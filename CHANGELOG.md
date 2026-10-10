@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.0](https://github.com/KookaStudio/KookaPictura/compare/v0.1.0...v0.2.0) (2026-10-10)
+
+
+### Features
+
+* autosave and crash recovery ([#184](https://github.com/KookaStudio/KookaPictura/issues/184)) ([#295](https://github.com/KookaStudio/KookaPictura/issues/295)) ([3124250](https://github.com/KookaStudio/KookaPictura/commit/31242502fd1a30f5a1e91187fbc4772ee7f934d5))
+* **skills:** add issue-review and pr-review agent skills ([#284](https://github.com/KookaStudio/KookaPictura/issues/284)) ([#291](https://github.com/KookaStudio/KookaPictura/issues/291)) ([64fb2df](https://github.com/KookaStudio/KookaPictura/commit/64fb2df2bb87fabb59cf67ef45ae3b0dc16c26af))
+* **ui:** CS6 crop straighten and UX parity pass ([#252](https://github.com/KookaStudio/KookaPictura/issues/252)) ([#298](https://github.com/KookaStudio/KookaPictura/issues/298)) ([54c978c](https://github.com/KookaStudio/KookaPictura/commit/54c978c2e455f9060936820e3fd9732ff62af94d))
+
 ## 0.1.0 (2026-10-10)
 
 
