@@ -14,7 +14,9 @@
   !define OUTFILE "KookaPictura-${VERSION}-windows-x64-setup.exe"
 !endif
 !ifndef APP_ICON
-  !define APP_ICON "assets/icons/app.ico"
+  ; makensis cds into the script's directory, so this is relative to
+  ; packaging/windows/, not the invocation cwd.
+  !define APP_ICON "..\..\assets\icons\app.ico"
 !endif
 
 Unicode true

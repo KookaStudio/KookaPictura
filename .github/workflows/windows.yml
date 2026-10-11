@@ -82,7 +82,7 @@ jobs:
           $makensis = (Get-Command makensis -ErrorAction SilentlyContinue).Source
           if (-not $makensis) { $makensis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe" }
           & $makensis "/DSTAGE_DIR=$stage" "/DVERSION=$ver" `
-            "/DOUTFILE=KookaPictura-$ver-windows-x64-setup.exe" `
+            "/DOUTFILE=$env:GITHUB_WORKSPACE\KookaPictura-$ver-windows-x64-setup.exe" `
             "packaging/windows/installer.nsi"
 
       - name: Keep the dry-run artifacts
