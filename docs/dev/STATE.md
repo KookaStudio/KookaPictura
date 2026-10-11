@@ -302,6 +302,21 @@ Snapshot for resuming after a context break. Update after each milestone.
   `tst_custom_filter`. Verified: `TASK_ALLOWS_DOCS=1 bash scripts/verify-full.sh`
   → `verify-full: OK` (TOTAL 3917 passed · 21 skipped · 0 failed); `openspec
   validate --all --strict` 232/232.
+- **Shape Blur** (change `add-shape-blur`, issue #337): new engine (no
+  photorust source). `Filter::ShapeBlur { shape, radius }` convolves each
+  colour plane with a Custom Shape's antialiased coverage
+  (`pictura_core::shape::custom_shape_kernel`), `2r+1` px square, rotated 180°
+  so a bright pixel spreads into the shape as drawn; clamp-to-edge, integer
+  exact. Kernel rows split into equal-weight runs over per-row prefix sums, so
+  a pixel costs the run count, not the area (~100 ms at radius 46 on 1024²).
+  `Filter ▸ Blur ▸ Shape Blur…` (after Box Blur) has Radius `5..=1000`
+  (default 10, inferred) and `FilterControl::Shape`, a grid of the six
+  built-in Custom Shapes; the `shape-blur` kind is 2 slots (Radius, Shape).
+  `filter_map.rs`'s choice lists moved to `filter_map_choices.rs` to stay
+  under the cap. Ceilings: the six app shapes, not CS6's library; no large
+  Shape swatch or shape-set gear. Tests: unit (runs = direct convolution on
+  every shape), ImageMagick `-morphology Convolve` differential (exact),
+  kernel digests, `filter_map` unit, `tst_shape_blur`.
 - **Lighting Effects workspace** (change `lighting-effects-workspace`, issue
   #225): `render::lighting_effects` (now `render/lighting.rs`) shades a CS6 rig
   of 1–16 Spot / Point / Infinite lights with photorust's model. A Spot is an
