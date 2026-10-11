@@ -481,7 +481,7 @@ fn region_deltas_retain_only_changed_tiles() {
     );
     let retained = history.retained_tile_bytes();
     assert!(
-        retained <= 10 * TILE * TILE * 2,
+        retained <= 10 * TILE * TILE,
         "retained {retained} bytes exceeds the changed-tile bound"
     );
     assert!(
@@ -969,6 +969,15 @@ fn live_restores_match_a_full_snapshot_history() {
                 history.full_state_count() <= history.anchor_count() + 1,
                 "seed {seed} step {step}: the cursor's anchor must be hollow"
             );
+            // Deltas keep one side each; every state must still rebuild
+            // without moving the cursor, whichever way the walks went.
+            for (i, expected) in reference.iter().enumerate() {
+                let snap = history.materialize(i);
+                assert!(
+                    snap.doc == expected.doc && snap.selection == expected.selection,
+                    "seed {seed} step {step}: state {i} rebuilds wrong"
+                );
+            }
         }
         for (i, expected) in reference.iter().enumerate() {
             let snap = history.jump(i).expect("state");

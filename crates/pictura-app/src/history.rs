@@ -5,8 +5,8 @@ mod planes;
 mod styles;
 
 use planes::{
-    adopt_metadata, apply_tiles, diff, hollow, plane_kinds, planes_agree, private_copy,
-    stamp_agreed, tile_rect, Dir, PlaneDelta, PlaneKind,
+    adopt_metadata, apply_tiles, diff_into, hollow, plane_kinds, planes_agree, private_copy,
+    stamp_agreed, swap_tiles, tile_rect, PlaneDelta, PlaneKind,
 };
 pub(crate) use planes::{copy_plane, detached_copy};
 pub use styles::{
@@ -31,12 +31,12 @@ pub enum Restored {
 }
 
 /// A state's delta against the previous state within one geometry-stable
-/// segment: the new metadata plus the changed tiles. `meta` is the new
-/// document with every tracked plane cleared; overlaying the running planes
-/// and then writing the after-tiles reconstructs the state exactly.
+/// segment: the new metadata plus the changed tiles, each holding one side of
+/// the change (see [`planes::TileDelta`]). `meta` is the new document with
+/// every tracked plane cleared.
 ///
-/// ponytail: tiles are uncompressed and keep both before- and after-bytes; drop
-/// `before` (or RLE the tiles) only if a paint profile shows the payload hurts.
+/// ponytail: tiles are uncompressed; RLE them if a full-layer filter's delta
+/// (one copy of the layer and composite) ever needs to shrink further.
 struct Delta {
     meta: Document,
     tiles: Vec<PlaneDelta>,
@@ -202,9 +202,8 @@ impl History {
                 self.current = Some(current);
                 stored
             }
-            Some(mut cur) => match diff(&cur.doc, doc) {
+            Some(mut cur) => match diff_into(&mut cur.doc, doc) {
                 Some(tiles) => {
-                    apply_tiles(&mut cur.doc, &tiles, &Dir::After);
                     adopt_metadata(&mut cur.doc, doc);
                     cur.selection = selection.clone();
                     stamp_agreed(&mut cur.doc, doc);
@@ -461,27 +460,46 @@ impl History {
         }
     }
 
-    /// Move `snap` from state `from` to state `to` of the same segment by the
-    /// deltas between them, writing the same tiles into `live` when given.
-    fn walk(
-        &self,
+    /// The states whose deltas a walk from `from` to `to` crosses, in order.
+    fn crossed(from: usize, to: usize) -> Vec<usize> {
+        if to < from {
+            (to + 1..=from).rev().collect()
+        } else {
+            (from + 1..=to).collect()
+        }
+    }
+
+    /// Rebuild state `to` in `snap`, a copy of state `from` of the same
+    /// segment, leaving the deltas as they are. Every delta it crosses holds
+    /// the side it needs: walking down from `current` meets before-bytes,
+    /// walking up from `current` or a full anchor meets after-bytes.
+    fn walk(&self, snap: &mut Snapshot, from: usize, to: usize) {
+        for k in Self::crossed(from, to) {
+            if let Stored::Delta(delta) = &self.states[k].stored {
+                apply_tiles(&mut snap.doc, &delta.tiles);
+            }
+        }
+        if from != to {
+            let (meta, selection) = self.meta_of(to);
+            adopt_metadata(&mut snap.doc, meta);
+            snap.selection = selection.clone();
+        }
+    }
+
+    /// Move the materialized state `snap` from `from` to `to` of the same
+    /// segment, swapping each crossed delta's bytes with it so the delta keeps
+    /// the side `snap` left, and writing the same tiles into `live` when given.
+    fn walk_swapping(
+        &mut self,
         snap: &mut Snapshot,
         from: usize,
         to: usize,
         mut live: Option<&mut Document>,
         damage: &mut Damage,
     ) {
-        let steps: Vec<(usize, Dir)> = if to < from {
-            (to + 1..=from).rev().map(|k| (k, Dir::Before)).collect()
-        } else {
-            (from + 1..=to).map(|k| (k, Dir::After)).collect()
-        };
-        for (k, dir) in steps {
-            if let Stored::Delta(delta) = &self.states[k].stored {
-                apply_tiles(&mut snap.doc, &delta.tiles, &dir);
-                if let Some(live) = live.as_deref_mut() {
-                    apply_tiles(live, &delta.tiles, &dir);
-                }
+        for k in Self::crossed(from, to) {
+            if let Stored::Delta(delta) = &mut self.states[k].stored {
+                swap_tiles(&mut snap.doc, live.as_deref_mut(), &mut delta.tiles);
                 damage.add(&delta.tiles);
             }
         }
@@ -497,7 +515,7 @@ impl History {
     fn fill_anchor(&mut self, mut cur: Snapshot) {
         let anchor = self.anchor_of(self.cursor);
         let mut ignored = Damage::new(&cur.doc);
-        self.walk(&mut cur, self.cursor, anchor, None, &mut ignored);
+        self.walk_swapping(&mut cur, self.cursor, anchor, None, &mut ignored);
         self.states[anchor].stored = Stored::Full(cur);
     }
 
@@ -516,7 +534,7 @@ impl History {
             let end = self.segment_end(self.cursor);
             let mut cur = self.current.take().expect("current state");
             let stop = target.clamp(anchor, end - 1);
-            self.walk(
+            self.walk_swapping(
                 &mut cur,
                 self.cursor,
                 stop,
@@ -551,7 +569,7 @@ impl History {
                 });
                 let mut moved = base;
                 let mut ignored = Damage::new(&moved.doc);
-                self.walk(&mut moved, prev, anchor - 1, None, &mut ignored);
+                self.walk_swapping(&mut moved, prev, anchor - 1, None, &mut ignored);
                 self.current = Some(moved);
                 self.cursor = anchor - 1;
             } else {
@@ -583,21 +601,15 @@ impl History {
     /// Rebuild state `target` without moving the cursor.
     fn materialize(&self, target: usize) -> Snapshot {
         let anchor = self.anchor_of(target);
-        let mut ignored = Damage {
-            kinds: Vec::new(),
-            height: 0,
-            rect: None,
-            everywhere: false,
-        };
         match &self.states[anchor].stored {
             Stored::Full(base) => {
                 let mut snap = base.clone();
-                self.walk(&mut snap, anchor, target, None, &mut ignored);
+                self.walk(&mut snap, anchor, target);
                 snap
             }
             _ => {
                 let mut snap = self.current.clone().expect("current state");
-                self.walk(&mut snap, self.cursor, target, None, &mut ignored);
+                self.walk(&mut snap, self.cursor, target);
                 snap
             }
         }
@@ -621,7 +633,7 @@ impl History {
     }
 
     #[cfg(test)]
-    fn retained_tile_bytes(&self) -> usize {
+    pub(crate) fn retained_tile_bytes(&self) -> usize {
         self.states
             .iter()
             .filter_map(|e| match &e.stored {
@@ -630,7 +642,7 @@ impl History {
             })
             .flat_map(|d| d.tiles.iter())
             .flat_map(|p| p.tiles.iter())
-            .map(|t| t.before.len() + t.after.len())
+            .map(|t| t.bytes.len())
             .sum()
     }
 
