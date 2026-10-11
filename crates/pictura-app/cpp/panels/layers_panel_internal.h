@@ -22,6 +22,8 @@ public:
     static constexpr int kChevronWidth = 16;
     // The gap between the thumbnail (or clip glyph) and the name text.
     static constexpr int kNameGap = 8;
+    // The gap either side of a chain glyph between two thumbnails.
+    static constexpr int kThumbLinkGap = 2;
     // The color-label chip's width and the gap that follows it, before the
     // thumbnail. CS6 shows a label as a small bar next to the thumbnail.
     static constexpr int kLabelChipWidth = 3;
@@ -64,12 +66,46 @@ public:
                      itemRect.height());
     }
 
+    /// Side of the (shrunken) lock badge: about two thirds of the thumbnail, so
+    /// it reads as a badge rather than a second thumbnail.
+    int lockBadgeSide() const
+    {
+        const int thumb = qMax(0, thumbnailSize_);
+        return qMax(10, thumb > 0 ? (thumb * 2) / 3 : 11);
+    }
+
     /// The lock badge's rect at a row's right edge (as painted).
     QRect lockRect(const QRect& itemRect) const
     {
-        const int side = qMax(12, thumbnailSize() > 0 ? thumbnailSize() : 16);
+        const int side = lockBadgeSide();
         return QRect(itemRect.right() - 3 - side,
                      itemRect.top() + (itemRect.height() - side) / 2, side, side);
+    }
+
+    /// The nominal thumbnail side (0 when thumbnails are off).
+    int thumbSize() const { return qMax(0, thumbnailSize_); }
+
+    /// The square box left of the right-edge badges where the image thumbnail
+    /// sits, mirroring paint()'s left-to-right content walk.
+    QRect imageThumbBox(const QRect& itemRect, const QModelIndex& index) const
+    {
+        int x = contentLeft(itemRect, index);
+        x += labelChipAdvance(index);
+        if (index.data(ClippingRole).toBool()) {
+            const int thumb = thumbSize();
+            const int side = qMax(10, thumb > 0 ? thumb - 8 : 12);
+            if (!pictura::icon(QStringLiteral("layers.clipMask")).pixmap(side, side).isNull()) {
+                x += side + 2;
+            }
+        }
+        const int thumb = thumbSize();
+        return QRect(x, itemRect.top() + (itemRect.height() - thumb) / 2, thumb, thumb);
+    }
+
+    /// The x just past the image thumbnail's square slot.
+    int imageSlotRight(const QRect& itemRect, const QModelIndex& index) const
+    {
+        return imageThumbBox(itemRect, index).right() + 1;
     }
 
     /// Whether a row paints the fx badge: adjustment content or a layer style,
@@ -95,8 +131,10 @@ public:
         }
         int right = itemRect.right() - 3;
         if (index.data(LockRole).toInt() != 0
-            && !pictura::icon(QStringLiteral("layers.lockAll")).pixmap(badge, badge).isNull()) {
-            right -= badge + 3;
+            && !pictura::icon(QStringLiteral("layers.lockAll"))
+                    .pixmap(lockBadgeSide(), lockBadgeSide())
+                    .isNull()) {
+            right -= lockBadgeSide() + 3;
         }
         return QRect(right - badge, itemRect.top() + (itemRect.height() - badge) / 2, badge,
                      badge);
@@ -148,19 +186,27 @@ public:
     int contentLeft(const QRect& itemRect, const QModelIndex& index) const
     {
         const int depth = index.data(DepthRole).toInt();
-        int x = itemRect.left() + kEyeColumn + kContentPad + qMax(0, depth) * kIndent;
+        // A folder row uses half the content pad, so its name column starts
+        // closer to the gutter; child-layer visibility controls are untouched.
+        const int pad = index.data(KindRole).toString() == QLatin1String("group")
+            ? kContentPad / 2
+            : kContentPad;
+        int x = itemRect.left() + kEyeColumn + pad + qMax(0, depth) * kIndent;
         if (index.data(ExpandableRole).toBool()) {
             x += kChevronWidth;
         }
         return x;
     }
 
-    /// The expand/collapse chevron's hit-target for a row at `depth`.
-    QRect chevronRect(const QRect& itemRect, int depth) const
+    /// The expand/collapse chevron's hit-target for `index`, in the reserved
+    /// slot just before the row content.
+    QRect chevronRect(const QRect& itemRect, const QModelIndex& index) const
     {
         const int side = qMin(kChevronWidth, itemRect.height());
-        const int left =
-            itemRect.left() + kEyeColumn + kContentPad + qMax(0, depth) * kIndent;
+        int left = contentLeft(itemRect, index);
+        if (index.data(ExpandableRole).toBool()) {
+            left -= kChevronWidth;
+        }
         return QRect(left, itemRect.top() + (itemRect.height() - side) / 2, side, side);
     }
 
@@ -216,8 +262,10 @@ public:
         const int badge = qMax(12, thumb > 0 ? thumb : 16);
         int right = itemRect.right() - 3;
         if (index.data(LockRole).toInt() != 0
-            && !pictura::icon(QStringLiteral("layers.lockAll")).pixmap(badge, badge).isNull()) {
-            right -= badge + 3;
+            && !pictura::icon(QStringLiteral("layers.lockAll"))
+                    .pixmap(lockBadgeSide(), lockBadgeSide())
+                    .isNull()) {
+            right -= lockBadgeSide() + 3;
         }
         if (showsFx(index)
             && !pictura::icon(QStringLiteral("layers.fx")).pixmap(badge, badge).isNull()) {
@@ -227,117 +275,118 @@ public:
         return right;
     }
 
-    /// Side of the link/chain glyph slot left of the mask thumbnail.
+    /// Side of the link/chain glyph slot between two thumbnails.
     static int linkSide(int thumb) { return qMax(8, thumb / 2); }
 
-    /// The mask thumbnail's rect at a row's right edge, as painted; empty when
-    /// thumbnails are off or the row carries no mask.
-    QRect maskThumbRect(const QRect& itemRect, const QModelIndex& index) const
-    {
-        const int thumb = qMax(0, thumbnailSize_);
-        if (thumb <= 0 || index.data(MaskThumbnailRole).value<QImage>().isNull()) {
-            return {};
-        }
-        return QRect(badgesRight(itemRect, index) - thumb,
-                     itemRect.top() + (itemRect.height() - thumb) / 2, thumb, thumb);
-    }
-
-    /// The link/chain glyph's slot immediately left of the mask thumbnail;
-    /// empty when thumbnails are off or the row carries no mask.
+    /// The link/chain glyph's hit-target immediately right of the image
+    /// thumbnail (the mask link); empty when thumbnails are off or the row
+    /// carries no raster mask.
     QRect linkGlyphRect(const QRect& itemRect, const QModelIndex& index) const
     {
-        const int thumb = qMax(0, thumbnailSize_);
+        const int thumb = thumbSize();
         if (thumb <= 0 || index.data(MaskThumbnailRole).value<QImage>().isNull()) {
             return {};
         }
         const int side = linkSide(thumb);
-        return QRect(badgesRight(itemRect, index) - thumb - 2 - side,
-                     itemRect.top() + (itemRect.height() - side) / 2, side, side);
+        const int left = imageSlotRight(itemRect, index) + kThumbLinkGap;
+        return QRect(left, itemRect.top() + (itemRect.height() - side) / 2, side, side);
     }
 
-    /// The x advance consumed at the right edge by the raster mask block (thumb
-    /// plus gap plus link slot); 0 when the row carries no raster mask.
-    int rasterMaskAdvance(const QModelIndex& index) const
+    /// The mask thumbnail's hit-target, immediately right of the mask link;
+    /// empty when thumbnails are off or the row carries no raster mask.
+    QRect maskThumbRect(const QRect& itemRect, const QModelIndex& index) const
     {
-        const int thumb = qMax(0, thumbnailSize_);
+        const int thumb = thumbSize();
         if (thumb <= 0 || index.data(MaskThumbnailRole).value<QImage>().isNull()) {
-            return 0;
-        }
-        return thumb + 3 + linkSide(thumb) + 2;
-    }
-
-    /// The vector-mask thumbnail's rect, immediately left of the raster-mask
-    /// thumbnail (or at the right edge without one); empty when thumbnails are
-    /// off or the row carries no vector mask.
-    QRect vectorMaskThumbRect(const QRect& itemRect, const QModelIndex& index) const
-    {
-        const int thumb = qMax(0, thumbnailSize_);
-        if (thumb <= 0 || index.data(VectorMaskThumbnailRole).value<QImage>().isNull()) {
             return {};
         }
-        return QRect(badgesRight(itemRect, index) - rasterMaskAdvance(index) - thumb,
-                     itemRect.top() + (itemRect.height() - thumb) / 2, thumb, thumb);
+        const int side = linkSide(thumb);
+        const int left = imageSlotRight(itemRect, index) + kThumbLinkGap + side + kThumbLinkGap;
+        const QRect box(left, itemRect.top() + (itemRect.height() - thumb) / 2, thumb, thumb);
+        return letterboxedThumb(box, index);
     }
 
-    /// The vector link/chain glyph's slot immediately left of the vector-mask
-    /// thumbnail; empty when thumbnails are off or the row carries no vector
-    /// mask.
+    /// The x just past the mask thumbnail's square slot (or the image slot when
+    /// the row carries no raster mask).
+    int maskSlotRight(const QRect& itemRect, const QModelIndex& index) const
+    {
+        const int thumb = thumbSize();
+        if (thumb <= 0 || index.data(MaskThumbnailRole).value<QImage>().isNull()) {
+            return imageSlotRight(itemRect, index);
+        }
+        return imageSlotRight(itemRect, index) + kThumbLinkGap + linkSide(thumb) + kThumbLinkGap
+            + thumb;
+    }
+
+    /// The vector link/chain glyph's hit-target immediately right of the mask
+    /// thumbnail (or the image thumbnail without a raster mask); empty without a
+    /// vector mask.
     QRect vectorLinkGlyphRect(const QRect& itemRect, const QModelIndex& index) const
     {
-        const int thumb = qMax(0, thumbnailSize_);
+        const int thumb = thumbSize();
         if (thumb <= 0 || index.data(VectorMaskThumbnailRole).value<QImage>().isNull()) {
             return {};
         }
         const int side = linkSide(thumb);
-        return QRect(badgesRight(itemRect, index) - rasterMaskAdvance(index) - thumb - 2 - side,
-                     itemRect.top() + (itemRect.height() - side) / 2, side, side);
+        const int left = maskSlotRight(itemRect, index) + kThumbLinkGap;
+        return QRect(left, itemRect.top() + (itemRect.height() - side) / 2, side, side);
     }
 
-    /// The name text's hit-target, mirroring the geometry paint() lays out: the
-    /// clipping glyph and thumbnail advance, the +4 gap, the clipping indent,
-    /// and the right-edge lock/fx/mask caps. Floored to a non-zero width so a
+    /// The vector-mask thumbnail's hit-target, immediately right of the vector
+    /// link; empty when thumbnails are off or the row carries no vector mask.
+    QRect vectorMaskThumbRect(const QRect& itemRect, const QModelIndex& index) const
+    {
+        const int thumb = thumbSize();
+        if (thumb <= 0 || index.data(VectorMaskThumbnailRole).value<QImage>().isNull()) {
+            return {};
+        }
+        const int side = linkSide(thumb);
+        const int left = maskSlotRight(itemRect, index) + kThumbLinkGap + side + kThumbLinkGap;
+        const QRect box(left, itemRect.top() + (itemRect.height() - thumb) / 2, thumb, thumb);
+        return letterboxedThumb(box, index);
+    }
+
+    /// The x just past the last thumbnail slot (image, mask, or vector).
+    int thumbsRight(const QRect& itemRect, const QModelIndex& index) const
+    {
+        const int thumb = thumbSize();
+        if (thumb > 0 && !index.data(VectorMaskThumbnailRole).value<QImage>().isNull()) {
+            return maskSlotRight(itemRect, index) + kThumbLinkGap + linkSide(thumb)
+                + kThumbLinkGap + thumb;
+        }
+        return maskSlotRight(itemRect, index);
+    }
+
+    /// The name text's hit-target: immediately right of the thumbnail block
+    /// (image, mask, vector) plus the name gap and clipping indent, capped at
+    /// the right-edge lock/fx/Blend If badges. Floored to a non-zero width so a
     /// click in an empty label area still resolves to the name.
     QRect nameRect(const QRect& itemRect, const QModelIndex& index) const
     {
-        const int thumb = qMax(0, thumbnailSize_);
-        int x = contentLeft(itemRect, index);
-        x += labelChipAdvance(index);
-        const bool clipping = index.data(ClippingRole).toBool();
-        if (clipping) {
-            const int side = qMax(10, thumb > 0 ? thumb - 8 : 12);
-            if (!pictura::icon(QStringLiteral("layers.clipMask")).pixmap(side, side).isNull()) {
-                x += side + 2;
-            }
-        }
-        if (thumb > 0) {
-            x += thumb;
-        }
-        x += kNameGap;
+        const int thumb = thumbSize();
+        int x = thumbsRight(itemRect, index) + kNameGap;
         int right = itemRect.right() - 3;
         const int badge = qMax(12, thumb > 0 ? thumb : 16);
         if (index.data(LockRole).toInt() != 0
-            && !pictura::icon(QStringLiteral("layers.lockAll")).pixmap(badge, badge).isNull()) {
-            right -= badge + 3;
+            && !pictura::icon(QStringLiteral("layers.lockAll"))
+                    .pixmap(lockBadgeSide(), lockBadgeSide())
+                    .isNull()) {
+            right -= lockBadgeSide() + 3;
         }
         if (showsFx(index)
             && !pictura::icon(QStringLiteral("layers.fx")).pixmap(badge, badge).isNull()) {
             right -= badge + 3;
         }
         right -= blendIfAdvance(index);
-        if (thumb > 0 && !index.data(MaskThumbnailRole).value<QImage>().isNull()) {
-            right -= thumb + 3 + linkSide(thumb) + 2;
-        }
-        if (thumb > 0 && !index.data(VectorMaskThumbnailRole).value<QImage>().isNull()) {
-            right -= thumb + 3 + linkSide(thumb) + 2;
-        }
-        const int nameLeft = x + (clipping ? 12 : 0);
+        const int nameLeft = x + (index.data(ClippingRole).toBool() ? 12 : 0);
         const int nameRight = qMax(nameLeft, right - 4);
         return QRect(nameLeft, itemRect.top(), qMax(1, nameRight - nameLeft), itemRect.height());
     }
 
     /// One named row height (floor 32 px) shared by sizeHint and centring; a
-    /// Medium (24 px) thumbnail row lands at 36 px.
+    /// Medium (24 px) thumbnail row lands at 36 px. A folder row is shorter.
     static constexpr int kRowHeightFloor = 32;
+    static constexpr int kGroupRowShrink = 6;
     int rowHeight() const { return qMax(kRowHeightFloor, thumbnailSize_ + 12); }
 
     /// The row name's font: Background italic, linked/placed (and clip-base)
@@ -360,8 +409,9 @@ public:
     QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const override
     {
         Q_UNUSED(option);
-        Q_UNUSED(index);
-        return QSize(200, rowHeight());
+        const int shrink =
+            index.data(KindRole).toString() == QLatin1String("group") ? kGroupRowShrink : 0;
+        return QSize(200, qMax(kRowHeightFloor - kGroupRowShrink, rowHeight() - shrink));
     }
 
     /// CS6 rename navigation. The view installs this delegate as the editor's
@@ -408,7 +458,7 @@ public:
         // the palette's blue Highlight, and the eye gutter is refilled with the
         // row surface so it matches an unselected row.
         const QRect rect = option.rect;
-        const int height = qMax(kRowHeightFloor, rect.height());
+        const int height = qMax(1, rect.height());
         const bool selected = option.state & QStyle::State_Selected;
         // The item surface matches the widget surface; the gutter and a selected
         // row step off it so the row still reads. Never the palette blue.
@@ -425,7 +475,6 @@ public:
 
         painter->save();
         const QPalette& palette = option.palette;
-        const int depth = index.data(DepthRole).toInt();
         // A non-None color label tints the eye toggle's own background; the
         // alpha keeps the eye glyph legible.
         QColor label = layerLabelColor(index.data(ColorRole).toInt());
@@ -457,7 +506,7 @@ public:
         if (index.data(ExpandableRole).toBool()) {
             const auto* treeView = qobject_cast<const QTreeView*>(option.widget);
             const bool expanded = treeView && treeView->isExpanded(index);
-            paintAsset(painter, chevronRect(rect, depth),
+            paintAsset(painter, chevronRect(rect, index),
                        expanded ? QStringLiteral("layers.disclosureDown")
                                 : QStringLiteral("layers.disclosureRight"));
         }
@@ -476,10 +525,15 @@ public:
             const QRect shaped = letterboxedThumb(box, index);
             thumbBox = shaped;
             if (index.data(KindRole).toString() == QLatin1String("group")) {
+                // The folder glyph is half the row thumbnail, centred in its
+                // slot, so a folder row reads lighter than a layer row.
+                const int gs = qMax(8, thumb / 2);
                 const QPixmap glyph =
-                    pictura::icon(QStringLiteral("layers.group")).pixmap(thumb, thumb);
+                    pictura::icon(QStringLiteral("layers.group")).pixmap(gs, gs);
                 if (!glyph.isNull()) {
-                    painter->drawPixmap(box, glyph);
+                    painter->drawPixmap(QRect(box.left() + (thumb - gs) / 2,
+                                              box.top() + (thumb - gs) / 2, gs, gs),
+                                        glyph);
                 }
             } else if (index.data(KindRole).toString().startsWith(QLatin1String("smart-filter"))) {
                 // The Smart Filters group and its rows show the fx badge instead
@@ -540,23 +594,77 @@ public:
                 }
             }
         }
-        x += thumb + kNameGap;
-
-        // Right-aligned badges: the lock badge at the far edge, then fx, then
-        // the mask thumbnail. A null icon/thumbnail is omitted.
-        int right = rect.right() - 3;
-        const QIcon fxIcon = pictura::icon(QStringLiteral("layers.fx"));
-        const int badge = qMax(12, thumb > 0 ? thumb : 16);
-        if (index.data(LockRole).toInt() != 0) {
-            const QPixmap lockPix =
-                pictura::icon(QStringLiteral("layers.lockAll")).pixmap(badge, badge);
-            if (!lockPix.isNull()) {
-                painter->drawPixmap(
-                    QRect(right - badge, rect.top() + (height - badge) / 2, badge, badge),
-                    lockPix);
-                right -= badge + 3;
+        // Thumbnails run left-to-right from the image thumb: [image][chain][mask]
+        // [chain][vector]. The chain glyph is always drawn (link-2 when the mask
+        // is linked to the layer, unlink-2 otherwise).
+        const QImage mask = index.data(MaskThumbnailRole).value<QImage>();
+        const QRect imageRect = thumbBox;
+        QRect maskRect;
+        QRect vectorRect;
+        if (thumb > 0 && !mask.isNull()) {
+            const int side = linkSide(thumb);
+            const QPixmap linkPix =
+                pictura::icon(index.data(MaskLinkedRole).toBool()
+                                  ? QStringLiteral("layers.link2")
+                                  : QStringLiteral("layers.unlink2"))
+                    .pixmap(side, side);
+            const QRect link = linkGlyphRect(rect, index);
+            if (!linkPix.isNull()) {
+                painter->drawPixmap(link, linkPix);
+            }
+            maskRect = maskThumbRect(rect, index);
+            painter->drawImage(maskRect, mask);
+            if (index.data(MaskTargetRole).toBool()) {
+                // The active mask thumbnail wears the CS6 focus border: a dark
+                // outline outside a white line, legible over any coverage.
+                painter->save();
+                painter->setBrush(Qt::NoBrush);
+                painter->setPen(QColor(0, 0, 0, 200));
+                painter->drawRect(maskRect.adjusted(-1, -1, 0, 0));
+                painter->setPen(Qt::white);
+                painter->drawRect(maskRect.adjusted(0, 0, -1, -1));
+                painter->restore();
+            }
+            if (index.data(MaskDisabledRole).toBool()) {
+                paintDisabledCross(painter, maskRect, thumb);
             }
         }
+        const QImage vectorMask = index.data(VectorMaskThumbnailRole).value<QImage>();
+        if (thumb > 0 && !vectorMask.isNull()) {
+            const int side = linkSide(thumb);
+            const QPixmap linkPix =
+                pictura::icon(index.data(VectorMaskLinkedRole).toBool()
+                                  ? QStringLiteral("layers.link2")
+                                  : QStringLiteral("layers.unlink2"))
+                    .pixmap(side, side);
+            const QRect link = vectorLinkGlyphRect(rect, index);
+            if (!linkPix.isNull()) {
+                painter->drawPixmap(link, linkPix);
+            }
+            vectorRect = vectorMaskThumbRect(rect, index);
+            painter->drawImage(vectorRect, vectorMask);
+            if (index.data(VectorMaskDisabledRole).toBool()) {
+                paintDisabledCross(painter, vectorRect, thumb);
+            }
+        }
+
+        // Right-aligned badges: the (shrunken) lock badge at the far edge, then
+        // fx. A null icon is omitted.
+        int right = rect.right() - 3;
+        const QIcon fxIcon = pictura::icon(QStringLiteral("layers.fx"));
+        if (index.data(LockRole).toInt() != 0) {
+            const int lockSide = lockBadgeSide();
+            const QPixmap lockPix =
+                pictura::icon(QStringLiteral("layers.lockAll")).pixmap(lockSide, lockSide);
+            if (!lockPix.isNull()) {
+                painter->drawPixmap(
+                    QRect(right - lockSide, rect.top() + (height - lockSide) / 2, lockSide,
+                          lockSide),
+                    lockPix);
+                right -= lockSide + 3;
+            }
+        }
+        const int badge = qMax(12, thumb > 0 ? thumb : 16);
         if (showsFx(index) && !fxIcon.isNull()) {
             const QPixmap badgePix = fxIcon.pixmap(badge, badge);
             if (!badgePix.isNull()) {
@@ -581,74 +689,11 @@ public:
             painter->restore();
             right -= blendIfChipWidth() + 3;
         }
-        const QImage mask = index.data(MaskThumbnailRole).value<QImage>();
-        if (!mask.isNull() && thumb > 0) {
-            // The link/chain glyph sits in a slot immediately left of the mask
-            // thumbnail, so the name elides before both and nothing overlaps.
-            const int side = linkSide(thumb);
-            if (index.data(MaskLinkedRole).toBool()) {
-                const QPixmap linkPix =
-                    pictura::icon(QStringLiteral("layers.link")).pixmap(side, side);
-                if (!linkPix.isNull()) {
-                    painter->drawPixmap(QRect(right - thumb - 2 - side,
-                                              rect.top() + (height - side) / 2, side, side),
-                                        linkPix);
-                }
-            }
-            const QRect maskRect(right - thumb, rect.top() + (height - thumb) / 2, thumb, thumb);
-            painter->drawImage(maskRect, mask);
-            if (index.data(MaskTargetRole).toBool()) {
-                // The active mask thumbnail wears the CS6 focus border: a dark
-                // outline outside a white line, legible over any coverage.
-                painter->save();
-                painter->setBrush(Qt::NoBrush);
-                painter->setPen(QColor(0, 0, 0, 200));
-                painter->drawRect(maskRect.adjusted(-1, -1, 0, 0));
-                painter->setPen(Qt::white);
-                painter->drawRect(maskRect.adjusted(0, 0, -1, -1));
-                painter->restore();
-            }
-            if (index.data(MaskDisabledRole).toBool()) {
-                // A red cross over the thumbnail, the CS6 disabled-mask mark.
-                painter->save();
-                painter->setPen(QPen(QColor(0xE0, 0x20, 0x20), qMax(1, thumb / 10)));
-                const QRect cross = maskRect.adjusted(2, 2, -2, -2);
-                painter->drawLine(cross.topLeft(), cross.bottomRight());
-                painter->drawLine(cross.topRight(), cross.bottomLeft());
-                painter->restore();
-            }
-            right -= thumb + 3 + side + 2;
-        }
 
-        // The vector-mask thumbnail sits immediately left of the raster mask,
-        // with its own link glyph and disabled red cross, mirroring the mask.
-        const QImage vectorMask = index.data(VectorMaskThumbnailRole).value<QImage>();
-        if (!vectorMask.isNull() && thumb > 0) {
-            const int side = linkSide(thumb);
-            if (index.data(VectorMaskLinkedRole).toBool()) {
-                const QPixmap linkPix =
-                    pictura::icon(QStringLiteral("layers.link")).pixmap(side, side);
-                if (!linkPix.isNull()) {
-                    painter->drawPixmap(QRect(right - thumb - 2 - side,
-                                              rect.top() + (height - side) / 2, side, side),
-                                        linkPix);
-                }
-            }
-            const QRect maskRect(right - thumb, rect.top() + (height - thumb) / 2, thumb, thumb);
-            painter->drawImage(maskRect, vectorMask);
-            if (index.data(VectorMaskDisabledRole).toBool()) {
-                painter->save();
-                painter->setPen(QPen(QColor(0xE0, 0x20, 0x20), qMax(1, thumb / 10)));
-                const QRect cross = maskRect.adjusted(2, 2, -2, -2);
-                painter->drawLine(cross.topLeft(), cross.bottomRight());
-                painter->drawLine(cross.topRight(), cross.bottomLeft());
-                painter->restore();
-            }
-            right -= thumb + 3 + side + 2;
-        }
-
-        // Name, with the extra clipping indent and the base underline.
-        const int nameLeft = x + (index.data(ClippingRole).toBool() ? 12 : 0);
+        // Name, after the thumbnail block, with the base underline and the
+        // extra clipping indent.
+        const int nameX = thumbsRight(rect, index) + kNameGap;
+        const int nameLeft = nameX + (index.data(ClippingRole).toBool() ? 12 : 0);
         const int nameRight = qMax(nameLeft, right - 4);
         painter->setFont(nameFont(option.font, index));
         painter->setPen(selected ? palette.color(QPalette::HighlightedText)
@@ -659,10 +704,18 @@ public:
         painter->drawText(QRect(nameLeft, rect.top(), nameRight - nameLeft, height),
                           Qt::AlignVCenter | Qt::AlignLeft, elided);
 
-        // White 1 px corner brackets one pixel outside the outline, only for the
-        // singular active layer.
-        if (thumb > 0 && singularActive(selected, option.widget, index)) {
-            paintBrackets(painter, thumbBox.adjusted(-1, -1, 1, 1));
+        // White 1 px corner brackets one pixel outside the outline, on the
+        // active edit target's thumbnail only; never around a group's icon.
+        const int active = index.data(ActiveThumbRole).toInt();
+        if (thumb > 0 && index.data(KindRole).toString() != QLatin1String("group")
+            && singularActive(selected, option.widget, index)) {
+            QRect target = imageRect;
+            if (active == 2 && !vectorRect.isEmpty()) {
+                target = vectorRect;
+            } else if (active == 1 && !maskRect.isEmpty()) {
+                target = maskRect;
+            }
+            paintBrackets(painter, target.adjusted(-1, -1, 1, 1));
         }
         painter->restore();
     }
@@ -690,6 +743,17 @@ private:
         painter->drawLine(r.left(), r.bottom(), r.left() + len, r.bottom());
         painter->drawLine(r.right() - len, r.bottom(), r.right(), r.bottom());
         painter->drawLine(r.right(), r.bottom() - len, r.right(), r.bottom());
+    }
+
+    /// The CS6 disabled-mask mark: a red cross over the thumbnail.
+    static void paintDisabledCross(QPainter* painter, const QRect& thumb, int side)
+    {
+        painter->save();
+        painter->setPen(QPen(QColor(0xE0, 0x20, 0x20), qMax(1, side / 10)));
+        const QRect cross = thumb.adjusted(2, 2, -2, -2);
+        painter->drawLine(cross.topLeft(), cross.bottomRight());
+        painter->drawLine(cross.topRight(), cross.bottomLeft());
+        painter->restore();
     }
 
     static const QPixmap& checkerTile()

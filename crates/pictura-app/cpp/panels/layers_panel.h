@@ -271,6 +271,7 @@ private:
     void restoreSolo();
     void clearSolo();
     QStringList soloPaths(const QString& path, const QHash<QString, bool>& snapshot) const;
+    void setActiveThumb(const QString& path, int thumb);
 
     PictureView* view_ = nullptr;
     LayersModel* model_ = nullptr;
@@ -287,6 +288,8 @@ private:
     QToolButton* lockNesting_ = nullptr;
     QToolButton* lockAll_ = nullptr;
     QSet<QString> expandedPaths_;
+    // Panel-local active edit target per row path: 0 image, 1 mask, 2 vector.
+    QHash<QString, int> activeThumbByPath_;
     bool thumbEntireDocument_ = true;
     int thumbSizeIndex_ = 2;
     int thumbContents_ = 0;

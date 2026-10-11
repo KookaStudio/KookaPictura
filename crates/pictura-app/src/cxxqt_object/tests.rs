@@ -518,7 +518,7 @@ fn move_preview_base_preserves_layer_visibility() {
     doc.layers[1].visible = false;
 
     // The region path.
-    let base = build_move_preview_base(&mut doc, 1, false);
+    let base = build_move_preview_base(&mut doc, "1", false);
     assert!(
         !doc.layers[1].visible,
         "a move must not reveal the invisible layer"
@@ -529,7 +529,7 @@ fn move_preview_base_preserves_layer_visibility() {
     let mut no_composite = doc.clone();
     no_composite.composite.data.clear();
     no_composite.layers[1].visible = false;
-    let _ = build_move_preview_base(&mut no_composite, 1, false);
+    let _ = build_move_preview_base(&mut no_composite, "1", false);
     assert!(
         !no_composite.layers[1].visible,
         "the fallback must restore the prior visibility"
@@ -544,8 +544,8 @@ fn duplicate_move_target_duplicates_and_repoints_the_active_layer() {
         pixel_layer("top", 8, 8, (200, 100, 50)),
     ];
     let mut active = Some("1".to_string());
-    let new_index = duplicate_move_target(&mut doc, &mut active).expect("duplicate");
-    assert_eq!(new_index, 2);
+    let new_path = duplicate_move_target(&mut doc, &mut active).expect("duplicate");
+    assert_eq!(new_path, "2");
     assert_eq!(doc.layers.len(), 3, "one layer is added");
     assert_eq!(doc.layers[2].name, "top copy");
     assert_eq!(active.as_deref(), Some("2"), "the copy becomes active");
@@ -558,7 +558,10 @@ fn duplicate_move_target_preserves_visibility_and_refuses_locks() {
     let mut doc = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = vec![pixel_layer("base", 8, 8, (0, 0, 0)), hidden];
     let mut active = Some("1".to_string());
-    assert_eq!(duplicate_move_target(&mut doc, &mut active), Some(2));
+    assert_eq!(
+        duplicate_move_target(&mut doc, &mut active),
+        Some("2".to_string())
+    );
     assert!(
         !doc.layers[2].visible,
         "the clone of an invisible layer stays invisible"
@@ -597,15 +600,12 @@ fn move_duplicate_records_one_state_and_undo_restores_the_layer_count() {
     let before = history.count();
 
     let mut active = Some("0".to_string());
-    let new_index = duplicate_move_target(&mut doc, &mut active).expect("duplicate");
+    let new_path = duplicate_move_target(&mut doc, &mut active).expect("duplicate");
     assert_eq!(history.count(), before, "the drag start records no state");
 
     // The commit: translate the clone, then the bridge's one `record_move`.
-    assert!(pictura_render::translate_layer_index(
-        &mut doc,
-        new_index as usize,
-        2,
-        2
+    assert!(pictura_render::translate_layer_path(
+        &mut doc, &new_path, 2, 2
     ));
     history.capture(
         Snapshot {
@@ -1065,7 +1065,7 @@ fn finalize_import_keeps_non_opaque_import_as_regular_alpha_layer() {
 }
 
 #[test]
-fn active_layer_resolution_targets_only_a_single_top_level_raster() {
+fn active_layer_resolution_walks_the_tree_to_the_leaf() {
     let mut group = pixel_layer("group", 8, 8, (0, 0, 0));
     group.is_group = true;
     group.children = vec![pixel_layer("nested", 8, 8, (0, 0, 0))];
@@ -1091,8 +1091,12 @@ fn active_layer_resolution_targets_only_a_single_top_level_raster() {
         "an adjustment has no target"
     );
     assert!(
+        active_pixel_layer(&doc, Some("1/0")).is_some_and(|layer| layer.name == "nested"),
+        "a nested path resolves to its leaf"
+    );
+    assert!(
         active_pixel_layer(&doc, Some("0/0")).is_none(),
-        "a nested path has no target"
+        "a leaf has no children to resolve"
     );
     assert!(
         active_pixel_layer(&doc, Some("")).is_none(),
@@ -1112,6 +1116,67 @@ fn active_layer_resolution_targets_only_a_single_top_level_raster() {
         .name = "renamed".to_string();
     assert_eq!(doc.layers[0].name, "renamed");
     assert_eq!(doc.layers[1].name, "group", "other layers are untouched");
+
+    active_pixel_layer_mut(&mut doc, Some("1/0"))
+        .expect("mutable nested target")
+        .name = "leaf".to_string();
+    assert_eq!(doc.layers[1].children[0].name, "leaf");
+}
+
+#[test]
+fn nested_layer_paint_targets_the_leaf_and_refuses_a_group() {
+    use pictura_paint::{paint_stroke, Rgba, StrokeConfig, StrokeSample};
+
+    let nested = pixel_layer("nested", 8, 8, (0, 0, 0));
+    let nested_before = nested
+        .channels
+        .iter()
+        .find(|c| c.id == 0)
+        .unwrap()
+        .data
+        .clone();
+    let mut group = pixel_layer("folder", 8, 8, (0, 0, 0));
+    group.is_group = true;
+    group.children = vec![nested];
+    let mut doc = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers = vec![group, pixel_layer("base", 8, 8, (10, 20, 30))];
+    let base_before = doc.layers[1].clone();
+
+    assert!(active_pixel_layer(&doc, Some("0/0")).is_some());
+    assert!(
+        active_pixel_layer(&doc, Some("0")).is_none(),
+        "a group is refused"
+    );
+
+    let cfg = StrokeConfig {
+        color: Rgba {
+            r: 255,
+            g: 0,
+            b: 0,
+            a: 255,
+        },
+        diameter: 6,
+        ..StrokeConfig::default()
+    };
+    let samples = [StrokeSample {
+        x: 4.0,
+        y: 4.0,
+        pressure: 1.0,
+    }];
+    paint_stroke(&mut doc, "0/0", &cfg, &samples).expect("paint the nested leaf");
+    let nested_after = doc.layers[0].children[0]
+        .channels
+        .iter()
+        .find(|c| c.id == 0)
+        .unwrap()
+        .data
+        .clone();
+    assert_ne!(
+        nested_after.as_ref(),
+        nested_before.as_ref(),
+        "the stroke lands in the nested leaf"
+    );
+    assert_eq!(doc.layers[1], base_before, "the sibling is untouched");
 }
 
 #[test]

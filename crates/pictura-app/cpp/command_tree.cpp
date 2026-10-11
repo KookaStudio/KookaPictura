@@ -275,7 +275,8 @@ void addDefaultCommands(CommandRegistry& registry) {
                  QStringLiteral("90° CW"), QKeySequence(), true);
     registry.add(command_ids::ImageRotate90Ccw, {"Image", "Image Rotation", "90° CCW"},
                  QStringLiteral("90° CCW"), QKeySequence(), true);
-    leaf(registry, {"Image", "Image Rotation", "Arbitrary…"}, QStringLiteral("Arbitrary…"));
+    registry.add(command_ids::ImageRotateArbitrary, {"Image", "Image Rotation", "Arbitrary…"},
+                 QStringLiteral("Arbitrary…"), QKeySequence(), true);
     registry.add(command_ids::ImageFlipHorizontal, {"Image", "Image Rotation", "Flip Canvas Horizontal"},
                  QStringLiteral("Flip Canvas Horizontal"), QKeySequence(), true);
     registry.add(command_ids::ImageFlipVertical, {"Image", "Image Rotation", "Flip Canvas Vertical"},

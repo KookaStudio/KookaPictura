@@ -8,6 +8,7 @@
 #include "tools.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/layer_path.cxxqt.h"
 
 namespace pictura {
 
@@ -131,15 +132,12 @@ QJsonObject ControlServer::methodFilter(const QJsonObject& params)
     // that is an unknown kind.
     //
     // ponytail: the app fixes the filter seed; typed params/seed are future work.
-    bool activeOk = false;
-    const int parsedActive = view->active_layer_path().toInt(&activeOk);
-    const int activeIndex = activeOk ? parsedActive : -1;
-    const QString activeKind =
-        activeIndex >= 0 ? view->layer_kind(activeIndex) : QString();
-    const bool editablePixel = activeIndex >= 0 && activeIndex < view->layer_count()
+    const QString activePath = view->active_layer_path();
+    const QString activeKind = layer_kind_path(*view, activePath);
+    const bool editablePixel = !activeKind.isEmpty()
                                && activeKind != QStringLiteral("group")
                                && activeKind != QStringLiteral("adjustment");
-    const bool pixelLocked = editablePixel && (view->layer_lock(activeIndex) & 0x02) != 0;
+    const bool pixelLocked = editablePixel && (layer_lock_path(*view, activePath) & 0x02) != 0;
     if (!editablePixel || !view->active_layer_visible() || pixelLocked) {
         return error(QStringLiteral("refused"),
                      QStringLiteral("filter target layer is unavailable, hidden, or locked"));

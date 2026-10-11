@@ -5,7 +5,9 @@
 // Source: https://github.com/perfecto25/photorust
 
 #include <QtCore/QList>
+#include <QtCore/QPointer>
 #include <QtCore/QPointF>
+#include <QtCore/QRect>
 #include <QtCore/QRectF>
 #include <QtGui/QImage>
 #include <QtWidgets/QDialog>
@@ -16,14 +18,17 @@ class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
 class QLabel;
+class QProgressBar;
 class QPushButton;
 class QResizeEvent;
 class QShowEvent;
+class QTimer;
 class QSlider;
 
 namespace pictura {
 
 class FilterParamControls;
+class ImageView;
 class PictureView;
 
 // The canvas state a filter dialog previews against: the document-space rect
@@ -32,6 +37,10 @@ class PictureView;
 struct FilterPreviewView {
     QRectF visible;
     double canvasZoom = 1.0;
+    // The canvas a zoomed-out preview draws its reduced copy on, and its
+    // device pixel ratio. Without one every preview filters the document.
+    ImageView* canvas = nullptr;
+    double devicePixelRatio = 1.0;
 };
 
 // CS6's shared filter dialog: a preview thumbnail with its own zoom and a
@@ -44,6 +53,7 @@ class FilterPreviewDialog : public QDialog {
 public:
     FilterPreviewDialog(PictureView* view, const FilterCommandSpec& spec,
                         const FilterPreviewView& previewView = {}, QWidget* parent = nullptr);
+    ~FilterPreviewDialog() override;
 
     // The parameter slot values in mapping order.
     QList<double> values() const;
@@ -59,9 +69,30 @@ public:
                     QList<double>* out, QWidget* parent);
 
 private:
+    // Schedule a canvas preview of the current values; changes that arrive
+    // before it runs (queued behind a slow preview) coalesce into one.
     void valuesChanged();
+    void runPreview();
     void discardPreview();
     void updateThumbnail();
+    void zoomChanged();
+    // Below 100% zoom over a large area the canvas shows a reduced copy
+    // filtered with scaled pixel parameters (photocraft's proxy preview,
+    // #152); the document is filtered only on OK.
+    bool previewsOnProxy() const;
+    bool showProxy();
+    void clearProxy();
+    // The exact picture: the worker filters the full-resolution layer and the
+    // canvas swaps the draft copy for it when it lands.
+    void startExactPreview(const QList<double>& values);
+    void pollExactPreview();
+    void cancelExactPreview();
+    // The pane's section filtered off the document while the canvas shows
+    // the copy.
+    void updatePaneSection();
+    QRect proxyRegion() const;
+    // The document section the pane shows at its zoom level.
+    QRect thumbnailCrop() const;
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
@@ -77,6 +108,19 @@ private:
     int zoom_ = 2;
     bool previewShown_ = false;
     bool shownOnce_ = false;
+    QTimer* previewTimer_ = nullptr;
+    QPointer<ImageView> canvas_;
+    double devicePixelRatio_ = 1.0;
+    // The filter places itself against the whole layer, so neither a section
+    // preview nor a section of the proxy stands for it.
+    bool positional_ = false;
+    bool proxyShown_ = false;
+    QImage proxyPicture_;
+    QRect proxyArea_;
+    double proxyScale_ = 1.0;
+    QImage sectionImage_;
+    QTimer* exactTimer_ = nullptr;
+    QProgressBar* exactBusy_ = nullptr;
     QRectF previewVisible_;
     double canvasZoom_ = 1.0;
     // A small pre-preview picture for a bottom pane (Shear): the document with

@@ -25,6 +25,10 @@ struct NumericFieldConfig {
     // Child object names are `<namePrefix>{Label,Edit,Suffix,Arrow,Popup}`.
     QString namePrefix = QStringLiteral("numeric");
     QString objectName;
+    // An integer field (decimals == 0) normally rejects a typed fraction; set
+    // this to accept one and render it as an integer unless a decimal is typed.
+    // Kept last so positional aggregate initializers stay valid.
+    bool allowFractional = false;
 };
 
 // A leading label, a left-aligned text editor, and an optional slider popup.
@@ -42,6 +46,8 @@ public:
     double value() const { return value_; }
     void setValue(double value);
     QString labelText() const;
+    // Show or hide the in-box suffix (e.g. " px"); the row reflows.
+    void setSuffixVisible(bool visible);
 
 signals:
     void valueChanged(double value);
@@ -70,6 +76,9 @@ private:
     bool syncing_ = false;
     bool scrubbing_ = false;
     bool pending_ = false;
+    // True when the last typed edit contained a decimal point; an integer field
+    // (decimals == 0) then keeps the fraction instead of rounding.
+    bool decimalTyped_ = false;
     QPoint scrubOrigin_;
     double scrubStart_ = 0.0;
 };

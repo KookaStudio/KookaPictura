@@ -42,6 +42,12 @@ pub mod ffi {
         /// The name Image ▸ Duplicate suggests: the source file's base name plus
         /// " copy".
         fn duplicate_name(view: &PictureView) -> QString;
+
+        /// `Image ▸ Image Rotation ▸ Arbitrary`: rotate the document about its
+        /// centre by `angle_deg` degrees clockwise, recomposite, and record one
+        /// "Rotate" state. False for a non-finite or zero angle, an out-of-range
+        /// angle, or without a document.
+        fn rotate_document_arbitrary(view: Pin<&mut PictureView>, angle_deg: f64) -> bool;
     }
 }
 
@@ -125,6 +131,26 @@ fn trim_image(view: Pin<&mut PictureView>) -> bool {
         return false;
     }
     finish(view, cropped, "Trim")
+}
+
+fn rotate_document_arbitrary(mut view: Pin<&mut PictureView>, angle_deg: f64) -> bool {
+    if !angle_deg.is_finite() || angle_deg == 0.0 || !(-359.99..=359.99).contains(&angle_deg) {
+        return false;
+    }
+    let rotated = {
+        let mut rust = view.as_mut().rust_mut();
+        let Some(doc) = rust.doc.as_mut() else {
+            return false;
+        };
+        let pivot = (doc.width as f64 / 2.0, doc.height as f64 / 2.0);
+        pictura_render::rotate_document_in(doc, angle_deg, pivot)
+    };
+    if rotated {
+        view.as_mut().rust_mut().selection = None;
+        view.as_mut().recomposite();
+        view.as_mut().record("Rotate");
+    }
+    rotated
 }
 
 fn duplicate_name(view: &PictureView) -> QString {

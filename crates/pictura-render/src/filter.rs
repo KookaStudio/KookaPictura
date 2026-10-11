@@ -10,6 +10,7 @@ use pictura_core::{
     layer_pixel_locked, layer_transparency_locked, Layer, LayerMask, PixelBuffer, PsdRect,
 };
 use pictura_filters::{Filter, FilterError};
+use rayon::prelude::*;
 
 use crate::channel;
 
@@ -117,6 +118,30 @@ pub fn filter_preserves_opacity(filter: &Filter) -> bool {
     )
 }
 
+/// Kernels whose row-parallel CPU path beats the GPU round trip, so a layer
+/// filter skips the GPU for them. Measured at 8192² on an integrated AMD 780M
+/// (#152): uploading and reading back cost about what the CPU takes for the
+/// whole kernel (Gaussian radius 4: GPU 0.91 s, CPU 0.46 s; Median radius 10:
+/// GPU 11.2 s, CPU 3.4 s). Box, Motion and Surface Blur and Oil Paint stay on
+/// the GPU, which still wins there.
+/// ponytail: one machine's crossover; re-measure on a discrete GPU.
+pub(crate) fn cpu_outruns_gpu(filter: &Filter) -> bool {
+    matches!(
+        filter,
+        Filter::GaussianBlur { .. }
+            | Filter::Blur
+            | Filter::BlurMore
+            | Filter::Sharpen
+            | Filter::SharpenMore
+            | Filter::UnsharpMask { .. }
+            | Filter::HighPass { .. }
+            | Filter::Maximum { .. }
+            | Filter::Minimum { .. }
+            | Filter::Median { .. }
+            | Filter::Custom { .. }
+    )
+}
+
 /// The kernel the alpha pass runs for `filter`. Offset's exposed area takes
 /// the Background colour, which CS6's "Set to Background" paints opaque, so
 /// the alpha pass fills it with 255 rather than the colour's grey.
@@ -201,22 +226,14 @@ fn apply_op_region(
         [c0, channel(layer, 1).unwrap(), channel(layer, 2).unwrap()]
     };
     let mut buf = PixelBuffer::new(cw as u32, ch as u32, 3);
-    for (c, src) in sources.into_iter().enumerate() {
-        for row in 0..ch {
-            let from = (oy + row) * lw + ox;
-            let to = c * n + row * cw;
-            buf.data[to..to + cw].copy_from_slice(&src[from..from + cw]);
-        }
-    }
-
-    let orig = buf.clone();
-    match op {
-        Op::Filter(filter, gpu_enabled) => {
-            crate::gpu_filter::apply_filter_active(filter, &mut buf, gpu_enabled)?;
-        }
-        Op::Adjustment(adjustment) => pictura_adjust::apply(adjustment, &mut buf)
-            .map_err(|error| FilterError::InvalidParams(error.to_string()))?,
-    }
+    buf.data
+        .as_mut_slice()
+        .par_chunks_mut(cw)
+        .enumerate()
+        .for_each(|(i, row)| {
+            let from = (oy + i % ch) * lw + ox;
+            row.copy_from_slice(&sources[i / ch][from..from + cw]);
+        });
 
     // A transparency lock preserves the alpha plane exactly and leaves fully
     // transparent pixels untouched; only opaque pixels take the filter colour.
@@ -227,17 +244,33 @@ fn apply_op_region(
     // working buffer once the kernels accept a fourth plane.
     let alpha_locked = layer_transparency_locked(layer);
     let alpha_original: Option<Vec<u8>> = channel(layer, -1).map(|data| {
-        let mut crop = Vec::with_capacity(n);
-        for row in 0..ch {
+        let mut crop = vec![0u8; n];
+        crop.par_chunks_mut(cw).enumerate().for_each(|(row, out)| {
             let from = (oy + row) * lw + ox;
-            crop.extend_from_slice(&data[from..from + cw]);
-        }
+            out.copy_from_slice(&data[from..from + cw]);
+        });
         crop
     });
+    // Without a mask or a transparency lock every pixel takes the filtered
+    // value whole, so the pre-filter copy is kept only for the blend.
+    let orig = (mask.is_some() || alpha_locked).then(|| buf.clone());
+    match op {
+        Op::Filter(filter, gpu_enabled) => {
+            let gpu = gpu_enabled && !cpu_outruns_gpu(filter);
+            crate::gpu_filter::apply_filter_active(filter, &mut buf, gpu)?;
+        }
+        Op::Adjustment(adjustment) => pictura_adjust::apply(adjustment, &mut buf)
+            .map_err(|error| FilterError::InvalidParams(error.to_string()))?,
+    }
+
     let filtered_alpha = match op {
         Op::Filter(filter, _) if !alpha_locked && !filter_preserves_opacity(filter) => {
             alpha_original
                 .as_ref()
+                // A moving kernel maps a flat opaque plane to itself
+                // (`moving_kernels_map_opaque_to_opaque`), so an opaque crop
+                // needs no rerun.
+                .filter(|alpha| !alpha.par_iter().all(|&a| a == 255))
                 .map(|alpha| -> Result<Vec<u8>, FilterError> {
                     let mut gray = PixelBuffer::new(cw as u32, ch as u32, 3);
                     for c in 0..3usize {
@@ -251,50 +284,103 @@ fn apply_op_region(
         _ => None,
     };
 
-    let (left, top) = (clip.left, clip.top);
+    let at = Placement {
+        lw,
+        ox,
+        oy,
+        cw,
+        left: clip.left,
+        top: clip.top,
+    };
     // A Grayscale result is a single plane; a color result has all three.
     let write_planes: &[i16] = if grayscale { &[0] } else { &[0, 1, 2] };
     for &c in write_planes {
         let plane = c as usize * n;
-        let orig_plane = &orig.data[plane..plane + n];
-        let filtered_plane = &buf.data[plane..plane + n];
+        let blend = orig.as_ref().map(|orig| Blend {
+            source: &orig.data[plane..plane + n],
+            mask,
+            keep_clear: if alpha_locked {
+                alpha_original.as_deref()
+            } else {
+                None
+            },
+        });
         let out = channel_mut(layer, c).expect("channel presence validated above");
-        for ly in 0..ch {
-            for lx in 0..cw {
-                let i = ly * cw + lx;
-                if alpha_locked && alpha_original.as_ref().is_some_and(|a| a[i] == 0) {
-                    continue;
-                }
-                let cov = coverage(mask, left + lx as i32, top + ly as i32);
-                if cov == 0 {
-                    continue;
-                }
-                let o = orig_plane[i] as f64;
-                let f = filtered_plane[i] as f64;
-                let dst = (oy + ly) * lw + ox + lx;
-                out[dst] = (o + (f - o) * cov as f64 / 255.0).round().clamp(0.0, 255.0) as u8;
-            }
-        }
+        write_back(out, &buf.data[plane..plane + n], blend, at);
     }
 
     // Write the filtered transparency (unlocked layers only).
     if let (Some(source), Some(filtered)) = (alpha_original.as_ref(), filtered_alpha.as_ref()) {
+        let blend = mask.is_some().then_some(Blend {
+            source,
+            mask,
+            keep_clear: None,
+        });
         let out = channel_mut(layer, -1).expect("alpha presence checked above");
-        for ly in 0..ch {
+        write_back(out, filtered, blend, at);
+    }
+    Ok(())
+}
+
+/// Where a clip-sized result lands in a layer-wide plane: the layer width,
+/// the clip's offset and width inside the layer, and its document origin.
+#[derive(Clone, Copy)]
+struct Placement {
+    lw: usize,
+    ox: usize,
+    oy: usize,
+    cw: usize,
+    left: i32,
+    top: i32,
+}
+
+/// How [`write_back`] mixes a filtered plane into the layer: each pixel moves
+/// from `source` toward the filtered value by the `mask` coverage, and pixels
+/// clear in `keep_clear` (a transparency-locked alpha crop) keep their value.
+#[derive(Clone, Copy)]
+struct Blend<'a> {
+    source: &'a [u8],
+    mask: Option<&'a LayerMask>,
+    keep_clear: Option<&'a [u8]>,
+}
+
+/// Write the clip-sized `filtered` plane into the layer-wide `out`, row-parallel.
+/// Without a `blend` every pixel takes the filtered value, which is what the
+/// blend yields at full coverage.
+fn write_back(out: &mut [u8], filtered: &[u8], blend: Option<Blend>, at: Placement) {
+    let Placement {
+        lw,
+        ox,
+        oy,
+        cw,
+        left,
+        top,
+    } = at;
+    let rows = filtered.len() / cw;
+    out[oy * lw..(oy + rows) * lw]
+        .par_chunks_mut(lw)
+        .enumerate()
+        .for_each(|(ly, row)| {
+            let dst = &mut row[ox..ox + cw];
+            let src = &filtered[ly * cw..(ly + 1) * cw];
+            let Some(blend) = blend else {
+                dst.copy_from_slice(src);
+                return;
+            };
             for lx in 0..cw {
                 let i = ly * cw + lx;
-                let cov = coverage(mask, left + lx as i32, top + ly as i32);
+                if blend.keep_clear.is_some_and(|a| a[i] == 0) {
+                    continue;
+                }
+                let cov = coverage(blend.mask, left + lx as i32, top + ly as i32);
                 if cov == 0 {
                     continue;
                 }
-                let o = source[i] as f64;
-                let f = filtered[i] as f64;
-                let dst = (oy + ly) * lw + ox + lx;
-                out[dst] = (o + (f - o) * cov as f64 / 255.0).round().clamp(0.0, 255.0) as u8;
+                let o = blend.source[i] as f64;
+                let f = src[lx] as f64;
+                dst[lx] = (o + (f - o) * cov as f64 / 255.0).round().clamp(0.0, 255.0) as u8;
             }
-        }
-    }
-    Ok(())
+        });
 }
 
 fn intersect_rect(a: PsdRect, b: PsdRect) -> PsdRect {
@@ -368,605 +454,4 @@ pub(crate) fn coverage(mask: Option<&LayerMask>, x: i32, y: i32) -> u8 {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use pictura_core::{BlendMode, Channel, ColorLabel, LockFlags, PsdRect};
-
-    fn rect(top: i32, left: i32, bottom: i32, right: i32) -> PsdRect {
-        PsdRect {
-            top,
-            left,
-            bottom,
-            right,
-        }
-    }
-
-    fn step_layer(w: i32, h: i32, alpha: u8) -> Layer {
-        let n = (w * h) as usize;
-        let plane: Vec<u8> = (0..n)
-            .map(|i| if (i as i32 % w) < w / 2 { 40 } else { 200 })
-            .collect();
-        Layer {
-            name: "px".into(),
-            rect: rect(0, 0, h, w),
-            blend: BlendMode::Normal,
-            opacity: 255,
-            fill: 255,
-            lock: LockFlags::default(),
-            color: ColorLabel::None,
-            clipping: false,
-            visible: true,
-            mask: None,
-            adjustment: None,
-            channels: vec![
-                Channel {
-                    id: 0,
-                    data: plane.clone().into(),
-                },
-                Channel {
-                    id: 1,
-                    data: plane.clone().into(),
-                },
-                Channel {
-                    id: 2,
-                    data: plane.into(),
-                },
-                Channel {
-                    id: -1,
-                    data: vec![alpha; n].into(),
-                },
-            ],
-            children: Vec::new(),
-            is_group: false,
-            background: false,
-            ..Default::default()
-        }
-    }
-
-    fn chan(layer: &Layer, id: i16) -> &[u8] {
-        &layer.channels.iter().find(|c| c.id == id).unwrap().data
-    }
-
-    /// A non-uniform colour layer (the step in [`step_layer`] cannot expose a
-    /// too-small apron, because clamping replays the same flat values).
-    fn varied_layer(w: i32, h: i32) -> Layer {
-        let n = (w * h) as usize;
-        let mut layer = step_layer(w, h, 255);
-        for (c, ch) in layer.channels.iter_mut().filter(|c| c.id >= 0).enumerate() {
-            let plane: Vec<u8> = (0..n)
-                .map(|i| {
-                    let x = (i % w as usize) as u32;
-                    let y = (i / w as usize) as u32;
-                    ((x * 7 + y * 13 + c as u32 * 53) % 256) as u8
-                })
-                .collect();
-            ch.data = plane.into();
-        }
-        layer
-    }
-
-    #[test]
-    fn gaussian_blur_changes_interior_leaves_alpha_and_meta() {
-        let mut layer = step_layer(32, 32, 123);
-        let rect_before = layer.rect;
-        let blend_before = layer.blend;
-        let opacity_before = layer.opacity;
-        let alpha_before = chan(&layer, -1).to_vec();
-        let before = chan(&layer, 0).to_vec();
-
-        apply_filter(
-            &mut layer,
-            &Filter::GaussianBlur { radius: 5.0 },
-            None,
-            false,
-        )
-        .unwrap();
-
-        assert_ne!(chan(&layer, 0), before.as_slice());
-        let edge = 15usize * 32 + 16;
-        assert_ne!(chan(&layer, 0)[edge], before[edge]);
-        assert_eq!(chan(&layer, -1), alpha_before.as_slice());
-        assert_eq!(layer.rect, rect_before);
-        assert_eq!(layer.blend, blend_before);
-        assert_eq!(layer.opacity, opacity_before);
-        assert!(layer.mask.is_none());
-    }
-
-    #[test]
-    fn mask_confines_change_to_left_half() {
-        let (w, h) = (8usize, 8usize);
-        let mut layer = step_layer(w as i32, h as i32, 255);
-        let before = chan(&layer, 0).to_vec();
-        let mask = LayerMask {
-            rect: rect(0, 0, h as i32, w as i32),
-            default_color: 0,
-            disabled: false,
-            flags: 0,
-            data: Some(
-                (0..w * h)
-                    .map(|i| if i % w < w / 2 { 255 } else { 0 })
-                    .collect(),
-            ),
-            ..Default::default()
-        };
-
-        apply_filter(
-            &mut layer,
-            &Filter::GaussianBlur { radius: 2.0 },
-            Some(&mask),
-            false,
-        )
-        .unwrap();
-
-        let after = chan(&layer, 0);
-        let inside = 3 * w + 3;
-        assert_ne!(
-            after[inside], before[inside],
-            "left-half pixel should change"
-        );
-        for y in 0..h {
-            for x in w / 2..w {
-                let i = y * w + x;
-                assert_eq!(
-                    after[i], before[i],
-                    "pixel ({x},{y}) outside coverage changed"
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn disabled_mask_reports_full_coverage() {
-        let mask = LayerMask {
-            rect: rect(0, 0, 4, 4),
-            default_color: 0,
-            disabled: true,
-            flags: 0,
-            data: Some(vec![0u8; 16].into()),
-            ..Default::default()
-        };
-        assert_eq!(
-            coverage(Some(&mask), 0, 0),
-            255,
-            "disabled mask must not gate"
-        );
-        assert_eq!(coverage(Some(&mask), 3, 3), 255);
-
-        let enabled = LayerMask {
-            disabled: false,
-            ..mask
-        };
-        assert_eq!(
-            coverage(Some(&enabled), 1, 1),
-            0,
-            "enabled mask still gates"
-        );
-    }
-
-    #[test]
-    fn missing_color_channel_is_invalid_params() {
-        let mut layer = step_layer(4, 4, 255);
-        layer.channels.retain(|c| c.id != 2);
-        let err = apply_filter(&mut layer, &Filter::Sharpen, None, false).unwrap_err();
-        assert!(matches!(err, FilterError::InvalidParams(_)), "{err:?}");
-    }
-
-    #[test]
-    fn wrong_length_channel_is_invalid_params() {
-        let mut layer = step_layer(4, 4, 255);
-        for c in &mut layer.channels {
-            if c.id == 1 {
-                c.data.truncate(3);
-            }
-        }
-        let err = apply_filter(&mut layer, &Filter::Sharpen, None, false).unwrap_err();
-        assert!(matches!(err, FilterError::InvalidParams(_)), "{err:?}");
-    }
-
-    #[test]
-    fn empty_layer_rect_is_noop() {
-        let mut layer = step_layer(4, 4, 255);
-        layer.rect = rect(0, 0, 4, 0);
-        assert!(apply_filter(&mut layer, &Filter::Median { radius: 200 }, None, false).is_ok());
-        layer.rect = rect(0, 0, 0, 4);
-        assert!(apply_filter(&mut layer, &Filter::Median { radius: 200 }, None, false).is_ok());
-    }
-
-    #[test]
-    fn filter_parameter_error_propagates() {
-        let mut layer = step_layer(4, 4, 255);
-        let err =
-            apply_filter(&mut layer, &Filter::Median { radius: 200 }, None, false).unwrap_err();
-        assert!(matches!(err, FilterError::InvalidParams(_)), "{err:?}");
-    }
-
-    #[test]
-    fn pixel_locked_layer_is_refused_and_unchanged() {
-        let mut layer = step_layer(8, 8, 255);
-        layer.lock = LockFlags::default().with(LockFlags::PIXELS, true);
-        let before = layer.clone();
-        let err = apply_filter(
-            &mut layer,
-            &Filter::GaussianBlur { radius: 2.0 },
-            None,
-            false,
-        )
-        .unwrap_err();
-        assert!(matches!(err, FilterError::Locked), "{err:?}");
-        assert_eq!(layer, before, "refusal leaves every channel bit-identical");
-    }
-
-    #[test]
-    fn transparency_lock_keeps_alpha_and_skips_clear_pixels() {
-        let (w, h) = (4usize, 4usize);
-        let mut layer = step_layer(w as i32, h as i32, 255);
-        for c in &mut layer.channels {
-            if c.id == -1 {
-                c.data[w + 1] = 0;
-                c.data[w + 2] = 180;
-            }
-        }
-        layer.lock = LockFlags::default().with(LockFlags::TRANSPARENCY, true);
-        let alpha_before = chan(&layer, -1).to_vec();
-        let before = chan(&layer, 0).to_vec();
-
-        apply_filter(
-            &mut layer,
-            &Filter::GaussianBlur { radius: 2.0 },
-            None,
-            false,
-        )
-        .unwrap();
-
-        assert_eq!(
-            chan(&layer, -1),
-            alpha_before.as_slice(),
-            "alpha is bit-identical"
-        );
-        assert_eq!(
-            chan(&layer, 0)[w + 1],
-            before[w + 1],
-            "a fully transparent pixel is untouched"
-        );
-        assert_eq!(chan(&layer, -1)[w + 2], 180);
-        assert!(
-            chan(&layer, 0)
-                .iter()
-                .enumerate()
-                .any(|(i, v)| { alpha_before[i] > 0 && *v != before[i] }),
-            "an opaque pixel still takes the filter"
-        );
-    }
-
-    #[test]
-    fn region_apply_matches_full_inside_and_leaves_the_rest() {
-        let filter = Filter::GaussianBlur { radius: 2.0 };
-        let full = step_layer(32, 32, 255);
-        let region = rect(8, 8, 24, 24);
-        let mut partial = full.clone();
-        apply_filter_region(&mut partial, &filter, None, false, region).unwrap();
-        let mut whole = full.clone();
-        apply_filter(&mut whole, &filter, None, false).unwrap();
-
-        let w = 32usize;
-        // The blurred step edge at the region centre matches the full apply.
-        assert_eq!(
-            chan(&partial, 0)[16 * w + 16],
-            chan(&whole, 0)[16 * w + 16],
-            "inside the region matches a full apply"
-        );
-        // A corner outside the region is untouched.
-        assert_eq!(
-            chan(&partial, 0)[0],
-            chan(&full, 0)[0],
-            "outside the region is not filtered"
-        );
-    }
-
-    #[test]
-    fn unlocked_layer_filters_its_transparency() {
-        let (w, h) = (8usize, 8usize);
-        let mut layer = step_layer(w as i32, h as i32, 255);
-        for c in &mut layer.channels {
-            if c.id == -1 {
-                for i in 0..w * h {
-                    c.data[i] = if i % w < w / 2 { 255 } else { 0 };
-                }
-            }
-        }
-        let alpha_before = chan(&layer, -1).to_vec();
-        apply_filter(
-            &mut layer,
-            &Filter::GaussianBlur { radius: 1.5 },
-            None,
-            false,
-        )
-        .unwrap();
-        assert_ne!(
-            chan(&layer, -1),
-            alpha_before.as_slice(),
-            "an unlocked layer's alpha is filtered"
-        );
-    }
-
-    /// Kinds whose kernel reads absolute values, replaces the planes, or adds
-    /// onto them, so a rerun over alpha would rewrite opacity (#248).
-    fn value_kernels() -> Vec<Filter> {
-        use pictura_filters::{ContourEdge, LensType, NoiseDistribution, TileFill};
-        vec![
-            Filter::GlowingEdges {
-                width: 2,
-                brightness: 6,
-                smoothness: 1,
-            },
-            Filter::Lighting {
-                lighting: pictura_filters::Lighting::default(),
-            },
-            Filter::HdrToning(pictura_filters::HdrToningParams::default()),
-            Filter::Solarize,
-            Filter::Clouds {
-                color_a: [0; 3],
-                color_b: [255; 3],
-                starker: false,
-                seed: 7,
-            },
-            Filter::DifferenceClouds {
-                color_a: [0; 3],
-                color_b: [255; 3],
-                starker: false,
-                seed: 7,
-            },
-            Filter::Fibers {
-                variance: 16.0,
-                strength: 4.0,
-                color_a: [0; 3],
-                color_b: [255; 3],
-                seed: 7,
-            },
-            Filter::LensFlare {
-                brightness: 300.0,
-                center: (0.75, 0.5),
-                lens: LensType::Zoom,
-            },
-            Filter::TraceContour {
-                level: 128,
-                edge: ContourEdge::Upper,
-            },
-            Filter::Tiles {
-                count: 4,
-                offset: 30,
-                fill: TileFill::BackgroundColor,
-                foreground: [255; 3],
-                background: [0; 3],
-            },
-            Filter::FindEdges,
-            Filter::Emboss {
-                angle: 135.0,
-                height: 3.0,
-                amount: 100.0,
-            },
-            Filter::HighPass { radius: 4.0 },
-            Filter::AddNoise {
-                amount: 25.0,
-                distribution: NoiseDistribution::Uniform,
-                monochromatic: false,
-                seed: 7,
-            },
-        ]
-    }
-
-    /// The right half of `layer` fully transparent, the left half opaque.
-    fn half_clear(mut layer: Layer) -> Layer {
-        let w = layer.rect.width() as usize;
-        for c in &mut layer.channels {
-            if c.id == -1 {
-                for i in 0..c.data.len() {
-                    if i % w >= w / 2 {
-                        c.data[i] = 0;
-                    }
-                }
-            }
-        }
-        layer
-    }
-
-    #[test]
-    fn value_kernels_leave_alpha_bit_identical() {
-        for filter in value_kernels() {
-            for mut layer in [step_layer(16, 16, 255), half_clear(step_layer(16, 16, 255))] {
-                let alpha_before = chan(&layer, -1).to_vec();
-                apply_filter(&mut layer, &filter, None, false).unwrap();
-                assert_eq!(
-                    chan(&layer, -1),
-                    alpha_before.as_slice(),
-                    "{filter:?} must leave alpha bit-identical"
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn moving_kernels_keep_an_opaque_layer_opaque() {
-        use pictura_filters::{PolarKind, RippleSize, ShearFill};
-        let filters = [
-            Filter::GaussianBlur { radius: 2.0 },
-            Filter::UnsharpMask {
-                amount: 150.0,
-                radius: 2.0,
-                threshold: 0,
-            },
-            Filter::Median { radius: 2 },
-            Filter::Mosaic { cell_size: 5 },
-            Filter::Twirl { angle: 90.0 },
-            Filter::Ripple {
-                amount: 200.0,
-                size: RippleSize::Medium,
-            },
-            Filter::PolarCoordinates {
-                kind: PolarKind::RectangularToPolar,
-            },
-            Filter::Shear {
-                curve: vec![(0.0, 0.0), (0.5, 0.4), (1.0, 0.0)],
-                fill: ShearFill::RepeatEdgePixels,
-            },
-            Filter::Offset {
-                horizontal: 2000,
-                vertical: 2000,
-                wrap: false,
-                background: [0; 3],
-            },
-        ];
-        for filter in filters {
-            let mut layer = step_layer(16, 16, 255);
-            apply_filter(&mut layer, &filter, None, false).unwrap();
-            assert!(
-                chan(&layer, -1).iter().all(|&a| a == 255),
-                "{filter:?} made an opaque layer transparent"
-            );
-        }
-    }
-
-    #[test]
-    fn offset_moves_the_layer_edge_and_fills_what_it_exposes_opaque() {
-        let mut layer = half_clear(step_layer(16, 16, 255));
-        let filter = Filter::Offset {
-            horizontal: 4,
-            vertical: 0,
-            wrap: false,
-            background: [0; 3],
-        };
-        apply_filter(&mut layer, &filter, None, false).unwrap();
-        let alpha = chan(&layer, -1);
-        for (x, expected) in [(0, 255), (3, 255), (4, 255), (11, 255), (12, 0), (15, 0)] {
-            assert_eq!(alpha[x], expected, "alpha at x = {x}");
-        }
-    }
-
-    #[test]
-    fn hdr_toning_apron_covers_its_blur_support() {
-        let (w, h) = (512i32, 64i32);
-        let filter = Filter::HdrToning(pictura_filters::HdrToningParams {
-            radius: 40.0,
-            gamma: 1.0,
-            ..Default::default()
-        });
-        assert_eq!(preview_apron(&filter), 120, "apron must be 3 * sigma");
-
-        let viewport = rect(16, 160, 48, 352);
-        let base = varied_layer(w, h);
-        let mut whole = base.clone();
-        apply_filter(&mut whole, &filter, None, false).unwrap();
-
-        let apron = preview_apron(&filter);
-        let expanded = rect(
-            viewport.top - apron,
-            viewport.left - apron,
-            viewport.bottom + apron,
-            viewport.right + apron,
-        );
-        let mut region = base.clone();
-        apply_filter_region(&mut region, &filter, None, false, expanded).unwrap();
-
-        let lw = w as usize;
-        for y in viewport.top..viewport.bottom {
-            for x in viewport.left..viewport.right {
-                let i = y as usize * lw + x as usize;
-                assert_eq!(
-                    chan(&region, 0)[i],
-                    chan(&whole, 0)[i],
-                    "expanded-region preview differs from a full apply at ({x},{y})"
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn an_adjustment_changes_colour_inside_the_region_and_never_alpha() {
-        let (w, h) = (8usize, 8usize);
-        let mut layer = step_layer(w as i32, h as i32, 255);
-        for c in &mut layer.channels {
-            if c.id == -1 {
-                for i in 0..w * h {
-                    c.data[i] = if i % w < w / 2 { 255 } else { 90 };
-                }
-            }
-        }
-        let alpha_before = chan(&layer, -1).to_vec();
-        let colour_before = chan(&layer, 0).to_vec();
-        let left = PsdRect {
-            top: 0,
-            left: 0,
-            bottom: h as i32,
-            right: (w / 2) as i32,
-        };
-        apply_adjustment_region(&mut layer, &Adjustment::Invert, None, left).unwrap();
-        assert_eq!(chan(&layer, -1), alpha_before.as_slice(), "alpha untouched");
-        let after = chan(&layer, 0);
-        assert_eq!(
-            after[0],
-            255 - colour_before[0],
-            "inside the region inverts"
-        );
-        assert_eq!(after[w - 1], colour_before[w - 1], "outside it does not");
-    }
-
-    #[test]
-    fn position_and_transparency_locks_do_not_block_a_filter() {
-        for flag in [LockFlags::POSITION, LockFlags::TRANSPARENCY] {
-            let mut layer = step_layer(8, 8, 255);
-            layer.lock = LockFlags::default().with(flag, true);
-            assert!(
-                apply_filter(
-                    &mut layer,
-                    &Filter::GaussianBlur { radius: 2.0 },
-                    None,
-                    false
-                )
-                .is_ok(),
-                "flag {flag} must not refuse an opaque-preserving filter"
-            );
-        }
-    }
-
-    #[test]
-    fn grayscale_single_channel_layer_filters_channel_zero() {
-        let (w, h) = (32usize, 32usize);
-        let mut layer = step_layer(w as i32, h as i32, 123);
-        layer.channels.retain(|c| c.id == 0 || c.id == -1);
-        let before = chan(&layer, 0).to_vec();
-        let alpha_before = chan(&layer, -1).to_vec();
-
-        apply_filter(
-            &mut layer,
-            &Filter::GaussianBlur { radius: 3.0 },
-            None,
-            false,
-        )
-        .unwrap();
-
-        assert_ne!(
-            chan(&layer, 0),
-            before.as_slice(),
-            "grayscale plane changes"
-        );
-        assert_eq!(chan(&layer, -1), alpha_before.as_slice(), "alpha untouched");
-        assert_eq!(layer.channels.len(), 2, "no color planes are added");
-    }
-
-    #[test]
-    fn missing_channel_zero_is_invalid_params() {
-        let mut layer = step_layer(4, 4, 255);
-        layer.channels.retain(|c| c.id == -1);
-        let err = apply_filter(&mut layer, &Filter::Sharpen, None, false).unwrap_err();
-        assert!(matches!(err, FilterError::InvalidParams(_)), "{err:?}");
-    }
-
-    #[test]
-    fn mixed_color_and_missing_channel_is_invalid_params() {
-        // Channel 1 present but channel 2 absent is malformed, not Grayscale.
-        let mut layer = step_layer(4, 4, 255);
-        layer.channels.retain(|c| c.id != 2);
-        let err = apply_filter(&mut layer, &Filter::Sharpen, None, false).unwrap_err();
-        assert!(matches!(err, FilterError::InvalidParams(_)), "{err:?}");
-    }
-}
+mod tests;

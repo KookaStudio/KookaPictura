@@ -92,6 +92,8 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/warp_preset_dialog.cpp
     crates/pictura-app/cpp/filter_commands.cpp
     crates/pictura-app/cpp/filter_commands.h
+    crates/pictura-app/cpp/filter_commit.cpp
+    crates/pictura-app/cpp/filter_commit.h
     crates/pictura-app/cpp/filter_gallery_dialog.cpp
     crates/pictura-app/cpp/filter_gallery_dialog.h
     crates/pictura-app/cpp/filter_param_controls.cpp
@@ -113,6 +115,7 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/color_settings_dialog.cpp
     crates/pictura-app/cpp/color_picker_dialog.cpp
     crates/pictura-app/cpp/color_range_dialog.cpp
+    crates/pictura-app/cpp/refine_edge_dialog.cpp
     crates/pictura-app/cpp/replace_color_dialog.cpp
     crates/pictura-app/cpp/adjustment_dialog.cpp
     crates/pictura-app/cpp/black_white_dialog.cpp
@@ -266,6 +269,7 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/tools_selection_move.cpp
     crates/pictura-app/cpp/toolbox.cpp
     crates/pictura-app/cpp/options_bar.cpp
+    crates/pictura-app/cpp/options_bar_crop.cpp
     crates/pictura-app/cpp/options_bar_paint.cpp
     crates/pictura-app/cpp/options_bar_stamp.cpp
     crates/pictura-app/cpp/options_bar_erase.cpp
@@ -274,6 +278,7 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/options_bar_pen.cpp
     crates/pictura-app/cpp/options_bar_shape.cpp
     crates/pictura-app/cpp/options_bar_move.cpp
+    crates/pictura-app/cpp/options_bar_eyedropper.cpp
     crates/pictura-app/cpp/options_bar_rotate.cpp
     crates/pictura-app/cpp/options_bar_type.cpp
     crates/pictura-app/cpp/tool_hint_bar.cpp

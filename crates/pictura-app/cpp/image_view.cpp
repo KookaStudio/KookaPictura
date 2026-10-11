@@ -1,6 +1,7 @@
 #include "image_view.h"
 
 #include "canvas_range.h"
+#include "icons.h"
 #include "pictura_debug_timing.h"
 
 #include <QtCore/QDebug>
@@ -25,6 +26,16 @@ namespace pictura {
 namespace {
 constexpr double kMinZoom = 0.01;
 constexpr double kMaxZoom = 32.0;
+
+// The modifier flag for a modifier key, or 0 for any other key.
+int modifierFlag(int key)
+{
+    return key == Qt::Key_Alt     ? int(Qt::AltModifier)
+        : key == Qt::Key_Shift    ? int(Qt::ShiftModifier)
+        : key == Qt::Key_Control  ? int(Qt::ControlModifier)
+        : key == Qt::Key_Meta     ? int(Qt::MetaModifier)
+                                  : 0;
+}
 
 // 2x2-cell tile reused for every transparency fill. Built lazily on the GUI
 // thread the first time a document is painted.
@@ -64,6 +75,9 @@ ImageView::ImageView(QWidget* parent)
     setMinimumSize(320, 240);
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
+    // The workspace default pointer: the bare arrow the tool cursors are built
+    // on. Panels, menus, and dialogs keep the system cursor.
+    setCursor(pictura::cursor(QStringLiteral("cursor.workspace"), 2, 2));
     antsTimer_ = new QTimer(this);
     antsTimer_->setInterval(120);
     connect(antsTimer_, &QTimer::timeout, this, [this]() {
@@ -107,6 +121,7 @@ void ImageView::applyInitialView()
     emit zoomChanged(zoom_);
     emit viewChanged();
     update();
+    userAdjusted_ = true;
 }
 
 void ImageView::centreImage()
@@ -205,6 +220,14 @@ void ImageView::setCanvasColor(const QColor& color)
     update();
 }
 
+void ImageView::setCanvasBackdrop(const QColor& color, bool opaque)
+{
+    if (canvasBackdrop_ == color && canvasBackdropOpaque_ == opaque) return;
+    canvasBackdrop_ = color;
+    canvasBackdropOpaque_ = opaque;
+    update();
+}
+
 void ImageView::setPanEnabled(bool enabled)
 {
     panEnabled_ = enabled;
@@ -225,6 +248,7 @@ void ImageView::setSpacePan(bool on)
     } else {
         panning_ = false;
     }
+    update();
 }
 
 void ImageView::setOverlayPolygon(const QPolygonF& polygon)
@@ -558,11 +582,6 @@ void ImageView::setLevelProvider(LevelProvider provider)
     presentCache_.valid = false;
 }
 
-bool ImageView::smoothSamplingForZoom(double zoom)
-{
-    return zoom < 2.0;
-}
-
 int ImageView::presentLevelForZoom(double zoom, int levelCount)
 {
     if (levelCount <= 0) {
@@ -675,9 +694,16 @@ void ImageView::paintEvent(QPaintEvent*)
     const QTransform rotation = viewRotation();
     painter.setTransform(rotation);
 
+    // The canvas frame follows the box at every angle (backdrop pads past it).
+    const bool straightening = cropStraighten_ != 0.0 && !cropBox_.isNull();
+    const QRectF canvasDoc = cropBox_.isNull()
+                                 ? QRectF(0.0, 0.0, docSize_.width(), docSize_.height())
+                                 : cropCanvasImageRect();
+
     // Checkerboard in screen space, anchored to the document origin and
     // clipped to the document rect so it never spills onto the canvas.
-    const QRectF docRect(offset_, QSizeF(docSize_.width() * zoom_, docSize_.height() * zoom_));
+    const QRectF docRect(offset_.x() + canvasDoc.x() * zoom_, offset_.y() + canvasDoc.y() * zoom_,
+                         canvasDoc.width() * zoom_, canvasDoc.height() * zoom_);
     // One integer device rect for the document, rounded the way fillRect rounds,
     // so the checkerboard and the cached base share an exact boundary. Without
     // this the floor-sized present cache fell a pixel short at the right/bottom
@@ -688,7 +714,11 @@ void ImageView::paintEvent(QPaintEvent*)
     const QRect checkerRect = docDevice.intersected(viewRect().toAlignedRect());
     if (!checkerRect.isEmpty()) {
         painter.setBrushOrigin(docDevice.topLeft());
-        painter.fillRect(checkerRect, QBrush(transparencyTile()));
+        // A Background layer makes the canvas opaque: the area beyond the
+        // content shows the background colour, not the transparency tile.
+        painter.fillRect(checkerRect,
+                         canvasBackdropOpaque_ ? QBrush(canvasBackdrop_)
+                                               : QBrush(transparencyTile()));
     }
 
     painter.translate(offset_);
@@ -696,7 +726,7 @@ void ImageView::paintEvent(QPaintEvent*)
     // Crop the document content (base, preview, overlays) to the image rect.
     // The brush ring below is drawn outside this scope so it can render past
     // the document edge while staying inside the canvas widget.
-    const QRectF docClip(0.0, 0.0, docSize_.width(), docSize_.height());
+    const QRectF docClip = canvasDoc;
     painter.save();
     painter.setClipRect(docClip);
 
@@ -731,9 +761,29 @@ void ImageView::paintEvent(QPaintEvent*)
         painter.save();
         painter.setTransform(rotation);
         painter.setRenderHint(QPainter::SmoothPixmapTransform,
-                              rotation_ != 0.0 || smoothSamplingForZoom(zoom_));
+                              rotation_ != 0.0 || cropStraighten_ != 0.0
+                                  || smoothSamplingForZoom(zoom_));
+        // Clip to the (possibly expanded) canvas before composing the straighten
+        // rotation: the clip must stay axis-aligned in the view frame.
         painter.setClipRect(docDevice);
-        if (singleChannel() >= 0 && crop) {
+        // Straighten preview rotates the content about the session pivot while
+        // the box stays axis-aligned; composed into the view transform.
+        if (straightening) {
+            QTransform about;
+            const QPointF c = cropStraightenPivot_ * zoom_ + offset_;
+            about.translate(c.x(), c.y());
+            about.rotate(cropStraighten_);
+            about.translate(-c.x(), -c.y());
+            painter.setTransform(rotation * about);
+        }
+        if (!cropContentOffset_.isNull()) {
+            // Modern content pan: shift the whole composite. A document canvas
+            // holds no image_, so pull level 0 through image() (the doc crop).
+            const QImage composite = image();
+            if (!composite.isNull()) {
+                painter.drawImage(offset_ + cropContentOffset_ * zoom_, composite);
+            }
+        } else if (singleChannel() >= 0 && crop) {
             const QRectF target(offset_.x() + cropDoc.x() * zoom_,
                                 offset_.y() + cropDoc.y() * zoom_, cropDoc.width() * zoom_,
                                 cropDoc.height() * zoom_);
@@ -773,6 +823,7 @@ void ImageView::paintEvent(QPaintEvent*)
         painter.restore();
         presentCacheRebuiltLastPaint_ = presentCache_.rebuilds != before;
     }
+    paintFilterPreview(painter);
     // Hidden channels (two still shown): zero them with one multiply.
     if (channelMask_ != 0x7 && singleChannel() < 0) {
         painter.setCompositionMode(QPainter::CompositionMode_Multiply);
@@ -782,7 +833,7 @@ void ImageView::paintEvent(QPaintEvent*)
     }
     painter.restore();
 
-    if (brushOutlineActive_ && brushOutlineDiameter_ > 0.0) {
+    if (brushOutlineActive_ && brushOutlineDiameter_ > 0.0 && !panning_ && !spacePan_) {
         // Cosmetic pens keep each ring 1 device px independent of zoom; the
         // radius is in image pixels, so the on-screen circle scales with zoom.
         // A white ring one image px outside the black one keeps the outline
@@ -986,6 +1037,7 @@ void ImageView::mousePressEvent(QMouseEvent* event)
         userAdjusted_ = true;
         last_ = event->position();
         setCursor(Qt::ClosedHandCursor);
+        update();
     } else if (panEnabled_ && event->button() == Qt::LeftButton) {
         panning_ = true;
         userAdjusted_ = true;
@@ -1050,6 +1102,9 @@ void ImageView::mouseReleaseEvent(QMouseEvent* event)
 
 void ImageView::resizeEvent(QResizeEvent* event)
 {
+    // A load/fit leaves userAdjusted_ false until the first resize settles the
+    // canvas; any pan/zoom sets it true so a later tool-switch resize keeps the
+    // view instead of snapping the zoom.
     if (!userAdjusted_ && !docSize_.isEmpty()) {
         applyInitialView();
     } else {
@@ -1073,6 +1128,9 @@ void ImageView::showEvent(QShowEvent* event)
 
 void ImageView::keyPressEvent(QKeyEvent* event)
 {
+    if (modifierFlag(event->key())) {
+        emit modifierKeyChanged(int(event->modifiers()));
+    }
     if (transformActive_) {
         if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
             emit transformCommitRequested();
@@ -1086,6 +1144,14 @@ void ImageView::keyPressEvent(QKeyEvent* event)
         }
     }
     QWidget::keyPressEvent(event);
+}
+
+void ImageView::keyReleaseEvent(QKeyEvent* event)
+{
+    if (const int flag = modifierFlag(event->key())) {
+        emit modifierKeyChanged(int(event->modifiers()) & ~flag);
+    }
+    QWidget::keyReleaseEvent(event);
 }
 
 void ImageView::hideEvent(QHideEvent* event)

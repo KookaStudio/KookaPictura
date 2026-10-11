@@ -366,6 +366,9 @@ private:
     void wireLayerStyleMenu();
     // frame_menus_image.cpp: Image > Crop, Trim, and Duplicate.
     void wireImageMenu();
+    // frame_menus_edit.cpp: Edit > Undo/Redo/Step, honoring the active tool's
+    // modal session before the document history.
+    void wireEditHistory();
     // frame_menus_image_mode.cpp: Image > Mode, the color-mode and bit-depth
     // conversions with their prompts and dialogs.
     void wireImageModeMenu();
@@ -396,7 +399,7 @@ private:
     void wireAdvancedSmartObjectActions();
     // frame_menus_smart_object.cpp: Layer > Smart Filter > Clear Smart Filters.
     void wireSmartFilterActions();
-    void alignSelectedLayers(int edge, bool toSelection);
+    void alignSelectedLayers(int edge, bool toSelection, int alignTo = 0);
     void distributeSelectedLayers(int edge);
     void updateAlignControls();
     void exportClipboard();

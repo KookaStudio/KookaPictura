@@ -48,9 +48,24 @@ NOT change the tool's resolved cursor or hotspot.
 #### Scenario: Switching tools changes the cursor
 - **WHEN** the active tool changes
 - **THEN** the canvas cursor becomes that tool's SVG cursor
-
 #### Scenario: An overlay does not replace the cursor [lsc_overlay_keeps_cursor]
+
 - **WHEN** a tool draws an in-canvas overlay such as the brush-size circle
 - **THEN** the tool's SVG cursor remains the pointer appearance and the overlay
   is drawn in addition
+
+### Requirement: Base tool-arrow fill
+
+Every cursor built on the workspace default arrow SHALL fill that arrow black
+(`#202020`) beneath its white outline, matching `cursor.workspace.svg`. Any other
+art compounded in the same cursor SHALL keep the standard white body fill, and
+the arrow SHALL keep the white halo used for legibility on dark canvases. The
+arrow geometry SHALL be the same path in every cursor that uses it.
+
+#### Scenario: A tool cursor's arrow is black [svg_cursor_arrow_black]
+
+- **WHEN** a cursor that compounds the workspace arrow (the Move, lasso, patch,
+  or content-aware move cursors and `cursor.moveSelection`) is created
+- **THEN** its arrow is filled black with the white halo, and the remaining art
+  keeps the standard white fill
 

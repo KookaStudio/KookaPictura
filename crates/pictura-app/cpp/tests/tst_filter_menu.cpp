@@ -16,9 +16,12 @@
 
 #include "commands.h"
 #include "filter_commands.h"
+#include "filter_param_controls.h"
 #include "filter_preview_dialog.h"
+#include "image_view.h"
 #include "frame.h"
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/filter_tools/jobs.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
 
 #include "qt_test_support.h"
@@ -69,6 +72,8 @@ private slots:
     void zoomChangesOnlyThumbnailAndLabel();
     void zoomFollowsKeyboardShortcuts();
     void sliderDragDefersPreviewUntilRelease();
+    void zoomedOutPreviewDrawsAReducedCopy();
+    void pixelParametersScaleWithTheCopy();
     void numericFieldIsCompactAndSliderAlignsLeft();
     void dialogEntriesEndWithEllipsis();
     void colorParameterIsASwatch();
@@ -188,7 +193,7 @@ void FilterMenuTest::parameterlessAppliesDirectly()
     QVERIFY(window_->registry()->dispatch(
         filterId(QStringLiteral("Sharpen"), QStringLiteral("Sharpen"))));
     QCOMPARE(view->history_count(), before + 1);
-    QCOMPARE(view->history_label(view->history_index()), QStringLiteral("Filter"));
+    QCOMPARE(view->history_label(view->history_index()), QStringLiteral("Filter: Sharpen"));
 }
 
 void FilterMenuTest::previewCancelRestores()
@@ -239,6 +244,7 @@ void FilterMenuTest::parameterizedCommandOpensDialogAndCommits()
         filterId(QStringLiteral("Blur"), QStringLiteral("Gaussian Blur"))));
     QCOMPARE(seen.size(), 1);
     QCOMPARE(view->history_count(), before + 1);
+    QCOMPARE(view->history_label(view->history_index()), QStringLiteral("Filter: Gaussian Blur"));
     QCOMPARE(filter_last_kind(*view), QStringLiteral("gaussian-blur"));
 }
 
@@ -367,12 +373,17 @@ void FilterMenuTest::previewToggleShowsAndRevertsPixels()
             dialog->reject();
             return;
         }
+        // A change previews on the next event-loop turn, so changes queued
+        // behind a slow preview coalesce.
+        const auto previewed = [&] {
+            return QTest::qWaitFor([&] { return view->image() != before; }, 2000);
+        };
         amount->setValue(amount->value() + 50.0);
-        changedOnEdit = view->image() != before;
+        changedOnEdit = previewed();
         preview->setChecked(false);
         restoredOnUncheck = view->image() == before;
         preview->setChecked(true);
-        changedOnRecheck = view->image() != before;
+        changedOnRecheck = previewed();
         dialog->reject();
     });
     QVERIFY(window_->registry()->dispatch(
@@ -505,13 +516,105 @@ void FilterMenuTest::sliderDragDefersPreviewUntilRelease()
         slider->setValue(qMin(slider->maximum(), slider->value() + 300));
         held = view->image() == before;
         slider->setSliderDown(false);
-        released = view->image() != before;
+        released = QTest::qWaitFor([&] { return view->image() != before; }, 2000);
         dialog->reject();
     });
     QVERIFY(window_->registry()->dispatch(
         filterId(QStringLiteral("Noise"), QStringLiteral("Add Noise"))));
     QVERIFY(held);
     QVERIFY(released);
+}
+
+// Zoomed out over a large area the canvas previews a reduced copy (#152) and
+// then the exact picture from a worker; the document is untouched until OK,
+// which commits at full resolution on a worker under the filter's name.
+void FilterMenuTest::zoomedOutPreviewDrawsAReducedCopy()
+{
+    const auto open = [this](const QString& name) {
+        return window_->newDocument(name, 3000, 2400, QStringLiteral("rgb"), 8,
+                                    QStringLiteral("white"));
+    };
+    QVERIFY(open(QStringLiteral("Fresh")));
+    pictura::PictureView* fresh = window_->activeView();
+    QVERIFY(open(QStringLiteral("Large")));
+    pictura::PictureView* view = window_->activeView();
+    pictura::ImageView* canvas = window_->imageView();
+    QVERIFY(fresh && view && canvas && fresh != view);
+    canvas->setZoom(0.1, QPointF(canvas->width() / 2.0, canvas->height() / 2.0));
+    const QImage before = view->image();
+    const int states = view->history_count();
+    const QString addNoise = filterId(QStringLiteral("Noise"), QStringLiteral("Add Noise"));
+
+    bool untouched = false;
+    bool exactShown = false;
+    QList<double> values;
+    const auto preview = [&](bool accept) {
+        QTimer::singleShot(0, [&, accept] {
+            auto* dialog = activeFilterDialog();
+            auto* amount = dialog ? dialog->findChild<QDoubleSpinBox*>() : nullptr;
+            if (!amount) {
+                if (dialog) {
+                    dialog->reject();
+                }
+                return;
+            }
+            amount->setValue(amount->value() + 50.0);
+            QTRY_VERIFY(canvas->filterPreviewShownForTest());
+            QTRY_VERIFY_WITH_TIMEOUT(!filter_exact_preview_busy(*view), 20000);
+            exactShown = canvas->filterPreviewShownForTest();
+            untouched = view->image() == before;
+            values = dialog->values();
+            if (accept) {
+                dialog->accept();
+            } else {
+                dialog->reject();
+            }
+        });
+        return window_->registry()->dispatch(addNoise);
+    };
+
+    QVERIFY(preview(false));
+    QVERIFY(untouched);
+    QVERIFY(exactShown);
+    QVERIFY(!canvas->filterPreviewShownForTest());
+    QCOMPARE(view->image(), before);
+    QCOMPARE(view->history_count(), states);
+
+    untouched = exactShown = false;
+    QVERIFY(preview(true));
+    QVERIFY(untouched);
+    QVERIFY(exactShown);
+    QVERIFY(!canvas->filterPreviewShownForTest());
+    QCOMPARE(view->history_count(), states + 1);
+    QCOMPARE(view->history_label(view->history_index()), QStringLiteral("Filter: Add Noise"));
+    QVERIFY(apply_filter_params(*fresh, QStringLiteral("add-noise"), values));
+    QCOMPARE(view->image(), fresh->image());
+    QVERIFY(view->image() != before);
+    // Later cases filter the active document; leave them a small one.
+    QVERIFY(window_->closeActiveDocument(false));
+    QVERIFY(window_->closeActiveDocument(false));
+}
+
+// Only distances in pixels shrink with the reduced copy; an integer radius
+// rounds and keeps its minimum, and amounts and levels stay as set.
+void FilterMenuTest::pixelParametersScaleWithTheCopy()
+{
+    const auto scaled = [](const QString& family, const QString& leaf, double scale) {
+        const pictura::FilterCommandSpec* spec =
+            pictura::filterCommandForPath({QStringLiteral("Filter"), family, leaf});
+        QWidget parent;
+        pictura::FilterParamControls controls(spec->params, &parent);
+        return controls.scaledValues(scale);
+    };
+    QCOMPARE(scaled(QStringLiteral("Blur"), QStringLiteral("Gaussian Blur"), 0.25),
+             QList<double>({1.25}));
+    QCOMPARE(scaled(QStringLiteral("Sharpen"), QStringLiteral("Unsharp Mask"), 0.5),
+             QList<double>({150.0, 0.5, 0.0}));
+    QCOMPARE(scaled(QStringLiteral("Noise"), QStringLiteral("Median"), 0.1), QList<double>({1.0}));
+    QCOMPARE(scaled(QStringLiteral("Other"), QStringLiteral("Maximum"), 0.5),
+             QList<double>({1.0}));
+    const QList<double> offset = scaled(QStringLiteral("Other"), QStringLiteral("Offset"), 0.5);
+    QCOMPARE(offset.mid(0, 2), QList<double>({2.0, 2.0}));
 }
 
 void FilterMenuTest::numericFieldIsCompactAndSliderAlignsLeft()

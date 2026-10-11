@@ -69,6 +69,7 @@ inline constexpr char FilterLastFilterSettings[] = "filter.lastSettings";
 inline constexpr char ImageRotate90Cw[] = "image.rotate90cw";
 inline constexpr char ImageRotate90Ccw[] = "image.rotate90ccw";
 inline constexpr char ImageRotate180[] = "image.rotate180";
+inline constexpr char ImageRotateArbitrary[] = "image.rotate.arbitrary";
 inline constexpr char ImageFlipHorizontal[] = "image.flipHorizontal";
 inline constexpr char ImageFlipVertical[] = "image.flipVertical";
 inline constexpr char ImageCrop[] = "image.crop";

@@ -11,7 +11,9 @@
 #include <QtCore/QtGlobal>
 #include <QtGui/QAction>
 #include <QtGui/QColor>
+#include <QtGui/QFont>
 #include <QtGui/QScreen>
+#include <QtWidgets/QApplication>
 #include <QtWidgets/QGridLayout>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QMenu>
@@ -39,6 +41,17 @@ QString formatBytes(double bytes)
         return QStringLiteral("%1M").arg(bytes / (1024.0 * 1024.0), 0, 'f', 1);
     }
     return QStringLiteral("%1K").arg(bytes / 1024.0, 0, 'f', 1);
+}
+
+QString capitaliseFirst(QString text)
+{
+    for (int i = 0; i < text.size(); ++i) {
+        if (text.at(i).isLetter()) {
+            text[i] = text.at(i).toUpper();
+            break;
+        }
+    }
+    return text;
 }
 
 struct Lab {
@@ -123,6 +136,13 @@ InfoPanel::InfoPanel(QWidget* parent)
     toolLabel_->setObjectName(QStringLiteral("infoTool"));
     toolLabel_->setWordWrap(true);
     toolLabel_->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    int baseFontPx = QApplication::font().pixelSize();
+    if (baseFontPx <= 0) {
+        baseFontPx = 12;
+    }
+    QFont toolFont = toolLabel_->font();
+    toolFont.setPixelSize(baseFontPx - 2);
+    toolLabel_->setFont(toolFont);
     outer->addWidget(toolLabel_);
 
     // The readouts keep their natural height: a trailing stretch absorbs the
@@ -270,6 +290,10 @@ bool InfoPanel::eventFilter(QObject* watched, QEvent* event)
     if (event->type() == QEvent::Show) {
         if (auto* menu = qobject_cast<QMenu*>(watched)) {
             if (auto* button = qobject_cast<QToolButton*>(menu->parentWidget())) {
+                // Polish and resize before measuring: on the first show the menu
+                // is not yet laid out, so its raw size hint clips the items.
+                menu->ensurePolished();
+                menu->adjustSize();
                 if (QScreen* screen = button->screen()) {
                     const QSize menuSize = menu->sizeHint();
                     const QRect area = screen->availableGeometry();
@@ -561,11 +585,14 @@ void InfoPanel::refreshToolLabel()
         toolLabel_->clear();
         return;
     }
-    QString text = toolName_;
-    if (!toolHints_.isEmpty()) {
-        text += QStringLiteral(": ") + toolHints_.join(QStringLiteral("   "));
+    QStringList lines;
+    if (!toolName_.isEmpty()) {
+        lines << toolName_;
     }
-    toolLabel_->setText(text);
+    for (const QString& hint : toolHints_) {
+        lines << capitaliseFirst(hint);
+    }
+    toolLabel_->setText(lines.join(QLatin1Char('\n')));
 }
 
 void InfoPanel::refresh()

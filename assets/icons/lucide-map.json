@@ -6,6 +6,31 @@
     "style": "viewBox 0 0 24 24, fill=none, stroke=currentColor, stroke-width=2, round caps/joins; tinted at render time. Custom icons keep their named Lucide base at its original size and position; small added symbols use stroke-width=1."
   },
   "entries": {
+    "crop.apply": {
+      "kind": "lucide",
+      "slug": "check",
+      "match": "good"
+    },
+    "crop.cancel": {
+      "kind": "lucide",
+      "slug": "ban",
+      "match": "good"
+    },
+    "crop.cog": {
+      "kind": "lucide",
+      "slug": "settings",
+      "match": "good"
+    },
+    "crop.grid": {
+      "kind": "lucide",
+      "slug": "grid-3x3",
+      "match": "good"
+    },
+    "crop.swap": {
+      "kind": "lucide",
+      "slug": "arrow-left-right",
+      "match": "good"
+    },
     "count.newGroup": {
       "kind": "lucide",
       "slug": "folder-plus",
@@ -282,6 +307,16 @@
     "layers.link": {
       "kind": "lucide",
       "slug": "link",
+      "match": "exact"
+    },
+    "layers.link2": {
+      "kind": "lucide",
+      "slug": "link-2",
+      "match": "exact"
+    },
+    "layers.unlink2": {
+      "kind": "lucide",
+      "slug": "unlink-2",
       "match": "exact"
     },
     "layers.lockAll": {

@@ -1,6 +1,7 @@
 #include "tool_handler.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/eyedropper_sample.cxxqt.h"
 
 #include <QtCore/QtGlobal>
 #include <QtGui/QColor>
@@ -19,7 +20,9 @@ public:
         if (!v) {
             return true;
         }
-        const quint32 argb = v->sample_argb(qRound(imagePos.x()), qRound(imagePos.y()));
+        const EyedropperOptions options = ctx.eyedropperOptions();
+        const quint32 argb = sample_argb_scoped(*v, qRound(imagePos.x()), qRound(imagePos.y()),
+                                                options.sampleSize, options.scope);
         if (argb != 0) {
             ctx.sampledForeground(QColor::fromRgb(argb));
         }

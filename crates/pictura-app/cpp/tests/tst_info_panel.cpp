@@ -2,6 +2,8 @@
 
 #include <QtCore/QPointF>
 #include <QtGui/QScreen>
+#include <QtWidgets/QApplication>
+#include <QtWidgets/QLabel>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QToolButton>
 
@@ -30,6 +32,7 @@ private slots:
     void offCanvasBlanksColorReadouts();
     void docLineIsPresent();
     void toolRowDescribesActiveTool();
+    void toolHintsOnePerLineCapitalisedReducedFont();
     void menuOpensBesideItsButton();
 
 private:
@@ -247,6 +250,27 @@ void InfoPanelTest::toolRowDescribesActiveTool()
              "move hints present");
 }
 
+void InfoPanelTest::toolHintsOnePerLineCapitalisedReducedFont()
+{
+    openDocument(QStringLiteral("Hints"));
+    const QStringList hints = {QStringLiteral("Arrows nudge 1 px"),
+                               QStringLiteral("alt subtract from selection")};
+    panel_->setToolInfo(QStringLiteral("Move"), hints);
+
+    const QString text = panel_->toolTextForTest();
+    QVERIFY2(text.contains(QStringLiteral("Arrows nudge 1 px\n")), "one hint per line");
+    QVERIFY2(text.contains(QStringLiteral("Alt subtract from selection")),
+             "hint first letter capitalised");
+
+    auto* label = panel_->findChild<QLabel*>(QStringLiteral("infoTool"));
+    QVERIFY(label != nullptr);
+    int base = QApplication::font().pixelSize();
+    if (base <= 0) {
+        base = 12;
+    }
+    QCOMPARE(label->font().pixelSize(), base - 2);
+}
+
 void InfoPanelTest::menuOpensBesideItsButton()
 {
     openDocument(QStringLiteral("MenuPos"));
@@ -273,10 +297,12 @@ void InfoPanelTest::menuOpensBesideItsButton()
     const QRect buttonRect(buttonTopLeft, button->size());
     const QRect menuRect(menu->geometry());
     const QSize hint = menu->sizeHint();
+    const int shownHeight = menu->height();
     // Hide before asserting so a failure never leaves a popup behind.
     menu->hide();
 
     QVERIFY2(visible, "menu opened");
+    QVERIFY2(shownHeight >= hint.height(), "first-open menu is laid out, not clipped");
     QVERIFY2(!menuRect.intersects(buttonRect), "menu does not cover its button");
     QVERIFY2(menuRect.left() >= buttonRect.right() || menuRect.right() <= buttonRect.left(),
              "menu sits beside the button");

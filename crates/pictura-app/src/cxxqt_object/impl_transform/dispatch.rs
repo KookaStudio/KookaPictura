@@ -150,21 +150,21 @@ impl qobject::PictureView {
 
 impl qobject::PictureView {
     pub fn translate_layer(mut self: Pin<&mut Self>, dx: i32, dy: i32) -> bool {
-        let Some(index) = self.as_ref().move_cache_target() else {
+        let Some(path) = self.as_ref().move_cache_target() else {
             return false;
         };
         let before = self
             .rust()
             .doc
             .as_ref()
-            .and_then(|doc| doc.layers.get(index as usize))
+            .and_then(|doc| pictura_render::resolve_path(doc, &path))
             .map(|layer| layer.rect);
         let moved = {
             let mut rust = self.as_mut().rust_mut();
             let Some(doc) = rust.doc.as_mut() else {
                 return false;
             };
-            pictura_render::translate_layer_index(doc, index as usize, dx, dy)
+            pictura_render::translate_layer_path(doc, &path, dx, dy)
         };
         if moved {
             match (
@@ -172,7 +172,7 @@ impl qobject::PictureView {
                 self.rust()
                     .doc
                     .as_ref()
-                    .and_then(|doc| doc.layers.get(index as usize))
+                    .and_then(|doc| pictura_render::resolve_path(doc, &path))
                     .map(|l| (l.rect, layer_has_effects(l))),
             ) {
                 (Some(b), Some((a, false))) => self.as_mut().refresh_region(union_rect(b, a)),
@@ -187,21 +187,21 @@ impl qobject::PictureView {
         if dx == 0 && dy == 0 {
             return false;
         }
-        let Some(index) = self.as_ref().move_cache_target() else {
+        let Some(path) = self.as_ref().move_cache_target() else {
             return false;
         };
         let before = self
             .rust()
             .doc
             .as_ref()
-            .and_then(|doc| doc.layers.get(index as usize))
+            .and_then(|doc| pictura_render::resolve_path(doc, &path))
             .map(|layer| layer.rect);
         let moved = {
             let mut rust = self.as_mut().rust_mut();
             let Some(doc) = rust.doc.as_mut() else {
                 return false;
             };
-            pictura_render::translate_layer_index(doc, index as usize, dx, dy)
+            pictura_render::translate_layer_path(doc, &path, dx, dy)
         };
         if moved {
             match (
@@ -209,7 +209,7 @@ impl qobject::PictureView {
                 self.rust()
                     .doc
                     .as_ref()
-                    .and_then(|doc| doc.layers.get(index as usize))
+                    .and_then(|doc| pictura_render::resolve_path(doc, &path))
                     .map(|l| (l.rect, layer_has_effects(l))),
             ) {
                 (Some(b), Some((a, false))) => self.as_mut().refresh_region(union_rect(b, a)),

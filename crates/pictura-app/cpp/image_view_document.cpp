@@ -1,10 +1,12 @@
-// ImageView's document: the image or the document size it presents, and the
-// region blits a paint delivers. Split from image_view.cpp to keep each
-// translation unit small.
+// ImageView's document: the image or the document size it presents, the
+// region blits a paint delivers, and a filter dialog's reduced preview. Split
+// from image_view.cpp to keep each translation unit small.
 
 #include "image_view.h"
 
 #include "pictura_debug_timing.h"
+
+#include <QtGui/QPainter>
 
 #include <algorithm>
 #include <cstring>
@@ -33,6 +35,40 @@ void ImageView::replaceDocument(const QSize& size)
 {
     replaceImage(QImage());
     docSize_ = size;
+}
+
+bool ImageView::smoothSamplingForZoom(double zoom)
+{
+    return zoom < 2.0;
+}
+
+void ImageView::setFilterPreview(const QImage& picture, const QRect& area)
+{
+    filterPreview_ = picture;
+    filterPreviewArea_ = area;
+    update();
+}
+
+void ImageView::clearFilterPreview()
+{
+    if (filterPreview_.isNull()) {
+        return;
+    }
+    filterPreview_ = QImage();
+    filterPreviewArea_ = QRect();
+    update();
+}
+
+// Drawn in document space under the document clip, over the presented base.
+void ImageView::paintFilterPreview(QPainter& painter)
+{
+    if (filterPreview_.isNull() || filterPreviewArea_.isEmpty()) {
+        return;
+    }
+    painter.save();
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    painter.drawImage(QRectF(filterPreviewArea_), filterPreview_);
+    painter.restore();
 }
 
 QImage ImageView::image() const

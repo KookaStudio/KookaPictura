@@ -19,17 +19,21 @@ HistogramView::HistogramView(QWidget* parent)
 {
 }
 
-void HistogramView::setBins(const QVector<quint32>& bins, const QColor& color)
+void HistogramView::setSeries(const QVector<Series>& series)
 {
-    bins_ = bins;
-    color_ = color;
+    series_ = series;
     update();
 }
 
 void HistogramView::clear()
 {
-    bins_.clear();
+    series_.clear();
     update();
+}
+
+QColor HistogramView::seriesColorForTest(int index) const
+{
+    return index >= 0 && index < series_.size() ? series_.at(index).color : QColor();
 }
 
 void HistogramView::paintEvent(QPaintEvent*)
@@ -38,39 +42,49 @@ void HistogramView::paintEvent(QPaintEvent*)
     painter.fillRect(rect(), QColor(32, 32, 32));
     painter.setPen(QColor(80, 80, 80));
     painter.drawRect(rect().adjusted(0, 0, -1, -1));
-    if (bins_.isEmpty()) {
+    if (series_.isEmpty()) {
         return;
     }
     quint32 peak = 0;
-    for (quint32 count : bins_) {
-        peak = std::max(peak, count);
+    for (const Series& series : series_) {
+        for (quint32 count : series.bins) {
+            peak = std::max(peak, count);
+        }
     }
     if (peak == 0) {
         return;
     }
     const QRect area = rect().adjusted(1, 1, -1, -1);
-    const double barWidth = double(area.width()) / bins_.size();
     painter.setPen(Qt::NoPen);
-    painter.setBrush(color_);
-    for (int i = 0; i < bins_.size(); ++i) {
-        const double barHeight = double(bins_[i]) / peak * area.height();
-        painter.drawRect(QRectF(area.x() + i * barWidth, area.bottom() + 1 - barHeight,
-                                std::max(1.0, barWidth), barHeight));
+    // Additive blend so overlapping channel curves brighten toward white, the
+    // way Photoshop's RGB overlay reads.
+    painter.setCompositionMode(QPainter::CompositionMode_Plus);
+    for (const Series& series : series_) {
+        if (series.bins.isEmpty()) {
+            continue;
+        }
+        const double barWidth = double(area.width()) / series.bins.size();
+        painter.setBrush(series.color);
+        for (int i = 0; i < series.bins.size(); ++i) {
+            const double barHeight = double(series.bins[i]) / peak * area.height();
+            painter.drawRect(QRectF(area.x() + i * barWidth, area.bottom() + 1 - barHeight,
+                                    std::max(1.0, barWidth), barHeight));
+        }
     }
 }
 
 HistogramPanel::HistogramPanel(QWidget* parent)
     : QWidget(parent)
 {
-    QWidget* body = this;
-    auto* layout = new QVBoxLayout(body);
-    channel_ = new QComboBox(body);
+    auto* layout = new QVBoxLayout(this);
+    channel_ = new QComboBox(this);
+    channel_->addItem(tr("All Channels"));
     channel_->addItem(tr("Red"));
     channel_->addItem(tr("Green"));
     channel_->addItem(tr("Blue"));
     channel_->addItem(tr("Luminance"));
     layout->addWidget(channel_);
-    histogram_ = new HistogramView(body);
+    histogram_ = new HistogramView(this);
     layout->addWidget(histogram_, 1);
 
     connect(channel_, &QComboBox::currentIndexChanged, this, [this](int) { applyChannel(); });
@@ -134,18 +148,46 @@ void HistogramPanel::applyChannel()
         histogram_->clear();
         return;
     }
-    const int index = std::clamp(channel_->currentIndex(), 0, 3);
     static const QColor colors[4] = {
         QColor(230, 90, 90),
         QColor(90, 220, 90),
         QColor(90, 130, 240),
         QColor(220, 220, 220),
     };
-    QVector<quint32> bins(256);
-    for (int i = 0; i < 256; ++i) {
-        bins[i] = bins_[index][i];
+    const int index = std::clamp(channel_->currentIndex(), 0, 4);
+    QVector<HistogramView::Series> series;
+    const auto addChannel = [&](int channelIndex) {
+        QVector<quint32> bins(256);
+        for (int i = 0; i < 256; ++i) {
+            bins[i] = bins_[channelIndex][i];
+        }
+        series.append(HistogramView::Series{bins, colors[channelIndex]});
+    };
+    if (index == 0) {
+        addChannel(0);
+        addChannel(1);
+        addChannel(2);
+    } else {
+        addChannel(index - 1);
     }
-    histogram_->setBins(bins, colors[index]);
+    histogram_->setSeries(series);
 }
+
+int HistogramPanel::channelIndexForTest() const { return channel_->currentIndex(); }
+
+QString HistogramPanel::channelLabelForTest() const { return channel_->currentText(); }
+
+int HistogramPanel::seriesCountForTest() const { return histogram_->seriesCountForTest(); }
+
+QVector<QColor> HistogramPanel::seriesColorsForTest() const
+{
+    QVector<QColor> colors;
+    for (int i = 0; i < histogram_->seriesCountForTest(); ++i) {
+        colors.append(histogram_->seriesColorForTest(i));
+    }
+    return colors;
+}
+
+void HistogramPanel::setChannelIndexForTest(int index) { channel_->setCurrentIndex(index); }
 
 } // namespace pictura

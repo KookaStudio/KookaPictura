@@ -23,6 +23,11 @@
     <file>icons/file.save.svg</file>
     <file>icons/help.about.svg</file>
     <file>icons/history.snapshot.svg</file>
+    <file>icons/crop.apply.svg</file>
+    <file>icons/crop.cancel.svg</file>
+    <file>icons/crop.cog.svg</file>
+    <file>icons/crop.grid.svg</file>
+    <file>icons/crop.swap.svg</file>
     <file>icons/image.crop.svg</file>
     <file>icons/image.flipHorizontal.svg</file>
     <file>icons/image.flipVertical.svg</file>
@@ -64,6 +69,8 @@
     <file>icons/layers.kindSmartObject.svg</file>
     <file>icons/layers.kindType.svg</file>
     <file>icons/layers.link.svg</file>
+    <file>icons/layers.link2.svg</file>
+    <file>icons/layers.unlink2.svg</file>
     <file>icons/layers.lockAll.svg</file>
     <file>icons/layers.lockAlpha.svg</file>
     <file>icons/layers.lockNesting.svg</file>
@@ -193,6 +200,7 @@
     <file>icons/window.panels.tools.svg</file>
     <file>cursors/cursor.moveSelection.svg</file>
     <file>cursors/cursor.rotate.svg</file>
+    <file>cursors/cursor.workspace.svg</file>
     <file>cursors/tool.addanchorpoint.svg</file>
     <file>cursors/tool.arthistorybrush.svg</file>
     <file>cursors/tool.backgrounderaser.svg</file>

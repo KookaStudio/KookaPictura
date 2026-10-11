@@ -249,14 +249,14 @@ pub(super) fn topmost_pixel_layer_index(doc: &Document) -> Option<usize> {
         .rposition(|l| l.adjustment.is_none() && !l.is_group)
 }
 /// The single active layer a tool edit may target, or `None` when no layer is
-/// active or the path does not name a top-level raster layer.
+/// active or the path does not name a raster leaf layer.
 ///
-/// `active` is the panel path of the selected layer; the panel pushes `None`
-/// (an empty path) for a zero- or multi-layer selection, so neither can edit.
-/// A group, an adjustment, or a nested path resolves to `None`.
+/// `active` is the panel path of the selected layer (`"0/1"` = child 1 of node
+/// 0); the panel pushes `None` (an empty path) for a zero- or multi-layer
+/// selection, so neither can edit. A group or an adjustment resolves to `None`,
+/// while a nested path resolves to its exact leaf.
 pub(super) fn active_pixel_layer<'a>(doc: &'a Document, active: Option<&str>) -> Option<&'a Layer> {
-    let index: usize = active?.parse().ok()?;
-    let layer = doc.layers.get(index)?;
+    let layer = pictura_render::resolve_path(doc, active?)?;
     (!layer.is_group && layer.adjustment.is_none()).then_some(layer)
 }
 /// Mutable [`active_pixel_layer`].
@@ -264,8 +264,7 @@ pub(super) fn active_pixel_layer_mut<'a>(
     doc: &'a mut Document,
     active: Option<&str>,
 ) -> Option<&'a mut Layer> {
-    let index: usize = active?.parse().ok()?;
-    let layer = doc.layers.get_mut(index)?;
+    let layer = pictura_render::resolve_path_mut(doc, active?)?;
     (!layer.is_group && layer.adjustment.is_none()).then_some(layer)
 }
 /// Whether the single active layer a tool edit may target is visible.

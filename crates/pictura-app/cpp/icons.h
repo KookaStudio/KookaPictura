@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QtCore/QPointF>
 #include <QtCore/QString>
 #include <QtGui/QColor>
 #include <QtGui/QCursor>
@@ -19,5 +20,10 @@ QCursor cursor(const QString& id, int hotX, int hotY);
 QCursor cursor(const QString& id, int hotX, int hotY, double degrees);
 // Compatibility overload: centres the hotspot at (12, 12).
 QCursor cursor(const QString& id);
+
+// The curved double-arrow for a rotate gesture: `cursor.rotate` turned so its
+// arc bulges from `centre` toward `pointer` (both points in the same space),
+// cached per 5 degrees so a drag does not re-render the SVG on every move.
+QCursor rotateCursor(const QPointF& centre, const QPointF& pointer);
 
 } // namespace pictura

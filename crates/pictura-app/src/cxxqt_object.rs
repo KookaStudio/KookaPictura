@@ -9,6 +9,7 @@ mod clipping;
 mod color_range;
 mod crop_group;
 mod export;
+mod eyedropper_sample;
 mod filter_map;
 mod filter_tools;
 mod guides;
@@ -32,6 +33,7 @@ mod impl_pictura_raw;
 mod impl_selection;
 mod impl_transform;
 mod layer_arrange;
+mod layer_path;
 mod layer_style;
 mod layers_smart_filters;
 mod magnetic;
@@ -1148,36 +1150,28 @@ pub mod qobject {
         /// Number of labeled history states, including the current one.
         #[qinvokable]
         fn history_count(&self) -> i32;
-
         /// Position of the current history state, in `0..history_count()`.
         #[qinvokable]
         fn history_index(&self) -> i32;
-
         /// Label of history state `i`, or empty when out of range.
         #[qinvokable]
         fn history_label(&self, i: i32) -> QString;
-
         /// Restore history state `i`, recomposite, and emit [`changed`]; false when `i` is out of range.
         #[qinvokable]
         fn history_jump(self: Pin<&mut Self>, i: i32) -> bool;
-
         /// Capture the current state as a named restore point. Emits [`changed`]
         /// so the History panel refreshes. Returns false without a document.
         #[qinvokable]
         fn history_add_snapshot(self: Pin<&mut Self>, label: &QString) -> bool;
-
         /// Number of named restore points (capped at 10).
         #[qinvokable]
         fn history_snapshot_count(&self) -> i32;
-
         /// Label of named restore point `i`, or empty when out of range.
         #[qinvokable]
         fn history_snapshot_label(&self, i: i32) -> QString;
-
         /// Restore named restore point `i`, recomposite, and emit [`changed`]. Returns false when `i` is out of range.
         #[qinvokable]
         fn history_restore_snapshot(self: Pin<&mut Self>, i: i32) -> bool;
-
         /// Remove layer `i`, recomposite, and emit [`changed`].
         #[qinvokable]
         fn remove_layer(self: Pin<&mut Self>, i: i32);
@@ -1188,7 +1182,6 @@ pub mod qobject {
         /// alive. Returns false when no device is available.
         #[qinvokable]
         fn gpu_interop_prepare(self: Pin<&mut Self>) -> bool;
-
         /// Raw handles from `gpu_interop_prepare`; 0 when unavailable.
         #[qinvokable]
         fn gpu_vk_instance(&self) -> u64;

@@ -6,6 +6,8 @@
 #include "pictura_app/src/cxxqt_object/image_adjust/image_ops.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h"
 
+#include <QtWidgets/QInputDialog>
+
 namespace pictura {
 
 // Image > Crop, Trim, Duplicate, Image Size, and Canvas Size (Image > Mode is frame_menus_image_mode.cpp).
@@ -107,6 +109,24 @@ void PicturaMainWindow::wireImageMenu()
             refresh();
         }
     });
+
+    registry_->setHandler(command_ids::ImageRotateArbitrary, [this]() {
+        PictureView* view = activeView();
+        if (!view || !view->has_document()) {
+            return;
+        }
+        bool ok = false;
+        const double angle = QInputDialog::getDouble(this, tr("Rotate Image"),
+                                                     tr("Angle (degrees):"), 0.0, -359.99, 359.99, 2,
+                                                     &ok);
+        if (!ok || angle == 0.0) {
+            return;
+        }
+        if (rotate_document_arbitrary(*view, angle)) {
+            refresh();
+        }
+    });
+    registry_->setEnabledProvider(command_ids::ImageRotateArbitrary, imageEnabled);
 }
 
 } // namespace pictura

@@ -1,10 +1,16 @@
 #include "channels_panel.h"
 
 #include "icons.h"
+#include "theme.h"
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/channels.cxxqt.h"
 
+#include <QtCore/QCoreApplication>
+#include <QtCore/QEvent>
 #include <QtGui/QImage>
+#include <QtGui/QMouseEvent>
+#include <QtGui/QPalette>
+#include <QtWidgets/QApplication>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QListWidget>
@@ -130,7 +136,18 @@ ChannelsPanel::ChannelsPanel(QWidget* parent)
     layout->setSpacing(0);
     list_ = new QListWidget(this);
     list_->setObjectName(QStringLiteral("channelList"));
+    list_->viewport()->setMouseTracking(true);
+    list_->viewport()->installEventFilter(this);
     layout->addWidget(list_, 1);
+
+    // The Ctrl-over-channel "select all pixels" symbol: a dashed square pinned
+    // at the cursor over the row, transparent to mouse input.
+    ctrlOverlay_ = new QLabel(list_->viewport());
+    ctrlOverlay_->setObjectName(QStringLiteral("channelsCtrlOverlay"));
+    ctrlOverlay_->setAttribute(Qt::WA_TransparentForMouseEvents);
+    ctrlOverlay_->setFixedSize(20, 20);
+    ctrlOverlay_->setPixmap(icon(QStringLiteral("select.all")).pixmap(20, 20));
+    ctrlOverlay_->hide();
 
     auto* footer = new QHBoxLayout();
     footer->setContentsMargins(4, 2, 4, 2);
@@ -182,6 +199,7 @@ ChannelsPanel::ChannelsPanel(QWidget* parent)
 void ChannelsPanel::addRow(const QString& name, const QString& shortcut, int alpha)
 {
     auto* rowWidget = new QWidget(list_);
+    rowWidget->setAutoFillBackground(true);
     auto* rowLayout = new QHBoxLayout(rowWidget);
     rowLayout->setContentsMargins(2, 1, 6, 1);
     auto* eye = new QToolButton(rowWidget);
@@ -198,13 +216,21 @@ void ChannelsPanel::addRow(const QString& name, const QString& shortcut, int alp
     rowLayout->addWidget(thumb);
     rowLayout->addWidget(label, 1);
     rowLayout->addWidget(keys);
+    // Hover is tracked through the row's own widgets: the row covers the item,
+    // so the viewport alone would never see the pointer.
+    for (QWidget* hovered : {static_cast<QWidget*>(rowWidget), static_cast<QWidget*>(thumb),
+                             static_cast<QWidget*>(label), static_cast<QWidget*>(keys)}) {
+        hovered->setMouseTracking(true);
+        hovered->installEventFilter(this);
+    }
 
     const int index = rows_.size();
     connect(eye, &QToolButton::clicked, this, [this, index]() { toggle(index); });
     auto* item = new QListWidgetItem(list_);
     item->setSizeHint(QSize(0, kThumbnailSize + 8));
     list_->setItemWidget(item, rowWidget);
-    rows_.append(Row{name, shortcut, alpha, eye, thumb});
+    rows_.append(Row{name, shortcut, alpha, eye, thumb, rowWidget});
+    styleRows();
 }
 
 void ChannelsPanel::rebuild(const QString& mode, int alphaCount)
@@ -341,6 +367,61 @@ void ChannelsPanel::updateFooter()
     remove_->setEnabled(document && alpha);
     add_->setEnabled(document);
     save_->setEnabled(document && view_->has_selection());
+    styleRows();
+}
+
+// The Channels rows reuse the Layers surface ramp: the selected row steps three
+// shades off the window, the rest one, so both panels read alike.
+void ChannelsPanel::styleRows()
+{
+    const QColor base = palette().color(QPalette::Window);
+    const int current = list_->currentRow();
+    for (int i = 0; i < rows_.size(); ++i) {
+        QWidget* widget = rows_.at(i).widget;
+        if (!widget) {
+            continue;
+        }
+        QPalette rowPalette = widget->palette();
+        rowPalette.setColor(QPalette::Window, Theme::shade(base, i == current ? 3 : 1));
+        widget->setPalette(rowPalette);
+    }
+}
+
+bool ChannelsPanel::eventFilter(QObject* watched, QEvent* event)
+{
+    auto* widget = qobject_cast<QWidget*>(watched);
+    const bool inList = widget
+        && (widget == list_->viewport() || list_->viewport()->isAncestorOf(widget));
+    if (inList) {
+        if (event->type() == QEvent::MouseMove || event->type() == QEvent::HoverMove) {
+            auto* mouse = static_cast<QMouseEvent*>(event);
+            const QPoint pos = widget->mapTo(list_->viewport(), mouse->position().toPoint());
+            QListWidgetItem* item = list_->itemAt(pos);
+            const int row = item ? list_->row(item) : -1;
+            list_->viewport()->setCursor(row >= 0 ? Qt::PointingHandCursor : Qt::ArrowCursor);
+            updateCtrlOverlay(row, pos, mouse->modifiers());
+        } else if (event->type() == QEvent::Leave) {
+            list_->viewport()->unsetCursor();
+            if (ctrlOverlay_) {
+                ctrlOverlay_->hide();
+            }
+        }
+    }
+    return QWidget::eventFilter(watched, event);
+}
+
+void ChannelsPanel::updateCtrlOverlay(int index, const QPoint& pos, Qt::KeyboardModifiers mods)
+{
+    if (!ctrlOverlay_) {
+        return;
+    }
+    if (index < 0 || !(mods & Qt::ControlModifier)) {
+        ctrlOverlay_->hide();
+        return;
+    }
+    ctrlOverlay_->move(pos + QPoint(2, 2));
+    ctrlOverlay_->show();
+    ctrlOverlay_->raise();
 }
 
 int ChannelsPanel::channelCountForTest() const { return rows_.size(); }
@@ -377,5 +458,30 @@ bool ChannelsPanel::channelEyeEnabledForTest(int index) const
 void ChannelsPanel::toggleChannelForTest(int index) { toggle(index); }
 
 void ChannelsPanel::selectChannelForTest(int index) { list_->setCurrentRow(index); }
+
+int ChannelsPanel::hoverChannelForTest(int index, Qt::KeyboardModifiers mods)
+{
+    if (index < 0 || index >= rows_.size()) {
+        return -1;
+    }
+    const QPoint pos = list_->visualItemRect(list_->item(index)).center();
+    QMouseEvent move(QEvent::MouseMove, pos, list_->viewport()->mapToGlobal(pos), Qt::NoButton,
+                     Qt::NoButton, mods);
+    QCoreApplication::sendEvent(list_->viewport(), &move);
+    return static_cast<int>(list_->viewport()->cursor().shape());
+}
+
+bool ChannelsPanel::ctrlOverlayVisibleForTest() const
+{
+    return ctrlOverlay_ && !ctrlOverlay_->isHidden();
+}
+
+QColor ChannelsPanel::rowSurfaceForTest(int index) const
+{
+    if (index < 0 || index >= rows_.size() || !rows_.at(index).widget) {
+        return {};
+    }
+    return rows_.at(index).widget->palette().color(QPalette::Window);
+}
 
 } // namespace pictura

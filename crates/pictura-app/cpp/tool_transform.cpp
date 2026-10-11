@@ -5,11 +5,6 @@
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 
-#include <QtCore/QHash>
-#include <QtCore/QLineF>
-
-#include <cmath>
-
 namespace pictura {
 
 namespace {
@@ -33,24 +28,6 @@ QPointF quadCentre(const QString& quad, const QPointF& fallback)
         sum += QPointF(xy[0].toDouble(), xy[1].toDouble());
     }
     return sum / 4.0;
-}
-
-// CS6's curved double arrow, turned so its arc bulges away from the box's
-// centre toward `pointer`, both in widget space (the SVG's arc bulges
-// up-right, at -45 degrees).
-// Cached per 5 degrees so a drag does not re-render the SVG on every move.
-QCursor rotateCursor(const QPointF& centre, const QPointF& pointer)
-{
-    static QHash<int, QCursor> cache;
-    const QLineF out(centre, pointer);
-    const double heading = out.length() > 1e-6 ? -out.angle() : -45.0;
-    const int step = int(std::lround((heading + 45.0) / 5.0)) % 72;
-    const int key = step < 0 ? step + 72 : step;
-    auto it = cache.find(key);
-    if (it == cache.end()) {
-        it = cache.insert(key, cursor(QStringLiteral("cursor.rotate"), 12, 12, key * 5.0));
-    }
-    return it.value();
 }
 
 } // namespace

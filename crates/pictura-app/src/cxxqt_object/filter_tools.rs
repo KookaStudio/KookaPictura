@@ -10,16 +10,22 @@
 
 use super::filter_map::filter_from_kind_params;
 use super::helpers::{active_layer_visible, active_pixel_layer};
-use super::helpers_composite::{buffer_to_image, patch_buffer_region, selection_to_mask};
+use super::helpers_composite::{
+    buffer_to_image, patch_buffer_region, premultiplied_display_image, selection_to_mask,
+};
 use super::impl_filters::{
     apply_filter_active, apply_filter_active_region, apply_op_active_region, cancel_filter_preview,
     ActiveOp,
 };
 use super::qobject::PictureView;
+pub(super) use canvas_proxy::canvas_proxy_buffer;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QByteArray, QImage, QList, QString, QStringList};
 use pictura_core::{layer_pixel_locked, Document, Layer, PixelBuffer};
+
+mod canvas_proxy;
+pub(super) mod jobs;
 
 #[cxx_qt::bridge]
 pub mod ffi {
@@ -177,6 +183,34 @@ pub mod ffi {
             params: &QList_f64,
             max_edge: i32,
         ) -> QImage;
+
+        /// The canvas preview of `kind`/`params` below 100% zoom: the document
+        /// rect `(x, y, w, h)` reduced to `scale` (at most 1), composited with
+        /// the active layer filtered, as a premultiplied display image. The
+        /// caller scales pixel-sized slots by `scale`. The reduced copy is
+        /// built from the pre-preview pixels and kept while the region, scale
+        /// and document are unchanged, so a parameter change filters only the
+        /// copy. Neither the document nor the canvas changes. Null when the
+        /// target has no proxy (a layer mask) or the filter is refused, so the
+        /// caller previews exactly instead.
+        #[allow(clippy::too_many_arguments)]
+        fn filter_canvas_proxy(
+            view: Pin<&mut PictureView>,
+            kind: &QString,
+            params: &QList_f64,
+            x: i32,
+            y: i32,
+            w: i32,
+            h: i32,
+            scale: f64,
+        ) -> QImage;
+
+        /// Drop the reduced copy [`filter_canvas_proxy`] keeps.
+        fn filter_canvas_proxy_release(view: Pin<&mut PictureView>);
+
+        /// Whether `kind` resolves position or a statistic against the whole
+        /// layer, so a section of it cannot be previewed on its own.
+        fn filter_kind_positional(kind: &QString) -> bool;
     }
 }
 
@@ -435,16 +469,12 @@ fn filter_gallery_preview(
     else {
         return QImage::default();
     };
-    let index = rust
-        .active_layer
-        .as_deref()
-        .and_then(|p| p.parse::<usize>().ok());
-    let filtered = match (resolve_stack(kinds, params), index) {
-        (Some(filters), Some(index)) => proxy.render(index, &filters, rust.gpu_compute).ok(),
+    let filtered = match (resolve_stack(kinds, params), rust.active_layer.as_deref()) {
+        (Some(filters), Some(path)) => proxy.render(path, &filters, rust.gpu_compute).ok(),
         _ => None,
     };
     filtered
-        .or_else(|| proxy.render(0, &[], false).ok())
+        .or_else(|| proxy.render("", &[], false).ok())
         .map_or_else(QImage::default, |buffer| buffer_to_image(&buffer))
 }
 
@@ -486,12 +516,11 @@ fn rgba_to_buffer(rgba: &[u8], width: u32, height: u32) -> Option<PixelBuffer> {
     Some(buffer)
 }
 
-/// The single top-level pixel layer a whole-layer proxy can draw, or `None`
-/// for no active layer, a group, or an adjustment layer.
-fn active_proxy_layer(doc: &Document, active: Option<&str>) -> Option<usize> {
-    let index: usize = active?.parse().ok()?;
-    let layer = doc.layers.get(index)?;
-    (!layer.is_group && layer.adjustment.is_none()).then_some(index)
+/// The active path resolved to a proxyable raster layer (not a group or an
+/// adjustment), or `None` for an absent, malformed, or ineligible path.
+fn active_proxy_layer<'a>(doc: &'a Document, active: Option<&str>) -> Option<&'a Layer> {
+    let layer = pictura_render::resolve_path(doc, active?)?;
+    (!layer.is_group && layer.adjustment.is_none()).then_some(layer)
 }
 
 /// Proxy frame dimensions: the document scaled to `max_edge` on the long side,
@@ -502,28 +531,32 @@ fn proxy_dims(width: u32, height: u32, max_edge: u32) -> (u32, u32) {
     (scaled(width), scaled(height))
 }
 
-/// The document's composite with layer `index` hidden, patched over the cached
-/// `doc.composite` so opening a dialog does not pay for a full recomposite.
-fn hidden_layer_buffer(doc: &mut Document, index: usize, gpu_compute: bool) -> PixelBuffer {
-    let rect = doc.layers[index].rect;
-    let was_visible = doc.layers[index].visible;
+/// The document's composite with the layer at `path` hidden, patched over the
+/// cached `doc.composite` so opening a dialog does not pay for a full
+/// recomposite. `None` when the path does not resolve.
+fn hidden_layer_buffer(doc: &mut Document, path: &str, gpu_compute: bool) -> Option<PixelBuffer> {
+    let (rect, was_visible) = {
+        let layer = pictura_render::resolve_path(doc, path)?;
+        (layer.rect, layer.visible)
+    };
     let cached_ok = doc.composite.width == doc.width
         && doc.composite.height == doc.height
         && !doc.composite.data.is_empty()
         && rect.width() > 0
         && rect.height() > 0;
-    doc.layers[index].visible = false;
-    if cached_ok {
+    pictura_render::resolve_path_mut(doc, path)?.visible = false;
+    let base = if cached_ok {
         let (region, _) = pictura_render::composite_region_active(doc, rect, gpu_compute);
-        doc.layers[index].visible = was_visible;
         let mut base = doc.composite.clone();
         patch_buffer_region(&mut base, &region, rect.left, rect.top);
         base
     } else {
-        let base = pictura_render::composite_rgba(doc);
-        doc.layers[index].visible = was_visible;
-        base
+        pictura_render::composite_rgba(doc)
+    };
+    if let Some(layer) = pictura_render::resolve_path_mut(doc, path) {
+        layer.visible = was_visible;
     }
+    Some(base)
 }
 
 /// The raster mask value at document pixel `(x, y)`: `255` when there is no
@@ -682,10 +715,15 @@ fn filter_proxy_base(mut view: Pin<&mut PictureView>, max_edge: i32) -> QImage {
     let Some(doc) = rust.doc.as_mut() else {
         return QImage::default();
     };
-    let Some(index) = active_proxy_layer(doc, active.as_deref()) else {
+    let Some(active_path) = active.as_deref() else {
         return QImage::default();
     };
-    let base = hidden_layer_buffer(doc, index, gpu_compute);
+    if active_proxy_layer(doc, Some(active_path)).is_none() {
+        return QImage::default();
+    }
+    let Some(base) = hidden_layer_buffer(doc, active_path, gpu_compute) else {
+        return QImage::default();
+    };
     let (width, height) = proxy_dims(doc.width, doc.height, max_edge);
     match pictura_ops::resize(&base, width, height, pictura_ops::Resample::Bilinear) {
         Ok(scaled) => buffer_to_image(&pictura_codec::buffer_to_srgb(doc, &scaled)),
@@ -709,16 +747,20 @@ fn filter_proxy_layer(
     let Some(doc) = rust.doc.as_ref() else {
         return QImage::default();
     };
-    let Some(index) = active_proxy_layer(doc, rust.active_layer.as_deref()) else {
+    let Some(active) = rust.active_layer.as_deref() else {
+        return QImage::default();
+    };
+    let Some(resolved) = active_proxy_layer(doc, Some(active)) else {
         return QImage::default();
     };
     // An open preview has already re-filtered the live layer; the proxy must
     // start from its pre-preview snapshot so the two never compound.
-    let layer = rust
+    let original = rust
         .filter_preview
         .as_ref()
-        .filter(|p| p.layer_index == index)
-        .map_or(&doc.layers[index], |p| &p.original);
+        .filter(|p| p.layer_path.as_str() == active)
+        .map(|p| p.baseline.original(resolved));
+    let layer = original.as_deref().unwrap_or(resolved);
     let params: Vec<f64> = params.into_iter().copied().collect();
     proxy_layer_frame(
         layer,
@@ -728,6 +770,40 @@ fn filter_proxy_layer(
         &kind.to_string(),
         &params,
     )
+}
+
+fn filter_canvas_proxy(
+    mut view: Pin<&mut PictureView>,
+    kind: &QString,
+    params: &QList<f64>,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    scale: f64,
+) -> QImage {
+    let params: Vec<f64> = params.into_iter().copied().collect();
+    let Some(filter) = filter_from_kind_params(&kind.to_string(), &params) else {
+        return QImage::default();
+    };
+    let region = pictura_core::PsdRect {
+        top: y,
+        left: x,
+        bottom: y + h.max(0),
+        right: x + w.max(0),
+    };
+    let mut rust = view.as_mut().rust_mut();
+    canvas_proxy_buffer(&mut rust, &filter, region, scale).map_or_else(QImage::default, |buffer| {
+        premultiplied_display_image(&buffer)
+    })
+}
+
+fn filter_canvas_proxy_release(mut view: Pin<&mut PictureView>) {
+    view.as_mut().rust_mut().canvas_proxy = None;
+}
+
+fn filter_kind_positional(kind: &QString) -> bool {
+    filter_preview_needs_whole_layer(&kind.to_string())
 }
 
 #[cfg(test)]
@@ -784,7 +860,7 @@ mod tests {
         ];
         doc.composite = pictura_render::composite_rgba(&doc);
 
-        let base = hidden_layer_buffer(&mut doc, 1, false);
+        let base = hidden_layer_buffer(&mut doc, "1", false).expect("base");
         assert!(doc.layers[1].visible, "hiding must be undone");
         let plane = 16;
         assert_eq!(base.data[0], 255, "the red bottom layer");
@@ -830,5 +906,32 @@ mod tests {
         layer.opacity = 128;
         let buffer = proxy_layer_buffer(&layer, 1.0).expect("layer buffer");
         assert_eq!(buffer.data[3 * 4], 128, "opacity baked into the alpha");
+    }
+
+    #[test]
+    fn a_nested_active_layer_resolves_for_the_proxy() {
+        use crate::cxxqt_object::tests::pixel_layer;
+        use pictura_core::{BitDepth, ColorMode};
+
+        let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
+        let mut group = pixel_layer("group", 4, 4, (0, 0, 0));
+        group.is_group = true;
+        group.channels.clear();
+        group.children = vec![
+            pixel_layer("nested-red", 4, 4, (255, 0, 0)),
+            pixel_layer("nested-blue", 4, 4, (0, 0, 255)),
+        ];
+        doc.layers = vec![group];
+        doc.composite = pictura_render::composite_rgba(&doc);
+
+        // The group itself is not a proxy target; the nested leaf is.
+        assert!(active_proxy_layer(&doc, Some("0")).is_none());
+        assert!(active_proxy_layer(&doc, Some("0/1")).is_some());
+
+        let base = hidden_layer_buffer(&mut doc, "0/1", false).expect("nested base");
+        let plane = 16;
+        assert_eq!(base.data[0], 255, "the red nested layer survives");
+        assert_eq!(base.data[2 * plane], 0, "the blue nested layer is hidden");
+        assert!(doc.layers[0].children[1].visible, "visibility restored");
     }
 }

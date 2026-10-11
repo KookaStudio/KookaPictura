@@ -82,6 +82,36 @@ fn patch_flag(layer: &mut Layer, bit: u32, on: bool, width: u32, height: u32) ->
     true
 }
 
+/// Re-encode a layer's in-memory `VectorMask` view into its `vmsk` block,
+/// preserving the block's flags (invert / disabled / link). An external geometry
+/// operation such as rotation mutates the view directly, so this keeps the
+/// authoritative raw block from going stale on save. Returns false without a
+/// view. `ponytail:` re-encodes the flattened polyline, so a rotated curved
+/// mask serializes as its flattened vertices — the compositor already renders
+/// that polyline, so the result stays consistent.
+pub fn sync_vector_mask_block(layer: &mut Layer, width: u32, height: u32) -> bool {
+    let Some(view) = layer.vector_mask.as_ref() else {
+        return false;
+    };
+    let subpaths = view.subpaths.clone();
+    let mut view_flags = 0u32;
+    if view.invert {
+        view_flags |= VECTOR_MASK_FLAG_INVERT;
+    }
+    if view.disabled {
+        view_flags |= VECTOR_MASK_FLAG_DISABLED;
+    }
+    let flags = layer
+        .extra_blocks
+        .iter()
+        .find(|b| &b.key == VMSK)
+        .map(|b| flags_of(&b.data))
+        .unwrap_or(view_flags);
+    let mut data = pictura_codec::encode_vector_mask_view(&subpaths, width, height);
+    write_flags(&mut data, flags);
+    set_vmsk_block(layer, Some(data))
+}
+
 /// A closed rectangle subpath over `rect`, in document pixels.
 fn rect_subpath(rect: PsdRect) -> Subpath {
     let corner = |x: i32, y: i32| PathPoint {

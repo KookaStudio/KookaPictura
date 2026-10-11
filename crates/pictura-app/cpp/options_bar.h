@@ -3,6 +3,7 @@
 #include <QtWidgets/QToolBar>
 
 #include <functional>
+#include <utility>
 #include <vector>
 
 #include "tools.h"
@@ -46,10 +47,14 @@ signals:
     // The Move tool's Align / Distribute buttons; `edge` is 0 Top ... 5 Right.
     void alignRequested(int edge);
     void distributeRequested(int edge);
+    // A selection tool's `Select and Mask…` button (opens Refine Edge).
+    void refineEdgeRequested();
 
 public:
     // Self-test hook: the controller the size field is wired to.
     ToolController* controllerForTest() const { return controller_; }
+    // Test hook: the built options page for `id` (stack index = enum value).
+    QWidget* pageForTest(ToolId id) const;
     // The Brush Preset picker behind every brush tip button, made on first use.
     BrushPresetPicker* brushPicker();
 
@@ -58,9 +63,12 @@ protected:
 
 private:
     QWidget* buildPage(ToolId id);
+    QWidget* buildPageBody(ToolId id);
     QWidget* buildCombinePage(ToolId id, bool withTolerance);
     QWidget* buildSelectionPage(ToolId id);
     QWidget* buildWandPage(ToolId id);
+    // The `Select and Mask…` button the selection tools share.
+    void addRefineEdgeButton(QHBoxLayout* layout, QWidget* page);
     QWidget* buildCropPage(ToolId id);
     QWidget* buildAnnotationPage(ToolId id);
     QWidget* buildPaintPage(ToolId id);
@@ -99,6 +107,8 @@ private:
     QWidget* buildRotateViewPage(ToolId id);
     // options_bar_move.cpp: the Move tool's Align and Distribute buttons.
     QWidget* buildMovePage(ToolId id);
+    // options_bar_eyedropper.cpp: the Eyedropper's Sample Size / Sample / ring.
+    QWidget* buildEyedropperPage(ToolId id);
     void buildShapeAppearance(QWidget* page, QHBoxLayout* layout, const ShapeUpdate& update,
                               ShapeSyncs& syncs);
     QToolButton* buildShapeGeometryButton(ToolId id, QWidget* page, const ShapeUpdate& update,
@@ -114,10 +124,13 @@ private:
                                   void (ToolController::*setter)(int));
     static NumericFieldConfig numericConfig(double lo, double hi, double step, int decimals,
                                             const QString& suffix, bool popup,
-                                            const QString& name);
+                                            const QString& name, bool allowFractional = false);
     void addModeButtons(QHBoxLayout* layout, QWidget* page, bool withIntersect);
     void addMagneticFields(QHBoxLayout* layout, QWidget* page);
     QToolButton* toolButton(ToolId id, QWidget* parent);
+    // Re-seed the Crop W/H fields from their mode (ratio values, or pixels in
+    // `W x H x Resolution` mode).
+    void syncCropFields();
 
     ToolController* controller_ = nullptr;
     QStackedWidget* stack_ = nullptr;
@@ -125,6 +138,15 @@ private:
     BrushPresetPicker* brushPicker_ = nullptr;
     std::vector<QToolButton*> alignButtons_;
     std::vector<QToolButton*> distributeButtons_;
+    // The Crop tool's user aspect-ratio presets (label, width:height pair).
+    std::vector<std::pair<QString, QPointF>> cropPresets_;
+    NumericField* cropWidthField_ = nullptr;
+    NumericField* cropHeightField_ = nullptr;
+    // True while the `W x H x Resolution` entry drives the W/H fields as pixels.
+    bool cropResolutionMode_ = false;
+    // The W/H ratio values shown in ratio mode (1,1 for the free `Ratio` entry).
+    double cropRatioW_ = 1.0;
+    double cropRatioH_ = 1.0;
 };
 
 // Built-in pattern `index` as an icon, for the pattern pickers.

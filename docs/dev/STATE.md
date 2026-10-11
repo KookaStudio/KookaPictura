@@ -1264,6 +1264,46 @@ Snapshot for resuming after a context break. Update after each milestone.
   Cropped Pixels (`pictura_render::delete_cropped_pixels`, default on; live /
   native-depth layers keep their pixels). Self-test code 534. The remaining CS6
   crop options are #100–#105.
+- **Crop straighten + surface parity** (change `crop-straighten`, issue #252):
+  CS6's rotate-crop — the box stays axis-aligned while the content/layers spin
+  about the box centre and the canvas grows to the rotated bounding box
+  (`pictura_render::rotate_document_in`, reusing `pictura_ops::rotate_in`; the
+  pivot is the box centre at the moment the angle is set). The crop has a
+  `none → preview → active` model: Modern starts with a centered, ratio-fitted
+  dashed preview box, Classic starts boxless, a drag draws a new box, a click
+  adopts the preview, and Escape/Cancel return to no box. A Classic drag moves
+  the box; a Modern drag pans the composite under a box fixed on screen. The
+  canvas frame follows the box at every angle (padding with the backdrop or the
+  transparency checkerboard); the first box is clamped and its press corner is
+  pinned. The options bar's `W`/`H` are unit-less ratio values (pixels plus a
+  resolution only in `W x H x Resolution`, defaulting to the document resolution,
+  72 ppi fallback), `Ratio` is the first/default entry, the spirit-level button
+  arms a draw-a-horizon straighten line that activates the crop, and Cancel/Apply
+  show only while a box is active. The crop rotate cursor takes one of eight
+  corner/edge orientations, and every tool cursor built on the workspace arrow
+  fills it black. Edit Undo/Redo routes through the crop session;
+  `Image > Image Rotation > Arbitrary` reuses the rotation primitive.
+- **#252 UX-testing audit pass** (change `crop-straighten`, issue #252): nested
+  layers are now paint/fill/filter targets — the active-layer path resolves to
+  the exact leaf by walking the tree (`document/layer-nesting`), a group is not
+  an edit target, and ancestors contribute only at composite time. The Layers
+  panel gained a hover hand cursor, single-click lock removal, smaller locks, a
+  narrower blend select, mask/vector thumbnails adjacent to the image thumbnail
+  with link glyphs, active-thumb brackets, aspect-correct mask thumbs, folder-row
+  sizing, a responsive visibility toggle, and a chevron on an empty nested group.
+  Channels gained a hover cursor, a Ctrl select-all overlay, and Layers-style
+  rows. Every active tool icon now has a separator; the Move bar gained
+  Auto-Select, Show Transform Controls, and a three-dots `Align To:`
+  Selection/Canvas menu; the Eyedropper gained Sample Size, Sample scope, and a
+  sampling ring. Canvas Space/middle pan suppresses overlays and switching tools
+  preserves zoom/position. The Info panel shows one hint per line (capitalised,
+  2px smaller) with an unclipped icon menu; the Histogram gained a default
+  `All Channels` RGB overlay; the footer uses Lucide chevrons; and a marquee's
+  first Alt subtracts while a second Alt during the same drag mirrors the pivot.
+  The Transform options bar and Select and Mask are tracked separately
+  (#296, #297). Self-test `crop_tool` (534) and the new Qt Test suites cover the
+  surface; the `cxxqt_object.rs` `#252` declarations moved to a `layer_path`
+  bridge to stay under the file-size ceiling.
 - **Open Recent** (change `open-recent-menu`, issue #62, ported from photorust):
   File > Open Recent is rebuilt each time it opens (a file opened this session
   appears at once), lists files by name with the path as tooltip plus Clear
@@ -2208,6 +2248,31 @@ Snapshot for resuming after a context break. Update after each milestone.
   fixture/golden changed. Ceilings (all `ponytail:`): no true 16-bit sample model
   (depth is not preserved), the 32-bit path is display-referred so HDR clips at
   1.0 with no tone map, and there is no write-side re-encode to the source depth.
+- **Refine Edge / Select and Mask** (change `refine-edge`, issue #297, from the
+  #252 UX pass; new capability `tools/refine-edge`, and `tools/select-menu`
+  MODIFIED): `pictura-select::refine` refines a selection's coverage against the
+  composite. `refine(mask, image, settings)` runs CS6's documented order —
+  edge-band re-estimation (a Chamfer boundary band, `smart_radius` narrowing
+  where the image edge is hard), then Smooth (reused majority filter), Feather
+  (reused Gaussian), Contrast (a mid-toned S-curve that pushes partial coverage
+  toward 0/255), and Shift Edge (a signed-distance re-threshold, negative
+  inward) — with a bit-identical identity at defaults and `InvalidParams` /
+  `SizeMismatch` guards. `decontaminate(image, alpha, amount)` returns a new
+  buffer, lerping soft-edge colour toward nearby fully-opaque foreground by
+  `(1 − α)·amount`, leaving α 0/255 pixels untouched. The app bridge
+  (`cxxqt_object/impl_selection/refine.rs`) exposes available / preview / apply;
+  `RefineEdgeDialog` (`refine_edge_dialog.{h,cpp}`) is the CS6 layout (View Mode,
+  Show Radius / Original, Smart Radius + Radius, Smooth / Feather / Contrast /
+  Shift Edge, Decontaminate + Amount, Output To) with a live proxy preview.
+  `Select ▸ Refine Edge…` (`Ctrl+Alt+R`) and the selection tools' `Select and
+  Mask…` options-bar button both open it; OK records one "Refine Edge" state,
+  Output To maps to the selection, the active layer's mask, or `layer_via_copy`
+  (New Layer / New Layer with Layer Mask), and Decontaminate forces a colour
+  output (the in-place targets are disabled). Tested by `tst_refine_edge` (7
+  cases) and the engine's property tests. Ceilings (`ponytail:`): no interactive
+  Refine Radius / Erase Refinements brush strokes or their local band override,
+  no view-mode keyboard shortcuts (F/X/P/J), no Properties-panel mask entry, and
+  the surface/edge model is a behavioural approximation of a closed algorithm.
 
 ## Commands
 

@@ -61,6 +61,13 @@ public:
     // null canvas are no-ops.
     void blitRegion(const QImage& region, int x, int y);
 
+    // A zoomed-out filter dialog's preview: `picture`, a reduced render of the
+    // document rect `area`, drawn over the document there until cleared. The
+    // document itself is untouched.
+    void setFilterPreview(const QImage& picture, const QRect& area);
+    void clearFilterPreview();
+    bool filterPreviewShownForTest() const { return !filterPreview_.isNull(); }
+
     // Supplies document crops from the view pyramid so the present path never
     // scales the full-resolution `image()`. `crop` returns a premultiplied crop
     // of `level` at the level-space rect `(x, y, w, h)`; `levelCount`/`levelSize`
@@ -126,6 +133,13 @@ public:
     {
         return brushOutlineDiameter_ * zoom_;
     }
+
+    // Eyedropper sampling ring drawn in image space like the brush outline; the
+    // diameter is the Sample Size in image pixels.
+    void setSamplingRing(double diameter, const QPointF& imagePos);
+    void clearSamplingRing();
+    bool hasSamplingRingForTest() const { return samplingRingActive_; }
+    double samplingRingDiameterForTest() const { return samplingRingDiameter_; }
 
     void setCanvasColor(const QColor& color);
     QColor canvasColor() const { return canvasColor_; }
@@ -223,7 +237,38 @@ public:
     // guides, its frame, and eight handles.
     void setCropBox(const QRectF& box);
     void clearCropBox();
+    // A preview crop box: a dashed outline with no rule-of-thirds guides and no
+    // resize handles. Stays set until the next setCropPreview.
+    void setCropPreview(bool preview);
+    bool cropPreviewForTest() const { return cropPreview_; }
+    // The active crop guide overlay: 0 Rule of Thirds, 1 Grid, 2 Diagonal,
+    // 3 Triangle, 4 Golden Ratio, 5 Golden Spiral. Drawn only on an active box.
+    void setCropOverlay(int overlay);
+    int cropOverlayForTest() const { return cropOverlay_; }
+    // The Modern crop content offset (image space): the composite is drawn
+    // shifted by this while the crop box overlay stays fixed, so an inside drag
+    // pans the content under the box. Commit maps the box by `box - offset`.
+    void setCropContentOffset(const QPointF& offset);
+    QPointF cropContentOffset() const { return cropContentOffset_; }
+    // The crop straighten angle: the content is previewed rotated about `pivot`
+    // (image space, fixed for the session so moving the box does not move the
+    // content) while the box stays axis-aligned. The canvas grows to the rotated
+    // content's bounding box.
+    void setCropStraighten(double degrees, const QPointF& pivot);
+    // The straighten line tool's live horizon line (image space); drawn until
+    // the gesture ends.
+    void setCropStraightenLine(const QLineF& line);
+    void clearCropStraightenLine();
+    // The canvas backdrop: when `opaque` (a Background layer exists) the area
+    // beyond the content shows `color` instead of the transparency checkerboard.
+    void setCanvasBackdrop(const QColor& color, bool opaque);
+    // The axis-aligned canvas rect (image space) the preview shows: the image
+    // rect when straight, else the bounding box of the rotated canvas.
+    QRectF cropCanvasImageRect() const;
     bool hasCropBoxForTest() const { return !cropBox_.isNull(); }
+    // The crop box's four corners in widget space, as the overlay draws them
+    // (independent of the content-rotation preview).
+    QPolygonF cropBoxWidgetForTest() const;
 
     // Perspective Crop quad (TL, TR, BR, BL, image space): shades outside it and
     // draws its edges, a perspective-following 3x3 grid, and corner handles.
@@ -379,6 +424,9 @@ signals:
     void mousePressed(const QPointF& imagePos, int button, int modifiers);
     void mouseMoved(const QPointF& imagePos);
     void mouseReleased(const QPointF& imagePos);
+    // A modifier key (Alt/Shift/Ctrl/Meta) was pressed or released, so a tool
+    // observes the edge even without pointer movement.
+    void modifierKeyChanged(int modifiers);
     // A right-click on the canvas; the frame shows the active tool's context
     // menu at the global position (the Zoom tool's preset menu).
     void contextMenuRequested(const QPoint& globalPos);
@@ -394,6 +442,7 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
+    void keyReleaseEvent(QKeyEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
     void showEvent(QShowEvent* event) override;
     void hideEvent(QHideEvent* event) override;
@@ -411,6 +460,9 @@ private:
     bool guidePreviewActive_ = false;
     void paintPathOverlay(QPainter& painter);
     void paintTypeOverlay(QPainter& painter);
+    void paintFilterPreview(QPainter& painter);
+    QImage filterPreview_;
+    QRect filterPreviewArea_;
     PathOverlay pathOverlay_;
     TypeOverlay typeOverlay_;
     QList<QPointF> samplerOverlay_;
@@ -421,6 +473,12 @@ private:
     bool rulerShown_ = false;
     QPolygonF perspectiveQuad_;
     QRectF cropBox_;
+    bool cropPreview_ = false;
+    int cropOverlay_ = 0;
+    QPointF cropContentOffset_;
+    double cropStraighten_ = 0.0;
+    QPointF cropStraightenPivot_;
+    QLineF cropStraightenLine_;
     QList<SliceOverlay> sliceOverlay_;
     QRectF sliceDrag_;
     void centreImage();
@@ -456,6 +514,8 @@ private:
     // `source` with only the visible channel, as greyscale, cached by `key`.
     const QImage& channelImage(const QImage& source, qint64 key);
     QColor canvasColor_{Theme::workspaceColor()};
+    QColor canvasBackdrop_{Qt::white};
+    bool canvasBackdropOpaque_ = false;
     double zoom_ = 1.0;
     QPointF offset_;
     double rotation_ = 0.0;
@@ -465,6 +525,9 @@ private:
     bool panEnabled_ = true;
     bool panning_ = false;
     bool spacePan_ = false;
+    // False after a load/fit so the first resize settles the canvas, then any
+    // pan/zoom (and the initial fit itself) sets it true so a later tool-switch
+    // resize keeps the view instead of snapping the zoom.
     bool userAdjusted_ = false;
     QPolygonF overlayPolygon_;
 
@@ -508,6 +571,10 @@ private:
     bool brushOutlineActive_ = false;
     double brushOutlineDiameter_ = 0.0;
     QPointF brushOutlineImagePos_;
+
+    bool samplingRingActive_ = false;
+    double samplingRingDiameter_ = 0.0;
+    QPointF samplingRingImagePos_;
 
     // Drag-start latency probe: reports the press -> handler -> first move ->
     // paint gaps to stderr when a drag start exceeds one frame, or always when

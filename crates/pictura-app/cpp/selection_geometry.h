@@ -17,10 +17,10 @@ constexpr double kPolygonCloseRadius = 6.0;
 QRect dragRect(const QPointF& a, const QPointF& b);
 
 // Style constrains the drag geometry before rasterisation: Normal follows the
-// drag (Shift squares, Alt centres); Fixed Ratio keeps the entered width:height;
-// Fixed Size is centred on the mousedown.
+// drag (Shift squares, `mirror` centres about the press point); Fixed Ratio
+// keeps the entered width:height; Fixed Size is centred on the mousedown.
 QRect marqueeDragRect(const QPointF& a, const QPointF& b, Qt::KeyboardModifiers mods,
-                      MarqueeStyle style, double fixedRatioW, double fixedRatioH,
+                      bool mirror, MarqueeStyle style, double fixedRatioW, double fixedRatioH,
                       int fixedSizeW, int fixedSizeH);
 
 } // namespace pictura

@@ -570,7 +570,7 @@ bool LayersPanel::chevronClickExpandsForTest(const QString& path)
     }
     const bool before = tree_->isExpanded(index);
     const QPoint pos =
-        delegate_->chevronRect(tree_->visualRect(index), index.data(DepthRole).toInt()).center();
+        delegate_->chevronRect(tree_->visualRect(index), index).center();
     QMouseEvent press(QEvent::MouseButtonPress, pos, tree_->viewport()->mapToGlobal(pos),
                       Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
     QCoreApplication::sendEvent(tree_->viewport(), &press);
@@ -961,7 +961,7 @@ bool LayersPanel::doubleClickChevronForTest(const QString& path)
         return false;
     }
     const QPoint pos =
-        delegate_->chevronRect(tree_->visualRect(index), index.data(DepthRole).toInt()).center();
+        delegate_->chevronRect(tree_->visualRect(index), index).center();
     QMouseEvent dbl(QEvent::MouseButtonDblClick, pos, tree_->viewport()->mapToGlobal(pos),
                     Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
     QCoreApplication::sendEvent(tree_->viewport(), &dbl);

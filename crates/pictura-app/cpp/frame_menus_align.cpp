@@ -28,7 +28,7 @@ void PicturaMainWindow::wireAlignMenu()
         registry_->setHandler(align, [this, edge]() { alignSelectedLayers(edge, false); });
         registry_->setEnabledProvider(align, [this, selectedPaths]() {
             PictureView* view = activeView();
-            return view && align_can(*view, selectedPaths(), false);
+            return view && align_can(*view, selectedPaths(), false, 0);
         });
 
         const QString toSelection = commandIdForPath(
@@ -37,7 +37,7 @@ void PicturaMainWindow::wireAlignMenu()
         registry_->setHandler(toSelection, [this, edge]() { alignSelectedLayers(edge, true); });
         registry_->setEnabledProvider(toSelection, [this, selectedPaths]() {
             PictureView* view = activeView();
-            return view && view->has_selection() && align_can(*view, selectedPaths(), true);
+            return view && view->has_selection() && align_can(*view, selectedPaths(), true, 0);
         });
 
         const QString distribute =
@@ -51,11 +51,11 @@ void PicturaMainWindow::wireAlignMenu()
     }
 }
 
-void PicturaMainWindow::alignSelectedLayers(int edge, bool toSelection)
+void PicturaMainWindow::alignSelectedLayers(int edge, bool toSelection, int alignTo)
 {
     PictureView* view = activeView();
     if (view && layersPanel_
-        && align_apply(*view, layersPanel_->selectedPaths(), edge, toSelection) > 0) {
+        && align_apply(*view, layersPanel_->selectedPaths(), edge, toSelection, alignTo) > 0) {
         refresh();
     }
 }
@@ -75,7 +75,8 @@ void PicturaMainWindow::updateAlignControls()
     }
     PictureView* view = activeView();
     const QStringList paths = layersPanel_ ? layersPanel_->selectedPaths() : QStringList();
-    optionsBar_->setAlignEnabled(view && align_can(*view, paths, true),
+    const int alignTo = tools_ ? tools_->moveAlignTo() : 0;
+    optionsBar_->setAlignEnabled(view && align_can(*view, paths, alignTo == 0, alignTo),
                                  view && distribute_can(*view, paths));
 }
 

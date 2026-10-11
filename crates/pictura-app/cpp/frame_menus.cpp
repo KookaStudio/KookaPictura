@@ -193,46 +193,7 @@ void PicturaMainWindow::registerHandlers()
     registry_->setEnabledProvider(command_ids::FileRevert,
                                   [this]() { return !activeFilePath().isEmpty(); });
 
-    // A restore announces itself: `changed` (wired to refresh()) when it
-    // redraws everything, `regionBlitted` when history bounded it. A refresh()
-    // here would rebuild the full canvas image after every bounded undo.
-    registry_->setHandler(command_ids::EditUndo, [this]() {
-        if (PictureView* view = activeView()) {
-            view->can_undo() ? view->undo() : view->redo();
-        }
-    });
-    registry_->setEnabledProvider(command_ids::EditUndo, [this]() {
-        PictureView* view = activeView();
-        return view && (view->can_undo() || view->can_redo());
-    });
-    registry_->setLabelProvider(command_ids::EditUndo, [this]() {
-        PictureView* view = activeView();
-        return view && !view->can_undo() ? QStringLiteral("Redo") : QStringLiteral("Undo");
-    });
-
-    registry_->setHandler(command_ids::EditRedo, [this]() {
-        if (PictureView* view = activeView()) {
-            view->redo();
-        }
-    });
-    registry_->setEnabledProvider(command_ids::EditRedo,
-                                  [this]() { return activeView() && activeView()->can_redo(); });
-
-    registry_->setHandler(command_ids::EditStepBackward, [this]() {
-        if (PictureView* view = activeView()) {
-            view->undo();
-        }
-    });
-    registry_->setEnabledProvider(command_ids::EditStepBackward,
-                                  [this]() { return activeView() && activeView()->can_undo(); });
-
-    registry_->setHandler(command_ids::EditStepForward, [this]() {
-        if (PictureView* view = activeView()) {
-            view->redo();
-        }
-    });
-    registry_->setEnabledProvider(command_ids::EditStepForward,
-                                  [this]() { return activeView() && activeView()->can_redo(); });
+    wireEditHistory();
 
     registry_->setHandler(command_ids::EditAssignProfile,
                           [this]() { showProfileCommand(false); });

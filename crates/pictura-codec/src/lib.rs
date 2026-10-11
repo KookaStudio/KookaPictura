@@ -105,7 +105,9 @@ pub use smart_filter::{
 pub use smart_object::remove_linked_source;
 pub use type_tool::encode_type_tool;
 pub use type_write::author_type_tool;
-pub use vector_mask::{decode_vector_mask, decode_vector_mask_paths, encode_vector_mask};
+pub use vector_mask::{
+    decode_vector_mask, decode_vector_mask_paths, encode_vector_mask, encode_vector_mask_view,
+};
 pub use web::{
     encode_gif, encode_wbmp, quantize, web_safe_palette, ColorReduction, Dither, Indexed,
     PaletteOptions,

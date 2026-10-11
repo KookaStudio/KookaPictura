@@ -20,6 +20,11 @@ pub use contour::contour;
 mod magnetic;
 pub use magnetic::EdgeMap;
 
+mod refine;
+pub use refine::{
+    coverage_plane, decontaminate, refine, OutputTarget, RefineEdgeSettings, ViewMode,
+};
+
 mod translate;
 
 #[derive(Debug, thiserror::Error)]
@@ -515,7 +520,7 @@ pub fn similar(
     Ok(out)
 }
 
-fn blur(src: &[u8], w: usize, h: usize, sigma: f64) -> Vec<u8> {
+pub(crate) fn blur(src: &[u8], w: usize, h: usize, sigma: f64) -> Vec<u8> {
     let radius = (sigma * 3.0).ceil().max(1.0) as isize;
     let mut kernel = Vec::with_capacity((2 * radius + 1) as usize);
     let mut sum = 0.0f64;
@@ -552,7 +557,7 @@ fn blur(src: &[u8], w: usize, h: usize, sigma: f64) -> Vec<u8> {
     out
 }
 
-fn median(src: &[u8], w: usize, h: usize, radius: usize) -> Vec<u8> {
+pub(crate) fn median(src: &[u8], w: usize, h: usize, radius: usize) -> Vec<u8> {
     let r = radius as isize;
     let mut out = vec![0u8; w * h];
     for y in 0..h {

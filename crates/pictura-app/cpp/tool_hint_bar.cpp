@@ -1,12 +1,14 @@
 #include "tool_hint_bar.h"
 
+#include "icons.h"
 #include "theme.h"
 
 #include <QtCore/QPointF>
 #include <QtCore/QStringList>
 #include <QtGui/QFontMetrics>
 #include <QtGui/QPainter>
-#include <QtGui/QPolygonF>
+#include <QtGui/QPixmap>
+#include <QtGui/QTransform>
 
 namespace pictura {
 
@@ -59,28 +61,35 @@ int keycapWidth(const QFontMetrics& fm, const QString& key)
     return width;
 }
 
-void paintChevron(QPainter& painter, const QPointF& c, int direction, qreal s)
+struct ChevronGlyph {
+    const char* asset;
+    bool flipped;
+};
+
+ChevronGlyph chevronGlyphFor(int direction)
 {
-    QPolygonF arm;
     switch (direction) {
     case 0: // up
-        arm << QPointF(c.x() - s, c.y() + s * 0.6) << QPointF(c.x(), c.y() - s * 0.6)
-            << QPointF(c.x() + s, c.y() + s * 0.6);
-        break;
+        return {"layers.disclosureDown", true};
     case 1: // right
-        arm << QPointF(c.x() - s * 0.6, c.y() - s) << QPointF(c.x() + s * 0.6, c.y())
-            << QPointF(c.x() - s * 0.6, c.y() + s);
-        break;
+        return {"layers.disclosureRight", false};
     case 2: // down
-        arm << QPointF(c.x() - s, c.y() - s * 0.6) << QPointF(c.x(), c.y() + s * 0.6)
-            << QPointF(c.x() + s, c.y() - s * 0.6);
-        break;
+        return {"layers.disclosureDown", false};
     default: // left
-        arm << QPointF(c.x() + s * 0.6, c.y() - s) << QPointF(c.x() - s * 0.6, c.y())
-            << QPointF(c.x() + s * 0.6, c.y() + s);
-        break;
+        return {"layers.disclosureRight", true};
     }
-    painter.drawPolyline(arm);
+}
+
+void paintChevron(QPainter& painter, const QPointF& c, int direction, int iconSize,
+                  const QColor& color)
+{
+    const ChevronGlyph glyph = chevronGlyphFor(direction);
+    QPixmap pixmap =
+        pictura::icon(QString::fromLatin1(glyph.asset), color).pixmap(QSize(iconSize, iconSize));
+    if (glyph.flipped) {
+        pixmap = pixmap.transformed(QTransform().rotate(180.0), Qt::SmoothTransformation);
+    }
+    painter.drawPixmap(QPointF(c.x() - iconSize / 2.0, c.y() - iconSize / 2.0), pixmap);
 }
 
 // The Move tool's nudge hint: four small keycaps side by side in a single row,
@@ -93,15 +102,15 @@ void paintArrowsKeycaps(QPainter& painter, const QRect& keyRect, const QColor& b
     const int totalW = 4 * capW + 3 * kArrowsCapGap;
     const int startX = keyRect.left() + qMax(0, (keyRect.width() - totalW) / 2);
     const int y = keyRect.top() + (keyRect.height() - capH) / 2;
+    const int iconSize = qMax(8, capW + 4);
 
     for (int i = 0; i < 4; ++i) {
         const QRect r(startX + i * (capW + kArrowsCapGap), y, capW, capH);
         painter.setPen(QPen(border, 1));
         painter.setBrush(fill);
         painter.drawRoundedRect(r, 2, 2);
-        painter.setPen(QPen(chevron, 1.2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         paintChevron(painter, QRectF(r).center(), chevronDirectionFor(kArrowsChevronDirections[i]),
-                     qMax(2.0, capH * 0.35));
+                     iconSize, chevron);
     }
 }
 
@@ -204,6 +213,23 @@ int ToolHintBar::chevronCountForTest(int index) const
 QString ToolHintBar::chevronDirectionsForTest() const
 {
     return QString::fromLatin1(kArrowsChevronDirections);
+}
+
+QString ToolHintBar::chevronAssetForTest(int index) const
+{
+    if (index < 0 || index >= int(sizeof(kArrowsChevronDirections) - 1)) {
+        return QString();
+    }
+    return QString::fromLatin1(
+        chevronGlyphFor(chevronDirectionFor(kArrowsChevronDirections[index])).asset);
+}
+
+bool ToolHintBar::chevronFlippedForTest(int index) const
+{
+    if (index < 0 || index >= int(sizeof(kArrowsChevronDirections) - 1)) {
+        return false;
+    }
+    return chevronGlyphFor(chevronDirectionFor(kArrowsChevronDirections[index])).flipped;
 }
 
 QSize ToolHintBar::sizeHint() const

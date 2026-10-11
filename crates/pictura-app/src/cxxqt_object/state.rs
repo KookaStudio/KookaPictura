@@ -127,7 +127,9 @@ pub struct PictureViewRust {
     pub(super) move_y: i32,
     pub(super) move_opacity: i32,
     pub(super) move_prepared_revision: u64,
-    pub(super) move_prepared_layer: i32,
+    /// The panel path of the layer the move-preview base was built from; empty
+    /// when no whole-layer preview is prepared.
+    pub(super) move_prepared_layer: String,
     pub(super) move_preview_cache_hit: bool,
     pub(super) transform_session: Option<TransformSession>,
     pub(super) opacity_preview_changed: bool,
@@ -184,6 +186,12 @@ pub struct PictureViewRust {
     /// with the target path, so each parameter change re-filters the original.
     /// `None` when no mask preview is open.
     pub(super) mask_filter_preview: Option<(String, Vec<u8>)>,
+    /// The reduced copy a zoomed-out filter dialog previews on, kept between
+    /// parameter changes (`filter_tools::filter_canvas_proxy`). `None` when no
+    /// dialog holds one.
+    pub(super) canvas_proxy: Option<CanvasProxy>,
+    /// Filter work running on worker threads (`filter_tools::jobs`).
+    pub(super) filter_jobs: super::filter_tools::jobs::FilterJobs,
     /// The document before an open Indexed Color dialog's live preview, so each
     /// option change converts the original. `None` when no preview is shown.
     pub(super) mode_preview: Option<pictura_core::Document>,
@@ -208,12 +216,34 @@ pub struct PictureViewRust {
     pub(super) recovery_write: Option<std::thread::JoinHandle<bool>>,
 }
 
-/// The pre-filter layer clone backing a live filter preview.
+/// The pre-filter pixels backing a live filter preview.
 pub(super) struct FilterPreview {
-    /// Index into `Document::layers` of the layer being previewed.
-    pub(super) layer_index: usize,
-    /// The layer's pixels before the first preview parameter change.
-    pub(super) original: Layer,
+    /// Panel path of the layer being previewed.
+    pub(super) layer_path: String,
+    /// What the preview overwrote.
+    pub(super) baseline: PreviewBaseline,
+}
+
+/// What a filter preview overwrote, so the next one starts from the original.
+pub(super) enum PreviewBaseline {
+    /// The whole layer, before a whole-layer preview (sharing its planes).
+    Layer(Box<Layer>),
+    /// The pixels of `rect` (inside the layer) in each layer-sized channel,
+    /// before a section preview, which writes nothing outside it. A copy of
+    /// the section alone, so the live planes are written in place and never
+    /// copied whole.
+    Section {
+        layer_rect: PsdRect,
+        rect: PsdRect,
+        planes: Vec<(i16, Vec<u8>)>,
+    },
+}
+
+/// A filter dialog's reduced canvas copy and what it was built from.
+pub(super) struct CanvasProxy {
+    /// The document region, the scale's bits and the `content_revision`.
+    pub(super) key: (PsdRect, u64, u64),
+    pub(super) proxy: pictura_render::FilterProxy,
 }
 
 /// A large-brush stroke shown at a view-pyramid level instead of rasterized at
@@ -280,7 +310,7 @@ impl Default for PictureViewRust {
             move_y: 0,
             move_opacity: 0,
             move_prepared_revision: 0,
-            move_prepared_layer: -1,
+            move_prepared_layer: String::new(),
             move_preview_cache_hit: false,
             transform_session: None,
             opacity_preview_changed: false,
@@ -302,6 +332,8 @@ impl Default for PictureViewRust {
             gpu_placer: None,
             filter_preview: None,
             mask_filter_preview: None,
+            canvas_proxy: None,
+            filter_jobs: Default::default(),
             mode_preview: None,
             last_filter: None,
             filter_error: None,

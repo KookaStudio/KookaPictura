@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- The workspace default pointer. Tip at the top left, a vertical left
+       edge straight down, a barb up-right, a horizontal (0°) notch, and a 45°
+       edge back to the tip. Black fill, white outline; hotspot at the tip. -->
+  <g fill="#202020" stroke="#ffffff" stroke-width="4" stroke-linejoin="round">
+    <path d="M2 2 2 14 5.515 10.485 10.485 10.485Z"/>
+  </g>
+  <g fill="#202020" stroke="#202020" stroke-width="1.5" stroke-linejoin="round">
+    <path d="M2 2 2 14 5.515 10.485 10.485 10.485Z"/>
+  </g>
+</svg>

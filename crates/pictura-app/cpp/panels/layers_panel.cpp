@@ -140,7 +140,8 @@ LayersPanel::LayersPanel(QWidget* parent)
         blend_->addItem(QString::fromLatin1(entry.name), QString::fromLatin1(entry.key));
     }
     blend_->setEnabled(false);
-    controls->addWidget(blend_, 2);
+    blend_->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    controls->addWidget(blend_, 1);
     opacity_ = new PercentField(tr("Opacity"), body);
     opacity_->setObjectName(QStringLiteral("layersOpacityField"));
     opacity_->setEnabled(false);
@@ -161,7 +162,7 @@ LayersPanel::LayersPanel(QWidget* parent)
         button->setCheckable(true);
         button->setEnabled(false);
         button->setIcon(pictura::icon(assetId));
-        button->setIconSize(QSize(20, 20));
+        button->setIconSize(QSize(16, 16));
         button->setAutoRaise(true);
         button->setToolTip(tooltip);
         locks->addWidget(button);
@@ -215,11 +216,15 @@ LayersPanel::LayersPanel(QWidget* parent)
     tree_->setAllColumnsShowFocus(true);
     tree_->setSelectionBehavior(QAbstractItemView::SelectRows);
     tree_->setSelectionMode(QAbstractItemView::ExtendedSelection);
-    tree_->setUniformRowHeights(true);
+    // Folder rows are shorter than layer rows, so per-row heights differ.
+    tree_->setUniformRowHeights(false);
     tree_->setHeaderHidden(true);
     tree_->header()->setSectionResizeMode(0, QHeaderView::Stretch);
     tree_->setContextMenuPolicy(Qt::CustomContextMenu);
     tree_->viewport()->installEventFilter(this);
+    // Mouse tracking so the viewport filter can show the pointing-hand cursor on
+    // a row.
+    tree_->viewport()->setMouseTracking(true);
     // Self-contained layer drag/drop: the tree resolves the drop to a target
     // path + mode and the panel turns it into one reparent/move undo step.
     tree_->setDragPathsProvider([this] {
@@ -432,6 +437,7 @@ void LayersPanel::setView(PictureView* view)
     // transient, so both reset.
     if (view_ != view) {
         clearSolo();
+        activeThumbByPath_.clear();
         const LayerFilter defaultFilter{true};
         if (filterBar_) {
             filterBar_->setFilter(defaultFilter);
@@ -501,6 +507,7 @@ void LayersPanel::refresh()
             row.smartObject = layer_row_is_smart_object(*view_, i);
             row.hasStyle = layer_row_has_style(*view_, i);
             row.hasBlendIf = layer_row_has_blend_if(*view_, i);
+            row.activeThumb = activeThumbByPath_.value(row.path, 0);
             if (row.hasStyle) {
                 for (const QString& name : styleEffectNames) {
                     if (layer_style_value(*view_, row.path,
@@ -738,6 +745,16 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
             }
         }
     }
+    if (watched == tree_->viewport()) {
+        if (event->type() == QEvent::MouseMove || event->type() == QEvent::HoverMove) {
+            auto* move = static_cast<QMouseEvent*>(event);
+            const QModelIndex index = tree_->indexAt(move->position().toPoint());
+            tree_->viewport()->setCursor(index.isValid() ? Qt::PointingHandCursor
+                                                         : Qt::ArrowCursor);
+        } else if (event->type() == QEvent::Leave) {
+            tree_->viewport()->unsetCursor();
+        }
+    }
     if (watched == tree_->viewport() && event->type() == QEvent::MouseButtonPress) {
         auto* mouse = static_cast<QMouseEvent*>(event);
         if (mouse->button() == Qt::LeftButton) {
@@ -745,7 +762,7 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
             const QModelIndex index = tree_->indexAt(pos);
             if (index.isValid() && index.data(ExpandableRole).toBool()) {
                 const QRect chevron =
-                    delegate_->chevronRect(tree_->visualRect(index), index.data(DepthRole).toInt());
+                    delegate_->chevronRect(tree_->visualRect(index), index);
                 if (chevron.contains(pos)) {
                     tree_->setExpanded(index, !tree_->isExpanded(index));
                     return true;
@@ -779,6 +796,7 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                 }
                 const QRect maskThumb = delegate_->maskThumbRect(vr, index);
                 if (!maskThumb.isEmpty() && maskThumb.contains(pos)) {
+                    setActiveThumb(rowPath, 1);
                     if (mouse->modifiers() & Qt::ShiftModifier) {
                         layer_mask_set_enabled_path(*view_, rowPath,
                                                     index.data(MaskDisabledRole).toBool());
@@ -789,7 +807,7 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                         mask_edit_target_set(*view_, rowPath);
                         refresh();
                     }
-                    return true;
+                    return false;
                 }
                 const QRect linkGlyph = delegate_->linkGlyphRect(vr, index);
                 if (!linkGlyph.isEmpty() && linkGlyph.contains(pos)) {
@@ -800,17 +818,27 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                 // The vector mask's own controls, mirroring the layer mask.
                 const QRect vectorThumb = delegate_->vectorMaskThumbRect(vr, index);
                 if (!vectorThumb.isEmpty() && vectorThumb.contains(pos)) {
+                    setActiveThumb(rowPath, 2);
                     if (mouse->modifiers() & Qt::ShiftModifier) {
                         vector_mask_set_enabled_path(
                             *view_, rowPath, index.data(VectorMaskDisabledRole).toBool());
+                        return true;
                     }
-                    return true;
+                    return false;
                 }
                 const QRect vectorLink = delegate_->vectorLinkGlyphRect(vr, index);
                 if (!vectorLink.isEmpty() && vectorLink.contains(pos)) {
                     vector_mask_set_linked_path(*view_, rowPath,
                                                 !index.data(VectorMaskLinkedRole).toBool());
                     return true;
+                }
+                // A plain or Alt click on the image thumbnail makes it the edit
+                // target and still selects the row (which activates the layer).
+                const QRect imageThumb = delegate_->thumbRect(vr, index);
+                if (!imageThumb.isEmpty() && imageThumb.contains(pos)
+                    && !(mouse->modifiers() & Qt::ControlModifier)) {
+                    setActiveThumb(rowPath, 0);
+                    return false;
                 }
             }
             // An Alt-click on a row's fx badge toggles every layer's effects,
@@ -852,6 +880,15 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                 }
                 return true;
             }
+            // A regular layer's lock badge unlocks it with one click; the
+            // Background badge above converts instead.
+            if (index.isValid() && view_ && index.data(LockRole).toInt() != 0
+                && index.data(KindRole).toString() != QLatin1String("background")
+                && delegate_->lockRect(tree_->visualRect(index)).contains(pos)) {
+                view_->set_layers_lock(QStringList{pathForProxyIndex(index)},
+                                       QStringLiteral("all"), false);
+                return true;
+            }
             if (index.isValid() && delegate_->eyeColumnContains(tree_->visualRect(index), pos)) {
                 const QString path = pathForProxyIndex(index);
                 const QString kind = index.data(KindRole).toString();
@@ -876,8 +913,14 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                 if (!targets.contains(path)) {
                     targets = QStringList{path};
                 }
+                const bool on = !model_->visibleInDocument(path);
                 if (view_ && !targets.isEmpty()) {
-                    view_->set_layers_visible(targets, !index.data(VisibleRole).toBool());
+                    view_->set_layers_visible(targets, on);
+                    // Patch the toggled rows in place so a second quick toggle
+                    // reads the new value instead of a stale one.
+                    for (const QString& target : targets) {
+                        model_->setVisible(target, on);
+                    }
                 }
                 return true;
             }
@@ -923,40 +966,6 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
         }
     }
     return QWidget::eventFilter(watched, event);
-}
-
-void LayersPanel::openBackgroundConversion(const QString& path)
-{
-    if (!view_ || path.isEmpty()) {
-        return;
-    }
-    LayerNewSpec spec;
-    if (bgConvertArmed_) {
-        if (!bgConvertAccept_) {
-            return;
-        }
-        spec.name = bgConvertName_;
-        spec.color = bgConvertColor_;
-    } else {
-        const QString defaultName = view_->next_layer_name(QStringLiteral("Layer"));
-        if (!LayerNewDialog::getNameColor(this, defaultName, &spec)) {
-            return;
-        }
-    }
-    if (view_->convert_background(path, spec.name, spec.color)) {
-        refresh();
-        selectPath(path);
-    }
-}
-
-void LayersPanel::openLayerStyle(const QString& path)
-{
-    if (!view_ || path.isEmpty() || !layer_style_can_edit(*view_, path)) {
-        return;
-    }
-    LayerStyleDialog dialog(view_, path, QString(), this);
-    runDialog(dialog, this);
-    refresh();
 }
 
 void LayersPanel::syncControls()
@@ -1038,6 +1047,17 @@ void LayersPanel::syncControls()
     }
     syncing_ = false;
     emit selectionChanged();
+}
+
+void LayersPanel::setActiveThumb(const QString& path, int thumb)
+{
+    if (path.isEmpty()) {
+        return;
+    }
+    activeThumbByPath_.insert(path, thumb);
+    if (model_) {
+        model_->setActiveThumb(path, thumb);
+    }
 }
 
 void LayersPanel::openPanelOptions()

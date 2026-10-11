@@ -4,6 +4,7 @@
 
 use pictura_core::{Channel, Document, LayerMask, PsdRect};
 
+use super::create::layer_from_background;
 use super::paths::{resolve_path, resolve_path_mut};
 
 /// The mask kind [`add_layer_mask`] creates.
@@ -88,6 +89,23 @@ pub fn add_layer_mask(
         data: Some(data.into()),
         extra: Vec::new(),
     });
+    true
+}
+
+/// Add a layer mask and, only when the add succeeds, convert a Background layer
+/// to an ordinary layer (as CS6 does, so the four forced locks do not keep the
+/// mask unusable). A refused add — an existing mask, a selection variant with no
+/// selection, or an unresolved path — leaves the Background untouched.
+pub fn add_layer_mask_converting_background(
+    doc: &mut Document,
+    path: &str,
+    kind: LayerMaskKind,
+    selection: Option<&LayerMask>,
+) -> bool {
+    if !add_layer_mask(doc, path, kind, selection) {
+        return false;
+    }
+    layer_from_background(doc, path);
     true
 }
 
@@ -262,6 +280,35 @@ mod tests {
             LayerMaskKind::RevealAll,
             None
         ));
+    }
+
+    #[test]
+    fn a_refused_mask_add_does_not_convert_the_background() {
+        let mut doc = doc(2, 2);
+        doc.layers[0].background = true;
+
+        // Reveal Selection with no selection is refused: the Background stays.
+        assert!(!add_layer_mask_converting_background(
+            &mut doc,
+            "0",
+            LayerMaskKind::RevealSelection,
+            None
+        ));
+        assert!(
+            doc.layers[0].background,
+            "refused add leaves the Background"
+        );
+        assert!(!has_layer_mask(&doc, "0"));
+
+        // A successful add converts it to an ordinary layer.
+        assert!(add_layer_mask_converting_background(
+            &mut doc,
+            "0",
+            LayerMaskKind::RevealAll,
+            None
+        ));
+        assert!(!doc.layers[0].background, "successful add converts");
+        assert!(has_layer_mask(&doc, "0"));
     }
 
     #[test]

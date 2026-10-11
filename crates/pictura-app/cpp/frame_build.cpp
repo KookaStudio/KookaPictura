@@ -409,9 +409,15 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
     optionsBar_->setContentsMargins(9, 0, 3, 0);
     connect(optionsBar_, &OptionsBar::panelToggleRequested, this, &PicturaMainWindow::togglePanel);
     connect(optionsBar_, &OptionsBar::alignRequested, this,
-            [this](int edge) { alignSelectedLayers(edge, true); });
+            [this](int edge) { alignSelectedLayers(edge, true, tools_ ? tools_->moveAlignTo() : 0); });
     connect(optionsBar_, &OptionsBar::distributeRequested, this,
             &PicturaMainWindow::distributeSelectedLayers);
+    connect(tools_, &ToolController::moveOptionsChanged, this,
+            &PicturaMainWindow::updateAlignControls);
+    connect(optionsBar_, &OptionsBar::refineEdgeRequested, this, [this]() {
+        registry_->dispatch(
+            commandIdForPath({QStringLiteral("Select"), QStringLiteral("Refine Edge…")}));
+    });
     brushPanel_->setController(tools_);
     cloneSourcePanel_->setController(tools_);
     glyphsPanel_->setController(tools_);
@@ -433,6 +439,15 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
         }
         updateToolHint();
     });
+    // A modal tool session (Crop) recorded or discarded a step; re-evaluate the
+    // Undo/Redo commands so Ctrl+Z reaches the session.
+    connect(tools_, &ToolController::toolSessionChanged, this, [this]() {
+        if (registry_) {
+            registry_->refresh();
+        }
+    });
+    // Crop options (mode, grid, ratio, delete pixels) persist across restarts.
+    connect(tools_, &ToolController::cropOptionsChanged, this, [this]() { saveSession(); });
     // The Note tool opens a note in the Notes panel; the panel's
     // previous/next/delete hand the current note back to the controller.
     connect(tools_, &ToolController::layerCreated, this, &PicturaMainWindow::selectLayerPath);

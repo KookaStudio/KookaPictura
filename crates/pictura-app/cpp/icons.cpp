@@ -1,6 +1,9 @@
 #include "icons.h"
 
 #include <QtCore/QFile>
+#include <QtCore/QHash>
+#include <QtCore/QLineF>
+#include <QtCore/QPointF>
 #include <QtCore/QString>
 #include <QtGui/QCursor>
 #include <QtGui/QIcon>
@@ -8,6 +11,8 @@
 #include <QtGui/QPixmap>
 #include <QtSvg/QSvgRenderer>
 #include <QtWidgets/QApplication>
+
+#include <cmath>
 
 #include "svg_icon_engine.h"
 
@@ -75,6 +80,20 @@ QCursor cursor(const QString& id, int hotX, int hotY, double degrees)
     pixmap.setDevicePixelRatio(dpr);
 
     return QCursor(pixmap, qRound(hotX * dpr), qRound(hotY * dpr));
+}
+
+QCursor rotateCursor(const QPointF& centre, const QPointF& pointer)
+{
+    static QHash<int, QCursor> cache;
+    const QLineF out(centre, pointer);
+    const double heading = out.length() > 1e-6 ? -out.angle() : -45.0;
+    const int step = int(std::lround((heading + 45.0) / 5.0)) % 72;
+    const int key = step < 0 ? step + 72 : step;
+    auto it = cache.find(key);
+    if (it == cache.end()) {
+        it = cache.insert(key, cursor(QStringLiteral("cursor.rotate"), 12, 12, key * 5.0));
+    }
+    return it.value();
 }
 
 } // namespace pictura

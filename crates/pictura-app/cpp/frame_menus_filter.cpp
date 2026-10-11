@@ -4,12 +4,14 @@
 #include <QtWidgets/QStatusBar>
 
 #include "filter_commands.h"
+#include "filter_commit.h"
 #include "filter_gallery_dialog.h"
 #include "filter_preview_dialog.h"
 #include "lens_flare_dialog.h"
 #include "lighting_effects_dialog.h"
 
 #include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/filter_tools/jobs.cxxqt.h"
 
 namespace pictura {
 
@@ -22,6 +24,8 @@ FilterPreviewView previewViewFor(ImageView* canvas)
     if (canvas) {
         view.visible = canvas->visibleDocumentRect();
         view.canvasZoom = canvas->zoom();
+        view.canvas = canvas;
+        view.devicePixelRatio = canvas->devicePixelRatioF();
     }
     return view;
 }
@@ -40,6 +44,22 @@ bool runFilterDialog(PictureView* view, const FilterCommandSpec& spec,
         return LightingEffectsDialog::get(view, spec, initial, out, parent);
     }
     return FilterPreviewDialog::get(view, spec, previewView, initial, out, parent);
+}
+
+// Commit `kind` on a worker with a busy indicator, recorded under its menu
+// name. A zoomed-out dialog leaves its canvas preview up until the commit lands.
+bool commitFilter(QWidget* parent, PictureView* view, ImageView* canvas, const QString& kind,
+                  const QList<double>& values)
+{
+    const FilterCommandSpec* spec = filterCommandForKind(kind);
+    const QString name = spec ? spec->label : kind;
+    const bool applied = runFilterCommit(parent, view, name, [&] {
+        return filter_commit_start(*view, kind, values, filterHistoryLabel(name));
+    });
+    if (canvas) {
+        canvas->clearFilterPreview();
+    }
+    return applied;
 }
 
 } // namespace
@@ -61,7 +81,7 @@ void PicturaMainWindow::applyFilterCommand(const FilterCommandSpec& spec)
     }
     if (spec.params.isEmpty()) {
         // Nothing to edit: apply the engine defaults directly.
-        if (apply_filter_params(*view, spec.kind, QList<double>())) {
+        if (commitFilter(this, view, imageView(), spec.kind, QList<double>())) {
             refresh();
         } else {
             reportFilterRefusal(view);
@@ -70,9 +90,9 @@ void PicturaMainWindow::applyFilterCommand(const FilterCommandSpec& spec)
     }
     QList<double> values;
     // The dialog previews on the canvas as controls change; OK commits one
-    // state, Cancel discards the preview bit-identically.
+    // state on a worker, Cancel discards the preview bit-identically.
     if (runFilterDialog(view, spec, previewViewFor(imageView()), QList<double>(), &values, this)) {
-        if (apply_filter_params(*view, spec.kind, values)) {
+        if (commitFilter(this, view, imageView(), spec.kind, values)) {
             refresh();
         } else {
             reportFilterRefusal(view);
@@ -138,7 +158,7 @@ void PicturaMainWindow::wireFilterMenu()
         if (!view || !filter_has_last(*view)) {
             return;
         }
-        if (apply_filter_params(*view, filter_last_kind(*view), filter_last_params(*view))) {
+        if (commitFilter(this, view, imageView(), filter_last_kind(*view), filter_last_params(*view))) {
             refresh();
         } else {
             reportFilterRefusal(view);
@@ -168,7 +188,7 @@ void PicturaMainWindow::wireFilterMenu()
         QList<double> values;
         if (runFilterDialog(view, *spec, previewViewFor(imageView()), filter_last_params(*view),
                             &values, this)) {
-            if (apply_filter_params(*view, spec->kind, values)) {
+            if (commitFilter(this, view, imageView(), spec->kind, values)) {
                 refresh();
             } else {
                 reportFilterRefusal(view);

@@ -1,5 +1,6 @@
 #include "filter_gallery_dialog.h"
 #include "dialogs.h"
+#include "filter_commit.h"
 #include "filter_param_controls.h"
 #include "icons.h"
 
@@ -29,6 +30,7 @@
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/filter_tools/jobs.cxxqt.h"
 
 namespace pictura {
 
@@ -687,9 +689,17 @@ FilterGalleryDialog::CommitResult FilterGalleryDialog::commit()
     if (!view_) {
         return CommitResult::Refused;
     }
-    QApplication::setOverrideCursor(Qt::WaitCursor);
-    const bool applied = apply_filter_stack(*view_, kinds, params);
-    QApplication::restoreOverrideCursor();
+    QStringList names;
+    for (const QString& kind : kinds) {
+        const FilterCommandSpec* spec = filterCommandForKind(kind);
+        names.append(spec ? spec->label : kind);
+    }
+    const QString label =
+        QStringLiteral("Filter Gallery: %1").arg(names.join(QStringLiteral(", ")));
+    PictureView* view = view_;
+    const bool applied = runFilterCommit(parentWidget(), view, tr("Filter Gallery"), [&] {
+        return filter_stack_commit_start(*view, kinds, params, label);
+    });
     return applied ? CommitResult::Applied : CommitResult::Refused;
 }
 

@@ -109,6 +109,9 @@ struct LayerRow {
     /// A display-only row (the Smart Filters group and its children) with no
     /// real layer behind its path: not editable, draggable, or a drop target.
     bool synthetic = false;
+    /// The active edit target within the row: 0 image, 1 raster mask, 2 vector
+    /// mask. Panel-local; only the delegate's brackets read it.
+    int activeThumb = 0;
 };
 
 QString layerTooltip(const LayerRow& layer);
@@ -163,6 +166,7 @@ enum LayerRole {
     HasLayerStyleRole,
     StyleEffectsRole,
     HasBlendIfRole,
+    ActiveThumbRole,
 };
 
 struct Node {
@@ -340,6 +344,8 @@ public:
             return row.styleEffects;
         case HasBlendIfRole:
             return row.hasBlendIf;
+        case ActiveThumbRole:
+            return row.activeThumb;
         default:
             return {};
         }
@@ -395,6 +401,51 @@ public:
             return view_->set_layer_name_path(node->row.path, name);
         }
         return false;
+    }
+
+    /// Patch one row's visibility in place and notify, so a rapid second toggle
+    /// reads the new value instead of a stale one from a pending model reset.
+    void setVisible(const QString& path, bool visible)
+    {
+        Node* node = byPath_.value(path, nullptr);
+        if (!node || node->row.visible == visible) {
+            return;
+        }
+        node->row.visible = visible;
+        const QModelIndex idx = indexForPath(path);
+        if (idx.isValid()) {
+            emit dataChanged(idx, idx, {VisibleRole});
+        }
+    }
+
+    /// The live visibility of the layer at `path`, read from the document rather
+    /// than `row.visible`, which a pending deferred refresh can leave stale.
+    bool visibleInDocument(const QString& path) const
+    {
+        if (!view_) {
+            return false;
+        }
+        for (int i = 0; i < view_->layer_row_count(); ++i) {
+            if (view_->layer_row_path(i) == path) {
+                return view_->layer_row_visible(i);
+            }
+        }
+        return false;
+    }
+
+    /// Patch one row's active-thumb target in place and notify, so the
+    /// delegate redraws the brackets without a model reset.
+    void setActiveThumb(const QString& path, int thumb)
+    {
+        Node* node = byPath_.value(path, nullptr);
+        if (!node || node->row.activeThumb == thumb) {
+            return;
+        }
+        node->row.activeThumb = thumb;
+        const QModelIndex idx = indexForPath(path);
+        if (idx.isValid()) {
+            emit dataChanged(idx, idx, {ActiveThumbRole});
+        }
     }
 
     QVariant headerData(int section, Qt::Orientation orientation, int role) const override

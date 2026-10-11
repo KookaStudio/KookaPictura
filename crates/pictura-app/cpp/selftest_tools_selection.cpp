@@ -772,25 +772,27 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         }
 
         // tsc_marquee_geometry (271): a Normal marquee squares the drag under
-        // Shift, centres it on the press point under Alt, and does both together.
+        // Shift and mirrors about the press point only when the explicit mirror
+        // flag is set; Alt alone no longer mirrors (its first stage subtracts).
         tools->setMarqueeStyle(pictura::MarqueeStyle::Normal);
         const QPointF geoA(10, 10);
         const QPointF geoB(30, 20);
-        const QRect geoNone = tools->marqueeRectForTest(geoA, geoB, int(Qt::NoModifier));
-        const QRect geoShift = tools->marqueeRectForTest(geoA, geoB, int(Qt::ShiftModifier));
-        const QRect geoAlt = tools->marqueeRectForTest(geoA, geoB, int(Qt::AltModifier));
-        const QRect geoBoth = tools->marqueeRectForTest(
-            geoA, geoB, int(Qt::ShiftModifier | Qt::AltModifier));
+        const QRect geoNone = tools->marqueeRectForTest(geoA, geoB, int(Qt::NoModifier), false);
+        const QRect geoShift = tools->marqueeRectForTest(geoA, geoB, int(Qt::ShiftModifier), false);
+        const QRect geoAlt = tools->marqueeRectForTest(geoA, geoB, int(Qt::AltModifier), false);
+        const QRect geoMirror = tools->marqueeRectForTest(geoA, geoB, int(Qt::NoModifier), true);
+        const QRect geoBoth =
+            tools->marqueeRectForTest(geoA, geoB, int(Qt::ShiftModifier), true);
         const bool marqueeGeometry = geoNone == QRect(10, 10, 20, 10)
-            && geoShift == QRect(10, 10, 20, 20) && geoAlt == QRect(-10, 0, 40, 20)
-            && geoBoth == QRect(-10, -10, 40, 40);
+            && geoShift == QRect(10, 10, 20, 20) && geoAlt == QRect(10, 10, 20, 10)
+            && geoMirror == QRect(-10, 0, 40, 20) && geoBoth == QRect(-10, -10, 40, 40);
         ST_BEGIN("tsc_marquee_geometry");
         ST_PASS("tsc_marquee_geometry none=%d,%d,%d,%d shift=%d,%d,%d,%d alt=%d,%d,%d,%d "
-                "both=%d,%d,%d,%d",
+                "mirror=%d,%d,%d,%d both=%d,%d,%d,%d",
                 geoNone.x(), geoNone.y(), geoNone.width(), geoNone.height(), geoShift.x(),
                 geoShift.y(), geoShift.width(), geoShift.height(), geoAlt.x(), geoAlt.y(),
-                geoAlt.width(), geoAlt.height(), geoBoth.x(), geoBoth.y(), geoBoth.width(),
-                geoBoth.height());
+                geoAlt.width(), geoAlt.height(), geoMirror.x(), geoMirror.y(), geoMirror.width(),
+                geoMirror.height(), geoBoth.x(), geoBoth.y(), geoBoth.width(), geoBoth.height());
         if (!marqueeGeometry) {
             return pictura::selfTest().fail(271, "marquee geometry");
         }
@@ -1009,9 +1011,9 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         }
 
         // lst_alt_pivot (369): Alt chooses Subtract at press only when a
-        // selection exists (never pre-toggled while only hovering); its
-        // from-centre geometry comes from the captured `dragMods_`, so a press
-        // pivot from the centre survives to release even with no live modifier.
+        // selection exists (never pre-toggled while only hovering); the first
+        // Alt subtracts alone and does not mirror, so the geometry is an
+        // ordinary drag. (A second Alt edge mirrors; that lives in the Qt Test.)
         frame.setActiveTool(pictura::ToolId::Marquee);
         tools->setCombineMode(pictura::SelectionMode::New);
         tools->setMarqueeStyle(pictura::MarqueeStyle::Normal);
@@ -1036,7 +1038,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
                 apNoPretoggle ? 1 : 0, apModsAlt ? 1 : 0, apCommitted ? 1 : 0,
                 qPrintable(apBounds), apSubtract ? 1 : 0);
         if (!apNoPretoggle || !apModsAlt || !apCommitted
-            || apBounds != QStringLiteral("1 3 8 4") || !apSeed || !apSubtract) {
+            || apBounds != QStringLiteral("5 5 4 2") || !apSeed || !apSubtract) {
             return pictura::selfTest().fail(369, "alt pivot pre-toggle");
         }
 

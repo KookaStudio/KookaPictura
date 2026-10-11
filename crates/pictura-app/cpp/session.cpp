@@ -91,6 +91,10 @@ SessionState loadSession()
     state.guidesLocked = obj.value(QStringLiteral("guidesLocked")).toBool(false);
     state.guideColor = obj.value(QStringLiteral("guideColor")).toString(state.guideColor);
     state.guideDashed = obj.value(QStringLiteral("guideDashed")).toBool(false);
+    state.cropClassicMode = obj.value(QStringLiteral("cropClassicMode")).toBool(true);
+    state.cropDeletePixels = obj.value(QStringLiteral("cropDeletePixels")).toBool(true);
+    state.cropRatio = obj.value(QStringLiteral("cropRatio")).toDouble(0.0);
+    state.cropGridOverlay = obj.value(QStringLiteral("cropGridOverlay")).toInt(0);
     state.panelRailMode = obj.value(QStringLiteral("panelRailMode")).toString(
         QStringLiteral("normal"));
     if (state.panelRailMode != QStringLiteral("iconic")) {
@@ -157,6 +161,10 @@ bool saveSession(const SessionState& state)
     obj.insert(QStringLiteral("guidesLocked"), state.guidesLocked);
     obj.insert(QStringLiteral("guideColor"), state.guideColor);
     obj.insert(QStringLiteral("guideDashed"), state.guideDashed);
+    obj.insert(QStringLiteral("cropClassicMode"), state.cropClassicMode);
+    obj.insert(QStringLiteral("cropDeletePixels"), state.cropDeletePixels);
+    obj.insert(QStringLiteral("cropRatio"), state.cropRatio);
+    obj.insert(QStringLiteral("cropGridOverlay"), state.cropGridOverlay);
     obj.insert(QStringLiteral("panelRailMode"), state.panelRailMode);
     obj.insert(QStringLiteral("railWidth"), state.railWidth);
     obj.insert(QStringLiteral("autoCollapseIconic"), state.autoCollapseIconic);

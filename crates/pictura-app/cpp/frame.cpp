@@ -141,6 +141,10 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
     buildMenus();
     buildPanels();
     buildTools(state.toolsColumns, state.useShiftKeyForToolSwitch);
+    if (tools_) {
+        tools_->applyCropOptions(state.cropClassicMode, state.cropDeletePixels, state.cropRatio,
+                                 state.cropGridOverlay);
+    }
     buildStatusBar();
     // The two 1 px inner frame lines span the whole central band (options bar
     // included); the outer 2 px is the window `${panel}` showing through the

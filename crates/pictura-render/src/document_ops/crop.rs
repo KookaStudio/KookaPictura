@@ -7,7 +7,7 @@
 use pictura_core::{layer_move_locked, Document, Layer, PsdRect};
 
 use super::canvas::{extend_channel, offset_rect, rebase_source_planes};
-use super::{for_each_layer, recompute};
+use super::{for_each_layer, recompute, resolve_path_mut};
 
 /// Crop the document to the clamped `width`×`height` rect at `(x, y)`.
 ///
@@ -23,8 +23,27 @@ pub fn crop_document(doc: &mut Document, x: i32, y: i32, width: u32, height: u32
     if x1 <= x0 || y1 <= y0 {
         return false;
     }
-    let new_w = (x1 - x0) as u32;
-    let new_h = (y1 - y0) as u32;
+    crop_to_frame(doc, x0, y0, (x1 - x0) as u32, (y1 - y0) as u32)
+}
+
+/// Crop to the `width`×`height` rect at `(x, y)` where the rect may extend
+/// beyond the canvas: the document grows to the rect and the added area starts
+/// transparent. Unlike [`crop_document`] nothing is clamped, so a box dragged
+/// past the original edge grows the canvas. Rejects a zero dimension or an
+/// empty document.
+pub fn crop_document_grow(doc: &mut Document, x: i32, y: i32, width: u32, height: u32) -> bool {
+    if width == 0 || height == 0 || doc.width == 0 || doc.height == 0 {
+        return false;
+    }
+    crop_to_frame(doc, x, y, width, height)
+}
+
+/// Re-frame the document to the `new_w`×`new_h` window whose top-left is the
+/// old-canvas point `(x0, y0)`; `x0`/`y0` may be negative to grow left/up.
+/// Pixels are shifted, not resampled, and the uncovered area is transparent.
+fn crop_to_frame(doc: &mut Document, x0: i32, y0: i32, new_w: u32, new_h: u32) -> bool {
+    let old_w = doc.width;
+    let old_h = doc.height;
     let (dx, dy) = (-x0, -y0);
 
     for_each_layer(&mut doc.layers, &mut |layer| {
@@ -218,6 +237,23 @@ pub fn translate_layer_index(doc: &mut Document, index: usize, dx: i32, dy: i32)
     true
 }
 
+/// Shift the layer at `path`'s bounds by `(dx, dy)` without recompositing; the
+/// caller refreshes the dirty region. Returns false for an unresolved path, a
+/// group/adjustment, or a position-locked layer.
+pub fn translate_layer_path(doc: &mut Document, path: &str, dx: i32, dy: i32) -> bool {
+    let Some(layer) = resolve_path_mut(doc, path) else {
+        return false;
+    };
+    if layer.is_group || layer.adjustment.is_some() {
+        return false;
+    }
+    if layer_move_locked(layer) {
+        return false;
+    }
+    offset_layer(layer, dx, dy);
+    true
+}
+
 fn topmost_pixel_layer(layers: &mut [Layer]) -> Option<&mut Layer> {
     layers
         .iter_mut()
@@ -322,6 +358,27 @@ mod tests {
         assert_eq!(doc.channels[0].data, vec![15]);
         assert_eq!(doc.layers[0].rect, rect(-3, -3, 1, 1));
         assert_eq!(doc.composite.data[0], 15, "old (3,3) becomes the origin");
+    }
+
+    #[test]
+    fn crop_document_grow_extends_the_canvas_and_pads_transparent() {
+        let mut doc = sample_doc();
+        assert!(crop_document_grow(&mut doc, -1, -1, 6, 6));
+        assert_eq!((doc.width, doc.height), (6, 6));
+        assert_eq!(doc.channels[0].data.len(), 36);
+        assert_eq!(
+            doc.channels[0].data[0], 0,
+            "the added border is transparent"
+        );
+        let plane = 6usize;
+        // The old (0,0) lands at (1,1); the old (1,0) at (2,1).
+        assert_eq!(doc.channels[0].data[plane + 1], 0);
+        assert_eq!(doc.channels[0].data[plane + 2], 1);
+        assert_eq!(doc.layers[0].rect, rect(1, 1, 5, 5));
+        assert!(
+            !crop_document_grow(&mut doc, 0, 0, 0, 2),
+            "zero width is refused"
+        );
     }
 
     #[test]

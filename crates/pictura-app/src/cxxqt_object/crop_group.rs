@@ -11,7 +11,7 @@ use super::qobject::PictureView;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
-use pictura_core::PsdRect;
+use pictura_core::{Document, PsdRect};
 
 #[cxx_qt::bridge]
 pub mod ffi {
@@ -29,7 +29,7 @@ pub mod ffi {
         /// Perspective-crop to `quad` (8 values: TL, TR, BR, BL x/y in document pixels): warp every layer so the quad becomes the canvas, drop the selection, recomposite, and record one "Perspective Crop" state. False, changing nothing, without a document, on a refusal, or for a degenerate quad.
         fn perspective_crop_commit(view: Pin<&mut PictureView>, quad: &[f64]) -> bool;
 
-        /// The Crop tool's commit: crop to the `width`×`height` rect at `(x, y)` (clamped to the canvas), discarding the pixels outside it when `delete_cropped`; drop the selection and record one "Crop" state. False, changing nothing, without a document or for a rect that misses the canvas.
+        /// The Crop tool's commit: crop to the `width`×`height` rect at `(x, y)`, discarding the pixels outside it when `delete_cropped`; drop the selection and record one "Crop" state. A rect that stays inside the canvas is clamped as before; a rect that extends beyond it grows the canvas, filling the added area with the Background layer's colour `fill_rgb` (0xRRGGBB; ignored without a Background layer). False, changing nothing, without a document or for an empty rect.
         fn crop_to(
             view: Pin<&mut PictureView>,
             x: i32,
@@ -37,6 +37,27 @@ pub mod ffi {
             width: i32,
             height: i32,
             delete_cropped: bool,
+            fill_rgb: i32,
+        ) -> bool;
+
+        /// The Crop tool's straighten commit: rotate the document about
+        /// `(pivot_x, pivot_y)` by `angle` degrees, then crop to the
+        /// `width`×`height` box at `(x, y)` (discarding pixels outside when
+        /// `delete_cropped`, growing the canvas for an out-of-bounds box and
+        /// filling it with `fill_rgb`); drop the selection and record one "Crop"
+        /// state. False, changing nothing, without a document, an invalid angle,
+        /// or an empty rect.
+        fn straighten_crop(
+            view: Pin<&mut PictureView>,
+            x: i32,
+            y: i32,
+            width: i32,
+            height: i32,
+            angle: f64,
+            pivot_x: f64,
+            pivot_y: f64,
+            delete_cropped: bool,
+            fill_rgb: i32,
         ) -> bool;
 
         /// Why the document cannot be perspective-cropped (live type, smart objects, vector masks, 16/32-bit), or empty when it can.
@@ -104,6 +125,7 @@ fn crop_to(
     width: i32,
     height: i32,
     delete_cropped: bool,
+    fill_rgb: i32,
 ) -> bool {
     if width < 1 || height < 1 {
         return false;
@@ -113,11 +135,8 @@ fn crop_to(
         let Some(doc) = rust.doc.as_mut() else {
             return false;
         };
-        if !pictura_render::crop_document(doc, x, y, width as u32, height as u32) {
+        if !apply_crop(doc, x, y, width, height, delete_cropped, fill_rgb) {
             return false;
-        }
-        if delete_cropped {
-            pictura_render::delete_cropped_pixels(doc);
         }
         // Canvas dimensions changed, so the old selection no longer maps.
         rust.selection = None;
@@ -125,6 +144,89 @@ fn crop_to(
     view.as_mut().recomposite();
     view.as_mut().record("Crop");
     true
+}
+
+/// Crop `doc` to the `width`×`height` rect at `(x, y)`. Inside the canvas the
+/// rect is clamped (the classic path); beyond it the canvas grows and the added
+/// area is filled with the Background layer's colour when `fill_rgb` is a
+/// 0xRRGGBB value (ignored without a Background layer). Discards the pixels
+/// outside the new canvas when `delete_cropped`.
+fn apply_crop(
+    doc: &mut Document,
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+    delete_cropped: bool,
+    fill_rgb: i32,
+) -> bool {
+    let grows = x < 0 || y < 0 || x + width > doc.width as i32 || y + height > doc.height as i32;
+    if grows {
+        if !pictura_render::crop_document_grow(doc, x, y, width as u32, height as u32) {
+            return false;
+        }
+        if fill_rgb >= 0 {
+            pictura_render::extend_background(
+                doc,
+                [
+                    (fill_rgb >> 16) as u8,
+                    (fill_rgb >> 8) as u8,
+                    fill_rgb as u8,
+                ],
+            );
+        }
+    } else if !pictura_render::crop_document(doc, x, y, width as u32, height as u32) {
+        return false;
+    }
+    if delete_cropped {
+        pictura_render::delete_cropped_pixels(doc);
+    }
+    true
+}
+
+fn straighten_crop(
+    mut view: Pin<&mut PictureView>,
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+    angle: f64,
+    pivot_x: f64,
+    pivot_y: f64,
+    delete_cropped: bool,
+    fill_rgb: i32,
+) -> bool {
+    if width < 1 || height < 1 {
+        return false;
+    }
+    let cropped = {
+        let mut rust = view.as_mut().rust_mut();
+        let Some(doc) = rust.doc.as_mut() else {
+            return false;
+        };
+        let pivot = (pivot_x, pivot_y);
+        let Some((ox, oy)) =
+            pictura_render::rotate_document_in_offset(doc.width, doc.height, angle, pivot)
+        else {
+            return false;
+        };
+        if !pictura_render::rotate_document_in(doc, angle, pivot) {
+            return false;
+        }
+        let nx = (x as f64 + ox).round() as i32;
+        let ny = (y as f64 + oy).round() as i32;
+        if !apply_crop(doc, nx, ny, width, height, delete_cropped, fill_rgb) {
+            return false;
+        }
+        // Canvas dimensions changed, so the old selection no longer maps.
+        rust.selection = None;
+        true
+    };
+    if cropped {
+        view.as_mut().recomposite();
+        view.as_mut().record("Crop");
+    }
+    cropped
 }
 
 fn perspective_crop_refusal_reason(view: &PictureView) -> QString {

@@ -132,7 +132,14 @@ fn layer_mask_add_path(view: Pin<&mut PictureView>, path: &QString, kind: &QStri
     let changed = view.batch_changed(&one(&path), "Add Layer Mask", |doc, paths| {
         let mut changed = 0;
         for &path in paths {
-            if pictura_render::add_layer_mask(doc, path, kind, selection.as_ref()) {
+            // Add first, then convert: a refused add (an existing mask, or a
+            // reveal-selection with no selection) must not convert the Background.
+            if pictura_render::add_layer_mask_converting_background(
+                doc,
+                path,
+                kind,
+                selection.as_ref(),
+            ) {
                 changed += 1;
             }
         }

@@ -21,7 +21,9 @@ use pictura_core::{
 use pictura_ops::{Anchor, Resample};
 use pictura_render::{
     composite_rgba, flip_document, resize_canvas_document, resize_document, rotate_document,
+    rotate_document_in,
 };
+use pictura_testkit::compare;
 
 // --- document builders (same layer-builder style as the unit tests) ---------
 
@@ -221,6 +223,41 @@ fn flip_document_preserves_structure_and_composite() {
     assert_structural_oracle(&doc, "flip_document");
 }
 
+// --- document-scope arbitrary rotation (rotate_document_in) -----------------
+
+#[test]
+fn rotate_document_in_right_angle_matches_exact_remap() {
+    let mut a = sample_doc();
+    let mut b = sample_doc();
+    assert!(rotate_document_in(&mut a, 90.0, (3.0, 2.0)));
+    rotate_document(&mut b, 1).unwrap();
+    assert_eq!(
+        a, b,
+        "90° about the centre must equal the exact quarter-turn remap"
+    );
+}
+
+#[test]
+fn rotate_document_in_matches_rotate_in_kernel() {
+    // One full-canvas layer: the doc-level resample is the buffer kernel.
+    let mut doc = Document::new(6, 4, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers = vec![pixel_layer("only", rect(0, 0, 4, 6), None)];
+    doc.composite = composite_rgba(&doc);
+    let before = doc.layers[0].channels[0].data.to_vec();
+
+    assert!(rotate_document_in(&mut doc, 30.0, (3.0, 2.0)));
+    assert_structural_oracle(&doc, "rotate_document_in");
+
+    let mut src = pictura_core::PixelBuffer::new(6, 4, 1);
+    src.data.copy_from_slice(&before);
+    let want = pictura_ops::rotate_arbitrary(&src, 30.0, [0, 0, 0, 0]).unwrap();
+    assert_eq!(
+        &doc.layers[0].channels[0].data[..],
+        &want.data[..],
+        "rotated channel must match the oracled rotate_in kernel exactly"
+    );
+}
+
 // --- exactness --------------------------------------------------------------
 
 #[test]
@@ -381,4 +418,145 @@ fn scratch_dir(tag: &str) -> PathBuf {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir
+}
+
+// --- ImageMagick differential oracle for rotate_document_in -----------------
+
+fn ops_oracle_script() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../scripts/ops_oracle.py")
+}
+
+fn magick_available() -> bool {
+    static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *AVAILABLE.get_or_init(|| {
+        Command::new("magick")
+            .arg("-version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    })
+}
+
+/// The central `k×k` region of a planar buffer, channel planes preserved.
+fn center_crop(data: &[u8], width: u32, height: u32, channels: u8, k: u32) -> Vec<u8> {
+    assert!(k <= width && k <= height, "crop larger than the buffer");
+    let ch = channels as usize;
+    let (kw, w) = (k as usize, width as usize);
+    let ox = (width - k) / 2;
+    let oy = (height - k) / 2;
+    let plane = w * height as usize;
+    let mut out = vec![0u8; kw * kw * ch];
+    for c in 0..ch {
+        for y in 0..kw {
+            for x in 0..kw {
+                out[c * kw * kw + y * kw + x] =
+                    data[c * plane + (y + oy as usize) * w + (x + ox as usize)];
+            }
+        }
+    }
+    out
+}
+
+fn oracle_rotate(input_planar: &[u8], size: &str, angle: &str) -> (Vec<u8>, (u32, u32)) {
+    let dir = scratch_dir("rotate-in-oracle");
+    let input_path = dir.join("in.rgb");
+    let output_path = dir.join("out.rgb");
+    std::fs::write(&input_path, input_planar).unwrap();
+    let result = Command::new("python3")
+        .arg(ops_oracle_script())
+        .arg("apply")
+        .args(["--size", size, "--channels", "3", "--planar"])
+        .args([
+            "--op",
+            "rotate_arbitrary",
+            "--angle",
+            angle,
+            "--filter",
+            "triangle",
+            "--background",
+            "0,0,0,0",
+        ])
+        .arg(&input_path)
+        .arg(&output_path)
+        .output()
+        .expect("run ops_oracle.py apply");
+    assert!(
+        result.status.success(),
+        "oracle failed:\n{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let text = String::from_utf8_lossy(&result.stdout);
+    let dims = text.split_whitespace().last().expect("output size");
+    let (w, h) = dims.split_once('x').expect("WxH");
+    let bytes = std::fs::read(&output_path).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    (bytes, (w.parse().unwrap(), h.parse().unwrap()))
+}
+
+#[test]
+fn rotate_document_in_matches_imagemagick_central_region() {
+    if !magick_available() {
+        eprintln!("skipping rotate_document_in oracle: `magick` not on PATH");
+        return;
+    }
+    let (w, h) = (16u32, 16u32);
+    let plane = (w * h) as usize;
+    // Same smooth ramp + 4x4 checker the ops oracle uses, so the central
+    // region has no hard edge that would defeat the triangle-vs-bilinear diff.
+    let mut planar = vec![0u8; plane * 3];
+    for y in 0..h {
+        for x in 0..w {
+            let i = (y * w + x) as usize;
+            planar[i] = (x * 16) as u8;
+            planar[plane + i] = (y * 16) as u8;
+            planar[2 * plane + i] = if (x / 4 + y / 4) % 2 == 0 { 40 } else { 210 };
+        }
+    }
+
+    let mut layer = pixel_layer("only", rect(0, 0, h as i32, w as i32), None);
+    for c in 0..3usize {
+        layer.channels[c].data = planar[c * plane..(c + 1) * plane].to_vec().into();
+    }
+    let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers = vec![layer];
+    doc.composite = composite_rgba(&doc);
+
+    let (reference, (iw, ih)) = oracle_rotate(&planar, "16x16", "30");
+    assert!(
+        iw >= w && ih >= h,
+        "IM {iw}x{ih} smaller than Pictura {w}x{h}"
+    );
+
+    assert!(rotate_document_in(
+        &mut doc,
+        30.0,
+        (w as f64 / 2.0, h as f64 / 2.0)
+    ));
+    let rplane = (doc.width * doc.height) as usize;
+    let mut rotated = vec![0u8; rplane * 3];
+    for c in 0..3usize {
+        rotated[c * rplane..(c + 1) * rplane].copy_from_slice(&doc.layers[0].channels[c].data);
+    }
+
+    // Isolate: the doc-side must equal the oracled kernel exactly.
+    {
+        let mut src = pictura_core::PixelBuffer::new(w, h, 3);
+        src.data.copy_from_slice(&planar);
+        let kernel = pictura_ops::rotate_arbitrary(&src, 30.0, [0, 0, 0, 0]).unwrap();
+        assert_eq!(kernel.width, doc.width, "dims");
+        assert_eq!(kernel.height, doc.height, "dims");
+        assert_eq!(&rotated[..], &kernel.data[..], "doc-side vs kernel");
+    }
+
+    const K: u32 = 12;
+    let want = center_crop(&rotated, doc.width, doc.height, 3, K);
+    let got = center_crop(&reference, iw, ih, 3, K);
+    let diff = compare(&want, &got, 8).expect("buffer lengths agree");
+    assert!(
+        diff.is_empty(),
+        "rotate_document_in 30 deg (central {K}x{K}): {} of {} over tolerance 8 (max {})",
+        diff.differing,
+        diff.samples,
+        diff.max_delta
+    );
 }

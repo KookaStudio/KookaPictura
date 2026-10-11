@@ -200,9 +200,55 @@ public:
     double cropRatio() const override { return cropRatio_; }
     void setCropRatio(double ratio);
     bool cropDeletePixels() const override { return cropDeletePixels_; }
-    void setCropDeletePixels(bool on) { cropDeletePixels_ = on; }
+    void setCropDeletePixels(bool on)
+    {
+        cropDeletePixels_ = on;
+        notifyCropOptionsChanged();
+    }
+    double cropAngle() const override { return cropAngle_; }
+    void setCropAngle(double degrees) override;
+    // The pivot the straighten preview rotates about (image space), fixed when
+    // the angle is set so moving the crop box leaves the content in place.
+    QPointF cropPivot() const override { return cropPivot_; }
+    // A modal tool session's history changed; the frame re-evaluates the
+    // Undo/Redo command enabled state.
+    void notifyToolSessionChanged() override;
+    // Classic (default) vs Modern crop drag semantics; persisted.
+    bool cropClassicMode() const override { return cropClassicMode_; }
+    void setCropClassicMode(bool on) override;
+    int cropGridOverlay() const override { return cropGridOverlay_; }
+    void setCropGridOverlay(int index) override;
+    bool cropStraightenMode() const override { return cropStraightenMode_; }
+    void setCropStraightenMode(bool on) override;
+    void notifyCropOptionsChanged() override;
+    // Restore persisted crop options without re-emitting the save signal (used
+    // during startup, before the workspace store exists).
+    void applyCropOptions(bool classic, bool deletePixels, double ratio, int grid);
+    // The crop cursor zone under an image point (test hook); -1 when not Crop.
+    int cropCursorKindForTest(const QPointF& imagePos, int mods);
+    // The crop box centre (image space; test hook); empty without a box.
+    QPointF cropCenterForTest();
+    bool resizeCrop(double width, double height) override;
+    double cropWidth() const override;
+    double cropHeight() const override;
     // Esc / the options bar's Cancel: put the crop box back to the canvas.
     void cancelCrop();
+    // True while the Crop tool holds an active (not preview) box; the options
+    // bar hides Cancel/Apply/Reset otherwise.
+    bool cropActive() const override;
+
+    // Move tool options: Auto-Select 0 Group / 1 Layer, Show Transform
+    // Controls, and Align To 0 Selection / 1 Canvas.
+    int moveAutoSelect() const override { return moveAutoSelect_; }
+    void setMoveAutoSelect(int which);
+    bool moveShowTransformControls() const override { return moveShowTransform_; }
+    void setMoveShowTransformControls(bool on);
+    int moveAlignTo() const override { return moveAlignTo_; }
+    void setMoveAlignTo(int which);
+
+    // Eyedropper options.
+    EyedropperOptions eyedropperOptions() const override { return eyedropper_; }
+    void setEyedropperOptions(const EyedropperOptions& options);
 
     int tolerance() const override { return tolerance_; }
     void setTolerance(int tolerance);
@@ -379,15 +425,25 @@ public:
         return h ? h->pendingCropRect() : QRect();
     }
     bool commitCrop();
-
+    // The active tool's modal session undo/redo, consulted by Edit Undo/Redo
+    // before the document history.
+    bool toolUndo();
+    bool toolRedo();
+    bool canToolUndo() const;
+    bool canToolRedo() const;
     static SelectionMode selectionModeForModifiers(SelectionMode base, Qt::KeyboardModifiers mods,
                                                    bool hasExistingSelection);
-    QRect marqueeRectForTest(const QPointF& a, const QPointF& b, int mods) const;
+    QRect marqueeRectForTest(const QPointF& a, const QPointF& b, int mods, bool mirror) const;
     int dragModeForTest() const { return static_cast<int>(dragMode_); }
     int dragModsForTest() const
     {
         ToolHandler* h = registry_.forTool(active_);
         return h ? int(h->dragMods()) : 0;
+    }
+    bool dragMirrorForTest() const
+    {
+        ToolHandler* h = registry_.forTool(active_);
+        return h && h->marqueeMirror();
     }
     // The cursor id a selection-tool drag shows, derived from the mode captured
     // at press (`dragMode_`) rather than the live keyboard state.
@@ -458,9 +514,20 @@ signals:
     void shapeOptionsChanged();
     // Rotate View turned the canvas (a drag, the options bar, or Reset View).
     void viewRotationChanged(double degrees);
+    // A modal tool session (e.g. Crop) recorded, walked, or discarded a step.
+    void toolSessionChanged();
+    // A crop option (mode, grid overlay, ratio, delete pixels) changed; the
+    // frame persists the session.
+    void cropOptionsChanged();
+    // A Move option (Auto-Select, Show Transform Controls, Align To) changed;
+    // the frame re-evaluates the Align/Distribute enabled state.
+    void moveOptionsChanged();
 
 private:
     void applyToolPolicy();
+    // Push the canvas backdrop (background colour when a Background layer
+    // exists, else the transparency tile) to the active canvas.
+    void updateCanvasBackdrop();
     static bool isSelectionTool(ToolId id);
     bool maybeBeginSelectionMove(PictureView* v, const QPointF& imagePos);
     void cancelSelectionMove();
@@ -469,9 +536,10 @@ private:
     void releaseSelectionMove(const QPointF& imagePos);
     void handlePressed(const QPointF& imagePos, int button, int modifiers);
     void handleMoved(const QPointF& imagePos);
+    void handleModifiers(int modifiers);
     void handleReleased(const QPointF& imagePos);
     void updateBrushOutline(const QPointF& imagePos);
-
+    void updateSamplingRing(const QPointF& imagePos);
     void updateTransformOverlay(PictureView* v);
     void setTransformCursor(const QPointF& imagePos);
     // Shared begin: resolve the view, start `mode` (empty = Free), then set up
@@ -494,6 +562,22 @@ private:
     double cropRatio_ = 0.0;
     // docs/03-tools/crop-tool.md: Delete Cropped Pixels is on by default.
     bool cropDeletePixels_ = true;
+    // The Crop tool's straighten angle in degrees.
+    double cropAngle_ = 0.0;
+    // The straighten pivot (image space) for the current angle.
+    QPointF cropPivot_;
+    // Classic (default) vs Modern crop drag semantics; the grid overlay index.
+    bool cropClassicMode_ = true;
+    int cropGridOverlay_ = 0;
+    // The Crop straighten line tool armed state.
+    bool cropStraightenMode_ = false;
+    // Move options: Auto-Select 0 Group / 1 Layer, Show Transform Controls,
+    // Align To 0 Selection / 1 Canvas.
+    int moveAutoSelect_ = 0;
+    bool moveShowTransform_ = false;
+    int moveAlignTo_ = 0;
+    // Eyedropper: Sample Size (odd pixels, 1..101), Sample scope, and ring.
+    EyedropperOptions eyedropper_;
     int magneticWidth_ = 10;
     int magneticContrast_ = 10;
     int magneticFrequency_ = 57;

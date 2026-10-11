@@ -3,6 +3,7 @@ use pictura_codec::buffer_to_srgb;
 use pictura_core::{
     BlendMode, ColorMode, Document, Layer, LayerMask, PixelBuffer, PsdRect, VectorMask,
 };
+use pictura_paint::stamp::{layer_surface, sample_scope, surface_from_composite, CloneSampling};
 #[cfg(test)]
 use pictura_paint::Stroke;
 use pictura_render::{Planes, PyramidLevel};
@@ -556,6 +557,93 @@ pub(super) fn sample_planar_argb(buffer: &PixelBuffer, x: i32, y: i32) -> u32 {
     };
     ((a as u32) << 24) | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32)
 }
+
+/// Average the `size`×`size` box centred on `(x, y)` from the eyedropper
+/// `scope`: 0 Current Layer, 1 Current & Below, 2 All Layers, 3 All Layers No
+/// Adjustments, 4 Current & Below No Adjustments. `0` when nothing is sampled.
+pub(super) fn sample_argb_scoped(
+    doc: &Document,
+    path: &str,
+    x: i32,
+    y: i32,
+    size: i32,
+    scope: i32,
+) -> u32 {
+    let Some(image) = eyedropper_surface(doc, path, scope) else {
+        return 0;
+    };
+    let radius = (size.clamp(1, 101) - 1) / 2;
+    let (mut r, mut g, mut b, mut a, mut n) = (0u32, 0u32, 0u32, 0u32, 0u32);
+    for sy in (y - radius).max(0)..=(y + radius).min(image.height - 1) {
+        for sx in (x - radius).max(0)..=(x + radius).min(image.width - 1) {
+            let p = image.data[(sy * image.width + sx) as usize];
+            r += p[0] as u32;
+            g += p[1] as u32;
+            b += p[2] as u32;
+            a += p[3] as u32;
+            n += 1;
+        }
+    }
+    if n == 0 {
+        return 0;
+    }
+    ((a / n) << 24) | ((r / n) << 16) | ((g / n) << 8) | (b / n)
+}
+
+// The sampling surface for one scope; `None` when the scope cannot be read
+// (no such layer, or a group/adjustment for Current Layer).
+fn eyedropper_surface(
+    doc: &Document,
+    path: &str,
+    scope: i32,
+) -> Option<pictura_paint::healing::RgbaImage> {
+    match scope {
+        0 => layer_surface(doc, path),
+        4 => {
+            let mut scope_doc = doc.clone();
+            truncate_above(&mut scope_doc.layers, &parse_layer_path(path)?);
+            strip_adjustments(&mut scope_doc.layers);
+            Some(surface_from_composite(&pictura_render::composite_rgba(
+                &scope_doc,
+            )))
+        }
+        _ => {
+            let sampling = if scope == 1 {
+                CloneSampling::CurrentAndBelow
+            } else {
+                CloneSampling::AllLayers
+            };
+            let scope_doc = sample_scope(doc, path, sampling, scope == 3)?;
+            Some(surface_from_composite(&pictura_render::composite_rgba(
+                &scope_doc,
+            )))
+        }
+    }
+}
+
+fn parse_layer_path(path: &str) -> Option<Vec<usize>> {
+    if path.is_empty() {
+        return None;
+    }
+    path.split('/').map(|s| s.parse::<usize>().ok()).collect()
+}
+
+fn truncate_above(layers: &mut Vec<Layer>, path: &[usize]) {
+    if let Some((&i, rest)) = path.split_first() {
+        layers.truncate(i + 1);
+        if let Some(layer) = layers.get_mut(i) {
+            truncate_above(&mut layer.children, rest);
+        }
+    }
+}
+
+fn strip_adjustments(layers: &mut Vec<Layer>) {
+    layers.retain(|l| l.adjustment.is_none());
+    for layer in layers {
+        strip_adjustments(&mut layer.children);
+    }
+}
+
 /// Convert a planar 8-bit buffer (1 = gray, 2 = gray+alpha, 3 = RGB, 4 = RGBA)
 /// to interleaved RGBA8888. Gray replicates across RGB; RGB gets opaque alpha.
 pub(super) fn buffer_to_rgba_bytes(buffer: &PixelBuffer) -> Vec<u8> {

@@ -388,7 +388,7 @@ impl qobject::PictureView {
 
     pub fn layer_row_expandable(&self, i: i32) -> bool {
         self.row_at(i)
-            .is_some_and(|(_, _, _, layer)| layer.is_group && !layer.children.is_empty())
+            .is_some_and(|(_, _, _, layer)| layer.is_group)
     }
 
     pub fn layer_row_child_count(&self, i: i32) -> i32 {

@@ -7,6 +7,8 @@ use cxx_qt_lib::{QImage, QString, QStringList};
 use pictura_core::Channel;
 use pictura_select::{CombineMode, Selection};
 
+mod refine;
+
 impl qobject::PictureView {
     pub fn select_all(mut self: Pin<&mut Self>) {
         let dims = self.rust().doc.as_ref().map(|d| (d.width, d.height));
@@ -164,10 +166,10 @@ impl qobject::PictureView {
             let mut rust = self.as_mut().rust_mut();
             rust.selection_move_origin = None;
             if duplicate {
-                // `layer_via_copy` inserts the copy directly above the source,
-                // which is always a single top-level path here.
-                if let Ok(source) = path.parse::<usize>() {
-                    rust.active_layer = Some((source + 1).to_string());
+                // `layer_via_copy` inserts the copy directly above the source
+                // in the source's own container.
+                if let Some(copy) = layer_above(&path) {
+                    rust.active_layer = Some(copy);
                 }
             }
         }
@@ -207,8 +209,8 @@ impl qobject::PictureView {
         rust.move_y = 0;
         rust.move_opacity = opacity;
         rust.move_prepared_revision = rust.content_revision;
-        // The `-1` sentinel keeps the whole-layer cache from reusing this base.
-        rust.move_prepared_layer = -1;
+        // The empty sentinel keeps the whole-layer cache from reusing this base.
+        rust.move_prepared_layer = String::new();
         rust.move_preview_cache_hit = false;
         true
     }
@@ -647,8 +649,20 @@ impl qobject::PictureView {
 ///
 /// The base is the full composite (source pixels intact); the moving layer is a
 /// document-sized copy of the selected pixels produced by the same engine call
+/// The path directly above `path` in the same container, or `None` for a
+/// malformed path. `layer_via_copy` inserts the copy at that index.
+fn layer_above(path: &str) -> Option<String> {
+    let (prefix, last) = path.rsplit_once('/').unwrap_or(("", path));
+    let index: usize = last.parse().ok()?;
+    Some(if prefix.is_empty() {
+        (index + 1).to_string()
+    } else {
+        format!("{prefix}/{}", index + 1)
+    })
+}
+
 /// the commit uses, so the preview matches the committed layer exactly. Returns
-/// `None` for a non-top-level path, a missing source layer, or an engine refusal.
+/// `None` for an unresolved path, a missing source layer, or an engine refusal.
 ///
 /// ponytail: clones the document and recomposites once per Alt press, not per
 /// pointer event; shave it only if press latency on large documents matters.
@@ -658,14 +672,14 @@ fn selection_duplicate_preview(
     selection: &Selection,
     gpu_compute: bool,
 ) -> Option<(QImage, QImage, i32)> {
-    let source_index: usize = path.parse().ok()?;
-    doc.layers.get(source_index)?;
+    pictura_render::resolve_path(doc, path)?;
+    let copy_path = layer_above(path)?;
     let mask = selection_to_mask(selection, doc);
     let mut preview = doc.clone();
     if !pictura_render::move_selection_content(&mut preview, path, &mask, 0, 0, true) {
         return None;
     }
-    let copy = preview.layers.get(source_index + 1)?;
+    let copy = pictura_render::resolve_path(&preview, &copy_path)?;
     let layer = layer_image(copy)?;
     Some((
         document_to_image(doc, gpu_compute),

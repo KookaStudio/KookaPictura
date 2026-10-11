@@ -8,6 +8,7 @@
 #include "selection_geometry.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/layer_path.cxxqt.h"
 
 #include <QtCore/QPointF>
 #include <QtCore/QRect>
@@ -25,9 +26,7 @@ bool activePixelLocked(PictureView* view)
     if (!view) {
         return false;
     }
-    bool ok = false;
-    const int index = view->active_layer_path().toInt(&ok);
-    return ok && (view->layer_lock(index) & 0x02) != 0;
+    return (layer_lock_path(*view, view->active_layer_path()) & 0x02) != 0;
 }
 
 void ToolController::refreshCursor()
@@ -88,6 +87,15 @@ void ToolController::refreshCursor(Qt::KeyboardModifiers mods)
         // The drawn brush-size ring is the pointer affordance; hide the OS
         // cursor rather than scaling a pixmap with the brush.
         return canvas_->setCursor(Qt::BlankCursor);
+    }
+    // A handler that owns a pointer-driven cursor (Crop) reports the state
+    // cursor for the live pointer; otherwise the tool's static cursor is used.
+    if (ToolHandler* h = registry_.forTool(active_)) {
+        const QPoint local = canvas_->mapFromGlobal(QCursor::pos());
+        QCursor hover;
+        if (h->hoverCursor(*this, canvas_->widgetToImage(QPointF(local)), mods, hover)) {
+            return canvas_->setCursor(hover);
+        }
     }
     const ToolInfo& info = toolInfo(active_);
     ToolHandler* h = registry_.forTool(active_);
@@ -159,9 +167,10 @@ SelectionMode ToolController::selectionModeForModifiers(SelectionMode base,
     return SelectionMode::Subtract;
 }
 
-QRect ToolController::marqueeRectForTest(const QPointF& a, const QPointF& b, int mods) const
+QRect ToolController::marqueeRectForTest(const QPointF& a, const QPointF& b, int mods,
+                                         bool mirror) const
 {
-    return marqueeDragRect(a, b, Qt::KeyboardModifiers(mods), marqueeStyle_, fixedRatioW_,
+    return marqueeDragRect(a, b, Qt::KeyboardModifiers(mods), mirror, marqueeStyle_, fixedRatioW_,
                            fixedRatioH_, fixedSizeW_, fixedSizeH_);
 }
 

@@ -121,6 +121,16 @@ struct ToneOptions {
     bool vibrance = true;
 };
 
+// The Eyedropper options bar: Sample Size in pixels (odd, 1..101; 1 is the
+// point sample), the Sample scope 0 Current Layer / 1 Current & Below /
+// 2 All Layers / 3 All Layers No Adjustments / 4 Current & Below No
+// Adjustments, and Show Sampling Ring.
+struct EyedropperOptions {
+    int sampleSize = 1;
+    int scope = 2;
+    bool ring = false;
+};
+
 // The Gradient options bar: `preset` indexes the built-in gradients
 // (gradient_preset_name), Style 0 Linear / 1 Radial / 2 Angle / 3 Reflected /
 // 4 Diamond, Mode a Brush mode, Opacity 0-100 %.
@@ -311,9 +321,49 @@ struct ToolContext {
     // whether a crop discards the pixels outside the canvas.
     virtual double cropRatio() const = 0;
     virtual bool cropDeletePixels() const = 0;
+    // The crop straighten angle in degrees (positive clockwise), 0 when unset.
+    virtual double cropAngle() const = 0;
+    virtual void setCropAngle(double degrees) = 0;
+    // The pivot the straighten preview rotates about (image space).
+    virtual QPointF cropPivot() const = 0;
+    // A modal tool session's history changed; the frame re-evaluates commands.
+    virtual void notifyToolSessionChanged() = 0;
+    // Classic crop (default): dragging inside moves the crop box, the content
+    // stays. Modern (PS CC): dragging inside moves the content under the fixed
+    // box. Persisted with the other crop options.
+    virtual bool cropClassicMode() const = 0;
+    virtual void setCropClassicMode(bool on) = 0;
+    // The crop grid overlay index (0 Rule of Thirds, 1 Grid, ...). Persisted.
+    virtual int cropGridOverlay() const = 0;
+    virtual void setCropGridOverlay(int index) = 0;
+    // The Crop straighten line tool: while armed, a canvas drag draws a
+    // horizon line whose inclination sets the straighten angle.
+    virtual bool cropStraightenMode() const = 0;
+    virtual void setCropStraightenMode(bool on) = 0;
+    // A crop option changed; the frame persists the session.
+    virtual void notifyCropOptionsChanged() = 0;
+    // Re-resolve the canvas cursor from the tool's current state and the live
+    // pointer (a handler's `hoverCursor`).
+    virtual void refreshCursor() = 0;
+    // True while the Crop tool holds an active (not preview) box.
+    virtual bool cropActive() const = 0;
+    // The options bar's W/H fields.
+    virtual bool resizeCrop(double width, double height) = 0;
+    virtual double cropWidth() const = 0;
+    virtual double cropHeight() const = 0;
     virtual int magneticWidth() const = 0;
     virtual int magneticContrast() const = 0;
     virtual int magneticFrequency() const = 0;
+
+    // Eyedropper options: Sample Size (odd pixels, 1..101), the Sample scope,
+    // and the Show Sampling Ring toggle.
+    virtual EyedropperOptions eyedropperOptions() const = 0;
+
+    // Move options: Auto-Select 0 Group / 1 Layer, Show Transform Controls,
+    // Align To 0 Selection / 1 Canvas.
+    virtual int moveAutoSelect() const = 0;
+    virtual bool moveShowTransformControls() const = 0;
+    virtual int moveAlignTo() const = 0;
 
     // The controller's selection-move service: start a mask/content translate
     // from `imagePos`. The Move handler and the selection pre-block share it.

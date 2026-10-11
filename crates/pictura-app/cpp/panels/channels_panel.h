@@ -1,8 +1,10 @@
 #pragma once
 
 #include <QtCore/QList>
+#include <QtCore/QPoint>
 #include <QtCore/QString>
 #include <QtCore/QStringList>
+#include <QtGui/QColor>
 #include <QtGui/QPixmap>
 #include <QtWidgets/QWidget>
 
@@ -43,10 +45,19 @@ public:
     bool channelEyeEnabledForTest(int index) const;
     void toggleChannelForTest(int index);
     void selectChannelForTest(int index);
+    // Hover the row at `index` with `mods` held and return the viewport cursor's
+    // shape; also drives the Ctrl select-all overlay.
+    int hoverChannelForTest(int index, Qt::KeyboardModifiers mods);
+    bool ctrlOverlayVisibleForTest() const;
+    // The row widget's surface colour, for the Layers-style restyle check.
+    QColor rowSurfaceForTest(int index) const;
 
 signals:
     // The visible working colour channels: bit 0 red, 1 green, 2 blue (0x7 all).
     void channelMaskChanged(int mask);
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     struct Row {
@@ -55,6 +66,7 @@ private:
         int alpha = -1;          // the alpha channel's index, or -1 for a colour row
         QToolButton* eye = nullptr;
         QLabel* thumbnail = nullptr;
+        QWidget* widget = nullptr;  // the row's own widget (for its surface)
     };
 
     void rebuild(const QString& mode, int alphaCount);
@@ -62,10 +74,13 @@ private:
     void refreshThumbnails();
     void toggle(int index);
     void updateFooter();
+    void styleRows();
     int selectedAlpha() const;
+    void updateCtrlOverlay(int index, const QPoint& pos, Qt::KeyboardModifiers mods);
 
     PictureView* view_ = nullptr;
     QListWidget* list_ = nullptr;
+    QLabel* ctrlOverlay_ = nullptr;
     QList<Row> rows_;
     QString mode_;
     int alphaCount_ = -1;

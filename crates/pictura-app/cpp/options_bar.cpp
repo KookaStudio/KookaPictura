@@ -10,12 +10,14 @@
 #include <QtCore/QSignalBlocker>
 #include <QtGui/QIcon>
 #include <QtGui/QAction>
+#include <QtGui/QActionGroup>
 #include <QtGui/QColor>
 #include <QtGui/QPixmap>
 #include <QtGui/QResizeEvent>
 #include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
+#include <QtWidgets/QFrame>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QInputDialog>
 #include <QtWidgets/QLabel>
@@ -41,11 +43,23 @@ const ModeButton kModes[] = {
     {SelectionMode::Intersect, "Intersect with selection", "select.mode.intersect"},
 };
 
+// The vertical rule drawn after the tool icon on every page (D21).
+QFrame* toolSeparator(QWidget* parent)
+{
+    auto* line = new QFrame(parent);
+    line->setObjectName(QStringLiteral("optionsToolSeparator"));
+    line->setFrameShape(QFrame::VLine);
+    line->setFrameShadow(QFrame::Sunken);
+    line->setFixedHeight(18);
+    line->setAttribute(Qt::WA_TransparentForMouseEvents);
+    return line;
+}
+
 } // namespace
 
 NumericFieldConfig OptionsBar::numericConfig(double lo, double hi, double step, int decimals,
                                              const QString& suffix, bool popup,
-                                             const QString& name)
+                                             const QString& name, bool allowFractional)
 {
     NumericFieldConfig config;
     config.minimum = lo;
@@ -55,6 +69,7 @@ NumericFieldConfig OptionsBar::numericConfig(double lo, double hi, double step, 
     config.suffix = suffix;
     config.popup = popup;
     config.objectName = name;
+    config.allowFractional = allowFractional;
     return config;
 }
 
@@ -126,6 +141,17 @@ void OptionsBar::setActiveWorkspace(const QString& name)
 
 QWidget* OptionsBar::buildPage(ToolId id)
 {
+    QWidget* page = buildPageBody(id);
+    if (page) {
+        if (auto* layout = qobject_cast<QHBoxLayout*>(page->layout())) {
+            layout->insertWidget(1, toolSeparator(page));
+        }
+    }
+    return page;
+}
+
+QWidget* OptionsBar::buildPageBody(ToolId id)
+{
     switch (id) {
     case ToolId::Lasso:
     case ToolId::PolygonalLasso:
@@ -137,6 +163,8 @@ QWidget* OptionsBar::buildPage(ToolId id)
         return buildWandPage(id);
     case ToolId::Crop:
         return buildCropPage(id);
+    case ToolId::Eyedropper:
+        return buildEyedropperPage(id);
     case ToolId::ColorSampler:
     case ToolId::Ruler:
     case ToolId::Note:
@@ -302,6 +330,7 @@ QWidget* OptionsBar::buildWandPage(ToolId id)
     sample->setToolTip(QStringLiteral("Not modelled: the wand samples the visible composite."));
         layout->addWidget(sample);
 
+    addRefineEdgeButton(layout, page);
     layout->addStretch(1);
     return page;
 }
@@ -450,8 +479,22 @@ QWidget* OptionsBar::buildSelectionPage(ToolId id)
         layout->addWidget(antiAlias);
     }
 
+    addRefineEdgeButton(layout, page);
     layout->addStretch(1);
     return page;
+}
+
+void OptionsBar::addRefineEdgeButton(QHBoxLayout* layout, QWidget* page)
+{
+    auto* button = new QToolButton(page);
+    button->setObjectName(QStringLiteral("optionsRefineEdge"));
+    button->setText(QStringLiteral("Select and Mask…"));
+    button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    button->setAutoRaise(true);
+    button->setFocusPolicy(Qt::NoFocus);
+    button->setToolTip(QStringLiteral("Refine Edge (Ctrl+Alt+R)"));
+    connect(button, &QToolButton::clicked, this, &OptionsBar::refineEdgeRequested);
+    layout->addWidget(button);
 }
 
 void OptionsBar::addMagneticFields(QHBoxLayout* layout, QWidget* page)
@@ -491,61 +534,6 @@ void OptionsBar::addMagneticFields(QHBoxLayout* layout, QWidget* page)
     pressure->setEnabled(false);
     pressure->setToolTip(QStringLiteral("Not modelled: tablet pressure is not read."));
     layout->addWidget(pressure);
-}
-
-// CS6's Crop bar, as photorust ports it: an aspect-ratio preset, Delete
-// Cropped Pixels, and a cancel/commit pair (Esc / Enter do the same).
-QWidget* OptionsBar::buildCropPage(ToolId id)
-{
-    auto* page = new QWidget(stack_);
-    auto* layout = new QHBoxLayout(page);
-    layout->setContentsMargins(4, 2, 4, 2);
-    layout->addWidget(toolButton(id, page));
-
-    struct Preset {
-        const char* label;
-        double ratio;
-    };
-    const Preset presets[] = {
-        {"Unconstrained", 0.0},    {"1 : 1 (Square)", 1.0}, {"4 : 5 (8:10)", 4.0 / 5.0},
-        {"5 : 7", 5.0 / 7.0},      {"2 : 3 (4:6)", 2.0 / 3.0}, {"16 : 9", 16.0 / 9.0},
-    };
-    auto* ratio = new QComboBox(page);
-    ratio->setObjectName(QStringLiteral("optionsCropRatio"));
-    ratio->setToolTip(QStringLiteral("Lock the crop box to an aspect ratio"));
-    for (const Preset& preset : presets) {
-        ratio->addItem(QString::fromLatin1(preset.label), preset.ratio);
-    }
-    layout->addWidget(ratio);
-
-    auto* deletePixels = new QCheckBox(QStringLiteral("Delete Cropped Pixels"), page);
-    deletePixels->setObjectName(QStringLiteral("optionsCropDelete"));
-    deletePixels->setChecked(controller_ ? controller_->cropDeletePixels() : true);
-    deletePixels->setToolTip(QStringLiteral(
-        "Discard the pixels outside the crop rather than keeping them beyond the canvas edge"));
-    layout->addWidget(deletePixels);
-
-    auto* cancel = new QToolButton(page);
-    cancel->setObjectName(QStringLiteral("optionsCropCancel"));
-    cancel->setText(QStringLiteral("\u2718"));
-    cancel->setToolTip(QStringLiteral("Cancel the crop (Esc)"));
-    layout->addWidget(cancel);
-    auto* commit = new QToolButton(page);
-    commit->setObjectName(QStringLiteral("optionsCropCommit"));
-    commit->setText(QStringLiteral("\u2713"));
-    commit->setToolTip(QStringLiteral("Apply the crop (Enter)"));
-    layout->addWidget(commit);
-
-    if (controller_) {
-        connect(ratio, &QComboBox::currentIndexChanged, this,
-                [this, ratio](int index) { controller_->setCropRatio(ratio->itemData(index).toDouble()); });
-        connect(deletePixels, &QCheckBox::toggled, this,
-                [this](bool on) { controller_->setCropDeletePixels(on); });
-        connect(cancel, &QToolButton::clicked, this, [this]() { controller_->cancelCrop(); });
-        connect(commit, &QToolButton::clicked, this, [this]() { controller_->commitCrop(); });
-    }
-    layout->addStretch(1);
-    return page;
 }
 
 // The annotation tools' bars, as photorust ports them: the Ruler's X, Y, W, H,
@@ -1021,6 +1009,15 @@ void OptionsBar::showTool(ToolId id)
                                          QSizePolicy::Preferred);
     }
     stack_->updateGeometry();
+    // Re-seed the Crop W/H fields for their mode (ratio values or pixels).
+    if (id == ToolId::Crop) {
+        syncCropFields();
+    }
+}
+
+QWidget* OptionsBar::pageForTest(ToolId id) const
+{
+    return stack_ ? stack_->widget(static_cast<int>(id)) : nullptr;
 }
 
 } // namespace pictura

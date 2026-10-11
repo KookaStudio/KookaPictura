@@ -138,6 +138,44 @@ pub(crate) fn encode_path_records(
     }
 }
 
+/// Author a version-3 `vmsk` block from an already-flattened
+/// [`VectorSubpath`] view, preserving each subpath's operation and fill rule.
+/// The polyline vertices are written as corner knots; this is the inverse of
+/// [`decode`] over the serializable fields, used when an in-session geometry
+/// operation (e.g. rotation) mutates the view and the authoritative raw block
+/// must be kept in sync.
+pub fn encode_vector_mask_view(subpaths: &[VectorSubpath], width: u32, height: u32) -> Vec<u8> {
+    let mut out = Vec::with_capacity(8 + RECORD * (1 + subpaths.len() * 5));
+    out.extend_from_slice(&3u32.to_be_bytes());
+    out.extend_from_slice(&0u32.to_be_bytes());
+    out.extend_from_slice(&6u16.to_be_bytes());
+    out.extend_from_slice(&[0u8; 24]);
+    let fixed = |v: f64, extent: u32| ((v / extent.max(1) as f64) * FIXED_ONE).round() as i32;
+    for subpath in subpaths {
+        let selector: u16 = if subpath.closed { 0 } else { 3 };
+        out.extend_from_slice(&selector.to_be_bytes());
+        out.extend_from_slice(&(subpath.points.len() as u16).to_be_bytes());
+        out.extend_from_slice(&subpath.operation.to_be_bytes());
+        let fill: u16 = match subpath.fill_rule {
+            VectorFillRule::NonZero => 2,
+            VectorFillRule::EvenOdd => 0,
+        };
+        out.extend_from_slice(&fill.to_be_bytes());
+        out.extend_from_slice(&[0u8; 18]);
+        let knot: u16 = if subpath.closed { 2 } else { 5 };
+        for p in &subpath.points {
+            out.extend_from_slice(&knot.to_be_bytes());
+            let y = fixed(p[1] as f64 / 256.0, height);
+            let x = fixed(p[0] as f64 / 256.0, width);
+            for _ in 0..3 {
+                out.extend_from_slice(&y.to_be_bytes());
+                out.extend_from_slice(&x.to_be_bytes());
+            }
+        }
+    }
+    out
+}
+
 /// One knot in 1/256-pixel document coordinates.
 struct Knot {
     preceding: [i32; 2],
@@ -369,6 +407,23 @@ mod tests {
             assert!(close(a.out_handle.unwrap(), b.out_handle.unwrap()));
         }
         assert_eq!(decode_vector_mask_paths(&[0, 0, 0, 2], 8, 8), None);
+    }
+
+    #[test]
+    fn view_encoder_preserves_operation_fill_and_vertices() {
+        let subpaths = vec![VectorSubpath {
+            closed: true,
+            operation: 3,
+            fill_rule: VectorFillRule::NonZero,
+            points: vec![[0, 0], [512, 0], [512, 512]],
+        }];
+        let data = encode_vector_mask_view(&subpaths, 8, 8);
+        let mask = decode_vector_mask(&data, 8, 8).expect("decodes");
+        let sub = &mask.subpaths[0];
+        assert!(sub.closed);
+        assert_eq!(sub.operation, 3);
+        assert_eq!(sub.fill_rule, VectorFillRule::NonZero);
+        assert!(sub.points.contains(&[512, 512]));
     }
 
     #[test]

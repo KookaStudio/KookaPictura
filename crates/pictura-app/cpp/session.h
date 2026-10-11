@@ -40,6 +40,11 @@ struct SessionState {
     bool guidesLocked = false;
     QString guideColor = QStringLiteral("#4affff");
     bool guideDashed = false;
+    // Crop options bar, persisted across restarts.
+    bool cropClassicMode = true;     // Classic (default) vs Modern drag semantics
+    bool cropDeletePixels = true;    // discard pixels outside the crop
+    double cropRatio = 0.0;          // locked aspect ratio, 0 = unconstrained
+    int cropGridOverlay = 0;         // 0 Rule of Thirds, 1 Grid, ...
     // v5-v8 panel-column state. `panelGroups` is the legacy flat JSON array of
     // {name, order, visible, minimized, collapsed} for the primary column;
     // `panelColumns` is the ordered array of

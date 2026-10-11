@@ -243,7 +243,7 @@ impl qobject::PictureView {
         rust.move_y = y;
         rust.move_opacity = opacity;
         rust.move_prepared_revision = rust.content_revision;
-        rust.move_prepared_layer = -1;
+        rust.move_prepared_layer = String::new();
         true
     }
 
@@ -432,23 +432,36 @@ impl qobject::PictureView {
 }
 
 impl qobject::PictureView {
-    /// Cache the base composite (topmost raster layer hidden), the layer image,
-    /// its document-space origin, and opacity. One region composite at drag
-    /// start, derived from the authoritative `doc.composite`.
+    /// Cache the base composite (the active raster layer hidden), the layer
+    /// image, its document-space origin, and opacity. One region composite at
+    /// drag start, derived from the authoritative `doc.composite`.
     ///
-    /// Reuses the cached base when the content revision, topmost layer, and
+    /// Reuses the cached base when the content revision, target path, and
     /// clamped rect all match; otherwise it recomputes.
     pub fn begin_move_preview(mut self: Pin<&mut Self>) -> bool {
-        let Some(index) = self.as_ref().movable_target() else {
+        let Some(path) = self.as_ref().move_cache_target() else {
             return false;
         };
-        if self.as_ref().move_cache_valid(index) {
+        {
+            let rust = self.rust();
+            let Some(layer) = rust
+                .doc
+                .as_ref()
+                .and_then(|doc| pictura_render::resolve_path(doc, &path))
+            else {
+                return false;
+            };
+            if layer_move_locked(layer) {
+                return false;
+            }
+        }
+        if self.as_ref().move_cache_valid(&path) {
             {
                 let mut rust = self.as_mut().rust_mut();
                 let (x, y, opacity) = rust
                     .doc
                     .as_ref()
-                    .and_then(|doc| doc.layers.get(index as usize))
+                    .and_then(|doc| pictura_render::resolve_path(doc, &path))
                     .map_or((0, 0, 0), |layer| {
                         (layer.rect.left, layer.rect.top, layer.opacity as i32)
                     });
@@ -459,7 +472,7 @@ impl qobject::PictureView {
             }
             return true;
         }
-        let computed = self.as_mut().compute_move_preview(index as usize);
+        let computed = self.as_mut().compute_move_preview(path);
         self.as_mut().rust_mut().move_preview_cache_hit = false;
         computed
     }
@@ -472,90 +485,98 @@ impl qobject::PictureView {
         if self.rust().selection.is_some() {
             return self.as_mut().begin_selection_duplicate_preview();
         }
-        let new_index = {
+        let new_path = {
             let mut guard = self.as_mut().rust_mut();
             let rust = &mut *guard;
             let (doc, active_layer) = (&mut rust.doc, &mut rust.active_layer);
             let doc = doc.as_mut();
             let duplicate = doc.and_then(|d| duplicate_move_target(d, active_layer));
-            let Some(new_index) = duplicate else {
+            let Some(new_path) = duplicate else {
                 return false;
             };
-            new_index
+            new_path
         };
         self.as_mut().recomposite();
-        self.as_mut().compute_move_preview(new_index as usize)
+        self.as_mut().compute_move_preview(new_path)
     }
 
     /// Warm the move-preview cache without entering preview mode. A layer the
     /// Move tool may not move (a Background) is never previewed, so it is not
     /// warmed either: the warm composites the whole document.
     pub fn prepare_move_preview(mut self: Pin<&mut Self>) -> bool {
-        let Some(index) = self.as_ref().movable_target() else {
+        let Some(path) = self.as_ref().move_cache_target() else {
             return false;
         };
-        if self.as_ref().move_cache_valid(index) {
+        {
+            let rust = self.rust();
+            let Some(layer) = rust
+                .doc
+                .as_ref()
+                .and_then(|doc| pictura_render::resolve_path(doc, &path))
+            else {
+                return false;
+            };
+            if layer_move_locked(layer) {
+                return false;
+            }
+        }
+        if self.as_ref().move_cache_valid(&path) {
             return true;
         }
-        self.as_mut().compute_move_preview(index as usize)
+        self.as_mut().compute_move_preview(path)
     }
 
     pub fn move_preview_cache_hit(&self) -> bool {
         self.rust().move_preview_cache_hit
     }
 
-    /// The active top-level pixel layer index, or `None` without a document or
-    /// a single active raster layer.
-    pub(super) fn move_cache_target(&self) -> Option<i32> {
+    /// The active pixel layer's path, or `None` without a document or a single
+    /// active raster layer.
+    pub(super) fn move_cache_target(&self) -> Option<String> {
         let rust = self.rust();
         let doc = rust.doc.as_ref()?;
         let path = rust.active_layer.as_deref()?;
         active_pixel_layer(doc, Some(path))?;
-        path.parse::<usize>().ok().map(|index| index as i32)
+        Some(path.to_string())
     }
 
-    /// [`Self::move_cache_target`] when its layer is not move-locked.
-    fn movable_target(&self) -> Option<i32> {
-        let index = self.move_cache_target()?;
+    fn move_cache_valid(&self, path: &str) -> bool {
         let rust = self.rust();
-        let layer = rust.doc.as_ref()?.layers.get(index as usize)?;
-        (!layer_move_locked(layer)).then_some(index)
-    }
-
-    fn move_cache_valid(&self, index: i32) -> bool {
-        let rust = self.rust();
-        // The base is the document with the topmost layer hidden, so it does not
+        // The base is the document with the target layer hidden, so it does not
         // depend on that layer's position: a committed move leaves it valid.
         // `record_move` deliberately does not bump `content_revision` for this
         // reason; keying on the layer rect here would throw the base away on
         // every drag and force a full region recomposite on the next press.
         rust.move_base.is_some()
             && rust.move_prepared_revision == rust.content_revision
-            && rust.move_prepared_layer == index
+            && rust.move_prepared_layer == path
     }
 
-    /// Compute and store the move-preview base/layer for the top-level layer
-    /// `index` and record the revision and index they were built from.
-    fn compute_move_preview(mut self: Pin<&mut Self>, index: usize) -> bool {
+    /// Compute and store the move-preview base/layer for the layer at `path`
+    /// and record the revision and path they were built from.
+    fn compute_move_preview(mut self: Pin<&mut Self>, path: String) -> bool {
         let mut guard = self.as_mut().rust_mut();
         let rust = &mut *guard;
         let gpu_compute = rust.gpu_compute;
         let Some(doc) = rust.doc.as_mut() else {
             return false;
         };
-        let Some(layer_image) = layer_image(&doc.layers[index]) else {
+        let Some(layer) = pictura_render::resolve_path(doc, &path) else {
             return false;
         };
-        let rect = doc.layers[index].rect;
-        let (x, y, opacity) = (rect.left, rect.top, doc.layers[index].opacity as i32);
-        let base = build_move_preview_base(doc, index, gpu_compute);
+        let Some(layer_image) = layer_image(layer) else {
+            return false;
+        };
+        let rect = layer.rect;
+        let (x, y, opacity) = (rect.left, rect.top, layer.opacity as i32);
+        let base = build_move_preview_base(doc, &path, gpu_compute);
         rust.move_base = Some(base);
         rust.move_layer = Some(layer_image);
         rust.move_x = x;
         rust.move_y = y;
         rust.move_opacity = opacity;
         rust.move_prepared_revision = rust.content_revision;
-        rust.move_prepared_layer = index as i32;
+        rust.move_prepared_layer = path;
         true
     }
 
@@ -588,7 +609,7 @@ impl qobject::PictureView {
         if dx == 0 && dy == 0 {
             return false;
         }
-        let Some(index) = self.as_ref().move_cache_target() else {
+        let Some(path) = self.as_ref().move_cache_target() else {
             return false;
         };
         let before = {
@@ -596,7 +617,7 @@ impl qobject::PictureView {
             let Some(doc) = rust.doc.as_ref() else {
                 return false;
             };
-            match doc.layers.get(index as usize) {
+            match pictura_render::resolve_path(doc, &path) {
                 Some(layer) => layer.rect,
                 None => return false,
             }
@@ -606,7 +627,7 @@ impl qobject::PictureView {
             let Some(doc) = rust.doc.as_mut() else {
                 return false;
             };
-            pictura_render::translate_layer_index(doc, index as usize, dx, dy)
+            pictura_render::translate_layer_path(doc, &path, dx, dy)
         };
         if !moved {
             return false;
@@ -616,7 +637,7 @@ impl qobject::PictureView {
             let after = rust
                 .doc
                 .as_ref()
-                .and_then(|doc| doc.layers.get(index as usize))
+                .and_then(|doc| pictura_render::resolve_path(doc, &path))
                 .map_or(before, |layer| layer.rect);
             union_rect(before, after)
         };

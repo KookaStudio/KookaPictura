@@ -5,6 +5,8 @@
 #include <QtGui/QGuiApplication>
 #include <QtGui/QScreen>
 
+#include "pictura_app/src/cxxqt_object/filter_tools/jobs.cxxqt.h"
+
 namespace pictura {
 
 void PicturaMainWindow::setPanelsHidden(bool hidden)
@@ -86,6 +88,12 @@ void PicturaMainWindow::retargetDock()
 void PicturaMainWindow::refreshPanels()
 {
     pictura::ScopedTimer t("cxx_refreshPanels (debounced timer)");
+    // A filter commit holds the history on its worker; the commit's own
+    // refresh restarts this timer once it lands.
+    PictureView* view = activeView();
+    if (view && filter_commit_running(*view)) {
+        return;
+    }
     retargetDock();
 }
 
@@ -128,6 +136,12 @@ void PicturaMainWindow::saveSession()
     state.guidesLocked = guidesLocked_;
     state.guideColor = guideColor_.name();
     state.guideDashed = guideDashed_;
+    if (tools_) {
+        state.cropClassicMode = tools_->cropClassicMode();
+        state.cropDeletePixels = tools_->cropDeletePixels();
+        state.cropRatio = tools_->cropRatio();
+        state.cropGridOverlay = tools_->cropGridOverlay();
+    }
     if (panelColumn_) {
         const bool iconic = panelColumn_->railMode();
         state.panelRailMode = iconic ? QStringLiteral("iconic") : QStringLiteral("normal");

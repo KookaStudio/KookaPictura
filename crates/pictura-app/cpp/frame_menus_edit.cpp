@@ -335,4 +335,61 @@ bool PicturaMainWindow::copyLayerFromDocument(const void* source, const QString&
     return true;
 }
 
+// Edit > Undo/Redo/Step. While the active tool holds a modal session (the Crop
+// straighten steps) the session is undone first; otherwise the document history.
+void PicturaMainWindow::wireEditHistory()
+{
+    registry_->setHandler(command_ids::EditUndo, [this]() {
+        if (tools_ && tools_->toolUndo()) {
+            refresh();
+            return;
+        }
+        PictureView* view = activeView();
+        if (!view) {
+            return;
+        }
+        view->can_undo() ? view->undo() : view->redo();
+    });
+    registry_->setEnabledProvider(command_ids::EditUndo, [this]() {
+        PictureView* view = activeView();
+        return (tools_ && tools_->canToolUndo()) || (view && (view->can_undo() || view->can_redo()));
+    });
+    registry_->setLabelProvider(command_ids::EditUndo, [this]() {
+        if (tools_ && tools_->canToolUndo()) {
+            return QStringLiteral("Undo");
+        }
+        PictureView* view = activeView();
+        return view && !view->can_undo() ? QStringLiteral("Redo") : QStringLiteral("Undo");
+    });
+
+    registry_->setHandler(command_ids::EditRedo, [this]() {
+        if (tools_ && tools_->toolRedo()) {
+            refresh();
+            return;
+        }
+        if (PictureView* view = activeView()) {
+            view->redo();
+        }
+    });
+    registry_->setEnabledProvider(command_ids::EditRedo, [this]() {
+        return (tools_ && tools_->canToolRedo()) || (activeView() && activeView()->can_redo());
+    });
+
+    registry_->setHandler(command_ids::EditStepBackward, [this]() {
+        if (PictureView* view = activeView()) {
+            view->undo();
+        }
+    });
+    registry_->setEnabledProvider(command_ids::EditStepBackward,
+                                  [this]() { return activeView() && activeView()->can_undo(); });
+
+    registry_->setHandler(command_ids::EditStepForward, [this]() {
+        if (PictureView* view = activeView()) {
+            view->redo();
+        }
+    });
+    registry_->setEnabledProvider(command_ids::EditStepForward,
+                                  [this]() { return activeView() && activeView()->can_redo(); });
+}
+
 } // namespace pictura

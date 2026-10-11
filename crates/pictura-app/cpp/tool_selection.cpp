@@ -22,9 +22,9 @@ namespace pictura {
 namespace {
 
 QRect marqueeGeometry(ToolContext& ctx, const QPointF& a, const QPointF& b,
-                      Qt::KeyboardModifiers mods)
+                      Qt::KeyboardModifiers mods, bool mirror)
 {
-    return marqueeDragRect(a, b, mods, ctx.marqueeStyle(), ctx.fixedRatioWidth(),
+    return marqueeDragRect(a, b, mods, mirror, ctx.marqueeStyle(), ctx.fixedRatioWidth(),
                            ctx.fixedRatioHeight(), ctx.fixedSizeWidth(),
                            ctx.fixedSizeHeight());
 }
@@ -60,6 +60,10 @@ public:
         }
         ctx.setDragMode(ctx.resolveSelectionMode(mods, v->has_selection()));
         dragMods_ = mods;
+        const bool alt = mods.testFlag(Qt::AltModifier);
+        altArmed_ = alt;
+        altWasDown_ = alt;
+        mirrorAlt_ = false;
         ctx.setDragging(true);
         ctx.setDragCommitted(false);
         anchor_ = last_ = imagePos;
@@ -67,13 +71,24 @@ public:
         return true;
     }
 
-    void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         if (!ctx.dragging()) {
             return;
         }
+        trackAltEdge(ctx, mods);
         last_ = imagePos;
         updateOverlay(ctx, imagePos);
+    }
+
+    // A modifier edge with no pointer movement still arms subtract or mirror.
+    void onModifiers(ToolContext& ctx, Qt::KeyboardModifiers mods) override
+    {
+        if (!ctx.dragging()) {
+            return;
+        }
+        trackAltEdge(ctx, mods);
+        updateOverlay(ctx, last_);
     }
 
     void onRelease(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
@@ -83,7 +98,7 @@ public:
         }
         ctx.setDragging(false);
         PictureView* v = ctx.view();
-        const QRect rect = marqueeGeometry(ctx, anchor_, imagePos, dragMods_);
+        const QRect rect = marqueeGeometry(ctx, anchor_, imagePos, dragMods_, mirrorAlt_);
         const bool shaped = v && rect.width() > 0 && rect.height() > 0;
         const bool committed = shaped
             && (elliptical_ ? v->select_ellipse(rect.x(), rect.y(), rect.width(), rect.height(),
@@ -103,14 +118,36 @@ public:
 
     Qt::KeyboardModifiers dragMods() const override { return dragMods_; }
 
+    bool marqueeMirror() const override { return mirrorAlt_; }
+
 private:
+    // Two-stage Alt: the first Alt (held at press, or first pressed during the
+    // drag) subtracts; a later Alt edge during the same drag mirrors the
+    // rectangle about the anchor.
+    void trackAltEdge(ToolContext& ctx, Qt::KeyboardModifiers mods)
+    {
+        const bool altNow = mods.testFlag(Qt::AltModifier);
+        if (altNow && !altWasDown_) {
+            if (altArmed_) {
+                mirrorAlt_ = true;
+            } else {
+                altArmed_ = true;
+                PictureView* v = ctx.view();
+                if (v && v->has_selection()) {
+                    ctx.setDragMode(SelectionMode::Subtract);
+                }
+            }
+        }
+        altWasDown_ = altNow;
+    }
+
     void updateOverlay(ToolContext& ctx, const QPointF& imagePos)
     {
         ImageView* canvas = ctx.canvas();
         if (!canvas) {
             return;
         }
-        const QRect rect = marqueeGeometry(ctx, anchor_, imagePos, dragMods_);
+        const QRect rect = marqueeGeometry(ctx, anchor_, imagePos, dragMods_, mirrorAlt_);
         if (rect.width() <= 0 || rect.height() <= 0) {
             canvas->clearSelectionPreview();
             return;
@@ -129,6 +166,9 @@ private:
 
     bool elliptical_;
     Qt::KeyboardModifiers dragMods_ = Qt::NoModifier;
+    bool altArmed_ = false;
+    bool altWasDown_ = false;
+    bool mirrorAlt_ = false;
     QPointF anchor_;
     QPointF last_;
 };

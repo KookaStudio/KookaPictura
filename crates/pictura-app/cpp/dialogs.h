@@ -8,6 +8,7 @@
 #include <functional>
 
 class QAbstractButton;
+class QImage;
 class QKeyEvent;
 class QComboBox;
 class QDialog;
@@ -35,6 +36,11 @@ void setDialogNavigationKeys(std::function<bool(QKeyEvent*)> handler);
 // `zoomOut`. `+` takes Shift on most layouts, so Ctrl+= and Ctrl+Shift+= zoom
 // in too, as they do on the canvas.
 void addZoomShortcuts(QWidget* dialog, QAbstractButton* zoomIn, QAbstractButton* zoomOut);
+
+// The whole document as the smallest view-pyramid level whose long side is at
+// least `minEdge` (level 0 for a smaller document), so a dialog's small picture
+// never builds the full-resolution image. Null without a document.
+QImage documentPreviewImage(PictureView* view, int minEdge);
 
 // Ask what to do with a modified document before closing/reverting/replacing it.
 // A frame-to-front save prompt is expected when the choice is Save.

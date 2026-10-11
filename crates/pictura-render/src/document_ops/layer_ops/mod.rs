@@ -59,9 +59,9 @@ pub use create::{
     ungroup_layer, NewLayerSpec,
 };
 pub use layer_masks::{
-    add_layer_mask, apply_layer_mask, delete_layer_mask, has_layer_mask, layer_mask_disabled,
-    layer_mask_linked, set_layer_mask_enabled, set_layer_mask_linked, LayerMaskKind,
-    MASK_FLAG_LINKED,
+    add_layer_mask, add_layer_mask_converting_background, apply_layer_mask, delete_layer_mask,
+    has_layer_mask, layer_mask_disabled, layer_mask_linked, set_layer_mask_enabled,
+    set_layer_mask_linked, LayerMaskKind, MASK_FLAG_LINKED,
 };
 pub use layer_style::{
     any_effects_visible, clear_layer_style, copy_layer_style, has_layer_style,
@@ -108,8 +108,8 @@ pub use transfer::copy_path_to_document;
 pub use transform::{transform_layer, transform_layer_quad, LayerTransform};
 pub use vector_masks::{
     add_vector_mask, delete_vector_mask, has_vector_mask, rasterize_vector_mask,
-    set_vector_mask_enabled, set_vector_mask_linked, vector_mask_disabled, vector_mask_linked,
-    VectorMaskKind, VECTOR_MASK_FLAG_DISABLED, VECTOR_MASK_FLAG_INVERT,
+    set_vector_mask_enabled, set_vector_mask_linked, sync_vector_mask_block, vector_mask_disabled,
+    vector_mask_linked, VectorMaskKind, VECTOR_MASK_FLAG_DISABLED, VECTOR_MASK_FLAG_INVERT,
     VECTOR_MASK_FLAG_NOT_LINKED,
 };
 pub use via::{layer_via_copy, layer_via_cut};

@@ -860,7 +860,7 @@ dependencies = [
 
 [[package]]
 name = "pictura-adjust"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "pictura-core",
  "pictura-testkit",
@@ -869,7 +869,7 @@ dependencies = [
 
 [[package]]
 name = "pictura-codec"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "flate2",
  "pictura-color",
@@ -880,7 +880,7 @@ dependencies = [
 
 [[package]]
 name = "pictura-color"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "lcms2",
  "pictura-testkit",
@@ -889,11 +889,11 @@ dependencies = [
 
 [[package]]
 name = "pictura-core"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "pictura-filters"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "pictura-core",
  "pictura-testkit",
@@ -904,7 +904,7 @@ dependencies = [
 
 [[package]]
 name = "pictura-ops"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "pictura-core",
  "pictura-testkit",
@@ -913,14 +913,14 @@ dependencies = [
 
 [[package]]
 name = "pictura-paint"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "pictura-core",
 ]
 
 [[package]]
 name = "pictura-render"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "pictura-adjust",
  "pictura-codec",
@@ -938,7 +938,7 @@ dependencies = [
 
 [[package]]
 name = "pictura-select"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "pictura-core",
  "thiserror 2.0.20",
@@ -946,11 +946,11 @@ dependencies = [
 
 [[package]]
 name = "pictura-testkit"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "pictura_app"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "ash",
  "cxx",

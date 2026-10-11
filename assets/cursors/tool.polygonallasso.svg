@@ -1,6 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <g fill="#202020" stroke="#ffffff" stroke-width="4" stroke-linejoin="round">
+    <path d="M2 2 2 14 5.515 10.485 10.485 10.485Z"/>
+  </g>
   <g fill="#ffffff" stroke="#ffffff" stroke-width="4">
-    <path d="M2 2 13 5.5 8.5 8.5 5.5 13Z"/>
     <path d="M11 17 16 11 22 14 21 21 12 21Z"/>
     <circle cx="11" cy="17" r="1"/>
     <circle cx="16" cy="11" r="1"/>
@@ -8,8 +10,10 @@
     <circle cx="21" cy="21" r="1"/>
     <circle cx="12" cy="21" r="1"/>
   </g>
+  <g fill="#202020" stroke="#202020" stroke-width="1.5" stroke-linejoin="round">
+    <path d="M2 2 2 14 5.515 10.485 10.485 10.485Z"/>
+  </g>
   <g fill="#ffffff" stroke="#202020" stroke-width="1.5">
-    <path d="M2 2 13 5.5 8.5 8.5 5.5 13Z"/>
     <path d="M11 17 16 11 22 14 21 21 12 21Z"/>
     <circle cx="11" cy="17" r="1"/>
     <circle cx="16" cy="11" r="1"/>

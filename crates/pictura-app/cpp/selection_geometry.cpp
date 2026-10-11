@@ -13,7 +13,7 @@ QRect dragRect(const QPointF& a, const QPointF& b)
 }
 
 QRect marqueeDragRect(const QPointF& a, const QPointF& b, Qt::KeyboardModifiers mods,
-                      MarqueeStyle style, double fixedRatioW, double fixedRatioH,
+                      bool mirror, MarqueeStyle style, double fixedRatioW, double fixedRatioH,
                       int fixedSizeW, int fixedSizeH)
 {
     if (style == MarqueeStyle::FixedSize) {
@@ -47,7 +47,7 @@ QRect marqueeDragRect(const QPointF& a, const QPointF& b, Qt::KeyboardModifiers 
         dy = std::copysign(m, dy);
     }
     const QPointF end = a + QPointF(dx, dy);
-    if (mods.testFlag(Qt::AltModifier)) {
+    if (mirror) {
         return QRect(qRound(a.x() - std::abs(dx)), qRound(a.y() - std::abs(dy)),
                      qRound(2 * std::abs(dx)), qRound(2 * std::abs(dy)));
     }

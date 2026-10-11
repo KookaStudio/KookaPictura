@@ -1,7 +1,11 @@
 #include "layers_panel.h"
 
 #include "layers_panel_internal.h"
+#include "dialogs.h"
 #include "layer_new_dialog.h"
+#include "layer_style_dialog.h"
+
+#include "pictura_app/src/cxxqt_object/layer_style.cxxqt.h"
 
 #include <QtCore/QHash>
 #include <QtCore/QString>
@@ -232,6 +236,40 @@ QStringList LayersPanel::soloPaths(const QString& path, const QHash<QString, boo
     }
     result.removeDuplicates();
     return result;
+}
+
+void LayersPanel::openBackgroundConversion(const QString& path)
+{
+    if (!view_ || path.isEmpty()) {
+        return;
+    }
+    LayerNewSpec spec;
+    if (bgConvertArmed_) {
+        if (!bgConvertAccept_) {
+            return;
+        }
+        spec.name = bgConvertName_;
+        spec.color = bgConvertColor_;
+    } else {
+        const QString defaultName = view_->next_layer_name(QStringLiteral("Layer"));
+        if (!LayerNewDialog::getNameColor(this, defaultName, &spec)) {
+            return;
+        }
+    }
+    if (view_->convert_background(path, spec.name, spec.color)) {
+        refresh();
+        selectPath(path);
+    }
+}
+
+void LayersPanel::openLayerStyle(const QString& path)
+{
+    if (!view_ || path.isEmpty() || !layer_style_can_edit(*view_, path)) {
+        return;
+    }
+    LayerStyleDialog dialog(view_, path, QString(), this);
+    runDialog(dialog, this);
+    refresh();
 }
 
 } // namespace pictura

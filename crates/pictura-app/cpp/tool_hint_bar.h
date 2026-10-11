@@ -33,6 +33,9 @@ public:
     // The chevron directions the painter draws for `Arrows`, in draw order
     // (up, left, down, right).
     QString chevronDirectionsForTest() const;
+    // The Lucide asset and whether it is rotated 180° for each direction above.
+    QString chevronAssetForTest(int index) const;
+    bool chevronFlippedForTest(int index) const;
     QString fallbackForTest() const { return fallbackText_; }
 
     QSize sizeHint() const override;

@@ -141,6 +141,9 @@ non-trivial changes and works from the CLI, with or without an agent** (the
   `fix(codec): RLE row padding (#12)`. Open or reuse an issue first. A `docs/`
   change also carries `TASK-ALLOWS-DOCS` (guard rule 4) after the description:
   `docs: record free-transform-quad (#21) TASK-ALLOWS-DOCS`.
+- **Claim the issue when you start.** When you open a branch for an issue,
+  assign it to yourself and leave a short comment saying work has begun, so
+  nobody duplicates the effort.
 - **Branch names** — `type/issue-number-kebab-description`, e.g.
   `feat/14-port-release-please`; include the issue number after the slash.
 - **GH issue titles** — the conventional prefix, no number, e.g.

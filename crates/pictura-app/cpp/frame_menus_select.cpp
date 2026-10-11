@@ -1,6 +1,9 @@
 #include "frame_includes.h"
 
 #include "pictura_app/src/cxxqt_object/color_range.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_selection/refine.cxxqt.h"
+
+#include "refine_edge_dialog.h"
 
 #include <QtWidgets/QInputDialog>
 #include <QtWidgets/QLineEdit>
@@ -203,6 +206,32 @@ void PicturaMainWindow::registerSelectHandlers()
     registry_->setEnabledProvider(colorRange, [this]() {
         PictureView* view = activeView();
         return view && color_range_available(*view);
+    });
+
+    // Select > Refine Edge…: the dialog previews the refined mask; OK applies
+    // the settings once as one "Refine Edge" state.
+    const QString refineEdge =
+        commandIdForPath({QStringLiteral("Select"), QStringLiteral("Refine Edge…")});
+    registry_->setImplemented(refineEdge, true);
+    const auto openRefineEdge = [this]() {
+        PictureView* view = activeView();
+        if (!view || !refine_edge_available(*view)) {
+            return;
+        }
+        auto* dialog = new RefineEdgeDialog(view, this);
+        dialog->setAttribute(Qt::WA_DeleteOnClose);
+        if (runDialog(*dialog, this) == QDialog::Accepted && activeView() == view
+            && refine_edge_apply(*view, dialog->smartRadius(), dialog->radius(),
+                                 dialog->smooth(), dialog->feather(), dialog->contrast(),
+                                 dialog->shiftEdge(), dialog->decontaminate(), dialog->amount(),
+                                 dialog->outputTo())) {
+            refresh();
+        }
+    };
+    registry_->setHandler(refineEdge, openRefineEdge);
+    registry_->setEnabledProvider(refineEdge, [this]() {
+        PictureView* view = activeView();
+        return view && refine_edge_available(*view);
     });
 }
 

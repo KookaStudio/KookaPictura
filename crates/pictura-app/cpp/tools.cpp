@@ -290,12 +290,171 @@ void ToolController::setCropRatio(double ratio)
     if (ToolHandler* h = registry_.forTool(ToolId::Crop)) {
         h->onOptionsChanged(*this);
     }
+    emit cropOptionsChanged();
+}
+
+void ToolController::setCropAngle(double degrees)
+{
+    double a = degrees;
+    while (a > 180.0) {
+        a -= 360.0;
+    }
+    while (a < -180.0) {
+        a += 360.0;
+    }
+    cropAngle_ = a;
+    // The pivot is the crop box centre at the moment the angle is set; it stays
+    // fixed afterwards so moving the box does not move the content.
+    if (ToolHandler* h = registry_.forTool(ToolId::Crop)) {
+        cropPivot_ = h->cropCenter();
+    }
+    if (canvas_) {
+        canvas_->setCropStraighten(a, cropPivot_);
+    }
+}
+
+void ToolController::notifyToolSessionChanged()
+{
+    emit toolSessionChanged();
+}
+
+void ToolController::setCropClassicMode(bool on)
+{
+    if (cropClassicMode_ == on) {
+        return;
+    }
+    cropClassicMode_ = on;
+    if (ToolHandler* h = registry_.forTool(ToolId::Crop)) {
+        h->onOptionsChanged(*this);
+    }
+    emit cropOptionsChanged();
+}
+
+void ToolController::setCropGridOverlay(int index)
+{
+    if (cropGridOverlay_ == index) {
+        return;
+    }
+    cropGridOverlay_ = index;
+    if (ToolHandler* h = registry_.forTool(ToolId::Crop)) {
+        h->onOptionsChanged(*this);
+    }
+    emit cropOptionsChanged();
+}
+
+void ToolController::setCropStraightenMode(bool on)
+{
+    cropStraightenMode_ = on;
+    if (ToolHandler* h = registry_.forTool(ToolId::Crop)) {
+        h->setStraightenMode(on);
+    }
+    refreshCursor();
+    emit cropOptionsChanged();
+}
+
+void ToolController::notifyCropOptionsChanged()
+{
+    emit cropOptionsChanged();
+}
+
+void ToolController::applyCropOptions(bool classic, bool deletePixels, double ratio, int grid)
+{
+    cropClassicMode_ = classic;
+    cropDeletePixels_ = deletePixels;
+    cropRatio_ = ratio > 0.0 ? ratio : 0.0;
+    cropGridOverlay_ = grid;
+    if (ToolHandler* h = registry_.forTool(ToolId::Crop)) {
+        h->onOptionsChanged(*this);
+    }
+}
+
+int ToolController::cropCursorKindForTest(const QPointF& imagePos, int mods)
+{
+    if (ToolHandler* h = registry_.forTool(ToolId::Crop)) {
+        return h->pointerCursorKind(*this, imagePos, Qt::KeyboardModifiers(mods));
+    }
+    return -1;
+}
+
+QPointF ToolController::cropCenterForTest()
+{
+    if (ToolHandler* h = registry_.forTool(ToolId::Crop)) {
+        return h->cropCenter();
+    }
+    return QPointF();
+}
+
+bool ToolController::resizeCrop(double width, double height)
+{
+    if (ToolHandler* h = registry_.forTool(ToolId::Crop)) {
+        return h->resizeCrop(width, height);
+    }
+    return false;
+}
+
+double ToolController::cropWidth() const
+{
+    ToolHandler* h = registry_.forTool(ToolId::Crop);
+    return h ? h->cropWidth() : 0.0;
+}
+
+double ToolController::cropHeight() const
+{
+    ToolHandler* h = registry_.forTool(ToolId::Crop);
+    return h ? h->cropHeight() : 0.0;
 }
 
 void ToolController::cancelCrop()
 {
     if (ToolHandler* h = registry_.forTool(ToolId::Crop)) {
         h->cancelPolygonLasso();
+    }
+}
+
+bool ToolController::cropActive() const
+{
+    ToolHandler* h = registry_.forTool(ToolId::Crop);
+    return h && h->cropActive();
+}
+
+void ToolController::setMoveAutoSelect(int which)
+{
+    moveAutoSelect_ = which == 1 ? 1 : 0;
+    emit moveOptionsChanged();
+}
+
+void ToolController::setMoveShowTransformControls(bool on)
+{
+    moveShowTransform_ = on;
+    emit moveOptionsChanged();
+}
+
+void ToolController::setMoveAlignTo(int which)
+{
+    moveAlignTo_ = which == 1 ? 1 : 0;
+    emit moveOptionsChanged();
+}
+
+void ToolController::setEyedropperOptions(const EyedropperOptions& options)
+{
+    eyedropper_ = options;
+    const int size = std::clamp(options.sampleSize, 1, 101);
+    eyedropper_.sampleSize = size % 2 == 1 ? size : size + 1;
+    eyedropper_.scope = std::clamp(options.scope, 0, 4);
+    if (!eyedropper_.ring && canvas_ && active_ == ToolId::Eyedropper) {
+        canvas_->clearSamplingRing();
+    }
+}
+
+void ToolController::updateSamplingRing(const QPointF& imagePos)
+{
+    if (!canvas_) {
+        return;
+    }
+    if (active_ == ToolId::Eyedropper && eyedropper_.ring) {
+        canvas_->setSamplingRing(eyedropper_.sampleSize, imagePos);
+    } else {
+        canvas_->clearSamplingRing();
     }
 }
 
@@ -500,7 +659,19 @@ QColor ToolController::background() const { return background_; }
 void ToolController::setBackground(const QColor& color)
 {
     background_ = color;
+    updateCanvasBackdrop();
     emit colorsChanged();
+}
+
+void ToolController::updateCanvasBackdrop()
+{
+    if (!canvas_) {
+        return;
+    }
+    PictureView* v = view();
+    const bool background =
+        v && v->has_document() && v->layer_kind(0) == QStringLiteral("background");
+    canvas_->setCanvasBackdrop(background_, background);
 }
 
 void ToolController::adjustBrushSize(int delta) { setBrushSize(brushSize_ + delta); }
@@ -570,6 +741,7 @@ void ToolController::bindCanvas(ImageView* canvas)
         if (!transformSessionActive()) {
             refreshCursor();
         }
+        updateCanvasBackdrop();
         if (ToolHandler* h = registry_.forTool(active_)) {
             h->onDocumentRefreshed(*this);
         }
@@ -585,12 +757,14 @@ void ToolController::bindCanvas(ImageView* canvas)
     }
     connect(canvas_, &ImageView::mousePressed, this, &ToolController::handlePressed);
     connect(canvas_, &ImageView::mouseMoved, this, &ToolController::handleMoved);
+    connect(canvas_, &ImageView::modifierKeyChanged, this, &ToolController::handleModifiers);
     connect(canvas_, &ImageView::mouseReleased, this, &ToolController::handleReleased);
     connect(canvas_, &ImageView::transformCommitRequested, this,
             &ToolController::commitFreeTransform);
     connect(canvas_, &ImageView::transformCancelRequested, this,
             &ToolController::cancelFreeTransform);
     applyToolPolicy();
+    updateCanvasBackdrop();
     if (ToolHandler* h = registry_.forTool(active_)) {
         h->onDocumentRefreshed(*this);
     }
@@ -689,6 +863,7 @@ void ToolController::unbindCanvas()
     canvas_->clearOverlay();
     canvas_->clearSelectionPreview();
     canvas_->clearBrushOutline();
+    canvas_->clearSamplingRing();
     canvas_ = nullptr;
     PictureView* v = view();
     if (v && v->is_painting()) {
@@ -709,6 +884,9 @@ void ToolController::applyToolPolicy()
     canvas_->setPanEnabled(!session && active_ == ToolId::Hand);
     if (!isBrushTool(active_)) {
         canvas_->clearBrushOutline();
+    }
+    if (active_ != ToolId::Eyedropper) {
+        canvas_->clearSamplingRing();
     }
     if (session) {
         return;
@@ -772,6 +950,9 @@ void ToolController::handlePressed(const QPointF& imagePos, int button, int modi
 
     if (handler) {
         handler->onPress(*this, imagePos, mods);
+        if (handler->pointerCursor()) {
+            refreshCursor();
+        }
     }
 }
 
@@ -799,6 +980,7 @@ void ToolController::handleMoved(const QPointF& imagePos)
     updateGuideHover(imagePos);
     updateSelectionHover(imagePos);
     updateBrushOutline(imagePos);
+    updateSamplingRing(imagePos);
     // The selection/content move is cross-cutting: route it before the active
     // tool handler so the shape tools do not also consume the move.
     if (movingSelection_) {
@@ -807,9 +989,19 @@ void ToolController::handleMoved(const QPointF& imagePos)
     }
     if (ToolHandler* h = registry_.forTool(active_)) {
         h->onMove(*this, imagePos, QGuiApplication::queryKeyboardModifiers());
-        if (h->cursorVariant() != cursorVariant_) {
+        if (h->pointerCursor() || h->cursorVariant() != cursorVariant_) {
             refreshCursor();
         }
+    }
+}
+
+void ToolController::handleModifiers(int modifiers)
+{
+    if (canvasSampler_ || transformSessionActive() || movingSelection_) {
+        return;
+    }
+    if (ToolHandler* h = registry_.forTool(active_)) {
+        h->onModifiers(*this, Qt::KeyboardModifiers(modifiers));
     }
 }
 
@@ -839,7 +1031,7 @@ void ToolController::handleReleased(const QPointF& imagePos)
     }
     if (ToolHandler* h = registry_.forTool(active_)) {
         h->onRelease(*this, imagePos, QGuiApplication::queryKeyboardModifiers());
-        if (h->cursorVariant() != cursorVariant_) {
+        if (h->pointerCursor() || h->cursorVariant() != cursorVariant_) {
             refreshCursor();
         }
     }
@@ -879,6 +1071,34 @@ bool ToolController::commitCrop()
         return h->commitCrop();
     }
     return false;
+}
+
+bool ToolController::toolUndo()
+{
+    if (ToolHandler* h = registry_.forTool(active_)) {
+        return h->toolUndo();
+    }
+    return false;
+}
+
+bool ToolController::toolRedo()
+{
+    if (ToolHandler* h = registry_.forTool(active_)) {
+        return h->toolRedo();
+    }
+    return false;
+}
+
+bool ToolController::canToolUndo() const
+{
+    ToolHandler* h = registry_.forTool(active_);
+    return h && h->canToolUndo();
+}
+
+bool ToolController::canToolRedo() const
+{
+    ToolHandler* h = registry_.forTool(active_);
+    return h && h->canToolRedo();
 }
 
 } // namespace pictura
