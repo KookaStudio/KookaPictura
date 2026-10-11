@@ -1,5 +1,9 @@
+use super::kernel::Interpolation;
 use super::paths::resolve_path;
-use super::transform::{transform_layer, transform_layer_quad, LayerTransform};
+use super::transform::{
+    transform_layer, transform_layer_quad, transform_layer_quad_with, transform_layer_with,
+    LayerTransform,
+};
 use pictura_core::{
     BitDepth, Channel, ColorMode, Document, Layer, LayerMask, LockFlags, PsdRect, RawChannel,
     Samples, SmartObject, SmartObjectKind, SourceChannels, SourcePlanes,
@@ -626,4 +630,102 @@ fn quad_one_by_one_does_not_panic() {
         "0",
         [(0.0, 0.0), (2.0, 1.0), (1.0, 2.0), (0.0, 1.0)],
     );
+}
+
+fn checker_layer() -> Layer {
+    let mut layer = pixel_layer(4, 4);
+    let ch = layer.channels.iter_mut().find(|c| c.id == 0).unwrap();
+    for y in 0..4 {
+        for x in 0..4 {
+            ch.data[y * 4 + x] = if (x + y) % 2 == 0 { 0 } else { 255 };
+        }
+    }
+    layer
+}
+
+#[test]
+fn legacy_op_equals_the_bilinear_variant() {
+    let transform = transform(2.0, 2.0, 0.3, 1.0, -2.0);
+    let mut legacy = doc_with(pixel_layer(4, 4));
+    let mut explicit = doc_with(pixel_layer(4, 4));
+    assert!(transform_layer(&mut legacy, "0", transform));
+    assert!(transform_layer_with(
+        &mut explicit,
+        "0",
+        transform,
+        Interpolation::Bilinear
+    ));
+    assert_eq!(legacy, explicit);
+}
+
+#[test]
+fn nearest_scale_replicates_a_checkerboard() {
+    let mut doc = doc_with(checker_layer());
+    assert!(transform_layer_with(
+        &mut doc,
+        "0",
+        transform(4.0, 4.0, 0.0, 0.0, 0.0),
+        Interpolation::Nearest
+    ));
+    let layer = resolve_path(&doc, "0").unwrap();
+    let ch = layer.channels.iter().find(|c| c.id == 0).unwrap();
+    assert_eq!(ch.data.len(), 16 * 16);
+    assert!(
+        ch.data.iter().all(|&v| v == 0 || v == 255),
+        "nearest must not invent intermediate values"
+    );
+}
+
+#[test]
+fn bicubic_differs_from_bilinear_at_scale_two() {
+    let mut bilinear = doc_with(pixel_layer(4, 4));
+    let mut bicubic = doc_with(pixel_layer(4, 4));
+    let t = transform(2.0, 2.0, 0.0, 0.5, 0.5);
+    assert!(transform_layer_with(
+        &mut bilinear,
+        "0",
+        t,
+        Interpolation::Bilinear
+    ));
+    assert!(transform_layer_with(
+        &mut bicubic,
+        "0",
+        t,
+        Interpolation::Bicubic
+    ));
+    assert_ne!(bilinear, bicubic);
+}
+
+#[test]
+fn quad_interpolation_reaches_the_planes() {
+    let mut nearest = doc_with(checker_layer());
+    let mut bilinear = doc_with(checker_layer());
+    let quad = [(0.0, 0.0), (8.0, 0.0), (8.0, 8.0), (0.0, 8.0)];
+    assert!(transform_layer_quad_with(
+        &mut nearest,
+        "0",
+        quad,
+        Interpolation::Nearest
+    ));
+    assert!(transform_layer_quad(&mut bilinear, "0", quad));
+    let nearest_layer = resolve_path(&nearest, "0").unwrap();
+    let ch = nearest_layer.channels.iter().find(|c| c.id == 0).unwrap();
+    assert!(ch.data.iter().all(|&v| v == 0 || v == 255));
+    assert_ne!(nearest, bilinear);
+}
+
+#[test]
+fn interpolated_refusal_is_bit_identical() {
+    let mut doc = doc_with(Layer {
+        background: true,
+        ..pixel_layer(2, 2)
+    });
+    let before = doc.clone();
+    assert!(!transform_layer_with(
+        &mut doc,
+        "0",
+        transform(2.0, 2.0, 0.0, 0.0, 0.0),
+        Interpolation::Nearest
+    ));
+    assert_eq!(doc, before);
 }

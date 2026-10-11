@@ -9,8 +9,11 @@
 
 use pictura_core::{Channel, Document, LayerMask, LockFlags, PsdRect, SourceChannels};
 
+use super::kernel::{self, Interpolation};
 use super::paths::{resolve_path, resolve_path_mut};
 use super::transform_native;
+
+pub(super) use super::kernel::bilinear;
 
 use pictura_core::Layer;
 
@@ -307,32 +310,6 @@ fn bounding_box<M: PlaneMap>(map: &M, rect: PsdRect) -> Option<(i32, i32, i32, i
     integer_bbox(&points)
 }
 
-/// Inverse-mapped bilinear sample of a `w×h` plane at source-local `(lx, ly)`.
-///
-/// The caller has already checked `0 <= lx < w` and `0 <= ly < h`; taps are
-/// edge-clamped.
-pub(super) fn bilinear(src: &[u8], w: usize, h: usize, lx: f64, ly: f64) -> u8 {
-    let u = lx - 0.5;
-    let v = ly - 0.5;
-    let x0f = u.floor();
-    let y0f = v.floor();
-    let fx = u - x0f;
-    let fy = v - y0f;
-    let max_x = (w - 1) as f64;
-    let max_y = (h - 1) as f64;
-    let x0 = x0f.clamp(0.0, max_x) as usize;
-    let y0 = y0f.clamp(0.0, max_y) as usize;
-    let x1 = (x0f + 1.0).clamp(0.0, max_x) as usize;
-    let y1 = (y0f + 1.0).clamp(0.0, max_y) as usize;
-    let p00 = src[y0 * w + x0] as f64;
-    let p10 = src[y0 * w + x1] as f64;
-    let p01 = src[y1 * w + x0] as f64;
-    let p11 = src[y1 * w + x1] as f64;
-    let top = p00 + (p10 - p00) * fx;
-    let bot = p01 + (p11 - p01) * fx;
-    (top + (bot - top) * fy).round().clamp(0.0, 255.0) as u8
-}
-
 /// Resample one `w×h` plane into the destination rect; out-of-source → 0.
 pub(super) fn resample_plane<M: PlaneMap>(
     src: &[u8],
@@ -341,10 +318,12 @@ pub(super) fn resample_plane<M: PlaneMap>(
     map: &M,
     rect: PsdRect,
     dest: (i32, i32, i32, i32),
+    interpolation: Interpolation,
 ) -> Vec<u8> {
     let (dl, dt, dr, db) = dest;
     let dw = (dr - dl) as usize;
     let dh = (db - dt) as usize;
+    let resolved = interpolation.resolve((w * h) as u64, (dw * dh) as u64);
     let mut out = vec![0u8; dw * dh];
     let wf = w as f64;
     let hf = h as f64;
@@ -360,7 +339,7 @@ pub(super) fn resample_plane<M: PlaneMap>(
             if lx < 0.0 || ly < 0.0 || lx >= wf || ly >= hf {
                 continue;
             }
-            out[oy * dw + ox] = bilinear(src, w, h, lx, ly);
+            out[oy * dw + ox] = kernel::sample(src, w, h, lx, ly, resolved);
         }
     }
     out
@@ -405,7 +384,11 @@ fn materialized_channels(doc: &Document, layer: &Layer) -> Option<Vec<Channel>> 
 /// has its `rect` transformed (and keeps `data` `None`) so the rect follows the
 /// layer; a similarity map re-centres on the mask's own rect, a projective map
 /// is global.
-fn transform_mask<M: PlaneMap>(mask: &LayerMask, layer_map: &M) -> Option<LayerMask> {
+fn transform_mask<M: PlaneMap>(
+    mask: &LayerMask,
+    layer_map: &M,
+    interpolation: Interpolation,
+) -> Option<LayerMask> {
     let rect = mask.rect;
     let map = layer_map.for_rect(rect);
     let dest = bounding_box(&map, rect)?;
@@ -417,7 +400,13 @@ fn transform_mask<M: PlaneMap>(mask: &LayerMask, layer_map: &M) -> Option<LayerM
                 return None;
             }
             Some(resample_plane(
-                data, w as usize, h as usize, &map, rect, dest,
+                data,
+                w as usize,
+                h as usize,
+                &map,
+                rect,
+                dest,
+                interpolation,
             ))
         }
         None => None,
@@ -577,7 +566,13 @@ pub(super) fn write_layer(
 /// (`None` refuses). `pure_translate` selects whether an unmodeled raw channel
 /// stream survives (a similarity integer move) or is dropped. Mutates `doc` only
 /// after every refusal has passed, so a refused call is bit-identical.
-fn apply_layer_map<M, F>(doc: &mut Document, path: &str, build_map: F, pure_translate: bool) -> bool
+fn apply_layer_map<M, F>(
+    doc: &mut Document,
+    path: &str,
+    build_map: F,
+    pure_translate: bool,
+    interpolation: Interpolation,
+) -> bool
 where
     M: PlaneMap,
     F: Fn(PsdRect) -> Option<M>,
@@ -603,11 +598,15 @@ where
                 &map,
                 prepared.rect,
                 dest,
+                interpolation,
             )
             .into(),
         })
         .collect();
-    let new_mask = prepared.mask.as_ref().and_then(|m| transform_mask(m, &map));
+    let new_mask = prepared
+        .mask
+        .as_ref()
+        .and_then(|m| transform_mask(m, &map, interpolation));
     let native = if pure_translate {
         None
     } else {
@@ -625,6 +624,7 @@ where
                 prepared.rect,
                 dest,
                 mask_info,
+                interpolation,
             )
         })
     };
@@ -652,12 +652,22 @@ where
 ///
 /// # Ceiling
 ///
-/// Bilinear resampling only: no bicubic/nearest choice; skew and perspective go
-/// through [`transform_layer_quad`]. A type layer is re-set as type instead
-/// (`type_layer::transform_type_layer`), staying sharp and editable.
-// ponytail: bilinear-only; add an interpolation parameter and bicubic kernel if
-// a numeric options bar ever needs it.
+/// Bilinear resampling (use [`transform_layer_with`] to choose the method);
+/// skew and perspective go through [`transform_layer_quad`]. A type layer is
+/// re-set as type instead (`type_layer::transform_type_layer`), staying sharp
+/// and editable.
 pub fn transform_layer(doc: &mut Document, path: &str, transform: LayerTransform) -> bool {
+    transform_layer_with(doc, path, transform, Interpolation::Bilinear)
+}
+
+/// Apply a similarity transform to the layer at `path` with an explicit
+/// resample `interpolation`. Same contract as [`transform_layer`].
+pub fn transform_layer_with(
+    doc: &mut Document,
+    path: &str,
+    transform: LayerTransform,
+    interpolation: Interpolation,
+) -> bool {
     if !params_ok(&transform) {
         return false;
     }
@@ -694,6 +704,7 @@ pub fn transform_layer(doc: &mut Document, path: &str, transform: LayerTransform
         path,
         |rect| Some(Map::new(rect, transform, cos, sin)),
         pure_translate,
+        interpolation,
     )
 }
 
@@ -708,6 +719,17 @@ pub fn transform_layer(doc: &mut Document, path: &str, transform: LayerTransform
 /// near-singular map, or a zero-area destination. A projective map is never a
 /// pure integer translation, so an unmodeled raw channel stream is dropped.
 pub fn transform_layer_quad(doc: &mut Document, path: &str, quad: [(f64, f64); 4]) -> bool {
+    transform_layer_quad_with(doc, path, quad, Interpolation::Bilinear)
+}
+
+/// Apply a projective transform with an explicit resample `interpolation`.
+/// Same contract as [`transform_layer_quad`].
+pub fn transform_layer_quad_with(
+    doc: &mut Document,
+    path: &str,
+    quad: [(f64, f64); 4],
+    interpolation: Interpolation,
+) -> bool {
     if let Some(rect) = resolve_path(doc, path)
         .filter(|l| l.is_type())
         .map(|l| l.rect)
@@ -723,6 +745,7 @@ pub fn transform_layer_quad(doc: &mut Document, path: &str, quad: [(f64, f64); 4
         path,
         |rect| solve_homography(source_corners(rect), quad),
         false,
+        interpolation,
     )
 }
 
