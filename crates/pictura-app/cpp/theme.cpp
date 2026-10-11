@@ -207,7 +207,11 @@ QString styleSheetFor(const Ramp& ramp)
         {"${iconHoverBorder}", ramp.iconHoverBorder},
         {"${iconPressed}", ramp.iconPressed},
         {"${panelHeaderBorder}", Theme::shade(ramp.panelHeader, -1)},
-        {"${scrollbar}", Theme::shade(ramp.window, 1)},
+        // The track matches the document tab strip; the thumb is a visible
+        // step lighter at rest and brightens on hover.
+        {"${scrollbar}", ramp.panelHeader},
+        {"${scrollbarThumb}", ramp.buttonBorder},
+        {"${scrollbarThumbHover}", Theme::shade(ramp.buttonBorder, 1)},
     };
 
     QString qss = QStringLiteral(R"(
@@ -326,11 +330,11 @@ QStatusBar::item { border: 0; }
 QFrame#statusSeparator { background: ${separator}; border: 0; }
 
 QScrollBar:vertical { background: ${scrollbar}; width: 12px; border: 0; margin: 0; }
-QScrollBar::handle:vertical { background: ${button}; min-height: 24px; border-radius: 3px; margin: 2px; }
-QScrollBar::handle:vertical:hover { background: ${hover}; }
+QScrollBar::handle:vertical { background: ${scrollbarThumb}; min-height: 24px; border-radius: 3px; margin: 2px; }
+QScrollBar::handle:vertical:hover { background: ${scrollbarThumbHover}; }
 QScrollBar:horizontal { background: ${scrollbar}; height: 12px; border: 0; margin: 0; }
-QScrollBar::handle:horizontal { background: ${button}; min-width: 24px; border-radius: 3px; margin: 2px; }
-QScrollBar::handle:horizontal:hover { background: ${hover}; }
+QScrollBar::handle:horizontal { background: ${scrollbarThumb}; min-width: 24px; border-radius: 3px; margin: 2px; }
+QScrollBar::handle:horizontal:hover { background: ${scrollbarThumbHover}; }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { background: transparent; border: 0; width: 0; height: 0; }
 QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }

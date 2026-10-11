@@ -1,5 +1,6 @@
 #include <QtTest/QtTest>
 
+#include "canvas_scrollbars.h"
 #include "frame.h"
 #include "image_view.h"
 #include "panels/numeric_field.h"
@@ -11,6 +12,9 @@
 #include <QtCore/QFile>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QLineEdit>
+#include <QtWidgets/QScrollBar>
+#include <QtWidgets/QStyleOptionSlider>
+#include <QtWidgets/QTabBar>
 #include <QtWidgets/QStatusBar>
 #include <QtWidgets/QToolButton>
 
@@ -25,6 +29,7 @@ private slots:
     void stateHomeIsolationRestoresPriorValue();
     void themeFoundation();
     void statusBarChromeAndZoom();
+    void workspaceScrollbarColours();
     void numericFieldAlignment();
     void sessionWindowGeometryRoundTrips();
 
@@ -187,6 +192,56 @@ void SmokeTest::statusBarChromeAndZoom()
     hint->setPressedKey(QString());
     QVERIFY(!hint->highlightedForTest(0));
     QVERIFY(!hint->highlightedForTest(1));
+}
+
+// The canvas scrollbar track renders the document tab strip's grey, and its
+// thumb is visible at rest, not only on hover (#316).
+void SmokeTest::workspaceScrollbarColours()
+{
+    window_->resize(1100, 700);
+    window_->show();
+    QVERIFY(window_->newDocument(QStringLiteral("Scroll"), 64, 48, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::ImageView* canvas = window_->imageView();
+    QVERIFY(canvas != nullptr);
+    canvas->setZoom(16.0, QPointF(canvas->width() / 2.0, canvas->height() / 2.0));
+    QCoreApplication::processEvents();
+
+    QScrollBar* bar = nullptr;
+    for (auto* host : window_->findChildren<pictura::CanvasScrollBars*>()) {
+        for (auto* candidate : host->findChildren<QScrollBar*>()) {
+            if (candidate->orientation() == Qt::Horizontal && candidate->isVisible()) {
+                bar = candidate;
+            }
+        }
+    }
+    auto* tabs = window_->findChild<QTabBar*>(QStringLiteral("documentTabBar"));
+    QVERIFY(bar && tabs);
+    QVERIFY2(bar->maximum() > bar->minimum(), "the zoomed canvas scrolls");
+
+    QStyleOptionSlider option;
+    option.initFrom(bar);
+    option.orientation = bar->orientation();
+    option.minimum = bar->minimum();
+    option.maximum = bar->maximum();
+    option.sliderPosition = bar->sliderPosition();
+    option.sliderValue = bar->value();
+    option.pageStep = bar->pageStep();
+    option.singleStep = bar->singleStep();
+    const QRect slider = bar->style()->subControlRect(QStyle::CC_ScrollBar, &option,
+                                                      QStyle::SC_ScrollBarSlider, bar);
+    QVERIFY(!slider.isEmpty());
+    const QImage image = bar->grab().toImage();
+    const int y = bar->height() / 2;
+    const int trackX = slider.left() > bar->width() - slider.right() ? 1 : bar->width() - 2;
+    const QColor track = image.pixelColor(trackX, y);
+    const QColor thumb = image.pixelColor(slider.center().x(), y);
+    const QColor strip = tabs->grab().toImage().pixelColor(tabs->width() - 2, 1);
+
+    QCOMPARE(track.name(QColor::HexRgb), strip.name(QColor::HexRgb));
+    QVERIFY2(qAbs(thumb.lightness() - track.lightness()) >= 24,
+             qPrintable(QStringLiteral("thumb %1 reads against track %2")
+                            .arg(thumb.name(QColor::HexRgb), track.name(QColor::HexRgb))));
 }
 
 void SmokeTest::numericFieldAlignment()
