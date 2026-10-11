@@ -942,6 +942,10 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
     const bool readA = fileA.open(QIODevice::ReadOnly);
     const bool readB = fileB.open(QIODevice::ReadOnly);
     const bool identical = readA && readB && fileA.readAll() == fileB.readAll();
+    // Close the handles: Windows refuses to overwrite a file that still has an
+    // open read handle, so the later re-saves to saveA/saveB would fail.
+    fileA.close();
+    fileB.close();
     const bool historyKept = view->history_count() == cancelBase;
 
     // An identity commit records nothing and leaves the document unchanged.
@@ -1084,6 +1088,8 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
     QFile escFileB(saveB);
     const bool escRead = escFileA.open(QIODevice::ReadOnly) && escFileB.open(QIODevice::ReadOnly);
     const bool escIdentical = escRead && escFileA.readAll() == escFileB.readAll();
+    escFileA.close();
+    escFileB.close();
 
     // A second begin on the same path switches modes (not a no-op): a Distort
     // session followed by a Skew begin accepts an edge drag.
@@ -1117,8 +1123,7 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
     ST_PASS("lpr_free_transform entered=%d select=%d begin=%d preview=%d hit=%d moved=%d "
             "commit=%d states=%d rect=%s->%s keys=%d rotate=%d cancel=%d identical=%d "
             "history=%d identity=%d group=%d adj=%d bg=%d distort=%d persp=%d skew=%d esc=%d "
-            "switch=%d escBegin=%d escHit=%d escMoved=%d escCancelled=%d escSavedA=%d "
-            "escSavedB=%d escIdentical=%d escBase=%d escNow=%d",
+            "switch=%d",
             entered ? 1 : 0, placedSelected ? 1 : 0,
             (samePathNoop && otherPathSwitched && restoredPath) ? 1 : 0,
             previewMatchesCommitRect ? 1 : 0, hit, moved ? 1 : 0, committed ? 1 : 0,
@@ -1126,9 +1131,7 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
             (keyCommitted && keyCancelled) ? 1 : 0, rotated ? 1 : 0, cancelled ? 1 : 0,
             identical ? 1 : 0, historyKept ? 1 : 0, identityNoState ? 1 : 0, groupCan ? 1 : 0,
             adjCan ? 1 : 0, bgCan ? 1 : 0, distortOk ? 1 : 0, perspOk ? 1 : 0, skewOk ? 1 : 0,
-            escOk ? 1 : 0, switchOk ? 1 : 0, escBegin ? 1 : 0, escHit ? 1 : 0, escMoved ? 1 : 0,
-            escCancelled ? 1 : 0, escSavedA ? 1 : 0, escSavedB ? 1 : 0, escIdentical ? 1 : 0,
-            escBase, view->history_count());
+            escOk ? 1 : 0, switchOk ? 1 : 0);
     if (!ok) {
         return pictura::selfTest().fail(292, "free transform");
     }
