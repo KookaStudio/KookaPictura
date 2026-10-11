@@ -91,6 +91,7 @@ pub fn filter_preserves_opacity(filter: &Filter) -> bool {
             | Filter::Blur
             | Filter::BlurMore
             | Filter::SurfaceBlur { .. }
+            | Filter::LensBlur { .. }
             | Filter::Sharpen
             | Filter::SharpenMore
             | Filter::SharpenEdges
@@ -160,6 +161,21 @@ fn alpha_kernel(filter: &Filter) -> std::borrow::Cow<'_, Filter> {
             wrap,
             background: [255; 3],
         }),
+        // Grain and the specular bloom are colour effects; the alpha pass keeps
+        // the depth-driven blur only.
+        Filter::LensBlur { .. } => {
+            let mut alpha = filter.clone();
+            if let Filter::LensBlur {
+                specular_brightness,
+                noise_amount,
+                ..
+            } = &mut alpha
+            {
+                *specular_brightness = 0;
+                *noise_amount = 0;
+            }
+            std::borrow::Cow::Owned(alpha)
+        }
         _ => std::borrow::Cow::Borrowed(filter),
     }
 }
@@ -406,6 +422,7 @@ pub fn preview_apron(filter: &Filter) -> i32 {
         Filter::HdrToning(p) => (3.0 * p.radius).ceil(),
         Filter::BoxBlur { radius }
         | Filter::SurfaceBlur { radius, .. }
+        | Filter::LensBlur { radius, .. }
         | Filter::Median { radius }
         | Filter::Maximum { radius }
         | Filter::Minimum { radius } => f64::from(*radius),

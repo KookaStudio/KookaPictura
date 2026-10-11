@@ -10,9 +10,10 @@
 //! Source: https://github.com/perfecto25/photorust
 
 use super::filter_tools::displace_maps::{displace_map, DISPLACE_SLOTS};
+use super::filter_tools::lens_blur_depths::{depth_map as lens_blur_depth_map, LENS_BLUR_SLOTS};
 use pictura_filters::{
     BrushType, ContourEdge, DiffuseMode, DisplaceFit, ExtrudeType, Filter, GlassTexture, GrainType,
-    HalftoneType, LensType, Light, LightDirection, LightType, Lighting, MezzotintType,
+    HalftoneType, IrisShape, LensType, Light, LightDirection, LightType, Lighting, MezzotintType,
     NoiseDistribution, PolarKind, Quality, RadialMethod, RippleSize, SharpenRemove, ShearFill,
     SpherizeMode, StrokeDirection, TextureChannel, TextureOptions, TextureSurface, TileFill,
     TonalFade, WaveType, WindMethod, ZigZagStyle, SHEAR_MAX_POINTS,
@@ -111,6 +112,14 @@ const SHEAR_FILLS: [ShearFill; 2] = [ShearFill::WrapAround, ShearFill::RepeatEdg
 const DISPLACE_FITS: [DisplaceFit; 2] = [DisplaceFit::StretchToFit, DisplaceFit::Tile];
 /// Custom's slots: the 5×5 weights row by row, then Scale and Offset.
 pub(super) const CUSTOM_SLOTS: usize = 25 + 2;
+const IRIS_SHAPES: [IrisShape; 6] = [
+    IrisShape::Triangle,
+    IrisShape::Square,
+    IrisShape::Pentagon,
+    IrisShape::Hexagon,
+    IrisShape::Heptagon,
+    IrisShape::Octagon,
+];
 /// Shear's slots: a point count, then `SHEAR_MAX_POINTS` `(position, offset)`
 /// pairs, then the fill.
 pub(super) const SHEAR_SLOTS: usize = 1 + 2 * SHEAR_MAX_POINTS + 1;
@@ -247,119 +256,8 @@ fn lighting(params: &[f64]) -> Option<Lighting> {
     })
 }
 
-/// Every supported kind and its exact slot count. This is the guard that
-/// keeps the Rust mapping and `cpp/filter_commands.cpp` in lock-step.
-pub(super) const FILTER_ARITIES: &[(&str, usize)] = &[
-    ("gaussian-blur", 1),
-    ("box-blur", 1),
-    ("surface-blur", 2),
-    ("motion-blur", 2),
-    ("radial-blur", 3),
-    ("average", 0),
-    ("blur", 0),
-    ("blur-more", 0),
-    ("median", 1),
-    ("despeckle", 0),
-    ("sharpen", 0),
-    ("sharpen-more", 0),
-    ("sharpen-edges", 0),
-    ("unsharp-mask", 3),
-    ("add-noise", 4),
-    ("maximum", 1),
-    ("minimum", 1),
-    ("offset", 6),
-    ("high-pass", 1),
-    ("custom", CUSTOM_SLOTS),
-    ("emboss", 3),
-    ("find-edges", 0),
-    ("solarize", 0),
-    ("diffuse", 1),
-    ("glowing-edges", 3),
-    ("mosaic", 1),
-    ("crystallize", 2),
-    ("facet", 0),
-    ("fragment", 0),
-    ("mezzotint", 2),
-    ("pointillize", 5),
-    ("color-halftone", 5),
-    ("twirl", 1),
-    ("pinch", 1),
-    ("spherize", 2),
-    ("ripple", 2),
-    ("wave", 9),
-    ("polar-coordinates", 1),
-    ("shear", SHEAR_SLOTS),
-    ("displace", DISPLACE_SLOTS),
-    ("zigzag", 3),
-    ("ocean-ripple", 3),
-    ("diffuse-glow", 4),
-    ("glass", 5),
-    ("clouds", 8),
-    ("difference-clouds", 8),
-    ("fibers", 9),
-    ("lens-flare", 4),
-    (
-        "lighting-effects",
-        LIGHTING_RIG_SLOTS + LIGHTING_LIGHT_SLOTS,
-    ),
-    ("colored-pencil", 4),
-    ("cutout", 3),
-    ("dry-brush", 4),
-    ("film-grain", 4),
-    ("fresco", 4),
-    ("neon-glow", 5),
-    ("paint-daubs", 4),
-    ("palette-knife", 3),
-    ("plastic-wrap", 3),
-    ("poster-edges", 3),
-    ("rough-pastels", 7),
-    ("smudge-stick", 4),
-    ("sponge", 4),
-    ("underpainting", 8),
-    ("watercolor", 4),
-    ("accented-edges", 3),
-    ("angled-strokes", 3),
-    ("crosshatch", 3),
-    ("dark-strokes", 3),
-    ("ink-outlines", 3),
-    ("spatter", 3),
-    ("sprayed-strokes", 4),
-    ("sumi-e", 3),
-    ("bas-relief", 9),
-    ("chalk-charcoal", 10),
-    ("charcoal", 10),
-    ("chrome", 2),
-    ("conte-crayon", 14),
-    ("graphic-pen", 9),
-    ("halftone-pattern", 3),
-    ("note-paper", 4),
-    ("photocopy", 2),
-    ("plaster", 9),
-    ("reticulation", 10),
-    ("stamp", 8),
-    ("torn-edges", 9),
-    ("water-paper", 4),
-    ("craquelure", 3),
-    ("grain", 7),
-    ("mosaic-tiles", 4),
-    ("patchwork", 3),
-    ("stained-glass", 7),
-    ("texturizer", 5),
-    ("oil-paint", 6),
-    ("dust-and-scratches", 2),
-    ("extrude", 6),
-    ("tiles", 9),
-    ("trace-contour", 2),
-    ("wind", 2),
-    ("smart-sharpen", 12),
-];
-
-pub(super) fn filter_param_arity(kind: &str) -> Option<usize> {
-    FILTER_ARITIES
-        .iter()
-        .find(|(k, _)| *k == kind)
-        .map(|(_, n)| *n)
-}
+mod arities;
+pub(super) use arities::{commit_params, filter_param_arity};
 
 /// Build the filter for `kind` from an ordered parameter list.
 ///
@@ -392,6 +290,28 @@ pub(super) fn filter_from_kind_params(kind: &str, params: &[f64]) -> Option<Filt
             Filter::MotionBlur {
                 angle: f(params, 0, 0.0),
                 distance: u32v(params, 1, 15),
+            }
+        }
+        "lens-blur" => {
+            arity!(params, LENS_BLUR_SLOTS);
+            Filter::LensBlur {
+                depth: match u32v(params, 1, 0) {
+                    0 => None,
+                    _ => lens_blur_depth_map(u32v(params, 13, 0)).map(Some)?,
+                },
+                focal: u8v(params, 2, 126),
+                invert: flag(params, 3, false),
+                shape: pick(&IRIS_SHAPES, params, 4, 0),
+                radius: u32v(params, 5, 50),
+                curvature: u8v(params, 6, 33),
+                rotation: f(params, 7, 191.0),
+                specular_brightness: u8v(params, 8, 44),
+                specular_threshold: u8v(params, 9, 93),
+                noise_amount: u8v(params, 10, 47),
+                noise_distribution: pick(&NOISE_DISTRIBUTIONS, params, 11, 1),
+                monochromatic: flag(params, 12, false),
+                faster: u32v(params, 0, 0) == 0,
+                seed: u64v(params, 14, 1),
             }
         }
         "radial-blur" => {

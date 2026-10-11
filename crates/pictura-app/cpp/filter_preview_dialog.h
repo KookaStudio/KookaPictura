@@ -90,6 +90,9 @@ private:
     // The pane's section filtered off the document while the canvas shows
     // the copy.
     void updatePaneSection();
+    // Lens Blur's Source slot is document state, so its depth-map id is
+    // materialized fresh into the hidden slot on every read.
+    QList<double> resolvedValues(QList<double> values) const;
     QRect proxyRegion() const;
     // The document section the pane shows at its zoom level.
     QRect thumbnailCrop() const;

@@ -364,10 +364,18 @@ const MAPPING: &[Mapping] = &[
                no-equivalent. Guarded by the core-inverse, halo-convergence, remove-path and \
                determinism unit tests",
     },
+    Mapping {
+        filter: "LensBlur",
+        im: None,
+        tolerance: 0,
+        note: "A depth-map-driven aperture convolution: ImageMagick has no depth-aware iris \
+               blur, no circle-of-confusion ramp, no specular bloom and no seeded grain. \
+               Guarded by the focus, ramp, iris, specular and noise unit tests",
+    },
 ];
 
 /// Filters the table marks as having no faithful ImageMagick equivalent.
-const NO_EQUIVALENT: [&str; 31] = [
+const NO_EQUIVALENT: [&str; 32] = [
     "MotionBlur",
     "RadialBlur",
     "Average",
@@ -399,13 +407,14 @@ const NO_EQUIVALENT: [&str; 31] = [
     "TraceContour",
     "Wind",
     "SmartSharpen",
+    "LensBlur",
 ];
 
 #[test]
 fn mapping_marks_no_equivalent_operators() {
-    assert_eq!(MAPPING.len(), 46, "one mapping row per Filter variant");
+    assert_eq!(MAPPING.len(), 47, "one mapping row per Filter variant");
     // Exactly one row per `Filter` variant, no duplicates, full enum coverage.
-    let all: [&str; 46] = [
+    let all: [&str; 47] = [
         "GaussianBlur",
         "BoxBlur",
         "MotionBlur",
@@ -452,6 +461,7 @@ fn mapping_marks_no_equivalent_operators() {
         "TraceContour",
         "Wind",
         "SmartSharpen",
+        "LensBlur",
     ];
     let mut mapped: Vec<&str> = MAPPING.iter().map(|m| m.filter).collect();
     mapped.sort_unstable();

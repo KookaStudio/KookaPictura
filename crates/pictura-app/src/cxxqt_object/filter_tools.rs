@@ -27,6 +27,7 @@ use pictura_core::{layer_pixel_locked, Document, Layer, PixelBuffer};
 mod canvas_proxy;
 pub(super) mod displace_maps;
 pub(super) mod jobs;
+pub(super) mod lens_blur_depths;
 
 #[cxx_qt::bridge]
 pub mod ffi {
@@ -217,6 +218,11 @@ pub mod ffi {
         /// the `displace` kind's map slot. Returns the map's id, or 0 when the
         /// file is unreadable or in Bitmap mode.
         fn filter_displace_map_load(path: &QString) -> i32;
+
+        /// Build and keep the active layer's depth map for the `lens-blur`
+        /// Source slot (0 None, 1 Transparency, 2 Layer Mask, 3 Selection) and
+        /// return its id, or 0 when the source is unavailable.
+        fn filter_lens_blur_depth(view: &PictureView, source: i32) -> i32;
     }
 }
 
@@ -227,6 +233,7 @@ fn apply_filter_params(
 ) -> bool {
     let kind_s = kind.to_string();
     let params_v: Vec<f64> = params.into_iter().copied().collect();
+    let params_v = super::filter_map::commit_params(&kind_s, &params_v);
     let region = {
         let mut rust = view.as_mut().rust_mut();
         apply_filter_active(&mut rust, &kind_s, &params_v, true)
@@ -266,12 +273,19 @@ fn filter_preview(mut view: Pin<&mut PictureView>, kind: &QString, params: &QLis
 /// hashes the pixel's absolute coordinates, Lighting resolves its light span
 /// against the crop, HDR Toning computes a global pivot, Lens Flare places
 /// and sizes itself as a fraction of the buffer, Shear shifts each row by
-/// a fraction of the buffer's half-width, and Displace stretches or tiles its
-/// map from the buffer's corner.
+/// a fraction of the buffer's half-width, Displace stretches or tiles its
+/// map from the buffer's corner, and Lens Blur aligns its depth map to the
+/// layer's rectangle.
 pub(crate) fn filter_preview_needs_whole_layer(kind: &str) -> bool {
     matches!(
         kind,
-        "diffuse" | "lighting-effects" | "hdr-toning" | "lens-flare" | "shear" | "displace"
+        "diffuse"
+            | "lighting-effects"
+            | "hdr-toning"
+            | "lens-flare"
+            | "shear"
+            | "displace"
+            | "lens-blur"
     )
 }
 
@@ -826,6 +840,14 @@ fn filter_displace_map_load(path: &QString) -> i32 {
             eprintln!("pictura: displacement map refused: {reason}");
             0
         }
+    }
+}
+
+fn filter_lens_blur_depth(view: &PictureView, source: i32) -> i32 {
+    let rust = view.rust();
+    match lens_blur_depths::materialize(rust, source) {
+        Some(map) => lens_blur_depths::register(map) as i32,
+        None => 0,
     }
 }
 
