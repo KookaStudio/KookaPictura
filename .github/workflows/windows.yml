@@ -1,0 +1,107 @@
+name: windows
+
+# Builds the Windows x64 portable archive and NSIS installer for a release tag
+# and attaches them to that release. Same shape as appimage.yml:
+# release-please.yml calls it after it cuts a release, it runs by hand for an
+# existing tag, and a PR touching the Windows packaging runs it as a dry run
+# that keeps both artifacts as workflow artifacts.
+on:
+  pull_request:
+    paths:
+      - .github/workflows/windows.yml
+      - .github/actions/windows-bundle/**
+      - packaging/windows/**
+      - CMakeLists.txt
+      - assets/icons/app.ico
+      - crates/**
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag, e.g. v0.1.0
+        type: string
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    env:
+      TAG: ${{ inputs.tag }}
+      VERSION: ${{ inputs.tag || format('pr{0}', github.event.number) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+
+      - uses: ./.github/actions/windows-bundle
+
+      - name: Verify the deployed folder
+        shell: pwsh
+        run: |
+          $bin = "$env:GITHUB_WORKSPACE\stage\bin"
+          if (-not (Test-Path "$bin\pictura.exe")) { throw "pictura.exe missing from the staging folder" }
+          if (-not (Test-Path "$bin\platforms\qwindows.dll")) { throw "qwindows.dll missing from the staging folder" }
+          if (-not (Test-Path "$bin\platforms\qoffscreen.dll")) { throw "qoffscreen.dll missing (needed by --headless)" }
+          if (-not (Get-ChildItem $bin -Filter 'vcruntime140*.dll')) { throw "MSVC C runtime missing from the staging folder" }
+          if (-not (Get-ChildItem $bin -Filter 'msvcp140*.dll')) { throw "MSVC C++ runtime missing from the staging folder" }
+
+      - name: Smoke-check the staged binary
+        shell: pwsh
+        run: |
+          $log = "$env:GITHUB_WORKSPACE\selftest.log"
+          & "$env:GITHUB_WORKSPACE\stage\bin\pictura.exe" --headless --self-test 2>&1 |
+            Tee-Object -FilePath $log
+          if ($LASTEXITCODE -ne 0) { throw "self-test exited $LASTEXITCODE" }
+          if (-not (Select-String -Path $log -Quiet -Pattern 'SUMMARY passed=\d+ failed=0')) {
+            throw "self-test did not report a passing summary"
+          }
+
+      - name: Pack the portable archive
+        shell: pwsh
+        run: |
+          $ver = $env:VERSION -replace '^v', ''
+          Compress-Archive -Path "$env:GITHUB_WORKSPACE\stage\*" `
+            -DestinationPath "KookaPictura-$ver-windows-x64-portable.zip"
+
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          $ver = $env:VERSION -replace '^v', ''
+          $stage = "$env:GITHUB_WORKSPACE\stage"
+          $makensis = (Get-Command makensis -ErrorAction SilentlyContinue).Source
+          if (-not $makensis) { $makensis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe" }
+          & $makensis "/DSTAGE_DIR=$stage" "/DVERSION=$ver" `
+            "/DOUTFILE=KookaPictura-$ver-windows-x64-setup.exe" `
+            "packaging/windows/installer.nsi"
+
+      - name: Keep the dry-run artifacts
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows
+          path: |
+            KookaPictura-*-windows-x64-portable.zip
+            KookaPictura-*-windows-x64-setup.exe
+          retention-days: 7
+
+      - name: Upload release assets
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $ver = $env:VERSION -replace '^v', ''
+          gh release upload "$env:TAG" `
+            "KookaPictura-$ver-windows-x64-portable.zip" `
+            "KookaPictura-$ver-windows-x64-setup.exe" --clobber

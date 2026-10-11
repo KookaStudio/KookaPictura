@@ -1,0 +1,54 @@
+name: windows-bundle
+description: >-
+  Release-build pictura with MSVC and stage it with its Qt dependencies in
+  ./stage (stage/bin plus the Qt platforms and other plugins). windows.yml packs
+  that tree as a portable .zip and an NSIS installer.
+runs:
+  using: composite
+  steps:
+    - name: Install pinned toolchain
+      shell: pwsh
+      run: rustup show active-toolchain
+
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v4
+      with:
+        version: '6.11.1'
+        arch: win64_msvc2022_64
+        cache: true
+
+    # Puts cl.exe and the Windows SDK on PATH for Ninja + Cargo.
+    - name: Set up MSVC
+      uses: ilammy/msvc-dev-cmd@v1.13.0
+
+    - uses: Swatinem/rust-cache@v2
+      with:
+        cache-targets: "false"
+
+    # No --locked: the Release PR bumps Cargo.toml but not Cargo.lock
+    # (DEVELOPING.md). No -fuse-ld=lld: that is a Linux linker flag.
+    - name: Build and stage
+      shell: pwsh
+      run: |
+        cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF `
+          -DCMAKE_INSTALL_PREFIX="$env:GITHUB_WORKSPACE/stage"
+        cmake --build build --config Release
+        cmake --install build --config Release
+
+    # windeployqt gathers the Qt DLLs and the platforms plugins next to the
+    # executable. Its default also copies the MSVC runtime, which is what lets
+    # the portable archive run on a machine without the VC++ redistributable.
+    - name: Deploy Qt
+      shell: pwsh
+      run: |
+        windeployqt --release "$env:GITHUB_WORKSPACE\stage\bin\pictura.exe"
+
+    # The headless smoke check selects the offscreen QPA plugin. windeployqt's
+    # platform-plugin set varies by Qt version, so make sure qoffscreen is there.
+    - name: Ensure the offscreen platform plugin
+      shell: pwsh
+      run: |
+        $src = "$env:QT_ROOT_DIR\plugins\platforms"
+        $dst = "$env:GITHUB_WORKSPACE\stage\bin\platforms"
+        New-Item -ItemType Directory -Force -Path $dst | Out-Null
+        Copy-Item "$src\qoffscreen.dll" $dst -Force -ErrorAction SilentlyContinue
