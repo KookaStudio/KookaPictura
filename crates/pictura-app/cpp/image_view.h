@@ -546,6 +546,11 @@ private:
     // pan/zoom (and the initial fit itself) sets it true so a later tool-switch
     // resize keeps the view instead of snapping the zoom.
     bool userAdjusted_ = false;
+    // The viewport size the offset was last laid out against. An adjusted
+    // view's resize shifts the offset by half the change so the document point
+    // at the centre stays put (CS6 on maximize/restore). Not oldSize(): a
+    // hidden view's deferred first resize carries none.
+    QSize laidOutSize_;
     QPolygonF overlayPolygon_;
 
     QList<QPolygonF> selectionContours_;

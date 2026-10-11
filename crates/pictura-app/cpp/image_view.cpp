@@ -73,6 +73,7 @@ ImageView::ImageView(QWidget* parent)
     : QWidget(parent)
 {
     setMinimumSize(320, 240);
+    laidOutSize_ = size();
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
     // The workspace default pointer: the bare arrow the tool cursors are built
@@ -1101,9 +1102,11 @@ void ImageView::resizeEvent(QResizeEvent* event)
     if (!userAdjusted_ && !docSize_.isEmpty()) {
         applyInitialView();
     } else {
+        offset_ += QRectF(QPointF(), QSizeF(event->size() - laidOutSize_)).center();
         clampOffset();
         emit viewChanged();
     }
+    laidOutSize_ = event->size();
     QWidget::resizeEvent(event);
 }
 
