@@ -4,6 +4,8 @@
 
 #include "image_view.h"
 
+#include "crop_grip.h"
+
 #include <QtGui/QFontMetrics>
 #include <QtGui/QPainter>
 #include <QtGui/QPainterPath>
@@ -256,15 +258,18 @@ QPolygonF ImageView::cropBoxWidgetForTest() const
     return poly;
 }
 
-void ImageView::setPerspectiveCropQuad(const QPolygonF& quad)
+void ImageView::setPerspectiveCropQuad(const QPolygonF& quad, double gridSpacing)
 {
-    perspectiveQuad_ = quad.size() == 4 ? quad : QPolygonF();
+    // 1–3 points stage the quad; the fourth completes it.
+    perspectiveQuad_ = quad;
+    perspectiveGridSpacing_ = gridSpacing;
     update();
 }
 
 void ImageView::clearPerspectiveCropQuad()
 {
     perspectiveQuad_.clear();
+    perspectiveGridSpacing_ = 0.0;
     update();
 }
 
@@ -307,7 +312,7 @@ void ImageView::clearSamplingRing()
 // any zoom.
 void ImageView::paintCropGroupOverlays(QPainter& painter)
 {
-    if (perspectiveQuad_.size() != 4 && sliceOverlay_.isEmpty() && sliceDrag_.isNull()
+    if (perspectiveQuad_.isEmpty() && sliceOverlay_.isEmpty() && sliceDrag_.isNull()
         && cropBox_.isNull() && cropStraightenLine_.isNull() && !samplingRingActive_) {
         return;
     }
@@ -389,17 +394,38 @@ void ImageView::paintCropGroupOverlays(QPainter& painter)
             // The active guide overlay, chosen from the options-bar menu.
             painter.setPen(QPen(QColor(255, 255, 255, 90), 1));
             drawCropGuides(painter, box, cropOverlay_);
+            // CS6 handles sit inside the outline: L-bracket corners and thin edge
+            // bars, drawn white over a dark shadow so they read on any content.
+            // Shadows are clamped to the box so they never bleed onto the shield.
+            const CropHandleGlyphs glyphs = cropHandleGlyphs(box);
+            painter.setRenderHint(QPainter::Antialiasing, true);
+            painter.setOpacity(0.8);
+            painter.setBrush(Qt::NoBrush);
+            painter.setPen(QPen(QColor(40, 40, 40, 200), kCropHandleBarThickPx + 2));
+            for (const QLineF& s : glyphs.cornerStrokes) {
+                painter.drawLine(s);
+            }
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(QColor(40, 40, 40, 200));
+            for (const QRectF& bar : glyphs.edgeBars) {
+                painter.drawRect(bar.adjusted(-1, -1, 1, 1).intersected(box));
+            }
+            painter.setPen(QPen(Qt::white, kCropHandleBarThickPx));
+            painter.setBrush(Qt::NoBrush);
+            for (const QLineF& s : glyphs.cornerStrokes) {
+                painter.drawLine(s);
+            }
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(Qt::white);
+            for (const QRectF& bar : glyphs.edgeBars) {
+                painter.drawRect(bar);
+            }
+            painter.setOpacity(1.0);
+            // The outline is drawn last so the handle shadows cannot break it.
+            painter.setRenderHint(QPainter::Antialiasing, false);
+            painter.setBrush(Qt::NoBrush);
             painter.setPen(QPen(QColor(255, 255, 255, 220), 1));
             painter.drawRect(box);
-            painter.setPen(QPen(QColor(40, 40, 40), 1));
-            painter.setBrush(Qt::white);
-            const QPointF c = box.center();
-            for (const QPointF& h :
-                 {box.topLeft(), QPointF(c.x(), box.top()), box.topRight(), QPointF(box.right(), c.y()),
-                  box.bottomRight(), QPointF(c.x(), box.bottom()), box.bottomLeft(),
-                  QPointF(box.left(), c.y())}) {
-                painter.drawRect(QRectF(h.x() - 3, h.y() - 3, 6, 6));
-            }
         }
     }
 
@@ -413,32 +439,57 @@ void ImageView::paintCropGroupOverlays(QPainter& painter)
                                 toWidget(cropStraightenLine_.p2())));
     }
 
-    if (perspectiveQuad_.size() == 4) {
+    if (!perspectiveQuad_.isEmpty()) {
         QPolygonF quad;
         for (const QPointF& p : perspectiveQuad_) {
             quad << toWidget(p);
         }
         painter.setRenderHint(QPainter::Antialiasing, true);
-        // Shade everything outside the quad, as the rectangular crop does.
-        QPainterPath shield;
-        shield.addRect(viewRect());
-        QPainterPath inside;
-        inside.addPolygon(quad);
-        inside.closeSubpath();
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(0, 0, 0, 150));
-        painter.drawPath(shield.subtracted(inside));
-        // A 3x3 grid interpolated along the edges, so it follows the
-        // perspective and shows how the warp will land.
-        painter.setBrush(Qt::NoBrush);
-        painter.setPen(QPen(QColor(255, 255, 255, 90), 1));
-        for (int i = 1; i <= 2; ++i) {
-            const double t = i / 3.0;
-            painter.drawLine(quad[0] + (quad[1] - quad[0]) * t, quad[3] + (quad[2] - quad[3]) * t);
-            painter.drawLine(quad[0] + (quad[3] - quad[0]) * t, quad[1] + (quad[2] - quad[1]) * t);
+        if (quad.size() == 4) {
+            // Shade the canvas area outside the quad (not the workspace), as the
+            // rectangular crop does.
+            const QRectF canvasDoc = cropCanvasImageRect();
+            const QRectF canvas(toWidget(canvasDoc.topLeft()), toWidget(canvasDoc.bottomRight()));
+            QPainterPath shield;
+            shield.addRect(canvas);
+            QPainterPath inside;
+            inside.addPolygon(quad);
+            inside.closeSubpath();
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(QColor(0, 0, 0, 150));
+            painter.drawPath(shield.subtracted(inside));
+            // An inch grid interpolated along the edges, so it follows the
+            // perspective and keeps a fixed physical spacing as the quad grows.
+            const double spacing = perspectiveGridSpacing_;
+            if (spacing > 0.0) {
+                const double e01 = std::hypot(quad[1].x() - quad[0].x(), quad[1].y() - quad[0].y());
+                const double e32 = std::hypot(quad[2].x() - quad[3].x(), quad[2].y() - quad[3].y());
+                const double e03 = std::hypot(quad[3].x() - quad[0].x(), quad[3].y() - quad[0].y());
+                const double e12 = std::hypot(quad[2].x() - quad[1].x(), quad[2].y() - quad[1].y());
+                const int cols = std::max(1, int(std::lround((e01 + e32) / 2.0 / spacing)));
+                const int rows = std::max(1, int(std::lround((e03 + e12) / 2.0 / spacing)));
+                painter.setBrush(Qt::NoBrush);
+                painter.setPen(QPen(QColor(255, 255, 255, 90), 1));
+                for (int i = 1; i < cols; ++i) {
+                    const double t = double(i) / cols;
+                    painter.drawLine(quad[0] + (quad[1] - quad[0]) * t,
+                                     quad[3] + (quad[2] - quad[3]) * t);
+                }
+                for (int i = 1; i < rows; ++i) {
+                    const double t = double(i) / rows;
+                    painter.drawLine(quad[0] + (quad[3] - quad[0]) * t,
+                                     quad[1] + (quad[2] - quad[1]) * t);
+                }
+            }
+            painter.setPen(QPen(QColor(255, 255, 255, 220), 1));
+            painter.drawPolygon(quad);
+        } else {
+            // Staging: connect the placed points and mark each one.
+            painter.setBrush(Qt::NoBrush);
+            painter.setPen(QPen(QColor(255, 255, 255, 180), 1, Qt::DashLine));
+            painter.drawPolyline(quad);
         }
-        painter.setPen(QPen(QColor(255, 255, 255, 220), 1));
-        painter.drawPolygon(quad);
+        // The corner handles.
         painter.setPen(QPen(QColor(40, 40, 40), 1));
         painter.setBrush(Qt::white);
         for (const QPointF& p : quad) {

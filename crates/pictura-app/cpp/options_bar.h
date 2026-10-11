@@ -76,6 +76,7 @@ private:
     // The `Select and Mask…` button the selection tools share.
     void addRefineEdgeButton(QHBoxLayout* layout, QWidget* page);
     QWidget* buildCropPage(ToolId id);
+    QWidget* buildPerspectiveCropPage(ToolId id);
     QWidget* buildAnnotationPage(ToolId id);
     QWidget* buildPaintPage(ToolId id);
     QWidget* buildHealingPage(ToolId id);
@@ -143,6 +144,8 @@ private:
     // Re-seed the Crop W/H fields from their mode (ratio values, or pixels in
     // `W x H x Resolution` mode).
     void syncCropFields();
+    // Show/hide the Perspective Crop Apply/Cancel buttons from the quad state.
+    void syncPerspectiveButtons();
 
     ToolController* controller_ = nullptr;
     QStackedWidget* stack_ = nullptr;
@@ -159,11 +162,15 @@ private:
     std::vector<std::pair<QString, QPointF>> cropPresets_;
     NumericField* cropWidthField_ = nullptr;
     NumericField* cropHeightField_ = nullptr;
+    // The Perspective Crop Apply/Cancel buttons (visible only when the quad is
+    // complete).
+    QToolButton* perspectiveApply_ = nullptr;
+    QToolButton* perspectiveCancel_ = nullptr;
     // True while the `W x H x Resolution` entry drives the W/H fields as pixels.
     bool cropResolutionMode_ = false;
     // The W/H ratio values shown in ratio mode (1,1 for the free `Ratio` entry).
-    double cropRatioW_ = 1.0;
-    double cropRatioH_ = 1.0;
+    double cropRatioW_ = 0.0;
+    double cropRatioH_ = 0.0;
 };
 
 // Built-in pattern `index` as an icon, for the pattern pickers.

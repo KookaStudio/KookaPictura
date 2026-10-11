@@ -14,6 +14,7 @@ set(PICTURA_QT_TESTS
     tst_crop_options
     tst_crop_preview
     tst_crop_cursor
+    tst_perspective_crop
     tst_canvas_pan
     tst_initial_view
     tst_new_document

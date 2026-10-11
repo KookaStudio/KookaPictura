@@ -425,6 +425,16 @@ public:
         return h ? h->pendingCropRect() : QRect();
     }
     bool commitCrop();
+    // Reset the active crop box to the whole canvas and clear its angle.
+    bool resetCrop();
+    // Perspective Crop: the forced output size (0 = auto) and whether its quad
+    // is fully staged.
+    void setPerspectiveOutput(int width, int height);
+    bool perspectiveQuadComplete() const;
+    void setPerspectiveShowGrid(bool on);
+    // Arrow-key nudge: the active tool first (Crop nudges its box / pans), then
+    // the Move tool's layer nudge. True when a key was consumed.
+    bool handleNudgeKey(int key, Qt::KeyboardModifiers mods);
     // The active tool's modal session undo/redo, consulted by Edit Undo/Redo
     // before the document history.
     bool toolUndo();

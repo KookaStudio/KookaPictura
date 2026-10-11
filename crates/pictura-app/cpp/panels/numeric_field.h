@@ -45,6 +45,10 @@ public:
 
     double value() const { return value_; }
     void setValue(double value);
+    // Show an empty box (e.g. an unconstrained crop ratio has no value yet).
+    // Typing a value or setValue clears the blank state.
+    void setBlank(bool blank);
+    bool isBlank() const { return blank_; }
     QString labelText() const;
     // Show or hide the in-box suffix (e.g. " px"); the row reflows.
     void setSuffixVisible(bool visible);
@@ -76,6 +80,8 @@ private:
     bool syncing_ = false;
     bool scrubbing_ = false;
     bool pending_ = false;
+    // True while the box shows an empty value (no number entered yet).
+    bool blank_ = false;
     // True when the last typed edit contained a decimal point; an integer field
     // (decimals == 0) then keeps the fraction instead of rounding.
     bool decimalTyped_ = false;

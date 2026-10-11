@@ -1,6 +1,8 @@
 //! Perspective Crop tests.
 
-use super::perspective_crop::{perspective_crop, perspective_crop_refusal, perspective_crop_size};
+use super::perspective_crop::{
+    perspective_crop, perspective_crop_refusal, perspective_crop_size, perspective_crop_sized,
+};
 use super::tests::pixel_layer;
 use pictura_core::{BitDepth, Channel, ColorMode, Document, LayerBlock, LayerMask, PsdRect};
 
@@ -33,6 +35,20 @@ fn size_takes_the_longer_of_each_edge_pair() {
     let quad = [(20.0, 0.0), (80.0, 0.0), (100.0, 50.0), (0.0, 50.0)];
     assert_eq!(perspective_crop_size(quad), (100, 54));
     assert_eq!(perspective_crop_size([(0.0, 0.0); 4]), (1, 1));
+}
+
+#[test]
+fn an_explicit_output_size_wins() {
+    // Auto would be 100×54; a manual size overrides it.
+    let quad = [(20.0, 0.0), (80.0, 0.0), (100.0, 50.0), (0.0, 50.0)];
+    let mut d = doc(128, 64, 255);
+    assert!(perspective_crop_sized(&mut d, quad, 40, 20));
+    assert_eq!((d.width, d.height), (40, 20));
+
+    // Zero falls back to the automatic size.
+    let mut auto = doc(128, 64, 255);
+    assert!(perspective_crop_sized(&mut auto, quad, 0, 0));
+    assert_eq!((auto.width, auto.height), perspective_crop_size(quad));
 }
 
 #[test]

@@ -68,9 +68,19 @@ public:
     }
     virtual double cropWidth() const { return 0.0; }
     virtual double cropHeight() const { return 0.0; }
+    // Reset the active crop box to the whole canvas and clear the angle.
+    virtual bool resetCropBox() { return false; }
     // The crop box centre (image space); the straighten pivot. Empty without a
     // box.
     virtual QPointF cropCenter() const { return QPointF(); }
+    // Arrow-key nudge for the active tool, in image pixels (`dx`/`dy` already
+    // scaled by the caller). True when the tool consumed the key.
+    virtual bool nudge(int dx, int dy)
+    {
+        (void)dx;
+        (void)dy;
+        return false;
+    }
 
     // Pointer-driven cursors: when true, the controller re-resolves the cursor
     // through `hoverCursor` on every press/move/release and on any framework
@@ -127,6 +137,16 @@ public:
     // The Crop handler's staged rectangle; the controller exposes it.
     virtual bool hasPendingCrop() const { return false; }
     virtual QRect pendingCropRect() const { return QRect(); }
+    // Perspective Crop: the forced output size in pixels (0 = auto from the
+    // quad) and whether the quad is fully staged (for the Cancel/Apply buttons).
+    virtual void setPerspectiveOutput(int width, int height)
+    {
+        (void)width;
+        (void)height;
+    }
+    virtual bool perspectiveQuadComplete() const { return false; }
+    // Perspective Crop: show the inch grid overlay.
+    virtual void setPerspectiveShowGrid(bool on) { (void)on; }
 };
 
 } // namespace pictura

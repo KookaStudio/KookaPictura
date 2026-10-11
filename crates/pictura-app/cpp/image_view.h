@@ -288,9 +288,10 @@ public:
 
     // Perspective Crop quad (TL, TR, BR, BL, image space): shades outside it and
     // draws its edges, a perspective-following 3x3 grid, and corner handles.
-    void setPerspectiveCropQuad(const QPolygonF& quad);
+    void setPerspectiveCropQuad(const QPolygonF& quad, double gridSpacing);
     void clearPerspectiveCropQuad();
     bool hasPerspectiveCropQuadForTest() const { return perspectiveQuad_.size() == 4; }
+    QPolygonF perspectiveCropQuadForTest() const { return perspectiveQuad_; }
 
     // Slice overlay (image space): user slices solid blue with a numbered
     // badge, auto slices dotted grey, the selected slice with orange handles,
@@ -490,6 +491,8 @@ private:
     QLineF rulerLine_;
     bool rulerShown_ = false;
     QPolygonF perspectiveQuad_;
+    // The perspective grid's spacing in document pixels (one inch); 0 hides it.
+    double perspectiveGridSpacing_ = 0.0;
     QRectF cropBox_;
     bool cropPreview_ = false;
     int cropOverlay_ = 0;

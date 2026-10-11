@@ -144,9 +144,20 @@ QString NumericField::formatValue(double value) const
 void NumericField::setValue(double value)
 {
     decimalTyped_ = false;
+    blank_ = false;
     value_ = std::clamp(value, config_.minimum, config_.maximum);
     edit_->setText(formatValue(value_));
     syncSlider();
+}
+
+void NumericField::setBlank(bool blank)
+{
+    blank_ = blank;
+    if (blank) {
+        edit_->clear();
+    } else {
+        edit_->setText(formatValue(value_));
+    }
 }
 
 void NumericField::setSuffixVisible(bool visible)
@@ -170,6 +181,14 @@ void NumericField::syncSlider()
 
 void NumericField::commitEdit()
 {
+    if (edit_->text().trimmed().isEmpty()) {
+        if (blank_) {
+            return;
+        }
+        edit_->setText(formatValue(value_));
+        return;
+    }
+    blank_ = false;
     bool ok = false;
     const double entered = edit_->text().toDouble(&ok);
     if (!ok) {
@@ -183,6 +202,7 @@ void NumericField::commitEdit()
 
 void NumericField::applyUserValue(double value)
 {
+    blank_ = false;
     value = std::clamp(value, config_.minimum, config_.maximum);
     if (config_.decimals == 0 && !decimalTyped_) {
         value = std::round(value);

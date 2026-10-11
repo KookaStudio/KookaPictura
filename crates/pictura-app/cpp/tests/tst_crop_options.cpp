@@ -29,6 +29,7 @@ private slots:
     void ratioFieldsShowRatioValues();
     void ratioFieldsAcceptDecimals();
     void resolutionModeShowsPixels();
+    void resetRestoresCanvasBox();
     void straightenToggleArmsLineMode();
     void contentAwareIsADisabledPlaceholder();
     void cropOptionsPersist();
@@ -116,10 +117,41 @@ void CropOptionsTest::ratioFieldsShowRatioValues()
     QCOMPARE(width->value(), 16.0);
     QCOMPARE(height->value(), 9.0);
 
-    // The free Ratio default shows 1 : 1.
+    // The free Ratio default is unconstrained: the W/H boxes are blank.
     combo->setCurrentIndex(0);
-    QCOMPARE(width->value(), 1.0);
-    QCOMPARE(height->value(), 1.0);
+    QVERIFY(width->isBlank());
+    QVERIFY(height->isBlank());
+
+    frame.setActiveTool(pictura::ToolId::Move);
+    frame.closeDocument(doc, false);
+}
+
+void CropOptionsTest::resetRestoresCanvasBox()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("OptReset"), 120, 120, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::ImageView* canvas = frame.imageView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    auto* combo = frame.findChild<QComboBox*>(QStringLiteral("optionsCropRatio"));
+    auto* reset = frame.findChild<QToolButton*>(QStringLiteral("optionsCropReset"));
+    auto* width = frame.findChild<pictura::NumericField*>(QStringLiteral("optionsCropWidth"));
+    auto* height = frame.findChild<pictura::NumericField*>(QStringLiteral("optionsCropHeight"));
+    QVERIFY(canvas && tools && combo && reset && width && height);
+    const int doc = frame.activeDocumentIndex();
+
+    canvas->actualPixels();
+    tools->setCropClassicMode(true);
+    frame.setActiveTool(pictura::ToolId::Crop);
+    drag(canvas, QPointF(0, 0), QPointF(30, 30));
+    combo->setCurrentIndex(combo->findText(QStringLiteral("16 : 9")));
+
+    // Reset makes the box the whole canvas and blanks the ratio fields.
+    reset->click();
+    QCOMPARE(tools->pendingCropRect(), QRect(0, 0, 120, 120));
+    QCOMPARE(combo->currentIndex(), 0);
+    QVERIFY(width->isBlank());
+    QVERIFY(height->isBlank());
 
     frame.setActiveTool(pictura::ToolId::Move);
     frame.closeDocument(doc, false);

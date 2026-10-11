@@ -408,7 +408,10 @@ double ToolController::cropHeight() const
 
 void ToolController::cancelCrop()
 {
-    if (ToolHandler* h = registry_.forTool(ToolId::Crop)) {
+    // Works for both crop tools, mirroring commitCrop.
+    const ToolId target =
+        active_ == ToolId::PerspectiveCrop ? ToolId::PerspectiveCrop : ToolId::Crop;
+    if (ToolHandler* h = registry_.forTool(target)) {
         h->cancelPolygonLasso();
     }
 }
@@ -1110,6 +1113,56 @@ bool ToolController::commitCrop()
     const ToolId target = active_ == ToolId::PerspectiveCrop ? ToolId::PerspectiveCrop : ToolId::Crop;
     if (ToolHandler* h = registry_.forTool(target)) {
         return h->commitCrop();
+    }
+    return false;
+}
+
+bool ToolController::resetCrop()
+{
+    if (ToolHandler* h = registry_.forTool(ToolId::Crop)) {
+        return h->resetCropBox();
+    }
+    return false;
+}
+
+void ToolController::setPerspectiveOutput(int width, int height)
+{
+    if (ToolHandler* h = registry_.forTool(ToolId::PerspectiveCrop)) {
+        h->setPerspectiveOutput(width, height);
+    }
+}
+
+bool ToolController::perspectiveQuadComplete() const
+{
+    ToolHandler* h = registry_.forTool(ToolId::PerspectiveCrop);
+    return h && h->perspectiveQuadComplete();
+}
+
+void ToolController::setPerspectiveShowGrid(bool on)
+{
+    if (ToolHandler* h = registry_.forTool(ToolId::PerspectiveCrop)) {
+        h->setPerspectiveShowGrid(on);
+    }
+}
+
+bool ToolController::handleNudgeKey(int key, Qt::KeyboardModifiers mods)
+{
+    int dx = 0;
+    int dy = 0;
+    switch (key) {
+    case Qt::Key_Left: dx = -1; break;
+    case Qt::Key_Right: dx = 1; break;
+    case Qt::Key_Up: dy = -1; break;
+    case Qt::Key_Down: dy = 1; break;
+    default: return false;
+    }
+    const int step = mods.testFlag(Qt::ShiftModifier) ? 10 : 1;
+    if (ToolHandler* h = registry_.forTool(active_); h && h->nudge(dx * step, dy * step)) {
+        return true;
+    }
+    if (active_ == ToolId::Move && view()) {
+        view()->translate_layer(dx * step, dy * step);
+        return true;
     }
     return false;
 }
