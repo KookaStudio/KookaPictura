@@ -173,7 +173,13 @@ pub(super) fn apply_filter_obj_active_region(
     commit: bool,
     preview_region: Option<pictura_core::PsdRect>,
 ) -> Option<Option<pictura_core::PsdRect>> {
-    apply_op_active_region(rust, &ActiveOp::Filter(filter), commit, preview_region)
+    apply_op_active_region(
+        rust,
+        &ActiveOp::Filter(filter),
+        commit,
+        preview_region,
+        false,
+    )
 }
 
 /// A destructive edit of the active pixel layer: a filter, or an Image >
@@ -187,13 +193,17 @@ pub(super) enum ActiveOp {
 
 /// Apply `op` to the active pixel layer within the selection, as a preview
 /// (re-applied from the pre-preview pixels, restricted to `preview_region`)
-/// or a commit. Returns the region to refresh; `None` with
+/// or a commit. `ignore_selection` skips the selection confinement, so the
+/// whole layer is adjusted (Match Color's "Ignore Selection When Applying
+/// Adjustment"). Returns the region to refresh; `None` with
 /// `filter_error` set when refused.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn apply_op_active_region(
     rust: &mut PictureViewRust,
     op: &ActiveOp,
     commit: bool,
     preview_region: Option<pictura_core::PsdRect>,
+    ignore_selection: bool,
 ) -> Option<Option<pictura_core::PsdRect>> {
     rust.filter_error = None;
     if let Some(path) = active_mask_target(rust) {
@@ -202,10 +212,14 @@ pub(super) fn apply_op_active_region(
     let path = pixel_filter_target(rust)?;
     let gpu_compute = rust.gpu_compute;
     let mask = {
-        let doc = rust.doc.as_ref()?;
-        rust.selection
-            .as_ref()
-            .map(|selection| selection_to_mask(selection, doc))
+        if ignore_selection {
+            None
+        } else {
+            let doc = rust.doc.as_ref()?;
+            rust.selection
+                .as_ref()
+                .map(|selection| selection_to_mask(selection, doc))
+        }
     };
     let existing = rust.filter_preview.take_if(|p| p.layer_path == path);
     let Some(doc) = rust.doc.as_mut() else {

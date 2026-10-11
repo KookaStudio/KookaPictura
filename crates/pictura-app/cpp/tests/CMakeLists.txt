@@ -54,6 +54,7 @@ set(PICTURA_QT_TESTS
     tst_color_range
     tst_refine_edge
     tst_replace_color
+    tst_match_color
     tst_print
     tst_image_adjustments
     tst_layers_smart_filters

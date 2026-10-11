@@ -484,7 +484,8 @@ fn layout(data: &AdjustmentData, adjustment: &Adjustment) -> Option<Layout> {
         Adjustment::Desaturate
         | Adjustment::Equalize
         | Adjustment::Auto(_)
-        | Adjustment::ReplaceColor(_) => None,
+        | Adjustment::ReplaceColor(_)
+        | Adjustment::MatchColor(_) => None,
     }
 }
 

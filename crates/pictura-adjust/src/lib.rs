@@ -15,6 +15,7 @@ mod color;
 mod common;
 mod hdr_toning;
 mod lut;
+mod match_color;
 mod native;
 mod pictura_raw;
 mod replace_color;
@@ -27,6 +28,7 @@ mod tests;
 pub use apply::apply;
 pub use hdr_toning::{exposure_gamma, ExposureGamma};
 pub use lut::parse_cube;
+pub use match_color::{match_color_stats, MatchColorParams, MatchColorStats};
 pub use native::apply_native;
 pub use pictura_raw::render_pictura_raw;
 pub use replace_color::{

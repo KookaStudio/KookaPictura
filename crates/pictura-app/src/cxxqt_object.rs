@@ -18,6 +18,7 @@ mod helpers;
 mod helpers_composite;
 mod image_adjust;
 mod image_hdr_toning;
+mod image_match_color;
 mod image_replace_color;
 mod impl_core;
 mod impl_filters;
@@ -63,7 +64,6 @@ pub mod qobject {
         type QImage = cxx_qt_lib::QImage;
         include!("cxx-qt-lib/qstringlist.h");
         type QStringList = cxx_qt_lib::QStringList;
-
         include!("decode_image.h");
         /// Decode `data` with Qt to tightly packed RGBA8888 and report the decoded size; empty with zero dimensions when Qt cannot read it.
         fn decode_image_rgba(data: &[u8], width: &mut i32, height: &mut i32) -> Vec<u8>;

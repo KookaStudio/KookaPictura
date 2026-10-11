@@ -147,6 +147,7 @@ fn run(
             &ActiveOp::Adjustment(adjustment),
             commit,
             preview,
+            false,
         )
     };
     let Some(region) = region else {

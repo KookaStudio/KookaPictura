@@ -6,6 +6,7 @@
 #include "adjustment_dialog.h"
 #include "hdr_toning_dialog.h"
 #include "layer_adjustments.h"
+#include "match_color_dialog.h"
 #include "replace_color_dialog.h"
 
 #include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
@@ -49,7 +50,6 @@ constexpr Entry kDirect[] = {
 
 } // namespace
 
-// ponytail: Match Color stays a disabled stub.
 void PicturaMainWindow::wireImageAdjustments()
 {
     const auto ready = [this]() {
@@ -151,6 +151,42 @@ void PicturaMainWindow::wireImageAdjustments()
             dialog->show();
         });
         registry_->setEnabledProvider(id, ready);
+    }
+
+    // Match Color matches the active layer's statistics to another open
+    // document, one of its layers, or the loaded statistics; it is RGB-only
+    // (CS6), so Grayscale documents disable the row. Modal, like the other
+    // adjustment dialogs.
+    {
+        const QString leaf = QStringLiteral("Match Color");
+        const QString id =
+            commandIdForPath({QStringLiteral("Image"), QStringLiteral("Adjustments"), leaf});
+        registry_->setImplemented(id, true);
+        registry_->setLabelProvider(id, [leaf]() { return leaf + QStringLiteral("…"); });
+        registry_->setHandler(id, [this]() {
+            PictureView* view = activeView();
+            if (!view || !filter_target_ready(*view)) {
+                if (view) {
+                    reportFilterRefusal(view);
+                }
+                return;
+            }
+            QList<MatchColorDialog::Source> sources;
+            for (int i = 0; i < documentCount(); ++i) {
+                if (viewAt(i) && viewAt(i) != view) {
+                    sources.append({documentName(i), viewAt(i)});
+                }
+            }
+            MatchColorDialog dialog(view, imageView(), sources, this);
+            if (runDialog(dialog, this) == QDialog::Accepted) {
+                refresh();
+            }
+        });
+        registry_->setEnabledProvider(id, [this]() {
+            PictureView* view = activeView();
+            return view && filter_target_ready(*view)
+                && view->document_mode() == QStringLiteral("rgb");
+        });
     }
 }
 

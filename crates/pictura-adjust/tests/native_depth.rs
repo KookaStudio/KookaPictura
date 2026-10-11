@@ -5,8 +5,9 @@ use pictura_adjust::{
     apply, apply_native, parse_cube, AdjustError, Adjustment, AutoKind, BlackWhiteParams,
     BrightnessContrastParams, ChannelMixerParams, ColorBalanceParams, ColorLookupKind,
     ColorLookupParams, CurvesParams, ExposureParams, GradientMapParams, GradientStop,
-    HueSaturationParams, LevelsParams, PhotoFilterParams, SelectiveColorMethod,
-    SelectiveColorParams, SelectiveRange, ShadowsHighlightsParams, VibranceParams,
+    HueSaturationParams, LevelsParams, MatchColorParams, MatchColorStats, PhotoFilterParams,
+    SelectiveColorMethod, SelectiveColorParams, SelectiveRange, ShadowsHighlightsParams,
+    VibranceParams,
 };
 use pictura_core::{PixelBuffer, Samples};
 
@@ -383,6 +384,24 @@ fn unsupported_adjustment_is_refused_without_mutation() {
     let before = store.clone();
     let fill = Adjustment::SolidFill([1, 2, 3, 4]);
     let err = apply_native(&fill, &mut store, 2, 1, 3).unwrap_err();
+    assert!(matches!(err, AdjustError::Unsupported(_)));
+    assert_eq!(store, before);
+}
+
+#[test]
+fn match_color_is_refused_at_native_depth() {
+    // Dialog-only, like Replace Color: no PSD encoding, no native arm.
+    let mut store = Samples::U16(vec![10, 20, 30, 40, 50, 60]);
+    let before = store.clone();
+    let p = MatchColorParams {
+        target: MatchColorStats::ZERO,
+        source: MatchColorStats::ZERO,
+        neutralize: false,
+        luminance: 100.0,
+        color_intensity: 100.0,
+        fade: 0.0,
+    };
+    let err = apply_native(&Adjustment::MatchColor(p), &mut store, 2, 1, 3).unwrap_err();
     assert!(matches!(err, AdjustError::Unsupported(_)));
     assert_eq!(store, before);
 }

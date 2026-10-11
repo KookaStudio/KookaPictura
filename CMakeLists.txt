@@ -117,6 +117,7 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/color_range_dialog.cpp
     crates/pictura-app/cpp/refine_edge_dialog.cpp
     crates/pictura-app/cpp/replace_color_dialog.cpp
+    crates/pictura-app/cpp/match_color_dialog.cpp
     crates/pictura-app/cpp/adjustment_dialog.cpp
     crates/pictura-app/cpp/black_white_dialog.cpp
     crates/pictura-app/cpp/channel_mixer_dialog.cpp
@@ -313,6 +314,7 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/photo_filter_dialog.h
     crates/pictura-app/cpp/slider_dialog.h
     crates/pictura-app/cpp/replace_color_dialog.h
+    crates/pictura-app/cpp/match_color_dialog.h
     crates/pictura-app/cpp/pictura_raw_dialog.h
     crates/pictura-app/cpp/warp_preset_dialog.h
     crates/pictura-app/cpp/color_settings_dialog.h
