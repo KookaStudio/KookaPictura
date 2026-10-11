@@ -109,6 +109,8 @@ const WAVE_TYPES: [WaveType; 3] = [WaveType::Sine, WaveType::Triangle, WaveType:
 const POLAR_KINDS: [PolarKind; 2] = [PolarKind::RectangularToPolar, PolarKind::PolarToRectangular];
 const SHEAR_FILLS: [ShearFill; 2] = [ShearFill::WrapAround, ShearFill::RepeatEdgePixels];
 const DISPLACE_FITS: [DisplaceFit; 2] = [DisplaceFit::StretchToFit, DisplaceFit::Tile];
+/// Custom's slots: the 5×5 weights row by row, then Scale and Offset.
+pub(super) const CUSTOM_SLOTS: usize = 25 + 2;
 /// Shear's slots: a point count, then `SHEAR_MAX_POINTS` `(position, offset)`
 /// pairs, then the fill.
 pub(super) const SHEAR_SLOTS: usize = 1 + 2 * SHEAR_MAX_POINTS + 1;
@@ -267,6 +269,7 @@ pub(super) const FILTER_ARITIES: &[(&str, usize)] = &[
     ("minimum", 1),
     ("offset", 6),
     ("high-pass", 1),
+    ("custom", CUSTOM_SLOTS),
     ("emboss", 3),
     ("find-edges", 0),
     ("solarize", 0),
@@ -475,6 +478,18 @@ pub(super) fn filter_from_kind_params(kind: &str, params: &[f64]) -> Option<Filt
             arity!(params, 1);
             Filter::HighPass {
                 radius: f(params, 0, 4.0),
+            }
+        }
+        "custom" => {
+            arity!(params, CUSTOM_SLOTS);
+            let mut kernel = [[0.0; 5]; 5];
+            for (i, k) in kernel.iter_mut().flatten().enumerate() {
+                *k = f(params, i, if i == 12 { 1.0 } else { 0.0 });
+            }
+            Filter::Custom {
+                kernel,
+                scale: f(params, 25, 1.0),
+                offset: f(params, 26, 0.0),
             }
         }
         "emboss" => {

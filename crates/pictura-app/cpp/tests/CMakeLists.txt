@@ -51,6 +51,7 @@ set(PICTURA_QT_TESTS
     tst_lighting_effects_dialog
     tst_shear_dialog
     tst_displace
+    tst_custom_filter
     tst_layer_style
     tst_color_range
     tst_refine_edge

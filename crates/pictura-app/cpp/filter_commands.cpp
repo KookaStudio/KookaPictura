@@ -114,6 +114,25 @@ FilterParamSpec hidden(double value)
     return p;
 }
 
+FilterParamSpec number(const QString& label, double minimum, double maximum, double value)
+{
+    FilterParamSpec p = slider(label, minimum, maximum, value);
+    p.control = FilterControl::Number;
+    return p;
+}
+
+// Every cell in -999..999, opening on the pass-through kernel.
+FilterParamSpec matrix()
+{
+    FilterParamSpec p;
+    p.control = FilterControl::Matrix;
+    p.minimum = -999.0;
+    p.maximum = 999.0;
+    p.initial = QList<double>(kMatrixCells, 0.0);
+    p.initial[kMatrixCells / 2] = 1.0;
+    return p;
+}
+
 FilterParamSpec radio(const QString& label, const QStringList& names, int index)
 {
     FilterParamSpec p = choice(label, names, index);
@@ -718,6 +737,10 @@ const QList<FilterCommandSpec>& buildCommands()
              check(QStringLiteral("Invert"), false)}),
 
         // Other
+        // Scale and Offset are plain value boxes, as in CS6.
+        def(QStringLiteral("Other"), QStringLiteral("Custom"), QStringLiteral("custom"),
+            {matrix(), number(QStringLiteral("Scale:"), 1, 9999, 1),
+             number(QStringLiteral("Offset:"), -9999, 9999, 0)}),
         def(QStringLiteral("Other"), QStringLiteral("High Pass"), QStringLiteral("high-pass"),
             {slider(QStringLiteral("Radius:"), 0.1, 250.0, 4.0, 1, QStringLiteral(" pixels"))}),
         def(QStringLiteral("Other"), QStringLiteral("Maximum"), QStringLiteral("maximum"),

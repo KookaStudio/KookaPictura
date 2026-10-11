@@ -257,3 +257,32 @@ fn displace_reads_its_slots_and_refuses_a_map_it_no_longer_has() {
     assert_eq!((fit, wrap), (DisplaceFit::Tile, true));
     assert!(filter_from_kind_params("displace", &[10.0, 10.0, 0.0, 1.0, 4e9]).is_none());
 }
+
+#[test]
+fn custom_reads_its_grid_row_by_row_then_scale_and_offset() {
+    let mut identity = [[0.0; 5]; 5];
+    identity[2][2] = 1.0;
+    assert_eq!(
+        filter_from_kind_params("custom", &[]),
+        Some(Filter::Custom {
+            kernel: identity,
+            scale: 1.0,
+            offset: 0.0,
+        })
+    );
+    let mut params: Vec<f64> = (0..25).map(|i| i as f64 - 12.0).collect();
+    params.extend([9.0, 128.0]);
+    let Some(Filter::Custom {
+        kernel,
+        scale,
+        offset,
+    }) = filter_from_kind_params("custom", &params)
+    else {
+        panic!("custom did not decode");
+    };
+    assert_eq!(kernel[0][1], -11.0);
+    assert_eq!(kernel[1][0], -7.0);
+    assert_eq!(kernel[4][4], 12.0);
+    assert_eq!((scale, offset), (9.0, 128.0));
+    assert!(filter_from_kind_params("custom", &params[..26]).is_none());
+}
