@@ -1,5 +1,6 @@
 // Canvas pan/zoom fixes (#252): the brush-size ring is hidden while Space (or
 // middle-button) panning, and switching tools preserves the zoom and offset.
+// Resizing an adjusted view keeps its centre (#125).
 
 #include <QtTest/QtTest>
 
@@ -26,6 +27,7 @@ private slots:
     void initTestCase();
     void panHidesTheBrushRing();
     void toolSwitchKeepsZoomAndPosition();
+    void resizeKeepsAdjustedViewCentred();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -96,6 +98,34 @@ void CanvasPanTest::toolSwitchKeepsZoomAndPosition()
              "switching tools keeps the canvas position");
 
     frame.setActiveTool(pictura::ToolId::Move);
+}
+
+void CanvasPanTest::resizeKeepsAdjustedViewCentred()
+{
+    pictura::ImageView view;
+    view.resize(400, 300);
+    QImage seed(1000, 800, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    view.setImage(seed);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QCoreApplication::processEvents();
+
+    view.setZoom(1.0, QPointF(view.width() / 2.0, view.height() / 2.0));
+    view.panBy(QPointF(-60, 40));
+    const auto centreDocPoint = [&view] {
+        return view.widgetToImage(QPointF(view.width() / 2.0, view.height() / 2.0));
+    };
+    const QPointF before = centreDocPoint();
+
+    for (const QSize size : {QSize(900, 700), QSize(400, 300)}) {
+        view.resize(size);
+        QCoreApplication::processEvents();
+        QCOMPARE(view.zoom(), 1.0);
+        const QPointF after = centreDocPoint();
+        QVERIFY2(std::abs(after.x() - before.x()) < 0.5 && std::abs(after.y() - before.y()) < 0.5,
+                 "resizing an adjusted view keeps the document point at the centre");
+    }
 }
 
 QTEST_MAIN(CanvasPanTest)
