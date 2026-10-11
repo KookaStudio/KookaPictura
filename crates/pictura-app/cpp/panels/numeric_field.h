@@ -33,7 +33,8 @@ struct NumericFieldConfig {
 
 // A leading label, a left-aligned text editor, and an optional slider popup.
 // Pressing and dragging horizontally on the label, the value, or the suffix
-// scrubs one step per pixel; Shift scales the step up 10x and Ctrl down 10x.
+// scrubs one step per pixel, and Up/Down in the value step it; Shift scales the
+// step up 10x and Ctrl down 10x.
 // `valueChanged` previews user input and `valueCommitted` fires once when the
 // edit finishes; `setValue` is a programmatic sync that emits nothing.
 class NumericField : public QWidget {
@@ -66,6 +67,7 @@ private:
     void commitPending();
     void syncSlider();
     void layoutSuffix();
+    void reserveWidth();
     void showPopup();
     QString formatValue(double value) const;
 

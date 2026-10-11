@@ -12,9 +12,11 @@
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QSlider>
+#include <QtWidgets/QStyleOptionFrame>
 #include <QtWidgets/QToolButton>
 #include <QtWidgets/QVBoxLayout>
 
+#include <algorithm>
 #include <cmath>
 
 namespace pictura {
@@ -31,6 +33,22 @@ double modifierScale(Qt::KeyboardModifiers modifiers)
         return 0.1;
     }
     return 1.0;
+}
+
+// QLineEdit insets its text by a fixed 2px inside the style's content rect.
+constexpr int kTextInset = 2;
+
+// Where the style lets `edit` draw its text, inside the frame and padding.
+QRect lineEditContents(const QLineEdit* edit)
+{
+    QStyleOptionFrame option;
+    option.initFrom(edit);
+    option.rect = edit->rect();
+    option.lineWidth = edit->hasFrame()
+        ? edit->style()->pixelMetric(QStyle::PM_DefaultFrameWidth, &option, edit)
+        : 0;
+    option.state |= QStyle::State_Sunken;
+    return edit->style()->subElementRect(QStyle::SE_LineEditContents, &option, edit);
 }
 
 } // namespace
@@ -83,12 +101,7 @@ NumericField::NumericField(const QString& label, const NumericFieldConfig& confi
         suffix_->installEventFilter(this);
     }
 
-    // Reserve room for the largest value, the inside suffix, and the margins.
-    const int valueWidth = edit_->fontMetrics().horizontalAdvance(formatValue(config_.maximum));
-    const int suffixWidth =
-        suffix_ ? suffix_->fontMetrics().horizontalAdvance(config_.suffix) : 0;
-    edit_->setFixedWidth(valueWidth + suffixWidth + 12);
-    layoutSuffix();
+    reserveWidth();
 
     if (config_.popup) {
         arrow_ = new QToolButton(this);
@@ -121,6 +134,22 @@ NumericField::NumericField(const QString& label, const NumericFieldConfig& confi
     }
 
     connect(edit_, &QLineEdit::editingFinished, this, [this] { commitEdit(); });
+    connect(edit_, &QLineEdit::textChanged, this, [this] { layoutSuffix(); });
+}
+
+void NumericField::reserveWidth()
+{
+    // Measured against the polished style so the widest value and the suffix
+    // fit without QLineEdit scrolling the start of the text out of view.
+    edit_->ensurePolished();
+    const QFontMetrics metrics = edit_->fontMetrics();
+    const int valueWidth = std::max(metrics.horizontalAdvance(formatValue(config_.maximum)),
+                                    metrics.horizontalAdvance(formatValue(config_.minimum)));
+    const int suffixWidth = suffix_ ? metrics.horizontalAdvance(config_.suffix) : 0;
+    const int frame = edit_->width() - lineEditContents(edit_).width();
+    // One extra pixel each for the text cursor and rounding.
+    edit_->setFixedWidth(frame + 2 * kTextInset + valueWidth + suffixWidth + 2);
+    layoutSuffix();
 }
 
 QString NumericField::labelText() const
@@ -232,8 +261,14 @@ void NumericField::layoutSuffix()
         return;
     }
     suffix_->adjustSize();
-    edit_->setTextMargins(0, 0, suffix_->sizeHint().width() + 6, 0);
-    suffix_->move(edit_->width() - suffix_->width() - 4,
+    // The suffix hugs the value ("25%"); the right margin keeps typed text
+    // from running under it.
+    const int suffixWidth = suffix_->isVisible() ? suffix_->width() : 0;
+    edit_->setTextMargins(0, 0, suffixWidth, 0);
+    const QRect contents = lineEditContents(edit_);
+    const int textEnd =
+        contents.left() + kTextInset + edit_->fontMetrics().horizontalAdvance(edit_->text());
+    suffix_->move(std::min(textEnd, contents.right() + 1 - suffix_->width()),
                   (edit_->height() - suffix_->height()) / 2);
 }
 
@@ -253,9 +288,37 @@ void NumericField::showPopup()
 
 bool NumericField::eventFilter(QObject* watched, QEvent* event)
 {
-    if (watched == edit_ && event->type() == QEvent::Resize) {
-        layoutSuffix();
-        return QWidget::eventFilter(watched, event);
+    if (watched == edit_) {
+        switch (event->type()) {
+        case QEvent::Resize:
+            layoutSuffix();
+            return QWidget::eventFilter(watched, event);
+        case QEvent::FontChange:
+        case QEvent::StyleChange:
+            reserveWidth();
+            return QWidget::eventFilter(watched, event);
+        case QEvent::ShortcutOverride:
+        case QEvent::KeyPress: {
+            // Up/Down step the value (Shift 10x, Ctrl 0.1x) and commit, ahead
+            // of any arrow-key shortcut.
+            auto* key = static_cast<QKeyEvent*>(event);
+            if (key->key() != Qt::Key_Up && key->key() != Qt::Key_Down) {
+                break;
+            }
+            event->accept();
+            if (event->type() == QEvent::KeyPress) {
+                bool ok = false;
+                const double typed = edit_->text().toDouble(&ok);
+                const double delta = modifierScale(key->modifiers()) * config_.step;
+                applyUserValue((ok ? typed : value_)
+                               + (key->key() == Qt::Key_Up ? delta : -delta));
+                commitPending();
+            }
+            return true;
+        }
+        default:
+            break;
+        }
     }
     if (watched == popup_) {
         if (event->type() == QEvent::Hide) {

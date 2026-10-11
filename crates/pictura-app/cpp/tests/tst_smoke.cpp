@@ -25,6 +25,7 @@ private slots:
     void stateHomeIsolationRestoresPriorValue();
     void themeFoundation();
     void statusBarChromeAndZoom();
+    void statusZoomKeysAndSuffix();
     void numericFieldAlignment();
     void sessionWindowGeometryRoundTrips();
 
@@ -187,6 +188,52 @@ void SmokeTest::statusBarChromeAndZoom()
     hint->setPressedKey(QString());
     QVERIFY(!hint->highlightedForTest(0));
     QVERIFY(!hint->highlightedForTest(1));
+}
+
+// The footer zoom field steps with Up/Down, hugs its "%" to the value, and
+// shows the widest zoom without scrolling its start out of view (#318).
+void SmokeTest::statusZoomKeysAndSuffix()
+{
+    window_->resize(1100, 700);
+    window_->show();
+    QVERIFY(window_->newDocument(QStringLiteral("ZoomKeys"), 64, 48, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::ImageView* canvas = window_->imageView();
+    auto* zoom = window_->findChild<pictura::NumericField*>(QStringLiteral("statusZoomField"));
+    QVERIFY(canvas && zoom);
+    auto* edit = zoom->findChild<QLineEdit*>(QStringLiteral("statusZoomEdit"));
+    auto* suffix = zoom->findChild<QLabel*>(QStringLiteral("statusZoomSuffix"));
+    QVERIFY(edit && suffix);
+    const QPointF centre(canvas->width() / 2.0, canvas->height() / 2.0);
+    canvas->setZoom(0.25, centre);
+    QCoreApplication::processEvents();
+    QCOMPARE(edit->text(), QStringLiteral("25"));
+
+    QTest::keyClick(edit, Qt::Key_Up);
+    QCOMPARE(qRound(canvas->zoom() * 100.0), 26);
+    QTest::keyClick(edit, Qt::Key_Down);
+    QTest::keyClick(edit, Qt::Key_Down);
+    QCOMPARE(qRound(canvas->zoom() * 100.0), 24);
+    QTest::keyClick(edit, Qt::Key_Up, Qt::ShiftModifier);
+    QCOMPARE(qRound(canvas->zoom() * 100.0), 34);
+    QCOMPARE(edit->text(), QStringLiteral("34"));
+
+    // The cursor at the end of the text marks where the value ends.
+    const auto textEnd = [edit]() {
+        edit->end(false);
+        return edit->inputMethodQuery(Qt::ImCursorRectangle).toRect().center().x();
+    };
+    QVERIFY2(qAbs(suffix->x() - textEnd()) <= 2,
+             qPrintable(QStringLiteral("suffix at %1, value ends at %2")
+                            .arg(suffix->x())
+                            .arg(textEnd())));
+
+    canvas->setZoom(32.0, centre);
+    QCoreApplication::processEvents();
+    QCOMPARE(edit->text(), QStringLiteral("3200"));
+    const int start = textEnd() - edit->fontMetrics().horizontalAdvance(edit->text());
+    QVERIFY2(start >= 2, qPrintable(QStringLiteral("value starts at %1").arg(start)));
+    QVERIFY2(suffix->geometry().right() < edit->width(), "the suffix stays inside the box");
 }
 
 void SmokeTest::numericFieldAlignment()
