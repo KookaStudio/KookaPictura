@@ -6,6 +6,7 @@
 #include "panels/layers_panel.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h"
 
 #include <cmath>
 
@@ -888,6 +889,9 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
         && view->begin_free_transform(otherPath) && view->transform_session_path() == otherPath;
     const bool restoredPath =
         view->begin_free_transform(path) && view->transform_session_path() == path;
+    // The pivot defaults to the box centre; these fixtures are a few pixels
+    // wide, so hide it and let the presses hit the box handles.
+    pictura::transform_set_show_pivot(*view, false);
 
     const QString beforeRect = view->layer_rect(path);
 
@@ -924,6 +928,7 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
     const bool savedA = view->save(saveA);
     const int cancelBase = view->history_count();
     const bool reentered = view->begin_free_transform(path);
+    pictura::transform_set_show_pivot(*view, false);
     const int rotHit = view->transform_press(-10.0, -10.0, 1.0, false, false);
     const bool rotated = rotHit == 8
         && view->transform_move(8.0, -2.0, 1.0, false, false)
@@ -949,6 +954,7 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
     // Enter and Escape reach commit/cancel through the real ImageView key path.
     const int keyCommitBase = view->history_count();
     const bool keyBegin = frame.beginFreeTransform(path);
+    pictura::transform_set_show_pivot(*view, false);
     const bool keyHit = view->transform_press(4.0, 4.0, 1.0, false, false) == 2;
     const bool keyMoved = view->transform_move(6.0, 6.0, 1.0, false, false);
     QKeyEvent enterEvent(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
@@ -1010,6 +1016,7 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
     const QString beforeDistort = view->layer_rect(path);
     const int distortBase = view->history_count();
     const bool distortBegin = view->begin_transform_mode(path, QStringLiteral("distort"));
+    pictura::transform_set_show_pivot(*view, false);
     const bool distortHit =
         view->transform_press(dRect.left(), dRect.top(), 1.0, false, false) == 0;
     const bool distortMoved =
@@ -1024,6 +1031,7 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
     // (b) Perspective moves the opposite corner by the negated delta.
     const QRectF pRect = rectOf(view, path);
     const bool perspBegin = view->begin_transform_mode(path, QStringLiteral("perspective"));
+    pictura::transform_set_show_pivot(*view, false);
     const QList<QPointF> perspBefore = quadOf(view);
     const bool perspHit =
         view->transform_press(pRect.left(), pRect.top(), 1.0, false, false) == 0;
@@ -1043,6 +1051,7 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
     const QRectF sRect = rectOf(view, path);
     const double topMidX = (sRect.left() + sRect.right()) / 2.0;
     const bool skewBegin = view->begin_transform_mode(path, QStringLiteral("skew"));
+    pictura::transform_set_show_pivot(*view, false);
     const bool skewHit = view->transform_press(topMidX, sRect.top(), 1.0, false, false) == 4;
     const bool skewMoved =
         view->transform_move(topMidX + 2.0, sRect.top() + 3.0, 1.0, false, false);
@@ -1061,6 +1070,7 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
     const int escBase = view->history_count();
     const bool escSavedA = view->save(saveA);
     const bool escBegin = view->begin_transform_mode(path, QStringLiteral("distort"));
+    pictura::transform_set_show_pivot(*view, false);
     const bool escHit =
         view->transform_press(sRect.left(), sRect.top(), 1.0, false, false) >= 0;
     const bool escMoved =
@@ -1079,6 +1089,7 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
     // session followed by a Skew begin accepts an edge drag.
     const bool switchDistort = view->begin_transform_mode(path, QStringLiteral("distort"));
     const bool switchSkew = view->begin_transform_mode(path, QStringLiteral("skew"));
+    pictura::transform_set_show_pivot(*view, false);
     const QRectF swRect = rectOf(view, path);
     const double swMid = (swRect.left() + swRect.right()) / 2.0;
     const bool swHit = view->transform_press(swMid, swRect.top(), 1.0, false, false) == 4;

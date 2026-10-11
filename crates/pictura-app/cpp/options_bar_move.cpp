@@ -51,8 +51,8 @@ QWidget* OptionsBar::buildMovePage(ToolId id)
     transform->setObjectName(QStringLiteral("optionsMoveTransform"));
     transform->setChecked(controller_ && controller_->moveShowTransformControls());
     layout->addWidget(transform);
-    // ponytail: Show Transform Controls is recorded but does not yet show the
-    // Free Transform box on the Move tool; Ctrl+T still starts it.
+    // The checkbox drives ToolController::syncTransformControls, which shows the
+    // Free Transform box on the active layer (see `tools/move-transform-controls`).
 
     // The bar aligns against the selection when there is one (CS6's Align
     // Layers To Selection), else the selected layers against each other.

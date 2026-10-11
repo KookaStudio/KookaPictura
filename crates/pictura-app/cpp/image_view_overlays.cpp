@@ -86,8 +86,55 @@ void drawCropGuides(QPainter& p, const QRectF& box, int mode)
 
 } // namespace
 
-void ImageView::setCropBox(const QRectF& box)
+QTransform ImageView::transformPreviewMatrix() const
 {
+    const double cx = moveLayerPos_.x() + moveLayer_.width() / 2.0;
+    const double cy = moveLayerPos_.y() + moveLayer_.height() / 2.0;
+    QTransform matrix;
+    matrix.translate(transformDx_, transformDy_);
+    matrix.translate(cx, cy);
+    matrix.rotate(transformAngle_ * 180.0 / M_PI);
+    matrix.scale(transformScaleX_, transformScaleY_);
+    matrix.translate(-cx, -cy);
+    return matrix;
+}
+
+void ImageView::setTransformPivot(const QPointF& pivot, bool visible)
+{
+    transformPivot_ = pivot;
+    transformPivotVisible_ = visible;
+    update();
+}
+
+void ImageView::updateTransformPreviewLayer(const QImage& layer, const QPointF& layerPos)
+{
+    moveLayer_ = layer;
+    moveLayerPos_ = layerPos;
+    update();
+}
+
+// The Free Transform reference point: a target glyph in image space (the
+// painter is already scaled by the zoom).
+void ImageView::paintTransformPivot(QPainter& painter)
+{
+    const double z = zoom_ > 0.0 ? zoom_ : 1.0;
+    const double r = 6.0 / z;
+    const QPointF p = transformPivot_;
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(QPen(Qt::white, 0, Qt::SolidLine));
+    painter.drawEllipse(p, r, r);
+    painter.drawLine(QPointF(p.x() - r, p.y()), QPointF(p.x() + r, p.y()));
+    painter.drawLine(QPointF(p.x(), p.y() - r), QPointF(p.x(), p.y() + r));
+    painter.setPen(QPen(Qt::black, 0, Qt::DashLine));
+    painter.drawEllipse(p, r, r);
+    painter.drawLine(QPointF(p.x() - r, p.y()), QPointF(p.x() + r, p.y()));
+    painter.drawLine(QPointF(p.x(), p.y() - r), QPointF(p.x(), p.y() + r));
+    painter.setBrush(Qt::white);
+    painter.setPen(QPen(Qt::black, 0, Qt::SolidLine));
+    painter.drawEllipse(p, 1.5 / z, 1.5 / z);
+}
+
+void ImageView::setCropBox(const QRectF& box){
     cropBox_ = box.normalized();
     update();
 }

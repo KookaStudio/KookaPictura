@@ -428,19 +428,6 @@ void ImageView::setTransformPreview(double scaleX, double scaleY, double angleRa
     update();
 }
 
-QTransform ImageView::transformPreviewMatrix() const
-{
-    const double cx = moveLayerPos_.x() + moveLayer_.width() / 2.0;
-    const double cy = moveLayerPos_.y() + moveLayer_.height() / 2.0;
-    QTransform matrix;
-    matrix.translate(transformDx_, transformDy_);
-    matrix.translate(cx, cy);
-    matrix.rotate(transformAngle_ * 180.0 / M_PI);
-    matrix.scale(transformScaleX_, transformScaleY_);
-    matrix.translate(-cx, -cy);
-    return matrix;
-}
-
 void ImageView::setTransformQuad(const QString& encoded)
 {
     transformQuad_.clear();
@@ -467,6 +454,7 @@ void ImageView::clearTransformPreview()
     transformProjective_ = QTransform();
     transformProjectiveActive_ = false;
     transformQuad_.clear();
+    transformPivotVisible_ = false;
     movePreviewActive_ = false;
     moveBase_ = QImage();
     moveLayer_ = QImage();
@@ -953,6 +941,11 @@ void ImageView::paintEvent(QPaintEvent*)
         painter.drawLine(bottomMid, knob);
         painter.setBrush(Qt::white);
         painter.drawEllipse(knob, hs, hs);
+
+        // Reference point: a target glyph (circle, crosshair, centre dot).
+        if (transformPivotVisible_) {
+            paintTransformPivot(painter);
+        }
     }
     painter.restore();
 

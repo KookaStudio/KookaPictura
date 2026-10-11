@@ -270,6 +270,7 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/options_bar_pen.cpp
     crates/pictura-app/cpp/options_bar_shape.cpp
     crates/pictura-app/cpp/options_bar_move.cpp
+    crates/pictura-app/cpp/options_bar_transform.cpp
     crates/pictura-app/cpp/options_bar_eyedropper.cpp
     crates/pictura-app/cpp/options_bar_rotate.cpp
     crates/pictura-app/cpp/options_bar_type.cpp

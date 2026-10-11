@@ -469,6 +469,24 @@ public:
     void commitFreeTransform();
     void cancelFreeTransform();
     bool transformSessionActive() const;
+    // Whether the active session is the Move tool's `Show Transform Controls`
+    // box (an auto-managed, per-drag-commit session), not a modal Ctrl+T one.
+    bool transformControlsSession() const { return transformControls_; }
+    // Show or hide the controls box for the current tool, checkbox, selection,
+    // and active layer; rebuild it when its target or content rect went stale.
+    void syncTransformControls();
+    // The transform options bar's setters: they write through to the session
+    // and refresh the canvas overlay and the bar.
+    bool setTransformPivot(double x, double y);
+    bool setTransformPivotPreset(int anchor);
+    void setTransformShowPivot(bool on);
+    bool setTransformWidth(double pct, bool link);
+    bool setTransformHeight(double pct, bool link);
+    bool setTransformAngle(double degrees);
+    bool setTransformSkew(double hDegrees, double vDegrees);
+    bool setTransformInterpolation(const QString& id);
+    bool setTransformWarp(const QString& styleId, double bend, double dx, double dy, bool vertical);
+    void clearTransformWarp();
 
 signals:
     void activeToolChanged(ToolId id);
@@ -516,6 +534,9 @@ signals:
     // A Move option (Auto-Select, Show Transform Controls, Align To) changed;
     // the frame re-evaluates the Align/Distribute enabled state.
     void moveOptionsChanged();
+    // A Free Transform session began, ended, or changed (a canvas gesture, a
+    // pivot press, or an options-bar setter); the options bar re-reads it.
+    void transformChanged();
 
 private:
     void applyToolPolicy();
@@ -537,8 +558,9 @@ private:
     void updateTransformOverlay(PictureView* v);
     void setTransformCursor(const QPointF& imagePos);
     // Shared begin: resolve the view, start `mode` (empty = Free), then set up
-    // the overlay and pan policy.
-    bool beginTransformImpl(const QString& path, const QString& mode);
+    // the overlay and pan policy. `controls` marks the Move tool's auto-managed
+    // box, which the user-command take-over must not cancel.
+    bool beginTransformImpl(const QString& path, const QString& mode, bool controls = false);
 
     ToolRegistry registry_;
     ImageView* canvas_ = nullptr;
@@ -641,6 +663,8 @@ private:
 
     bool transformDragging_ = false;
     int transformHandle_ = -1;
+    // True while the active session is the Move tool's controls box.
+    bool transformControls_ = false;
     int currentNote_ = -1;
 };
 

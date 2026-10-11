@@ -1,0 +1,570 @@
+//! The transform options bar's bridge: the session's reference point, numeric
+//! scale/rotation/skew setters and readouts, the interpolation choice, and the
+//! in-session warp. Free functions over [`PictureView`] (their own bridge, so
+//! the `PictureView` declaration list does not grow).
+//!
+//! [`PictureView`]: super::super::qobject::PictureView
+
+use super::super::qobject::PictureView;
+use super::super::state::{TransformSession, TransformWarp};
+use super::geometry::{quad_anchors, session_quad, set_pivot, store_quad};
+use super::session::build_transform_preview;
+use core::pin::Pin;
+use cxx_qt::CxxQtType;
+use cxx_qt_lib::QString;
+use pictura_render::Interpolation;
+
+#[cxx_qt::bridge]
+pub mod ffi {
+    unsafe extern "C++" {
+        include!("cxx-qt-lib/qstring.h");
+        type QString = cxx_qt_lib::QString;
+
+        include!("pictura_app/src/cxxqt_object.cxxqt.h");
+        #[namespace = "pictura"]
+        type PictureView = super::PictureView;
+    }
+
+    #[namespace = "pictura"]
+    extern "Rust" {
+        /// The active session's mode name ("free", "skew", "distort",
+        /// "perspective"), or empty without a session.
+        fn transform_session_mode(view: &PictureView) -> QString;
+        /// The session target's content rect as "left top right bottom", or
+        /// empty without a session.
+        fn transform_session_rect(view: &PictureView) -> QString;
+        /// Move the reference point to document-space `(x, y)`, leaving the
+        /// rendered quad unchanged.
+        fn transform_set_pivot(view: Pin<&mut PictureView>, x: f64, y: f64) -> bool;
+        /// Move the reference point to the live quad's anchor `0..=8`.
+        fn transform_set_pivot_preset(view: Pin<&mut PictureView>, anchor: i32) -> bool;
+        fn transform_set_show_pivot(view: Pin<&mut PictureView>, on: bool);
+        fn transform_set_width(view: Pin<&mut PictureView>, pct: f64, link: bool) -> bool;
+        fn transform_set_height(view: Pin<&mut PictureView>, pct: f64, link: bool) -> bool;
+        fn transform_set_angle(view: Pin<&mut PictureView>, degrees: f64) -> bool;
+        fn transform_set_skew(view: Pin<&mut PictureView>, h_degrees: f64, v_degrees: f64) -> bool;
+        fn transform_set_interpolation(view: Pin<&mut PictureView>, id: &QString) -> bool;
+        fn transform_pivot_x(view: &PictureView) -> f64;
+        fn transform_pivot_y(view: &PictureView) -> f64;
+        fn transform_pivot_origin_x(view: &PictureView) -> f64;
+        fn transform_pivot_origin_y(view: &PictureView) -> f64;
+        fn transform_show_pivot(view: &PictureView) -> bool;
+        fn transform_width_pct(view: &PictureView) -> f64;
+        fn transform_height_pct(view: &PictureView) -> f64;
+        fn transform_angle_degrees(view: &PictureView) -> f64;
+        fn transform_skew_h_degrees(view: &PictureView) -> f64;
+        fn transform_skew_v_degrees(view: &PictureView) -> f64;
+        fn transform_interpolation_id(view: &PictureView) -> QString;
+        /// Set the in-session preset warp (`None`/`Custom` clears it).
+        fn transform_set_warp(
+            view: Pin<&mut PictureView>,
+            style: &QString,
+            bend: f64,
+            distort_x: f64,
+            distort_y: f64,
+            vertical: bool,
+        ) -> bool;
+        fn transform_clear_warp(view: Pin<&mut PictureView>) -> bool;
+        fn transform_warp_active(view: &PictureView) -> bool;
+        fn transform_warp_style_id(view: &PictureView) -> QString;
+        fn transform_warp_bend(view: &PictureView) -> f64;
+        fn transform_warp_distort_x(view: &PictureView) -> f64;
+        fn transform_warp_distort_y(view: &PictureView) -> f64;
+        fn transform_warp_vertical(view: &PictureView) -> bool;
+    }
+}
+
+/// The projective-mode readouts derived from the live quad: `(width_pct,
+/// height_pct, angle_deg, h_skew_deg, v_skew_deg)`. The rotation is the
+/// balanced estimate `(top_edge_angle − left_edge_deviation)/2`; the skews are
+/// the edges' deviations from their axes relative to it. Inferred (no Adobe
+/// oracle); a readout, not state.
+fn derived_readouts(session: &TransformSession) -> (f64, f64, f64, f64, f64) {
+    let quad = session_quad(session);
+    let (tl, tr, bl) = (quad[0], quad[1], quad[3]);
+    let u = (tr.0 - tl.0, tr.1 - tl.1);
+    let v = (bl.0 - tl.0, bl.1 - tl.1);
+    let top_angle = u.1.atan2(u.0);
+    let left_dev = v.0.atan2(v.1);
+    let rotation = (top_angle - left_dev) / 2.0;
+    let (w, h) = (
+        f64::from(session.orig_rect.width()),
+        f64::from(session.orig_rect.height()),
+    );
+    let width_pct = if w > 0.0 {
+        u.0.hypot(u.1) / w * 100.0
+    } else {
+        100.0
+    };
+    let height_pct = if h > 0.0 {
+        v.0.hypot(v.1) / h * 100.0
+    } else {
+        100.0
+    };
+    (
+        width_pct,
+        height_pct,
+        rotation.to_degrees(),
+        (left_dev + rotation).to_degrees(),
+        (top_angle - rotation).to_degrees(),
+    )
+}
+
+fn transform_session_mode(view: &PictureView) -> QString {
+    view.rust()
+        .transform_session
+        .as_ref()
+        .map(|session| QString::from(session.mode.name()))
+        .unwrap_or_default()
+}
+
+fn transform_session_rect(view: &PictureView) -> QString {
+    view.rust()
+        .transform_session
+        .as_ref()
+        .map(|session| {
+            let rect = session.orig_rect;
+            QString::from(format!(
+                "{} {} {} {}",
+                rect.left, rect.top, rect.right, rect.bottom
+            ))
+        })
+        .unwrap_or_default()
+}
+
+fn transform_set_pivot(mut view: Pin<&mut PictureView>, x: f64, y: f64) -> bool {
+    if !x.is_finite() || !y.is_finite() {
+        return false;
+    }
+    let mut rust = view.as_mut().rust_mut();
+    let Some(session) = rust.transform_session.as_mut() else {
+        return false;
+    };
+    set_pivot(session, x, y);
+    true
+}
+
+fn transform_set_pivot_preset(mut view: Pin<&mut PictureView>, anchor: i32) -> bool {
+    if !(0..=8).contains(&anchor) {
+        return false;
+    }
+    let mut rust = view.as_mut().rust_mut();
+    let Some(session) = rust.transform_session.as_mut() else {
+        return false;
+    };
+    let point = quad_anchors(&session_quad(session))[anchor as usize];
+    set_pivot(session, point.0, point.1);
+    true
+}
+
+fn transform_set_show_pivot(mut view: Pin<&mut PictureView>, on: bool) {
+    if let Some(session) = view.as_mut().rust_mut().transform_session.as_mut() {
+        session.show_pivot = on;
+    }
+}
+
+fn transform_set_width(view: Pin<&mut PictureView>, pct: f64, link: bool) -> bool {
+    set_scale_axis(view, pct, link, true)
+}
+
+fn transform_set_height(view: Pin<&mut PictureView>, pct: f64, link: bool) -> bool {
+    set_scale_axis(view, pct, link, false)
+}
+
+fn set_scale_axis(mut view: Pin<&mut PictureView>, pct: f64, link: bool, horizontal: bool) -> bool {
+    if !pct.is_finite() || pct.abs() < 1e-3 {
+        return false;
+    }
+    let mut rust = view.as_mut().rust_mut();
+    let Some(session) = rust.transform_session.as_mut() else {
+        return false;
+    };
+    if session.mode.is_projective() {
+        // W/H are readouts in a projective mode; angle/H/V edit the quad.
+        return false;
+    }
+    let target = pct / 100.0;
+    if horizontal {
+        let factor = target / session.scale_x;
+        session.scale_x = target;
+        if link {
+            session.scale_y *= factor;
+        }
+    } else {
+        let factor = target / session.scale_y;
+        session.scale_y = target;
+        if link {
+            session.scale_x *= factor;
+        }
+    }
+    true
+}
+
+fn transform_set_angle(mut view: Pin<&mut PictureView>, degrees: f64) -> bool {
+    if !degrees.is_finite() {
+        return false;
+    }
+    let mut rust = view.as_mut().rust_mut();
+    let Some(session) = rust.transform_session.as_mut() else {
+        return false;
+    };
+    if session.mode.is_projective() {
+        let delta = degrees.to_radians() - derived_readouts(session).2.to_radians();
+        let quad = session_quad(session);
+        return rotate_quad_about(session, &quad, delta);
+    }
+    session.angle = degrees.to_radians();
+    true
+}
+
+fn transform_set_skew(mut view: Pin<&mut PictureView>, h_degrees: f64, v_degrees: f64) -> bool {
+    if !h_degrees.is_finite() || !v_degrees.is_finite() {
+        return false;
+    }
+    let mut rust = view.as_mut().rust_mut();
+    let Some(session) = rust.transform_session.as_mut() else {
+        return false;
+    };
+    if session.mode.is_projective() {
+        let (_, _, _, h, v) = derived_readouts(session);
+        let quad = session_quad(session);
+        return shear_quad_about(
+            session,
+            &quad,
+            (h_degrees - h).to_radians(),
+            (v_degrees - v).to_radians(),
+        );
+    }
+    session.skew_x = h_degrees.to_radians();
+    session.skew_y = v_degrees.to_radians();
+    true
+}
+
+fn transform_set_interpolation(mut view: Pin<&mut PictureView>, id: &QString) -> bool {
+    let Some(interpolation) = Interpolation::from_id(&id.to_string()) else {
+        return false;
+    };
+    let mut rust = view.as_mut().rust_mut();
+    let Some(session) = rust.transform_session.as_mut() else {
+        return false;
+    };
+    session.interpolation = interpolation;
+    true
+}
+
+fn transform_pivot_x(view: &PictureView) -> f64 {
+    view.rust()
+        .transform_session
+        .as_ref()
+        .map_or(0.0, |s| s.pivot.0)
+}
+
+fn transform_pivot_y(view: &PictureView) -> f64 {
+    view.rust()
+        .transform_session
+        .as_ref()
+        .map_or(0.0, |s| s.pivot.1)
+}
+
+/// The reference point at session begin (the source-rect centre); the base of
+/// the relative-positioning display.
+fn transform_pivot_origin_x(view: &PictureView) -> f64 {
+    view.rust()
+        .transform_session
+        .as_ref()
+        .map_or(0.0, |s| s.pivot_origin.0)
+}
+
+fn transform_pivot_origin_y(view: &PictureView) -> f64 {
+    view.rust()
+        .transform_session
+        .as_ref()
+        .map_or(0.0, |s| s.pivot_origin.1)
+}
+
+fn transform_show_pivot(view: &PictureView) -> bool {
+    view.rust()
+        .transform_session
+        .as_ref()
+        .is_some_and(|s| s.show_pivot)
+}
+
+/// The horizontal scale as a percentage of the source rect: the stored scalar
+/// in `Free`, the live quad's top edge in a projective mode.
+fn transform_width_pct(view: &PictureView) -> f64 {
+    let Some(session) = view.rust().transform_session.as_ref() else {
+        return 100.0;
+    };
+    if session.mode.is_projective() {
+        derived_readouts(session).0
+    } else {
+        session.scale_x.abs() * 100.0
+    }
+}
+
+fn transform_height_pct(view: &PictureView) -> f64 {
+    let Some(session) = view.rust().transform_session.as_ref() else {
+        return 100.0;
+    };
+    if session.mode.is_projective() {
+        derived_readouts(session).1
+    } else {
+        session.scale_y.abs() * 100.0
+    }
+}
+
+fn transform_angle_degrees(view: &PictureView) -> f64 {
+    let Some(session) = view.rust().transform_session.as_ref() else {
+        return 0.0;
+    };
+    if session.mode.is_projective() {
+        derived_readouts(session).2
+    } else {
+        session.angle.to_degrees()
+    }
+}
+
+fn transform_skew_h_degrees(view: &PictureView) -> f64 {
+    let Some(session) = view.rust().transform_session.as_ref() else {
+        return 0.0;
+    };
+    if session.mode.is_projective() {
+        derived_readouts(session).3
+    } else {
+        session.skew_x.to_degrees()
+    }
+}
+
+fn transform_skew_v_degrees(view: &PictureView) -> f64 {
+    let Some(session) = view.rust().transform_session.as_ref() else {
+        return 0.0;
+    };
+    if session.mode.is_projective() {
+        derived_readouts(session).4
+    } else {
+        session.skew_y.to_degrees()
+    }
+}
+
+fn transform_interpolation_id(view: &PictureView) -> QString {
+    view.rust()
+        .transform_session
+        .as_ref()
+        .map(|s| QString::from(s.interpolation.id()))
+        .unwrap_or_else(|| QString::from(Interpolation::Bicubic.id()))
+}
+
+/// Set the session's preset warp, or clear it for `None`/`Custom` (no preset
+/// mesh). False for an unknown style id, a non-finite value, or without a
+/// session.
+fn transform_set_warp(
+    mut view: Pin<&mut PictureView>,
+    style: &QString,
+    bend: f64,
+    distort_x: f64,
+    distort_y: f64,
+    vertical: bool,
+) -> bool {
+    let Some(style) = pictura_render::WarpStyle::from_id(&style.to_string()) else {
+        return false;
+    };
+    if !bend.is_finite() || !distort_x.is_finite() || !distort_y.is_finite() {
+        return false;
+    }
+    if pictura_render::style_mesh(style, bend, vertical, 1, 1).is_none() {
+        return transform_clear_warp(view);
+    }
+    {
+        let mut rust = view.as_mut().rust_mut();
+        let Some(session) = rust.transform_session.as_mut() else {
+            return false;
+        };
+        session.warp = Some(TransformWarp {
+            style,
+            bend,
+            distort_x,
+            distort_y,
+            vertical,
+        });
+    }
+    refresh_warp_preview(view)
+}
+
+/// Clear the session warp and restore the plain transform preview.
+fn transform_clear_warp(mut view: Pin<&mut PictureView>) -> bool {
+    let path = {
+        let mut rust = view.as_mut().rust_mut();
+        let Some(session) = rust.transform_session.as_mut() else {
+            return false;
+        };
+        if session.warp.is_none() {
+            return true;
+        }
+        session.warp = None;
+        session.warp_preview_quad = None;
+        session.path.clone()
+    };
+    view.as_mut().compute_transform_preview(&path)
+}
+
+fn transform_warp_active(view: &PictureView) -> bool {
+    view.rust()
+        .transform_session
+        .as_ref()
+        .is_some_and(|s| s.warp.is_some())
+}
+
+fn transform_warp_style_id(view: &PictureView) -> QString {
+    view.rust()
+        .transform_session
+        .as_ref()
+        .and_then(|s| s.warp.as_ref())
+        .map(|w| QString::from(w.style.id()))
+        .unwrap_or_default()
+}
+
+fn transform_warp_bend(view: &PictureView) -> f64 {
+    view.rust()
+        .transform_session
+        .as_ref()
+        .and_then(|s| s.warp.as_ref())
+        .map_or(0.0, |w| w.bend)
+}
+
+fn transform_warp_distort_x(view: &PictureView) -> f64 {
+    view.rust()
+        .transform_session
+        .as_ref()
+        .and_then(|s| s.warp.as_ref())
+        .map_or(0.0, |w| w.distort_x)
+}
+
+fn transform_warp_distort_y(view: &PictureView) -> f64 {
+    view.rust()
+        .transform_session
+        .as_ref()
+        .and_then(|s| s.warp.as_ref())
+        .map_or(0.0, |w| w.distort_y)
+}
+
+fn transform_warp_vertical(view: &PictureView) -> bool {
+    view.rust()
+        .transform_session
+        .as_ref()
+        .and_then(|s| s.warp.as_ref())
+        .is_some_and(|w| w.vertical)
+}
+
+/// Recompute the warped preview: a document clone with the live transform and
+/// then the warp applied, handed to the canvas as the preview layer (with an
+/// identity preview transform). Mutates nothing.
+fn refresh_warp_preview(mut view: Pin<&mut PictureView>) -> bool {
+    let gpu_compute = view.rust().gpu_compute;
+    let prepared = (|| {
+        let rust = view.rust();
+        let doc = rust.doc.as_ref()?;
+        let session = rust.transform_session.as_ref()?;
+        let warp = session.warp.as_ref()?;
+        let params = super::geometry::MapParams::of(session);
+        let quad = session_quad(session);
+        let identity = if session.mode.is_projective() {
+            let source = super::geometry::source_corners(session.orig_rect);
+            quad.iter()
+                .zip(source.iter())
+                .all(|(q, s)| (q.0 - s.0).abs() <= 1e-9 && (q.1 - s.1).abs() <= 1e-9)
+        } else {
+            params.is_identity()
+        };
+        let mut clone = doc.clone();
+        if !identity
+            && !super::geometry::apply_session_transform(
+                &mut clone,
+                &session.path,
+                session.mode,
+                quad,
+                params,
+                session.orig_rect,
+                session.interpolation,
+            )
+        {
+            return None;
+        }
+        let rect = pictura_render::resolve_path(&clone, &session.path).map(|l| l.rect)?;
+        let mesh = pictura_render::style_mesh(
+            warp.style,
+            warp.bend,
+            warp.vertical,
+            rect.width(),
+            rect.height(),
+        )?;
+        if !pictura_render::transform_layer_warp_with(
+            &mut clone,
+            &session.path,
+            &mesh,
+            pictura_render::WarpParams {
+                distort_h: warp.distort_x,
+                distort_v: warp.distort_y,
+            },
+            session.interpolation,
+        ) {
+            return None;
+        }
+        let after = pictura_render::resolve_path(&clone, &session.path).map(|l| l.rect)?;
+        let (base, image, x, y, opacity) =
+            build_transform_preview(&clone, &session.path, gpu_compute)?;
+        Some((base, image, x, y, opacity, after))
+    })();
+    let Some((base, image, x, y, opacity, after)) = prepared else {
+        return false;
+    };
+    let mut guard = view.as_mut().rust_mut();
+    let rust = &mut *guard;
+    rust.move_base = Some(base);
+    rust.move_layer = Some(image);
+    rust.move_x = x;
+    rust.move_y = y;
+    rust.move_opacity = opacity;
+    rust.move_prepared_revision = rust.content_revision;
+    rust.move_prepared_layer = String::new();
+    if let Some(session) = rust.transform_session.as_mut() {
+        session.warp_preview_quad = Some(super::geometry::source_corners(after));
+    }
+    true
+}
+
+/// Rotate `quad` about the reference point by `delta`; degenerate results are
+/// refused.
+fn rotate_quad_about(session: &mut TransformSession, quad: &[(f64, f64); 4], delta: f64) -> bool {
+    if !delta.is_finite() {
+        return false;
+    }
+    let (sin, cos) = delta.sin_cos();
+    let (px, py) = session.pivot;
+    let mut out = *quad;
+    for corner in &mut out {
+        let (x, y) = (corner.0 - px, corner.1 - py);
+        *corner = (px + cos * x - sin * y, py + sin * x + cos * y);
+    }
+    store_quad(session, out)
+}
+
+/// Shear `quad` about the reference point in document space by `(dh, dv)`;
+/// degenerate results are refused.
+fn shear_quad_about(
+    session: &mut TransformSession,
+    quad: &[(f64, f64); 4],
+    dh: f64,
+    dv: f64,
+) -> bool {
+    if !dh.is_finite() || !dv.is_finite() {
+        return false;
+    }
+    let (th, tv) = (dh.tan(), dv.tan());
+    let (px, py) = session.pivot;
+    let mut out = *quad;
+    for corner in &mut out {
+        let (x, y) = (corner.0 - px, corner.1 - py);
+        *corner = (px + x + th * y, py + tv * x + y);
+    }
+    store_quad(session, out)
+}

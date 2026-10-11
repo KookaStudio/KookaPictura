@@ -156,8 +156,10 @@ void EditShortcutsTest::freeTransformLiftsTheSelectedPixels()
 
     QTest::keyClick(canvas, Qt::Key_T, Qt::ControlModifier);
     QVERIFY(view->transform_session_active());
-    QCOMPARE(view->transform_press(15.0, 13.0, 1.0, false, false), 9);
-    QVERIFY(view->transform_move(25.0, 18.0, 1.0, false, false));
+    // Away from the reference point (the box centre) and the handles: at 2x the
+    // screen-space tolerances shrink to 3 image pixels.
+    QCOMPARE(view->transform_press(12.0, 10.0, 2.0, false, false), 9);
+    QVERIFY(view->transform_move(22.0, 15.0, 2.0, false, false));
     view->transform_release();
     QCOMPARE(view->transform_dx(), 10.0);
     QCOMPARE(view->transform_dy(), 5.0);

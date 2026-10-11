@@ -46,8 +46,19 @@ impl TransformMode {
     }
 }
 
+/// A preset warp chosen during a session (the interactive cage is out of
+/// scope); committed after the live transform as one state.
+#[derive(Clone)]
+pub struct TransformWarp {
+    pub(super) style: pictura_render::WarpStyle,
+    pub(super) bend: f64,
+    pub(super) distort_x: f64,
+    pub(super) distort_y: f64,
+    pub(super) vertical: bool,
+}
+
 /// The live Free Transform session: the target path, the source rect, the
-/// current similarity transform about that rect's centre, and the drag state.
+/// current similarity transform about its reference point, and the drag state.
 pub struct TransformSession {
     pub(super) path: String,
     pub(super) orig_rect: PsdRect,
@@ -56,7 +67,7 @@ pub struct TransformSession {
     pub(super) angle: f64,
     pub(super) dx: f64,
     pub(super) dy: f64,
-    /// Active handle: 0..=7 scale, 8 rotate, 9 move, -1 none.
+    /// Active handle: 0..=7 scale, 8 rotate, 9 move, 10 pivot, -1 none.
     pub(super) handle: i32,
     pub(super) press_x: f64,
     pub(super) press_y: f64,
@@ -69,6 +80,20 @@ pub struct TransformSession {
     pub(super) quad: Option<[(f64, f64); 4]>,
     /// Quad captured at begin/press for a projective gesture.
     pub(super) start_quad: [(f64, f64); 4],
+    /// The reference point (document space) and its position at begin.
+    pub(super) pivot: (f64, f64),
+    pub(super) pivot_origin: (f64, f64),
+    /// Whether the canvas draws the reference point.
+    pub(super) show_pivot: bool,
+    /// Horizontal/vertical skew in radians.
+    pub(super) skew_x: f64,
+    pub(super) skew_y: f64,
+    /// The session's resample method.
+    pub(super) interpolation: pictura_render::Interpolation,
+    /// A preset warp applied after the transform at commit.
+    pub(super) warp: Option<TransformWarp>,
+    /// The warped preview's bounding quad while a warp is set.
+    pub(super) warp_preview_quad: Option<[(f64, f64); 4]>,
     /// For a selection's pixels lifted onto `path` (a floating layer above the
     /// source): the source path and the document before the lift, which a
     /// cancel restores.

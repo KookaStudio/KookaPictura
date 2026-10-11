@@ -2,18 +2,21 @@ use super::super::helpers::*;
 use super::super::helpers_composite::*;
 use super::super::qobject;
 use super::super::state::{TransformMode, TransformSession};
-use super::geometry::{projective_coefficients, session_quad, source_corners};
+use super::geometry::{
+    apply_session_transform, projective_coefficients, rect_center, session_quad, source_corners,
+    MapParams,
+};
 use super::{build_move_preview_base, duplicate_move_target};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QString};
 use pictura_core::{layer_move_locked, LockFlags};
-use pictura_render::LayerTransform;
+use pictura_render::Interpolation;
 
 /// Build the transform overlay images for `path`: the document composited with
 /// the target hidden, the target's own RGBA image (materializing a channel-less
 /// embedded object into a clone), its document-space origin, and opacity.
-fn build_transform_preview(
+pub(super) fn build_transform_preview(
     doc: &pictura_core::Document,
     path: &str,
     gpu_compute: bool,
@@ -120,16 +123,6 @@ impl qobject::PictureView {
         self.begin_transform_session(path, mode)
     }
 
-    /// The active session's mode name (`"free"`, `"skew"`, `"distort"`,
-    /// `"perspective"`), or an empty string without a session. Test hook.
-    pub fn transform_session_mode(&self) -> QString {
-        self.rust()
-            .transform_session
-            .as_ref()
-            .map(|session| QString::from(session.mode.name()))
-            .unwrap_or_default()
-    }
-
     fn begin_transform_session(
         mut self: Pin<&mut Self>,
         path: &QString,
@@ -203,6 +196,7 @@ impl qobject::PictureView {
             return false;
         };
         let corners = source_corners(orig_rect);
+        let center = rect_center(orig_rect);
         self.as_mut().rust_mut().transform_session = Some(TransformSession {
             path,
             orig_rect,
@@ -219,6 +213,14 @@ impl qobject::PictureView {
             mode,
             quad: mode.is_projective().then_some(corners),
             start_quad: corners,
+            pivot: center,
+            pivot_origin: center,
+            show_pivot: true,
+            skew_x: 0.0,
+            skew_y: 0.0,
+            interpolation: Interpolation::Bicubic,
+            warp: None,
+            warp_preview_quad: None,
             lifted,
         });
         true
@@ -226,7 +228,7 @@ impl qobject::PictureView {
 
     /// Compute and store the transform overlay base/layer for `path`; keyed with
     /// the `-1` sentinel so the Move cache rebuilds when it next runs.
-    fn compute_transform_preview(mut self: Pin<&mut Self>, path: &str) -> bool {
+    pub(super) fn compute_transform_preview(mut self: Pin<&mut Self>, path: &str) -> bool {
         let mut guard = self.as_mut().rust_mut();
         let rust = &mut *guard;
         let gpu_compute = rust.gpu_compute;
@@ -261,58 +263,82 @@ impl qobject::PictureView {
         }
     }
 
-    /// Commit the session: one `transform_layer` call in `Free` or
-    /// `transform_layer_quad` in a projective mode, a recomposite, and one
-    /// `"Free Transform"` history state on success. An identity transform records
-    /// nothing; an engine refusal records nothing. The session always clears.
+    /// Commit the session: one transform op (the similarity, an affine quad
+    /// when a shear is set, or `transform_layer_quad` in a projective mode),
+    /// then the session warp when one is set, a recomposite, and one
+    /// `"Free Transform"` history state on success. An identity transform with
+    /// no warp records nothing; an engine refusal records nothing. The session
+    /// always clears.
     pub fn commit_transform(mut self: Pin<&mut Self>) -> bool {
-        let Some((path, mode, quad, transform, source, orig_rect)) =
+        let Some((path, mode, quad, params, orig_rect, interpolation, warp)) =
             self.rust().transform_session.as_ref().map(|session| {
                 (
                     session.path.clone(),
                     session.mode,
                     session_quad(session),
-                    LayerTransform {
-                        scale_x: session.scale_x,
-                        scale_y: session.scale_y,
-                        angle_radians: session.angle,
-                        dx: session.dx,
-                        dy: session.dy,
-                    },
-                    source_corners(session.orig_rect),
+                    MapParams::of(session),
                     session.orig_rect,
+                    session.interpolation,
+                    session.warp.clone(),
                 )
             })
         else {
             return false;
         };
-        if mode == TransformMode::Free {
-            let identity = transform.scale_x == 1.0
-                && transform.scale_y == 1.0
-                && transform.angle_radians == 0.0
-                && transform.dx == 0.0
-                && transform.dy == 0.0;
-            if identity {
-                self.as_mut().drop_transform_session();
-                return false;
-            }
-        } else {
-            let identity = quad
-                .iter()
+        let identity = if mode.is_projective() {
+            let source = source_corners(orig_rect);
+            quad.iter()
                 .zip(source.iter())
-                .all(|(q, s)| (q.0 - s.0).abs() <= 1e-9 && (q.1 - s.1).abs() <= 1e-9);
-            if identity {
-                self.as_mut().drop_transform_session();
-                return false;
-            }
+                .all(|(q, s)| (q.0 - s.0).abs() <= 1e-9 && (q.1 - s.1).abs() <= 1e-9)
+        } else {
+            params.is_identity()
+        };
+        if identity && warp.is_none() {
+            self.as_mut().drop_transform_session();
+            return false;
         }
         let changed = match self.as_mut().rust_mut().doc.as_mut() {
             Some(doc) => {
-                if mode == TransformMode::Free {
-                    pictura_render::transform_layer(doc, &path, transform)
+                let mut changed = if identity {
+                    false
                 } else {
-                    pictura_render::transform_layer_quad(doc, &path, quad)
+                    apply_session_transform(
+                        doc,
+                        &path,
+                        mode,
+                        quad,
+                        params,
+                        orig_rect,
+                        interpolation,
+                    )
+                };
+                if let Some(warp) = &warp {
+                    if changed || identity {
+                        let mesh = pictura_render::resolve_path(doc, &path).and_then(|layer| {
+                            let rect = layer.rect;
+                            pictura_render::style_mesh(
+                                warp.style,
+                                warp.bend,
+                                warp.vertical,
+                                rect.width(),
+                                rect.height(),
+                            )
+                        });
+                        if let Some(mesh) = mesh {
+                            changed = pictura_render::transform_layer_warp_with(
+                                doc,
+                                &path,
+                                &mesh,
+                                pictura_render::WarpParams {
+                                    distort_h: warp.distort_x,
+                                    distort_v: warp.distort_y,
+                                },
+                                interpolation,
+                            ) || changed;
+                        }
+                    }
                 }
+                changed
             }
             None => false,
         };
@@ -362,19 +388,28 @@ impl qobject::PictureView {
         changed
     }
 
-    /// The nine coefficients of the projective map sending the source-rect
-    /// corners to the live quad, in `QTransform` constructor order, or an empty
-    /// string without a projective session.
+    /// The nine coefficients of the live preview map in `QTransform`
+    /// constructor order: the projective map onto the quad in a projective
+    /// mode, else the affine map (identity while a warp preview is shown, since
+    /// the preview image is already warped).
     pub fn transform_preview_matrix(&self) -> QString {
         let Some(session) = self.rust().transform_session.as_ref() else {
             return QString::default();
         };
-        if !session.mode.is_projective() {
-            return QString::default();
+        if session.warp.is_some() {
+            return QString::from("1 0 0 0 1 0 0 0 1");
         }
-        let Some(coeffs) =
+        let coeffs = if session.mode.is_projective() {
             projective_coefficients(source_corners(session.orig_rect), session_quad(session))
-        else {
+        } else {
+            let params = MapParams::of(session);
+            let a = params.linear();
+            let (px, py) = params.pivot;
+            let tx = px + params.dx - (a[0][0] * px + a[0][1] * py);
+            let ty = py + params.dy - (a[1][0] * px + a[1][1] * py);
+            Some([a[0][0], a[1][0], 0.0, a[0][1], a[1][1], 0.0, tx, ty, 1.0])
+        };
+        let Some(coeffs) = coeffs else {
             return QString::default();
         };
         let encoded: Vec<String> = coeffs.iter().map(|c| format!("{c:.12}")).collect();
@@ -385,8 +420,6 @@ impl qobject::PictureView {
     pub fn transform_session_active(&self) -> bool {
         self.rust().transform_session.is_some()
     }
-
-    /// The active session's target path, or an empty string.
     pub fn transform_session_path(&self) -> QString {
         self.rust()
             .transform_session
