@@ -1137,8 +1137,8 @@ Snapshot for resuming after a context break. Update after each milestone.
   `apply_adjustment_region` leaves transparency alone. CS6 shortcuts (Levels
   Ctrl+L, Curves Ctrl+M, Hue/Saturation Ctrl+U, Color Balance Ctrl+B, Invert
   Ctrl+I, …). Qt Test `tst_image_adjustments`. Ceilings (`ponytail:`): Color
-  Lookup, Shadows/Highlights, HDR Toning, Match Color, and Replace Color stay
-  stubs; no dialog presets, eyedroppers, histograms, or Load / Save.
+   Lookup, Shadows/Highlights, HDR Toning, and Replace Color stay
+   stubs; no dialog presets, eyedroppers, histograms, or Load / Save.
 - **Image > Adjustments > Match Color** (change `add-match-color`, issue #352,
   the last CS6 destructive adjustment; lifted that stub): a Reinhard-style Lab
   mean/std transfer in `pictura-adjust::match_color`
