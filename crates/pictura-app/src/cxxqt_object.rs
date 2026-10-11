@@ -72,6 +72,14 @@ pub mod qobject {
         /// Render `text` with the system `family` font to packed RGBA8888 of the given size.
         fn render_text_rgba(family: &str, pixel_size: f64, text: &str, justify: i32, r: u8, g: u8, b: u8, a: u8, width: i32, height: i32) -> Vec<u8>;
     }
+    /// One row of `layers_snapshot` (spike shape; unit D fills every field the
+    /// Layers panel reads).
+    #[namespace = "pictura"]
+    struct LayerRow {
+        path: QString,
+        depth: i32,
+        name: QString,
+    }
     extern "RustQt" {
         #[qobject]
         #[namespace = "pictura"]
@@ -301,6 +309,11 @@ pub mod qobject {
         /// The RGBA content of layer `i` scaled to fit `size`×`size` keeping the aspect ratio; null for groups/adjustments or an out-of-range argument.
         #[qinvokable]
         fn layer_thumbnail(&self, i: i32, size: i32) -> QImage;
+
+        /// Every tree row in one crossing (`thumb_size`/`entire_document` feed
+        /// the thumbnails unit D adds); empty without a document.
+        #[qinvokable]
+        fn layers_snapshot(&self, thumb_size: i32, entire_document: bool) -> Vec<LayerRow>;
 
         // M39 tree rows, path/batch mutation; see docs/dev/m39-panel-anatomy.md §3.2.
 

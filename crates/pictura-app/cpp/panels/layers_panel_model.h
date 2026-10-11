@@ -71,7 +71,7 @@ inline QMimeData* makeLayerDragMime(const void* source, const QStringList& paths
 }
 
 // One bridge row, as read by refresh(). The model owns a tree of these.
-struct LayerRow {
+struct LayerRowNode {
     QString path;
     int depth = 0;
     QString name;
@@ -114,7 +114,7 @@ struct LayerRow {
     int activeThumb = 0;
 };
 
-QString layerTooltip(const LayerRow& layer);
+QString layerTooltip(const LayerRowNode& layer);
 
 // CS6 sheet color for a label index (1..7); an invalid color for 0/unknown.
 QColor layerLabelColor(int label);
@@ -170,7 +170,7 @@ enum LayerRole {
 };
 
 struct Node {
-    LayerRow row;
+    LayerRowNode row;
     bool clipBase = false;
     Node* parent = nullptr;
     int rowInParent = 0;
@@ -187,7 +187,7 @@ public:
 
     void setView(PictureView* view) { view_ = view; }
 
-    void setRows(QVector<LayerRow> rows)
+    void setRows(QVector<LayerRowNode> rows)
     {
         beginResetModel();
         root_ = std::make_unique<Node>();
@@ -199,7 +199,7 @@ public:
         // pre-order input still attaches in encounter order.
         std::vector<std::unique_ptr<Node>> nodes;
         nodes.reserve(static_cast<size_t>(rows.size()));
-        for (LayerRow& row : rows) {
+        for (LayerRowNode& row : rows) {
             auto node = std::make_unique<Node>();
             node->row = std::move(row);
             byPath_.insert(node->row.path, node.get());
@@ -269,7 +269,7 @@ public:
         if (!node) {
             return {};
         }
-        const LayerRow& row = node->row;
+        const LayerRowNode& row = node->row;
         switch (role) {
         case Qt::DisplayRole:
         case Qt::EditRole:

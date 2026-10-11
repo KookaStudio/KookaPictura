@@ -98,7 +98,7 @@ QColor layerLabelColor(int label)
     }
 }
 
-QString layerTooltip(const LayerRow& layer)
+QString layerTooltip(const LayerRowNode& layer)
 {
     return QStringLiteral("%1 (%2)").arg(layer.name, layer.kind);
 }
@@ -472,7 +472,7 @@ void LayersPanel::refresh()
     const bool wasEditing = tree_->viewport()->findChild<QLineEdit*>() != nullptr;
     const int thumbSize = delegate_ ? delegate_->thumbnailSize() : 24;
 
-    QVector<LayerRow> rows;
+    QVector<LayerRowNode> rows;
     if (view_) {
         const int count = view_->layer_row_count();
         const int documentWidth = view_->document_width();
@@ -484,7 +484,7 @@ void LayersPanel::refresh()
         // whose layer or mask is gone.
         const QString maskTargetPath = mask_edit_target_get(*view_);
         for (int i = 0; i < count; ++i) {
-            LayerRow row;
+            LayerRowNode row;
             row.path = view_->layer_row_path(i);
             row.depth = view_->layer_row_depth(i);
             row.name = view_->layer_row_name(i);
@@ -534,9 +534,9 @@ void LayersPanel::refresh()
         // Display-only Smart Filters rows: a group header under each filtered
         // smart object plus one row per filter. The header carries the filter
         // count and the group eye; the children carry their own eyes.
-        QVector<LayerRow> synthetic;
+        QVector<LayerRowNode> synthetic;
         for (int k = 0; k < rows.size(); ++k) {
-            LayerRow& row = rows[k];
+            LayerRowNode& row = rows[k];
             if (row.path.isEmpty() || !layer_has_smart_filters(*view_, row.path)) {
                 continue;
             }
@@ -544,7 +544,7 @@ void LayersPanel::refresh()
             // The smart object row gains a disclosure so the filter group can be
             // revealed, as CS6 nests "Smart Filters" under the layer.
             row.expandable = true;
-            LayerRow group;
+            LayerRowNode group;
             group.path = row.path + QStringLiteral("/@sf");
             group.depth = row.depth + 1;
             group.name = QStringLiteral("Smart Filters");
@@ -555,7 +555,7 @@ void LayersPanel::refresh()
             group.synthetic = true;
             synthetic.push_back(std::move(group));
             for (int j = 0; j < count; ++j) {
-                LayerRow child;
+                LayerRowNode child;
                 child.path = row.path + QStringLiteral("/@sf/") + QString::number(j);
                 child.depth = row.depth + 2;
                 child.name = layer_smart_filter_name(*view_, row.path, j);
@@ -565,7 +565,7 @@ void LayersPanel::refresh()
                 synthetic.push_back(std::move(child));
             }
         }
-        for (LayerRow& row : synthetic) {
+        for (LayerRowNode& row : synthetic) {
             rows.push_back(std::move(row));
         }
     }

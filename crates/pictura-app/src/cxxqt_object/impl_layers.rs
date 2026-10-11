@@ -314,6 +314,23 @@ impl qobject::PictureView {
             .map_or(0, |doc| pictura_render::flatten_rows(doc).len() as i32)
     }
 
+    /// Spike body for the `Vec<LayerRow>` vehicle: one row per tree node,
+    /// filled from the existing per-field getters. Unit D widens the struct
+    /// and fills it in one pass.
+    pub fn layers_snapshot(
+        &self,
+        _thumb_size: i32,
+        _entire_document: bool,
+    ) -> Vec<qobject::LayerRow> {
+        (0..self.layer_row_count())
+            .map(|i| qobject::LayerRow {
+                path: self.layer_row_path(i),
+                depth: self.layer_row_depth(i),
+                name: self.layer_row_name(i),
+            })
+            .collect()
+    }
+
     pub fn layer_row_path(&self, i: i32) -> QString {
         self.row_at(i)
             .map(|(_, path, _, _)| QString::from(path.as_str()))

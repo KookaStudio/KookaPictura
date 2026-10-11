@@ -71,6 +71,8 @@ cxx_qt_import_crate(
 )
 
 add_library(pictura_shell STATIC
+    crates/pictura-app/cpp/api/document_api.cpp
+    crates/pictura-app/cpp/api/document_api.h
     crates/pictura-app/cpp/decode_image.cpp
     crates/pictura-app/cpp/decode_image.h
     crates/pictura-app/cpp/encode_image.cpp
