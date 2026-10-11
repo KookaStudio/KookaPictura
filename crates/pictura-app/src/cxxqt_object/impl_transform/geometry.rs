@@ -1,4 +1,4 @@
-use super::super::state::TransformSession;
+use super::super::state::{TransformMode, TransformSession};
 use pictura_core::PsdRect;
 
 /// Screen-pixel tolerance for a scale-handle hit.
@@ -8,9 +8,11 @@ const ROTATE_BAND: f64 = 20.0;
 /// Handle indices above the eight scale handles.
 pub(super) const ROTATE_HANDLE: i32 = 8;
 pub(super) const MOVE_HANDLE: i32 = 9;
+/// The reference point's drag handle.
+pub(super) const PIVOT_HANDLE: i32 = 10;
 
 /// Centre of `rect` as a document-space point.
-fn rect_center(rect: PsdRect) -> (f64, f64) {
+pub(super) fn rect_center(rect: PsdRect) -> (f64, f64) {
     (
         (rect.left as f64 + rect.right as f64) / 2.0,
         (rect.top as f64 + rect.bottom as f64) / 2.0,
@@ -27,7 +29,237 @@ pub(super) fn source_corners(rect: PsdRect) -> [(f64, f64); 4] {
     ]
 }
 
+/// The session map's parameters: `M(p) = P + A·(p − P) + (dx, dy)` with
+/// `A = R(θ)·S·K` and `K = [[1, tan(skew_x)], [tan(skew_y), 1]]` (H/V shear in
+/// the local frame). Copyable, so a commit can snapshot it before mutating.
+#[derive(Clone, Copy)]
+pub(super) struct MapParams {
+    pub(super) scale_x: f64,
+    pub(super) scale_y: f64,
+    pub(super) angle: f64,
+    pub(super) dx: f64,
+    pub(super) dy: f64,
+    pub(super) pivot: (f64, f64),
+    pub(super) skew_x: f64,
+    pub(super) skew_y: f64,
+}
+
+impl MapParams {
+    /// The live parameters of `session`.
+    pub(super) fn of(session: &TransformSession) -> Self {
+        Self {
+            scale_x: session.scale_x,
+            scale_y: session.scale_y,
+            angle: session.angle,
+            dx: session.dx,
+            dy: session.dy,
+            pivot: session.pivot,
+            skew_x: session.skew_x,
+            skew_y: session.skew_y,
+        }
+    }
+
+    /// The 2×2 linear part `A = R(θ)·S·K`.
+    pub(super) fn linear(&self) -> [[f64; 2]; 2] {
+        let (sin, cos) = self.angle.sin_cos();
+        let (th, tv) = (self.skew_x.tan(), self.skew_y.tan());
+        let sk = [
+            [self.scale_x, self.scale_x * th],
+            [self.scale_y * tv, self.scale_y],
+        ];
+        [
+            [
+                cos * sk[0][0] - sin * sk[1][0],
+                cos * sk[0][1] - sin * sk[1][1],
+            ],
+            [
+                sin * sk[0][0] + cos * sk[1][0],
+                sin * sk[0][1] + cos * sk[1][1],
+            ],
+        ]
+    }
+
+    /// The map applied to a document-space point.
+    pub(super) fn map_point(&self, p: (f64, f64)) -> (f64, f64) {
+        let a = self.linear();
+        let ux = p.0 - self.pivot.0;
+        let uy = p.1 - self.pivot.1;
+        (
+            self.pivot.0 + a[0][0] * ux + a[0][1] * uy + self.dx,
+            self.pivot.1 + a[1][0] * ux + a[1][1] * uy + self.dy,
+        )
+    }
+
+    /// The corners of `rect` under the map.
+    pub(super) fn map_quad(&self, rect: PsdRect) -> [(f64, f64); 4] {
+        let mut out = source_corners(rect);
+        for corner in &mut out {
+            *corner = self.map_point(*corner);
+        }
+        out
+    }
+
+    /// Whether the map is the identity.
+    pub(super) fn is_identity(&self) -> bool {
+        self.scale_x == 1.0
+            && self.scale_y == 1.0
+            && self.angle == 0.0
+            && self.skew_x == 0.0
+            && self.skew_y == 0.0
+            && self.dx == 0.0
+            && self.dy == 0.0
+    }
+}
+
+/// The live parameters of `session` (`MapParams::of`).
+pub(super) fn linear(session: &TransformSession) -> [[f64; 2]; 2] {
+    MapParams::of(session).linear()
+}
+
+/// The source-rect corners under the session map.
+pub(super) fn map_quad(session: &TransformSession) -> [(f64, f64); 4] {
+    MapParams::of(session).map_quad(session.orig_rect)
+}
+
+/// Apply the session's live transform to `doc` at `path` with `interpolation`:
+/// the projective op in a projective mode, the affine quad when a shear is set,
+/// else the similarity op re-centred on `orig_rect` (so an integer move keeps
+/// its unmodeled raw channels).
+pub(super) fn apply_session_transform(
+    doc: &mut pictura_core::Document,
+    path: &str,
+    mode: TransformMode,
+    quad: [(f64, f64); 4],
+    params: MapParams,
+    orig_rect: PsdRect,
+    interpolation: pictura_render::Interpolation,
+) -> bool {
+    if mode.is_projective() {
+        return pictura_render::transform_layer_quad_with(doc, path, quad, interpolation);
+    }
+    if params.skew_x != 0.0 || params.skew_y != 0.0 {
+        return pictura_render::transform_layer_quad_with(
+            doc,
+            path,
+            params.map_quad(orig_rect),
+            interpolation,
+        );
+    }
+    let (cx, cy) = rect_center(orig_rect);
+    let a = params.linear();
+    let (px, py) = params.pivot;
+    let t = (
+        params.dx + (px - cx) - (a[0][0] * (px - cx) + a[0][1] * (py - cy)),
+        params.dy + (py - cy) - (a[1][0] * (px - cx) + a[1][1] * (py - cy)),
+    );
+    pictura_render::transform_layer_with(
+        doc,
+        path,
+        pictura_render::LayerTransform {
+            scale_x: params.scale_x,
+            scale_y: params.scale_y,
+            angle_radians: params.angle,
+            dx: t.0,
+            dy: t.1,
+        },
+        interpolation,
+    )
+}
+
+/// The map with the parameters captured at press (the anchor of a scale drag).
+fn start_map_point(session: &TransformSession, p: (f64, f64)) -> (f64, f64) {
+    let [sx, sy, angle, dx, dy] = session.start;
+    let (sin, cos) = angle.sin_cos();
+    let (th, tv) = (session.skew_x.tan(), session.skew_y.tan());
+    let ux = p.0 - session.pivot.0;
+    let uy = p.1 - session.pivot.1;
+    let kx = ux + th * uy;
+    let ky = tv * ux + uy;
+    (
+        session.pivot.0 + cos * sx * kx - sin * sy * ky + dx,
+        session.pivot.1 + sin * sx * kx + cos * sy * ky + dy,
+    )
+}
+
+/// Set the reference point, compensating the translation so the rendered quad
+/// does not move: `t' = t + (P − A·P) − (P' − A·P')`.
+pub(super) fn set_pivot(session: &mut TransformSession, x: f64, y: f64) {
+    if !x.is_finite() || !y.is_finite() {
+        return;
+    }
+    let a = linear(session);
+    let (px, py) = session.pivot;
+    let old = (
+        px - (a[0][0] * px + a[0][1] * py),
+        py - (a[1][0] * px + a[1][1] * py),
+    );
+    let new = (
+        x - (a[0][0] * x + a[0][1] * y),
+        y - (a[1][0] * x + a[1][1] * y),
+    );
+    session.dx += old.0 - new.0;
+    session.dy += old.1 - new.1;
+    session.pivot = (x, y);
+}
+
+/// The nine anchors of `quad` in row-major order (corners, edge midpoints,
+/// centre).
+pub(super) fn quad_anchors(quad: &[(f64, f64); 4]) -> [(f64, f64); 9] {
+    let (tl, tr, br, bl) = (quad[0], quad[1], quad[2], quad[3]);
+    [
+        tl,
+        ((tl.0 + tr.0) / 2.0, (tl.1 + tr.1) / 2.0),
+        tr,
+        ((tl.0 + bl.0) / 2.0, (tl.1 + bl.1) / 2.0),
+        (
+            (tl.0 + tr.0 + br.0 + bl.0) / 4.0,
+            (tl.1 + tr.1 + br.1 + bl.1) / 4.0,
+        ),
+        ((tr.0 + br.0) / 2.0, (tr.1 + br.1) / 2.0),
+        bl,
+        ((bl.0 + br.0) / 2.0, (bl.1 + br.1) / 2.0),
+        br,
+    ]
+}
+
+/// Whether `(x, y)` hits the reference point within the handle tolerance.
+pub(super) fn pivot_hit(session: &TransformSession, x: f64, y: f64, zoom: f64) -> bool {
+    if !session.show_pivot || !x.is_finite() || !y.is_finite() {
+        return false;
+    }
+    let zoom = if zoom.is_finite() && zoom > 1e-9 {
+        zoom
+    } else {
+        1.0
+    };
+    let tol = HANDLE_TOLERANCE / zoom;
+    dist2((x, y), session.pivot) <= tol * tol
+}
+
+/// Move the reference point to `(x, y)`, snapping to the live quad's nine
+/// anchors within the handle tolerance.
+pub(super) fn pivot_drag(session: &mut TransformSession, x: f64, y: f64, zoom: f64) {
+    let zoom = if zoom.is_finite() && zoom > 1e-9 {
+        zoom
+    } else {
+        1.0
+    };
+    let tol = HANDLE_TOLERANCE / zoom;
+    let quad = session_quad(session);
+    let mut target = (x, y);
+    let mut best = tol * tol;
+    for anchor in quad_anchors(&quad) {
+        let d = dist2((x, y), anchor);
+        if d <= best {
+            best = d;
+            target = anchor;
+        }
+    }
+    set_pivot(session, target.0, target.1);
+}
+
 /// `p' = c + R(θ)·(S·(p − c)) + (dx, dy)` for one point.
+#[cfg(test)]
 fn forward_point(
     rect: PsdRect,
     sx: f64,
@@ -48,6 +280,7 @@ fn forward_point(
 }
 
 /// The transformed quad corners in [`source_corners`] order.
+#[cfg(test)]
 pub(super) fn transform_quad_points(
     rect: PsdRect,
     sx: f64,
@@ -66,16 +299,7 @@ pub(super) fn transform_quad_points(
 /// The session's live target quad: the stored projective quad, or the
 /// similarity quad derived from the scalars in `Free` mode.
 pub(super) fn session_quad(session: &TransformSession) -> [(f64, f64); 4] {
-    session.quad.unwrap_or_else(|| {
-        transform_quad_points(
-            session.orig_rect,
-            session.scale_x,
-            session.scale_y,
-            session.angle,
-            session.dx,
-            session.dy,
-        )
-    })
+    session.quad.unwrap_or_else(|| map_quad(session))
 }
 
 /// Whether a candidate quad is too degenerate to keep: a non-finite corner,
@@ -105,7 +329,7 @@ fn quad_is_degenerate(quad: &[(f64, f64); 4]) -> bool {
 
 /// Store `quad` on the session unless it is degenerate; returns whether it was
 /// accepted.
-fn store_quad(session: &mut TransformSession, quad: [(f64, f64); 4]) -> bool {
+pub(super) fn store_quad(session: &mut TransformSession, quad: [(f64, f64); 4]) -> bool {
     if quad_is_degenerate(&quad) {
         return false;
     }
@@ -305,10 +529,13 @@ pub(super) fn gesture_translate(session: &mut TransformSession, x: f64, y: f64) 
     session.dy = session.start[4] + (y - session.press_y);
 }
 
-/// Rotate about the session centre; Shift snaps to 15° steps.
+/// Rotate about the reference point's current image position; Shift snaps to
+/// 15° steps. The translation is unchanged, so that point stays fixed.
 pub(super) fn gesture_rotate(session: &mut TransformSession, x: f64, y: f64, shift: bool) {
-    let (c_x, c_y) = rect_center(session.orig_rect);
-    let pivot = (c_x + session.start[3], c_y + session.start[4]);
+    let pivot = (
+        session.pivot.0 + session.start[3],
+        session.pivot.1 + session.start[4],
+    );
     let a0 = (session.press_y - pivot.1).atan2(session.press_x - pivot.0);
     let a1 = (y - pivot.1).atan2(x - pivot.0);
     let mut angle = session.start[2] + (a1 - a0);
@@ -317,35 +544,33 @@ pub(super) fn gesture_rotate(session: &mut TransformSession, x: f64, y: f64, shi
         angle = (angle / step).round() * step;
     }
     session.angle = angle;
+    session.dx = session.start[3];
+    session.dy = session.start[4];
 }
 
 /// Scale about the opposite handle so it stays fixed; Shift locks the aspect
-/// ratio and the transformed rect is clamped to at least 1 px per axis.
+/// ratio and the transformed rect is clamped to at least 1 px per axis. The
+/// current H/V shear is kept.
 pub(super) fn gesture_scale(session: &mut TransformSession, x: f64, y: f64, shift: bool) -> bool {
     let rect = session.orig_rect;
-    let [start_sx, start_sy, start_angle, start_dx, start_dy] = session.start;
-    let (c_x, c_y) = rect_center(rect);
+    let [start_sx, start_sy, start_angle, ..] = session.start;
     let h = session.handle;
     let drag_src = handle_source_point(rect, h);
     let anchor_src = handle_source_point(rect, opposite_handle(h));
-    let anchor_doc = forward_point(
-        rect,
-        start_sx,
-        start_sy,
-        start_angle,
-        start_dx,
-        start_dy,
-        anchor_src,
-    );
+    let anchor_doc = start_map_point(session, anchor_src);
+    let (th, tv) = (session.skew_x.tan(), session.skew_y.tan());
+    let ux = drag_src.0 - anchor_src.0;
+    let uy = drag_src.1 - anchor_src.1;
+    // The source vector through the fixed shear, then the inverse rotation.
+    let kx = ux + th * uy;
+    let ky = tv * ux + uy;
     let (sin, cos) = start_angle.sin_cos();
     let vx = x - anchor_doc.0;
     let vy = y - anchor_doc.1;
     let wx = cos * vx + sin * vy;
     let wy = -sin * vx + cos * vy;
-    let ux = drag_src.0 - anchor_src.0;
-    let uy = drag_src.1 - anchor_src.1;
-    let mut new_sx = if ux.abs() > 1e-12 { wx / ux } else { start_sx };
-    let mut new_sy = if uy.abs() > 1e-12 { wy / uy } else { start_sy };
+    let mut new_sx = if kx.abs() > 1e-12 { wx / kx } else { start_sx };
+    let mut new_sy = if ky.abs() > 1e-12 { wy / ky } else { start_sy };
     // Shift locks the aspect ratio on a corner only; an edge handle always
     // scales one axis.
     if shift && h <= 3 {
@@ -368,21 +593,15 @@ pub(super) fn gesture_scale(session: &mut TransformSession, x: f64, y: f64, shif
     if !new_sx.is_finite() || !new_sy.is_finite() {
         return false;
     }
-    let a00 = cos * new_sx;
-    let a01 = -sin * new_sy;
-    let a10 = sin * new_sx;
-    let a11 = cos * new_sy;
-    let anchor_mapped = (
-        a00 * anchor_src.0 + a01 * anchor_src.1,
-        a10 * anchor_src.0 + a11 * anchor_src.1,
-    );
-    let t_x = anchor_doc.0 - anchor_mapped.0;
-    let t_y = anchor_doc.1 - anchor_mapped.1;
     session.scale_x = new_sx;
     session.scale_y = new_sy;
     session.angle = start_angle;
-    session.dx = t_x - c_x + a00 * c_x + a01 * c_y;
-    session.dy = t_y - c_y + a10 * c_x + a11 * c_y;
+    // Keep the anchor fixed: `t = anchor_doc − P − A·(anchor_src − P)`.
+    let a = linear(session);
+    let ax = anchor_src.0 - session.pivot.0;
+    let ay = anchor_src.1 - session.pivot.1;
+    session.dx = anchor_doc.0 - session.pivot.0 - (a[0][0] * ax + a[0][1] * ay);
+    session.dy = anchor_doc.1 - session.pivot.1 - (a[1][0] * ax + a[1][1] * ay);
     true
 }
 
@@ -504,6 +723,14 @@ mod tests {
             mode: TransformMode::Free,
             quad: None,
             start_quad: source_corners(rect4()),
+            pivot: (2.0, 2.0),
+            pivot_origin: (2.0, 2.0),
+            show_pivot: true,
+            skew_x: 0.0,
+            skew_y: 0.0,
+            interpolation: pictura_render::Interpolation::Bicubic,
+            warp: None,
+            warp_preview_quad: None,
             lifted: None,
         }
     }
@@ -513,6 +740,79 @@ mod tests {
         s.mode = TransformMode::Distort;
         s.quad = Some(source_corners(rect4()));
         s
+    }
+
+    #[test]
+    fn quad_anchors_are_row_major() {
+        let a = quad_anchors(&source_corners(rect4()));
+        assert_eq!(a[0], (0.0, 0.0));
+        assert_eq!(a[1], (2.0, 0.0));
+        assert_eq!(a[2], (4.0, 0.0));
+        assert_eq!(a[3], (0.0, 2.0));
+        assert_eq!(a[4], (2.0, 2.0));
+        assert_eq!(a[5], (4.0, 2.0));
+        assert_eq!(a[6], (0.0, 4.0));
+        assert_eq!(a[8], (4.0, 4.0));
+    }
+
+    #[test]
+    fn pivot_drag_snaps_to_an_anchor() {
+        let mut s = session();
+        set_pivot(&mut s, 10.0, 10.0);
+        pivot_drag(&mut s, 0.5, 0.5, 1.0);
+        assert_eq!(s.pivot, (0.0, 0.0));
+    }
+
+    #[test]
+    fn pivot_drag_away_keeps_the_pointer() {
+        let mut s = session();
+        pivot_drag(&mut s, 8.0, 9.0, 1.0);
+        assert_eq!(s.pivot, (8.0, 9.0));
+    }
+
+    #[test]
+    fn moving_the_pivot_keeps_the_quad_fixed() {
+        let mut s = session();
+        s.scale_x = 2.0;
+        s.angle = 0.3;
+        s.dx = 3.0;
+        let before = session_quad(&s);
+        set_pivot(&mut s, 0.0, 0.0);
+        let after = session_quad(&s);
+        for (b, a) in before.iter().zip(after.iter()) {
+            assert!((b.0 - a.0).abs() < 1e-9 && (b.1 - a.1).abs() < 1e-9);
+        }
+    }
+
+    #[test]
+    fn rotation_keeps_the_pivot_image_point_fixed() {
+        let mut s = session();
+        s.dx = 3.0;
+        s.dy = -1.0;
+        s.angle = 0.4;
+        let before = MapParams::of(&s).map_point(s.pivot);
+        s.angle = 1.1;
+        let after = MapParams::of(&s).map_point(s.pivot);
+        assert!((before.0 - after.0).abs() < 1e-12 && (before.1 - after.1).abs() < 1e-12);
+    }
+
+    #[test]
+    fn h_shear_moves_the_left_edge() {
+        let mut s = session();
+        s.skew_x = (30f64).to_radians();
+        let q = session_quad(&s);
+        let expected = (30f64).to_radians().tan() * 2.0;
+        assert!((q[3].0 - expected).abs() < 1e-9, "left edge x {}", q[3].0);
+        assert!((q[3].1 - 4.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn pivot_hit_respects_the_show_flag() {
+        let mut s = session();
+        assert!(pivot_hit(&s, 2.0, 2.0, 1.0));
+        assert!(!pivot_hit(&s, 10.0, 10.0, 1.0));
+        s.show_pivot = false;
+        assert!(!pivot_hit(&s, 2.0, 2.0, 1.0));
     }
 
     #[test]

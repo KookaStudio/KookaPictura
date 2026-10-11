@@ -160,13 +160,15 @@ pub use document_ops::{
     set_shape_fill, set_shape_stroke, set_slice, set_vector_mask_enabled, set_vector_mask_linked,
     set_visible_paths, shape_bounds, shape_coverage, shape_fill, shape_fill_color, shape_stroke,
     smart_object_source_bytes, stamp_scope, style_mesh, transform_layer, transform_layer_quad,
-    transform_layer_warp, translate_layer, translate_layer_active, translate_layer_index,
+    transform_layer_quad_with, transform_layer_warp, transform_layer_warp_with,
+    transform_layer_with, translate_layer, translate_layer_active, translate_layer_index,
     translate_layer_path, translate_layer_rect, trim_to_content, ungroup_layer, ungroup_paths,
     vector_mask_disabled, vector_mask_linked, write_mask_back, AlignEdge, Arrange, BitmapMethod,
-    Clip, LayerMaskKind, LayerStyle, LayerTransform, MaskDocument, MatteBackground, MattingError,
-    MergeError, MergeOutcome, MergeScope, NewLayerSpec, PasteMode, ShapeAttributes, ShapeStroke,
-    Slice, StampScope, VectorMaskKind, WarpMesh, WarpParams, WarpStyle, MASK_FLAG_LINKED,
-    VECTOR_MASK_FLAG_DISABLED, VECTOR_MASK_FLAG_INVERT, VECTOR_MASK_FLAG_NOT_LINKED,
+    Clip, Interpolation, LayerMaskKind, LayerStyle, LayerTransform, MaskDocument, MatteBackground,
+    MattingError, MergeError, MergeOutcome, MergeScope, NewLayerSpec, PasteMode, ShapeAttributes,
+    ShapeStroke, Slice, StampScope, VectorMaskKind, WarpMesh, WarpParams, WarpStyle,
+    MASK_FLAG_LINKED, VECTOR_MASK_FLAG_DISABLED, VECTOR_MASK_FLAG_INVERT,
+    VECTOR_MASK_FLAG_NOT_LINKED,
 };
 
 mod text_render;

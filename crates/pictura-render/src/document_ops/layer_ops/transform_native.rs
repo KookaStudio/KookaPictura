@@ -6,7 +6,8 @@
 
 use pictura_core::{PsdRect, Sample, Samples, SourceChannels};
 
-use super::transform::{bilinear, resample_plane, PlaneMap};
+use super::kernel::{self, Interpolation};
+use super::transform::{resample_plane, PlaneMap};
 use super::warp::{warp_plane, WarpMesh};
 
 /// The `(left, top, right, bottom)` tuple of a rect.
@@ -32,11 +33,12 @@ pub(super) fn resample_native<M: PlaneMap>(
     map: &M,
     rect: PsdRect,
     dest: (i32, i32, i32, i32),
+    interpolation: Interpolation,
 ) -> Samples {
     match samples {
-        Samples::U8(v) => Samples::U8(resample_plane(v, w, h, map, rect, dest)),
-        Samples::U16(v) => Samples::U16(resample_typed(v, w, h, map, rect, dest)),
-        Samples::F32(v) => Samples::F32(resample_typed(v, w, h, map, rect, dest)),
+        Samples::U8(v) => Samples::U8(resample_plane(v, w, h, map, rect, dest, interpolation)),
+        Samples::U16(v) => Samples::U16(resample_typed(v, w, h, map, rect, dest, interpolation)),
+        Samples::F32(v) => Samples::F32(resample_typed(v, w, h, map, rect, dest, interpolation)),
     }
 }
 
@@ -47,10 +49,12 @@ fn resample_typed<M: PlaneMap, T: Sample>(
     map: &M,
     rect: PsdRect,
     dest: (i32, i32, i32, i32),
+    interpolation: Interpolation,
 ) -> Vec<T> {
     let (dl, dt, dr, db) = dest;
     let dw = (dr - dl) as usize;
     let dh = (db - dt) as usize;
+    let resolved = interpolation.resolve((w * h) as u64, (dw * dh) as u64);
     let mut out = vec![T::from_unit(0.0); dw * dh];
     let wf = w as f64;
     let hf = h as f64;
@@ -66,38 +70,15 @@ fn resample_typed<M: PlaneMap, T: Sample>(
             if lx < 0.0 || ly < 0.0 || lx >= wf || ly >= hf {
                 continue;
             }
-            out[oy * dw + ox] = bilinear_sample(src, w, h, lx, ly);
+            out[oy * dw + ox] = kernel::sample(src, w, h, lx, ly, resolved);
         }
     }
     out
 }
 
-/// Inverse-mapped bilinear sample of a native plane; the unit-domain analogue
-/// of `transform::bilinear`.
-pub(super) fn bilinear_sample<T: Sample>(src: &[T], w: usize, h: usize, lx: f64, ly: f64) -> T {
-    let u = lx - 0.5;
-    let v = ly - 0.5;
-    let x0f = u.floor();
-    let y0f = v.floor();
-    let fx = u - x0f;
-    let fy = v - y0f;
-    let max_x = (w - 1) as f64;
-    let max_y = (h - 1) as f64;
-    let x0 = x0f.clamp(0.0, max_x) as usize;
-    let y0 = y0f.clamp(0.0, max_y) as usize;
-    let x1 = (x0f + 1.0).clamp(0.0, max_x) as usize;
-    let y1 = (y0f + 1.0).clamp(0.0, max_y) as usize;
-    let p00 = src[y0 * w + x0].to_unit();
-    let p10 = src[y0 * w + x1].to_unit();
-    let p01 = src[y1 * w + x0].to_unit();
-    let p11 = src[y1 * w + x1].to_unit();
-    let top = p00 + (p10 - p00) * fx;
-    let bot = p01 + (p11 - p01) * fx;
-    T::from_unit(top + (bot - top) * fy)
-}
-
 /// Resample a layer's retained store through `map`; the `-2` mask plane uses the
 /// mask's own map and destination (`mask` is its old rect and new dest).
+#[allow(clippy::too_many_arguments)]
 pub(super) fn resample_store<M: PlaneMap>(
     store: &SourceChannels,
     layer_w: usize,
@@ -106,6 +87,7 @@ pub(super) fn resample_store<M: PlaneMap>(
     layer_rect: PsdRect,
     dest: (i32, i32, i32, i32),
     mask: Option<(PsdRect, (i32, i32, i32, i32))>,
+    interpolation: Interpolation,
 ) -> SourceChannels {
     let planes = store
         .planes
@@ -117,12 +99,20 @@ pub(super) fn resample_store<M: PlaneMap>(
                         let mmap = map.for_rect(mrect);
                         let mw = mrect.width().max(0) as usize;
                         let mh = mrect.height().max(0) as usize;
-                        resample_native(samples, mw, mh, &mmap, mrect, mdest)
+                        resample_native(samples, mw, mh, &mmap, mrect, mdest, interpolation)
                     }
                     None => samples.clone(),
                 }
             } else {
-                resample_native(samples, layer_w, layer_h, map, layer_rect, dest)
+                resample_native(
+                    samples,
+                    layer_w,
+                    layer_h,
+                    map,
+                    layer_rect,
+                    dest,
+                    interpolation,
+                )
             };
             (*id, resampled)
         })
@@ -132,6 +122,7 @@ pub(super) fn resample_store<M: PlaneMap>(
 
 /// Warp a layer's retained store through the mesh; the `-2` mask plane uses the
 /// mask-relative surface mapping and its own destination.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn warp_store(
     store: &SourceChannels,
     layer_w: usize,
@@ -140,6 +131,7 @@ pub(super) fn warp_store(
     layer_rect: PsdRect,
     dest: (i32, i32, i32, i32),
     mask: Option<(PsdRect, (i32, i32, i32, i32))>,
+    interpolation: Interpolation,
 ) -> SourceChannels {
     let planes = store
         .planes
@@ -161,6 +153,7 @@ pub(super) fn warp_store(
                             mesh,
                             move |u, v| (u * lw + ox, v * lh + oy),
                             mdest,
+                            interpolation,
                         )
                     }
                     None => samples.clone(),
@@ -173,6 +166,7 @@ pub(super) fn warp_store(
                     mesh,
                     |u, v| (u * layer_w as f64, v * layer_h as f64),
                     dest,
+                    interpolation,
                 )
             };
             (*id, warped)
@@ -188,10 +182,37 @@ fn warp_native(
     mesh: &WarpMesh,
     to_src: impl Fn(f64, f64) -> (f64, f64),
     dest: (i32, i32, i32, i32),
+    interpolation: Interpolation,
 ) -> Samples {
+    let (dl, dt, dr, db) = dest;
+    let resolved = interpolation.resolve((sw * sh) as u64, ((dr - dl) * (db - dt)) as u64);
     match samples {
-        Samples::U8(v) => Samples::U8(warp_plane(v, sw, sh, mesh, to_src, dest, bilinear)),
-        Samples::U16(v) => Samples::U16(warp_plane(v, sw, sh, mesh, to_src, dest, bilinear_sample)),
-        Samples::F32(v) => Samples::F32(warp_plane(v, sw, sh, mesh, to_src, dest, bilinear_sample)),
+        Samples::U8(v) => Samples::U8(warp_plane(
+            v,
+            sw,
+            sh,
+            mesh,
+            to_src,
+            dest,
+            |src, w, h, lx, ly| kernel::sample(src, w, h, lx, ly, resolved),
+        )),
+        Samples::U16(v) => Samples::U16(warp_plane(
+            v,
+            sw,
+            sh,
+            mesh,
+            to_src,
+            dest,
+            |src, w, h, lx, ly| kernel::sample(src, w, h, lx, ly, resolved),
+        )),
+        Samples::F32(v) => Samples::F32(warp_plane(
+            v,
+            sw,
+            sh,
+            mesh,
+            to_src,
+            dest,
+            |src, w, h, lx, ly| kernel::sample(src, w, h, lx, ly, resolved),
+        )),
     }
 }

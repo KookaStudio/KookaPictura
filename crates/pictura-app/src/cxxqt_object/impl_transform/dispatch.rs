@@ -3,7 +3,8 @@ use super::super::qobject;
 use super::super::state::TransformMode;
 use super::geometry::{
     gesture_distort, gesture_perspective, gesture_rotate, gesture_scale, gesture_skew,
-    gesture_translate, hit_test_quad, session_quad, MOVE_HANDLE, ROTATE_HANDLE,
+    gesture_translate, hit_test_quad, pivot_drag, pivot_hit, session_quad, MOVE_HANDLE,
+    PIVOT_HANDLE, ROTATE_HANDLE,
 };
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -24,9 +25,17 @@ impl qobject::PictureView {
             let rust = self.rust();
             match rust.transform_session.as_ref() {
                 Some(session) => {
-                    let quad = session_quad(session);
-                    let hit = hit_test_quad(&quad, session.mode.is_projective(), x, y, zoom);
-                    (hit, quad)
+                    if pivot_hit(session, x, y, zoom) {
+                        (PIVOT_HANDLE, session_quad(session))
+                    } else if session.warp.is_some() {
+                        // A preset warp's box gestures are suspended; only the
+                        // reference point (and Apply/Cancel) stays active.
+                        (-1, session_quad(session))
+                    } else {
+                        let quad = session_quad(session);
+                        let hit = hit_test_quad(&quad, session.mode.is_projective(), x, y, zoom);
+                        (hit, quad)
+                    }
                 }
                 None => return -1,
             }
@@ -56,6 +65,12 @@ impl qobject::PictureView {
     pub fn transform_hit_test(&self, x: f64, y: f64, zoom: f64) -> i32 {
         match self.rust().transform_session.as_ref() {
             Some(session) => {
+                if pivot_hit(session, x, y, zoom) {
+                    return PIVOT_HANDLE;
+                }
+                if session.warp.is_some() {
+                    return -1;
+                }
                 let quad = session_quad(session);
                 hit_test_quad(&quad, session.mode.is_projective(), x, y, zoom)
             }
@@ -71,7 +86,7 @@ impl qobject::PictureView {
         mut self: Pin<&mut Self>,
         x: f64,
         y: f64,
-        _zoom: f64,
+        zoom: f64,
         shift: bool,
         _alt: bool,
     ) -> bool {
@@ -84,6 +99,10 @@ impl qobject::PictureView {
         };
         if !session.dragging {
             return false;
+        }
+        if session.handle == PIVOT_HANDLE {
+            pivot_drag(session, x, y, zoom);
+            return true;
         }
         let mode = session.mode;
         let handle = session.handle;
@@ -121,12 +140,15 @@ impl qobject::PictureView {
     }
 
     /// The session quad as `"x,y x,y x,y x,y"` (four document-space corners):
-    /// the live projective quad in a projective mode, else the similarity quad.
+    /// the warped preview's bounding quad while a warp is set, the live
+    /// projective quad in a projective mode, else the similarity quad.
     pub fn transform_quad(&self) -> QString {
         let Some(session) = self.rust().transform_session.as_ref() else {
             return QString::default();
         };
-        let quad = session_quad(session);
+        let quad = session
+            .warp_preview_quad
+            .unwrap_or_else(|| session_quad(session));
         let encoded: Vec<String> = quad.iter().map(|(x, y)| format!("{x:.2},{y:.2}")).collect();
         QString::from(encoded.join(" "))
     }

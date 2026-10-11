@@ -221,6 +221,10 @@ void PicturaMainWindow::buildPanels()
             propertiesPanel_->refresh();
         }
         updateAlignControls();
+        // The Move tool's Show Transform Controls box follows the active layer.
+        if (tools_) {
+            tools_->syncTransformControls();
+        }
         // The type panels follow the active layer; selection does not bump the
         // view's `changed`, so refresh them here rather than from the timer.
         if (characterPanel_) {

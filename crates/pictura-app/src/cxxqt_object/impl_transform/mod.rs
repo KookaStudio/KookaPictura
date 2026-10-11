@@ -1,3 +1,4 @@
+mod bridge;
 mod dispatch;
 mod geometry;
 mod session;

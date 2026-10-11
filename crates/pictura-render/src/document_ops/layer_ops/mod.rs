@@ -7,6 +7,7 @@ mod align;
 mod clipboard;
 mod clipping;
 mod create;
+mod kernel;
 mod layer_masks;
 mod layer_style;
 mod mask_edit;
@@ -58,6 +59,7 @@ pub use create::{
     duplicate_layer, group_layer, layer_from_background, neutral_color, next_layer_name,
     ungroup_layer, NewLayerSpec,
 };
+pub use kernel::Interpolation;
 pub use layer_masks::{
     add_layer_mask, add_layer_mask_converting_background, apply_layer_mask, delete_layer_mask,
     has_layer_mask, layer_mask_disabled, layer_mask_linked, set_layer_mask_enabled,
@@ -105,7 +107,10 @@ pub use smart_object::{
     replace_smart_object_contents, reset_smart_object_transform, smart_object_source_bytes,
 };
 pub use transfer::copy_path_to_document;
-pub use transform::{transform_layer, transform_layer_quad, LayerTransform};
+pub use transform::{
+    transform_layer, transform_layer_quad, transform_layer_quad_with, transform_layer_with,
+    LayerTransform,
+};
 pub use vector_masks::{
     add_vector_mask, delete_vector_mask, has_vector_mask, rasterize_vector_mask,
     set_vector_mask_enabled, set_vector_mask_linked, sync_vector_mask_block, vector_mask_disabled,
@@ -113,5 +118,7 @@ pub use vector_masks::{
     VECTOR_MASK_FLAG_NOT_LINKED,
 };
 pub use via::{layer_via_copy, layer_via_cut};
-pub use warp::{identity_mesh, transform_layer_warp, WarpMesh, WarpParams};
+pub use warp::{
+    identity_mesh, transform_layer_warp, transform_layer_warp_with, WarpMesh, WarpParams,
+};
 pub use warp_styles::{style_mesh, WarpStyle};

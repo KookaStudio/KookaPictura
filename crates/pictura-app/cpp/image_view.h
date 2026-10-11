@@ -231,6 +231,14 @@ public:
     // until the next `beginTransformPreview`.
     void setTransformPreviewProjective(const QString& matrix9);
     void setTransformQuad(const QString& encoded);
+    // The Free Transform reference point (image space) and its marker
+    // visibility; drawn as a target glyph with the transform overlay.
+    void setTransformPivot(const QPointF& pivot, bool visible);
+    // Replace the previewed layer image and its document-space origin (a warped
+    // preview recomputes the whole layer, so its rect may move).
+    void updateTransformPreviewLayer(const QImage& layer, const QPointF& layerPos);
+    QPointF transformPivotForTest() const { return transformPivot_; }
+    bool transformPivotVisibleForTest() const { return transformPivotVisible_; }
     void clearTransformPreview();
     bool transformPreviewActive() const { return transformActive_; }
 
@@ -457,6 +465,8 @@ protected:
 
 private:
     void paintCropGroupOverlays(QPainter& painter);
+    // The Free Transform reference point marker (image_view_overlays.cpp).
+    void paintTransformPivot(QPainter& painter);
     void paintAnnotations(QPainter& painter);
     void paintGuides(QPainter& painter);
     QList<GuideLine> guides_;
@@ -570,6 +580,8 @@ private:
     QTransform transformProjective_;
     bool transformProjectiveActive_ = false;
     QPolygonF transformQuad_;
+    QPointF transformPivot_;
+    bool transformPivotVisible_ = false;
 
     QString dragSizeText_;
     QPointF dragSizeImagePos_;

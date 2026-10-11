@@ -20,6 +20,8 @@ set(PICTURA_QT_TESTS
     tst_layers_panel
     tst_align_distribute
     tst_options_bars_parity
+    tst_transform_options
+    tst_transform_controls
     tst_command_tree
     tst_fill_tools
     tst_retouch_tools

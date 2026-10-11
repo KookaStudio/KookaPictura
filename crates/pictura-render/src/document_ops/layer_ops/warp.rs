@@ -13,7 +13,8 @@
 
 use pictura_core::{Channel, Document, LayerMask, PsdRect};
 
-use super::transform::{bilinear, integer_bbox, prepare_layer, write_layer, LayerOutput};
+use super::kernel::{self, Interpolation};
+use super::transform::{integer_bbox, prepare_layer, write_layer, LayerOutput};
 use super::transform_native;
 
 /// Number of parameter cells per axis the surface is rasterized through.
@@ -217,7 +218,12 @@ pub(super) fn warp_plane<T: Copy + Default>(
 }
 
 /// The transformed mask, or `None` when its plane size disagrees with its rect.
-fn warp_mask(mask: &LayerMask, mesh: &WarpMesh, layer_rect: PsdRect) -> Option<LayerMask> {
+fn warp_mask(
+    mask: &LayerMask,
+    mesh: &WarpMesh,
+    layer_rect: PsdRect,
+    interpolation: Interpolation,
+) -> Option<LayerMask> {
     let rect = mask.rect;
     let (w, h) = (rect.width(), rect.height());
     if w <= 0 || h <= 0 {
@@ -238,6 +244,10 @@ fn warp_mask(mask: &LayerMask, mesh: &WarpMesh, layer_rect: PsdRect) -> Option<L
         *out = (layer_rect.left as f64 + lx, layer_rect.top as f64 + ly);
     }
     let dest = integer_bbox(&pts)?;
+    let resolved = interpolation.resolve(
+        (w as u64) * (h as u64),
+        ((dest.2 - dest.0) as u64) * ((dest.3 - dest.1) as u64),
+    );
     let data = match mask.data.as_ref() {
         Some(data) => {
             if data.len() != (w as usize) * (h as usize) {
@@ -252,7 +262,7 @@ fn warp_mask(mask: &LayerMask, mesh: &WarpMesh, layer_rect: PsdRect) -> Option<L
                 mesh,
                 move |u, v| (u * lw + ox, v * lh + oy),
                 dest,
-                bilinear,
+                |src, sw, sh, lx, ly| kernel::sample(src, sw, sh, lx, ly, resolved),
             ))
         }
         None => None,
@@ -280,6 +290,18 @@ pub fn transform_layer_warp(
     path: &str,
     mesh: &WarpMesh,
     params: WarpParams,
+) -> bool {
+    transform_layer_warp_with(doc, path, mesh, params, Interpolation::Bilinear)
+}
+
+/// Apply a custom mesh warp with an explicit resample `interpolation`. Same
+/// contract as [`transform_layer_warp`].
+pub fn transform_layer_warp_with(
+    doc: &mut Document,
+    path: &str,
+    mesh: &WarpMesh,
+    params: WarpParams,
+    interpolation: Interpolation,
 ) -> bool {
     if mesh.rows < 2
         || mesh.cols < 2
@@ -312,6 +334,10 @@ pub fn transform_layer_warp(
     };
     let sw = prepared.w as usize;
     let sh = prepared.h as usize;
+    let resolved = interpolation.resolve(
+        (sw as u64) * (sh as u64),
+        ((dest.2 - dest.0) as u64) * ((dest.3 - dest.1) as u64),
+    );
     let new_channels: Vec<Channel> = prepared
         .source_channels
         .iter()
@@ -324,7 +350,7 @@ pub fn transform_layer_warp(
                 &m,
                 |u, v| (u * sw as f64, v * sh as f64),
                 dest,
-                bilinear,
+                |src, w, h, lx, ly| kernel::sample(src, w, h, lx, ly, resolved),
             )
             .into(),
         })
@@ -332,14 +358,23 @@ pub fn transform_layer_warp(
     let new_mask = prepared
         .mask
         .as_ref()
-        .and_then(|mk| warp_mask(mk, &m, prepared.rect));
+        .and_then(|mk| warp_mask(mk, &m, prepared.rect, interpolation));
     let native = prepared.native.as_ref().map(|store| {
         let mask_info = prepared
             .mask
             .as_ref()
             .zip(new_mask.as_ref())
             .map(|(mk, nmk)| (mk.rect, transform_native::dest_tuple(nmk.rect)));
-        transform_native::warp_store(store, sw, sh, &m, prepared.rect, dest, mask_info)
+        transform_native::warp_store(
+            store,
+            sw,
+            sh,
+            &m,
+            prepared.rect,
+            dest,
+            mask_info,
+            interpolation,
+        )
     });
     let out = LayerOutput {
         channels: new_channels,
@@ -416,6 +451,28 @@ mod tests {
             WarpParams::default()
         ));
         assert_eq!(doc, before);
+    }
+
+    #[test]
+    fn warp_interpolation_reaches_the_plane() {
+        let mut nearest = doc_with(pixel_layer(9, 9));
+        let mut bilinear = doc_with(pixel_layer(9, 9));
+        let mut mesh = identity_mesh(4, 4, 9, 9);
+        mesh.points[5] = (2.0, 2.0);
+        assert!(transform_layer_warp_with(
+            &mut nearest,
+            "0",
+            &mesh,
+            WarpParams::default(),
+            Interpolation::Nearest
+        ));
+        assert!(transform_layer_warp(
+            &mut bilinear,
+            "0",
+            &mesh,
+            WarpParams::default()
+        ));
+        assert_ne!(nearest, bilinear);
     }
 
     #[test]

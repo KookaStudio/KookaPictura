@@ -4,6 +4,7 @@
 #include "image_view.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/annotations.cxxqt.h"
 
 #include <QtCore/QDebug>
@@ -173,6 +174,7 @@ void ToolController::setActiveTool(ToolId id)
         if (canvas_) {
             canvas_->clearTransformPreview();
         }
+        emit transformChanged();
     }
     if (canvas_) {
         canvas_->clearOverlay();
@@ -427,6 +429,7 @@ void ToolController::setMoveShowTransformControls(bool on)
 {
     moveShowTransform_ = on;
     emit moveOptionsChanged();
+    syncTransformControls();
 }
 
 void ToolController::setMoveAlignTo(int which)
@@ -746,6 +749,9 @@ void ToolController::bindCanvas(ImageView* canvas)
             h->onDocumentRefreshed(*this);
         }
         refreshAnnotations();
+        // Every refresh reaches here: keep the Move tool's controls box on the
+        // active layer (or rebuild it after a content change).
+        syncTransformControls();
         return;
     }
     unbindCanvas();
@@ -888,6 +894,9 @@ void ToolController::applyToolPolicy()
     if (active_ != ToolId::Eyedropper) {
         canvas_->clearSamplingRing();
     }
+    // Keep the Move tool's controls box in step with the tool and checkbox even
+    // while a session is up.
+    syncTransformControls();
     if (session) {
         return;
     }
@@ -919,13 +928,26 @@ void ToolController::handlePressed(const QPointF& imagePos, int button, int modi
         const int hit = v->transform_press(imagePos.x(), imagePos.y(), z,
                                            mods.testFlag(Qt::ShiftModifier),
                                            mods.testFlag(Qt::AltModifier));
-        if (hit >= 0) {
-            transformDragging_ = true;
-            transformHandle_ = hit;
-            updateTransformOverlay(v);
-            setTransformCursor(imagePos);
+        if (transformControls_ && (hit < 0 || hit == 9)) {
+            // Inside or outside the Move tool's controls box: an ordinary Move
+            // drag. Suspend the box for the drag; the release path brings it
+            // back on the moved layer.
+            v->transform_release();
+            transformControls_ = false;
+            v->cancel_transform();
+            if (canvas_) {
+                canvas_->clearTransformPreview();
+            }
+        } else {
+            if (hit >= 0) {
+                transformDragging_ = true;
+                transformHandle_ = hit;
+                updateTransformOverlay(v);
+                setTransformCursor(imagePos);
+                emit transformChanged();
+            }
+            return;
         }
-        return;
     }
     if (beginGuideDrag(imagePos, mods)) {
         return;
@@ -973,6 +995,7 @@ void ToolController::handleMoved(const QPointF& imagePos)
             v->transform_move(imagePos.x(), imagePos.y(), canvas_->zoom(),
                               mods.testFlag(Qt::ShiftModifier), mods.testFlag(Qt::AltModifier));
             updateTransformOverlay(v);
+            emit transformChanged();
         }
         setTransformCursor(imagePos);
         return;
@@ -1018,8 +1041,19 @@ void ToolController::handleReleased(const QPointF& imagePos)
         if (transformDragging_) {
             transformDragging_ = false;
             transformHandle_ = -1;
-            if (PictureView* v = view()) {
+            PictureView* v = view();
+            if (v) {
                 v->transform_release();
+                if (transformControls_) {
+                    // The controls box applies each gesture on release and stays
+                    // on the resulting layer.
+                    transformControls_ = false;
+                    v->commit_transform();
+                    if (canvas_) {
+                        canvas_->clearTransformPreview();
+                    }
+                    syncTransformControls();
+                }
             }
         }
         return;
@@ -1039,6 +1073,9 @@ void ToolController::handleReleased(const QPointF& imagePos)
             refreshCursor();
         }
     }
+    // A suspended controls box (an inside/outside Move drag) returns here, even
+    // when the drag changed nothing.
+    syncTransformControls();
 }
 
 bool ToolController::commitPolygonLasso()

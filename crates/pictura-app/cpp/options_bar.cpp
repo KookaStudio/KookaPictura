@@ -81,10 +81,12 @@ OptionsBar::OptionsBar(ToolController* controller, QWidget* parent)
 
     stack_ = new QStackedWidget(this);
     // Page order follows allToolIds(), which matches ToolId's integer order, so
-    // the stack index is the enum value.
+    // the stack index is the enum value. The Free Transform page is appended
+    // after every tool page; the frame switches to it while a session is active.
     for (ToolId id : allToolIds()) {
         stack_->addWidget(buildPage(id));
     }
+    stack_->addWidget(buildTransformPage());
     addWidget(stack_);
 
     // The workspace switcher is a directly-positioned child pinned to the right
@@ -102,6 +104,18 @@ OptionsBar::OptionsBar(ToolController* controller, QWidget* parent)
 
     if (controller_) {
         showTool(controller_->activeTool());
+        // A Free Transform session switches the bar to its own page and back;
+        // the Move tool's Show Transform Controls box keeps the Move page. The
+        // page's fields re-read the session on every change.
+        connect(controller_, &ToolController::transformChanged, this, [this]() {
+            if (controller_->transformSessionActive()
+                && !controller_->transformControlsSession()) {
+                showTransform();
+            } else {
+                showTool(controller_->activeTool());
+            }
+            refreshTransformPage();
+        });
     }
 }
 
@@ -1000,24 +1014,45 @@ void OptionsBar::showTool(ToolId id)
         return;
     }
     stack_->setCurrentIndex(static_cast<int>(id));
-    // A stacked widget reserves the widest page's minimum; ignore the hidden
-    // pages so only the active tool's options set the bar's (and window's)
-    // minimum width.
-    for (int i = 0; i < stack_->count(); ++i) {
-        stack_->widget(i)->setSizePolicy(i == stack_->currentIndex() ? QSizePolicy::Preferred
-                                                                     : QSizePolicy::Ignored,
-                                         QSizePolicy::Preferred);
-    }
-    stack_->updateGeometry();
+    updateStackPolicies();
     // Re-seed the Crop W/H fields for their mode (ratio values or pixels).
     if (id == ToolId::Crop) {
         syncCropFields();
     }
 }
 
+void OptionsBar::showTransform()
+{
+    if (!stack_ || !transformPage_) {
+        return;
+    }
+    stack_->setCurrentIndex(stack_->indexOf(transformPage_));
+    updateStackPolicies();
+}
+
+// A stacked widget reserves the widest page's minimum; ignore the hidden pages
+// so only the active page sets the bar's (and window's) minimum width.
+void OptionsBar::updateStackPolicies()
+{
+    if (!stack_) {
+        return;
+    }
+    for (int i = 0; i < stack_->count(); ++i) {
+        stack_->widget(i)->setSizePolicy(i == stack_->currentIndex() ? QSizePolicy::Preferred
+                                                                     : QSizePolicy::Ignored,
+                                         QSizePolicy::Preferred);
+    }
+    stack_->updateGeometry();
+}
+
 QWidget* OptionsBar::pageForTest(ToolId id) const
 {
     return stack_ ? stack_->widget(static_cast<int>(id)) : nullptr;
+}
+
+QWidget* OptionsBar::currentPageForTest() const
+{
+    return stack_ ? stack_->currentWidget() : nullptr;
 }
 
 } // namespace pictura

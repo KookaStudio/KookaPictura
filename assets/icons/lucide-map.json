@@ -967,6 +967,11 @@
       "kind": "lucide",
       "slug": "wrench",
       "match": "good"
+    },
+    "options.warp": {
+      "kind": "custom",
+      "match": "custom",
+      "note": "Free Transform warp-mode toggle; a warped 3x3 grid, drawn on the 24x24 Lucide grid"
     }
   }
 }

@@ -105,7 +105,9 @@ void OptionsBarsParityTest::moveControlsAndAlignToCanvas()
     QVERIFY(!layer.isEmpty());
     view->deselect();
     QCoreApplication::processEvents();
-    panel->selectPaths({layer}, layer);
+    // The Layers model refreshes on a 120 ms debounce; wait for the copy's row
+    // before selecting it.
+    QTRY_VERIFY(panel->selectRowForTest(layer));
     window_->setActiveTool(pictura::ToolId::Move);
 
     auto* autoSelect = window_->findChild<QComboBox*>(QStringLiteral("optionsMoveAutoSelect"));
@@ -119,15 +121,19 @@ void OptionsBarsParityTest::moveControlsAndAlignToCanvas()
 
     autoSelect->setCurrentIndex(1);
     QCOMPARE(tools->moveAutoSelect(), 1);
-    transform->setChecked(true);
-    QVERIFY(tools->moveShowTransformControls());
-
     // Align To Canvas: the square's content left (8) meets the canvas left (0),
-    // so the document-sized copy shifts by -8.
+    // so the document-sized copy shifts by -8. (Before the controls box is
+    // checked: showing it trims the layer to its content, like Free Transform.)
     menuAction(menuButton, QStringLiteral("moveMenuAlignToCanvas"))->trigger();
     QCOMPARE(tools->moveAlignTo(), 1);
     menuAction(menuButton, QStringLiteral("moveMenuAlignLeft"))->trigger();
     QCOMPARE(offset(view, layer), QPoint(-8, 0));
+
+    // Show Transform Controls records the option; tst_transform_controls
+    // covers the box behavior.
+    transform->setChecked(true);
+    QVERIFY(tools->moveShowTransformControls());
+    transform->setChecked(false);
 }
 
 void OptionsBarsParityTest::eyedropperSampleSize()

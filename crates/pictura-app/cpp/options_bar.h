@@ -31,6 +31,9 @@ public:
     explicit OptionsBar(ToolController* controller, QWidget* parent = nullptr);
 
     void showTool(ToolId id);
+    // Show the Free Transform page (appended after the per-tool pages); the
+    // frame's `transformChanged` handler switches between the two.
+    void showTransform();
     // Enable the Move tool's Align and Distribute buttons (the frame decides
     // from the selected layers and the selection).
     void setAlignEnabled(bool align, bool distribute);
@@ -55,6 +58,9 @@ public:
     ToolController* controllerForTest() const { return controller_; }
     // Test hook: the built options page for `id` (stack index = enum value).
     QWidget* pageForTest(ToolId id) const;
+    // Test hooks: the Free Transform page and the stack's current page.
+    QWidget* transformPageForTest() const { return transformPage_; }
+    QWidget* currentPageForTest() const;
     // The Brush Preset picker behind every brush tip button, made on first use.
     BrushPresetPicker* brushPicker();
 
@@ -118,6 +124,12 @@ private:
                                        const ShapeUpdate& update);
     // options_bar_type.cpp: the four Type tools.
     QWidget* buildTypePage(ToolId id);
+    // options_bar_transform.cpp: the session-keyed Free Transform page and its
+    // refresh from the live session.
+    QWidget* buildTransformPage();
+    void refreshTransformPage();
+    // Apply the current page's size policy so only it sets the bar's minimum.
+    void updateStackPolicies();
     void addStampPaintFields(QHBoxLayout* layout, QWidget* page);
     NumericField* addPercentField(QHBoxLayout* layout, QWidget* page, const QString& label,
                                   const QString& name, int value,
@@ -136,6 +148,11 @@ private:
     QStackedWidget* stack_ = nullptr;
     QToolButton* workspaceSwitcher_ = nullptr;
     BrushPresetPicker* brushPicker_ = nullptr;
+    // The Free Transform page, appended after the per-tool pages.
+    QWidget* transformPage_ = nullptr;
+    // Transform page state: relative X/Y display and the W/H aspect link.
+    bool transformRelative_ = false;
+    bool transformLink_ = true;
     std::vector<QToolButton*> alignButtons_;
     std::vector<QToolButton*> distributeButtons_;
     // The Crop tool's user aspect-ratio presets (label, width:height pair).

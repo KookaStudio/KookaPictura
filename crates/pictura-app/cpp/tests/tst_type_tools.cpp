@@ -427,9 +427,12 @@ void TypeToolsTest::freeTransformRotateCursor()
     QVERIFY2(tl.x() > 0.3 && tl.y() > 0.3, "top-left arrow faces out of the corner");
     QVERIFY2(br.x() < -0.3 && br.y() < -0.3, "bottom-right arrow faces out of the corner");
 
-    // Inside the box it is the move hand again.
+    // Inside the box it is the move hand again; with the reference point
+    // hidden the box centre is a move press (a shown pivot would grab there).
+    f.tools->setTransformShowPivot(false);
     f.canvas->mouseMoved(QPointF(box.center()));
     QCOMPARE(f.canvas->cursor().shape(), Qt::OpenHandCursor);
+    f.tools->setTransformShowPivot(true);
 
     // A rotation drag keeps the arrow, even inside the box, and rotates.
     f.canvas->mousePressed(bottomRight, Qt::LeftButton, 0);

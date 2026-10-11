@@ -636,6 +636,37 @@ Snapshot for resuming after a context break. Update after each milestone.
   interactive mesh cage / curved overlay, `View > Extras`, the custom-net drag,
   Warp Text, Puppet Warp, and Content-Aware Scale are not shipped; Patchy's
   captures are Photoshop 2026, so CS6 preset equivalence is assumed.
+- **Transform options bar** (change `transform-options-bar`, issue #296): the
+  Free Transform session gained a document-space **reference point** (`pivot`,
+  default the source-rect centre; 3×3 presets from the live quad; canvas drag
+  with a 6 screen-px snap to the nine anchors; X/Y absolute or origin-relative),
+  **H/V skew** committed as the equivalent affine quad, the six-method CS6
+  `pictura_render::Interpolation` (`nearest` … `bicubic-automatic`, with
+  `transform_layer_with` / `transform_layer_quad_with` /
+  `transform_layer_warp_with`; the legacy ops stay bilinear, so no other engine
+  caller changes), and an **in-session preset warp** (the existing
+  `WarpPresetDialog`; the commit applies the transform then the warp in one
+  `"Free Transform"` state; box gestures are suspended while warped, and the
+  preview is computed on a clone). The session-keyed options page
+  (`options_bar_transform.cpp`, appended after the per-tool pages) shows the
+  tool icon, show-pivot toggle, 3×3 locator, X / relative / Y, W / link / H,
+  angle, H/V, interpolation, warp, Cancel, and Apply;
+  `ToolController::transformChanged` fires on begin/end/gesture/setter and
+  switches the bar between the page and the active tool's. The new bridge
+  family lives in a secondary bridge (`impl_transform/bridge.rs`, free
+  functions over `PictureView`) so the main bridge stays inside its size
+  ceiling; the canvas draws the reference point (`image_view_overlays.cpp`), and
+  a custom `options.warp` glyph was added. The Move tool's **Show Transform
+  Controls** checkbox now shows that box on the active layer (change
+  `show-transform-controls`, issue #296 follow-up): an auto-managed session
+  with no reference point, handle/rotate gestures applied per release as one
+  `"Free Transform"` state, inside/outside presses passing through to the
+  ordinary Move drag (`"Move Layer"`), rebuilt when the active layer or its
+  content rect changes, suppressed by a selection or an untransformable layer,
+  and taken over by `Ctrl+T`. Ceilings (`ponytail:`): the bicubic
+  kernels are inferred approximations (Adobe's are closed); the projective-mode
+  angle/H/V readouts are derived from the quad; W/H setters are Free-mode only;
+  the interactive warp cage stays out of scope.
 - **Color Sampler, Ruler, and Note** (change `annotation-tools`, issues #6,
   #7, and #8, ported from photorust): `pictura_core::annotations` puts color
   samplers (CS6's cap of four) and notes on `Document::annotations`, undoable

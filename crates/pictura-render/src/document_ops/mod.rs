@@ -54,12 +54,13 @@ pub use layer_ops::{
     set_shape_fill, set_shape_stroke, set_vector_mask_enabled, set_vector_mask_linked,
     set_visible_paths, shape_bounds, shape_coverage, shape_fill, shape_fill_color, shape_stroke,
     smart_object_source_bytes, stamp_scope, style_mesh, sync_vector_mask_block, transform_layer,
-    transform_layer_quad, transform_layer_warp, trim_to_content, ungroup_layer, ungroup_paths,
+    transform_layer_quad, transform_layer_quad_with, transform_layer_warp,
+    transform_layer_warp_with, transform_layer_with, trim_to_content, ungroup_layer, ungroup_paths,
     vector_mask_disabled, vector_mask_linked, write_mask_back, AlignEdge, Arrange, Clip,
-    LayerMaskKind, LayerStyle, LayerTransform, MaskDocument, MergeError, MergeOutcome, MergeScope,
-    NewLayerSpec, PasteMode, ShapeAttributes, ShapeStroke, StampScope, VectorMaskKind, WarpMesh,
-    WarpParams, WarpStyle, MASK_FLAG_LINKED, VECTOR_MASK_FLAG_DISABLED, VECTOR_MASK_FLAG_INVERT,
-    VECTOR_MASK_FLAG_NOT_LINKED,
+    Interpolation, LayerMaskKind, LayerStyle, LayerTransform, MaskDocument, MergeError,
+    MergeOutcome, MergeScope, NewLayerSpec, PasteMode, ShapeAttributes, ShapeStroke, StampScope,
+    VectorMaskKind, WarpMesh, WarpParams, WarpStyle, MASK_FLAG_LINKED, VECTOR_MASK_FLAG_DISABLED,
+    VECTOR_MASK_FLAG_INVERT, VECTOR_MASK_FLAG_NOT_LINKED,
 };
 pub use matting::{defringe, remove_matte, MatteBackground, MattingError};
 pub use mode::{
