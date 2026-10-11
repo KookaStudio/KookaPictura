@@ -45,6 +45,9 @@ here.
   artwork (the kookaburra mascot), released under **CC0-1.0 / MIT**. Metadata
   stripped, so it carries no Adobe-tool creator strings. Raster only for now;
   a scalable SVG replacement is planned.
+- `assets/icons/app.ico` — the same icon in Windows ICO format
+  (256/128/64/48/32/16), generated from `app.png` with ImageMagick, released
+  under the same **CC0-1.0 / MIT**.
 
 ## Screenshots
 

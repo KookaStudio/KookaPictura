@@ -377,11 +377,16 @@ target_include_directories(pictura_shell PUBLIC
     crates/pictura-app/cpp
     "${QT_HEADERS_DIR}/QtGui/${QT_VERSION_STR}/QtGui"
 )
-# The Rust static lib embeds `pictura-color` (Little CMS 2); a staticlib does not
-# propagate its native link dependencies, so the C++ link needs `-llcms2`.
-find_library(LCMS2_LIBRARY NAMES lcms2 REQUIRED)
-target_link_libraries(pictura_shell PUBLIC pictura_app Qt6::Svg Qt6::Network Qt6::PrintSupport
-    "${LCMS2_LIBRARY}")
+# The Rust static lib embeds `pictura-color` (Little CMS 2). On Linux/macOS the
+# `lcms2-sys` crate links the system library dynamically, so the C++ link needs
+# `-llcms2`. On Windows pkg-config finds no system lcms2 and `lcms2-sys`'s static
+# fallback compiles the vendored copy into `pictura_app`, so nothing external is
+# linked.
+target_link_libraries(pictura_shell PUBLIC pictura_app Qt6::Svg Qt6::Network Qt6::PrintSupport)
+if(NOT WIN32)
+    find_library(LCMS2_LIBRARY NAMES lcms2 REQUIRED)
+    target_link_libraries(pictura_shell PUBLIC "${LCMS2_LIBRARY}")
+endif()
 
 # Compile the Qt resource once: the executable and every Qt Test binary link
 # this object library instead of each embedding its own copy of the .qrc.
@@ -475,6 +480,22 @@ add_executable(pictura
     crates/pictura-app/cpp/selftest_workspace_input.h
 )
 target_link_libraries(pictura PRIVATE pictura_shell pictura_assets)
+
+# Windows-only presentation: a GUI-subsystem executable (no console window) with
+# an embedded icon and manifest. A plain `add_executable` never runs Qt's
+# target-finalization hook, so `qt6_finalize_target` is what makes
+# QT_WINDOWS_APP_PROJECT_IDENTIFIER — and Qt's generated manifest, which
+# declares Windows 10/11 compatibility — actually apply.
+if(WIN32)
+    enable_language(RC)
+    configure_file(packaging/windows/pictura.rc.in
+        "${CMAKE_CURRENT_BINARY_DIR}/pictura.rc" @ONLY)
+    target_sources(pictura PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/pictura.rc")
+    set_target_properties(pictura PROPERTIES
+        WIN32_EXECUTABLE ON
+        QT_WINDOWS_APP_PROJECT_IDENTIFIER "io.github.KookaPictura.KookaPictura")
+    qt6_finalize_target(pictura)
+endif()
 
 if(BUILD_TESTING)
     find_package(Qt6 REQUIRED COMPONENTS Test)
