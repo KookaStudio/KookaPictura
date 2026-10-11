@@ -55,6 +55,7 @@ fn main() {
                 "src/cxxqt_object/export.rs",
                 "src/cxxqt_object/eyedropper_sample.rs",
                 "src/cxxqt_object/filter_tools.rs",
+                "src/cxxqt_object/filter_tools/jobs.rs",
                 "src/cxxqt_object/healing.rs",
                 "src/cxxqt_object/image_adjust.rs",
                 "src/cxxqt_object/image_adjust/gradient_map.rs",

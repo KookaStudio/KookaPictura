@@ -70,20 +70,18 @@ impl FilterProxy {
         self.doc.height
     }
 
-    /// The proxy composited with `filters` applied in order to top-level layer
-    /// `layer`, gated by the reduced selection. An empty stack composites the
-    /// proxy unfiltered.
+    /// The proxy composited with `filters` applied in order to the layer at
+    /// panel path `layer`, gated by the reduced selection. An empty stack
+    /// composites the proxy unfiltered.
     pub fn render(
         &self,
-        layer: usize,
+        layer: &str,
         filters: &[Filter],
         gpu_enabled: bool,
     ) -> Result<PixelBuffer, FilterError> {
         let mut doc = self.doc.clone();
         if !filters.is_empty() {
-            let target = doc
-                .layers
-                .get_mut(layer)
+            let target = crate::resolve_path_mut(&mut doc, layer)
                 .ok_or_else(|| FilterError::Unsupported("no such layer".to_string()))?;
             for filter in filters {
                 crate::apply_filter(target, filter, self.selection.as_ref(), gpu_enabled)?;
@@ -334,14 +332,14 @@ mod tests {
         let proxy = FilterProxy::new(&doc, None, rect(0, 0, 40, 30), 1.0).unwrap();
         let filter = Filter::GaussianBlur { radius: 2.0 };
         let got = proxy
-            .render(0, std::slice::from_ref(&filter), false)
+            .render("0", std::slice::from_ref(&filter), false)
             .unwrap();
         let mut want = doc.clone();
         crate::apply_filter(&mut want.layers[0], &filter, None, false).unwrap();
         assert_eq!(got, crate::composite_rgba(&want));
         // The proxy itself is untouched by a render.
         assert_eq!(
-            proxy.render(0, &[], false).unwrap(),
+            proxy.render("0", &[], false).unwrap(),
             crate::composite_rgba(&doc)
         );
     }

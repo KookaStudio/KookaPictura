@@ -35,6 +35,11 @@ public:
     // The parameter slot values in mapping order.
     QList<double> values() const;
 
+    // values() with every pixel-sized slider (a "pixels" or "px" unit) scaled
+    // by `scale`, held to its range and rounded on an integer slider, for a
+    // preview on a copy reduced by `scale`.
+    QList<double> scaledValues(double scale) const;
+
     // Set the controls from slot values; slots past the end keep their value.
     // Silent: emits no changed().
     void setValues(const QList<double>& values);

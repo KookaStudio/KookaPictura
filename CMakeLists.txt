@@ -91,6 +91,8 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/warp_preset_dialog.cpp
     crates/pictura-app/cpp/filter_commands.cpp
     crates/pictura-app/cpp/filter_commands.h
+    crates/pictura-app/cpp/filter_commit.cpp
+    crates/pictura-app/cpp/filter_commit.h
     crates/pictura-app/cpp/filter_gallery_dialog.cpp
     crates/pictura-app/cpp/filter_gallery_dialog.h
     crates/pictura-app/cpp/filter_param_controls.cpp

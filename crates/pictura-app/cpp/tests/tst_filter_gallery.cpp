@@ -161,6 +161,8 @@ void FilterGalleryTest::okCommitsOneHistoryState()
     QVERIFY(dialog.commit() == pictura::FilterGalleryDialog::CommitResult::Applied);
     QVERIFY(view->image() != before);
     QCOMPARE(view->history_count(), states + 1);
+    QCOMPARE(view->history_label(view->history_index()),
+             QStringLiteral("Filter Gallery: Grain, Texturizer"));
     // CS6 reopens the gallery on the stack it last applied.
     pictura::FilterGalleryDialog again(view);
     QCOMPARE(kinds(again.effects()), kinds(dialog.effects()));

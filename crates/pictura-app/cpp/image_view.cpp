@@ -582,11 +582,6 @@ void ImageView::setLevelProvider(LevelProvider provider)
     presentCache_.valid = false;
 }
 
-bool ImageView::smoothSamplingForZoom(double zoom)
-{
-    return zoom < 2.0;
-}
-
 int ImageView::presentLevelForZoom(double zoom, int levelCount)
 {
     if (levelCount <= 0) {
@@ -828,6 +823,7 @@ void ImageView::paintEvent(QPaintEvent*)
         painter.restore();
         presentCacheRebuiltLastPaint_ = presentCache_.rebuilds != before;
     }
+    paintFilterPreview(painter);
     // Hidden channels (two still shown): zero them with one multiply.
     if (channelMask_ != 0x7 && singleChannel() < 0) {
         painter.setCompositionMode(QPainter::CompositionMode_Multiply);

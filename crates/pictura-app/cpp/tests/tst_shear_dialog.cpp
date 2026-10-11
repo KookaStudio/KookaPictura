@@ -239,7 +239,7 @@ void ShearDialogTest::dragUpdatesThePaneBeforeTheCanvas()
     QCOMPARE(view->image(), canvasBefore);
 
     QTest::mouseRelease(curve, Qt::LeftButton, Qt::NoModifier, right);
-    QVERIFY2(view->image() != canvasBefore, "the canvas preview did not run on release");
+    QTRY_VERIFY2(view->image() != canvasBefore, "the canvas preview did not run on release");
 }
 
 void ShearDialogTest::controlPointsRoundTripThroughSlots()
@@ -295,6 +295,7 @@ void ShearDialogTest::rejectRestoresPixels()
     QWidget* curve = curveBox(dialog);
     QVERIFY(curve != nullptr);
     bendTheCurve(curve);
+    QTRY_VERIFY2(view->image() != before, "the canvas preview did not run");
     dialog.reject();
     QCOMPARE(view->image(), before);
 }

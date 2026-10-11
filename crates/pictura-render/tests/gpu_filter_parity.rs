@@ -9,7 +9,7 @@
 //! GPU-less CI stays green.
 
 use pictura_core::PixelBuffer;
-use pictura_filters::{apply, Filter};
+use pictura_filters::{apply, Filter, Quality, RadialMethod};
 use pictura_render::{apply_filter_active, filter_gpu_available, Backend};
 
 const SIZE: u32 = 32;
@@ -39,6 +39,11 @@ fn accelerated_filters() -> Vec<Filter> {
             threshold: 0,
         },
         Filter::HighPass { radius: 3.0 },
+        Filter::RadialBlur {
+            method: RadialMethod::Zoom,
+            amount: 70.0,
+            quality: Quality::Best,
+        },
         Filter::SurfaceBlur {
             radius: 2,
             threshold: 20,
@@ -272,6 +277,23 @@ fn large_buffer_over_1d_limit_runs_on_gpu() {
 #[test]
 fn unsupported_filter_falls_back_byte_identical() {
     let filter = unsupported_filter();
+    let base = gradient_rgba();
+    let want = oracle(&filter, &base);
+    let mut got = base.clone();
+    let backend = apply_filter_active(&filter, &mut got, true).expect("valid parameters");
+    assert_eq!(backend, Backend::Cpu);
+    assert_eq!(got.data, want.data, "fallback must be byte-identical");
+}
+
+/// Radial Blur's Spin scatters its samples along arcs; the CPU's tiles keep
+/// them in cache, so it stays on the CPU while Zoom runs on the GPU.
+#[test]
+fn radial_spin_runs_on_the_cpu() {
+    let filter = Filter::RadialBlur {
+        method: RadialMethod::Spin,
+        amount: 40.0,
+        quality: Quality::Good,
+    };
     let base = gradient_rgba();
     let want = oracle(&filter, &base);
     let mut got = base.clone();

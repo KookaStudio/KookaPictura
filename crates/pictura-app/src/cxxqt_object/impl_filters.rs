@@ -2,11 +2,12 @@ use super::filter_map::filter_from_kind_params;
 use super::helpers::*;
 use super::helpers_composite::*;
 use super::qobject;
-use super::state::{FilterPreview, PictureViewRust};
+use super::state::{FilterPreview, PictureViewRust, PreviewBaseline};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
-use pictura_core::layer_pixel_locked;
+use pictura_core::{layer_pixel_locked, Layer};
+use rayon::prelude::*;
 
 impl qobject::PictureView {
     pub fn add_adjustment(mut self: Pin<&mut Self>, kind: &QString) -> bool {
@@ -198,35 +199,124 @@ pub(super) fn apply_op_active_region(
     if let Some(path) = active_mask_target(rust) {
         return apply_mask_op(rust, &path, op, commit, preview_region);
     }
-    let (path, gpu_compute) = {
-        let Some(doc) = rust.doc.as_ref() else {
-            rust.filter_error = Some("there is no document".to_string());
-            return None;
-        };
-        let active = rust.active_layer.as_deref();
-        if !active_layer_visible(doc, active) {
-            rust.filter_error = Some("the active layer is hidden".to_string());
-            return None;
-        }
-        let Some(layer) = active_pixel_layer(doc, active) else {
-            rust.filter_error = Some("select a single pixel layer to filter".to_string());
-            return None;
-        };
-        if layer_pixel_locked(layer) {
-            rust.filter_error = Some("the active layer is pixel-locked".to_string());
-            return None;
-        }
-        let Some(path) = active.map(str::to_string) else {
-            rust.filter_error = Some("the active layer has no filterable target".to_string());
-            return None;
-        };
-        (path, rust.gpu_compute)
-    };
+    let path = pixel_filter_target(rust)?;
+    let gpu_compute = rust.gpu_compute;
     let mask = {
         let doc = rust.doc.as_ref()?;
         rust.selection
             .as_ref()
             .map(|selection| selection_to_mask(selection, doc))
+    };
+    let existing = rust.filter_preview.take_if(|p| p.layer_path == path);
+    let Some(doc) = rust.doc.as_mut() else {
+        rust.filter_error = Some("there is no document".to_string());
+        return None;
+    };
+    let Some(layer) = pictura_render::resolve_path_mut(doc, &path) else {
+        rust.filter_error = Some("the active layer no longer exists".to_string());
+        return None;
+    };
+    // Re-filter from the pre-preview pixels, never from the previous preview.
+    let restored = existing.map(|preview| preview.baseline.restore(layer));
+    if layer.is_group || layer.adjustment.is_some() {
+        rust.filter_error = Some("the active layer cannot take a filter".to_string());
+        return None;
+    }
+    let lrect = layer.rect;
+    let filters = match op {
+        ActiveOp::Filter(filter) => std::slice::from_ref(filter),
+        ActiveOp::Filters(filters) => filters.as_slice(),
+        ActiveOp::Adjustment(_) => &[],
+    };
+    // Expand the visible rect by the support of every filter still to run, so
+    // the viewport is exact after the whole stack; the renderer clamps it to
+    // the layer. A point operation needs no apron.
+    let mut apron: i32 = filters.iter().map(pictura_render::preview_apron).sum();
+    let section = preview_region
+        .filter(|_| !commit)
+        .map(|visible| clamp_to(expand(visible, apron), lrect));
+    // The composite changes where this call writes and where the last preview
+    // was put back; a layer effect can spill anywhere.
+    let region_out = (!layer_has_effects(layer)).then(|| {
+        let written = section.unwrap_or(lrect);
+        match restored {
+            Some(r) if written.width() > 0 && written.height() > 0 => union_rect(r, written),
+            Some(r) => r,
+            None => written,
+        }
+    });
+    let baseline = (!commit).then(|| PreviewBaseline::save(layer, section));
+    let applied = match op {
+        ActiveOp::Adjustment(adjustment) => pictura_render::apply_adjustment_region(
+            layer,
+            adjustment,
+            mask.as_ref(),
+            section.unwrap_or(lrect),
+        ),
+        _ => {
+            let mut applied = Ok(());
+            for filter in filters {
+                applied = match preview_region {
+                    Some(visible) if !commit => pictura_render::apply_filter_region(
+                        layer,
+                        filter,
+                        mask.as_ref(),
+                        gpu_compute,
+                        expand(visible, apron),
+                    ),
+                    _ => pictura_render::apply_filter(layer, filter, mask.as_ref(), gpu_compute),
+                };
+                if applied.is_err() {
+                    break;
+                }
+                apron -= pictura_render::preview_apron(filter);
+            }
+            applied
+        }
+    };
+    if let Err(error) = applied {
+        // A refused preview leaves the original pixels and no preview open.
+        if let Some(baseline) = baseline {
+            baseline.restore(layer);
+        }
+        rust.filter_error = Some(error.to_string());
+        return None;
+    }
+    rust.filter_preview = baseline.map(|baseline| FilterPreview {
+        layer_path: path,
+        baseline,
+    });
+    Some(region_out)
+}
+
+/// The panel path of the active pixel layer a filter may change, or `None`
+/// with `filter_error` set: no document, a hidden or pixel-locked layer, no
+/// single pixel layer, or an open preview on another target.
+pub(super) fn pixel_filter_target(rust: &mut PictureViewRust) -> Option<String> {
+    let Some(doc) = rust.doc.as_ref() else {
+        rust.filter_error = Some("there is no document".to_string());
+        return None;
+    };
+    let active = rust.active_layer.as_deref();
+    if !active_layer_visible(doc, active) {
+        rust.filter_error = Some("the active layer is hidden".to_string());
+        return None;
+    }
+    let Some(layer) = active_pixel_layer(doc, active) else {
+        rust.filter_error = Some("select a single pixel layer to filter".to_string());
+        return None;
+    };
+    if layer_pixel_locked(layer) {
+        rust.filter_error = Some("the active layer is pixel-locked".to_string());
+        return None;
+    }
+    if layer.is_group || layer.adjustment.is_some() {
+        rust.filter_error = Some("the active layer cannot take a filter".to_string());
+        return None;
+    }
+    let Some(path) = active.map(str::to_string) else {
+        rust.filter_error = Some("the active layer has no filterable target".to_string());
+        return None;
     };
     // A preview for another layer must not be silently abandoned: refuse so its
     // baseline stays intact until it is cancelled or committed.
@@ -242,104 +332,114 @@ pub(super) fn apply_op_active_region(
         rust.filter_error = Some("a mask preview is open; cancel it first".to_string());
         return None;
     }
-    let existing = rust
-        .filter_preview
-        .as_ref()
-        .filter(|p| p.layer_path == path)
-        .map(|p| p.original.clone());
-    let Some(doc) = rust.doc.as_mut() else {
-        rust.filter_error = Some("there is no document".to_string());
-        return None;
-    };
-    let Some(layer) = pictura_render::resolve_path_mut(doc, &path) else {
-        rust.filter_error = Some("the active layer no longer exists".to_string());
-        return None;
-    };
-    if layer.is_group || layer.adjustment.is_some() {
-        rust.filter_error = Some("the active layer cannot take a filter".to_string());
-        return None;
-    }
-    // Re-filter from the pre-preview pixels, never from the previous preview.
-    if let Some(baseline) = &existing {
-        *layer = baseline.clone();
-    }
-    let snapshot = if !commit && existing.is_none() {
-        Some(layer.clone())
-    } else {
-        None
-    };
-    let region_out = (!layer_has_effects(layer)).then_some(layer.rect);
-    let filters = match op {
-        ActiveOp::Filter(filter) => std::slice::from_ref(filter),
-        ActiveOp::Filters(filters) => filters.as_slice(),
-        ActiveOp::Adjustment(adjustment) => {
-            // A point operation: the visible section alone is exact.
-            let region = match preview_region {
-                Some(visible) if !commit => visible,
-                _ => layer.rect,
-            };
-            let applied =
-                pictura_render::apply_adjustment_region(layer, adjustment, mask.as_ref(), region);
-            return finish_op(rust, applied, commit, path, existing, snapshot, region_out);
-        }
-    };
-    // Expand the visible rect by the support of every filter still to run, so
-    // the viewport is exact after the whole stack; the renderer clamps it to
-    // the layer.
-    let mut apron: i32 = filters.iter().map(pictura_render::preview_apron).sum();
-    let mut applied = Ok(());
-    for filter in filters {
-        applied = match preview_region {
-            Some(visible) if !commit => {
-                let expanded = pictura_core::PsdRect {
-                    top: visible.top - apron,
-                    left: visible.left - apron,
-                    bottom: visible.bottom + apron,
-                    right: visible.right + apron,
-                };
-                pictura_render::apply_filter_region(
-                    layer,
-                    filter,
-                    mask.as_ref(),
-                    gpu_compute,
-                    expanded,
-                )
-            }
-            _ => pictura_render::apply_filter(layer, filter, mask.as_ref(), gpu_compute),
-        };
-        if applied.is_err() {
-            break;
-        }
-        apron -= pictura_render::preview_apron(filter);
-    }
-    finish_op(rust, applied, commit, path, existing, snapshot, region_out)
+    Some(path)
 }
 
-/// Record the outcome of [`apply_op_active_region`]: the error, or the open
-/// preview's baseline (cleared on a commit).
-fn finish_op(
-    rust: &mut PictureViewRust,
-    applied: Result<(), pictura_filters::FilterError>,
-    commit: bool,
-    path: String,
-    existing: Option<pictura_core::Layer>,
-    snapshot: Option<pictura_core::Layer>,
-    region: Option<pictura_core::PsdRect>,
-) -> Option<Option<pictura_core::PsdRect>> {
-    if let Err(error) = applied {
-        rust.filter_error = Some(error.to_string());
-        return None;
+/// `rect` grown by `by` on every side.
+fn expand(rect: pictura_core::PsdRect, by: i32) -> pictura_core::PsdRect {
+    pictura_core::PsdRect {
+        top: rect.top - by,
+        left: rect.left - by,
+        bottom: rect.bottom + by,
+        right: rect.right + by,
     }
-    if commit {
-        rust.filter_preview = None;
-    } else {
-        let original = existing.or(snapshot).expect("preview baseline");
-        rust.filter_preview = Some(FilterPreview {
-            layer_path: path,
-            original,
-        });
+}
+
+/// `rect` clamped to `bounds`; an empty result keeps a zero size.
+fn clamp_to(rect: pictura_core::PsdRect, bounds: pictura_core::PsdRect) -> pictura_core::PsdRect {
+    let top = rect.top.clamp(bounds.top, bounds.bottom);
+    let left = rect.left.clamp(bounds.left, bounds.right);
+    pictura_core::PsdRect {
+        top,
+        left,
+        bottom: rect.bottom.clamp(top, bounds.bottom),
+        right: rect.right.clamp(left, bounds.right),
     }
-    Some(region)
+}
+
+impl PreviewBaseline {
+    /// Keep what a preview over `section` (the whole layer for `None`) is
+    /// about to overwrite.
+    fn save(layer: &Layer, section: Option<pictura_core::PsdRect>) -> Self {
+        let Some(rect) = section else {
+            return Self::Layer(Box::new(layer.clone()));
+        };
+        let lrect = layer.rect;
+        let lw = lrect.width() as usize;
+        let full = lw * lrect.height() as usize;
+        let (ox, oy) = (
+            (rect.left - lrect.left) as usize,
+            (rect.top - lrect.top) as usize,
+        );
+        let (cw, ch) = (rect.width() as usize, rect.height() as usize);
+        let planes = layer
+            .channels
+            .iter()
+            .filter(|c| c.data.len() == full)
+            .map(|c| {
+                let mut saved = vec![0u8; cw * ch];
+                if cw > 0 {
+                    saved.par_chunks_mut(cw).enumerate().for_each(|(row, out)| {
+                        let from = (oy + row) * lw + ox;
+                        out.copy_from_slice(&c.data[from..from + cw]);
+                    });
+                }
+                (c.id, saved)
+            })
+            .collect();
+        Self::Section {
+            layer_rect: lrect,
+            rect,
+            planes,
+        }
+    }
+
+    /// Put the saved pixels back into `layer`; returns the rect restored.
+    pub(super) fn restore(&self, layer: &mut Layer) -> pictura_core::PsdRect {
+        let (layer_rect, rect, planes) = match self {
+            Self::Layer(original) => {
+                *layer = (**original).clone();
+                return layer.rect;
+            }
+            Self::Section {
+                layer_rect,
+                rect,
+                planes,
+            } => (*layer_rect, *rect, planes),
+        };
+        let (cw, ch) = (rect.width() as usize, rect.height() as usize);
+        if layer.rect != layer_rect || cw == 0 || ch == 0 {
+            return rect;
+        }
+        let lw = layer_rect.width() as usize;
+        let (ox, oy) = (
+            (rect.left - layer_rect.left) as usize,
+            (rect.top - layer_rect.top) as usize,
+        );
+        for (id, saved) in planes {
+            let Some(channel) = layer.channels.iter_mut().find(|c| c.id == *id) else {
+                continue;
+            };
+            let rows = oy * lw..(oy + ch) * lw;
+            channel.data.as_mut_slice()[rows]
+                .par_chunks_mut(lw)
+                .zip(saved.par_chunks(cw))
+                .for_each(|(out, src)| out[ox..ox + cw].copy_from_slice(src));
+        }
+        rect
+    }
+
+    /// The layer as it was before the preview, given the live one.
+    pub(super) fn original<'a>(&'a self, live: &'a Layer) -> std::borrow::Cow<'a, Layer> {
+        match self {
+            Self::Layer(original) => std::borrow::Cow::Borrowed(original.as_ref()),
+            Self::Section { .. } => {
+                let mut original = live.clone();
+                self.restore(&mut original);
+                std::borrow::Cow::Owned(original)
+            }
+        }
+    }
 }
 
 /// Apply `op` to the active layer's mask coverage instead of its pixels: the
@@ -458,8 +558,8 @@ pub(super) fn cancel_filter_preview(
     let preview = rust.filter_preview.take()?;
     let doc = rust.doc.as_mut()?;
     let layer = pictura_render::resolve_path_mut(doc, &preview.layer_path)?;
-    *layer = preview.original;
-    Some((!layer_has_effects(layer)).then_some(layer.rect))
+    let restored = preview.baseline.restore(layer);
+    Some((!layer_has_effects(layer)).then_some(restored))
 }
 
 #[cfg(test)]
@@ -647,6 +747,88 @@ mod tests {
         let mut fresh = state();
         apply_filter_active(&mut fresh, "gaussian-blur", &[3.0], true).expect("commit");
         assert_eq!(red(&rust), red(&fresh), "no double application");
+    }
+
+    /// A section preview writes and reports only its section; the next one
+    /// puts that section back first, so the layer never compounds and the
+    /// refresh covers both.
+    #[test]
+    fn section_previews_restore_only_what_they_wrote() {
+        let rect = |top, left, bottom, right| pictura_core::PsdRect {
+            top,
+            left,
+            bottom,
+            right,
+        };
+        let original = red(&big_state());
+        let mut rust = big_state();
+        let a = rect(16, 16, 48, 48);
+        let b = rect(200, 200, 232, 232);
+        // Gaussian radius 3 keeps the minimum 8 px apron.
+        let (a_out, b_out) = (rect(8, 8, 56, 56), rect(192, 192, 240, 240));
+        let region = apply_filter_active_region(&mut rust, "gaussian-blur", &[3.0], false, Some(a))
+            .expect("preview a");
+        assert_eq!(region, Some(a_out));
+        let region = apply_filter_active_region(&mut rust, "gaussian-blur", &[3.0], false, Some(b))
+            .expect("preview b");
+        assert_eq!(region, Some(rect(8, 8, 240, 240)), "a put back, b written");
+
+        let mut fresh = big_state();
+        apply_filter_active_region(&mut fresh, "gaussian-blur", &[3.0], false, Some(b))
+            .expect("fresh preview b");
+        assert_eq!(red(&rust), red(&fresh), "section a was restored");
+        let inside = |i: usize| {
+            let (x, y) = ((i % 256) as i32, (i / 256) as i32);
+            (b_out.left..b_out.right).contains(&x) && (b_out.top..b_out.bottom).contains(&y)
+        };
+        let px = red(&rust);
+        assert!((0..px.len()).all(|i| inside(i) || px[i] == original[i]));
+        assert!((0..px.len()).any(|i| px[i] != original[i]));
+
+        let region = cancel_filter_preview(&mut rust).expect("preview open");
+        assert_eq!(region, Some(b_out), "cancel refreshes the last section");
+        assert_eq!(red(&rust), original, "cancel is bit-identical");
+
+        apply_filter_active_region(&mut rust, "gaussian-blur", &[3.0], false, Some(a))
+            .expect("preview a again");
+        let region = apply_filter_active_region(&mut rust, "gaussian-blur", &[3.0], true, None)
+            .expect("commit");
+        assert_eq!(region, Some(rect(0, 0, 256, 256)));
+        let mut fresh = big_state();
+        apply_filter_active_region(&mut fresh, "gaussian-blur", &[3.0], true, None)
+            .expect("fresh commit");
+        assert_eq!(
+            red(&rust),
+            red(&fresh),
+            "no section of the preview leaks into the commit"
+        );
+    }
+
+    /// A section preview keeps a copy of its section alone, so the live
+    /// planes are written where they are, never copied whole.
+    #[test]
+    fn section_previews_write_the_live_planes_in_place() {
+        let mut rust = big_state();
+        let plane = |rust: &PictureViewRust| {
+            rust.doc.as_ref().unwrap().layers[0].channels[0]
+                .data
+                .as_ptr()
+        };
+        let before = plane(&rust);
+        let section = pictura_core::PsdRect {
+            top: 100,
+            left: 100,
+            bottom: 140,
+            right: 140,
+        };
+        for radius in [3.0, 5.0] {
+            apply_filter_active_region(&mut rust, "gaussian-blur", &[radius], false, Some(section))
+                .expect("section preview");
+            assert_eq!(plane(&rust), before, "radius {radius} copied the plane");
+        }
+        cancel_filter_preview(&mut rust).expect("preview open");
+        assert_eq!(plane(&rust), before);
+        assert_eq!(red(&rust), red(&big_state()));
     }
 
     #[test]

@@ -1,6 +1,7 @@
 #include "filter_preview_dialog.h"
 #include "filter_param_controls.h"
 #include "dialogs.h"
+#include "image_view.h"
 #include "panels/jump_slider.h"
 
 #include <QtCore/QSignalBlocker>
@@ -23,6 +24,7 @@
 #include <QtWidgets/QFrame>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
+#include <QtWidgets/QProgressBar>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QSizePolicy>
 #include <QtWidgets/QSlider>
@@ -30,11 +32,14 @@
 #include <QtWidgets/QVBoxLayout>
 #include <QtWidgets/QWidget>
 
+#include <algorithm>
+#include <cmath>
 #include <functional>
 #include <limits>
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/filter_tools/jobs.cxxqt.h"
 
 namespace pictura {
 
@@ -50,6 +55,18 @@ const int kStackedRowWidth = 360;
 // The bottom preview pane (Shear) re-filters a proxy of this size, so a
 // curve drag stays responsive while the whole-layer canvas render waits.
 const int kProxySize = 320;
+
+// A Placement pad's picture: a reduced copy at least this size on its long side.
+const int kPadImageEdge = 256;
+
+// A zoomed-out canvas preview over more document pixels than this filters a
+// reduced copy instead of the document (#152): on the 16507×16196 map an exact
+// preview cost seconds per change, the copy tens of milliseconds.
+// ponytail: one budget for every filter, not a per-filter cost model.
+const double kExactPreviewPixels = 4.0e6;
+
+// The reduced copy holds at most this many pixels, whatever the canvas size.
+const double kCanvasProxyPixels = 4.0e6;
 
 // CS6 preview zoom steps, as a percentage of the base thumbnail size.
 const int kZoomLevels[] = {25, 50, 100, 200, 400};
@@ -79,8 +96,18 @@ FilterPreviewDialog::FilterPreviewDialog(PictureView* view, const FilterCommandS
     : QDialog(parent), view_(view), spec_(spec)
 {
     setWindowTitle(spec.label);
+    previewTimer_ = new QTimer(this);
+    previewTimer_->setSingleShot(true);
+    previewTimer_->setInterval(0);
+    connect(previewTimer_, &QTimer::timeout, this, &FilterPreviewDialog::runPreview);
+    exactTimer_ = new QTimer(this);
+    exactTimer_->setInterval(60);
+    connect(exactTimer_, &QTimer::timeout, this, &FilterPreviewDialog::pollExactPreview);
     previewVisible_ = previewView.visible;
     canvasZoom_ = previewView.canvasZoom;
+    canvas_ = previewView.canvas;
+    devicePixelRatio_ = previewView.devicePixelRatio;
+    positional_ = filter_kind_positional(spec.kind);
     // Seed the preview zoom from the canvas zoom, snapped to a preview level.
     const double percent = canvasZoom_ * 100.0;
     int best = 2;
@@ -126,11 +153,11 @@ FilterPreviewDialog::FilterPreviewDialog(PictureView* view, const FilterCommandS
         zoomLabel_->setAlignment(Qt::AlignCenter);
         connect(zoomIn, &QToolButton::clicked, this, [this] {
             zoom_ = qMin(zoom_ + 1, kZoomCount - 1);
-            updateThumbnail();
+            zoomChanged();
         });
         connect(zoomOut, &QToolButton::clicked, this, [this] {
             zoom_ = qMax(zoom_ - 1, 0);
-            updateThumbnail();
+            zoomChanged();
         });
         addZoomShortcuts(this, zoomIn, zoomOut);
         zoomRow->addStretch(1);
@@ -159,7 +186,14 @@ FilterPreviewDialog::FilterPreviewDialog(PictureView* view, const FilterCommandS
 
     // One self-contained row per parameter, built by addControl; a filter with
     // many inputs spills the overflow into the middle column.
-    controls_ = new FilterParamControls(spec_.params, this, view_ ? view_->image() : QImage());
+    // Only a Placement pad shows the picture, and only a pad-sized one.
+    const bool hasPad = std::any_of(spec_.params.cbegin(), spec_.params.cend(),
+                                    [](const FilterParamSpec& param) {
+                                        return param.control == FilterControl::Placement;
+                                    });
+    controls_ = new FilterParamControls(spec_.params, this,
+                                        hasPad ? documentPreviewImage(view_, kPadImageEdge)
+                                               : QImage());
     connect(controls_, &FilterParamControls::changed, this, &FilterPreviewDialog::valuesChanged);
     connect(controls_, &FilterParamControls::changedLive, this, &FilterPreviewDialog::updateThumbnail);
     QList<QWidget*> rows = controls_->rows();
@@ -222,6 +256,16 @@ FilterPreviewDialog::FilterPreviewDialog(PictureView* view, const FilterCommandS
         buttonColumn->addSpacing(6);
         buttonColumn->addWidget(preview_);
     }
+    // CS6 blinks a line while a preview renders; this bar runs while the
+    // exact picture is computed.
+    exactBusy_ = new QProgressBar(this);
+    exactBusy_->setObjectName(QStringLiteral("filterExactBusy"));
+    exactBusy_->setRange(0, 0);
+    exactBusy_->setTextVisible(false);
+    exactBusy_->setMaximumHeight(6);
+    exactBusy_->setToolTip(tr("Rendering the preview at full resolution"));
+    exactBusy_->hide();
+    buttonColumn->addWidget(exactBusy_);
     buttonColumn->addStretch(1);
     body->addLayout(buttonColumn);
     outer->addLayout(body);
@@ -230,6 +274,19 @@ FilterPreviewDialog::FilterPreviewDialog(PictureView* view, const FilterCommandS
     }
 
     connect(this, &QDialog::rejected, this, &FilterPreviewDialog::discardPreview);
+}
+
+FilterPreviewDialog::~FilterPreviewDialog()
+{
+    exactTimer_->stop();
+    // On OK the canvas keeps the preview until the commit lands (the caller
+    // clears it), and a finished exact preview is kept for the commit to reuse.
+    if (result() != QDialog::Accepted) {
+        clearProxy();
+    }
+    if (view_) {
+        filter_canvas_proxy_release(*view_);
+    }
 }
 
 void FilterPreviewDialog::applyInitial(const QList<double>& initial)
@@ -248,10 +305,28 @@ void FilterPreviewDialog::valuesChanged()
     if (preview_ && !preview_->isChecked()) {
         return;
     }
+    previewTimer_->start();
+}
+
+void FilterPreviewDialog::runPreview()
+{
+    if (preview_ && !preview_->isChecked()) {
+        return;
+    }
     if (!view_ || !view_->has_document()) {
         return;
     }
     const QList<double> current = values();
+    if (previewsOnProxy() && showProxy()) {
+        // The canvas shows the copy as a draft at once; the pane shows its own
+        // section exactly (a positional filter's pane crops the canvas picture).
+        startExactPreview(current);
+        updatePaneSection();
+        updateThumbnail();
+        return;
+    }
+    clearProxy();
+    cancelExactPreview();
     // Restrict the preview to the visible section when the caller supplied one;
     // the commit still filters the whole layer.
     const bool shown =
@@ -268,8 +343,119 @@ void FilterPreviewDialog::valuesChanged()
     }
 }
 
+bool FilterPreviewDialog::previewsOnProxy() const
+{
+    if (!canvas_ || canvasZoom_ >= 1.0) {
+        return false;
+    }
+    const QRect region = proxyRegion();
+    return double(region.width()) * region.height() > kExactPreviewPixels;
+}
+
+QRect FilterPreviewDialog::proxyRegion() const
+{
+    const QRect document(0, 0, view_->document_width(), view_->document_height());
+    if (positional_ || previewVisible_.isEmpty()) {
+        return document;
+    }
+    return previewVisible_.toAlignedRect().intersected(document);
+}
+
+bool FilterPreviewDialog::showProxy()
+{
+    const QRect region = proxyRegion();
+    const double area = double(region.width()) * region.height();
+    double scale = qMin(1.0, canvasZoom_ * devicePixelRatio_);
+    if (area * scale * scale > kCanvasProxyPixels) {
+        scale = std::sqrt(kCanvasProxyPixels / area);
+    }
+    const QImage picture =
+        filter_canvas_proxy(*view_, spec_.kind, controls_->scaledValues(scale), region.x(),
+                            region.y(), region.width(), region.height(), scale);
+    if (picture.isNull()) {
+        return false;
+    }
+    proxyPicture_ = picture;
+    proxyArea_ = region;
+    proxyScale_ = scale;
+    proxyShown_ = true;
+    canvas_->setFilterPreview(picture, region);
+    return true;
+}
+
+void FilterPreviewDialog::clearProxy()
+{
+    if (proxyShown_ && canvas_) {
+        canvas_->clearFilterPreview();
+    }
+    proxyShown_ = false;
+}
+
+void FilterPreviewDialog::startExactPreview(const QList<double>& values)
+{
+    if (filter_exact_preview_start(*view_, spec_.kind, values, proxyArea_.x(), proxyArea_.y(),
+                                   proxyArea_.width(), proxyArea_.height(), proxyScale_)) {
+        exactTimer_->start();
+        pollExactPreview();
+    }
+}
+
+void FilterPreviewDialog::pollExactPreview()
+{
+    if (!view_) {
+        return;
+    }
+    const QImage exact = filter_exact_preview_poll(*view_);
+    if (!exact.isNull() && proxyShown_ && canvas_) {
+        proxyPicture_ = exact;
+        canvas_->setFilterPreview(exact, proxyArea_);
+        if (positional_) {
+            updateThumbnail();
+        }
+    }
+    const bool busy = filter_exact_preview_busy(*view_);
+    exactBusy_->setVisible(busy);
+    if (!busy) {
+        exactTimer_->stop();
+    }
+}
+
+void FilterPreviewDialog::cancelExactPreview()
+{
+    exactTimer_->stop();
+    exactBusy_->hide();
+    if (view_) {
+        filter_exact_preview_cancel(*view_);
+    }
+}
+
+void FilterPreviewDialog::updatePaneSection()
+{
+    sectionImage_ = QImage();
+    if (!thumbnail_ || positional_ || spec_.previewBelow || !proxyShown_) {
+        return;
+    }
+    const QRect crop = thumbnailCrop();
+    sectionImage_ = filter_section_image(*view_, spec_.kind, values(), crop.x(), crop.y(),
+                                         crop.width(), crop.height());
+}
+
+void FilterPreviewDialog::zoomChanged()
+{
+    // On the reduced copy the pane's section is filtered on its own, so a new
+    // section needs a new render.
+    if (proxyShown_) {
+        updatePaneSection();
+    }
+    updateThumbnail();
+}
+
 void FilterPreviewDialog::discardPreview()
 {
+    previewTimer_->stop();
+    clearProxy();
+    cancelExactPreview();
+    sectionImage_ = QImage();
     if (previewShown_ && view_) {
         filter_preview_cancel(*view_);
         previewShown_ = false;
@@ -309,24 +495,44 @@ void FilterPreviewDialog::updateThumbnail()
     if (!view_ || !view_->has_document()) {
         return;
     }
-    const QImage image = view_->image();
-    if (image.isNull()) {
+    const QRect pixels = thumbnailCrop();
+    if (pixels.isEmpty()) {
         return;
     }
-    // Preview the current canvas section, not the whole image: at 100% the pane
-    // shows 200 document pixels 1:1; a higher zoom shows fewer pixels larger.
-    const double shown = 200.0 * 100.0 / static_cast<double>(level);
-    const QPointF center = previewVisible_.isNull()
-                               ? QPointF(image.width() / 2.0, image.height() / 2.0)
-                               : previewVisible_.center();
-    QRectF crop(center.x() - shown / 2.0, center.y() - shown / 2.0, shown, shown);
-    crop = crop.intersected(QRectF(0, 0, image.width(), image.height()));
-    if (crop.isEmpty()) {
-        crop = QRectF(0, 0, image.width(), image.height());
+    QImage section;
+    if (proxyShown_ && positional_ && !proxyArea_.isEmpty()) {
+        const double sx = double(proxyPicture_.width()) / proxyArea_.width();
+        const double sy = double(proxyPicture_.height()) / proxyArea_.height();
+        const QRectF source((pixels.x() - proxyArea_.x()) * sx, (pixels.y() - proxyArea_.y()) * sy,
+                            pixels.width() * sx, pixels.height() * sy);
+        section = proxyPicture_.copy(source.toAlignedRect());
+    } else if (proxyShown_ && !sectionImage_.isNull()) {
+        section = sectionImage_;
+    } else {
+        // Only the crop is read, never the full-resolution image.
+        section = view_->display_image(0, pixels.x(), pixels.y(), pixels.width(), pixels.height());
     }
-    const QImage section = image.copy(crop.toRect());
+    if (section.isNull()) {
+        return;
+    }
     thumbnail_->setPixmap(
         QPixmap::fromImage(section).scaled(target, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+}
+
+QRect FilterPreviewDialog::thumbnailCrop() const
+{
+    const QRectF document(0, 0, view_->document_width(), view_->document_height());
+    if (document.isEmpty()) {
+        return QRect();
+    }
+    // The current canvas section, not the whole image: at 100% the pane shows
+    // 200 document pixels 1:1; a higher zoom shows fewer pixels larger.
+    const int level = kZoomLevels[qBound(0, zoom_, kZoomCount - 1)];
+    const double shown = 200.0 * 100.0 / static_cast<double>(level);
+    const QPointF center = previewVisible_.isNull() ? document.center() : previewVisible_.center();
+    QRectF crop(center.x() - shown / 2.0, center.y() - shown / 2.0, shown, shown);
+    crop = crop.intersected(document);
+    return (crop.isEmpty() ? document : crop).toRect();
 }
 
 void FilterPreviewDialog::resizeEvent(QResizeEvent* event)
