@@ -46,6 +46,7 @@ block checker in B, so every filter sees both gradients and hard edges. All
 | `Blur` | `-gaussian-blur 0x0.7` | yes | 0 | A Gaussian at the fixed σ 0.7 (radius 2.1); measured max delta 0. |
 | `BlurMore` | `-gaussian-blur 0x2` | yes | 1 | A Gaussian at the fixed σ 2.0 (radius 6); IM's kernel at this σ differs by rounding; measured max delta 1. |
 | `SurfaceBlur` | — | **no** | — | Per-channel mean of the neighbours within the threshold; IM has no thresholded-mean operator. Observed max delta 71 (radius 3 / threshold 20 vs `-gaussian-blur 0x1`). |
+| `LensBlur` | — | **no** | — | A depth-map-driven aperture convolution: ImageMagick has no depth-aware iris blur, no circle-of-confusion ramp, no specular bloom and no seeded grain. Guarded by the focus, ramp, iris, specular and noise unit tests. |
 | `Sharpen` | `-unsharp 0x1+0.5+0` | yes | 2 | Unsharp Mask at the fixed 50 % / σ 1; IM's internal blur differs slightly; measured max delta 2. |
 | `SharpenMore` | `-unsharp 0x1+1+0` | yes | 3 | Unsharp Mask at the fixed 100 % / σ 1; IM's internal blur differs slightly; measured max delta 3. |
 | `SharpenEdges` | — | **no** | — | Unsharp gated by a smoothstep of the Sobel edge strength; IM has no edge-gated sharpen. Observed max delta 44 (`-sharpen 0x1`). |
@@ -439,6 +440,9 @@ with `=` so argparse does not read the leading `-` as another option.
 - Dust and Scratches, Extrude, Tiles, Trace Contour, Wind and Smart Sharpen: no
   faithful ImageMagick equivalent (see the table); covered by property and
   known-value tests in the module unit tests instead.
+- Lens Blur: no depth-aware aperture blur in ImageMagick (see the table);
+  covered by the focus, ramp, iris, specular and noise module unit tests
+  instead.
 - Alpha-channel behaviour: the tests use 3-channel buffers, and `apply` is
   specified never to modify channel 4 (guarded by the module unit tests).
 - 16/32-bit filter math (M6–M9 are 8-bit only).

@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
 use crate::{
-    BrushType, ContourEdge, DiffuseMode, DisplaceFit, DisplaceMap, ExtrudeType, GlassTexture,
-    GrainType, HalftoneType, HdrToningParams, LensType, LightDirection, Lighting, MezzotintType,
-    NoiseDistribution, PolarKind, Quality, RadialMethod, RippleSize, SharpenRemove, ShearFill,
-    SpherizeMode, StrokeDirection, TextureOptions, TileFill, TonalFade, WaveType, WindMethod,
-    ZigZagStyle,
+    BrushType, ContourEdge, DepthMap, DiffuseMode, DisplaceFit, DisplaceMap, ExtrudeType,
+    GlassTexture, GrainType, HalftoneType, HdrToningParams, IrisShape, LensType, LightDirection,
+    Lighting, MezzotintType, NoiseDistribution, PolarKind, Quality, RadialMethod, RippleSize,
+    SharpenRemove, ShearFill, SpherizeMode, StrokeDirection, TextureOptions, TileFill, TonalFade,
+    WaveType, WindMethod, ZigZagStyle,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -36,6 +36,22 @@ pub enum Filter {
     SurfaceBlur {
         radius: u32,
         threshold: u8,
+    },
+    LensBlur {
+        depth: Option<Arc<DepthMap>>,
+        focal: u8,
+        invert: bool,
+        shape: IrisShape,
+        radius: u32,
+        curvature: u8,
+        rotation: f64,
+        specular_brightness: u8,
+        specular_threshold: u8,
+        noise_amount: u8,
+        noise_distribution: NoiseDistribution,
+        monochromatic: bool,
+        faster: bool,
+        seed: u64,
     },
     Sharpen,
     SharpenMore,

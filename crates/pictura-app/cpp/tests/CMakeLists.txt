@@ -53,6 +53,7 @@ set(PICTURA_QT_TESTS
     tst_displace
     tst_custom_filter
     tst_shape_blur
+    tst_lens_blur_dialog
     tst_layer_style
     tst_color_range
     tst_refine_edge

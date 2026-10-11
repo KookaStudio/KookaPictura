@@ -3,9 +3,9 @@
 
 use pictura_filters::{
     BrushType, ContourEdge, DiffuseMode, DisplaceFit, ExtrudeType, GlassTexture, GrainType,
-    HalftoneType, LensType, LightDirection, LightType, MezzotintType, NoiseDistribution, PolarKind,
-    Quality, RadialMethod, RippleSize, SharpenRemove, ShearFill, SpherizeMode, StrokeDirection,
-    TextureChannel, TileFill, WaveType, WindMethod, ZigZagStyle,
+    HalftoneType, IrisShape, LensType, LightDirection, LightType, MezzotintType, NoiseDistribution,
+    PolarKind, Quality, RadialMethod, RippleSize, SharpenRemove, ShearFill, SpherizeMode,
+    StrokeDirection, TextureChannel, TileFill, WaveType, WindMethod, ZigZagStyle,
 };
 
 pub(super) const NOISE_DISTRIBUTIONS: [NoiseDistribution; 2] =
@@ -120,4 +120,12 @@ pub(super) const DIFFUSE_MODES: [DiffuseMode; 4] = [
     DiffuseMode::DarkenOnly,
     DiffuseMode::LightenOnly,
     DiffuseMode::Anisotropic,
+];
+pub(super) const IRIS_SHAPES: [IrisShape; 6] = [
+    IrisShape::Triangle,
+    IrisShape::Square,
+    IrisShape::Pentagon,
+    IrisShape::Hexagon,
+    IrisShape::Heptagon,
+    IrisShape::Octagon,
 ];

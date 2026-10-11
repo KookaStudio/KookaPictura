@@ -1,5 +1,6 @@
 use super::*;
 use pictura_core::{BlendMode, Channel, ColorLabel, LockFlags, PsdRect};
+use pictura_filters::{IrisShape, NoiseDistribution};
 
 fn rect(top: i32, left: i32, bottom: i32, right: i32) -> PsdRect {
     PsdRect {
@@ -505,6 +506,22 @@ fn moving_kernels_map_opaque_to_opaque() {
             radius: 4,
             threshold: 20,
         },
+        Filter::LensBlur {
+            depth: None,
+            focal: 128,
+            invert: false,
+            shape: IrisShape::Triangle,
+            radius: 6,
+            curvature: 50,
+            rotation: 30.0,
+            specular_brightness: 100,
+            specular_threshold: 0,
+            noise_amount: 100,
+            noise_distribution: NoiseDistribution::Gaussian,
+            monochromatic: false,
+            faster: false,
+            seed: 3,
+        },
         Filter::Sharpen,
         Filter::SharpenMore,
         Filter::SharpenEdges,
@@ -613,6 +630,31 @@ fn offset_moves_the_layer_edge_and_fills_what_it_exposes_opaque() {
     for (x, expected) in [(0, 255), (3, 255), (4, 255), (11, 255), (12, 0), (15, 0)] {
         assert_eq!(alpha[x], expected, "alpha at x = {x}");
     }
+}
+
+#[test]
+fn lens_blur_apron_covers_its_radius() {
+    let filter = Filter::LensBlur {
+        depth: None,
+        focal: 0,
+        invert: false,
+        shape: IrisShape::Triangle,
+        radius: 40,
+        curvature: 0,
+        rotation: 0.0,
+        specular_brightness: 0,
+        specular_threshold: 255,
+        noise_amount: 0,
+        noise_distribution: NoiseDistribution::Uniform,
+        monochromatic: false,
+        faster: false,
+        seed: 1,
+    };
+    assert_eq!(
+        preview_apron(&filter),
+        40,
+        "the apron covers the largest CoC"
+    );
 }
 
 #[test]

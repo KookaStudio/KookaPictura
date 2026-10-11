@@ -1,8 +1,9 @@
+use super::arities::FILTER_ARITIES;
 use super::*;
 use pictura_core::shape::CUSTOM_SHAPE_NAMES;
 use pictura_filters::{
-    DisplaceFit, GlassTexture, LightType, NoiseDistribution, Quality, RadialMethod, SharpenRemove,
-    TextureChannel, WaveType, WindMethod,
+    DisplaceFit, GlassTexture, IrisShape, LightType, NoiseDistribution, Quality, RadialMethod,
+    SharpenRemove, TextureChannel, WaveType, WindMethod,
 };
 
 #[test]
@@ -318,4 +319,57 @@ fn shape_blur_reads_radius_then_shape() {
         "an unknown shape clamps"
     );
     assert!(filter_from_kind_params("shape-blur", &[5.0]).is_none());
+}
+
+#[test]
+fn lens_blur_defaults_and_refuses_a_missing_depth_map() {
+    let Some(Filter::LensBlur {
+        depth,
+        focal,
+        invert,
+        shape,
+        radius,
+        curvature,
+        rotation,
+        specular_brightness,
+        specular_threshold,
+        noise_amount,
+        noise_distribution,
+        monochromatic,
+        faster,
+        seed,
+    }) = filter_from_kind_params("lens-blur", &[])
+    else {
+        panic!("lens blur did not decode");
+    };
+    assert!(depth.is_none(), "Source None carries no map");
+    assert_eq!((focal, invert), (126, false));
+    assert_eq!(shape, IrisShape::Triangle);
+    assert_eq!((radius, curvature, rotation), (50, 33, 191.0));
+    assert_eq!((specular_brightness, specular_threshold), (44, 93));
+    assert_eq!((noise_amount, monochromatic), (47, false));
+    assert_eq!(noise_distribution, NoiseDistribution::Gaussian);
+    assert!(faster, "Preview defaults to Faster");
+    assert_eq!(seed, 1);
+
+    // A real source whose id names no kept map is refused...
+    let mut params = vec![0.0; LENS_BLUR_SLOTS];
+    params[1] = 1.0;
+    assert!(filter_from_kind_params("lens-blur", &params).is_none());
+    // ...and a registered map resolves, with the accurate commit flag.
+    let id = crate::cxxqt_object::filter_tools::lens_blur_depths::register(
+        pictura_filters::DepthMap::new(1, 1, vec![128]).unwrap(),
+    );
+    params[0] = 1.0;
+    params[13] = f64::from(id);
+    let Some(Filter::LensBlur {
+        depth: Some(map),
+        faster,
+        ..
+    }) = filter_from_kind_params("lens-blur", &params)
+    else {
+        panic!("a registered depth map did not resolve");
+    };
+    assert_eq!(map.width(), 1);
+    assert!(!faster, "More Accurate decodes to faster = false");
 }
