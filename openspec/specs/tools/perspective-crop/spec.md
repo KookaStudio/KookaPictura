@@ -43,8 +43,11 @@ masks, retained 16/32-bit samples).
 ### Requirement: Perspective Crop tool
 
 The Perspective Crop tool SHALL stage its quad from four separate corner clicks
-in top-left, top-right, bottom-right, bottom-left order, drawing each placed
-point as it is clicked and closing the quad on the fourth. While the quad is
+in any corner order, drawing each placed point as it is clicked and closing the
+quad on the fourth. On the fourth click it SHALL order the four points into
+top-left, top-right, bottom-right, bottom-left (clockwise about their centroid,
+starting from the top-left-most point) before warping, so the result is neither
+rotated nor mirrored whatever corner was clicked first. While the quad is
 incomplete a click SHALL add the next corner; once complete, a corner dragged
 within 8 screen pixels of it SHALL move that corner, and a drag inside the quad
 SHALL move the whole quad. Enter or a double-click inside the quad SHALL commit
@@ -65,8 +68,13 @@ so a larger quad shows more grid lines at the same spacing.
 
 #### Scenario: Four clicks stage the quad
 
-- **WHEN** four corners are clicked in order
+- **WHEN** four corners are clicked in any order
 - **THEN** the quad closes on the fourth click and no state is added until a commit
+
+#### Scenario: Any click order is upright
+
+- **WHEN** the four corners are clicked starting from any corner, clockwise or counter-clockwise
+- **THEN** the quad reads top-left, top-right, bottom-right, bottom-left, so the warp is neither rotated nor mirrored
 
 #### Scenario: A degenerate quad stays staged
 

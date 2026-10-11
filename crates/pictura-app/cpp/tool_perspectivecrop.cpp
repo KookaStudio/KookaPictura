@@ -15,7 +15,9 @@
 #include <QtWidgets/QApplication>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <limits>
 #include <memory>
 #include <vector>
 
@@ -70,7 +72,9 @@ public:
         }
         clock_.restart();
 
-        // Staging: each click drops the next corner (TL, TR, BR, BL).
+        // Staging: each click drops the next corner; on the fourth the quad is
+        // oriented top-left/top-right/bottom-right/bottom-left so the crop is
+        // never rotated or mirrored, whatever corner was clicked first.
         if (quad_.size() < 4) {
             const QString refusal = perspective_crop_refusal_reason(*v);
             if (quad_.isEmpty() && !refusal.isEmpty()) {
@@ -78,6 +82,9 @@ public:
                 return true;
             }
             quad_.append(snapPoint(ctx, imagePos));
+            if (quad_.size() == 4) {
+                quad_ = orderQuad(quad_);
+            }
             showQuad(ctx);
             notifyStateChanged(ctx);
             gesture_ = Gesture::None;
@@ -226,6 +233,38 @@ private:
             sum += p;
         }
         return sum / quad_.size();
+    }
+
+    // Reorder four clicked corners into TL, TR, BR, BL so the warp is neither
+    // rotated nor mirrored, whatever corner the user started from. The points
+    // are sorted clockwise about their centroid (screen y-down), then the list
+    // is rotated so the top-left-most point (smallest x + y) comes first.
+    static QPolygonF orderQuad(const QPolygonF& quad)
+    {
+        if (quad.size() != 4) {
+            return quad;
+        }
+        const QPointF c = (quad.at(0) + quad.at(1) + quad.at(2) + quad.at(3)) / 4.0;
+        const auto angle = [&quad, c](int i) {
+            return std::atan2(quad.at(i).y() - c.y(), quad.at(i).x() - c.x());
+        };
+        std::array<int, 4> idx{0, 1, 2, 3};
+        std::sort(idx.begin(), idx.end(), [&angle](int a, int b) { return angle(a) < angle(b); });
+        int start = 0;
+        double best = std::numeric_limits<double>::max();
+        for (int k = 0; k < 4; ++k) {
+            const QPointF& p = quad.at(idx.at(k));
+            const double sum = p.x() + p.y();
+            if (sum < best) {
+                best = sum;
+                start = k;
+            }
+        }
+        QPolygonF out;
+        for (int k = 0; k < 4; ++k) {
+            out << quad.at(idx.at((start + k) % 4));
+        }
+        return out;
     }
 
     static QPolygonF translateQuad(const QPolygonF& quad, const QPointF& delta)

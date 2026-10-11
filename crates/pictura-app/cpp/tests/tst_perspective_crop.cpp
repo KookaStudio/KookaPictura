@@ -25,6 +25,7 @@ class PerspectiveCropTest : public QObject {
 private slots:
     void initTestCase();
     void fourClicksStageAndSnap();
+    void clickOrderIsOrientedUpright();
     void rotateCursorOutsideCompleteQuad();
     void optionsBarApplyCancelFollowQuad();
 
@@ -83,6 +84,47 @@ void PerspectiveCropTest::fourClicksStageAndSnap()
     QVERIFY(!canvas->hasPerspectiveCropQuadForTest());
     click(canvas, QPointF(3, 3));
     QCOMPARE(canvas->perspectiveCropQuadForTest().at(0), QPointF(0, 0));
+
+    frame.setActiveTool(pictura::ToolId::Move);
+    frame.closeDocument(doc, false);
+}
+
+void PerspectiveCropTest::clickOrderIsOrientedUpright()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("PerspOrder"), 120, 120, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::ImageView* canvas = frame.imageView();
+    QVERIFY(canvas);
+    const int doc = frame.activeDocumentIndex();
+
+    canvas->actualPixels();
+    frame.setActiveTool(pictura::ToolId::PerspectiveCrop);
+
+    const auto expectUpright = [canvas]() {
+        const QPolygonF q = canvas->perspectiveCropQuadForTest();
+        QCOMPARE(q.size(), 4);
+        QCOMPARE(q.at(0), QPointF(20, 20));
+        QCOMPARE(q.at(1), QPointF(100, 20));
+        QCOMPARE(q.at(2), QPointF(100, 100));
+        QCOMPARE(q.at(3), QPointF(20, 100));
+    };
+
+    // Starting top-right and going clockwise must still read TL, TR, BR, BL.
+    click(canvas, QPointF(100, 20));
+    click(canvas, QPointF(100, 100));
+    click(canvas, QPointF(20, 100));
+    click(canvas, QPointF(20, 20));
+    expectUpright();
+
+    // A counter-clockwise order must not mirror.
+    QKeyEvent esc(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+    QApplication::sendEvent(&frame, &esc);
+    click(canvas, QPointF(20, 20));
+    click(canvas, QPointF(20, 100));
+    click(canvas, QPointF(100, 100));
+    click(canvas, QPointF(100, 20));
+    expectUpright();
 
     frame.setActiveTool(pictura::ToolId::Move);
     frame.closeDocument(doc, false);
