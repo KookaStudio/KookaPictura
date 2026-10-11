@@ -1,5 +1,6 @@
 #include <QtTest/QtTest>
 
+#include "canvas_scrollbars.h"
 #include "frame.h"
 #include "image_view.h"
 #include "panels/numeric_field.h"
@@ -9,8 +10,11 @@
 #include "tool_hint_bar.h"
 
 #include <QtCore/QFile>
+#include <QtCore/QRegularExpression>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QLineEdit>
+#include <QtWidgets/QScrollBar>
+#include <QtWidgets/QStyleOptionSlider>
 #include <QtWidgets/QStatusBar>
 #include <QtWidgets/QToolButton>
 
@@ -25,6 +29,7 @@ private slots:
     void stateHomeIsolationRestoresPriorValue();
     void themeFoundation();
     void statusBarChromeAndZoom();
+    void workspaceScrollbarColours();
     void statusZoomKeysAndSuffix();
     void numericFieldStepsAndSuffix();
     void numericFieldAlignment();
@@ -189,6 +194,74 @@ void SmokeTest::statusBarChromeAndZoom()
     hint->setPressedKey(QString());
     QVERIFY(!hint->highlightedForTest(0));
     QVERIFY(!hint->highlightedForTest(1));
+}
+
+// The canvas scrollbar track renders the document tab strip's grey, and its
+// thumb is visible at rest and brightens on hover, on both bars (#316).
+void SmokeTest::workspaceScrollbarColours()
+{
+    window_->resize(1100, 700);
+    window_->show();
+    QVERIFY(window_->newDocument(QStringLiteral("Scroll"), 64, 48, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::ImageView* canvas = window_->imageView();
+    QVERIFY(canvas != nullptr);
+    canvas->setZoom(16.0, QPointF(canvas->width() / 2.0, canvas->height() / 2.0));
+    QCoreApplication::processEvents();
+
+    // The strip's own background rule, not a sampled pixel, which could land
+    // on a tab (whose colour may differ from the strip's).
+    const QRegularExpression stripRule(
+        QStringLiteral(R"(QTabBar#documentTabBar \{ background: (#[0-9a-f]{6}); \})"));
+    const QRegularExpressionMatch strip = stripRule.match(qApp->styleSheet());
+    QVERIFY2(strip.hasMatch(), "document tab strip background rule");
+
+    QList<QScrollBar*> bars;
+    for (auto* host : window_->findChildren<pictura::CanvasScrollBars*>()) {
+        for (auto* candidate : host->findChildren<QScrollBar*>()) {
+            if (candidate->isVisible()) {
+                bars << candidate;
+            }
+        }
+    }
+    QCOMPARE(bars.size(), 2);
+    for (QScrollBar* bar : bars) {
+        const bool horizontal = bar->orientation() == Qt::Horizontal;
+        QVERIFY2(bar->maximum() > bar->minimum(), "the zoomed canvas scrolls");
+        QStyleOptionSlider option;
+        option.initFrom(bar);
+        option.orientation = bar->orientation();
+        option.minimum = bar->minimum();
+        option.maximum = bar->maximum();
+        option.sliderPosition = bar->sliderPosition();
+        option.sliderValue = bar->value();
+        option.pageStep = bar->pageStep();
+        option.singleStep = bar->singleStep();
+        const QRect slider = bar->style()->subControlRect(QStyle::CC_ScrollBar, &option,
+                                                          QStyle::SC_ScrollBarSlider, bar);
+        QVERIFY(!slider.isEmpty());
+        // A track point beyond whichever end of the slider has more room.
+        const QPoint trackAt = horizontal
+            ? QPoint(slider.left() > bar->width() - slider.right() ? 1 : bar->width() - 2,
+                     bar->height() / 2)
+            : QPoint(bar->width() / 2,
+                     slider.top() > bar->height() - slider.bottom() ? 1 : bar->height() - 2);
+        const QImage rest = bar->grab().toImage();
+        const QColor track = rest.pixelColor(trackAt);
+        const QColor thumb = rest.pixelColor(slider.center());
+        QCOMPARE(track.name(QColor::HexRgb), strip.captured(1));
+        QVERIFY2(qAbs(thumb.lightness() - track.lightness()) >= 24,
+                 qPrintable(QStringLiteral("thumb %1 reads against track %2")
+                                .arg(thumb.name(QColor::HexRgb), track.name(QColor::HexRgb))));
+
+        QTest::mouseMove(bar, slider.center());
+        QCoreApplication::processEvents();
+        const QColor hovered = bar->grab().toImage().pixelColor(slider.center());
+        QVERIFY2(hovered.lightness() > thumb.lightness(),
+                 qPrintable(QStringLiteral("hover %1 brightens rest %2")
+                                .arg(hovered.name(QColor::HexRgb), thumb.name(QColor::HexRgb))));
+        QTest::mouseMove(canvas, canvas->rect().center());
+    }
 }
 
 // The footer zoom field steps with Up/Down, hugs its "%" to the value, and
