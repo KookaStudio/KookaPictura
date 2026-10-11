@@ -28,6 +28,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
+# MSVC's <cmath> only exposes M_PI (used by the crop/overlay geometry) when
+# _USE_MATH_DEFINES is defined before the include. A command-line define covers
+# every translation unit regardless of include order; other compilers ignore it.
+add_compile_definitions(_USE_MATH_DEFINES)
+
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Svg Network PrintSupport)
 
 # Enables BUILD_TESTING (default ON); the Qt Test suites live under cpp/tests.
