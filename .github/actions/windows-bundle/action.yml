@@ -51,14 +51,22 @@ runs:
       run: |
         $ErrorActionPreference = 'Stop'
         $PSNativeCommandUseErrorActionPreference = $true
-        windeployqt --release "$env:GITHUB_WORKSPACE\stage\bin\pictura.exe"
+        windeployqt --release --compiler-runtime "$env:GITHUB_WORKSPACE\stage\bin\pictura.exe"
 
-    # The headless smoke check selects the offscreen QPA plugin. windeployqt's
-    # platform-plugin set varies by Qt version, so make sure qoffscreen is there.
-    - name: Ensure the offscreen platform plugin
+    # windeployqt's platform-plugin set varies by Qt version, and 6.11.1 skips
+    # the MSVC runtime even with --compiler-runtime. Make the deployed folder
+    # self-contained: the offscreen QPA plugin the headless check needs, plus
+    # the C/C++ runtime DLLs copied from the installed VS redistributable.
+    - name: Ensure the offscreen plugin and MSVC runtime
       shell: pwsh
       run: |
-        $src = "$env:QT_ROOT_DIR\plugins\platforms"
-        $dst = "$env:GITHUB_WORKSPACE\stage\bin\platforms"
+        $ErrorActionPreference = 'Stop'
+        $bin = "$env:GITHUB_WORKSPACE\stage\bin"
+        $dst = "$bin\platforms"
         New-Item -ItemType Directory -Force -Path $dst | Out-Null
-        Copy-Item "$src\qoffscreen.dll" $dst -Force -ErrorAction SilentlyContinue
+        Copy-Item "$env:QT_ROOT_DIR\plugins\platforms\qoffscreen.dll" $dst -Force -ErrorAction SilentlyContinue
+        $crt = Get-ChildItem "$env:VCToolsRedistDir\x64\Microsoft.VC*.CRT" -Directory -ErrorAction SilentlyContinue |
+          Select-Object -First 1
+        if (-not $crt) { throw "MSVC redistributable CRT folder not found under $env:VCToolsRedistDir" }
+        Copy-Item "$($crt.FullName)\*runtime*.dll" $bin -Force
+        Copy-Item "$($crt.FullName)\msvcp*.dll" $bin -Force
