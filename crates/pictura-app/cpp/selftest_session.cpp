@@ -759,8 +759,7 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
                 dialogDirectoryFromStored(tmp + QStringLiteral("-nope")).isEmpty();
             const bool emptyOk = dialogDirectoryFromStored(QString()).isEmpty();
             // The document tier: a document's folder, empty when there is none.
-            const bool documentOk = documentDirectory(QStringLiteral("/a/b/c.psd"))
-                    == QStringLiteral("/a/b")
+            const bool documentOk = documentDirectory(tmp + QStringLiteral("/c.psd")) == tmp
                 && documentDirectory(QString()).isEmpty();
 
             QSettings settings(QSettings::UserScope, QStringLiteral("QtProject"));
