@@ -27,6 +27,11 @@ runs:
     - name: Set up MSVC
       uses: ilammy/msvc-dev-cmd@v1.13.0
 
+    # The workflows set RUSTC_WRAPPER/SCCACHE_GHA_ENABLED; this only installs
+    # the binary (same action and version ci.yml uses).
+    - name: Install sccache
+      uses: mozilla-actions/sccache-action@v0.0.11
+
     - uses: Swatinem/rust-cache@v2
       with:
         cache-targets: "false"
@@ -39,7 +44,8 @@ runs:
         $ErrorActionPreference = 'Stop'
         $PSNativeCommandUseErrorActionPreference = $true
         cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF `
-          -DCMAKE_INSTALL_PREFIX="$env:GITHUB_WORKSPACE/stage"
+          -DCMAKE_INSTALL_PREFIX="$env:GITHUB_WORKSPACE/stage" `
+          -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
         cmake --build build --config Release
         cmake --install build --config Release
 

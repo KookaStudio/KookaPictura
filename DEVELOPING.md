@@ -381,10 +381,13 @@ all use the binary's name, `pictura`.
 - **Re-run for an existing tag** (failed upload, packaging fix):
   `gh workflow run appimage.yml -f tag=vX.Y.Z` or
   `gh workflow run linux-packages.yml -f tag=vX.Y.Z`, also available from
-  *Actions → Run workflow*; `--clobber` replaces existing assets.
-- **Dry run** — a PR touching either workflow, the shared action, or
-  `packaging/` runs the matching build and keeps its output as a workflow
-  artifact instead of uploading it.
+  *Actions → Run workflow*; `--clobber` replaces existing assets. Dispatching
+  with `--ref <branch>` runs that branch's workflow file but checks out the
+  tag, so bundle or packaging edits only fully validate on the Release PR.
+- **Dry run** — the release-please Release PR runs both builds (and the
+  Windows one below) and keeps their output as workflow artifacts instead of
+  uploading it. Feature PRs do not run them: a packaging change is validated
+  when the Release PR next syncs after that change merges to `master`.
 - **Local bundling against a distro Qt is not representative.** linuxdeploy's
   bundled `strip`/`patchelf` mishandle RELR-packed libraries (Fedora's Qt), and
   the result segfaults on plugin load; CI bundles the official Qt binaries.
@@ -409,10 +412,11 @@ smoke-tests the staged binary with `--headless --self-test`.
 
 - **Re-run for an existing tag**: `gh workflow run windows.yml -f tag=vX.Y.Z`,
   also available from *Actions → Run workflow*; `--clobber` replaces existing
-  assets.
-- **Dry run** — a PR touching the workflow, its bundle action,
-  `packaging/windows/`, `CMakeLists.txt`, or `assets/icons/app.ico` runs the same
-  build and keeps both artifacts as workflow artifacts instead of uploading them.
+  assets. As for the Linux workflows, `--ref <branch>` runs the branch's
+  workflow file against the tag's tree.
+- **Dry run** — the release-please Release PR runs the same build and keeps
+  both artifacts as workflow artifacts instead of uploading them; feature PRs
+  never run it.
 - **The Windows build cannot run on Linux.** MSVC and `windeployqt` are
   Windows-only, so this job always runs on a Windows runner.
 
