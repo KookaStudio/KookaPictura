@@ -52,12 +52,12 @@
 ## 5. Validation and verification
 
 - [x] 5.1 `openspec validate --all --strict` passes.
-- [ ] 5.2 Push the branch and confirm none of the three workflows starts a
+- [x] 5.2 Push the branch and confirm none of the three workflows starts a
   runner for it (either not scheduled, or the job reports skipped because the
   head branch is not `release-please--branches--master`).
-- [ ] 5.3 After merge, push to `master` so the Release PR syncs, then confirm
+- [x] 5.3 After merge, push to `master` so the Release PR syncs, then confirm
   all three workflows run as dry runs on the Release PR and keep their
   artifacts.
-- [ ] 5.4 Compare the second Release-PR run's wall time against the first
+- [x] 5.4 Compare the second Release-PR run's wall time against the first
   (sccache cold vs warm): windows should drop from ~14 min toward ~6–8 min,
   linux-packages/appimage from ~13 min toward ~6–7 min.
