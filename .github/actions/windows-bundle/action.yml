@@ -16,6 +16,12 @@ runs:
         version: '6.11.1'
         arch: win64_msvc2022_64
         cache: true
+        # Qt 6.11 splits the Windows online repo per architecture
+        # (qt6_6111_msvc2022_64), which the released aqtinstall 3.3.0 that
+        # install-qt-action pins does not understand: it looks for the legacy
+        # qt6_6111/qt6_6111 and fails. miurahr/aqtinstall#1000 added the support
+        # but is unreleased, so pin that merge commit until a release ships it.
+        aqtsource: 'git+https://github.com/miurahr/aqtinstall.git@8c3695d4a4e1ceabf6a74dc6c79681656dc6b74b'
 
     # Puts cl.exe and the Windows SDK on PATH for Ninja + Cargo.
     - name: Set up MSVC
