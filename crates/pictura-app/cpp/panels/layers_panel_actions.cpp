@@ -5,6 +5,7 @@
 #include "layer_new_dialog.h"
 #include "layer_style_dialog.h"
 
+#include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/layer_style.cxxqt.h"
 
 #include <QtCore/QHash>
@@ -12,6 +13,18 @@
 #include <QtCore/QStringList>
 
 namespace pictura {
+
+void LayersPanel::syncEditTarget()
+{
+    // Mirrors the bridge's `active_mask_target`: a target only routes strokes
+    // while its layer is the active one.
+    const QString target = view_ ? mask_edit_target_get(*view_) : QString();
+    const bool mask = !target.isEmpty() && target == view_->active_layer_path();
+    if (mask != maskEditing_) {
+        maskEditing_ = mask;
+        emit editTargetChanged(mask);
+    }
+}
 
 void LayersPanel::addLayerAt(const QString& path)
 {

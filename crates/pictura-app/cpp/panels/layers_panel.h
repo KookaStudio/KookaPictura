@@ -238,12 +238,15 @@ public:
 
 signals:
     void selectionChanged();
+    // The edit target moved between the active layer's pixels and its mask.
+    void editTargetChanged(bool mask);
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     void syncControls();
+    void syncEditTarget();
     void selectLayer(int index);
     void selectPath(const QString& path);
     void showContextMenu(const QPoint& pos);
@@ -290,6 +293,8 @@ private:
     QSet<QString> expandedPaths_;
     // Panel-local active edit target per row path: 0 image, 1 mask, 2 vector.
     QHash<QString, int> activeThumbByPath_;
+    // Whether the view's mask edit target was set at the last sync.
+    bool maskEditing_ = false;
     bool thumbEntireDocument_ = true;
     int thumbSizeIndex_ = 2;
     int thumbContents_ = 0;

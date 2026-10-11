@@ -15,7 +15,10 @@
 
 pub(super) mod fills;
 
-use super::helpers::{active_layer_visible, active_pixel_layer, paint_mode_from, rgba_from_argb};
+use super::helpers::{
+    active_layer_visible, active_mask_target, active_pixel_layer, mask_stroke_config,
+    paint_mode_from, rgba_from_argb,
+};
 use super::qobject::PictureView;
 use super::PictureViewRust;
 use crate::history::BrushSource;
@@ -437,6 +440,9 @@ fn begin_brush(
         ..stamp_config(tip, opacity, flow, mode)
     };
     let label = if aliased { "Pencil" } else { "Brush" };
+    if let Some(path) = active_mask_target(view.rust()) {
+        return view.begin_mask_paint(&path, mask_stroke_config(cfg), label);
+    }
     begin(view, label, |doc, path, _| {
         Stroke::begin_at(doc, path, cfg).ok()
     })
@@ -573,6 +579,20 @@ fn begin_eraser(
         ..tip_config(tip)
     };
     let mode = EraserMode::from_i32(mode).unwrap_or_default();
+    // Erasing a mask paints the background colour's coverage, as on a
+    // Background layer. ponytail: Block mode erases with the brush tip, and
+    // Erase To History has no mask source, so it is refused.
+    if let Some(path) = active_mask_target(view.rust()) {
+        if to_history {
+            return false;
+        }
+        let mask_cfg = StrokeConfig {
+            color: cfg.background,
+            aliased: mode == EraserMode::Pencil,
+            ..cfg
+        };
+        return view.begin_mask_paint(&path, mask_stroke_config(mask_cfg), "Eraser");
+    }
     begin(view, "Eraser", |doc, path, view| {
         // ponytail: the source layer is matched by panel path, as for the
         // History Brush.
@@ -747,6 +767,7 @@ fn magic_erase_at(
             return false;
         };
         if rust.stroke.is_some()
+            || active_mask_target(rust).is_some()
             || x < 0
             || y < 0
             || active_pixel_layer(doc, Some(path)).is_none()
@@ -958,7 +979,10 @@ fn begin(
         let (Some(doc), Some(path)) = (rust.doc.as_ref(), rust.active_layer.as_deref()) else {
             return false;
         };
+        // ponytail: only the Brush, Pencil, and Eraser paint a mask; the other
+        // painting tools refuse rather than write the layer's pixels.
         if rust.stroke.is_some()
+            || active_mask_target(rust).is_some()
             || active_pixel_layer(doc, Some(path)).is_none()
             || !active_layer_visible(doc, Some(path))
         {
