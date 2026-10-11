@@ -568,6 +568,9 @@ void FilterParamControls::addControl(const FilterParamSpec& spec)
         control.center = new BlurCenterWidget(parent_);
         break;
     }
+    case FilterControl::Hidden:
+        control.hidden = fallback(0, spec.value);
+        break;
     case FilterControl::ShearCurve: {
         auto* curve = new ShearCurveWidget(parent_);
         curve->changed = [this] { emit changed(); };
@@ -659,6 +662,9 @@ void FilterParamControls::addControl(const FilterParamSpec& spec)
     case FilterControl::ShearCurve:
         rowLayout->addWidget(control.shear);
         break;
+    case FilterControl::Hidden:
+        control.row->hide();
+        break;
     case FilterControl::Radio: {
         rowLayout->addWidget(new QLabel(spec.label, control.row));
         const QList<QAbstractButton*> buttons = control.group->buttons();
@@ -748,6 +754,11 @@ void FilterParamControls::setValues(const QList<double>& initial)
             break;
         case FilterControl::BlurCenter:
             break;
+        case FilterControl::Hidden:
+            if (slot < initial.size()) {
+                control.hidden = initial.at(slot);
+            }
+            break;
         default:
             if (slot < initial.size()) {
                 control.spin->setValue(initial.at(slot));
@@ -776,6 +787,8 @@ double FilterParamControls::controlValue(const Control& control, int slot) const
     case FilterControl::BlurCenter:
     case FilterControl::ShearCurve:
         return 0.0;
+    case FilterControl::Hidden:
+        return control.hidden;
     default:
         return control.spin->value();
     }

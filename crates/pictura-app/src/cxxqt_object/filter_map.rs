@@ -9,8 +9,9 @@
 //! Ported from perfecto25/photorust's filter menu parameter mapping.
 //! Source: https://github.com/perfecto25/photorust
 
+use super::filter_tools::displace_maps::{displace_map, DISPLACE_SLOTS};
 use pictura_filters::{
-    BrushType, ContourEdge, DiffuseMode, ExtrudeType, Filter, GlassTexture, GrainType,
+    BrushType, ContourEdge, DiffuseMode, DisplaceFit, ExtrudeType, Filter, GlassTexture, GrainType,
     HalftoneType, LensType, Light, LightDirection, LightType, Lighting, MezzotintType,
     NoiseDistribution, PolarKind, Quality, RadialMethod, RippleSize, SharpenRemove, ShearFill,
     SpherizeMode, StrokeDirection, TextureChannel, TextureOptions, TextureSurface, TileFill,
@@ -107,6 +108,7 @@ const RIPPLE_SIZES: [RippleSize; 3] = [RippleSize::Small, RippleSize::Medium, Ri
 const WAVE_TYPES: [WaveType; 3] = [WaveType::Sine, WaveType::Triangle, WaveType::Square];
 const POLAR_KINDS: [PolarKind; 2] = [PolarKind::RectangularToPolar, PolarKind::PolarToRectangular];
 const SHEAR_FILLS: [ShearFill; 2] = [ShearFill::WrapAround, ShearFill::RepeatEdgePixels];
+const DISPLACE_FITS: [DisplaceFit; 2] = [DisplaceFit::StretchToFit, DisplaceFit::Tile];
 /// Shear's slots: a point count, then `SHEAR_MAX_POINTS` `(position, offset)`
 /// pairs, then the fill.
 pub(super) const SHEAR_SLOTS: usize = 1 + 2 * SHEAR_MAX_POINTS + 1;
@@ -284,6 +286,7 @@ pub(super) const FILTER_ARITIES: &[(&str, usize)] = &[
     ("wave", 9),
     ("polar-coordinates", 1),
     ("shear", SHEAR_SLOTS),
+    ("displace", DISPLACE_SLOTS),
     ("zigzag", 3),
     ("ocean-ripple", 3),
     ("diffuse-glow", 4),
@@ -612,6 +615,16 @@ pub(super) fn filter_from_kind_params(kind: &str, params: &[f64]) -> Option<Filt
             Filter::Shear {
                 curve,
                 fill: pick(&SHEAR_FILLS, params, SHEAR_SLOTS - 1, 0),
+            }
+        }
+        "displace" => {
+            arity!(params, DISPLACE_SLOTS);
+            Filter::Displace {
+                map: displace_map(u32v(params, 4, 0))?,
+                horizontal_scale: f(params, 0, 10.0),
+                vertical_scale: f(params, 1, 10.0),
+                fit: pick(&DISPLACE_FITS, params, 2, 0),
+                wrap: pick(&SHEAR_FILLS, params, 3, 1) == ShearFill::WrapAround,
             }
         }
         "zigzag" => {

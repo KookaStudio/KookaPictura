@@ -270,6 +270,28 @@ Snapshot for resuming after a context break. Update after each milestone.
   --strict` 207/207. The change REMOVEs the old `Shear` requirement and ADDs
   `Shear row shift` (`imaging/distort-filters`) plus the `Shear dialog`
   requirement (`imaging/filter-app-ui`); no new capability.
+- **Displace** (change `port-photorust-displace`, issue #335, ported from
+  photorust): `Filter::Displace { map, horizontal_scale, vertical_scale, fit,
+  wrap }` over a `DisplaceMap` (two 8-bit planes). Each pixel reads the
+  source `(v − 128) × scale/100` px away (the contract's 128 px at 100%, not
+  photorust's half image); Stretch To Fit samples the map bilinearly, Tile
+  repeats it; Wrap Around / Repeat Edge Pixels use the shared `remap`. Joins
+  the alpha-moving allowlist. The app keeps loaded maps in
+  `filter_tools/displace_maps.rs` (the 8 most recent, process-lifetime);
+  `filter_displace_map_load` reads a flattened PSD (profile ignored, Bitmap
+  refused). The `displace` kind is 5 slots, the last a map id (0 = neutral).
+  The dialog is CS6's (two scales, two radio groups, no preview: new
+  `FilterControl::Hidden` and `FilterCommandSpec::livePreview`); after OK a
+  file dialog asks for the map. Last Filter reuses the map; Last Filter
+  Settings asks again. Ceilings: the map fits the layer, not the selection
+  bounds; CMYK/Lab/Indexed maps read as RGB. Oracle: the first Distort filter
+  with a faithful ImageMagick operator (`-compose displace`, `X = 1.275 ×
+  scale`); Repeat Edge Pixels within 8 (measured max 5 / mean 0.5); Wrap
+  Around differs at the seam and is not diffed. Tests: kernel units,
+  `displace_maps` units, `tst_displace`. Verified: `TASK_ALLOWS_DOCS=1 bash
+  scripts/verify-full.sh` → `verify-fast: OK` (TOTAL 3913 passed · 21 skipped ·
+  0 failed; nextest 2922 passed / 20 skipped); `openspec validate --all
+  --strict` 231/231.
 - **Lighting Effects workspace** (change `lighting-effects-workspace`, issue
   #225): `render::lighting_effects` (now `render/lighting.rs`) shades a CS6 rig
   of 1–16 Spot / Point / Infinite lights with photorust's model. A Spot is an

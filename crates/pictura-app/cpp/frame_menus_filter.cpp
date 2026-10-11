@@ -1,6 +1,8 @@
 #include "frame_includes.h"
 
 #include <QtCore/QDebug>
+#include <QtCore/QFileInfo>
+#include <QtWidgets/QMessageBox>
 #include <QtWidgets/QStatusBar>
 
 #include "filter_commands.h"
@@ -30,6 +32,28 @@ FilterPreviewView previewViewFor(ImageView* canvas)
     return view;
 }
 
+// CS6's Displace asks for its map file after OK. The loaded map's id fills
+// the hidden last slot; Cancel or an unusable file abandons the filter.
+bool chooseDisplacementMap(QList<double>* values, QWidget* parent)
+{
+    const QString path =
+        getOpenFileName(parent, QObject::tr("Choose a displacement map."), QString(),
+                        {QObject::tr("Photoshop (*.psd *.PSD *.pdd *.PDD)")});
+    if (path.isEmpty() || values->isEmpty()) {
+        return false;
+    }
+    const int id = filter_displace_map_load(path);
+    if (id == 0) {
+        QMessageBox::warning(parent, QObject::tr("Displace"),
+                             QObject::tr("Could not use \"%1\" as a displacement map. Choose a "
+                                         "Photoshop file that is not in Bitmap mode.")
+                                 .arg(QFileInfo(path).fileName()));
+        return false;
+    }
+    values->last() = id;
+    return true;
+}
+
 // Lens Flare's parameters are one struct and Lighting Effects' a list of lights,
 // each edited on its own dialog; every other filter edits independent slots on
 // the shared one.
@@ -43,7 +67,10 @@ bool runFilterDialog(PictureView* view, const FilterCommandSpec& spec,
     if (spec.kind == QStringLiteral("lighting-effects")) {
         return LightingEffectsDialog::get(view, spec, initial, out, parent);
     }
-    return FilterPreviewDialog::get(view, spec, previewView, initial, out, parent);
+    if (!FilterPreviewDialog::get(view, spec, previewView, initial, out, parent)) {
+        return false;
+    }
+    return spec.kind != QStringLiteral("displace") || chooseDisplacementMap(out, parent);
 }
 
 // Commit `kind` on a worker with a busy indicator, recorded under its menu

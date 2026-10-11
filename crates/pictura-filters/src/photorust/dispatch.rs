@@ -9,8 +9,8 @@ use pictura_core::PixelBuffer;
 
 use super::pixmap::{Pixmap, Rgba8};
 use super::{
-    add_noise, artistic, brush_strokes, convolve, distort, pixelate, sharpen, sketch, stylize,
-    texture, with_seed,
+    add_noise, artistic, brush_strokes, convolve, displace, distort, pixelate, sharpen, sketch,
+    stylize, texture, with_seed,
 };
 use crate::{
     Filter, FilterError, LightDirection, NoiseDistribution, PolarKind, ShearFill, TextureOptions,
@@ -224,6 +224,35 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
         Filter::Shear { ref curve, fill } => check_shear_curve(curve).map(|()| {
             let curve = curve.clone();
             unseeded(move |p| distort::shear(p, &curve, fill == ShearFill::WrapAround))
+        }),
+        Filter::Displace {
+            ref map,
+            horizontal_scale,
+            vertical_scale,
+            fit,
+            wrap,
+        } => check_f(
+            "displace horizontal scale",
+            horizontal_scale,
+            -999.0..=999.0,
+        )
+        .and(check_f(
+            "displace vertical scale",
+            vertical_scale,
+            -999.0..=999.0,
+        ))
+        .map(|()| {
+            let map = map.clone();
+            unseeded(move |p| {
+                displace::displace(
+                    p,
+                    &map,
+                    horizontal_scale as f32,
+                    vertical_scale as f32,
+                    fit,
+                    wrap,
+                )
+            })
         }),
         Filter::ZigZag {
             amount,

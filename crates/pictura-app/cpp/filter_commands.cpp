@@ -106,6 +106,14 @@ FilterParamSpec shearCurve(const QString& label)
     return p;
 }
 
+FilterParamSpec hidden(double value)
+{
+    FilterParamSpec p;
+    p.control = FilterControl::Hidden;
+    p.value = value;
+    return p;
+}
+
 FilterParamSpec radio(const QString& label, const QStringList& names, int index)
 {
     FilterParamSpec p = choice(label, names, index);
@@ -134,6 +142,12 @@ FilterCommandSpec stacked(FilterCommandSpec d)
 FilterCommandSpec bottomPreview(FilterCommandSpec d)
 {
     d.previewBelow = true;
+    return d;
+}
+
+FilterCommandSpec noPreview(FilterCommandSpec d)
+{
+    d.livePreview = false;
     return d;
 }
 
@@ -318,6 +332,22 @@ const QList<FilterCommandSpec>& buildCommands()
              slider(QStringLiteral("Contrast:"), 0, 40, 20)}),
 
         // Distort
+        // photorust's defaults; the map is chosen after OK and its id fills
+        // the hidden slot.
+        noPreview(def(QStringLiteral("Distort"), QStringLiteral("Displace"),
+                      QStringLiteral("displace"),
+                      {slider(QStringLiteral("Horizontal Scale:"), -999, 999, 10, 0,
+                              QStringLiteral(" %")),
+                       slider(QStringLiteral("Vertical Scale:"), -999, 999, 10, 0,
+                              QStringLiteral(" %")),
+                       radio(QStringLiteral("Displacement Map:"),
+                             {QStringLiteral("Stretch To Fit"), QStringLiteral("Tile")}, 0),
+                       radio(QStringLiteral("Undefined Areas:"),
+                             {QStringLiteral("Wrap Around"),
+                              QStringLiteral("Repeat Edge Pixels")},
+                             1),
+                       hidden(0)},
+                      false)),
         def(QStringLiteral("Distort"), QStringLiteral("Diffuse Glow"), QStringLiteral("diffuse-glow"),
             {slider(QStringLiteral("Graininess:"), 0, 10, 6),
              slider(QStringLiteral("Glow Amount:"), 0, 20, 10),

@@ -43,7 +43,7 @@ impl RippleSize {
 /// Sampled bilinearly, because a distortion lands between pixels nearly
 /// everywhere and rounding to the nearest one leaves the jagged staircase
 /// along every curve that gives cheap warps away.
-fn remap<F>(pixmap: &mut Pixmap, edge: EdgeMode, source_of: F)
+pub(super) fn remap<F>(pixmap: &mut Pixmap, edge: EdgeMode, source_of: F)
 where
     F: Fn(f32, f32) -> (f32, f32) + Sync,
 {

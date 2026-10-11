@@ -1,8 +1,11 @@
+use std::sync::Arc;
+
 use crate::{
-    BrushType, ContourEdge, DiffuseMode, ExtrudeType, GlassTexture, GrainType, HalftoneType,
-    HdrToningParams, LensType, LightDirection, Lighting, MezzotintType, NoiseDistribution,
-    PolarKind, Quality, RadialMethod, RippleSize, SharpenRemove, ShearFill, SpherizeMode,
-    StrokeDirection, TextureOptions, TileFill, TonalFade, WaveType, WindMethod, ZigZagStyle,
+    BrushType, ContourEdge, DiffuseMode, DisplaceFit, DisplaceMap, ExtrudeType, GlassTexture,
+    GrainType, HalftoneType, HdrToningParams, LensType, LightDirection, Lighting, MezzotintType,
+    NoiseDistribution, PolarKind, Quality, RadialMethod, RippleSize, SharpenRemove, ShearFill,
+    SpherizeMode, StrokeDirection, TextureOptions, TileFill, TonalFade, WaveType, WindMethod,
+    ZigZagStyle,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -133,6 +136,14 @@ pub enum Filter {
     Shear {
         curve: Vec<(f64, f64)>,
         fill: ShearFill,
+    },
+    /// Scales are percentages: 100 moves a pixel up to 128 px.
+    Displace {
+        map: Arc<DisplaceMap>,
+        horizontal_scale: f64,
+        vertical_scale: f64,
+        fit: DisplaceFit,
+        wrap: bool,
     },
     ZigZag {
         amount: f64,

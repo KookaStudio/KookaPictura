@@ -63,10 +63,10 @@ Ranges below marked **[AS]** are taken from the Photoshop CS6 AppleScript Script
 | Diffuse Glow | Graininess | int | 6 *(observed)* | 0–10 | [AS] |
 | Diffuse Glow | Glow Amount | int | 10 *(observed)* | 0–20 | [AS] |
 | Diffuse Glow | Clear Amount | int | 15 *(observed)* | 0–20 | [AS] |
-| Displace | Horizontal Scale | int | 0 *(inferred)* | −999–999 | [AS] |
-| Displace | Vertical Scale | int | 0 *(inferred)* | −999–999 | [AS] |
-| Displace | Displacement Map | enum | Stretch To Fit *(inferred)* | Stretch To Fit / Tile | [AS] |
-| Displace | Undefined Areas | enum | Wrap Around *(inferred)* | Wrap Around / Repeat Edge Pixels | [AS] |
+| Displace | Horizontal Scale | int % | 10 *(photorust)* | −999–999 | [AS] |
+| Displace | Vertical Scale | int % | 10 *(photorust)* | −999–999 | [AS] |
+| Displace | Displacement Map | enum | Stretch To Fit *(photorust)* | Stretch To Fit / Tile | [AS] |
+| Displace | Undefined Areas | enum | Repeat Edge Pixels *(photorust)* | Wrap Around / Repeat Edge Pixels | [AS] |
 | Displace | Map file | file | — | Flattened Photoshop PSD; Bitmap unsupported | [Help] |
 | Glass | Distortion | int | 5 *(inferred)* | 0–20 | [AS] |
 | Glass | Smoothness | int | 3 *(inferred)* | 1–15 | [AS] |
@@ -116,7 +116,7 @@ Ranges below marked **[AS]** are taken from the Photoshop CS6 AppleScript Script
 
 | Filter | Algorithm family | Notes |
 |---|---|---|
-| Displace | Per-pixel inverse lookup into a displacement map | Channel 1 drives horizontal, channel 2 vertical; each channel value `v` maps to shift `(v−128)/128 × scale` pixels; with one channel the shift is along the diagonal defined by the two scales. At 100% the largest shift is 128 px. Map is stretched or tiled to the selection. *[Help]* |
+| Displace | Per-pixel inverse lookup into a displacement map | Channel 1 drives horizontal, channel 2 vertical; each channel value `v` maps to shift `(v−128)/128 × scale` pixels; with one channel the shift is along the diagonal defined by the two scales. At 100% the largest shift is 128 px. Map is stretched or tiled to the selection. *[Help]* Each pixel reads the source that far away, so a light map pulls the picture up and to the left, the same direction as ImageMagick's `-compose displace`; a stretched map is sampled bilinearly. *(inferred; matches photorust and the ImageMagick oracle)* |
 | Pinch / Spherize | Radial inverse-mapping warp | Normalized radial distance remapped by a monotone curve; Spherize 3D-wraps around a sphere, Pinch squeezes/expands toward center. *(inferred)* |
 | Twirl | Angular inverse-mapping warp | Rotation angle falls off from center to edge; angle sign sets direction. *(inferred)* |
 | Polar Coordinates | Coordinate transform | `rect→polar` and `polar→rect` with bilinear resampling. *(inferred)* |
@@ -152,7 +152,7 @@ Crossing types: `Tile`, `Rect`, `ColorMode`, `BitDepth`, `EdgeMode`, `FilterPara
 | `DistortOptionsDialog` | `QDialog` | Hosts each filter's small parameter form; swap-in `QStackedWidget` per filter |
 | `ShearCurveEditor` | `QWidget` | Draws the shear curve grid; drag control points; click the line to add, drag a point out to remove |
 | `WaveOptionsPanel` | `QWidget` | Generators, min/max wavelength/amplitude spin boxes, type combo, Randomize |
-| `DisplaceOptionsPanel` | `QWidget` | Scale spins, Stretch/Tile, Undefined combo, file chooser (deferred to post-OK open) |
+| `DisplaceOptionsPanel` | `QWidget` | Scale spins, Stretch/Tile radios, Undefined Areas radios, no preview; file chooser opens after OK |
 | `GlassOptionsPanel` | `QWidget` | Distortion/Smoothness/Scaling sliders, texture combo + Load Texture, Invert |
 | `LensCorrectionWidget` | `QWidget` (workspace) | Auto/Custom tabs, sliders, Straighten tool, grid overlay, lens-profile list |
 | `FilterPreviewPane` | `QGraphicsView` | Shared preview with zoom + drag-to-center (per Help) |

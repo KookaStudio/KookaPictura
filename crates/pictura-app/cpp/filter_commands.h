@@ -22,6 +22,7 @@ enum class FilterControl {
     Placement, // two slots: x, y (normalized 0..1)
     BlurCenter, // display-only centre pad, contributes no slot
     ShearCurve, // a point count and up to kShearMaxPoints (position, offset) pairs
+    Hidden,     // one slot carried through the dialog with no widget (Displace's map id)
 };
 
 // The most control points a Shear curve carries. Lock-step with
@@ -59,6 +60,9 @@ struct FilterCommandSpec {
     // The preview sits under the inputs (Shear) instead of beside them, with
     // no zoom row and no Preview checkbox, as CS6's Shear has none.
     bool previewBelow = false;
+    // No preview at all, no Preview checkbox (Displace: its map is chosen
+    // after OK, so there is nothing to show).
+    bool livePreview = true;
 };
 
 // Every Filter-menu leaf that has an engine kernel, in menu order.
