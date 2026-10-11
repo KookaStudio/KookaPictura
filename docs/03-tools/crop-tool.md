@@ -11,8 +11,9 @@
 Cropping removes portions of an image to strengthen composition. In CS6 the Crop
 tool is a redesigned, interactive tool separate from the older CS5 workflow:
 
-- Selecting the Crop tool places a crop box with eight handles (four corners,
-  four edges) on the image immediately; the user can also drag a new box. The
+- Selecting the Crop tool places a crop box with eight handles (four L-shaped
+  corner brackets and four thin edge bars, all drawn inside the box) on the
+  image immediately; the user can also drag a new box. The
   area outside the box is shown through a **crop shield** (a tinted overlay), and
   the crop box carries an overlay guide (Rule of Thirds by default).
 - The image moves inside the box when dragged; the box stays fixed (the
@@ -21,10 +22,11 @@ tool is a redesigned, interactive tool separate from the older CS5 workflow:
 - **Size and proportions** come from the Aspect Ratio menu (presets, custom
   W/H, `Front Image`, `W x H x Resolution`). The double-arrow control swaps
   width and height (keyboard `X`), replacing CS5's "Rotate Crop Box" button.
-- **Straighten**: either drag outside the corner handles to rotate the image
-  behind the box, or use the **Straighten** control and draw a reference line
-  along a feature that should be horizontal or vertical. The canvas is
-  automatically resized to accommodate the rotated pixels. Source: CS6
+- **Straighten**: either drag in the rotate band just outside the box to rotate
+  the image behind the box (beyond the band the cursor is the default arrow and
+  a click applies the crop), or use the **Straighten** control and draw a
+  reference line along a feature that should be horizontal or vertical. The
+  canvas is automatically resized to accommodate the rotated pixels. Source: CS6
   reference, "Straighten an image | CS6".
 - **View** selects the overlay guide; `O` cycles overlays, `Shift+O` cycles
   orientation for triangular/spiral overlays.
@@ -34,8 +36,10 @@ tool is a redesigned, interactive tool separate from the older CS5 workflow:
   crop box exposes common crop options.
 - **Use Classic mode** (Settings menu) makes the tool behave like earlier
   Photoshop versions.
-- Committing is `Enter`/`Return`, a double-click inside the box, or the commit
-  button; `Esc` cancels. Resetting the box is `Backspace`/`Delete`.
+- Committing is `Enter`/`Return`, a double-click inside the box, a click away from
+  the box beyond the rotate band (on the canvas or the workspace past its edge),
+  or the commit button; `Esc` cancels. A far click while only the preview is
+  shown does nothing. Resetting the box is `Backspace`/`Delete`.
 - The same tool slot also holds the CS6 **Perspective Crop** tool
   (`TOOL-012`) and, lower in the toolbox, the Slice tools.
 - `Image > Crop` (selection-based) and `Image > Trim` remain as non-interactive
