@@ -4,6 +4,7 @@
 #include "frame_canvas.h"
 #include "panels/numeric_field.h"
 #include "pictura_debug_timing.h"
+#include "screen_mode_message.h"
 #include "pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_history/display.cxxqt.h"
 
@@ -214,10 +215,9 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
             [this](int index) { closeDocument(index, true); });
 
     auto* hidePanels = new QShortcut(QKeySequence(Qt::Key_Tab), this);
-    connect(hidePanels, &QShortcut::activated, this, [this]() { setPanelsHidden(!panelsHidden_); });
+    connect(hidePanels, &QShortcut::activated, this, [this]() { togglePanelsHidden(); });
     auto* hidePanelsBack = new QShortcut(QKeySequence(Qt::SHIFT | Qt::Key_Tab), this);
-    connect(hidePanelsBack, &QShortcut::activated, this,
-            [this]() { setPanelsHidden(!panelsHidden_); });
+    connect(hidePanelsBack, &QShortcut::activated, this, [this]() { togglePanelsHidden(); });
     // Space is reserved for transient panning, so the canvas-colour cycle is
     // bound to a double `F` instead; a bare Space reaches the widgets.
     auto* cycleCanvas = new QShortcut(QKeySequence(Qt::Key_F, Qt::Key_F), this);
@@ -841,17 +841,13 @@ void PicturaMainWindow::setBrightnessLevel(int level)
 
 void PicturaMainWindow::setScreenMode(ScreenMode mode)
 {
+    const ScreenMode previous = screenMode_;
     screenMode_ = mode;
     auto setCanvasColor = [this](const QColor& color) {
         for (const DocEntry& entry : docs_) {
             if (entry.canvas) {
                 entry.canvas->setCanvasColor(color);
             }
-        }
-    };
-    auto setChromeVisible = [this](bool visible) {
-        for (PanelColumn* column : panelColumns()) {
-            column->setVisible(visible);
         }
     };
     switch (mode) {
@@ -861,22 +857,28 @@ void PicturaMainWindow::setScreenMode(ScreenMode mode)
         setWindowState(state);
         menuBar()->setVisible(true);
         statusBar()->setVisible(true);
-        setChromeVisible(!panelsHidden_);
+        setPanelColumnsVisible(!panelsHidden_);
         setCanvasColor(canvasColorForIndex(canvasColorIndex_));
         break;
     }
     case ScreenMode::FullWithMenuBar:
+        fullScreenChromeShown_ = false;
         setWindowState(Qt::WindowFullScreen);
         menuBar()->setVisible(true);
         statusBar()->setVisible(false);
-        setChromeVisible(false);
+        // CS6 keeps the Tools panel, Options bar, and panels in this mode; only
+        // the document-window chrome (tab, scroll bars, status bar) goes away.
+        setPanelColumnsVisible(!panelsHidden_);
         setCanvasColor(QColor(128, 128, 128));
         break;
     case ScreenMode::Full:
+        if (previous != ScreenMode::Full) {
+            fullScreenChromeShown_ = false;
+        }
         setWindowState(Qt::WindowFullScreen);
-        menuBar()->setVisible(false);
+        menuBar()->setVisible(fullScreenChromeShown_);
         statusBar()->setVisible(false);
-        setChromeVisible(false);
+        setPanelColumnsVisible(fullScreenChromeShown_);
         setCanvasColor(Qt::black);
         break;
     }
@@ -887,12 +889,49 @@ void PicturaMainWindow::setScreenMode(ScreenMode mode)
     layoutWorkspaceFrame();
 }
 
-void PicturaMainWindow::cycleScreenMode(bool forward)
+PicturaMainWindow::ScreenMode PicturaMainWindow::nextScreenMode(bool forward) const
 {
     int index = static_cast<int>(screenMode_);
     index += forward ? 1 : -1;
     index = (index % 3 + 3) % 3;
-    setScreenMode(static_cast<ScreenMode>(index));
+    return static_cast<ScreenMode>(index);
+}
+
+void PicturaMainWindow::cycleScreenMode(bool forward)
+{
+    setScreenMode(nextScreenMode(forward));
+}
+
+void PicturaMainWindow::requestScreenMode(ScreenMode mode)
+{
+    if (mode != ScreenMode::Standard && screenMode_ == ScreenMode::Standard
+        && !confirmFullScreenMode(this)) {
+        return;
+    }
+    setScreenMode(mode);
+}
+
+void PicturaMainWindow::setPanelColumnsVisible(bool visible)
+{
+    for (PanelColumn* column : panelColumns()) {
+        column->setVisible(visible);
+    }
+}
+
+void PicturaMainWindow::togglePanelsHidden()
+{
+    if (screenMode_ != ScreenMode::Full) {
+        // Standard and Full Screen With Menu Bar share the persisted Tab state;
+        // CS6 toggles the same chrome in both.
+        setPanelsHidden(!panelsHidden_);
+        return;
+    }
+    // Full Screen Mode hides the panels and the menu bar; Tab reveals them
+    // transiently, and the next Tab hides them again.
+    fullScreenChromeShown_ = !fullScreenChromeShown_;
+    menuBar()->setVisible(fullScreenChromeShown_);
+    setPanelColumnsVisible(fullScreenChromeShown_);
+    layoutWorkspaceFrame();
 }
 
 void PicturaMainWindow::refresh()
@@ -1057,8 +1096,13 @@ void PicturaMainWindow::keyPressEvent(QKeyEvent* event)
         && tools_->cancelPolygonLasso()) {
         return;
     }
+    if (!event->isAutoRepeat() && event->key() == Qt::Key_Escape
+        && screenMode_ != ScreenMode::Standard) {
+        setScreenMode(ScreenMode::Standard);
+        return;
+    }
     if (!event->isAutoRepeat() && event->key() == Qt::Key_F) {
-        cycleScreenMode(!(event->modifiers() & Qt::ShiftModifier));
+        requestScreenMode(nextScreenMode(!(event->modifiers() & Qt::ShiftModifier)));
         return;
     }
     // EU/Scandinavian fallback for the `[`/`]` brush shortcuts: the US

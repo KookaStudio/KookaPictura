@@ -463,6 +463,11 @@ void CommandTreeTest::toolboxInteractions()
     QVERIFY(modeMenu->actions().contains(full));
     window_->setScreenMode(pictura::PicturaMainWindow::ScreenMode::Standard);
     const QImage standardIcon = screenMode->icon().pixmap(16, 16).toImage();
+    // The trigger would otherwise raise the full-screen advisory modal; the
+    // dialog itself is covered by tst_screen_modes.
+    pictura::SessionState session = pictura::loadSession();
+    session.showFullScreenMessage = false;
+    QVERIFY(pictura::saveSession(session));
     full->trigger();
     QCoreApplication::processEvents();
     QCOMPARE(window_->screenMode(), pictura::PicturaMainWindow::ScreenMode::Full);

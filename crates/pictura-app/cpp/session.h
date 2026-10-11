@@ -27,6 +27,7 @@ struct SessionState {
     int toolsColumns = 1;            // 1 or 2; out-of-range loads the default
     bool useShiftKeyForToolSwitch = true;
     bool confirmLiveShapeToPath = true;  // off after "Don't show again"
+    bool showFullScreenMessage = true;   // off after "Don't show again"
     // Edit > Preferences > File Handling: Automatically Save Recovery
     // Information Every <n> minutes (CS6 choices 5/10/15/30/60, default 10).
     bool autoSaveRecovery = true;

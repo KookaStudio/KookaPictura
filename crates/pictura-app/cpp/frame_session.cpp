@@ -12,9 +12,7 @@ namespace pictura {
 void PicturaMainWindow::setPanelsHidden(bool hidden)
 {
     panelsHidden_ = hidden;
-    for (PanelColumn* column : panelColumns()) {
-        column->setVisible(!hidden);
-    }
+    setPanelColumnsVisible(!hidden);
 }
 
 void PicturaMainWindow::retargetDock()

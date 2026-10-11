@@ -145,7 +145,20 @@ CS6 has three screen modes, cycled with `F` (forward) and `Shift+F` (backward)
 - `Esc` (or `F`) returns from Full Screen Mode to Standard Screen Mode
   *(secondary)*.
 - `Tab` hides/shows the Tools panel, Options bar and panels; `Shift+Tab` hides/
-  shows panels only *(primary Help; secondary for CS6)*.
+  shows panels only *(primary Help; secondary for CS6)*. In Standard and Full
+  Screen With Menu Bar the toggle is the ordinary persisted panel state. In Full
+  Screen Mode the panel columns and the menu bar start hidden and the **first
+  `Tab` reveals them** (the second hides them again); the reveal is transient,
+  so returning to Standard Screen Mode restores the chrome that was in effect
+  before the mode change.
+- Entering either full-screen mode from Standard Screen Mode shows the CS6
+  **advisory message** *(issue #328 screenshot)*: a `Message` box whose body
+  reads "In Full Screen Mode, panels are hidden. They can be accessed on the
+  sides of the screen, or revealed by pressing Tab." and "While in Full Screen
+  Mode, you can return to Standard Screen Mode by pressing 'F' or Esc.", with a
+  default **Full Screen** button, a **Cancel** button that aborts the switch,
+  and a **Don't show again** checkbox whose choice persists across restarts.
+  Switching between the two full-screen modes does not show it.
 - Canvas/pasteboard colour cycles with `Space+F` (forward) and `Space+Shift+F`
   (backward) or by right-clicking the canvas background *(primary: CS6 Help key
   table)*. The palette is Black, Dark Gray, Medium Gray, Light Gray and a Custom
@@ -372,6 +385,10 @@ Fetched for this document:
   visible chrome, hiding of the tab/scroll bars/status bar in Full Screen With
   Menu Bar, `Esc` to exit Full Screen, edge-hover to reveal tools/panels, and
   `Tab`/`Shift+Tab`.
+- Issue #328's screenshot of the CS6 full-screen advisory (a black-box capture
+  attached to the repository issue) — establishes the advisory's `Message`
+  title, its two body sentences, the `Full Screen` / `Cancel` buttons, and the
+  `Don't show again` checkbox.
 - `https://www.howtogeek.com/724883/how-to-switch-between-light-and-dark-themes-in-photoshop/`
   — secondary. Corroborates `Shift+F1` darker / `Shift+F2` lighter, four levels,
   persisted across restarts.

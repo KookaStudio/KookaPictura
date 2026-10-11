@@ -1008,11 +1008,11 @@ void PicturaMainWindow::registerHandlers()
     });
 
     registry_->setHandler(command_ids::ViewScreenModeStandard,
-                          [this]() { setScreenMode(ScreenMode::Standard); });
+                          [this]() { requestScreenMode(ScreenMode::Standard); });
     registry_->setHandler(command_ids::ViewScreenModeFullWithMenuBar,
-                          [this]() { setScreenMode(ScreenMode::FullWithMenuBar); });
+                          [this]() { requestScreenMode(ScreenMode::FullWithMenuBar); });
     registry_->setHandler(command_ids::ViewScreenModeFull,
-                          [this]() { setScreenMode(ScreenMode::Full); });
+                          [this]() { requestScreenMode(ScreenMode::Full); });
     registry_->setCheckedProvider(command_ids::ViewScreenModeStandard,
                                   [this]() { return screenMode_ == ScreenMode::Standard; });
     registry_->setCheckedProvider(command_ids::ViewScreenModeFullWithMenuBar, [this]() {
