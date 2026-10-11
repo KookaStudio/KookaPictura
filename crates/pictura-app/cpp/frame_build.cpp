@@ -216,6 +216,19 @@ void PicturaMainWindow::buildPanels()
     panelColumn_->showPanel(QStringLiteral("paragraphPanel"), false);
     panelColumn_->showPanel(QStringLiteral("paragraphStylesPanel"), false);
 
+    // Switching between a layer's pixels and its mask swaps in that target's
+    // own FG/BG pair, so each remembers its colours.
+    connect(layersPanel_, &LayersPanel::editTargetChanged, this, [this](bool) {
+        if (!colorState_) {
+            return;
+        }
+        const QColor foreground = colorState_->foreground();
+        const QColor background = colorState_->background();
+        colorState_->setForeground(otherForeground_);
+        colorState_->setBackground(otherBackground_);
+        otherForeground_ = foreground;
+        otherBackground_ = background;
+    });
     connect(layersPanel_, &LayersPanel::selectionChanged, this, [this] {
         if (propertiesPanel_) {
             propertiesPanel_->refresh();

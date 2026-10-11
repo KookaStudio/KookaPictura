@@ -793,6 +793,7 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                 if (!layerThumb.isEmpty() && layerThumb.contains(pos)
                     && !(mouse->modifiers() & Qt::ControlModifier)) {
                     mask_edit_target_set(*view_, QString());
+                    syncEditTarget();
                 }
                 const QRect maskThumb = delegate_->maskThumbRect(vr, index);
                 if (!maskThumb.isEmpty() && maskThumb.contains(pos)) {
@@ -1046,6 +1047,7 @@ void LayersPanel::syncControls()
         fill_->setEnabled(fillAny);
     }
     syncing_ = false;
+    syncEditTarget();
     emit selectionChanged();
 }
 

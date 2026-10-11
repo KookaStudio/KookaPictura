@@ -431,7 +431,10 @@ pub(crate) fn apply(
         let (Some(doc), Some(path)) = (rust.doc.as_ref(), rust.active_layer.as_deref()) else {
             return false;
         };
+        // ponytail: of the fills only Edit > Fill writes a mask (`fill_mask`);
+        // the rest refuse a mask target rather than write the layer's pixels.
         if rust.stroke.is_some()
+            || active_mask_target(rust).is_some()
             || active_pixel_layer(doc, Some(path)).is_none()
             || !active_layer_visible(doc, Some(path))
         {
