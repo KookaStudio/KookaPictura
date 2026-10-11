@@ -16,6 +16,7 @@ pub fn apply(filter: &Filter, buf: &mut PixelBuffer) -> Result<(), FilterError> 
     match filter {
         Filter::GaussianBlur { radius } => blur::gaussian(buf, *radius),
         Filter::BoxBlur { radius } => blur::r#box(buf, *radius),
+        Filter::ShapeBlur { shape, radius } => blur::shape(buf, *shape, *radius),
         Filter::MotionBlur { angle, distance } => blur::motion(buf, *angle, *distance),
         Filter::RadialBlur {
             method,

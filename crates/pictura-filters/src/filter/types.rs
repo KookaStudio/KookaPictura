@@ -16,6 +16,11 @@ pub enum Filter {
     BoxBlur {
         radius: u32,
     },
+    /// `shape` indexes `pictura_core::shape::CUSTOM_SHAPE_NAMES`.
+    ShapeBlur {
+        shape: usize,
+        radius: u32,
+    },
     MotionBlur {
         angle: f64,
         distance: u32,

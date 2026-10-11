@@ -11,6 +11,7 @@ use crate::cxxqt_object::filter_tools::lens_blur_depths::LENS_BLUR_SLOTS;
 pub(in crate::cxxqt_object) const FILTER_ARITIES: &[(&str, usize)] = &[
     ("gaussian-blur", 1),
     ("box-blur", 1),
+    ("shape-blur", 2),
     ("surface-blur", 2),
     ("lens-blur", LENS_BLUR_SLOTS),
     ("motion-blur", 2),

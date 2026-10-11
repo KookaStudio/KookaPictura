@@ -13,6 +13,7 @@
 class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
+class QListWidget;
 class QButtonGroup;
 class QPushButton;
 class QSlider;
@@ -69,6 +70,7 @@ private:
         QButtonGroup* group = nullptr; // Radio group
         double hidden = 0.0;           // a Hidden slot's value
         QList<QSpinBox*> cells;        // Matrix cells, row by row
+        QListWidget* shapes = nullptr; // Shape grid
     };
 
     void addControl(const FilterParamSpec& spec);

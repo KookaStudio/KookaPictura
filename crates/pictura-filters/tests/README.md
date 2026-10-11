@@ -14,7 +14,7 @@ flags, the tolerances and the known divergences are below.
 Only filters with a faithful ImageMagick operator are diffed (`GaussianBlur`,
 `BoxBlur`, `Blur`, `BlurMore`, `Median`, `UnsharpMask`, `Sharpen`,
 `SharpenMore`, `Maximum`, `Minimum`, `Offset` with `wrap = true`, `Custom`,
-`Solarize`, `Mosaic`, `Displace` with Repeat Edge Pixels). The rest are covered by
+`Solarize`, `Mosaic`, `Displace` with Repeat Edge Pixels, `ShapeBlur`). The rest are covered by
 ImageMagick-independent property/known-value tests (here and in the module unit
 tests); the measured divergences that ruled out a differential test are recorded
 below. No test is `#[ignore]`d.
@@ -149,6 +149,7 @@ play.
 |---|---|
 | Gaussian Blur | `-gaussian-blur 0x{sigma}` |
 | Box Blur | `-statistic mean {N}x{N}`, `N = 2·radius + 1` |
+| Shape Blur | `-define convolve:scale=! -morphology Convolve {S}x{S}:{weights}`, Pictura's coverage kernel, `S = 2·radius + 1` |
 | Motion Blur | `-motion-blur 0x{distance}+{angle}` (documented, **not** used by a differential test) |
 | Median | `-median {radius}` |
 | Unsharp Mask | `-unsharp 0x{sigma}+{amount/100}+{threshold/255}` |

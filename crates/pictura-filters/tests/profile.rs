@@ -67,6 +67,13 @@ fn filters() -> Vec<(&'static str, Filter)> {
         ("GaussianBlur", Filter::GaussianBlur { radius: 50.0 }),
         ("BoxBlur", Filter::BoxBlur { radius: 20 }),
         (
+            "ShapeBlur",
+            Filter::ShapeBlur {
+                shape: 0,
+                radius: 46,
+            },
+        ),
+        (
             "MotionBlur",
             Filter::MotionBlur {
                 angle: 30.0,

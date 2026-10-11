@@ -107,11 +107,20 @@ pub(super) fn aspect(index: usize) -> f64 {
 /// (0–255) of the shape at its designed proportions, inset a tenth of the side.
 /// Empty for an unknown index.
 pub fn custom_shape_preview(index: usize, size: u32) -> Vec<u8> {
+    centred_coverage(index, size, (f64::from(size) * 0.1).max(1.0))
+}
+
+/// Shape `index` as a blur kernel: like [`custom_shape_preview`] but filling
+/// the `size` square edge to edge along its longer side.
+pub fn custom_shape_kernel(index: usize, size: u32) -> Vec<u8> {
+    centred_coverage(index, size, 0.0)
+}
+
+fn centred_coverage(index: usize, size: u32, inset: f64) -> Vec<u8> {
     if index >= CUSTOM_SHAPE_NAMES.len() || size == 0 {
         return Vec::new();
     }
     let side = f64::from(size);
-    let inset = (side * 0.1).max(1.0);
     let room = (side - inset * 2.0).max(1.0);
     let a = aspect(index);
     let (w, h) = if a >= 1.0 {
@@ -174,5 +183,29 @@ mod tests {
         assert_eq!(star[16 * 32 + 16], 255, "the middle is filled");
         assert_eq!(star[0], 0, "the corner is empty");
         assert!(custom_shape_preview(99, 32).is_empty());
+    }
+
+    #[test]
+    fn a_kernel_reaches_the_square_edge_a_preview_is_inset_from() {
+        let size = 41;
+        let rows_touched = |c: &[u8]| {
+            let first = c.iter().position(|&v| v > 0).unwrap() / size;
+            let last = c.iter().rposition(|&v| v > 0).unwrap() / size;
+            (first, last)
+        };
+        // The cross is square, so it fills both axes.
+        let kernel = custom_shape_kernel(3, size as u32);
+        assert_eq!(rows_touched(&kernel), (0, size - 1));
+        assert_eq!(
+            kernel[(size / 2) * size],
+            255,
+            "the bar reaches the left edge"
+        );
+        let (first, last) = rows_touched(&custom_shape_preview(3, size as u32));
+        assert!(
+            first >= 3 && last <= size - 4,
+            "the preview keeps its inset"
+        );
+        assert!(custom_shape_kernel(CUSTOM_SHAPE_NAMES.len(), 9).is_empty());
     }
 }

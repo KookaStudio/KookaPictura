@@ -85,6 +85,7 @@ pub fn filter_preserves_opacity(filter: &Filter) -> bool {
         filter,
         Filter::GaussianBlur { .. }
             | Filter::BoxBlur { .. }
+            | Filter::ShapeBlur { .. }
             | Filter::MotionBlur { .. }
             | Filter::RadialBlur { .. }
             | Filter::Average
@@ -421,6 +422,7 @@ pub fn preview_apron(filter: &Filter) -> i32 {
         Filter::SmartSharpen { radius, .. } => (3.0 * radius).ceil(),
         Filter::HdrToning(p) => (3.0 * p.radius).ceil(),
         Filter::BoxBlur { radius }
+        | Filter::ShapeBlur { radius, .. }
         | Filter::SurfaceBlur { radius, .. }
         | Filter::LensBlur { radius, .. }
         | Filter::Median { radius }

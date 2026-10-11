@@ -1,14 +1,17 @@
 #include "filter_param_controls.h"
 #include "color_picker_dialog.h"
 #include "panels/jump_slider.h"
+#include "pictura_app/src/cxxqt_object/shapes.cxxqt.h"
 
 #include <QtCore/QSignalBlocker>
 #include <QtCore/QVariant>
 #include <QtGui/QColor>
 #include <QtGui/QFontMetrics>
 #include <QtGui/QMouseEvent>
+#include <QtGui/QIcon>
 #include <QtGui/QPainter>
 #include <QtGui/QPen>
+#include <QtGui/QPixmap>
 #include <QtGui/QResizeEvent>
 #include <QtMath>
 #include <QtWidgets/QCheckBox>
@@ -18,6 +21,7 @@
 #include <QtWidgets/QGridLayout>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
+#include <QtWidgets/QListWidget>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QRadioButton>
 #include <QtWidgets/QSlider>
@@ -588,6 +592,28 @@ void FilterParamControls::addControl(const FilterParamSpec& spec)
             control.cells.append(cell);
         }
         break;
+    case FilterControl::Shape: {
+        // The Custom Shape catalogue as the options bar's picker draws it:
+        // white silhouettes on the dark grid.
+        auto* list = new QListWidget(parent_);
+        list->setObjectName(QStringLiteral("filterShapeGrid"));
+        list->setViewMode(QListView::IconMode);
+        list->setIconSize(QSize(32, 32));
+        list->setGridSize(QSize(40, 40));
+        list->setResizeMode(QListView::Adjust);
+        list->setMovement(QListView::Static);
+        list->setMinimumHeight(100);
+        for (int i = 0; i < shape_custom_count(); ++i) {
+            QImage image = shape_custom_preview(i, 64);
+            image.invertPixels(QImage::InvertRgb);
+            auto* item = new QListWidgetItem(QIcon(QPixmap::fromImage(image)), QString(), list);
+            item->setToolTip(shape_custom_name(i));
+        }
+        list->setCurrentRow(static_cast<int>(fallback(0, spec.value)));
+        connect(list, &QListWidget::currentRowChanged, this, [this] { emit changed(); });
+        control.shapes = list;
+        break;
+    }
     case FilterControl::ShearCurve: {
         auto* curve = new ShearCurveWidget(parent_);
         curve->changed = [this] { emit changed(); };
@@ -695,6 +721,10 @@ void FilterParamControls::addControl(const FilterParamSpec& spec)
         rowLayout->addLayout(grid);
         break;
     }
+    case FilterControl::Shape:
+        rowLayout->addWidget(new QLabel(spec.label, control.row));
+        rowLayout->addWidget(control.shapes);
+        break;
     case FilterControl::Radio: {
         rowLayout->addWidget(new QLabel(spec.label, control.row));
         const QList<QAbstractButton*> buttons = control.group->buttons();
@@ -796,6 +826,12 @@ void FilterParamControls::setValues(const QList<double>& initial)
                 control.cells.at(i)->setValue(static_cast<int>(initial.at(slot + i)));
             }
             break;
+        case FilterControl::Shape:
+            if (slot < initial.size()) {
+                control.shapes->setCurrentRow(
+                    qBound(0, static_cast<int>(initial.at(slot)), control.shapes->count() - 1));
+            }
+            break;
         default:
             if (slot < initial.size()) {
                 control.spin->setValue(initial.at(slot));
@@ -828,6 +864,8 @@ double FilterParamControls::controlValue(const Control& control, int slot) const
         return control.hidden;
     case FilterControl::Matrix:
         return control.cells.at(slot)->value();
+    case FilterControl::Shape:
+        return static_cast<double>(qMax(0, control.shapes->currentRow()));
     default:
         return control.spin->value();
     }
