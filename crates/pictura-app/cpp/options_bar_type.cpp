@@ -217,7 +217,7 @@ QWidget* OptionsBar::buildTypePage(ToolId id)
         return page;
     }
 
-    const auto sync = [=, this]() {
+    const auto sync = [=]() {
         const TypeOptions o = controller_->typeOptions();
         const QSignalBlocker blockFamily(family);
         const QSignalBlocker blockAntialias(antialias);
