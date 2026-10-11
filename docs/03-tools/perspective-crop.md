@@ -76,7 +76,7 @@ Additional CS6 facts:
 | Options bar | Front Image | `I` | Sets the resolution from the front document; shortcut changed from F |
 | Options bar | Clear | — | Clears the W/H output fields |
 | Options bar | Apply / Cancel | `Enter` / `Esc` | Shown only while the quad is complete |
-| Canvas | Four clicked corners | — | Click TL, TR, BR, BL; drag to match object edges |
+| Canvas | Four clicked corners | — | Click the four corners in any order; the tool orients them upright (never rotates or mirrors); drag to match object edges |
 | Canvas | Rotate outside | — | Drag outside the complete quad rotates it about its centre |
 | Context | Commit | `Enter`/`Return` | Double-click inside also commits |
 | Context | Cancel | `Esc` | |
