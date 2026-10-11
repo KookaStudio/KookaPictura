@@ -1038,10 +1038,10 @@ void ImageView::mousePressEvent(QMouseEvent* event)
         last_ = event->position();
         setCursor(Qt::ClosedHandCursor);
         update();
-    } else if (panEnabled_ && event->button() == Qt::LeftButton) {
-        panning_ = true;
-        userAdjusted_ = true;
-        last_ = event->position();
+    } else if (panEnabled_ && event->button() == Qt::LeftButton
+               && (spacePan_ || !event->modifiers().testFlag(Qt::ControlModifier))) {
+        // A Ctrl press goes to the controller, which pans if no guide is hit.
+        beginPan(event->position());
         if (spacePan_) {
             setCursor(Qt::ClosedHandCursor);
         }

@@ -16,13 +16,16 @@ const DEFAULT_GRID_CYCLE: u32 = 576;
 const HEADER_LEN: usize = 16;
 const GUIDE_LEN: usize = 5;
 
+/// A 1032 payload's guides and `(horizontal, vertical)` grid cycles.
+type StoredGuides = (Vec<Guide>, (u32, u32));
+
 fn be_u32(bytes: &[u8]) -> u32 {
     u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
 }
 
 /// The guides and the `(horizontal, vertical)` grid cycles a 1032 payload
 /// holds; `None` when it is truncated.
-fn decode_guides(data: &[u8]) -> Option<(Vec<Guide>, (u32, u32))> {
+fn decode_guides(data: &[u8]) -> Option<StoredGuides> {
     if data.len() < HEADER_LEN {
         return None;
     }
@@ -62,13 +65,19 @@ fn encode_guides(guides: &[Guide], (horizontal, vertical): (u32, u32)) -> Vec<u8
     out
 }
 
-/// The 1032 payload `section` holds, decoded.
-fn section_guides(section: &[u8]) -> Option<(Vec<Guide>, (u32, u32))> {
+/// The 1032 payload `section` holds: `None` when absent, `Some(None)` when
+/// malformed.
+fn stored_guides(section: &[u8]) -> Option<Option<StoredGuides>> {
     decode_section(section)
         .0
         .into_iter()
         .find(|r| r.id == GRID_AND_GUIDES)
-        .and_then(|r| decode_guides(&r.data))
+        .map(|r| decode_guides(&r.data))
+}
+
+/// The 1032 payload `section` holds, decoded.
+fn section_guides(section: &[u8]) -> Option<StoredGuides> {
+    stored_guides(section).flatten()
 }
 
 /// Derive the document's guides from its preserved image-resource section. A
@@ -86,15 +95,22 @@ pub(crate) fn output_resources(doc: &Document, mode_code: u16) -> Vec<u8> {
 }
 
 /// `section` with its 1032 resource standing for the document's guides.
-/// Returned unchanged when it already decodes to them, so an unedited file
-/// keeps its original bytes; the grid cycles of an existing resource are kept.
+/// Returned unchanged when it already holds them (or, with no guides, holds no
+/// 1032), so an unedited file keeps its original bytes; the grid cycles of an
+/// existing resource are kept.
 pub(crate) fn with_document_guides(doc: &Document, section: Vec<u8>) -> Vec<u8> {
-    let stored = section_guides(&section);
-    let stored_guides = stored.as_ref().map_or(&[][..], |(g, _)| g.as_slice());
-    if stored_guides == doc.guides.as_slice() {
+    let stored = stored_guides(&section);
+    let unchanged = match &stored {
+        None => doc.guides.is_empty(),
+        Some(Some((guides, _))) => !doc.guides.is_empty() && *guides == doc.guides,
+        Some(None) => false,
+    };
+    if unchanged {
         return section;
     }
-    let cycles = stored.map_or((DEFAULT_GRID_CYCLE, DEFAULT_GRID_CYCLE), |(_, c)| c);
+    let cycles = stored
+        .flatten()
+        .map_or((DEFAULT_GRID_CYCLE, DEFAULT_GRID_CYCLE), |(_, c)| c);
     let (resources, consumed) = decode_section(&section);
     let mut kept: Vec<_> = resources
         .into_iter()
@@ -182,5 +198,17 @@ mod tests {
     fn no_guides_write_no_resource() {
         let doc = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
         assert!(with_document_guides(&doc, Vec::new()).is_empty());
+    }
+
+    #[test]
+    fn empty_or_malformed_resource_is_dropped_without_guides() {
+        let other = frame_image_resource(1005, "", &[0; 16]);
+        let expected = encode_image_resources(std::slice::from_ref(&other));
+        let doc = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
+        for payload in [encode_guides(&[], (576, 576)), vec![0, 0, 0, 1]] {
+            let stored = frame_image_resource(GRID_AND_GUIDES, "", &payload);
+            let section = encode_image_resources(&[other.clone(), stored]);
+            assert_eq!(with_document_guides(&doc, section), expected);
+        }
     }
 }

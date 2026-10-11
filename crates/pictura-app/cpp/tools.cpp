@@ -930,6 +930,10 @@ void ToolController::handlePressed(const QPointF& imagePos, int button, int modi
     if (beginGuideDrag(imagePos, mods)) {
         return;
     }
+    if (active_ == ToolId::Hand && canvas_ && canvas_->panEnabled()) {
+        canvas_->beginPan(canvas_->imageToWidget(imagePos));
+        return;
+    }
     ToolHandler* handler = registry_.forTool(active_);
     if (isSelectionTool(active_) && !(handler && handler->lassoInProgress())) {
         // A press inside a live selection moves the mask or its content instead

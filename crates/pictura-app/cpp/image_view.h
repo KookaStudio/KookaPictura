@@ -153,6 +153,13 @@ public:
     // When disabled, mouse presses are forwarded as tool events instead of
     // starting a pan. Default true.
     void setPanEnabled(bool enabled);
+    // Start a left-button pan from `widgetPos`, as a pan-enabled press does.
+    void beginPan(const QPointF& widgetPos)
+    {
+        panning_ = true;
+        userAdjusted_ = true;
+        last_ = widgetPos;
+    }
     bool panEnabled() const { return panEnabled_; }
 
     // Transient Space-key pan: while on, a left drag pans and the hand cursors

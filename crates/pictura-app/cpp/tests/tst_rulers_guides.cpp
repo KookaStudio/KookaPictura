@@ -65,6 +65,24 @@ void dragFromRuler(QWidget* ruler, const QPoint& from, const QPoint& to)
     sendMouse(ruler, QEvent::MouseButtonRelease, to, Qt::NoButton);
 }
 
+// A real press-move-release on the canvas at image points, so ImageView's own
+// pan handling sees it (Fixture::drag emits the tool signals directly).
+void dragOnCanvas(pictura::ImageView* canvas, const QPointF& from, const QPointF& to,
+                  Qt::KeyboardModifiers mods)
+{
+    const QPointF a = canvas->imageToWidget(from);
+    const QPointF b = canvas->imageToWidget(to);
+    QMouseEvent press(QEvent::MouseButtonPress, a, canvas->mapToGlobal(a), Qt::LeftButton,
+                      Qt::LeftButton, mods);
+    QApplication::sendEvent(canvas, &press);
+    QMouseEvent move(QEvent::MouseMove, b, canvas->mapToGlobal(b), Qt::NoButton, Qt::LeftButton,
+                     mods);
+    QApplication::sendEvent(canvas, &move);
+    QMouseEvent release(QEvent::MouseButtonRelease, b, canvas->mapToGlobal(b), Qt::LeftButton,
+                        Qt::NoButton, mods);
+    QApplication::sendEvent(canvas, &release);
+}
+
 QList<double> guide(pictura::PictureView* view, int index)
 {
     const ::rust::Vec<double> g = pictura::guide_at(*view, index);
@@ -237,6 +255,20 @@ void RulersGuidesTest::moveAndDeleteGuide()
     f.drag({QPointF(5, 25), QPointF(5, 35)}, Qt::ControlModifier);
     QCOMPARE(guide(f.view, 0), QList<double>({0.0, 35.0}));
     QVERIFY(f.committedOnce(painted, "Move Guide"));
+
+    // The Hand tool pans on its own press, but Ctrl still reaches a guide, and
+    // a Ctrl press that misses one pans.
+    window_->setActiveTool(pictura::ToolId::Hand);
+    QVERIFY(f.canvas->panEnabled());
+    const int handBase = f.view->history_index();
+    dragOnCanvas(f.canvas, QPointF(5, 35), QPointF(5, 20), Qt::ControlModifier);
+    QCOMPARE(guide(f.view, 0), QList<double>({0.0, 20.0}));
+    QVERIFY(f.committedOnce(handBase, "Move Guide"));
+    const QPointF before = f.canvas->offset();
+    dragOnCanvas(f.canvas, QPointF(40, 45), QPointF(30, 50), Qt::ControlModifier);
+    QVERIFY(f.canvas->offset() != before);
+    QCOMPARE(guide(f.view, 0), QList<double>({0.0, 20.0}));
+    QCOMPARE(f.view->history_index(), handBase + 1);
 }
 
 void RulersGuidesTest::lockedGuides()
