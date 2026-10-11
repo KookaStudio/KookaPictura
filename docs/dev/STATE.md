@@ -1139,6 +1139,26 @@ Snapshot for resuming after a context break. Update after each milestone.
   Ctrl+I, …). Qt Test `tst_image_adjustments`. Ceilings (`ponytail:`): Color
   Lookup, Shadows/Highlights, HDR Toning, Match Color, and Replace Color stay
   stubs; no dialog presets, eyedroppers, histograms, or Load / Save.
+- **Image > Adjustments > Match Color** (change `add-match-color`, issue #352,
+  the last CS6 destructive adjustment; lifted that stub): a Reinhard-style Lab
+  mean/std transfer in `pictura-adjust::match_color`
+  (`MatchColorParams`/`MatchColorStats`, local f64 CIELAB conversion — Adobe's
+  kernel and space are closed, approximation marked in code). Statistics are
+  computed by the `image_match_color` bridge over whole layers/composites
+  (never the preview crop), alpha- and selection-weighted
+  (`match_color_stats`); the modal `MatchColorDialog` lists the other open
+  documents (Source), their pixel layers or Merged (Layer), the three CS6
+  selection checkboxes (a new `ignore_selection` flag on
+  `apply_op_active_region` applies outside the selection), Neutralize
+  (gray-world), Luminance / Color Intensity 1–200/100 (intensity 1 is exactly
+  gray), Fade 0–100 (right reduces, 100 identity — resolves the doc's open
+  question in favour of the Help-sourced direction), live Preview, and
+  Save/Load Statistics as an in-tree binary `.sta` payload (Adobe's format is
+  undocumented). Dialog-only: no PSD encoding, native-depth apply refuses.
+  The row is RGB-only (`document_mode`). Qt Test `tst_match_color`;
+  `tst_image_adjustments` now asserts the row is live. Ceilings
+  (`ponytail:`): no Info-panel eyedropper feedback while the dialog is open;
+  cross-profile statistics are unconverted working composites.
 - **Channels panel** (change `channels-panel-live`, issue #71, from photorust's
   `ChannelsPanel`): rows follow the document's mode (the opened file's — RGB,
   Gray, CMYK, Lab, Multichannel, Indexed, Bitmap, Duotone) with CS6's
