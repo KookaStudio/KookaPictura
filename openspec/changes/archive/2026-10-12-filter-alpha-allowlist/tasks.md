@@ -13,5 +13,5 @@
 
 ## 3. Follow-ups
 
-- [ ] 3.1 Fold alpha into the working buffer so each kernel receives the fourth plane, and drop the grey pass.
-- [ ] 3.2 Offer CS6's "Set to Transparent" for Offset's undefined area.
+- [x] 3.1 Fold alpha into the working buffer so each kernel receives the fourth plane, and drop the grey pass.
+- [x] 3.2 Offer CS6's "Set to Transparent" for Offset's undefined area.

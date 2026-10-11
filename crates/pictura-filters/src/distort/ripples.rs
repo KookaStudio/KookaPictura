@@ -68,7 +68,7 @@ pub fn ocean_ripple(
             ((c - a) * (1.0 - su) + (d - b) * su) * dv,
         )
     };
-    for c in 0..(buf.channels as usize).min(3) {
+    for c in 0..buf.channels as usize {
         let src = buf.data[c * n..c * n + n].to_vec();
         buf.data[c * n..c * n + n]
             .par_chunks_mut(w)

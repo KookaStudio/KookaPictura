@@ -244,6 +244,7 @@ fn filter_from_kind_maps_known_and_rejects_unknown() {
             vertical: 4,
             wrap: true,
             background: [0, 0, 0],
+            transparent: false,
         })
     );
     assert_eq!(

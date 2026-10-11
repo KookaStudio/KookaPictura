@@ -2,7 +2,9 @@
 
 ## Purpose
 The destructive filter entry point: colour-channel extraction, mask-confined writes, and alpha-preserving output.
+
 ## Requirements
+
 ### Requirement: Destructive filter application entry point
 
 `pictura-render` SHALL expose `pub fn apply_filter(layer: &mut pictura_core::Layer, filter: &pictura_filters::Filter, mask: Option<&pictura_core::LayerMask>) -> Result<(), pictura_filters::FilterError>`. It SHALL apply `filter` destructively to the layer's color channels and gate the write by the optional document-coordinate `mask`. When `layer.rect.width()` or `layer.rect.height()` is `<= 0` it MUST return `Ok(())` without modifying the layer. When the layer's lock state includes the pixel lock, it MUST return a refusal error without modifying the layer.
@@ -72,12 +74,27 @@ For each local pixel `(lx, ly)`, the coverage SHALL be the mask value at documen
 
 ### Requirement: Alpha and layer metadata preservation
 
-The transparency channel (`id == -1`) MUST NOT be modified. `apply_filter` MUST NOT change `layer.rect`, `layer.mask`, `layer.opacity`, or `layer.blend`.
+On a layer that is not transparency-locked, `apply_filter` SHALL filter the transparency channel (`id == -1`) only for a kernel that moves, spreads, or ranks samples independently of their value (the blurs, the sharpens, Median, Despeckle, Maximum, Minimum, Dust & Scratches, Offset, Mosaic, Crystallize, Fragment, and the geometric Distort filters), by running that kernel over the alpha plane, so the layer edge moves with the colour. Every other filter MUST leave the transparency channel bit-identical. Offset without wrap SHALL fill the area it exposes on the transparency channel per its undefined-area mode: fully opaque (255) for CS6's "Set to Background", fully clear (0) for CS6's "Set to Transparent". `apply_filter` MUST NOT change `layer.rect`, `layer.mask`, `layer.opacity`, or `layer.blend`.
 
 #### Scenario: Transparency is bit-identical
 
-- **WHEN** `apply_filter` runs on a layer that carries a channel with id `-1`
-- **THEN** that channel's data equals the input bit for bit
+- **WHEN** `apply_filter` runs Solarize, Clouds, Difference Clouds, Fibers, Lens Flare, Find Edges, Trace Contour, Tiles, Emboss, High Pass, or Add Noise runs on an unlocked layer that is opaque or partly transparent
+- **THEN** the channel with id `-1` equals the input bit for bit
+
+#### Scenario: A moving kernel keeps an opaque layer opaque
+
+- **WHEN** a blur, Median, Mosaic, a geometric Distort filter, or Offset with wrap off and a black Background runs on an unlocked layer whose alpha is 255 everywhere
+- **THEN** every alpha sample is still 255
+
+#### Scenario: Offset moves the layer edge
+
+- **WHEN** Offset with wrap off shifts a layer whose right half is transparent to the right
+- **THEN** the transparent half moves right with the colour and the exposed left columns are opaque
+
+#### Scenario: Offset can expose transparency
+
+- **WHEN** Offset with wrap off runs in "Set to Transparent" mode on an unlocked layer
+- **THEN** the exposed area's transparency channel is 0 while the colour planes take the dialog's Background colour
 
 #### Scenario: Layer metadata is unchanged
 
@@ -139,4 +156,3 @@ pre-filter value.
 - **WHEN** a filter runs on a transparency-locked layer at a pixel whose alpha is
   zero
 - **THEN** that pixel's color and alpha are unchanged
-

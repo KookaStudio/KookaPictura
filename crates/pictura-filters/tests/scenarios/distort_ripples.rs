@@ -81,7 +81,7 @@ fn zigzag_rejects_out_of_range_amount_and_ridges() {
 }
 
 #[test]
-fn alpha_preserved_and_tiny_images_do_not_panic() {
+fn alpha_moves_with_the_warp_and_tiny_images_do_not_panic() {
     let px: Vec<[u8; 4]> = (0..24 * 24)
         .map(|i| [i as u8, (i * 3) as u8, (i * 7) as u8, (i * 11) as u8])
         .collect();
@@ -91,10 +91,14 @@ fn alpha_preserved_and_tiny_images_do_not_panic() {
 
     let mut z = base.clone();
     zigzag(&mut z, 90.0, 7, ZigZagStyle::PondRipples).unwrap();
-    assert_eq!(&z.data[3 * n..], &alpha[..]);
+    assert_ne!(&z.data[3 * n..], &alpha[..], "zigzag resamples alpha too");
     let mut o = base.clone();
     ocean_ripple(&mut o, 9, 15, 3).unwrap();
-    assert_eq!(&o.data[3 * n..], &alpha[..]);
+    assert_ne!(
+        &o.data[3 * n..],
+        &alpha[..],
+        "ocean ripple resamples alpha too"
+    );
 
     for &(w, h) in &[(1u32, 1u32), (1, 8), (8, 1)] {
         let px: Vec<[u8; 3]> = (0..(w * h) as usize)

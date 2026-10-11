@@ -105,10 +105,7 @@ pub use gpu::{
 };
 
 mod filter;
-pub use filter::{
-    apply_adjustment_region, apply_filter, apply_filter_region, filter_preserves_opacity,
-    preview_apron,
-};
+pub use filter::{apply_adjustment_region, apply_filter, apply_filter_region, preview_apron};
 
 mod smart_filter;
 pub use smart_filter::{apply_smart_filter_chain, decode_smart_filter, SmartFilterOp};

@@ -290,12 +290,13 @@ pub(super) fn filter_from_kind_params(kind: &str, params: &[f64]) -> Option<Filt
             }
         }
         "offset" => {
-            arity!(params, 6);
+            arity!(params, 7);
             Filter::Offset {
                 horizontal: i32v(params, 0, 4),
                 vertical: i32v(params, 1, 4),
                 wrap: flag(params, 2, true),
                 background: rgb(params, 3, [0, 0, 0]),
+                transparent: flag(params, 6, false),
             }
         }
         "high-pass" => {

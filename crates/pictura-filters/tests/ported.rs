@@ -1,5 +1,6 @@
 //! The shared filter contract for every variant `apply` routes to the ported
-//! photorust engine (#221, #222): it runs on RGB and RGBA, never touches alpha, is
+//! photorust engine (#221, #222): it runs on RGB and RGBA, leaves alpha alone
+//! for value kernels and filters it for moving ones (see `filters_alpha`), is
 //! deterministic, rejects an out-of-range parameter without writing a sample,
 //! survives tiny images, and re-rolls with its seed where it takes one.
 
@@ -943,18 +944,24 @@ fn cases() -> Vec<Case> {
 }
 
 #[test]
-fn every_ported_filter_runs_and_leaves_alpha_alone() {
+fn every_ported_filter_runs_and_decides_alpha_per_its_kernel() {
     for c in cases() {
         let before = picture(4);
         let mut b = before.clone();
         apply(&c.valid, &mut b).unwrap_or_else(|e| panic!("{}: {e}", c.name));
         let n = (W * H) as usize;
-        assert_eq!(
-            b.data[3 * n..],
-            before.data[3 * n..],
-            "{} touched alpha",
-            c.name
-        );
+        // A value kernel must leave alpha bit-identical. A moving kernel runs
+        // over the fourth plane, but on smooth data (no outliers, no edges) the
+        // kernel can be a no-op there and leave the same bytes — layer-level
+        // tests in pictura-render pin the filtering behaviour itself.
+        if !filters_alpha(&c.valid) {
+            assert_eq!(
+                b.data[3 * n..],
+                before.data[3 * n..],
+                "{} touched alpha",
+                c.name
+            );
+        }
         // Facet keeps this picture's even gradients and 4-pixel checks as they
         // are; `facet_flattens_a_gradient_and_keeps_a_strong_edge` covers it.
         if c.name != "Facet" {

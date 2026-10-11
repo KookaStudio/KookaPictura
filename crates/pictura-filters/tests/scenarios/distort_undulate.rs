@@ -101,7 +101,7 @@ fn wave_edge_modes_types_and_validation() {
 }
 
 #[test]
-fn alpha_preserved_and_tiny_images_do_not_panic() {
+fn alpha_moves_with_the_warp_and_tiny_images_do_not_panic() {
     let px: Vec<[u8; 4]> = (0..24 * 24)
         .map(|i| [i as u8, (i * 3) as u8, (i * 7) as u8, (i * 11) as u8])
         .collect();
@@ -110,9 +110,9 @@ fn alpha_preserved_and_tiny_images_do_not_panic() {
     let alpha = base.data[3 * n..].to_vec();
     let mut r = base.clone();
     ripple(&mut r, 400.0, RippleSize::Small).unwrap();
-    assert_eq!(&r.data[3 * n..], &alpha[..]);
+    assert_ne!(&r.data[3 * n..], &alpha[..], "ripple resamples alpha too");
     let w = wv(&base, 4, WaveType::Square, 9, false);
-    assert_eq!(&w.data[3 * n..], &alpha[..]);
+    assert_ne!(&w.data[3 * n..], &alpha[..], "wave resamples alpha too");
 
     let one = buf4(1, 1, &[[100, 150, 200, 255]]);
     let mut r1 = one.clone();

@@ -1,7 +1,8 @@
 //! Route the ported [`Filter`] variants to the photorust engine: check the
 //! parameters against the ranges the filter specs fix, run the filter on an
 //! interleaved copy under the variant's seed, and write the colour planes
-//! back (alpha untouched).
+//! back — plus the alpha plane for a moving kernel (see
+//! [`crate::filters_alpha`]) on a four-channel buffer.
 
 use std::ops::RangeInclusive;
 
@@ -13,7 +14,8 @@ use super::{
     stylize, texture, with_seed,
 };
 use crate::{
-    Filter, FilterError, LightDirection, NoiseDistribution, PolarKind, ShearFill, TextureOptions,
+    filters_alpha, Filter, FilterError, LightDirection, NoiseDistribution, PolarKind, ShearFill,
+    TextureOptions,
 };
 
 type Run = Box<dyn FnOnce(&mut Pixmap)>;
@@ -28,6 +30,9 @@ pub(crate) fn apply(filter: &Filter, buf: &mut PixelBuffer) -> Option<Result<(),
     let mut pixmap = Pixmap::from_planar(buf);
     with_seed(seed, || run(&mut pixmap));
     pixmap.write_colour(buf);
+    if buf.channels == 4 && filters_alpha(filter) {
+        pixmap.write_alpha(buf);
+    }
     Some(Ok(()))
 }
 

@@ -60,7 +60,7 @@ fn polar_horizontal_line_maps_to_constant_radius_ring() {
 }
 
 #[test]
-fn alpha_preserved_and_tiny_images_do_not_panic() {
+fn alpha_moves_with_the_warp_and_tiny_images_do_not_panic() {
     let px: Vec<[u8; 4]> = (0..12 * 12)
         .map(|i| [i as u8, (i * 3) as u8, (i * 7) as u8, (i * 11) as u8])
         .collect();
@@ -69,10 +69,10 @@ fn alpha_preserved_and_tiny_images_do_not_panic() {
     let alpha = base.data[3 * n..].to_vec();
     let mut p = base.clone();
     polar_coordinates(&mut p, PolarKind::RectangularToPolar).unwrap();
-    assert_eq!(&p.data[3 * n..], &alpha[..]);
+    assert_ne!(&p.data[3 * n..], &alpha[..], "polar resamples alpha too");
     let mut s = base.clone();
     shear(&mut s, &[(-1.0, -1.0), (1.0, 1.0)], ShearFill::WrapAround).unwrap();
-    assert_eq!(&s.data[3 * n..], &alpha[..], "alpha untouched");
+    assert_ne!(&s.data[3 * n..], &alpha[..], "shear resamples alpha too");
 
     let one = mk(1, 1, &[[100, 150, 200, 255]]);
     for kind in [PolarKind::RectangularToPolar, PolarKind::PolarToRectangular] {

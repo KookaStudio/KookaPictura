@@ -31,25 +31,6 @@ The function SHALL extract the color channels into a planar 8-bit `PixelBuffer` 
 - **WHEN** the layer carries no channel with id `0`
 - **THEN** `apply_filter` returns `FilterError::InvalidParams` and the layer is unchanged
 
-### Requirement: Alpha and layer metadata preservation
-
-`apply_filter` MUST NOT change `layer.rect`, `layer.mask`, `layer.opacity`, or `layer.blend`. The transparency channel (`id == -1`) SHALL be filtered with the same kernel as the color channels when the layer is not transparency-locked, so a blur softens the layer's edges and noise speckles its transparency. When the lock is set, the transparency channel MUST NOT be modified.
-
-#### Scenario: An unlocked layer's transparency is filtered
-
-- **WHEN** `apply_filter` runs on an unlocked layer with an alpha channel
-- **THEN** the alpha channel is rewritten by the filter and a uniform alpha stays uniform
-
-#### Scenario: Transparency is bit-identical
-
-- **WHEN** `apply_filter` runs on a layer whose lock state includes the transparency lock
-- **THEN** the transparency channel equals its input bit for bit
-
-#### Scenario: Layer metadata is unchanged
-
-- **WHEN** `apply_filter` returns success
-- **THEN** `rect`, `mask`, `opacity`, and `blend` equal their pre-call values
-
 ## ADDED Requirements
 
 ### Requirement: Region-bounded filter application

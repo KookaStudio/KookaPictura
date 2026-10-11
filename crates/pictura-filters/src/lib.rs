@@ -1,8 +1,10 @@
 //! Filter operations for Kooka Pictura.
 //!
 //! M6 scope: the destructive `Filter > Blur / Sharpen / Noise` math as pure
-//! functions over a planar 8-bit [`PixelBuffer`] (channels 3 or 4; alpha is
-//! never modified). Specs live in `docs/06-filters/`.
+//! functions over a planar 8-bit [`PixelBuffer`] (channels 3 or 4). On a
+//! four-channel buffer each kernel decides the alpha plane itself: a moving
+//! kernel (see [`filters_alpha`]) processes it along with the colour, every
+//! other kernel leaves it bit-identical. Specs live in `docs/06-filters/`.
 //!
 //! The closed kernels are approximated where the specs say so; each
 //! approximation is marked inline. Everything is deterministic except Add
@@ -325,7 +327,7 @@ impl Default for TonalFade {
 }
 
 mod filter;
-pub use filter::{apply, Filter};
+pub use filter::{apply, filters_alpha, Filter};
 pub(crate) fn validate(buf: &PixelBuffer) -> Result<usize, FilterError> {
     if buf.channels != 3 && buf.channels != 4 {
         return Err(FilterError::Unsupported(format!(

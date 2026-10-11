@@ -235,14 +235,24 @@ impl Pixmap {
         pm
     }
 
-    /// Write the colour planes back into `buf`. Alpha is never written: Kooka
-    /// filters leave the alpha plane untouched.
+    /// Write the colour planes back into `buf`. Used by every filter: a value
+    /// kernel's result never touches the pixmap's alpha.
     pub(crate) fn write_colour(&self, buf: &mut PixelBuffer) {
         let n = buf.width as usize * buf.height as usize;
         for (i, px) in self.data.chunks_exact(4).enumerate() {
             buf.data[i] = px[0];
             buf.data[n + i] = px[1];
             buf.data[2 * n + i] = px[2];
+        }
+    }
+
+    /// Write the alpha plane back into a four-channel `buf`, for a moving
+    /// kernel whose run over the pixmap is the layer's filtered transparency.
+    pub(crate) fn write_alpha(&self, buf: &mut PixelBuffer) {
+        debug_assert_eq!(buf.channels, 4);
+        let n = buf.width as usize * buf.height as usize;
+        for (i, px) in self.data.chunks_exact(4).enumerate() {
+            buf.data[3 * n + i] = px[3];
         }
     }
 }
@@ -283,7 +293,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn planar_round_trip_keeps_colour_and_never_writes_alpha() {
+    fn planar_round_trip_writes_colour_and_alpha_on_demand() {
         let mut buf = PixelBuffer {
             width: 2,
             height: 1,
@@ -295,5 +305,7 @@ mod tests {
         pm.set(0, 0, Rgba8::new(1, 2, 3, 0));
         pm.write_colour(&mut buf);
         assert_eq!(&buf.data[..], &[1, 20, 2, 40, 3, 60, 7, 8]);
+        pm.write_alpha(&mut buf);
+        assert_eq!(&buf.data[..], &[1, 20, 2, 40, 3, 60, 0, 8]);
     }
 }
