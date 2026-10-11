@@ -10,12 +10,10 @@
 //! Source: https://github.com/perfecto25/photorust
 
 use super::filter_tools::displace_maps::{displace_map, DISPLACE_SLOTS};
+use choices::*;
+use pictura_core::shape::CUSTOM_SHAPE_NAMES;
 use pictura_filters::{
-    BrushType, ContourEdge, DiffuseMode, DisplaceFit, ExtrudeType, Filter, GlassTexture, GrainType,
-    HalftoneType, LensType, Light, LightDirection, LightType, Lighting, MezzotintType,
-    NoiseDistribution, PolarKind, Quality, RadialMethod, RippleSize, SharpenRemove, ShearFill,
-    SpherizeMode, StrokeDirection, TextureChannel, TextureOptions, TextureSurface, TileFill,
-    TonalFade, WaveType, WindMethod, ZigZagStyle, SHEAR_MAX_POINTS,
+    Filter, Light, Lighting, ShearFill, TextureOptions, TextureSurface, TonalFade, SHEAR_MAX_POINTS,
 };
 
 /// Refuse a non-empty parameter list that does not match the kind's arity.
@@ -85,120 +83,11 @@ fn texture(params: &[f64], base: usize) -> TextureOptions {
     }
 }
 
-const NOISE_DISTRIBUTIONS: [NoiseDistribution; 2] =
-    [NoiseDistribution::Uniform, NoiseDistribution::Gaussian];
-const MEZZOTINT_TYPES: [MezzotintType; 10] = [
-    MezzotintType::FineDots,
-    MezzotintType::MediumDots,
-    MezzotintType::GrainyDots,
-    MezzotintType::CoarseDots,
-    MezzotintType::ShortLines,
-    MezzotintType::MediumLines,
-    MezzotintType::LongLines,
-    MezzotintType::ShortStrokes,
-    MezzotintType::MediumStrokes,
-    MezzotintType::LongStrokes,
-];
-const SPHERIZE_MODES: [SpherizeMode; 3] = [
-    SpherizeMode::Normal,
-    SpherizeMode::HorizontalOnly,
-    SpherizeMode::VerticalOnly,
-];
-const RIPPLE_SIZES: [RippleSize; 3] = [RippleSize::Small, RippleSize::Medium, RippleSize::Large];
-const WAVE_TYPES: [WaveType; 3] = [WaveType::Sine, WaveType::Triangle, WaveType::Square];
-const POLAR_KINDS: [PolarKind; 2] = [PolarKind::RectangularToPolar, PolarKind::PolarToRectangular];
-const SHEAR_FILLS: [ShearFill; 2] = [ShearFill::WrapAround, ShearFill::RepeatEdgePixels];
-const DISPLACE_FITS: [DisplaceFit; 2] = [DisplaceFit::StretchToFit, DisplaceFit::Tile];
 /// Custom's slots: the 5×5 weights row by row, then Scale and Offset.
 pub(super) const CUSTOM_SLOTS: usize = 25 + 2;
 /// Shear's slots: a point count, then `SHEAR_MAX_POINTS` `(position, offset)`
 /// pairs, then the fill.
 pub(super) const SHEAR_SLOTS: usize = 1 + 2 * SHEAR_MAX_POINTS + 1;
-const GLASS_TEXTURES: [GlassTexture; 4] = [
-    GlassTexture::Blocks,
-    GlassTexture::Canvas,
-    GlassTexture::Frosted,
-    GlassTexture::TinyLens,
-];
-const ZIGZAG_STYLES: [ZigZagStyle; 3] = [
-    ZigZagStyle::AroundCenter,
-    ZigZagStyle::OutFromCenter,
-    ZigZagStyle::PondRipples,
-];
-const BRUSH_TYPES: [BrushType; 6] = [
-    BrushType::Simple,
-    BrushType::LightRough,
-    BrushType::DarkRough,
-    BrushType::WideSharp,
-    BrushType::WideBlurry,
-    BrushType::Sparkle,
-];
-const STROKE_DIRECTIONS: [StrokeDirection; 4] = [
-    StrokeDirection::RightDiagonal,
-    StrokeDirection::Horizontal,
-    StrokeDirection::LeftDiagonal,
-    StrokeDirection::Vertical,
-];
-const LIGHT_DIRECTIONS: [LightDirection; 8] = [
-    LightDirection::Bottom,
-    LightDirection::BottomLeft,
-    LightDirection::Left,
-    LightDirection::TopLeft,
-    LightDirection::Top,
-    LightDirection::TopRight,
-    LightDirection::Right,
-    LightDirection::BottomRight,
-];
-const HALFTONE_TYPES: [HalftoneType; 3] =
-    [HalftoneType::Dot, HalftoneType::Line, HalftoneType::Circle];
-const GRAIN_TYPES: [GrainType; 10] = [
-    GrainType::Regular,
-    GrainType::Soft,
-    GrainType::Sprinkles,
-    GrainType::Clumped,
-    GrainType::Contrasty,
-    GrainType::Enlarged,
-    GrainType::Stippled,
-    GrainType::Horizontal,
-    GrainType::Vertical,
-    GrainType::Speckle,
-];
-const EXTRUDE_TYPES: [ExtrudeType; 2] = [ExtrudeType::Blocks, ExtrudeType::Pyramids];
-const TILE_FILLS: [TileFill; 4] = [
-    TileFill::BackgroundColor,
-    TileFill::ForegroundColor,
-    TileFill::InverseImage,
-    TileFill::UnalteredImage,
-];
-const CONTOUR_EDGES: [ContourEdge; 2] = [ContourEdge::Lower, ContourEdge::Upper];
-const WIND_METHODS: [WindMethod; 3] = [WindMethod::Wind, WindMethod::Blast, WindMethod::Stagger];
-const WIND_FROM_RIGHT: [bool; 2] = [true, false];
-const SHARPEN_REMOVES: [SharpenRemove; 3] = [
-    SharpenRemove::GaussianBlur,
-    SharpenRemove::LensBlur,
-    SharpenRemove::MotionBlur,
-];
-const LENS_TYPES: [LensType; 4] = [
-    LensType::Zoom,
-    LensType::Prime35,
-    LensType::Prime105,
-    LensType::MoviePrime,
-];
-const RADIAL_METHODS: [RadialMethod; 2] = [RadialMethod::Spin, RadialMethod::Zoom];
-const QUALITIES: [Quality; 3] = [Quality::Draft, Quality::Good, Quality::Best];
-const LIGHT_TYPES: [LightType; 3] = [LightType::Spot, LightType::Point, LightType::Infinite];
-const TEXTURE_CHANNELS: [TextureChannel; 4] = [
-    TextureChannel::None,
-    TextureChannel::Red,
-    TextureChannel::Green,
-    TextureChannel::Blue,
-];
-const DIFFUSE_MODES: [DiffuseMode; 4] = [
-    DiffuseMode::Normal,
-    DiffuseMode::DarkenOnly,
-    DiffuseMode::LightenOnly,
-    DiffuseMode::Anisotropic,
-];
 
 /// Lighting Effects' slots: the rig (colorize r/g/b, exposure, gloss, metallic,
 /// ambience, texture, height), then per light: type, visible, colour r/g/b,
@@ -252,6 +141,7 @@ fn lighting(params: &[f64]) -> Option<Lighting> {
 pub(super) const FILTER_ARITIES: &[(&str, usize)] = &[
     ("gaussian-blur", 1),
     ("box-blur", 1),
+    ("shape-blur", 2),
     ("surface-blur", 2),
     ("motion-blur", 2),
     ("radial-blur", 3),
@@ -378,6 +268,14 @@ pub(super) fn filter_from_kind_params(kind: &str, params: &[f64]) -> Option<Filt
             arity!(params, 1);
             Filter::BoxBlur {
                 radius: u32v(params, 0, 3),
+            }
+        }
+        // Radius, then the shape's index in the Custom Shape catalogue.
+        "shape-blur" => {
+            arity!(params, 2);
+            Filter::ShapeBlur {
+                radius: u32v(params, 0, 10),
+                shape: (u32v(params, 1, 0) as usize).min(CUSTOM_SHAPE_NAMES.len() - 1),
             }
         }
         "surface-blur" => {
@@ -1184,6 +1082,9 @@ fn tonal_fade(params: &[f64], base: usize, d: TonalFade) -> TonalFade {
         radius: u32v(params, base + 2, d.radius),
     }
 }
+
+#[path = "filter_map_choices.rs"]
+mod choices;
 
 #[cfg(test)]
 #[path = "filter_map_tests.rs"]

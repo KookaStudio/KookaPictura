@@ -29,6 +29,7 @@ filter -> ImageMagick mapping and the measured/tolerated divergence live in
     Minimum       -morphology Erode Square:{radius}
     Offset        -roll {+h}{+v}                    (wrap == true only)
     Custom        -convolve {kernel} (+ convolve:scale, -evaluate add)
+    ShapeBlur     -morphology Convolve {S}x{S}:{weights} (convolve:scale=!)
     Emboss        -emboss {radius}x{sigma}          (measured, no equivalent)
     Mosaic        -filter box -resize W/n x H/n ! + -filter point -resize WxH !
     Twirl         -swirl {angle}                    (measured, no equivalent)
@@ -207,6 +208,15 @@ def build_im_args(args: argparse.Namespace) -> list[str]:
         ]
     if op == "convolve":
         return convolve_args(args)
+    if op == "shape":
+        # The kernel's coverage weights, row-major, `{side}:{w,w,...}`.
+        # `Convolve` rotates the kernel 180° as Pictura does, and `!`
+        # normalizes by the weight sum.
+        side, _, weights = args.shape_kernel.partition(":")
+        return [
+            "-define", "convolve:scale=!",
+            "-morphology", "Convolve", f"{side}x{side}:{weights}",
+        ]
     if op == "swirl":
         return ["-swirl", str(args.angle)]
     if op == "implode":
@@ -355,7 +365,7 @@ def main(argv: list[str] | None = None) -> int:
     p_apply.add_argument("--op", choices=(
         "gaussian", "box", "motion", "median", "unsharp",
         "maximum", "minimum", "roll", "solarize", "emboss", "mosaic", "convolve",
-        "swirl", "implode", "wave", "depolar", "polar", "shear", "displace",
+        "swirl", "implode", "wave", "depolar", "polar", "shear", "displace", "shape",
     ), help="named operator; builds the Magick args below")
     p_apply.add_argument("--im-args", default="",
                          help="verbatim Magick operator arguments (when --op is omitted)")
@@ -400,6 +410,8 @@ def main(argv: list[str] | None = None) -> int:
                               "for IM and crops back to --size)")
     p_apply.add_argument("--shear-crop-x", type=int, default=None,
                          help="x offset of the shear op's crop (default centres the middle row)")
+    p_apply.add_argument("--shape-kernel", default="",
+                         help="ShapeBlur kernel: SIDE:w,w,... row-major coverage weights")
     p_apply.add_argument("--map", default="",
                          help="displacement map image file (the displace op)")
     p_apply.add_argument("--displace-scale", default="10x10",

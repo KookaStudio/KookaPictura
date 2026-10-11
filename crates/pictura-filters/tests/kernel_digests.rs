@@ -58,6 +58,20 @@ fn kernels() -> Vec<(&'static str, Filter)> {
         ),
         ("box 2", Filter::BoxBlur { radius: 2 }),
         ("box 70", Filter::BoxBlur { radius: 70 }),
+        (
+            "shape heart 7",
+            Filter::ShapeBlur {
+                shape: 1,
+                radius: 7,
+            },
+        ),
+        (
+            "shape arrow 40",
+            Filter::ShapeBlur {
+                shape: 2,
+                radius: 40,
+            },
+        ),
         ("maximum 2", Filter::Maximum { radius: 2 }),
         ("minimum 5", Filter::Minimum { radius: 5 }),
         (
@@ -106,6 +120,8 @@ fn row_parallel_kernels_keep_their_serial_bytes() {
         ("motion -75", 0x9733_d43e_7acb_7c69),
         ("box 2", 0x2cd8_72fc_0780_110c),
         ("box 70", 0xc346_208f_7155_235d),
+        ("shape heart 7", 0x5e7f_3ab9_03a1_f59a),
+        ("shape arrow 40", 0x0d9c_2fdc_6023_46c7),
         ("maximum 2", 0x0b19_a93a_49cb_5598),
         ("minimum 5", 0x0dda_b0a3_defc_fe66),
         ("custom", 0x4a5a_022c_4c8f_6bfa),

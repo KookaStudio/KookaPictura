@@ -14,7 +14,7 @@
 mod custom;
 mod line;
 
-pub use custom::{custom_shape_preview, CUSTOM_SHAPE_NAMES};
+pub use custom::{custom_shape_kernel, custom_shape_preview, CUSTOM_SHAPE_NAMES};
 
 use crate::path::{PathPoint, Subpath, VectorPath};
 

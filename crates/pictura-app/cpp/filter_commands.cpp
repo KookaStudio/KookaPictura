@@ -133,6 +133,15 @@ FilterParamSpec matrix()
     return p;
 }
 
+FilterParamSpec shapePicker(const QString& label, int index)
+{
+    FilterParamSpec p;
+    p.control = FilterControl::Shape;
+    p.label = label;
+    p.value = index;
+    return p;
+}
+
 FilterParamSpec radio(const QString& label, const QStringList& names, int index)
 {
     FilterParamSpec p = choice(label, names, index);
@@ -301,6 +310,12 @@ const QList<FilterCommandSpec>& buildCommands()
             false),
         def(QStringLiteral("Blur"), QStringLiteral("Box Blur"), QStringLiteral("box-blur"),
             {slider(QStringLiteral("Radius:"), 1, 250, 3, 0, QStringLiteral(" pixels"))}),
+        // The kernel is a Custom Shape preset, Radius its half-width; the
+        // range and default are inferred (FILT-002 leaves them unverified).
+        stacked(def(QStringLiteral("Blur"), QStringLiteral("Shape Blur"),
+                    QStringLiteral("shape-blur"),
+                    {slider(QStringLiteral("Radius:"), 5, 1000, 10, 0, QStringLiteral(" pixels")),
+                     shapePicker(QStringLiteral("Shape:"), 0)})),
         def(QStringLiteral("Blur"), QStringLiteral("Surface Blur"), QStringLiteral("surface-blur"),
             {slider(QStringLiteral("Radius:"), 1, 100, 10, 0, QStringLiteral(" pixels")),
              slider(QStringLiteral("Threshold:"), 2, 255, 20, 0, QStringLiteral(" levels"))}),

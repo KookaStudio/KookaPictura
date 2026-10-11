@@ -156,6 +156,7 @@ void FilterMenuTest::dialogCollectsParameterSlots()
     const Case cases[] = {
         {QStringLiteral("Blur"), QStringLiteral("Gaussian Blur"), 1},
         {QStringLiteral("Blur"), QStringLiteral("Radial Blur"), 3},
+        {QStringLiteral("Blur"), QStringLiteral("Shape Blur"), 2},
         {QStringLiteral("Distort"), QStringLiteral("Shear"), 18},
         {QStringLiteral("Distort"), QStringLiteral("Displace"), 5},
         {QStringLiteral("Other"), QStringLiteral("Custom"), 27},

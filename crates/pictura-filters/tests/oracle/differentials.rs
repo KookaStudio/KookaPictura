@@ -206,3 +206,18 @@ fn mosaic_matches_imagemagick() {
         "Mosaic cell 4",
     );
 }
+
+#[test]
+fn shape_blur_matches_imagemagick() {
+    for (shape, radius) in [(1, 5), (2, 4)] {
+        let kernel = pictura_filters::blur::shape_kernel(shape, radius);
+        let weights: Vec<String> = kernel.iter().map(u8::to_string).collect();
+        let arg = format!("{}:{}", 2 * radius + 1, weights.join(","));
+        differential(
+            &Filter::ShapeBlur { shape, radius },
+            &["--op", "shape", "--shape-kernel", &arg],
+            0,
+            &format!("ShapeBlur shape {shape} radius {radius}"),
+        );
+    }
+}

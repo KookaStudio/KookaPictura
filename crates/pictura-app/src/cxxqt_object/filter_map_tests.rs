@@ -1,4 +1,9 @@
 use super::*;
+use pictura_core::shape::CUSTOM_SHAPE_NAMES;
+use pictura_filters::{
+    DisplaceFit, GlassTexture, LightType, NoiseDistribution, Quality, RadialMethod, SharpenRemove,
+    TextureChannel, WaveType, WindMethod,
+};
 
 #[test]
 fn every_kind_defaults_from_empty_and_rejects_wrong_arity() {
@@ -285,4 +290,32 @@ fn custom_reads_its_grid_row_by_row_then_scale_and_offset() {
     assert_eq!(kernel[4][4], 12.0);
     assert_eq!((scale, offset), (9.0, 128.0));
     assert!(filter_from_kind_params("custom", &params[..26]).is_none());
+}
+
+#[test]
+fn shape_blur_reads_radius_then_shape() {
+    assert_eq!(
+        filter_from_kind_params("shape-blur", &[]),
+        Some(Filter::ShapeBlur {
+            shape: 0,
+            radius: 10,
+        })
+    );
+    assert_eq!(
+        filter_from_kind_params("shape-blur", &[46.0, 1.0]),
+        Some(Filter::ShapeBlur {
+            shape: 1,
+            radius: 46,
+        })
+    );
+    let Some(Filter::ShapeBlur { shape, .. }) = filter_from_kind_params("shape-blur", &[5.0, 99.0])
+    else {
+        panic!("shape-blur did not decode");
+    };
+    assert_eq!(
+        shape,
+        CUSTOM_SHAPE_NAMES.len() - 1,
+        "an unknown shape clamps"
+    );
+    assert!(filter_from_kind_params("shape-blur", &[5.0]).is_none());
 }

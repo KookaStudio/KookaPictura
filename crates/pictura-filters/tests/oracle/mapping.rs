@@ -38,6 +38,14 @@ const MAPPING: &[Mapping] = &[
                radius 3 / amount 150 / threshold 0",
     },
     Mapping {
+        filter: "ShapeBlur",
+        im: Some("-define convolve:scale=! -morphology Convolve {S}x{S}:{coverage weights}"),
+        tolerance: 0,
+        note: "same weighted convolution with the kernel rotated 180 degrees, clamp-to-edge, \
+               fed Pictura's own coverage kernel, so it checks the convolution, not the shape \
+               artwork; measured max delta 0 (heart radius 5, arrow radius 4)",
+    },
+    Mapping {
         filter: "MotionBlur",
         im: None,
         tolerance: 0,
@@ -403,11 +411,12 @@ const NO_EQUIVALENT: [&str; 31] = [
 
 #[test]
 fn mapping_marks_no_equivalent_operators() {
-    assert_eq!(MAPPING.len(), 46, "one mapping row per Filter variant");
+    assert_eq!(MAPPING.len(), 47, "one mapping row per Filter variant");
     // Exactly one row per `Filter` variant, no duplicates, full enum coverage.
-    let all: [&str; 46] = [
+    let all: [&str; 47] = [
         "GaussianBlur",
         "BoxBlur",
+        "ShapeBlur",
         "MotionBlur",
         "RadialBlur",
         "Average",

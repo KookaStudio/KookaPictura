@@ -702,6 +702,7 @@ void addDefaultCommands(CommandRegistry& registry) {
     leaf(registry, {"Filter", "Blur", "Motion Blur"}, QStringLiteral("Motion Blur"));
     leaf(registry, {"Filter", "Blur", "Radial Blur"}, QStringLiteral("Radial Blur"));
     leaf(registry, {"Filter", "Blur", "Box Blur"}, QStringLiteral("Box Blur"));
+    leaf(registry, {"Filter", "Blur", "Shape Blur"}, QStringLiteral("Shape Blur"));
     leaf(registry, {"Filter", "Blur", "Surface Blur"}, QStringLiteral("Surface Blur"));
     leaf(registry, {"Filter", "Blur", "Lens Blur"}, QStringLiteral("Lens Blur"));
     leaf(registry, {"Filter", "Blur", "Smart Blur"}, QStringLiteral("Smart Blur"));

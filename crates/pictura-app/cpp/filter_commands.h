@@ -25,6 +25,7 @@ enum class FilterControl {
     Hidden,     // one slot carried through the dialog with no widget (Displace's map id)
     Number,     // one slot, a value box with no slider
     Matrix,     // kMatrixCells slots: Custom's 5x5 weights, row by row
+    Shape,      // one slot, a Custom Shape index picked from a grid (Shape Blur)
 };
 
 // The most control points a Shear curve carries. Lock-step with
