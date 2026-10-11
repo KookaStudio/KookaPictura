@@ -1,17 +1,25 @@
 // ImageView's document: the image or the document size it presents, the
-// region blits a paint delivers, and a filter dialog's reduced preview. Split
-// from image_view.cpp to keep each translation unit small.
+// zoom/pan view state over it, the region blits a paint delivers, and a
+// filter dialog's reduced preview. Split from image_view.cpp to keep each
+// translation unit small.
 
 #include "image_view.h"
 
+#include "canvas_range.h"
 #include "pictura_debug_timing.h"
 
 #include <QtGui/QPainter>
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 namespace pictura {
+
+namespace {
+constexpr double kMinZoom = 0.01;
+constexpr double kMaxZoom = 32.0;
+} // namespace
 
 void ImageView::replaceImage(const QImage& image)
 {
@@ -27,6 +35,7 @@ void ImageView::setDocument(const QSize& size)
     setImage(QImage());
     docSize_ = size;
     if (!docSize_.isEmpty()) {
+        pendingSettle_ = true;
         applyInitialView();
     }
 }
@@ -122,6 +131,152 @@ void ImageView::blitRegion(const QImage& region, int x, int y)
     // The cached level crop no longer matches the patched image; the next paint
     // re-crops the updated pyramid level.
     presentCache_.valid = false;
+    update();
+}
+
+void ImageView::setImage(const QImage& image)
+{
+    image_ = image;
+    docSize_ = image.size();
+    ++frameKey_;
+    presentCache_.valid = false;
+    userAdjusted_ = false;
+    pendingSettle_ = !docSize_.isEmpty();
+    if (docSize_.isEmpty()) {
+        zoom_ = 1.0;
+        offset_ = QPointF();
+        update();
+        emit viewChanged();
+        return;
+    }
+    applyInitialView();
+}
+
+void ImageView::applyInitialView()
+{
+    if (docSize_.isEmpty()) {
+        return;
+    }
+    if (docSize_.width() > width() || docSize_.height() > height()) {
+        const double fit = std::min(double(width()) / docSize_.width(),
+                                    double(height()) / docSize_.height())
+                           * 0.95;
+        zoom_ = std::clamp(fit, kMinZoom, kMaxZoom);
+    } else {
+        zoom_ = 1.0;
+    }
+    centreImage();
+    clampOffset();
+    emit zoomChanged(zoom_);
+    emit viewChanged();
+    update();
+    userAdjusted_ = true;
+}
+
+void ImageView::centreImage()
+{
+    offset_ = QPointF((width() - docSize_.width() * zoom_) / 2.0,
+                      (height() - docSize_.height() * zoom_) / 2.0);
+    clampOffset();
+}
+
+void ImageView::clampOffset()
+{
+    if (docSize_.isEmpty()) {
+        offset_ = QPointF();
+        return;
+    }
+    const OffsetRange range = offsetRangeFor(
+        QSizeF(docSize_.width(), docSize_.height()), zoom_, QSizeF(width(), height()));
+    offset_.setX(std::clamp(offset_.x(), range.minX, range.maxX));
+    offset_.setY(std::clamp(offset_.y(), range.minY, range.maxY));
+}
+
+void ImageView::zoomAt(const QPointF& cursor, int angleDelta)
+{
+    const double factor = std::pow(1.0015, angleDelta);
+    // Zoom-in keeps the point under the cursor fixed; zoom-out steps at the
+    // canvas centre so the image does not drift toward (and off) the pointer.
+    const QPointF anchor = angleDelta < 0 ? QPointF(width() / 2.0, height() / 2.0) : cursor;
+    setZoom(zoom_ * factor, anchor);
+}
+
+void ImageView::panBy(const QPointF& delta)
+{
+    userAdjusted_ = true;
+    pendingSettle_ = false;
+    offset_ += delta;
+    clampOffset();
+    update();
+    emit viewChanged();
+}
+
+void ImageView::setOffset(const QPointF& offset)
+{
+    userAdjusted_ = true;
+    pendingSettle_ = false;
+    offset_ = offset;
+    clampOffset();
+    update();
+    emit viewChanged();
+}
+
+void ImageView::zoomIn()
+{
+    setZoom(zoom_ * 1.2, QPointF(width() / 2.0, height() / 2.0));
+}
+
+void ImageView::zoomOut()
+{
+    setZoom(zoom_ / 1.2, QPointF(width() / 2.0, height() / 2.0));
+}
+
+void ImageView::setZoom(double zoom, const QPointF& anchor)
+{
+    userAdjusted_ = true;
+    pendingSettle_ = false;
+    const double target = std::clamp(zoom, kMinZoom, kMaxZoom);
+    const double factor = (zoom_ > 0.0) ? target / zoom_ : 1.0;
+    offset_ = anchor - (anchor - offset_) * factor;
+    zoom_ = target;
+    clampOffset();
+    emit zoomChanged(zoom_);
+    emit viewChanged();
+    update();
+}
+
+void ImageView::fitOnScreen()
+{
+    userAdjusted_ = false;
+    if (docSize_.isEmpty()) {
+        return;
+    }
+    const double fit = std::min(double(width()) / docSize_.width(),
+                                double(height()) / docSize_.height())
+                       * 0.95;
+    zoom_ = std::clamp(fit, kMinZoom, kMaxZoom);
+    offset_ = QPointF((width() - docSize_.width() * zoom_) / 2.0,
+                      (height() - docSize_.height() * zoom_) / 2.0);
+    clampOffset();
+    emit zoomChanged(zoom_);
+    emit viewChanged();
+    update();
+}
+
+void ImageView::actualPixels()
+{
+    // 100% is an explicit user choice: keep it when the workspace scrollbars
+    // appear and resize the canvas instead of refitting on the next resize.
+    userAdjusted_ = true;
+    pendingSettle_ = false;
+    zoom_ = 1.0;
+    offset_ = docSize_.isEmpty()
+                  ? QPointF()
+                  : QPointF((width() - docSize_.width()) / 2.0,
+                            (height() - docSize_.height()) / 2.0);
+    clampOffset();
+    emit zoomChanged(zoom_);
+    emit viewChanged();
     update();
 }
 
