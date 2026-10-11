@@ -488,6 +488,7 @@ fn filter_commit_start(
     let kind = kind.to_string();
     let params: Vec<f64> = params.into_iter().copied().collect();
     let params = super::super::filter_map::commit_params(&kind, &params);
+    let params = super::lens_blur_depths::commit_slots(&kind, view.rust(), &params);
     let Some(filter) = filter_from_kind_params(&kind, &params) else {
         view.as_mut().rust_mut().filter_error = Some(format!(
             "filter '{kind}' is not recognised or its parameters are wrong"

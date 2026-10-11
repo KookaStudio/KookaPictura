@@ -33,9 +33,15 @@ static STORE: Mutex<Store> = Mutex::new(Store {
     maps: VecDeque::new(),
 });
 
-/// Keep `map` and return its id (never 0).
+/// Keep `map` and return its id (never 0). A map equal to the newest one is
+/// the same id again, so a slider drag's repeated reads do not churn the store.
 pub(in crate::cxxqt_object) fn register(map: DepthMap) -> u32 {
     let mut store = STORE.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((id, newest)) = store.maps.back() {
+        if newest.as_ref() == &map {
+            return *id;
+        }
+    }
     let id = store.next;
     store.next = store.next.wrapping_add(1).max(1);
     if store.maps.len() == KEPT {
@@ -43,6 +49,26 @@ pub(in crate::cxxqt_object) fn register(map: DepthMap) -> u32 {
     }
     store.maps.push_back((id, Arc::new(map)));
     id
+}
+
+/// A commit's slots. The Source slot is document state, so the depth map is
+/// materialized here rather than trusted from the dialog's preview-time id:
+/// the store keeps only the eight most recent maps, and a later Lens Blur
+/// session can let the committed id go. Last Filter then replays the source
+/// against the document as it stands, like a fresh dialog would.
+pub(in crate::cxxqt_object) fn commit_slots(
+    kind: &str,
+    rust: &PictureViewRust,
+    params: &[f64],
+) -> Vec<f64> {
+    let mut params = params.to_vec();
+    if kind == "lens-blur" && params.len() == LENS_BLUR_SLOTS && params[1] >= 0.5 {
+        params[13] = match materialize(rust, params[1] as i32) {
+            Some(map) => f64::from(register(map)),
+            None => 0.0,
+        };
+    }
+    params
 }
 
 /// The map `id` names, or `None` for id 0 (no map chosen) or an id the store
@@ -233,10 +259,32 @@ mod tests {
             *depth_map(first).unwrap(),
             DepthMap::new(1, 1, vec![7]).unwrap()
         );
-        // Other tests register too, so push past the cap from here.
-        for _ in 0..KEPT {
-            register(DepthMap::new(1, 1, vec![1]).unwrap());
+        // Other tests register too, so push past the cap from here; each map
+        // must differ from the newest, or the dedupe returns its id.
+        for i in 0..KEPT {
+            register(DepthMap::new(1, 1, vec![(i + 1) as u8]).unwrap());
         }
         assert!(depth_map(first).is_none(), "the oldest map was kept");
+    }
+
+    #[test]
+    fn a_commit_re_materializes_the_source_slot() {
+        let mut rust = state();
+        let layer = &mut rust.doc.as_mut().unwrap().layers[0];
+        layer.channels.push(Channel {
+            id: -1,
+            data: (0..48u8).collect::<Vec<_>>().into(),
+        });
+        let mut params = vec![0.0; LENS_BLUR_SLOTS];
+        params[1] = 1.0; // Transparency
+        let slots = commit_slots("lens-blur", &rust, &params);
+        assert!(slots[13] > 0.0, "the source was not materialized");
+        assert!(depth_map(slots[13] as u32).is_some());
+
+        params[1] = 2.0; // Layer Mask, none present: refused
+        assert_eq!(commit_slots("lens-blur", &rust, &params)[13], 0.0);
+
+        params[1] = 0.0; // Source None: no map
+        assert_eq!(commit_slots("lens-blur", &rust, &params)[13], 0.0);
     }
 }

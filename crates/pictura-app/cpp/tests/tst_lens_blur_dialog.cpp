@@ -84,6 +84,7 @@ private slots:
     void fasterStillCommitsMoreAccurate();
     void rejectRestoresPixels();
     void lastFilterReusesTheSettings();
+    void lastFilterSurvivesAStoreChurn();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -220,6 +221,35 @@ void LensBlurDialogTest::lastFilterReusesTheSettings()
     QVERIFY(registry->dispatch(
         QString::fromLatin1(pictura::command_ids::FilterLastFilterSettings)));
     QCOMPARE(seen, values);
+}
+
+// The depth store keeps only the eight most recent maps, so a later Lens Blur
+// session must not break Last Filter: the commit re-materializes the Source
+// slot instead of trusting the preview-time id.
+void LensBlurDialogTest::lastFilterSurvivesAStoreChurn()
+{
+    QVERIFY(window_->openDocumentAtPath(alphaPath_));
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(view != nullptr);
+    QList<double> values = defaultSlots();
+    values[0] = 1.0; // More Accurate
+    values[1] = 1.0; // Source: Transparency
+    values[13] = pictura::filter_lens_blur_depth(*view, 1);
+    QVERIFY(values[13] > 0);
+    QVERIFY(pictura::apply_filter_params(*view, QStringLiteral("lens-blur"), values));
+
+    // Churn the store with distinct selection maps, past its eight entries.
+    for (int i = 0; i < 12; ++i) {
+        view->select_rect(0, 0, 8 + i, 8, QStringLiteral("new"), 0.0);
+        QVERIFY(pictura::filter_lens_blur_depth(*view, 3) > 0);
+    }
+    view->deselect();
+
+    pictura::CommandRegistry* registry = window_->registry();
+    registry->refresh();
+    const int states = view->history_count();
+    QVERIFY(registry->dispatch(QString::fromLatin1(pictura::command_ids::FilterLastFilter)));
+    QCOMPARE(view->history_count(), states + 1);
 }
 
 QTEST_MAIN(LensBlurDialogTest)
