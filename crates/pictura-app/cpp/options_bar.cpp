@@ -49,7 +49,8 @@ QFrame* toolSeparator(QWidget* parent)
     auto* line = new QFrame(parent);
     line->setObjectName(QStringLiteral("optionsToolSeparator"));
     line->setFrameShape(QFrame::VLine);
-    line->setFrameShadow(QFrame::Sunken);
+    line->setFrameShadow(QFrame::Plain);
+    line->setFixedWidth(1);
     line->setFixedHeight(18);
     line->setAttribute(Qt::WA_TransparentForMouseEvents);
     return line;
@@ -177,6 +178,8 @@ QWidget* OptionsBar::buildPageBody(ToolId id)
         return buildWandPage(id);
     case ToolId::Crop:
         return buildCropPage(id);
+    case ToolId::PerspectiveCrop:
+        return buildPerspectiveCropPage(id);
     case ToolId::Eyedropper:
         return buildEyedropperPage(id);
     case ToolId::ColorSampler:
@@ -1018,6 +1021,10 @@ void OptionsBar::showTool(ToolId id)
     // Re-seed the Crop W/H fields for their mode (ratio values or pixels).
     if (id == ToolId::Crop) {
         syncCropFields();
+    }
+    // The Perspective Crop Apply/Cancel buttons follow the staged quad.
+    if (id == ToolId::PerspectiveCrop) {
+        syncPerspectiveButtons();
     }
 }
 

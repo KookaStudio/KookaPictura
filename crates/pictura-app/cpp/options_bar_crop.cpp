@@ -27,6 +27,8 @@
 #include <QtWidgets/QToolButton>
 #include <QtWidgets/QWidgetAction>
 
+#include <cmath>
+
 namespace pictura {
 
 namespace {
@@ -61,8 +63,10 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
     layout->setContentsMargins(4, 2, 4, 2);
     const auto separator = [page]() {
         auto* line = new QFrame(page);
+        line->setObjectName(QStringLiteral("optionsToolSeparator"));
         line->setFrameShape(QFrame::VLine);
-        line->setFrameShadow(QFrame::Sunken);
+        line->setFrameShadow(QFrame::Plain);
+        line->setFixedWidth(1);
         line->setFixedHeight(18);
         return line;
     };
@@ -129,6 +133,9 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
                                                   false, QStringLiteral("optionsCropHeight"), true),
                                     page);
     layout->addWidget(height);
+    // The free Ratio default is unconstrained, so the W/H boxes start empty.
+    width->setBlank(true);
+    height->setBlank(true);
     cropWidthField_ = width;
     cropHeightField_ = height;
     // Only the W x H x Resolution mode shows the pixel suffix, the resolution
@@ -293,7 +300,6 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
     reset->setIconSize(QSize(18, 18));
     reset->setToolTip(QStringLiteral("Reset the crop values"));
     layout->addWidget(reset);
-    layout->addWidget(separator());
     auto* cancel = new QToolButton(page);
     cancel->setObjectName(QStringLiteral("optionsCropCancel"));
     cancel->setIcon(icon(QStringLiteral("crop.cancel")));
@@ -344,19 +350,19 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
             height->setValue(w);
         });
         const auto resetRatio = [this, ratio, width, height]() {
-            cropRatioW_ = 1.0;
-            cropRatioH_ = 1.0;
+            cropRatioW_ = 0.0;
+            cropRatioH_ = 0.0;
             controller_->setCropRatio(0.0);
             ratio->setCurrentIndex(0);
             const QSignalBlocker bw(width);
             const QSignalBlocker bh(height);
-            width->setValue(1.0);
-            height->setValue(1.0);
+            width->setBlank(true);
+            height->setBlank(true);
         };
         connect(clear, &QToolButton::clicked, this, resetRatio);
         connect(reset, &QToolButton::clicked, this, [this, resetRatio, spirit]() {
             resetRatio();
-            controller_->setCropAngle(0.0);
+            controller_->resetCrop();
             if (spirit->isChecked()) {
                 spirit->setChecked(false);
             }
@@ -415,16 +421,18 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
                         }
                         return;
                     }
-                    const double w = pair.x() > 0.0 ? pair.x() : 1.0;
-                    const double h = pair.y() > 0.0 ? pair.y() : 1.0;
-                    cropRatioW_ = w;
-                    cropRatioH_ = h;
+                    const bool constrained = pair.x() > 0.0 && pair.y() > 0.0;
+                    cropRatioW_ = constrained ? pair.x() : 0.0;
+                    cropRatioH_ = constrained ? pair.y() : 0.0;
                     const QSignalBlocker bw(width);
                     const QSignalBlocker bh(height);
-                    width->setValue(w);
-                    height->setValue(h);
-                    controller_->setCropRatio(
-                        pair.x() > 0.0 && pair.y() > 0.0 ? pair.x() / pair.y() : 0.0);
+                    width->setBlank(!constrained);
+                    height->setBlank(!constrained);
+                    if (constrained) {
+                        width->setValue(pair.x());
+                        height->setValue(pair.y());
+                    }
+                    controller_->setCropRatio(constrained ? pair.x() / pair.y() : 0.0);
                 });
         connect(deletePixels, &QCheckBox::toggled, this,
                 [this](bool on) { controller_->setCropDeletePixels(on); });
@@ -457,10 +465,157 @@ void OptionsBar::syncCropFields()
     if (cropResolutionMode_) {
         cropWidthField_->setValue(controller_->cropWidth());
         cropHeightField_->setValue(controller_->cropHeight());
-    } else {
+    } else if (cropRatioW_ > 0.0 && cropRatioH_ > 0.0) {
         cropWidthField_->setValue(cropRatioW_);
         cropHeightField_->setValue(cropRatioH_);
+    } else {
+        // Unconstrained: no ratio to show.
+        cropWidthField_->setBlank(true);
+        cropHeightField_->setBlank(true);
     }
+}
+
+// CS6's Perspective Crop bar: W/H output pixels (blank = auto), swap,
+// Resolution with its unit, Front Image, Clear, and a Show Grid toggle, plus
+// Cancel/Apply shown only while the quad is complete.
+QWidget* OptionsBar::buildPerspectiveCropPage(ToolId id)
+{
+    auto* page = new QWidget(stack_);
+    auto* layout = new QHBoxLayout(page);
+    layout->setContentsMargins(4, 2, 4, 2);
+    const auto separator = [page]() {
+        auto* line = new QFrame(page);
+        line->setObjectName(QStringLiteral("optionsToolSeparator"));
+        line->setFrameShape(QFrame::VLine);
+        line->setFrameShadow(QFrame::Plain);
+        line->setFixedWidth(1);
+        line->setFixedHeight(18);
+        return line;
+    };
+    layout->addWidget(toolButton(id, page));
+
+    const auto pixelField = [page](const QString& name) {
+        return new NumericField(
+            QString(),
+            numericConfig(1.0, 100000.0, 1.0, 0, QStringLiteral(" px"), false, name, true), page);
+    };
+    auto* width = pixelField(QStringLiteral("optionsPerspectiveWidth"));
+    width->setBlank(true);
+    layout->addWidget(width);
+    auto* swap = new QToolButton(page);
+    swap->setObjectName(QStringLiteral("optionsPerspectiveSwap"));
+    swap->setIcon(icon(QStringLiteral("crop.swap")));
+    swap->setIconSize(QSize(18, 18));
+    swap->setToolTip(QStringLiteral("Swap the output width and height"));
+    layout->addWidget(swap);
+    auto* height = pixelField(QStringLiteral("optionsPerspectiveHeight"));
+    height->setBlank(true);
+    layout->addWidget(height);
+    layout->addWidget(separator());
+
+    layout->addWidget(new QLabel(QStringLiteral("Resolution:"), page));
+    auto* resolution = new NumericField(
+        QString(),
+        numericConfig(1.0, 100000.0, 1.0, 0, QString(), false,
+                      QStringLiteral("optionsPerspectiveResolution")),
+        page);
+    layout->addWidget(resolution);
+    auto* unit = new QComboBox(page);
+    unit->setObjectName(QStringLiteral("optionsPerspectiveUnit"));
+    unit->addItems({QStringLiteral("Pixels/in"), QStringLiteral("Pixels/cm")});
+    unit->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    layout->addWidget(unit);
+    layout->addWidget(separator());
+
+    const auto textButton = [page](const QString& name, const QString& text) {
+        auto* button = new QToolButton(page);
+        button->setObjectName(name);
+        button->setText(text);
+        return button;
+    };
+    auto* front = textButton(QStringLiteral("optionsPerspectiveFrontImage"),
+                             QStringLiteral("Front Image"));
+    layout->addWidget(front);
+    auto* clear = textButton(QStringLiteral("optionsPerspectiveClear"), QStringLiteral("Clear"));
+    clear->setToolTip(QStringLiteral("Clear the output size fields"));
+    layout->addWidget(clear);
+    auto* showGrid =
+        textButton(QStringLiteral("optionsPerspectiveShowGrid"), QStringLiteral("Show Grid"));
+    showGrid->setCheckable(true);
+    showGrid->setChecked(true);
+    layout->addWidget(showGrid);
+    layout->addWidget(separator());
+
+    auto* cancel = new QToolButton(page);
+    cancel->setObjectName(QStringLiteral("optionsPerspectiveCancel"));
+    cancel->setIcon(icon(QStringLiteral("crop.cancel")));
+    cancel->setIconSize(QSize(18, 18));
+    cancel->setToolTip(QStringLiteral("Cancel the perspective crop (Esc)"));
+    layout->addWidget(cancel);
+    auto* apply = new QToolButton(page);
+    apply->setObjectName(QStringLiteral("optionsPerspectiveApply"));
+    apply->setIcon(icon(QStringLiteral("crop.apply")));
+    apply->setIconSize(QSize(18, 18));
+    apply->setToolTip(QStringLiteral("Apply the perspective crop (Enter)"));
+    layout->addWidget(apply);
+
+    const auto setResolutionFields = [resolution, unit](bool on) {
+        resolution->setVisible(on);
+        unit->setVisible(on);
+    };
+    setResolutionFields(true);
+
+    if (controller_) {
+        const auto pushOutput = [this, width, height]() {
+            controller_->setPerspectiveOutput(width->isBlank() ? 0 : int(std::lround(width->value())),
+                                              height->isBlank() ? 0 : int(std::lround(height->value())));
+        };
+        connect(width, &NumericField::valueChanged, this, [pushOutput](double) { pushOutput(); });
+        connect(height, &NumericField::valueChanged, this, [pushOutput](double) { pushOutput(); });
+        connect(swap, &QToolButton::clicked, this, [width, height, pushOutput]() {
+            const bool wb = width->isBlank();
+            const bool hb = height->isBlank();
+            const double w = width->value();
+            const double h = height->value();
+            width->setBlank(hb);
+            height->setBlank(wb);
+            if (!hb) width->setValue(h);
+            if (!wb) height->setValue(w);
+            pushOutput();
+        });
+        connect(front, &QToolButton::clicked, this, [this, resolution]() {
+            if (PictureView* v = controller_->view(); v && v->has_document()) {
+                const double ppi = document_ppi(*v);
+                if (ppi > 0.0) resolution->setValue(ppi);
+            }
+        });
+        connect(clear, &QToolButton::clicked, this, [width, height, pushOutput]() {
+            width->setBlank(true);
+            height->setBlank(true);
+            pushOutput();
+        });
+        connect(showGrid, &QToolButton::toggled, this,
+                [this](bool on) { controller_->setPerspectiveShowGrid(on); });
+        connect(cancel, &QToolButton::clicked, this, [this]() { controller_->cancelCrop(); });
+        connect(apply, &QToolButton::clicked, this, [this]() { controller_->commitCrop(); });
+        perspectiveApply_ = apply;
+        perspectiveCancel_ = cancel;
+        syncPerspectiveButtons();
+        connect(controller_, &ToolController::toolSessionChanged, this,
+                [this]() { syncPerspectiveButtons(); });
+    }
+    layout->addStretch(1);
+    return page;
+}
+
+void OptionsBar::syncPerspectiveButtons()
+{
+    if (!perspectiveApply_ || !perspectiveCancel_) {
+        return;
+    }
+    const bool on = controller_ && controller_->perspectiveQuadComplete();
+    perspectiveApply_->setVisible(on);
+    perspectiveCancel_->setVisible(on);
 }
 
 } // namespace pictura

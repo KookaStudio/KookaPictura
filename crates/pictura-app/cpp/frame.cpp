@@ -1069,22 +1069,9 @@ void PicturaMainWindow::keyPressEvent(QKeyEvent* event)
                                       event->modifiers().testFlag(Qt::ShiftModifier))) {
         return;
     }
-    if (tools_ && tools_->activeTool() == ToolId::Move) {
-        int dx = 0;
-        int dy = 0;
-        switch (event->key()) {
-        case Qt::Key_Left: dx = -1; break;
-        case Qt::Key_Right: dx = 1; break;
-        case Qt::Key_Up: dy = -1; break;
-        case Qt::Key_Down: dy = 1; break;
-        default: break;
-        }
-        if ((dx != 0 || dy != 0) && activeView()) {
-            const int step = event->modifiers().testFlag(Qt::ShiftModifier) ? 10 : 1;
-            activeView()->translate_layer(dx * step, dy * step);
-            event->accept();
-            return;
-        }
+    if (tools_ && tools_->handleNudgeKey(event->key(), event->modifiers())) {
+        event->accept();
+        return;
     }
     QMainWindow::keyPressEvent(event);
 }

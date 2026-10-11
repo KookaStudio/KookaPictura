@@ -635,11 +635,10 @@ void ImageView::paintEvent(QPaintEvent*)
             painter.setTransform(rotation * about);
         }
         if (!cropContentOffset_.isNull()) {
-            // Modern content pan: shift the whole composite. A document canvas
-            // holds no image_, so pull level 0 through image() (the doc crop).
-            const QImage composite = image();
-            if (!composite.isNull()) {
-                painter.drawImage(offset_ + cropContentOffset_ * zoom_, composite);
+            // Modern content pan: shift the composite, pulled from image() at zoom.
+            if (const QImage composite = image(); !composite.isNull()) {
+                painter.drawImage(QRectF(offset_ + cropContentOffset_ * zoom_,
+                                         QSizeF(composite.size()) * zoom_), composite);
             }
         } else if (singleChannel() >= 0 && crop) {
             const QRectF target(offset_.x() + cropDoc.x() * zoom_,

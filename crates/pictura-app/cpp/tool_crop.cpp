@@ -168,6 +168,12 @@ public:
                 pressAngle_ = std::atan2(imagePos.y() - c.y(), imagePos.x() - c.x());
                 return true;
             }
+            // Far outside the box the cursor is the default arrow and a press
+            // applies the crop, as CS6 does.
+            if (grip_ == BoxGrip::None && cropFarZone(box_, imagePos, zoom(ctx))) {
+                commitCrop();
+                return true;
+            }
             start_ = imagePos;
             startBox_ = box_;
             offsetStart_ = contentOffset_;
@@ -184,6 +190,11 @@ public:
                 startAngle_ = ctx.cropAngle();
                 const QPointF c = box_.center();
                 pressAngle_ = std::atan2(imagePos.y() - c.y(), imagePos.x() - c.x());
+                return true;
+            }
+            // Far outside a preview nothing happens; there is no active crop yet
+            // to apply.
+            if (grip_ == BoxGrip::None && cropFarZone(box_, imagePos, zoom(ctx))) {
                 return true;
             }
             // A press inside the preview draws a new box on drag, or adopts the
@@ -281,9 +292,24 @@ public:
             show(ctx);
             return;
         }
+        const bool alt = mods.testFlag(Qt::AltModifier);
+        if (alt) {
+            // Alt scales about the box centre: the dragged edge moves, the
+            // opposite edge mirrors it, and the ratio fit stays centred.
+            box_ = dragBox(startBox_, grip_, imagePos - start_, true);
+            box_ = fitRatio(box_, ctx.cropRatio(), grip_);
+            box_.moveCenter(startBox_.center());
+            show(ctx);
+            return;
+        }
         box_ = dragBox(startBox_, grip_, imagePos - start_);
         snapBox(ctx, box_, grip_);
         box_ = fitRatio(box_, ctx.cropRatio(), grip_);
+        // The ratio fit moved the snapped edge; re-snap the whole box (keeping
+        // the ratio) so a locked ratio still lands on a canvas/layer edge.
+        if (ctx.cropRatio() > 0.0) {
+            snapBox(ctx, box_, BoxGrip::Move);
+        }
         show(ctx);
     }
 
@@ -337,14 +363,21 @@ public:
         const double tol = 6.0 / std::max(zoom(ctx), 1e-6);
         std::vector<double> xs = {0.0, double(canvas_.width())};
         std::vector<double> ys = {0.0, double(canvas_.height())};
-        if (PictureView* v = ctx.view(); v && !v->active_layer_path().isEmpty()) {
-            const QStringList p =
-                v->layer_rect(v->active_layer_path()).split(QLatin1Char(' '), Qt::SkipEmptyParts);
+        PictureView* v = ctx.view();
+        const auto addRect = [&xs, &ys](const QStringList& p) {
             if (p.size() == 4) {
                 xs.push_back(p[0].toDouble());
                 xs.push_back(p[2].toDouble());
                 ys.push_back(p[1].toDouble());
                 ys.push_back(p[3].toDouble());
+            }
+        };
+        if (v && v->has_document()) {
+            // Snap to the whole composite's bounding box, then the active layer.
+            addRect(composite_bounds(*v).split(QLatin1Char(' '), Qt::SkipEmptyParts));
+            if (!v->active_layer_path().isEmpty()) {
+                addRect(v->layer_rect(v->active_layer_path())
+                            .split(QLatin1Char(' '), Qt::SkipEmptyParts));
             }
         }
         if (grip == BoxGrip::Move) {
@@ -435,6 +468,41 @@ public:
     double cropWidth() const override { return box_.width(); }
     double cropHeight() const override { return box_.height(); }
 
+    // Reset: make the box the whole canvas and clear the angle/offset.
+    bool resetCropBox() override
+    {
+        if (!active_ || !ctx_ || canvas_.isEmpty()) {
+            return false;
+        }
+        box_ = QRectF(canvas_);
+        startBox_ = box_;
+        contentOffset_ = QPointF();
+        state_ = State::Active;
+        ctx_->setCropAngle(0.0);
+        show(*ctx_);
+        recordState(*ctx_);
+        notifyStateChanged(*ctx_);
+        return true;
+    }
+
+    // Arrow keys: move the crop box in Classic, pan the composite in Modern.
+    bool nudge(int dx, int dy) override
+    {
+        if (!active_ || state_ != State::Active || box_.isNull() || (dx == 0 && dy == 0)) {
+            return false;
+        }
+        if (ctx_ && ctx_->cropClassicMode()) {
+            box_ = box_.translated(dx, dy);
+        } else {
+            contentOffset_ += QPointF(dx, dy);
+        }
+        if (ctx_) {
+            show(*ctx_);
+            recordState(*ctx_);
+        }
+        return true;
+    }
+
     // Escape / Cancel: drop the box and angle, returning to no box in BOTH
     // modes, so a fresh drag draws a new box honoring the ratio.
     bool cancelPolygonLasso() override
@@ -473,9 +541,10 @@ public:
     enum CursorKind {
         CursorNone = 0,
         CursorBox,      // over the box body: the workspace arrow
-        CursorRotate,   // just outside the box: straighten
+        CursorRotate,   // in the rotate band outside the box: straighten
         CursorResize,   // on a handle
-        CursorNewCrop   // where a new box can be drawn
+        CursorNewCrop,  // where a new box can be drawn
+        CursorDefault   // beyond the rotate band: the workspace arrow, a press applies
     };
 
     int pointerCursorKind(const ToolContext& ctx, const QPointF& imagePos,
@@ -493,7 +562,10 @@ public:
     {
         const CursorState s = cursorStateAt(ctx, imagePos, mods);
         switch (s.kind) {
-        case CursorBox: out = cursorOr(QStringLiteral("cursor.workspace"), 2, 2, Qt::ArrowCursor); return true;
+        case CursorBox:
+        case CursorDefault:
+            out = cursorOr(QStringLiteral("cursor.workspace"), 2, 2, Qt::ArrowCursor);
+            return true;
         case CursorRotate: {
             // The arc bulges outward along the nearest of the eight box
             // corner/edge zones, so corners get a diagonal and edges an axis.
@@ -594,8 +666,14 @@ private:
         }
         const double z = zoom(ctx);
         if (state_ == State::Preview) {
-            return boxGripAt(box_, p, z) != BoxGrip::None ? CursorState{CursorNewCrop, BoxGrip::None}
-                                                          : CursorState{CursorRotate, BoxGrip::None};
+            // Use the same 8 px grab as onPress so the cursor and the press
+            // classify the preview rim identically (a 6 px default would show
+            // the arrow over a point that still starts a draw).
+            if (boxGripAt(box_, p, z, kCropRotateMarginPx) != BoxGrip::None) {
+                return {CursorNewCrop, BoxGrip::None};
+            }
+            return cropRotateZone(box_, p, z) ? CursorState{CursorRotate, BoxGrip::None}
+                                              : CursorState{CursorDefault, BoxGrip::None};
         }
         if (grip_ != BoxGrip::None && grip_ != BoxGrip::Move) {
             return {CursorResize, grip_};
@@ -607,8 +685,10 @@ private:
         if (hover == BoxGrip::Move) {
             return {CursorBox, BoxGrip::None};
         }
-        // Everything outside the box rotates, including past the canvas edge.
-        return {CursorRotate, BoxGrip::None};
+        // Outside the box: the rotate band rotates, beyond it the default arrow
+        // (a press there applies the crop). Both extend past the canvas edge.
+        return cropRotateZone(box_, p, z) ? CursorState{CursorRotate, BoxGrip::None}
+                                          : CursorState{CursorDefault, BoxGrip::None};
     }
 
     QRectF effectiveBox() const { return box_.translated(-contentOffset_); }

@@ -17,11 +17,20 @@ level, whose edges converge toward the top). Source: CS6 reference,
 Documented workflow (CS6):
 
 1. Hold down the Crop tool and select the **Perspective Crop** tool.
-2. Draw a marquee around the distorted object. Match the four corners of the
-   marquee to the rectangular edges of the object. The object **must have been
-   rectangular in the original scene**, or the transform will not be what the
-   user expects.
-3. `Enter`/`Return` completes the perspective crop.
+2. Click the four corners of the distorted object in turn (top-left,
+   top-right, bottom-right, bottom-left); the quad closes on the fourth click.
+   Match the corners to the rectangular edges of the object. The object **must
+   have been rectangular in the original scene**, or the transform will not be
+   what the user expects. Each corner snaps to the canvas edges/corners within a
+   small threshold, and the corners can be dragged afterwards; dragging inside
+   moves the whole quad, and dragging outside it rotates the quad about its
+   centre.
+3. `Enter`/`Return`, or the options bar's apply button, completes the
+   perspective crop; the cancel button or `Esc` discards the quad.
+
+Kooka draws only the staged corners while the quad is incomplete, and shades
+**only the canvas** (never the workspace) once the quad is complete, so a
+partially staged quad never dims anything.
 
 Additional CS6 facts:
 
@@ -60,13 +69,16 @@ Additional CS6 facts:
 | Location | Type | Shortcut | Notes |
 |---|---|---|---|
 | Toolbox (under Crop) | Tool | hold Crop / `Shift+C` | Separate CS6 tool |
+| Options bar | W / H | — | Final output pixels; blank = auto from the quad |
+| Options bar | Swap | — | Swap the output width and height |
+| Options bar | Resolution / unit | — | Output resolution (ppi or ppcm) |
 | Options bar | Show Grid | — | Perspective grid visibility |
-| Options bar | Front Image | `I` | Matches crop to another image; shortcut changed from F |
-| Options bar | Clear | — | Clears W/H (and resolution) |
-| Canvas | Four corner handles | — | Drag to match object edges |
-| Canvas | Edge handles | — | Reshape crop bounds |
-| Canvas | Center point | — | CS5 required it to stay fixed; CS6 status unverified |
-| Context | Commit | `Enter`/`Return` | |
+| Options bar | Front Image | `I` | Sets the resolution from the front document; shortcut changed from F |
+| Options bar | Clear | — | Clears the W/H output fields |
+| Options bar | Apply / Cancel | `Enter` / `Esc` | Shown only while the quad is complete |
+| Canvas | Four clicked corners | — | Click the four corners in any order; the tool orients them upright (never rotates or mirrors); drag to match object edges |
+| Canvas | Rotate outside | — | Drag outside the complete quad rotates it about its centre |
+| Context | Commit | `Enter`/`Return` | Double-click inside also commits |
 | Context | Cancel | `Esc` | |
 
 ## Parameters & ranges
@@ -107,7 +119,9 @@ is the standard, well-known approach and is **inferred** unless noted):
   "squish," because the transform cannot recover information the camera did not
   record (depth/true proportions).
 - **Show Grid** draws the homography's line family so the user can align grid
-  lines with edges that should be vertical/horizontal.
+  lines with edges that should be vertical/horizontal. Kooka spaces the grid at
+  one inch (the document resolution in pixels), clipped to the quad, so a larger
+  quad shows more lines at the same physical spacing.
 
 Implementation notes:
 
@@ -206,9 +220,10 @@ Proposed:
 
 - **Does the CS6 center-point constraint still apply** to the separate
   Perspective Crop tool? *Resolves with:* CS6 observation.
-- **Exact arbitrary-quad-to-rectangle solve and target size** Adobe uses (and
-  whether output size is user-set or derived from the quad). *Resolves with:*
-  measuring behavior in tests; not documented.
+- **Exact arbitrary-quad-to-rectangle solve** Adobe uses. *Resolves with:*
+  measuring behavior in tests; not documented. Kooka sizes the output from the
+  quad's longer opposite edges unless the user types a W/H, which forces that
+  dimension.
 - **Is Perspective Crop strictly destructive in CS6**, and is Delete Cropped
   Pixels ever exposed? *Resolves with:* CS6 options-bar capture.
 - **Grid construction** (1-point/2-point grid, line spacing) used by Show Grid.

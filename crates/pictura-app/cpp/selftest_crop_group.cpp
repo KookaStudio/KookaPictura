@@ -42,31 +42,45 @@ int pictura::runCropGroupChecks(pictura::PicturaMainWindow& frame)
         QKeyEvent press(QEvent::KeyPress, k, Qt::NoModifier);
         QApplication::sendEvent(&frame, &press);
     };
+    const auto click = [canvas](QPointF p) {
+        canvas->mousePressed(p, Qt::LeftButton, int(Qt::NoModifier));
+        canvas->mouseReleased(p);
+    };
 
-    // Perspective Crop.
+    // Perspective Crop: four corner clicks stage the quad.
     frame.setActiveTool(pictura::ToolId::PerspectiveCrop);
-    drag(QPointF(5, 5), QPointF(12, 12));
+    click(QPointF(8, 8));
+    click(QPointF(32, 8));
+    click(QPointF(32, 32));
+    click(QPointF(8, 32));
     const bool staged = canvas->hasPerspectiveCropQuadForTest();
-    // A crosshair over the canvas, the move cursor over a corner handle.
+    // A crosshair inside the quad, the move cursor over a corner handle.
     canvas->mouseMoved(QPointF(20, 20));
     const bool crosshair = canvas->cursor().shape() == Qt::BitmapCursor
         && canvas->cursor().pixmap().toImage()
             == pictura::cursor(QStringLiteral("tool.marquee"), 12, 12).pixmap().toImage();
-    canvas->mouseMoved(QPointF(12, 12));
+    canvas->mouseMoved(QPointF(8, 8));
     const bool cornerCursor = canvas->cursor().shape() == Qt::SizeAllCursor;
     key(Qt::Key_Escape);
     const bool discarded = !canvas->hasPerspectiveCropQuadForTest();
 
-    // Drag the top-left corner onto the top-right one: a degenerate quad.
-    drag(QPointF(5, 5), QPointF(15, 15));
-    drag(QPointF(5, 5), QPointF(15, 5));
+    // Stage a quad, then drag the top-left corner onto the top-right one: a
+    // degenerate quad is refused and stays.
+    click(QPointF(10, 10));
+    click(QPointF(30, 10));
+    click(QPointF(30, 30));
+    click(QPointF(10, 30));
+    drag(QPointF(10, 10), QPointF(30, 10));
     const int badBase = view->history_count();
     key(Qt::Key_Return);
     const bool degenerateKept = view->history_count() == badBase
         && view->document_width() == 40 && canvas->hasPerspectiveCropQuadForTest();
     key(Qt::Key_Escape);
 
-    drag(QPointF(10, 10), QPointF(30, 30));
+    click(QPointF(10, 10));
+    click(QPointF(30, 10));
+    click(QPointF(30, 30));
+    click(QPointF(10, 30));
     const int cropBase = view->history_count();
     key(Qt::Key_Return);
     const bool cropped = view->history_count() == cropBase + 1

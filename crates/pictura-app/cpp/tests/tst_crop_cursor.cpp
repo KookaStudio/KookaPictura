@@ -25,6 +25,10 @@ private slots:
     void initTestCase();
     void cursorZones();
     void rotateCursorZones();
+    void farZoneDefaultAndApply();
+    void farZoneAppliesFromWorkspace();
+    void previewFarIsNoOp();
+    void arrowKeysNudgeCrop();
     void classicMovesBoxModernMovesContent();
     void firstBoxClampedThenGrows();
 
@@ -33,7 +37,7 @@ private:
     std::unique_ptr<pictura::PicturaMainWindow> window_;
 
     // The CropToolHandler::CursorKind values.
-    enum { None = 0, Box = 1, Rotate = 2, Resize = 3, NewCrop = 4 };
+    enum { None = 0, Box = 1, Rotate = 2, Resize = 3, NewCrop = 4, Default = 5 };
 
     void drag(pictura::ImageView* canvas, const QPointF& from, const QPointF& to)
     {
@@ -80,6 +84,148 @@ void CropCursorTest::cursorZones()
     QKeyEvent esc(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
     QApplication::sendEvent(&frame, &esc);
     QCOMPARE(tools->cropCursorKindForTest(QPointF(60, 60), 0), int(NewCrop));
+
+    tools->setCropClassicMode(true);
+    frame.setActiveTool(pictura::ToolId::Move);
+    frame.closeDocument(doc, false);
+}
+
+void CropCursorTest::farZoneDefaultAndApply()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("CropFar"), 120, 120, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::ImageView* canvas = frame.imageView();
+    pictura::PictureView* view = frame.activeView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(canvas);
+    QVERIFY(view);
+    QVERIFY(tools);
+    const int doc = frame.activeDocumentIndex();
+
+    canvas->actualPixels();
+    tools->setCropClassicMode(true);
+    frame.setActiveTool(pictura::ToolId::Crop);
+
+    // Draw a small active box at the top-left.
+    drag(canvas, QPointF(0, 0), QPointF(30, 30));
+
+    // Within the band (under 100 px from the corner) the cursor rotates; beyond
+    // it the cursor is the default arrow and a press applies the crop.
+    QCOMPARE(tools->cropCursorKindForTest(QPointF(60, 60), 0), int(Rotate));
+    QCOMPARE(tools->cropCursorKindForTest(QPointF(115, 115), 0), int(Default));
+    canvas->mousePressed(QPointF(115, 115), Qt::LeftButton, int(Qt::NoModifier));
+    canvas->mouseReleased(QPointF(115, 115));
+    QCOMPARE(view->document_width(), 30);
+    QCOMPARE(view->document_height(), 30);
+    QVERIFY(!tools->cropActive());
+
+    tools->setCropClassicMode(true);
+    frame.setActiveTool(pictura::ToolId::Move);
+    frame.closeDocument(doc, false);
+}
+
+void CropCursorTest::farZoneAppliesFromWorkspace()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("CropFarWorkspace"), 120, 120, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::ImageView* canvas = frame.imageView();
+    pictura::PictureView* view = frame.activeView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(canvas);
+    QVERIFY(view);
+    QVERIFY(tools);
+    const int doc = frame.activeDocumentIndex();
+
+    canvas->actualPixels();
+    tools->setCropClassicMode(true);
+    frame.setActiveTool(pictura::ToolId::Crop);
+    drag(canvas, QPointF(0, 0), QPointF(30, 30));
+
+    // A press far outside the canvas (on the workspace) still applies: the zone
+    // ignores the canvas edge. (300,300) is ~380 px from the box corner.
+    canvas->mousePressed(QPointF(300, 300), Qt::LeftButton, int(Qt::NoModifier));
+    QCOMPARE(view->document_width(), 30);
+    QCOMPARE(view->document_height(), 30);
+
+    tools->setCropClassicMode(true);
+    frame.setActiveTool(pictura::ToolId::Move);
+    frame.closeDocument(doc, false);
+}
+
+void CropCursorTest::previewFarIsNoOp()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("CropFarPreview"), 120, 120, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::ImageView* canvas = frame.imageView();
+    pictura::PictureView* view = frame.activeView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(canvas);
+    QVERIFY(view);
+    QVERIFY(tools);
+    const int doc = frame.activeDocumentIndex();
+
+    canvas->actualPixels();
+    tools->setCropClassicMode(false);  // Modern: full-canvas preview
+    frame.setActiveTool(pictura::ToolId::Crop);
+
+    // The preview cursor rotates in the band and is the default arrow far out.
+    QCOMPARE(tools->cropCursorKindForTest(QPointF(130, 130), 0), int(Rotate));
+    QCOMPARE(tools->cropCursorKindForTest(QPointF(300, 300), 0), int(Default));
+
+    // A far press in the preview applies nothing and does not adopt the box.
+    canvas->mousePressed(QPointF(300, 300), Qt::LeftButton, int(Qt::NoModifier));
+    canvas->mouseReleased(QPointF(300, 300));
+    QCOMPARE(view->document_width(), 120);
+    QCOMPARE(view->document_height(), 120);
+    QVERIFY(!tools->cropActive());
+
+    tools->setCropClassicMode(true);
+    frame.setActiveTool(pictura::ToolId::Move);
+    frame.closeDocument(doc, false);
+}
+
+void CropCursorTest::arrowKeysNudgeCrop()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("CropArrows"), 120, 120, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::ImageView* canvas = frame.imageView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(canvas);
+    QVERIFY(tools);
+    const int doc = frame.activeDocumentIndex();
+
+    const auto arrow = [&frame](int key, Qt::KeyboardModifiers mods) {
+        QKeyEvent event(QEvent::KeyPress, key, mods);
+        QApplication::sendEvent(&frame, &event);
+    };
+
+    canvas->actualPixels();
+    tools->setCropClassicMode(true);
+    frame.setActiveTool(pictura::ToolId::Crop);
+    drag(canvas, QPointF(0, 0), QPointF(30, 30));
+
+    // Classic: arrow keys nudge the box (Shift steps 10 px).
+    arrow(Qt::Key_Right, Qt::NoModifier);
+    QCOMPARE(tools->pendingCropRect(), QRect(1, 0, 30, 30));
+    arrow(Qt::Key_Down, Qt::NoModifier);
+    QCOMPARE(tools->pendingCropRect(), QRect(1, 1, 30, 30));
+    arrow(Qt::Key_Right, Qt::ShiftModifier);
+    QCOMPARE(tools->pendingCropRect(), QRect(11, 1, 30, 30));
+
+    // Modern: arrow keys pan the composite under the fixed box.
+    tools->setCropClassicMode(false);
+    frame.setActiveTool(pictura::ToolId::Move);
+    frame.setActiveTool(pictura::ToolId::Crop);
+    drag(canvas, QPointF(120, 120), QPointF(60, 60));
+    QCOMPARE(canvas->cropContentOffset(), QPointF());
+    arrow(Qt::Key_Right, Qt::NoModifier);
+    QCOMPARE(canvas->cropContentOffset(), QPointF(1, 0));
+    arrow(Qt::Key_Up, Qt::ShiftModifier);
+    QCOMPARE(canvas->cropContentOffset(), QPointF(1, -10));
 
     tools->setCropClassicMode(true);
     frame.setActiveTool(pictura::ToolId::Move);

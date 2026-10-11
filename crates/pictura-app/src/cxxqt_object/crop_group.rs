@@ -29,6 +29,14 @@ pub mod ffi {
         /// Perspective-crop to `quad` (8 values: TL, TR, BR, BL x/y in document pixels): warp every layer so the quad becomes the canvas, drop the selection, recomposite, and record one "Perspective Crop" state. False, changing nothing, without a document, on a refusal, or for a degenerate quad.
         fn perspective_crop_commit(view: Pin<&mut PictureView>, quad: &[f64]) -> bool;
 
+        /// As `perspective_crop_commit`, but a positive `out_w`/`out_h` forces that output dimension (0 = auto from the quad).
+        fn perspective_crop_commit_sized(
+            view: Pin<&mut PictureView>,
+            quad: &[f64],
+            out_w: i32,
+            out_h: i32,
+        ) -> bool;
+
         /// The Crop tool's commit: crop to the `width`×`height` rect at `(x, y)`, discarding the pixels outside it when `delete_cropped`; drop the selection and record one "Crop" state. A rect that stays inside the canvas is clamped as before; a rect that extends beyond it grows the canvas, filling the added area with the Background layer's colour `fill_rgb` (0xRRGGBB; ignored without a Background layer). False, changing nothing, without a document or for an empty rect.
         fn crop_to(
             view: Pin<&mut PictureView>,
@@ -63,6 +71,9 @@ pub mod ffi {
         /// Why the document cannot be perspective-cropped (live type, smart objects, vector masks, 16/32-bit), or empty when it can.
         fn perspective_crop_refusal_reason(view: &PictureView) -> QString;
 
+        /// The union of every layer's rect as "left top right bottom", or empty without a document. Used by the crop tools' snapping.
+        fn composite_bounds(view: &PictureView) -> QString;
+
         /// Number of resolved slices (user and auto); 0 without a document.
         fn slice_count(view: &PictureView) -> i32;
 
@@ -95,6 +106,15 @@ pub mod ffi {
 }
 
 fn perspective_crop_commit(mut view: Pin<&mut PictureView>, quad: &[f64]) -> bool {
+    perspective_crop_commit_sized(view.as_mut(), quad, 0, 0)
+}
+
+fn perspective_crop_commit_sized(
+    mut view: Pin<&mut PictureView>,
+    quad: &[f64],
+    out_w: i32,
+    out_h: i32,
+) -> bool {
     let [x0, y0, x1, y1, x2, y2, x3, y3] = *quad else {
         return false;
     };
@@ -104,7 +124,7 @@ fn perspective_crop_commit(mut view: Pin<&mut PictureView>, quad: &[f64]) -> boo
         let Some(doc) = rust.doc.as_mut() else {
             return false;
         };
-        if !pictura_render::perspective_crop(doc, corners) {
+        if !pictura_render::perspective_crop_sized(doc, corners, out_w, out_h) {
             return false;
         }
         // Canvas dimensions changed, so the old selection no longer maps.
@@ -236,6 +256,33 @@ fn perspective_crop_refusal_reason(view: &PictureView) -> QString {
         .and_then(pictura_render::perspective_crop_refusal)
         .map(QString::from)
         .unwrap_or_default()
+}
+
+/// The union of every layer's rect (recursively) as `"left top right bottom"`,
+/// or empty without a document.
+fn composite_bounds(view: &PictureView) -> QString {
+    fn union(layers: &[pictura_core::Layer], acc: &mut Option<PsdRect>) {
+        for layer in layers {
+            match acc.as_mut() {
+                Some(r) => {
+                    r.left = r.left.min(layer.rect.left);
+                    r.top = r.top.min(layer.rect.top);
+                    r.right = r.right.max(layer.rect.right);
+                    r.bottom = r.bottom.max(layer.rect.bottom);
+                }
+                None => *acc = Some(layer.rect),
+            }
+            union(&layer.children, acc);
+        }
+    }
+    let Some(doc) = view.rust().doc.as_ref() else {
+        return QString::default();
+    };
+    let mut acc: Option<PsdRect> = None;
+    union(&doc.layers, &mut acc);
+    acc.map_or_else(QString::default, |r| {
+        QString::from(format!("{} {} {} {}", r.left, r.top, r.right, r.bottom))
+    })
 }
 
 fn slices(view: &PictureView) -> Vec<pictura_render::Slice> {

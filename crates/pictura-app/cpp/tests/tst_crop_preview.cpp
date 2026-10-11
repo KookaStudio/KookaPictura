@@ -263,8 +263,9 @@ void CropPreviewTest::paddedMoveShowsTheBackdrop()
     QCOMPARE(canvas->cropCanvasImageRect(), QRectF(-10, -10, 60, 60));
 
     // A point just outside the image, inside the box: the padded area shows the
-    // backdrop (the Background layer's white), not the workspace colour.
-    const QPoint sample = canvas->imageToWidget(QPointF(-5, 20)).toPoint();
+    // backdrop (the Background layer's white), not the workspace colour. Kept
+    // clear of the edge bars and corner brackets that sit on the box rim.
+    const QPoint sample = canvas->imageToWidget(QPointF(-5, 2)).toPoint();
     QVERIFY(sample.x() >= 0 && sample.y() >= 0 && sample.x() < canvas->width()
             && sample.y() < canvas->height());
     const QImage shot = canvas->grab().toImage();

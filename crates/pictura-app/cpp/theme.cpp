@@ -190,6 +190,7 @@ QString styleSheetFor(const Ramp& ramp)
         {"${menuDisabledText}", Theme::shade(ramp.disabledText, 1)},
         {"${border}", ramp.border},
         {"${separator}", ramp.separator},
+        {"${separatorLight}", Theme::shade(ramp.separator, 1)},
         {"${tableBg}", ramp.tableBg},
         {"${alternateTableBg}", Theme::shade(ramp.tableBg, 1)},
         {"${inputBg}", ramp.inputBg},
@@ -227,6 +228,7 @@ QMenu::separator { background: ${separator}; height: 1px; margin: 4px 6px; }
 QToolBar { background: ${panel}; color: ${windowText}; border: 0; spacing: 2px; padding: 2px; }
 QToolBar::separator { background: ${border}; width: ${chromeWidth}px; margin: 3px 2px; }
 QToolBar#optionsBar { border-bottom: ${borderWidth}px solid ${border}; border-top: 1px solid ${separator}; padding-right: 8px; }
+QFrame#optionsToolSeparator { background: ${separatorLight}; border: 0; }
 
 QToolButton { background: transparent; color: ${buttonText}; border: 1px solid transparent; border-radius: 3px; padding: 3px; }
 QToolButton:hover { background: ${iconHover}; border-color: ${iconHoverBorder}; }

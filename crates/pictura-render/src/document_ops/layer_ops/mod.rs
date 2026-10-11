@@ -80,7 +80,9 @@ pub use move_content::{
     can_lift_selection, lift_selection, merge_lifted, move_selection_content, trim_to_content,
 };
 pub use paths::{flatten_rows, is_background, parent_path, resolve_path, resolve_path_mut};
-pub use perspective_crop::{perspective_crop, perspective_crop_refusal, perspective_crop_size};
+pub use perspective_crop::{
+    perspective_crop, perspective_crop_refusal, perspective_crop_size, perspective_crop_sized,
+};
 pub use properties::{
     apply_visibility, arrange_path, can_arrange_path, can_move_path_to, delete_hidden_layers,
     delete_paths, duplicate_paths, group_paths, lock_group_layers, move_path, move_path_to,

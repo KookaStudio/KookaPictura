@@ -8,6 +8,7 @@
 #include "tools.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/crop_group.cxxqt.h"
 
 #include "qt_test_support.h"
 
@@ -18,6 +19,7 @@ private slots:
     void initTestCase();
     void handleSnapsToTheCanvasEdge();
     void handleBeyondTheThresholdDoesNotSnap();
+    void compositeBoundsAreTheLayerUnion();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -85,6 +87,22 @@ void CropSnapTest::handleBeyondTheThresholdDoesNotSnap()
     QVERIFY(tools->pendingCropRect() == QRect(0, 0, 20, 20));
 
     frame.setActiveTool(pictura::ToolId::Move);
+    frame.closeDocument(doc, false);
+}
+
+void CropSnapTest::compositeBoundsAreTheLayerUnion()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("Bounds"), 40, 24, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY(view);
+    const int doc = frame.activeDocumentIndex();
+
+    // A new document's Background covers the canvas, so the composite bounds
+    // are the canvas rect.
+    QCOMPARE(pictura::composite_bounds(*view), QStringLiteral("0 0 40 24"));
+
     frame.closeDocument(doc, false);
 }
 

@@ -10,29 +10,47 @@
 #include <QtCore/Qt>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 namespace pictura {
 
 enum class BoxGrip { None, Move, TopLeft, Top, TopRight, Right, BottomRight, Bottom, BottomLeft, Left };
 
-// Screen-pixel margin outside the crop box that still belongs to the resize
-// handles; just beyond it (and inside the canvas) a press rotates the content.
+// Screen-pixel margins outside the crop box: within `kCropRotateMarginPx` a
+// press grabs a resize handle; from there out to `kCropFarMarginPx` it rotates
+// the content; beyond the far margin it applies the crop.
 inline constexpr double kCropRotateMarginPx = 8.0;
+inline constexpr double kCropFarMarginPx = 100.0;
 
-// True when `p` (image space) is outside `box` by at least the rotate margin
-// (so it does not fight the resize handles). Ignoring the canvas: with an active
-// crop box the whole region outside it rotates, including past the canvas edge.
+// The image-space distance from `p` to the nearest point of `box`.
+inline double boxDistance(const QRectF& box, const QPointF& p)
+{
+    const QPointF clamped(std::clamp(p.x(), box.left(), box.right()),
+                          std::clamp(p.y(), box.top(), box.bottom()));
+    return std::hypot(p.x() - clamped.x(), p.y() - clamped.y());
+}
+
+// True when `p` (image space) is beyond the rotate margin but within the far
+// margin: the rotate band. Ignoring the canvas, so the band extends past the
+// canvas edge.
 inline bool cropRotateZone(const QRectF& box, const QPointF& p, double zoom,
-                           double marginPx = kCropRotateMarginPx)
+                           double marginPx = kCropRotateMarginPx,
+                           double outerPx = kCropFarMarginPx)
 {
     if (box.isNull()) {
         return false;
     }
-    const double margin = marginPx / std::max(zoom, 1e-6);
-    const QPointF clamped(std::clamp(p.x(), box.left(), box.right()),
-                          std::clamp(p.y(), box.top(), box.bottom()));
-    return std::hypot(p.x() - clamped.x(), p.y() - clamped.y()) > margin;
+    const double d = boxDistance(box, p) * std::max(zoom, 1e-6);
+    return d > marginPx && d <= outerPx;
+}
+
+// True when `p` (image space) is beyond the far margin from `box`; there a press
+// applies the crop rather than rotating.
+inline bool cropFarZone(const QRectF& box, const QPointF& p, double zoom,
+                        double outerPx = kCropFarMarginPx)
+{
+    return !box.isNull() && boxDistance(box, p) * std::max(zoom, 1e-6) > outerPx;
 }
 
 // The eight rotate-cursor directions (degrees, screen y-down), one per box
@@ -100,10 +118,27 @@ inline BoxGrip boxGripAt(const QRectF& box, const QPointF& p, double zoom, doubl
     return box.contains(p) ? BoxGrip::Move : BoxGrip::None;
 }
 
-// `start` moved by `delta` through `grip`, normalized.
-inline QRectF dragBox(const QRectF& start, BoxGrip grip, const QPointF& delta)
+// `start` moved by `delta` through `grip`, normalized. With `mirror`, the
+// dragged edge(s) move and the opposite edge(s) move just as far the other way,
+// so the box scales about its centre (Alt-drag).
+inline QRectF dragBox(const QRectF& start, BoxGrip grip, const QPointF& delta, bool mirror = false)
 {
     QRectF r = start;
+    if (mirror && grip != BoxGrip::None && grip != BoxGrip::Move) {
+        const bool left = grip == BoxGrip::TopLeft || grip == BoxGrip::Left
+            || grip == BoxGrip::BottomLeft;
+        const bool right = grip == BoxGrip::TopRight || grip == BoxGrip::Right
+            || grip == BoxGrip::BottomRight;
+        const bool top = grip == BoxGrip::TopLeft || grip == BoxGrip::Top
+            || grip == BoxGrip::TopRight;
+        const bool bottom = grip == BoxGrip::BottomLeft || grip == BoxGrip::Bottom
+            || grip == BoxGrip::BottomRight;
+        r.setLeft(start.left() + (left ? delta.x() : right ? -delta.x() : 0.0));
+        r.setRight(start.right() + (right ? delta.x() : left ? -delta.x() : 0.0));
+        r.setTop(start.top() + (top ? delta.y() : bottom ? -delta.y() : 0.0));
+        r.setBottom(start.bottom() + (bottom ? delta.y() : top ? -delta.y() : 0.0));
+        return r.normalized();
+    }
     switch (grip) {
     case BoxGrip::None: break;
     case BoxGrip::Move: r.translate(delta); break;
@@ -120,7 +155,9 @@ inline QRectF dragBox(const QRectF& start, BoxGrip grip, const QPointF& delta)
 }
 
 // Fit `ratio` (width / height, > 0) inside `box`, pivoting on the corner
-// opposite `grip` so the edge under the pointer is the one that moves.
+// opposite `grip` so the edge under the pointer is the one that moves. An edge
+// grip has only one dimension to drive, so the other follows from it; a corner
+// keeps the larger fitting dimension.
 inline QRectF fitRatio(const QRectF& box, double ratio, BoxGrip grip)
 {
     if (ratio <= 0.0 || box.width() <= 0.0 || box.height() <= 0.0) {
@@ -128,7 +165,13 @@ inline QRectF fitRatio(const QRectF& box, double ratio, BoxGrip grip)
     }
     double width = box.width();
     double height = box.height();
-    if (width / height > ratio) {
+    const bool horizontalEdge = grip == BoxGrip::Left || grip == BoxGrip::Right;
+    const bool verticalEdge = grip == BoxGrip::Top || grip == BoxGrip::Bottom;
+    if (horizontalEdge) {
+        height = width / ratio;
+    } else if (verticalEdge) {
+        width = height * ratio;
+    } else if (width / height > ratio) {
         width = height * ratio;
     } else {
         height = width / ratio;
@@ -157,6 +200,58 @@ inline Qt::CursorShape boxGripCursor(BoxGrip grip, Qt::CursorShape fallback)
     case BoxGrip::None: break;
     }
     return fallback;
+}
+
+// The drawn handle glyphs of an active crop box, in widget space: four L-shaped
+// corner brackets and four thin edge bars, all inset inside the box outline.
+// Sizes are fixed screen pixels, clamped so a box smaller than a glyph does not
+// produce degenerate strokes.
+inline constexpr double kCropCornerArmPx = 18.0;
+inline constexpr double kCropHandleBarLenPx = 22.0;
+inline constexpr double kCropHandleBarThickPx = 4.0;
+inline constexpr double kCropHandleInsetPx = 1.0;
+
+struct CropHandleGlyphs {
+    // Two strokes per corner, in top-left, top-right, bottom-right, bottom-left
+    // order; each pair meets at the inset corner and runs inward along the edges.
+    std::array<QLineF, 8> cornerStrokes{};
+    // One bar per edge, in top, right, bottom, left order, hugging the inside.
+    std::array<QRectF, 4> edgeBars{};
+};
+
+inline CropHandleGlyphs cropHandleGlyphs(const QRectF& box)
+{
+    CropHandleGlyphs g;
+    if (box.isNull() || box.width() <= 0.0 || box.height() <= 0.0) {
+        return g;
+    }
+    const double in = std::min(kCropHandleInsetPx, std::min(box.width(), box.height()) / 4.0);
+    const double arm = std::min(kCropCornerArmPx, std::min(box.width(), box.height()) / 2.0 - in);
+    const double thick = std::min(kCropHandleBarThickPx, std::min(box.width(), box.height()) / 4.0);
+    const double lenX = std::min(kCropHandleBarLenPx, std::max(0.0, box.width() - 2.0 * in));
+    const double lenY = std::min(kCropHandleBarLenPx, std::max(0.0, box.height() - 2.0 * in));
+    // The bracket strokes are drawn as thick as the edge bars, so their centre
+    // line sits half a thickness in from the corner to keep them inside the box.
+    const double ci = std::min(std::max(kCropHandleInsetPx, kCropHandleBarThickPx / 2.0),
+                               std::min(box.width(), box.height()) / 4.0);
+    const double cl = box.left() + ci;
+    const double ct = box.top() + ci;
+    const double cr = box.right() - ci;
+    const double cb = box.bottom() - ci;
+    const QPointF c = box.center();
+    g.cornerStrokes = {
+        QLineF(cl, ct, cl, ct + arm), QLineF(cl, ct, cl + arm, ct),   // top-left
+        QLineF(cr, ct, cr, ct + arm), QLineF(cr, ct, cr - arm, ct),   // top-right
+        QLineF(cr, cb, cr, cb - arm), QLineF(cr, cb, cr - arm, cb),   // bottom-right
+        QLineF(cl, cb, cl, cb - arm), QLineF(cl, cb, cl + arm, cb),   // bottom-left
+    };
+    g.edgeBars = {
+        QRectF(c.x() - lenX / 2, box.top() + in, lenX, thick),          // top
+        QRectF(box.right() - in - thick, c.y() - lenY / 2, thick, lenY), // right
+        QRectF(c.x() - lenX / 2, box.bottom() - in - thick, lenX, thick), // bottom
+        QRectF(box.left() + in, c.y() - lenY / 2, thick, lenY),         // left
+    };
+    return g;
 }
 
 } // namespace pictura

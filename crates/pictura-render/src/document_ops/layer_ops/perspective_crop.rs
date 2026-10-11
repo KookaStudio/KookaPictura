@@ -61,10 +61,30 @@ pub fn perspective_crop_refusal(doc: &Document) -> Option<&'static str> {
 /// channel-less layers (adjustments, fills) are untouched. Returns false,
 /// changing nothing, on a refusal or a degenerate quad.
 pub fn perspective_crop(doc: &mut Document, quad: [(f64, f64); 4]) -> bool {
+    perspective_crop_sized(doc, quad, 0, 0)
+}
+
+/// As [`perspective_crop`], but an explicit `out_w`/`out_h` (a positive pixel
+/// count) forces that output dimension; 0 or negative falls back to
+/// [`perspective_crop_size`] for that dimension.
+pub fn perspective_crop_sized(
+    doc: &mut Document,
+    quad: [(f64, f64); 4],
+    out_w: i32,
+    out_h: i32,
+) -> bool {
     if perspective_crop_refusal(doc).is_some() {
         return false;
     }
-    let (w, h) = perspective_crop_size(quad);
+    let (auto_w, auto_h) = perspective_crop_size(quad);
+    let side = |v: i32, auto: u32| -> u32 {
+        if v > 0 {
+            (v as u32).clamp(1, MAX_SIDE)
+        } else {
+            auto
+        }
+    };
+    let (w, h) = (side(out_w, auto_w), side(out_h, auto_h));
     let (wf, hf) = (w as f64, h as f64);
     let Some(map) = solve_homography(quad, [(0.0, 0.0), (wf, 0.0), (wf, hf), (0.0, hf)]) else {
         return false;
