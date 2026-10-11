@@ -16,7 +16,10 @@ namespace pictura {
 
 void LayersPanel::syncEditTarget()
 {
-    const bool mask = view_ && !mask_edit_target_get(*view_).isEmpty();
+    // Mirrors the bridge's `active_mask_target`: a target only routes strokes
+    // while its layer is the active one.
+    const QString target = view_ ? mask_edit_target_get(*view_) : QString();
+    const bool mask = !target.isEmpty() && target == view_->active_layer_path();
     if (mask != maskEditing_) {
         maskEditing_ = mask;
         emit editTargetChanged(mask);

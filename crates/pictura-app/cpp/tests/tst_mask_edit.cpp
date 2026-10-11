@@ -172,6 +172,11 @@ void MaskEditTest::canvasToolsWriteCoverage()
     QCOMPARE(view->history_label(base + 1), QStringLiteral("Eraser"));
     QCOMPARE(view->sample_argb(16, 16), fill);
 
+    // Erase To History has no mask source and is refused.
+    QVERIFY2(!pictura::begin_eraser(*view, 0xffffffffu, tip, 0, 100, 100, true),
+             "erase to history refuses a mask target");
+    QCOMPARE(view->history_count(), base + 2);
+
     // Tools that cannot paint a mask refuse instead of editing the pixels.
     QVERIFY2(!pictura::begin_pattern_stamp(*view, tip, 100, 100, QStringLiteral("normal"), 0, 0,
                                            0),
