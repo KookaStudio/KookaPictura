@@ -186,7 +186,7 @@ Changing units on the Info panel automatically changes the ruler units. Columns 
 
 | Setting | Type | CS6 default | Notes |
 |---|---|---|---|
-| Guides: Color | menu/picker | Light Blue *(secondary)* | Any preset or Custom. |
+| Guides: Color | menu/picker | Cyan | Any preset or Custom. Default per the CS6 Preferences screenshot on #294. |
 | Guides: Style | menu | Lines *(secondary)* | Lines / Dashed Lines. |
 | Smart Guides: Color | menu/picker | Magenta *(secondary)* | — |
 | Grid: Color | menu/picker | Light Gray *(secondary)* | — |
