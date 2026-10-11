@@ -647,7 +647,9 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
             for (const QUrl& url : pictura::fileDialogPlaces()) {
                 placePaths.append(url.toLocalFile());
             }
-            const bool placesOk = placePaths.contains(QStringLiteral("/"))
+            // QDir::rootPath() is "/" on Unix and the drive root ("C:/") on
+            // Windows, matching the volume root the sidebar adds there.
+            const bool placesOk = placePaths.contains(QDir::rootPath())
                 && placePaths.contains(QDir::homePath());
 
             // The hybrid dialog switch: default follows the sandbox, and the
