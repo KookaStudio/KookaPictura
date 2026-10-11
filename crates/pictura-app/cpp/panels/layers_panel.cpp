@@ -248,12 +248,13 @@ LayersPanel::LayersPanel(QWidget* parent)
     layout->addWidget(tree_, 1);
 
     auto* buttons = new QHBoxLayout();
+    buttons->setSpacing(0);
     const auto stripIconButton = [body, buttons](const QString& objectName,
                                                  const QString& assetId) {
         auto* button = new QToolButton(body);
         button->setObjectName(objectName);
         button->setIcon(pictura::icon(assetId));
-        button->setIconSize(QSize(20, 20));
+        button->setIconSize(QSize(16, 16));
         button->setAutoRaise(true);
         buttons->addWidget(button);
         return button;
