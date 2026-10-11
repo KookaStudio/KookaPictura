@@ -23,12 +23,18 @@ enum class FilterControl {
     BlurCenter, // display-only centre pad, contributes no slot
     ShearCurve, // a point count and up to kShearMaxPoints (position, offset) pairs
     Hidden,     // one slot carried through the dialog with no widget (Displace's map id)
+    Number,     // one slot, a value box with no slider
+    Matrix,     // kMatrixCells slots: Custom's 5x5 weights, row by row
 };
 
 // The most control points a Shear curve carries. Lock-step with
 // `pictura_filters::SHEAR_MAX_POINTS`; the curve box edits the points and the
 // filter is the same points, so the two never disagree.
 constexpr int kShearMaxPoints = 8;
+
+// Custom's grid is 5x5. Lock-step with `CUSTOM_SLOTS` in filter_map.rs.
+constexpr int kMatrixSide = 5;
+constexpr int kMatrixCells = kMatrixSide * kMatrixSide;
 
 // One parameter's control identity and range. Ported from photorust's
 // per-filter dialog descriptors.
@@ -42,7 +48,8 @@ struct FilterParamSpec {
     QString suffix;
     QStringList choices;
     QList<double> choiceValues;
-    // Defaults for multi-slot controls (Color: r,g,b; Placement: x,y).
+    // Defaults for multi-slot controls (Color: r,g,b; Placement: x,y;
+    // Matrix: its cells).
     QList<double> initial;
 };
 

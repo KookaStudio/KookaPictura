@@ -16,6 +16,7 @@ class QDoubleSpinBox;
 class QButtonGroup;
 class QPushButton;
 class QSlider;
+class QSpinBox;
 class QWidget;
 
 namespace pictura {
@@ -67,6 +68,7 @@ private:
         QWidget* shear = nullptr;  // Shear curve box
         QButtonGroup* group = nullptr; // Radio group
         double hidden = 0.0;           // a Hidden slot's value
+        QList<QSpinBox*> cells;        // Matrix cells, row by row
     };
 
     void addControl(const FilterParamSpec& spec);

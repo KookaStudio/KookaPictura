@@ -15,11 +15,13 @@
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QDoubleSpinBox>
 #include <QtWidgets/QButtonGroup>
+#include <QtWidgets/QGridLayout>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QRadioButton>
 #include <QtWidgets/QSlider>
+#include <QtWidgets/QSpinBox>
 #include <QtWidgets/QVBoxLayout>
 #include <QtWidgets/QWidget>
 
@@ -41,6 +43,8 @@ int slotCount(FilterControl control)
         return 0;
     case FilterControl::ShearCurve:
         return 1 + 2 * kShearMaxPoints;
+    case FilterControl::Matrix:
+        return kMatrixCells;
     default:
         return 1;
     }
@@ -571,6 +575,19 @@ void FilterParamControls::addControl(const FilterParamSpec& spec)
     case FilterControl::Hidden:
         control.hidden = fallback(0, spec.value);
         break;
+    case FilterControl::Matrix:
+        for (int i = 0; i < kMatrixCells; ++i) {
+            auto* cell = new QSpinBox(parent_);
+            cell->setObjectName(QStringLiteral("filterMatrixCell"));
+            cell->setRange(static_cast<int>(spec.minimum), static_cast<int>(spec.maximum));
+            cell->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+            cell->setButtonSymbols(QAbstractSpinBox::NoButtons);
+            cell->setFixedWidth(cell->fontMetrics().horizontalAdvance(QStringLiteral("-0000")) + 12);
+            cell->setValue(static_cast<int>(fallback(i, 0.0)));
+            connect(cell, &QSpinBox::valueChanged, this, [this] { emit changed(); });
+            control.cells.append(cell);
+        }
+        break;
     case FilterControl::ShearCurve: {
         auto* curve = new ShearCurveWidget(parent_);
         curve->changed = [this] { emit changed(); };
@@ -585,6 +602,10 @@ void FilterParamControls::addControl(const FilterParamSpec& spec)
         control.spin->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
         control.spin->setFixedWidth(compactSpinWidth(control.spin));
         control.spin->setValue(fallback(0, spec.value));
+        if (spec.control == FilterControl::Number) {
+            connect(control.spin, &QDoubleSpinBox::valueChanged, this, [this] { emit changed(); });
+            break;
+        }
         control.slider = new JumpSlider(Qt::Horizontal, parent_);
         control.slider->setRange(0, 1000);
         const double span = spec.maximum - spec.minimum;
@@ -665,6 +686,15 @@ void FilterParamControls::addControl(const FilterParamSpec& spec)
     case FilterControl::Hidden:
         control.row->hide();
         break;
+    case FilterControl::Matrix: {
+        auto* grid = new QGridLayout;
+        grid->setSpacing(4);
+        for (int i = 0; i < kMatrixCells; ++i) {
+            grid->addWidget(control.cells.at(i), i / kMatrixSide, i % kMatrixSide);
+        }
+        rowLayout->addLayout(grid);
+        break;
+    }
     case FilterControl::Radio: {
         rowLayout->addWidget(new QLabel(spec.label, control.row));
         const QList<QAbstractButton*> buttons = control.group->buttons();
@@ -685,7 +715,9 @@ void FilterParamControls::addControl(const FilterParamSpec& spec)
             line->addWidget(unitLabel);
         }
         rowLayout->addLayout(line);
-        rowLayout->addWidget(control.slider);
+        if (control.slider) {
+            rowLayout->addWidget(control.slider);
+        }
         break;
     }
     }
@@ -759,6 +791,11 @@ void FilterParamControls::setValues(const QList<double>& initial)
                 control.hidden = initial.at(slot);
             }
             break;
+        case FilterControl::Matrix:
+            for (int i = 0; i < kMatrixCells && slot + i < initial.size(); ++i) {
+                control.cells.at(i)->setValue(static_cast<int>(initial.at(slot + i)));
+            }
+            break;
         default:
             if (slot < initial.size()) {
                 control.spin->setValue(initial.at(slot));
@@ -789,6 +826,8 @@ double FilterParamControls::controlValue(const Control& control, int slot) const
         return 0.0;
     case FilterControl::Hidden:
         return control.hidden;
+    case FilterControl::Matrix:
+        return control.cells.at(slot)->value();
     default:
         return control.spin->value();
     }

@@ -292,6 +292,16 @@ Snapshot for resuming after a context break. Update after each milestone.
   scripts/verify-full.sh` → `verify-fast: OK` (TOTAL 3913 passed · 21 skipped ·
   0 failed; nextest 2922 passed / 20 skipped); `openspec validate --all
   --strict` 231/231.
+- **Custom** (change `expose-custom-filter`, issue #336): `Filter ▸ Other ▸
+  Custom…` exposes the existing `Filter::Custom` kernel. The `custom` kind is
+  27 slots (the 5×5 weights row by row, Scale, Offset; empty = pass-through).
+  The dialog adds `FilterControl::Matrix` (a 5×5 grid of `-999..=999` cells)
+  and `FilterControl::Number` (a value box with no slider) for Scale
+  (`1..=9999`) and Offset (`-9999..=9999`), with the usual live preview.
+  Ceiling: no Save/Load (`.acf`) buttons. Tests: `filter_map` unit,
+  `tst_custom_filter`. Verified: `TASK_ALLOWS_DOCS=1 bash scripts/verify-full.sh`
+  → `verify-full: OK` (TOTAL 3917 passed · 21 skipped · 0 failed); `openspec
+  validate --all --strict` 232/232.
 - **Lighting Effects workspace** (change `lighting-effects-workspace`, issue
   #225): `render::lighting_effects` (now `render/lighting.rs`) shades a CS6 rig
   of 1–16 Spot / Point / Infinite lights with photorust's model. A Spot is an
@@ -333,8 +343,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   Ceilings (`ponytail:`): entries with no engine kernel (Filter Gallery, Liquify,
   Vanishing Point, Lens Correction, Blur Gallery, Lens/Smart Blur, Reduce Noise,
   Glass, Diffuse Glow, Diffuse, Glowing Edges, De-Interlace, NTSC Colors,
-  Digimarc) and `Custom`, which needs a caller-supplied 5×5 kernel and has no
-  fixed default, stay disabled stubs; the alpha pass reruns the kernel on the CPU.
+  Digimarc) stay disabled stubs (Custom has since been exposed, #336); the alpha pass reruns the kernel on the CPU.
 - PSD interop roadmap (`docs/dev/psd-support-roadmap.md`): P1 (ZIP/ZIP-prediction
   read) and P2 (opaque lossless open→save) and P2.5 are shipped. P2.5 adds a
   smart-object model and the Camera Raw Filter view on top of the preserved
