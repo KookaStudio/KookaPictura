@@ -202,6 +202,9 @@ public:
     ScreenMode screenMode() const { return screenMode_; }
     void setScreenMode(ScreenMode mode);
     void cycleScreenMode(bool forward);
+    // The user-facing entry to the screen modes: on a Standard -> full-screen
+    // transition it shows the CS6 advisory first (Cancel aborts), then applies.
+    void requestScreenMode(ScreenMode mode);
 
     int canvasColorIndex() const { return canvasColorIndex_; }
     void cycleCanvasColor(bool forward);
@@ -469,6 +472,13 @@ private:
     void applyBrightness(int level);
     QColor canvasColorForIndex(int index) const;
     void applyWorkspaceCanvasColor();
+    // The mode `cycleScreenMode` steps to, and the panel toggles: Standard and
+    // Full Screen With Menu Bar flip the persisted `panelsHidden_`; Full Screen
+    // Mode flips the transient `fullScreenChromeShown_`, which also controls the
+    // menu bar, so the first Tab reveals the chrome.
+    ScreenMode nextScreenMode(bool forward) const;
+    void togglePanelsHidden();
+    void setPanelColumnsVisible(bool visible);
 
     QList<DocEntry> docs_;
     QList<SmartObjectEditSession> editSessions_;
@@ -558,6 +568,10 @@ private:
     ScreenMode screenMode_ = ScreenMode::Standard;
     int canvasColorIndex_ = 0;
     bool panelsHidden_ = false;
+    // The chrome reveal Tab toggles while in Full Screen Mode (the panel
+    // columns and the menu bar); transient, so leaving the mode restores the
+    // Standard-mode chrome unchanged.
+    bool fullScreenChromeShown_ = false;
     bool restoringPanelSession_ = false;
     // System-clipboard mirror of the bridge clipboard (frame_menus_edit.cpp):
     // `clipboardMirrored_` while both hold the same pixels, `clipboardExported_`

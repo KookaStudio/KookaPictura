@@ -68,6 +68,7 @@ set(PICTURA_QT_TESTS
     tst_panels_parity
     tst_selection_alt
     tst_nested_layer_target
+    tst_screen_modes
 )
 
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/qt-test-results)
