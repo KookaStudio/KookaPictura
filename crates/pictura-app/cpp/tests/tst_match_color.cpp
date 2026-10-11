@@ -18,6 +18,8 @@
 #include <QtGui/QAction>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
+#include <QtWidgets/QSlider>
+#include <QtWidgets/QSpinBox>
 
 #include "qt_test_support.h"
 
@@ -31,6 +33,8 @@ private slots:
     void cancelRestoresExactly();
     void neutralizeCommitsOneStateAndUndoRestores();
     void secondDocumentFeedsTheSource();
+    void slidersAreLaidOutWithTheirFields();
+    void ignoreSelectionSpansTheWholeLayer();
     void statisticsRoundTripThroughSaveLoad();
 
 private:
@@ -166,6 +170,65 @@ void MatchColorTest::secondDocumentFeedsTheSource()
     QVERIFY(view_->undo());
     QCOMPARE(view_->composite_argb(5, 5), before);
     QVERIFY(red);
+}
+
+void MatchColorTest::slidersAreLaidOutWithTheirFields()
+{
+    QVERIFY(openImage(QColor(200, 60, 60), QStringLiteral("cast.png")));
+    pictura::MatchColorDialog dialog(view_, window_->imageView(), sources());
+    // Each slider is parented into the dialog's layout and moves its field.
+    struct {
+        const char* slider;
+        const char* spin;
+    } rows[] = {
+        {"matchColorLuminanceSlider", "matchColorLuminance"},
+        {"matchColorColorIntensitySlider", "matchColorColorIntensity"},
+        {"matchColorFadeSlider", "matchColorFade"},
+    };
+    for (const auto& row : rows) {
+        auto* slider = dialog.findChild<QSlider*>(QString::fromUtf8(row.slider));
+        auto* spin = dialog.findChild<QSpinBox*>(QString::fromUtf8(row.spin));
+        QVERIFY(slider && spin);
+        QVERIFY(slider->parentWidget() != nullptr);
+        QCOMPARE(slider->value(), spin->value());
+        slider->setValue(spin->value() + 1);
+        QCOMPARE(spin->value(), slider->value());
+    }
+}
+
+void MatchColorTest::ignoreSelectionSpansTheWholeLayer()
+{
+    QVERIFY(openImage(QColor(200, 60, 60), QStringLiteral("cast.png")));
+    QVERIFY(view_->select_rect(2, 2, 6, 6, QStringLiteral("new"), 0.0));
+    const QRgb insideBefore = view_->composite_argb(5, 5);
+    const QRgb outsideBefore = view_->composite_argb(15, 15);
+    {
+        // Unchecked, the adjustment is confined to the selection.
+        pictura::MatchColorDialog dialog(view_, window_->imageView(), sources());
+        dialog.findChild<QCheckBox*>(QStringLiteral("matchColorNeutralize"))
+            ->setChecked(true);
+        dialog.accept();
+    }
+    const QRgb insideConfined = view_->composite_argb(5, 5);
+    const QRgb outsideConfined = view_->composite_argb(15, 15);
+    QVERIFY(insideConfined != insideBefore);
+    QCOMPARE(outsideConfined, outsideBefore);
+    QVERIFY(view_->undo());
+    QCOMPARE(view_->composite_argb(5, 5), insideBefore);
+
+    {
+        // Checked, "Ignore Selection When Applying Adjustment" spans the layer.
+        pictura::MatchColorDialog dialog(view_, window_->imageView(), sources());
+        dialog.findChild<QCheckBox*>(QStringLiteral("matchColorIgnoreSelection"))
+            ->setChecked(true);
+        dialog.findChild<QCheckBox*>(QStringLiteral("matchColorNeutralize"))
+            ->setChecked(true);
+        dialog.accept();
+    }
+    QVERIFY(view_->composite_argb(5, 5) != insideBefore);
+    QVERIFY(view_->composite_argb(15, 15) != outsideBefore);
+    QVERIFY(view_->undo());
+    QCOMPARE(view_->composite_argb(15, 15), outsideBefore);
 }
 
 void MatchColorTest::statisticsRoundTripThroughSaveLoad()

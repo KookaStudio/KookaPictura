@@ -250,11 +250,22 @@ fn invalid_parameters_are_refused() {
 
 #[test]
 fn empty_statistics_are_an_identity() {
-    // No contributing pixels: zeroed statistics, and the flat-target guard
-    // keeps the buffer unchanged at default options.
+    // No contributing pixels anywhere: zeroed statistics, and the kernel's
+    // zeroed-source guard keeps the buffer unchanged at default options.
     let px = [[100, 100, 100], [200, 10, 10]];
     assert_eq!(
         apply3(&params(MatchColorStats::ZERO, MatchColorStats::ZERO), &px),
         px
     );
+}
+
+#[test]
+fn a_zeroed_source_is_an_identity() {
+    // A source with no contributing pixels (all-transparent, or an empty
+    // "Use Selection In Source") reports zeroed statistics; the transfer
+    // must not collapse a normal target onto their black mean.
+    let target_pixels: Vec<[u8; 4]> = vec![[0, 0, 0, 255], [255, 255, 255, 255]];
+    let target = match_color_stats(&target_pixels, None);
+    let px = [[0, 0, 0], [255, 255, 255]];
+    assert_eq!(apply3(&params(target, MatchColorStats::ZERO), &px), px);
 }

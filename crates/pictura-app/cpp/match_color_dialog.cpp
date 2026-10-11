@@ -113,6 +113,12 @@ bool MatchColorDialog::writeStatistics(QIODevice* device, const QList<double>& s
 
 void MatchColorDialog::buildUi()
 {
+    auto* destination = new QGroupBox(tr("Destination Image"));
+    auto* destinationForm = new QFormLayout(destination);
+    ignoreSelection_ = new QCheckBox(tr("Ignore Selection When Applying Adjustment"));
+    ignoreSelection_->setObjectName(QStringLiteral("matchColorIgnoreSelection"));
+    destinationForm->addRow(QString(), ignoreSelection_);
+
     auto* statistics = new QGroupBox(tr("Image Statistics"));
     auto* statisticsForm = new QFormLayout(statistics);
     sourceCombo_ = new QComboBox;
@@ -140,44 +146,36 @@ void MatchColorDialog::buildUi()
     statisticsButtons->addStretch(1);
     statisticsForm->addRow(QString(), statisticsButtons);
 
-    auto* destination = new QGroupBox(tr("Destination Image"));
-    auto* destinationForm = new QFormLayout(destination);
-    ignoreSelection_ = new QCheckBox(tr("Ignore Selection When Applying Adjustment"));
-    ignoreSelection_->setObjectName(QStringLiteral("matchColorIgnoreSelection"));
-    destinationForm->addRow(QString(), ignoreSelection_);
-
     auto* options = new QGroupBox(tr("Image Options"));
     auto* optionsForm = new QFormLayout(options);
     neutralize_ = new QCheckBox(tr("Neutralize"));
     neutralize_->setObjectName(QStringLiteral("matchColorNeutralize"));
     optionsForm->addRow(QString(), neutralize_);
-    luminanceSlider_ = new QSlider(Qt::Horizontal);
-    luminanceSpin_ = new QSpinBox;
-    luminanceSpin_->setObjectName(QStringLiteral("matchColorLuminance"));
-    luminanceSpin_->setRange(kLuminanceMin, kLuminanceMax);
-    luminanceSpin_->setValue(100);
-    luminanceSlider_->setRange(kLuminanceMin, kLuminanceMax);
-    luminanceSlider_->setValue(100);
-    bindSlider(luminanceSlider_, luminanceSpin_);
-    optionsForm->addRow(tr("Luminance:"), luminanceSpin_);
-    intensitySlider_ = new QSlider(Qt::Horizontal);
-    intensitySpin_ = new QSpinBox;
-    intensitySpin_->setObjectName(QStringLiteral("matchColorColorIntensity"));
-    intensitySpin_->setRange(kLuminanceMin, kLuminanceMax);
-    intensitySpin_->setValue(100);
-    intensitySlider_->setRange(kLuminanceMin, kLuminanceMax);
-    intensitySlider_->setValue(100);
-    bindSlider(intensitySlider_, intensitySpin_);
-    optionsForm->addRow(tr("Color Intensity:"), intensitySpin_);
-    fadeSlider_ = new QSlider(Qt::Horizontal);
-    fadeSpin_ = new QSpinBox;
-    fadeSpin_->setObjectName(QStringLiteral("matchColorFade"));
-    fadeSpin_->setRange(0, kFadeMax);
-    fadeSpin_->setValue(0);
-    fadeSlider_->setRange(0, kFadeMax);
-    fadeSlider_->setValue(0);
-    bindSlider(fadeSlider_, fadeSpin_);
-    optionsForm->addRow(tr("Fade:"), fadeSpin_);
+    auto addSliderRow = [optionsForm](const QString& label, const QString& sliderName,
+                                      const QString& spinName, int min, int max,
+                                      int value, QSlider*& slider, QSpinBox*& spin) {
+        auto* row = new QHBoxLayout;
+        slider = new QSlider(Qt::Horizontal);
+        slider->setObjectName(sliderName);
+        slider->setRange(min, max);
+        slider->setValue(value);
+        spin = new QSpinBox;
+        spin->setObjectName(spinName);
+        spin->setRange(min, max);
+        spin->setValue(value);
+        bindSlider(slider, spin);
+        row->addWidget(slider, 1);
+        row->addWidget(spin);
+        optionsForm->addRow(label, row);
+    };
+    addSliderRow(tr("Luminance:"), QStringLiteral("matchColorLuminanceSlider"),
+                 QStringLiteral("matchColorLuminance"), kLuminanceMin, kLuminanceMax, 100,
+                 luminanceSlider_, luminanceSpin_);
+    addSliderRow(tr("Color Intensity:"), QStringLiteral("matchColorColorIntensitySlider"),
+                 QStringLiteral("matchColorColorIntensity"), kLuminanceMin, kLuminanceMax, 100,
+                 intensitySlider_, intensitySpin_);
+    addSliderRow(tr("Fade:"), QStringLiteral("matchColorFadeSlider"),
+                 QStringLiteral("matchColorFade"), 0, kFadeMax, 0, fadeSlider_, fadeSpin_);
 
     preview_ = new QCheckBox(tr("Preview"));
     preview_->setObjectName(QStringLiteral("matchColorPreview"));
@@ -187,8 +185,8 @@ void MatchColorDialog::buildUi()
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
     auto* outer = new QVBoxLayout(this);
-    outer->addWidget(statistics);
     outer->addWidget(destination);
+    outer->addWidget(statistics);
     outer->addWidget(options);
     auto* bottom = new QHBoxLayout;
     bottom->addWidget(preview_);

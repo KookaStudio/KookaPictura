@@ -85,9 +85,12 @@ the preview section, which is what the shared apply path crops:
 - The dialog recomputes statistics only when the source, layer, or the two
   selection checkboxes change; sliders only re-run the pointwise preview.
 
-With no pixel contributing weight, the statistics are zeroed and the kernel's
-flat-target guard (`scale = 1`) makes the transfer an identity — the doc's
-"1-px / flat-color" edge case.
+With no pixel contributing weight, the statistics are zeroed. A zeroed
+*target* keeps its buffer's contrast through the flat-target guard
+(`scale = 1`); a zeroed *source* short-circuits the kernel to an identity —
+without the guard, scaling by its zero std would collapse the target onto the
+zeroed source's black mean — which covers the doc's "1-px / flat-color" edge
+case from either side.
 
 ### Ignore Selection When Applying Adjustment
 

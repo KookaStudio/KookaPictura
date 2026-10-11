@@ -28,8 +28,10 @@ pub struct MatchColorStats {
 }
 
 impl MatchColorStats {
-    /// Zeroed statistics: a flat, black target. The kernel's flat-target guard
-    /// makes an adjustment against these an identity.
+    /// Zeroed statistics: no pixel contributed weight. As the *source* the
+    /// kernel short-circuits to an identity (nothing to match); as the
+    /// *target* the flat-channel guard keeps the buffer's contrast and only
+    /// the source's mean transfers.
     pub const ZERO: MatchColorStats = MatchColorStats {
         mean: [0.0; 3],
         std: [0.0; 3],
@@ -169,6 +171,11 @@ fn source_mean(p: &MatchColorParams) -> [f64; 3] {
 /// f64 Lab round trip could otherwise shift a pixel by one LSB.
 fn is_identity(p: &MatchColorParams) -> bool {
     p.fade >= 100.0
+        // A zeroed source (an all-transparent source layer, or "Use
+        // Selection In Source" over an empty selection) has nothing to
+        // transfer; scaling by its zero std would collapse the target onto
+        // its black mean instead of leaving it alone.
+        || p.source == MatchColorStats::ZERO
         || (p.source == p.target
             && !p.neutralize
             && p.luminance == 100.0
