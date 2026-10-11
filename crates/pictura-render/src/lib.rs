@@ -46,9 +46,10 @@ pub use view_pyramid::{Planes, PyramidLevel, ViewPyramid, SMALLEST_SIDE, TILE};
 mod composite_native;
 pub use composite_native::{composite_native, refresh_native_composite};
 pub use pictura_adjust::{
-    replace_color_mask, replace_color_result, replace_color_shift_for, Adjustment, AutoKind,
-    ExposureGamma, GradientFillParams, GradientKind, GradientMapParams, GradientStop, OpacityStop,
-    PatternFillParams, ReplaceColorParams, ReplaceColorSample,
+    match_color_stats, replace_color_mask, replace_color_result, replace_color_shift_for,
+    Adjustment, AutoKind, ExposureGamma, GradientFillParams, GradientKind, GradientMapParams,
+    GradientStop, MatchColorParams, MatchColorStats, OpacityStop, PatternFillParams,
+    ReplaceColorParams, ReplaceColorSample,
 };
 
 mod color_balance;

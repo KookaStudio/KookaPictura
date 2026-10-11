@@ -132,7 +132,7 @@ Legend: **✓** confirmed in the CS6 Help or a CS6-derived reference;
   Hue/Saturation; Color Balance; Black & White; Photo Filter; Channel Mixer;
   Color Lookup; Invert ✓; Posterize; Threshold; Gradient Map;
   Selective Color; Shadows/Highlights ✓; HDR Toning ✓; Desaturate ✓;
-  Match Color; Replace Color ✓; Equalize ✓; Auto Tone/Contrast/Color)
+  Match Color ✓; Replace Color ✓; Equalize ✓; Auto Tone/Contrast/Color)
 - Auto Tone — `Shift+Ctrl+L` ✓
 - Auto Contrast — `Alt+Shift+Ctrl+L` ✓
 - Auto Color — `Shift+Ctrl+B` ✓

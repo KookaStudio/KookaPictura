@@ -399,7 +399,13 @@ fn run_stack(
     }
     let region = {
         let mut rust = view.as_mut().rust_mut();
-        apply_op_active_region(&mut rust, &ActiveOp::Filters(filters), commit, section)
+        apply_op_active_region(
+            &mut rust,
+            &ActiveOp::Filters(filters),
+            commit,
+            section,
+            false,
+        )
     };
     let Some(region) = region else {
         return false;

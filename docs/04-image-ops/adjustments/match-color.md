@@ -73,13 +73,15 @@ Workflow documented by the Help:
 | Neutralize | bool | off *(inferred)* | on / off | Auto-removes a color cast. |
 | Luminance | slider + field | 100 | 1–200 (Help-stated) | Brightness of the target. |
 | Color Intensity | slider + field | 100 | 1–200 (Help-stated); 1 = grayscale | Saturation of the target. |
-| Fade | slider | 100 *(inferred)* | direction noted; numeric range not documented | Moving right reduces the adjustment. |
+| Fade | slider + field | 0 *(resolved from the Help direction by the `add-match-color` change)* | 0–100 | Moving right reduces the adjustment; 100 withholds it entirely (identity). |
 | Preview | bool | on | on / off | Live preview. |
-| Save / Load Statistics | buttons | — | `.sta`-class file *(extension inferred)* | Stores the computed statistics only. |
+| Save / Load Statistics | buttons | — | `.sta` binary payload *(in-tree: `PCTMCST` magic, version byte, six little-endian f64s; Adobe's own format is undocumented)* | Stores the computed statistics only. |
 
-The Help gives exact bounds only for Luminance and Color Intensity (1–200). The
-Fade default/range and the defaults of the option checkboxes are *(inferred)* and
-listed in `## Open questions`.
+The Help gives exact bounds only for Luminance and Color Intensity (1–200).
+The Fade default and range are resolved by the `add-match-color` change in
+favour of the Help-sourced direction sentence (0 = full match, 100 =
+identity); the checkbox defaults remain *(inferred)* and listed in
+`## Open questions`.
 
 ## Algorithms & pipeline
 
@@ -138,7 +140,9 @@ Proposed:
   pre-image for exact reversal; the lazy option is a pre-image of the edited
   region (`ARCH-009`).
 - `Save Statistics` writes a statistics file independent of the document; the
-  `.sta`/settings format is not published by Adobe (`## Open questions`).
+  `.sta`/settings format is not published by Adobe (`## Open questions`), so
+  this implementation stores an in-tree binary payload (`PCTMCST` magic,
+  version byte, six little-endian f64s).
 - When source and target have different document profiles, statistics should be
   computed in a common space; whether CS6 uses each document's space or the
   Color Settings working space is unverified (`ARCH-007`).
@@ -155,8 +159,8 @@ Proposed:
   compute in a defined common space.
 - **Empty/global selection**: fall back to overall image statistics, as the Help
   states.
-- **Fade extremes**: 100 (default) applies the full match; the Help says moving
-  the slider right reduces it; 0 is undefined in the fetched text.
+- **Fade extremes**: 0 (the default) applies the full match; moving right
+  reduces it and 100 withholds it entirely (identity).
 - **1-px / flat-color documents**: standard deviation is zero; guard against
   divide-by-zero in the transfer.
 - **Huge/PSB documents**: statistics pass streams by tile; preview uses a
@@ -174,7 +178,8 @@ Proposed:
 3. Given `Luminance = 100` and `Fade = 100`, mean luminance of the target is
    unchanged within tolerance; Luminance >100 brightens and <100 darkens
    monotonically.
-4. Given `Fade = 0`, the target is unchanged (identity).
+4. Given `Fade = 100`, the target is unchanged (identity); `Fade = 0` applies
+   the full match.
 5. Given a target selection and `Ignore Selection When Applying Adjustment` on,
    the whole target is modified; with it off, only the selection is modified.
 6. Given `Source = None`, the command still runs against the target's own
@@ -206,6 +211,8 @@ Proposed:
   in Lab, lαβ, or a proprietary space? *Resolves with:* controlled two-image
   tests + a deconvolution of the transfer, or an Adobe statement.
 - **Fade range and default.** The fetched Help states the direction only.
+  *Resolved for this implementation by the `add-match-color` change* (0–100,
+  default 0 = full match); the CS6 default stays a parity open question.
   *Resolves with:* a CS6 dialog capture.
 - **Default states of the option checkboxes** (`Neutralize`,
   `Use Selection In …`, `Ignore Selection …`). *Resolves with:* CS6 default
@@ -214,7 +221,10 @@ Proposed:
   target documents have different embedded profiles? *Resolves with:* CS6 test
   with mismatched profiles.
 - **`Save/Load Statistics` file format.** The extension and serialization are
-  undocumented. *Resolves with:* inspecting a file saved by CS6.
+  undocumented. *Resolved for this implementation with an in-tree binary
+  format (`PCTMCST` magic, version byte, six little-endian f64s); Adobe's own
+  serialization stays a parity open question. Resolves with:* inspecting a
+  file saved by CS6.
 - **32-bit availability.** Whether Match Color is enabled for 32-bpc documents.
   *Resolves with:* CS6 observation / the supported-adjustment list.
 - **Selection partial-coverage semantics** for statistics and application.

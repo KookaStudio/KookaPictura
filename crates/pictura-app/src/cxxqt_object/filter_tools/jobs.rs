@@ -463,7 +463,7 @@ fn commit_filters(
     // A layer mask is a mask-sized plane; filter it here.
     let region = {
         let mut rust = view.as_mut().rust_mut();
-        apply_op_active_region(&mut rust, &ActiveOp::Filters(filters), true, None)
+        apply_op_active_region(&mut rust, &ActiveOp::Filters(filters), true, None, false)
     };
     let Some(region) = region else {
         return false;

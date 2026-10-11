@@ -131,14 +131,14 @@ void ImageAdjustmentsTest::menuIsLiveOnAnOpenedImage()
           "Color Balance", "Black & White", "Photo Filter", "Channel Mixer", "Invert",
           "Posterize", "Threshold", "Gradient Map", "Selective Color", "Shadows/Highlights",
           "Color Lookup", "Desaturate", "Equalize",
-          "HDR Toning"}) {
+          "HDR Toning", "Match Color"}) {
         QAction* action = leaf(QString::fromUtf8(name));
         QVERIFY2(action && action->isEnabled(), name);
     }
     QCOMPARE(levels->text(), QStringLiteral("Levels…"));
     QCOMPARE(levels->shortcut(), QKeySequence(QStringLiteral("Ctrl+L")));
     QCOMPARE(leaf(QStringLiteral("Invert"))->text(), QStringLiteral("Invert"));
-    QVERIFY(!leaf(QStringLiteral("Match Color"))->isEnabled());
+    QCOMPARE(leaf(QStringLiteral("Match Color"))->text(), QStringLiteral("Match Color…"));
     QAction* autoTone = window_->registry()->action(
         pictura::commandIdForPath({QStringLiteral("Image"), QStringLiteral("Auto Tone")}));
     QVERIFY(autoTone && autoTone->isEnabled());

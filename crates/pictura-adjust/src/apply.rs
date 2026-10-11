@@ -6,6 +6,7 @@ use crate::color::{
     vibrance,
 };
 use crate::common::{map_float, validate};
+use crate::match_color::match_color;
 use crate::replace_color::replace_color;
 use crate::tonal::{
     brightness_contrast, curves, desaturate, equalize, exposure, gradient_map, levels, posterize,
@@ -56,5 +57,6 @@ pub fn apply(adjustment: &Adjustment, buf: &mut PixelBuffer) -> Result<(), Adjus
         )),
         Adjustment::ColorLookup(p) => crate::lut::apply_color_lookup(p, buf),
         Adjustment::ReplaceColor(p) => replace_color(p, buf, n),
+        Adjustment::MatchColor(p) => match_color(p, buf, n),
     }
 }

@@ -190,6 +190,7 @@ fn run(
             &ActiveOp::Adjustment(Adjustment::ReplaceColor(p)),
             commit,
             preview,
+            false,
         )
     };
     let Some(region) = region else {
