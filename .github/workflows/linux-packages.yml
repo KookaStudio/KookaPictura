@@ -2,16 +2,18 @@ name: linux-packages
 
 # Builds the x86_64 .deb and .rpm for a release tag and attaches them to that
 # release. Same shape as appimage.yml: release-please.yml calls it after cutting
-# a release, it runs by hand for an existing tag, and a PR touching the
-# packaging runs it as a dry run that keeps the packages as workflow artifacts.
-# Each package is smoke-checked by installing it into a clean distro container,
-# which also proves its dependency list resolves there.
+# a release, it runs by hand for an existing tag, and the release-please Release
+# PR runs it as a dry run that keeps the packages as workflow artifacts.
+# Feature PRs never run it. Each package is smoke-checked by installing it into
+# a clean distro container, which also proves its dependency list resolves there.
 on:
   pull_request:
     paths:
-      - .github/workflows/linux-packages.yml
-      - .github/actions/linux-bundle/**
-      - packaging/**
+      - Cargo.toml
+      - CMakeLists.txt
+      - CHANGELOG.md
+      - version.txt
+      - .release-please-manifest.json
   workflow_call:
     inputs:
       tag:
@@ -24,6 +26,10 @@ on:
         type: string
         required: true
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: write
 
@@ -31,9 +37,14 @@ jobs:
   packages:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    if: github.event_name != 'pull_request' || github.head_ref == 'release-please--branches--master'
     env:
       TAG: ${{ inputs.tag }}
       VERSION: ${{ inputs.tag || format('0.0.0~pr{0}', github.event.number) }}
+      # sccache, the same setup ci.yml uses.
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: "true"
+      CARGO_INCREMENTAL: "0"
     steps:
       - uses: actions/checkout@v7
         with:

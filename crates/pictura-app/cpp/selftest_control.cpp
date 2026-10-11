@@ -16,7 +16,9 @@
 #include <QtGui/QImage>
 #include <QtNetwork/QLocalSocket>
 
+#ifndef _WIN32
 #include <sys/stat.h>
+#endif
 
 namespace {
 
@@ -104,14 +106,21 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
         return pictura::selfTest().fail(464, "control client connect");
     }
 
+    ST_BEGIN("mcp_control_socket_mode");
+#ifdef _WIN32
+    // A Windows QLocalServer is a machine-global named pipe with no filesystem
+    // mode to stat; there is no per-user ACL to assert, so the POSIX mode check
+    // has no analogue here.
+    ST_SKIP("named pipe (no filesystem mode to check)");
+#else
     struct stat status{};
     const bool userOnly = ::stat(socketPath.toLocal8Bit().constData(), &status) == 0
                           && (status.st_mode & 0077) == 0;
-    ST_BEGIN("mcp_control_socket_mode");
     if (!userOnly) {
         return pictura::selfTest().fail(465, "socket is not user-only");
     }
     ST_PASS("mode=%03o", static_cast<int>(status.st_mode & 0777));
+#endif
 
     bool parsed = false;
     QJsonObject response =

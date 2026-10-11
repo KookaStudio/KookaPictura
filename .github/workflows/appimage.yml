@@ -3,14 +3,17 @@ name: appimage
 # Builds the x86_64 AppImage for a release tag and attaches it to that release.
 # release-please.yml calls this after it cuts a release (a release created with
 # GITHUB_TOKEN cannot trigger a `release:` workflow). Run it by hand to rebuild
-# or re-upload the asset for an existing tag. A PR touching the packaging runs
+# or re-upload the asset for an existing tag. The release-please Release PR runs
 # the same build as a dry run and keeps the AppImage as a workflow artifact.
+# Feature PRs never run it.
 on:
   pull_request:
     paths:
-      - .github/workflows/appimage.yml
-      - .github/actions/linux-bundle/**
-      - packaging/pictura.desktop
+      - Cargo.toml
+      - CMakeLists.txt
+      - CHANGELOG.md
+      - version.txt
+      - .release-please-manifest.json
   workflow_call:
     inputs:
       tag:
@@ -23,6 +26,10 @@ on:
         type: string
         required: true
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: write
 
@@ -30,9 +37,14 @@ jobs:
   appimage:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    if: github.event_name != 'pull_request' || github.head_ref == 'release-please--branches--master'
     env:
       TAG: ${{ inputs.tag }}
       VERSION: ${{ inputs.tag || format('pr{0}', github.event.number) }}
+      # sccache, the same setup ci.yml uses.
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: "true"
+      CARGO_INCREMENTAL: "0"
     steps:
       - uses: actions/checkout@v7
         with:

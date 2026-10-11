@@ -1,0 +1,78 @@
+name: windows-bundle
+description: >-
+  Release-build pictura with MSVC and stage it with its Qt dependencies in
+  ./stage (stage/bin plus the Qt platforms and other plugins). windows.yml packs
+  that tree as a portable .zip and an NSIS installer.
+runs:
+  using: composite
+  steps:
+    - name: Install pinned toolchain
+      shell: pwsh
+      run: rustup show active-toolchain
+
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v4
+      with:
+        version: '6.11.1'
+        arch: win64_msvc2022_64
+        cache: true
+        # Qt 6.11 splits the Windows online repo per architecture
+        # (qt6_6111_msvc2022_64), which the released aqtinstall 3.3.0 that
+        # install-qt-action pins does not understand: it looks for the legacy
+        # qt6_6111/qt6_6111 and fails. miurahr/aqtinstall#1000 added the support
+        # but is unreleased, so pin that merge commit until a release ships it.
+        aqtsource: 'git+https://github.com/miurahr/aqtinstall.git@8c3695d4a4e1ceabf6a74dc6c79681656dc6b74b'
+
+    # Puts cl.exe and the Windows SDK on PATH for Ninja + Cargo.
+    - name: Set up MSVC
+      uses: ilammy/msvc-dev-cmd@v1.13.0
+
+    # The workflows set RUSTC_WRAPPER/SCCACHE_GHA_ENABLED; this only installs
+    # the binary (same action and version ci.yml uses).
+    - name: Install sccache
+      uses: mozilla-actions/sccache-action@v0.0.11
+
+    - uses: Swatinem/rust-cache@v2
+      with:
+        cache-targets: "false"
+
+    # No --locked: the Release PR bumps Cargo.toml but not Cargo.lock
+    # (DEVELOPING.md). No -fuse-ld=lld: that is a Linux linker flag.
+    - name: Build and stage
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $PSNativeCommandUseErrorActionPreference = $true
+        cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF `
+          -DCMAKE_INSTALL_PREFIX="$env:GITHUB_WORKSPACE/stage" `
+          -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+        cmake --build build --config Release
+        cmake --install build --config Release
+
+    # windeployqt gathers the Qt DLLs and the platforms plugins next to the
+    # executable. Its default also copies the MSVC runtime, which is what lets
+    # the portable archive run on a machine without the VC++ redistributable.
+    - name: Deploy Qt
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $PSNativeCommandUseErrorActionPreference = $true
+        windeployqt --release --compiler-runtime "$env:GITHUB_WORKSPACE\stage\bin\pictura.exe"
+
+    # windeployqt's platform-plugin set varies by Qt version, and 6.11.1 skips
+    # the MSVC runtime even with --compiler-runtime. Make the deployed folder
+    # self-contained: the offscreen QPA plugin the headless check needs, plus
+    # the C/C++ runtime DLLs copied from the installed VS redistributable.
+    - name: Ensure the offscreen plugin and MSVC runtime
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $bin = "$env:GITHUB_WORKSPACE\stage\bin"
+        $dst = "$bin\platforms"
+        New-Item -ItemType Directory -Force -Path $dst | Out-Null
+        Copy-Item "$env:QT_ROOT_DIR\plugins\platforms\qoffscreen.dll" $dst -Force -ErrorAction SilentlyContinue
+        $crt = Get-ChildItem "$env:VCToolsRedistDir\x64\Microsoft.VC*.CRT" -Directory -ErrorAction SilentlyContinue |
+          Select-Object -First 1
+        if (-not $crt) { throw "MSVC redistributable CRT folder not found under $env:VCToolsRedistDir" }
+        Copy-Item "$($crt.FullName)\*runtime*.dll" $bin -Force
+        Copy-Item "$($crt.FullName)\msvcp*.dll" $bin -Force

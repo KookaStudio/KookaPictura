@@ -7,6 +7,7 @@
 #include <QtCore/QJsonParseError>
 #include <QtCore/QProcessEnvironment>
 #include <QtCore/QSet>
+#include <QtCore/QStandardPaths>
 #include <QtGui/QAction>
 #include <QtGui/QImage>
 #include <QtNetwork/QLocalServer>
@@ -17,8 +18,10 @@
 #include <QtWidgets/QMenu>
 
 #include <cmath>
+#ifndef _WIN32
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
 
 #include "commands.h"
 #include "dialogs.h"
@@ -241,18 +244,33 @@ QString ControlServer::defaultSocketPath()
     if (!runtime.isEmpty()) {
         return runtime + QStringLiteral("/pictura-control.sock");
     }
+#ifdef _WIN32
+    // A Windows QLocalServer is a named pipe, not a filesystem path, and there
+    // is no getuid(). Scope the pipe name to the user's temp directory so two
+    // users never collide on one endpoint.
+    QString scope = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    if (scope.isEmpty()) {
+        scope = QDir::tempPath();
+    }
+    return QStringLiteral("pictura-control-%1")
+        .arg(QString::number(static_cast<qulonglong>(qHash(scope)), 16));
+#else
     return QDir::tempPath() + QStringLiteral("/pictura-control-%1.sock").arg(::getuid());
+#endif
 }
 
 bool ControlServer::listen()
 {
+#ifndef _WIN32
     // Never clobber a non-socket path: only remove a stale file that stat
-    // confirms is a Unix-domain socket.
+    // confirms is a Unix-domain socket. A Windows named pipe has no filesystem
+    // entry to protect.
     struct stat existing{};
     if (::stat(socketPath_.toLocal8Bit().constData(), &existing) == 0
         && !S_ISSOCK(existing.st_mode)) {
         return false;
     }
+#endif
     QLocalServer::removeServer(socketPath_);
     server_ = new QLocalServer(this);
     server_->setSocketOptions(QLocalServer::UserAccessOption);
@@ -276,11 +294,15 @@ void ControlServer::shutdown()
         // (e.g. `--control-socket` pointed at a regular file) would delete the
         // user's file. Re-stat and require a socket; a repeated shutdown is a
         // no-op because `server_` is already null.
+#ifndef _WIN32
         struct stat current{};
         if (::stat(socketPath_.toLocal8Bit().constData(), &current) == 0
             && S_ISSOCK(current.st_mode)) {
             QLocalServer::removeServer(socketPath_);
         }
+#else
+        QLocalServer::removeServer(socketPath_);
+#endif
     }
 }
 
