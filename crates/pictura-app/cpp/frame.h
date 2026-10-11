@@ -11,6 +11,7 @@
 #include <QtGui/QColor>
 #include <QtWidgets/QMainWindow>
 
+#include "canvas_ruler.h"
 #include "panels/panel_column.h"
 #include "recovery_store.h"
 #include "tools.h"
@@ -576,6 +577,26 @@ private:
     int recoveryCounter_ = 0;
     bool autoSaveRecovery_ = true;
     int autoSaveMinutes_ = 10;
+
+    // Rulers and guides (frame_guides.cpp): the View commands, each canvas's
+    // rulers and guide look, and the Guides preferences. Global view state,
+    // persisted in the session.
+    void registerGuideHandlers();
+    void loadGuideSession(const SessionState& state);
+    void prepareCanvasGuides(const DocEntry& entry);
+    void applyGuideViewState();
+    void connectGuidePreferences(PreferencesDialog* dialog);
+    // Units & Rulers: from the preferences page or a ruler's context menu.
+    void setRulerUnit(RulerUnit unit);
+    // frame_preferences.cpp: the Edit > Preferences leaves.
+    void registerPreferenceHandlers();
+    bool rulersVisible_ = false;
+    RulerUnit rulerUnit_ = RulerUnit::Inches;
+    bool traditionalPoints_ = false;
+    bool guidesVisible_ = true;
+    bool guidesLocked_ = false;
+    QColor guideColor_{0x4a, 0xff, 0xff};
+    bool guideDashed_ = false;
 };
 
 } // namespace pictura

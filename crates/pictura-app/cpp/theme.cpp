@@ -335,6 +335,7 @@ QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
 /* The empty cell where the canvas's two scrollbars meet takes the scrollbar
    track colour instead of the workspace showing through. */
 QWidget#canvasScrollCorner { background: ${scrollbar}; }
+QWidget#canvasRulerCorner { background: ${panel}; }
 
 QToolTip { background: ${toolTipBase}; color: ${toolTipText}; border: 1px solid ${border}; padding: 2px; }
 

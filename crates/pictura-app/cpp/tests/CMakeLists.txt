@@ -59,6 +59,7 @@ set(PICTURA_QT_TESTS
     tst_zoom_tool
     tst_large_document
     tst_recovery
+    tst_rulers_guides
     tst_panels_parity
     tst_selection_alt
     tst_nested_layer_target

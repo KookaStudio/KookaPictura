@@ -26,6 +26,7 @@ pub fn read_psd(bytes: &[u8]) -> Result<Document, PsdError> {
 pub fn read_psd_with(bytes: &[u8], policy: Policy) -> Result<Document, PsdError> {
     let mut doc = read_container(bytes, policy)?;
     crate::path_resources::resolve_paths(&mut doc);
+    crate::guide_resources::resolve_guides(&mut doc);
     Ok(doc)
 }
 
@@ -157,6 +158,7 @@ fn read_container(bytes: &[u8], policy: Policy) -> Result<Document, PsdError> {
             layer_section_extra,
             slices: Vec::new(),
             annotations: Default::default(),
+            guides: Vec::new(),
             work_path: Default::default(),
             saved_paths: Vec::new(),
             text_styles: Default::default(),
@@ -247,6 +249,7 @@ fn read_container(bytes: &[u8], policy: Policy) -> Result<Document, PsdError> {
         layer_section_extra,
         slices: Vec::new(),
         annotations: Default::default(),
+        guides: Vec::new(),
         work_path: Default::default(),
         saved_paths: Vec::new(),
         text_styles: Default::default(),

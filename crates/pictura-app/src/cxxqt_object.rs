@@ -12,6 +12,7 @@ mod export;
 mod eyedropper_sample;
 mod filter_map;
 mod filter_tools;
+mod guides;
 mod healing;
 mod helpers;
 mod helpers_composite;
@@ -60,7 +61,6 @@ pub mod qobject {
         type QString = cxx_qt_lib::QString;
         include!("cxx-qt-lib/qimage.h");
         type QImage = cxx_qt_lib::QImage;
-
         include!("cxx-qt-lib/qstringlist.h");
         type QStringList = cxx_qt_lib::QStringList;
 

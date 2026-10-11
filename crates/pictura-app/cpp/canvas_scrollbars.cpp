@@ -1,6 +1,7 @@
 #include "canvas_scrollbars.h"
 
 #include "canvas_range.h"
+#include "canvas_ruler.h"
 #include "image_view.h"
 
 #include <QtCore/QSignalBlocker>
@@ -18,18 +19,36 @@ CanvasScrollBars::CanvasScrollBars(QWidget* parent)
     grid_ = new QGridLayout(this);
     grid_->setContentsMargins(0, 0, 0, 0);
     grid_->setSpacing(0);
+    // Rulers on row/column 0 (hidden until View > Rulers), the canvas at
+    // (1, 1), the scrollbars on row/column 2.
+    hruler_ = new CanvasRuler(Qt::Horizontal, this);
+    vruler_ = new CanvasRuler(Qt::Vertical, this);
+    rulerCorner_ = new QWidget(this);
+    rulerCorner_->setObjectName(QStringLiteral("canvasRulerCorner"));
+    rulerCorner_->setAttribute(Qt::WA_StyledBackground, true);
+    grid_->addWidget(rulerCorner_, 0, 0);
+    grid_->addWidget(hruler_, 0, 1);
+    grid_->addWidget(vruler_, 1, 0);
+    for (CanvasRuler* ruler : {hruler_, vruler_}) {
+        connect(ruler, &CanvasRuler::guideDropped, this, &CanvasScrollBars::guideDropped);
+        connect(ruler, &CanvasRuler::unitChosen, this, &CanvasScrollBars::rulerUnitChosen);
+        connect(ruler, &CanvasRuler::preferencesRequested, this,
+                &CanvasScrollBars::rulerPreferencesRequested);
+    }
+    setRulersVisible(false);
+
     hbar_ = new QScrollBar(Qt::Horizontal, this);
     vbar_ = new QScrollBar(Qt::Vertical, this);
-    grid_->addWidget(vbar_, 0, 1);
-    grid_->addWidget(hbar_, 1, 0);
+    grid_->addWidget(vbar_, 1, 2);
+    grid_->addWidget(hbar_, 2, 0, 1, 2);
     // The empty corner where the two bars meet: styled to the scrollbar track so
     // the workspace colour does not show through the notch.
     auto* corner = new QWidget(this);
     corner->setObjectName(QStringLiteral("canvasScrollCorner"));
     corner->setAttribute(Qt::WA_StyledBackground, true);
-    grid_->addWidget(corner, 1, 1);
-    grid_->setColumnStretch(0, 1);
-    grid_->setRowStretch(0, 1);
+    grid_->addWidget(corner, 2, 2);
+    grid_->setColumnStretch(1, 1);
+    grid_->setRowStretch(1, 1);
     hbar_->hide();
     vbar_->hide();
 
@@ -65,11 +84,38 @@ void CanvasScrollBars::setView(ImageView* view)
     view_ = view;
     if (view_) {
         view_->setParent(this);
-        grid_->addWidget(view_, 0, 0);
+        grid_->addWidget(view_, 1, 1);
         view_->show();
         connect(view_, &ImageView::viewChanged, this, [this]() { syncFromView(); });
+        connect(view_, &ImageView::mouseMoved, this, [this](const QPointF& imagePos) {
+            hruler_->setCursorPosition(imagePos);
+            vruler_->setCursorPosition(imagePos);
+        });
     }
+    hruler_->setView(view_);
+    vruler_->setView(view_);
     syncFromView();
+}
+
+void CanvasScrollBars::setRulerUnit(RulerUnit unit, bool traditionalPoints)
+{
+    for (CanvasRuler* ruler : {hruler_, vruler_}) {
+        ruler->setUnit(unit);
+        ruler->setTraditionalPoints(traditionalPoints);
+    }
+}
+
+void CanvasScrollBars::setPpiProvider(const std::function<double()>& ppi)
+{
+    hruler_->setPpiProvider(ppi);
+    vruler_->setPpiProvider(ppi);
+}
+
+void CanvasScrollBars::setRulersVisible(bool on)
+{
+    hruler_->setVisible(on);
+    vruler_->setVisible(on);
+    rulerCorner_->setVisible(on);
 }
 
 void CanvasScrollBars::resizeEvent(QResizeEvent* event)
@@ -84,6 +130,8 @@ void CanvasScrollBars::syncFromView()
         return;
     }
     syncing_ = true;
+    hruler_->update();
+    vruler_->update();
 
     const double zoom = view_->zoom();
     const QSizeF imageSize(view_->documentSize());

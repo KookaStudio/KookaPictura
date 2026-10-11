@@ -8,6 +8,7 @@ mod advanced_blending;
 mod annotations;
 pub mod blur;
 mod crs;
+mod guides;
 pub mod nonseparable;
 pub mod path;
 mod plane;
@@ -23,6 +24,7 @@ pub use annotations::{
     MAX_COLOR_SAMPLERS,
 };
 pub use crs::{CrsSettings, PicturaRawSettings};
+pub use guides::{guide_near, Guide, GuideOrientation};
 pub use plane::{fresh_stamp, Plane};
 pub use samples::{Sample, Samples};
 pub use text_render::{
@@ -222,6 +224,9 @@ pub struct Document {
     pub slices: Vec<PsdRect>,
     /// Color samplers and notes; they ride the history snapshot like slices.
     pub annotations: Annotations,
+    /// Guides in placement order; they ride the history snapshot. Read from
+    /// and written to the PSD grid-and-guides resource (1032).
+    pub guides: Vec<Guide>,
     /// The Work Path the Pen tool group draws; it rides the history snapshot.
     /// Read from and written to the PSD Work Path resource (1025).
     pub work_path: path::VectorPath,
@@ -263,6 +268,7 @@ impl Document {
             layer_section_extra: Vec::new(),
             slices: Vec::new(),
             annotations: Annotations::default(),
+            guides: Vec::new(),
             work_path: path::VectorPath::default(),
             saved_paths: Vec::new(),
             text_styles: TextStyleSheet::default(),

@@ -45,6 +45,19 @@ Snapshot for resuming after a context break. Update after each milestone.
   reads the Work Path (1025) and saved paths (2000-2997), so paths survive both
   save and recovery (psd-tools oracle `path_resource_oracle`). Ceilings: no
   journal, crash handler, or Background Save; History is not recovered.
+- **Rulers & guides** (#294 + #299, branch `feat/294-rulers-guides`, OpenSpec change
+  `rulers-and-guides`): `View > Rulers` (`Ctrl+R`) adds rulers above and
+  left of every canvas (`CanvasRuler` in the `CanvasScrollBars` grid); dragging
+  out of a ruler drops a guide (default Cyan `#4AFFFF`). Guides are document
+  data (`Document.guides`), undoable ("New/Move/Delete Guide", "Clear Guides"),
+  moved with the Move tool or Ctrl, deleted by dragging off the canvas, and
+  saved as PSD resource 1032 (psd-tools oracle `guide_resource_oracle`).
+  `Show > Guides`, `Lock Guides`, `Clear Guides`, `New Guide…`, and the
+  Guides, Grid, & Slices preferences page (guide colour/style) are real.
+  Rulers default to inches; right-click or Edit > Preferences > Units &
+  Rulers (a real page; double-click a ruler) picks the unit and point size.
+  Ceilings: no snapping or Alt-flip; Smart
+  Guides/Grid/Slices prefs are shown disabled.
 - **In flight:** the large-image PR above. Open PRs are docs-only — #191 (README AI
   disclosure, real screenshot, `CLAUDE.md`, developer guide) and #135 (Fedora 43
   build instructions). The Paragraph Styles panel + Edit/Image menu commands

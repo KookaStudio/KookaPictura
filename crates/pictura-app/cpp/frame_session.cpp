@@ -129,6 +129,13 @@ void PicturaMainWindow::saveSession()
     state.useShiftKeyForToolSwitch = useShiftKeyForToolSwitch_;
     state.autoSaveRecovery = autoSaveRecovery_;
     state.autoSaveMinutes = autoSaveMinutes_;
+    state.rulersVisible = rulersVisible_;
+    state.rulerUnit = int(rulerUnit_);
+    state.traditionalPoints = traditionalPoints_;
+    state.guidesVisible = guidesVisible_;
+    state.guidesLocked = guidesLocked_;
+    state.guideColor = guideColor_.name();
+    state.guideDashed = guideDashed_;
     if (tools_) {
         state.cropClassicMode = tools_->cropClassicMode();
         state.cropDeletePixels = tools_->cropDeletePixels();

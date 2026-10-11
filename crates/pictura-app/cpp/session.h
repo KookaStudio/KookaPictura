@@ -31,6 +31,15 @@ struct SessionState {
     // Information Every <n> minutes (CS6 choices 5/10/15/30/60, default 10).
     bool autoSaveRecovery = true;
     int autoSaveMinutes = 10;
+    // View > Rulers / Show > Guides / Lock Guides, and the Guides, Grid, &
+    // Slices guide colour (#rrggbb) and Dashed Lines style.
+    bool rulersVisible = false;
+    int rulerUnit = 1;               // RulerUnit; 1 Inches, CS6's default
+    bool traditionalPoints = false;  // Units & Rulers: 72.27 rather than 72 pt/in
+    bool guidesVisible = true;
+    bool guidesLocked = false;
+    QString guideColor = QStringLiteral("#4affff");
+    bool guideDashed = false;
     // Crop options bar, persisted across restarts.
     bool cropClassicMode = true;     // Classic (default) vs Modern drag semantics
     bool cropDeletePixels = true;    // discard pixels outside the crop

@@ -1060,14 +1060,8 @@ void PicturaMainWindow::registerHandlers()
     registry_->setCheckedProvider(command_ids::WindowPanelsTools,
                                   [this]() { return toolsColumn_ && toolsColumn_->isVisible(); });
 
-    // The two implemented Preferences leaves; the other CS6 panes stay
-    // disabled and are no-ops (their command-tree enablement is unchanged).
-    registry_->setHandler(command_ids::EditPreferencesGeneral,
-                          [this]() { showPreferences(PreferencesDialog::kGeneral); });
-    registry_->setHandler(command_ids::EditPreferencesInterface,
-                          [this]() { showPreferences(PreferencesDialog::kInterface); });
-    registry_->setHandler(command_ids::EditPreferencesPerformance,
-                          [this]() { showPreferences(PreferencesDialog::kPerformance); });
+    registerPreferenceHandlers();
+    registerGuideHandlers();
 
     // Every other panel is a content widget hosted by the PanelColumn; the
     // Window > Panels toggles drive and reflect the column's registry rather

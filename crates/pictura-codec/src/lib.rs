@@ -29,6 +29,7 @@ mod engine_data;
 mod engine_data_encode;
 mod error;
 mod exif;
+mod guide_resources;
 mod icc;
 mod image_resources;
 mod iptc;

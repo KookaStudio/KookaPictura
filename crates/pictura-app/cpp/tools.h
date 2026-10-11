@@ -404,6 +404,12 @@ public:
     void notifyCountChanged() override { emit countChanged(); }
     // The options bar's Clear for the active Color Sampler, Note, or Ruler tool.
     bool clearAnnotations();
+
+    // Guides (tools_guides.cpp): show the document's guides on the canvas, and
+    // View > Lock Guides, which stops a press picking one up.
+    void refreshGuides();
+    void setGuidesLocked(bool on) { guidesLocked_ = on; }
+    bool guideDragActiveForTest() const { return guideDrag_ >= 0; }
     void beginContentMove(PictureView* v, const QPointF& imagePos, bool duplicate) override;
 
     void setViewProvider(std::function<PictureView*()> provider);
@@ -642,6 +648,20 @@ private:
     bool transformDragging_ = false;
     int transformHandle_ = -1;
     int currentNote_ = -1;
+
+    // The guide a press would pick up at `imagePos` (Move tool, or Ctrl with
+    // any tool; guides shown and unlocked), or -1.
+    int guideAt(const QPointF& imagePos, Qt::KeyboardModifiers mods) const;
+    bool beginGuideDrag(const QPointF& imagePos, Qt::KeyboardModifiers mods);
+    void dragGuide(const QPointF& imagePos);
+    void releaseGuide(const QPointF& imagePos);
+    // Show the split cursor over a guide the Move tool would pick up.
+    void updateGuideHover(const QPointF& imagePos);
+    int guideDrag_ = -1;
+    bool guideDragVertical_ = false;
+    double guideDragStart_ = 0.0;
+    bool guidesLocked_ = false;
+    bool guideHover_ = false;
 };
 
 } // namespace pictura

@@ -196,9 +196,10 @@ void addDefaultCommands(CommandRegistry& registry) {
     leaf(registry, {"Edit", "Preferences", "Cursors"}, QStringLiteral("Cursors"));
     leaf(registry, {"Edit", "Preferences", "Transparency & Gamut"},
          QStringLiteral("Transparency & Gamut"));
-    leaf(registry, {"Edit", "Preferences", "Units & Rulers"}, QStringLiteral("Units & Rulers"));
-    leaf(registry, {"Edit", "Preferences", "Guides, Grid, & Slices"},
-         QStringLiteral("Guides, Grid, & Slices"));
+    registry.add(command_ids::EditPreferencesUnits, {"Edit", "Preferences", "Units & Rulers"},
+                 QStringLiteral("Units & Rulers"), QKeySequence(), true);
+    registry.add(command_ids::EditPreferencesGuides, {"Edit", "Preferences", "Guides, Grid, & Slices"},
+                 QStringLiteral("Guides, Grid, & Slices"), QKeySequence(), true);
     leaf(registry, {"Edit", "Preferences", "Plug-ins"}, QStringLiteral("Plug-ins"));
     leaf(registry, {"Edit", "Preferences", "Type"}, QStringLiteral("Type"));
     leaf(registry, {"Edit", "Preferences", "3D"}, QStringLiteral("3D"));
@@ -827,7 +828,8 @@ void addDefaultCommands(CommandRegistry& registry) {
                              {"View", "Screen Mode", "Full Screen Mode"},
                              QStringLiteral("Full Screen Mode"), QKeySequence(), true, true});
     registry.addSeparator({"View"});
-    leaf(registry, {"View", "Rulers"}, QStringLiteral("Rulers"), QStringLiteral("Ctrl+R"));
+    registry.add(CommandSpec{command_ids::ViewRulers, {"View", "Rulers"}, QStringLiteral("Rulers"),
+                             QKeySequence(QStringLiteral("Ctrl+R")), true, true});
     leaf(registry, {"View", "Snap"}, QStringLiteral("Snap"), QStringLiteral("Shift+Ctrl+;"));
     leaf(registry, {"View", "Snap To", "Guides"}, QStringLiteral("Guides"));
     leaf(registry, {"View", "Snap To", "Grid"}, QStringLiteral("Grid"));
@@ -836,9 +838,13 @@ void addDefaultCommands(CommandRegistry& registry) {
     leaf(registry, {"View", "Snap To", "Document Bounds"}, QStringLiteral("Document Bounds"));
     leaf(registry, {"View", "Snap To", "All"}, QStringLiteral("All"));
     leaf(registry, {"View", "Snap To", "None"}, QStringLiteral("None"));
-    leaf(registry, {"View", "Lock Guides"}, QStringLiteral("Lock Guides"), QStringLiteral("Alt+Ctrl+;"));
-    leaf(registry, {"View", "Clear Guides"}, QStringLiteral("Clear Guides"));
-    leaf(registry, {"View", "New Guide…"}, QStringLiteral("New Guide…"));
+    registry.add(CommandSpec{command_ids::ViewLockGuides, {"View", "Lock Guides"},
+                             QStringLiteral("Lock Guides"),
+                             QKeySequence(QStringLiteral("Alt+Ctrl+;")), true, true});
+    registry.add(command_ids::ViewClearGuides, {"View", "Clear Guides"},
+                 QStringLiteral("Clear Guides"), QKeySequence(), true);
+    registry.add(command_ids::ViewNewGuide, {"View", "New Guide…"}, QStringLiteral("New Guide…"),
+                 QKeySequence(), true);
     registry.addSeparator({"View"});
     leaf(registry, {"View", "Lock Slices"}, QStringLiteral("Lock Slices"));
     registry.addSeparator({"View"});
@@ -848,7 +854,9 @@ void addDefaultCommands(CommandRegistry& registry) {
     leaf(registry, {"View", "Show", "Target Path"}, QStringLiteral("Target Path"));
     leaf(registry, {"View", "Show", "Layer Edges"}, QStringLiteral("Layer Edges"));
     leaf(registry, {"View", "Show", "3D Axis"}, QStringLiteral("3D Axis"));
-    leaf(registry, {"View", "Show", "Guides"}, QStringLiteral("Guides"));
+    registry.add(CommandSpec{command_ids::ViewShowGuides, {"View", "Show", "Guides"},
+                             QStringLiteral("Guides"), QKeySequence(QStringLiteral("Ctrl+;")),
+                             true, true});
     leaf(registry, {"View", "Show", "Grid"}, QStringLiteral("Grid"));
     leaf(registry, {"View", "Show", "Count"}, QStringLiteral("Count"));
     leaf(registry, {"View", "Show", "Slices"}, QStringLiteral("Slices"));

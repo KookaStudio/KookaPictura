@@ -1,15 +1,21 @@
 #include "preferences_dialog.h"
 
+#include "canvas_ruler.h"
 #include "panels/numeric_field.h"
 #include "session.h"
 #include "theme.h"
 
+#include <QtGui/QPixmap>
 #include <QtWidgets/QCheckBox>
+#include <QtWidgets/QColorDialog>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QFormLayout>
+#include <QtWidgets/QGridLayout>
+#include <QtWidgets/QGroupBox>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QListWidget>
+#include <QtWidgets/QRadioButton>
 #include <QtWidgets/QStackedWidget>
 #include <QtWidgets/QVBoxLayout>
 
@@ -19,6 +25,8 @@ const QString PreferencesDialog::kGeneral = QStringLiteral("General");
 const QString PreferencesDialog::kInterface = QStringLiteral("Interface");
 const QString PreferencesDialog::kFileHandling = QStringLiteral("File Handling");
 const QString PreferencesDialog::kPerformance = QStringLiteral("Performance");
+const QString PreferencesDialog::kUnits = QStringLiteral("Units & Rulers");
+const QString PreferencesDialog::kGuides = QStringLiteral("Guides, Grid, & Slices");
 
 namespace {
 
@@ -36,6 +44,50 @@ const char* const kPaneNames[] = {
     "Type",
     "3D",
 };
+
+struct NamedColor {
+    const char* name;
+    QColor color;
+};
+
+// CS6's guide colour presets. Cyan and Magenta were sampled from a CS6
+// Preferences screenshot (#294) and Light Blue from its slice swatch.
+// ponytail: the other presets are approximated in the same 74/255 family.
+const NamedColor kGuideColors[] = {
+    {"Light Blue", QColor(74, 113, 255)}, {"Light Red", QColor(255, 74, 74)},
+    {"Green", QColor(74, 255, 74)},       {"Medium Blue", QColor(74, 74, 255)},
+    {"Yellow", QColor(255, 255, 74)},     {"Magenta", QColor(255, 74, 255)},
+    {"Cyan", QColor(74, 255, 255)},       {"Light Gray", QColor(192, 192, 192)},
+    {"Black", QColor(0, 0, 0)},
+};
+
+QIcon swatchIcon(const QColor& color)
+{
+    QPixmap pixmap(12, 12);
+    pixmap.fill(color);
+    return QIcon(pixmap);
+}
+
+QComboBox* colorCombo(const QString& objectName, QWidget* parent)
+{
+    auto* combo = new QComboBox(parent);
+    combo->setObjectName(objectName);
+    for (const NamedColor& preset : kGuideColors) {
+        combo->addItem(swatchIcon(preset.color), QString::fromUtf8(preset.name), preset.color);
+    }
+    combo->addItem(QObject::tr("Custom…"));
+    return combo;
+}
+
+QLabel* swatch(const QColor& color, QWidget* parent)
+{
+    auto* label = new QLabel(parent);
+    label->setFixedSize(40, 40);
+    label->setAutoFillBackground(true);
+    label->setStyleSheet(QStringLiteral("background: %1; border: 1px solid #808080;")
+                             .arg(color.name()));
+    return label;
+}
 
 } // namespace
 
@@ -56,7 +108,7 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     stack_->setObjectName(QStringLiteral("preferencesStack"));
     layout->addWidget(stack_, 1);
 
-    realPages_ = {kGeneral, kInterface, kFileHandling, kPerformance};
+    realPages_ = {kGeneral, kInterface, kFileHandling, kPerformance, kUnits, kGuides};
 
     // General: the app's real theme brightness is the only General setting.
     auto* generalPage = new QWidget(this);
@@ -117,6 +169,8 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     makeCheckbox(QStringLiteral("useGpuCompute"), tr("Use GPU Compute"), performancePage);
     performanceLayout->addStretch(1);
     stack_->addWidget(performancePage);
+    stack_->addWidget(buildUnitsPage());
+    stack_->addWidget(buildGuidesPage());
 
     // List rows carry their pane name in Qt::UserRole: the CS6 pane order does
     // not match the stack's real-page order, so the row maps by name.
@@ -270,6 +324,209 @@ bool PreferencesDialog::checkboxForTest(const QString& key) const
 {
     QCheckBox* box = checkbox(key);
     return box && box->isChecked();
+}
+
+// Units & Rulers: the ruler unit and Point/Pica Size are live; Type, Column
+// Size, and New Document Preset Resolutions show CS6's defaults, disabled
+// until something reads them.
+QWidget* PreferencesDialog::buildUnitsPage()
+{
+    auto* page = new QWidget(this);
+    page->setObjectName(QStringLiteral("preferencesUnitsPage"));
+    auto* layout = new QGridLayout(page);
+
+    auto* units = new QGroupBox(tr("Units"), page);
+    auto* unitsForm = new QFormLayout(units);
+    rulerUnit_ = new QComboBox(units);
+    rulerUnit_->setObjectName(QStringLiteral("preferencesRulerUnits"));
+    for (int i = 0; i < kRulerUnitCount; ++i) {
+        rulerUnit_->addItem(rulerUnitName(RulerUnit(i)));
+    }
+    rulerUnit_->setCurrentIndex(int(RulerUnit::Inches));
+    auto* typeUnit = new QComboBox(units);
+    typeUnit->addItems({tr("Pixels"), tr("Points"), tr("Millimeters")});
+    typeUnit->setCurrentIndex(1);
+    typeUnit->setEnabled(false);
+    unitsForm->addRow(tr("Rulers:"), rulerUnit_);
+    unitsForm->addRow(tr("Type:"), typeUnit);
+    layout->addWidget(units, 0, 0);
+
+    const auto valueAndUnit = [](QWidget* parent, const QString& value,
+                                 const QStringList& units) {
+        auto* row = new QWidget(parent);
+        auto* rowLayout = new QHBoxLayout(row);
+        rowLayout->setContentsMargins(0, 0, 0, 0);
+        rowLayout->addWidget(new QLabel(value, row));
+        auto* unit = new QComboBox(row);
+        unit->addItems(units);
+        rowLayout->addWidget(unit);
+        return row;
+    };
+    const QStringList columnUnits = {tr("Points"), tr("Inches"), tr("Centimeters"),
+                                     tr("Millimeters"), tr("Picas")};
+    auto* columns = new QGroupBox(tr("Column Size"), page);
+    auto* columnsForm = new QFormLayout(columns);
+    columnsForm->addRow(tr("Width:"), valueAndUnit(columns, QStringLiteral("180"), columnUnits));
+    columnsForm->addRow(tr("Gutter:"), valueAndUnit(columns, QStringLiteral("12"), columnUnits));
+    columns->setEnabled(false);
+    layout->addWidget(columns, 1, 0);
+
+    const QStringList resolutionUnits = {tr("Pixels/Inch"), tr("Pixels/Centimeter")};
+    auto* resolutions = new QGroupBox(tr("New Document Preset Resolutions"), page);
+    auto* resolutionsForm = new QFormLayout(resolutions);
+    resolutionsForm->addRow(tr("Print Resolution:"),
+                            valueAndUnit(resolutions, QStringLiteral("300"), resolutionUnits));
+    resolutionsForm->addRow(tr("Screen Resolution:"),
+                            valueAndUnit(resolutions, QStringLiteral("72"), resolutionUnits));
+    resolutions->setEnabled(false);
+    layout->addWidget(resolutions, 0, 1);
+
+    auto* pointSize = new QGroupBox(tr("Point/Pica Size"), page);
+    auto* pointLayout = new QVBoxLayout(pointSize);
+    postScriptPoints_ = new QRadioButton(tr("PostScript (72 points/inch)"), pointSize);
+    postScriptPoints_->setObjectName(QStringLiteral("preferencesPostScriptPoints"));
+    traditionalPoints_ = new QRadioButton(tr("Traditional (72.27 points/inch)"), pointSize);
+    traditionalPoints_->setObjectName(QStringLiteral("preferencesTraditionalPoints"));
+    postScriptPoints_->setChecked(true);
+    pointLayout->addWidget(postScriptPoints_);
+    pointLayout->addWidget(traditionalPoints_);
+    layout->addWidget(pointSize, 1, 1);
+    layout->setRowStretch(2, 1);
+
+    connect(rulerUnit_, &QComboBox::activated, this,
+            [this](int index) { emit rulerUnitChanged(index); });
+    connect(traditionalPoints_, &QRadioButton::toggled, this,
+            [this](bool on) { emit traditionalPointsChanged(on); });
+    return page;
+}
+
+void PreferencesDialog::setRulerUnit(int unit)
+{
+    const QSignalBlocker block(rulerUnit_);
+    rulerUnit_->setCurrentIndex(unit);
+}
+
+void PreferencesDialog::setTraditionalPoints(bool on)
+{
+    const QSignalBlocker blockTraditional(traditionalPoints_);
+    const QSignalBlocker blockPostScript(postScriptPoints_);
+    (on ? traditionalPoints_ : postScriptPoints_)->setChecked(true);
+}
+
+// Guides, Grid, & Slices: the Guides group is live; Smart Guides, Grid, and
+// Slices show CS6's defaults, disabled until those features exist.
+QWidget* PreferencesDialog::buildGuidesPage()
+{
+    auto* page = new QWidget(this);
+    page->setObjectName(QStringLiteral("preferencesGuidesPage"));
+    auto* layout = new QVBoxLayout(page);
+
+    auto* guides = new QGroupBox(tr("Guides"), page);
+    auto* guidesGrid = new QGridLayout(guides);
+    guideColor_ = colorCombo(QStringLiteral("preferencesGuideColor"), guides);
+    guideStyle_ = new QComboBox(guides);
+    guideStyle_->setObjectName(QStringLiteral("preferencesGuideStyle"));
+    guideStyle_->addItems({tr("Lines"), tr("Dashed Lines")});
+    guideSwatch_ = swatch(QColor(), guides);
+    guidesGrid->addWidget(new QLabel(tr("Color:"), guides), 0, 0, Qt::AlignRight);
+    guidesGrid->addWidget(guideColor_, 0, 1);
+    guidesGrid->addWidget(new QLabel(tr("Style:"), guides), 1, 0, Qt::AlignRight);
+    guidesGrid->addWidget(guideStyle_, 1, 1);
+    guidesGrid->setColumnStretch(2, 1);
+    guidesGrid->addWidget(guideSwatch_, 0, 3, 2, 1);
+    layout->addWidget(guides);
+
+    auto* smart = new QGroupBox(tr("Smart Guides"), page);
+    auto* smartGrid = new QGridLayout(smart);
+    auto* smartColor = colorCombo(QStringLiteral("preferencesSmartGuideColor"), smart);
+    smartColor->setCurrentText(QStringLiteral("Magenta"));
+    smartGrid->addWidget(new QLabel(tr("Color:"), smart), 0, 0, Qt::AlignRight);
+    smartGrid->addWidget(smartColor, 0, 1);
+    smartGrid->setColumnStretch(2, 1);
+    smartGrid->addWidget(swatch(QColor(255, 74, 255), smart), 0, 3);
+    smart->setEnabled(false);
+    layout->addWidget(smart);
+
+    auto* grid = new QGroupBox(tr("Grid"), page);
+    auto* gridGrid = new QGridLayout(grid);
+    auto* gridColor = colorCombo(QStringLiteral("preferencesGridColor"), grid);
+    gridColor->setCurrentIndex(gridColor->count() - 1);
+    auto* gridStyle = new QComboBox(grid);
+    gridStyle->addItems({tr("Lines"), tr("Dashed Lines"), tr("Dots")});
+    auto* every = new QComboBox(grid);
+    every->addItems({tr("Pixels"), tr("Inches"), tr("Centimeters"), tr("Millimeters"),
+                     tr("Points"), tr("Picas"), tr("Percent")});
+    every->setCurrentIndex(1);
+    auto* everyRow = new QHBoxLayout;
+    auto* everyValue = new QLabel(QStringLiteral("1"), grid);
+    everyRow->addWidget(everyValue);
+    everyRow->addWidget(every);
+    gridGrid->addWidget(new QLabel(tr("Color:"), grid), 0, 0, Qt::AlignRight);
+    gridGrid->addWidget(gridColor, 0, 1);
+    gridGrid->addWidget(new QLabel(tr("Style:"), grid), 1, 0, Qt::AlignRight);
+    gridGrid->addWidget(gridStyle, 1, 1);
+    gridGrid->addWidget(new QLabel(tr("Gridline Every:"), grid), 2, 0, Qt::AlignRight);
+    gridGrid->addLayout(everyRow, 2, 1);
+    gridGrid->addWidget(new QLabel(tr("Subdivisions:"), grid), 3, 0, Qt::AlignRight);
+    gridGrid->addWidget(new QLabel(QStringLiteral("4"), grid), 3, 1);
+    gridGrid->setColumnStretch(2, 1);
+    gridGrid->addWidget(swatch(QColor(128, 128, 128), grid), 0, 3, 2, 1);
+    grid->setEnabled(false);
+    layout->addWidget(grid);
+
+    auto* slices = new QGroupBox(tr("Slices"), page);
+    auto* slicesRow = new QHBoxLayout(slices);
+    auto* sliceColor = colorCombo(QStringLiteral("preferencesSliceColor"), slices);
+    auto* sliceNumbers = new QCheckBox(tr("Show Slice Numbers"), slices);
+    sliceNumbers->setChecked(true);
+    slicesRow->addWidget(new QLabel(tr("Line Color:"), slices));
+    slicesRow->addWidget(sliceColor);
+    slicesRow->addWidget(sliceNumbers);
+    slicesRow->addStretch(1);
+    slices->setEnabled(false);
+    layout->addWidget(slices);
+    layout->addStretch(1);
+
+    setGuideAppearance(QColor(74, 255, 255), false);
+    connect(guideColor_, &QComboBox::activated, this, [this](int index) {
+        QColor color = guideColor_->itemData(index).value<QColor>();
+        if (!color.isValid()) {
+            color = QColorDialog::getColor(guideColorValue_, this, tr("Custom Guide Color"));
+            if (!color.isValid()) {
+                showGuideColor(guideColorValue_);
+                return;
+            }
+        }
+        showGuideColor(color);
+        emit guideAppearanceChanged(color, guideStyle_->currentIndex() == 1);
+    });
+    connect(guideStyle_, &QComboBox::activated, this, [this](int index) {
+        emit guideAppearanceChanged(guideColorValue_, index == 1);
+    });
+    return page;
+}
+
+void PreferencesDialog::showGuideColor(const QColor& color)
+{
+    guideColorValue_ = color;
+    int index = guideColor_->count() - 1;
+    for (int i = 0; i < guideColor_->count() - 1; ++i) {
+        if (guideColor_->itemData(i).value<QColor>() == color) {
+            index = i;
+            break;
+        }
+    }
+    const QSignalBlocker block(guideColor_);
+    guideColor_->setCurrentIndex(index);
+    guideSwatch_->setStyleSheet(QStringLiteral("background: %1; border: 1px solid #808080;")
+                                    .arg(color.name()));
+}
+
+void PreferencesDialog::setGuideAppearance(const QColor& color, bool dashed)
+{
+    showGuideColor(color);
+    const QSignalBlocker block(guideStyle_);
+    guideStyle_->setCurrentIndex(dashed ? 1 : 0);
 }
 
 } // namespace pictura

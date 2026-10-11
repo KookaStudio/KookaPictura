@@ -153,6 +153,13 @@ public:
     // When disabled, mouse presses are forwarded as tool events instead of
     // starting a pan. Default true.
     void setPanEnabled(bool enabled);
+    // Start a left-button pan from `widgetPos`, as a pan-enabled press does.
+    void beginPan(const QPointF& widgetPos)
+    {
+        panning_ = true;
+        userAdjusted_ = true;
+        last_ = widgetPos;
+    }
     bool panEnabled() const { return panEnabled_; }
 
     // Transient Space-key pan: while on, a left drag pans and the hand cursors
@@ -317,6 +324,28 @@ public:
     int countOverlayCountForTest() const { return int(countOverlay_.size()); }
     bool hasRulerLineForTest() const { return rulerShown_; }
 
+    // Guides (image_view_guides.cpp): full-length one-pixel lines across the
+    // view at document columns (vertical) or rows (horizontal), drawn in the
+    // guide colour, solid or dashed, plus the guide a ruler drag is placing.
+    struct GuideLine {
+        bool vertical = false;
+        double position = 0.0;
+        bool operator==(const GuideLine& other) const
+        {
+            return vertical == other.vertical && position == other.position;
+        }
+    };
+    void setGuides(const QList<GuideLine>& guides);
+    void setGuidesVisible(bool on);
+    bool guidesVisible() const { return guidesVisible_; }
+    void setGuideAppearance(const QColor& color, bool dashed);
+    QColor guideColor() const { return guideColor_; }
+    bool guidesDashed() const { return guidesDashed_; }
+    void setGuidePreview(const GuideLine& guide);
+    void clearGuidePreview();
+    const QList<GuideLine>& guides() const { return guides_; }
+    bool hasGuidePreviewForTest() const { return guidePreviewActive_; }
+
     // The Work Path overlay (image space) while a Pen-group or path selection
     // tool is active: the curve, its anchors (`activeAnchor`, the one the Pen
     // just placed or Direct Selection picked, solid; every one solid with
@@ -429,6 +458,13 @@ protected:
 private:
     void paintCropGroupOverlays(QPainter& painter);
     void paintAnnotations(QPainter& painter);
+    void paintGuides(QPainter& painter);
+    QList<GuideLine> guides_;
+    bool guidesVisible_ = true;
+    QColor guideColor_{0x4a, 0xff, 0xff};
+    bool guidesDashed_ = false;
+    GuideLine guidePreview_;
+    bool guidePreviewActive_ = false;
     void paintPathOverlay(QPainter& painter);
     void paintTypeOverlay(QPainter& painter);
     void paintFilterPreview(QPainter& painter);

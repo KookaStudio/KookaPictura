@@ -84,6 +84,7 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/session.cpp
     crates/pictura-app/cpp/workspace_store.cpp
     crates/pictura-app/cpp/preferences_dialog.cpp
+    crates/pictura-app/cpp/new_guide_dialog.cpp
     crates/pictura-app/cpp/file_info_dialog.cpp
     crates/pictura-app/cpp/profile_dialog.cpp
     crates/pictura-app/cpp/hdr_conversion_dialog.cpp
@@ -143,11 +144,13 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/image_view.cpp
     crates/pictura-app/cpp/image_view_overlays.cpp
     crates/pictura-app/cpp/image_view_annotations.cpp
+    crates/pictura-app/cpp/image_view_guides.cpp
     crates/pictura-app/cpp/image_view_channels.cpp
     crates/pictura-app/cpp/image_view_document.cpp
     crates/pictura-app/cpp/image_view_paths.cpp
     crates/pictura-app/cpp/image_view_type.cpp
     crates/pictura-app/cpp/canvas_scrollbars.cpp
+    crates/pictura-app/cpp/canvas_ruler.cpp
     crates/pictura-app/cpp/icons.cpp
     crates/pictura-app/cpp/svg_icon_engine.cpp
     crates/pictura-app/cpp/file_drop_router.cpp
@@ -168,6 +171,8 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/frame_menus_image_mode.cpp
     crates/pictura-app/cpp/frame_recent.cpp
     crates/pictura-app/cpp/frame_recovery.cpp
+    crates/pictura-app/cpp/frame_guides.cpp
+    crates/pictura-app/cpp/frame_preferences.cpp
     crates/pictura-app/cpp/frame_test.cpp
     crates/pictura-app/cpp/frame_build.cpp
     crates/pictura-app/cpp/frame_workspaces.cpp
@@ -260,6 +265,7 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/tool_transform.cpp
     crates/pictura-app/cpp/selection_geometry.cpp
     crates/pictura-app/cpp/tools_marquee.cpp
+    crates/pictura-app/cpp/tools_guides.cpp
     crates/pictura-app/cpp/tools_selection_move.cpp
     crates/pictura-app/cpp/toolbox.cpp
     crates/pictura-app/cpp/options_bar.cpp
@@ -286,6 +292,7 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/session.h
     crates/pictura-app/cpp/workspace_store.h
     crates/pictura-app/cpp/preferences_dialog.h
+    crates/pictura-app/cpp/new_guide_dialog.h
     crates/pictura-app/cpp/file_info_dialog.h
     crates/pictura-app/cpp/profile_dialog.h
     crates/pictura-app/cpp/hdr_conversion_dialog.h
@@ -320,6 +327,7 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/pictura_debug_timing.h
     crates/pictura-app/cpp/canvas_range.h
     crates/pictura-app/cpp/canvas_scrollbars.h
+    crates/pictura-app/cpp/canvas_ruler.h
     crates/pictura-app/cpp/icons.h
     crates/pictura-app/cpp/layer_adjustments.h
     crates/pictura-app/cpp/svg_icon_engine.h
