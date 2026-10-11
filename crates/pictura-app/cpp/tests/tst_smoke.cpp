@@ -30,6 +30,8 @@ private slots:
     void themeFoundation();
     void statusBarChromeAndZoom();
     void workspaceScrollbarColours();
+    void statusZoomKeysAndSuffix();
+    void numericFieldStepsAndSuffix();
     void numericFieldAlignment();
     void sessionWindowGeometryRoundTrips();
 
@@ -260,6 +262,101 @@ void SmokeTest::workspaceScrollbarColours()
                                 .arg(hovered.name(QColor::HexRgb), thumb.name(QColor::HexRgb))));
         QTest::mouseMove(canvas, canvas->rect().center());
     }
+}
+
+// The footer zoom field steps with Up/Down, hugs its "%" to the value, and
+// shows the widest zoom without scrolling its start out of view (#318).
+void SmokeTest::statusZoomKeysAndSuffix()
+{
+    window_->resize(1100, 700);
+    window_->show();
+    QVERIFY(window_->newDocument(QStringLiteral("ZoomKeys"), 64, 48, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::ImageView* canvas = window_->imageView();
+    auto* zoom = window_->findChild<pictura::NumericField*>(QStringLiteral("statusZoomField"));
+    QVERIFY(canvas && zoom);
+    auto* edit = zoom->findChild<QLineEdit*>(QStringLiteral("statusZoomEdit"));
+    auto* suffix = zoom->findChild<QLabel*>(QStringLiteral("statusZoomSuffix"));
+    QVERIFY(edit && suffix);
+    const QPointF centre(canvas->width() / 2.0, canvas->height() / 2.0);
+    canvas->setZoom(0.25, centre);
+    QCoreApplication::processEvents();
+    QCOMPARE(edit->text(), QStringLiteral("25"));
+
+    QTest::keyClick(edit, Qt::Key_Up);
+    QCOMPARE(qRound(canvas->zoom() * 100.0), 26);
+    QTest::keyClick(edit, Qt::Key_Down);
+    QTest::keyClick(edit, Qt::Key_Down);
+    QCOMPARE(qRound(canvas->zoom() * 100.0), 24);
+    QTest::keyClick(edit, Qt::Key_Up, Qt::ShiftModifier);
+    QCOMPARE(qRound(canvas->zoom() * 100.0), 34);
+    QCOMPARE(edit->text(), QStringLiteral("34"));
+
+    // The cursor at the end of the text marks where the value ends.
+    const auto textEnd = [edit]() {
+        edit->end(false);
+        return edit->inputMethodQuery(Qt::ImCursorRectangle).toRect().center().x();
+    };
+    QVERIFY2(qAbs(suffix->x() - textEnd()) <= 2,
+             qPrintable(QStringLiteral("suffix at %1, value ends at %2")
+                            .arg(suffix->x())
+                            .arg(textEnd())));
+
+    canvas->setZoom(32.0, centre);
+    QCoreApplication::processEvents();
+    QCOMPARE(edit->text(), QStringLiteral("3200"));
+    const int start = textEnd() - edit->fontMetrics().horizontalAdvance(edit->text());
+    QVERIFY2(start >= 2, qPrintable(QStringLiteral("value starts at %1").arg(start)));
+    QVERIFY2(suffix->geometry().right() < edit->width(), "the suffix stays inside the box");
+}
+
+// Up/Down modifiers, the range clamp, a multi-character suffix, and hiding
+// the suffix on a standalone field (#318).
+void SmokeTest::numericFieldStepsAndSuffix()
+{
+    pictura::NumericFieldConfig config;
+    config.minimum = 0.0;
+    config.maximum = 10.0;
+    config.decimals = 1;
+    config.suffix = QStringLiteral(" px");
+    config.namePrefix = QStringLiteral("stepTest");
+    pictura::NumericField field(QStringLiteral("W"), config);
+    field.setValue(5.0);
+    field.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&field));
+    auto* edit = field.findChild<QLineEdit*>(QStringLiteral("stepTestEdit"));
+    auto* suffix = field.findChild<QLabel*>(QStringLiteral("stepTestSuffix"));
+    QVERIFY(edit && suffix);
+    QSignalSpy committed(&field, &pictura::NumericField::valueCommitted);
+
+    QTest::keyClick(edit, Qt::Key_Up);
+    QCOMPARE(field.value(), 6.0);
+    QTest::keyClick(edit, Qt::Key_Down, Qt::ControlModifier);
+    QCOMPARE(field.value(), 5.9);
+    QTest::keyClick(edit, Qt::Key_Up, Qt::ShiftModifier);
+    QCOMPARE(field.value(), 10.0);
+    QCOMPARE(committed.count(), 3);
+    // At the maximum, Up is a no-op and commits nothing.
+    QTest::keyClick(edit, Qt::Key_Up);
+    QCOMPARE(field.value(), 10.0);
+    QCOMPARE(committed.count(), 3);
+
+    // " px" follows the value, leading space included.
+    edit->end(false);
+    const int textEnd = edit->inputMethodQuery(Qt::ImCursorRectangle).toRect().center().x();
+    QVERIFY2(qAbs(suffix->x() - textEnd) <= 2,
+             qPrintable(QStringLiteral("suffix at %1, value ends at %2")
+                            .arg(suffix->x())
+                            .arg(textEnd)));
+    QCOMPARE(edit->textMargins().right(), suffix->width());
+
+    // Hiding the suffix gives its space back.
+    const int withSuffix = edit->width();
+    field.setSuffixVisible(false);
+    QCOMPARE(edit->textMargins().right(), 0);
+    QCOMPARE(edit->width(), withSuffix - edit->fontMetrics().horizontalAdvance(config.suffix));
+    field.setSuffixVisible(true);
+    QCOMPARE(edit->width(), withSuffix);
 }
 
 void SmokeTest::numericFieldAlignment()

@@ -647,7 +647,9 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
             for (const QUrl& url : pictura::fileDialogPlaces()) {
                 placePaths.append(url.toLocalFile());
             }
-            const bool placesOk = placePaths.contains(QStringLiteral("/"))
+            // QDir::rootPath() is "/" on Unix and the drive root ("C:/") on
+            // Windows, matching the volume root the sidebar adds there.
+            const bool placesOk = placePaths.contains(QDir::rootPath())
                 && placePaths.contains(QDir::homePath());
 
             // The hybrid dialog switch: default follows the sandbox, and the
@@ -757,8 +759,7 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
                 dialogDirectoryFromStored(tmp + QStringLiteral("-nope")).isEmpty();
             const bool emptyOk = dialogDirectoryFromStored(QString()).isEmpty();
             // The document tier: a document's folder, empty when there is none.
-            const bool documentOk = documentDirectory(QStringLiteral("/a/b/c.psd"))
-                    == QStringLiteral("/a/b")
+            const bool documentOk = documentDirectory(tmp + QStringLiteral("/c.psd")) == tmp
                 && documentDirectory(QString()).isEmpty();
 
             QSettings settings(QSettings::UserScope, QStringLiteral("QtProject"));

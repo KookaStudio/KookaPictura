@@ -241,6 +241,24 @@ pub(super) fn luma_u8(color: Rgba) -> u8 {
         .round()
         .clamp(0.0, 255.0) as u8
 }
+/// `cfg` for a stroke on a mask: the foreground and background paint their
+/// luma, so black hides and white reveals.
+pub(super) fn mask_stroke_config(cfg: pictura_paint::StrokeConfig) -> pictura_paint::StrokeConfig {
+    let gray = |color: Rgba| {
+        let v = luma_u8(color);
+        Rgba {
+            r: v,
+            g: v,
+            b: v,
+            a: color.a,
+        }
+    };
+    pictura_paint::StrokeConfig {
+        color: gray(cfg.color),
+        background: gray(cfg.background),
+        ..cfg
+    }
+}
 /// Index of the topmost pixel layer: the last layer (bottom-first order) that is
 /// neither a group nor an adjustment.
 pub(super) fn topmost_pixel_layer_index(doc: &Document) -> Option<usize> {

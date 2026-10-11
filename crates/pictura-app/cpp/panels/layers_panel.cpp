@@ -248,12 +248,13 @@ LayersPanel::LayersPanel(QWidget* parent)
     layout->addWidget(tree_, 1);
 
     auto* buttons = new QHBoxLayout();
+    buttons->setSpacing(0);
     const auto stripIconButton = [body, buttons](const QString& objectName,
                                                  const QString& assetId) {
         auto* button = new QToolButton(body);
         button->setObjectName(objectName);
         button->setIcon(pictura::icon(assetId));
-        button->setIconSize(QSize(20, 20));
+        button->setIconSize(QSize(16, 16));
         button->setAutoRaise(true);
         buttons->addWidget(button);
         return button;
@@ -793,6 +794,7 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                 if (!layerThumb.isEmpty() && layerThumb.contains(pos)
                     && !(mouse->modifiers() & Qt::ControlModifier)) {
                     mask_edit_target_set(*view_, QString());
+                    syncEditTarget();
                 }
                 const QRect maskThumb = delegate_->maskThumbRect(vr, index);
                 if (!maskThumb.isEmpty() && maskThumb.contains(pos)) {
@@ -1046,6 +1048,7 @@ void LayersPanel::syncControls()
         fill_->setEnabled(fillAny);
     }
     syncing_ = false;
+    syncEditTarget();
     emit selectionChanged();
 }
 

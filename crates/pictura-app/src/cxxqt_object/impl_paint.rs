@@ -375,17 +375,10 @@ impl qobject::PictureView {
         // white reveals. The stroke runs on a mask-sized grayscale document.
         let mask_target = active_mask_target(self.rust());
         if let Some(path) = mask_target {
-            let gray = luma_u8(cfg.color);
-            let mask_cfg = StrokeConfig {
-                color: pictura_paint::Rgba {
-                    r: gray,
-                    g: gray,
-                    b: gray,
-                    a: cfg.color.a,
-                },
-                ..cfg
-            };
-            return self.as_mut().begin_mask_paint(&path, mask_cfg);
+            let label = if aliased { "Pencil" } else { "Brush" };
+            return self
+                .as_mut()
+                .begin_mask_paint(&path, mask_stroke_config(cfg), label);
         }
         let begun = {
             let rust = self.rust();
@@ -491,9 +484,17 @@ impl qobject::PictureView {
     /// exposed as a mask-sized grayscale document and an ordinary [`Stroke`]
     /// runs on it, so the mask gains the exact brush behaviour. False without a
     /// mask, on a zero-sized mask rectangle, or when the stroke is refused.
-    fn begin_mask_paint(mut self: Pin<&mut Self>, path: &str, cfg: StrokeConfig) -> bool {
+    pub(super) fn begin_mask_paint(
+        mut self: Pin<&mut Self>,
+        path: &str,
+        cfg: StrokeConfig,
+        label: &str,
+    ) -> bool {
         let built = {
             let rust = self.rust();
+            if rust.stroke.is_some() || rust.mask_stroke.is_some() {
+                return false;
+            }
             let Some(doc) = rust.doc.as_ref() else {
                 return false;
             };
@@ -514,7 +515,7 @@ impl qobject::PictureView {
         };
         let mut rust = self.as_mut().rust_mut();
         rust.mask_stroke = Some(mask_stroke);
-        rust.stroke_label = if cfg.aliased { "Pencil" } else { "Brush" }.to_string();
+        rust.stroke_label = label.to_string();
         rust.clear_pending_present();
         let dims = rust.doc.as_ref().map(|doc| (doc.width, doc.height));
         if let Some((width, height)) = dims {

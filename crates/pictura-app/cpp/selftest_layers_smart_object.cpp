@@ -942,6 +942,10 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
     const bool readA = fileA.open(QIODevice::ReadOnly);
     const bool readB = fileB.open(QIODevice::ReadOnly);
     const bool identical = readA && readB && fileA.readAll() == fileB.readAll();
+    // Close the handles: Windows refuses to overwrite a file that still has an
+    // open read handle, so the later re-saves to saveA/saveB would fail.
+    fileA.close();
+    fileB.close();
     const bool historyKept = view->history_count() == cancelBase;
 
     // An identity commit records nothing and leaves the document unchanged.
@@ -1084,6 +1088,8 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
     QFile escFileB(saveB);
     const bool escRead = escFileA.open(QIODevice::ReadOnly) && escFileB.open(QIODevice::ReadOnly);
     const bool escIdentical = escRead && escFileA.readAll() == escFileB.readAll();
+    escFileA.close();
+    escFileB.close();
 
     // A second begin on the same path switches modes (not a no-op): a Distort
     // session followed by a Skew begin accepts an edge drag.
