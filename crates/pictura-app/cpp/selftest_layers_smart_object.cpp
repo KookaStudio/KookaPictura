@@ -1117,7 +1117,8 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
     ST_PASS("lpr_free_transform entered=%d select=%d begin=%d preview=%d hit=%d moved=%d "
             "commit=%d states=%d rect=%s->%s keys=%d rotate=%d cancel=%d identical=%d "
             "history=%d identity=%d group=%d adj=%d bg=%d distort=%d persp=%d skew=%d esc=%d "
-            "switch=%d",
+            "switch=%d escBegin=%d escHit=%d escMoved=%d escCancelled=%d escSavedA=%d "
+            "escSavedB=%d escIdentical=%d escBase=%d escNow=%d",
             entered ? 1 : 0, placedSelected ? 1 : 0,
             (samePathNoop && otherPathSwitched && restoredPath) ? 1 : 0,
             previewMatchesCommitRect ? 1 : 0, hit, moved ? 1 : 0, committed ? 1 : 0,
@@ -1125,7 +1126,9 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
             (keyCommitted && keyCancelled) ? 1 : 0, rotated ? 1 : 0, cancelled ? 1 : 0,
             identical ? 1 : 0, historyKept ? 1 : 0, identityNoState ? 1 : 0, groupCan ? 1 : 0,
             adjCan ? 1 : 0, bgCan ? 1 : 0, distortOk ? 1 : 0, perspOk ? 1 : 0, skewOk ? 1 : 0,
-            escOk ? 1 : 0, switchOk ? 1 : 0);
+            escOk ? 1 : 0, switchOk ? 1 : 0, escBegin ? 1 : 0, escHit ? 1 : 0, escMoved ? 1 : 0,
+            escCancelled ? 1 : 0, escSavedA ? 1 : 0, escSavedB ? 1 : 0, escIdentical ? 1 : 0,
+            escBase, view->history_count());
     if (!ok) {
         return pictura::selfTest().fail(292, "free transform");
     }
