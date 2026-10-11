@@ -145,7 +145,8 @@ void NumericField::reserveWidth()
     const QFontMetrics metrics = edit_->fontMetrics();
     const int valueWidth = std::max(metrics.horizontalAdvance(formatValue(config_.maximum)),
                                     metrics.horizontalAdvance(formatValue(config_.minimum)));
-    const int suffixWidth = suffix_ ? metrics.horizontalAdvance(config_.suffix) : 0;
+    const int suffixWidth =
+        suffix_ && !suffix_->isHidden() ? metrics.horizontalAdvance(config_.suffix) : 0;
     const int frame = edit_->width() - lineEditContents(edit_).width();
     // One extra pixel each for the text cursor and rounding.
     edit_->setFixedWidth(frame + 2 * kTextInset + valueWidth + suffixWidth + 2);
@@ -195,7 +196,7 @@ void NumericField::setSuffixVisible(bool visible)
         return;
     }
     suffix_->setVisible(visible);
-    layoutSuffix();
+    reserveWidth();
 }
 
 void NumericField::syncSlider()
@@ -263,7 +264,8 @@ void NumericField::layoutSuffix()
     suffix_->adjustSize();
     // The suffix hugs the value ("25%"); the right margin keeps typed text
     // from running under it.
-    const int suffixWidth = suffix_->isVisible() ? suffix_->width() : 0;
+    // `isHidden`, not `isVisible`: the field may not be shown yet.
+    const int suffixWidth = suffix_->isHidden() ? 0 : suffix_->width();
     edit_->setTextMargins(0, 0, suffixWidth, 0);
     const QRect contents = lineEditContents(edit_);
     const int textEnd =
