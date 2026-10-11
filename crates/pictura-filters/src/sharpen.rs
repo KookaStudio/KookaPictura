@@ -6,6 +6,7 @@ use pictura_core::PixelBuffer;
 
 use crate::kernel::{gaussian_blur_planes, sigma_from_radius};
 use crate::{validate, FilterError};
+use rayon::prelude::*;
 
 /// Sharpen's and Sharpen More's Unsharp Mask: 50 % and 100 % at σ 1 (radius 3
 /// under the 3σ convention), photorust's model (#222). A 3×3 high-pass kernel
@@ -52,17 +53,20 @@ pub fn unsharp_mask(
 
     let gain = amount / 100.0;
     let thr = threshold as f64;
-    for c in 0..planes {
-        let base = c * n;
-        for i in 0..n {
-            let o = orig[base + i] as f64;
-            let diff = o - blurred.data[base + i] as f64;
-            if diff.abs() > thr {
-                let out = o + diff * gain;
-                buf.data[base + i] = out.round().clamp(0.0, 255.0) as u8;
+    let w = (buf.width as usize).max(1);
+    buf.data[..planes * n]
+        .par_chunks_mut(w)
+        .zip(orig[..planes * n].par_chunks(w))
+        .zip(blurred.data[..planes * n].par_chunks(w))
+        .for_each(|((out, orig), blurred)| {
+            for ((out, &o), &b) in out.iter_mut().zip(orig).zip(blurred) {
+                let o = o as f64;
+                let diff = o - b as f64;
+                if diff.abs() > thr {
+                    *out = (o + diff * gain).round().clamp(0.0, 255.0) as u8;
+                }
             }
-        }
-    }
+        });
     Ok(())
 }
 

@@ -1,0 +1,123 @@
+//! Byte-exact digests of the row-parallel kernels (#152), taken from their
+//! serial versions: parallelizing a kernel must not move a single sample.
+
+use pictura_core::PixelBuffer;
+use pictura_filters::{apply, Filter, Quality, RadialMethod};
+
+/// A deterministic 4-channel picture with noise, gradients and hard edges, in
+/// odd sizes so rows and column strips never divide evenly.
+fn picture() -> PixelBuffer {
+    let (w, h) = (97u32, 61u32);
+    let mut b = PixelBuffer::new(w, h, 4);
+    let mut state = 0x2545_f491_4f6c_dd1du64;
+    for (i, v) in b.data.as_mut_slice().iter_mut().enumerate() {
+        state = state
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        let x = i % w as usize;
+        let edge = if (x / 9).is_multiple_of(2) { 0 } else { 120 };
+        *v = ((state >> 59) as usize + x * 2 + edge) as u8;
+    }
+    b
+}
+
+/// FNV-1a over every byte.
+fn digest(buf: &PixelBuffer) -> u64 {
+    buf.data.iter().fold(0xcbf2_9ce4_8422_2325u64, |h, &b| {
+        (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
+    })
+}
+
+fn kernels() -> Vec<(&'static str, Filter)> {
+    vec![
+        ("gaussian 1.5", Filter::GaussianBlur { radius: 1.5 }),
+        ("gaussian 9", Filter::GaussianBlur { radius: 9.0 }),
+        (
+            "unsharp",
+            Filter::UnsharpMask {
+                amount: 180.0,
+                radius: 2.5,
+                threshold: 3,
+            },
+        ),
+        ("median 1", Filter::Median { radius: 1 }),
+        ("median 4", Filter::Median { radius: 4 }),
+        (
+            "motion 30",
+            Filter::MotionBlur {
+                angle: 30.0,
+                distance: 9,
+            },
+        ),
+        (
+            "motion -75",
+            Filter::MotionBlur {
+                angle: -75.0,
+                distance: 40,
+            },
+        ),
+        ("box 2", Filter::BoxBlur { radius: 2 }),
+        ("box 70", Filter::BoxBlur { radius: 70 }),
+        ("maximum 2", Filter::Maximum { radius: 2 }),
+        ("minimum 5", Filter::Minimum { radius: 5 }),
+        (
+            "custom",
+            Filter::Custom {
+                kernel: [
+                    [0.0, -1.0, 0.0, 1.0, 0.0],
+                    [-1.0, 2.0, -3.0, 2.0, -1.0],
+                    [0.0, -3.0, 13.0, -3.0, 0.0],
+                    [-1.0, 2.0, -3.0, 2.0, -1.0],
+                    [0.0, 1.0, 0.0, -1.0, 0.5],
+                ],
+                scale: 3.0,
+                offset: 7.0,
+            },
+        ),
+        ("high pass", Filter::HighPass { radius: 3.5 }),
+        (
+            "radial spin",
+            Filter::RadialBlur {
+                method: RadialMethod::Spin,
+                amount: 30.0,
+                quality: Quality::Good,
+            },
+        ),
+        (
+            "radial zoom",
+            Filter::RadialBlur {
+                method: RadialMethod::Zoom,
+                amount: 60.0,
+                quality: Quality::Best,
+            },
+        ),
+    ]
+}
+
+#[test]
+fn row_parallel_kernels_keep_their_serial_bytes() {
+    let expected = [
+        ("gaussian 1.5", 0xf9a2_5193_6f8e_4515),
+        ("gaussian 9", 0x8304_14ab_58dd_a5b3),
+        ("unsharp", 0xd4f3_37f4_4ddf_f92b),
+        ("median 1", 0xa87a_dfef_57b5_d176),
+        ("median 4", 0x929b_65f3_1035_8689),
+        ("motion 30", 0x00f7_ea4d_9a5b_f70f),
+        ("motion -75", 0x9733_d43e_7acb_7c69),
+        ("box 2", 0x2cd8_72fc_0780_110c),
+        ("box 70", 0xc346_208f_7155_235d),
+        ("maximum 2", 0x0b19_a93a_49cb_5598),
+        ("minimum 5", 0x0dda_b0a3_defc_fe66),
+        ("custom", 0x4a5a_022c_4c8f_6bfa),
+        ("high pass", 0x366c_a481_61d8_b4dd),
+        ("radial spin", 0x3c14_296d_3343_fe21),
+        ("radial zoom", 0x2327_b5e8_6773_fd83),
+    ];
+    let source = picture();
+    for ((name, filter), (want_name, want)) in kernels().into_iter().zip(expected) {
+        assert_eq!(name, want_name);
+        let mut buf = source.clone();
+        apply(&filter, &mut buf).unwrap();
+        assert_eq!(digest(&buf), want, "{name} changed its output");
+    }
+}

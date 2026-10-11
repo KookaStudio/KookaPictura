@@ -10,6 +10,7 @@ use pictura_core::PixelBuffer;
 
 use crate::kernel::{clamp_index, gaussian_blur_planes, sigma_from_radius};
 use crate::{validate, FilterError};
+use rayon::prelude::*;
 
 /// Scriptable radius ceiling for Maximum/Minimum per `FILT-070`; larger
 /// requests clamp rather than error.
@@ -75,13 +76,13 @@ pub fn high_pass(buf: &mut PixelBuffer, radius: f64) -> Result<(), FilterError> 
     let orig = buf.data.clone();
     let mut blurred = buf.clone();
     gaussian_blur_planes(&mut blurred, sigma_from_radius(radius));
-    for c in 0..planes {
-        let base = c * n;
-        for i in 0..n {
-            let out = orig[base + i] as f64 - blurred.data[base + i] as f64 + 128.0;
-            buf.data[base + i] = out.round().clamp(0.0, 255.0) as u8;
-        }
-    }
+    buf.data[..planes * n]
+        .par_iter_mut()
+        .zip(orig[..planes * n].par_iter())
+        .zip(blurred.data[..planes * n].par_iter())
+        .for_each(|((out, &o), &b)| {
+            *out = (o as f64 - b as f64 + 128.0).round().clamp(0.0, 255.0) as u8;
+        });
     Ok(())
 }
 
@@ -116,19 +117,22 @@ pub fn custom(
     for c in 0..planes {
         let base = c * n;
         let src = buf.data[base..base + n].to_vec();
-        for y in 0..h {
-            for x in 0..w {
-                let mut acc = 0f64;
-                for (ky, row) in kernel.iter().enumerate() {
-                    let sy = clamp_index(y as isize + ky as isize - 2, h);
-                    for (kx, &kv) in row.iter().enumerate() {
-                        let sx = clamp_index(x as isize + kx as isize - 2, w);
-                        acc += kv * src[sy * w + sx] as f64;
+        buf.data[base..base + n]
+            .par_chunks_mut(w)
+            .enumerate()
+            .for_each(|(y, out)| {
+                for (x, out) in out.iter_mut().enumerate() {
+                    let mut acc = 0f64;
+                    for (ky, row) in kernel.iter().enumerate() {
+                        let sy = clamp_index(y as isize + ky as isize - 2, h);
+                        for (kx, &kv) in row.iter().enumerate() {
+                            let sx = clamp_index(x as isize + kx as isize - 2, w);
+                            acc += kv * src[sy * w + sx] as f64;
+                        }
                     }
+                    *out = (acc / scale + offset).round().clamp(0.0, 255.0) as u8;
                 }
-                buf.data[base + y * w + x] = (acc / scale + offset).round().clamp(0.0, 255.0) as u8;
-            }
-        }
+            });
     }
     Ok(())
 }
@@ -150,29 +154,40 @@ fn morphology(buf: &mut PixelBuffer, radius: u32, dilate: bool) -> Result<(), Fi
     let mut horizontal = vec![0u8; n];
     for c in 0..planes {
         let base = c * n;
-        let src = buf.data[base..base + n].to_vec();
-        for y in 0..h {
-            for x in 0..w {
-                let mut best = if dilate { u8::MIN } else { u8::MAX };
-                for dx in 0..=2 * r {
-                    let sx = clamp_index(x as isize + dx as isize - r as isize, w);
-                    let v = src[y * w + sx];
-                    best = if dilate { best.max(v) } else { best.min(v) };
+        let src = &buf.data[base..base + n];
+        horizontal
+            .par_chunks_mut(w)
+            .enumerate()
+            .for_each(|(y, out)| {
+                let line = &src[y * w..y * w + w];
+                for (x, out) in out.iter_mut().enumerate() {
+                    let mut best = if dilate { u8::MIN } else { u8::MAX };
+                    for dx in 0..=2 * r {
+                        let v = line[clamp_index(x as isize + dx as isize - r as isize, w)];
+                        best = if dilate { best.max(v) } else { best.min(v) };
+                    }
+                    *out = best;
                 }
-                horizontal[y * w + x] = best;
-            }
-        }
-        for y in 0..h {
-            for x in 0..w {
-                let mut best = if dilate { u8::MIN } else { u8::MAX };
+            });
+        // Max and min are order-free, so the column pass folds whole rows.
+        let horizontal = &horizontal;
+        buf.data[base..base + n]
+            .par_chunks_mut(w)
+            .enumerate()
+            .for_each(|(y, out)| {
+                out.fill(if dilate { u8::MIN } else { u8::MAX });
                 for dy in 0..=2 * r {
                     let sy = clamp_index(y as isize + dy as isize - r as isize, h);
-                    let v = horizontal[sy * w + x];
-                    best = if dilate { best.max(v) } else { best.min(v) };
+                    let line = &horizontal[sy * w..sy * w + w];
+                    for (best, &v) in out.iter_mut().zip(line) {
+                        *best = if dilate {
+                            (*best).max(v)
+                        } else {
+                            (*best).min(v)
+                        };
+                    }
                 }
-                buf.data[base + y * w + x] = best;
-            }
-        }
+            });
     }
     Ok(())
 }
