@@ -1,6 +1,5 @@
 #include "image_view.h"
 
-#include "canvas_range.h"
 #include "icons.h"
 #include "pictura_debug_timing.h"
 
@@ -24,8 +23,6 @@
 namespace pictura {
 
 namespace {
-constexpr double kMinZoom = 0.01;
-constexpr double kMaxZoom = 32.0;
 
 // The modifier flag for a modifier key, or 0 for any other key.
 int modifierFlag(int key)
@@ -85,134 +82,6 @@ ImageView::ImageView(QWidget* parent)
         antsPhase_ = (antsPhase_ + 1) % 8;
         update();
     });
-}
-
-void ImageView::setImage(const QImage& image)
-{
-    image_ = image;
-    docSize_ = image.size();
-    ++frameKey_;
-    presentCache_.valid = false;
-    userAdjusted_ = false;
-    if (docSize_.isEmpty()) {
-        zoom_ = 1.0;
-        offset_ = QPointF();
-        update();
-        emit viewChanged();
-        return;
-    }
-    applyInitialView();
-}
-
-void ImageView::applyInitialView()
-{
-    if (docSize_.isEmpty()) {
-        return;
-    }
-    if (docSize_.width() > width() || docSize_.height() > height()) {
-        const double fit = std::min(double(width()) / docSize_.width(),
-                                    double(height()) / docSize_.height())
-                           * 0.95;
-        zoom_ = std::clamp(fit, kMinZoom, kMaxZoom);
-    } else {
-        zoom_ = 1.0;
-    }
-    centreImage();
-    clampOffset();
-    emit zoomChanged(zoom_);
-    emit viewChanged();
-    update();
-    userAdjusted_ = true;
-}
-
-void ImageView::centreImage()
-{
-    offset_ = QPointF((width() - docSize_.width() * zoom_) / 2.0,
-                      (height() - docSize_.height() * zoom_) / 2.0);
-    clampOffset();
-}
-
-void ImageView::clampOffset()
-{
-    if (docSize_.isEmpty()) {
-        offset_ = QPointF();
-        return;
-    }
-    const OffsetRange range = offsetRangeFor(
-        QSizeF(docSize_.width(), docSize_.height()), zoom_, QSizeF(width(), height()));
-    offset_.setX(std::clamp(offset_.x(), range.minX, range.maxX));
-    offset_.setY(std::clamp(offset_.y(), range.minY, range.maxY));
-}
-
-void ImageView::zoomAt(const QPointF& cursor, int angleDelta)
-{
-    const double factor = std::pow(1.0015, angleDelta);
-    // Zoom-in keeps the point under the cursor fixed; zoom-out steps at the
-    // canvas centre so the image does not drift toward (and off) the pointer.
-    const QPointF anchor = angleDelta < 0 ? QPointF(width() / 2.0, height() / 2.0) : cursor;
-    setZoom(zoom_ * factor, anchor);
-}
-
-void ImageView::panBy(const QPointF& delta)
-{
-    userAdjusted_ = true;
-    offset_ += delta;
-    clampOffset();
-    update();
-    emit viewChanged();
-}
-
-void ImageView::setOffset(const QPointF& offset)
-{
-    userAdjusted_ = true;
-    offset_ = offset;
-    clampOffset();
-    update();
-    emit viewChanged();
-}
-
-void ImageView::zoomIn()
-{
-    setZoom(zoom_ * 1.2, QPointF(width() / 2.0, height() / 2.0));
-}
-
-void ImageView::zoomOut()
-{
-    setZoom(zoom_ / 1.2, QPointF(width() / 2.0, height() / 2.0));
-}
-
-void ImageView::fitOnScreen()
-{
-    userAdjusted_ = false;
-    if (docSize_.isEmpty()) {
-        return;
-    }
-    const double fit = std::min(double(width()) / docSize_.width(),
-                                double(height()) / docSize_.height())
-                       * 0.95;
-    zoom_ = std::clamp(fit, kMinZoom, kMaxZoom);
-    offset_ = QPointF((width() - docSize_.width() * zoom_) / 2.0,
-                      (height() - docSize_.height() * zoom_) / 2.0);
-    clampOffset();
-    emit zoomChanged(zoom_);
-    emit viewChanged();
-    update();
-}
-
-void ImageView::actualPixels()
-{
-    // 100% is an explicit user choice: keep it when the workspace scrollbars
-    // appear and resize the canvas instead of refitting on the next resize.
-    userAdjusted_ = true;
-    zoom_ = 1.0;
-    offset_ = docSize_.isEmpty()
-                  ? QPointF()
-                  : QPointF((width() - docSize_.width()) / 2.0,
-                            (height() - docSize_.height()) / 2.0);
-    clampOffset();
-    emit zoomChanged(zoom_);
-    emit viewChanged();
-    update();
 }
 
 void ImageView::setCanvasColor(const QColor& color)
@@ -1029,6 +898,7 @@ void ImageView::mousePressEvent(QMouseEvent* event)
     if (event->button() == Qt::MiddleButton) {
         panning_ = true;
         userAdjusted_ = true;
+        pendingSettle_ = false;
         last_ = event->position();
         setCursor(Qt::ClosedHandCursor);
         update();
@@ -1096,10 +966,14 @@ void ImageView::mouseReleaseEvent(QMouseEvent* event)
 
 void ImageView::resizeEvent(QResizeEvent* event)
 {
-    // A load/fit leaves userAdjusted_ false until the first resize settles the
-    // canvas; any pan/zoom sets it true so a later tool-switch resize keeps the
-    // view instead of snapping the zoom.
-    if (!userAdjusted_ && !docSize_.isEmpty()) {
+    // A fresh document set before layout runs its automatic fit against a
+    // stale viewport, so while the settle is pending every resize re-fits;
+    // the show pass ends it. A load/fit also leaves userAdjusted_ false until
+    // the first resize; any pan/zoom sets it true so a later tool-switch
+    // resize keeps the view instead of snapping the zoom.
+    if (pendingSettle_ && !docSize_.isEmpty()) {
+        applyInitialView();
+    } else if (!userAdjusted_ && !docSize_.isEmpty()) {
         applyInitialView();
     } else {
         offset_ += QRectF(QPointF(), QSizeF(event->size() - laidOutSize_)).center();
@@ -1120,6 +994,19 @@ void ImageView::showEvent(QShowEvent* event)
 {
     QWidget::showEvent(event);
     updateAntsTimer();
+    // Qt assigns a never-shown widget its laid-out geometry silently, with no
+    // resize event, so a fit computed before the show is stale (the canvas sat
+    // at its grid minimum). The geometry is real by now: re-fit, then settle
+    // once the show pass finished so a multi-pass layout still lands correctly.
+    if (pendingSettle_ && !docSize_.isEmpty()) {
+        applyInitialView();
+        QMetaObject::invokeMethod(this, [this]() {
+            if (pendingSettle_ && !docSize_.isEmpty()) {
+                applyInitialView();
+                pendingSettle_ = false;
+            }
+        }, Qt::QueuedConnection);
+    }
 }
 
 void ImageView::keyPressEvent(QKeyEvent* event)
@@ -1154,19 +1041,6 @@ void ImageView::hideEvent(QHideEvent* event)
 {
     QWidget::hideEvent(event);
     updateAntsTimer();
-}
-
-void ImageView::setZoom(double zoom, const QPointF& anchor)
-{
-    userAdjusted_ = true;
-    const double target = std::clamp(zoom, kMinZoom, kMaxZoom);
-    const double factor = (zoom_ > 0.0) ? target / zoom_ : 1.0;
-    offset_ = anchor - (anchor - offset_) * factor;
-    zoom_ = target;
-    clampOffset();
-    emit zoomChanged(zoom_);
-    emit viewChanged();
-    update();
 }
 
 void ImageView::setBrushOutline(double diameter, const QPointF& imagePos)

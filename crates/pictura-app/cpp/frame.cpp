@@ -1119,8 +1119,9 @@ void PicturaMainWindow::updateStatus()
     if (zoomField_) {
         zoomField_->setVisible(hasDoc);
         if (canvas) {
-            // Raw percent so the field formats exactly like the Navigator readout.
-            zoomField_->setValue(canvas->zoom() * 100.0);
+            // Integer percent like the tab title: the readouts agree and the
+            // value always fits the width the box reserves for its range.
+            zoomField_->setValue(qRound(canvas->zoom() * 100.0));
         }
     }
     if (sizeLabel_) {

@@ -163,6 +163,17 @@ void SmokeTest::statusBarChromeAndZoom()
     QCOMPARE(edit->text() + suffix->text(), expected);
     QVERIFY2(expected.endsWith(QStringLiteral("%")), "percent format");
 
+    // A fractional zoom renders rounded, so it fits the value box and agrees
+    // with the tab title instead of clipping a raw "52.3438".
+    canvas->setZoom(0.5234, QPointF(canvas->width() / 2.0, canvas->height() / 2.0));
+    QCoreApplication::processEvents();
+    QCOMPARE(edit->text() + suffix->text(), QStringLiteral("52%"));
+    QVERIFY2(window_->documentTabTextForTest(tabIndex).contains(QStringLiteral("@ 52%")),
+             "tab title tracks the fractional zoom percent");
+    QVERIFY2(edit->fontMetrics().horizontalAdvance(edit->text())
+                     + edit->textMargins().right() + 4 <= edit->width(),
+             "the zoom value fits its box");
+
     hint->setHints(pictura::toolHintEntries(pictura::ToolId::Move), QString());
     QCOMPARE(hint->keyForTest(0), QStringLiteral("Arrows"));
     QCOMPARE(hint->chevronCountForTest(0), 4);

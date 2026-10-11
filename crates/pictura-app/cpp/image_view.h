@@ -158,6 +158,7 @@ public:
     {
         panning_ = true;
         userAdjusted_ = true;
+        pendingSettle_ = false;
         last_ = widgetPos;
     }
     bool panEnabled() const { return panEnabled_; }
@@ -551,6 +552,11 @@ private:
     // at the centre stays put (CS6 on maximize/restore). Not oldSize(): a
     // hidden view's deferred first resize carries none.
     QSize laidOutSize_;
+    // A document may be set before the canvas has its laid-out viewport, so
+    // the automatic fit runs against a stale size (tiny zoom, top-left clamp).
+    // While the settle is pending every resize re-fits; the first visible
+    // paint ends it, and any explicit user view change ends it early.
+    bool pendingSettle_ = false;
     QPolygonF overlayPolygon_;
 
     QList<QPolygonF> selectionContours_;

@@ -15,6 +15,7 @@ set(PICTURA_QT_TESTS
     tst_crop_preview
     tst_crop_cursor
     tst_canvas_pan
+    tst_initial_view
     tst_new_document
     tst_image_mode
     tst_layers_panel
