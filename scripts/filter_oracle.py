@@ -38,6 +38,8 @@ filter -> ImageMagick mapping and the measured/tolerated divergence live in
     Wave          -wave {amp}x{wavelength} + -crop  (measured, no equivalent)
     PolarCoordinates -distort DePolar / Polar 0      (measured, no equivalent)
     Shear         -shear {angle}x0 + -crop           (measured, no equivalent)
+    Displace      MAP -compose displace -define compose:args=XxY -composite
+                  (X = scale * 1.275; -virtual-pixel tile for Wrap Around)
     ZigZag        -swirl {angle}                     (measured, no equivalent)
     OceanRipple   -wave {amp}x{wavelength} + -crop   (measured, no equivalent)
 
@@ -239,6 +241,23 @@ def build_im_args(args: argparse.Namespace) -> list[str]:
             f"{w}x{h}+{crop_x}+0",
             "+repage",
         ]
+    if op == "displace":
+        # Displace reads its map from a file. ImageMagick reaches X px at full
+        # white with `compose:args=XxY`, about where Pictura reaches
+        # `127 * scale / 100` px, so the scale converts as `scale * 1.275`.
+        # Its default edge virtual pixel repeats the edge; `tile` wraps.
+        if not args.map:
+            raise SystemExit("--op displace needs --map")
+        x, y = (float(part) * 1.275 for part in args.displace_scale.split("x"))
+        out = (["-virtual-pixel", "tile"] if args.wrap else []) + ["-interpolate", "bilinear"]
+        return out + [
+            args.map,
+            "-compose",
+            "displace",
+            "-define",
+            f"compose:args={x:g}x{y:g}",
+            "-composite",
+        ]
     raise SystemExit(f"unknown --op {op!r}")
 
 
@@ -336,7 +355,7 @@ def main(argv: list[str] | None = None) -> int:
     p_apply.add_argument("--op", choices=(
         "gaussian", "box", "motion", "median", "unsharp",
         "maximum", "minimum", "roll", "solarize", "emboss", "mosaic", "convolve",
-        "swirl", "implode", "wave", "depolar", "polar", "shear",
+        "swirl", "implode", "wave", "depolar", "polar", "shear", "displace",
     ), help="named operator; builds the Magick args below")
     p_apply.add_argument("--im-args", default="",
                          help="verbatim Magick operator arguments (when --op is omitted)")
@@ -381,6 +400,12 @@ def main(argv: list[str] | None = None) -> int:
                               "for IM and crops back to --size)")
     p_apply.add_argument("--shear-crop-x", type=int, default=None,
                          help="x offset of the shear op's crop (default centres the middle row)")
+    p_apply.add_argument("--map", default="",
+                         help="displacement map image file (the displace op)")
+    p_apply.add_argument("--displace-scale", default="10x10",
+                         help="Pictura Displace scales HxV in percent")
+    p_apply.add_argument("--wrap", action="store_true",
+                         help="displace with Wrap Around instead of Repeat Edge Pixels")
     p_apply.add_argument("input", help="raw 8-bit input image")
     p_apply.add_argument("output", help="raw 8-bit output image")
     p_apply.set_defaults(func=cmd_apply)

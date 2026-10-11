@@ -228,3 +228,32 @@ fn gallery_distort_kinds_default_to_cs6() {
         })
     );
 }
+
+#[test]
+fn displace_reads_its_slots_and_refuses_a_map_it_no_longer_has() {
+    // CS6's defaults: 10% both ways, Stretch To Fit, Repeat Edge Pixels, and
+    // no map yet, which moves nothing.
+    assert_eq!(
+        filter_from_kind_params("displace", &[]),
+        Some(Filter::Displace {
+            map: std::sync::Arc::new(pictura_filters::DisplaceMap::neutral()),
+            horizontal_scale: 10.0,
+            vertical_scale: 10.0,
+            fit: DisplaceFit::StretchToFit,
+            wrap: false,
+        })
+    );
+    let Some(Filter::Displace {
+        horizontal_scale,
+        vertical_scale,
+        fit,
+        wrap,
+        ..
+    }) = filter_from_kind_params("displace", &[-40.0, 250.0, 1.0, 0.0, 0.0])
+    else {
+        panic!("displace did not decode");
+    };
+    assert_eq!((horizontal_scale, vertical_scale), (-40.0, 250.0));
+    assert_eq!((fit, wrap), (DisplaceFit::Tile, true));
+    assert!(filter_from_kind_params("displace", &[10.0, 10.0, 0.0, 1.0, 4e9]).is_none());
+}

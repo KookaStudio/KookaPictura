@@ -25,6 +25,7 @@ use cxx_qt_lib::{QByteArray, QImage, QList, QString, QStringList};
 use pictura_core::{layer_pixel_locked, Document, Layer, PixelBuffer};
 
 mod canvas_proxy;
+pub(super) mod displace_maps;
 pub(super) mod jobs;
 
 #[cxx_qt::bridge]
@@ -211,6 +212,11 @@ pub mod ffi {
         /// Whether `kind` resolves position or a statistic against the whole
         /// layer, so a section of it cannot be previewed on its own.
         fn filter_kind_positional(kind: &QString) -> bool;
+
+        /// Read a flattened PSD at `path` as a Displace map and keep it for
+        /// the `displace` kind's map slot. Returns the map's id, or 0 when the
+        /// file is unreadable or in Bitmap mode.
+        fn filter_displace_map_load(path: &QString) -> i32;
     }
 }
 
@@ -259,12 +265,13 @@ fn filter_preview(mut view: Pin<&mut PictureView>, kind: &QString, params: &QLis
 /// layer, so a cropped section preview would not match the commit: Diffuse
 /// hashes the pixel's absolute coordinates, Lighting resolves its light span
 /// against the crop, HDR Toning computes a global pivot, Lens Flare places
-/// and sizes itself as a fraction of the buffer, and Shear shifts each row by
-/// a fraction of the buffer's half-width.
+/// and sizes itself as a fraction of the buffer, Shear shifts each row by
+/// a fraction of the buffer's half-width, and Displace stretches or tiles its
+/// map from the buffer's corner.
 pub(crate) fn filter_preview_needs_whole_layer(kind: &str) -> bool {
     matches!(
         kind,
-        "diffuse" | "lighting-effects" | "hdr-toning" | "lens-flare" | "shear"
+        "diffuse" | "lighting-effects" | "hdr-toning" | "lens-flare" | "shear" | "displace"
     )
 }
 
@@ -810,6 +817,16 @@ fn filter_canvas_proxy_release(mut view: Pin<&mut PictureView>) {
 
 fn filter_kind_positional(kind: &QString) -> bool {
     filter_preview_needs_whole_layer(&kind.to_string())
+}
+
+fn filter_displace_map_load(path: &QString) -> i32 {
+    match displace_maps::load(&path.to_string()) {
+        Ok(id) => id as i32,
+        Err(reason) => {
+            eprintln!("pictura: displacement map refused: {reason}");
+            0
+        }
+    }
 }
 
 #[cfg(test)]

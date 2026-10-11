@@ -12,7 +12,8 @@
 //! Filters with a faithful ImageMagick operator are run differentially
 //! (`GaussianBlur`, `BoxBlur`, `Blur`, `BlurMore`, `Median`, `UnsharpMask`,
 //! `Sharpen`, `SharpenMore`, `Maximum`, `Minimum`, `Offset` with
-//! `wrap = true`, `Custom`, `Solarize`, `Mosaic`). The rest are
+//! `wrap = true`, `Custom`, `Solarize`, `Mosaic`, `Displace` with Repeat Edge
+//! Pixels). The rest are
 //! covered by ImageMagick-independent property/known-value tests here and in
 //! the module unit tests; the divergences that ruled out a differential test
 //! are recorded in the table below and in `tests/README.md`. The M9 Distort
@@ -31,6 +32,7 @@
 
 mod common;
 mod differentials;
+mod displace;
 mod distort_properties;
 mod harness;
 mod mapping;

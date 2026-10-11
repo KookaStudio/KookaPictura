@@ -238,7 +238,7 @@ FilterPreviewDialog::FilterPreviewDialog(PictureView* view, const FilterCommandS
     auto* cancel = new QPushButton(QStringLiteral("Cancel"), this);
     connect(ok, &QPushButton::clicked, this, &QDialog::accept);
     connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
-    if (!previewBelow) {
+    if (!previewBelow && spec.livePreview) {
         preview_ = new QCheckBox(QStringLiteral("Preview"), this);
         preview_->setObjectName(QStringLiteral("filterPreview"));
         preview_->setChecked(true);
@@ -302,7 +302,7 @@ QList<double> FilterPreviewDialog::values() const
 
 void FilterPreviewDialog::valuesChanged()
 {
-    if (preview_ && !preview_->isChecked()) {
+    if (!spec_.livePreview || (preview_ && !preview_->isChecked())) {
         return;
     }
     previewTimer_->start();

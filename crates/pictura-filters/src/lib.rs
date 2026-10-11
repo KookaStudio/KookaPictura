@@ -109,6 +109,62 @@ pub enum ShearFill {
 /// replayed from history, so the list is capped rather than open-ended.
 pub const SHEAR_MAX_POINTS: usize = 8;
 
+/// How Displace lays its map over the layer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DisplaceFit {
+    StretchToFit,
+    Tile,
+}
+
+/// Displace's map: the flattened map file's first two channels, one byte per
+/// pixel each. A one-channel (Grayscale) file carries the same plane twice, so
+/// it shifts along the diagonal the two scales define.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DisplaceMap {
+    width: u32,
+    height: u32,
+    horizontal: Vec<u8>,
+    vertical: Vec<u8>,
+}
+
+impl DisplaceMap {
+    /// `None` unless both planes hold `width * height` samples and the map is
+    /// not empty.
+    pub fn new(width: u32, height: u32, horizontal: Vec<u8>, vertical: Vec<u8>) -> Option<Self> {
+        let n = width as usize * height as usize;
+        (n > 0 && horizontal.len() == n && vertical.len() == n).then_some(Self {
+            width,
+            height,
+            horizontal,
+            vertical,
+        })
+    }
+
+    /// A one-pixel mid-grey map, which moves nothing.
+    pub fn neutral() -> Self {
+        Self {
+            width: 1,
+            height: 1,
+            horizontal: vec![128],
+            vertical: vec![128],
+        }
+    }
+
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+
+    pub fn height(&self) -> u32 {
+        self.height
+    }
+
+    /// The `(horizontal, vertical)` samples at `(x, y)`, which must be inside.
+    fn at(&self, x: u32, y: u32) -> (u8, u8) {
+        let i = y as usize * self.width as usize + x as usize;
+        (self.horizontal[i], self.vertical[i])
+    }
+}
+
 /// Glass's built-in surfaces, in CS6's menu order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GlassTexture {

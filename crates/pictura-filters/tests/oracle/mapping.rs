@@ -293,6 +293,14 @@ const MAPPING: &[Mapping] = &[
                (WrapAround mean 23.4). Guarded by the zero-curve no-op and fill property tests",
     },
     Mapping {
+        filter: "Displace",
+        im: Some("MAP -compose displace -define compose:args={1.275*h}x{1.275*v} -composite"),
+        tolerance: 8,
+        note: "Repeat Edge Pixels: the same bilinear lookup with red across and green down; IM \
+               centres on 127.5, so measured max delta 5 / mean 0.5 at 4x4 and 6x-5 (9 at 8x-6). Wrap Around diverges at the \
+               seam (IM blends across it), so only Repeat Edge Pixels is diffed",
+    },
+    Mapping {
         filter: "ZigZag",
         im: None,
         tolerance: 0,
@@ -395,9 +403,9 @@ const NO_EQUIVALENT: [&str; 31] = [
 
 #[test]
 fn mapping_marks_no_equivalent_operators() {
-    assert_eq!(MAPPING.len(), 45, "one mapping row per Filter variant");
+    assert_eq!(MAPPING.len(), 46, "one mapping row per Filter variant");
     // Exactly one row per `Filter` variant, no duplicates, full enum coverage.
-    let all: [&str; 45] = [
+    let all: [&str; 46] = [
         "GaussianBlur",
         "BoxBlur",
         "MotionBlur",
@@ -435,6 +443,7 @@ fn mapping_marks_no_equivalent_operators() {
         "Wave",
         "PolarCoordinates",
         "Shear",
+        "Displace",
         "ZigZag",
         "OceanRipple",
         "DustAndScratches",

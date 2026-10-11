@@ -13,6 +13,7 @@ pub(crate) mod artistic;
 pub(crate) mod brush_strokes;
 pub(crate) mod convolve;
 pub(crate) mod dispatch;
+pub(crate) mod displace;
 pub(crate) mod distort;
 pub(crate) mod pixelate;
 pub(crate) mod pixmap;
