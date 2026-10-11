@@ -5,7 +5,7 @@ use super::plan::{Combine, Plan};
 use super::{
     COMBINE_HIGH_PASS, COMBINE_UNSHARP, MODE_COMBINE, MODE_KERNEL, MODE_MEDIAN, MODE_MORPH_H,
     MODE_MORPH_V, MODE_MOTION, MODE_OIL_AGG, MODE_OIL_HEIGHT, MODE_OIL_LUMA, MODE_OIL_SHADE,
-    MODE_SEP_H, MODE_SEP_V, MODE_SURFACE,
+    MODE_RADIAL_ZOOM, MODE_SEP_H, MODE_SEP_V, MODE_SURFACE,
 };
 use crate::gpu::storage_entry;
 
@@ -139,6 +139,15 @@ pub(super) fn run_chunked(
             );
             &b
         }
+        Plan::RadialZoom { samples, span } => {
+            let mut p = Params::new(MODE_RADIAL_ZOOM, w, h);
+            p.taps = *samples;
+            p.angle = *span;
+            dispatch(
+                device, queue, &p, &a, &b, &mid, &weights, &params, count, budget,
+            );
+            &b
+        }
         Plan::Surface { radius, threshold } => {
             let mut p = Params::new(MODE_SURFACE, w, h);
             p.support = *radius as i32;
@@ -226,6 +235,7 @@ fn weights_bytes(plan: &Plan) -> Vec<u8> {
         Plan::Kernel { weights, .. } => weights,
         Plan::Separable(sp) => &sp.weights,
         Plan::Motion { .. }
+        | Plan::RadialZoom { .. }
         | Plan::Surface { .. }
         | Plan::Morph { .. }
         | Plan::Median { .. }
@@ -367,6 +377,7 @@ fn invocation_cost(p: &Params) -> u64 {
         MODE_KERNEL => u64::from(p.ksize).pow(2),
         MODE_SEP_H | MODE_SEP_V => u64::from(p.ksize),
         MODE_MOTION => u64::from(p.taps),
+        MODE_RADIAL_ZOOM => 4 * u64::from(p.taps),
         MODE_SURFACE => win * win,
         MODE_MORPH_H | MODE_MORPH_V => win,
         // Eight binary-search steps, each a full window count.
@@ -691,6 +702,54 @@ fn motion_val(idx: u32) -> f32 {
     return acc / f32(p.taps);
 }
 
+// Clamp-to-edge bilinear sample of one plane at `(x, y)`, as the CPU's
+// Radial Blur taps it.
+fn bilinear(base: u32, x: f32, y: f32) -> f32 {
+    let x0 = floor(x);
+    let y0 = floor(y);
+    let fx = x - x0;
+    let fy = y - y0;
+    let xi = clampi(i32(x0), p.w);
+    let yi = clampi(i32(y0), p.h);
+    let xi1 = clampi(i32(x0) + 1, p.w);
+    let yi1 = clampi(i32(y0) + 1, p.h);
+    let p00 = src_byte(base + yi * p.w + xi);
+    let p10 = src_byte(base + yi * p.w + xi1);
+    let p01 = src_byte(base + yi1 * p.w + xi);
+    let p11 = src_byte(base + yi1 * p.w + xi1);
+    return (p00 * (1.0 - fx) + p10 * fx) * (1.0 - fy) + (p01 * (1.0 - fx) + p11 * fx) * fy;
+}
+
+// Radial Blur's Zoom: the mean of `p.taps` samples along the pixel's ray from
+// the image centre, spanning `p.angle` of its radius. (Spin stays on the CPU:
+// its samples sweep arcs across thousands of rows, and the CPU's tiles keep
+// them in cache where these invocations do not.)
+fn radial_zoom_val(idx: u32) -> f32 {
+    let n = p.w * p.h;
+    let plane = idx / n;
+    let rem = idx % n;
+    let base = plane * n;
+    let cx = (f32(p.w) - 1.0) / 2.0;
+    let cy = (f32(p.h) - 1.0) / 2.0;
+    let px = f32(rem % p.w) - cx;
+    let py = f32(rem / p.w) - cy;
+    let radius = sqrt(px * px + py * py);
+    var c = 1.0;
+    var sn = 0.0;
+    if (radius > 0.0) {
+        c = px / radius;
+        sn = py / radius;
+    }
+    let s = f32(p.taps);
+    var acc = 0.0;
+    for (var k = 0u; k < p.taps; k = k + 1u) {
+        let t = f32(k) / (s - 1.0);
+        let rr = radius * (1.0 - p.angle / 2.0 + p.angle * t);
+        acc = acc + bilinear(base, cx + rr * c, cy + rr * sn);
+    }
+    return acc / s;
+}
+
 // Mean of the neighbours within `p.taps` levels of the centre, per channel,
 // over the window clipped to the image, mirroring the photorust engine's
 // `surface_blur`. Integer sums and a truncating divide, so it is exact.
@@ -964,6 +1023,8 @@ fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
             val = sep_v_val(idx);
         } else if (p.mode == 3u) {
             val = motion_val(idx);
+        } else if (p.mode == 9u) {
+            val = radial_zoom_val(idx);
         } else if (p.mode == 5u) {
             val = surface_val(idx);
         } else if (p.mode == 7u) {

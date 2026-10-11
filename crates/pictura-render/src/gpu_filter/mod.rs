@@ -17,6 +17,7 @@
 //!   `pictura_filters::kernel::gaussian_blur_planes` (Gaussian, Box, and Blur
 //!   and Blur More at their fixed radii);
 //! - `MOTION` — the directional 1-D sum (Motion Blur);
+//! - `RADIAL_ZOOM` — bilinear samples along a pixel's ray (Radial Blur, Zoom);
 //! - `COMBINE` — a pointwise mix of the original and a blurred copy (Unsharp
 //!   Mask, Sharpen and Sharpen More at their fixed amounts, High Pass);
 //! - `SURFACE` — the per-channel thresholded window mean (Surface Blur);
@@ -58,6 +59,7 @@ const MODE_SURFACE: u32 = 5;
 const MODE_MORPH_H: u32 = 6;
 const MODE_MORPH_V: u32 = 7;
 const MODE_MEDIAN: u32 = 8;
+const MODE_RADIAL_ZOOM: u32 = 9;
 const MODE_OIL_LUMA: u32 = 20;
 const MODE_OIL_AGG: u32 = 21;
 const MODE_OIL_HEIGHT: u32 = 22;

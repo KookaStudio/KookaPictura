@@ -123,7 +123,7 @@ LightingEffectsDialog::LightingEffectsDialog(PictureView* view, const FilterComm
 
     canvas_ = new LightingCanvas(&rig_, this);
     if (view_ && view_->has_document()) {
-        const QImage image = view_->image();
+        const QImage image = documentPreviewImage(view_, kProxyEdge);
         if (!image.isNull()) {
             proxy_ = (image.width() > kProxyEdge || image.height() > kProxyEdge
                           ? image.scaled(kProxyEdge, kProxyEdge, Qt::KeepAspectRatio,
@@ -134,7 +134,7 @@ LightingEffectsDialog::LightingEffectsDialog(PictureView* view, const FilterComm
                 proxyRgba_.append(reinterpret_cast<const char*>(proxy_.constScanLine(y)),
                                   proxy_.width() * 4);
             }
-            canvas_->setAspect(image.size());
+            canvas_->setAspect(QSize(view_->document_width(), view_->document_height()));
         }
     }
     connect(canvas_, &LightingCanvas::rigEdited, this, [this] {

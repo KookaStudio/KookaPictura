@@ -10,16 +10,22 @@
 
 use super::filter_map::filter_from_kind_params;
 use super::helpers::{active_layer_visible, active_pixel_layer};
-use super::helpers_composite::{buffer_to_image, patch_buffer_region, selection_to_mask};
+use super::helpers_composite::{
+    buffer_to_image, patch_buffer_region, premultiplied_display_image, selection_to_mask,
+};
 use super::impl_filters::{
     apply_filter_active, apply_filter_active_region, apply_op_active_region, cancel_filter_preview,
     ActiveOp,
 };
 use super::qobject::PictureView;
+pub(super) use canvas_proxy::canvas_proxy_buffer;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QByteArray, QImage, QList, QString, QStringList};
 use pictura_core::{layer_pixel_locked, Document, Layer, PixelBuffer};
+
+mod canvas_proxy;
+pub(super) mod jobs;
 
 #[cxx_qt::bridge]
 pub mod ffi {
@@ -177,6 +183,34 @@ pub mod ffi {
             params: &QList_f64,
             max_edge: i32,
         ) -> QImage;
+
+        /// The canvas preview of `kind`/`params` below 100% zoom: the document
+        /// rect `(x, y, w, h)` reduced to `scale` (at most 1), composited with
+        /// the active layer filtered, as a premultiplied display image. The
+        /// caller scales pixel-sized slots by `scale`. The reduced copy is
+        /// built from the pre-preview pixels and kept while the region, scale
+        /// and document are unchanged, so a parameter change filters only the
+        /// copy. Neither the document nor the canvas changes. Null when the
+        /// target has no proxy (a layer mask) or the filter is refused, so the
+        /// caller previews exactly instead.
+        #[allow(clippy::too_many_arguments)]
+        fn filter_canvas_proxy(
+            view: Pin<&mut PictureView>,
+            kind: &QString,
+            params: &QList_f64,
+            x: i32,
+            y: i32,
+            w: i32,
+            h: i32,
+            scale: f64,
+        ) -> QImage;
+
+        /// Drop the reduced copy [`filter_canvas_proxy`] keeps.
+        fn filter_canvas_proxy_release(view: Pin<&mut PictureView>);
+
+        /// Whether `kind` resolves position or a statistic against the whole
+        /// layer, so a section of it cannot be previewed on its own.
+        fn filter_kind_positional(kind: &QString) -> bool;
     }
 }
 
@@ -435,16 +469,12 @@ fn filter_gallery_preview(
     else {
         return QImage::default();
     };
-    let index = rust
-        .active_layer
-        .as_deref()
-        .and_then(|p| p.parse::<usize>().ok());
-    let filtered = match (resolve_stack(kinds, params), index) {
-        (Some(filters), Some(index)) => proxy.render(index, &filters, rust.gpu_compute).ok(),
+    let filtered = match (resolve_stack(kinds, params), rust.active_layer.as_deref()) {
+        (Some(filters), Some(path)) => proxy.render(path, &filters, rust.gpu_compute).ok(),
         _ => None,
     };
     filtered
-        .or_else(|| proxy.render(0, &[], false).ok())
+        .or_else(|| proxy.render("", &[], false).ok())
         .map_or_else(QImage::default, |buffer| buffer_to_image(&buffer))
 }
 
@@ -725,11 +755,12 @@ fn filter_proxy_layer(
     };
     // An open preview has already re-filtered the live layer; the proxy must
     // start from its pre-preview snapshot so the two never compound.
-    let layer = rust
+    let original = rust
         .filter_preview
         .as_ref()
         .filter(|p| p.layer_path.as_str() == active)
-        .map_or(resolved, |p| &p.original);
+        .map(|p| p.baseline.original(resolved));
+    let layer = original.as_deref().unwrap_or(resolved);
     let params: Vec<f64> = params.into_iter().copied().collect();
     proxy_layer_frame(
         layer,
@@ -739,6 +770,40 @@ fn filter_proxy_layer(
         &kind.to_string(),
         &params,
     )
+}
+
+fn filter_canvas_proxy(
+    mut view: Pin<&mut PictureView>,
+    kind: &QString,
+    params: &QList<f64>,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    scale: f64,
+) -> QImage {
+    let params: Vec<f64> = params.into_iter().copied().collect();
+    let Some(filter) = filter_from_kind_params(&kind.to_string(), &params) else {
+        return QImage::default();
+    };
+    let region = pictura_core::PsdRect {
+        top: y,
+        left: x,
+        bottom: y + h.max(0),
+        right: x + w.max(0),
+    };
+    let mut rust = view.as_mut().rust_mut();
+    canvas_proxy_buffer(&mut rust, &filter, region, scale).map_or_else(QImage::default, |buffer| {
+        premultiplied_display_image(&buffer)
+    })
+}
+
+fn filter_canvas_proxy_release(mut view: Pin<&mut PictureView>) {
+    view.as_mut().rust_mut().canvas_proxy = None;
+}
+
+fn filter_kind_positional(kind: &QString) -> bool {
+    filter_preview_needs_whole_layer(&kind.to_string())
 }
 
 #[cfg(test)]

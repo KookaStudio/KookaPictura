@@ -23,6 +23,7 @@
 #include <QtWidgets/QVBoxLayout>
 #include <QtWidgets/QWidget>
 
+#include <cmath>
 #include <functional>
 
 namespace pictura {
@@ -43,6 +44,14 @@ int slotCount(FilterControl control)
     default:
         return 1;
     }
+}
+
+// A slider whose value is a distance in document pixels.
+bool measuresPixels(const FilterParamSpec& spec)
+{
+    const QString unit = spec.suffix.trimmed();
+    return spec.control == FilterControl::Slider
+           && (unit.startsWith(QStringLiteral("pixels")) || unit == QStringLiteral("px"));
 }
 
 // A value box only needs room for five digits and a decimal (with a sign); a
@@ -798,5 +807,23 @@ QList<double> FilterParamControls::values() const
     return result;
 }
 
+
+QList<double> FilterParamControls::scaledValues(double scale) const
+{
+    QList<double> result = values();
+    int slot = 0;
+    for (const Control& control : controls_) {
+        const FilterParamSpec& spec = control.spec;
+        if (measuresPixels(spec) && slot < result.size()) {
+            double value = result.at(slot) * scale;
+            if (spec.decimals == 0) {
+                value = std::round(value);
+            }
+            result[slot] = qBound(spec.minimum, value, spec.maximum);
+        }
+        slot += slotCount(spec.control);
+    }
+    return result;
+}
 
 } // namespace pictura

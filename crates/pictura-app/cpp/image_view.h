@@ -61,6 +61,13 @@ public:
     // null canvas are no-ops.
     void blitRegion(const QImage& region, int x, int y);
 
+    // A zoomed-out filter dialog's preview: `picture`, a reduced render of the
+    // document rect `area`, drawn over the document there until cleared. The
+    // document itself is untouched.
+    void setFilterPreview(const QImage& picture, const QRect& area);
+    void clearFilterPreview();
+    bool filterPreviewShownForTest() const { return !filterPreview_.isNull(); }
+
     // Supplies document crops from the view pyramid so the present path never
     // scales the full-resolution `image()`. `crop` returns a premultiplied crop
     // of `level` at the level-space rect `(x, y, w, h)`; `levelCount`/`levelSize`
@@ -424,6 +431,9 @@ private:
     void paintAnnotations(QPainter& painter);
     void paintPathOverlay(QPainter& painter);
     void paintTypeOverlay(QPainter& painter);
+    void paintFilterPreview(QPainter& painter);
+    QImage filterPreview_;
+    QRect filterPreviewArea_;
     PathOverlay pathOverlay_;
     TypeOverlay typeOverlay_;
     QList<QPointF> samplerOverlay_;

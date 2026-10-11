@@ -9,19 +9,18 @@ use rayon::prelude::*;
 /// 61 MiB plane.
 pub(super) const TILE: usize = 64;
 
-pub(super) enum Dir {
-    Before,
-    After,
-}
-
 /// One changed tile of one plane, laid out row-major with the plane's stride.
+/// It holds one side of the change, whichever side the materialized state it
+/// is walked from does not: the bytes before it while the state it leads to is
+/// at or below the cursor, the bytes after it otherwise. A walk that moves a
+/// materialized state across it swaps the two (see [`swap_tiles`]), so history
+/// keeps each changed byte once.
 pub(super) struct TileDelta {
     pub(super) x: usize,
     pub(super) y: usize,
     pub(super) w: usize,
     pub(super) h: usize,
-    pub(super) before: Vec<u8>,
-    pub(super) after: Vec<u8>,
+    pub(super) bytes: Vec<u8>,
 }
 
 /// The changed tiles of one tracked plane, anchored at the previous state.
@@ -62,15 +61,16 @@ pub(super) fn plane_kinds(doc: &Document) -> Vec<PlaneKind> {
     out
 }
 
-/// The changed tiles from `prev` to `next`, or `None` when the tracked-plane
-/// geometry (count, stride, or height) differs or a plane moved to another
-/// index (a layer reorder), and a full state is needed.
+/// Bring `current` to `next` and return the changed tiles, each holding
+/// `current`'s bytes from before; `None`, with `current` untouched, when the
+/// tracked-plane geometry (count, stride, or height) differs or a plane moved
+/// to another index (a layer reorder), and a full state is needed.
 ///
 /// A pair with the same nonzero stamp, or one allocation, is equal and skipped
 /// without a look at its bytes; every other pair is compared tile by tile on
-/// every core.
-pub(super) fn diff(prev: &Document, next: &Document) -> Option<Vec<PlaneDelta>> {
-    let prev_planes = planes(prev);
+/// every core, and only the changed tiles are copied in.
+pub(super) fn diff_into(current: &mut Document, next: &Document) -> Option<Vec<PlaneDelta>> {
+    let prev_planes = planes(current);
     let next_planes = planes(next);
     if prev_planes.len() != next_planes.len()
         || prev_planes
@@ -83,22 +83,24 @@ pub(super) fn diff(prev: &Document, next: &Document) -> Option<Vec<PlaneDelta>> 
     if planes_moved(&prev_planes, &next_planes) {
         return None;
     }
+    drop(prev_planes);
     let mut out = Vec::new();
-    for (index, ((before, width, _), (after, _, _))) in
-        prev_planes.iter().zip(&next_planes).enumerate()
-    {
-        if known_equal(before, after) {
-            continue;
+    let mut index = 0;
+    each_plane_mut(current, &mut |plane, width, _| {
+        let (after, _, _) = &next_planes[index];
+        if !known_equal(plane, after) {
+            let bands = changed_tiles(plane.as_slice(), after.as_slice(), width);
+            if bands.iter().any(|band| !band.is_empty()) {
+                write_bands(plane.as_mut_slice(), after.as_slice(), width, &bands);
+                out.push(PlaneDelta {
+                    index,
+                    width,
+                    tiles: bands.into_iter().flatten().collect(),
+                });
+            }
         }
-        let tiles = diff_tiles(before.as_slice(), after.as_slice(), *width);
-        if !tiles.is_empty() {
-            out.push(PlaneDelta {
-                index,
-                width: *width,
-                tiles,
-            });
-        }
-    }
+        index += 1;
+    });
     Some(out)
 }
 
@@ -121,13 +123,15 @@ fn known_equal(a: &Plane<u8>, b: &Plane<u8>) -> bool {
     (a.stamp() != 0 && a.stamp() == b.stamp()) || (a.len() == b.len() && a.shares(b))
 }
 
-fn diff_tiles(before: &[u8], after: &[u8], width: usize) -> Vec<TileDelta> {
+/// The tiles of `before` that differ from `after`, per 64-row band, each
+/// holding `before`'s bytes.
+fn changed_tiles(before: &[u8], after: &[u8], width: usize) -> Vec<Vec<TileDelta>> {
     if width == 0 {
         return Vec::new();
     }
     let height = before.len() / width;
     let columns = width.div_ceil(TILE);
-    let bands: Vec<Vec<TileDelta>> = (0..height.div_ceil(TILE))
+    (0..height.div_ceil(TILE))
         .into_par_iter()
         .map(|band| {
             let y0 = band * TILE;
@@ -145,44 +149,81 @@ fn diff_tiles(before: &[u8], after: &[u8], width: usize) -> Vec<TileDelta> {
                     *flag = *flag || b[x0..x1] != a[x0..x1];
                 }
             }
-            let mut tiles = Vec::new();
-            for (c, _) in changed.iter().enumerate().filter(|(_, f)| **f) {
-                let x0 = c * TILE;
-                let w = TILE.min(width - x0);
-                let mut bb = Vec::with_capacity(w * h);
-                let mut ab = Vec::with_capacity(w * h);
-                for row in y0..y0 + h {
-                    let start = row * width + x0;
-                    bb.extend_from_slice(&before[start..start + w]);
-                    ab.extend_from_slice(&after[start..start + w]);
-                }
-                tiles.push(TileDelta {
-                    x: x0,
-                    y: y0,
-                    w,
-                    h,
-                    before: bb,
-                    after: ab,
-                });
-            }
-            tiles
+            changed
+                .iter()
+                .enumerate()
+                .filter(|(_, f)| **f)
+                .map(|(c, _)| {
+                    let x0 = c * TILE;
+                    let w = TILE.min(width - x0);
+                    let mut bytes = Vec::with_capacity(w * h);
+                    for row in y0..y0 + h {
+                        let start = row * width + x0;
+                        bytes.extend_from_slice(&before[start..start + w]);
+                    }
+                    TileDelta {
+                        x: x0,
+                        y: y0,
+                        w,
+                        h,
+                        bytes,
+                    }
+                })
+                .collect()
         })
-        .collect();
-    bands.into_iter().flatten().collect()
+        .collect()
 }
 
-/// Write `deltas` into `doc` in the given direction.
-pub(super) fn apply_tiles(doc: &mut Document, deltas: &[PlaneDelta], dir: &Dir) {
+/// Copy `after`'s bytes into `plane` over each band's changed tiles, band by
+/// band on every core.
+fn write_bands(plane: &mut [u8], after: &[u8], width: usize, bands: &[Vec<TileDelta>]) {
+    plane
+        .par_chunks_mut(TILE * width)
+        .zip(after.par_chunks(TILE * width))
+        .zip(bands.par_iter())
+        .for_each(|((dst, src), tiles)| {
+            for tile in tiles {
+                for row in 0..tile.h {
+                    let at = row * width + tile.x;
+                    dst[at..at + tile.w].copy_from_slice(&src[at..at + tile.w]);
+                }
+            }
+        });
+}
+
+/// Write each tile's stored bytes into `doc` (and into `live` when given): a
+/// walk that leaves the deltas as they are.
+pub(super) fn apply_tiles(doc: &mut Document, deltas: &[PlaneDelta]) {
     for delta in deltas {
         let mut index = 0;
         each_plane_mut(doc, &mut |plane, _, _| {
             if index == delta.index {
                 for tile in &delta.tiles {
-                    let bytes = match dir {
-                        Dir::Before => &tile.before,
-                        Dir::After => &tile.after,
-                    };
-                    write_tile(plane, delta.width, tile, bytes);
+                    write_tile(plane, delta.width, tile, &tile.bytes);
+                }
+            }
+            index += 1;
+        });
+    }
+}
+
+/// Exchange each tile's stored bytes with `doc`'s, writing the stored bytes
+/// into `live` too when given: a walk that moves a materialized state across
+/// the deltas, after which they hold the side it left.
+pub(super) fn swap_tiles(
+    doc: &mut Document,
+    live: Option<&mut Document>,
+    deltas: &mut [PlaneDelta],
+) {
+    if let Some(live) = live {
+        apply_tiles(live, deltas);
+    }
+    for delta in deltas.iter_mut() {
+        let mut index = 0;
+        each_plane_mut(doc, &mut |plane, _, _| {
+            if index == delta.index {
+                for tile in delta.tiles.iter_mut() {
+                    swap_tile(plane, delta.width, tile);
                 }
             }
             index += 1;
@@ -201,6 +242,18 @@ fn write_tile(plane: &mut Plane<u8>, width: usize, tile: &TileDelta, bytes: &[u8
             return;
         }
         plane[dst..dst + tile.w].copy_from_slice(&bytes[src..src + tile.w]);
+    }
+}
+
+fn swap_tile(plane: &mut Plane<u8>, width: usize, tile: &mut TileDelta) {
+    let last = (tile.y + tile.h).saturating_sub(1) * width + tile.x + tile.w;
+    if width == 0 || tile.h == 0 || last > plane.len() {
+        return;
+    }
+    for row in 0..tile.h {
+        let dst = (tile.y + row) * width + tile.x;
+        let src = row * tile.w;
+        plane[dst..dst + tile.w].swap_with_slice(&mut tile.bytes[src..src + tile.w]);
     }
 }
 

@@ -8,6 +8,7 @@ use pictura_core::PixelBuffer;
 
 use crate::kernel::{clamp_index, gaussian_blur_planes, sigma_from_radius};
 use crate::{validate, FilterError, Quality, RadialMethod};
+use rayon::prelude::*;
 
 /// Blur's and Blur More's fixed Gaussian radii: σ 0.7 and σ 2.0 under the
 /// 3σ radius convention, photorust's CS6-tuned strengths (#222).
@@ -63,21 +64,29 @@ pub fn motion(buf: &mut PixelBuffer, angle_deg: f64, distance: u32) -> Result<()
     let taps = distance as isize;
     let half = (distance as f64 - 1.0) / 2.0;
     let divisor = distance as f64;
+    let steps: Vec<(isize, isize)> = (0..taps)
+        .map(|k| {
+            let f = k as f64 - half;
+            ((f * dx).round() as isize, (f * dy).round() as isize)
+        })
+        .collect();
     for c in 0..planes {
         let base = c * n;
         let src = buf.data[base..base + n].to_vec();
-        for y in 0..h {
-            for x in 0..w {
-                let mut acc = 0f64;
-                for k in 0..taps {
-                    let f = k as f64 - half;
-                    let sx = clamp_index(x as isize + (f * dx).round() as isize, w);
-                    let sy = clamp_index(y as isize + (f * dy).round() as isize, h);
-                    acc += src[sy * w + sx] as f64;
+        buf.data[base..base + n]
+            .par_chunks_mut(w)
+            .enumerate()
+            .for_each(|(y, row)| {
+                for (x, out) in row.iter_mut().enumerate() {
+                    let mut acc = 0f64;
+                    for &(sx, sy) in &steps {
+                        let sx = clamp_index(x as isize + sx, w);
+                        let sy = clamp_index(y as isize + sy, h);
+                        acc += src[sy * w + sx] as f64;
+                    }
+                    *out = (acc / divisor).round().clamp(0.0, 255.0) as u8;
                 }
-                buf.data[base + y * w + x] = (acc / divisor).round().clamp(0.0, 255.0) as u8;
-            }
-        }
+            });
     }
     Ok(())
 }
@@ -113,42 +122,112 @@ pub fn radial(
     };
     let cx = (w as f64 - 1.0) / 2.0;
     let cy = (h as f64 - 1.0) / 2.0;
+    // The planes interleaved, so a tap reads one cache line however far
+    // along its arc the sample lands.
+    let mut pixels = vec![[0u8; 4]; n];
+    pixels
+        .par_chunks_mut(w.max(1))
+        .enumerate()
+        .for_each(|(y, row)| {
+            for c in 0..planes {
+                let plane = &buf.data[c * n + y * w..c * n + y * w + w];
+                for (px, &v) in row.iter_mut().zip(plane) {
+                    px[c] = v;
+                }
+            }
+        });
+    // Spin rotates each pixel's offset from the centre by the sample angles,
+    // whose sines and cosines are found once: the same point as
+    // `r·(cos(θ+off), sin(θ+off))`, without trigonometry per sample.
+    let spin: Vec<(f64, f64)> = (0..samples)
+        .map(|k| {
+            let dt = amount.to_radians() / samples as f64;
+            let off = (k as f64 - (samples as f64 - 1.0) / 2.0) * dt;
+            (off.cos(), off.sin())
+        })
+        .collect();
     // ponytail: polar resample + midpoint 1-D smear, not the reference's kernel.
     // Upgrade to supersampled/jittered sampling if Draft banding is visible.
-    for c in 0..planes {
-        let base = c * n;
-        let src = buf.data[base..base + n].to_vec();
-        for y in 0..h {
-            for x in 0..w {
-                let px = x as f64 - cx;
-                let py = y as f64 - cy;
+    // Tiles run in parallel and each sample point and its bilinear weights are
+    // found once for every plane (`kernel_digests` pins the bytes).
+    let value = |x: usize, y: usize, acc: &mut [f64]| -> [u8; 4] {
+        let px = x as f64 - cx;
+        let py = y as f64 - cy;
+        acc.fill(0.0);
+        let mut sample = |sx: f64, sy: f64| {
+            let tap = Bilinear::at(w, h, sx, sy);
+            let corners = [
+                pixels[tap.i00],
+                pixels[tap.i10],
+                pixels[tap.i01],
+                pixels[tap.i11],
+            ];
+            for (c, a) in acc.iter_mut().enumerate() {
+                *a += tap.mix(corners.map(|p| p[c]));
+            }
+        };
+        match method {
+            RadialMethod::Spin => {
+                for &(cos, sin) in &spin {
+                    sample(cx + px * cos - py * sin, cy + px * sin + py * cos);
+                }
+            }
+            RadialMethod::Zoom => {
                 let radius = (px * px + py * py).sqrt();
                 let theta = py.atan2(px);
-                let mut acc = 0f64;
-                match method {
-                    RadialMethod::Spin => {
-                        let dt = amount.to_radians() / samples as f64;
-                        for k in 0..samples {
-                            let off = (k as f64 - (samples as f64 - 1.0) / 2.0) * dt;
-                            let t = theta + off;
-                            acc +=
-                                bilinear(&src, w, h, cx + radius * t.cos(), cy + radius * t.sin());
-                        }
-                    }
-                    RadialMethod::Zoom => {
-                        let k_amt = (amount / 100.0).clamp(0.0, 1.0);
-                        for k in 0..samples {
-                            let t = k as f64 / (samples as f64 - 1.0);
-                            let frac = 1.0 - k_amt / 2.0 + k_amt * t;
-                            let rr = radius * frac;
-                            acc +=
-                                bilinear(&src, w, h, cx + rr * theta.cos(), cy + rr * theta.sin());
-                        }
-                    }
+                let (cos, sin) = (theta.cos(), theta.sin());
+                let k_amt = (amount / 100.0).clamp(0.0, 1.0);
+                for k in 0..samples {
+                    let t = k as f64 / (samples as f64 - 1.0);
+                    let frac = 1.0 - k_amt / 2.0 + k_amt * t;
+                    let rr = radius * frac;
+                    sample(cx + rr * cos, cy + rr * sin);
                 }
-                buf.data[base + y * w + x] = (acc / samples as f64).round().clamp(0.0, 255.0) as u8;
             }
         }
+        let mut out = [0u8; 4];
+        for (o, &a) in out.iter_mut().zip(acc.iter()) {
+            *o = (a / samples as f64).round().clamp(0.0, 255.0) as u8;
+        }
+        out
+    };
+    // Square tiles rather than rows: a spin sample of a row sweeps a diagonal
+    // across thousands of rows and misses the cache at nearly every tap, while
+    // a tile's samples at one angle stay as compact as the tile.
+    const RADIAL_TILE: usize = 64;
+    let tiles_x = w.div_ceil(RADIAL_TILE);
+    let tiles: Vec<Vec<[u8; 4]>> = (0..tiles_x * h.div_ceil(RADIAL_TILE))
+        .into_par_iter()
+        .map_init(
+            || vec![0f64; planes],
+            |acc, t| {
+                let (x0, y0) = ((t % tiles_x) * RADIAL_TILE, (t / tiles_x) * RADIAL_TILE);
+                let (x1, y1) = ((x0 + RADIAL_TILE).min(w), (y0 + RADIAL_TILE).min(h));
+                let mut out = Vec::with_capacity((x1 - x0) * (y1 - y0));
+                for y in y0..y1 {
+                    for x in x0..x1 {
+                        out.push(value(x, y, acc));
+                    }
+                }
+                out
+            },
+        )
+        .collect();
+    for c in 0..planes {
+        buf.data[c * n..c * n + n]
+            .par_chunks_mut(w)
+            .enumerate()
+            .for_each(|(y, row)| {
+                let (band, dy) = (y / RADIAL_TILE, y % RADIAL_TILE);
+                for tx in 0..tiles_x {
+                    let x0 = tx * RADIAL_TILE;
+                    let tw = RADIAL_TILE.min(w - x0);
+                    let tile = &tiles[band * tiles_x + tx];
+                    for (dx, out) in row[x0..x0 + tw].iter_mut().enumerate() {
+                        *out = tile[dy * tw + dx][c];
+                    }
+                }
+            });
     }
     Ok(())
 }
@@ -171,20 +250,41 @@ pub fn simple(buf: &mut PixelBuffer, more: bool) -> Result<(), FilterError> {
     gaussian(buf, if more { BLUR_MORE_RADIUS } else { BLUR_RADIUS })
 }
 
-fn bilinear(plane: &[u8], w: usize, h: usize, x: f64, y: f64) -> f64 {
-    let x0 = x.floor();
-    let y0 = y.floor();
-    let fx = x - x0;
-    let fy = y - y0;
-    let xi = clamp_index(x0 as isize, w);
-    let yi = clamp_index(y0 as isize, h);
-    let xi1 = clamp_index(x0 as isize + 1, w);
-    let yi1 = clamp_index(y0 as isize + 1, h);
-    let p00 = plane[yi * w + xi] as f64;
-    let p10 = plane[yi * w + xi1] as f64;
-    let p01 = plane[yi1 * w + xi] as f64;
-    let p11 = plane[yi1 * w + xi1] as f64;
-    (p00 * (1.0 - fx) + p10 * fx) * (1.0 - fy) + (p01 * (1.0 - fx) + p11 * fx) * fy
+/// A clamp-to-edge bilinear tap: the four sample indices and the weights,
+/// found once and mixed for each plane.
+struct Bilinear {
+    i00: usize,
+    i10: usize,
+    i01: usize,
+    i11: usize,
+    fx: f64,
+    fy: f64,
+}
+
+impl Bilinear {
+    fn at(w: usize, h: usize, x: f64, y: f64) -> Self {
+        let x0 = x.floor();
+        let y0 = y.floor();
+        let xi = clamp_index(x0 as isize, w);
+        let yi = clamp_index(y0 as isize, h);
+        let xi1 = clamp_index(x0 as isize + 1, w);
+        let yi1 = clamp_index(y0 as isize + 1, h);
+        Self {
+            i00: yi * w + xi,
+            i10: yi * w + xi1,
+            i01: yi1 * w + xi,
+            i11: yi1 * w + xi1,
+            fx: x - x0,
+            fy: y - y0,
+        }
+    }
+
+    /// The tap over one plane's corner values `[p00, p10, p01, p11]`.
+    fn mix(&self, [p00, p10, p01, p11]: [u8; 4]) -> f64 {
+        let (fx, fy) = (self.fx, self.fy);
+        let (p00, p10, p01, p11) = (p00 as f64, p10 as f64, p01 as f64, p11 as f64);
+        (p00 * (1.0 - fx) + p10 * fx) * (1.0 - fy) + (p01 * (1.0 - fx) + p11 * fx) * fy
+    }
 }
 
 fn box_blur_planes(buf: &mut PixelBuffer, radius: u32) {
@@ -206,42 +306,64 @@ fn box_blur_planes(buf: &mut PixelBuffer, radius: u32) {
     }
 }
 
+/// Columns a vertical box pass gathers at once, so each worker reads whole
+/// row runs instead of striding the plane one sample at a time.
+const BOX_STRIP: usize = 64;
+
 /// Separable moving average over `(2r+1)` taps, clamp-to-edge. Prefix sums keep
-/// it O(1) per pixel even when the radius exceeds the image.
+/// it O(1) per pixel even when the radius exceeds the image. Rows (or column
+/// strips) run in parallel; each line sums in the same order as a serial pass.
 fn box_blur_axis(src: &[f64], dst: &mut [f64], w: usize, h: usize, r: isize, horizontal: bool) {
     let taps = (2 * r + 1) as f64;
     if horizontal {
-        let mut line = vec![0f64; w];
-        let mut pre = vec![0f64; w + 1];
-        for y in 0..h {
-            line.copy_from_slice(&src[y * w..y * w + w]);
-            pre[0] = 0.0;
-            for (k, &v) in line.iter().enumerate() {
-                pre[k + 1] = pre[k] + v;
-            }
-            for x in 0..w {
-                let a = x as isize - r;
-                let b = x as isize + r;
-                dst[y * w + x] = (prefix_at(&pre, &line, b) - prefix_at(&pre, &line, a - 1)) / taps;
-            }
-        }
+        dst.par_chunks_mut(w).enumerate().for_each_init(
+            || vec![0f64; w + 1],
+            |pre, (y, out)| {
+                let line = &src[y * w..y * w + w];
+                for (k, &v) in line.iter().enumerate() {
+                    pre[k + 1] = pre[k] + v;
+                }
+                for (x, out) in out.iter_mut().enumerate() {
+                    let a = x as isize - r;
+                    let b = x as isize + r;
+                    *out = (prefix_at(pre, line, b) - prefix_at(pre, line, a - 1)) / taps;
+                }
+            },
+        );
     } else {
-        let mut line = vec![0f64; h];
-        let mut pre = vec![0f64; h + 1];
-        for x in 0..w {
-            for y in 0..h {
-                line[y] = src[y * w + x];
+        let strips: Vec<Vec<f64>> = (0..w)
+            .step_by(BOX_STRIP)
+            .collect::<Vec<_>>()
+            .into_par_iter()
+            .map(|x0| {
+                let sw = BOX_STRIP.min(w - x0);
+                let mut out = vec![0f64; h * sw];
+                let mut line = vec![0f64; h];
+                let mut pre = vec![0f64; h + 1];
+                for dx in 0..sw {
+                    for (y, v) in line.iter_mut().enumerate() {
+                        *v = src[y * w + x0 + dx];
+                    }
+                    for (k, &v) in line.iter().enumerate() {
+                        pre[k + 1] = pre[k] + v;
+                    }
+                    for y in 0..h {
+                        let a = y as isize - r;
+                        let b = y as isize + r;
+                        out[y * sw + dx] =
+                            (prefix_at(&pre, &line, b) - prefix_at(&pre, &line, a - 1)) / taps;
+                    }
+                }
+                out
+            })
+            .collect();
+        dst.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
+            for (i, strip) in strips.iter().enumerate() {
+                let x0 = i * BOX_STRIP;
+                let sw = BOX_STRIP.min(w - x0);
+                row[x0..x0 + sw].copy_from_slice(&strip[y * sw..y * sw + sw]);
             }
-            pre[0] = 0.0;
-            for (k, &v) in line.iter().enumerate() {
-                pre[k + 1] = pre[k] + v;
-            }
-            for y in 0..h {
-                let a = y as isize - r;
-                let b = y as isize + r;
-                dst[y * w + x] = (prefix_at(&pre, &line, b) - prefix_at(&pre, &line, a - 1)) / taps;
-            }
-        }
+        });
     }
 }
 

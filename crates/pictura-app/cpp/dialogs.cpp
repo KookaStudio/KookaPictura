@@ -17,6 +17,7 @@
 #include <QtCore/QStandardPaths>
 #include <QtCore/QStorageInfo>
 #include <QtCore/QXmlStreamReader>
+#include <QtGui/QImage>
 #include <QtGui/QKeyEvent>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QShortcut>
@@ -112,6 +113,29 @@ void setUnsavedPromptInteractive(bool interactive)
 void setNonInteractiveUnsavedChoice(UnsavedChoice choice)
 {
     g_nonInteractiveChoice = choice;
+}
+
+QImage documentPreviewImage(PictureView* view, int minEdge)
+{
+    if (!view || !view->has_document()) {
+        return QImage();
+    }
+    int best = -1;
+    QSize size;
+    for (int level = 0; level < view->display_level_count(); ++level) {
+        const QStringList parts =
+            view->display_level_size(level).split(QLatin1Char(' '), Qt::SkipEmptyParts);
+        if (parts.size() != 2) {
+            break;
+        }
+        const QSize levelSize(parts[0].toInt(), parts[1].toInt());
+        if (level > 0 && qMax(levelSize.width(), levelSize.height()) < minEdge) {
+            break;
+        }
+        best = level;
+        size = levelSize;
+    }
+    return best < 0 ? QImage() : view->display_image(best, 0, 0, size.width(), size.height());
 }
 
 UnsavedChoice askUnsaved(QWidget* parent, const QString& documentName)

@@ -9,6 +9,7 @@
 use pictura_core::PixelBuffer;
 
 use crate::{kernel::clamp_index, validate, FilterError};
+use rayon::prelude::*;
 
 /// Despeckle: how far outside a flat neighborhood the center must sit before
 /// it reads as an isolated outlier rather than texture.
@@ -55,10 +56,11 @@ fn window_median(src: &[u8], w: usize, h: usize, r: usize) -> Vec<u8> {
     let reach = r as isize;
     let target = (2 * r + 1) * (2 * r + 1) / 2;
     let mut out = vec![0u8; w * h];
-    let mut rows = Vec::with_capacity(2 * r + 1);
-    for y in 0..h {
-        rows.clear();
-        rows.extend((-reach..=reach).map(|dy| clamp_index(y as isize + dy, h) * w));
+    // Rows are independent: each starts its own tally.
+    out.par_chunks_mut(w).enumerate().for_each(|(y, out)| {
+        let rows: Vec<usize> = (-reach..=reach)
+            .map(|dy| clamp_index(y as isize + dy, h) * w)
+            .collect();
         let mut hist = [0u32; 256];
         let column = |hist: &mut [u32; 256], x: isize, add: bool| {
             let sx = clamp_index(x, w);
@@ -74,19 +76,19 @@ fn window_median(src: &[u8], w: usize, h: usize, r: usize) -> Vec<u8> {
         for x in -reach..=reach {
             column(&mut hist, x, true);
         }
-        for x in 0..w {
+        for (x, out) in out.iter_mut().enumerate() {
             let mut seen = 0;
             for (value, &count) in hist.iter().enumerate() {
                 seen += count as usize;
                 if seen > target {
-                    out[y * w + x] = value as u8;
+                    *out = value as u8;
                     break;
                 }
             }
             column(&mut hist, x as isize - reach, false);
             column(&mut hist, x as isize + reach + 1, true);
         }
-    }
+    });
     out
 }
 

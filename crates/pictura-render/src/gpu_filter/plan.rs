@@ -1,7 +1,7 @@
 use pictura_filters::blur::{BLUR_MORE_RADIUS, BLUR_RADIUS};
 use pictura_filters::kernel::{gaussian_kernel, sigma_from_radius};
 use pictura_filters::sharpen::{SHARPEN_AMOUNT, SHARPEN_MORE_AMOUNT, SHARPEN_RADIUS};
-use pictura_filters::Filter;
+use pictura_filters::{Filter, Quality, RadialMethod};
 
 use super::MAX_WEIGHTS;
 
@@ -21,6 +21,12 @@ pub(super) enum Plan {
     Motion {
         angle: f32,
         taps: u32,
+    },
+    /// Radial Blur's Zoom: `samples` taps along the pixel's ray from the
+    /// centre, spanning `span` of its radius.
+    RadialZoom {
+        samples: u32,
+        span: f32,
     },
     Surface {
         radius: u32,
@@ -105,6 +111,24 @@ pub(super) fn plan(filter: &Filter) -> Option<Plan> {
             Some(Plan::Motion {
                 angle: *angle as f32,
                 taps: *distance,
+            })
+        }
+        Filter::RadialBlur {
+            method: RadialMethod::Zoom,
+            amount,
+            quality,
+        } => {
+            // Zero is the identity; the CPU returns it untouched.
+            if !amount.is_finite() || *amount <= 0.0 || *amount > 100.0 {
+                return None;
+            }
+            Some(Plan::RadialZoom {
+                samples: match quality {
+                    Quality::Draft => 8,
+                    Quality::Good => 16,
+                    Quality::Best => 32,
+                },
+                span: (amount / 100.0) as f32,
             })
         }
         Filter::UnsharpMask {

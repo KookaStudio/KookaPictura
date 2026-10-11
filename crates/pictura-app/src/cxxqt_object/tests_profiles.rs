@@ -479,3 +479,257 @@ fn large_document_stroke_profile() {
         rect.height()
     );
 }
+
+/// Print-only: the Filter dialog's costs on a document the size of the
+/// 16507×16196 world map (issue #152) — the dialog's full-image reads, a
+/// section preview at fit and at 100% zoom, a re-preview after a parameter
+/// change, cancel, and the commit with its refresh and history capture.
+/// `PICTURA_PROFILE_GPU=1` runs the filters and composites on the GPU.
+#[test]
+#[ignore = "16507x16196 filter-dialog profile; run explicitly with --ignored --nocapture"]
+fn large_document_filter_profile() {
+    use super::filter_map::filter_from_kind_params;
+    use super::helpers_composite::premultiplied_display_image;
+    use super::impl_filters::{apply_filter_active_region, cancel_filter_preview};
+    use super::PictureViewRust;
+    use std::time::Instant;
+
+    let (w, h) = (16507u32, 16196u32);
+    let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
+    let mut layer = pixel_layer("Background", w, h, (30, 60, 90));
+    for (c, ch) in layer.channels.iter_mut().filter(|c| c.id >= 0).enumerate() {
+        let plane = ch.data.as_mut_slice();
+        for (i, px) in plane.iter_mut().enumerate() {
+            let (x, y) = (i % w as usize, i / w as usize);
+            *px = ((x * 7 + y * 13 + c * 53) % 256) as u8;
+        }
+    }
+    doc.layers = vec![layer];
+    doc.composite = pictura_render::composite_active(&doc, false).0;
+    let mut rust = PictureViewRust {
+        doc: Some(doc),
+        active_layer: Some("0".to_string()),
+        gpu_compute: std::env::var_os("PICTURA_PROFILE_GPU").is_some(),
+        ..Default::default()
+    };
+    rust.reset_pyramid();
+    let r = &mut rust;
+    r.history
+        .capture_live(r.doc.as_mut().expect("document"), &None, "Open");
+
+    let timed = |label: &str, f: &mut dyn FnMut()| {
+        let t = Instant::now();
+        f();
+        ms(label, t.elapsed());
+    };
+    let refresh = |rust: &mut PictureViewRust, rect: PsdRect| {
+        if let Some((x0, y0, clipped, srgb)) = rust.refresh_region_buffer(rect) {
+            rust.apply_refreshed_region(x0, y0, clipped, srgb);
+        }
+    };
+
+    let fit_scale = f64::from(VIEW.0) / f64::from(w);
+    for (kind, filter) in [
+        (
+            "gaussian-blur",
+            pictura_filters::Filter::GaussianBlur { radius: 0.3 },
+        ),
+        ("median", pictura_filters::Filter::Median { radius: 1 }),
+    ] {
+        let whole = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: h as i32,
+            right: w as i32,
+        };
+        for pass in ["build + render", "render"] {
+            let t = Instant::now();
+            let shown =
+                super::filter_tools::canvas_proxy_buffer(&mut rust, &filter, whole, fit_scale)
+                    .expect("proxy");
+            println!(
+                "{kind} canvas proxy at fit, {pass}: {:.0}ms ({}x{})",
+                t.elapsed().as_secs_f64() * 1000.0,
+                shown.width,
+                shown.height
+            );
+        }
+    }
+    rust.canvas_proxy = None;
+
+    // A commit on a worker: how long it runs, and what the UI thread still
+    // does when it lands.
+    for (kind, filter) in [
+        (
+            "gaussian-blur",
+            pictura_filters::Filter::GaussianBlur { radius: 4.0 },
+        ),
+        (
+            "accented-edges",
+            pictura_filters::Filter::AccentedEdges {
+                edge_width: 9,
+                edge_brightness: 38,
+                smoothness: 5,
+            },
+        ),
+    ] {
+        use super::filter_tools::jobs::{commit_finish, commit_start};
+        let t = Instant::now();
+        assert!(commit_start(
+            &mut rust,
+            vec![filter],
+            format!("Filter: {kind}"),
+            None
+        ));
+        let started = t.elapsed();
+        while rust.filter_jobs.commit_running() {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        let worker = t.elapsed();
+        let t = Instant::now();
+        assert!(commit_finish(&mut rust).is_ok());
+        println!(
+            "{kind} background commit: start (UI)={:.0}ms worker={:.0}ms land (UI)={:.0}ms",
+            started.as_secs_f64() * 1000.0,
+            worker.as_secs_f64() * 1000.0,
+            t.elapsed().as_secs_f64() * 1000.0
+        );
+    }
+
+    timed("dialog image() (full QImage)", &mut || {
+        let level0 = rust.level0.as_ref().expect("level 0");
+        drop(premultiplied_display_image(level0));
+    });
+
+    let fit = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: h as i32,
+        right: w as i32,
+    };
+    let (cx, cy) = (w as i32 / 2, h as i32 / 2);
+    let actual = PsdRect {
+        top: cy - VIEW.1 as i32 / 2,
+        left: cx - VIEW.0 as i32 / 2,
+        bottom: cy + VIEW.1 as i32 / 2,
+        right: cx + VIEW.0 as i32 / 2,
+    };
+    for (kind, params) in [
+        ("gaussian-blur", vec![4.0]),
+        ("unsharp-mask", vec![150.0, 2.0, 0.0]),
+        ("median", vec![2.0]),
+    ] {
+        assert!(filter_from_kind_params(kind, &params).is_some(), "{kind}");
+        for (zoom, section) in [("fit", fit), ("100%", actual)] {
+            for pass in ["first", "re-preview"] {
+                let t = Instant::now();
+                let region =
+                    apply_filter_active_region(&mut rust, kind, &params, false, Some(section))
+                        .expect("preview applies");
+                let filter = t.elapsed();
+                let t = Instant::now();
+                if let Some(rect) = region {
+                    refresh(&mut rust, rect);
+                }
+                println!(
+                    "{kind} preview {zoom} {pass}: filter={:.0}ms refresh={:.0}ms",
+                    filter.as_secs_f64() * 1000.0,
+                    t.elapsed().as_secs_f64() * 1000.0
+                );
+            }
+            let t = Instant::now();
+            let region = cancel_filter_preview(&mut rust).expect("a preview to cancel");
+            let cancel = t.elapsed();
+            let t = Instant::now();
+            if let Some(rect) = region {
+                refresh(&mut rust, rect);
+            }
+            println!(
+                "{kind} cancel {zoom}: restore={:.0}ms refresh={:.0}ms",
+                cancel.as_secs_f64() * 1000.0,
+                t.elapsed().as_secs_f64() * 1000.0
+            );
+        }
+        apply_filter_active_region(&mut rust, kind, &params, false, Some(actual)).expect("preview");
+        let t = Instant::now();
+        let region = apply_filter_active_region(&mut rust, kind, &params, true, None)
+            .expect("commit applies");
+        let filter = t.elapsed();
+        let t = Instant::now();
+        if let Some(rect) = region {
+            refresh(&mut rust, rect);
+        }
+        let refreshed = t.elapsed();
+        let t = Instant::now();
+        let r = &mut rust;
+        r.history
+            .capture_live(r.doc.as_mut().expect("document"), &None, "Filter");
+        println!(
+            "{kind} commit: filter={:.0}ms refresh={:.0}ms history_capture={:.0}ms",
+            filter.as_secs_f64() * 1000.0,
+            refreshed.as_secs_f64() * 1000.0,
+            t.elapsed().as_secs_f64() * 1000.0
+        );
+    }
+}
+
+/// Print-only: a full Radial Blur committed on a worker on a document the size
+/// of `earth_xtralarge.jpg` (8000×8000, issue #152): the worker's time, what
+/// the UI thread does when it lands, and the bytes history keeps for it.
+#[test]
+#[ignore = "8000x8000 radial-blur commit profile; run explicitly with --ignored --nocapture"]
+fn radial_blur_commit_profile() {
+    use super::filter_tools::jobs::{commit_finish, commit_start};
+    use super::PictureViewRust;
+    use pictura_filters::{Filter, Quality, RadialMethod};
+    use std::time::Instant;
+
+    let (w, h) = (8000u32, 8000u32);
+    let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
+    let mut layer = pixel_layer("Background", w, h, (30, 60, 90));
+    for (c, ch) in layer.channels.iter_mut().filter(|c| c.id >= 0).enumerate() {
+        for (i, px) in ch.data.as_mut_slice().iter_mut().enumerate() {
+            let (x, y) = (i % w as usize, i / w as usize);
+            *px = ((x * 7 + y * 13 + c * 53) % 256) as u8;
+        }
+    }
+    doc.layers = vec![layer];
+    doc.composite = pictura_render::composite_active(&doc, false).0;
+    let mut rust = PictureViewRust {
+        doc: Some(doc),
+        active_layer: Some("0".to_string()),
+        gpu_compute: std::env::var_os("PICTURA_PROFILE_GPU").is_some(),
+        ..Default::default()
+    };
+    rust.reset_pyramid();
+    let r = &mut rust;
+    r.history
+        .capture_live(r.doc.as_mut().expect("document"), &None, "Open");
+
+    for method in [RadialMethod::Spin, RadialMethod::Zoom] {
+        let filter = Filter::RadialBlur {
+            method,
+            amount: 100.0,
+            quality: Quality::Best,
+        };
+        let t = Instant::now();
+        assert!(commit_start(
+            &mut rust,
+            vec![filter],
+            "Filter: Radial Blur".into(),
+            None
+        ));
+        while rust.filter_jobs.commit_running() {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        let worker = t.elapsed();
+        let t = Instant::now();
+        assert!(commit_finish(&mut rust).is_ok());
+        println!(
+            "radial {method:?} 100 Best: worker={:.0}ms land (UI)={:.0}ms history tiles={:.0} MB",
+            worker.as_secs_f64() * 1000.0,
+            t.elapsed().as_secs_f64() * 1000.0,
+            rust.history.retained_tile_bytes() as f64 / 1e6
+        );
+    }
+}

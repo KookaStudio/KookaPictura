@@ -93,46 +93,103 @@ pub fn gaussian_blur_planes(buf: &mut PixelBuffer, sigma: f64) {
     if sigma <= 0.0 || n == 0 {
         return;
     }
-    let kernel = gaussian_kernel(sigma);
-    let support = (kernel.len() / 2) as isize;
+    let kernel: Vec<f32> = gaussian_kernel(sigma).iter().map(|&kw| kw as f32).collect();
+    let support = kernel.len() / 2;
     let planes = (buf.channels as usize).min(3);
-    // Rows are independent and each pixel's sum runs in kernel order, so the
-    // parallel passes are byte-identical to a serial run.
-    let kernel: Vec<f32> = kernel.iter().map(|&kw| kw as f32).collect();
+    // Each pass accumulates a whole row one tap at a time, so it vectorizes;
+    // every pixel still sums its taps in kernel order from zero, so the result
+    // is byte-identical to a per-pixel serial loop (`blur_matches_the_per_pixel_sum`).
     for c in 0..planes {
         let base = c * n;
-        let src = buf.data[base..base + n].to_vec();
-        let mut tmp = vec![0f32; n];
-        tmp.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
-            let line = &src[y * w..y * w + w];
-            for (x, out) in row.iter_mut().enumerate() {
-                let mut acc = 0f32;
-                for (ki, &kw) in kernel.iter().enumerate() {
-                    let sx = clamp_index(x as isize + ki as isize - support, w);
-                    acc += kw * line[sx] as f32;
+        let mut across = vec![0f32; n];
+        let src = &buf.data[base..base + n];
+        across.par_chunks_mut(w).enumerate().for_each_init(
+            || vec![0f32; w + 2 * support],
+            |padded, (y, row)| {
+                let line = &src[y * w..y * w + w];
+                for (i, p) in padded.iter_mut().enumerate() {
+                    *p = f32::from(line[clamp_index(i as isize - support as isize, w)]);
                 }
-                *out = acc;
-            }
-        });
+                for (k, &kw) in kernel.iter().enumerate() {
+                    for (out, &v) in row.iter_mut().zip(&padded[k..k + w]) {
+                        *out += kw * v;
+                    }
+                }
+            },
+        );
         buf.data[base..base + n]
             .par_chunks_mut(w)
             .enumerate()
-            .for_each(|(y, row)| {
-                for (x, out) in row.iter_mut().enumerate() {
-                    let mut acc = 0f32;
-                    for (ki, &kw) in kernel.iter().enumerate() {
-                        let sy = clamp_index(y as isize + ki as isize - support, h);
-                        acc += kw * tmp[sy * w + x];
+            .for_each_init(
+                || vec![0f32; w],
+                |acc, (y, row)| {
+                    acc.fill(0.0);
+                    for (k, &kw) in kernel.iter().enumerate() {
+                        let sy = clamp_index((y + k) as isize - support as isize, h);
+                        for (a, &v) in acc.iter_mut().zip(&across[sy * w..sy * w + w]) {
+                            *a += kw * v;
+                        }
                     }
-                    *out = acc.round().clamp(0.0, 255.0) as u8;
-                }
-            });
+                    for (out, &a) in row.iter_mut().zip(acc.iter()) {
+                        *out = a.round().clamp(0.0, 255.0) as u8;
+                    }
+                },
+            );
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The per-pixel serial blur the row-wise passes replaced.
+    fn per_pixel_blur(buf: &mut PixelBuffer, sigma: f64) {
+        let (w, h) = (buf.width as usize, buf.height as usize);
+        let n = w * h;
+        let kernel: Vec<f32> = gaussian_kernel(sigma).iter().map(|&k| k as f32).collect();
+        let support = (kernel.len() / 2) as isize;
+        for c in 0..(buf.channels as usize).min(3) {
+            let src = buf.data[c * n..c * n + n].to_vec();
+            let mut tmp = vec![0f32; n];
+            for y in 0..h {
+                for x in 0..w {
+                    let mut acc = 0f32;
+                    for (k, &kw) in kernel.iter().enumerate() {
+                        let sx = clamp_index(x as isize + k as isize - support, w);
+                        acc += kw * src[y * w + sx] as f32;
+                    }
+                    tmp[y * w + x] = acc;
+                }
+            }
+            for y in 0..h {
+                for x in 0..w {
+                    let mut acc = 0f32;
+                    for (k, &kw) in kernel.iter().enumerate() {
+                        let sy = clamp_index(y as isize + k as isize - support, h);
+                        acc += kw * tmp[sy * w + x];
+                    }
+                    buf.data[c * n + y * w + x] = acc.round().clamp(0.0, 255.0) as u8;
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn blur_matches_the_per_pixel_sum() {
+        for (w, h) in [(37u32, 23u32), (3, 41), (1, 1), (64, 2)] {
+            let mut buf = PixelBuffer::new(w, h, 4);
+            for (i, v) in buf.data.as_mut_slice().iter_mut().enumerate() {
+                *v = ((i * 7919) ^ (i >> 3)) as u8;
+            }
+            for sigma in [0.1, 0.4, 1.3, 4.0, 11.0] {
+                let mut fast = buf.clone();
+                let mut slow = buf.clone();
+                gaussian_blur_planes(&mut fast, sigma);
+                per_pixel_blur(&mut slow, sigma);
+                assert_eq!(fast.data, slow.data, "{w}x{h} sigma {sigma}");
+            }
+        }
+    }
 
     #[test]
     fn sigma_floor() {

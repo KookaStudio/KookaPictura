@@ -148,7 +148,7 @@ LensFlareDialog::LensFlareDialog(PictureView* view, const FilterCommandSpec& spe
 
     pad_ = new FlareCenterPad(this);
     if (view_ && view_->has_document()) {
-        const QImage image = view_->image();
+        const QImage image = documentPreviewImage(view_, kPadSize);
         if (!image.isNull()) {
             proxy_ = image.scaled(kPadSize, kPadSize, Qt::KeepAspectRatio, Qt::SmoothTransformation)
                          .convertToFormat(QImage::Format_RGBA8888);
@@ -156,7 +156,7 @@ LensFlareDialog::LensFlareDialog(PictureView* view, const FilterCommandSpec& spe
                 proxyRgba_.append(reinterpret_cast<const char*>(proxy_.constScanLine(y)),
                                   proxy_.width() * 4);
             }
-            pad_->setAspect(image.size());
+            pad_->setAspect(QSize(view_->document_width(), view_->document_height()));
         }
     }
     pad_->setCenter(QPointF(center.initial.value(0, 0.5), center.initial.value(1, 0.5)));
