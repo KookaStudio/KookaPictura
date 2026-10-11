@@ -36,6 +36,8 @@ runs:
     - name: Build and stage
       shell: pwsh
       run: |
+        $ErrorActionPreference = 'Stop'
+        $PSNativeCommandUseErrorActionPreference = $true
         cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF `
           -DCMAKE_INSTALL_PREFIX="$env:GITHUB_WORKSPACE/stage"
         cmake --build build --config Release
@@ -47,6 +49,8 @@ runs:
     - name: Deploy Qt
       shell: pwsh
       run: |
+        $ErrorActionPreference = 'Stop'
+        $PSNativeCommandUseErrorActionPreference = $true
         windeployqt --release "$env:GITHUB_WORKSPACE\stage\bin\pictura.exe"
 
     # The headless smoke check selects the offscreen QPA plugin. windeployqt's
