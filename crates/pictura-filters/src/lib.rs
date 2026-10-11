@@ -24,6 +24,7 @@ pub mod render;
 pub mod sharpen;
 mod stylize;
 
+pub use blur::lens::{DepthMap, IrisShape, MAX_LENS_RADIUS};
 pub use hdr_toning::HdrToningParams;
 pub use render::{LensType, Light, LightType, Lighting, TextureChannel, MAX_LIGHTS};
 pub use stylize::DiffuseMode;

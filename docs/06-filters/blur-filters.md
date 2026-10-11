@@ -43,8 +43,8 @@ Blur filters soften a selection or a whole image by averaging the pixels adjacen
 | `Filter > Blur > Smart Blur` | dialog | — | Radius, Threshold, Quality, Mode |
 | `Filter > Blur > Surface Blur` | dialog | — | Radius, Threshold |
 | `Filter > Blur > Field/Iris/Tilt-Shift` | workspace | — | CS6 Blur Gallery; see `blur-gallery.md` |
-| `Filter > Blur > Lens Blur` depth source | combo | — | Selection / alpha channel / layer mask |
-| Filter dialog preview | widget | +/- | Drag to recenter; Lens Blur click-to-focus |
+| `Filter > Blur > Lens Blur` depth source | combo | — | None / Transparency / Layer Mask / Selection |
+| Filter dialog preview | widget | +/- | Drag to recenter |
 
 ## Parameters & ranges
 
@@ -69,21 +69,23 @@ Blur filters soften a selection or a whole image by averaging the pixels adjacen
 | Smart Blur | Mode | enum | Normal | Normal / Edge Only / Overlay Edge | Sourced |
 | Surface Blur | Radius | int px | 5 *(inferred)* | 1–100 *(inferred)* | Area sampled |
 | Surface Blur | Threshold | int levels | 15 *(inferred)* | 1–255 *(inferred)* | Tonal divergence gate |
-| Lens Blur | Preview | enum | Faster | Faster / More Accurate | Sourced |
-| Lens Blur | Depth Map Source | combo | None | none / selection / alpha channel / layer mask | Black = front, white = far |
-| Lens Blur | Blur Focal Distance | int | 0 *(inferred)* | 0–255 *(inferred)* | Depth in focus |
+| Lens Blur | Preview | enum | Faster | Faster / More Accurate | Sourced; preview sampling only, never committed |
+| Lens Blur | Depth Map Source | combo | None | none / transparency / layer mask / selection | Black = front, white = far |
+| Lens Blur | Blur Focal Distance | int | 126 | 0–255 | Depth in focus |
 | Lens Blur | Invert | bool | off | on/off | Invert depth map |
-| Lens Blur | Shape | preset | Hexagon *(inferred)* | iris presets (blade count) | Iris/bokeh shape |
-| Lens Blur | Blade Curvature | int % | 0 *(inferred)* | 0–100 *(inferred)* | Rounds the iris |
-| Lens Blur | Rotation | int ° | 0 *(inferred)* | 0–360 *(inferred)* | Rotates the iris |
-| Lens Blur | Radius | int px | 15 *(inferred)* | 0–100 *(inferred)* | Blur amount |
-| Lens Blur | Specular Threshold | int | 255 *(inferred)* | 0–255 *(inferred)* | Brightness cutoff for highlights |
-| Lens Blur | Specular Brightness | int | 0 *(inferred)* | 0–100 *(inferred)* | Highlight boost |
-| Lens Blur | Noise Distribution | enum | Gaussian *(inferred)* | Uniform / Gaussian | Re-inject grain |
+| Lens Blur | Shape | preset | Triangle (3) | Triangle (3) … Octagon (8) | Iris/bokeh shape |
+| Lens Blur | Blade Curvature | int % | 33 | 0–100 | Rounds the iris |
+| Lens Blur | Rotation | int ° | 191 | 0–360 | Rotates the iris |
+| Lens Blur | Radius | int px | 50 | 0–100 | Blur amount |
+| Lens Blur | Specular Threshold | int | 93 | 0–255 | Brightness cutoff for highlights |
+| Lens Blur | Specular Brightness | int | 44 | 0–100 | Highlight boost |
+| Lens Blur | Noise Distribution | enum | Gaussian | Uniform / Gaussian | Re-inject grain |
 | Lens Blur | Monochromatic | bool | off | on/off | Noise without color change |
-| Lens Blur | Noise Amount | int | 0 *(inferred)* | 0–100 *(inferred)* | Grain amount |
+| Lens Blur | Noise Amount | int | 47 | 0–100 | Grain amount |
 
-`(inferred)` values come from modern Photoshop dialogs and community documentation, not the fetched CS6 PDF; see `## Open questions`.
+Lens Blur's defaults and ranges are pinned to the CS6 dialog in issue #338.
+The remaining `(inferred)` values come from modern Photoshop dialogs and
+community documentation, not the fetched CS6 PDF; see `## Open questions`.
 
 ## Algorithms & pipeline
 
@@ -147,7 +149,7 @@ Proposed under `pictura-filters::blur` (`ARCH-002`, `ARCH-006`):
 - `pictura-filters::blur::radial` — `RadialBlur { method: Spin|Zoom, amount, quality, center }`; polar resampler + 1-D smear.
 - `pictura-filters::photorust::convolve::surface_blur` — `SurfaceBlur { radius, threshold }`; thresholded window mean on a sliding histogram.
 - `pictura-filters::blur::average` — `Average`; region mean.
-- `pictura-filters::blur::lens` — `LensBlur { source: DepthSource, focal, invert, iris: Iris, radius, specular, noise }`; disc/iris convolution, specular add, grain injection.
+- `pictura-filters::blur::lens` — `Filter::LensBlur { depth: Option<Arc<DepthMap>>, focal, invert, shape, radius, curvature, rotation, specular_brightness, specular_threshold, noise_amount, noise_distribution, monochromatic, faster, seed }`; iris-shaped aperture convolution, specular add, seeded grain injection. The app materializes the chosen source (transparency, layer mask, or selection) into the `DepthMap`; `None` acts as a uniform far depth.
 - `pictura-filters::blur::smart` — `SmartBlur { radius, threshold, quality, mode }`; edge-gated averaging.
 - `pictura-filters::blur::shape` — `ShapeBlur { kernel: ShapeRef, radius }`.
 - `pictura-filters::blur::simple` — Blur / Blur More as Gaussian Blur at the fixed `BLUR_RADIUS` / `BLUR_MORE_RADIUS`.
@@ -226,8 +228,8 @@ Searches performed (not documents fetched): DuckDuckGo/Brave for modern Photosho
 - **CS6 parameter ranges/defaults.** The fetched PDF gives ranges only for Motion Blur distance (1–999), Radial Zoom amount (1–100), and Dust & Scratches (elsewhere). All other ranges/defaults are *(inferred)* from modern Photoshop/community and need confirmation from a CS6 build or scripted dialog read.
 - **Box Blur and Shape Blur 16-bit availability.** The CS6 16-bit list includes both; confirm the exact CS6-at-launch dot release. Shape Blur's shape-preset enumeration and default are unknown.
 - **Radial Spin amount semantics.** Whether the Spin "amount" is literal degrees or a 1–100 scale is unclear; resolve with measurements.
-- **Lens Blur iris definition.** Blade counts/presets, curvature mapping, and the specular-highlight compositing formula are closed. Resolve by matching out-of-focus point-light images.
-- **Lens Blur noise distribution defaults.** Distribution and monochromatic defaults are unverified.
+- **Lens Blur iris definition.** The blade presets and dialog defaults are pinned to the CS6 dialog in #338; the curvature-to-polygon mapping and the specular-highlight compositing formula remain closed. Resolve by matching out-of-focus point-light images.
+- **Lens Blur noise distribution defaults.** Distribution (Gaussian) and Monochromatic (off) are pinned to the CS6 dialog in #338; the grain's exact distribution shape remains unverified.
 - **Border handling.** Whether Photoshop clamps, reflects, or wraps at image borders for each blur is untested. Resolve with edge-pixel probes.
 - **Smart Blur edge kernel.** Exact edge detection and threshold application are closed; `Edge Only`/`Overlay Edge` output convention (black/white assignment) is known but the kernel is not. Behavioral parity.
 - **Gaussian precision.** Whether CS6 computes 8-bit blur in 8-bit integer or in higher precision internally affects banding; resolve by gradient tests.

@@ -13,13 +13,14 @@ Snapshot for resuming after a context break. Update after each milestone.
 - Toolchain: Rust 1.98 (`rust-toolchain.toml`), system Qt **6.11.1**, cxx-qt
   **0.10.0**, wgpu **30.0.1**, lcms2 **6.2.0** (system Little CMS 2.19).
 - Oracles installed for tests: `psd-tools` 1.19, ImageMagick 7.1.2, `magick`.
-- Test suite: **2717 tests, 0 failed, 18 skipped** from
-  `cargo nextest run --workspace` (the skips are the `#[ignore]`d profiling/GPU
-  probes; nextest also excludes the pre-existing ignored `pictura-render` doctest
-  that `cargo test --workspace` reports separately). The C++ self-test reports
-  **475 passed, 0 failed, 0 skipped** standalone; the unified report
+- Test suite: **2940 tests, 2939 passed, 20 skipped, 1 failed** from
+  `cargo nextest run --workspace` — the failure is the local ImageMagick
+  fixture mismatch (`imagemagick_fixtures_reproduce`: 7.1.2-27 here vs the
+  CI-pinned 7.1.2-29; it fails on `master` too). The C++ self-test reports
+  **474 passed, 0 failed, 0 skipped** standalone; the unified report
   (`scripts/verify-fast.sh`, which reruns both plus the workspace probes and the
-  Qt Test suites) reports **3534 passed, 19 skipped, 0 failed**.
+  Qt Test suites) reports **3944 passed, 21 skipped, 1 failed** (the same
+  fixture check).
 - **Large images** (#185, branch `perf/185-large-image-boundaries`, PR #257,
   OpenSpec change `large-image-stroke-boundaries`, numbers in its `design.md`):
   measured on a 16507×16196 PNG. History keeps a private copy of the current
@@ -302,6 +303,31 @@ Snapshot for resuming after a context break. Update after each milestone.
   `tst_custom_filter`. Verified: `TASK_ALLOWS_DOCS=1 bash scripts/verify-full.sh`
   → `verify-full: OK` (TOTAL 3917 passed · 21 skipped · 0 failed); `openspec
   validate --all --strict` 232/232.
+- **Lens Blur** (change `lens-blur-filter`, issue #338): `pictura-filters` gains
+  `DepthMap`/`IrisShape` and `Filter::LensBlur` with the kernel in
+  `blur/lens.rs` — a per-pixel `|d − focal|/255` circle of confusion, a
+  precomputed antialiased iris tap table (blades 3–8, curvature, rotation), an
+  additive specular highlight, and seeded uniform/Gaussian grain; `None` is a
+  uniform far depth, a mismatched map stretches bilinearly, and Lens Blur moves
+  transparency (alpha allowlist) while the alpha pass drops the colour-only
+  grain and specular. `Filter ▸ Blur ▸ Lens Blur…` opens CS6's dialog on the
+  shared pane (15 slots; defaults from the #338 screenshot: Source None, focal
+  126, Triangle (3), radius 50, curvature 33, rotation 191, brightness 44,
+  threshold 93, noise 47 Gaussian, Faster), previews the whole layer, and
+  always commits More Accurate. The app materializes Transparency / Layer Mask
+  / Selection into a depth map cropped to the active layer
+  (`filter_tools/lens_blur_depths.rs`, `filter_lens_blur_depth`); an
+  unavailable source refuses the commit. No ImageMagick equivalent (mapping
+  row tolerance 0); guarded by the kernel property tests, a digest entry, the
+  render alpha/apron tests, and `tst_lens_blur_dialog`. Ceilings (`ponytail:`):
+  the CoC ramp, iris curvature mapping, specular compositing, and grain shape
+  are inferred approximations; the source combo has no named alpha channels
+  and no click-to-focus preview; the gather is `O(Σ CoC area)` per pixel on
+  the CPU. Verified: `TASK_ALLOWS_DOCS=1 bash scripts/verify-full.sh` builds
+  and passes fmt, clippy, file-size, selftest-budget, and guard;
+  `openspec validate --all --strict` 232/232; the unified report is 3944
+  passed · 21 skipped · 1 failed, the one failure the pre-existing local
+  ImageMagick fixture mismatch noted above.
 - **Lighting Effects workspace** (change `lighting-effects-workspace`, issue
   #225): `render::lighting_effects` (now `render/lighting.rs`) shades a CS6 rig
   of 1–16 Spot / Point / Infinite lights with photorust's model. A Spot is an

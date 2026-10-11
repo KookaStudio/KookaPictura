@@ -297,7 +297,15 @@ void FilterPreviewDialog::applyInitial(const QList<double>& initial)
 
 QList<double> FilterPreviewDialog::values() const
 {
-    return controls_->values();
+    return resolvedValues(controls_->values());
+}
+
+QList<double> FilterPreviewDialog::resolvedValues(QList<double> values) const
+{
+    if (spec_.kind == QStringLiteral("lens-blur") && values.size() == 15 && view_) {
+        values[13] = filter_lens_blur_depth(*view_, static_cast<int>(values[1]));
+    }
+    return values;
 }
 
 void FilterPreviewDialog::valuesChanged()
@@ -370,8 +378,8 @@ bool FilterPreviewDialog::showProxy()
         scale = std::sqrt(kCanvasProxyPixels / area);
     }
     const QImage picture =
-        filter_canvas_proxy(*view_, spec_.kind, controls_->scaledValues(scale), region.x(),
-                            region.y(), region.width(), region.height(), scale);
+        filter_canvas_proxy(*view_, spec_.kind, resolvedValues(controls_->scaledValues(scale)),
+                            region.x(), region.y(), region.width(), region.height(), scale);
     if (picture.isNull()) {
         return false;
     }

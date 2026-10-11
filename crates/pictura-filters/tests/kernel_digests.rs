@@ -2,7 +2,9 @@
 //! serial versions: parallelizing a kernel must not move a single sample.
 
 use pictura_core::PixelBuffer;
-use pictura_filters::{apply, Filter, Quality, RadialMethod};
+use pictura_filters::{
+    apply, DepthMap, Filter, IrisShape, NoiseDistribution, Quality, RadialMethod,
+};
 
 /// A deterministic 4-channel picture with noise, gradients and hard edges, in
 /// odd sizes so rows and column strips never divide evenly.
@@ -26,6 +28,13 @@ fn digest(buf: &PixelBuffer) -> u64 {
     buf.data.iter().fold(0xcbf2_9ce4_8422_2325u64, |h, &b| {
         (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
     })
+}
+
+/// A horizontal depth ramp matching `picture`'s size.
+fn lens_depth() -> DepthMap {
+    let (w, h) = (97u32, 61u32);
+    let samples: Vec<u8> = (0..w * h).map(|i| ((i % w) * 255 / 96) as u8).collect();
+    DepthMap::new(w, h, samples).unwrap()
 }
 
 fn kernels() -> Vec<(&'static str, Filter)> {
@@ -91,6 +100,25 @@ fn kernels() -> Vec<(&'static str, Filter)> {
                 quality: Quality::Best,
             },
         ),
+        (
+            "lens blur",
+            Filter::LensBlur {
+                depth: Some(std::sync::Arc::new(lens_depth())),
+                focal: 96,
+                invert: false,
+                shape: IrisShape::Hexagon,
+                radius: 9,
+                curvature: 40,
+                rotation: 23.0,
+                specular_brightness: 60,
+                specular_threshold: 180,
+                noise_amount: 25,
+                noise_distribution: NoiseDistribution::Gaussian,
+                monochromatic: false,
+                faster: false,
+                seed: 7,
+            },
+        ),
     ]
 }
 
@@ -112,6 +140,7 @@ fn row_parallel_kernels_keep_their_serial_bytes() {
         ("high pass", 0x366c_a481_61d8_b4dd),
         ("radial spin", 0x3c14_296d_3343_fe21),
         ("radial zoom", 0x2327_b5e8_6773_fd83),
+        ("lens blur", 0x954e_772d_0d08_f422),
     ];
     let source = picture();
     for ((name, filter), (want_name, want)) in kernels().into_iter().zip(expected) {
