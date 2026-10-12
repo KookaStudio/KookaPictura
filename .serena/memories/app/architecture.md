@@ -42,8 +42,12 @@ tests) and linked into the C++ executable `pictura` by CMake via `cxx_qt_import_
 - `scripts/report_tests.py` parses both self-test invocations' token streams and merges checks by
   `(suite, name)`.
 - **State isolation**: `main.cpp` points `XDG_STATE_HOME` at a temp dir, so the self-test never
-  touches real preferences/recovery state. The session store is
+  touches real preferences/recovery state; if that temp dir cannot be created the run aborts
+  (exit 199) instead of falling back to the real store. The session store is
   `$XDG_STATE_HOME/kooka-pictura/state.json` (default `~/.local/state/kooka-pictura/state.json`).
+  Every write stamps a per-launch `writerToken`/`writtenAt`; `saveSession` refuses a store another
+  launch wrote at or after this launch started, and a refused frame save skips the workspace
+  snapshot (`session-store-single-writer`).
 
 ## GPU interop
 

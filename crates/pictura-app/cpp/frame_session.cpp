@@ -162,8 +162,11 @@ void PicturaMainWindow::saveSession()
     state.panelColumns = serializeWorkspaceLayout();
     state.schemaVersion = 9;
     state.recent = recent_;
-    pictura::saveSession(state);
-    snapshotActiveWorkspace();
+    // A refused write means another instance wrote the store after this one
+    // launched; leave its workspace snapshot alone too.
+    if (pictura::saveSession(state)) {
+        snapshotActiveWorkspace();
+    }
 }
 
 void PicturaMainWindow::restoreSessionWindowGeometry(const SessionState& state)
