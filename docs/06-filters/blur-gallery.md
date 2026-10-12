@@ -1,8 +1,8 @@
 # Blur Gallery (Photographic Blur Gallery)
 
 - **Spec ID:** `FILT-092`
-- **Status:** `Partial` — Field Blur and the shared workspace are implemented
-  (see `## Implementation status`); Iris Blur and Tilt-Shift are not.
+- **Status:** `Partial` — Field Blur, Iris Blur, and the shared workspace are
+  implemented (see `## Implementation status`); Tilt-Shift is not.
 - **Parity tier:** `Core` — the Blur Gallery shipped in CS6 Standard and Extended. **GPU/OpenCL-gated**: the three CS6 effects are OpenCL-accelerated and the Help's GPU FAQ ties them to an OpenCL-capable card.
 - **New in CS6:** `Yes` — CS6 introduces the **Blur Gallery** workspace with **Field Blur, Iris Blur, and Tilt-Shift** and a **Blur Effects** panel (Light Bokeh, Bokeh Color, Light Range). CS6's own Help and launch videos describe a **three-effect** gallery. **Path Blur, Spin Blur, Motion Blur Effects, Noise, and Edge Glow are post-CS6 (CC) additions** — see the clearly-marked subsection under `## CS6 behavior`. Smart-filter support is also CC-only.
 - **Depends on:** `FILT-001` filters-overview, `FILT-010` blur-filters (shares the blur-kernel vocabulary), `ARCH-006` gpu-rendering-pipeline, `ARCH-003` qt6-ui-design, `ARCH-007` color-management, `ARCH-009` undo-history, `LAY-021` smart-filters, `LAY-020` smart-objects, `IMG-005` bit-depth-and-conversion.
@@ -16,8 +16,8 @@
 
 ## Implementation status
 
-Field Blur, its Blur Effects, and the shared Blur Gallery workspace are
-implemented; Iris Blur, Tilt-Shift, Path Blur, and Spin Blur are not. The
+Field Blur, Iris Blur, their Blur Effects, and the shared Blur Gallery
+workspace are implemented; Tilt-Shift, Path Blur, and Spin Blur are not. The
 Noise tab is a post-CS6 addition ported on the owner's request.
 
 - **Engine.** `pictura_filters::blur::field` (`BlurPin { x, y, blur }`,
@@ -35,6 +35,18 @@ Noise tab is a post-CS6 addition ported on the owner's request.
   seeded Gaussian/Uniform/Grain grain scaled by the weight and damped in
   highlights. The effect curves and the grain model are inferred
   approximations (Adobe's are closed).
+- **Iris engine.** `pictura_filters::blur::iris` (`IrisPin { x, y,
+  radius_x, radius_y, angle, squareness, feather, blur }`, `iris_blur`,
+  `iris_exponent`, `MAX_IRIS_RADIUS = 10`): each pin is a rotated
+  superellipse whose semi-axes are fractions of the buffer width
+  (squareness 0..100 maps to the exponent `2 / (1 − 0.009·s)`, 2 → 20).
+  A pin's falloff is 0 inside its feather core (`ρ ≤ feather`), a smoothstep
+  across the fade band, and 1 outside the outline — the Help's A/B/C sharp,
+  fade, and blur areas. Several pins multiply their falloffs, so each keeps
+  its own sharp island, and the exterior amount is the
+  inverse-square-distance blend of the pin amounts. The radius field drives
+  Field Blur's pyramid and effects passes unchanged. The falloff curve, the
+  squareness map, and the multi-pin combine are inferred.
 - **App.** `Filter ▸ Blur Gallery ▸ Field Blur…` opens `BlurGalleryDialog`
   (with `BlurGalleryCanvas`): a document proxy with draggable circle pins
   (click adds, drag moves, the selected pin's ring changes its amount, each
@@ -46,12 +58,24 @@ Noise tab is a post-CS6 addition ported on the owner's request.
   the Gaussian/Uniform/Grain picker, Amount, Size, Roughness, Color,
   Highlights), Preview / Cancel / OK, and one history state on commit. The
   `Blur Gallery`
-  submenu also lists disabled `Iris Blur…`, `Tilt-Shift…`, `Path Blur…`, and
-  `Spin Blur…` stubs; its placement follows the later Photoshop menu (the
+  submenu also lists disabled `Tilt-Shift…`, `Path Blur…`, and `Spin Blur…`
+  stubs; its placement follows the later Photoshop menu (the
   owner's screenshot) rather than CS6's `Filter ▸ Blur` listing. Last Filter /
   Last Filter Settings reuse the pin list. The `field-blur` kind takes
   `[count, x, y, blur, …, bokeh …, noise …]`.
-- **Ceilings.** The `M` mask view is not shipped; the Motion Effects tab only
+  `Filter ▸ Blur Gallery ▸ Iris Blur…` opens the same workspace in Iris
+  mode: the Iris Blur row is active (Blur `0..=500 px`, default 15) and the
+  others are disabled; the selected pin draws its outline with four radius
+  handles (drag to resize that semi-axis and turn the outline), four
+  feather dots (drag to set the sharp core), and the roundness diamond (drag
+  to square the outline). The default iris is centred, 0.35 of the width
+  across, proportioned like the picture, feather 0.65, squareness 50; a new
+  pin copies the selected one's outline and amount. The `iris-blur` kind
+  takes `[count, x, y, radius x, radius y, angle, squareness, feather, blur,
+  …, bokeh …, noise …]`.
+- **Ceilings.** The workspace runs one effect at a time (Field and Iris do
+  not combine); an Iris feather dot moves all four together (no Alt-drag of
+  one); the `M` mask view is not shipped; the Motion Effects tab only
   states that Path/Spin motion effects are unimplemented; pins are fractions
   of the document proxy while the commit filters the active layer, so a layer
   that does not cover the document previews approximately; no GPU path; Path
