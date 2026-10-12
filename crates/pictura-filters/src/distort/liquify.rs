@@ -21,8 +21,10 @@ use pictura_core::PsdRect;
 mod resample;
 #[cfg(test)]
 mod tests;
+mod view;
 
-pub use resample::{liquify, LiquifyProxy};
+pub use resample::liquify;
+pub use view::LiquifySource;
 
 /// CS6's largest Liquify brush.
 pub const LIQUIFY_MAX_BRUSH: f64 = 15_000.0;
@@ -363,8 +365,7 @@ impl LiquifyMesh {
                 if t2 >= 1.0 {
                     continue;
                 }
-                let soft = (1.0 - t2) * (1.0 - t2);
-                let fall = (1.0 - density) + density * soft;
+                let fall = falloff(t2, density);
                 let idx = j * self.cols + i;
                 let k_raw = strength * fall;
                 if matches!(brush.tool, LiquifyTool::Freeze | LiquifyTool::Thaw) {
@@ -453,6 +454,18 @@ impl LiquifyMesh {
         }
         acc
     }
+}
+
+/// The brush's weight at squared relative distance `t2` (`< 1`): Density
+/// blends a flat core from a soft bell, and both fade to zero at the rim. A
+/// weight that stopped short of zero there would leave a step every dab
+/// repeats into a jagged ring.
+fn falloff(t2: f64, density: f64) -> f64 {
+    const RIM: f64 = 0.15;
+    let soft = (1.0 - t2) * (1.0 - t2);
+    let c = ((1.0 - t2.sqrt()) / RIM).clamp(0.0, 1.0);
+    let core = c * c * (3.0 - 2.0 * c);
+    (1.0 - density) * core + density * soft
 }
 
 /// Where a dab of a moving tool reads the current output for node `p`.

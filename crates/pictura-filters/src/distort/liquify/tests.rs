@@ -70,6 +70,21 @@ fn forward_warp_moves_pixels_along_the_drag_and_nowhere_else() {
 }
 
 #[test]
+fn the_brush_fades_to_nothing_at_its_rim() {
+    for density in [0.0, 0.5, 1.0] {
+        assert!(falloff(0.0, density) > 0.99, "{density}");
+        let near_rim = falloff(0.999, density);
+        assert!(near_rim < 0.01, "density {density}: {near_rim}");
+        let mut last = 1.0;
+        for i in 0..100 {
+            let w = falloff(f64::from(i) / 100.0, density);
+            assert!(w <= last + 1e-12, "monotonic at density {density}");
+            last = w;
+        }
+    }
+}
+
+#[test]
 fn twirl_turns_further_with_hold_time_and_alt_reverses_it() {
     let turn = |reverse: bool, holds: usize| {
         let mut mesh = LiquifyMesh::new(100, 100);
@@ -261,40 +276,116 @@ fn a_stroke_to_a_far_off_point_returns() {
         .is_none());
 }
 
-#[test]
-fn the_proxy_reduces_and_renders_through_the_mesh() {
-    let (w, h) = (64u32, 32u32);
+fn source(w: u32, h: u32, alpha: u8) -> (LiquifySource, PixelBuffer) {
+    let buf = gradient(w, h);
     let n = (w * h) as usize;
-    let r: Vec<u8> = (0..n).map(|i| ((i % 64) * 4) as u8).collect();
-    let g = vec![100u8; n];
-    let b = vec![200u8; n];
-    let a = vec![128u8; n];
-    let proxy = LiquifyProxy::new(w, h, [&r, &g, &b], Some(&a), 32);
-    assert_eq!((proxy.width(), proxy.height(), proxy.scale()), (32, 16, 2));
-    let mut mesh = LiquifyMesh::new(w, h);
-    let mut out = vec![0u8; 32 * 16 * 4];
-    let all = PsdRect {
-        left: 0,
-        top: 0,
-        right: 32,
-        bottom: 16,
-    };
-    proxy.render(&mesh, all, &mut out, None);
-    // Premultiplied: 100 at alpha 128 is 50.
-    assert_eq!(&out[4..8], &[(10 * 128 / 255) as u8, 50, 100, 128]);
+    let plane = |c: usize| pictura_core::Plane::from(buf.data[c * n..(c + 1) * n].to_vec());
+    let alpha = pictura_core::Plane::from(vec![alpha; n]);
+    (
+        LiquifySource::new(w, h, [plane(0), plane(1), plane(2)], Some(alpha)),
+        buf,
+    )
+}
+
+fn render(
+    src: &mut LiquifySource,
+    mesh: &LiquifyMesh,
+    origin: [f64; 2],
+    zoom: f64,
+    size: (usize, usize),
+) -> Vec<u8> {
+    let mut out = vec![0u8; size.0 * size.1 * 4];
+    src.render(mesh, origin, zoom, size, &mut out, None);
+    out
+}
+
+#[test]
+fn the_view_at_100_percent_shows_the_layer_exactly() {
+    let (mut src, buf) = source(40, 30, 255);
+    let out = render(
+        &mut src,
+        &LiquifyMesh::new(40, 30),
+        [0.0, 0.0],
+        1.0,
+        (40, 30),
+    );
+    let n = 40 * 30;
+    for i in 0..n {
+        for c in 0..3 {
+            assert_eq!(out[i * 4 + c], buf.data[c * n + i], "pixel {i} channel {c}");
+        }
+        assert_eq!(out[i * 4 + 3], 255);
+    }
+}
+
+#[test]
+fn a_magnified_view_interpolates_instead_of_repeating_pixels() {
+    let (mut src, _) = source(40, 30, 255);
+    // Four screen pixels per layer pixel across the red ramp.
+    let out = render(
+        &mut src,
+        &LiquifyMesh::new(40, 30),
+        [10.0, 10.0],
+        4.0,
+        (16, 1),
+    );
+    let reds: Vec<u8> = (0..16).map(|i| out[i * 4]).collect();
+    assert!(reds.windows(2).all(|w| w[1] >= w[0]), "{reds:?}");
+    let distinct = reds.windows(2).filter(|w| w[1] != w[0]).count();
+    assert!(distinct >= 10, "a smooth ramp, not 4-px blocks: {reds:?}");
+}
+
+#[test]
+fn the_view_matches_the_commit_at_100_percent() {
+    let (mut src, mut buf) = source(80, 60, 255);
+    let mut mesh = LiquifyMesh::new(80, 60);
+    mesh.stroke_to(
+        &brush(LiquifyTool::ForwardWarp, 40.0),
+        [30.0, 30.0, 1.0],
+        [45.0, 34.0, 1.0],
+    );
+    let out = render(&mut src, &mesh, [0.0, 0.0], 1.0, (80, 60));
+    liquify(&mut buf, &mesh).unwrap();
+    let n = 80 * 60;
+    for i in 0..n {
+        for c in 0..3 {
+            let (a, b) = (i32::from(out[i * 4 + c]), i32::from(buf.data[c * n + i]));
+            assert!((a - b).abs() <= 1, "pixel {i} channel {c}: {a} vs {b}");
+        }
+    }
+}
+
+#[test]
+fn a_minified_view_averages_and_off_layer_pixels_are_clear() {
+    let (mut src, _) = source(64, 32, 128);
+    let mut mesh = LiquifyMesh::new(64, 32);
+    // An eighth-size view of the 4 px checker averages to its middle grey.
+    let out = render(&mut src, &mesh, [0.0, 0.0], 0.125, (8, 4));
+    let blue = out[(2 * 8 + 3) * 4 + 2];
+    assert!(
+        (60..=70).contains(&blue),
+        "premultiplied (40+220)/2 at half alpha: {blue}"
+    );
+    assert_eq!(out[(2 * 8 + 3) * 4 + 3], 128);
+    // Off the layer's right edge: clear.
+    let out = render(&mut src, &mesh, [60.0, 0.0], 1.0, (8, 1));
+    assert_eq!(&out[4 * 4..4 * 4 + 4], &[0, 0, 0, 0]);
+    assert_eq!(out[3 * 4 + 3], 128);
 
     mesh.freeze_all();
-    proxy.render(&mesh, all, &mut out, Some([255, 0, 0]));
-    assert_eq!(out[7], 192, "a half-strength opaque tint over half alpha");
-    assert!(out[4] > 120 && out[5] < 30);
-
-    let pr = proxy.proxy_rect(PsdRect {
-        left: 10,
-        top: 4,
-        right: 20,
-        bottom: 9,
-    });
-    assert_eq!((pr.left, pr.top, pr.right, pr.bottom), (4, 1, 11, 6));
+    let mut tinted = vec![0u8; 4 * 4];
+    src.render(
+        &mesh,
+        [0.0, 0.0],
+        1.0,
+        (4, 1),
+        &mut tinted,
+        Some([255, 0, 0]),
+    );
+    assert_eq!(
+        tinted[3], 192,
+        "a half-strength opaque tint over half alpha"
+    );
 }
 
 #[test]

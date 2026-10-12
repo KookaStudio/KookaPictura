@@ -31,8 +31,6 @@ namespace pictura {
 
 namespace {
 
-// The preview copy's longest side; the commit always runs at full size.
-constexpr int kPreviewMaxSide = 3072;
 // The Size slider stops here; the field takes CS6's full 15,000.
 constexpr int kSizeSliderMaximum = 1500;
 constexpr int kMaxBrush = 15000;
@@ -181,7 +179,7 @@ LiquifyDialog::LiquifyDialog(PictureView* view, const QString& documentName, QWi
     : QDialog(parent), view_(view), documentName_(documentName)
 {
     setObjectName(QStringLiteral("liquifyDialog"));
-    ready_ = view_ && liquify_begin(*view_, kPreviewMaxSide);
+    ready_ = view_ && liquify_begin(*view_);
 
     // The tool column.
     tools_ = new QButtonGroup(this);
@@ -205,6 +203,14 @@ LiquifyDialog::LiquifyDialog(PictureView* view, const QString& documentName, QWi
         column->addWidget(button);
         if (info.advancedOnly) {
             advancedOnly_.append(button);
+        }
+        if (info.tool == Zoom) {
+            // CS6 offers its zoom levels on a right click of the Zoom tool.
+            button->setContextMenuPolicy(Qt::CustomContextMenu);
+            connect(button, &QToolButton::customContextMenuRequested, this,
+                    [this, button](const QPoint& at) {
+                        canvas_->showZoomMenu(button->mapToGlobal(at));
+                    });
         }
         auto* shortcut = new QShortcut(QKeySequence(info.key), this);
         connect(shortcut, &QShortcut::activated, this, [this, tool = info.tool] {

@@ -1,13 +1,16 @@
 #include "liquify_canvas.h"
 
+#include <QtGui/QAction>
 #include <QtGui/QKeyEvent>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPainter>
 #include <QtGui/QPen>
 #include <QtGui/QTabletEvent>
 #include <QtGui/QWheelEvent>
+#include <QtWidgets/QMenu>
 
 #include <algorithm>
+#include <cmath>
 
 #include "pictura_app/src/cxxqt_object/filter_tools/liquify.cxxqt.h"
 
@@ -22,6 +25,11 @@ constexpr double kMaxZoom = 16.0;
 constexpr int kHoldIntervalMs = 40;
 // How much ground stays between a panned picture and the frame edge.
 constexpr double kMargin = 24.0;
+
+// The Zoom tool menu's levels in CS6's groups; 0 separates.
+constexpr double kZoomLevels[] = {0.0625, 0.125, 0.25, 1.0 / 3.0, 0.5, 2.0 / 3.0, 0,
+                                  1.0,    0,     2.0,  3.0,       4.0, 6.0,       8.0,
+                                  10.0,   12.0,  16.0};
 
 QList<int> toList(const ::rust::Vec<int32_t>& v)
 {
@@ -62,20 +70,25 @@ LiquifyCanvas::LiquifyCanvas(QWidget* parent) : QWidget(parent)
 void LiquifyCanvas::reload()
 {
     const ::rust::Vec<int32_t> dims = liquify_geometry();
-    if (dims.size() == 3) {
+    if (dims.size() == 2) {
         layerWidth_ = dims[0];
         layerHeight_ = dims[1];
-        scale_ = std::max(1, static_cast<int>(dims[2]));
     }
-    refreshAll();
-    if (width() > 0 && height() > 0) {
-        fitInView();
-    }
+    // CS6 opens Liquify at 100%, centred on the layer.
+    zoom_ = 1.0;
+    offset_ = QPointF((width() - layerWidth_) / 2.0, (height() - layerHeight_) / 2.0);
+    placed_ = width() > 0 && height() > 0;
+    viewChanged();
 }
 
 void LiquifyCanvas::refreshAll()
 {
-    preview_ = liquify_image().convertToFormat(QImage::Format_RGBA8888_Premultiplied);
+    const double dpr = devicePixelRatioF();
+    const int w = static_cast<int>(std::ceil(width() * dpr));
+    const int h = static_cast<int>(std::ceil(height() * dpr));
+    const QPointF origin = toLayer(QPointF(0, 0));
+    view_ = liquify_render(origin.x(), origin.y(), zoom_ * dpr, w, h);
+    view_.setDevicePixelRatio(dpr);
     update();
 }
 
@@ -110,19 +123,62 @@ void LiquifyCanvas::zoomBy(double factor)
 
 void LiquifyCanvas::fitInView()
 {
+    fit(true);
+}
+
+void LiquifyCanvas::fitOnScreen()
+{
+    fit(false);
+}
+
+void LiquifyCanvas::fit(bool capAtActualPixels)
+{
     if (layerWidth_ <= 0 || layerHeight_ <= 0) {
         return;
     }
-    const double fit = std::min((width() - 2 * kMargin) / layerWidth_,
-                                (height() - 2 * kMargin) / layerHeight_);
-    zoom_ = std::clamp(std::min(fit, 1.0), kMinZoom, kMaxZoom);
-    offset_ = QPointF((width() - layerWidth_ * zoom_) / 2.0, (height() - layerHeight_ * zoom_) / 2.0);
-    fitted_ = true;
-    clampOffset();
-    update();
-    if (zoomChanged) {
-        zoomChanged();
+    double fit = std::min((width() - 2 * kMargin) / layerWidth_,
+                          (height() - 2 * kMargin) / layerHeight_);
+    if (capAtActualPixels) {
+        fit = std::min(fit, 1.0);
     }
+    zoom_ = std::clamp(fit, kMinZoom, kMaxZoom);
+    offset_ = QPointF((width() - layerWidth_ * zoom_) / 2.0, (height() - layerHeight_ * zoom_) / 2.0);
+    viewChanged();
+}
+
+QList<QAction*> LiquifyCanvas::zoomMenuActions(QObject* owner)
+{
+    QList<QAction*> actions;
+    auto add = [&](const QString& text, std::function<void()> run) {
+        auto* action = new QAction(text, owner);
+        connect(action, &QAction::triggered, this, std::move(run));
+        actions.append(action);
+    };
+    for (double level : kZoomLevels) {
+        if (level == 0) {
+            auto* separator = new QAction(owner);
+            separator->setSeparator(true);
+            actions.append(separator);
+            continue;
+        }
+        add(QStringLiteral("%1%").arg(static_cast<int>(level * 100.0)),
+            [this, level] { setZoom(level); });
+    }
+    auto* separator = new QAction(owner);
+    separator->setSeparator(true);
+    actions.append(separator);
+    add(QStringLiteral("Actual Pixels"), [this] { setZoom(1.0); });
+    add(QStringLiteral("Fit in View"), [this] { fitInView(); });
+    add(QStringLiteral("Fit on Screen"), [this] { fitOnScreen(); });
+    return actions;
+}
+
+void LiquifyCanvas::showZoomMenu(const QPoint& globalPos)
+{
+    QMenu menu(this);
+    menu.setObjectName(QStringLiteral("liquifyZoomMenu"));
+    menu.addActions(zoomMenuActions(&menu));
+    menu.exec(globalPos);
 }
 
 QPointF LiquifyCanvas::toLayer(const QPointF& pos) const
@@ -156,7 +212,7 @@ void LiquifyCanvas::paintEvent(QPaintEvent*)
 {
     QPainter painter(this);
     painter.fillRect(rect(), QColor(0xa8, 0xa8, 0xa8));
-    if (preview_.isNull() || layerWidth_ <= 0) {
+    if (layerWidth_ <= 0) {
         return;
     }
     const QRectF target(toWidget(QPointF(0, 0)), QSizeF(layerWidth_ * zoom_, layerHeight_ * zoom_));
@@ -164,13 +220,9 @@ void LiquifyCanvas::paintEvent(QPaintEvent*)
     painter.setBrushOrigin(target.topLeft());
     painter.fillRect(target, checkerBrush());
     painter.restore();
-    // Smooth while the preview is minified or barely magnified; at high zoom
-    // the pixels show square, as on the canvas.
-    painter.setRenderHint(QPainter::SmoothPixmapTransform, zoom_ * scale_ < 2.0);
-    const QRectF source(0, 0, static_cast<double>(layerWidth_) / scale_,
-                        static_cast<double>(layerHeight_) / scale_);
-    painter.drawImage(target, preview_, source);
-
+    if (!view_.isNull()) {
+        painter.drawImage(QPointF(0, 0), view_);
+    }
     if (effectiveMode() == Mode::Brush && hovering_) {
         const double r = brushSize_ / 2.0 * zoom_;
         painter.setRenderHint(QPainter::Antialiasing, true);
@@ -185,16 +237,20 @@ void LiquifyCanvas::paintEvent(QPaintEvent*)
 void LiquifyCanvas::resizeEvent(QResizeEvent* event)
 {
     QWidget::resizeEvent(event);
-    if (!fitted_) {
-        fitInView();
-    } else {
-        clampOffset();
+    if (!placed_ && layerWidth_ > 0) {
+        reload();
+        return;
     }
+    viewChanged();
 }
 
 void LiquifyCanvas::mousePressEvent(QMouseEvent* event)
 {
     setFocus(Qt::MouseFocusReason);
+    if (event->button() == Qt::RightButton && effectiveMode() == Mode::Zoom) {
+        showZoomMenu(event->globalPosition().toPoint());
+        return;
+    }
     const Mode mode = event->button() == Qt::MiddleButton ? Mode::Hand : effectiveMode();
     if (mode == Mode::Hand) {
         panning_ = true;
@@ -217,15 +273,21 @@ void LiquifyCanvas::mousePressEvent(QMouseEvent* event)
 
 void LiquifyCanvas::mouseMoveEvent(QMouseEvent* event)
 {
+    const QPointF previous = hover_;
     hover_ = event->position();
     hovering_ = true;
     if (panning_) {
         offset_ = panOffset_ + (event->position() - panAnchor_);
-        clampOffset();
-    } else if (stroking_) {
+        viewChanged();
+        return;
+    }
+    if (stroking_) {
         strokeTo(toLayer(event->position()));
     }
-    update();
+    // Repaint where the brush ring was and where it is now.
+    const double r = brushSize_ / 2.0 * zoom_ + 3.0;
+    update(QRectF(previous - QPointF(r, r), QSizeF(2 * r, 2 * r)).toAlignedRect());
+    update(QRectF(hover_ - QPointF(r, r), QSizeF(2 * r, 2 * r)).toAlignedRect());
 }
 
 void LiquifyCanvas::mouseReleaseEvent(QMouseEvent*)
@@ -249,8 +311,7 @@ void LiquifyCanvas::wheelEvent(QWheelEvent* event)
     } else {
         const bool sideways = event->modifiers() & Qt::ShiftModifier;
         offset_ += sideways ? QPointF(delta.y() / 2.0, 0) : QPointF(delta.x() / 2.0, delta.y() / 2.0);
-        clampOffset();
-        update();
+        viewChanged();
     }
     event->accept();
 }
@@ -320,8 +381,13 @@ void LiquifyCanvas::zoomAbout(double zoom, const QPointF& anchor)
     const QPointF layer = toLayer(anchor);
     zoom_ = next;
     offset_ = anchor - layer * zoom_;
+    viewChanged();
+}
+
+void LiquifyCanvas::viewChanged()
+{
     clampOffset();
-    update();
+    refreshAll();
     if (zoomChanged) {
         zoomChanged();
     }
@@ -338,6 +404,9 @@ void LiquifyCanvas::clampOffset()
         return std::clamp(offset, frame - extent - kMargin, kMargin);
     };
     offset_ = QPointF(clampAxis(offset_.x(), w, width()), clampAxis(offset_.y(), h, height()));
+    // Whole device pixels keep a patch aligned with the view it lands in.
+    const double dpr = devicePixelRatioF();
+    offset_ = QPointF(std::round(offset_.x() * dpr) / dpr, std::round(offset_.y() * dpr) / dpr);
 }
 
 double LiquifyCanvas::pressure() const
@@ -377,26 +446,38 @@ void LiquifyCanvas::hold()
 
 void LiquifyCanvas::applyPatch(const QList<int>& rect)
 {
-    if (rect.size() != 4 || rect.at(2) <= 0 || rect.at(3) <= 0 || preview_.isNull()) {
+    if (rect.size() != 4 || rect.at(2) <= 0 || rect.at(3) <= 0 || view_.isNull()) {
         return;
     }
-    const QImage patch = liquify_patch(rect.at(0), rect.at(1), rect.at(2), rect.at(3));
+    // The changed layer rectangle in device pixels, clipped to the view.
+    const double dpr = view_.devicePixelRatio();
+    const QRectF widgetRect(toWidget(QPointF(rect.at(0), rect.at(1))),
+                            QSizeF(rect.at(2) * zoom_, rect.at(3) * zoom_));
+    const QRect device = QRectF(widgetRect.topLeft() * dpr, widgetRect.size() * dpr)
+                             .toAlignedRect()
+                             .adjusted(-1, -1, 1, 1)
+                             .intersected(view_.rect());
+    if (device.isEmpty()) {
+        return;
+    }
+    const QPointF origin = toLayer(QPointF(device.topLeft()) / dpr);
+    const QImage patch =
+        liquify_render(origin.x(), origin.y(), zoom_ * dpr, device.width(), device.height());
     if (patch.isNull()) {
         return;
     }
     {
-        QPainter painter(&preview_);
+        QImage& target = view_;
+        target.setDevicePixelRatio(1.0);
+        QPainter painter(&target);
         painter.setCompositionMode(QPainter::CompositionMode_Source);
-        painter.drawImage(rect.at(0), rect.at(1), patch);
+        painter.drawImage(device.topLeft(), patch);
+        painter.end();
+        target.setDevicePixelRatio(dpr);
     }
-    const QRectF layerRect(rect.at(0) * scale_, rect.at(1) * scale_, rect.at(2) * scale_,
-                           rect.at(3) * scale_);
-    update(QRectF(toWidget(layerRect.topLeft()), layerRect.size() * zoom_)
+    update(QRectF(QPointF(device.topLeft()) / dpr, QSizeF(device.size()) / dpr)
                .toAlignedRect()
-               .adjusted(-2, -2, 2, 2));
-    if (edited) {
-        edited();
-    }
+               .adjusted(-1, -1, 1, 1));
 }
 
 } // namespace pictura

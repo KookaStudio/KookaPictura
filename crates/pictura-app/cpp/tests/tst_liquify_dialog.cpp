@@ -55,6 +55,9 @@ private slots:
     void menuRowIsLiveWithItsShortcut();
     void basicModeShowsCs6sShortColumn();
     void advancedModeAddsTheRest();
+    void opensAtActualPixels();
+    void zoomMenuOffersCs6Levels();
+    void aMagnifiedViewIsSmooth();
     void toolShortcutsFollowTheMode();
     void aDragDistortsThePreviewNotTheDocument();
     void restoreAllAndReconstructUndoTheDistortion();
@@ -166,6 +169,74 @@ void LiquifyDialogTest::advancedModeAddsTheRest()
     dialog.reject();
 }
 
+void LiquifyDialogTest::opensAtActualPixels()
+{
+    LiquifyDialog dialog(window_->activeView(), QStringLiteral("stripes.png"));
+    dialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+    QCOMPARE(dialog.canvas()->zoom(), 1.0);
+    QCOMPARE(dialog.windowTitle(), QStringLiteral("Liquify (stripes.png @ 100%)"));
+    dialog.reject();
+}
+
+void LiquifyDialogTest::zoomMenuOffersCs6Levels()
+{
+    LiquifyDialog dialog(window_->activeView(), QStringLiteral("stripes.png"));
+    dialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+    QObject owner;
+    const QList<QAction*> actions = dialog.canvas()->zoomMenuActions(&owner);
+    QStringList labels;
+    for (QAction* action : actions) {
+        labels.append(action->isSeparator() ? QStringLiteral("-") : action->text());
+    }
+    QCOMPARE(labels, QStringList({"6%", "12%", "25%", "33%", "50%", "66%", "-", "100%", "-",
+                                  "200%", "300%", "400%", "600%", "800%", "1000%", "1200%",
+                                  "1600%", "-", "Actual Pixels", "Fit in View", "Fit on Screen"}));
+    auto trigger = [&](const QString& text) {
+        for (QAction* action : actions) {
+            if (action->text() == text) {
+                action->trigger();
+            }
+        }
+    };
+    trigger(QStringLiteral("400%"));
+    QCOMPARE(dialog.canvas()->zoom(), 4.0);
+    QVERIFY(dialog.windowTitle().endsWith(QStringLiteral("@ 400%)")));
+    trigger(QStringLiteral("Actual Pixels"));
+    QCOMPARE(dialog.canvas()->zoom(), 1.0);
+    // The 160 px layer fits a larger frame: Fit on Screen magnifies it, Fit in
+    // View stops at 100%.
+    trigger(QStringLiteral("Fit on Screen"));
+    QVERIFY(dialog.canvas()->zoom() > 1.0);
+    trigger(QStringLiteral("Fit in View"));
+    QCOMPARE(dialog.canvas()->zoom(), 1.0);
+    dialog.reject();
+}
+
+void LiquifyDialogTest::aMagnifiedViewIsSmooth()
+{
+    LiquifyDialog dialog(window_->activeView(), QStringLiteral("stripes.png"));
+    dialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+    pictura::LiquifyCanvas* canvas = dialog.canvas();
+    canvas->setZoom(8.0);
+    // Across a stripe edge at 800% the view blends, rather than jumping from
+    // one colour to the other in 8 px blocks.
+    const QImage view = canvas->previewImage().convertToFormat(QImage::Format_RGB32);
+    const double dpr = view.devicePixelRatio();
+    // The stripe edge nearest the middle of the frame.
+    const QPointF middle = canvas->toLayer(QPointF(canvas->width() / 2.0, canvas->height() / 2.0));
+    const double edgeX = std::round(middle.x() / 6.0) * 6.0;
+    const QPointF edge = canvas->toWidget(QPointF(edgeX, middle.y())) * dpr;
+    QSet<QRgb> colours;
+    for (int dx = -8; dx <= 8; ++dx) {
+        colours.insert(view.pixel(static_cast<int>(edge.x()) + dx, static_cast<int>(edge.y())));
+    }
+    QVERIFY2(colours.size() >= 6, qPrintable(QString::number(colours.size())));
+    dialog.reject();
+}
+
 void LiquifyDialogTest::toolShortcutsFollowTheMode()
 {
     LiquifyDialog dialog(window_->activeView(), QStringLiteral("stripes.png"));
@@ -217,6 +288,8 @@ void LiquifyDialogTest::restoreAllAndReconstructUndoTheDistortion()
 
     // Reconstruct at its default 100% restores an unfrozen layer too.
     dialog.setAdvanced(true);
+    QCoreApplication::processEvents();
+    const QImage advancedBefore = dialog.canvas()->previewImage();
     dialog.canvas()->strokeForTest(kDrag);
     QTimer::singleShot(0, [] {
         for (QWidget* widget : QApplication::topLevelWidgets()) {
@@ -230,7 +303,7 @@ void LiquifyDialogTest::restoreAllAndReconstructUndoTheDistortion()
     });
     dialog.findChild<QPushButton*>(QStringLiteral("liquifyReconstruct"))->click();
     QVERIFY(!pictura::liquify_distorted());
-    QCOMPARE(dialog.canvas()->previewImage(), before);
+    QCOMPARE(dialog.canvas()->previewImage(), advancedBefore);
     dialog.reject();
 }
 

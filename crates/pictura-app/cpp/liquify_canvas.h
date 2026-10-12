@@ -1,10 +1,12 @@
 #pragma once
 
 // The Liquify dialog's preview: the active layer through the dialog's mesh on
-// a checkerboard, over CS6's grey ground. A brush drag edits the mesh in the
-// Rust session (`filter_tools/liquify.rs`) and repaints only the preview
-// rectangle the session re-rendered; Hand drags (or Space) pan and Zoom clicks
-// (Alt: out) zoom.
+// a checkerboard, over CS6's grey ground. The view is rendered by the Rust
+// session (`filter_tools/liquify.rs`) at the screen's resolution, so a
+// zoomed-in preview is smooth and matches the commit; a brush drag edits the
+// mesh and re-renders only the rectangle it changed. Hand drags (or Space)
+// pan, Zoom clicks (Alt: out) zoom, and a right click with Zoom offers CS6's
+// zoom levels.
 
 #include <QtCore/QList>
 #include <QtCore/QPointF>
@@ -24,9 +26,9 @@ public:
 
     explicit LiquifyCanvas(QWidget* parent = nullptr);
 
-    // Re-read the session's geometry and whole preview.
+    // Re-read the session's layer size and open at 100%, centred.
     void reload();
-    // Re-fetch the whole preview after a whole-mesh edit.
+    // Re-render the whole view after a whole-mesh edit.
     void refreshAll();
 
     // `actsWhileHeld`: the tool keeps working at Brush Rate while the brush
@@ -41,15 +43,20 @@ public:
     // Zoom about the widget centre, clamped to CS6's 6.25%–1600%.
     void setZoom(double zoom);
     void zoomBy(double factor);
+    // The whole layer in the frame, never past 100%.
     void fitInView();
+    // The whole layer filling the frame, magnifying a small one.
+    void fitOnScreen();
+    // CS6's Zoom tool menu, owned by `owner`: preset levels, Actual Pixels,
+    // Fit in View, Fit on Screen (separators as null-text actions).
+    QList<QAction*> zoomMenuActions(QObject* owner);
+    void showZoomMenu(const QPoint& globalPos);
 
     QPointF toLayer(const QPointF& pos) const;
     QPointF toWidget(const QPointF& layer) const;
 
     // Asked before each stroke with whether Alt is held, to set the brush.
     std::function<void(bool reverse)> beforeStroke;
-    // After any brush edit.
-    std::function<void()> edited;
     std::function<void()> zoomChanged;
     // The first stylus event, so the Stylus Pressure option can enable.
     std::function<void()> tabletSeen;
@@ -57,7 +64,7 @@ public:
     // Test hooks: a stroke through `layerPoints`, and `ticks` Brush Rate ticks
     // at its last point.
     void strokeForTest(const QList<QPointF>& layerPoints, bool reverse = false, int ticks = 0);
-    const QImage& previewImage() const { return preview_; }
+    const QImage& previewImage() const { return view_; }
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -75,22 +82,23 @@ private:
     Mode effectiveMode() const;
     void updateCursor();
     void zoomAbout(double zoom, const QPointF& anchor);
+    void fit(bool capAtActualPixels);
+    void viewChanged();
     void clampOffset();
     double pressure() const;
     void beginStroke(const QPointF& layer, bool reverse, bool straightLine);
     void strokeTo(const QPointF& layer);
     void hold();
-    // Paint the session's preview rectangle `rect` ([x, y, w, h]) into the
-    // preview image.
+    // Re-render the part of the view over layer rectangle `rect`
+    // ([x, y, w, h]).
     void applyPatch(const QList<int>& rect);
 
-    QImage preview_;
+    QImage view_;
     int layerWidth_ = 0;
     int layerHeight_ = 0;
-    int scale_ = 1;
     double zoom_ = 1.0;
     QPointF offset_;
-    bool fitted_ = false;
+    bool placed_ = false;
 
     Mode mode_ = Mode::Brush;
     bool actsWhileHeld_ = false;

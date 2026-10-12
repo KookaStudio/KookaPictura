@@ -1,9 +1,10 @@
 //! Filter ▸ Liquify (#348): the dialog's editing session and its finished
-//! meshes. The dialog edits a mesh over the active layer here, previewing on
-//! a reduced copy; OK keeps the mesh and the `liquify` kind's one slot names
-//! it by id, so the commit, Fade and Last Filter run the ordinary filter
-//! path, as Displace's map does. Free functions (their own bridge); the
-//! dialog is modal, so one session at a time.
+//! meshes. The dialog edits a mesh over the active layer here and asks for
+//! its view rendered at screen resolution; OK keeps the mesh and the
+//! `liquify` kind's one slot names it by id, so the commit, Fade and Last
+//! Filter run the ordinary filter path, as Displace's map does. Free
+//! functions (their own bridge); the dialog is modal, so one session at a
+//! time.
 
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
@@ -11,7 +12,7 @@ use std::sync::{Arc, Mutex};
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QImageFormat};
 use pictura_core::PsdRect;
-use pictura_filters::{LiquifyBrush, LiquifyMesh, LiquifyProxy, LiquifyTool};
+use pictura_filters::{LiquifyBrush, LiquifyMesh, LiquifySource, LiquifyTool};
 
 use super::super::helpers::{active_mask_target, active_pixel_layer};
 use super::super::qobject::PictureView;
@@ -29,20 +30,18 @@ pub mod ffi {
 
     #[namespace = "pictura"]
     extern "Rust" {
-        /// Open a session over the active layer, previewed on a copy reduced
-        /// by a whole factor to at most `max_side` on the long side. False
-        /// when there is no unmasked pixel layer with colour data.
-        fn liquify_begin(view: &PictureView, max_side: i32) -> bool;
+        /// Open a session over the active layer. False when there is no
+        /// unmasked pixel layer with colour data.
+        fn liquify_begin(view: &PictureView) -> bool;
 
-        /// The session's layer size and preview scale (layer pixels per
-        /// preview pixel): `[width, height, scale]`, empty with no session.
+        /// The session's layer size, `[width, height]`; empty with no
+        /// session.
         fn liquify_geometry() -> Vec<i32>;
 
-        /// The whole preview, premultiplied; null with no session.
-        fn liquify_image() -> QImage;
-
-        /// The preview pixels `(x, y, w, h)`, premultiplied.
-        fn liquify_patch(x: i32, y: i32, w: i32, h: i32) -> QImage;
+        /// A `w`×`h` premultiplied view of the distorted layer whose pixel
+        /// `(i, j)` shows layer point `(x + (i + 0.5) / zoom, y + (j + 0.5) /
+        /// zoom)`, clear off the layer; null with no session.
+        fn liquify_render(x: f64, y: f64, zoom: f64, w: i32, h: i32) -> QImage;
 
         /// The brush the following strokes use. `tool` indexes Forward Warp,
         /// Reconstruct, Twirl, Pucker, Bloat, Push Left, Mirror, Turbulence,
@@ -59,8 +58,8 @@ pub mod ffi {
         );
 
         /// Start a stroke at layer point `(x, y)` with stylus `pressure`
-        /// (0..1). Each stroke call returns the preview rectangle it
-        /// re-rendered, `[x, y, w, h]`, or empty when nothing changed.
+        /// (0..1). Each stroke call returns the layer rectangle it changed,
+        /// `[x, y, w, h]`, or empty when nothing changed.
         fn liquify_stroke_begin(x: f64, y: f64, pressure: f64) -> Vec<i32>;
 
         /// Continue the stroke to `(x, y)`.
@@ -78,7 +77,7 @@ pub mod ffi {
         /// Mask None (0), Mask All (1), Invert All (2).
         fn liquify_mask(op: i32);
 
-        /// Tint frozen areas with `(r, g, b)` in the preview, or not.
+        /// Tint frozen areas with `(r, g, b)` in the view, or not.
         fn liquify_set_mask_overlay(show: bool, r: i32, g: i32, b: i32);
 
         /// Whether the mesh moves anything.
@@ -149,33 +148,10 @@ pub(in crate::cxxqt_object) fn liquify_mesh(id: u32) -> Option<Arc<LiquifyMesh>>
 
 struct Session {
     mesh: LiquifyMesh,
-    proxy: LiquifyProxy,
-    /// The rendered preview, premultiplied RGBA8 at the proxy's size.
-    out: Vec<u8>,
+    source: LiquifySource,
     brush: LiquifyBrush,
     last: Option<[f64; 3]>,
     mask: Option<[u8; 3]>,
-}
-
-impl Session {
-    fn render(&mut self, layer: Option<PsdRect>) -> Vec<i32> {
-        let Some(layer) = layer else {
-            return Vec::new();
-        };
-        let r = self.proxy.proxy_rect(layer);
-        self.proxy.render(&self.mesh, r, &mut self.out, self.mask);
-        vec![r.left, r.top, r.width(), r.height()]
-    }
-
-    fn render_all(&mut self) {
-        let all = PsdRect {
-            left: 0,
-            top: 0,
-            right: self.proxy.width() as i32,
-            bottom: self.proxy.height() as i32,
-        };
-        self.proxy.render(&self.mesh, all, &mut self.out, self.mask);
-    }
 }
 
 static SESSION: Mutex<Option<Session>> = Mutex::new(None);
@@ -183,6 +159,10 @@ static SESSION: Mutex<Option<Session>> = Mutex::new(None);
 fn with_session<R>(default: R, f: impl FnOnce(&mut Session) -> R) -> R {
     let mut guard = SESSION.lock().unwrap_or_else(|e| e.into_inner());
     guard.as_mut().map_or(default, f)
+}
+
+fn rect_vec(r: Option<PsdRect>) -> Vec<i32> {
+    r.map_or_else(Vec::new, |r| vec![r.left, r.top, r.width(), r.height()])
 }
 
 const TOOLS: [LiquifyTool; 10] = [
@@ -198,7 +178,7 @@ const TOOLS: [LiquifyTool; 10] = [
     LiquifyTool::Thaw,
 ];
 
-fn liquify_begin(view: &PictureView, max_side: i32) -> bool {
+fn liquify_begin(view: &PictureView) -> bool {
     let rust = view.rust();
     if active_mask_target(rust).is_some() {
         return false;
@@ -214,76 +194,52 @@ fn liquify_begin(view: &PictureView, max_side: i32) -> bool {
         return false;
     }
     let plane = w as usize * h as usize;
+    // Planes are shared, not copied: the modal dialog never edits the layer.
     let channel = |id: i16| {
         layer
             .channels
             .iter()
             .find(|c| c.id == id && c.data.len() == plane)
-            .map(|c| &c.data[..])
+            .map(|c| c.data.clone())
     };
     let Some(c0) = channel(0) else {
         return false;
     };
     // A Grayscale layer carries one colour plane.
-    let color = [c0, channel(1).unwrap_or(c0), channel(2).unwrap_or(c0)];
-    let proxy = LiquifyProxy::new(
-        w as u32,
-        h as u32,
-        color,
-        channel(-1),
-        max_side.max(1) as u32,
-    );
-    let mut session = Session {
+    let color = [
+        c0.clone(),
+        channel(1).unwrap_or_else(|| c0.clone()),
+        channel(2).unwrap_or(c0),
+    ];
+    let session = Session {
         mesh: LiquifyMesh::new(w as u32, h as u32),
-        out: vec![0; proxy.width() * proxy.height() * 4],
-        proxy,
+        source: LiquifySource::new(w as u32, h as u32, color, channel(-1)),
         brush: LiquifyBrush::new(LiquifyTool::ForwardWarp, 100.0),
         last: None,
         mask: None,
     };
-    session.render_all();
     *SESSION.lock().unwrap_or_else(|e| e.into_inner()) = Some(session);
     true
 }
 
 fn liquify_geometry() -> Vec<i32> {
     with_session(Vec::new(), |s| {
-        vec![
-            s.mesh.width() as i32,
-            s.mesh.height() as i32,
-            s.proxy.scale() as i32,
-        ]
+        vec![s.mesh.width() as i32, s.mesh.height() as i32]
     })
 }
 
-fn liquify_image() -> QImage {
+fn liquify_render(x: f64, y: f64, zoom: f64, w: i32, h: i32) -> QImage {
+    if w <= 0 || h <= 0 {
+        return QImage::default();
+    }
     with_session(QImage::default(), |s| {
-        let (w, h) = (s.proxy.width(), s.proxy.height());
-        image(s.out.clone(), w as i32, h as i32)
+        let (wu, hu) = (w as usize, h as usize);
+        let mut bytes = vec![0u8; wu * hu * 4];
+        s.source
+            .render(&s.mesh, [x, y], zoom, (wu, hu), &mut bytes, s.mask);
+        // SAFETY: `bytes` is exactly w*h premultiplied RGBA8888 samples.
+        unsafe { QImage::from_raw_bytes(bytes, w, h, QImageFormat::Format_RGBA8888_Premultiplied) }
     })
-}
-
-fn liquify_patch(x: i32, y: i32, w: i32, h: i32) -> QImage {
-    with_session(QImage::default(), |s| {
-        let (pw, ph) = (s.proxy.width() as i32, s.proxy.height() as i32);
-        let (x0, y0) = (x.clamp(0, pw), y.clamp(0, ph));
-        let (x1, y1) = ((x + w).clamp(0, pw), (y + h).clamp(0, ph));
-        if x0 >= x1 || y0 >= y1 {
-            return QImage::default();
-        }
-        let stride = pw as usize * 4;
-        let mut bytes = Vec::with_capacity((x1 - x0) as usize * (y1 - y0) as usize * 4);
-        for row in y0..y1 {
-            let start = row as usize * stride + x0 as usize * 4;
-            bytes.extend_from_slice(&s.out[start..start + (x1 - x0) as usize * 4]);
-        }
-        image(bytes, x1 - x0, y1 - y0)
-    })
-}
-
-fn image(bytes: Vec<u8>, w: i32, h: i32) -> QImage {
-    // SAFETY: `bytes` is exactly w*h premultiplied RGBA8888 samples.
-    unsafe { QImage::from_raw_bytes(bytes, w, h, QImageFormat::Format_RGBA8888_Premultiplied) }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -313,8 +269,7 @@ fn liquify_stroke_begin(x: f64, y: f64, pressure: f64) -> Vec<i32> {
     with_session(Vec::new(), |s| {
         let p = [x, y, pressure];
         s.last = Some(p);
-        let dirty = s.mesh.stroke_begin(&s.brush, p);
-        s.render(dirty)
+        rect_vec(s.mesh.stroke_begin(&s.brush, p))
     })
 }
 
@@ -323,48 +278,35 @@ fn liquify_stroke_to(x: f64, y: f64, pressure: f64) -> Vec<i32> {
         let b = [x, y, pressure];
         let dirty = s.last.and_then(|a| s.mesh.stroke_to(&s.brush, a, b));
         s.last = Some(b);
-        s.render(dirty)
+        rect_vec(dirty)
     })
 }
 
 fn liquify_hold() -> Vec<i32> {
     with_session(Vec::new(), |s| {
-        let dirty = s.last.and_then(|p| s.mesh.hold(&s.brush, p));
-        s.render(dirty)
+        rect_vec(s.last.and_then(|p| s.mesh.hold(&s.brush, p)))
     })
 }
 
 fn liquify_reconstruct(amount: f64) {
-    with_session((), |s| {
-        s.mesh.reconstruct(amount);
-        s.render_all();
-    });
+    with_session((), |s| s.mesh.reconstruct(amount));
 }
 
 fn liquify_restore_all() {
-    with_session((), |s| {
-        s.mesh.restore_all();
-        s.render_all();
-    });
+    with_session((), |s| s.mesh.restore_all());
 }
 
 fn liquify_mask(op: i32) {
-    with_session((), |s| {
-        match op {
-            0 => s.mesh.thaw_all(),
-            1 => s.mesh.freeze_all(),
-            _ => s.mesh.invert_freeze(),
-        }
-        s.render_all();
+    with_session((), |s| match op {
+        0 => s.mesh.thaw_all(),
+        1 => s.mesh.freeze_all(),
+        _ => s.mesh.invert_freeze(),
     });
 }
 
 fn liquify_set_mask_overlay(show: bool, r: i32, g: i32, b: i32) {
     let byte = |v: i32| v.clamp(0, 255) as u8;
-    with_session((), |s| {
-        s.mask = show.then(|| [byte(r), byte(g), byte(b)]);
-        s.render_all();
-    });
+    with_session((), |s| s.mask = show.then(|| [byte(r), byte(g), byte(b)]));
 }
 
 fn liquify_distorted() -> bool {
@@ -392,7 +334,6 @@ fn liquify_load_mesh(id: i32) -> bool {
         let mut mesh = kept.scaled_to(s.mesh.width(), s.mesh.height());
         mesh.copy_freeze_from(&s.mesh);
         s.mesh = mesh;
-        s.render_all();
         true
     })
 }
