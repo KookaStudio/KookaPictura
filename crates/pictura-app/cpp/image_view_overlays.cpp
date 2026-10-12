@@ -136,6 +136,57 @@ void ImageView::paintTransformPivot(QPainter& painter)
     painter.drawEllipse(p, 1.5 / z, 1.5 / z);
 }
 
+// The Free Transform box and its chrome in image space. Called outside the
+// document clip so a layer dragged past the canvas edge keeps its full box.
+void ImageView::paintTransformOverlay(QPainter& painter)
+{
+    if (!transformActive_ || transformQuad_.size() < 4) {
+        return;
+    }
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(QPen(Qt::white, 0, Qt::SolidLine));
+    painter.drawPolygon(transformQuad_);
+    painter.setPen(QPen(Qt::black, 0, Qt::DashLine));
+    painter.drawPolygon(transformQuad_);
+
+    // Eight scale handles at the corners and edge midpoints.
+    const QPointF tl = transformQuad_.at(0);
+    const QPointF tr = transformQuad_.at(1);
+    const QPointF br = transformQuad_.at(2);
+    const QPointF bl = transformQuad_.at(3);
+    const QPointF handles[8] = {
+        tl,
+        tr,
+        br,
+        bl,
+        (tl + tr) / 2.0,
+        (tr + br) / 2.0,
+        (br + bl) / 2.0,
+        (bl + tl) / 2.0,
+    };
+    const double hs = 3.5 / (zoom_ > 0.0 ? zoom_ : 1.0);
+    painter.setBrush(Qt::white);
+    painter.setPen(QPen(Qt::black, 0, Qt::SolidLine));
+    for (const QPointF& h : handles) {
+        const QRectF box(h.x() - hs, h.y() - hs, 2.0 * hs, 2.0 * hs);
+        painter.drawRect(box);
+    }
+
+    // Rotate affordance: a short stem and knob below the bottom edge.
+    const QPointF bottomMid = (br + bl) / 2.0;
+    const double stem = 22.0 / (zoom_ > 0.0 ? zoom_ : 1.0);
+    const QPointF knob(bottomMid.x(), bottomMid.y() + stem);
+    painter.setPen(QPen(Qt::white, 0, Qt::SolidLine));
+    painter.drawLine(bottomMid, knob);
+    painter.setBrush(Qt::white);
+    painter.drawEllipse(knob, hs, hs);
+
+    // Reference point: a target glyph (circle, crosshair, centre dot).
+    if (transformPivotVisible_) {
+        paintTransformPivot(painter);
+    }
+}
+
 void ImageView::setCropBox(const QRectF& box){
     cropBox_ = box.normalized();
     update();
