@@ -9,7 +9,7 @@ use pictura_adjust::Adjustment;
 use pictura_core::{
     layer_pixel_locked, layer_transparency_locked, Layer, LayerMask, PixelBuffer, PsdRect,
 };
-use pictura_filters::{Filter, FilterError};
+use pictura_filters::{Filter, FilterError, SmartBlurMode};
 use rayon::prelude::*;
 
 use crate::channel;
@@ -92,6 +92,10 @@ pub fn filter_preserves_opacity(filter: &Filter) -> bool {
             | Filter::Blur
             | Filter::BlurMore
             | Filter::SurfaceBlur { .. }
+            | Filter::SmartBlur {
+                mode: SmartBlurMode::Normal,
+                ..
+            }
             | Filter::LensBlur { .. }
             | Filter::Sharpen
             | Filter::SharpenMore
@@ -421,6 +425,8 @@ pub fn preview_apron(filter: &Filter) -> i32 {
         // σ = 0.8·radius); later iterations reach further but weigh less.
         Filter::SmartSharpen { radius, .. } => (3.0 * radius).ceil(),
         Filter::HdrToning(p) => (3.0 * p.radius).ceil(),
+        // One more pixel for the edge test against the 4-neighbours.
+        Filter::SmartBlur { radius, .. } => radius.ceil() + 1.0,
         Filter::BoxBlur { radius }
         | Filter::ShapeBlur { radius, .. }
         | Filter::SurfaceBlur { radius, .. }

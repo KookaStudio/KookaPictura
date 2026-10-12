@@ -319,6 +319,17 @@ const QList<FilterCommandSpec>& buildCommands()
         def(QStringLiteral("Blur"), QStringLiteral("Surface Blur"), QStringLiteral("surface-blur"),
             {slider(QStringLiteral("Radius:"), 1, 100, 10, 0, QStringLiteral(" pixels")),
              slider(QStringLiteral("Threshold:"), 2, 255, 20, 0, QStringLiteral(" levels"))}),
+        // Range and Normal mode are sourced; the defaults (Radius 3, Threshold
+        // 25, Quality Low) are inferred (FILT-002 leaves them unverified).
+        def(QStringLiteral("Blur"), QStringLiteral("Smart Blur"), QStringLiteral("smart-blur"),
+            {slider(QStringLiteral("Radius:"), 0.1, 100.0, 3.0, 1),
+             slider(QStringLiteral("Threshold:"), 0.1, 100.0, 25.0, 1),
+             choice(QStringLiteral("Quality:"),
+                    {QStringLiteral("Low"), QStringLiteral("Medium"), QStringLiteral("High")}, 0),
+             choice(QStringLiteral("Mode:"),
+                    {QStringLiteral("Normal"), QStringLiteral("Edge Only"),
+                     QStringLiteral("Overlay Edge")},
+                    0)}),
         // CS6's dialog values (#338). The Source slot is resolved into a depth
         // map id in the first hidden slot on every preview and commit.
         stacked(def(QStringLiteral("Blur"), QStringLiteral("Lens Blur"), QStringLiteral("lens-blur"),

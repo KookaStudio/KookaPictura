@@ -13,6 +13,7 @@ pub(in crate::cxxqt_object) const FILTER_ARITIES: &[(&str, usize)] = &[
     ("box-blur", 1),
     ("shape-blur", 2),
     ("surface-blur", 2),
+    ("smart-blur", 4),
     ("lens-blur", LENS_BLUR_SLOTS),
     ("motion-blur", 2),
     ("radial-blur", 3),

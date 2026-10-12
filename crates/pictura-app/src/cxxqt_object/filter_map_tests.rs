@@ -3,7 +3,7 @@ use super::*;
 use pictura_core::shape::CUSTOM_SHAPE_NAMES;
 use pictura_filters::{
     DisplaceFit, GlassTexture, IrisShape, LightType, NoiseDistribution, Quality, RadialMethod,
-    SharpenRemove, TextureChannel, WaveType, WindMethod,
+    SharpenRemove, SmartBlurMode, TextureChannel, WaveType, WindMethod,
 };
 
 #[test]
@@ -319,6 +319,39 @@ fn shape_blur_reads_radius_then_shape() {
         "an unknown shape clamps"
     );
     assert!(filter_from_kind_params("shape-blur", &[5.0]).is_none());
+}
+
+#[test]
+fn smart_blur_reads_radius_threshold_quality_mode() {
+    assert_eq!(
+        filter_from_kind_params("smart-blur", &[]),
+        Some(Filter::SmartBlur {
+            radius: 3.0,
+            threshold: 25.0,
+            quality: Quality::Draft,
+            mode: SmartBlurMode::Normal,
+        })
+    );
+    assert_eq!(
+        filter_from_kind_params("smart-blur", &[53.1, 25.0, 1.0, 2.0]),
+        Some(Filter::SmartBlur {
+            radius: 53.1,
+            threshold: 25.0,
+            quality: Quality::Good,
+            mode: SmartBlurMode::OverlayEdge,
+        })
+    );
+    assert_eq!(
+        filter_from_kind_params("smart-blur", &[0.0, 400.0, 2.0, 1.0]),
+        Some(Filter::SmartBlur {
+            radius: 0.1,
+            threshold: 100.0,
+            quality: Quality::Best,
+            mode: SmartBlurMode::EdgeOnly,
+        }),
+        "radius and threshold clamp into 0.1..=100"
+    );
+    assert!(filter_from_kind_params("smart-blur", &[3.0, 25.0, 0.0]).is_none());
 }
 
 #[test]
