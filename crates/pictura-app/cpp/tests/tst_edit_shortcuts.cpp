@@ -16,6 +16,8 @@
 
 #include <QtCore/QTemporaryDir>
 #include <QtGui/QImage>
+#include <QtWidgets/QApplication>
+#include <QtWidgets/QLineEdit>
 
 class EditShortcutsTest : public QObject {
     Q_OBJECT
@@ -23,6 +25,8 @@ class EditShortcutsTest : public QObject {
 private slots:
     void initTestCase();
     void deleteAndBackspaceClearTheSelection();
+    void deleteKeyDeletesTheActiveLayerAwayFromTheCanvas();
+    void deleteKeyLeavesAFocusedTextFieldAlone();
     void ctrlEqualsZoomsIn();
     void freeTransformLiftsTheSelectedPixels();
     void freeTransformBoxHugsTheLayerContent();
@@ -58,11 +62,6 @@ void EditShortcutsTest::deleteAndBackspaceClearTheSelection()
         pictura::ImageView* canvas = frame.imageView();
         QVERIFY(view && canvas);
         const int doc = frame.activeDocumentIndex();
-        const int history = view->history_count();
-
-        // No selection: nothing to clear.
-        QTest::keyClick(canvas, key);
-        QCOMPARE(view->history_count(), history);
 
         QVERIFY(view->select_rect(5, 5, 20, 16, QStringLiteral("new"), 0.0));
         const int selected = view->history_count();
@@ -75,6 +74,58 @@ void EditShortcutsTest::deleteAndBackspaceClearTheSelection()
         QCOMPARE(view->composite_argb(30, 20), outside);
         frame.closeDocument(doc, false);
     }
+}
+
+// #304: Delete / Backspace delete the selected layer from anywhere in the
+// workspace, not only with the canvas focused.
+void EditShortcutsTest::deleteKeyDeletesTheActiveLayerAwayFromTheCanvas()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    auto* panel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(panel);
+    for (const Qt::Key key : {Qt::Key_Delete, Qt::Key_Backspace}) {
+        QVERIFY(frame.newDocument(QStringLiteral("Delete"), 40, 30, QStringLiteral("rgb"), 8,
+                                  QStringLiteral("white")));
+        pictura::PictureView* view = frame.activeView();
+        QVERIFY(view);
+        const int doc = frame.activeDocumentIndex();
+        QCOMPARE(view->duplicate_layer(0), 1);
+        QCOMPARE(view->layer_kind(1), QStringLiteral("pixel"));
+        frame.selectLayerPath(QStringLiteral("1"));
+        panel->setFocus();
+        const int history = view->history_count();
+        QTest::keyClick(panel, key);
+        QCOMPARE(view->layer_count(), 1);
+        QCOMPARE(view->history_count(), history + 1);
+        QCOMPARE(view->history_label(view->history_index()), QStringLiteral("Delete Layers"));
+        frame.closeDocument(doc, false);
+    }
+}
+
+// A focused editable field keeps Delete for its own editing.
+void EditShortcutsTest::deleteKeyLeavesAFocusedTextFieldAlone()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("Field"), 40, 30, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY(view);
+    const int doc = frame.activeDocumentIndex();
+    QCOMPARE(view->duplicate_layer(0), 1);
+    frame.selectLayerPath(QStringLiteral("1"));
+
+    QLineEdit edit(&frame);
+    edit.setText(QStringLiteral("abc"));
+    edit.show();
+    edit.setFocus();
+    QTRY_VERIFY(QApplication::focusWidget() == &edit);
+    edit.setCursorPosition(1);
+    QTest::keyClick(&edit, Qt::Key_Delete);
+    QCOMPARE(edit.text(), QStringLiteral("ac"));
+    QTest::keyClick(&edit, Qt::Key_Backspace);
+    QCOMPARE(edit.text(), QStringLiteral("c"));
+    QCOMPARE(view->layer_count(), 2);
+    frame.closeDocument(doc, false);
 }
 
 void EditShortcutsTest::ctrlEqualsZoomsIn()

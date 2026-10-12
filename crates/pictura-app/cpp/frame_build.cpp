@@ -2,6 +2,7 @@
 
 #include "fonts.h"
 #include "panels/numeric_field.h"
+#include "text_input.h"
 
 #include <QtCore/QEvent>
 #include <QtGui/QFont>
@@ -411,6 +412,33 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
             [this]() {
                 if (toolbox_) {
                     toolbox_->resetForegroundBackground();
+                }
+            });
+
+    // CS6's Delete / Backspace act from anywhere in the workspace: a pixel
+    // selection clears, otherwise the selected layer(s) delete. Auto-repeat is
+    // off so holding the key cannot delete layer after layer; the type
+    // session's shortcut override, an open dialog, and a tool that consumes
+    // the key all keep it.
+    QShortcut* deleteShortcuts[2] = {nullptr, nullptr};
+    int deleteShortcutCount = 0;
+    for (const Qt::Key key : {Qt::Key_Delete, Qt::Key_Backspace}) {
+        auto* shortcut = new QShortcut(QKeySequence(key), this);
+        shortcut->setAutoRepeat(false);
+        shortcut->setEnabled(!isTextInput(QApplication::focusWidget()));
+        connect(shortcut, &QShortcut::activated, this, [this]() { handleDeleteKey(); });
+        deleteShortcuts[deleteShortcutCount++] = shortcut;
+    }
+    // A focused editable field owns Delete / Backspace: while one has focus the
+    // shortcuts are off, so the key reaches the field instead of being
+    // swallowed by the shortcut map.
+    connect(qApp, &QApplication::focusChanged, this,
+            [deleteShortcuts](QWidget* now, QWidget*) {
+                const bool field = isTextInput(now);
+                for (QShortcut* shortcut : deleteShortcuts) {
+                    if (shortcut) {
+                        shortcut->setEnabled(!field);
+                    }
                 }
             });
 

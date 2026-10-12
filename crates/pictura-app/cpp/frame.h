@@ -321,6 +321,12 @@ private:
     // Keys the menu shortcuts miss: Ctrl+= / Ctrl+Shift+= / keypad Ctrl++
     // zoom in, and Delete / Backspace clear a selection. True when handled.
     bool dispatchCommandKey(QKeyEvent* event);
+    // The window-level Delete / Backspace action: clear a pixel selection or
+    // delete the selected layer(s), unless a type session, an editable field,
+    // or the active tool owns the key. True when handled. Routed from the
+    // window shortcuts so the focus location is irrelevant, and from
+    // `dispatchCommandKey` so synthetic events reach the same path.
+    bool handleDeleteKey();
     struct DocEntry {
         PictureView* view = nullptr;
         ImageView* canvas = nullptr;
