@@ -1,4 +1,5 @@
 #include <QtTest/QtTest>
+#include "api/layers_api.h"
 
 #include <QtGui/QClipboard>
 #include <QtGui/QGuiApplication>
@@ -6,6 +7,9 @@
 
 #include "commands.h"
 #include "frame.h"
+
+#include "api/transform_api.h"
+
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/clipboard.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_history/purge.cxxqt.h"
@@ -57,8 +61,8 @@ void EditClipboardTest::editClipboard()
             && view->history_label(base) == QString::fromLatin1(label);
     };
     const auto hasMask = [view]() {
-        for (int row = 0; row < view->layer_row_count(); ++row) {
-            if (view->layer_row_has_mask(row)) {
+        for (int row = 0; row < pictura::layers_api::rowCount(*view); ++row) {
+            if (pictura::layers_api::rowAt(*view, row).hasMask) {
                 return true;
             }
         }
@@ -95,7 +99,8 @@ void EditClipboardTest::editClipboard()
     // A plain paste keeps the copied rect and drops the marquee.
     const bool paste = step(pictura::command_ids::EditPaste, "Paste")
         && view->layer_count() == layers + 3
-        && view->layer_rect(view->active_layer_path()) == QStringLiteral("2 2 5 5")
+        && pictura::transform_api::layerRect(*view, view->active_layer_path()).toString()
+            == QStringLiteral("2 2 5 5")
         && !view->has_selection() && view->has_deselected_selection();
 
     // Another application's image replaces our copy and pastes in place at the

@@ -6,6 +6,7 @@
 
 #include "tool_handler.h"
 
+#include "api/paint_api.h"
 #include "paint_tip.h"
 #include "pictura_debug_timing.h"
 #include "tools.h"
@@ -17,6 +18,7 @@
 #include <QtGui/QColor>
 
 #include <memory>
+#include <optional>
 
 namespace pictura {
 
@@ -39,10 +41,16 @@ public:
             return true;
         }
         const ColorReplaceOptions o = ctx.colorReplaceOptions();
-        pictura::ScopedTimer beginTimer("cxx_begin_color_replacement (call)");
-        if (!begin_color_replacement(*v, ctx.foreground().rgba(), ctx.background().rgba(),
-                                     paintTip(ctx), o.mode, o.sampling, o.limits, o.tolerance,
-                                     o.antialias)) {
+        {
+            pictura::ScopedTimer beginTimer("cxx_begin_color_replacement (call)");
+            stroke_.emplace(*v, [&] {
+                return begin_color_replacement(*v, ctx.foreground().rgba(), ctx.background().rgba(),
+                                               paintTip(ctx), o.mode, o.sampling, o.limits,
+                                               o.tolerance, o.antialias);
+            });
+        }
+        if (!stroke_->open()) {
+            stroke_.reset();
             if (activePixelLocked(v)) {
                 ctx.refused(QObject::tr("Could not paint: the layer's pixels are locked."));
             } else if (!v->active_layer_visible()) {
@@ -56,20 +64,18 @@ public:
         ctx.setDragCommitted(false);
         {
             pictura::ScopedTimer t("cxx_paint_dab (call)");
-            v->paint_dab(imagePos.x(), imagePos.y(), 1.0);
+            stroke_->dab(imagePos.x(), imagePos.y());
         }
         return true;
     }
 
     void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
-        if (!ctx.dragging()) {
+        if (!ctx.dragging() || !stroke_) {
             return;
         }
-        if (PictureView* v = ctx.view()) {
-            pictura::ScopedTimer t("cxx_paint_dab (call)");
-            v->paint_dab(imagePos.x(), imagePos.y(), 1.0);
-        }
+        pictura::ScopedTimer t("cxx_paint_dab (call)");
+        stroke_->dab(imagePos.x(), imagePos.y());
     }
 
     void onRelease(ToolContext& ctx, const QPointF&, Qt::KeyboardModifiers) override
@@ -78,11 +84,15 @@ public:
             return;
         }
         ctx.setDragging(false);
-        if (PictureView* v = ctx.view()) {
+        if (stroke_) {
             pictura::ScopedTimer t("cxx_end_paint (call)");
-            v->end_paint();
+            stroke_->finish();
+            stroke_.reset();
         }
     }
+
+private:
+    std::optional<paint_api::Stroke> stroke_;
 };
 
 } // namespace

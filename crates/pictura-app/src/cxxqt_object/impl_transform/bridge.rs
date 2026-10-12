@@ -7,7 +7,10 @@
 
 use super::super::qobject::PictureView;
 use super::super::state::{TransformSession, TransformWarp};
-use super::geometry::{quad_anchors, session_quad, set_pivot, store_quad};
+use super::geometry::{
+    projective_coefficients, quad_anchors, session_quad, set_pivot, source_corners, store_quad,
+    MapParams,
+};
 use super::session::build_transform_preview;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -33,6 +36,15 @@ pub mod ffi {
         /// The session target's content rect as "left top right bottom", or
         /// empty without a session.
         fn transform_session_rect(view: &PictureView) -> QString;
+        /// The layer at `path`'s rect as flat `[left, top, right, bottom]`;
+        /// empty when the path does not resolve to a layer.
+        fn layer_rect_extents(view: &PictureView, path: &QString) -> Vec<i32>;
+        /// The session quad's four document-space corners as flat
+        /// `[x0, y0, …, x3, y3]`; empty without a session.
+        fn transform_quad_extents(view: &PictureView) -> Vec<f64>;
+        /// The nine preview-map coefficients in `QTransform` constructor
+        /// order; empty without a session.
+        fn transform_preview_matrix_extents(view: &PictureView) -> Vec<f64>;
         /// Move the reference point to document-space `(x, y)`, leaving the
         /// rendered quad unchanged.
         fn transform_set_pivot(view: Pin<&mut PictureView>, x: f64, y: f64) -> bool;
@@ -130,6 +142,52 @@ fn transform_session_rect(view: &PictureView) -> QString {
             ))
         })
         .unwrap_or_default()
+}
+
+fn layer_rect_extents(view: &PictureView, path: &QString) -> Vec<i32> {
+    view.rust()
+        .doc
+        .as_ref()
+        .and_then(|doc| pictura_render::resolve_path(doc, &path.to_string()))
+        .map(|layer| layer.rect)
+        .map_or_else(Vec::new, |rect| {
+            vec![rect.left, rect.top, rect.right, rect.bottom]
+        })
+}
+
+fn transform_quad_extents(view: &PictureView) -> Vec<f64> {
+    let Some(session) = view.rust().transform_session.as_ref() else {
+        return Vec::new();
+    };
+    let quad = session
+        .warp_preview_quad
+        .unwrap_or_else(|| session_quad(session));
+    let mut out = Vec::with_capacity(8);
+    for (x, y) in quad {
+        out.push(x);
+        out.push(y);
+    }
+    out
+}
+
+fn transform_preview_matrix_extents(view: &PictureView) -> Vec<f64> {
+    let Some(session) = view.rust().transform_session.as_ref() else {
+        return Vec::new();
+    };
+    if session.warp.is_some() {
+        return vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0];
+    }
+    let coeffs = if session.mode.is_projective() {
+        projective_coefficients(source_corners(session.orig_rect), session_quad(session))
+    } else {
+        let params = MapParams::of(session);
+        let a = params.linear();
+        let (px, py) = params.pivot;
+        let tx = px + params.dx - (a[0][0] * px + a[0][1] * py);
+        let ty = py + params.dy - (a[1][0] * px + a[1][1] * py);
+        Some([a[0][0], a[1][0], 0.0, a[0][1], a[1][1], 0.0, tx, ty, 1.0])
+    };
+    coeffs.map_or_else(Vec::new, |c| c.to_vec())
 }
 
 fn transform_set_pivot(mut view: Pin<&mut PictureView>, x: f64, y: f64) -> bool {

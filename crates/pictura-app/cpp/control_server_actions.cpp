@@ -4,6 +4,7 @@
 #include <QtCore/QJsonValue>
 #include <QtCore/QString>
 
+#include "api/selection_api.h"
 #include "frame.h"
 #include "tools.h"
 
@@ -112,7 +113,7 @@ QJsonObject ControlServer::methodSelection(const QJsonObject& params)
     QJsonObject result;
     result.insert(QStringLiteral("has_selection"), view->has_selection());
     result.insert(QStringLiteral("count"), view->selection_count());
-    result.insert(QStringLiteral("bounds"), view->selection_bounds());
+    result.insert(QStringLiteral("bounds"), selection_api::bounds(*view).toString());
     return ok(result);
 }
 

@@ -1,6 +1,7 @@
 #include "selftest_warp_preset.h"
 #include "selftest_report.h"
 
+#include "api/transform_api.h"
 #include "frame.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
@@ -18,14 +19,14 @@ int pictura::runWarpPresetChecks(pictura::PicturaMainWindow& frame)
     const QString path = view->add_solid_fill(0xff2244aau);
     const bool raster = view->rasterize_fill_content(path);
     const bool can = view->layer_can_free_transform(path);
-    const QString before = view->layer_rect(path);
+    const QString before = transform_api::layerRect(*view, path).toString();
 
     const int base = view->history_count();
     const bool applied =
         view->apply_warp_preset(path, QStringLiteral("warpArc"), 50.0, 0.0, 0.0, false);
     const bool oneState = view->history_count() == base + 1
         && view->history_label(base) == QStringLiteral("Warp");
-    const bool changed = !before.isEmpty() && view->layer_rect(path) != before;
+    const bool changed = !before.isEmpty() && transform_api::layerRect(*view, path).toString() != before;
 
     const int noneBase = view->history_count();
     const bool noneRefused =
@@ -39,7 +40,7 @@ int pictura::runWarpPresetChecks(pictura::PicturaMainWindow& frame)
     ST_BEGIN("lpr_warp_preset");
     ST_PASS("lpr_warp_preset raster=%d can=%d apply=%d states=%d rect=%s->%s none=%d unknown=%d",
             raster ? 1 : 0, can ? 1 : 0, applied ? 1 : 0, view->history_count() - base,
-            qPrintable(before), qPrintable(view->layer_rect(path)), noneRefused ? 1 : 0,
+            qPrintable(before), qPrintable(transform_api::layerRect(*view, path).toString()), noneRefused ? 1 : 0,
             unknownRefused ? 1 : 0);
     if (!raster || !can || !applied || !oneState || !changed || !noneRefused || !unknownRefused) {
         return pictura::selfTest().fail(527, "warp preset");

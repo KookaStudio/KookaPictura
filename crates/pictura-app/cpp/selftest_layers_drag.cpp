@@ -1,5 +1,6 @@
 #include "selftest_layers_drag.h"
 #include "selftest_report.h"
+#include "api/layers_api.h"
 
 #include "commands.h"
 #include "frame.h"
@@ -17,8 +18,8 @@ namespace {
 int groupCount(pictura::PictureView* view)
 {
     int groups = 0;
-    for (int i = 0; i < view->layer_row_count(); ++i) {
-        if (view->layer_row_kind(i) == QStringLiteral("group")) {
+    for (int i = 0; i < pictura::layers_api::rowCount(*view); ++i) {
+        if (pictura::layers_api::rowAt(*view, i).kind == QStringLiteral("group")) {
             ++groups;
         }
     }
@@ -27,8 +28,8 @@ int groupCount(pictura::PictureView* view)
 
 int rowForPath(pictura::PictureView* view, const QString& path)
 {
-    for (int i = 0; i < view->layer_row_count(); ++i) {
-        if (view->layer_row_path(i) == path) {
+    for (int i = 0; i < pictura::layers_api::rowCount(*view); ++i) {
+        if (pictura::layers_api::rowAt(*view, i).path == path) {
             return i;
         }
     }
@@ -145,10 +146,10 @@ int pictura::runLayersDragChecks(pictura::PicturaMainWindow& frame)
             const int childRow = rowForPath(view, QStringLiteral("1/0"));
             const int groupRow = rowForPath(view, QStringLiteral("1"));
             const bool nested = childRow >= 0
-                && view->layer_row_name(childRow) == QStringLiteral("A")
-                && groupRow >= 0 && view->layer_row_kind(groupRow) == QStringLiteral("group")
-                && view->layer_row_name(groupRow) == QStringLiteral("G")
-                && view->layer_row_count() == 3;
+                && pictura::layers_api::rowAt(*view, childRow).name == QStringLiteral("A")
+                && groupRow >= 0 && pictura::layers_api::rowAt(*view, groupRow).kind == QStringLiteral("group")
+                && pictura::layers_api::rowAt(*view, groupRow).name == QStringLiteral("G")
+                && pictura::layers_api::rowCount(*view) == 3;
             const bool oneStep = view->history_count() == base + 1;
             ST_BEGIN("lpr_drag_into_above");
             ST_PASS("lpr_drag_into_above valid=%d drop=%d nested=%d history=%d", valid ? 1 : 0,
@@ -183,8 +184,8 @@ int pictura::runLayersDragChecks(pictura::PicturaMainWindow& frame)
             const bool leftGroup = rowForPath(view, QStringLiteral("1/0")) < 0;
             const int movedRow = rowForPath(view, QStringLiteral("3"));
             const bool atRoot = movedRow >= 0
-                && view->layer_row_name(movedRow) == QStringLiteral("C")
-                && view->layer_row_count() == 4;
+                && pictura::layers_api::rowAt(*view, movedRow).name == QStringLiteral("C")
+                && pictura::layers_api::rowCount(*view) == 4;
             const bool oneStep = view->history_count() == base + 1;
             ST_BEGIN("lpr_drag_out");
             ST_PASS("lpr_drag_out drop=%d left=%d root=%d history=%d", dropped ? 1 : 0,

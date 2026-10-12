@@ -1,8 +1,8 @@
 #include "frame_includes.h"
 
+#include "api/history_api.h"
 #include "pictura_app/src/cxxqt_object/clipboard.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/impl_history/purge.cxxqt.h"
 
 #include <QtCore/QMimeData>
 #include <QtGui/QClipboard>
@@ -255,12 +255,12 @@ void PicturaMainWindow::registerEditHandlers()
         }
     };
     registry_->setHandler(command_ids::EditPurgeUndo,
-                          [purgeView]() { purgeView([](PictureView& v) { return purge_history(v); }); });
+                          [purgeView]() { purgeView([](PictureView& v) { return history_api::purgeUndo(v); }); });
     registry_->setHandler(command_ids::EditPurgeHistories, [purgeView]() {
-        purgeView([](PictureView& v) { return purge_named_history(v); });
+        purgeView([](PictureView& v) { return history_api::purgeHistories(v); });
     });
     registry_->setHandler(command_ids::EditPurgeAll, [this, purgeView]() {
-        purgeView([](PictureView& v) { return purge_all(v); });
+        purgeView([](PictureView& v) { return history_api::purgeAll(v); });
         clipboard_purge();
         if (clipboardExported_) {
             clipboardSetting_ = true;
@@ -348,18 +348,20 @@ void PicturaMainWindow::wireEditHistory()
         if (!view) {
             return;
         }
-        view->can_undo() ? view->undo() : view->redo();
+        history_api::canUndo(*view) ? history_api::undo(*view) : history_api::redo(*view);
     });
     registry_->setEnabledProvider(command_ids::EditUndo, [this]() {
         PictureView* view = activeView();
-        return (tools_ && tools_->canToolUndo()) || (view && (view->can_undo() || view->can_redo()));
+        return (tools_ && tools_->canToolUndo())
+            || (view && (history_api::canUndo(*view) || history_api::canRedo(*view)));
     });
     registry_->setLabelProvider(command_ids::EditUndo, [this]() {
         if (tools_ && tools_->canToolUndo()) {
             return QStringLiteral("Undo");
         }
         PictureView* view = activeView();
-        return view && !view->can_undo() ? QStringLiteral("Redo") : QStringLiteral("Undo");
+        return view && !history_api::canUndo(*view) ? QStringLiteral("Redo")
+                                                    : QStringLiteral("Undo");
     });
 
     registry_->setHandler(command_ids::EditRedo, [this]() {
@@ -368,28 +370,29 @@ void PicturaMainWindow::wireEditHistory()
             return;
         }
         if (PictureView* view = activeView()) {
-            view->redo();
+            history_api::redo(*view);
         }
     });
     registry_->setEnabledProvider(command_ids::EditRedo, [this]() {
-        return (tools_ && tools_->canToolRedo()) || (activeView() && activeView()->can_redo());
+        return (tools_ && tools_->canToolRedo())
+            || (activeView() && history_api::canRedo(*activeView()));
     });
 
     registry_->setHandler(command_ids::EditStepBackward, [this]() {
         if (PictureView* view = activeView()) {
-            view->undo();
+            history_api::undo(*view);
         }
     });
     registry_->setEnabledProvider(command_ids::EditStepBackward,
-                                  [this]() { return activeView() && activeView()->can_undo(); });
+                                  [this]() { return activeView() && history_api::canUndo(*activeView()); });
 
     registry_->setHandler(command_ids::EditStepForward, [this]() {
         if (PictureView* view = activeView()) {
-            view->redo();
+            history_api::redo(*view);
         }
     });
     registry_->setEnabledProvider(command_ids::EditStepForward,
-                                  [this]() { return activeView() && activeView()->can_redo(); });
+                                  [this]() { return activeView() && history_api::canRedo(*activeView()); });
 }
 
 } // namespace pictura

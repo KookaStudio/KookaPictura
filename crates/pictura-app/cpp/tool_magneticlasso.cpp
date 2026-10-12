@@ -1,5 +1,6 @@
 #include "tool_handler.h"
 
+#include "api/document_api.h"
 #include "image_view.h"
 #include "selection_geometry.h"
 #include "tools.h"
@@ -117,7 +118,7 @@ public:
 private:
     void begin(ToolContext& ctx, PictureView& v, const QPoint& p, Qt::KeyboardModifiers mods)
     {
-        if (v.document_depth_bits() == 32) {
+        if (document_api::documentDepthBits(v) == 32) {
             ctx.refused(QStringLiteral(
                 "The Magnetic Lasso is not available for 32-bit documents."));
             return;

@@ -5,6 +5,8 @@
 
 #include "match_color_dialog.h"
 
+#include "api/layers_api.h"
+
 #include "image_view.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
@@ -252,15 +254,13 @@ void MatchColorDialog::rebuildLayerCombo()
     }
     layerCombo_->addItem(tr("Merged"));
     layerPaths_.append(QString());
-    const int count = source->layer_row_count();
-    for (int i = 0; i < count; ++i) {
-        const QString kind = source->layer_row_kind(i);
-        if (kind != QLatin1String("pixel") && kind != QLatin1String("background")
-            && kind != QLatin1String("type")) {
+    for (const auto& row : pictura::layers_api::rows(*source)) {
+        if (row.kind != QLatin1String("pixel") && row.kind != QLatin1String("background")
+            && row.kind != QLatin1String("type")) {
             continue;
         }
-        layerCombo_->addItem(source->layer_row_name(i));
-        layerPaths_.append(source->layer_row_path(i));
+        layerCombo_->addItem(row.name);
+        layerPaths_.append(row.path);
     }
     layerCombo_->setCurrentIndex(0);
 }

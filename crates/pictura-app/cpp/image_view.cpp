@@ -1,5 +1,6 @@
 #include "image_view.h"
 
+#include "api/selection_api.h"
 #include "icons.h"
 #include "pictura_debug_timing.h"
 
@@ -133,32 +134,9 @@ void ImageView::clearOverlay()
     update();
 }
 
-void ImageView::setSelectionContour(const QString& encoded)
+void ImageView::setSelectionContour(const selection_api::SelectionContour& contour)
 {
-    selectionContours_.clear();
-    if (!encoded.isEmpty()) {
-        const QStringList loops = encoded.split(QLatin1Char(';'), Qt::SkipEmptyParts);
-        for (const QString& loop : loops) {
-            QPolygonF poly;
-            const QStringList points = loop.split(QLatin1Char(' '), Qt::SkipEmptyParts);
-            for (const QString& point : points) {
-                const int comma = point.indexOf(QLatin1Char(','));
-                if (comma < 0) {
-                    continue;
-                }
-                bool okX = false;
-                bool okY = false;
-                const double x = point.left(comma).toDouble(&okX);
-                const double y = point.mid(comma + 1).toDouble(&okY);
-                if (okX && okY) {
-                    poly << QPointF(x, y);
-                }
-            }
-            if (poly.size() >= 2) {
-                selectionContours_ << poly;
-            }
-        }
-    }
+    selectionContours_ = contour.loops;
     updateAntsTimer();
     update();
 }
@@ -264,25 +242,11 @@ void ImageView::beginTransformPreview(const QImage& base, const QImage& layer,
     update();
 }
 
-void ImageView::setTransformPreviewProjective(const QString& matrix9)
+void ImageView::setTransformPreviewProjective(const std::array<double, 9>& coefficients)
 {
-    const QStringList values = matrix9.split(QLatin1Char(' '), Qt::SkipEmptyParts);
-    if (values.size() != 9) {
-        transformProjectiveActive_ = false;
-        update();
-        return;
-    }
-    double c[9] = {0.0};
-    for (int i = 0; i < 9; ++i) {
-        bool ok = false;
-        c[i] = values.at(i).toDouble(&ok);
-        if (!ok) {
-            transformProjectiveActive_ = false;
-            update();
-            return;
-        }
-    }
-    transformProjective_ = QTransform(c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8]);
+    transformProjective_ = QTransform(coefficients[0], coefficients[1], coefficients[2],
+                                      coefficients[3], coefficients[4], coefficients[5],
+                                      coefficients[6], coefficients[7], coefficients[8]);
     transformProjectiveActive_ = true;
     update();
 }
@@ -298,23 +262,9 @@ void ImageView::setTransformPreview(double scaleX, double scaleY, double angleRa
     update();
 }
 
-void ImageView::setTransformQuad(const QString& encoded)
+void ImageView::setTransformQuad(const QPolygonF& corners)
 {
-    transformQuad_.clear();
-    const QStringList points = encoded.split(QLatin1Char(' '), Qt::SkipEmptyParts);
-    for (const QString& point : points) {
-        const int comma = point.indexOf(QLatin1Char(','));
-        if (comma < 0) {
-            continue;
-        }
-        bool okX = false;
-        bool okY = false;
-        const double x = point.left(comma).toDouble(&okX);
-        const double y = point.mid(comma + 1).toDouble(&okY);
-        if (okX && okY) {
-            transformQuad_ << QPointF(x, y);
-        }
-    }
+    transformQuad_ = corners;
     update();
 }
 

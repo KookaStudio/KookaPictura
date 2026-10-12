@@ -1,6 +1,7 @@
 #include "selftest_visibility.h"
 #include "selftest_report.h"
 
+#include "api/transform_api.h"
 #include "frame.h"
 #include "image_view.h"
 #include "tools.h"
@@ -126,7 +127,7 @@ int pictura::runVisibilityChecks(pictura::PicturaMainWindow& frame)
         const int doc = frame.activeDocumentIndex();
         view->set_layers_visible(QStringList{QStringLiteral("0")}, false);
         view->set_active_layer(QStringLiteral("0"));
-        const QString rectBefore = view->layer_rect(QStringLiteral("0"));
+        const QString rectBefore = transform_api::layerRect(*view, QStringLiteral("0")).toString();
         const int historyBefore = view->history_count();
 
         frame.setActiveTool(pictura::ToolId::Move);
@@ -134,7 +135,7 @@ int pictura::runVisibilityChecks(pictura::PicturaMainWindow& frame)
         canvas->mouseMoved(QPointF(16, 16));
         canvas->mouseReleased(QPointF(16, 16));
 
-        const bool moved = view->layer_rect(QStringLiteral("0")) != rectBefore;
+        const bool moved = transform_api::layerRect(*view, QStringLiteral("0")).toString() != rectBefore;
         const bool stillInvisible = !view->layer_visible(0);
         const bool oneState = view->history_count() == historyBefore + 1;
         ST_BEGIN("vis_invisible_move");

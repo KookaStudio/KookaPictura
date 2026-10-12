@@ -18,6 +18,7 @@
 #include "theme.h"
 
 #include <algorithm>
+#include <array>
 #include <functional>
 
 class QPainter;
@@ -31,6 +32,10 @@ class QWheelEvent;
 class QShowEvent;
 class QHideEvent;
 class QTimer;
+
+namespace pictura::selection_api {
+struct SelectionContour;
+}
 
 namespace pictura {
 
@@ -172,9 +177,9 @@ public:
     void setOverlayPolygon(const QPolygonF& polygon);
     void clearOverlay();
 
-    // Committed-selection marching ants. `encoded` is `"x,y x,y ..."` loops
-    // joined by `;` (see PictureView::selection_contour); empty clears.
-    void setSelectionContour(const QString& encoded);
+    // Committed-selection marching ants from the typed adapter contour (see
+    // selection_api::contour); an empty contour clears.
+    void setSelectionContour(const selection_api::SelectionContour& contour);
     // The Channels panel's visible colour channels (image_view_channels.cpp):
     // bit 0 red, 1 green, 2 blue; 0x7 shows all. One visible channel draws as
     // greyscale, as CS6 does by default; two draw in their own colours.
@@ -230,8 +235,8 @@ public:
     // `QTransform(m11,m12,m13,m21,m22,m23,m31,m32,m33)` order, mapping source
     // document space onto the target quad. Overrides the similarity preview
     // until the next `beginTransformPreview`.
-    void setTransformPreviewProjective(const QString& matrix9);
-    void setTransformQuad(const QString& encoded);
+    void setTransformPreviewProjective(const std::array<double, 9>& coefficients);
+    void setTransformQuad(const QPolygonF& corners);
     // The Free Transform reference point (image space) and its marker
     // visibility; drawn as a target glyph with the transform overlay.
     void setTransformPivot(const QPointF& pivot, bool visible);

@@ -9,7 +9,7 @@ namespace pictura {
 // (QRawFont exposes tables, not the file); empty when Qt has none.
 QByteArray typeFontBytes(const QString& family);
 
-// Hand `family`'s face to the engine (`type_register_font`) once per process,
+// Hand `family`'s face to the engine (`type_api::registerFont`) once per process,
 // so type set in it renders in it rather than in the bundled face.
 void registerTypeFont(const QString& family);
 

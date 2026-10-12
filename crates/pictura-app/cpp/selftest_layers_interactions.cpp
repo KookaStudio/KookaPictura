@@ -1,5 +1,6 @@
 #include "selftest_layers_interactions.h"
 #include "selftest_report.h"
+#include "api/layers_api.h"
 
 #include "frame.h"
 #include "panels/layers_panel.h"
@@ -15,8 +16,8 @@ namespace {
 
 int rowForPath(PictureView* view, const QString& path)
 {
-    for (int i = 0; i < view->layer_row_count(); ++i) {
-        if (view->layer_row_path(i) == path) {
+    for (int i = 0; i < pictura::layers_api::rowCount(*view); ++i) {
+        if (pictura::layers_api::rowAt(*view, i).path == path) {
             return i;
         }
     }
@@ -54,8 +55,8 @@ int runLayersInteractionsChecks(PicturaMainWindow& frame)
         const int rowA = rowForPath(view, a);
         const int rowB = rowForPath(view, b);
         const bool reordered = rowA >= 0 && rowB >= 0
-            && view->layer_row_name(rowB) == QStringLiteral("A")
-            && view->layer_row_name(rowA) == QStringLiteral("B");
+            && pictura::layers_api::rowAt(*view, rowB).name == QStringLiteral("A")
+            && pictura::layers_api::rowAt(*view, rowA).name == QStringLiteral("B");
         const bool oneStep = view->history_count() == base + 1;
         ST_BEGIN("lpr_drag_sibling");
         ST_PASS("lpr_drag_sibling support=%d mode=%d indicator=%d drop=%d reorder=%d history=%d",
@@ -90,7 +91,7 @@ int runLayersInteractionsChecks(PicturaMainWindow& frame)
         const bool indicator = panel->dropIndicatorShownForTest();
         const bool dropped = panel->dropAtForTest(QStringLiteral("0"), target, true);
         const bool unchanged = view->history_count() == base;
-        const bool stillBackground = view->layer_row_kind(rowForPath(view, QStringLiteral("0")))
+        const bool stillBackground = pictura::layers_api::rowAt(*view, rowForPath(view, QStringLiteral("0"))).kind
             == QStringLiteral("background");
         ST_BEGIN("lpr_drag_invalid");
         ST_PASS("lpr_drag_invalid mode=%d indicator=%d drop=%d history=%d background=%d", mode,
@@ -122,18 +123,18 @@ int runLayersInteractionsChecks(PicturaMainWindow& frame)
         panel->refresh();
         const QString path = QStringLiteral("0");
         const bool wasBackground =
-            view->layer_row_kind(rowForPath(view, path)) == QStringLiteral("background");
+            pictura::layers_api::rowAt(*view, rowForPath(view, path)).kind == QStringLiteral("background");
         const int base = view->history_count();
         panel->setBackgroundConvertForTest(true, QString(), 0);
         panel->doubleClickAtForTest(path, true);
         const int row = rowForPath(view, path);
-        const bool converted = row >= 0 && view->layer_row_kind(row) == QStringLiteral("pixel");
-        const bool unlocked = row >= 0 && view->layer_row_lock(row) == 0;
+        const bool converted = row >= 0 && pictura::layers_api::rowAt(*view, row).kind == QStringLiteral("pixel");
+        const bool unlocked = row >= 0 && pictura::layers_api::rowAt(*view, row).lockBits == 0;
         const bool oneStep = view->history_count() == base + 1;
         ST_BEGIN("lpr_background_dblclick");
         ST_PASS("lpr_background_dblclick before=%d after=%s lock=%d history=%d",
-                wasBackground ? 1 : 0, qPrintable(view->layer_row_kind(row)),
-                view->layer_row_lock(row), view->history_count() - base);
+                wasBackground ? 1 : 0, qPrintable(pictura::layers_api::rowAt(*view, row).kind),
+                pictura::layers_api::rowAt(*view, row).lockBits, view->history_count() - base);
         if (!wasBackground || !converted || !unlocked || !oneStep) {
             frame.closeDocument(doc, false);
             return pictura::selfTest().fail(330, "background double-click convert");
@@ -161,17 +162,17 @@ int runLayersInteractionsChecks(PicturaMainWindow& frame)
         const bool dropped = panel->dropOnStripButtonForTest(
             QStringLiteral("layersStripNewLayer"), QStringList{QStringLiteral("0")});
         bool copyExists = false;
-        for (int i = 0; i < view->layer_row_count(); ++i) {
-            if (view->layer_row_name(i).contains(QStringLiteral("copy"))) {
+        for (int i = 0; i < pictura::layers_api::rowCount(*view); ++i) {
+            if (pictura::layers_api::rowAt(*view, i).name.contains(QStringLiteral("copy"))) {
                 copyExists = true;
             }
         }
         const int row = rowForPath(view, QStringLiteral("0"));
-        const bool converted = row >= 0 && view->layer_row_kind(row) == QStringLiteral("pixel");
+        const bool converted = row >= 0 && pictura::layers_api::rowAt(*view, row).kind == QStringLiteral("pixel");
         const bool oneStep = view->history_count() == base + 1;
         ST_BEGIN("lpr_background_drop");
         ST_PASS("lpr_background_drop dropped=%d copy=%d kind=%s history=%d", dropped ? 1 : 0,
-                copyExists ? 1 : 0, qPrintable(view->layer_row_kind(row)),
+                copyExists ? 1 : 0, qPrintable(pictura::layers_api::rowAt(*view, row).kind),
                 view->history_count() - base);
         if (!dropped || copyExists || !converted || !oneStep) {
             frame.closeDocument(doc, false);
@@ -241,7 +242,7 @@ int runLayersInteractionsChecks(PicturaMainWindow& frame)
         const bool dropped = panel->dropAtForTest(child, sibling, true);
         const bool unchanged = view->history_count() == base
             && rowForPath(view, child) >= 0
-            && view->layer_row_path(rowForPath(view, child)) == child;
+            && pictura::layers_api::rowAt(*view, rowForPath(view, child)).path == child;
         ST_BEGIN("lpr_drag_nesting");
         ST_PASS("lpr_drag_nesting mode=%d indicator=%d drop=%d history=%d", mode,
                 indicator ? 1 : 0, dropped ? 1 : 0, view->history_count() - base);

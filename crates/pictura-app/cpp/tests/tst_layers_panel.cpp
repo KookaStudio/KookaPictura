@@ -1,4 +1,5 @@
 #include <QtTest/QtTest>
+#include "api/layers_api.h"
 
 #include <QtCore/QAbstractItemModel>
 #include <QtCore/QDir>
@@ -101,8 +102,8 @@ bool dragLayerOver(QWidget* target, const void* document, const QString& path,
 int countNamed(pictura::PictureView* view, const QString& name)
 {
     int count = 0;
-    for (int i = 0; i < view->layer_row_count(); ++i) {
-        count += view->layer_row_name(i) == name ? 1 : 0;
+    for (int i = 0; i < pictura::layers_api::rowCount(*view); ++i) {
+        count += pictura::layers_api::rowAt(*view, i).name == name ? 1 : 0;
     }
     return count;
 }
@@ -194,8 +195,8 @@ bool LayersPanelTest::setupNest()
 
 int LayersPanelTest::rowOf(const QString& path)
 {
-    for (int i = 0; i < view_->layer_row_count(); ++i) {
-        if (view_->layer_row_path(i) == path) {
+    for (int i = 0; i < pictura::layers_api::rowCount(*view_); ++i) {
+        if (pictura::layers_api::rowAt(*view_, i).path == path) {
             return i;
         }
     }
@@ -209,23 +210,23 @@ void LayersPanelTest::nestingLockRefusalAndReorder()
     const int lockBase = view_->history_count();
     const int locked =
         view_->set_layers_lock(QStringList{a_}, QStringLiteral("nesting"), true);
-    QVERIFY2(locked == 1 && (view_->layer_row_lock(rowOf(a_)) & 0x08) != 0
+    QVERIFY2(locked == 1 && (pictura::layers_api::rowAt(*view_, rowOf(a_)).lockBits & 0x08) != 0
                  && view_->history_count() == lockBase + 1,
              "nesting lock bit");
     const int groupBase = view_->history_count();
     const QString wrapped = view_->group_layers(QStringList{a_});
     QVERIFY2(wrapped.isEmpty() && view_->history_count() == groupBase
-                 && view_->layer_row_path(rowOf(a_)) == a_,
+                 && pictura::layers_api::rowAt(*view_, rowOf(a_)).path == a_,
              "group layers refused");
     const int moveBase = view_->history_count();
     const bool moved = view_->move_layer_path(a_, 1);
-    QVERIFY2(moved && view_->layer_row_name(rowOf(QStringLiteral("1/1"))) == QStringLiteral("A")
+    QVERIFY2(moved && pictura::layers_api::rowAt(*view_, rowOf(QStringLiteral("1/1"))).name == QStringLiteral("A")
                  && view_->history_count() == moveBase + 1,
              "move in container");
     const int all = view_->set_layers_lock(QStringList{QStringLiteral("1/1")},
                                            QStringLiteral("all"), true);
     QVERIFY2(all == 1
-                 && (view_->layer_row_lock(rowOf(QStringLiteral("1/1"))) & 0x0F) == 0x0F,
+                 && (pictura::layers_api::rowAt(*view_, rowOf(QStringLiteral("1/1"))).lockBits & 0x0F) == 0x0F,
              "all locks");
     window_->closeDocument(doc, false);
 }
@@ -334,7 +335,7 @@ void LayersPanelTest::gutterClickTogglesWithoutSelecting()
     QVERIFY2(vr.isValid() && vr.width() > kEyeColumn, "layer A row is laid out");
 
     panel_->selectPaths({b_}, b_);
-    const bool before = view_->layer_row_visible(rowOf(a_));
+    const bool before = pictura::layers_api::rowAt(*view_, rowOf(a_)).visible;
     QCOMPARE(panel_->selectedPaths(), QStringList{b_});
 
     // Re-read the row geometry: selecting b_ may scroll the view, which moves
@@ -348,7 +349,7 @@ void LayersPanelTest::gutterClickTogglesWithoutSelecting()
     QTest::mouseClick(viewport, Qt::LeftButton, Qt::NoModifier,
                       QPoint(vr.left(), vr.center().y()));
     QCoreApplication::processEvents();
-    QVERIFY2(view_->layer_row_visible(rowOf(a_)) != before, "gutter left edge toggles visibility");
+    QVERIFY2(pictura::layers_api::rowAt(*view_, rowOf(a_)).visible != before, "gutter left edge toggles visibility");
     QCOMPARE(panel_->selectedPaths(), QStringList{b_});
 
     // Restore, then the last gutter pixel toggles identically.
@@ -359,17 +360,17 @@ void LayersPanelTest::gutterClickTogglesWithoutSelecting()
     QTest::mouseClick(viewport, Qt::LeftButton, Qt::NoModifier,
                       QPoint(vr.left() + kEyeColumn - 1, vr.center().y()));
     QCoreApplication::processEvents();
-    QVERIFY2(view_->layer_row_visible(rowOf(a_)) != before, "gutter last column toggles visibility");
+    QVERIFY2(pictura::layers_api::rowAt(*view_, rowOf(a_)).visible != before, "gutter last column toggles visibility");
     QCOMPARE(panel_->selectedPaths(), QStringList{b_});
 
     // The padded content column just past the gutter selects instead of toggling.
     vr = rowRect();
     QVERIFY2(vr.isValid(), "layer A row still laid out");
-    const bool visibleBeforeContent = view_->layer_row_visible(rowOf(a_));
+    const bool visibleBeforeContent = pictura::layers_api::rowAt(*view_, rowOf(a_)).visible;
     QTest::mouseClick(viewport, Qt::LeftButton, Qt::NoModifier,
                       QPoint(vr.left() + kEyeColumn, vr.center().y()));
     QCoreApplication::processEvents();
-    QVERIFY2(view_->layer_row_visible(rowOf(a_)) == visibleBeforeContent,
+    QVERIFY2(pictura::layers_api::rowAt(*view_, rowOf(a_)).visible == visibleBeforeContent,
              "content click leaves visibility alone");
     QVERIFY2(panel_->selectedPaths().contains(a_), "content click selects the row");
 
@@ -435,7 +436,7 @@ void LayersPanelTest::dropAnywhereOnLayerRowReorders()
     QVERIFY2(dropOnViewport(tree->viewport(), view_, a,
                             QPoint(row.center().x(), row.top() + row.height() / 4)),
              "upper-half drop accepted");
-    QCOMPARE(view_->layer_row_name(rowOf(QStringLiteral("2"))), QStringLiteral("A"));
+    QCOMPARE(pictura::layers_api::rowAt(*view_, rowOf(QStringLiteral("2"))).name, QStringLiteral("A"));
     QCOMPARE(view_->history_count(), base + 1);
 
     panel_->refresh();
@@ -444,8 +445,8 @@ void LayersPanelTest::dropAnywhereOnLayerRowReorders()
     QVERIFY2(dropOnViewport(tree->viewport(), view_, QStringLiteral("2"),
                             QPoint(row.center().x(), row.bottom() - row.height() / 4)),
              "lower-half drop accepted");
-    QCOMPARE(view_->layer_row_name(rowOf(QStringLiteral("1"))), QStringLiteral("A"));
-    QCOMPARE(view_->layer_row_name(rowOf(QStringLiteral("2"))), QStringLiteral("B"));
+    QCOMPARE(pictura::layers_api::rowAt(*view_, rowOf(QStringLiteral("1"))).name, QStringLiteral("A"));
+    QCOMPARE(pictura::layers_api::rowAt(*view_, rowOf(QStringLiteral("2"))).name, QStringLiteral("B"));
     window_->closeDocument(doc, false);
 }
 
@@ -477,8 +478,8 @@ void LayersPanelTest::dropOnGroupRowEdgesPlacesSibling()
     QVERIFY2(dropOnViewport(tree->viewport(), view_, QStringLiteral("1"),
                             QPoint(row.center().x(), row.top() + row.height() / 8)),
              "upper-quarter drop accepted");
-    QCOMPARE(view_->layer_row_name(rowOf(QStringLiteral("2"))), QStringLiteral("L"));
-    QCOMPARE(view_->layer_row_name(rowOf(QStringLiteral("1"))), QStringLiteral("G"));
+    QCOMPARE(pictura::layers_api::rowAt(*view_, rowOf(QStringLiteral("2"))).name, QStringLiteral("L"));
+    QCOMPARE(pictura::layers_api::rowAt(*view_, rowOf(QStringLiteral("1"))).name, QStringLiteral("G"));
     QCOMPARE(view_->history_count(), base + 1);
 
     panel_->refresh();
@@ -487,8 +488,8 @@ void LayersPanelTest::dropOnGroupRowEdgesPlacesSibling()
     QVERIFY2(dropOnViewport(tree->viewport(), view_, QStringLiteral("2"),
                             QPoint(row.center().x(), row.bottom() - row.height() / 8)),
              "lower-quarter drop accepted");
-    QCOMPARE(view_->layer_row_name(rowOf(QStringLiteral("1"))), QStringLiteral("L"));
-    QCOMPARE(view_->layer_row_name(rowOf(QStringLiteral("2"))), QStringLiteral("G"));
+    QCOMPARE(pictura::layers_api::rowAt(*view_, rowOf(QStringLiteral("1"))).name, QStringLiteral("L"));
+    QCOMPARE(pictura::layers_api::rowAt(*view_, rowOf(QStringLiteral("2"))).name, QStringLiteral("G"));
     QCOMPARE(view_->history_count(), base + 2);
     window_->closeDocument(doc, false);
 }
@@ -515,12 +516,12 @@ void LayersPanelTest::dragLayerOntoAnotherDocument()
     QTest::qWait(50);
     auto* bar = window_->findChild<QTabBar*>(QStringLiteral("documentTabBar"));
     QVERIFY(bar != nullptr && bar->count() == 3);
-    const int srcRows = src->layer_row_count();
+    const int srcRows = pictura::layers_api::rowCount(*src);
     const int base = dst->history_count();
 
     QVERIFY2(!dragLayerOver(bar, src, sky, bar->tabRect(0).center(), true),
              "a drop on its own document's tab copies nothing");
-    QCOMPARE(src->layer_row_count(), srcRows);
+    QCOMPARE(pictura::layers_api::rowCount(*src), srcRows);
 
     QVERIFY2(dragLayerOver(bar, src, sky, bar->tabRect(1).center(), false),
              "hovering another tab accepts the drag");
@@ -532,26 +533,26 @@ void LayersPanelTest::dragLayerOntoAnotherDocument()
     panel_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
     QVERIFY(panel_ != nullptr);
     const QString copied = panel_->currentPath();
-    QCOMPARE(dst->layer_row_name(rowOf(copied)), QStringLiteral("Sky"));
+    QCOMPARE(pictura::layers_api::rowAt(*dst, rowOf(copied)).name, QStringLiteral("Sky"));
     view_ = src;
-    const int srcOpacity = src->layer_row_opacity(rowOf(sky));
+    const int srcOpacity = pictura::layers_api::rowAt(*src, rowOf(sky)).opacity;
     view_ = dst;
     QVERIFY(srcOpacity < 100);
-    QCOMPARE(dst->layer_row_opacity(rowOf(copied)), srcOpacity);
-    QCOMPARE(src->layer_row_count(), srcRows);
+    QCOMPARE(pictura::layers_api::rowAt(*dst, rowOf(copied)).opacity, srcOpacity);
+    QCOMPARE(pictura::layers_api::rowCount(*src), srcRows);
 
     QWidget* canvas = window_->canvasAt(1);
     QVERIFY2(dragLayerOver(canvas, src, sky, canvas->rect().center(), true),
              "canvas drop accepted");
     QCOMPARE(countNamed(dst, QStringLiteral("Sky")), 2);
 
-    const int dstRows = dst->layer_row_count();
+    const int dstRows = pictura::layers_api::rowCount(*dst);
     QTreeView* tree = panel_->findChild<QTreeView*>();
     QVERIFY(tree != nullptr);
     QVERIFY2(!dropOnViewport(tree->viewport(), src, QStringLiteral("1"),
                              tree->viewport()->rect().center()),
              "another document's drag is not a drop on this panel");
-    QCOMPARE(dst->layer_row_count(), dstRows);
+    QCOMPARE(pictura::layers_api::rowCount(*dst), dstRows);
 
     // Back over the source tab after another document came forward: the drop
     // is the own-document no-op, not a copy into the last-hovered document.
@@ -560,7 +561,7 @@ void LayersPanelTest::dragLayerOntoAnotherDocument()
              "returning to the source tab copies nothing");
     QCOMPARE(window_->activeView(), src);
     QCOMPARE(countNamed(dst, QStringLiteral("Sky")), 2);
-    QCOMPARE(src->layer_row_count(), srcRows);
+    QCOMPARE(pictura::layers_api::rowCount(*src), srcRows);
 
     // Empty tab-bar space is no target, whatever document is active.
     QVERIFY(dragLayerOver(bar, src, sky, bar->tabRect(1).center(), false));
@@ -615,11 +616,11 @@ void LayersPanelTest::dropOnDelete()
     const int doc = window_->activeDocumentIndex();
     panel->setView(view);
     panel->refresh();
-    const int rows = view->layer_row_count();
+    const int rows = pictura::layers_api::rowCount(*view);
     const int base = view->history_count();
     const bool dropped = panel->dropOnStripButtonForTest(
         QStringLiteral("layersStripDelete"), {QStringLiteral("0")});
-    QVERIFY2(dropped && view->layer_row_count() == rows - 1
+    QVERIFY2(dropped && pictura::layers_api::rowCount(*view) == rows - 1
                  && view->history_count() == base + 1,
              "drop on delete is one undo step");
     window_->closeDocument(doc, false);
@@ -666,7 +667,7 @@ void LayersPanelTest::clippingMasks()
     create->trigger();
     QCOMPARE(view_->history_count(), before + 1);
     QCOMPARE(view_->history_label(view_->history_index()), QStringLiteral("Create Clipping Mask"));
-    QVERIFY(view_->layer_row_clipping(rowOf(fill)));
+    QVERIFY(pictura::layers_api::rowAt(*view_, rowOf(fill)).clipping);
     QCOMPARE(view_->sample_argb(4, 4), green);
     QCOMPARE(view_->sample_argb(12, 12), white);
 
@@ -677,17 +678,17 @@ void LayersPanelTest::clippingMasks()
     QVERIFY(release->isEnabled());
     release->trigger();
     QCOMPARE(view_->history_label(view_->history_index()), QStringLiteral("Release Clipping Mask"));
-    QVERIFY(!view_->layer_row_clipping(rowOf(fill)));
+    QVERIFY(!pictura::layers_api::rowAt(*view_, rowOf(fill)).clipping);
     QCOMPARE(view_->sample_argb(12, 12), green);
 
     // Alt-click on the line between the rows clips, and again releases.
     QCoreApplication::processEvents();
     panel_->altClickBelowRowForTest(fill);
-    QVERIFY(view_->layer_row_clipping(rowOf(fill)));
+    QVERIFY(pictura::layers_api::rowAt(*view_, rowOf(fill)).clipping);
     QCOMPARE(view_->sample_argb(12, 12), white);
     QCoreApplication::processEvents();
     panel_->altClickBelowRowForTest(fill);
-    QVERIFY(!view_->layer_row_clipping(rowOf(fill)));
+    QVERIFY(!pictura::layers_api::rowAt(*view_, rowOf(fill)).clipping);
 }
 
 // Issue #119: a document whose only layer is the locked Background must always
@@ -710,8 +711,8 @@ void LayersPanelTest::backgroundOnlyStaysActive()
     QVERIFY(view_->open_image(path));
     QFile::remove(path);
 
-    QCOMPARE(view_->layer_row_count(), 1);
-    QCOMPARE(view_->layer_row_kind(0), QStringLiteral("background"));
+    QCOMPARE(pictura::layers_api::rowCount(*view_), 1);
+    QCOMPARE(pictura::layers_api::rowAt(*view_, 0).kind, QStringLiteral("background"));
     QCOMPARE(view_->active_layer_path(), QStringLiteral("0"));
     QCOMPARE(panel_->currentPath(), QStringLiteral("0"));
 
@@ -740,8 +741,8 @@ void LayersPanelTest::activeLayerNotFirstRow()
     QVERIFY(!view_->add_layer_in(QString()).isEmpty());
     QVERIFY(!view_->add_group_in(QString()).isEmpty());
     // The group is the first displayed row; the active pixel layer is "0".
-    QCOMPARE(view_->layer_row_path(0), QStringLiteral("2"));
-    QCOMPARE(view_->layer_row_kind(0), QStringLiteral("group"));
+    QCOMPARE(pictura::layers_api::rowAt(*view_, 0).path, QStringLiteral("2"));
+    QCOMPARE(pictura::layers_api::rowAt(*view_, 0).kind, QStringLiteral("group"));
     // Clearing the selection syncs an empty active layer, so re-establish the
     // document's active layer (off the first row) before the refresh.
     panel_->selectPaths(QStringList{}, QString());
@@ -763,7 +764,7 @@ void LayersPanelTest::maskRowIndicators()
     panel_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
     QVERIFY2(created && view_ && panel_, "mask row fixture");
     const int doc = window_->activeDocumentIndex();
-    const QString layer = view_->layer_row_path(0);
+    const QString layer = pictura::layers_api::rowAt(*view_, 0).path;
     QVERIFY(!layer.isEmpty());
     view_->set_active_layer(layer);
     QVERIFY2(pictura::layer_mask_add(*view_, QStringLiteral("reveal-all")), "add mask");
@@ -812,7 +813,7 @@ void LayersPanelTest::maskEditTargetActivation()
     panel_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
     QVERIFY2(created && view_ && panel_, "mask activation fixture");
     const int doc = window_->activeDocumentIndex();
-    const QString layer = view_->layer_row_path(0);
+    const QString layer = pictura::layers_api::rowAt(*view_, 0).path;
     view_->set_active_layer(layer);
     QVERIFY2(pictura::layer_mask_add(*view_, QStringLiteral("reveal-all")), "add mask");
 
@@ -897,7 +898,7 @@ void LayersPanelTest::vectorMaskRowIndicators()
     panel_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
     QVERIFY2(created && view_ && panel_, "vector mask row fixture");
     const int doc = window_->activeDocumentIndex();
-    const QString layer = view_->layer_row_path(0);
+    const QString layer = pictura::layers_api::rowAt(*view_, 0).path;
     QVERIFY(!layer.isEmpty());
     view_->set_active_layer(layer);
     QVERIFY2(pictura::vector_mask_add(*view_, QStringLiteral("reveal-all")), "add vector mask");
@@ -977,7 +978,7 @@ void LayersPanelTest::fillAdjustmentMenu()
     QVERIFY2(!pattern->isEnabled(), "Pattern stays disabled until authoring exists");
     QVERIFY(pattern->toolTip().contains(QStringLiteral("not implemented yet")));
 
-    const int before = view_->layer_row_count();
+    const int before = pictura::layers_api::rowCount(*view_);
     QAction* levels = nullptr;
     for (QAction* action : menu->actions()) {
         if (action->text() == QStringLiteral("Levels…")) {
@@ -986,7 +987,7 @@ void LayersPanelTest::fillAdjustmentMenu()
     }
     QVERIFY(levels != nullptr);
     levels->trigger();
-    QCOMPARE(view_->layer_row_count(), before + 1);
+    QCOMPARE(pictura::layers_api::rowCount(*view_), before + 1);
     QVERIFY2(countNamed(view_, QStringLiteral("Levels")) == 1, "Levels layer created");
 
     window_->closeDocument(doc, false);
@@ -1038,27 +1039,27 @@ void LayersPanelTest::panelOptionsFlags()
     panel_->setOptionFlagsForTest(false, true);
     const QStringList plain = view_->duplicate_layers(QStringList{a_});
     QCOMPARE(plain.size(), 1);
-    QCOMPARE(view_->layer_row_name(rowOf(plain.first())), QStringLiteral("A"));
+    QCOMPARE(pictura::layers_api::rowAt(*view_, rowOf(plain.first())).name, QStringLiteral("A"));
 
     // Add "copy" on: duplicating that copy names it "<name> copy" again.
     panel_->setOptionFlagsForTest(true, true);
     const QStringList named = view_->duplicate_layers(QStringList{plain.first()});
     QCOMPARE(named.size(), 1);
-    QCOMPARE(view_->layer_row_name(rowOf(named.first())), QStringLiteral("A copy"));
+    QCOMPARE(pictura::layers_api::rowAt(*view_, rowOf(named.first())).name, QStringLiteral("A copy"));
 
     // Default masks on: a fill layer created with a selection carries a mask.
     panel_->setOptionFlagsForTest(true, true);
     view_->select_all();
     const QString maskedFill = view_->add_solid_fill(0xff0000ffu);
     QVERIFY(!maskedFill.isEmpty());
-    QVERIFY2(view_->layer_row_has_mask(rowOf(maskedFill)), "fill took the selection mask");
+    QVERIFY2(pictura::layers_api::rowAt(*view_, rowOf(maskedFill)).hasMask, "fill took the selection mask");
 
     // Default masks off: a fill layer created with a selection has no mask.
     panel_->setOptionFlagsForTest(true, false);
     view_->select_all();
     const QString plainFill = view_->add_solid_fill(0xff00ff00u);
     QVERIFY(!plainFill.isEmpty());
-    QVERIFY2(!view_->layer_row_has_mask(rowOf(plainFill)), "fill has no mask when off");
+    QVERIFY2(!pictura::layers_api::rowAt(*view_, rowOf(plainFill)).hasMask, "fill has no mask when off");
 
     window_->closeDocument(doc, false);
 }
@@ -1080,7 +1081,7 @@ void LayersPanelTest::renameTabNavigation()
     QVERIFY(delegate != nullptr);
 
     // Shift+Tab on the first visible row commits without wrapping to the last.
-    const QString first = view_->layer_row_path(0);
+    const QString first = pictura::layers_api::rowAt(*view_, 0).path;
     QVERIFY(panel_->beginRenameForTest(first));
     QLineEdit* editor0 = tree->viewport()->findChild<QLineEdit*>();
     QVERIFY(editor0 != nullptr);
@@ -1100,8 +1101,8 @@ void LayersPanelTest::renameTabNavigation()
     QKeyEvent tab(QEvent::KeyPress, Qt::Key_Tab, Qt::NoModifier);
     QVERIFY(delegate->eventFilter(editor, &tab));
     QCoreApplication::processEvents();
-    QCOMPARE(view_->layer_row_name(rowOf(a_)), QStringLiteral("A2"));
-    const QString nextPath = view_->layer_row_path(rowOf(a_) + 1);
+    QCOMPARE(pictura::layers_api::rowAt(*view_, rowOf(a_)).name, QStringLiteral("A2"));
+    const QString nextPath = pictura::layers_api::rowAt(*view_, rowOf(a_) + 1).path;
     QCOMPARE(panel_->currentPath(), nextPath);
     QVERIFY2(panel_->inlineEditorOpenForTest(), "Tab opened the next row's editor");
 
@@ -1148,7 +1149,7 @@ void LayersPanelTest::shapeRowActions()
 
     panel_->selectPaths({shape}, shape);
     panel_->refresh();
-    QVERIFY2((view_->layer_row_lock(rowOf(shape)) & 0x03) == 0x03, "forced bits reported");
+    QVERIFY2((pictura::layers_api::rowAt(*view_, rowOf(shape)).lockBits & 0x03) == 0x03, "forced bits reported");
     QVERIFY2(panel_->lockToggleCheckedForTest(0), "transparency checked");
     QVERIFY2(panel_->lockToggleCheckedForTest(1), "image checked");
     QVERIFY2(!panel_->lockToggleEnabledForTest(0), "transparency forced");
@@ -1157,7 +1158,7 @@ void LayersPanelTest::shapeRowActions()
     const int before = view_->history_count();
     QCOMPARE(view_->set_layers_lock({shape}, QStringLiteral("transparency"), false), 0);
     QCOMPARE(view_->history_count(), before);
-    QVERIFY2((view_->layer_row_lock(rowOf(shape)) & 0x01) != 0, "bit stays set");
+    QVERIFY2((pictura::layers_api::rowAt(*view_, rowOf(shape)).lockBits & 0x01) != 0, "bit stays set");
 
     window_->closeDocument(window_->activeDocumentIndex(), false);
 }

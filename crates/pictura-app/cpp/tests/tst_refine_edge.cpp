@@ -3,6 +3,7 @@
 // Layer Mask output writes the active layer's mask.
 
 #include <QtTest/QtTest>
+#include "api/layers_api.h"
 
 #include <QtCore/QTimer>
 #include <QtWidgets/QApplication>
@@ -176,7 +177,7 @@ void RefineEdgeTest::layerMaskOutputWritesTheMask()
     QVERIFY(setupRedSquare());
     QVERIFY(view_->select_rect(6, 6, 26, 26, QStringLiteral("new"), 0.0));
     const int layer = 0;
-    QVERIFY(!view_->layer_row_has_mask(layer));
+    QVERIFY(!pictura::layers_api::rowAt(*view_, layer).hasMask);
     QTimer::singleShot(0, [] {
         auto* dialog = activeRefineDialog();
         if (!dialog) {
@@ -189,7 +190,7 @@ void RefineEdgeTest::layerMaskOutputWritesTheMask()
         dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
     });
     QVERIFY(window_->registry()->dispatch(commandId()));
-    QVERIFY2(view_->layer_row_has_mask(layer), "the active layer gained a mask");
+    QVERIFY2(pictura::layers_api::rowAt(*view_, layer).hasMask, "the active layer gained a mask");
 }
 
 void RefineEdgeTest::optionsBarButtonOpensIt()

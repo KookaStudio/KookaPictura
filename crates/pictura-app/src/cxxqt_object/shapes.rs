@@ -24,7 +24,7 @@ use ffi::ShapeSpec;
 use pictura_codec::LiveShape;
 use pictura_core::path::{Subpath, VectorPath};
 use pictura_core::shape::{self, Arrowheads, ShapeKind, ShapeOptions, CUSTOM_SHAPE_NAMES};
-use pictura_core::{Document, Layer};
+use pictura_core::Layer;
 use pictura_paint::bucket::{self, BucketPaint};
 use pictura_paint::PaintMode;
 
@@ -137,17 +137,8 @@ pub mod ffi {
         /// Scale the active shape layer's outline about its top-left corner to `width` x `height` px; one "Resize Shape" state. False (no state) as for `shape_set_active_fill`.
         fn shape_resize_active(view: Pin<&mut PictureView>, width: f64, height: f64) -> bool;
 
-        /// Whether Layers row `i` is a shape layer (a fill cut by a vector mask).
-        fn shape_row_is_shape(view: &PictureView, i: i32) -> bool;
-
         /// Whether the layer at `path` is a shape layer.
         fn shape_is_shape(view: &PictureView, path: &QString) -> bool;
-
-        /// Whether Layers row `i` is a live shape.
-        fn shape_row_is_live(view: &PictureView, i: i32) -> bool;
-
-        /// Shape layer row `i` drawn into a `size` square laid out like the whole document (fill color where the outline covers, transparent elsewhere); null when the row is not a shape layer.
-        fn shape_row_thumbnail(view: &PictureView, i: i32, size: i32) -> QImage;
 
         /// Copy the shape layer at `path`'s fill and stroke into the shape-attributes clipboard. False (clipboard kept) when `path` is not a shape layer; no history.
         fn shape_copy_attributes(view: Pin<&mut PictureView>, path: &QString) -> bool;
@@ -459,20 +450,6 @@ fn shape_resize_active(view: Pin<&mut PictureView>, width: f64, height: f64) -> 
     })
 }
 
-/// Layers row `i`'s document and layer, when it is a shape layer.
-fn shape_row(view: &PictureView, i: i32) -> Option<(&Document, &Layer)> {
-    let doc = view.rust().doc.as_ref()?;
-    let (path, _) = pictura_render::flatten_rows(doc)
-        .into_iter()
-        .nth(usize::try_from(i).ok()?)?;
-    let layer = pictura_render::resolve_path(doc, &path)?;
-    pictura_render::is_shape_layer(layer).then_some((doc, layer))
-}
-
-fn shape_row_is_shape(view: &PictureView, i: i32) -> bool {
-    shape_row(view, i).is_some()
-}
-
 /// Whether the layer at `path` is a shape layer.
 fn shape_is_shape(view: &PictureView, path: &QString) -> bool {
     view.rust()
@@ -482,14 +459,13 @@ fn shape_is_shape(view: &PictureView, path: &QString) -> bool {
         .is_some_and(pictura_render::is_shape_layer)
 }
 
-fn shape_row_is_live(view: &PictureView, i: i32) -> bool {
-    shape_row(view, i).is_some_and(|(_, layer)| pictura_render::layer_live_shape(layer).is_some())
-}
-
-fn shape_row_thumbnail(view: &PictureView, i: i32, size: i32) -> QImage {
-    let Some((doc, layer)) = shape_row(view, i) else {
-        return QImage::default();
-    };
+/// A shape layer's fill-coverage thumbnail over the document extent, `size`
+/// square; empty for a non-shape layer, no fill colour, or a non-positive size.
+pub(super) fn shape_thumbnail(
+    layer: &pictura_core::Layer,
+    doc: &pictura_core::Document,
+    size: i32,
+) -> QImage {
     let Some([r, g, b, _]) = pictura_render::shape_fill_color(layer) else {
         return QImage::default();
     };

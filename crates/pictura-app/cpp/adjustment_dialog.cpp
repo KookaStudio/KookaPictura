@@ -1,5 +1,6 @@
 #include "adjustment_dialog.h"
 
+#include "api/document_api.h"
 #include "dialogs.h"
 #include "image_view.h"
 
@@ -117,11 +118,11 @@ void AdjustmentDialog::takeHistograms()
     // The largest view-pyramid level at most 1024 px a side: enough samples
     // for a 256-bin shape, cheap on a large document.
     QImage image;
-    for (int level = 0; level < view_->display_level_count(); ++level) {
-        const QStringList size =
-            view_->display_level_size(level).split(QLatin1Char(' '), Qt::SkipEmptyParts);
-        if (size.size() == 2 && size[0].toInt() <= 1024 && size[1].toInt() <= 1024) {
-            image = view_->display_image(level, 0, 0, size[0].toInt(), size[1].toInt());
+    const QVector<document_api::CanvasSize> levels = document_api::pyramidSizes(*view_);
+    for (int level = 0; level < levels.size(); ++level) {
+        const document_api::CanvasSize& size = levels.at(level);
+        if (size.width <= 1024 && size.height <= 1024) {
+            image = view_->display_image(level, 0, 0, size.width, size.height);
             break;
         }
     }

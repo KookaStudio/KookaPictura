@@ -266,12 +266,12 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
             const bool cmOpened = cmWritten && frame.openPath(cmPath);
             pictura::PictureView* cmView = frame.activeView();
             const bool cmOk = cmOpened && frame.documentCount() == cmDocs + 1 && cmView
-                && cmView->mode_notice() == QStringLiteral("Converted from CMYK; saved as CMYK")
+                && cmView->open_notice() == QStringLiteral("Converted from CMYK; saved as CMYK")
                 && cmView->document_mode() == QStringLiteral("rgb")
                 && cmView->sample_argb(0, 0) == 0xff643219u;
             ST_BEGIN("color_mode_open");
             ST_PASS("color_mode_open open=%d notice=%s mode=%s pixel=%08x",
-                    cmOpened ? 1 : 0, cmView ? qPrintable(cmView->mode_notice()) : "-",
+                    cmOpened ? 1 : 0, cmView ? qPrintable(cmView->open_notice()) : "-",
                     cmView ? qPrintable(cmView->document_mode()) : "-",
                     cmView ? cmView->sample_argb(0, 0) : 0u);
             if (cmView) {
@@ -323,11 +323,11 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
             const bool labOpened = labWritten && frame.openPath(labPath);
             pictura::PictureView* labView = frame.activeView();
             const bool labOk = labOpened && frame.documentCount() == labDocs + 1 && labView
-                && labView->mode_notice() == QStringLiteral("Converted from Lab; saved as Lab")
+                && labView->open_notice() == QStringLiteral("Converted from Lab; saved as Lab")
                 && labView->document_mode() == QStringLiteral("rgb");
             ST_BEGIN("lab_mode_open");
             ST_PASS("lab_mode_open open=%d notice=%s mode=%s",
-                    labOpened ? 1 : 0, labView ? qPrintable(labView->mode_notice()) : "-",
+                    labOpened ? 1 : 0, labView ? qPrintable(labView->open_notice()) : "-",
                     labView ? qPrintable(labView->document_mode()) : "-");
             if (labView) {
                 frame.closeDocument(frame.activeDocumentIndex(), false);
@@ -378,11 +378,13 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
             const bool lab16Opened = lab16Written && frame.openPath(lab16Path);
             pictura::PictureView* lab16View = frame.activeView();
             const bool lab16Ok = lab16Opened && frame.documentCount() == lab16Docs + 1 && lab16View
-                && lab16View->mode_notice() == QStringLiteral("Converted from Lab; saved as Lab")
+                && lab16View->open_notice()
+                    == QStringLiteral("Converted from Lab; saved as Lab; "
+                                      "Converted from 16-bit to 8-bit for editing; saved at 16-bit")
                 && lab16View->document_mode() == QStringLiteral("rgb");
             ST_BEGIN("lab16_mode_open");
             ST_PASS("lab16_mode_open open=%d notice=%s mode=%s",
-                    lab16Opened ? 1 : 0, lab16View ? qPrintable(lab16View->mode_notice()) : "-",
+                    lab16Opened ? 1 : 0, lab16View ? qPrintable(lab16View->open_notice()) : "-",
                     lab16View ? qPrintable(lab16View->document_mode()) : "-");
             if (lab16View) {
                 frame.closeDocument(frame.activeDocumentIndex(), false);
@@ -438,12 +440,12 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
             const bool idxOpened = idxWritten && frame.openPath(idxPath);
             pictura::PictureView* idxView = frame.activeView();
             const bool idxOk = idxOpened && frame.documentCount() == idxDocs + 1 && idxView
-                && idxView->mode_notice() == QStringLiteral("Converted from Indexed; saved as Indexed")
+                && idxView->open_notice() == QStringLiteral("Converted from Indexed; saved as Indexed")
                 && idxView->document_mode() == QStringLiteral("rgb")
                 && idxView->sample_argb(0, 0) == 0xff02fd0eu;
             ST_BEGIN("indexed_mode_open");
             ST_PASS("indexed_mode_open open=%d notice=%s mode=%s pixel=%08x",
-                    idxOpened ? 1 : 0, idxView ? qPrintable(idxView->mode_notice()) : "-",
+                    idxOpened ? 1 : 0, idxView ? qPrintable(idxView->open_notice()) : "-",
                     idxView ? qPrintable(idxView->document_mode()) : "-",
                     idxView ? idxView->sample_argb(0, 0) : 0u);
             if (idxView) {
@@ -494,12 +496,12 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
             pictura::PictureView* bmpView = frame.activeView();
             const bool bmpOk = bmpOpened && frame.documentCount() == bmpDocs + 1
                 && bmpView
-                && bmpView->mode_notice() == QStringLiteral("Converted from Bitmap; saved as Bitmap")
+                && bmpView->open_notice() == QStringLiteral("Converted from Bitmap; saved as Bitmap")
                 && bmpView->document_mode() == QStringLiteral("rgb")
                 && bmpView->sample_argb(0, 0) == 0xff000000u;
             ST_BEGIN("bitmap_mode_open");
             ST_PASS("bitmap_mode_open open=%d notice=%s mode=%s pixel=%08x",
-                    bmpOpened ? 1 : 0, bmpView ? qPrintable(bmpView->mode_notice()) : "-",
+                    bmpOpened ? 1 : 0, bmpView ? qPrintable(bmpView->open_notice()) : "-",
                     bmpView ? qPrintable(bmpView->document_mode()) : "-",
                     bmpView ? bmpView->sample_argb(0, 0) : 0u);
             if (bmpView) {
@@ -552,13 +554,13 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
             pictura::PictureView* depthView = frame.activeView();
             const bool depthOk = depthOpened && frame.documentCount() == depthDocs + 1
                 && depthView
-                && depthView->depth_notice() == QStringLiteral("Converted from 16-bit to 8-bit for editing; saved at 16-bit")
+                && depthView->open_notice() == QStringLiteral("Converted from 16-bit to 8-bit for editing; saved at 16-bit")
                 && depthView->document_mode() == QStringLiteral("rgb")
                 && depthView->sample_argb(0, 0) == 0xff12569au;
             ST_BEGIN("depth_open");
             ST_PASS("depth_open open=%d notice=%s mode=%s pixel=%08x",
                     depthOpened ? 1 : 0,
-                    depthView ? qPrintable(depthView->depth_notice()) : "-",
+                    depthView ? qPrintable(depthView->open_notice()) : "-",
                     depthView ? qPrintable(depthView->document_mode()) : "-",
                     depthView ? depthView->sample_argb(0, 0) : 0u);
             if (depthView) {

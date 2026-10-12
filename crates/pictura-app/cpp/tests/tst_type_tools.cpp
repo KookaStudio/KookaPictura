@@ -3,13 +3,14 @@
 
 #include <QtTest/QtTest>
 
+#include "api/transform_api.h"
 #include "panels/layers_panel.h"
 #include "type_fonts.h"
 #include "type_text_edit.h"
 #include "panels/numeric_field.h"
 #include "selftest_paint_fixture.h"
 
-#include "pictura_app/src/cxxqt_object/type_tools.cxxqt.h"
+#include "api/type_api.h"
 
 #include <QtCore/QDataStream>
 #include <QtGui/QClipboard>
@@ -28,7 +29,7 @@ using paint_fixture::Fixture;
 
 QRect layerRect(const Fixture& f, const QString& path)
 {
-    const QStringList parts = f.view->layer_rect(path).split(QLatin1Char(' '));
+    const QStringList parts = pictura::transform_api::layerRect(*f.view, path).toString().split(QLatin1Char(' '));
     if (parts.size() != 4) {
         return QRect();
     }
@@ -40,7 +41,7 @@ QRect layerRect(const Fixture& f, const QString& path)
 QString typeLayer(const Fixture& f)
 {
     for (int i = 0; i < f.view->layer_count(); ++i) {
-        if (f.view->layer_is_type(QString::number(i))) {
+        if (pictura::type_api::isType(*f.view, QString::number(i))) {
             return QString::number(i);
         }
     }
@@ -362,7 +363,7 @@ void TypeToolsTest::freeTransformKeepsType()
     QVERIFY2(f.committedOnce(base, "Free Transform"), "one Free Transform state");
 
     // Still type, twice as wide, and reopening it keeps the stretch.
-    QVERIFY(f.view->layer_is_type(path));
+    QVERIFY(pictura::type_api::isType(*f.view, path));
     const QRect stretched = layerRect(f, path);
     QVERIFY2(qAbs(stretched.width() - 2 * before.width()) <= 4, "twice as wide");
     frame.setActiveTool(pictura::ToolId::HorizontalType);
@@ -538,7 +539,7 @@ void TypeToolsTest::editLikeATextField()
     const int base = f.view->history_index();
     QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
     QVERIFY2(f.committedOnce(base, "Horizontal Type"), "commit");
-    QCOMPARE(QString(pictura::type_layer_text(*f.view, typeLayer(f))),
+    QCOMPARE(QString(pictura::type_api::layerText(*f.view, typeLayer(f))),
              QStringLiteral("one 2\r3"));
     f.tools->setTypeOptions(saved);
 }
@@ -570,7 +571,7 @@ void TypeToolsTest::barRestylesTheSelectedLayer()
     QCOMPARE(f.view->layer_count(), layers);
     const QRect big = layerRect(f, path);
     QVERIFY(qAbs(big.height() - 2 * small.height()) <= 3);
-    QCOMPARE(QString(pictura::type_layer_text(*f.view, path)), QStringLiteral("iiiiiiii"));
+    QCOMPARE(QString(pictura::type_api::layerText(*f.view, path)), QStringLiteral("iiiiiiii"));
 
     // Family: the layer is re-set in that face — monospace i's are wider —
     // and records it, keeping the size.
@@ -583,7 +584,7 @@ void TypeToolsTest::barRestylesTheSelectedLayer()
     QVERIFY2(monoRect.width() > big.width() * 3 / 2, "set in the monospace face");
     // Its own ascent and descent, at the same size.
     QVERIFY(monoRect.height() > big.height() * 3 / 4 && monoRect.height() < big.height() * 3 / 2);
-    QCOMPARE(QString(pictura::type_layer_font(*f.view, path)), mono);
+    QCOMPARE(QString(pictura::type_api::layerFont(*f.view, path)), mono);
 
     // Selecting the layer again shows its family and size in the bar.
     frame.setActiveTool(pictura::ToolId::Move);
@@ -617,29 +618,29 @@ void TypeToolsTest::characterAttributeEdits()
     const QString path = typeLayer(f);
     QVERIFY2(!path.isEmpty(), "a type layer");
     const int base = f.view->history_index();
-    const QString family = pictura::type_layer_font(*f.view, path);
-    const QString text = pictura::type_layer_text(*f.view, path);
+    const QString family = pictura::type_api::layerFont(*f.view, path);
+    const QString text = pictura::type_api::layerText(*f.view, path);
 
     // A non-default character attribute records exactly one state...
-    const pictura::TypeSetting placement = pictura::type_layer_setting(*f.view, path);
-    const pictura::ParagraphSetting paragraph = pictura::type_layer_paragraph_setting(*f.view, path);
-    pictura::CharacterSetting character = pictura::type_layer_character_setting(*f.view, path);
+    const pictura::TypeSetting placement = pictura::type_api::layerSetting(*f.view, path);
+    const pictura::ParagraphSetting paragraph = pictura::type_api::layerParagraphSetting(*f.view, path);
+    pictura::CharacterSetting character = pictura::type_api::layerCharacterSetting(*f.view, path);
     QCOMPARE(character.tracking, 0.0);
     QCOMPARE(character.horizontal_scale, 100.0);
     character.tracking = 120.0;
     character.horizontal_scale = 50.0;
     QVERIFY(
-        pictura::type_update_layer(*f.view, path, text, family, placement, character, paragraph));
+        pictura::type_api::updateLayer(*f.view, path, text, family, placement, character, paragraph));
     QVERIFY2(f.committedOnce(base, "Edit Type Layer"), "one Edit Type Layer state");
 
     // ...and the re-authored layer reopens with it intact (6.4).
-    const pictura::CharacterSetting set = pictura::type_layer_character_setting(*f.view, path);
+    const pictura::CharacterSetting set = pictura::type_api::layerCharacterSetting(*f.view, path);
     QCOMPARE(set.tracking, 120.0);
     QCOMPARE(set.horizontal_scale, 50.0);
 
     // One undo restores the previous values (6.3).
     QVERIFY(f.view->undo());
-    const pictura::CharacterSetting back = pictura::type_layer_character_setting(*f.view, path);
+    const pictura::CharacterSetting back = pictura::type_api::layerCharacterSetting(*f.view, path);
     QCOMPARE(back.tracking, 0.0);
     QCOMPARE(back.horizontal_scale, 100.0);
 
@@ -647,18 +648,18 @@ void TypeToolsTest::characterAttributeEdits()
     const int restoredBase = f.view->history_index();
     const quint64 beforePixels = layerPixelHash(f, path);
     const QByteArray beforeCharacter =
-        characterFingerprint(pictura::type_layer_character_setting(*f.view, path));
+        characterFingerprint(pictura::type_api::layerCharacterSetting(*f.view, path));
     const QByteArray beforeParagraph =
-        paragraphFingerprint(pictura::type_layer_paragraph_setting(*f.view, path));
+        paragraphFingerprint(pictura::type_api::layerParagraphSetting(*f.view, path));
     f.drag({QPointF(layerRect(f, path).center())});
     QVERIFY(f.tools->textActive());
-    QCOMPARE(pictura::type_layer_character_setting(*f.view, path).tracking, 0.0);
+    QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).tracking, 0.0);
     QTest::keyClick(f.canvas, Qt::Key_Escape);
     QCOMPARE(f.view->history_index(), restoredBase);
     QCOMPARE(layerPixelHash(f, path), beforePixels);
-    QCOMPARE(characterFingerprint(pictura::type_layer_character_setting(*f.view, path)),
+    QCOMPARE(characterFingerprint(pictura::type_api::layerCharacterSetting(*f.view, path)),
              beforeCharacter);
-    QCOMPARE(paragraphFingerprint(pictura::type_layer_paragraph_setting(*f.view, path)),
+    QCOMPARE(paragraphFingerprint(pictura::type_api::layerParagraphSetting(*f.view, path)),
              beforeParagraph);
     f.tools->setTypeOptions(saved);
 }
@@ -686,26 +687,26 @@ void TypeToolsTest::manualOverrideSurvivesStyleApply()
     QVERIFY2(!path.isEmpty(), "a type layer");
 
     // Through the real edit path, change tracking only; size stays inherited.
-    const QString text = pictura::type_layer_text(*f.view, path);
-    const QString family = pictura::type_layer_font(*f.view, path);
-    const pictura::TypeSetting placement = pictura::type_layer_setting(*f.view, path);
+    const QString text = pictura::type_api::layerText(*f.view, path);
+    const QString family = pictura::type_api::layerFont(*f.view, path);
+    const pictura::TypeSetting placement = pictura::type_api::layerSetting(*f.view, path);
     const pictura::ParagraphSetting paragraph =
-        pictura::type_layer_paragraph_setting(*f.view, path);
+        pictura::type_api::layerParagraphSetting(*f.view, path);
     pictura::CharacterSetting character =
-        pictura::type_layer_character_setting(*f.view, path);
+        pictura::type_api::layerCharacterSetting(*f.view, path);
     character.tracking = 120.0;
-    QVERIFY(pictura::type_update_layer(*f.view, path, text, family, placement, character,
+    QVERIFY(pictura::type_api::updateLayer(*f.view, path, text, family, placement, character,
                                        paragraph));
 
     // A style that sets size, but not the manually changed tracking.
-    pictura::CharacterSetting style = pictura::type_default_character_setting();
+    pictura::CharacterSetting style = pictura::type_api::defaultCharacterSetting();
     style.size = 48.0;
-    QVERIFY(pictura::type_create_character_style(*f.view, QStringLiteral("Override Probe"),
+    QVERIFY(pictura::type_api::createCharacterStyle(*f.view, QStringLiteral("Override Probe"),
                                                  family, style));
-    QVERIFY(pictura::type_apply_style(*f.view, path, QStringLiteral("Override Probe"), false));
+    QVERIFY(pictura::type_api::applyStyle(*f.view, path, QStringLiteral("Override Probe"), false));
 
     const pictura::CharacterSetting applied =
-        pictura::type_layer_character_setting(*f.view, path);
+        pictura::type_api::layerCharacterSetting(*f.view, path);
     QCOMPARE(applied.tracking, 120.0); // the manual override survives
     QCOMPARE(applied.size, 48.0);      // the untouched field follows the style
     f.tools->setTypeOptions(saved);
@@ -728,7 +729,7 @@ void TypeToolsTest::reopenKeepsAntiAlias()
     QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
     const QString path = typeLayer(f);
     QVERIFY2(!path.isEmpty(), "a type layer");
-    QCOMPARE(pictura::type_layer_character_setting(*f.view, path).anti_alias, 0);
+    QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).anti_alias, 0);
 
     // Selecting the layer seeds the bar's combo from the stored method.
     frame.setActiveTool(pictura::ToolId::Move);
@@ -743,7 +744,7 @@ void TypeToolsTest::reopenKeepsAntiAlias()
     QTest::keyClicks(f.canvas, QStringLiteral("!"));
     QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
     QCOMPARE(f.view->history_index(), base + 1);
-    QCOMPARE(pictura::type_layer_character_setting(*f.view, path).anti_alias, 0);
+    QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).anti_alias, 0);
 
     // Esc leaves it as it was.
     f.drag({QPointF(layerRect(f, path).center())});
@@ -751,7 +752,7 @@ void TypeToolsTest::reopenKeepsAntiAlias()
     QTest::keyClicks(f.canvas, QStringLiteral("?"));
     QTest::keyClick(f.canvas, Qt::Key_Escape);
     QCOMPARE(f.view->history_index(), base + 1);
-    QCOMPARE(pictura::type_layer_character_setting(*f.view, path).anti_alias, 0);
+    QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).anti_alias, 0);
     f.tools->setTypeOptions(saved);
 }
 

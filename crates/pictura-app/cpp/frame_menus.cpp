@@ -1,5 +1,9 @@
 #include "frame_includes.h"
+#include "api/type_api.h"
 
+#include "api/layers_api.h"
+
+#include "api/document_api.h"
 #include "pictura_app/src/cxxqt_object/layers_smart_filters.cxxqt.h"
 
 namespace pictura {
@@ -205,7 +209,7 @@ void PicturaMainWindow::registerHandlers()
         registry_->setEnabledProvider(id, [this]() {
             PictureView* view = activeView();
             return view && view->has_document()
-                && view->document_mode() == QStringLiteral("rgb");
+                && document_api::documentMode(*view) == QStringLiteral("rgb");
         });
     }
 
@@ -429,12 +433,8 @@ void PicturaMainWindow::registerHandlers()
         if (!view || !view->has_document() || path.isEmpty()) {
             return false;
         }
-        for (int i = 0; i < view->layer_row_count(); ++i) {
-            if (view->layer_row_path(i) == path) {
-                return view->layer_row_visible(i);
-            }
-        }
-        return false;
+        const auto row = pictura::layers_api::rowForPath(*view, path);
+        return row.path == path && row.visible;
     });
 
     // Create / Release Clipping Mask act on every selected layer.
@@ -559,12 +559,7 @@ void PicturaMainWindow::registerHandlers()
         if (!view || path.isEmpty()) {
             return QString();
         }
-        for (int i = 0; i < view->layer_row_count(); ++i) {
-            if (view->layer_row_path(i) == path) {
-                return view->layer_row_kind(i);
-            }
-        }
-        return QString();
+        return pictura::layers_api::rowForPath(*view, path).kind;
     };
     registry_->setHandler(command_ids::LayerNewLayerFromBackground, [this]() {
         PictureView* view = activeView();
@@ -743,7 +738,7 @@ void PicturaMainWindow::registerHandlers()
     const auto currentTypePath = [this]() -> QString {
         PictureView* view = activeView();
         const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
-        if (!view || path.isEmpty() || !view->layer_is_type(path)) {
+        if (!view || path.isEmpty() || !pictura::type_api::isType(*view, path)) {
             return QString();
         }
         return path;
@@ -771,7 +766,7 @@ void PicturaMainWindow::registerHandlers()
     registry_->setHandler(command_ids::LayerRasterizeType, [this, currentTypePath]() {
         if (PictureView* view = activeView()) {
             const QString path = currentTypePath();
-            if (!path.isEmpty() && view->rasterize_type(path)) {
+            if (!path.isEmpty() && pictura::type_api::rasterize(*view, path)) {
                 refresh();
             }
         }
@@ -789,8 +784,8 @@ void PicturaMainWindow::registerHandlers()
         if (!view || !view->has_document()) {
             return false;
         }
-        for (int i = 0; i < view->layer_row_count(); ++i) {
-            if (view->layer_is_fill_content(view->layer_row_path(i))) {
+        for (const auto& row : pictura::layers_api::rows(*view)) {
+            if (view->layer_is_fill_content(row.path)) {
                 return true;
             }
         }

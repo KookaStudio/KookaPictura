@@ -1,9 +1,7 @@
 #include "history_panel.h"
 
+#include "api/history_api.h"
 #include "icons.h"
-
-#include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/paint_tools.cxxqt.h"
 
 #include <QtCore/QSize>
 #include <QtCore/QTimer>
@@ -72,7 +70,7 @@ void HistoryPanel::setView(PictureView* view)
     }
     view_ = view;
     if (view_) {
-        viewConnection_ = connect(view_, &PictureView::changed, this, [this] {
+        viewConnection_ = history_api::connectChanged(*view_, this, [this] {
             QTimer::singleShot(0, this, [this] { refresh(); });
         });
     }
@@ -86,25 +84,25 @@ void HistoryPanel::refresh()
         return;
     }
 
-    const int sourceSnapshot = history_brush_source_snapshot(*view_);
-    const int sourceState = history_brush_source_state(*view_);
-    const int snapshots = view_->history_snapshot_count();
+    const int sourceSnapshot = history_api::brushSourceSnapshot(*view_);
+    const int sourceState = history_api::brushSourceState(*view_);
+    const int snapshots = history_api::snapshotCount(*view_);
     for (int i = 0; i < snapshots; ++i) {
         auto* item = new QListWidgetItem(sourceIcon(i == sourceSnapshot),
-                                         view_->history_snapshot_label(i), list_);
+                                         history_api::snapshotLabel(*view_, i), list_);
         item->setData(kKindRole, kSnapshotKind);
         item->setData(kIndexRole, i);
         item->setToolTip(tr("Snapshot"));
     }
 
-    const int count = view_->history_count();
-    const int current = view_->history_index();
+    const int count = history_api::count(*view_);
+    const int current = history_api::index(*view_);
     QListWidgetItem* currentItem = nullptr;
     for (int i = 0; i < count; ++i) {
         const bool isCurrent = i == current;
         auto* item = new QListWidgetItem(
             sourceIcon(i == sourceState),
-            (isCurrent ? QStringLiteral("> ") : QString()) + view_->history_label(i), list_);
+            (isCurrent ? QStringLiteral("> ") : QString()) + history_api::label(*view_, i), list_);
         item->setData(kKindRole, kStateKind);
         item->setData(kIndexRole, i);
         if (isCurrent) {
@@ -126,9 +124,9 @@ void HistoryPanel::activate(QListWidgetItem* item)
     }
     const int index = item->data(kIndexRole).toInt();
     if (item->data(kKindRole).toInt() == kSnapshotKind) {
-        view_->history_restore_snapshot(index);
+        history_api::restoreSnapshot(*view_, index);
     } else {
-        view_->history_jump(index);
+        history_api::jump(*view_, index);
     }
 }
 
@@ -139,8 +137,8 @@ bool HistoryPanel::eventFilter(QObject* watched, QEvent* event)
         const QPoint pos = press->position().toPoint();
         QListWidgetItem* item = list_->itemAt(pos);
         if (item && pos.x() - list_->visualItemRect(item).left() < kSourceColumnWidth) {
-            set_history_brush_source(*view_, item->data(kKindRole).toInt() == kSnapshotKind,
-                                     item->data(kIndexRole).toInt());
+            history_api::setBrushSource(*view_, item->data(kKindRole).toInt() == kSnapshotKind,
+                                        item->data(kIndexRole).toInt());
             refresh();
             return true;
         }
@@ -152,11 +150,11 @@ bool HistoryPanel::performPanelMenuAction(const QString& actionId)
 {
     if (actionId == QLatin1String("stepForward")) {
         if (view_) {
-            view_->redo();
+            history_api::redo(*view_);
         }
     } else if (actionId == QLatin1String("stepBackward")) {
         if (view_) {
-            view_->undo();
+            history_api::undo(*view_);
         }
     } else if (actionId == QLatin1String("newSnapshot")) {
         createSnapshot();
@@ -177,7 +175,7 @@ void HistoryPanel::createSnapshot()
     if (!accepted || label.isEmpty()) {
         return;
     }
-    view_->history_add_snapshot(label);
+    history_api::addSnapshot(*view_, label);
 }
 
 } // namespace pictura

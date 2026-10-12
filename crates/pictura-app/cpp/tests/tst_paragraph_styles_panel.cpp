@@ -11,7 +11,7 @@
 #include "selftest_paint_fixture.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/type_tools.cxxqt.h"
+#include "api/type_api.h"
 
 #include <QtCore/QElapsedTimer>
 #include <QtGui/QAction>
@@ -40,7 +40,7 @@ QImage seed()
 QString typeLayer(const Fixture& f)
 {
     for (int i = 0; i < f.view->layer_count(); ++i) {
-        if (f.view->layer_is_type(QString::number(i))) {
+        if (pictura::type_api::isType(*f.view, QString::number(i))) {
             return QString::number(i);
         }
     }
@@ -118,22 +118,22 @@ void ParagraphStylesPanelTest::listsAndApplies()
     QCOMPARE(panel->listForTest()->item(0)->text(), QStringLiteral("Basic Paragraph"));
 
     // Add a second style through the sheet, then the panel lists both.
-    pictura::CharacterSetting c = pictura::type_default_character_setting();
+    pictura::CharacterSetting c = pictura::type_api::defaultCharacterSetting();
     c.size = 48.0;
-    const pictura::ParagraphSetting p = pictura::type_default_paragraph_setting();
-    QVERIFY(pictura::type_create_paragraph_style(*f.view, QStringLiteral("Heading"), QString(),
+    const pictura::ParagraphSetting p = pictura::type_api::defaultParagraphSetting();
+    QVERIFY(pictura::type_api::createParagraphStyle(*f.view, QStringLiteral("Heading"), QString(),
                                                  c, p));
     panel->refresh();
     QCOMPARE(panel->listForTest()->count(), 2);
     QCOMPARE(panel->listForTest()->item(1)->text(), QStringLiteral("Heading"));
-    QCOMPARE(pictura::type_paragraph_style_character(*f.view, QStringLiteral("Heading")).size,
+    QCOMPARE(pictura::type_api::paragraphStyleCharacter(*f.view, QStringLiteral("Heading")).size,
              48.0);
 
     // Applying the style sets the layer and records one state.
     const int base = f.view->history_index();
     panel->applyRowForTest(1);
     QVERIFY2(f.committedOnce(base, "Apply Type Style"), "one apply state");
-    QCOMPARE(pictura::type_layer_character_setting(*f.view, path).size, 48.0);
+    QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).size, 48.0);
 }
 
 void ParagraphStylesPanelTest::createAndDelete()
@@ -155,9 +155,9 @@ void ParagraphStylesPanelTest::createAndDelete()
 
     // A second style deletes, recording one state, and drops back to the
     // default.
-    pictura::CharacterSetting c = pictura::type_default_character_setting();
-    const pictura::ParagraphSetting p = pictura::type_default_paragraph_setting();
-    QVERIFY(pictura::type_create_paragraph_style(*f.view, QStringLiteral("Body"), QString(), c,
+    pictura::CharacterSetting c = pictura::type_api::defaultCharacterSetting();
+    const pictura::ParagraphSetting p = pictura::type_api::defaultParagraphSetting();
+    QVERIFY(pictura::type_api::createParagraphStyle(*f.view, QStringLiteral("Body"), QString(), c,
                                                  p));
     panel->refresh();
     QCOMPARE(panel->listForTest()->count(), 2);
@@ -180,9 +180,9 @@ void ParagraphStylesPanelTest::dialogShowsEveryPage()
     QVERIFY(panel);
     panel->setView(f.view);
 
-    const pictura::CharacterSetting c = pictura::type_default_character_setting();
-    const pictura::ParagraphSetting p = pictura::type_default_paragraph_setting();
-    QVERIFY(pictura::type_create_paragraph_style(*f.view, QStringLiteral("Heading"), QString(), c,
+    const pictura::CharacterSetting c = pictura::type_api::defaultCharacterSetting();
+    const pictura::ParagraphSetting p = pictura::type_api::defaultParagraphSetting();
+    QVERIFY(pictura::type_api::createParagraphStyle(*f.view, QStringLiteral("Heading"), QString(), c,
                                                  p));
     panel->refresh();
 
@@ -223,9 +223,9 @@ void ParagraphStylesPanelTest::dialogRoundTripsAttributes()
     QVERIFY(panel);
     panel->setView(f.view);
 
-    const pictura::CharacterSetting c = pictura::type_default_character_setting();
-    const pictura::ParagraphSetting p = pictura::type_default_paragraph_setting();
-    QVERIFY(pictura::type_create_paragraph_style(*f.view, QStringLiteral("Heading"),
+    const pictura::CharacterSetting c = pictura::type_api::defaultCharacterSetting();
+    const pictura::ParagraphSetting p = pictura::type_api::defaultParagraphSetting();
+    QVERIFY(pictura::type_api::createParagraphStyle(*f.view, QStringLiteral("Heading"),
                                                  QStringLiteral("Liberation Sans"), c, p));
     panel->refresh();
 
@@ -259,13 +259,13 @@ void ParagraphStylesPanelTest::dialogRoundTripsAttributes()
     QVERIFY2(f.committedOnce(base, "Edit Paragraph Style"), "one edit state");
 
     const pictura::CharacterSetting character =
-        pictura::type_paragraph_style_character(*f.view, QStringLiteral("Heading"));
+        pictura::type_api::paragraphStyleCharacter(*f.view, QStringLiteral("Heading"));
     QVERIFY(character.faux_bold);
     QVERIFY(!character.standard_ligatures);
     QVERIFY(character.fractions);
     QCOMPARE(character.language, QStringLiteral("French"));
     const pictura::ParagraphSetting paragraph =
-        pictura::type_paragraph_style_paragraph(*f.view, QStringLiteral("Heading"));
+        pictura::type_api::paragraphStyleParagraph(*f.view, QStringLiteral("Heading"));
     QCOMPARE(paragraph.auto_leading, 150.0);
     QCOMPARE(paragraph.hyphen_limit, 3);
     QVERIFY(paragraph.hyphenate);
@@ -284,10 +284,10 @@ void ParagraphStylesPanelTest::dialogPreviewAppliesAndCancelRestores()
     QVERIFY(panel);
     panel->setView(f.view);
 
-    pictura::CharacterSetting c = pictura::type_default_character_setting();
+    pictura::CharacterSetting c = pictura::type_api::defaultCharacterSetting();
     c.size = 48.0;
-    const pictura::ParagraphSetting p = pictura::type_default_paragraph_setting();
-    QVERIFY(pictura::type_create_paragraph_style(*f.view, QStringLiteral("Body"),
+    const pictura::ParagraphSetting p = pictura::type_api::defaultParagraphSetting();
+    QVERIFY(pictura::type_api::createParagraphStyle(*f.view, QStringLiteral("Body"),
                                                  QStringLiteral("Liberation Sans"), c, p));
     panel->refresh();
 
@@ -303,13 +303,13 @@ void ParagraphStylesPanelTest::dialogPreviewAppliesAndCancelRestores()
             ->setValue(72.0);
         // Preview is checked by default, so the change re-applies at once and
         // records nothing.
-        previewed = pictura::type_paragraph_style_character(*f.view, QStringLiteral("Body")).size
+        previewed = pictura::type_api::paragraphStyleCharacter(*f.view, QStringLiteral("Body")).size
             == 72.0;
         dialog->reject();
     });
     QVERIFY(!panel->editStyle(1));
     QVERIFY(previewed);
-    QCOMPARE(pictura::type_paragraph_style_character(*f.view, QStringLiteral("Body")).size, 48.0);
+    QCOMPARE(pictura::type_api::paragraphStyleCharacter(*f.view, QStringLiteral("Body")).size, 48.0);
     QCOMPARE(f.view->history_index(), base);
 }
 
@@ -324,9 +324,9 @@ void ParagraphStylesPanelTest::dialogFontFamilyPopup()
     QVERIFY(panel);
     panel->setView(f.view);
 
-    const pictura::CharacterSetting c = pictura::type_default_character_setting();
-    const pictura::ParagraphSetting p = pictura::type_default_paragraph_setting();
-    QVERIFY(pictura::type_create_paragraph_style(*f.view, QStringLiteral("Heading"), QString(), c,
+    const pictura::CharacterSetting c = pictura::type_api::defaultCharacterSetting();
+    const pictura::ParagraphSetting p = pictura::type_api::defaultParagraphSetting();
+    QVERIFY(pictura::type_api::createParagraphStyle(*f.view, QStringLiteral("Heading"), QString(), c,
                                                  p));
     panel->refresh();
 
@@ -407,9 +407,9 @@ void ParagraphStylesPanelTest::doubleClickOpensDialog()
     // must not rebuild the list under the second click.
     QVERIFY2(!makeTypeLayer(f).isEmpty(), "a type layer");
 
-    const pictura::CharacterSetting c = pictura::type_default_character_setting();
-    const pictura::ParagraphSetting p = pictura::type_default_paragraph_setting();
-    QVERIFY(pictura::type_create_paragraph_style(*f.view, QStringLiteral("Heading"), QString(), c,
+    const pictura::CharacterSetting c = pictura::type_api::defaultCharacterSetting();
+    const pictura::ParagraphSetting p = pictura::type_api::defaultParagraphSetting();
+    QVERIFY(pictura::type_api::createParagraphStyle(*f.view, QStringLiteral("Heading"), QString(), c,
                                                  p));
     panel->refresh();
     QCoreApplication::processEvents();
@@ -450,9 +450,9 @@ void ParagraphStylesPanelTest::fontHoverDoesNotPreview()
     QVERIFY(panel);
     panel->setView(f.view);
 
-    const pictura::CharacterSetting c = pictura::type_default_character_setting();
-    const pictura::ParagraphSetting p = pictura::type_default_paragraph_setting();
-    QVERIFY(pictura::type_create_paragraph_style(*f.view, QStringLiteral("Body"),
+    const pictura::CharacterSetting c = pictura::type_api::defaultCharacterSetting();
+    const pictura::ParagraphSetting p = pictura::type_api::defaultParagraphSetting();
+    QVERIFY(pictura::type_api::createParagraphStyle(*f.view, QStringLiteral("Body"),
                                                  QStringLiteral("Liberation Sans"), c, p));
     panel->refresh();
 
@@ -480,19 +480,19 @@ void ParagraphStylesPanelTest::fontHoverDoesNotPreview()
         // Hovering the popup moves the combo's current index; it must not
         // recomposite the document (the list crawls and closes if it does).
         family->setCurrentIndex(other);
-        checked = pictura::type_paragraph_style_font(*f.view, QStringLiteral("Body"))
+        checked = pictura::type_api::paragraphStyleFont(*f.view, QStringLiteral("Body"))
             == QStringLiteral("Liberation Sans");
         // Picking an entry is an `activated` and does preview.
         QMetaObject::invokeMethod(family, "activated", Q_ARG(int, other));
         checked = checked
-            && pictura::type_paragraph_style_font(*f.view, QStringLiteral("Body"))
+            && pictura::type_api::paragraphStyleFont(*f.view, QStringLiteral("Body"))
                 == family->itemText(other);
         checked = checked && f.view->history_index() == base;
         dialog->reject();
     });
     QVERIFY(!panel->editStyle(1));
     QVERIFY(checked);
-    QCOMPARE(pictura::type_paragraph_style_font(*f.view, QStringLiteral("Body")),
+    QCOMPARE(pictura::type_api::paragraphStyleFont(*f.view, QStringLiteral("Body")),
              QStringLiteral("Liberation Sans"));
 }
 

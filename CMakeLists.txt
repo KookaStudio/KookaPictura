@@ -73,6 +73,18 @@ cxx_qt_import_crate(
 add_library(pictura_shell STATIC
     crates/pictura-app/cpp/api/document_api.cpp
     crates/pictura-app/cpp/api/document_api.h
+    crates/pictura-app/cpp/api/history_api.cpp
+    crates/pictura-app/cpp/api/history_api.h
+    crates/pictura-app/cpp/api/selection_api.cpp
+    crates/pictura-app/cpp/api/selection_api.h
+    crates/pictura-app/cpp/api/paint_api.cpp
+    crates/pictura-app/cpp/api/paint_api.h
+    crates/pictura-app/cpp/api/transform_api.cpp
+    crates/pictura-app/cpp/api/transform_api.h
+    crates/pictura-app/cpp/api/layers_api.cpp
+    crates/pictura-app/cpp/api/layers_api.h
+    crates/pictura-app/cpp/api/type_api.cpp
+    crates/pictura-app/cpp/api/type_api.h
     crates/pictura-app/cpp/decode_image.cpp
     crates/pictura-app/cpp/decode_image.h
     crates/pictura-app/cpp/encode_image.cpp

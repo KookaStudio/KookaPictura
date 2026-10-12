@@ -1,5 +1,6 @@
 #include "frame_includes.h"
 
+#include "api/selection_api.h"
 #include "canvas_size_dialog.h"
 #include "image_size_dialog.h"
 
@@ -26,16 +27,11 @@ void PicturaMainWindow::wireImageMenu()
         if (!view) {
             return;
         }
-        const QString bounds = view->selection_bounds();
-        if (bounds.isEmpty()) {
+        const selection_api::SelectionBounds bounds = selection_api::bounds(*view);
+        if (!bounds.valid) {
             return;
         }
-        const QStringList parts = bounds.split(QLatin1Char(' '), Qt::SkipEmptyParts);
-        if (parts.size() != 4) {
-            return;
-        }
-        if (view->crop(parts.at(0).toInt(), parts.at(1).toInt(), parts.at(2).toInt(),
-                       parts.at(3).toInt())) {
+        if (view->crop(bounds.x, bounds.y, bounds.width, bounds.height)) {
             refresh();
         }
     });

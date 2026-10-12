@@ -4,6 +4,7 @@
 
 #include <QtTest/QtTest>
 
+#include "api/transform_api.h"
 #include "frame.h"
 #include "image_view.h"
 #include "options_bar.h"
@@ -44,7 +45,7 @@ private:
     // The layer's rect offset as (left, top).
     QPoint offset(pictura::PictureView* view, const QString& path) const
     {
-        const QStringList parts = view->layer_rect(path).split(QLatin1Char(' '));
+        const QStringList parts = pictura::transform_api::layerRect(*view, path).toString().split(QLatin1Char(' '));
         return parts.size() == 4 ? QPoint(parts[0].toInt(), parts[1].toInt()) : QPoint(-999, -999);
     }
 

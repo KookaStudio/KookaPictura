@@ -307,150 +307,149 @@ impl qobject::PictureView {
         layer_thumbnail_image(layer, size as u32).unwrap_or_default()
     }
 
-    pub fn layer_row_count(&self) -> i32 {
-        self.rust()
-            .doc
-            .as_ref()
-            .map_or(0, |doc| pictura_render::flatten_rows(doc).len() as i32)
-    }
-
-    /// Spike body for the `Vec<LayerRow>` vehicle: one row per tree node,
-    /// filled from the existing per-field getters. Unit D widens the struct
-    /// and fills it in one pass.
+    /// One crossing for the whole layer tree: every row's typed fields, its
+    /// active effect names `\n`-joined for the adapter to split, and
+    /// thumbnails at `thumb_size` (0 skips them). `entire_document` places
+    /// pixel thumbnails at their document extent; shape rows always use the
+    /// fill-coverage thumbnail.
     pub fn layers_snapshot(
         &self,
-        _thumb_size: i32,
-        _entire_document: bool,
+        thumb_size: i32,
+        entire_document: bool,
     ) -> Vec<qobject::LayerRow> {
-        (0..self.layer_row_count())
-            .map(|i| qobject::LayerRow {
-                path: self.layer_row_path(i),
-                depth: self.layer_row_depth(i),
-                name: self.layer_row_name(i),
-            })
+        let Some(doc) = self.rust().doc.as_ref() else {
+            return Vec::new();
+        };
+        let thumb = if thumb_size > 0 { thumb_size as u32 } else { 0 };
+        let effects = pictura_render::layer_style_effect_names();
+        let link_sets = &self.rust().link_sets;
+        pictura_render::flatten_rows(doc)
+            .into_iter()
+            .map(
+                |(path, depth)| match pictura_render::resolve_path(doc, &path) {
+                    Some(layer) => {
+                        let shape = pictura_render::is_shape_layer(layer);
+                        let style_effects = if pictura_render::has_layer_style(layer) {
+                            let active: Vec<&str> = effects
+                                .iter()
+                                .copied()
+                                .filter(|name| {
+                                    pictura_render::layer_style_value(
+                                        layer,
+                                        &format!("{name}.exists"),
+                                    ) == Some(1.0)
+                                })
+                                .collect();
+                            QString::from(active.join("\n").as_str())
+                        } else {
+                            QString::default()
+                        };
+                        let thumbnail = if thumb == 0 {
+                            QImage::default()
+                        } else if shape {
+                            super::shapes::shape_thumbnail(layer, doc, thumb_size)
+                        } else if layer.is_group || layer.adjustment.is_some() {
+                            QImage::default()
+                        } else if entire_document {
+                            layer_thumbnail_positioned(layer, doc.width, doc.height, thumb)
+                                .unwrap_or_default()
+                        } else {
+                            layer_thumbnail_image(layer, thumb).unwrap_or_default()
+                        };
+                        let mask_thumbnail = if thumb == 0 {
+                            QImage::default()
+                        } else {
+                            layer
+                                .mask
+                                .as_ref()
+                                .and_then(|mask| mask_thumbnail_image(mask, thumb))
+                                .unwrap_or_default()
+                        };
+                        let vector_mask_thumbnail = if thumb == 0 {
+                            QImage::default()
+                        } else {
+                            layer
+                                .vector_mask
+                                .as_ref()
+                                .and_then(|mask| {
+                                    vector_mask_thumbnail_image(mask, doc.width, doc.height, thumb)
+                                })
+                                .unwrap_or_default()
+                        };
+                        let mut lock = layer.lock.bits();
+                        if pictura_render::has_forced_locks(layer) {
+                            lock |= pictura_core::LockFlags::TRANSPARENCY
+                                | pictura_core::LockFlags::PIXELS;
+                        }
+                        qobject::LayerRow {
+                            path: QString::from(path.as_str()),
+                            depth: depth as i32,
+                            name: QString::from(layer.name.as_str()),
+                            kind: layer_kind_str(doc, &path, layer),
+                            visible: layer.visible,
+                            blend: QString::from(blend_key(layer.blend).as_str()),
+                            opacity: layer.opacity as i32,
+                            fill: layer.fill as i32,
+                            lock: lock as i32,
+                            color: layer.color.to_byte() as i32,
+                            clipping: layer.clipping,
+                            has_mask: layer.mask.is_some(),
+                            mask_linked: pictura_render::layer_mask_linked(doc, &path),
+                            mask_disabled: pictura_render::layer_mask_disabled(doc, &path),
+                            has_vector_mask: pictura_render::has_vector_mask(doc, &path),
+                            vector_mask_linked: pictura_render::vector_mask_linked(doc, &path),
+                            vector_mask_disabled: pictura_render::vector_mask_disabled(doc, &path),
+                            has_adjustment: layer.adjustment.is_some(),
+                            expandable: layer.is_group,
+                            child_count: layer.children.len() as i32,
+                            linked: link_sets.contains_key(&path),
+                            placed: is_placed_smart_object(layer),
+                            shape,
+                            smart_object: layer.smart_object.is_some(),
+                            has_style: pictura_render::has_layer_style(layer),
+                            style_effects,
+                            has_blend_if: super::layer_style::layer_is_blend_if_customised(layer),
+                            thumbnail,
+                            mask_thumbnail,
+                            vector_mask_thumbnail,
+                        }
+                    }
+                    // Unreachable: every flattened row resolves in the same tree.
+                    None => qobject::LayerRow {
+                        path: QString::from(path.as_str()),
+                        depth: depth as i32,
+                        name: QString::default(),
+                        kind: QString::default(),
+                        visible: false,
+                        blend: QString::default(),
+                        opacity: 0,
+                        fill: 0,
+                        lock: 0,
+                        color: 0,
+                        clipping: false,
+                        has_mask: false,
+                        mask_linked: false,
+                        mask_disabled: false,
+                        has_vector_mask: false,
+                        vector_mask_linked: false,
+                        vector_mask_disabled: false,
+                        has_adjustment: false,
+                        expandable: false,
+                        child_count: 0,
+                        linked: false,
+                        placed: false,
+                        shape: false,
+                        smart_object: false,
+                        has_style: false,
+                        style_effects: QString::default(),
+                        has_blend_if: false,
+                        thumbnail: QImage::default(),
+                        mask_thumbnail: QImage::default(),
+                        vector_mask_thumbnail: QImage::default(),
+                    },
+                },
+            )
             .collect()
-    }
-
-    pub fn layer_row_path(&self, i: i32) -> QString {
-        self.row_at(i)
-            .map(|(_, path, _, _)| QString::from(path.as_str()))
-            .unwrap_or_default()
-    }
-
-    pub fn layer_row_depth(&self, i: i32) -> i32 {
-        self.row_at(i).map_or(0, |(_, _, depth, _)| depth as i32)
-    }
-
-    pub fn layer_row_name(&self, i: i32) -> QString {
-        self.row_at(i)
-            .map(|(_, _, _, layer)| QString::from(layer.name.as_str()))
-            .unwrap_or_default()
-    }
-
-    pub fn layer_row_kind(&self, i: i32) -> QString {
-        self.row_at(i)
-            .map(|(doc, path, _, layer)| layer_kind_str(doc, &path, layer))
-            .unwrap_or_default()
-    }
-
-    pub fn layer_row_visible(&self, i: i32) -> bool {
-        self.row_at(i).is_some_and(|(_, _, _, layer)| layer.visible)
-    }
-
-    pub fn layer_row_blend(&self, i: i32) -> QString {
-        self.row_at(i)
-            .map(|(_, _, _, layer)| QString::from(blend_key(layer.blend).as_str()))
-            .unwrap_or_default()
-    }
-
-    pub fn layer_row_opacity(&self, i: i32) -> i32 {
-        self.row_at(i)
-            .map_or(0, |(_, _, _, layer)| layer.opacity as i32)
-    }
-
-    pub fn layer_row_fill(&self, i: i32) -> i32 {
-        self.row_at(i)
-            .map_or(0, |(_, _, _, layer)| layer.fill as i32)
-    }
-
-    pub fn layer_row_lock(&self, i: i32) -> i32 {
-        self.row_at(i).map_or(0, |(_, _, _, layer)| {
-            let mut bits = layer.lock.bits();
-            if pictura_render::has_forced_locks(layer) {
-                bits |= pictura_core::LockFlags::TRANSPARENCY | pictura_core::LockFlags::PIXELS;
-            }
-            bits as i32
-        })
-    }
-
-    pub fn layer_row_color(&self, i: i32) -> i32 {
-        self.row_at(i)
-            .map_or(0, |(_, _, _, layer)| layer.color.to_byte() as i32)
-    }
-
-    pub fn layer_row_clipping(&self, i: i32) -> bool {
-        self.row_at(i)
-            .is_some_and(|(_, _, _, layer)| layer.clipping)
-    }
-
-    pub fn layer_row_has_mask(&self, i: i32) -> bool {
-        self.row_at(i)
-            .is_some_and(|(_, _, _, layer)| layer.mask.is_some())
-    }
-
-    pub fn layer_row_has_adjustment(&self, i: i32) -> bool {
-        self.row_at(i)
-            .is_some_and(|(_, _, _, layer)| layer.adjustment.is_some())
-    }
-
-    pub fn layer_row_expandable(&self, i: i32) -> bool {
-        self.row_at(i)
-            .is_some_and(|(_, _, _, layer)| layer.is_group)
-    }
-
-    pub fn layer_row_child_count(&self, i: i32) -> i32 {
-        self.row_at(i)
-            .map_or(0, |(_, _, _, layer)| layer.children.len() as i32)
-    }
-
-    pub fn layer_row_thumbnail(&self, i: i32, size: i32, entire_document: bool) -> QImage {
-        if size <= 0 {
-            return QImage::default();
-        }
-        let Some((doc, _, _, layer)) = self.row_at(i) else {
-            return QImage::default();
-        };
-        if layer.is_group || layer.adjustment.is_some() {
-            return QImage::default();
-        }
-        let rendered = if entire_document {
-            layer_thumbnail_positioned(layer, doc.width, doc.height, size as u32)
-        } else {
-            layer_thumbnail_image(layer, size as u32)
-        };
-        rendered.unwrap_or_default()
-    }
-
-    pub fn layer_row_mask_thumbnail(&self, i: i32, size: i32) -> QImage {
-        if size <= 0 {
-            return QImage::default();
-        }
-        self.row_at(i)
-            .and_then(|(_, _, _, layer)| layer.mask.as_ref())
-            .and_then(|mask| mask_thumbnail_image(mask, size as u32))
-            .unwrap_or_default()
-    }
-
-    /// Whether row `i`'s path is a member of the frame's link set.
-    pub fn layer_row_linked(&self, i: i32) -> bool {
-        self.row_at(i)
-            .is_some_and(|(_, path, _, _)| self.rust().link_sets.contains_key(&path))
-    }
-
-    /// Whether row `i` is a placed (external/alias) smart object.
-    pub fn layer_row_placed(&self, i: i32) -> bool {
-        self.row_at(i)
-            .is_some_and(|(_, _, _, layer)| is_placed_smart_object(layer))
     }
 
     /// `Prefix N` where N is one more than the highest existing `Prefix <number>`
@@ -850,24 +849,6 @@ impl qobject::PictureView {
             self.as_mut().changed();
         }
         changed
-    }
-
-    /// Resolve flat row `i` to its document, path, depth, and layer, or `None`
-    /// when out of range or without a document.
-    ///
-    /// ponytail: re-flattens the whole tree on every row getter (O(n) each, so
-    /// a full panel refresh is O(n²)). Cache the projection and invalidate it on
-    /// `changed` if a many-row document ever profiles hot.
-    fn row_at(&self, i: i32) -> Option<(&Document, String, u32, &Layer)> {
-        if i < 0 {
-            return None;
-        }
-        let doc = self.rust().doc.as_ref()?;
-        let (path, depth) = pictura_render::flatten_rows(doc)
-            .into_iter()
-            .nth(i as usize)?;
-        let layer = pictura_render::resolve_path(doc, &path)?;
-        Some((doc, path, depth, layer))
     }
 
     /// Shared batch mutation wrapper: apply `op` to every listed path, then

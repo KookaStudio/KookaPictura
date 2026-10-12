@@ -4,6 +4,7 @@
 
 #include <QtTest/QtTest>
 
+#include "api/transform_api.h"
 #include "commands.h"
 #include "frame.h"
 #include "panels/layers_panel.h"
@@ -86,7 +87,7 @@ QAction* AlignDistributeTest::leaf(const QString& submenu, const QString& edge) 
 
 QPoint AlignDistributeTest::offset(const QString& path) const
 {
-    const QStringList parts = view_->layer_rect(path).split(QLatin1Char(' '));
+    const QStringList parts = pictura::transform_api::layerRect(*view_, path).toString().split(QLatin1Char(' '));
     return parts.size() == 4 ? QPoint(parts[0].toInt(), parts[1].toInt()) : QPoint(-999, -999);
 }
 

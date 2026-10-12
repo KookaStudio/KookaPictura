@@ -6,6 +6,7 @@
 
 #include "frame_includes.h"
 
+#include "api/document_api.h"
 #include "pictura_app/src/cxxqt_object/impl_core/recovery.cxxqt.h"
 
 #include <QtCore/QLocale>
@@ -69,7 +70,7 @@ void PicturaMainWindow::autosaveRecovery()
     }
     for (int i = 0; i < docs_.size(); ++i) {
         PictureView* view = docs_.at(i).view;
-        if (!view->is_dirty()) {
+        if (!document_api::isDirty(*view)) {
             dropRecoverySnapshot(view);
             continue;
         }

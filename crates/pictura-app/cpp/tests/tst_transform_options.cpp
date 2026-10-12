@@ -4,6 +4,7 @@
 
 #include <QtTest/QtTest>
 
+#include "api/transform_api.h"
 #include "frame.h"
 #include "image_view.h"
 #include "options_bar.h"
@@ -180,7 +181,7 @@ void TransformOptionsTest::pivotLocatorMovesTheReferencePoint()
     QVERIFY(std::abs(pictura::transform_pivot_x(*view) - 10.0) < kTolerance);
     QVERIFY(std::abs(pictura::transform_pivot_y(*view) - 8.0) < kTolerance);
     // The quad must not move when the pivot does.
-    QCOMPARE(view->transform_quad(),
+    QCOMPARE(pictura::transform_api::quad(*view).toString(),
              QStringLiteral("10.00,8.00 22.00,8.00 22.00,17.00 10.00,17.00"));
 
     // The canvas marker tracks the pivot and hides with the toggle.
@@ -320,7 +321,7 @@ void TransformOptionsTest::canvasPivotDragSnapsToAnAnchor()
     QVERIFY(std::abs(pictura::transform_pivot_x(*view) - 10.0) < kTolerance);
     QVERIFY(std::abs(pictura::transform_pivot_y(*view) - 8.0) < kTolerance);
     view->transform_release();
-    QCOMPARE(view->transform_quad(),
+    QCOMPARE(pictura::transform_api::quad(*view).toString(),
              QStringLiteral("10.00,8.00 22.00,8.00 22.00,17.00 10.00,17.00"));
 
     // A drag away from every anchor keeps the pointer's position.
@@ -397,7 +398,7 @@ void TransformOptionsTest::warpCommitsOneState()
     auto* tools = frame.findChild<pictura::ToolController*>();
     QVERIFY(view && tools && tools->beginFreeTransform(layer));
 
-    const QString before = view->layer_rect(layer);
+    const QString before = pictura::transform_api::layerRect(*view, layer).toString();
     const int base = view->history_count();
     QVERIFY(tools->setTransformWarp(QStringLiteral("warpArc"), 50.0, 0.0, 0.0, false));
     auto* apply = frame.findChild<QToolButton*>(QStringLiteral("optionsTransformApply"));
@@ -406,17 +407,17 @@ void TransformOptionsTest::warpCommitsOneState()
     QVERIFY(!view->transform_session_active());
     QCOMPARE(view->history_count(), base + 1);
     QCOMPARE(view->history_label(base), QStringLiteral("Free Transform"));
-    QVERIFY(view->layer_rect(layer) != before);
+    QVERIFY(pictura::transform_api::layerRect(*view, layer).toString() != before);
 
     // Escape on a warped session restores the document and adds no state.
     const int cancelBase = view->history_count();
-    const QString settled = view->layer_rect(layer);
+    const QString settled = pictura::transform_api::layerRect(*view, layer).toString();
     QVERIFY(tools->beginFreeTransform(layer));
     QVERIFY(tools->setTransformWarp(QStringLiteral("warpArc"), 50.0, 0.0, 0.0, false));
     tools->cancelFreeTransform();
     QVERIFY(!view->transform_session_active());
     QCOMPARE(view->history_count(), cancelBase);
-    QCOMPARE(view->layer_rect(layer), settled);
+    QCOMPARE(pictura::transform_api::layerRect(*view, layer).toString(), settled);
 }
 
 void TransformOptionsTest::applyCommitsCancelRestores()

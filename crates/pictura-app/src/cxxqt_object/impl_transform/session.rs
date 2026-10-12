@@ -3,8 +3,7 @@ use super::super::helpers_composite::*;
 use super::super::qobject;
 use super::super::state::{TransformMode, TransformSession};
 use super::geometry::{
-    apply_session_transform, projective_coefficients, rect_center, session_quad, source_corners,
-    MapParams,
+    apply_session_transform, rect_center, session_quad, source_corners, MapParams,
 };
 use super::{build_move_preview_base, duplicate_move_target};
 use core::pin::Pin;
@@ -386,34 +385,6 @@ impl qobject::PictureView {
             self.as_mut().record("Free Transform");
         }
         changed
-    }
-
-    /// The nine coefficients of the live preview map in `QTransform`
-    /// constructor order: the projective map onto the quad in a projective
-    /// mode, else the affine map (identity while a warp preview is shown, since
-    /// the preview image is already warped).
-    pub fn transform_preview_matrix(&self) -> QString {
-        let Some(session) = self.rust().transform_session.as_ref() else {
-            return QString::default();
-        };
-        if session.warp.is_some() {
-            return QString::from("1 0 0 0 1 0 0 0 1");
-        }
-        let coeffs = if session.mode.is_projective() {
-            projective_coefficients(source_corners(session.orig_rect), session_quad(session))
-        } else {
-            let params = MapParams::of(session);
-            let a = params.linear();
-            let (px, py) = params.pivot;
-            let tx = px + params.dx - (a[0][0] * px + a[0][1] * py);
-            let ty = py + params.dy - (a[1][0] * px + a[1][1] * py);
-            Some([a[0][0], a[1][0], 0.0, a[0][1], a[1][1], 0.0, tx, ty, 1.0])
-        };
-        let Some(coeffs) = coeffs else {
-            return QString::default();
-        };
-        let encoded: Vec<String> = coeffs.iter().map(|c| format!("{c:.12}")).collect();
-        QString::from(encoded.join(" "))
     }
 
     /// Whether a Free Transform session is active.

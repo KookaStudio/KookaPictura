@@ -7,6 +7,7 @@
 
 #include "tool_handler.h"
 
+#include "api/paint_api.h"
 #include "paint_tip.h"
 #include "pictura_debug_timing.h"
 #include "tools.h"
@@ -18,6 +19,7 @@
 #include <QtGui/QColor>
 
 #include <memory>
+#include <optional>
 
 namespace pictura {
 
@@ -40,9 +42,15 @@ public:
         }
         const MixerOptions o = ctx.mixerOptions();
         // ponytail: Sample All Layers is not wired; the active layer is sampled.
-        pictura::ScopedTimer beginTimer("cxx_begin_mixer_brush (call)");
-        if (!begin_mixer_brush(*v, ctx.mixerReservoir().rgba(), paintTip(ctx), o.wet, o.load,
-                               o.mix, o.flow)) {
+        {
+            pictura::ScopedTimer beginTimer("cxx_begin_mixer_brush (call)");
+            stroke_.emplace(*v, [&] {
+                return begin_mixer_brush(*v, ctx.mixerReservoir().rgba(), paintTip(ctx), o.wet,
+                                         o.load, o.mix, o.flow);
+            });
+        }
+        if (!stroke_->open()) {
+            stroke_.reset();
             if (activePixelLocked(v)) {
                 ctx.refused(QObject::tr("Could not paint: the layer's pixels are locked."));
             } else if (!v->active_layer_visible()) {
@@ -56,20 +64,18 @@ public:
         ctx.setDragCommitted(false);
         {
             pictura::ScopedTimer t("cxx_paint_dab (call)");
-            v->paint_dab(imagePos.x(), imagePos.y(), 1.0);
+            stroke_->dab(imagePos.x(), imagePos.y());
         }
         return true;
     }
 
     void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
-        if (!ctx.dragging()) {
+        if (!ctx.dragging() || !stroke_) {
             return;
         }
-        if (PictureView* v = ctx.view()) {
-            pictura::ScopedTimer t("cxx_paint_dab (call)");
-            v->paint_dab(imagePos.x(), imagePos.y(), 1.0);
-        }
+        pictura::ScopedTimer t("cxx_paint_dab (call)");
+        stroke_->dab(imagePos.x(), imagePos.y());
     }
 
     void onRelease(ToolContext& ctx, const QPointF&, Qt::KeyboardModifiers) override
@@ -79,13 +85,14 @@ public:
         }
         ctx.setDragging(false);
         PictureView* v = ctx.view();
-        if (!v) {
+        if (!v || !stroke_) {
             return;
         }
         const QColor carried = QColor::fromRgba(mixer_reservoir(*v));
         {
             pictura::ScopedTimer t("cxx_end_paint (call)");
-            v->end_paint();
+            stroke_->finish();
+            stroke_.reset();
         }
         // Clean wins over Load when both are on: a cleaned brush is not then
         // reloaded.
@@ -98,6 +105,9 @@ public:
             ctx.setMixerReservoir(carried);
         }
     }
+
+private:
+    std::optional<paint_api::Stroke> stroke_;
 };
 
 } // namespace

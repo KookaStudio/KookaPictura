@@ -8,6 +8,7 @@
 #include "theme.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "api/layers_api.h"
 
 #include <QtCore/QAbstractItemModel>
 #include <QtCore/QHash>
@@ -425,12 +426,8 @@ public:
         if (!view_) {
             return false;
         }
-        for (int i = 0; i < view_->layer_row_count(); ++i) {
-            if (view_->layer_row_path(i) == path) {
-                return view_->layer_row_visible(i);
-            }
-        }
-        return false;
+        const auto row = pictura::layers_api::rowForPath(*view_, path);
+        return row.path == path && row.visible;
     }
 
     /// Patch one row's active-thumb target in place and notify, so the

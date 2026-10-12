@@ -1,17 +1,15 @@
 //! Layer > Vector Mask bridge: add (by kind), delete, enable/disable,
 //! link/unlink, and rasterize, plus presence/link/disabled reads, over the
-//! active layer, and per-row presence/link/disabled/thumbnail reads. Free
-//! functions over a [`PictureView`] (their own bridge, so the `PictureView`
-//! declaration list does not grow). Each edit recomposites and records one
-//! state.
+//! active layer. Free functions over a [`PictureView`] (their own bridge, so
+//! the `PictureView` declaration list does not grow). Each edit recomposites
+//! and records one state.
 //!
 //! [`PictureView`]: super::super::qobject::PictureView
 
-use super::super::helpers_composite::vector_mask_thumbnail_image;
 use super::super::qobject::PictureView;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
-use cxx_qt_lib::{QImage, QString, QStringList};
+use cxx_qt_lib::{QString, QStringList};
 use pictura_render::VectorMaskKind;
 
 #[cxx_qt::bridge]
@@ -76,18 +74,6 @@ pub mod ffi {
         /// Whether the active layer's vector mask is disabled.
         fn vector_mask_disabled(view: &PictureView) -> bool;
 
-        /// Whether flat row `i` carries a vector mask.
-        fn layer_row_has_vector_mask(view: &PictureView, i: i32) -> bool;
-
-        /// Whether flat row `i`'s vector mask is linked to its layer.
-        fn layer_row_vector_mask_linked(view: &PictureView, i: i32) -> bool;
-
-        /// Whether flat row `i`'s vector mask is disabled.
-        fn layer_row_vector_mask_disabled(view: &PictureView, i: i32) -> bool;
-
-        /// Vector-mask thumbnail of row `i` scaled to `size`, or null without a
-        /// vector mask.
-        fn layer_row_vector_mask_thumbnail(view: &PictureView, i: i32, size: i32) -> QImage;
     }
 }
 
@@ -242,33 +228,4 @@ fn vector_mask_disabled(view: &PictureView) -> bool {
             .as_ref()
             .is_some_and(|doc| pictura_render::vector_mask_disabled(doc, &path))
     })
-}
-
-fn layer_row_has_vector_mask(view: &PictureView, i: i32) -> bool {
-    view.row_at(i)
-        .is_some_and(|(doc, path, _, _)| pictura_render::has_vector_mask(doc, &path))
-}
-
-fn layer_row_vector_mask_linked(view: &PictureView, i: i32) -> bool {
-    view.row_at(i)
-        .is_some_and(|(doc, path, _, _)| pictura_render::vector_mask_linked(doc, &path))
-}
-
-fn layer_row_vector_mask_disabled(view: &PictureView, i: i32) -> bool {
-    view.row_at(i)
-        .is_some_and(|(doc, path, _, _)| pictura_render::vector_mask_disabled(doc, &path))
-}
-
-fn layer_row_vector_mask_thumbnail(view: &PictureView, i: i32, size: i32) -> QImage {
-    if size <= 0 {
-        return QImage::default();
-    }
-    let Some((doc, _, _, layer)) = view.row_at(i) else {
-        return QImage::default();
-    };
-    layer
-        .vector_mask
-        .as_ref()
-        .and_then(|mask| vector_mask_thumbnail_image(mask, doc.width, doc.height, size as u32))
-        .unwrap_or_default()
 }

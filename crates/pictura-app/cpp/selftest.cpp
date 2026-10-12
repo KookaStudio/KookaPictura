@@ -1,5 +1,5 @@
 #include "selftest_report.h"
-
+#include "api/layers_api.h"
 #include <QtCore/QCoreApplication>
 #include <QtCore/QDir>
 #include <QtCore/QFile>
@@ -2492,8 +2492,8 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         anatomyPanel->refresh();
 
         auto rowOf = [anatomyView](const QString& path) {
-            for (int i = 0; i < anatomyView->layer_row_count(); ++i) {
-                if (anatomyView->layer_row_path(i) == path) {
+            for (int i = 0; i < pictura::layers_api::rowCount(*anatomyView); ++i) {
+                if (pictura::layers_api::rowAt(*anatomyView, i).path == path) {
                     return i;
                 }
             }
@@ -2511,23 +2511,23 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             QStringLiteral("adjustment"), QStringLiteral("group"), QStringLiteral("group"),
             QStringLiteral("pixel"), QStringLiteral("pixel"), QStringLiteral("pixel"),
             QStringLiteral("background")};
-        bool orderOk = anatomyView->layer_row_count() == treePaths.size();
+        bool orderOk = pictura::layers_api::rowCount(*anatomyView) == treePaths.size();
         for (int i = 0; orderOk && i < treePaths.size(); ++i) {
-            orderOk = anatomyView->layer_row_path(i) == treePaths.at(i)
-                         && anatomyView->layer_row_depth(i) == treeDepths[i]
-                         && anatomyView->layer_row_kind(i) == treeKinds.at(i);
+            orderOk = pictura::layers_api::rowAt(*anatomyView, i).path == treePaths.at(i)
+                         && pictura::layers_api::rowAt(*anatomyView, i).depth == treeDepths[i]
+                         && pictura::layers_api::rowAt(*anatomyView, i).kind == treeKinds.at(i);
         }
         const bool anatomyAddOk =
             childA == QStringLiteral("1/0") && childB == QStringLiteral("1/1")
             && anatomyNested == QStringLiteral("1/2")
             && nestedChild == QStringLiteral("1/2/0")
-            && anatomyView->layer_row_depth(rowOf(nestedChild)) == 2
-            && anatomyView->layer_row_expandable(rowOf(QStringLiteral("1")))
-            && anatomyView->layer_row_expandable(rowOf(anatomyNested));
+            && pictura::layers_api::rowAt(*anatomyView, rowOf(nestedChild)).depth == 2
+            && pictura::layers_api::rowAt(*anatomyView, rowOf(QStringLiteral("1"))).expandable
+            && pictura::layers_api::rowAt(*anatomyView, rowOf(anatomyNested)).expandable;
         const int renameBase = anatomyView->history_count();
         const bool treeRenameOk =
             anatomyView->set_layer_name_path(QStringLiteral("1/1"), QStringLiteral("Nested"))
-            && anatomyView->layer_row_name(rowOf(QStringLiteral("1/1")))
+            && pictura::layers_api::rowAt(*anatomyView, rowOf(QStringLiteral("1/1"))).name
                    == QStringLiteral("Nested")
             && anatomyView->history_count() == renameBase + 1
             && !anatomyView->set_layer_name_path(QStringLiteral("1/9"), QStringLiteral("Bogus"))
@@ -2551,14 +2551,14 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             anatomyView->set_layers_blend(QStringList{pixA, pixB}, QStringLiteral("mul "));
         const bool batchOk =
             blendChanged == 2 && anatomyView->history_count() == blendBase + 1
-            && anatomyView->layer_row_blend(rowOf(pixA)) == QStringLiteral("mul ")
-            && anatomyView->layer_row_blend(rowOf(pixB)) == QStringLiteral("mul ");
+            && pictura::layers_api::rowAt(*anatomyView, rowOf(pixA)).blend == QStringLiteral("mul ")
+            && pictura::layers_api::rowAt(*anatomyView, rowOf(pixB)).blend == QStringLiteral("mul ");
         const bool batchUndoOk =
             anatomyView->undo()
-            && anatomyView->layer_row_blend(rowOf(pixA)) == QStringLiteral("norm")
-            && anatomyView->layer_row_blend(rowOf(pixB)) == QStringLiteral("norm")
+            && pictura::layers_api::rowAt(*anatomyView, rowOf(pixA)).blend == QStringLiteral("norm")
+            && pictura::layers_api::rowAt(*anatomyView, rowOf(pixB)).blend == QStringLiteral("norm")
             && anatomyView->redo()
-            && anatomyView->layer_row_blend(rowOf(pixA)) == QStringLiteral("mul ");
+            && pictura::layers_api::rowAt(*anatomyView, rowOf(pixA)).blend == QStringLiteral("mul ");
 
         const int skipBase = anatomyView->history_count();
         const int bgChanged =
@@ -2567,11 +2567,11 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         const int groupFill = anatomyView->set_layers_fill(QStringList{anatomyGroup, pixB}, 128);
         const bool skipOk =
             bgChanged == 1 && fillBase == skipBase + 1
-            && anatomyView->layer_row_blend(rowOf(anatomyBg)) == QStringLiteral("norm")
-            && anatomyView->layer_row_blend(rowOf(pixA)) == QStringLiteral("scrn")
+            && pictura::layers_api::rowAt(*anatomyView, rowOf(anatomyBg)).blend == QStringLiteral("norm")
+            && pictura::layers_api::rowAt(*anatomyView, rowOf(pixA)).blend == QStringLiteral("scrn")
             && groupFill == 1 && anatomyView->history_count() == fillBase + 1
-            && anatomyView->layer_row_fill(rowOf(anatomyGroup)) == 255
-            && anatomyView->layer_row_fill(rowOf(pixB)) == 128;
+            && pictura::layers_api::rowAt(*anatomyView, rowOf(anatomyGroup)).fill == 255
+            && pictura::layers_api::rowAt(*anatomyView, rowOf(pixB)).fill == 128;
 
         const int groupBase = anatomyView->history_count();
         const QString anatomyWrapped = anatomyView->group_layers(QStringList{pixA, pixB});
@@ -2598,38 +2598,38 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         anatomyView->set_layers_visible(QStringList{soloHidden}, false);
         anatomyPanel->refresh();
         QStringList priorHidden;
-        for (int i = 0; i < anatomyView->layer_row_count(); ++i) {
-            if (!anatomyView->layer_row_visible(i)) {
-                priorHidden.push_back(anatomyView->layer_row_path(i));
+        for (int i = 0; i < pictura::layers_api::rowCount(*anatomyView); ++i) {
+            if (!pictura::layers_api::rowAt(*anatomyView, i).visible) {
+                priorHidden.push_back(pictura::layers_api::rowAt(*anatomyView, i).path);
             }
         }
         const QString soloPath = QStringLiteral("1/0");
         anatomyPanel->toggleSoloForTest(soloPath);
         anatomyPanel->refresh();
         bool soloOk = true;
-        for (int i = 0; i < anatomyView->layer_row_count(); ++i) {
-            const QString path = anatomyView->layer_row_path(i);
+        for (int i = 0; i < pictura::layers_api::rowCount(*anatomyView); ++i) {
+            const QString path = pictura::layers_api::rowAt(*anatomyView, i).path;
             const bool expected = path == soloPath || path == anatomyGroup;
-            soloOk = soloOk && anatomyView->layer_row_visible(i) == expected;
+            soloOk = soloOk && pictura::layers_api::rowAt(*anatomyView, i).visible == expected;
         }
         const bool soloUndo = anatomyView->undo();
         anatomyPanel->refresh();
         bool soloUndoOk = soloUndo;
-        for (int i = 0; i < anatomyView->layer_row_count(); ++i) {
+        for (int i = 0; i < pictura::layers_api::rowCount(*anatomyView); ++i) {
             soloUndoOk = soloUndoOk
-                            && anatomyView->layer_row_visible(i)
-                                   == !priorHidden.contains(anatomyView->layer_row_path(i));
+                            && pictura::layers_api::rowAt(*anatomyView, i).visible
+                                   == !priorHidden.contains(pictura::layers_api::rowAt(*anatomyView, i).path);
         }
         const bool soloRedo = anatomyView->redo();
         anatomyPanel->refresh();
         anatomyPanel->toggleSoloForTest(anatomyGroup);
         anatomyPanel->refresh();
         bool soloRestoreOk = soloRedo;
-        for (int i = 0; i < anatomyView->layer_row_count(); ++i) {
+        for (int i = 0; i < pictura::layers_api::rowCount(*anatomyView); ++i) {
             soloRestoreOk =
                 soloRestoreOk
-                && anatomyView->layer_row_visible(i)
-                       == !priorHidden.contains(anatomyView->layer_row_path(i));
+                && pictura::layers_api::rowAt(*anatomyView, i).visible
+                       == !priorHidden.contains(pictura::layers_api::rowAt(*anatomyView, i).path);
         }
         ST_BEGIN("solo_solo");
         ST_PASS("solo solo=%d restore=%d undo=%d", soloOk ? 1 : 0, soloRestoreOk ? 1 : 0, soloUndoOk ? 1 : 0);
@@ -2673,27 +2673,27 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         const bool downSent = anatomyEdit(firstRow, QStringLiteral("TopAdj"), Qt::Key_Tab);
         const bool downMoved =
             downSent
-            && anatomyView->layer_row_name(rowOf(firstRow)) == QStringLiteral("TopAdj")
+            && pictura::layers_api::rowAt(*anatomyView, rowOf(firstRow)).name == QStringLiteral("TopAdj")
             && anatomyPanel->currentPath() == QStringLiteral("1");
         // The commit is exactly one undoable step: one undo restores the prior
         // name and one redo reapplies it.
         const bool downUndoOk =
             anatomyView->undo()
-            && anatomyView->layer_row_name(rowOf(firstRow)) == QStringLiteral("Invert")
+            && pictura::layers_api::rowAt(*anatomyView, rowOf(firstRow)).name == QStringLiteral("Invert")
             && anatomyView->redo()
-            && anatomyView->layer_row_name(rowOf(firstRow)) == QStringLiteral("TopAdj");
+            && pictura::layers_api::rowAt(*anatomyView, rowOf(firstRow)).name == QStringLiteral("TopAdj");
         const bool downOk = downMoved && downUndoOk;
         const bool upOk =
             anatomyEdit(lastRow, QStringLiteral("Bottom"), Qt::Key_Backtab)
-            && anatomyView->layer_row_name(rowOf(lastRow)) == QStringLiteral("Bottom")
+            && pictura::layers_api::rowAt(*anatomyView, rowOf(lastRow)).name == QStringLiteral("Bottom")
             && anatomyPanel->currentPath() == QStringLiteral("1");
         const bool noWrapFirst =
             anatomyEdit(firstRow, QStringLiteral("First"), Qt::Key_Backtab)
-            && anatomyView->layer_row_name(rowOf(firstRow)) == QStringLiteral("First")
+            && pictura::layers_api::rowAt(*anatomyView, rowOf(firstRow)).name == QStringLiteral("First")
             && anatomyPanel->currentPath() == firstRow;
         const bool noWrapLast =
             anatomyEdit(lastRow, QStringLiteral("Last"), Qt::Key_Tab)
-            && anatomyView->layer_row_name(rowOf(lastRow)) == QStringLiteral("Last")
+            && pictura::layers_api::rowAt(*anatomyView, rowOf(lastRow)).name == QStringLiteral("Last")
             && anatomyPanel->currentPath() == lastRow;
         const bool nowrapOk = noWrapFirst && noWrapLast;
         ST_BEGIN("rename_down");
@@ -2731,18 +2731,18 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         // model. No bridge op creates a clipped layer, so `clip` verifies the
         // clip role is plumbed consistently (and the group expand indicator).
         const bool badgeMask =
-            anatomyView->layer_row_has_mask(rowOf(QStringLiteral("2")))
+            pictura::layers_api::rowAt(*anatomyView, rowOf(QStringLiteral("2"))).hasMask
             && anatomyPanel->rowHasMaskForTest(QStringLiteral("2"));
         const bool badgeFx =
-            anatomyView->layer_row_has_adjustment(rowOf(QStringLiteral("2")))
+            pictura::layers_api::rowAt(*anatomyView, rowOf(QStringLiteral("2"))).hasAdjustment
             && anatomyPanel->rowHasAdjustmentForTest(QStringLiteral("2"));
         bool badgeClip = anatomyPanel->rowExpandableForTest(QStringLiteral("1"))
                             && anatomyPanel->rowExpandableForTest(QStringLiteral("1/2"));
-        for (int i = 0; i < anatomyView->layer_row_count(); ++i) {
-            const QString path = anatomyView->layer_row_path(i);
+        for (int i = 0; i < pictura::layers_api::rowCount(*anatomyView); ++i) {
+            const QString path = pictura::layers_api::rowAt(*anatomyView, i).path;
             badgeClip = badgeClip
                            && anatomyPanel->rowClippingForTest(path)
-                                  == anatomyView->layer_row_clipping(i)
+                                  == pictura::layers_api::rowAt(*anatomyView, i).clipping
                            && !anatomyPanel->rowClipBaseForTest(path);
         }
         ST_BEGIN("badges_mask");
@@ -2758,13 +2758,13 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         const bool tipOk =
             groupTip
                 == QStringLiteral("%1 (group)")
-                       .arg(anatomyView->layer_row_name(rowOf(QStringLiteral("1"))))
+                       .arg(pictura::layers_api::rowAt(*anatomyView, rowOf(QStringLiteral("1"))).name)
             && pixelTip
                    == QStringLiteral("%1 (pixel)")
-                          .arg(anatomyView->layer_row_name(rowOf(QStringLiteral("1/1"))))
+                          .arg(pictura::layers_api::rowAt(*anatomyView, rowOf(QStringLiteral("1/1"))).name)
             && adjTip
                    == QStringLiteral("%1 (adjustment)")
-                          .arg(anatomyView->layer_row_name(rowOf(QStringLiteral("2"))));
+                          .arg(pictura::layers_api::rowAt(*anatomyView, rowOf(QStringLiteral("2"))).name);
         ST_BEGIN("tooltip_ok");
         ST_PASS("tooltip ok=%d", tipOk ? 1 : 0);
         if (!tipOk) {

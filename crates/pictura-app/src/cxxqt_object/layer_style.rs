@@ -36,13 +36,6 @@ pub mod ffi {
         /// Whether the layer at `path` carries any effect, on or off.
         fn layer_style_has(view: &PictureView, path: &QString) -> bool;
 
-        /// Whether the projection row at `i` carries any effect, on or off.
-        fn layer_row_has_style(view: &PictureView, i: i32) -> bool;
-
-        /// Whether the projection row at `i` carries a customised Blend If: a
-        /// non-default typed view, or a raw `blending_ranges` block with no view.
-        fn layer_row_has_blend_if(view: &PictureView, i: i32) -> bool;
-
         /// The ten effect dialog keys, in CS6 list order.
         fn layer_style_effect_names() -> QStringList;
 
@@ -122,24 +115,14 @@ fn layer_style_has(view: &PictureView, path: &QString) -> bool {
     with_layer(view, path, pictura_render::has_layer_style).unwrap_or(false)
 }
 
-fn layer_row_has_style(view: &PictureView, i: i32) -> bool {
-    let path = view.layer_row_path(i);
-    !path.is_empty() && layer_style_has(view, &path)
-}
-
 /// A layer's Blend If is customised when its typed view is non-default, or when
 /// a raw `blending_ranges` block is present but could not be parsed into a view
 /// (empty means absent).
-fn layer_is_blend_if_customised(layer: &pictura_core::Layer) -> bool {
+pub(super) fn layer_is_blend_if_customised(layer: &pictura_core::Layer) -> bool {
     match layer.blend_if.as_ref() {
         Some(view) => !view.is_default(),
         None => !layer.blending_ranges.is_empty(),
     }
-}
-
-fn layer_row_has_blend_if(view: &PictureView, i: i32) -> bool {
-    let path = view.layer_row_path(i);
-    !path.is_empty() && with_layer(view, &path, layer_is_blend_if_customised).unwrap_or(false)
 }
 
 fn layer_style_effect_names() -> QStringList {
