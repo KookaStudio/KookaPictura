@@ -3,7 +3,8 @@
 
 use pictura_core::PixelBuffer;
 use pictura_filters::{
-    apply, DepthMap, Filter, IrisShape, NoiseDistribution, Quality, RadialMethod, SmartBlurMode,
+    apply, BlurNoise, BlurNoiseKind, BlurPin, BokehParams, DepthMap, Filter, IrisShape,
+    NoiseDistribution, Quality, RadialMethod, SmartBlurMode,
 };
 
 /// A deterministic 4-channel picture with noise, gradients and hard edges, in
@@ -160,6 +161,39 @@ fn kernels() -> Vec<(&'static str, Filter)> {
                 seed: 7,
             },
         ),
+        (
+            "field blur",
+            Filter::FieldBlur {
+                pins: vec![
+                    BlurPin {
+                        x: 0.2,
+                        y: 0.3,
+                        blur: 12.0,
+                    },
+                    BlurPin {
+                        x: 0.8,
+                        y: 0.7,
+                        blur: 45.0,
+                    },
+                ],
+                bokeh: BokehParams {
+                    enabled: true,
+                    light_bokeh: 30.0,
+                    bokeh_color: 50.0,
+                    light_range: (40, 200),
+                },
+                noise: BlurNoise {
+                    enabled: true,
+                    amount: 20.0,
+                    size: 40.0,
+                    roughness: 30.0,
+                    color: 25.0,
+                    highlights: 10.0,
+                    kind: BlurNoiseKind::Grain,
+                    seed: 7,
+                },
+            },
+        ),
     ]
 }
 
@@ -187,6 +221,7 @@ fn row_parallel_kernels_keep_their_serial_bytes() {
         ("radial spin", 0x3c14_296d_3343_fe21),
         ("radial zoom", 0x2327_b5e8_6773_fd83),
         ("lens blur", 0x954e_772d_0d08_f422),
+        ("field blur", 0x62e5_9821_9a51_6e8f),
     ];
     let source = picture();
     for ((name, filter), (want_name, want)) in kernels().into_iter().zip(expected) {

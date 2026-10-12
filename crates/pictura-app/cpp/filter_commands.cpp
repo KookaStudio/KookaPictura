@@ -295,6 +295,30 @@ const QList<FilterCommandSpec>& buildCommands()
              slider(QStringLiteral("Seed:"), 0, 999, 1)}),
 
         // Blur
+        // Blur Gallery: the pins and the Effects/Noise tabs live on its
+        // workspace, not this pane; the canonical slots are one centred pin
+        // plus the effects tail (`filter_map.rs`).
+        def(QStringLiteral("Blur Gallery"), QStringLiteral("Field Blur"),
+            QStringLiteral("field-blur"),
+            {hidden(1), // pin count
+             placement(QStringLiteral("Pin:"), 0.5, 0.5),
+             slider(QStringLiteral("Blur:"), 0, 500, 0, 0, QStringLiteral(" pixels")),
+             check(QStringLiteral("Bokeh"), true),
+             slider(QStringLiteral("Light Bokeh:"), 0, 100, 14, 0, QStringLiteral(" %")),
+             slider(QStringLiteral("Bokeh Color:"), 0, 100, 40, 0, QStringLiteral(" %")),
+             slider(QStringLiteral("Light Range Low:"), 0, 255, 40),
+             slider(QStringLiteral("Light Range High:"), 0, 255, 118),
+             check(QStringLiteral("Noise"), false),
+             slider(QStringLiteral("Noise Amount:"), 0, 100, 0, 0, QStringLiteral(" %")),
+             slider(QStringLiteral("Noise Size:"), 0, 100, 50, 0, QStringLiteral(" %")),
+             slider(QStringLiteral("Noise Roughness:"), 0, 100, 50, 0, QStringLiteral(" %")),
+             slider(QStringLiteral("Noise Color:"), 0, 100, 0, 0, QStringLiteral(" %")),
+             slider(QStringLiteral("Noise Highlights:"), 0, 100, 0, 0, QStringLiteral(" %")),
+             choice(QStringLiteral("Noise Type:"),
+                    {QStringLiteral("Gaussian"), QStringLiteral("Uniform"),
+                     QStringLiteral("Grain")},
+                    0),
+             hidden(1)}), // seed
         def(QStringLiteral("Blur"), QStringLiteral("Gaussian Blur"), QStringLiteral("gaussian-blur"),
             {slider(QStringLiteral("Radius:"), 0.1, 250.0, 5.0, 1, QStringLiteral(" pixels"))}),
         def(QStringLiteral("Blur"), QStringLiteral("Motion Blur"), QStringLiteral("motion-blur"),

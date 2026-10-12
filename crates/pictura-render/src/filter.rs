@@ -97,6 +97,7 @@ pub fn filter_preserves_opacity(filter: &Filter) -> bool {
                 ..
             }
             | Filter::LensBlur { .. }
+            | Filter::FieldBlur { .. }
             | Filter::Sharpen
             | Filter::SharpenMore
             | Filter::SharpenEdges
@@ -178,6 +179,16 @@ fn alpha_kernel(filter: &Filter) -> std::borrow::Cow<'_, Filter> {
             {
                 *specular_brightness = 0;
                 *noise_amount = 0;
+            }
+            std::borrow::Cow::Owned(alpha)
+        }
+        // The bokeh lift and the grain are colour effects; the alpha pass
+        // keeps the pin-driven blur only.
+        Filter::FieldBlur { .. } => {
+            let mut alpha = filter.clone();
+            if let Filter::FieldBlur { bokeh, noise, .. } = &mut alpha {
+                bokeh.enabled = false;
+                noise.enabled = false;
             }
             std::borrow::Cow::Owned(alpha)
         }
@@ -435,6 +446,7 @@ pub fn preview_apron(filter: &Filter) -> i32 {
         | Filter::Maximum { radius }
         | Filter::Minimum { radius } => f64::from(*radius),
         Filter::MotionBlur { distance, .. } => f64::from(*distance),
+        Filter::FieldBlur { pins, .. } => pins.iter().map(|pin| pin.blur).fold(0.0, f64::max),
         Filter::RadialBlur { amount, .. } => *amount,
         Filter::Offset {
             horizontal,

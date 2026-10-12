@@ -2,11 +2,18 @@
 //! the order its dialog lists them (a choice slot's index picks from these).
 
 use pictura_filters::{
-    BrushType, ContourEdge, DiffuseMode, DisplaceFit, ExtrudeType, GlassTexture, GrainType,
-    HalftoneType, IrisShape, LensType, LightDirection, LightType, MezzotintType, NoiseDistribution,
-    PolarKind, Quality, RadialMethod, RippleSize, SharpenRemove, ShearFill, SmartBlurMode,
-    SpherizeMode, StrokeDirection, TextureChannel, TileFill, WaveType, WindMethod, ZigZagStyle,
+    BlurNoiseKind, BrushType, ContourEdge, DiffuseMode, DisplaceFit, ExtrudeType, GlassTexture,
+    GrainType, HalftoneType, IrisShape, LensType, LightDirection, LightType, MezzotintType,
+    NoiseDistribution, PolarKind, Quality, RadialMethod, RippleSize, SharpenRemove, ShearFill,
+    SmartBlurMode, SpherizeMode, StrokeDirection, TextureChannel, TileFill, WaveType, WindMethod,
+    ZigZagStyle,
 };
+
+pub(super) const BLUR_NOISE_KINDS: [BlurNoiseKind; 3] = [
+    BlurNoiseKind::Gaussian,
+    BlurNoiseKind::Uniform,
+    BlurNoiseKind::Grain,
+];
 
 pub(super) const NOISE_DISTRIBUTIONS: [NoiseDistribution; 2] =
     [NoiseDistribution::Uniform, NoiseDistribution::Gaussian];
