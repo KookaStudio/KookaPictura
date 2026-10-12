@@ -242,6 +242,11 @@ pub(super) fn blend_key(mode: BlendMode) -> String {
 /// Convert a pixel layer's planar channels to an RGBA `QImage`, or `None` for an
 /// empty rect, a missing/wrong-sized color channel, or an alpha mismatch.
 pub(super) fn layer_image(layer: &Layer) -> Option<QImage> {
+    layer_buffer(layer).map(|buffer| buffer_to_image(&buffer))
+}
+/// A pixel layer's planar channels as a gray+alpha (2) or RGBA (4) buffer, with
+/// [`layer_image`]'s refusals.
+pub(super) fn layer_buffer(layer: &Layer) -> Option<PixelBuffer> {
     let width = layer.rect.width();
     let height = layer.rect.height();
     if width <= 0 || height <= 0 {
@@ -291,7 +296,7 @@ pub(super) fn layer_image(layer: &Layer) -> Option<QImage> {
             data: data.into(),
         }
     };
-    Some(buffer_to_image(&buffer))
+    Some(buffer)
 }
 /// Downsample a pixel layer's planar channels straight into a `size`-bounded
 /// RGBA `QImage` (long edge `size`, aspect kept), without first materializing a

@@ -4,6 +4,7 @@
 
 mod diffuse_glow;
 mod glass;
+pub mod liquify;
 mod ripples;
 
 pub use diffuse_glow::diffuse_glow;

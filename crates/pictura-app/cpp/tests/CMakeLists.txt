@@ -56,6 +56,7 @@ set(PICTURA_QT_TESTS
     tst_smart_blur
     tst_lens_blur_dialog
     tst_blur_gallery_dialog
+    tst_liquify_dialog
     tst_layer_style
     tst_color_range
     tst_refine_edge

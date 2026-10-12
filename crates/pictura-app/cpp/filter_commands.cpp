@@ -193,6 +193,9 @@ const QList<FilterCommandSpec>& buildCommands()
 {
     static const QList<FilterCommandSpec> commands = {
         // Top-level leaves (no family submenu)
+        // Liquify edits a mesh on its own workspace; the slot names the kept
+        // mesh (`filter_tools/liquify.rs`).
+        defLeaf(QStringLiteral("Liquify…"), QStringLiteral("liquify"), {hidden(0)}),
         defLeaf(QStringLiteral("Oil Paint…"), QStringLiteral("oil-paint"),
                 {slider(QStringLiteral("Stylization:"), 0.1, 10, 3.5, 1),
                  slider(QStringLiteral("Cleanliness:"), 0, 10, 4.5, 1),

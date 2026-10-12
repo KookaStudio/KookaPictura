@@ -28,6 +28,7 @@ mod canvas_proxy;
 pub(super) mod displace_maps;
 pub(super) mod jobs;
 pub(super) mod lens_blur_depths;
+pub(super) mod liquify;
 
 #[cxx_qt::bridge]
 pub mod ffi {
@@ -275,9 +276,9 @@ fn filter_preview(mut view: Pin<&mut PictureView>, kind: &QString, params: &QLis
 /// against the crop, HDR Toning computes a global pivot, Lens Flare places
 /// and sizes itself as a fraction of the buffer, Shear shifts each row by
 /// a fraction of the buffer's half-width, Displace stretches or tiles its
-/// map from the buffer's corner, Lens Blur aligns its depth map to the
-/// layer's rectangle, and Field Blur weights its pins as fractions of the
-/// buffer.
+/// map from the buffer's corner, Lens Blur's depth map and Liquify's mesh
+/// align to the layer's rectangle, and Field Blur weights its pins as
+/// fractions of the buffer.
 pub(crate) fn filter_preview_needs_whole_layer(kind: &str) -> bool {
     matches!(
         kind,
@@ -289,6 +290,7 @@ pub(crate) fn filter_preview_needs_whole_layer(kind: &str) -> bool {
             | "displace"
             | "lens-blur"
             | "field-blur"
+            | "liquify"
     )
 }
 

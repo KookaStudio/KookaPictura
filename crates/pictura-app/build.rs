@@ -57,6 +57,7 @@ fn main() {
                 "src/cxxqt_object/filter_tools.rs",
                 "src/cxxqt_object/guides.rs",
                 "src/cxxqt_object/filter_tools/jobs.rs",
+                "src/cxxqt_object/filter_tools/liquify.rs",
                 "src/cxxqt_object/healing.rs",
                 "src/cxxqt_object/image_adjust.rs",
                 "src/cxxqt_object/impl_selection/refine.rs",

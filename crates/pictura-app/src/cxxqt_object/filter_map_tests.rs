@@ -266,6 +266,17 @@ fn displace_reads_its_slots_and_refuses_a_map_it_no_longer_has() {
 }
 
 #[test]
+fn liquify_names_a_kept_mesh_and_refuses_one_it_no_longer_has() {
+    // No mesh yet (a dialog's default slot) moves nothing.
+    let Some(Filter::Liquify { mesh }) = filter_from_kind_params("liquify", &[]) else {
+        panic!("liquify did not default");
+    };
+    assert!(mesh.is_identity());
+    assert!(filter_from_kind_params("liquify", &[4e9]).is_none());
+    assert!(filter_from_kind_params("liquify", &[1.0, 2.0]).is_none());
+}
+
+#[test]
 fn custom_reads_its_grid_row_by_row_then_scale_and_offset() {
     let mut identity = [[0.0; 5]; 5];
     identity[2][2] = 1.0;

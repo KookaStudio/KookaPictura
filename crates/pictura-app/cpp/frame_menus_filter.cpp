@@ -12,6 +12,7 @@
 #include "filter_preview_dialog.h"
 #include "lens_flare_dialog.h"
 #include "lighting_effects_dialog.h"
+#include "liquify_dialog.h"
 
 #include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/filter_tools/jobs.cxxqt.h"
@@ -55,9 +56,9 @@ bool chooseDisplacementMap(QList<double>* values, QWidget* parent)
     return true;
 }
 
-// Lens Flare's parameters are one struct and Lighting Effects' a list of lights,
-// each edited on its own dialog; every other filter edits independent slots on
-// the shared one.
+// Lens Flare's parameters are one struct, Lighting Effects' a list of lights
+// and Liquify's a mesh, each edited on its own dialog; every other filter edits
+// independent slots on the shared one.
 bool runFilterDialog(PictureView* view, const FilterCommandSpec& spec,
                      const FilterPreviewView& previewView, const QList<double>& initial,
                      QList<double>* out, QWidget* parent)
@@ -70,6 +71,11 @@ bool runFilterDialog(PictureView* view, const FilterCommandSpec& spec,
     }
     if (spec.kind == QStringLiteral("field-blur")) {
         return BlurGalleryDialog::get(view, spec, initial, out, parent);
+    }
+    if (spec.kind == QStringLiteral("liquify")) {
+        const auto* frame = qobject_cast<PicturaMainWindow*>(parent);
+        const QString name = frame ? frame->activeDocumentName() : QString();
+        return LiquifyDialog::get(view, name, initial, out, parent);
     }
     if (!FilterPreviewDialog::get(view, spec, previewView, initial, out, parent)) {
         return false;

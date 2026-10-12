@@ -11,6 +11,7 @@
 
 use super::filter_tools::displace_maps::{displace_map, DISPLACE_SLOTS};
 use super::filter_tools::lens_blur_depths::{depth_map as lens_blur_depth_map, LENS_BLUR_SLOTS};
+use super::filter_tools::liquify::liquify_mesh;
 use choices::*;
 use pictura_core::shape::CUSTOM_SHAPE_NAMES;
 use pictura_filters::{
@@ -533,6 +534,12 @@ pub(super) fn filter_from_kind_params(kind: &str, params: &[f64]) -> Option<Filt
                 vertical_scale: f(params, 1, 10.0),
                 fit: pick(&DISPLACE_FITS, params, 2, 0),
                 wrap: pick(&SHEAR_FILLS, params, 3, 1) == ShearFill::WrapAround,
+            }
+        }
+        "liquify" => {
+            arity!(params, 1);
+            Filter::Liquify {
+                mesh: liquify_mesh(u32v(params, 0, 0))?,
             }
         }
         "zigzag" => {

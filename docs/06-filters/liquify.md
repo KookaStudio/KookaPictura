@@ -6,7 +6,7 @@
 - **New in CS6:** `Changed` — CS6 adds **GPU/video-card acceleration**, a **Basic vs Advanced** interface split, **`Load Last Mesh`**, a maximum brush size of **15,000**, bracket-key brush resizing, an improved Mac cursor, and `Ctrl`/`Cmd` magnifier switching. The **Reconstruct** button's amount dialog and `Load Last Mesh` are CS6; the Reconstruct *mode* menus and the Displace/Amplitwist/Affine tool modes are marked **CS5-only** in the Help.
 - **Depends on:** `FILT-001` filters-overview, `FILT-010` blur-filters (only for the shared filter dispatch/`Fade` model), `ARCH-006` gpu-rendering-pipeline, `ARCH-008` document-model, `ARCH-009` undo-history, `ARCH-004` rust-qt-interop, `ARCH-005` threading-and-concurrency, `LAY-021` smart-filters, `LAY-020` smart-objects, `LAY-004` layer-masks, `IMG-005` bit-depth-and-conversion.
 
-> All module, widget, and type names below are **design proposals**. No code exists in this repository. Adobe's warp/reconstruct math and its `.msh` mesh format are closed; those parts are **behavioral parity only, algorithm TBD**. Facts are taken from the fetched CS6 Help PDF and the fetched CS6-era Adobe Help page unless marked *(inferred)*. Any **face-aware** content is **CC 2015.5**, not CS6, and is labelled as such.
+> Module, widget, and type names below are **design proposals** except where `## Rust module mapping` records the implementation (#348). Adobe's warp/reconstruct math and its `.msh` mesh format are closed; those parts are **behavioral parity only, algorithm TBD**. Facts are taken from the fetched CS6 Help PDF and the fetched CS6-era Adobe Help page unless marked *(inferred)*. Any **face-aware** content is **CC 2015.5**, not CS6, and is labelled as such.
 
 ## CS6 behavior
 
@@ -80,9 +80,9 @@ CS6 has **no face-aware Liquify**. **Face-Aware Liquify** (automatic face detect
 
 | Control | Type | Default | Range / options | Notes |
 |---|---|---|---|---|
-| Brush Size | int px | *(unverified)* | 1–**15,000** (CS6 max) | Bracket keys, `Alt`+right-drag (Win), `Ctrl`+`Alt`-drag (Mac) |
+| Brush Size | int px | 100 (CS6 capture, #348) | 1–**15,000** (CS6 max) | Bracket keys, `Alt`+right-drag (Win), `Ctrl`+`Alt`-drag (Mac) |
 | Brush Density | int % | *(unverified)* | 0–100 | Feathers the brush edge; effect strongest at center |
-| Brush Pressure | int % | *(unverified)* | 0–100 | Speed at which distortions accumulate while dragging |
+| Brush Pressure | int % | 100 (CS6 capture, #348) | 0–100 | Speed at which distortions accumulate while dragging |
 | Brush Rate | int % | *(unverified)* | 0–100 | Speed of application while a tool is held stationary |
 | Turbulent Jitter | int % | *(unverified)* | 0–100 | CS5+; tightness of the Turbulence scramble |
 | Reconstruct Mode | enum | — | Revert / Rigid / Stiff / Smooth / Loose | **CS5 only** |
@@ -143,7 +143,9 @@ The Help's "amount" in the CS6 Revert Reconstruction dialog is a blend factor be
 
 ## Rust module mapping
 
-Proposals. The whole-image interactive warp is a distinct pipeline from the tile-based paint tools, but reuses the document tile store and history model.
+**Implemented (#348, OpenSpec change `add-liquify`).** `pictura_filters::distort::liquify` ports photocraft's displacement field (MIT OR Apache-2.0): `LiquifyMesh` holds an inverse offset per node of a 2 / 4 / 8 px grid (by layer area) plus a freeze mask; `LiquifyBrush` / `LiquifyTool` dab it (each tool reads the current output at `q = M(p)`, so `d' = q + d(q) − p`), with Kooka's own Mirror and Turbulence; `reconstruct(amount)`, `restore_all`, Mask All / None / Invert All and `scaled_to` (Load Mesh's scale-to-fit). `Filter::Liquify { mesh }` resamples through `liquify` (Catmull-Rom mesh and source; an identity mesh is bit-exact) and `LiquifySource` renders the dialog's view at screen resolution from the full-resolution layer (Catmull-Rom when magnified, so the preview matches OK). The app keeps one dialog session and the kept meshes in `filter_tools/liquify.rs`; the `liquify` kind's one slot is a kept mesh id, so OK commits one filter state and Last Filter replays it. The dialog is `LiquifyDialog` + `LiquifyCanvas` (C++). Tool strengths, Density/Rate/Jitter defaults (50 / 80 / 50) and Mirror/Turbulence are approximations. View Options (Advanced) are built: Show Image, Show Mesh (Small/Medium/Large = 16/32/64 layer px — sizes approximated — and CS6's colour list; the grid is traced as contours of `p + d(p)`), Show Mask, and Show Backdrop (All Layers or one layer; In Front / Behind / Blend, Blend drawn as Difference — approximation; Opacity default 50). Not built: `.msh` Save/Load Mesh, mask sources (Selection/Layer Mask/Transparency/Quick Mask) and combine modes, Show Guides, Pin Edges, CS5 reconstruct modes, a live Reconstruct preview, and the GPU path.
+
+The proposals below remain the long-form design. The whole-image interactive warp is a distinct pipeline from the tile-based paint tools, but reuses the document tile store and history model.
 
 - `pictura_filters::liquify` — `LiquifySession` owning a `WarpMesh`, an input snapshot, and the option set; methods `apply_tool(ToolEvent)`, `reconstruct(amount)`, `restore_all()`, `to_displacement()`, `commit(&mut Document)`.
 - `pictura_filters::liquify::mesh` — `WarpMesh { dim: (u16, u16), nodes: Vec<Vec2f> }`, `sample_bilinear(&self, p) -> Vec2f`, `save_msh`, `load_msh` (format TBD), `resize_to(image_size)` for `Load Mesh` scaling.

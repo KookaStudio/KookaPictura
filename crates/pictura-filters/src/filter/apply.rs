@@ -17,6 +17,7 @@ pub fn apply(filter: &Filter, buf: &mut PixelBuffer) -> Result<(), FilterError> 
         Filter::GaussianBlur { radius } => blur::gaussian(buf, *radius),
         Filter::BoxBlur { radius } => blur::r#box(buf, *radius),
         Filter::ShapeBlur { shape, radius } => blur::shape(buf, *shape, *radius),
+        Filter::Liquify { mesh } => distort::liquify::liquify(buf, mesh),
         Filter::SmartBlur {
             radius,
             threshold,
