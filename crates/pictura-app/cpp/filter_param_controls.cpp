@@ -1,5 +1,6 @@
 #include "filter_param_controls.h"
 #include "color_picker_dialog.h"
+#include "panels/color_swatch_widget.h"
 #include "panels/jump_slider.h"
 #include "pictura_app/src/cxxqt_object/shapes.cxxqt.h"
 
@@ -209,19 +210,17 @@ private:
     double y_ = 0.5;
 };
 
-QColor buttonColor(const QPushButton* button)
+QColor buttonColor(const ColorSwatchWidget* button)
 {
     return button->property("filterColor").value<QColor>();
 }
 
 // A colour parameter shows as a swatch, as CS6's does; the hex is only the tooltip.
-void setButtonColor(QPushButton* button, const QColor& color)
+void setButtonColor(ColorSwatchWidget* button, const QColor& color)
 {
     button->setProperty("filterColor", color);
     button->setToolTip(color.name());
-    button->setStyleSheet(
-        QStringLiteral("QPushButton { background-color: %1; border: 1px solid #000; }")
-            .arg(color.name()));
+    button->setColor(color);
 }
 
 } // namespace
@@ -518,7 +517,7 @@ void FilterParamControls::addControl(const FilterParamSpec& spec)
         break;
     }
     case FilterControl::Color: {
-        control.colorButton = new QPushButton(parent_);
+        control.colorButton = new ColorSwatchWidget(parent_);
         control.colorButton->setObjectName(QStringLiteral("filterColorSwatch"));
         control.colorButton->setFixedSize(24, 22);
         const QColor color(static_cast<int>(fallback(0, spec.initial.value(0, 0))),

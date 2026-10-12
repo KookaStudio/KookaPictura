@@ -28,6 +28,7 @@ class QToolButton;
 
 namespace pictura {
 
+class ColorSwatchWidget;
 class LightingCanvas;
 class PictureView;
 
@@ -75,8 +76,8 @@ private:
     QWidget* buildLightsPanel();
     Field makeField(QWidget* parent, const QString& label, const QString& name, int minimum,
                     int maximum, void (LightingEffectsDialog::*apply)(int));
-    QPushButton* makeSwatch(QWidget* parent, const QString& name, const QString& title,
-                            bool rigColor);
+    ColorSwatchWidget* makeSwatch(QWidget* parent, const QString& name, const QString& title,
+                                  bool rigColor);
 
     void setIntensity(int value);
     void setHotspot(int value);
@@ -105,8 +106,8 @@ private:
     QCheckBox* preview_ = nullptr;
 
     QComboBox* type_ = nullptr;
-    QPushButton* color_ = nullptr;
-    QPushButton* colorize_ = nullptr;
+    ColorSwatchWidget* color_ = nullptr;
+    ColorSwatchWidget* colorize_ = nullptr;
     Field intensity_;
     Field hotspot_;
     Field exposure_;

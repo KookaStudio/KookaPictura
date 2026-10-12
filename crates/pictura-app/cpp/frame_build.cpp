@@ -580,10 +580,6 @@ void PicturaMainWindow::buildStatusBar()
     statusOptionsButton_->setObjectName(QStringLiteral("statusOptionsButton"));
     statusOptionsButton_->setArrowType(Qt::DownArrow);
     statusOptionsButton_->setPopupMode(QToolButton::InstantPopup);
-    // Flat on the footer surface: the default button chrome reads as a raised
-    // surface, so drop the background and border.
-    statusOptionsButton_->setStyleSheet(
-        QStringLiteral("QToolButton { background: transparent; border: 0; }"));
     auto* optionsMenu = new QMenu(statusOptionsButton_);
     auto* group = new QActionGroup(optionsMenu);
     for (const QString& key : {QStringLiteral("sizes"), QStringLiteral("dimensions")}) {

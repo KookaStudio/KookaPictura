@@ -10,6 +10,8 @@
 
 namespace pictura {
 
+class ColorSwatchWidget;
+
 // Photoshop's Edit > Stroke: Width, Color, Location (Inside / Center /
 // Outside), a Blending group (Mode, Opacity), and Preserve Transparency.
 // Ported from photorust's StrokeDialog.
@@ -35,7 +37,7 @@ private:
     void updateColorSwatch();
 
     QSpinBox* width_ = nullptr;
-    QLabel* colorSwatch_ = nullptr;
+    ColorSwatchWidget* colorSwatch_ = nullptr;
     QColor color_;
     QRadioButton* inside_ = nullptr;
     QRadioButton* center_ = nullptr;

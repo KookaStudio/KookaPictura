@@ -25,6 +25,7 @@
 #include "panels/panel_column_internal.h"
 #include "panels/panel_group.h"
 #include "panels/properties_panel.h"
+#include "theme.h"
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/vector_masks.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/shapes.cxxqt.h"
@@ -376,7 +377,10 @@ void CommandTreeTest::toolboxInteractions()
     QMenu* flyout = toolbox->slotMenuForTest(2);
     QVERIFY(flyout != nullptr);
     QVERIFY(flyout->isVisible());
-    QVERIFY(!flyout->styleSheet().isEmpty());
+    QCOMPARE(flyout->objectName(), QStringLiteral("toolFlyoutMenu"));
+    QVERIFY2(pictura::Theme::styleSheet(pictura::Theme::kDefaultLevel)
+                 .contains(QStringLiteral("QMenu#toolFlyoutMenu::item")),
+             "the flyout's icon margin styling lives in the global stylesheet");
     QToolButton* button2 = toolbox->slotButtons().value(1);
     QVERIFY(button2 != nullptr);
     const QPoint btnTopLeft = button2->mapToGlobal(QPoint(0, 0));

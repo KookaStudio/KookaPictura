@@ -1,6 +1,7 @@
 #include "stroke_dialog.h"
 
 #include "color_picker_dialog.h"
+#include "panels/color_swatch_widget.h"
 
 #include <QtCore/QEvent>
 #include <QtWidgets/QButtonGroup>
@@ -44,7 +45,7 @@ StrokeDialog::StrokeDialog(const QColor& initial, QWidget* parent)
     colorLabel->setFixedWidth(50);
     colorLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     colorRow->addWidget(colorLabel);
-    colorSwatch_ = new QLabel(strokeGroup);
+    colorSwatch_ = new ColorSwatchWidget(strokeGroup);
     colorSwatch_->setObjectName(QStringLiteral("strokeColor"));
     colorSwatch_->setFixedSize(40, 24);
     colorSwatch_->setCursor(Qt::PointingHandCursor);
@@ -157,8 +158,7 @@ void StrokeDialog::openColorPicker()
 
 void StrokeDialog::updateColorSwatch()
 {
-    colorSwatch_->setStyleSheet(
-        QStringLiteral("background-color: %1; border: 1px solid #555;").arg(color_.name()));
+    colorSwatch_->setColor(color_);
 }
 
 bool StrokeDialog::eventFilter(QObject* obj, QEvent* event)

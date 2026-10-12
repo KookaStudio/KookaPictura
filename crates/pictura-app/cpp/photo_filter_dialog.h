@@ -4,7 +4,7 @@
 
 class QComboBox;
 class QRadioButton;
-class QToolButton;
+class ColorSwatchWidget;
 
 namespace pictura {
 
@@ -32,7 +32,7 @@ private:
     QRadioButton* useFilter_ = nullptr;
     QRadioButton* useColor_ = nullptr;
     QComboBox* filter_ = nullptr;
-    QToolButton* color_ = nullptr;
+    ColorSwatchWidget* color_ = nullptr;
 };
 
 } // namespace pictura

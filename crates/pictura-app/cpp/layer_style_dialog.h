@@ -24,6 +24,7 @@ class QStackedWidget;
 
 namespace pictura {
 
+class ColorSwatchWidget;
 class PictureView;
 
 class LayerStyleDialog : public QDialog {
@@ -82,7 +83,7 @@ private:
     void bindCheck(QCheckBox* box, const QString& key);
     void bindChoice(QComboBox* combo, const QString& key);
     void bindBlendMode(QComboBox* combo, const QString& key);
-    void bindColor(QPushButton* button, const QString& key);
+    void bindColor(ColorSwatchWidget* button, const QString& key);
     QWidget* colorButton(const QString& key);
     // CS6's slider-and-number pair on one setting.
     QWidget* sliderRow(const QString& key, int min, int max, const QString& suffix);

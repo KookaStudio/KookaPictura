@@ -1,9 +1,19 @@
 #pragma once
 
 #include <QtCore/QString>
+#include <QtCore/QVector>
 #include <QtGui/QColor>
 
 namespace pictura {
+
+// One named theme token: a stylesheet substitution key with its value. Colours
+// are `#rrggbb`; metrics are decimal strings. `Theme::tokens` is the single
+// source shared by the stylesheet builder, the `--dump-theme` JSON, and tests.
+struct ThemeToken {
+    QString key;
+    QString value;
+    bool color = false;
+};
 
 // Single source of truth for the application theme. Applies the Fusion style
 // and a dark QPalette for one of four brightness levels (0 darkest .. 3
@@ -32,6 +42,11 @@ public:
 
     // Clamp a level into [0, kLevelCount).
     static int clampLevel(int level);
+
+    // The named tokens of `level`: every colour the stylesheet substitutes
+    // (including the derived shades) and every shared metric. The stylesheet
+    // builder and the `--dump-theme` JSON both consume this list.
+    static QVector<ThemeToken> tokens(int level);
 
     // CS6-style chrome QSS for `level`.
     static QString styleSheet(int level);

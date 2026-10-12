@@ -6,6 +6,7 @@
 #include "panels/numeric_field.h"
 #include "options_bar.h"
 #include "selftest_paint_fixture.h"
+#include "theme.h"
 
 #include <QtGui/QPainter>
 #include <QtWidgets/QCheckBox>
@@ -319,9 +320,11 @@ void RetouchToolsTest::brushTipBarIsCompact()
     auto* peer = page->findChild<QComboBox*>(QStringLiteral("optionsBlurMode"));
     QVERIFY(tip && peer);
 
-    QVERIFY2(tip->styleSheet().contains(QStringLiteral("padding: 0"))
-                 && tip->styleSheet().contains(QStringLiteral("border: 0")),
-             "brush tip is idle-less");
+    QCOMPARE(tip->objectName(), QStringLiteral("optionsBrushTip"));
+    const QString tipQss = pictura::Theme::styleSheet(pictura::Theme::kDefaultLevel);
+    QVERIFY2(tipQss.contains(QStringLiteral("QToolButton#optionsBrushTip:!hover:!pressed"))
+                 && tipQss.contains(QStringLiteral("padding: 0")),
+             "brush tip is idle-less in the global stylesheet");
     QCOMPARE(tip->toolButtonStyle(), Qt::ToolButtonTextBesideIcon);
     QVERIFY2(tip->sizeHint().height() <= tip->iconSize().height() + 8,
              "tip is one row, not icon over text");

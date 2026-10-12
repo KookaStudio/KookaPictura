@@ -26,7 +26,6 @@ void PanelColumn::showWorkspaceEdgeIndicator(bool left)
         edgeIndicator_ = new QWidget(frame);
         edgeIndicator_->setObjectName(QStringLiteral("panelColumnEdgeIndicator"));
         edgeIndicator_->setAttribute(Qt::WA_TransparentForMouseEvents);
-        edgeIndicator_->setStyleSheet(QStringLiteral("background-color:#2a7fff;"));
     }
     const QRect centralRect(central->mapToGlobal(QPoint(0, 0)), central->size());
     const int globalX = left ? centralRect.left() : centralRect.right() - 2;
@@ -50,7 +49,6 @@ void PanelColumn::showColumnEdgeIndicator(bool left)
         edgeIndicator_ = new QWidget(frame);
         edgeIndicator_->setObjectName(QStringLiteral("panelColumnEdgeIndicator"));
         edgeIndicator_->setAttribute(Qt::WA_TransparentForMouseEvents);
-        edgeIndicator_->setStyleSheet(QStringLiteral("background-color:#2a7fff;"));
     }
     const QRect selfRect(mapToGlobal(QPoint(0, 0)), size());
     const int globalX = left ? selfRect.left() : selfRect.right() - 2;

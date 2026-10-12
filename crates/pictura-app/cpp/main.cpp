@@ -2,6 +2,7 @@
 #include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QJsonArray>
+#include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 #include <QtCore/QProcessEnvironment>
 #include <QtCore/QSet>
@@ -67,10 +68,12 @@ int main(int argc, char* argv[])
     bool headlessArg = false;
     for (int i = 1; i < argc; ++i) {
         selfTestArg = selfTestArg || std::strcmp(argv[i], "--self-test") == 0;
-        headlessArg = headlessArg || std::strcmp(argv[i], "--headless") == 0;
+        headlessArg = headlessArg || std::strcmp(argv[i], "--headless") == 0
+            || std::strcmp(argv[i], "--dump-theme") == 0;
     }
-    // A headless run must not need X or Wayland; --headless wins over the
-    // self-test xcb routing below because it sets the variable that guard checks.
+    // A headless or theme-dump run must not need X or Wayland; --headless wins
+    // over the self-test xcb routing below because it sets the variable that
+    // guard checks.
     if (headlessArg && !qEnvironmentVariableIsSet("QT_QPA_PLATFORM")) {
         qputenv("QT_QPA_PLATFORM", "offscreen");
     }
@@ -106,6 +109,7 @@ int main(int argc, char* argv[])
     bool interopProbe = false;
     bool headless = false;
     bool control = false;
+    bool dumpTheme = false;
     QString psdPath;
     QString controlSocket;
     QString stateHome;
@@ -116,6 +120,8 @@ int main(int argc, char* argv[])
             interopProbe = true;
         } else if (args.at(i) == QStringLiteral("--headless")) {
             headless = true;
+        } else if (args.at(i) == QStringLiteral("--dump-theme")) {
+            dumpTheme = true;
         } else if (args.at(i) == QStringLiteral("--control")) {
             control = true;
         } else if (args.at(i) == QStringLiteral("--control-socket") && i + 1 < args.size()) {
@@ -125,6 +131,32 @@ int main(int argc, char* argv[])
         } else if (!args.at(i).startsWith(QLatin1Char('-'))) {
             psdPath = args.at(i);
         }
+    }
+
+    // The theme dump is a machine-readable read of the token contract; it needs
+    // no window, session store, or document.
+    if (dumpTheme) {
+        QJsonObject root;
+        root.insert(QStringLiteral("defaultLevel"), pictura::Theme::kDefaultLevel);
+        root.insert(QStringLiteral("levelCount"), pictura::Theme::kLevelCount);
+        QJsonArray levels;
+        for (int level = 0; level < pictura::Theme::kLevelCount; ++level) {
+            QJsonObject colors;
+            QJsonObject metrics;
+            for (const pictura::ThemeToken& token : pictura::Theme::tokens(level)) {
+                (token.color ? colors : metrics).insert(token.key, token.value);
+            }
+            QJsonObject entry;
+            entry.insert(QStringLiteral("level"), level);
+            entry.insert(QStringLiteral("colors"), colors);
+            entry.insert(QStringLiteral("metrics"), metrics);
+            levels.append(entry);
+        }
+        root.insert(QStringLiteral("levels"), levels);
+        const QByteArray json = QJsonDocument(root).toJson(QJsonDocument::Indented);
+        std::fwrite(json.constData(), 1, static_cast<std::size_t>(json.size()), stdout);
+        std::fflush(stdout);
+        return 0;
     }
 
     // A bare --headless run has nothing to show and no way to quit; run the

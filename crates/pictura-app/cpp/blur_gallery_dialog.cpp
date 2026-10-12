@@ -236,7 +236,7 @@ QWidget* BlurGalleryDialog::buildOptionsBar()
     row->setSpacing(6);
 
     auto* title = new QLabel(QStringLiteral("Blur Gallery"), bar);
-    title->setStyleSheet(QStringLiteral("font-weight: 700;"));
+    title->setObjectName(QStringLiteral("dialogTitle"));
     row->addWidget(title);
     row->addSpacing(12);
     auto* hint = new QLabel(
@@ -354,7 +354,7 @@ QWidget* BlurGalleryDialog::buildBlurToolsPanel()
     layout->setSpacing(3);
 
     auto* tab = new QLabel(QStringLiteral("Blur Tools"), panel);
-    tab->setStyleSheet(QStringLiteral("font-weight: 700; padding: 3px 0;"));
+    tab->setObjectName(QStringLiteral("sectionTabLabel"));
     layout->addWidget(tab);
 
     const struct {
@@ -433,7 +433,7 @@ QWidget* BlurGalleryDialog::buildBokehTab()
 
     auto* row = new QHBoxLayout;
     auto* name = new QLabel(QStringLiteral("Bokeh"), tab);
-    name->setStyleSheet(QStringLiteral("font-weight: 700;"));
+    name->setObjectName(QStringLiteral("sectionTitle"));
     bokehEnabled_ = new QCheckBox(tab);
     bokehEnabled_->setObjectName(QStringLiteral("bokehEnabled"));
     bokehEnabled_->setChecked(true);

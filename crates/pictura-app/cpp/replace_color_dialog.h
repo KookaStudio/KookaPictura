@@ -17,6 +17,7 @@ class QToolButton;
 
 namespace pictura {
 
+class ColorSwatchWidget;
 class ImageView;
 class PictureView;
 class ToolController;
@@ -85,8 +86,8 @@ private:
     QSpinBox* fuzziness_ = nullptr;
     QSlider* fuzzinessSlider_ = nullptr;
     QCheckBox* localized_ = nullptr;
-    QLabel* colorSwatch_ = nullptr;
-    QToolButton* resultSwatch_ = nullptr;
+    ColorSwatchWidget* colorSwatch_ = nullptr;
+    ColorSwatchWidget* resultSwatch_ = nullptr;
     QLabel* maskLabel_ = nullptr;
     QRadioButton* selectionButton_ = nullptr;
     QRadioButton* imageButton_ = nullptr;

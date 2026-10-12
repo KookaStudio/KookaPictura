@@ -22,6 +22,8 @@ class QWidget;
 
 namespace pictura {
 
+class ColorSwatchWidget;
+
 class FilterParamControls : public QObject {
     Q_OBJECT
 
@@ -61,7 +63,7 @@ private:
         QSlider* slider = nullptr;
         QComboBox* combo = nullptr;
         QCheckBox* box = nullptr;
-        QPushButton* colorButton = nullptr;
+        ColorSwatchWidget* colorButton = nullptr;
         QDoubleSpinBox* x = nullptr;
         QDoubleSpinBox* y = nullptr;
         QWidget* pad = nullptr;    // Placement crosshair pad

@@ -1,6 +1,7 @@
 #include "color_panel.h"
 
 #include "color_picker_dialog.h"
+#include "panels/color_swatch_widget.h"
 
 #include <QtCore/QSignalBlocker>
 #include <QtWidgets/QHBoxLayout>
@@ -52,8 +53,8 @@ ColorPanel::ColorPanel(ColorState* state, QWidget* parent)
     // Foreground/background swatches: clicking one makes it the active colour
     // the field edits.
     auto* swatchRow = new QHBoxLayout();
-    fgSwatch_ = new QPushButton(this);
-    bgSwatch_ = new QPushButton(this);
+    fgSwatch_ = new ColorSwatchWidget(this);
+    bgSwatch_ = new ColorSwatchWidget(this);
     fgSwatch_->setFixedSize(44, 26);
     bgSwatch_->setFixedSize(44, 26);
     fgSwatch_->setFlat(true);
@@ -139,15 +140,10 @@ void ColorPanel::syncControls()
     paintSwatch(bgSwatch_, state_->background(), !state_->foregroundActive());
 }
 
-void ColorPanel::paintSwatch(QPushButton* button, const QColor& color, bool active)
+void ColorPanel::paintSwatch(ColorSwatchWidget* button, const QColor& color, bool active)
 {
-    const int border = active ? 2 : 1;
-    const QColor borderColor = active ? QColor(Qt::black) : QColor(120, 120, 120);
-    button->setStyleSheet(QStringLiteral(
-                              "QPushButton { background-color: %1; border: %2px solid %3; }")
-                              .arg(color.name())
-                              .arg(border)
-                              .arg(borderColor.name()));
+    button->setColor(color);
+    button->setActive(active);
 }
 
 } // namespace pictura

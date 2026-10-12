@@ -1,6 +1,7 @@
 #include "photo_filter_dialog.h"
 
 #include "color_picker_dialog.h"
+#include "panels/color_swatch_widget.h"
 
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
@@ -11,7 +12,7 @@
 #include <QtWidgets/QRadioButton>
 #include <QtWidgets/QSlider>
 #include <QtWidgets/QSpinBox>
-#include <QtWidgets/QToolButton>
+#include <QtWidgets/QPushButton>
 #include <QtWidgets/QVBoxLayout>
 
 namespace pictura {
@@ -120,7 +121,7 @@ PhotoFilterDialog::PhotoFilterDialog(PictureView* view, const QByteArray& block,
         useFilter_->setChecked(true);
         applySource();
     });
-    connect(color_, &QToolButton::clicked, this, [this]() {
+    connect(color_, &QPushButton::clicked, this, [this]() {
         const QColor picked = ColorPickerDialog::getColor(
             color_->property("color").value<QColor>(), this, QStringLiteral("Photo Filter Color"));
         if (picked.isValid()) {

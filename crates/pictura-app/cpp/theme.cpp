@@ -76,6 +76,8 @@ struct Ramp {
     QColor toolTipText;
     QColor link;
     QColor disabledText;
+    // The drop/insertion accent (CS6's #2a7fff), constant across levels.
+    QColor accent;
     // Surfaces. Level 1 holds the explicit CS6 dark swatches; the other levels
     // derive from them by shifting every surface with `shade(level - 1)`.
     QColor window;
@@ -108,6 +110,7 @@ const Ramp kLevel1Ramp = {
     QColor(232, 232, 232),    // toolTipText
     QColor(111, 168, 220),    // link
     QColor(104, 104, 104),    // disabledText
+    QColor(0x2a, 0x7f, 0xff), // accent
     QColor(0x36, 0x36, 0x36), // window
     QColor(0x4d, 0x4d, 0x4d), // panel
     QColor(0x4d, 0x4d, 0x4d), // activeTab
@@ -155,6 +158,9 @@ QPalette paletteFor(const Ramp& ramp)
     pal.setColor(QPalette::Text, ramp.text);
     pal.setColor(QPalette::Button, ramp.button);
     pal.setColor(QPalette::ButtonText, ramp.buttonText);
+    pal.setColor(QPalette::Mid, ramp.buttonBorder);
+    pal.setColor(QPalette::Dark, ramp.border);
+    pal.setColor(QPalette::Shadow, ramp.border);
     pal.setColor(QPalette::Highlight, ramp.highlight);
     pal.setColor(QPalette::HighlightedText, ramp.highlightedText);
     pal.setColor(QPalette::ToolTipBase, ramp.toolTipBase);
@@ -166,54 +172,10 @@ QPalette paletteFor(const Ramp& ramp)
     return pal;
 }
 
-struct ColorToken {
-    const char* key;
-    QColor color;
-};
-
 // The stylesheet only re-colours surfaces; the CS6 dark swatches are explicit
 // in `kLevel1Ramp` and shifted per brightness level by `rampFor`.
-QString styleSheetFor(const Ramp& ramp)
+QString styleSheetFor(const QVector<ThemeToken>& tokens)
 {
-    const ColorToken tokens[] = {
-        {"${window}", ramp.window},
-        {"${windowText}", ramp.windowText},
-        {"${text}", ramp.text},
-        {"${button}", ramp.button},
-        {"${buttonText}", ramp.buttonText},
-        {"${highlight}", ramp.highlight},
-        {"${highlightedText}", ramp.highlightedText},
-        {"${toolTipBase}", ramp.toolTipBase},
-        {"${toolTipText}", ramp.toolTipText},
-        {"${link}", ramp.link},
-        {"${disabledText}", ramp.disabledText},
-        {"${menuDisabledText}", Theme::shade(ramp.disabledText, 1)},
-        {"${border}", ramp.border},
-        {"${separator}", ramp.separator},
-        {"${separatorLight}", Theme::shade(ramp.separator, 1)},
-        {"${tableBg}", ramp.tableBg},
-        {"${alternateTableBg}", Theme::shade(ramp.tableBg, 1)},
-        {"${inputBg}", ramp.inputBg},
-        {"${inputBorder}", ramp.inputBorder},
-        {"${buttonBorder}", ramp.buttonBorder},
-        {"${buttonPressed}", ramp.buttonPressed},
-        {"${panel}", ramp.panel},
-        {"${activeTab}", ramp.activeTab},
-        {"${workspace}", ramp.workspace},
-        {"${panelHeader}", ramp.panelHeader},
-        {"${hover}", ramp.hover},
-        {"${pressed}", ramp.iconPressed},
-        {"${iconHover}", ramp.iconHover},
-        {"${iconHoverBorder}", ramp.iconHoverBorder},
-        {"${iconPressed}", ramp.iconPressed},
-        {"${panelHeaderBorder}", Theme::shade(ramp.panelHeader, -1)},
-        // The track matches the document tab strip; the thumb is a visible
-        // step lighter at rest and brightens on hover.
-        {"${scrollbar}", ramp.panelHeader},
-        {"${scrollbarThumb}", ramp.buttonBorder},
-        {"${scrollbarThumbHover}", Theme::shade(ramp.buttonBorder, 1)},
-    };
-
     QString qss = QStringLiteral(R"(
 QMainWindow { background: ${panel}; }
 QMainWindow::separator { background: ${border}; width: 3px; height: 3px; }
@@ -230,8 +192,8 @@ QMenu::item:disabled { color: ${menuDisabledText}; }
 QMenu::separator { background: ${separator}; height: 1px; margin: 4px 6px; }
 
 QToolBar { background: ${panel}; color: ${windowText}; border: 0; spacing: 2px; padding: 2px; }
-QToolBar::separator { background: ${border}; width: ${chromeWidth}px; margin: 3px 2px; }
-QToolBar#optionsBar { border-bottom: ${borderWidth}px solid ${border}; border-top: 1px solid ${separator}; padding-right: 8px; }
+QToolBar::separator { background: ${border}; width: ${chromeBorderWidth}px; margin: 3px 2px; }
+QToolBar#optionsBar { border-bottom: ${panelBorderWidth}px solid ${border}; border-top: 1px solid ${separator}; padding-right: 8px; }
 QFrame#optionsToolSeparator { background: ${separatorLight}; border: 0; }
 
 QToolButton { background: transparent; color: ${buttonText}; border: 1px solid transparent; border-radius: 3px; padding: 3px; }
@@ -239,6 +201,7 @@ QToolButton:hover { background: ${iconHover}; border-color: ${iconHoverBorder}; 
 QToolButton:pressed { background: ${iconPressed}; border-color: ${iconHoverBorder}; }
 QToolButton:checked { background: ${iconPressed}; border-color: ${iconHoverBorder}; color: ${buttonText}; }
 QToolButton:disabled { color: ${disabledText}; }
+QToolButton:focus { border-color: ${highlight}; }
 /* Tool slots sit flush on the toolbar at rest; only hover/press/active differ. */
 QToolButton#toolSlotButton { background: transparent; border: 1px solid transparent; border-radius: 3px; }
 QToolButton#toolSlotButton:hover { background: ${iconHover}; border-color: ${iconHoverBorder}; }
@@ -262,7 +225,7 @@ QTabBar::tab:disabled { color: ${disabledText}; }
    than the tabs. The document tab bar keeps the unscoped `QTabBar::tab` rules
    above. */
 QTabBar#panelTabBar { background: ${panelHeader}; }
-QTabBar#panelTabBar::tab { background: ${panelHeader}; color: ${windowText}; border: ${borderWidth}px solid ${border}; border-bottom: 0; padding: 4px 8px; margin-right: 1px; font-size: ${tabFontSize}px; font-weight: 700; }
+QTabBar#panelTabBar::tab { background: ${panelHeader}; color: ${windowText}; border: ${panelBorderWidth}px solid ${border}; border-bottom: 0; padding: 4px 8px; margin-right: 1px; font-size: ${tabFontSize}px; font-weight: 700; }
 QTabBar#panelTabBar::tab:hover { background: ${hover}; }
 QTabBar#panelTabBar::tab:selected { background: ${panel}; color: ${windowText}; }
 
@@ -283,8 +246,8 @@ QWidget#panelWidgetCorner QToolButton::menu-indicator { image: none; width: 0; }
 QWidget#panelWidgetCorner QToolButton:hover { background: ${hover}; }
 QWidget#panelWidgetCorner QToolButton:pressed { background: ${pressed}; }
 
-QTabWidget::pane { border: ${borderWidth}px solid ${border}; background: ${workspace}; }
-QTabWidget#panelGroupTabs { border: ${borderWidth}px solid ${border}; }
+QTabWidget::pane { border: ${panelBorderWidth}px solid ${border}; background: ${workspace}; }
+QTabWidget#panelGroupTabs { border: ${panelBorderWidth}px solid ${border}; }
 QTabWidget#panelGroupTabs::pane { border: 0; background: ${panel}; }
 QTabWidget#panelGroupTabs QStackedWidget { background: ${panel}; }
 QTabWidget#documentTabs::pane { border: 0; }
@@ -297,8 +260,8 @@ QTabBar#documentTabBar::close-button:hover { background: ${hover}; }
 QTabBar#documentTabBar::close-button:pressed { background: ${hover}; }
 /* Columns keep their side rules only; the top and bottom edges are open, and
    the header carries no rule of its own. */
-QWidget#panelColumnContainer { border: 0; border-left: ${borderWidth}px solid ${separator}; border-right: ${borderWidth}px solid ${separator}; border-bottom: ${borderWidth}px solid ${separator}; background: ${panel}; }
-QWidget#toolsColumn { border: 0; border-left: ${borderWidth}px solid ${separator}; border-right: ${borderWidth}px solid ${separator}; border-bottom: ${borderWidth}px solid ${separator}; background: ${panel}; }
+QWidget#panelColumnContainer { border: 0; border-left: ${panelBorderWidth}px solid ${separator}; border-right: ${panelBorderWidth}px solid ${separator}; border-bottom: ${panelBorderWidth}px solid ${separator}; background: ${panel}; }
+QWidget#toolsColumn { border: 0; border-left: ${panelBorderWidth}px solid ${separator}; border-right: ${panelBorderWidth}px solid ${separator}; border-bottom: ${panelBorderWidth}px solid ${separator}; background: ${panel}; }
 /* The central band's 1 px inner frame line; the outer 2 px is the window
    `${panel}`. The outermost column's frame-side border is suppressed so the
    band edge reads as exactly 2 px panel + 1 px border. */
@@ -310,8 +273,8 @@ QWidget#panelColumnHeader { background: ${panelHeader}; border: 0; border-bottom
    draw its own side rule (that would double the column border). */
 QWidget#panelColumnIconStrip { border: 0; background: ${panel}; }
 QWidget#toolsPanel { background: ${panel}; border: 0; }
-QWidget#panelIconFlyout { background: ${panel}; border: ${borderWidth}px solid ${border}; }
-QWidget#panelFloat { background: ${panel}; border: ${borderWidth}px solid ${border}; }
+QWidget#panelIconFlyout { background: ${panel}; border: ${panelBorderWidth}px solid ${border}; }
+QWidget#panelFloat { background: ${panel}; border: ${panelBorderWidth}px solid ${border}; }
 
 /* Info panel readout grid: only the inner cross of the 2x2 table is drawn, in
    the frame shade; the outer edge is the panel pane itself. The blocks flag
@@ -347,18 +310,21 @@ QToolTip { background: ${toolTipBase}; color: ${toolTipText}; border: 1px solid 
 
 QListView, QTreeView, QTableView { background: ${tableBg}; color: ${text}; border: 1px solid ${separator}; alternate-background-color: ${alternateTableBg}; selection-background-color: ${highlight}; selection-color: ${highlightedText}; }
 QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QPlainTextEdit { background: ${inputBg}; color: ${text}; border: 1px solid ${inputBorder}; border-radius: 2px; padding: 1px 2px; }
-QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled, QComboBox:disabled, QPlainTextEdit:disabled { color: ${disabledText}; }
+QLineEdit:hover, QSpinBox:hover, QDoubleSpinBox:hover, QComboBox:hover, QPlainTextEdit:hover { border-color: ${inputBorder}; }
+QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus, QPlainTextEdit:focus { border-color: ${highlight}; }
+QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled, QComboBox:disabled, QPlainTextEdit:disabled { color: ${disabledText}; border-color: ${border}; }
+QComboBox::drop-down { background: transparent; border: 0; width: 16px; }
 QComboBox QAbstractItemView { background: ${panel}; color: ${text}; border: 1px solid ${border}; selection-background-color: ${highlight}; selection-color: ${highlightedText}; }
 
-QWidget#percentField QLineEdit { background: ${inputBg}; color: ${text}; border: 1px solid ${inputBorder}; border-radius: 2px; padding: 1px 2px; }
-QWidget#percentField QLineEdit:disabled { color: ${disabledText}; }
-QWidget#percentField QToolButton { background: transparent; color: ${buttonText}; border: 0; border-left: 1px solid ${border}; border-radius: 0; padding: 0 2px; }
-QWidget#percentField QToolButton:hover { background: ${hover}; }
-QWidget#percentField QToolButton:disabled { color: ${disabledText}; }
+QWidget#numericField, QWidget#percentField QLineEdit { background: ${inputBg}; color: ${text}; border: 1px solid ${inputBorder}; border-radius: 2px; padding: 1px 2px; }
+QWidget#numericField, QWidget#percentField QLineEdit:disabled { color: ${disabledText}; }
+QWidget#numericField, QWidget#percentField QToolButton { background: transparent; color: ${buttonText}; border: 0; border-left: 1px solid ${border}; border-radius: 0; padding: 0 2px; }
+QWidget#numericField, QWidget#percentField QToolButton:hover { background: ${hover}; }
+QWidget#numericField, QWidget#percentField QToolButton:disabled { color: ${disabledText}; }
 QTabWidget::tab-bar { alignment: left; }
 
-QWidget#percentField QSlider::groove:horizontal { height: 4px; background: ${border}; border-radius: 2px; }
-QWidget#percentField QSlider::handle:horizontal { width: 10px; margin: -4px 0; background: ${buttonText}; border-radius: 3px; }
+QWidget#numericField, QWidget#percentField QSlider::groove:horizontal { height: 4px; background: ${border}; border-radius: 2px; }
+QWidget#numericField, QWidget#percentField QSlider::handle:horizontal { width: 10px; margin: -4px 0; background: ${buttonText}; border-radius: 3px; }
 
 QWidget#layersFilterBar { background: ${panel}; border-bottom: 1px solid ${separator}; }
 QWidget#layersFilterBar QComboBox, QWidget#layersFilterBar QLineEdit { background: ${inputBg}; color: ${text}; border: 1px solid ${inputBorder}; border-radius: 2px; padding: 1px 2px; }
@@ -371,14 +337,52 @@ QWidget#layersFilterBar QToolButton#layersFilterToggle:checked { background: ${h
 QPushButton { background: ${button}; color: ${buttonText}; border: 1px solid ${buttonBorder}; border-radius: 3px; padding: 4px 10px; }
 QPushButton:hover { background: ${button}; border-color: ${buttonBorder}; }
 QPushButton:pressed { background: ${buttonPressed}; }
-QPushButton:disabled { color: ${disabledText}; }
+QPushButton:checked { background: ${buttonPressed}; border-color: ${inputBorder}; }
+QPushButton:focus { border-color: ${highlight}; }
+QPushButton:disabled { color: ${disabledText}; border-color: ${border}; }
+
+/* Design-system primitives: one global definition per standard control, every
+   value from a token. Object names scope the controls that need their own
+   surface; the rest are type rules. */
+QCheckBox { color: ${text}; spacing: 5px; }
+QCheckBox:disabled { color: ${disabledText}; }
+QCheckBox::indicator { width: 13px; height: 13px; border: 1px solid ${inputBorder}; border-radius: 2px; background: ${inputBg}; }
+QCheckBox::indicator:hover { border-color: ${highlight}; }
+QCheckBox::indicator:checked { background: ${highlight}; border-color: ${highlight}; }
+QCheckBox::indicator:checked:hover { background: ${link}; border-color: ${link}; }
+QCheckBox::indicator:disabled { border-color: ${border}; }
+QCheckBox::indicator:checked:disabled { background: ${disabledText}; border-color: ${disabledText}; }
+
+QSlider::groove:horizontal { height: 4px; background: ${border}; border-radius: 2px; }
+QSlider::handle:horizontal { width: 10px; margin: -4px 0; background: ${buttonText}; border-radius: 3px; }
+QSlider::handle:horizontal:hover { background: ${highlight}; }
+QSlider::groove:vertical { width: 4px; background: ${border}; border-radius: 2px; }
+QSlider::handle:vertical { height: 10px; margin: 0 -4px; background: ${buttonText}; border-radius: 3px; }
+QSlider::handle:vertical:hover { background: ${highlight}; }
+QSlider::handle:horizontal:disabled, QSlider::handle:vertical:disabled { background: ${disabledText}; }
+
+/* A colour swatch paints its data colour itself; the global rule only removes
+   the button chrome and the focus ring comes from the paint. */
+QPushButton#colorSwatch { background: transparent; border: 0; padding: 0; }
+
+/* Static surfaces that used to carry per-widget stylesheets. */
+QToolButton#optionsBrushTip:!hover:!pressed { background: transparent; border: 0; padding: 0; }
+QToolButton#gradientMapPresets::menu-indicator { image: none; width: 0; }
+QWidget#panelDropIndicator, QWidget#panelStripDropIndicator, QWidget#panelFloatDropIndicator,
+QWidget#panelColumnEdgeIndicator { background: ${accent}; }
+QWidget#panelOutlineIndicator { background: transparent; border: 2px solid ${accent}; border-radius: 6px; }
+QLabel#imageSizePreview { background: ${inputBg}; border: 1px solid ${inputBorder}; }
+QLabel#brushTipPreview { background: ${inputBg}; }
+QLabel#replaceColorMaskPreview { background: ${workspace}; border: 1px solid ${inputBorder}; }
+QListWidget#galleryEffects::indicator { width: 0; height: 0; }
+QMenu#toolFlyoutMenu::item { padding: 3px 18px 3px 24px; }
+QLabel#dialogTitle, QLabel#sectionTitle { font-weight: 700; }
+QLabel#sectionTabLabel { font-weight: 700; padding: 3px 0; }
 )");
 
-    for (const ColorToken& token : tokens) {
-        qss.replace(QLatin1String(token.key), token.color.name(QColor::HexRgb));
+    for (const ThemeToken& token : tokens) {
+        qss.replace(QStringLiteral("${") + token.key + QLatin1Char('}'), token.value);
     }
-    qss.replace(QStringLiteral("${borderWidth}"), QString::number(Theme::kPanelBorderWidth));
-    qss.replace(QStringLiteral("${chromeWidth}"), QString::number(Theme::kChromeBorderWidth));
     // Tab labels run 2 px under the app default; a point-sized default font
     // (pixelSize() < 0) falls back to 12 px (~9 pt) at 96 DPI.
     int baseFontPx = 12;
@@ -433,7 +437,63 @@ QColor Theme::panelColor()
 
 QString Theme::styleSheet(int level)
 {
-    return styleSheetFor(rampFor(clampLevel(level)));
+    return styleSheetFor(tokens(level));
+}
+
+QVector<ThemeToken> Theme::tokens(int level)
+{
+    const Ramp ramp = rampFor(clampLevel(level));
+    const auto color = [](const char* key, const QColor& value) {
+        return ThemeToken{QString::fromLatin1(key), value.name(QColor::HexRgb), true};
+    };
+    const auto metric = [](const char* key, int value) {
+        return ThemeToken{QString::fromLatin1(key), QString::number(value), false};
+    };
+    return {
+        color("window", ramp.window),
+        color("windowText", ramp.windowText),
+        color("text", ramp.text),
+        color("button", ramp.button),
+        color("buttonText", ramp.buttonText),
+        color("highlight", ramp.highlight),
+        color("highlightedText", ramp.highlightedText),
+        color("toolTipBase", ramp.toolTipBase),
+        color("toolTipText", ramp.toolTipText),
+        color("link", ramp.link),
+        color("disabledText", ramp.disabledText),
+        color("accent", ramp.accent),
+        color("menuDisabledText", shade(ramp.disabledText, 1)),
+        color("border", ramp.border),
+        color("separator", ramp.separator),
+        color("separatorLight", shade(ramp.separator, 1)),
+        color("tableBg", ramp.tableBg),
+        color("alternateTableBg", shade(ramp.tableBg, 1)),
+        color("inputBg", ramp.inputBg),
+        color("inputBorder", ramp.inputBorder),
+        color("buttonBorder", ramp.buttonBorder),
+        color("buttonPressed", ramp.buttonPressed),
+        color("panel", ramp.panel),
+        color("activeTab", ramp.activeTab),
+        color("workspace", ramp.workspace),
+        color("panelHeader", ramp.panelHeader),
+        color("hover", ramp.hover),
+        color("pressed", ramp.iconPressed),
+        color("iconHover", ramp.iconHover),
+        color("iconHoverBorder", ramp.iconHoverBorder),
+        color("iconPressed", ramp.iconPressed),
+        color("panelHeaderBorder", shade(ramp.panelHeader, -1)),
+        color("scrollbar", ramp.panelHeader),
+        color("scrollbarThumb", ramp.buttonBorder),
+        color("scrollbarThumbHover", shade(ramp.buttonBorder, 1)),
+        metric("panelBorderWidth", kPanelBorderWidth),
+        metric("chromeBorderWidth", kChromeBorderWidth),
+        metric("groupDividerWidth", kGroupDividerWidth),
+        metric("slotBaseW", kSlotBaseW),
+        metric("slotBaseH", kSlotBaseH),
+        metric("slotIconMaxW", kSlotIconMaxW),
+        metric("slotIconMaxH", kSlotIconMaxH),
+        metric("shadeStep", kShadeStep),
+    };
 }
 
 quint64 Theme::paletteGeneration()

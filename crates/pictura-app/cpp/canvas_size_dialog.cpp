@@ -2,6 +2,7 @@
 
 #include "color_picker_dialog.h"
 #include "image_size_dialog.h"
+#include "panels/color_swatch_widget.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h"
@@ -281,7 +282,7 @@ void CanvasSizeDialog::buildUi()
     extensionRow->addWidget(extension_, 1);
     // A button, not a readout: in CS6 the swatch opens the colour picker
     // whatever the menu says.
-    swatch_ = new QToolButton(this);
+    swatch_ = new ColorSwatchWidget(this);
     swatch_->setObjectName(QStringLiteral("canvasSizeSwatch"));
     swatch_->setFixedSize(24, 22);
     swatch_->setToolTip(QStringLiteral("Choose the canvas extension color"));
@@ -311,7 +312,7 @@ void CanvasSizeDialog::buildUi()
             [this](int unit) { changeUnit(height_, unit, heightUnitPrevious_, pixelHeight_); });
     connect(relative_, &QCheckBox::toggled, this, &CanvasSizeDialog::relativeToggled);
     connect(extension_, &QComboBox::currentIndexChanged, this, &CanvasSizeDialog::extensionChosen);
-    connect(swatch_, &QToolButton::clicked, this, &CanvasSizeDialog::pickExtensionColor);
+    connect(swatch_, &QPushButton::clicked, this, &CanvasSizeDialog::pickExtensionColor);
 
     {
         const QSignalBlocker bw(widthUnit_);
@@ -374,9 +375,7 @@ void CanvasSizeDialog::pickExtensionColor()
 
 void CanvasSizeDialog::updateSwatch()
 {
-    swatch_->setStyleSheet(QStringLiteral("QToolButton { background-color: %1; border: 1px solid "
-                                          "#000; }")
-                               .arg(extensionColor().name()));
+    swatch_->setColor(extensionColor());
 }
 
 void CanvasSizeDialog::updateSizes()

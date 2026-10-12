@@ -88,12 +88,6 @@ void OptionsBar::addBrushTipFields(QHBoxLayout* layout, QWidget* page)
 {
     auto* button = new QToolButton(page);
     button->setObjectName(QStringLiteral("optionsBrushTip"));
-    // ponytail: at rest this shared control is flat and compact so it sets
-    // neither the bar height nor an idle outline; the scoped selector stops
-    // matching while hovered/pressed so the global hover chrome still shows.
-    button->setStyleSheet(QStringLiteral(
-        "QToolButton#optionsBrushTip:!hover:!pressed { background: transparent; "
-        "border: 0; padding: 0; }"));
     button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     button->setIconSize(QSize(16, 16));
     button->setAutoRaise(true);
