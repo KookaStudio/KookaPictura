@@ -1,12 +1,47 @@
 # Blur Gallery (Photographic Blur Gallery)
 
 - **Spec ID:** `FILT-092`
-- **Status:** `Draft`
+- **Status:** `Partial` — Field Blur and the shared workspace are implemented
+  (see `## Implementation status`); Iris Blur and Tilt-Shift are not.
 - **Parity tier:** `Core` — the Blur Gallery shipped in CS6 Standard and Extended. **GPU/OpenCL-gated**: the three CS6 effects are OpenCL-accelerated and the Help's GPU FAQ ties them to an OpenCL-capable card.
 - **New in CS6:** `Yes` — CS6 introduces the **Blur Gallery** workspace with **Field Blur, Iris Blur, and Tilt-Shift** and a **Blur Effects** panel (Light Bokeh, Bokeh Color, Light Range). CS6's own Help and launch videos describe a **three-effect** gallery. **Path Blur, Spin Blur, Motion Blur Effects, Noise, and Edge Glow are post-CS6 (CC) additions** — see the clearly-marked subsection under `## CS6 behavior`. Smart-filter support is also CC-only.
 - **Depends on:** `FILT-001` filters-overview, `FILT-010` blur-filters (shares the blur-kernel vocabulary), `ARCH-006` gpu-rendering-pipeline, `ARCH-003` qt6-ui-design, `ARCH-007` color-management, `ARCH-009` undo-history, `LAY-021` smart-filters, `LAY-020` smart-objects, `IMG-005` bit-depth-and-conversion.
 
-> All module, widget, and type names below are **design proposals**. No code exists in this repository. Adobe's blur shaders are closed; the algorithm description is **behavioral parity only, algorithm TBD**. Facts come from the fetched CS6 Help PDF and the fetched **CS6-era** Adobe Help snapshot unless marked *(inferred)* or explicitly labelled **post-CS6**.
+> All module, widget, and type names below are **design proposals** unless the
+> `## Implementation status` section names them as shipped. Adobe's blur
+> shaders are closed; the algorithm description is **behavioral parity only,
+> algorithm TBD**. Facts come from the fetched CS6 Help PDF and the fetched
+> **CS6-era** Adobe Help snapshot unless marked *(inferred)* or explicitly
+> labelled **post-CS6**.
+
+## Implementation status
+
+Field Blur and the shared Blur Gallery workspace are implemented; Iris Blur
+and Tilt-Shift are not.
+
+- **Engine.** `pictura_filters::blur::field` (`BlurPin { x, y, blur }`,
+  `field_blur`, `MAX_FIELD_RADIUS = 500`, `MAX_FIELD_PINS = 16`): each pixel's
+  radius is the inverse-square-distance weighted average of the pin amounts,
+  and the variable blur linearly blends the two bracketing levels of a
+  box-blur pyramid. The field weights and the pyramid are approximations of
+  the `(inferred)` model above — the doc's disc/bokeh gather is not
+  implemented (a per-pixel disc gather cannot drive a live pin drag).
+- **App.** `Filter ▸ Blur Gallery ▸ Field Blur…` opens `BlurGalleryDialog`
+  (with `BlurGalleryCanvas`): a document proxy with draggable pins (click
+  adds, drag moves, the pin's ring changes its amount, Delete removes, `H`
+  hides the UI), the Blur Tools panel with the selected pin's Blur
+  (`0..=500 px`) and disabled Iris Blur / Tilt-Shift rows, Preview / Cancel /
+  OK, and one history state on commit. The `Blur Gallery` submenu also lists
+  disabled `Iris Blur…`, `Tilt-Shift…`, `Path Blur…`, and `Spin Blur…` stubs;
+  its placement follows the later Photoshop menu (the owner's screenshot)
+  rather than CS6's `Filter ▸ Blur` listing. Last Filter / Last Filter
+  Settings reuse the pin list. The `field-blur` kind takes
+  `[count, x, y, blur, …]`.
+- **Ceilings.** The Blur Effects panel (Light Bokeh, Bokeh Color, Light
+  Range) and the `M` mask view are not shipped; pins are fractions of the
+  document proxy while the commit filters the active layer, so a layer that
+  does not cover the document previews approximately; no GPU path; Path Blur
+  and Spin Blur stay post-CS6 non-goals.
 
 ## CS6 behavior
 

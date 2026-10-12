@@ -13,13 +13,13 @@ Snapshot for resuming after a context break. Update after each milestone.
 - Toolchain: Rust 1.98 (`rust-toolchain.toml`), system Qt **6.11.1**, cxx-qt
   **0.10.0**, wgpu **30.0.1**, lcms2 **6.2.0** (system Little CMS 2.19).
 - Oracles installed for tests: `psd-tools` 1.19, ImageMagick 7.1.2, `magick`.
-- Test suite: **2940 tests, 2939 passed, 20 skipped, 1 failed** from
+- Test suite: **2958 tests, 2957 passed, 20 skipped, 1 failed** from
   `cargo nextest run --workspace` — the failure is the local ImageMagick
   fixture mismatch (`imagemagick_fixtures_reproduce`: 7.1.2-27 here vs the
   CI-pinned 7.1.2-29; it fails on `master` too). The C++ self-test reports
   **474 passed, 0 failed, 0 skipped** standalone; the unified report
   (`scripts/verify-fast.sh`, which reruns both plus the workspace probes and the
-  Qt Test suites) reports **3944 passed, 21 skipped, 1 failed** (the same
+  Qt Test suites) reports **3977 passed, 21 skipped, 1 failed** (the same
   fixture check).
 - **Large images** (#185, branch `perf/185-large-image-boundaries`, PR #257,
   OpenSpec change `large-image-stroke-boundaries`, numbers in its `design.md`):
@@ -356,6 +356,39 @@ Snapshot for resuming after a context break. Update after each milestone.
   `openspec validate --all --strict` 232/232; the unified report is 3944
   passed · 21 skipped · 1 failed, the one failure the pre-existing local
   ImageMagick fixture mismatch noted above.
+- **Field Blur** (change `field-blur-gallery`, issue #340): the Blur Gallery's
+  first effect and its shared workspace shell. `pictura-filters::blur::field`
+  (`BlurPin { x, y, blur }`, `field_blur`, `MAX_FIELD_RADIUS` 500,
+  `MAX_FIELD_PINS` 16) builds a per-pixel radius field from
+  inverse-square-distance pin weights (pins may sit outside the image) and
+  blends the two bracketing levels of a box-blur pyramid, so a live pin drag
+  stays fast; it is deterministic, validates before mutating, joins the
+  moving-kernel alpha allowlist, and returns the largest pin amount as its
+  preview apron. The `field-blur` kind is a variable slot list
+  (`count, x, y, blur, …`; the arity table's canonical is one centred pin),
+  and `Filter ▸ Blur Gallery ▸ Field Blur…` (the later Photoshop submenu,
+  with disabled `Iris Blur…` / `Tilt-Shift…` / `Path Blur…` / `Spin Blur…`
+  stubs) opens `BlurGalleryDialog` +
+  `BlurGalleryCanvas`: a document proxy with pins (click adds, drag moves, the
+  pin's ring changes its amount, Delete removes, `H` hides the overlay), a
+  Blur Tools panel (the selected pin's Blur 0–500 px, plus disabled Iris Blur
+  / Tilt-Shift rows), Preview / Cancel / OK, and one `"Filter"` state on
+  commit; Last Filter / Last Filter Settings reuse the pin list. #341/#342
+  reuse the shell. Tests: engine units + a kernel digest + a no-equivalent
+  oracle row, `filter_map_tests`, `tst_filter_menu`'s new row, and
+  `tst_blur_gallery_dialog`. Ceilings (`ponytail:`): the doc's disc/bokeh
+  gather is approximated by the box pyramid (highlights blur softly, not
+  disc-shaped); the Blur Effects panel (Light Bokeh / Bokeh Color / Light
+  Range) and the `M` mask view are not shipped; the preview is a document
+  proxy on the dialog's own canvas, and pins normalize to the document while
+  the commit normalizes to the active layer, so a layer that does not cover
+  the document previews approximately; no GPU. Verified:
+  `TASK_ALLOWS_DOCS=1 bash scripts/verify-full.sh` builds and passes fmt,
+  clippy, file-size, selftest-budget, icon provenance, guard, and control;
+  `openspec validate --all --strict` 236/236; the unified report is 3977
+  passed · 21 skipped · 1 failed, the one failure the pre-existing local
+  ImageMagick fixture mismatch noted above (nextest 2957/1/20, app self-test
+  510, Qt 510).
 - **Lighting Effects workspace** (change `lighting-effects-workspace`, issue
   #225): `render::lighting_effects` (now `render/lighting.rs`) shades a CS6 rig
   of 1–16 Spot / Point / Infinite lights with photorust's model. A Spot is an

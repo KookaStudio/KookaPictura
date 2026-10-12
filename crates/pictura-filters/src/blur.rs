@@ -4,6 +4,7 @@
 //! Planar 8-bit buffers (channels 3 or 4); only the color planes are touched,
 //! alpha is never modified. Borders clamp-to-edge per `FILT-010`.
 
+pub mod field;
 pub mod lens;
 
 use pictura_core::PixelBuffer;

@@ -55,6 +55,7 @@ private slots:
     void lastFilterDisabledBeforeFirstCommit();
     void implementedEntriesAreEnabled();
     void stubEntriesStayDisabled();
+    void blurGallerySubmenuListsTheGallery();
     void dialogCollectsParameterSlots();
     void radialBlurHasNoThumbnail();
     void parameterlessAppliesDirectly();
@@ -144,6 +145,31 @@ void FilterMenuTest::stubEntriesStayDisabled()
     }
 }
 
+void FilterMenuTest::blurGallerySubmenuListsTheGallery()
+{
+    pictura::CommandRegistry* registry = window_->registry();
+    QVERIFY(registry != nullptr);
+    registry->refresh();
+    const auto galleryId = [](const QString& leaf) {
+        return pictura::commandIdForPath(
+            {QStringLiteral("Filter"), QStringLiteral("Blur Gallery"), leaf});
+    };
+    // Field Blur moved out of the Blur submenu into the gallery one.
+    QVERIFY(registry->action(filterId(QStringLiteral("Blur"), QStringLiteral("Field Blur")))
+            == nullptr);
+    QAction* field = registry->action(galleryId(QStringLiteral("Field Blur")));
+    QVERIFY(field != nullptr);
+    QVERIFY(field->isEnabled());
+    QVERIFY(field->text().endsWith(QStringLiteral("…")));
+    for (const QString& leaf : {QStringLiteral("Iris Blur"), QStringLiteral("Tilt-Shift"),
+                                QStringLiteral("Path Blur"), QStringLiteral("Spin Blur")}) {
+        QAction* stub = registry->action(galleryId(leaf));
+        QVERIFY2(stub != nullptr, qPrintable(leaf));
+        QVERIFY2(!stub->isEnabled(), qPrintable(leaf));
+        QVERIFY2(stub->text().endsWith(QStringLiteral("…")), qPrintable(leaf));
+    }
+}
+
 void FilterMenuTest::dialogCollectsParameterSlots()
 {
     pictura::PictureView* view = window_->activeView();
@@ -154,6 +180,7 @@ void FilterMenuTest::dialogCollectsParameterSlots()
         int count;
     };
     const Case cases[] = {
+        {QStringLiteral("Blur Gallery"), QStringLiteral("Field Blur"), 17},
         {QStringLiteral("Blur"), QStringLiteral("Gaussian Blur"), 1},
         {QStringLiteral("Blur"), QStringLiteral("Radial Blur"), 3},
         {QStringLiteral("Blur"), QStringLiteral("Shape Blur"), 2},

@@ -695,9 +695,6 @@ void addDefaultCommands(CommandRegistry& registry) {
     leaf(registry, {"Filter", "Artistic", "Sponge"}, QStringLiteral("Sponge"));
     leaf(registry, {"Filter", "Artistic", "Underpainting"}, QStringLiteral("Underpainting"));
     leaf(registry, {"Filter", "Artistic", "Watercolor"}, QStringLiteral("Watercolor"));
-    leaf(registry, {"Filter", "Blur", "Field Blur"}, QStringLiteral("Field Blur"));
-    leaf(registry, {"Filter", "Blur", "Iris Blur"}, QStringLiteral("Iris Blur"));
-    leaf(registry, {"Filter", "Blur", "Tilt-Shift"}, QStringLiteral("Tilt-Shift"));
     leaf(registry, {"Filter", "Blur", "Gaussian Blur"}, QStringLiteral("Gaussian Blur"));
     leaf(registry, {"Filter", "Blur", "Motion Blur"}, QStringLiteral("Motion Blur"));
     leaf(registry, {"Filter", "Blur", "Radial Blur"}, QStringLiteral("Radial Blur"));
@@ -709,6 +706,14 @@ void addDefaultCommands(CommandRegistry& registry) {
     leaf(registry, {"Filter", "Blur", "Average"}, QStringLiteral("Average"));
     leaf(registry, {"Filter", "Blur", "Blur"}, QStringLiteral("Blur"));
     leaf(registry, {"Filter", "Blur", "Blur More"}, QStringLiteral("Blur More"));
+    // The Blur Gallery submenu as later Photoshop versions list it (the
+    // owner's screenshot); CS6 itself put the three effects under Blur.
+    // Only Field Blur has a kernel; the others stay disabled stubs.
+    leaf(registry, {"Filter", "Blur Gallery", "Field Blur"}, QStringLiteral("Field Blur"));
+    leaf(registry, {"Filter", "Blur Gallery", "Iris Blur"}, QStringLiteral("Iris Blur…"));
+    leaf(registry, {"Filter", "Blur Gallery", "Tilt-Shift"}, QStringLiteral("Tilt-Shift…"));
+    leaf(registry, {"Filter", "Blur Gallery", "Path Blur"}, QStringLiteral("Path Blur…"));
+    leaf(registry, {"Filter", "Blur Gallery", "Spin Blur"}, QStringLiteral("Spin Blur…"));
     leaf(registry, {"Filter", "Brush Strokes", "Accented Edges"}, QStringLiteral("Accented Edges"));
     leaf(registry, {"Filter", "Brush Strokes", "Angled Strokes"}, QStringLiteral("Angled Strokes"));
     leaf(registry, {"Filter", "Brush Strokes", "Crosshatch"}, QStringLiteral("Crosshatch"));

@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
 use crate::{
-    BrushType, ContourEdge, DepthMap, DiffuseMode, DisplaceFit, DisplaceMap, ExtrudeType,
-    GlassTexture, GrainType, HalftoneType, HdrToningParams, IrisShape, LensType, LightDirection,
-    Lighting, MezzotintType, NoiseDistribution, PolarKind, Quality, RadialMethod, RippleSize,
-    SharpenRemove, ShearFill, SmartBlurMode, SpherizeMode, StrokeDirection, TextureOptions,
-    TileFill, TonalFade, WaveType, WindMethod, ZigZagStyle,
+    BlurNoise, BlurPin, BokehParams, BrushType, ContourEdge, DepthMap, DiffuseMode, DisplaceFit,
+    DisplaceMap, ExtrudeType, GlassTexture, GrainType, HalftoneType, HdrToningParams, IrisShape,
+    LensType, LightDirection, Lighting, MezzotintType, NoiseDistribution, PolarKind, Quality,
+    RadialMethod, RippleSize, SharpenRemove, ShearFill, SmartBlurMode, SpherizeMode,
+    StrokeDirection, TextureOptions, TileFill, TonalFade, WaveType, WindMethod, ZigZagStyle,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -59,6 +59,14 @@ pub enum Filter {
         monochromatic: bool,
         faster: bool,
         seed: u64,
+    },
+    /// Blur Gallery Field Blur: each pin carries a radius in buffer pixels and
+    /// a position as a fraction of the buffer (outside allowed), with the
+    /// gallery's Blur Effects (bokeh) and Noise post-passes.
+    FieldBlur {
+        pins: Vec<BlurPin>,
+        bokeh: BokehParams,
+        noise: BlurNoise,
     },
     Sharpen,
     SharpenMore,
