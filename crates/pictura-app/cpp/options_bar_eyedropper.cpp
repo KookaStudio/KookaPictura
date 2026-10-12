@@ -27,7 +27,7 @@ QWidget* OptionsBar::buildEyedropperPage(ToolId id)
                              : QStringLiteral("%1 by %1 Average").arg(n),
                       n);
     }
-    size->setCurrentIndex(controller_ ? (controller_->eyedropperOptions().sampleSize - 1) / 2 : 0);
+    size->setCurrentIndex(controller_ ? (eyedropper_->get().sampleSize - 1) / 2 : 0);
     layout->addWidget(size);
 
     layout->addWidget(new QLabel(QStringLiteral("Sample:"), page));
@@ -38,29 +38,29 @@ QWidget* OptionsBar::buildEyedropperPage(ToolId id)
     sample->addItem(QStringLiteral("All Layers"), 2);
     sample->addItem(QStringLiteral("All Layers No Adjustments"), 3);
     sample->addItem(QStringLiteral("Current & Below No Adjustments"), 4);
-    sample->setCurrentIndex(controller_ ? controller_->eyedropperOptions().scope : 2);
+    sample->setCurrentIndex(controller_ ? eyedropper_->get().scope : 2);
     layout->addWidget(sample);
 
     auto* ring = new QCheckBox(QStringLiteral("Show Sampling Ring"), page);
     ring->setObjectName(QStringLiteral("optionsEyedropperRing"));
-    ring->setChecked(controller_ && controller_->eyedropperOptions().ring);
+    ring->setChecked(controller_ && eyedropper_->get().ring);
     layout->addWidget(ring);
 
     if (controller_) {
         connect(size, &QComboBox::currentIndexChanged, this, [this, size](int) {
-            EyedropperOptions options = controller_->eyedropperOptions();
+            EyedropperOptions options = eyedropper_->get();
             options.sampleSize = size->currentData().toInt();
-            controller_->setEyedropperOptions(options);
+            eyedropper_->set(options);
         });
         connect(sample, &QComboBox::currentIndexChanged, this, [this, sample](int) {
-            EyedropperOptions options = controller_->eyedropperOptions();
+            EyedropperOptions options = eyedropper_->get();
             options.scope = sample->currentData().toInt();
-            controller_->setEyedropperOptions(options);
+            eyedropper_->set(options);
         });
         connect(ring, &QCheckBox::toggled, this, [this](bool on) {
-            EyedropperOptions options = controller_->eyedropperOptions();
+            EyedropperOptions options = eyedropper_->get();
             options.ring = on;
-            controller_->setEyedropperOptions(options);
+            eyedropper_->set(options);
         });
     }
 

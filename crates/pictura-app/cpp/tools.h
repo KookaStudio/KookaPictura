@@ -14,8 +14,9 @@
 #include <functional>
 #include <QtGui/QPolygonF>
 
-#include "tool_context.h"
+#include "tool_options.h"
 #include "tool_registry.h"
+#include "tool_services.h"
 
 #include <algorithm>
 #include <array>
@@ -102,8 +103,6 @@ enum class ToolId {
     RotateView,
     Zoom
 };
-enum class SelectionMode { New, Add, Subtract, Intersect };
-enum class MarqueeStyle { Normal, FixedRatio, FixedSize };
 
 struct ToolInfo {
     ToolId id;
@@ -162,7 +161,7 @@ bool activePixelLocked(PictureView* view);
 
 // Routes canvas pointer events to the active tool. Implemented tools dispatch
 // through the handler registry; the legacy switch covers the rest.
-class ToolController : public QObject, public ToolContext {
+class ToolController : public QObject, public ToolServices {
     Q_OBJECT
 
 public:
@@ -170,6 +169,30 @@ public:
 
     ToolId activeTool() const { return active_; }
     void setActiveTool(ToolId id);
+
+    // A modal tool session's history changed; the frame re-evaluates the
+    // Undo/Redo command enabled state.
+    void notifyToolSessionChanged() override;
+
+    // The tool's handler; null for an unimplemented row. The options UI uses
+    // this to reach the handler's family options port.
+    ToolHandler* handlerFor(ToolId id) const { return registry_.forTool(id); }
+
+    // The tool's typed option group, resolved through its handler's port;
+    // null when the tool has no options. The group's setters clamp and notify.
+    template <typename T> T* optionsFor(ToolId id) const
+    {
+        ToolHandler* handler = registry_.forTool(id);
+        if (!handler) {
+            return nullptr;
+        }
+        for (ToolOptions* group : handler->optionGroups()) {
+            if (auto* typed = dynamic_cast<T*>(group)) {
+                return typed;
+            }
+        }
+        return nullptr;
+    }
 
     // Re-apply the active tool's cursor using the live keyboard modifiers
     // (Shift / Alt select the marquee add / remove cursor variants).
@@ -180,47 +203,6 @@ public:
     void refreshCursor(Qt::KeyboardModifiers mods);
     QString cursorIdForModifiersForTest(ToolId id, int mods) const;
 
-    SelectionMode combineMode() const { return mode_; }
-    void setCombineMode(SelectionMode mode);
-
-    MarqueeStyle marqueeStyle() const override { return marqueeStyle_; }
-    void setMarqueeStyle(MarqueeStyle style);
-
-    double feather() const override { return feather_; }
-    void setFeather(double feather);
-
-    double fixedRatioWidth() const override { return fixedRatioW_; }
-    double fixedRatioHeight() const override { return fixedRatioH_; }
-    void setFixedRatio(double width, double height);
-
-    int fixedSizeWidth() const override { return fixedSizeW_; }
-    int fixedSizeHeight() const override { return fixedSizeH_; }
-    void setFixedSize(int width, int height);
-
-    double cropRatio() const override { return cropRatio_; }
-    void setCropRatio(double ratio);
-    bool cropDeletePixels() const override { return cropDeletePixels_; }
-    void setCropDeletePixels(bool on)
-    {
-        cropDeletePixels_ = on;
-        notifyCropOptionsChanged();
-    }
-    double cropAngle() const override { return cropAngle_; }
-    void setCropAngle(double degrees) override;
-    // The pivot the straighten preview rotates about (image space), fixed when
-    // the angle is set so moving the crop box leaves the content in place.
-    QPointF cropPivot() const override { return cropPivot_; }
-    // A modal tool session's history changed; the frame re-evaluates the
-    // Undo/Redo command enabled state.
-    void notifyToolSessionChanged() override;
-    // Classic (default) vs Modern crop drag semantics; persisted.
-    bool cropClassicMode() const override { return cropClassicMode_; }
-    void setCropClassicMode(bool on) override;
-    int cropGridOverlay() const override { return cropGridOverlay_; }
-    void setCropGridOverlay(int index) override;
-    bool cropStraightenMode() const override { return cropStraightenMode_; }
-    void setCropStraightenMode(bool on) override;
-    void notifyCropOptionsChanged() override;
     // Restore persisted crop options without re-emitting the save signal (used
     // during startup, before the workspace store exists).
     void applyCropOptions(bool classic, bool deletePixels, double ratio, int grid);
@@ -228,133 +210,19 @@ public:
     int cropCursorKindForTest(const QPointF& imagePos, int mods);
     // The crop box centre (image space; test hook); empty without a box.
     QPointF cropCenterForTest();
-    bool resizeCrop(double width, double height) override;
-    double cropWidth() const override;
-    double cropHeight() const override;
+    bool resizeCrop(double width, double height);
+    double cropWidth() const;
+    double cropHeight() const;
     // Esc / the options bar's Cancel: put the crop box back to the canvas.
     void cancelCrop();
     // True while the Crop tool holds an active (not preview) box; the options
     // bar hides Cancel/Apply/Reset otherwise.
-    bool cropActive() const override;
+    bool cropActive() const;
 
-    // Move tool options: Auto-Select 0 Group / 1 Layer, Show Transform
-    // Controls, and Align To 0 Selection / 1 Canvas.
-    int moveAutoSelect() const override { return moveAutoSelect_; }
-    void setMoveAutoSelect(int which);
-    bool moveShowTransformControls() const override { return moveShowTransform_; }
-    void setMoveShowTransformControls(bool on);
-    int moveAlignTo() const override { return moveAlignTo_; }
-    void setMoveAlignTo(int which);
-
-    // Eyedropper options.
-    EyedropperOptions eyedropperOptions() const override { return eyedropper_; }
-    void setEyedropperOptions(const EyedropperOptions& options);
-
-    int tolerance() const override { return tolerance_; }
-    void setTolerance(int tolerance);
-
-    // Magnetic Lasso options (docs/03-tools/lasso-selection.md): Width 1-256 px,
-    // Contrast 1-100 %, Frequency 0-100; CS6 defaults 10 / 10 / 57.
-    int magneticWidth() const override { return magneticWidth_; }
-    void setMagneticWidth(int width);
-    int magneticContrast() const override { return magneticContrast_; }
-    void setMagneticContrast(int contrast);
-    int magneticFrequency() const override { return magneticFrequency_; }
-    void setMagneticFrequency(int frequency);
-
-    bool contiguous() const override { return contiguous_; }
-    void setContiguous(bool on);
-    bool antiAlias() const { return antiAlias_; }
-    bool sampleAllLayers() const { return sampleAllLayers_; }
-
-    int brushSize() const override;
-    void setBrushSize(int size);
-    int brushHardness() const override;
-    void setBrushHardness(int h);
-    int brushOpacity() const override;
-    void setBrushOpacity(int o);
-    int brushFlow() const override;
-    void setBrushFlow(int f);
-    QString brushMode() const override;
-    void setBrushMode(const QString& mode);
-    int brushRoundness() const override { return brushRoundness_; }
-    void setBrushRoundness(int roundness);
-    // For elliptical tips a single flip mirrors the angle; both flips cancel.
-    int brushAngle() const override
-    {
-        return brushFlipX_ != brushFlipY_ ? -brushTipAngle_ : brushTipAngle_;
-    }
-    int brushTipAngle() const { return brushTipAngle_; }
-    void setBrushTipAngle(int angle);
-    int brushSpacing() const override { return brushSpacing_; }
-    void setBrushSpacing(int spacing);
-    bool brushFlipX() const { return brushFlipX_; }
-    bool brushFlipY() const { return brushFlipY_; }
-    BrushDynamics brushDynamics() const override { return brushDynamics_; }
-    void setBrushDynamics(const BrushDynamics& dynamics);
-    void setBrushFlip(bool x, bool y);
-    bool autoErase() const override;
-    void setAutoErase(bool on);
-    // Spot Healing Brush Type (0/1/2) and Healing Brush Aligned.
-    int spotHealingType() const override { return spotHealingType_; }
-    void setSpotHealingType(int type);
-    bool healingAligned() const override { return healingAligned_; }
-    void setHealingAligned(bool on) { healingAligned_ = on; }
-    // Patch mode (Normal / Content-Aware), Source / Destination, Transparent.
-    bool patchContentAware() const override { return patchContentAware_; }
-    void setPatchContentAware(bool on) { patchContentAware_ = on; }
-    bool patchDestination() const override { return patchDestination_; }
-    void setPatchDestination(bool on) { patchDestination_ = on; }
-    bool patchTransparent() const override { return patchTransparent_; }
-    void setPatchTransparent(bool on) { patchTransparent_ = on; }
-    // Content-Aware Move Mode (Move / Extend) and Adaptation (0..4).
-    bool contentAwareMoveExtend() const override { return contentAwareMoveExtend_; }
-    void setContentAwareMoveExtend(bool on) { contentAwareMoveExtend_ = on; }
-    int contentAwareAdaptation() const override { return contentAwareAdaptation_; }
-    void setContentAwareAdaptation(int level);
-    int redEyePupil() const override { return redEyePupil_; }
-    void setRedEyePupil(int pupil) { redEyePupil_ = std::clamp(pupil, 0, 100); }
-    int redEyeDarken() const override { return redEyeDarken_; }
-    void setRedEyeDarken(int darken) { redEyeDarken_ = std::clamp(darken, 0, 100); }
-    ColorReplaceOptions colorReplaceOptions() const override { return colorReplace_; }
-    void setColorReplaceOptions(const ColorReplaceOptions& options) { colorReplace_ = options; }
-    MixerOptions mixerOptions() const override { return mixer_; }
-    void setMixerOptions(const MixerOptions& options) { mixer_ = options; }
-    QColor mixerReservoir() const override { return mixerReservoir_; }
-    StampOptions stampOptions() const override { return stamp_; }
-    CloneSource cloneSource() const override { return cloneSources_[cloneSlot_]; }
-    void setCloneSource(const CloneSource& source) override;
-    // The Clone Source panel's five slots; each keeps its own source.
-    int cloneSourceSlot() const { return cloneSlot_; }
-    void setCloneSourceSlot(int slot);
-    void setStampOptions(const StampOptions& options) { stamp_ = options; }
-    EraserOptions eraserOptions() const override { return eraser_; }
-    void setEraserOptions(const EraserOptions& options) { eraser_ = options; }
-    BackgroundEraseOptions backgroundEraseOptions() const override { return backgroundErase_; }
-    void setBackgroundEraseOptions(const BackgroundEraseOptions& options)
-    {
-        backgroundErase_ = options;
-    }
-    MagicEraseOptions magicEraseOptions() const override { return magicErase_; }
-    void setMagicEraseOptions(const MagicEraseOptions& options) { magicErase_ = options; }
-    ArtHistoryOptions artHistoryOptions() const override { return artHistory_; }
-    void setArtHistoryOptions(const ArtHistoryOptions& options) { artHistory_ = options; }
-    RetouchOptions retouchOptions(ToolId id) const override;
-    void setRetouchOptions(ToolId id, const RetouchOptions& options);
-    ToneOptions toneOptions(ToolId id) const override;
-    void setToneOptions(ToolId id, const ToneOptions& options);
-    GradientOptions gradientOptions() const override { return gradient_; }
-    void setGradientOptions(const GradientOptions& options) { gradient_ = options; }
-    BucketOptions bucketOptions() const override { return bucket_; }
-    void setBucketOptions(const BucketOptions& options) { bucket_ = options; }
-    PenOptions penOptions() const override { return pen_; }
-    void setPenOptions(const PenOptions& options);
-    ShapeOptions shapeOptions() const override { return shape_; }
-    void setShapeOptions(const ShapeOptions& options) override;
+    // The Rotate View tool's canvas rotation in degrees clockwise.
     double viewRotation() const;
-    void setViewRotation(double degrees) override;
-    TypeOptions typeOptions() const override { return type_; }
-    void setTypeOptions(const TypeOptions& options) override;
+    void setViewRotation(double degrees);
+
     // The active Type tool's Commit / Cancel; false when no text is being typed.
     bool commitText();
     bool cancelText();
@@ -366,7 +234,7 @@ public:
     bool canvasSamplerActive() const { return bool(canvasSampler_); }
     // Insert `text` into the open type edit; false when none is open.
     bool insertText(const QString& text);
-    void setMixerReservoir(const QColor& color) override;
+
     QColor foreground() const override;
     void setForeground(const QColor& color);
     QColor background() const override;
@@ -382,7 +250,7 @@ public:
     void unbindCanvas();
     ImageView* canvas() const override { return canvas_; }
 
-    // ToolContext: the shared services a handler receives.
+    // ToolServices: the shared services a handler receives.
     PictureView* view() const override;
     void sampledForeground(const QColor& color) override;
     bool dragging() const override { return dragging_; }
@@ -582,82 +450,23 @@ private:
     ImageView* canvas_ = nullptr;
     std::function<PictureView*()> viewProvider_;
     ToolId active_ = ToolId::Move;
-    SelectionMode mode_ = SelectionMode::New;
     SelectionMode dragMode_ = SelectionMode::New;
-    MarqueeStyle marqueeStyle_ = MarqueeStyle::Normal;
-    double feather_ = 0.0;
-    double fixedRatioW_ = 1.0;
-    double fixedRatioH_ = 1.0;
-    int fixedSizeW_ = 100;
-    int fixedSizeH_ = 100;
-    int tolerance_ = 32;
-    double cropRatio_ = 0.0;
-    // docs/03-tools/crop-tool.md: Delete Cropped Pixels is on by default.
-    bool cropDeletePixels_ = true;
-    // The Crop tool's straighten angle in degrees.
-    double cropAngle_ = 0.0;
-    // The straighten pivot (image space) for the current angle.
-    QPointF cropPivot_;
-    // Classic (default) vs Modern crop drag semantics; the grid overlay index.
-    bool cropClassicMode_ = true;
-    int cropGridOverlay_ = 0;
-    // The Crop straighten line tool armed state.
-    bool cropStraightenMode_ = false;
-    // Move options: Auto-Select 0 Group / 1 Layer, Show Transform Controls,
-    // Align To 0 Selection / 1 Canvas.
-    int moveAutoSelect_ = 0;
-    bool moveShowTransform_ = false;
-    int moveAlignTo_ = 0;
-    // Eyedropper: Sample Size (odd pixels, 1..101), Sample scope, and ring.
-    EyedropperOptions eyedropper_;
-    int magneticWidth_ = 10;
-    int magneticContrast_ = 10;
-    int magneticFrequency_ = 57;
-    bool contiguous_ = true;
-    bool antiAlias_ = true;
-    bool sampleAllLayers_ = true;
 
-    int brushSize_ = 12;
-    int brushHardness_ = 100;
-    int brushOpacity_ = 100;
-    int brushFlow_ = 100;
-    QString brushMode_ = QStringLiteral("normal");
-    bool autoErase_ = false;
-    int spotHealingType_ = 0;
-    bool healingAligned_ = true;
-    bool patchContentAware_ = false;
-    bool patchDestination_ = false;
-    bool patchTransparent_ = false;
-    bool contentAwareMoveExtend_ = false;
-    int contentAwareAdaptation_ = 2;
-    int redEyePupil_ = 50;
-    int redEyeDarken_ = 50;
-    ColorReplaceOptions colorReplace_;
-    MixerOptions mixer_;
-    QColor mixerReservoir_{Qt::black};
-    StampOptions stamp_;
-    EraserOptions eraser_;
-    BackgroundEraseOptions backgroundErase_;
-    MagicEraseOptions magicErase_;
-    ArtHistoryOptions artHistory_;
-    GradientOptions gradient_;
-    // Blur, Sharpen, Smudge.
-    std::array<RetouchOptions, 3> retouch_{};
-    // Dodge, Burn, Sponge.
-    std::array<ToneOptions, 3> tone_{};
-    BucketOptions bucket_;
-    PenOptions pen_;
-    ShapeOptions shape_;
-    TypeOptions type_;
+    // The family option groups. The handlers own them (they hold the
+    // shared_ptr the constructor handed out); these are the controller's
+    // non-owning references for signal wiring and its own reads.
+    PaintOptions* paint_ = nullptr;
+    SelectionOptions* selection_ = nullptr;
+    CropOptions* crop_ = nullptr;
+    CloneSourceOptions* clone_ = nullptr;
+    MoveGroup* move_ = nullptr;
+    TypeGroup* type_ = nullptr;
+    MixerGroup* mixer_ = nullptr;
+    EyedropperGroup* eyedropper_ = nullptr;
+    PenGroup* pen_ = nullptr;
+    ShapeGroup* shape_ = nullptr;
+
     std::function<void(const QPointF&)> canvasSampler_;
-    std::array<CloneSource, 5> cloneSources_{};
-    int cloneSlot_ = 0;
-    int brushRoundness_ = 100;
-    int brushTipAngle_ = 0;
-    int brushSpacing_ = 25;
-    bool brushFlipX_ = false;
-    bool brushFlipY_ = false;
-    BrushDynamics brushDynamics_;
     QColor foreground_{Qt::black};
     QColor background_{Qt::white};
 

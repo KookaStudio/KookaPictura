@@ -261,10 +261,10 @@ void TypeToolsTest::reopenTypeLayer()
     QVERIFY2(f.ok(), "type fixture");
     showFrame();
     frame.setActiveTool(pictura::ToolId::HorizontalType);
-    const pictura::TypeOptions saved = f.tools->typeOptions();
+    const pictura::TypeOptions saved = f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get();
     pictura::TypeOptions o = saved;
     o.size = 30.0;
-    f.tools->setTypeOptions(o);
+    f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(o);
     f.drag({QPointF(20, 60)});
     QTest::keyClicks(f.canvas, QStringLiteral("Hello"));
     QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
@@ -277,10 +277,10 @@ void TypeToolsTest::reopenTypeLayer()
     // Type tool shows the selected layer's size.
     frame.setActiveTool(pictura::ToolId::Move);
     o.size = 12.0;
-    f.tools->setTypeOptions(o);
+    f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(o);
     QCOMPARE(layerRect(f, path), before);
     frame.setActiveTool(pictura::ToolId::HorizontalType);
-    QCOMPARE(f.tools->typeOptions().size, 30.0);
+    QCOMPARE(f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get().size, 30.0);
     o.size = 12.0;
 
     // A click on the type reopens it: hidden under its own text, nothing
@@ -289,7 +289,7 @@ void TypeToolsTest::reopenTypeLayer()
     QVERIFY(f.tools->textActive());
     QVERIFY(!f.view->layer_visible(index));
     QVERIFY(f.canvas->typeOverlayHasTextForTest());
-    QCOMPARE(f.tools->typeOptions().size, 30.0);
+    QCOMPARE(f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get().size, 30.0);
     QCOMPARE(f.view->history_index(), base);
     QTest::keyClick(f.canvas, Qt::Key_End);
     QTest::keyClicks(f.canvas, QStringLiteral(" there"));
@@ -331,7 +331,7 @@ void TypeToolsTest::reopenTypeLayer()
     QTest::keyClicks(f.canvas, QStringLiteral("M"));
     QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
     QVERIFY2(f.committedOnce(base + 2, "Horizontal Type Mask"), "the mask starts new type");
-    f.tools->setTypeOptions(saved);
+    f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(saved);
 }
 
 void TypeToolsTest::freeTransformKeepsType()
@@ -341,10 +341,10 @@ void TypeToolsTest::freeTransformKeepsType()
     QVERIFY2(f.ok(), "type fixture");
     showFrame();
     frame.setActiveTool(pictura::ToolId::HorizontalType);
-    const pictura::TypeOptions saved = f.tools->typeOptions();
+    const pictura::TypeOptions saved = f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get();
     pictura::TypeOptions o = saved;
     o.size = 30.0;
-    f.tools->setTypeOptions(o);
+    f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(o);
     f.drag({QPointF(10, 60)});
     QTest::keyClicks(f.canvas, QStringLiteral("Wide"));
     QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
@@ -374,7 +374,7 @@ void TypeToolsTest::freeTransformKeepsType()
     QVERIFY2(f.committedOnce(base + 1, "Edit Type Layer"), "edited after the transform");
     QVERIFY(layerRect(f, path).width() > stretched.width() + 10);
     QCOMPARE(layerRect(f, path).height(), stretched.height());
-    f.tools->setTypeOptions(saved);
+    f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(saved);
 }
 
 // Just outside a Free Transform corner the cursor is the curved rotate arrow,
@@ -386,10 +386,10 @@ void TypeToolsTest::freeTransformRotateCursor()
     QVERIFY2(f.ok(), "type fixture");
     showFrame();
     frame.setActiveTool(pictura::ToolId::HorizontalType);
-    const pictura::TypeOptions saved = f.tools->typeOptions();
+    const pictura::TypeOptions saved = f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get();
     pictura::TypeOptions o = saved;
     o.size = 30.0;
-    f.tools->setTypeOptions(o);
+    f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(o);
     f.drag({QPointF(40, 60)});
     QTest::keyClicks(f.canvas, QStringLiteral("Spin"));
     QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
@@ -444,7 +444,7 @@ void TypeToolsTest::freeTransformRotateCursor()
     f.canvas->mouseReleased(QPointF(box.center()) + QPointF(1, 1));
     QVERIFY2(qAbs(f.view->transform_angle()) > 0.1, "rotated (radians)");
     f.tools->cancelFreeTransform();
-    f.tools->setTypeOptions(saved);
+    f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(saved);
 }
 
 void TypeToolsTest::textEditModel()
@@ -493,11 +493,11 @@ void TypeToolsTest::editLikeATextField()
     QVERIFY2(f.ok(), "type fixture");
     showFrame();
     frame.setActiveTool(pictura::ToolId::HorizontalType);
-    const pictura::TypeOptions saved = f.tools->typeOptions();
+    const pictura::TypeOptions saved = f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get();
     pictura::TypeOptions o = saved;
     o.size = 30.0;
     o.justification = 0;
-    f.tools->setTypeOptions(o);
+    f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(o);
     f.drag({QPointF(10, 60)});
     QTest::keyClicks(f.canvas, QStringLiteral("one two"));
     const QLineF end = f.canvas->typeOverlayCaretForTest();
@@ -541,7 +541,7 @@ void TypeToolsTest::editLikeATextField()
     QVERIFY2(f.committedOnce(base, "Horizontal Type"), "commit");
     QCOMPARE(QString(pictura::type_api::layerText(*f.view, typeLayer(f))),
              QStringLiteral("one 2\r3"));
-    f.tools->setTypeOptions(saved);
+    f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(saved);
 }
 
 void TypeToolsTest::barRestylesTheSelectedLayer()
@@ -551,11 +551,11 @@ void TypeToolsTest::barRestylesTheSelectedLayer()
     QVERIFY2(f.ok(), "type fixture");
     showFrame();
     frame.setActiveTool(pictura::ToolId::HorizontalType);
-    const pictura::TypeOptions saved = f.tools->typeOptions();
+    const pictura::TypeOptions saved = f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get();
     pictura::TypeOptions o = saved;
     o.family = QStringLiteral("Liberation Sans");
     o.size = 24.0;
-    f.tools->setTypeOptions(o);
+    f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(o);
     f.drag({QPointF(10, 60)});
     QTest::keyClicks(f.canvas, QStringLiteral("iiiiiiii"));
     QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
@@ -566,7 +566,7 @@ void TypeToolsTest::barRestylesTheSelectedLayer()
 
     // Size: one state, the same text twice as tall.
     o.size = 48.0;
-    f.tools->setTypeOptions(o);
+    f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(o);
     QVERIFY2(f.committedOnce(base, "Edit Type Layer"), "size restyles the layer");
     QCOMPARE(f.view->layer_count(), layers);
     const QRect big = layerRect(f, path);
@@ -578,7 +578,7 @@ void TypeToolsTest::barRestylesTheSelectedLayer()
     const QString mono = QFontInfo(QFontDatabase::systemFont(QFontDatabase::FixedFont)).family();
     QVERIFY2(!pictura::typeFontBytes(mono).isEmpty(), "Qt hands over the face");
     o.family = mono;
-    f.tools->setTypeOptions(o);
+    f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(o);
     QVERIFY2(f.committedOnce(base + 1, "Edit Type Layer"), "family restyles the layer");
     const QRect monoRect = layerRect(f, path);
     QVERIFY2(monoRect.width() > big.width() * 3 / 2, "set in the monospace face");
@@ -588,17 +588,17 @@ void TypeToolsTest::barRestylesTheSelectedLayer()
 
     // Selecting the layer again shows its family and size in the bar.
     frame.setActiveTool(pictura::ToolId::Move);
-    f.tools->setTypeOptions(saved);
+    f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(saved);
     frame.setActiveTool(pictura::ToolId::HorizontalType);
-    QCOMPARE(f.tools->typeOptions().family, mono);
-    QCOMPARE(f.tools->typeOptions().size, 48.0);
+    QCOMPARE(f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get().family, mono);
+    QCOMPARE(f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get().size, 48.0);
     QCOMPARE(f.view->history_index(), base + 2);
 
     // A registered generic alias reads back as itself, not as whichever
     // family its spaceless name happens to match.
     pictura::registerTypeFont(QStringLiteral("monospace"));
     QCOMPARE(pictura::familyForFontName(QStringLiteral("monospace")), QStringLiteral("monospace"));
-    f.tools->setTypeOptions(saved);
+    f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(saved);
 }
 
 void TypeToolsTest::characterAttributeEdits()
@@ -608,10 +608,10 @@ void TypeToolsTest::characterAttributeEdits()
     QVERIFY2(f.ok(), "type fixture");
     showFrame();
     frame.setActiveTool(pictura::ToolId::HorizontalType);
-    const pictura::TypeOptions saved = f.tools->typeOptions();
+    const pictura::TypeOptions saved = f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get();
     pictura::TypeOptions o = saved;
     o.size = 30.0;
-    f.tools->setTypeOptions(o);
+    f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(o);
     f.drag({QPointF(10, 60)});
     QTest::keyClicks(f.canvas, QStringLiteral("Attr"));
     QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
@@ -661,7 +661,7 @@ void TypeToolsTest::characterAttributeEdits()
              beforeCharacter);
     QCOMPARE(paragraphFingerprint(pictura::type_api::layerParagraphSetting(*f.view, path)),
              beforeParagraph);
-    f.tools->setTypeOptions(saved);
+    f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(saved);
 }
 
 // A manual attribute edit records only the changed field as an override, so a
@@ -675,11 +675,11 @@ void TypeToolsTest::manualOverrideSurvivesStyleApply()
     QVERIFY2(f.ok(), "type fixture");
     showFrame();
     frame.setActiveTool(pictura::ToolId::HorizontalType);
-    const pictura::TypeOptions saved = f.tools->typeOptions();
+    const pictura::TypeOptions saved = f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get();
     pictura::TypeOptions o = saved;
     o.family = QStringLiteral("Liberation Sans");
     o.size = 30.0;
-    f.tools->setTypeOptions(o);
+    f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(o);
     f.drag({QPointF(10, 60)});
     QTest::keyClicks(f.canvas, QStringLiteral("Attr"));
     QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
@@ -709,7 +709,7 @@ void TypeToolsTest::manualOverrideSurvivesStyleApply()
         pictura::type_api::layerCharacterSetting(*f.view, path);
     QCOMPARE(applied.tracking, 120.0); // the manual override survives
     QCOMPARE(applied.size, 48.0);      // the untouched field follows the style
-    f.tools->setTypeOptions(saved);
+    f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(saved);
 }
 
 void TypeToolsTest::reopenKeepsAntiAlias()
@@ -719,11 +719,11 @@ void TypeToolsTest::reopenKeepsAntiAlias()
     QVERIFY2(f.ok(), "type fixture");
     showFrame();
     frame.setActiveTool(pictura::ToolId::HorizontalType);
-    const pictura::TypeOptions saved = f.tools->typeOptions();
+    const pictura::TypeOptions saved = f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get();
     pictura::TypeOptions o = saved;
     o.size = 30.0;
     o.antialias = 0; // None, not the default Sharp
-    f.tools->setTypeOptions(o);
+    f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(o);
     f.drag({QPointF(10, 60)});
     QTest::keyClicks(f.canvas, QStringLiteral("AA"));
     QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
@@ -734,7 +734,7 @@ void TypeToolsTest::reopenKeepsAntiAlias()
     // Selecting the layer seeds the bar's combo from the stored method.
     frame.setActiveTool(pictura::ToolId::Move);
     frame.setActiveTool(pictura::ToolId::HorizontalType);
-    QCOMPARE(f.tools->typeOptions().antialias, 0);
+    QCOMPARE(f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get().antialias, 0);
 
     // Reopen and commit without touching the combo: still None.
     const int base = f.view->history_index();
@@ -753,7 +753,7 @@ void TypeToolsTest::reopenKeepsAntiAlias()
     QTest::keyClick(f.canvas, Qt::Key_Escape);
     QCOMPARE(f.view->history_index(), base + 1);
     QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).anti_alias, 0);
-    f.tools->setTypeOptions(saved);
+    f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(saved);
 }
 
 void TypeToolsTest::verticalTypeTool()
@@ -810,7 +810,7 @@ void TypeToolsTest::typeOptionsBar()
     Fixture f(frame, seed(), QStringLiteral("pictura_type_bar"));
     QVERIFY2(f.ok(), "type fixture");
     showFrame();
-    const pictura::TypeOptions saved = f.tools->typeOptions();
+    const pictura::TypeOptions saved = f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get();
     frame.setActiveTool(pictura::ToolId::HorizontalType);
 
     auto visible = [&frame](const QString& name) -> QToolButton* {
@@ -826,11 +826,11 @@ void TypeToolsTest::typeOptionsBar()
     QVERIFY(!commit->isEnabled());
 
     // Size and alignment feed the next commit: right-aligned type ends at the click.
-    pictura::TypeOptions o = f.tools->typeOptions();
+    pictura::TypeOptions o = f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get();
     o.size = 40.0;
-    f.tools->setTypeOptions(o);
+    f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(o);
     visible(QStringLiteral("optionsTypeAlignRight"))->click();
-    QCOMPARE(f.tools->typeOptions().justification, 1);
+    QCOMPARE(f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get().justification, 1);
     const int base = f.view->history_index();
     f.drag({QPointF(180, 80)});
     QVERIFY(commit->isEnabled());
@@ -845,7 +845,7 @@ void TypeToolsTest::typeOptionsBar()
     // Toggle Text Orientation swaps to the Vertical Type tool.
     visible(QStringLiteral("optionsTypeOrientation"))->click();
     QCOMPARE(frame.activeTool(), pictura::ToolId::VerticalType);
-    f.tools->setTypeOptions(saved);
+    f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(saved);
 }
 
 void TypeToolsTest::typeBarSizeAlignAndColor()
@@ -854,7 +854,7 @@ void TypeToolsTest::typeBarSizeAlignAndColor()
     Fixture f(frame, seed(), QStringLiteral("pictura_type_bar_color"));
     QVERIFY2(f.ok(), "type fixture");
     showFrame();
-    const pictura::TypeOptions saved = f.tools->typeOptions();
+    const pictura::TypeOptions saved = f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get();
     const QColor foreground = f.tools->foreground();
     frame.setActiveTool(pictura::ToolId::HorizontalType);
     auto visible = [&frame](auto* kind, const QString& name) {
@@ -874,15 +874,15 @@ void TypeToolsTest::typeBarSizeAlignAndColor()
     QVERIFY(size->count() > size->maxVisibleItems());
     QVERIFY(size->findText(QStringLiteral("72")) >= 0);
     size->lineEdit()->setText(QStringLiteral("37.5"));
-    QCOMPARE(f.tools->typeOptions().size, saved.size);
+    QCOMPARE(f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get().size, saved.size);
     emit size->lineEdit()->editingFinished();
-    QCOMPARE(f.tools->typeOptions().size, 37.5);
+    QCOMPARE(f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get().size, 37.5);
     size->setCurrentIndex(size->findText(QStringLiteral("72")));
     emit size->activated(size->currentIndex());
-    QCOMPARE(f.tools->typeOptions().size, 72.0);
+    QCOMPARE(f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get().size, 72.0);
     size->lineEdit()->setText(QStringLiteral("0"));
     emit size->lineEdit()->editingFinished();
-    QCOMPARE(f.tools->typeOptions().size, 72.0);
+    QCOMPARE(f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get().size, 72.0);
     QCOMPARE(size->currentText(), QStringLiteral("72"));
 
     // Alignment shows drawn line icons, not glyph text.
@@ -897,12 +897,12 @@ void TypeToolsTest::typeBarSizeAlignAndColor()
     QToolButton* swatch = visible(static_cast<QToolButton*>(nullptr), QStringLiteral("optionsTypeColor"));
     QVERIFY2(swatch, "colour swatch");
     f.tools->setForeground(QColor(200, 0, 0));
-    QCOMPARE(f.tools->typeOptions().color, QColor(200, 0, 0));
+    QCOMPARE(f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get().color, QColor(200, 0, 0));
     const QImage icon = swatch->icon().pixmap(16, 16).toImage();
     QCOMPARE(QColor(icon.pixel(8, 8)), QColor(200, 0, 0));
-    pictura::TypeOptions o = f.tools->typeOptions();
+    pictura::TypeOptions o = f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get();
     o.size = 40.0;
-    f.tools->setTypeOptions(o);
+    f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(o);
     f.drag({QPointF(10, 60)});
     QTest::keyClicks(f.canvas, QStringLiteral("HH"));
     QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
@@ -928,9 +928,9 @@ void TypeToolsTest::typeBarSizeAlignAndColor()
     frame.setActiveTool(pictura::ToolId::Move);
     f.tools->setForeground(foreground);
     frame.setActiveTool(pictura::ToolId::HorizontalType);
-    QCOMPARE(f.tools->typeOptions().color, QColor(0, 0, 200));
+    QCOMPARE(f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get().color, QColor(0, 0, 200));
 
-    f.tools->setTypeOptions(saved);
+    f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(saved);
     f.tools->setForeground(foreground);
 }
 

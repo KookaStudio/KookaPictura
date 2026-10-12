@@ -131,20 +131,20 @@ void CropPreviewTest::movingTheBoxKeepsThePivot()
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
-    tools->setCropClassicMode(true);  // boxless: draw a box, then move it
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(true);  // boxless: draw a box, then move it
     frame.setActiveTool(pictura::ToolId::Crop);
     drag(canvas, QPointF(40, 40), QPointF(80, 80));  // box (40,40,40,40)
     // Rotate about the box centre (press outside the box, inside the canvas).
     drag(canvas, QPointF(10, 60), QPointF(10, 40));
-    QVERIFY2(tools->cropAngle() != 0.0, "the outside drag rotates");
-    const QPointF pivot = tools->cropPivot();
+    QVERIFY2(tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->angle() != 0.0, "the outside drag rotates");
+    const QPointF pivot = tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->pivot();
     QVERIFY2(std::abs(pivot.x() - 60.0) < 1.0 && std::abs(pivot.y() - 60.0) < 1.0,
              "the pivot is the box centre");
 
     // Moving the box leaves the composite's pivot in place.
     drag(canvas, QPointF(60, 60), QPointF(70, 70));
-    QVERIFY2(std::abs(tools->cropPivot().x() - pivot.x()) < 1e-6
-                 && std::abs(tools->cropPivot().y() - pivot.y()) < 1e-6,
+    QVERIFY2(std::abs(tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->pivot().x() - pivot.x()) < 1e-6
+                 && std::abs(tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->pivot().y() - pivot.y()) < 1e-6,
              "moving the box leaves the pivot fixed");
 
     frame.setActiveTool(pictura::ToolId::Move);
@@ -163,13 +163,13 @@ void CropPreviewTest::modernStartsInPreview()
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
-    tools->setCropClassicMode(false);
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(false);
     frame.setActiveTool(pictura::ToolId::Crop);
     QVERIFY2(canvas->hasCropBoxForTest() && canvas->cropPreviewForTest(),
              "Modern starts with a preview box");
     QVERIFY2(!tools->cropActive(), "the preview is not an active crop");
 
-    tools->setCropClassicMode(true);
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(true);
     frame.setActiveTool(pictura::ToolId::Move);
     frame.setActiveTool(pictura::ToolId::Crop);
     QVERIFY2(!canvas->hasCropBoxForTest(), "Classic starts with no box");
@@ -190,7 +190,7 @@ void CropPreviewTest::previewDragDrawsAndClickAdopts()
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
-    tools->setCropClassicMode(false);
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(false);
     frame.setActiveTool(pictura::ToolId::Crop);
     QVERIFY(canvas->cropPreviewForTest());
 
@@ -224,14 +224,14 @@ void CropPreviewTest::escapeClearsToNoBoxInBothModes()
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
-    tools->setCropClassicMode(false);
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(false);
     frame.setActiveTool(pictura::ToolId::Crop);
     QVERIFY(canvas->hasCropBoxForTest());
     sendEsc(frame);
     QVERIFY2(!canvas->hasCropBoxForTest() && !tools->cropActive(),
              "Escape clears the Modern preview to no box");
 
-    tools->setCropClassicMode(true);
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(true);
     frame.setActiveTool(pictura::ToolId::Move);
     frame.setActiveTool(pictura::ToolId::Crop);
     drag(canvas, QPointF(10, 10), QPointF(50, 50));
@@ -290,15 +290,15 @@ void CropPreviewTest::ratioDragPinsTheStartCorner()
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
-    tools->setCropClassicMode(false);
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(false);
     frame.setActiveTool(pictura::ToolId::Crop);
-    tools->setCropRatio(2.0);
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setRatio(2.0);
     // Drag up-left from the press point (40,40); the press corner must stay put
     // (the box's bottom-right), not become the fitted top-left.
     drag(canvas, QPointF(40, 40), QPointF(0, 0));
     QCOMPARE(tools->pendingCropRect(), QRect(0, 20, 40, 20));
 
-    tools->setCropRatio(0.0);
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setRatio(0.0);
     frame.setActiveTool(pictura::ToolId::Move);
     frame.closeDocument(doc, false);
 }

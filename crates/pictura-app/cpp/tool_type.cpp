@@ -154,20 +154,22 @@ private:
 
 class TypeToolHandler : public ToolHandler {
 public:
-    explicit TypeToolHandler(ToolId id)
+    TypeToolHandler(ToolId id, std::shared_ptr<TypeGroup> type)
         : toolVertical_(id == ToolId::VerticalType || id == ToolId::VerticalTypeMask)
         , mask_(id == ToolId::HorizontalTypeMask || id == ToolId::VerticalTypeMask)
+        , type_(std::move(type))
     {
+        addOptions(type_.get());
     }
 
-    void onActivate(ToolContext& ctx) override
+    void onActivate(ToolServices& ctx) override
     {
         ctx_ = &ctx;
         layerPath_.clear();
         loadLayerOptions();
     }
 
-    void onDeactivate(ToolContext& ctx) override
+    void onDeactivate(ToolServices& ctx) override
     {
         ctx_ = &ctx;
         commitText();
@@ -175,7 +177,7 @@ public:
     }
 
     // Switching documents commits the session into the one it was typed in.
-    void onDocumentRefreshed(ToolContext& ctx) override
+    void onDocumentRefreshed(ToolServices& ctx) override
     {
         ctx_ = &ctx;
         if (active_ && ctx.view() != view_) {
@@ -189,10 +191,10 @@ public:
     // While typing, the bar restyles the text being typed. Otherwise a change
     // re-sets the selected type layer, as CS6's bar does with a type layer
     // selected: only the field that changed, as one state.
-    void onOptionsChanged(ToolContext& ctx) override
+    void onOptionsChanged(ToolServices& ctx) override
     {
         ctx_ = &ctx;
-        const TypeOptions now = ctx.typeOptions();
+        const TypeOptions now = type_->get();
         const TypeOptions was = known_;
         known_ = now;
         if (active_) {
@@ -226,7 +228,7 @@ public:
         pictura::type_api::updateLayer(*v, layerPath_, pictura::type_api::layerText(*v, layerPath_), family, s, c, p);
     }
 
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         ctx_ = &ctx;
         PictureView* v = ctx.view();
@@ -271,7 +273,7 @@ public:
             origin_ = QPointF(s.x, s.y);
             vertical_ = s.vertical;
             matrix_ = {s.xx, s.xy, s.yx, s.yy};
-            TypeOptions o = ctx.typeOptions();
+            TypeOptions o = type_->get();
             const QString family = familyForFontName(pictura::type_api::layerFont(*v, hit));
             if (!family.isEmpty()) {
                 o.family = family;
@@ -280,7 +282,7 @@ public:
             o.justification = p.justify;
             o.color = QColor::fromRgba(c.color);
             o.antialias = c.anti_alias;
-            ctx.setTypeOptions(o);
+            type_->set(o);
         }
         filter_ = std::make_unique<TypeKeyFilter>(
             [this]() { return ctx_ && ctx_->canvas() ? ctx_->canvas()->window() : nullptr; },
@@ -296,7 +298,7 @@ public:
         return true;
     }
 
-    void onMove(ToolContext&, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    void onMove(ToolServices&, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         if (active_ && selecting_) {
             edit_.moveTo(indexAt(imagePos), true);
@@ -304,7 +306,7 @@ public:
         }
     }
 
-    void onRelease(ToolContext&, const QPointF&, Qt::KeyboardModifiers) override
+    void onRelease(ToolServices&, const QPointF&, Qt::KeyboardModifiers) override
     {
         selecting_ = false;
     }
@@ -320,7 +322,7 @@ public:
         const QString text = edit_.text();
         const SelectionMode mode = mode_;
         const TypeEdit edit = currentSetting();
-        const QString family = ctx_->typeOptions().family;
+        const QString family = type_->get().family;
         registerTypeFont(family);
         endSession();
         if (!v) {
@@ -526,12 +528,12 @@ private:
         }
         layerPath_ = path;
         if (path.isEmpty() || !pictura::type_api::isType(*v, path)) {
-            known_ = ctx_ ? ctx_->typeOptions() : TypeOptions{};
+            known_ = ctx_ ? type_->get() : TypeOptions{};
             return;
         }
         const CharacterSetting c = pictura::type_api::layerCharacterSetting(*v, path);
         const ParagraphSetting p = pictura::type_api::layerParagraphSetting(*v, path);
-        TypeOptions o = ctx_->typeOptions();
+        TypeOptions o = type_->get();
         const QString family = familyForFontName(pictura::type_api::layerFont(*v, path));
         if (!family.isEmpty()) {
             o.family = family;
@@ -541,9 +543,9 @@ private:
         o.color = QColor::fromRgba(c.color);
         o.antialias = c.anti_alias;
         syncing_ = true;
-        ctx_->setTypeOptions(o);
+        type_->set(o);
         syncing_ = false;
-        known_ = ctx_->typeOptions();
+        known_ = type_->get();
     }
 
     void endSession()
@@ -569,7 +571,7 @@ private:
 
     TypeEdit currentSetting() const
     {
-        const TypeOptions o = ctx_->typeOptions();
+        const TypeOptions o = type_->get();
         TypeEdit edit;
         edit.character = pictura::type_api::defaultCharacterSetting();
         edit.paragraph = pictura::type_api::defaultParagraphSetting();
@@ -596,7 +598,7 @@ private:
     QRect previewRect(const QString& text, const TypeEdit& edit) const
     {
         const QVector<int> r = pictura::type_api::previewRect(
-            text, ctx_->typeOptions().family, edit.placement, edit.character, edit.paragraph);
+            text, type_->get().family, edit.placement, edit.character, edit.paragraph);
         return r.size() == 4 ? QRect(r[0], r[1], r[2], r[3]) : QRect();
     }
 
@@ -612,7 +614,7 @@ private:
         overlay.mask = mask_;
         overlay.canvas = QSize(view_->document_width(), view_->document_height());
         const QString& text = edit_.text();
-        const QString family = ctx_->typeOptions().family;
+        const QString family = type_->get().family;
         registerTypeFont(family);
         stops_.clear();
         const QVector<double> stops = pictura::type_api::caretStops(
@@ -657,7 +659,7 @@ private:
 
     const bool toolVertical_;
     const bool mask_;
-    ToolContext* ctx_ = nullptr;
+    ToolServices* ctx_ = nullptr;
     bool active_ = false;
     // Guarded: the document may close while text is being typed.
     QPointer<PictureView> view_;
@@ -682,13 +684,14 @@ private:
     TypeOptions known_;
     bool syncing_ = false;
     std::unique_ptr<TypeKeyFilter> filter_;
+    std::shared_ptr<TypeGroup> type_;
 };
 
 } // namespace
 
-std::unique_ptr<ToolHandler> makeTypeToolHandler(ToolId id)
+std::unique_ptr<ToolHandler> makeTypeToolHandler(ToolId id, std::shared_ptr<TypeGroup> type)
 {
-    return std::make_unique<TypeToolHandler>(id);
+    return std::make_unique<TypeToolHandler>(id, std::move(type));
 }
 
 } // namespace pictura

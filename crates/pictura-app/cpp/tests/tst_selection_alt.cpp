@@ -40,8 +40,8 @@ void SelectionAltTest::firstAltSubtractsAndDoesNotMirror()
     Fixture f(frame, seed, QStringLiteral("pictura_sel_alt_first"));
     QVERIFY2(f.ok(), "selection fixture");
     frame.setActiveTool(pictura::ToolId::Marquee);
-    f.tools->setCombineMode(pictura::SelectionMode::New);
-    f.tools->setMarqueeStyle(pictura::MarqueeStyle::Normal);
+    f.tools->optionsFor<pictura::SelectionOptions>(pictura::ToolId::Marquee)->setCombineMode(pictura::SelectionMode::New);
+    f.tools->optionsFor<pictura::SelectionOptions>(pictura::ToolId::Marquee)->setMarqueeStyle(pictura::MarqueeStyle::Normal);
 
     QVERIFY(f.view->select_rect(10, 10, 40, 40, QStringLiteral("new"), 0.0));
     const int base = f.view->history_count();
@@ -69,8 +69,8 @@ void SelectionAltTest::secondAltMirrorsAboutTheAnchor()
     Fixture f(frame, seed, QStringLiteral("pictura_sel_alt_second"));
     QVERIFY2(f.ok(), "selection fixture");
     frame.setActiveTool(pictura::ToolId::Marquee);
-    f.tools->setCombineMode(pictura::SelectionMode::New);
-    f.tools->setMarqueeStyle(pictura::MarqueeStyle::Normal);
+    f.tools->optionsFor<pictura::SelectionOptions>(pictura::ToolId::Marquee)->setCombineMode(pictura::SelectionMode::New);
+    f.tools->optionsFor<pictura::SelectionOptions>(pictura::ToolId::Marquee)->setMarqueeStyle(pictura::MarqueeStyle::Normal);
 
     QVERIFY(f.view->select_rect(10, 10, 40, 40, QStringLiteral("new"), 0.0));
     const int base = f.view->history_count();
@@ -103,8 +103,8 @@ void SelectionAltTest::altRepressWithoutMovementMirrors()
     Fixture f(frame, seed, QStringLiteral("pictura_sel_alt_repress"));
     QVERIFY2(f.ok(), "selection fixture");
     frame.setActiveTool(pictura::ToolId::Marquee);
-    f.tools->setCombineMode(pictura::SelectionMode::New);
-    f.tools->setMarqueeStyle(pictura::MarqueeStyle::Normal);
+    f.tools->optionsFor<pictura::SelectionOptions>(pictura::ToolId::Marquee)->setCombineMode(pictura::SelectionMode::New);
+    f.tools->optionsFor<pictura::SelectionOptions>(pictura::ToolId::Marquee)->setMarqueeStyle(pictura::MarqueeStyle::Normal);
     QVERIFY(f.view->select_rect(10, 10, 40, 40, QStringLiteral("new"), 0.0));
 
     // Alt is already held at press, so the drag subtracts.

@@ -1,12 +1,14 @@
 #pragma once
 
-#include "tool_context.h"
+#include "tool_services.h"
 
 #include <QtCore/QPointF>
 #include <QtCore/QRect>
 #include <QtCore/QString>
 #include <QtCore/Qt>
 #include <QtGui/QCursor>
+
+#include <vector>
 
 namespace pictura {
 
@@ -16,33 +18,39 @@ namespace pictura {
 class ToolHandler {
 public:
     virtual ~ToolHandler() = default;
-    virtual bool onPress(ToolContext& ctx, const QPointF& imagePos,
+
+    // The family option groups this handler owns or shares, in registration
+    // order. `ToolController::optionsFor<T>` resolves one typed; the group's
+    // setters clamp and notify.
+    const std::vector<ToolOptions*>& optionGroups() const { return optionGroups_; }
+
+    virtual bool onPress(ToolServices& ctx, const QPointF& imagePos,
                          Qt::KeyboardModifiers mods)
     {
         return false;
     }
-    virtual void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) {}
+    virtual void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) {}
     // A modifier key changed during a drag without pointer movement, so an
     // Alt/Shift edge is observed even when the pointer is still.
-    virtual void onModifiers(ToolContext& ctx, Qt::KeyboardModifiers mods)
+    virtual void onModifiers(ToolServices& ctx, Qt::KeyboardModifiers mods)
     {
         (void)ctx;
         (void)mods;
     }
-    virtual void onRelease(ToolContext& ctx, const QPointF& imagePos,
+    virtual void onRelease(ToolServices& ctx, const QPointF& imagePos,
                            Qt::KeyboardModifiers mods)
     {
     }
 
     // Lifecycle: the controller activates the new handler and deactivates the
     // old one on tool switch and canvas unbind, so handlers hold no stale state.
-    virtual void onActivate(ToolContext& ctx) {}
-    virtual void onDeactivate(ToolContext& ctx) {}
+    virtual void onActivate(ToolServices& ctx) {}
+    virtual void onDeactivate(ToolServices& ctx) {}
     // The frame refreshed (a document edit, undo, or tab switch) with this tool
     // active; re-read any document state the tool mirrors on the canvas.
-    virtual void onDocumentRefreshed(ToolContext& ctx) {}
+    virtual void onDocumentRefreshed(ToolServices& ctx) {}
     // A tool option changed (e.g. the crop aspect ratio); re-apply it.
-    virtual void onOptionsChanged(ToolContext& ctx) {}
+    virtual void onOptionsChanged(ToolServices& ctx) {}
 
     // Tool-specific commands the controller forwards by active tool.
     virtual bool commitPolygonLasso() { return false; }
@@ -88,7 +96,7 @@ public:
     virtual bool pointerCursor() const { return false; }
     // The cursor for `imagePos` under the live modifiers. Returns false when the
     // tool leaves the cursor to the framework default.
-    virtual bool hoverCursor(const ToolContext& ctx, const QPointF& imagePos,
+    virtual bool hoverCursor(const ToolServices& ctx, const QPointF& imagePos,
                              Qt::KeyboardModifiers mods, QCursor& out) const
     {
         (void)ctx;
@@ -98,7 +106,7 @@ public:
         return false;
     }
     // A stable id for the pointer's cursor zone (for tests), or -1.
-    virtual int pointerCursorKind(const ToolContext& ctx, const QPointF& imagePos,
+    virtual int pointerCursorKind(const ToolServices& ctx, const QPointF& imagePos,
                                   Qt::KeyboardModifiers mods) const
     {
         (void)ctx;
@@ -147,6 +155,14 @@ public:
     virtual bool perspectiveQuadComplete() const { return false; }
     // Perspective Crop: show the inch grid overlay.
     virtual void setPerspectiveShowGrid(bool on) { (void)on; }
+
+protected:
+    // Register a family option group for `optionsFor<T>`; call it from the
+    // handler's constructor once its group pointers are set.
+    void addOptions(ToolOptions* group) { optionGroups_.push_back(group); }
+
+private:
+    std::vector<ToolOptions*> optionGroups_;
 };
 
 } // namespace pictura

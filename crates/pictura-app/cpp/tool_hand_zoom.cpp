@@ -25,7 +25,7 @@ constexpr double kClickSlopPx = 4.0;
 
 class ZoomToolHandler : public ToolHandler {
 public:
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         ImageView* canvas = ctx.canvas();
         PictureView* view = ctx.view();
@@ -43,7 +43,7 @@ public:
         return true;
     }
 
-    void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         if (!ctx.dragging()) {
             return;
@@ -63,7 +63,7 @@ public:
         canvas->setSelectionPreview({QPolygonF(marquee_)}, true, /*solid=*/true);
     }
 
-    void onRelease(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    void onRelease(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         Q_UNUSED(imagePos);
         if (!ctx.dragging()) {
@@ -90,7 +90,7 @@ public:
         canvas->setZoom(canvas->zoom() * (out_ ? 1.0 / 1.2 : 1.2), anchor);
     }
 
-    void onDeactivate(ToolContext& ctx) override
+    void onDeactivate(ToolServices& ctx) override
     {
         if (ImageView* canvas = ctx.canvas()) {
             canvas->clearSelectionPreview();

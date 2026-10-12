@@ -39,7 +39,7 @@ QIcon patternIcon(int index)
 // A 0-100 % field wired to a controller setter; returns it.
 NumericField* OptionsBar::addPercentField(QHBoxLayout* layout, QWidget* page,
                                           const QString& label, const QString& name, int value,
-                                          void (ToolController::*setter)(int))
+                                          std::function<void(int)> setter)
 {
     auto* field = new NumericField(
         label, numericConfig(0, 100, 1, 0, QStringLiteral("%"), true, name), page);
@@ -47,7 +47,7 @@ NumericField* OptionsBar::addPercentField(QHBoxLayout* layout, QWidget* page,
     layout->addWidget(field);
     if (controller_) {
         connect(field, &NumericField::valueChanged, this,
-                [this, setter](double v) { (controller_->*setter)(qRound(v)); });
+                [setter](double v) { setter(qRound(v)); });
     }
     return field;
 }
@@ -68,15 +68,15 @@ void OptionsBar::addStampPaintFields(QHBoxLayout* layout, QWidget* page)
     layout->addWidget(mode);
 
     addPercentField(layout, page, QStringLiteral("Opacity:"), QStringLiteral("optionsStampOpacity"),
-                    controller_ ? controller_->brushOpacity() : 100,
-                    &ToolController::setBrushOpacity);
+                    controller_ ? paint_->opacity() : 100,
+                    [this](int v) { paint_->setOpacity(v); });
     addPercentField(layout, page, QStringLiteral("Flow:"), QStringLiteral("optionsStampFlow"),
-                    controller_ ? controller_->brushFlow() : 100, &ToolController::setBrushFlow);
+                    controller_ ? paint_->flow() : 100, [this](int v) { paint_->setFlow(v); });
 
     if (controller_) {
-        mode->setCurrentIndex(std::max(0, mode->findData(controller_->brushMode())));
+        mode->setCurrentIndex(std::max(0, mode->findData(paint_->mode())));
         connect(mode, &QComboBox::currentIndexChanged, this, [this, mode](int) {
-            controller_->setBrushMode(mode->currentData().toString());
+            paint_->setMode(mode->currentData().toString());
         });
     }
 }
@@ -92,12 +92,12 @@ QWidget* OptionsBar::buildStampPage(ToolId id)
     layout->addWidget(toolButton(id, page));
     addStampPaintFields(layout, page);
 
-    const StampOptions initial = controller_ ? controller_->stampOptions() : StampOptions{};
+    const StampOptions initial = controller_ ? stamp_->get() : StampOptions{};
     const auto update = [this](auto edit) {
         if (controller_) {
-            StampOptions o = controller_->stampOptions();
+            StampOptions o = stamp_->get();
             edit(o);
-            controller_->setStampOptions(o);
+            stamp_->set(o);
         }
     };
     const bool clone = id == ToolId::CloneStamp;
@@ -207,16 +207,16 @@ QWidget* OptionsBar::buildArtHistoryBrushPage(ToolId id)
     layout->addWidget(mode);
     addPercentField(layout, page, QStringLiteral("Opacity:"),
                     QStringLiteral("optionsArtHistoryOpacity"),
-                    controller_ ? controller_->brushOpacity() : 100,
-                    &ToolController::setBrushOpacity);
+                    controller_ ? paint_->opacity() : 100,
+                    [this](int v) { paint_->setOpacity(v); });
 
     const ArtHistoryOptions initial =
-        controller_ ? controller_->artHistoryOptions() : ArtHistoryOptions{};
+        controller_ ? artHistory_->get() : ArtHistoryOptions{};
     const auto update = [this](auto edit) {
         if (controller_) {
-            ArtHistoryOptions o = controller_->artHistoryOptions();
+            ArtHistoryOptions o = artHistory_->get();
             edit(o);
-            controller_->setArtHistoryOptions(o);
+            artHistory_->set(o);
         }
     };
     layout->addWidget(new QLabel(QStringLiteral("Style:"), page));
@@ -265,12 +265,12 @@ QWidget* OptionsBar::buildEraserPage(ToolId id)
     layout->addWidget(toolButton(id, page));
     addBrushTipFields(layout, page);
 
-    const EraserOptions initial = controller_ ? controller_->eraserOptions() : EraserOptions{};
+    const EraserOptions initial = controller_ ? eraser_->get() : EraserOptions{};
     const auto update = [this](auto edit) {
         if (controller_) {
-            EraserOptions o = controller_->eraserOptions();
+            EraserOptions o = eraser_->get();
             edit(o);
-            controller_->setEraserOptions(o);
+            eraser_->set(o);
         }
     };
     layout->addWidget(new QLabel(QStringLiteral("Mode:"), page));
@@ -282,10 +282,10 @@ QWidget* OptionsBar::buildEraserPage(ToolId id)
 
     NumericField* opacity = addPercentField(
         layout, page, QStringLiteral("Opacity:"), QStringLiteral("optionsEraserOpacity"),
-        controller_ ? controller_->brushOpacity() : 100, &ToolController::setBrushOpacity);
+        controller_ ? paint_->opacity() : 100, [this](int v) { paint_->setOpacity(v); });
     NumericField* flow = addPercentField(
         layout, page, QStringLiteral("Flow:"), QStringLiteral("optionsEraserFlow"),
-        controller_ ? controller_->brushFlow() : 100, &ToolController::setBrushFlow);
+        controller_ ? paint_->flow() : 100, [this](int v) { paint_->setFlow(v); });
     const auto strengthFor = [opacity, flow](int m) {
         opacity->setEnabled(m != 2);
         flow->setEnabled(m != 2);

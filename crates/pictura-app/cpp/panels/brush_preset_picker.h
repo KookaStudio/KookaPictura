@@ -3,6 +3,8 @@
 #include <QtGui/QPixmap>
 #include <QtWidgets/QWidget>
 
+#include "tool_options.h"
+
 class QLabel;
 class QListWidget;
 class QSlider;
@@ -53,6 +55,7 @@ private:
     void buildGrid();
 
     ToolController* controller_ = nullptr;
+    PaintOptions* paint_ = nullptr;
     bool updating_ = false;
     QLabel* preview_ = nullptr;
     QSpinBox* size_ = nullptr;

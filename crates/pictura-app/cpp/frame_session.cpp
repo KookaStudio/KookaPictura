@@ -134,11 +134,12 @@ void PicturaMainWindow::saveSession()
     state.guidesLocked = guidesLocked_;
     state.guideColor = guideColor_.name();
     state.guideDashed = guideDashed_;
-    if (tools_) {
-        state.cropClassicMode = tools_->cropClassicMode();
-        state.cropDeletePixels = tools_->cropDeletePixels();
-        state.cropRatio = tools_->cropRatio();
-        state.cropGridOverlay = tools_->cropGridOverlay();
+    if (tools_ && tools_->optionsFor<CropOptions>(ToolId::Crop)) {
+        const CropOptions* crop = tools_->optionsFor<CropOptions>(ToolId::Crop);
+        state.cropClassicMode = crop->classicMode();
+        state.cropDeletePixels = crop->deletePixels();
+        state.cropRatio = crop->ratio();
+        state.cropGridOverlay = crop->gridOverlay();
     }
     if (panelColumn_) {
         const bool iconic = panelColumn_->railMode();

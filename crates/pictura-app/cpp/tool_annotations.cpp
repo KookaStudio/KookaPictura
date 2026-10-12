@@ -27,15 +27,15 @@ public:
     {
     }
 
-    void onActivate(ToolContext& ctx) override { ctx_ = &ctx; }
+    void onActivate(ToolServices& ctx) override { ctx_ = &ctx; }
 
-    void onDeactivate(ToolContext&) override
+    void onDeactivate(ToolServices&) override
     {
         dragged_ = -1;
         ctx_ = nullptr;
     }
 
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         PictureView* v = ctx.view();
         ctx_ = &ctx;
@@ -69,7 +69,7 @@ public:
         return true;
     }
 
-    void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         PictureView* v = ctx.view();
         if (dragged_ < 0 || !v) {
@@ -79,7 +79,7 @@ public:
         ctx.refreshAnnotations();
     }
 
-    void onRelease(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    void onRelease(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         PictureView* v = ctx.view();
         const int index = dragged_;
@@ -116,7 +116,7 @@ private:
     const int kind_;
     int dragged_ = -1;
     QPoint start_;
-    ToolContext* ctx_ = nullptr;
+    ToolServices* ctx_ = nullptr;
 };
 
 } // namespace

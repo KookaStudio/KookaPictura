@@ -38,13 +38,13 @@ double distanceToSegment(const QLineF& line, const QPointF& p)
 // Ported from photorust's CanvasView::annotationPress / annotationDrag.
 class RulerToolHandler : public ToolHandler {
 public:
-    void onActivate(ToolContext& ctx) override
+    void onActivate(ToolServices& ctx) override
     {
         ctx_ = &ctx;
         show(ctx);
     }
 
-    void onDeactivate(ToolContext& ctx) override
+    void onDeactivate(ToolServices& ctx) override
     {
         grab_ = Grab::None;
         if (ImageView* canvas = ctx.canvas()) {
@@ -53,9 +53,9 @@ public:
         ctx_ = nullptr;
     }
 
-    void onDocumentRefreshed(ToolContext& ctx) override { show(ctx); }
+    void onDocumentRefreshed(ToolServices& ctx) override { show(ctx); }
 
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         PictureView* v = ctx.view();
         ctx_ = &ctx;
@@ -88,7 +88,7 @@ public:
         return true;
     }
 
-    void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         PictureView* v = ctx.view();
         if (grab_ == Grab::None || !v) {
@@ -110,7 +110,7 @@ public:
         show(ctx);
     }
 
-    void onRelease(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    void onRelease(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         if (grab_ == Grab::None) {
             return;
@@ -140,7 +140,7 @@ public:
 private:
     enum class Grab { None, A, B, Line };
 
-    static void show(ToolContext& ctx)
+    static void show(ToolServices& ctx)
     {
         if (ImageView* canvas = ctx.canvas()) {
             if (const auto line = rulerOf(ctx.view())) {
@@ -156,7 +156,7 @@ private:
     bool fresh_ = false;
     QLineF start_;
     QPointF press_;
-    ToolContext* ctx_ = nullptr;
+    ToolServices* ctx_ = nullptr;
 };
 
 } // namespace

@@ -4,7 +4,7 @@
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/path_list.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/paths.cxxqt.h"
-#include "tool_context.h"
+#include "tools.h"
 
 #include <QtGui/QFont>
 #include <QtGui/QMouseEvent>
@@ -363,11 +363,14 @@ bool PathsPanel::fillPath()
 bool PathsPanel::strokePath()
 {
     const QColor foreground = tools_ ? tools_->foreground() : QColor(Qt::black);
-    const int size = tools_ ? tools_->brushSize() : 5;
-    const int hardness = tools_ ? tools_->brushHardness() : 100;
-    const int opacity = tools_ ? tools_->brushOpacity() : 100;
-    const int flow = tools_ ? tools_->brushFlow() : 100;
-    const int spacing = tools_ ? tools_->brushSpacing() : 25;
+    const auto* controller = dynamic_cast<const ToolController*>(tools_);
+    PaintOptions* paint = controller ? controller->optionsFor<PaintOptions>(ToolId::Brush)
+                                     : nullptr;
+    const int size = paint ? paint->size() : 5;
+    const int hardness = paint ? paint->hardness() : 100;
+    const int opacity = paint ? paint->opacity() : 100;
+    const int flow = paint ? paint->flow() : 100;
+    const int spacing = paint ? paint->spacing() : 25;
     return onSelected([&](PictureView& v) {
         return paths_stroke(v, argb(foreground), size, hardness, opacity, flow, spacing);
     });

@@ -141,7 +141,7 @@ void FillToolsTest::gradientTool()
 
     reverse->setChecked(true);
     f.drag({QPointF(0, 20), QPointF(39, 20)});
-    const bool reversed = f.tools->gradientOptions().reverse
+    const bool reversed = f.tools->optionsFor<pictura::GradientGroup>(pictura::ToolId::Gradient)->get().reverse
         && f.view->history_index() == base + 2 && f.view->sample_argb(0, 20) == white
         && f.view->sample_argb(39, 20) == black;
     reverse->setChecked(false);
@@ -151,14 +151,14 @@ void FillToolsTest::gradientTool()
     f.view->select_rect(0, 0, 20, 40, QStringLiteral("new"), 0.0);
     const int inside = f.view->history_index();
     f.drag({QPointF(10, 20), QPointF(15, 20)});
-    const bool selected = f.tools->gradientOptions().style == 1
+    const bool selected = f.tools->optionsFor<pictura::GradientGroup>(pictura::ToolId::Gradient)->get().style == 1
         && f.committedOnce(inside, "Gradient") && f.view->sample_argb(10, 20) == black
         && f.view->sample_argb(10, 38) == white && f.view->sample_argb(39, 20) == black;
     f.view->deselect();
     styles.at(0)->click();
 
     presets.at(1)->trigger();
-    const bool preset = f.tools->gradientOptions().preset == 1
+    const bool preset = f.tools->optionsFor<pictura::GradientGroup>(pictura::ToolId::Gradient)->get().preset == 1
         && sample->toolTip() == pictura::gradient_preset_name(1);
     presets.at(0)->trigger();
 
@@ -240,14 +240,14 @@ void FillToolsTest::paintBucketTool()
     f.tools->setForeground(blue);
     contiguous->setChecked(false);
     f.drag({QPointF(29, 29)});
-    const bool global = !f.tools->bucketOptions().contiguous
+    const bool global = !f.tools->optionsFor<pictura::BucketGroup>(pictura::ToolId::PaintBucket)->get().contiguous
         && f.view->sample_argb(29, 29) == blue.rgba() && f.view->sample_argb(9, 9) == green.rgba();
 
     // Pattern: the checkerboard tile from the document origin, over all the blue.
     fill->setCurrentIndex(1);
     const int plain = f.view->history_index();
     f.drag({QPointF(1, 1)});
-    const bool patterned = pattern->isEnabled() && f.tools->bucketOptions().fill == 1
+    const bool patterned = pattern->isEnabled() && f.tools->optionsFor<pictura::BucketGroup>(pictura::ToolId::PaintBucket)->get().fill == 1
         && f.committedOnce(plain, "Paint Bucket")
         && f.view->sample_argb(1, 1) == QColor(215, 215, 215).rgba()
         && f.view->sample_argb(33, 1) == QColor(90, 90, 90).rgba();

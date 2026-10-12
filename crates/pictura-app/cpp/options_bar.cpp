@@ -80,6 +80,30 @@ OptionsBar::OptionsBar(ToolController* controller, QWidget* parent)
 {
     setObjectName(QStringLiteral("optionsBar"));
 
+    if (controller_) {
+        paint_ = controller_->optionsFor<PaintOptions>(ToolId::Brush);
+        selection_ = controller_->optionsFor<SelectionOptions>(ToolId::Marquee);
+        crop_ = controller_->optionsFor<CropOptions>(ToolId::Crop);
+        move_ = controller_->optionsFor<MoveGroup>(ToolId::Move);
+        eyedropper_ = controller_->optionsFor<EyedropperGroup>(ToolId::Eyedropper);
+        healing_ = controller_->optionsFor<HealingGroup>(ToolId::SpotHealingBrush);
+        patch_ = controller_->optionsFor<PatchGroup>(ToolId::Patch);
+        contentAware_ = controller_->optionsFor<ContentAwareMoveGroup>(ToolId::ContentAwareMove);
+        redEye_ = controller_->optionsFor<RedEyeGroup>(ToolId::RedEye);
+        colorReplace_ = controller_->optionsFor<ColorReplaceGroup>(ToolId::ColorReplacement);
+        mixer_ = controller_->optionsFor<MixerGroup>(ToolId::MixerBrush);
+        stamp_ = controller_->optionsFor<StampGroup>(ToolId::CloneStamp);
+        eraser_ = controller_->optionsFor<EraserGroup>(ToolId::Eraser);
+        backgroundErase_ = controller_->optionsFor<BackgroundEraseGroup>(ToolId::BackgroundEraser);
+        magicErase_ = controller_->optionsFor<MagicEraseGroup>(ToolId::MagicEraser);
+        artHistory_ = controller_->optionsFor<ArtHistoryGroup>(ToolId::ArtHistoryBrush);
+        gradient_ = controller_->optionsFor<GradientGroup>(ToolId::Gradient);
+        bucket_ = controller_->optionsFor<BucketGroup>(ToolId::PaintBucket);
+        pen_ = controller_->optionsFor<PenGroup>(ToolId::Pen);
+        shape_ = controller_->optionsFor<ShapeGroup>(ToolId::Rectangle);
+        type_ = controller_->optionsFor<TypeGroup>(ToolId::HorizontalType);
+    }
+
     stack_ = new QStackedWidget(this);
     // Page order follows allToolIds(), which matches ToolId's integer order, so
     // the stack index is the enum value. The Free Transform page is appended
@@ -277,10 +301,10 @@ QWidget* OptionsBar::buildCombinePage(ToolId id, bool withTolerance)
                                       numericConfig(0, 255, 1, 0, QString(), true,
                                                     QStringLiteral("optionsTolerance")),
                                       page);
-        spin->setValue(controller_->tolerance());
+        spin->setValue(selection_->tolerance());
         layout->addWidget(spin);
         connect(spin, &NumericField::valueChanged, this,
-                [this](double value) { controller_->setTolerance(qRound(value)); });
+                [this](double value) { selection_->setTolerance(qRound(value)); });
     }
 
     if (id == ToolId::QuickSelection) {
@@ -318,31 +342,31 @@ QWidget* OptionsBar::buildWandPage(ToolId id)
                                        numericConfig(0, 255, 1, 0, QString(), true,
                                                      QStringLiteral("optionsTolerance")),
                                        page);
-    tolerance->setValue(controller_ ? controller_->tolerance() : 32);
+    tolerance->setValue(controller_ ? selection_->tolerance() : 32);
     layout->addWidget(tolerance);
     if (controller_) {
         connect(tolerance, &NumericField::valueChanged, this,
-                [this](double value) { controller_->setTolerance(qRound(value)); });
+                [this](double value) { selection_->setTolerance(qRound(value)); });
     }
 
     auto* contiguous = new QCheckBox(QStringLiteral("Contiguous"), page);
-    contiguous->setChecked(controller_ ? controller_->contiguous() : true);
+    contiguous->setChecked(controller_ ? selection_->contiguous() : true);
     layout->addWidget(contiguous);
     if (controller_) {
         connect(contiguous, &QCheckBox::toggled, this,
-                [this](bool on) { controller_->setContiguous(on); });
+                [this](bool on) { selection_->setContiguous(on); });
     }
 
     // ponytail: the engine rasteriser is binary (pixel-centre) and the wand
     // samples the visible composite; both controls stay visible but disabled.
     auto* antiAlias = new QCheckBox(QStringLiteral("Anti-alias"), page);
-    antiAlias->setChecked(controller_ ? controller_->antiAlias() : true);
+    antiAlias->setChecked(controller_ ? selection_->antiAlias() : true);
     antiAlias->setEnabled(false);
     antiAlias->setToolTip(
         QStringLiteral("Not modelled: the selection rasteriser is binary (pixel-centre)."));
     layout->addWidget(antiAlias);
     auto* sample = new QCheckBox(QStringLiteral("Sample All Layers"), page);
-    sample->setChecked(controller_ ? controller_->sampleAllLayers() : true);
+    sample->setChecked(controller_ ? selection_->sampleAllLayers() : true);
     sample->setEnabled(false);
     sample->setToolTip(QStringLiteral("Not modelled: the wand samples the visible composite."));
         layout->addWidget(sample);
@@ -366,12 +390,12 @@ void OptionsBar::addModeButtons(QHBoxLayout* layout, QWidget* page, bool withInt
         button->setToolButtonStyle(Qt::ToolButtonIconOnly);
         button->setToolTip(QString::fromLatin1(modeButton.label));
         button->setCheckable(true);
-        button->setChecked(controller_ && controller_->combineMode() == modeButton.mode);
+        button->setChecked(controller_ && selection_->combineMode() == modeButton.mode);
         group->addButton(button);
         layout->addWidget(button);
         if (controller_) {
             connect(button, &QToolButton::clicked, this,
-                    [this, modeButton]() { controller_->setCombineMode(modeButton.mode); });
+                    [this, modeButton]() { selection_->setCombineMode(modeButton.mode); });
         }
     }
 }
@@ -390,11 +414,11 @@ QWidget* OptionsBar::buildSelectionPage(ToolId id)
         numericConfig(0.0, 250.0, 1.0, 1, QStringLiteral("px"), false,
                       QStringLiteral("optionsFeather")),
         page);
-    feather->setValue(controller_ ? controller_->feather() : 0.0);
+    feather->setValue(controller_ ? selection_->feather() : 0.0);
     layout->addWidget(feather);
     if (controller_) {
         connect(feather, &NumericField::valueChanged, this,
-                [this](double value) { controller_->setFeather(value); });
+                [this](double value) { selection_->setFeather(value); });
     }
 
     const bool isMarquee = id == ToolId::Marquee || id == ToolId::EllipticalMarquee;
@@ -415,12 +439,12 @@ QWidget* OptionsBar::buildSelectionPage(ToolId id)
                                         numericConfig(0.1, 100.0, 0.1, 1, QString(), true,
                                                       QStringLiteral("optionsRatioW")),
                                         ratioBox);
-        ratioW->setValue(controller_ ? controller_->fixedRatioWidth() : 1.0);
+        ratioW->setValue(controller_ ? selection_->fixedRatioWidth() : 1.0);
         auto* ratioH = new NumericField(QString(),
                                         numericConfig(0.1, 100.0, 0.1, 1, QString(), true,
                                                       QStringLiteral("optionsRatioH")),
                                         ratioBox);
-        ratioH->setValue(controller_ ? controller_->fixedRatioHeight() : 1.0);
+        ratioH->setValue(controller_ ? selection_->fixedRatioHeight() : 1.0);
         ratioLayout->addWidget(ratioW);
         ratioLayout->addWidget(new QLabel(QStringLiteral(":"), ratioBox));
         ratioLayout->addWidget(ratioH);
@@ -434,12 +458,12 @@ QWidget* OptionsBar::buildSelectionPage(ToolId id)
                                        numericConfig(1, 10000, 1, 0, QString(), true,
                                                      QStringLiteral("optionsSizeW")),
                                        sizeBox);
-        sizeW->setValue(controller_ ? controller_->fixedSizeWidth() : 100);
+        sizeW->setValue(controller_ ? selection_->fixedSizeWidth() : 100);
         auto* sizeH = new NumericField(QString(),
                                        numericConfig(1, 10000, 1, 0, QString(), true,
                                                      QStringLiteral("optionsSizeH")),
                                        sizeBox);
-        sizeH->setValue(controller_ ? controller_->fixedSizeHeight() : 100);
+        sizeH->setValue(controller_ ? selection_->fixedSizeHeight() : 100);
         sizeLayout->addWidget(sizeW);
         sizeLayout->addWidget(new QLabel(QStringLiteral("x"), sizeBox));
         sizeLayout->addWidget(sizeH);
@@ -449,16 +473,16 @@ QWidget* OptionsBar::buildSelectionPage(ToolId id)
 
         if (controller_) {
             connect(ratioW, &NumericField::valueChanged, this, [this, ratioH](double v) {
-                controller_->setFixedRatio(v, ratioH->value());
+                selection_->setFixedRatio(v, ratioH->value());
             });
             connect(ratioH, &NumericField::valueChanged, this, [this, ratioW](double v) {
-                controller_->setFixedRatio(ratioW->value(), v);
+                selection_->setFixedRatio(ratioW->value(), v);
             });
             connect(sizeW, &NumericField::valueChanged, this, [this, sizeH](double v) {
-                controller_->setFixedSize(qRound(v), qRound(sizeH->value()));
+                selection_->setFixedSize(qRound(v), qRound(sizeH->value()));
             });
             connect(sizeH, &NumericField::valueChanged, this, [this, sizeW](double v) {
-                controller_->setFixedSize(qRound(sizeW->value()), qRound(v));
+                selection_->setFixedSize(qRound(sizeW->value()), qRound(v));
             });
         }
 
@@ -467,14 +491,14 @@ QWidget* OptionsBar::buildSelectionPage(ToolId id)
             sizeBox->setVisible(style == int(MarqueeStyle::FixedSize));
         };
         const int initialStyle =
-            controller_ ? int(controller_->marqueeStyle()) : int(MarqueeStyle::Normal);
+            controller_ ? int(selection_->marqueeStyle()) : int(MarqueeStyle::Normal);
         styleCombo->setCurrentIndex(styleCombo->findData(initialStyle));
         applyStyleVisibility(initialStyle);
         if (controller_) {
             connect(styleCombo, &QComboBox::currentIndexChanged, this,
                     [this, styleCombo, applyStyleVisibility](int) {
                         const int style = styleCombo->currentData().toInt();
-                        controller_->setMarqueeStyle(static_cast<MarqueeStyle>(style));
+                        selection_->setMarqueeStyle(static_cast<MarqueeStyle>(style));
                         applyStyleVisibility(style);
                     });
         }
@@ -532,15 +556,15 @@ void OptionsBar::addMagneticFields(QHBoxLayout* layout, QWidget* page)
     layout->addWidget(contrast);
     layout->addWidget(frequency);
     if (controller_) {
-        width->setValue(controller_->magneticWidth());
-        contrast->setValue(controller_->magneticContrast());
-        frequency->setValue(controller_->magneticFrequency());
+        width->setValue(selection_->magneticWidth());
+        contrast->setValue(selection_->magneticContrast());
+        frequency->setValue(selection_->magneticFrequency());
         connect(width, &NumericField::valueChanged, this,
-                [this](double v) { controller_->setMagneticWidth(qRound(v)); });
+                [this](double v) { selection_->setMagneticWidth(qRound(v)); });
         connect(contrast, &NumericField::valueChanged, this,
-                [this](double v) { controller_->setMagneticContrast(qRound(v)); });
+                [this](double v) { selection_->setMagneticContrast(qRound(v)); });
         connect(frequency, &NumericField::valueChanged, this,
-                [this](double v) { controller_->setMagneticFrequency(qRound(v)); });
+                [this](double v) { selection_->setMagneticFrequency(qRound(v)); });
         // `[` / `]` change the width from the keyboard.
         connect(controller_, &ToolController::magneticWidthChanged, width,
                 [width](int v) { width->setValue(v); });
@@ -611,22 +635,22 @@ QWidget* OptionsBar::buildPaintPage(ToolId id)
 
     addBrushTipFields(layout, page);
     auto addField = [&](const QString& label, const QString& name, const QString& suffix, int lo,
-                        int hi, int value, void (ToolController::*setter)(int)) {
+                        int hi, int value, std::function<void(int)> setter) {
         auto* field =
             new NumericField(label, numericConfig(lo, hi, 1, 0, suffix, true, name), page);
         field->setValue(value);
         layout->addWidget(field);
         if (controller_) {
             connect(field, &NumericField::valueChanged, this,
-                    [this, setter](double v) { (controller_->*setter)(qRound(v)); });
+                    [setter](double v) { setter(qRound(v)); });
         }
     };
 
     addField(QStringLiteral("Opacity"), QStringLiteral("optionsBrushOpacity"),
-             QStringLiteral("%"), 0, 100, controller_ ? controller_->brushOpacity() : 100,
-             &ToolController::setBrushOpacity);
+             QStringLiteral("%"), 0, 100, controller_ ? paint_->opacity() : 100,
+             [this](int v) { paint_->setOpacity(v); });
     addField(QStringLiteral("Flow"), QStringLiteral("optionsBrushFlow"), QStringLiteral("%"), 0,
-             100, controller_ ? controller_->brushFlow() : 100, &ToolController::setBrushFlow);
+             100, controller_ ? paint_->flow() : 100, [this](int v) { paint_->setFlow(v); });
 
     layout->addWidget(new QLabel(QStringLiteral("Mode"), page));
     auto* combo = new QComboBox(page);
@@ -635,9 +659,9 @@ QWidget* OptionsBar::buildPaintPage(ToolId id)
     combo->addItem(QStringLiteral("Behind"), QStringLiteral("behind"));
     combo->addItem(QStringLiteral("Clear"), QStringLiteral("clear"));
     if (controller_) {
-        combo->setCurrentIndex(combo->findData(controller_->brushMode()));
+        combo->setCurrentIndex(combo->findData(paint_->mode()));
         connect(combo, &QComboBox::currentIndexChanged, this, [this, combo](int) {
-            controller_->setBrushMode(combo->currentData().toString());
+            paint_->setMode(combo->currentData().toString());
         });
     }
     layout->addWidget(combo);
@@ -645,9 +669,9 @@ QWidget* OptionsBar::buildPaintPage(ToolId id)
     if (id == ToolId::Pencil) {
         auto* check = new QCheckBox(QStringLiteral("Auto Erase"), page);
         if (controller_) {
-            check->setChecked(controller_->autoErase());
+            check->setChecked(paint_->autoErase());
             connect(check, &QCheckBox::toggled, this,
-                    [this](bool on) { controller_->setAutoErase(on); });
+                    [this](bool on) { paint_->setAutoErase(on); });
         }
         layout->addWidget(check);
     }
@@ -677,18 +701,26 @@ QWidget* OptionsBar::buildHealingPage(ToolId id)
         combo->addItem(QStringLiteral("Create Texture"));
         combo->addItem(QStringLiteral("Content-Aware"));
         if (controller_) {
-            combo->setCurrentIndex(controller_->spotHealingType());
+            combo->setCurrentIndex(healing_->get().spotType);
             connect(combo, &QComboBox::currentIndexChanged, this,
-                    [this](int index) { controller_->setSpotHealingType(index); });
+                    [this](int index) {
+                        HealingOptions o = healing_->get();
+                        o.spotType = index;
+                        healing_->set(o);
+                    });
         }
         layout->addWidget(combo);
     } else {
         auto* check = new QCheckBox(QStringLiteral("Aligned"), page);
         check->setObjectName(QStringLiteral("optionsHealingAligned"));
         if (controller_) {
-            check->setChecked(controller_->healingAligned());
+            check->setChecked(healing_->get().aligned);
             connect(check, &QCheckBox::toggled, this,
-                    [this](bool on) { controller_->setHealingAligned(on); });
+                    [this](bool on) {
+                        HealingOptions o = healing_->get();
+                        o.aligned = on;
+                        healing_->set(o);
+                    });
         }
         layout->addWidget(check);
     }
@@ -927,17 +959,25 @@ QWidget* OptionsBar::buildPatchPage(ToolId id)
         transparent->setEnabled(!contentAware);
     };
     if (controller_) {
-        mode->setCurrentIndex(controller_->patchContentAware() ? 1 : 0);
-        (controller_->patchDestination() ? destination : source)->setChecked(true);
-        transparent->setChecked(controller_->patchTransparent());
+        mode->setCurrentIndex(patch_->get().contentAware ? 1 : 0);
+        (patch_->get().destination ? destination : source)->setChecked(true);
+        transparent->setChecked(patch_->get().transparent);
         connect(mode, &QComboBox::currentIndexChanged, this, [this, syncEnabled](int index) {
-            controller_->setPatchContentAware(index == 1);
+            PatchOptions o = patch_->get();
+            o.contentAware = index == 1;
+            patch_->set(o);
             syncEnabled(index == 1);
         });
-        connect(destination, &QToolButton::toggled, this,
-                [this](bool on) { controller_->setPatchDestination(on); });
-        connect(transparent, &QCheckBox::toggled, this,
-                [this](bool on) { controller_->setPatchTransparent(on); });
+        connect(destination, &QToolButton::toggled, this, [this](bool on) {
+            PatchOptions o = patch_->get();
+            o.destination = on;
+            patch_->set(o);
+        });
+        connect(transparent, &QCheckBox::toggled, this, [this](bool on) {
+            PatchOptions o = patch_->get();
+            o.transparent = on;
+            patch_->set(o);
+        });
     } else {
         source->setChecked(true);
     }
@@ -982,12 +1022,20 @@ QWidget* OptionsBar::buildContentAwareMovePage(ToolId id)
     layout->addWidget(sampleAll);
 
     if (controller_) {
-        mode->setCurrentIndex(controller_->contentAwareMoveExtend() ? 1 : 0);
-        adaptation->setCurrentIndex(controller_->contentAwareAdaptation());
+        mode->setCurrentIndex(contentAware_->get().extend ? 1 : 0);
+        adaptation->setCurrentIndex(contentAware_->get().adaptation);
         connect(mode, &QComboBox::currentIndexChanged, this,
-                [this](int index) { controller_->setContentAwareMoveExtend(index == 1); });
+                [this](int index) {
+                    ContentAwareMoveOptions o = contentAware_->get();
+                    o.extend = index == 1;
+                    contentAware_->set(o);
+                });
         connect(adaptation, &QComboBox::currentIndexChanged, this,
-                [this](int index) { controller_->setContentAwareAdaptation(index); });
+                [this](int index) {
+                    ContentAwareMoveOptions o = contentAware_->get();
+                    o.adaptation = index;
+                    contentAware_->set(o);
+                });
     } else {
         adaptation->setCurrentIndex(2);
     }

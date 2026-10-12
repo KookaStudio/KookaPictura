@@ -22,109 +22,238 @@
 namespace pictura {
 
 // Concrete handlers live in their own translation units; ToolController owns
-// only the registry.
+// only the registry. The factories take the family option groups the handlers
+// own (shared within a family) and read directly.
 std::unique_ptr<ToolHandler> makeHandToolHandler();
 std::unique_ptr<ToolHandler> makeZoomToolHandler();
-std::unique_ptr<ToolHandler> makeEyedropperToolHandler();
-std::unique_ptr<ToolHandler> makeBrushToolHandler(bool aliased);
-std::unique_ptr<ToolHandler> makeMagicWandToolHandler();
-std::unique_ptr<ToolHandler> makeQuickSelectionToolHandler();
-std::unique_ptr<ToolHandler> makeMoveToolHandler();
-std::unique_ptr<ToolHandler> makeCropToolHandler();
-std::unique_ptr<ToolHandler> makePerspectiveCropToolHandler();
+std::unique_ptr<ToolHandler> makeEyedropperToolHandler(std::shared_ptr<EyedropperGroup> options);
+std::unique_ptr<ToolHandler> makeBrushToolHandler(bool aliased, std::shared_ptr<PaintOptions> paint);
+std::unique_ptr<ToolHandler> makeMagicWandToolHandler(std::shared_ptr<SelectionOptions> selection);
+std::unique_ptr<ToolHandler> makeQuickSelectionToolHandler(
+    std::shared_ptr<SelectionOptions> selection);
+std::unique_ptr<ToolHandler> makeMoveToolHandler(std::shared_ptr<MoveGroup> move);
+std::unique_ptr<ToolHandler> makeCropToolHandler(std::shared_ptr<CropOptions> crop);
+std::unique_ptr<ToolHandler> makePerspectiveCropToolHandler(std::shared_ptr<CropOptions> crop);
 std::unique_ptr<ToolHandler> makeSliceToolHandler();
 std::unique_ptr<ToolHandler> makeSliceSelectToolHandler();
-std::unique_ptr<ToolHandler> makeMarqueeToolHandler();
-std::unique_ptr<ToolHandler> makeEllipticalMarqueeToolHandler();
-std::unique_ptr<ToolHandler> makeLassoToolHandler();
-std::unique_ptr<ToolHandler> makePolygonalLassoToolHandler();
-std::unique_ptr<ToolHandler> makeMagneticLassoToolHandler();
+std::unique_ptr<ToolHandler> makeMarqueeToolHandler(std::shared_ptr<SelectionOptions> selection);
+std::unique_ptr<ToolHandler> makeEllipticalMarqueeToolHandler(
+    std::shared_ptr<SelectionOptions> selection);
+std::unique_ptr<ToolHandler> makeLassoToolHandler(std::shared_ptr<SelectionOptions> selection);
+std::unique_ptr<ToolHandler> makePolygonalLassoToolHandler(
+    std::shared_ptr<SelectionOptions> selection);
+std::unique_ptr<ToolHandler> makeMagneticLassoToolHandler(
+    std::shared_ptr<SelectionOptions> selection);
 std::unique_ptr<ToolHandler> makeColorSamplerToolHandler();
 std::unique_ptr<ToolHandler> makeRulerToolHandler();
 std::unique_ptr<ToolHandler> makeNoteToolHandler();
 std::unique_ptr<ToolHandler> makeCountToolHandler();
-std::unique_ptr<ToolHandler> makeSpotHealingToolHandler();
-std::unique_ptr<ToolHandler> makeHealingToolHandler();
-std::unique_ptr<ToolHandler> makePatchToolHandler();
-std::unique_ptr<ToolHandler> makeContentAwareMoveToolHandler();
-std::unique_ptr<ToolHandler> makeRedEyeToolHandler();
-std::unique_ptr<ToolHandler> makeColorReplacementToolHandler();
-std::unique_ptr<ToolHandler> makeMixerBrushToolHandler();
-std::unique_ptr<ToolHandler> makeCloneStampToolHandler();
-std::unique_ptr<ToolHandler> makePatternStampToolHandler();
-std::unique_ptr<ToolHandler> makeHistoryBrushToolHandler();
-std::unique_ptr<ToolHandler> makeArtHistoryBrushToolHandler();
-std::unique_ptr<ToolHandler> makeEraserToolHandler();
-std::unique_ptr<ToolHandler> makeBackgroundEraserToolHandler();
-std::unique_ptr<ToolHandler> makeMagicEraserToolHandler();
-std::unique_ptr<ToolHandler> makeGradientToolHandler();
-std::unique_ptr<ToolHandler> makePaintBucketToolHandler();
-std::unique_ptr<ToolHandler> makeRetouchToolHandler(ToolId id);
-std::unique_ptr<ToolHandler> makePenToolHandler(ToolId id);
-std::unique_ptr<ToolHandler> makePathSelectionToolHandler(ToolId id);
-std::unique_ptr<ToolHandler> makeShapeToolHandler(ToolId id);
+std::unique_ptr<ToolHandler> makeSpotHealingToolHandler(std::shared_ptr<PaintOptions> paint,
+                                                        std::shared_ptr<HealingGroup> healing);
+std::unique_ptr<ToolHandler> makeHealingToolHandler(std::shared_ptr<PaintOptions> paint,
+                                                    std::shared_ptr<HealingGroup> healing);
+std::unique_ptr<ToolHandler> makePatchToolHandler(std::shared_ptr<PaintOptions> paint,
+                                                  std::shared_ptr<PatchGroup> patch);
+std::unique_ptr<ToolHandler> makeContentAwareMoveToolHandler(
+    std::shared_ptr<ContentAwareMoveGroup> contentAware);
+std::unique_ptr<ToolHandler> makeRedEyeToolHandler(std::shared_ptr<PaintOptions> paint,
+                                                   std::shared_ptr<RedEyeGroup> redEye);
+std::unique_ptr<ToolHandler> makeColorReplacementToolHandler(
+    std::shared_ptr<PaintOptions> paint, std::shared_ptr<ColorReplaceGroup> colorReplace);
+std::unique_ptr<ToolHandler> makeMixerBrushToolHandler(std::shared_ptr<PaintOptions> paint,
+                                                       std::shared_ptr<MixerGroup> mixer);
+std::unique_ptr<ToolHandler> makeCloneStampToolHandler(
+    std::shared_ptr<PaintOptions> paint, std::shared_ptr<StampGroup> stamp,
+    std::shared_ptr<CloneSourceOptions> clone);
+std::unique_ptr<ToolHandler> makePatternStampToolHandler(std::shared_ptr<PaintOptions> paint,
+                                                         std::shared_ptr<StampGroup> stamp);
+std::unique_ptr<ToolHandler> makeHistoryBrushToolHandler(std::shared_ptr<PaintOptions> paint);
+std::unique_ptr<ToolHandler> makeArtHistoryBrushToolHandler(
+    std::shared_ptr<PaintOptions> paint, std::shared_ptr<ArtHistoryGroup> artHistory);
+std::unique_ptr<ToolHandler> makeEraserToolHandler(std::shared_ptr<PaintOptions> paint,
+                                                   std::shared_ptr<EraserGroup> eraser);
+std::unique_ptr<ToolHandler> makeBackgroundEraserToolHandler(
+    std::shared_ptr<PaintOptions> paint, std::shared_ptr<BackgroundEraseGroup> backgroundErase);
+std::unique_ptr<ToolHandler> makeMagicEraserToolHandler(
+    std::shared_ptr<PaintOptions> paint, std::shared_ptr<MagicEraseGroup> magicErase);
+std::unique_ptr<ToolHandler> makeGradientToolHandler(std::shared_ptr<GradientGroup> gradient);
+std::unique_ptr<ToolHandler> makePaintBucketToolHandler(std::shared_ptr<BucketGroup> bucket);
+std::unique_ptr<ToolHandler> makeRetouchToolHandler(ToolId id, std::shared_ptr<PaintOptions> paint,
+                                                    std::shared_ptr<RetouchGroup> retouch,
+                                                    std::shared_ptr<ToneGroup> tone);
+std::unique_ptr<ToolHandler> makePenToolHandler(ToolId id, std::shared_ptr<PenGroup> pen);
+std::unique_ptr<ToolHandler> makePathSelectionToolHandler(ToolId id,
+                                                          std::shared_ptr<PenGroup> pen);
+std::unique_ptr<ToolHandler> makeShapeToolHandler(ToolId id, std::shared_ptr<ShapeGroup> shape);
 std::unique_ptr<ToolHandler> makeRotateViewToolHandler();
-std::unique_ptr<ToolHandler> makeTypeToolHandler(ToolId id);
+std::unique_ptr<ToolHandler> makeTypeToolHandler(ToolId id, std::shared_ptr<TypeGroup> type);
 
 ToolController::ToolController(QObject* parent)
     : QObject(parent)
 {
+    // The family option groups. Each handler holds the shared_ptr for its
+    // family; the raw pointers below are the controller's non-owning references
+    // for signal wiring and its own reads.
+    auto paint = std::make_shared<PaintOptions>();
+    auto selection = std::make_shared<SelectionOptions>();
+    auto crop = std::make_shared<CropOptions>();
+    auto clone = std::make_shared<CloneSourceOptions>();
+    auto move = std::make_shared<MoveGroup>();
+    auto type = std::make_shared<TypeGroup>();
+    auto mixer = std::make_shared<MixerGroup>();
+    auto eyedropper = std::make_shared<EyedropperGroup>();
+    auto pen = std::make_shared<PenGroup>();
+    auto shape = std::make_shared<ShapeGroup>();
+    auto healing = std::make_shared<HealingGroup>();
+    auto patch = std::make_shared<PatchGroup>();
+    auto contentAware = std::make_shared<ContentAwareMoveGroup>();
+    auto redEye = std::make_shared<RedEyeGroup>();
+    auto colorReplace = std::make_shared<ColorReplaceGroup>();
+    auto stamp = std::make_shared<StampGroup>();
+    auto eraser = std::make_shared<EraserGroup>();
+    auto backgroundErase = std::make_shared<BackgroundEraseGroup>();
+    auto magicErase = std::make_shared<MagicEraseGroup>();
+    auto artHistory = std::make_shared<ArtHistoryGroup>();
+    auto gradient = std::make_shared<GradientGroup>();
+    auto bucket = std::make_shared<BucketGroup>();
+    std::array<std::shared_ptr<RetouchGroup>, 3> retouch{
+        std::make_shared<RetouchGroup>(), std::make_shared<RetouchGroup>(),
+        std::make_shared<RetouchGroup>()};
+    std::array<std::shared_ptr<ToneGroup>, 3> tone{
+        std::make_shared<ToneGroup>(), std::make_shared<ToneGroup>(),
+        std::make_shared<ToneGroup>()};
+
+    paint_ = paint.get();
+    selection_ = selection.get();
+    crop_ = crop.get();
+    clone_ = clone.get();
+    move_ = move.get();
+    type_ = type.get();
+    mixer_ = mixer.get();
+    eyedropper_ = eyedropper.get();
+    pen_ = pen.get();
+    shape_ = shape.get();
+
+    // Wire the groups to the controller's signals and handler hooks, so every
+    // consumer keeps following an option change.
+    paint->sizeChanged = [this](int size) { emit brushSizeChanged(size); };
+    paint->tipChanged = [this]() { emit brushTipChanged(); };
+    selection->magneticWidthChanged = [this](int width) { emit magneticWidthChanged(width); };
+    crop->optionsChanged = [this]() {
+        if (ToolHandler* h = registry_.forTool(ToolId::Crop)) {
+            h->onOptionsChanged(*this);
+        }
+        emit cropOptionsChanged();
+    };
+    crop->angleChanged = [this]() {
+        if (ToolHandler* h = registry_.forTool(ToolId::Crop)) {
+            crop_->setPivot(h->cropCenter());
+        }
+        if (canvas_) {
+            canvas_->setCropStraighten(crop_->angle(), crop_->pivot());
+        }
+    };
+    crop->straightenChanged = [this]() {
+        if (ToolHandler* h = registry_.forTool(ToolId::Crop)) {
+            h->setStraightenMode(crop_->straightenMode());
+        }
+        refreshCursor();
+        emit cropOptionsChanged();
+    };
+    type->changed = [this]() {
+        if (ToolHandler* h = registry_.forTool(active_)) {
+            h->onOptionsChanged(*this);
+        }
+        emit typeOptionsChanged();
+    };
+    pen->changed = [this]() {
+        if (ToolHandler* h = registry_.forTool(active_)) {
+            h->onOptionsChanged(*this);
+        }
+    };
+    shape->changed = [this]() {
+        if (ToolHandler* h = registry_.forTool(active_)) {
+            h->onOptionsChanged(*this);
+        }
+        emit shapeOptionsChanged();
+    };
+    clone->changed = [this]() { emit cloneSourceChanged(); };
+    move->changed = [this]() {
+        emit moveOptionsChanged();
+        syncTransformControls();
+    };
+    eyedropper->changed = [this]() {
+        if (!eyedropper_->get().ring && canvas_ && active_ == ToolId::Eyedropper) {
+            canvas_->clearSamplingRing();
+        }
+    };
+    mixer->changed = [this]() { emit mixerReservoirChanged(mixer_->get().reservoir); };
+
     registry_.registerTool(ToolId::Hand, makeHandToolHandler());
     registry_.registerTool(ToolId::RotateView, makeRotateViewToolHandler());
     registry_.registerTool(ToolId::Zoom, makeZoomToolHandler());
-    registry_.registerTool(ToolId::Eyedropper, makeEyedropperToolHandler());
-    registry_.registerTool(ToolId::Brush, makeBrushToolHandler(false));
-    registry_.registerTool(ToolId::Pencil, makeBrushToolHandler(true));
-    registry_.registerTool(ToolId::MagicWand, makeMagicWandToolHandler());
-    registry_.registerTool(ToolId::QuickSelection, makeQuickSelectionToolHandler());
-    registry_.registerTool(ToolId::Move, makeMoveToolHandler());
-    registry_.registerTool(ToolId::Crop, makeCropToolHandler());
-    registry_.registerTool(ToolId::PerspectiveCrop, makePerspectiveCropToolHandler());
+    registry_.registerTool(ToolId::Eyedropper, makeEyedropperToolHandler(eyedropper));
+    registry_.registerTool(ToolId::Brush, makeBrushToolHandler(false, paint));
+    registry_.registerTool(ToolId::Pencil, makeBrushToolHandler(true, paint));
+    registry_.registerTool(ToolId::MagicWand, makeMagicWandToolHandler(selection));
+    registry_.registerTool(ToolId::QuickSelection, makeQuickSelectionToolHandler(selection));
+    registry_.registerTool(ToolId::Move, makeMoveToolHandler(move));
+    registry_.registerTool(ToolId::Crop, makeCropToolHandler(crop));
+    registry_.registerTool(ToolId::PerspectiveCrop, makePerspectiveCropToolHandler(crop));
     registry_.registerTool(ToolId::Slice, makeSliceToolHandler());
     registry_.registerTool(ToolId::SliceSelect, makeSliceSelectToolHandler());
-    registry_.registerTool(ToolId::Marquee, makeMarqueeToolHandler());
-    registry_.registerTool(ToolId::EllipticalMarquee, makeEllipticalMarqueeToolHandler());
-    registry_.registerTool(ToolId::Lasso, makeLassoToolHandler());
-    registry_.registerTool(ToolId::PolygonalLasso, makePolygonalLassoToolHandler());
-    registry_.registerTool(ToolId::MagneticLasso, makeMagneticLassoToolHandler());
+    registry_.registerTool(ToolId::Marquee, makeMarqueeToolHandler(selection));
+    registry_.registerTool(ToolId::EllipticalMarquee, makeEllipticalMarqueeToolHandler(selection));
+    registry_.registerTool(ToolId::Lasso, makeLassoToolHandler(selection));
+    registry_.registerTool(ToolId::PolygonalLasso, makePolygonalLassoToolHandler(selection));
+    registry_.registerTool(ToolId::MagneticLasso, makeMagneticLassoToolHandler(selection));
     registry_.registerTool(ToolId::ColorSampler, makeColorSamplerToolHandler());
     registry_.registerTool(ToolId::Ruler, makeRulerToolHandler());
     registry_.registerTool(ToolId::Note, makeNoteToolHandler());
     registry_.registerTool(ToolId::Count, makeCountToolHandler());
-    registry_.registerTool(ToolId::SpotHealingBrush, makeSpotHealingToolHandler());
-    registry_.registerTool(ToolId::HealingBrush, makeHealingToolHandler());
-    registry_.registerTool(ToolId::Patch, makePatchToolHandler());
-    registry_.registerTool(ToolId::ContentAwareMove, makeContentAwareMoveToolHandler());
-    registry_.registerTool(ToolId::RedEye, makeRedEyeToolHandler());
-    registry_.registerTool(ToolId::ColorReplacement, makeColorReplacementToolHandler());
-    registry_.registerTool(ToolId::MixerBrush, makeMixerBrushToolHandler());
-    registry_.registerTool(ToolId::CloneStamp, makeCloneStampToolHandler());
-    registry_.registerTool(ToolId::PatternStamp, makePatternStampToolHandler());
-    registry_.registerTool(ToolId::HistoryBrush, makeHistoryBrushToolHandler());
-    registry_.registerTool(ToolId::ArtHistoryBrush, makeArtHistoryBrushToolHandler());
-    registry_.registerTool(ToolId::Eraser, makeEraserToolHandler());
-    registry_.registerTool(ToolId::BackgroundEraser, makeBackgroundEraserToolHandler());
-    registry_.registerTool(ToolId::MagicEraser, makeMagicEraserToolHandler());
-    registry_.registerTool(ToolId::Gradient, makeGradientToolHandler());
-    registry_.registerTool(ToolId::PaintBucket, makePaintBucketToolHandler());
+    registry_.registerTool(ToolId::SpotHealingBrush,
+                           makeSpotHealingToolHandler(paint, healing));
+    registry_.registerTool(ToolId::HealingBrush, makeHealingToolHandler(paint, healing));
+    registry_.registerTool(ToolId::Patch, makePatchToolHandler(paint, patch));
+    registry_.registerTool(ToolId::ContentAwareMove,
+                           makeContentAwareMoveToolHandler(contentAware));
+    registry_.registerTool(ToolId::RedEye, makeRedEyeToolHandler(paint, redEye));
+    registry_.registerTool(ToolId::ColorReplacement,
+                           makeColorReplacementToolHandler(paint, colorReplace));
+    registry_.registerTool(ToolId::MixerBrush, makeMixerBrushToolHandler(paint, mixer));
+    registry_.registerTool(ToolId::CloneStamp,
+                           makeCloneStampToolHandler(paint, stamp, clone));
+    registry_.registerTool(ToolId::PatternStamp, makePatternStampToolHandler(paint, stamp));
+    registry_.registerTool(ToolId::HistoryBrush, makeHistoryBrushToolHandler(paint));
+    registry_.registerTool(ToolId::ArtHistoryBrush,
+                           makeArtHistoryBrushToolHandler(paint, artHistory));
+    registry_.registerTool(ToolId::Eraser, makeEraserToolHandler(paint, eraser));
+    registry_.registerTool(ToolId::BackgroundEraser,
+                           makeBackgroundEraserToolHandler(paint, backgroundErase));
+    registry_.registerTool(ToolId::MagicEraser, makeMagicEraserToolHandler(paint, magicErase));
+    registry_.registerTool(ToolId::Gradient, makeGradientToolHandler(gradient));
+    registry_.registerTool(ToolId::PaintBucket, makePaintBucketToolHandler(bucket));
     for (ToolId id : {ToolId::Blur, ToolId::Sharpen, ToolId::Smudge, ToolId::Dodge, ToolId::Burn,
                       ToolId::Sponge}) {
-        registry_.registerTool(id, makeRetouchToolHandler(id));
+        const size_t slot = id == ToolId::Sharpen || id == ToolId::Burn
+            ? 1
+            : (id == ToolId::Smudge || id == ToolId::Sponge ? 2 : 0);
+        registry_.registerTool(id, makeRetouchToolHandler(id, paint, retouch[slot], tone[slot]));
     }
     for (ToolId id : {ToolId::Pen, ToolId::FreeformPen, ToolId::AddAnchorPoint,
                       ToolId::DeleteAnchorPoint, ToolId::ConvertPoint}) {
-        registry_.registerTool(id, makePenToolHandler(id));
+        registry_.registerTool(id, makePenToolHandler(id, pen));
     }
     for (ToolId id : {ToolId::PathSelection, ToolId::DirectSelection}) {
-        registry_.registerTool(id, makePathSelectionToolHandler(id));
+        registry_.registerTool(id, makePathSelectionToolHandler(id, pen));
     }
     for (ToolId id : {ToolId::Rectangle, ToolId::RoundedRectangle, ToolId::Ellipse,
                       ToolId::Polygon, ToolId::Line, ToolId::CustomShape}) {
-        registry_.registerTool(id, makeShapeToolHandler(id));
+        registry_.registerTool(id, makeShapeToolHandler(id, shape));
     }
     for (ToolId id : {ToolId::HorizontalType, ToolId::VerticalType, ToolId::HorizontalTypeMask,
                       ToolId::VerticalTypeMask}) {
-        registry_.registerTool(id, makeTypeToolHandler(id));
+        registry_.registerTool(id, makeTypeToolHandler(id, type));
     }
     // A size change from the options bar or `[`/`]` moves the hover ring at
     // once. Query the pointer so a stale position is never reused after leave.
@@ -184,19 +313,6 @@ void ToolController::setActiveTool(ToolId id)
     emit activeToolChanged(id);
 }
 
-void ToolController::setCombineMode(SelectionMode mode) { mode_ = mode; }
-
-void ToolController::setTypeOptions(const TypeOptions& options)
-{
-    type_ = options;
-    type_.size = std::clamp(options.size, 1.0, 1296.0);
-    type_.justification = std::clamp(options.justification, 0, 2);
-    emit typeOptionsChanged();
-    if (ToolHandler* h = registry_.forTool(active_)) {
-        h->onOptionsChanged(*this);
-    }
-}
-
 bool ToolController::commitText()
 {
     ToolHandler* h = registry_.forTool(active_);
@@ -221,15 +337,6 @@ bool ToolController::insertText(const QString& text)
     return h && h->insertText(text);
 }
 
-void ToolController::setPenOptions(const PenOptions& options)
-{
-    pen_ = options;
-    pen_.curveFit = std::clamp(options.curveFit, 0.5, 10.0);
-    if (ToolHandler* h = registry_.forTool(active_)) {
-        h->onOptionsChanged(*this);
-    }
-}
-
 double ToolController::viewRotation() const
 {
     return canvas_ ? canvas_->rotation() : 0.0;
@@ -244,127 +351,14 @@ void ToolController::setViewRotation(double degrees)
     emit viewRotationChanged(canvas_->rotation());
 }
 
-void ToolController::setShapeOptions(const ShapeOptions& options)
-{
-    shape_ = options;
-    shape_.mode = std::clamp(options.mode, 0, 2);
-    shape_.radius = std::clamp(options.radius, 0.0, 1000.0);
-    shape_.sides = std::clamp(options.sides, 3, 100);
-    shape_.weight = std::clamp(options.weight, 1.0, 1000.0);
-    shape_.arrowWidth = std::clamp(options.arrowWidth, 10.0, 1000.0);
-    shape_.arrowLength = std::clamp(options.arrowLength, 10.0, 5000.0);
-    shape_.arrowConcavity = std::clamp(options.arrowConcavity, -50.0, 50.0);
-    shape_.custom = std::max(options.custom, 0);
-    shape_.strokeWidth = std::clamp(options.strokeWidth, 1.0, 250.0);
-    shape_.strokeAlign = std::clamp(options.strokeAlign, 0, 2);
-    shape_.geometry = std::clamp(options.geometry, 0, 2);
-    shape_.fixedWidth = std::max(options.fixedWidth, 0.01);
-    shape_.fixedHeight = std::max(options.fixedHeight, 0.01);
-    shape_.indent = std::clamp(options.indent, 1.0, 99.0);
-    if (ToolHandler* h = registry_.forTool(active_)) {
-        h->onOptionsChanged(*this);
-    }
-    emit shapeOptionsChanged();
-}
-
-void ToolController::setMarqueeStyle(MarqueeStyle style) { marqueeStyle_ = style; }
-
-void ToolController::setFeather(double feather)
-{
-    feather_ = feather > 0.0 ? std::min(feather, 250.0) : 0.0;
-}
-
-void ToolController::setFixedRatio(double width, double height)
-{
-    fixedRatioW_ = width > 0.0 ? width : 1.0;
-    fixedRatioH_ = height > 0.0 ? height : 1.0;
-}
-
-void ToolController::setFixedSize(int width, int height)
-{
-    fixedSizeW_ = std::max(width, 1);
-    fixedSizeH_ = std::max(height, 1);
-}
-
-void ToolController::setCropRatio(double ratio)
-{
-    cropRatio_ = ratio > 0.0 ? ratio : 0.0;
-    if (ToolHandler* h = registry_.forTool(ToolId::Crop)) {
-        h->onOptionsChanged(*this);
-    }
-    emit cropOptionsChanged();
-}
-
-void ToolController::setCropAngle(double degrees)
-{
-    double a = degrees;
-    while (a > 180.0) {
-        a -= 360.0;
-    }
-    while (a < -180.0) {
-        a += 360.0;
-    }
-    cropAngle_ = a;
-    // The pivot is the crop box centre at the moment the angle is set; it stays
-    // fixed afterwards so moving the box does not move the content.
-    if (ToolHandler* h = registry_.forTool(ToolId::Crop)) {
-        cropPivot_ = h->cropCenter();
-    }
-    if (canvas_) {
-        canvas_->setCropStraighten(a, cropPivot_);
-    }
-}
-
 void ToolController::notifyToolSessionChanged()
 {
     emit toolSessionChanged();
 }
 
-void ToolController::setCropClassicMode(bool on)
-{
-    if (cropClassicMode_ == on) {
-        return;
-    }
-    cropClassicMode_ = on;
-    if (ToolHandler* h = registry_.forTool(ToolId::Crop)) {
-        h->onOptionsChanged(*this);
-    }
-    emit cropOptionsChanged();
-}
-
-void ToolController::setCropGridOverlay(int index)
-{
-    if (cropGridOverlay_ == index) {
-        return;
-    }
-    cropGridOverlay_ = index;
-    if (ToolHandler* h = registry_.forTool(ToolId::Crop)) {
-        h->onOptionsChanged(*this);
-    }
-    emit cropOptionsChanged();
-}
-
-void ToolController::setCropStraightenMode(bool on)
-{
-    cropStraightenMode_ = on;
-    if (ToolHandler* h = registry_.forTool(ToolId::Crop)) {
-        h->setStraightenMode(on);
-    }
-    refreshCursor();
-    emit cropOptionsChanged();
-}
-
-void ToolController::notifyCropOptionsChanged()
-{
-    emit cropOptionsChanged();
-}
-
 void ToolController::applyCropOptions(bool classic, bool deletePixels, double ratio, int grid)
 {
-    cropClassicMode_ = classic;
-    cropDeletePixels_ = deletePixels;
-    cropRatio_ = ratio > 0.0 ? ratio : 0.0;
-    cropGridOverlay_ = grid;
+    crop_->apply(classic, deletePixels, ratio, grid);
     if (ToolHandler* h = registry_.forTool(ToolId::Crop)) {
         h->onOptionsChanged(*this);
     }
@@ -422,225 +416,17 @@ bool ToolController::cropActive() const
     return h && h->cropActive();
 }
 
-void ToolController::setMoveAutoSelect(int which)
-{
-    moveAutoSelect_ = which == 1 ? 1 : 0;
-    emit moveOptionsChanged();
-}
-
-void ToolController::setMoveShowTransformControls(bool on)
-{
-    moveShowTransform_ = on;
-    emit moveOptionsChanged();
-    syncTransformControls();
-}
-
-void ToolController::setMoveAlignTo(int which)
-{
-    moveAlignTo_ = which == 1 ? 1 : 0;
-    emit moveOptionsChanged();
-}
-
-void ToolController::setEyedropperOptions(const EyedropperOptions& options)
-{
-    eyedropper_ = options;
-    const int size = std::clamp(options.sampleSize, 1, 101);
-    eyedropper_.sampleSize = size % 2 == 1 ? size : size + 1;
-    eyedropper_.scope = std::clamp(options.scope, 0, 4);
-    if (!eyedropper_.ring && canvas_ && active_ == ToolId::Eyedropper) {
-        canvas_->clearSamplingRing();
-    }
-}
-
 void ToolController::updateSamplingRing(const QPointF& imagePos)
 {
     if (!canvas_) {
         return;
     }
-    if (active_ == ToolId::Eyedropper && eyedropper_.ring) {
-        canvas_->setSamplingRing(eyedropper_.sampleSize, imagePos);
+    const EyedropperOptions options = eyedropper_->get();
+    if (active_ == ToolId::Eyedropper && options.ring) {
+        canvas_->setSamplingRing(options.sampleSize, imagePos);
     } else {
         canvas_->clearSamplingRing();
     }
-}
-
-void ToolController::setTolerance(int tolerance)
-{
-    tolerance_ = std::clamp(tolerance, 0, 255);
-}
-
-void ToolController::setMagneticWidth(int width)
-{
-    const int clamped = std::clamp(width, 1, 256);
-    if (clamped != magneticWidth_) {
-        magneticWidth_ = clamped;
-        emit magneticWidthChanged(clamped);
-    }
-}
-
-void ToolController::setMagneticContrast(int contrast)
-{
-    magneticContrast_ = std::clamp(contrast, 1, 100);
-}
-
-void ToolController::setMagneticFrequency(int frequency)
-{
-    magneticFrequency_ = std::clamp(frequency, 0, 100);
-}
-
-void ToolController::setContiguous(bool on) { contiguous_ = on; }
-
-int ToolController::brushSize() const { return brushSize_; }
-
-void ToolController::setBrushSize(int size)
-{
-    const int clamped = std::clamp(size, 1, 5000);
-    if (clamped == brushSize_) {
-        return;
-    }
-    brushSize_ = clamped;
-    emit brushSizeChanged(brushSize_);
-}
-
-int ToolController::brushHardness() const { return brushHardness_; }
-
-void ToolController::setBrushHardness(int h)
-{
-    const int clamped = std::clamp(h, 0, 100);
-    if (clamped != brushHardness_) {
-        brushHardness_ = clamped;
-        emit brushTipChanged();
-    }
-}
-
-void ToolController::setBrushRoundness(int roundness)
-{
-    const int clamped = std::clamp(roundness, 0, 100);
-    if (clamped != brushRoundness_) {
-        brushRoundness_ = clamped;
-        emit brushTipChanged();
-    }
-}
-
-void ToolController::setBrushTipAngle(int angle)
-{
-    const int clamped = std::clamp(angle, -180, 180);
-    if (clamped != brushTipAngle_) {
-        brushTipAngle_ = clamped;
-        emit brushTipChanged();
-    }
-}
-
-void ToolController::setBrushSpacing(int spacing)
-{
-    const int clamped = std::clamp(spacing, 1, 1000);
-    if (clamped != brushSpacing_) {
-        brushSpacing_ = clamped;
-        emit brushTipChanged();
-    }
-}
-
-void ToolController::setBrushDynamics(const BrushDynamics& dynamics)
-{
-    const BrushDynamics d{std::clamp(dynamics.scatter, 0, 1000), std::clamp(dynamics.count, 1, 16),
-                          std::clamp(dynamics.sizeJitter, 0, 100),
-                          std::clamp(dynamics.angleJitter, 0, 180),
-                          std::clamp(dynamics.roundnessJitter, 0, 100)};
-    const BrushDynamics& o = brushDynamics_;
-    if (d.scatter != o.scatter || d.count != o.count || d.sizeJitter != o.sizeJitter
-        || d.angleJitter != o.angleJitter || d.roundnessJitter != o.roundnessJitter) {
-        brushDynamics_ = d;
-        emit brushTipChanged();
-    }
-}
-
-void ToolController::setBrushFlip(bool x, bool y)
-{
-    if (x != brushFlipX_ || y != brushFlipY_) {
-        brushFlipX_ = x;
-        brushFlipY_ = y;
-        emit brushTipChanged();
-    }
-}
-
-void ToolController::setCloneSource(const CloneSource& source)
-{
-    cloneSources_[cloneSlot_] = source;
-    emit cloneSourceChanged();
-}
-
-void ToolController::setCloneSourceSlot(int slot)
-{
-    const int clamped = std::clamp(slot, 0, int(cloneSources_.size()) - 1);
-    if (clamped != cloneSlot_) {
-        cloneSlot_ = clamped;
-        emit cloneSourceChanged();
-    }
-}
-
-int ToolController::brushOpacity() const { return brushOpacity_; }
-
-void ToolController::setBrushOpacity(int o) { brushOpacity_ = std::clamp(o, 0, 100); }
-
-int ToolController::brushFlow() const { return brushFlow_; }
-
-void ToolController::setBrushFlow(int f) { brushFlow_ = std::clamp(f, 0, 100); }
-
-QString ToolController::brushMode() const { return brushMode_; }
-
-void ToolController::setBrushMode(const QString& mode) { brushMode_ = mode; }
-
-bool ToolController::autoErase() const { return autoErase_; }
-
-void ToolController::setAutoErase(bool on) { autoErase_ = on; }
-
-namespace {
-
-// The retouch_ slot of the Blur, Sharpen, or Smudge tool.
-size_t retouchSlot(ToolId id)
-{
-    return id == ToolId::Sharpen ? 1 : id == ToolId::Smudge ? 2 : 0;
-}
-
-// The tone_ slot of the Dodge, Burn, or Sponge tool.
-size_t toneSlot(ToolId id)
-{
-    return id == ToolId::Burn ? 1 : id == ToolId::Sponge ? 2 : 0;
-}
-
-} // namespace
-
-RetouchOptions ToolController::retouchOptions(ToolId id) const
-{
-    return retouch_[retouchSlot(id)];
-}
-
-void ToolController::setRetouchOptions(ToolId id, const RetouchOptions& options)
-{
-    retouch_[retouchSlot(id)] = options;
-}
-
-ToneOptions ToolController::toneOptions(ToolId id) const { return tone_[toneSlot(id)]; }
-
-void ToolController::setToneOptions(ToolId id, const ToneOptions& options)
-{
-    tone_[toneSlot(id)] = options;
-}
-
-void ToolController::setSpotHealingType(int type) { spotHealingType_ = std::clamp(type, 0, 2); }
-
-void ToolController::setContentAwareAdaptation(int level)
-{
-    contentAwareAdaptation_ = std::clamp(level, 0, 4);
-}
-
-void ToolController::setMixerReservoir(const QColor& color)
-{
-    if (color.rgba() == mixerReservoir_.rgba()) {
-        return;
-    }
-    mixerReservoir_ = color;
-    emit mixerReservoirChanged(color);
 }
 
 QColor ToolController::foreground() const { return foreground_; }
@@ -649,14 +435,18 @@ void ToolController::setForeground(const QColor& color)
 {
     foreground_ = color;
     // Choosing a foreground colour loads the Mixer Brush (docs/03-tools/mixer-brush.md).
-    setMixerReservoir(color);
+    MixerOptions mixer = mixer_->get();
+    if (mixer.reservoir.rgba() != color.rgba()) {
+        mixer.reservoir = color;
+        mixer_->set(mixer);
+    }
     emit colorsChanged();
     // ...and is the text colour, so it restyles text being typed or a selected
     // type layer, as CS6's does with the Type tool active.
-    if (color != type_.color) {
-        TypeOptions o = type_;
-        o.color = color;
-        setTypeOptions(o);
+    TypeOptions options = type_->get();
+    if (options.color != color) {
+        options.color = color;
+        type_->set(options);
     }
 }
 
@@ -680,9 +470,12 @@ void ToolController::updateCanvasBackdrop()
     canvas_->setCanvasBackdrop(background_, background);
 }
 
-void ToolController::adjustBrushSize(int delta) { setBrushSize(brushSize_ + delta); }
+void ToolController::adjustBrushSize(int delta) { paint_->setSize(paint_->size() + delta); }
 
-void ToolController::adjustBrushHardness(int delta) { setBrushHardness(brushHardness_ + delta); }
+void ToolController::adjustBrushHardness(int delta)
+{
+    paint_->setHardness(paint_->hardness() + delta);
+}
 
 bool ToolController::applyBrushShortcut(int key, quint32 nativeScanCode, bool shift)
 {
@@ -696,7 +489,7 @@ bool ToolController::applyBrushShortcut(int key, quint32 nativeScanCode, bool sh
         if (step == 0) {
             return false;
         }
-        setMagneticWidth(magneticWidth_ + (step > 0 ? 1 : -1));
+        selection_->setMagneticWidth(selection_->magneticWidth() + (step > 0 ? 1 : -1));
         return true;
     }
     const bool paint = isBrushTool(active_);
@@ -731,7 +524,7 @@ void ToolController::sampledForeground(const QColor& color)
 SelectionMode ToolController::resolveSelectionMode(Qt::KeyboardModifiers mods,
                                                    bool hasExistingSelection) const
 {
-    return selectionModeForModifiers(mode_, mods, hasExistingSelection);
+    return selectionModeForModifiers(selection_->combineMode(), mods, hasExistingSelection);
 }
 
 void ToolController::refused(const QString& message) { emit pixelEditRefused(message); }

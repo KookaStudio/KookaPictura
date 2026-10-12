@@ -21,7 +21,7 @@ namespace pictura {
 namespace {
 
 // The refusals shared by both healing tools, matching the Brush press path.
-void refuseHeal(ToolContext& ctx, PictureView* v)
+void refuseHeal(ToolServices& ctx, PictureView* v)
 {
     if (activePixelLocked(v)) {
         ctx.refused(QObject::tr("Could not heal: the layer's pixels are locked."));
@@ -36,13 +36,22 @@ void refuseHeal(ToolContext& ctx, PictureView* v)
 // from its surroundings (Proximity Match / Create Texture / Content-Aware).
 class SpotHealingToolHandler : public ToolHandler {
 public:
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    SpotHealingToolHandler(std::shared_ptr<PaintOptions> paint,
+                           std::shared_ptr<HealingGroup> healing)
+        : paint_(std::move(paint))
+        , healing_(std::move(healing))
+    {
+        addOptions(paint_.get());
+        addOptions(healing_.get());
+    }
+
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         PictureView* v = ctx.view();
         if (!v || !v->has_document()) {
             return true;
         }
-        if (!healing_begin(*v, ctx.brushSize(), ctx.brushHardness())) {
+        if (!healing_begin(*v, paint_->size(), paint_->hardness())) {
             refuseHeal(ctx, v);
             return true;
         }
@@ -52,7 +61,7 @@ public:
         return true;
     }
 
-    void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         if (!ctx.dragging()) {
             return;
@@ -62,7 +71,7 @@ public:
         }
     }
 
-    void onRelease(ToolContext& ctx, const QPointF&, Qt::KeyboardModifiers) override
+    void onRelease(ToolServices& ctx, const QPointF&, Qt::KeyboardModifiers) override
     {
         if (!ctx.dragging()) {
             return;
@@ -72,17 +81,21 @@ public:
         if (!v) {
             return;
         }
-        if (!healing_commit(*v, ctx.spotHealingType(), false, 0, 0, false)) {
+        if (!healing_commit(*v, healing_->get().spotType, false, 0, 0, false)) {
             healing_cancel(*v);
         }
     }
 
-    void onDeactivate(ToolContext& ctx) override
+    void onDeactivate(ToolServices& ctx) override
     {
         if (PictureView* v = ctx.view()) {
             healing_cancel(*v);
         }
     }
+
+private:
+    std::shared_ptr<PaintOptions> paint_;
+    std::shared_ptr<HealingGroup> healing_;
 };
 
 // Healing Brush: Alt-click sets a sample point, then paint to transplant that
@@ -90,7 +103,16 @@ public:
 // offset across strokes; unchecked, each stroke re-anchors it to its own start.
 class HealingBrushToolHandler : public ToolHandler {
 public:
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    HealingBrushToolHandler(std::shared_ptr<PaintOptions> paint,
+                            std::shared_ptr<HealingGroup> healing)
+        : paint_(std::move(paint))
+        , healing_(std::move(healing))
+    {
+        addOptions(paint_.get());
+        addOptions(healing_.get());
+    }
+
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         PictureView* v = ctx.view();
         if (!v || !v->has_document()) {
@@ -106,11 +128,11 @@ public:
             ctx.refused(QObject::tr("Healing Brush: Alt-click to set a sample point first."));
             return true;
         }
-        if (!ctx.healingAligned() || !hasOffset_) {
+        if (!healing_->get().aligned || !hasOffset_) {
             offset_ = source_ - QPoint(qRound(imagePos.x()), qRound(imagePos.y()));
             hasOffset_ = true;
         }
-        if (!healing_begin(*v, ctx.brushSize(), ctx.brushHardness())) {
+        if (!healing_begin(*v, paint_->size(), paint_->hardness())) {
             refuseHeal(ctx, v);
             return true;
         }
@@ -120,7 +142,7 @@ public:
         return true;
     }
 
-    void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         if (!ctx.dragging()) {
             return;
@@ -130,7 +152,7 @@ public:
         }
     }
 
-    void onRelease(ToolContext& ctx, const QPointF&, Qt::KeyboardModifiers) override
+    void onRelease(ToolServices& ctx, const QPointF&, Qt::KeyboardModifiers) override
     {
         if (!ctx.dragging()) {
             return;
@@ -146,7 +168,7 @@ public:
         }
     }
 
-    void onDeactivate(ToolContext& ctx) override
+    void onDeactivate(ToolServices& ctx) override
     {
         if (PictureView* v = ctx.view()) {
             healing_cancel(*v);
@@ -158,18 +180,22 @@ private:
     QPoint offset_;
     bool hasSource_ = false;
     bool hasOffset_ = false;
+    std::shared_ptr<PaintOptions> paint_;
+    std::shared_ptr<HealingGroup> healing_;
 };
 
 } // namespace
 
-std::unique_ptr<ToolHandler> makeSpotHealingToolHandler()
+std::unique_ptr<ToolHandler> makeSpotHealingToolHandler(std::shared_ptr<PaintOptions> paint,
+                                                        std::shared_ptr<HealingGroup> healing)
 {
-    return std::make_unique<SpotHealingToolHandler>();
+    return std::make_unique<SpotHealingToolHandler>(std::move(paint), std::move(healing));
 }
 
-std::unique_ptr<ToolHandler> makeHealingToolHandler()
+std::unique_ptr<ToolHandler> makeHealingToolHandler(std::shared_ptr<PaintOptions> paint,
+                                                    std::shared_ptr<HealingGroup> healing)
 {
-    return std::make_unique<HealingBrushToolHandler>();
+    return std::make_unique<HealingBrushToolHandler>(std::move(paint), std::move(healing));
 }
 
 } // namespace pictura

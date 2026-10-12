@@ -188,7 +188,8 @@ void ToolController::syncTransformControls()
     if (v->transform_session_active() && !transformControls_) {
         return;
     }
-    const bool want = active_ == ToolId::Move && moveShowTransform_ && !v->has_selection();
+    const bool want = active_ == ToolId::Move && move_->get().showTransformControls
+        && !v->has_selection();
     if (!want) {
         if (transformControls_) {
             transformControls_ = false;

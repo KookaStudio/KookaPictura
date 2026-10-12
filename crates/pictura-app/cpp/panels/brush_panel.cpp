@@ -167,11 +167,11 @@ BrushPanel::BrushPanel(QWidget* parent)
                                                : tr("Soft Round %1").arg(tip.size));
         grid->addWidget(button, int(i) / 6, int(i) % 6);
         connect(button, &QToolButton::clicked, this, [this, tip] {
-            if (controller_) {
-                controller_->setBrushSize(tip.size);
-                controller_->setBrushHardness(tip.hardness);
-                controller_->setBrushRoundness(100);
-                controller_->setBrushTipAngle(0);
+            if (paint_) {
+                paint_->setSize(tip.size);
+                paint_->setHardness(tip.hardness);
+                paint_->setRoundness(100);
+                paint_->setTipAngle(0);
             }
         });
     }
@@ -235,33 +235,33 @@ BrushPanel::BrushPanel(QWidget* parent)
     layout->addWidget(preview_);
 
     connect(size_, &NumericField::valueChanged, this, [this](double v) {
-        if (controller_) {
-            controller_->setBrushSize(qRound(v));
+        if (paint_) {
+            paint_->setSize(qRound(v));
         }
     });
     connect(hardness_, &NumericField::valueChanged, this, [this](double v) {
-        if (controller_) {
-            controller_->setBrushHardness(qRound(v));
+        if (paint_) {
+            paint_->setHardness(qRound(v));
         }
     });
     connect(angle_, &NumericField::valueChanged, this, [this](double v) {
-        if (controller_) {
-            controller_->setBrushTipAngle(qRound(v));
+        if (paint_) {
+            paint_->setTipAngle(qRound(v));
         }
     });
     connect(roundness_, &NumericField::valueChanged, this, [this](double v) {
-        if (controller_) {
-            controller_->setBrushRoundness(qRound(v));
+        if (paint_) {
+            paint_->setRoundness(qRound(v));
         }
     });
     connect(spacing_, &NumericField::valueChanged, this, [this](double v) {
-        if (controller_) {
-            controller_->setBrushSpacing(qRound(v));
+        if (paint_) {
+            paint_->setSpacing(qRound(v));
         }
     });
     auto flip = [this](bool) {
-        if (controller_) {
-            controller_->setBrushFlip(flipX_->isChecked(), flipY_->isChecked());
+        if (paint_) {
+            paint_->setFlip(flipX_->isChecked(), flipY_->isChecked());
         }
     };
     connect(flipX_, &QCheckBox::toggled, this, flip);
@@ -271,6 +271,7 @@ BrushPanel::BrushPanel(QWidget* parent)
 void BrushPanel::setController(ToolController* controller)
 {
     controller_ = controller;
+    paint_ = controller ? controller->optionsFor<PaintOptions>(ToolId::Brush) : nullptr;
     if (controller_) {
         connect(controller_, &ToolController::brushSizeChanged, this, [this] { refresh(); });
         connect(controller_, &ToolController::brushTipChanged, this, [this] { refresh(); });
@@ -280,25 +281,25 @@ void BrushPanel::setController(ToolController* controller)
 
 void BrushPanel::refresh()
 {
-    if (!controller_) {
+    if (!paint_) {
         return;
     }
-    size_->setValue(controller_->brushSize());
-    hardness_->setValue(controller_->brushHardness());
-    angle_->setValue(controller_->brushTipAngle());
-    roundness_->setValue(controller_->brushRoundness());
-    spacing_->setValue(controller_->brushSpacing());
+    size_->setValue(paint_->size());
+    hardness_->setValue(paint_->hardness());
+    angle_->setValue(paint_->tipAngle());
+    roundness_->setValue(paint_->roundness());
+    spacing_->setValue(paint_->spacing());
     {
         const QSignalBlocker bx(flipX_);
         const QSignalBlocker by(flipY_);
-        flipX_->setChecked(controller_->brushFlipX());
-        flipY_->setChecked(controller_->brushFlipY());
+        flipX_->setChecked(paint_->flipX());
+        flipY_->setChecked(paint_->flipY());
     }
-    shape_->setShape(controller_->brushAngle(), controller_->brushRoundness());
+    shape_->setShape(paint_->angle(), paint_->roundness());
 
     // The preview paints the tip through the engine, capped so a huge brush
     // still fits the strip.
-    PaintTip tip = paintTip(*controller_);
+    PaintTip tip = paintTip(*paint_);
     tip.diameter = std::min(tip.diameter, preview_->height() - 12);
     const int w = std::max(preview_->width(), 120);
     const int h = preview_->height();

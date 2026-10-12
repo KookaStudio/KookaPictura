@@ -21,12 +21,14 @@ namespace {
 // Pencil rasterisation.
 class BrushToolHandler : public ToolHandler {
 public:
-    explicit BrushToolHandler(bool aliased)
+    BrushToolHandler(bool aliased, std::shared_ptr<PaintOptions> paint)
         : aliased_(aliased)
+        , paint_(std::move(paint))
     {
+        addOptions(paint_.get());
     }
 
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         PictureView* v = ctx.view();
         if (!v) {
@@ -44,9 +46,9 @@ public:
         {
             pictura::ScopedTimer t("cxx_begin_brush (call)");
             stroke_ = paint_api::beginBrush(*v, quint32(ctx.foreground().rgba()),
-                                            quint32(ctx.background().rgba()), paintTip(ctx),
-                                            ctx.brushOpacity(), ctx.brushFlow(), ctx.brushMode(),
-                                            aliased_, ctx.autoErase());
+                                            quint32(ctx.background().rgba()), paintTip(*paint_),
+                                            paint_->opacity(), paint_->flow(), paint_->mode(),
+                                            aliased_, paint_->autoErase());
         }
         if (!stroke_) {
             if (activePixelLocked(v)) {
@@ -67,7 +69,7 @@ public:
         return true;
     }
 
-    void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         if (!ctx.dragging() || !stroke_) {
             return;
@@ -76,7 +78,7 @@ public:
         stroke_->dab(imagePos.x(), imagePos.y());
     }
 
-    void onRelease(ToolContext& ctx, const QPointF&, Qt::KeyboardModifiers) override
+    void onRelease(ToolServices& ctx, const QPointF&, Qt::KeyboardModifiers) override
     {
         if (!ctx.dragging()) {
             return;
@@ -92,13 +94,14 @@ public:
 private:
     bool aliased_;
     std::optional<paint_api::Stroke> stroke_;
+    std::shared_ptr<PaintOptions> paint_;
 };
 
 }
 
-std::unique_ptr<ToolHandler> makeBrushToolHandler(bool aliased)
+std::unique_ptr<ToolHandler> makeBrushToolHandler(bool aliased, std::shared_ptr<PaintOptions> paint)
 {
-    return std::make_unique<BrushToolHandler>(aliased);
+    return std::make_unique<BrushToolHandler>(aliased, std::move(paint));
 }
 
 } // namespace pictura

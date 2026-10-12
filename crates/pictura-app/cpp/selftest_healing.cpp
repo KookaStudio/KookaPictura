@@ -173,9 +173,9 @@ int pictura::runPatchChecks(pictura::PicturaMainWindow& frame)
     bool bar = mode && source && source->isChecked() && source->isEnabled();
     if (bar) {
         mode->setCurrentIndex(1);
-        bar = !source->isEnabled() && tools->patchContentAware();
+        bar = !source->isEnabled() && tools->optionsFor<PatchGroup>(ToolId::Patch)->get().contentAware;
         mode->setCurrentIndex(0);
-        bar = bar && source->isEnabled() && !tools->patchContentAware();
+        bar = bar && source->isEnabled() && !tools->optionsFor<PatchGroup>(ToolId::Patch)->get().contentAware;
     }
 
     // Step one: a drag outside any selection outlines the blemish.
@@ -247,12 +247,12 @@ int pictura::runContentAwareMoveChecks(pictura::PicturaMainWindow& frame)
     auto* adaptation =
         frame.findChild<QComboBox*>(QStringLiteral("optionsContentAwareAdaptation"));
     bool bar = mode && adaptation && adaptation->count() == 5
-        && adaptation->currentIndex() == 2 && tools->contentAwareAdaptation() == 2;
+        && adaptation->currentIndex() == 2 && tools->optionsFor<ContentAwareMoveGroup>(ToolId::ContentAwareMove)->get().adaptation == 2;
     if (bar) {
         mode->setCurrentIndex(1);
-        bar = tools->contentAwareMoveExtend();
+        bar = tools->optionsFor<ContentAwareMoveGroup>(ToolId::ContentAwareMove)->get().extend;
         mode->setCurrentIndex(0);
-        bar = bar && !tools->contentAwareMoveExtend();
+        bar = bar && !tools->optionsFor<ContentAwareMoveGroup>(ToolId::ContentAwareMove)->get().extend;
     }
 
     // Outline the subject, then drag it 30 px right: the subject lands there,

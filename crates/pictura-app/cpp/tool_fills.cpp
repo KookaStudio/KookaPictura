@@ -23,7 +23,7 @@ namespace pictura {
 
 namespace {
 
-void reportRefusal(ToolContext& ctx, PictureView* v)
+void reportRefusal(ToolServices& ctx, PictureView* v)
 {
     if (activePixelLocked(v)) {
         ctx.refused(QObject::tr("Could not fill: the layer's pixels are locked."));
@@ -38,7 +38,13 @@ void reportRefusal(ToolContext& ctx, PictureView* v)
 // click without a drag draws nothing.
 class GradientToolHandler : public ToolHandler {
 public:
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    explicit GradientToolHandler(std::shared_ptr<GradientGroup> gradient)
+        : gradient_(std::move(gradient))
+    {
+        addOptions(gradient_.get());
+    }
+
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         PictureView* v = ctx.view();
         if (!v || !v->has_document()) {
@@ -50,14 +56,14 @@ public:
         return true;
     }
 
-    void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         if (ctx.dragging()) {
             showAxis(ctx, constrained(imagePos, mods));
         }
     }
 
-    void onRelease(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    void onRelease(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         if (!ctx.dragging()) {
             return;
@@ -69,7 +75,7 @@ public:
             return;
         }
         const QPointF end = constrained(imagePos, mods);
-        const GradientOptions o = ctx.gradientOptions();
+        const GradientOptions o = gradient_->get();
         if (!draw_gradient(*v, o.preset, ctx.foreground().rgba(), ctx.background().rgba(), o.style,
                            o.mode, o.opacity, o.reverse, o.dither, o.transparency, start_.x(),
                            start_.y(), end.x(), end.y())) {
@@ -77,7 +83,7 @@ public:
         }
     }
 
-    void onDeactivate(ToolContext& ctx) override
+    void onDeactivate(ToolServices& ctx) override
     {
         if (ctx.dragging()) {
             ctx.setDragging(false);
@@ -100,14 +106,14 @@ private:
 
     // The canvas's measuring line doubles as the drag axis: the Ruler shows its
     // own only while it is the active tool.
-    void showAxis(ToolContext& ctx, const QPointF& end) const
+    void showAxis(ToolServices& ctx, const QPointF& end) const
     {
         if (ImageView* canvas = ctx.canvas()) {
             canvas->setRulerLine(QLineF(start_, end));
         }
     }
 
-    void hideAxis(ToolContext& ctx) const
+    void hideAxis(ToolServices& ctx) const
     {
         if (ImageView* canvas = ctx.canvas()) {
             canvas->clearRulerLine();
@@ -115,17 +121,24 @@ private:
     }
 
     QPointF start_;
+    std::shared_ptr<GradientGroup> gradient_;
 };
 
 class PaintBucketToolHandler : public ToolHandler {
 public:
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    explicit PaintBucketToolHandler(std::shared_ptr<BucketGroup> bucket)
+        : bucket_(std::move(bucket))
+    {
+        addOptions(bucket_.get());
+    }
+
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         PictureView* v = ctx.view();
         if (!v || !v->has_document()) {
             return true;
         }
-        const BucketOptions o = ctx.bucketOptions();
+        const BucketOptions o = bucket_->get();
         if (!bucket_fill_at(*v, qFloor(imagePos.x()), qFloor(imagePos.y()),
                             ctx.foreground().rgba(), o.fill == 1 ? o.pattern : -1, o.mode,
                             o.opacity, o.tolerance, o.antialias, o.contiguous, o.allLayers)) {
@@ -133,18 +146,21 @@ public:
         }
         return true;
     }
+
+private:
+    std::shared_ptr<BucketGroup> bucket_;
 };
 
 } // namespace
 
-std::unique_ptr<ToolHandler> makeGradientToolHandler()
+std::unique_ptr<ToolHandler> makeGradientToolHandler(std::shared_ptr<GradientGroup> gradient)
 {
-    return std::make_unique<GradientToolHandler>();
+    return std::make_unique<GradientToolHandler>(std::move(gradient));
 }
 
-std::unique_ptr<ToolHandler> makePaintBucketToolHandler()
+std::unique_ptr<ToolHandler> makePaintBucketToolHandler(std::shared_ptr<BucketGroup> bucket)
 {
-    return std::make_unique<PaintBucketToolHandler>();
+    return std::make_unique<PaintBucketToolHandler>(std::move(bucket));
 }
 
 } // namespace pictura

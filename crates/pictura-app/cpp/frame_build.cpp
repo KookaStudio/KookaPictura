@@ -268,7 +268,7 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
 {
     tools_ = new ToolController(this);
     tools_->setViewProvider([this]() { return activeView(); });
-    pathsPanel_->setToolContext(tools_);
+    pathsPanel_->setToolServices(tools_);
 
     // A tool commit (marquee release, wand click, lasso close) reaches the
     // picture view without a `changed` emission, so refresh the overlay directly.
@@ -373,7 +373,10 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
                 if (brushActive()) {
                     tools_->adjustBrushSize(-1);
                 } else if (magneticActive()) {
-                    tools_->setMagneticWidth(tools_->magneticWidth() - 1);
+                    if (SelectionOptions* selection =
+                            tools_->optionsFor<SelectionOptions>(ToolId::MagneticLasso)) {
+                        selection->setMagneticWidth(selection->magneticWidth() - 1);
+                    }
                 }
             });
     connect(new QShortcut(QKeySequence(Qt::Key_BracketRight), this), &QShortcut::activated, this,
@@ -381,7 +384,10 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
                 if (brushActive()) {
                     tools_->adjustBrushSize(+1);
                 } else if (magneticActive()) {
-                    tools_->setMagneticWidth(tools_->magneticWidth() + 1);
+                    if (SelectionOptions* selection =
+                            tools_->optionsFor<SelectionOptions>(ToolId::MagneticLasso)) {
+                        selection->setMagneticWidth(selection->magneticWidth() + 1);
+                    }
                 }
             });
     connect(new QShortcut(QKeySequence(Qt::SHIFT | Qt::Key_BracketLeft), this),
@@ -454,7 +460,10 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
     optionsBar_->setContentsMargins(9, 0, 3, 0);
     connect(optionsBar_, &OptionsBar::panelToggleRequested, this, &PicturaMainWindow::togglePanel);
     connect(optionsBar_, &OptionsBar::alignRequested, this,
-            [this](int edge) { alignSelectedLayers(edge, true, tools_ ? tools_->moveAlignTo() : 0); });
+            [this](int edge) {
+                const MoveGroup* move = tools_ ? tools_->optionsFor<MoveGroup>(ToolId::Move) : nullptr;
+                alignSelectedLayers(edge, true, move ? move->get().alignTo : 0);
+            });
     connect(optionsBar_, &OptionsBar::distributeRequested, this,
             &PicturaMainWindow::distributeSelectedLayers);
     connect(tools_, &ToolController::moveOptionsChanged, this,

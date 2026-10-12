@@ -34,13 +34,19 @@ namespace {
 // staging.
 class PerspectiveCropToolHandler : public ToolHandler {
 public:
-    void onActivate(ToolContext& ctx) override
+    explicit PerspectiveCropToolHandler(std::shared_ptr<CropOptions> crop)
+        : crop_(std::move(crop))
+    {
+        addOptions(crop_.get());
+    }
+
+    void onActivate(ToolServices& ctx) override
     {
         ctx_ = &ctx;
         showQuad(ctx);
     }
 
-    void onDeactivate(ToolContext& ctx) override
+    void onDeactivate(ToolServices& ctx) override
     {
         quad_.clear();
         gesture_ = Gesture::None;
@@ -50,7 +56,7 @@ public:
         ctx_ = nullptr;
     }
 
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         PictureView* v = ctx.view();
         if (!v || !v->has_document()) {
@@ -107,7 +113,7 @@ public:
         return true;
     }
 
-    void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         const QPointF delta = imagePos - start_;
         switch (gesture_) {
@@ -133,7 +139,7 @@ public:
         showQuad(ctx);
     }
 
-    void onRelease(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    void onRelease(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         if (gesture_ == Gesture::None) {
             return;
@@ -181,7 +187,7 @@ public:
 private:
     enum class Gesture { None, Corner, Move, Rotate };
 
-    bool commit(ToolContext& ctx)
+    bool commit(ToolServices& ctx)
     {
         PictureView* v = ctx.view();
         if (!v || quad_.size() != 4) {
@@ -206,9 +212,9 @@ private:
         return true;
     }
 
-    static double zoom(const ToolContext& ctx) { return ctx.canvas() ? ctx.canvas()->zoom() : 1.0; }
+    static double zoom(const ToolServices& ctx) { return ctx.canvas() ? ctx.canvas()->zoom() : 1.0; }
 
-    static double screenDistance(const ToolContext& ctx, const QPointF& a, const QPointF& b)
+    static double screenDistance(const ToolServices& ctx, const QPointF& a, const QPointF& b)
     {
         const QPointF d = (a - b) * zoom(ctx);
         return std::hypot(d.x(), d.y());
@@ -292,7 +298,7 @@ private:
 
     // Snap a point to the canvas edges/corners and the composite bounding box
     // within 6 screen px, per axis.
-    QPointF snapPoint(ToolContext& ctx, const QPointF& p) const
+    QPointF snapPoint(ToolServices& ctx, const QPointF& p) const
     {
         PictureView* v = ctx.view();
         if (!v || !v->has_document()) {
@@ -328,7 +334,7 @@ private:
 
     // Corners grab within a fixed screen radius, so they stay reachable at any
     // zoom.
-    int cornerAt(ToolContext& ctx, const QPointF& imagePos) const
+    int cornerAt(ToolServices& ctx, const QPointF& imagePos) const
     {
         for (int i = 0; i < quad_.size(); ++i) {
             if (screenDistance(ctx, quad_.at(i), imagePos) <= 8.0) {
@@ -340,7 +346,7 @@ private:
 
     // A precise crosshair over the canvas, the move cursor over a corner, and
     // the eight-way rotate cursor outside a completed quad.
-    void updateCursor(ToolContext& ctx, const QPointF& imagePos)
+    void updateCursor(ToolServices& ctx, const QPointF& imagePos)
     {
         ImageView* canvas = ctx.canvas();
         if (!canvas) {
@@ -363,7 +369,7 @@ private:
         canvas->setCursor(cross.pixmap().isNull() ? QCursor(Qt::CrossCursor) : cross);
     }
 
-    void showQuad(ToolContext& ctx)
+    void showQuad(ToolServices& ctx)
     {
         if (ImageView* canvas = ctx.canvas()) {
             canvas->setPerspectiveCropQuad(quad_, gridSpacing(ctx));
@@ -371,7 +377,7 @@ private:
     }
 
     // The inch grid spacing in document pixels, from the resolution (72 fallback).
-    double gridSpacing(const ToolContext& ctx) const
+    double gridSpacing(const ToolServices& ctx) const
     {
         if (!showGrid_) {
             return 0.0;
@@ -384,7 +390,7 @@ private:
         return ppi > 0.0 ? std::max(1.0, std::round(ppi)) : 72.0;
     }
 
-    void notifyStateChanged(ToolContext& ctx) { ctx.notifyToolSessionChanged(); }
+    void notifyStateChanged(ToolServices& ctx) { ctx.notifyToolSessionChanged(); }
 
     QPolygonF quad_;
     QPolygonF startQuad_;
@@ -398,14 +404,15 @@ private:
     bool showGrid_ = true;
     Gesture gesture_ = Gesture::None;
     QElapsedTimer clock_;
-    ToolContext* ctx_ = nullptr;
+    ToolServices* ctx_ = nullptr;
+    std::shared_ptr<CropOptions> crop_;
 };
 
 } // namespace
 
-std::unique_ptr<ToolHandler> makePerspectiveCropToolHandler()
+std::unique_ptr<ToolHandler> makePerspectiveCropToolHandler(std::shared_ptr<CropOptions> crop)
 {
-    return std::make_unique<PerspectiveCropToolHandler>();
+    return std::make_unique<PerspectiveCropToolHandler>(std::move(crop));
 }
 
 } // namespace pictura

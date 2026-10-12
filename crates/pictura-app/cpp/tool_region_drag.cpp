@@ -10,7 +10,7 @@
 
 namespace pictura {
 
-bool RegionDragToolHandler::onPress(ToolContext& ctx, const QPointF& imagePos,
+bool RegionDragToolHandler::onPress(ToolServices& ctx, const QPointF& imagePos,
                                     Qt::KeyboardModifiers mods)
 {
     PictureView* v = ctx.view();
@@ -40,7 +40,7 @@ bool RegionDragToolHandler::onPress(ToolContext& ctx, const QPointF& imagePos,
     return true;
 }
 
-void RegionDragToolHandler::onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers)
+void RegionDragToolHandler::onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers)
 {
     if (!ctx.dragging()) {
         return;
@@ -67,7 +67,7 @@ void RegionDragToolHandler::onMove(ToolContext& ctx, const QPointF& imagePos, Qt
     }
 }
 
-void RegionDragToolHandler::onRelease(ToolContext& ctx, const QPointF& imagePos,
+void RegionDragToolHandler::onRelease(ToolServices& ctx, const QPointF& imagePos,
                                   Qt::KeyboardModifiers)
 {
     if (!ctx.dragging()) {
@@ -115,7 +115,7 @@ void RegionDragToolHandler::onRelease(ToolContext& ctx, const QPointF& imagePos,
     }
 }
 
-void RegionDragToolHandler::onDeactivate(ToolContext& ctx)
+void RegionDragToolHandler::onDeactivate(ToolServices& ctx)
 {
     if (ctx.dragging() && !regionDrag_) {
         if (PictureView* v = ctx.view()) {

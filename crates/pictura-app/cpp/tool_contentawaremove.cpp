@@ -15,13 +15,20 @@ namespace pictura {
 namespace {
 
 class ContentAwareMoveToolHandler : public RegionDragToolHandler {
+public:
+    explicit ContentAwareMoveToolHandler(std::shared_ptr<ContentAwareMoveGroup> contentAware)
+        : contentAware_(std::move(contentAware))
+    {
+        addOptions(contentAware_.get());
+    }
+
 protected:
     // ponytail: no Sample All Layers yet; the active layer is both read and
     // written.
-    bool apply(ToolContext& ctx, PictureView& view, int dx, int dy) override
+    bool apply(ToolServices& ctx, PictureView& view, int dx, int dy) override
     {
-        const bool moved = content_aware_move(view, dx, dy, ctx.contentAwareMoveExtend(),
-                                              ctx.contentAwareAdaptation());
+        const bool moved = content_aware_move(view, dx, dy, contentAware_->get().extend,
+                                              contentAware_->get().adaptation);
         if (moved) {
             ctx.emitSelectionCommitted();
         }
@@ -29,13 +36,17 @@ protected:
     }
 
     QString verb() const override { return QStringLiteral("move"); }
+
+private:
+    std::shared_ptr<ContentAwareMoveGroup> contentAware_;
 };
 
 } // namespace
 
-std::unique_ptr<ToolHandler> makeContentAwareMoveToolHandler()
+std::unique_ptr<ToolHandler> makeContentAwareMoveToolHandler(
+    std::shared_ptr<ContentAwareMoveGroup> contentAware)
 {
-    return std::make_unique<ContentAwareMoveToolHandler>();
+    return std::make_unique<ContentAwareMoveToolHandler>(std::move(contentAware));
 }
 
 } // namespace pictura

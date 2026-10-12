@@ -173,7 +173,7 @@ void PathsPanelTest::fillStrokeAndLoadSelection()
     pictura::PictureView& v = *f.view;
     v.set_active_layer(QStringLiteral("0"));
     const QColor foreground = f.tools->foreground();
-    const int brush = f.tools->brushSize();
+    const int brush = f.tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->size();
 
     // Two same-direction squares: nonzero keeps the inner one filled.
     square(v, 10, 10, 60, 60);
@@ -196,7 +196,7 @@ void PathsPanelTest::fillStrokeAndLoadSelection()
 
     const QColor blue(0, 0, 255);
     f.tools->setForeground(blue);
-    f.tools->setBrushSize(4);
+    f.tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setSize(4);
     QVERIFY(p->strokePath());
     QCOMPARE(v.history_label(v.history_index()), QStringLiteral("Stroke Path"));
     QCOMPARE(v.sample_argb(10, 35), blue.rgba());
@@ -215,7 +215,7 @@ void PathsPanelTest::fillStrokeAndLoadSelection()
     QCOMPARE(v.selection_coverage(15, 35), 255);
 
     f.tools->setForeground(foreground);
-    f.tools->setBrushSize(brush);
+    f.tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setSize(brush);
 }
 
 QTEST_MAIN(PathsPanelTest)

@@ -121,19 +121,19 @@ void OptionsBarsParityTest::moveControlsAndAlignToCanvas()
     QVERIFY(menuAction(menuButton, QStringLiteral("moveMenuAlignToCanvas")));
 
     autoSelect->setCurrentIndex(1);
-    QCOMPARE(tools->moveAutoSelect(), 1);
+    QCOMPARE(tools->optionsFor<pictura::MoveGroup>(pictura::ToolId::Move)->get().autoSelect, 1);
     // Align To Canvas: the square's content left (8) meets the canvas left (0),
     // so the document-sized copy shifts by -8. (Before the controls box is
     // checked: showing it trims the layer to its content, like Free Transform.)
     menuAction(menuButton, QStringLiteral("moveMenuAlignToCanvas"))->trigger();
-    QCOMPARE(tools->moveAlignTo(), 1);
+    QCOMPARE(tools->optionsFor<pictura::MoveGroup>(pictura::ToolId::Move)->get().alignTo, 1);
     menuAction(menuButton, QStringLiteral("moveMenuAlignLeft"))->trigger();
     QCOMPARE(offset(view, layer), QPoint(-8, 0));
 
     // Show Transform Controls records the option; tst_transform_controls
     // covers the box behavior.
     transform->setChecked(true);
-    QVERIFY(tools->moveShowTransformControls());
+    QVERIFY(tools->optionsFor<pictura::MoveGroup>(pictura::ToolId::Move)->get().showTransformControls);
     transform->setChecked(false);
 }
 

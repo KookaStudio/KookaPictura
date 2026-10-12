@@ -78,7 +78,7 @@ void CropOptionsTest::ratioPresetLocksTheBox()
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
-    tools->setCropClassicMode(false);  // Modern: start in preview
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(false);  // Modern: start in preview
     frame.setActiveTool(pictura::ToolId::Crop);
     auto* combo = frame.findChild<QComboBox*>(QStringLiteral("optionsCropRatio"));
     QVERIFY(combo);
@@ -103,7 +103,7 @@ void CropOptionsTest::ratioFieldsShowRatioValues()
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
-    tools->setCropClassicMode(false);
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(false);
     frame.setActiveTool(pictura::ToolId::Crop);
     auto* combo = frame.findChild<QComboBox*>(QStringLiteral("optionsCropRatio"));
     auto* width = frame.findChild<pictura::NumericField*>(QStringLiteral("optionsCropWidth"));
@@ -141,7 +141,7 @@ void CropOptionsTest::resetRestoresCanvasBox()
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
-    tools->setCropClassicMode(true);
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(true);
     frame.setActiveTool(pictura::ToolId::Crop);
     drag(canvas, QPointF(0, 0), QPointF(30, 30));
     combo->setCurrentIndex(combo->findText(QStringLiteral("16 : 9")));
@@ -190,8 +190,8 @@ void CropOptionsTest::resolutionModeShowsPixels()
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
-    tools->setCropClassicMode(false);
-    tools->setCropRatio(0.0);
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(false);
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setRatio(0.0);
     frame.setActiveTool(pictura::ToolId::Crop);
     auto* combo = frame.findChild<QComboBox*>(QStringLiteral("optionsCropRatio"));
     auto* width = frame.findChild<pictura::NumericField*>(QStringLiteral("optionsCropWidth"));
@@ -221,11 +221,11 @@ void CropOptionsTest::straightenToggleArmsLineMode()
     auto* spirit = frame.findChild<QToolButton*>(QStringLiteral("optionsCropSpirit"));
     QVERIFY(spirit);
 
-    QVERIFY(!tools->cropStraightenMode());
+    QVERIFY(!tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->straightenMode());
     spirit->click();
-    QVERIFY(tools->cropStraightenMode());
+    QVERIFY(tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->straightenMode());
     spirit->click();
-    QVERIFY(!tools->cropStraightenMode());
+    QVERIFY(!tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->straightenMode());
 
     frame.setActiveTool(pictura::ToolId::Move);
     frame.closeDocument(doc, false);
@@ -254,11 +254,11 @@ void CropOptionsTest::cropOptionsPersist()
     QVERIFY(tools);
 
     // Changing a crop option persists it through the session store.
-    tools->setCropClassicMode(true);  // force a known start, then toggle
-    tools->setCropClassicMode(false);
-    tools->setCropGridOverlay(2);
-    tools->setCropDeletePixels(false);
-    tools->setCropRatio(1.5);
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(true);  // force a known start, then toggle
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(false);
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setGridOverlay(2);
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setDeletePixels(false);
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setRatio(1.5);
 
     const pictura::SessionState saved = pictura::loadSession();
     QCOMPARE(saved.cropClassicMode, false);
@@ -267,10 +267,10 @@ void CropOptionsTest::cropOptionsPersist()
     QCOMPARE(saved.cropRatio, 1.5);
 
     // Restore the defaults so the sibling tests are unaffected.
-    tools->setCropClassicMode(true);
-    tools->setCropGridOverlay(0);
-    tools->setCropDeletePixels(true);
-    tools->setCropRatio(0.0);
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(true);
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setGridOverlay(0);
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setDeletePixels(true);
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setRatio(0.0);
 }
 
 void CropOptionsTest::overlayModesRenderDifferently()

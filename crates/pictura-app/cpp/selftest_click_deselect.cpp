@@ -18,8 +18,8 @@ int pictura::runClickDeselectChecks(pictura::PicturaMainWindow& frame)
         return pictura::selfTest().fail(531, "click deselect fixture");
     }
     const int doc = frame.activeDocumentIndex();
-    tools->setCombineMode(pictura::SelectionMode::New);
-    tools->setFeather(0.0);
+    tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setCombineMode(pictura::SelectionMode::New);
+    tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setFeather(0.0);
     const auto click = [canvas](qreal x, qreal y, Qt::KeyboardModifiers mods) {
         canvas->mousePressed(QPointF(x, y), Qt::LeftButton, int(mods));
         canvas->mouseReleased(QPointF(x, y));

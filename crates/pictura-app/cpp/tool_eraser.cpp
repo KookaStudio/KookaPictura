@@ -30,7 +30,13 @@ namespace {
 // tool's stroke and reports whether it did.
 class EraseStrokeHandler : public ToolHandler {
 public:
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    explicit EraseStrokeHandler(std::shared_ptr<PaintOptions> paint)
+        : paint_(std::move(paint))
+    {
+        addOptions(paint_.get());
+    }
+
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         PictureView* v = ctx.view();
         if (!v || !v->has_document()) {
@@ -58,7 +64,7 @@ public:
         return true;
     }
 
-    void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         if (!ctx.dragging() || !stroke_) {
             return;
@@ -66,7 +72,7 @@ public:
         stroke_->dab(imagePos.x(), imagePos.y());
     }
 
-    void onRelease(ToolContext& ctx, const QPointF&, Qt::KeyboardModifiers) override
+    void onRelease(ToolServices& ctx, const QPointF&, Qt::KeyboardModifiers) override
     {
         if (!ctx.dragging()) {
             return;
@@ -79,52 +85,83 @@ public:
     }
 
 protected:
-    virtual bool begin(ToolContext& ctx, PictureView& v, bool toHistory) = 0;
-    virtual bool eraseToHistory(ToolContext&, Qt::KeyboardModifiers) { return false; }
+    virtual bool begin(ToolServices& ctx, PictureView& v, bool toHistory) = 0;
+    virtual bool eraseToHistory(ToolServices&, Qt::KeyboardModifiers) { return false; }
+
+    std::shared_ptr<PaintOptions> paint_;
 
 private:
     std::optional<paint_api::Stroke> stroke_;
 };
 
 class EraserToolHandler : public EraseStrokeHandler {
-protected:
-    bool eraseToHistory(ToolContext& ctx, Qt::KeyboardModifiers mods) override
+public:
+    EraserToolHandler(std::shared_ptr<PaintOptions> paint, std::shared_ptr<EraserGroup> eraser)
+        : EraseStrokeHandler(std::move(paint))
+        , eraser_(std::move(eraser))
     {
-        return ctx.eraserOptions().toHistory || mods.testFlag(Qt::AltModifier);
+        addOptions(eraser_.get());
     }
 
-    bool begin(ToolContext& ctx, PictureView& v, bool toHistory) override
+protected:
+    bool eraseToHistory(ToolServices& ctx, Qt::KeyboardModifiers mods) override
     {
-        const EraserOptions o = ctx.eraserOptions();
-        return begin_eraser(v, ctx.background().rgba(), paintTip(ctx), o.mode, ctx.brushOpacity(),
-                            ctx.brushFlow(), toHistory);
+        return eraser_->get().toHistory || mods.testFlag(Qt::AltModifier);
     }
+
+    bool begin(ToolServices& ctx, PictureView& v, bool toHistory) override
+    {
+        const EraserOptions o = eraser_->get();
+        return begin_eraser(v, ctx.background().rgba(), paintTip(*paint_), o.mode, paint_->opacity(),
+                            paint_->flow(), toHistory);
+    }
+
+private:
+    std::shared_ptr<EraserGroup> eraser_;
 };
 
 // The Background Eraser has no Opacity or Flow; it always erases at full
 // strength where the colour matches.
 class BackgroundEraserToolHandler : public EraseStrokeHandler {
-protected:
-    bool begin(ToolContext& ctx, PictureView& v, bool) override
+public:
+    BackgroundEraserToolHandler(std::shared_ptr<PaintOptions> paint,
+                                std::shared_ptr<BackgroundEraseGroup> backgroundErase)
+        : EraseStrokeHandler(std::move(paint))
+        , backgroundErase_(std::move(backgroundErase))
     {
-        const BackgroundEraseOptions o = ctx.backgroundEraseOptions();
+        addOptions(backgroundErase_.get());
+    }
+
+protected:
+    bool begin(ToolServices& ctx, PictureView& v, bool) override
+    {
+        const BackgroundEraseOptions o = backgroundErase_->get();
         return begin_background_eraser(v, ctx.foreground().rgba(), ctx.background().rgba(),
-                                       paintTip(ctx), o.sampling, o.limits, o.tolerance,
+                                       paintTip(*paint_), o.sampling, o.limits, o.tolerance,
                                        o.protectForeground);
     }
+
+private:
+    std::shared_ptr<BackgroundEraseGroup> backgroundErase_;
 };
 
 // One click erases the region the Magic Wand would select there.
 // ponytail: the active selection does not limit the erase.
 class MagicEraserToolHandler : public ToolHandler {
 public:
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    explicit MagicEraserToolHandler(std::shared_ptr<MagicEraseGroup> magicErase)
+        : magicErase_(std::move(magicErase))
+    {
+        addOptions(magicErase_.get());
+    }
+
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         PictureView* v = ctx.view();
         if (!v || !v->has_document()) {
             return true;
         }
-        const MagicEraseOptions o = ctx.magicEraseOptions();
+        const MagicEraseOptions o = magicErase_->get();
         if (!magic_erase_at(*v, qFloor(imagePos.x()), qFloor(imagePos.y()), o.tolerance,
                             o.antialias, o.contiguous, o.sampleAllLayers, o.opacity,
                             ctx.background().rgba())) {
@@ -138,23 +175,31 @@ public:
         }
         return true;
     }
+
+private:
+    std::shared_ptr<MagicEraseGroup> magicErase_;
 };
 
 } // namespace
 
-std::unique_ptr<ToolHandler> makeEraserToolHandler()
+std::unique_ptr<ToolHandler> makeEraserToolHandler(std::shared_ptr<PaintOptions> paint,
+                                                   std::shared_ptr<EraserGroup> eraser)
 {
-    return std::make_unique<EraserToolHandler>();
+    return std::make_unique<EraserToolHandler>(std::move(paint), std::move(eraser));
 }
 
-std::unique_ptr<ToolHandler> makeBackgroundEraserToolHandler()
+std::unique_ptr<ToolHandler> makeBackgroundEraserToolHandler(
+    std::shared_ptr<PaintOptions> paint, std::shared_ptr<BackgroundEraseGroup> backgroundErase)
 {
-    return std::make_unique<BackgroundEraserToolHandler>();
+    return std::make_unique<BackgroundEraserToolHandler>(std::move(paint),
+                                                         std::move(backgroundErase));
 }
 
-std::unique_ptr<ToolHandler> makeMagicEraserToolHandler()
+std::unique_ptr<ToolHandler> makeMagicEraserToolHandler(
+    std::shared_ptr<PaintOptions> paint, std::shared_ptr<MagicEraseGroup> magicErase)
 {
-    return std::make_unique<MagicEraserToolHandler>();
+    (void)paint;
+    return std::make_unique<MagicEraserToolHandler>(std::move(magicErase));
 }
 
 } // namespace pictura

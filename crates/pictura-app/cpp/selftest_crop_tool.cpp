@@ -45,9 +45,9 @@ int pictura::runCropToolChecks(pictura::PicturaMainWindow& frame)
     // The layer's rect as "left top right bottom".
     const QString layer = pictura::layers_api::rowAt(*view, 0).path;
 
-    tools->setCropRatio(0.0);
-    tools->setCropDeletePixels(true);
-    tools->setCropClassicMode(false);  // start with the full-canvas preview
+    tools->optionsFor<CropOptions>(ToolId::Crop)->setRatio(0.0);
+    tools->optionsFor<CropOptions>(ToolId::Crop)->setDeletePixels(true);
+    tools->optionsFor<CropOptions>(ToolId::Crop)->setClassicMode(false);  // start with the full-canvas preview
     frame.setActiveTool(pictura::ToolId::Crop);
     const bool defaultBox = canvas->hasCropBoxForTest() && !frame.hasPendingCrop();
 
@@ -55,10 +55,10 @@ int pictura::runCropToolChecks(pictura::PicturaMainWindow& frame)
     drag(QPointF(20, 20), QPointF(20, 20));
     drag(QPointF(40, 40), QPointF(30, 30));
     const bool resized = tools->pendingCropRect() == QRect(0, 0, 30, 30);
-    tools->setCropClassicMode(true);  // a classic drag moves the box
+    tools->optionsFor<CropOptions>(ToolId::Crop)->setClassicMode(true);  // a classic drag moves the box
     drag(QPointF(15, 15), QPointF(25, 25));
     const bool moved = tools->pendingCropRect() == QRect(10, 10, 30, 30);
-    tools->setCropClassicMode(false);  // full box on every reset again
+    tools->optionsFor<CropOptions>(ToolId::Crop)->setClassicMode(false);  // full box on every reset again
     key(Qt::Key_Escape);
     const bool escReset = !frame.hasPendingCrop() && !canvas->hasCropBoxForTest();
     // Escape leaves the init mode with no box; restore the full-canvas box for
@@ -74,10 +74,10 @@ int pictura::runCropToolChecks(pictura::PicturaMainWindow& frame)
     drag(QPointF(0, 0), QPointF(40, 40));
 
     // Inside the default box a press moves it, so shape boxes by the handles.
-    tools->setCropRatio(1.0);
+    tools->optionsFor<CropOptions>(ToolId::Crop)->setRatio(1.0);
     drag(QPointF(40, 40), QPointF(30, 20));
     const bool ratioLocked = tools->pendingCropRect() == QRect(0, 0, 20, 20);
-    tools->setCropRatio(0.0);
+    tools->optionsFor<CropOptions>(ToolId::Crop)->setRatio(0.0);
     key(Qt::Key_Escape);
     drag(QPointF(0, 0), QPointF(40, 40));
 
@@ -98,7 +98,7 @@ int pictura::runCropToolChecks(pictura::PicturaMainWindow& frame)
 
     // Off: the pixels outside the canvas stay with the layer.
     view->undo();
-    tools->setCropDeletePixels(false);
+    tools->optionsFor<CropOptions>(ToolId::Crop)->setDeletePixels(false);
     // Undo re-fits the tool to the restored canvas (Modern preview), so
     // re-establish the full-canvas box the handle drags start from.
     drag(QPointF(0, 0), QPointF(40, 40));
@@ -106,7 +106,7 @@ int pictura::runCropToolChecks(pictura::PicturaMainWindow& frame)
     key(Qt::Key_Return);
     const bool kept = view->document_width() == 20
         && transform_api::layerRect(*view, layer).toString() == QStringLiteral("-10 -10 30 30");
-    tools->setCropDeletePixels(true);
+    tools->optionsFor<CropOptions>(ToolId::Crop)->setDeletePixels(true);
 
     // A double-click inside the box commits.
     view->undo();
@@ -126,7 +126,7 @@ int pictura::runCropToolChecks(pictura::PicturaMainWindow& frame)
             defaultBox ? 1 : 0, resized ? 1 : 0, moved ? 1 : 0, escReset ? 1 : 0,
             cancelReset ? 1 : 0, ratioLocked ? 1 : 0, deleted ? 1 : 0, kept ? 1 : 0,
             doubleClick ? 1 : 0);
-    tools->setCropClassicMode(true);
+    tools->optionsFor<CropOptions>(ToolId::Crop)->setClassicMode(true);
     frame.setActiveTool(pictura::ToolId::Move);
     frame.closeDocument(doc, false);
     QFile::remove(seedPath);

@@ -24,9 +24,9 @@ namespace {
 
 class RotateViewToolHandler : public ToolHandler {
 public:
-    void onActivate(ToolContext& ctx) override { ctx_ = &ctx; }
+    void onActivate(ToolServices& ctx) override { ctx_ = &ctx; }
 
-    void onDeactivate(ToolContext& ctx) override
+    void onDeactivate(ToolServices& ctx) override
     {
         if (ImageView* canvas = ctx.canvas()) {
             canvas->setCompassVisible(false);
@@ -35,7 +35,7 @@ public:
         ctx_ = nullptr;
     }
 
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         ctx_ = &ctx;
         ImageView* canvas = ctx.canvas();
@@ -49,7 +49,7 @@ public:
         return true;
     }
 
-    void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         ImageView* canvas = ctx.canvas();
         if (!dragging_ || !canvas) {
@@ -62,7 +62,7 @@ public:
         ctx.setViewRotation(angle);
     }
 
-    void onRelease(ToolContext& ctx, const QPointF&, Qt::KeyboardModifiers) override
+    void onRelease(ToolServices& ctx, const QPointF&, Qt::KeyboardModifiers) override
     {
         dragging_ = false;
         if (ImageView* canvas = ctx.canvas()) {
@@ -91,7 +91,7 @@ private:
             std::atan2(w.y() - canvas.height() / 2.0, w.x() - canvas.width() / 2.0));
     }
 
-    ToolContext* ctx_ = nullptr;
+    ToolServices* ctx_ = nullptr;
     bool dragging_ = false;
     double startRotation_ = 0.0;
     double pressAngle_ = 0.0;

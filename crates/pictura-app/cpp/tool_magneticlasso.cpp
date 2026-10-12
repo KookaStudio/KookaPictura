@@ -31,9 +31,15 @@ namespace {
 // Lasso), the Caps Lock width ring, and Stylus Pressure are not modelled.
 class MagneticLassoToolHandler : public ToolHandler {
 public:
-    void onActivate(ToolContext& ctx) override { ctx_ = &ctx; }
+    explicit MagneticLassoToolHandler(std::shared_ptr<SelectionOptions> selection)
+        : selection_(std::move(selection))
+    {
+        addOptions(selection_.get());
+    }
 
-    void onDeactivate(ToolContext& ctx) override
+    void onActivate(ToolServices& ctx) override { ctx_ = &ctx; }
+
+    void onDeactivate(ToolServices& ctx) override
     {
         if (active_) {
             cancel(ctx);
@@ -41,7 +47,7 @@ public:
         ctx_ = nullptr;
     }
 
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         PictureView* v = ctx.view();
         if (!v) {
@@ -68,7 +74,7 @@ public:
         return true;
     }
 
-    void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         if (!active_) {
             return;
@@ -116,7 +122,7 @@ public:
     bool lassoInProgress() const override { return active_; }
 
 private:
-    void begin(ToolContext& ctx, PictureView& v, const QPoint& p, Qt::KeyboardModifiers mods)
+    void begin(ToolServices& ctx, PictureView& v, const QPoint& p, Qt::KeyboardModifiers mods)
     {
         if (document_api::documentDepthBits(v) == 32) {
             ctx.refused(QStringLiteral(
@@ -124,7 +130,7 @@ private:
             return;
         }
         ctx.setDragMode(ctx.resolveSelectionMode(mods, v.has_selection()));
-        if (!magnetic_begin(v, ctx.magneticContrast())) {
+        if (!magnetic_begin(v, selection_->magneticContrast())) {
             return;
         }
         if (!v.begin_lasso(selectionModeString(ctx.dragMode()))) {
@@ -151,7 +157,7 @@ private:
         fastening_ << int(path_.size()) - 1;
     }
 
-    void updateWire(ToolContext& ctx)
+    void updateWire(ToolServices& ctx)
     {
         preview_.clear();
         PictureView* v = ctx.view();
@@ -160,7 +166,7 @@ private:
         }
         const QPoint from = path_.last();
         const ::rust::Vec<std::int32_t> flat = magnetic_trace(
-            *v, from.x(), from.y(), cursor_.x(), cursor_.y(), ctx.magneticWidth());
+            *v, from.x(), from.y(), cursor_.x(), cursor_.y(), selection_->magneticWidth());
         // The wire starts on the last fastening point, which the path holds.
         for (std::size_t i = 2; i + 1 < flat.size(); i += 2) {
             preview_ << QPoint(flat[i], flat[i + 1]);
@@ -170,9 +176,9 @@ private:
     // Only a pointer move fastens automatically, so Delete can peel an
     // automatic point back without it reappearing at once. Frequency 0 never
     // fastens; 100 fastens every ~8 px of wire, 1 every ~107 px.
-    void autoFasten(ToolContext& ctx)
+    void autoFasten(ToolServices& ctx)
     {
-        const int frequency = ctx.magneticFrequency();
+        const int frequency = selection_->magneticFrequency();
         if (frequency > 0 && preview_.size() >= std::max(8, 108 - frequency)) {
             path_ += preview_;
             preview_.clear();
@@ -180,7 +186,7 @@ private:
         }
     }
 
-    void close(ToolContext& ctx)
+    void close(ToolServices& ctx)
     {
         PictureView* v = ctx.view();
         path_ += preview_;
@@ -189,7 +195,7 @@ private:
             for (const QPoint& p : path_) {
                 v->lasso_add_point(p.x(), p.y());
             }
-            committed = path_.size() >= 3 && v->end_lasso(ctx.feather());
+            committed = path_.size() >= 3 && v->end_lasso(selection_->feather());
             if (!committed) {
                 v->cancel_lasso();
             }
@@ -207,7 +213,7 @@ private:
         }
     }
 
-    void cancel(ToolContext& ctx)
+    void cancel(ToolServices& ctx)
     {
         if (PictureView* v = ctx.view()) {
             v->cancel_lasso();
@@ -215,7 +221,7 @@ private:
         reset(ctx);
     }
 
-    void reset(ToolContext& ctx)
+    void reset(ToolServices& ctx)
     {
         if (PictureView* v = ctx.view()) {
             magnetic_end(*v);
@@ -230,7 +236,7 @@ private:
         }
     }
 
-    void showPreview(ToolContext& ctx)
+    void showPreview(ToolServices& ctx)
     {
         ImageView* canvas = ctx.canvas();
         if (!canvas) {
@@ -255,7 +261,7 @@ private:
     }
 
     // The close hit zone is fixed on screen, so it stays reachable at any zoom.
-    static bool near(ToolContext& ctx, const QPoint& a, const QPoint& b)
+    static bool near(ToolServices& ctx, const QPoint& a, const QPoint& b)
     {
         const double zoom = ctx.canvas() ? std::max(ctx.canvas()->zoom(), 1e-6) : 1.0;
         return std::hypot(a.x() - b.x(), a.y() - b.y()) * zoom <= kPolygonCloseRadius;
@@ -269,14 +275,16 @@ private:
     QPoint cursor_;
     QPoint lastPress_;
     QElapsedTimer clock_;
-    ToolContext* ctx_ = nullptr;
+    ToolServices* ctx_ = nullptr;
+    std::shared_ptr<SelectionOptions> selection_;
 };
 
 } // namespace
 
-std::unique_ptr<ToolHandler> makeMagneticLassoToolHandler()
+std::unique_ptr<ToolHandler> makeMagneticLassoToolHandler(
+    std::shared_ptr<SelectionOptions> selection)
 {
-    return std::make_unique<MagneticLassoToolHandler>();
+    return std::make_unique<MagneticLassoToolHandler>(std::move(selection));
 }
 
 } // namespace pictura

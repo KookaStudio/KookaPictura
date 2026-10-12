@@ -21,19 +21,19 @@ namespace pictura {
 
 namespace {
 
-QRect marqueeGeometry(ToolContext& ctx, const QPointF& a, const QPointF& b,
+QRect marqueeGeometry(const SelectionOptions& selection, const QPointF& a, const QPointF& b,
                       Qt::KeyboardModifiers mods, bool mirror)
 {
-    return marqueeDragRect(a, b, mods, mirror, ctx.marqueeStyle(), ctx.fixedRatioWidth(),
-                           ctx.fixedRatioHeight(), ctx.fixedSizeWidth(),
-                           ctx.fixedSizeHeight());
+    return marqueeDragRect(a, b, mods, mirror, selection.marqueeStyle(),
+                           selection.fixedRatioWidth(), selection.fixedRatioHeight(),
+                           selection.fixedSizeWidth(), selection.fixedSizeHeight());
 }
 
 // A click that encloses no area (no drag, or a lasso outline under three
 // points) clears the selection in New mode, as in CS6; a stray click while
 // adding, subtracting, or intersecting leaves it alone. Ported from photorust's
 // CanvasView release / commitLasso.
-bool clickDeselect(ToolContext& ctx, PictureView* v)
+bool clickDeselect(ToolServices& ctx, PictureView* v)
 {
     if (!v || ctx.dragMode() != SelectionMode::New || !v->has_selection()) {
         return false;
@@ -47,12 +47,14 @@ bool clickDeselect(ToolContext& ctx, PictureView* v)
 // selects the ellipse preview and the ellipse raster at release.
 class MarqueeToolHandler : public ToolHandler {
 public:
-    explicit MarqueeToolHandler(bool elliptical)
+    MarqueeToolHandler(bool elliptical, std::shared_ptr<SelectionOptions> selection)
         : elliptical_(elliptical)
+        , selection_(std::move(selection))
     {
+        addOptions(selection_.get());
     }
 
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         PictureView* v = ctx.view();
         if (!v) {
@@ -71,7 +73,7 @@ public:
         return true;
     }
 
-    void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         if (!ctx.dragging()) {
             return;
@@ -82,7 +84,7 @@ public:
     }
 
     // A modifier edge with no pointer movement still arms subtract or mirror.
-    void onModifiers(ToolContext& ctx, Qt::KeyboardModifiers mods) override
+    void onModifiers(ToolServices& ctx, Qt::KeyboardModifiers mods) override
     {
         if (!ctx.dragging()) {
             return;
@@ -91,20 +93,20 @@ public:
         updateOverlay(ctx, last_);
     }
 
-    void onRelease(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    void onRelease(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         if (!ctx.dragging()) {
             return;
         }
         ctx.setDragging(false);
         PictureView* v = ctx.view();
-        const QRect rect = marqueeGeometry(ctx, anchor_, imagePos, dragMods_, mirrorAlt_);
+        const QRect rect = marqueeGeometry(*selection_, anchor_, imagePos, dragMods_, mirrorAlt_);
         const bool shaped = v && rect.width() > 0 && rect.height() > 0;
         const bool committed = shaped
             && (elliptical_ ? v->select_ellipse(rect.x(), rect.y(), rect.width(), rect.height(),
-                                                selectionModeString(ctx.dragMode()), ctx.feather())
+                                                selectionModeString(ctx.dragMode()), selection_->feather())
                             : v->select_rect(rect.x(), rect.y(), rect.width(), rect.height(),
-                                             selectionModeString(ctx.dragMode()), ctx.feather()));
+                                             selectionModeString(ctx.dragMode()), selection_->feather()));
         if (ImageView* canvas = ctx.canvas()) {
             canvas->clearSelectionPreview();
             canvas->clearDragSizeHint();
@@ -124,7 +126,7 @@ private:
     // Two-stage Alt: the first Alt (held at press, or first pressed during the
     // drag) subtracts; a later Alt edge during the same drag mirrors the
     // rectangle about the anchor.
-    void trackAltEdge(ToolContext& ctx, Qt::KeyboardModifiers mods)
+    void trackAltEdge(ToolServices& ctx, Qt::KeyboardModifiers mods)
     {
         const bool altNow = mods.testFlag(Qt::AltModifier);
         if (altNow && !altWasDown_) {
@@ -141,13 +143,13 @@ private:
         altWasDown_ = altNow;
     }
 
-    void updateOverlay(ToolContext& ctx, const QPointF& imagePos)
+    void updateOverlay(ToolServices& ctx, const QPointF& imagePos)
     {
         ImageView* canvas = ctx.canvas();
         if (!canvas) {
             return;
         }
-        const QRect rect = marqueeGeometry(ctx, anchor_, imagePos, dragMods_, mirrorAlt_);
+        const QRect rect = marqueeGeometry(*selection_, anchor_, imagePos, dragMods_, mirrorAlt_);
         if (rect.width() <= 0 || rect.height() <= 0) {
             canvas->clearSelectionPreview();
             return;
@@ -165,6 +167,7 @@ private:
     }
 
     bool elliptical_;
+    std::shared_ptr<SelectionOptions> selection_;
     Qt::KeyboardModifiers dragMods_ = Qt::NoModifier;
     bool altArmed_ = false;
     bool altWasDown_ = false;
@@ -176,7 +179,13 @@ private:
 // Freehand Lasso: the mask grows with each move until release.
 class LassoToolHandler : public ToolHandler {
 public:
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    explicit LassoToolHandler(std::shared_ptr<SelectionOptions> selection)
+        : selection_(std::move(selection))
+    {
+        addOptions(selection_.get());
+    }
+
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         PictureView* v = ctx.view();
         if (!v) {
@@ -197,7 +206,7 @@ public:
         return true;
     }
 
-    void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         if (!ctx.dragging()) {
             return;
@@ -213,7 +222,7 @@ public:
         }
     }
 
-    void onRelease(ToolContext& ctx, const QPointF&, Qt::KeyboardModifiers) override
+    void onRelease(ToolServices& ctx, const QPointF&, Qt::KeyboardModifiers) override
     {
         if (!ctx.dragging()) {
             return;
@@ -221,7 +230,7 @@ public:
         ctx.setDragging(false);
         PictureView* v = ctx.view();
         const bool click = lassoPolygon_.size() < 3;
-        const bool committed = !click && v && v->end_lasso(ctx.feather());
+        const bool committed = !click && v && v->end_lasso(selection_->feather());
         if (click && v) {
             v->cancel_lasso();
             clickDeselect(ctx, v);
@@ -238,15 +247,22 @@ public:
 private:
     QPointF last_;
     QPolygonF lassoPolygon_;
+    std::shared_ptr<SelectionOptions> selection_;
 };
 
 // Polygonal Lasso: click to add vertices, close on the first vertex or a rapid
 // second click near the last one, commit on Enter, discard on Escape.
 class PolygonalLassoToolHandler : public ToolHandler {
 public:
-    void onActivate(ToolContext& ctx) override { ctx_ = &ctx; }
+    explicit PolygonalLassoToolHandler(std::shared_ptr<SelectionOptions> selection)
+        : selection_(std::move(selection))
+    {
+        addOptions(selection_.get());
+    }
 
-    void onDeactivate(ToolContext& ctx) override
+    void onActivate(ToolServices& ctx) override { ctx_ = &ctx; }
+
+    void onDeactivate(ToolServices& ctx) override
     {
         if (polygonInProgress_) {
             cancel(ctx);
@@ -254,7 +270,7 @@ public:
         ctx_ = nullptr;
     }
 
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         PictureView* v = ctx.view();
         if (!v) {
@@ -297,7 +313,7 @@ public:
         return true;
     }
 
-    void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         if (polygonInProgress_) {
             if (ImageView* canvas = ctx.canvas()) {
@@ -331,11 +347,11 @@ public:
     }
 
 private:
-    void close(ToolContext& ctx)
+    void close(ToolServices& ctx)
     {
         PictureView* v = ctx.view();
         const bool enough = polygonPoints_.size() >= 3;
-        const bool committed = enough && v && v->end_lasso(ctx.feather());
+        const bool committed = enough && v && v->end_lasso(selection_->feather());
         if (v && !committed) {
             v->cancel_lasso();
         }
@@ -352,7 +368,7 @@ private:
         }
     }
 
-    void cancel(ToolContext& ctx)
+    void cancel(ToolServices& ctx)
     {
         polygonInProgress_ = false;
         polygonPoints_.clear();
@@ -369,29 +385,32 @@ private:
     QPointF lastPolygonPress_;
     QElapsedTimer polygonClock_;
     bool polygonInProgress_ = false;
-    ToolContext* ctx_ = nullptr;
+    ToolServices* ctx_ = nullptr;
+    std::shared_ptr<SelectionOptions> selection_;
 };
 
 } // namespace
 
-std::unique_ptr<ToolHandler> makeMarqueeToolHandler()
+std::unique_ptr<ToolHandler> makeMarqueeToolHandler(std::shared_ptr<SelectionOptions> selection)
 {
-    return std::make_unique<MarqueeToolHandler>(false);
+    return std::make_unique<MarqueeToolHandler>(false, std::move(selection));
 }
 
-std::unique_ptr<ToolHandler> makeEllipticalMarqueeToolHandler()
+std::unique_ptr<ToolHandler> makeEllipticalMarqueeToolHandler(
+    std::shared_ptr<SelectionOptions> selection)
 {
-    return std::make_unique<MarqueeToolHandler>(true);
+    return std::make_unique<MarqueeToolHandler>(true, std::move(selection));
 }
 
-std::unique_ptr<ToolHandler> makeLassoToolHandler()
+std::unique_ptr<ToolHandler> makeLassoToolHandler(std::shared_ptr<SelectionOptions> selection)
 {
-    return std::make_unique<LassoToolHandler>();
+    return std::make_unique<LassoToolHandler>(std::move(selection));
 }
 
-std::unique_ptr<ToolHandler> makePolygonalLassoToolHandler()
+std::unique_ptr<ToolHandler> makePolygonalLassoToolHandler(
+    std::shared_ptr<SelectionOptions> selection)
 {
-    return std::make_unique<PolygonalLassoToolHandler>();
+    return std::make_unique<PolygonalLassoToolHandler>(std::move(selection));
 }
 
 } // namespace pictura

@@ -393,7 +393,8 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/panels/panel_group.h
     crates/pictura-app/cpp/panels/panel_column.h
     crates/pictura-app/cpp/tools.h
-    crates/pictura-app/cpp/tool_context.h
+    crates/pictura-app/cpp/tool_options.h
+    crates/pictura-app/cpp/tool_services.h
     crates/pictura-app/cpp/tool_handler.h
     crates/pictura-app/cpp/tool_registry.h
     crates/pictura-app/cpp/text_input.h

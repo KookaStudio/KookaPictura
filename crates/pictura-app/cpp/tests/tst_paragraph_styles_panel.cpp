@@ -90,9 +90,9 @@ void ParagraphStylesPanelTest::showFrame()
 QString ParagraphStylesPanelTest::makeTypeLayer(Fixture& f)
 {
     window_->setActiveTool(pictura::ToolId::HorizontalType);
-    pictura::TypeOptions o = f.tools->typeOptions();
+    pictura::TypeOptions o = f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get();
     o.size = 30.0;
-    f.tools->setTypeOptions(o);
+    f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(o);
     f.drag({QPointF(10, 60)});
     QTest::keyClicks(f.canvas, QStringLiteral("Hello"));
     QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);

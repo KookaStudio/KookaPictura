@@ -18,14 +18,14 @@ class PictureView;
 // press/drag/release.
 class RegionDragToolHandler : public ToolHandler {
 public:
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override;
-    void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override;
-    void onRelease(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override;
-    void onDeactivate(ToolContext& ctx) override;
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override;
+    void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override;
+    void onRelease(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override;
+    void onDeactivate(ToolServices& ctx) override;
 
 protected:
     // Run the tool on the selection dragged by `(dx, dy)`; false refuses.
-    virtual bool apply(ToolContext& ctx, PictureView& view, int dx, int dy) = 0;
+    virtual bool apply(ToolServices& ctx, PictureView& view, int dx, int dy) = 0;
     // The refusal verb, e.g. "patch" in "Could not patch: ...".
     virtual QString verb() const = 0;
 

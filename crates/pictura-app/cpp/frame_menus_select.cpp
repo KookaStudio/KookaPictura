@@ -59,14 +59,16 @@ void PicturaMainWindow::registerSelectHandlers()
     });
     registry_->setHandler(command_ids::SelectGrow, [this]() {
         PictureView* view = activeView();
-        const int tolerance = tools_ ? tools_->tolerance() : 0;
+        const SelectionOptions* selection = tools_ ? tools_->optionsFor<SelectionOptions>(ToolId::MagicWand) : nullptr;
+        const int tolerance = selection ? selection->tolerance() : 0;
         if (view && view->grow_selection(tolerance)) {
             refresh();
         }
     });
     registry_->setHandler(command_ids::SelectSimilar, [this]() {
         PictureView* view = activeView();
-        const int tolerance = tools_ ? tools_->tolerance() : 0;
+        const SelectionOptions* selection = tools_ ? tools_->optionsFor<SelectionOptions>(ToolId::MagicWand) : nullptr;
+        const int tolerance = selection ? selection->tolerance() : 0;
         if (view && view->similar_selection(tolerance)) {
             refresh();
         }

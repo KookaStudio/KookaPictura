@@ -41,7 +41,7 @@ QWidget* OptionsBar::buildMovePage(ToolId id)
     autoSelect->setObjectName(QStringLiteral("optionsMoveAutoSelect"));
     autoSelect->addItem(QStringLiteral("Group"), 0);
     autoSelect->addItem(QStringLiteral("Layer"), 1);
-    autoSelect->setCurrentIndex(controller_ ? controller_->moveAutoSelect() : 0);
+    autoSelect->setCurrentIndex(controller_ ? move_->get().autoSelect : 0);
     autoSelect->setToolTip(QStringLiteral("Auto-Select"));
     layout->addWidget(autoSelect);
     // ponytail: Auto-Select is recorded but not wired; a deep hit test for the
@@ -49,7 +49,7 @@ QWidget* OptionsBar::buildMovePage(ToolId id)
     // the Layers panel's active layer.
     auto* transform = new QCheckBox(QStringLiteral("Show Transform Controls"), page);
     transform->setObjectName(QStringLiteral("optionsMoveTransform"));
-    transform->setChecked(controller_ && controller_->moveShowTransformControls());
+    transform->setChecked(controller_ && move_->get().showTransformControls);
     layout->addWidget(transform);
     // The checkbox drives ToolController::syncTransformControls, which shows the
     // Free Transform box on the active layer (see `tools/move-transform-controls`).
@@ -119,21 +119,33 @@ QWidget* OptionsBar::buildMovePage(ToolId id)
         action->setCheckable(true);
         alignToGroup->addAction(action);
     }
-    const int alignTo = controller_ ? controller_->moveAlignTo() : 0;
+    const int alignTo = controller_ ? move_->get().alignTo : 0;
     toSelectionAction->setChecked(alignTo == 0);
     toCanvasAction->setChecked(alignTo == 1);
     menuButton->setMenu(menu);
     layout->addWidget(menuButton);
 
     if (controller_) {
-        connect(autoSelect, &QComboBox::currentIndexChanged, this,
-                [this, autoSelect](int) { controller_->setMoveAutoSelect(autoSelect->currentIndex()); });
-        connect(transform, &QCheckBox::toggled, this,
-                [this](bool on) { controller_->setMoveShowTransformControls(on); });
-        connect(toSelectionAction, &QAction::triggered, this,
-                [this]() { controller_->setMoveAlignTo(0); });
-        connect(toCanvasAction, &QAction::triggered, this,
-                [this]() { controller_->setMoveAlignTo(1); });
+        connect(autoSelect, &QComboBox::currentIndexChanged, this, [this, autoSelect](int) {
+            MoveOptions o = move_->get();
+            o.autoSelect = autoSelect->currentIndex();
+            move_->set(o);
+        });
+        connect(transform, &QCheckBox::toggled, this, [this](bool on) {
+            MoveOptions o = move_->get();
+            o.showTransformControls = on;
+            move_->set(o);
+        });
+        connect(toSelectionAction, &QAction::triggered, this, [this]() {
+            MoveOptions o = move_->get();
+            o.alignTo = 0;
+            move_->set(o);
+        });
+        connect(toCanvasAction, &QAction::triggered, this, [this]() {
+            MoveOptions o = move_->get();
+            o.alignTo = 1;
+            move_->set(o);
+        });
     }
 
     layout->addStretch(1);

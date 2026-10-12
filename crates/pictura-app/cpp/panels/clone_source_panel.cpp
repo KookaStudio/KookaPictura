@@ -173,8 +173,8 @@ CloneSourcePanel::CloneSourcePanel(QWidget* parent)
     layout->addStretch(1);
 
     connect(group, &QButtonGroup::idClicked, this, [this](int id) {
-        if (controller_) {
-            controller_->setCloneSourceSlot(id);
+        if (clone_) {
+            clone_->setSlot(id);
         }
     });
     // Offset is shown as destination minus source, the engine keeps the other
@@ -227,6 +227,7 @@ CloneSourcePanel::CloneSourcePanel(QWidget* parent)
 void CloneSourcePanel::setController(ToolController* controller)
 {
     controller_ = controller;
+    clone_ = controller ? controller->optionsFor<CloneSourceOptions>(ToolId::CloneStamp) : nullptr;
     if (controller_) {
         connect(controller_, &ToolController::cloneSourceChanged, this, [this] { refresh(); });
     }
@@ -235,22 +236,22 @@ void CloneSourcePanel::setController(ToolController* controller)
 
 void CloneSourcePanel::editSlot(const std::function<void(CloneSource&)>& edit)
 {
-    if (!controller_) {
+    if (!clone_) {
         return;
     }
-    CloneSource slot = controller_->cloneSource();
+    CloneSource slot = clone_->active();
     edit(slot);
-    controller_->setCloneSource(slot);
+    clone_->setActive(slot);
 }
 
 void CloneSourcePanel::refresh()
 {
-    if (!controller_) {
+    if (!clone_) {
         return;
     }
-    const CloneSource s = controller_->cloneSource();
+    const CloneSource s = clone_->active();
     for (int i = 0; i < int(slots_.size()); ++i) {
-        slots_[i]->setChecked(i == controller_->cloneSourceSlot());
+        slots_[i]->setChecked(i == clone_->slot());
     }
     const QPoint shown = s.hasOffset ? -s.offset : QPoint();
     offsetX_->setValue(shown.x());

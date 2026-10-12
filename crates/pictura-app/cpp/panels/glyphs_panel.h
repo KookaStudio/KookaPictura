@@ -3,6 +3,8 @@
 #include <QtGui/QFont>
 #include <QtWidgets/QWidget>
 
+#include "tool_options.h"
+
 class QComboBox;
 class QFontComboBox;
 class QLabel;
@@ -44,6 +46,7 @@ private:
     QFont glyphFont() const;
 
     ToolController* controller_ = nullptr;
+    TypeGroup* type_ = nullptr;
     QFontComboBox* family_ = nullptr;
     QComboBox* style_ = nullptr;
     QComboBox* subset_ = nullptr;

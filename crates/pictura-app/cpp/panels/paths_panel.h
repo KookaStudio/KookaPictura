@@ -10,7 +10,7 @@ class QToolButton;
 namespace pictura {
 
 class PictureView;
-struct ToolContext;
+struct ToolServices;
 
 // Window > Paths: the active shape layer's "<Layer> Shape Path", the saved
 // paths, and the temporary Work Path (italic), each with a thumbnail. The
@@ -32,7 +32,7 @@ public:
     void setView(PictureView* view);
     // Supplies the foreground and brush for Fill / Stroke Path; without it they
     // use black and a 5 px hard round brush.
-    void setToolContext(const ToolContext* tools) { tools_ = tools; }
+    void setToolServices(const ToolServices* tools) { tools_ = tools; }
     void refresh();
 
     // The footer actions on the selected row; false when nothing happened.
@@ -64,7 +64,7 @@ private:
     bool eventFilter(QObject* watched, QEvent* event) override;
 
     PictureView* view_ = nullptr;
-    const ToolContext* tools_ = nullptr;
+    const ToolServices* tools_ = nullptr;
     QListWidget* list_ = nullptr;
     QLabel* empty_ = nullptr;
     QToolButton* fill_ = nullptr;

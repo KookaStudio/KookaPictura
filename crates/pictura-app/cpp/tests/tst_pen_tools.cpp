@@ -196,10 +196,10 @@ void PenToolsTest::penAutoAddDelete()
     QCOMPARE(points(f, 0), 4);
 
     // Off, the same click starts a new subpath.
-    f.tools->setPenOptions({false, false, 2.0});
+    f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::Pen)->set({false, false, 2.0});
     click(f, QPointF(30, 10));
     QCOMPARE(pictura::path_subpath_count(*f.view), 2);
-    f.tools->setPenOptions({});
+    f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::Pen)->set({});
 }
 
 void PenToolsTest::freeformPenTool()
@@ -239,14 +239,14 @@ void PenToolsTest::freeformPenTool()
     for (int i = 0; i <= 80; ++i) {
         wave.append(QPointF(10 + i, 80 + 3 * std::sin(i / 4.0)));
     }
-    f.tools->setPenOptions({true, false, 0.5});
+    f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::Pen)->set({true, false, 0.5});
     f.drag(wave);
-    f.tools->setPenOptions({true, false, 10.0});
+    f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::Pen)->set({true, false, 10.0});
     f.drag(wave);
     QVERIFY2(!pictura::path_subpath_closed(*f.view, 1), "an open stroke closed");
     QVERIFY2(points(f, 1) > points(f, 2), "Curve Fit did not simplify");
     QCOMPARE(points(f, 2), 2);
-    f.tools->setPenOptions({});
+    f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::Pen)->set({});
 
     // A click draws nothing.
     const int clicked = f.view->history_index();
