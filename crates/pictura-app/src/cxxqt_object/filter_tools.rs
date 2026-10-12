@@ -277,8 +277,8 @@ fn filter_preview(mut view: Pin<&mut PictureView>, kind: &QString, params: &QLis
 /// and sizes itself as a fraction of the buffer, Shear shifts each row by
 /// a fraction of the buffer's half-width, Displace stretches or tiles its
 /// map from the buffer's corner, Lens Blur's depth map and Liquify's mesh
-/// align to the layer's rectangle, and Field Blur weights its pins as
-/// fractions of the buffer.
+/// align to the layer's rectangle, and the Blur Gallery (Field and Iris
+/// Blur) places its pins as fractions of the buffer.
 pub(crate) fn filter_preview_needs_whole_layer(kind: &str) -> bool {
     matches!(
         kind,
@@ -290,6 +290,7 @@ pub(crate) fn filter_preview_needs_whole_layer(kind: &str) -> bool {
             | "displace"
             | "lens-blur"
             | "field-blur"
+            | "iris-blur"
             | "liquify"
     )
 }

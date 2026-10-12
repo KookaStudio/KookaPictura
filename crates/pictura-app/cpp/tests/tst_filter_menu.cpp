@@ -157,12 +157,14 @@ void FilterMenuTest::blurGallerySubmenuListsTheGallery()
     // Field Blur moved out of the Blur submenu into the gallery one.
     QVERIFY(registry->action(filterId(QStringLiteral("Blur"), QStringLiteral("Field Blur")))
             == nullptr);
-    QAction* field = registry->action(galleryId(QStringLiteral("Field Blur")));
-    QVERIFY(field != nullptr);
-    QVERIFY(field->isEnabled());
-    QVERIFY(field->text().endsWith(QStringLiteral("…")));
-    for (const QString& leaf : {QStringLiteral("Iris Blur"), QStringLiteral("Tilt-Shift"),
-                                QStringLiteral("Path Blur"), QStringLiteral("Spin Blur")}) {
+    for (const QString& leaf : {QStringLiteral("Field Blur"), QStringLiteral("Iris Blur")}) {
+        QAction* live = registry->action(galleryId(leaf));
+        QVERIFY2(live != nullptr, qPrintable(leaf));
+        QVERIFY2(live->isEnabled(), qPrintable(leaf));
+        QVERIFY2(live->text().endsWith(QStringLiteral("…")), qPrintable(leaf));
+    }
+    for (const QString& leaf : {QStringLiteral("Tilt-Shift"), QStringLiteral("Path Blur"),
+                                QStringLiteral("Spin Blur")}) {
         QAction* stub = registry->action(galleryId(leaf));
         QVERIFY2(stub != nullptr, qPrintable(leaf));
         QVERIFY2(!stub->isEnabled(), qPrintable(leaf));
@@ -181,6 +183,7 @@ void FilterMenuTest::dialogCollectsParameterSlots()
     };
     const Case cases[] = {
         {QStringLiteral("Blur Gallery"), QStringLiteral("Field Blur"), 17},
+        {QStringLiteral("Blur Gallery"), QStringLiteral("Iris Blur"), 22},
         {QStringLiteral("Blur"), QStringLiteral("Gaussian Blur"), 1},
         {QStringLiteral("Blur"), QStringLiteral("Radial Blur"), 3},
         {QStringLiteral("Blur"), QStringLiteral("Shape Blur"), 2},

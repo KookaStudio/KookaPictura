@@ -13,14 +13,12 @@ Snapshot for resuming after a context break. Update after each milestone.
 - Toolchain: Rust 1.98 (`rust-toolchain.toml`), system Qt **6.11.1**, cxx-qt
   **0.10.0**, wgpu **30.0.1**, lcms2 **6.2.0** (system Little CMS 2.19).
 - Oracles installed for tests: `psd-tools` 1.19, ImageMagick 7.1.2, `magick`.
-- Test suite: **2970 tests, 2969 passed, 20 skipped, 1 failed** from
-  `cargo nextest run --workspace` — the failure is the local ImageMagick
-  fixture mismatch (`imagemagick_fixtures_reproduce`: 7.1.2-27 here vs the
-  CI-pinned 7.1.2-29; it fails on `master` too). The C++ self-test reports
+- Test suite: **3004 tests, 3004 passed, 21 skipped, 0 failed** from
+  `cargo nextest run --workspace` (the local ImageMagick fixture mismatch,
+  `imagemagick_fixtures_reproduce`, no longer fails here). The C++ self-test reports
   **474 passed, 0 failed, 0 skipped** standalone; the unified report
   (`scripts/verify-fast.sh`, which reruns both plus the workspace probes and the
-  Qt Test suites) reports **3994 passed, 21 skipped, 1 failed** (the same
-  fixture check).
+  Qt Test suites) reports **4052 passed, 22 skipped, 0 failed**.
 - **Large images** (#185, branch `perf/185-large-image-boundaries`, PR #257,
   OpenSpec change `large-image-stroke-boundaries`, numbers in its `design.md`):
   measured on a 16507×16196 PNG. History keeps a private copy of the current
@@ -427,6 +425,30 @@ Snapshot for resuming after a context break. Update after each milestone.
   passed · 21 skipped · 1 failed, the one failure the pre-existing local
   ImageMagick fixture mismatch noted above (nextest 2969/1/20, app self-test
   510, Qt 515).
+- **Iris Blur** (change `iris-blur-gallery`, issue #341): the Blur Gallery's
+  second effect, on Field Blur's shell. `pictura-filters::blur::iris`
+  (`IrisPin { x, y, radius_x, radius_y, angle, squareness, feather, blur }`,
+  `iris_blur`, `iris_exponent`, `MAX_IRIS_RADIUS` 10) makes each pin a
+  rotated superellipse (semi-axes in buffer widths; squareness 0..100 maps to
+  the exponent 2 → 20): sharp inside the feather core, a smoothstep across the
+  fade band, the full amount outside the outline. Pins multiply their
+  falloffs (one sharp island each) and blend their amounts by
+  inverse-square distance. Field Blur's pyramid and effects passes moved
+  behind a shared `variable_blur(radius_at)` with the Field digest unchanged.
+  The `iris-blur` kind is `count`, 8 slots per pin, then the 13-slot effects
+  tail (22 canonical), parsed with `field-blur` in `filter_map/gallery.rs`.
+  `Filter ▸ Blur Gallery ▸ Iris Blur…` opens `BlurGalleryDialog` in Iris mode:
+  the Iris Blur row active (Blur, default 15 px), the other rows disabled, and
+  the selected pin's outline with radius handles (resize + rotate), feather
+  dots, and the roundness diamond; new pins copy the selected outline. Tests:
+  iris engine units, a kernel digest, a no-equivalent oracle row,
+  `filter_map_tests`, the whole-layer preview row, `tst_filter_menu`, and five
+  `tst_blur_gallery_dialog` cases. Ceilings: the falloff, squareness map, and
+  multi-pin combine are inferred; one gallery effect per workspace; feather
+  dots move together (no Alt-drag); no `M` mask view. Verified:
+  `TASK_ALLOWS_DOCS=1 bash scripts/verify-fast.sh` passes; `openspec validate
+  --all --strict` 239/239; the unified report is 4052 passed · 22 skipped ·
+  0 failed (nextest 3004/0/21, Qt 538).
 - **Lighting Effects workspace** (change `lighting-effects-workspace`, issue
   #225): `render::lighting_effects` (now `render/lighting.rs`) shades a CS6 rig
   of 1–16 Spot / Point / Infinite lights with photorust's model. A Spot is an

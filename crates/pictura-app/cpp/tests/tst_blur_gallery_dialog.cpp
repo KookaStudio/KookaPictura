@@ -25,9 +25,17 @@ namespace {
 const QStringList kFieldBlurPath = {QStringLiteral("Filter"), QStringLiteral("Blur Gallery"),
                                     QStringLiteral("Field Blur")};
 
+const QStringList kIrisBlurPath = {QStringLiteral("Filter"), QStringLiteral("Blur Gallery"),
+                                   QStringLiteral("Iris Blur")};
+
 const pictura::FilterCommandSpec& fieldBlurSpec()
 {
     return *pictura::filterCommandForPath(kFieldBlurPath);
+}
+
+const pictura::FilterCommandSpec& irisBlurSpec()
+{
+    return *pictura::filterCommandForPath(kIrisBlurPath);
 }
 
 pictura::BlurGalleryDialog* openWorkspace()
@@ -65,6 +73,23 @@ QList<double> defaultValues()
     return values;
 }
 
+// The default iris on the 96×64 pattern: the outline proportioned like the
+// picture, a 0.65 core, squareness 50, blur 15.
+QList<double> defaultIrisValues()
+{
+    QList<double> values = {1.0, 0.5, 0.5, 0.35, 0.35 * 64.0 / 96.0, 0.0, 50.0, 0.65, 15.0};
+    values += defaultTail();
+    return values;
+}
+
+// The canvas's picture rectangle, as `BlurGalleryCanvas::imageRect` fits it.
+QRectF pictureRect(const QWidget* canvas)
+{
+    const QRectF room = QRectF(canvas->rect()).adjusted(24, 24, -24, -24);
+    const QSizeF fitted = QSizeF(96, 64).scaled(room.size(), Qt::KeepAspectRatio);
+    return QRectF(room.center() - QPointF(fitted.width(), fitted.height()) / 2.0, fitted);
+}
+
 int pinCount(const QList<double>& values)
 {
     return values.isEmpty() ? 0 : int(values.first());
@@ -94,6 +119,11 @@ private slots:
     void hideUiTogglesThePinOverlay();
     void menuCommitsAndCancelRestores();
     void lastFilterReusesThePins();
+    void irisWorkspaceOpensOnTheDefaultOutline();
+    void irisPinListRoundTrips();
+    void irisHandlesReshapeTheOutline();
+    void irisPreviewKeepsTheCoreSharp();
+    void irisMenuCommitsOnce();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -112,6 +142,7 @@ void BlurGalleryDialogTest::initTestCase()
     QVERIFY(pattern().save(patternPath_) && window_->openDocumentAtPath(patternPath_));
     QVERIFY(window_->activeView() != nullptr);
     QVERIFY(pictura::filterCommandForPath(kFieldBlurPath) != nullptr);
+    QVERIFY(pictura::filterCommandForPath(kIrisBlurPath) != nullptr);
 }
 
 void BlurGalleryDialogTest::workspaceFollowsCs6()
@@ -358,6 +389,127 @@ void BlurGalleryDialogTest::lastFilterReusesThePins()
     QVERIFY(registry->dispatch(
         QString::fromLatin1(pictura::command_ids::FilterLastFilterSettings)));
     QCOMPARE(seen, pins);
+}
+
+void BlurGalleryDialogTest::irisWorkspaceOpensOnTheDefaultOutline()
+{
+    pictura::BlurGalleryDialog dialog(window_->activeView(), irisBlurSpec());
+    QCOMPARE(dialog.windowTitle(), QStringLiteral("Iris Blur"));
+    QVERIFY(dialog.canvas()->iris());
+    QCOMPARE(dialog.values(), defaultIrisValues());
+
+    auto* iris = dialog.findChild<QCheckBox*>(QStringLiteral("irisBlurEnabled"));
+    QVERIFY(iris != nullptr && iris->isChecked() && iris->isEnabled());
+    auto* spin = dialog.findChild<QDoubleSpinBox*>(QStringLiteral("irisBlurSpin"));
+    QVERIFY(spin != nullptr && spin->value() == 15.0 && spin->maximum() == 500.0);
+    QVERIFY(dialog.findChild<QDoubleSpinBox*>(QStringLiteral("fieldBlurSpin")) == nullptr);
+    // The other effects list as disabled rows, Field Blur included.
+    for (const char* name : {"fieldBlurEnabled", "tiltShiftEnabled", "pathBlurEnabled",
+                             "spinBlurEnabled"}) {
+        auto* row = dialog.findChild<QCheckBox*>(QLatin1String(name));
+        QVERIFY2(row != nullptr, name);
+        QVERIFY2(!row->isChecked() && !row->isEnabled(), name);
+    }
+    dialog.reject();
+}
+
+void BlurGalleryDialogTest::irisPinListRoundTrips()
+{
+    pictura::BlurGalleryDialog dialog(window_->activeView(), irisBlurSpec());
+    QList<double> pins = {2.0, 0.3, 0.4, 0.2, 0.1, 30.0, 60.0, 0.5, 12.0,
+                          0.8, 0.7, 0.1, 0.1, -45.0, 0.0, 0.3, 40.0};
+    pins += defaultTail();
+    dialog.setValues(pins);
+    QCOMPARE(dialog.values(), pins);
+    // A Field Blur stride does not fit the Iris record and keeps the default.
+    QList<double> field = {1.0, 0.5, 0.5, 10.0};
+    field += defaultTail();
+    dialog.setValues(field);
+    QCOMPARE(dialog.values(), defaultIrisValues());
+    dialog.reject();
+}
+
+void BlurGalleryDialogTest::irisHandlesReshapeTheOutline()
+{
+    pictura::BlurGalleryDialog dialog(window_->activeView(), irisBlurSpec());
+    dialog.resize(900, 600);
+    dialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+    auto* canvas = dialog.canvas();
+    const QRectF picture = pictureRect(canvas);
+    const QPointF centre = picture.center();
+    const double scale = picture.width();
+    const auto at = [&](double dx, double dy) { return (centre + QPointF(dx, dy)).toPoint(); };
+    QList<double> v = dialog.values();
+    const double a = v[3] * scale;
+    const double b = v[4] * scale;
+
+    // The right radius handle widens the outline.
+    drag(canvas, at(a, 0), at(a + 40, 0));
+    v = dialog.values();
+    QVERIFY2(v[3] > 0.35 + 0.05, "the x radius did not grow");
+    QVERIFY2(qAbs(v[5]) < 1.0, "a straight drag turned the outline");
+    const double wide = v[3] * scale;
+
+    // The inner feather dot pulls the sharp core in.
+    drag(canvas, at(0.65 * wide, 0), at(0.3 * wide, 0));
+    v = dialog.values();
+    QVERIFY2(v[7] < 0.5, "the feather did not shrink");
+
+    // The diamond squares the outline.
+    const double k = std::pow(2.0, -(1.0 - 0.009 * 50.0) / 2.0);
+    drag(canvas, at(k * wide, -k * b), at(0.94 * wide, -0.94 * b));
+    v = dialog.values();
+    QVERIFY2(v[6] > 60.0, "the diamond did not square the outline");
+
+    // Dragging the top radius handle sideways turns the outline.
+    drag(canvas, at(0, -b), at(b, -b));
+    v = dialog.values();
+    QVERIFY2(qAbs(v[5]) > 20.0, "the outline did not turn");
+    QCOMPARE(pinCount(v), 1);
+    dialog.reject();
+}
+
+void BlurGalleryDialogTest::irisPreviewKeepsTheCoreSharp()
+{
+    pictura::BlurGalleryDialog dialog(window_->activeView(), irisBlurSpec());
+    // The constructor rendered the default iris; flush the coalesced
+    // re-render so the canvas holds the unfiltered proxy.
+    dialog.findChild<QCheckBox*>(QStringLiteral("filterPreview"))->setChecked(false);
+    QCoreApplication::processEvents();
+    const QImage unfiltered = dialog.canvas()->image();
+    QVERIFY(!unfiltered.isNull());
+    auto* bokeh = dialog.findChild<QCheckBox*>(QStringLiteral("bokehEnabled"));
+    bokeh->setChecked(false);
+    dialog.findChild<QDoubleSpinBox*>(QStringLiteral("irisBlurSpin"))->setValue(30.0);
+    dialog.findChild<QCheckBox*>(QStringLiteral("filterPreview"))->setChecked(true);
+    QTRY_VERIFY2(dialog.canvas()->image() != unfiltered, "the iris did not blur the preview");
+    const QImage blurred = dialog.canvas()->image();
+    QCOMPARE(blurred.pixel(48, 32), unfiltered.pixel(48, 32));
+    QVERIFY2(blurred.pixel(2, 2) != unfiltered.pixel(2, 2), "the corner stayed sharp");
+    dialog.reject();
+}
+
+void BlurGalleryDialogTest::irisMenuCommitsOnce()
+{
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(view != nullptr);
+    const int before = view->history_count();
+    QList<double> committed;
+    QTimer::singleShot(0, [&committed] {
+        if (auto* dialog = openWorkspace()) {
+            dialog->findChild<QDoubleSpinBox*>(QStringLiteral("irisBlurSpin"))->setValue(22.0);
+            committed = dialog->values();
+            dialog->accept();
+        }
+    });
+    QVERIFY(window_->registry()->dispatch(pictura::commandIdForPath(kIrisBlurPath)));
+    QCOMPARE(committed.size(), 22);
+    QCOMPARE(committed.at(8), 22.0);
+    QCOMPARE(view->history_count(), before + 1);
+    QCOMPARE(view->history_label(view->history_index()), QStringLiteral("Filter: Iris Blur"));
+    QCOMPARE(filter_last_kind(*view), QStringLiteral("iris-blur"));
+    QCOMPARE(filter_last_params(*view), committed);
 }
 
 QTEST_MAIN(BlurGalleryDialogTest)

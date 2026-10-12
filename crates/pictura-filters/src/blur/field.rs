@@ -124,16 +124,46 @@ pub fn field_blur(
         return Ok(());
     }
     let max_pin = pins.iter().map(|pin| pin.blur).fold(0.0f64, f64::max);
-    if max_pin <= 0.0 {
-        return Ok(());
+    let (w, h) = (f64::from(buf.width), f64::from(buf.height));
+    variable_blur(buf, max_pin, bokeh, noise, |x, y| {
+        let u = x / w;
+        let v = y / h;
+        let mut weighted = 0.0;
+        let mut weight_sum = 0.0;
+        for pin in pins {
+            let dx = u - pin.x;
+            let dy = v - pin.y;
+            let w = 1.0 / (dx * dx + dy * dy + PIN_EPSILON);
+            weighted += w * pin.blur;
+            weight_sum += w;
+        }
+        weighted / weight_sum
+    });
+    Ok(())
+}
+
+/// The Blur Gallery's shared variable blur: `radius_at` maps a pixel centre
+/// (buffer pixels) to a blur radius in `0..=max_radius`, which picks and
+/// blends the two bracketing levels of a box-blur pyramid; then the Blur
+/// Effects and Noise passes, weighted by `radius / max_radius`. Callers
+/// validate first; a non-positive `max_radius` is a no-op.
+pub(super) fn variable_blur(
+    buf: &mut PixelBuffer,
+    max_radius: f64,
+    bokeh: &BokehParams,
+    noise: &BlurNoise,
+    radius_at: impl Fn(f64, f64) -> f64 + Sync,
+) {
+    if max_radius <= 0.0 {
+        return;
     }
     let w = buf.width as usize;
     let h = buf.height as usize;
     let n = w * h;
     let planes = (buf.channels as usize).min(3);
-    let boxes = level_boxes(max_pin);
+    let boxes = level_boxes(max_radius);
     let nominal = level_nominals(&boxes);
-    let (brackets, weights) = bracket_map(pins, w, h, &nominal, max_pin);
+    let (brackets, weights) = bracket_map(w, h, &nominal, max_radius, radius_at);
     let src = buf.data.clone();
     for c in 0..planes {
         let base = c * n;
@@ -163,7 +193,6 @@ pub fn field_blur(
         }
     }
     apply_effects(buf, &weights, bokeh, noise);
-    Ok(())
 }
 
 fn validate_pins(pins: &[BlurPin]) -> Result<(), FilterError> {
@@ -189,7 +218,7 @@ fn validate_pins(pins: &[BlurPin]) -> Result<(), FilterError> {
     Ok(())
 }
 
-fn validate_bokeh(bokeh: &BokehParams) -> Result<(), FilterError> {
+pub(super) fn validate_bokeh(bokeh: &BokehParams) -> Result<(), FilterError> {
     if !bokeh.light_bokeh.is_finite()
         || !bokeh.bokeh_color.is_finite()
         || !(0.0..=100.0).contains(&bokeh.light_bokeh)
@@ -202,7 +231,7 @@ fn validate_bokeh(bokeh: &BokehParams) -> Result<(), FilterError> {
     Ok(())
 }
 
-fn validate_noise(noise: &BlurNoise) -> Result<(), FilterError> {
+pub(super) fn validate_noise(noise: &BlurNoise) -> Result<(), FilterError> {
     for (name, value) in [
         ("amount", noise.amount),
         ("size", noise.size),
@@ -379,14 +408,14 @@ fn level_nominals(boxes: &[u32]) -> Vec<f64> {
 }
 
 /// Each pixel's bracketing level and blend packed as `(level << 11) | t`, plus
-/// its normalized field weight (0 sharp, 255 at the largest pin) for the
-/// effects passes.
+/// its normalized field weight (0 sharp, 255 at `max_radius`) for the effects
+/// passes.
 fn bracket_map(
-    pins: &[BlurPin],
     w: usize,
     h: usize,
     nominal: &[f64],
-    max_pin: f64,
+    max_radius: f64,
+    radius_at: impl Fn(f64, f64) -> f64 + Sync,
 ) -> (Vec<u16>, Vec<u8>) {
     let mut brackets = vec![0u16; w * h];
     let mut weights = vec![0u8; w * h];
@@ -395,23 +424,12 @@ fn bracket_map(
         .zip(weights.par_iter_mut())
         .enumerate()
         .for_each(|(i, (slot, weight))| {
-            let x = i % w;
-            let y = i / w;
-            let u = (x as f64 + 0.5) / w as f64;
-            let v = (y as f64 + 0.5) / h as f64;
-            let mut weighted = 0.0;
-            let mut weight_sum = 0.0;
-            for pin in pins {
-                let dx = u - pin.x;
-                let dy = v - pin.y;
-                let w = 1.0 / (dx * dx + dy * dy + PIN_EPSILON);
-                weighted += w * pin.blur;
-                weight_sum += w;
-            }
-            let radius = weighted / weight_sum;
+            let x = (i % w) as f64 + 0.5;
+            let y = (i / w) as f64 + 0.5;
+            let radius = radius_at(x, y);
             let (level, t) = bracket(nominal, radius);
             *slot = ((level as u16) << 11) | (t * 2047.0).round() as u16;
-            *weight = ((radius / max_pin * 255.0).round().clamp(0.0, 255.0)) as u8;
+            *weight = ((radius / max_radius * 255.0).round().clamp(0.0, 255.0)) as u8;
         });
     (brackets, weights)
 }

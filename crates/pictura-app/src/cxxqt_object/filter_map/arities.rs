@@ -3,7 +3,8 @@
 //! `cpp/filter_commands.cpp` stay in lock-step.
 
 use super::{
-    CUSTOM_SLOTS, FIELD_BLUR_SLOTS, LIGHTING_LIGHT_SLOTS, LIGHTING_RIG_SLOTS, SHEAR_SLOTS,
+    CUSTOM_SLOTS, FIELD_BLUR_SLOTS, IRIS_BLUR_SLOTS, LIGHTING_LIGHT_SLOTS, LIGHTING_RIG_SLOTS,
+    SHEAR_SLOTS,
 };
 use crate::cxxqt_object::filter_tools::displace_maps::DISPLACE_SLOTS;
 use crate::cxxqt_object::filter_tools::lens_blur_depths::LENS_BLUR_SLOTS;
@@ -18,6 +19,7 @@ pub(in crate::cxxqt_object) const FILTER_ARITIES: &[(&str, usize)] = &[
     ("smart-blur", 4),
     ("lens-blur", LENS_BLUR_SLOTS),
     ("field-blur", FIELD_BLUR_SLOTS),
+    ("iris-blur", IRIS_BLUR_SLOTS),
     ("motion-blur", 2),
     ("radial-blur", 3),
     ("average", 0),
