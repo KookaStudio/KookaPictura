@@ -449,6 +449,33 @@ Snapshot for resuming after a context break. Update after each milestone.
   `TASK_ALLOWS_DOCS=1 bash scripts/verify-fast.sh` passes; `openspec validate
   --all --strict` 239/239; the unified report is 4052 passed · 22 skipped ·
   0 failed (nextest 3004/0/21, Qt 538).
+- **Design system** (change `ui-design-system`, issue #249): the theme's token
+  table is now a public contract. `Theme::tokens(level)` returns every colour
+  (including the derived shades) and the shared metrics (panel/chrome border,
+  group divider, slot footprint and icon maxima, shade step) as
+  `ThemeToken{key, value, color}`; `styleSheet` builds from it and the new
+  `./build/pictura --headless --dump-theme` prints the same list for all four
+  levels as JSON. The global QSS gained one canonical definition per primitive
+  (text button, icon/toggle button, text input, numeric field, combo, check
+  box, slider, panel/document tabs, menu, colour swatch, panel header) with
+  rest/hover/pressed/checked/disabled/focus states; a new `accent` token
+  (`#2a7fff`) replaces the drop-indicator literals, and the static per-widget
+  stylesheets (preview panes, indicators, bold labels, menu padding) moved to
+  object-name-scoped rules. Data-driven fills route through the new
+  `panels/color_swatch_widget.{h,cpp}` (a `QPushButton` that paints its colour,
+  `setColor`/`setActive`, keeps the `color` property), replacing the ten
+  ad-hoc swatch stylesheets; no `setStyleSheet` call remains outside
+  `theme.cpp`. `scripts/gen-styleguide.py` runs the dump and writes the
+  committed `design-system.html` (token tables, metrics, primitive/state
+  gallery, level switcher; idempotent). Checked by `tst_design_system`
+  (palette == tokens, primitive selectors, object-name/state contract, swatch
+  paint); `tst_filter_menu`, `tst_command_tree`, and `tst_retouch_tools` now
+  assert the shared contract instead of per-widget stylesheets. Verified:
+  `TASK_ALLOWS_DOCS=1 bash scripts/verify-full.sh` → `verify-full: OK`; unified
+  report 4065 passed · 22 skipped · 0 failed (Qt 550); `ctest -R '^tst_'`
+  79/79; `openspec validate --all --strict` 244/244. Ceilings: the HTML guide
+  is a static reference, not a live renderer; `QCheckBox::indicator` is the
+  tokenised fill, not the Fusion tick.
 - **Lighting Effects workspace** (change `lighting-effects-workspace`, issue
   #225): `render::lighting_effects` (now `render/lighting.rs`) shades a CS6 rig
   of 1–16 Spot / Point / Infinite lights with photorust's model. A Spot is an
