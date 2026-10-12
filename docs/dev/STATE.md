@@ -371,15 +371,17 @@ Snapshot for resuming after a context break. Update after each milestone.
   workspace: Basic (Warp, Reconstruct, Pucker, Bloat, Push Left, Hand, Zoom;
   Size/Pressure 100 from the #348 capture) and Advanced (Twirl, Mirror,
   Turbulence, Freeze, Thaw, Density/Rate/Jitter, Reconstruct…, mask options,
-  Show Mask); the view is rendered at screen resolution from the
+  View Options: Show Image, Show Mesh — Small/Medium/Large, colour, traced as
+  contours of `p + d(p)` — Show Mask, Show Backdrop — All Layers or one
+  layer, In Front/Behind/Blend (Difference stand-in), Opacity 50); the view is rendered at screen resolution from the
   full-resolution layer (Catmull-Rom when magnified, box levels minified) and
   re-rendered per dab rectangle; opens at 100 %, Zoom tool right-click menu;
   Load Last Mesh; W R C S B O X T F D H Z, `[`/`]`. Ceilings (`ponytail:`):
-  tool strengths tuned by eye; no `.msh` files, mask sources, backdrop, mesh
-  overlay, live Reconstruct preview or GPU path; kept meshes live for the
-  process; `Edit ▸ Fade` is still an app-wide stub. Tests: 18 engine units
+  tool strengths tuned by eye; no `.msh` files, mask sources, Show Guides,
+  Pin Edges, live Reconstruct preview or GPU path; kept meshes live for the
+  process; `Edit ▸ Fade` is still an app-wide stub. Tests: 19 engine units
   (+1 ignored profile), store and `filter_map` units, `tst_liquify_dialog`
-  (17). Verified: `bash scripts/verify-full.sh` — unified report 4006 passed ·
+  (20). Verified: `bash scripts/verify-full.sh` — unified report 4011 passed ·
   22 skipped · 0 failed, file-size and selftest-budget OK, guard OK with
   `TASK_ALLOWS_DOCS=1`; `openspec validate --all --strict` 237/237.
 - **Lighting Effects workspace** (change `lighting-effects-workspace`, issue
