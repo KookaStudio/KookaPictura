@@ -48,6 +48,9 @@ here.
 - `assets/icons/app.ico` — the same icon in Windows ICO format
   (256/128/64/48/32/16), generated from `app.png` with ImageMagick, released
   under the same **CC0-1.0 / MIT**.
+- `assets/icons/app.icns` — the same icon in macOS ICNS format (512/256/128/64/32
+  PNG-backed entries), generated from `app.png` with a Pillow-based packer,
+  released under the same **CC0-1.0 / MIT**.
 
 ## Screenshots
 
