@@ -25,7 +25,7 @@ int pictura::runEraserChecks(pictura::PicturaMainWindow& frame)
     const BrushState brush(f.tools);
     const QColor foreground = f.tools->foreground();
     const QColor background = f.tools->background();
-    const pictura::EraserOptions options = f.tools->eraserOptions();
+    const pictura::EraserOptions options = f.tools->optionsFor<EraserGroup>(ToolId::Eraser)->get();
     const QRgb red = QColor(Qt::red).rgba();
     const QRgb white = QColor(Qt::white).rgba();
 
@@ -62,10 +62,10 @@ int pictura::runEraserChecks(pictura::PicturaMainWindow& frame)
     bool block = false;
     if (mode) {
         mode->setCurrentIndex(2);
-        block = f.tools->eraserOptions().mode == 2 && !opacity->isEnabled();
+        block = f.tools->optionsFor<EraserGroup>(ToolId::Eraser)->get().mode == 2 && !opacity->isEnabled();
         mode->setCurrentIndex(0);
     }
-    f.tools->setEraserOptions(options);
+    f.tools->optionsFor<EraserGroup>(ToolId::Eraser)->set(options);
     f.tools->setForeground(foreground);
     f.tools->setBackground(background);
 
@@ -89,7 +89,7 @@ int pictura::runBackgroundEraserChecks(pictura::PicturaMainWindow& frame)
         return pictura::selfTest().fail(550, "background eraser fixture");
     }
     const BrushState brush(f.tools);
-    f.tools->setBrushSize(16);
+    f.tools->optionsFor<PaintOptions>(ToolId::Brush)->setSize(16);
 
     frame.setActiveTool(pictura::ToolId::BackgroundEraser);
     auto* sampling = frame.findChild<QComboBox*>(QStringLiteral("optionsBackgroundEraseSampling"));
@@ -132,7 +132,7 @@ int pictura::runMagicEraserChecks(pictura::PicturaMainWindow& frame)
     if (!f.ok()) {
         return pictura::selfTest().fail(551, "magic eraser fixture");
     }
-    const pictura::MagicEraseOptions options = f.tools->magicEraseOptions();
+    const pictura::MagicEraseOptions options = f.tools->optionsFor<MagicEraseGroup>(ToolId::MagicEraser)->get();
 
     frame.setActiveTool(pictura::ToolId::MagicEraser);
     auto* tolerance =
@@ -153,12 +153,12 @@ int pictura::runMagicEraserChecks(pictura::PicturaMainWindow& frame)
 
     pictura::MagicEraseOptions global = options;
     global.contiguous = false;
-    f.tools->setMagicEraseOptions(global);
+    f.tools->optionsFor<MagicEraseGroup>(ToolId::MagicEraser)->set(global);
     f.drag({QPointF(1, 1)});
     const bool whiteGone = f.view->history_index() == base + 2
         && qAlpha(f.view->sample_argb(1, 1)) == 0 && qAlpha(f.view->sample_argb(38, 38)) == 0
         && f.view->sample_argb(29, 29) == red;
-    f.tools->setMagicEraseOptions(options);
+    f.tools->optionsFor<MagicEraseGroup>(ToolId::MagicEraser)->set(options);
 
     ST_BEGIN("magic_eraser_tool");
     ST_PASS("magic eraser bar=%d commit=%d square=%d kept=%d global=%d", bar ? 1 : 0,

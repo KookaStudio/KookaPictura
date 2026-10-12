@@ -60,7 +60,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
 
         // tsc_feather (243): a tool-time Feather softens the committed boundary,
         // so the coverage contains values strictly between 0 and 255.
-        tools->setFeather(8.0);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setFeather(8.0);
         ellipseView->deselect();
         const int featherBase = ellipseView->history_count();
         ellipseCanvas->mousePressed(QPointF(3, 3), Qt::LeftButton, int(Qt::NoModifier));
@@ -75,7 +75,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
                 }
             }
         }
-        const bool featherApplied = tools->feather() == 8.0;
+        const bool featherApplied = tools->optionsFor<SelectionOptions>(ToolId::Marquee)->feather() == 8.0;
         const bool featherDrawn = ellipseView->has_selection()
             && ellipseView->history_count() == featherBase + 1;
         ST_BEGIN("tsc_feather");
@@ -84,12 +84,12 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         if (!featherApplied || !featherDrawn || softPixels <= 0) {
             return pictura::selfTest().fail(243, "marquee feather");
         }
-        tools->setFeather(0.0);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setFeather(0.0);
 
         // tsc_fixed_size (244): Fixed Size ignores the drag extent and commits
         // the configured size centred on the mousedown.
-        tools->setMarqueeStyle(pictura::MarqueeStyle::FixedSize);
-        tools->setFixedSize(10, 6);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setMarqueeStyle(pictura::MarqueeStyle::FixedSize);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setFixedSize(10, 6);
         frame.setActiveTool(pictura::ToolId::Marquee);
         ellipseView->deselect();
         const int fixedBase = ellipseView->history_count();
@@ -105,7 +105,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         if (!fixedDrawn || fixedBounds != QStringLiteral("0 2 10 6")) {
             return pictura::selfTest().fail(244, "fixed size marquee");
         }
-        tools->setMarqueeStyle(pictura::MarqueeStyle::Normal);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setMarqueeStyle(pictura::MarqueeStyle::Normal);
 
         // tsc_polygon (245): the Polygonal Lasso commits the clicked triangle
         // through the press path; clicking the first vertex closes it, the
@@ -160,7 +160,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
 
         // tsc_polygon_feather (247): a tool-time Feather on the Polygonal Lasso
         // softens the committed boundary.
-        tools->setFeather(6.0);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setFeather(6.0);
         ellipseView->deselect();
         const int polygonFeatherBase = ellipseView->history_count();
         polygonClick(3, 3);
@@ -185,7 +185,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         if (!polygonFeatherDrawn || polygonSoft <= 0) {
             return pictura::selfTest().fail(247, "polygonal lasso feather");
         }
-        tools->setFeather(0.0);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setFeather(0.0);
 
         // tsc_wand_contiguous (248): a Magic Wand click selects the contiguous
         // uniform region and excludes an identical-coloured disconnected patch.
@@ -198,9 +198,9 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         };
         const bool wandPainted = wandDab(3, 3) && wandDab(12, 12);
         frame.setActiveTool(pictura::ToolId::MagicWand);
-        tools->setTolerance(32);
-        tools->setCombineMode(pictura::SelectionMode::New);
-        tools->setContiguous(true);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setTolerance(32);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setCombineMode(pictura::SelectionMode::New);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setContiguous(true);
         ellipseView->deselect();
         const int wandBase = ellipseView->history_count();
         ellipseCanvas->mousePressed(QPointF(3, 3), Qt::LeftButton, int(Qt::NoModifier));
@@ -220,7 +220,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         // tsc_wand_global (249): non-contiguous mode includes the disconnected
         // patch, so the committed selection grows and covers its seed pixel.
         ellipseView->deselect();
-        tools->setContiguous(false);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setContiguous(false);
         const int wandGlobalBase = ellipseView->history_count();
         ellipseCanvas->mousePressed(QPointF(3, 3), Qt::LeftButton, int(Qt::NoModifier));
         const bool wandGlobalDrawn = ellipseView->has_selection()
@@ -237,8 +237,8 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         // tsc_wand_add (250): Add mode unions the wand result with the existing
         // selection instead of replacing it.
         ellipseView->deselect();
-        tools->setContiguous(true);
-        tools->setCombineMode(pictura::SelectionMode::Add);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setContiguous(true);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setCombineMode(pictura::SelectionMode::Add);
         const bool wandSeeded =
             ellipseView->select_rect(10, 10, 5, 5, QStringLiteral("new"), 0.0);
         const int wandSeedPx = ellipseView->selection_count();
@@ -254,7 +254,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         if (!wandAddDrawn || wandAddPx <= wandSeedPx || wandAddKept <= 0) {
             return pictura::selfTest().fail(250, "magic wand add");
         }
-        tools->setCombineMode(pictura::SelectionMode::New);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setCombineMode(pictura::SelectionMode::New);
         frame.closeDocument(ellipseDoc, false);
 
         // tsc_select_inverse (251): Inverse complements the coverage and records
@@ -510,9 +510,9 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         }
         const int antsDoc = frame.activeDocumentIndex();
         frame.setActiveTool(pictura::ToolId::Marquee);
-        tools->setCombineMode(pictura::SelectionMode::New);
-        tools->setMarqueeStyle(pictura::MarqueeStyle::Normal);
-        tools->setFeather(0.0);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setCombineMode(pictura::SelectionMode::New);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setMarqueeStyle(pictura::MarqueeStyle::Normal);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setFeather(0.0);
         antsView->deselect();
         antsCanvas->mousePressed(QPointF(2, 2), Qt::LeftButton, int(Qt::NoModifier));
         antsCanvas->mouseMoved(QPointF(10, 10));
@@ -628,8 +628,8 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         // rubber band is an open polyline with no committed contour; a closing
         // double-click commits and swaps the preview for the marching ants.
         frame.setActiveTool(pictura::ToolId::PolygonalLasso);
-        tools->setCombineMode(pictura::SelectionMode::New);
-        tools->setFeather(0.0);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setCombineMode(pictura::SelectionMode::New);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setFeather(0.0);
         antsView->deselect();
         const auto polyPreviewClick = [antsCanvas](qreal x, qreal y) {
             antsCanvas->mousePressed(QPointF(x, y), Qt::LeftButton, int(Qt::NoModifier));
@@ -675,8 +675,8 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         // records exactly one "Move Selection" state, and shows no replacement
         // rubber band; the live contour tracks the translated mask.
         frame.setActiveTool(pictura::ToolId::Marquee);
-        tools->setCombineMode(pictura::SelectionMode::New);
-        tools->setFeather(0.0);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setCombineMode(pictura::SelectionMode::New);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setFeather(0.0);
         antsView->deselect();
         const bool moveSeed = antsView->select_rect(2, 2, 5, 5, QStringLiteral("new"), 0.0);
         const int moveBase = antsView->history_count();
@@ -777,7 +777,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         // tsc_marquee_geometry (271): a Normal marquee squares the drag under
         // Shift and mirrors about the press point only when the explicit mirror
         // flag is set; Alt alone no longer mirrors (its first stage subtracts).
-        tools->setMarqueeStyle(pictura::MarqueeStyle::Normal);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setMarqueeStyle(pictura::MarqueeStyle::Normal);
         const QPointF geoA(10, 10);
         const QPointF geoB(30, 20);
         const QRect geoNone = tools->marqueeRectForTest(geoA, geoB, int(Qt::NoModifier), false);
@@ -837,7 +837,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         // open solid rubber band carries the clicked vertices plus the live
         // cursor; cancelling drops it without committing.
         frame.setActiveTool(pictura::ToolId::PolygonalLasso);
-        tools->setCombineMode(pictura::SelectionMode::New);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setCombineMode(pictura::SelectionMode::New);
         ellipseView->deselect();
         const auto bandClick = [ellipseCanvas](qreal x, qreal y) {
             ellipseCanvas->mousePressed(QPointF(x, y), Qt::LeftButton, int(Qt::NoModifier));
@@ -915,8 +915,8 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         // path in Add mode, so the committed bounds are the union of the seeded
         // selection and the dragged rectangle (not a New replacement).
         frame.setActiveTool(pictura::ToolId::Marquee);
-        tools->setCombineMode(pictura::SelectionMode::New);
-        tools->setMarqueeStyle(pictura::MarqueeStyle::Normal);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setCombineMode(pictura::SelectionMode::New);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setMarqueeStyle(pictura::MarqueeStyle::Normal);
         ellipseView->deselect();
         const bool qmSeed = ellipseView->select_rect(2, 2, 4, 4, QStringLiteral("new"), 0.0);
         const int qmBase = ellipseView->history_count();
@@ -955,8 +955,8 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         // A plain drag from inside the selection still moves it (the hover path
         // only changes the cursor, not the press behaviour).
         frame.setActiveTool(pictura::ToolId::Marquee);
-        tools->setCombineMode(pictura::SelectionMode::New);
-        tools->setMarqueeStyle(pictura::MarqueeStyle::Normal);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setCombineMode(pictura::SelectionMode::New);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setMarqueeStyle(pictura::MarqueeStyle::Normal);
         ellipseView->deselect();
         const bool hcSeed = ellipseView->select_rect(2, 2, 6, 6, QStringLiteral("new"), 0.0);
         ellipseCanvas->mouseMoved(QPointF(4, 4));
@@ -990,8 +990,8 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         // empty here, so the committed union and the `.add` drag cursor prove
         // the geometry, mode, and cursor all come from the captured `dragMods_`.
         frame.setActiveTool(pictura::ToolId::Marquee);
-        tools->setCombineMode(pictura::SelectionMode::New);
-        tools->setMarqueeStyle(pictura::MarqueeStyle::Normal);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setCombineMode(pictura::SelectionMode::New);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setMarqueeStyle(pictura::MarqueeStyle::Normal);
         ellipseView->deselect();
         const bool drSeed = ellipseView->select_rect(2, 2, 4, 4, QStringLiteral("new"), 0.0);
         const int drBase = ellipseView->history_count();
@@ -1018,8 +1018,8 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         // Alt subtracts alone and does not mirror, so the geometry is an
         // ordinary drag. (A second Alt edge mirrors; that lives in the Qt Test.)
         frame.setActiveTool(pictura::ToolId::Marquee);
-        tools->setCombineMode(pictura::SelectionMode::New);
-        tools->setMarqueeStyle(pictura::MarqueeStyle::Normal);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setCombineMode(pictura::SelectionMode::New);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setMarqueeStyle(pictura::MarqueeStyle::Normal);
         ellipseView->deselect();
         const int apBase = ellipseView->history_count();
         ellipseCanvas->mousePressed(QPointF(5, 5), Qt::LeftButton, int(Qt::AltModifier));
@@ -1049,8 +1049,8 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         // options-bar combine mode at press instead of reusing a stale drag
         // mode. A Marquee press first locks a deliberately wrong stale mode.
         frame.setActiveTool(pictura::ToolId::Marquee);
-        tools->setCombineMode(pictura::SelectionMode::New);
-        tools->setMarqueeStyle(pictura::MarqueeStyle::Normal);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setCombineMode(pictura::SelectionMode::New);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setMarqueeStyle(pictura::MarqueeStyle::Normal);
         ellipseView->deselect();
         const bool lmSeed = ellipseView->select_rect(2, 2, 4, 4, QStringLiteral("new"), 0.0);
         ellipseCanvas->mousePressed(QPointF(4, 4), Qt::LeftButton, int(Qt::AltModifier));
@@ -1063,7 +1063,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         ellipseCanvas->mousePressed(QPointF(4, 4), Qt::LeftButton, int(Qt::ShiftModifier));
         ellipseCanvas->mouseReleased(QPointF(4, 4));
         frame.setActiveTool(pictura::ToolId::Lasso);
-        tools->setCombineMode(pictura::SelectionMode::Subtract);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setCombineMode(pictura::SelectionMode::Subtract);
         ellipseCanvas->mousePressed(QPointF(10, 10), Qt::LeftButton, int(Qt::NoModifier));
         const bool lmSubtract =
             tools->dragModeForTest() == int(pictura::SelectionMode::Subtract);
@@ -1079,8 +1079,8 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         // selection keeps the cursor captured at press after the modifier is
         // released, instead of falling back to the move-selection cursor.
         frame.setActiveTool(pictura::ToolId::Marquee);
-        tools->setCombineMode(pictura::SelectionMode::New);
-        tools->setMarqueeStyle(pictura::MarqueeStyle::Normal);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setCombineMode(pictura::SelectionMode::New);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setMarqueeStyle(pictura::MarqueeStyle::Normal);
         ellipseView->deselect();
         const bool dcSeed = ellipseView->select_rect(2, 2, 6, 6, QStringLiteral("new"), 0.0);
         ellipseCanvas->mouseMoved(QPointF(4, 4));

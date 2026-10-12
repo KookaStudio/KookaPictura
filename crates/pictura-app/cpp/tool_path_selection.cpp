@@ -34,18 +34,20 @@ namespace {
 
 class PathSelectionToolHandler : public ToolHandler {
 public:
-    explicit PathSelectionToolHandler(ToolId id)
+    PathSelectionToolHandler(ToolId id, std::shared_ptr<PenGroup> pen)
         : id_(id)
+        , pen_(std::move(pen))
     {
+        addOptions(pen_.get());
     }
 
-    void onActivate(ToolContext& ctx) override
+    void onActivate(ToolServices& ctx) override
     {
         ctx_ = &ctx;
         refreshOverlay(ctx);
     }
 
-    void onDeactivate(ToolContext& ctx) override
+    void onDeactivate(ToolServices& ctx) override
     {
         // A drag cut short by a tool switch still lands as one state.
         if (PictureView* v = ctx.view(); v && v == pressView_) {
@@ -60,7 +62,7 @@ public:
     }
 
     // Undo or another tool can renumber or drop subpaths under the selection.
-    void onDocumentRefreshed(ToolContext& ctx) override
+    void onDocumentRefreshed(ToolServices& ctx) override
     {
         PictureView* v = ctx.view();
         if (v && v->has_document()) {
@@ -74,9 +76,9 @@ public:
         refreshOverlay(ctx);
     }
 
-    void onOptionsChanged(ToolContext& ctx) override { refreshOverlay(ctx); }
+    void onOptionsChanged(ToolServices& ctx) override { refreshOverlay(ctx); }
 
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         ctx_ = &ctx;
         PictureView* v = ctx.view();
@@ -103,7 +105,7 @@ public:
         return true;
     }
 
-    void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         PictureView* v = ctx.view();
         if (!v || v != pressView_ || gesture_ == Gesture::None) {
@@ -159,7 +161,7 @@ public:
         refreshOverlay(ctx);
     }
 
-    void onRelease(ToolContext& ctx, const QPointF&, Qt::KeyboardModifiers) override
+    void onRelease(ToolServices& ctx, const QPointF&, Qt::KeyboardModifiers) override
     {
         if (PictureView* v = ctx.view(); v && v == pressView_) {
             commitDrag(*v);
@@ -187,7 +189,7 @@ private:
     // A handle on the selected component wins over an anchor (the smaller
     // target); an anchor picks its component and itself; a segment picks
     // just the component; empty canvas clears the selection.
-    void pressDirect(ToolContext& ctx, PictureView& v, const QPointF& pos)
+    void pressDirect(ToolServices& ctx, PictureView& v, const QPointF& pos)
     {
         const double radius = hitRadius(ctx);
         const ::rust::Vec<std::int32_t> handle = path_hit_handle(v, pos.x(), pos.y(), radius);
@@ -247,17 +249,17 @@ private:
         whole_ = false;
     }
 
-    static double zoom(ToolContext& ctx)
+    static double zoom(ToolServices& ctx)
     {
         return ctx.canvas() ? qMax(ctx.canvas()->zoom(), 1e-6) : 1.0;
     }
 
     // Eight screen pixels, so the grab area keeps its size at any zoom.
-    static double hitRadius(ToolContext& ctx) { return 8.0 / zoom(ctx); }
+    static double hitRadius(ToolServices& ctx) { return 8.0 / zoom(ctx); }
 
     // The whole path's outline; the selected component's anchors (solid when
     // selected whole) and, for Direct Selection, its handles.
-    void refreshOverlay(ToolContext& ctx)
+    void refreshOverlay(ToolServices& ctx)
     {
         ImageView* canvas = ctx.canvas();
         if (!canvas) {
@@ -277,7 +279,7 @@ private:
         if (id_ == ToolId::PathSelection) {
             overlay.handles.clear();
             const ::rust::Vec<double> b = path_subpath_bounds(*v, selected_);
-            if (ctx.penOptions().showBoundingBox && b.size() == 4) {
+            if (pen_->get().showBoundingBox && b.size() == 4) {
                 overlay.bounds = QRectF(QPointF(b[0], b[1]), QPointF(b[2], b[3]));
             }
         }
@@ -285,7 +287,7 @@ private:
     }
 
     const ToolId id_;
-    ToolContext* ctx_ = nullptr;
+    ToolServices* ctx_ = nullptr;
     Gesture gesture_ = Gesture::None;
     PictureView* pressView_ = nullptr;
     QPointF press_;
@@ -297,13 +299,15 @@ private:
     bool whole_ = false;
     int handlePoint_ = -1;
     int handleSide_ = 0;
+    std::shared_ptr<PenGroup> pen_;
 };
 
 } // namespace
 
-std::unique_ptr<ToolHandler> makePathSelectionToolHandler(ToolId id)
+std::unique_ptr<ToolHandler> makePathSelectionToolHandler(ToolId id,
+                                                          std::shared_ptr<PenGroup> pen)
 {
-    return std::make_unique<PathSelectionToolHandler>(id);
+    return std::make_unique<PathSelectionToolHandler>(id, std::move(pen));
 }
 
 } // namespace pictura

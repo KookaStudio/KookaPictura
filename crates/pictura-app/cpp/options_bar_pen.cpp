@@ -24,12 +24,12 @@ QWidget* OptionsBar::buildPenPage(ToolId id)
     layout->setContentsMargins(4, 2, 4, 2);
     layout->addWidget(toolButton(id, page));
 
-    const PenOptions initial = controller_ ? controller_->penOptions() : PenOptions{};
+    const PenOptions initial = controller_ ? pen_->get() : PenOptions{};
     const auto update = [this](auto edit) {
         if (controller_) {
-            PenOptions o = controller_->penOptions();
+            PenOptions o = pen_->get();
             edit(o);
-            controller_->setPenOptions(o);
+            pen_->set(o);
         }
     };
     if (id == ToolId::PathSelection) {

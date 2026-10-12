@@ -65,18 +65,24 @@ double snapDelta(double lo, double hi, const std::vector<double>& candidates, do
 // photorust's CanvasView resetCrop/dragCrop/applyCropRatio.
 class CropToolHandler : public ToolHandler {
 public:
+    explicit CropToolHandler(std::shared_ptr<CropOptions> crop)
+        : crop_(std::move(crop))
+    {
+        addOptions(crop_.get());
+    }
+
     // The crop states: no box (Classic init), a Modern dashed preview, or an
     // active box with handles.
     enum class State { None, Preview, Active };
 
-    void onActivate(ToolContext& ctx) override
+    void onActivate(ToolServices& ctx) override
     {
         ctx_ = &ctx;
         active_ = true;
         reset(ctx);
     }
 
-    void onDeactivate(ToolContext& ctx) override
+    void onDeactivate(ToolServices& ctx) override
     {
         active_ = false;
         grip_ = BoxGrip::None;
@@ -96,22 +102,22 @@ public:
 
     // A commit, undo, or tab switch changes the canvas under the box; start
     // over from the new canvas.
-    void onDocumentRefreshed(ToolContext& ctx) override
+    void onDocumentRefreshed(ToolServices& ctx) override
     {
         if (active_ && canvasRect(ctx) != canvas_) {
             reset(ctx);
         }
     }
 
-    void onOptionsChanged(ToolContext& ctx) override
+    void onOptionsChanged(ToolServices& ctx) override
     {
         if (box_.isNull()) {
             return;
         }
         if (state_ == State::Preview) {
-            box_ = fitRatioCentered(QRectF(canvas_), ctx.cropRatio());
+            box_ = fitRatioCentered(QRectF(canvas_), crop_->ratio());
         } else {
-            box_ = fitRatio(box_, ctx.cropRatio(), BoxGrip::BottomRight);
+            box_ = fitRatio(box_, crop_->ratio(), BoxGrip::BottomRight);
         }
         show(ctx);
     }
@@ -129,7 +135,7 @@ public:
         }
     }
 
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         PictureView* v = ctx.view();
         if (!v || !v->has_document()) {
@@ -164,7 +170,7 @@ public:
             clock_.restart();
             if (grip_ == BoxGrip::None && cropRotateZone(box_, imagePos, zoom(ctx))) {
                 rotating_ = true;
-                startAngle_ = ctx.cropAngle();
+                startAngle_ = crop_->angle();
                 const QPointF c = box_.center();
                 pressAngle_ = std::atan2(imagePos.y() - c.y(), imagePos.x() - c.x());
                 return true;
@@ -188,7 +194,7 @@ public:
                 show(ctx);
                 notifyStateChanged(ctx);
                 rotating_ = true;
-                startAngle_ = ctx.cropAngle();
+                startAngle_ = crop_->angle();
                 const QPointF c = box_.center();
                 pressAngle_ = std::atan2(imagePos.y() - c.y(), imagePos.x() - c.x());
                 return true;
@@ -223,7 +229,7 @@ public:
         return true;
     }
 
-    void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         if (straightenDragging_) {
             if (ImageView* canvas = ctx.canvas()) {
@@ -231,7 +237,7 @@ public:
                 // Preview the rotation from the first drag frame.
                 if (std::hypot(imagePos.x() - straightenStart_.x(),
                                imagePos.y() - straightenStart_.y()) > 1.0) {
-                    ctx.setCropAngle(straightenAngle(straightenStart_, imagePos));
+                    crop_->setAngle(straightenAngle(straightenStart_, imagePos));
                 }
             }
             return;
@@ -244,7 +250,7 @@ public:
             if (mods.testFlag(Qt::ShiftModifier)) {
                 angle = std::round(angle / 15.0) * 15.0;
             }
-            ctx.setCropAngle(angle);
+            crop_->setAngle(angle);
             return;
         }
         if (state_ == State::Preview) {
@@ -273,13 +279,13 @@ public:
             box_ = box_.intersected(QRectF(canvas_));
             snapBox(ctx, box_, grip_);
             // Anchor the ratio fit on the press corner for any drag direction.
-            box_ = fitRatio(box_, ctx.cropRatio(), ratioGripFromDirection(drawAnchor_, imagePos));
+            box_ = fitRatio(box_, crop_->ratio(), ratioGripFromDirection(drawAnchor_, imagePos));
             box_ = box_.intersected(QRectF(canvas_));
             show(ctx);
             return;
         }
         if (grip_ == BoxGrip::Move) {
-            if (ctx.cropClassicMode()) {
+            if (crop_->classicMode()) {
                 box_ = dragBox(startBox_, grip_, imagePos - start_);
                 snapBox(ctx, box_, grip_);
             } else {
@@ -298,23 +304,23 @@ public:
             // Alt scales about the box centre: the dragged edge moves, the
             // opposite edge mirrors it, and the ratio fit stays centred.
             box_ = dragBox(startBox_, grip_, imagePos - start_, true);
-            box_ = fitRatio(box_, ctx.cropRatio(), grip_);
+            box_ = fitRatio(box_, crop_->ratio(), grip_);
             box_.moveCenter(startBox_.center());
             show(ctx);
             return;
         }
         box_ = dragBox(startBox_, grip_, imagePos - start_);
         snapBox(ctx, box_, grip_);
-        box_ = fitRatio(box_, ctx.cropRatio(), grip_);
+        box_ = fitRatio(box_, crop_->ratio(), grip_);
         // The ratio fit moved the snapped edge; re-snap the whole box (keeping
         // the ratio) so a locked ratio still lands on a canvas/layer edge.
-        if (ctx.cropRatio() > 0.0) {
+        if (crop_->ratio() > 0.0) {
             snapBox(ctx, box_, BoxGrip::Move);
         }
         show(ctx);
     }
 
-    void onRelease(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    void onRelease(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         if (straightenDragging_) {
             straightenDragging_ = false;
@@ -323,10 +329,10 @@ public:
             if (std::hypot(dx, dy) > 1.0) {
                 // The drawn horizon becomes horizontal: rotate the content by
                 // the negative of the line's inclination.
-                ctx.setCropAngle(straightenAngle(straightenStart_, imagePos));
+                crop_->setAngle(straightenAngle(straightenStart_, imagePos));
                 recordState(ctx);
             }
-            ctx.setCropStraightenMode(false);  // disarm, clear the line, uncheck
+            crop_->setStraightenMode(false);  // disarm, clear the line, uncheck
             return;
         }
         if (rotating_) {
@@ -359,7 +365,7 @@ public:
 
     // Snap the dragged edge(s) to the canvas or the active layer's bounding
     // edges within a screen-pixel threshold.
-    void snapBox(ToolContext& ctx, QRectF& box, BoxGrip grip)
+    void snapBox(ToolServices& ctx, QRectF& box, BoxGrip grip)
     {
         const double tol = 6.0 / std::max(zoom(ctx), 1e-6);
         std::vector<double> xs = {0.0, double(canvas_.width())};
@@ -421,12 +427,12 @@ public:
         // A box dragged past the canvas grows it; the added area takes the
         // background colour when the document has a Background layer.
         const int fill = int(ctx_->background().rgb() & 0xFFFFFF);
-        const bool ok = ctx_->cropAngle() != 0.0
+        const bool ok = crop_->angle() != 0.0
             ? straighten_crop(*v, rect.x(), rect.y(), rect.width(), rect.height(),
-                              ctx_->cropAngle(), ctx_->cropPivot().x(), ctx_->cropPivot().y(),
-                              ctx_->cropDeletePixels(), fill)
+                              crop_->angle(), crop_->pivot().x(), crop_->pivot().y(),
+                              crop_->deletePixels(), fill)
             : crop_to(*v, rect.x(), rect.y(), rect.width(), rect.height(),
-                      ctx_->cropDeletePixels(), fill);
+                      crop_->deletePixels(), fill);
         if (ok) {
             ctx_->emitSelectionCommitted();
             clearSession(*ctx_);
@@ -466,8 +472,8 @@ public:
         QRectF b = box_;
         b.setWidth(std::max(1.0, width));
         b.setHeight(std::max(1.0, height));
-        if (ctx_->cropRatio() > 0.0) {
-            b = fitRatio(b, ctx_->cropRatio(), BoxGrip::TopLeft);
+        if (crop_->ratio() > 0.0) {
+            b = fitRatio(b, crop_->ratio(), BoxGrip::TopLeft);
         }
         box_ = b;
         show(*ctx_);
@@ -487,7 +493,7 @@ public:
         startBox_ = box_;
         contentOffset_ = QPointF();
         state_ = State::Active;
-        ctx_->setCropAngle(0.0);
+        crop_->setAngle(0.0);
         show(*ctx_);
         recordState(*ctx_);
         notifyStateChanged(*ctx_);
@@ -500,7 +506,7 @@ public:
         if (!active_ || state_ != State::Active || box_.isNull() || (dx == 0 && dy == 0)) {
             return false;
         }
-        if (ctx_ && ctx_->cropClassicMode()) {
+        if (ctx_ && crop_->classicMode()) {
             box_ = box_.translated(dx, dy);
         } else {
             contentOffset_ += QPointF(dx, dy);
@@ -556,7 +562,7 @@ public:
         CursorDefault   // beyond the rotate band: the workspace arrow, a press applies
     };
 
-    int pointerCursorKind(const ToolContext& ctx, const QPointF& imagePos,
+    int pointerCursorKind(const ToolServices& ctx, const QPointF& imagePos,
                           Qt::KeyboardModifiers mods) const override
     {
         return cursorStateAt(ctx, imagePos, mods).kind;
@@ -566,7 +572,7 @@ public:
     // over an active box, rotate outside the box, and the new-crop crosshair
     // inside a preview or where a new box can start. A captured drag keeps its
     // cursor.
-    bool hoverCursor(const ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods,
+    bool hoverCursor(const ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods,
                      QCursor& out) const override
     {
         const CursorState s = cursorStateAt(ctx, imagePos, mods);
@@ -595,7 +601,7 @@ public:
     // captured by the default box.
     bool hasPendingCrop() const override
     {
-        const double angle = ctx_ ? ctx_->cropAngle() : 0.0;
+        const double angle = ctx_ ? crop_->angle() : 0.0;
         return active_ && state_ == State::Active && !box_.isNull()
             && (pendingCropRect() != canvas_ || angle != 0.0);
     }
@@ -609,9 +615,9 @@ public:
     }
 
 private:
-    static double zoom(const ToolContext& ctx) { return ctx.canvas() ? ctx.canvas()->zoom() : 1.0; }
+    static double zoom(const ToolServices& ctx) { return ctx.canvas() ? ctx.canvas()->zoom() : 1.0; }
 
-    static QRect canvasRect(const ToolContext& ctx)
+    static QRect canvasRect(const ToolServices& ctx)
     {
         PictureView* v = ctx.view();
         if (!v || !v->has_document()) {
@@ -657,7 +663,7 @@ private:
     // The cursor zone under `p`: a captured drag keeps its cursor; otherwise a
     // handle wins, then the box body, then the rotate ring, then new-crop. A
     // preview's inside is the new-crop crosshair and its outside the rotate.
-    CursorState cursorStateAt(const ToolContext& ctx, const QPointF& p,
+    CursorState cursorStateAt(const ToolServices& ctx, const QPointF& p,
                               Qt::KeyboardModifiers mods) const
     {
         (void)mods;
@@ -702,7 +708,7 @@ private:
 
     QRectF effectiveBox() const { return box_.translated(-contentOffset_); }
 
-    void activateForStraighten(ToolContext& ctx)
+    void activateForStraighten(ToolServices& ctx)
     {
         if (state_ == State::Active) {
             return;
@@ -719,7 +725,7 @@ private:
         notifyStateChanged(ctx);
     }
 
-    void reset(ToolContext& ctx)
+    void reset(ToolServices& ctx)
     {
         grip_ = BoxGrip::None;
         rotating_ = false;
@@ -727,14 +733,14 @@ private:
         previewPress_ = false;
         canvas_ = canvasRect(ctx);
         contentOffset_ = QPointF();
-        ctx.setCropAngle(0.0);
+        crop_->setAngle(0.0);
         // Modern starts with a centered, ratio-fitted preview box; Classic
         // starts with no box, so the user draws one.
-        if (ctx.cropClassicMode() || canvas_.isEmpty()) {
+        if (crop_->classicMode() || canvas_.isEmpty()) {
             box_ = QRectF();
             state_ = State::None;
         } else {
-            box_ = fitRatioCentered(QRectF(canvas_), ctx.cropRatio());
+            box_ = fitRatioCentered(QRectF(canvas_), crop_->ratio());
             state_ = State::Preview;
         }
         history_.clear();
@@ -762,9 +768,9 @@ private:
             && std::abs(a.angle - b.angle) < 1e-6;
     }
 
-    void recordState(ToolContext& ctx)
+    void recordState(ToolServices& ctx)
     {
-        const CropState state{box_, ctx.cropAngle(), contentOffset_};
+        const CropState state{box_, crop_->angle(), contentOffset_};
         if (cursor_ >= 0 && cursor_ < int(history_.size()) && sameState(history_[cursor_], state)) {
             return;
         }
@@ -786,22 +792,22 @@ private:
         } else if (state_ == State::None) {
             state_ = State::Active;
         }
-        ctx_->setCropAngle(history_[cursor_].angle);
+        crop_->setAngle(history_[cursor_].angle);
         show(*ctx_);
         notifyStateChanged(*ctx_);
     }
 
-    void clearSession(ToolContext& ctx)
+    void clearSession(ToolServices& ctx)
     {
         history_.clear();
         cursor_ = -1;
-        ctx.setCropAngle(0.0);
+        crop_->setAngle(0.0);
         ctx.notifyToolSessionChanged();
     }
 
-    void notifyStateChanged(ToolContext& ctx) { ctx.notifyToolSessionChanged(); }
+    void notifyStateChanged(ToolServices& ctx) { ctx.notifyToolSessionChanged(); }
 
-    void show(ToolContext& ctx)
+    void show(ToolServices& ctx)
     {
         if (ImageView* canvas = ctx.canvas()) {
             if (box_.isNull()) {
@@ -810,7 +816,7 @@ private:
                 canvas->setCropContentOffset(contentOffset_);
                 canvas->setCropBox(box_);
                 canvas->setCropPreview(state_ == State::Preview);
-                canvas->setCropOverlay(ctx.cropGridOverlay());
+                canvas->setCropOverlay(crop_->gridOverlay());
             }
         }
     }
@@ -842,14 +848,15 @@ private:
     double pressAngle_ = 0.0;
     std::vector<CropState> history_;
     int cursor_ = -1;
-    ToolContext* ctx_ = nullptr;
+    ToolServices* ctx_ = nullptr;
+    std::shared_ptr<CropOptions> crop_;
 };
 
 } // namespace
 
-std::unique_ptr<ToolHandler> makeCropToolHandler()
+std::unique_ptr<ToolHandler> makeCropToolHandler(std::shared_ptr<CropOptions> crop)
 {
-    return std::make_unique<CropToolHandler>();
+    return std::make_unique<CropToolHandler>(std::move(crop));
 }
 
 } // namespace pictura

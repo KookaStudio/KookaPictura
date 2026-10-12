@@ -192,13 +192,13 @@ int runNumericFieldChecks(pictura::PicturaMainWindow& frame)
         if (tools && tipButton) {
             tipButton->click();
             sizeField = bar->brushPicker()->findChild<QSpinBox*>(QStringLiteral("brushPickerSize"));
-            tools->setBrushSize(77);
+            tools->optionsFor<PaintOptions>(ToolId::Brush)->setSize(77);
             const bool fromController = sizeField && sizeField->value() == 77
                 && tipButton->text() == QStringLiteral("77");
             if (sizeField) {
                 sizeField->setValue(55);
             }
-            resyncOk = fromController && tools->brushSize() == 55;
+            resyncOk = fromController && tools->optionsFor<PaintOptions>(ToolId::Brush)->size() == 55;
             bar->brushPicker()->hide();
         }
         ST_BEGIN("lpn_brush_resync");

@@ -88,18 +88,20 @@ namespace {
 
 class PenToolHandler : public ToolHandler {
 public:
-    explicit PenToolHandler(ToolId id)
+    PenToolHandler(ToolId id, std::shared_ptr<PenGroup> pen)
         : id_(id)
+        , pen_(std::move(pen))
     {
+        addOptions(pen_.get());
     }
 
-    void onActivate(ToolContext& ctx) override
+    void onActivate(ToolServices& ctx) override
     {
         ctx_ = &ctx;
         refreshOverlay(ctx);
     }
 
-    void onDeactivate(ToolContext& ctx) override
+    void onDeactivate(ToolServices& ctx) override
     {
         PictureView* v = ctx.view();
         // A drag cut short by a tool switch still lands as one state.
@@ -126,10 +128,10 @@ public:
         ctx_ = nullptr;
     }
 
-    void onDocumentRefreshed(ToolContext& ctx) override { refreshOverlay(ctx); }
-    void onOptionsChanged(ToolContext& ctx) override { refreshOverlay(ctx); }
+    void onDocumentRefreshed(ToolServices& ctx) override { refreshOverlay(ctx); }
+    void onOptionsChanged(ToolServices& ctx) override { refreshOverlay(ctx); }
 
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         ctx_ = &ctx;
         PictureView* v = ctx.view();
@@ -190,14 +192,14 @@ public:
         return true;
     }
 
-    void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         hover_ = imagePos;
         hovering_ = true;
         PictureView* v = ctx.view();
         overClose_ = v && v != pressView_ && overFirstAnchor(ctx, *v, imagePos);
         if (!v || v != pressView_) {
-            if (id_ == ToolId::Pen && ctx.penOptions().rubberBand) {
+            if (id_ == ToolId::Pen && pen_->get().rubberBand) {
                 refreshOverlay(ctx);
             }
             return;
@@ -227,7 +229,7 @@ public:
             }
             break;
         case Gesture::None:
-            if (!(id_ == ToolId::Pen && ctx.penOptions().rubberBand)) {
+            if (!(id_ == ToolId::Pen && pen_->get().rubberBand)) {
                 return;
             }
             break;
@@ -235,7 +237,7 @@ public:
         refreshOverlay(ctx);
     }
 
-    void onRelease(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    void onRelease(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         PictureView* v = ctx.view();
         PictureView* press = pressView_;
@@ -279,7 +281,7 @@ public:
             const bool close = trail.size() > 2
                 && QLineF(trail.first(), imagePos).length() * zoom(ctx) <= 8.0;
             path_add_freeform(*v, ::rust::Slice<const double>(flat.data(), flat.size()),
-                              ctx.penOptions().curveFit, close);
+                              pen_->get().curveFit, close);
             break;
         }
         case Gesture::None:
@@ -327,7 +329,7 @@ public:
 private:
     enum class Gesture { None, PlacingHandle, Freeform, ConvertHandle, ConvertNewHandles };
 
-    void pressPen(ToolContext& ctx, PictureView& v, const QPointF& pos,
+    void pressPen(ToolServices& ctx, PictureView& v, const QPointF& pos,
                   Qt::KeyboardModifiers mods, double radius)
     {
         // Ctrl-click away ends the subpath, open.
@@ -347,11 +349,11 @@ private:
             if (path_resume(v, anchor[0], anchor[1])) {
                 return;
             }
-            if (ctx.penOptions().autoAddDelete) {
+            if (pen_->get().autoAddDelete) {
                 path_delete_anchor(v, anchor[0], anchor[1]);
                 return;
             }
-        } else if (ctx.penOptions().autoAddDelete) {
+        } else if (pen_->get().autoAddDelete) {
             const ::rust::Vec<double> seg = path_hit_segment(v, pos.x(), pos.y(), radius);
             if (seg.size() == 3) {
                 path_insert_anchor(v, int(seg[0]), int(seg[1]), seg[2]);
@@ -364,7 +366,7 @@ private:
         }
     }
 
-    bool overFirstAnchor(ToolContext& ctx, const PictureView& v, const QPointF& pos) const
+    bool overFirstAnchor(ToolServices& ctx, const PictureView& v, const QPointF& pos) const
     {
         if (id_ != ToolId::Pen || !v.has_document()) {
             return false;
@@ -397,15 +399,15 @@ private:
         pressView_ = nullptr;
     }
 
-    static double zoom(ToolContext& ctx)
+    static double zoom(ToolServices& ctx)
     {
         return ctx.canvas() ? qMax(ctx.canvas()->zoom(), 1e-6) : 1.0;
     }
 
     // Eight screen pixels, so the grab area keeps its size at any zoom.
-    static double hitRadius(ToolContext& ctx) { return 8.0 / zoom(ctx); }
+    static double hitRadius(ToolServices& ctx) { return 8.0 / zoom(ctx); }
 
-    void refreshOverlay(ToolContext& ctx)
+    void refreshOverlay(ToolServices& ctx)
     {
         ImageView* canvas = ctx.canvas();
         if (!canvas) {
@@ -435,7 +437,7 @@ private:
             for (int i = 1; i < trail_.size(); ++i) {
                 overlay.preview.lineTo(trail_.at(i));
             }
-        } else if (id_ == ToolId::Pen && ctx.penOptions().rubberBand && hasLast && hovering_
+        } else if (id_ == ToolId::Pen && pen_->get().rubberBand && hasLast && hovering_
                    && gesture_ == Gesture::None) {
             overlay.preview.moveTo(last.anchor);
             overlay.preview.cubicTo(last.hasOut ? last.out : last.anchor, hover_, hover_);
@@ -444,7 +446,7 @@ private:
     }
 
     const ToolId id_;
-    ToolContext* ctx_ = nullptr;
+    ToolServices* ctx_ = nullptr;
     Gesture gesture_ = Gesture::None;
     PictureView* pressView_ = nullptr;
     QPointF press_;
@@ -454,13 +456,14 @@ private:
     bool moved_ = false;
     std::array<int, 3> target_{};
     QList<QPointF> trail_;
+    std::shared_ptr<PenGroup> pen_;
 };
 
 } // namespace
 
-std::unique_ptr<ToolHandler> makePenToolHandler(ToolId id)
+std::unique_ptr<ToolHandler> makePenToolHandler(ToolId id, std::shared_ptr<PenGroup> pen)
 {
-    return std::make_unique<PenToolHandler>(id);
+    return std::make_unique<PenToolHandler>(id, std::move(pen));
 }
 
 } // namespace pictura

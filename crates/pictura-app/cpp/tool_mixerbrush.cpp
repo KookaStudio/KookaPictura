@@ -27,7 +27,15 @@ namespace {
 
 class MixerBrushToolHandler : public ToolHandler {
 public:
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    MixerBrushToolHandler(std::shared_ptr<PaintOptions> paint, std::shared_ptr<MixerGroup> mixer)
+        : paint_(std::move(paint))
+        , mixer_(std::move(mixer))
+    {
+        addOptions(paint_.get());
+        addOptions(mixer_.get());
+    }
+
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         PictureView* v = ctx.view();
         if (!v) {
@@ -36,17 +44,17 @@ public:
         if (mods.testFlag(Qt::AltModifier)) {
             // ponytail: loads one solid colour; CS6's sampled-variation load
             // (and Load Solid Colors Only) is not modelled.
-            ctx.setMixerReservoir(QColor::fromRgba(
+            setReservoir(QColor::fromRgba(
                 v->sample_argb(qRound(imagePos.x()), qRound(imagePos.y()))));
             return true;
         }
-        const MixerOptions o = ctx.mixerOptions();
+        const MixerOptions o = mixer_->get();
         // ponytail: Sample All Layers is not wired; the active layer is sampled.
         {
             pictura::ScopedTimer beginTimer("cxx_begin_mixer_brush (call)");
             stroke_.emplace(*v, [&] {
-                return begin_mixer_brush(*v, ctx.mixerReservoir().rgba(), paintTip(ctx), o.wet,
-                                         o.load, o.mix, o.flow);
+                return begin_mixer_brush(*v, mixer_->get().reservoir.rgba(), paintTip(*paint_),
+                                         o.wet, o.load, o.mix, o.flow);
             });
         }
         if (!stroke_->open()) {
@@ -69,7 +77,7 @@ public:
         return true;
     }
 
-    void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         if (!ctx.dragging() || !stroke_) {
             return;
@@ -78,7 +86,7 @@ public:
         stroke_->dab(imagePos.x(), imagePos.y());
     }
 
-    void onRelease(ToolContext& ctx, const QPointF&, Qt::KeyboardModifiers) override
+    void onRelease(ToolServices& ctx, const QPointF&, Qt::KeyboardModifiers) override
     {
         if (!ctx.dragging()) {
             return;
@@ -96,25 +104,35 @@ public:
         }
         // Clean wins over Load when both are on: a cleaned brush is not then
         // reloaded.
-        const MixerOptions o = ctx.mixerOptions();
+        const MixerOptions o = mixer_->get();
         if (o.cleanAfterStroke) {
-            ctx.setMixerReservoir(QColor(Qt::transparent));
+            setReservoir(QColor(Qt::transparent));
         } else if (o.loadAfterStroke) {
-            ctx.setMixerReservoir(ctx.foreground());
+            setReservoir(ctx.foreground());
         } else {
-            ctx.setMixerReservoir(carried);
+            setReservoir(carried);
         }
     }
 
 private:
+    void setReservoir(const QColor& color)
+    {
+        MixerOptions options = mixer_->get();
+        options.reservoir = color;
+        mixer_->set(options);
+    }
+
     std::optional<paint_api::Stroke> stroke_;
+    std::shared_ptr<PaintOptions> paint_;
+    std::shared_ptr<MixerGroup> mixer_;
 };
 
 } // namespace
 
-std::unique_ptr<ToolHandler> makeMixerBrushToolHandler()
+std::unique_ptr<ToolHandler> makeMixerBrushToolHandler(std::shared_ptr<PaintOptions> paint,
+                                                       std::shared_ptr<MixerGroup> mixer)
 {
-    return std::make_unique<MixerBrushToolHandler>();
+    return std::make_unique<MixerBrushToolHandler>(std::move(paint), std::move(mixer));
 }
 
 } // namespace pictura

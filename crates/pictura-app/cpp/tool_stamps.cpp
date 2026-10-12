@@ -30,7 +30,13 @@ namespace {
 // tool's stroke and reports whether it did.
 class StampToolHandler : public ToolHandler {
 public:
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    explicit StampToolHandler(std::shared_ptr<PaintOptions> paint)
+        : paint_(std::move(paint))
+    {
+        addOptions(paint_.get());
+    }
+
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         PictureView* v = ctx.view();
         if (!v || !v->has_document()) {
@@ -60,7 +66,7 @@ public:
         return true;
     }
 
-    void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         if (!ctx.dragging() || !stroke_) {
             return;
@@ -68,7 +74,7 @@ public:
         stroke_->dab(imagePos.x(), imagePos.y());
     }
 
-    void onRelease(ToolContext& ctx, const QPointF&, Qt::KeyboardModifiers) override
+    void onRelease(ToolServices& ctx, const QPointF&, Qt::KeyboardModifiers) override
     {
         if (!ctx.dragging()) {
             return;
@@ -81,12 +87,12 @@ public:
     }
 
 protected:
-    virtual bool begin(ToolContext& ctx, PictureView& v, const QPointF& imagePos) = 0;
+    virtual bool begin(ToolServices& ctx, PictureView& v, const QPointF& imagePos) = 0;
     // A refusal the layer checks do not explain, e.g. a missing source.
-    virtual void refuseSource(ToolContext&) {}
+    virtual void refuseSource(ToolServices&) {}
 
     // Alt samples the foreground, as with the Brush.
-    virtual void onAltPress(ToolContext& ctx, const QPointF& imagePos)
+    virtual void onAltPress(ToolServices& ctx, const QPointF& imagePos)
     {
         PictureView* v = ctx.view();
         const quint32 argb = v->sample_argb(qRound(imagePos.x()), qRound(imagePos.y()));
@@ -94,6 +100,9 @@ protected:
             ctx.sampledForeground(QColor::fromRgb(argb));
         }
     }
+
+protected:
+    std::shared_ptr<PaintOptions> paint_;
 
 private:
     std::optional<paint_api::Stroke> stroke_;
@@ -106,71 +115,100 @@ private:
 // again.
 // ponytail: no source overlay and no on-canvas source crosshair.
 class CloneStampToolHandler : public StampToolHandler {
-protected:
-    void onAltPress(ToolContext& ctx, const QPointF& imagePos) override
+public:
+    CloneStampToolHandler(std::shared_ptr<PaintOptions> paint, std::shared_ptr<StampGroup> stamp,
+                          std::shared_ptr<CloneSourceOptions> clone)
+        : StampToolHandler(std::move(paint))
+        , stamp_(std::move(stamp))
+        , clone_(std::move(clone))
     {
-        CloneSource slot = ctx.cloneSource();
+        addOptions(stamp_.get());
+        addOptions(clone_.get());
+    }
+
+protected:
+    void onAltPress(ToolServices& ctx, const QPointF& imagePos) override
+    {
+        CloneSource slot = clone_->active();
         slot.source = QPoint(qRound(imagePos.x()), qRound(imagePos.y()));
         slot.hasSource = true;
         slot.hasOffset = false;
-        ctx.setCloneSource(slot);
+        clone_->setActive(slot);
     }
 
-    bool begin(ToolContext& ctx, PictureView& v, const QPointF& imagePos) override
+    bool begin(ToolServices& ctx, PictureView& v, const QPointF& imagePos) override
     {
-        CloneSource slot = ctx.cloneSource();
+        CloneSource slot = clone_->active();
         if (!slot.hasSource) {
             return false;
         }
-        const StampOptions o = ctx.stampOptions();
+        const StampOptions o = stamp_->get();
         if (!o.cloneAligned || !slot.hasOffset) {
             slot.anchor = QPoint(qRound(imagePos.x()), qRound(imagePos.y()));
             slot.offset = slot.source - slot.anchor;
             slot.hasOffset = true;
-            ctx.setCloneSource(slot);
+            clone_->setActive(slot);
         }
         const double sx = slot.width / 100.0 * (slot.flipH ? -1.0 : 1.0);
         const double sy = slot.height / 100.0 * (slot.flipV ? -1.0 : 1.0);
-        return begin_clone_stamp(v, paintTip(ctx), ctx.brushOpacity(), ctx.brushFlow(),
-                                 ctx.brushMode(), slot.offset.x(), slot.offset.y(),
+        return begin_clone_stamp(v, paintTip(*paint_), paint_->opacity(), paint_->flow(),
+                                 paint_->mode(), slot.offset.x(), slot.offset.y(),
                                  slot.anchor.x() + 0.5, slot.anchor.y() + 0.5, sx, sy,
                                  slot.angle, o.cloneSample, o.ignoreAdjustments);
     }
 
-    void refuseSource(ToolContext& ctx) override
+    void refuseSource(ToolServices& ctx) override
     {
-        ctx.refused(ctx.cloneSource().hasSource
+        ctx.refused(clone_->active().hasSource
                         ? QObject::tr("Clone Stamp: paint away from the source point.")
                         : QObject::tr("Clone Stamp: Alt-click to set a source point first."));
     }
+
+private:
+    std::shared_ptr<StampGroup> stamp_;
+    std::shared_ptr<CloneSourceOptions> clone_;
 };
 
 // Pattern Stamp: paints the chosen pattern, pinned to the document when
 // Aligned and to each stroke's start otherwise.
 // ponytail: built-in generated patterns only; Impressionist is not wired.
 class PatternStampToolHandler : public StampToolHandler {
-protected:
-    bool begin(ToolContext& ctx, PictureView& v, const QPointF& imagePos) override
+public:
+    PatternStampToolHandler(std::shared_ptr<PaintOptions> paint, std::shared_ptr<StampGroup> stamp)
+        : StampToolHandler(std::move(paint))
+        , stamp_(std::move(stamp))
     {
-        const StampOptions o = ctx.stampOptions();
+        addOptions(stamp_.get());
+    }
+
+protected:
+    bool begin(ToolServices& ctx, PictureView& v, const QPointF& imagePos) override
+    {
+        const StampOptions o = stamp_->get();
         const QPoint origin =
             o.patternAligned ? QPoint() : QPoint(qRound(imagePos.x()), qRound(imagePos.y()));
-        return begin_pattern_stamp(v, paintTip(ctx), ctx.brushOpacity(), ctx.brushFlow(),
-                                   ctx.brushMode(), o.pattern, origin.x(), origin.y());
+        return begin_pattern_stamp(v, paintTip(*paint_), paint_->opacity(), paint_->flow(),
+                                   paint_->mode(), o.pattern, origin.x(), origin.y());
     }
+
+private:
+    std::shared_ptr<StampGroup> stamp_;
 };
 
 // History Brush: paints the active layer as it was in the History panel's
 // source state (the oldest state unless another is chosen), in place.
 class HistoryBrushToolHandler : public StampToolHandler {
+public:
+    using StampToolHandler::StampToolHandler;
+
 protected:
-    bool begin(ToolContext& ctx, PictureView& v, const QPointF&) override
+    bool begin(ToolServices& ctx, PictureView& v, const QPointF&) override
     {
-        return begin_history_brush(v, paintTip(ctx), ctx.brushOpacity(), ctx.brushFlow(),
-                                   ctx.brushMode());
+        return begin_history_brush(v, paintTip(*paint_), paint_->opacity(), paint_->flow(),
+                                   paint_->mode());
     }
 
-    void refuseSource(ToolContext& ctx) override
+    void refuseSource(ToolServices& ctx) override
     {
         ctx.refused(QObject::tr("History Brush: the source state has no matching pixel layer."));
     }
@@ -181,41 +219,59 @@ protected:
 // ponytail: strokes land only as the pointer moves; CS6 keeps painting while
 // the button is held still.
 class ArtHistoryBrushToolHandler : public StampToolHandler {
-protected:
-    bool begin(ToolContext& ctx, PictureView& v, const QPointF&) override
+public:
+    ArtHistoryBrushToolHandler(std::shared_ptr<PaintOptions> paint,
+                               std::shared_ptr<ArtHistoryGroup> artHistory)
+        : StampToolHandler(std::move(paint))
+        , artHistory_(std::move(artHistory))
     {
-        const ArtHistoryOptions o = ctx.artHistoryOptions();
-        return begin_art_history_brush(v, paintTip(ctx), ctx.brushOpacity(), o.style, o.area,
+        addOptions(artHistory_.get());
+    }
+
+protected:
+    bool begin(ToolServices& ctx, PictureView& v, const QPointF&) override
+    {
+        const ArtHistoryOptions o = artHistory_->get();
+        return begin_art_history_brush(v, paintTip(*paint_), paint_->opacity(), o.style, o.area,
                                        o.tolerance);
     }
 
-    void refuseSource(ToolContext& ctx) override
+    void refuseSource(ToolServices& ctx) override
     {
         ctx.refused(QObject::tr("Art History Brush: needs an 8-bit document whose source state "
                                 "has a matching pixel layer."));
     }
+
+private:
+    std::shared_ptr<ArtHistoryGroup> artHistory_;
 };
 
 } // namespace
 
-std::unique_ptr<ToolHandler> makeCloneStampToolHandler()
+std::unique_ptr<ToolHandler> makeCloneStampToolHandler(
+    std::shared_ptr<PaintOptions> paint, std::shared_ptr<StampGroup> stamp,
+    std::shared_ptr<CloneSourceOptions> clone)
 {
-    return std::make_unique<CloneStampToolHandler>();
+    return std::make_unique<CloneStampToolHandler>(std::move(paint), std::move(stamp),
+                                                   std::move(clone));
 }
 
-std::unique_ptr<ToolHandler> makePatternStampToolHandler()
+std::unique_ptr<ToolHandler> makePatternStampToolHandler(std::shared_ptr<PaintOptions> paint,
+                                                         std::shared_ptr<StampGroup> stamp)
 {
-    return std::make_unique<PatternStampToolHandler>();
+    return std::make_unique<PatternStampToolHandler>(std::move(paint), std::move(stamp));
 }
 
-std::unique_ptr<ToolHandler> makeHistoryBrushToolHandler()
+std::unique_ptr<ToolHandler> makeHistoryBrushToolHandler(std::shared_ptr<PaintOptions> paint)
 {
-    return std::make_unique<HistoryBrushToolHandler>();
+    return std::make_unique<HistoryBrushToolHandler>(std::move(paint));
 }
 
-std::unique_ptr<ToolHandler> makeArtHistoryBrushToolHandler()
+std::unique_ptr<ToolHandler> makeArtHistoryBrushToolHandler(
+    std::shared_ptr<PaintOptions> paint, std::shared_ptr<ArtHistoryGroup> artHistory)
 {
-    return std::make_unique<ArtHistoryBrushToolHandler>();
+    return std::make_unique<ArtHistoryBrushToolHandler>(std::move(paint),
+                                                        std::move(artHistory));
 }
 
 } // namespace pictura

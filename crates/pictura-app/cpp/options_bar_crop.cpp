@@ -193,11 +193,11 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
         for (int i = 0; i < overlays.size(); ++i) {
             QAction* action = menu->addAction(overlays[i]);
             action->setCheckable(true);
-            action->setChecked(controller_ ? controller_->cropGridOverlay() == i : i == 0);
+            action->setChecked(controller_ ? crop_->gridOverlay() == i : i == 0);
             group->addAction(action);
             connect(action, &QAction::triggered, this, [this, i]() {
                 if (controller_) {
-                    controller_->setCropGridOverlay(i);
+                    crop_->setGridOverlay(i);
                 }
             });
         }
@@ -230,14 +230,14 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
         QMenu* menu = cogButton->menu();
         QAction* classic = menu->addAction(QStringLiteral("Use Classic Mode"));
         classic->setCheckable(true);
-        classic->setChecked(controller_ ? controller_->cropClassicMode() : true);
+        classic->setChecked(controller_ ? crop_->classicMode() : true);
         classic->setShortcut(QKeySequence(QStringLiteral("P")));
         classic->setShortcutVisibleInContextMenu(true);
         classic->setToolTip(QStringLiteral(
             "Classic: dragging inside moves the crop box. Modern: it moves the content"));
         connect(classic, &QAction::toggled, this, [this](bool on) {
             if (controller_) {
-                controller_->setCropClassicMode(on);
+                crop_->setClassicMode(on);
             }
         });
         QAction* showArea = menu->addAction(QStringLiteral("Show Cropped Area"));
@@ -283,7 +283,7 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
 
     auto* deletePixels = new QCheckBox(QStringLiteral("Delete Cropped Pixels"), page);
     deletePixels->setObjectName(QStringLiteral("optionsCropDelete"));
-    deletePixels->setChecked(controller_ ? controller_->cropDeletePixels() : true);
+    deletePixels->setChecked(controller_ ? crop_->deletePixels() : true);
     deletePixels->setToolTip(QStringLiteral(
         "Discard the pixels outside the crop rather than keeping them beyond the canvas edge"));
     layout->addWidget(deletePixels);
@@ -326,7 +326,7 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
             if (cropResolutionMode_) {
                 controller_->resizeCrop(width->value(), height->value());
             } else {
-                controller_->setCropRatio(
+                crop_->setRatio(
                     height->value() > 0.0 ? width->value() / height->value() : 0.0);
             }
         };
@@ -340,7 +340,7 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
             if (cropResolutionMode_) {
                 controller_->resizeCrop(h, w);
             } else {
-                controller_->setCropRatio(w > 0.0 ? h / w : 0.0);
+                crop_->setRatio(w > 0.0 ? h / w : 0.0);
             }
             cropRatioW_ = h;
             cropRatioH_ = w;
@@ -352,7 +352,7 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
         const auto resetRatio = [this, ratio, width, height]() {
             cropRatioW_ = 0.0;
             cropRatioH_ = 0.0;
-            controller_->setCropRatio(0.0);
+            crop_->setRatio(0.0);
             ratio->setCurrentIndex(0);
             const QSignalBlocker bw(width);
             const QSignalBlocker bh(height);
@@ -368,10 +368,10 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
             }
         });
         connect(spirit, &QToolButton::toggled, this,
-                [this](bool on) { controller_->setCropStraightenMode(on); });
+                [this](bool on) { crop_->setStraightenMode(on); });
         connect(controller_, &ToolController::cropOptionsChanged, this, [this, spirit]() {
             const QSignalBlocker block(spirit);
-            spirit->setChecked(controller_->cropStraightenMode());
+            spirit->setChecked(crop_->straightenMode());
         });
         // Resample-free resolution: the field defaults to the document's
         // resolution (CS6's 72 ppi fallback). ponytail: metadata only for now;
@@ -432,10 +432,10 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
                         width->setValue(pair.x());
                         height->setValue(pair.y());
                     }
-                    controller_->setCropRatio(constrained ? pair.x() / pair.y() : 0.0);
+                    crop_->setRatio(constrained ? pair.x() / pair.y() : 0.0);
                 });
         connect(deletePixels, &QCheckBox::toggled, this,
-                [this](bool on) { controller_->setCropDeletePixels(on); });
+                [this](bool on) { crop_->setDeletePixels(on); });
         connect(cancel, &QToolButton::clicked, this, [this]() { controller_->cancelCrop(); });
         connect(commit, &QToolButton::clicked, this, [this]() { controller_->commitCrop(); });
         // Cancel/Apply/Reset are visible only while a box is active (not in the

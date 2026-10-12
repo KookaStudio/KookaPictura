@@ -14,13 +14,19 @@ namespace {
 
 class EyedropperToolHandler : public ToolHandler {
 public:
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    explicit EyedropperToolHandler(std::shared_ptr<EyedropperGroup> options)
+        : options_(std::move(options))
+    {
+        addOptions(options_.get());
+    }
+
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         PictureView* v = ctx.view();
         if (!v) {
             return true;
         }
-        const EyedropperOptions options = ctx.eyedropperOptions();
+        const EyedropperOptions options = options_->get();
         const quint32 argb = sample_argb_scoped(*v, qRound(imagePos.x()), qRound(imagePos.y()),
                                                 options.sampleSize, options.scope);
         if (argb != 0) {
@@ -28,13 +34,16 @@ public:
         }
         return true;
     }
+
+private:
+    std::shared_ptr<EyedropperGroup> options_;
 };
 
 } // namespace
 
-std::unique_ptr<ToolHandler> makeEyedropperToolHandler()
+std::unique_ptr<ToolHandler> makeEyedropperToolHandler(std::shared_ptr<EyedropperGroup> options)
 {
-    return std::make_unique<EyedropperToolHandler>();
+    return std::make_unique<EyedropperToolHandler>(std::move(options));
 }
 
 } // namespace pictura

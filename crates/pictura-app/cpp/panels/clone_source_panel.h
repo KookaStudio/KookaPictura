@@ -1,8 +1,10 @@
 #pragma once
 
-#include "tool_context.h"
+#include "tools.h"
 
 #include <QtWidgets/QWidget>
+
+#include "tool_options.h"
 
 #include <array>
 #include <functional>
@@ -36,6 +38,7 @@ private:
     void editSlot(const std::function<void(CloneSource&)>& edit);
 
     ToolController* controller_ = nullptr;
+    CloneSourceOptions* clone_ = nullptr;
     std::array<QToolButton*, 5> slots_{};
     NumericField* offsetX_ = nullptr;
     NumericField* offsetY_ = nullptr;

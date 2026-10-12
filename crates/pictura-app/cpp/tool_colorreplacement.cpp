@@ -26,7 +26,16 @@ namespace {
 
 class ColorReplacementToolHandler : public ToolHandler {
 public:
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    ColorReplacementToolHandler(std::shared_ptr<PaintOptions> paint,
+                                std::shared_ptr<ColorReplaceGroup> colorReplace)
+        : paint_(std::move(paint))
+        , colorReplace_(std::move(colorReplace))
+    {
+        addOptions(paint_.get());
+        addOptions(colorReplace_.get());
+    }
+
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         PictureView* v = ctx.view();
         if (!v) {
@@ -40,12 +49,12 @@ public:
             }
             return true;
         }
-        const ColorReplaceOptions o = ctx.colorReplaceOptions();
+        const ColorReplaceOptions o = colorReplace_->get();
         {
             pictura::ScopedTimer beginTimer("cxx_begin_color_replacement (call)");
             stroke_.emplace(*v, [&] {
                 return begin_color_replacement(*v, ctx.foreground().rgba(), ctx.background().rgba(),
-                                               paintTip(ctx), o.mode, o.sampling, o.limits,
+                                               paintTip(*paint_), o.mode, o.sampling, o.limits,
                                                o.tolerance, o.antialias);
             });
         }
@@ -69,7 +78,7 @@ public:
         return true;
     }
 
-    void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         if (!ctx.dragging() || !stroke_) {
             return;
@@ -78,7 +87,7 @@ public:
         stroke_->dab(imagePos.x(), imagePos.y());
     }
 
-    void onRelease(ToolContext& ctx, const QPointF&, Qt::KeyboardModifiers) override
+    void onRelease(ToolServices& ctx, const QPointF&, Qt::KeyboardModifiers) override
     {
         if (!ctx.dragging()) {
             return;
@@ -93,13 +102,17 @@ public:
 
 private:
     std::optional<paint_api::Stroke> stroke_;
+    std::shared_ptr<PaintOptions> paint_;
+    std::shared_ptr<ColorReplaceGroup> colorReplace_;
 };
 
 } // namespace
 
-std::unique_ptr<ToolHandler> makeColorReplacementToolHandler()
+std::unique_ptr<ToolHandler> makeColorReplacementToolHandler(
+    std::shared_ptr<PaintOptions> paint, std::shared_ptr<ColorReplaceGroup> colorReplace)
 {
-    return std::make_unique<ColorReplacementToolHandler>();
+    return std::make_unique<ColorReplacementToolHandler>(std::move(paint),
+                                                         std::move(colorReplace));
 }
 
 } // namespace pictura

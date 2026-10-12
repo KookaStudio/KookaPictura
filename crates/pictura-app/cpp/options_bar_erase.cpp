@@ -52,12 +52,12 @@ QWidget* OptionsBar::buildBackgroundEraserPage(ToolId id)
     addBrushTipFields(layout, page);
 
     const BackgroundEraseOptions initial =
-        controller_ ? controller_->backgroundEraseOptions() : BackgroundEraseOptions{};
+        controller_ ? backgroundErase_->get() : BackgroundEraseOptions{};
     const auto update = [this](auto edit) {
         if (controller_) {
-            BackgroundEraseOptions o = controller_->backgroundEraseOptions();
+            BackgroundEraseOptions o = backgroundErase_->get();
             edit(o);
-            controller_->setBackgroundEraseOptions(o);
+            backgroundErase_->set(o);
         }
     };
     auto* sampling = addErasePicker(
@@ -105,12 +105,12 @@ QWidget* OptionsBar::buildMagicEraserPage(ToolId id)
     layout->addWidget(toolButton(id, page));
 
     const MagicEraseOptions initial =
-        controller_ ? controller_->magicEraseOptions() : MagicEraseOptions{};
+        controller_ ? magicErase_->get() : MagicEraseOptions{};
     const auto update = [this](auto edit) {
         if (controller_) {
-            MagicEraseOptions o = controller_->magicEraseOptions();
+            MagicEraseOptions o = magicErase_->get();
             edit(o);
-            controller_->setMagicEraseOptions(o);
+            magicErase_->set(o);
         }
     };
     auto* tolerance = new NumericField(

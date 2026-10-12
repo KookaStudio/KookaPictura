@@ -64,16 +64,16 @@ struct State {
     explicit State(pictura::ToolController* t)
         : tools(t)
         , foreground(t->foreground())
-        , shape(t->shapeOptions())
+        , shape(t->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->get())
     {
         tools->setForeground(Qt::red);
         // Defaults: the fill follows the foreground until a shape is mirrored.
-        tools->setShapeOptions({});
+        tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->set({});
     }
     ~State()
     {
         tools->setForeground(foreground);
-        tools->setShapeOptions(shape);
+        tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->set(shape);
     }
 };
 
@@ -200,11 +200,11 @@ void ShapeToolsTest::shapeTools()
     auto* sides = frame.findChild<pictura::NumericField*>(QStringLiteral("optionsShapeSides"));
     QVERIFY(sides != nullptr);
     emit sides->valueChanged(6);
-    QCOMPARE(f.tools->shapeOptions().sides, 6);
+    QCOMPARE(f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->get().sides, 6);
     auto* mode = visibleChild<QComboBox>(frame, QStringLiteral("optionsShapeMode"));
     QVERIFY(mode != nullptr);
     mode->setCurrentIndex(2);
-    QCOMPARE(f.tools->shapeOptions().mode, 2);
+    QCOMPARE(f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->get().mode, 2);
     const int layers = f.view->layer_count();
     int base = f.view->history_index();
     f.drag({QPointF(50, 50), QPointF(50, 30), QPointF(50, 20)});
@@ -299,7 +299,7 @@ void ShapeToolsTest::liveShapes()
     Fixture f(frame, seed, QStringLiteral("pictura_live_shape_seed"));
     QVERIFY2(f.ok(), "live shape fixture");
     const State state(f.tools);
-    f.tools->setShapeOptions({0, 10.0, 5});
+    f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->set({0, 10.0, 5});
 
     // A Shape-mode rectangle is a live shape.
     frame.setActiveTool(pictura::ToolId::Rectangle);
@@ -392,7 +392,7 @@ void ShapeToolsTest::createDialogs()
     int seen = 0;
 
     // Shape mode: a 30 x 20 rectangle with its top-left corner at the click.
-    f.tools->setShapeOptions({0, 10.0, 5});
+    f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->set({0, 10.0, 5});
     frame.setActiveTool(pictura::ToolId::Rectangle);
     int base = f.view->history_index();
     {
@@ -412,7 +412,7 @@ void ShapeToolsTest::createDialogs()
     QCOMPARE(f.view->sample_argb(35, 35), kWhite);
 
     // Path mode from here on, so the Work Path shows what each dialog drew.
-    f.tools->setShapeOptions({1, 10.0, 5});
+    f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->set({1, 10.0, 5});
 
     // From Center puts the ellipse's centre at the click.
     frame.setActiveTool(pictura::ToolId::Ellipse);
@@ -489,10 +489,10 @@ void ShapeToolsTest::lineAndCustomShape()
     QVERIFY(weight != nullptr);
     QCOMPARE(weight->value(), 1.0);
     emit weight->valueChanged(4);
-    pictura::ShapeOptions o = f.tools->shapeOptions();
+    pictura::ShapeOptions o = f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->get();
     QCOMPARE(o.weight, 4.0);
     o.mode = 2;
-    f.tools->setShapeOptions(o);
+    f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->set(o);
     int base = f.view->history_index();
     f.drag({QPointF(10, 50), QPointF(50, 50), QPointF(90, 50)});
     QVERIFY2(f.committedOnce(base, "Line Tool"), "line pixels");
@@ -514,10 +514,10 @@ void ShapeToolsTest::lineAndCustomShape()
     auto* end = frame.findChild<QCheckBox*>(QStringLiteral("optionsShapeArrowEnd"));
     QVERIFY(end != nullptr);
     end->setChecked(true);
-    QVERIFY(f.tools->shapeOptions().arrowEnd);
-    o = f.tools->shapeOptions();
+    QVERIFY(f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->get().arrowEnd);
+    o = f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->get();
     o.mode = 1;
-    f.tools->setShapeOptions(o);
+    f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->set(o);
     f.drag({QPointF(10, 20), QPointF(50, 20), QPointF(90, 20)});
     QCOMPARE(pictura::path_subpath_count(*f.view), 1);
     QCOMPARE(pictura::path_point_count(*f.view, 0), 7);
@@ -535,12 +535,12 @@ void ShapeToolsTest::lineAndCustomShape()
     QCOMPARE(grid->item(1)->toolTip(), QStringLiteral("Heart"));
     QVERIFY(!grid->item(1)->icon().isNull());
     grid->setCurrentRow(1);
-    QCOMPARE(f.tools->shapeOptions().custom, 1);
+    QCOMPARE(f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->get().custom, 1);
 
     // Shape mode: the heart lands on a "Shape 1" layer, not a live shape.
-    o = f.tools->shapeOptions();
+    o = f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->get();
     o.mode = 0;
-    f.tools->setShapeOptions(o);
+    f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->set(o);
     base = f.view->history_index();
     f.drag({QPointF(20, 60), QPointF(50, 80), QPointF(80, 95)});
     QVERIFY2(f.committedOnce(base, "Shape Tool"), "custom shape layer");
@@ -593,13 +593,13 @@ void ShapeToolsTest::optionsBar()
 
     // A new shape takes the bar's appearance: no fill, a 2 px green inside
     // stroke, and Align Edges snapping its edges to whole pixels.
-    pictura::ShapeOptions o = f.tools->shapeOptions();
+    pictura::ShapeOptions o = f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->get();
     o.fillEnabled = false;
     o.strokeEnabled = true;
     o.strokeColor = Qt::green;
     o.strokeWidth = 2;
     o.strokeAlign = 0;
-    f.tools->setShapeOptions(o);
+    f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->set(o);
     f.drag({QPointF(10.4, 10.4), QPointF(30, 30), QPointF(40.4, 30.6)});
     QCOMPARE(f.view->sample_argb(25, 20), kWhite);
     QCOMPARE(f.view->sample_argb(10, 20), kGreen);
@@ -611,14 +611,14 @@ void ShapeToolsTest::optionsBar()
     QCOMPARE(width->value(), 30.0);
     auto* height = visibleChild<pictura::NumericField>(frame, QStringLiteral("optionsShapeHeight"));
     QCOMPARE(height->value(), 21.0);
-    QVERIFY(!f.tools->shapeOptions().fillEnabled);
+    QVERIFY(!f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->get().fillEnabled);
 
     // Restyling it: a red fill, then No Color for the stroke, one state each.
     int base = f.view->history_index();
-    o = f.tools->shapeOptions();
+    o = f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->get();
     o.fillEnabled = true;
     o.fillColor = Qt::red;
-    f.tools->setShapeOptions(o);
+    f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->set(o);
     QVERIFY2(f.committedOnce(base, "Change Shape Fill"), "restyle the fill");
     QCOMPARE(f.view->sample_argb(25, 20), kRed);
     auto* stroke = visibleChild<QToolButton>(frame, QStringLiteral("optionsShapeStroke"));
@@ -646,19 +646,19 @@ void ShapeToolsTest::optionsBar()
     auto* fixed = gear->menu()->findChild<QRadioButton*>(QStringLiteral("optionsShapeGeometry2"));
     QVERIFY(fixed != nullptr && fixed->text() == QStringLiteral("Fixed Size"));
     fixed->click();
-    QCOMPARE(f.tools->shapeOptions().geometry, 2);
-    o = f.tools->shapeOptions();
+    QCOMPARE(f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->get().geometry, 2);
+    o = f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->get();
     o.fixedWidth = 20;
     o.fixedHeight = 10;
     o.fromCenter = true;
     o.mode = 1;
-    f.tools->setShapeOptions(o);
+    f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->set(o);
     f.drag({QPointF(50, 80), QPointF(70, 85)});
     QCOMPARE(pictura::path_subpath_count(*f.view), 1);
     QCOMPARE(subpathBounds(f, 0), QRectF(60, 80, 20, 10));
     gear->menu()->findChild<QRadioButton*>(QStringLiteral("optionsShapeGeometry1"))->click();
     gear->menu()->findChild<QCheckBox*>(QStringLiteral("optionsShapeFromCenter"))->setChecked(false);
-    QVERIFY(!f.tools->shapeOptions().fromCenter);
+    QVERIFY(!f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->get().fromCenter);
     f.drag({QPointF(5, 60), QPointF(15, 62), QPointF(25, 64)});
     QCOMPARE(subpathBounds(f, 1), QRectF(5, 60, 20, 20));
 

@@ -27,7 +27,13 @@ constexpr double kClickBox = 24.0;
 
 class RedEyeToolHandler : public ToolHandler {
 public:
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    explicit RedEyeToolHandler(std::shared_ptr<RedEyeGroup> redEye)
+        : redEye_(std::move(redEye))
+    {
+        addOptions(redEye_.get());
+    }
+
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         PictureView* v = ctx.view();
         if (!v || !v->has_document()) {
@@ -39,7 +45,7 @@ public:
         return true;
     }
 
-    void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         if (!ctx.dragging()) {
             return;
@@ -49,7 +55,7 @@ public:
         }
     }
 
-    void onRelease(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    void onRelease(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         if (!ctx.dragging()) {
             return;
@@ -69,7 +75,7 @@ public:
         }
         if (red_eye(*v, int(std::floor(box.x())), int(std::floor(box.y())),
                     int(std::round(box.width())), int(std::round(box.height())),
-                    ctx.redEyePupil(), ctx.redEyeDarken())) {
+                    redEye_->get().pupil, redEye_->get().darken)) {
             return;
         }
         if (activePixelLocked(v)) {
@@ -79,7 +85,7 @@ public:
         }
     }
 
-    void onDeactivate(ToolContext& ctx) override
+    void onDeactivate(ToolServices& ctx) override
     {
         if (ImageView* canvas = ctx.canvas()) {
             canvas->clearSelectionPreview();
@@ -88,13 +94,16 @@ public:
 
 private:
     QPointF anchor_;
+    std::shared_ptr<RedEyeGroup> redEye_;
 };
 
 } // namespace
 
-std::unique_ptr<ToolHandler> makeRedEyeToolHandler()
+std::unique_ptr<ToolHandler> makeRedEyeToolHandler(std::shared_ptr<PaintOptions> paint,
+                                                   std::shared_ptr<RedEyeGroup> redEye)
 {
-    return std::make_unique<RedEyeToolHandler>();
+    (void)paint;
+    return std::make_unique<RedEyeToolHandler>(std::move(redEye));
 }
 
 } // namespace pictura

@@ -26,12 +26,19 @@ namespace {
 
 class RetouchToolHandler : public ToolHandler {
 public:
-    explicit RetouchToolHandler(ToolId id)
+    RetouchToolHandler(ToolId id, std::shared_ptr<PaintOptions> paint,
+                       std::shared_ptr<RetouchGroup> retouch, std::shared_ptr<ToneGroup> tone)
         : id_(id)
+        , paint_(std::move(paint))
+        , retouch_(std::move(retouch))
+        , tone_(std::move(tone))
     {
+        addOptions(paint_.get());
+        addOptions(retouch_.get());
+        addOptions(tone_.get());
     }
 
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         PictureView* v = ctx.view();
         if (!v || !v->has_document()) {
@@ -55,7 +62,7 @@ public:
         return true;
     }
 
-    void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         if (!ctx.dragging() || !stroke_) {
             return;
@@ -63,7 +70,7 @@ public:
         stroke_->dab(imagePos.x(), imagePos.y());
     }
 
-    void onRelease(ToolContext& ctx, const QPointF&, Qt::KeyboardModifiers) override
+    void onRelease(ToolServices& ctx, const QPointF&, Qt::KeyboardModifiers) override
     {
         if (!ctx.dragging()) {
             return;
@@ -76,32 +83,38 @@ public:
     }
 
 private:
-    bool begin(ToolContext& ctx, PictureView& v) const
+    bool begin(ToolServices& ctx, PictureView& v) const
     {
         if (id_ == ToolId::Dodge || id_ == ToolId::Burn || id_ == ToolId::Sponge) {
-            const ToneOptions o = ctx.toneOptions(id_);
+            const ToneOptions o = tone_->get();
             const int tool = id_ == ToolId::Burn ? 1 : id_ == ToolId::Sponge ? 2 : 0;
-            return begin_tone(v, paintTip(ctx), tool, o.amount, o.range, o.protectTones,
+            return begin_tone(v, paintTip(*paint_), tool, o.amount, o.range, o.protectTones,
                               o.spongeMode, o.vibrance);
         }
-        const RetouchOptions o = ctx.retouchOptions(id_);
+        const RetouchOptions o = retouch_->get();
         if (id_ == ToolId::Smudge) {
-            return begin_smudge(v, ctx.foreground().rgba(), paintTip(ctx), o.strength, o.mode,
+            return begin_smudge(v, ctx.foreground().rgba(), paintTip(*paint_), o.strength, o.mode,
                                 o.sampleAllLayers, o.fingerPainting);
         }
-        return begin_focus(v, paintTip(ctx), id_ == ToolId::Sharpen, o.strength, o.mode,
+        return begin_focus(v, paintTip(*paint_), id_ == ToolId::Sharpen, o.strength, o.mode,
                            o.sampleAllLayers, o.protectDetail);
     }
 
     ToolId id_;
     std::optional<paint_api::Stroke> stroke_;
+    std::shared_ptr<PaintOptions> paint_;
+    std::shared_ptr<RetouchGroup> retouch_;
+    std::shared_ptr<ToneGroup> tone_;
 };
 
 } // namespace
 
-std::unique_ptr<ToolHandler> makeRetouchToolHandler(ToolId id)
+std::unique_ptr<ToolHandler> makeRetouchToolHandler(ToolId id, std::shared_ptr<PaintOptions> paint,
+                                                    std::shared_ptr<RetouchGroup> retouch,
+                                                    std::shared_ptr<ToneGroup> tone)
 {
-    return std::make_unique<RetouchToolHandler>(id);
+    return std::make_unique<RetouchToolHandler>(id, std::move(paint), std::move(retouch),
+                                                std::move(tone));
 }
 
 } // namespace pictura

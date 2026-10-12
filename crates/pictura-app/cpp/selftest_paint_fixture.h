@@ -76,21 +76,21 @@ struct BrushState {
 
     explicit BrushState(pictura::ToolController* t)
         : tools(t)
-        , size(t->brushSize())
-        , opacity(t->brushOpacity())
-        , flow(t->brushFlow())
-        , stamp(t->stampOptions())
+        , size(t->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->size())
+        , opacity(t->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->opacity())
+        , flow(t->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->flow())
+        , stamp(t->optionsFor<pictura::StampGroup>(pictura::ToolId::CloneStamp)->get())
     {
-        tools->setBrushSize(6);
-        tools->setBrushOpacity(100);
-        tools->setBrushFlow(100);
+        tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setSize(6);
+        tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setOpacity(100);
+        tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setFlow(100);
     }
     ~BrushState()
     {
-        tools->setBrushSize(size);
-        tools->setBrushOpacity(opacity);
-        tools->setBrushFlow(flow);
-        tools->setStampOptions(stamp);
+        tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setSize(size);
+        tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setOpacity(opacity);
+        tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setFlow(flow);
+        tools->optionsFor<pictura::StampGroup>(pictura::ToolId::CloneStamp)->set(stamp);
     }
 };
 

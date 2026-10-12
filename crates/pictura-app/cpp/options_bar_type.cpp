@@ -218,7 +218,7 @@ QWidget* OptionsBar::buildTypePage(ToolId id)
     }
 
     const auto sync = [=]() {
-        const TypeOptions o = controller_->typeOptions();
+        const TypeOptions o = type_->get();
         const QSignalBlocker blockFamily(family);
         const QSignalBlocker blockAntialias(antialias);
         family->setCurrentFont(QFont(o.family));
@@ -234,9 +234,9 @@ QWidget* OptionsBar::buildTypePage(ToolId id)
     };
     sync();
     const auto update = [this](auto edit) {
-        TypeOptions o = controller_->typeOptions();
+        TypeOptions o = type_->get();
         edit(o);
-        controller_->setTypeOptions(o);
+        type_->set(o);
     };
     connect(controller_, &ToolController::activeToolChanged, page, sync);
     connect(controller_, &ToolController::typeOptionsChanged, page, sync);
@@ -257,10 +257,10 @@ QWidget* OptionsBar::buildTypePage(ToolId id)
         // output must re-parse under every system locale (comma decimals).
         const double v = QLocale::c().toDouble(size->currentText(), &ok);
         if (!ok || v < 1.0 || v > 1296.0) {
-            size->setEditText(sizeText(controller_->typeOptions().size));
+            size->setEditText(sizeText(type_->get().size));
             return;
         }
-        if (v != controller_->typeOptions().size) {
+        if (v != type_->get().size) {
             update([v](TypeOptions& o) { o.size = v; });
         }
     };
@@ -269,7 +269,7 @@ QWidget* OptionsBar::buildTypePage(ToolId id)
     // The swatch sets the foreground, which the text colour follows (CS6 links
     // the two); a type layer being edited or selected takes the colour.
     connect(color, &QToolButton::clicked, this, [this]() {
-        const QColor picked = ColorPickerDialog::getColor(controller_->typeOptions().color, this,
+        const QColor picked = ColorPickerDialog::getColor(type_->get().color, this,
                                                           QStringLiteral("Text Color"));
         if (picked.isValid()) {
             controller_->setForeground(picked);

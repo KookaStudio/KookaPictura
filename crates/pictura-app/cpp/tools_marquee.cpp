@@ -170,8 +170,10 @@ SelectionMode ToolController::selectionModeForModifiers(SelectionMode base,
 QRect ToolController::marqueeRectForTest(const QPointF& a, const QPointF& b, int mods,
                                          bool mirror) const
 {
-    return marqueeDragRect(a, b, Qt::KeyboardModifiers(mods), mirror, marqueeStyle_, fixedRatioW_,
-                           fixedRatioH_, fixedSizeW_, fixedSizeH_);
+    const SelectionOptions* selection = optionsFor<SelectionOptions>(ToolId::Marquee);
+    return marqueeDragRect(a, b, Qt::KeyboardModifiers(mods), mirror, selection->marqueeStyle(),
+                           selection->fixedRatioWidth(), selection->fixedRatioHeight(),
+                           selection->fixedSizeWidth(), selection->fixedSizeHeight());
 }
 
 void ToolController::updateBrushOutline(const QPointF& imagePos)
@@ -180,7 +182,7 @@ void ToolController::updateBrushOutline(const QPointF& imagePos)
         return;
     }
     if (isBrushTool(active_)) {
-        canvas_->setBrushOutline(brushSize_, imagePos);
+        canvas_->setBrushOutline(paint_->size(), imagePos);
     } else {
         canvas_->clearBrushOutline();
     }

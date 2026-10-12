@@ -15,22 +15,34 @@ namespace pictura {
 namespace {
 
 class PatchToolHandler : public RegionDragToolHandler {
+public:
+    explicit PatchToolHandler(std::shared_ptr<PatchGroup> patch)
+        : patch_(std::move(patch))
+    {
+        addOptions(patch_.get());
+    }
+
 protected:
     // ponytail: no Adaptation, Sample All Layers, or Use Pattern yet.
-    bool apply(ToolContext& ctx, PictureView& view, int dx, int dy) override
+    bool apply(ToolServices& ctx, PictureView& view, int dx, int dy) override
     {
-        return patch_selection(view, dx, dy, ctx.patchContentAware(), ctx.patchDestination(),
-                               ctx.patchTransparent());
+        return patch_selection(view, dx, dy, patch_->get().contentAware, patch_->get().destination,
+                               patch_->get().transparent);
     }
 
     QString verb() const override { return QStringLiteral("patch"); }
+
+private:
+    std::shared_ptr<PatchGroup> patch_;
 };
 
 } // namespace
 
-std::unique_ptr<ToolHandler> makePatchToolHandler()
+std::unique_ptr<ToolHandler> makePatchToolHandler(std::shared_ptr<PaintOptions> paint,
+                                                  std::shared_ptr<PatchGroup> patch)
 {
-    return std::make_unique<PatchToolHandler>();
+    (void)paint;
+    return std::make_unique<PatchToolHandler>(std::move(patch));
 }
 
 } // namespace pictura

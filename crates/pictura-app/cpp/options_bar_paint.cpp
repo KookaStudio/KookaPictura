@@ -103,8 +103,8 @@ void OptionsBar::addBrushTipFields(QHBoxLayout* layout, QWidget* page)
         return;
     }
     const auto refresh = [this, button] {
-        button->setText(QString::number(controller_->brushSize()));
-        button->setIcon(QIcon(BrushPresetPicker::tipIcon(paintTip(*controller_), 16)));
+        button->setText(QString::number(paint_->size()));
+        button->setIcon(QIcon(BrushPresetPicker::tipIcon(paintTip(*paint_), 16)));
     };
     refresh();
     connect(controller_, &ToolController::brushSizeChanged, button, refresh);
@@ -130,20 +130,28 @@ QWidget* OptionsBar::buildRedEyePage(ToolId id)
     layout->addWidget(toolButton(id, page));
 
     auto addField = [&](const QString& label, const QString& name, int value,
-                        void (ToolController::*setter)(int)) {
+                        std::function<void(int)> setter) {
         auto* field = new NumericField(
             label, numericConfig(1, 100, 1, 0, QStringLiteral("%"), true, name), page);
         field->setValue(value);
         layout->addWidget(field);
         if (controller_) {
             connect(field, &NumericField::valueChanged, this,
-                    [this, setter](double v) { (controller_->*setter)(qRound(v)); });
+                    [setter](double v) { setter(qRound(v)); });
         }
     };
     addField(QStringLiteral("Pupil Size:"), QStringLiteral("optionsRedEyePupil"),
-             controller_ ? controller_->redEyePupil() : 50, &ToolController::setRedEyePupil);
+             controller_ ? redEye_->get().pupil : 50, [this](int v) {
+                 RedEyeOptions o = redEye_->get();
+                 o.pupil = v;
+                 redEye_->set(o);
+             });
     addField(QStringLiteral("Darken Amount:"), QStringLiteral("optionsRedEyeDarken"),
-             controller_ ? controller_->redEyeDarken() : 50, &ToolController::setRedEyeDarken);
+             controller_ ? redEye_->get().darken : 50, [this](int v) {
+                 RedEyeOptions o = redEye_->get();
+                 o.darken = v;
+                 redEye_->set(o);
+             });
 
     layout->addStretch(1);
     return page;
@@ -159,14 +167,14 @@ QWidget* OptionsBar::buildColorReplacementPage(ToolId id)
     layout->addWidget(toolButton(id, page));
     addBrushTipFields(layout, page);
 
-    const ColorReplaceOptions initial = controller_ ? controller_->colorReplaceOptions()
+    const ColorReplaceOptions initial = controller_ ? colorReplace_->get()
                                                     : ColorReplaceOptions{};
     // Each control edits one field of the controller's options.
     const auto update = [this](auto edit) {
         if (controller_) {
-            ColorReplaceOptions o = controller_->colorReplaceOptions();
+            ColorReplaceOptions o = colorReplace_->get();
             edit(o);
-            controller_->setColorReplaceOptions(o);
+            colorReplace_->set(o);
         }
     };
 
@@ -236,13 +244,19 @@ QWidget* OptionsBar::buildMixerBrushPage(ToolId id)
     load->setMenu(loadMenu);
     layout->addWidget(load);
 
-    const MixerOptions initial = controller_ ? controller_->mixerOptions() : MixerOptions{};
+    const MixerOptions initial = controller_ ? mixer_->get() : MixerOptions{};
     const auto update = [this](auto edit) {
         if (controller_) {
-            MixerOptions o = controller_->mixerOptions();
+            MixerOptions o = mixer_->get();
             edit(o);
-            controller_->setMixerOptions(o);
+            mixer_->set(o);
         }
+    };
+    // The reservoir lives in the Mixer options; this replaces just that field.
+    const auto setReservoir = [this](const QColor& color) {
+        MixerOptions o = mixer_->get();
+        o.reservoir = color;
+        mixer_->set(o);
     };
 
     auto addToggle = [&](const QString& text, const QString& name, const QString& tip,
@@ -332,8 +346,8 @@ QWidget* OptionsBar::buildMixerBrushPage(ToolId id)
                 [this, update, member, followWet, syncPreset](double v) {
                     update([member, v](MixerOptions& o) { o.*member = qRound(v); });
                     if (controller_) {
-                        followWet(controller_->mixerOptions().wet);
-                        syncPreset(controller_->mixerOptions());
+                        followWet(mixer_->get().wet);
+                        syncPreset(mixer_->get());
                     }
                 });
     }
@@ -354,13 +368,13 @@ QWidget* OptionsBar::buildMixerBrushPage(ToolId id)
     });
 
     if (controller_) {
-        load->setIcon(reservoirIcon(controller_->mixerReservoir()));
+        load->setIcon(reservoirIcon(mixer_->get().reservoir));
         connect(controller_, &ToolController::mixerReservoirChanged, load,
                 [load](const QColor& paint) { load->setIcon(reservoirIcon(paint)); });
         connect(loadBrush, &QAction::triggered, this,
-                [this] { controller_->setMixerReservoir(controller_->foreground()); });
+                [this, setReservoir] { setReservoir(controller_->foreground()); });
         connect(cleanBrush, &QAction::triggered, this,
-                [this] { controller_->setMixerReservoir(QColor(Qt::transparent)); });
+                [this, setReservoir] { setReservoir(QColor(Qt::transparent)); });
     }
 
     layout->addStretch(1);

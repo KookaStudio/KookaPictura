@@ -146,6 +146,7 @@ QPixmap BrushPresetPicker::tipIcon(const PaintTip& tip, int edge)
 BrushPresetPicker::BrushPresetPicker(ToolController* controller, QWidget* parent)
     : QWidget(parent, Qt::Popup)
     , controller_(controller)
+    , paint_(controller ? controller->optionsFor<PaintOptions>(ToolId::Brush) : nullptr)
 {
     setObjectName(QStringLiteral("brushPresetPicker"));
     auto* outer = new QVBoxLayout(this);
@@ -202,13 +203,13 @@ BrushPresetPicker::BrushPresetPicker(ToolController* controller, QWidget* parent
     outer->addWidget(grid_);
 
     const auto setSize = [this](int size) {
-        if (!updating_ && controller_) {
-            controller_->setBrushSize(size);
+        if (!updating_ && paint_) {
+            paint_->setSize(size);
         }
     };
     const auto setHardness = [this](int hardness) {
-        if (!updating_ && controller_) {
-            controller_->setBrushHardness(hardness);
+        if (!updating_ && paint_) {
+            paint_->setHardness(hardness);
         }
     };
     connect(size_, &QSpinBox::valueChanged, this, setSize);
@@ -253,17 +254,17 @@ void BrushPresetPicker::buildGrid()
 
 void BrushPresetPicker::applyPreset(int index)
 {
-    if (!controller_ || index < 0 || index >= kPresetCount) {
+    if (!paint_ || index < 0 || index >= kPresetCount) {
         return;
     }
     const Preset& p = kPresets[index];
-    controller_->setBrushSize(p.size);
-    controller_->setBrushHardness(p.hardness);
-    controller_->setBrushRoundness(p.roundness);
-    controller_->setBrushTipAngle(p.angle);
-    controller_->setBrushSpacing(p.spacing);
-    controller_->setBrushFlip(false, false);
-    controller_->setBrushDynamics(
+    paint_->setSize(p.size);
+    paint_->setHardness(p.hardness);
+    paint_->setRoundness(p.roundness);
+    paint_->setTipAngle(p.angle);
+    paint_->setSpacing(p.spacing);
+    paint_->setFlip(false, false);
+    paint_->setDynamics(
         BrushDynamics{p.scatter, p.count, p.sizeJitter, p.angleJitter, p.roundnessJitter});
     current_->setText(QString::fromLatin1(p.name));
     grid_->setCurrentRow(index);
@@ -271,18 +272,18 @@ void BrushPresetPicker::applyPreset(int index)
 
 void BrushPresetPicker::sync()
 {
-    if (!controller_) {
+    if (!paint_) {
         return;
     }
     updating_ = true;
-    const int size = controller_->brushSize();
+    const int size = paint_->size();
     size_->setValue(size);
     // Several positions share a size in the lower half; keep the one dragged to.
     if (brush_size_scale::sizeAt(sizeSlider_->value()) != size) {
         sizeSlider_->setValue(brush_size_scale::positionOf(size));
     }
-    hardness_->setValue(controller_->brushHardness());
-    hardnessSlider_->setValue(controller_->brushHardness());
+    hardness_->setValue(paint_->hardness());
+    hardnessSlider_->setValue(paint_->hardness());
     updating_ = false;
 
     // The tip at a size that fits the preview, crossed at its centre as CS6's is.
@@ -291,7 +292,7 @@ void BrushPresetPicker::sync()
     pm.fill(Qt::transparent);
     {
         QPainter painter(&pm);
-        painter.drawPixmap(0, 0, tipIcon(paintTip(*controller_), edge));
+        painter.drawPixmap(0, 0, tipIcon(paintTip(*paint_), edge));
         painter.setPen(QPen(QColor(0x80, 0x80, 0x80), 1));
         painter.drawLine(edge / 2, 2, edge / 2, edge - 2);
         painter.drawLine(2, edge / 2, edge - 2, edge / 2);

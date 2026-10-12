@@ -75,7 +75,8 @@ void PicturaMainWindow::updateAlignControls()
     }
     PictureView* view = activeView();
     const QStringList paths = layersPanel_ ? layersPanel_->selectedPaths() : QStringList();
-    const int alignTo = tools_ ? tools_->moveAlignTo() : 0;
+    const MoveGroup* move = tools_ ? tools_->optionsFor<MoveGroup>(ToolId::Move) : nullptr;
+    const int alignTo = move ? move->get().alignTo : 0;
     optionsBar_->setAlignEnabled(view && align_can(*view, paths, alignTo == 0, alignTo),
                                  view && distribute_can(*view, paths));
 }

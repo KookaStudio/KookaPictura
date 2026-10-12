@@ -31,12 +31,13 @@ QWidget* OptionsBar::buildRetouchPage(ToolId id)
     const auto name = [&tool](const char* field) {
         return QStringLiteral("options%1%2").arg(tool, QLatin1String(field));
     };
-    const RetouchOptions initial = controller_ ? controller_->retouchOptions(id) : RetouchOptions{};
-    const auto update = [this, id](auto edit) {
-        if (controller_) {
-            RetouchOptions o = controller_->retouchOptions(id);
+    auto* retouch = controller_ ? controller_->optionsFor<RetouchGroup>(id) : nullptr;
+    const RetouchOptions initial = retouch ? retouch->get() : RetouchOptions{};
+    const auto update = [retouch](auto edit) {
+        if (retouch) {
+            RetouchOptions o = retouch->get();
             edit(o);
-            controller_->setRetouchOptions(id, o);
+            retouch->set(o);
         }
     };
     layout->addWidget(new QLabel(QStringLiteral("Mode:"), page));
@@ -102,12 +103,13 @@ QWidget* OptionsBar::buildTonePage(ToolId id)
     const auto name = [&tool](const char* field) {
         return QStringLiteral("options%1%2").arg(tool, QLatin1String(field));
     };
-    const ToneOptions initial = controller_ ? controller_->toneOptions(id) : ToneOptions{};
-    const auto update = [this, id](auto edit) {
-        if (controller_) {
-            ToneOptions o = controller_->toneOptions(id);
+    auto* tone = controller_ ? controller_->optionsFor<ToneGroup>(id) : nullptr;
+    const ToneOptions initial = tone ? tone->get() : ToneOptions{};
+    const auto update = [tone](auto edit) {
+        if (tone) {
+            ToneOptions o = tone->get();
             edit(o);
-            controller_->setToneOptions(id, o);
+            tone->set(o);
         }
     };
     const bool sponge = id == ToolId::Sponge;

@@ -23,19 +23,19 @@ namespace {
 
 class CountToolHandler : public ToolHandler {
 public:
-    void onActivate(ToolContext& ctx) override
+    void onActivate(ToolServices& ctx) override
     {
         ctx_ = &ctx;
         ctx.notifyCountChanged();
     }
 
-    void onDeactivate(ToolContext&) override
+    void onDeactivate(ToolServices&) override
     {
         dragged_ = -1;
         ctx_ = nullptr;
     }
 
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         PictureView* v = ctx.view();
         ctx_ = &ctx;
@@ -65,7 +65,7 @@ public:
         return true;
     }
 
-    void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         PictureView* v = ctx.view();
         if (dragged_ < 0 || !v) {
@@ -74,7 +74,7 @@ public:
         count_move_mark(*v, dragged_, qRound(imagePos.x()), qRound(imagePos.y()), false);
     }
 
-    void onRelease(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    void onRelease(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         PictureView* v = ctx.view();
         const int index = dragged_;
@@ -113,7 +113,7 @@ public:
 private:
     int dragged_ = -1;
     QPoint start_;
-    ToolContext* ctx_ = nullptr;
+    ToolServices* ctx_ = nullptr;
 };
 
 } // namespace

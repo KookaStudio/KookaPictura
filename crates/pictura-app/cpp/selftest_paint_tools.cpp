@@ -53,7 +53,7 @@ int pictura::runRedEyeChecks(pictura::PicturaMainWindow& frame)
     auto* darken =
         frame.findChild<pictura::NumericField*>(QStringLiteral("optionsRedEyeDarken"));
     const bool bar = pupil && darken && pupil->value() == 50 && darken->value() == 50
-        && f.tools->redEyePupil() == 50 && f.tools->redEyeDarken() == 50;
+        && f.tools->optionsFor<RedEyeGroup>(ToolId::RedEye)->get().pupil == 50 && f.tools->optionsFor<RedEyeGroup>(ToolId::RedEye)->get().darken == 50;
 
     const int base = f.view->history_index();
     f.drag({QPointF(14, 14), QPointF(20, 20), QPointF(26, 26)});
@@ -97,15 +97,15 @@ int pictura::runColorReplacementChecks(pictura::PicturaMainWindow& frame)
         && sampling->currentIndex() == 0 && limits->currentIndex() == 1;
     if (bar) {
         mode->setCurrentIndex(3);
-        bar = f.tools->colorReplaceOptions().mode == 3;
+        bar = f.tools->optionsFor<ColorReplaceGroup>(ToolId::ColorReplacement)->get().mode == 3;
         mode->setCurrentIndex(2);
-        bar = bar && f.tools->colorReplaceOptions().mode == 2;
+        bar = bar && f.tools->optionsFor<ColorReplaceGroup>(ToolId::ColorReplacement)->get().mode == 2;
     }
 
     const QColor foreground = f.tools->foreground();
-    const int size = f.tools->brushSize();
+    const int size = f.tools->optionsFor<PaintOptions>(ToolId::Brush)->size();
     f.tools->setForeground(QColor(40, 200, 40));
-    f.tools->setBrushSize(10);
+    f.tools->optionsFor<PaintOptions>(ToolId::Brush)->setSize(10);
     const int base = f.view->history_index();
     f.drag({QPointF(8, 10), QPointF(14, 10), QPointF(20, 10)});
     const bool committed = f.committedOnce(base, "Color Replacement Tool");
@@ -113,7 +113,7 @@ int pictura::runColorReplacementChecks(pictura::PicturaMainWindow& frame)
     const bool recoloured = qGreen(argb) > qRed(argb) + 20 && qGreen(argb) > qBlue(argb);
     const bool farKept = f.view->sample_argb(45, 10) == QColor(220, 220, 40).rgba();
     f.tools->setForeground(foreground);
-    f.tools->setBrushSize(size);
+    f.tools->optionsFor<PaintOptions>(ToolId::Brush)->setSize(size);
 
     ST_BEGIN("color_replacement_tool");
     ST_PASS("color replacement active=%d bar=%d commit=%d recoloured=%d far=%d",
@@ -138,9 +138,9 @@ int pictura::runMixerBrushChecks(pictura::PicturaMainWindow& frame)
 
     frame.setActiveTool(pictura::ToolId::MixerBrush);
     const bool active = f.tools->activeTool() == pictura::ToolId::MixerBrush;
-    const pictura::MixerOptions saved = f.tools->mixerOptions();
-    const QColor savedPaint = f.tools->mixerReservoir();
-    const int savedSize = f.tools->brushSize();
+    const pictura::MixerOptions saved = f.tools->optionsFor<MixerGroup>(ToolId::MixerBrush)->get();
+    const QColor savedPaint = f.tools->optionsFor<MixerGroup>(ToolId::MixerBrush)->get().reservoir;
+    const int savedSize = f.tools->optionsFor<PaintOptions>(ToolId::Brush)->size();
 
     // The preset menu sets Wet/Load/Mix; Load and Mix grey out while dry.
     auto* preset = frame.findChild<QComboBox*>(QStringLiteral("optionsMixerPreset"));
@@ -151,7 +151,7 @@ int pictura::runMixerBrushChecks(pictura::PicturaMainWindow& frame)
         const int wetHeavy = preset->findText(QStringLiteral("Wet, Heavy Mix"));
         preset->setCurrentIndex(wetHeavy);
         emit preset->activated(wetHeavy);
-        const pictura::MixerOptions o = f.tools->mixerOptions();
+        const pictura::MixerOptions o = f.tools->optionsFor<MixerGroup>(ToolId::MixerBrush)->get();
         bar = o.wet == 50 && o.load == 50 && o.mix == 60 && mix->isEnabled()
             && mix->value() == 60;
     }
@@ -162,9 +162,14 @@ int pictura::runMixerBrushChecks(pictura::PicturaMainWindow& frame)
     wet.wet = 100;
     wet.load = 100;
     wet.mix = 100;
-    f.tools->setMixerOptions(wet);
-    f.tools->setMixerReservoir(Qt::white);
-    f.tools->setBrushSize(10);
+    f.tools->optionsFor<MixerGroup>(ToolId::MixerBrush)->set(wet);
+    {
+        auto* mixer = f.tools->optionsFor<MixerGroup>(ToolId::MixerBrush);
+        MixerOptions o = mixer->get();
+        o.reservoir = Qt::white;
+        mixer->set(o);
+    }
+    f.tools->optionsFor<PaintOptions>(ToolId::Brush)->setSize(10);
     const int base = f.view->history_index();
     QList<QPointF> path;
     for (int x = 10; x <= 40; x += 2) {
@@ -173,19 +178,24 @@ int pictura::runMixerBrushChecks(pictura::PicturaMainWindow& frame)
     f.drag(path);
     const bool committed = f.committedOnce(base, "Mixer Brush Tool");
     const bool smeared = qRed(f.view->sample_argb(26, 20)) < 250;
-    const bool carried = f.tools->mixerReservoir().red() < 255;
+    const bool carried = f.tools->optionsFor<MixerGroup>(ToolId::MixerBrush)->get().reservoir.red() < 255;
     // Clean After Stroke empties the brush.
     wet.cleanAfterStroke = true;
-    f.tools->setMixerOptions(wet);
+    f.tools->optionsFor<MixerGroup>(ToolId::MixerBrush)->set(wet);
     f.drag({QPointF(50, 30), QPointF(56, 30)});
-    const bool cleaned = f.tools->mixerReservoir().alpha() == 0;
+    const bool cleaned = f.tools->optionsFor<MixerGroup>(ToolId::MixerBrush)->get().reservoir.alpha() == 0;
     // Alt-click loads the brush from the image.
     f.drag({QPointF(5, 5)}, Qt::AltModifier);
-    const bool loaded = f.tools->mixerReservoir() == QColor(Qt::black);
+    const bool loaded = f.tools->optionsFor<MixerGroup>(ToolId::MixerBrush)->get().reservoir == QColor(Qt::black);
 
-    f.tools->setMixerOptions(saved);
-    f.tools->setMixerReservoir(savedPaint);
-    f.tools->setBrushSize(savedSize);
+    f.tools->optionsFor<MixerGroup>(ToolId::MixerBrush)->set(saved);
+    {
+        auto* mixer = f.tools->optionsFor<MixerGroup>(ToolId::MixerBrush);
+        MixerOptions o = mixer->get();
+        o.reservoir = savedPaint;
+        mixer->set(o);
+    }
+    f.tools->optionsFor<PaintOptions>(ToolId::Brush)->setSize(savedSize);
 
     ST_BEGIN("mixer_brush_tool");
     ST_PASS("mixer active=%d bar=%d commit=%d smeared=%d carried=%d cleaned=%d loaded=%d",
@@ -220,9 +230,9 @@ int pictura::runCloneStampChecks(pictura::PicturaMainWindow& frame)
     bool bar = sample && ignore && sample->currentIndex() == 0 && ignore->isHidden();
     if (bar) {
         sample->setCurrentIndex(2);
-        bar = !ignore->isHidden() && f.tools->stampOptions().cloneSample == 2;
+        bar = !ignore->isHidden() && f.tools->optionsFor<StampGroup>(ToolId::CloneStamp)->get().cloneSample == 2;
         sample->setCurrentIndex(0);
-        bar = bar && ignore->isHidden() && f.tools->stampOptions().cloneSample == 0;
+        bar = bar && ignore->isHidden() && f.tools->optionsFor<StampGroup>(ToolId::CloneStamp)->get().cloneSample == 0;
     }
 
     const int base = f.view->history_index();
@@ -275,9 +285,9 @@ int pictura::runPatternStampChecks(pictura::PicturaMainWindow& frame)
         qRed(f.view->sample_argb(20, 16)) == 215 && qRed(f.view->sample_argb(40, 16)) == 90;
     // Unaligned pins the tile's corner to the stroke start: light there, where
     // the document-aligned tile is dark.
-    pictura::StampOptions o = f.tools->stampOptions();
+    pictura::StampOptions o = f.tools->optionsFor<StampGroup>(ToolId::CloneStamp)->get();
     o.patternAligned = false;
-    f.tools->setStampOptions(o);
+    f.tools->optionsFor<StampGroup>(ToolId::CloneStamp)->set(o);
     f.drag({QPointF(20, 50)});
     const bool unaligned = qRed(f.view->sample_argb(20, 50)) == 215;
 
@@ -395,7 +405,7 @@ int pictura::runBrushPanelChecks(pictura::PicturaMainWindow& frame)
     bool previewed = false;
     if (wired) {
         emit roundness->valueChanged(30);
-        wired = f.tools->brushRoundness() == 30 && roundness->value() == 30;
+        wired = f.tools->optionsFor<PaintOptions>(ToolId::Brush)->roundness() == 30 && roundness->value() == 30;
         const QImage preview = panel->previewForTest();
         for (int x = 0; x < preview.width() && !previewed; ++x) {
             for (int y = 0; y < preview.height(); ++y) {
@@ -409,13 +419,13 @@ int pictura::runBrushPanelChecks(pictura::PicturaMainWindow& frame)
     // A 30 % round, 0° tip is flat: one dab covers more across than down.
     const QColor foreground = f.tools->foreground();
     f.tools->setForeground(Qt::black);
-    f.tools->setBrushSize(20);
+    f.tools->optionsFor<PaintOptions>(ToolId::Brush)->setSize(20);
     frame.setActiveTool(pictura::ToolId::Brush);
     f.drag({QPointF(30, 20)});
     auto painted = [&f](int x, int y) { return f.view->sample_argb(x, y) != QColor(Qt::white).rgba(); };
     const bool flat = painted(37, 20) && !painted(30, 27);
     f.tools->setForeground(foreground);
-    f.tools->setBrushRoundness(100);
+    f.tools->optionsFor<PaintOptions>(ToolId::Brush)->setRoundness(100);
 
     ST_BEGIN("brush_panel");
     ST_PASS("brush panel shown=%d hidden=%d wired=%d preview=%d flat=%d", shown ? 1 : 0,
@@ -448,29 +458,29 @@ int pictura::runCloneSourcePanelChecks(pictura::PicturaMainWindow& frame)
 
     // Earlier checks may have left sources in the controller's slots.
     for (int slot : {1, 0}) {
-        f.tools->setCloneSourceSlot(slot);
-        f.tools->setCloneSource(pictura::CloneSource{});
+        f.tools->optionsFor<CloneSourceOptions>(ToolId::CloneStamp)->setSlot(slot);
+        f.tools->optionsFor<CloneSourceOptions>(ToolId::CloneStamp)->setActive(pictura::CloneSource{});
     }
     // Slot 2 gets a source; slot 1 stays empty, so a stroke there is refused.
-    const bool slotButtons = clickBar(frame, "cloneSourceSlot2") && f.tools->cloneSourceSlot() == 1;
+    const bool slotButtons = clickBar(frame, "cloneSourceSlot2") && f.tools->optionsFor<CloneSourceOptions>(ToolId::CloneStamp)->slot() == 1;
     f.drag({QPointF(5, 10)}, Qt::AltModifier);
     clickBar(frame, "cloneSourceSlot1");
     const int base = f.view->history_index();
     f.drag({QPointF(40, 10)});
     const bool perSlot = slotButtons && f.view->history_index() == base
-        && !f.tools->cloneSource().hasSource;
+        && !f.tools->optionsFor<CloneSourceOptions>(ToolId::CloneStamp)->active().hasSource;
     clickBar(frame, "cloneSourceSlot2");
 
     // Flip Horizontal mirrors about the stroke start at x = 40.
-    const bool flipped = clickBar(frame, "cloneSourceFlipH") && f.tools->cloneSource().flipH;
+    const bool flipped = clickBar(frame, "cloneSourceFlipH") && f.tools->optionsFor<CloneSourceOptions>(ToolId::CloneStamp)->active().flipH;
     f.drag({QPointF(40, 10), QPointF(42, 10), QPointF(44, 10)});
     const bool mirrored = f.committedOnce(base, "Clone Stamp")
         && f.view->sample_argb(43, 10) == QColor(220, 30, 30).rgba();
     auto* offsetX = frame.findChild<pictura::NumericField*>(QStringLiteral("cloneSourceOffsetX"));
     const bool offset = offsetX && offsetX->value() == 35;
     clickBar(frame, "cloneSourceReset");
-    const bool reset = !f.tools->cloneSource().flipH;
-    f.tools->setCloneSource(pictura::CloneSource{});
+    const bool reset = !f.tools->optionsFor<CloneSourceOptions>(ToolId::CloneStamp)->active().flipH;
+    f.tools->optionsFor<CloneSourceOptions>(ToolId::CloneStamp)->setActive(pictura::CloneSource{});
     clickBar(frame, "cloneSourceSlot1");
     const bool hidden =
         clickBar(frame, "optionsToggleCloneSourcePanel") && panelVisible(frame, name) == before;
@@ -495,14 +505,14 @@ int pictura::runArtHistoryBrushChecks(pictura::PicturaMainWindow& frame)
     }
     const BrushState brush(f.tools);
     const QColor foreground = f.tools->foreground();
-    const pictura::ArtHistoryOptions options = f.tools->artHistoryOptions();
+    const pictura::ArtHistoryOptions options = f.tools->optionsFor<ArtHistoryGroup>(ToolId::ArtHistoryBrush)->get();
 
     // Paint the left edge (x < 25) white so it no longer matches the red source.
     f.tools->setForeground(Qt::white);
-    f.tools->setBrushSize(20);
+    f.tools->optionsFor<PaintOptions>(ToolId::Brush)->setSize(20);
     frame.setActiveTool(pictura::ToolId::Brush);
     f.drag({QPointF(10, 20), QPointF(14, 20)});
-    f.tools->setBrushSize(4);
+    f.tools->optionsFor<PaintOptions>(ToolId::Brush)->setSize(4);
 
     frame.setActiveTool(pictura::ToolId::ArtHistoryBrush);
     auto* style = frame.findChild<QComboBox*>(QStringLiteral("optionsArtHistoryStyle"));
@@ -536,11 +546,11 @@ int pictura::runArtHistoryBrushChecks(pictura::PicturaMainWindow& frame)
     pictura::ArtHistoryOptions strict = options;
     strict.tolerance = 100;
     strict.area = 10;
-    f.tools->setArtHistoryOptions(strict);
+    f.tools->optionsFor<ArtHistoryGroup>(ToolId::ArtHistoryBrush)->set(strict);
     f.drag({QPointF(45, 20), QPointF(50, 20), QPointF(55, 20)});
     const bool gated = f.view->history_index() == base + 1;
 
-    f.tools->setArtHistoryOptions(options);
+    f.tools->optionsFor<ArtHistoryGroup>(ToolId::ArtHistoryBrush)->set(options);
     f.tools->setForeground(foreground);
 
     ST_BEGIN("art_history_brush_tool");
@@ -574,10 +584,10 @@ int pictura::runBrushPresetPickerChecks(pictura::PicturaMainWindow& frame)
         return pictura::selfTest().fail(549, "brush preset picker fixture");
     }
     const BrushState brush(f.tools);
-    const int hardness = f.tools->brushHardness();
-    const int roundness = f.tools->brushRoundness();
-    const int angle = f.tools->brushTipAngle();
-    const int spacing = f.tools->brushSpacing();
+    const int hardness = f.tools->optionsFor<PaintOptions>(ToolId::Brush)->hardness();
+    const int roundness = f.tools->optionsFor<PaintOptions>(ToolId::Brush)->roundness();
+    const int angle = f.tools->optionsFor<PaintOptions>(ToolId::Brush)->tipAngle();
+    const int spacing = f.tools->optionsFor<PaintOptions>(ToolId::Brush)->spacing();
     const QColor foreground = f.tools->foreground();
 
     // Clicking the Eraser's tip button opens the picker with the default set.
@@ -598,12 +608,12 @@ int pictura::runBrushPresetPickerChecks(pictura::PicturaMainWindow& frame)
         auto* sizeSlider = picker->findChild<QSlider*>(QStringLiteral("brushPickerSizeSlider"));
         if (sizeSlider) {
             sizeSlider->setValue(scale::kSteps / 2);
-            slider = f.tools->brushSize() == 100 && tip->text() == QStringLiteral("100");
+            slider = f.tools->optionsFor<PaintOptions>(ToolId::Brush)->size() == 100 && tip->text() == QStringLiteral("100");
         }
         // "Spatter 24": a cluster of seven dabs scattered 150 % of the size.
         picker->choosePresetForTest(25);
-        const pictura::BrushDynamics d = f.tools->brushDynamics();
-        preset = f.tools->brushSize() == 24 && d.count == 7 && d.scatter == 150;
+        const pictura::BrushDynamics d = f.tools->optionsFor<PaintOptions>(ToolId::Brush)->dynamics();
+        preset = f.tools->optionsFor<PaintOptions>(ToolId::Brush)->size() == 24 && d.count == 7 && d.scatter == 150;
         picker->hide();
     }
 
@@ -623,11 +633,11 @@ int pictura::runBrushPresetPickerChecks(pictura::PicturaMainWindow& frame)
     }
 
     f.tools->setForeground(foreground);
-    f.tools->setBrushHardness(hardness);
-    f.tools->setBrushRoundness(roundness);
-    f.tools->setBrushTipAngle(angle);
-    f.tools->setBrushSpacing(spacing);
-    f.tools->setBrushDynamics(pictura::BrushDynamics{});
+    f.tools->optionsFor<PaintOptions>(ToolId::Brush)->setHardness(hardness);
+    f.tools->optionsFor<PaintOptions>(ToolId::Brush)->setRoundness(roundness);
+    f.tools->optionsFor<PaintOptions>(ToolId::Brush)->setTipAngle(angle);
+    f.tools->optionsFor<PaintOptions>(ToolId::Brush)->setSpacing(spacing);
+    f.tools->optionsFor<PaintOptions>(ToolId::Brush)->setDynamics(pictura::BrushDynamics{});
 
     ST_BEGIN("brush_preset_picker");
     ST_PASS("brush preset picker mapping=%d opened=%d slider=%d preset=%d scattered=%d",

@@ -142,6 +142,7 @@ GlyphsPanel::GlyphsPanel(QWidget* parent)
 void GlyphsPanel::setController(ToolController* controller)
 {
     controller_ = controller;
+    type_ = controller ? controller->optionsFor<TypeGroup>(ToolId::HorizontalType) : nullptr;
     if (controller_) {
         connect(controller_, &ToolController::typeOptionsChanged, this,
                 &GlyphsPanel::followTypeFont);
@@ -152,11 +153,11 @@ void GlyphsPanel::setController(ToolController* controller)
 void GlyphsPanel::followTypeFont()
 {
     // Browsing to a symbol font here should survive reaching for another tool.
-    if (!controller_ || familyChosenHere_) {
+    if (!type_ || familyChosenHere_) {
         return;
     }
     following_ = true;
-    family_->setCurrentFont(QFont(controller_->typeOptions().family));
+    family_->setCurrentFont(QFont(type_->get().family));
     following_ = false;
 }
 
@@ -176,10 +177,10 @@ void GlyphsPanel::chooseGlyph(QListWidgetItem* item)
     // The type has one font per layer: switch it to the glyph's family only
     // when the current one has nothing at this code point, rather than put an
     // empty box in the document.
-    TypeOptions o = controller_->typeOptions();
+    TypeOptions o = type_->get();
     if (!QFontMetrics(QFont(o.family)).inFontUcs4(code)) {
         o.family = family_->currentFont().family();
-        controller_->setTypeOptions(o);
+        type_->set(o);
     }
     controller_->insertText(text);
 }

@@ -134,7 +134,7 @@ private:
     void addStampPaintFields(QHBoxLayout* layout, QWidget* page);
     NumericField* addPercentField(QHBoxLayout* layout, QWidget* page, const QString& label,
                                   const QString& name, int value,
-                                  void (ToolController::*setter)(int));
+                                  std::function<void(int)> setter);
     static NumericFieldConfig numericConfig(double lo, double hi, double step, int decimals,
                                             const QString& suffix, bool popup,
                                             const QString& name, bool allowFractional = false);
@@ -148,6 +148,29 @@ private:
     void syncPerspectiveButtons();
 
     ToolController* controller_ = nullptr;
+    // The family option groups, resolved once from the handlers' ports; the
+    // pages write these directly (the group setters clamp and notify).
+    PaintOptions* paint_ = nullptr;
+    SelectionOptions* selection_ = nullptr;
+    CropOptions* crop_ = nullptr;
+    MoveGroup* move_ = nullptr;
+    EyedropperGroup* eyedropper_ = nullptr;
+    HealingGroup* healing_ = nullptr;
+    PatchGroup* patch_ = nullptr;
+    ContentAwareMoveGroup* contentAware_ = nullptr;
+    RedEyeGroup* redEye_ = nullptr;
+    ColorReplaceGroup* colorReplace_ = nullptr;
+    MixerGroup* mixer_ = nullptr;
+    StampGroup* stamp_ = nullptr;
+    EraserGroup* eraser_ = nullptr;
+    BackgroundEraseGroup* backgroundErase_ = nullptr;
+    MagicEraseGroup* magicErase_ = nullptr;
+    ArtHistoryGroup* artHistory_ = nullptr;
+    GradientGroup* gradient_ = nullptr;
+    BucketGroup* bucket_ = nullptr;
+    PenGroup* pen_ = nullptr;
+    ShapeGroup* shape_ = nullptr;
+    TypeGroup* type_ = nullptr;
     QStackedWidget* stack_ = nullptr;
     QToolButton* workspaceSwitcher_ = nullptr;
     BrushPresetPicker* brushPicker_ = nullptr;

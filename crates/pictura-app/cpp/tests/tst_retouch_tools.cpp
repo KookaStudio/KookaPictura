@@ -57,8 +57,8 @@ void RetouchToolsTest::blurTool()
         QFAIL("blur fixture");
     }
     const BrushState brush(f.tools);
-    f.tools->setBrushSize(12);
-    const pictura::RetouchOptions options = f.tools->retouchOptions(pictura::ToolId::Blur);
+    f.tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setSize(12);
+    const pictura::RetouchOptions options = f.tools->optionsFor<pictura::RetouchGroup>(pictura::ToolId::Blur)->get();
 
     frame.setActiveTool(pictura::ToolId::Blur);
     auto* mode = frame.findChild<QComboBox*>(QStringLiteral("optionsBlurMode"));
@@ -88,7 +88,7 @@ void RetouchToolsTest::blurTool()
     const bool nothing = f.view->history_index() == empty;
     sampleAll->setChecked(true);
     f.drag({QPointF(20, 10), QPointF(20, 30)});
-    const bool sampled = f.tools->retouchOptions(pictura::ToolId::Blur).sampleAllLayers && f.committedOnce(empty, "Blur");
+    const bool sampled = f.tools->optionsFor<pictura::RetouchGroup>(pictura::ToolId::Blur)->get().sampleAllLayers && f.committedOnce(empty, "Blur");
     sampleAll->setChecked(false);
     strength->setValue(options.strength);
 
@@ -110,8 +110,8 @@ void RetouchToolsTest::sharpenTool()
         QFAIL("sharpen fixture");
     }
     const BrushState brush(f.tools);
-    f.tools->setBrushSize(12);
-    const pictura::RetouchOptions options = f.tools->retouchOptions(pictura::ToolId::Sharpen);
+    f.tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setSize(12);
+    const pictura::RetouchOptions options = f.tools->optionsFor<pictura::RetouchGroup>(pictura::ToolId::Sharpen)->get();
 
     frame.setActiveTool(pictura::ToolId::Sharpen);
     auto* mode = frame.findChild<QComboBox*>(QStringLiteral("optionsSharpenMode"));
@@ -150,8 +150,8 @@ void RetouchToolsTest::smudgeTool()
         QFAIL("smudge fixture");
     }
     const BrushState brush(f.tools);
-    f.tools->setBrushSize(12);
-    const pictura::RetouchOptions options = f.tools->retouchOptions(pictura::ToolId::Smudge);
+    f.tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setSize(12);
+    const pictura::RetouchOptions options = f.tools->optionsFor<pictura::RetouchGroup>(pictura::ToolId::Smudge)->get();
     const QColor foreground = f.tools->foreground();
 
     frame.setActiveTool(pictura::ToolId::Smudge);
@@ -206,7 +206,7 @@ void RetouchToolsTest::dodgeTool()
         QFAIL("dodge fixture");
     }
     const BrushState brush(f.tools);
-    f.tools->setBrushSize(12);
+    f.tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setSize(12);
 
     frame.setActiveTool(pictura::ToolId::Dodge);
     auto* range = frame.findChild<QComboBox*>(QStringLiteral("optionsDodgeRange"));
@@ -240,7 +240,7 @@ void RetouchToolsTest::burnTool()
     Fixture f(frame, seed, QStringLiteral("pictura_burn_seed"));
     QVERIFY2(f.ok(), "burn fixture");
     const BrushState brush(f.tools);
-    f.tools->setBrushSize(12);
+    f.tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setSize(12);
 
     frame.setActiveTool(pictura::ToolId::Burn);
     auto* range = frame.findChild<QComboBox*>(QStringLiteral("optionsBurnRange"));
@@ -271,8 +271,8 @@ void RetouchToolsTest::spongeTool()
     Fixture f(frame, seed, QStringLiteral("pictura_sponge_seed"));
     QVERIFY2(f.ok(), "sponge fixture");
     const BrushState brush(f.tools);
-    f.tools->setBrushSize(12);
-    const pictura::ToneOptions options = f.tools->toneOptions(pictura::ToolId::Sponge);
+    f.tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setSize(12);
+    const pictura::ToneOptions options = f.tools->optionsFor<pictura::ToneGroup>(pictura::ToolId::Sponge)->get();
 
     frame.setActiveTool(pictura::ToolId::Sponge);
     auto* mode = frame.findChild<QComboBox*>(QStringLiteral("optionsSpongeMode"));
@@ -296,7 +296,7 @@ void RetouchToolsTest::spongeTool()
 
     mode->setCurrentIndex(1);
     f.drag({QPointF(5, 32), QPointF(15, 32), QPointF(25, 32), QPointF(35, 32)});
-    QVERIFY2(f.tools->toneOptions(pictura::ToolId::Sponge).spongeMode == 1, "Saturate not set");
+    QVERIFY2(f.tools->optionsFor<pictura::ToneGroup>(pictura::ToolId::Sponge)->get().spongeMode == 1, "Saturate not set");
     QVERIFY2(spread(20, 32) > 120, "Saturate lifted nothing");
     mode->setCurrentIndex(options.spongeMode);
 }

@@ -23,9 +23,15 @@ namespace {
 // expensive region build.
 class MoveToolHandler : public ToolHandler {
 public:
-    void onActivate(ToolContext& ctx) override { warm(ctx); }
+    explicit MoveToolHandler(std::shared_ptr<MoveGroup> move)
+        : move_(std::move(move))
+    {
+        addOptions(move_.get());
+    }
 
-    void onDeactivate(ToolContext&) override
+    void onActivate(ToolServices& ctx) override { warm(ctx); }
+
+    void onDeactivate(ToolServices&) override
     {
         warmView_ = nullptr;
         warmBase_ = QImage();
@@ -36,7 +42,7 @@ public:
         pressed_ = false;
     }
 
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         PictureView* v = ctx.view();
         if (!v) {
@@ -82,7 +88,7 @@ public:
         return true;
     }
 
-    void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         // ponytail: an Alt clone already inserted into the source stays a local
         // move; CS6 would carry it across without the clone.
@@ -120,7 +126,7 @@ public:
         }
     }
 
-    void onRelease(ToolContext& ctx, const QPointF&, Qt::KeyboardModifiers) override
+    void onRelease(ToolServices& ctx, const QPointF&, Qt::KeyboardModifiers) override
     {
         pressed_ = false;
         if (!ctx.dragging()) {
@@ -145,7 +151,7 @@ private:
     // The pointer reached another document's tab: drop the in-canvas move and
     // carry the layer on as a Layers-panel drag, which the frame's drop router
     // copies into whichever document takes the drop.
-    void dragToDocument(ToolContext& ctx)
+    void dragToDocument(ToolServices& ctx)
     {
         const bool moving = ctx.dragging();
         ctx.setDragging(false);
@@ -171,7 +177,7 @@ private:
         drag->exec(Qt::CopyAction);
     }
 
-    void warm(ToolContext& ctx)
+    void warm(ToolServices& ctx)
     {
         PictureView* v = ctx.view();
         if (!v) {
@@ -199,13 +205,14 @@ private:
     bool duplicated_ = false;
     // The button went down with no selection: a drag may leave for a tab.
     bool pressed_ = false;
+    std::shared_ptr<MoveGroup> move_;
 };
 
 } // namespace
 
-std::unique_ptr<ToolHandler> makeMoveToolHandler()
+std::unique_ptr<ToolHandler> makeMoveToolHandler(std::shared_ptr<MoveGroup> move)
 {
-    return std::make_unique<MoveToolHandler>();
+    return std::make_unique<MoveToolHandler>(std::move(move));
 }
 
 } // namespace pictura

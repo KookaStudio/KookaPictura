@@ -122,12 +122,12 @@ QWidget* OptionsBar::buildShapePage(ToolId id)
     layout->setContentsMargins(4, 2, 4, 2);
     layout->addWidget(toolButton(id, page));
 
-    const ShapeOptions initial = controller_ ? controller_->shapeOptions() : ShapeOptions{};
+    const ShapeOptions initial = controller_ ? shape_->get() : ShapeOptions{};
     const ShapeUpdate update = [this](const std::function<void(ShapeOptions&)>& edit) {
         if (controller_) {
-            ShapeOptions o = controller_->shapeOptions();
+            ShapeOptions o = shape_->get();
             edit(o);
-            controller_->setShapeOptions(o);
+            shape_->set(o);
         }
     };
     // Re-reads, run with the page's signals blocked on every shapeOptionsChanged.
@@ -243,7 +243,7 @@ QWidget* OptionsBar::buildShapePage(ToolId id)
     layout->addStretch(1);
 
     const auto syncAll = [this, page, syncs]() {
-        const ShapeOptions o = controller_ ? controller_->shapeOptions() : ShapeOptions{};
+        const ShapeOptions o = controller_ ? shape_->get() : ShapeOptions{};
         std::vector<std::unique_ptr<QSignalBlocker>> blocks;
         for (QObject* child : page->findChildren<QObject*>()) {
             blocks.push_back(std::make_unique<QSignalBlocker>(child));
@@ -288,7 +288,7 @@ void OptionsBar::buildShapeAppearance(QWidget* page, QHBoxLayout* layout,
             update([fill](ShapeOptions& o) { (fill ? o.fillEnabled : o.strokeEnabled) = false; });
         });
         connect(solid, &QAction::triggered, this, [this, update, fill, button]() {
-            const ShapeOptions o = controller_ ? controller_->shapeOptions() : ShapeOptions{};
+            const ShapeOptions o = controller_ ? shape_->get() : ShapeOptions{};
             QColor start = o.strokeColor;
             if (fill) {
                 start = o.fillColor.isValid() || !controller_ ? o.fillColor

@@ -12,6 +12,25 @@ Snapshot for resuming after a context break. Update after each milestone.
   contains reproduced Adobe Help prose or the old wording.
 - Toolchain: Rust 1.98 (`rust-toolchain.toml`), system Qt **6.11.1**, cxx-qt
   **0.10.0**, wgpu **30.0.1**, lcms2 **6.2.0** (system Little CMS 2.19).
+- **Tool options seam, pen gesture undo, and the Delete key** (#357, #307,
+  #304; archived `tool-options-handler-seam`, `pen-gesture-undo`,
+  `delete-key-layer`; new specs `tools/pen-edit-session`, `ui/delete-key`):
+  `ToolContext` (95 pure virtuals) and `tool_context.h` (399 LOC) are deleted.
+  Option state lives in per-family groups in `tool_options.h` (Paint,
+  Selection, Crop, CloneSource explicit; the rest `ToolOption<T>`), created by
+  `ToolController`, owned by the handlers that share them, and resolved typed
+  by `controller_->optionsFor<T>(id)` through `ToolHandler::optionGroups()`;
+  `options_bar*.cpp` and the brush/clone/glyph/paths panels write the groups,
+  the controller keeps only signal wiring and its own reads, and `tools.cpp`
+  shrank 1198→991. A live Pen-group gesture is now one modal session step:
+  Ctrl+Z cancels the in-progress anchor/handle/freeform gesture (restoring the
+  pre-press path via `paths.rs::path_gesture_*`) before the document history,
+  and the release records nothing. Delete/Backspace route through window
+  shortcuts (`handleDeleteKey`): a type session or editable field keeps the
+  key, a tool hook consumes it, a pixel selection clears (Edit > Clear), else
+  the selected layer(s) delete — regardless of focus. Ceiling (`ponytail:`):
+  a cancelled gesture is reverted from an in-view path backup, not a replayed
+  inverse edit.
 - Oracles installed for tests: `psd-tools` 1.19, ImageMagick 7.1.2, `magick`.
 - Test suite: **3004 tests, 3004 passed, 21 skipped, 0 failed** from
   `cargo nextest run --workspace` (the local ImageMagick fixture mismatch,

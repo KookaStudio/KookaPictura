@@ -63,7 +63,7 @@ void CropSessionTest::sessionRecordsAndWalksSteps()
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
-    tools->setCropClassicMode(true);  // boxless start: draw a box
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(true);  // boxless start: draw a box
     frame.setActiveTool(pictura::ToolId::Crop);
     QVERIFY2(!tools->canToolUndo(), "a fresh box is the session base");
 
@@ -119,7 +119,7 @@ void CropSessionTest::commandUndoReachesTheSession()
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
-    tools->setCropClassicMode(true);  // boxless start: draw a box
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(true);  // boxless start: draw a box
     frame.setActiveTool(pictura::ToolId::Crop);
     drag(canvas, QPointF(0, 0), QPointF(30, 30));
     drag(canvas, QPointF(30, 30), QPointF(20, 20));
@@ -153,9 +153,9 @@ void CropSessionTest::cancelReturnsToInitMode()
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
-    tools->setCropClassicMode(true);
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(true);
     frame.setActiveTool(pictura::ToolId::Crop);
-    tools->setCropRatio(1.0);
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setRatio(1.0);
     drag(canvas, QPointF(40, 40), QPointF(30, 20));
     QVERIFY(tools->hasPendingCrop());
 

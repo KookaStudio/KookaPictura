@@ -137,12 +137,12 @@ QWidget* OptionsBar::buildGradientPage(ToolId id)
     layout->addWidget(toolButton(id, page));
 
     const GradientOptions initial =
-        controller_ ? controller_->gradientOptions() : GradientOptions{};
+        controller_ ? gradient_->get() : GradientOptions{};
     const auto update = [this](auto edit) {
         if (controller_) {
-            GradientOptions o = controller_->gradientOptions();
+            GradientOptions o = gradient_->get();
             edit(o);
-            controller_->setGradientOptions(o);
+            gradient_->set(o);
         }
     };
 
@@ -245,12 +245,12 @@ QWidget* OptionsBar::buildPaintBucketPage(ToolId id)
     layout->setContentsMargins(4, 2, 4, 2);
     layout->addWidget(toolButton(id, page));
 
-    const BucketOptions initial = controller_ ? controller_->bucketOptions() : BucketOptions{};
+    const BucketOptions initial = controller_ ? bucket_->get() : BucketOptions{};
     const auto update = [this](auto edit) {
         if (controller_) {
-            BucketOptions o = controller_->bucketOptions();
+            BucketOptions o = bucket_->get();
             edit(o);
-            controller_->setBucketOptions(o);
+            bucket_->set(o);
         }
     };
 

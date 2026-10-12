@@ -3,6 +3,8 @@
 #include <QtGui/QImage>
 #include <QtWidgets/QWidget>
 
+#include "tool_options.h"
+
 class QCheckBox;
 class QLabel;
 
@@ -33,6 +35,7 @@ public:
 
 private:
     ToolController* controller_ = nullptr;
+    PaintOptions* paint_ = nullptr;
     NumericField* size_ = nullptr;
     NumericField* angle_ = nullptr;
     NumericField* roundness_ = nullptr;

@@ -82,9 +82,9 @@ void CharacterParagraphPanelsTest::showFrame()
 QString CharacterParagraphPanelsTest::makeTypeLayer(Fixture& f)
 {
     window_->setActiveTool(pictura::ToolId::HorizontalType);
-    pictura::TypeOptions o = f.tools->typeOptions();
+    pictura::TypeOptions o = f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get();
     o.size = 30.0;
-    f.tools->setTypeOptions(o);
+    f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(o);
     f.drag({QPointF(10, 60)});
     QTest::keyClicks(f.canvas, QStringLiteral("Hello"));
     QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
@@ -99,7 +99,7 @@ void CharacterParagraphPanelsTest::characterPanelReflectsAndEdits()
     showFrame();
 
     const QColor foreground = f.tools->foreground();
-    const pictura::TypeOptions saved = f.tools->typeOptions();
+    const pictura::TypeOptions saved = f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get();
     const QString path = makeTypeLayer(f);
     QVERIFY2(!path.isEmpty(), "a type layer");
 
@@ -136,7 +136,7 @@ void CharacterParagraphPanelsTest::characterPanelReflectsAndEdits()
     QVERIFY2(f.committedOnce(toggleBase, "Edit Type Layer"), "one toggle state");
     QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).underline, true);
 
-    f.tools->setTypeOptions(saved);
+    f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(saved);
     f.tools->setForeground(foreground);
 }
 
@@ -171,7 +171,7 @@ void CharacterParagraphPanelsTest::paragraphPanelReflectsAndEdits()
     QVERIFY2(f.ok(), "type fixture");
     showFrame();
 
-    const pictura::TypeOptions saved = f.tools->typeOptions();
+    const pictura::TypeOptions saved = f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get();
     const QString path = makeTypeLayer(f);
     QVERIFY2(!path.isEmpty(), "a type layer");
 
@@ -201,7 +201,7 @@ void CharacterParagraphPanelsTest::paragraphPanelReflectsAndEdits()
     QVERIFY2(f.committedOnce(alignBase, "Edit Type Layer"), "one alignment state");
     QCOMPARE(pictura::type_api::layerParagraphSetting(*f.view, path).justify, 2);
 
-    f.tools->setTypeOptions(saved);
+    f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(saved);
 }
 
 void CharacterParagraphPanelsTest::menusTogglePanels()

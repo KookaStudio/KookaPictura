@@ -59,19 +59,21 @@ int shapeKind(ToolId id)
 
 class ShapeToolHandler : public ToolHandler {
 public:
-    explicit ShapeToolHandler(ToolId id)
+    ShapeToolHandler(ToolId id, std::shared_ptr<ShapeGroup> shape)
         : id_(id)
         , kind_(shapeKind(id))
+        , shape_(std::move(shape))
     {
+        addOptions(shape_.get());
     }
 
-    void onActivate(ToolContext& ctx) override
+    void onActivate(ToolServices& ctx) override
     {
         syncFromLayer(ctx);
         refreshOverlay(ctx, {});
     }
 
-    void onDeactivate(ToolContext& ctx) override
+    void onDeactivate(ToolServices& ctx) override
     {
         ctx.setDragging(false);
         if (ImageView* canvas = ctx.canvas()) {
@@ -79,7 +81,7 @@ public:
         }
     }
 
-    void onDocumentRefreshed(ToolContext& ctx) override
+    void onDocumentRefreshed(ToolServices& ctx) override
     {
         if (!ctx.dragging()) {
             syncFromLayer(ctx);
@@ -87,7 +89,7 @@ public:
         }
     }
 
-    void onOptionsChanged(ToolContext& ctx) override
+    void onOptionsChanged(ToolServices& ctx) override
     {
         if (!ctx.dragging()) {
             if (!syncing_) {
@@ -97,7 +99,7 @@ public:
         }
     }
 
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         PictureView* v = ctx.view();
         if (!v || !v->has_document()) {
@@ -108,14 +110,14 @@ public:
         return true;
     }
 
-    void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         if (ctx.dragging()) {
             refreshOverlay(ctx, outlinePath(dragSpec(ctx, imagePos, mods)));
         }
     }
 
-    void onRelease(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    void onRelease(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         if (!ctx.dragging()) {
             return;
@@ -149,9 +151,9 @@ public:
 
 private:
     // The spec's options from the options bar; the geometry is the caller's.
-    ShapeSpec baseSpec(ToolContext& ctx) const
+    ShapeSpec baseSpec(ToolServices& ctx) const
     {
-        const ShapeOptions o = ctx.shapeOptions();
+        const ShapeOptions o = shape_->get();
         ShapeSpec spec{};
         spec.kind = kind_;
         spec.r_tl = spec.r_tr = spec.r_br = spec.r_bl = o.radius;
@@ -180,20 +182,20 @@ private:
     // The tools whose geometry gear sizes a box (not the Polygon or Line).
     bool boxed() const { return id_ != ToolId::Polygon && id_ != ToolId::Line; }
 
-    bool fixedSize(ToolContext& ctx) const
+    bool fixedSize(ToolServices& ctx) const
     {
-        return boxed() && ctx.shapeOptions().geometry == 2;
+        return boxed() && shape_->get().geometry == 2;
     }
 
-    static QColor fillColor(ToolContext& ctx)
+    QColor fillColor(ToolServices& ctx) const
     {
-        const QColor fill = ctx.shapeOptions().fillColor;
+        const QColor fill = shape_->get().fillColor;
         return fill.isValid() ? fill : ctx.foreground();
     }
 
-    ShapeSpec dragSpec(ToolContext& ctx, const QPointF& end, Qt::KeyboardModifiers mods) const
+    ShapeSpec dragSpec(ToolServices& ctx, const QPointF& end, Qt::KeyboardModifiers mods) const
     {
-        const ShapeOptions o = ctx.shapeOptions();
+        const ShapeOptions o = shape_->get();
         ShapeSpec spec = baseSpec(ctx);
         if (fixedSize(ctx)) {
             // Fixed Size: the box keeps its size and follows the pointer.
@@ -235,9 +237,9 @@ private:
     // The Create dialog, seeded with the last shape's size and the options
     // bar's radius and sides the first time; the shape's top-left corner (or
     // centre) goes at the click.
-    void createAtClick(ToolContext& ctx, PictureView& v)
+    void createAtClick(ToolServices& ctx, PictureView& v)
     {
-        const ShapeOptions o = ctx.shapeOptions();
+        const ShapeOptions o = shape_->get();
         if (!dialogSeeded_) {
             values_.radii.fill(o.radius);
             values_.sides = o.sides;
@@ -264,10 +266,10 @@ private:
         land(ctx, v, spec);
     }
 
-    bool land(ToolContext& ctx, PictureView& v, const ShapeSpec& spec)
+    bool land(ToolServices& ctx, PictureView& v, const ShapeSpec& spec)
     {
         const std::uint32_t color = fillColor(ctx).rgba();
-        switch (ctx.shapeOptions().mode) {
+        switch (shape_->get().mode) {
         case 1:
             return shape_add_path(v, spec);
         case 2:
@@ -287,7 +289,7 @@ private:
         }
     }
 
-    static void reportRefusal(ToolContext& ctx, PictureView& v)
+    static void reportRefusal(ToolServices& ctx, PictureView& v)
     {
         if (activePixelLocked(&v)) {
             ctx.refused(QObject::tr("Could not fill: the layer's pixels are locked."));
@@ -300,15 +302,15 @@ private:
 
     // The active shape layer's size, fill, and stroke into the options, so the
     // bar shows them; marked so the change is not applied straight back.
-    void syncFromLayer(ToolContext& ctx)
+    void syncFromLayer(ToolServices& ctx)
     {
         PictureView* v = ctx.view();
         if (!v || !v->has_document()) {
             return;
         }
-        path_set_layer_target(*v, ctx.shapeOptions().mode != 1);
+        path_set_layer_target(*v, shape_->get().mode != 1);
         const ::rust::Vec<double> info = shape_active(*v);
-        ShapeOptions o = ctx.shapeOptions();
+        ShapeOptions o = shape_->get();
         const ShapeOptions before = o;
         if (info.size() == 8) {
             o.activeWidth = info[0];
@@ -331,14 +333,14 @@ private:
             || o.strokeEnabled != before.strokeEnabled || o.strokeColor != before.strokeColor
             || o.strokeWidth != before.strokeWidth || o.strokeAlign != before.strokeAlign) {
             syncing_ = true;
-            ctx.setShapeOptions(o);
+            shape_->set(o);
             syncing_ = false;
         }
     }
 
     // An options-bar edit of the fill, stroke, or W / H restyles or resizes
     // the active shape layer; each differing aspect is one history state.
-    void applyToLayer(ToolContext& ctx)
+    void applyToLayer(ToolServices& ctx)
     {
         PictureView* v = ctx.view();
         if (!v || !v->has_document()) {
@@ -348,7 +350,7 @@ private:
         if (info.size() != 8) {
             return;
         }
-        const ShapeOptions o = ctx.shapeOptions();
+        const ShapeOptions o = shape_->get();
         const QRgb fill = fillColor(ctx).rgba();
         if (o.fillEnabled != (info[2] != 0.0) || (o.fillEnabled && fill != QRgb(info[3]))) {
             shape_set_active_fill(*v, o.fillEnabled, fill);
@@ -368,7 +370,7 @@ private:
 
     // The live outline over either the Work Path it joins (Path mode) or the
     // active shape layer's outline with its anchors.
-    static void refreshOverlay(ToolContext& ctx, const QPainterPath& outline)
+    void refreshOverlay(ToolServices& ctx, const QPainterPath& outline)
     {
         ImageView* canvas = ctx.canvas();
         if (!canvas) {
@@ -377,7 +379,7 @@ private:
         PictureView* v = ctx.view();
         ImageView::PathOverlay overlay;
         if (v && v->has_document()) {
-            const bool pathMode = ctx.shapeOptions().mode == 1;
+            const bool pathMode = shape_->get().mode == 1;
             path_set_layer_target(*v, !pathMode);
             if (pathMode) {
                 overlay = workPathOverlay(*v, -2);
@@ -396,13 +398,14 @@ private:
     CreateShapeValues values_;
     bool dialogSeeded_ = false;
     bool syncing_ = false;
+    std::shared_ptr<ShapeGroup> shape_;
 };
 
 } // namespace
 
-std::unique_ptr<ToolHandler> makeShapeToolHandler(ToolId id)
+std::unique_ptr<ToolHandler> makeShapeToolHandler(ToolId id, std::shared_ptr<ShapeGroup> shape)
 {
-    return std::make_unique<ShapeToolHandler>(id);
+    return std::make_unique<ShapeToolHandler>(id, std::move(shape));
 }
 
 } // namespace pictura

@@ -33,11 +33,11 @@ int pictura::runMagneticLassoChecks(pictura::PicturaMainWindow& frame)
     const int doc = frame.activeDocumentIndex();
     frame.setActiveTool(pictura::ToolId::MagneticLasso);
     const bool active = tools->activeTool() == pictura::ToolId::MagneticLasso;
-    tools->setCombineMode(pictura::SelectionMode::New);
-    tools->setFeather(0.0);
-    tools->setMagneticWidth(6);
-    tools->setMagneticContrast(10);
-    tools->setMagneticFrequency(0);
+    tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setCombineMode(pictura::SelectionMode::New);
+    tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setFeather(0.0);
+    tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setMagneticWidth(6);
+    tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setMagneticContrast(10);
+    tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setMagneticFrequency(0);
     const auto click = [canvas](qreal x, qreal y) {
         canvas->mouseMoved(QPointF(x, y));
         canvas->mousePressed(QPointF(x, y), Qt::LeftButton, int(Qt::NoModifier));
@@ -103,7 +103,7 @@ int pictura::runMagneticLassoChecks(pictura::PicturaMainWindow& frame)
     // Frequency: at 100 a 15 px wire fastens itself (two deletes still leave the
     // trace open), at 0 it never does (the second delete finds nothing).
     const auto deletesUntilClosed = [&](int frequency) {
-        tools->setMagneticFrequency(frequency);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setMagneticFrequency(frequency);
         click(12, 12);
         canvas->mouseMoved(QPointF(12, 27));
         int deletes = 0;
@@ -117,14 +117,14 @@ int pictura::runMagneticLassoChecks(pictura::PicturaMainWindow& frame)
     const bool frequency = denseDeletes > sparseDeletes && sparseDeletes == 1;
 
     // `]` / `[` step Width by 1 px and the options-bar field follows.
-    tools->setMagneticWidth(10);
+    tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setMagneticWidth(10);
     const bool up = tools->applyBrushShortcut(Qt::Key_BracketRight, 0, false)
-        && tools->magneticWidth() == 11;
+        && tools->optionsFor<SelectionOptions>(ToolId::Marquee)->magneticWidth() == 11;
     auto* widthField = frame.findChild<pictura::NumericField*>(
         QStringLiteral("optionsMagneticWidth"));
     const bool fieldFollows = widthField && qRound(widthField->value()) == 11;
     const bool down = tools->applyBrushShortcut(Qt::Key_BracketLeft, 0, false)
-        && tools->magneticWidth() == 10;
+        && tools->optionsFor<SelectionOptions>(ToolId::Marquee)->magneticWidth() == 10;
     const bool width = up && down && fieldFollows;
 
     ST_BEGIN("magnetic_lasso");
@@ -132,7 +132,7 @@ int pictura::runMagneticLassoChecks(pictura::PicturaMainWindow& frame)
             "sparse=%d width=%d",
             active ? 1 : 0, snapped ? 1 : 0, peeled ? 1 : 0, escaped ? 1 : 0,
             clickDeselects ? 1 : 0, denseDeletes, sparseDeletes, width ? 1 : 0);
-    tools->setMagneticFrequency(57);
+    tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setMagneticFrequency(57);
     frame.setActiveTool(pictura::ToolId::Move);
     frame.closeDocument(doc, false);
     QFile::remove(seedPath);

@@ -52,7 +52,7 @@ void CropSnapTest::handleSnapsToTheCanvasEdge()
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
-    tools->setCropClassicMode(false);  // Modern: full-canvas preview
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(false);  // Modern: full-canvas preview
     frame.setActiveTool(pictura::ToolId::Crop);
     // Adopt the full-canvas preview as the active box.
     drag(canvas, QPointF(40, 40), QPointF(40, 40));
@@ -78,7 +78,7 @@ void CropSnapTest::handleBeyondTheThresholdDoesNotSnap()
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
-    tools->setCropClassicMode(false);  // Modern: full-canvas preview
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(false);  // Modern: full-canvas preview
     frame.setActiveTool(pictura::ToolId::Crop);
     // Adopt the preview, then drag its bottom-right handle well past the
     // threshold from both 40 and 0, so it does not snap.

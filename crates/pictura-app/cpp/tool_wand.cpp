@@ -13,7 +13,13 @@ namespace {
 
 class MagicWandHandler : public ToolHandler {
 public:
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    explicit MagicWandHandler(std::shared_ptr<SelectionOptions> selection)
+        : selection_(std::move(selection))
+    {
+        addOptions(selection_.get());
+    }
+
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         PictureView* v = ctx.view();
         if (!v) {
@@ -21,18 +27,27 @@ public:
         }
         ctx.setDragMode(ctx.resolveSelectionMode(mods, v->has_selection()));
         const bool committed = v->magic_wand(qRound(imagePos.x()), qRound(imagePos.y()),
-                                             ctx.tolerance(), ctx.contiguous(),
+                                             selection_->tolerance(), selection_->contiguous(),
                                              selectionModeString(ctx.dragMode()));
         if (committed) {
             ctx.emitSelectionCommitted();
         }
         return true;
     }
+
+private:
+    std::shared_ptr<SelectionOptions> selection_;
 };
 
 class QuickSelectionHandler : public ToolHandler {
 public:
-    bool onPress(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    explicit QuickSelectionHandler(std::shared_ptr<SelectionOptions> selection)
+        : selection_(std::move(selection))
+    {
+        addOptions(selection_.get());
+    }
+
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         PictureView* v = ctx.view();
         if (!v) {
@@ -41,12 +56,12 @@ public:
         ctx.setDragMode(ctx.resolveSelectionMode(mods, v->has_selection()));
         ctx.setDragging(true);
         ctx.setDragCommitted(v->quick_select(qRound(imagePos.x()), qRound(imagePos.y()),
-                                             ctx.tolerance(),
+                                             selection_->tolerance(),
                                              selectionModeString(ctx.dragMode())));
         return true;
     }
 
-    void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         if (!ctx.dragging()) {
             return;
@@ -55,13 +70,13 @@ public:
         if (!v) {
             return;
         }
-        if (v->quick_select(qRound(imagePos.x()), qRound(imagePos.y()), ctx.tolerance(),
+        if (v->quick_select(qRound(imagePos.x()), qRound(imagePos.y()), selection_->tolerance(),
                             selectionModeString(ctx.dragMode()))) {
             ctx.setDragCommitted(true);
         }
     }
 
-    void onRelease(ToolContext& ctx, const QPointF&, Qt::KeyboardModifiers) override
+    void onRelease(ToolServices& ctx, const QPointF&, Qt::KeyboardModifiers) override
     {
         if (!ctx.dragging()) {
             return;
@@ -74,18 +89,22 @@ public:
             ctx.emitSelectionCommitted();
         }
     }
+
+private:
+    std::shared_ptr<SelectionOptions> selection_;
 };
 
 } // namespace
 
-std::unique_ptr<ToolHandler> makeMagicWandToolHandler()
+std::unique_ptr<ToolHandler> makeMagicWandToolHandler(std::shared_ptr<SelectionOptions> selection)
 {
-    return std::make_unique<MagicWandHandler>();
+    return std::make_unique<MagicWandHandler>(std::move(selection));
 }
 
-std::unique_ptr<ToolHandler> makeQuickSelectionToolHandler()
+std::unique_ptr<ToolHandler> makeQuickSelectionToolHandler(
+    std::shared_ptr<SelectionOptions> selection)
 {
-    return std::make_unique<QuickSelectionHandler>();
+    return std::make_unique<QuickSelectionHandler>(std::move(selection));
 }
 
 } // namespace pictura
