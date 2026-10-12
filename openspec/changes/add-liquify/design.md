@@ -10,7 +10,10 @@
 - **Dabs.** Ported from photocraft's `LiquifyField`: a stroke dabs every fifth
   of the brush radius; each node within the radius takes
   `k = pressure × falloff × (1 − freeze)`, falloff
-  `(1 − density) + density·(1 − t²)²`. Every tool is "where does the new
+  `(1 − density)·core + density·(1 − t²)²` where `core` is flat to 85 % of
+  the radius and smoothsteps to zero at the rim (photocraft's
+  `(1 − density) + …` stops at `1 − density` on the rim, a step every dab
+  repeats into a jagged ring). Every tool is "where does the new
   output at `p` come from in the current output": Forward Warp `p − kΔ`, Push
   Left `p` plus Δ turned 90° (Alt: the other way), Twirl a rotation by
   `±0.12·k·rate` about the centre, Pucker/Bloat a scaling by `1 ± 0.06·k·rate`.
@@ -41,11 +44,14 @@
   the layer bit-identical. A mesh of another size is stretched to fit.
 - **Alpha.** `filter_preserves_opacity` lists Liquify, so the shared
   unlocked-layer pass runs the same warp over the alpha plane.
-- **Preview.** `LiquifyProxy` box-reduces the layer by a whole factor to at
-  most 3072 px, premultiplied, and renders proxy rectangles with a bilinear
-  mesh and bilinear source; frozen areas are tinted at half strength when
-  Show Mask is on. A dab re-renders only its rectangle and the C++ canvas
-  paints that patch in. *(approximation below 100 %; the commit is exact)*
+- **Preview.** `LiquifySource` shares the layer's full-resolution planes and
+  renders the dialog's view at screen (device) resolution: magnified, each
+  screen pixel samples the commit's Catmull-Rom mesh and Catmull-Rom source,
+  so a zoomed-in preview is smooth and matches OK; between 50 % and 100 % it
+  is bilinear; minified past 2:1 it reads a lazily built box-halved level.
+  Frozen areas are tinted at half strength when Show Mask is on. A dab
+  re-renders only the view pixels over its rectangle; pan and zoom re-render
+  the view.
 
 ## App
 
@@ -60,7 +66,9 @@
 - **Dialog.** `LiquifyDialog`: tool column (Basic: Forward Warp, Reconstruct,
   Pucker, Bloat, Push Left, Hand, Zoom; Advanced adds Twirl, Mirror,
   Turbulence, Freeze, Thaw), the canvas with a zoom row, and the options
-  column. Shortcuts W R C S B O X T F D H Z; Mirror takes X so M can be Load
+  column. It opens at 100 %, centred; a right click with the Zoom tool (or on
+  its button) offers CS6's levels 6–1600 %, Actual Pixels, Fit in View (never
+  past 100 %) and Fit on Screen. Shortcuts W R C S B O X T F D H Z; Mirror takes X so M can be Load
   Last Mesh (the spec's reading). `[` / `]` resize the brush by 10 %. Alt
   reverses a stroke; Shift-click draws a straight line from the last click.
   The tool glyphs are drawn with QPainter in the palette's text colour (the

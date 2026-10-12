@@ -18,13 +18,14 @@ Apache-2.0) has a displacement-field Liquify whose design this ports.
   current output at `q = M(p)`, so `d' = q + d(q) - p`), Kooka's own Mirror and
   Turbulence, Reconstruct / Restore All / Mask All / None / Invert All, a
   scale-to-fit, the commit resampler `liquify` (Catmull-Rom mesh and source,
-  untouched rows copied), and `LiquifyProxy` for the dialog preview.
+  untouched rows copied), and `LiquifySource`, which renders the dialog's view
+  at screen resolution from the full-resolution layer.
   `Filter::Liquify { mesh }` dispatches to it.
 - `pictura-render` lists Liquify in `filter_preserves_opacity` (the alpha
   plane is warped with the colour).
 - `pictura-app` adds a `filter_tools/liquify.rs` bridge: one dialog session
-  over the active layer (a reduced premultiplied preview re-rendered per dab
-  rectangle) and a store of kept meshes. The `liquify` kind is one slot, the
+  over the active layer (its view rendered at screen resolution, re-rendered
+  per dab rectangle) and a store of kept meshes. The `liquify` kind is one slot, the
   kept mesh's id, so OK commits through the ordinary filter path (one history
   state, Last Filter, Last Filter Settings). The C++ `LiquifyDialog` /
   `LiquifyCanvas` give CS6's workspace.
