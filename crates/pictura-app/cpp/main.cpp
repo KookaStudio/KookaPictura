@@ -146,11 +146,16 @@ int main(int argc, char* argv[])
     std::optional<QTemporaryDir> selfTestStateDir;
     if (selfTest) {
         selfTestStateDir.emplace();
-        if (selfTestStateDir->isValid()) {
-            qputenv("XDG_STATE_HOME", selfTestStateDir->path().toUtf8());
-        } else {
-            selfTestStateDir.reset();
+        if (!selfTestStateDir->isValid()) {
+            // Never fall back to the real store: a self-test run must not write
+            // the user's session.
+            std::fprintf(stderr,
+                         "pictura self-test: FAIL core state_home_temp_dir 199 "
+                         "cannot create the self-test state dir\n");
+            std::fflush(stderr);
+            return 199;
         }
+        qputenv("XDG_STATE_HOME", selfTestStateDir->path().toUtf8());
     }
 
     if (interopProbe) {

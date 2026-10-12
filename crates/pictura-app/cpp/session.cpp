@@ -1,6 +1,7 @@
 #include "session.h"
 
 #include <QtCore/QByteArray>
+#include <QtCore/QDateTime>
 #include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
@@ -9,6 +10,7 @@
 #include <QtCore/QJsonObject>
 #include <QtCore/QJsonParseError>
 #include <QtCore/QSaveFile>
+#include <QtCore/QUuid>
 
 namespace pictura {
 
@@ -17,6 +19,18 @@ namespace {
 // The state file is tiny JSON; anything larger is corrupt or hostile, so it is
 // not read into memory.
 constexpr qint64 kMaxSessionBytes = 1024 * 1024;
+
+// This launch's identity in the store. A store another token wrote at or after
+// the launch start is newer than the state this launch loaded.
+QString instanceToken()
+{
+    static const QString token = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    return token;
+}
+
+// Captured at process start, not on first save: a store written before the
+// first save but after the launch must still be refused.
+const qint64 kInstanceStartMs = QDateTime::currentMSecsSinceEpoch();
 
 // The existing store's top-level object, or empty when missing/corrupt. Used by
 // the load-then-write save so keys this build does not know survive a rewrite.
@@ -142,6 +156,16 @@ bool saveSession(const SessionState& state)
     }
 
     QJsonObject obj = readStoreObject();
+    // A store another instance wrote after this one launched is newer than the
+    // state this instance loaded; refuse rather than silently clobber it.
+    const QString writer = obj.value(QStringLiteral("writerToken")).toString();
+    const qint64 writtenAt =
+        obj.value(QStringLiteral("writtenAt")).toVariant().toLongLong();
+    if (!writer.isEmpty() && writer != instanceToken() && writtenAt >= kInstanceStartMs) {
+        return false;
+    }
+    obj.insert(QStringLiteral("writerToken"), instanceToken());
+    obj.insert(QStringLiteral("writtenAt"), QDateTime::currentMSecsSinceEpoch());
     obj.insert(QStringLiteral("schemaVersion"), state.schemaVersion);
     obj.insert(QStringLiteral("brightnessLevel"), state.brightnessLevel);
     obj.insert(QStringLiteral("gpuCompute"), state.gpuCompute);

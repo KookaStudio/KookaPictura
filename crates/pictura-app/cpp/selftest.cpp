@@ -512,11 +512,8 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                 ST_FAIL(29, "screen mode cycle wrong");
             }
 
-            // M16: layout + brightness persist atomically under a temp XDG state dir.
-            const QString tmpState = QDir::tempPath()
-                                     + QStringLiteral("/kooka-pictura-selftest-")
-                                     + QString::number(QCoreApplication::applicationPid());
-            qputenv("XDG_STATE_HOME", tmpState.toUtf8());
+            // M16: layout + brightness persist atomically under the self-test's
+            // temp XDG state dir (main.cpp redirects it before the frame exists).
             frame.setBrightnessLevel(2); frame.saveSession(); frame.setBrightnessLevel(1);
             const pictura::SessionState loaded = pictura::loadSession();
             const bool sessionOk = loaded.brightnessLevel == 2
