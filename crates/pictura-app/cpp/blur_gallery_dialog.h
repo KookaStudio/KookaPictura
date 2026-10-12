@@ -1,11 +1,12 @@
 #pragma once
 
-// CS6's Blur Gallery workspace as the Field Blur entry opens it: the picture
-// with its on-image pins beside a Blur Tools panel and the Effects / Motion
-// Effects / Noise tabbed panel. The pin list lives here; the canvas edits it
-// and the preview re-renders through `filter_thumbnail`. Iris Blur,
-// Tilt-Shift, Path Blur, and Spin Blur list as disabled rows until their
-// kernels land. The document is untouched until OK.
+// CS6's Blur Gallery workspace as the Field Blur and Iris Blur entries open
+// it: the picture with its on-image pins beside a Blur Tools panel and the
+// Effects / Motion Effects / Noise tabbed panel. The command's kind picks the
+// one active effect (the gallery does not combine them yet); the other rows
+// list disabled. The pin list lives here; the canvas edits it and the
+// preview re-renders through `filter_thumbnail`. The document is untouched
+// until OK.
 
 #include <QtCore/QByteArray>
 #include <QtCore/QList>
@@ -35,8 +36,10 @@ public:
     BlurGalleryDialog(PictureView* view, const FilterCommandSpec& spec,
                       QWidget* parent = nullptr);
 
-    // The `field-blur` slots: the count, then `(x, y, blur)` per pin, then the
-    // effects tail (bokeh enabled/light/color/range, noise
+    // The kind's slots: the count, then per pin `(x, y, blur)` for
+    // `field-blur` or `(x, y, radius x, radius y, angle, squareness, feather,
+    // blur)` for `iris-blur`, then the effects tail (bokeh
+    // enabled/light/color/range, noise
     // enabled/amount/size/roughness/color/highlights/kind/seed).
     QList<double> values() const;
     // Ignored unless `values` is a whole pin list with its effects tail; empty
@@ -72,6 +75,8 @@ private:
     QDoubleSpinBox* makeValueBox(QWidget* parent, const QString& name, double minimum,
                                  double maximum, double value);
 
+    int pinSlots() const;
+    BlurGalleryPin defaultPin() const;
     void selectPin(int index);
     void pinsEdited();
     void deleteSelectedPin();
@@ -83,11 +88,12 @@ private:
 
     PictureView* view_ = nullptr;
     const FilterCommandSpec spec_;
+    const bool iris_ = false;
     QList<BlurGalleryPin> pins_;
     BlurGalleryCanvas* canvas_ = nullptr;
 
-    QToolButton* fieldArrow_ = nullptr;
-    QWidget* fieldControls_ = nullptr;
+    QToolButton* toolArrow_ = nullptr;
+    QWidget* toolControls_ = nullptr;
     QDoubleSpinBox* blurSpin_ = nullptr;
     QSlider* blurSlider_ = nullptr;
 

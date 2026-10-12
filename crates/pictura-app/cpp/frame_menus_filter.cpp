@@ -69,7 +69,7 @@ bool runFilterDialog(PictureView* view, const FilterCommandSpec& spec,
     if (spec.kind == QStringLiteral("lighting-effects")) {
         return LightingEffectsDialog::get(view, spec, initial, out, parent);
     }
-    if (spec.kind == QStringLiteral("field-blur")) {
+    if (spec.kind == QStringLiteral("field-blur") || spec.kind == QStringLiteral("iris-blur")) {
         return BlurGalleryDialog::get(view, spec, initial, out, parent);
     }
     if (spec.kind == QStringLiteral("liquify")) {

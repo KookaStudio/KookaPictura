@@ -3,7 +3,7 @@
 
 use pictura_core::PixelBuffer;
 use pictura_filters::{
-    apply, BlurNoise, BlurNoiseKind, BlurPin, BokehParams, DepthMap, Filter, IrisShape,
+    apply, BlurNoise, BlurNoiseKind, BlurPin, BokehParams, DepthMap, Filter, IrisPin, IrisShape,
     NoiseDistribution, Quality, RadialMethod, SmartBlurMode,
 };
 
@@ -194,6 +194,49 @@ fn kernels() -> Vec<(&'static str, Filter)> {
                 },
             },
         ),
+        (
+            "iris blur",
+            Filter::IrisBlur {
+                pins: vec![
+                    IrisPin {
+                        x: 0.4,
+                        y: 0.45,
+                        radius_x: 0.25,
+                        radius_y: 0.15,
+                        angle: 30.0,
+                        squareness: 40.0,
+                        feather: 0.5,
+                        blur: 18.0,
+                    },
+                    IrisPin {
+                        x: 0.8,
+                        y: 0.75,
+                        radius_x: 0.1,
+                        radius_y: 0.1,
+                        angle: 0.0,
+                        squareness: 0.0,
+                        feather: 0.3,
+                        blur: 40.0,
+                    },
+                ],
+                bokeh: BokehParams {
+                    enabled: true,
+                    light_bokeh: 30.0,
+                    bokeh_color: 50.0,
+                    light_range: (40, 200),
+                },
+                noise: BlurNoise {
+                    enabled: true,
+                    amount: 20.0,
+                    size: 40.0,
+                    roughness: 30.0,
+                    color: 25.0,
+                    highlights: 10.0,
+                    kind: BlurNoiseKind::Gaussian,
+                    seed: 7,
+                },
+            },
+        ),
     ]
 }
 
@@ -222,6 +265,7 @@ fn row_parallel_kernels_keep_their_serial_bytes() {
         ("radial zoom", 0x2327_b5e8_6773_fd83),
         ("lens blur", 0x954e_772d_0d08_f422),
         ("field blur", 0x62e5_9821_9a51_6e8f),
+        ("iris blur", 0x9880_82cd_fdc2_9575),
     ];
     let source = picture();
     for ((name, filter), (want_name, want)) in kernels().into_iter().zip(expected) {

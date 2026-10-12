@@ -1,8 +1,9 @@
 use super::arities::FILTER_ARITIES;
+use super::gallery::GALLERY_TAIL;
 use super::*;
 use pictura_core::shape::CUSTOM_SHAPE_NAMES;
 use pictura_filters::{
-    BlurNoise, BlurNoiseKind, BlurPin, BokehParams, DisplaceFit, GlassTexture, IrisShape,
+    BlurNoise, BlurNoiseKind, BlurPin, BokehParams, DisplaceFit, GlassTexture, IrisPin, IrisShape,
     LightType, NoiseDistribution, Quality, RadialMethod, SharpenRemove, SmartBlurMode,
     TextureChannel, WaveType, WindMethod, MAX_FIELD_PINS,
 };
@@ -494,7 +495,7 @@ fn field_blur_defaults_and_accepts_a_variable_pin_list() {
     );
 
     // Two pins move the tail behind their six slots.
-    let mut two = vec![0.0; 1 + 6 + FIELD_BLUR_TAIL];
+    let mut two = vec![0.0; 1 + 6 + GALLERY_TAIL];
     two[..7].copy_from_slice(&[2.0, 0.1, 0.2, 0.0, 0.9, 0.8, 40.0]);
     two[7..].copy_from_slice(&one[4..]);
     assert_eq!(
@@ -537,7 +538,74 @@ fn field_blur_defaults_and_accepts_a_variable_pin_list() {
     assert!(filter_from_kind_params("field-blur", &[2.0, 0.1, 0.2, 0.0]).is_none());
     assert!(filter_from_kind_params("field-blur", &[1.0, 0.5, 0.5, 10.0]).is_none());
     assert!(filter_from_kind_params("field-blur", &[1.0, 0.5, 0.5]).is_none());
-    let mut too_many = vec![0.0f64; 1 + 3 * (MAX_FIELD_PINS + 1) + FIELD_BLUR_TAIL];
+    let mut too_many = vec![0.0f64; 1 + 3 * (MAX_FIELD_PINS + 1) + GALLERY_TAIL];
     too_many[0] = (MAX_FIELD_PINS + 1) as f64;
     assert!(filter_from_kind_params("field-blur", &too_many).is_none());
+}
+
+#[test]
+fn iris_blur_defaults_and_accepts_a_variable_pin_list() {
+    let iris = |params: &[f64]| match filter_from_kind_params("iris-blur", params) {
+        Some(Filter::IrisBlur { pins, bokeh, noise }) => Some((pins, bokeh, noise)),
+        Some(other) => panic!("iris-blur mapped to {other:?}"),
+        None => None,
+    };
+    let (pins, bokeh, noise) = iris(&[]).unwrap();
+    assert_eq!(pins, vec![IrisPin::default()]);
+    assert_eq!(bokeh, BokehParams::default());
+    assert_eq!(noise, BlurNoise::default());
+    let (pins, bokeh, _) = iris(&[0.0; IRIS_BLUR_SLOTS]).unwrap();
+    assert_eq!(
+        pins,
+        vec![IrisPin::default()],
+        "the canonical list is one default pin"
+    );
+    assert!(!bokeh.enabled);
+
+    // Two pins, then the tail.
+    let mut two = vec![2.0];
+    two.extend([0.3, 0.4, 0.2, 0.1, 30.0, 60.0, 0.5, 12.0]);
+    two.extend([0.8, 0.7, 0.1, 0.1, 0.0, 0.0, 0.3, 40.0]);
+    two.extend([1.0, 30.0, 50.0, 200.0, 40.0]);
+    two.extend([1.0, 20.0, 40.0, 30.0, 25.0, 10.0, 2.0, 7.0]);
+    assert_eq!(two.len(), 1 + 16 + GALLERY_TAIL);
+    let (pins, bokeh, noise) = iris(&two).unwrap();
+    assert_eq!(
+        pins,
+        vec![
+            IrisPin {
+                x: 0.3,
+                y: 0.4,
+                radius_x: 0.2,
+                radius_y: 0.1,
+                angle: 30.0,
+                squareness: 60.0,
+                feather: 0.5,
+                blur: 12.0,
+            },
+            IrisPin {
+                x: 0.8,
+                y: 0.7,
+                radius_x: 0.1,
+                radius_y: 0.1,
+                angle: 0.0,
+                squareness: 0.0,
+                feather: 0.3,
+                blur: 40.0,
+            },
+        ]
+    );
+    assert_eq!(bokeh.light_range, (40, 200), "a reversed range is ordered");
+    assert_eq!(noise.kind, BlurNoiseKind::Grain);
+    assert_eq!(noise.seed, 7);
+
+    // A Field Blur stride, a short list, and more pins than the cap are
+    // refused.
+    let mut field_stride = vec![1.0, 0.5, 0.5, 10.0];
+    field_stride.extend([0.0; GALLERY_TAIL]);
+    assert!(iris(&field_stride).is_none());
+    assert!(iris(&two[..two.len() - 1]).is_none());
+    let mut too_many = vec![0.0f64; 1 + 8 * (MAX_FIELD_PINS + 1) + GALLERY_TAIL];
+    too_many[0] = (MAX_FIELD_PINS + 1) as f64;
+    assert!(iris(&too_many).is_none());
 }

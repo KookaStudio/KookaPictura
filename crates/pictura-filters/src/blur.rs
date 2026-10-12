@@ -5,6 +5,7 @@
 //! alpha is never modified. Borders clamp-to-edge per `FILT-010`.
 
 pub mod field;
+pub mod iris;
 pub mod lens;
 
 use pictura_core::PixelBuffer;

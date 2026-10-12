@@ -39,6 +39,8 @@ const int kProxyEdge = 1100;
 const int kColumnWidth = 264;
 const double kMaxBlur = 500.0;
 const int kEffectsTail = 13;
+const double kMinIrisRadius = 0.0001;
+const double kMaxIrisRadius = 10.0;
 
 } // namespace
 
@@ -156,7 +158,7 @@ void BlurGalleryDialog::Field::setEnabled(bool on)
 
 BlurGalleryDialog::BlurGalleryDialog(PictureView* view, const FilterCommandSpec& spec,
                                      QWidget* parent)
-    : QDialog(parent), view_(view), spec_(spec)
+    : QDialog(parent), view_(view), spec_(spec), iris_(spec.kind == QStringLiteral("iris-blur"))
 {
     setWindowTitle(spec.label);
     setObjectName(QStringLiteral("blurGalleryDialog"));
@@ -165,8 +167,8 @@ BlurGalleryDialog::BlurGalleryDialog(PictureView* view, const FilterCommandSpec&
     resize(frame ? (QSizeF(frame->size()) * 0.92).toSize().expandedTo(minimumSize())
                  : QSize(1100, 720));
 
-    pins_.append(BlurGalleryPin{});
     canvas_ = new BlurGalleryCanvas(&pins_, this);
+    canvas_->setIris(iris_);
     if (view_ && view_->has_document()) {
         const QImage image = documentPreviewImage(view_, kProxyEdge);
         if (!image.isNull()) {
@@ -185,6 +187,7 @@ BlurGalleryDialog::BlurGalleryDialog(PictureView* view, const FilterCommandSpec&
             canvas_->setDocumentSize(QSize(view_->document_width(), view_->document_height()));
         }
     }
+    pins_.append(defaultPin());
     connect(canvas_, &BlurGalleryCanvas::pinsEdited, this, &BlurGalleryDialog::pinsEdited);
     connect(canvas_, &BlurGalleryCanvas::pinSelected, this, &BlurGalleryDialog::selectPin);
     connect(canvas_, &BlurGalleryCanvas::pinAdded, this, [this](int index) { selectPin(index); });
@@ -237,8 +240,10 @@ QWidget* BlurGalleryDialog::buildOptionsBar()
     row->addWidget(title);
     row->addSpacing(12);
     auto* hint = new QLabel(
-        QStringLiteral("Click the image to add a pin, drag a pin to move it, its ring to blur, "
-                       "H to hide the pins"),
+        iris_ ? QStringLiteral("Click to add an iris; drag its handles to size, turn, feather, "
+                               "or square it; H hides the overlay")
+              : QStringLiteral("Click the image to add a pin, drag a pin to move it, its ring to "
+                               "blur, H to hide the pins"),
         bar);
     hint->setEnabled(false);
     row->addWidget(hint);
@@ -352,51 +357,54 @@ QWidget* BlurGalleryDialog::buildBlurToolsPanel()
     tab->setStyleSheet(QStringLiteral("font-weight: 700; padding: 3px 0;"));
     layout->addWidget(tab);
 
-    layout->addWidget(effectRow(panel, QStringLiteral("Field Blur"),
-                                QStringLiteral("fieldBlurEnabled"), true, true, &fieldArrow_));
-    fieldControls_ = new QWidget(panel);
-    auto* controls = new QVBoxLayout(fieldControls_);
-    controls->setContentsMargins(18, 0, 0, 0);
-    controls->setSpacing(3);
-    auto* blurRow = new QHBoxLayout;
-    auto* label = new QLabel(QStringLiteral("Blur:"), fieldControls_);
-    blurSpin_ = makeValueBox(fieldControls_, QStringLiteral("fieldBlurSpin"), 0.0, kMaxBlur, 0.0);
-    blurSpin_->setSuffix(QStringLiteral(" px"));
-    label->setBuddy(blurSpin_);
-    blurRow->addWidget(label);
-    blurRow->addStretch(1);
-    blurRow->addWidget(blurSpin_);
-    controls->addLayout(blurRow);
-    blurSlider_ = new JumpSlider(Qt::Horizontal, fieldControls_);
-    blurSlider_->setObjectName(QStringLiteral("fieldBlurSlider"));
-    blurSlider_->setRange(0, int(kMaxBlur));
-    controls->addWidget(blurSlider_);
-    layout->addWidget(fieldControls_);
+    const struct {
+        const char* label;
+        const char* name;
+        const char* kind;
+    } rows[] = {
+        {"Field Blur", "fieldBlur", "field-blur"}, {"Iris Blur", "irisBlur", "iris-blur"},
+        {"Tilt-Shift", "tiltShift", nullptr},      {"Path Blur", "pathBlur", nullptr},
+        {"Spin Blur", "spinBlur", nullptr},
+    };
+    for (const auto& row : rows) {
+        const QString name = QLatin1String(row.name);
+        const bool active = row.kind && spec_.kind == QLatin1String(row.kind);
+        auto* widget = effectRow(panel, QLatin1String(row.label), name + QStringLiteral("Enabled"),
+                                 active, active, active ? &toolArrow_ : nullptr);
+        layout->addWidget(widget);
+        if (!active) {
+            widget->setToolTip(row.kind ? QStringLiteral("Not combined with this blur yet")
+                                        : QStringLiteral("Not implemented yet"));
+            continue;
+        }
+        toolControls_ = new QWidget(panel);
+        auto* controls = new QVBoxLayout(toolControls_);
+        controls->setContentsMargins(18, 0, 0, 0);
+        controls->setSpacing(3);
+        auto* blurRow = new QHBoxLayout;
+        auto* label = new QLabel(QStringLiteral("Blur:"), toolControls_);
+        blurSpin_ = makeValueBox(toolControls_, name + QStringLiteral("Spin"), 0.0, kMaxBlur, 0.0);
+        blurSpin_->setSuffix(QStringLiteral(" px"));
+        label->setBuddy(blurSpin_);
+        blurRow->addWidget(label);
+        blurRow->addStretch(1);
+        blurRow->addWidget(blurSpin_);
+        controls->addLayout(blurRow);
+        blurSlider_ = new JumpSlider(Qt::Horizontal, toolControls_);
+        blurSlider_->setObjectName(name + QStringLiteral("Slider"));
+        blurSlider_->setRange(0, int(kMaxBlur));
+        controls->addWidget(blurSlider_);
+        layout->addWidget(toolControls_);
+    }
     connect(blurSpin_, &QDoubleSpinBox::valueChanged, this,
             [this](double value) { setSelectedBlur(value); });
     connect(blurSlider_, &QSlider::valueChanged, this,
             [this](int value) { setSelectedBlur(value); });
-    connect(fieldArrow_, &QToolButton::clicked, this, [this] {
-        const bool show = !fieldControls_->isVisible();
-        fieldControls_->setVisible(show);
-        fieldArrow_->setText(show ? QStringLiteral("▼") : QStringLiteral("▶"));
+    connect(toolArrow_, &QToolButton::clicked, this, [this] {
+        const bool show = !toolControls_->isVisible();
+        toolControls_->setVisible(show);
+        toolArrow_->setText(show ? QStringLiteral("▼") : QStringLiteral("▶"));
     });
-
-    const struct {
-        const char* label;
-        const char* name;
-    } disabled[] = {
-        {"Iris Blur", "irisBlurEnabled"},
-        {"Tilt-Shift", "tiltShiftEnabled"},
-        {"Path Blur", "pathBlurEnabled"},
-        {"Spin Blur", "spinBlurEnabled"},
-    };
-    for (const auto& row : disabled) {
-        auto* widget = effectRow(panel, QLatin1String(row.label), QLatin1String(row.name), false,
-                                 false, nullptr);
-        widget->setToolTip(QStringLiteral("Not implemented yet"));
-        layout->addWidget(widget);
-    }
     return panel;
 }
 
@@ -527,7 +535,12 @@ QList<double> BlurGalleryDialog::values() const
     QList<double> out;
     out << pins_.size();
     for (const BlurGalleryPin& pin : pins_) {
-        out << pin.pos.x() << pin.pos.y() << pin.blur;
+        out << pin.pos.x() << pin.pos.y();
+        if (iris_) {
+            out << pin.radii.width() << pin.radii.height() << pin.angle << pin.squareness
+                << pin.feather;
+        }
+        out << pin.blur;
     }
     out << (bokehEnabled_->isChecked() ? 1.0 : 0.0) << bokehLight_.spin->value()
         << bokehColor_.spin->value() << bokehRangeLow_->value() << bokehRangeHigh_->value()
@@ -541,16 +554,25 @@ void BlurGalleryDialog::setValues(const QList<double>& values)
 {
     QList<BlurGalleryPin> pins;
     const int count = values.isEmpty() ? 0 : int(values.first());
+    const int stride = pinSlots();
     const bool whole = !values.isEmpty() && double(count) == values.first() && count >= 1
-                       && values.size() == 1 + 3 * count + kEffectsTail;
+                       && values.size() == 1 + stride * count + kEffectsTail;
     if (whole) {
         for (int i = 0; i < count; ++i) {
+            const auto slot = [&](int k) { return values.at(1 + stride * i + k); };
             BlurGalleryPin pin;
-            pin.pos = QPointF(values.at(1 + 3 * i), values.at(2 + 3 * i));
-            pin.blur = qBound(0.0, values.at(3 + 3 * i), kMaxBlur);
+            pin.pos = QPointF(slot(0), slot(1));
+            if (iris_) {
+                pin.radii = QSizeF(qBound(kMinIrisRadius, slot(2), kMaxIrisRadius),
+                                   qBound(kMinIrisRadius, slot(3), kMaxIrisRadius));
+                pin.angle = slot(4);
+                pin.squareness = qBound(0.0, slot(5), 100.0);
+                pin.feather = qBound(0.0, slot(6), 1.0);
+            }
+            pin.blur = qBound(0.0, slot(stride - 1), kMaxBlur);
             pins.append(pin);
         }
-        const int tail = 1 + 3 * count;
+        const int tail = 1 + stride * count;
         {
             const QSignalBlocker blockBokeh(bokehEnabled_);
             const QSignalBlocker blockNoise(noiseEnabled_);
@@ -572,11 +594,33 @@ void BlurGalleryDialog::setValues(const QList<double>& values)
         bokehRange_->setRange(int(bokehRangeLow_->value()), int(bokehRangeHigh_->value()));
     }
     if (pins.isEmpty()) {
-        pins.append(BlurGalleryPin{});
+        pins.append(defaultPin());
     }
     pins_ = pins;
     selectPin(0);
     effectsEdited();
+}
+
+int BlurGalleryDialog::pinSlots() const
+{
+    return iris_ ? 8 : 3;
+}
+
+BlurGalleryPin BlurGalleryDialog::defaultPin() const
+{
+    BlurGalleryPin pin;
+    if (!iris_) {
+        return pin;
+    }
+    // The owner's screenshot opens on an outline proportioned like the
+    // picture; 15 px is CS6's Iris default (unverified).
+    pin.blur = 15.0;
+    if (view_ && view_->has_document() && view_->document_width() > 0
+        && view_->document_height() > 0) {
+        pin.radii.setHeight(pin.radii.width() * double(view_->document_height())
+                            / double(view_->document_width()));
+    }
+    return pin;
 }
 
 void BlurGalleryDialog::selectPin(int index)
@@ -673,8 +717,9 @@ void BlurGalleryDialog::render()
         return;
     }
     QList<double> params = values();
-    const int pinEnd = 1 + 3 * qRound(params.value(0));
-    for (int i = 3; i < pinEnd; i += 3) {
+    const int stride = pinSlots();
+    const int pinEnd = 1 + stride * qRound(params.value(0));
+    for (int i = stride; i < pinEnd; i += stride) {
         params[i] *= proxyScale_;
     }
     const QImage filtered =

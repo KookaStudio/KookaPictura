@@ -2,10 +2,11 @@ use std::sync::Arc;
 
 use crate::{
     BlurNoise, BlurPin, BokehParams, BrushType, ContourEdge, DepthMap, DiffuseMode, DisplaceFit,
-    DisplaceMap, ExtrudeType, GlassTexture, GrainType, HalftoneType, HdrToningParams, IrisShape,
-    LensType, LightDirection, Lighting, LiquifyMesh, MezzotintType, NoiseDistribution, PolarKind,
-    Quality, RadialMethod, RippleSize, SharpenRemove, ShearFill, SmartBlurMode, SpherizeMode,
-    StrokeDirection, TextureOptions, TileFill, TonalFade, WaveType, WindMethod, ZigZagStyle,
+    DisplaceMap, ExtrudeType, GlassTexture, GrainType, HalftoneType, HdrToningParams, IrisPin,
+    IrisShape, LensType, LightDirection, Lighting, LiquifyMesh, MezzotintType, NoiseDistribution,
+    PolarKind, Quality, RadialMethod, RippleSize, SharpenRemove, ShearFill, SmartBlurMode,
+    SpherizeMode, StrokeDirection, TextureOptions, TileFill, TonalFade, WaveType, WindMethod,
+    ZigZagStyle,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -65,6 +66,14 @@ pub enum Filter {
     /// gallery's Blur Effects (bokeh) and Noise post-passes.
     FieldBlur {
         pins: Vec<BlurPin>,
+        bokeh: BokehParams,
+        noise: BlurNoise,
+    },
+    /// Blur Gallery Iris Blur: elliptical sharp islands with a feathered fade
+    /// to each pin's exterior radius (buffer pixels), with the same effects
+    /// passes as Field Blur.
+    IrisBlur {
+        pins: Vec<IrisPin>,
         bokeh: BokehParams,
         noise: BlurNoise,
     },

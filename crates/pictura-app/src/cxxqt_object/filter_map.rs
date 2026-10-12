@@ -15,8 +15,7 @@ use super::filter_tools::liquify::liquify_mesh;
 use choices::*;
 use pictura_core::shape::CUSTOM_SHAPE_NAMES;
 use pictura_filters::{
-    BlurNoise, BlurPin, BokehParams, Filter, Light, Lighting, ShearFill, TextureOptions,
-    TextureSurface, TonalFade, MAX_FIELD_PINS, SHEAR_MAX_POINTS,
+    Filter, Light, Lighting, ShearFill, TextureOptions, TextureSurface, TonalFade, SHEAR_MAX_POINTS,
 };
 
 /// Refuse a non-empty parameter list that does not match the kind's arity.
@@ -88,11 +87,6 @@ fn texture(params: &[f64], base: usize) -> TextureOptions {
 
 /// Custom's slots: the 5×5 weights row by row, then Scale and Offset.
 pub(super) const CUSTOM_SLOTS: usize = 25 + 2;
-/// Field Blur's canonical slots: a pin count, one `(x, y, blur)` pin, then the
-/// 13-slot effects tail. The real pin list is variable (`1 + 3·count + tail`),
-/// like Lighting Effects' rig.
-pub(super) const FIELD_BLUR_TAIL: usize = 13;
-pub(super) const FIELD_BLUR_SLOTS: usize = 4 + FIELD_BLUR_TAIL;
 /// Shear's slots: a point count, then `SHEAR_MAX_POINTS` `(position, offset)`
 /// pairs, then the fill.
 pub(super) const SHEAR_SLOTS: usize = 1 + 2 * SHEAR_MAX_POINTS + 1;
@@ -146,6 +140,8 @@ fn lighting(params: &[f64]) -> Option<Lighting> {
 
 mod arities;
 pub(super) use arities::{commit_params, filter_param_arity};
+mod gallery;
+pub(super) use gallery::{FIELD_BLUR_SLOTS, IRIS_BLUR_SLOTS};
 
 /// Build the filter for `kind` from an ordered parameter list.
 ///
@@ -220,74 +216,8 @@ pub(super) fn filter_from_kind_params(kind: &str, params: &[f64]) -> Option<Filt
                 seed: u64v(params, 14, 1),
             }
         }
-        // A variable pin list: the count, then `(x, y, blur)` per pin, then
-        // the effects tail (bokeh enabled/light/color/range, noise
-        // enabled/amount/size/roughness/color/highlights/kind/seed). The
-        // canonical all-defaults list (count 0) and an empty list both mean
-        // one centred pin with the default effects.
-        "field-blur" => {
-            let count = if params.is_empty() {
-                1
-            } else {
-                u32v(params, 0, 1) as usize
-            };
-            let canonical = params.len() == FIELD_BLUR_SLOTS && u32v(params, 0, 1) == 0;
-            let tail = if canonical { 1 } else { 1 + 3 * count };
-            if !params.is_empty() && !canonical && params.len() != tail + FIELD_BLUR_TAIL {
-                return None;
-            }
-            if count > MAX_FIELD_PINS {
-                return None;
-            }
-            if params.is_empty() {
-                return Some(Filter::FieldBlur {
-                    pins: vec![BlurPin {
-                        x: 0.5,
-                        y: 0.5,
-                        blur: 0.0,
-                    }],
-                    bokeh: BokehParams::default(),
-                    noise: BlurNoise::default(),
-                });
-            }
-            let pins = if canonical {
-                vec![BlurPin {
-                    x: 0.5,
-                    y: 0.5,
-                    blur: 0.0,
-                }]
-            } else {
-                (0..count)
-                    .map(|i| BlurPin {
-                        x: f(params, 1 + 3 * i, 0.5),
-                        y: f(params, 2 + 3 * i, 0.5),
-                        blur: f(params, 3 + 3 * i, 0.0),
-                    })
-                    .collect()
-            };
-            let (low, high) = (u8v(params, tail + 3, 40), u8v(params, tail + 4, 118));
-            let bokeh = BokehParams {
-                enabled: flag(params, tail, true),
-                light_bokeh: f(params, tail + 1, 14.0),
-                bokeh_color: f(params, tail + 2, 40.0),
-                light_range: if low <= high {
-                    (low, high)
-                } else {
-                    (high, low)
-                },
-            };
-            let noise = BlurNoise {
-                enabled: flag(params, tail + 5, false),
-                amount: f(params, tail + 6, 0.0),
-                size: f(params, tail + 7, 50.0),
-                roughness: f(params, tail + 8, 50.0),
-                color: f(params, tail + 9, 0.0),
-                highlights: f(params, tail + 10, 0.0),
-                kind: pick(&BLUR_NOISE_KINDS, params, tail + 11, 0),
-                seed: u64v(params, tail + 12, 1),
-            };
-            Filter::FieldBlur { pins, bokeh, noise }
-        }
+        "field-blur" => gallery::field_blur(params)?,
+        "iris-blur" => gallery::iris_blur(params)?,
         "radial-blur" => {
             arity!(params, 3);
             Filter::RadialBlur {

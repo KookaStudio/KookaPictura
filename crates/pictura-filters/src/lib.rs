@@ -27,6 +27,7 @@ mod stylize;
 pub use blur::field::{
     BlurNoise, BlurNoiseKind, BlurPin, BokehParams, MAX_FIELD_PINS, MAX_FIELD_RADIUS,
 };
+pub use blur::iris::{iris_exponent, IrisPin, MAX_IRIS_RADIUS};
 pub use blur::lens::{DepthMap, IrisShape, MAX_LENS_RADIUS};
 pub use blur::SmartBlurMode;
 pub use distort::liquify::{
