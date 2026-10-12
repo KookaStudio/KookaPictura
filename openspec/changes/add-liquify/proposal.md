@@ -31,7 +31,7 @@ Apache-2.0) has a displacement-field Liquify whose design this ports.
   `LiquifyCanvas` give CS6's workspace.
 - Ceilings: Adobe's mesh math is closed, so the tool strengths are tuned by
   eye; no `.msh` Save/Load Mesh, no mask from a selection or channel, no
-  backdrop or mesh overlay, the Reconstruct amount is applied on OK rather
+  Show Guides, Blend backdrop mode is a Difference stand-in, the Reconstruct amount is applied on OK rather
   than previewed, kept meshes live for the process only, and there is no GPU
   path. `Edit ▸ Fade` is an app-wide stub; Liquify commits as a filter so it
   is covered when Fade lands.

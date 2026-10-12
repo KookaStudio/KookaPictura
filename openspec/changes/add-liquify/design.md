@@ -73,3 +73,23 @@
   reverses a stroke; Shift-click draws a straight line from the last click.
   The tool glyphs are drawn with QPainter in the palette's text colour (the
   icon set has none).
+
+## View Options
+
+- **Show Image** hides the distorted layer (the mesh and backdrop stay).
+- **Show Mesh** draws the source grid (Small / Medium / Large = 16 / 32 /
+  64 layer px; Red … Gray, default Gray) as the distortion places it. Each
+  grid line is the contour where the source coordinate `p + d(p)` crosses a
+  multiple of the cell, traced by marching squares on a lattice about three
+  screen pixels apart over the visible part of the layer. Contours stay
+  correct through twirls and folds, where inverting the mesh point by point
+  does not converge. *(cell sizes are approximations)*
+- **Show Backdrop** reads, once per Use choice, either All Layers (the
+  document composite with the active layer hidden, display-converted) or one
+  pixel layer, placed in the active layer's frame
+  (`liquify_backdrop`). In Front draws it over the distorted layer at
+  Opacity, Behind under it; Blend draws it with Difference at Opacity
+  (*approximation: CS6's Blend formula is unpublished*). Only the active
+  layer is ever distorted. Defaults: All Layers, In Front, 50.
+- Leaving Advanced Mode turns Show Mesh, Show Mask and Show Backdrop off and
+  Show Image on, as Basic mode has no View Options.
