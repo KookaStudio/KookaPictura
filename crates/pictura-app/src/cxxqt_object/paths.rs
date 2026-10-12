@@ -134,6 +134,17 @@ pub mod ffi {
         /// End the drawing session, leaving the subpath open. No history.
         fn path_finish(view: Pin<&mut PictureView>);
 
+        /// Capture the active path as the live gesture's backup; Edit > Undo
+        /// restores it when the gesture is cancelled. No history.
+        fn path_gesture_begin(view: Pin<&mut PictureView>);
+
+        /// Restore the path captured by `path_gesture_begin` and clear the
+        /// backup; false when none. No history.
+        fn path_gesture_abort(view: Pin<&mut PictureView>) -> bool;
+
+        /// Drop the gesture backup after a commit; no-op when none.
+        fn path_gesture_end(view: Pin<&mut PictureView>);
+
         /// Resume drawing from an open subpath's endpoint `pt`. No history; false for a closed subpath or an interior point.
         fn path_resume(view: Pin<&mut PictureView>, sp: i32, pt: i32) -> bool;
 
@@ -434,6 +445,47 @@ fn path_close(mut view: Pin<&mut PictureView>) -> bool {
 
 fn path_finish(view: Pin<&mut PictureView>) {
     edit(view, VectorPath::finish_editing);
+}
+
+fn path_gesture_begin(mut view: Pin<&mut PictureView>) {
+    let mut rust = view.as_mut().rust_mut();
+    let active = rust.active_path;
+    // The `None` row backs up the Work Path slot: `begin_drawing` replaces it
+    // when a drawing press finds no active path.
+    let backup = rust.doc.as_ref().map(|doc| {
+        let path = match active_in(doc, active) {
+            ActivePath::None | ActivePath::Work => doc.work_path.clone(),
+            ActivePath::Saved(i) => doc.saved_paths[i].path.clone(),
+        };
+        (active, path)
+    });
+    rust.path_gesture = backup;
+}
+
+fn path_gesture_abort(mut view: Pin<&mut PictureView>) -> bool {
+    let mut rust = view.as_mut().rust_mut();
+    let Some((active, path)) = rust.path_gesture.take() else {
+        return false;
+    };
+    {
+        let Some(doc) = rust.doc.as_mut() else {
+            return false;
+        };
+        match active {
+            ActivePath::None | ActivePath::Work => doc.work_path = path,
+            ActivePath::Saved(i) => match doc.saved_paths.get_mut(i) {
+                Some(saved) => saved.path = path,
+                None => return false,
+            },
+        }
+    }
+    rust.active_path = active;
+    view.as_mut().changed();
+    true
+}
+
+fn path_gesture_end(mut view: Pin<&mut PictureView>) {
+    view.as_mut().rust_mut().path_gesture = None;
 }
 
 fn path_resume(view: Pin<&mut PictureView>, sp: i32, pt: i32) -> bool {

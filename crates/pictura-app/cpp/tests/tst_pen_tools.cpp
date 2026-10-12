@@ -58,6 +58,10 @@ private slots:
     void anchorPointTools();
     void convertPointTool();
     void pathsPanelListsTheWorkPath();
+    void ctrlUndoStepsBackAnchorEdits();
+    void ctrlUndoCancelsALiveGesture();
+    void ctrlUndoCancelsAConvertDrag();
+    void ctrlUndoCancelsAFreeformTrail();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -347,6 +351,128 @@ void PenToolsTest::pathsPanelListsTheWorkPath()
     // Undoing every anchor takes the row away again.
     QVERIFY(f.view->undo() && f.view->undo());
     QTRY_COMPARE(list->count(), 0);
+}
+
+// Ctrl+Z while a Pen tool is active walks back one committed edit per press.
+void PenToolsTest::ctrlUndoStepsBackAnchorEdits()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_pen_undo_seed"));
+    QVERIFY2(f.ok(), "pen undo fixture");
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowActive(&frame));
+    frame.setActiveTool(pictura::ToolId::Pen);
+    click(f, QPointF(10, 10));
+    click(f, QPointF(50, 10));
+    click(f, QPointF(50, 50));
+    QCOMPARE(points(f, 0), 3);
+    const int base = f.view->history_index();
+    f.canvas->setFocus();
+    QTest::keyClick(f.canvas, Qt::Key_Z, Qt::ControlModifier);
+    QCOMPARE(points(f, 0), 2);
+    QCOMPARE(f.view->history_index(), base - 1);
+    QTest::keyClick(f.canvas, Qt::Key_Z, Qt::ControlModifier);
+    QCOMPARE(points(f, 0), 1);
+    QCOMPARE(f.view->history_index(), base - 2);
+    QTest::keyClick(f.canvas, Qt::Key_Z, Qt::ControlModifier);
+    QCOMPARE(pictura::path_subpath_count(*f.view), 0);
+    QCOMPARE(f.view->history_index(), base - 3);
+}
+
+// A live gesture is one session step: Ctrl+Z cancels it — restoring the path
+// to its pre-press state — and the release records nothing. The next Ctrl+Z
+// then steps back the previous committed edit.
+void PenToolsTest::ctrlUndoCancelsALiveGesture()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_pen_gesture_seed"));
+    QVERIFY2(f.ok(), "pen gesture fixture");
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowActive(&frame));
+    frame.setActiveTool(pictura::ToolId::Pen);
+    f.canvas->setFocus();
+
+    // First anchor, cancelled before the release: the path stays empty and no
+    // state is recorded.
+    f.canvas->mousePressed(QPointF(10, 10), Qt::LeftButton, 0);
+    f.canvas->mouseMoved(QPointF(20, 10));
+    QCOMPARE(points(f, 0), 1);
+    QTest::keyClick(f.canvas, Qt::Key_Z, Qt::ControlModifier);
+    QCOMPARE(points(f, 0), 0);
+    f.canvas->mouseReleased(QPointF(20, 10));
+    QCOMPARE(f.view->history_count(), 1);
+
+    // A committed anchor, then a live drag cancelled: the committed anchor
+    // survives, the live one is gone, and the release records nothing.
+    click(f, QPointF(10, 10));
+    const int base = f.view->history_index();
+    f.canvas->mousePressed(QPointF(50, 10), Qt::LeftButton, 0);
+    f.canvas->mouseMoved(QPointF(60, 10));
+    QCOMPARE(points(f, 0), 2);
+    QTest::keyClick(f.canvas, Qt::Key_Z, Qt::ControlModifier);
+    QCOMPARE(points(f, 0), 1);
+    QCOMPARE(f.view->history_index(), base);
+    f.canvas->mouseReleased(QPointF(60, 10));
+    QCOMPARE(f.view->history_index(), base);
+    // The gesture was consumed by the session: the next Ctrl+Z is the document.
+    QTest::keyClick(f.canvas, Qt::Key_Z, Qt::ControlModifier);
+    QCOMPARE(points(f, 0), 0);
+}
+
+// A Convert Point handle drag is cancelled the same way: the handles go back
+// and the release records nothing.
+void PenToolsTest::ctrlUndoCancelsAConvertDrag()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_convert_undo_seed"));
+    QVERIFY2(f.ok(), "convert undo fixture");
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowActive(&frame));
+    frame.setActiveTool(pictura::ToolId::Pen);
+    drawSquare(f);
+    frame.setActiveTool(pictura::ToolId::ConvertPoint);
+    f.canvas->setFocus();
+
+    const int base = f.view->history_index();
+    f.canvas->mousePressed(QPointF(50, 10), Qt::LeftButton, 0);
+    f.canvas->mouseMoved(QPointF(60, 10));
+    QCOMPARE(point(f, 0, 1).at(8), 1.0);
+    QTest::keyClick(f.canvas, Qt::Key_Z, Qt::ControlModifier);
+    QCOMPARE(point(f, 0, 1).at(8), 0.0);
+    f.canvas->mouseReleased(QPointF(60, 10));
+    QCOMPARE(f.view->history_index(), base);
+}
+
+// A Freeform Pen trail lives only in the handler until the release; Ctrl+Z
+// clears it and the release records nothing.
+void PenToolsTest::ctrlUndoCancelsAFreeformTrail()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_freeform_undo_seed"));
+    QVERIFY2(f.ok(), "freeform undo fixture");
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowActive(&frame));
+    frame.setActiveTool(pictura::ToolId::FreeformPen);
+    f.canvas->setFocus();
+
+    f.canvas->mousePressed(QPointF(10, 10), Qt::LeftButton, 0);
+    for (int i = 0; i <= 40; ++i) {
+        f.canvas->mouseMoved(QPointF(10 + i, 20));
+    }
+    QVERIFY2(f.canvas->pathOverlayHasPreviewForTest(), "trail preview");
+    QTest::keyClick(f.canvas, Qt::Key_Z, Qt::ControlModifier);
+    QVERIFY2(!f.canvas->pathOverlayHasPreviewForTest(), "trail not cleared");
+    f.canvas->mouseReleased(QPointF(50, 20));
+    QCOMPARE(f.view->history_count(), 1);
+    QCOMPARE(pictura::path_subpath_count(*f.view), 0);
 }
 
 QTEST_MAIN(PenToolsTest)

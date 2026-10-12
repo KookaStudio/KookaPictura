@@ -111,6 +111,9 @@ public:
                 path_commit_convert(*v);
             }
         }
+        if (PictureView* press = pressView_) {
+            path_gesture_end(*press);
+        }
         // Switching tools leaves the subpath being drawn open.
         if (v && v->has_document()) {
             path_finish(*v);
@@ -135,6 +138,7 @@ public:
             return true;
         }
         path_set_layer_target(*v, false);
+        path_gesture_begin(*v);
         const double radius = hitRadius(ctx);
         const double x = imagePos.x();
         const double y = imagePos.y();
@@ -177,6 +181,10 @@ public:
         }
         default:
             break;
+        }
+        // A live gesture is a session step: refresh Edit Undo's enablement.
+        if (gesture_ != Gesture::None) {
+            ctx.notifyToolSessionChanged();
         }
         refreshOverlay(ctx);
         return true;
@@ -230,12 +238,16 @@ public:
     void onRelease(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         PictureView* v = ctx.view();
+        PictureView* press = pressView_;
         const Gesture gesture = gesture_;
         const QList<QPointF> trail = trail_;
         const bool moved = moved_;
         const auto target = target_;
-        const bool same = v && v == pressView_;
+        const bool same = v && v == press;
         reset();
+        if (press) {
+            path_gesture_end(*press);
+        }
         if (!same) {
             return;
         }
@@ -287,6 +299,30 @@ public:
     // Enter and Esc end the subpath being drawn, leaving it open.
     bool commitPolygonLasso() override { return finishDrawing(); }
     bool cancelPolygonLasso() override { return finishDrawing(); }
+
+    // A live gesture is this tool session's one step: Edit Undo cancels the
+    // gesture — restoring the pre-press path — before the document history.
+    bool toolUndo() override
+    {
+        if (!canToolUndo()) {
+            return false;
+        }
+        path_gesture_abort(*pressView_);
+        reset();
+        if (ctx_) {
+            refreshOverlay(*ctx_);
+        }
+        return true;
+    }
+
+    bool toolRedo() override { return false; }
+
+    bool canToolUndo() const override
+    {
+        return pressView_ != nullptr && gesture_ != Gesture::None;
+    }
+
+    bool canToolRedo() const override { return false; }
 
 private:
     enum class Gesture { None, PlacingHandle, Freeform, ConvertHandle, ConvertNewHandles };
