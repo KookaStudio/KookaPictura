@@ -83,6 +83,10 @@ Side effects of the spike, owned by later units:
   1220. The recorded ceiling is not raised; unit A's deletions must bring the
   file back under 1220 before that unit completes (its done criteria include
   `scripts/check-file-size.sh`).
+- Unit D probe (widened `LayerRow`): cxx rejects `Vec<QString>` as a shared-struct
+  field (`QString: cxx::private::ImplVec` unsatisfied). The style-effect names cross
+  as one `QString` joined by `\n`; the adapter splits it back. `QImage`, `QString`,
+  `i32`, and `bool` fields compile in the `#[qinvokable] -> Vec<LayerRow>` return.
 
 **Alternatives:** packed `QStringList`/`QVariantList` (proven but re-creates a
 string protocol); return `QImage` only and keep field getters (keeps N+1).
@@ -120,11 +124,14 @@ all of that unit's string conversions).
 path list structure typed, not a re-parse of `x,y;…` at every call site;
 `SelectionBounds` and `CanvasSize` follow the same pattern.
 
-**Unit ownership for the full inventory:** document → `display_level_size`/`CanvasSize`;
-selection → `selection_contour`, `selection_bounds`; transform/paint → `layer_rect`,
-`transform_quad`, `transform_preview_matrix`, `image_view` projective/contour parsers;
-transform also claims `composite_bounds` for tool_crop/tool_perspectivecrop (or names
-a deferral if left for a crop-specific follow-up).
+**Unit ownership for the full inventory:** document → `display_level_size`/`CanvasSize`
+(deleted in unit A: replaced by one typed `display_level_extents()` crossing that
+`document_api::pyramidSizes` parses once; the mode/depth/ICC notice trio folded into
+`open_notice` the same way); selection → `selection_contour`, `selection_bounds`;
+transform/paint → `layer_rect`, `transform_quad`, `transform_preview_matrix`,
+`image_view` projective/contour parsers; transform also claims `composite_bounds` for
+tool_crop/tool_perspectivecrop (or names a deferral if left for a crop-specific
+follow-up).
 
 ### D4 — Paint stroke is a tool-lifetime object in `paint_api`
 
@@ -170,9 +177,11 @@ consumer TUs with `rg -l` for its symbols → switch them → delete superseded 
 when the last caller is gone (grep gate in the unit's task). Self-tests that assert
 string equality migrate in the same unit as the deletion (36 assertion hits for the
 five named protocols, plus `selection_bounds`/`composite_bounds` assertions —
-inventory per unit in tasks). Units without deletable surface (A, E) achieve
-exclusivity by consumer migration + include gates only; permanent dual surface is
-accepted for those units and does not require a fake deletion.
+inventory per unit in tasks). Unit A achieved exclusivity by consumer migration plus
+deleting `display_level_count`/`display_level_size` and the three notice getters (the
+typed replacements landed in the same unit); unit E (type) is the unit without
+deletable bridge surface — permanent dual surface there is accepted and does not
+require a fake deletion.
 
 ## Risks / Trade-offs
 

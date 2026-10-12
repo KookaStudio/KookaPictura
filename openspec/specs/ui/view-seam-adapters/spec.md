@@ -1,4 +1,4 @@
-# Spec Delta
+# view-seam-adapters Specification
 
 ## Purpose
 
@@ -7,7 +7,7 @@ adapter surface for migrated units, batched and typed data contracts where raw
 crossings today re-parse strings or fan out per row, and paint-stroke ordering
 enforced by the adapter rather than by convention.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Adapters are the only C++ surface over covered bridge operations
 
@@ -94,13 +94,15 @@ tool_perspectivecrop) or a named follow-up if deferred.
 The Layers panel SHALL obtain its per-row fields for a refresh in a single
 `layers_snapshot(thumb_size, entire_doc)` call returning one typed row record per
 layer, rather than ~20 per-field invokables per row plus a per-effect
-`layer_style_value` probe. The snapshot SHALL be field-for-field equivalent to the
-old per-getter output on a fixture document.
+`layer_style_value` probe. While the pre-migration per-getter surface exists, the
+snapshot MUST be field-for-field equivalent to it on a fixture document (asserted by
+`tst_layers_snapshot`); once that surface is removed, the fixture's expected typed
+values are the regression check.
 
-#### Scenario: Snapshot equals per-getter rows
+#### Scenario: Snapshot equals per-getter rows during migration
 
-- **WHEN** `tst_layers_snapshot` builds a fixture document and compares
-  `layers_snapshot` output to the legacy per-getter sequence for every row
+- **WHEN** `tst_layers_snapshot` builds a fixture document while the legacy per-getter
+  sequence still exists and compares `layers_snapshot` output to it for every row
 - **THEN** every field (path, depth, name, kind, visibility, blend, opacity, fill,
   lock bits, colour, clipping, mask/style/adjustment/vector-mask flags, child count,
   linked, placed, shape, smart-object, style effect names, row and mask thumbnails at
