@@ -469,6 +469,9 @@ private:
     void paintCropGroupOverlays(QPainter& painter);
     // The Free Transform reference point marker (image_view_overlays.cpp).
     void paintTransformPivot(QPainter& painter);
+    // The Free Transform box, handles, rotate knob, and reference point,
+    // unclipped by the document rect (image_view_overlays.cpp).
+    void paintTransformOverlay(QPainter& painter);
     void paintAnnotations(QPainter& painter);
     void paintGuides(QPainter& painter);
     QList<GuideLine> guides_;
