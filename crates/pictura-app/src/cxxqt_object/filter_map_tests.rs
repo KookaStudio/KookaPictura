@@ -2,8 +2,9 @@ use super::arities::FILTER_ARITIES;
 use super::*;
 use pictura_core::shape::CUSTOM_SHAPE_NAMES;
 use pictura_filters::{
-    DisplaceFit, GlassTexture, IrisShape, LightType, NoiseDistribution, Quality, RadialMethod,
-    SharpenRemove, SmartBlurMode, TextureChannel, WaveType, WindMethod,
+    BlurNoise, BlurNoiseKind, BlurPin, BokehParams, DisplaceFit, GlassTexture, IrisShape,
+    LightType, NoiseDistribution, Quality, RadialMethod, SharpenRemove, SmartBlurMode,
+    TextureChannel, WaveType, WindMethod, MAX_FIELD_PINS,
 };
 
 #[test]
@@ -416,4 +417,127 @@ fn lens_blur_defaults_and_refuses_a_missing_depth_map() {
     };
     assert_eq!(map.width(), 1);
     assert!(!faster, "More Accurate decodes to faster = false");
+}
+
+#[test]
+fn field_blur_defaults_and_accepts_a_variable_pin_list() {
+    let default_pin = vec![BlurPin {
+        x: 0.5,
+        y: 0.5,
+        blur: 0.0,
+    }];
+    assert_eq!(
+        filter_from_kind_params("field-blur", &[]),
+        Some(Filter::FieldBlur {
+            pins: default_pin.clone(),
+            bokeh: BokehParams::default(),
+            noise: BlurNoise::default(),
+        }),
+        "an empty list is one centred pin with the default effects"
+    );
+    assert_eq!(
+        filter_from_kind_params("field-blur", &[0.0; FIELD_BLUR_SLOTS]),
+        Some(Filter::FieldBlur {
+            pins: default_pin,
+            bokeh: BokehParams {
+                enabled: false,
+                light_bokeh: 0.0,
+                bokeh_color: 0.0,
+                light_range: (0, 0),
+            },
+            noise: BlurNoise {
+                enabled: false,
+                amount: 0.0,
+                size: 0.0,
+                roughness: 0.0,
+                color: 0.0,
+                highlights: 0.0,
+                kind: BlurNoiseKind::Gaussian,
+                seed: 0,
+            },
+        }),
+        "the canonical all-defaults list is one centred pin"
+    );
+
+    // One pin with the whole effects tail set.
+    let mut one = vec![0.0; FIELD_BLUR_SLOTS];
+    one[..17].copy_from_slice(&[
+        1.0, 0.25, 0.75, 12.0, // pin
+        1.0, 30.0, 50.0, 40.0, 200.0, // bokeh
+        1.0, 20.0, 40.0, 30.0, 25.0, 10.0, 1.0, 7.0, // noise
+    ]);
+    assert_eq!(
+        filter_from_kind_params("field-blur", &one),
+        Some(Filter::FieldBlur {
+            pins: vec![BlurPin {
+                x: 0.25,
+                y: 0.75,
+                blur: 12.0
+            }],
+            bokeh: BokehParams {
+                enabled: true,
+                light_bokeh: 30.0,
+                bokeh_color: 50.0,
+                light_range: (40, 200),
+            },
+            noise: BlurNoise {
+                enabled: true,
+                amount: 20.0,
+                size: 40.0,
+                roughness: 30.0,
+                color: 25.0,
+                highlights: 10.0,
+                kind: BlurNoiseKind::Uniform,
+                seed: 7,
+            },
+        })
+    );
+
+    // Two pins move the tail behind their six slots.
+    let mut two = vec![0.0; 1 + 6 + FIELD_BLUR_TAIL];
+    two[..7].copy_from_slice(&[2.0, 0.1, 0.2, 0.0, 0.9, 0.8, 40.0]);
+    two[7..].copy_from_slice(&one[4..]);
+    assert_eq!(
+        filter_from_kind_params("field-blur", &two),
+        Some(Filter::FieldBlur {
+            pins: vec![
+                BlurPin {
+                    x: 0.1,
+                    y: 0.2,
+                    blur: 0.0
+                },
+                BlurPin {
+                    x: 0.9,
+                    y: 0.8,
+                    blur: 40.0
+                },
+            ],
+            bokeh: BokehParams {
+                enabled: true,
+                light_bokeh: 30.0,
+                bokeh_color: 50.0,
+                light_range: (40, 200),
+            },
+            noise: BlurNoise {
+                enabled: true,
+                amount: 20.0,
+                size: 40.0,
+                roughness: 30.0,
+                color: 25.0,
+                highlights: 10.0,
+                kind: BlurNoiseKind::Uniform,
+                seed: 7,
+            },
+        })
+    );
+
+    // A count that does not match the list length (including the old
+    // no-tail layout), a list with no count, and more pins than the cap are
+    // all refused.
+    assert!(filter_from_kind_params("field-blur", &[2.0, 0.1, 0.2, 0.0]).is_none());
+    assert!(filter_from_kind_params("field-blur", &[1.0, 0.5, 0.5, 10.0]).is_none());
+    assert!(filter_from_kind_params("field-blur", &[1.0, 0.5, 0.5]).is_none());
+    let mut too_many = vec![0.0f64; 1 + 3 * (MAX_FIELD_PINS + 1) + FIELD_BLUR_TAIL];
+    too_many[0] = (MAX_FIELD_PINS + 1) as f64;
+    assert!(filter_from_kind_params("field-blur", &too_many).is_none());
 }

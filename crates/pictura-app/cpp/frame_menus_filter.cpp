@@ -5,6 +5,7 @@
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QStatusBar>
 
+#include "blur_gallery_dialog.h"
 #include "filter_commands.h"
 #include "filter_commit.h"
 #include "filter_gallery_dialog.h"
@@ -67,6 +68,9 @@ bool runFilterDialog(PictureView* view, const FilterCommandSpec& spec,
     }
     if (spec.kind == QStringLiteral("lighting-effects")) {
         return LightingEffectsDialog::get(view, spec, initial, out, parent);
+    }
+    if (spec.kind == QStringLiteral("field-blur")) {
+        return BlurGalleryDialog::get(view, spec, initial, out, parent);
     }
     if (spec.kind == QStringLiteral("liquify")) {
         const auto* frame = qobject_cast<PicturaMainWindow*>(parent);

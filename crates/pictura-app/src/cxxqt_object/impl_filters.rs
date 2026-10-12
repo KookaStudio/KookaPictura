@@ -866,6 +866,14 @@ mod tests {
                 ],
             ),
             ("lens-flare", vec![100.0, 0.5, 0.5, 0.0]),
+            (
+                "field-blur",
+                vec![
+                    2.0, 0.25, 0.5, 0.0, 0.75, 0.5, 40.0, // two pins
+                    0.0, 0.0, 0.0, 0.0, 0.0, // bokeh off
+                    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, // noise off
+                ],
+            ),
             ("shear", {
                 let mut shear = vec![0.0f64; SHEAR_SLOTS];
                 shear[0] = 2.0;
