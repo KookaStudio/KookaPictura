@@ -40,3 +40,16 @@ the **MIT License**; the full text is in
 or custom) is recorded in
 [`docs/dev/icon-provenance.md`](docs/dev/icon-provenance.md) and
 `assets/icons/lucide-map.json`.
+
+## Ported code
+
+Parts of the filter engine are ported from **PhotoCraft**
+(<https://github.com/storytold/photocraft>), Copyright (c) 2026 ArtCraft Team
+and the PhotoCraft contributors, licensed under the MIT License or the Apache
+License 2.0 at the recipient's option; Kooka Pictura takes it under the
+**MIT License**. The ported code is `Filter ▸ Liquify` (the displacement
+mesh, brush-dab model and resampling in
+`crates/pictura-filters/src/distort/liquify.rs` and its submodules) and
+`Filter ▸ Artistic ▸ Palette Knife`
+(`crates/pictura-filters/src/photorust/artistic/knife_glow_grain.rs`). The
+full license text is in [`LICENSES/photocraft.txt`](LICENSES/photocraft.txt).

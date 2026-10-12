@@ -12,7 +12,9 @@
 //! scales every tool down.
 //!
 //! Ported from photocraft's Filter ▸ Liquify (ArtCraft Team and the PhotoCraft
-//! contributors, MIT OR Apache-2.0). Mirror and Turbulence are Kooka's own.
+//! contributors, MIT OR Apache-2.0, taken under MIT; license text in
+//! `LICENSES/photocraft.txt`, attribution in `NOTICE.md`). Mirror and
+//! Turbulence are Kooka's own.
 //! Adobe's mesh math is closed: the tool strengths are tuned by eye, an
 //! approximation, not parity.
 
