@@ -119,6 +119,7 @@ pub fn filter_preserves_opacity(filter: &Filter) -> bool {
             | Filter::PolarCoordinates { .. }
             | Filter::Shear { .. }
             | Filter::Displace { .. }
+            | Filter::Liquify { .. }
             | Filter::ZigZag { .. }
             | Filter::OceanRipple { .. }
             | Filter::Glass { .. }

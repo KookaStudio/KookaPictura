@@ -3,9 +3,9 @@ use std::sync::Arc;
 use crate::{
     BrushType, ContourEdge, DepthMap, DiffuseMode, DisplaceFit, DisplaceMap, ExtrudeType,
     GlassTexture, GrainType, HalftoneType, HdrToningParams, IrisShape, LensType, LightDirection,
-    Lighting, MezzotintType, NoiseDistribution, PolarKind, Quality, RadialMethod, RippleSize,
-    SharpenRemove, ShearFill, SmartBlurMode, SpherizeMode, StrokeDirection, TextureOptions,
-    TileFill, TonalFade, WaveType, WindMethod, ZigZagStyle,
+    Lighting, LiquifyMesh, MezzotintType, NoiseDistribution, PolarKind, Quality, RadialMethod,
+    RippleSize, SharpenRemove, ShearFill, SmartBlurMode, SpherizeMode, StrokeDirection,
+    TextureOptions, TileFill, TonalFade, WaveType, WindMethod, ZigZagStyle,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -172,6 +172,10 @@ pub enum Filter {
         vertical_scale: f64,
         fit: DisplaceFit,
         wrap: bool,
+    },
+    /// The Liquify dialog's mesh, stretched to fit a layer of another size.
+    Liquify {
+        mesh: Arc<LiquifyMesh>,
     },
     ZigZag {
         amount: f64,

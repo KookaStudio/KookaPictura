@@ -52,6 +52,7 @@ pub(in crate::cxxqt_object) const FILTER_ARITIES: &[(&str, usize)] = &[
     ("polar-coordinates", 1),
     ("shear", SHEAR_SLOTS),
     ("displace", DISPLACE_SLOTS),
+    ("liquify", 1),
     ("zigzag", 3),
     ("ocean-ripple", 3),
     ("diffuse-glow", 4),

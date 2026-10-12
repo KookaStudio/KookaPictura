@@ -26,6 +26,9 @@ mod stylize;
 
 pub use blur::lens::{DepthMap, IrisShape, MAX_LENS_RADIUS};
 pub use blur::SmartBlurMode;
+pub use distort::liquify::{
+    LiquifyBrush, LiquifyMesh, LiquifyProxy, LiquifyTool, LIQUIFY_MAX_BRUSH,
+};
 pub use hdr_toning::HdrToningParams;
 pub use render::{LensType, Light, LightType, Lighting, TextureChannel, MAX_LIGHTS};
 pub use stylize::DiffuseMode;

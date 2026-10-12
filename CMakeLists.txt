@@ -113,6 +113,10 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/lighting_effects_dialog.h
     crates/pictura-app/cpp/lighting_rig.cpp
     crates/pictura-app/cpp/lighting_rig.h
+    crates/pictura-app/cpp/liquify_canvas.cpp
+    crates/pictura-app/cpp/liquify_canvas.h
+    crates/pictura-app/cpp/liquify_dialog.cpp
+    crates/pictura-app/cpp/liquify_dialog.h
     crates/pictura-app/cpp/blend_modes.h
     crates/pictura-app/cpp/layer_style_dialog.cpp
     crates/pictura-app/cpp/layer_style_dialog.h
