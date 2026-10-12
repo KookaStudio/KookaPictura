@@ -1,4 +1,5 @@
 #include "liquify_dialog.h"
+#include "api/layers_api.h"
 #include "dialogs.h"
 #include "icons.h"
 #include "liquify_canvas.h"
@@ -401,10 +402,9 @@ LiquifyDialog::LiquifyDialog(PictureView* view, const QString& documentName, QWi
     backdropUse_->setObjectName(QStringLiteral("liquifyBackdropUse"));
     backdropUse_->addItem(QStringLiteral("All Layers"), QString());
     if (view_) {
-        for (int i = 0; i < view_->layer_row_count(); ++i) {
-            const QString kind = view_->layer_row_kind(i);
-            if (kind == QStringLiteral("pixel") || kind == QStringLiteral("background")) {
-                backdropUse_->addItem(view_->layer_row_name(i), view_->layer_row_path(i));
+        for (const pictura::layers_api::LayerRow& row : pictura::layers_api::rows(*view_)) {
+            if (row.kind == QStringLiteral("pixel") || row.kind == QStringLiteral("background")) {
+                backdropUse_->addItem(row.name, row.path);
             }
         }
     }
