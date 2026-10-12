@@ -148,6 +148,7 @@ Proposed under `pictura-filters::blur` (`ARCH-002`, `ARCH-006`):
 - `pictura-filters::blur::motion` — `MotionBlur { angle, distance }`; line kernel + supersampling.
 - `pictura-filters::blur::radial` — `RadialBlur { method: Spin|Zoom, amount, quality, center }`; polar resampler + 1-D smear.
 - `pictura-filters::photorust::convolve::surface_blur` — `SurfaceBlur { radius, threshold }`; thresholded window mean on a sliding histogram.
+- `pictura-filters::blur::smart` — `SmartBlur { radius, threshold, quality, mode }`; Gaussian mean over the neighbours whose every channel is within Threshold levels, Quality thinning the search disc (≤ 3 / 6 / 12 taps a side for Low / Medium / High), and a 4-neighbour edge map for Edge Only / Overlay Edge *(approximation; #339)*.
 - `pictura-filters::blur::average` — `Average`; region mean.
 - `pictura-filters::blur::lens` — `Filter::LensBlur { depth: Option<Arc<DepthMap>>, focal, invert, shape, radius, curvature, rotation, specular_brightness, specular_threshold, noise_amount, noise_distribution, monochromatic, faster, seed }`; iris-shaped aperture convolution, specular add, seeded grain injection. The app materializes the chosen source (transparency, layer mask, or selection) into the `DepthMap`; `None` acts as a uniform far depth.
 - `pictura-filters::blur::smart` — `SmartBlur { radius, threshold, quality, mode }`; edge-gated averaging.

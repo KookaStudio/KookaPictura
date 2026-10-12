@@ -318,6 +318,19 @@ Snapshot for resuming after a context break. Update after each milestone.
   Shape swatch or shape-set gear. Tests: unit (runs = direct convolution on
   every shape), ImageMagick `-morphology Convolve` differential (exact),
   kernel digests, `filter_map` unit, `tst_shape_blur`.
+- **Smart Blur** (change `add-smart-blur`, issue #339): new engine (no
+  photorust source). `Filter::SmartBlur { radius, threshold, quality, mode }`
+  in `blur/smart.rs` is a selective Gaussian (σ = radius/3) over the disc of
+  Radius, averaging only neighbours whose every channel is within Threshold
+  levels; Quality (engine `Quality` Draft/Good/Best = Low/Medium/High) caps the
+  disc at 3/6/12 taps a side. An edge is a pixel with a 4-neighbour past
+  Threshold: Edge Only paints edges white on black, Overlay Edge white over the
+  blur. `Filter ▸ Blur ▸ Smart Blur…` has Radius/Threshold `0.1..=100` (defaults
+  3/25, inferred), Quality (Low) and Mode (Normal); the `smart-blur` kind is 4
+  slots. ~160 ms at radius 50 High on 1024². Ceilings: Adobe's kernel is
+  closed; the joint test, weights, tap budget and edge rule are inferred. Tests:
+  unit (step/threshold/modes/quality), kernel digests, `filter_map` unit,
+  `tst_smart_blur`.
 - **Lens Blur** (change `lens-blur-filter`, issue #338): `pictura-filters` gains
   `DepthMap`/`IrisShape` and `Filter::LensBlur` with the kernel in
   `blur/lens.rs` — a per-pixel `|d − focal|/255` circle of confusion, a
