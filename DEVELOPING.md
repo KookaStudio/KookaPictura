@@ -420,6 +420,33 @@ smoke-tests the staged binary with `--headless --self-test`.
 - **The Windows build cannot run on Linux.** MSVC and `windeployqt` are
   Windows-only, so this job always runs on a Windows runner.
 
+### macOS packages
+
+`.github/workflows/macos.yml` builds the Apple Silicon DMG on a `macos-15`
+runner: `KookaPictura-X.Y.Z-macOS.dmg`. The bundle targets macOS 13 or later
+(Qt 6.11's floor) and is **unsigned** — until an Apple Developer account
+exists, Gatekeeper requires a right-click → Open (or
+`xattr -d com.apple.quarantine`) on first launch.
+
+The shared composite action `.github/actions/macos-bundle` builds the
+`MACOSX_BUNDLE` target `pictura.app` (`Info.plist` from
+`packaging/macos/Info.plist.in`, icon `assets/icons/app.icns`), then runs
+`macdeployqt` to embed the Qt frameworks and plugins into `Contents/`. The
+workflow smoke-tests the deployed bundle with `--headless --self-test`, then
+packs the DMG with `create-dmg`; `--skip-jenkins` skips the Finder AppleScript,
+which needs an interactive session. Little CMS is linked statically on macOS
+(`lcms2-sys`'s vendored copy, as on Windows), so the DMG needs no Homebrew
+dylibs.
+
+- **Re-run for an existing tag**: `gh workflow run macos.yml -f tag=vX.Y.Z`,
+  also available from *Actions → Run workflow*; `--clobber` replaces existing
+  assets. As for the other workflows, `--ref <branch>` runs the branch's
+  workflow file against the tag's tree.
+- **Dry run** — the release-please Release PR runs the same build and keeps the
+  DMG as a workflow artifact instead of uploading it; feature PRs never run it.
+- **The macOS build cannot run on Linux.** clang/arm64, `macdeployqt`, and
+  `create-dmg` are macOS-only, so this job always runs on a macOS runner.
+
 ## Where to go next
 
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — provenance, asset, and dependency rules.

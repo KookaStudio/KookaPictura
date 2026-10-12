@@ -1,0 +1,40 @@
+name: macos-bundle
+description: >-
+  Release-build pictura as a macOS application bundle and deploy its Qt
+  frameworks and plugins into it with macdeployqt. macos.yml packs that bundle
+  as a DMG.
+
+runs:
+  using: composite
+  steps:
+    - name: Install pinned toolchain
+      shell: bash
+      run: rustup show active-toolchain
+
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v4
+      with:
+        version: '6.11.1'
+        cache: true
+
+    # The workflows set RUSTC_WRAPPER/SCCACHE_GHA_ENABLED; this only installs
+    # the binary (same action and version ci.yml uses).
+    - name: Install sccache
+      uses: mozilla-actions/sccache-action@v0.0.11
+
+    - uses: Swatinem/rust-cache@v2
+      with:
+        cache-targets: "false"
+
+    # No --locked: the Release PR bumps Cargo.toml but not Cargo.lock
+    # (DEVELOPING.md). No -fuse-ld=lld: that is a Linux linker flag. The
+    # deployment target matches the bundle's LSMinimumSystemVersion (Qt 6.11's
+    # macOS 13 floor).
+    - name: Build and deploy the bundle
+      shell: bash
+      run: |
+        cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
+          -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+        cmake --build build --parallel
+        macdeployqt build/pictura.app

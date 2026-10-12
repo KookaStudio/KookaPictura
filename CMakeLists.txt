@@ -394,13 +394,14 @@ target_include_directories(pictura_shell PUBLIC
     crates/pictura-app/cpp
     "${QT_HEADERS_DIR}/QtGui/${QT_VERSION_STR}/QtGui"
 )
-# The Rust static lib embeds `pictura-color` (Little CMS 2). On Linux/macOS the
+# The Rust static lib embeds `pictura-color` (Little CMS 2). On Linux the
 # `lcms2-sys` crate links the system library dynamically, so the C++ link needs
 # `-llcms2`. On Windows pkg-config finds no system lcms2 and `lcms2-sys`'s static
-# fallback compiles the vendored copy into `pictura_app`, so nothing external is
-# linked.
+# fallback compiles the vendored copy into `pictura_app`; macOS does the same by
+# enabling lcms2-sys's `static` feature (pictura-color), so neither platform
+# links anything external.
 target_link_libraries(pictura_shell PUBLIC pictura_app Qt6::Svg Qt6::Network Qt6::PrintSupport)
-if(NOT WIN32)
+if(UNIX AND NOT APPLE)
     find_library(LCMS2_LIBRARY NAMES lcms2 REQUIRED)
     target_link_libraries(pictura_shell PUBLIC "${LCMS2_LIBRARY}")
 endif()
@@ -514,16 +515,36 @@ if(WIN32)
     qt6_finalize_target(pictura)
 endif()
 
+# macOS presentation: an application bundle, the form macdeployqt and create-dmg
+# operate on. The Info.plist template substitutes the project version, so the
+# bundle tracks the x-release-please-version marker.
+if(APPLE)
+    set_target_properties(pictura PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/Info.plist.in"
+        MACOSX_BUNDLE_BUNDLE_NAME "Kooka Pictura"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "io.github.KookaPictura.KookaPictura"
+        MACOSX_BUNDLE_ICON_FILE app.icns
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}")
+    set_source_files_properties(assets/icons/app.icns PROPERTIES
+        MACOSX_PACKAGE_LOCATION Resources)
+    target_sources(pictura PRIVATE assets/icons/app.icns)
+endif()
+
 if(BUILD_TESTING)
     find_package(Qt6 REQUIRED COMPONENTS Test)
     add_subdirectory(crates/pictura-app/cpp/tests)
 endif()
 
 # The AppImage job (.github/workflows/appimage.yml) stages this tree into an
-# AppDir. The desktop file and icon share the binary's name so Wayland's default
-# app_id ("pictura") resolves to them.
+# AppDir; the macOS job (.github/workflows/macos.yml) stages the .app bundle.
+# The desktop file and icon share the binary's name so Wayland's default app_id
+# ("pictura") resolves to them.
 include(GNUInstallDirs)
-install(TARGETS pictura RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(TARGETS pictura
+    BUNDLE DESTINATION ${CMAKE_INSTALL_BINDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(FILES packaging/pictura.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 install(FILES assets/icons/app.png
     DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/512x512/apps

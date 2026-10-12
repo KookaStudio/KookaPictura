@@ -9,5 +9,10 @@ rust-version.workspace = true
 thiserror.workspace = true
 lcms2 = "6"
 
+# macOS release bundles must not depend on a Homebrew dylib: link lcms2-sys's
+# vendored static copy instead, the same way Windows does through its fallback.
+[target.'cfg(target_os = "macos")'.dependencies]
+lcms2 = { version = "6", features = ["static"] }
+
 [dev-dependencies]
 pictura-testkit = { path = "../pictura-testkit" }
