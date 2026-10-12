@@ -16,32 +16,46 @@
 
 ## Implementation status
 
-Field Blur and the shared Blur Gallery workspace are implemented; Iris Blur
-and Tilt-Shift are not.
+Field Blur, its Blur Effects, and the shared Blur Gallery workspace are
+implemented; Iris Blur, Tilt-Shift, Path Blur, and Spin Blur are not. The
+Noise tab is a post-CS6 addition ported on the owner's request.
 
 - **Engine.** `pictura_filters::blur::field` (`BlurPin { x, y, blur }`,
-  `field_blur`, `MAX_FIELD_RADIUS = 500`, `MAX_FIELD_PINS = 16`): each pixel's
-  radius is the inverse-square-distance weighted average of the pin amounts,
-  and the variable blur linearly blends the two bracketing levels of a
-  box-blur pyramid. The field weights and the pyramid are approximations of
-  the `(inferred)` model above — the doc's disc/bokeh gather is not
-  implemented (a per-pixel disc gather cannot drive a live pin drag).
+  `BokehParams`, `BlurNoise`, `field_blur`, `MAX_FIELD_RADIUS = 500`,
+  `MAX_FIELD_PINS = 16`): each pixel's radius is the inverse-square-distance
+  weighted average of the pin amounts, and the variable blur linearly blends
+  the two bracketing levels of a box-blur pyramid. The field weights and the
+  pyramid are approximations of the `(inferred)` model above — the doc's
+  disc/bokeh gather is not implemented (a per-pixel disc gather cannot drive
+  a live pin drag). After the blur, the Blur Effects pass applies Light
+  Bokeh (a doubled multiplicative brightening of the in-range blurred
+  pixels, so bright highlights bloom brilliantly toward white) and Bokeh
+  Color (a chroma push on the lightened, non-clipped pixels), both gated by
+  the Light Range window and the local blur weight; the Noise pass adds
+  seeded Gaussian/Uniform/Grain grain scaled by the weight and damped in
+  highlights. The effect curves and the grain model are inferred
+  approximations (Adobe's are closed).
 - **App.** `Filter ▸ Blur Gallery ▸ Field Blur…` opens `BlurGalleryDialog`
-  (with `BlurGalleryCanvas`): a document proxy with draggable pins (click
-  adds, drag moves, the pin's ring changes its amount, Delete removes, `H`
-  hides the UI), the Blur Tools panel with the selected pin's Blur
-  (`0..=500 px`) and disabled Iris Blur / Tilt-Shift rows, Preview / Cancel /
-  OK, and one history state on commit. The `Blur Gallery` submenu also lists
-  disabled `Iris Blur…`, `Tilt-Shift…`, `Path Blur…`, and `Spin Blur…` stubs;
-  its placement follows the later Photoshop menu (the owner's screenshot)
-  rather than CS6's `Filter ▸ Blur` listing. Last Filter / Last Filter
-  Settings reuse the pin list. The `field-blur` kind takes
-  `[count, x, y, blur, …]`.
-- **Ceilings.** The Blur Effects panel (Light Bokeh, Bokeh Color, Light
-  Range) and the `M` mask view are not shipped; pins are fractions of the
-  document proxy while the commit filters the active layer, so a layer that
-  does not cover the document previews approximately; no GPU path; Path Blur
-  and Spin Blur stay post-CS6 non-goals.
+  (with `BlurGalleryCanvas`): a document proxy with draggable circle pins
+  (click adds, drag moves, the selected pin's ring changes its amount, each
+  ring's white arc shows the blur amount — full at 100 px, Delete removes,
+  `H` hides the UI), the Blur Tools panel with the selected pin's
+  Blur (`0..=500 px`) and disabled Iris Blur / Tilt-Shift / Path Blur /
+  Spin Blur rows, an Effects / Motion Effects / Noise tabbed panel (Bokeh
+  with Light Bokeh, Bokeh Color, and the two-handle Light Range; Noise with
+  the Gaussian/Uniform/Grain picker, Amount, Size, Roughness, Color,
+  Highlights), Preview / Cancel / OK, and one history state on commit. The
+  `Blur Gallery`
+  submenu also lists disabled `Iris Blur…`, `Tilt-Shift…`, `Path Blur…`, and
+  `Spin Blur…` stubs; its placement follows the later Photoshop menu (the
+  owner's screenshot) rather than CS6's `Filter ▸ Blur` listing. Last Filter /
+  Last Filter Settings reuse the pin list. The `field-blur` kind takes
+  `[count, x, y, blur, …, bokeh …, noise …]`.
+- **Ceilings.** The `M` mask view is not shipped; the Motion Effects tab only
+  states that Path/Spin motion effects are unimplemented; pins are fractions
+  of the document proxy while the commit filters the active layer, so a layer
+  that does not cover the document previews approximately; no GPU path; Path
+  Blur and Spin Blur stay post-CS6 non-goals.
 
 ## CS6 behavior
 
