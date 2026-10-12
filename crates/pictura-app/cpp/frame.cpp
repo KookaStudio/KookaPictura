@@ -1076,11 +1076,6 @@ void PicturaMainWindow::keyPressEvent(QKeyEvent* event)
         tools_->commitPolygonLasso();
         return;
     }
-    if (!event->isAutoRepeat()
-        && (event->key() == Qt::Key_Delete || event->key() == Qt::Key_Backspace) && tools_
-        && tools_->removeLassoPoint()) {
-        return;
-    }
     if (dispatchCommandKey(event)) {
         return;
     }

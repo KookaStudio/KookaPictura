@@ -396,6 +396,7 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/tool_context.h
     crates/pictura-app/cpp/tool_handler.h
     crates/pictura-app/cpp/tool_registry.h
+    crates/pictura-app/cpp/text_input.h
     crates/pictura-app/cpp/selection_geometry.h
     crates/pictura-app/cpp/toolbox.h
     crates/pictura-app/cpp/options_bar.h

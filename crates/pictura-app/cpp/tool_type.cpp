@@ -21,6 +21,7 @@
 #include "tool_handler.h"
 
 #include "image_view.h"
+#include "text_input.h"
 #include "tools.h"
 #include "type_fonts.h"
 #include "type_text_edit.h"
@@ -35,12 +36,7 @@
 #include <QtGui/QGuiApplication>
 #include <QtGui/QKeyEvent>
 #include <QtGui/QPolygonF>
-#include <QtWidgets/QAbstractSpinBox>
 #include <QtWidgets/QApplication>
-#include <QtWidgets/QComboBox>
-#include <QtWidgets/QLineEdit>
-#include <QtWidgets/QPlainTextEdit>
-#include <QtWidgets/QTextEdit>
 
 #include <array>
 #include <functional>
@@ -49,13 +45,6 @@
 namespace pictura {
 
 namespace {
-
-bool isTextInput(QWidget* w)
-{
-    return qobject_cast<QLineEdit*>(w) || qobject_cast<QAbstractSpinBox*>(w)
-        || qobject_cast<QTextEdit*>(w) || qobject_cast<QPlainTextEdit*>(w)
-        || (qobject_cast<QComboBox*>(w) && static_cast<QComboBox*>(w)->isEditable());
-}
 
 bool commitKey(const QKeyEvent& key)
 {

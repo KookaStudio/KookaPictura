@@ -1,6 +1,8 @@
 #include "frame_includes.h"
 
 #include "api/history_api.h"
+#include "text_input.h"
+
 #include "pictura_app/src/cxxqt_object/clipboard.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
 
@@ -8,6 +10,7 @@
 #include <QtGui/QClipboard>
 #include <QtGui/QGuiApplication>
 #include <QtGui/QImage>
+#include <QtWidgets/QApplication>
 
 namespace pictura {
 
@@ -298,14 +301,39 @@ bool PicturaMainWindow::dispatchCommandKey(QKeyEvent* event)
         event->accept();
         return true;
     }
-    // CS6: with a selection, Delete / Backspace clear it (Edit > Clear) once
-    // no tool has claimed the key.
-    PictureView* view = activeView();
+    // CS6: Delete / Backspace clear a selection, else delete the selected
+    // layer(s), once no tool has claimed the key.
     if (!event->isAutoRepeat() && mods == Qt::NoModifier
-        && (event->key() == Qt::Key_Delete || event->key() == Qt::Key_Backspace) && view
-        && view->has_selection()) {
+        && (event->key() == Qt::Key_Delete || event->key() == Qt::Key_Backspace)) {
+        if (handleDeleteKey()) {
+            event->accept();
+            return true;
+        }
+    }
+    return false;
+}
+
+bool PicturaMainWindow::handleDeleteKey()
+{
+    if (tools_ && tools_->textActive()) {
+        return false;
+    }
+    if (isTextInput(QApplication::focusWidget())) {
+        return false;
+    }
+    // An active lasso trace, a selected slice, or a selected path component
+    // owns the key.
+    if (tools_ && tools_->removeLassoPoint()) {
+        return true;
+    }
+    PictureView* view = activeView();
+    if (view && view->has_selection()) {
         registry_->dispatch(QLatin1String(command_ids::EditClear));
-        event->accept();
+        return true;
+    }
+    if (layersPanel_) {
+        layersPanel_->deleteSelection();
+        refresh();
         return true;
     }
     return false;
