@@ -4,8 +4,8 @@ use crate::{
     BrushType, ContourEdge, DepthMap, DiffuseMode, DisplaceFit, DisplaceMap, ExtrudeType,
     GlassTexture, GrainType, HalftoneType, HdrToningParams, IrisShape, LensType, LightDirection,
     Lighting, MezzotintType, NoiseDistribution, PolarKind, Quality, RadialMethod, RippleSize,
-    SharpenRemove, ShearFill, SpherizeMode, StrokeDirection, TextureOptions, TileFill, TonalFade,
-    WaveType, WindMethod, ZigZagStyle,
+    SharpenRemove, ShearFill, SmartBlurMode, SpherizeMode, StrokeDirection, TextureOptions,
+    TileFill, TonalFade, WaveType, WindMethod, ZigZagStyle,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -36,6 +36,13 @@ pub enum Filter {
     SurfaceBlur {
         radius: u32,
         threshold: u8,
+    },
+    /// `quality` Draft / Good / Best are CS6's Low / Medium / High.
+    SmartBlur {
+        radius: f64,
+        threshold: f64,
+        quality: Quality,
+        mode: SmartBlurMode,
     },
     LensBlur {
         depth: Option<Arc<DepthMap>>,

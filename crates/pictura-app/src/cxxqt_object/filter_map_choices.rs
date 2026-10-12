@@ -4,8 +4,8 @@
 use pictura_filters::{
     BrushType, ContourEdge, DiffuseMode, DisplaceFit, ExtrudeType, GlassTexture, GrainType,
     HalftoneType, IrisShape, LensType, LightDirection, LightType, MezzotintType, NoiseDistribution,
-    PolarKind, Quality, RadialMethod, RippleSize, SharpenRemove, ShearFill, SpherizeMode,
-    StrokeDirection, TextureChannel, TileFill, WaveType, WindMethod, ZigZagStyle,
+    PolarKind, Quality, RadialMethod, RippleSize, SharpenRemove, ShearFill, SmartBlurMode,
+    SpherizeMode, StrokeDirection, TextureChannel, TileFill, WaveType, WindMethod, ZigZagStyle,
 };
 
 pub(super) const NOISE_DISTRIBUTIONS: [NoiseDistribution; 2] =
@@ -107,6 +107,11 @@ pub(super) const LENS_TYPES: [LensType; 4] = [
 ];
 pub(super) const RADIAL_METHODS: [RadialMethod; 2] = [RadialMethod::Spin, RadialMethod::Zoom];
 pub(super) const QUALITIES: [Quality; 3] = [Quality::Draft, Quality::Good, Quality::Best];
+pub(super) const SMART_BLUR_MODES: [SmartBlurMode; 3] = [
+    SmartBlurMode::Normal,
+    SmartBlurMode::EdgeOnly,
+    SmartBlurMode::OverlayEdge,
+];
 pub(super) const LIGHT_TYPES: [LightType; 3] =
     [LightType::Spot, LightType::Point, LightType::Infinite];
 pub(super) const TEXTURE_CHANNELS: [TextureChannel; 4] = [

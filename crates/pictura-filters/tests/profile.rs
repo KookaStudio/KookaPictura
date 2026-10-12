@@ -7,7 +7,8 @@ use std::time::Instant;
 use pictura_core::PixelBuffer;
 use pictura_filters::{
     apply, BrushType, Filter, LensType, LightDirection, MezzotintType, NoiseDistribution,
-    PolarKind, RippleSize, ShearFill, SpherizeMode, TextureOptions, WaveType, ZigZagStyle,
+    PolarKind, Quality, RippleSize, ShearFill, SmartBlurMode, SpherizeMode, TextureOptions,
+    WaveType, ZigZagStyle,
 };
 
 const SIZE: u32 = 1024;
@@ -71,6 +72,15 @@ fn filters() -> Vec<(&'static str, Filter)> {
             Filter::ShapeBlur {
                 shape: 0,
                 radius: 46,
+            },
+        ),
+        (
+            "SmartBlur",
+            Filter::SmartBlur {
+                radius: 50.0,
+                threshold: 25.0,
+                quality: Quality::Best,
+                mode: SmartBlurMode::Normal,
             },
         ),
         (

@@ -174,6 +174,16 @@ pub(super) fn filter_from_kind_params(kind: &str, params: &[f64]) -> Option<Filt
                 threshold: u8v(params, 1, 20),
             }
         }
+        // Radius, Threshold, Quality (Low / Medium / High), Mode.
+        "smart-blur" => {
+            arity!(params, 4);
+            Filter::SmartBlur {
+                radius: f(params, 0, 3.0).clamp(0.1, 100.0),
+                threshold: f(params, 1, 25.0).clamp(0.1, 100.0),
+                quality: pick(&QUALITIES, params, 2, 0),
+                mode: pick(&SMART_BLUR_MODES, params, 3, 0),
+            }
+        }
         "motion-blur" => {
             arity!(params, 2);
             Filter::MotionBlur {

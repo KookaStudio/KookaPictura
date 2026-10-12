@@ -17,6 +17,12 @@ pub fn apply(filter: &Filter, buf: &mut PixelBuffer) -> Result<(), FilterError> 
         Filter::GaussianBlur { radius } => blur::gaussian(buf, *radius),
         Filter::BoxBlur { radius } => blur::r#box(buf, *radius),
         Filter::ShapeBlur { shape, radius } => blur::shape(buf, *shape, *radius),
+        Filter::SmartBlur {
+            radius,
+            threshold,
+            quality,
+            mode,
+        } => blur::smart(buf, *radius, *threshold, *quality, *mode),
         Filter::MotionBlur { angle, distance } => blur::motion(buf, *angle, *distance),
         Filter::RadialBlur {
             method,

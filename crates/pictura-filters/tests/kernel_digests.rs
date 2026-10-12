@@ -3,7 +3,7 @@
 
 use pictura_core::PixelBuffer;
 use pictura_filters::{
-    apply, DepthMap, Filter, IrisShape, NoiseDistribution, Quality, RadialMethod,
+    apply, DepthMap, Filter, IrisShape, NoiseDistribution, Quality, RadialMethod, SmartBlurMode,
 };
 
 /// A deterministic 4-channel picture with noise, gradients and hard edges, in
@@ -81,6 +81,33 @@ fn kernels() -> Vec<(&'static str, Filter)> {
                 radius: 40,
             },
         ),
+        (
+            "smart normal 6",
+            Filter::SmartBlur {
+                radius: 6.0,
+                threshold: 25.0,
+                quality: Quality::Best,
+                mode: SmartBlurMode::Normal,
+            },
+        ),
+        (
+            "smart overlay 40",
+            Filter::SmartBlur {
+                radius: 40.0,
+                threshold: 60.0,
+                quality: Quality::Draft,
+                mode: SmartBlurMode::OverlayEdge,
+            },
+        ),
+        (
+            "smart edges 3",
+            Filter::SmartBlur {
+                radius: 3.0,
+                threshold: 30.0,
+                quality: Quality::Good,
+                mode: SmartBlurMode::EdgeOnly,
+            },
+        ),
         ("maximum 2", Filter::Maximum { radius: 2 }),
         ("minimum 5", Filter::Minimum { radius: 5 }),
         (
@@ -150,6 +177,9 @@ fn row_parallel_kernels_keep_their_serial_bytes() {
         ("box 70", 0xc346_208f_7155_235d),
         ("shape heart 7", 0x5e7f_3ab9_03a1_f59a),
         ("shape arrow 40", 0x0d9c_2fdc_6023_46c7),
+        ("smart normal 6", 0x9807_7b07_7a5e_4060),
+        ("smart overlay 40", 0x90b2_060d_1532_f549),
+        ("smart edges 3", 0x7d47_9518_947e_946e),
         ("maximum 2", 0x0b19_a93a_49cb_5598),
         ("minimum 5", 0x0dda_b0a3_defc_fe66),
         ("custom", 0x4a5a_022c_4c8f_6bfa),

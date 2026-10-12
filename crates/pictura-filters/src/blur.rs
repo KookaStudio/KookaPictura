@@ -1,4 +1,4 @@
-//! Blur family: Gaussian, Box, Motion, Radial, Shape, Average, Blur/Blur More.
+//! Blur family: Gaussian, Box, Motion, Radial, Shape, Smart, Average, Blur/Blur More.
 //! Surface Blur runs on the photorust engine.
 //!
 //! Planar 8-bit buffers (channels 3 or 4); only the color planes are touched,
@@ -13,7 +13,9 @@ use crate::{validate, FilterError, Quality, RadialMethod};
 use rayon::prelude::*;
 
 mod shape;
+mod smart;
 pub use shape::{shape, shape_kernel, SHAPE_BLUR_MAX_RADIUS};
+pub use smart::{smart, SmartBlurMode};
 
 /// Blur's and Blur More's fixed Gaussian radii: σ 0.7 and σ 2.0 under the
 /// 3σ radius convention, photorust's CS6-tuned strengths (#222).

@@ -88,6 +88,15 @@ const MAPPING: &[Mapping] = &[
                -gaussian-blur 0x1)",
     },
     Mapping {
+        filter: "SmartBlur",
+        im: None,
+        tolerance: 0,
+        note: "A Gaussian over the neighbours whose every channel is within the threshold, plus \
+               white edge marks; IM's `-selective-blur` gates on luma and draws no edges, so the \
+               variant is no-equivalent. Guarded by the step, threshold, mode and quality unit \
+               tests and the kernel digests",
+    },
+    Mapping {
         filter: "Sharpen",
         im: Some("-unsharp 0x1+0.5+0"),
         tolerance: 2,
@@ -383,11 +392,12 @@ const MAPPING: &[Mapping] = &[
 ];
 
 /// Filters the table marks as having no faithful ImageMagick equivalent.
-const NO_EQUIVALENT: [&str; 32] = [
+const NO_EQUIVALENT: [&str; 33] = [
     "MotionBlur",
     "RadialBlur",
     "Average",
     "SurfaceBlur",
+    "SmartBlur",
     "SharpenEdges",
     "AddNoise",
     "Despeckle",
@@ -420,9 +430,9 @@ const NO_EQUIVALENT: [&str; 32] = [
 
 #[test]
 fn mapping_marks_no_equivalent_operators() {
-    assert_eq!(MAPPING.len(), 48, "one mapping row per Filter variant");
+    assert_eq!(MAPPING.len(), 49, "one mapping row per Filter variant");
     // Exactly one row per `Filter` variant, no duplicates, full enum coverage.
-    let all: [&str; 48] = [
+    let all: [&str; 49] = [
         "GaussianBlur",
         "BoxBlur",
         "ShapeBlur",
@@ -432,6 +442,7 @@ fn mapping_marks_no_equivalent_operators() {
         "Blur",
         "BlurMore",
         "SurfaceBlur",
+        "SmartBlur",
         "Sharpen",
         "SharpenMore",
         "SharpenEdges",
