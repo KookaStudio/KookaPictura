@@ -356,6 +356,30 @@ Snapshot for resuming after a context break. Update after each milestone.
   `openspec validate --all --strict` 232/232; the unified report is 3944
   passed · 21 skipped · 1 failed, the one failure the pre-existing local
   ImageMagick fixture mismatch noted above.
+- **Liquify** (change `add-liquify`, issue #348): new engine, ported from
+  photocraft's displacement field (MIT OR Apache-2.0). `distort::liquify`'s
+  `LiquifyMesh` holds an inverse offset per node of a 2/4/8 px grid plus a
+  freeze mask; brush dabs (`d' = q + d(q) − p`) implement Forward Warp,
+  Reconstruct, Twirl, Pucker, Bloat, Push Left, Freeze/Thaw, and Kooka's own
+  Mirror and Turbulence, with Alt reversals; Reconstruct amount, Restore All,
+  Mask All/None/Invert All, `scaled_to`. `Filter::Liquify { mesh }` resamples
+  Catmull-Rom (identity bit-exact; ~110 ms for 24 MP in release) and warps
+  alpha (opacity allowlist). The app keeps one dialog session and up to eight
+  kept meshes (`filter_tools/liquify.rs`); the `liquify` kind is one slot, the
+  mesh id, so OK commits one filter state, Last Filter replays it and Last
+  Filter Settings reloads it. `LiquifyDialog`/`LiquifyCanvas` give CS6's
+  workspace: Basic (Warp, Reconstruct, Pucker, Bloat, Push Left, Hand, Zoom;
+  Size/Pressure 100 from the #348 capture) and Advanced (Twirl, Mirror,
+  Turbulence, Freeze, Thaw, Density/Rate/Jitter, Reconstruct…, mask options,
+  Show Mask); a reduced (≤ 3072 px) preview re-rendered per dab rectangle;
+  Load Last Mesh; W R C S B O X T F D H Z, `[`/`]`. Ceilings (`ponytail:`):
+  tool strengths tuned by eye; no `.msh` files, mask sources, backdrop, mesh
+  overlay, live Reconstruct preview or GPU path; kept meshes live for the
+  process; `Edit ▸ Fade` is still an app-wide stub. Tests: 14 engine units
+  (+1 ignored profile), store and `filter_map` units, `tst_liquify_dialog`
+  (14). Verified: `bash scripts/verify-full.sh` — unified report 3999 passed ·
+  22 skipped · 0 failed, file-size and selftest-budget OK, guard OK with
+  `TASK_ALLOWS_DOCS=1`; `openspec validate --all --strict` 237/237.
 - **Lighting Effects workspace** (change `lighting-effects-workspace`, issue
   #225): `render::lighting_effects` (now `render/lighting.rs`) shades a CS6 rig
   of 1–16 Spot / Point / Infinite lights with photorust's model. A Spot is an
