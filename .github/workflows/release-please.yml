@@ -51,3 +51,10 @@ jobs:
     uses: ./.github/workflows/windows.yml
     with:
       tag: ${{ needs.release-please.outputs.tag_name }}
+
+  macos:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    uses: ./.github/workflows/macos.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}

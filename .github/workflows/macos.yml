@@ -1,0 +1,92 @@
+name: macos
+
+# Builds the Apple Silicon DMG for a release tag and attaches it to that
+# release. Same shape as appimage.yml: release-please.yml calls it after it cuts
+# a release (a release created with GITHUB_TOKEN cannot trigger a `release:`
+# workflow). Run it by hand to rebuild or re-upload the asset for an existing
+# tag. The release-please Release PR runs the same build as a dry run and keeps
+# the DMG as a workflow artifact. Feature PRs never run it.
+#
+# The bundle and DMG are unsigned: there is no Apple Developer account yet, so
+# the workflow takes no signing secrets and passes no signing options.
+on:
+  pull_request:
+    paths:
+      - Cargo.toml
+      - CMakeLists.txt
+      - CHANGELOG.md
+      - version.txt
+      - .release-please-manifest.json
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag, e.g. v0.1.0
+        type: string
+        required: true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 90
+    if: github.event_name != 'pull_request' || github.head_ref == 'release-please--branches--master'
+    env:
+      TAG: ${{ inputs.tag }}
+      VERSION: ${{ inputs.tag || format('pr{0}', github.event.number) }}
+      # sccache, the same setup ci.yml uses.
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: "true"
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+
+      - uses: ./.github/actions/macos-bundle
+
+      # The deployed bundle must find its own plugins, not the runner's Qt
+      # install, so drop the environment the Qt action may have exported.
+      - name: Smoke-check the deployed bundle
+        run: |
+          env -u QT_PLUGIN_PATH -u QML2_IMPORT_PATH \
+            ./build/pictura.app/Contents/MacOS/pictura --headless --self-test
+
+      # ponytail: unsigned DMG; add codesign --sign "Developer ID Application"
+      # plus notarytool when an Apple Developer account exists.
+      - name: Pack the DMG
+        run: |
+          brew install create-dmg
+          mkdir -p dist
+          cp -R build/pictura.app dist/
+          create-dmg \
+            --volname "Kooka Pictura ${VERSION#v}" \
+            --volicon assets/icons/app.icns \
+            --app-drop-link 480 200 \
+            --skip-jenkins \
+            "KookaPictura-${VERSION#v}-macOS.dmg" \
+            dist/
+
+      - name: Keep the dry-run DMG
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos
+          path: KookaPictura-*-macOS.dmg
+          retention-days: 7
+
+      - name: Upload release assets
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" KookaPictura-*-macOS.dmg --clobber
