@@ -6,6 +6,7 @@
 #include <QtGui/QPainter>
 #include <QtGui/QPen>
 #include <QtGui/QTabletEvent>
+#include <QtGui/QTransform>
 #include <QtGui/QWheelEvent>
 #include <QtWidgets/QMenu>
 
@@ -83,6 +84,7 @@ void LiquifyCanvas::reload()
 
 void LiquifyCanvas::refreshAll()
 {
+    meshDirty_ = true;
     const double dpr = devicePixelRatioF();
     const int w = static_cast<int>(std::ceil(width() * dpr));
     const int h = static_cast<int>(std::ceil(height() * dpr));
@@ -109,6 +111,65 @@ void LiquifyCanvas::setBrushSize(double size)
 void LiquifyCanvas::setStylusPressure(bool on)
 {
     stylus_ = on;
+}
+
+void LiquifyCanvas::setShowImage(bool show)
+{
+    showImage_ = show;
+    update();
+}
+
+void LiquifyCanvas::setMesh(bool show, double spacing, const QColor& color)
+{
+    showMesh_ = show;
+    meshSpacing_ = spacing;
+    meshColor_ = color;
+    meshDirty_ = true;
+    update();
+}
+
+void LiquifyCanvas::setBackdrop(const QImage& image, BackdropMode mode, double opacity)
+{
+    backdrop_ = image;
+    backdropMode_ = mode;
+    backdropOpacity_ = std::clamp(opacity, 0.0, 1.0);
+    update();
+}
+
+QPainterPath LiquifyCanvas::meshPathForTest()
+{
+    rebuildMesh();
+    return QTransform::fromTranslate(offset_.x(), offset_.y()).scale(zoom_, zoom_).map(meshPath_);
+}
+
+void LiquifyCanvas::rebuildMesh()
+{
+    if (!meshDirty_) {
+        return;
+    }
+    meshDirty_ = false;
+    meshPath_ = QPainterPath();
+    const QPointF a = toLayer(QPointF(0, 0));
+    const QPointF b = toLayer(QPointF(width(), height()));
+    // Trace on a lattice about three screen pixels apart, never coarser than
+    // half a cell.
+    const double step = std::clamp(3.0 / zoom_, 0.5, meshSpacing_ / 2.0);
+    const ::rust::Vec<double> points =
+        liquify_grid_lines(a.x(), a.y(), b.x(), b.y(), meshSpacing_, step);
+    bool start = true;
+    for (size_t i = 0; i + 1 < points.size(); i += 2) {
+        if (std::isnan(points[i])) {
+            start = true;
+            continue;
+        }
+        const QPointF p(points[i], points[i + 1]);
+        if (start) {
+            meshPath_.moveTo(p);
+            start = false;
+        } else {
+            meshPath_.lineTo(p);
+        }
+    }
 }
 
 void LiquifyCanvas::setZoom(double zoom)
@@ -220,8 +281,40 @@ void LiquifyCanvas::paintEvent(QPaintEvent*)
     painter.setBrushOrigin(target.topLeft());
     painter.fillRect(target, checkerBrush());
     painter.restore();
-    if (!view_.isNull()) {
+    // Only the active layer is distorted; the backdrop is drawn as it is.
+    const bool backdrop = !backdrop_.isNull() && backdropOpacity_ > 0.0;
+    auto drawBackdrop = [&](QPainter::CompositionMode mode) {
+        painter.save();
+        painter.setOpacity(backdropOpacity_);
+        painter.setCompositionMode(mode);
+        painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+        painter.drawImage(target, backdrop_);
+        painter.restore();
+    };
+    if (backdrop && backdropMode_ == BackdropMode::Behind) {
+        drawBackdrop(QPainter::CompositionMode_SourceOver);
+    }
+    if (showImage_ && !view_.isNull()) {
         painter.drawImage(QPointF(0, 0), view_);
+    }
+    if (backdrop && backdropMode_ == BackdropMode::InFront) {
+        drawBackdrop(QPainter::CompositionMode_SourceOver);
+    } else if (backdrop && backdropMode_ == BackdropMode::Blend) {
+        // ponytail: CS6's Blend formula is unpublished; Difference shows
+        // where the two pictures disagree, which is what aligning needs.
+        drawBackdrop(QPainter::CompositionMode_Difference);
+    }
+    if (showMesh_) {
+        rebuildMesh();
+        painter.save();
+        painter.translate(offset_);
+        painter.scale(zoom_, zoom_);
+        QPen pen(meshColor_, 1.0);
+        pen.setCosmetic(true);
+        painter.setPen(pen);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawPath(meshPath_);
+        painter.restore();
     }
     if (effectiveMode() == Mode::Brush && hovering_) {
         const double r = brushSize_ / 2.0 * zoom_;
@@ -387,6 +480,7 @@ void LiquifyCanvas::zoomAbout(double zoom, const QPointF& anchor)
 void LiquifyCanvas::viewChanged()
 {
     clampOffset();
+    meshDirty_ = true;
     refreshAll();
     if (zoomChanged) {
         zoomChanged();
@@ -474,6 +568,12 @@ void LiquifyCanvas::applyPatch(const QList<int>& rect)
         painter.drawImage(device.topLeft(), patch);
         painter.end();
         target.setDevicePixelRatio(dpr);
+    }
+    if (showMesh_) {
+        // The mesh is traced across the frame, so it repaints whole.
+        meshDirty_ = true;
+        update();
+        return;
     }
     update(QRectF(QPointF(device.topLeft()) / dpr, QSizeF(device.size()) / dpr)
                .toAlignedRect()

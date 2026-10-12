@@ -69,6 +69,50 @@ fn forward_warp_moves_pixels_along_the_drag_and_nowhere_else() {
     assert!(dirty.left <= 25 && dirty.right >= 64 && dirty.right <= 120);
 }
 
+fn segments(lines: &[[f64; 2]]) -> Vec<([f64; 2], [f64; 2])> {
+    lines
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .map(|&[a, b, _]| (a, b))
+        .collect()
+}
+
+#[test]
+fn the_grid_is_drawn_where_the_distortion_puts_it() {
+    let mut mesh = LiquifyMesh::new(64, 48);
+    let lines = mesh.grid_lines([0.0, 0.0, 64.0, 48.0], 16.0, 4.0);
+    assert_eq!(lines.len() % 3, 0);
+    // Undistorted: every segment lies on a multiple of 16, the layer's far
+    // edges included.
+    let on_grid = |v: f64| (v / 16.0 - (v / 16.0).round()).abs() < 1e-9;
+    let straight = segments(&lines);
+    assert!(!straight.is_empty());
+    assert!(straight
+        .iter()
+        .all(|(a, b)| (on_grid(a[0]) && on_grid(b[0])) || (on_grid(a[1]) && on_grid(b[1]))));
+    // Output p shows source p + 3, so the source line x = 32 shows at 29.
+    mesh.d.fill([3.0, 0.0]);
+    let shifted = segments(&mesh.grid_lines([0.0, 0.0, 64.0, 48.0], 16.0, 4.0));
+    assert!(shifted
+        .iter()
+        .any(|(a, b)| (a[0] - 29.0).abs() < 1e-6 && (b[0] - 29.0).abs() < 1e-6));
+    // A twirl bends the lines but keeps them short and joined: no segment is
+    // longer than a lattice cell's diagonal.
+    let mut twirled = LiquifyMesh::new(64, 48);
+    for _ in 0..30 {
+        twirled.hold(&brush(LiquifyTool::Twirl, 40.0), [32.0, 24.0, 1.0]);
+    }
+    let bent = segments(&twirled.grid_lines([0.0, 0.0, 64.0, 48.0], 16.0, 2.0));
+    assert!(bent
+        .iter()
+        .all(|(a, b)| (a[0] - b[0]).hypot(a[1] - b[1]) <= 2.0 * std::f64::consts::SQRT_2 + 1e-9));
+    assert!(bent.len() > straight.len());
+    // Only the asked rectangle is traced.
+    let few = mesh.grid_lines([0.0, 0.0, 10.0, 10.0], 16.0, 4.0);
+    assert!(few.len() < 3 * shifted.len());
+}
+
 #[test]
 fn the_brush_fades_to_nothing_at_its_rim() {
     for density in [0.0, 0.5, 1.0] {

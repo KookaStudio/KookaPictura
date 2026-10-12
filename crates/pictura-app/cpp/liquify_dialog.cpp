@@ -14,6 +14,8 @@
 #include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
+#include <QtWidgets/QFrame>
+#include <QtWidgets/QGridLayout>
 #include <QtWidgets/QGroupBox>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
@@ -329,19 +331,104 @@ LiquifyDialog::LiquifyDialog(PictureView* view, const QString& documentName, QWi
     }
 
     viewBox_ = new QGroupBox(QStringLiteral("View Options"), this);
-    auto* viewRow = new QHBoxLayout(viewBox_);
+    // One grid, so every label in the group lines up.
+    auto* grid = new QGridLayout(viewBox_);
+    grid->setColumnStretch(1, 1);
+    auto colorCombo = [this](const QString& name, int initial) {
+        auto* combo = new QComboBox(viewBox_);
+        combo->setObjectName(name);
+        for (const auto& m : kMaskColors) {
+            combo->addItem(QString::fromLatin1(m.name), m.color);
+        }
+        combo->setCurrentIndex(initial);
+        return combo;
+    };
+    auto span = [grid](QWidget* widget) { grid->addWidget(widget, grid->rowCount(), 0, 1, 2); };
+    auto spanLayout = [grid](QLayout* layout) {
+        grid->addLayout(layout, grid->rowCount(), 0, 1, 2);
+    };
+    auto rule = [this, span] {
+        auto* line = new QFrame(viewBox_);
+        line->setFrameShape(QFrame::HLine);
+        line->setFrameShadow(QFrame::Sunken);
+        span(line);
+    };
+    auto formRow = [this, grid](const QString& label, QWidget* control) {
+        auto* caption = new QLabel(label, viewBox_);
+        caption->setBuddy(control);
+        const int row = grid->rowCount();
+        grid->addWidget(caption, row, 0, Qt::AlignRight);
+        grid->addWidget(control, row, 1);
+        return caption;
+    };
+
+    showImage_ = new QCheckBox(QStringLiteral("Show Image"), viewBox_);
+    showImage_->setObjectName(QStringLiteral("liquifyShowImage"));
+    showImage_->setChecked(true);
+    showMesh_ = new QCheckBox(QStringLiteral("Show Mesh"), viewBox_);
+    showMesh_->setObjectName(QStringLiteral("liquifyShowMesh"));
+    auto* showRow = new QHBoxLayout;
+    showRow->addWidget(showImage_);
+    showRow->addWidget(showMesh_);
+    showRow->addStretch(1);
+    spanLayout(showRow);
+    meshSize_ = new QComboBox(viewBox_);
+    meshSize_->setObjectName(QStringLiteral("liquifyMeshSize"));
+    meshSize_->addItems({QStringLiteral("Small"), QStringLiteral("Medium"), QStringLiteral("Large")});
+    meshSize_->setCurrentIndex(1);
+    meshColor_ = colorCombo(QStringLiteral("liquifyMeshColor"), 6); // Gray
+    meshControls_ << formRow(QStringLiteral("Mesh Size:"), meshSize_) << meshSize_
+                  << formRow(QStringLiteral("Mesh Color:"), meshColor_) << meshColor_;
+    connect(showImage_, &QCheckBox::toggled, canvas_, &LiquifyCanvas::setShowImage);
+    connect(showMesh_, &QCheckBox::toggled, this, &LiquifyDialog::meshChanged);
+    connect(meshSize_, &QComboBox::currentIndexChanged, this, &LiquifyDialog::meshChanged);
+    connect(meshColor_, &QComboBox::currentIndexChanged, this, &LiquifyDialog::meshChanged);
+
+    rule();
     showMask_ = new QCheckBox(QStringLiteral("Show Mask"), viewBox_);
     showMask_->setObjectName(QStringLiteral("liquifyShowMask"));
-    maskColor_ = new QComboBox(viewBox_);
-    maskColor_->setObjectName(QStringLiteral("liquifyMaskColor"));
-    for (const auto& m : kMaskColors) {
-        maskColor_->addItem(QString::fromLatin1(m.name), m.color);
-    }
-    viewRow->addWidget(showMask_);
-    viewRow->addWidget(new QLabel(QStringLiteral("Mask Color:"), viewBox_));
-    viewRow->addWidget(maskColor_, 1);
+    span(showMask_);
+    maskColor_ = colorCombo(QStringLiteral("liquifyMaskColor"), 0); // Red
+    formRow(QStringLiteral("Mask Color:"), maskColor_);
     connect(showMask_, &QCheckBox::toggled, this, &LiquifyDialog::showMaskChanged);
     connect(maskColor_, &QComboBox::currentIndexChanged, this, &LiquifyDialog::showMaskChanged);
+
+    rule();
+    showBackdrop_ = new QCheckBox(QStringLiteral("Show Backdrop"), viewBox_);
+    showBackdrop_->setObjectName(QStringLiteral("liquifyShowBackdrop"));
+    span(showBackdrop_);
+    backdropUse_ = new QComboBox(viewBox_);
+    backdropUse_->setObjectName(QStringLiteral("liquifyBackdropUse"));
+    backdropUse_->addItem(QStringLiteral("All Layers"), QString());
+    if (view_) {
+        for (int i = 0; i < view_->layer_row_count(); ++i) {
+            const QString kind = view_->layer_row_kind(i);
+            if (kind == QStringLiteral("pixel") || kind == QStringLiteral("background")) {
+                backdropUse_->addItem(view_->layer_row_name(i), view_->layer_row_path(i));
+            }
+        }
+    }
+    backdropMode_ = new QComboBox(viewBox_);
+    backdropMode_->setObjectName(QStringLiteral("liquifyBackdropMode"));
+    backdropMode_->addItems(
+        {QStringLiteral("In Front"), QStringLiteral("Behind"), QStringLiteral("Blend")});
+    backdropControls_ << formRow(QStringLiteral("Use:"), backdropUse_) << backdropUse_
+                      << formRow(QStringLiteral("Mode:"), backdropMode_) << backdropMode_;
+    // addSliderRow appends to a vertical layout, so the row gets its own.
+    auto* opacityHost = new QWidget(viewBox_);
+    auto* opacityLayout = new QVBoxLayout(opacityHost);
+    opacityLayout->setContentsMargins(0, 0, 0, 0);
+    backdropOpacity_ = addSliderRow(opacityHost, QStringLiteral("Opacity:"),
+                                    QStringLiteral("liquifyBackdropOpacity"), 0, 100, 50);
+    span(opacityHost);
+    backdropControls_ << opacityHost;
+    connect(showBackdrop_, &QCheckBox::toggled, this, [this] { backdropChanged(true); });
+    connect(backdropUse_, &QComboBox::currentIndexChanged, this, [this] { backdropChanged(true); });
+    connect(backdropMode_, &QComboBox::currentIndexChanged, this,
+            [this] { backdropChanged(false); });
+    connect(backdropOpacity_, &QSpinBox::valueChanged, this, [this] { backdropChanged(false); });
+    meshChanged();
+    backdropChanged(false);
 
     advancedOnly_ << density_->parentWidget() << rate_->parentWidget()
                   << jitter_->parentWidget() << reconstruct_ << maskBox_ << viewBox_;
@@ -442,7 +529,11 @@ void LiquifyDialog::setAdvanced(bool on)
         box->setTitle(on ? QStringLiteral("Tool Options") : QStringLiteral("Brush Tool Options"));
     }
     if (!on) {
+        // Basic mode has no View Options, so nothing they add stays on.
         showMask_->setChecked(false);
+        showMesh_->setChecked(false);
+        showBackdrop_->setChecked(false);
+        showImage_->setChecked(true);
     }
     if (QAbstractButton* current = tools_->checkedButton(); current && current->isHidden()) {
         selectTool(ForwardWarp);
@@ -493,6 +584,36 @@ void LiquifyDialog::showMaskChanged()
     const QColor color = maskColor_->currentData().value<QColor>();
     liquify_set_mask_overlay(showMask_->isChecked(), color.red(), color.green(), color.blue());
     canvas_->refreshAll();
+}
+
+void LiquifyDialog::meshChanged()
+{
+    // Small, Medium and Large cells, in layer pixels.
+    constexpr double kSpacing[] = {16.0, 32.0, 64.0};
+    const bool on = showMesh_->isChecked();
+    for (QWidget* control : meshControls_) {
+        control->setEnabled(on);
+    }
+    canvas_->setMesh(on, kSpacing[std::clamp(meshSize_->currentIndex(), 0, 2)],
+                     meshColor_->currentData().value<QColor>());
+}
+
+void LiquifyDialog::backdropChanged(bool refetch)
+{
+    const bool on = showBackdrop_->isChecked();
+    for (QWidget* control : backdropControls_) {
+        control->setEnabled(on);
+    }
+    if (!on) {
+        canvas_->setBackdrop(QImage(), LiquifyCanvas::BackdropMode::InFront, 0.0);
+        return;
+    }
+    if (refetch || backdrop_.isNull()) {
+        backdrop_ = view_ ? liquify_backdrop(*view_, backdropUse_->currentData().toString())
+                          : QImage();
+    }
+    const auto mode = static_cast<LiquifyCanvas::BackdropMode>(backdropMode_->currentIndex());
+    canvas_->setBackdrop(backdrop_, mode, backdropOpacity_->value() / 100.0);
 }
 
 void LiquifyDialog::reconstructWithAmount()

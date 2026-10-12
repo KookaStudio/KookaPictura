@@ -4,14 +4,18 @@
 // a checkerboard, over CS6's grey ground. The view is rendered by the Rust
 // session (`filter_tools/liquify.rs`) at the screen's resolution, so a
 // zoomed-in preview is smooth and matches the commit; a brush drag edits the
-// mesh and re-renders only the rectangle it changed. Hand drags (or Space)
+// mesh and re-renders only the rectangle it changed. View Options can hide
+// the picture, draw the mesh through the distortion, and show a backdrop of
+// other layers in front of, behind, or blended with it. Hand drags (or Space)
 // pan, Zoom clicks (Alt: out) zoom, and a right click with Zoom offers CS6's
 // zoom levels.
 
 #include <QtCore/QList>
 #include <QtCore/QPointF>
 #include <QtCore/QTimer>
+#include <QtGui/QColor>
 #include <QtGui/QImage>
+#include <QtGui/QPainterPath>
 #include <QtWidgets/QWidget>
 
 #include <functional>
@@ -23,6 +27,7 @@ class LiquifyCanvas : public QWidget {
 
 public:
     enum class Mode { Brush, Hand, Zoom };
+    enum class BackdropMode { InFront, Behind, Blend };
 
     explicit LiquifyCanvas(QWidget* parent = nullptr);
 
@@ -37,6 +42,15 @@ public:
     // Brush diameter in layer pixels, for the cursor ring.
     void setBrushSize(double size);
     void setStylusPressure(bool on);
+
+    // View Options. `spacing` is the mesh's cell in layer pixels.
+    void setShowImage(bool show);
+    void setMesh(bool show, double spacing, const QColor& color);
+    // A null `image` hides the backdrop; it is in the layer's frame.
+    void setBackdrop(const QImage& image, BackdropMode mode, double opacity);
+    bool meshShown() const { return showMesh_; }
+    // The traced mesh in widget coordinates, for tests.
+    QPainterPath meshPathForTest();
 
     // Screen pixels per layer pixel.
     double zoom() const { return zoom_; }
@@ -93,7 +107,19 @@ private:
     // ([x, y, w, h]).
     void applyPatch(const QList<int>& rect);
 
+    void rebuildMesh();
+
     QImage view_;
+    bool showImage_ = true;
+    bool showMesh_ = false;
+    double meshSpacing_ = 32.0;
+    QColor meshColor_ = QColor(128, 128, 128);
+    // The mesh in layer coordinates, rebuilt when the mesh or view changes.
+    QPainterPath meshPath_;
+    bool meshDirty_ = true;
+    QImage backdrop_;
+    BackdropMode backdropMode_ = BackdropMode::InFront;
+    double backdropOpacity_ = 0.5;
     int layerWidth_ = 0;
     int layerHeight_ = 0;
     double zoom_ = 1.0;

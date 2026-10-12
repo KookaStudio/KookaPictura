@@ -5,6 +5,7 @@
 #include <QtGui/QImage>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QCheckBox>
+#include <QtWidgets/QComboBox>
 #include <QtWidgets/QGroupBox>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QSpinBox>
@@ -67,6 +68,9 @@ private slots:
     void okCommitsOneFilterState();
     void loadLastMeshReappliesTheCommittedMesh();
     void lastFilterSettingsReopensWithTheMesh();
+    void viewOptionsFollowCs6();
+    void showMeshTracesTheDistortion();
+    void showBackdropLaysOtherLayersOverOrUnder();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -414,6 +418,121 @@ void LiquifyDialogTest::lastFilterSettingsReopensWithTheMesh()
         QString::fromLatin1(pictura::command_ids::FilterLastFilterSettings)));
     QVERIFY(distorted);
     QCOMPARE(view->history_count(), history);
+}
+
+namespace {
+
+QStringList comboItems(const QComboBox* combo)
+{
+    QStringList items;
+    for (int i = 0; i < combo->count(); ++i) {
+        items.append(combo->itemText(i));
+    }
+    return items;
+}
+
+} // namespace
+
+void LiquifyDialogTest::viewOptionsFollowCs6()
+{
+    LiquifyDialog dialog(window_->activeView(), QStringLiteral("stripes.png"));
+    dialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+    dialog.setAdvanced(true);
+    auto check = [&](const char* name) {
+        return dialog.findChild<QCheckBox*>(QString::fromLatin1(name));
+    };
+    auto combo = [&](const char* name) {
+        return dialog.findChild<QComboBox*>(QString::fromLatin1(name));
+    };
+    QVERIFY(check("liquifyShowImage")->isChecked());
+    QVERIFY(!check("liquifyShowMesh")->isChecked());
+    QVERIFY(!check("liquifyShowBackdrop")->isChecked());
+    const QStringList colours = {"Red", "Yellow", "Green", "Cyan", "Blue", "Magenta", "Gray"};
+    QCOMPARE(comboItems(combo("liquifyMeshSize")), QStringList({"Small", "Medium", "Large"}));
+    QCOMPARE(combo("liquifyMeshSize")->currentText(), QStringLiteral("Medium"));
+    QCOMPARE(comboItems(combo("liquifyMeshColor")), colours);
+    QCOMPARE(combo("liquifyMeshColor")->currentText(), QStringLiteral("Gray"));
+    QCOMPARE(comboItems(combo("liquifyMaskColor")), colours);
+    QCOMPARE(combo("liquifyMaskColor")->currentText(), QStringLiteral("Red"));
+    QCOMPARE(comboItems(combo("liquifyBackdropMode")),
+             QStringList({"In Front", "Behind", "Blend"}));
+    QCOMPARE(combo("liquifyBackdropUse")->itemText(0), QStringLiteral("All Layers"));
+    QVERIFY(comboItems(combo("liquifyBackdropUse")).contains(QStringLiteral("Background")));
+    auto* opacity = dialog.findChild<QSpinBox*>(QStringLiteral("liquifyBackdropOpacity"));
+    QCOMPARE(opacity->value(), 50);
+    // Each group's controls wait for their checkbox.
+    QVERIFY(!combo("liquifyMeshSize")->isEnabled());
+    QVERIFY(!combo("liquifyBackdropUse")->isEnabled() && !opacity->isEnabled());
+    check("liquifyShowMesh")->setChecked(true);
+    check("liquifyShowBackdrop")->setChecked(true);
+    QVERIFY(combo("liquifyMeshSize")->isEnabled() && combo("liquifyMeshColor")->isEnabled());
+    QVERIFY(combo("liquifyBackdropMode")->isEnabled() && opacity->isEnabled());
+    // Back to Basic turns them off again.
+    dialog.setAdvanced(false);
+    QVERIFY(!check("liquifyShowMesh")->isChecked() && !dialog.canvas()->meshShown());
+    dialog.reject();
+}
+
+void LiquifyDialogTest::showMeshTracesTheDistortion()
+{
+    LiquifyDialog dialog(window_->activeView(), QStringLiteral("stripes.png"));
+    dialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+    dialog.setAdvanced(true);
+    const QImage plain = dialog.canvas()->grab().toImage();
+    dialog.findChild<QCheckBox*>(QStringLiteral("liquifyShowMesh"))->setChecked(true);
+    QVERIFY(dialog.canvas()->meshShown());
+    const QPainterPath straight = dialog.canvas()->meshPathForTest();
+    QVERIFY(!straight.isEmpty());
+    QVERIFY(dialog.canvas()->grab().toImage() != plain);
+    dialog.canvas()->strokeForTest(kDrag);
+    QVERIFY(dialog.canvas()->meshPathForTest() != straight);
+    // Large cells trace fewer lines.
+    auto* size = dialog.findChild<QComboBox*>(QStringLiteral("liquifyMeshSize"));
+    size->setCurrentIndex(0);
+    const int small = dialog.canvas()->meshPathForTest().elementCount();
+    size->setCurrentIndex(2);
+    QVERIFY(dialog.canvas()->meshPathForTest().elementCount() < small);
+    // Show Image off leaves only the mesh on the checkerboard.
+    dialog.findChild<QCheckBox*>(QStringLiteral("liquifyShowImage"))->setChecked(false);
+    const QImage meshOnly = dialog.canvas()->grab().toImage();
+    QVERIFY(meshOnly != plain);
+    dialog.reject();
+}
+
+void LiquifyDialogTest::showBackdropLaysOtherLayersOverOrUnder()
+{
+    pictura::PictureView* view = window_->activeView();
+    // A copy of the stripes to distort over the original Background.
+    QVERIFY(view->duplicate_layer(0) >= 0);
+    LiquifyDialog dialog(view, QStringLiteral("stripes.png"));
+    dialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+    dialog.setAdvanced(true);
+    QVERIFY(!pictura::liquify_backdrop(*view, QString()).isNull());
+    dialog.canvas()->strokeForTest(kDrag);
+    const QImage distorted = dialog.canvas()->grab().toImage();
+
+    auto* show = dialog.findChild<QCheckBox*>(QStringLiteral("liquifyShowBackdrop"));
+    auto* mode = dialog.findChild<QComboBox*>(QStringLiteral("liquifyBackdropMode"));
+    auto* opacity = dialog.findChild<QSpinBox*>(QStringLiteral("liquifyBackdropOpacity"));
+    show->setChecked(true);
+    opacity->setValue(100);
+    // In Front at 100% shows the undistorted Background over the warp.
+    const QImage front = dialog.canvas()->grab().toImage();
+    QVERIFY(front != distorted);
+    // Behind an opaque layer it is hidden.
+    mode->setCurrentIndex(1);
+    QCOMPARE(dialog.canvas()->grab().toImage(), distorted);
+    // Opacity 0 in front shows the full effect.
+    mode->setCurrentIndex(0);
+    opacity->setValue(0);
+    QCOMPARE(dialog.canvas()->grab().toImage(), distorted);
+    mode->setCurrentIndex(2);
+    opacity->setValue(100);
+    QVERIFY(dialog.canvas()->grab().toImage() != distorted);
+    dialog.reject();
 }
 
 QTEST_MAIN(LiquifyDialogTest)

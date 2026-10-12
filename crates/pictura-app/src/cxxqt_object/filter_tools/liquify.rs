@@ -9,19 +9,25 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
+use core::pin::Pin;
 use cxx_qt::CxxQtType;
-use cxx_qt_lib::{QImage, QImageFormat};
-use pictura_core::PsdRect;
+use cxx_qt_lib::{QImage, QImageFormat, QString};
+use pictura_core::{PixelBuffer, PsdRect};
 use pictura_filters::{LiquifyBrush, LiquifyMesh, LiquifySource, LiquifyTool};
 
 use super::super::helpers::{active_mask_target, active_pixel_layer};
+use super::super::helpers_composite::{layer_buffer, rgba_image};
 use super::super::qobject::PictureView;
+use super::hidden_layer_buffer;
 
 #[cxx_qt::bridge]
 pub mod ffi {
     unsafe extern "C++" {
         include!("cxx-qt-lib/qimage.h");
         type QImage = cxx_qt_lib::QImage;
+
+        include!("cxx-qt-lib/qstring.h");
+        type QString = cxx_qt_lib::QString;
 
         include!("pictura_app/src/cxxqt_object.cxxqt.h");
         #[namespace = "pictura"]
@@ -42,6 +48,25 @@ pub mod ffi {
         /// `(i, j)` shows layer point `(x + (i + 0.5) / zoom, y + (j + 0.5) /
         /// zoom)`, clear off the layer; null with no session.
         fn liquify_render(x: f64, y: f64, zoom: f64, w: i32, h: i32) -> QImage;
+
+        /// Show Mesh: the source grid `spacing` layer pixels apart as the
+        /// distortion draws it, traced where it can show inside the layer
+        /// rectangle `(x0, y0)–(x1, y1)` and sampled every `step`. Flattened
+        /// `x, y` pairs; a NaN pair ends each line.
+        fn liquify_grid_lines(
+            x0: f64,
+            y0: f64,
+            x1: f64,
+            y1: f64,
+            spacing: f64,
+            step: f64,
+        ) -> Vec<f64>;
+
+        /// Show Backdrop's picture in the active layer's frame (its size, laid
+        /// over it): an empty `path` is All Layers (the document with the
+        /// active layer hidden), otherwise the layer at `path`. Null when
+        /// unavailable.
+        fn liquify_backdrop(view: Pin<&mut PictureView>, path: &QString) -> QImage;
 
         /// The brush the following strokes use. `tool` indexes Forward Warp,
         /// Reconstruct, Twirl, Pucker, Bloat, Push Left, Mirror, Turbulence,
@@ -242,6 +267,78 @@ fn liquify_render(x: f64, y: f64, zoom: f64, w: i32, h: i32) -> QImage {
     })
 }
 
+fn liquify_grid_lines(x0: f64, y0: f64, x1: f64, y1: f64, spacing: f64, step: f64) -> Vec<f64> {
+    with_session(Vec::new(), |s| {
+        s.mesh
+            .grid_lines([x0, y0, x1, y1], spacing, step)
+            .into_iter()
+            .flatten()
+            .collect()
+    })
+}
+
+fn liquify_backdrop(mut view: Pin<&mut PictureView>, path: &QString) -> QImage {
+    let mut rust = view.as_mut().rust_mut();
+    let gpu_compute = rust.gpu_compute;
+    let Some(active) = rust.active_layer.clone() else {
+        return QImage::default();
+    };
+    let Some(doc) = rust.doc.as_mut() else {
+        return QImage::default();
+    };
+    let Some(frame) = active_pixel_layer(doc, Some(&active)).map(|l| l.rect) else {
+        return QImage::default();
+    };
+    let path = path.to_string();
+    let picture = if path.is_empty() {
+        hidden_layer_buffer(doc, &active, gpu_compute)
+            .map(|base| (pictura_codec::buffer_to_srgb(doc, &base).into_owned(), 0, 0))
+    } else {
+        active_pixel_layer(doc, Some(&path))
+            .and_then(|layer| Some((layer_buffer(layer)?, layer.rect.left, layer.rect.top)))
+    };
+    let Some((buffer, left, top)) = picture else {
+        return QImage::default();
+    };
+    let rgba = in_frame(&buffer, left - frame.left, top - frame.top, frame);
+    rgba_image(rgba, frame.width(), frame.height())
+}
+
+/// `buffer` (gray, gray+alpha, RGB or RGBA planes) placed at `(dx, dy)` in a
+/// clear straight-alpha RGBA8 image the size of `frame`.
+fn in_frame(buffer: &PixelBuffer, dx: i32, dy: i32, frame: PsdRect) -> Vec<u8> {
+    let (fw, fh) = (
+        frame.width().max(0) as usize,
+        frame.height().max(0) as usize,
+    );
+    let (bw, bh) = (buffer.width as usize, buffer.height as usize);
+    let n = bw * bh;
+    let channels = buffer.channels as usize;
+    let mut out = vec![0u8; fw * fh * 4];
+    for y in 0..fh {
+        let sy = y as i64 - i64::from(dy);
+        if sy < 0 || sy >= bh as i64 {
+            continue;
+        }
+        for x in 0..fw {
+            let sx = x as i64 - i64::from(dx);
+            if sx < 0 || sx >= bw as i64 {
+                continue;
+            }
+            let i = sy as usize * bw + sx as usize;
+            let plane = |c: usize| buffer.data[c * n + i];
+            let px = match channels {
+                1 => [plane(0), plane(0), plane(0), 255],
+                2 => [plane(0), plane(0), plane(0), plane(1)],
+                3 => [plane(0), plane(1), plane(2), 255],
+                _ => [plane(0), plane(1), plane(2), plane(3)],
+            };
+            out[(y * fw + x) * 4..(y * fw + x) * 4 + 4].copy_from_slice(&px);
+        }
+    }
+    out
+}
+
 #[allow(clippy::too_many_arguments)]
 fn liquify_set_brush(
     tool: i32,
@@ -349,6 +446,23 @@ fn liquify_finish(keep: bool) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_backdrop_sits_at_its_offset_in_the_active_layers_frame() {
+        let mut buffer = PixelBuffer::new(2, 1, 3);
+        buffer.data.copy_from_slice(&[10, 20, 30, 40, 50, 60]);
+        let frame = PsdRect {
+            left: 0,
+            top: 0,
+            right: 3,
+            bottom: 2,
+        };
+        let rgba = in_frame(&buffer, 1, 1, frame);
+        // Row 0 and column 0 are clear; the two pixels land at (1,1), (2,1).
+        assert!(rgba[..12].iter().all(|&v| v == 0));
+        assert_eq!(&rgba[12..16], &[0, 0, 0, 0]);
+        assert_eq!(&rgba[16..24], &[10, 30, 50, 255, 20, 40, 60, 255]);
+    }
 
     #[test]
     fn kept_meshes_are_found_by_id_and_zero_is_identity() {

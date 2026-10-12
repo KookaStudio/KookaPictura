@@ -436,6 +436,57 @@ impl LiquifyMesh {
         )
     }
 
+    /// Show Mesh: the source grid `spacing` layer pixels apart as the
+    /// distortion draws it, inside `rect` (`[x0, y0, x1, y1]`, layer pixels,
+    /// clipped to the layer). Each grid line is the contour where the source
+    /// coordinate `p + d(p)` crosses a multiple of `spacing`, traced by
+    /// marching squares on a lattice `step` apart, so twirls and folds draw as
+    /// faithfully as shifts. Returns segment end points in pairs, each pair
+    /// followed by a NaN point.
+    pub fn grid_lines(&self, rect: [f64; 4], spacing: f64, step: f64) -> Vec<[f64; 2]> {
+        let mut out = Vec::new();
+        let (w, h) = (f64::from(self.width), f64::from(self.height));
+        let (x0, y0) = (rect[0].max(0.0), rect[1].max(0.0));
+        let (x1, y1) = (rect[2].min(w), rect[3].min(h));
+        if !(spacing >= 1.0 && step > 0.0) || x0 >= x1 || y0 >= y1 {
+            return out;
+        }
+        let cols = ((x1 - x0) / step).ceil() as usize + 1;
+        let rows = ((y1 - y0) / step).ceil() as usize + 1;
+        let at = |i: usize, j: usize| {
+            [
+                (x0 + i as f64 * step).min(x1),
+                (y0 + j as f64 * step).min(y1),
+            ]
+        };
+        // The source position each lattice point shows.
+        let source: Vec<[f64; 2]> = (0..rows)
+            .flat_map(|j| (0..cols).map(move |i| (i, j)))
+            .map(|(i, j)| {
+                let p = at(i, j);
+                let d = self.displacement(p[0], p[1]);
+                [p[0] + d[0], p[1] + d[1]]
+            })
+            .collect();
+        for j in 0..rows.saturating_sub(1) {
+            for i in 0..cols.saturating_sub(1) {
+                let corners = [(i, j), (i + 1, j), (i + 1, j + 1), (i, j + 1)];
+                let pos = corners.map(|(i, j)| at(i, j));
+                for axis in [0, 1] {
+                    let v = corners.map(|(i, j)| source[j * cols + i][axis]);
+                    let lo = v.iter().copied().fold(f64::INFINITY, f64::min);
+                    let hi = v.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                    let mut k = (lo / spacing).ceil();
+                    while k * spacing <= hi {
+                        contour_cell(&pos, &v, k * spacing, &mut out);
+                        k += 1.0;
+                    }
+                }
+            }
+        }
+        out
+    }
+
     /// Catmull-Rom displacement at grid coordinates.
     fn sample_cubic(&self, gx: f64, gy: f64) -> [f64; 2] {
         let (ix, iy) = (gx.floor() as isize, gy.floor() as isize);
@@ -466,6 +517,28 @@ fn falloff(t2: f64, density: f64) -> f64 {
     let c = ((1.0 - t2.sqrt()) / RIM).clamp(0.0, 1.0);
     let core = c * c * (3.0 - 2.0 * c);
     (1.0 - density) * core + density * soft
+}
+
+/// One marching-squares cell: the segment(s) where the field `v` (at corners
+/// `pos`, in order around the cell) crosses `level`.
+fn contour_cell(pos: &[[f64; 2]; 4], v: &[f64; 4], level: f64, out: &mut Vec<[f64; 2]>) {
+    let mut hits: Vec<[f64; 2]> = Vec::with_capacity(4);
+    for e in 0..4 {
+        let (a, b) = (e, (e + 1) % 4);
+        let (va, vb) = (v[a] - level, v[b] - level);
+        // Half-open, so a corner exactly on the level counts once.
+        if (va < 0.0) != (vb < 0.0) {
+            let t = va / (va - vb);
+            hits.push([
+                pos[a][0] + (pos[b][0] - pos[a][0]) * t,
+                pos[a][1] + (pos[b][1] - pos[a][1]) * t,
+            ]);
+        }
+    }
+    // Two crossings make one segment; a saddle's four pair up in order.
+    for &[a, b] in hits.as_chunks::<2>().0 {
+        out.extend([a, b, [f64::NAN, f64::NAN]]);
+    }
 }
 
 /// Where a dab of a moving tool reads the current output for node `p`.

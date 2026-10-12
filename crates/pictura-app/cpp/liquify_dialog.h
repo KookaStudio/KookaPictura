@@ -7,11 +7,15 @@
 // with Size and Pressure; Advanced adds Twirl, Mirror, Turbulence and the
 // Freeze/Thaw masks with Density, Rate and Turbulent Jitter. The mesh lives in
 // a Rust session; OK keeps it and fills the `liquify` slot with its id.
+// View Options (Advanced) show or hide the picture, draw the mesh (Small /
+// Medium / Large, a colour), tint the freeze mask, and lay a backdrop of all
+// other layers or one layer in front of, behind, or blended with it.
 // ponytail: no Save/Load Mesh files (CS6's format is closed), no mask from a
-// selection/channel, no backdrop or mesh overlay, and Reconstruct's amount is
-// applied on OK rather than previewed live.
+// selection/channel, no Show Guides, and Reconstruct's amount is applied on
+// OK rather than previewed live.
 
 #include <QtCore/QList>
+#include <QtGui/QImage>
 #include <QtWidgets/QDialog>
 
 class QButtonGroup;
@@ -80,6 +84,9 @@ private:
     void toolChanged();
     void resizeBrush(bool larger);
     void showMaskChanged();
+    void meshChanged();
+    // `refetch`: Show Backdrop or Use changed, so the picture is read again.
+    void backdropChanged(bool refetch);
     void reconstructWithAmount();
     void updateZoomLabel();
     void finish(bool keep);
@@ -102,8 +109,19 @@ private:
     QPushButton* reconstruct_ = nullptr;
     QGroupBox* maskBox_ = nullptr;
     QGroupBox* viewBox_ = nullptr;
+    QCheckBox* showImage_ = nullptr;
+    QCheckBox* showMesh_ = nullptr;
+    QComboBox* meshSize_ = nullptr;
+    QComboBox* meshColor_ = nullptr;
+    QList<QWidget*> meshControls_;
     QCheckBox* showMask_ = nullptr;
     QComboBox* maskColor_ = nullptr;
+    QCheckBox* showBackdrop_ = nullptr;
+    QComboBox* backdropUse_ = nullptr;
+    QComboBox* backdropMode_ = nullptr;
+    QSpinBox* backdropOpacity_ = nullptr;
+    QList<QWidget*> backdropControls_;
+    QImage backdrop_;
     QLabel* zoomLabel_ = nullptr;
     QList<QWidget*> advancedOnly_;
     QString documentName_;
