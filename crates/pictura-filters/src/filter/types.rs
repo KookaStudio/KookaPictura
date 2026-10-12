@@ -106,6 +106,9 @@ pub enum Filter {
         vertical: i32,
         wrap: bool,
         background: [u8; 3],
+        /// CS6's "Set to Transparent" for the undefined area (vs "Set to
+        /// Background", which paints `background` opaque).
+        transparent: bool,
     },
     HighPass {
         radius: f64,
@@ -541,4 +544,62 @@ pub enum Filter {
         highlight: TonalFade,
     },
     HdrToning(HdrToningParams),
+}
+
+/// Whether `filter`'s kernel runs over a fourth (alpha) plane when the buffer
+/// carries one: a kernel that moves, spreads, or ranks samples independently
+/// of their value lets the layer edge move with the colour (blurs, sharpens,
+/// rank filters, Offset, Mosaic, Crystallize, Fragment, the geometric Distort
+/// family). Every other kernel reads absolute values, replaces the planes, or
+/// adds onto them, so a fourth plane would rewrite opacity; those leave it
+/// bit-identical. The decision lives with the kernels, not the caller: native
+/// kernels either process every plane they are given or cap at three, the
+/// photorust path writes the pixmap's alpha back only for these kinds, and
+/// the GPU path sizes its plane count from this list.
+pub fn filters_alpha(filter: &Filter) -> bool {
+    matches!(
+        filter,
+        Filter::GaussianBlur { .. }
+            | Filter::BoxBlur { .. }
+            | Filter::ShapeBlur { .. }
+            | Filter::MotionBlur { .. }
+            | Filter::RadialBlur { .. }
+            | Filter::Average
+            | Filter::Blur
+            | Filter::BlurMore
+            | Filter::SurfaceBlur { .. }
+            | Filter::SmartBlur {
+                mode: SmartBlurMode::Normal,
+                ..
+            }
+            | Filter::LensBlur { .. }
+            | Filter::FieldBlur { .. }
+            | Filter::IrisBlur { .. }
+            | Filter::Sharpen
+            | Filter::SharpenMore
+            | Filter::SharpenEdges
+            | Filter::UnsharpMask { .. }
+            | Filter::SmartSharpen { .. }
+            | Filter::Median { .. }
+            | Filter::Despeckle
+            | Filter::Maximum { .. }
+            | Filter::Minimum { .. }
+            | Filter::DustAndScratches { .. }
+            | Filter::Offset { .. }
+            | Filter::Mosaic { .. }
+            | Filter::Crystallize { .. }
+            | Filter::Fragment
+            | Filter::Twirl { .. }
+            | Filter::Pinch { .. }
+            | Filter::Spherize { .. }
+            | Filter::Ripple { .. }
+            | Filter::Wave { .. }
+            | Filter::PolarCoordinates { .. }
+            | Filter::Shear { .. }
+            | Filter::Displace { .. }
+            | Filter::Liquify { .. }
+            | Filter::ZigZag { .. }
+            | Filter::OceanRipple { .. }
+            | Filter::Glass { .. }
+    )
 }

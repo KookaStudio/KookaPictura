@@ -46,7 +46,7 @@ pub fn unsharp_mask(
     }
 
     let n = buf.pixel_count();
-    let planes = (buf.channels as usize).min(3);
+    let planes = buf.channels as usize;
     let orig = buf.data.clone();
     let mut blurred = buf.clone();
     gaussian_blur_planes(&mut blurred, sigma_from_radius(radius));
@@ -248,29 +248,36 @@ mod tests {
     }
 
     #[test]
-    fn sharpen_variants_preserve_alpha() {
+    fn sharpen_variants_filter_alpha_with_the_colour() {
         let r = vec![10, 60, 120, 200, 250, 30];
         let g = vec![20, 70, 130, 210, 240, 40];
         let b = vec![30, 80, 140, 220, 230, 50];
         let a = vec![5, 95, 128, 170, 200, 255];
         let base = planar(6, 1, 4, &[r, g, b, a.clone()]);
         let n = base.pixel_count();
+        let changed = |out: &PixelBuffer, which: &str| {
+            assert_ne!(
+                &out.data[3 * n..4 * n],
+                &a[..],
+                "{which} left alpha untouched"
+            );
+        };
 
         let mut s = base.clone();
         sharpen(&mut s).unwrap();
-        assert_eq!(&s.data[3 * n..4 * n], &a[..]);
+        changed(&s, "sharpen");
 
         let mut m = base.clone();
         sharpen_more(&mut m).unwrap();
-        assert_eq!(&m.data[3 * n..4 * n], &a[..]);
+        changed(&m, "sharpen more");
 
         let mut e = base.clone();
         edges(&mut e).unwrap();
-        assert_eq!(&e.data[3 * n..4 * n], &a[..]);
+        changed(&e, "sharpen edges");
 
         let mut u = base.clone();
         unsharp_mask(&mut u, 150.0, 3.0, 0).unwrap();
-        assert_eq!(&u.data[3 * n..4 * n], &a[..]);
+        changed(&u, "unsharp mask");
     }
 
     #[test]

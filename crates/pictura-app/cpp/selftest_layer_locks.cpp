@@ -1,6 +1,7 @@
 #include "selftest_layer_locks.h"
 #include "selftest_report.h"
 
+#include "api/transform_api.h"
 #include "frame.h"
 #include "image_view.h"
 #include "panels/layers_panel.h"
@@ -37,14 +38,14 @@ int pictura::runLayerLocksChecks(pictura::PicturaMainWindow& frame)
         view->set_active_layer(locked);
         view->set_layer_name_path(locked, QStringLiteral("LockedMove"));
         view->set_layers_lock(QStringList{locked}, QStringLiteral("position"), true);
-        const QString rectBefore = view->layer_rect(locked);
+        const QString rectBefore = transform_api::layerRect(*view, locked).toString();
         const unsigned int pixelBefore = view->composite_argb(2, 2);
         const int historyBefore = view->history_count();
         frame.setActiveTool(pictura::ToolId::Move);
         canvas->mousePressed(QPointF(2, 2), Qt::LeftButton, int(Qt::NoModifier));
         canvas->mouseMoved(QPointF(7, 7));
         canvas->mouseReleased(QPointF(7, 7));
-        const bool rectSame = view->layer_rect(locked) == rectBefore;
+        const bool rectSame = transform_api::layerRect(*view, locked).toString() == rectBefore;
         const bool compositeSame = view->composite_argb(2, 2) == pixelBefore;
         const bool noHistory = view->history_count() == historyBefore;
         ST_BEGIN("llk_move_refusal");

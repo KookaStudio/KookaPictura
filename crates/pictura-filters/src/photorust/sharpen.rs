@@ -81,7 +81,14 @@ pub fn sharpen_edges(pixmap: &mut Pixmap) {
                 }
                 let b = blur.get(x, y);
                 let i = x as usize * 4;
-                for (c, (oc, bc)) in [(o.r, b.r), (o.g, b.g), (o.b, b.b)].into_iter().enumerate() {
+                // Alpha rides the same weight as the colour: the edge mask
+                // comes from the visible image, so the layer edge moves with
+                // it (the fourth write is dropped again unless the caller
+                // writes the pixmap's alpha back for a moving kernel).
+                for (c, (oc, bc)) in [(o.r, b.r), (o.g, b.g), (o.b, b.b), (o.a, b.a)]
+                    .into_iter()
+                    .enumerate()
+                {
                     let diff = oc as f32 - bc as f32;
                     out[i + c] = (oc as f32 + diff * weight).clamp(0.0, 255.0) as u8;
                 }

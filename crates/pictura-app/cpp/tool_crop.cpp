@@ -1,5 +1,6 @@
 #include "tool_handler.h"
 
+#include "api/transform_api.h"
 #include "crop_grip.h"
 #include "icons.h"
 #include "image_view.h"
@@ -372,12 +373,20 @@ public:
                 ys.push_back(p[3].toDouble());
             }
         };
+        const auto addLayerRect = [&xs, &ys](const transform_api::LayerRect& r) {
+            if (r.valid) {
+                xs.push_back(r.left);
+                xs.push_back(r.right);
+                ys.push_back(r.top);
+                ys.push_back(r.bottom);
+            }
+        };
         if (v && v->has_document()) {
             // Snap to the whole composite's bounding box, then the active layer.
+            // ponytail: composite_bounds stays a string crossing (deferred).
             addRect(composite_bounds(*v).split(QLatin1Char(' '), Qt::SkipEmptyParts));
             if (!v->active_layer_path().isEmpty()) {
-                addRect(v->layer_rect(v->active_layer_path())
-                            .split(QLatin1Char(' '), Qt::SkipEmptyParts));
+                addLayerRect(transform_api::layerRect(*v, v->active_layer_path()));
             }
         }
         if (grip == BoxGrip::Move) {

@@ -1,4 +1,5 @@
 #include <QtTest/QtTest>
+#include "api/layers_api.h"
 
 #include <QtCore/QAbstractItemModel>
 #include <QtCore/QDir>
@@ -129,8 +130,8 @@ bool PanelsParityTest::setupLayers()
 
 int PanelsParityTest::rowOf(const QString& path)
 {
-    for (int i = 0; i < view_->layer_row_count(); ++i) {
-        if (view_->layer_row_path(i) == path) {
+    for (int i = 0; i < pictura::layers_api::rowCount(*view_); ++i) {
+        if (pictura::layers_api::rowAt(*view_, i).path == path) {
             return i;
         }
     }
@@ -147,7 +148,7 @@ void PanelsParityTest::layerHoverCursor()
     QVERIFY(tree != nullptr);
     QWidget* viewport = tree->viewport();
 
-    const QString path = view_->layer_row_path(0);
+    const QString path = pictura::layers_api::rowAt(*view_, 0).path;
     const QRect row = panel_->rowViewportRectForTest(path);
     QVERIFY(row.isValid());
     moveMouse(viewport, row.center(), Qt::NoModifier);
@@ -170,10 +171,10 @@ void PanelsParityTest::lockBadgeClickUnlocks()
     const int doc = window_->activeDocumentIndex();
     const QString path = view_->add_layer_in(QString());
     QVERIFY(!path.isEmpty());
-    QCOMPARE(view_->layer_row_kind(rowOf(path)), QStringLiteral("pixel"));
+    QCOMPARE(pictura::layers_api::rowAt(*view_, rowOf(path)).kind, QStringLiteral("pixel"));
     view_->set_active_layer(path);
     QCOMPARE(view_->set_layers_lock(QStringList{path}, QStringLiteral("position"), true), 1);
-    QVERIFY((view_->layer_row_lock(rowOf(path)) & 0x04) != 0);
+    QVERIFY((pictura::layers_api::rowAt(*view_, rowOf(path)).lockBits & 0x04) != 0);
 
     panel_->setView(view_);
     panel_->selectPaths({path}, path);
@@ -183,7 +184,7 @@ void PanelsParityTest::lockBadgeClickUnlocks()
 
     QVERIFY2(panel_->clickLockBadgeForTest(path), "lock badge click");
     QCoreApplication::processEvents();
-    QCOMPARE(view_->layer_row_lock(rowOf(path)), 0);
+    QCOMPARE(pictura::layers_api::rowAt(*view_, rowOf(path)).lockBits, 0);
     window_->closeDocument(doc, false);
 }
 
@@ -221,8 +222,8 @@ void PanelsParityTest::maskingBackgroundConvertsIt()
     QVERIFY(view_->open_image(file));
     QFile::remove(file);
 
-    const QString bg = view_->layer_row_path(0);
-    QCOMPARE(view_->layer_row_kind(rowOf(bg)), QStringLiteral("background"));
+    const QString bg = pictura::layers_api::rowAt(*view_, 0).path;
+    QCOMPARE(pictura::layers_api::rowAt(*view_, rowOf(bg)).kind, QStringLiteral("background"));
     panel_->setView(view_);
     panel_->selectPaths({bg}, bg);
     panel_->refresh();
@@ -232,10 +233,10 @@ void PanelsParityTest::maskingBackgroundConvertsIt()
     maskButton->click();
     QCoreApplication::processEvents();
 
-    QVERIFY2(view_->layer_row_kind(rowOf(bg)) != QStringLiteral("background"),
+    QVERIFY2(pictura::layers_api::rowAt(*view_, rowOf(bg)).kind != QStringLiteral("background"),
              "Background converted to a regular layer");
-    QCOMPARE(view_->layer_row_lock(rowOf(bg)), 0);
-    QVERIFY2(view_->layer_row_has_mask(rowOf(bg)), "mask added");
+    QCOMPARE(pictura::layers_api::rowAt(*view_, rowOf(bg)).lockBits, 0);
+    QVERIFY2(pictura::layers_api::rowAt(*view_, rowOf(bg)).hasMask, "mask added");
     window_->closeDocument(window_->activeDocumentIndex(), false);
 }
 
@@ -297,8 +298,8 @@ void PanelsParityTest::emptyGroupShowsChevron()
     const int doc = window_->activeDocumentIndex();
     const QString group = view_->add_group_in(QString());
     QVERIFY(!group.isEmpty());
-    QCOMPARE(view_->layer_row_child_count(rowOf(group)), 0);
-    QVERIFY2(view_->layer_row_expandable(rowOf(group)), "empty group is expandable");
+    QCOMPARE(pictura::layers_api::rowAt(*view_, rowOf(group)).childCount, 0);
+    QVERIFY2(pictura::layers_api::rowAt(*view_, rowOf(group)).expandable, "empty group is expandable");
     panel_->refresh();
     QTreeView* tree = panel_->findChild<QTreeView*>();
     const QModelIndex index = indexForPath(tree->model(), group);
@@ -323,7 +324,7 @@ void PanelsParityTest::visibilityToggleIsResponsive()
     QVERIFY(tree != nullptr);
     QWidget* viewport = tree->viewport();
     const int r = rowOf(path);
-    const bool before = view_->layer_row_visible(r);
+    const bool before = pictura::layers_api::rowAt(*view_, r).visible;
     const QRect row = panel_->rowViewportRectForTest(path);
     QVERIFY(row.isValid());
 
@@ -331,7 +332,7 @@ void PanelsParityTest::visibilityToggleIsResponsive()
     // patch must let the second click read the first's value.
     clickMouse(viewport, QPoint(row.left() + 2, row.center().y()), Qt::NoModifier);
     clickMouse(viewport, QPoint(row.left() + 2, row.center().y()), Qt::NoModifier);
-    QCOMPARE(view_->layer_row_visible(r), before);
+    QCOMPARE(pictura::layers_api::rowAt(*view_, r).visible, before);
     window_->closeDocument(doc, false);
 }
 

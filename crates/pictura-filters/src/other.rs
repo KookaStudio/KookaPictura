@@ -1,10 +1,12 @@
 //! Other family: Maximum, Minimum, Offset, High Pass, Custom (`FILT-070`).
 //!
-//! Color planes only; alpha is never modified. Maximum/Minimum are separable
-//! square-footprint morphology, Custom is a 5×5 convolution with f64
-//! accumulation, and High Pass splits a Gaussian band around mid-gray.
-//! Borders clamp to the edge; the exact kernels are closed, so the choices
-//! marked `ponytail:` are documented approximations, not verified parity.
+//! Maximum/Minimum/Offset are moving kernels and take a fourth (alpha) plane;
+//! High Pass and Custom are value kernels and cap at the colour planes.
+//! Maximum/Minimum are separable square-footprint morphology, Custom is a 5×5
+//! convolution with f64 accumulation, and High Pass splits a Gaussian band
+//! around mid-gray. Borders clamp to the edge; the exact kernels are closed,
+//! so the choices marked `ponytail:` are documented approximations, not
+//! verified parity.
 
 use pictura_core::PixelBuffer;
 
@@ -25,13 +27,16 @@ pub fn minimum(buf: &mut PixelBuffer, radius: u32) -> Result<(), FilterError> {
 }
 
 /// Translate the color planes by `(horizontal, vertical)`; positive moves the
-/// image right/down. `wrap` cycles, otherwise the exposed area is `background`.
+/// image right/down. `wrap` cycles, otherwise the exposed area takes
+/// `background` on the colour planes and, on alpha, 255 (CS6's "Set to
+/// Background") or 0 when `transparent` ("Set to Transparent").
 pub fn offset(
     buf: &mut PixelBuffer,
     horizontal: i32,
     vertical: i32,
     wrap: bool,
     background: [u8; 3],
+    transparent: bool,
 ) -> Result<(), FilterError> {
     let n = validate(buf)?;
     if horizontal == 0 && vertical == 0 {
@@ -39,8 +44,14 @@ pub fn offset(
     }
     let w = buf.width as usize;
     let h = buf.height as usize;
-    let planes = (buf.channels as usize).min(3);
-    for (c, &bg) in background.iter().enumerate().take(planes) {
+    let planes = buf.channels as usize;
+    let fill = [
+        background[0],
+        background[1],
+        background[2],
+        if transparent { 0 } else { 255 },
+    ];
+    for (c, &bg) in fill.iter().enumerate().take(planes) {
         let base = c * n;
         let src = buf.data[base..base + n].to_vec();
         for y in 0..h {
@@ -150,7 +161,7 @@ fn morphology(buf: &mut PixelBuffer, radius: u32, dilate: bool) -> Result<(), Fi
     let r = radius.min(MAX_RADIUS) as usize;
     let w = buf.width as usize;
     let h = buf.height as usize;
-    let planes = (buf.channels as usize).min(3);
+    let planes = buf.channels as usize;
     let mut horizontal = vec![0u8; n];
     for c in 0..planes {
         let base = c * n;
@@ -288,29 +299,28 @@ mod tests {
     }
 
     #[test]
-    fn morphology_preserves_alpha() {
+    fn morphology_runs_over_the_alpha_plane_too() {
         let base = buf4(3, 1, &[[10, 0, 0, 111], [20, 0, 0, 222], [30, 0, 0, 255]]);
         let n = base.pixel_count();
-        let alpha = base.data[3 * n..].to_vec();
         let mut a = base.clone();
         maximum(&mut a, 1).unwrap();
-        assert_eq!(&a.data[3 * n..], &alpha[..]);
+        assert_eq!(&a.data[3 * n..], &[222, 255, 255]);
         let mut b = base.clone();
         minimum(&mut b, 1).unwrap();
-        assert_eq!(&b.data[3 * n..], &alpha[..]);
+        assert_eq!(&b.data[3 * n..], &[111, 111, 222]);
     }
 
     #[test]
     fn offset_wraps_and_fills_background_with_known_values() {
         let base = gray3(3, 1, &[1, 2, 3]);
         let mut wrapped = base.clone();
-        offset(&mut wrapped, 1, 0, true, [9, 9, 9]).unwrap();
+        offset(&mut wrapped, 1, 0, true, [9, 9, 9], false).unwrap();
         assert_eq!(px3(&wrapped, 0, 0), [3, 3, 3]);
         assert_eq!(px3(&wrapped, 1, 0), [1, 1, 1]);
         assert_eq!(px3(&wrapped, 2, 0), [2, 2, 2]);
 
         let mut filled = base.clone();
-        offset(&mut filled, 1, 0, false, [7, 8, 9]).unwrap();
+        offset(&mut filled, 1, 0, false, [7, 8, 9], false).unwrap();
         assert_eq!(
             px3(&filled, 0, 0),
             [7, 8, 9],
@@ -324,21 +334,35 @@ mod tests {
     fn offset_vertical_shift_and_zero_is_noop() {
         let base = gray3(1, 3, &[1, 2, 3]);
         let mut wrapped = base.clone();
-        offset(&mut wrapped, 0, 1, true, [0, 0, 0]).unwrap();
+        offset(&mut wrapped, 0, 1, true, [0, 0, 0], false).unwrap();
         assert_eq!(px3(&wrapped, 0, 0), [3, 3, 3]);
         assert_eq!(px3(&wrapped, 0, 1), [1, 1, 1]);
         assert_eq!(px3(&wrapped, 0, 2), [2, 2, 2]);
 
         let mut noop = base.clone();
-        offset(&mut noop, 0, 0, false, [0, 0, 0]).unwrap();
+        offset(&mut noop, 0, 0, false, [0, 0, 0], false).unwrap();
         assert_eq!(noop, base);
 
+        // Wrap moves the alpha plane with the colour; no-wrap fills what it
+        // exposes opaque (Set to Background) or clear (Set to Transparent).
         let alpha_base = buf4(2, 1, &[[1, 2, 3, 10], [4, 5, 6, 20]]);
         let n = alpha_base.pixel_count();
-        let alpha = alpha_base.data[3 * n..].to_vec();
         let mut shifted = alpha_base.clone();
-        offset(&mut shifted, 1, 0, true, [0, 0, 0]).unwrap();
-        assert_eq!(&shifted.data[3 * n..], &alpha[..]);
+        offset(&mut shifted, 1, 0, true, [0, 0, 0], false).unwrap();
+        assert_eq!(&shifted.data[3 * n..], &[20, 10]);
+
+        let mut filled = alpha_base.clone();
+        offset(&mut filled, 1, 0, false, [9, 9, 9], false).unwrap();
+        assert_eq!(&filled.data[3 * n..], &[255, 10]);
+
+        let mut cleared = alpha_base.clone();
+        offset(&mut cleared, 1, 0, false, [9, 9, 9], true).unwrap();
+        assert_eq!(&cleared.data[3 * n..], &[0, 10]);
+        assert_eq!(
+            px3(&cleared, 0, 0),
+            [9, 9, 9],
+            "colour still takes the background"
+        );
     }
 
     #[test]
@@ -414,9 +438,9 @@ mod tests {
             assert!(minimum(&mut b, radius).is_ok());
         }
         let mut a = base.clone();
-        assert!(offset(&mut a, 5, -3, true, [0, 0, 0]).is_ok());
+        assert!(offset(&mut a, 5, -3, true, [0, 0, 0], false).is_ok());
         let mut b = base.clone();
-        assert!(offset(&mut b, 5, -3, false, [1, 2, 3]).is_ok());
+        assert!(offset(&mut b, 5, -3, false, [1, 2, 3], true).is_ok());
         let mut c = base.clone();
         assert!(high_pass(&mut c, 1.0).is_ok());
         let mut d = base.clone();

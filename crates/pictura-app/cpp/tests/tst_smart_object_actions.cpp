@@ -1,4 +1,5 @@
 #include <QtTest/QtTest>
+#include "api/layers_api.h"
 
 #include <QtCore/QStringList>
 
@@ -64,7 +65,7 @@ QString SmartObjectActionsTest::makeSmartLayer(pictura::PictureView* view,
 {
     view->add_layer(-1);
     panel->refresh();
-    const QString path = view->layer_row_path(0);
+    const QString path = pictura::layers_api::rowAt(*view, 0).path;
     panel->selectPaths({path}, path);
     window_->registry()->refresh();
     if (!view->convert_to_smart_object(path)) {
@@ -100,7 +101,7 @@ void SmartObjectActionsTest::rowMenuOffersSmartRows()
     QVERIFY(view != nullptr);
     view->add_layer(-1);
     panel->refresh();
-    const QString path = view->layer_row_path(0);
+    const QString path = pictura::layers_api::rowAt(*view, 0).path;
     QVERIFY2(!panel->rowMenuEnabledForPathForTest(path, QStringLiteral("Reset Transform")),
              "a plain layer disables Reset Transform");
     QVERIFY2(view->convert_to_smart_object(path), "convert to smart object");
@@ -126,7 +127,7 @@ void SmartObjectActionsTest::commandsRequireASmartObject()
     // disabled while convert-to-smart-object is enabled.
     view->add_layer(-1);
     panel->refresh();
-    const QString path = view->layer_row_path(0);
+    const QString path = pictura::layers_api::rowAt(*view, 0).path;
     panel->selectPaths({path}, path);
     registry->refresh();
     QVERIFY(registry->action(id(pictura::command_ids::LayerSmartObjectConvertTo))->isEnabled());
@@ -192,11 +193,11 @@ void SmartObjectActionsTest::newViaCopyAddsIndependentLayer()
     const QString path = makeSmartLayer(view, panel);
     QVERIFY2(!path.isEmpty(), "smart layer prepared");
 
-    const int layersBefore = view->layer_row_count();
+    const int layersBefore = pictura::layers_api::rowCount(*view);
     const int before = view->history_count();
     QVERIFY(registry->dispatch(id(pictura::command_ids::LayerSmartObjectNewViaCopy)));
     QCOMPARE(view->history_count(), before + 1);
-    QCOMPARE(view->layer_row_count(), layersBefore + 1);
+    QCOMPARE(pictura::layers_api::rowCount(*view), layersBefore + 1);
     QVERIFY2(!view->layer_smart_object_state(path).isEmpty(), "original keeps its source");
 }
 

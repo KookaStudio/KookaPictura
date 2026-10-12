@@ -84,8 +84,9 @@ pub(crate) fn blur_plane(src: &[f32], w: usize, h: usize, sigma: f32) -> Vec<f32
     out
 }
 
-/// Separable Gaussian blur of the color planes of a 3/4-channel planar buffer
-/// (alpha untouched), clamp-to-edge. Shared by Gaussian Blur and Unsharp Mask.
+/// Separable Gaussian blur of every plane of a 3/4-channel planar buffer,
+/// clamp-to-edge. Shared by Gaussian Blur and Unsharp Mask; a fourth plane is
+/// a moving kernel's alpha and is blurred with the colour.
 pub fn gaussian_blur_planes(buf: &mut PixelBuffer, sigma: f64) {
     let w = buf.width as usize;
     let h = buf.height as usize;
@@ -95,7 +96,7 @@ pub fn gaussian_blur_planes(buf: &mut PixelBuffer, sigma: f64) {
     }
     let kernel: Vec<f32> = gaussian_kernel(sigma).iter().map(|&kw| kw as f32).collect();
     let support = kernel.len() / 2;
-    let planes = (buf.channels as usize).min(3);
+    let planes = buf.channels as usize;
     // Each pass accumulates a whole row one tap at a time, so it vectorizes;
     // every pixel still sums its taps in kernel order from zero, so the result
     // is byte-identical to a per-pixel serial loop (`blur_matches_the_per_pixel_sum`).
@@ -148,7 +149,7 @@ mod tests {
         let n = w * h;
         let kernel: Vec<f32> = gaussian_kernel(sigma).iter().map(|&k| k as f32).collect();
         let support = (kernel.len() / 2) as isize;
-        for c in 0..(buf.channels as usize).min(3) {
+        for c in 0..buf.channels as usize {
             let src = buf.data[c * n..c * n + n].to_vec();
             let mut tmp = vec![0f32; n];
             for y in 0..h {
@@ -221,7 +222,7 @@ mod tests {
     }
 
     #[test]
-    fn gaussian_blur_planes_is_noop_on_uniform_and_preserves_alpha() {
+    fn gaussian_blur_planes_is_noop_on_uniform_and_runs_over_alpha() {
         let mut buf = PixelBuffer {
             width: 3,
             height: 1,
@@ -232,6 +233,19 @@ mod tests {
         assert_eq!(&buf.data[0..3], &[50, 50, 50]);
         assert_eq!(&buf.data[3..6], &[100, 100, 100]);
         assert_eq!(&buf.data[6..9], &[150, 150, 150]);
-        assert_eq!(&buf.data[9..12], &[10, 20, 30], "alpha untouched");
+        assert_ne!(
+            &buf.data[9..12],
+            &[10, 20, 30],
+            "alpha plane is blurred too"
+        );
+
+        let mut flat = PixelBuffer {
+            width: 3,
+            height: 1,
+            channels: 4,
+            data: vec![50, 50, 50, 100, 100, 100, 150, 150, 150, 96, 96, 96].into(),
+        };
+        gaussian_blur_planes(&mut flat, 1.0);
+        assert_eq!(&flat.data[9..12], &[96, 96, 96], "a flat plane stays flat");
     }
 }

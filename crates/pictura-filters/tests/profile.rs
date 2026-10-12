@@ -149,6 +149,7 @@ fn filters() -> Vec<(&'static str, Filter)> {
                 vertical: 40,
                 wrap: true,
                 background: [0, 0, 0],
+                transparent: false,
             },
         ),
         ("Mosaic", Filter::Mosaic { cell_size: 20 }),

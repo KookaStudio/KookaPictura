@@ -76,7 +76,7 @@ pub fn glass(
     let sign = if invert { -1.0 } else { 1.0 };
     let reach = sign * REACH_PER_STEP * distortion as f32 * relief(texture) / rms;
 
-    for c in 0..(buf.channels as usize).min(3) {
+    for c in 0..buf.channels as usize {
         let src = buf.data[c * n..c * n + n].to_vec();
         buf.data[c * n..c * n + n]
             .par_chunks_mut(w)

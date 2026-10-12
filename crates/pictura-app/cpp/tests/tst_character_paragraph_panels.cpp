@@ -9,7 +9,7 @@
 #include "panels/paragraph_panel.h"
 #include "selftest_paint_fixture.h"
 
-#include "pictura_app/src/cxxqt_object/type_tools.cxxqt.h"
+#include "api/type_api.h"
 
 #include <QtGui/QAction>
 #include <QtGui/QFontDatabase>
@@ -36,7 +36,7 @@ QImage seed()
 QString typeLayer(const Fixture& f)
 {
     for (int i = 0; i < f.view->layer_count(); ++i) {
-        if (f.view->layer_is_type(QString::number(i))) {
+        if (pictura::type_api::isType(*f.view, QString::number(i))) {
             return QString::number(i);
         }
     }
@@ -125,16 +125,16 @@ void CharacterParagraphPanelsTest::characterPanelReflectsAndEdits()
     panel->sizeFieldForTest()->setValue(48.0);
     emit panel->sizeFieldForTest()->editingFinished();
     QVERIFY2(f.committedOnce(base, "Edit Type Layer"), "one Edit Type Layer state");
-    QCOMPARE(pictura::type_layer_character_setting(*f.view, path).size, 48.0);
+    QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).size, 48.0);
     QVERIFY(f.view->undo());
-    QCOMPARE(pictura::type_layer_character_setting(*f.view, path).size, 30.0);
+    QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).size, 30.0);
 
     // A toggle edit is also one state.
     panel->refresh();
     const int toggleBase = f.view->history_index();
     panel->underlineForTest()->setChecked(true);
     QVERIFY2(f.committedOnce(toggleBase, "Edit Type Layer"), "one toggle state");
-    QCOMPARE(pictura::type_layer_character_setting(*f.view, path).underline, true);
+    QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).underline, true);
 
     f.tools->setTypeOptions(saved);
     f.tools->setForeground(foreground);
@@ -154,9 +154,9 @@ void CharacterParagraphPanelsTest::characterDefaultsWithoutType()
 
     // No type layer active: the model defaults, editing disabled.
     QVERIFY(!panel->editingEnabledForTest());
-    QCOMPARE(panel->sizeFieldForTest()->value(), pictura::type_default_character_setting().size);
+    QCOMPARE(panel->sizeFieldForTest()->value(), pictura::type_api::defaultCharacterSetting().size);
     QCOMPARE(panel->trackingFieldForTest()->value(),
-             pictura::type_default_character_setting().tracking);
+             pictura::type_api::defaultCharacterSetting().tracking);
 
     // Committing while disabled records nothing.
     const int base = f.view->history_index();
@@ -180,7 +180,7 @@ void CharacterParagraphPanelsTest::paragraphPanelReflectsAndEdits()
     panel->setView(f.view);
     panel->refresh();
 
-    const pictura::ParagraphSetting shown = pictura::type_layer_paragraph_setting(*f.view, path);
+    const pictura::ParagraphSetting shown = pictura::type_api::layerParagraphSetting(*f.view, path);
     QVERIFY(panel->editingEnabledForTest());
     QCOMPARE(panel->justifyFieldForTest()->currentIndex(), int(shown.justify));
     QCOMPARE(panel->firstLineIndentFieldForTest()->value(), shown.first_line_indent);
@@ -190,16 +190,16 @@ void CharacterParagraphPanelsTest::paragraphPanelReflectsAndEdits()
     panel->firstLineIndentFieldForTest()->setValue(20.0);
     emit panel->firstLineIndentFieldForTest()->editingFinished();
     QVERIFY2(f.committedOnce(base, "Edit Type Layer"), "one Edit Type Layer state");
-    QCOMPARE(pictura::type_layer_paragraph_setting(*f.view, path).first_line_indent, 20.0);
+    QCOMPARE(pictura::type_api::layerParagraphSetting(*f.view, path).first_line_indent, 20.0);
     QVERIFY(f.view->undo());
-    QCOMPARE(pictura::type_layer_paragraph_setting(*f.view, path).first_line_indent, 0.0);
+    QCOMPARE(pictura::type_api::layerParagraphSetting(*f.view, path).first_line_indent, 0.0);
 
     // Alignment is editable too.
     panel->refresh();
     const int alignBase = f.view->history_index();
     panel->justifyFieldForTest()->setCurrentIndex(2);
     QVERIFY2(f.committedOnce(alignBase, "Edit Type Layer"), "one alignment state");
-    QCOMPARE(pictura::type_layer_paragraph_setting(*f.view, path).justify, 2);
+    QCOMPARE(pictura::type_api::layerParagraphSetting(*f.view, path).justify, 2);
 
     f.tools->setTypeOptions(saved);
 }

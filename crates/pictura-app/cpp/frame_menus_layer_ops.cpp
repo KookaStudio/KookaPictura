@@ -4,6 +4,8 @@
 
 #include "frame_includes.h"
 
+#include "api/layers_api.h"
+
 #include "pictura_app/src/cxxqt_object/layer_arrange.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layers_surface.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/vector_masks.cxxqt.h"
@@ -84,12 +86,8 @@ void PicturaMainWindow::wireLayerArrangeStamp()
         if (!view || !view->has_document() || path.isEmpty()) {
             return false;
         }
-        for (int i = 0; i < view->layer_row_count(); ++i) {
-            if (view->layer_row_path(i) == path) {
-                return view->layer_row_visible(i);
-            }
-        }
-        return false;
+        const auto row = pictura::layers_api::rowForPath(*view, path);
+        return row.path == path && row.visible;
     };
     registry_->setHandler(command_ids::LayerStampVisible, [this]() {
         PictureView* view = activeView();
@@ -153,12 +151,7 @@ void PicturaMainWindow::wireLayerArrangeStamp()
             return {};
         }
         const auto kindOf = [view](const QString& path) {
-            for (int i = 0; i < view->layer_row_count(); ++i) {
-                if (view->layer_row_path(i) == path) {
-                    return view->layer_row_kind(i);
-                }
-            }
-            return QString();
+            return pictura::layers_api::rowForPath(*view, path).kind;
         };
         if (kindOf(current) == QLatin1String("group")) {
             return current;

@@ -242,27 +242,30 @@ fn kernels() -> Vec<(&'static str, Filter)> {
 
 #[test]
 fn row_parallel_kernels_keep_their_serial_bytes() {
+    // Moving kernels now run over the picture's fourth plane as well, so
+    // their digests moved with the fold; value kernels (custom, high pass)
+    // still leave alpha bit-identical and keep their old digests.
     let expected = [
-        ("gaussian 1.5", 0xf9a2_5193_6f8e_4515),
-        ("gaussian 9", 0x8304_14ab_58dd_a5b3),
-        ("unsharp", 0xd4f3_37f4_4ddf_f92b),
-        ("median 1", 0xa87a_dfef_57b5_d176),
-        ("median 4", 0x929b_65f3_1035_8689),
-        ("motion 30", 0x00f7_ea4d_9a5b_f70f),
-        ("motion -75", 0x9733_d43e_7acb_7c69),
-        ("box 2", 0x2cd8_72fc_0780_110c),
-        ("box 70", 0xc346_208f_7155_235d),
+        ("gaussian 1.5", 0xc400_4efa_61a4_ed25),
+        ("gaussian 9", 0x7972_fd09_8cf3_00f3),
+        ("unsharp", 0x034f_4a46_fc10_95bd),
+        ("median 1", 0x6c43_94f5_21a7_60ef),
+        ("median 4", 0x7df2_1565_3253_8682),
+        ("motion 30", 0x06c6_d5a7_5020_9627),
+        ("motion -75", 0xc47c_d47d_da23_3405),
+        ("box 2", 0xb4f7_9300_d71d_b971),
+        ("box 70", 0x033c_5682_b051_aa87),
         ("shape heart 7", 0x5e7f_3ab9_03a1_f59a),
         ("shape arrow 40", 0x0d9c_2fdc_6023_46c7),
         ("smart normal 6", 0x9807_7b07_7a5e_4060),
         ("smart overlay 40", 0x90b2_060d_1532_f549),
         ("smart edges 3", 0x7d47_9518_947e_946e),
-        ("maximum 2", 0x0b19_a93a_49cb_5598),
-        ("minimum 5", 0x0dda_b0a3_defc_fe66),
+        ("maximum 2", 0xd5f0_6297_d8a0_bcba),
+        ("minimum 5", 0x4b83_b5a6_dcb9_66a8),
         ("custom", 0x4a5a_022c_4c8f_6bfa),
         ("high pass", 0x366c_a481_61d8_b4dd),
-        ("radial spin", 0x3c14_296d_3343_fe21),
-        ("radial zoom", 0x2327_b5e8_6773_fd83),
+        ("radial spin", 0x4c62_de8a_06d5_6282),
+        ("radial zoom", 0x356d_0a67_96e5_c3b5),
         ("lens blur", 0x954e_772d_0d08_f422),
         ("field blur", 0x62e5_9821_9a51_6e8f),
         ("iris blur", 0x9880_82cd_fdc2_9575),

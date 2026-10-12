@@ -1,4 +1,5 @@
 #include <QtTest/QtTest>
+#include "api/layers_api.h"
 #include <QtTest/QSignalSpy>
 
 #include <QtCore/QCoreApplication>
@@ -182,21 +183,21 @@ void CommandTreeTest::layerMaskMenu()
     QVERIFY(!action(pictura::command_ids::LayerMaskDelete)->isEnabled());
 
     QVERIFY(registry->dispatch(QString::fromLatin1(pictura::command_ids::LayerMaskRevealAll)));
-    QVERIFY2(view->layer_row_has_mask(0), "reveal all adds a mask");
+    QVERIFY2(pictura::layers_api::rowAt(*view, 0).hasMask, "reveal all adds a mask");
     registry->refresh();
     QVERIFY(!action(pictura::command_ids::LayerMaskRevealAll)->isEnabled());
     QVERIFY(action(pictura::command_ids::LayerMaskDelete)->isEnabled());
     QVERIFY(action(pictura::command_ids::LayerMaskDisable)->isEnabled());
 
     QVERIFY(registry->dispatch(QString::fromLatin1(pictura::command_ids::LayerMaskDelete)));
-    QVERIFY2(!view->layer_row_has_mask(0), "delete clears the mask");
+    QVERIFY2(!pictura::layers_api::rowAt(*view, 0).hasMask, "delete clears the mask");
     registry->refresh();
     QVERIFY(action(pictura::command_ids::LayerMaskRevealAll)->isEnabled());
 
     auto* strip = window_->findChild<QToolButton*>(QStringLiteral("layersStripMask"));
     QVERIFY(strip != nullptr && strip->isEnabled());
     strip->click();
-    QVERIFY2(view->layer_row_has_mask(0), "strip button adds a mask");
+    QVERIFY2(pictura::layers_api::rowAt(*view, 0).hasMask, "strip button adds a mask");
     QVERIFY(registry->dispatch(QString::fromLatin1(pictura::command_ids::LayerMaskDelete)));
 }
 
@@ -236,7 +237,7 @@ void CommandTreeTest::vectorMaskMenu()
     QVERIFY(registry->dispatch(
         QString::fromLatin1(pictura::command_ids::LayerRasterizeVectorMask)));
     QVERIFY2(!pictura::vector_mask_present(*view), "rasterize dropped the vector mask");
-    QVERIFY2(view->layer_row_has_mask(0), "rasterize produced a layer mask");
+    QVERIFY2(pictura::layers_api::rowAt(*view, 0).hasMask, "rasterize produced a layer mask");
     QVERIFY(registry->dispatch(QString::fromLatin1(pictura::command_ids::LayerMaskDelete)));
 }
 
@@ -715,12 +716,12 @@ void CommandTreeTest::layerAdjustmentMenu()
             name == QStringLiteral("Invert") ? name : name + QStringLiteral("\u2026");
         QCOMPARE(action->text(), expected);
 
-        const int before = view->layer_row_count();
+        const int before = pictura::layers_api::rowCount(*view);
         action->trigger();
-        QCOMPARE(view->layer_row_count(), before + 1);
+        QCOMPARE(pictura::layers_api::rowCount(*view), before + 1);
         bool named = false;
-        for (int i = 0; i < view->layer_row_count(); ++i) {
-            if (view->layer_row_name(i) == name) {
+        for (int i = 0; i < pictura::layers_api::rowCount(*view); ++i) {
+            if (pictura::layers_api::rowAt(*view, i).name == name) {
                 named = true;
             }
         }
@@ -790,11 +791,11 @@ void CommandTreeTest::layerMenuGroupsAndDelete()
     QVERIFY(panel->selectRowForTest(doomed));
     registry->refresh();
     QVERIFY(del->isEnabled());
-    const int before = view->layer_row_count();
+    const int before = pictura::layers_api::rowCount(*view);
     del->trigger();
-    QCOMPARE(view->layer_row_count(), before - 1);
-    for (int i = 0; i < view->layer_row_count(); ++i) {
-        QVERIFY(view->layer_row_path(i) != doomed);
+    QCOMPARE(pictura::layers_api::rowCount(*view), before - 1);
+    for (int i = 0; i < pictura::layers_api::rowCount(*view); ++i) {
+        QVERIFY(pictura::layers_api::rowAt(*view, i).path != doomed);
     }
 }
 
@@ -812,7 +813,7 @@ void CommandTreeTest::layerContentOptions()
         window_->findChild<pictura::PropertiesPanel*>(QStringLiteral("propertiesPanel"));
     pictura::PanelColumn* column = window_->panelColumn();
     QVERIFY(layers && props && column);
-    QVERIFY(layers->selectRowForTest(view->layer_row_path(0)));
+    QVERIFY(layers->selectRowForTest(pictura::layers_api::rowAt(*view, 0).path));
 
     pictura::CommandRegistry* registry = window_->registry();
     QVERIFY(registry != nullptr);
@@ -831,9 +832,9 @@ void CommandTreeTest::layerContentOptions()
     // An adjustment current layer enables the command and opens Properties.
     QVERIFY(view->add_adjustment(QStringLiteral("invert")));
     QString path;
-    for (int i = 0; i < view->layer_row_count(); ++i) {
-        if (view->layer_row_has_adjustment(i)) {
-            path = view->layer_row_path(i);
+    for (int i = 0; i < pictura::layers_api::rowCount(*view); ++i) {
+        if (pictura::layers_api::rowAt(*view, i).hasAdjustment) {
+            path = pictura::layers_api::rowAt(*view, i).path;
         }
     }
     QVERIFY2(!path.isEmpty(), "adjustment row");
@@ -1023,9 +1024,9 @@ void CommandTreeTest::layerArrangeStamp()
     view->add_layer(-1);
     view->add_layer(-1);
     layers->refresh();
-    QVERIFY(view->layer_row_count() >= 3);
-    const QString topName = view->layer_row_name(0);
-    const QString middleName = view->layer_row_name(1);
+    QVERIFY(pictura::layers_api::rowCount(*view) >= 3);
+    const QString topName = pictura::layers_api::rowAt(*view, 0).name;
+    const QString middleName = pictura::layers_api::rowAt(*view, 1).name;
 
     for (const char* id : {pictura::command_ids::LayerArrangeFront,
                            pictura::command_ids::LayerArrangeForward,
@@ -1040,50 +1041,50 @@ void CommandTreeTest::layerArrangeStamp()
     }
 
     // Arrange Forward swaps the middle layer with the one above it.
-    layers->selectPaths({view->layer_row_path(1)}, view->layer_row_path(1));
+    layers->selectPaths({pictura::layers_api::rowAt(*view, 1).path}, pictura::layers_api::rowAt(*view, 1).path);
     registry->refresh();
     QVERIFY2(action(pictura::command_ids::LayerArrangeForward)->isEnabled(), "forward enabled");
     QVERIFY(registry->dispatch(QString::fromLatin1(pictura::command_ids::LayerArrangeForward)));
     layers->refresh();
-    QCOMPARE(view->layer_row_name(0), middleName);
-    QCOMPARE(view->layer_row_name(1), topName);
+    QCOMPARE(pictura::layers_api::rowAt(*view, 0).name, middleName);
+    QCOMPARE(pictura::layers_api::rowAt(*view, 1).name, topName);
 
     // Reverse flips the contiguous top-two run back.
-    const QString run0 = view->layer_row_path(0);
-    const QString run1 = view->layer_row_path(1);
+    const QString run0 = pictura::layers_api::rowAt(*view, 0).path;
+    const QString run1 = pictura::layers_api::rowAt(*view, 1).path;
     layers->selectPaths({run0, run1}, run0);
     registry->refresh();
     QVERIFY2(action(pictura::command_ids::LayerArrangeReverse)->isEnabled(), "reverse enabled");
     QVERIFY(registry->dispatch(QString::fromLatin1(pictura::command_ids::LayerArrangeReverse)));
     layers->refresh();
-    QCOMPARE(view->layer_row_name(0), topName);
-    QCOMPARE(view->layer_row_name(1), middleName);
+    QCOMPARE(pictura::layers_api::rowAt(*view, 0).name, topName);
+    QCOMPARE(pictura::layers_api::rowAt(*view, 1).name, middleName);
 
     // Merge Down folds the active layer into the layer below it.
-    layers->selectPaths({view->layer_row_path(0)}, view->layer_row_path(0));
+    layers->selectPaths({pictura::layers_api::rowAt(*view, 0).path}, pictura::layers_api::rowAt(*view, 0).path);
     registry->refresh();
     QVERIFY2(action(pictura::command_ids::LayerMergeDown)->isEnabled(), "merge down enabled");
-    const int beforeMerge = view->layer_row_count();
+    const int beforeMerge = pictura::layers_api::rowCount(*view);
     QVERIFY(registry->dispatch(QString::fromLatin1(pictura::command_ids::LayerMergeDown)));
-    QCOMPARE(view->layer_row_count(), beforeMerge - 1);
+    QCOMPARE(pictura::layers_api::rowCount(*view), beforeMerge - 1);
 
     // Stamp Visible adds exactly one layer and keeps every source.
     layers->refresh();
-    layers->selectPaths({view->layer_row_path(0)}, view->layer_row_path(0));
+    layers->selectPaths({pictura::layers_api::rowAt(*view, 0).path}, pictura::layers_api::rowAt(*view, 0).path);
     registry->refresh();
-    const int beforeStamp = view->layer_row_count();
+    const int beforeStamp = pictura::layers_api::rowCount(*view);
     QVERIFY2(action(pictura::command_ids::LayerStampVisible)->isEnabled(), "stamp visible enabled");
     QVERIFY(registry->dispatch(QString::fromLatin1(pictura::command_ids::LayerStampVisible)));
-    QCOMPARE(view->layer_row_count(), beforeStamp + 1);
+    QCOMPARE(pictura::layers_api::rowCount(*view), beforeStamp + 1);
 
     // Delete Layer removes the selected (stamp) layer.
     layers->refresh();
-    layers->selectPaths({view->layer_row_path(0)}, view->layer_row_path(0));
+    layers->selectPaths({pictura::layers_api::rowAt(*view, 0).path}, pictura::layers_api::rowAt(*view, 0).path);
     registry->refresh();
     QVERIFY2(action(pictura::command_ids::LayerDeleteLayer)->isEnabled(), "delete enabled");
-    const int beforeDelete = view->layer_row_count();
+    const int beforeDelete = pictura::layers_api::rowCount(*view);
     QVERIFY(registry->dispatch(QString::fromLatin1(pictura::command_ids::LayerDeleteLayer)));
-    QCOMPARE(view->layer_row_count(), beforeDelete - 1);
+    QCOMPARE(pictura::layers_api::rowCount(*view), beforeDelete - 1);
 
     window_->closeDocument(doc, false);
 }
@@ -1114,8 +1115,8 @@ void CommandTreeTest::layerLockCommands()
     }
 
     const auto rowOf = [view](const QString& path) {
-        for (int i = 0; i < view->layer_row_count(); ++i) {
-            if (view->layer_row_path(i) == path) {
+        for (int i = 0; i < pictura::layers_api::rowCount(*view); ++i) {
+            if (pictura::layers_api::rowAt(*view, i).path == path) {
                 return i;
             }
         }
@@ -1130,7 +1131,7 @@ void CommandTreeTest::layerLockCommands()
     // Lock Transparency over the selection sets bit 0x01 in one state.
     view->add_layer(-1);
     layers->refresh();
-    const QString top = view->layer_row_path(0);
+    const QString top = pictura::layers_api::rowAt(*view, 0).path;
     layers->selectPaths({top}, top);
     registry->refresh();
     QVERIFY2(action(pictura::command_ids::LayerLockLayersTransparency)->isEnabled(),
@@ -1139,13 +1140,13 @@ void CommandTreeTest::layerLockCommands()
     QVERIFY(registry->dispatch(
         QString::fromLatin1(pictura::command_ids::LayerLockLayersTransparency)));
     QCOMPARE(view->history_count(), before + 1);
-    QVERIFY((view->layer_row_lock(rowOf(top)) & 0x01) != 0);
+    QVERIFY((pictura::layers_api::rowAt(*view, rowOf(top)).lockBits & 0x01) != 0);
 
     // Lock All sets the full set.
     layers->selectPaths({top}, top);
     registry->refresh();
     QVERIFY(registry->dispatch(QString::fromLatin1(pictura::command_ids::LayerLockLayersAll)));
-    QCOMPARE(view->layer_row_lock(rowOf(top)) & 0x0F, 0x0F);
+    QCOMPARE(pictura::layers_api::rowAt(*view, rowOf(top)).lockBits & 0x0F, 0x0F);
 
     // Lock All Layers In Group… locks the group's descendants, not the group.
     const QString group = view->add_group_in(QString());
@@ -1158,8 +1159,8 @@ void CommandTreeTest::layerLockCommands()
     QVERIFY(registry->dispatch(
         QString::fromLatin1(pictura::command_ids::LayerLockAllInGroup)));
     QCOMPARE(view->history_count(), groupBase + 1);
-    QCOMPARE(view->layer_row_lock(rowOf(child)) & 0x0F, 0x0F);
-    QCOMPARE(view->layer_row_lock(rowOf(group)) & 0x0F, 0x00);
+    QCOMPARE(pictura::layers_api::rowAt(*view, rowOf(child)).lockBits & 0x0F, 0x0F);
+    QCOMPARE(pictura::layers_api::rowAt(*view, rowOf(group)).lockBits & 0x0F, 0x00);
 
     window_->closeDocument(doc, false);
 }
@@ -1235,7 +1236,7 @@ void CommandTreeTest::layerMattingCommands()
 
     view->add_layer(-1);
     layers->refresh();
-    const QString top = view->layer_row_path(0);
+    const QString top = pictura::layers_api::rowAt(*view, 0).path;
     layers->selectPaths({top}, top);
     registry->refresh();
     QVERIFY2(action(pictura::command_ids::LayerMattingRemoveBlack)->isEnabled(),

@@ -7,7 +7,10 @@ use crate::{
 
 use super::Filter;
 
-/// Apply `filter` in place (planar 8-bit; channels 3 or 4; alpha untouched).
+/// Apply `filter` in place (planar 8-bit; channels 3 or 4). On a four-channel
+/// buffer the kernel itself decides the alpha plane: moving kernels (see
+/// [`crate::filters_alpha`]) process it, every other kernel leaves it
+/// bit-identical.
 pub fn apply(filter: &Filter, buf: &mut PixelBuffer) -> Result<(), FilterError> {
     validate(buf)?;
     if let Some(result) = crate::photorust::dispatch::apply(filter, buf) {
@@ -86,7 +89,15 @@ pub fn apply(filter: &Filter, buf: &mut PixelBuffer) -> Result<(), FilterError> 
             vertical,
             wrap,
             background,
-        } => other::offset(buf, *horizontal, *vertical, *wrap, *background),
+            transparent,
+        } => other::offset(
+            buf,
+            *horizontal,
+            *vertical,
+            *wrap,
+            *background,
+            *transparent,
+        ),
         Filter::HighPass { radius } => other::high_pass(buf, *radius),
         Filter::Custom {
             kernel,

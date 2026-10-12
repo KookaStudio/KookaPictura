@@ -1,5 +1,6 @@
 #include "histogram_panel.h"
 
+#include "api/document_api.h"
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 
 #include <QtCore/QRectF>
@@ -113,15 +114,11 @@ void HistogramPanel::recompute()
     // independent of document size and no full-resolution image rebuild is
     // triggered by a panel refresh.
     QImage image;
-    const int levels = view_->display_level_count();
-    if (levels > 0) {
-        const int level = levels - 1;
-        const QStringList parts = view_->display_level_size(level).split(
-            QLatin1Char(' '), Qt::SkipEmptyParts);
-        if (parts.size() == 2) {
-            image = view_->display_image(level, 0, 0, parts.at(0).toInt(),
-                                         parts.at(1).toInt());
-        }
+    const QVector<document_api::CanvasSize> levels = document_api::pyramidSizes(*view_);
+    if (!levels.isEmpty()) {
+        const int level = levels.size() - 1;
+        const document_api::CanvasSize& size = levels.at(level);
+        image = view_->display_image(level, 0, 0, size.width, size.height);
     }
     if (image.isNull()) {
         return;

@@ -6,7 +6,7 @@
 #include "type_fonts.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/type_tools.cxxqt.h"
+#include "api/type_api.h"
 
 #include <QtCore/QList>
 #include <QtCore/QSet>
@@ -119,7 +119,7 @@ void registerTypeFont(const QString& family)
     tried().insert(family);
     const QByteArray bytes = typeFontBytes(family);
     if (!bytes.isEmpty()) {
-        type_register_font(family, ::rust::Slice<const std::uint8_t>(
+        pictura::type_api::registerFont(family, ::rust::Slice<const std::uint8_t>(
                                        reinterpret_cast<const std::uint8_t*>(bytes.constData()),
                                        std::size_t(bytes.size())));
     }

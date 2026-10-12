@@ -1,5 +1,6 @@
 #include "export_as_dialog.h"
 
+#include "api/document_api.h"
 #include "dialogs.h"
 #include "panels/jump_slider.h"
 
@@ -176,7 +177,7 @@ bool exportAsFromView(QWidget* parent, PictureView* view)
         return false;
     }
     const QString chosen = dialog.format();
-    QString path = getSaveFileName(parent, QObject::tr("Export As"), view->file_path(),
+    QString path = getSaveFileName(parent, QObject::tr("Export As"), document_api::filePath(*view),
                                    {filterForFormat(chosen)}, nullptr);
     if (path.isEmpty()) {
         return false;
@@ -194,7 +195,7 @@ bool quickExportPngFromView(QWidget* parent, PictureView* view)
     if (!view || !view->has_document()) {
         return false;
     }
-    const QString source = view->file_path();
+    const QString source = document_api::filePath(*view);
     QString path;
     bool prompt = source.isEmpty();
     if (!source.isEmpty()) {

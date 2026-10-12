@@ -33,6 +33,8 @@ pub(super) fn run_chunked(
     let padded = total.div_ceil(4) * 4;
     let u8_size = padded as u64;
     let npix = (w as usize) * (h as usize);
+    // Colour only, or colour + alpha for a moving kernel on a folded layer.
+    let planes = (total / npix.max(1)) as u32;
     // Only the separable/morphology paths need the unrounded f32 intermediate
     // (one f32 per byte); Oil Paint needs four f32 planes per pixel (lum +
     // three aggregated colour planes, with height reusing the lum plane). The
@@ -91,7 +93,7 @@ pub(super) fn run_chunked(
             norm,
             offset,
         } => {
-            let mut p = Params::new(MODE_KERNEL, w, h);
+            let mut p = Params::new(MODE_KERNEL, w, h, planes);
             p.ksize = *k;
             p.support = (*k / 2) as i32;
             p.norm = *norm;
@@ -102,7 +104,7 @@ pub(super) fn run_chunked(
             &b
         }
         Plan::Separable(sp) => {
-            let mut p = Params::new(MODE_SEP_H, w, h);
+            let mut p = Params::new(MODE_SEP_H, w, h, planes);
             p.ksize = sp.weights.len() as u32;
             p.support = sp.support;
             p.norm = sp.norm;
@@ -131,7 +133,7 @@ pub(super) fn run_chunked(
             &b
         }
         Plan::Motion { angle, taps } => {
-            let mut p = Params::new(MODE_MOTION, w, h);
+            let mut p = Params::new(MODE_MOTION, w, h, planes);
             p.angle = *angle;
             p.taps = *taps;
             dispatch(
@@ -140,7 +142,7 @@ pub(super) fn run_chunked(
             &b
         }
         Plan::RadialZoom { samples, span } => {
-            let mut p = Params::new(MODE_RADIAL_ZOOM, w, h);
+            let mut p = Params::new(MODE_RADIAL_ZOOM, w, h, planes);
             p.taps = *samples;
             p.angle = *span;
             dispatch(
@@ -149,7 +151,7 @@ pub(super) fn run_chunked(
             &b
         }
         Plan::Surface { radius, threshold } => {
-            let mut p = Params::new(MODE_SURFACE, w, h);
+            let mut p = Params::new(MODE_SURFACE, w, h, planes);
             p.support = *radius as i32;
             p.taps = *threshold;
             dispatch(
@@ -158,7 +160,7 @@ pub(super) fn run_chunked(
             &b
         }
         Plan::Morph { radius, dilate } => {
-            let mut p = Params::new(MODE_MORPH_H, w, h);
+            let mut p = Params::new(MODE_MORPH_H, w, h, planes);
             p.support = *radius as i32;
             p.taps = u32::from(*dilate);
             dispatch(
@@ -174,7 +176,7 @@ pub(super) fn run_chunked(
             // Mirror `noise::median`'s cap: beyond max(w, h) every clamped
             // sample is interior, so a larger window would change the multiset.
             let r = (*radius).min(w.max(h));
-            let mut p = Params::new(MODE_MEDIAN, w, h);
+            let mut p = Params::new(MODE_MEDIAN, w, h, planes);
             p.support = r as i32;
             dispatch(
                 device, queue, &p, &a, &b, &mid, &weights, &params, count, budget,
@@ -192,7 +194,7 @@ pub(super) fn run_chunked(
             half,
             shine_t,
         } => {
-            let mut p = Params::new(MODE_OIL_LUMA, w, h);
+            let mut p = Params::new(MODE_OIL_LUMA, w, h, planes);
             p.along = *along as u32;
             p.perp = *perp as u32;
             p.stop = *stop;
@@ -289,10 +291,13 @@ struct Params {
     /// First invocation of the current chunk and one past its last.
     base: u32,
     end: u32,
+    /// Planes the run carries: 3 (colour only) or 4 (colour + alpha for a
+    /// moving kernel). Serialized into the shader's spare `_p3` slot.
+    planes: u32,
 }
 
 impl Params {
-    fn new(mode: u32, w: u32, h: u32) -> Self {
+    fn new(mode: u32, w: u32, h: u32, planes: u32) -> Self {
         Self {
             mode,
             w,
@@ -322,6 +327,7 @@ impl Params {
             stride: 0,
             base: 0,
             end: 0,
+            planes,
         }
     }
 
@@ -356,6 +362,7 @@ impl Params {
             self.stride,
             self.base,
             self.end,
+            self.planes,
         ];
         for (i, v) in fields.iter().enumerate() {
             out[i * 4..i * 4 + 4].copy_from_slice(&v.to_le_bytes());
@@ -579,7 +586,7 @@ struct FParams {
     stride: u32,
     base: u32,
     end: u32,
-    _p3: u32,
+    planes: u32,
     _p4: u32,
     _p5: u32,
     _p6: u32,
@@ -984,7 +991,7 @@ fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let wi = p.base + gid.x + gid.y * p.stride;
     if (wi >= p.end) { return; }
     let n = p.w * p.h;
-    let total = 3u * n;
+    let total = p.planes * n;
 
     if (p.mode == 20u) {
         oil_luma(wi);

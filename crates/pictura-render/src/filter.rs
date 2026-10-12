@@ -9,7 +9,7 @@ use pictura_adjust::Adjustment;
 use pictura_core::{
     layer_pixel_locked, layer_transparency_locked, Layer, LayerMask, PixelBuffer, PsdRect,
 };
-use pictura_filters::{Filter, FilterError, SmartBlurMode};
+use pictura_filters::{Filter, FilterError};
 use rayon::prelude::*;
 
 use crate::channel;
@@ -68,66 +68,6 @@ enum Op<'a> {
     Adjustment(&'a Adjustment),
 }
 
-/// Whether `filter` leaves an unlocked layer's transparency exactly as found.
-///
-/// The unlocked-layer alpha pass reruns the kernel over a grey copy of the
-/// alpha plane. That is right only for a kernel that moves, spreads, or ranks
-/// samples the same way whatever their value (blurs, distortions, rank
-/// filters, cell averages): a flat 255 plane comes back 255 and the layer edge
-/// moves with the colour. Every other kernel reads absolute values, replaces
-/// the planes, or adds onto them (Solarize, Clouds, Lens Flare, Find Edges,
-/// Add Noise, the artistic families), so rerunning it would rewrite opacity;
-/// those leave alpha bit-identical.
-/// ponytail: an allowlist on the call side. The real fix folds alpha into the
-/// working buffer so each kernel receives the fourth plane and decides itself.
-pub fn filter_preserves_opacity(filter: &Filter) -> bool {
-    !matches!(
-        filter,
-        Filter::GaussianBlur { .. }
-            | Filter::BoxBlur { .. }
-            | Filter::ShapeBlur { .. }
-            | Filter::MotionBlur { .. }
-            | Filter::RadialBlur { .. }
-            | Filter::Average
-            | Filter::Blur
-            | Filter::BlurMore
-            | Filter::SurfaceBlur { .. }
-            | Filter::SmartBlur {
-                mode: SmartBlurMode::Normal,
-                ..
-            }
-            | Filter::LensBlur { .. }
-            | Filter::FieldBlur { .. }
-            | Filter::IrisBlur { .. }
-            | Filter::Sharpen
-            | Filter::SharpenMore
-            | Filter::SharpenEdges
-            | Filter::UnsharpMask { .. }
-            | Filter::SmartSharpen { .. }
-            | Filter::Median { .. }
-            | Filter::Despeckle
-            | Filter::Maximum { .. }
-            | Filter::Minimum { .. }
-            | Filter::DustAndScratches { .. }
-            | Filter::Offset { .. }
-            | Filter::Mosaic { .. }
-            | Filter::Crystallize { .. }
-            | Filter::Fragment
-            | Filter::Twirl { .. }
-            | Filter::Pinch { .. }
-            | Filter::Spherize { .. }
-            | Filter::Ripple { .. }
-            | Filter::Wave { .. }
-            | Filter::PolarCoordinates { .. }
-            | Filter::Shear { .. }
-            | Filter::Displace { .. }
-            | Filter::Liquify { .. }
-            | Filter::ZigZag { .. }
-            | Filter::OceanRipple { .. }
-            | Filter::Glass { .. }
-    )
-}
-
 /// Kernels whose row-parallel CPU path beats the GPU round trip, so a layer
 /// filter skips the GPU for them. Measured at 8192² on an integrated AMD 780M
 /// (#152): uploading and reading back cost about what the CPU takes for the
@@ -150,54 +90,6 @@ pub(crate) fn cpu_outruns_gpu(filter: &Filter) -> bool {
             | Filter::Median { .. }
             | Filter::Custom { .. }
     )
-}
-
-/// The kernel the alpha pass runs for `filter`. Offset's exposed area takes
-/// the Background colour, which CS6's "Set to Background" paints opaque, so
-/// the alpha pass fills it with 255 rather than the colour's grey.
-/// ponytail: CS6's "Set to Transparent" has no slot in `Filter::Offset` yet.
-fn alpha_kernel(filter: &Filter) -> std::borrow::Cow<'_, Filter> {
-    match *filter {
-        Filter::Offset {
-            horizontal,
-            vertical,
-            wrap,
-            ..
-        } => std::borrow::Cow::Owned(Filter::Offset {
-            horizontal,
-            vertical,
-            wrap,
-            background: [255; 3],
-        }),
-        // Grain and the specular bloom are colour effects; the alpha pass keeps
-        // the depth-driven blur only.
-        Filter::LensBlur { .. } => {
-            let mut alpha = filter.clone();
-            if let Filter::LensBlur {
-                specular_brightness,
-                noise_amount,
-                ..
-            } = &mut alpha
-            {
-                *specular_brightness = 0;
-                *noise_amount = 0;
-            }
-            std::borrow::Cow::Owned(alpha)
-        }
-        // The bokeh lift and the grain are colour effects; the alpha pass
-        // keeps the pin-driven blur only.
-        Filter::FieldBlur { .. } | Filter::IrisBlur { .. } => {
-            let mut alpha = filter.clone();
-            if let Filter::FieldBlur { bokeh, noise, .. } | Filter::IrisBlur { bokeh, noise, .. } =
-                &mut alpha
-            {
-                bokeh.enabled = false;
-                noise.enabled = false;
-            }
-            std::borrow::Cow::Owned(alpha)
-        }
-        _ => std::borrow::Cow::Borrowed(filter),
-    }
 }
 
 fn apply_op_region(
@@ -256,29 +148,13 @@ fn apply_op_region(
         }
     };
 
-    // Crop the clip out of the layer into a clip-sized working buffer.
-    let sources: [&[u8]; 3] = if grayscale {
-        [c0, c0, c0]
-    } else {
-        [c0, channel(layer, 1).unwrap(), channel(layer, 2).unwrap()]
-    };
-    let mut buf = PixelBuffer::new(cw as u32, ch as u32, 3);
-    buf.data
-        .as_mut_slice()
-        .par_chunks_mut(cw)
-        .enumerate()
-        .for_each(|(i, row)| {
-            let from = (oy + i % ch) * lw + ox;
-            row.copy_from_slice(&sources[i / ch][from..from + cw]);
-        });
-
-    // A transparency lock preserves the alpha plane exactly and leaves fully
-    // transparent pixels untouched; only opaque pixels take the filter colour.
-    // An unlocked layer takes a moving kernel on its transparency too (CS6):
-    // run it over a grey copy of the alpha plane so the layer edge smears or
-    // moves exactly as the colour does (see `filter_preserves_opacity`).
-    // ponytail: the alpha pass reruns the kernel on the CPU; fold it into the
-    // working buffer once the kernels accept a fourth plane.
+    // Crop the clip out of the layer into a clip-sized working buffer. The
+    // layer's transparency is folded in as a fourth plane whenever the op can
+    // touch it (a filter on an unlocked layer that has alpha), so each kernel
+    // receives the alpha plane and decides it: a moving kernel filters it with
+    // the colour, a value kernel leaves it bit-identical. There is no second
+    // pass and no call-site allowlist — the plane counts and write-backs below
+    // are the whole protocol.
     let alpha_locked = layer_transparency_locked(layer);
     let alpha_original: Option<Vec<u8>> = channel(layer, -1).map(|data| {
         let mut crop = vec![0u8; n];
@@ -288,6 +164,31 @@ fn apply_op_region(
         });
         crop
     });
+    let fold_alpha = matches!(op, Op::Filter(..)) && !alpha_locked && alpha_original.is_some();
+    let sources: [&[u8]; 3] = if grayscale {
+        [c0, c0, c0]
+    } else {
+        [c0, channel(layer, 1).unwrap(), channel(layer, 2).unwrap()]
+    };
+    let mut buf = PixelBuffer::new(cw as u32, ch as u32, if fold_alpha { 4 } else { 3 });
+    buf.data
+        .as_mut_slice()
+        .par_chunks_mut(cw)
+        .enumerate()
+        .for_each(|(i, row)| {
+            let r = i % ch;
+            let from = (oy + r) * lw + ox;
+            if i / ch < 3 {
+                row.copy_from_slice(&sources[i / ch][from..from + cw]);
+            } else {
+                row.copy_from_slice(
+                    &alpha_original.as_ref().expect("folded")[r * cw..(r + 1) * cw],
+                );
+            }
+        });
+
+    // A transparency lock preserves the alpha plane exactly and leaves fully
+    // transparent pixels untouched; only opaque pixels take the filter colour.
     // Without a mask or a transparency lock every pixel takes the filtered
     // value whole, so the pre-filter copy is kept only for the blend.
     let orig = (mask.is_some() || alpha_locked).then(|| buf.clone());
@@ -299,27 +200,6 @@ fn apply_op_region(
         Op::Adjustment(adjustment) => pictura_adjust::apply(adjustment, &mut buf)
             .map_err(|error| FilterError::InvalidParams(error.to_string()))?,
     }
-
-    let filtered_alpha = match op {
-        Op::Filter(filter, _) if !alpha_locked && !filter_preserves_opacity(filter) => {
-            alpha_original
-                .as_ref()
-                // A moving kernel maps a flat opaque plane to itself
-                // (`moving_kernels_map_opaque_to_opaque`), so an opaque crop
-                // needs no rerun.
-                .filter(|alpha| !alpha.par_iter().all(|&a| a == 255))
-                .map(|alpha| -> Result<Vec<u8>, FilterError> {
-                    let mut gray = PixelBuffer::new(cw as u32, ch as u32, 3);
-                    for c in 0..3usize {
-                        gray.data[c * n..c * n + n].copy_from_slice(alpha);
-                    }
-                    pictura_filters::apply(&alpha_kernel(filter), &mut gray)?;
-                    Ok(gray.data[0..n].to_vec())
-                })
-                .transpose()?
-        }
-        _ => None,
-    };
 
     let at = Placement {
         lw,
@@ -346,15 +226,17 @@ fn apply_op_region(
         write_back(out, &buf.data[plane..plane + n], blend, at);
     }
 
-    // Write the filtered transparency (unlocked layers only).
-    if let (Some(source), Some(filtered)) = (alpha_original.as_ref(), filtered_alpha.as_ref()) {
+    // Write the transparency the kernel left in the fourth plane (unlocked
+    // layers that had alpha; a value kernel leaves the plane bit-identical, so
+    // this is a no-op write for those).
+    if let (Some(source), true) = (alpha_original.as_ref(), fold_alpha) {
         let blend = mask.is_some().then_some(Blend {
             source,
             mask,
             keep_clear: None,
         });
         let out = channel_mut(layer, -1).expect("alpha presence checked above");
-        write_back(out, filtered, blend, at);
+        write_back(out, &buf.data[3 * n..4 * n], blend, at);
     }
     Ok(())
 }

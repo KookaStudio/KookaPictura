@@ -1,6 +1,8 @@
 #include "selftest_layers_smart_object.h"
 #include "selftest_report.h"
+#include "api/layers_api.h"
 
+#include "api/transform_api.h"
 #include "frame.h"
 #include "image_view.h"
 #include "panels/layers_panel.h"
@@ -169,10 +171,10 @@ int pictura::runLayersPlaceSmartObjectChecks(pictura::PicturaMainWindow& frame)
     }
     const int plDoc = frame.activeDocumentIndex();
     const int plBase = plView->history_count();
-    const int plRows = plView->layer_row_count();
+    const int plRows = pictura::layers_api::rowCount(*plView);
     const unsigned int plBefore = plView->sample_argb(0, 0);
     const QString plPath = plView->place_smart_object(plSourcePath);
-    const bool plPlaced = !plPath.isEmpty() && plView->layer_row_count() == plRows + 1
+    const bool plPlaced = !plPath.isEmpty() && pictura::layers_api::rowCount(*plView) == plRows + 1
         && plView->history_count() == plBase + 1
         && plView->sample_argb(0, 0) == 0xffffffffu
         && plView->sample_argb(0, 0) != plBefore
@@ -188,7 +190,7 @@ int pictura::runLayersPlaceSmartObjectChecks(pictura::PicturaMainWindow& frame)
     const QString plRefused = plView->place_smart_object(plBadPath);
     const bool plRefusedOk = plRefused.isEmpty()
         && plView->history_count() == plBadBase
-        && plView->layer_row_count() == plRows + 1;
+        && pictura::layers_api::rowCount(*plView) == plRows + 1;
     ST_BEGIN("lpr_place_smart_object");
     ST_PASS("lpr_place_smart_object saved=%d path=%s pixel=%08x before=%08x refuse=%d",
             plSourceSaved ? 1 : 0, qPrintable(plPath), plView->sample_argb(0, 0), plBefore,
@@ -269,7 +271,7 @@ int pictura::runLayersOpenSmartObjectChecks(pictura::PicturaMainWindow& frame)
     pictura::PictureView* ossView = frame.activeView();
     const bool ossAdded = ossOpened && frame.documentCount() == ossBase + 1 && ossView;
     const bool ossUntitled = ossView && ossView->file_path().isEmpty();
-    const bool ossOneLayer = ossView && ossView->layer_row_count() == 1;
+    const bool ossOneLayer = ossView && pictura::layers_api::rowCount(*ossView) == 1;
     const QString ossState =
         ossView ? ossView->layer_smart_object_state(QStringLiteral("0")) : QString();
     const bool ossSmart = ossState.startsWith(QStringLiteral("embedded:"))
@@ -295,7 +297,7 @@ int pictura::runLayersOpenSmartObjectChecks(pictura::PicturaMainWindow& frame)
     ST_PASS("lpr_open_as_smart_object opened=%d added=%d untitled=%d layers=%d state=%s "
             "pixel=%08x history=%d refused=%d notab=%d",
             ossOpened ? 1 : 0, ossAdded ? 1 : 0, ossUntitled ? 1 : 0,
-            ossView ? ossView->layer_row_count() : -1, qPrintable(ossState),
+            ossView ? pictura::layers_api::rowCount(*ossView) : -1, qPrintable(ossState),
             ossView ? ossView->sample_argb(0, 0) : 0, ossView ? ossView->history_count() : -1,
             ossRefused ? 1 : 0, ossNoTab ? 1 : 0);
     if (!ossOk) {
@@ -391,7 +393,7 @@ int pictura::runLayersEditSmartObjectChecks(pictura::PicturaMainWindow& frame)
         && editEditor && editEditor != editView;
     const bool editUntitled = editEditor && frame.documentPath(editDocsBase).isEmpty();
     const bool editDecoded = editEditor && editEditor->has_document()
-        && editEditor->layer_row_count() == 1
+        && pictura::layers_api::rowCount(*editEditor) == 1
         && editEditor->layer_smart_object_state(QStringLiteral("0")).isEmpty();
     const bool editOriginUntouched = editView->history_count() == editOriginHistory
         && editView->sample_argb(0, 0) == editOriginPixel;
@@ -531,22 +533,22 @@ int pictura::runImageImportChecks(pictura::PicturaMainWindow& frame)
     pictura::PictureView* view = frame.activeView();
     const bool openAdded = opened && frame.documentCount() == openDocsBase + 1 && view;
     const bool openSize = view && view->document_width() == 2 && view->document_height() == 2;
-    const bool openOneLayer = view && view->layer_row_count() == 1;
+    const bool openOneLayer = view && pictura::layers_api::rowCount(*view) == 1;
     const bool openPixel = view && view->sample_argb(0, 0) == 0xffff0000u;
     // An all-opaque import becomes the locked Background (issue 4 / D1).
     const bool openBackground =
-        view && view->layer_row_kind(0) == QStringLiteral("background");
-    const bool openLocked = view && view->layer_row_lock(0) == 0x05;
+        view && pictura::layers_api::rowAt(*view, 0).kind == QStringLiteral("background");
+    const bool openLocked = view && pictura::layers_api::rowAt(*view, 0).lockBits == 0x05;
     const bool openHistory =
         view && view->history_count() == 1 && view->history_label(0) == QStringLiteral("Open");
     const bool openUntitled = view && view->file_path().isEmpty();
     const bool openClean = view && !view->is_dirty();
 
     const int placeBase = view ? view->history_count() : -1;
-    const int placeRows = view ? view->layer_row_count() : -1;
+    const int placeRows = view ? pictura::layers_api::rowCount(*view) : -1;
     const QString placePath = view ? view->place_image(pngPath) : QString();
     const bool placePlaced = !placePath.isEmpty() && view
-        && view->layer_row_count() == placeRows + 1 && view->history_count() == placeBase + 1
+        && pictura::layers_api::rowCount(*view) == placeRows + 1 && view->history_count() == placeBase + 1
         && view->history_label(placeBase) == QStringLiteral("Place")
         && view->layer_smart_object_state(placePath).startsWith(QStringLiteral("embedded:"));
 
@@ -560,9 +562,9 @@ int pictura::runImageImportChecks(pictura::PicturaMainWindow& frame)
     const bool badOpen = !frame.openImagePath(badPath);
     const bool badOpenDocs = frame.documentCount() == badDocs;
     const int badHistory = view ? view->history_count() : -1;
-    const int badRows = view ? view->layer_row_count() : -1;
+    const int badRows = view ? pictura::layers_api::rowCount(*view) : -1;
     const bool badPlace = view && view->place_image(badPath).isEmpty()
-        && view->history_count() == badHistory && view->layer_row_count() == badRows;
+        && view->history_count() == badHistory && pictura::layers_api::rowCount(*view) == badRows;
 
     // A PNG IHDR declaring 40000x40000 is over the 30000 px dimension budget,
     // so the probe refuses it before Qt ever decodes.
@@ -620,7 +622,7 @@ int pictura::runImageImportChecks(pictura::PicturaMainWindow& frame)
             "untitled=%d clean=%d background=%d locked=%d place=%s placed=%d bad=%d big=%d "
             "ppm=%d routing=%d",
             pngSaved ? 1 : 0, opened ? 1 : 0, view ? view->document_width() : -1,
-            view ? view->document_height() : -1, view ? view->layer_row_count() : -1,
+            view ? view->document_height() : -1, view ? pictura::layers_api::rowCount(*view) : -1,
             view ? view->sample_argb(0, 0) : 0u, view ? qPrintable(view->history_label(0)) : "-",
             openUntitled ? 1 : 0, openClean ? 1 : 0, openBackground ? 1 : 0, openLocked ? 1 : 0,
             qPrintable(placePath), placePlaced ? 1 : 0,
@@ -712,16 +714,16 @@ int pictura::runFileDropChecks(pictura::PicturaMainWindow& frame)
     if (!placeCreated || !placeView || !placeCanvas) {
         return pictura::selfTest().fail(291, "file drop canvas fixture");
     }
-    const int placeRows = placeView->layer_row_count();
+    const int placeRows = pictura::layers_api::rowCount(*placeView);
     const int placeBase = placeView->history_count();
     QMimeData placeMime;
     placeMime.setUrls({QUrl::fromLocalFile(pngA), QUrl::fromLocalFile(pngB)});
     const DropResult place = sendDrop(placeCanvas, placeMime);
-    const QString placeTop = placeView->layer_row_path(0);
-    const QString placeNext = placeView->layer_row_count() > 1 ? placeView->layer_row_path(1)
+    const QString placeTop = pictura::layers_api::rowAt(*placeView, 0).path;
+    const QString placeNext = pictura::layers_api::rowCount(*placeView) > 1 ? pictura::layers_api::rowAt(*placeView, 1).path
                                                                : QString();
     const bool placed = place.enter && place.drop
-        && placeView->layer_row_count() == placeRows + 2
+        && pictura::layers_api::rowCount(*placeView) == placeRows + 2
         && placeView->history_count() == placeBase + 2
         && placeView->history_label(placeBase) == QStringLiteral("Place")
         && placeView->history_label(placeBase + 1) == QStringLiteral("Place")
@@ -731,26 +733,26 @@ int pictura::runFileDropChecks(pictura::PicturaMainWindow& frame)
 
     // One supported file plus one undecodable file: the good file places, the bad
     // file records nothing and leaves the rest of the document untouched.
-    const int mixedRows = placeView->layer_row_count();
+    const int mixedRows = pictura::layers_api::rowCount(*placeView);
     const int mixedBase = placeView->history_count();
     QMimeData mixedMime;
     mixedMime.setUrls({QUrl::fromLocalFile(pngA), QUrl::fromLocalFile(badPath)});
     const DropResult mixed = sendDrop(placeCanvas, mixedMime);
     const bool mixedPlaced = mixed.enter && mixed.drop
-        && placeView->layer_row_count() == mixedRows + 1
+        && pictura::layers_api::rowCount(*placeView) == mixedRows + 1
         && placeView->history_count() == mixedBase + 1
         && placeView->history_label(mixedBase) == QStringLiteral("Place");
 
     // A PSD on the canvas stays native: place_smart_object embeds the original
     // file bytes verbatim, so the exported payload must equal the source file.
-    const int psdRows = placeView->layer_row_count();
+    const int psdRows = pictura::layers_api::rowCount(*placeView);
     const int psdBase = placeView->history_count();
     QMimeData psdMime;
     psdMime.setUrls({QUrl::fromLocalFile(psdPath)});
     const DropResult psdPlace = sendDrop(placeCanvas, psdMime);
-    const QString psdLayer = psdPlace.drop ? placeView->layer_row_path(0) : QString();
+    const QString psdLayer = psdPlace.drop ? pictura::layers_api::rowAt(*placeView, 0).path : QString();
     const bool psdPlaced = psdPlace.enter && psdPlace.drop && !psdLayer.isEmpty()
-        && placeView->layer_row_count() == psdRows + 1
+        && pictura::layers_api::rowCount(*placeView) == psdRows + 1
         && placeView->history_count() == psdBase + 1
         && placeView->history_label(psdBase) == QStringLiteral("Place")
         && placeView->layer_smart_object_state(psdLayer).startsWith(QStringLiteral("embedded:"));
@@ -800,7 +802,7 @@ int pictura::runFileDropChecks(pictura::PicturaMainWindow& frame)
     const DropResult dirDrop = sendDrop(bar, dirMime);
     const DropResult badDrop = sendDrop(bar, badMime);
     pictura::PictureView* guardView = frame.activeView();
-    const int guardRows = guardView ? guardView->layer_row_count() : -1;
+    const int guardRows = guardView ? pictura::layers_api::rowCount(*guardView) : -1;
     const int guardHistory = guardView ? guardView->history_count() : -1;
     QMimeData badPlaceMime;
     badPlaceMime.setUrls({QUrl::fromLocalFile(badPath)});
@@ -808,7 +810,7 @@ int pictura::runFileDropChecks(pictura::PicturaMainWindow& frame)
     const bool ignored = !internalDrop.enter && !internalDrop.drop && !dirDrop.enter
         && !dirDrop.drop && badDrop.enter && badDrop.drop && badPlace.enter && badPlace.drop
         && frame.documentCount() == guardDocs && guardView
-        && guardView->layer_row_count() == guardRows
+        && pictura::layers_api::rowCount(*guardView) == guardRows
         && guardView->history_count() == guardHistory;
 
     while (frame.documentCount() > 0) {
@@ -882,7 +884,7 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
 
     // Begin-while-active: the same path is a no-op; a different path cancels
     // the active session and starts a new one on the new target.
-    const QString otherPath = view->layer_row_path(view->layer_row_count() - 1);
+    const QString otherPath = pictura::layers_api::rowAt(*view, pictura::layers_api::rowCount(*view) - 1).path;
     const bool samePathNoop = view->begin_free_transform(path)
         && view->transform_session_active() && view->transform_session_path() == path;
     const bool otherPathSwitched = otherPath != path
@@ -893,7 +895,7 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
     // wide, so hide it and let the presses hit the box handles.
     pictura::transform_set_show_pivot(*view, false);
 
-    const QString beforeRect = view->layer_rect(path);
+    const QString beforeRect = transform_api::layerRect(*view, path).toString();
 
     // Scale about the top-left corner: press the handle, drag outward, commit.
     const int hit = view->transform_press(0.0, 0.0, 1.0, false, false);
@@ -914,7 +916,7 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
     view->transform_release();
     const bool committed = view->commit_transform();
     frame.imageView()->clearTransformPreview();
-    const QString afterRect = view->layer_rect(path);
+    const QString afterRect = transform_api::layerRect(*view, path).toString();
     const bool oneState = view->history_count() == base + 2
         && view->history_label(base + 1) == QStringLiteral("Free Transform");
     const bool rectChanged = !beforeRect.isEmpty() && afterRect != beforeRect;
@@ -979,7 +981,7 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
     const bool groupCan = !group.isEmpty() && !view->layer_can_free_transform(group)
         && !view->begin_free_transform(group);
     const bool adjAdded = view->add_adjustment(QStringLiteral("invert"));
-    const QString adjPath = adjAdded ? view->layer_row_path(0) : QString();
+    const QString adjPath = adjAdded ? pictura::layers_api::rowAt(*view, 0).path : QString();
     const bool adjCan = adjAdded && !adjPath.isEmpty()
         && !view->layer_can_free_transform(adjPath)
         && !view->begin_free_transform(adjPath);
@@ -997,7 +999,7 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
     // Perspective mirrors the opposite corner, Skew slides one edge, and Escape
     // in a projective mode restores the document byte-identically.
     auto rectOf = [](pictura::PictureView* v, const QString& p) {
-        const QStringList parts = v->layer_rect(p).split(QLatin1Char(' '), Qt::SkipEmptyParts);
+        const QStringList parts = transform_api::layerRect(*v, p).toString().split(QLatin1Char(' '), Qt::SkipEmptyParts);
         return QRectF(parts.value(0).toDouble(), parts.value(1).toDouble(),
                       parts.value(2).toDouble() - parts.value(0).toDouble(),
                       parts.value(3).toDouble() - parts.value(1).toDouble());
@@ -1005,7 +1007,7 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
     auto quadOf = [](pictura::PictureView* v) {
         QList<QPointF> pts;
         const QStringList toks =
-            v->transform_quad().split(QLatin1Char(' '), Qt::SkipEmptyParts);
+            transform_api::quad(*v).toString().split(QLatin1Char(' '), Qt::SkipEmptyParts);
         for (const QString& tok : toks) {
             const QStringList xy = tok.split(QLatin1Char(','));
             if (xy.size() == 2) {
@@ -1017,7 +1019,7 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
 
     // (a) Distort drags corner 0 and commits exactly one state.
     const QRectF dRect = rectOf(view, path);
-    const QString beforeDistort = view->layer_rect(path);
+    const QString beforeDistort = transform_api::layerRect(*view, path).toString();
     const int distortBase = view->history_count();
     const bool distortBegin = view->begin_transform_mode(path, QStringLiteral("distort"));
     pictura::transform_set_show_pivot(*view, false);
@@ -1030,7 +1032,7 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
     frame.imageView()->clearTransformPreview();
     const bool distortOneState = view->history_count() == distortBase + 1
         && view->history_label(distortBase) == QStringLiteral("Free Transform");
-    const bool distortChanged = view->layer_rect(path) != beforeDistort;
+    const bool distortChanged = transform_api::layerRect(*view, path).toString() != beforeDistort;
 
     // (b) Perspective moves the opposite corner by the negated delta.
     const QRectF pRect = rectOf(view, path);

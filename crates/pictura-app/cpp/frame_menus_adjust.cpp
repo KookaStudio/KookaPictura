@@ -3,7 +3,10 @@
 
 #include "frame_includes.h"
 
+#include "api/layers_api.h"
+
 #include "adjustment_dialog.h"
+#include "api/document_api.h"
 #include "hdr_toning_dialog.h"
 #include "layer_adjustments.h"
 #include "match_color_dialog.h"
@@ -185,7 +188,7 @@ void PicturaMainWindow::wireImageAdjustments()
         registry_->setEnabledProvider(id, [this]() {
             PictureView* view = activeView();
             return view && filter_target_ready(*view)
-                && view->document_mode() == QStringLiteral("rgb");
+                && document_api::documentMode(*view) == QStringLiteral("rgb");
         });
     }
 }
@@ -227,12 +230,8 @@ void PicturaMainWindow::wireLayerContentOptions()
         if (!view || path.isEmpty()) {
             return QString();
         }
-        for (int i = 0; i < view->layer_row_count(); ++i) {
-            if (view->layer_row_path(i) == path) {
-                return view->layer_row_has_adjustment(i) ? path : QString();
-            }
-        }
-        return QString();
+        const auto row = pictura::layers_api::rowForPath(*view, path);
+        return row.hasAdjustment ? path : QString();
     };
     const QString id = QString::fromLatin1(command_ids::LayerContentOptions);
     registry_->setImplemented(id, true);

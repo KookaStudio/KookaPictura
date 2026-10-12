@@ -1,5 +1,6 @@
 #include "selftest_layers_filter.h"
 #include "selftest_report.h"
+#include "api/layers_api.h"
 
 #include "frame.h"
 #include "panels/layers_panel.h"
@@ -19,9 +20,9 @@ QSet<QString> pathSet(const QStringList& paths)
 
 QString pathForKind(pictura::PictureView* view, const QString& kind)
 {
-    for (int i = 0; i < view->layer_row_count(); ++i) {
-        if (view->layer_row_kind(i) == kind) {
-            return view->layer_row_path(i);
+    for (int i = 0; i < pictura::layers_api::rowCount(*view); ++i) {
+        if (pictura::layers_api::rowAt(*view, i).kind == kind) {
+            return pictura::layers_api::rowAt(*view, i).path;
         }
     }
     return QString();
@@ -30,8 +31,8 @@ QString pathForKind(pictura::PictureView* view, const QString& kind)
 QStringList allPaths(pictura::PictureView* view)
 {
     QStringList paths;
-    for (int i = 0; i < view->layer_row_count(); ++i) {
-        paths.push_back(view->layer_row_path(i));
+    for (int i = 0; i < pictura::layers_api::rowCount(*view); ++i) {
+        paths.push_back(pictura::layers_api::rowAt(*view, i).path);
     }
     return paths;
 }
@@ -183,10 +184,10 @@ int pictura::runLayersFilterChecks(pictura::PicturaMainWindow& frame)
         view->add_layer_in(QString());
         view->add_layer_in(QString());
         panel->refresh();
-        const int rows = view->layer_row_count();
+        const int rows = pictura::layers_api::rowCount(*view);
         panel->setFilterNameForTest(QStringLiteral("no-such-layer-xyz"), true);
         const bool empty = panel->visiblePathsForTest().isEmpty();
-        const bool unchanged = view->layer_row_count() == rows;
+        const bool unchanged = pictura::layers_api::rowCount(*view) == rows;
         panel->setFilterNameForTest(QString(), false);
         const bool restored = panel->visiblePathsForTest().size() == rows;
         ST_BEGIN("lfs_none");

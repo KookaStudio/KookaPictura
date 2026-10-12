@@ -5,6 +5,8 @@
 #include <QtGui/QColor>
 #include <QtWidgets/QWidget>
 
+#include "api/layers_api.h"
+
 
 class QComboBox;
 class QFormLayout;
@@ -74,9 +76,9 @@ signals:
 
 private:
     // The selected layer's path and its Layers-panel row, or empty / -1.
-    QString activePath(int* row) const;
+    QString activePath() const;
     void showNothing();
-    void showLayer(int row);
+    void showLayer(const pictura::layers_api::LayerRow& row);
     void showAdjustment(const QStringList& page);
     // Shrink the hidden pages so the stack sizes to the current one.
     void setPage(int index);

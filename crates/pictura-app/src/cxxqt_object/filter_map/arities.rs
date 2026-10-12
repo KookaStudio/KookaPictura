@@ -34,7 +34,7 @@ pub(in crate::cxxqt_object) const FILTER_ARITIES: &[(&str, usize)] = &[
     ("add-noise", 4),
     ("maximum", 1),
     ("minimum", 1),
-    ("offset", 6),
+    ("offset", 7),
     ("high-pass", 1),
     ("custom", CUSTOM_SLOTS),
     ("emboss", 3),

@@ -1,5 +1,8 @@
 #include "frame_includes.h"
 
+#include "api/document_api.h"
+#include "api/paint_api.h"
+#include "api/selection_api.h"
 #include "file_drop_router.h"
 #include "frame_canvas.h"
 #include "panels/numeric_field.h"
@@ -360,7 +363,7 @@ QString PicturaMainWindow::documentName(int index) const
 bool PicturaMainWindow::isDocumentDirty(int index) const
 {
     PictureView* view = viewAt(index);
-    return view && view->is_dirty();
+    return view && document_api::isDirty(*view);
 }
 
 QString PicturaMainWindow::activeFilePath() const
@@ -443,9 +446,8 @@ int PicturaMainWindow::addDocument(PictureView* view, const QString& path)
                     // A present arms its own flush: the next event-loop turn
                     // folds every dab that arrived since into one region, so the
                     // composite and the present track the frame rate, not the
-                    // input rate. `flush_present` is a no-op with nothing
-                    // pending, so the chain ends when the dabs stop.
-                    QTimer::singleShot(0, view, [view] { view->flush_present(); });
+                    // input rate.
+                    paint_api::presentDeferred(*view);
                     return;
                 }
                 updateTabTitle(activeDocumentIndex());
@@ -490,7 +492,7 @@ bool PicturaMainWindow::newDocument(const QString& name, int width, int height,
     // the tab always shows the generated Untitled-<n>.
     Q_UNUSED(name);
     auto* view = new PictureView(this);
-    if (!view->new_document(width, height, mode, depth, background)) {
+    if (!document_api::newDocument(*view, width, height, mode, depth, background)) {
         delete view;
         return false;
     }
@@ -502,22 +504,12 @@ bool PicturaMainWindow::openPath(const QString& path)
 {
     auto* view = new PictureView(this);
     view->set_color_policy(colorPolicy_);
-    if (!view->open(path)) {
+    if (!document_api::open(*view, path)) {
         delete view;
         return false;
     }
     addDocument(view, path);
-    QString notice = view->mode_notice();
-    const QString depthNotice = view->depth_notice();
-    if (!depthNotice.isEmpty()) {
-        notice = notice.isEmpty() ? depthNotice
-                                  : notice + QStringLiteral("; ") + depthNotice;
-    }
-    const QString iccNotice = view->icc_notice();
-    if (!iccNotice.isEmpty()) {
-        notice = notice.isEmpty() ? iccNotice
-                                  : notice + QStringLiteral("; ") + iccNotice;
-    }
+    const QString notice = document_api::openNotice(*view);
     if (!notice.isEmpty()) {
         statusBar()->showMessage(notice);
     }
@@ -527,7 +519,7 @@ bool PicturaMainWindow::openPath(const QString& path)
 bool PicturaMainWindow::openImagePath(const QString& path)
 {
     auto* view = new PictureView(this);
-    if (!view->open_image(path)) {
+    if (!document_api::openImage(*view, path)) {
         delete view;
         return false;
     }
@@ -558,7 +550,7 @@ bool PicturaMainWindow::openDocumentAtPath(const QString& path)
 bool PicturaMainWindow::openAsSmartObjectPath(const QString& path)
 {
     auto* view = new PictureView(this);
-    if (!view->open_as_smart_object(path)) {
+    if (!document_api::openAsSmartObject(*view, path)) {
         delete view;
         statusBar()->showMessage(tr("Open As Smart Object: %1 is not a supported image")
                                      .arg(QFileInfo(path).fileName()));
@@ -591,7 +583,7 @@ bool PicturaMainWindow::editSmartObjectContents(const QString& layerPath)
         return false;
     }
     auto* editor = new PictureView(this);
-    if (!editor->open(file)) {
+    if (!document_api::open(*editor, file)) {
         delete editor;
         delete temp;
         return false;
@@ -613,7 +605,7 @@ bool PicturaMainWindow::saveActive()
             continue;
         }
         const QString file = session.temp->filePath(session.filename);
-        if (!view->save(file)
+        if (!document_api::save(*view, file)
             || !session.origin->commit_smart_object_edit(session.layerPath, file)) {
             return false;
         }
@@ -634,7 +626,7 @@ bool PicturaMainWindow::saveActiveAs(const QString& path)
 {
     const int index = activeDocumentIndex();
     PictureView* view = viewAt(index);
-    if (!view || path.isEmpty() || !view->save(path)) {
+    if (!view || path.isEmpty() || !document_api::save(*view, path)) {
         return false;
     }
     docs_[index].path = path;
@@ -655,8 +647,8 @@ bool PicturaMainWindow::revertActive()
     }
     // Reload in place: a raster path re-imports through the Qt edge, a PSD/PSB
     // path through the native reader.
-    const bool reloaded =
-        isNativeDocumentPath(path) ? view->open(path) : view->open_image(path);
+    const bool reloaded = isNativeDocumentPath(path) ? document_api::open(*view, path)
+                                                     : document_api::openImage(*view, path);
     if (!reloaded) {
         return false;
     }
@@ -795,7 +787,7 @@ void PicturaMainWindow::showFileInfo()
 void PicturaMainWindow::showProfileCommand(bool convert)
 {
     PictureView* view = activeView();
-    if (!view || !view->has_document() || view->document_mode() != QStringLiteral("rgb")) {
+    if (!view || !view->has_document() || document_api::documentMode(*view) != QStringLiteral("rgb")) {
         return;
     }
     ProfileDialog dialog(convert, this);
@@ -988,7 +980,7 @@ void PicturaMainWindow::refreshSelectionOverlay()
         return;
     }
     if (view->has_selection()) {
-        canvas->setSelectionContour(view->selection_contour());
+        canvas->setSelectionContour(selection_api::contour(*view));
     } else {
         canvas->clearSelectionContour();
     }

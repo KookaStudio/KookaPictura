@@ -138,36 +138,6 @@ impl qobject::PictureView {
         session.handle = -1;
         true
     }
-
-    /// The session quad as `"x,y x,y x,y x,y"` (four document-space corners):
-    /// the warped preview's bounding quad while a warp is set, the live
-    /// projective quad in a projective mode, else the similarity quad.
-    pub fn transform_quad(&self) -> QString {
-        let Some(session) = self.rust().transform_session.as_ref() else {
-            return QString::default();
-        };
-        let quad = session
-            .warp_preview_quad
-            .unwrap_or_else(|| session_quad(session));
-        let encoded: Vec<String> = quad.iter().map(|(x, y)| format!("{x:.2},{y:.2}")).collect();
-        QString::from(encoded.join(" "))
-    }
-
-    /// The layer at `path`'s rect as `"left top right bottom"`, or empty.
-    pub fn layer_rect(&self, path: &QString) -> QString {
-        let rect = self
-            .rust()
-            .doc
-            .as_ref()
-            .and_then(|doc| pictura_render::resolve_path(doc, &path.to_string()))
-            .map(|layer| layer.rect);
-        rect.map_or_else(QString::default, |rect| {
-            QString::from(format!(
-                "{} {} {} {}",
-                rect.left, rect.top, rect.right, rect.bottom
-            ))
-        })
-    }
 }
 
 impl qobject::PictureView {

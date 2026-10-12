@@ -1,5 +1,6 @@
 #include "frame_canvas.h"
 
+#include "api/document_api.h"
 #include "frame.h"
 #include "image_view.h"
 #include "theme.h"
@@ -23,17 +24,13 @@ void wireCanvasLevelProvider(PictureView* view, ImageView* canvas)
         [levelView](int level, int x, int y, int w, int h) {
             return levelView ? levelView->display_image(level, x, y, w, h) : QImage();
         },
-        [levelView]() { return levelView ? levelView->display_level_count() : 0; },
+        [levelView]() { return levelView ? document_api::levelCount(*levelView) : 0; },
         [levelView](int level) {
-            QSize size;
-            if (levelView) {
-                const QStringList parts = levelView->display_level_size(level).split(
-                    QLatin1Char(' '), Qt::SkipEmptyParts);
-                if (parts.size() == 2) {
-                    size = QSize(parts.at(0).toInt(), parts.at(1).toInt());
-                }
+            if (!levelView) {
+                return QSize();
             }
-            return size;
+            const document_api::CanvasSize size = document_api::pyramidSize(*levelView, level);
+            return size.valid ? QSize(size.width, size.height) : QSize();
         },
         [levelView]() { return levelView ? levelView->canvas_revision() : quint64(0); },
         [levelView]() { return levelView && levelView->is_painting(); },

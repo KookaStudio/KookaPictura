@@ -1,6 +1,8 @@
 #include "selftest_tool_canvas.h"
 #include "selftest_report.h"
 
+#include "api/selection_api.h"
+#include "api/transform_api.h"
 #include "frame.h"
 #include "image_view.h"
 #include "tool_hint_bar.h"
@@ -214,7 +216,7 @@ int pictura::runToolCanvasChecks(pictura::PicturaMainWindow& frame)
         const int doc = frame.activeDocumentIndex();
         const QString source = view->add_layer_in(QString());
         view->set_active_layer(source);
-        const QString sourceRect = view->layer_rect(source);
+        const QString sourceRect = transform_api::layerRect(*view, source).toString();
         const int layers = view->select_all_layers().size();
         const int base = view->history_count();
         frame.setActiveTool(ToolId::Move);
@@ -222,7 +224,7 @@ int pictura::runToolCanvasChecks(pictura::PicturaMainWindow& frame)
         canvas->mouseReleased(QPointF(4, 4));
         const bool clean = view->select_all_layers().size() == layers
             && view->active_layer_path() == source
-            && view->layer_rect(source) == sourceRect
+            && transform_api::layerRect(*view, source).toString() == sourceRect
             && view->history_count() == base;
         canvas->mousePressed(QPointF(4, 4), Qt::LeftButton, int(Qt::AltModifier));
         canvas->mouseMoved(QPointF(6, 6));
@@ -288,14 +290,14 @@ int pictura::runToolCanvasChecks(pictura::PicturaMainWindow& frame)
         const int cancelLayers = view->select_all_layers().size();
         const int cancelBase = view->history_count();
         const QString cancelSource = view->active_layer_path();
-        const QString cancelBounds = view->selection_bounds();
+        const QString cancelBounds = pictura::selection_api::bounds(*view).toString();
         const quint32 cancelPixel = view->composite_argb(5, 5);
         canvas->mousePressed(QPointF(5, 5), Qt::LeftButton, int(Qt::AltModifier));
         canvas->mouseReleased(QPointF(5, 5));
         const bool cancelClean = view->select_all_layers().size() == cancelLayers
             && view->history_count() == cancelBase
             && view->active_layer_path() == cancelSource
-            && view->selection_bounds() == cancelBounds
+            && pictura::selection_api::bounds(*view).toString() == cancelBounds
             && view->composite_argb(5, 5) == cancelPixel && !canvas->movePreviewActive();
         ST_BEGIN("tc_content_duplicate_cancel");
         ST_PASS("tc_content_duplicate_cancel seed=%d clean=%d layers=%d", cancelSeed ? 1 : 0,

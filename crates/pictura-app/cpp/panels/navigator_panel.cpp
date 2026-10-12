@@ -1,5 +1,6 @@
 #include "navigator_panel.h"
 
+#include "api/document_api.h"
 #include "image_view.h"
 #include "jump_slider.h"
 
@@ -287,15 +288,10 @@ void NavigatorPanel::refresh()
         thumb = canvas_->image();
     } else {
         docSize = QSize(view_->document_width(), view_->document_height());
-        const int levels = view_->display_level_count();
-        if (levels > 0) {
-            const int level = levels - 1;
-            const QStringList parts = view_->display_level_size(level).split(
-                QLatin1Char(' '), Qt::SkipEmptyParts);
-            if (parts.size() == 2) {
-                thumb = view_->display_image(level, 0, 0, parts.at(0).toInt(),
-                                             parts.at(1).toInt());
-            }
+        const QVector<document_api::CanvasSize> levels = document_api::pyramidSizes(*view_);
+        if (!levels.isEmpty()) {
+            const document_api::CanvasSize& level = levels.last();
+            thumb = view_->display_image(levels.size() - 1, 0, 0, level.width, level.height);
         }
     }
     thumbnail_->setDocumentSize(docSize);

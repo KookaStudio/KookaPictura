@@ -6,6 +6,7 @@
 // separate FG/BG pairs.
 
 #include <QtTest/QtTest>
+#include "api/layers_api.h"
 
 #include "frame.h"
 #include "panels/color_panel.h"
@@ -199,7 +200,7 @@ void MaskEditTest::colorsFollowTheEditTarget()
     auto* colors = frame.findChild<pictura::ColorState*>();
     QVERIFY2(created && view && panel && colors, "mask colours fixture");
     const int doc = frame.activeDocumentIndex();
-    const QString layer = view->layer_row_path(0);
+    const QString layer = pictura::layers_api::rowAt(*view, 0).path;
     frame.selectLayerPath(layer);
     QVERIFY2(pictura::layer_mask_add(*view, QStringLiteral("reveal-all")), "add mask");
     frame.show();

@@ -1,0 +1,46 @@
+#pragma once
+
+#include <array>
+
+#include <QtCore/QString>
+#include <QtGui/QPolygon>
+
+namespace pictura {
+class PictureView;
+}
+
+namespace pictura::transform_api {
+
+/// A layer's document-space rectangle; invalid when `path` does not resolve.
+struct LayerRect {
+    int left = 0;
+    int top = 0;
+    int right = 0;
+    int bottom = 0;
+    bool valid = false;
+
+    int width() const { return right - left; }
+    int height() const { return bottom - top; }
+    /// `"left top right bottom"`, or empty when invalid.
+    QString toString() const;
+};
+
+/// A transform quad's four document-space corners; empty without a session.
+struct Quad {
+    QPolygonF corners;
+    bool isEmpty() const { return corners.isEmpty(); }
+    /// `"x,y x,y x,y x,y"` (2-decimal corners), matching the old string form.
+    QString toString() const;
+};
+
+/// The nine preview-map coefficients in `QTransform` constructor order.
+struct Matrix {
+    std::array<double, 9> coefficients{};
+    bool valid = false;
+};
+
+LayerRect layerRect(const PictureView& view, const QString& path);
+Quad quad(const PictureView& view);
+Matrix previewMatrix(const PictureView& view);
+
+} // namespace pictura::transform_api

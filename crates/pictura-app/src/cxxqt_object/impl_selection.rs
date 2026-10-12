@@ -604,10 +604,12 @@ impl qobject::PictureView {
         cropped
     }
 
-    pub fn selection_bounds(&self) -> QString {
+    /// The selected pixels' bounding box as flat `[x, y, w, h]`; empty when
+    /// nothing is selected. View-only: derives from the mask, records no history.
+    pub fn selection_bounds_extents(&self) -> Vec<i32> {
         let rust = self.rust();
         let Some(sel) = rust.selection.as_ref() else {
-            return QString::default();
+            return Vec::new();
         };
         let mut bounds: Option<(u32, u32, u32, u32)> = None;
         for (i, &v) in sel.data.iter().enumerate() {
@@ -622,26 +624,35 @@ impl qobject::PictureView {
             });
         }
         let Some((x0, y0, x1, y1)) = bounds else {
-            return QString::default();
+            return Vec::new();
         };
-        QString::from(format!("{x0} {y0} {} {}", x1 - x0 + 1, y1 - y0 + 1))
+        vec![
+            x0 as i32,
+            y0 as i32,
+            (x1 - x0 + 1) as i32,
+            (y1 - y0 + 1) as i32,
+        ]
     }
 
-    /// The 50 %-coverage outline of the selection as `"x,y x,y ..."` polylines
-    /// joined by `;` (integer pixel corners). Empty string without a selection.
-    /// View-only: derives from the mask, records no history.
-    pub fn selection_contour(&self) -> QString {
+    /// The 50 %-coverage outline of the selection encoded as flat
+    /// `[n0, x,y, x,y, …, n1, …]` (loop point counts then integer pixel
+    /// corners); empty without a selection. View-only: derives from the mask,
+    /// records no history.
+    pub fn selection_contour_extents(&self) -> Vec<i32> {
         let rust = self.rust();
         let Some(sel) = rust.selection.as_ref() else {
-            return QString::default();
+            return Vec::new();
         };
         let loops = pictura_select::contour(sel, 128);
-        let mut parts: Vec<String> = Vec::with_capacity(loops.len());
+        let mut out = Vec::new();
         for poly in &loops {
-            let points: Vec<String> = poly.iter().map(|p| format!("{},{}", p[0], p[1])).collect();
-            parts.push(points.join(" "));
+            out.push(poly.len() as i32);
+            for p in poly {
+                out.push(p[0]);
+                out.push(p[1]);
+            }
         }
-        QString::from(parts.join(";"))
+        out
     }
 }
 

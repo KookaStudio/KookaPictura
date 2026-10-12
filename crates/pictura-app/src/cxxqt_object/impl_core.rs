@@ -339,7 +339,23 @@ impl qobject::PictureView {
             .unwrap_or_default()
     }
 
-    pub fn mode_notice(&self) -> QString {
+    /// Post-open notices joined for the status bar: mode, then depth, then ICC.
+    pub fn open_notice(&self) -> QString {
+        let mut out = String::new();
+        for part in [self.mode_notice(), self.depth_notice(), self.icc_notice()] {
+            let part = part.to_string();
+            if part.is_empty() {
+                continue;
+            }
+            if !out.is_empty() {
+                out.push_str("; ");
+            }
+            out.push_str(&part);
+        }
+        QString::from(out)
+    }
+
+    fn mode_notice(&self) -> QString {
         let Some(doc) = self.rust().doc.as_ref() else {
             return QString::default();
         };
@@ -368,7 +384,7 @@ impl qobject::PictureView {
         QString::from(format!("Converted from {name}; saved as {saved}"))
     }
 
-    pub fn depth_notice(&self) -> QString {
+    fn depth_notice(&self) -> QString {
         let Some(doc) = self.rust().doc.as_ref() else {
             return QString::default();
         };
@@ -392,7 +408,7 @@ impl qobject::PictureView {
         }
     }
 
-    pub fn icc_notice(&self) -> QString {
+    fn icc_notice(&self) -> QString {
         let Some(icc) = self
             .rust()
             .doc
@@ -676,16 +692,18 @@ impl qobject::PictureView {
         self.rust().display_crop(level, rect)
     }
 
-    /// The number of view-pyramid levels (0 without a document).
-    pub fn display_level_count(&self) -> i32 {
-        self.rust().display_level_count()
-    }
-
-    /// The size of `level` as `"w h"`, or empty when out of range.
-    pub fn display_level_size(&self, level: i32) -> QString {
-        self.rust()
-            .display_level_size(level)
-            .map_or_else(QString::default, |(w, h)| QString::from(format!("{w} {h}")))
+    /// Extents of every view-pyramid level as flat `w,h` pairs (empty without a document).
+    pub fn display_level_extents(&self) -> Vec<i32> {
+        let rust = self.rust();
+        let count = rust.display_level_count();
+        let mut out = Vec::with_capacity(count.max(0) as usize * 2);
+        for level in 0..count {
+            if let Some((w, h)) = rust.display_level_size(level) {
+                out.push(w as i32);
+                out.push(h as i32);
+            }
+        }
+        out
     }
 
     /// The outstanding canvas damage as `"x y w h"`, or empty when clean.

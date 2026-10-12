@@ -1,8 +1,9 @@
 # Refactor — tool architecture and code splitting (round 2)
 
-- **Status:** done, except Track 4. Tracks 0–3 landed; the single cxx-qt bridge
-  (`cxxqt_object.rs`, 1200) is unexercised because no new declaration was needed.
-  `tools.cpp` is 417; every implemented tool has a handler.
+- **Status:** done. Tracks 0–3 landed; Track 4 is **superseded** by
+  `docs/dev/refactor-view-seam.md` (typed view-seam adapters, issue #276 /
+  #281). The single cxx-qt bridge (`cxxqt_object.rs`, 1200) still carries the
+  surface until each migration unit deletes its share.
 - **Type:** pure-mechanical splits first, then a behavior-preserving tool-handler
   redesign. No spec deltas, no new dependency, no algorithm change.
 - **Contract:** every public symbol, signature, registration, self-test exit
@@ -154,7 +155,12 @@ public:
 - `composite.rs` (1125) and `frame.cpp` (1068) still have headroom and are left
   for when they are next touched.
 
-### Track 4 — bridge growth policy (open)
+### Track 4 — bridge growth policy (superseded)
+
+**Superseded by `docs/dev/refactor-view-seam.md` (#276 / #281).** The
+single-bridge policy below is kept for history; the adapter namespaces under
+`crates/pictura-app/cpp/api/` are now the growth path, and deleting superseded
+invokables as each unit lands replaces the "decide in this order" escalation.
 
 Keep the single `#[cxx_qt::bridge]`. New tool work must reuse existing
 invokables; only a genuinely new engine operation adds a declaration. If

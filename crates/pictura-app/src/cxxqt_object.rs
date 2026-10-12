@@ -72,6 +72,40 @@ pub mod qobject {
         /// Render `text` with the system `family` font to packed RGBA8888 of the given size.
         fn render_text_rgba(family: &str, pixel_size: f64, text: &str, justify: i32, r: u8, g: u8, b: u8, a: u8, width: i32, height: i32) -> Vec<u8>;
     }
+    #[namespace = "pictura"]
+    struct LayerRow {
+        path: QString,
+        depth: i32,
+        name: QString,
+        kind: QString,
+        visible: bool,
+        blend: QString,
+        opacity: i32,
+        fill: i32,
+        lock: i32,
+        color: i32,
+        clipping: bool,
+        has_mask: bool,
+        mask_linked: bool,
+        mask_disabled: bool,
+        has_vector_mask: bool,
+        vector_mask_linked: bool,
+        vector_mask_disabled: bool,
+        has_adjustment: bool,
+        expandable: bool,
+        child_count: i32,
+        linked: bool,
+        placed: bool,
+        shape: bool,
+        smart_object: bool,
+        has_style: bool,
+        /// Active effect names joined by `\n`; the adapter splits them back.
+        style_effects: QString,
+        has_blend_if: bool,
+        thumbnail: QImage,
+        mask_thumbnail: QImage,
+        vector_mask_thumbnail: QImage,
+    }
     extern "RustQt" {
         #[qobject]
         #[namespace = "pictura"]
@@ -131,13 +165,9 @@ pub mod qobject {
         #[qinvokable]
         fn active_layer_visible(&self) -> bool;
 
-        /// Notices for an opened document normalized from another mode, depth, or ICC profile.
+        /// Post-open notices (mode, depth, ICC), `"; "`-joined; empty when none.
         #[qinvokable]
-        fn mode_notice(&self) -> QString;
-        #[qinvokable]
-        fn depth_notice(&self) -> QString;
-        #[qinvokable]
-        fn icc_notice(&self) -> QString;
+        fn open_notice(&self) -> QString;
 
         /// Assign (retag) or convert (transform and retag) the active document to a built-in profile: 0 sRGB, 1 Adobe RGB, 2 Pro Photo RGB. False without a document or on a bad index.
         #[qinvokable]
@@ -183,13 +213,9 @@ pub mod qobject {
         #[qinvokable]
         fn display_image(&self, level: i32, x: i32, y: i32, w: i32, h: i32) -> QImage;
 
-        /// Number of view-pyramid levels (0 without a document).
+        /// Extents of every view-pyramid level as flat `w,h` pairs; empty without a document.
         #[qinvokable]
-        fn display_level_count(&self) -> i32;
-
-        /// Size of `level` as `"w h"`, or empty when out of range.
-        #[qinvokable]
-        fn display_level_size(&self, level: i32) -> QString;
+        fn display_level_extents(&self) -> Vec<i32>;
 
         /// The outstanding canvas damage as `"x y w h"`, or empty when clean.
         #[qinvokable]
@@ -302,70 +328,12 @@ pub mod qobject {
         #[qinvokable]
         fn layer_thumbnail(&self, i: i32, size: i32) -> QImage;
 
+        /// One crossing for every Layers-panel row; empty without a document.
+        #[qinvokable]
+        fn layers_snapshot(&self, thumb_size: i32, entire_document: bool) -> Vec<LayerRow>;
+
         // M39 tree rows, path/batch mutation; see docs/dev/m39-panel-anatomy.md §3.2.
 
-        /// Number of nodes in the whole layer tree (all depths; 0 without a document).
-        #[qinvokable]
-        fn layer_row_count(&self) -> i32;
-        /// Frozen path of flat row `i` (depth-first, topmost-first), or empty.
-        #[qinvokable]
-        fn layer_row_path(&self, i: i32) -> QString;
-        /// Nesting depth of row `i` (top-level rows are 0).
-        #[qinvokable]
-        fn layer_row_depth(&self, i: i32) -> i32;
-        /// Name of row `i`, or empty when out of range.
-        #[qinvokable]
-        fn layer_row_name(&self, i: i32) -> QString;
-        /// Kind of row `i`: `"pixel"`, `"group"`, `"adjustment"`, or `"background"` (the same strings as [`layer_kind`]), or empty.
-        #[qinvokable]
-        fn layer_row_kind(&self, i: i32) -> QString;
-        /// Visibility flag of row `i`.
-        #[qinvokable]
-        fn layer_row_visible(&self, i: i32) -> bool;
-        /// Blend mode of row `i` as its 4-byte PSD key, or empty.
-        #[qinvokable]
-        fn layer_row_blend(&self, i: i32) -> QString;
-        /// Opacity of row `i` in `0..=255`.
-        #[qinvokable]
-        fn layer_row_opacity(&self, i: i32) -> i32;
-        /// Fill opacity of row `i` in `0..=255`.
-        #[qinvokable]
-        fn layer_row_fill(&self, i: i32) -> i32;
-        /// Lock flags of row `i` as a bitmask `0x01/0x02/0x04`.
-        #[qinvokable]
-        fn layer_row_lock(&self, i: i32) -> i32;
-        /// Color label of row `i` as a byte (`0` none … `7` gray).
-        #[qinvokable]
-        fn layer_row_color(&self, i: i32) -> i32;
-        /// Clipping flag of row `i`.
-        #[qinvokable]
-        fn layer_row_clipping(&self, i: i32) -> bool;
-        /// Whether row `i` carries a layer mask.
-        #[qinvokable]
-        fn layer_row_has_mask(&self, i: i32) -> bool;
-        /// Whether row `i` carries adjustment content.
-        #[qinvokable]
-        fn layer_row_has_adjustment(&self, i: i32) -> bool;
-        /// Whether row `i` is a group with at least one child.
-        #[qinvokable]
-        fn layer_row_expandable(&self, i: i32) -> bool;
-        /// Number of direct children of row `i`.
-        #[qinvokable]
-        fn layer_row_child_count(&self, i: i32) -> i32;
-        /// Thumbnail of row `i` scaled to `size`. `entire_document` places it at
-        /// its document position in a transparent square, else its own bounds fill
-        /// it. Null for a group, an adjustment layer, or an invalid index/size.
-        #[qinvokable]
-        fn layer_row_thumbnail(&self, i: i32, size: i32, entire_document: bool) -> QImage;
-        /// Mask thumbnail of row `i` scaled to `size`, or null without a mask.
-        #[qinvokable]
-        fn layer_row_mask_thumbnail(&self, i: i32, size: i32) -> QImage;
-        /// Whether row `i`'s path is in the frame's link set.
-        #[qinvokable]
-        fn layer_row_linked(&self, i: i32) -> bool;
-        /// Whether row `i` is a placed (external/alias) smart object.
-        #[qinvokable]
-        fn layer_row_placed(&self, i: i32) -> bool;
         /// `Prefix N` for the next free name in the whole tree.
         #[qinvokable]
         fn next_layer_name(&self, prefix: &QString) -> QString;
@@ -960,15 +928,15 @@ pub mod qobject {
         #[qinvokable]
         fn composite_argb(&self, x: i32, y: i32) -> u32;
 
-        /// The selected pixels' `"x y w h"` bounding box, or an empty string when nothing is selected.
+        /// The selected pixels' bounding box as flat `[x, y, w, h]`; empty when nothing is selected.
         #[qinvokable]
-        fn selection_bounds(&self) -> QString;
+        fn selection_bounds_extents(&self) -> Vec<i32>;
 
-        /// The marching-ants outline of the selection as `"x,y x,y ..."`
-        /// polylines (integer pixel corners) joined by `;`, or an empty string
-        /// when nothing is selected. View-only: no history, no recomposite.
+        /// The marching-ants outline loops encoded as `[n0, x,y, …, n1, …]`
+        /// (loop point counts then integer pixel corners); empty when nothing is
+        /// selected. View-only: no history, no recomposite.
         #[qinvokable]
-        fn selection_contour(&self) -> QString;
+        fn selection_contour_extents(&self) -> Vec<i32>;
 
         /// Append an adjustment layer for `kind` (invert, posterize, threshold,
         /// brightness-contrast, hue-saturation), recomposite, and emit
@@ -1132,12 +1100,6 @@ pub mod qobject {
         #[qinvokable]
         fn transform_dy(&self) -> f64;
         #[qinvokable]
-        fn transform_quad(&self) -> QString;
-        #[qinvokable]
-        fn transform_preview_matrix(&self) -> QString;
-        #[qinvokable]
-        fn layer_rect(&self, path: &QString) -> QString;
-        #[qinvokable]
         fn undo(self: Pin<&mut Self>) -> bool;
         #[qinvokable]
         fn redo(self: Pin<&mut Self>) -> bool;
@@ -1147,7 +1109,6 @@ pub mod qobject {
         fn can_redo(&self) -> bool;
         #[qinvokable]
         fn history_depth(&self) -> i32;
-        /// Number of labeled history states, including the current one.
         #[qinvokable]
         fn history_count(&self) -> i32;
         /// Position of the current history state, in `0..history_count()`.
@@ -1159,8 +1120,7 @@ pub mod qobject {
         /// Restore history state `i`, recomposite, and emit [`changed`]; false when `i` is out of range.
         #[qinvokable]
         fn history_jump(self: Pin<&mut Self>, i: i32) -> bool;
-        /// Capture the current state as a named restore point. Emits [`changed`]
-        /// so the History panel refreshes. Returns false without a document.
+        /// Capture the current state as a named restore point; false without a document.
         #[qinvokable]
         fn history_add_snapshot(self: Pin<&mut Self>, label: &QString) -> bool;
         /// Number of named restore points (capped at 10).

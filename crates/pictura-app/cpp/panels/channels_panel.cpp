@@ -1,5 +1,6 @@
 #include "channels_panel.h"
 
+#include "api/document_api.h"
 #include "icons.h"
 #include "theme.h"
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
@@ -298,13 +299,11 @@ void ChannelsPanel::refreshThumbnails()
     if (view_ && view_->has_document()) {
         // Thumbnails need ~24 px: take the coarsest pyramid level of at least
         // 64 px rather than the full composite.
-        for (int level = view_->display_level_count() - 1; level >= 0 && source.isNull(); --level) {
-            const QStringList parts =
-                view_->display_level_size(level).split(QLatin1Char(' '), Qt::SkipEmptyParts);
-            const int w = parts.value(0).toInt();
-            const int h = parts.value(1).toInt();
-            if (parts.size() == 2 && qMax(w, h) >= 64) {
-                source = view_->display_image(level, 0, 0, w, h);
+        const QVector<document_api::CanvasSize> levels = document_api::pyramidSizes(*view_);
+        for (int level = levels.size() - 1; level >= 0 && source.isNull(); --level) {
+            const document_api::CanvasSize& size = levels.at(level);
+            if (qMax(size.width, size.height) >= 64) {
+                source = view_->display_image(level, 0, 0, size.width, size.height);
             }
         }
         if (source.isNull()) {

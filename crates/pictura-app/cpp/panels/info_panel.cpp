@@ -1,5 +1,6 @@
 #include "info_panel.h"
 
+#include "api/selection_api.h"
 #include "icons.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
@@ -644,11 +645,10 @@ void InfoPanel::refresh()
             setValues(size_, {});
         }
     } else {
-        const QString bounds = view_->selection_bounds();
-        const QStringList parts = bounds.split(QLatin1Char(' '), Qt::SkipEmptyParts);
-        if (parts.size() == 4) {
-            setValues(size_, {formatMeasure(parts[2].toDouble(), size_->unit, width),
-                              formatMeasure(parts[3].toDouble(), size_->unit, height)});
+        const selection_api::SelectionBounds bounds = selection_api::bounds(*view_);
+        if (bounds.valid) {
+            setValues(size_, {formatMeasure(double(bounds.width), size_->unit, width),
+                              formatMeasure(double(bounds.height), size_->unit, height)});
         } else {
             setValues(size_, {});
         }

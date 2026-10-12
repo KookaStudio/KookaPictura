@@ -443,6 +443,7 @@ fn moving_kernels_keep_an_opaque_layer_opaque() {
             vertical: 2000,
             wrap: false,
             background: [0; 3],
+            transparent: false,
         },
     ];
     for filter in filters {
@@ -478,9 +479,9 @@ fn cpu_preferred_kernels_skip_the_gpu() {
     }
 }
 
-/// The alpha pass is skipped over an opaque crop, which is exact only if
-/// every kernel `filter_preserves_opacity` rejects maps a flat 255 plane to
-/// itself.
+/// An unlocked layer folds its alpha into the working buffer, so every moving
+/// kernel's run over a flat 255 plane must map it back to 255 — otherwise an
+/// opaque layer would gain transparency it never had.
 #[test]
 fn moving_kernels_map_opaque_to_opaque() {
     use pictura_filters::{
@@ -553,6 +554,7 @@ fn moving_kernels_map_opaque_to_opaque() {
             vertical: -3,
             wrap: false,
             background: [0; 3],
+            transparent: false,
         },
         Filter::Mosaic { cell_size: 5 },
         Filter::Crystallize {
@@ -605,12 +607,13 @@ fn moving_kernels_map_opaque_to_opaque() {
         },
     ];
     for filter in filters {
-        assert!(!filter_preserves_opacity(&filter), "{filter:?}");
-        let mut gray = PixelBuffer::new(24, 24, 3);
-        gray.data.as_mut_slice().fill(255);
-        pictura_filters::apply(&alpha_kernel(&filter), &mut gray).unwrap();
+        assert!(pictura_filters::filters_alpha(&filter), "{filter:?}");
+        let mut buf = PixelBuffer::new(24, 24, 4);
+        buf.data.as_mut_slice().fill(255);
+        pictura_filters::apply(&filter, &mut buf).unwrap();
+        let n = buf.pixel_count();
         assert!(
-            gray.data.iter().all(|&a| a == 255),
+            buf.data[3 * n..].iter().all(|&a| a == 255),
             "{filter:?} does not map opaque to opaque"
         );
     }
@@ -624,6 +627,7 @@ fn offset_moves_the_layer_edge_and_fills_what_it_exposes_opaque() {
         vertical: 0,
         wrap: false,
         background: [0; 3],
+        transparent: false,
     };
     apply_filter(&mut layer, &filter, None, false).unwrap();
     let alpha = chan(&layer, -1);

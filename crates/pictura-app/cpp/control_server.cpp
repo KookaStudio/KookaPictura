@@ -1,5 +1,8 @@
 #include "control_server.h"
 
+#include "api/document_api.h"
+#include "api/history_api.h"
+
 #include <QtCore/QBuffer>
 #include <QtCore/QDir>
 #include <QtCore/QJsonArray>
@@ -129,8 +132,8 @@ QJsonObject documentInfo(PicturaMainWindow* frame, int index)
     info.insert(QStringLiteral("path"), frame->documentPath(index));
     info.insert(QStringLiteral("width"), view ? view->document_width() : 0);
     info.insert(QStringLiteral("height"), view ? view->document_height() : 0);
-    info.insert(QStringLiteral("mode"), view ? view->document_mode() : QString());
-    info.insert(QStringLiteral("depth"), view ? view->document_depth_bits() : 0);
+    info.insert(QStringLiteral("mode"), view ? document_api::documentMode(*view) : QString());
+    info.insert(QStringLiteral("depth"), view ? document_api::documentDepthBits(*view) : 0);
     info.insert(QStringLiteral("dirty"), frame->isDocumentDirty(index));
     info.insert(QStringLiteral("layers"), view ? view->layer_count() : 0);
     info.insert(QStringLiteral("selection_px"), view ? view->selection_count() : 0);
@@ -769,18 +772,18 @@ QJsonObject ControlServer::methodEdit(const QJsonObject& params)
     const QString op = params.value(QStringLiteral("op")).toString();
     bool applied = false;
     if (op == QStringLiteral("undo")) {
-        applied = view->undo();
+        applied = history_api::undo(*view);
     } else if (op == QStringLiteral("redo")) {
-        applied = view->redo();
+        applied = history_api::redo(*view);
     } else {
         return error(QStringLiteral("invalid_param"),
                      QStringLiteral("op must be undo or redo"));
     }
     QJsonObject result;
     result.insert(QStringLiteral("success"), applied);
-    result.insert(QStringLiteral("can_undo"), view->can_undo());
-    result.insert(QStringLiteral("can_redo"), view->can_redo());
-    result.insert(QStringLiteral("depth"), view->history_depth());
+    result.insert(QStringLiteral("can_undo"), history_api::canUndo(*view));
+    result.insert(QStringLiteral("can_redo"), history_api::canRedo(*view));
+    result.insert(QStringLiteral("depth"), history_api::depth(*view));
     return ok(result);
 }
 

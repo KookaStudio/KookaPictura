@@ -1,4 +1,5 @@
 #include <QtTest/QtTest>
+#include "api/layers_api.h"
 
 #include "frame.h"
 #include "panels/layers_panel.h"
@@ -77,7 +78,7 @@ void PropertiesPanelTest::plainDocumentShowsNoProperties()
     QVERIFY2(created && view_ && layers, "properties fixture");
     panel_->setView(view_);
     layers->setView(view_);
-    QVERIFY(layers->selectRowForTest(view_->layer_row_path(0)));
+    QVERIFY(layers->selectRowForTest(pictura::layers_api::rowAt(*view_, 0).path));
     panel_->refresh();
     QCOMPARE(panel_->messageForTest(), QStringLiteral("Layer Properties"));
     QStringList text;
@@ -104,9 +105,9 @@ bool PropertiesPanelTest::setupAdjustment(const QString& kind)
         return false;
     }
     path_.clear();
-    for (int i = 0; i < view_->layer_row_count(); ++i) {
-        if (view_->layer_row_has_adjustment(i)) {
-            path_ = view_->layer_row_path(i);
+    for (int i = 0; i < pictura::layers_api::rowCount(*view_); ++i) {
+        if (pictura::layers_api::rowAt(*view_, i).hasAdjustment) {
+            path_ = pictura::layers_api::rowAt(*view_, i).path;
         }
     }
     panel_->setView(view_);
@@ -130,9 +131,9 @@ void PropertiesPanelTest::adjustmentLayerShowsItsName()
     QVERIFY2(view_->add_adjustment(QStringLiteral("brightness-contrast")), "add adjustment");
 
     QString path;
-    for (int i = 0; i < view_->layer_row_count(); ++i) {
-        if (view_->layer_row_has_adjustment(i)) {
-            path = view_->layer_row_path(i);
+    for (int i = 0; i < pictura::layers_api::rowCount(*view_); ++i) {
+        if (pictura::layers_api::rowAt(*view_, i).hasAdjustment) {
+            path = pictura::layers_api::rowAt(*view_, i).path;
             break;
         }
     }
@@ -205,13 +206,13 @@ void PropertiesPanelTest::groupsCurvesAndFooter()
     QVERIFY(visible);
     visible->click();
     int row = -1;
-    for (int i = 0; i < view_->layer_row_count(); ++i) {
-        row = view_->layer_row_path(i) == path_ ? i : row;
+    for (int i = 0; i < pictura::layers_api::rowCount(*view_); ++i) {
+        row = pictura::layers_api::rowAt(*view_, i).path == path_ ? i : row;
     }
-    QVERIFY(row >= 0 && !view_->layer_row_visible(row));
-    const int rows = view_->layer_row_count();
+    QVERIFY(row >= 0 && !pictura::layers_api::rowAt(*view_, row).visible);
+    const int rows = pictura::layers_api::rowCount(*view_);
     panel_->findChild<QToolButton*>(QStringLiteral("propertiesDelete"))->click();
-    QCOMPARE(view_->layer_row_count(), rows - 1);
+    QCOMPARE(pictura::layers_api::rowCount(*view_), rows - 1);
     window_->closeDocument(window_->activeDocumentIndex(), false);
 
     // A single-slider page (Threshold) commits under its own name.
@@ -281,7 +282,7 @@ void PropertiesPanelTest::maskSectionAppearsForAMaskedLayer()
     auto* layers = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
     QVERIFY2(view_ && panel_ && layers, "mask fixture");
     layers->setView(view_);
-    QVERIFY(layers->selectRowForTest(view_->layer_row_path(0)));
+    QVERIFY(layers->selectRowForTest(pictura::layers_api::rowAt(*view_, 0).path));
     panel_->setView(view_);
     panel_->refresh();
     QVERIFY2(!panel_->maskSectionVisibleForTest(), "no mask section without a mask");
@@ -295,7 +296,7 @@ void PropertiesPanelTest::maskSectionAppearsForAMaskedLayer()
     remove->click();
     panel_->refresh();
     QVERIFY2(!panel_->maskSectionVisibleForTest(), "section gone after delete");
-    QVERIFY(!view_->layer_row_has_mask(0));
+    QVERIFY(!pictura::layers_api::rowAt(*view_, 0).hasMask);
 }
 
 // The Vector Mask section appears only for a vector-masked layer; Delete clears
@@ -309,7 +310,7 @@ void PropertiesPanelTest::vectorMaskSectionAppears()
     auto* layers = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
     QVERIFY2(view_ && panel_ && layers, "vector mask fixture");
     layers->setView(view_);
-    QVERIFY(layers->selectRowForTest(view_->layer_row_path(0)));
+    QVERIFY(layers->selectRowForTest(pictura::layers_api::rowAt(*view_, 0).path));
     panel_->setView(view_);
     panel_->refresh();
     QVERIFY2(!panel_->vectorMaskSectionVisibleForTest(), "no vector mask section without a mask");
@@ -325,7 +326,7 @@ void PropertiesPanelTest::vectorMaskSectionAppears()
     panel_->refresh();
     QVERIFY2(!panel_->vectorMaskSectionVisibleForTest(), "section gone after rasterize");
     QVERIFY(!vector_mask_present(*view_));
-    QVERIFY(view_->layer_row_has_mask(0));
+    QVERIFY(pictura::layers_api::rowAt(*view_, 0).hasMask);
 
     QVERIFY(vector_mask_add(*view_, QStringLiteral("hide-all")));
     panel_->refresh();

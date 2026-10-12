@@ -5,7 +5,7 @@
 #include "type_fonts.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/type_tools.cxxqt.h"
+#include "api/type_api.h"
 
 #include <QtCore/QSignalBlocker>
 #include <QtGui/QFont>
@@ -163,7 +163,7 @@ bool CharacterPanel::hasTypeLayer() const
         return false;
     }
     const QString path = view_->active_layer_path();
-    return !path.isEmpty() && view_->layer_is_type(path);
+    return !path.isEmpty() && pictura::type_api::isType(*view_, path);
 }
 
 void CharacterPanel::setView(PictureView* view)
@@ -183,9 +183,9 @@ void CharacterPanel::refresh()
 {
     const bool type = hasTypeLayer();
     const QString path = type ? view_->active_layer_path() : QString();
-    const CharacterSetting c = type ? type_layer_character_setting(*view_, path)
-                                    : type_default_character_setting();
-    const QString family = type ? familyForFontName(type_layer_font(*view_, path)) : QString();
+    const CharacterSetting c = type ? pictura::type_api::layerCharacterSetting(*view_, path)
+                                    : pictura::type_api::defaultCharacterSetting();
+    const QString family = type ? familyForFontName(pictura::type_api::layerFont(*view_, path)) : QString();
 
     const QSignalBlocker blockFamily(family_);
     const QSignalBlocker blockSize(size_);
@@ -244,7 +244,8 @@ void CharacterPanel::apply()
         return;
     }
     const QString path = view_->active_layer_path();
-    CharacterSetting c = type_layer_character_setting(*view_, path);
+    const pictura::type_api::LayerType layer = pictura::type_api::readLayer(*view_, path);
+    CharacterSetting c = layer.character;
     c.size = size_->value();
     c.leading_mode = leadingMode_->currentIndex() == 1 ? 1 : 0;
     c.leading_value = leading_->value();
@@ -265,9 +266,8 @@ void CharacterPanel::apply()
 
     const QString family = family_->currentFont().family();
     registerTypeFont(family);
-    const TypeSetting setting = type_layer_setting(*view_, path);
-    const ParagraphSetting paragraph = type_layer_paragraph_setting(*view_, path);
-    type_update_layer(*view_, path, type_layer_text(*view_, path), family, setting, c, paragraph);
+    pictura::type_api::updateLayer(*view_, path, layer.text, family, layer.setting, c,
+                                   layer.paragraph);
 }
 
 bool CharacterPanel::editingEnabledForTest() const { return size_->isEnabled(); }

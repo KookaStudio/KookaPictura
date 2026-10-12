@@ -105,7 +105,7 @@ fn params_are_validated() {
 }
 
 #[test]
-fn alpha_is_untouched_by_every_radial_warp() {
+fn every_radial_warp_resamples_alpha_too() {
     let alpha: Vec<u8> = (0..49).map(|i| (i * 5) as u8).collect();
     let px: Vec<[u8; 4]> = alpha
         .iter()
@@ -115,9 +115,11 @@ fn alpha_is_untouched_by_every_radial_warp() {
     let base = buf(7, 7, &px);
     let check = |b: &PixelBuffer| {
         let n = b.pixel_count();
-        for (i, &a) in alpha.iter().enumerate() {
-            assert_eq!(b.data[3 * n + i], a, "alpha changed at {i}");
-        }
+        assert_ne!(
+            &b.data[3 * n..4 * n],
+            &alpha[..],
+            "warp left alpha untouched"
+        );
     };
     let mut t = base.clone();
     twirl(&mut t, 45.0).unwrap();

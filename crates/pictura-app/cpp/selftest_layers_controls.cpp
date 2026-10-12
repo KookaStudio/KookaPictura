@@ -17,6 +17,8 @@
 #include "selftest_shell_round3.h"
 #include "selftest_shell_round4.h"
 #include "selftest_report.h"
+#include "api/layers_api.h"
+#include "api/type_api.h"
 #include "selftest_session.h"
 #include "selftest_tools_selection.h"
 #include "selftest_tool_canvas.h"
@@ -240,16 +242,16 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         const int mvBase = mvView->history_count();
         const int mvReplaced = mvView->merge_visible(QStringLiteral("1"));
         bool mvHiddenSurvives = false;
-        for (int i = 0; i < mvView->layer_row_count(); ++i) {
-            if (mvView->layer_row_name(i) == QStringLiteral("Hidden")) {
-                mvHiddenSurvives = !mvView->layer_row_visible(i);
+        for (int i = 0; i < pictura::layers_api::rowCount(*mvView); ++i) {
+            if (pictura::layers_api::rowAt(*mvView, i).name == QStringLiteral("Hidden")) {
+                mvHiddenSurvives = !pictura::layers_api::rowAt(*mvView, i).visible;
             }
         }
-        const bool mvOk = mvReplaced == 2 && mvView->layer_row_count() == 2 && mvHiddenSurvives
+        const bool mvOk = mvReplaced == 2 && pictura::layers_api::rowCount(*mvView) == 2 && mvHiddenSurvives
             && mvView->history_count() == mvBase + 1;
         ST_BEGIN("lpr_merge_visible");
         ST_PASS("lpr_merge_visible replaced=%d rows=%d hidden=%d", mvReplaced,
-                mvView->layer_row_count(), mvHiddenSurvives ? 1 : 0);
+                pictura::layers_api::rowCount(*mvView), mvHiddenSurvives ? 1 : 0);
         if (!mvOk) {
             return pictura::selfTest().fail(220, "merge visible");
         }
@@ -345,22 +347,22 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         const QString ngdPath = ngdView->new_group_dialog(QString(), QStringLiteral("Grp"), 3,
                                                           QStringLiteral("scrn"), 200);
         int ngdRow = -1;
-        for (int i = 0; i < ngdView->layer_row_count(); ++i) {
-            if (ngdView->layer_row_path(i) == ngdPath) {
+        for (int i = 0; i < pictura::layers_api::rowCount(*ngdView); ++i) {
+            if (pictura::layers_api::rowAt(*ngdView, i).path == ngdPath) {
                 ngdRow = i;
             }
         }
         const bool ngdOk = ngdPath == QStringLiteral("1")
-            && ngdView->layer_row_kind(ngdRow) == QStringLiteral("group")
-            && ngdView->layer_row_name(ngdRow) == QStringLiteral("Grp")
-            && ngdView->layer_row_blend(ngdRow) == QStringLiteral("scrn")
-            && ngdView->layer_row_opacity(ngdRow) == 200
-            && ngdView->layer_row_color(ngdRow) == 3
-            && !ngdView->layer_row_clipping(ngdRow)
+            && pictura::layers_api::rowAt(*ngdView, ngdRow).kind == QStringLiteral("group")
+            && pictura::layers_api::rowAt(*ngdView, ngdRow).name == QStringLiteral("Grp")
+            && pictura::layers_api::rowAt(*ngdView, ngdRow).blend == QStringLiteral("scrn")
+            && pictura::layers_api::rowAt(*ngdView, ngdRow).opacity == 200
+            && pictura::layers_api::rowAt(*ngdView, ngdRow).color == 3
+            && !pictura::layers_api::rowAt(*ngdView, ngdRow).clipping
             && ngdView->history_count() == ngdBase + 1;
         ST_BEGIN("lpr_new_group_dialog");
         ST_PASS("lpr_new_group_dialog path=%s row=%d clip=%d", qPrintable(ngdPath), ngdRow,
-                ngdView->layer_row_clipping(ngdRow) ? 1 : 0);
+                pictura::layers_api::rowAt(*ngdView, ngdRow).clipping ? 1 : 0);
         if (!ngdOk) {
             return pictura::selfTest().fail(224, "new group dialog");
         }
@@ -412,7 +414,7 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         const int bgRtBase = bgRtView->history_count();
         const bool bgRtTo = bgRtView->background_from_layer(QStringLiteral("0"));
         const bool bgRtState = bgRtTo && bgRtView->history_count() == bgRtBase + 1
-            && bgRtView->layer_row_kind(0) == QStringLiteral("background");
+            && pictura::layers_api::rowAt(*bgRtView, 0).kind == QStringLiteral("background");
         const QString bgRtPath =
             QDir::tempPath() + QStringLiteral("/kooka-pictura-background.psd");
         const bool bgRtSaved = frame.saveActiveAs(bgRtPath);
@@ -421,11 +423,11 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         const int bgRtReloadDoc = frame.activeDocumentIndex();
         const bool bgRtOk = bgRtState && bgRtSaved && bgRtReopened && bgRtReload
             && bgRtReload->layer_name(0) == QStringLiteral("Background")
-            && bgRtReload->layer_row_kind(0) == QStringLiteral("background");
+            && pictura::layers_api::rowAt(*bgRtReload, 0).kind == QStringLiteral("background");
         ST_BEGIN("lpr_background_roundtrip");
         ST_PASS("lpr_background_roundtrip state=%d saved=%d reopened=%d kind=%s",
                 bgRtState ? 1 : 0, bgRtSaved ? 1 : 0, bgRtReopened ? 1 : 0,
-                qPrintable(bgRtReload ? bgRtReload->layer_row_kind(0) : QString()));
+                qPrintable(bgRtReload ? pictura::layers_api::rowAt(*bgRtReload, 0).kind : QString()));
         if (!bgRtOk) {
             return pictura::selfTest().fail(226, "background roundtrip");
         }
@@ -449,25 +451,25 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         const bool bgIndFlagged = bgIndView->background_from_layer(QStringLiteral("0"));
         int bgIndBottomRow = -1;
         int bgIndTopRow = -1;
-        for (int i = 0; i < bgIndView->layer_row_count(); ++i) {
-            if (bgIndView->layer_row_path(i) == QStringLiteral("0")) {
+        for (int i = 0; i < pictura::layers_api::rowCount(*bgIndView); ++i) {
+            if (pictura::layers_api::rowAt(*bgIndView, i).path == QStringLiteral("0")) {
                 bgIndBottomRow = i;
             }
-            if (bgIndView->layer_row_path(i) == bgIndTop) {
+            if (pictura::layers_api::rowAt(*bgIndView, i).path == bgIndTop) {
                 bgIndTopRow = i;
             }
         }
         const bool bgIndOk = bgIndNamed && bgIndFlagged && bgIndBottomRow >= 0 && bgIndTopRow >= 0
-            && bgIndView->layer_row_kind(bgIndBottomRow) == QStringLiteral("background")
-            && bgIndView->layer_row_kind(bgIndTopRow) == QStringLiteral("pixel")
-            && bgIndView->layer_row_name(bgIndTopRow) == QStringLiteral("Background");
+            && pictura::layers_api::rowAt(*bgIndView, bgIndBottomRow).kind == QStringLiteral("background")
+            && pictura::layers_api::rowAt(*bgIndView, bgIndTopRow).kind == QStringLiteral("pixel")
+            && pictura::layers_api::rowAt(*bgIndView, bgIndTopRow).name == QStringLiteral("Background");
         ST_BEGIN("lpr_background_independence");
         ST_PASS("lpr_background_independence named=%d bottom=%d top=%d",
                 bgIndNamed ? 1 : 0,
-                bgIndBottomRow >= 0 ? bgIndView->layer_row_kind(bgIndBottomRow) ==
+                bgIndBottomRow >= 0 ? pictura::layers_api::rowAt(*bgIndView, bgIndBottomRow).kind ==
                                           QStringLiteral("background")
                                     : 0,
-                bgIndTopRow >= 0 ? bgIndView->layer_row_kind(bgIndTopRow) == QStringLiteral("pixel")
+                bgIndTopRow >= 0 ? pictura::layers_api::rowAt(*bgIndView, bgIndTopRow).kind == QStringLiteral("pixel")
                                  : 0);
         if (!bgIndOk) {
             return pictura::selfTest().fail(227, "background independence");
@@ -592,8 +594,8 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         frame.closeDocument(vrDoc, false);
 
         const auto rowForPath = [](pictura::PictureView* view, const QString& path) {
-            for (int i = 0; i < view->layer_row_count(); ++i) {
-                if (view->layer_row_path(i) == path) {
+            for (int i = 0; i < pictura::layers_api::rowCount(*view); ++i) {
+                if (pictura::layers_api::rowAt(*view, i).path == path) {
                     return i;
                 }
             }
@@ -678,9 +680,9 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         dhView->set_layer_visible(1, false);
         const int dhBase = dhView->history_count();
         const int dhRemoved = dhView->delete_hidden_layers();
-        bool dhGone = dhView->layer_row_count() == 2;
-        for (int i = 0; i < dhView->layer_row_count(); ++i) {
-            if (dhView->layer_row_name(i) == QStringLiteral("Hidden")) {
+        bool dhGone = pictura::layers_api::rowCount(*dhView) == 2;
+        for (int i = 0; i < pictura::layers_api::rowCount(*dhView); ++i) {
+            if (pictura::layers_api::rowAt(*dhView, i).name == QStringLiteral("Hidden")) {
                 dhGone = false;
             }
         }
@@ -714,14 +716,14 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         const int hlRow0 = rowForPath(hlView, QStringLiteral("0"));
         const int hlRow1 = rowForPath(hlView, QStringLiteral("1"));
         const bool hlOk = hlChanged == 1 && hlRow0 >= 0 && hlRow1 >= 0
-            && !hlView->layer_row_visible(hlRow0) && hlView->layer_row_visible(hlRow1)
+            && !pictura::layers_api::rowAt(*hlView, hlRow0).visible && pictura::layers_api::rowAt(*hlView, hlRow1).visible
             && hlView->history_count() == hlBase + 1;
         const int hlBase2 = hlView->history_count();
         const int hlAgain = hlView->hide_layers(QStringList{QStringLiteral("0")});
         const bool hlNoop = hlAgain == 0 && hlView->history_count() == hlBase2;
         ST_BEGIN("lpr_hide_layers");
         ST_PASS("lpr_hide_layers changed=%d hidden=%d again=%d", hlChanged,
-                hlRow0 >= 0 ? (hlView->layer_row_visible(hlRow0) ? 0 : 1) : -1, hlAgain);
+                hlRow0 >= 0 ? (pictura::layers_api::rowAt(*hlView, hlRow0).visible ? 0 : 1) : -1, hlAgain);
         if (!hlOk || !hlNoop) {
             return pictura::selfTest().fail(235, "hide layers");
         }
@@ -796,7 +798,7 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         const int rrBase = rrView->history_count();
         const bool rrPlain = rrView->rasterize_layer(QStringLiteral("0"));
         const int rrAll = rrView->rasterize_all_layers();
-        const bool rrType = rrView->rasterize_type(QStringLiteral("0"));
+        const bool rrType = pictura::type_api::rasterize(*rrView, QStringLiteral("0"));
         const bool rrHistory = rrView->history_count() == rrBase;
         bool kindlessDisabled = true;
         for (const QString& command : {QStringLiteral("layer.rasterize.shape"),
@@ -842,9 +844,9 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         const bool doCan = lpcPanel->canMoveForTest(doChild, QString(), 0);
         const bool doMoved = lpcPanel->moveForTest(doChild, QString(), 0);
         QString doWhere;
-        for (int i = 0; i < doView->layer_row_count(); ++i) {
-            if (doView->layer_row_name(i) == QStringLiteral("Out")) {
-                doWhere = doView->layer_row_path(i);
+        for (int i = 0; i < pictura::layers_api::rowCount(*doView); ++i) {
+            if (pictura::layers_api::rowAt(*doView, i).name == QStringLiteral("Out")) {
+                doWhere = pictura::layers_api::rowAt(*doView, i).path;
             }
         }
         const bool doOk = doCan && doMoved && doWhere == QStringLiteral("2")
@@ -872,7 +874,7 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         const QString drGroup = drView->add_group_in(QString());
         const QString drChild = drView->add_layer_in(drGroup);
         const QString drTop = drView->add_layer_in(QString());
-        const int drRowCount = drView->layer_row_count();
+        const int drRowCount = pictura::layers_api::rowCount(*drView);
         lpcPanel->refresh();
         const int drBase = drView->history_count();
         const bool drDescend = !lpcPanel->canMoveForTest(drGroup, drChild, 0);
@@ -881,7 +883,7 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         const bool drRefused = !lpcPanel->moveForTest(drTop, drChild, 2);
         const bool drOk = drDescend && drIntoPlain && drSelf && drRefused
             && drView->history_count() == drBase
-            && drView->layer_row_count() == drRowCount;
+            && pictura::layers_api::rowCount(*drView) == drRowCount;
         ST_BEGIN("lpr_drop_rules");
         ST_PASS("lpr_drop_rules descend=%d intoplain=%d self=%d history=%d",
                 drDescend ? 1 : 0, drIntoPlain ? 1 : 0, drSelf ? 1 : 0,
@@ -909,22 +911,22 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         const QString gflGroup = gflView->group_from_layers_dialog(
             QStringList{gflA, gflB}, QStringLiteral("Grp"), 2, QStringLiteral("scrn"), 180);
         int gflRow = -1;
-        for (int i = 0; i < gflView->layer_row_count(); ++i) {
-            if (gflView->layer_row_path(i) == gflGroup) {
+        for (int i = 0; i < pictura::layers_api::rowCount(*gflView); ++i) {
+            if (pictura::layers_api::rowAt(*gflView, i).path == gflGroup) {
                 gflRow = i;
             }
         }
         const bool gflOk = !gflGroup.isEmpty()
-            && gflView->layer_row_kind(gflRow) == QStringLiteral("group")
-            && gflView->layer_row_name(gflRow) == QStringLiteral("Grp")
-            && gflView->layer_row_color(gflRow) == 2
-            && gflView->layer_row_blend(gflRow) == QStringLiteral("scrn")
-            && gflView->layer_row_opacity(gflRow) == 180
+            && pictura::layers_api::rowAt(*gflView, gflRow).kind == QStringLiteral("group")
+            && pictura::layers_api::rowAt(*gflView, gflRow).name == QStringLiteral("Grp")
+            && pictura::layers_api::rowAt(*gflView, gflRow).color == 2
+            && pictura::layers_api::rowAt(*gflView, gflRow).blend == QStringLiteral("scrn")
+            && pictura::layers_api::rowAt(*gflView, gflRow).opacity == 180
             && gflView->history_count() == gflBase + 1;
         ST_BEGIN("lpr_group_from_layers");
         ST_PASS("lpr_group_from_layers path=%s name=%s mode=%s opacity=%d history=%d",
-                qPrintable(gflGroup), qPrintable(gflView->layer_row_name(gflRow)),
-                qPrintable(gflView->layer_row_blend(gflRow)), gflView->layer_row_opacity(gflRow),
+                qPrintable(gflGroup), qPrintable(pictura::layers_api::rowAt(*gflView, gflRow).name),
+                qPrintable(pictura::layers_api::rowAt(*gflView, gflRow).blend), pictura::layers_api::rowAt(*gflView, gflRow).opacity,
                 gflView->history_count() - gflBase);
         if (!gflOk) {
             return pictura::selfTest().fail(241, "group from layers");

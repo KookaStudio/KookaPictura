@@ -154,6 +154,7 @@ fn offset_wrap_matches_imagemagick() {
             vertical: 2,
             wrap: true,
             background: [0, 0, 0],
+            transparent: false,
         },
         &["--op", "roll", "--horizontal", "3", "--vertical", "2"],
         0,

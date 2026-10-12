@@ -106,6 +106,7 @@ fn stylize_no_equivalent_filters_properties() {
             vertical: 2,
             wrap: false,
             background: [10, 20, 30],
+            transparent: false,
         },
         &mut shifted,
     )

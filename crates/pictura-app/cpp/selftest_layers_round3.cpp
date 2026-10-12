@@ -1,5 +1,6 @@
 #include "selftest_layers_round3.h"
 #include "selftest_report.h"
+#include "api/layers_api.h"
 
 #include "frame.h"
 #include "layer_new_dialog.h"
@@ -19,8 +20,8 @@ namespace {
 
 int rowForPath(PictureView* view, const QString& path)
 {
-    for (int i = 0; i < view->layer_row_count(); ++i) {
-        if (view->layer_row_path(i) == path) {
+    for (int i = 0; i < pictura::layers_api::rowCount(*view); ++i) {
+        if (pictura::layers_api::rowAt(*view, i).path == path) {
             return i;
         }
     }
@@ -143,21 +144,21 @@ int runLayersRound3Checks(PicturaMainWindow& frame)
             && shape.spec().name == QStringLiteral("Layer 1") && shape.spec().opacity == 255;
         const QString expected = view->next_layer_name(QStringLiteral("Layer"));
         const bool wasBackground =
-            view->layer_row_kind(rowForPath(view, QStringLiteral("0"))) == QStringLiteral("background");
+            pictura::layers_api::rowAt(*view, rowForPath(view, QStringLiteral("0"))).kind == QStringLiteral("background");
         const int base = view->history_count();
         panel->setBackgroundConvertForTest(true, expected, 3);
         panel->doubleClickAtForTest(QStringLiteral("0"), true);
         const int row = rowForPath(view, QStringLiteral("0"));
-        const bool converted = row >= 0 && view->layer_row_kind(row) == QStringLiteral("pixel");
-        const bool named = row >= 0 && view->layer_row_name(row) == expected;
-        const bool labeled = row >= 0 && view->layer_row_color(row) == 3;
+        const bool converted = row >= 0 && pictura::layers_api::rowAt(*view, row).kind == QStringLiteral("pixel");
+        const bool named = row >= 0 && pictura::layers_api::rowAt(*view, row).name == expected;
+        const bool labeled = row >= 0 && pictura::layers_api::rowAt(*view, row).color == 3;
         const bool unlocked = view->layer_lock(0) == 0;
         const bool oneStep = view->history_count() == base + 1;
         ST_BEGIN("lpr_background_dialog");
         ST_PASS("lpr_background_dialog factory=%d expected=%s kind=%s name=%s color=%d history=%d",
                 nameColorOnly ? 1 : 0, qPrintable(expected),
-                qPrintable(view->layer_row_kind(row)), qPrintable(view->layer_row_name(row)),
-                view->layer_row_color(row), view->history_count() - base);
+                qPrintable(pictura::layers_api::rowAt(*view, row).kind), qPrintable(pictura::layers_api::rowAt(*view, row).name),
+                pictura::layers_api::rowAt(*view, row).color, view->history_count() - base);
         if (!nameColorOnly || !wasBackground || !converted || !named || !labeled || !unlocked
             || !oneStep) {
             return pictura::selfTest().fail(355, "background conversion dialog");
@@ -180,18 +181,18 @@ int runLayersRound3Checks(PicturaMainWindow& frame)
         view->background_from_layer(QStringLiteral("0"));
         panel->refresh();
         const int row = rowForPath(view, QStringLiteral("0"));
-        const QString beforeName = view->layer_row_name(row);
+        const QString beforeName = pictura::layers_api::rowAt(*view, row).name;
         const int beforeLock = view->layer_lock(0);
         const unsigned beforePixel = view->sample_argb(0, 0);
         const int base = view->history_count();
         panel->setBackgroundConvertForTest(false, QString(), 0);
         panel->doubleClickAtForTest(QStringLiteral("0"), true);
-        const bool unchanged = view->layer_row_kind(row) == QStringLiteral("background")
-            && view->layer_row_name(row) == beforeName && view->layer_lock(0) == beforeLock
+        const bool unchanged = pictura::layers_api::rowAt(*view, row).kind == QStringLiteral("background")
+            && pictura::layers_api::rowAt(*view, row).name == beforeName && view->layer_lock(0) == beforeLock
             && view->sample_argb(0, 0) == beforePixel && view->history_count() == base;
         ST_BEGIN("lpr_background_cancel");
         ST_PASS("lpr_background_cancel kind=%s name=%s lock=%d history=%d",
-                qPrintable(view->layer_row_kind(row)), qPrintable(view->layer_row_name(row)),
+                qPrintable(pictura::layers_api::rowAt(*view, row).kind), qPrintable(pictura::layers_api::rowAt(*view, row).name),
                 view->layer_lock(0), view->history_count() - base);
         if (!unchanged) {
             return pictura::selfTest().fail(356, "background conversion cancel");

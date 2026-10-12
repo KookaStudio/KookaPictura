@@ -1,6 +1,8 @@
 #include "selftest_crop_tool.h"
 #include "selftest_report.h"
+#include "api/layers_api.h"
 
+#include "api/transform_api.h"
 #include "frame.h"
 #include "image_view.h"
 #include "tools.h"
@@ -41,7 +43,7 @@ int pictura::runCropToolChecks(pictura::PicturaMainWindow& frame)
         QApplication::sendEvent(&frame, &press);
     };
     // The layer's rect as "left top right bottom".
-    const QString layer = view->layer_row_path(0);
+    const QString layer = pictura::layers_api::rowAt(*view, 0).path;
 
     tools->setCropRatio(0.0);
     tools->setCropDeletePixels(true);
@@ -92,7 +94,7 @@ int pictura::runCropToolChecks(pictura::PicturaMainWindow& frame)
     const bool deleted = view->history_count() == base + 1
         && view->history_label(base) == QStringLiteral("Crop") && view->document_width() == 20
         && view->sample_argb(10, 10) == 0xff000000u
-        && view->layer_rect(layer) == QStringLiteral("0 0 20 20") && !frame.hasPendingCrop();
+        && transform_api::layerRect(*view, layer).toString() == QStringLiteral("0 0 20 20") && !frame.hasPendingCrop();
 
     // Off: the pixels outside the canvas stay with the layer.
     view->undo();
@@ -103,7 +105,7 @@ int pictura::runCropToolChecks(pictura::PicturaMainWindow& frame)
     box10();
     key(Qt::Key_Return);
     const bool kept = view->document_width() == 20
-        && view->layer_rect(layer) == QStringLiteral("-10 -10 30 30");
+        && transform_api::layerRect(*view, layer).toString() == QStringLiteral("-10 -10 30 30");
     tools->setCropDeletePixels(true);
 
     // A double-click inside the box commits.

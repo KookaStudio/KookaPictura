@@ -3,7 +3,7 @@
 #include "type_fonts.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/type_tools.cxxqt.h"
+#include "api/type_api.h"
 
 #include <QtCore/QSignalBlocker>
 #include <QtWidgets/QCheckBox>
@@ -88,7 +88,7 @@ bool ParagraphPanel::hasTypeLayer() const
         return false;
     }
     const QString path = view_->active_layer_path();
-    return !path.isEmpty() && view_->layer_is_type(path);
+    return !path.isEmpty() && pictura::type_api::isType(*view_, path);
 }
 
 void ParagraphPanel::setView(PictureView* view)
@@ -106,8 +106,8 @@ void ParagraphPanel::refresh()
 {
     const bool type = hasTypeLayer();
     const QString path = type ? view_->active_layer_path() : QString();
-    const ParagraphSetting p = type ? type_layer_paragraph_setting(*view_, path)
-                                    : type_default_paragraph_setting();
+    const ParagraphSetting p = type ? pictura::type_api::layerParagraphSetting(*view_, path)
+                                    : pictura::type_api::defaultParagraphSetting();
 
     const QSignalBlocker blockJustify(justify_);
     const QSignalBlocker blockStart(startIndent_);
@@ -142,7 +142,8 @@ void ParagraphPanel::apply()
         return;
     }
     const QString path = view_->active_layer_path();
-    ParagraphSetting p = type_layer_paragraph_setting(*view_, path);
+    const pictura::type_api::LayerType layer = pictura::type_api::readLayer(*view_, path);
+    ParagraphSetting p = layer.paragraph;
     p.justify = justify_->currentIndex();
     p.start_indent = startIndent_->value();
     p.end_indent = endIndent_->value();
@@ -153,11 +154,10 @@ void ParagraphPanel::apply()
     p.hyphenate = hyphenate_->isChecked();
     p.composer = composer_->currentIndex() == 1 ? 1 : 0;
 
-    const QString family = familyForFontName(type_layer_font(*view_, path));
+    const QString family = familyForFontName(layer.font);
     registerTypeFont(family);
-    const TypeSetting setting = type_layer_setting(*view_, path);
-    const CharacterSetting character = type_layer_character_setting(*view_, path);
-    type_update_layer(*view_, path, type_layer_text(*view_, path), family, setting, character, p);
+    pictura::type_api::updateLayer(*view_, path, layer.text, family, layer.setting,
+                                   layer.character, p);
 }
 
 bool ParagraphPanel::editingEnabledForTest() const { return justify_->isEnabled(); }

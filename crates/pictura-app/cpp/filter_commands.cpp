@@ -851,7 +851,8 @@ const QList<FilterCommandSpec>& buildCommands()
             {slider(QStringLiteral("Horizontal:"), -2000, 2000, 4, 0, QStringLiteral(" pixels right")),
              slider(QStringLiteral("Vertical:"), -2000, 2000, 4, 0, QStringLiteral(" pixels down")),
              check(QStringLiteral("Wrap Around"), true),
-             color(QStringLiteral("Background:"), 0, 0, 0)}),
+             color(QStringLiteral("Background:"), 0, 0, 0),
+             check(QStringLiteral("Set to Transparent"), false)}),
     };
     return commands;
 }

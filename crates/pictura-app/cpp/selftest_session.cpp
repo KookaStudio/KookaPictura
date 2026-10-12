@@ -1,5 +1,6 @@
 #include "selftest_session.h"
 #include "selftest_report.h"
+#include "api/layers_api.h"
 
 #include "export_as_dialog.h"
 #include "commands.h"
@@ -367,13 +368,13 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
                 writeSolidImage(opaquePath, QColor(20, 120, 220, 255));
             const bool opened = !written.isEmpty() && frame.openImagePath(opaquePath);
             pictura::PictureView* view = frame.activeView();
-            const bool opaqueOk = opened && view && view->layer_row_count() == 1
-                && view->layer_row_kind(0) == QStringLiteral("background")
-                && view->layer_row_lock(0) == 0x05;
+            const bool opaqueOk = opened && view && pictura::layers_api::rowCount(*view) == 1
+                && pictura::layers_api::rowAt(*view, 0).kind == QStringLiteral("background")
+                && pictura::layers_api::rowAt(*view, 0).lockBits == 0x05;
             ST_BEGIN("lim_opaque_background");
             ST_PASS("lim_opaque_background opened=%d kind=%s lock=%d", opened ? 1 : 0,
-                    view ? qPrintable(view->layer_row_kind(0)) : "-",
-                    view ? view->layer_row_lock(0) : -1);
+                    view ? qPrintable(pictura::layers_api::rowAt(*view, 0).kind) : "-",
+                    view ? pictura::layers_api::rowAt(*view, 0).lockBits : -1);
             if (!opaqueOk) {
                 return pictura::selfTest().fail(322, "opaque import background");
             }
@@ -391,15 +392,15 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
             const bool opened = !written.isEmpty() && frame.openImagePath(alphaPath);
             pictura::PictureView* view = frame.activeView();
             const unsigned int pixel = view ? view->sample_argb(0, 0) : 0u;
-            const bool alphaOk = opened && view && view->layer_row_count() == 1
-                && view->layer_row_kind(0) != QStringLiteral("background")
-                && view->layer_row_lock(0) != 0x0F
+            const bool alphaOk = opened && view && pictura::layers_api::rowCount(*view) == 1
+                && pictura::layers_api::rowAt(*view, 0).kind != QStringLiteral("background")
+                && pictura::layers_api::rowAt(*view, 0).lockBits != 0x0F
                 && ((pixel >> 24) & 0xffu) != 0xffu;
             ST_BEGIN("lim_transparent_layer");
             ST_PASS("lim_transparent_layer opened=%d kind=%s lock=%d pixel=%08x",
                     opened ? 1 : 0,
-                    view ? qPrintable(view->layer_row_kind(0)) : "-",
-                    view ? view->layer_row_lock(0) : -1, pixel);
+                    view ? qPrintable(pictura::layers_api::rowAt(*view, 0).kind) : "-",
+                    view ? pictura::layers_api::rowAt(*view, 0).lockBits : -1, pixel);
             if (!alphaOk) {
                 return pictura::selfTest().fail(323, "transparent import layer");
             }

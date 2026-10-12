@@ -7,6 +7,7 @@
 
 #include "tool_handler.h"
 
+#include "api/paint_api.h"
 #include "paint_tip.h"
 
 #include "tools.h"
@@ -19,6 +20,7 @@
 #include <QtGui/QColor>
 
 #include <memory>
+#include <optional>
 
 namespace pictura {
 
@@ -38,7 +40,9 @@ public:
             onAltPress(ctx, imagePos);
             return true;
         }
-        if (!begin(ctx, *v, imagePos)) {
+        stroke_.emplace(*v, [&] { return begin(ctx, *v, imagePos); });
+        if (!stroke_->open()) {
+            stroke_.reset();
             if (activePixelLocked(v)) {
                 ctx.refused(QObject::tr("Could not paint: the layer's pixels are locked."));
             } else if (!v->active_layer_visible()) {
@@ -52,18 +56,16 @@ public:
         }
         ctx.setDragging(true);
         ctx.setDragCommitted(false);
-        v->paint_dab(imagePos.x(), imagePos.y(), 1.0);
+        stroke_->dab(imagePos.x(), imagePos.y());
         return true;
     }
 
     void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
-        if (!ctx.dragging()) {
+        if (!ctx.dragging() || !stroke_) {
             return;
         }
-        if (PictureView* v = ctx.view()) {
-            v->paint_dab(imagePos.x(), imagePos.y(), 1.0);
-        }
+        stroke_->dab(imagePos.x(), imagePos.y());
     }
 
     void onRelease(ToolContext& ctx, const QPointF&, Qt::KeyboardModifiers) override
@@ -72,8 +74,9 @@ public:
             return;
         }
         ctx.setDragging(false);
-        if (PictureView* v = ctx.view()) {
-            v->end_paint();
+        if (stroke_) {
+            stroke_->finish();
+            stroke_.reset();
         }
     }
 
@@ -91,6 +94,9 @@ protected:
             ctx.sampledForeground(QColor::fromRgb(argb));
         }
     }
+
+private:
+    std::optional<paint_api::Stroke> stroke_;
 };
 
 // Clone Stamp: Alt-click sets the active Clone Source slot's source point;

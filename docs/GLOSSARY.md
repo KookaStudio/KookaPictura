@@ -24,6 +24,7 @@ The `Type` column is one of:
 | Action set | cs6 | A named group of actions, saved as a `.atn` library. | docs/02-ui-ux/panels/actions-panel.md:17 |
 | Actions panel | cs6 | Dock that records, plays, edits, and deletes actions, and can render them as buttons. | docs/02-ui-ux/panels/actions-panel.md:13 |
 | active_backend | code | Invokable returning the current render backend label, one of "GPU", "CPU", or "CPU (no GPU)". | crates/pictura-app/src/cxxqt_object.rs:722 |
+| adapter namespace | project | One of `document_api`, `layers_api`, `selection_api`, `paint_api`, `transform_api`, `history_api`, `type_api` — the typed C++ façade over the `PictureView` bridge for a landed migration unit, and the only surface its consumers include. | docs/dev/refactor-view-seam.md:21 |
 | Adaptive Wide Angle | cs6 | CS6 top-level GPU filter that corrects wide-angle and fish-eye distortion from lens-profile data and user-drawn straight-line constraints. | docs/06-filters/adaptive-wide-angle.md:13 |
 | Add Noise | cs6 | Noise filter that adds random pixels to simulate film grain, with Uniform or Gaussian distribution and an optional monochromatic mode. | docs/06-filters/noise-filters.md:15 |
 | add_group | code | Inserts an empty group directly above `above` and returns its index. | crates/pictura-render/src/document_ops/layer_ops.rs:126 |
@@ -52,9 +53,9 @@ The `Type` column is one of:
 | Application frame | cs6 | The single integrated window holding the menu bar, options bar, document windows, Tools panel, and docks. | docs/02-ui-ux/application-frame.md:19 |
 | application-shell | capability | The Qt6 plus Rust shell: the cxx-qt bridge exposing a Rust QObject, the CMake and qmake6 build, a headless window, theme brightness, screen modes, status readouts, CS6 chrome, checkerboard canvas clipping, and the toolbox catalogue. | openspec/specs/ui/application-shell/spec.md:6 |
 | apply (adjust) | code | Applies an adjustment in place to a planar 8-bit buffer, alpha untouched. | crates/pictura-adjust/src/lib.rs:138 |
-| apply (filters) | code | Applies a filter in place to a planar 8-bit buffer with 3 or 4 channels, alpha untouched. | crates/pictura-filters/src/lib.rs:616 |
+| apply (filters) | code | Applies a filter in place to a planar 8-bit buffer with 3 or 4 channels; on four channels the kernel decides the alpha plane itself — a moving kernel (`filters_alpha`) filters it with the colour, every other kernel leaves it bit-identical. | crates/pictura-filters/src/filter/apply.rs:11 |
 | Apply Image | cs6 | Command that blends one image's layer and channel with a layer and channel of the active image, optionally through a mask. | docs/08-selection/channel-based-masking.md:30 |
-| apply_filter | code | Applies a destructive filter to a pixel layer's color channels (0,1,2), gated by an optional document-coordinate coverage mask (`None` is full frame). The transparency channel (-1) is never modified. | crates/pictura-render/src/filter.rs:18 ; docs/dev/STATE.md:47 |
+| apply_filter | code | Applies a destructive filter to a pixel layer's colour channels (0,1,2), gated by an optional document-coordinate coverage mask (`None` is full frame). On an unlocked layer the transparency channel (-1) is folded into the working buffer as a fourth plane so a moving kernel filters it with the colour; a value kernel leaves it bit-identical. | crates/pictura-render/src/filter.rs:25 ; docs/dev/STATE.md:47 |
 | apply_filter_active | code | Applies a filter in place and returns the backend that produced the buffer. Uses the GPU when `gpu_enabled` and `filter_gpu_available()` and a kernel exists, otherwise the CPU oracle. | crates/pictura-render/src/gpu_filter.rs:88 ; docs/dev/STATE.md:47 |
 | apply_visibility | code | Solo visibility primitive: sets exactly the listed paths visible and hides every other node. Not additive, ancestors are not implied, and duplicates count once. | crates/pictura-render/src/document_ops/layer_ops.rs:393 |
 | Apron | project | The band of source pixels read outside a filter's target region so neighborhood kernels have data at selection edges. | docs/06-filters/filters-overview.md:132 |
@@ -456,6 +457,7 @@ The `Type` column is one of:
 | layers-panel | capability | Layer rows, property editing, layer operations, grouping commands, thumbnails, docking and toggle, and the action strip icons. | openspec/specs/ui/layers-panel/spec.md:6 |
 | LayersModel | code | Layers panel tree model, promoted from a flat table to a QAbstractItemModel with one visible column and a role per row value. | openspec/changes/m39-panel-anatomy/proposal.md:15 ; crates/pictura-app/cpp/panels/layers_panel.h:22 |
 | LayersPanel | code | Dock panel with the layer tree, blend/opacity/fill controls, lock toggles, colour labels, solo mode, and inline rename. | crates/pictura-app/cpp/panels/layers_panel.h:25 |
+| layers_snapshot | code | Single bridge call returning one typed `LayerRow` per layer — path, depth, name, kind, visibility, blend, opacity, fill, locks, colour, clipping and style flags, child count, style-effect names, and row/mask thumbnails — replacing the Layers panel's per-row field invokables. | docs/dev/refactor-view-seam.md:44 |
 | lclr | format | Additional-layer-info tagged block holding the layer color label as a 16-bit value whose low byte is a ColorLabel. | crates/pictura-codec/src/lib.rs:544 |
 | lcms2 | code | Little CMS 2, the system library used for ICC profile handling in pictura-color. | docs/dev/STATE.md:10 |
 | lcms2 (Little CMS) | code | Color-management library wrapped by `pictura-color` for ICC transforms and soft proofing. | docs/01-architecture/color-management.md:193 |
@@ -513,6 +515,7 @@ The `Type` column is one of:
 | Metadata | project | Document-level file resolution, physical size, pixel aspect ratio, color profile, EXIF, IPTC, and XMP. | docs/01-architecture/document-model.md:45 |
 | Metadata template | cs6 | Plain XMP file exporting or importing File Info field sets, combined on apply by append or replace. | docs/10-workflow-io/file-info-and-metadata.md:100 |
 | MezzotintType | code | Mezzotint pattern: fine, medium, grainy, or coarse dots, then short, medium, or long lines, then short, medium, or long strokes. | crates/pictura-filters/src/lib.rs:60 |
+| migration unit | process | One independently landable slice of the view-seam refactor (document+history, selection, paint+transform, layers+snapshot, type), each leaving the build green with its consumers migrated and its superseded surface deleted or named as a deferral. | docs/dev/refactor-view-seam.md:66 |
 | Milestone | process | An M-numbered development stage, for example m38-icon-cursor-library and m39-panel-anatomy of the layers-panel program. | docs/dev/STATE.md:52 ; openspec/changes/m39-panel-anatomy/proposal.md:1 |
 | Milestone brief | process | Task document under docs/dev/m*-*.md specifying a milestone's scope, contract, oracle, and exit gate. | docs/dev/STATE.md:850 |
 | Minimum | cs6 | Other filter performing morphological erosion, replacing each pixel with the lowest-brightness neighbor within the radius. | docs/06-filters/other-filters.md:20 |
@@ -525,6 +528,7 @@ The `Type` column is one of:
 | move_path | code | Move the node `delta` places within its own container, clamped to container bounds. Refuses the background and fully locked nodes. | crates/pictura-render/src/document_ops/layer_ops.rs:649 |
 | Multichannel | cs6 | Mode with 2 to 56 channels of 256 gray levels each, for specialized printing. It supports no layers and flattens on conversion. | docs/04-image-ops/image-modes.md:23 |
 | Multiply | cs6 | Darkening blend mode computing base times source per channel. | docs/05-layers/blend-modes.md:165 |
+| named deferral | process | A bridge operation no migration unit has claimed yet: listed by name in the change's tasks instead of being wrapped by a pass-through adapter, so the exclusive-surface claim stays honest. | docs/dev/refactor-view-seam.md:36 |
 | Navigator panel | cs6 | Dock with a document thumbnail and a proxy view area for pan and zoom. | docs/02-ui-ux/panels/navigator-panel.md:13 |
 | navigator-panel | capability | A navigator thumbnail and proxy, navigator zoom controls, and the navigator dock and toggle. | openspec/specs/ui/navigator-panel/spec.md:6 |
 | NavigatorPanel | code | Dock panel with a document thumbnail, a proxy rectangle for the visible region, and a zoom slider, driven by the active `ImageView`. | crates/pictura-app/cpp/panels/navigator_panel.h:47 |
@@ -575,6 +579,7 @@ The `Type` column is one of:
 | Paint Bucket | cs6 | Tool filling adjacent pixels similar in color to the clicked pixel, with the foreground color or a pattern (`BucketEngine`). Tolerance is documented from 0 to 255. | docs/03-tools/gradient-and-paint-bucket.md:52 |
 | paint stroke | code | Live painting session in the Rust object: `begin_paint` starts it, `paint_dab` samples the pointer, `end_paint` commits one history state, and `cancel_paint` drops it. | crates/pictura-app/src/cxxqt_object.rs:560 |
 | paint-engine | capability | Standard brush tip coverage, stroke spacing, flow and opacity accumulation, the pencil aliased edge and auto erase, paint modes, and per-stroke commit and undo. | openspec/specs/tools/paint-engine/spec.md:6 |
+| paint_api::Stroke | code | Tool-lifetime paint object in `paint_api`: constructed on press, `finish()`/`cancel()` on release or Esc, destructor closes exactly once; a mid-stroke present queues `flush_present` and never calls `image()`. | docs/dev/refactor-view-seam.md:53 |
 | paint_stroke | code | Feed a whole sample list into a destructive stroke and commit it on success, returning the dirty rectangle. | crates/pictura-paint/src/stroke.rs:237 |
 | PaintError | code | Error from starting a stroke: empty document or no raster layer to paint on (`EmptyDocument`, `NoRasterLayer`). | crates/pictura-paint/src/stroke.rs:11 |
 | PaintMode | code | Per-pixel compositing mode for a stroke: normal, dissolve, behind, or clear. | crates/pictura-paint/src/lib.rs:16 |
@@ -934,6 +939,7 @@ The `Type` column is one of:
 | Vibrance | cs6 | Adjustment that boosts saturation less as colors approach full saturation, to limit clipping and protect skin tones. Its Saturation slider applies a uniform change. | docs/04-image-ops/adjustments/vibrance.md:14 |
 | VibranceParams | code | Vibrance and saturation values for the Vibrance adjustment. | crates/pictura-adjust/src/lib.rs:92 |
 | View Mode (Refine Edge) | cs6 | Pop-up previewing the refined selection, including Show Original and Show Radius plus community-documented modes such as Marching Ants, Overlay, and On Black. | docs/08-selection/refine-edge.md:20 |
+| view seam | project | The Rust-to-Qt boundary where C++ reaches the `PictureView` bridge, governed by the adapter-namespace policy in `docs/dev/refactor-view-seam.md` (supersedes Track 4's single-bridge policy). | docs/dev/refactor-view-seam.md:1 |
 | ViewportTransform | code | The mapping from document space to window space, holding scale, translation, and rotation. Hand, Zoom, and Rotate View operate on it instead of resampling document pixels. | docs/03-tools/hand-and-zoom.md:124 |
 | VulkanHandles | code | Raw Vulkan handles exported from a live wgpu device (instance, physical device, device, queue family) for the zero-copy interop attempt. | crates/pictura-app/src/gpu.rs:233 |
 | W3C Compositing and Blending Level 1 | process | The normative source for separable blend formulas and source-over compositing, including the dodge and burn guards and non-separable helpers. | openspec/specs/compositing/blend-modes/spec.md:20 |

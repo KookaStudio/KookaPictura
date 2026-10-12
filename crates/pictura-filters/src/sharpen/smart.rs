@@ -78,7 +78,7 @@ pub fn smart_sharpen(
     let w = buf.width as usize;
     let h = buf.height as usize;
     let n = w * h;
-    let planes = (buf.channels as usize).min(3);
+    let planes = buf.channels as usize;
     let halo = Halo::new(remove, radius, angle);
     let iterations = if more_accurate {
         ACCURATE_ITERATIONS
@@ -802,7 +802,7 @@ mod tests {
     }
 
     #[test]
-    fn smart_sharpen_preserves_alpha_and_is_deterministic() {
+    fn smart_sharpen_filters_alpha_and_is_deterministic() {
         let r = vec![10, 60, 120, 200, 250, 30, 80, 90];
         let g = vec![20, 70, 130, 210, 240, 40, 90, 100];
         let b = vec![30, 80, 140, 220, 230, 50, 100, 110];
@@ -812,6 +812,10 @@ mod tests {
         let x = sharpen_with(&base, 200.0, 3.0, SharpenRemove::MotionBlur, 30.0, true);
         let y = sharpen_with(&base, 200.0, 3.0, SharpenRemove::MotionBlur, 30.0, true);
         assert_eq!(x.data, y.data, "no seed, so re-apply is byte-identical");
-        assert_eq!(&x.data[3 * n..4 * n], &a[..]);
+        assert_ne!(
+            &x.data[3 * n..4 * n],
+            &a[..],
+            "alpha runs through the kernel"
+        );
     }
 }

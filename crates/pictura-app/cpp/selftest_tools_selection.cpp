@@ -1,6 +1,9 @@
 #include "selftest_tools_selection.h"
 #include "selftest_report.h"
+#include "api/layers_api.h"
 
+#include "api/selection_api.h"
+#include "api/transform_api.h"
 #include "commands.h"
 #include "frame.h"
 #include "icons.h"
@@ -93,7 +96,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         ellipseCanvas->mousePressed(QPointF(5, 5), Qt::LeftButton, int(Qt::NoModifier));
         ellipseCanvas->mouseMoved(QPointF(15, 15));
         ellipseCanvas->mouseReleased(QPointF(15, 15));
-        const QString fixedBounds = ellipseView->selection_bounds();
+        const QString fixedBounds = selection_api::bounds(*ellipseView).toString();
         const bool fixedDrawn = ellipseView->has_selection()
             && ellipseView->history_count() == fixedBase + 1;
         ST_BEGIN("tsc_fixed_size");
@@ -474,7 +477,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         const QString lsMid = lsView->add_layer_in(QString());
         lsView->set_layers_blend(QStringList{lsTop}, QStringLiteral("mul "));
         smPanel->refresh();
-        const int lsAll = lsView->layer_row_count();
+        const int lsAll = pictura::layers_api::rowCount(*lsView);
         const int lsBase = lsView->history_count();
         frame.registry()->dispatch(QString::fromLatin1(pictura::command_ids::SelectAllLayers));
         const int lsAllSelected = smPanel->selectedPaths().size();
@@ -514,12 +517,12 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         antsCanvas->mousePressed(QPointF(2, 2), Qt::LeftButton, int(Qt::NoModifier));
         antsCanvas->mouseMoved(QPointF(10, 10));
         antsCanvas->mouseReleased(QPointF(10, 10));
-        const QString antsContour = antsView->selection_contour();
+        const pictura::selection_api::SelectionContour antsContour =
+            pictura::selection_api::contour(*antsView);
         const bool antsCommitted = antsView->has_selection();
         const bool antsOutline = antsCanvas->hasSelectionContourForTest()
             && antsCanvas->selectionContourLoopCountForTest() == 1;
-        const bool antsCorner = antsContour.contains(QStringLiteral("2,2"))
-            && antsContour.contains(QStringLiteral("10,10"));
+        const bool antsCorner = antsContour.hasVertex(2, 2) && antsContour.hasVertex(10, 10);
         ST_BEGIN("tsc_selection_ants");
         ST_PASS("tsc_selection_ants committed=%d outline=%d loops=%d corner=%d",
                 antsCommitted ? 1 : 0, antsOutline ? 1 : 0,
@@ -679,20 +682,20 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         const int moveBase = antsView->history_count();
         antsCanvas->mousePressed(QPointF(4, 4), Qt::LeftButton, int(Qt::NoModifier));
         antsCanvas->mouseMoved(QPointF(6, 6));
-        const bool movePreviewLive = antsView->selection_bounds() == QStringLiteral("4 4 5 5")
+        const bool movePreviewLive = selection_api::bounds(*antsView).toString() == QStringLiteral("4 4 5 5")
             && !antsCanvas->hasSelectionPreviewForTest();
         antsCanvas->mouseReleased(QPointF(6, 6));
         const bool moveCommitted = antsView->has_selection()
             && antsView->history_count() == moveBase + 1
             && antsView->history_label(moveBase) == QStringLiteral("Move Selection");
-        const bool moveBounds = antsView->selection_bounds() == QStringLiteral("4 4 5 5");
+        const bool moveBounds = selection_api::bounds(*antsView).toString() == QStringLiteral("4 4 5 5");
         const bool moveOutline = antsCanvas->hasSelectionContourForTest()
             && antsCanvas->selectionContourLoopCountForTest() == 1
             && !antsCanvas->hasSelectionPreviewForTest();
         ST_BEGIN("tsc_move_selection");
         ST_PASS("tsc_move_selection seed=%d live=%d committed=%d bounds=%s outline=%d",
                 moveSeed ? 1 : 0, movePreviewLive ? 1 : 0, moveCommitted ? 1 : 0,
-                qPrintable(antsView->selection_bounds()), moveOutline ? 1 : 0);
+                qPrintable(selection_api::bounds(*antsView).toString()), moveOutline ? 1 : 0);
         if (!moveSeed || !movePreviewLive || !moveCommitted || !moveBounds || !moveOutline) {
             return pictura::selfTest().fail(267, "move selection");
         }
@@ -702,14 +705,14 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         antsView->deselect();
         const bool noopSeed = antsView->select_rect(3, 3, 6, 6, QStringLiteral("new"), 0.0);
         const int noopBase = antsView->history_count();
-        const QString noopBounds = antsView->selection_bounds();
+        const QString noopBounds = selection_api::bounds(*antsView).toString();
         antsCanvas->mousePressed(QPointF(5, 5), Qt::LeftButton, int(Qt::NoModifier));
         antsCanvas->mouseReleased(QPointF(5, 5));
         const bool noopClean = antsView->history_count() == noopBase
-            && antsView->selection_bounds() == noopBounds;
+            && selection_api::bounds(*antsView).toString() == noopBounds;
         ST_BEGIN("tsc_move_selection_noop");
         ST_PASS("tsc_move_selection_noop seed=%d clean=%d bounds=%s", noopSeed ? 1 : 0,
-                noopClean ? 1 : 0, qPrintable(antsView->selection_bounds()));
+                noopClean ? 1 : 0, qPrintable(selection_api::bounds(*antsView).toString()));
         if (!noopSeed || !noopClean) {
             return pictura::selfTest().fail(268, "move selection noop");
         }
@@ -725,7 +728,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         antsCanvas->mouseReleased(QPointF(-1, -1));
         const bool clipCommitted = antsView->has_selection()
             && antsView->history_count() == clipBase + 1;
-        const QString clipBounds = antsView->selection_bounds();
+        const QString clipBounds = selection_api::bounds(*antsView).toString();
         const int clipPx = antsView->selection_count();
         const bool clipOutline = antsCanvas->hasSelectionContourForTest()
             && antsCanvas->selectionContourLoopCountForTest() == 1;
@@ -869,12 +872,12 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         ellipseCanvas->mouseReleased(QPointF(7, 7));
         const bool cmCommitted = cmSeed && ellipseView->history_count() == cmBase + 1
             && ellipseView->history_label(cmBase) == QStringLiteral("Move Selection");
-        const bool cmBounds = ellipseView->selection_bounds() == QStringLiteral("6 6 4 4");
+        const bool cmBounds = selection_api::bounds(*ellipseView).toString() == QStringLiteral("6 6 4 4");
         const bool cmLayersKept = ellipseView->select_all_layers().size() == cmLayers;
         ST_BEGIN("tsc_content_move");
         ST_PASS("tsc_content_move seed=%d committed=%d bounds=%s layers=%d kept=%d",
                 cmSeed ? 1 : 0, cmCommitted ? 1 : 0,
-                qPrintable(ellipseView->selection_bounds()),
+                qPrintable(selection_api::bounds(*ellipseView).toString()),
                 ellipseView->select_all_layers().size(), cmLayersKept ? 1 : 0);
         if (!cmSeed || !cmCommitted || !cmBounds || !cmLayersKept) {
             return pictura::selfTest().fail(274, "content move");
@@ -922,10 +925,10 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         ellipseCanvas->mouseReleased(QPointF(11, 11));
         const bool qmAdded = qmSeed && ellipseView->has_selection()
             && ellipseView->history_count() == qmBase + 1
-            && ellipseView->selection_bounds() == QStringLiteral("2 2 9 9");
+            && selection_api::bounds(*ellipseView).toString() == QStringLiteral("2 2 9 9");
         ST_BEGIN("tsc_quick_mode_drag");
         ST_PASS("tsc_quick_mode_drag seed=%d added=%d bounds=%s", qmSeed ? 1 : 0,
-                qmAdded ? 1 : 0, qPrintable(ellipseView->selection_bounds()));
+                qmAdded ? 1 : 0, qPrintable(selection_api::bounds(*ellipseView).toString()));
         if (!qmSeed || !qmAdded) {
             return pictura::selfTest().fail(276, "quick mode drag");
         }
@@ -962,7 +965,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         ellipseCanvas->mouseMoved(QPointF(5, 5));
         ellipseCanvas->mouseReleased(QPointF(5, 5));
         const bool hcMoved = hcSeed
-            && ellipseView->selection_bounds() == QStringLiteral("3 3 6 6")
+            && selection_api::bounds(*ellipseView).toString() == QStringLiteral("3 3 6 6")
             && ellipseView->history_count() == hcBase + 1;
         const bool combineCursor = hoverShift == QStringLiteral("tool.marquee.add")
             && hoverAlt == QStringLiteral("tool.marquee.remove")
@@ -977,7 +980,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
                 qPrintable(hoverShift), qPrintable(hoverAlt), qPrintable(hoverNone),
                 qPrintable(hoverOutside), qPrintable(hoverCtrl), qPrintable(hoverShiftCtrl),
                 qPrintable(hoverLassoShift), hcMoved ? 1 : 0,
-                qPrintable(ellipseView->selection_bounds()));
+                qPrintable(selection_api::bounds(*ellipseView).toString()));
         if (!combineCursor || !hcMoved) {
             return pictura::selfTest().fail(367, "combine hover cursor");
         }
@@ -1000,7 +1003,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         ellipseCanvas->mouseReleased(QPointF(11, 8));
         const bool drCommitted = ellipseView->has_selection()
             && ellipseView->history_count() == drBase + 1;
-        const QString drBounds = ellipseView->selection_bounds();
+        const QString drBounds = selection_api::bounds(*ellipseView).toString();
         ST_BEGIN("lst_drag_retention");
         ST_PASS("lst_drag_retention seed=%d mode=%d mods=%d cursor=%s committed=%d bounds=%s",
                 drSeed ? 1 : 0, drMode ? 1 : 0, drMods ? 1 : 0, qPrintable(drCursor),
@@ -1027,7 +1030,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         ellipseCanvas->mouseReleased(QPointF(9, 7));
         const bool apCommitted = ellipseView->has_selection()
             && ellipseView->history_count() == apBase + 1;
-        const QString apBounds = ellipseView->selection_bounds();
+        const QString apBounds = selection_api::bounds(*ellipseView).toString();
         const bool apSeed = ellipseView->select_rect(2, 2, 4, 4, QStringLiteral("new"), 0.0);
         ellipseCanvas->mousePressed(QPointF(3, 3), Qt::LeftButton, int(Qt::AltModifier));
         const bool apSubtract =
@@ -1118,17 +1121,17 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         };
         const int nudgeBase = nudgeView->history_count();
         sendArrow(Qt::Key_Right, Qt::NoModifier);
-        const bool nudgeOne = nudgeView->layer_rect(nudgeLayer) == QStringLiteral("1 0 17 16")
+        const bool nudgeOne = transform_api::layerRect(*nudgeView, nudgeLayer).toString() == QStringLiteral("1 0 17 16")
             && nudgeView->history_count() == nudgeBase + 1
             && nudgeView->history_label(nudgeBase) == QStringLiteral("Move Layer");
         sendArrow(Qt::Key_Down, Qt::ShiftModifier);
-        const bool nudgeTen = nudgeView->layer_rect(nudgeLayer) == QStringLiteral("1 10 17 26")
+        const bool nudgeTen = transform_api::layerRect(*nudgeView, nudgeLayer).toString() == QStringLiteral("1 10 17 26")
             && nudgeView->history_count() == nudgeBase + 2;
         nudgeView->set_layers_lock(QStringList{nudgeLayer}, QStringLiteral("position"), true);
-        const QString nudgeLockedRect = nudgeView->layer_rect(nudgeLayer);
+        const QString nudgeLockedRect = transform_api::layerRect(*nudgeView, nudgeLayer).toString();
         const int nudgeLockBase = nudgeView->history_count();
         sendArrow(Qt::Key_Left, Qt::NoModifier);
-        const bool nudgeLocked = nudgeView->layer_rect(nudgeLayer) == nudgeLockedRect
+        const bool nudgeLocked = transform_api::layerRect(*nudgeView, nudgeLayer).toString() == nudgeLockedRect
             && nudgeView->history_count() == nudgeLockBase;
         ST_BEGIN("lst_nudge");
         ST_PASS("lst_nudge one=%d ten=%d locked=%d rect=%s", nudgeOne ? 1 : 0,
@@ -1154,7 +1157,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         const int cloneDoc = frame.activeDocumentIndex();
         const QString cloneSource = cloneView->add_layer_in(QString());
         cloneView->set_active_layer(cloneSource);
-        const QString cloneSourceRect = cloneView->layer_rect(cloneSource);
+        const QString cloneSourceRect = transform_api::layerRect(*cloneView, cloneSource).toString();
         const int cloneLayers = cloneView->select_all_layers().size();
         const int cloneBase = cloneView->history_count();
         frame.setActiveTool(pictura::ToolId::Move);
@@ -1169,9 +1172,9 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         const bool cloneCommitted = cloneView->history_count() == cloneBase + 1
             && cloneView->history_label(cloneBase) == QStringLiteral("Move Layer")
             && cloneView->select_all_layers().size() == cloneLayers + 1
-            && cloneView->layer_rect(cloneSource) == cloneSourceRect;
+            && transform_api::layerRect(*cloneView, cloneSource).toString() == cloneSourceRect;
         const bool cloneActive = clonePath == cloneView->active_layer_path()
-            && cloneView->layer_rect(clonePath) == QStringLiteral("2 2 18 18");
+            && transform_api::layerRect(*cloneView, clonePath).toString() == QStringLiteral("2 2 18 18");
         const bool cloneUndo = cloneView->undo()
             && cloneView->select_all_layers().size() == cloneLayers;
         ST_BEGIN("lst_alt_clone");

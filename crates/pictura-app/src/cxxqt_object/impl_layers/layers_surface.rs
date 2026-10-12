@@ -1,6 +1,6 @@
-//! Layers-panel surface bridge: the smart-object row projection, the CS6
-//! Panel Options that gate duplicate naming and default fill masks, and the
-//! `Layer > Lock All Layers In Group…` batch.
+//! Layers-panel surface bridge: the CS6 Panel Options that gate duplicate
+//! naming and default fill masks, and the `Layer > Lock All Layers In Group…`
+//! batch.
 //!
 //! Free functions over a [`PictureView`] (their own bridge, so the
 //! `PictureView` declaration list in `cxxqt_object.rs` stays at its size
@@ -26,8 +26,6 @@ pub mod ffi {
 
     #[namespace = "pictura"]
     extern "Rust" {
-        /// Whether row `i`'s layer is a smart object (embedded or placed).
-        fn layer_row_is_smart_object(view: &PictureView, i: i32) -> bool;
 
         /// Apply the CS6 Layers Panel Options that gate bridge behaviour:
         /// `add_copy` (name a duplicate `"<name> copy"`) and
@@ -44,17 +42,6 @@ pub mod ffi {
         /// layers changed, `0` when `group_path` is not a group.
         fn lock_group_layers_run(view: Pin<&mut PictureView>, group_path: &QString) -> i32;
     }
-}
-
-fn layer_row_is_smart_object(view: &PictureView, i: i32) -> bool {
-    let Some(doc) = view.rust().doc.as_ref() else {
-        return false;
-    };
-    let path = view.layer_row_path(i).to_string();
-    if path.is_empty() {
-        return false;
-    }
-    pictura_render::resolve_path(doc, &path).is_some_and(|layer| layer.smart_object.is_some())
 }
 
 fn set_layers_panel_options(

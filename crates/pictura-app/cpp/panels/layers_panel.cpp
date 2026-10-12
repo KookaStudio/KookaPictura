@@ -1,4 +1,6 @@
 #include "layers_panel.h"
+
+#include "api/layers_api.h"
 #include "dialogs.h"
 
 #include "layer_new_dialog.h"
@@ -19,7 +21,6 @@
 #include "pictura_app/src/cxxqt_object/impl_layers/vector_masks.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/layer_style.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/layers_smart_filters.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/shapes.cxxqt.h"
 
 #include <QtCore/QAbstractItemModel>
 #include <QtCore/QEvent>
@@ -98,7 +99,7 @@ QColor layerLabelColor(int label)
     }
 }
 
-QString layerTooltip(const LayerRow& layer)
+QString layerTooltip(const LayerRowNode& layer)
 {
     return QStringLiteral("%1 (%2)").arg(layer.name, layer.kind);
 }
@@ -472,71 +473,61 @@ void LayersPanel::refresh()
     const bool wasEditing = tree_->viewport()->findChild<QLineEdit*>() != nullptr;
     const int thumbSize = delegate_ ? delegate_->thumbnailSize() : 24;
 
-    QVector<LayerRow> rows;
+    QVector<LayerRowNode> rows;
     if (view_) {
-        const int count = view_->layer_row_count();
-        const int documentWidth = view_->document_width();
-        const int documentHeight = view_->document_height();
-        rows.reserve(count);
-        const QStringList styleEffectNames = layer_style_effect_names();
+        // One crossing per rebuild: the bridge fills every row field in one
+        // pass, including the shape-aware thumbnails and the effect names.
+        const pictura::layers_api::Snapshot snap =
+            pictura::layers_api::snapshot(*view_, thumbSize, thumbEntireDocument_);
+        rows.reserve(snap.rows.size());
         // The mask edit target is one per view; the row whose path matches it
         // draws the active-thumbnail border. Reading it also clears a target
         // whose layer or mask is gone.
-        const QString maskTargetPath = mask_edit_target_get(*view_);
-        for (int i = 0; i < count; ++i) {
-            LayerRow row;
-            row.path = view_->layer_row_path(i);
-            row.depth = view_->layer_row_depth(i);
-            row.name = view_->layer_row_name(i);
-            row.kind = view_->layer_row_kind(i);
-            row.visible = view_->layer_row_visible(i);
-            row.blend = view_->layer_row_blend(i);
-            row.opacity = view_->layer_row_opacity(i);
-            row.fill = view_->layer_row_fill(i);
-            row.lockBits = view_->layer_row_lock(i);
-            row.color = view_->layer_row_color(i);
-            row.clipping = view_->layer_row_clipping(i);
-            row.hasMask = view_->layer_row_has_mask(i);
-            row.hasAdjustment = view_->layer_row_has_adjustment(i);
-            row.expandable = view_->layer_row_expandable(i);
-            row.childCount = view_->layer_row_child_count(i);
-            row.linked = view_->layer_row_linked(i);
-            row.placed = view_->layer_row_placed(i);
-            row.documentWidth = documentWidth;
-            row.documentHeight = documentHeight;
-            row.shape = shape_row_is_shape(*view_, i);
-            row.smartObject = layer_row_is_smart_object(*view_, i);
-            row.hasStyle = layer_row_has_style(*view_, i);
-            row.hasBlendIf = layer_row_has_blend_if(*view_, i);
+        const QString maskTargetPath = snap.maskTargetPath;
+        for (const pictura::layers_api::LayerRow& source : snap.rows) {
+            LayerRowNode row;
+            row.path = source.path;
+            row.depth = source.depth;
+            row.name = source.name;
+            row.kind = source.kind;
+            row.visible = source.visible;
+            row.blend = source.blend;
+            row.opacity = source.opacity;
+            row.fill = source.fill;
+            row.lockBits = source.lockBits;
+            row.color = source.color;
+            row.clipping = source.clipping;
+            row.hasMask = source.hasMask;
+            row.hasAdjustment = source.hasAdjustment;
+            row.expandable = source.expandable;
+            row.childCount = source.childCount;
+            row.linked = source.linked;
+            row.placed = source.placed;
+            row.documentWidth = snap.documentWidth;
+            row.documentHeight = snap.documentHeight;
+            row.shape = source.shape;
+            row.smartObject = source.smartObject;
+            row.hasStyle = source.hasStyle;
+            row.hasBlendIf = source.hasBlendIf;
+            row.styleEffects = source.styleEffects;
             row.activeThumb = activeThumbByPath_.value(row.path, 0);
-            if (row.hasStyle) {
-                for (const QString& name : styleEffectNames) {
-                    if (layer_style_value(*view_, row.path,
-                                          name + QStringLiteral(".exists"))
-                        == 1.0) {
-                        row.styleEffects.push_back(name);
-                    }
-                }
-            }
-            row.thumbnail = row.shape
-                ? shape_row_thumbnail(*view_, i, thumbSize)
-                : view_->layer_row_thumbnail(i, thumbSize, thumbEntireDocument_);
-            row.maskThumbnail = view_->layer_row_mask_thumbnail(i, thumbSize);
-            row.maskLinked = layer_row_mask_linked(*view_, i);
-            row.maskDisabled = layer_row_mask_disabled(*view_, i);
+            row.thumbnail = source.thumbnail;
+            row.maskThumbnail = source.maskThumbnail;
+            row.maskLinked = source.maskLinked;
+            row.maskDisabled = source.maskDisabled;
             row.maskTarget = row.hasMask && row.path == maskTargetPath;
-            row.hasVectorMask = layer_row_has_vector_mask(*view_, i);
-            row.vectorMaskThumbnail = layer_row_vector_mask_thumbnail(*view_, i, thumbSize);
-            row.vectorMaskLinked = layer_row_vector_mask_linked(*view_, i);
-            row.vectorMaskDisabled = layer_row_vector_mask_disabled(*view_, i);
+            row.hasVectorMask = source.hasVectorMask;
+            row.vectorMaskThumbnail = source.vectorMaskThumbnail;
+            row.vectorMaskLinked = source.vectorMaskLinked;
+            row.vectorMaskDisabled = source.vectorMaskDisabled;
             rows.push_back(std::move(row));
         }
         // Display-only Smart Filters rows: a group header under each filtered
         // smart object plus one row per filter. The header carries the filter
         // count and the group eye; the children carry their own eyes.
-        QVector<LayerRow> synthetic;
+        QVector<LayerRowNode> synthetic;
         for (int k = 0; k < rows.size(); ++k) {
-            LayerRow& row = rows[k];
+            LayerRowNode& row = rows[k];
             if (row.path.isEmpty() || !layer_has_smart_filters(*view_, row.path)) {
                 continue;
             }
@@ -544,7 +535,7 @@ void LayersPanel::refresh()
             // The smart object row gains a disclosure so the filter group can be
             // revealed, as CS6 nests "Smart Filters" under the layer.
             row.expandable = true;
-            LayerRow group;
+            LayerRowNode group;
             group.path = row.path + QStringLiteral("/@sf");
             group.depth = row.depth + 1;
             group.name = QStringLiteral("Smart Filters");
@@ -555,7 +546,7 @@ void LayersPanel::refresh()
             group.synthetic = true;
             synthetic.push_back(std::move(group));
             for (int j = 0; j < count; ++j) {
-                LayerRow child;
+                LayerRowNode child;
                 child.path = row.path + QStringLiteral("/@sf/") + QString::number(j);
                 child.depth = row.depth + 2;
                 child.name = layer_smart_filter_name(*view_, row.path, j);
@@ -565,7 +556,7 @@ void LayersPanel::refresh()
                 synthetic.push_back(std::move(child));
             }
         }
-        for (LayerRow& row : synthetic) {
+        for (LayerRowNode& row : synthetic) {
             rows.push_back(std::move(row));
         }
     }

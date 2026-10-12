@@ -4,6 +4,7 @@
 
 #include <QtTest/QtTest>
 
+#include "api/transform_api.h"
 #include "commands.h"
 #include "frame.h"
 #include "image_view.h"
@@ -215,7 +216,7 @@ void EditShortcutsTest::freeTransformBoxHugsTheLayerContent()
     QTest::keyClick(frame.imageView(), Qt::Key_T, Qt::ControlModifier);
     QVERIFY(view->transform_session_active());
     QCOMPARE(view->transform_session_path(), layer);
-    QCOMPARE(view->transform_quad(),
+    QCOMPARE(pictura::transform_api::quad(*view).toString(),
              QStringLiteral("10.00,8.00 22.00,8.00 22.00,17.00 10.00,17.00"));
     QTest::keyClick(frame.imageView(), Qt::Key_Escape);
     QVERIFY(!view->transform_session_active());

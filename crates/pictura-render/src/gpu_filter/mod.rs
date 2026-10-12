@@ -28,8 +28,10 @@
 //!
 //! Samples are uploaded planar 8-bit, packed four bytes per `u32` word with the
 //! same byte helpers as [`crate::gpu`]; one invocation owns a whole word, so
-//! the read-modify-write of a shared word never races. Alpha is never uploaded
-//! and never written back, so a 4-channel buffer keeps its alpha bit-for-bit.
+//! the read-modify-write of a shared word never races. A 4-channel buffer
+//! uploads its alpha plane as a fourth plane only when the kernel filters alpha
+//! (see [`pictura_filters::filters_alpha`]); otherwise alpha is never uploaded
+//! and never written back, so the buffer keeps it bit-for-bit.
 //!
 //! This module reuses the compositor's cached [`crate::gpu::shared_device`]
 //! rather than opening a second Vulkan device, so filters and compositing share
@@ -109,13 +111,20 @@ fn apply_filter_gpu(filter: &Filter, buf: &mut PixelBuffer) -> Option<()> {
     if n == 0 || buf.data.len() != n * buf.channels as usize {
         return None;
     }
-    let mut input = Vec::with_capacity(n * 3);
-    for c in 0..3 {
+    // A moving kernel takes the fourth plane through the shader; a value
+    // kernel runs colour only and the buffer's alpha is left untouched.
+    let planes = if buf.channels == 4 && pictura_filters::filters_alpha(filter) {
+        4
+    } else {
+        3
+    };
+    let mut input = Vec::with_capacity(n * planes);
+    for c in 0..planes {
         input.extend_from_slice(&buf.data[c * n..c * n + n]);
     }
     let (device, queue) = crate::gpu::shared_device()?;
     let out = run(device, queue, &plan, &input, buf.width, buf.height)?;
-    for c in 0..3 {
+    for c in 0..planes {
         buf.data[c * n..c * n + n].copy_from_slice(&out[c * n..c * n + n]);
     }
     Some(())

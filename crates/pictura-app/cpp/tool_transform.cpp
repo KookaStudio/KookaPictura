@@ -1,5 +1,6 @@
 #include "tools.h"
 
+#include "api/transform_api.h"
 #include "icons.h"
 #include "image_view.h"
 
@@ -15,20 +16,15 @@ constexpr int kRotateHandle = 8;
 // The reference point's drag handle (`PIVOT_HANDLE`).
 constexpr int kPivotHandle = 10;
 
-// The centre of a `transform_quad` string ("x,y x,y x,y x,y"), or `fallback`.
-QPointF quadCentre(const QString& quad, const QPointF& fallback)
+// The centre of a transform quad's four document-space corners, or `fallback`.
+QPointF quadCentre(const transform_api::Quad& quad, const QPointF& fallback)
 {
-    const QStringList corners = quad.split(QLatin1Char(' '), Qt::SkipEmptyParts);
-    if (corners.size() != 4) {
+    if (quad.corners.size() != 4) {
         return fallback;
     }
     QPointF sum;
-    for (const QString& corner : corners) {
-        const QStringList xy = corner.split(QLatin1Char(','));
-        if (xy.size() != 2) {
-            return fallback;
-        }
-        sum += QPointF(xy[0].toDouble(), xy[1].toDouble());
+    for (const QPointF& corner : quad.corners) {
+        sum += corner;
     }
     return sum / 4.0;
 }
@@ -87,12 +83,12 @@ void ToolController::updateTransformOverlay(PictureView* v)
     if (!canvas_ || !v) {
         return;
     }
-    canvas_->setTransformQuad(v->transform_quad());
+    canvas_->setTransformQuad(transform_api::quad(*v).corners);
     canvas_->setTransformPivot(QPointF(transform_pivot_x(*v), transform_pivot_y(*v)),
                                transform_show_pivot(*v));
-    const QString matrix = v->transform_preview_matrix();
-    if (!matrix.isEmpty()) {
-        canvas_->setTransformPreviewProjective(matrix);
+    const transform_api::Matrix matrix = transform_api::previewMatrix(*v);
+    if (matrix.valid) {
+        canvas_->setTransformPreviewProjective(matrix.coefficients);
     } else {
         canvas_->setTransformPreview(1.0, 1.0, 0.0, 0.0, 0.0);
     }
@@ -134,7 +130,7 @@ void ToolController::setTransformCursor(const QPointF& imagePos)
     case kRotateHandle:
         // In widget space, so a turned view (Rotate View) turns the arrow too.
         canvas_->setCursor(
-            rotateCursor(canvas_->imageToWidget(quadCentre(v->transform_quad(), imagePos)),
+            rotateCursor(canvas_->imageToWidget(quadCentre(transform_api::quad(*v), imagePos)),
                          canvas_->imageToWidget(imagePos)));
         break;
     default:
@@ -207,7 +203,7 @@ void ToolController::syncTransformControls()
     const QString active = v->active_layer_path();
     if (transformControls_ && v->transform_session_active()
         && v->transform_session_path() == active
-        && transform_session_rect(*v) == v->layer_rect(active)) {
+        && transform_session_rect(*v) == transform_api::layerRect(*v, active).toString()) {
         return;
     }
     if (transformControls_ && v->transform_session_active()) {

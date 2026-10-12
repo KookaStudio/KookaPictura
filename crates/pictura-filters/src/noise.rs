@@ -35,7 +35,7 @@ pub fn median(buf: &mut PixelBuffer, radius: u32) -> Result<(), FilterError> {
     // Cap the radius so an oversized request cannot allocate a giant window;
     // beyond max(w, h) every clamped sample is interior anyway.
     let r = (radius as usize).min(w.max(h));
-    let planes = (buf.channels as usize).min(3);
+    let planes = buf.channels as usize;
     for plane in 0..planes {
         let base = plane * n;
         let src = buf.data[base..base + n].to_vec();
@@ -104,7 +104,7 @@ pub fn despeckle(buf: &mut PixelBuffer) -> Result<(), FilterError> {
     if w < 3 || h < 3 {
         return Ok(());
     }
-    let planes = (buf.channels as usize).min(3);
+    let planes = buf.channels as usize;
     // ponytail: fixed internal thresholds; FILT-030 leaves the detector closed.
     // A per-tile adaptive threshold or a real gradient gate is the upgrade path.
     for plane in 0..planes {

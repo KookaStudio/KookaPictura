@@ -82,11 +82,6 @@ pub mod ffi {
         /// Whether the active layer's mask is linked to the layer.
         fn layer_mask_linked(view: &PictureView) -> bool;
 
-        /// Whether flat row `i`'s mask is disabled. False without a mask.
-        fn layer_row_mask_disabled(view: &PictureView, i: i32) -> bool;
-
-        /// Whether flat row `i`'s mask is linked to its layer. False without a mask.
-        fn layer_row_mask_linked(view: &PictureView, i: i32) -> bool;
     }
 }
 
@@ -287,14 +282,4 @@ fn layer_mask_linked(view: &PictureView) -> bool {
             .as_ref()
             .is_some_and(|doc| pictura_render::layer_mask_linked(doc, &path))
     })
-}
-
-fn layer_row_mask_disabled(view: &PictureView, i: i32) -> bool {
-    view.row_at(i)
-        .is_some_and(|(doc, path, _, _)| pictura_render::layer_mask_disabled(doc, &path))
-}
-
-fn layer_row_mask_linked(view: &PictureView, i: i32) -> bool {
-    view.row_at(i)
-        .is_some_and(|(doc, path, _, _)| pictura_render::layer_mask_linked(doc, &path))
 }

@@ -6,7 +6,7 @@
 #include "type_fonts.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/type_tools.cxxqt.h"
+#include "api/type_api.h"
 
 #include <QtCore/QSignalBlocker>
 #include <QtWidgets/QHBoxLayout>
@@ -88,10 +88,10 @@ void ParagraphStylesPanel::refresh()
     const int current = list_->currentRow();
     QStringList names;
     if (view_ && view_->has_document()) {
-        const int count = type_paragraph_style_count(*view_);
+        const int count = pictura::type_api::paragraphStyleCount(*view_);
         names.reserve(count);
         for (int i = 0; i < count; ++i) {
-            names << type_paragraph_style_name(*view_, i);
+            names << pictura::type_api::paragraphStyleName(*view_, i);
         }
     }
     // Applying a style records history, and the frame's debounced panel
@@ -129,10 +129,10 @@ void ParagraphStylesPanel::applyRow(int row)
     }
     const QString name = item->text();
     const QString path = view_->active_layer_path();
-    if (path.isEmpty() || !view_->layer_is_type(path)) {
+    if (path.isEmpty() || !pictura::type_api::isType(*view_, path)) {
         return;
     }
-    type_apply_style(*view_, path, name, true);
+    pictura::type_api::applyStyle(*view_, path, name, true);
 }
 
 bool ParagraphStylesPanel::createStyle()
@@ -143,8 +143,8 @@ bool ParagraphStylesPanel::createStyle()
     const QString suggested = tr("Paragraph Style %1").arg(list_->count());
     // A new style starts from the document defaults. Nothing applies it yet, so
     // the dialog's Preview checkbox is disabled.
-    const CharacterSetting character = type_default_character_setting();
-    const ParagraphSetting paragraph = type_default_paragraph_setting();
+    const CharacterSetting character = pictura::type_api::defaultCharacterSetting();
+    const ParagraphSetting paragraph = pictura::type_api::defaultParagraphSetting();
 
     ParagraphStyleDialog dialog(suggested, QString(), character, paragraph, false, this);
     if (runDialog(dialog, this) != QDialog::Accepted) {
@@ -153,7 +153,7 @@ bool ParagraphStylesPanel::createStyle()
 
     const QString family = dialog.family();
     registerTypeFont(family);
-    const bool created = type_create_paragraph_style(*view_, dialog.styleName(), family,
+    const bool created = pictura::type_api::createParagraphStyle(*view_, dialog.styleName(), family,
                                                      dialog.characterSetting(),
                                                      dialog.paragraphSetting());
     if (created) {
@@ -169,22 +169,22 @@ bool ParagraphStylesPanel::editStyle(int row)
         return false;
     }
     const QString name = list_->item(row)->text();
-    const CharacterSetting originalCharacter = type_paragraph_style_character(*view_, name);
-    const ParagraphSetting originalParagraph = type_paragraph_style_paragraph(*view_, name);
-    const QString family = familyForFontName(type_paragraph_style_font(*view_, name));
+    const CharacterSetting originalCharacter = pictura::type_api::paragraphStyleCharacter(*view_, name);
+    const ParagraphSetting originalParagraph = pictura::type_api::paragraphStyleParagraph(*view_, name);
+    const QString family = familyForFontName(pictura::type_api::paragraphStyleFont(*view_, name));
 
     ParagraphStyleDialog dialog(name, family, originalCharacter, originalParagraph, true, this);
     bool previewed = false;
     connect(&dialog, &ParagraphStyleDialog::previewChanged, this,
             [this, &dialog, &name, &previewed] {
                 previewed = true;
-                type_preview_paragraph_style(*view_, name, dialog.family(),
+                pictura::type_api::previewParagraphStyle(*view_, name, dialog.family(),
                                              dialog.characterSetting(),
                                              dialog.paragraphSetting());
             });
     if (runDialog(dialog, this) != QDialog::Accepted) {
         if (previewed) {
-            type_preview_paragraph_style(*view_, name, family, originalCharacter,
+            pictura::type_api::previewParagraphStyle(*view_, name, family, originalCharacter,
                                          originalParagraph);
         }
         return false;
@@ -195,12 +195,12 @@ bool ParagraphStylesPanel::editStyle(int row)
     // The bridge edits by current name; a rename deletes and recreates.
     const QString newName = dialog.styleName();
     if (newName == name) {
-        type_edit_paragraph_style(*view_, name, newFamily, dialog.characterSetting(),
+        pictura::type_api::editParagraphStyle(*view_, name, newFamily, dialog.characterSetting(),
                                   dialog.paragraphSetting());
     } else {
-        type_create_paragraph_style(*view_, newName, newFamily, dialog.characterSetting(),
+        pictura::type_api::createParagraphStyle(*view_, newName, newFamily, dialog.characterSetting(),
                                     dialog.paragraphSetting());
-        type_delete_paragraph_style(*view_, name);
+        pictura::type_api::deleteParagraphStyle(*view_, name);
     }
     refresh();
     return true;
@@ -218,7 +218,7 @@ bool ParagraphStylesPanel::deleteSelectedStyle()
         return false;
     }
     const QString name = list_->item(row)->text();
-    const bool deleted = type_delete_paragraph_style(*view_, name);
+    const bool deleted = pictura::type_api::deleteParagraphStyle(*view_, name);
     if (deleted) {
         refresh();
         list_->setCurrentRow(qMin(row, list_->count() - 1));

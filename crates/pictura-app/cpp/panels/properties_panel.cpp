@@ -1,6 +1,8 @@
 #include "properties_panel.h"
+#include "api/type_api.h"
 
 #include "adjustment_controls.h"
+#include "api/transform_api.h"
 #include "icons.h"
 #include "layers_panel_internal.h"
 
@@ -346,10 +348,11 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     });
     connect(visible_, &QToolButton::clicked, this, [this]() {
         commit();
-        int row = -1;
-        activePath(&row);
-        if (view_ && row >= 0) {
-            view_->set_layers_visible(QStringList{path_}, !view_->layer_row_visible(row));
+        if (view_) {
+            const auto row = pictura::layers_api::rowForPath(*view_, path_);
+            if (row.path == path_) {
+                view_->set_layers_visible(QStringList{path_}, !row.visible);
+            }
         }
         refresh();
     });
@@ -518,31 +521,32 @@ void PropertiesPanel::setView(PictureView* view)
     refresh();
 }
 
-QString PropertiesPanel::activePath(int* row) const
+QString PropertiesPanel::activePath() const
 {
-    *row = -1;
     if (!view_ || !view_->has_document()) {
         return QString();
     }
     const QString active = view_->active_layer_path();
-    for (int i = 0; !active.isEmpty() && i < view_->layer_row_count(); ++i) {
-        if (view_->layer_row_path(i) == active) {
-            *row = i;
-            return active;
-        }
+    if (!active.isEmpty()
+        && pictura::layers_api::rowForPath(*view_, active).path == active) {
+        return active;
     }
     return QString();
 }
 
 void PropertiesPanel::refresh()
 {
-    int row = -1;
-    const QString path = activePath(&row);
+    const QString path = activePath();
     if (path != path_) {
         commit();
     }
     path_ = path;
-    if (row < 0) {
+    if (path_.isEmpty()) {
+        showNothing();
+        return;
+    }
+    const pictura::layers_api::LayerRow row = pictura::layers_api::rowForPath(*view_, path_);
+    if (row.path != path_) {
         showNothing();
         return;
     }
@@ -551,9 +555,9 @@ void PropertiesPanel::refresh()
         showLayer(row);
         return;
     }
-    clip_->setChecked(view_->layer_row_clipping(row));
-    visible_->setIcon(icon(view_->layer_row_visible(row) ? QStringLiteral("layers.eyeOn")
-                                                         : QStringLiteral("layers.eyeOff")));
+    clip_->setChecked(row.clipping);
+    visible_->setIcon(icon(row.visible ? QStringLiteral("layers.eyeOn")
+                                       : QStringLiteral("layers.eyeOff")));
     showAdjustment(page);
 }
 
@@ -573,7 +577,7 @@ void PropertiesPanel::showNothing()
     canvas_->hide();
 }
 
-void PropertiesPanel::showLayer(int row)
+void PropertiesPanel::showLayer(const pictura::layers_api::LayerRow& row)
 {
     header_->setText(QStringLiteral("Layer Properties"));
     stack_->show();
@@ -583,8 +587,7 @@ void PropertiesPanel::showLayer(int row)
     while (info_->rowCount() > 0) {
         info_->removeRow(0);
     }
-    const QString kind = view_->layer_is_type(path_) ? QStringLiteral("type")
-                                                     : view_->layer_row_kind(row);
+    const QString kind = pictura::type_api::isType(*view_, path_) ? QStringLiteral("type") : row.kind;
     const std::map<QString, QString> kinds = {
         {QStringLiteral("pixel"), QStringLiteral("Pixel")},
         {QStringLiteral("type"), QStringLiteral("Type")},
@@ -594,19 +597,18 @@ void PropertiesPanel::showLayer(int row)
     const auto it = kinds.find(kind);
     info_->addRow(QStringLiteral("Kind:"),
                   new QLabel(it != kinds.end() ? it->second : kind, layerPage_));
-    const QStringList rect = view_->layer_rect(path_).split(QLatin1Char(' '));
-    if (rect.size() == 4 && kind != QStringLiteral("group")) {
-        const int left = rect[0].toInt();
-        const int top = rect[1].toInt();
+    const transform_api::LayerRect rect = transform_api::layerRect(*view_, path_);
+    if (rect.valid && kind != QStringLiteral("group")) {
         info_->addRow(QStringLiteral("Size:"),
                       new QLabel(QStringLiteral("%1 x %2 px")
-                                     .arg(rect[2].toInt() - left)
-                                     .arg(rect[3].toInt() - top),
+                                     .arg(rect.width())
+                                     .arg(rect.height()),
                                  layerPage_));
         info_->addRow(QStringLiteral("Position:"),
-                      new QLabel(QStringLiteral("X %1, Y %2").arg(left).arg(top), layerPage_));
+                      new QLabel(QStringLiteral("X %1, Y %2").arg(rect.left).arg(rect.top),
+                                 layerPage_));
     }
-    QString blend = view_->layer_row_blend(row);
+    QString blend = row.blend;
     for (const BlendEntry& entry : kBlends) {
         if (blend == QLatin1String(entry.key)) {
             blend = QLatin1String(entry.name);
@@ -615,13 +617,13 @@ void PropertiesPanel::showLayer(int row)
     info_->addRow(QStringLiteral("Blend Mode:"), new QLabel(blend, layerPage_));
     const auto percent = [](int v) { return QStringLiteral("%1%").arg(qRound(v * 100.0 / 255.0)); };
     info_->addRow(QStringLiteral("Opacity:"),
-                  new QLabel(percent(view_->layer_row_opacity(row)), layerPage_));
-    info_->addRow(QStringLiteral("Fill:"), new QLabel(percent(view_->layer_row_fill(row)), layerPage_));
+                  new QLabel(percent(row.opacity), layerPage_));
+    info_->addRow(QStringLiteral("Fill:"), new QLabel(percent(row.fill), layerPage_));
     info_->addRow(QStringLiteral("Mask:"),
-                  new QLabel(view_->layer_row_has_mask(row) ? QStringLiteral("Layer Mask")
-                                                            : QStringLiteral("None"),
+                  new QLabel(row.hasMask ? QStringLiteral("Layer Mask")
+                                         : QStringLiteral("None"),
                              layerPage_));
-    const int lock = view_->layer_row_lock(row);
+    const int lock = row.lockBits;
     QStringList locks;
     if (lock & 0x01) {
         locks << QStringLiteral("Transparency");
@@ -635,8 +637,8 @@ void PropertiesPanel::showLayer(int row)
     info_->addRow(QStringLiteral("Locks:"),
                   new QLabel(locks.isEmpty() ? QStringLiteral("None") : locks.join(QStringLiteral(", ")),
                              layerPage_));
-    maskSection_->setVisible(view_->layer_row_has_mask(row));
-    vectorMaskSection_->setVisible(layer_row_has_vector_mask(*view_, row));
+    maskSection_->setVisible(row.hasMask);
+    vectorMaskSection_->setVisible(row.hasVectorMask);
 }
 
 void PropertiesPanel::showAdjustment(const QStringList& page)

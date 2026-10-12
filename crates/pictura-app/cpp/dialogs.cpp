@@ -1,5 +1,6 @@
 #include "dialogs.h"
 
+#include "api/document_api.h"
 #include "image_view.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
@@ -122,13 +123,9 @@ QImage documentPreviewImage(PictureView* view, int minEdge)
     }
     int best = -1;
     QSize size;
-    for (int level = 0; level < view->display_level_count(); ++level) {
-        const QStringList parts =
-            view->display_level_size(level).split(QLatin1Char(' '), Qt::SkipEmptyParts);
-        if (parts.size() != 2) {
-            break;
-        }
-        const QSize levelSize(parts[0].toInt(), parts[1].toInt());
+    const QVector<document_api::CanvasSize> levels = document_api::pyramidSizes(*view);
+    for (int level = 0; level < levels.size(); ++level) {
+        const QSize levelSize(levels.at(level).width, levels.at(level).height);
         if (level > 0 && qMax(levelSize.width(), levelSize.height()) < minEdge) {
             break;
         }

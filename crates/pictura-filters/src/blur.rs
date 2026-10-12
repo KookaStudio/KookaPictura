@@ -1,8 +1,9 @@
 //! Blur family: Gaussian, Box, Motion, Radial, Shape, Smart, Average, Blur/Blur More.
 //! Surface Blur runs on the photorust engine.
 //!
-//! Planar 8-bit buffers (channels 3 or 4); only the color planes are touched,
-//! alpha is never modified. Borders clamp-to-edge per `FILT-010`.
+//! Planar 8-bit buffers (channels 3 or 4); these are moving kernels, so a
+//! fourth (alpha) plane is blurred along with the colour. Borders clamp-to-
+//! edge per `FILT-010`.
 
 pub mod field;
 pub mod iris;
@@ -65,7 +66,7 @@ pub fn motion(buf: &mut PixelBuffer, angle_deg: f64, distance: u32) -> Result<()
     let w = buf.width as usize;
     let h = buf.height as usize;
     let n = w * h;
-    let planes = (buf.channels as usize).min(3);
+    let planes = buf.channels as usize;
     let angle = angle_deg.to_radians();
     // Photoshop angles run counter-clockwise on screen (0 = east, +90 = up);
     // this buffer's y grows downward, so the vertical component is negated.
@@ -123,7 +124,7 @@ pub fn radial(
     let w = buf.width as usize;
     let h = buf.height as usize;
     let n = w * h;
-    let planes = (buf.channels as usize).min(3);
+    let planes = buf.channels as usize;
     let samples: usize = match quality {
         Quality::Draft => 8,
         Quality::Good => 16,
@@ -244,7 +245,7 @@ pub fn radial(
 pub fn average(buf: &mut PixelBuffer) -> Result<(), FilterError> {
     validate(buf)?;
     let n = buf.pixel_count();
-    let planes = (buf.channels as usize).min(3);
+    let planes = buf.channels as usize;
     for c in 0..planes {
         let base = c * n;
         let sum: u64 = buf.data[base..base + n].iter().map(|&v| v as u64).sum();
@@ -300,7 +301,7 @@ fn box_blur_planes(buf: &mut PixelBuffer, radius: u32) {
     let w = buf.width as usize;
     let h = buf.height as usize;
     let n = w * h;
-    let planes = (buf.channels as usize).min(3);
+    let planes = buf.channels as usize;
     let r = radius as isize;
     for c in 0..planes {
         let base = c * n;
@@ -605,15 +606,17 @@ mod tests {
     }
 
     #[test]
-    fn alpha_is_untouched_by_every_blur() {
-        let expected: Vec<u8> = (0..20u32).map(|i| (i * 7) as u8).collect();
-        let px: Vec<[u8; 4]> = expected.iter().map(|&a| [30, 60, 90, a]).collect();
+    fn every_blur_runs_over_the_alpha_plane() {
+        let original: Vec<u8> = (0..20u32).map(|i| (i * 7) as u8).collect();
+        let px: Vec<[u8; 4]> = original.iter().map(|&a| [30, 60, 90, a]).collect();
         let base = buf4(5, 4, &px);
         let check = |b: &PixelBuffer| {
             let n = b.pixel_count();
-            for (i, &a) in expected.iter().enumerate() {
-                assert_eq!(b.data[3 * n + i], a);
-            }
+            assert_ne!(
+                &b.data[3 * n..4 * n],
+                &original[..],
+                "alpha plane was left untouched"
+            );
         };
         let mut b1 = base.clone();
         gaussian(&mut b1, 2.0).unwrap();

@@ -7,6 +7,7 @@
 
 #include "tool_handler.h"
 
+#include "api/paint_api.h"
 #include "paint_tip.h"
 
 #include "tools.h"
@@ -17,6 +18,7 @@
 #include <QtCore/QObject>
 
 #include <memory>
+#include <optional>
 
 namespace pictura {
 
@@ -35,7 +37,9 @@ public:
         if (!v || !v->has_document()) {
             return true;
         }
-        if (!begin(ctx, *v)) {
+        stroke_.emplace(*v, [&] { return begin(ctx, *v); });
+        if (!stroke_->open()) {
+            stroke_.reset();
             if (activePixelLocked(v)) {
                 ctx.refused(QObject::tr("Could not retouch: the layer's pixels are locked."));
             } else if (!v->active_layer_visible()) {
@@ -47,18 +51,16 @@ public:
         }
         ctx.setDragging(true);
         ctx.setDragCommitted(false);
-        v->paint_dab(imagePos.x(), imagePos.y(), 1.0);
+        stroke_->dab(imagePos.x(), imagePos.y());
         return true;
     }
 
     void onMove(ToolContext& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
-        if (!ctx.dragging()) {
+        if (!ctx.dragging() || !stroke_) {
             return;
         }
-        if (PictureView* v = ctx.view()) {
-            v->paint_dab(imagePos.x(), imagePos.y(), 1.0);
-        }
+        stroke_->dab(imagePos.x(), imagePos.y());
     }
 
     void onRelease(ToolContext& ctx, const QPointF&, Qt::KeyboardModifiers) override
@@ -67,8 +69,9 @@ public:
             return;
         }
         ctx.setDragging(false);
-        if (PictureView* v = ctx.view()) {
-            v->end_paint();
+        if (stroke_) {
+            stroke_->finish();
+            stroke_.reset();
         }
     }
 
@@ -91,6 +94,7 @@ private:
     }
 
     ToolId id_;
+    std::optional<paint_api::Stroke> stroke_;
 };
 
 } // namespace
