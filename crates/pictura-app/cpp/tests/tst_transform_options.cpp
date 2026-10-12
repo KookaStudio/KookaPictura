@@ -41,6 +41,7 @@ private slots:
     void angleAndSkewSettersReachTheSession();
     void interpolationComboReachesTheSession();
     void canvasPivotDragSnapsToAnAnchor();
+    void perimeterRotatesAndFarPressDoesNotCommit();
     void warpSetAndClear();
     void warpCommitsOneState();
     void applyCommitsCancelRestores();
@@ -328,6 +329,34 @@ void TransformOptionsTest::canvasPivotDragSnapsToAnAnchor()
     QVERIFY(std::abs(pictura::transform_pivot_x(*view) - 3.5) < kTolerance);
     QVERIFY(std::abs(pictura::transform_pivot_y(*view) - 20.0) < kTolerance);
     view->transform_release();
+    tools->cancelFreeTransform();
+}
+
+void TransformOptionsTest::perimeterRotatesAndFarPressDoesNotCommit()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginLayer(frame);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    pictura::ImageView* canvas = frame.imageView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(view && canvas && tools && tools->beginFreeTransform(layer));
+
+    // The filled square is (10,8)-(22,17); just outside the top edge is in the
+    // rotate band, not only the corners.
+    QCOMPARE(view->transform_hit_test(16.0, 0.0, 1.0), 8);
+    canvas->mousePressed(QPointF(16.0, 0.0), Qt::LeftButton, int(Qt::NoModifier));
+    canvas->mouseMoved(QPointF(26.0, 4.0));
+    canvas->mouseReleased(QPointF(26.0, 4.0));
+    QVERIFY(std::abs(pictura::transform_angle_degrees(*view)) > 1.0);
+
+    // A press beyond the band hits nothing, commits nothing, and leaves the
+    // session running.
+    const int history = view->history_count();
+    canvas->mousePressed(QPointF(16.0, -40.0), Qt::LeftButton, int(Qt::NoModifier));
+    canvas->mouseReleased(QPointF(16.0, -40.0));
+    QVERIFY(view->transform_session_active());
+    QCOMPARE(view->history_count(), history);
     tools->cancelFreeTransform();
 }
 

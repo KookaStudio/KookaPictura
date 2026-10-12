@@ -674,13 +674,29 @@ pub(super) fn hit_test_quad(
     if point_in_quad(p, quad) {
         return MOVE_HANDLE;
     }
+    // The rotate band follows the whole perimeter, so a press just outside any
+    // side rotates, not only near a corner.
     let band = ROTATE_BAND / zoom;
-    for corner in quad {
-        if dist2(p, *corner) <= band * band {
+    for i in 0..4 {
+        if point_segment_dist2(p, quad[i], quad[(i + 1) % 4]) <= band * band {
             return ROTATE_HANDLE;
         }
     }
     -1
+}
+
+/// Squared distance from `p` to the segment `a`–`b`.
+fn point_segment_dist2(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
+    let (vx, vy) = (b.0 - a.0, b.1 - a.1);
+    let (wx, wy) = (p.0 - a.0, p.1 - a.1);
+    let len2 = vx * vx + vy * vy;
+    let t = if len2 > 0.0 {
+        ((wx * vx + wy * vy) / len2).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let (dx, dy) = (wx - t * vx, wy - t * vy);
+    dx * dx + dy * dy
 }
 
 #[cfg(test)]
@@ -830,6 +846,23 @@ mod tests {
             ROTATE_HANDLE
         );
         assert_eq!(hit_test(r, 1.0, 1.0, 0.0, 0.0, 0.0, 300.0, 300.0, 1.0), -1);
+    }
+
+    #[test]
+    fn rotate_band_follows_every_side() {
+        let q = source_corners(rect100());
+        // Just outside each edge midpoint, within the 20 px band.
+        assert_eq!(hit_test_quad(&q, false, 50.0, -10.0, 1.0), ROTATE_HANDLE);
+        assert_eq!(hit_test_quad(&q, false, 110.0, 50.0, 1.0), ROTATE_HANDLE);
+        assert_eq!(hit_test_quad(&q, false, 50.0, 110.0, 1.0), ROTATE_HANDLE);
+        assert_eq!(hit_test_quad(&q, false, -10.0, 50.0, 1.0), ROTATE_HANDLE);
+        // Beyond the band nothing is hit.
+        assert_eq!(hit_test_quad(&q, false, 50.0, -30.0, 1.0), -1);
+        // The band is measured in screen pixels: 10 px out is inside at 1x,
+        // outside the 5 px band at 4x.
+        assert_eq!(hit_test_quad(&q, false, 50.0, -10.0, 4.0), -1);
+        // A projective mode keeps only the handles active outside.
+        assert_eq!(hit_test_quad(&q, true, 50.0, -10.0, 1.0), -1);
     }
 
     #[test]
