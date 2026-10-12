@@ -10,6 +10,7 @@ namespace pictura {
 
 class ColorPlane;
 class ColorRamp;
+class ColorSwatchWidget;
 
 // Application foreground/background colour shared by the toolbox, Color,
 // Swatches, and Eyedropper.
@@ -50,11 +51,11 @@ private:
     void syncControls();
     void selectColor(const QColor& color);
     QColor activeColor() const;
-    void paintSwatch(QPushButton* button, const QColor& color, bool active);
+    void paintSwatch(ColorSwatchWidget* button, const QColor& color, bool active);
 
     ColorState* state_ = nullptr;
-    QPushButton* fgSwatch_ = nullptr;
-    QPushButton* bgSwatch_ = nullptr;
+    ColorSwatchWidget* fgSwatch_ = nullptr;
+    ColorSwatchWidget* bgSwatch_ = nullptr;
     ColorPlane* plane_ = nullptr;
     ColorRamp* ramp_ = nullptr;
 };

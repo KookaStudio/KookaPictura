@@ -136,7 +136,6 @@ PanelColumn::PanelColumn(QWidget* parent)
     indicator_ = new QWidget(scroll_->viewport());
     indicator_->setObjectName(QStringLiteral("panelDropIndicator"));
     indicator_->setAttribute(Qt::WA_TransparentForMouseEvents);
-    indicator_->setStyleSheet(QStringLiteral("background-color:#2a7fff;"));
     indicator_->hide();
 
     // The strip's own insertion line: the scroll viewport is hidden in iconic
@@ -144,7 +143,6 @@ PanelColumn::PanelColumn(QWidget* parent)
     stripIndicator_ = new QWidget(iconStrip_);
     stripIndicator_->setObjectName(QStringLiteral("panelStripDropIndicator"));
     stripIndicator_->setAttribute(Qt::WA_TransparentForMouseEvents);
-    stripIndicator_->setStyleSheet(QStringLiteral("background-color:#2a7fff;"));
     stripIndicator_->hide();
 
     // Phase 4: the blue region outline drawn around a whole target group for a
@@ -153,8 +151,6 @@ PanelColumn::PanelColumn(QWidget* parent)
     outlineIndicator_->setObjectName(QStringLiteral("panelOutlineIndicator"));
     outlineIndicator_->setAttribute(Qt::WA_TransparentForMouseEvents);
     outlineIndicator_->setAttribute(Qt::WA_StyledBackground);
-    outlineIndicator_->setStyleSheet(QStringLiteral(
-        "background:transparent; border:2px solid #2a7fff; border-radius:6px;"));
     outlineIndicator_->hide();
 
     setMinimumHeight(0);

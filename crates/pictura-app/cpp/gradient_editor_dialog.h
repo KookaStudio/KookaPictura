@@ -18,6 +18,8 @@ class QToolButton;
 
 namespace pictura {
 
+class ColorSwatchWidget;
+
 // One colour stop; `location` in the PSD's 0..4096. The colour's alpha is
 // the gradient's opacity there.
 struct GradientColorStop {
@@ -149,7 +151,7 @@ private:
     QComboBox* type_ = nullptr;
     PercentField* smoothness_ = nullptr;
     QLineEdit* name_ = nullptr;
-    QToolButton* color_ = nullptr;
+    ColorSwatchWidget* color_ = nullptr;
     QSpinBox* location_ = nullptr;
     QPushButton* delete_ = nullptr;
     QColor foreground_;

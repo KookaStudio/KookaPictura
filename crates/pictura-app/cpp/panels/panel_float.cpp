@@ -295,7 +295,6 @@ void PanelFloat::showTabIndicator(PanelGroup* group, int index)
         indicator_ = new QWidget(this);
         indicator_->setObjectName(QStringLiteral("panelFloatDropIndicator"));
         indicator_->setAttribute(Qt::WA_TransparentForMouseEvents);
-        indicator_->setStyleSheet(QStringLiteral("background-color:#2a7fff;"));
     }
     const int x = group->tabInsertionX(index);
     const QPoint origin = bar->mapTo(this, QPoint(x, 0));

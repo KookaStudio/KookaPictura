@@ -202,6 +202,7 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/panels/layers_panel_test.cpp
     crates/pictura-app/cpp/panels/percent_field.cpp
     crates/pictura-app/cpp/panels/numeric_field.cpp
+    crates/pictura-app/cpp/panels/color_swatch_widget.cpp
     crates/pictura-app/cpp/panels/angle_dial.cpp
     crates/pictura-app/cpp/panels/ramp_slider.cpp
     crates/pictura-app/cpp/panels/spectrum_bar.cpp
@@ -357,6 +358,7 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/panels/layers_filter_bar.h
     crates/pictura-app/cpp/panels/percent_field.h
     crates/pictura-app/cpp/panels/numeric_field.h
+    crates/pictura-app/cpp/panels/color_swatch_widget.h
     crates/pictura-app/cpp/panels/jump_slider.h
     crates/pictura-app/cpp/panels/angle_dial.h
     crates/pictura-app/cpp/panels/ramp_slider.h

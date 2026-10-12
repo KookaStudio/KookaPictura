@@ -400,9 +400,6 @@ Toolbox::Toolbox(ToolController* controller, ColorState* colors, QWidget* parent
         if (members.size() > 1) {
             menu = new QMenu(this);
             menu->setObjectName(QStringLiteral("toolFlyoutMenu"));
-            // Left icon margin with a tight icon/label gap; scoped to the flyout.
-            menu->setStyleSheet(
-                QStringLiteral("QMenu::item { padding: 3px 18px 3px 24px; }"));
             for (ToolId member : members) {
                 const ToolInfo& info = toolInfo(member);
                 QAction* action =

@@ -15,6 +15,7 @@ class QStackedWidget;
 
 namespace pictura {
 
+class ColorSwatchWidget;
 class NumericField;
 
 // The M41 CS6 Preferences dialog: a left pane list plus a QStackedWidget.
@@ -85,7 +86,7 @@ private:
     QComboBox* autoSaveMinutes_ = nullptr;
     QComboBox* guideColor_ = nullptr;
     QComboBox* guideStyle_ = nullptr;
-    QLabel* guideSwatch_ = nullptr;
+    ColorSwatchWidget* guideSwatch_ = nullptr;
     QColor guideColorValue_;
     QComboBox* rulerUnit_ = nullptr;
     QRadioButton* postScriptPoints_ = nullptr;

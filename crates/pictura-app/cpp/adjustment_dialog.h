@@ -20,6 +20,7 @@ class QVBoxLayout;
 namespace pictura {
 
 class AdjustmentControls;
+class ColorSwatchWidget;
 class ImageView;
 class PictureView;
 
@@ -103,8 +104,8 @@ protected:
     QSpinBox* addRampRow(QVBoxLayout* layout, const QString& label, const QString& key, int min,
                          int max, const QList<QColor>& ramp, const QString& suffix = {});
     // A colour swatch button and its fill (also kept as its "color" property).
-    QToolButton* swatch(const QString& name);
-    static void paintSwatch(QToolButton* button, const QColor& color);
+    ColorSwatchWidget* swatch(const QString& name);
+    static void paintSwatch(ColorSwatchWidget* button, const QColor& color);
     // The newer layout's bottom row: Cancel, then OK (default), at the right.
     QHBoxLayout* bottomButtons();
     // The block key a stacked or ramp row named `key` edits; Hue/Saturation prefixes

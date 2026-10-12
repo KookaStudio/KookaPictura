@@ -11,6 +11,7 @@ class QToolButton;
 
 namespace pictura {
 
+class ColorSwatchWidget;
 class PictureView;
 
 // Canvas Size's nine-square anchor grid. Painted whole: every square's arrow
@@ -94,7 +95,7 @@ private:
     QCheckBox* relative_ = nullptr;
     AnchorSelector* anchor_ = nullptr;
     QComboBox* extension_ = nullptr;
-    QToolButton* swatch_ = nullptr;
+    ColorSwatchWidget* swatch_ = nullptr;
 };
 
 } // namespace pictura

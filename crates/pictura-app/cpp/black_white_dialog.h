@@ -31,7 +31,7 @@ private:
     void showTint(const QColor& color);
 
     QComboBox* preset_ = nullptr;
-    QToolButton* color_ = nullptr;
+    ColorSwatchWidget* color_ = nullptr;
     QSpinBox* hue_ = nullptr;
     QSpinBox* saturation_ = nullptr;
     bool showingTint_ = false;

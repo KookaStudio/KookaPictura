@@ -3,6 +3,7 @@
 #include "color_picker_dialog.h"
 #include "icons.h"
 #include "image_view.h"
+#include "panels/color_swatch_widget.h"
 #include "panels/jump_slider.h"
 #include "tools.h"
 
@@ -34,27 +35,19 @@ namespace {
 constexpr int kMaskBox = 200;
 
 // A flat swatch showing a colour, framed so white reads against the dialog.
-QLabel* makeSwatch()
+ColorSwatchWidget* makeSwatch()
 {
-    auto* label = new QLabel;
-    label->setFixedSize(34, 26);
-    label->setFrameShape(QFrame::Box);
-    label->setFrameShadow(QFrame::Plain);
-    label->setAutoFillBackground(true);
-    return label;
+    auto* swatch = new ColorSwatchWidget;
+    swatch->setFixedSize(34, 26);
+    return swatch;
 }
 
-void setSwatchColor(QLabel* label, const QColor& color)
+void setSwatchColor(ColorSwatchWidget* swatch, const QColor& color)
 {
-    if (!label) {
+    if (!swatch) {
         return;
     }
-    if (!color.isValid()) {
-        label->setStyleSheet(QStringLiteral("border: 1px solid #000;"));
-        return;
-    }
-    label->setStyleSheet(QStringLiteral("background-color: %1; border: 1px solid #000;")
-                             .arg(color.name()));
+    swatch->setColor(color);
 }
 
 } // namespace
@@ -138,9 +131,9 @@ void ReplaceColorDialog::buildUi()
 
     // --- Mask thumbnail ----------------------------------------------------
     maskLabel_ = new QLabel(this);
+    maskLabel_->setObjectName(QStringLiteral("replaceColorMaskPreview"));
     maskLabel_->setFixedSize(kMaskBox, kMaskBox * 3 / 5);
     maskLabel_->setAlignment(Qt::AlignCenter);
-    maskLabel_->setStyleSheet(QStringLiteral("background-color: #000; border: 1px solid #555;"));
     left->addWidget(maskLabel_, 0, Qt::AlignHCenter);
 
     auto* modeRow = new QHBoxLayout;
@@ -179,7 +172,7 @@ void ReplaceColorDialog::buildUi()
             QStringLiteral("replaceColorLightness"));
 
     auto* resultCol = new QVBoxLayout;
-    resultSwatch_ = new QToolButton(this);
+    resultSwatch_ = new ColorSwatchWidget(this);
     resultSwatch_->setObjectName(QStringLiteral("replaceColorResult"));
     resultSwatch_->setFixedSize(34, 26);
     resultSwatch_->setToolTip(QStringLiteral("Click to set the result color"));
@@ -217,7 +210,7 @@ void ReplaceColorDialog::buildUi()
     connect(saturationSlider_, &QSlider::valueChanged, this, [this] { applyChange(false); });
     connect(lightnessSlider_, &QSlider::valueChanged, this, [this] { applyChange(false); });
     connect(imageButton_, &QRadioButton::toggled, this, [this] { refreshMask(); });
-    connect(resultSwatch_, &QToolButton::clicked, this, [this] {
+    connect(resultSwatch_, &QPushButton::clicked, this, [this] {
         if (samples_.isEmpty()) {
             return;
         }
@@ -375,12 +368,7 @@ QColor ReplaceColorDialog::resultForTest() const
 void ReplaceColorDialog::refreshSwatches()
 {
     setSwatchColor(colorSwatch_, samples_.isEmpty() ? QColor() : samples_.back().color);
-    const QColor result = resultForTest();
-    resultSwatch_->setStyleSheet(
-        result.isValid()
-            ? QStringLiteral("QToolButton { background-color: %1; border: 1px solid #000; }")
-                  .arg(result.name())
-            : QStringLiteral("QToolButton { border: 1px solid #000; }"));
+    resultSwatch_->setColor(resultForTest());
 }
 
 void ReplaceColorDialog::pickResult(const QColor& result)

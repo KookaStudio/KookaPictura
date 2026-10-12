@@ -1,6 +1,7 @@
 #include "preferences_dialog.h"
 
 #include "canvas_ruler.h"
+#include "panels/color_swatch_widget.h"
 #include "panels/numeric_field.h"
 #include "session.h"
 #include "theme.h"
@@ -79,14 +80,13 @@ QComboBox* colorCombo(const QString& objectName, QWidget* parent)
     return combo;
 }
 
-QLabel* swatch(const QColor& color, QWidget* parent)
+ColorSwatchWidget* swatch(const QColor& color, QWidget* parent)
 {
-    auto* label = new QLabel(parent);
-    label->setFixedSize(40, 40);
-    label->setAutoFillBackground(true);
-    label->setStyleSheet(QStringLiteral("background: %1; border: 1px solid #808080;")
-                             .arg(color.name()));
-    return label;
+    auto* widget = new ColorSwatchWidget(parent);
+    widget->setFixedSize(40, 40);
+    widget->setFocusPolicy(Qt::NoFocus);
+    widget->setColor(color);
+    return widget;
 }
 
 } // namespace
@@ -518,8 +518,7 @@ void PreferencesDialog::showGuideColor(const QColor& color)
     }
     const QSignalBlocker block(guideColor_);
     guideColor_->setCurrentIndex(index);
-    guideSwatch_->setStyleSheet(QStringLiteral("background: %1; border: 1px solid #808080;")
-                                    .arg(color.name()));
+    guideSwatch_->setColor(color);
 }
 
 void PreferencesDialog::setGuideAppearance(const QColor& color, bool dashed)

@@ -22,14 +22,30 @@ tests) and linked into the C++ executable `pictura` by CMake via `cxx_qt_import_
 - **New `.cpp`/`.h` files MUST be added to `CMakeLists.txt` explicitly — there is no globbing.**
 - `main.cpp` is startup only: selects the offscreen QPA plugin before `QApplication` for `--headless`
   (which implies `--self-test` when no document is given), then calls `runSelfTest`.
+  `--dump-theme` prints the theme token JSON and exits before any window/session code.
 - Large classes are split across several TUs registered in `CMakeLists.txt` (`frame.cpp` →
   `frame_{columns,session,menus,build,test}.cpp`; `panels/panel_column.cpp` →
   `panel_column{,_drag,_iconic,_menu,_test}.cpp` + `panel_float.cpp`; etc.).
 
+## Design system (theme tokens)
+
+- `cpp/theme.{h,cpp}` is the token layer: `Theme::tokens(level)` returns
+  `ThemeToken{key, value, color}` — every colour (including derived shades) plus the shared metrics
+  — and `styleSheet` builds from the same list. `--dump-theme` prints it for all four levels.
+- Each standard primitive has **one global QSS definition** (type- or object-name-scoped); widgets
+  must not carry static-colour `setStyleSheet` calls. A new colour belongs in `Theme::tokens`
+  (and the QSS), never in a widget.
+- Data-driven colour fills use `panels/color_swatch_widget.{h,cpp}` (`ColorSwatchWidget`, a
+  `QPushButton` that paints its colour; keeps the `color` dynamic property).
+- `scripts/gen-styleguide.py` regenerates the committed `design-system.html` from `--dump-theme`;
+  run it after any theme change. `tst_design_system` (Qt Test) guards palette/token equality,
+  primitive selectors, and the object-name/state contract.
+
 ## The C++ self-test (hand-rolled oracle, not Qt Test/CTest)
 
 - `runSelfTest()` (`cpp/selftest.cpp`, one long sequential function) is called from `main.cpp`.
-  `CMakeLists.txt` has no `enable_testing()`/`add_test`.
+  GUI checks now grow in Qt Test suites (`cpp/tests/tst_*.cpp`, `ctest -R '^tst_'`); the self-test
+  only shrinks (`scripts/check-selftest-budget.sh`).
 - Emits one token per check on stderr:
   `pictura self-test: PASS|SKIP|FAIL <suite> <name> ...`, closed by
   `pictura self-test: SUMMARY passed=<n> failed=<n> skipped=<n>`.

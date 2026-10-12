@@ -23,6 +23,7 @@
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
+#include "panels/color_swatch_widget.h"
 
 namespace pictura {
 
@@ -78,18 +79,16 @@ QIcon lightGlyph(LightKind kind)
     return QIcon(pixmap);
 }
 
-void paintSwatch(QPushButton* swatch, const QColor& color)
+void paintSwatch(ColorSwatchWidget* swatch, const QColor& color)
 {
     swatch->setToolTip(color.name());
-    swatch->setStyleSheet(QStringLiteral("QPushButton { background-color: %1; border: 1px solid "
-                                         "#111; border-radius: 0; }")
-                              .arg(color.name()));
+    swatch->setColor(color);
 }
 
 QLabel* panelTab(const QString& title, QWidget* parent)
 {
     auto* tab = new QLabel(title, parent);
-    tab->setStyleSheet(QStringLiteral("font-weight: 700; padding: 3px 8px;"));
+    tab->setObjectName(QStringLiteral("sectionTabLabel"));
     return tab;
 }
 
@@ -271,10 +270,10 @@ LightingEffectsDialog::Field LightingEffectsDialog::makeField(
     return field;
 }
 
-QPushButton* LightingEffectsDialog::makeSwatch(QWidget* parent, const QString& name,
-                                               const QString& title, bool rigColor)
+ColorSwatchWidget* LightingEffectsDialog::makeSwatch(QWidget* parent, const QString& name,
+                                                     const QString& title, bool rigColor)
 {
-    auto* swatch = new QPushButton(parent);
+    auto* swatch = new ColorSwatchWidget(parent);
     swatch->setObjectName(name);
     swatch->setFixedSize(28, 16);
     swatch->setFocusPolicy(Qt::NoFocus);
@@ -309,7 +308,7 @@ QWidget* LightingEffectsDialog::buildPropertiesPanel()
     auto* glyph = new QLabel(panel);
     glyph->setPixmap(lightGlyph(LightKind::Infinite).pixmap(18, 18));
     auto* name = new QLabel(QStringLiteral("Lighting Effects"), panel);
-    name->setStyleSheet(QStringLiteral("font-weight: 700;"));
+    name->setObjectName(QStringLiteral("sectionTitle"));
     title->addWidget(glyph);
     title->addWidget(name, 1);
     layout->addLayout(title);

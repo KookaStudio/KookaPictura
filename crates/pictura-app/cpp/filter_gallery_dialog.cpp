@@ -224,8 +224,6 @@ FilterGalleryDialog::FilterGalleryDialog(PictureView* view, QWidget* parent)
     list_->setIconSize(QSize(18, 18));
     // Visibility is each row's check state, so Space toggles it and assistive
     // technology reads it; the eye icon stands in for the hidden indicator.
-    list_->setStyleSheet(
-        QStringLiteral("QListWidget#galleryEffects::indicator { width: 0px; height: 0px; }"));
     list_->viewport()->installEventFilter(this);
     connect(list_, &QListWidget::itemChanged, this, [this](QListWidgetItem* item) {
         const int index = effects_.size() - 1 - list_->row(item);

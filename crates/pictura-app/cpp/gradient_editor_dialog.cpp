@@ -1,6 +1,7 @@
 #include "gradient_editor_dialog.h"
 
 #include "color_picker_dialog.h"
+#include "panels/color_swatch_widget.h"
 #include "panels/percent_field.h"
 
 #include "pictura_app/src/cxxqt_object/image_adjust/gradient_map.cxxqt.h"
@@ -486,7 +487,7 @@ GradientEditorDialog::GradientEditorDialog(const GradientSpec& spec, const QColo
     stopsGrid->addWidget(new QLabel(QStringLiteral("Location:"), this), 0, 2);
     stopsGrid->addWidget(opacityLocation, 0, 3);
     stopsGrid->addWidget(opacityDelete, 0, 4);
-    color_ = new QToolButton(this);
+    color_ = new ColorSwatchWidget(this);
     color_->setObjectName(QStringLiteral("gradientStopColor"));
     color_->setFixedSize(60, 22);
     location_ = locationField();
@@ -556,7 +557,7 @@ GradientEditorDialog::GradientEditorDialog(const GradientSpec& spec, const QColo
         }
     });
     connect(delete_, &QPushButton::clicked, this, [this]() { bar_->removeStop(bar_->selected()); });
-    connect(color_, &QToolButton::clicked, this, [this]() {
+    connect(color_, &QPushButton::clicked, this, [this]() {
         const int index = bar_->selected();
         if (index < 0) {
             return;
@@ -599,12 +600,10 @@ void GradientEditorDialog::showSelection(int index)
     if (has) {
         const GradientColorStop& stop = bar_->stops().at(index);
         location_->setValue(qRound(stop.location * 100.0 / kMaxLocation));
-        color_->setStyleSheet(
-            QStringLiteral("QToolButton { background: %1; border: 1px solid #222; }")
-                .arg(stop.color.name()));
+        color_->setColor(stop.color);
     } else {
         location_->clear();
-        color_->setStyleSheet(QString());
+        color_->setColor(QColor());
     }
     loading_ = wasLoading;
 }

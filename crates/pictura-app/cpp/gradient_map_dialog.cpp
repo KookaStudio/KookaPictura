@@ -56,7 +56,6 @@ GradientMapDialog::GradientMapDialog(PictureView* view, const QByteArray& block,
     presets_->setPopupMode(QToolButton::InstantPopup);
     presets_->setToolTip(QStringLiteral("Click to open Gradient picker"));
     presets_->setFixedHeight(kSampleSize.height() + 8);
-    presets_->setStyleSheet(QStringLiteral("QToolButton::menu-indicator { image: none; }"));
     auto* menu = new QMenu(presets_);
     for (int i = 0; i < gradient_preset_count(); ++i) {
         QPixmap pixmap(32, 16);

@@ -4,6 +4,7 @@
 #include "image_view.h"
 
 #include "panels/adjustment_controls.h"
+#include "panels/color_swatch_widget.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
@@ -299,20 +300,17 @@ QSpinBox* AdjustmentDialog::addRampRow(QVBoxLayout* layout, const QString& label
     return spin;
 }
 
-QToolButton* AdjustmentDialog::swatch(const QString& name)
+ColorSwatchWidget* AdjustmentDialog::swatch(const QString& name)
 {
-    auto* button = new QToolButton(this);
+    auto* button = new ColorSwatchWidget(this);
     button->setObjectName(name);
     button->setFixedSize(40, 24);
     return button;
 }
 
-void AdjustmentDialog::paintSwatch(QToolButton* button, const QColor& color)
+void AdjustmentDialog::paintSwatch(ColorSwatchWidget* button, const QColor& color)
 {
-    button->setStyleSheet(QStringLiteral("QToolButton { background: %1; border: 1px solid #222; "
-                                         "border-radius: 2px; }")
-                              .arg(color.name()));
-    button->setProperty("color", color);
+    button->setColor(color);
 }
 
 QHBoxLayout* AdjustmentDialog::bottomButtons()

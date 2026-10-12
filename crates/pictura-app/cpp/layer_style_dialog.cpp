@@ -4,6 +4,7 @@
 #include "color_picker_dialog.h"
 #include "image_view.h"
 #include "panels/angle_dial.h"
+#include "panels/color_swatch_widget.h"
 
 #include <QtCore/QSignalBlocker>
 #include <QtGui/QMouseEvent>
@@ -57,10 +58,9 @@ ImageView* canvasUnder(QObject* object)
     return nullptr;
 }
 
-void paintSwatch(QPushButton* button, const QColor& color)
+void paintSwatch(ColorSwatchWidget* button, const QColor& color)
 {
-    button->setStyleSheet(
-        QStringLiteral("background-color: %1; border: 1px solid #000;").arg(color.name()));
+    button->setColor(color);
 }
 
 } // namespace
@@ -329,7 +329,7 @@ void LayerStyleDialog::bindBlendMode(QComboBox* combo, const QString& key)
     bindChoice(combo, key);
 }
 
-void LayerStyleDialog::bindColor(QPushButton* button, const QString& key)
+void LayerStyleDialog::bindColor(ColorSwatchWidget* button, const QString& key)
 {
     button->setFixedSize(40, 20);
     paintSwatch(button, unpack(value(key)));
@@ -344,7 +344,7 @@ void LayerStyleDialog::bindColor(QPushButton* button, const QString& key)
 
 QWidget* LayerStyleDialog::colorButton(const QString& key)
 {
-    auto* button = new QPushButton;
+    auto* button = new ColorSwatchWidget;
     button->setObjectName(key);
     bindColor(button, key);
     return button;

@@ -20,6 +20,7 @@
 #include "filter_preview_dialog.h"
 #include "image_view.h"
 #include "frame.h"
+#include "panels/color_swatch_widget.h"
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/filter_tools/jobs.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
@@ -704,11 +705,11 @@ void FilterMenuTest::colorParameterIsASwatch()
         {QStringLiteral("Filter"), QStringLiteral("Artistic"), QStringLiteral("Neon Glow")});
     QVERIFY(spec != nullptr);
     pictura::FilterPreviewDialog dialog(window_->activeView(), *spec);
-    auto* swatch = dialog.findChild<QPushButton*>(QStringLiteral("filterColorSwatch"));
+    auto* swatch = dialog.findChild<pictura::ColorSwatchWidget*>(QStringLiteral("filterColorSwatch"));
     QVERIFY(swatch != nullptr);
     // A box filled with the colour, as in CS6 — not the hex code as text.
     QVERIFY(swatch->text().isEmpty());
-    QVERIFY(swatch->styleSheet().contains(QStringLiteral("#0000ff")));
+    QCOMPARE(swatch->color(), QColor(0, 0, 255));
     const QList<double> values = dialog.values();
     QCOMPARE(values, (QList<double>{5.0, 15.0, 0.0, 0.0, 255.0}));
 }

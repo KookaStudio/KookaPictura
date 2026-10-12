@@ -228,7 +228,7 @@ BrushPanel::BrushPanel(QWidget* parent)
     // The rendered pixmap must not set the label's minimum width.
     preview_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
     preview_->setAlignment(Qt::AlignCenter);
-    preview_->setStyleSheet(QStringLiteral("background: #3a3a3a;"));
+    preview_->setObjectName(QStringLiteral("brushTipPreview"));
 
     layout->addWidget(presets, 0, Qt::AlignLeft);
     layout->addLayout(body, 1);

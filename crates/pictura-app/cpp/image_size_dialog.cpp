@@ -241,9 +241,9 @@ void ImageSizeDialog::buildUi()
     outer->setSpacing(14);
 
     preview_ = new QLabel(this);
+    preview_->setObjectName(QStringLiteral("imageSizePreview"));
     preview_->setFixedSize(kPreviewBox, kPreviewBox);
     preview_->setAlignment(Qt::AlignCenter);
-    preview_->setStyleSheet(QStringLiteral("background-color: #2b2b2b; border: 1px solid #555;"));
     if (view_) {
         const QImage image = view_->image();
         if (!image.isNull()) {
