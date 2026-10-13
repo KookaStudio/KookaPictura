@@ -194,11 +194,16 @@ public:
     void setChannelMask(int mask);
     int channelMask() const { return channelMask_; }
     void clearSelectionContour();
+    // A move-selection drag shifts the committed ants by the drag delta rather
+    // than retracing the translated mask; setting or clearing the contour
+    // resets it.
+    void setSelectionContourOffset(const QPointF& offset);
     void setSelectionEdgesVisible(bool on);
     bool selectionEdgesVisible() const { return selectionEdgesVisible_; }
     bool hasSelectionContourForTest() const { return !selectionContours_.isEmpty(); }
     int selectionContourLoopCountForTest() const { return selectionContours_.size(); }
     const QList<QPolygonF>& selectionContours() const { return selectionContours_; }
+    QPointF selectionContourOffsetForTest() const { return selectionContourOffset_; }
 
     // Live selection preview while a tool drags (the rubber band). Drawn with the
     // same animated marching-ants pen as a committed selection, and replaced by
@@ -580,6 +585,7 @@ private:
     QPolygonF overlayPolygon_;
 
     QList<QPolygonF> selectionContours_;
+    QPointF selectionContourOffset_;
     QList<QPolygonF> previewContours_;
     bool selectionPreviewClosed_ = true;
     bool selectionPreviewSolid_ = false;

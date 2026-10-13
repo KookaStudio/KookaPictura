@@ -733,3 +733,61 @@ fn radial_blur_commit_profile() {
         );
     }
 }
+
+#[test]
+#[ignore = "8000x6000 marquee commit/move profile; run explicitly with --ignored --nocapture"]
+fn marquee_selection_profile() {
+    use super::helpers::feathered;
+    use super::PictureViewRust;
+    use pictura_select::Selection;
+    use std::time::Instant;
+
+    let (w, h) = (8000u32, 6000u32);
+    let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers = vec![pixel_layer("Background", w, h, (30, 60, 90))];
+    doc.composite = pictura_render::composite_active(&doc, false).0;
+    let mut rust = PictureViewRust {
+        doc: Some(doc),
+        ..Default::default()
+    };
+    let r = &mut rust;
+    r.history
+        .capture_live(r.doc.as_mut().expect("document"), &None, "Open");
+
+    for (name, elliptical) in [("rect", false), ("ellipse", true)] {
+        let t = Instant::now();
+        let shape = if elliptical {
+            Selection::ellipse(w, h, 1000, 1000, 5000, 3000)
+        } else {
+            Selection::rect(w, h, 1000, 1000, 5000, 3000)
+        };
+        r.selection = Some(feathered(shape, 0.0));
+        let build = t.elapsed();
+        let t = Instant::now();
+        r.history.capture_live(
+            r.doc.as_mut().expect("document"),
+            &r.selection,
+            "Rectangular Marquee",
+        );
+        let record = t.elapsed();
+        let t = Instant::now();
+        let loops = pictura_select::contour(r.selection.as_ref().expect("selection"), 128);
+        let contour = t.elapsed();
+        let t = Instant::now();
+        let moved = r.selection.as_ref().expect("selection").translate(37, 21);
+        let translate = t.elapsed();
+        let t = Instant::now();
+        let moved_loops = pictura_select::contour(&moved, 128).len();
+        let moved_contour = t.elapsed();
+        println!(
+            "marquee_selection {name}: build={:.2}ms record={:.2}ms \
+             contour={:.2}ms ({} loops) move_translate={:.2}ms move_contour={:.2}ms ({moved_loops} loops)",
+            build.as_secs_f64() * 1000.0,
+            record.as_secs_f64() * 1000.0,
+            contour.as_secs_f64() * 1000.0,
+            loops.len(),
+            translate.as_secs_f64() * 1000.0,
+            moved_contour.as_secs_f64() * 1000.0,
+        );
+    }
+}

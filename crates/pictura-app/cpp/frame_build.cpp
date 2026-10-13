@@ -274,10 +274,6 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
     // picture view without a `changed` emission, so refresh the overlay directly.
     connect(tools_, &ToolController::selectionCommitted, this,
             &PicturaMainWindow::refreshSelectionOverlay);
-    // A live move-selection drag also stays silent, so its translated contour
-    // is refreshed from the dedicated preview signal.
-    connect(tools_, &ToolController::selectionPreviewChanged, this,
-            &PicturaMainWindow::refreshSelectionOverlay);
     // A locked pixel edit is refused silently at the bridge; report it so the
     // user learns why nothing was painted.
     connect(tools_, &ToolController::pixelEditRefused, this, [this](const QString& message) {

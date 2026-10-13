@@ -13,18 +13,20 @@ impl Selection {
         }
         let (w, h) = (self.width as i64, self.height as i64);
         let mut out = Selection::none(self.width, self.height);
+        // Destination columns whose source column is on the canvas.
+        let (x0, x1) = ((dx as i64).clamp(0, w), (w + dx as i64).clamp(0, w));
+        if x0 >= x1 {
+            return out;
+        }
         for y in 0..h {
             let sy = y - dy as i64;
             if sy < 0 || sy >= h {
                 continue;
             }
-            for x in 0..w {
-                let sx = x - dx as i64;
-                if sx < 0 || sx >= w {
-                    continue;
-                }
-                out.data[(y * w + x) as usize] = self.data[(sy * w + sx) as usize];
-            }
+            let (dst, src) = ((y * w) as usize, (sy * w) as usize);
+            let (sx0, sx1) = ((x0 - dx as i64) as usize, (x1 - dx as i64) as usize);
+            out.data[dst + x0 as usize..dst + x1 as usize]
+                .copy_from_slice(&self.data[src + sx0..src + sx1]);
         }
         out
     }

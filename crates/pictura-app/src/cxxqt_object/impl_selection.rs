@@ -458,10 +458,15 @@ impl qobject::PictureView {
                 rust.selection = Some(shape);
             } else {
                 rust.deselected_selection = None;
-                let mut base =
-                    previous.unwrap_or_else(|| Selection::none(shape.width, shape.height));
-                base.combine_with(&shape, mode);
-                rust.selection = Some(base);
+                rust.selection = Some(match previous {
+                    Some(mut base) => {
+                        base.combine_with(&shape, mode);
+                        base
+                    }
+                    // Combined into nothing, a new or added shape is itself.
+                    None if matches!(mode, CombineMode::New | CombineMode::Add) => shape,
+                    None => Selection::none(shape.width, shape.height),
+                });
             }
         }
         self.as_mut().record(label);
@@ -483,7 +488,7 @@ impl qobject::PictureView {
             let Some(doc) = rust.doc.as_ref() else {
                 return false;
             };
-            Selection::rect(doc.width, doc.height, x, y, w, h).feather(feather)
+            feathered(Selection::rect(doc.width, doc.height, x, y, w, h), feather)
         };
         let mode = combine_mode_from(&mode.to_string());
         self.as_mut().apply_selection(shape, mode)
@@ -503,7 +508,10 @@ impl qobject::PictureView {
             let Some(doc) = rust.doc.as_ref() else {
                 return false;
             };
-            Selection::ellipse(doc.width, doc.height, x, y, w, h).feather(feather)
+            feathered(
+                Selection::ellipse(doc.width, doc.height, x, y, w, h),
+                feather,
+            )
         };
         let mode = combine_mode_from(&mode.to_string());
         self.as_mut().apply_selection(shape, mode)
@@ -532,7 +540,10 @@ impl qobject::PictureView {
             if rust.pending_lasso.len() < 3 {
                 return false;
             }
-            Selection::polygon(doc.width, doc.height, &rust.pending_lasso).feather(feather)
+            feathered(
+                Selection::polygon(doc.width, doc.height, &rust.pending_lasso),
+                feather,
+            )
         };
         let mode = combine_mode_from(&self.rust().pending_lasso_mode);
         if !self.as_mut().apply_selection(shape, mode) {

@@ -1,12 +1,14 @@
-//! 50 %-coverage marching-squares outline of a selection mask.
+//! 50 %-coverage outline of a selection mask (marching ants).
 //!
-//! The overlay needs the committed edge (marching ants), not pixel data. We walk
-//! the boundary as unit edges on the integer pixel lattice and chain them into
-//! closed polylines. The drawn union of edges is the exact 4-connected outline;
-//! degree-4 saddle vertices may split a loop into more than one polyline, which
-//! is fine for drawing. Derived and view-only: never stored.
-
-use std::collections::HashMap;
+//! The overlay needs the committed edge, not pixel data. One pass reduces each
+//! row to its inside runs (an identical row reuses the previous runs), and the
+//! boundary falls out of the runs as directed edges on the integer pixel-corner
+//! lattice, with the inside always on the same side, so every vertex has as
+//! many edges leaving as entering and each walk closes. Chaining then drops
+//! collinear vertices: a rectangle is four corners. The drawn union of edges is
+//! the exact 4-connected outline; a saddle vertex may split a loop into more
+//! than one polyline, which is fine for drawing. Derived and view-only: never
+//! stored.
 
 use crate::Selection;
 
@@ -19,116 +21,147 @@ pub fn contour(selection: &Selection, threshold: u8) -> Vec<Vec<[i32; 2]>> {
     if w == 0 || h == 0 || selection.data.len() != w * h {
         return Vec::new();
     }
-    let inside = |x: i64, y: i64| -> bool {
-        x >= 0
-            && y >= 0
-            && (x as usize) < w
-            && (y as usize) < h
-            && selection.data[y as usize * w + x as usize] >= threshold
-    };
-
-    // One pass for the inside bounding box, so a small selection in a huge
-    // document never scans the whole mask twice.
-    let mut min_x = w as i64;
-    let mut min_y = h as i64;
-    let mut max_x = -1i64;
-    let mut max_y = -1i64;
-    let mut inside_count = 0usize;
-    for y in 0..h as i64 {
-        for x in 0..w as i64 {
-            if selection.data[y as usize * w + x as usize] >= threshold {
-                inside_count += 1;
-                min_x = min_x.min(x);
-                min_y = min_y.min(y);
-                max_x = max_x.max(x);
-                max_y = max_y.max(y);
-            }
-        }
-    }
-    if inside_count == 0 {
-        return Vec::new();
-    }
-    if inside_count == w * h {
-        // Select All: the outline is the document rectangle; skip the edge scan.
-        return vec![vec![
-            [0, 0],
-            [0, h as i32],
-            [w as i32, h as i32],
-            [w as i32, 0],
-        ]];
-    }
-
     let vw = w as i64 + 1;
-    let key = |x: i64, y: i64| -> i64 { y * vw + x };
-    let decode = |k: i64| -> [i32; 2] { [(k % vw) as i32, (k / vw) as i32] };
-
+    let key = |x: usize, y: usize| y as i64 * vw + x as i64;
     let mut edges: Vec<[i64; 2]> = Vec::new();
-    let mut adj: HashMap<i64, Vec<usize>> = HashMap::new();
-    {
-        let mut push_edge = |a: (i64, i64), b: (i64, i64)| {
-            let (ka, kb) = (key(a.0, a.1), key(b.0, b.1));
-            let id = edges.len();
-            edges.push([ka, kb]);
-            adj.entry(ka).or_default().push(id);
-            adj.entry(kb).or_default().push(id);
-        };
+    let mut above: Vec<(usize, usize)> = Vec::new();
+    let mut below: Vec<(usize, usize)> = Vec::new();
+    let mut full_rows = 0;
 
-        for y in min_y..=max_y {
-            for x in min_x..=max_x {
-                if !inside(x, y) {
-                    continue;
+    // Row boundary `y` separates row `y - 1` (above) from row `y` (below).
+    // Edges run with the inside on their right in pixel coordinates: left sides
+    // down, bottoms right, right sides up, tops left.
+    for y in 0..=h {
+        let row = (y < h).then(|| &selection.data[y * w..(y + 1) * w]);
+        let same = match row {
+            Some(r) => y > 0 && r == &selection.data[(y - 1) * w..y * w],
+            None => above.is_empty(),
+        };
+        if !same {
+            below.clear();
+            if let Some(r) = row {
+                inside_runs(r, threshold, &mut below);
+            }
+            for (x0, x1) in difference(&below, &above) {
+                edges.push([key(x1, y), key(x0, y)]);
+            }
+            for (x0, x1) in difference(&above, &below) {
+                edges.push([key(x0, y), key(x1, y)]);
+            }
+            std::mem::swap(&mut above, &mut below);
+        }
+        if y < h {
+            for &(x0, x1) in &above {
+                edges.push([key(x0, y), key(x0, y + 1)]);
+                edges.push([key(x1, y + 1), key(x1, y)]);
+            }
+            if above.as_slice() == [(0, w)] {
+                full_rows += 1;
+            }
+        }
+    }
+    if full_rows == h {
+        // Select All: the outline is the document rectangle.
+        let (w, h) = (w as i32, h as i32);
+        return vec![vec![[0, 0], [0, h], [w, h], [w, 0]]];
+    }
+    chain(&edges, vw)
+}
+
+/// Append the half-open `[x0, x1)` runs of `row` at or above `threshold`.
+fn inside_runs(row: &[u8], threshold: u8, out: &mut Vec<(usize, usize)>) {
+    let mut x = 0;
+    while let Some(start) = row[x..].iter().position(|&v| v >= threshold) {
+        let x0 = x + start;
+        let x1 = row[x0..]
+            .iter()
+            .position(|&v| v < threshold)
+            .map_or(row.len(), |n| x0 + n);
+        out.push((x0, x1));
+        x = x1;
+    }
+}
+
+/// The parts of the sorted, disjoint runs `a` not covered by `b`, as maximal runs.
+fn difference(a: &[(usize, usize)], b: &[(usize, usize)]) -> Vec<(usize, usize)> {
+    let mut out = Vec::new();
+    let mut j = 0;
+    for &(start, end) in a {
+        while j < b.len() && b[j].1 <= start {
+            j += 1;
+        }
+        let mut x = start;
+        let mut k = j;
+        while x < end {
+            match b.get(k) {
+                Some(&(b0, b1)) if b0 < end => {
+                    if b0 > x {
+                        out.push((x, b0));
+                    }
+                    x = x.max(b1);
+                    k += 1;
                 }
-                if !inside(x, y - 1) {
-                    push_edge((x, y), (x + 1, y));
-                }
-                if !inside(x, y + 1) {
-                    push_edge((x, y + 1), (x + 1, y + 1));
-                }
-                if !inside(x - 1, y) {
-                    push_edge((x, y), (x, y + 1));
-                }
-                if !inside(x + 1, y) {
-                    push_edge((x + 1, y), (x + 1, y + 1));
+                _ => {
+                    out.push((x, end));
+                    x = end;
                 }
             }
         }
     }
+    out
+}
 
+/// Walk the directed edges into closed loops, dropping collinear vertices.
+fn chain(edges: &[[i64; 2]], vw: i64) -> Vec<Vec<[i32; 2]>> {
+    let mut by_from: Vec<(i64, usize)> = edges.iter().enumerate().map(|(i, e)| (e[0], i)).collect();
+    by_from.sort_unstable();
     let mut used = vec![false; edges.len()];
-    let mut loops: Vec<Vec<[i32; 2]>> = Vec::new();
+    let next_from = |used: &[bool], k: i64| {
+        let start = by_from.partition_point(|&(f, _)| f < k);
+        by_from[start..]
+            .iter()
+            .take_while(|&&(f, _)| f == k)
+            .map(|&(_, e)| e)
+            .find(|&e| !used[e])
+    };
+    let decode = |k: i64| [(k % vw) as i32, (k / vw) as i32];
+
+    let mut loops = Vec::new();
     for start in 0..edges.len() {
         if used[start] {
             continue;
         }
         used[start] = true;
         let first = edges[start][0];
+        let mut poly = vec![decode(first)];
         let mut cur = edges[start][1];
-        let mut poly = vec![first, cur];
-        loop {
-            let mut next_edge = None;
-            if let Some(list) = adj.get(&cur) {
-                for &e in list {
-                    if !used[e] {
-                        next_edge = Some(e);
-                        break;
-                    }
-                }
-            }
-            let Some(e) = next_edge else {
+        while cur != first {
+            poly.push(decode(cur));
+            let Some(e) = next_from(&used, cur) else {
                 break;
             };
             used[e] = true;
-            let [p, q] = edges[e];
-            let next = if p == cur { q } else { p };
-            if next == first {
-                break;
-            }
-            cur = next;
-            poly.push(cur);
+            cur = edges[e][1];
         }
-        loops.push(poly.into_iter().map(decode).collect());
+        loops.push(drop_collinear(poly));
     }
     loops
+}
+
+/// Remove vertices whose neighbours lie on the same axis line (the loop is
+/// closed, so the first and last vertices are neighbours).
+fn drop_collinear(poly: Vec<[i32; 2]>) -> Vec<[i32; 2]> {
+    let n = poly.len();
+    if n < 3 {
+        return poly;
+    }
+    (0..n)
+        .filter(|&i| {
+            let (p, c, q) = (poly[(i + n - 1) % n], poly[i], poly[(i + 1) % n]);
+            !((p[0] == c[0] && c[0] == q[0]) || (p[1] == c[1] && c[1] == q[1]))
+        })
+        .map(|i| poly[i])
+        .collect()
 }
 
 #[cfg(test)]
@@ -203,5 +236,72 @@ mod tests {
         let loops = contour(&Selection::all(4, 5), 128);
         assert_eq!(loops.len(), 1);
         assert_eq!(loops[0], vec![[0, 0], [0, 5], [4, 5], [4, 0]]);
+    }
+
+    #[test]
+    fn rectangle_keeps_only_its_corners() {
+        let loops = contour(&filled(6, 6, 1, 1, 5, 4), 128);
+        assert_eq!(loops.len(), 1);
+        assert_eq!(loops[0].len(), 4);
+    }
+
+    /// Unit lattice edges (undirected) a set of loops draws.
+    fn drawn_unit_edges(loops: &[Vec<[i32; 2]>]) -> std::collections::BTreeSet<[[i32; 2]; 2]> {
+        let mut out = std::collections::BTreeSet::new();
+        for l in loops {
+            for i in 0..l.len() {
+                let (a, b) = (l[i], l[(i + 1) % l.len()]);
+                assert!(a[0] == b[0] || a[1] == b[1], "axis-aligned segment");
+                let (dx, dy) = ((b[0] - a[0]).signum(), (b[1] - a[1]).signum());
+                let mut p = a;
+                while p != b {
+                    let q = [p[0] + dx, p[1] + dy];
+                    out.insert(if p < q { [p, q] } else { [q, p] });
+                    p = q;
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn random_masks_trace_the_exact_pixel_boundary() {
+        let mut seed = 0x2545_f491_u32;
+        for _ in 0..40 {
+            let (w, h) = (13u32, 9u32);
+            let mut sel = Selection::none(w, h);
+            for v in sel.data.iter_mut() {
+                seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                *v = if seed >> 31 == 1 { 255 } else { 0 };
+            }
+            let inside = |x: i32, y: i32| {
+                x >= 0
+                    && y >= 0
+                    && x < w as i32
+                    && y < h as i32
+                    && sel.data[(y * w as i32 + x) as usize] >= 128
+            };
+            let mut expected = std::collections::BTreeSet::new();
+            for y in 0..h as i32 {
+                for x in 0..w as i32 {
+                    if !inside(x, y) {
+                        continue;
+                    }
+                    if !inside(x, y - 1) {
+                        expected.insert([[x, y], [x + 1, y]]);
+                    }
+                    if !inside(x, y + 1) {
+                        expected.insert([[x, y + 1], [x + 1, y + 1]]);
+                    }
+                    if !inside(x - 1, y) {
+                        expected.insert([[x, y], [x, y + 1]]);
+                    }
+                    if !inside(x + 1, y) {
+                        expected.insert([[x + 1, y], [x + 1, y + 1]]);
+                    }
+                }
+            }
+            assert_eq!(drawn_unit_edges(&contour(&sel, 128)), expected);
+        }
     }
 }
