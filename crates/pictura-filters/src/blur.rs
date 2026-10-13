@@ -6,6 +6,7 @@
 //! edge per `FILT-010`.
 
 pub mod field;
+pub mod gallery;
 pub mod iris;
 pub mod lens;
 
@@ -17,6 +18,7 @@ use rayon::prelude::*;
 
 mod shape;
 mod smart;
+pub mod tilt;
 pub use shape::{shape, shape_kernel, SHAPE_BLUR_MAX_RADIUS};
 pub use smart::{smart, SmartBlurMode};
 

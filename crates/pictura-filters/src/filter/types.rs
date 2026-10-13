@@ -5,8 +5,8 @@ use crate::{
     DisplaceMap, ExtrudeType, GlassTexture, GrainType, HalftoneType, HdrToningParams, IrisPin,
     IrisShape, LensType, LightDirection, Lighting, LiquifyMesh, MezzotintType, NoiseDistribution,
     PolarKind, Quality, RadialMethod, RippleSize, SharpenRemove, ShearFill, SmartBlurMode,
-    SpherizeMode, StrokeDirection, TextureOptions, TileFill, TonalFade, WaveType, WindMethod,
-    ZigZagStyle,
+    SpherizeMode, StrokeDirection, TextureOptions, TileFill, TiltPin, TonalFade, WaveType,
+    WindMethod, ZigZagStyle,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -74,6 +74,24 @@ pub enum Filter {
     /// passes as Field Blur.
     IrisBlur {
         pins: Vec<IrisPin>,
+        bokeh: BokehParams,
+        noise: BlurNoise,
+    },
+    /// Blur Gallery Tilt-Shift: sharp bands fading to each pin's full radius
+    /// (buffer pixels) on either side, with an optional distortion smear and
+    /// the same effects passes as Field Blur.
+    TiltShift {
+        pins: Vec<TiltPin>,
+        bokeh: BokehParams,
+        noise: BlurNoise,
+    },
+    /// The Blur Gallery with several effects on: each list's radius field as
+    /// its own kernel builds it, combined per pixel by the largest; an empty
+    /// list turns that effect off.
+    BlurGallery {
+        field: Vec<BlurPin>,
+        iris: Vec<IrisPin>,
+        tilt: Vec<TiltPin>,
         bokeh: BokehParams,
         noise: BlurNoise,
     },
@@ -575,6 +593,8 @@ pub fn filters_alpha(filter: &Filter) -> bool {
             | Filter::LensBlur { .. }
             | Filter::FieldBlur { .. }
             | Filter::IrisBlur { .. }
+            | Filter::TiltShift { .. }
+            | Filter::BlurGallery { .. }
             | Filter::Sharpen
             | Filter::SharpenMore
             | Filter::SharpenEdges

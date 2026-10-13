@@ -71,6 +71,14 @@ pub fn apply(filter: &Filter, buf: &mut PixelBuffer) -> Result<(), FilterError> 
             blur::field::field_blur(buf, pins, bokeh, noise)
         }
         Filter::IrisBlur { pins, bokeh, noise } => blur::iris::iris_blur(buf, pins, bokeh, noise),
+        Filter::TiltShift { pins, bokeh, noise } => blur::tilt::tilt_shift(buf, pins, bokeh, noise),
+        Filter::BlurGallery {
+            field,
+            iris,
+            tilt,
+            bokeh,
+            noise,
+        } => blur::gallery::blur_gallery(buf, field, iris, tilt, bokeh, noise),
         Filter::Blur => blur::simple(buf, false),
         Filter::BlurMore => blur::simple(buf, true),
         Filter::Sharpen => sharpen::sharpen(buf),

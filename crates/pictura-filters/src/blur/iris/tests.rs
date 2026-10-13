@@ -321,16 +321,26 @@ fn invalid_parameters_are_refused_without_mutation() {
 }
 
 #[test]
-fn alpha_is_untouched() {
-    let n = 64usize;
-    let mut buf = noise_picture(8, 8);
-    let alpha: Vec<u8> = (0..n).map(|i| ((i * 7) % 251) as u8).collect();
+fn alpha_blurs_outside_the_core_only() {
+    // A checkerboard alpha: the core keeps it, the exterior averages it.
+    let (w, n) = (32usize, 32 * 32);
+    let mut buf = noise_picture(32, 32);
+    let alpha: Vec<u8> = (0..n)
+        .map(|i| if (i % w + i / w) % 2 == 0 { 255 } else { 0 })
+        .collect();
     let mut data = buf.data.to_vec();
     data.extend_from_slice(&alpha);
     buf.channels = 4;
     buf.data = data.into();
-    blur(&mut buf, &[circle(0.5, 0.5, 0.2, 0.5, 20.0)]);
-    assert_eq!(&buf.data[3 * n..], &alpha[..]);
+    blur(&mut buf, &[circle(0.5, 0.5, 0.25, 0.5, 8.0)]);
+    let at = |x: usize, y: usize| buf.data[3 * n + y * w + x];
+    assert_eq!(at(16, 16), alpha[16 * w + 16], "the core's alpha changed");
+    assert_eq!(at(15, 16), alpha[16 * w + 15], "the core's alpha changed");
+    let corner = at(1, 1);
+    assert!(
+        corner > 0 && corner < 255,
+        "the exterior alpha kept its edge ({corner})"
+    );
 }
 
 #[test]

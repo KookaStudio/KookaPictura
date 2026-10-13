@@ -31,6 +31,7 @@ pub use blur::field::{
 };
 pub use blur::iris::{iris_exponent, IrisPin, MAX_IRIS_RADIUS};
 pub use blur::lens::{DepthMap, IrisShape, MAX_LENS_RADIUS};
+pub use blur::tilt::{TiltPin, MAX_TILT_EXTENT};
 pub use blur::SmartBlurMode;
 pub use distort::liquify::{
     LiquifyBrush, LiquifyMesh, LiquifySource, LiquifyTool, LIQUIFY_MAX_BRUSH,

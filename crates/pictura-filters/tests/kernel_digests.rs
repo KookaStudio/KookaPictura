@@ -4,7 +4,7 @@
 use pictura_core::PixelBuffer;
 use pictura_filters::{
     apply, BlurNoise, BlurNoiseKind, BlurPin, BokehParams, DepthMap, Filter, IrisPin, IrisShape,
-    NoiseDistribution, Quality, RadialMethod, SmartBlurMode,
+    NoiseDistribution, Quality, RadialMethod, SmartBlurMode, TiltPin,
 };
 
 /// A deterministic 4-channel picture with noise, gradients and hard edges, in
@@ -237,6 +237,115 @@ fn kernels() -> Vec<(&'static str, Filter)> {
                 },
             },
         ),
+        (
+            "tilt-shift",
+            Filter::TiltShift {
+                pins: vec![
+                    TiltPin {
+                        x: 0.45,
+                        y: 0.4,
+                        angle: 20.0,
+                        focus_above: 0.08,
+                        focus_below: 0.05,
+                        fade_above: 0.1,
+                        fade_below: 0.2,
+                        distortion: 60.0,
+                        symmetric: false,
+                        blur: 24.0,
+                    },
+                    TiltPin {
+                        x: 0.7,
+                        y: 0.85,
+                        angle: -10.0,
+                        focus_above: 0.03,
+                        focus_below: 0.03,
+                        fade_above: 0.05,
+                        fade_below: 0.05,
+                        distortion: -40.0,
+                        symmetric: true,
+                        blur: 12.0,
+                    },
+                ],
+                bokeh: BokehParams {
+                    enabled: true,
+                    light_bokeh: 30.0,
+                    bokeh_color: 50.0,
+                    light_range: (40, 200),
+                },
+                noise: BlurNoise {
+                    enabled: true,
+                    amount: 20.0,
+                    size: 40.0,
+                    roughness: 30.0,
+                    color: 25.0,
+                    highlights: 10.0,
+                    kind: BlurNoiseKind::Uniform,
+                    seed: 7,
+                },
+            },
+        ),
+        (
+            "blur gallery",
+            Filter::BlurGallery {
+                field: vec![BlurPin {
+                    x: 0.9,
+                    y: 0.1,
+                    blur: 9.0,
+                }],
+                iris: vec![IrisPin {
+                    x: 0.2,
+                    y: 0.7,
+                    radius_x: 0.15,
+                    radius_y: 0.1,
+                    angle: 10.0,
+                    squareness: 30.0,
+                    feather: 0.4,
+                    blur: 20.0,
+                }],
+                tilt: vec![
+                    TiltPin {
+                        x: 0.45,
+                        y: 0.4,
+                        angle: 20.0,
+                        focus_above: 0.08,
+                        focus_below: 0.05,
+                        fade_above: 0.1,
+                        fade_below: 0.2,
+                        distortion: 60.0,
+                        symmetric: false,
+                        blur: 24.0,
+                    },
+                    TiltPin {
+                        x: 0.7,
+                        y: 0.85,
+                        angle: -10.0,
+                        focus_above: 0.03,
+                        focus_below: 0.03,
+                        fade_above: 0.05,
+                        fade_below: 0.05,
+                        distortion: -40.0,
+                        symmetric: true,
+                        blur: 12.0,
+                    },
+                ],
+                bokeh: BokehParams {
+                    enabled: true,
+                    light_bokeh: 30.0,
+                    bokeh_color: 50.0,
+                    light_range: (40, 200),
+                },
+                noise: BlurNoise {
+                    enabled: true,
+                    amount: 20.0,
+                    size: 40.0,
+                    roughness: 30.0,
+                    color: 25.0,
+                    highlights: 10.0,
+                    kind: BlurNoiseKind::Uniform,
+                    seed: 7,
+                },
+            },
+        ),
     ]
 }
 
@@ -267,8 +376,10 @@ fn row_parallel_kernels_keep_their_serial_bytes() {
         ("radial spin", 0x4c62_de8a_06d5_6282),
         ("radial zoom", 0x356d_0a67_96e5_c3b5),
         ("lens blur", 0x954e_772d_0d08_f422),
-        ("field blur", 0x62e5_9821_9a51_6e8f),
-        ("iris blur", 0x9880_82cd_fdc2_9575),
+        ("field blur", 0x28df_9133_325d_d4e6),
+        ("iris blur", 0xc3bb_434e_14ef_8186),
+        ("tilt-shift", 0x0c98_ef52_c090_cca3),
+        ("blur gallery", 0x4ab9_0f60_c404_69f0),
     ];
     let source = picture();
     for ((name, filter), (want_name, want)) in kernels().into_iter().zip(expected) {

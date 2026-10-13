@@ -104,6 +104,11 @@ pub mod ffi {
         /// normal pixel layer in an open document).
         fn filter_target_ready(view: Pin<&mut PictureView>) -> bool;
 
+        /// Whether the active pixel layer has nothing to filter: no opaque
+        /// pixel at all, or none inside the selection. False when there is no
+        /// pixel layer (that is [`filter_target_ready`]'s refusal).
+        fn filter_target_empty(view: Pin<&mut PictureView>) -> bool;
+
         /// Whether `kind` is a filter the parameterised mapper understands.
         fn filter_kind_supported(kind: &QString) -> bool;
 
@@ -277,8 +282,8 @@ fn filter_preview(mut view: Pin<&mut PictureView>, kind: &QString, params: &QLis
 /// and sizes itself as a fraction of the buffer, Shear shifts each row by
 /// a fraction of the buffer's half-width, Displace stretches or tiles its
 /// map from the buffer's corner, Lens Blur's depth map and Liquify's mesh
-/// align to the layer's rectangle, and the Blur Gallery (Field and Iris
-/// Blur) places its pins as fractions of the buffer.
+/// align to the layer's rectangle, and the Blur Gallery (Field Blur, Iris
+/// Blur, and Tilt-Shift) places its pins as fractions of the buffer.
 pub(crate) fn filter_preview_needs_whole_layer(kind: &str) -> bool {
     matches!(
         kind,
@@ -291,6 +296,8 @@ pub(crate) fn filter_preview_needs_whole_layer(kind: &str) -> bool {
             | "lens-blur"
             | "field-blur"
             | "iris-blur"
+            | "tilt-shift"
+            | "blur-gallery"
             | "liquify"
     )
 }
@@ -370,6 +377,39 @@ fn filter_target_ready(view: Pin<&mut PictureView>) -> bool {
     let active = rust.active_layer.as_deref();
     active_layer_visible(doc, active)
         && active_pixel_layer(doc, active).is_some_and(|layer| !layer_pixel_locked(layer))
+}
+
+fn filter_target_empty(view: Pin<&mut PictureView>) -> bool {
+    let rust = view.rust();
+    let Some(doc) = rust.doc.as_ref() else {
+        return false;
+    };
+    active_pixel_layer(doc, rust.active_layer.as_deref())
+        .is_some_and(|layer| selected_area_empty(layer, rust.selection.as_ref()))
+}
+
+/// Whether `layer` has no non-transparent pixel inside `selection` (the
+/// whole layer when there is none). Layer masks do not count: a filter still
+/// writes the pixels a mask hides.
+fn selected_area_empty(layer: &Layer, selection: Option<&pictura_select::Selection>) -> bool {
+    let r = layer.rect;
+    let (w, h) = (r.width().max(0) as usize, r.height().max(0) as usize);
+    if w == 0 || h == 0 || !layer.channels.iter().any(|c| c.id == 0) {
+        return true;
+    }
+    let alpha = layer.channels.iter().find(|c| c.id == -1);
+    let opaque = |x: usize, y: usize| alpha.is_none_or(|a| a.data.get(y * w + x) != Some(&0));
+    let selected = |x: usize, y: usize| {
+        selection.is_none_or(|s| {
+            let (dx, dy) = (r.left + x as i32, r.top + y as i32);
+            dx >= 0
+                && dy >= 0
+                && (dx as u32) < s.width
+                && (dy as u32) < s.height
+                && s.data[dy as usize * s.width as usize + dx as usize] > 0
+        })
+    };
+    !(0..h).any(|y| (0..w).any(|x| opaque(x, y) && selected(x, y)))
 }
 
 fn filter_kind_supported(kind: &QString) -> bool {
@@ -860,6 +900,46 @@ fn filter_lens_blur_depth(view: &PictureView, source: i32) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_empty_layer_or_an_empty_selected_area_has_nothing_to_filter() {
+        use crate::cxxqt_object::tests::pixel_layer;
+        use pictura_select::Selection;
+
+        let mut layer = pixel_layer("layer", 4, 4, (10, 20, 30));
+        assert!(!selected_area_empty(&layer, None));
+        let mut no_alpha = layer.clone();
+        no_alpha.channels.retain(|c| c.id != -1);
+        assert!(!selected_area_empty(&no_alpha, None), "an opaque layer");
+
+        // One opaque pixel at (3, 1); the rest transparent.
+        let mut alpha = vec![0u8; 16];
+        alpha[4 + 3] = 255;
+        layer.channels.last_mut().unwrap().data = alpha.into();
+        assert!(!selected_area_empty(&layer, None));
+        let mut selection = Selection {
+            width: 4,
+            height: 4,
+            data: vec![0; 16],
+        };
+        selection.data[0] = 255;
+        assert!(
+            selected_area_empty(&layer, Some(&selection)),
+            "selection misses it"
+        );
+        selection.data[4 + 3] = 1;
+        assert!(!selected_area_empty(&layer, Some(&selection)));
+
+        layer.channels.last_mut().unwrap().data = vec![0u8; 16].into();
+        assert!(selected_area_empty(&layer, None), "fully transparent");
+        let mut sized_out = pixel_layer("new", 0, 0, (0, 0, 0));
+        assert!(
+            selected_area_empty(&sized_out, None),
+            "a zero-size new layer"
+        );
+        sized_out.channels.clear();
+        assert!(selected_area_empty(&sized_out, None));
+    }
 
     #[test]
     fn a_stack_takes_each_kinds_slots_in_turn() {

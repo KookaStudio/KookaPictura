@@ -334,6 +334,22 @@ pub fn preview_apron(filter: &Filter) -> i32 {
         Filter::MotionBlur { distance, .. } => f64::from(*distance),
         Filter::FieldBlur { pins, .. } => pins.iter().map(|pin| pin.blur).fold(0.0, f64::max),
         Filter::IrisBlur { pins, .. } => pins.iter().map(|pin| pin.blur).fold(0.0, f64::max),
+        // A full distortion smears across twice the local radius.
+        Filter::TiltShift { pins, .. } => pins
+            .iter()
+            .map(|pin| pin.blur * (1.0 + pin.distortion.abs() / 100.0))
+            .fold(0.0, f64::max),
+        Filter::BlurGallery {
+            field, iris, tilt, ..
+        } => field
+            .iter()
+            .map(|pin| pin.blur)
+            .chain(iris.iter().map(|pin| pin.blur))
+            .chain(
+                tilt.iter()
+                    .map(|pin| pin.blur * (1.0 + pin.distortion.abs() / 100.0)),
+            )
+            .fold(0.0, f64::max),
         Filter::RadialBlur { amount, .. } => *amount,
         Filter::Offset {
             horizontal,

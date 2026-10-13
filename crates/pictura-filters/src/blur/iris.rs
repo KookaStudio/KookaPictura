@@ -88,13 +88,31 @@ pub fn iris_blur(
         return Ok(());
     }
     let max_pin = pins.iter().map(|pin| pin.blur).fold(0.0f64, f64::max);
-    let (w, h) = (f64::from(buf.width), f64::from(buf.height));
-    let shapes: Vec<Shape> = pins.iter().map(|pin| Shape::new(pin, w, h)).collect();
-    variable_blur(buf, max_pin, bokeh, noise, |x, y| {
+    let field = IrisField::new(pins, f64::from(buf.width), f64::from(buf.height));
+    variable_blur(buf, max_pin, bokeh, noise, |x, y| field.radius(x, y));
+    Ok(())
+}
+
+/// A non-empty pin list resolved to buffer pixels.
+pub(super) struct IrisField {
+    shapes: Vec<Shape>,
+    w: f64,
+}
+
+impl IrisField {
+    pub(super) fn new(pins: &[IrisPin], w: f64, h: f64) -> Self {
+        let shapes = pins.iter().map(|pin| Shape::new(pin, w, h)).collect();
+        Self { shapes, w }
+    }
+
+    /// A pixel centre's radius: the product of the pins' falloffs times the
+    /// inverse-square-distance blend of their amounts.
+    pub(super) fn radius(&self, x: f64, y: f64) -> f64 {
+        let w = self.w;
         let mut falloff = 1.0;
         let mut weighted = 0.0;
         let mut weight_sum = 0.0;
-        for shape in &shapes {
+        for shape in &self.shapes {
             falloff *= shape.falloff(x, y);
             let (dx, dy) = ((x - shape.cx) / w, (y - shape.cy) / w);
             let weight = 1.0 / (dx * dx + dy * dy + PIN_EPSILON);
@@ -102,8 +120,7 @@ pub fn iris_blur(
             weight_sum += weight;
         }
         falloff * weighted / weight_sum
-    });
-    Ok(())
+    }
 }
 
 /// One pin resolved to buffer pixels.
@@ -154,7 +171,7 @@ impl Shape {
     }
 }
 
-fn validate_pins(pins: &[IrisPin]) -> Result<(), FilterError> {
+pub(super) fn validate_pins(pins: &[IrisPin]) -> Result<(), FilterError> {
     if pins.len() > MAX_FIELD_PINS {
         return Err(FilterError::InvalidParams(format!(
             "iris blur takes at most {MAX_FIELD_PINS} pins, got {}",

@@ -141,7 +141,7 @@ fn lighting(params: &[f64]) -> Option<Lighting> {
 mod arities;
 pub(super) use arities::{commit_params, filter_param_arity};
 mod gallery;
-pub(super) use gallery::{FIELD_BLUR_SLOTS, IRIS_BLUR_SLOTS};
+pub(super) use gallery::{BLUR_GALLERY_SLOTS, FIELD_BLUR_SLOTS, IRIS_BLUR_SLOTS, TILT_SHIFT_SLOTS};
 
 /// Build the filter for `kind` from an ordered parameter list.
 ///
@@ -218,6 +218,8 @@ pub(super) fn filter_from_kind_params(kind: &str, params: &[f64]) -> Option<Filt
         }
         "field-blur" => gallery::field_blur(params)?,
         "iris-blur" => gallery::iris_blur(params)?,
+        "tilt-shift" => gallery::tilt_shift(params)?,
+        "blur-gallery" => gallery::blur_gallery(params)?,
         "radial-blur" => {
             arity!(params, 3);
             Filter::RadialBlur {
