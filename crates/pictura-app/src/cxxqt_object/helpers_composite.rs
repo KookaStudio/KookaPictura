@@ -395,6 +395,53 @@ pub(super) fn layer_pixel(layer: &Layer, x: u32, y: u32) -> Option<[u8; 4]> {
     };
     Some([r, g, b, a])
 }
+
+/// The panel path of the topmost visible pixel layer covering document
+/// `(x, y)`, or `None`. A hidden or zero-opacity layer (and its subtree) is
+/// skipped, an adjustment layer has no pixels, and a pixel layer is a hit when
+/// the point falls in its rect and its own alpha there is non-zero. `group`
+/// resolves a nested hit to its top-level ancestor.
+///
+/// ponytail: layer masks, clipping, effects, and live type/shape rendering are
+/// ignored; the layer's own channel alpha decides.
+pub(super) fn auto_select_path(doc: &Document, x: i32, y: i32, group: bool) -> Option<String> {
+    fn walk(layers: &[Layer], prefix: &str, x: i32, y: i32) -> Option<String> {
+        for (i, layer) in layers.iter().enumerate().rev() {
+            if !layer.visible || layer.opacity == 0 {
+                continue;
+            }
+            let path = if prefix.is_empty() {
+                i.to_string()
+            } else {
+                format!("{prefix}/{i}")
+            };
+            if layer.is_group {
+                if let Some(hit) = walk(&layer.children, &path, x, y) {
+                    return Some(hit);
+                }
+                continue;
+            }
+            if layer.adjustment.is_some() {
+                continue;
+            }
+            let lx = x - layer.rect.left;
+            let ly = y - layer.rect.top;
+            if lx < 0 || ly < 0 {
+                continue;
+            }
+            if layer_pixel(layer, lx as u32, ly as u32).is_some_and(|px| px[3] > 0) {
+                return Some(path);
+            }
+        }
+        None
+    }
+    let hit = walk(&doc.layers, "", x, y)?;
+    Some(if group {
+        hit.split('/').next().unwrap_or(&hit).to_string()
+    } else {
+        hit
+    })
+}
 /// Panel Options "Entire Document": render a pixel layer inside a transparent
 /// `size`×`size` document square, placing its pixels at their document position
 /// (`rect.left/top`) scaled by `size / max(doc_width, doc_height)`, so a small

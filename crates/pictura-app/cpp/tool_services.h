@@ -60,6 +60,9 @@ struct ToolServices {
     virtual void refused(const QString& message) = 0;
     // A tool created the layer at `path`; the Layers panel selects it.
     virtual void notifyLayerCreated(const QString& path) = 0;
+    // The Layers panel selects the existing layer at `path` (the Move tool's
+    // Auto-Select hit).
+    virtual void selectLayer(const QString& path) = 0;
     // A Type tool started or stopped taking keystrokes.
     virtual void notifyTextEditing(bool active) = 0;
     virtual void emitSelectionCommitted() = 0;

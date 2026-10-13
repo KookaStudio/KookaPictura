@@ -534,8 +534,19 @@ void OptionsBar::addRefineEdgeButton(QHBoxLayout* layout, QWidget* page)
     button->setAutoRaise(true);
     button->setFocusPolicy(Qt::NoFocus);
     button->setToolTip(QStringLiteral("Refine Edge (Ctrl+Alt+R)"));
+    // The frame enables it when Refine Edge is available (a non-empty
+    // selection), matching the Select menu row.
+    button->setEnabled(false);
     connect(button, &QToolButton::clicked, this, &OptionsBar::refineEdgeRequested);
+    refineEdgeButtons_.push_back(button);
     layout->addWidget(button);
+}
+
+void OptionsBar::setRefineEdgeEnabled(bool enabled)
+{
+    for (QToolButton* button : refineEdgeButtons_) {
+        button->setEnabled(enabled);
+    }
 }
 
 void OptionsBar::addMagneticFields(QHBoxLayout* layout, QWidget* page)

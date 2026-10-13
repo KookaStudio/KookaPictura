@@ -263,6 +263,7 @@ public:
                                        bool hasExistingSelection) const override;
     void refused(const QString& message) override;
     void notifyLayerCreated(const QString& path) override { emit layerCreated(path); }
+    void selectLayer(const QString& path) override { emit layerSelectionRequested(path); }
     void notifyTextEditing(bool active) override { emit textEditingChanged(active); }
     void emitSelectionCommitted() override;
     void refreshAnnotations() override;
@@ -401,6 +402,8 @@ signals:
     void colorsChanged();
     // A tool created the layer at `path` (a committed type layer).
     void layerCreated(const QString& path);
+    // A tool asks the Layers panel to select the existing layer at `path`.
+    void layerSelectionRequested(const QString& path);
     // Text started or stopped being typed; the Type options bar shows Commit
     // and Cancel only while it is.
     void textEditingChanged(bool active);

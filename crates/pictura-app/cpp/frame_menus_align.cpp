@@ -4,6 +4,7 @@
 #include "frame_includes.h"
 
 #include "pictura_app/src/cxxqt_object/align.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_selection/refine.cxxqt.h"
 
 namespace pictura {
 
@@ -79,6 +80,9 @@ void PicturaMainWindow::updateAlignControls()
     const int alignTo = move ? move->get().alignTo : 0;
     optionsBar_->setAlignEnabled(view && align_can(*view, paths, alignTo == 0, alignTo),
                                  view && distribute_can(*view, paths));
+    // The selection tools' Select and Mask button mirrors the Refine Edge
+    // command's enablement, so a click is never a silent no-op.
+    optionsBar_->setRefineEdgeEnabled(view && refine_edge_available(*view));
 }
 
 } // namespace pictura

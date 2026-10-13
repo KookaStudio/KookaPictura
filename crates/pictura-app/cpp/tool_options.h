@@ -254,9 +254,10 @@ struct CloneSource {
     bool flipV = false;
 };
 
-// The Move tool options: Auto-Select 0 Group / 1 Layer, Show Transform
-// Controls, Align To 0 Selection / 1 Canvas.
+// The Move tool options: Auto-Select on/off and 0 Group / 1 Layer, Show
+// Transform Controls, Align To 0 Selection / 1 Canvas.
 struct MoveOptions {
+    bool autoSelectOn = false;
     int autoSelect = 0;
     bool showTransformControls = false;
     int alignTo = 0;

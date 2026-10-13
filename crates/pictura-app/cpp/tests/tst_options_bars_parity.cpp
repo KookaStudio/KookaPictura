@@ -34,6 +34,7 @@ private slots:
     void cleanup();
     void toolIconSeparatorOnEveryPage();
     void moveControlsAndAlignToCanvas();
+    void moveAutoSelectPicksTheTopmostLayer();
     void eraserBarMatchesTheBrush();
     void eyedropperSampleSize();
     void eyedropperSampleScope();
@@ -113,16 +114,28 @@ void OptionsBarsParityTest::moveControlsAndAlignToCanvas()
     window_->setActiveTool(pictura::ToolId::Move);
 
     auto* autoSelect = window_->findChild<QComboBox*>(QStringLiteral("optionsMoveAutoSelect"));
+    auto* autoSelectOn =
+        window_->findChild<QCheckBox*>(QStringLiteral("optionsMoveAutoSelectOn"));
     auto* transform = window_->findChild<QCheckBox*>(QStringLiteral("optionsMoveTransform"));
     auto* menuButton = window_->findChild<QToolButton*>(QStringLiteral("optionsMoveMenu"));
-    QVERIFY(autoSelect && transform && menuButton && menuButton->menu());
+    QVERIFY(autoSelect && autoSelectOn && transform && menuButton && menuButton->menu());
     QCOMPARE(autoSelect->count(), 2);
+    QVERIFY(!autoSelectOn->isChecked());
+    QVERIFY(!autoSelect->isEnabled());
+    QVERIFY2(!menuButton->icon().isNull(), "the menu button uses the ellipsis icon");
+    QVERIFY(menuButton->text().isEmpty());
     QVERIFY(menuAction(menuButton, QStringLiteral("moveMenuAlignLeft")));
     QVERIFY(menuAction(menuButton, QStringLiteral("moveMenuDistributeTop")));
     QVERIFY(menuAction(menuButton, QStringLiteral("moveMenuAlignToCanvas")));
 
+    autoSelectOn->setChecked(true);
+    QVERIFY(autoSelect->isEnabled());
+    QVERIFY(tools->optionsFor<pictura::MoveGroup>(pictura::ToolId::Move)->get().autoSelectOn);
     autoSelect->setCurrentIndex(1);
     QCOMPARE(tools->optionsFor<pictura::MoveGroup>(pictura::ToolId::Move)->get().autoSelect, 1);
+    autoSelectOn->setChecked(false);
+    QVERIFY(!autoSelect->isEnabled());
+    QVERIFY(!tools->optionsFor<pictura::MoveGroup>(pictura::ToolId::Move)->get().autoSelectOn);
     // Align To Canvas: the square's content left (8) meets the canvas left (0),
     // so the document-sized copy shifts by -8. (Before the controls box is
     // checked: showing it trims the layer to its content, like Free Transform.)
@@ -136,6 +149,50 @@ void OptionsBarsParityTest::moveControlsAndAlignToCanvas()
     transform->setChecked(true);
     QVERIFY(tools->optionsFor<pictura::MoveGroup>(pictura::ToolId::Move)->get().showTransformControls);
     transform->setChecked(false);
+}
+
+void OptionsBarsParityTest::moveAutoSelectPicksTheTopmostLayer()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("AutoSelect"), 40, 40, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::PictureView* view = window_->activeView();
+    auto* panel = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    auto* canvas = window_->imageView();
+    QVERIFY(view && panel && canvas);
+
+    // A 6x6 copy of the background over (8, 5): two stacked opaque layers now
+    // cover that point, and the copy is the topmost one.
+    view->select_rect(8, 5, 6, 6, QStringLiteral("new"), 0.0);
+    const QString copy = view->layer_via_copy(QStringLiteral("0"));
+    QVERIFY(!copy.isEmpty());
+    view->deselect();
+    QTRY_VERIFY(panel->selectRowForTest(copy));
+    view->set_active_layer(QStringLiteral("0"));
+
+    window_->setActiveTool(pictura::ToolId::Move);
+    auto* autoSelectOn =
+        window_->findChild<QCheckBox*>(QStringLiteral("optionsMoveAutoSelectOn"));
+    auto* autoSelect = window_->findChild<QComboBox*>(QStringLiteral("optionsMoveAutoSelect"));
+    QVERIFY(autoSelectOn && autoSelect);
+    autoSelect->setCurrentIndex(1); // Layer
+    autoSelectOn->setChecked(true);
+
+    // A press on the copy's pixels activates it.
+    canvas->mousePressed(QPointF(10, 8), Qt::LeftButton, 0);
+    canvas->mouseReleased(QPointF(10, 8));
+    QCOMPARE(view->active_layer_path(), copy);
+
+    // A press on the uncovered background falls back to the Background layer.
+    canvas->mousePressed(QPointF(30, 30), Qt::LeftButton, 0);
+    canvas->mouseReleased(QPointF(30, 30));
+    QCOMPARE(view->active_layer_path(), QStringLiteral("0"));
+
+    // With Auto-Select off the active layer is left alone.
+    view->set_active_layer(QStringLiteral("0"));
+    autoSelectOn->setChecked(false);
+    canvas->mousePressed(QPointF(10, 8), Qt::LeftButton, 0);
+    canvas->mouseReleased(QPointF(10, 8));
+    QCOMPARE(view->active_layer_path(), QStringLiteral("0"));
 }
 
 void OptionsBarsParityTest::eraserBarMatchesTheBrush()
