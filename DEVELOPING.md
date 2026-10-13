@@ -229,6 +229,50 @@ offscreen-compatible.
 - **Change `docs/`.** A docs change fails `scripts/guard.sh` unless the commit
   carries `TASK-ALLOWS-DOCS` (or you run with `TASK_ALLOWS_DOCS=1`).
 
+## Worktrees
+
+Work on separate issues in parallel with linked worktrees. Enable the committed
+hooks once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+This replaces the clone's default `.git/hooks` entirely — any personal hooks
+installed there stop running, and checkouts of branches that predate
+`.githooks/` run no hooks at all.
+
+Create a worktree per issue, next to the repo rather than inside it:
+
+```bash
+git worktree add ../kooka-pictura-worktrees/{issue}-{name}   # branch: type/issue-number-kebab-description, see AGENTS.md
+```
+
+The `.githooks/post-checkout` hook wires each linked worktree as it appears: it
+symlinks `reference-fixtures` to this checkout's copy and points `target` at a
+shared `../.target`, so worktrees under the same root reuse one cargo artifact
+tree instead of copying it. Treat that tree as **one builder at a time**: cargo
+serializes concurrent builds on its build-directory lock, and two worktrees
+building different branches ping-pong workspace recompiles. Per-worktree on
+purpose: `build/`, `compile_commands.json`, the `.serena` index, and cmake
+configure — configure a fresh worktree with:
+
+```bash
+cmake -S . -B build -G Ninja -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld
+cmake --build build --parallel
+```
+
+A new worktree benefits from `sccache` (see
+[Speeding up local builds](#speeding-up-local-builds)) and needs a one-time
+`serena project index` if you use Serena there. Remove a finished worktree with:
+
+```bash
+git worktree remove ../kooka-pictura-worktrees/{issue}-{name}
+```
+
+The shared `../.target` survives removal; reclaim it like any `target/` with
+`cargo clean` or `cargo sweep`.
+
 ## Speeding up local builds
 
 `sccache` is optional. To route Rust compilation through it, export the wrapper

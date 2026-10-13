@@ -73,7 +73,9 @@ if [ -n "$tracked_ref" ]; then
     echo "$tracked_ref"
     fail=1
 fi
-ref_use=$(git grep -n -e 'reference-fixtures/' -- 'crates/*' 'scripts/*' ':!scripts/guard.sh' || true)
+# check-worktree-hook.sh seeds its own throwaway copy; it does not depend on
+# the local reference-fixtures/ being present (design D7 of auto-wire-worktrees).
+ref_use=$(git grep -n -e 'reference-fixtures/' -- 'crates/*' 'scripts/*' ':!scripts/guard.sh' ':!scripts/check-worktree-hook.sh' || true)
 if [ -n "$ref_use" ]; then
     echo "FAIL: tracked code depends on reference-fixtures/ (absent in clones/CI):"
     echo "$ref_use"

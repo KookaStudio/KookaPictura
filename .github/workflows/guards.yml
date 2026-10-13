@@ -25,5 +25,7 @@ jobs:
         run: bash scripts/check-file-size.sh
       - name: Self-test budget
         run: bash scripts/check-selftest-budget.sh
+      - name: Worktree hook
+        run: bash scripts/check-worktree-hook.sh
       - name: OpenSpec validation
         run: openspec validate --all --strict
