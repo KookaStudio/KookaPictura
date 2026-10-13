@@ -101,6 +101,11 @@ void ImageView::setCanvasBackdrop(const QColor& color, bool opaque)
 
 void ImageView::setPanEnabled(bool enabled)
 {
+    // A transient Space pan owns pan state while held: a tool-state refresh that
+    // recomputes pan-enabled must not drop it mid-hold.
+    if (spacePan_ && !enabled) {
+        return;
+    }
     panEnabled_ = enabled;
     if (!enabled) {
         panning_ = false;
@@ -126,7 +131,8 @@ void ImageView::setSpacePan(bool on)
     spacePan_ = on;
     if (on) {
         setPanEnabled(true);
-        setCursor(Qt::OpenHandCursor);
+        // Keep the closed hand if a middle-button pan is already in progress.
+        setCursor(panning_ ? Qt::ClosedHandCursor : Qt::OpenHandCursor);
     } else {
         panning_ = false;
     }
@@ -822,8 +828,9 @@ void ImageView::mousePressEvent(QMouseEvent* event)
         last_ = event->position();
         setCursor(Qt::ClosedHandCursor);
         update();
-    } else if (panEnabled_ && event->button() == Qt::LeftButton
-               && (spacePan_ || !event->modifiers().testFlag(Qt::ControlModifier))) {
+    } else if (event->button() == Qt::LeftButton
+               && (spacePan_
+                   || (panEnabled_ && !event->modifiers().testFlag(Qt::ControlModifier)))) {
         // A Ctrl press goes to the controller, which pans if no guide is hit.
         beginPan(event->position());
         if (spacePan_) {
@@ -851,7 +858,10 @@ void ImageView::mouseMoveEvent(QMouseEvent* event)
         const QTransform unturn = QTransform().rotate(-rotation_);
         panBy(unturn.map(event->position() - last_));
         last_ = event->position();
-    } else {
+    } else if (!(spacePan_ && buttons == Qt::NoButton)) {
+        // While Space is held with no button down, the hover path is muted so a
+        // tool cursor update cannot clobber the hand cursor; a button-held drag
+        // still gets its moves.
         if (pressTrace_.armed && pressTrace_.firstMoveNs < 0) {
             pressTrace_.firstMoveNs = pressTrace_.clock.nsecsElapsed();
             pressTrace_.firstMoveHwMs = event->timestamp();
@@ -878,7 +888,12 @@ void ImageView::mouseReleaseEvent(QMouseEvent* event)
         }
     }
     if (event->button() == Qt::MiddleButton) {
-        unsetCursor();
+        // A Space hold keeps the hand cursor, matching the left-button path.
+        if (spacePan_) {
+            setCursor(Qt::OpenHandCursor);
+        } else {
+            unsetCursor();
+        }
     }
     emit mouseReleased(widgetToImage(event->position()));
     QWidget::mouseReleaseEvent(event);

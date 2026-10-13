@@ -247,6 +247,9 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
 PicturaMainWindow::~PicturaMainWindow()
 {
     shutdownRecovery();
+    // Detach the focus-loss Space guard before the child widgets are torn down;
+    // a child's clearFocus() emits focusChanged while tabs_ is already gone.
+    QObject::disconnect(spacePanFocusConn_);
     for (const SmartObjectEditSession& session : editSessions_) {
         delete session.temp;
     }
@@ -1113,7 +1116,7 @@ void PicturaMainWindow::keyReleaseEvent(QKeyEvent* event)
     if (hintBar_) {
         hintBar_->setPressedKey(QString());
     }
-    if (event->key() == Qt::Key_Space) {
+    if (!event->isAutoRepeat() && event->key() == Qt::Key_Space) {
         if (ImageView* canvas = imageView(); canvas && canvas->spacePanForTest()) {
             canvas->setSpacePan(false);
             canvas->setPanEnabled(tools_ && tools_->activeTool() == ToolId::Hand);

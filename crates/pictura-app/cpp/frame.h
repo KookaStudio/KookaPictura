@@ -489,6 +489,9 @@ private:
     QList<DocEntry> docs_;
     QList<SmartObjectEditSession> editSessions_;
     QTabWidget* tabs_ = nullptr;
+    // Disconnected in the destructor: the focusChanged handler must not run
+    // while the window's children are being torn down.
+    QMetaObject::Connection spacePanFocusConn_;
     FileDropRouter* fileDropRouter_ = nullptr;
     QSplitter* centerSplitter_ = nullptr;
     // The 3 px central-band frame lines (outer 2 px is the window `${panel}`).

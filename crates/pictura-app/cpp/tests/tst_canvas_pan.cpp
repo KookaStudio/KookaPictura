@@ -7,8 +7,11 @@
 #include <cmath>
 
 #include <QtGui/QImage>
+#include <QtGui/QKeyEvent>
+#include <QtGui/QMouseEvent>
 #include <QtGui/QPainter>
 #include <QtGui/QAction>
+#include <QtWidgets/QApplication>
 #include <QtWidgets/QScrollBar>
 
 #include "frame.h"
@@ -25,6 +28,14 @@
 
 namespace {
 using paint_fixture::Fixture;
+
+void sendMouse(pictura::ImageView* canvas, QEvent::Type type, const QPointF& local,
+               Qt::MouseButton button, Qt::MouseButtons buttons)
+{
+    QMouseEvent event(type, local, QPointF(canvas->mapToGlobal(local.toPoint())), button, buttons,
+                      Qt::NoModifier);
+    QApplication::sendEvent(canvas, &event);
+}
 }
 
 class CanvasPanTest : public QObject {
@@ -40,6 +51,8 @@ private slots:
     void freePanReclampsResizedDocument();
     void freePanCollapsesScrollbar();
     void freePanCommandAppliesToCanvas();
+    void spacePanOverrideHolds();
+    void spacePanHoverAndMiddleButton();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -285,6 +298,112 @@ void CanvasPanTest::freePanCommandAppliesToCanvas()
     QCoreApplication::processEvents();
     QVERIFY(action->isChecked());
     QVERIFY(f.canvas->freePan());
+}
+
+void CanvasPanTest::spacePanOverrideHolds()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(160, 160, QImage::Format_RGB32);
+    seed.fill(Qt::red);
+    Fixture f(frame, seed, QStringLiteral("pictura_canvas_space_override"));
+    QVERIFY2(f.ok(), "space-override fixture");
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&frame));
+    QCoreApplication::processEvents();
+
+    frame.setActiveTool(pictura::ToolId::Brush);
+    QCoreApplication::processEvents();
+
+    const auto sendSpace = [&frame](QEvent::Type type, bool autorep) {
+        QKeyEvent event(type, Qt::Key_Space, Qt::NoModifier, QString(), autorep);
+        QApplication::sendEvent(&frame, &event);
+    };
+
+    // Space held: the hand cursor replaces the Brush's blank cursor.
+    sendSpace(QEvent::KeyPress, false);
+    QCOMPARE(f.canvas->cursor().shape(), Qt::OpenHandCursor);
+
+    // A tool switch runs applyToolPolicy (setPanEnabled + refreshCursor) and
+    // must not clobber the override.
+    frame.setActiveTool(pictura::ToolId::Move);
+    QCoreApplication::processEvents();
+    QCOMPARE(f.canvas->cursor().shape(), Qt::OpenHandCursor);
+    QVERIFY(f.canvas->panEnabled());
+
+    // An auto-repeat release is not a physical release.
+    sendSpace(QEvent::KeyRelease, true);
+    QVERIFY(f.canvas->spacePanForTest());
+    QVERIFY(f.canvas->panEnabled());
+
+    // Press/drag pans the canvas with no tool edit.
+    const QPointF centre(f.canvas->width() / 2.0, f.canvas->height() / 2.0);
+    const QPointF base = f.canvas->offset();
+    const int history = f.view->history_count();
+    sendMouse(f.canvas, QEvent::MouseButtonPress, centre, Qt::LeftButton, Qt::LeftButton);
+    sendMouse(f.canvas, QEvent::MouseMove, centre + QPointF(40.0, 30.0), Qt::NoButton,
+              Qt::LeftButton);
+    sendMouse(f.canvas, QEvent::MouseButtonRelease, centre + QPointF(40.0, 30.0), Qt::LeftButton,
+              Qt::NoButton);
+    QVERIFY2(f.canvas->offset() != base, "the Space drag pans the canvas");
+    QCOMPARE(f.view->history_count(), history);
+
+    // Release Space: the override ends and the tool's pan state is restored.
+    sendSpace(QEvent::KeyRelease, false);
+    QVERIFY(!f.canvas->spacePanForTest());
+    QVERIFY(!f.canvas->panEnabled());
+}
+
+void CanvasPanTest::spacePanHoverAndMiddleButton()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(160, 160, QImage::Format_RGB32);
+    seed.fill(Qt::red);
+    Fixture f(frame, seed, QStringLiteral("pictura_canvas_space_middle"));
+    QVERIFY2(f.ok(), "space middle-button fixture");
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&frame));
+    QCoreApplication::processEvents();
+
+    frame.setActiveTool(pictura::ToolId::Brush);
+    QCoreApplication::processEvents();
+
+    const auto sendSpace = [&frame](QEvent::Type type, bool autorep) {
+        QKeyEvent event(type, Qt::Key_Space, Qt::NoModifier, QString(), autorep);
+        QApplication::sendEvent(&frame, &event);
+    };
+    const QPointF centre(f.canvas->width() / 2.0, f.canvas->height() / 2.0);
+
+    // Space held: hand cursor. A hover with no button must not clobber it.
+    sendSpace(QEvent::KeyPress, false);
+    QCOMPARE(f.canvas->cursor().shape(), Qt::OpenHandCursor);
+    sendMouse(f.canvas, QEvent::MouseMove, centre + QPointF(20.0, 10.0), Qt::NoButton,
+              Qt::NoButton);
+    QCOMPARE(f.canvas->cursor().shape(), Qt::OpenHandCursor);
+
+    // Space + middle-button pan: closed hand while dragging, hand on release
+    // (not the default arrow).
+    sendMouse(f.canvas, QEvent::MouseButtonPress, centre, Qt::MiddleButton, Qt::MiddleButton);
+    QCOMPARE(f.canvas->cursor().shape(), Qt::ClosedHandCursor);
+    sendMouse(f.canvas, QEvent::MouseMove, centre + QPointF(30.0, 20.0), Qt::NoButton,
+              Qt::MiddleButton);
+    sendMouse(f.canvas, QEvent::MouseButtonRelease, centre + QPointF(30.0, 20.0),
+              Qt::MiddleButton, Qt::NoButton);
+    QCOMPARE(f.canvas->cursor().shape(), Qt::OpenHandCursor);
+
+    // Releasing Space restores the Brush's blank cursor.
+    sendSpace(QEvent::KeyRelease, false);
+    QVERIFY(!f.canvas->spacePanForTest());
+    QCOMPARE(f.canvas->cursor().shape(), Qt::BlankCursor);
+
+    // Space pressed mid middle-drag keeps the closed hand.
+    sendMouse(f.canvas, QEvent::MouseButtonPress, centre, Qt::MiddleButton, Qt::MiddleButton);
+    QCOMPARE(f.canvas->cursor().shape(), Qt::ClosedHandCursor);
+    sendSpace(QEvent::KeyPress, false);
+    QCOMPARE(f.canvas->cursor().shape(), Qt::ClosedHandCursor);
+    sendMouse(f.canvas, QEvent::MouseButtonRelease, centre, Qt::MiddleButton, Qt::NoButton);
+    QCOMPARE(f.canvas->cursor().shape(), Qt::OpenHandCursor);
+    sendSpace(QEvent::KeyRelease, false);
+    QVERIFY(!f.canvas->spacePanForTest());
 }
 
 QTEST_MAIN(CanvasPanTest)
