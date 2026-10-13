@@ -940,9 +940,6 @@ crs:Exposure2012=\"+0.50\"/></rdf:RDF></x:xmpmeta>";
             Some(&DescValue::Long(-30))
         );
         assert_eq!(get_object_item(&items, b"Vibr"), Some(&DescValue::Long(13)));
-        assert_eq!(
-            get_object_item(&items, b"Dhze"),
-            Some(&DescValue::Long(-14))
-        );
+        assert_eq!(get_object_item(&items, b"Dhze"), Some(&DescValue::Long(14)));
     }
 }

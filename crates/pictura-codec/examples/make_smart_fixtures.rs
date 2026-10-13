@@ -91,7 +91,6 @@ fn camera_raw_options() -> Vec<u8> {
             vibrance: Some(13.0),
             saturation: Some(-12.0),
         },
-        legacy_blacks: Some(-14),
         mode: RawMode {
             module: Some("Filter\0".into()),
             white_balance: Some(*b"Cst "),
@@ -156,12 +155,6 @@ fn camera_raw_options() -> Vec<u8> {
                 Some(18),
                 Some(18),
             ],
-            legacy_red_hue: Some(-13),
-            legacy_red_saturation: Some(-17),
-            legacy_green_hue: Some(-13),
-            legacy_green_saturation: Some(-15),
-            legacy_blue_hue: Some(-13),
-            legacy_blue_saturation: Some(-17),
             grayscale_mix: [
                 Some(-10),
                 Some(-19),
@@ -204,6 +197,7 @@ fn camera_raw_options() -> Vec<u8> {
             grain_amount: Some(9),
             grain_size: Some(6),
             grain_frequency: Some(13),
+            dehaze: Some(14),
             vignette_amount: Some(-12),
             vignette_midpoint: Some(43),
             vignette_feather: Some(45),
@@ -214,12 +208,18 @@ fn camera_raw_options() -> Vec<u8> {
         calibration: CameraCalibration {
             camera_profile: Some("Embedded\0".into()),
             profile_digest: Some("0123456789ABCDEF\0".into()),
+            red_hue: Some(-13),
+            red_saturation: Some(-17),
+            green_hue: Some(-13),
+            green_saturation: Some(-15),
+            blue_hue: Some(-13),
+            blue_saturation: Some(-17),
+            shadow_tint: Some(-7),
         },
     };
     let mut fltr = encode_pictura_raw_fltr(&settings);
     if let pictura_codec::DescValue::Object { items, .. } = &mut fltr {
-        let unmodeled: [(&[u8], pictura_codec::DescValue); 8] = [
-            (b"Dhze", pictura_codec::DescValue::Long(-14)),
+        let unmodeled: [(&[u8], pictura_codec::DescValue); 7] = [
             (b"AuCA", pictura_codec::DescValue::Long(0)),
             (b"TMMs", pictura_codec::DescValue::Long(0)),
             (b"LCs ", pictura_codec::DescValue::Text("\0".into())),

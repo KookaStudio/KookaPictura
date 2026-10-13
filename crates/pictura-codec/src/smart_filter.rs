@@ -390,10 +390,7 @@ mod tests {
             get_object_item(&items, b"Ex12"),
             Some(&DescValue::Double(2.5))
         );
-        assert_eq!(
-            get_object_item(&items, b"Dhze"),
-            Some(&DescValue::Long(-14))
-        );
+        assert_eq!(get_object_item(&items, b"Dhze"), Some(&DescValue::Long(14)));
         assert_eq!(
             get_object_item(&items, b"Temp"),
             Some(&DescValue::Long(-30))
@@ -589,7 +586,7 @@ mod tests {
             items: vec![
                 (b"Keep".to_vec(), DescValue::Long(7)),
                 (b"Ex12".to_vec(), DescValue::Double(-1.15)),
-                (b"Dhze".to_vec(), DescValue::Long(-14)),
+                (b"Upri".to_vec(), DescValue::Text("keep".to_string())),
             ],
         };
         let mut parsed =
@@ -610,8 +607,8 @@ mod tests {
         );
         assert_eq!(get_object_item(&items, b"Keep"), Some(&DescValue::Long(7)));
         assert_eq!(
-            get_object_item(&items, b"Dhze"),
-            Some(&DescValue::Long(-14))
+            get_object_item(&items, b"Upri"),
+            Some(&DescValue::Text("keep".to_string()))
         );
     }
 

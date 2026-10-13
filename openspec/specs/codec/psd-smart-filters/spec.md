@@ -29,8 +29,8 @@ descriptor named `Fltr`, and SHALL re-emit it on write. The settings model SHALL
 target the earliest CC Camera Raw Filter (Photoshop CC v14, ACR 8, process
 version PV2012), and `Fltr` keys SHALL be read with the mapping recorded in
 `docs/dev/camera-raw-cc-notes.md`. Keys the system does not model, including the
-later-CC `Dhze`, `Upri`, `GuUr`, `Rtch`, `REye`, and `LCs ` keys, SHALL be
-preserved unchanged.
+later-CC `Upri`, `GuUr`, `Rtch`, `REye`, and `LCs ` keys, SHALL be
+preserved unchanged. Dehaze (`Dhze`) SHALL be modeled rather than preserved.
 
 #### Scenario: Settings exposed
 - **WHEN** a layer carries a Pictura Raw filter with a `Fltr` descriptor
@@ -89,7 +89,7 @@ The codec SHALL expose a generic operation that attaches a single `SmartFilter` 
 #### Scenario: Re-attaching over a modelled filter keeps unmodeled keys
 
 - **WHEN** a filter whose `filterID` already has an entry is attached again over a preserved descriptor
-- **THEN** the entry is not duplicated, the new `Fltr` keys win, and unmodeled keys such as `Dhze` and the entry's `blendOptions` survive
+- **THEN** the entry is not duplicated, the new `Fltr` keys win, and unmodeled keys such as `Upri` and the entry's `blendOptions` survive
 
 #### Scenario: Attaching to an embedded object without a preserved block
 
@@ -98,8 +98,8 @@ The codec SHALL expose a generic operation that attaches a single `SmartFilter` 
 
 #### Scenario: Non-smart or legacy layers are refused
 
-- **WHEN** the layer has no smart object, or is a legacy placed-layer object
-- **THEN** the operation returns an error and does not mutate the layer
+- **WHEN** the target has no smart object or is a non-embedded/legacy placed object
+- **THEN** the attach is refused and the layer is unchanged
 
 ### Requirement: Smart-filter list editing on the preserved descriptor
 
