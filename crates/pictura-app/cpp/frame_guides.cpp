@@ -15,6 +15,7 @@ namespace pictura {
 void PicturaMainWindow::loadGuideSession(const SessionState& state)
 {
     rulersVisible_ = state.rulersVisible;
+    freePan_ = state.freePan;
     if (state.rulerUnit >= 0 && state.rulerUnit < kRulerUnitCount) {
         rulerUnit_ = RulerUnit(state.rulerUnit);
     }

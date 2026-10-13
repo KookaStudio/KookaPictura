@@ -39,6 +39,8 @@ struct SessionState {
     bool traditionalPoints = false;  // Units & Rulers: 72.27 rather than 72 pt/in
     bool guidesVisible = true;
     bool guidesLocked = false;
+    // View > Free Pan: free (default) vs the Photoshop-style constrained pan.
+    bool freePan = true;
     QString guideColor = QStringLiteral("#4affff");
     bool guideDashed = false;
     // Crop options bar, persisted across restarts.

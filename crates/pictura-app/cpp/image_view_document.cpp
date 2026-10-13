@@ -27,6 +27,11 @@ void ImageView::replaceImage(const QImage& image)
     docSize_ = image.size();
     ++frameKey_;
     presentCache_.valid = false;
+    // An empty image is the first half of a document-size replacement; leave the
+    // offset for replaceDocument to clamp once the new size is known.
+    if (!docSize_.isEmpty()) {
+        clampOffset();
+    }
     update();
 }
 
@@ -44,6 +49,9 @@ void ImageView::replaceDocument(const QSize& size)
 {
     replaceImage(QImage());
     docSize_ = size;
+    clampOffset();
+    update();
+    emit viewChanged();
 }
 
 bool ImageView::smoothSamplingForZoom(double zoom)
@@ -187,7 +195,7 @@ void ImageView::clampOffset()
         return;
     }
     const OffsetRange range = offsetRangeFor(
-        QSizeF(docSize_.width(), docSize_.height()), zoom_, QSizeF(width(), height()));
+        QSizeF(docSize_.width(), docSize_.height()), zoom_, QSizeF(width(), height()), freePan_);
     offset_.setX(std::clamp(offset_.x(), range.minX, range.maxX));
     offset_.setY(std::clamp(offset_.y(), range.minY, range.maxY));
 }
