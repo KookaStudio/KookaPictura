@@ -468,6 +468,44 @@ Snapshot for resuming after a context break. Update after each milestone.
   `TASK_ALLOWS_DOCS=1 bash scripts/verify-fast.sh` passes; `openspec validate
   --all --strict` 239/239; the unified report is 4052 passed · 22 skipped ·
   0 failed (nextest 3004/0/21, Qt 538).
+- **Tilt-Shift** (change `tilt-shift-gallery`, issue #342): the Blur
+  Gallery's third CS6 effect. `pictura-filters::blur::tilt` (`TiltPin { x, y,
+  angle, focus_above, focus_below, fade_above, fade_below, distortion,
+  symmetric, blur }`, `tilt_shift`, `MAX_TILT_EXTENT` 10): a band through each
+  pin, extents in buffer heights per side (centre → solid → dashed line),
+  sharp / smoothstep fade / full blur; pins combine as Iris. Distortion
+  (−100..100) smears the zone below the band (both when symmetric) radially or
+  tangentially between the pyramid and the effects passes — `variable_blur`
+  split into `pyramid_blur` + `apply_effects` with the Field/Iris digests
+  unchanged. The `tilt-shift` kind is `count`, 10 slots per pin, the 13-slot
+  tail (24 canonical). `BlurGalleryCanvas` takes a `BlurGalleryMode`; the
+  Tilt-Shift mode draws solid/dashed lines and rotation dots, and the row
+  carries Blur, Distortion, Symmetric Distortion. Every Blur / Blur Gallery
+  command now refuses an empty target (`filter_target_empty`) with a
+  "Could not complete the … command because …" error before any dialog, on
+  the menu, Last Filter, and Last Filter Settings paths. Tests: tilt engine
+  units, a digest, a no-equivalent oracle row, mapping and empty-target Rust
+  tests, `tst_filter_menu`, and the new `tst_tilt_shift` suite. Ceilings: the
+  falloff, combine, and smear are inferred; one effect per workspace; no `M`
+  mask view. The gallery canvas shows resize/rotate cursors over the
+  Tilt-Shift lines and dots, and every gallery mode previews a ≤ 360 px draft
+  while a pin, handle, line, or amount slider is dragged (~26 ms vs ~213 ms
+  for the 1100 px proxy at Blur 176), the full proxy on release. The gallery
+  preview now filters only the active layer over the document with it hidden
+  (`filter_proxy_base` + `filter_proxy_layer`), and the gallery pyramid and
+  smear blur the alpha plane (they had stopped at three planes since the
+  fourth-plane alpha refactor, so layer edges never feathered); the Field,
+  Iris, and Tilt-Shift kernel digests changed for that (alpha bytes only).
+  The Blur Tools rows are now selectable (name), checkable, and expandable
+  (arrow); each effect keeps its own pins and the ones switched on combine
+  in `blur::gallery` (`Filter::BlurGallery`, per-pixel max of the effect
+  fields, one effect byte-identical to its own kernel). OK commits the one
+  effect's own kind, or `blur-gallery` ("Filter: Blur Gallery", reopened by
+  Last Filter Settings) for several. `LightRangeSlider` moved to
+  `blur_gallery_light_range.h`. Verified: `TASK_ALLOWS_DOCS=1 bash
+  scripts/verify-fast.sh` passes; `openspec validate --all --strict`
+  248/248; the unified report is 4126 passed · 22 skipped · 0 failed
+  (nextest 3026/0/21, app self-test 510, Qt 590).
 - **Design system** (change `ui-design-system`, issue #249): the theme's token
   table is now a public contract. `Theme::tokens(level)` returns every colour
   (including the derived shades) and the shared metrics (panel/chrome border,

@@ -1,8 +1,9 @@
 # Blur Gallery (Photographic Blur Gallery)
 
 - **Spec ID:** `FILT-092`
-- **Status:** `Partial` — Field Blur, Iris Blur, and the shared workspace are
-  implemented (see `## Implementation status`); Tilt-Shift is not.
+- **Status:** `Partial` — Field Blur, Iris Blur, Tilt-Shift, combining them,
+  and the shared workspace are implemented (see `## Implementation status`);
+  the `M` mask view is not.
 - **Parity tier:** `Core` — the Blur Gallery shipped in CS6 Standard and Extended. **GPU/OpenCL-gated**: the three CS6 effects are OpenCL-accelerated and the Help's GPU FAQ ties them to an OpenCL-capable card.
 - **New in CS6:** `Yes` — CS6 introduces the **Blur Gallery** workspace with **Field Blur, Iris Blur, and Tilt-Shift** and a **Blur Effects** panel (Light Bokeh, Bokeh Color, Light Range). CS6's own Help and launch videos describe a **three-effect** gallery. **Path Blur, Spin Blur, Motion Blur Effects, Noise, and Edge Glow are post-CS6 (CC) additions** — see the clearly-marked subsection under `## CS6 behavior`. Smart-filter support is also CC-only.
 - **Depends on:** `FILT-001` filters-overview, `FILT-010` blur-filters (shares the blur-kernel vocabulary), `ARCH-006` gpu-rendering-pipeline, `ARCH-003` qt6-ui-design, `ARCH-007` color-management, `ARCH-009` undo-history, `LAY-021` smart-filters, `LAY-020` smart-objects, `IMG-005` bit-depth-and-conversion.
@@ -16,8 +17,8 @@
 
 ## Implementation status
 
-Field Blur, Iris Blur, their Blur Effects, and the shared Blur Gallery
-workspace are implemented; Tilt-Shift, Path Blur, and Spin Blur are not. The
+Field Blur, Iris Blur, Tilt-Shift, their Blur Effects, and the shared Blur
+Gallery workspace are implemented; Path Blur and Spin Blur are not. The
 Noise tab is a post-CS6 addition ported on the owner's request.
 
 - **Engine.** `pictura_filters::blur::field` (`BlurPin { x, y, blur }`,
@@ -47,13 +48,28 @@ Noise tab is a post-CS6 addition ported on the owner's request.
   inverse-square-distance blend of the pin amounts. The radius field drives
   Field Blur's pyramid and effects passes unchanged. The falloff curve, the
   squareness map, and the multi-pin combine are inferred.
+- **Tilt-Shift engine.** `pictura_filters::blur::tilt` (`TiltPin { x, y,
+  angle, focus_above, focus_below, fade_above, fade_below, distortion,
+  symmetric, blur }`, `tilt_shift`, `MAX_TILT_EXTENT = 10`): each pin is a
+  band through its centre at `angle`; the four extents are fractions of the
+  buffer height measured across the band (centre line → solid line → dashed
+  line, each side separately). The falloff is 0 within the focus extent, a
+  smoothstep across the fade, and 1 beyond — the Help's A/B/C sharp, fade,
+  and blur areas. Pins multiply falloffs and blend amounts as Iris does.
+  **Distortion** (−100..100 %) smears the blurred zone below the band (both
+  zones with **Symmetric Distortion**) along the radius from the pin when
+  positive and around it when negative, over up to twice the local radius
+  (at most 33 bilinear taps), between the pyramid and the effects passes
+  (`variable_blur` is now `pyramid_blur` + `apply_effects`, byte-identical
+  for Field and Iris). The falloff, the combine, and the smear model are
+  inferred.
 - **App.** `Filter ▸ Blur Gallery ▸ Field Blur…` opens `BlurGalleryDialog`
   (with `BlurGalleryCanvas`): a document proxy with draggable circle pins
   (click adds, drag moves, the selected pin's ring changes its amount, each
   ring's white arc shows the blur amount — full at 100 px, Delete removes,
   `H` hides the UI), the Blur Tools panel with the selected pin's
-  Blur (`0..=500 px`) and disabled Iris Blur / Tilt-Shift / Path Blur /
-  Spin Blur rows, an Effects / Motion Effects / Noise tabbed panel (Bokeh
+  Blur (`0..=500 px`), the other effects' rows (see **Combined effects**),
+  disabled Path Blur / Spin Blur rows, an Effects / Motion Effects / Noise tabbed panel (Bokeh
   with Light Bokeh, Bokeh Color, and the two-handle Light Range; Noise with
   the Gaussian/Uniform/Grain picker, Amount, Size, Roughness, Color,
   Highlights), Preview / Cancel / OK, and one history state on commit. The
@@ -64,8 +80,8 @@ Noise tab is a post-CS6 addition ported on the owner's request.
   Last Filter Settings reuse the pin list. The `field-blur` kind takes
   `[count, x, y, blur, …, bokeh …, noise …]`.
   `Filter ▸ Blur Gallery ▸ Iris Blur…` opens the same workspace in Iris
-  mode: the Iris Blur row is active (Blur `0..=500 px`, default 15) and the
-  others are disabled; the selected pin draws its outline with four radius
+  mode: the Iris Blur row is on and selected (Blur `0..=500 px`, default
+  15); the selected pin draws its outline with four radius
   handles (drag to resize that semi-axis and turn the outline), four
   feather dots (drag to set the sharp core), and the roundness diamond (drag
   to square the outline). The default iris is centred, 0.35 of the width
@@ -73,12 +89,53 @@ Noise tab is a post-CS6 addition ported on the owner's request.
   pin copies the selected one's outline and amount. The `iris-blur` kind
   takes `[count, x, y, radius x, radius y, angle, squareness, feather, blur,
   …, bokeh …, noise …]`.
-- **Ceilings.** The workspace runs one effect at a time (Field and Iris do
-  not combine); an Iris feather dot moves all four together (no Alt-drag of
+  `Filter ▸ Blur Gallery ▸ Tilt-Shift…` opens the workspace in Tilt-Shift
+  mode: the Tilt-Shift row is active with Blur (`0..=500 px`, default 15),
+  Distortion (`−100..=100 %`, default 0), and Symmetric Distortion; the
+  selected pin draws its two solid focus lines and two dashed fade lines
+  across the picture and a rotation dot on each solid line (drag a solid
+  line to set that side's sharp area — its dashed line stays put until
+  pushed; drag a dashed line to set the fade; drag a dot to turn the band).
+  Hovering a line shows a resize arrow across the band and a dot the rotate
+  arrow. While a pin, handle, line, or amount slider is dragged the preview
+  renders a ≤ 360 px draft (~26 ms vs ~213 ms for the 1100 px proxy at Blur
+  176) and the full proxy on release, in every gallery mode. The preview
+  filters only the active layer and draws it over the document with that
+  layer hidden, so lower layers never blur with it; the blur (and the
+  distortion smear) runs over the layer's alpha too, so its edges feather
+  into transparency as in Photoshop, while bokeh and noise stay
+  colour-only.
+  The default band is horizontal through the centre, focus 0.1 and fade
+  0.15 of the picture's height each way (read off the owner's screenshots;
+  unverified). The `tilt-shift` kind takes `[count, x, y, angle, focus
+  above, focus below, fade above, fade below, distortion, symmetric, blur,
+  …, bokeh …, noise …]`.
+- **Empty target.** Every Blur Gallery command refuses an active layer with
+  no non-transparent pixel inside the selection (or at all) before the
+  workspace opens, with "Could not complete the `<command>` command because
+  the initial bounding rectangle is empty." (the owner's Photoshop
+  screenshot) and no history state; the Blur family shares the rule
+  (`FILT-010`).
+- **Combined effects.** Every implemented Blur Tools row is selectable: its
+  name selects the effect (switching it on with its default pin, expanding
+  it, bold while selected, the canvas editing its pins), its checkbox
+  switches it on or off (pins kept), its arrow only expands. Each effect
+  keeps its own pins. Several effects on blur together in one pass —
+  `pictura_filters::blur::gallery` (`Filter::BlurGallery { field, iris,
+  tilt, bokeh, noise }`) takes each pixel's largest radius of the per-effect
+  fields (inferred; Adobe's combine is closed), then Tilt-Shift's smear and
+  the effects; one effect alone is byte-identical to its own kernel. OK
+  commits the one effect's own kind and label, or the `blur-gallery` kind
+  ("Filter: Blur Gallery", `[field count, records…, iris count, records…,
+  tilt count, records…, bokeh …, noise …]`) for several, which Last Filter
+  and Last Filter Settings reuse; nothing on commits nothing.
+- **Ceilings.** The canvas shows only the selected effect's pins; the distortion is a line-sampled smear, not
+  Adobe's shader; an Iris feather dot moves all four together (no Alt-drag of
   one); the `M` mask view is not shipped; the Motion Effects tab only
-  states that Path/Spin motion effects are unimplemented; pins are fractions
-  of the document proxy while the commit filters the active layer, so a layer
-  that does not cover the document previews approximately; no GPU path; Path
+  states that Path/Spin motion effects are unimplemented; pins are drawn
+  as fractions of the document while the preview and the commit place them
+  as fractions of the active layer's bounds, so on a layer that does not
+  cover the document the overlay sits off the effect it controls; no GPU path; Path
   Blur and Spin Blur stay post-CS6 non-goals.
 
 ## CS6 behavior
@@ -102,7 +159,7 @@ Simulates a **shallow depth-of-field** independent of camera/lens. The default p
 
 ### Tilt-Shift (CS6)
 
-Simulates a **tilt-shift lens**: a band of sharpness then a fade to blur at the edges, used for a "miniature" look. Areas are **A. sharp, B. fade, C. blur**. Drag the lines to move them, drag the handles to rotate; multiple pins are allowed.
+Simulates a **tilt-shift lens**: a band of sharpness then a fade to blur at the edges, used for a "miniature" look. Areas are **A. sharp, B. fade, C. blur**. Drag the lines to move them, drag the handles to rotate; multiple pins are allowed. The Blur Tools panel carries **Blur** (px), **Distortion** (%; shapes the blur in the bottom blur zone), and **Symmetric Distortion** (applies the distortion from both directions) *(owner's screenshots of a later Photoshop; unverified against CS6)*.
 
 ### Blur Effects panel (CS6 — only these three)
 
@@ -154,6 +211,8 @@ CS6 Help does **not** publish numeric ranges for the CS6 controls; the entries b
 | Iris Blur | Ellipse rotation | float ° | *(unverified)* | 0–360 | Yes |
 | Tilt-Shift | Band position / width | interactive | default band | sharp / fade / blur regions | Yes |
 | Tilt-Shift | Band angle | float ° | *(unverified)* | 0–360 | Yes |
+| Tilt-Shift | Distortion | int % | 0 *(screenshot)* | −100–100 *(screenshot)* | Yes |
+| Tilt-Shift | Symmetric Distortion | bool | off *(screenshot)* | on / off | Yes |
 | All | Light Bokeh | int % | *(unverified)* | *(unverified; ~0–100)* | Yes |
 | All | Bokeh Color | int % | *(unverified)* | *(unverified; ~0–100)* | Yes |
 | All | Light Range | int | *(unverified)* | *(unverified; tonal range ~0–255)* | Yes |
@@ -239,6 +298,7 @@ Rationale: on-image editing with many hit-testable handles and a live GPU previe
 - **Modes** — Bitmap/Indexed excluded; whether the gallery is RGB-only is unstated.
 - **Pins outside the image** — Field Blur explicitly allows this to blur corners; the weight field must handle it.
 - **Zero pins / deleted all pins** — treat as a no-op or re-seed one pin; do not crash.
+- **Empty target** — an active layer with nothing opaque in the selection (a new empty layer) refuses with "Could not complete the `<command>` command because the initial bounding rectangle is empty." (owner's Photoshop screenshot) before the workspace opens; no history state.
 - **Multiple pins** — Field combines all; Iris/Tilt-Shift compose multiple focus regions; the combine order must be deterministic.
 - **Huge (PSB) documents** — full-size live preview is memory-heavy; use a downscaled preview while editing and render at full resolution on commit.
 - **Selection** — confine processing to the selection (plus apron for the blur kernel).
