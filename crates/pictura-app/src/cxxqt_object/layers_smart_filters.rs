@@ -324,7 +324,10 @@ mod tests {
         assert!(pictura_render::convert_to_smart_object(&mut doc, "0"));
         let layer = pictura_render::resolve_path_mut(&mut doc, "0").expect("layer");
         let settings = pictura_core::PicturaRawSettings {
-            exposure: Some(1.0),
+            basic: pictura_core::CrsSettings {
+                exposure: Some(1.0),
+                ..Default::default()
+            },
             ..Default::default()
         };
         pictura_codec::attach_pictura_raw_filter(layer, &settings).expect("attach filter");

@@ -12,6 +12,7 @@ mod guides;
 pub mod nonseparable;
 pub mod path;
 mod plane;
+mod raw_settings;
 mod samples;
 pub mod shape;
 mod text_render;
@@ -23,9 +24,13 @@ pub use annotations::{
     COUNT_LABEL_SIZE_MIN, COUNT_MARKER_SIZE_MAX, COUNT_MARKER_SIZE_MIN, DEFAULT_COUNT_COLOR,
     MAX_COLOR_SAMPLERS,
 };
-pub use crs::{CrsSettings, PicturaRawSettings};
+pub use crs::CrsSettings;
 pub use guides::{guide_near, Guide, GuideOrientation};
 pub use plane::{fresh_stamp, Plane};
+pub use raw_settings::{
+    CameraCalibration, Detail, Effects, Hsl, Lens, PicturaRawSettings, RawMode, SplitToning,
+    ToneCurve, HSL_RANGES,
+};
 pub use samples::{Sample, Samples};
 pub use text_render::{
     layout_lines, FontPolicy, GlyphMask, LayoutLine, LayoutParams, PlacedGlyph, RasterRequest,

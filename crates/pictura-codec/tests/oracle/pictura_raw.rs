@@ -1,6 +1,6 @@
 use super::*;
 use pictura_codec::attach_pictura_raw_filter;
-use pictura_core::PicturaRawSettings;
+use pictura_core::{CrsSettings, PicturaRawSettings};
 
 /// A 4x4 RGB document with one authored embedded smart-object layer: no
 /// preserved `SoLd`, so the writer authors the descriptor from the typed object.
@@ -73,9 +73,12 @@ fn psd_tools_reads_the_authored_pictura_raw_filter() {
     }
     let mut doc = authoring_smart_doc();
     let settings = PicturaRawSettings {
-        temperature: Some(20.0),
-        exposure: Some(0.75),
-        clarity: Some(-12.0),
+        basic: CrsSettings {
+            temperature: Some(20.0),
+            exposure: Some(0.75),
+            clarity: Some(-12.0),
+            ..Default::default()
+        },
         ..Default::default()
     };
     assert!(attach_pictura_raw_filter(&mut doc.layers[0], &settings).is_ok());

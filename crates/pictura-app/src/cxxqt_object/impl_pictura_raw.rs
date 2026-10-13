@@ -11,7 +11,7 @@ use super::qobject;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
-use pictura_core::PicturaRawSettings;
+use pictura_core::{CrsSettings, PicturaRawSettings};
 
 impl qobject::PictureView {
     /// The Pictura Raw Basic settings attached to `path`, as 11 space-separated
@@ -35,19 +35,20 @@ impl qobject::PictureView {
             return QString::default();
         };
         let v = |value: Option<f64>| value.unwrap_or(0.0);
+        let b = &settings.basic;
         QString::from(format!(
             "{} {} {} {} {} {} {} {} {} {} {}",
-            v(settings.temperature),
-            v(settings.tint),
-            v(settings.exposure),
-            v(settings.contrast),
-            v(settings.highlights),
-            v(settings.shadows),
-            v(settings.whites),
-            v(settings.blacks),
-            v(settings.clarity),
-            v(settings.vibrance),
-            v(settings.saturation),
+            v(b.temperature),
+            v(b.tint),
+            v(b.exposure),
+            v(b.contrast),
+            v(b.highlights),
+            v(b.shadows),
+            v(b.whites),
+            v(b.blacks),
+            v(b.clarity),
+            v(b.vibrance),
+            v(b.saturation),
         ))
     }
 
@@ -71,17 +72,20 @@ impl qobject::PictureView {
         saturation: f64,
     ) -> bool {
         let settings = PicturaRawSettings {
-            temperature: Some(temperature),
-            tint: Some(tint),
-            exposure: Some(exposure),
-            contrast: Some(contrast),
-            highlights: Some(highlights),
-            shadows: Some(shadows),
-            whites: Some(whites),
-            blacks: Some(blacks),
-            clarity: Some(clarity),
-            vibrance: Some(vibrance),
-            saturation: Some(saturation),
+            basic: CrsSettings {
+                temperature: Some(temperature),
+                tint: Some(tint),
+                exposure: Some(exposure),
+                contrast: Some(contrast),
+                highlights: Some(highlights),
+                shadows: Some(shadows),
+                whites: Some(whites),
+                blacks: Some(blacks),
+                clarity: Some(clarity),
+                vibrance: Some(vibrance),
+                saturation: Some(saturation),
+            },
+            ..Default::default()
         };
         let path = path.to_string();
         let applied = {

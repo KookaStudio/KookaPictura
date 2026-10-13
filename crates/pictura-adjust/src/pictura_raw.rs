@@ -36,14 +36,14 @@ pub fn render_pictura_raw(
     }
 
     let v = |x: Option<f64>| x.filter(|v| v.is_finite()).unwrap_or(0.0);
-    let (wb_temp, wb_tint) = (v(settings.temperature), v(settings.tint));
-    let exposure = v(settings.exposure);
-    let contrast = v(settings.contrast);
-    let (highlights, shadows) = (v(settings.highlights), v(settings.shadows));
-    let (whites, blacks) = (v(settings.whites), v(settings.blacks));
-    let clarity = v(settings.clarity);
-    let vibrance = v(settings.vibrance);
-    let saturation = v(settings.saturation);
+    let (wb_temp, wb_tint) = (v(settings.basic.temperature), v(settings.basic.tint));
+    let exposure = v(settings.basic.exposure);
+    let contrast = v(settings.basic.contrast);
+    let (highlights, shadows) = (v(settings.basic.highlights), v(settings.basic.shadows));
+    let (whites, blacks) = (v(settings.basic.whites), v(settings.basic.blacks));
+    let clarity = v(settings.basic.clarity);
+    let vibrance = v(settings.basic.vibrance);
+    let saturation = v(settings.basic.saturation);
     if [
         wb_temp, wb_tint, exposure, contrast, highlights, shadows, whites, blacks, clarity,
         vibrance, saturation,
@@ -195,6 +195,7 @@ fn box_blur(src: &[f32], w: usize, h: usize, radius: usize) -> Vec<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pictura_core::CrsSettings;
 
     fn gray(w: u32, h: u32, value: u8) -> PixelBuffer {
         PixelBuffer {
@@ -237,7 +238,10 @@ mod tests {
         assert_eq!(out, input);
         // NaN fields are ignored, not propagated.
         let weird = PicturaRawSettings {
-            exposure: Some(f64::NAN),
+            basic: CrsSettings {
+                exposure: Some(f64::NAN),
+                ..Default::default()
+            },
             ..Default::default()
         };
         assert_eq!(render_pictura_raw(&input, &weird).unwrap(), input);
@@ -249,7 +253,10 @@ mod tests {
         let brighter = render_pictura_raw(
             &input,
             &PicturaRawSettings {
-                exposure: Some(1.0),
+                basic: CrsSettings {
+                    exposure: Some(1.0),
+                    ..Default::default()
+                },
                 ..Default::default()
             },
         )
@@ -257,7 +264,10 @@ mod tests {
         let darker = render_pictura_raw(
             &input,
             &PicturaRawSettings {
-                exposure: Some(-1.0),
+                basic: CrsSettings {
+                    exposure: Some(-1.0),
+                    ..Default::default()
+                },
                 ..Default::default()
             },
         )
@@ -272,7 +282,10 @@ mod tests {
         let out = render_pictura_raw(
             &rgba,
             &PicturaRawSettings {
-                exposure: Some(1.0),
+                basic: CrsSettings {
+                    exposure: Some(1.0),
+                    ..Default::default()
+                },
                 ..Default::default()
             },
         )
@@ -287,7 +300,10 @@ mod tests {
         let warm = render_pictura_raw(
             &input,
             &PicturaRawSettings {
-                temperature: Some(60.0),
+                basic: CrsSettings {
+                    temperature: Some(60.0),
+                    ..Default::default()
+                },
                 ..Default::default()
             },
         )
@@ -295,7 +311,10 @@ mod tests {
         let cool = render_pictura_raw(
             &input,
             &PicturaRawSettings {
-                temperature: Some(-60.0),
+                basic: CrsSettings {
+                    temperature: Some(-60.0),
+                    ..Default::default()
+                },
                 ..Default::default()
             },
         )
@@ -315,7 +334,10 @@ mod tests {
         let more = render_pictura_raw(
             &input,
             &PicturaRawSettings {
-                clarity: Some(80.0),
+                basic: CrsSettings {
+                    clarity: Some(80.0),
+                    ..Default::default()
+                },
                 ..Default::default()
             },
         )
@@ -323,7 +345,10 @@ mod tests {
         let less = render_pictura_raw(
             &input,
             &PicturaRawSettings {
-                clarity: Some(-80.0),
+                basic: CrsSettings {
+                    clarity: Some(-80.0),
+                    ..Default::default()
+                },
                 ..Default::default()
             },
         )
@@ -338,7 +363,10 @@ mod tests {
     fn vibrance_increases_saturation_and_is_deterministic() {
         let input = rgb_grid(&[[130, 150, 130], [130, 150, 130]]);
         let settings = PicturaRawSettings {
-            vibrance: Some(70.0),
+            basic: CrsSettings {
+                vibrance: Some(70.0),
+                ..Default::default()
+            },
             ..Default::default()
         };
         let a = render_pictura_raw(&input, &settings).unwrap();
