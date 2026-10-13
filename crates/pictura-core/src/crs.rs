@@ -19,8 +19,3 @@ pub struct CrsSettings {
     pub temperature: Option<f64>,
     pub tint: Option<f64>,
 }
-
-/// Pictura Raw settings: the same 11 PV2012 Basic controls as the `crs:` XMP
-/// view. A thin alias so the codec and renderer name the filter's settings
-/// without duplicating the struct.
-pub type PicturaRawSettings = CrsSettings;

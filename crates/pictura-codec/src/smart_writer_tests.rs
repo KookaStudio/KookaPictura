@@ -119,8 +119,11 @@ fn authored_smart_object_round_trips() {
 #[test]
 fn authored_smart_object_with_filter_round_trips() {
     let settings = PicturaRawSettings {
-        temperature: Some(-20.0),
-        exposure: Some(0.5),
+        basic: CrsSettings {
+            temperature: Some(-20.0),
+            exposure: Some(0.5),
+            ..Default::default()
+        },
         ..Default::default()
     };
     let options = crate::write_descriptor(&crate::encode_pictura_raw_fltr(&settings));
@@ -162,7 +165,10 @@ fn authored_smart_object_with_filter_round_trips() {
 #[test]
 fn authored_disabled_filter_group_round_trips() {
     let settings = PicturaRawSettings {
-        exposure: Some(0.5),
+        basic: CrsSettings {
+            exposure: Some(0.5),
+            ..Default::default()
+        },
         ..Default::default()
     };
     let options = crate::write_descriptor(&crate::encode_pictura_raw_fltr(&settings));

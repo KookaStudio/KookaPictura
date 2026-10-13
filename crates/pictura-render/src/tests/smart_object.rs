@@ -1,6 +1,8 @@
 use super::*;
 use pictura_codec::{decode_pictura_raw_settings, read_psd, write_psd};
-use pictura_core::{Channel, LayerBlock, PicturaRawSettings, SmartObject, SmartObjectKind};
+use pictura_core::{
+    Channel, CrsSettings, LayerBlock, PicturaRawSettings, SmartObject, SmartObjectKind,
+};
 
 fn section_has_uuid(bytes: &[u8], uuid: &str) -> bool {
     !uuid.is_empty() && bytes.windows(uuid.len()).any(|w| w == uuid.as_bytes())
@@ -1121,9 +1123,12 @@ fn apply_pictura_raw_bakes_the_proxy_and_keeps_the_settings() {
     let before_channels = d.layers[0].channels.clone();
 
     let settings = PicturaRawSettings {
-        exposure: Some(1.0),
-        temperature: Some(40.0),
-        clarity: Some(-30.0),
+        basic: CrsSettings {
+            exposure: Some(1.0),
+            temperature: Some(40.0),
+            clarity: Some(-30.0),
+            ..Default::default()
+        },
         ..Default::default()
     };
     assert!(apply_pictura_raw(&mut d, "0", &settings));
@@ -1163,7 +1168,10 @@ fn apply_pictura_raw_refuses_without_mutation() {
     let mut d = doc(4, 4, vec![layer]);
     let before = d.clone();
     let settings = PicturaRawSettings {
-        exposure: Some(2.0),
+        basic: CrsSettings {
+            exposure: Some(2.0),
+            ..Default::default()
+        },
         ..Default::default()
     };
     assert!(
@@ -1180,7 +1188,10 @@ fn apply_pictura_raw_refuses_without_mutation() {
 #[test]
 fn smart_filter_chain_composites_the_filtered_source() {
     let settings = PicturaRawSettings {
-        exposure: Some(1.0),
+        basic: CrsSettings {
+            exposure: Some(1.0),
+            ..Default::default()
+        },
         ..Default::default()
     };
     let plain = smart_layer(
@@ -1208,7 +1219,10 @@ fn smart_filter_chain_composites_the_filtered_source() {
 #[test]
 fn disabled_smart_filter_matches_no_filter() {
     let settings = PicturaRawSettings {
-        exposure: Some(2.0),
+        basic: CrsSettings {
+            exposure: Some(2.0),
+            ..Default::default()
+        },
         ..Default::default()
     };
     let plain = smart_layer(
@@ -1266,8 +1280,11 @@ fn disabled_smart_filter_matches_no_filter() {
 #[test]
 fn smart_filter_chain_ignores_a_baked_proxy() {
     let settings = PicturaRawSettings {
-        exposure: Some(1.0),
-        clarity: Some(20.0),
+        basic: CrsSettings {
+            exposure: Some(1.0),
+            clarity: Some(20.0),
+            ..Default::default()
+        },
         ..Default::default()
     };
     let layer = solid(
