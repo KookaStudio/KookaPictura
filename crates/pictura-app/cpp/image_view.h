@@ -168,6 +168,12 @@ public:
     }
     bool panEnabled() const { return panEnabled_; }
 
+    // View > Free Pan: when true (default) the canvas may pan off-centre even
+    // when the document fits the viewport; when false an axis the document fits
+    // is pinned to centre. Changing the value re-clamps the current offset.
+    void setFreePan(bool enabled);
+    bool freePan() const { return freePan_; }
+
     // Transient Space-key pan: while on, a left drag pans and the hand cursors
     // are used regardless of the active tool, and the tool's mouse-press is not
     // emitted. The owner restores the pan/cursor state on release.
@@ -552,6 +558,7 @@ private:
     void paintCompass(QPainter& painter);
     QPointF last_;
     bool panEnabled_ = true;
+    bool freePan_ = true;
     bool panning_ = false;
     bool spacePan_ = false;
     // False after a load/fit so the first resize settles the canvas, then any

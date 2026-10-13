@@ -25,6 +25,7 @@ private slots:
     void anotherInstancesNewerWriteIsRefused();
     void aStoreFromBeforeTheLaunchIsAdopted();
     void ownWritesRoundTrip();
+    void freePanRoundTrips();
 
 private:
     void writeStore(int brightness, const QString& writer, qint64 writtenAt);
@@ -82,6 +83,18 @@ void SessionStoreTest::aStoreFromBeforeTheLaunchIsAdopted()
     const QJsonObject obj = QJsonDocument::fromJson(file.readAll()).object();
     QVERIFY(obj.value(QStringLiteral("writerToken")).toString()
             != QStringLiteral("another-instance"));
+}
+
+void SessionStoreTest::freePanRoundTrips()
+{
+    pictura::SessionState state;
+    state.freePan = false;
+    QVERIFY(pictura::saveSession(state));
+    QVERIFY(!pictura::loadSession().freePan);
+
+    state.freePan = true;
+    QVERIFY(pictura::saveSession(state));
+    QVERIFY(pictura::loadSession().freePan);
 }
 
 QTEST_MAIN(SessionStoreTest)

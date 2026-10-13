@@ -57,7 +57,7 @@ CanvasScrollBars::CanvasScrollBars(QWidget* parent)
             return;
         }
         const OffsetRange range = offsetRangeFor(QSizeF(view_->documentSize()), view_->zoom(),
-                                                 QSizeF(view_->size()));
+                                                 QSizeF(view_->size()), view_->freePan());
         view_->setOffset(QPointF(range.minX + value, view_->offset().y()));
     });
     connect(vbar_, &QScrollBar::valueChanged, this, [this](int value) {
@@ -65,7 +65,7 @@ CanvasScrollBars::CanvasScrollBars(QWidget* parent)
             return;
         }
         const OffsetRange range = offsetRangeFor(QSizeF(view_->documentSize()), view_->zoom(),
-                                                 QSizeF(view_->size()));
+                                                 QSizeF(view_->size()), view_->freePan());
         view_->setOffset(QPointF(view_->offset().x(), range.minY + value));
     });
 }
@@ -141,7 +141,8 @@ void CanvasScrollBars::syncFromView()
     hbar_->show();
     vbar_->show();
 
-    const OffsetRange range = offsetRangeFor(imageSize, zoom, QSizeF(view_->size()));
+    const OffsetRange range = offsetRangeFor(imageSize, zoom, QSizeF(view_->size()),
+                                             view_->freePan());
     {
         const QSignalBlocker blockH(hbar_);
         const QSignalBlocker blockV(vbar_);

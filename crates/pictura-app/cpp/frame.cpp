@@ -415,6 +415,7 @@ int PicturaMainWindow::addDocument(PictureView* view, const QString& path)
         entry.canvas->replaceImage(view->image());
     }
     entry.canvas->setCanvasColor(canvasColorForIndex(canvasColorIndex_));
+    entry.canvas->setFreePan(freePan_);
     prepareCanvasGuides(entry);
 
     // Present from the view pyramid: the canvas crops a level instead of

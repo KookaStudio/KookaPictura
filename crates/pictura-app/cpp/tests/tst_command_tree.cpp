@@ -67,6 +67,7 @@ private slots:
     void menuMoves();
     void preferencesPages();
     void toolHintsToggle();
+    void freePanToggle();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -1004,6 +1005,25 @@ void CommandTreeTest::toolHintsToggle()
     while (window_->activeDocumentIndex() >= 0) {
         window_->closeDocument(window_->activeDocumentIndex(), false);
     }
+}
+
+// View > Free Pan is a checkable toggle under the View menu, on by default.
+void CommandTreeTest::freePanToggle()
+{
+    const QString id = QString::fromLatin1(pictura::command_ids::ViewFreePan);
+    QAction* action = window_->registry()->action(id);
+    QVERIFY2(action != nullptr, "Free Pan command exists");
+    QVERIFY2(action->isCheckable(), "Free Pan is checkable");
+    QVERIFY2(action->isChecked(), "Free Pan defaults on");
+
+    bool underView = false;
+    for (const pictura::CommandInfo& info : window_->registry()->describe()) {
+        if (info.id == id) {
+            underView = info.path
+                        == QStringList({QStringLiteral("View"), QStringLiteral("Free Pan")});
+        }
+    }
+    QVERIFY2(underView, "Free Pan sits under the View menu");
 }
 
 // Layer > Arrange / Reverse / Merge Down / Delete Layer / Stamp: the new

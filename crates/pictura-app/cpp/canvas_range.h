@@ -14,7 +14,10 @@ inline constexpr double kCanvasRevealMarginPx = 96.0;
 
 // Allowed widget-space canvas offset (top-left of the scaled document) so that
 // at least `margin` logical pixels of each axis stay inside the viewport. A
-// document smaller than the margin keeps its whole extent visible instead.
+// document smaller than the margin keeps its whole extent visible instead. When
+// `freePan` is false, each axis the document fits and has content on collapses
+// to the single centred offset, so the canvas is pinned there (Photoshop's
+// constrained pan); an overflowing or empty axis is left on the margin range.
 struct OffsetRange {
     double minX = 0.0;
     double maxX = 0.0;
@@ -23,7 +26,7 @@ struct OffsetRange {
 };
 
 inline OffsetRange offsetRangeFor(const QSizeF& imageSize, double zoom, const QSizeF& viewport,
-                                  double margin = kCanvasRevealMarginPx)
+                                  bool freePan = true, double margin = kCanvasRevealMarginPx)
 {
     const double w = imageSize.width() * zoom;
     const double h = imageSize.height() * zoom;
@@ -35,6 +38,18 @@ inline OffsetRange offsetRangeFor(const QSizeF& imageSize, double zoom, const QS
     range.maxX = viewport.width() - visibleX;
     range.minY = visibleY - h;
     range.maxY = viewport.height() - visibleY;
+    if (!freePan) {
+        // ponytail: constrain only fires on an axis the document fits and has
+        // content on; an empty doc or an overflowing axis keeps today's reveal
+        // margin, so zoomed-in pan is unchanged. Negate this by making the
+        // collapse unconditional for a pasteboard/overscroll mode.
+        if (w > 0.0 && w <= viewport.width()) {
+            range.minX = range.maxX = (viewport.width() - w) / 2.0;
+        }
+        if (h > 0.0 && h <= viewport.height()) {
+            range.minY = range.maxY = (viewport.height() - h) / 2.0;
+        }
+    }
     if (range.minX > range.maxX) {
         range.minX = range.maxX = (viewport.width() - w) / 2.0;
     }

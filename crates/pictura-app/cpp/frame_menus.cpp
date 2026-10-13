@@ -1033,6 +1033,18 @@ void PicturaMainWindow::registerHandlers()
     });
     registry_->setCheckedProvider(command_ids::ViewToolHints, [this]() { return hintsVisible_; });
 
+    registry_->setHandler(command_ids::ViewFreePan, [this]() {
+        freePan_ = !freePan_;
+        for (const DocEntry& entry : docs_) {
+            if (entry.canvas) {
+                entry.canvas->setFreePan(freePan_);
+            }
+        }
+        saveSession();
+        registry_->refresh();
+    });
+    registry_->setCheckedProvider(command_ids::ViewFreePan, [this]() { return freePan_; });
+
     registry_->setHandler(command_ids::ViewShowSelectionEdges, [this]() {
         const QAction* action = registry_->action(command_ids::ViewShowSelectionEdges);
         if (ImageView* canvas = imageView()) {

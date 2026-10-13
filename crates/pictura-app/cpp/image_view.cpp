@@ -107,6 +107,17 @@ void ImageView::setPanEnabled(bool enabled)
     }
 }
 
+void ImageView::setFreePan(bool enabled)
+{
+    if (freePan_ == enabled) {
+        return;
+    }
+    freePan_ = enabled;
+    clampOffset();
+    update();
+    emit viewChanged();
+}
+
 void ImageView::setSpacePan(bool on)
 {
     if (spacePan_ == on) {

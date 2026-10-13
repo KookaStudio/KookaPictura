@@ -823,6 +823,8 @@ void addDefaultCommands(CommandRegistry& registry) {
                  QKeySequence(QStringLiteral("Ctrl+1")), true);
     leaf(registry, {"View", "200%"}, QStringLiteral("200%"));
     leaf(registry, {"View", "Print Size"}, QStringLiteral("Print Size"));
+    registry.add(CommandSpec{command_ids::ViewFreePan, {"View", "Free Pan"},
+                             QStringLiteral("Free Pan"), QKeySequence(), true, true});
     registry.addSeparator({"View"});
     registry.add(CommandSpec{command_ids::ViewScreenModeStandard,
                              {"View", "Screen Mode", "Standard Screen Mode"},

@@ -559,6 +559,9 @@ private:
     QToolButton* statusOptionsButton_ = nullptr;
     QString statusReadout_ = QStringLiteral("sizes");
     bool hintsVisible_ = true;
+    // View > Free Pan: whether a canvas may pan off-centre when the document
+    // fits the viewport (checked, default) or is pinned to centre. Persisted.
+    bool freePan_ = true;
     QColor foreground_;
     QSet<QString> panelNames_;
     QStringList recent_;

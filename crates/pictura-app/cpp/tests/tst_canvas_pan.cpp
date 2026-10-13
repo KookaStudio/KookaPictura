@@ -4,10 +4,17 @@
 
 #include <QtTest/QtTest>
 
+#include <cmath>
+
 #include <QtGui/QImage>
 #include <QtGui/QPainter>
+#include <QtGui/QAction>
+#include <QtWidgets/QScrollBar>
 
 #include "frame.h"
+#include "canvas_range.h"
+#include "canvas_scrollbars.h"
+#include "commands.h"
 #include "image_view.h"
 #include "selftest_paint_fixture.h"
 #include "tools.h"
@@ -28,6 +35,11 @@ private slots:
     void panHidesTheBrushRing();
     void toolSwitchKeepsZoomAndPosition();
     void resizeKeepsAdjustedViewCentred();
+    void offsetRangeConstrainsFittingAxes();
+    void freePanConstrainsFittingImage();
+    void freePanReclampsResizedDocument();
+    void freePanCollapsesScrollbar();
+    void freePanCommandAppliesToCanvas();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -126,6 +138,153 @@ void CanvasPanTest::resizeKeepsAdjustedViewCentred()
         QVERIFY2(std::abs(after.x() - before.x()) < 0.5 && std::abs(after.y() - before.y()) < 0.5,
                  "resizing an adjusted view keeps the document point at the centre");
     }
+}
+
+void CanvasPanTest::offsetRangeConstrainsFittingAxes()
+{
+    const QSizeF viewport(400.0, 300.0);
+    const auto close = [](double a, double b) { return std::abs(a - b) < 1e-9; };
+
+    // A document that fits both axes collapses to the centre.
+    const pictura::OffsetRange fit =
+        pictura::offsetRangeFor(QSizeF(100.0, 80.0), 1.0, viewport, false);
+    QVERIFY(close(fit.minX, fit.maxX));
+    QVERIFY(close(fit.minX, (400.0 - 100.0) / 2.0));
+    QVERIFY(close(fit.minY, fit.maxY));
+    QVERIFY(close(fit.minY, (300.0 - 80.0) / 2.0));
+
+    // Mixed: a fitting axis is pinned, an overflowing axis keeps the margin.
+    const pictura::OffsetRange mixed =
+        pictura::offsetRangeFor(QSizeF(100.0, 900.0), 1.0, viewport, false);
+    QVERIFY(close(mixed.minX, mixed.maxX));
+    QVERIFY(mixed.minY < mixed.maxY);
+
+    // An overflowing document on both axes is byte-for-byte unchanged.
+    const pictura::OffsetRange overflowFree =
+        pictura::offsetRangeFor(QSizeF(1000.0, 900.0), 1.0, viewport, true);
+    const pictura::OffsetRange overflowConstrained =
+        pictura::offsetRangeFor(QSizeF(1000.0, 900.0), 1.0, viewport, false);
+    QVERIFY(close(overflowConstrained.minX, overflowFree.minX));
+    QVERIFY(close(overflowConstrained.maxX, overflowFree.maxX));
+    QVERIFY(close(overflowConstrained.minY, overflowFree.minY));
+    QVERIFY(close(overflowConstrained.maxY, overflowFree.maxY));
+
+    // An empty document is unaffected: no centring offset is produced.
+    const pictura::OffsetRange empty =
+        pictura::offsetRangeFor(QSizeF(0.0, 0.0), 1.0, viewport, false);
+    QVERIFY(close(empty.minX, 0.0));
+    QVERIFY(close(empty.maxX, 400.0));
+}
+
+void CanvasPanTest::freePanConstrainsFittingImage()
+{
+    pictura::ImageView view;
+    view.resize(400, 300);
+    QImage seed(100, 80, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    view.setImage(seed);
+    QCoreApplication::processEvents();
+
+    const double centreX = (400.0 - 100.0) / 2.0;
+    const double centreY = (300.0 - 80.0) / 2.0;
+
+    view.setFreePan(true);
+    view.panBy(QPointF(120, 90));
+    QVERIFY2(std::abs(view.offset().x() - centreX) > 1.0,
+             "free pan moves a fitting image off centre");
+
+    view.setFreePan(false);
+    QVERIFY2(std::abs(view.offset().x() - centreX) < 1e-9
+                 && std::abs(view.offset().y() - centreY) < 1e-9,
+             "disabling free pan re-centres the fitting image");
+
+    view.panBy(QPointF(500, 500));
+    QVERIFY2(std::abs(view.offset().x() - centreX) < 1e-9
+                 && std::abs(view.offset().y() - centreY) < 1e-9,
+             "a constrained pan cannot move a fitting image");
+
+    view.setFreePan(true);
+    view.panBy(QPointF(500, 500));
+    QVERIFY2(std::abs(view.offset().x() - centreX) > 1.0,
+             "re-enabling free pan allows the pan again");
+}
+
+void CanvasPanTest::freePanReclampsResizedDocument()
+{
+    pictura::ImageView view;
+    view.resize(400, 300);
+    QImage big(1000, 800, QImage::Format_RGB32);
+    big.fill(Qt::white);
+    view.setImage(big);
+    view.setFreePan(false);
+    view.setZoom(1.0, QPointF(view.width() / 2.0, view.height() / 2.0));
+    view.panBy(QPointF(50, 40));
+    QVERIFY2(std::abs(view.offset().x() - (400.0 - 1000.0) / 2.0) > 1.0,
+             "an overflowing document can pan while constrained");
+
+    view.replaceDocument(QSize(100, 80));
+    QVERIFY2(std::abs(view.offset().x() - (400.0 - 100.0) / 2.0) < 1e-9
+                 && std::abs(view.offset().y() - (300.0 - 80.0) / 2.0) < 1e-9,
+             "a document resized to fit re-centres under the constraint");
+}
+
+void CanvasPanTest::freePanCollapsesScrollbar()
+{
+    pictura::CanvasScrollBars bars;
+    auto* view = new pictura::ImageView(&bars);
+    bars.setView(view);
+    bars.resize(600, 500);
+    bars.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&bars));
+    view->resize(400, 300);
+    QImage seed(100, 80, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    view->setImage(seed);
+    QCoreApplication::processEvents();
+
+    view->setFreePan(true);
+    const int freeMaxX = bars.horizontalBarForTest()->maximum();
+    const int freeMaxY = bars.verticalBarForTest()->maximum();
+    QVERIFY2(freeMaxX > 0 && freeMaxY > 0, "free pan offers a pan range");
+
+    view->setFreePan(false);
+    QCOMPARE(bars.horizontalBarForTest()->maximum(), 0);
+    QCOMPARE(bars.verticalBarForTest()->maximum(), 0);
+    QCOMPARE(bars.horizontalBarForTest()->value(), 0);
+    QCOMPARE(bars.verticalBarForTest()->value(), 0);
+
+    view->setFreePan(true);
+    QCOMPARE(bars.horizontalBarForTest()->maximum(), freeMaxX);
+    QCOMPARE(bars.verticalBarForTest()->maximum(), freeMaxY);
+}
+
+void CanvasPanTest::freePanCommandAppliesToCanvas()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(100, 80, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_canvas_free_pan_command"));
+    QVERIFY2(f.ok(), "free-pan command fixture");
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&frame));
+    QCoreApplication::processEvents();
+
+    QAction* action =
+        frame.registry()->action(QString::fromLatin1(pictura::command_ids::ViewFreePan));
+    QVERIFY2(action != nullptr, "Free Pan command exists");
+    QVERIFY2(action->isCheckable(), "Free Pan is checkable");
+    QVERIFY2(action->isChecked(), "Free Pan defaults on");
+    QVERIFY(f.canvas->freePan());
+
+    action->trigger();
+    QCoreApplication::processEvents();
+    QVERIFY2(!action->isChecked(), "toggled off");
+    QVERIFY(!f.canvas->freePan());
+
+    action->trigger();
+    QCoreApplication::processEvents();
+    QVERIFY(action->isChecked());
+    QVERIFY(f.canvas->freePan());
 }
 
 QTEST_MAIN(CanvasPanTest)
