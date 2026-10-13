@@ -38,6 +38,17 @@ fn known_key_examples() {
 }
 
 #[test]
+fn blend_names_are_distinct_and_non_empty() {
+    assert_eq!(BlendMode::ColorBurn.name(), "Color Burn");
+    assert_eq!(BlendMode::Luminosity.name(), "Luminosity");
+    let mut names: Vec<&str> = BlendMode::LAYER_MODES.iter().map(BlendMode::name).collect();
+    assert!(names.iter().all(|name| !name.is_empty()));
+    names.sort_unstable();
+    names.dedup();
+    assert_eq!(names.len(), 27, "blend names must be unique");
+}
+
+#[test]
 fn unknown_blend_key_is_none() {
     assert_eq!(BlendMode::from_psd_key(*b"zzzz"), None);
     assert_eq!(BlendMode::from_psd_key(*b"nrml"), None);

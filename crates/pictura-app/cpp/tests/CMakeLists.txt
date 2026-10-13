@@ -25,6 +25,7 @@ set(PICTURA_QT_TESTS
     tst_new_document
     tst_image_mode
     tst_layers_panel
+    tst_layers_panel_fixes
     tst_layers_snapshot
     tst_align_distribute
     tst_options_bars_parity

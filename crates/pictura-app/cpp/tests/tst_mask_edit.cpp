@@ -207,12 +207,22 @@ void MaskEditTest::colorsFollowTheEditTarget()
     panel->refresh();
     QTest::qWait(50);
 
+    // Adding a mask makes it the edit target, so the colour state is already the
+    // mask pair (black on white).
+    QCOMPARE(pictura::mask_edit_target_get(*view), layer);
+    QCOMPARE(colors->foreground(), QColor(Qt::black));
+    QCOMPARE(colors->background(), QColor(Qt::white));
+
+    // Switch to the layer's pixels and set the image pair.
+    QVERIFY(panel->clickLayerThumbnailForTest(layer));
+    QCoreApplication::processEvents();
+    QVERIFY(pictura::mask_edit_target_get(*view).isEmpty());
     const QColor imageFg(200, 40, 40);
     const QColor imageBg(20, 90, 200);
     colors->setForeground(imageFg);
     colors->setBackground(imageBg);
 
-    // The mask target starts on black/white.
+    // Back to the mask: it remembers its own pair (black/white).
     QVERIFY(panel->clickMaskThumbnailForTest(layer));
     QCoreApplication::processEvents();
     QCOMPARE(pictura::mask_edit_target_get(*view), layer);

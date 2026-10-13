@@ -468,6 +468,46 @@ public:
         return createIndex(node->rowInParent, 0, node);
     }
 
+    /// A node's ancestor name chain (its own name last), joined by U+001F. This
+    /// key survives the index-path shifts a sibling insert, remove, or move
+    /// causes, so the panel can re-find an expanded group whose path changed.
+    QString namePathForPath(const QString& path) const
+    {
+        Node* node = byPath_.value(path, nullptr);
+        if (!node || node == root_.get()) {
+            return {};
+        }
+        QStringList names;
+        for (Node* cur = node; cur && cur != root_.get(); cur = cur->parent) {
+            names.prepend(cur->row.name);
+        }
+        return names.join(QChar(0x1f));
+    }
+
+    /// The first node whose ancestor name chain equals `namePath`, as an index.
+    QModelIndex indexForNamePath(const QString& namePath) const
+    {
+        if (namePath.isEmpty()) {
+            return {};
+        }
+        const QStringList names = namePath.split(QChar(0x1f));
+        Node* node = root_.get();
+        for (const QString& name : names) {
+            Node* next = nullptr;
+            for (const auto& child : node->children) {
+                if (child->row.name == name) {
+                    next = child.get();
+                    break;
+                }
+            }
+            if (!next) {
+                return {};
+            }
+            node = next;
+        }
+        return createIndex(node->rowInParent, 0, node);
+    }
+
     /// Every node's path and visibility, for the solo snapshot.
     QHash<QString, bool> visibilityByPath() const
     {

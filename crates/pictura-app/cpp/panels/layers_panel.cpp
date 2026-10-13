@@ -137,6 +137,7 @@ LayersPanel::LayersPanel(QWidget* parent)
 
     auto* controls = new QHBoxLayout();
     blend_ = new QComboBox(body);
+    blend_->setObjectName(QStringLiteral("layersBlendCombo"));
     for (const BlendEntry& entry : kBlends) {
         blend_->addItem(QString::fromLatin1(entry.name), QString::fromLatin1(entry.key));
     }
@@ -145,6 +146,7 @@ LayersPanel::LayersPanel(QWidget* parent)
     controls->addWidget(blend_, 1);
     opacity_ = new PercentField(tr("Opacity"), body);
     opacity_->setObjectName(QStringLiteral("layersOpacityField"));
+    opacity_->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
     opacity_->setEnabled(false);
     opacity_->setToolTip(tr("Opacity"));
     controls->addWidget(opacity_, 1);
@@ -510,7 +512,15 @@ void LayersPanel::refresh()
             row.hasStyle = source.hasStyle;
             row.hasBlendIf = source.hasBlendIf;
             row.styleEffects = source.styleEffects;
-            row.activeThumb = activeThumbByPath_.value(row.path, 0);
+            // The raster mask target is authoritative for the active thumbnail;
+            // a stale raster target on a non-target row falls back to the image.
+            int activeThumb = activeThumbByPath_.value(row.path, 0);
+            if (row.path == maskTargetPath) {
+                activeThumb = 1;
+            } else if (activeThumb == 1) {
+                activeThumb = 0;
+            }
+            row.activeThumb = activeThumb;
             row.thumbnail = source.thumbnail;
             row.maskThumbnail = source.maskThumbnail;
             row.maskLinked = source.maskLinked;
@@ -560,19 +570,32 @@ void LayersPanel::refresh()
             rows.push_back(std::move(row));
         }
     }
+    // Capture each expanded group's name chain before the model reset, so a
+    // group whose index path shifts is re-found by name and kept expanded.
+    const QSet<QString> previousExpansion = expandedPaths_;
+    QHash<QString, QString> previousNames;
+    for (const QString& path : previousExpansion) {
+        previousNames.insert(path, model_->namePathForPath(path));
+    }
     model_->setRows(std::move(rows));
 
-    // Restore expansion by path; keep a path the filter hid (the document still
-    // has it) so toggling the filter off restores its expansion. Iterate a copy:
-    // `expand()` emits `expanded`, which re-inserts into the set.
-    const QSet<QString> previousExpansion = expandedPaths_;
     QSet<QString> live;
     for (const QString& path : previousExpansion) {
-        if (!model_->indexForPath(path).isValid()) {
+        const QString expectedName = previousNames.value(path);
+        QModelIndex modelIndex = model_->indexForPath(path);
+        // A shifted path may name a different layer; fall back to the name chain.
+        if (modelIndex.isValid()
+            && model_->namePathForPath(model_->pathForIndex(modelIndex)) != expectedName) {
+            modelIndex = QModelIndex();
+        }
+        if (!modelIndex.isValid() && !expectedName.isEmpty()) {
+            modelIndex = model_->indexForNamePath(expectedName);
+        }
+        if (!modelIndex.isValid()) {
             continue;
         }
-        live.insert(path);
-        const QModelIndex index = proxyIndexForPath(path);
+        live.insert(model_->pathForIndex(modelIndex));
+        const QModelIndex index = proxy_->mapFromSource(modelIndex);
         if (index.isValid()) {
             tree_->expand(index);
         }
@@ -811,6 +834,8 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                 // The vector mask's own controls, mirroring the layer mask.
                 const QRect vectorThumb = delegate_->vectorMaskThumbRect(vr, index);
                 if (!vectorThumb.isEmpty() && vectorThumb.contains(pos)) {
+                    // The vector mask becomes the target; drop any raster target.
+                    mask_edit_target_set(*view_, QString());
                     setActiveThumb(rowPath, 2);
                     if (mouse->modifiers() & Qt::ShiftModifier) {
                         vector_mask_set_enabled_path(
@@ -977,15 +1002,16 @@ void LayersPanel::syncControls()
     }
     const bool active = view_ && !paths.isEmpty();
     syncing_ = true;
-    blend_->setEnabled(false);
-    opacity_->setEnabled(false);
-    fill_->setEnabled(false);
     const std::array<QToolButton*, 5> lockButtons = {
         lockTransparency_, lockPixels_, lockPosition_, lockNesting_, lockAll_};
     for (QToolButton* button : lockButtons) {
-        button->setEnabled(false);
         button->setChecked(false);
     }
+    bool lockAny = false;
+    bool blendAny = false;
+    bool opacityAny = false;
+    bool fillAny = false;
+    bool forcedLocks = false;
     if (active) {
         // Show the current row's value; apply to the whole selection.
         const QModelIndex valueIndex =
@@ -1002,10 +1028,6 @@ void LayersPanel::syncControls()
         lockAll_->setChecked((lockBits & 0x0F) == 0x0F);
 
         // Enable iff at least one selected node is eligible (frozen table).
-        bool lockAny = false;
-        bool blendAny = false;
-        bool opacityAny = false;
-        bool fillAny = false;
         for (const QString& path : paths) {
             const QModelIndex index = model_->indexForPath(path);
             const QString kind = index.data(KindRole).toString();
@@ -1023,20 +1045,22 @@ void LayersPanel::syncControls()
                 fillAny = true;
             }
         }
-        for (QToolButton* button : lockButtons) {
-            button->setEnabled(lockAny);
-        }
         // A type or shape layer forces Transparency and Image on: show them
         // checked (the row projection already sets the bits) and refuse a click.
-        const bool forcedLocks = valueIndex.data(LayerRowShapeRole).toBool()
+        forcedLocks = valueIndex.data(LayerRowShapeRole).toBool()
             || valueIndex.data(KindRole).toString() == QLatin1String("type");
-        if (forcedLocks) {
-            lockTransparency_->setEnabled(false);
-            lockPixels_->setEnabled(false);
-        }
-        blend_->setEnabled(blendAny);
-        opacity_->setEnabled(opacityAny);
-        fill_->setEnabled(fillAny);
+    }
+    // Set the final enabled state once: a control that stays enabled keeps its
+    // keyboard focus, where a transient disable would drop it.
+    blend_->setEnabled(blendAny);
+    opacity_->setEnabled(opacityAny);
+    fill_->setEnabled(fillAny);
+    for (QToolButton* button : lockButtons) {
+        button->setEnabled(lockAny);
+    }
+    if (forcedLocks) {
+        lockTransparency_->setEnabled(false);
+        lockPixels_->setEnabled(false);
     }
     syncing_ = false;
     syncEditTarget();

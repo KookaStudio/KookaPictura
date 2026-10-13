@@ -3,6 +3,7 @@
 #include "layers_panel_model.h"
 
 #include <QtGui/QFontMetrics>
+#include <QtGui/QTransform>
 
 namespace pictura {
 class LayerRowDelegate : public QStyledItemDelegate {
@@ -85,6 +86,23 @@ public:
     /// The nominal thumbnail side (0 when thumbnails are off).
     int thumbSize() const { return qMax(0, thumbnailSize_); }
 
+    /// The folder glyph's side for a group row: about three quarters of the row
+    /// thumbnail, so a folder reads close to a layer thumbnail in size.
+    int groupIconSide() const { return qMax(8, (thumbSize() * 3) / 4); }
+
+    /// The vertical inset of the thumbnail slot inside the row.
+    static constexpr int kThumbVerticalPad = 2;
+
+    /// The thumbnail slot at `left`: `thumb` wide and the row's full height
+    /// (minus a small vertical pad), so a tall document's thumbnail fills the
+    /// row vertically rather than floating in a square box.
+    QRect thumbSlot(const QRect& itemRect, int left) const
+    {
+        const int thumb = qMax(0, thumbnailSize_);
+        const int pad = qMin(kThumbVerticalPad, qMax(0, (itemRect.height() - thumb) / 2));
+        return QRect(left, itemRect.top() + pad, thumb, qMax(1, itemRect.height() - 2 * pad));
+    }
+
     /// The square box left of the right-edge badges where the image thumbnail
     /// sits, mirroring paint()'s left-to-right content walk.
     QRect imageThumbBox(const QRect& itemRect, const QModelIndex& index) const
@@ -98,8 +116,7 @@ public:
                 x += side + 2;
             }
         }
-        const int thumb = thumbSize();
-        return QRect(x, itemRect.top() + (itemRect.height() - thumb) / 2, thumb, thumb);
+        return thumbSlot(itemRect, x);
     }
 
     /// The x just past the image thumbnail's square slot.
@@ -225,12 +242,14 @@ public:
         }
         int width = box.width();
         int height = box.height();
-        if (static_cast<qint64>(documentWidth) * height
-            > static_cast<qint64>(documentHeight) * width) {
-            height = qMax(1, qRound(static_cast<double>(box.height()) * documentHeight
+        if (static_cast<qint64>(documentWidth) * box.height()
+            > static_cast<qint64>(documentHeight) * box.width()) {
+            // The document is wider than the box: fit by width.
+            height = qMax(1, qRound(static_cast<double>(box.width()) * documentHeight
                                     / documentWidth));
         } else {
-            width = qMax(1, qRound(static_cast<double>(box.width()) * documentWidth
+            // The document is taller than the box: fit by height.
+            width = qMax(1, qRound(static_cast<double>(box.height()) * documentWidth
                                    / documentHeight));
         }
         return QRect(box.left() + (box.width() - width) / 2,
@@ -241,17 +260,10 @@ public:
     /// the letterboxed (document-aspect) rect. Empty when thumbnails are off.
     QRect thumbRect(const QRect& itemRect, const QModelIndex& index) const
     {
-        const int thumb = qMax(0, thumbnailSize_);
-        if (thumb <= 0) {
+        if (thumbSize() <= 0) {
             return {};
         }
-        int x = contentLeft(itemRect, index);
-        x += labelChipAdvance(index);
-        if (index.data(ClippingRole).toBool()) {
-            x += qMax(10, thumb - 8) + 2;
-        }
-        const QRect box(x, itemRect.top() + (itemRect.height() - thumb) / 2, thumb, thumb);
-        return letterboxedThumb(box, index);
+        return letterboxedThumb(imageThumbBox(itemRect, index), index);
     }
 
     /// The right edge left for the mask thumbnail after the lock and fx badges,
@@ -302,8 +314,7 @@ public:
         }
         const int side = linkSide(thumb);
         const int left = imageSlotRight(itemRect, index) + kThumbLinkGap + side + kThumbLinkGap;
-        const QRect box(left, itemRect.top() + (itemRect.height() - thumb) / 2, thumb, thumb);
-        return letterboxedThumb(box, index);
+        return letterboxedThumb(thumbSlot(itemRect, left), index);
     }
 
     /// The x just past the mask thumbnail's square slot (or the image slot when
@@ -342,8 +353,7 @@ public:
         }
         const int side = linkSide(thumb);
         const int left = maskSlotRight(itemRect, index) + kThumbLinkGap + side + kThumbLinkGap;
-        const QRect box(left, itemRect.top() + (itemRect.height() - thumb) / 2, thumb, thumb);
-        return letterboxedThumb(box, index);
+        return letterboxedThumb(thumbSlot(itemRect, left), index);
     }
 
     /// The x just past the last thumbnail slot (image, mask, or vector).
@@ -521,18 +531,19 @@ public:
             }
         }
         if (thumb > 0) {
-            const QRect box(x, rect.top() + (height - thumb) / 2, thumb, thumb);
+            const QRect box = thumbSlot(rect, x);
             const QRect shaped = letterboxedThumb(box, index);
             thumbBox = shaped;
             if (index.data(KindRole).toString() == QLatin1String("group")) {
-                // The folder glyph is half the row thumbnail, centred in its
-                // slot, so a folder row reads lighter than a layer row.
-                const int gs = qMax(8, thumb / 2);
+                // The folder glyph is about three quarters of the row thumbnail,
+                // centred in its slot, so a folder reads close to a layer
+                // thumbnail in size.
+                const int gs = groupIconSide();
                 const QPixmap glyph =
                     pictura::icon(QStringLiteral("layers.group")).pixmap(gs, gs);
                 if (!glyph.isNull()) {
-                    painter->drawPixmap(QRect(box.left() + (thumb - gs) / 2,
-                                              box.top() + (thumb - gs) / 2, gs, gs),
+                    painter->drawPixmap(QRect(box.left() + (box.width() - gs) / 2,
+                                              box.top() + (box.height() - gs) / 2, gs, gs),
                                         glyph);
                 }
             } else if (index.data(KindRole).toString().startsWith(QLatin1String("smart-filter"))) {
@@ -547,8 +558,8 @@ public:
                 // CS6 shows a type layer as a T on white, not its pixels; the
                 // stroke is `layers.kindType`'s glyph, dark for the white card.
                 painter->fillRect(shaped, Qt::white);
-                const QRectF t = QRectF(box).adjusted(thumb / 4.0, thumb / 4.0, -thumb / 4.0,
-                                                      -thumb / 4.0);
+                const QRectF t = QRectF(shaped).adjusted(thumb / 4.0, thumb / 4.0, -thumb / 4.0,
+                                                        -thumb / 4.0);
                 painter->save();
                 painter->setRenderHint(QPainter::Antialiasing, true);
                 painter->setPen(QPen(QColor(0x20, 0x20, 0x20), qMax(1.5, thumb / 12.0)));
@@ -563,10 +574,13 @@ public:
                     painter->drawImage(shaped, image);
                 }
             }
-            // 1 px black outline around the letterboxed thumbnail.
-            painter->setPen(QPen(Qt::black, 1));
-            painter->setBrush(Qt::NoBrush);
-            painter->drawRect(shaped.adjusted(0, 0, -1, -1));
+            // 1 px black outline around the letterboxed thumbnail. A group's
+            // folder glyph keeps no outline.
+            if (index.data(KindRole).toString() != QLatin1String("group")) {
+                painter->setPen(QPen(Qt::black, 1));
+                painter->setBrush(Qt::NoBrush);
+                painter->drawRect(shaped.adjusted(0, 0, -1, -1));
+            }
             // A shape layer's vector badge sits on the thumbnail's bottom-right
             // corner, as CS6 marks a shape layer.
             if (index.data(LayerRowShapeRole).toBool()) {
@@ -602,15 +616,13 @@ public:
         QRect maskRect;
         QRect vectorRect;
         if (thumb > 0 && !mask.isNull()) {
-            const int side = linkSide(thumb);
-            const QPixmap linkPix =
-                pictura::icon(index.data(MaskLinkedRole).toBool()
-                                  ? QStringLiteral("layers.link2")
-                                  : QStringLiteral("layers.unlink2"))
-                    .pixmap(side, side);
+            const int side = linkSide(thumb) + 2;
+            const QPixmap linkPix = linkPixmap(index.data(MaskLinkedRole).toBool(), side);
             const QRect link = linkGlyphRect(rect, index);
             if (!linkPix.isNull()) {
-                painter->drawPixmap(link, linkPix);
+                painter->drawPixmap(QRect(link.center().x() - side / 2,
+                                          link.center().y() - side / 2, side, side),
+                                    linkPix);
             }
             maskRect = maskThumbRect(rect, index);
             painter->drawImage(maskRect, mask);
@@ -631,15 +643,13 @@ public:
         }
         const QImage vectorMask = index.data(VectorMaskThumbnailRole).value<QImage>();
         if (thumb > 0 && !vectorMask.isNull()) {
-            const int side = linkSide(thumb);
-            const QPixmap linkPix =
-                pictura::icon(index.data(VectorMaskLinkedRole).toBool()
-                                  ? QStringLiteral("layers.link2")
-                                  : QStringLiteral("layers.unlink2"))
-                    .pixmap(side, side);
+            const int side = linkSide(thumb) + 2;
+            const QPixmap linkPix = linkPixmap(index.data(VectorMaskLinkedRole).toBool(), side);
             const QRect link = vectorLinkGlyphRect(rect, index);
             if (!linkPix.isNull()) {
-                painter->drawPixmap(link, linkPix);
+                painter->drawPixmap(QRect(link.center().x() - side / 2,
+                                          link.center().y() - side / 2, side, side),
+                                    linkPix);
             }
             vectorRect = vectorMaskThumbRect(rect, index);
             painter->drawImage(vectorRect, vectorMask);
@@ -786,6 +796,20 @@ private:
                       rect.top() + (rect.height() - side) / 2, side, side),
                 pixmap);
         }
+    }
+
+    /// The chain glyph between two thumbnails: the link/unlink icon rotated a
+    /// quarter turn so it reads vertically between the side-by-side thumbnails.
+    static QPixmap linkPixmap(bool linked, int side)
+    {
+        const QPixmap base =
+            pictura::icon(linked ? QStringLiteral("layers.link2")
+                                 : QStringLiteral("layers.unlink2"))
+                .pixmap(side, side);
+        if (base.isNull()) {
+            return {};
+        }
+        return base.transformed(QTransform().rotate(90), Qt::SmoothTransformation);
     }
 
     int thumbnailSize_ = 24;

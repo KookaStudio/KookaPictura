@@ -113,7 +113,7 @@ fn layer_mask_add(view: Pin<&mut PictureView>, kind: &QString) -> bool {
     layer_mask_add_path(view, &QString::from(path.as_str()), kind)
 }
 
-fn layer_mask_add_path(view: Pin<&mut PictureView>, path: &QString, kind: &QString) -> bool {
+fn layer_mask_add_path(mut view: Pin<&mut PictureView>, path: &QString, kind: &QString) -> bool {
     let Some(kind) = kind_from(&kind.to_string()) else {
         return false;
     };
@@ -124,22 +124,29 @@ fn layer_mask_add_path(view: Pin<&mut PictureView>, path: &QString, kind: &QStri
             .as_ref()
             .and_then(|doc| rust.selection.as_ref().map(|s| selection_to_mask(s, doc)))
     };
-    let changed = view.batch_changed(&one(&path), "Add Layer Mask", |doc, paths| {
-        let mut changed = 0;
-        for &path in paths {
-            // Add first, then convert: a refused add (an existing mask, or a
-            // reveal-selection with no selection) must not convert the Background.
-            if pictura_render::add_layer_mask_converting_background(
-                doc,
-                path,
-                kind,
-                selection.as_ref(),
-            ) {
-                changed += 1;
+    let changed = view
+        .as_mut()
+        .batch_changed(&one(&path), "Add Layer Mask", |doc, paths| {
+            let mut changed = 0;
+            for &path in paths {
+                // Add first, then convert: a refused add (an existing mask, or a
+                // reveal-selection with no selection) must not convert the Background.
+                if pictura_render::add_layer_mask_converting_background(
+                    doc,
+                    path,
+                    kind,
+                    selection.as_ref(),
+                ) {
+                    changed += 1;
+                }
             }
-        }
-        changed
-    });
+            changed
+        });
+    if changed > 0 {
+        // A freshly added mask becomes the edit target, as CS6 selects its
+        // thumbnail so the brush, fill, and filters write coverage at once.
+        view.as_mut().rust_mut().mask_edit_target = Some(path);
+    }
     changed > 0
 }
 
