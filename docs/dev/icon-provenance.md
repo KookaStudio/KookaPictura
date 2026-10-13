@@ -15,10 +15,10 @@ not edit by hand; change the JSON and regenerate.
   vendored files carry no baked colour. Internal shading uses alpha
   gradients / `stroke-opacity`.
 
-## Summary (181 icons)
+## Summary (190 icons)
 
-- Lucide-derived: **107**
-- Custom (Lucide-style): **61**
+- Lucide-derived: **115**
+- Custom (Lucide-style): **62**
 - Note / deferred: **3**
 - Out of scope (3D tools, file unchanged): **10**
 
@@ -30,10 +30,16 @@ hand-authored assets, or the note for deferred entries.
 | Pictura id | source | match | notes |
 |---|---|---|---|
 | `count.newGroup` | lucide:folder-plus | good |  |
+| `crop.apply` | lucide:check | good |  |
+| `crop.cancel` | lucide:ban | good |  |
+| `crop.cog` | lucide:settings | good |  |
+| `crop.grid` | lucide:grid-3x3 | good |  |
+| `crop.swap` | lucide:arrow-left-right | good |  |
 | `edit.redo` | lucide:redo-2 | good |  |
 | `edit.stepBackward` | lucide:step-back | good |  |
 | `edit.stepForward` | lucide:step-forward | good |  |
 | `edit.undo` | lucide:undo-2 | good |  |
+| `ellipsis` | lucide:ellipsis | exact | the Move options bar's three-dots menu |
 | `file.close` | lucide:file-x | approximate |  |
 | `file.closeAll` | lucide:files | approximate |  |
 | `file.exit` | lucide:log-out | good |  |
@@ -84,6 +90,7 @@ hand-authored assets, or the note for deferred entries.
 | `layers.kindSmartObject` | custom (base: file) | custom | Lucide file with a filled square in the bottom-left |
 | `layers.kindType` | lucide:type | exact |  |
 | `layers.link` | lucide:link | exact |  |
+| `layers.link2` | lucide:link-2 | exact |  |
 | `layers.lockAll` | lucide:lock-keyhole | good |  |
 | `layers.lockAlpha` | custom | custom | Lucide-style checkerboard |
 | `layers.lockNesting` | note | — | not used; file kept as-is |
@@ -93,6 +100,8 @@ hand-authored assets, or the note for deferred entries.
 | `layers.newLayer` | lucide:square-plus | good |  |
 | `layers.reset` | lucide:rotate-ccw | good |  |
 | `layers.search` | lucide:search | exact |  |
+| `layers.unlink2` | lucide:unlink-2 | exact |  |
+| `options.warp` | custom | custom | Free Transform warp-mode toggle; a warped 3x3 grid, drawn on the 24x24 Lucide grid |
 | `panel.close` | lucide:x | exact |  |
 | `panel.columnsOne` | lucide:chevrons-left | good |  |
 | `panel.columnsTwo` | lucide:chevrons-right | good |  |
