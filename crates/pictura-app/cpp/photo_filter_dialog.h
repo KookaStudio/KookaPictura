@@ -12,7 +12,9 @@ namespace pictura {
 // named Filter or a Color swatch, Density as a percent field over a slider,
 // Preserve Luminosity, and OK / Cancel / Preview down the right. A named
 // filter is its colour: the block stores only the colour, so a colour
-// matching a filter reopens as that filter. Ported from photorust's
+// matching a filter reopens as that filter. While the Color swatch's picker is
+// open, a canvas click samples the image as it was before the preview (#413).
+// Ported from photorust's
 // PhotoFilterDialog (its 20 filter colours).
 // ponytail: a version-3 block (colour as CIE XYZ) keeps its colour; the Use
 // group is disabled for it.

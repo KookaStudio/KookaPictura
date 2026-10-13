@@ -3,7 +3,10 @@
 #include <QColor>
 #include <QDialog>
 #include <QImage>
+#include <QPointer>
 #include <QWidget>
+
+#include <functional>
 
 class QCheckBox;
 class QLabel;
@@ -12,6 +15,8 @@ class QRadioButton;
 class QSpinBox;
 
 namespace pictura {
+
+class ToolController;
 
 /// The component the vertical ramp controls. In Photoshop this is chosen by the
 /// radio buttons beside the numeric fields, and it re-maps both the ramp and
@@ -219,8 +224,10 @@ private:
 /// \endcode
 ///
 /// Ported from photorust's `shell/src/dialogs/ColorPickerDialog.{h,cpp}`
-/// (<https://github.com/perfecto25/photorust>). ponytail: the screen-sampling
-/// eyedropper, Add to Swatches, and Color Libraries are not wired.
+/// (<https://github.com/perfecto25/photorust>). Given a canvas, a click on the
+/// image takes its colour, as CS6's picker eyedropper does.
+/// ponytail: the eyedropper reaches only the canvas (not the screen), and Add
+/// to Swatches and Color Libraries are not wired.
 class ColorPickerDialog : public QDialog
 {
     Q_OBJECT
@@ -228,15 +235,24 @@ class ColorPickerDialog : public QDialog
 public:
     explicit ColorPickerDialog(const QColor& initial, QWidget* parent = nullptr,
                                const QString& title = {});
+    ~ColorPickerDialog() override;
 
     QColor selectedColor() const;
 
+    /// While the dialog is open, a canvas click (through `tools`' canvas
+    /// sampler) takes `colorAt` of the clicked document pixel; an invalid
+    /// colour (outside the document) is ignored.
+    void sampleCanvas(ToolController* tools, std::function<QColor(const QPoint&)> colorAt);
+
     /// Modal convenience wrapper. Returns an invalid QColor if cancelled.
+    /// With `tools` and `colorAt`, the image can be sampled (`sampleCanvas`).
     static QColor getColor(const QColor& initial, QWidget* parent = nullptr,
-                           const QString& title = {});
+                           const QString& title = {}, ToolController* tools = nullptr,
+                           std::function<QColor(const QPoint&)> colorAt = {});
 
 private:
     ColorPicker* m_picker = nullptr;
+    QPointer<ToolController> m_tools;
 };
 
 /// sRGB -> CIE L*a*b* (D50), the space Photoshop's Lab readout uses.

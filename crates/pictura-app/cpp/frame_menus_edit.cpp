@@ -100,6 +100,9 @@ void PicturaMainWindow::registerEditHandlers()
         window->registry()->dispatch(QLatin1String(id));
         return true;
     });
+    setDialogCanvasSampling([window = QPointer<PicturaMainWindow>(this)]() {
+        return window && window->tools_ && window->tools_->canvasSamplerActive();
+    });
     // ponytail: a platform that reports our own write asynchronously drops the
     // mirror, so the next paste re-imports our export and Paste in Place loses
     // the source position (it lands at the origin).

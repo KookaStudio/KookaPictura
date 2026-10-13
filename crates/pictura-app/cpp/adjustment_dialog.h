@@ -23,6 +23,7 @@ class AdjustmentControls;
 class ColorSwatchWidget;
 class ImageView;
 class PictureView;
+class ToolController;
 
 // An Image > Adjustments dialog (Levels…, Curves…, Hue/Saturation…, and the
 // rest the engine describes): the adjustment's controls, built from the same
@@ -58,6 +59,9 @@ public:
 
     // Preview the canvas section `visible` from now on (the view moved).
     void setPreviewArea(const QRect& visible);
+    // The tool controller whose canvas sampler a colour picker opened from
+    // this dialog arms, so the picker can take a colour from the image.
+    void setCanvasSampling(ToolController* tools) { tools_ = tools; }
 
 protected:
     // A hand-laid-out dialog titled `title`: no generic controls. The subclass
@@ -67,6 +71,10 @@ protected:
     AdjustmentDialog(PictureView* view, const QByteArray& block, const QRect& visible,
                      const QString& title, QWidget* parent);
 
+    ToolController* tools() const { return tools_; }
+    // The composite colour at document `pos` as it was before the preview
+    // (the image a picker samples); invalid outside the document.
+    QColor originalColorAt(const QPoint& pos);
     // The current block's descriptor page (`image_adjustment_page` rows).
     QStringList page() const;
     // `key`'s value in the current block, or `fallback` when the page lacks it.
@@ -119,6 +127,7 @@ private:
     void takeHistograms();
 
     PictureView* view_ = nullptr;
+    ToolController* tools_ = nullptr;
     QByteArray block_;
     QRect visible_;
     QString title_;
@@ -135,10 +144,11 @@ std::unique_ptr<AdjustmentDialog> makeAdjustmentDialog(const QString& kind, Pict
                                                        const QRect& visible,
                                                        QWidget* parent = nullptr);
 
-// Open the `kind` dialog (`"levels"`, …) over `view`'s active layer; true when
-// it was applied. `canvas` may be panned or zoomed while the dialog is open
-// (see `runDialog`); the preview follows the section it shows.
+// Open the `kind` dialog (`"levels"`, …) over `view`'s active layer, seeded
+// with `tools`' foreground and background colours; true when it was applied.
+// `canvas` may be panned or zoomed while the dialog is open (see `runDialog`);
+// the preview follows the section it shows.
 bool runAdjustmentDialog(QWidget* parent, PictureView* view, const QString& kind,
-                         const QColor& foreground, const QColor& background, ImageView* canvas);
+                         ToolController* tools, ImageView* canvas);
 
 } // namespace pictura

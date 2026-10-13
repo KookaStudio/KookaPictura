@@ -479,6 +479,12 @@ std::function<bool(QKeyEvent*)>& navigationKeys()
     return handler;
 }
 
+std::function<bool()>& canvasSampling()
+{
+    static std::function<bool()> active;
+    return active;
+}
+
 class DialogInputBlocker : public QObject
 {
 public:
@@ -524,7 +530,8 @@ protected:
             && navigationKeys() && navigationKeys()(static_cast<QKeyEvent*>(event))) {
             return true;
         }
-        if (widget->window() != blocked_ || isCanvasNavigation(widget, event)) {
+        if (widget->window() != blocked_ || isCanvasNavigation(widget, event)
+            || isCanvasSample(widget, event)) {
             return QObject::eventFilter(watched, event);
         }
         // Swallow only input addressed to the blocked top-level window; the
@@ -543,7 +550,27 @@ private:
                              || (event->type() == QEvent::MouseMove
                                  && mouse->buttons() == Qt::MiddleButton));
         }
-        for (QWidget* w = widget; navigation && w; w = w->parentWidget()) {
+        return navigation && overCanvas(widget);
+    }
+
+    // A left-button press / release or a hover over a canvas while a dialog's
+    // eyedropper has armed the canvas sampler.
+    static bool isCanvasSample(QWidget* widget, QEvent* event)
+    {
+        auto* mouse = dynamic_cast<QMouseEvent*>(event);
+        if (!mouse || event->type() == QEvent::MouseButtonDblClick || !canvasSampling()
+            || !canvasSampling()()) {
+            return false;
+        }
+        const bool left = event->type() == QEvent::MouseMove
+                              ? !(mouse->buttons() & ~Qt::LeftButton)
+                              : mouse->button() == Qt::LeftButton;
+        return left && overCanvas(widget);
+    }
+
+    static bool overCanvas(QWidget* widget)
+    {
+        for (QWidget* w = widget; w; w = w->parentWidget()) {
             if (qobject_cast<ImageView*>(w)) {
                 return true;
             }
@@ -567,6 +594,11 @@ int runFileDialog(QFileDialog& dialog, QWidget* parent)
 void setDialogNavigationKeys(std::function<bool(QKeyEvent*)> handler)
 {
     navigationKeys() = std::move(handler);
+}
+
+void setDialogCanvasSampling(std::function<bool()> active)
+{
+    canvasSampling() = std::move(active);
 }
 
 int runDialog(QDialog& dialog, QWidget* parent)
