@@ -63,10 +63,6 @@
 
       <div class="hero-art">
         <img class="medallion" src="./assets/app.png" alt="The Kooka Pictura kookaburra" width="512" height="512">
-        <figure class="canvas-frame">
-          <img src="./assets/screenshot01.jpg" alt="Kooka Pictura editing a photo of a kookaburra with the Curves adjustment open" width="1103" height="865">
-          <figcaption class="plate">Kooka Pictura, editing on Linux</figcaption>
-        </figure>
       </div>
     </div>
   </section>
@@ -169,10 +165,44 @@
         <h2>Built for the way you actually edit.</h2>
         <p>Open a file, paint, select, crop, stack adjustment and fill layers, apply filters, then save — and the round-trip keeps layers, effects, smart objects, metadata and profiles intact.</p>
       </div>
-      <figure class="showcase-frame">
-        <img src="./assets/screenshot01.jpg" alt="The Kooka Pictura workspace with a PSD open, a Curves dialog, and the layer and color panels docked" width="1103" height="865" loading="lazy" decoding="async">
-        <figcaption class="plate">A PSD open in Kooka Pictura, with Curves applied</figcaption>
-      </figure>
+      <div class="showcase-gallery">
+        <figure class="showcase-frame">
+          <div class="showcase-media">
+            <img src="./assets/screenshot01.jpg" alt="The Kooka Pictura workspace with a PSD open, a Curves dialog, and the layer and color panels docked" width="1103" height="865" loading="lazy" decoding="async">
+            <button class="expand" type="button" aria-label="Expand image">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+            </button>
+          </div>
+          <figcaption class="plate">A PSD open in Kooka Pictura, with Curves applied</figcaption>
+        </figure>
+        <figure class="showcase-frame">
+          <div class="showcase-media">
+            <img src="./assets/showcase-iris-blur.png" alt="The Blur Gallery's Iris Blur applied to a mountain landscape in Kooka Pictura" width="2369" height="1791" loading="lazy" decoding="async">
+            <button class="expand" type="button" aria-label="Expand image">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+            </button>
+          </div>
+          <figcaption class="plate">Iris Blur, shaping focus across a mountain landscape</figcaption>
+        </figure>
+        <figure class="showcase-frame">
+          <div class="showcase-media">
+            <img src="./assets/showcase-filter-gallery.png" alt="The Filter Gallery applying Poster Edges to a surfer riding a wave in Kooka Pictura" width="2374" height="1791" loading="lazy" decoding="async">
+            <button class="expand" type="button" aria-label="Expand image">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+            </button>
+          </div>
+          <figcaption class="plate">The Filter Gallery, applying Poster Edges</figcaption>
+        </figure>
+        <figure class="showcase-frame showcase-frame--cover">
+          <div class="showcase-media">
+            <img src="./assets/showcase-brush.png" alt="Painting with a chisel-tip brush, with the Brush and Clone Source panels docked in Kooka Pictura" width="2228" height="1267" loading="lazy" decoding="async">
+            <button class="expand" type="button" aria-label="Expand image">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+            </button>
+          </div>
+          <figcaption class="plate">Brush presets and Clone Source, painting with a chisel tip</figcaption>
+        </figure>
+      </div>
     </div>
   </section>
 
@@ -228,6 +258,7 @@
       </div>
 
       <p class="download-note">Every build is attached to the <a href="https://github.com/KookaStudio/KookaPictura/releases">latest release</a>. Prefer to build it yourself? The steps are in <code>DEVELOPING.md</code>.</p>
+      <p class="download-beta">Kooka Pictura is currently in Beta-testing phase.</p>
     </div>
   </section>
 
@@ -305,6 +336,54 @@
     </p>
   </div>
 </footer>
+
+<div class="lightbox" id="lightbox" hidden>
+  <button class="lightbox-close" type="button" aria-label="Close image">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+  </button>
+  <img class="lightbox-img" alt="">
+</div>
+
+<script>
+(function () {
+  var lightbox = document.getElementById("lightbox");
+  if (!lightbox) return;
+  var lightboxImg = lightbox.querySelector(".lightbox-img");
+  var closeBtn = lightbox.querySelector(".lightbox-close");
+  var lastTrigger = null;
+
+  function open(src, alt) {
+    lightboxImg.src = src;
+    lightboxImg.alt = alt || "";
+    lightbox.hidden = false;
+    document.body.style.overflow = "hidden";
+    closeBtn.focus();
+  }
+
+  function close() {
+    lightbox.hidden = true;
+    lightboxImg.removeAttribute("src");
+    document.body.style.overflow = "";
+    if (lastTrigger) lastTrigger.focus();
+  }
+
+  document.querySelectorAll(".showcase-frame .expand").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var img = btn.closest(".showcase-frame").querySelector("img");
+      lastTrigger = btn;
+      open(img.currentSrc || img.src, img.alt);
+    });
+  });
+
+  closeBtn.addEventListener("click", close);
+  lightbox.addEventListener("click", function (e) {
+    if (e.target === lightbox) close();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !lightbox.hidden) close();
+  });
+})();
+</script>
 
 </body>
 </html>
