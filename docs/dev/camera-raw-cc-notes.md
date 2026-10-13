@@ -57,35 +57,44 @@ per filter in `filterFXList`.
 
 ## `Fltr` key map
 
-Short keys, grouped by the `FILT-100` tab they drive. Values observed in
-fixture 02. The modeled set targets the earliest CC Camera Raw Filter (ACR 8 /
-PV2012); keys added by later CC releases are preserved and not modeled.
+Short keys, grouped by the `FILT-100` tab they drive. Key names and value types
+were observed in reference Photoshop camera-raw filter descriptors. The modeled
+set targets the earliest CC Camera Raw Filter (ACR 8 / PV2012); keys added by
+later CC releases are preserved and not modeled.
 
 `filterID` 2683 is assumed stable across CC, but it is unverified for the
 earliest CC build because there is no such fixture.
+
+**Value types.** Every key below is an integer (`Long`) unless noted: `Ex12`,
+`ShpR`, `PerR`, `PerX`, `PerY` are doubles; `Crv `, `CrvR`, `CrvG`, `CrvB` are
+integer lists; `CMod`, `CamP`, `CP_D`, and the preserved `GuUr`/`Upri`/`REye`/
+`Rtch`/`LCs ` are text; `CtoG` is a boolean; `WBal` and `Sett` are enums. A
+three-letter key is stored as four bytes padded with a trailing space
+(`Crv `, `LNR `, `CNR `, `STB `).
 
 ### Modeled (earliest CC / PV2012)
 
 | Group | Keys | Notes |
 |---|---|---|
-| Mode and process | `CMod`, `Sett`, `PrVe` | `Sett` an enum, `PrVe` observed 101122048 |
-| White balance | `WBal`, `Temp`, `Tint`, `AWBV`, `CtoG` | `Temp` -30, `Tint` 12 (the filter uses the rendered-image scale, not Kelvin) |
-| Basic PV2012 | `Ex12`, `Cr12`, `Hi12`, `Sh12`, `Wh12`, `Bk12`, `Cl12`, `Vibr` | Exposure -1.15, Contrast 12, Highlights -15, Shadows 10, Whites -18, Blacks 9, Clarity -12, Vibrance 13 |
-| Legacy Basic | `BlkB`, `Strt`, `Shrp` | |
-| HSL | `RHue`/`RSat`, `GHue`/`GSat`, `BHue`/`BSat` | red, green, blue |
+| Mode and process | `CMod`, `Sett`, `PrVe`, `AWBV` | `CMod` text `Filter`; `Sett`/`WBal` enums (`Cst ` custom); `PrVe` process version |
+| White balance | `WBal`, `Temp`, `Tint`, `CtoG` | `Temp`/`Tint` use the rendered-image scale, not Kelvin |
+| Basic PV2012 | `Ex12`, `Cr12`, `Hi12`, `Sh12`, `Wh12`, `Bk12`, `Cl12`, `Vibr`, `Strt` | `Ex12` double; the rest integers |
+| Legacy Basic | `BlkB` | PV2010 blacks |
+| HSL 3 ranges | `RHue`/`RSat`, `GHue`/`GSat`, `BHue`/`BSat` | red, green, blue |
 | HSL 8 ranges | `HA_*`, `SA_*`, `LA_*` for `_R _O _Y _G _A _B _P _M` | hue, saturation, luminance |
-| Split toning | `STSH`, `STSS`, `STHH`, `STHS`, `STB` | |
-| Tone curve | `PC_S`, `PC_D`, `PC_L`, `PC_H`, `PC_1`, `PC_2`, `PC_3`, `Crv`, `CrvR`, `CrvG`, `CrvB` | parametric regions plus point curves as `[in, out, ...]` |
-| Detail | `Shrp`, `ShpR`, `ShpD`, `ShpM`, `LNR`, `CNR` | sharpening plus luminance/chroma noise |
-| Lens | `LPEn`, `MDis`, `VigA`, `PerV`, `PerH`, `PerR`, `PerS`, `PerA`, `PerU`, `PerX`, `PerY`, `DfPA`, `DPHL`, `DPPH`, `DfGA`, `DPGL`, `DPGH` | profile enable, manual distortion, vignette, perspective, defringe |
+| Grayscale mix | `GM_*` for the same eight ranges | written when `CtoG` is true; HSL 8 ranges are dropped then |
+| Split toning | `STSH`, `STSS`, `STHH`, `STHS`, `STB ` | |
+| Tone curve | `PC_S`, `PC_D`, `PC_L`, `PC_H`, `PC_1`, `PC_2`, `PC_3`, `Crv `, `CrvR`, `CrvG`, `CrvB` | parametric regions and split points; point curves are integer lists of `[in, out, ...]` pairs |
+| Detail | `Shrp`, `ShpR`, `ShpD`, `ShpM`, `LNR `, `LNRD`, `LNRC`, `CNR `, `CNRD`, `CNRS` | sharpening plus luminance/chroma noise; `ShpR` double |
+| Lens | `LPEn`, `MDis`, `VigA`, `VigM`, `PerV`, `PerH`, `PerR`, `PerS`, `PerA`, `PerU`, `PerX`, `PerY`, `DfPA`, `DPHL`, `DPPH`, `DfGA`, `DPGL`, `DPGH` | profile enable, manual distortion, vignette (amount/midpoint), perspective, defringe; `PerR`/`PerX`/`PerY` doubles |
 | Effects | `GRNA`, `GRNS`, `GRNF`, `PCVA`, `PCVM`, `PCVF`, `PCVR`, `PCVS`, `PCVH` | grain plus post-crop vignette |
-| Camera calibration | `CamP`, `CP_D`, `PrVe` | `CamP` Embedded, `CP_D` profile digest |
+| Camera calibration | `CamP`, `CP_D` | `CamP` profile name, `CP_D` profile digest; both text |
 
-### Preserved, not modeled (later CC)
+### Preserved, not modeled
 
 | Group | Keys | Notes |
 |---|---|---|
-| Later CC | `Dhze`, `Upri`, `GuUr`, `Rtch`, `REye`, `LCs ` | Dehaze -14; Upright stored as XMP strings |
+| Later CC | `Dhze`, `Upri`, `GuUr`, `Rtch`, `REye`, `LCs `, `AuCA`, `TMMs` | Dehaze; Upright stored as XMP strings; the rest are preserved opaque values |
 
 ## Open items
 
