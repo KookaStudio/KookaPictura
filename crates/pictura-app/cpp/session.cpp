@@ -106,6 +106,8 @@ SessionState loadSession()
     state.guidesVisible = obj.value(QStringLiteral("guidesVisible")).toBool(true);
     state.guidesLocked = obj.value(QStringLiteral("guidesLocked")).toBool(false);
     state.freePan = obj.value(QStringLiteral("freePan")).toBool(true);
+    state.snapCanvasToWorkspace =
+        obj.value(QStringLiteral("snapCanvasToWorkspace")).toBool(false);
     state.guideColor = obj.value(QStringLiteral("guideColor")).toString(state.guideColor);
     state.guideDashed = obj.value(QStringLiteral("guideDashed")).toBool(false);
     state.cropClassicMode = obj.value(QStringLiteral("cropClassicMode")).toBool(true);
@@ -188,6 +190,7 @@ bool saveSession(const SessionState& state)
     obj.insert(QStringLiteral("guidesVisible"), state.guidesVisible);
     obj.insert(QStringLiteral("guidesLocked"), state.guidesLocked);
     obj.insert(QStringLiteral("freePan"), state.freePan);
+    obj.insert(QStringLiteral("snapCanvasToWorkspace"), state.snapCanvasToWorkspace);
     obj.insert(QStringLiteral("guideColor"), state.guideColor);
     obj.insert(QStringLiteral("guideDashed"), state.guideDashed);
     obj.insert(QStringLiteral("cropClassicMode"), state.cropClassicMode);

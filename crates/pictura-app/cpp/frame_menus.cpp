@@ -1021,6 +1021,19 @@ void PicturaMainWindow::registerHandlers()
     });
     registry_->setCheckedProvider(command_ids::ViewFreePan, [this]() { return freePan_; });
 
+    registry_->setHandler(command_ids::ViewSnapCanvasToWorkspace, [this]() {
+        snapCanvasToWorkspace_ = !snapCanvasToWorkspace_;
+        for (const DocEntry& entry : docs_) {
+            if (entry.canvas) {
+                entry.canvas->setSnapToWorkspace(snapCanvasToWorkspace_);
+            }
+        }
+        saveSession();
+        registry_->refresh();
+    });
+    registry_->setCheckedProvider(command_ids::ViewSnapCanvasToWorkspace,
+                                  [this]() { return snapCanvasToWorkspace_; });
+
     registry_->setHandler(command_ids::ViewShowSelectionEdges, [this]() {
         const QAction* action = registry_->action(command_ids::ViewShowSelectionEdges);
         if (ImageView* canvas = imageView()) {

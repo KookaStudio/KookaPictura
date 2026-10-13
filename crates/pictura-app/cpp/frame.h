@@ -573,6 +573,10 @@ private:
     // View > Free Pan: whether a canvas may pan off-centre when the document
     // fits the viewport (checked, default) or is pinned to centre. Persisted.
     bool freePan_ = true;
+    // View > Snap Canvas To Workspace: when checked, a canvas whose scaled
+    // document fits the viewport is pinned to the centre, panning is refused,
+    // and the workspace scrollbars hide. Default off. Persisted.
+    bool snapCanvasToWorkspace_ = false;
     QColor foreground_;
     QSet<QString> panelNames_;
     QStringList recent_;

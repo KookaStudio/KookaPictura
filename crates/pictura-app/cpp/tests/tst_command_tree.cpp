@@ -68,6 +68,7 @@ private slots:
     void preferencesPages();
     void toolHintsToggle();
     void freePanToggle();
+    void snapCanvasToWorkspaceToggle();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -1025,6 +1026,27 @@ void CommandTreeTest::freePanToggle()
         }
     }
     QVERIFY2(underView, "Free Pan sits under the View menu");
+}
+
+// View > Snap Canvas To Workspace is a checkable toggle under the View menu,
+// off by default.
+void CommandTreeTest::snapCanvasToWorkspaceToggle()
+{
+    const QString id = QString::fromLatin1(pictura::command_ids::ViewSnapCanvasToWorkspace);
+    QAction* action = window_->registry()->action(id);
+    QVERIFY2(action != nullptr, "Snap Canvas To Workspace command exists");
+    QVERIFY2(action->isCheckable(), "Snap Canvas To Workspace is checkable");
+    QVERIFY2(!action->isChecked(), "Snap Canvas To Workspace defaults off");
+
+    bool underView = false;
+    for (const pictura::CommandInfo& info : window_->registry()->describe()) {
+        if (info.id == id) {
+            underView = info.path
+                        == QStringList({QStringLiteral("View"),
+                                        QStringLiteral("Snap Canvas To Workspace")});
+        }
+    }
+    QVERIFY2(underView, "Snap Canvas To Workspace sits under the View menu");
 }
 
 // Layer > Arrange / Reverse / Merge Down / Delete Layer / Stamp: the new

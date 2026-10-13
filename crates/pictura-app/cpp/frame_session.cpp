@@ -133,6 +133,7 @@ void PicturaMainWindow::saveSession()
     state.guidesVisible = guidesVisible_;
     state.guidesLocked = guidesLocked_;
     state.freePan = freePan_;
+    state.snapCanvasToWorkspace = snapCanvasToWorkspace_;
     state.guideColor = guideColor_.name();
     state.guideDashed = guideDashed_;
     if (tools_ && tools_->optionsFor<CropOptions>(ToolId::Crop)) {

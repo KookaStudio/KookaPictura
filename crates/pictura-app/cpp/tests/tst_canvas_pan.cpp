@@ -51,6 +51,10 @@ private slots:
     void freePanReclampsResizedDocument();
     void freePanCollapsesScrollbar();
     void freePanCommandAppliesToCanvas();
+    void offsetRangeSnapsToWorkspace();
+    void workspaceSnapPinsFittingImage();
+    void workspaceSnapHidesScrollbars();
+    void workspaceSnapCommandAppliesToCanvas();
     void spacePanOverrideHolds();
     void spacePanHoverAndMiddleButton();
 
@@ -298,6 +302,135 @@ void CanvasPanTest::freePanCommandAppliesToCanvas()
     QCoreApplication::processEvents();
     QVERIFY(action->isChecked());
     QVERIFY(f.canvas->freePan());
+}
+
+void CanvasPanTest::offsetRangeSnapsToWorkspace()
+{
+    const QSizeF viewport(400.0, 300.0);
+    const auto close = [](double a, double b) { return std::abs(a - b) < 1e-9; };
+    const auto range = [&viewport](const QSizeF& image, bool snap) {
+        return pictura::offsetRangeFor(image, 1.0, viewport, true,
+                                       pictura::kCanvasRevealMarginPx, snap);
+    };
+
+    // A document that fits both axes collapses to the centre even with free pan.
+    const pictura::OffsetRange fit = range(QSizeF(100.0, 80.0), true);
+    QVERIFY(close(fit.minX, fit.maxX));
+    QVERIFY(close(fit.minX, (400.0 - 100.0) / 2.0));
+    QVERIFY(close(fit.minY, fit.maxY));
+    QVERIFY(close(fit.minY, (300.0 - 80.0) / 2.0));
+
+    // A document that overflows one axis is the free-pan result, byte-for-byte.
+    const pictura::OffsetRange overflowSnap = range(QSizeF(100.0, 900.0), true);
+    const pictura::OffsetRange overflowFree = range(QSizeF(100.0, 900.0), false);
+    QVERIFY(close(overflowSnap.minX, overflowFree.minX));
+    QVERIFY(close(overflowSnap.maxX, overflowFree.maxX));
+    QVERIFY(close(overflowSnap.minY, overflowFree.minY));
+    QVERIFY(close(overflowSnap.maxY, overflowFree.maxY));
+
+    // An empty document is unaffected: no centring offset is produced.
+    const pictura::OffsetRange empty = range(QSizeF(0.0, 0.0), true);
+    QVERIFY(close(empty.minX, 0.0));
+    QVERIFY(close(empty.maxX, 400.0));
+}
+
+void CanvasPanTest::workspaceSnapPinsFittingImage()
+{
+    pictura::ImageView view;
+    view.resize(400, 300);
+    QImage seed(100, 80, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    view.setImage(seed);
+    QCoreApplication::processEvents();
+
+    const double centreX = (400.0 - 100.0) / 2.0;
+    const double centreY = (300.0 - 80.0) / 2.0;
+
+    view.setFreePan(true);
+    view.panBy(QPointF(120, 90));
+    QVERIFY2(std::abs(view.offset().x() - centreX) > 1.0,
+             "free pan moves a fitting image off centre");
+
+    view.setSnapToWorkspace(true);
+    QVERIFY(view.workspaceSnapLocked());
+    QVERIFY2(std::abs(view.offset().x() - centreX) < 1e-9
+                 && std::abs(view.offset().y() - centreY) < 1e-9,
+             "the lock re-centres the fitting image");
+
+    // A middle-button drag cannot move the pinned canvas.
+    const QPointF centre(view.width() / 2.0, view.height() / 2.0);
+    sendMouse(&view, QEvent::MouseButtonPress, centre, Qt::MiddleButton, Qt::MiddleButton);
+    sendMouse(&view, QEvent::MouseMove, centre + QPointF(60.0, 40.0), Qt::NoButton,
+              Qt::MiddleButton);
+    sendMouse(&view, QEvent::MouseButtonRelease, centre + QPointF(60.0, 40.0), Qt::MiddleButton,
+              Qt::NoButton);
+    QVERIFY2(std::abs(view.offset().x() - centreX) < 1e-9
+                 && std::abs(view.offset().y() - centreY) < 1e-9,
+             "a locked canvas cannot be panned");
+
+    view.setSnapToWorkspace(false);
+    QVERIFY(!view.workspaceSnapLocked());
+    view.panBy(QPointF(120, 90));
+    QVERIFY2(std::abs(view.offset().x() - centreX) > 1.0,
+             "clearing the lock allows the pan again");
+}
+
+void CanvasPanTest::workspaceSnapHidesScrollbars()
+{
+    pictura::CanvasScrollBars bars;
+    auto* view = new pictura::ImageView(&bars);
+    bars.setView(view);
+    bars.resize(600, 500);
+    bars.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&bars));
+    view->resize(400, 300);
+    QImage seed(100, 80, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    view->setImage(seed);
+    QCoreApplication::processEvents();
+
+    view->setSnapToWorkspace(true);
+    QVERIFY(view->workspaceSnapLocked());
+    QVERIFY2(!bars.horizontalBarForTest()->isVisible(), "horizontal bar hides under the lock");
+    QVERIFY2(!bars.verticalBarForTest()->isVisible(), "vertical bar hides under the lock");
+
+    // Zoom past the workspace: the lock releases and the bars return.
+    view->setZoom(12.0, QPointF(view->width() / 2.0, view->height() / 2.0));
+    QVERIFY(!view->workspaceSnapLocked());
+    QVERIFY2(bars.horizontalBarForTest()->isVisible(),
+             "horizontal bar returns past the workspace");
+    QVERIFY2(bars.verticalBarForTest()->isVisible(), "vertical bar returns past the workspace");
+
+    view->setSnapToWorkspace(false);
+}
+
+void CanvasPanTest::workspaceSnapCommandAppliesToCanvas()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(100, 80, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_canvas_ws_snap_command"));
+    QVERIFY2(f.ok(), "workspace-snap command fixture");
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&frame));
+    QCoreApplication::processEvents();
+
+    QAction* action = frame.registry()->action(
+        QString::fromLatin1(pictura::command_ids::ViewSnapCanvasToWorkspace));
+    QVERIFY2(action != nullptr, "Snap Canvas To Workspace command exists");
+    QVERIFY2(action->isCheckable(), "Snap Canvas To Workspace is checkable");
+    QVERIFY2(!action->isChecked(), "Snap Canvas To Workspace defaults off");
+    QVERIFY(!f.canvas->snapToWorkspace());
+
+    action->trigger();
+    QCoreApplication::processEvents();
+    QVERIFY2(action->isChecked(), "toggled on");
+    QVERIFY(f.canvas->snapToWorkspace());
+
+    action->trigger();
+    QCoreApplication::processEvents();
+    QVERIFY(!action->isChecked());
+    QVERIFY(!f.canvas->snapToWorkspace());
 }
 
 void CanvasPanTest::spacePanOverrideHolds()
