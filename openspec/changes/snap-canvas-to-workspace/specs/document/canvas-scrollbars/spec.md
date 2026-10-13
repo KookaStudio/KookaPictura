@@ -39,3 +39,26 @@ unchecked.
 - **WHEN** the canvas is zoomed so the document overflows the viewport while Snap
   Canvas To Workspace is on
 - **THEN** both scrollbars are shown again and project the pan range
+
+### Requirement: Scrollbars project the free-pan range
+
+The workspace scrollbars SHALL derive their range and value from the same shared
+range helper that clamps the canvas pan, using the canvas's current free-pan
+state, so the bars never offer a range the canvas will refuse. When Free Pan is
+off and the scaled document fits an axis, that bar's range SHALL equal the
+centred value on both ends and its value SHALL read zero. The bars SHALL remain
+visible except while the workspace snap lock hides them (see the always-visible
+requirement), and the canvas offset SHALL remain the single source of truth; the
+bars SHALL NOT store their own pan state.
+
+#### Scenario: A constrained axis collapses [lcs_free_pan_collapse]
+
+- **WHEN** Free Pan is off and the document fits the viewport along an axis
+- **THEN** that scrollbar's range is a single point and the canvas offset equals
+  the centred value
+
+#### Scenario: The bars follow the toggle [lcs_free_pan_follow]
+
+- **WHEN** Free Pan is toggled
+- **THEN** both scrollbars re-derive their range and value from the shared helper
+  with no second stored pan state
