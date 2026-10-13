@@ -154,6 +154,7 @@ void ImageView::clearOverlay()
 void ImageView::setSelectionContour(const selection_api::SelectionContour& contour)
 {
     selectionContours_ = contour.loops;
+    selectionContourOffset_ = QPointF();
     updateAntsTimer();
     update();
 }
@@ -161,7 +162,17 @@ void ImageView::setSelectionContour(const selection_api::SelectionContour& conto
 void ImageView::clearSelectionContour()
 {
     selectionContours_.clear();
+    selectionContourOffset_ = QPointF();
     updateAntsTimer();
+    update();
+}
+
+void ImageView::setSelectionContourOffset(const QPointF& offset)
+{
+    if (selectionContourOffset_ == offset) {
+        return;
+    }
+    selectionContourOffset_ = offset;
     update();
 }
 
@@ -684,6 +695,10 @@ void ImageView::paintEvent(QPaintEvent*)
         // Marching ants: a solid white base under an animated black dashed pen,
         // so the edge reads against both light and dark pixels. Width 0 = a
         // cosmetic 1-px line independent of the pan/zoom transform.
+        // ponytail: a dragged outline past the canvas edge is cut off rather
+        // than closed along it; the release retrace draws the clipped mask.
+        painter.save();
+        painter.translate(selectionContourOffset_);
         painter.setBrush(Qt::NoBrush);
         painter.setPen(QPen(Qt::white, 0));
         for (const QPolygonF& loop : selectionContours_) {
@@ -695,6 +710,7 @@ void ImageView::paintEvent(QPaintEvent*)
         for (const QPolygonF& loop : selectionContours_) {
             painter.drawPolygon(loop);
         }
+        painter.restore();
     }
 
     if (!previewContours_.isEmpty()) {

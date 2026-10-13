@@ -215,6 +215,18 @@ pub(super) fn combine_mode_from(mode: &str) -> CombineMode {
         _ => CombineMode::New,
     }
 }
+/// `shape` feathered by `radius`, moved through untouched when there is no
+/// feather: [`Selection::feather`] would clone a document-sized mask.
+pub(super) fn feathered(
+    shape: pictura_select::Selection,
+    radius: f64,
+) -> pictura_select::Selection {
+    if radius > 0.0 {
+        shape.feather(radius)
+    } else {
+        shape
+    }
+}
 /// Unpack a `0xAARRGGBB` colour.
 pub(super) fn rgba_from_argb(argb: u32) -> Rgba {
     Rgba {

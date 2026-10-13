@@ -101,14 +101,16 @@ impl Selection {
         if w <= 0 || h <= 0 {
             return sel;
         }
-        for py in 0..height as i32 {
-            if py < y || py >= y.saturating_add(h) {
-                continue;
-            }
-            for px in 0..width as i32 {
-                if px >= x && px < x.saturating_add(w) {
-                    sel.data[py as usize * width as usize + px as usize] = 255;
-                }
+        let clip = |lo: i32, len: i32, max: u32| {
+            let max = max as i64;
+            let (lo, hi) = (lo as i64, lo as i64 + len as i64);
+            (lo.clamp(0, max) as usize, hi.clamp(0, max) as usize)
+        };
+        let (x0, x1) = clip(x, w, width);
+        let (y0, y1) = clip(y, h, height);
+        if x0 < x1 {
+            for row in sel.data.chunks_exact_mut(width as usize).take(y1).skip(y0) {
+                row[x0..x1].fill(255);
             }
         }
         sel
@@ -126,14 +128,38 @@ impl Selection {
         let ry = h as f64 / 2.0;
         let cx = x as f64 + rx;
         let cy = y as f64 + ry;
-        for py in 0..height {
+        // No pixel centre outside the bounding box is inside, and each row's
+        // inside pixels are one run: estimate its ends in closed form, then
+        // settle them with the exact per-pixel test.
+        let clip = |lo: i32, len: i32, max: u32| {
+            let (lo, hi) = (lo as i64, lo as i64 + len as i64);
+            (lo.clamp(0, max as i64), hi.clamp(0, max as i64))
+        };
+        let (xs, xe) = clip(x, w, width);
+        let (ys, ye) = clip(y, h, height);
+        for py in ys..ye {
             let dy = (py as f64 + 0.5 - cy) / ry;
-            for px in 0..width {
+            let inside = |px: i64| {
                 let dx = (px as f64 + 0.5 - cx) / rx;
-                if dx * dx + dy * dy <= 1.0 {
-                    sel.data[py as usize * width as usize + px as usize] = 255;
-                }
+                dx * dx + dy * dy <= 1.0
+            };
+            let half = rx * (1.0 - dy * dy).max(0.0).sqrt();
+            let mut left = ((cx - half - 0.5).ceil() as i64).clamp(xs, xe);
+            while left > xs && inside(left - 1) {
+                left -= 1;
             }
+            while left < xe && !inside(left) {
+                left += 1;
+            }
+            let mut right = ((cx + half - 0.5).floor() as i64 + 1).clamp(left, xe);
+            while right < xe && inside(right) {
+                right += 1;
+            }
+            while right > left && !inside(right - 1) {
+                right -= 1;
+            }
+            let row = py as usize * width as usize;
+            sel.data[row + left as usize..row + right as usize].fill(255);
         }
         sel
     }
@@ -1014,5 +1040,71 @@ mod tests {
         assert_eq!(a.smooth(10_000).data.len(), 64);
         assert_eq!(a.feather(f64::MAX).data.len(), 64);
         assert_eq!(a.feather(1e9).data.len(), 64);
+    }
+
+    /// The per-pixel definitions the bounded `rect`/`ellipse` fills must match.
+    fn reference_shape(w: u32, h: u32, f: impl Fn(i64, i64) -> bool) -> Selection {
+        sel_from(w, h, |x, y| if f(x as i64, y as i64) { 255 } else { 0 })
+    }
+
+    #[test]
+    fn bounded_shapes_match_the_per_pixel_definition() {
+        let (w, h) = (23u32, 17u32);
+        let boxes = [
+            (2, 3, 9, 7),
+            (-4, -5, 12, 9),
+            (15, 10, 20, 20),
+            (0, 0, 23, 17),
+            (-30, 2, 60, 5),
+            (5, 5, 1, 1),
+            (7, 2, 2, 13),
+            (30, 30, 4, 4),
+        ];
+        for (x, y, bw, bh) in boxes {
+            let rect = reference_shape(w, h, |px, py| {
+                px >= x as i64 && px < (x + bw) as i64 && py >= y as i64 && py < (y + bh) as i64
+            });
+            assert_eq!(
+                Selection::rect(w, h, x, y, bw, bh),
+                rect,
+                "rect {x},{y} {bw}x{bh}"
+            );
+            let (rx, ry) = (bw as f64 / 2.0, bh as f64 / 2.0);
+            let (cx, cy) = (x as f64 + rx, y as f64 + ry);
+            let ellipse = reference_shape(w, h, |px, py| {
+                let dx = (px as f64 + 0.5 - cx) / rx;
+                let dy = (py as f64 + 0.5 - cy) / ry;
+                dx * dx + dy * dy <= 1.0
+            });
+            assert_eq!(
+                Selection::ellipse(w, h, x, y, bw, bh),
+                ellipse,
+                "ellipse {x},{y} {bw}x{bh}"
+            );
+        }
+    }
+
+    #[test]
+    fn row_copy_translate_matches_the_per_pixel_shift() {
+        let src = sel_from(11, 7, |x, y| ((x * 37 + y * 11) % 256) as u8);
+        for (dx, dy) in [
+            (3, 2),
+            (-4, 1),
+            (0, -3),
+            (10, 6),
+            (-11, 0),
+            (5, -7),
+            (20, 1),
+        ] {
+            let expected = sel_from(11, 7, |x, y| {
+                let (sx, sy) = (x as i64 - dx as i64, y as i64 - dy as i64);
+                if (0..11).contains(&sx) && (0..7).contains(&sy) {
+                    src.data[(sy * 11 + sx) as usize]
+                } else {
+                    0
+                }
+            });
+            assert_eq!(src.translate(dx, dy), expected, "shift {dx},{dy}");
+        }
     }
 }

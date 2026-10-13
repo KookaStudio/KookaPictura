@@ -73,6 +73,9 @@ void ToolController::cancelSelectionMove()
         return;
     }
     movingSelection_ = false;
+    if (canvas_) {
+        canvas_->setSelectionContourOffset(QPointF());
+    }
     PictureView* v = view();
     if (v) {
         v->cancel_selection_move();
@@ -95,8 +98,8 @@ void ToolController::dragSelectionMove(const QPointF& imagePos)
     }
     const int dx = qRound(imagePos.x() - selectionMoveAnchor_.x());
     const int dy = qRound(imagePos.y() - selectionMoveAnchor_.y());
-    if (v->preview_selection_move(dx, dy)) {
-        emit selectionPreviewChanged();
+    if (v->preview_selection_move(dx, dy) && canvas_) {
+        canvas_->setSelectionContourOffset(QPointF(dx, dy));
     }
     if (contentPreviewActive_ && canvas_) {
         canvas_->setMovePreviewDelta(QPointF(dx, dy));
@@ -109,6 +112,11 @@ void ToolController::releaseSelectionMove(const QPointF& imagePos)
         return;
     }
     movingSelection_ = false;
+    // The commit retraces the moved mask; a refused or zero move shows the
+    // origin contour again.
+    if (canvas_) {
+        canvas_->setSelectionContourOffset(QPointF());
+    }
     PictureView* v = view();
     const int dx = qRound(imagePos.x() - selectionMoveAnchor_.x());
     const int dy = qRound(imagePos.y() - selectionMoveAnchor_.y());

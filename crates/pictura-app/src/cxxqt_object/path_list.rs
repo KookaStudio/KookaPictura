@@ -11,7 +11,7 @@
 //!
 //! [`PictureView`]: super::qobject::PictureView
 
-use super::helpers::{combine_mode_from, rgba_from_argb};
+use super::helpers::{combine_mode_from, feathered, rgba_from_argb};
 use super::paint_tools::fills::{apply, selection};
 use super::paths::{active_in, path, ActivePath};
 use super::qobject::PictureView;
@@ -430,12 +430,14 @@ fn paths_make_selection(mut view: Pin<&mut PictureView>, feather: f64, mode: &QS
     let Some((width, height)) = view.rust().doc.as_ref().map(|d| (d.width, d.height)) else {
         return false;
     };
-    let shape = Selection {
-        width,
-        height,
-        data: mask,
-    }
-    .feather(feather.max(0.0));
+    let shape = feathered(
+        Selection {
+            width,
+            height,
+            data: mask,
+        },
+        feather,
+    );
     let mode = combine_mode_from(&mode.to_string());
     view.as_mut()
         .apply_selection_labeled(shape, mode, "Make Selection")
