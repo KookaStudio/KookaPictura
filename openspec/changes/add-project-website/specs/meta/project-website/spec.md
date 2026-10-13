@@ -69,6 +69,17 @@ SHALL link to its issue tracker at
 - **WHEN** a visitor activates an issue control
 - **THEN** they are taken to the project's GitHub issue tracker
 
+### Requirement: The site links to the project's community chat
+
+The landing page SHALL offer a link to the project's Discord community at
+`https://discord.com/channels/1553843620501528786/1559643682897010741`, from the
+community section and the footer.
+
+#### Scenario: A visitor joins the chat
+
+- **WHEN** a visitor activates a Discord link
+- **THEN** they are taken to the project's Discord channel
+
 ### Requirement: Local assets are referenced relatively
 
 The site SHALL reference its local assets with relative URLs, because GitHub

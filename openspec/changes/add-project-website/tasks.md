@@ -28,6 +28,8 @@
 - [x] 2.5 Reference all local assets relatively (`./…`) and pin absolute Open
   Graph URLs to the Pages origin; add image `width`/`height` and lazy-load the
   below-the-fold screenshot.
+- [x] 2.6 Link the community section and the footer to the project's Discord
+  channel.
 
 ## 3. Add the Pages deploy workflow
 
