@@ -297,7 +297,8 @@ filter masks are moved/copied between smart-filter effects. See
   not itemized in the Help. *Resolves with:* CS6 dialog capture.
 - **From Transparency color.** The opaque color produced is admitted to vary;
   whether it is deterministic is unknown. *Resolves with:* CS6 test PSDs.
-- **Mask-parameters PSD round-trip.** Whether CS6 always writes density/feather
+- **Mask-parameters PSD round-trip.** The block layout is sourced from psd-tools
+  (see `ARCH-008` open questions). Whether CS6 always writes density/feather
   records (flag bit 4) or only when non-default is not confirmed. *Resolves with:*
   a CS6 mask PSD byte inspection.
 - **Rubylith defaults** (color and opacity on a fresh install) are not stated.
