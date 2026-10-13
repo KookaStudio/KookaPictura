@@ -63,7 +63,7 @@ pub struct GpuStroke {
 impl GpuStroke {
     /// Whether a GPU stroke can run at all.
     pub fn available() -> bool {
-        devices().is_ok()
+        super::gpu_available()
     }
 
     /// Seed a stroke from the target layer's interleaved RGBA8 pixels
@@ -77,6 +77,12 @@ impl GpuStroke {
         let n = u64::from(width) * u64::from(height);
         if width == 0 || height == 0 || rgba.len() < (n as usize) * 4 {
             return Err(GpuError::TooLarge);
+        }
+        // The app seeds via `new().ok()`, not `available()`, so the gate must
+        // live here too: a device that miscompiles the compositor miscompiles
+        // `STROKE_SHADER`, and a GPU stroke commits with no CPU replay.
+        if !super::gpu_available() {
+            return Err(GpuError::Unavailable);
         }
         let shared = devices()?;
         let device = shared.device.clone();
@@ -426,6 +432,37 @@ mod tests {
         BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LockFlags,
     };
     use pictura_paint::{spacing::SpacingMode, Stroke, StrokeSample};
+
+    /// The GPU stroke reaches the device through `devices()`, not
+    /// `shared_device()`, and the app seeds it via `new().ok()`; both must
+    /// consult the compositor validation so a miscompiled `STROKE_SHADER` cannot
+    /// patch the document with no CPU replay.
+    #[test]
+    fn the_stroke_gate_follows_the_compositor_validation() {
+        assert_eq!(GpuStroke::available(), crate::gpu::gpu_available());
+        if GpuStroke::available() {
+            return;
+        }
+        let cfg = GpuStrokeParams {
+            radius: 4.0,
+            round_radius: 4.0,
+            sin_t: 0.0,
+            cos_t: 1.0,
+            core: 0.5,
+            denom: 1.0,
+            flow: 1.0,
+            opacity: 1.0,
+            color: [1.0, 0.0, 0.0, 1.0],
+            aliased: false,
+            flip_x: false,
+            flip_y: false,
+            mode: GpuPaintMode::Normal,
+        };
+        assert!(matches!(
+            GpuStroke::new(2, 2, &[0u8; 16], cfg),
+            Err(GpuError::Unavailable)
+        ));
+    }
 
     fn layer_doc(w: u32, h: u32, rgba: (u8, u8, u8, u8)) -> Document {
         let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);

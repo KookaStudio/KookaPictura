@@ -269,9 +269,14 @@ pub(super) fn devices() -> Result<&'static Devices, GpuError> {
 }
 
 /// The process-wide cached device and queue, shared by the compositor and the
-/// M27 filter kernels. `None` when no Vulkan adapter is usable. Cheap to call
-/// repeatedly and never panics.
+/// M27 filter kernels. `None` when no Vulkan adapter is usable, or when the
+/// device failed the compositor's one-time CPU-oracle check (a device that
+/// miscompiles the compositor miscompiles the filter kernels too). Cheap to
+/// call repeatedly and never panics.
 pub(crate) fn shared_device() -> Option<(&'static wgpu::Device, &'static wgpu::Queue)> {
+    if !super::gpu_available() {
+        return None;
+    }
     devices().ok().map(|d| (&d.device, &d.queue))
 }
 
