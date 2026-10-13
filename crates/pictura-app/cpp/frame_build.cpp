@@ -217,6 +217,11 @@ void PicturaMainWindow::buildPanels()
     panelColumn_->showPanel(QStringLiteral("paragraphPanel"), false);
     panelColumn_->showPanel(QStringLiteral("paragraphStylesPanel"), false);
 
+    // The Layers row menu's Edit / Replace / Export Contents actions run through
+    // the frame, so this is wired here where the panel exists (registerHandlers
+    // runs before buildPanels).
+    wireSmartObjectRowMenu();
+
     // Switching between a layer's pixels and its mask swaps in that target's
     // own FG/BG pair, so each remembers its colours.
     connect(layersPanel_, &LayersPanel::editTargetChanged, this, [this](bool) {

@@ -174,12 +174,16 @@ void SmartObjectActionsTest::rowMenuOffersSmartObjectContents()
     QVERIFY2(!panel->rowMenuEnabledForPathForTest(path, QStringLiteral("Convert to Linked…")),
              "Convert to Linked is not implemented");
 
-    // The contents rows carry the row's path to the frame through the signal.
+    // The contents rows carry the row's path to the frame through the signal,
+    // and the frame acts on it: Edit Contents opens a new untitled editor tab
+    // (no file dialog), which proves the signal is connected end to end.
     QSignalSpy spy(panel, &pictura::LayersPanel::smartObjectContentsRequested);
     QVERIFY(spy.isValid());
+    const int tabsBefore = window_->documentCount();
     QVERIFY(panel->performRowActionForTest(QStringLiteral("editContents"), path));
     QCOMPARE(spy.count(), 1);
     QCOMPARE(spy.takeFirst().at(0).toString(), QStringLiteral("edit"));
+    QCOMPARE(window_->documentCount(), tabsBefore + 1);
 }
 
 void SmartObjectActionsTest::commandsRequireASmartObject()

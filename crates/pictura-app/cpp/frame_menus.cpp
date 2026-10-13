@@ -796,7 +796,6 @@ void PicturaMainWindow::registerHandlers()
     wireVectorMaskActions();
     wireMattingActions();
     wireAdvancedSmartObjectActions();
-    wireSmartObjectRowMenu();
 
     // Smart Objects. Convert to Smart Object needs the current layer to be a
     // raster pixel layer (not a group, adjustment, Background, or already a
