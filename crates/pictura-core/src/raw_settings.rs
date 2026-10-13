@@ -63,18 +63,12 @@ pub struct Detail {
     pub noise_color_smoothness: Option<i32>,
 }
 
-/// HSL color ranges, the legacy red/green/blue sliders, and the grayscale mix.
+/// HSL color ranges and the grayscale mix.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Hsl {
     pub hue: [Option<i32>; 8],
     pub saturation: [Option<i32>; 8],
     pub luminance: [Option<i32>; 8],
-    pub legacy_red_hue: Option<i32>,
-    pub legacy_red_saturation: Option<i32>,
-    pub legacy_green_hue: Option<i32>,
-    pub legacy_green_saturation: Option<i32>,
-    pub legacy_blue_hue: Option<i32>,
-    pub legacy_blue_saturation: Option<i32>,
     pub grayscale_mix: [Option<i32>; 8],
 }
 
@@ -112,12 +106,13 @@ pub struct Lens {
     pub defringe_green_hue_hi: Option<i32>,
 }
 
-/// Effects: film grain and post-crop vignette.
+/// Effects: film grain, Dehaze, and post-crop vignette.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Effects {
     pub grain_amount: Option<i32>,
     pub grain_size: Option<i32>,
     pub grain_frequency: Option<i32>,
+    pub dehaze: Option<i32>,
     pub vignette_amount: Option<i32>,
     pub vignette_midpoint: Option<i32>,
     pub vignette_feather: Option<i32>,
@@ -126,13 +121,28 @@ pub struct Effects {
     pub vignette_highlights: Option<i32>,
 }
 
-/// Camera calibration.
+/// Camera calibration: the camera profile, the red/green/blue primary hue and
+/// saturation, and the shadow tint.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct CameraCalibration {
     /// `CamP` camera profile name, stored verbatim including the trailing NUL.
     pub camera_profile: Option<String>,
     /// `CP_D` camera profile digest, stored verbatim.
     pub profile_digest: Option<String>,
+    /// `RHue` red primary hue.
+    pub red_hue: Option<i32>,
+    /// `RSat` red primary saturation.
+    pub red_saturation: Option<i32>,
+    /// `GHue` green primary hue.
+    pub green_hue: Option<i32>,
+    /// `GSat` green primary saturation.
+    pub green_saturation: Option<i32>,
+    /// `BHue` blue primary hue.
+    pub blue_hue: Option<i32>,
+    /// `BSat` blue primary saturation.
+    pub blue_saturation: Option<i32>,
+    /// `BlkB` shadow tint.
+    pub shadow_tint: Option<i32>,
 }
 
 /// The full Pictura Raw settings model: the CC `Fltr` key set in per-tab
@@ -140,8 +150,6 @@ pub struct CameraCalibration {
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PicturaRawSettings {
     pub basic: CrsSettings,
-    /// `BlkB` legacy (PV2010) blacks.
-    pub legacy_blacks: Option<i32>,
     pub mode: RawMode,
     pub tone_curve: ToneCurve,
     pub detail: Detail,
@@ -163,7 +171,22 @@ mod tests {
         value.detail.sharpen_amount = Some(25);
         value.tone_curve.curve_rgb = vec![0, 0, 255, 255];
         value.mode.grayscale = Some(true);
+        value.effects.dehaze = Some(14);
         assert_eq!(value.clone(), value);
+    }
+
+    #[test]
+    fn calibration_controls_live_under_camera_calibration() {
+        let mut value = PicturaRawSettings::default();
+        value.calibration.red_hue = Some(40);
+        value.calibration.red_saturation = Some(30);
+        value.calibration.green_hue = Some(35);
+        value.calibration.green_saturation = Some(-40);
+        value.calibration.blue_hue = Some(-30);
+        value.calibration.blue_saturation = Some(45);
+        value.calibration.shadow_tint = Some(25);
+        assert_eq!(value.calibration.red_hue, Some(40));
+        assert_eq!(value.calibration.shadow_tint, Some(25));
     }
 
     #[test]

@@ -44,7 +44,6 @@ fn full_settings() -> PicturaRawSettings {
             vibrance: Some(-9.0),
             saturation: Some(4.0),
         },
-        legacy_blacks: Some(-7),
         mode: RawMode {
             module: Some("Filter\0".into()),
             white_balance: Some(*b"Cst "),
@@ -109,12 +108,6 @@ fn full_settings() -> PicturaRawSettings {
                 Some(18),
                 Some(18),
             ],
-            legacy_red_hue: Some(-13),
-            legacy_red_saturation: Some(-17),
-            legacy_green_hue: Some(-13),
-            legacy_green_saturation: Some(-15),
-            legacy_blue_hue: Some(-13),
-            legacy_blue_saturation: Some(-17),
             grayscale_mix: [
                 Some(-10),
                 Some(-19),
@@ -157,6 +150,7 @@ fn full_settings() -> PicturaRawSettings {
             grain_amount: Some(9),
             grain_size: Some(6),
             grain_frequency: Some(13),
+            dehaze: Some(14),
             vignette_amount: Some(-12),
             vignette_midpoint: Some(43),
             vignette_feather: Some(45),
@@ -167,6 +161,13 @@ fn full_settings() -> PicturaRawSettings {
         calibration: CameraCalibration {
             camera_profile: Some("Embedded\0".into()),
             profile_digest: Some("0123456789ABCDEF\0".into()),
+            red_hue: Some(-13),
+            red_saturation: Some(-17),
+            green_hue: Some(-13),
+            green_saturation: Some(-15),
+            blue_hue: Some(-13),
+            blue_saturation: Some(-17),
+            shadow_tint: Some(-7),
         },
     }
 }
@@ -359,8 +360,8 @@ fn config_filter_entry(config_descriptor: &[u8]) -> Vec<(Vec<u8>, DescValue)> {
     entry.clone()
 }
 
-const PRESERVE_KEYS: [&[u8]; 8] = [
-    b"Dhze", b"Upri", b"GuUr", b"Rtch", b"REye", b"LCs ", b"AuCA", b"TMMs",
+const PRESERVE_KEYS: [&[u8]; 7] = [
+    b"Upri", b"GuUr", b"Rtch", b"REye", b"LCs ", b"AuCA", b"TMMs",
 ];
 
 #[test]
@@ -418,8 +419,8 @@ fn reattach_over_a_preserved_filter_keeps_unmodeled_keys() {
         panic!("Fltr is an object");
     };
     assert_eq!(
-        get_object_item(fltr, b"Dhze"),
-        Some(&DescValue::Long(-14)),
+        get_object_item(fltr, b"AuCA"),
+        Some(&DescValue::Long(0)),
         "an unmodeled Fltr key survives the merge"
     );
 }
@@ -561,10 +562,17 @@ fn fixture_full_key_map_round_trips_and_preserves_unmodeled() {
     assert!(settings.split_toning.balance.is_some(), "split toning");
     assert!(settings.lens.vignette_midpoint.is_some(), "lens tab");
     assert!(settings.effects.grain_frequency.is_some(), "effects tab");
+    assert_eq!(settings.effects.dehaze, Some(14), "dehaze modeled");
     assert!(
         settings.calibration.camera_profile.is_some(),
         "calibration tab"
     );
+    assert_eq!(
+        settings.calibration.red_hue,
+        Some(-13),
+        "calibration primaries"
+    );
+    assert_eq!(settings.calibration.shadow_tint, Some(-7), "shadow tint");
 
     // Capture the unmodeled keys as they sit in the fixture.
     let DescValue::Object {

@@ -19,7 +19,6 @@ pub fn decode_pictura_raw_settings(fltr_options: &[u8]) -> PicturaRawSettings {
     };
     PicturaRawSettings {
         basic: decode_basic(&items),
-        legacy_blacks: integer(&items, b"BlkB"),
         mode: decode_mode(&items),
         tone_curve: decode_tone_curve(&items),
         detail: decode_detail(&items),
@@ -48,7 +47,6 @@ pub fn encode_pictura_raw_fltr(settings: &PicturaRawSettings) -> DescValue {
     push_rounded(&mut items, b"Cl12", b.clarity);
     push_rounded(&mut items, b"Vibr", b.vibrance);
     push_rounded(&mut items, b"Strt", b.saturation);
-    push_int(&mut items, b"BlkB", settings.legacy_blacks);
 
     let m = &settings.mode;
     push_text(&mut items, b"CMod", m.module.as_deref());
@@ -88,12 +86,6 @@ pub fn encode_pictura_raw_fltr(settings: &PicturaRawSettings) -> DescValue {
     push_range(&mut items, b"SA_", &h.saturation);
     push_range(&mut items, b"LA_", &h.luminance);
     push_range(&mut items, b"GM_", &h.grayscale_mix);
-    push_int(&mut items, b"RHue", h.legacy_red_hue);
-    push_int(&mut items, b"RSat", h.legacy_red_saturation);
-    push_int(&mut items, b"GHue", h.legacy_green_hue);
-    push_int(&mut items, b"GSat", h.legacy_green_saturation);
-    push_int(&mut items, b"BHue", h.legacy_blue_hue);
-    push_int(&mut items, b"BSat", h.legacy_blue_saturation);
 
     let s = &settings.split_toning;
     push_int(&mut items, b"STSH", s.shadow_hue);
@@ -126,6 +118,7 @@ pub fn encode_pictura_raw_fltr(settings: &PicturaRawSettings) -> DescValue {
     push_int(&mut items, b"GRNA", e.grain_amount);
     push_int(&mut items, b"GRNS", e.grain_size);
     push_int(&mut items, b"GRNF", e.grain_frequency);
+    push_int(&mut items, b"Dhze", e.dehaze);
     push_int(&mut items, b"PCVA", e.vignette_amount);
     push_int(&mut items, b"PCVM", e.vignette_midpoint);
     push_int(&mut items, b"PCVF", e.vignette_feather);
@@ -136,6 +129,13 @@ pub fn encode_pictura_raw_fltr(settings: &PicturaRawSettings) -> DescValue {
     let c = &settings.calibration;
     push_text(&mut items, b"CamP", c.camera_profile.as_deref());
     push_text(&mut items, b"CP_D", c.profile_digest.as_deref());
+    push_int(&mut items, b"RHue", c.red_hue);
+    push_int(&mut items, b"RSat", c.red_saturation);
+    push_int(&mut items, b"GHue", c.green_hue);
+    push_int(&mut items, b"GSat", c.green_saturation);
+    push_int(&mut items, b"BHue", c.blue_hue);
+    push_int(&mut items, b"BSat", c.blue_saturation);
+    push_int(&mut items, b"BlkB", c.shadow_tint);
 
     DescValue::Object {
         name: String::new(),
@@ -207,12 +207,6 @@ fn decode_hsl(items: &[(Vec<u8>, DescValue)]) -> Hsl {
         hue: range(items, b"HA_"),
         saturation: range(items, b"SA_"),
         luminance: range(items, b"LA_"),
-        legacy_red_hue: integer(items, b"RHue"),
-        legacy_red_saturation: integer(items, b"RSat"),
-        legacy_green_hue: integer(items, b"GHue"),
-        legacy_green_saturation: integer(items, b"GSat"),
-        legacy_blue_hue: integer(items, b"BHue"),
-        legacy_blue_saturation: integer(items, b"BSat"),
         grayscale_mix: range(items, b"GM_"),
     }
 }
@@ -255,6 +249,7 @@ fn decode_effects(items: &[(Vec<u8>, DescValue)]) -> Effects {
         grain_amount: integer(items, b"GRNA"),
         grain_size: integer(items, b"GRNS"),
         grain_frequency: integer(items, b"GRNF"),
+        dehaze: integer(items, b"Dhze"),
         vignette_amount: integer(items, b"PCVA"),
         vignette_midpoint: integer(items, b"PCVM"),
         vignette_feather: integer(items, b"PCVF"),
@@ -268,6 +263,13 @@ fn decode_calibration(items: &[(Vec<u8>, DescValue)]) -> CameraCalibration {
     CameraCalibration {
         camera_profile: text(items, b"CamP"),
         profile_digest: text(items, b"CP_D"),
+        red_hue: integer(items, b"RHue"),
+        red_saturation: integer(items, b"RSat"),
+        green_hue: integer(items, b"GHue"),
+        green_saturation: integer(items, b"GSat"),
+        blue_hue: integer(items, b"BHue"),
+        blue_saturation: integer(items, b"BSat"),
+        shadow_tint: integer(items, b"BlkB"),
     }
 }
 
