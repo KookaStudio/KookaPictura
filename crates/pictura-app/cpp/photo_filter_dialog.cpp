@@ -123,7 +123,8 @@ PhotoFilterDialog::PhotoFilterDialog(PictureView* view, const QByteArray& block,
     });
     connect(color_, &QPushButton::clicked, this, [this]() {
         const QColor picked = ColorPickerDialog::getColor(
-            color_->property("color").value<QColor>(), this, QStringLiteral("Photo Filter Color"));
+            color_->property("color").value<QColor>(), this, QStringLiteral("Photo Filter Color"),
+            tools(), [this](const QPoint& pos) { return originalColorAt(pos); });
         if (picked.isValid()) {
             paintSwatch(color_, picked);
             useColor_->setChecked(true);

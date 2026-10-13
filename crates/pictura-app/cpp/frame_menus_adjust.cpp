@@ -70,8 +70,7 @@ void PicturaMainWindow::wireImageAdjustments()
         registry_->setHandler(id, [this, kind]() {
             PictureView* view = activeView();
             if (view && filter_target_ready(*view)
-                && runAdjustmentDialog(this, view, kind, tools_->foreground(),
-                                       tools_->background(), imageView())) {
+                && runAdjustmentDialog(this, view, kind, tools_, imageView())) {
                 refresh();
             } else if (view) {
                 reportFilterRefusal(view);

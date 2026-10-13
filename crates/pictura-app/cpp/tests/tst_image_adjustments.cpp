@@ -6,6 +6,7 @@
 #include <QtTest/QtTest>
 
 #include "adjustment_dialog.h"
+#include "color_picker_dialog.h"
 #include "curves_dialog.h"
 #include "gradient_map_dialog.h"
 #include "panels/percent_field.h"
@@ -17,6 +18,7 @@
 #include "image_view.h"
 #include "dialogs.h"
 #include "hdr_toning_dialog.h"
+#include "tools.h"
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/image_adjust.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/image_adjust/gradient_map.cxxqt.h"
@@ -68,6 +70,7 @@ private slots:
     void gradientMapEditsItsGradient();
     void gradientMapReopensWithItsState();
     void photoFilterUsesAFilterOrAColor();
+    void photoFilterColorPickerSamplesTheImage();
     void curvesEditsEachChannelAndTheSelectedPoint();
     void hdrToningPresetsPopulateControls();
     void hdrToningRefusedApplyDoesNotAccept();
@@ -593,6 +596,57 @@ void ImageAdjustmentsTest::photoFilterUsesAFilterOrAColor()
     QVERIFY(qobject_cast<QRadioButton*>(again->controlForTest(QStringLiteral("useColor")))
                 ->isChecked());
     again->reject();
+}
+
+// Photo Filter's colour picker samples the image as CS6's does (#413): while
+// it is open, a canvas click reaches the canvas past both dialogs' input
+// blockers and takes the composite colour instead of running the active tool.
+void ImageAdjustmentsTest::photoFilterColorPickerSamplesTheImage()
+{
+    QVERIFY(openImage(QColor(10, 200, 30)));
+    window_->resize(900, 700);
+    window_->show();
+    auto* canvas = window_->imageView();
+    auto* tools = window_->findChild<pictura::ToolController*>();
+    QVERIFY(canvas && tools && QTest::qWaitForWindowExposed(window_.get()));
+    const int history = view_->history_count();
+    auto dialog = pictura::makeAdjustmentDialog(QStringLiteral("photo-filter"), view_,
+                                                block("photo-filter"), QRect(), window_.get());
+    dialog->setCanvasSampling(tools);
+    auto* swatch = qobject_cast<QPushButton*>(dialog->controlForTest(QStringLiteral("color")));
+    auto* useColor = qobject_cast<QRadioButton*>(dialog->controlForTest(QStringLiteral("useColor")));
+    QVERIFY(swatch && useColor);
+
+    bool armed = false;
+    QColor sampled;
+    const auto send = [canvas](QEvent::Type type, QPointF at, Qt::MouseButtons held) {
+        QMouseEvent event(type, at, canvas->mapToGlobal(at), Qt::LeftButton, held,
+                          Qt::NoModifier);
+        QApplication::sendEvent(canvas, &event);
+    };
+    QTimer::singleShot(0, dialog.get(), [&]() {
+        QTimer::singleShot(0, dialog.get(), [&]() {
+            auto* picker = dialog->findChild<pictura::ColorPickerDialog*>();
+            QVERIFY(picker);
+            armed = tools->canvasSamplerActive();
+            const QPointF at = canvas->imageToWidget(QPointF(5, 5));
+            send(QEvent::MouseButtonPress, at, Qt::LeftButton);
+            send(QEvent::MouseButtonRelease, at, Qt::NoButton);
+            sampled = picker->selectedColor();
+            picker->accept();
+        });
+        swatch->click();
+        dialog->reject();
+    });
+    pictura::runDialog(*dialog, window_.get());
+
+    QVERIFY(armed);
+    QCOMPARE(sampled, QColor(10, 200, 30));
+    QCOMPARE(swatch->property("color").value<QColor>(), QColor(10, 200, 30));
+    QVERIFY(useColor->isChecked());
+    QVERIFY(!tools->canvasSamplerActive());
+    QCOMPARE(view_->history_count(), history);
+    window_->hide();
 }
 
 // Levels: a channel edits only its own record (red's output white at 0 zeroes

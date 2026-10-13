@@ -1,5 +1,6 @@
 #include "color_picker_dialog.h"
 #include "dialogs.h"
+#include "tools.h"
 
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPainter>
@@ -970,14 +971,45 @@ ColorPickerDialog::ColorPickerDialog(const QColor& initial, QWidget* parent, con
     m_picker->setOriginalColor(start);
 }
 
+ColorPickerDialog::~ColorPickerDialog()
+{
+    if (m_tools) {
+        m_tools->setCanvasSampler({});
+    }
+}
+
 QColor ColorPickerDialog::selectedColor() const
 {
     return m_picker ? m_picker->color() : QColor();
 }
 
-QColor ColorPickerDialog::getColor(const QColor& initial, QWidget* parent, const QString& title)
+void ColorPickerDialog::sampleCanvas(ToolController* tools,
+                                     std::function<QColor(const QPoint&)> colorAt)
+{
+    if (!tools || !colorAt) {
+        return;
+    }
+    m_tools = tools;
+    tools->setCanvasSampler([this, colorAt = std::move(colorAt)](const QPointF& imagePos) {
+        const QColor color = colorAt(imagePos.toPoint());
+        if (color.isValid()) {
+            m_picker->setColor(color);
+        }
+    });
+    connect(this, &QDialog::finished, this, [this]() {
+        if (m_tools) {
+            m_tools->setCanvasSampler({});
+            m_tools = nullptr;
+        }
+    });
+}
+
+QColor ColorPickerDialog::getColor(const QColor& initial, QWidget* parent, const QString& title,
+                                   ToolController* tools,
+                                   std::function<QColor(const QPoint&)> colorAt)
 {
     ColorPickerDialog dialog(initial, parent, title);
+    dialog.sampleCanvas(tools, std::move(colorAt));
     if (runDialog(dialog, parent) != QDialog::Accepted) {
         return {};
     }

@@ -32,6 +32,12 @@ int runDialog(QDialog& dialog, QWidget* parent);
 // Ctrl+- / Ctrl+0 / Ctrl+1 zoom the canvas behind any dialog.
 void setDialogNavigationKeys(std::function<bool(QKeyEvent*)> handler);
 
+// While a dialog runs under runDialog and `active` returns true, left-button
+// input over a canvas reaches it, so a dialog's eyedropper (an armed canvas
+// sampler) can take a colour from the image. The frame installs its tool
+// controller's sampler state here.
+void setDialogCanvasSampling(std::function<bool()> active);
+
 // Ctrl++ / Ctrl+- in a dialog with its own preview zoom click `zoomIn` /
 // `zoomOut`. `+` takes Shift on most layouts, so Ctrl+= and Ctrl+Shift+= zoom
 // in too, as they do on the canvas.

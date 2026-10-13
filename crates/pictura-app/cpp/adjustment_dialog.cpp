@@ -3,6 +3,7 @@
 #include "api/document_api.h"
 #include "dialogs.h"
 #include "image_view.h"
+#include "tools.h"
 
 #include "panels/adjustment_controls.h"
 #include "panels/color_swatch_widget.h"
@@ -380,6 +381,23 @@ void AdjustmentDialog::cancelPreview()
     previewing_ = false;
 }
 
+QColor AdjustmentDialog::originalColorAt(const QPoint& pos)
+{
+    if (!view_ || pos.x() < 0 || pos.y() < 0 || pos.x() >= view_->document_width()
+        || pos.y() >= view_->document_height()) {
+        return {};
+    }
+    // ponytail: lifts and re-applies the whole preview for one pixel; a click
+    // costs two section refreshes.
+    const bool previewed = previewing_;
+    cancelPreview();
+    const QColor color = QColor::fromRgb(view_->sample_argb(pos.x(), pos.y()));
+    if (previewed) {
+        preview();
+    }
+    return color;
+}
+
 void AdjustmentDialog::setPreviewArea(const QRect& visible)
 {
     if (visible == visible_) {
@@ -457,18 +475,19 @@ std::unique_ptr<AdjustmentDialog> makeAdjustmentDialog(const QString& kind, Pict
 }
 
 bool runAdjustmentDialog(QWidget* parent, PictureView* view, const QString& kind,
-                         const QColor& foreground, const QColor& background, ImageView* canvas)
+                         ToolController* tools, ImageView* canvas)
 {
-    if (!view) {
+    if (!view || !tools) {
         return false;
     }
     const QByteArray block = bytes(image_adjustment_default(
-        kind, foreground.rgb() & 0xffffffu, background.rgb() & 0xffffffu));
+        kind, tools->foreground().rgb() & 0xffffffu, tools->background().rgb() & 0xffffffu));
     if (block.isEmpty()) {
         return false;
     }
     const QRect visible = canvas ? canvas->visibleDocumentRect().toAlignedRect() : QRect();
     const auto dialog = makeAdjustmentDialog(kind, view, block, visible, parent);
+    dialog->setCanvasSampling(tools);
     if (canvas) {
         // A drag reports every step; re-preview once the view settles.
         auto* settle = new QTimer(dialog.get());
