@@ -823,17 +823,25 @@ void LayersPanelTest::maskEditTargetActivation()
     window_->show();
     QTest::qWait(50);
 
-    QVERIFY2(!panel_->rowMaskTargetForTest(layer), "no target yet");
-    QVERIFY2(panel_->clickMaskThumbnailForTest(layer), "mask thumbnail target exists");
-    QCoreApplication::processEvents();
-    panel_->refresh();
+    // Adding a mask selects its thumbnail: the mask becomes the active target,
+    // so its brackets follow the mask and the bridge target is set.
     QCOMPARE(view_->active_layer_path(), layer);
-    QVERIFY2(panel_->rowMaskTargetForTest(layer), "mask click activated the mask");
+    QVERIFY2(panel_->rowMaskTargetForTest(layer), "adding a mask activates the mask");
+    QCOMPARE(panel_->rowActiveThumbForTest(layer), 1);
+    QCOMPARE(pictura::mask_edit_target_get(*view_), layer);
 
     QVERIFY2(panel_->clickLayerThumbnailForTest(layer), "layer thumbnail target exists");
     QCoreApplication::processEvents();
     panel_->refresh();
     QVERIFY2(!panel_->rowMaskTargetForTest(layer), "layer click deactivated the mask");
+    QCOMPARE(panel_->rowActiveThumbForTest(layer), 0);
+    QVERIFY(pictura::mask_edit_target_get(*view_).isEmpty());
+
+    QVERIFY2(panel_->clickMaskThumbnailForTest(layer), "mask thumbnail target exists");
+    QCoreApplication::processEvents();
+    panel_->refresh();
+    QVERIFY2(panel_->rowMaskTargetForTest(layer), "mask click activated the mask");
+    QCOMPARE(panel_->rowActiveThumbForTest(layer), 1);
 
     window_->closeDocument(doc, false);
 }

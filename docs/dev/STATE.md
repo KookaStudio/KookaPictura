@@ -468,6 +468,37 @@ Snapshot for resuming after a context break. Update after each milestone.
   `TASK_ALLOWS_DOCS=1 bash scripts/verify-fast.sh` passes; `openspec validate
   --all --strict` 239/239; the unified report is 4052 passed · 22 skipped ·
   0 failed (nextest 3004/0/21, Qt 538).
+- **Layers panel manual-test fixes** (#378, change
+  `layers-panel-manual-test-fixes`, spec `ui/layers-panel` +
+  `compositing/layer-masks`): six independent `PAN-001` fixes. The Opacity
+  field's label is right-aligned against its value box
+  (`NumericField::setLabelAlignment`); adding a layer mask makes it the view's
+  mask edit target (`layer_mask_add_path` sets `mask_edit_target`), and the
+  panel derives its active-thumbnail brackets from that target so they follow
+  the mask (clicking a vector-mask thumbnail clears the raster target); a group's
+  expanded state survives a structural change that shifts its index path (adding,
+  removing, or moving a layer) — `LayersModel` gains `namePathForPath` /
+  `indexForNamePath` (same-named siblings disambiguated by occurrence) and
+  `refresh` remaps expansion by the ancestor name chain, while `setData` patches
+  a renamed node's name in place so a rename keeps the group expanded;
+  a group's folder glyph draws no black outline and grows from half to three
+  quarters of the thumbnail; the thumbnail box spans the row's full height minus
+  a 2 px pad (with `letterboxedThumb` corrected for a non-square box) so a tall
+  document fills the row; and the mask/vector chain glyph is drawn 2 px larger
+  and rotated 90°. The panel's blend and filter combos now draw a drop-down
+  caret (`assets/ui/combo-caret{,-disabled}.svg`, since Qt's stylesheet engine
+  cannot draw a CSS triangle) and cycle with Up/Down while focused, and a
+  focused header control keeps its focus across a refresh (`syncControls` now
+  sets the final enabled state once rather than disabling then re-enabling); a
+  blend-mode edit records `Blending Change: <mode name>` (`BlendMode::name` in
+  `pictura-core`) instead of the generic `Blend Mode`. `LayersPanel::eventFilter`
+  moved to `panels/layers_panel_events.cpp` (pure move) for size headroom.
+  Checked by the new `tst_layers_panel_fixes` (11) plus updated
+  `tst_layers_panel::maskEditTargetActivation` and
+  `tst_mask_edit::colorsFollowTheEditTarget` and
+  `pictura-core::blend_names_are_distinct_and_non_empty`. The local ImageMagick
+  fixture mismatch remains the one environment failure; `openspec validate --all
+  --strict` 246/246.
 - **Design system** (change `ui-design-system`, issue #249): the theme's token
   table is now a public contract. `Theme::tokens(level)` returns every colour
   (including the derived shades) and the shared metrics (panel/chrome border,

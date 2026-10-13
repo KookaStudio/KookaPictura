@@ -314,6 +314,8 @@ QLineEdit:hover, QSpinBox:hover, QDoubleSpinBox:hover, QComboBox:hover, QPlainTe
 QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus, QPlainTextEdit:focus { border-color: ${highlight}; }
 QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled, QComboBox:disabled, QPlainTextEdit:disabled { color: ${disabledText}; border-color: ${border}; }
 QComboBox::drop-down { background: transparent; border: 0; width: 16px; }
+QComboBox::down-arrow { image: url(:/ui/combo-caret.svg); width: 8px; height: 5px; }
+QComboBox::down-arrow:disabled { image: url(:/ui/combo-caret-disabled.svg); }
 QComboBox QAbstractItemView { background: ${panel}; color: ${text}; border: 1px solid ${border}; selection-background-color: ${highlight}; selection-color: ${highlightedText}; }
 
 QWidget#numericField, QWidget#percentField QLineEdit { background: ${inputBg}; color: ${text}; border: 1px solid ${inputBorder}; border-radius: 2px; padding: 1px 2px; }

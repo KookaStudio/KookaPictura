@@ -158,6 +158,13 @@ QString NumericField::labelText() const
     return label_ ? label_->text() : QString();
 }
 
+void NumericField::setLabelAlignment(Qt::Alignment alignment)
+{
+    if (label_) {
+        label_->setAlignment(alignment);
+    }
+}
+
 QString NumericField::formatValue(double value) const
 {
     if (config_.decimals == 0) {

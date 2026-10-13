@@ -480,6 +480,40 @@ impl BlendMode {
             .into_iter()
             .find(|m| m.to_psd_key() == key)
     }
+
+    /// The CS6 display name, matching the app's blend combo (`blend_modes.h`).
+    pub fn name(&self) -> &'static str {
+        match self {
+            BlendMode::Normal => "Normal",
+            BlendMode::Dissolve => "Dissolve",
+            BlendMode::Darken => "Darken",
+            BlendMode::Multiply => "Multiply",
+            BlendMode::ColorBurn => "Color Burn",
+            BlendMode::LinearBurn => "Linear Burn",
+            BlendMode::DarkerColor => "Darker Color",
+            BlendMode::Lighten => "Lighten",
+            BlendMode::Screen => "Screen",
+            BlendMode::ColorDodge => "Color Dodge",
+            BlendMode::LinearDodge => "Linear Dodge (Add)",
+            BlendMode::LighterColor => "Lighter Color",
+            BlendMode::Overlay => "Overlay",
+            BlendMode::SoftLight => "Soft Light",
+            BlendMode::HardLight => "Hard Light",
+            BlendMode::VividLight => "Vivid Light",
+            BlendMode::LinearLight => "Linear Light",
+            BlendMode::PinLight => "Pin Light",
+            BlendMode::HardMix => "Hard Mix",
+            BlendMode::Difference => "Difference",
+            BlendMode::Exclusion => "Exclusion",
+            BlendMode::Subtract => "Subtract",
+            BlendMode::Divide => "Divide",
+            BlendMode::Hue => "Hue",
+            BlendMode::Saturation => "Saturation",
+            BlendMode::Color => "Color",
+            BlendMode::Luminosity => "Luminosity",
+            BlendMode::PassThrough => "Pass Through",
+        }
+    }
 }
 
 /// A signed rectangle in PSD coordinates. Bounds may fall outside the canvas,

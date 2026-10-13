@@ -20,6 +20,15 @@ here.
 - The `info.crosshair`, `info.bounds`, and `info.protractor` glyphs are original
   project artwork in the same house style, released under **CC0-1.0 / MIT**.
 
+## UI chrome artwork (`assets/ui`)
+
+- `combo-caret.svg` and `combo-caret-disabled.svg` are the combo box drop-down
+  caret (a small filled triangle matching `design-system.html`'s `.combo .caret`),
+  original project artwork released under **CC0-1.0 / MIT**. The Qt stylesheet
+  engine cannot draw a CSS triangle, so the caret ships as a fixed-colour asset
+  in the UI text and disabled-text colours (both constant across the four
+  brightness levels).
+
 ## Ported vector glyphs (`assets/icons`)
 
 - Eleven panel/path glyphs (`layers.search`, `layers.kindShape`,

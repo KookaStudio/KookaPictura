@@ -161,6 +161,14 @@ public:
     bool rowMaskTargetForTest(const QString& path) const;
     bool clickMaskThumbnailForTest(const QString& path);
     bool clickLayerThumbnailForTest(const QString& path);
+    // The row's active edit target (0 image, 1 raster mask, 2 vector mask).
+    int rowActiveThumbForTest(const QString& path) const;
+    // The Opacity field's leading label alignment and its text's right edge.
+    int opacityLabelAlignmentForTest() const;
+    int opacityLabelRightForTest() const;
+    // The chain glyph slot of `path`'s row, and the side the glyph is drawn at.
+    QRect rowLinkGlyphRectForTest(const QString& path) const;
+    int linkIconSideForTest() const;
     bool rowHasVectorMaskForTest(const QString& path) const;
     bool rowVectorMaskLinkedForTest(const QString& path) const;
     bool rowVectorMaskDisabledForTest(const QString& path) const;

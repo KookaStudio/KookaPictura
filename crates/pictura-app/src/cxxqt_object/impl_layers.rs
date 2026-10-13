@@ -86,7 +86,8 @@ impl qobject::PictureView {
         let Some(mode) = BlendMode::from_psd_key([bytes[0], bytes[1], bytes[2], bytes[3]]) else {
             return false;
         };
-        self.as_mut().mutate_layer(i, "Blend Mode", |layer, _| {
+        let label = format!("Blending Change: {}", mode.name());
+        self.as_mut().mutate_layer(i, &label, |layer, _| {
             layer.blend = mode;
             true
         })
@@ -547,8 +548,9 @@ impl qobject::PictureView {
         let Some(mode) = BlendMode::from_psd_key([bytes[0], bytes[1], bytes[2], bytes[3]]) else {
             return 0;
         };
+        let label = format!("Blending Change: {}", mode.name());
         self.as_mut()
-            .batch_property(paths, "Blend Mode", true, |doc, paths| {
+            .batch_property(paths, &label, true, |doc, paths| {
                 pictura_render::set_blend_paths(doc, paths, mode)
             })
     }
