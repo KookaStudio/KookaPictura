@@ -39,6 +39,12 @@ void ToolController::refreshCursor(Qt::KeyboardModifiers mods)
     if (!canvas_) {
         return;
     }
+    // A held Space owns the cursor: the transient hand override must win over
+    // every tool, hover, and sampler update until it is released.
+    if (canvas_->spacePanForTest()) {
+        return canvas_->setCursor(canvas_->isPanning() ? Qt::ClosedHandCursor
+                                                       : Qt::OpenHandCursor);
+    }
     if (canvasSampler_) {
         const ToolInfo& info = toolInfo(ToolId::Eyedropper);
         const QCursor c = cursor(toolCursorId(ToolId::Eyedropper, Qt::NoModifier), info.hotspotX,

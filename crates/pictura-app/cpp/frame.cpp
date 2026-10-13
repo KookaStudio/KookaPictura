@@ -1113,7 +1113,7 @@ void PicturaMainWindow::keyReleaseEvent(QKeyEvent* event)
     if (hintBar_) {
         hintBar_->setPressedKey(QString());
     }
-    if (event->key() == Qt::Key_Space) {
+    if (!event->isAutoRepeat() && event->key() == Qt::Key_Space) {
         if (ImageView* canvas = imageView(); canvas && canvas->spacePanForTest()) {
             canvas->setSpacePan(false);
             canvas->setPanEnabled(tools_ && tools_->activeTool() == ToolId::Hand);

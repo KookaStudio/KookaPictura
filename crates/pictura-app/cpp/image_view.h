@@ -179,6 +179,8 @@ public:
     // emitted. The owner restores the pan/cursor state on release.
     void setSpacePan(bool on);
     bool spacePanForTest() const { return spacePan_; }
+    // Whether a pan drag is in progress (middle-button, Hand, or Space).
+    bool isPanning() const { return panning_; }
 
     void setOverlayPolygon(const QPolygonF& polygon);
     void clearOverlay();

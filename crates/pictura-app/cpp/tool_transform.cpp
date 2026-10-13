@@ -65,6 +65,9 @@ bool ToolController::beginTransformImpl(const QString& path, const QString& mode
                                       QPointF(v->move_preview_x(), v->move_preview_y()),
                                       v->move_preview_opacity() / 255.0);
         updateTransformOverlay(v);
+        // A transform session is modal: drop any transient Space pan so its
+        // pan-disable is not swallowed by the override's pan guard.
+        canvas_->setSpacePan(false);
         canvas_->setPanEnabled(false);
         canvas_->setFocus();
     }

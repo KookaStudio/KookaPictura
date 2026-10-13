@@ -448,6 +448,25 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
                 }
             });
 
+    // A Space pan is a key-held override; if the key-up is missed because the
+    // canvas loses focus or the window deactivates, it would otherwise stick and
+    // route every later press to pan. End it and restore the tool on that edge.
+    connect(qApp, &QApplication::focusChanged, this, [this](QWidget* now, QWidget* old) {
+        ImageView* canvas = imageView();
+        if (!canvas || !canvas->spacePanForTest()) {
+            return;
+        }
+        const bool wasCanvas = old && (old == canvas || canvas->isAncestorOf(old));
+        const bool isCanvas = now && (now == canvas || canvas->isAncestorOf(now));
+        if (now == nullptr || (wasCanvas && !isCanvas)) {
+            canvas->setSpacePan(false);
+            canvas->setPanEnabled(tools_ && tools_->activeTool() == ToolId::Hand);
+            if (tools_) {
+                tools_->refreshCursor();
+            }
+        }
+    });
+
     registerPanel(toolbox, Qt::LeftDockWidgetArea);
 
     optionsBar_ = new OptionsBar(tools_, this);
