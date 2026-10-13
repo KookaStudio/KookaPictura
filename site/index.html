@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kooka Pictura — a layered photo editor for Linux</title>
+<meta name="description" content="Kooka Pictura is an independent, from-scratch photo editor for Linux. A Rust engine and a Qt 6 interface that read and write Photoshop PSD/PSB files faithfully.">
+<meta name="theme-color" content="#1d2531">
+<link rel="icon" type="image/png" href="./assets/app.png">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://kookastudio.github.io/KookaPictura/">
+<meta property="og:title" content="Kooka Pictura — a layered photo editor for Linux">
+<meta property="og:description" content="Paint, layer and finish — with faithful Photoshop PSD/PSB round-trip. Free and open source under the GPL.">
+<meta property="og:image" content="https://kookastudio.github.io/KookaPictura/assets/screenshot01.jpg">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="#top">
+      <img src="./assets/app.png" alt="Kooka Pictura kookaburra logo" width="512" height="512">
+      <span>Kooka Pictura<span class="brand-sub">Photo editor for Linux</span></span>
+    </a>
+    <nav class="nav" aria-label="Primary">
+      <a href="#about">About</a>
+      <a href="#capabilities">Capabilities</a>
+      <a href="#download">Download</a>
+      <a href="#community">Community</a>
+      <a class="btn btn-dark" href="https://github.com/KookaStudio/KookaPictura">
+        <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+        GitHub
+      </a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- ===================== hero ===================== -->
+  <section class="hero">
+    <div class="wrap">
+      <div class="hero-copy">
+        <p class="eyebrow">Kooka Pictura · Free &amp; open source</p>
+        <h1>Your layers, your color, <em>your canvas.</em></h1>
+        <p class="lede">A layered photo editor for Linux, built to edit photos beautifully — and to read and write Photoshop PSD/PSB files faithfully.</p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="#download">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+            Download for Linux
+          </a>
+          <a class="btn btn-ghost" href="https://github.com/KookaStudio/KookaPictura">
+            <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+            View on GitHub
+          </a>
+        </div>
+        <div class="hero-meta">
+          <span>GPLv3 or later</span>
+          <span>Rust engine · Qt 6 interface</span>
+          <span>PSD · PSB · PNG · JPEG · TIFF · WebP</span>
+        </div>
+      </div>
+
+      <div class="hero-art">
+        <img class="medallion" src="./assets/app.png" alt="The Kooka Pictura kookaburra" width="512" height="512">
+        <figure class="canvas-frame">
+          <img src="./assets/screenshot01.jpg" alt="Kooka Pictura editing a photo of a kookaburra with the Curves adjustment open" width="1103" height="865">
+          <figcaption class="plate">Kooka Pictura, editing on Linux</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <svg class="stroke-divider" viewBox="0 0 520 26" fill="none" aria-hidden="true">
+    <path d="M4 15C58 3 108 25 166 13S276 3 336 16s134 9 180-7" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+    <path d="M22 20C82 10 118 24 182 17s118-9 168 2 116 6 148-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity=".55"/>
+  </svg>
+
+  <!-- ===================== about ===================== -->
+  <section class="about" id="about">
+    <div class="wrap">
+      <div>
+        <p class="eyebrow">The project</p>
+        <h2 style="font-size:clamp(1.9rem,3.4vw,2.7rem);margin-bottom:1rem;">An editor that treats the file as sacred.</h2>
+        <p>Kooka Pictura is an independent, from-scratch image editor for Linux. The engine is Rust; the interface is Qt 6. It is a working application, not a mock-up — it opens and saves PSD and PSB, composites layers on the CPU with an optional GPU path, and ships a large slice of the classic Photoshop tool, layer, adjustment and filter surface.</p>
+        <p>The goal is a photo editor that handles the editing workflow really well, not a clone of every corner of Photoshop. For what is in and out of scope, see the roadmap.</p>
+        <div class="stats">
+          <div class="stat"><b>27</b><span>Blend modes</span></div>
+          <div class="stat"><b>6</b><span>Color modes</span></div>
+          <div class="stat"><b>GPU</b><span>Accelerated</span></div>
+        </div>
+      </div>
+      <div>
+        <blockquote class="pull-quote">
+          Independent by design — no Adobe code, no bundled Adobe assets. Just the formats, and the craft.
+          <cite>From the project README</cite>
+        </blockquote>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== capabilities ===================== -->
+  <section class="capabilities" id="capabilities">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">What it does</p>
+        <h2>A deep slice of the classic studio.</h2>
+        <p>From the file format up: layers, adjustments, selections, color and metadata — with the Photoshop file itself kept intact through every round-trip.</p>
+      </div>
+      <div class="cap-grid">
+
+        <article class="cap">
+          <div class="ico" style="-webkit-mask-image:url(./icons/file.save.svg);mask-image:url(./icons/file.save.svg)"></div>
+          <h3>PSD/PSB round-trip</h3>
+          <p>Reads and writes Gray, RGB, CMYK, Lab, Indexed and Bitmap at 8/16/32-bit, with raw, RLE and ZIP compression — preserving blocks the engine does not model.</p>
+        </article>
+
+        <article class="cap">
+          <div class="ico" style="-webkit-mask-image:url(./icons/layers.mask.svg);mask-image:url(./icons/layers.mask.svg)"></div>
+          <h3>Layers</h3>
+          <p>Groups and nesting, raster and vector masks, 27 blend modes, layer styles and effects, fill and adjustment layers, locks, labels and filtering.</p>
+        </article>
+
+        <article class="cap">
+          <div class="ico" style="-webkit-mask-image:url(./icons/layers.kindSmartObject.svg);mask-image:url(./icons/layers.kindSmartObject.svg)"></div>
+          <h3>Smart objects</h3>
+          <p>Embedded smart objects with a bundled, non-destructive editing flow — and smart filters that stay editable.</p>
+        </article>
+
+        <article class="cap">
+          <div class="ico" style="-webkit-mask-image:url(./icons/tool.camerazoom.svg);mask-image:url(./icons/tool.camerazoom.svg)"></div>
+          <h3>Pictura Raw</h3>
+          <p>The built-in raw processor, filling the role of Camera Raw — reached through Filter&nbsp;›&nbsp;Pictura Raw.</p>
+        </article>
+
+        <article class="cap">
+          <div class="ico" style="-webkit-mask-image:url(./icons/window.panels.adjustments.svg);mask-image:url(./icons/window.panels.adjustments.svg)"></div>
+          <h3>Adjustments &amp; filters</h3>
+          <p>All the usual adjustment families plus the full classic filter set — blur, sharpen, noise, stylize, pixelate, distort, render and the artistic families — accelerated on the GPU.</p>
+        </article>
+
+        <article class="cap">
+          <div class="ico" style="-webkit-mask-image:url(./icons/select.all.svg);mask-image:url(./icons/select.all.svg)"></div>
+          <h3>Selections</h3>
+          <p>Marquee, ellipse, lasso, magic wand and quick selection, with save/load to channels, selection-masked edits and content move.</p>
+        </article>
+
+        <article class="cap">
+          <div class="ico" style="-webkit-mask-image:url(./icons/window.panels.color.svg);mask-image:url(./icons/window.panels.color.svg)"></div>
+          <h3>Color management</h3>
+          <p>ICC profiles, Assign and Convert Profile, and configurable handling of an incoming embedded profile.</p>
+        </article>
+
+        <article class="cap">
+          <div class="ico" style="-webkit-mask-image:url(./icons/window.panels.info.svg);mask-image:url(./icons/window.panels.info.svg)"></div>
+          <h3>Metadata</h3>
+          <p>EXIF, IPTC and XMP reading and editing, File Info, and metadata templates.</p>
+        </article>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== showcase ===================== -->
+  <section class="showcase">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">In the studio</p>
+        <h2>Built for the way you actually edit.</h2>
+        <p>Open a file, paint, select, crop, stack adjustment and fill layers, apply filters, then save — and the round-trip keeps layers, effects, smart objects, metadata and profiles intact.</p>
+      </div>
+      <figure class="showcase-frame">
+        <img src="./assets/screenshot01.jpg" alt="The Kooka Pictura workspace with a PSD open, a Curves dialog, and the layer and color panels docked" width="1103" height="865" loading="lazy" decoding="async">
+        <figcaption class="plate">A PSD open in Kooka Pictura, with Curves applied</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- ===================== download ===================== -->
+  <section class="download" id="download">
+    <div class="wrap">
+      <div class="section-head center">
+        <p class="eyebrow" style="justify-content:center;">Get Pictura</p>
+        <h2>Download</h2>
+        <p>Installers are built and attached to every release. Pick your platform — or compile it from source if you prefer.</p>
+      </div>
+
+      <div class="platforms">
+        <article class="platform">
+          <p class="kicker">x86_64</p>
+          <h3>Linux</h3>
+          <ul>
+            <li>AppImage — run anywhere</li>
+            <li>Debian / Ubuntu <code>.deb</code></li>
+            <li>Fedora / RHEL <code>.rpm</code></li>
+          </ul>
+          <a class="btn btn-primary" href="https://github.com/KookaStudio/KookaPictura/releases/latest">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+            Download for Linux
+          </a>
+        </article>
+
+        <article class="platform">
+          <p class="kicker">x64</p>
+          <h3>Windows</h3>
+          <ul>
+            <li>NSIS installer <code>.exe</code></li>
+            <li>Portable archive <code>.zip</code></li>
+          </ul>
+          <a class="btn btn-ghost" href="https://github.com/KookaStudio/KookaPictura/releases/latest">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+            Download for Windows
+          </a>
+        </article>
+
+        <article class="platform">
+          <p class="kicker">Apple silicon</p>
+          <h3>macOS</h3>
+          <ul>
+            <li>Disk image <code>.dmg</code></li>
+            <li>Unsigned build for now</li>
+          </ul>
+          <a class="btn btn-ghost" href="https://github.com/KookaStudio/KookaPictura/releases/latest">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+            Download for macOS
+          </a>
+        </article>
+      </div>
+
+      <p class="download-note">Every build is attached to the <a href="https://github.com/KookaStudio/KookaPictura/releases">latest release</a>. Prefer to build it yourself? The steps are in <code>DEVELOPING.md</code>.</p>
+    </div>
+  </section>
+
+  <!-- ===================== community ===================== -->
+  <section class="community" id="community">
+    <div class="wrap">
+      <div>
+        <p class="eyebrow">Open source</p>
+        <h2 style="font-size:clamp(1.9rem,3.4vw,2.7rem);margin-bottom:1rem;">Made in the open — and with you.</h2>
+        <p>Kooka Pictura is free software under the GNU GPL v3.0 or later, developed in the open on GitHub. Found a bug, have an idea, or want to contribute? The issue tracker is the front door.</p>
+        <div class="issue-actions">
+          <a class="btn btn-primary" href="https://github.com/KookaStudio/KookaPictura/issues">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v5"/><path d="M12 16.5h.01"/><circle cx="12" cy="12" r="9"/></svg>
+            Submit an issue
+          </a>
+          <a class="btn btn-ghost" href="https://github.com/KookaStudio/KookaPictura">
+            Browse the code
+          </a>
+        </div>
+      </div>
+
+      <div class="issue-list">
+        <div class="issue-card">
+          <div class="ico" style="-webkit-mask-image:url(./icons/window.panels.info.svg);mask-image:url(./icons/window.panels.info.svg)"></div>
+          <div><b>Report a bug</b><span>Something renders or saves wrong? Tell us the steps to reproduce it.</span></div>
+        </div>
+        <div class="issue-card">
+          <div class="ico" style="-webkit-mask-image:url(./icons/window.panels.adjustments.svg);mask-image:url(./icons/window.panels.adjustments.svg)"></div>
+          <div><b>Request a feature</b><span>Have a tool or a workflow in mind? Open a request and make the case.</span></div>
+        </div>
+        <div class="issue-card">
+          <div class="ico" style="-webkit-mask-image:url(./icons/layers.mask.svg);mask-image:url(./icons/layers.mask.svg)"></div>
+          <div><b>Contribute</b><span>Provenance rules, the spec workflow and the build are all documented for newcomers.</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div>
+      <div class="footer-brand">
+        <img src="./assets/app.png" alt="" width="512" height="512">
+        Kooka Pictura
+      </div>
+      <p style="max-width:34ch;">A layered photo editor for Linux, with Photoshop PSD/PSB files at its core.</p>
+    </div>
+    <div>
+      <h4>Project</h4>
+      <a href="https://github.com/KookaStudio/KookaPictura#readme">README</a>
+      <a href="https://github.com/KookaStudio/KookaPictura/blob/master/ROADMAP.md">Roadmap</a>
+      <a href="https://github.com/KookaStudio/KookaPictura/blob/master/CHANGELOG.md">Changelog</a>
+      <a href="https://github.com/KookaStudio/KookaPictura/blob/master/LICENSE">License</a>
+    </div>
+    <div>
+      <h4>Developers</h4>
+      <a href="https://github.com/KookaStudio/KookaPictura/blob/master/DEVELOPING.md">Developing</a>
+      <a href="https://github.com/KookaStudio/KookaPictura/blob/master/CONTRIBUTING.md">Contributing</a>
+      <a href="https://github.com/KookaStudio/KookaPictura/blob/master/docs/README.md">Spec corpus</a>
+      <a href="https://github.com/KookaStudio/KookaPictura/issues">Issues</a>
+    </div>
+    <p class="footer-legal">
+      Adobe, Photoshop and Camera Raw are trademarks of Adobe Inc. Kooka Pictura is an independent project and ships no Adobe code or assets. Free software under the GNU GPL v3.0 or later.
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>
