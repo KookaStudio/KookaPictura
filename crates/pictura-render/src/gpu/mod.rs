@@ -44,9 +44,13 @@
 //! shows up in a profile.
 
 use std::fmt;
+use std::sync::OnceLock;
 
 use pictura_adjust::Adjustment;
-use pictura_core::{BlendMode, Document, Knockout, Layer, PixelBuffer, PsdRect};
+use pictura_core::{
+    BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Knockout, Layer, LockFlags,
+    PixelBuffer, PsdRect,
+};
 
 use crate::decode_adjustment;
 
@@ -152,6 +156,27 @@ fn composite_gpu_region(
     rw: u32,
     rh: u32,
 ) -> Result<PixelBuffer, GpuError> {
+    // A stack with a CPU-only mode must still report that mode, even when the
+    // device is unusable, so the mode check precedes the availability gate.
+    check_supported(doc)?;
+    // A device that cannot reproduce the CPU oracle on the validation scene is
+    // treated as no device: a wrong-but-plausible composite is worse than the
+    // CPU path. See `gpu_composite_verified`.
+    if !gpu_available() {
+        return Err(GpuError::Unavailable);
+    }
+    composite_gpu_region_raw(doc, x0, y0, rw, rh)
+}
+
+/// The ungated region kernel. [`gpu_composite_verified`] calls this directly so
+/// the validation does not recurse through [`gpu_available`].
+fn composite_gpu_region_raw(
+    doc: &Document,
+    x0: u32,
+    y0: u32,
+    rw: u32,
+    rh: u32,
+) -> Result<PixelBuffer, GpuError> {
     check_supported(doc)?;
     if rw == 0 || rh == 0 {
         return Ok(PixelBuffer::new(rw, rh, 4));
@@ -210,12 +235,105 @@ pub fn composite_gpu_or_cpu(doc: &Document) -> PixelBuffer {
     composite_gpu(doc).unwrap_or_else(|_| crate::composite_rgba(doc))
 }
 
-/// Whether a usable Vulkan adapter/device exists.
+/// Whether a usable Vulkan adapter/device exists and its compositor reproduces
+/// the CPU oracle.
 ///
-/// Cached behind `devices()`'s `OnceLock`; cheap to call repeatedly and never
-/// panics.
+/// Cached behind `devices()`'s and [`gpu_composite_verified`]'s `OnceLock`s;
+/// cheap to call repeatedly and never panics.
 pub fn gpu_available() -> bool {
-    devices().is_ok()
+    devices().is_ok() && gpu_composite_verified()
+}
+
+/// Whether the device's compute compositor reproduces the CPU oracle.
+///
+/// Some drivers (observed on Mesa's Honeykrisp for the Apple M1) accept the
+/// compositor's pipelines but return wrong pixels for anything but the
+/// simplest stacks. A wrong composite is not a [`GpuError`], so it cannot be
+/// caught by the per-call fallback; this one-time check composites a small
+/// representative scene on the GPU and compares it to [`crate::composite_rgba`].
+/// A mismatch disables the GPU for the process, so every compositing call keeps
+/// the CPU path. Cached; the check runs at most once.
+fn gpu_composite_verified() -> bool {
+    static VERIFIED: OnceLock<bool> = OnceLock::new();
+    *VERIFIED.get_or_init(|| {
+        let doc = validation_document();
+        let cpu = crate::composite_rgba(&doc);
+        let Ok(gpu) = composite_gpu_region_raw(&doc, 0, 0, doc.width, doc.height) else {
+            return false;
+        };
+        gpu.width == cpu.width
+            && gpu.height == cpu.height
+            && gpu.data.len() == cpu.data.len()
+            && gpu
+                .data
+                .iter()
+                .zip(cpu.data.iter())
+                .all(|(g, c)| g.abs_diff(*c) <= 1)
+    })
+}
+
+/// A tiny scene that exercises the paths a broken driver gets wrong: an opaque
+/// gradient backdrop plus a half-transparent gradient source in a separable
+/// mode. Kept small so the check is cheap; a uniform-white stack would pass on a
+/// device that only composites the first few pixels correctly.
+fn validation_document() -> Document {
+    const N: u32 = 8;
+    let layer = |name: &str, blend: BlendMode, sample: fn(u32, u32) -> (u8, u8, u8, u8)| {
+        let mut channels: Vec<Channel> = (0..4)
+            .map(|id| Channel {
+                id: if id == 3 { -1 } else { id as i16 },
+                data: vec![0u8; (N * N) as usize].into(),
+            })
+            .collect();
+        for y in 0..N {
+            for x in 0..N {
+                let (r, g, b, a) = sample(x, y);
+                let i = (y * N + x) as usize;
+                channels[0].data.as_mut_slice()[i] = r;
+                channels[1].data.as_mut_slice()[i] = g;
+                channels[2].data.as_mut_slice()[i] = b;
+                channels[3].data.as_mut_slice()[i] = a;
+            }
+        }
+        Layer {
+            name: name.into(),
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: N as i32,
+                right: N as i32,
+            },
+            blend,
+            opacity: 255,
+            fill: 255,
+            lock: LockFlags::default(),
+            color: ColorLabel::None,
+            clipping: false,
+            visible: true,
+            mask: None,
+            adjustment: None,
+            channels,
+            children: Vec::new(),
+            is_group: false,
+            background: false,
+            ..Default::default()
+        }
+    };
+    let mut doc = Document::new(N, N, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers = vec![
+        layer("base", BlendMode::Normal, |x, y| {
+            (x as u8 * 32, y as u8 * 32, (x + y) as u8 * 16, 255)
+        }),
+        layer("top", BlendMode::Multiply, |x, y| {
+            (
+                x as u8 * 16 + 8,
+                y as u8 * 16 + 8,
+                255 - x as u8 * 16,
+                64 + x as u8 * 16,
+            )
+        }),
+    ];
+    doc
 }
 
 /// Composite `doc` on the GPU when `gpu_enabled && gpu_available()`, otherwise
@@ -413,6 +531,43 @@ mod tests {
         SmartObject, SmartObjectKind,
     };
     use std::time::Instant;
+
+    #[test]
+    fn the_validation_scene_is_a_real_blend_of_alpha_pixels() {
+        let doc = validation_document();
+        assert_eq!((doc.width, doc.height), (8, 8));
+        assert_eq!(doc.layers.len(), 2, "a backdrop plus a blended source");
+        // The source is partially transparent and not a flat colour: a device
+        // that drops alpha or composites only the first few pixels diverges.
+        let alpha = doc.layers[1]
+            .channels
+            .iter()
+            .find(|c| c.id == -1)
+            .expect("the source carries alpha");
+        assert!(alpha.data.iter().any(|&a| a != 0 && a != 255));
+        let red = doc.layers[1]
+            .channels
+            .iter()
+            .find(|c| c.id == 0)
+            .expect("the source carries red");
+        assert!(red.data.iter().any(|&r| r != red.data[0]));
+    }
+
+    /// The gate and the composite must agree: a device is available exactly when
+    /// the validation scene composites on it, and a device that fails validation
+    /// reports `Unavailable` so the caller keeps the CPU path.
+    #[test]
+    fn the_gpu_gate_is_consistent_with_the_validation_scene() {
+        let doc = validation_document();
+        if gpu_available() {
+            assert!(
+                composite_gpu(&doc).is_ok(),
+                "an available device must composite the validation scene"
+            );
+        } else {
+            assert!(matches!(composite_gpu(&doc), Err(GpuError::Unavailable)));
+        }
+    }
 
     /// The largest per-byte difference between two composites.
     fn max_delta(a: &PixelBuffer, b: &PixelBuffer) -> u8 {
