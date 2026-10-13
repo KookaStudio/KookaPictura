@@ -30,6 +30,7 @@ private slots:
     void initTestCase();
     void cleanup();
     void rowMenuOffersSmartRows();
+    void rowMenuOffersSmartObjectContents();
     void commandsRequireASmartObject();
     void resetTransformRecordsOneState();
     void convertToLayersConsumesObject();
@@ -86,12 +87,27 @@ void SmartObjectActionsTest::rowMenuOffersSmartRows()
     QVERIFY2(smart.contains(QStringLiteral("Convert to Layers")), "Convert to Layers row");
     QVERIFY2(smart.contains(QStringLiteral("New Smart Object via Copy")),
              "New Smart Object via Copy row");
+    QVERIFY2(smart.contains(QStringLiteral("Edit Contents")), "Edit Contents row");
+    QVERIFY2(smart.contains(QStringLiteral("Replace Contents…")), "Replace Contents row");
+    QVERIFY2(smart.contains(QStringLiteral("Export Contents…")), "Export Contents row");
+    QVERIFY2(smart.contains(QStringLiteral("Relink to File…")), "Relink to File row");
+    QVERIFY2(smart.contains(QStringLiteral("Convert to Linked…")), "Convert to Linked row");
 
     const QStringList pixel = panel->rowMenuTextsForTest(QStringLiteral("pixel"));
     QVERIFY2(!pixel.contains(QStringLiteral("Reset Transform")), "plain pixel omits Reset");
     QVERIFY2(!pixel.contains(QStringLiteral("Convert to Layers")), "plain pixel omits Convert");
     QVERIFY2(!pixel.contains(QStringLiteral("New Smart Object via Copy")),
              "plain pixel omits via Copy");
+    QVERIFY2(!pixel.contains(QStringLiteral("Edit Contents")), "plain pixel omits Edit Contents");
+    QVERIFY2(!pixel.contains(QStringLiteral("Replace Contents…")),
+             "plain pixel omits Replace Contents");
+    QVERIFY2(!pixel.contains(QStringLiteral("Export Contents…")),
+             "plain pixel omits Export Contents");
+    QVERIFY2(!pixel.contains(QStringLiteral("Relink to File…")), "plain pixel omits Relink");
+    QVERIFY2(!pixel.contains(QStringLiteral("Convert to Linked…")),
+             "plain pixel omits Convert to Linked");
+    QVERIFY2(pixel.contains(QStringLiteral("Convert to Smart Object")),
+             "plain pixel offers Convert to Smart Object");
 
     // Enablement follows the target: disabled on a plain layer, enabled once the
     // layer is a smart object.
@@ -104,6 +120,8 @@ void SmartObjectActionsTest::rowMenuOffersSmartRows()
     const QString path = pictura::layers_api::rowAt(*view, 0).path;
     QVERIFY2(!panel->rowMenuEnabledForPathForTest(path, QStringLiteral("Reset Transform")),
              "a plain layer disables Reset Transform");
+    QVERIFY2(panel->rowMenuEnabledForPathForTest(path, QStringLiteral("Convert to Smart Object")),
+             "a plain layer enables Convert to Smart Object");
     QVERIFY2(view->convert_to_smart_object(path), "convert to smart object");
     panel->refresh();
     QVERIFY2(panel->rowMenuEnabledForPathForTest(path, QStringLiteral("Reset Transform")),
@@ -112,6 +130,60 @@ void SmartObjectActionsTest::rowMenuOffersSmartRows()
              "a smart layer enables Convert to Layers");
     QVERIFY2(panel->rowMenuEnabledForPathForTest(path, QStringLiteral("New Smart Object via Copy")),
              "a smart layer enables New Smart Object via Copy");
+    QVERIFY2(!panel->rowMenuEnabledForPathForTest(path, QStringLiteral("Convert to Smart Object")),
+             "an existing smart object disables Convert to Smart Object");
+}
+
+// The contents rows: Convert to Smart Object acts on the row directly, the
+// Edit/Replace/Export rows run on the row's path through the frame, and the
+// linked rows are present but disabled until #113 lands.
+void SmartObjectActionsTest::rowMenuOffersSmartObjectContents()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("SmartContents"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::PictureView* view = window_->activeView();
+    auto* panel = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(view && panel);
+
+    // Convert to Smart Object from the row menu converts the row and selects the
+    // new object, recording one state.
+    view->add_layer(-1);
+    panel->refresh();
+    const QString path = pictura::layers_api::rowAt(*view, 0).path;
+    const int before = view->history_count();
+    QVERIFY2(panel->performRowActionForTest(QStringLiteral("convertToSmartObject"), path),
+             "the row menu converts the layer");
+    QCOMPARE(view->history_count(), before + 1);
+    QVERIFY2(!view->layer_smart_object_state(path).isEmpty(), "the row became a smart object");
+
+    const QStringList rows = panel->rowMenuTextsForPathForTest(path);
+    QVERIFY2(rows.contains(QStringLiteral("Edit Contents")), "edit contents row present");
+    QVERIFY2(rows.contains(QStringLiteral("Replace Contents…")), "replace contents row present");
+    QVERIFY2(rows.contains(QStringLiteral("Export Contents…")), "export contents row present");
+    QVERIFY2(rows.contains(QStringLiteral("Relink to File…")), "relink row present");
+    QVERIFY2(rows.contains(QStringLiteral("Convert to Linked…")), "convert to linked row present");
+
+    QVERIFY2(panel->rowMenuEnabledForPathForTest(path, QStringLiteral("Edit Contents")),
+             "an editable source enables Edit Contents");
+    QVERIFY2(panel->rowMenuEnabledForPathForTest(path, QStringLiteral("Replace Contents…")),
+             "a replaceable object enables Replace Contents");
+    QVERIFY2(panel->rowMenuEnabledForPathForTest(path, QStringLiteral("Export Contents…")),
+             "a payload enables Export Contents");
+    QVERIFY2(!panel->rowMenuEnabledForPathForTest(path, QStringLiteral("Relink to File…")),
+             "Relink to File is not implemented");
+    QVERIFY2(!panel->rowMenuEnabledForPathForTest(path, QStringLiteral("Convert to Linked…")),
+             "Convert to Linked is not implemented");
+
+    // The contents rows carry the row's path to the frame through the signal,
+    // and the frame acts on it: Edit Contents opens a new untitled editor tab
+    // (no file dialog), which proves the signal is connected end to end.
+    QSignalSpy spy(panel, &pictura::LayersPanel::smartObjectContentsRequested);
+    QVERIFY(spy.isValid());
+    const int tabsBefore = window_->documentCount();
+    QVERIFY(panel->performRowActionForTest(QStringLiteral("editContents"), path));
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.takeFirst().at(0).toString(), QStringLiteral("edit"));
+    QCOMPARE(window_->documentCount(), tabsBefore + 1);
 }
 
 void SmartObjectActionsTest::commandsRequireASmartObject()

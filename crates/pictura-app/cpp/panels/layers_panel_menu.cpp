@@ -70,9 +70,13 @@ struct RowSpec {
         StyleEdit,
         HasStyle,
         CanPasteStyle,
+        ConvertToSmartCan,
         ResetTransformCan,
         ConvertToLayersCan,
         NewViaCopyCan,
+        EditContentsCan,
+        ReplaceContentsCan,
+        ExportContentsCan,
     };
     Enable enable = Always;
 };
@@ -105,10 +109,16 @@ const RowSpec kRowSpecs[] = {
     {"copyShapeAttributes", "Copy Shape Attributes", Shape, true},
     {"pasteShapeAttributes", "Paste Shape Attributes", Shape, true},
     {"rasterizeShape", "Rasterize Shape", Shape, true},
+    {"convertToSmartObject", "Convert to Smart Object", Pixel, true, RowSpec::ConvertToSmartCan},
     {"resetTransform", "Reset Transform", SmartObject, true, RowSpec::ResetTransformCan},
     {"convertToLayers", "Convert to Layers", SmartObject, true, RowSpec::ConvertToLayersCan},
     {"newSmartObjectViaCopy", "New Smart Object via Copy", SmartObject, true,
      RowSpec::NewViaCopyCan},
+    {"editContents", "Edit Contents", SmartObject, true, RowSpec::EditContentsCan},
+    {"replaceContents", "Replace Contents…", SmartObject, true, RowSpec::ReplaceContentsCan},
+    {"exportContents", "Export Contents…", SmartObject, true, RowSpec::ExportContentsCan},
+    {"relinkToFile", "Relink to File…", SmartObject, false},
+    {"convertToLinked", "Convert to Linked…", SmartObject, false},
     // Export writes the flattened composite; pixel and background only (smart
     // objects report the pixel kind), never groups or adjustment layers.
     {"exportAs", "Export As…", Pixel | Background, true},
@@ -223,6 +233,9 @@ void LayersPanel::populateRowMenu(QMenu& menu, const QString& path, int color,
             case RowSpec::CanPasteStyle:
                 enabled = view_ && layer_style_can_paste();
                 break;
+            case RowSpec::ConvertToSmartCan:
+                enabled = view_ && view_->layer_can_convert_to_smart_object(path);
+                break;
             case RowSpec::ResetTransformCan:
                 enabled = view_ && layer_can_reset_smart_object_transform(*view_, path);
                 break;
@@ -231,6 +244,15 @@ void LayersPanel::populateRowMenu(QMenu& menu, const QString& path, int color,
                 break;
             case RowSpec::NewViaCopyCan:
                 enabled = view_ && layer_can_new_smart_object_via_copy(*view_, path);
+                break;
+            case RowSpec::EditContentsCan:
+                enabled = view_ && view_->layer_can_edit_smart_object_contents(path);
+                break;
+            case RowSpec::ReplaceContentsCan:
+                enabled = view_ && view_->layer_can_replace_smart_object_contents(path);
+                break;
+            case RowSpec::ExportContentsCan:
+                enabled = view_ && view_->layer_can_export_smart_object_contents(path);
                 break;
             case RowSpec::Always:
                 break;
@@ -300,6 +322,17 @@ bool LayersPanel::performRowAction(const QString& id, const QString& path)
         if (view_) {
             shape_rasterize(*view_, path);
         }
+    } else if (id == QLatin1String("convertToSmartObject")) {
+        if (view_ && view_->convert_to_smart_object(path)) {
+            refresh();
+            selectPath(path);
+        }
+    } else if (id == QLatin1String("editContents")) {
+        emit smartObjectContentsRequested(QStringLiteral("edit"), path);
+    } else if (id == QLatin1String("replaceContents")) {
+        emit smartObjectContentsRequested(QStringLiteral("replace"), path);
+    } else if (id == QLatin1String("exportContents")) {
+        emit smartObjectContentsRequested(QStringLiteral("export"), path);
     } else if (id == QLatin1String("resetTransform")) {
         if (view_ && smart_object_reset_transform(*view_, path)) {
             refresh();

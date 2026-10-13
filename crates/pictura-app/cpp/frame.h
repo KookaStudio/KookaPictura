@@ -271,6 +271,11 @@ public:
     static bool isNativeDocumentPath(const QString& path);
     bool openAsSmartObjectPath(const QString& path);
     bool editSmartObjectContents(const QString& layerPath);
+    // Replace the embedded source of `layerPath` from a chosen PSD/PSB file, or
+    // write that source to a chosen destination. Both refuse without a
+    // replaceable/exportable target and prompt for the file.
+    bool replaceSmartObjectContents(const QString& layerPath);
+    bool exportSmartObjectContents(const QString& layerPath);
     // Begin a Free Transform session on `path` in the active view and show its
     // overlay. Returns false without a transformable target.
     bool beginFreeTransform(const QString& path);
@@ -406,6 +411,9 @@ private:
     // frame_menus_smart_object.cpp: Layer > Smart Objects > Reset Transform /
     // Convert to Layers / New Smart Object via Copy over the active layer.
     void wireAdvancedSmartObjectActions();
+    // frame_menus_smart_object.cpp: run the Layers row menu's Edit / Replace /
+    // Export Contents actions on the row's path.
+    void wireSmartObjectRowMenu();
     // frame_menus_smart_object.cpp: Layer > Smart Filter > Clear Smart Filters.
     void wireSmartFilterActions();
     void alignSelectedLayers(int edge, bool toSelection, int alignTo = 0);
