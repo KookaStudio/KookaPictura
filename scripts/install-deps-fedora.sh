@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # install-deps-fedora.sh - install every build and test dependency for Kooka
-# Pictura on Fedora 43/44, on x86_64 and aarch64.
+# Pictura on Fedora 43/44, on x86_64 and aarch64 (including Fedora Asahi Remix
+# on Apple Silicon, which is detected automatically).
 #
 # Covers the C++/Qt toolchain (gcc, clang + clangd, cmake, ninja, lld), Qt 6
 # (Core/Gui/Widgets/Svg/Network/PrintSupport/Test, plus the private RHI headers
@@ -69,20 +70,41 @@ case "$arch" in
         ;;
 esac
 
+# Fedora Asahi Remix reports ID=fedora-asahi-remix; detect it via os-release or
+# the kernel name so we can pick the right Vulkan driver story and accept its release
+# cadence (Asahi Remix trails mainline Fedora by a release or so).
+asahi=0
 if [ -r /etc/os-release ]; then
     . /etc/os-release
-    if [ "${ID:-}" != "fedora" ]; then
+    # Asahi Remix sets ID=fedora-asahi-remix (ID_LIKE=fedora), not ID=fedora.
+    case "${ID:-}:${VARIANT_ID:-}:${VARIANT:-}:$(uname -r)" in
+        *[Aa]sahi*) asahi=1 ;;
+    esac
+    if [ "${ID:-}" != "fedora" ] && [ "$asahi" -ne 1 ]; then
         echo "install-deps-fedora: this script targets Fedora, found ID=${ID:-unknown}" >&2
         [ "$force" -eq 1 ] || exit 1
     fi
+    if [ "$asahi" -eq 1 ]; then
+        supported="42 | 43 | 44"
+    else
+        supported="43 | 44"
+    fi
     case "${VERSION_ID:-}" in
         43 | 44) ;;
+        42)
+            if [ "$asahi" -ne 1 ]; then
+                echo "install-deps-fedora: tested on Fedora ${supported// | //}, found 42" >&2
+                [ "$force" -eq 1 ] || exit 1
+            fi
+            ;;
         *)
-            echo "install-deps-fedora: tested on Fedora 43/44, found ${VERSION_ID:-unknown}" >&2
+            echo "install-deps-fedora: tested on Fedora ${supported// | //}, found ${VERSION_ID:-unknown}" >&2
             [ "$force" -eq 1 ] || exit 1
             ;;
     esac
 fi
+platform_label="$arch"
+[ "$asahi" -eq 1 ] && platform_label="$arch, Asahi"
 
 if [ "$(id -u)" -eq 0 ]; then
     SUDO=""
@@ -116,7 +138,9 @@ qt_pkgs=(
 
 # lcms2: the C++ binary links -llcms2. Vulkan loader + headers for the wgpu GPU
 # path and --interop-probe; mesa-vulkan-drivers is the software (lavapipe)
-# adapter headless GPU tests fall back to.
+# adapter headless GPU tests fall back to. On Fedora Asahi Remix the same
+# package also carries the Honeykrisp driver for the Apple GPU, so no extra
+# package is needed there (the Asahi Mesa fork is pulled in by the distro).
 graphics_pkgs=(
     lcms2 lcms2-devel
     vulkan-loader vulkan-loader-devel vulkan-headers vulkan-tools
@@ -132,6 +156,10 @@ font_pkgs=(google-noto-sans-fonts dejavu-sans-fonts)
 # npm is a separate package from nodejs on Fedora.
 node_pkgs=(nodejs nodejs-npm)
 
+# pip for the psd-tools install; uv for Serena.
+python_pkgs=(python3 python3-pip)
+serena_pkgs=(uv)
+
 # Only needed to build the .rpm/.deb locally (packaging/build-packages.sh).
 packaging_pkgs=(rpm-build rpmdevtools dpkg fuse-libs)
 
@@ -139,6 +167,8 @@ pkgs=("${base_pkgs[@]}" "${qt_pkgs[@]}" "${graphics_pkgs[@]}")
 [ "$with_oracles" -eq 1 ] && pkgs+=("${oracle_pkgs[@]}")
 [ "$with_fonts" -eq 1 ] && pkgs+=("${font_pkgs[@]}")
 [ "$with_node" -eq 1 ] && pkgs+=("${node_pkgs[@]}")
+[ "$with_python" -eq 1 ] && pkgs+=("${python_pkgs[@]}")
+[ "$with_serena" -eq 1 ] && pkgs+=("${serena_pkgs[@]}")
 [ "$with_packaging" -eq 1 ] && pkgs+=("${packaging_pkgs[@]}")
 
 dnf_install "${pkgs[@]}"
@@ -172,7 +202,7 @@ if [ "$with_rust" -eq 1 ]; then
     dnf_install sccache cargo-deny
 
     if ! command -v cargo-nextest >/dev/null 2>&1; then
-        echo "== cargo install cargo-nextest"
+        echo "== cargo install cargo-nextest (builds from source; slow on aarch64)"
         cargo install cargo-nextest --locked
     fi
 fi
@@ -200,13 +230,19 @@ fi
 
 # --- summary ------------------------------------------------------------------
 echo
-echo "install-deps-fedora: done (Fedora ${VERSION_ID:-?}, $arch)"
+echo "install-deps-fedora: done (Fedora ${VERSION_ID:-?}, $platform_label)"
 echo
 echo "Next steps:"
 echo "  cmake -S . -B build -G Ninja -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld"
 echo "  cmake --build build --parallel"
 echo "  bash scripts/verify-fast.sh"
 echo "  ./build/pictura --headless --self-test"
+if [ "$asahi" -eq 1 ]; then
+    echo
+    echo "Asahi: 'vulkaninfo --summary' should list the Apple GPU (Honeykrisp);"
+    echo "  if headless GPU tests misbehave, force lavapipe with:"
+    echo "  export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.aarch64.json"
+fi
 if [ "$with_rust" -eq 1 ]; then
     echo
     echo "Optional build cache: export RUSTC_WRAPPER=sccache"
