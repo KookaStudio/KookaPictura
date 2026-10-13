@@ -18,6 +18,7 @@
 
 #include "commands.h"
 #include "frame.h"
+#include "image_view.h"
 #include "panels/panel_column.h"
 #include "session.h"
 #include "tools.h"
@@ -101,6 +102,8 @@ private slots:
     void dontShowAgainPersists();
     void noAdvisoryBetweenFullModes();
     void fAndEscReturnToStandard();
+    void fReachesScreenModeThroughShortcutMap();
+    void spaceFCyclesCanvasColor();
     void toolCancelWinsOverEsc();
     void fullWithMenuBarKeepsPanels();
     void tabRevealsFullScreenChrome();
@@ -227,6 +230,41 @@ void ScreenModesTest::fAndEscReturnToStandard()
     QCOMPARE(window_->screenMode(), ScreenMode::Full);
     sendKey(window_.get(), Qt::Key_Escape);
     QCOMPARE(window_->screenMode(), ScreenMode::Standard);
+}
+
+void ScreenModesTest::fReachesScreenModeThroughShortcutMap()
+{
+    // QTest::keyClick routes through the shortcut map, where a multi-key
+    // sequence starting with F would swallow the press (#383).
+    setAdvisorySuppressed(true);
+    window_->setScreenMode(ScreenMode::Standard);
+    for (QShortcut* shortcut : window_->findChildren<QShortcut*>()) {
+        QVERIFY2(shortcut->key()[0] != QKeyCombination(Qt::Key_F), "no shortcut claims bare F");
+    }
+    QTest::keyClick(window_.get(), Qt::Key_F);
+    QCOMPARE(window_->screenMode(), ScreenMode::FullWithMenuBar);
+    QTest::keyClick(window_.get(), Qt::Key_F);
+    QCOMPARE(window_->screenMode(), ScreenMode::Full);
+    QTest::keyClick(window_.get(), Qt::Key_Escape);
+    QCOMPARE(window_->screenMode(), ScreenMode::Standard);
+}
+
+void ScreenModesTest::spaceFCyclesCanvasColor()
+{
+    window_->setScreenMode(ScreenMode::Standard);
+    pictura::ImageView* canvas = window_->imageView();
+    QVERIFY(canvas != nullptr);
+    const QColor before = canvas->canvasColor();
+    sendKey(window_.get(), Qt::Key_Space);
+    QVERIFY(canvas->spacePanForTest());
+    sendKey(window_.get(), Qt::Key_F);
+    QCOMPARE(window_->screenMode(), ScreenMode::Standard);
+    QVERIFY(canvas->canvasColor() != before);
+    sendKey(window_.get(), Qt::Key_F, Qt::ShiftModifier);
+    QCOMPARE(canvas->canvasColor(), before);
+    QKeyEvent release(QEvent::KeyRelease, Qt::Key_Space, Qt::NoModifier);
+    QApplication::sendEvent(window_.get(), &release);
+    QVERIFY(!canvas->spacePanForTest());
 }
 
 void ScreenModesTest::toolCancelWinsOverEsc()
