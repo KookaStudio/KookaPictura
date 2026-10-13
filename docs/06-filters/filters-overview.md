@@ -12,7 +12,7 @@
 
 ### Where a filter applies
 
-- A filter applies to the **active, visible layer**, or to the **current selection** on it. Locked layers, hidden layers, and empty (no-pixel) layers either refuse or no-op.
+- A filter applies to the **active, visible layer**, or to the **current selection** on it. Locked layers, hidden layers, and empty (no-pixel) layers either refuse or no-op. The Blur and Blur Gallery families refuse an empty target with an error dialog (`FILT-010`, `FILT-092`).
 - Filters **cannot** be applied to **Bitmap-mode** or **Indexed-color** images. Some filters work only on **RGB** images.
 - Filters can be applied to **individual channels** (a different setting per channel, or the same filter with different settings), and some random filters produce visibly different results per channel.
 - A filter selected while a **Smart Object** is active becomes a **Smart Filter** (non-destructive) — see `LAY-021`.
@@ -187,7 +187,7 @@ QML is not proposed: filter dialogs are modal tools with tight numeric layout an
 ## Edge cases
 
 - **Selection-edge contamination.** Neighborhood blurs read outside the selection; the design must decide (per filter) between sampling the apron (Adobe behavior for Gaussian/Box/Motion/Shape) and edge-aware/selection-clamped behavior (Smart/Lens Blur). Documented in each family spec.
-- **Locked transparent pixels / locked layer / empty layer.** Refuse or no-op; never write under transparency when the lock is set.
+- **Locked transparent pixels / locked layer / empty layer.** Refuse or no-op; never write under transparency when the lock is set. Blurs refuse an empty layer (or a selection over only transparency) with "Could not complete the `<command>` command because the selected area is empty." — the Blur Gallery says "…the initial bounding rectangle is empty."
 - **Bitmap / Indexed.** Refuse every filter.
 - **CMYK / Lab / Grayscale / Multichannel / Duotone.** Only the filters documented for those modes run; Lab Fade mode restrictions apply; unsupported ops refuse rather than convert.
 - **8/16/32-bit.** Enforce the availability matrix; 32-bit stays float and unclamped; never silently narrow.

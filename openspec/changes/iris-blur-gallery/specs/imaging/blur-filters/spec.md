@@ -18,7 +18,8 @@ most `MAX_FIELD_PINS` (16) pins SHALL be accepted. A pin's falloff SHALL be
 of the pins' falloffs times the inverse-square-distance blend of their
 amounts. The kernel SHALL run the shared Blur Gallery variable blur and its
 Blur Effects / Noise passes weighted by the normalized radius, SHALL leave a
-zero-radius pixel unchanged, SHALL write the colour planes only, SHALL treat
+zero-radius pixel unchanged, SHALL blur the alpha plane with the colour (the
+effects passes stay colour-only), SHALL treat
 an empty pin list as a no-op, and SHALL reject non-finite or out-of-range
 values with `FilterError::InvalidParams` before writing any pixel. Equal
 inputs SHALL produce bit-identical output. Oracle expectation: no faithful

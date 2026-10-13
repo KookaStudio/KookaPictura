@@ -1,5 +1,7 @@
 #include "blur_gallery_canvas.h"
 
+#include "icons.h"
+
 #include <QtCore/QLineF>
 #include <QtCore/QtMath>
 #include <QtGui/QFontMetrics>
@@ -29,6 +31,7 @@ const double kHandle = 3.0;
 const double kFeatherDot = 4.5;
 const double kMinIrisRadius = 0.005;
 const double kMaxIrisRadius = 10.0;
+const double kMaxTiltExtent = 10.0;
 
 // The superellipse exponent for a squareness, as `pictura_filters::iris_exponent`.
 double irisExponent(double squareness)
@@ -68,6 +71,7 @@ BlurGalleryCanvas::BlurGalleryCanvas(QList<BlurGalleryPin>* pins, QWidget* paren
     setObjectName(QStringLiteral("blurGalleryCanvas"));
     setMinimumSize(320, 240);
     setFocusPolicy(Qt::ClickFocus);
+    setMouseTracking(true);
 }
 
 void BlurGalleryCanvas::setImage(const QImage& image)
@@ -76,9 +80,18 @@ void BlurGalleryCanvas::setImage(const QImage& image)
     update();
 }
 
-void BlurGalleryCanvas::setIris(bool on)
+void BlurGalleryCanvas::setMode(BlurGalleryMode mode)
 {
-    iris_ = on;
+    mode_ = mode;
+    update();
+}
+
+void BlurGalleryCanvas::setPins(QList<BlurGalleryPin>* pins, int selected)
+{
+    pins_ = pins;
+    selected_ = pins_ && selected >= 0 && selected < pins_->size() ? selected : 0;
+    drag_ = Drag::None;
+    unsetCursor();
     update();
 }
 
@@ -108,7 +121,8 @@ QRectF BlurGalleryCanvas::imageRect() const
     if (room.isEmpty()) {
         return room;
     }
-    const QSizeF aspect = image_.isNull() ? QSizeF(documentSize_) : QSizeF(image_.size());
+    // The document's aspect, so the draft and full previews fit identically.
+    const QSizeF aspect = documentSize_.isEmpty() ? QSizeF(image_.size()) : QSizeF(documentSize_);
     if (aspect.isEmpty()) {
         return room;
     }
@@ -169,7 +183,8 @@ int BlurGalleryCanvas::hitPin(const QPointF& widget, bool* onRing) const
 
 bool BlurGalleryCanvas::grabIrisHandle(const QPointF& widget)
 {
-    if (!iris_ || !pins_ || selected_ < 0 || selected_ >= pins_->size()) {
+    if (mode_ != BlurGalleryMode::Iris || !pins_ || selected_ < 0
+        || selected_ >= pins_->size()) {
         return false;
     }
     const BlurGalleryPin& pin = pins_->at(selected_);
@@ -251,6 +266,8 @@ void BlurGalleryCanvas::dragTo(const QPointF& widget)
                                         : 1.0;
         pin.blur = qBound(0.0, dragStartBlur_ + (widget.x() - dragStart_.x()) * docPerWidget,
                           kMaxBlur);
+    } else if (drag_ == Drag::Focus || drag_ == Drag::Fade || drag_ == Drag::Rotate) {
+        dragTilt(widget, pin);
     } else if (drag_ != Drag::None) {
         dragIris(widget, pin);
     } else {
@@ -273,8 +290,10 @@ void BlurGalleryCanvas::paintEvent(QPaintEvent*)
         return;
     }
     painter.setRenderHint(QPainter::Antialiasing, true);
-    if (iris_) {
+    if (mode_ == BlurGalleryMode::Iris) {
         paintIris(painter, pins_->at(selected_));
+    } else if (mode_ == BlurGalleryMode::TiltShift) {
+        paintTilt(painter, pins_->at(selected_));
     }
     // Unselected pins first, the selected one last, so it reads on top.
     for (int pass = 0; pass < 2; ++pass) {
@@ -320,6 +339,10 @@ void BlurGalleryCanvas::paintEvent(QPaintEvent*)
     painter.drawRoundedRect(box, 2.0, 2.0);
     painter.setPen(QColor(0xf0, 0xf0, 0xf0));
     painter.drawText(box, Qt::AlignCenter, text);
+    // The rotation dots sit on top so the amount label never hides one.
+    if (mode_ == BlurGalleryMode::TiltShift) {
+        paintTiltDots(painter, pin);
+    }
 }
 
 void BlurGalleryCanvas::paintIris(QPainter& painter, const BlurGalleryPin& pin) const
@@ -360,6 +383,170 @@ void BlurGalleryCanvas::paintIris(QPainter& painter, const BlurGalleryPin& pin) 
                                    tip + QPointF(0, d), tip + QPointF(-d, 0)}));
 }
 
+namespace {
+
+// A pin's band in widget pixels: its centre, the unit axes along and across
+// the band (across points below it), and the picture height the extents
+// scale by.
+struct TiltFrame {
+    QPointF centre;
+    QPointF along;
+    QPointF across;
+    double heightPx = 0.0;
+
+    // The distance of the line on `side` (-1 above, +1 below) from the
+    // centre line, `outer` for the dashed fade line.
+    double offset(const BlurGalleryPin& pin, int side, bool outer) const
+    {
+        const int k = side < 0 ? 0 : 1;
+        return (pin.focus[k] + (outer ? pin.fade[k] : 0.0)) * heightPx;
+    }
+    QPointF dot(const BlurGalleryPin& pin, int side) const
+    {
+        return centre + across * (side * offset(pin, side, false));
+    }
+};
+
+TiltFrame tiltFrame(const BlurGalleryPin& pin, const QPointF& centre, double heightPx)
+{
+    const double radians = qDegreesToRadians(pin.angle);
+    TiltFrame frame;
+    frame.centre = centre;
+    frame.along = {std::cos(radians), std::sin(radians)};
+    frame.across = {-std::sin(radians), std::cos(radians)};
+    frame.heightPx = heightPx;
+    return frame;
+}
+
+} // namespace
+
+BlurGalleryCanvas::Drag BlurGalleryCanvas::hitTilt(const QPointF& widget, double* sign) const
+{
+    if (mode_ != BlurGalleryMode::TiltShift || !pins_ || selected_ < 0
+        || selected_ >= pins_->size()) {
+        return Drag::None;
+    }
+    const BlurGalleryPin& pin = pins_->at(selected_);
+    const TiltFrame frame = tiltFrame(pin, toWidget(pin.pos), imageRect().height());
+    const double v = dot(widget - frame.centre, frame.across);
+    const int side = v < 0.0 ? -1 : 1;
+    for (const int s : {-1, 1}) {
+        if (QLineF(widget, frame.dot(pin, s)).length() <= kHandle + kGrab) {
+            *sign = s;
+            return Drag::Rotate;
+        }
+    }
+    // Lines span the picture; a press past a coincident solid line grabs the
+    // dashed one so a zero fade can be pulled open.
+    const double solid = frame.offset(pin, side, false);
+    const double dashed = frame.offset(pin, side, true);
+    const bool outside = std::abs(v) >= solid;
+    const bool nearSolid = std::abs(std::abs(v) - solid) <= kGrab;
+    const bool nearDashed = std::abs(std::abs(v) - dashed) <= kGrab;
+    if (!imageRect().adjusted(-kGrab, -kGrab, kGrab, kGrab).contains(widget)
+        || (!nearSolid && !nearDashed)) {
+        return Drag::None;
+    }
+    *sign = side;
+    return nearDashed && (outside || !nearSolid) ? Drag::Fade : Drag::Focus;
+}
+
+bool BlurGalleryCanvas::grabTiltHandle(const QPointF& widget)
+{
+    const Drag hit = hitTilt(widget, &dragSign_);
+    if (hit == Drag::None) {
+        return false;
+    }
+    drag_ = hit;
+    return true;
+}
+
+void BlurGalleryCanvas::updateTiltCursor(Drag hit, const QPointF& widget)
+{
+    if (hit == Drag::None) {
+        unsetCursor();
+        return;
+    }
+    const BlurGalleryPin& pin = pins_->at(selected_);
+    if (hit == Drag::Rotate) {
+        setCursor(rotateCursor(toWidget(pin.pos), widget));
+        return;
+    }
+    // A line moves across the band: the double arrow follows its normal,
+    // snapped to the four resize cursors (y-down: 45° points down-right).
+    const double normal = std::fmod(std::fmod(pin.angle + 90.0, 180.0) + 180.0, 180.0);
+    const Qt::CursorShape shapes[] = {Qt::SizeHorCursor, Qt::SizeFDiagCursor, Qt::SizeVerCursor,
+                                      Qt::SizeBDiagCursor};
+    setCursor(shapes[int(std::lround(normal / 45.0)) % 4]);
+}
+
+void BlurGalleryCanvas::dragTilt(const QPointF& widget, BlurGalleryPin& pin) const
+{
+    const double heightPx = imageRect().height();
+    if (heightPx <= 0.0) {
+        return;
+    }
+    const TiltFrame frame = tiltFrame(pin, toWidget(pin.pos), heightPx);
+    const QPointF offset = widget - frame.centre;
+    const int k = dragSign_ < 0.0 ? 0 : 1;
+    if (drag_ == Drag::Rotate) {
+        // The dot follows the pointer round the pin; the band turns with it.
+        const double length = std::hypot(offset.x(), offset.y());
+        if (length <= 0.0) {
+            return;
+        }
+        const QPointF axis = offset * (dragSign_ / length);
+        pin.angle = qRadiansToDegrees(std::atan2(-axis.x(), axis.y()));
+        return;
+    }
+    const double reach = std::clamp(dragSign_ * dot(offset, frame.across) / heightPx, 0.0,
+                                    kMaxTiltExtent);
+    if (drag_ == Drag::Focus) {
+        // The dashed line stays put until the solid line pushes it.
+        const double outer = pin.focus[k] + pin.fade[k];
+        pin.focus[k] = reach;
+        pin.fade[k] = std::max(0.0, outer - reach);
+    } else {
+        pin.fade[k] = std::clamp(reach - pin.focus[k], 0.0, kMaxTiltExtent);
+    }
+}
+
+void BlurGalleryCanvas::paintTilt(QPainter& painter, const BlurGalleryPin& pin) const
+{
+    const QRectF area = imageRect();
+    const TiltFrame frame = tiltFrame(pin, toWidget(pin.pos), area.height());
+    // Long enough to cross the picture at any angle from any pin position.
+    const double span = 4.0 * std::hypot(area.width(), area.height());
+    painter.save();
+    painter.setClipRect(area);
+    painter.setBrush(Qt::NoBrush);
+    for (const int side : {-1, 1}) {
+        for (const bool outer : {false, true}) {
+            const QPointF mid = frame.centre + frame.across * (side * frame.offset(pin, side, outer));
+            const QLineF line(mid - frame.along * span, mid + frame.along * span);
+            painter.setPen(QPen(QColor(0, 0, 0, 110), 2.6));
+            painter.drawLine(line);
+            QPen pen(QColor(220, 220, 220, 230), 1.4);
+            if (outer) {
+                pen.setDashPattern({6.0, 4.0});
+            }
+            painter.setPen(pen);
+            painter.drawLine(line);
+        }
+    }
+    painter.restore();
+}
+
+void BlurGalleryCanvas::paintTiltDots(QPainter& painter, const BlurGalleryPin& pin) const
+{
+    const TiltFrame frame = tiltFrame(pin, toWidget(pin.pos), imageRect().height());
+    painter.setPen(QPen(QColor(0, 0, 0, 150), 1.0));
+    painter.setBrush(QColor(0xf4, 0xf4, 0xf4));
+    for (const int side : {-1, 1}) {
+        painter.drawEllipse(frame.dot(pin, side), kHandle, kHandle);
+    }
+}
+
 void BlurGalleryCanvas::mousePressEvent(QMouseEvent* event)
 {
     if (!pins_ || !uiVisible_ || event->button() != Qt::LeftButton) {
@@ -369,7 +556,7 @@ void BlurGalleryCanvas::mousePressEvent(QMouseEvent* event)
     const QPointF pos = event->position();
     bool onRing = false;
     const int index = hitPin(pos, &onRing);
-    if (index < 0 && grabIrisHandle(pos)) {
+    if (index < 0 && (grabIrisHandle(pos) || grabTiltHandle(pos))) {
         dragStart_ = pos;
         return;
     }
@@ -406,8 +593,18 @@ void BlurGalleryCanvas::mousePressEvent(QMouseEvent* event)
 void BlurGalleryCanvas::mouseMoveEvent(QMouseEvent* event)
 {
     if (drag_ == Drag::None) {
+        // Hover: a Tilt-Shift line or dot shows the drag it would start; a
+        // pin wins over a line it sits on, as a press does.
+        const QPointF pos = event->position();
+        bool onRing = false;
+        double sign = 1.0;
+        const bool live = uiVisible_ && hitPin(pos, &onRing) < 0;
+        updateTiltCursor(live ? hitTilt(pos, &sign) : Drag::None, pos);
         QWidget::mouseMoveEvent(event);
         return;
+    }
+    if (drag_ == Drag::Rotate) {
+        setCursor(rotateCursor(toWidget(pins_->at(selected_).pos), event->position()));
     }
     dragTo(event->position());
 }
@@ -420,6 +617,7 @@ void BlurGalleryCanvas::mouseReleaseEvent(QMouseEvent* event)
     }
     dragTo(event->position());
     drag_ = Drag::None;
+    emit dragFinished();
 }
 
 void BlurGalleryCanvas::keyPressEvent(QKeyEvent* event)

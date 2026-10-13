@@ -5,8 +5,8 @@
 `Filter ▸ Blur Gallery ▸ Iris Blur…` SHALL be enabled whenever filters are
 and SHALL open the Blur Gallery workspace in Iris mode, superseding its
 earlier disabled stub. The Blur Tools panel SHALL show Iris Blur checked and
-expanded with its Blur amount (`0..=500 px`), and Field Blur, Tilt-Shift,
-Path Blur, and Spin Blur as disabled rows. The workspace SHALL open on one
+expanded with its Blur amount (`0..=500 px`), Field Blur and Tilt-Shift as
+unchecked selectable rows, and Path Blur and Spin Blur as disabled rows. The workspace SHALL open on one
 pin at the picture's centre with blur 15, a horizontal semi-axis of 0.35 of
 the picture's width, a vertical semi-axis scaled by the picture's aspect,
 squareness 50, feather 0.65, angle 0, and the shared effects defaults. The
@@ -23,7 +23,8 @@ preview as in Field Blur. OK SHALL commit one history state labelled
 
 - **WHEN** Iris Blur is chosen from the Filter menu on an open document
 - **THEN** the workspace shows one centred iris with blur 15, the Iris Blur
-  row checked, and the other four rows disabled
+  row checked, Field Blur and Tilt-Shift unchecked, and Path Blur and Spin
+  Blur disabled
 
 #### Scenario: The handles reshape the outline
 

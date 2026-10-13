@@ -342,6 +342,22 @@ const QList<FilterCommandSpec>& buildCommands()
                 slider(QStringLiteral("Feather:"), 0, 1, 0.65, 2),
                 slider(QStringLiteral("Blur:"), 0, 500, 15, 0, QStringLiteral(" pixels"))}
                 + galleryEffects()),
+        // Tilt-Shift extents are fractions of the picture's height, measured
+        // across the band.
+        def(QStringLiteral("Blur Gallery"), QStringLiteral("Tilt-Shift"),
+            QStringLiteral("tilt-shift"),
+            QList<FilterParamSpec>{
+                hidden(1), // pin count
+                placement(QStringLiteral("Pin:"), 0.5, 0.5),
+                slider(QStringLiteral("Angle:"), -360, 360, 0, 1, QStringLiteral("°")),
+                slider(QStringLiteral("Focus Above:"), 0, 10, 0.1, 3),
+                slider(QStringLiteral("Focus Below:"), 0, 10, 0.1, 3),
+                slider(QStringLiteral("Fade Above:"), 0, 10, 0.15, 3),
+                slider(QStringLiteral("Fade Below:"), 0, 10, 0.15, 3),
+                slider(QStringLiteral("Distortion:"), -100, 100, 0, 0, QStringLiteral(" %")),
+                check(QStringLiteral("Symmetric Distortion"), false),
+                slider(QStringLiteral("Blur:"), 0, 500, 15, 0, QStringLiteral(" pixels"))}
+                + galleryEffects()),
         def(QStringLiteral("Blur"), QStringLiteral("Gaussian Blur"), QStringLiteral("gaussian-blur"),
             {slider(QStringLiteral("Radius:"), 0.1, 250.0, 5.0, 1, QStringLiteral(" pixels"))}),
         def(QStringLiteral("Blur"), QStringLiteral("Motion Blur"), QStringLiteral("motion-blur"),
@@ -881,7 +897,21 @@ const FilterCommandSpec* filterCommandForKind(const QString& kind)
             return &spec;
         }
     }
-    return nullptr;
+    // Several Blur Gallery effects at once commit `blur-gallery`, which has
+    // no menu row: it names the history state and Last Filter, and Last
+    // Filter Settings reopens the gallery with it. Canonical slots: no pins
+    // of each effect (one record's worth each) plus the effects tail.
+    static const FilterCommandSpec gallery = [] {
+        QList<FilterParamSpec> params;
+        for (int i = 0; i < 3 + 3 + 8 + 10; ++i) {
+            params << hidden(0);
+        }
+        FilterCommandSpec spec = def(QStringLiteral("Blur Gallery"), QStringLiteral("Blur Gallery"),
+                                     QStringLiteral("blur-gallery"), params + galleryEffects());
+        spec.path = {QStringLiteral("Filter"), QStringLiteral("Blur Gallery")};
+        return spec;
+    }();
+    return kind == gallery.kind ? &gallery : nullptr;
 }
 
 } // namespace pictura

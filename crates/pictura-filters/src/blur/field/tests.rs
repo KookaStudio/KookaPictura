@@ -212,15 +212,21 @@ fn invalid_parameters_are_refused_without_mutation() {
 }
 
 #[test]
-fn alpha_is_untouched() {
-    let expected: Vec<u8> = (0..64u32).map(|i| ((i * 7) % 251) as u8).collect();
-    let px: Vec<[u8; 4]> = expected.iter().map(|&a| [30, 60, 90, a]).collect();
-    let mut buf = buf4(8, 8, &px);
-    blur(&mut buf, &[pin(0.25, 0.5, 20.0), pin(0.75, 0.5, 40.0)]);
+fn alpha_blurs_with_the_colour() {
+    // An opaque left half on a transparent right half: the edge feathers
+    // under a blurring pin and stays hard under a sharp one.
+    let px: Vec<[u8; 4]> = (0..64u32)
+        .map(|i| [30, 60, 90, if i % 16 < 8 { 255 } else { 0 }])
+        .collect();
+    let mut buf = buf4(16, 4, &px);
+    blur(&mut buf, &[pin(0.5, 0.5, 6.0)]);
     let n = buf.pixel_count();
-    for (i, &a) in expected.iter().enumerate() {
-        assert_eq!(buf.data[3 * n + i], a);
-    }
+    assert!(buf.data[3 * n + 8] > 0, "the transparent side stayed clear");
+    assert!(buf.data[3 * n + 7] < 255, "the opaque side stayed solid");
+
+    let mut sharp = buf4(16, 4, &px);
+    blur(&mut sharp, &[pin(0.5, 0.5, 0.0)]);
+    assert_eq!(&sharp.data[3 * n..], &buf4(16, 4, &px).data[3 * n..]);
 }
 
 #[test]

@@ -13,8 +13,8 @@ inverse-square-distance weighted average of the pin amounts
 amount at a pin and a smooth gradient between pins. The kernel SHALL apply a
 variable-radius blur whose strength follows `r(p)` and SHALL leave a pixel
 with `r(p) = 0` unchanged; an empty pin list SHALL be a no-op. The kernel
-SHALL write the colour planes only, leaving alpha to the render layer's alpha
-pass. Non-finite coordinates or amounts, an amount above `MAX_FIELD_RADIUS`,
+SHALL blur every plane it is given, alpha included, so a layer's edge
+feathers. Non-finite coordinates or amounts, an amount above `MAX_FIELD_RADIUS`,
 and more than `MAX_FIELD_PINS` pins SHALL be rejected with
 `FilterError::InvalidParams` before any pixel is written. The kernel SHALL be
 deterministic: equal inputs SHALL produce bit-identical output. Oracle
@@ -49,10 +49,11 @@ non-empty note.
 - **THEN** `apply` returns `FilterError::InvalidParams` and the buffer is
   bit-exactly unchanged
 
-#### Scenario: Alpha is untouched by the kernel
+#### Scenario: Alpha blurs with the colour
 
-- **WHEN** Field Blur is applied to a four-channel buffer
-- **THEN** the fourth plane is bit-identical to the input
+- **WHEN** Field Blur is applied to a four-channel buffer with a hard alpha
+  edge under a blurring pin, and again with a zero amount
+- **THEN** the edge feathers, and the zero amount leaves alpha bit-identical
 
 #### Scenario: No faithful equivalent is documented
 
@@ -78,7 +79,7 @@ at 100, seeded by `seed` so equal inputs and seeds produce bit-identical
 output. `light_bokeh`, `bokeh_color`, `amount`, `size`, `roughness`, `color`,
 and `highlights` outside `0..=100` SHALL be rejected with
 `FilterError::InvalidParams` before any pixel is written. The passes SHALL
-write the colour planes only; the render layer's alpha pass SHALL drop them.
+write the colour planes only.
 
 #### Scenario: Light Bokeh brightens only the blurred band
 

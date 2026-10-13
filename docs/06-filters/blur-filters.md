@@ -181,6 +181,7 @@ Widgets, matching the CS6 modal dialogs; pixel work in Rust.
 
 ## Edge cases
 
+- **Empty target.** An active layer with no non-transparent pixel inside the selection (or at all, e.g. a new empty layer) refuses every Blur command before its dialog opens, with "Could not complete the `<command>` command because the selected area is empty." and no history state. The Blur Gallery words it "…because the initial bounding rectangle is empty." (`FILT-092`). A layer without transparency is never empty; a layer mask does not count. *Implemented:* `filter_target_empty` + `refuseEmptyBlur` (`frame_menus_filter.cpp`), on the menu, Last Filter, and Last Filter Settings paths.
 - **Degenerate radius 0 / distance 1.** Identity or near-identity; still commit consistently (or refuse with no history state).
 - **Selection edge.** Gaussian/Box/Motion/Shape sample the apron and may contaminate edges; Smart/Lens must not. Document per-kernel; tests must pin the chosen behavior.
 - **Radius larger than the image/tile.** Clamp the kernel support to available source; use reflection/replication at image borders (propose **clamp-to-edge**, matching common Photoshop behavior; unverified).

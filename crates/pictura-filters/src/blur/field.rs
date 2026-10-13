@@ -4,8 +4,9 @@
 //! Adobe's Blur Gallery shaders are closed; this is the documented model — a
 //! per-pixel radius field from inverse-square-distance pin weights, applied
 //! through a box-blur level pyramid, then the bokeh lift and re-injected
-//! grain. Only the color planes are written; the render layer's alpha pass
-//! blurs the alpha channel without the colour-only effects.
+//! grain. The blur runs over every plane it is given, alpha included, so a
+//! layer's edges feather into transparency as with the other blurs; the
+//! effects passes touch the colour planes only.
 //!
 //! ponytail: the doc's inferred disc/bokeh gather is approximated by blending
 //! two levels of a Gaussian-like box pyramid. A per-pixel disc gather costs
@@ -126,25 +127,29 @@ pub fn field_blur(
     let max_pin = pins.iter().map(|pin| pin.blur).fold(0.0f64, f64::max);
     let (w, h) = (f64::from(buf.width), f64::from(buf.height));
     variable_blur(buf, max_pin, bokeh, noise, |x, y| {
-        let u = x / w;
-        let v = y / h;
-        let mut weighted = 0.0;
-        let mut weight_sum = 0.0;
-        for pin in pins {
-            let dx = u - pin.x;
-            let dy = v - pin.y;
-            let w = 1.0 / (dx * dx + dy * dy + PIN_EPSILON);
-            weighted += w * pin.blur;
-            weight_sum += w;
-        }
-        weighted / weight_sum
+        field_radius(pins, w, h, x, y)
     });
     Ok(())
 }
 
-/// The Blur Gallery's shared variable blur: `radius_at` maps a pixel centre
-/// (buffer pixels) to a blur radius in `0..=max_radius`, which picks and
-/// blends the two bracketing levels of a box-blur pyramid; then the Blur
+/// A Field Blur pixel centre's radius: the inverse-square-distance weighted
+/// average of the pin amounts. `pins` is not empty.
+pub(super) fn field_radius(pins: &[BlurPin], w: f64, h: f64, x: f64, y: f64) -> f64 {
+    let u = x / w;
+    let v = y / h;
+    let mut weighted = 0.0;
+    let mut weight_sum = 0.0;
+    for pin in pins {
+        let dx = u - pin.x;
+        let dy = v - pin.y;
+        let w = 1.0 / (dx * dx + dy * dy + PIN_EPSILON);
+        weighted += w * pin.blur;
+        weight_sum += w;
+    }
+    weighted / weight_sum
+}
+
+/// The Blur Gallery's shared variable blur: [`pyramid_blur`], then the Blur
 /// Effects and Noise passes, weighted by `radius / max_radius`. Callers
 /// validate first; a non-positive `max_radius` is a no-op.
 pub(super) fn variable_blur(
@@ -154,13 +159,28 @@ pub(super) fn variable_blur(
     noise: &BlurNoise,
     radius_at: impl Fn(f64, f64) -> f64 + Sync,
 ) {
+    if let Some(weights) = pyramid_blur(buf, max_radius, radius_at) {
+        apply_effects(buf, &weights, bokeh, noise);
+    }
+}
+
+/// The variable blur alone: `radius_at` maps a pixel centre (buffer pixels)
+/// to a blur radius in `0..=max_radius`, which picks and blends the two
+/// bracketing levels of a box-blur pyramid. Returns each pixel's normalized
+/// weight (0 sharp, 255 at `max_radius`) for [`apply_effects`], or `None`
+/// (buffer untouched) for a non-positive `max_radius`.
+pub(super) fn pyramid_blur(
+    buf: &mut PixelBuffer,
+    max_radius: f64,
+    radius_at: impl Fn(f64, f64) -> f64 + Sync,
+) -> Option<Vec<u8>> {
     if max_radius <= 0.0 {
-        return;
+        return None;
     }
     let w = buf.width as usize;
     let h = buf.height as usize;
     let n = w * h;
-    let planes = (buf.channels as usize).min(3);
+    let planes = (buf.channels as usize).min(4);
     let boxes = level_boxes(max_radius);
     let nominal = level_nominals(&boxes);
     let (brackets, weights) = bracket_map(w, h, &nominal, max_radius, radius_at);
@@ -192,10 +212,10 @@ pub(super) fn variable_blur(
             }
         }
     }
-    apply_effects(buf, &weights, bokeh, noise);
+    Some(weights)
 }
 
-fn validate_pins(pins: &[BlurPin]) -> Result<(), FilterError> {
+pub(super) fn validate_pins(pins: &[BlurPin]) -> Result<(), FilterError> {
     if pins.len() > MAX_FIELD_PINS {
         return Err(FilterError::InvalidParams(format!(
             "field blur takes at most {MAX_FIELD_PINS} pins, got {}",
@@ -251,7 +271,12 @@ pub(super) fn validate_noise(noise: &BlurNoise) -> Result<(), FilterError> {
 /// The Blur Effects and Noise passes over the blurred pixels: the field weight
 /// gates both, so sharp pixels never change. Runs on interleaved pixels, then
 /// scatters back to the planes.
-fn apply_effects(buf: &mut PixelBuffer, weights: &[u8], bokeh: &BokehParams, noise: &BlurNoise) {
+pub(super) fn apply_effects(
+    buf: &mut PixelBuffer,
+    weights: &[u8],
+    bokeh: &BokehParams,
+    noise: &BlurNoise,
+) {
     let bokeh_on = bokeh.enabled && (bokeh.light_bokeh > 0.0 || bokeh.bokeh_color > 0.0);
     let noise_on = noise.enabled && noise.amount > 0.0;
     if !bokeh_on && !noise_on {

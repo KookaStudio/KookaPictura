@@ -59,18 +59,23 @@ bool chooseDisplacementMap(QList<double>* values, QWidget* parent)
 // Lens Flare's parameters are one struct, Lighting Effects' a list of lights
 // and Liquify's a mesh, each edited on its own dialog; every other filter edits
 // independent slots on the shared one.
+// `*kind` is the kind to commit: the spec's, except that the Blur Gallery
+// commits whichever of its effects the user switched on.
 bool runFilterDialog(PictureView* view, const FilterCommandSpec& spec,
                      const FilterPreviewView& previewView, const QList<double>& initial,
-                     QList<double>* out, QWidget* parent)
+                     QList<double>* out, QString* kind, QWidget* parent)
 {
+    *kind = spec.kind;
     if (spec.kind == QStringLiteral("lens-flare")) {
         return LensFlareDialog::get(view, spec, initial, out, parent);
     }
     if (spec.kind == QStringLiteral("lighting-effects")) {
         return LightingEffectsDialog::get(view, spec, initial, out, parent);
     }
-    if (spec.kind == QStringLiteral("field-blur") || spec.kind == QStringLiteral("iris-blur")) {
-        return BlurGalleryDialog::get(view, spec, initial, out, parent);
+    if (spec.kind == QStringLiteral("field-blur") || spec.kind == QStringLiteral("iris-blur")
+        || spec.kind == QStringLiteral("tilt-shift")
+        || spec.kind == QStringLiteral("blur-gallery")) {
+        return BlurGalleryDialog::get(view, spec, initial, out, kind, parent);
     }
     if (spec.kind == QStringLiteral("liquify")) {
         const auto* frame = qobject_cast<PicturaMainWindow*>(parent);
@@ -81,6 +86,27 @@ bool runFilterDialog(PictureView* view, const FilterCommandSpec& spec,
         return false;
     }
     return spec.kind != QStringLiteral("displace") || chooseDisplacementMap(out, parent);
+}
+
+// Photoshop refuses a blur with nothing under it — an empty layer, or a
+// selection over only transparent pixels — with an error naming the command.
+// The Blur Gallery words it as an empty bounding rectangle.
+bool refuseEmptyBlur(PictureView* view, const FilterCommandSpec& spec, QWidget* parent)
+{
+    const QString family = spec.path.value(1);
+    const bool gallery = family == QStringLiteral("Blur Gallery");
+    if ((!gallery && family != QStringLiteral("Blur")) || !filter_target_empty(*view)) {
+        return false;
+    }
+    const QString reason = gallery ? QObject::tr("the initial bounding rectangle is empty")
+                                   : QObject::tr("the selected area is empty");
+    QMessageBox box(QMessageBox::Critical, QStringLiteral("Kooka Pictura"),
+                    QObject::tr("Could not complete the %1 command because %2.")
+                        .arg(spec.label, reason),
+                    QMessageBox::Ok, parent);
+    box.setObjectName(QStringLiteral("emptyFilterTargetError"));
+    box.exec();
+    return true;
 }
 
 // Commit `kind` on a worker with a busy indicator, recorded under its menu
@@ -113,7 +139,7 @@ void PicturaMainWindow::reportFilterRefusal(PictureView* view)
 void PicturaMainWindow::applyFilterCommand(const FilterCommandSpec& spec)
 {
     PictureView* view = activeView();
-    if (!view || !filter_target_ready(*view)) {
+    if (!view || !filter_target_ready(*view) || refuseEmptyBlur(view, spec, this)) {
         return;
     }
     if (spec.params.isEmpty()) {
@@ -126,10 +152,12 @@ void PicturaMainWindow::applyFilterCommand(const FilterCommandSpec& spec)
         return;
     }
     QList<double> values;
+    QString kind;
     // The dialog previews on the canvas as controls change; OK commits one
     // state on a worker, Cancel discards the preview bit-identically.
-    if (runFilterDialog(view, spec, previewViewFor(imageView()), QList<double>(), &values, this)) {
-        if (commitFilter(this, view, imageView(), spec.kind, values)) {
+    if (runFilterDialog(view, spec, previewViewFor(imageView()), QList<double>(), &values, &kind,
+                        this)) {
+        if (commitFilter(this, view, imageView(), kind, values)) {
             refresh();
         } else {
             reportFilterRefusal(view);
@@ -195,6 +223,10 @@ void PicturaMainWindow::wireFilterMenu()
         if (!view || !filter_has_last(*view)) {
             return;
         }
+        const FilterCommandSpec* spec = filterCommandForKind(filter_last_kind(*view));
+        if (spec && refuseEmptyBlur(view, *spec, this)) {
+            return;
+        }
         if (commitFilter(this, view, imageView(), filter_last_kind(*view), filter_last_params(*view))) {
             refresh();
         } else {
@@ -219,13 +251,14 @@ void PicturaMainWindow::wireFilterMenu()
             return;
         }
         const FilterCommandSpec* spec = filterCommandForKind(filter_last_kind(*view));
-        if (!spec || spec->params.isEmpty()) {
+        if (!spec || spec->params.isEmpty() || refuseEmptyBlur(view, *spec, this)) {
             return;
         }
         QList<double> values;
+        QString kind;
         if (runFilterDialog(view, *spec, previewViewFor(imageView()), filter_last_params(*view),
-                            &values, this)) {
-            if (commitFilter(this, view, imageView(), spec->kind, values)) {
+                            &values, &kind, this)) {
+            if (commitFilter(this, view, imageView(), kind, values)) {
                 refresh();
             } else {
                 reportFilterRefusal(view);

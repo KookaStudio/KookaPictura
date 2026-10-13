@@ -1,5 +1,6 @@
 #include "blur_gallery_dialog.h"
 
+#include "blur_gallery_light_range.h"
 #include "dialogs.h"
 #include "panels/jump_slider.h"
 
@@ -36,110 +37,27 @@ namespace {
 // The workspace renders a proxy this size at most; the pin positions are
 // fractions of the picture, so it is the same picture OK commits.
 const int kProxyEdge = 1100;
+// While a pin, line, or amount slider is dragged the preview renders from a
+// copy this size at most (about a tenth of the full proxy's pixels), so the
+// overlay keeps up with the pointer; release renders the full proxy.
+const int kDraftEdge = 360;
 const int kColumnWidth = 264;
 const double kMaxBlur = 500.0;
 const int kEffectsTail = 13;
 const double kMinIrisRadius = 0.0001;
 const double kMaxIrisRadius = 10.0;
+const double kMaxTiltExtent = 10.0;
+
+BlurGalleryMode modeForKind(const QString& kind)
+{
+    if (kind == QStringLiteral("iris-blur")) {
+        return BlurGalleryMode::Iris;
+    }
+    return kind == QStringLiteral("tilt-shift") ? BlurGalleryMode::TiltShift
+                                                : BlurGalleryMode::Field;
+}
 
 } // namespace
-
-// The Light Range control: a black-to-white bar with a low and a high handle,
-// 0..255. The dialog drives it and reads it back; `changed` fires on a drag.
-class LightRangeSlider : public QWidget {
-public:
-    explicit LightRangeSlider(QWidget* parent = nullptr) : QWidget(parent)
-    {
-        setObjectName(QStringLiteral("bokehRange"));
-        setMinimumHeight(20);
-        setCursor(Qt::PointingHandCursor);
-    }
-
-    int low() const { return low_; }
-    int high() const { return high_; }
-
-    void setRange(int low, int high)
-    {
-        low_ = std::clamp(low, 0, 255);
-        high_ = std::clamp(high, 0, 255);
-        if (low_ > high_) {
-            std::swap(low_, high_);
-        }
-        update();
-    }
-
-    std::function<void(int, int)> changed;
-
-    QSize sizeHint() const override { return {200, 20}; }
-
-protected:
-    void paintEvent(QPaintEvent*) override
-    {
-        QPainter painter(this);
-        painter.setRenderHint(QPainter::Antialiasing, true);
-        const QRectF groove = grooveRect();
-        QLinearGradient ramp(groove.topLeft(), groove.topRight());
-        ramp.setColorAt(0.0, Qt::black);
-        ramp.setColorAt(1.0, Qt::white);
-        painter.setPen(QPen(QColor(90, 90, 90), 1));
-        painter.setBrush(ramp);
-        painter.drawRect(groove);
-        const auto handle = [&](int value, const QColor& color) {
-            const qreal x = handleX(value);
-            QPainterPath path;
-            path.moveTo(x, groove.bottom() + 1.0);
-            path.lineTo(x - 5.0, groove.bottom() + 7.0);
-            path.lineTo(x + 5.0, groove.bottom() + 7.0);
-            path.closeSubpath();
-            painter.setBrush(isEnabled() ? color : color.darker(160));
-            painter.setPen(QPen(QColor(60, 60, 60), 1));
-            painter.drawPath(path);
-        };
-        handle(low_, Qt::black);
-        handle(high_, Qt::white);
-    }
-
-    void mousePressEvent(QMouseEvent* event) override
-    {
-        if (!isEnabled()) {
-            return;
-        }
-        const int x = int(event->position().x());
-        dragging_ = std::abs(x - handleX(low_)) <= std::abs(x - handleX(high_)) ? 0 : 1;
-        mouseMoveEvent(event);
-    }
-
-    void mouseMoveEvent(QMouseEvent* event) override
-    {
-        if (dragging_ < 0) {
-            return;
-        }
-        const int value = valueAt(int(event->position().x()));
-        if (dragging_ == 0) {
-            low_ = std::min(value, high_);
-        } else {
-            high_ = std::max(value, low_);
-        }
-        update();
-        if (changed) {
-            changed(low_, high_);
-        }
-    }
-
-    void mouseReleaseEvent(QMouseEvent*) override { dragging_ = -1; }
-
-private:
-    QRectF grooveRect() const { return QRectF(8.0, 1.0, width() - 16.0, 8.0); }
-    int handleX(int value) const { return 8 + value * (width() - 16) / 255; }
-    int valueAt(int x) const
-    {
-        return std::clamp((x - 8) * 255 / std::max(1, width() - 16), 0, 255);
-    }
-
-    int low_ = 40;
-    int high_ = 118;
-    int dragging_ = -1;
-};
 
 void BlurGalleryDialog::Field::setValue(double value)
 {
@@ -158,7 +76,7 @@ void BlurGalleryDialog::Field::setEnabled(bool on)
 
 BlurGalleryDialog::BlurGalleryDialog(PictureView* view, const FilterCommandSpec& spec,
                                      QWidget* parent)
-    : QDialog(parent), view_(view), spec_(spec), iris_(spec.kind == QStringLiteral("iris-blur"))
+    : QDialog(parent), view_(view), spec_(spec), active_(modeForKind(spec.kind))
 {
     setWindowTitle(spec.label);
     setObjectName(QStringLiteral("blurGalleryDialog"));
@@ -167,8 +85,7 @@ BlurGalleryDialog::BlurGalleryDialog(PictureView* view, const FilterCommandSpec&
     resize(frame ? (QSizeF(frame->size()) * 0.92).toSize().expandedTo(minimumSize())
                  : QSize(1100, 720));
 
-    canvas_ = new BlurGalleryCanvas(&pins_, this);
-    canvas_->setIris(iris_);
+    canvas_ = new BlurGalleryCanvas(nullptr, this);
     if (view_ && view_->has_document()) {
         const QImage image = documentPreviewImage(view_, kProxyEdge);
         if (!image.isNull()) {
@@ -176,21 +93,24 @@ BlurGalleryDialog::BlurGalleryDialog(PictureView* view, const FilterCommandSpec&
                           ? image.scaled(kProxyEdge, kProxyEdge, Qt::KeepAspectRatio,
                                          Qt::SmoothTransformation)
                           : image)
-                         .convertToFormat(QImage::Format_RGBA8888);
-            for (int y = 0; y < proxy_.height(); ++y) {
-                proxyRgba_.append(reinterpret_cast<const char*>(proxy_.constScanLine(y)),
-                                  proxy_.width() * 4);
-            }
-            if (view_->document_width() > 0) {
-                proxyScale_ = double(proxy_.width()) / double(view_->document_width());
-            }
+                         .convertToFormat(QImage::Format_ARGB32_Premultiplied);
+            const int longEdge = qMax(view_->document_width(), view_->document_height());
+            proxyEdge_ = qMin(kProxyEdge, longEdge);
+            draftEdge_ = proxyEdge_ > kDraftEdge ? kDraftEdge : 0;
+            const auto base = [this](int edge) {
+                return edge > 0 ? filter_proxy_base(*view_, edge).convertToFormat(
+                                      QImage::Format_ARGB32_Premultiplied)
+                                : QImage();
+            };
+            base_ = base(proxyEdge_);
+            draftBase_ = base(draftEdge_);
             canvas_->setDocumentSize(QSize(view_->document_width(), view_->document_height()));
         }
     }
-    pins_.append(defaultPin());
     connect(canvas_, &BlurGalleryCanvas::pinsEdited, this, &BlurGalleryDialog::pinsEdited);
     connect(canvas_, &BlurGalleryCanvas::pinSelected, this, &BlurGalleryDialog::selectPin);
     connect(canvas_, &BlurGalleryCanvas::pinAdded, this, [this](int index) { selectPin(index); });
+    connect(canvas_, &BlurGalleryCanvas::dragFinished, this, &BlurGalleryDialog::scheduleRender);
     connect(canvas_, &BlurGalleryCanvas::deleteRequested, this,
             &BlurGalleryDialog::deleteSelectedPin);
 
@@ -221,7 +141,7 @@ BlurGalleryDialog::BlurGalleryDialog(PictureView* view, const FilterCommandSpec&
     connect(hide, &QShortcut::activated, this,
             [this] { canvas_->setUiVisible(!canvas_->uiVisible()); });
 
-    syncControls();
+    selectEffect(active_);
     effectsEdited();
     render();
 }
@@ -239,14 +159,9 @@ QWidget* BlurGalleryDialog::buildOptionsBar()
     title->setObjectName(QStringLiteral("dialogTitle"));
     row->addWidget(title);
     row->addSpacing(12);
-    auto* hint = new QLabel(
-        iris_ ? QStringLiteral("Click to add an iris; drag its handles to size, turn, feather, "
-                               "or square it; H hides the overlay")
-              : QStringLiteral("Click the image to add a pin, drag a pin to move it, its ring to "
-                               "blur, H to hide the pins"),
-        bar);
-    hint->setEnabled(false);
-    row->addWidget(hint);
+    hint_ = new QLabel(bar);
+    hint_->setEnabled(false);
+    row->addWidget(hint_);
     row->addStretch(1);
 
     preview_ = new QCheckBox(QStringLiteral("Preview"), bar);
@@ -265,29 +180,39 @@ QWidget* BlurGalleryDialog::buildOptionsBar()
 }
 
 QWidget* BlurGalleryDialog::effectRow(QWidget* parent, const QString& label,
-                                      const QString& checkName, bool checked, bool enabled,
-                                      QToolButton** arrow)
+                                      const QString& name, Effect* effect)
 {
     auto* row = new QWidget(parent);
     auto* layout = new QHBoxLayout(row);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(4);
     auto* triangle = new QToolButton(row);
-    triangle->setObjectName(checkName + QStringLiteral("Arrow"));
+    triangle->setObjectName(name + QStringLiteral("EnabledArrow"));
     triangle->setAutoRaise(true);
-    triangle->setText(checked ? QStringLiteral("▼") : QStringLiteral("▶"));
-    triangle->setEnabled(enabled);
-    auto* name = new QLabel(label, row);
+    triangle->setText(QStringLiteral("▶"));
+    // The name selects the effect, as clicking a Blur Tools row does in CS6.
+    auto* title = new QToolButton(row);
+    title->setObjectName(name + QStringLiteral("Select"));
+    title->setAutoRaise(true);
+    title->setText(label);
+    title->setToolButtonStyle(Qt::ToolButtonTextOnly);
     auto* check = new QCheckBox(row);
-    check->setObjectName(checkName);
-    check->setChecked(checked);
-    check->setEnabled(enabled);
+    check->setObjectName(name + QStringLiteral("Enabled"));
     layout->addWidget(triangle);
-    layout->addWidget(name, 1);
+    layout->addWidget(title);
+    layout->addStretch(1);
     layout->addWidget(check);
-    if (arrow) {
-        *arrow = triangle;
+    if (!effect) {
+        for (QWidget* widget : {static_cast<QWidget*>(triangle), static_cast<QWidget*>(title),
+                                static_cast<QWidget*>(check)}) {
+            widget->setEnabled(false);
+        }
+        row->setToolTip(QStringLiteral("Not implemented yet"));
+        return row;
     }
+    effect->check = check;
+    effect->arrow = triangle;
+    effect->title = title;
     return row;
 }
 
@@ -360,52 +285,95 @@ QWidget* BlurGalleryDialog::buildBlurToolsPanel()
     const struct {
         const char* label;
         const char* name;
-        const char* kind;
+        int mode;
     } rows[] = {
-        {"Field Blur", "fieldBlur", "field-blur"}, {"Iris Blur", "irisBlur", "iris-blur"},
-        {"Tilt-Shift", "tiltShift", nullptr},      {"Path Blur", "pathBlur", nullptr},
-        {"Spin Blur", "spinBlur", nullptr},
+        {"Field Blur", "fieldBlur", int(BlurGalleryMode::Field)},
+        {"Iris Blur", "irisBlur", int(BlurGalleryMode::Iris)},
+        {"Tilt-Shift", "tiltShift", int(BlurGalleryMode::TiltShift)},
+        {"Path Blur", "pathBlur", -1},
+        {"Spin Blur", "spinBlur", -1},
     };
     for (const auto& row : rows) {
         const QString name = QLatin1String(row.name);
-        const bool active = row.kind && spec_.kind == QLatin1String(row.kind);
-        auto* widget = effectRow(panel, QLatin1String(row.label), name + QStringLiteral("Enabled"),
-                                 active, active, active ? &toolArrow_ : nullptr);
-        layout->addWidget(widget);
-        if (!active) {
-            widget->setToolTip(row.kind ? QStringLiteral("Not combined with this blur yet")
-                                        : QStringLiteral("Not implemented yet"));
+        Effect* effect = row.mode >= 0 ? &effects_[row.mode] : nullptr;
+        layout->addWidget(effectRow(panel, QLatin1String(row.label), name, effect));
+        if (!effect) {
             continue;
         }
-        toolControls_ = new QWidget(panel);
-        auto* controls = new QVBoxLayout(toolControls_);
-        controls->setContentsMargins(18, 0, 0, 0);
-        controls->setSpacing(3);
-        auto* blurRow = new QHBoxLayout;
-        auto* label = new QLabel(QStringLiteral("Blur:"), toolControls_);
-        blurSpin_ = makeValueBox(toolControls_, name + QStringLiteral("Spin"), 0.0, kMaxBlur, 0.0);
-        blurSpin_->setSuffix(QStringLiteral(" px"));
-        label->setBuddy(blurSpin_);
-        blurRow->addWidget(label);
-        blurRow->addStretch(1);
-        blurRow->addWidget(blurSpin_);
-        controls->addLayout(blurRow);
-        blurSlider_ = new JumpSlider(Qt::Horizontal, toolControls_);
-        blurSlider_->setObjectName(name + QStringLiteral("Slider"));
-        blurSlider_->setRange(0, int(kMaxBlur));
-        controls->addWidget(blurSlider_);
-        layout->addWidget(toolControls_);
+        const auto mode = BlurGalleryMode(row.mode);
+        effect->controls = buildEffectControls(panel, mode, name);
+        effect->controls->setVisible(false);
+        layout->addWidget(effect->controls);
+        connect(effect->arrow, &QToolButton::clicked, this,
+                [this, mode] { setExpanded(mode, effects_[int(mode)].controls->isHidden()); });
+        connect(effect->title, &QToolButton::clicked, this, [this, mode] { selectEffect(mode); });
+        connect(effect->check, &QCheckBox::toggled, this,
+                [this, mode](bool on) { setEffectEnabled(mode, on); });
     }
-    connect(blurSpin_, &QDoubleSpinBox::valueChanged, this,
-            [this](double value) { setSelectedBlur(value); });
-    connect(blurSlider_, &QSlider::valueChanged, this,
-            [this](int value) { setSelectedBlur(value); });
-    connect(toolArrow_, &QToolButton::clicked, this, [this] {
-        const bool show = !toolControls_->isVisible();
-        toolControls_->setVisible(show);
-        toolArrow_->setText(show ? QStringLiteral("▼") : QStringLiteral("▶"));
-    });
     return panel;
+}
+
+QWidget* BlurGalleryDialog::buildEffectControls(QWidget* parent, BlurGalleryMode mode,
+                                                const QString& name)
+{
+    Effect& effect = effects_[int(mode)];
+    auto* box = new QWidget(parent);
+    auto* controls = new QVBoxLayout(box);
+    controls->setContentsMargins(18, 0, 0, 0);
+    controls->setSpacing(3);
+    auto* blurRow = new QHBoxLayout;
+    auto* label = new QLabel(QStringLiteral("Blur:"), box);
+    effect.blurSpin = makeValueBox(box, name + QStringLiteral("Spin"), 0.0, kMaxBlur, 0.0);
+    effect.blurSpin->setSuffix(QStringLiteral(" px"));
+    label->setBuddy(effect.blurSpin);
+    blurRow->addWidget(label);
+    blurRow->addStretch(1);
+    blurRow->addWidget(effect.blurSpin);
+    controls->addLayout(blurRow);
+    effect.blurSlider = new JumpSlider(Qt::Horizontal, box);
+    effect.blurSlider->setObjectName(name + QStringLiteral("Slider"));
+    effect.blurSlider->setRange(0, int(kMaxBlur));
+    controls->addWidget(effect.blurSlider);
+    // An amount edits the effect's own selected pin, selecting the effect.
+    const auto setBlur = [this, mode](double value) {
+        selectEffect(mode);
+        setSelectedBlur(value);
+    };
+    connect(effect.blurSpin, &QDoubleSpinBox::valueChanged, this, setBlur);
+    connect(effect.blurSlider, &QSlider::valueChanged, this, setBlur);
+    connect(effect.blurSlider, &QSlider::sliderReleased, this, &BlurGalleryDialog::scheduleRender);
+    if (mode != BlurGalleryMode::TiltShift) {
+        return box;
+    }
+    auto* distortionRow = new QHBoxLayout;
+    auto* distortionLabel = new QLabel(QStringLiteral("Distortion:"), box);
+    distortionSpin_ = makeValueBox(box, QStringLiteral("tiltDistortionSpin"), -100, 100, 0);
+    distortionSpin_->setSuffix(QStringLiteral("%"));
+    distortionLabel->setBuddy(distortionSpin_);
+    distortionRow->addWidget(distortionLabel);
+    distortionRow->addStretch(1);
+    distortionRow->addWidget(distortionSpin_);
+    controls->addLayout(distortionRow);
+    distortionSlider_ = new JumpSlider(Qt::Horizontal, box);
+    distortionSlider_->setObjectName(QStringLiteral("tiltDistortionSlider"));
+    distortionSlider_->setRange(-100, 100);
+    controls->addWidget(distortionSlider_);
+    symmetric_ = new QCheckBox(QStringLiteral("Symmetric Distortion"), box);
+    symmetric_->setObjectName(QStringLiteral("tiltSymmetric"));
+    controls->addWidget(symmetric_);
+    const auto setDistortion = [this](double value, bool symmetric) {
+        selectEffect(BlurGalleryMode::TiltShift);
+        setSelectedDistortion(value, symmetric);
+    };
+    connect(distortionSpin_, &QDoubleSpinBox::valueChanged, this,
+            [this, setDistortion](double v) { setDistortion(v, symmetric_->isChecked()); });
+    connect(distortionSlider_, &QSlider::valueChanged, this,
+            [this, setDistortion](int v) { setDistortion(v, symmetric_->isChecked()); });
+    connect(distortionSlider_, &QSlider::sliderReleased, this,
+            &BlurGalleryDialog::scheduleRender);
+    connect(symmetric_, &QCheckBox::toggled, this,
+            [this, setDistortion](bool on) { setDistortion(distortionSpin_->value(), on); });
+    return box;
 }
 
 QWidget* BlurGalleryDialog::buildEffectsPanel()
@@ -530,17 +498,66 @@ QWidget* BlurGalleryDialog::buildNoiseTab()
     return tab;
 }
 
+namespace {
+
+const char* const kEffectKinds[] = {"field-blur", "iris-blur", "tilt-shift"};
+const int kPinStrides[] = {3, 8, 10};
+
+} // namespace
+
+QString BlurGalleryDialog::kind() const
+{
+    int on = 0;
+    int last = 0;
+    for (int m = 0; m < 3; ++m) {
+        if (effects_[m].enabled && !effects_[m].pins.isEmpty()) {
+            ++on;
+            last = m;
+        }
+    }
+    if (on == 0) {
+        return QString();
+    }
+    return on == 1 ? QLatin1String(kEffectKinds[last]) : QStringLiteral("blur-gallery");
+}
+
 QList<double> BlurGalleryDialog::values() const
 {
-    QList<double> out;
-    out << pins_.size();
-    for (const BlurGalleryPin& pin : pins_) {
-        out << pin.pos.x() << pin.pos.y();
-        if (iris_) {
-            out << pin.radii.width() << pin.radii.height() << pin.angle << pin.squareness
-                << pin.feather;
+    return slotList(1.0);
+}
+
+void BlurGalleryDialog::appendPins(QList<double>* out, BlurGalleryMode mode, double scale) const
+{
+    const Effect& effect = effects_[int(mode)];
+    const bool on = effect.enabled;
+    *out << (on ? effect.pins.size() : 0);
+    if (!on) {
+        return;
+    }
+    for (const BlurGalleryPin& pin : effect.pins) {
+        *out << pin.pos.x() << pin.pos.y();
+        if (mode == BlurGalleryMode::Iris) {
+            *out << pin.radii.width() << pin.radii.height() << pin.angle << pin.squareness
+                 << pin.feather;
+        } else if (mode == BlurGalleryMode::TiltShift) {
+            *out << pin.angle << pin.focus[0] << pin.focus[1] << pin.fade[0] << pin.fade[1]
+                 << pin.distortion << (pin.symmetric ? 1.0 : 0.0);
         }
-        out << pin.blur;
+        *out << pin.blur * scale;
+    }
+}
+
+QList<double> BlurGalleryDialog::slotList(double scale) const
+{
+    QList<double> out;
+    const QString commit = kind();
+    for (int m = 0; m < 3; ++m) {
+        if (commit == QStringLiteral("blur-gallery") || commit == QLatin1String(kEffectKinds[m])) {
+            appendPins(&out, BlurGalleryMode(m), scale);
+        }
+    }
+    if (out.isEmpty()) {
+        return out;
     }
     out << (bokehEnabled_->isChecked() ? 1.0 : 0.0) << bokehLight_.spin->value()
         << bokehColor_.spin->value() << bokehRangeLow_->value() << bokehRangeHigh_->value()
@@ -550,66 +567,114 @@ QList<double> BlurGalleryDialog::values() const
     return out;
 }
 
+bool BlurGalleryDialog::readPins(const QList<double>& values, int* at, BlurGalleryMode mode,
+                                 QList<BlurGalleryPin>* pins) const
+{
+    const int stride = kPinStrides[int(mode)];
+    if (*at >= values.size()) {
+        return false;
+    }
+    const double count = values.at(*at);
+    if (count < 0 || count > 16 || count != double(int(count))
+        || *at + 1 + stride * int(count) > values.size()) {
+        return false;
+    }
+    for (int i = 0; i < int(count); ++i) {
+        const auto slot = [&](int k) { return values.at(*at + 1 + stride * i + k); };
+        BlurGalleryPin pin;
+        pin.pos = QPointF(slot(0), slot(1));
+        if (mode == BlurGalleryMode::Iris) {
+            pin.radii = QSizeF(qBound(kMinIrisRadius, slot(2), kMaxIrisRadius),
+                               qBound(kMinIrisRadius, slot(3), kMaxIrisRadius));
+            pin.angle = slot(4);
+            pin.squareness = qBound(0.0, slot(5), 100.0);
+            pin.feather = qBound(0.0, slot(6), 1.0);
+        } else if (mode == BlurGalleryMode::TiltShift) {
+            pin.angle = slot(2);
+            for (int k = 0; k < 2; ++k) {
+                pin.focus[k] = qBound(0.0, slot(3 + k), kMaxTiltExtent);
+                pin.fade[k] = qBound(0.0, slot(5 + k), kMaxTiltExtent);
+            }
+            pin.distortion = qBound(-100.0, slot(7), 100.0);
+            pin.symmetric = slot(8) >= 0.5;
+        }
+        pin.blur = qBound(0.0, slot(stride - 1), kMaxBlur);
+        pins->append(pin);
+    }
+    *at += 1 + stride * int(count);
+    return true;
+}
+
+void BlurGalleryDialog::readTail(const QList<double>& values, int tail)
+{
+    {
+        const QSignalBlocker blockBokeh(bokehEnabled_);
+        const QSignalBlocker blockNoise(noiseEnabled_);
+        const QSignalBlocker blockKind(noiseKind_);
+        bokehEnabled_->setChecked(values.at(tail) >= 0.5);
+        bokehLight_.setValue(values.at(tail + 1));
+        bokehColor_.setValue(values.at(tail + 2));
+        bokehRangeLow_->setValue(values.at(tail + 3));
+        bokehRangeHigh_->setValue(values.at(tail + 4));
+        noiseEnabled_->setChecked(values.at(tail + 5) >= 0.5);
+        noiseAmount_.setValue(values.at(tail + 6));
+        noiseSize_.setValue(values.at(tail + 7));
+        noiseRoughness_.setValue(values.at(tail + 8));
+        noiseColor_.setValue(values.at(tail + 9));
+        noiseHighlights_.setValue(values.at(tail + 10));
+        noiseKind_->setCurrentIndex(qBound(0, int(values.at(tail + 11)), 2));
+        noiseSeed_ = values.at(tail + 12);
+    }
+    bokehRange_->setRange(int(bokehRangeLow_->value()), int(bokehRangeHigh_->value()));
+}
+
 void BlurGalleryDialog::setValues(const QList<double>& values)
 {
-    QList<BlurGalleryPin> pins;
-    const int count = values.isEmpty() ? 0 : int(values.first());
-    const int stride = pinSlots();
-    const bool whole = !values.isEmpty() && double(count) == values.first() && count >= 1
-                       && values.size() == 1 + stride * count + kEffectsTail;
+    // The opening command's layout: one effect's list, or all three in turn.
+    const bool combined = spec_.kind == QStringLiteral("blur-gallery");
+    const BlurGalleryMode opening = modeForKind(spec_.kind);
+    QList<BlurGalleryPin> parsed[3];
+    int at = 0;
+    bool whole = !values.isEmpty();
+    for (int m = 0; m < 3 && whole; ++m) {
+        if (combined || BlurGalleryMode(m) == opening) {
+            whole = readPins(values, &at, BlurGalleryMode(m), &parsed[m]);
+        }
+    }
+    whole = whole && values.size() == at + kEffectsTail
+            && (combined || !parsed[int(opening)].isEmpty());
+    canvas_->setPins(nullptr, 0);
+    for (int m = 0; m < 3; ++m) {
+        Effect& effect = effects_[m];
+        effect.pins = whole ? parsed[m] : QList<BlurGalleryPin>();
+        effect.selected = 0;
+        effect.enabled = !effect.pins.isEmpty();
+        const QSignalBlocker block(effect.check);
+        effect.check->setChecked(effect.enabled);
+        setExpanded(BlurGalleryMode(m), false);
+    }
     if (whole) {
-        for (int i = 0; i < count; ++i) {
-            const auto slot = [&](int k) { return values.at(1 + stride * i + k); };
-            BlurGalleryPin pin;
-            pin.pos = QPointF(slot(0), slot(1));
-            if (iris_) {
-                pin.radii = QSizeF(qBound(kMinIrisRadius, slot(2), kMaxIrisRadius),
-                                   qBound(kMinIrisRadius, slot(3), kMaxIrisRadius));
-                pin.angle = slot(4);
-                pin.squareness = qBound(0.0, slot(5), 100.0);
-                pin.feather = qBound(0.0, slot(6), 1.0);
-            }
-            pin.blur = qBound(0.0, slot(stride - 1), kMaxBlur);
-            pins.append(pin);
-        }
-        const int tail = 1 + stride * count;
-        {
-            const QSignalBlocker blockBokeh(bokehEnabled_);
-            const QSignalBlocker blockNoise(noiseEnabled_);
-            const QSignalBlocker blockKind(noiseKind_);
-            bokehEnabled_->setChecked(values.at(tail) >= 0.5);
-            bokehLight_.setValue(values.at(tail + 1));
-            bokehColor_.setValue(values.at(tail + 2));
-            bokehRangeLow_->setValue(values.at(tail + 3));
-            bokehRangeHigh_->setValue(values.at(tail + 4));
-            noiseEnabled_->setChecked(values.at(tail + 5) >= 0.5);
-            noiseAmount_.setValue(values.at(tail + 6));
-            noiseSize_.setValue(values.at(tail + 7));
-            noiseRoughness_.setValue(values.at(tail + 8));
-            noiseColor_.setValue(values.at(tail + 9));
-            noiseHighlights_.setValue(values.at(tail + 10));
-            noiseKind_->setCurrentIndex(qBound(0, int(values.at(tail + 11)), 2));
-            noiseSeed_ = values.at(tail + 12);
-        }
-        bokehRange_->setRange(int(bokehRangeLow_->value()), int(bokehRangeHigh_->value()));
+        readTail(values, at);
     }
-    if (pins.isEmpty()) {
-        pins.append(defaultPin());
+    BlurGalleryMode first = opening;
+    for (int m = 2; m >= 0; --m) {
+        if (effects_[m].enabled && (combined || BlurGalleryMode(m) == opening)) {
+            first = BlurGalleryMode(m);
+        }
     }
-    pins_ = pins;
-    selectPin(0);
+    selectEffect(first);
     effectsEdited();
 }
 
-int BlurGalleryDialog::pinSlots() const
-{
-    return iris_ ? 8 : 3;
-}
-
-BlurGalleryPin BlurGalleryDialog::defaultPin() const
+BlurGalleryPin BlurGalleryDialog::defaultPin(BlurGalleryMode mode) const
 {
     BlurGalleryPin pin;
-    if (!iris_) {
+    if (mode == BlurGalleryMode::TiltShift) {
+        // The band's extents open at `pictura_filters::TiltPin::default()`.
+        pin.blur = 15.0;
+        return pin;
+    }
+    if (mode != BlurGalleryMode::Iris) {
         return pin;
     }
     // The owner's screenshot opens on an outline proportioned like the
@@ -623,9 +688,67 @@ BlurGalleryPin BlurGalleryDialog::defaultPin() const
     return pin;
 }
 
+void BlurGalleryDialog::selectEffect(BlurGalleryMode mode)
+{
+    // Remember the pin the canvas had selected on the effect it was showing.
+    if (canvas_->mode() == active_) {
+        effects_[int(active_)].selected = canvas_->selected();
+    }
+    active_ = mode;
+    Effect& effect = effects_[int(mode)];
+    if (effect.pins.isEmpty()) {
+        effect.pins.append(defaultPin(mode));
+        effect.selected = 0;
+    }
+    if (!effect.enabled) {
+        effect.enabled = true;
+        const QSignalBlocker block(effect.check);
+        effect.check->setChecked(true);
+    }
+    // The edited effect's name reads bold.
+    for (int m = 0; m < 3; ++m) {
+        QFont font = effects_[m].title->font();
+        font.setBold(m == int(mode));
+        effects_[m].title->setFont(font);
+    }
+    canvas_->setMode(mode);
+    canvas_->setPins(&effect.pins, effect.selected);
+    setExpanded(mode, true);
+    if (hint_) {
+        const QString hints[] = {
+            QStringLiteral("Click the image to add a pin, drag a pin to move it, its ring to "
+                           "blur, H to hide the pins"),
+            QStringLiteral("Click to add an iris; drag its handles to size, turn, feather, or "
+                           "square it; H hides the overlay"),
+            QStringLiteral("Click to add a band; drag its lines to set the sharp and fade "
+                           "areas, a dot to turn it; H hides the overlay"),
+        };
+        hint_->setText(hints[int(mode)]);
+    }
+    syncControls();
+    scheduleRender();
+}
+
+void BlurGalleryDialog::setEffectEnabled(BlurGalleryMode mode, bool on)
+{
+    if (on) {
+        selectEffect(mode);
+        return;
+    }
+    effects_[int(mode)].enabled = false;
+    scheduleRender();
+}
+
+void BlurGalleryDialog::setExpanded(BlurGalleryMode mode, bool on)
+{
+    const Effect& effect = effects_[int(mode)];
+    effect.controls->setVisible(on);
+    effect.arrow->setText(on ? QStringLiteral("▼") : QStringLiteral("▶"));
+}
+
 void BlurGalleryDialog::selectPin(int index)
 {
-    if (index < 0 || index >= pins_.size()) {
+    if (index < 0 || index >= pins().size()) {
         return;
     }
     canvas_->setSelected(index);
@@ -641,11 +764,11 @@ void BlurGalleryDialog::pinsEdited()
 void BlurGalleryDialog::deleteSelectedPin()
 {
     const int index = canvas_->selected();
-    if (pins_.size() <= 1 || index < 0 || index >= pins_.size()) {
+    if (pins().size() <= 1 || index < 0 || index >= pins().size()) {
         return;
     }
-    pins_.removeAt(index);
-    canvas_->setSelected(qMin(index, int(pins_.size()) - 1));
+    pins().removeAt(index);
+    canvas_->setSelected(qMin(index, int(pins().size()) - 1));
     syncControls();
     canvas_->update();
     scheduleRender();
@@ -654,33 +777,50 @@ void BlurGalleryDialog::deleteSelectedPin()
 void BlurGalleryDialog::setSelectedBlur(double blur)
 {
     const int index = canvas_->selected();
-    if (index < 0 || index >= pins_.size()) {
+    if (index < 0 || index >= pins().size()) {
         return;
     }
-    pins_[index].blur = qBound(0.0, blur, kMaxBlur);
-    {
-        const QSignalBlocker blockSpin(blurSpin_);
-        const QSignalBlocker blockSlider(blurSlider_);
-        blurSpin_->setValue(pins_[index].blur);
-        blurSlider_->setValue(qRound(pins_[index].blur));
-    }
+    pins()[index].blur = qBound(0.0, blur, kMaxBlur);
+    syncControls();
     canvas_->update();
+    scheduleRender();
+}
+
+void BlurGalleryDialog::setSelectedDistortion(double distortion, bool symmetric)
+{
+    const int index = canvas_->selected();
+    if (index < 0 || index >= pins().size()) {
+        return;
+    }
+    pins()[index].distortion = qBound(-100.0, distortion, 100.0);
+    pins()[index].symmetric = symmetric;
+    syncControls();
     scheduleRender();
 }
 
 void BlurGalleryDialog::syncControls()
 {
-    const int index = canvas_->selected();
-    const bool has = index >= 0 && index < pins_.size();
-    blurSpin_->setEnabled(has);
-    blurSlider_->setEnabled(has);
-    if (!has) {
-        return;
+    // Each row shows its own effect's selected pin.
+    for (int m = 0; m < 3; ++m) {
+        Effect& effect = effects_[m];
+        const int index = m == int(active_) ? canvas_->selected() : effect.selected;
+        if (index < 0 || index >= effect.pins.size()) {
+            continue;
+        }
+        const BlurGalleryPin& pin = effect.pins.at(index);
+        const QSignalBlocker blockSpin(effect.blurSpin);
+        const QSignalBlocker blockSlider(effect.blurSlider);
+        effect.blurSpin->setValue(pin.blur);
+        effect.blurSlider->setValue(qRound(pin.blur));
+        if (BlurGalleryMode(m) == BlurGalleryMode::TiltShift) {
+            const QSignalBlocker blockDistortion(distortionSpin_);
+            const QSignalBlocker blockDistortionSlider(distortionSlider_);
+            const QSignalBlocker blockSymmetric(symmetric_);
+            distortionSpin_->setValue(pin.distortion);
+            distortionSlider_->setValue(qRound(pin.distortion));
+            symmetric_->setChecked(pin.symmetric);
+        }
     }
-    const QSignalBlocker blockSpin(blurSpin_);
-    const QSignalBlocker blockSlider(blurSlider_);
-    blurSpin_->setValue(pins_.at(index).blur);
-    blurSlider_->setValue(qRound(pins_.at(index).blur));
 }
 
 void BlurGalleryDialog::effectsEdited()
@@ -705,6 +845,16 @@ void BlurGalleryDialog::scheduleRender()
     });
 }
 
+bool BlurGalleryDialog::interacting() const
+{
+    const auto held = [](const QSlider* slider) { return slider && slider->isSliderDown(); };
+    bool any = canvas_->dragging() || held(distortionSlider_);
+    for (const Effect& effect : effects_) {
+        any = any || held(effect.blurSlider);
+    }
+    return any;
+}
+
 void BlurGalleryDialog::render()
 {
     renderPending_ = false;
@@ -716,25 +866,40 @@ void BlurGalleryDialog::render()
         canvas_->setImage(proxy_);
         return;
     }
-    QList<double> params = values();
-    const int stride = pinSlots();
-    const int pinEnd = 1 + stride * qRound(params.value(0));
-    for (int i = stride; i < pinEnd; i += stride) {
-        params[i] *= proxyScale_;
+    const bool draft = !draftBase_.isNull() && interacting();
+    const QImage& base = draft ? draftBase_ : base_;
+    const int edge = draft ? draftEdge_ : proxyEdge_;
+    if (base.isNull()) {
+        canvas_->setImage(proxy_);
+        return;
     }
-    const QImage filtered =
-        filter_thumbnail(proxyRgba_, proxy_.width(), proxy_.height(), spec_.kind, params);
-    canvas_->setImage(filtered.isNull() ? proxy_ : filtered);
+    // Pin amounts are document pixels; the layer is filtered at proxy scale.
+    const double scale =
+        double(edge) / double(qMax(view_->document_width(), view_->document_height()));
+    const QString commit = kind();
+    if (commit.isEmpty()) {
+        canvas_->setImage(proxy_);
+        return;
+    }
+    const QImage layer = filter_proxy_layer(*view_, commit, slotList(scale), edge);
+    QImage composed = base.copy();
+    if (!layer.isNull()) {
+        QPainter painter(&composed);
+        painter.drawImage(0, 0, layer);
+    }
+    canvas_->setImage(composed);
 }
 
 bool BlurGalleryDialog::get(PictureView* view, const FilterCommandSpec& spec,
-                            const QList<double>& initial, QList<double>* out, QWidget* parent)
+                            const QList<double>& initial, QList<double>* out, QString* kind,
+                            QWidget* parent)
 {
     BlurGalleryDialog dialog(view, spec, parent);
     dialog.setValues(initial);
-    if (runDialog(dialog, parent) != QDialog::Accepted) {
+    if (runDialog(dialog, parent) != QDialog::Accepted || dialog.kind().isEmpty()) {
         return false;
     }
+    *kind = dialog.kind();
     *out = dialog.values();
     return true;
 }

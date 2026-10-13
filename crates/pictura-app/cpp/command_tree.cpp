@@ -708,10 +708,11 @@ void addDefaultCommands(CommandRegistry& registry) {
     leaf(registry, {"Filter", "Blur", "Blur More"}, QStringLiteral("Blur More"));
     // The Blur Gallery submenu as later Photoshop versions list it (the
     // owner's screenshot); CS6 itself put the three effects under Blur.
-    // Field Blur and Iris Blur have kernels; the others stay disabled stubs.
+    // Field Blur, Iris Blur, and Tilt-Shift have kernels; Path Blur and Spin
+    // Blur stay disabled stubs.
     leaf(registry, {"Filter", "Blur Gallery", "Field Blur"}, QStringLiteral("Field Blur"));
     leaf(registry, {"Filter", "Blur Gallery", "Iris Blur"}, QStringLiteral("Iris Blur"));
-    leaf(registry, {"Filter", "Blur Gallery", "Tilt-Shift"}, QStringLiteral("Tilt-Shift…"));
+    leaf(registry, {"Filter", "Blur Gallery", "Tilt-Shift"}, QStringLiteral("Tilt-Shift"));
     leaf(registry, {"Filter", "Blur Gallery", "Path Blur"}, QStringLiteral("Path Blur…"));
     leaf(registry, {"Filter", "Blur Gallery", "Spin Blur"}, QStringLiteral("Spin Blur…"));
     leaf(registry, {"Filter", "Brush Strokes", "Accented Edges"}, QStringLiteral("Accented Edges"));

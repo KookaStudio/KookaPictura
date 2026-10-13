@@ -10,8 +10,9 @@ submenu SHALL list Field Blur…, Iris Blur…, Tilt-Shift…, Path Blur…, and
 Spin Blur… in that order; only Field Blur SHALL be implemented and enabled,
 and the rest SHALL stay disabled stubs (Iris Blur and Tilt-Shift await
 #341/#342; Path Blur and Spin Blur are post-CS6). The Blur Tools panel SHALL
-list Field Blur expanded with its Blur amount and the same four effects as
-disabled rows. The workspace SHALL open on one pin at the picture's centre
+list Field Blur checked and expanded with its Blur amount, Iris Blur and
+Tilt-Shift as unchecked selectable rows, and Path Blur and Spin Blur as
+disabled rows (see the combined-effects requirement). The workspace SHALL open on one pin at the picture's centre
 with blur 0 and the Effects tab's defaults (Bokeh on, Light Bokeh 14 %,
 Bokeh Color 40 %, Light Range 40..118; Noise off, Amount 0, Size 50,
 Roughness 50, Color 0, Highlights 0, Gaussian). A click on the picture SHALL
@@ -40,8 +41,9 @@ history state named for the menu row.
 
 - **WHEN** Field Blur is chosen from the Filter menu on an open document
 - **THEN** the workspace shows one pin at the picture's centre with blur 0,
-  the Field Blur row checked and editable, the Iris Blur / Tilt-Shift /
-  Path Blur / Spin Blur rows present but disabled, and the Effects, Motion
+  the Field Blur row checked and editable, the Iris Blur / Tilt-Shift rows
+  unchecked but selectable, the Path Blur / Spin Blur rows present but
+  disabled, and the Effects, Motion
   Effects, and Noise tabs
 
 #### Scenario: The Blur Gallery submenu lists the gallery entries

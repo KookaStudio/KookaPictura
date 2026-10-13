@@ -5,7 +5,7 @@ use pictura_core::shape::CUSTOM_SHAPE_NAMES;
 use pictura_filters::{
     BlurNoise, BlurNoiseKind, BlurPin, BokehParams, DisplaceFit, GlassTexture, IrisPin, IrisShape,
     LightType, NoiseDistribution, Quality, RadialMethod, SharpenRemove, SmartBlurMode,
-    TextureChannel, WaveType, WindMethod, MAX_FIELD_PINS,
+    TextureChannel, TiltPin, WaveType, WindMethod, MAX_FIELD_PINS,
 };
 
 #[test]
@@ -608,4 +608,131 @@ fn iris_blur_defaults_and_accepts_a_variable_pin_list() {
     let mut too_many = vec![0.0f64; 1 + 8 * (MAX_FIELD_PINS + 1) + GALLERY_TAIL];
     too_many[0] = (MAX_FIELD_PINS + 1) as f64;
     assert!(iris(&too_many).is_none());
+}
+
+#[test]
+fn tilt_shift_defaults_and_accepts_a_variable_pin_list() {
+    let tilt = |params: &[f64]| match filter_from_kind_params("tilt-shift", params) {
+        Some(Filter::TiltShift { pins, bokeh, noise }) => Some((pins, bokeh, noise)),
+        Some(other) => panic!("tilt-shift mapped to {other:?}"),
+        None => None,
+    };
+    let (pins, bokeh, noise) = tilt(&[]).unwrap();
+    assert_eq!(pins, vec![TiltPin::default()]);
+    assert_eq!(bokeh, BokehParams::default());
+    assert_eq!(noise, BlurNoise::default());
+    let (pins, _, _) = tilt(&[0.0; TILT_SHIFT_SLOTS]).unwrap();
+    assert_eq!(
+        pins,
+        vec![TiltPin::default()],
+        "the canonical list is one default band"
+    );
+
+    // Two bands, then the tail.
+    let mut two = vec![2.0];
+    two.extend([0.5, 0.4, 15.0, 0.1, 0.05, 0.2, 0.3, 40.0, 1.0, 20.0]);
+    two.extend([0.2, 0.8, -30.0, 0.0, 0.0, 0.1, 0.1, -60.0, 0.0, 8.0]);
+    two.extend([1.0, 30.0, 50.0, 40.0, 200.0]);
+    two.extend([1.0, 20.0, 40.0, 30.0, 25.0, 10.0, 1.0, 9.0]);
+    assert_eq!(two.len(), 1 + 20 + GALLERY_TAIL);
+    let (pins, bokeh, noise) = tilt(&two).unwrap();
+    assert_eq!(
+        pins,
+        vec![
+            TiltPin {
+                x: 0.5,
+                y: 0.4,
+                angle: 15.0,
+                focus_above: 0.1,
+                focus_below: 0.05,
+                fade_above: 0.2,
+                fade_below: 0.3,
+                distortion: 40.0,
+                symmetric: true,
+                blur: 20.0,
+            },
+            TiltPin {
+                x: 0.2,
+                y: 0.8,
+                angle: -30.0,
+                focus_above: 0.0,
+                focus_below: 0.0,
+                fade_above: 0.1,
+                fade_below: 0.1,
+                distortion: -60.0,
+                symmetric: false,
+                blur: 8.0,
+            },
+        ]
+    );
+    assert!(bokeh.enabled);
+    assert_eq!(noise.kind, BlurNoiseKind::Uniform);
+    assert_eq!(noise.seed, 9);
+
+    // An Iris stride, a short list, and more bands than the cap are refused.
+    let mut iris_stride = vec![1.0];
+    iris_stride.extend([0.5; 8]);
+    iris_stride.extend([0.0; GALLERY_TAIL]);
+    assert!(tilt(&iris_stride).is_none());
+    assert!(tilt(&two[..two.len() - 1]).is_none());
+    let mut too_many = vec![0.0f64; 1 + 10 * (MAX_FIELD_PINS + 1) + GALLERY_TAIL];
+    too_many[0] = (MAX_FIELD_PINS + 1) as f64;
+    assert!(tilt(&too_many).is_none());
+}
+
+#[test]
+fn blur_gallery_combines_each_effects_records() {
+    let gallery = |params: &[f64]| match filter_from_kind_params("blur-gallery", params) {
+        Some(Filter::BlurGallery {
+            field,
+            iris,
+            tilt,
+            bokeh,
+            noise,
+        }) => Some((field, iris, tilt, bokeh, noise)),
+        Some(other) => panic!("blur-gallery mapped to {other:?}"),
+        None => None,
+    };
+    let default_field = vec![BlurPin {
+        x: 0.5,
+        y: 0.5,
+        blur: 0.0,
+    }];
+    let (field, iris, tilt, bokeh, _) = gallery(&[]).unwrap();
+    assert_eq!(
+        (field, iris.len(), tilt.len()),
+        (default_field.clone(), 0, 0)
+    );
+    assert_eq!(bokeh, BokehParams::default());
+    let (field, iris, tilt, _, _) = gallery(&[0.0; BLUR_GALLERY_SLOTS]).unwrap();
+    assert_eq!((field, iris.len(), tilt.len()), (default_field, 0, 0));
+
+    // No Field pins, one iris, two bands, then the tail.
+    let mut list = vec![0.0, 1.0];
+    list.extend([0.3, 0.4, 0.2, 0.1, 30.0, 60.0, 0.5, 12.0]);
+    list.push(2.0);
+    list.extend([0.5, 0.4, 15.0, 0.1, 0.05, 0.2, 0.3, 40.0, 1.0, 20.0]);
+    list.extend([0.2, 0.8, -30.0, 0.0, 0.0, 0.1, 0.1, -60.0, 0.0, 8.0]);
+    list.extend([1.0, 30.0, 50.0, 40.0, 200.0]);
+    list.extend([1.0, 20.0, 40.0, 30.0, 25.0, 10.0, 2.0, 7.0]);
+    let (field, iris, tilt, bokeh, noise) = gallery(&list).unwrap();
+    assert!(field.is_empty());
+    assert_eq!(iris.len(), 1);
+    assert_eq!(iris[0].angle, 30.0);
+    assert_eq!(tilt.len(), 2);
+    assert!(tilt[0].symmetric && !tilt[1].symmetric);
+    assert_eq!(tilt[1].distortion, -60.0);
+    assert!(bokeh.enabled);
+    assert_eq!(noise.kind, BlurNoiseKind::Grain);
+
+    // A short list, a fractional or over-cap count are refused.
+    assert!(gallery(&list[..list.len() - 1]).is_none());
+    let mut fractional = list.clone();
+    fractional[1] = 1.5;
+    assert!(gallery(&fractional).is_none());
+    let mut too_many = vec![(MAX_FIELD_PINS + 1) as f64];
+    too_many.extend(vec![0.5; 3 * (MAX_FIELD_PINS + 1)]);
+    too_many.extend([0.0, 0.0]);
+    too_many.extend([0.0; GALLERY_TAIL]);
+    assert!(gallery(&too_many).is_none());
 }
