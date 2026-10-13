@@ -1035,6 +1035,43 @@ bool LayersPanel::rowMaskTargetForTest(const QString& path) const
     return model_ && model_->indexForPath(path).data(MaskTargetRole).toBool();
 }
 
+int LayersPanel::rowActiveThumbForTest(const QString& path) const
+{
+    return model_ ? model_->indexForPath(path).data(ActiveThumbRole).toInt() : 0;
+}
+
+int LayersPanel::opacityLabelAlignmentForTest() const
+{
+    if (!opacity_) {
+        return 0;
+    }
+    auto* label = opacity_->findChild<QLabel*>(QStringLiteral("percentLabel"));
+    return label ? static_cast<int>(label->alignment()) : 0;
+}
+
+int LayersPanel::opacityLabelRightForTest() const
+{
+    if (!opacity_) {
+        return -1;
+    }
+    auto* label = opacity_->findChild<QLabel*>(QStringLiteral("percentLabel"));
+    return label ? label->mapTo(opacity_, QPoint(label->width(), 0)).x() : -1;
+}
+
+QRect LayersPanel::rowLinkGlyphRectForTest(const QString& path) const
+{
+    const QModelIndex index = proxyIndexForPath(path);
+    if (!index.isValid() || !delegate_ || !tree_) {
+        return {};
+    }
+    return delegate_->linkGlyphRect(tree_->visualRect(index), index);
+}
+
+int LayersPanel::linkIconSideForTest() const
+{
+    return delegate_ ? delegate_->linkSide(delegate_->thumbSize()) + 2 : 0;
+}
+
 bool LayersPanel::clickMaskThumbnailForTest(const QString& path)
 {
     const QModelIndex index = proxyIndexForPath(path);

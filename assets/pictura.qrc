@@ -8,6 +8,8 @@
     <file>fonts/NotoSans-MediumItalic.ttf</file>
     <file>fonts/NotoSans-SemiBoldItalic.ttf</file>
     <file>fonts/NotoSans-BoldItalic.ttf</file>
+    <file>ui/combo-caret.svg</file>
+    <file>ui/combo-caret-disabled.svg</file>
     <file>icons/app.png</file>
     <file>icons/edit.redo.svg</file>
     <file>icons/edit.stepBackward.svg</file>

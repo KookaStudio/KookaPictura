@@ -51,6 +51,9 @@ public:
     void setBlank(bool blank);
     bool isBlank() const { return blank_; }
     QString labelText() const;
+    // Align the leading label's text; a field whose label shares slack with the
+    // value box can right-align it against that box.
+    void setLabelAlignment(Qt::Alignment alignment);
     // Show or hide the in-box suffix (e.g. " px"); the row reflows.
     void setSuffixVisible(bool visible);
 
