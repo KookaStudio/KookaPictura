@@ -221,10 +221,6 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
     connect(hidePanels, &QShortcut::activated, this, [this]() { togglePanelsHidden(); });
     auto* hidePanelsBack = new QShortcut(QKeySequence(Qt::SHIFT | Qt::Key_Tab), this);
     connect(hidePanelsBack, &QShortcut::activated, this, [this]() { togglePanelsHidden(); });
-    // Space is reserved for transient panning, so the canvas-colour cycle is
-    // bound to a double `F` instead; a bare Space reaches the widgets.
-    auto* cycleCanvas = new QShortcut(QKeySequence(Qt::Key_F, Qt::Key_F), this);
-    connect(cycleCanvas, &QShortcut::activated, this, [this]() { cycleCanvasColor(true); });
     auto* brightnessDown = new QShortcut(QKeySequence(Qt::SHIFT | Qt::Key_F1), this);
     connect(brightnessDown, &QShortcut::activated, this,
             [this]() { setBrightnessLevel(brightnessLevel_ - 1); });
@@ -1093,6 +1089,12 @@ void PicturaMainWindow::keyPressEvent(QKeyEvent* event)
         return;
     }
     if (!event->isAutoRepeat() && event->key() == Qt::Key_F) {
+        // Space+F cycles the pane colour; bare F (Shift reverses) is the screen
+        // mode. A multi-key QShortcut on F would swallow the first press.
+        if (ImageView* canvas = imageView(); canvas && canvas->spacePanForTest()) {
+            cycleCanvasColor(!(event->modifiers() & Qt::ShiftModifier));
+            return;
+        }
         requestScreenMode(nextScreenMode(!(event->modifiers() & Qt::ShiftModifier)));
         return;
     }
