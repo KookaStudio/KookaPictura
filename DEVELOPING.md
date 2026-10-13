@@ -245,7 +245,7 @@ installed there stop running, and checkouts of branches that predate
 Create a worktree per issue, next to the repo rather than inside it:
 
 ```bash
-git worktree add ../kooka-pictura-worktrees/{issue}-{name}   # branch: type/issue-number-kebab-description, see AGENTS.md
+git worktree add -b type/issue-number-kebab-description ../kooka-pictura-worktrees/{issue}-{name}   # branch convention: see AGENTS.md
 ```
 
 The `.githooks/post-checkout` hook wires each linked worktree as it appears: it

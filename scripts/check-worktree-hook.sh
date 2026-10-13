@@ -8,9 +8,10 @@
 # checkout, and the missing-fixtures skip path. Never touches the real
 # checkout; removes the sandbox on exit. Exits non-zero on any failure.
 
-set -u
+set -euo pipefail
 
-hook_src="$(dirname "$0")/../.githooks/post-checkout"
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+hook_src="$repo_root/.githooks/post-checkout"
 if [ ! -f "$hook_src" ]; then
     echo "check-worktree-hook: missing $hook_src" >&2
     exit 1
@@ -34,14 +35,17 @@ mkdir -p "$main/.githooks" "$main/reference-fixtures"
 cp "$hook_src" "$main/.githooks/post-checkout"
 chmod 755 "$main/.githooks/post-checkout"
 echo seed >"$main/reference-fixtures/marker"
-printf '/reference-fixtures\n/target\n**/target\n' >"$main/.gitignore"
+# Use the repo's real .gitignore so the /reference-fixtures pattern itself is
+# under test (a regression to the directory-only form breaks the remove below).
+cp "$repo_root/.gitignore" "$main/.gitignore"
 git -C "$main" add -A
 git -C "$main" commit -qm "seed"
 
 git -C "$main" worktree add -q -b scratch "$wt" || fail "git worktree add"
 
 [ -L "$wt/target" ] || fail "target is not a symlink"
-[ -e "$wt/target/../.target" ] || fail "target symlink does not resolve"
+[ "$(readlink "$wt/target")" = "../.target" ] || fail "target does not point at ../.target"
+[ -d "$wt/target" ] || fail "target symlink does not resolve to a directory"
 [ -L "$wt/reference-fixtures" ] || fail "reference-fixtures is not a symlink"
 [ -e "$wt/reference-fixtures/marker" ] || fail "reference-fixtures symlink does not resolve"
 
@@ -49,6 +53,12 @@ before=$(ls -A "$wt" | sort)
 git -C "$wt" checkout -q HEAD || fail "second checkout errored"
 after=$(ls -A "$wt" | sort)
 [ "$before" = "$after" ] || fail "second checkout changed the worktree (not idempotent)"
+
+# A checkout in the main tree must be left untouched (no symlinks appear).
+git -C "$main" checkout -q HEAD || fail "main checkout errored"
+[ ! -e "$main/target" ] && [ ! -L "$main/target" ] \
+    || fail "main checkout gained a target link"
+[ ! -L "$main/reference-fixtures" ] || fail "main checkout fixtures link replaced the directory"
 
 git -C "$main" worktree remove "$wt" || fail "worktree remove without --force"
 rm -rf "$main/reference-fixtures" || fail "remove fixtures seed"
