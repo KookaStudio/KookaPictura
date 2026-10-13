@@ -174,6 +174,16 @@ public:
     void setFreePan(bool enabled);
     bool freePan() const { return freePan_; }
 
+    // View > Snap Canvas To Workspace: when true and the whole scaled document
+    // fits the viewport, the canvas is pinned to the workspace centre, panning
+    // is refused, and the workspace scrollbars hide. Changing the value
+    // re-clamps the current offset. Default false.
+    void setSnapToWorkspace(bool enabled);
+    bool snapToWorkspace() const { return snapToWorkspace_; }
+    // True while Snap is on and the whole scaled document fits the viewport, so
+    // the canvas is locked to the centre and offers no pan affordance.
+    bool workspaceSnapLocked() const;
+
     // Transient Space-key pan: while on, a left drag pans and the hand cursors
     // are used regardless of the active tool, and the tool's mouse-press is not
     // emitted. The owner restores the pan/cursor state on release.
@@ -566,6 +576,7 @@ private:
     QPointF last_;
     bool panEnabled_ = true;
     bool freePan_ = true;
+    bool snapToWorkspace_ = false;
     bool panning_ = false;
     bool spacePan_ = false;
     // False after a load/fit so the first resize settles the canvas, then any

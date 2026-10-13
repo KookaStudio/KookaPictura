@@ -195,7 +195,8 @@ void ImageView::clampOffset()
         return;
     }
     const OffsetRange range = offsetRangeFor(
-        QSizeF(docSize_.width(), docSize_.height()), zoom_, QSizeF(width(), height()), freePan_);
+        QSizeF(docSize_.width(), docSize_.height()), zoom_, QSizeF(width(), height()), freePan_,
+        kCanvasRevealMarginPx, snapToWorkspace_);
     offset_.setX(std::clamp(offset_.x(), range.minX, range.maxX));
     offset_.setY(std::clamp(offset_.y(), range.minY, range.maxY));
 }

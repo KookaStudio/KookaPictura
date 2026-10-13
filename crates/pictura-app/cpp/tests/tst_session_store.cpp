@@ -26,6 +26,7 @@ private slots:
     void aStoreFromBeforeTheLaunchIsAdopted();
     void ownWritesRoundTrip();
     void freePanRoundTrips();
+    void snapCanvasToWorkspaceRoundTrips();
 
 private:
     void writeStore(int brightness, const QString& writer, qint64 writtenAt);
@@ -95,6 +96,19 @@ void SessionStoreTest::freePanRoundTrips()
     state.freePan = true;
     QVERIFY(pictura::saveSession(state));
     QVERIFY(pictura::loadSession().freePan);
+}
+
+void SessionStoreTest::snapCanvasToWorkspaceRoundTrips()
+{
+    pictura::SessionState state;
+    QVERIFY(!pictura::loadSession().snapCanvasToWorkspace);
+    state.snapCanvasToWorkspace = true;
+    QVERIFY(pictura::saveSession(state));
+    QVERIFY(pictura::loadSession().snapCanvasToWorkspace);
+
+    state.snapCanvasToWorkspace = false;
+    QVERIFY(pictura::saveSession(state));
+    QVERIFY(!pictura::loadSession().snapCanvasToWorkspace);
 }
 
 QTEST_MAIN(SessionStoreTest)

@@ -186,6 +186,7 @@ inline constexpr char ViewFitOnScreen[] = "view.fitOnScreen";
 inline constexpr char ViewActualPixels[] = "view.actualPixels";
 inline constexpr char ViewOptions[] = "view.options";
 inline constexpr char ViewFreePan[] = "view.freePan";
+inline constexpr char ViewSnapCanvasToWorkspace[] = "view.snapCanvasToWorkspace";
 inline constexpr char ViewToolHints[] = "view.toolHints";
 inline constexpr char ViewShowSelectionEdges[] = "view.show.selectionEdges";
 inline constexpr char ViewRulers[] = "view.rulers";

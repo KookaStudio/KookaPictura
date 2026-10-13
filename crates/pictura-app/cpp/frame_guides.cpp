@@ -16,6 +16,7 @@ void PicturaMainWindow::loadGuideSession(const SessionState& state)
 {
     rulersVisible_ = state.rulersVisible;
     freePan_ = state.freePan;
+    snapCanvasToWorkspace_ = state.snapCanvasToWorkspace;
     if (state.rulerUnit >= 0 && state.rulerUnit < kRulerUnitCount) {
         rulerUnit_ = RulerUnit(state.rulerUnit);
     }

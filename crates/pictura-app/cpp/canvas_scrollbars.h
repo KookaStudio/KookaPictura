@@ -59,6 +59,7 @@ private:
     CanvasRuler* hruler_ = nullptr;
     CanvasRuler* vruler_ = nullptr;
     QWidget* rulerCorner_ = nullptr;
+    QWidget* corner_ = nullptr;
     bool syncing_ = false;
 };
 

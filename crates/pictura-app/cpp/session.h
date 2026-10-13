@@ -41,6 +41,9 @@ struct SessionState {
     bool guidesLocked = false;
     // View > Free Pan: free (default) vs the Photoshop-style constrained pan.
     bool freePan = true;
+    // View > Snap Canvas To Workspace: pin a fitting canvas to the centre and
+    // hide the workspace scrollbars. Default off.
+    bool snapCanvasToWorkspace = false;
     QString guideColor = QStringLiteral("#4affff");
     bool guideDashed = false;
     // Crop options bar, persisted across restarts.

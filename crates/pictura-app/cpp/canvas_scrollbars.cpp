@@ -43,10 +43,10 @@ CanvasScrollBars::CanvasScrollBars(QWidget* parent)
     grid_->addWidget(hbar_, 2, 0, 1, 2);
     // The empty corner where the two bars meet: styled to the scrollbar track so
     // the workspace colour does not show through the notch.
-    auto* corner = new QWidget(this);
-    corner->setObjectName(QStringLiteral("canvasScrollCorner"));
-    corner->setAttribute(Qt::WA_StyledBackground, true);
-    grid_->addWidget(corner, 2, 2);
+    corner_ = new QWidget(this);
+    corner_->setObjectName(QStringLiteral("canvasScrollCorner"));
+    corner_->setAttribute(Qt::WA_StyledBackground, true);
+    grid_->addWidget(corner_, 2, 2);
     grid_->setColumnStretch(1, 1);
     grid_->setRowStretch(1, 1);
     hbar_->hide();
@@ -56,16 +56,18 @@ CanvasScrollBars::CanvasScrollBars(QWidget* parent)
         if (syncing_ || !view_) {
             return;
         }
-        const OffsetRange range = offsetRangeFor(QSizeF(view_->documentSize()), view_->zoom(),
-                                                 QSizeF(view_->size()), view_->freePan());
+        const OffsetRange range = offsetRangeFor(
+            QSizeF(view_->documentSize()), view_->zoom(), QSizeF(view_->size()), view_->freePan(),
+            kCanvasRevealMarginPx, view_->snapToWorkspace());
         view_->setOffset(QPointF(range.minX + value, view_->offset().y()));
     });
     connect(vbar_, &QScrollBar::valueChanged, this, [this](int value) {
         if (syncing_ || !view_) {
             return;
         }
-        const OffsetRange range = offsetRangeFor(QSizeF(view_->documentSize()), view_->zoom(),
-                                                 QSizeF(view_->size()), view_->freePan());
+        const OffsetRange range = offsetRangeFor(
+            QSizeF(view_->documentSize()), view_->zoom(), QSizeF(view_->size()), view_->freePan(),
+            kCanvasRevealMarginPx, view_->snapToWorkspace());
         view_->setOffset(QPointF(view_->offset().x(), range.minY + value));
     });
 }
@@ -135,14 +137,18 @@ void CanvasScrollBars::syncFromView()
 
     const double zoom = view_->zoom();
     const QSizeF imageSize(view_->documentSize());
-    // ponytail: visibility is fixed on. The canvas is pannable within the
-    // reveal margin, so an as-needed policy would remove the only pan
-    // affordance; the bars stay a projection of the shared offset range.
-    hbar_->show();
-    vbar_->show();
+    // A workspace snap lock pins the canvas to the centre and offers no pan
+    // range, so the bars and their corner hide; otherwise they stay visible even
+    // when the document fits, since the canvas is pannable within the reveal
+    // margin. The bars remain a projection of the shared range either way.
+    const bool locked = view_->workspaceSnapLocked();
+    hbar_->setVisible(!locked);
+    vbar_->setVisible(!locked);
+    corner_->setVisible(!locked);
 
     const OffsetRange range = offsetRangeFor(imageSize, zoom, QSizeF(view_->size()),
-                                             view_->freePan());
+                                             view_->freePan(), kCanvasRevealMarginPx,
+                                             view_->snapToWorkspace());
     {
         const QSignalBlocker blockH(hbar_);
         const QSignalBlocker blockV(vbar_);

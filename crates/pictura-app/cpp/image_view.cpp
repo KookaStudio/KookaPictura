@@ -123,6 +123,25 @@ void ImageView::setFreePan(bool enabled)
     emit viewChanged();
 }
 
+void ImageView::setSnapToWorkspace(bool enabled)
+{
+    if (snapToWorkspace_ == enabled) {
+        return;
+    }
+    snapToWorkspace_ = enabled;
+    clampOffset();
+    update();
+    emit viewChanged();
+}
+
+bool ImageView::workspaceSnapLocked() const
+{
+    if (!snapToWorkspace_ || docSize_.isEmpty() || zoom_ <= 0.0) {
+        return false;
+    }
+    return docSize_.width() * zoom_ <= width() && docSize_.height() * zoom_ <= height();
+}
+
 void ImageView::setSpacePan(bool on)
 {
     if (spacePan_ == on) {
@@ -837,6 +856,17 @@ void ImageView::wheelEvent(QWheelEvent* event)
 
 void ImageView::mousePressEvent(QMouseEvent* event)
 {
+    // The workspace snap lock pins a fitting canvas to the centre, so no pan
+    // may start; a press that would otherwise pan falls through unhandled.
+    const bool panPress =
+        event->button() == Qt::MiddleButton
+        || (event->button() == Qt::LeftButton
+            && (spacePan_
+                || (panEnabled_ && !event->modifiers().testFlag(Qt::ControlModifier))));
+    if (panPress && workspaceSnapLocked()) {
+        QWidget::mousePressEvent(event);
+        return;
+    }
     if (event->button() == Qt::MiddleButton) {
         panning_ = true;
         userAdjusted_ = true;

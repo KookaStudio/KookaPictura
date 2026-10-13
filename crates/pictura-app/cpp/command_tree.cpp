@@ -825,6 +825,10 @@ void addDefaultCommands(CommandRegistry& registry) {
     leaf(registry, {"View", "Print Size"}, QStringLiteral("Print Size"));
     registry.add(CommandSpec{command_ids::ViewFreePan, {"View", "Free Pan"},
                              QStringLiteral("Free Pan"), QKeySequence(), true, true});
+    registry.add(CommandSpec{command_ids::ViewSnapCanvasToWorkspace,
+                             {"View", "Snap Canvas To Workspace"},
+                             QStringLiteral("Snap Canvas To Workspace"), QKeySequence(), true,
+                             true});
     registry.addSeparator({"View"});
     registry.add(CommandSpec{command_ids::ViewScreenModeStandard,
                              {"View", "Screen Mode", "Standard Screen Mode"},
