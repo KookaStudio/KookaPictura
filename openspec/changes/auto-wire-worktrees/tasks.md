@@ -26,12 +26,12 @@
 
 ## 5. Integration
 
-- [ ] 5.1 `openspec validate --all --strict` passes and `bash scripts/verify-fast.sh` is green end to end
-- [ ] 5.2 In this clone run the documented `git config core.hooksPath .githooks`, then acceptance: fresh `git worktree add ../kooka-pictura-worktrees/376-acceptance` wires both symlinks, branch switch inside is a silent no-op, main-checkout checkout creates nothing, `git worktree remove` succeeds without `--force`, shared `../.target` remains — then remove the acceptance worktree
+- [x] 5.1 `openspec validate --all --strict` passes and `bash scripts/verify-fast.sh` is green end to end
+- [x] 5.2 In this clone run the documented `git config core.hooksPath .githooks`, then acceptance: fresh `git worktree add ../kooka-pictura-worktrees/376-acceptance` wires both symlinks, branch switch inside is a silent no-op, main-checkout checkout creates nothing, `git worktree remove` succeeds without `--force`, shared `../.target` remains — then remove the acceptance worktree
 - [ ] 5.3 Update issue #376 acceptance checkboxes: items 1–4 from 5.2, item 5 after `verify-fast` (5.1) and the guards workflow pass on the PR; note the spike counts from 2.4 in the PR description
 
 ## 6. Commit and PR
 
-- [ ] 6.1 Claim issue #376 (assign + short start comment) — verify `gh issue view 376` shows the assignment
-- [ ] 6.2 Commit the change as `build: auto-wire local worktrees via a post-checkout hook (#376)` (Conventional Commits per AGENTS.md; DEVELOPING.md root change needs no docs marker) — verify `git log -1 --format=%s` matches the convention
+- [x] 6.1 Claim issue #376 (assign + short start comment) — verify `gh issue view 376` shows the assignment
+- [x] 6.2 Commit the change as `build: auto-wire local worktrees via a post-checkout hook (#376)` (Conventional Commits per AGENTS.md; DEVELOPING.md root change needs no docs marker) — verify `git log -1 --format=%s` matches the convention
 - [ ] 6.3 Open the PR titled `build: auto-wire local worktrees via a post-checkout hook (#376)` — verify `gh pr checks` shows the `pr-conventions` title check green
