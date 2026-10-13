@@ -12,6 +12,12 @@
   file, add `assets/icons/app.icns` with `MACOSX_PACKAGE_LOCATION Resources`,
   and give the install rule a `BUNDLE DESTINATION`. Verify a Linux configure
   and build are unaffected (all additions Apple-gated).
+- [x] 1.3 Gate the Vulkan-only interop probe so the Rust static library compiles
+  on Apple targets: `#[cfg(not(target_vendor = "apple"))]` on
+  `create_interop_state` in `crates/pictura-app/src/gpu.rs` with an Apple stub
+  returning `None`, and move the `ash` dependency behind the same `cfg` in
+  `crates/pictura-app/Cargo.toml`. `wgpu` has no Vulkan backend on Apple, so
+  `wgpu::hal::api::Vulkan` is otherwise a hard build error.
 
 ## 2. Make Little CMS static on macOS
 

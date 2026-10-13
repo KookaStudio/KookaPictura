@@ -13,9 +13,13 @@ See `proposal.md` for motivation. The constraints that shape the approach:
   `selftest_control.cpp`); nothing in `crates/**` uses Linux-only APIs. The
   Rust workspace has no `#[cfg(target_os = "linux")]` branches.
 - GPU paths are Vulkan-only (`wgpu` features `["vulkan"]` plus raw `ash`
-  interop). They compile on macOS and degrade to `GpuRender::Unavailable` when
-  no Vulkan adapter exists; GPU is an accelerator, not an oracle, so a
-  Metal-less build is acceptable.
+  interop). The compositor degrades to `GpuRender::Unavailable` when no Vulkan
+  adapter exists, so a Metal-less build is acceptable. The raw `ash` interop
+  escape hatch (`create_interop_state`) does **not** compile on macOS: `wgpu`
+  builds its Vulkan backend only on Windows/Linux/Android/FreeBSD, so
+  `wgpu::hal::api::Vulkan` is absent and `pictura_app` fails to build. It must be
+  `cfg`-gated to a `None` stub on Apple targets, and the `ash` dependency moved
+  behind the same `cfg`.
 - `pictura` is a plain `add_executable`; macOS packaging expects an `.app`
   bundle. `macdeployqt` operates on a bundle, and `create-dmg` packs one.
 - `CMakeLists.txt` links Little CMS on `NOT WIN32` with
@@ -105,6 +109,26 @@ dependency the crate already vendors.
 
 *Risk if wrong:* Cargo feature unification is per-platform; the `static` edge
 must not leak to Linux. Verified with `cargo metadata` for both targets.
+
+### Gate the Vulkan interop probe on Apple targets
+
+`crates/pictura-app/src/gpu.rs` exports raw `VkDevice`/`VkImage` handles from a
+live wgpu device through `wgpu::hal::api::Vulkan` and `ash`. `wgpu` compiles
+that backend only where `wgpu-core` enables
+`wgpu-core-deps-windows-linux-android` (Windows, Linux, Android, FreeBSD), so on
+Apple targets the `wgpu::hal::api::Vulkan` type does not exist and the crate
+fails to build. Gate `create_interop_state` with `#[cfg(not(target_vendor =
+"apple"))]` and add an Apple stub that returns `None`; the C++ side already
+stubs the probe out (`interop.cpp`'s `QT_CONFIG(vulkan) && __has_include(...)`
+guard), so `--interop-probe` reports unavailable there and callers keep the CPU
+path. Move the `ash` dependency behind the same target `cfg` so it is not
+compiled on macOS.
+
+*Alternative considered:* switch the backends to `Backends::PRIMARY` so macOS
+uses Metal. Rejected for this change — the GPU compositor and stroke kernels are
+only validated against the CPU oracle on Vulkan, and enabling a second backend
+is a feature decision, not a packaging fix. A Metal-less build is already
+accepted above.
 
 ### Commit `assets/icons/app.icns`
 

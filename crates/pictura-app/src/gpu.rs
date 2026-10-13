@@ -3,6 +3,10 @@
 //! The GPU is an accelerator, not an oracle: this module never panics on a
 //! missing adapter and never blocks the CPU fallback. Callers branch on
 //! [`GpuRender`].
+//!
+//! The zero-copy [`create_interop_state`] escape hatch is Vulkan-only. wgpu
+//! builds its Vulkan backend only on Windows/Linux/Android/FreeBSD, so on
+//! Apple targets it is compiled out and returns `None`.
 
 use std::borrow::Cow;
 
@@ -256,6 +260,10 @@ pub struct InteropState {
 
 /// Create a Vulkan wgpu device and an offscreen texture, exporting the raw
 /// VkDevice/VkImage handles through the (unsafe) wgpu-hal escape hatch.
+///
+/// Vulkan-only: wgpu has no Vulkan backend on Apple targets, so this is
+/// compiled out there and the stub returns `None`.
+#[cfg(not(target_vendor = "apple"))]
 pub fn create_interop_state() -> Option<InteropState> {
     pollster::block_on(async {
         let (width, height) = (512u32, 512u32);
@@ -308,6 +316,14 @@ pub fn create_interop_state() -> Option<InteropState> {
             keepalive: (instance, adapter, device, queue, texture),
         })
     })
+}
+
+/// Apple targets build wgpu without the Vulkan backend, so there is no
+/// interop state to export; the probe reports unavailable and callers keep the
+/// CPU path.
+#[cfg(target_vendor = "apple")]
+pub fn create_interop_state() -> Option<InteropState> {
+    None
 }
 
 #[cfg(test)]
