@@ -505,6 +505,9 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
     // The Note tool opens a note in the Notes panel; the panel's
     // previous/next/delete hand the current note back to the controller.
     connect(tools_, &ToolController::layerCreated, this, &PicturaMainWindow::selectLayerPath);
+    // The Move tool's Auto-Select hit asks for an existing layer's row.
+    connect(tools_, &ToolController::layerSelectionRequested, this,
+            &PicturaMainWindow::selectLayerPath);
     connect(tools_, &ToolController::noteActivated, this, [this](int index) {
         if (!notesPanel_) {
             return;

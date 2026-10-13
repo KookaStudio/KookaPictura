@@ -6,6 +6,7 @@
 #include "tools.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_layers/auto_select.cxxqt.h"
 
 #include <QtCore/QDebug>
 #include <QtCore/QElapsedTimer>
@@ -51,6 +52,14 @@ public:
         if (v->has_selection()) {
             ctx.beginContentMove(v, imagePos, mods.testFlag(Qt::AltModifier));
             return true;
+        }
+        const MoveOptions moveOptions = move_->get();
+        if (moveOptions.autoSelectOn) {
+            const QString hit = auto_select_layer(
+                *v, qRound(imagePos.x()), qRound(imagePos.y()), moveOptions.autoSelect == 0);
+            if (!hit.isEmpty() && hit != v->active_layer_path()) {
+                ctx.selectLayer(hit);
+            }
         }
         QElapsedTimer pressClock;
         pressClock.start();

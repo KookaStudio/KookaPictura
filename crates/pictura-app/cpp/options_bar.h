@@ -37,6 +37,9 @@ public:
     // Enable the Move tool's Align and Distribute buttons (the frame decides
     // from the selected layers and the selection).
     void setAlignEnabled(bool align, bool distribute);
+    // Enable the selection tools' `Select and Mask…` buttons (the frame decides
+    // from Refine Edge's availability, matching the menu row).
+    void setRefineEdgeEnabled(bool enabled);
     // The right-aligned workspace switcher: shows the active workspace and opens
     // the `Window > Workspace` menu.
     void setWorkspaceMenu(QMenu* menu);
@@ -181,6 +184,8 @@ private:
     bool transformLink_ = true;
     std::vector<QToolButton*> alignButtons_;
     std::vector<QToolButton*> distributeButtons_;
+    // The selection tools' `Select and Mask…` buttons, enabled together.
+    std::vector<QToolButton*> refineEdgeButtons_;
     // The Crop tool's user aspect-ratio presets (label, width:height pair).
     std::vector<std::pair<QString, QPointF>> cropPresets_;
     NumericField* cropWidthField_ = nullptr;

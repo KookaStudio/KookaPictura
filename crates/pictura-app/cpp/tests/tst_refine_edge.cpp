@@ -196,11 +196,15 @@ void RefineEdgeTest::layerMaskOutputWritesTheMask()
 void RefineEdgeTest::optionsBarButtonOpensIt()
 {
     QVERIFY(setupRedSquare());
-    QVERIFY(view_->select_rect(6, 6, 26, 26, QStringLiteral("new"), 0.0));
     auto* bar = window_->findChild<QToolBar*>(QStringLiteral("optionsBar"));
     QVERIFY(bar);
     auto* button = bar->findChild<QToolButton*>(QStringLiteral("optionsRefineEdge"));
     QVERIFY2(button, "the options bar carries a Select and Mask button");
+    // The button mirrors the Refine Edge command: disabled with no selection,
+    // enabled once one exists.
+    QVERIFY2(!button->isEnabled(), "Select and Mask is disabled without a selection");
+    QVERIFY(view_->select_rect(6, 6, 26, 26, QStringLiteral("new"), 0.0));
+    QTRY_VERIFY2(button->isEnabled(), "Select and Mask enables with a selection");
     bool opened = false;
     QTimer::singleShot(0, [&opened] {
         if (auto* dialog = activeRefineDialog()) {

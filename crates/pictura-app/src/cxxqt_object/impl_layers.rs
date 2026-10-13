@@ -6,6 +6,7 @@ use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QString, QStringList};
 use pictura_core::{BlendMode, ColorLabel, Document, Layer};
 
+mod auto_select;
 mod layer_masks;
 mod layers_surface;
 mod matting;

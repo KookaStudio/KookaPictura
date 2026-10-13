@@ -37,16 +37,21 @@ QWidget* OptionsBar::buildMovePage(ToolId id)
     layout->setContentsMargins(4, 2, 4, 2);
     layout->addWidget(toolButton(id, page));
 
+    auto* autoSelectOn = new QCheckBox(QStringLiteral("Auto-Select"), page);
+    autoSelectOn->setObjectName(QStringLiteral("optionsMoveAutoSelectOn"));
+    autoSelectOn->setChecked(controller_ && move_->get().autoSelectOn);
+    autoSelectOn->setToolTip(QStringLiteral("Select the layer under the pointer when the Move "
+                                            "tool presses"));
+    layout->addWidget(autoSelectOn);
+
     auto* autoSelect = new QComboBox(page);
     autoSelect->setObjectName(QStringLiteral("optionsMoveAutoSelect"));
     autoSelect->addItem(QStringLiteral("Group"), 0);
     autoSelect->addItem(QStringLiteral("Layer"), 1);
     autoSelect->setCurrentIndex(controller_ ? move_->get().autoSelect : 0);
-    autoSelect->setToolTip(QStringLiteral("Auto-Select"));
+    autoSelect->setEnabled(autoSelectOn->isChecked());
     layout->addWidget(autoSelect);
-    // ponytail: Auto-Select is recorded but not wired; a deep hit test for the
-    // topmost layer under the pointer is new engine work, so the move stays on
-    // the Layers panel's active layer.
+
     auto* transform = new QCheckBox(QStringLiteral("Show Transform Controls"), page);
     transform->setObjectName(QStringLiteral("optionsMoveTransform"));
     transform->setChecked(controller_ && move_->get().showTransformControls);
@@ -89,7 +94,9 @@ QWidget* OptionsBar::buildMovePage(ToolId id)
 
     auto* menuButton = new QToolButton(page);
     menuButton->setObjectName(QStringLiteral("optionsMoveMenu"));
-    menuButton->setText(QString::fromUtf8("\xE2\x80\xA6"));
+    menuButton->setIcon(icon(QStringLiteral("ellipsis")));
+    menuButton->setIconSize(QSize(16, 16));
+    menuButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
     menuButton->setToolTip(QStringLiteral("Align and distribute options"));
     menuButton->setPopupMode(QToolButton::InstantPopup);
     auto* menu = new QMenu(menuButton);
@@ -126,6 +133,12 @@ QWidget* OptionsBar::buildMovePage(ToolId id)
     layout->addWidget(menuButton);
 
     if (controller_) {
+        connect(autoSelectOn, &QCheckBox::toggled, this, [this, autoSelect](bool on) {
+            autoSelect->setEnabled(on);
+            MoveOptions o = move_->get();
+            o.autoSelectOn = on;
+            move_->set(o);
+        });
         connect(autoSelect, &QComboBox::currentIndexChanged, this, [this, autoSelect](int) {
             MoveOptions o = move_->get();
             o.autoSelect = autoSelect->currentIndex();

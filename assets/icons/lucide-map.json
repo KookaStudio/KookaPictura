@@ -56,6 +56,11 @@
       "slug": "undo-2",
       "match": "good"
     },
+    "ellipsis": {
+      "kind": "lucide",
+      "slug": "ellipsis",
+      "match": "exact"
+    },
     "file.close": {
       "kind": "lucide",
       "slug": "file-x",
