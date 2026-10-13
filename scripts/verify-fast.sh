@@ -68,6 +68,9 @@ bash scripts/test-report.sh never
 echo "== file-size =="
 bash scripts/check-file-size.sh
 
+echo "== worktree hook =="
+bash scripts/check-worktree-hook.sh
+
 echo "== selftest budget =="
 bash scripts/check-selftest-budget.sh
 

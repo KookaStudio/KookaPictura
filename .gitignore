@@ -35,4 +35,5 @@ __pycache__/
 *.swp
 
 # Local reference fixtures (real Photoshop-authored; not redistributed)
-/reference-fixtures/
+# No trailing slash: must also match the symlink a linked worktree gets.
+/reference-fixtures
