@@ -88,6 +88,60 @@ void PicturaMainWindow::wireAdvancedSmartObjectActions()
                                   });
 }
 
+bool PicturaMainWindow::replaceSmartObjectContents(const QString& layerPath)
+{
+    PictureView* view = activeView();
+    if (!view || layerPath.isEmpty()
+        || !view->layer_can_replace_smart_object_contents(layerPath)) {
+        return false;
+    }
+    const QString file = getOpenFileName(this, tr("Replace Contents"),
+                                         documentDirectory(activeFilePath()),
+                                         {QStringLiteral("Photoshop (*.PSD *.PSB)")});
+    if (file.isEmpty() || !view->replace_smart_object_contents(layerPath, file)) {
+        return false;
+    }
+    refresh();
+    return true;
+}
+
+bool PicturaMainWindow::exportSmartObjectContents(const QString& layerPath)
+{
+    PictureView* view = activeView();
+    if (!view || layerPath.isEmpty()
+        || !view->layer_can_export_smart_object_contents(layerPath)) {
+        return false;
+    }
+    QString dest = getSaveFileName(this, tr("Export Contents"), activeFilePath(),
+                                   {QStringLiteral("Photoshop (*.PSD)")}, nullptr);
+    if (dest.isEmpty()) {
+        return false;
+    }
+    if (QFileInfo(dest).suffix().isEmpty()) {
+        dest += QStringLiteral(".psd");
+    }
+    if (!view->export_smart_object_contents(layerPath, dest)) {
+        QMessageBox::warning(this, tr("Export Contents"),
+                             tr("Could not export the smart object contents."));
+        return false;
+    }
+    return true;
+}
+
+void PicturaMainWindow::wireSmartObjectRowMenu()
+{
+    connect(layersPanel_, &LayersPanel::smartObjectContentsRequested, this,
+            [this](const QString& action, const QString& path) {
+                if (action == QLatin1String("edit")) {
+                    editSmartObjectContents(path);
+                } else if (action == QLatin1String("replace")) {
+                    replaceSmartObjectContents(path);
+                } else if (action == QLatin1String("export")) {
+                    exportSmartObjectContents(path);
+                }
+            });
+}
+
 void PicturaMainWindow::wireSmartFilterActions()
 {
     // Clear Smart Filters removes every filter on the current smart-object

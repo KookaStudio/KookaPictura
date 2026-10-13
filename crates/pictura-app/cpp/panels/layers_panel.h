@@ -248,6 +248,9 @@ signals:
     void selectionChanged();
     // The edit target moved between the active layer's pixels and its mask.
     void editTargetChanged(bool mask);
+    // A smart-object contents command chosen from a row's context menu, to be
+    // run by the frame on `path`: `edit`, `replace`, or `export`.
+    void smartObjectContentsRequested(const QString& action, const QString& path);
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;

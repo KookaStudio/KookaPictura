@@ -796,6 +796,7 @@ void PicturaMainWindow::registerHandlers()
     wireVectorMaskActions();
     wireMattingActions();
     wireAdvancedSmartObjectActions();
+    wireSmartObjectRowMenu();
 
     // Smart Objects. Convert to Smart Object needs the current layer to be a
     // raster pixel layer (not a group, adjustment, Background, or already a
@@ -869,18 +870,9 @@ void PicturaMainWindow::registerHandlers()
     };
     registry_->setHandler(command_ids::LayerSmartObjectReplaceContents,
                           [this, currentReplaceableSmartPath]() {
-                              PictureView* view = activeView();
                               const QString path = currentReplaceableSmartPath();
-                              if (!view || path.isEmpty()) {
-                                  return;
-                              }
-                              const QString file = getOpenFileName(
-                                  this, tr("Replace Contents"),
-                                  documentDirectory(activeFilePath()),
-                                  {QStringLiteral("Photoshop (*.PSD *.PSB)")});
-                              if (!file.isEmpty()
-                                  && view->replace_smart_object_contents(path, file)) {
-                                  refresh();
+                              if (!path.isEmpty()) {
+                                  replaceSmartObjectContents(path);
                               }
                           });
     registry_->setEnabledProvider(command_ids::LayerSmartObjectReplaceContents,
@@ -900,24 +892,9 @@ void PicturaMainWindow::registerHandlers()
     };
     registry_->setHandler(command_ids::LayerSmartObjectExportContents,
                           [this, currentExportableSmartPath]() {
-                              PictureView* view = activeView();
                               const QString path = currentExportableSmartPath();
-                              if (!view || path.isEmpty()) {
-                                  return;
-                              }
-                              QString dest = getSaveFileName(
-                                  this, tr("Export Contents"), activeFilePath(),
-                                  {QStringLiteral("Photoshop (*.PSD)")}, nullptr);
-                              if (dest.isEmpty()) {
-                                  return;
-                              }
-                              if (QFileInfo(dest).suffix().isEmpty()) {
-                                  dest += QStringLiteral(".psd");
-                              }
-                              if (!view->export_smart_object_contents(path, dest)) {
-                                  QMessageBox::warning(
-                                      this, tr("Export Contents"),
-                                      tr("Could not export the smart object contents."));
+                              if (!path.isEmpty()) {
+                                  exportSmartObjectContents(path);
                               }
                           });
     registry_->setEnabledProvider(command_ids::LayerSmartObjectExportContents,

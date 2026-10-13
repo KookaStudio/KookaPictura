@@ -127,6 +127,7 @@ void CommandTreeTest::menusPanel()
                   << QStringLiteral("Enable Layer Mask") << QStringLiteral("Disable Layer Mask")
                   << QStringLiteral("Blending Options…") << QStringLiteral("Copy Layer Style")
                   << QStringLiteral("Paste Layer Style") << QStringLiteral("Clear Layer Style")
+                  << QStringLiteral("Convert to Smart Object")
                   << QStringLiteral("Export As…") << QStringLiteral("Quick Export as PNG")
                   << QStringLiteral("Color Label");
 
