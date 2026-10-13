@@ -35,6 +35,7 @@ private slots:
     void toolIconSeparatorOnEveryPage();
     void moveControlsAndAlignToCanvas();
     void moveAutoSelectPicksTheTopmostLayer();
+    void eraserBarMatchesTheBrush();
     void eyedropperSampleSize();
     void eyedropperSampleScope();
     void eyedropperSamplingRing();
@@ -192,6 +193,50 @@ void OptionsBarsParityTest::moveAutoSelectPicksTheTopmostLayer()
     canvas->mousePressed(QPointF(10, 8), Qt::LeftButton, 0);
     canvas->mouseReleased(QPointF(10, 8));
     QCOMPARE(view->active_layer_path(), QStringLiteral("0"));
+}
+
+void OptionsBarsParityTest::eraserBarMatchesTheBrush()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("Eraser"), 40, 40, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    auto* bar = window_->findChild<pictura::OptionsBar*>(QStringLiteral("optionsBar"));
+    auto* tools = window_->findChild<pictura::ToolController*>();
+    QVERIFY(bar && tools);
+    window_->setActiveTool(pictura::ToolId::Eraser);
+
+    QWidget* page = bar->pageForTest(pictura::ToolId::Eraser);
+    QVERIFY(page);
+    auto* tip = page->findChild<QToolButton*>(QStringLiteral("optionsBrushTip"));
+    auto* mode = page->findChild<QComboBox*>(QStringLiteral("optionsEraserMode"));
+    auto* opacity = page->findChild<QWidget*>(QStringLiteral("optionsEraserOpacity"));
+    auto* flow = page->findChild<QWidget*>(QStringLiteral("optionsEraserFlow"));
+    auto* toHistory = page->findChild<QCheckBox*>(QStringLiteral("optionsEraseToHistory"));
+    QVERIFY(tip && mode && opacity && flow && toHistory);
+
+    // The Eraser shares the Brush's tip and Opacity/Flow, with Brush / Pencil /
+    // Block modes instead of the Brush's blend modes.
+    auto* paint = tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Eraser);
+    QVERIFY(paint);
+    QCOMPARE(tip->text(), QString::number(paint->size()));
+    QCOMPARE(mode->count(), 3);
+    QCOMPARE(mode->itemText(0), QStringLiteral("Brush"));
+    QCOMPARE(mode->itemText(1), QStringLiteral("Pencil"));
+    QCOMPARE(mode->itemText(2), QStringLiteral("Block"));
+    QCOMPARE(mode->currentIndex(), 0);
+    QVERIFY(opacity->isEnabled() && flow->isEnabled());
+    QVERIFY(!toHistory->isChecked());
+
+    // Block erases at full strength: Opacity and Flow grey out.
+    mode->setCurrentIndex(2);
+    QVERIFY(!opacity->isEnabled() && !flow->isEnabled());
+    QCOMPARE(tools->optionsFor<pictura::EraserGroup>(pictura::ToolId::Eraser)->get().mode, 2);
+    mode->setCurrentIndex(0);
+    QVERIFY(opacity->isEnabled() && flow->isEnabled());
+
+    // Erase to History records on the shared group.
+    toHistory->setChecked(true);
+    QVERIFY(tools->optionsFor<pictura::EraserGroup>(pictura::ToolId::Eraser)->get().toHistory);
+    toHistory->setChecked(false);
 }
 
 void OptionsBarsParityTest::eyedropperSampleSize()
