@@ -25,10 +25,15 @@ cxx-qt = "0.10"
 cxx-qt-lib = { version = "0.10", features = ["qt_gui"] }
 wgpu = { version = "30.0.1", default-features = false, features = ["std", "vulkan", "wgsl"] }
 pollster = "1"
-ash = "0.38"
 # Whole-plane history diffs and copies run on every core; already in the
 # workspace through pictura-render and pictura-filters.
 rayon = "1"
+
+# ash is the Vulkan bindings the zero-copy interop probe uses to export raw
+# VkDevice/VkImage handles. wgpu has no Vulkan backend on Apple targets, so it
+# is only needed where that probe compiles (see `src/gpu.rs`).
+[target.'cfg(not(target_vendor = "apple"))'.dependencies]
+ash = "0.38"
 
 [build-dependencies]
 cxx-qt-build = "0.10"
