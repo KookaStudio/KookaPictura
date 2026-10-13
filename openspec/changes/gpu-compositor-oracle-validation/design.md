@@ -53,12 +53,20 @@ reports `UnsupportedMode` on an unusable device.
 The ungated kernel is split into `composite_gpu_region_raw`; the validation calls
 it directly so it does not recurse through `gpu_available`.
 
-### Disable the filter kernels too
+### Disable the filter kernels and the GPU stroke too
 
 `shared_device()` is the entry point the M27 GPU filter kernels share with the
 compositor. A device that miscompiles the compositor miscompiles those kernels,
 so `shared_device()` returns `None` when the check fails and `filter_gpu_available`
 reports no GPU.
+
+The GPU paint stroke reaches the device through `devices()` directly, not
+`shared_device()`, and the app seeds it via `GpuStroke::new(...).ok()`, not
+`GpuStroke::available()`. The gate therefore lives in both: `available()` returns
+`gpu_available()` and `new` returns `GpuError::Unavailable` when the check fails.
+This matters because a GPU stroke patches the working document in place and
+commits with no CPU replay, so a miscompiled `STROKE_SHADER` would write wrong
+pixels into the document.
 
 ## Risks / Trade-offs
 

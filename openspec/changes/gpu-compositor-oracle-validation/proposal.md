@@ -23,6 +23,9 @@ checked that a device existed, and a plausible-but-wrong composite is not a
   reports `UnsupportedMode`.
 - `shared_device()` returns `None` when the check fails, so the M27 GPU filter
   kernels also fall back to the CPU on a device that miscompiles the compositor.
+- `GpuStroke::available()` and `GpuStroke::new` consult the same check, so a
+  device that miscompiles `STROKE_SHADER` does not commit wrong paint pixels
+  into the document (a GPU stroke commits with no CPU replay).
 
 ## Capabilities
 

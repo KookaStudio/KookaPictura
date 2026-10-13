@@ -168,8 +168,10 @@ fn composite_gpu_region(
     composite_gpu_region_raw(doc, x0, y0, rw, rh)
 }
 
-/// The ungated region kernel. [`gpu_composite_verified`] calls this directly so
-/// the validation does not recurse through [`gpu_available`].
+/// The ungated region kernel. Callers own `check_supported`: [`composite_gpu_region`]
+/// runs it before the availability gate, and [`gpu_composite_verified`] checks its
+/// static validation scene. Splitting it out lets the validation bypass
+/// [`gpu_available`] without recursing.
 fn composite_gpu_region_raw(
     doc: &Document,
     x0: u32,
@@ -177,7 +179,6 @@ fn composite_gpu_region_raw(
     rw: u32,
     rh: u32,
 ) -> Result<PixelBuffer, GpuError> {
-    check_supported(doc)?;
     if rw == 0 || rh == 0 {
         return Ok(PixelBuffer::new(rw, rh, 4));
     }
@@ -257,6 +258,9 @@ fn gpu_composite_verified() -> bool {
     static VERIFIED: OnceLock<bool> = OnceLock::new();
     *VERIFIED.get_or_init(|| {
         let doc = validation_document();
+        if check_supported(&doc).is_err() {
+            return false;
+        }
         let cpu = crate::composite_rgba(&doc);
         let Ok(gpu) = composite_gpu_region_raw(&doc, 0, 0, doc.width, doc.height) else {
             return false;

@@ -11,8 +11,11 @@ include partial alpha and a separable blend, so a device that composites only a
 few pixels or drops alpha is detected. The check SHALL run at most once per
 process and its result SHALL be cached. When the check fails, `composite_gpu`
 SHALL return `GpuError::Unavailable` for a supported document, `composite_active`
-and `composite_gpu_or_cpu` SHALL keep the CPU path, and `shared_device()` SHALL
-return `None` so the GPU filter kernels also fall back to the CPU. The CPU-only
+and `composite_gpu_or_cpu` SHALL keep the CPU path, `shared_device()` SHALL
+return `None` so the GPU filter kernels also fall back to the CPU, and the GPU
+paint stroke SHALL fall back to the CPU: `GpuStroke::available()` SHALL report
+false and `GpuStroke::new` SHALL return `GpuError::Unavailable`, so a
+miscompiled `STROKE_SHADER` never commits wrong paint pixels. The CPU-only
 blend-mode check SHALL still precede the availability gate, so a `Dissolve` stack
 SHALL report `GpuError::UnsupportedMode` even when the device is unusable. The
 public signatures of `composite_gpu`, `composite_active`, `gpu_available`,
@@ -33,6 +36,13 @@ public signatures of `composite_gpu`, `composite_active`, `gpu_available`,
   `Err(GpuError::Unavailable)`, `composite_active(doc, true)` reports
   `Backend::Cpu` with bytes equal to `composite_rgba(doc)`, and `shared_device()`
   returns `None`
+
+#### Scenario: The GPU paint stroke falls back on a diverging device
+
+- **WHEN** the validation fails and the app tries to seed a GPU paint stroke
+- **THEN** `GpuStroke::available()` returns false and `GpuStroke::new` returns
+  `Err(GpuError::Unavailable)`, so the CPU stroke is used and no GPU dab patches
+  the document
 
 #### Scenario: The CPU-only mode check still precedes the gate
 

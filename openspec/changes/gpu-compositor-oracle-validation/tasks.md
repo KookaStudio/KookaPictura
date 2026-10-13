@@ -11,7 +11,11 @@
 - [x] `gpu_available()` requires `gpu_composite_verified()`.
 - [x] `composite_gpu_region` returns `GpuError::Unavailable` after the
   CPU-only-mode check when the device fails validation.
+- [x] `composite_gpu_region_raw` assumes a checked document; the check runs once
+  per dispatch and once at the validation call site.
 - [x] `shared_device()` returns `None` when the device fails validation.
+- [x] `GpuStroke::available()` returns `gpu_available()` and `GpuStroke::new`
+  returns `GpuError::Unavailable` when the device fails validation.
 
 ## 2. Checks
 
@@ -19,6 +23,8 @@
   pixels.
 - [x] Unit test: `gpu_available()` and `composite_gpu` agree on the validation
   scene (available ⇒ `Ok`; unavailable ⇒ `Unavailable`).
+- [x] Unit test: `GpuStroke::available()` follows `gpu_available()` and
+  `GpuStroke::new` returns `Unavailable` on a failing device.
 - [x] `gpu_parity` and `gpu_filter_parity` suites pass (skip on a failing
   device).
 - [x] `./build/pictura --headless --self-test` passes `fresh_white`.
