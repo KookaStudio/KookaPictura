@@ -399,7 +399,18 @@ public:
             if (name.isEmpty() || name == node->row.name) {
                 return false;
             }
-            return view_->set_layer_name_path(node->row.path, name);
+            if (!view_->set_layer_name_path(node->row.path, name)) {
+                return false;
+            }
+            // Patch the name in place so a pending refresh's pre-reset name
+            // capture sees it (mirroring setVisible); a rename keeps the path,
+            // so the group's expansion survives the reset.
+            node->row.name = name;
+            const QModelIndex idx = indexForPath(node->row.path);
+            if (idx.isValid()) {
+                emit dataChanged(idx, idx, {Qt::DisplayRole, Qt::EditRole});
+            }
+            return true;
         }
         return false;
     }
@@ -468,8 +479,10 @@ public:
         return createIndex(node->rowInParent, 0, node);
     }
 
-    /// A node's ancestor name chain (its own name last), joined by U+001F. This
-    /// key survives the index-path shifts a sibling insert, remove, or move
+    /// A node's ancestor name chain (its own name last), each level tagged with
+    /// its occurrence among same-named siblings so duplicate names stay distinct.
+    /// Levels are joined by U+001E and a level's name and occurrence by U+001F.
+    /// The key survives the index-path shifts a sibling insert, remove, or move
     /// causes, so the panel can re-find an expanded group whose path changed.
     QString namePathForPath(const QString& path) const
     {
@@ -477,28 +490,39 @@ public:
         if (!node || node == root_.get()) {
             return {};
         }
-        QStringList names;
+        QStringList levels;
         for (Node* cur = node; cur && cur != root_.get(); cur = cur->parent) {
-            names.prepend(cur->row.name);
+            levels.prepend(cur->row.name + QChar(0x1f) + QString::number(occurrenceOf(cur)));
         }
-        return names.join(QChar(0x1f));
+        return levels.join(QChar(0x1e));
     }
 
-    /// The first node whose ancestor name chain equals `namePath`, as an index.
+    /// The node whose ancestor name chain equals `namePath`, as an index.
     QModelIndex indexForNamePath(const QString& namePath) const
     {
         if (namePath.isEmpty()) {
             return {};
         }
-        const QStringList names = namePath.split(QChar(0x1f));
+        const QStringList levels = namePath.split(QChar(0x1e));
         Node* node = root_.get();
-        for (const QString& name : names) {
+        for (const QString& level : levels) {
+            const int sep = level.lastIndexOf(QChar(0x1f));
+            if (sep < 0) {
+                return {};
+            }
+            const QString name = level.left(sep);
+            const int wanted = level.mid(sep + 1).toInt();
             Node* next = nullptr;
+            int seen = 0;
             for (const auto& child : node->children) {
-                if (child->row.name == name) {
+                if (child->row.name != name) {
+                    continue;
+                }
+                if (seen == wanted) {
                     next = child.get();
                     break;
                 }
+                ++seen;
             }
             if (!next) {
                 return {};
@@ -532,6 +556,24 @@ private:
             return nullptr;
         }
         return static_cast<const Node*>(index.internalPointer());
+    }
+
+    /// The node's zero-based occurrence among its parent's same-named children.
+    static int occurrenceOf(const Node* node)
+    {
+        if (!node || !node->parent) {
+            return 0;
+        }
+        int occurrence = 0;
+        for (const auto& sibling : node->parent->children) {
+            if (sibling.get() == node) {
+                break;
+            }
+            if (sibling->row.name == node->row.name) {
+                ++occurrence;
+            }
+        }
+        return occurrence;
     }
 
     PictureView* view_ = nullptr;

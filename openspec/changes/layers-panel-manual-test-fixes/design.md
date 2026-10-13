@@ -36,13 +36,16 @@ both are updated to the new behaviour.
 
 Expansion is tracked by index-based path, and adding, removing, or moving a layer
 can shift a group's own index when the source leaves or enters its container.
-The model gains `namePathForPath` (an ancestor-name chain key) and
-`indexForNamePath`. Before the model reset `LayersPanel::refresh` captures each
-expanded path's name chain; after the rebuild it keeps the path when it still
-names the same chain, else falls back to the name chain, so a shifted group is
-re-found and stays expanded. A rename leaves the index path valid, so the primary
-lookup keeps its state. This generalises the earlier drop-into fix, which is
-removed (along with its engine/bridge change).
+The model gains `namePathForPath` (an ancestor-name chain key, each level tagged
+with its occurrence among same-named siblings) and `indexForNamePath`. Before the
+model reset `LayersPanel::refresh` captures each expanded path's name chain; after
+the rebuild it keeps the path when it still names the same chain, else falls back
+to the name chain, so a shifted group is re-found and stays expanded. The
+occurrence tag disambiguates duplicate sibling names. A rename leaves the index
+path valid but changes the chain, so `LayersModel::setData` patches the node's
+name in place (mirroring `setVisible`) before the deferred refresh captures it;
+the guard then matches and the path is kept. This generalises the earlier
+drop-into fix, which is removed (along with its engine/bridge change).
 
 ### Thumbnail geometry
 

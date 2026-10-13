@@ -478,7 +478,9 @@ Snapshot for resuming after a context break. Update after each milestone.
   the mask (clicking a vector-mask thumbnail clears the raster target); a group's
   expanded state survives a structural change that shifts its index path (adding,
   removing, or moving a layer) — `LayersModel` gains `namePathForPath` /
-  `indexForNamePath` and `refresh` remaps expansion by the ancestor name chain;
+  `indexForNamePath` (same-named siblings disambiguated by occurrence) and
+  `refresh` remaps expansion by the ancestor name chain, while `setData` patches
+  a renamed node's name in place so a rename keeps the group expanded;
   a group's folder glyph draws no black outline and grows from half to three
   quarters of the thumbnail; the thumbnail box spans the row's full height minus
   a 2 px pad (with `letterboxedThumb` corrected for a non-square box) so a tall
@@ -489,8 +491,9 @@ Snapshot for resuming after a context break. Update after each milestone.
   focused header control keeps its focus across a refresh (`syncControls` now
   sets the final enabled state once rather than disabling then re-enabling); a
   blend-mode edit records `Blending Change: <mode name>` (`BlendMode::name` in
-  `pictura-core`) instead of the generic `Blend Mode`. Checked by the new
-  `tst_layers_panel_fixes` (11) plus updated
+  `pictura-core`) instead of the generic `Blend Mode`. `LayersPanel::eventFilter`
+  moved to `panels/layers_panel_events.cpp` (pure move) for size headroom.
+  Checked by the new `tst_layers_panel_fixes` (11) plus updated
   `tst_layers_panel::maskEditTargetActivation` and
   `tst_mask_edit::colorsFollowTheEditTarget` and
   `pictura-core::blend_names_are_distinct_and_non_empty`. The local ImageMagick

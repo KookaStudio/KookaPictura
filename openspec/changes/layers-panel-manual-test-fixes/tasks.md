@@ -16,10 +16,19 @@
 
 ## 3. Group expansion survives a structural change
 
-- [x] Add `LayersModel::namePathForPath` / `indexForNamePath`.
+- [x] Add `LayersModel::namePathForPath` / `indexForNamePath` (same-named
+  siblings disambiguated by occurrence).
 - [x] Remap expansion by name chain in `LayersPanel::refresh`.
-- [x] Qt checks: `tst_layers_panel_fixes::addingLayerKeepsGroupExpanded` and
-  `dropIntoOpenGroupKeepsExpanded`.
+- [x] Patch a renamed node's name in place in `LayersModel::setData` so a rename
+  keeps the group expanded.
+- [x] Qt checks: `tst_layers_panel_fixes::addingLayerKeepsGroupExpanded`,
+  `dropIntoOpenGroupKeepsExpanded`, `renameKeepsGroupExpanded`, and
+  `duplicateGroupNamesStayDistinct`.
+
+## 3a. Split the panel event filter
+
+- [x] Move `LayersPanel::eventFilter` to `panels/layers_panel_events.cpp`
+  (pure move) so `layers_panel.cpp` has headroom under the size cap.
 
 ## 4. Group icon
 

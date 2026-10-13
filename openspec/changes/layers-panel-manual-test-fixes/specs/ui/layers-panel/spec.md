@@ -397,15 +397,27 @@ arrow keys keep cycling until focus moves elsewhere.
 A group's expanded/collapsed state SHALL survive a structural change that shifts
 the group's index-based path — adding, removing, or moving a layer, or dropping a
 layer into the group. The panel SHALL re-find the group by its ancestor name
-chain and keep it expanded or collapsed as before. A rename, which leaves the
-index path intact, SHALL keep the state through the unchanged path. A refused
-operation SHALL change neither the document nor the expansion.
+chain, disambiguating same-named siblings by their order among them, and keep it
+expanded or collapsed as before. A rename, which leaves the index path intact,
+SHALL keep the state through the unchanged path. A refused operation SHALL change
+neither the document nor the expansion.
 
 #### Scenario: Adding a layer outside an expanded group keeps it open [lpr_add_keeps_expanded]
 
 - **WHEN** a group is expanded and a layer is added elsewhere in the document so
   the group's index-based path shifts
 - **THEN** the group stays expanded with its children visible
+
+#### Scenario: A rename keeps the group expanded [lpr_rename_keeps_expanded]
+
+- **WHEN** an expanded group is renamed in place
+- **THEN** it stays expanded, because the rename leaves its index path intact
+
+#### Scenario: Same-named sibling groups stay distinct [lpr_dup_group_names]
+
+- **WHEN** two sibling groups share a name, one is expanded, and a structural
+  change shifts their paths
+- **THEN** the group that was expanded is the one that stays expanded
 
 #### Scenario: A drop into an open group keeps it open [lpr_drop_into_expanded]
 

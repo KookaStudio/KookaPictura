@@ -59,6 +59,8 @@ private slots:
     void opacityLabelRightAligned();
     void dropIntoOpenGroupKeepsExpanded();
     void addingLayerKeepsGroupExpanded();
+    void renameKeepsGroupExpanded();
+    void duplicateGroupNamesStayDistinct();
     void groupIconHasNoOutline();
     void groupIconIsLarger();
     void blendComboArrowAndKeys();
@@ -241,6 +243,105 @@ void LayersPanelFixesTest::addingLayerKeepsGroupExpanded()
         }
     }
     QVERIFY2(childVisible, "the group stayed expanded after the sibling was added");
+}
+
+// Renaming an expanded group keeps it expanded: a rename leaves the index path
+// intact, so the panel's name-chain guard must not treat it as a shifted path.
+void LayersPanelFixesTest::renameKeepsGroupExpanded()
+{
+    QVERIFY2(setupNest(), "rename fixture");
+    panel_->setView(view_);
+    panel_->refresh();
+    window_->show();
+    QTest::qWait(50);
+    panel_->expandForTest(group_);
+    QCoreApplication::processEvents();
+    auto* tree = panel_->findChild<QTreeView*>();
+    QVERIFY(tree != nullptr);
+
+    // Rename through the inline editor, i.e. the model's setData path.
+    QVERIFY2(panel_->beginRenameForTest(group_), "inline editor opens");
+    QLineEdit* editor = tree->viewport()->findChild<QLineEdit*>();
+    QVERIFY(editor != nullptr);
+    editor->setText(QStringLiteral("Renamed"));
+    QTest::keyClick(editor, Qt::Key_Return);
+    QCoreApplication::processEvents();
+    panel_->refresh();
+    QCoreApplication::processEvents();
+
+    QString renamed;
+    for (int i = 0; i < pictura::layers_api::rowCount(*view_); ++i) {
+        const pictura::layers_api::LayerRow row = pictura::layers_api::rowAt(*view_, i);
+        if (row.name == QStringLiteral("Renamed")) {
+            renamed = row.path;
+            break;
+        }
+    }
+    QVERIFY2(!renamed.isEmpty(), "the group was renamed");
+    QCOMPARE(renamed, group_);
+    const QStringList visible = panel_->visiblePathsForTest();
+    bool childVisible = false;
+    for (const QString& path : visible) {
+        if (path.startsWith(group_ + QLatin1Char('/'))) {
+            childVisible = true;
+            break;
+        }
+    }
+    QVERIFY2(childVisible, "the renamed group stayed expanded");
+}
+
+// Two sibling groups may share a user name; a path shift must re-find the one
+// that was expanded, not merely the first name match.
+void LayersPanelFixesTest::duplicateGroupNamesStayDistinct()
+{
+    const bool created = window_->newDocument(QStringLiteral("Dup"), 16, 16,
+                                              QStringLiteral("rgb"), 8, QStringLiteral("white"));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY2(created && view_ && panel_, "duplicate name fixture");
+    const QString first = view_->add_group_in(QString());
+    const QString second = view_->add_group_in(QString());
+    view_->set_layer_name_path(first, QStringLiteral("G"));
+    view_->set_layer_name_path(second, QStringLiteral("G"));
+    const QString firstChild = view_->add_layer_in(first);
+    const QString secondChild = view_->add_layer_in(second);
+    view_->set_layer_name_path(firstChild, QStringLiteral("C1"));
+    view_->set_layer_name_path(secondChild, QStringLiteral("C2"));
+    panel_->setView(view_);
+    panel_->refresh();
+    window_->show();
+    QTest::qWait(50);
+    panel_->expandForTest(second);
+    QCoreApplication::processEvents();
+
+    // Add a layer below both groups so their index paths shift.
+    QString bottom;
+    for (int i = 0; i < pictura::layers_api::rowCount(*view_); ++i) {
+        const pictura::layers_api::LayerRow row = pictura::layers_api::rowAt(*view_, i);
+        if (!row.path.contains(QLatin1Char('/'))) {
+            bottom = row.path;
+        }
+    }
+    QVERIFY2(!bottom.isEmpty(), "a root layer found");
+    QVERIFY(!view_->add_layer_in(bottom).isEmpty());
+    QCoreApplication::processEvents();
+    panel_->refresh();
+    QCoreApplication::processEvents();
+
+    QString child1;
+    QString child2;
+    for (int i = 0; i < pictura::layers_api::rowCount(*view_); ++i) {
+        const pictura::layers_api::LayerRow row = pictura::layers_api::rowAt(*view_, i);
+        if (row.name == QStringLiteral("C1")) {
+            child1 = row.path;
+        } else if (row.name == QStringLiteral("C2")) {
+            child2 = row.path;
+        }
+    }
+    QVERIFY(!child1.isEmpty() && !child2.isEmpty());
+    const QStringList visible = panel_->visiblePathsForTest();
+    QVERIFY2(visible.contains(child2), "the expanded duplicate-named group stayed expanded");
+    QVERIFY2(!visible.contains(child1), "the other duplicate-named group stayed collapsed");
 }
 
 // A group's folder glyph carries no black outline; a regular layer's thumbnail

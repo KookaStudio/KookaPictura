@@ -65,12 +65,14 @@ same shape of pass as the earlier `layers-panel-surface-completeness` and
   right-aligns the Opacity label, derives the active thumbnail from the mask
   target, remaps expansion by name chain, drops the raster target when a vector
   mask is clicked, and keeps a focused header control's focus across a refresh;
-  `panels/layers_panel_model.h` gains `namePathForPath`/`indexForNamePath`;
-  `panels/numeric_field.{h,cpp}` gains a label-alignment setter;
-  `panels/layers_panel_internal.h` gains the full-height thumbnail slot, the
-  fixed letterbox math, the group outline skip, the larger folder glyph, and the
-  rotated/larger chain glyph.
+  `panels/layers_panel_events.cpp` holds the split-out `eventFilter`;
+  `panels/layers_panel_model.h` gains `namePathForPath`/`indexForNamePath` and
+  patches a renamed node's name in place; `panels/numeric_field.{h,cpp}` gains a
+  label-alignment setter; `panels/layers_panel_internal.h` gains the full-height
+  thumbnail slot, the fixed letterbox math, the group outline skip, the larger
+  folder glyph, and the rotated/larger chain glyph.
 - Tests: Qt Test cases in `cpp/tests/tst_layers_panel_fixes.cpp` (one per fix)
   and an updated `cpp/tests/tst_mask_edit.cpp`; a `pictura-core` unit test for
   `BlendMode::name`.
-- No new dependencies. No `docs/` changes.
+- No new dependencies. No spec-contract `docs/` changes; only the
+  `docs/dev/STATE.md` resume anchor is updated (under `TASK-ALLOWS-DOCS`).
