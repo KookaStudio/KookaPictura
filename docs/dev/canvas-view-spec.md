@@ -89,6 +89,18 @@ first-party Adobe page), **CS6-sec** (secondary/community but consistent), or
 - **CS6-sec:** Space+drag is CS6 behaviour and should be added; it is currently
   missing. It differs from middle-drag (which is the extension) and should be
   implemented too.
+- **[ext] Workspace snap (`View > Snap Canvas To Workspace`).** A checkable
+  option, off by default, that pins the canvas to the workspace centre while the
+  scaled document fits inside the viewport: the offset is forced to the centre,
+  panning is refused, and the workspace scroll bars hide. Once the scaled
+  document overflows either axis the option has no effect and the free-pan
+  policy governs, with the scroll bars shown again. It is independent of
+  `View > Free Pan` (#414), which is per-axis and controls whether an axis that
+  fits may be panned off-centre at all.
+- Wheel zoom-in stays cursor-anchored in both modes: while the workspace snap
+  lock holds, the fitted canvas is re-centred after each zoom so the whole
+  document stays centred; once the document overflows, the point under the
+  cursor stays fixed exactly as in free mode.
 
 ### 1.4 Status-bar zoom readout
 
@@ -128,6 +140,7 @@ first-party Adobe page), **CS6-sec** (secondary/community but consistent), or
 | Hand-tool drag pan | CS6 | present |
 | Space+drag pan | CS6 | missing |
 | Middle-drag pan | **[ext]** | missing |
+| Workspace snap: pin a fitting canvas to centre, hide the bars | **[ext]** | present |
 | Navigator pan/zoom, synced | CS6 | present, but unthrottled |
 | Status-bar zoom readout | CS6 | present |
 
@@ -457,6 +470,11 @@ undo=1` and `m25_preview_cache began=1 base=1 layer=1 hist_unchanged=1`).
    a 1024×1024 two-layer document.)*
 10. **History integrity.** Pan, zoom, Navigator drag, and tool switches add no
     History entries; only committed moves/edits do.
+11. **Workspace snap.** With `View > Snap Canvas To Workspace` off, a fitted
+    document pans and shows both scroll bars. With it on, a fitted document sits
+    at the workspace centre, a middle- or Space-drag does not move it, and both
+    scroll bars are hidden; zooming past the workspace restores panning and the
+    bars.
 
 ---
 
