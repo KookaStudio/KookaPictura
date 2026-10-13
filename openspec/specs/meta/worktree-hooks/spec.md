@@ -1,10 +1,11 @@
-# Spec Delta
+# meta/worktree-hooks Specification
 
 ## Purpose
+Defines how a linked git worktree is discovered and wired automatically when it
+appears: the committed post-checkout hook, the symlinks it creates, the one-time
+per-clone opt-in, and the DEVELOPING.md workflow documentation that surrounds it.
 
-Defines how a linked git worktree is discovered and wired automatically when it appears: the committed post-checkout hook, the symlinks it creates, the one-time per-clone opt-in, and the DEVELOPING.md workflow documentation that surrounds it.
-
-## ADDED Requirements
+## Requirements
 
 ### Requirement: A committed post-checkout hook wires linked worktrees
 
@@ -14,7 +15,7 @@ The repository SHALL contain an executable `.githooks/post-checkout` hook (bash,
 - creating `../.target` if it does not exist, then symlinking `target` to `../.target`, unless a `target` entry (directory or symlink) already exists;
 - symlinking `reference-fixtures` to the main checkout's copy (derived from `--git-common-dir` minus `/.git`), unless a `reference-fixtures` entry (directory or symlink) already exists or the main checkout has no such directory.
 
-The hook SHALL be idempotent: a branch switch inside an already-wired worktree SHALL be a silent no-op. The hook's exit status is the checkout status, so the hook SHALL terminate with exit 0 on every path — a failed optional step (for example `ln -s` against an unwritable parent) is reported on stderr and still exits 0. A worktree created with `--no-checkout` SHALL be wired on its first subsequent checkout.
+The hook SHALL be idempotent: a branch switch inside an already-wired worktree SHALL be a silent no-op. The hook's exit status is the checkout status, so the hook SHALL terminate with exit 0 on every path — a failed optional step (for example `ln -s` against an unwritable parent) is reported on stderr and still exits 0. A worktree created with `--no-checkout` on a branch that contains `.githooks/post-checkout` SHALL be wired on its first subsequent checkout.
 
 #### Scenario: A fresh linked worktree is wired
 
@@ -48,7 +49,7 @@ The hook SHALL be idempotent: a branch switch inside an already-wired worktree S
 
 #### Scenario: A failed optional step does not fail the checkout
 
-- **WHEN** an optional step cannot complete (for example `../.target` cannot be created because the worktrees root is unwritable, or a `reference-fixtures` entry is a dangling symlink)
+- **WHEN** an optional step cannot complete (for example `../.target` cannot be created because the worktrees root is unwritable)
 - **THEN** the hook reports the problem on stderr, exits 0, and the checkout or `git worktree add` succeeds
 
 ### Requirement: Worktree wiring keeps removal clean
