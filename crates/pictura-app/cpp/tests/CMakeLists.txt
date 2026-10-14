@@ -40,6 +40,7 @@ set(PICTURA_QT_TESTS
     tst_shape_tools
     tst_rotate_view
     tst_save_for_web
+    tst_export_as
     tst_type_tools
     tst_type_panels
     tst_character_paragraph_panels

@@ -51,6 +51,24 @@ Snapshot for resuming after a context break. Update after each milestone.
   Verified: nextest 3100 passed / 23 skipped (the one failure is the pre-existing
   local ImageMagick fixture mismatch), ctest 89/89, app self-test 474,
   `openspec validate --all --strict` 260/260.
+- **Export As (CC)** (#457, branch `feat/457-export-as-dialog`, OpenSpec change
+  `export-as-dialog`; new spec `ui/export-as-dialog`, MODIFIED
+  `interop/raster-export`): `File ▸ Export As…` is now the CC dialog — a layer
+  list (the flattened document plus each top-level layer, adjustment layers
+  excluded, each with a checkbox), a preview with Fit / 1:1 / ± zoom, **File
+  Settings** (Format PNG / JPG / PNG-8 / GIF, with Transparency for the alpha
+  formats and Quality for JPG), **Image Size** (linked Width/Height/Scale + the
+  CC Resample menu), **Canvas Size** (+ Reset), and a debounced output-size
+  estimate capped at 4 MP. One checked row writes a file; several write one file
+  each into a chosen folder. A layer target is rendered alone and cropped to its
+  bounds (`web_export.rs::layer_flattened`). PNG/JPG go through the Qt edge,
+  PNG-8/GIF through the `pictura_codec::web` encoders. It is a deliberate
+  **CC-only scope extension** (CS6 has no Export As dialog); SVG is deferred to
+  #459. Ceilings (`ponytail:`): the bicubic Resample family collapses to Qt's
+  smooth filter (only Nearest Neighbor differs), Canvas Size anchors top-left,
+  and a layer's effects are not expanded past its rect. Tests: Rust `#[test]`s
+  for `layer_flattened`, Qt Test `tst_export_as` (8 cases); the self-test's
+  `raster_export` (code 532) shrank by its old dialog assertions.
 - **Mask Density, Feather, and Invert** (#260, branch `feat/260-mask-refinement`,
   OpenSpec change `mask-density-feather`): `LayerMask` and `VectorMask` carry
   `density` (PSD byte, default 255) and `feather_bits` (`f64` bits so `Layer`

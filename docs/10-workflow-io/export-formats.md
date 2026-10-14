@@ -107,6 +107,38 @@ PNG-8/PNG-24/WBMP optimization matrix are `WF-005`. Web Photo Gallery moved to
 Bridge in CS5; the Photoshop `File > Automate > Web Photo Gallery` path requires
 the optional plug-in and 32-bit mode on 64-bit macOS.
 
+### Export As (CC-only, in scope)
+
+CS6 has no `Export As` dialog; it exposes `File > Save For Web & Devices` for
+web-oriented output and the Save As format dialogs for everything else. Photoshop
+CC (post-CS6) added `File ▸ Export As…`, a single dialog that combines the output
+settings and a live preview, and this project carries it as a deliberate
+**CC-only extension**:
+
+1. **Layer list** — the flattened document plus each top-level layer that has
+   pixels (adjustment layers excluded), each with a checkbox; the checked rows
+   are the export targets, and the document is checked by default. Selecting a
+   row previews it.
+2. **Preview** — the selected target after sizing and canvasing, with Fit / 1:1
+   and zoom controls, and — for a small target — an estimated output size.
+3. **File Settings** — **Format** is PNG, JPG, PNG-8, or GIF; **Transparency**
+   is offered for PNG, PNG-8, and GIF, **Quality** for JPG. SVG export is a
+   separate, deferred capability (issue #459), not offered here.
+4. **Image Size** — Width, Height, Scale (percent), and a **Resample** menu
+   (Bicubic, Bicubic Automatic, Bicubic Sharper, Bicubic Smoother, Bilinear,
+   Nearest Neighbor, Preserve Details).
+5. **Canvas Size** — Canvas Width and Height plus **Reset**; the output is
+   canvas-sized with the resampled image placed top-left, padded with
+   transparency or cropped, and Reset returns the canvas to the image size.
+6. `Cancel` / `Export…`; one checked row writes a file, several write one file
+   per row into a chosen folder (the document named from the document, a layer
+   from the layer name).
+
+PNG and JPG are written through the Qt image writers (`WF-003`/`WF-004`); PNG-8
+and GIF through the engine web encoders (`WF-005`, `interop/raster-export`). A
+layer target is the layer rendered alone on transparency, cropped to its bounds.
+`Export As` never changes the document's path, modified state, or history.
+
 ### Mobile preview (legacy)
 
 Adobe Device Central (CS5-era) connects from `File > New` (Device Central button)
@@ -135,6 +167,7 @@ support list). These belong to the Extended 3D pipeline
 | `File > Export > Send Video Preview To Device` | Command | — | Extended |
 | `File > Export > Zoomify` | Dialog | — | JPEG tiles + HTML |
 | `File > Save For Web & Devices` | Dialog | `Ctrl/Cmd+Shift+Alt+S` *(inferred)* | `WF-005` |
+| `File > Export As` | Dialog | — | CC-only extension: layer list, preview, PNG/JPG/PNG-8/GIF, Image Size, Canvas Size |
 | `File > Save As > Photoshop PDF` | Dialog | — | `WF-003` |
 | `File > Automate > Web Photo Gallery` | Dialog | — | Optional CS5 plug-in / Bridge replacement |
 | `File > New > Device Central` | Button | — | CS5-era mobile preview |
@@ -355,6 +388,12 @@ Internal cross-references (not external URLs): `docs/01-architecture/file-format
 (per-format capabilities and the shared serializers), `docs/10-workflow-io/save-and-save-as.md`
 (the option dialogs), `docs/10-workflow-io/web-export-and-slices.md` (Save for Web
 and Web Photo Gallery).
+
+**Export As (CC-only).** The CS6 Help corpus does not document an Export As
+dialog (CS6 exposes Save For Web & Devices instead). The surface above is the
+Photoshop CC (post-CS6) dialog, recorded from the shipped dialog (issue #457's
+screenshots); everything not shown there is *(inferred)*. It is a CC-only scope
+extension, not CS6 parity, and has no pixel oracle.
 
 ## Open questions
 
