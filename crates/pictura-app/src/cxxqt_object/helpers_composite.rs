@@ -400,12 +400,32 @@ pub(super) fn layer_pixel(layer: &Layer, x: u32, y: u32) -> Option<[u8; 4]> {
 /// `(x, y)`, or `None`. A hidden or zero-opacity layer (and its subtree) is
 /// skipped, an adjustment layer has no pixels, and a pixel layer is a hit when
 /// the point falls in its rect and its own alpha there is non-zero. `group`
-/// resolves a nested hit to its top-level ancestor.
+/// resolves a nested hit to its top-level ancestor. When `isolation` is `Some`,
+/// only a layer in the set (or a descendant of one) is a hit, so the Layers
+/// panel's Selected filter scopes Auto-Select.
 ///
 /// ponytail: layer masks, clipping, effects, and live type/shape rendering are
 /// ignored; the layer's own channel alpha decides.
-pub(super) fn auto_select_path(doc: &Document, x: i32, y: i32, group: bool) -> Option<String> {
-    fn walk(layers: &[Layer], prefix: &str, x: i32, y: i32) -> Option<String> {
+pub(super) fn auto_select_path(
+    doc: &Document,
+    x: i32,
+    y: i32,
+    group: bool,
+    isolation: Option<&[String]>,
+) -> Option<String> {
+    let isolated = |path: &str| {
+        isolation.is_none_or(|set| {
+            set.iter()
+                .any(|m| path == m || path.strip_prefix(m).is_some_and(|r| r.starts_with('/')))
+        })
+    };
+    fn walk(
+        layers: &[Layer],
+        prefix: &str,
+        x: i32,
+        y: i32,
+        isolated: &impl Fn(&str) -> bool,
+    ) -> Option<String> {
         for (i, layer) in layers.iter().enumerate().rev() {
             if !layer.visible || layer.opacity == 0 {
                 continue;
@@ -416,7 +436,7 @@ pub(super) fn auto_select_path(doc: &Document, x: i32, y: i32, group: bool) -> O
                 format!("{prefix}/{i}")
             };
             if layer.is_group {
-                if let Some(hit) = walk(&layer.children, &path, x, y) {
+                if let Some(hit) = walk(&layer.children, &path, x, y, isolated) {
                     return Some(hit);
                 }
                 continue;
@@ -429,13 +449,15 @@ pub(super) fn auto_select_path(doc: &Document, x: i32, y: i32, group: bool) -> O
             if lx < 0 || ly < 0 {
                 continue;
             }
-            if layer_pixel(layer, lx as u32, ly as u32).is_some_and(|px| px[3] > 0) {
+            if isolated(&path)
+                && layer_pixel(layer, lx as u32, ly as u32).is_some_and(|px| px[3] > 0)
+            {
                 return Some(path);
             }
         }
         None
     }
-    let hit = walk(&doc.layers, "", x, y)?;
+    let hit = walk(&doc.layers, "", x, y, &isolated)?;
     Some(if group {
         hit.split('/').next().unwrap_or(&hit).to_string()
     } else {

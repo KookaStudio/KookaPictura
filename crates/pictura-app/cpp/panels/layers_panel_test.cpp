@@ -422,6 +422,11 @@ int LayersPanel::filterDimensionForTest() const
     return filterBar_ ? filterBar_->dimensionIndexForTest() : -1;
 }
 
+void LayersPanel::releaseIsolationForTest(const QString& path)
+{
+    releaseIsolationFor(path);
+}
+
 bool LayersPanel::rowHasStyleForTest(const QString& path) const
 {
     return model_ && model_->indexForPath(path).data(HasLayerStyleRole).toBool();

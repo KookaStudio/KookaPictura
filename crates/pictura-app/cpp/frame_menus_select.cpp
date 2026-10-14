@@ -237,4 +237,32 @@ void PicturaMainWindow::registerSelectHandlers()
     });
 }
 
+void PicturaMainWindow::showCanvasContextMenu(const QPoint& globalPos)
+{
+    if (activeTool() == ToolId::Zoom && toolbox_ && toolbox_->zoomMenu()) {
+        toolbox_->zoomMenu()->popup(globalPos);
+        return;
+    }
+    // With the Move tool, the canvas offers Isolation Mode on the current
+    // selection (the Selected layer filter). A persistent, non-modal popup
+    // keeps the menu from blocking the event loop.
+    if (activeTool() == ToolId::Move && layersPanel_) {
+        if (!moveContextMenu_) {
+            moveContextMenu_ = new QMenu(this);
+            QAction* isolate = moveContextMenu_->addAction(tr("Isolation Mode"));
+            connect(isolate, &QAction::triggered, layersPanel_, &LayersPanel::enterIsolation);
+        }
+        moveContextMenu_->popup(globalPos);
+    }
+}
+
+bool PicturaMainWindow::releaseIsolation()
+{
+    if (layersPanel_ && layersPanel_->isolationActive()) {
+        layersPanel_->releaseIsolation();
+        return true;
+    }
+    return false;
+}
+
 } // namespace pictura

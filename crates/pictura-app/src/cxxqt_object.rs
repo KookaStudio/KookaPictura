@@ -51,6 +51,8 @@ mod canvas_view_test;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
+mod tests_auto_select;
+#[cfg(test)]
 mod tests_impl;
 #[cfg(test)]
 mod tests_profiles;
@@ -164,6 +166,14 @@ pub mod qobject {
         /// Whether the single active layer a tool edit may target is visible.
         #[qinvokable]
         fn active_layer_visible(&self) -> bool;
+
+        /// Record the Layers panel's isolated set: while the Selected filter is on, `paths` are the panel paths Move Auto-Select may pick. `active` false clears the scope.
+        #[qinvokable]
+        fn isolation_set(self: Pin<&mut Self>, paths: &QStringList, active: bool);
+
+        /// Whether the Layers panel's Selected filter is isolating a set.
+        #[qinvokable]
+        fn isolation_active(&self) -> bool;
 
         /// Post-open notices (mode, depth, ICC), `"; "`-joined; empty when none.
         #[qinvokable]

@@ -847,6 +847,19 @@ impl qobject::PictureView {
             .is_none_or(|doc| active_layer_visible(doc, rust.active_layer.as_deref()))
     }
 
+    /// Record the Layers panel's isolated set: while the Selected filter is on,
+    /// `paths` are the panel paths Move Auto-Select may pick. `active` false
+    /// clears the scope so Auto-Select is unscoped.
+    pub fn isolation_set(mut self: Pin<&mut Self>, paths: &QStringList, active: bool) {
+        let set = paths.iter().map(|path| path.to_string()).collect();
+        self.as_mut().rust_mut().isolation = active.then_some(set);
+    }
+
+    /// Whether the Layers panel's Selected filter is isolating a set.
+    pub fn isolation_active(&self) -> bool {
+        self.rust().isolation.is_some()
+    }
+
     pub fn set_gpu_compute(mut self: Pin<&mut Self>, enabled: bool) {
         self.as_mut().rust_mut().gpu_compute = enabled;
         self.as_mut().recomposite();
@@ -899,6 +912,7 @@ impl super::PictureViewRust {
         self.stroke_base = None;
         self.stroke_label.clear();
         self.active_layer = None;
+        self.isolation = None;
         self.move_base = None;
         self.move_layer = None;
         self.move_x = 0;

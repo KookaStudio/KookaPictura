@@ -22,6 +22,12 @@ public:
     void setFilter(const LayerFilter& filter);
     LayerFilter filter() const { return filter_; }
 
+    /// Enter isolation mode: choose the Selected dimension and turn the filter
+    /// on, emitting `filterChanged` once.
+    void activateSelected();
+    /// Turn the filter toggle on or off, emitting `filterChanged` on a change.
+    void setFilterEnabled(bool on);
+
     int dimensionIndexForTest() const;
     void setDimensionForTest(const QString& key);
     bool toggleOnForTest() const;

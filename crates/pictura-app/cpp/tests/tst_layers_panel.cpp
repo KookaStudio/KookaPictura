@@ -16,6 +16,7 @@
 #include <QtGui/QDragMoveEvent>
 #include <QtGui/QDropEvent>
 #include <QtGui/QImage>
+#include <QtGui/QKeyEvent>
 #include <QtGui/QPalette>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QComboBox>
@@ -141,6 +142,7 @@ private slots:
     void shapeRowActions();
     void layerStylePanelIntegration();
     void blendIfBadge();
+    void isolationMode();
 
 private:
     bool setupNest();
@@ -1291,6 +1293,69 @@ void LayersPanelTest::blendIfBadge()
     panel_->refresh();
     QVERIFY2(!panel_->rowHasBlendIfForTest(layer), "restored default has no badge");
     QVERIFY2(panel_->rowBlendIfRectForTest(layer).isEmpty(), "restored default paints no chip");
+
+    window_->closeDocument(doc, false);
+}
+
+void LayersPanelTest::isolationMode()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("Isolation"), 30, 30, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY2(view_ && panel_, "isolation fixture");
+    const int doc = window_->activeDocumentIndex();
+    view_->select_rect(5, 5, 10, 10, QStringLiteral("new"), 0.0);
+    QVERIFY(!view_->layer_via_copy(QStringLiteral("0")).isEmpty());
+    view_->deselect();
+    QCoreApplication::processEvents();
+    panel_->setView(view_);
+    panel_->selectPaths({QStringLiteral("1")}, QStringLiteral("1"));
+    panel_->refresh();
+
+    QVERIFY2(!panel_->isolationActive(), "not isolated by default");
+    QVERIFY2(!view_->isolation_active(), "Auto-Select is unscoped by default");
+
+    // Entering isolation captures the selection as the fixed set: only those
+    // layers show, and Auto-Select is scoped to them.
+    panel_->selectPaths({QStringLiteral("0"), QStringLiteral("1")}, QStringLiteral("0"));
+    panel_->enterIsolation();
+    QCoreApplication::processEvents();
+    QVERIFY2(panel_->isolationActive(), "the Selected filter isolates");
+    QVERIFY2(view_->isolation_active(), "Auto-Select is scoped");
+    QVERIFY2(panel_->visiblePathsForTest().contains(QStringLiteral("0"))
+                 && panel_->visiblePathsForTest().contains(QStringLiteral("1")),
+             "both isolated layers are shown");
+    QVERIFY2(panel_->rowMenuTextsForPathForTest(QStringLiteral("1"))
+                 .contains(QStringLiteral("Release from Isolation")),
+             "the row menu offers Release from Isolation");
+
+    // Releasing one layer leaves the other isolated and hides the released row.
+    panel_->releaseIsolationForTest(QStringLiteral("0"));
+    QCoreApplication::processEvents();
+    QVERIFY2(panel_->isolationActive(), "one layer remains isolated");
+    QVERIFY2(!panel_->visiblePathsForTest().contains(QStringLiteral("0")),
+             "the released layer is hidden");
+    QVERIFY2(panel_->visiblePathsForTest().contains(QStringLiteral("1")), "the other remains");
+
+    // Releasing the last layer ends isolation and unscopes Auto-Select.
+    panel_->releaseIsolationForTest(QStringLiteral("1"));
+    QCoreApplication::processEvents();
+    QVERIFY2(!panel_->isolationActive(), "releasing the last layer ends isolation");
+    QVERIFY2(panel_->visiblePathsForTest().contains(QStringLiteral("0"))
+                 && panel_->visiblePathsForTest().contains(QStringLiteral("1")),
+             "every layer is shown again");
+    QVERIFY2(!view_->isolation_active(), "Auto-Select is unscoped again");
+
+    // The frame's Escape path releases isolation.
+    panel_->selectPaths({QStringLiteral("1")}, QStringLiteral("1"));
+    panel_->enterIsolation();
+    QCoreApplication::processEvents();
+    QVERIFY(panel_->isolationActive());
+    QKeyEvent esc(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+    QApplication::sendEvent(window_.get(), &esc);
+    QCoreApplication::processEvents();
+    QVERIFY2(!panel_->isolationActive(), "Escape leaves isolation");
 
     window_->closeDocument(doc, false);
 }

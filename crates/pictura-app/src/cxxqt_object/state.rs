@@ -139,6 +139,9 @@ pub struct PictureViewRust {
     /// The layer whose raster mask is the edit target, so the brush, fill, and
     /// filters write its coverage; `None` edits the layer's pixels.
     pub(super) mask_edit_target: Option<String>,
+    /// The isolated set while the Layers panel's Selected filter is on: the
+    /// panel paths Auto-Select may pick. `None` leaves Auto-Select unscoped.
+    pub(super) isolation: Option<Vec<String>>,
     /// Dabs received since the last in-stroke present, waiting for `flush_present`.
     pub(super) pending_present: Option<PsdRect>,
     /// The stroke's dirty area as document-space tiles, rebuilt per dab and
@@ -333,6 +336,7 @@ impl Default for PictureViewRust {
             stroke_label: String::new(),
             mask_stroke: None,
             mask_edit_target: None,
+            isolation: None,
             pending_present: None,
             stroke_tiles: TileSet::default(),
             present_flush_due: false,

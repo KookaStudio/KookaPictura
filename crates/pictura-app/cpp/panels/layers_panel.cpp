@@ -442,6 +442,7 @@ void LayersPanel::setView(PictureView* view)
     if (view_ != view) {
         clearSolo();
         activeThumbByPath_.clear();
+        isolatedPaths_.clear();
         const LayerFilter defaultFilter{true};
         if (filterBar_) {
             filterBar_->setFilter(defaultFilter);
@@ -732,6 +733,11 @@ void LayersPanel::syncControls()
         if (!current.isEmpty() && mask_edit_target_get(*view_) != current) {
             mask_edit_target_set(*view_, QString());
         }
+        // While the Selected filter isolates a set, scope Move Auto-Select to
+        // it; otherwise leave Auto-Select unscoped.
+        const bool isolated = proxy_ && proxy_->filter().enabled && proxy_->filter().selected;
+        const QStringList scope(isolatedPaths_.begin(), isolatedPaths_.end());
+        view_->isolation_set(scope, isolated);
     }
     const bool active = view_ && !paths.isEmpty();
     syncing_ = true;
@@ -915,8 +921,18 @@ void LayersPanel::applyFilter(const LayerFilter& filter)
     if (!proxy_) {
         return;
     }
-    proxy_->setFilter(filter);
-    if (filter.enabled && proxy_->hasActiveCriteria()) {
+    LayerFilter effective = filter;
+    const bool wasSelected = proxy_->filter().selected;
+    if (effective.selected && !wasSelected) {
+        // Entering isolation: capture the current selection as the fixed set.
+        const QStringList paths = selectedPaths();
+        isolatedPaths_ = QSet<QString>(paths.begin(), paths.end());
+    } else if (!effective.selected) {
+        isolatedPaths_.clear();
+    }
+    effective.selectedPaths = isolatedPaths_;
+    proxy_->setFilter(effective);
+    if (effective.enabled && proxy_->hasActiveCriteria()) {
         expandMatchingGroups();
     } else {
         for (const QString& path : expandedPaths_) {
@@ -927,6 +943,43 @@ void LayersPanel::applyFilter(const LayerFilter& filter)
         }
     }
     syncControls();
+}
+
+void LayersPanel::enterIsolation()
+{
+    const QStringList paths = selectedPaths();
+    isolatedPaths_ = QSet<QString>(paths.begin(), paths.end());
+    if (filterBar_) {
+        filterBar_->activateSelected();
+    }
+}
+
+void LayersPanel::releaseIsolation()
+{
+    isolatedPaths_.clear();
+    if (filterBar_) {
+        filterBar_->setFilterEnabled(false);
+    }
+}
+
+bool LayersPanel::isolationActive() const
+{
+    return proxy_ && proxy_->filter().enabled && proxy_->filter().selected;
+}
+
+void LayersPanel::releaseIsolationFor(const QString& path)
+{
+    isolatedPaths_.remove(path);
+    if (isolatedPaths_.isEmpty()) {
+        releaseIsolation();
+        return;
+    }
+    // Keep the panel selection within the reduced set, then re-filter.
+    QStringList remaining(isolatedPaths_.begin(), isolatedPaths_.end());
+    selectPaths(remaining, remaining.first());
+    if (proxy_) {
+        applyFilter(proxy_->filter());
+    }
 }
 
 } // namespace pictura

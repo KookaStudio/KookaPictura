@@ -35,11 +35,15 @@ void LayersFilterProxyModel::setFilter(const LayerFilter& filter)
 bool LayersFilterProxyModel::hasActiveCriteria() const
 {
     return !filter_.name.isEmpty() || !filter_.kinds.isEmpty() || !filter_.mode.isEmpty()
-        || filter_.color >= 0 || !filter_.attribute.isEmpty() || !filter_.effect.isEmpty();
+        || filter_.color >= 0 || !filter_.attribute.isEmpty() || !filter_.effect.isEmpty()
+        || filter_.selected;
 }
 
 bool LayersFilterProxyModel::rowMatches(const QModelIndex& index) const
 {
+    if (filter_.selected && !filter_.selectedPaths.contains(index.data(PathRole).toString())) {
+        return false;
+    }
     if (!filter_.name.isEmpty()
         && !index.data(Qt::DisplayRole)
                 .toString()

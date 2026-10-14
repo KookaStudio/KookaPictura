@@ -187,6 +187,14 @@ void LayersPanel::populateRowMenu(QMenu& menu, const QString& path, int color,
     });
     menu.addSeparator();
 
+    // Isolation mode: the selected layers are the isolated set; this row can be
+    // removed from it. Releasing the last one ends isolation.
+    if (isolationActive()) {
+        QAction* release = menu.addAction(tr("Release from Isolation"));
+        connect(release, &QAction::triggered, this, [this, path] { releaseIsolationFor(path); });
+        menu.addSeparator();
+    }
+
     // A shape layer reports the `adjustment` kind (its solid fill), but its menu
     // is a pixel layer's common commands plus the shape rows — never the
     // adjustment-only rows.
