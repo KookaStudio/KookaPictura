@@ -116,6 +116,22 @@ single deploy run rewrites the plugin's framework references to the bundle.
   self-contained bundle. Qt 6's `macdeployqt` has no `-extra-plugins`
   (Linux-only/older), so a manual copy is the documented mechanism.
 
+### Guard `request_device()` against wgpu's no-backend panic
+
+Early-return `None` from `request_device()` when
+`wgpu::Instance::enabled_backend_features()` does not include the Vulkan
+backend, before `wgpu::Instance::new`.
+
+- **Why:** `Instance::new` panics when no compiled-in backend is implemented for
+  the target (Apple implements no Vulkan, and the workspace enables only the
+  `vulkan` feature), and that panic crosses the cxx-qt FFI guard and aborts the
+  process. The repository already accepts "no wgpu Vulkan backend on Apple
+  targets" (`pictura-app/Cargo.toml` cfg-gates `ash` for it); this makes
+  `gpu_available()` honour that instead of panicking.
+- **Alternatives considered:** `catch_unwind` (hides the cause); enabling the
+  `metal` feature (compiles an unused backend — the compositor and the Qt RHI
+  interop are Vulkan-specific, so Apple has no GPU path anyway).
+
 ## Risks / Trade-offs
 
 - `Qt6::GuiPrivate` absent → configure fails where the old hack silently

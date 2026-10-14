@@ -83,3 +83,10 @@ install, and the release workflow's smoke check SHALL pass.
   the Qt plugin path unset
 - **THEN** it finds the offscreen platform plugin inside the bundle, runs the
   self-test, and exits 0
+
+#### Scenario: The GPU probe degrades where the platform has no backend
+
+- **WHEN** the self-test runs on a platform whose wgpu build has no backend
+  implemented for it (macOS, which the workspace builds Vulkan-only)
+- **THEN** the GPU probe reports no GPU and the self-test continues on the CPU
+  path rather than aborting the process

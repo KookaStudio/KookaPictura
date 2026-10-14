@@ -35,6 +35,9 @@ menu-bar contract for macOS is unverified.
   smoke check (`pictura --headless --self-test` from the deployed bundle) runs
   from the bundle alone, matching what `linux-bundle` and `windows-bundle`
   already deploy.
+- Guard `pictura-render`'s GPU probe against `wgpu::Instance::new`'s documented
+  panic when no compiled-in backend is implemented for the target (macOS), so
+  the self-test degrades to the CPU path instead of aborting.
 - **Temporarily** let `macos.yml` run on ordinary pull requests (drop the
   release-please-only `if:` at `macos.yml:43`, and add the C++ source and macOS
   packaging paths to its `paths:` filter) so the fix can be validated in CI
@@ -71,6 +74,8 @@ menu-bar contract for macOS is unverified.
     `Qt6::GuiPrivate`.
   - `crates/pictura-app/cpp/interop.cpp` — guard the Vulkan-only includes so
     the translation unit compiles against a Qt built without Vulkan.
+  - `crates/pictura-render/src/gpu/backend.rs` — report "no GPU" instead of
+    panicking where wgpu has no implemented backend (macOS).
   - `.github/actions/macos-bundle/action.yml` — bundle the offscreen QPA plugin
     for the headless smoke check.
   - `.github/workflows/macos.yml` — temporary PR gating/paths relaxation
