@@ -1,5 +1,7 @@
 #include "spectrum_bar.h"
 
+#include "theme.h"
+
 #include <QtGui/QColor>
 #include <QtGui/QLinearGradient>
 #include <QtGui/QPainter>
@@ -38,7 +40,7 @@ void SpectrumBar::paintEvent(QPaintEvent*)
     }
     p.fillRect(0, 0, w, h, grad);
 
-    p.setPen(QPen(QColor(80, 80, 80), 1));
+    p.setPen(QPen(Theme::tokenColor(QStringLiteral("inputBorder")), 1));
     p.drawRect(0, 0, w - 1, h - 1);
 }
 

@@ -121,6 +121,7 @@ void PicturaMainWindow::saveSession()
     state.windowGeometry = saveGeometry();
     state.windowMaximized = isMaximized();
     state.brightnessLevel = brightnessLevel_;
+    state.themeFamily = themeFamily_ == 1 ? 1 : 0;
     state.gpuCompute = gpuCompute_;
     state.colorPolicy = colorPolicy_;
     state.toolsColumns = toolbox_ ? toolbox_->columns() : 1;

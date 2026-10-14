@@ -233,6 +233,7 @@ inline constexpr char TypePanelsCharacter[] = "type.panels.character";
 inline constexpr char TypePanelsParagraph[] = "type.panels.paragraph";
 inline constexpr char TypePanelsParagraphStyles[] = "type.panels.paragraphStyles";
 inline constexpr char HelpAbout[] = "help.about";
+inline constexpr char HelpDeveloperDesignSystem[] = "help.developer.designSystem";
 } // namespace command_ids
 
 // One entry of the command table. An entry with an empty `id` is a separator.

@@ -19,15 +19,21 @@ here.
   artwork drawn by hand as plain pointer arrows, under the same licenses.
 - The `info.crosshair`, `info.bounds`, and `info.protractor` glyphs are original
   project artwork in the same house style, released under **CC0-1.0 / MIT**.
+- `theme.sun.svg` and `theme.moon.svg` are from **lucide-static v1.50.0**
+  (**ISC**); `link.github.svg` and `link.discord.svg` are the GitHub and Discord
+  marks from **simple-icons v15** (**CC0-1.0**). They are the top-right chrome
+  actions: the theme toggle and the GitHub/Discord links.
 
 ## UI chrome artwork (`assets/ui`)
 
-- `combo-caret.svg` and `combo-caret-disabled.svg` are the combo box drop-down
-  caret (a small filled triangle matching `design-system.html`'s `.combo .caret`),
+- `select-chevron.svg` / `select-chevron-light.svg` are the select drop-down
+  chevron (the Lucide "chevron-down" glyph) in each theme family's foreground
+  colour; `select-chevron-disabled.svg` is the same glyph in a mid grey for the
+  disabled state; `checkbox-check.svg` is the checkbox tick in white. They are
   original project artwork released under **CC0-1.0 / MIT**. The Qt stylesheet
-  engine cannot draw a CSS triangle, so the caret ships as a fixed-colour asset
-  in the UI text and disabled-text colours (both constant across the four
-  brightness levels).
+  engine cannot tint an SVG (`currentColor` renders black), so these ship as
+  fixed-colour assets; the foreground colours are constant across the four
+  brightness levels, so the baked files match a runtime tint.
 
 ## Ported vector glyphs (`assets/icons`)
 

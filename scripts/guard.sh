@@ -13,6 +13,7 @@
 #   7. a tracked reference-fixtures/ file, or tracked code depending on it.
 #   8. a missing required legal artifact (LICENSE, notices, deny.toml, CONTRIBUTING).
 #   9. a release-please version marker dropped from a version file.
+#  10. a theme-like grey colour literal outside the theme layer.
 #
 # Runnable locally with no setup:   bash scripts/guard.sh
 #
@@ -126,6 +127,12 @@ if [ -n "$committed$uncommitted" ] && [ "$allow" -ne 1 ]; then
 fi
 if [ -z "$base" ]; then
     echo "note: GUARD_BASE unset; checked uncommitted docs/ changes only"
+fi
+
+# --- 6. theme-like grey colour literals outside the theme layer ---------------
+echo "check: no theme-like grey colour literals outside the theme layer"
+if ! python3 "$(dirname "$0")/check-colour-literals.py"; then
+    fail=1
 fi
 
 # --- 5. release-please version markers present --------------------------------

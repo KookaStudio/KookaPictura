@@ -474,8 +474,9 @@ void LayersPanelFixesTest::blendComboArrowAndKeys()
     QVERIFY(combo != nullptr);
     QVERIFY2(combo->isEnabled(), "the blend combo is enabled for the selected layer");
 
-    // The caret is a down-pointing triangle in the drop-down strip: the ink's
-    // widest row sits above its vertical centre.
+    // The drop-down strip carries the chevron: ink sits in a narrow band inside
+    // the frame, and the lowest row is the narrowest (the glyph converges
+    // downward). Frame/border rows are excluded so only the glyph is measured.
     const QImage shot = combo->grab().toImage();
     QVERIFY(!shot.isNull());
     const QColor surface = shot.pixelColor(2, shot.height() / 2);
@@ -494,21 +495,21 @@ void LayersPanelFixesTest::blendComboArrowAndKeys()
     int minY = shot.height();
     int maxY = -1;
     QVector<int> widths(shot.height(), 0);
-    for (int y = 1; y < shot.height() - 1; ++y) {
+    for (int y = 2; y < shot.height() - 2; ++y) {
         widths[y] = inkAt(y);
         if (widths[y] > 0) {
             minY = qMin(minY, y);
             maxY = qMax(maxY, y);
         }
     }
-    QVERIFY2(maxY >= minY, "the drop-down caret is visible in the strip");
+    QVERIFY2(maxY >= minY, "the drop-down chevron is visible in the strip");
     int widest = minY;
     for (int y = minY; y <= maxY; ++y) {
         if (widths[y] > widths[widest]) {
             widest = y;
         }
     }
-    QVERIFY2(widest <= (minY + maxY) / 2, "the drop-down caret points down");
+    QVERIFY2(widths[maxY] < widths[widest], "the drop-down chevron points down");
 
     combo->setFocus();
     QCoreApplication::processEvents();

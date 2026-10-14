@@ -7,6 +7,7 @@ set(PICTURA_QT_TESTS
     tst_transform_api
     tst_fonts
     tst_design_system
+    tst_design_system_dialog
     tst_edit_clipboard
     tst_mask_edit
     tst_image_ops

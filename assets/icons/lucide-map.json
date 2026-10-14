@@ -6,6 +6,16 @@
     "style": "viewBox 0 0 24 24, fill=none, stroke=currentColor, stroke-width=2, round caps/joins; tinted at render time. Custom icons keep their named Lucide base at its original size and position; small added symbols use stroke-width=1."
   },
   "entries": {
+    "chevron.down": {
+      "kind": "lucide",
+      "slug": "chevron-down",
+      "match": "exact"
+    },
+    "chevron.up": {
+      "kind": "lucide",
+      "slug": "chevron-up",
+      "match": "exact"
+    },
     "crop.apply": {
       "kind": "lucide",
       "slug": "check",
@@ -418,6 +428,16 @@
     "panel.menu": {
       "kind": "lucide",
       "slug": "menu",
+      "match": "exact"
+    },
+    "panel.rightClose": {
+      "kind": "lucide",
+      "slug": "panel-right-close",
+      "match": "exact"
+    },
+    "panel.rightOpen": {
+      "kind": "lucide",
+      "slug": "panel-right-open",
       "match": "exact"
     },
     "path.delete": {
@@ -1008,6 +1028,28 @@
       "kind": "custom",
       "match": "custom",
       "note": "Free Transform warp-mode toggle; a warped 3x3 grid, drawn on the 24x24 Lucide grid"
+    },
+    "theme.sun": {
+      "kind": "lucide",
+      "slug": "sun",
+      "match": "good"
+    },
+    "theme.moon": {
+      "kind": "lucide",
+      "slug": "moon",
+      "match": "good"
+    },
+    "link.github": {
+      "kind": "brand",
+      "slug": "github",
+      "match": "brand",
+      "note": "simple-icons v15, CC0-1.0; a filled brand mark"
+    },
+    "link.discord": {
+      "kind": "brand",
+      "slug": "discord",
+      "match": "brand",
+      "note": "simple-icons v15, CC0-1.0; a filled brand mark"
     }
   }
 }

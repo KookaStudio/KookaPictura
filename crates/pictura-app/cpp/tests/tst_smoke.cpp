@@ -2,6 +2,7 @@
 
 #include "canvas_scrollbars.h"
 #include "frame.h"
+#include "icons.h"
 #include "image_view.h"
 #include "panels/numeric_field.h"
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
@@ -34,6 +35,8 @@ private slots:
     void numericFieldStepsAndSuffix();
     void numericFieldAlignment();
     void sessionWindowGeometryRoundTrips();
+    void themeFamilyPersists();
+    void lightSessionRestoresFamilyAndIcon();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -412,6 +415,36 @@ void SmokeTest::sessionWindowGeometryRoundTrips()
     const pictura::SessionState legacy = pictura::loadSession();
     QVERIFY(legacy.windowGeometry.isEmpty());
     QVERIFY(!legacy.windowMaximized);
+}
+
+// The chosen family round-trips through the session store (#417).
+void SmokeTest::themeFamilyPersists()
+{
+    window_->setThemeFamily(1);
+    QCOMPARE(pictura::loadSession().themeFamily, 1);
+    window_->setThemeFamily(0);
+    QCOMPARE(pictura::loadSession().themeFamily, 0);
+}
+
+// A stored light family is in effect, and the menu-bar theme button shows the
+// moon, from the first build rather than only after a toggle (#417).
+void SmokeTest::lightSessionRestoresFamilyAndIcon()
+{
+    pictura::SessionState state = pictura::loadSession();
+    state.themeFamily = 1;
+    QVERIFY(pictura::saveSession(state));
+
+    auto restored = pictura::test::makeMainWindow();
+    QVERIFY(restored != nullptr);
+    QCOMPARE(restored->themeFamily(), 1);
+    auto* button = restored->findChild<QToolButton*>(QStringLiteral("menuThemeButton"));
+    QVERIFY(button != nullptr);
+    const QImage shown = button->icon().pixmap(16, 16).toImage();
+    QCOMPARE(shown, pictura::icon(QStringLiteral("theme.moon")).pixmap(16, 16).toImage());
+    QVERIFY(shown != pictura::icon(QStringLiteral("theme.sun")).pixmap(16, 16).toImage());
+
+    // Leave the shared theme on dark for any later checks.
+    restored->setThemeFamily(0);
 }
 
 QTEST_MAIN(SmokeTest)

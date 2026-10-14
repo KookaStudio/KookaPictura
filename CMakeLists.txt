@@ -186,6 +186,7 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/svg_icon_engine.cpp
     crates/pictura-app/cpp/file_drop_router.cpp
     crates/pictura-app/cpp/frame.cpp
+    crates/pictura-app/cpp/frame_chrome.cpp
     crates/pictura-app/cpp/frame_columns.cpp
     crates/pictura-app/cpp/frame_session.cpp
     crates/pictura-app/cpp/frame_shortcuts.cpp
@@ -324,6 +325,9 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/dialog_chrome.cpp
     crates/pictura-app/cpp/dialogs.cpp
     crates/pictura-app/cpp/keyboard_shortcuts_dialog.cpp
+    crates/pictura-app/cpp/design_system_dialog.cpp
+    crates/pictura-app/cpp/design_system_dialog_pages.cpp
+    crates/pictura-app/cpp/design_system_dialog.h
     crates/pictura-app/cpp/commands.h
     crates/pictura-app/cpp/control_server.h
     crates/pictura-app/cpp/theme.h

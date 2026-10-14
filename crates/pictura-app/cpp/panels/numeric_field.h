@@ -69,7 +69,7 @@ private:
     void applyUserValue(double value);
     void commitPending();
     void syncSlider();
-    void layoutSuffix();
+    void layoutInset();
     void reserveWidth();
     void showPopup();
     QString formatValue(double value) const;

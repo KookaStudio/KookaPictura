@@ -137,6 +137,9 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
     autoSaveRecovery_ = state.autoSaveRecovery;
     autoSaveMinutes_ = state.autoSaveMinutes;
     loadGuideSession(state);
+    // The family drives the theme chrome built below, so resolve it before the
+    // menu bar (and its theme toggle icon) is built.
+    themeFamily_ = state.themeFamily == 1 ? 1 : 0;
     // Probe the adapter once so the toggle can be offered without a document.
     {
         PictureView probe;
@@ -1186,7 +1189,9 @@ void PicturaMainWindow::updateStatus()
 void PicturaMainWindow::applyBrightness(int level)
 {
     brightnessLevel_ = Theme::clampLevel(level);
-    Theme::apply(brightnessLevel_);
+    const Theme::ThemeFamily family = themeFamily_ == 1 ? Theme::ThemeFamily::Light
+                                                        : Theme::ThemeFamily::Dark;
+    Theme::apply(family, brightnessLevel_);
     applyWorkspaceCanvasColor();
 }
 

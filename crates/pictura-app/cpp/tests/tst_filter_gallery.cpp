@@ -2,11 +2,15 @@
 
 #include <QtCore/QTimer>
 #include <QtGui/QImage>
+#include <QtGui/QWheelEvent>
 #include <QtWidgets/QApplication>
+#include <QtWidgets/QComboBox>
+#include <QtWidgets/QDoubleSpinBox>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QListWidget>
 #include <QtWidgets/QScrollArea>
 #include <QtWidgets/QScrollBar>
+#include <QtWidgets/QSlider>
 #include <QtWidgets/QToolButton>
 
 #include "commands.h"
@@ -51,6 +55,8 @@ private slots:
     void clickingTheEyeHidesTheEffect();
     void spaceTogglesTheEye();
     void keyboardZoomAndDragPan();
+    void zoomDropdownAndWheel();
+    void sliderClickFocusesValueBox();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -289,25 +295,28 @@ void FilterGalleryTest::keyboardZoomAndDragPan()
             return;
         }
         dialog->activateWindow();
-        auto* label = dialog->findChild<QLabel*>(QStringLiteral("galleryZoomLabel"));
+        auto* zoom = dialog->findChild<QComboBox*>(QStringLiteral("galleryZoom"));
         auto* area = dialog->findChild<QScrollArea*>(QStringLiteral("galleryPreview"));
-        if (!QTest::qWaitForWindowActive(dialog) || !label || !area) {
+        if (!QTest::qWaitForWindowActive(dialog) || !zoom || !area) {
             dialog->reject();
             return;
         }
-        const auto percent = [label] { return label->text().chopped(1).toDouble(); };
+        const auto percent = [zoom] { return zoom->currentText().chopped(1).toDouble(); };
         fit = percent();
         QTest::keyClick(dialog, Qt::Key_Equal, Qt::ControlModifier);
         in = percent();
         QTest::keyClick(dialog, Qt::Key_Minus, Qt::ControlModifier);
         out = percent();
-        for (int i = 0; i < 10; ++i) {
+        // Enough steps to walk the whole ladder; the top preset must be
+        // reachable from the +/- buttons and the wheel.
+        for (int i = 0; i < 20; ++i) {
             QTest::keyClick(dialog, Qt::Key_Plus, Qt::ControlModifier | Qt::ShiftModifier);
         }
-        max = label->text();
+        max = zoom->currentText();
         QCoreApplication::processEvents();
 
-        // 400 px at 400 % overflows the pane: dragging left/up scrolls right/down.
+        // 400 px at high zoom overflows the pane: dragging left/up scrolls
+        // right/down.
         QScrollBar* h = area->horizontalScrollBar();
         QScrollBar* v = area->verticalScrollBar();
         h->setValue(0);
@@ -323,8 +332,70 @@ void FilterGalleryTest::keyboardZoomAndDragPan()
     QVERIFY(window_->registry()->dispatch(galleryId()));
     QVERIFY(in > fit);
     QVERIFY(out < in);
-    QCOMPARE(max, QStringLiteral("400%"));
+    QCOMPARE(max, QStringLiteral("1600%"));
     QCOMPARE(panned, QPoint(30, 20));
+}
+
+// The zoom level is a drop down of CS6's preset levels and named views, and the
+// mouse wheel zooms the preview.
+void FilterGalleryTest::zoomDropdownAndWheel()
+{
+    pictura::PictureView* view = window_->activeView();
+    pictura::FilterGalleryDialog dialog(view);
+    dialog.resize(900, 600);
+    dialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+
+    auto* zoom = dialog.findChild<QComboBox*>(QStringLiteral("galleryZoom"));
+    QVERIFY(zoom != nullptr);
+    QStringList options;
+    for (int i = 0; i < zoom->count(); ++i) {
+        options.append(zoom->itemText(i));
+    }
+    QVERIFY2(options.contains(QStringLiteral("1600%")), qPrintable(options.join(QLatin1Char(','))));
+    QVERIFY(options.contains(QStringLiteral("Actual Pixels")));
+    QVERIFY(options.contains(QStringLiteral("Fit in View")));
+    QVERIFY(options.contains(QStringLiteral("Fit on Screen")));
+
+    const double before = zoom->currentText().chopped(1).toDouble();
+    auto* area = dialog.findChild<QScrollArea*>(QStringLiteral("galleryPreview"));
+    QVERIFY(area != nullptr);
+    QWidget* viewport = area->viewport();
+    const QPointF centre(viewport->rect().center());
+    QWheelEvent wheel(centre, viewport->mapToGlobal(centre.toPoint()), QPoint(), QPoint(0, 120),
+                      Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+    QCoreApplication::sendEvent(viewport, &wheel);
+    const double after = zoom->currentText().chopped(1).toDouble();
+    QVERIFY2(after > before, qPrintable(QStringLiteral("%1 -> %2").arg(before).arg(after)));
+
+    // Choosing a preset applies it.
+    const int index = zoom->findText(QStringLiteral("200%"));
+    QVERIFY(index >= 0);
+    QMetaObject::invokeMethod(zoom, "activated", Qt::DirectConnection, Q_ARG(int, index));
+    QCOMPARE(zoom->currentText(), QStringLiteral("200%"));
+
+    dialog.reject();
+}
+
+// Clicking a parameter's slider activates its value box, so Up/Down adjust it.
+void FilterGalleryTest::sliderClickFocusesValueBox()
+{
+    pictura::PictureView* view = window_->activeView();
+    pictura::FilterGalleryDialog dialog(view);
+    dialog.selectFilter(QStringLiteral("grain"));
+    dialog.show();
+    dialog.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&dialog));
+
+    auto* slider = dialog.findChild<QSlider*>();
+    auto* spin = dialog.findChild<QDoubleSpinBox*>();
+    QVERIFY(slider != nullptr);
+    QVERIFY(spin != nullptr);
+    slider->setSliderDown(true);
+    QVERIFY2(spin->hasFocus(), "clicking the slider focuses the value box");
+    slider->setSliderDown(false);
+
+    dialog.reject();
 }
 
 QTEST_MAIN(FilterGalleryTest)
