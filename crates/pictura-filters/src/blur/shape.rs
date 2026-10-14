@@ -55,7 +55,7 @@ pub fn shape(buf: &mut PixelBuffer, shape: usize, radius: u32) -> Result<(), Fil
     let w = buf.width as usize;
     let h = buf.height as usize;
     let n = w * h;
-    for c in 0..(buf.channels as usize).min(3) {
+    for c in 0..buf.channels as usize {
         let plane = &mut buf.data[c * n..(c + 1) * n];
         let pre = row_prefixes(plane, w);
         plane.par_chunks_mut(w).enumerate().for_each_init(
@@ -233,20 +233,21 @@ mod tests {
     }
 
     #[test]
-    fn flat_input_and_alpha_are_kept_and_radius_zero_is_a_no_op() {
+    fn flat_input_is_kept_alpha_blurs_like_colour_and_radius_zero_is_a_no_op() {
         let mut flat = buffer(12, 9, |_, _| 173);
         shape(&mut flat, 1, 30).unwrap();
         assert!(flat.data.iter().all(|&v| v == 173));
 
+        let plane: Vec<u8> = (0..64).map(|i| (i * 7) as u8).collect();
         let mut rgba = PixelBuffer {
             width: 8,
             height: 8,
             channels: 4,
-            data: (0..256).map(|i| (i * 7) as u8).collect::<Vec<_>>().into(),
+            data: plane.repeat(4).into(),
         };
-        let alpha = rgba.data[192..].to_vec();
         shape(&mut rgba, 0, 3).unwrap();
-        assert_eq!(&rgba.data[192..], &alpha[..]);
+        assert_ne!(&rgba.data[192..], &plane[..], "alpha is blurred");
+        assert_eq!(&rgba.data[192..], &rgba.data[..64], "as the colour is");
 
         let src = buffer(9, 9, |x, y| (x * 20 + y) as u8);
         let mut same = src.clone();
