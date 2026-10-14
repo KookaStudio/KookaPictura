@@ -20,7 +20,10 @@ Snapshot for resuming after a context break. Update after each milestone.
   CMake now links the exported `Qt6::GuiPrivate` target and drops the
   header/version query; a private-header Qt install (`qt6-base-private-dev` on
   Debian; CI's `install-qt-action` already has it) is now a prerequisite
-  (`DEVELOPING.md`). The `macos.yml` job's release-please-only `if:` is relaxed
+  (`DEVELOPING.md`). `interop.cpp` now guards its Vulkan-only includes behind
+  the same `QT_CONFIG(vulkan)` condition as its probe body, because the
+  official macOS Qt is built without Vulkan and ships no `QVulkanInstance`
+  header. The `macos.yml` job's release-please-only `if:` is relaxed
   **temporarily** (the C++/packaging paths are added to its `paths:`) so the fix
   builds on a normal PR; both edits are reverted once the macOS build is green
   on master. New `tst_native_menu_bar` asserts the shell never opts out of the
