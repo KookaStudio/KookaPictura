@@ -19,6 +19,11 @@
   translation unit compiles against a Qt built without Vulkan (the macOS Qt).
   Verify: compile the translation unit with the guards forced to the
   no-Vulkan outcome and confirm it builds.
+- [ ] 1.4 Copy Qt's offscreen platform plugin (`libqoffscreen.dylib`) into the
+  macOS bundle in `macos-bundle/action.yml` before `macdeployqt`, so the
+  `--headless` smoke check runs from the bundle alone (linux-bundle and
+  windows-bundle already deploy it). Verify: the macOS job's `Smoke-check the
+  deployed bundle` step passes on this PR.
 
 ## 2. Enable the macOS build on this PR (temporary)
 

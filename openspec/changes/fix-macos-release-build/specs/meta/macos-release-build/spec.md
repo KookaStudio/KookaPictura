@@ -70,3 +70,16 @@ the release tag without its leading `v`, starting from the release tag.
 - **WHEN** the macOS workflow is dispatched by hand for tag `vX.Y.Z`
 - **THEN** it rebuilds and re-uploads the DMG to the `vX.Y.Z` release, replacing
   any existing asset of the same name
+
+### Requirement: The macOS bundle runs its headless self-test
+
+The deployed macOS bundle SHALL include the offscreen QPA plugin, so that
+`pictura --headless` runs from the bundle alone without the build machine's Qt
+install, and the release workflow's smoke check SHALL pass.
+
+#### Scenario: The headless self-test passes from the bundle
+
+- **WHEN** the deployed bundle is run as `pictura --headless --self-test` with
+  the Qt plugin path unset
+- **THEN** it finds the offscreen platform plugin inside the bundle, runs the
+  self-test, and exits 0

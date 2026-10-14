@@ -99,6 +99,23 @@ __has_include(<vulkan/vulkan.h>)` condition the probe body already uses.
   direction, which was written before the macOS log showed the second error.
   It is minimal and confined to `interop.cpp`.
 
+### Bundle the offscreen plugin for the headless smoke check
+
+Copy `$QT_ROOT_DIR/plugins/platforms/libqoffscreen.dylib` into
+`pictura.app/Contents/PlugIns/platforms/` before running `macdeployqt`, so the
+single deploy run rewrites the plugin's framework references to the bundle.
+
+- **Why:** `macos.yml` runs `pictura --headless --self-test` on the deployed
+  bundle with the runner's Qt plugin path unset. `macdeployqt` deploys only the
+  cocoa platform plugin, so `--headless` (offscreen) aborted. `linux-bundle`
+  already sets `EXTRA_PLATFORM_PLUGINS: libqoffscreen.so` and `windows-bundle`
+  copies `qoffscreen.dll` explicitly; macOS was the only platform without it,
+  because its build never got this far.
+- **Alternative considered:** drop `--headless` and run the self-test under
+  cocoa — rejected; the runner may have no window server and the point is a
+  self-contained bundle. Qt 6's `macdeployqt` has no `-extra-plugins`
+  (Linux-only/older), so a manual copy is the documented mechanism.
+
 ## Risks / Trade-offs
 
 - `Qt6::GuiPrivate` absent → configure fails where the old hack silently

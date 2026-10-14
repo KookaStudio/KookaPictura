@@ -31,6 +31,10 @@ menu-bar contract for macOS is unverified.
   header; the unconditional include fails once the include path resolves. This
   is the one source change the build fix needs (see the issue's "build-only"
   note under Impact).
+- Copy Qt's offscreen platform plugin into the macOS bundle, so the release
+  smoke check (`pictura --headless --self-test` from the deployed bundle) runs
+  from the bundle alone, matching what `linux-bundle` and `windows-bundle`
+  already deploy.
 - **Temporarily** let `macos.yml` run on ordinary pull requests (drop the
   release-please-only `if:` at `macos.yml:43`, and add the C++ source and macOS
   packaging paths to its `paths:` filter) so the fix can be validated in CI
@@ -67,6 +71,8 @@ menu-bar contract for macOS is unverified.
     `Qt6::GuiPrivate`.
   - `crates/pictura-app/cpp/interop.cpp` — guard the Vulkan-only includes so
     the translation unit compiles against a Qt built without Vulkan.
+  - `.github/actions/macos-bundle/action.yml` — bundle the offscreen QPA plugin
+    for the headless smoke check.
   - `.github/workflows/macos.yml` — temporary PR gating/paths relaxation
     (reverted after the fix).
 - App C++ for the menu-bar requirement: `crates/pictura-app/cpp/frame.cpp`
