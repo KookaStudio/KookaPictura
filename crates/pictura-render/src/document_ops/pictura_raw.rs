@@ -106,7 +106,11 @@ pub fn preview_pictura_raw(
     if rect.width() <= 0 || rect.height() <= 0 {
         return None;
     }
-    let (pw, ph) = preview_size(rect.width() as u32, rect.height() as u32, max_dim.max(1) as u32);
+    let (pw, ph) = preview_size(
+        rect.width() as u32,
+        rect.height() as u32,
+        max_dim.max(1) as u32,
+    );
 
     let src = match layer
         .smart_object
