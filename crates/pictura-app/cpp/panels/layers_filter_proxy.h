@@ -16,6 +16,10 @@ struct LayerFilter {
     int color = -1;
     QString attribute;
     QString effect;
+    /// The Selected dimension: match only the rows whose path is in
+    /// `selectedPaths` (the panel's current selection).
+    bool selected = false;
+    QSet<QString> selectedPaths;
 };
 
 class LayersFilterProxyModel : public QSortFilterProxyModel {

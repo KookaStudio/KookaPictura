@@ -53,6 +53,14 @@ public:
     /// row (falling back to the first when `current` is not among them).
     void selectPaths(const QStringList& paths, const QString& current);
 
+    /// Enter isolation mode: filter the panel to the selected layers (the
+    /// Selected dimension) and scope Move Auto-Select to them.
+    void enterIsolation();
+    /// Leave isolation mode: turn the layer filter off.
+    void releaseIsolation();
+    /// Whether the Selected filter is currently isolating the selection.
+    bool isolationActive() const;
+
     /// Select the row whose path matches and sync the controls; false when no
     /// such row exists. Test seam for the selection -> Properties wiring.
     bool selectRowForTest(const QString& path);
@@ -213,6 +221,9 @@ public:
     void setFilterColorForTest(int label, bool enabled);
     void setFilterAttributeForTest(const QString& attr, bool enabled);
     int filterDimensionForTest() const;
+    // Isolation-mode hook: release one row from the isolated set.
+    void releaseIsolationForTest(const QString& path);
+    void setFilterEnabledForTest(bool on);
 
     // Layer-style panel hooks: the fx badge projection, the row menu with a real
     // path, the Effect filter dimension, and an Alt-click on the fx region.
@@ -272,6 +283,7 @@ private:
     void openBackgroundConversion(const QString& path);
 
     void applyFilter(const LayerFilter& filter);
+    void releaseIsolationFor(const QString& path);
     void expandMatchingGroups();
     QModelIndex proxyIndexForPath(const QString& path) const;
     QString pathForProxyIndex(const QModelIndex& index) const;
@@ -306,6 +318,9 @@ private:
     QHash<QString, int> activeThumbByPath_;
     // Whether the view's mask edit target was set at the last sync.
     bool maskEditing_ = false;
+    // The isolated set captured when isolation was entered; the Selected filter
+    // shows these paths until they are released.
+    QSet<QString> isolatedPaths_;
     bool thumbEntireDocument_ = true;
     int thumbSizeIndex_ = 2;
     int thumbContents_ = 0;

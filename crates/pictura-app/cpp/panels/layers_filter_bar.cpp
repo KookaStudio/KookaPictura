@@ -33,6 +33,7 @@ constexpr Dimension kDimensions[] = {
     {"mode", "Mode"},
     {"attribute", "Attribute"},
     {"color", "Color"},
+    {"selected", "Selected"},
 };
 
 struct KindOption {
@@ -213,6 +214,10 @@ LayerFilterBar::LayerFilterBar(QWidget* parent)
     colorLayout->addWidget(color_);
     stack_->addWidget(colorPage);
 
+    // The Selected dimension has no criteria control: its criterion is the
+    // panel's current selection, so its page is empty.
+    stack_->addWidget(makePage(stack_));
+
     stack_->setCurrentIndex(dimension_->currentIndex());
     layout->addWidget(stack_, 1);
 
@@ -271,6 +276,8 @@ LayerFilter LayerFilterBar::buildFilter() const
         filter.color = color_->currentData().toInt();
     } else if (dimension == QLatin1String("effect")) {
         filter.effect = effect_->currentData().toString();
+    } else if (dimension == QLatin1String("selected")) {
+        filter.selected = true;
     }
     return filter;
 }
@@ -310,6 +317,8 @@ void LayerFilterBar::setFilter(const LayerFilter& filter)
             dimension = dimension_->findData(QStringLiteral("color"));
         } else if (!filter.effect.isEmpty()) {
             dimension = dimension_->findData(QStringLiteral("effect"));
+        } else if (filter.selected) {
+            dimension = dimension_->findData(QStringLiteral("selected"));
         }
     }
     if (dimension >= 0) {
@@ -317,6 +326,31 @@ void LayerFilterBar::setFilter(const LayerFilter& filter)
         stack_->setCurrentIndex(dimension);
     }
     syncing_ = false;
+}
+
+void LayerFilterBar::activateSelected()
+{
+    const int index = dimension_->findData(QStringLiteral("selected"));
+    if (index < 0) {
+        return;
+    }
+    syncing_ = true;
+    dimension_->setCurrentIndex(index);
+    stack_->setCurrentIndex(index);
+    toggle_->setChecked(true);
+    syncing_ = false;
+    userChanged();
+}
+
+void LayerFilterBar::setFilterEnabled(bool on)
+{
+    if (toggle_->isChecked() == on) {
+        return;
+    }
+    syncing_ = true;
+    toggle_->setChecked(on);
+    syncing_ = false;
+    userChanged();
 }
 
 int LayerFilterBar::dimensionIndexForTest() const

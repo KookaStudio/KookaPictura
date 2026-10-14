@@ -30,10 +30,10 @@ pub mod ffi {
 }
 
 fn auto_select_layer(view: &PictureView, x: i32, y: i32, group: bool) -> QString {
-    view.rust()
-        .doc
+    let rust = view.rust();
+    rust.doc
         .as_ref()
-        .and_then(|doc| auto_select_path(doc, x, y, group))
+        .and_then(|doc| auto_select_path(doc, x, y, group, rust.isolation.as_deref()))
         .map(QString::from)
         .unwrap_or_default()
 }

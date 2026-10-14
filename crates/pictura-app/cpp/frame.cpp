@@ -464,14 +464,9 @@ int PicturaMainWindow::addDocument(PictureView* view, const QString& path)
             infoPanel_->setCursorPosition(p);
         }
     });
-    // With the Zoom tool active a canvas right-click shows the same preset menu
-    // as the toolbox slot (the image or the workspace around it).
+    // The Zoom slot's preset menu or, with the Move tool, Isolation Mode.
     connect(entry.canvas, &ImageView::contextMenuRequested, this,
-            [this](const QPoint& globalPos) {
-                if (activeTool() == ToolId::Zoom && toolbox_ && toolbox_->zoomMenu()) {
-                    toolbox_->zoomMenu()->popup(globalPos);
-                }
-            });
+            [this](const QPoint& globalPos) { showCanvasContextMenu(globalPos); });
 
     docs_.append(entry);
     const int index = docs_.size() - 1;
@@ -1082,6 +1077,10 @@ void PicturaMainWindow::keyPressEvent(QKeyEvent* event)
     }
     if (!event->isAutoRepeat() && event->key() == Qt::Key_Escape && tools_
         && tools_->cancelPolygonLasso()) {
+        return;
+    }
+    // Escape leaves isolation mode before it leaves a full-screen screen mode.
+    if (!event->isAutoRepeat() && event->key() == Qt::Key_Escape && releaseIsolation()) {
         return;
     }
     if (!event->isAutoRepeat() && event->key() == Qt::Key_Escape

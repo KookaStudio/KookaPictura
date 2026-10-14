@@ -3,7 +3,7 @@
 - **Spec ID:** `LAY-032`
 - **Status:** `Draft`
 - **Parity tier:** `Core`
-- **New in CS6:** `Yes` — the CS6 Help's "Layers enhancements" section calls the filtering/search row at the top of the Layers panel new in CS6, listing filtering "based on name, kind, effect, mode, attribute, or color label". The later CC-only filter types (`Smart Object`, `Selected`, `Artboard`) are out of scope for CS6 parity.
+- **New in CS6:** `Yes` — the CS6 Help's "Layers enhancements" section calls the filtering/search row at the top of the Layers panel new in CS6, listing filtering "based on name, kind, effect, mode, attribute, or color label". The later CC-only filter types (`Smart Object`, `Artboard`) are out of scope for CS6 parity; the **`Selected`** type is shipped by decision as the **isolation-mode** entry point (see below), even though the CS6 Help does not list it.
 - **Depends on:** `05-layers/layers-overview.md`, `05-layers/layer-management-ui.md`, `05-layers/layer-groups.md`, `05-layers/artboards.md`, `05-layers/layer-styles.md`, `05-layers/blend-modes.md`, `02-ui-ux/panels/layers-panel.md`, `ARCH-008` document-model, `ARCH-003` qt6-ui-design
 
 > All module and type names below are **design proposals**. No code exists in
@@ -32,6 +32,11 @@ The six CS6 filter types are:
 | **Attribute** | Drop-down of layer attributes | Layers with the chosen state/characteristic (e.g. Visible, Locked) |
 | **Color** | Drop-down of layer color labels | Layers assigned the chosen label color |
 
+A seventh type, **`Selected`**, is shipped by decision (it is CC-era, not in the
+CS6 Help): it has no criteria control, and shows only the **isolated set** — the
+layers captured when isolation mode was entered — plus their group ancestors.
+It is the mechanism behind **isolation mode**; see `## Isolation mode`.
+
 The default filter type is **Kind** *(per a CS6-era guide)*. The Kind buttons
 are combinable (select more than one kind at once). Effect and Mode act as
 single-choice drop-downs *(inferred)*.
@@ -51,24 +56,28 @@ CC "Select Layers by Attribute" command is **not** CS6 scope.
 
 ### Scope exclusions (CC-only)
 
-The `Smart Object` (linked-up-to-date / out-of-date / missing / embedded),
-`Selected`, and `Artboard` filter types belong to later Photoshop releases and
-are documented only in post-CS6 sources. They are **not** part of this spec; see
-`## Open questions`.
+The `Smart Object` (linked-up-to-date / out-of-date / missing / embedded) and
+`Artboard` filter types belong to later Photoshop releases and are documented
+only in post-CS6 sources. They are **not** part of this spec; see
+`## Open questions`. The `Selected` type is the exception: it is shipped by
+decision as isolation mode, even though it too is CC-era.
 
 ## UI surface
 
 | Location | Type | Shortcut | Notes |
 |---|---|---|---|
 | Layers panel filter row (top) | Inline UI | n/a | Filter-type pop-up, criteria control, on/off toggle |
-| Layers panel filter-type pop-up | `QComboBox`-like menu | n/a | Kind, Name, Effect, Mode, Attribute, Color |
+| Layers panel filter-type pop-up | `QComboBox`-like menu | n/a | Kind, Name, Effect, Mode, Attribute, Color, Selected |
 | Layers panel Kind buttons | Toggle buttons | n/a | Pixel, Adjustment, Type, Shape, Smart Object; multi-select |
 | Layers panel Name field | Text field | n/a | Substring search over layer/group names |
 | Layers panel Effect drop-down | Menu | n/a | Layer-style effect list |
 | Layers panel Mode drop-down | Menu | n/a | Blend-mode list |
 | Layers panel Attribute drop-down | Menu | n/a | Layer state/characteristics |
 | Layers panel Color drop-down | Menu | n/a | Layer color labels |
+| Layers panel Selected type | (no criteria) | n/a | Shows the isolated set; entering it is isolation mode |
 | Layers panel filter toggle | Switch | n/a | On (accent color) / off (gray) |
+| Layer row context menu | Menu | n/a | `Release from Isolation` while isolated |
+| Canvas (Move tool) right-click | Menu | n/a | `Isolation Mode` enters on the current selection |
 | `Window > Layers` | Menu | `F7` | Opens the panel |
 | `Select > All Layers` | Menu | `Ctrl+Alt+A` | Combines with an active filter to select all matches |
 
@@ -76,7 +85,7 @@ are documented only in post-CS6 sources. They are **not** part of this spec; see
 
 | Control | Type | Default | Range / options | Notes |
 |---|---|---|---|---|
-| Filter type | enum | `Kind` *(per CS6-era guide)* | Kind, Name, Effect, Mode, Attribute, Color | Six options (Help) |
+| Filter type | enum | `Kind` *(per CS6-era guide)* | Kind, Name, Effect, Mode, Attribute, Color, Selected | Six CS6 options (Help) plus the Selected isolation type |
 | Filter enabled | bool | off | on / off | Toggle switch |
 | Kind selection | bitset | none | Pixel, Adjustment, Type, Shape, Smart Object | Multi-select |
 | Name query | string | "" | free text | Substring match *(inferred)*; case sensitivity unverified |
@@ -84,6 +93,7 @@ are documented only in post-CS6 sources. They are **not** part of this spec; see
 | Mode criterion | enum | `Normal` *(inferred)* | 27 CS6 blend modes (groups: Pass Through) | From `05-layers/blend-modes.md` |
 | Attribute criterion | enum | `Visible` *(inferred)* | e.g. Visible, Locked, (Lock transparent, Lock position, Empty, Linked, Clipped, Mask, Effects, Advanced Blending — see Open questions) | CS6 sub-list not fully sourced |
 | Color criterion | enum | none | Red, Orange, Yellow, Green, Blue, Violet, Gray (plus "None") | CS6 layer label colors |
+| Isolated set | path set | empty | panel paths | Captured on entry; shrinks through `Release from Isolation` |
 
 ## Algorithms & pipeline
 
@@ -92,7 +102,7 @@ Layer filtering is a **view-level predicate**, not a document mutation.
 1. Represent the panel's full layer tree (`LayersModel`, `ARCH-008`) and a
    `LayerFilter { enabled, kind: KindFilter, name: Option<String>, effect:
    Option<EffectKind>, mode: Option<BlendMode>, attribute: Option<Attribute>,
-   color: Option<LabelColor> }`.
+   color: Option<LabelColor>, selected: bool, isolated: Set<Path> }`.
 2. A layer `matches(filter)` returns true when **every active criterion**
    matches (conjunction). Kind accepts any selected kind (disjunction within the
    Kind set).
@@ -116,6 +126,29 @@ Because filtering is view-only, it creates **no history state** and is not
 saved with the document. A CS6-era source reports that **Actions cannot record
 layer filtering** (recording a filter adds nothing to the Action), which
 supports the view-only model.
+
+## Isolation mode
+
+**Isolation mode** is the `Selected` filter type, shipped by decision (CC-era,
+absent from the CS6 Help). It focuses the panel and the Move tool on one set of
+layers:
+
+- **Enter.** Choosing `Selected` with the toggle on, or the Move tool's canvas
+  right-click **`Isolation Mode`**, captures the current selection as a fixed
+  **isolated set**.
+- **While isolated.** The panel shows only the isolated layers and their group
+  ancestors. The Move tool's **Auto-Select** hit test ignores layers outside the
+  set, so a press picks the topmost isolated layer under the point (or, in Group
+  mode, its nearest isolated ancestor) and keeps the active layer when no
+  isolated layer covers it. Selecting a shown row does not change the set.
+- **Release.** The layer row context menu offers **`Release from Isolation`**,
+  which removes that row from the set; releasing the last row ends isolation.
+- **Exit.** Turning the filter toggle off, choosing another dimension, pressing
+  **Escape**, or switching documents ends isolation.
+
+Isolation is view-only: it never mutates the document, adds no history state,
+and is not serialized. Adding a layer to the set from the canvas (the CC
+workflow) is a ceiling — only Release shrinks the set.
 
 ## Rust module mapping
 
@@ -223,6 +256,12 @@ menu uses (`05-layers/layer-management-ui.md`).
   appears/disappears from the filtered view accordingly.
 - Given filtering, no history state is added, and the operation is not
   recordable by Actions.
+- Given isolation entered on two selected layers, only those layers (and their
+  ancestors) show, the Move tool's Auto-Select picks only among them, releasing
+  one hides it, and releasing the last restores every layer with no history
+  state.
+- Given isolation active, `Escape`, the filter toggle off, and a document switch
+  each end isolation and unscopes Auto-Select.
 - Given a filtered view, closing and reopening the document starts unfiltered
   (if CS6 does not persist it) or restores the last filter (if it does) — the
   chosen behavior is covered by an Open question.
@@ -258,6 +297,13 @@ Fetched for this document:
   `Selected`, `Artboard`) and richer Kind/Attribute lists; used **only** to
   identify CC-only scope and to reconstruct the likely Attribute set, not as a
   CS6 source.
+- `https://simonabrams.com/blog/2013/8/8/photoshop-quick-tips-isolation-mode`
+  and `https://creativepro.com/using-isolate-layers-photoshop-cc/` — CC-era
+  isolation-mode guides. Established: the `Selected` filter type (or the Move
+  tool's canvas right-click `Isolation Mode`) isolates the selected layers; the
+  panel shows only those layers; `Release from Isolation` in a layer's row menu
+  removes it from the set; clearing the filter exits. The CS6 Help does not
+  mention isolation, so it is shipped by decision rather than CS6 parity.
 
 ## Open questions
 
