@@ -1,11 +1,19 @@
 #include "interop.h"
 
-#include <rhi/qrhi.h>
-
 #include <QtCore/QByteArrayList>
 #include <QtCore/QSize>
-#include <QtGui/QVulkanInstance>
 #include <QtGui/qtguiglobal.h>
+
+// QVulkanInstance and the QRhi Vulkan types exist only when Qt was built with
+// Vulkan *and* vulkan.h is available at application build time; Qt otherwise
+// exposes opaque typedefs (VkImage, VkDevice, ...) and no QVulkan* classes, and
+// the QVulkanInstance header is not shipped at all (the official macOS Qt is
+// built without Vulkan). The probe is diagnostic, so include them only when the
+// probe body below needs them.
+#if QT_CONFIG(vulkan) && __has_include(<vulkan/vulkan.h>)
+#include <rhi/qrhi.h>
+#include <QtGui/QVulkanInstance>
+#endif
 
 #include <cstdio>
 

@@ -30,6 +30,12 @@ runs:
     # (DEVELOPING.md). No -fuse-ld=lld: that is a Linux linker flag. The
     # deployment target matches the bundle's LSMinimumSystemVersion (Qt 6.11's
     # macOS 13 floor).
+    #
+    # macdeployqt deploys only the cocoa platform plugin; the --headless smoke
+    # check needs offscreen. Copy it into the bundle before macdeployqt so that
+    # run rewrites the plugin's Qt framework references to the bundle (the same
+    # thing linux-bundle's EXTRA_PLATFORM_PLUGINS and windows-bundle's manual
+    # copy do for their platforms).
     - name: Build and deploy the bundle
       shell: bash
       run: |
@@ -37,4 +43,7 @@ runs:
           -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 \
           -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
         cmake --build build --parallel
+        mkdir -p build/pictura.app/Contents/PlugIns/platforms
+        cp "$QT_ROOT_DIR/plugins/platforms/libqoffscreen.dylib" \
+          build/pictura.app/Contents/PlugIns/platforms/
         macdeployqt build/pictura.app

@@ -189,6 +189,13 @@ impl Devices {
 }
 
 async fn request_device() -> Option<Devices> {
+    // wgpu::Instance::new panics when no implemented backend is compiled for
+    // the target; the workspace enables only the Vulkan backend, which Apple
+    // targets do not implement. Report "no GPU" instead of aborting the
+    // process, matching this module's never-panics contract.
+    if !wgpu::Instance::enabled_backend_features().contains(wgpu::Backends::VULKAN) {
+        return None;
+    }
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
         backends: wgpu::Backends::VULKAN,
         ..wgpu::InstanceDescriptor::new_without_display_handle()
