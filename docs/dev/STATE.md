@@ -506,6 +506,21 @@ Snapshot for resuming after a context break. Update after each milestone.
   scripts/verify-fast.sh` passes; `openspec validate --all --strict`
   248/248; the unified report is 4126 passed · 22 skipped · 0 failed
   (nextest 3026/0/21, app self-test 510, Qt 590).
+- **Picture Frame** (change `port-photorust-picture-frame`, issue #227, ported
+  from photorust): `render::picture_frame` (`render/picture_frame.rs`) draws a
+  decorative border over the layer: 47 frames over a shared catalogue of 22
+  flower shapes and 23 leaf shapes plus ruled and moulded borders, with Basic
+  (margin, size, arrangement, flower/leaf colours and sizes) and Advanced
+  (Number of Lines, Thickness, Angle, Fade, Invert) controls, all procedural
+  geometry (no traced Adobe asset). `Filter::PictureFrame { options:
+  FrameOptions }`, the `picture-frame` kind (22 slots, the frame slot a 0-based
+  picker index), joins the moving-kernel alpha allowlist, and previews the
+  whole layer. Filter ▸ Render ▸ Picture Frame… opens a dedicated
+  `PictureFrameDialog` (`picture_frame_dialog.{h,cpp}`, tested by
+  `tst_picture_frame_dialog`): a 47-frame thumbnail picker, a picture proxy
+  preview, and Basic / Advanced pages. Picture Frame is a CC 2014.2 entry
+  shipped by decision, so the `imaging/render-filters` requirement was amended
+  to surface it while `Flame`/`Tree` stay unsurfaced.
 - **Layers panel manual-test fixes** (#378, change
   `layers-panel-manual-test-fixes`, spec `ui/layers-panel` +
   `compositing/layer-masks`): six independent `PAN-001` fixes. The Opacity

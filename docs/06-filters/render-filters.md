@@ -2,8 +2,8 @@
 
 - **Spec ID:** `FILT-060`
 - **Status:** `Draft`
-- **Parity tier:** `Core` (Clouds, Difference Clouds, Fibers, Lens Flare, Lighting Effects) + `Core` for the CS6 **Scripted Patterns** fill; **Flame / Tree / Picture Frame are non-goals for CS6 parity** (they do not exist in CS6)
-- **New in CS6:** `Yes` — the **Lighting Effects gallery** is rebuilt as a 64-bit workspace with on-canvas controls and GPU support; **Scripted Patterns** (`Edit > Fill > Use: Pattern > Scripted Patterns`) is new in CS6. **Flame, Tree, and Picture Frame were added in Photoshop CC 2014.2, not CS6** — see "Post-CS6 render entries".
+- **Parity tier:** `Core` (Clouds, Difference Clouds, Fibers, Lens Flare, Lighting Effects) + `Core` for the CS6 **Scripted Patterns** fill; **Flame / Tree remain non-goals for CS6 parity** (they do not exist in CS6). **Picture Frame** is a post-CS6 (CC 2014.2) entry that Kooka ships by decision (#227) and is likewise out of CS6 parity.
+- **New in CS6:** `Yes` — the **Lighting Effects gallery** is rebuilt as a 64-bit workspace with on-canvas controls and GPU support; **Scripted Patterns** (`Edit > Fill > Use: Pattern > Scripted Patterns`) is new in CS6. **Flame, Tree, and Picture Frame were added in Photoshop CC 2014.2, not CS6** — see "Post-CS6 render entries". Kooka surfaces Picture Frame as a deliberate addition.
 - **Depends on:** `06-filters/filters-overview.md`, `06-filters/lighting-effects.md`, `06-filters/blur-filters.md`, `06-filters/texture-filters.md`, `05-layers/fill-layers.md`, `07-color-painting/pattern-presets.md`, `01-architecture/gpu-rendering-pipeline.md`, `01-architecture/document-model.md`, `05-layers/smart-filters.md`, `04-image-ops/bit-depth-and-conversion.md`
 
 > All crate, module, widget, and type names below are **design proposals**. No code exists in this repository. Behavior is from the fetched CS6 Help unless marked *(inferred)*. Adobe's noise functions, flare model, and lighting shader are closed and marked **behavioral parity only, algorithm TBD**.
@@ -29,7 +29,9 @@
 **Flame, Picture Frame, and Tree are not in shipped Photoshop CS6.** They were added in the **Photoshop CC 2014.2 update**, whose release notes list three new entries in the `Filter > Render` menu: Flame, Picture Frame, and Tree. Adobe's community answer is explicit that CS6 lacks `Filter > Render > Flame` and that it arrived only after Photoshop became Photoshop CC. The CS6 Help PDF contains no `Flame`, `Tree`, or `Picture Frame` render entries. They are recorded here only so downstream specs do not accidentally assume CS6 parity; the task note that Picture Frame came from Adobe Exchange could not be verified (see Open questions).
 
 - **Flame** (CC 2014.2): flames generated along one or more user paths (paths must be 50–50,000 px; not Smart-Object compatible). Controls include Flame Type, Length, Width, Angle, Interval, Flame Lines, Turbulent/Jag, Opacity, Bottom Alignment, style (Normal/Violent/Flat), shape (Parallel/To The Center/Spread/Oval/Pointing), custom color, quality, Randomize Shapes. *(sourced from the CC 2014.2 update guide, not CS6.)*
-- **Trace/Tree, Picture Frame** (CC 2014.2): procedural tree rendering and decorative border frames. *(sourced as existing; detailed behavior out of CS6 scope.)*
+- **Trace/Tree** (CC 2014.2): procedural tree rendering. *(sourced as existing; detailed behavior out of CS6 scope.)*
+
+**Picture Frame is shipped by Kooka (#227), a deliberate post-CS6 addition.** It draws a decorative border over the layer from procedural geometry: 47 frames, each a recipe over the same three ingredients — a **vine** in one colour, **flowers** from a catalogue of 22 shapes in another, and **leaves** from 23 in a third — or, for frames 36–47, ruled and moulded borders drawn from a corner distance field. The Basic controls are Frame, Vines colour, Margin, Size, Arrangement, Flower (+ colour and size), and Leaf (+ colour and size); the Advanced controls are Number of Lines, Thickness, Angle, Fade, and Invert. The model is ported from photorust (`core/src/filters/frame.rs`, GPL-3.0); all artwork is procedural parametric geometry, with no traced Adobe asset. It is a `Filter ▸ Render ▸ Picture Frame…` entry with its own dialog (a frame thumbnail picker, a preview, and Basic / Advanced pages); the arrangement is a seed, so the result is deterministic. *(inferred family; CC 2014.2 presence sourced.)*
 
 ### Halftone Pattern is not Render
 
@@ -46,7 +48,8 @@ Help lists Halftone Pattern (which simulates a halftone screen) under **Sketch**
 | `Filter > Render > Lighting Effects` | Menu / workspace | — | CS6 gallery; GPU; RGB only |
 | `Edit > Fill` → `Use: Pattern` → `Scripted Patterns` | Dialog | `Shift+F5` | Five scripts; CS6-new |
 | `Edit > Define Pattern` | Menu | — | Feeds Scripted Patterns |
-| `Filter > Render > Flame / Tree / Picture Frame` | Menu | — | **Not CS6** (CC 2014.2+) |
+| `Filter > Render > Flame / Tree` | Menu | — | **Not CS6** (CC 2014.2+), unsurfaced |
+| `Filter > Render > Picture Frame` | Menu / modal dialog | — | Post-CS6 (CC 2014.2), **shipped by Kooka** (#227); frame picker + Basic / Advanced |
 | Smart Filter row | Layers panel | — | Fibers, Clouds, Difference Clouds, Lens Flare are Smart-Filter capable (see bit-depth list); Lighting Effects is a workspace |
 
 ## Parameters & ranges
@@ -92,7 +95,8 @@ Ranges marked **[AS]** come from the Photoshop CS6 AppleScript Scripting Referen
 | Lens Flare | Optical flare model | Additive light: an inverse-square core in a soft glow, a halo ring, rays (6 / 8 / 4 for Zoom / 35mm / 105mm) or Movie Prime's horizontal blue streak, and tinted hexagonal ghosts and rings strung from the flare through the middle of the frame and out the far side. Every size is a fraction of the half-diagonal and the centre a fraction of the frame, so a proxy preview matches the full-size result. Kooka uses photorust's model, tuned by eye against CS6. Adobe's model is closed. *(inferred family)* |
 | Lighting Effects | 3D lighting over a bump map | A rig of 1–16 Point/Infinite/Spot lights over a surface whose normal comes from a grayscale bump map (Height); Gloss/Metallic/Exposure/Ambience/Colorize combine diffuse/specular responses. A Spot is an ellipse with its hotspot toward the aimed end; a Point falls off to its radius; an Infinite light comes from an angle and elevation. Kooka uses photorust's shading over the rig, CPU-rendered and tuned by eye against CS6; see `lighting-effects.md`. *(inferred family; CS6 gallery behavior sourced)* |
 | Scripted Patterns | Pattern-tiling scripts (Deco engine) | Scripts place the chosen pattern repeatedly across the layer/selection using geometric rules (brick stagger, cross weave, random placement, spiral, symmetry). Adobe Research documents that these are the Deco scripts. *(inferred internals)* |
-| Flame / Tree / Picture Frame | Procedural per-path / L-system-ish / frame synthesis | **Post-CS6 only**; out of parity scope. |
+| Flame / Tree | Procedural per-path / L-system-ish | **Post-CS6 only**; out of parity scope. |
+| Picture Frame | Procedural border synthesis | **Post-CS6 only**; shipped by Kooka (#227). Motif frames lay a vine, flowers, and leaves along a rounded-rectangle track; ruled/moulded frames draw lines and a bevelled band from a corner distance field. Every size is a fraction of the layer's shorter side; the arrangement is a seed. Ported from photorust. |
 
 **Pipeline.** Clouds/Difference Clouds/Fibers *replace* the layer (no input dependency beyond fg/bg colors), so they need no halo and cannot be masked by the source. Lens Flare and Lighting Effects are additive-light passes over the composed layer. Scripted Patterns is a fill operation that should share the fill/paint path, not the filter pipeline.
 
@@ -103,6 +107,7 @@ Ranges marked **[AS]** come from the Photoshop CS6 AppleScript Scripting Referen
 - `pictura_filter::render::fibers` — vertical clump + hair streaks (photorust's model) with `variance` 0–64 (0 = even blend), `strength` 1–64, `seed`.
 - `pictura_filter::render::lens_flare` — photorust's flare model; `LensType` enum, unit-coordinate centre, brightness 10–300 %; adds light onto the RGB planes, alpha untouched.
 - `pictura_filter::render::lighting_effects` — `Light { kind: Point|Infinite|Spot, on, color, intensity, hotspot, center, angle, size, width, elevation }`, `Lighting { lights: Vec<Light> (1–16), gloss, metallic, exposure, ambience, colorize, texture: None|Red|Green|Blue, height }`; CPU today, GPU path via `pictura_gpu` later (`01-architecture/gpu-rendering-pipeline.md`).
+- `pictura_filter::render::picture_frame` — photorust's frame model; `FrameOptions { frame, vine, margin, size, arrangement, flower, flower_colour, flower_size, leaf, leaf_colour, leaf_size, lines, thickness, angle, fade, invert }` plus the frame/flower/leaf name tables; procedural contours scan-converted source-over, alpha-moving, deterministic.
 - `pictura_paint::fill::scripted` — `ScriptedPattern::{BrickFill, CrossWeave, RandomFill, Spiral, SymmetryFill}`; consumes a `PatternRef`.
 - `pictura_filter::registry` — filter id + CS6 four-char event ids (`'Clou'` unconfirmed), `'DrfC'`, `'Fbrs'`, `'LnsF'`, `'LghE'` → implementation + `supported(mode, depth)`.
 
@@ -145,7 +150,7 @@ Widgets over QML for the CS6 lighting workspace's gizmo interaction is a judgeme
 - **Scripted Patterns without a pattern.** The script menu is disabled until a pattern preset exists (Help notes Pattern is dimmed until a library is loaded).
 - **Scripted Patterns on huge/PSB documents.** Pattern tiling is area-proportional; stream and cap script iteration counts.
 - **Difference Clouds iteration.** Cumulative marble patterning means repeated application differs; tests must render fresh each time.
-- **Flame/Tree/Picture Frame.** Not present in CS6; the menu builder must not surface them for parity, and loading a CC 2014.2 PSD that used them should preserve the Smart Filter/effect data without claiming CS6 parity.
+- **Flame/Tree/Picture Frame.** Flame and Tree are not present in CS6; the menu builder must not surface them, and loading a CC 2014.2 PSD that used them should preserve the Smart Filter/effect data without claiming CS6 parity. Picture Frame *is* surfaced by Kooka (#227); it is applied to the active layer's rectangle, so a layer smaller than the document gets the border round the layer, not the canvas.
 - **Undo/redo.** Store fg/bg colors, seeds, and (for replacing filters) a pixel snapshot; recompute the rest.
 
 ## Parity acceptance criteria
@@ -159,7 +164,7 @@ Widgets over QML for the CS6 lighting workspace's gizmo interaction is a judgeme
 - Given Lighting Effects with 16 lights, adding a 17th is prevented; only one light edits at a time.
 - Given `Edit > Fill` with `Use: Pattern` and Scripted Patterns then Brick Fill, the selection/layer is filled with a staggered-brick pattern; Cross Weave / Random Fill / Spiral / Symmetry Fill each produce their distinct geometry.
 - Given the Scripted Patterns menu with no pattern preset loaded, the script control is disabled.
-- Given a CS6 install, `Filter > Render` does **not** list Flame, Tree, or Picture Frame.
+- Given a CS6 install, `Filter > Render` does **not** list Flame, Tree, or Picture Frame; Kooka additionally surfaces Picture Frame by decision (#227) but not Flame or Tree.
 - Given a 32-bit document, Clouds and Lens Flare run and Fibers/Difference Clouds are unavailable.
 - Given a normal layer and Clouds, `Edit > Undo` restores the exact prior pixels; on a Smart Object it removes the Smart Filter entry.
 

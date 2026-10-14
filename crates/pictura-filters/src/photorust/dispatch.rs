@@ -112,6 +112,10 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
             .and(check("dust threshold", threshold, 0..=255))
             .map(|()| unseeded(move |p| convolve::dust_and_scratches(p, radius, threshold))),
         Filter::Average => Ok(unseeded(convolve::average)),
+        // --- Render -------------------------------------------------------
+        Filter::PictureFrame { options } => options
+            .validate()
+            .map(|()| unseeded(move |p| crate::render::picture_frame(p, &options))),
         // --- Blur / Sharpen -----------------------------------------------
         Filter::SurfaceBlur { radius, threshold } => check("surface radius", radius, 1..=100)
             .and(check("surface threshold", threshold, 1..=255))

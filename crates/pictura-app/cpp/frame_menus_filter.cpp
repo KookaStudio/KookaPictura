@@ -13,6 +13,7 @@
 #include "lens_flare_dialog.h"
 #include "lighting_effects_dialog.h"
 #include "liquify_dialog.h"
+#include "picture_frame_dialog.h"
 
 #include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/filter_tools/jobs.cxxqt.h"
@@ -71,6 +72,9 @@ bool runFilterDialog(PictureView* view, const FilterCommandSpec& spec,
     }
     if (spec.kind == QStringLiteral("lighting-effects")) {
         return LightingEffectsDialog::get(view, spec, initial, out, parent);
+    }
+    if (spec.kind == QStringLiteral("picture-frame")) {
+        return PictureFrameDialog::get(view, spec, initial, out, parent);
     }
     if (spec.kind == QStringLiteral("field-blur") || spec.kind == QStringLiteral("iris-blur")
         || spec.kind == QStringLiteral("tilt-shift")

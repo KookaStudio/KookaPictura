@@ -483,10 +483,10 @@ fn cpu_preferred_kernels_skip_the_gpu() {
 /// that visibly move a 24×24 picture.
 fn moving_kernels() -> Vec<Filter> {
     use pictura_filters::{
-        BlurNoise, BlurPin, BokehParams, DisplaceFit, DisplaceMap, GlassTexture, IrisPin,
-        LiquifyBrush, LiquifyMesh, LiquifyTool, PolarKind, Quality, RadialMethod, RippleSize,
-        SharpenRemove, ShearFill, SmartBlurMode, SpherizeMode, TiltPin, TonalFade, WaveType,
-        ZigZagStyle,
+        BlurNoise, BlurPin, BokehParams, DisplaceFit, DisplaceMap, FrameOptions, GlassTexture,
+        IrisPin, LiquifyBrush, LiquifyMesh, LiquifyTool, PolarKind, Quality, RadialMethod,
+        RippleSize, SharpenRemove, ShearFill, SmartBlurMode, SpherizeMode, TiltPin, TonalFade,
+        WaveType, ZigZagStyle,
     };
     let pin = BlurPin {
         x: 0.5,
@@ -662,6 +662,9 @@ fn moving_kernels() -> Vec<Filter> {
         },
         Filter::Liquify {
             mesh: std::sync::Arc::new(mesh),
+        },
+        Filter::PictureFrame {
+            options: FrameOptions::default(),
         },
     ]
 }

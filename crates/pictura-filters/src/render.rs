@@ -1,5 +1,5 @@
 //! Render family: Clouds, Difference Clouds, Fibers, Lens Flare, Lighting
-//! Effects (`FILT-060`).
+//! Effects, Picture Frame (`FILT-060`).
 //!
 //! All are classified **no-equivalent**: the reference's noise and flare models
 //! are closed, so these are deterministic approximations verified by property
@@ -8,7 +8,8 @@
 //! field and Fibers from photorust's streak model ([`fibers`]); Lens Flare adds
 //! photorust's flare model on top of the existing pixels ([`lens_flare`]); Lighting
 //! Effects re-lights the picture under CS6's light rig ([`lighting_effects`]).
-//! Alpha is never modified.
+//! Alpha is never modified, except by Picture Frame ([`picture_frame`]), which
+//! composites an opaque border over the picture and so may add opacity.
 
 use pictura_core::PixelBuffer;
 use rand_chacha::{
@@ -21,10 +22,14 @@ use crate::{kernel::unit_f64, validate, FilterError};
 mod fibers;
 mod lens_flare;
 mod lighting;
+mod picture_frame;
 pub use fibers::fibers;
 pub use lens_flare::{lens_flare, LensType};
 pub use lighting::{
     lighting_effects, spot_hotspot, Light, LightType, Lighting, TextureChannel, MAX_LIGHTS,
+};
+pub use picture_frame::{
+    picture_frame, uses_lines, FrameOptions, FLOWER_NAMES, FRAME_NAMES, LEAF_NAMES,
 };
 
 /// Clouds: base lattice cells across the image.
