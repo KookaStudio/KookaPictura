@@ -41,8 +41,8 @@ menu-bar contract for macOS is unverified.
 - **Temporarily** let `macos.yml` run on ordinary pull requests (drop the
   release-please-only `if:` at `macos.yml:43`, and add the C++ source and macOS
   packaging paths to its `paths:` filter) so the fix can be validated in CI
-  before merge. This relaxation is scaffolding and is reverted once the macOS
-  build is green on `master`.
+  before merge. This was scaffolding and is reverted within this change: the
+  final diff leaves `.github/workflows/macos.yml` unchanged.
 - Add a macOS menu-bar requirement to the application shell: the app SHALL use
   the native macOS menu bar (the Qt default, no opt-out), and the shell SHALL
   keep that working with screen modes and frame layout. Verification runs on
@@ -79,8 +79,8 @@ menu-bar contract for macOS is unverified.
     where wgpu has no implemented backend (macOS).
   - `.github/actions/macos-bundle/action.yml` — bundle the offscreen QPA plugin
     for the headless smoke check.
-  - `.github/workflows/macos.yml` — temporary PR gating/paths relaxation
-    (reverted after the fix).
+  - `.github/workflows/macos.yml` — temporary PR gating/paths relaxation used to
+    validate the fix, reverted within this change (no net diff).
 - App C++ for the menu-bar requirement: `crates/pictura-app/cpp/frame.cpp`
   (screen modes) and `frame_columns.cpp` (workspace frame offset) are the code
   the verification exercises; no behavior change is assumed until the mac run

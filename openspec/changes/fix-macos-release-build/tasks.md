@@ -62,10 +62,10 @@
 - [x] 4.1 Confirm the full macOS dry run is green on this PR (build,
   smoke-check, DMG artifact) and the Linux `qt-headless` job still builds and
   self-tests. Verify: both checks green on the same commit.
-- [ ] 4.2 Revert the temporary `macos.yml` gate/paths edits from group 2 once the
-  macOS build is green on `master`, and record the revert. Verify: the mac job no
-  longer runs on ordinary feature PRs and still runs on the Release PR/tag, and
-  its `paths:` list is back to the original.
+- [x] 4.2 Revert the temporary `macos.yml` gate/paths edits from group 2 once the
+  macOS build is green on this PR, and record the revert. Verify: `.github/workflows/macos.yml`
+  is back to its `master` content (no diff), so the mac job no longer runs on an
+  ordinary feature PR and still runs on the Release PR/tag.
 - [x] 4.3 Update `docs/dev/STATE.md` with the macOS build fix and the follow-up
   (the same release-only gate on `appimage.yml:40`). Verify: the resume anchor
   names this issue's outcome and the follow-up; commit carries

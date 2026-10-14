@@ -11,17 +11,12 @@ name: macos
 # the workflow takes no signing secrets and passes no signing options.
 on:
   pull_request:
-    # ponytail: temporary (#461) — the C++ source and macOS packaging paths are
-    # listed only so this fix builds on a normal PR. Once the macOS build is
-    # green on master, drop these two entries and restore the job `if:` below.
     paths:
       - Cargo.toml
       - CMakeLists.txt
       - CHANGELOG.md
       - version.txt
       - .release-please-manifest.json
-      - crates/pictura-app/cpp/**
-      - packaging/macos/**
   workflow_call:
     inputs:
       tag:
@@ -45,9 +40,7 @@ jobs:
   macos:
     runs-on: macos-15
     timeout-minutes: 90
-    # ponytail: temporary (#461) — this job built only the release-please PR so a
-    # macOS-only breakage never surfaced on a feature PR. The gate is restored
-    # (release-please branch only) once the macOS build is green on master.
+    if: github.event_name != 'pull_request' || github.head_ref == 'release-please--branches--master'
     env:
       TAG: ${{ inputs.tag }}
       VERSION: ${{ inputs.tag || format('pr{0}', github.event.number) }}

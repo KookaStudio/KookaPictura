@@ -62,8 +62,9 @@ Add `GuiPrivate` to the Qt component lookup and link `Qt6::GuiPrivate`
 
 Drop the release-please-only `if:` at `macos.yml:43` and add the C++ source and
 macOS packaging paths to its `paths:` list, so the fix is built on this PR. Both
-edits carry a `ponytail:` comment naming the ceiling and are reverted once the
-macOS build is green on `master`.
+edits carry a `ponytail:` comment naming the ceiling and are reverted within this
+change once the macOS job is green on the PR; `.github/workflows/macos.yml` has
+no net diff against `master`.
 
 - **Why the user asked for temporary:** the mac runner is expensive; the
   permanent policy (drive the mac job from build-path PRs, and the same for
