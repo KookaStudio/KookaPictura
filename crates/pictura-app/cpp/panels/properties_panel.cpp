@@ -107,14 +107,19 @@ NumericField* featherField(QWidget* parent, const QString& name)
                             parent);
 }
 
-int densityByte(double percent)
-{
-    return qRound(percent * 255.0 / 100.0);
-}
-
 double densityPercent(int byte)
 {
     return qRound(byte * 100.0 / 255.0);
+}
+
+// The byte for a whole percent; `current` when it already shows as `percent`,
+// so committing an untouched field (76 shows 30 %, which maps to 77) is a no-op.
+int densityByte(int current, double percent)
+{
+    if (current >= 0 && densityPercent(current) == percent) {
+        return current;
+    }
+    return qRound(percent * 255.0 / 100.0);
 }
 
 } // namespace
@@ -335,11 +340,13 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
         });
     };
     wireRefinement(maskDensity_, [](PictureView& view, double percent, bool commit) {
-        return layer_mask_set_density(view, densityByte(percent), commit);
+        return layer_mask_set_density(view, densityByte(layer_mask_density(view), percent),
+                                      commit);
     });
     wireRefinement(maskFeather_, &layer_mask_set_feather);
     wireRefinement(vectorMaskDensity_, [](PictureView& view, double percent, bool commit) {
-        return vector_mask_set_density(view, densityByte(percent), commit);
+        return vector_mask_set_density(view, densityByte(vector_mask_density(view), percent),
+                                       commit);
     });
     wireRefinement(vectorMaskFeather_, &vector_mask_set_feather);
     connect(maskInvert_, &QToolButton::clicked, this, [this]() {

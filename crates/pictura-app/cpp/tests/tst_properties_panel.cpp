@@ -35,6 +35,7 @@ private slots:
     void vectorMaskSectionAppears();
     void maskDensityFeatherAndInvertEdit();
     void vectorMaskDensityAndFeatherEdit();
+    void maskRefineEditsStayScoped();
 
 private:
     // A white 16x16 document whose layer is selected and shown in the panel.
@@ -431,6 +432,37 @@ void PropertiesPanelTest::vectorMaskDensityAndFeatherEdit()
              QStringLiteral("Vector Mask Feather"));
     emit feather->valueCommitted(4.0);
     QCOMPARE(view_->history_count(), history + 2);
+}
+
+// An uncommitted Density preview is recorded under its own label before
+// another control's edit, and committing an untouched Density field whose byte
+// has no exact percent changes nothing.
+void PropertiesPanelTest::maskRefineEditsStayScoped()
+{
+    QVERIFY2(setupLayer(QStringLiteral("MaskScope")), "mask scope fixture");
+    QVERIFY(layer_mask_add(*view_, QStringLiteral("hide-all")));
+    panel_->refresh();
+    auto* density = panel_->findChild<pictura::NumericField*>(QStringLiteral("propertiesMaskDensity"));
+    auto* invert = panel_->findChild<QToolButton*>(QStringLiteral("propertiesMaskInvert"));
+    QVERIFY(density && invert);
+
+    const int history = view_->history_count();
+    emit density->valueChanged(30.0);
+    invert->click();
+    QCOMPARE(view_->history_count(), history + 2);
+    QCOMPARE(view_->history_label(view_->history_index()), QStringLiteral("Invert"));
+    QVERIFY(view_->undo());
+    QCOMPARE(view_->history_label(view_->history_index()), QStringLiteral("Mask Density"));
+    QCOMPARE(layer_mask_density(*view_), 77);
+    QVERIFY(view_->redo());
+
+    QVERIFY(layer_mask_set_density(*view_, 76, true));
+    panel_->refresh();
+    QCOMPARE(density->value(), 30.0);
+    const int before = view_->history_count();
+    emit density->valueCommitted(density->value());
+    QCOMPARE(layer_mask_density(*view_), 76);
+    QCOMPARE(view_->history_count(), before);
 }
 
 QTEST_MAIN(PropertiesPanelTest)

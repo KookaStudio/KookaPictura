@@ -1,7 +1,7 @@
 //! Host-side assembly of the planes a GPU composite uploads: a pixel layer's
 //! source planes and its mask coverage over the composite's region.
 
-use pictura_core::{ColorMode, Document, Layer};
+use pictura_core::{ColorMode, Document, Layer, PsdRect};
 use wgpu::WriteOnly;
 
 use super::backend::SrcLayout;
@@ -15,6 +15,19 @@ pub(super) struct Region {
     pub(super) y0: u32,
     pub(super) w: u32,
     pub(super) h: u32,
+}
+
+impl Region {
+    /// The region in document coordinates, the `clip` for mask sampling.
+    pub(super) fn rect(self) -> PsdRect {
+        let at = |v: u32| v.min(i32::MAX as u32) as i32;
+        PsdRect {
+            left: at(self.x0),
+            top: at(self.y0),
+            right: at(self.x0.saturating_add(self.w)),
+            bottom: at(self.y0.saturating_add(self.h)),
+        }
+    }
 }
 
 /// The clamped layer-rect ∩ region intersection plus the plane layout, the
@@ -298,7 +311,8 @@ pub(super) fn assemble_mask_per_pixel(
         for y in y0..y1 {
             let row = (y - region.y0 as i32) as usize * stride;
             for x in x0..x1 {
-                data[row + (x - region.x0 as i32) as usize] = mask_alpha(layer, x, y);
+                data[row + (x - region.x0 as i32) as usize] =
+                    mask_alpha(layer, region.rect(), x, y);
             }
         }
     }
@@ -334,7 +348,7 @@ pub(super) fn mask_writer(
                 let span = &mut row_bytes[left..left + (x1 - x0) as usize];
                 if sampled {
                     for (x, v) in (x0..x1).zip(span.iter_mut()) {
-                        *v = mask_alpha(layer, x, y);
+                        *v = mask_alpha(layer, region.rect(), x, y);
                     }
                 } else {
                     span.fill(255);

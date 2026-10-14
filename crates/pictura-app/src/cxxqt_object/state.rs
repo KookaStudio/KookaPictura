@@ -163,9 +163,9 @@ pub struct PictureViewRust {
     pub(super) transform_session: Option<TransformSession>,
     pub(super) opacity_preview_changed: bool,
     pub(super) fill_preview_changed: bool,
-    /// A Properties mask Density/Feather preview changed the document since
-    /// the last commit.
-    pub(super) mask_refine_preview_changed: bool,
+    /// The history label of the Properties mask Density/Feather control whose
+    /// preview changed the document since its last commit.
+    pub(super) mask_refine_preview: Option<&'static str>,
     pub(super) content_revision: u64,
     pub(super) gpu_compute: bool,
     pub(super) color_policy: pictura_codec::Policy,
@@ -348,7 +348,7 @@ impl Default for PictureViewRust {
             transform_session: None,
             opacity_preview_changed: false,
             fill_preview_changed: false,
-            mask_refine_preview_changed: false,
+            mask_refine_preview: None,
             content_revision: 0,
             gpu_compute: true,
             color_policy: pictura_codec::Policy::Preserve,

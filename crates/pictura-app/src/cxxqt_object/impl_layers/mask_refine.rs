@@ -66,13 +66,20 @@ fn refinement(
 }
 
 /// Apply `set` to the active layer; recomposite on a change, and on a commit
-/// record `label` when this call or an earlier preview changed the mask.
+/// record `label` when this call or an earlier preview changed the mask. A
+/// preview another control left uncommitted is recorded under its own label
+/// first, so each state holds one control's change.
 fn edit(
     mut view: Pin<&mut PictureView>,
-    label: &str,
+    label: &'static str,
     commit: bool,
     set: impl FnOnce(&mut Document, &str) -> bool,
 ) -> bool {
+    let pending = view.as_mut().rust_mut().mask_refine_preview.take();
+    if let Some(other) = pending.filter(|other| *other != label) {
+        view.as_mut().record(other);
+    }
+    let pending = pending == Some(label);
     let changed = {
         let mut rust = view.as_mut().rust_mut();
         let Some(path) = rust.active_layer.clone() else {
@@ -80,8 +87,9 @@ fn edit(
         };
         rust.doc.as_mut().is_some_and(|doc| set(doc, &path))
     };
-    let pending = view.rust().mask_refine_preview_changed;
-    view.as_mut().rust_mut().mask_refine_preview_changed = !commit && (changed || pending);
+    if !commit && (changed || pending) {
+        view.as_mut().rust_mut().mask_refine_preview = Some(label);
+    }
     if changed || (commit && pending) {
         view.as_mut().recomposite();
     }

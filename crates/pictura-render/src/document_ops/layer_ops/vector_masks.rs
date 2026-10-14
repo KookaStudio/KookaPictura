@@ -254,9 +254,9 @@ pub fn rasterize_vector_mask(doc: &mut Document, path: &str) -> bool {
         for col in 0..width {
             let x = rect.left + col as i32;
             let y = rect.top + row as i32;
-            let vector = u32::from(crate::mask_refine::vector(Some(&vector), x, y));
+            let vector = u32::from(crate::mask_refine::vector(Some(&vector), rect, x, y));
             let raster = existing.as_ref().map_or(255, |mask| {
-                u32::from(crate::mask_refine::raster(mask, x, y))
+                u32::from(crate::mask_refine::raster(mask, rect, x, y))
             });
             data[row * width + col] = ((vector * raster + 127) / 255) as u8;
         }

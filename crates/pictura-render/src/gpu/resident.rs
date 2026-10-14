@@ -27,9 +27,10 @@ pub(super) enum UploadKey {
     Mask {
         region: (u32, u32, u32, u32),
         influence: Edges,
-        /// The sampled raster mask's `(stamp, rect, default)`; `None` for the
-        /// constant coverage of a mask with nothing to sample.
-        sampled: Option<(u64, Edges, u8)>,
+        /// The sampled raster mask's `(stamp, rect, default, density,
+        /// feather bits)`; `None` for the constant coverage of a mask with
+        /// nothing to sample.
+        sampled: Option<(u64, Edges, u8, u8, u64)>,
     },
 }
 
@@ -74,7 +75,13 @@ pub(super) fn mask_key(region: Region, layer: &Layer) -> Option<UploadKey> {
         if stamp == 0 {
             return None;
         }
-        Some((stamp, rect_key(mask.rect), mask.default_color))
+        Some((
+            stamp,
+            rect_key(mask.rect),
+            mask.default_color,
+            mask.density,
+            mask.feather_bits,
+        ))
     } else {
         None
     };
@@ -210,5 +217,11 @@ mod tests {
         let key = mask_key(region(), &l).expect("stamped mask");
         l.mask.as_mut().unwrap().default_color = 255;
         assert_ne!(mask_key(region(), &l), Some(key));
+        let key = mask_key(region(), &l);
+        l.mask.as_mut().unwrap().density = 128;
+        assert_ne!(mask_key(region(), &l), key, "density is in the key");
+        let key = mask_key(region(), &l);
+        l.mask.as_mut().unwrap().set_feather(2.0);
+        assert_ne!(mask_key(region(), &l), key, "feather is in the key");
     }
 }

@@ -44,9 +44,11 @@ pub(crate) fn mask_alpha_unit(doc: &Document, layer: &Layer, x: i32, y: i32) -> 
     // No native `-2` sample (8-bit document, or absent/disabled/out-of-rect
     // mask) keeps the exact 8-bit combine, so the fallback is byte-identical.
     let Some(raster) = native_mask_unit(doc, layer, x, y) else {
-        return crate::composite::mask_alpha(layer, x, y) as f32 / 255.0;
+        return crate::composite::mask_alpha(layer, crate::mask_refine::canvas(doc), x, y) as f32
+            / 255.0;
     };
-    let vector = crate::mask_refine::vector(layer.vector_mask.as_ref(), x, y) as f32 / 255.0;
+    let clip = crate::mask_refine::canvas(doc);
+    let vector = crate::mask_refine::vector(layer.vector_mask.as_ref(), clip, x, y) as f32 / 255.0;
     raster * vector
 }
 

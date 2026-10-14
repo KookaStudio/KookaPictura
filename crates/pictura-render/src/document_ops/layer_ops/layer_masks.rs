@@ -147,7 +147,7 @@ pub fn apply_layer_mask(doc: &mut Document, path: &str) -> bool {
         for col in 0..width {
             let x = rect.left + col as i32;
             let y = rect.top + row as i32;
-            let coverage = u32::from(crate::mask_refine::raster(&mask, x, y));
+            let coverage = u32::from(crate::mask_refine::raster(&mask, rect, x, y));
             let index = row * width + col;
             if let Some(sample) = layer.channels[alpha].data.get_mut(index) {
                 *sample = ((u32::from(*sample) * coverage + 127) / 255) as u8;

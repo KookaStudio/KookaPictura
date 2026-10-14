@@ -11,6 +11,10 @@
 //! hook. Lookups go through a small per-thread cache in front of a bounded
 //! shared one, so a hit takes no lock.
 //!
+//! The plane is cut to the caller's `clip` (the pixels it samples) grown by
+//! the feather's reach: a mask's rect and path come from the file, so they
+//! must not size the allocation. Samples inside `clip` are exact.
+//!
 //! ponytail: the shared cache keeps the last [`CAPACITY`] feathered planes; a
 //! document with more feathered masks than that rebuilds them every pass.
 
@@ -18,15 +22,25 @@ use std::cell::RefCell;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
-use pictura_core::{LayerMask, VectorMask};
+use pictura_core::{Document, LayerMask, PsdRect, VectorMask};
 
 /// The selection feather's maximum radius, which the blur clamps to.
 const FEATHER_MAX: f64 = 250.0;
 const CAPACITY: usize = 4;
 
-/// The refined raster-mask sample at a document pixel: `255` when disabled
-/// or with no decoded pixels.
-pub(crate) fn raster(mask: &LayerMask, x: i32, y: i32) -> u8 {
+/// The document canvas, the `clip` for samples taken over it.
+pub(crate) fn canvas(doc: &Document) -> PsdRect {
+    PsdRect {
+        top: 0,
+        left: 0,
+        bottom: doc.height.min(i32::MAX as u32) as i32,
+        right: doc.width.min(i32::MAX as u32) as i32,
+    }
+}
+
+/// The refined raster-mask sample at a document pixel inside `clip`: `255`
+/// when disabled or with no decoded pixels.
+pub(crate) fn raster(mask: &LayerMask, clip: PsdRect, x: i32, y: i32) -> u8 {
     if mask.disabled {
         return 255;
     }
@@ -34,7 +48,8 @@ pub(crate) fn raster(mask: &LayerMask, x: i32, y: i32) -> u8 {
         return 255;
     };
     let radius = radius(mask.feather());
-    let empty = mask.rect.width() <= 0 || mask.rect.height() <= 0;
+    let r = mask.rect;
+    let empty = i64::from(r.right) <= i64::from(r.left) || i64::from(r.bottom) <= i64::from(r.top);
     let m = if radius > 0.0 && !empty {
         let key = Key {
             source: data.ident(),
@@ -44,19 +59,20 @@ pub(crate) fn raster(mask: &LayerMask, x: i32, y: i32) -> u8 {
                 mask.rect.right,
                 mask.rect.bottom,
             ],
+            clip: rect_key(clip),
             outside: mask.default_color,
             feather: radius.to_bits(),
         };
-        sample(key, x, y, || feather_raster(mask, data, radius))
+        sample(key, x, y, || feather_raster(mask, data, radius, clip))
     } else {
         crate::composite::mask_value(mask, x, y)
     };
     density(m, mask.density)
 }
 
-/// The refined vector-mask coverage at a document pixel: `255` for an absent,
-/// disabled, or fill-less mask.
-pub(crate) fn vector(mask: Option<&VectorMask>, x: i32, y: i32) -> u8 {
+/// The refined vector-mask coverage at a document pixel inside `clip`: `255`
+/// for an absent, disabled, or fill-less mask.
+pub(crate) fn vector(mask: Option<&VectorMask>, clip: PsdRect, x: i32, y: i32) -> u8 {
     let Some(mask) = mask.filter(|m| m.has_fill()) else {
         return 255;
     };
@@ -65,12 +81,13 @@ pub(crate) fn vector(mask: Option<&VectorMask>, x: i32, y: i32) -> u8 {
         let key = Key {
             source: mask.ident(),
             rect: [0; 4],
+            clip: rect_key(clip),
             outside: 0,
             feather: radius.to_bits(),
         };
         // Built uninverted: the blur is linear, so inverting after it is the
         // same as blurring the inverted coverage.
-        let c = sample(key, x, y, || feather_vector(mask, radius));
+        let c = sample(key, x, y, || feather_vector(mask, radius, clip));
         if mask.invert {
             255 - c
         } else {
@@ -106,10 +123,25 @@ fn reach(radius: f64) -> i32 {
     (1.5 * radius).ceil() as i32 + 1
 }
 
+fn rect_key(r: PsdRect) -> [i32; 4] {
+    [r.left, r.top, r.right, r.bottom]
+}
+
+/// `bounds ∩ clip`, both grown by `pad`, as `[left, top, right, bottom]`;
+/// empty when they miss.
+fn plane_bounds(bounds: [i64; 4], clip: PsdRect, pad: i64) -> [i32; 4] {
+    let c = [clip.left, clip.top, clip.right, clip.bottom].map(i64::from);
+    let lo = |i: usize| (bounds[i].max(c[i]) - pad).max(i64::from(i32::MIN)) as i32;
+    let hi = |i: usize| (bounds[i].min(c[i]) + pad).min(i64::from(i32::MAX)) as i32;
+    let [left, top, right, bottom] = [lo(0), lo(1), hi(2), hi(3)];
+    [left, top, right.max(left), bottom.max(top)]
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct Key {
     source: u64,
     rect: [i32; 4],
+    clip: [i32; 4],
     outside: u8,
     feather: u64,
 }
@@ -125,8 +157,24 @@ struct Feathered {
 }
 
 impl Feathered {
+    /// An unblurred plane over `[left, top, right, bottom]` filled with `fill`.
+    fn new(bounds: [i32; 4], fill: u8, outside: u8) -> Feathered {
+        let [left, top, right, bottom] = bounds;
+        let width = (i64::from(right) - i64::from(left)) as usize;
+        let height = (i64::from(bottom) - i64::from(top)) as usize;
+        Feathered {
+            left,
+            top,
+            width,
+            height,
+            outside,
+            data: vec![fill; width * height],
+        }
+    }
+
     fn at(&self, x: i32, y: i32) -> u8 {
-        let (dx, dy) = (x - self.left, y - self.top);
+        let dx = i64::from(x) - i64::from(self.left);
+        let dy = i64::from(y) - i64::from(self.top);
         if dx < 0 || dy < 0 || dx as usize >= self.width || dy as usize >= self.height {
             return self.outside;
         }
@@ -135,6 +183,9 @@ impl Feathered {
 
     /// Blur `data` (a `width` × `height` plane at `(left, top)`) in place.
     fn blurred(mut self, radius: f64) -> Feathered {
+        if self.data.is_empty() {
+            return self;
+        }
         let selection = pictura_select::Selection {
             width: self.width as u32,
             height: self.height as u32,
@@ -145,61 +196,63 @@ impl Feathered {
     }
 }
 
-fn feather_raster(mask: &LayerMask, data: &[u8], radius: f64) -> Feathered {
-    let pad = reach(radius);
-    let (mw, mh) = (mask.rect.width() as usize, mask.rect.height() as usize);
-    let width = mw + 2 * pad as usize;
-    let height = mh + 2 * pad as usize;
-    let mut plane = vec![mask.default_color; width * height];
-    for (row, src) in data.chunks(mw).take(mh).enumerate() {
-        let at = (row + pad as usize) * width + pad as usize;
-        plane[at..at + src.len()].copy_from_slice(src);
+fn feather_raster(mask: &LayerMask, data: &[u8], radius: f64, clip: PsdRect) -> Feathered {
+    let r = mask.rect;
+    let rect = [r.left, r.top, r.right, r.bottom].map(i64::from);
+    let pad = i64::from(reach(radius));
+    let bounds = plane_bounds(rect, clip, pad);
+    let mut plane = Feathered::new(bounds, mask.default_color, mask.default_color);
+    let mw = (rect[2] - rect[0]) as usize;
+    // The mask's columns and rows that land in the plane.
+    let x0 = i64::from(bounds[0]).max(rect[0]);
+    let x1 = i64::from(bounds[2]).min(rect[2]);
+    let y0 = i64::from(bounds[1]).max(rect[1]);
+    let y1 = i64::from(bounds[3]).min(rect[3]);
+    if x1 > x0 {
+        for y in y0..y1 {
+            let src = (y - rect[1]) as usize * mw + (x0 - rect[0]) as usize;
+            let Some(src) = data.get(src..src + (x1 - x0) as usize) else {
+                break;
+            };
+            let at = (y - i64::from(plane.top)) as usize * plane.width
+                + (x0 - i64::from(plane.left)) as usize;
+            plane.data[at..at + src.len()].copy_from_slice(src);
+        }
     }
-    Feathered {
-        left: mask.rect.left - pad,
-        top: mask.rect.top - pad,
-        width,
-        height,
-        outside: mask.default_color,
-        data: plane,
-    }
-    .blurred(radius)
+    plane.blurred(radius)
 }
 
-fn feather_vector(mask: &VectorMask, radius: f64) -> Feathered {
+fn feather_vector(mask: &VectorMask, radius: f64, clip: PsdRect) -> Feathered {
     let points = mask
         .subpaths
         .iter()
         .filter(|s| s.closed)
         .flat_map(|s| &s.points);
-    let (mut x0, mut y0, mut x1, mut y1) = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
+    let mut bbox = [i64::MAX, i64::MAX, i64::MIN, i64::MIN];
     for p in points {
-        x0 = x0.min(p[0].div_euclid(256));
-        y0 = y0.min(p[1].div_euclid(256));
-        x1 = x1.max(p[0].div_euclid(256) + 1);
-        y1 = y1.max(p[1].div_euclid(256) + 1);
+        let (x, y) = (
+            i64::from(p[0].div_euclid(256)),
+            i64::from(p[1].div_euclid(256)),
+        );
+        bbox = [
+            bbox[0].min(x),
+            bbox[1].min(y),
+            bbox[2].max(x + 1),
+            bbox[3].max(y + 1),
+        ];
     }
-    let pad = reach(radius);
-    let (left, top) = (x0 - pad, y0 - pad);
-    let width = (x1 - x0 + 2 * pad) as usize;
-    let height = (y1 - y0 + 2 * pad) as usize;
-    let mut plane = vec![0u8; width * height];
-    for (row, line) in plane.chunks_exact_mut(width).enumerate() {
-        for (col, v) in line.iter_mut().enumerate() {
-            if mask.inside(left + col as i32, top + row as i32) {
-                *v = 255;
+    let bounds = plane_bounds(bbox, clip, i64::from(reach(radius)));
+    let mut plane = Feathered::new(bounds, 0, 0);
+    if plane.width > 0 {
+        for (row, line) in plane.data.chunks_exact_mut(plane.width).enumerate() {
+            for (col, v) in line.iter_mut().enumerate() {
+                if mask.inside(bounds[0] + col as i32, bounds[1] + row as i32) {
+                    *v = 255;
+                }
             }
         }
     }
-    Feathered {
-        left,
-        top,
-        width,
-        height,
-        outside: 0,
-        data: plane,
-    }
-    .blurred(radius)
+    plane.blurred(radius)
 }
 
 type Entry = (Key, Arc<OnceLock<Feathered>>);
@@ -255,6 +308,13 @@ mod tests {
     use super::*;
     use pictura_core::{PsdRect, VectorFillRule, VectorSubpath};
 
+    const CANVAS: PsdRect = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: 256,
+        right: 256,
+    };
+
     /// A `w`×`w` raster mask at the origin: black left half, white right half.
     fn step(w: i32, default_color: u8) -> LayerMask {
         LayerMask {
@@ -278,15 +338,27 @@ mod tests {
     #[test]
     fn density_lifts_the_mask_toward_white() {
         let mut mask = step(4, 0);
-        assert_eq!(raster(&mask, 0, 0), 0, "full density is the painted mask");
+        assert_eq!(
+            raster(&mask, CANVAS, 0, 0),
+            0,
+            "full density is the painted mask"
+        );
         mask.density = 128;
-        assert_eq!(raster(&mask, 0, 0), 127);
-        assert_eq!(raster(&mask, 3, 0), 255, "white stays white");
+        assert_eq!(raster(&mask, CANVAS, 0, 0), 127);
+        assert_eq!(raster(&mask, CANVAS, 3, 0), 255, "white stays white");
         mask.density = 0;
-        assert_eq!(raster(&mask, 0, 0), 255, "zero density reveals everything");
+        assert_eq!(
+            raster(&mask, CANVAS, 0, 0),
+            255,
+            "zero density reveals everything"
+        );
         mask.disabled = true;
         mask.density = 255;
-        assert_eq!(raster(&mask, 0, 0), 255, "a disabled mask still reveals");
+        assert_eq!(
+            raster(&mask, CANVAS, 0, 0),
+            255,
+            "a disabled mask still reveals"
+        );
     }
 
     #[test]
@@ -295,7 +367,7 @@ mod tests {
         mask.set_feather(8.0);
         // The edge is at x = 32; the rect's own edges (default colour 0) are
         // more than a ramp's width away from 20..44.
-        let row: Vec<u8> = (20..44).map(|x| raster(&mask, x, 32)).collect();
+        let row: Vec<u8> = (20..44).map(|x| raster(&mask, CANVAS, x, 32)).collect();
         assert!(row.windows(2).all(|w| w[0] <= w[1]), "{row:?}");
         assert!(row[12] > 0 && row[12] < 255, "the edge softens: {row:?}");
         assert_eq!(row[0], 0, "far from the edge stays black");
@@ -307,11 +379,11 @@ mod tests {
         let mut mask = step(16, 0);
         mask.set_feather(8.0);
         assert!(
-            raster(&mask, 16, 8) > 0,
+            raster(&mask, CANVAS, 16, 8) > 0,
             "the white side bleeds past the rect"
         );
         assert_eq!(
-            raster(&mask, 200, 8),
+            raster(&mask, CANVAS, 200, 8),
             0,
             "far outside is the default colour"
         );
@@ -321,11 +393,11 @@ mod tests {
     fn painting_the_mask_retires_its_feathered_plane() {
         let mut mask = step(32, 0);
         mask.set_feather(4.0);
-        let before = raster(&mask, 4, 16);
+        let before = raster(&mask, CANVAS, 4, 16);
         assert_eq!(before, 0);
         mask.data.as_mut().unwrap().as_mut_slice().fill(255);
         assert_eq!(
-            raster(&mask, 4, 16),
+            raster(&mask, CANVAS, 4, 16),
             255,
             "the cache follows the new pixels"
         );
@@ -344,20 +416,77 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(
-            vector(Some(&mask), 31, 16),
+            vector(Some(&mask), CANVAS, 31, 16),
             255,
             "a hard edge without feather"
         );
         mask.set_feather(6.0);
-        let inside_edge = vector(Some(&mask), 31, 16);
+        let inside_edge = vector(Some(&mask), CANVAS, 31, 16);
         assert!(inside_edge > 0 && inside_edge < 255, "{inside_edge}");
-        assert!(vector(Some(&mask), 33, 16) > 0, "the ramp crosses the path");
-        assert_eq!(vector(Some(&mask), 16, 16), 255);
+        assert!(
+            vector(Some(&mask), CANVAS, 33, 16) > 0,
+            "the ramp crosses the path"
+        );
+        assert_eq!(vector(Some(&mask), CANVAS, 16, 16), 255);
         mask.invert = true;
-        assert_eq!(vector(Some(&mask), 31, 16), 255 - inside_edge);
+        assert_eq!(vector(Some(&mask), CANVAS, 31, 16), 255 - inside_edge);
         mask.invert = false;
         mask.density = 0;
-        assert_eq!(vector(Some(&mask), 100, 100), 255);
+        assert_eq!(vector(Some(&mask), CANVAS, 100, 100), 255);
+    }
+
+    #[test]
+    fn file_bounds_far_off_the_canvas_do_not_size_the_plane() {
+        // Unclipped, the raster plane would be ~2^64 bytes and the vector one
+        // ~16 GB (the path is kept short so its row table stays small).
+        let mut mask = LayerMask {
+            rect: PsdRect {
+                top: i32::MIN,
+                left: i32::MIN,
+                bottom: i32::MAX,
+                right: i32::MAX,
+            },
+            default_color: 0,
+            data: Some(vec![255u8; 4].into()),
+            ..Default::default()
+        };
+        mask.set_feather(4.0);
+        assert_eq!(
+            raster(&mask, CANVAS, 10, 10),
+            0,
+            "past the data is the default"
+        );
+        let p = |x: i32, y: i32| [x, y];
+        let mut path = VectorMask {
+            subpaths: vec![VectorSubpath {
+                closed: true,
+                operation: 1,
+                fill_rule: VectorFillRule::EvenOdd,
+                points: vec![
+                    p(i32::MIN, 0),
+                    p(i32::MAX, 0),
+                    p(i32::MAX, 256 * 1000),
+                    p(i32::MIN, 256 * 1000),
+                ],
+            }],
+            ..Default::default()
+        };
+        path.set_feather(4.0);
+        assert_eq!(vector(Some(&path), CANVAS, 128, 128), 255);
+    }
+
+    #[test]
+    fn a_mask_off_the_canvas_still_feathers_onto_its_edge() {
+        let mut mask = step(16, 0);
+        mask.rect.left = 256;
+        mask.rect.right = 272;
+        mask.data.as_mut().unwrap().as_mut_slice().fill(255);
+        mask.set_feather(8.0);
+        assert!(
+            raster(&mask, CANVAS, 255, 8) > 0,
+            "the ramp crosses the clip"
+        );
+        assert_eq!(raster(&mask, CANVAS, 100, 8), 0);
     }
 
     #[test]
