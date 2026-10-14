@@ -20,6 +20,13 @@ includes `<rhi/qrhi.h>`, and SHALL link without a system Little CMS library.
 - **THEN** the translation unit that includes `<rhi/qrhi.h>` compiles and the
   build does not stop with a missing-header error
 
+#### Scenario: A Qt built without Vulkan still compiles
+
+- **WHEN** the C++ shell is configured against a Qt built without Vulkan (the
+  official macOS Qt, which ships no `QVulkanInstance` header)
+- **THEN** the interop translation unit compiles with its diagnostic probe
+  stubbed out rather than failing on a missing Vulkan header
+
 #### Scenario: The static library links on macOS
 
 - **WHEN** the macOS build links the application

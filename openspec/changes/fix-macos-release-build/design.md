@@ -9,7 +9,9 @@ See `proposal.md` — Why. Current state that shapes the approach:
   (`CMakeLists.txt:59-64,417`). That resolves only on the Debian-style layout.
 - CI provisions Qt with `jurplel/install-qt-action` (official Qt 6.11.1), which
   ships private headers and the `Qt6GuiPrivate` CMake package on Linux, macOS
-  frameworks, and Windows.
+  frameworks, and Windows. The official **macOS** Qt is built without Vulkan,
+  so `QtGui/QVulkanInstance` is not shipped there, though `interop.cpp`
+  includes it unconditionally outside its `QT_CONFIG(vulkan)` body guard.
 - `macos.yml:43` runs the mac job only on the release-please PR, so a
   macOS-only build error cannot surface on a feature PR.
 - The shell builds menus on `QMainWindow::menuBar()`. No call site sets
@@ -82,6 +84,20 @@ macOS step; the decision is recorded in the task.
 - **Not asserted:** the exact Application Menu contents — Qt merges by
   `QAction::menuRole()` and the outcome is a platform detail, not shell
   behaviour.
+
+### Guard the Vulkan-only includes in `interop.cpp`
+
+Move `<QtGui/qtguiglobal.h>` above the includes and wrap `<rhi/qrhi.h>` and
+`<QtGui/QVulkanInstance>` in the same `#if QT_CONFIG(vulkan) &&
+__has_include(<vulkan/vulkan.h>)` condition the probe body already uses.
+
+- **Why:** the body was already a no-op stub when Vulkan is absent, but the
+  unconditional include still failed to compile once the include path resolved
+  on the macOS Qt (no Vulkan). Guarding the includes matches the body's
+  contract and keeps the diagnostic probe a stub everywhere Qt lacks Vulkan.
+- **This is a source change**, beyond the issue's "keep the fix build-only"
+  direction, which was written before the macOS log showed the second error.
+  It is minimal and confined to `interop.cpp`.
 
 ## Risks / Trade-offs
 

@@ -13,6 +13,12 @@
   required (`qt6-base-private-dev` on Debian-derived systems; CI's
   `install-qt-action` already provides it). Verify: the documented package name
   resolves the `Qt6::GuiPrivate` configure failure on a system missing it.
+- [x] 1.3 Guard `interop.cpp`'s Vulkan-only includes (`<rhi/qrhi.h>`,
+  `<QtGui/QVulkanInstance>`) with the same `QT_CONFIG(vulkan)` /
+  `__has_include(<vulkan/vulkan.h>)` condition the probe body uses, so the
+  translation unit compiles against a Qt built without Vulkan (the macOS Qt).
+  Verify: compile the translation unit with the guards forced to the
+  no-Vulkan outcome and confirm it builds.
 
 ## 2. Enable the macOS build on this PR (temporary)
 
