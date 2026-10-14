@@ -1,80 +1,103 @@
 #include "pictura_raw_dialog.h"
-#include "dialogs.h"
 
-#include <QtCore/QString>
+#include "acr/acr_controls.h"
+#include "acr/acr_histogram.h"
+#include "acr/acr_panels.h"
+#include "acr/acr_preview_pane.h"
+#include "acr/acr_settings.h"
+#include "dialogs.h"
+#include "icons.h"
+
+#include "pictura_app/src/cxxqt_object.cxxqt.h"
+
+#include <QtCore/QList>
 #include <QtWidgets/QDialogButtonBox>
-#include <QtWidgets/QDoubleSpinBox>
-#include <QtWidgets/QFormLayout>
+#include <QtWidgets/QHBoxLayout>
+#include <QtWidgets/QStackedWidget>
+#include <QtWidgets/QTabBar>
+#include <QtWidgets/QVBoxLayout>
 
 namespace pictura {
 
-namespace {
-
-struct ControlSpec {
-    const char* label;
-    double minimum;
-    double maximum;
-    int decimals;
-    double step;
-};
-
-// ponytail: only Temperature ±100 (JPEG scale), Exposure ±5, and the other nine
-// ±100 are documented; the decimals/steps are inferred, and the spec's raw
-// 2,000–50,000 K temperature scale does not apply to a JPEG/TIFF filter.
-const ControlSpec kControls[11] = {
-    {"Temperature:", -100.0, 100.0, 0, 1.0},
-    {"Tint:", -100.0, 100.0, 0, 1.0},
-    {"Exposure:", -5.0, 5.0, 2, 0.05},
-    {"Contrast:", -100.0, 100.0, 0, 1.0},
-    {"Highlights:", -100.0, 100.0, 0, 1.0},
-    {"Shadows:", -100.0, 100.0, 0, 1.0},
-    {"Whites:", -100.0, 100.0, 0, 1.0},
-    {"Blacks:", -100.0, 100.0, 0, 1.0},
-    {"Clarity:", -100.0, 100.0, 0, 1.0},
-    {"Vibrance:", -100.0, 100.0, 0, 1.0},
-    {"Saturation:", -100.0, 100.0, 0, 1.0},
-};
-
-} // namespace
-
-PicturaRawDialog::PicturaRawDialog(const QList<double>& initial, QWidget* parent)
-    : QDialog(parent)
+PicturaRawDialog::PicturaRawDialog(PictureView* view, const QString& path,
+                                   const QString& initialSettings, QWidget* parent)
+    : QDialog(parent), path_(path), settings_(AcrSettings::decode(initialSettings))
 {
     setWindowTitle(QStringLiteral("Pictura Raw"));
 
-    auto* form = new QFormLayout(this);
-    for (int i = 0; i < 11; ++i) {
-        auto* spin = new QDoubleSpinBox(this);
-        spin->setRange(kControls[i].minimum, kControls[i].maximum);
-        spin->setDecimals(kControls[i].decimals);
-        spin->setSingleStep(kControls[i].step);
-        spin->setValue(i < initial.size() ? initial.at(i) : 0.0);
-        spins_[i] = spin;
-        form->addRow(QString::fromLatin1(kControls[i].label), spin);
+    auto* outer = new QHBoxLayout(this);
+
+    preview_ = new AcrPreviewPane(view, path, this);
+    outer->addWidget(preview_, 1);
+
+    auto* right = new QVBoxLayout;
+    histogram_ = new AcrHistogram(this);
+    right->addWidget(histogram_);
+
+    tabs_ = new QTabBar(this);
+    auto* stack = new QStackedWidget(this);
+
+    struct Tab {
+        QString title;
+        QString iconId;
+        AcrPanel* panel;
+    };
+    const QList<Tab> panels = {
+        {tr("Basic"), QStringLiteral("view.options"), new AcrBasicPanel(&settings_, this)},
+        {tr("Tone Curve"), QStringLiteral("window.panels.paths"),
+         new AcrToneCurvePanel(&settings_, this)},
+        {tr("Detail"), QStringLiteral("tool.sharpen"), new AcrDetailPanel(&settings_, this)},
+        {tr("HSL / Grayscale"), QStringLiteral("window.panels.color"),
+         new AcrHslPanel(&settings_, this)},
+        {tr("Split Toning"), QStringLiteral("window.panels.swatches"),
+         new AcrSplitToningPanel(&settings_, this)},
+        {tr("Lens Corrections"), QStringLiteral("window.panels.patterns"),
+         new AcrLensPanel(&settings_, this)},
+        {tr("Effects"), QStringLiteral("tool.blur"), new AcrEffectsPanel(&settings_, this)},
+        {tr("Camera Calibration"), QStringLiteral("tool.colorsampler"),
+         new AcrCalibrationPanel(&settings_, this)},
+        {tr("Presets"), QStringLiteral("layers.fx"), new AcrPresetsPanel(&settings_, this)},
+    };
+    for (const Tab& entry : panels) {
+        tabs_->addTab(pictura::icon(entry.iconId), entry.title);
+        stack->addWidget(entry.panel);
+        connect(entry.panel, &AcrPanel::changed, this, &PicturaRawDialog::refresh);
     }
+    connect(tabs_, &QTabBar::currentChanged, stack, &QStackedWidget::setCurrentIndex);
+
+    right->addWidget(tabs_);
+    right->addWidget(stack, 1);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     connect(buttons, &QDialogButtonBox::accepted, this, &PicturaRawDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &PicturaRawDialog::reject);
-    form->addRow(buttons);
+    right->addWidget(buttons);
+
+    outer->addLayout(right);
+    resize(1100, 680);
+    refresh();
 }
 
-QList<double> PicturaRawDialog::values() const
+void PicturaRawDialog::refresh()
 {
-    QList<double> result;
-    for (const QDoubleSpinBox* spin : spins_) {
-        result.append(spin->value());
-    }
-    return result;
+    const QString text = settings_.encode();
+    preview_->setSettingsText(text);
+    histogram_->setImage(preview_->image());
 }
 
-bool PicturaRawDialog::get(QWidget* parent, const QList<double>& initial, QList<double>* out)
+QString PicturaRawDialog::settingsText() const
 {
-    PicturaRawDialog dialog(initial, parent);
+    return settings_.encode();
+}
+
+bool PicturaRawDialog::get(QWidget* parent, PictureView* view, const QString& path,
+                           const QString& initialSettings, QString* out)
+{
+    PicturaRawDialog dialog(view, path, initialSettings, parent);
     if (runDialog(dialog, parent) != QDialog::Accepted) {
         return false;
     }
-    *out = dialog.values();
+    *out = dialog.settingsText();
     return true;
 }
 

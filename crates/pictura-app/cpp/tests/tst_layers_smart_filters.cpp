@@ -58,8 +58,7 @@ void LayersSmartFiltersTest::treeShowsGroupAndToggles()
 
     const QString path = view->add_solid_fill(0xff808080u);
     QVERIFY(view->rasterize_fill_content(path));
-    QVERIFY(view->apply_pictura_raw_filter(path, 20.0, 0.0, 1.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                                           0.0, 0.0));
+    QVERIFY(view->apply_pictura_raw_filter(path, QStringLiteral("Temp=20;Ex12=1.5")));
 
     const QString group = path + QStringLiteral("/@sf");
     const QString child = group + QStringLiteral("/0");
@@ -118,8 +117,7 @@ void LayersSmartFiltersTest::clearMenuCommandRemovesFilters()
 
     const QString path = view->add_solid_fill(0xff808080u);
     QVERIFY(view->rasterize_fill_content(path));
-    QVERIFY(view->apply_pictura_raw_filter(path, 20.0, 0.0, 1.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                                           0.0));
+    QVERIFY(view->apply_pictura_raw_filter(path, QStringLiteral("Temp=20;Ex12=1.5")));
     QCOMPARE(pictura::layer_smart_filter_count(*view, path), 1);
 
     panel->setView(view);

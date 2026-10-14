@@ -101,6 +101,19 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/profile_dialog.cpp
     crates/pictura-app/cpp/hdr_conversion_dialog.cpp
     crates/pictura-app/cpp/pictura_raw_dialog.cpp
+    crates/pictura-app/cpp/acr/acr_settings.cpp
+    crates/pictura-app/cpp/acr/acr_controls.cpp
+    crates/pictura-app/cpp/acr/acr_preview_pane.cpp
+    crates/pictura-app/cpp/acr/acr_histogram.cpp
+    crates/pictura-app/cpp/acr/acr_basic_panel.cpp
+    crates/pictura-app/cpp/acr/acr_tone_curve_panel.cpp
+    crates/pictura-app/cpp/acr/acr_detail_panel.cpp
+    crates/pictura-app/cpp/acr/acr_hsl_panel.cpp
+    crates/pictura-app/cpp/acr/acr_split_toning_panel.cpp
+    crates/pictura-app/cpp/acr/acr_lens_panel.cpp
+    crates/pictura-app/cpp/acr/acr_effects_panel.cpp
+    crates/pictura-app/cpp/acr/acr_calibration_panel.cpp
+    crates/pictura-app/cpp/acr/acr_presets_panel.cpp
     crates/pictura-app/cpp/warp_preset_dialog.cpp
     crates/pictura-app/cpp/filter_commands.cpp
     crates/pictura-app/cpp/filter_commands.h
@@ -350,6 +363,11 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/replace_color_dialog.h
     crates/pictura-app/cpp/match_color_dialog.h
     crates/pictura-app/cpp/pictura_raw_dialog.h
+    crates/pictura-app/cpp/acr/acr_settings.h
+    crates/pictura-app/cpp/acr/acr_controls.h
+    crates/pictura-app/cpp/acr/acr_preview_pane.h
+    crates/pictura-app/cpp/acr/acr_histogram.h
+    crates/pictura-app/cpp/acr/acr_panels.h
     crates/pictura-app/cpp/warp_preset_dialog.h
     crates/pictura-app/cpp/color_settings_dialog.h
     crates/pictura-app/cpp/color_picker_dialog.h
@@ -469,7 +487,6 @@ add_executable(pictura
     crates/pictura-app/cpp/selftest_paint_live.cpp
     crates/pictura-app/cpp/selftest_paint_perf.cpp
     crates/pictura-app/cpp/selftest_paint_tools.cpp
-    crates/pictura-app/cpp/selftest_pictura_raw.cpp
     crates/pictura-app/cpp/selftest_ports.cpp
     crates/pictura-app/cpp/selftest_recent_files.cpp
     crates/pictura-app/cpp/selftest_report.cpp
@@ -509,7 +526,6 @@ add_executable(pictura
     crates/pictura-app/cpp/selftest_paint_live.h
     crates/pictura-app/cpp/selftest_paint_perf.h
     crates/pictura-app/cpp/selftest_paint_tools.h
-    crates/pictura-app/cpp/selftest_pictura_raw.h
     crates/pictura-app/cpp/selftest_ports.h
     crates/pictura-app/cpp/selftest_recent_files.h
     crates/pictura-app/cpp/selftest_report.h

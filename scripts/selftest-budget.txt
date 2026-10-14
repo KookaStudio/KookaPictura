@@ -9,4 +9,5 @@
 # Reconciled once to 514 when the Gradient/Paint Bucket/Blur tool checks landed
 # (#138) concurrently with the guard; from here it only shrinks. Lowered to 511
 # when those three checks moved to the tst_fill_tools / tst_retouch_tools suites.
-511
+# Lowered to 510 when the pictura_raw check moved to tst_pictura_raw.
+510

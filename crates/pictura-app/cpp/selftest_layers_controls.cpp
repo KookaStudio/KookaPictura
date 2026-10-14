@@ -1,7 +1,6 @@
 #include "selftest_layers_controls.h"
 #include "selftest_active_layer.h"
 #include "selftest_canvas_view.h"
-#include "selftest_pictura_raw.h"
 #include "selftest_layer_locks.h"
 #include "selftest_layers_adjustments.h"
 #include "selftest_layers_drag.h"
@@ -946,8 +945,6 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         if (const int lso = pictura::runLayersEditSmartObjectSessionChecks(frame); lso != 0) { return lso; }
 
         if (const int lso = pictura::runImageImportChecks(frame); lso != 0) { return lso; }
-
-        if (const int raw = pictura::runPicturaRawChecks(frame); raw != 0) { return raw; }
 
         if (const int ft = pictura::runFreeTransformChecks(frame); ft != 0) { return ft; }
 

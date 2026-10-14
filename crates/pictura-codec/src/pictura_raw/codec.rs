@@ -17,22 +17,37 @@ pub fn decode_pictura_raw_settings(fltr_options: &[u8]) -> PicturaRawSettings {
     let Ok(DescValue::Object { items, .. }) = crate::camera_raw_options(fltr_options) else {
         return PicturaRawSettings::default();
     };
+    decode_items(&items)
+}
+
+/// Decode the modeled controls from already-parsed `Fltr` object items.
+pub(super) fn decode_items(items: &[(Vec<u8>, DescValue)]) -> PicturaRawSettings {
     PicturaRawSettings {
-        basic: decode_basic(&items),
-        mode: decode_mode(&items),
-        tone_curve: decode_tone_curve(&items),
-        detail: decode_detail(&items),
-        hsl: decode_hsl(&items),
-        split_toning: decode_split_toning(&items),
-        lens: decode_lens(&items),
-        effects: decode_effects(&items),
-        calibration: decode_calibration(&items),
+        basic: decode_basic(items),
+        mode: decode_mode(items),
+        tone_curve: decode_tone_curve(items),
+        detail: decode_detail(items),
+        hsl: decode_hsl(items),
+        split_toning: decode_split_toning(items),
+        lens: decode_lens(items),
+        effects: decode_effects(items),
+        calibration: decode_calibration(items),
     }
 }
 
 /// Encode the modeled controls as a `Fltr` descriptor object. Only set controls
 /// are written; an all-unset settings value yields a keyless object.
 pub fn encode_pictura_raw_fltr(settings: &PicturaRawSettings) -> DescValue {
+    DescValue::Object {
+        name: String::new(),
+        class_id: b"Adobe Camera Raw Filter".to_vec(),
+        items: encode_items(settings),
+    }
+}
+
+/// The modeled controls as `Fltr` object items. Only set controls are written;
+/// an all-unset settings value yields no items.
+pub(super) fn encode_items(settings: &PicturaRawSettings) -> Vec<(Vec<u8>, DescValue)> {
     let mut items: Vec<(Vec<u8>, DescValue)> = Vec::new();
 
     let b = &settings.basic;
@@ -137,11 +152,7 @@ pub fn encode_pictura_raw_fltr(settings: &PicturaRawSettings) -> DescValue {
     push_int(&mut items, b"BSat", c.blue_saturation);
     push_int(&mut items, b"BlkB", c.shadow_tint);
 
-    DescValue::Object {
-        name: String::new(),
-        class_id: b"Adobe Camera Raw Filter".to_vec(),
-        items,
-    }
+    items
 }
 
 fn decode_basic(items: &[(Vec<u8>, DescValue)]) -> CrsSettings {
