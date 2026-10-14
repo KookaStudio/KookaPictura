@@ -39,6 +39,11 @@ and `Tree` stay unsurfaced.
 
 - `imaging/render-filters`: Picture Frame is surfaced; `Flame` and `Tree`
   remain unsurfaced.
+- `imaging/filter-application`: Picture Frame is a compositing kernel that may
+  add opacity, so the alpha-preservation requirement's "every other filter
+  leaves the transparency channel bit-identical" clause is amended to admit it.
+  This touches the same requirement as the open `filter-alpha-family-contracts`
+  change (#442); the two deltas must be reconciled when they archive.
 
 ### New Capabilities
 

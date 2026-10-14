@@ -485,8 +485,8 @@ fn cpu_preferred_kernels_skip_the_gpu() {
 #[test]
 fn moving_kernels_map_opaque_to_opaque() {
     use pictura_filters::{
-        GlassTexture, PolarKind, Quality, RadialMethod, RippleSize, SharpenRemove, ShearFill,
-        SpherizeMode, TonalFade, WaveType, ZigZagStyle,
+        FrameOptions, GlassTexture, PolarKind, Quality, RadialMethod, RippleSize, SharpenRemove,
+        ShearFill, SpherizeMode, TonalFade, WaveType, ZigZagStyle,
     };
     let filters = [
         Filter::GaussianBlur { radius: 2.0 },
@@ -604,6 +604,9 @@ fn moving_kernels_map_opaque_to_opaque() {
             texture: GlassTexture::Frosted,
             scaling: 100,
             invert: false,
+        },
+        Filter::PictureFrame {
+            options: FrameOptions::default(),
         },
     ];
     for filter in filters {

@@ -36,7 +36,10 @@ constants and idioms kept so the port diffs against upstream.
   time. `source_over` moves from photorust's `brush` module into
   `photorust/pixmap.rs`.
 - `Filter::PictureFrame` joins `filters_alpha`: a frame is composited with
-  source-over, so it can add opacity where the layer was transparent.
+  source-over, so it can add opacity where the layer was transparent. That is a
+  compositing write, not a spatial move, so the `filter-application`
+  alpha-preservation requirement is amended to name it alongside the moving
+  kernels.
 - Parameter ranges (`FRAMES`, `MARGIN`, `SIZE`, `ARRANGEMENT`, `FLOWER`,
   `LEAF`, `FLOWER_SIZE`, `LEAF_SIZE`, `LINES`, `THICKNESS`, `ANGLE`, `FADE`)
   are validated in `dispatch::plan` and rejected as

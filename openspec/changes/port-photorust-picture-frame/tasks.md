@@ -4,6 +4,8 @@
 
 - [x] 1.1 Add `source_over` to `photorust/pixmap.rs` and a `render/picture_frame.rs` port of photorust's frame model (`FrameOptions`, the catalogue, the rasteriser, the frames, the moulding).
 - [x] 1.2 Add `Filter::PictureFrame { options: FrameOptions }`, dispatch it through the photorust engine, validate its ranges, and add it to `filters_alpha`; export `FrameOptions` and the name tables.
+- [x] 1.3 Amend `imaging/filter-application`'s "Alpha and layer metadata preservation" requirement so a compositing kernel (Picture Frame) may add opacity, not just the moving kernels.
+- [x] 1.4 Add a `PictureFrame` instance to `moving_kernels_map_opaque_to_opaque` (`pictura-render`), so the new alpha-moving kind rides the opaque-layer guard.
 
 ## 2. App
 
