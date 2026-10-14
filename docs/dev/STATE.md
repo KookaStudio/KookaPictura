@@ -12,6 +12,24 @@ Snapshot for resuming after a context break. Update after each milestone.
   contains reproduced Adobe Help prose or the old wording.
 - Toolchain: Rust 1.98 (`rust-toolchain.toml`), system Qt **6.11.1**, cxx-qt
   **0.10.0**, wgpu **30.0.1**, lcms2 **6.2.0** (system Little CMS 2.19).
+- **Frameless dialogs and Keyboard Shortcuts** (#85, branch
+  `feat/85-frameless-dialogs`, OpenSpec change
+  `frameless-dialogs-keyboard-shortcuts`): `installDialogChrome()`
+  (`dialog_chrome.cpp`, installed in `main.cpp`) is one app event filter
+  that makes every Qt-drawn `QDialog` frameless at polish and adds a
+  `dialogTitleBar` (title, close = reject, `startSystemMove` drag) and a
+  `dialogFrame` outline; the title height is added to the layout's top
+  margin, so no dialog changed. Native/portal pickers are exempt (a picker
+  counts as Qt-drawn when `DontUseNativeDialog` is set or its widget tree
+  exists at polish). `KeyboardShortcutsDialog` edits Application Menus and
+  Tools: an in-cell focused key field, several bindings per command
+  (`CommandRegistry::shortcuts`/`setShortcuts`), cross-list conflicts (a
+  tool letter owns its Shift+letter), refused `workspaceKeys()`, and an
+  inline dark-on-yellow `notice` label (theme tokens `noticeBg` /
+  `noticeText`). Overrides persist as `shortcuts` / `toolShortcuts` in the
+  session store; `rebuildToolShortcuts()` skips any key a menu command
+  holds. Ceilings: no named sets, Summarize, Panel Menus, legacy channel
+  keys, or Menus tab; edge resize only on the dialog's own margin band.
 - **Isolation mode** (#112, OpenSpec change `isolation-mode`; new spec
   `ui/isolation-mode`, MODIFIED `compositing/layers-filtering-search`):
   Photoshop's Isolate Layers shipped as the Layers panel's **`Selected`** filter
@@ -68,12 +86,12 @@ Snapshot for resuming after a context break. Update after each milestone.
   a cancelled gesture is reverted from an in-view path backup, not a replayed
   inverse edit.
 - Oracles installed for tests: `psd-tools` 1.19, ImageMagick 7.1.2, `magick`.
-- Test suite: **3004 tests, 3004 passed, 21 skipped, 0 failed** from
+- Test suite: **3101 tests, 3101 passed, 23 skipped, 0 failed** from
   `cargo nextest run --workspace` (the local ImageMagick fixture mismatch,
   `imagemagick_fixtures_reproduce`, no longer fails here). The C++ self-test reports
-  **474 passed, 0 failed, 0 skipped** standalone; the unified report
+  **510 passed, 0 failed** in the unified report
   (`scripts/verify-fast.sh`, which reruns both plus the workspace probes and the
-  Qt Test suites) reports **4052 passed, 22 skipped, 0 failed**.
+  Qt Test suites), which reports **4274 passed, 24 skipped, 0 failed**.
 - **Large images** (#185, branch `perf/185-large-image-boundaries`, PR #257,
   OpenSpec change `large-image-stroke-boundaries`, numbers in its `design.md`):
   measured on a 16507×16196 PNG. History keeps a private copy of the current
