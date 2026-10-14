@@ -31,14 +31,15 @@ magick -size 8x8 -depth 8 gray:IN.gray <OPERATOR ARGS> -depth 8 gray:OUT.gray
 |---|---|---|---|---|
 | `expand(r)` | `-morphology Dilate Square:r` | yes (M5-A) | 0 | M5-A uses a separable box element `(2r+1)²`; IM `Square:r` is the same. |
 | `contract(r)` | `-morphology Erode Square:r` | yes (M5-A) | 0 | As `expand`. IM clamps outside the canvas to the edge, matching PS's canvas-edge exemption and M5-A's clamp. |
-| `feather(r)` | `-gaussian-blur 0x(r/2)` | yes (M5-A) | 0 | M5-A uses a separable Gaussian with `σ = r/2` and radius `⌈3σ⌉`; matches IM exactly on the 8×8 mask. |
+| `feather(r)` | `-gaussian-blur 0x(r/2)` | yes (M5-A) | 0 | M5-A uses a separable Gaussian with `σ = r/2` and radius `⌈3σ⌉`; matches IM exactly on the 8×8 mask. The differential pins `r = 2`; `σ >= 2` (radius >= 4) uses the variance-matched three-box approximation instead, which is not byte-compared to IM. |
 | `smooth(r)` | `-morphology Smooth Square:r` | **no** | 32 | IM `Smooth` is a mean filter; PS `Smooth` is a majority vote over a square window of sample radius `r`. Shape/magnitude only; not exercised. |
 | `invert` | `-negate` | yes | 0 | Identical `255 - v`. |
 | (threshold helper) | `-threshold T%` | yes | 0 | Binarizes a coverage mask at `T`. |
 
 Tolerances are absolute per-8-bit-sample allowances. `0` means the output is
 identical up to Q16 rounding (none observed on the 8×8 mask). The `smooth` row
-is the only approximate one.
+is the only approximate one; the feather row is exact only at the narrow-kernel
+radius the differential pins.
 
 ## Why `Square:r` and not `Disk:r`
 
