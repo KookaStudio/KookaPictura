@@ -479,16 +479,30 @@ fn cpu_preferred_kernels_skip_the_gpu() {
     }
 }
 
-/// An unlocked layer folds its alpha into the working buffer, so every moving
-/// kernel's run over a flat 255 plane must map it back to 255 — otherwise an
-/// opaque layer would gain transparency it never had.
-#[test]
-fn moving_kernels_map_opaque_to_opaque() {
+/// One of every kind [`pictura_filters::filters_alpha`] names, at settings
+/// that visibly move a 24×24 picture.
+fn moving_kernels() -> Vec<Filter> {
     use pictura_filters::{
-        FrameOptions, GlassTexture, PolarKind, Quality, RadialMethod, RippleSize, SharpenRemove,
-        ShearFill, SpherizeMode, TonalFade, WaveType, ZigZagStyle,
+        BlurNoise, BlurPin, BokehParams, DisplaceFit, DisplaceMap, FrameOptions, GlassTexture,
+        IrisPin, LiquifyBrush, LiquifyMesh, LiquifyTool, PolarKind, Quality, RadialMethod,
+        RippleSize, SharpenRemove, ShearFill, SmartBlurMode, SpherizeMode, TiltPin, TonalFade,
+        WaveType, ZigZagStyle,
     };
-    let filters = [
+    let pin = BlurPin {
+        x: 0.5,
+        y: 0.5,
+        blur: 6.0,
+    };
+    let iris = IrisPin {
+        radius_x: 0.1,
+        radius_y: 0.1,
+        ..IrisPin::default()
+    };
+    let mut mesh = LiquifyMesh::new(24, 24);
+    let brush = LiquifyBrush::new(LiquifyTool::ForwardWarp, 16.0);
+    mesh.stroke_begin(&brush, [6.0, 12.0, 1.0]);
+    mesh.stroke_to(&brush, [6.0, 12.0, 1.0], [14.0, 12.0, 1.0]);
+    vec![
         Filter::GaussianBlur { radius: 2.0 },
         Filter::BoxBlur { radius: 3 },
         Filter::MotionBlur {
@@ -605,11 +619,62 @@ fn moving_kernels_map_opaque_to_opaque() {
             scaling: 100,
             invert: false,
         },
+        Filter::ShapeBlur {
+            shape: 0,
+            radius: 3,
+        },
+        Filter::SmartBlur {
+            radius: 4.0,
+            threshold: 100.0,
+            quality: Quality::Good,
+            mode: SmartBlurMode::Normal,
+        },
+        Filter::FieldBlur {
+            pins: vec![pin],
+            bokeh: BokehParams::default(),
+            noise: BlurNoise::default(),
+        },
+        Filter::IrisBlur {
+            pins: vec![iris],
+            bokeh: BokehParams::default(),
+            noise: BlurNoise::default(),
+        },
+        Filter::TiltShift {
+            pins: vec![TiltPin::default()],
+            bokeh: BokehParams::default(),
+            noise: BlurNoise::default(),
+        },
+        Filter::BlurGallery {
+            field: vec![pin],
+            iris: vec![iris],
+            tilt: vec![TiltPin::default()],
+            bokeh: BokehParams::default(),
+            noise: BlurNoise::default(),
+        },
+        Filter::Displace {
+            map: std::sync::Arc::new(
+                DisplaceMap::new(2, 2, vec![0, 255, 255, 0], vec![255, 0, 0, 255]).unwrap(),
+            ),
+            horizontal_scale: 10.0,
+            vertical_scale: 10.0,
+            fit: DisplaceFit::StretchToFit,
+            wrap: false,
+        },
+        Filter::Liquify {
+            mesh: std::sync::Arc::new(mesh),
+        },
         Filter::PictureFrame {
             options: FrameOptions::default(),
         },
-    ];
-    for filter in filters {
+    ]
+}
+
+/// An unlocked layer folds its alpha into the working buffer, so every moving
+/// kernel's run over a flat 255 plane must map it back to 255 — otherwise an
+/// opaque layer would gain transparency it never had.
+#[test]
+fn moving_kernels_map_opaque_to_opaque() {
+    for filter in moving_kernels() {
         assert!(pictura_filters::filters_alpha(&filter), "{filter:?}");
         let mut buf = PixelBuffer::new(24, 24, 4);
         buf.data.as_mut_slice().fill(255);
@@ -618,6 +683,36 @@ fn moving_kernels_map_opaque_to_opaque() {
         assert!(
             buf.data[3 * n..].iter().all(|&a| a == 255),
             "{filter:?} does not map opaque to opaque"
+        );
+    }
+}
+
+/// Every moving kernel actually runs over an unlocked layer's alpha: a soft
+/// disc with a stray speck must come out changed (#406). A kernel that capped
+/// at three planes would hand the fold its alpha back untouched.
+#[test]
+fn moving_kernels_move_a_soft_layer_edge() {
+    let (w, h) = (24usize, 24usize);
+    let mut layer = varied_layer(w as i32, h as i32);
+    let alpha: Vec<u8> = (0..w * h)
+        .map(|i| {
+            let (x, y) = ((i % w) as f64 - 11.5, (i / w) as f64 - 11.5);
+            let soft = ((7.0 - x.hypot(y)) * 48.0 + 128.0).clamp(0.0, 255.0) as u8;
+            if i == 2 * w + 2 {
+                255
+            } else {
+                soft
+            }
+        })
+        .collect();
+    layer.channels.iter_mut().find(|c| c.id == -1).unwrap().data = alpha.clone().into();
+    for filter in moving_kernels() {
+        let mut out = layer.clone();
+        apply_filter(&mut out, &filter, None, false).unwrap();
+        assert_ne!(
+            chan(&out, -1),
+            alpha.as_slice(),
+            "{filter:?} left the layer edge where it was"
         );
     }
 }

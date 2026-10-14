@@ -1,14 +1,8 @@
-name: pages
+name: Deploy Pages
 
-# Publishes the static landing site in site/ to GitHub Pages. Enable it once in
-# the repository settings: Settings -> Pages -> Build and deployment -> Source:
-# "GitHub Actions". After that every push to master that touches site/ redeploys.
 on:
   push:
     branches: [master]
-    paths:
-      - site/**
-      - .github/workflows/pages.yml
   workflow_dispatch:
 
 permissions:
@@ -21,17 +15,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deploy:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  build:
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v4

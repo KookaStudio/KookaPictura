@@ -42,8 +42,10 @@ and `Tree` stay unsurfaced.
 - `imaging/filter-application`: Picture Frame is a compositing kernel that may
   add opacity, so the alpha-preservation requirement's "every other filter
   leaves the transparency channel bit-identical" clause is amended to admit it.
-  This touches the same requirement as the open `filter-alpha-family-contracts`
-  change (#442); the two deltas must be reconciled when they archive.
+  This touches the same requirement as `filter-alpha-family-contracts` (#442,
+  now merged as code); this delta carries #442's amendments (Smart Blur in
+  Normal mode only, Liquify, and the soft-edge scenario) as well, so it applies
+  cleanly whether or not that change has archived first.
 
 ### New Capabilities
 

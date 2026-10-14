@@ -39,7 +39,8 @@ constants and idioms kept so the port diffs against upstream.
   source-over, so it can add opacity where the layer was transparent. That is a
   compositing write, not a spatial move, so the `filter-application`
   alpha-preservation requirement is amended to name it alongside the moving
-  kernels.
+  kernels; the delta carries #442's amendments to the same requirement so the
+  two archive in either order.
 - Parameter ranges (`FRAMES`, `MARGIN`, `SIZE`, `ARRANGEMENT`, `FLOWER`,
   `LEAF`, `FLOWER_SIZE`, `LEAF_SIZE`, `LINES`, `THICKNESS`, `ANGLE`, `FADE`)
   are validated in `dispatch::plan` and rejected as
