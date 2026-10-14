@@ -552,6 +552,12 @@ pub(super) fn vector_mask_thumbnail_image(
             size,
         )
     };
+    let clip = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: doc_height as i32,
+        right: doc_width as i32,
+    };
     let mut rgba = vec![0u8; (tw * th * 4) as usize];
     for ty in 0..th {
         let dy = (ty as u64 * doc_height as u64 / th as u64) as i32;
@@ -560,7 +566,7 @@ pub(super) fn vector_mask_thumbnail_image(
             let value = if !mask.has_fill() {
                 255
             } else {
-                let inside = mask.inside(dx, dy);
+                let inside = mask.inside(dx, dy, clip);
                 let show = if mask.invert { !inside } else { inside };
                 if show {
                     255

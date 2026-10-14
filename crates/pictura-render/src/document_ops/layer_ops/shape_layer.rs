@@ -7,7 +7,7 @@
 
 use pictura_codec::LiveShape;
 use pictura_core::path::Subpath;
-use pictura_core::{Document, Layer, LayerBlock};
+use pictura_core::{Document, Layer, LayerBlock, PsdRect};
 
 use super::create::{add_solid_fill, next_layer_name};
 use super::paths::resolve_path_mut;
@@ -86,9 +86,10 @@ pub fn shape_fill_color(layer: &Layer) -> Option<[u8; 4]> {
     }
 }
 
-/// The layer's vector-mask coverage (0–255) at a document pixel.
-pub fn shape_coverage(layer: &Layer, x: i32, y: i32) -> u8 {
-    crate::vector_mask::coverage(layer.vector_mask.as_ref(), x, y)
+/// The layer's vector-mask coverage (0–255) at a document pixel; `clip` is the
+/// sampled region the coverage's row table is bounded to.
+pub fn shape_coverage(layer: &Layer, clip: PsdRect, x: i32, y: i32) -> u8 {
+    crate::vector_mask::coverage(layer.vector_mask.as_ref(), clip, x, y)
 }
 
 fn set_block(layer: &mut Layer, key: &[u8; 4], data: Option<Vec<u8>>) {
@@ -132,12 +133,18 @@ mod tests {
         let layer = super::super::paths::resolve_path(&doc, &path)
             .unwrap()
             .clone();
+        let clip = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 16,
+            right: 16,
+        };
         assert!(is_shape_layer(&layer));
         assert!(!is_shape_layer(&doc.layers[0]));
         assert_eq!(layer_live_shape(&layer), Some(live));
-        assert_eq!(shape_coverage(&layer, 5, 5), 255);
+        assert_eq!(shape_coverage(&layer, clip, 5, 5), 255);
         assert_eq!(shape_fill_color(&layer).map(|c| c[2]), Some(255));
-        assert_eq!(shape_coverage(&layer, 12, 12), 0);
+        assert_eq!(shape_coverage(&layer, clip, 12, 12), 0);
 
         let mut paths = layer_shape_paths(&layer, 16, 16).unwrap();
         assert_eq!(paths[0].points[2].anchor, (10.0, 10.0));
@@ -145,7 +152,11 @@ mod tests {
         let mut edited = layer;
         set_layer_shape_paths(&mut edited, &paths, 16, 16);
         set_layer_live_shape(&mut edited, None);
-        assert_eq!(shape_coverage(&edited, 11, 11), 255, "the outline grew");
+        assert_eq!(
+            shape_coverage(&edited, clip, 11, 11),
+            255,
+            "the outline grew"
+        );
         assert_eq!(layer_live_shape(&edited), None);
         assert!(edited.extra_block(b"vogk").is_none());
         assert_eq!(

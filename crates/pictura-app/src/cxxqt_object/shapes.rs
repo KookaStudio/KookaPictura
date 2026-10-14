@@ -474,6 +474,12 @@ pub(super) fn shape_thumbnail(
     }
     let side = size as u32;
     let scale = doc.width.max(doc.height) as f64 / side as f64;
+    let clip = pictura_core::PsdRect {
+        top: 0,
+        left: 0,
+        bottom: doc.height as i32,
+        right: doc.width as i32,
+    };
     let mut rgba = vec![0u8; (side * side * 4) as usize];
     for ty in 0..side {
         for tx in 0..side {
@@ -482,7 +488,7 @@ pub(super) fn shape_thumbnail(
             if x >= doc.width as i32 || y >= doc.height as i32 {
                 continue;
             }
-            let a = pictura_render::shape_coverage(layer, x, y);
+            let a = pictura_render::shape_coverage(layer, clip, x, y);
             let o = ((ty * side + tx) * 4) as usize;
             rgba[o..o + 4].copy_from_slice(&[r, g, b, a]);
         }

@@ -94,7 +94,7 @@ pub(crate) fn vector(mask: Option<&VectorMask>, clip: PsdRect, x: i32, y: i32) -
             c
         }
     } else {
-        crate::vector_mask::coverage(Some(mask), x, y)
+        crate::vector_mask::coverage(Some(mask), clip, x, y)
     };
     density(m, mask.density)
 }
@@ -242,11 +242,18 @@ fn feather_vector(mask: &VectorMask, radius: f64, clip: PsdRect) -> Feathered {
         ];
     }
     let bounds = plane_bounds(bbox, clip, i64::from(reach(radius)));
+    // The plane is the exact region sampled, so it bounds the row table too.
+    let plane_rect = PsdRect {
+        left: bounds[0],
+        top: bounds[1],
+        right: bounds[2],
+        bottom: bounds[3],
+    };
     let mut plane = Feathered::new(bounds, 0, 0);
     if plane.width > 0 {
         for (row, line) in plane.data.chunks_exact_mut(plane.width).enumerate() {
             for (col, v) in line.iter_mut().enumerate() {
-                if mask.inside(bounds[0] + col as i32, bounds[1] + row as i32) {
+                if mask.inside(bounds[0] + col as i32, bounds[1] + row as i32, plane_rect) {
                     *v = 255;
                 }
             }
