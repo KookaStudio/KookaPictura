@@ -14,7 +14,7 @@
 //! [`PictureView`]: super::qobject::PictureView
 
 use super::helpers::rgba_from_argb;
-use super::helpers_composite::rgba_image;
+use super::helpers_composite::{aspect_thumbnail_extent, rgba_image};
 use super::paint_tools::fills::{apply, selection};
 use super::qobject::PictureView;
 use core::pin::Pin;
@@ -459,8 +459,9 @@ fn shape_is_shape(view: &PictureView, path: &QString) -> bool {
         .is_some_and(pictura_render::is_shape_layer)
 }
 
-/// A shape layer's fill-coverage thumbnail over the document extent, `size`
-/// square; empty for a non-shape layer, no fill colour, or a non-positive size.
+/// A shape layer's fill-coverage thumbnail over the document extent at the
+/// document's aspect ratio (`size` on the long edge); empty for a non-shape
+/// layer, no fill colour, or a non-positive size.
 pub(super) fn shape_thumbnail(
     layer: &pictura_core::Layer,
     doc: &pictura_core::Document,
@@ -472,28 +473,29 @@ pub(super) fn shape_thumbnail(
     if size <= 0 || doc.width == 0 || doc.height == 0 {
         return QImage::default();
     }
-    let side = size as u32;
-    let scale = doc.width.max(doc.height) as f64 / side as f64;
+    let (tw, th) = aspect_thumbnail_extent(doc.width, doc.height, size as u32);
+    let scale_x = doc.width as f64 / tw as f64;
+    let scale_y = doc.height as f64 / th as f64;
     let clip = pictura_core::PsdRect {
         top: 0,
         left: 0,
         bottom: doc.height as i32,
         right: doc.width as i32,
     };
-    let mut rgba = vec![0u8; (side * side * 4) as usize];
-    for ty in 0..side {
-        for tx in 0..side {
-            let x = ((tx as f64 + 0.5) * scale) as i32;
-            let y = ((ty as f64 + 0.5) * scale) as i32;
+    let mut rgba = vec![0u8; (tw * th * 4) as usize];
+    for ty in 0..th {
+        for tx in 0..tw {
+            let x = ((tx as f64 + 0.5) * scale_x) as i32;
+            let y = ((ty as f64 + 0.5) * scale_y) as i32;
             if x >= doc.width as i32 || y >= doc.height as i32 {
                 continue;
             }
             let a = pictura_render::shape_coverage(layer, clip, x, y);
-            let o = ((ty * side + tx) * 4) as usize;
+            let o = ((ty * tw + tx) * 4) as usize;
             rgba[o..o + 4].copy_from_slice(&[r, g, b, a]);
         }
     }
-    rgba_image(rgba, size, size)
+    rgba_image(rgba, tw as i32, th as i32)
 }
 
 /// Copy the shape layer at `path`'s fill and stroke into the clipboard. False
