@@ -683,9 +683,6 @@ pub struct SmartObject {
     /// The `filterFXStyle.enab` group flag: whether the whole smart-filter
     /// stack is enabled. Defaults to `true`.
     pub smart_filters_enabled: bool,
-    /// The smart-filter mask, session-only. Masks pixels are not decoded yet,
-    /// so this stays `None`; the preserved bytes carry the mask on disk.
-    pub filter_mask: Option<LayerMask>,
 }
 
 impl Default for SmartObject {
@@ -706,7 +703,6 @@ impl Default for SmartObject {
             filter_mask_linked: false,
             filter_mask_extend_with_white: true,
             smart_filters_enabled: true,
-            filter_mask: None,
         }
     }
 }

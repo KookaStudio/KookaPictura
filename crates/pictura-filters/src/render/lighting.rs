@@ -32,16 +32,6 @@ pub enum LightType {
     Infinite,
 }
 
-impl LightType {
-    pub fn from_i32(value: i32) -> LightType {
-        match value {
-            1 => LightType::Point,
-            2 => LightType::Infinite,
-            _ => LightType::Spot,
-        }
-    }
-}
-
 /// Which channel is read as a height map — CS6's Texture list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TextureChannel {
@@ -50,17 +40,6 @@ pub enum TextureChannel {
     Red,
     Green,
     Blue,
-}
-
-impl TextureChannel {
-    pub fn from_i32(value: i32) -> TextureChannel {
-        match value {
-            1 => TextureChannel::Red,
-            2 => TextureChannel::Green,
-            3 => TextureChannel::Blue,
-            _ => TextureChannel::None,
-        }
-    }
 }
 
 /// One light: the upper half of CS6's Properties panel plus the handles
