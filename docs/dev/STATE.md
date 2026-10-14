@@ -25,7 +25,9 @@ Snapshot for resuming after a context break. Update after each milestone.
   official macOS Qt is built without Vulkan and ships no `QVulkanInstance`
   header. `macos-bundle` now copies Qt's offscreen QPA plugin into the bundle
   before `macdeployqt`, so the `--headless` smoke check runs from the bundle
-  (linux/windows already deployed it). The `macos.yml` job's release-please-only `if:` is relaxed
+  (linux/windows already deployed it). `pictura-render`'s `request_device` now
+  returns "no GPU" when wgpu has no implemented backend for the target, instead
+  of panicking in `Instance::new` on macOS. The `macos.yml` job's release-please-only `if:` is relaxed
   **temporarily** (the C++/packaging paths are added to its `paths:`) so the fix
   builds on a normal PR; both edits are reverted once the macOS build is green
   on master. New `tst_native_menu_bar` asserts the shell never opts out of the
