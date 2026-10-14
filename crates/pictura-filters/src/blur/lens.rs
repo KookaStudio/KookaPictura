@@ -139,7 +139,7 @@ pub fn lens_blur(
     let w = buf.width as usize;
     let h = buf.height as usize;
     let n = w * h;
-    let planes = (buf.channels as usize).min(3);
+    let planes = buf.channels as usize;
     let radii = radii_map(w, h, depth, lens);
     let max_r = radii.iter().copied().max().unwrap_or(0) as usize;
     if max_r == 0 && lens.noise_amount == 0 {
@@ -161,6 +161,10 @@ pub fn lens_blur(
     for c in 0..planes {
         let base = c * n;
         let channel = if lens.monochromatic { 0 } else { c as u32 };
+        // The alpha plane takes the defocus alone: the specular bloom and the
+        // noise are colour.
+        let colour = c < 3;
+        let brightness = if colour { brightness } else { 0.0 };
         buf.data[base..base + n]
             .par_chunks_mut(w)
             .enumerate()
@@ -192,7 +196,7 @@ pub fn lens_blur(
                             base_value
                         }
                     };
-                    if noise > 0.0 {
+                    if colour && noise > 0.0 {
                         let visible = alpha_base.is_none_or(|a| src[a + i] != 0);
                         if visible {
                             value += noise * jitter(lens, x as u32, y as u32, channel);

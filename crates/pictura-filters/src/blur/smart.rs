@@ -58,20 +58,35 @@ pub fn smart(
     // Channel differences are whole levels, so `d <= threshold` is `d <= limit`.
     let limit = threshold.floor() as i32;
     let taps = taps(radius, quality);
-    let src = buf.data[..3 * n].to_vec();
-    let (r, rest) = buf.data[..3 * n].split_at_mut(n);
+    // Normal mode averages alpha over the taps the colour admits, so the
+    // layer edge softens with it; the edge modes paint colour only.
+    let planes = if buf.channels == 4 && mode == SmartBlurMode::Normal {
+        4
+    } else {
+        3
+    };
+    let src = buf.data[..planes * n].to_vec();
+    let (rgb, alpha) = buf.data[..planes * n].split_at_mut(3 * n);
+    let (r, rest) = rgb.split_at_mut(n);
     let (g, b) = rest.split_at_mut(n);
+    let alpha_rows: Vec<Option<&mut [u8]>> = if alpha.is_empty() {
+        (0..h).map(|_| None).collect()
+    } else {
+        alpha.chunks_mut(w).map(Some).collect()
+    };
     let at = |x: isize, y: isize| {
         let i = y.clamp(0, h as isize - 1) as usize * w + x.clamp(0, w as isize - 1) as usize;
-        [src[i], src[n + i], src[2 * n + i]]
+        let a = if planes == 4 { src[3 * n + i] } else { 0 };
+        [src[i], src[n + i], src[2 * n + i], a]
     };
     let far =
-        |p: [u8; 3], q: [u8; 3]| (0..3).any(|c| (i32::from(p[c]) - i32::from(q[c])).abs() > limit);
+        |p: [u8; 4], q: [u8; 4]| (0..3).any(|c| (i32::from(p[c]) - i32::from(q[c])).abs() > limit);
     r.par_chunks_mut(w)
         .zip(g.par_chunks_mut(w))
         .zip(b.par_chunks_mut(w))
+        .zip(alpha_rows)
         .enumerate()
-        .for_each(|(y, ((ro, go), bo))| {
+        .for_each(|(y, (((ro, go), bo), mut ao))| {
             let y = y as isize;
             for x in 0..w {
                 let xi = x as isize;
@@ -81,15 +96,15 @@ pub fn smart(
                         .iter()
                         .any(|&(dx, dy)| far(p, at(xi + dx, y + dy)));
                 let out = match mode {
-                    SmartBlurMode::EdgeOnly => [if edge { 255 } else { 0 }; 3],
-                    _ if edge => [255; 3],
+                    SmartBlurMode::EdgeOnly => [if edge { 255 } else { 0 }; 4],
+                    _ if edge => [255; 4],
                     _ => {
-                        let mut acc = [0f32; 3];
+                        let mut acc = [0f32; 4];
                         let mut total = 0f32;
                         for tap in &taps {
                             let q = at(xi + tap.dx, y + tap.dy);
                             if !far(p, q) {
-                                for c in 0..3 {
+                                for c in 0..4 {
                                     acc[c] += tap.weight * f32::from(q[c]);
                                 }
                                 total += tap.weight;
@@ -102,6 +117,9 @@ pub fn smart(
                 ro[x] = out[0];
                 go[x] = out[1];
                 bo[x] = out[2];
+                if let Some(ao) = ao.as_deref_mut() {
+                    ao[x] = out[3];
+                }
             }
         });
     Ok(())
@@ -257,6 +275,29 @@ mod tests {
         );
         assert!(taps(40.0, Quality::Draft).len() < taps(40.0, Quality::Good).len());
         assert!(taps(40.0, Quality::Good).len() < taps(40.0, Quality::Best).len());
+    }
+
+    #[test]
+    fn normal_mode_blurs_alpha_only_across_the_taps_the_colour_admits() {
+        let (w, h) = (12usize, 12usize);
+        let n = w * h;
+        let mut rgba = PixelBuffer::new(w as u32, h as u32, 4);
+        for i in 0..n {
+            let left = i % w < 6;
+            for c in 0..3 {
+                rgba.data[c * n + i] = if left { 40 } else { 220 };
+            }
+            rgba.data[3 * n + i] = if left { 0 } else { 255 };
+        }
+        rgba.data[3 * n + 5 * w + 2] = 255;
+        smart(&mut rgba, 4.0, 50.0, Quality::Best, SmartBlurMode::Normal).unwrap();
+        let alpha = &rgba.data[3 * n..];
+        assert!(alpha[5 * w + 2] < 255, "the speck spreads");
+        assert!(alpha[5 * w + 3] > 0, "into its neighbours");
+        for y in 0..h {
+            assert_eq!(alpha[y * w + 6..(y + 1) * w], [255; 6], "row {y}");
+        }
+        assert_eq!(alpha[11 * w + 5], 0, "the colour edge holds the alpha edge");
     }
 
     #[test]

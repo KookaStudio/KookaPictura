@@ -354,6 +354,8 @@ fn row_parallel_kernels_keep_their_serial_bytes() {
     // Moving kernels now run over the picture's fourth plane as well, so
     // their digests moved with the fold; value kernels (custom, high pass)
     // still leave alpha bit-identical and keep their old digests.
+    // Shape, Smart Blur Normal and Lens Blur joined the fold in #406: their
+    // colour bytes are unchanged, only the alpha plane now moves.
     let expected = [
         ("gaussian 1.5", 0xc400_4efa_61a4_ed25),
         ("gaussian 9", 0x7972_fd09_8cf3_00f3),
@@ -364,9 +366,9 @@ fn row_parallel_kernels_keep_their_serial_bytes() {
         ("motion -75", 0xc47c_d47d_da23_3405),
         ("box 2", 0xb4f7_9300_d71d_b971),
         ("box 70", 0x033c_5682_b051_aa87),
-        ("shape heart 7", 0x5e7f_3ab9_03a1_f59a),
-        ("shape arrow 40", 0x0d9c_2fdc_6023_46c7),
-        ("smart normal 6", 0x9807_7b07_7a5e_4060),
+        ("shape heart 7", 0x9f27_8f83_1ee2_3188),
+        ("shape arrow 40", 0x7b84_d94c_95db_a0c0),
+        ("smart normal 6", 0xa536_c508_d93b_cf70),
         ("smart overlay 40", 0x90b2_060d_1532_f549),
         ("smart edges 3", 0x7d47_9518_947e_946e),
         ("maximum 2", 0xd5f0_6297_d8a0_bcba),
@@ -375,7 +377,7 @@ fn row_parallel_kernels_keep_their_serial_bytes() {
         ("high pass", 0x366c_a481_61d8_b4dd),
         ("radial spin", 0x4c62_de8a_06d5_6282),
         ("radial zoom", 0x356d_0a67_96e5_c3b5),
-        ("lens blur", 0x954e_772d_0d08_f422),
+        ("lens blur", 0x55cd_8bd2_19be_c27a),
         ("field blur", 0x28df_9133_325d_d4e6),
         ("iris blur", 0xc3bb_434e_14ef_8186),
         ("tilt-shift", 0x0c98_ef52_c090_cca3),

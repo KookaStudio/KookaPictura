@@ -7,9 +7,12 @@ use rayon::prelude::*;
 use super::{catmull_rom, LiquifyMesh};
 use crate::{validate, FilterError};
 
-/// Resample `buf`'s colour planes through `mesh` (stretched to fit when the
+/// Resample every plane of `buf` through `mesh` (stretched to fit when the
 /// sizes differ): each pixel shows the source at `p + d(p)`, edge pixels
-/// repeating past the layer. Alpha is untouched.
+/// repeating past the layer. An alpha plane moves with the colour, as in the
+/// dialog's preview; the planes resample straight, not premultiplied as the
+/// preview does, so a semi-transparent edge's colour can differ from it.
+/// ponytail: straight resampling; a premultiplied commit would close that gap.
 pub fn liquify(buf: &mut PixelBuffer, mesh: &LiquifyMesh) -> Result<(), FilterError> {
     validate(buf)?;
     if mesh.is_identity() {
@@ -24,7 +27,7 @@ pub fn liquify(buf: &mut PixelBuffer, mesh: &LiquifyMesh) -> Result<(), FilterEr
     };
     let (w, h) = (buf.width as usize, buf.height as usize);
     let n = w * h;
-    let planes = (buf.channels as usize).min(3);
+    let planes = buf.channels as usize;
     let src = buf.data[..planes * n].to_vec();
     let moved: Vec<bool> = mesh
         .d

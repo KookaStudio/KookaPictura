@@ -209,28 +209,42 @@ fn noise_is_seeded_and_monochromatic_keeps_channels_equal() {
 }
 
 #[test]
-fn alpha_is_untouched() {
+fn alpha_takes_the_defocus_without_bloom_or_noise() {
     let (w, h) = (9, 9);
     let n = (w * h) as usize;
+    let ramp: Vec<u8> = (0..n).map(|i| (i * 11) as u8).collect();
     let mut data = vec![0u8; n * 4];
     for i in 0..n {
         data[i] = 50;
         data[n + i] = 80;
         data[2 * n + i] = 120;
-        data[3 * n + i] = (i * 11) as u8;
+        data[3 * n + i] = ramp[i];
     }
-    let mut buf = PixelBuffer {
+    let mut rgba = PixelBuffer {
         width: w,
         height: h,
         channels: 4,
         data: data.into(),
     };
-    let before = buf.data[3 * n..].to_vec();
     let mut p = params();
     p.radius = 4;
     p.noise_amount = 30;
-    lens_blur(&mut buf, None, &p).unwrap();
-    assert_eq!(&buf.data[3 * n..], &before[..]);
+    p.specular_brightness = 100;
+    p.specular_threshold = 0;
+    lens_blur(&mut rgba, None, &p).unwrap();
+
+    // The same plane as colour, with the bloom and the noise off.
+    let mut grey = PixelBuffer {
+        width: w,
+        height: h,
+        channels: 3,
+        data: ramp.repeat(3).into(),
+    };
+    p.noise_amount = 0;
+    p.specular_brightness = 0;
+    lens_blur(&mut grey, None, &p).unwrap();
+    assert_ne!(&rgba.data[3 * n..], &ramp[..], "alpha is defocused");
+    assert_eq!(&rgba.data[3 * n..], &grey.data[..n]);
 }
 
 #[test]
