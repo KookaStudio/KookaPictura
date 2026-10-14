@@ -29,7 +29,12 @@
     <file>icons/crop.apply.svg</file>
     <file>icons/crop.cancel.svg</file>
     <file>icons/crop.cog.svg</file>
-    <file>icons/crop.grid.svg</file>
+    <file>icons/crop.overlay.ruleOfThirds.svg</file>
+    <file>icons/crop.overlay.grid.svg</file>
+    <file>icons/crop.overlay.diagonal.svg</file>
+    <file>icons/crop.overlay.triangle.svg</file>
+    <file>icons/crop.overlay.goldenRatio.svg</file>
+    <file>icons/crop.overlay.goldenSpiral.svg</file>
     <file>icons/crop.swap.svg</file>
     <file>icons/image.crop.svg</file>
     <file>icons/image.flipHorizontal.svg</file>

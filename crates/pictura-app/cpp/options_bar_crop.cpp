@@ -54,8 +54,8 @@ void addComboHeader(QComboBox* combo, const QString& text)
 // CS6's Crop bar: the ratio select with a free `Ratio` default, the W/H fields
 // (ratio values, or pixels in the W x H x Resolution mode) with swap, Clear and
 // the spirit-level Straighten toggle, grid and settings menus, Delete Cropped
-// Pixels and a disabled Content-Aware placeholder, reset, and a cancel/commit
-// pair (Esc / Enter do the same). Groups are separated by vertical rules.
+// Pixels, reset, and a cancel/commit pair (Esc / Enter do the same). Groups are
+// separated by vertical rules.
 QWidget* OptionsBar::buildCropPage(ToolId id)
 {
     auto* page = new QWidget(stack_);
@@ -179,23 +179,24 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
         button->setMenu(new QMenu(button));
         return button;
     };
-    // Grid overlay menu: overlay choice, show mode, and cycle hints.
-    auto* gridButton = menuIcon(QStringLiteral("optionsCropGrid"), QStringLiteral("crop.grid"),
-                                QStringLiteral("Crop guide overlay"));
+    // Grid overlay menu: overlay choice, show mode, and cycle hints. Each overlay
+    // has its icon, and the button shows the selected one.
+    auto* gridButton = menuIcon(
+        QStringLiteral("optionsCropGrid"),
+        CropOptions::overlayIcon(controller_ ? crop_->gridOverlay() : 0),
+        QStringLiteral("Crop guide overlay"));
     {
         QMenu* menu = gridButton->menu();
         auto* group = new QActionGroup(menu);
         group->setExclusive(true);
-        const QStringList overlays = {
-            QStringLiteral("Rule of Thirds"), QStringLiteral("Grid"),
-            QStringLiteral("Diagonal"),       QStringLiteral("Triangle"),
-            QStringLiteral("Golden Ratio"),   QStringLiteral("Golden Spiral")};
+        const QStringList& overlays = CropOptions::overlayNames();
         for (int i = 0; i < overlays.size(); ++i) {
-            QAction* action = menu->addAction(overlays[i]);
+            QAction* action = menu->addAction(icon(CropOptions::overlayIcon(i)), overlays[i]);
             action->setCheckable(true);
             action->setChecked(controller_ ? crop_->gridOverlay() == i : i == 0);
             group->addAction(action);
-            connect(action, &QAction::triggered, this, [this, i]() {
+            connect(action, &QAction::triggered, this, [this, gridButton, i]() {
+                gridButton->setIcon(icon(CropOptions::overlayIcon(i)));
                 if (controller_) {
                     crop_->setGridOverlay(i);
                 }
@@ -287,11 +288,6 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
     deletePixels->setToolTip(QStringLiteral(
         "Discard the pixels outside the crop rather than keeping them beyond the canvas edge"));
     layout->addWidget(deletePixels);
-    auto* contentAware = new QCheckBox(QStringLiteral("Content-Aware"), page);
-    contentAware->setObjectName(QStringLiteral("optionsCropContentAware"));
-    contentAware->setEnabled(false);
-    contentAware->setToolTip(QStringLiteral("Content-Aware crop is not implemented"));
-    layout->addWidget(contentAware);
     layout->addWidget(separator());
 
     auto* reset = new QToolButton(page);
@@ -439,7 +435,7 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
         connect(cancel, &QToolButton::clicked, this, [this]() { controller_->cancelCrop(); });
         connect(commit, &QToolButton::clicked, this, [this]() { controller_->commitCrop(); });
         // Cancel/Apply/Reset are visible only while a box is active (not in the
-        // preview or the boxless init state). Re-synced on every crop-state
+        // preview or the no-box state after Escape). Re-synced on every crop-state
         // change, not just the tool switch.
         const auto syncCommitControls = [this, reset, cancel, commit]() {
             const bool on = controller_ && controller_->cropActive();

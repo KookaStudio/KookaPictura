@@ -63,11 +63,12 @@ void CropSessionTest::sessionRecordsAndWalksSteps()
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
-    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(true);  // boxless start: draw a box
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(true);
     frame.setActiveTool(pictura::ToolId::Crop);
     QVERIFY2(!tools->canToolUndo(), "a fresh box is the session base");
 
-    drag(canvas, QPointF(0, 0), QPointF(30, 30));  // draw (0,0,30,30)
+    // Drawn from inside the start box (its edges are resize handles).
+    drag(canvas, QPointF(30, 30), QPointF(0, 0));  // draw (0,0,30,30)
     QVERIFY(tools->pendingCropRect() == QRect(0, 0, 30, 30));
     QVERIFY(tools->canToolUndo());
 
@@ -119,9 +120,9 @@ void CropSessionTest::commandUndoReachesTheSession()
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
-    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(true);  // boxless start: draw a box
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(true);
     frame.setActiveTool(pictura::ToolId::Crop);
-    drag(canvas, QPointF(0, 0), QPointF(30, 30));
+    drag(canvas, QPointF(30, 30), QPointF(0, 0));
     drag(canvas, QPointF(30, 30), QPointF(20, 20));
 
     // The Edit Undo command is enabled by the session, so Ctrl+Z reaches it.

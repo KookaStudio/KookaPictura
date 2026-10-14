@@ -21,10 +21,41 @@
       "slug": "settings",
       "match": "good"
     },
-    "crop.grid": {
-      "kind": "lucide",
-      "slug": "grid-3x3",
-      "match": "good"
+    "crop.overlay.diagonal": {
+      "kind": "custom",
+      "match": "custom",
+      "note": "square with both diagonals",
+      "base": "square"
+    },
+    "crop.overlay.goldenRatio": {
+      "kind": "custom",
+      "match": "custom",
+      "note": "square with guides at the golden-ratio fractions",
+      "base": "square"
+    },
+    "crop.overlay.goldenSpiral": {
+      "kind": "custom",
+      "match": "custom",
+      "note": "square with a golden spiral about its centre",
+      "base": "square"
+    },
+    "crop.overlay.grid": {
+      "kind": "custom",
+      "match": "custom",
+      "note": "square with a six-by-six grid",
+      "base": "square"
+    },
+    "crop.overlay.ruleOfThirds": {
+      "kind": "custom",
+      "match": "custom",
+      "note": "square with guides at thirds",
+      "base": "square"
+    },
+    "crop.overlay.triangle": {
+      "kind": "custom",
+      "match": "custom",
+      "note": "square with diagonals and top-corner fans to the bottom centre, as the Triangle overlay draws",
+      "base": "square"
     },
     "crop.swap": {
       "kind": "lucide",

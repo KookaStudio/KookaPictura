@@ -281,10 +281,13 @@ public:
     // guides, its frame, and eight handles.
     void setCropBox(const QRectF& box);
     void clearCropBox();
-    // A preview crop box: a dashed outline with no rule-of-thirds guides and no
-    // resize handles. Stays set until the next setCropPreview.
+    // A preview crop box (the box the tool starts with): its frame and handles
+    // but no guides. Stays set until the next setCropPreview.
     void setCropPreview(bool preview);
     bool cropPreviewForTest() const { return cropPreview_; }
+    // While the box is being rotated a dense grid replaces the guide overlay.
+    void setCropRotating(bool rotating);
+    bool cropRotatingForTest() const { return cropRotating_; }
     // The active crop guide overlay: 0 Rule of Thirds, 1 Grid, 2 Diagonal,
     // 3 Triangle, 4 Golden Ratio, 5 Golden Spiral. Drawn only on an active box.
     void setCropOverlay(int overlay);
@@ -433,6 +436,7 @@ public:
     void setDragSizeHint(const QString& text, const QPointF& imagePos);
     void clearDragSizeHint();
     bool hasDragSizeHintForTest() const { return dragSizeActive_ && !dragSizeText_.isEmpty(); }
+    QString dragSizeHintForTest() const { return dragSizeText_; }
 
     // Test hooks for the internal level-crop present cache.
     bool presentCacheRebuiltOnLastPaint() const { return presentCacheRebuiltLastPaint_; }
@@ -526,6 +530,7 @@ private:
     double perspectiveGridSpacing_ = 0.0;
     QRectF cropBox_;
     bool cropPreview_ = false;
+    bool cropRotating_ = false;
     int cropOverlay_ = 0;
     QPointF cropContentOffset_;
     double cropStraighten_ = 0.0;

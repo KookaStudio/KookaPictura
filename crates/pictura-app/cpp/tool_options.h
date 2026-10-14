@@ -3,6 +3,7 @@
 #include <QtCore/QPoint>
 #include <QtCore/QPointF>
 #include <QtCore/QString>
+#include <QtCore/QStringList>
 #include <QtGui/QColor>
 
 #include <algorithm>
@@ -682,6 +683,26 @@ public:
         if (optionsChanged) {
             optionsChanged();
         }
+    }
+
+    // The guide overlays, in grid-menu order; the index is gridOverlay().
+    static const QStringList& overlayNames()
+    {
+        static const QStringList names = {
+            QStringLiteral("Rule of Thirds"), QStringLiteral("Grid"),
+            QStringLiteral("Diagonal"),       QStringLiteral("Triangle"),
+            QStringLiteral("Golden Ratio"),   QStringLiteral("Golden Spiral")};
+        return names;
+    }
+
+    // The icon id of overlay `index` (same order as overlayNames()).
+    static QString overlayIcon(int index)
+    {
+        static const QStringList ids = {
+            QStringLiteral("crop.overlay.ruleOfThirds"), QStringLiteral("crop.overlay.grid"),
+            QStringLiteral("crop.overlay.diagonal"),     QStringLiteral("crop.overlay.triangle"),
+            QStringLiteral("crop.overlay.goldenRatio"),  QStringLiteral("crop.overlay.goldenSpiral")};
+        return ids.value(index, ids.first());
     }
 
     int gridOverlay() const { return gridOverlay_; }

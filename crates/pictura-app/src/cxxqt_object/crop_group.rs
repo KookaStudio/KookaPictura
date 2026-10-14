@@ -37,7 +37,7 @@ pub mod ffi {
             out_h: i32,
         ) -> bool;
 
-        /// The Crop tool's commit: crop to the `width`×`height` rect at `(x, y)`, discarding the pixels outside it when `delete_cropped`; drop the selection and record one "Crop" state. A rect that stays inside the canvas is clamped as before; a rect that extends beyond it grows the canvas, filling the added area with the Background layer's colour `fill_rgb` (0xRRGGBB; ignored without a Background layer). False, changing nothing, without a document or for an empty rect.
+        /// The Crop tool's commit: crop to the `width`×`height` rect at `(x, y)`, discarding the pixels outside it when `delete_cropped`; drop the selection and record one history state named `label` ("Crop" when empty). A rect that stays inside the canvas is clamped as before; a rect that extends beyond it grows the canvas, filling the added area with the Background layer's colour `fill_rgb` (0xRRGGBB; ignored without a Background layer). False, changing nothing, without a document or for an empty rect.
         fn crop_to(
             view: Pin<&mut PictureView>,
             x: i32,
@@ -46,14 +46,15 @@ pub mod ffi {
             height: i32,
             delete_cropped: bool,
             fill_rgb: i32,
+            label: &QString,
         ) -> bool;
 
         /// The Crop tool's straighten commit: rotate the document about
         /// `(pivot_x, pivot_y)` by `angle` degrees, then crop to the
         /// `width`×`height` box at `(x, y)` (discarding pixels outside when
         /// `delete_cropped`, growing the canvas for an out-of-bounds box and
-        /// filling it with `fill_rgb`); drop the selection and record one "Crop"
-        /// state. False, changing nothing, without a document, an invalid angle,
+        /// filling it with `fill_rgb`); drop the selection and record one
+        /// history state named `label` ("Crop" when empty). False, changing nothing, without a document, an invalid angle,
         /// or an empty rect.
         fn straighten_crop(
             view: Pin<&mut PictureView>,
@@ -66,6 +67,7 @@ pub mod ffi {
             pivot_y: f64,
             delete_cropped: bool,
             fill_rgb: i32,
+            label: &QString,
         ) -> bool;
 
         /// Why the document cannot be perspective-cropped (live type, smart objects, vector masks, 16/32-bit), or empty when it can.
@@ -146,6 +148,7 @@ fn crop_to(
     height: i32,
     delete_cropped: bool,
     fill_rgb: i32,
+    label: &QString,
 ) -> bool {
     if width < 1 || height < 1 {
         return false;
@@ -162,8 +165,18 @@ fn crop_to(
         rust.selection = None;
     }
     view.as_mut().recomposite();
-    view.as_mut().record("Crop");
+    view.as_mut().record(&crop_label(label));
     true
+}
+
+/// The history name of a Crop tool commit: the caller's label (the guide
+/// overlay, e.g. "Crop: Rule of Thirds"), or plain "Crop".
+fn crop_label(label: &QString) -> String {
+    if label.is_empty() {
+        "Crop".to_owned()
+    } else {
+        label.to_string()
+    }
 }
 
 /// Crop `doc` to the `width`×`height` rect at `(x, y)`. Inside the canvas the
@@ -215,6 +228,7 @@ fn straighten_crop(
     pivot_y: f64,
     delete_cropped: bool,
     fill_rgb: i32,
+    label: &QString,
 ) -> bool {
     if width < 1 || height < 1 {
         return false;
@@ -244,7 +258,7 @@ fn straighten_crop(
     };
     if cropped {
         view.as_mut().recomposite();
-        view.as_mut().record("Crop");
+        view.as_mut().record(&crop_label(label));
     }
     cropped
 }

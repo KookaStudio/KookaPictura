@@ -90,9 +90,11 @@ int pictura::runCropToolChecks(pictura::PicturaMainWindow& frame)
     };
     box10();
     const int base = view->history_count();
+    const QString cropLabel = QStringLiteral("Crop: ")
+        + CropOptions::overlayNames().value(tools->optionsFor<CropOptions>(ToolId::Crop)->gridOverlay());
     key(Qt::Key_Return);
     const bool deleted = view->history_count() == base + 1
-        && view->history_label(base) == QStringLiteral("Crop") && view->document_width() == 20
+        && view->history_label(base) == cropLabel && view->document_width() == 20
         && view->sample_argb(10, 10) == 0xff000000u
         && transform_api::layerRect(*view, layer).toString() == QStringLiteral("0 0 20 20") && !frame.hasPendingCrop();
 
@@ -117,7 +119,7 @@ int pictura::runCropToolChecks(pictura::PicturaMainWindow& frame)
     drag(QPointF(20, 20), QPointF(20, 20));
     drag(QPointF(20, 20), QPointF(20, 20));
     const bool doubleClick = view->history_index() == dblBase + 1
-        && view->history_label(view->history_index()) == QStringLiteral("Crop")
+        && view->history_label(view->history_index()) == cropLabel
         && view->document_width() == 20;
 
     ST_BEGIN("crop_tool");
