@@ -112,23 +112,23 @@ fn mask_alpha_multiplies_raster_and_vector() {
         }],
         invert: false,
         disabled: false,
-        rows: Default::default(),
+        ..Default::default()
     });
 
     assert_eq!(
-        mask_alpha(&layer, 0, 0),
+        mask_alpha(&layer, full(2, 2), 0, 0),
         200,
         "raster x full vector coverage"
     );
     assert_eq!(
-        mask_alpha(&layer, 1, 1),
+        mask_alpha(&layer, full(2, 2), 1, 1),
         0,
         "zero vector coverage suppresses"
     );
 
     layer.vector_mask.as_mut().unwrap().disabled = true;
     assert_eq!(
-        mask_alpha(&layer, 1, 1),
+        mask_alpha(&layer, full(2, 2), 1, 1),
         200,
         "a disabled vector mask changes nothing"
     );

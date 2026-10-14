@@ -241,6 +241,7 @@ mod tests {
             flags: 0,
             data: Some(vec![255u8; 128 * 128].into()),
             extra: Vec::new(),
+            ..Default::default()
         });
         rust.mask_edit_target = Some("0".to_string());
         let blur = Filter::GaussianBlur { radius: 2.0 };

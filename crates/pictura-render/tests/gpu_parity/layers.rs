@@ -92,7 +92,7 @@ fn groups_and_masks_match_cpu() {
         }],
         invert: false,
         disabled: false,
-        rows: Default::default(),
+        ..Default::default()
     });
     let mut doc = Document::new(SIZE, SIZE, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = vec![base_layer(), shaped];

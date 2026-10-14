@@ -979,6 +979,7 @@ mod tests {
                     .into(),
             ),
             extra: Vec::new(),
+            ..Default::default()
         });
         rust.mask_edit_target = Some("0".to_string());
         rust

@@ -440,7 +440,7 @@ fn mask_alpha_unit_matches_the_eight_bit_fallbacks() {
     let eight = doc(1, 1, vec![plain.clone()]);
     assert_eq!(
         mask_alpha_unit(&eight, &plain, 0, 0),
-        crate::composite::mask_alpha(&plain, 0, 0) as f32 / 255.0,
+        crate::composite::mask_alpha(&plain, full(1, 1), 0, 0) as f32 / 255.0,
         "an 8-bit document keeps the rounded mask_alpha path"
     );
 }

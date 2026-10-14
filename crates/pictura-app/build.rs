@@ -77,6 +77,7 @@ fn main() {
                 "src/cxxqt_object/impl_layers/auto_select.rs",
                 "src/cxxqt_object/impl_layers/layer_masks.rs",
                 "src/cxxqt_object/impl_layers/layers_surface.rs",
+                "src/cxxqt_object/impl_layers/mask_refine.rs",
                 "src/cxxqt_object/impl_layers/matting.rs",
                 "src/cxxqt_object/impl_layers/smart_object_actions.rs",
                 "src/cxxqt_object/impl_layers/vector_masks.rs",

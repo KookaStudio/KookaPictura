@@ -928,6 +928,7 @@ dependencies = [
  "pictura-filters",
  "pictura-ops",
  "pictura-paint",
+ "pictura-select",
  "pictura-testkit",
  "pollster",
  "rayon",

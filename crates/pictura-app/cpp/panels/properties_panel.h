@@ -20,6 +20,7 @@ class QVBoxLayout;
 namespace pictura {
 
 class AdjustmentControls;
+class NumericField;
 class PictureView;
 
 // Window > Properties (PAN-006). For an adjustment layer it builds the
@@ -116,6 +117,9 @@ private:
     QToolButton* maskUnlink_ = nullptr;
     QToolButton* maskDelete_ = nullptr;
     QToolButton* maskApply_ = nullptr;
+    NumericField* maskDensity_ = nullptr;
+    NumericField* maskFeather_ = nullptr;
+    QToolButton* maskInvert_ = nullptr;
     // Vector Mask section, shown only when the active layer carries a vector mask.
     QWidget* vectorMaskSection_ = nullptr;
     QToolButton* vectorMaskEnable_ = nullptr;
@@ -124,6 +128,8 @@ private:
     QToolButton* vectorMaskUnlink_ = nullptr;
     QToolButton* vectorMaskDelete_ = nullptr;
     QToolButton* vectorMaskRasterize_ = nullptr;
+    NumericField* vectorMaskDensity_ = nullptr;
+    NumericField* vectorMaskFeather_ = nullptr;
 
     // Canvas section.
     QWidget* canvas_ = nullptr;

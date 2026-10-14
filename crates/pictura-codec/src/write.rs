@@ -560,21 +560,7 @@ fn write_extra(
     doc_height: u32,
     psb: bool,
 ) {
-    match &layer.mask {
-        Some(mask) => {
-            // Mask block: rect (4×i32) + default colour + flags + preserved tail.
-            out.extend_from_slice(&(18u32 + mask.extra.len() as u32).to_be_bytes());
-            out.extend_from_slice(&mask.rect.top.to_be_bytes());
-            out.extend_from_slice(&mask.rect.left.to_be_bytes());
-            out.extend_from_slice(&mask.rect.bottom.to_be_bytes());
-            out.extend_from_slice(&mask.rect.right.to_be_bytes());
-            out.push(mask.default_color);
-            let flags = (mask.flags & !0x02) | if mask.disabled { 0x02 } else { 0 };
-            out.push(flags);
-            out.extend_from_slice(&mask.extra);
-        }
-        None => out.extend_from_slice(&0u32.to_be_bytes()),
-    }
+    crate::mask_params::write_record(out, layer);
     crate::advanced_blending::write_ranges(out, layer);
     write_pascal(out, name);
     write_tag(out, b"luni", &luni_data(name), psb);

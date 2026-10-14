@@ -211,7 +211,7 @@ fn coverage(canvas: &Canvas, layer: &Layer, doc: &Document, opacity: f32) -> Opt
     for y in y0..y1 {
         for x in x0..x1 {
             matte[(y - y0) as usize * rw + (x - x0) as usize] *=
-                mask_alpha(layer, x, y) as f32 / 255.0;
+                mask_alpha(layer, crate::mask_refine::canvas(doc), x, y) as f32 / 255.0;
         }
     }
     if matte.iter().all(|&v| v <= 0.0) {

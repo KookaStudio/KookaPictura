@@ -221,6 +221,7 @@ fn set_layer_mask(doc: &mut pictura_core::Document, path: &str, data: Vec<u8>) {
             flags: 0,
             data: Some(data.into()),
             extra: Vec::new(),
+            ..Default::default()
         });
     }
 }

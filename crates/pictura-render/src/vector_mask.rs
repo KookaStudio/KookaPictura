@@ -48,7 +48,7 @@ mod tests {
             subpaths,
             invert: false,
             disabled: false,
-            rows: Default::default(),
+            ..Default::default()
         }
     }
 

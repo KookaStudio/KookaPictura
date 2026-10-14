@@ -203,7 +203,7 @@ pub(super) fn composite_drop_shadow(
     for y in py0..py1 {
         for x in px0..px1 {
             matte[(y - py0) as usize * pw + (x - px0) as usize] *=
-                mask_alpha(layer, x, y) as f32 / 255.0;
+                mask_alpha(layer, crate::mask_refine::canvas(doc), x, y) as f32 / 255.0;
         }
     }
     if matte.iter().all(|&v| v <= 0.0) {
@@ -295,7 +295,7 @@ pub(super) fn composite_inner_shadow(
     for y in py0..py1 {
         for x in px0..px1 {
             matte[(y - py0) as usize * pw + (x - px0) as usize] *=
-                mask_alpha(layer, x, y) as f32 / 255.0;
+                mask_alpha(layer, crate::mask_refine::canvas(doc), x, y) as f32 / 255.0;
         }
     }
     if matte.iter().all(|&v| v <= 0.0) {

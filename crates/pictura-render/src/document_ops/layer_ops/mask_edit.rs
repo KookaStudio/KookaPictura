@@ -147,6 +147,7 @@ mod tests {
                     .into(),
             ),
             extra: Vec::new(),
+            ..Default::default()
         });
         doc_with(vec![layer])
     }

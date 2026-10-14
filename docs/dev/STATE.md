@@ -12,6 +12,21 @@ Snapshot for resuming after a context break. Update after each milestone.
   contains reproduced Adobe Help prose or the old wording.
 - Toolchain: Rust 1.98 (`rust-toolchain.toml`), system Qt **6.11.1**, cxx-qt
   **0.10.0**, wgpu **30.0.1**, lcms2 **6.2.0** (system Little CMS 2.19).
+- **Mask Density, Feather, and Invert** (#260, branch `feat/260-mask-refinement`,
+  OpenSpec change `mask-density-feather`): `LayerMask` and `VectorMask` carry
+  `density` (PSD byte, default 255) and `feather_bits` (`f64` bits so `Layer`
+  keeps `Eq`). The codec parses and writes the mask-parameters block (flag bit 4;
+  layout from psd-tools `MaskParameters` and ag-psd, the real-mask header first
+  when a `-3` channel exists), routes the vector half to `VectorMask`, and keeps
+  records without parameters byte-identical; psd-tools reads our output back
+  (`mask_params_oracle`). `pictura-render::mask_refine` applies density
+  (`255 - d(255-m)/255`) and feather (the selection feather's Gaussian, 250 px
+  cap) with a per-thread cache keyed on the new lazy `Plane::ident`, so painting
+  a mask retires its feathered plane. Properties Mask/Vector Mask sections have
+  live Density/Feather fields (preview while dragging, one history state on
+  commit) and a permanent Invert. Ceilings (`ponytail:`): both formulas are
+  inferred; refined high-depth masks sample at 8 bits; a parameter-only
+  record's default colour (255) is unsourced.
 - **Tool options seam, pen gesture undo, and the Delete key** (#357, #307,
   #304; archived `tool-options-handler-seam`, `pen-gesture-undo`,
   `delete-key-layer`; new specs `tools/pen-edit-session`, `ui/delete-key`):

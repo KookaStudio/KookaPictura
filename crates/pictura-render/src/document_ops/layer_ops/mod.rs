@@ -62,7 +62,8 @@ pub use create::{
 pub use kernel::Interpolation;
 pub use layer_masks::{
     add_layer_mask, add_layer_mask_converting_background, apply_layer_mask, delete_layer_mask,
-    has_layer_mask, layer_mask_disabled, layer_mask_linked, set_layer_mask_enabled,
+    has_layer_mask, invert_layer_mask, layer_mask_disabled, layer_mask_linked,
+    layer_mask_refinement, set_layer_mask_density, set_layer_mask_enabled, set_layer_mask_feather,
     set_layer_mask_linked, LayerMaskKind, MASK_FLAG_LINKED,
 };
 pub use layer_style::{
@@ -115,8 +116,9 @@ pub use transform::{
 };
 pub use vector_masks::{
     add_vector_mask, delete_vector_mask, has_vector_mask, rasterize_vector_mask,
-    set_vector_mask_enabled, set_vector_mask_linked, sync_vector_mask_block, vector_mask_disabled,
-    vector_mask_linked, VectorMaskKind, VECTOR_MASK_FLAG_DISABLED, VECTOR_MASK_FLAG_INVERT,
+    set_vector_mask_density, set_vector_mask_enabled, set_vector_mask_feather,
+    set_vector_mask_linked, sync_vector_mask_block, vector_mask_disabled, vector_mask_linked,
+    vector_mask_refinement, VectorMaskKind, VECTOR_MASK_FLAG_DISABLED, VECTOR_MASK_FLAG_INVERT,
     VECTOR_MASK_FLAG_NOT_LINKED,
 };
 pub use via::{layer_via_copy, layer_via_cut};

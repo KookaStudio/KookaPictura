@@ -340,6 +340,10 @@ Fetched for this document:
   `lnk2`, `FEid`, `FXid`, `PxSD`); effects layer `lrFX` and effect keys;
   adjustment-layer keys; path resource format (26-byte records, 8.24 fixed
   point); global layer mask info; merged-composite behavior.
+- psd-tools 1.19 `psd_tools/psd/layer_and_mask.py` (`MaskFlags`, `MaskData`,
+  `MaskParameters`) — the installed PSD oracle. Established: mask-parameter
+  field flags and widths, the real-user-mask header preceding the parameters
+  (keyed on the `-3` channel, psd-tools #693), and 4-byte block padding.
 - `https://docs.rs/image/latest/image/` — only used to confirm the Rust imaging
   ecosystem's buffer types; not a document-model source.
 
@@ -363,8 +367,15 @@ Not parsed in this pass: `https://help.adobe.com/archive/en/photoshop/cs6/photos
   engineering or accepting rasterized-text parity.
 - **Blend-mode math.** Exact Adobe rounding/clamping for the 27 modes is closed.
   Define the numeric tolerance against PDF blend formulas.
-- **Mask feather/density round-trip.** Confirm CS6 writes mask parameters in the
-  documented bit-flag form and whether older files use the legacy 20-byte record.
+- **Mask feather/density round-trip.** *Partly resolved.* The byte layout is
+  sourced from psd-tools (`MaskData`/`MaskParameters`): mask flags bit 4 marks a
+  parameters block whose first byte selects user density (`u8`, bit 0), user
+  feather (`f64`, bit 1), vector density (`u8`, bit 2), and vector feather
+  (`f64`, bit 3), in that order. The 18-byte real-user-mask header precedes the
+  parameters (not after, as the spec text orders it) and is present only when the
+  layer carries a `-3` channel; the block pads to 4 bytes, so a parameterless
+  record is the 20-byte form. Still open: whether CS6 writes the block for default
+  values. *Resolves with:* a CS6 mask PSD byte inspection.
 - **Pass-through group semantics vs clipping.** Exact interaction of
   pass-through groups, clipping masks, and adjustment layers needs a controlled
   reference; resolve with test PSDs rendered by CS6.

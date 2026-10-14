@@ -9,6 +9,7 @@ use pictura_core::{BlendMode, ColorLabel, Document, Layer};
 mod auto_select;
 mod layer_masks;
 mod layers_surface;
+mod mask_refine;
 mod matting;
 mod smart_object_actions;
 mod vector_masks;
