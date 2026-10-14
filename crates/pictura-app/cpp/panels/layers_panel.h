@@ -223,6 +223,7 @@ public:
     int filterDimensionForTest() const;
     // Isolation-mode hook: release one row from the isolated set.
     void releaseIsolationForTest(const QString& path);
+    void setFilterEnabledForTest(bool on);
 
     // Layer-style panel hooks: the fx badge projection, the row menu with a real
     // path, the Effect filter dimension, and an Alt-click on the fx region.

@@ -922,13 +922,14 @@ void LayersPanel::applyFilter(const LayerFilter& filter)
         return;
     }
     LayerFilter effective = filter;
-    const bool wasSelected = proxy_->filter().selected;
-    if (effective.selected && !wasSelected) {
-        // Entering isolation: capture the current selection as the fixed set.
+    const bool wasIsolated = proxy_->filter().enabled && proxy_->filter().selected;
+    const bool nowIsolated = effective.enabled && effective.selected;
+    if (nowIsolated && !wasIsolated) {
+        // A new isolation session: capture the current selection as the fixed
+        // set. Re-entering after a release or a toggle-off re-captures rather
+        // than resuming a stale or empty set.
         const QStringList paths = selectedPaths();
         isolatedPaths_ = QSet<QString>(paths.begin(), paths.end());
-    } else if (!effective.selected) {
-        isolatedPaths_.clear();
     }
     effective.selectedPaths = isolatedPaths_;
     proxy_->setFilter(effective);
@@ -948,6 +949,10 @@ void LayersPanel::applyFilter(const LayerFilter& filter)
 void LayersPanel::enterIsolation()
 {
     const QStringList paths = selectedPaths();
+    // Isolating nothing would blank the panel; leave the filter as it is.
+    if (paths.isEmpty()) {
+        return;
+    }
     isolatedPaths_ = QSet<QString>(paths.begin(), paths.end());
     if (filterBar_) {
         filterBar_->activateSelected();
@@ -970,12 +975,18 @@ bool LayersPanel::isolationActive() const
 void LayersPanel::releaseIsolationFor(const QString& path)
 {
     isolatedPaths_.remove(path);
-    if (isolatedPaths_.isEmpty()) {
+    // Keep the panel selection within the reduced set (in its existing order,
+    // so the new current row is deterministic), then re-filter.
+    QStringList remaining;
+    for (const QString& selected : selectedPaths()) {
+        if (isolatedPaths_.contains(selected)) {
+            remaining.push_back(selected);
+        }
+    }
+    if (remaining.isEmpty()) {
         releaseIsolation();
         return;
     }
-    // Keep the panel selection within the reduced set, then re-filter.
-    QStringList remaining(isolatedPaths_.begin(), isolatedPaths_.end());
     selectPaths(remaining, remaining.first());
     if (proxy_) {
         applyFilter(proxy_->filter());

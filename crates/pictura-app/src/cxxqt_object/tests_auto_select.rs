@@ -142,6 +142,12 @@ fn auto_select_isolation_reaches_a_group_descendant() {
         auto_select_path(&doc, 1, 1, false, Some(&child_set)),
         Some("1/0".to_string())
     );
+    // Group mode with a child-only set keeps the child, not its unisolated
+    // parent group.
+    assert_eq!(
+        auto_select_path(&doc, 1, 1, true, Some(&child_set)),
+        Some("1/0".to_string())
+    );
     // The bottom layer is outside the group set.
     assert_eq!(auto_select_path(&doc, 3, 3, false, Some(&group_set)), None);
 }

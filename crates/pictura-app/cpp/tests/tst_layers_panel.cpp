@@ -1357,6 +1357,16 @@ void LayersPanelTest::isolationMode()
     QCoreApplication::processEvents();
     QVERIFY2(!panel_->isolationActive(), "Escape leaves isolation");
 
+    // Re-enabling the filter after a release starts a fresh set from the current
+    // selection rather than resuming an empty one (a blank panel).
+    panel_->setFilterEnabledForTest(true);
+    QCoreApplication::processEvents();
+    QVERIFY2(panel_->isolationActive(), "re-enabling isolates again");
+    QVERIFY2(!panel_->visiblePathsForTest().isEmpty(), "re-enabling does not blank the panel");
+    panel_->releaseIsolation();
+    QCoreApplication::processEvents();
+    QVERIFY2(!panel_->isolationActive(), "released again");
+
     window_->closeDocument(doc, false);
 }
 

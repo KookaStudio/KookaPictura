@@ -458,11 +458,23 @@ pub(super) fn auto_select_path(
         None
     }
     let hit = walk(&doc.layers, "", x, y, &isolated)?;
-    Some(if group {
-        hit.split('/').next().unwrap_or(&hit).to_string()
-    } else {
-        hit
-    })
+    if !group {
+        return Some(hit);
+    }
+    // Group mode resolves to a group. With no isolation that is the top-level
+    // ancestor; with isolation it is the shortest ancestor-or-self that is in
+    // the set, so the pick never escapes the isolated set (a child-only set
+    // keeps the child rather than its unisolated parent).
+    if let Some(set) = isolation {
+        for (i, _) in hit.match_indices('/') {
+            let prefix = &hit[..i];
+            if set.iter().any(|m| m == prefix) {
+                return Some(prefix.to_string());
+            }
+        }
+        return Some(hit);
+    }
+    Some(hit.split('/').next().unwrap_or(&hit).to_string())
 }
 /// Panel Options "Entire Document": render a pixel layer inside a transparent
 /// `size`×`size` document square, placing its pixels at their document position

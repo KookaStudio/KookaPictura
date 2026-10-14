@@ -38,15 +38,22 @@ from it. Choosing `Selected` with the toggle on SHALL be isolation mode.
 
 ### Requirement: Move Auto-Select is scoped while isolated
 
-While isolation is active, the Move tool's Auto-Select SHALL only pick a layer
-that is in the isolated set, or a descendant of one. A press whose topmost hit
-is outside the isolated set SHALL keep the active layer, and a press on a member
-or its descendant SHALL select it as usual.
+While isolation is active, the Move tool's Auto-Select SHALL ignore every layer
+outside the isolated set, so it only ever picks a layer that is in the set or a
+descendant of one. A press over an isolated layer SHALL pick it, or — in Group
+mode — its nearest isolated ancestor (so the pick never escapes the set). A
+press where no isolated layer covers the point SHALL keep the active layer.
 
-#### Scenario: A hit outside the set keeps the active layer [iso_scope_out]
+#### Scenario: A non-isolated layer is ignored [iso_scope_out]
 
-- **WHEN** isolation is active on one layer and the Move tool Auto-Select is
-  pressed over a different layer
+- **WHEN** isolation is active on a lower layer, a non-isolated layer covers the
+  press point above it, and the Move tool Auto-Select is pressed there
+- **THEN** the non-isolated layer is ignored and the lower isolated layer is
+  picked
+
+#### Scenario: Nothing isolated covers the point [iso_scope_none]
+
+- **WHEN** isolation is active and no isolated layer covers the press point
 - **THEN** the active layer does not change
 
 #### Scenario: A hit inside the set selects [iso_scope_in]
@@ -60,6 +67,12 @@ or its descendant SHALL select it as usual.
 - **WHEN** isolation is active on a group and the Move tool Auto-Select is
   pressed over a child of that group
 - **THEN** the child is a valid hit
+
+#### Scenario: Group mode stays in the set [iso_scope_group_set]
+
+- **WHEN** isolation is active on a child layer and the Move tool Auto-Select is
+  in Group mode over that child
+- **THEN** the picked layer is in the isolated set, not an unisolated ancestor
 
 ### Requirement: Release from Isolation
 
