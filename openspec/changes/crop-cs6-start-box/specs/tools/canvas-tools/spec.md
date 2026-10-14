@@ -3,10 +3,10 @@
 ### Requirement: Crop tool
 The system SHALL place a crop box over the whole canvas when the Crop tool is
 chosen (fitted to the aspect ratio when one is set), shading the canvas area
-outside it — not the workspace around the canvas — and drawing rule-of-thirds
-guides, its frame, and eight handles. Selecting the tool SHALL show a preview
-box (dashed, no guides, no handles) in Modern, fitted to the ratio and centered,
-and no box in Classic. Dragging a handle of an active box SHALL resize the box
+outside it — not the workspace around the canvas — and drawing its frame and
+eight handles (an active box also draws the selected guide overlay). Selecting
+the tool SHALL show a preview box fitted to the ratio and centered in either
+mode, drawn with its frame and handles but no guides. Dragging a handle of an active box SHALL resize the box
 (keeping the aspect ratio when one is set) and SHALL snap the dragged edge or
 corner to the canvas or a layer bounding edge within a screen-pixel threshold;
 dragging inside an active box SHALL move the box in Classic mode and reposition

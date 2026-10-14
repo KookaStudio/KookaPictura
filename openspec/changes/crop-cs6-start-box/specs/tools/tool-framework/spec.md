@@ -30,9 +30,9 @@ to the select; `Delete Crop Preset...` SHALL remove the selected user preset. Th
 spirit-level toggle SHALL arm a straighten mode in which a pressed, dragged,
 released line sets the crop angle to the line's inclination and then disarms.
 Applying a preset or field SHALL keep the crop box and any active straighten
-consistent. The cog menu SHALL offer a `Use Classic Mode` toggle (checked by
-default); a Classic drag moves the crop box, a Modern drag repositions the
-composite behind a fixed box; both modes start with the centered preview box. The crop options (mode, grid
+consistent. The cog menu SHALL offer a `Use Classic Mode` toggle; a Classic drag
+moves the crop box, a Modern drag repositions the composite behind a fixed box;
+both modes start with the centered preview box. The crop options (mode, grid
 overlay, ratio, and Delete Cropped Pixels) SHALL persist across restarts.
 
 #### Scenario: Crop option buttons use Lucide icons [ltf_crop_icons]
