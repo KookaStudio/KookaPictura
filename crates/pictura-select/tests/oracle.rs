@@ -54,7 +54,9 @@ const MAPPING: &[Mapping] = &[
         op: "feather(r)",
         im: "-gaussian-blur 0x(r/2)",
         tolerance: 0,
-        note: "sigma=r/2 matches the selection feather's separable Gaussian on the 8x8 mask",
+        note: "sigma=r/2 matches the selection feather's separable Gaussian on the 8x8 mask; \
+               the differential pins r=2, the exact narrow-kernel path (sigma >= 2 uses the \
+               variance-matched box stack)",
     },
     Mapping {
         op: "smooth(r)",

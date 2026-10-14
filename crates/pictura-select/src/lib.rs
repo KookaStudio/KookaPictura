@@ -17,6 +17,8 @@ pub use color_range::{color_range, ColorRangeSelect};
 mod contour;
 pub use contour::contour;
 
+mod blur;
+
 mod magnetic;
 pub use magnetic::EdgeMap;
 
@@ -284,8 +286,10 @@ impl Selection {
     }
 
     /// Blur the coverage with a Gaussian. radius 0 = identity.
-    // ponytail: sigma = radius/2, separable f64 convolution with clamped edges.
-    // Swap in a tiled/FFT blur only if full-document feathering shows up in profiles.
+    ///
+    /// `sigma = radius / 2`, separable with clamped edges. A wide kernel
+    /// (`radius >= 4`) switches to the variance-matched box stack in [`blur`],
+    /// so a large feather costs `O(pixels)` rather than `O(pixels * radius)`.
     pub fn feather(&self, radius: f64) -> Selection {
         if !radius.is_finite() || radius <= 0.0 || self.data.is_empty() {
             return self.clone();
@@ -294,7 +298,7 @@ impl Selection {
         Selection {
             width: self.width,
             height: self.height,
-            data: blur(&self.data, self.width as usize, self.height as usize, sigma),
+            data: blur::blur(&self.data, self.width as usize, self.height as usize, sigma),
         }
     }
 
@@ -544,43 +548,6 @@ pub fn similar(
         }
     }
     Ok(out)
-}
-
-pub(crate) fn blur(src: &[u8], w: usize, h: usize, sigma: f64) -> Vec<u8> {
-    let radius = (sigma * 3.0).ceil().max(1.0) as isize;
-    let mut kernel = Vec::with_capacity((2 * radius + 1) as usize);
-    let mut sum = 0.0f64;
-    for i in -radius..=radius {
-        let v = (-(i * i) as f64 / (2.0 * sigma * sigma)).exp();
-        kernel.push(v);
-        sum += v;
-    }
-    for k in &mut kernel {
-        *k /= sum;
-    }
-    let mut tmp = vec![0f64; w * h];
-    for y in 0..h {
-        for x in 0..w {
-            let mut acc = 0.0f64;
-            for (ki, i) in (-radius..=radius).enumerate() {
-                let xx = (x as isize + i).clamp(0, w as isize - 1) as usize;
-                acc += src[y * w + xx] as f64 * kernel[ki];
-            }
-            tmp[y * w + x] = acc;
-        }
-    }
-    let mut out = vec![0u8; w * h];
-    for y in 0..h {
-        for x in 0..w {
-            let mut acc = 0.0f64;
-            for (ki, i) in (-radius..=radius).enumerate() {
-                let yy = (y as isize + i).clamp(0, h as isize - 1) as usize;
-                acc += tmp[yy * w + x] * kernel[ki];
-            }
-            out[y * w + x] = acc.round().clamp(0.0, 255.0) as u8;
-        }
-    }
-    out
 }
 
 pub(crate) fn median(src: &[u8], w: usize, h: usize, radius: usize) -> Vec<u8> {

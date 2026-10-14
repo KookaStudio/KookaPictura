@@ -791,3 +791,23 @@ fn marquee_selection_profile() {
         );
     }
 }
+
+#[test]
+#[ignore = "8000x6000 feather profile; run explicitly with --ignored --nocapture"]
+fn feather_selection_profile() {
+    use super::helpers::feathered;
+    use pictura_select::Selection;
+    use std::time::Instant;
+
+    let (w, h) = (8000u32, 6000u32);
+    for feather in [0.0, 4.0, 10.0, 170.0] {
+        let shape = Selection::rect(w, h, 1000, 1000, 5000, 3000);
+        let t = Instant::now();
+        let out = feathered(shape, feather);
+        println!(
+            "feather_selection radius={feather}: {:.1}ms ({} bytes)",
+            t.elapsed().as_secs_f64() * 1000.0,
+            out.data.len()
+        );
+    }
+}
