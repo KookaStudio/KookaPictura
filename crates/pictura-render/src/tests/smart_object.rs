@@ -1269,8 +1269,8 @@ fn disabled_smart_filter_matches_no_filter() {
     let base = render_smart_source(so, full(4, 4), full(4, 4)).expect("source renders");
     let mut enabled = so.smart_filters.clone();
     enabled[0].enabled = true;
-    let skipped = apply_smart_filter_chain(&base, full(4, 4), &so.smart_filters, None, true);
-    let applied = apply_smart_filter_chain(&base, full(4, 4), &enabled, None, true);
+    let skipped = apply_smart_filter_chain(&base, &so.smart_filters, true);
+    let applied = apply_smart_filter_chain(&base, &enabled, true);
     assert_eq!(skipped.data, base.data, "the disabled filter is skipped");
     assert_ne!(
         applied.data, base.data,

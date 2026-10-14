@@ -379,18 +379,10 @@ mod tests {
             data: vec![30u8; 4 * 4 * 4].into(),
         };
         let filter = so.smart_filters.first().expect("filter");
-        let rect = pictura_core::PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 4,
-            right: 4,
-        };
-        let disabled =
-            apply_smart_filter_chain(&base, rect, std::slice::from_ref(filter), None, false);
+        let disabled = apply_smart_filter_chain(&base, std::slice::from_ref(filter), false);
         assert_eq!(disabled.data.as_ref(), base.data.as_ref());
 
-        let enabled =
-            apply_smart_filter_chain(&base, rect, std::slice::from_ref(filter), None, true);
+        let enabled = apply_smart_filter_chain(&base, std::slice::from_ref(filter), true);
         assert_ne!(enabled.data.as_ref(), base.data.as_ref());
     }
 

@@ -5,9 +5,7 @@
 
 use pictura_adjust::render_pictura_raw;
 use pictura_codec::{decode_pictura_raw_settings, CAMERA_RAW_FILTER_ID};
-use pictura_core::{
-    Document, Layer, LayerMask, PicturaRawSettings, PixelBuffer, PsdRect, SmartFilter,
-};
+use pictura_core::{Document, Layer, PicturaRawSettings, PixelBuffer, PsdRect, SmartFilter};
 
 use crate::composite::{blend_into, render_smart_source, Canvas};
 
@@ -31,16 +29,11 @@ pub fn decode_smart_filter(filter: &SmartFilter) -> Option<SmartFilterOp> {
 /// Apply the enabled smart filters to `base`, in order, over the colour planes;
 /// alpha is preserved.
 ///
-/// `base` covers `rect` (document coordinates). When `mask` is given, each
-/// pixel is lerped from the unfiltered `base` toward the filtered result by the
-/// mask coverage, so black mask pixels keep the source and white pixels take
-/// the filter. When `enabled` is false (the `filterFXStyle.enab` group flag)
-/// the chain is bypassed and `base` is returned unchanged.
+/// When `enabled` is false (the `filterFXStyle.enab` group flag) the chain is
+/// bypassed and `base` is returned unchanged.
 pub fn apply_smart_filter_chain(
     base: &PixelBuffer,
-    rect: PsdRect,
     filters: &[SmartFilter],
-    mask: Option<&LayerMask>,
     enabled: bool,
 ) -> PixelBuffer {
     if !enabled {
@@ -52,9 +45,6 @@ pub fn apply_smart_filter_chain(
             out = apply_op(&out, op);
         }
     }
-    if let Some(mask) = mask {
-        apply_mask(base, &mut out, rect, mask);
-    }
     out
 }
 
@@ -62,22 +52,6 @@ fn apply_op(base: &PixelBuffer, op: SmartFilterOp) -> PixelBuffer {
     match op {
         SmartFilterOp::CameraRaw(settings) => {
             render_pictura_raw(base, &settings).unwrap_or_else(|_| base.clone())
-        }
-    }
-}
-
-fn apply_mask(base: &PixelBuffer, out: &mut PixelBuffer, rect: PsdRect, mask: &LayerMask) {
-    let w = out.width as i32;
-    let plane = (out.width * out.height) as usize;
-    for y in 0..out.height as i32 {
-        for x in 0..w {
-            let t = crate::composite::mask_value(mask, rect.left + x, rect.top + y) as f32 / 255.0;
-            let i = (y * w + x) as usize;
-            for c in 0..3 {
-                let from = base.data[c * plane + i] as f32;
-                let to = out.data[c * plane + i] as f32;
-                out.data[c * plane + i] = (from + (to - from) * t).round().clamp(0.0, 255.0) as u8;
-            }
         }
     }
 }
@@ -120,13 +94,7 @@ pub(crate) fn composite_smart_filtered_source(
     let Some(base) = render_smart_source(so, layer.rect, region) else {
         return false;
     };
-    let src = apply_smart_filter_chain(
-        &base,
-        region,
-        &so.smart_filters,
-        so.filter_mask.as_ref(),
-        so.smart_filters_enabled,
-    );
+    let src = apply_smart_filter_chain(&base, &so.smart_filters, so.smart_filters_enabled);
 
     let rw = region.width() as usize;
     let rh = region.height() as usize;
