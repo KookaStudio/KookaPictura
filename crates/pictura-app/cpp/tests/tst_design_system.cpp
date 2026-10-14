@@ -505,7 +505,9 @@ void DesignSystemTest::numericFieldArrowIsInset()
 }
 
 // The input family renders at one height: the spin box's button floor is carried
-// to the line edit and the select.
+// to the line edit and the select. The size hint follows the platform font
+// metrics, which can differ by a pixel between Qt builds, so assert that no
+// member is visibly thinner rather than a pixel-exact match.
 void DesignSystemTest::inputsShareOneHeight()
 {
     QLineEdit edit;
@@ -516,8 +518,16 @@ void DesignSystemTest::inputsShareOneHeight()
                             static_cast<QWidget*>(&spin)}) {
         widget->ensurePolished();
     }
-    QCOMPARE(edit.sizeHint().height(), spin.sizeHint().height());
-    QCOMPARE(combo.sizeHint().height(), spin.sizeHint().height());
+    const int lineEdit = edit.sizeHint().height();
+    const int comboBox = combo.sizeHint().height();
+    const int spinBox = spin.sizeHint().height();
+    const int tallest = qMax(lineEdit, qMax(comboBox, spinBox));
+    const int shortest = qMin(lineEdit, qMin(comboBox, spinBox));
+    QVERIFY2(tallest - shortest <= 1,
+             qPrintable(QStringLiteral("input heights %1/%2/%3")
+                            .arg(lineEdit)
+                            .arg(comboBox)
+                            .arg(spinBox)));
 }
 
 QTEST_MAIN(DesignSystemTest)
