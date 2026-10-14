@@ -125,6 +125,21 @@ void PicturaMainWindow::saveSession()
     state.colorPolicy = colorPolicy_;
     state.toolsColumns = toolbox_ ? toolbox_->columns() : 1;
     state.useShiftKeyForToolSwitch = useShiftKeyForToolSwitch_;
+    state.shortcuts.clear();
+    const QHash<QString, QList<QKeySequence>> overrides = registry_->shortcutOverrides();
+    for (auto it = overrides.cbegin(); it != overrides.cend(); ++it) {
+        QStringList bindings;
+        for (const QKeySequence& binding : it.value()) {
+            bindings << binding.toString(QKeySequence::PortableText);
+        }
+        state.shortcuts.insert(it.key(), bindings);
+    }
+    state.toolShortcuts.clear();
+    const QMap<ToolId, QChar> toolOverrides = toolShortcutOverrides();
+    for (auto it = toolOverrides.cbegin(); it != toolOverrides.cend(); ++it) {
+        state.toolShortcuts.insert(toolIdName(it.key()), it.value().isNull() ? QString()
+                                                                             : QString(it.value()));
+    }
     state.autoSaveRecovery = autoSaveRecovery_;
     state.autoSaveMinutes = autoSaveMinutes_;
     state.rulersVisible = rulersVisible_;

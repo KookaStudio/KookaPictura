@@ -1057,6 +1057,7 @@ void PicturaMainWindow::registerHandlers()
                                   [this]() { return toolsColumn_ && toolsColumn_->isVisible(); });
 
     registerPreferenceHandlers();
+    registerShortcutHandlers();
     registerGuideHandlers();
 
     // Every other panel is a content widget hosted by the PanelColumn; the

@@ -105,6 +105,9 @@ public:
     void setShiftKeyForToolSwitch(bool on) { shiftKeyForToolSwitch_ = on; }
     bool shiftKeyForToolSwitch() const { return shiftKeyForToolSwitch_; }
     bool handleToolKey(const QChar& key, bool shift);
+    // Re-read every tool's letter into the slot tooltips and flyout rows after
+    // the shortcut editor changed them.
+    void refreshToolShortcuts();
 
     // Self-test hooks.
     void openSlotFlyoutForTest(int group);

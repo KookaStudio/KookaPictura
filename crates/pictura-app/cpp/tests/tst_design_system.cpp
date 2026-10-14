@@ -87,6 +87,15 @@ void DesignSystemTest::tokensCoverColoursAndMetrics()
     QCOMPARE(tokenColor(0, QStringLiteral("accent")), QColor(0x2a, 0x7f, 0xff));
     QCOMPARE(tokenColor(3, QStringLiteral("accent")), QColor(0x2a, 0x7f, 0xff));
 
+    // Inline warning / info text is dark-on-yellow at every level.
+    for (int level = 0; level < Theme::kLevelCount; ++level) {
+        const QColor bg = tokenColor(level, QStringLiteral("noticeBg"));
+        const QColor text = tokenColor(level, QStringLiteral("noticeText"));
+        QCOMPARE(bg, tokenColor(0, QStringLiteral("noticeBg")));
+        QVERIFY(bg.hue() >= 40 && bg.hue() <= 60 && bg.lightness() > 140);
+        QVERIFY(text.lightness() < 48);
+    }
+
     // Metrics join the same contract, once.
     QCOMPARE(tokenValue(1, QStringLiteral("panelBorderWidth")),
              QString::number(Theme::kPanelBorderWidth));

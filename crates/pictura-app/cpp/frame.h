@@ -22,6 +22,7 @@ class QFrame;
 class QLabel;
 class QListWidget;
 class QResizeEvent;
+class QShortcut;
 class QShowEvent;
 class QSplitter;
 class QTabWidget;
@@ -640,6 +641,13 @@ private:
     void setRulerUnit(RulerUnit unit);
     // frame_preferences.cpp: the Edit > Preferences leaves.
     void registerPreferenceHandlers();
+    // frame_shortcuts.cpp: Edit > Keyboard Shortcuts, the saved overrides, and
+    // the per-letter tool shortcuts they rebuild.
+    void registerShortcutHandlers();
+    void applyShortcutOverrides(const SessionState& state);
+    void rebuildToolShortcuts();
+    void showKeyboardShortcuts();
+    QList<QShortcut*> toolKeyShortcuts_;
     bool rulersVisible_ = false;
     RulerUnit rulerUnit_ = RulerUnit::Inches;
     bool traditionalPoints_ = false;

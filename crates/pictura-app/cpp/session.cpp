@@ -10,6 +10,7 @@
 #include <QtCore/QJsonObject>
 #include <QtCore/QJsonParseError>
 #include <QtCore/QSaveFile>
+#include <QtCore/QVariantMap>
 #include <QtCore/QUuid>
 
 namespace pictura {
@@ -31,6 +32,26 @@ QString instanceToken()
 // Captured at process start, not on first save: a store written before the
 // first save but after the launch must still be refused.
 const qint64 kInstanceStartMs = QDateTime::currentMSecsSinceEpoch();
+
+QMap<QString, QString> readStringMap(const QJsonObject& map)
+{
+    QMap<QString, QString> values;
+    for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
+        if (it.value().isString()) {
+            values.insert(it.key(), it.value().toString());
+        }
+    }
+    return values;
+}
+
+QVariantMap toVariantMap(const QMap<QString, QString>& values)
+{
+    QVariantMap map;
+    for (auto it = values.constBegin(); it != values.constEnd(); ++it) {
+        map.insert(it.key(), it.value());
+    }
+    return map;
+}
 
 // The existing store's top-level object, or empty when missing/corrupt. Used by
 // the load-then-write save so keys this build does not know survive a rewrite.
@@ -142,6 +163,17 @@ SessionState loadSession()
         obj.value(QStringLiteral("windowGeometry")).toString().toLatin1());
     state.windowMaximized =
         obj.value(QStringLiteral("windowMaximized")).toBool(false);
+    const QJsonObject shortcuts = obj.value(QStringLiteral("shortcuts")).toObject();
+    for (auto it = shortcuts.constBegin(); it != shortcuts.constEnd(); ++it) {
+        QStringList bindings;
+        for (const QJsonValue& binding : it.value().toArray()) {
+            if (binding.isString()) {
+                bindings << binding.toString();
+            }
+        }
+        state.shortcuts.insert(it.key(), bindings);
+    }
+    state.toolShortcuts = readStringMap(obj.value(QStringLiteral("toolShortcuts")).toObject());
     const QJsonArray recent = obj.value(QStringLiteral("recent")).toArray();
     for (const QJsonValue& entry : recent) {
         if (entry.isString()) {
@@ -208,6 +240,13 @@ bool saveSession(const SessionState& state)
     obj.insert(QStringLiteral("windowGeometry"),
                QString::fromLatin1(state.windowGeometry.toBase64()));
     obj.insert(QStringLiteral("windowMaximized"), state.windowMaximized);
+    QJsonObject shortcuts;
+    for (auto it = state.shortcuts.constBegin(); it != state.shortcuts.constEnd(); ++it) {
+        shortcuts.insert(it.key(), QJsonArray::fromStringList(it.value()));
+    }
+    obj.insert(QStringLiteral("shortcuts"), shortcuts);
+    obj.insert(QStringLiteral("toolShortcuts"),
+               QJsonObject::fromVariantMap(toVariantMap(state.toolShortcuts)));
     QJsonArray recent;
     for (const QString& path : state.recent) {
         recent.append(path);

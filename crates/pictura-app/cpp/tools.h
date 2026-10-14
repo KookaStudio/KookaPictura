@@ -2,6 +2,7 @@
 
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QList>
+#include <QtCore/QMap>
 #include <QtCore/QMetaType>
 #include <QtCore/QObject>
 #include <QtCore/QPointF>
@@ -136,8 +137,19 @@ QString toolIdName(ToolId id);
 // its plain `tool.<name>` asset.
 QString toolCursorId(ToolId id, Qt::KeyboardModifiers mods);
 
+// The tool's effective letter: the user's override (Edit > Keyboard
+// Shortcuts) when one is set, else the catalogue's. A null QChar means none.
+QChar toolShortcut(ToolId id);
+// Override a tool's letter (a null QChar removes it); the catalogue letter
+// clears the override. resetToolShortcuts() drops every override.
+void setToolShortcut(ToolId id, QChar key);
+void resetToolShortcuts();
+// Every tool whose letter differs from the catalogue's.
+QMap<ToolId, QChar> toolShortcutOverrides();
+
 // The distinct slot letters in catalogue order, and the group a letter maps to
-// (0 when no tool carries it). Every letter maps to exactly one group.
+// (0 when no tool carries it). Every letter maps to exactly one group; the
+// shortcut editor keeps it so by taking a letter away from other groups.
 QList<QChar> toolShortcutKeys();
 int toolGroupForKey(QChar key);
 

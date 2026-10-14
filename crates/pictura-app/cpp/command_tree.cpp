@@ -183,8 +183,9 @@ void addDefaultCommands(CommandRegistry& registry) {
     registry.add(command_ids::EditConvertProfile, {"Edit", "Convert to Profile…"},
                  QStringLiteral("Convert to Profile…"), QKeySequence(), true);
     registry.addSeparator({"Edit"});
-    leaf(registry, {"Edit", "Keyboard Shortcuts…"}, QStringLiteral("Keyboard Shortcuts…"),
-         QStringLiteral("Alt+Shift+Ctrl+K"));
+    registry.add(command_ids::EditKeyboardShortcuts, {"Edit", "Keyboard Shortcuts…"},
+                 QStringLiteral("Keyboard Shortcuts…"),
+                 QKeySequence(QStringLiteral("Alt+Shift+Ctrl+K")), true);
     leaf(registry, {"Edit", "Menus…"}, QStringLiteral("Menus…"));
     registry.add(command_ids::EditPreferencesGeneral, {"Edit", "Preferences", "General"},
                  QStringLiteral("General"), QKeySequence(QStringLiteral("Ctrl+K")), true);
@@ -922,8 +923,9 @@ void addDefaultCommands(CommandRegistry& registry) {
                              {"Window", "Workspace", "Reset [Workspace]"},
                              QStringLiteral("Reset [Workspace]"), QKeySequence(), true, false});
     registry.addSeparator({"Window", "Workspace"});
-    leaf(registry, {"Window", "Workspace", "Keyboard Shortcuts & Menus…"},
-         QStringLiteral("Keyboard Shortcuts & Menus…"));
+    registry.add(command_ids::WindowWorkspaceKeyboardShortcuts,
+                 {"Window", "Workspace", "Keyboard Shortcuts & Menus…"},
+                 QStringLiteral("Keyboard Shortcuts & Menus…"), QKeySequence(), true);
     registry.addSeparator({"Window"});
     leaf(registry, {"Window", "Panels", "3D"}, QStringLiteral("3D"));
     registry.add(CommandSpec{command_ids::WindowPanelsActions, {"Window", "Panels", "Actions"},

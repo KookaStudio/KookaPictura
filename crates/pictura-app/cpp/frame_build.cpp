@@ -344,23 +344,7 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
     reapplyColumnStretch();
     toolsColumn_->setVisible(!panelsHidden_);
 
-    // One plain and one Shift shortcut per distinct slot letter; the toolbox
-    // resolves the letter to its group and honours `Use Shift Key For Tool
-    // Switch`. refreshSlot() no longer owns any letter.
-    for (const QChar key : toolShortcutKeys()) {
-        connect(new QShortcut(QKeySequence(QString(key)), this), &QShortcut::activated, this,
-                [this, key]() {
-                    if (toolbox_) {
-                        toolbox_->handleToolKey(key, false);
-                    }
-                });
-        connect(new QShortcut(QKeySequence(Qt::SHIFT | Qt::Key(key.toUpper().unicode())), this),
-                &QShortcut::activated, this, [this, key]() {
-                    if (toolbox_) {
-                        toolbox_->handleToolKey(key, true);
-                    }
-                });
-    }
+    rebuildToolShortcuts();
 
     auto brushActive = [this]() {
         return tools_ && isBrushTool(tools_->activeTool());
