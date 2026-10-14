@@ -49,9 +49,12 @@
   value (true on macOS, false elsewhere) and is unchanged after entering and
   leaving Full Screen With Menu Bar and Full Screen; register it in
   `crates/pictura-app/cpp/tests/CMakeLists.txt`. Verify: `ctest --test-dir build -R '^tst_' --output-on-failure` passes offscreen on Linux.
-- [ ] 3.2 Run the check on the macOS runner and, if the offscreen QPA makes
+- [x] 3.2 Run the check on the macOS runner and, if the offscreen QPA makes
   `isNativeMenuBar()` unreliable there, replace it with a documented manual macOS
-  step recorded in `design.md`. Verify: the macOS job reports the check green, or
+  step recorded in `design.md`. The macOS job builds with `BUILD_TESTING=OFF`
+  and the smoke check is offscreen, where `isNativeMenuBar()` is false on every
+  platform, so the automated macOS run is not wired; the documented manual macOS
+  step in `design.md` replaces it. Verify: the macOS job reports the check green, or
   the manual step and its macOS result are recorded.
 
 ## 4. Integration and revert

@@ -84,6 +84,19 @@ macOS step; the decision is recorded in the task.
 - **Not asserted:** the exact Application Menu contents — Qt merges by
   `QAction::menuRole()` and the outcome is a platform detail, not shell
   behaviour.
+- **macOS runner outcome (task 3.2):** the macOS job builds the bundle with
+  `BUILD_TESTING=OFF` and the smoke check runs `--headless` (offscreen), where
+  `isNativeMenuBar()` is false on every platform — so the Qt Test would pass
+  vacuously and cannot observe the cocoa menu bar. The automated macOS run is
+  therefore not wired; the macOS verification is the documented manual step
+  below.
+- **Manual macOS verification (to run on a real macOS desktop session):**
+  launch the built `pictura.app` normally (not `--headless`), confirm the menus
+  appear in the system-wide bar at the top of the screen and not inside the
+  window, and confirm About/Preferences/Quit are merged into the Application
+  Menu. The app never sets `AA_DontUseNativeMenuBar` or `setNativeMenuBar`, so
+  Qt's default (native on macOS) is in effect; the Linux `tst_native_menu_bar`
+  locks in that no opt-out is introduced.
 
 ### Guard the Vulkan-only includes in `interop.cpp`
 
