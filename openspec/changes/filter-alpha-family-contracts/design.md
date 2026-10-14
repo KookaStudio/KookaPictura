@@ -10,8 +10,10 @@ migrated kernel's digest moved with the fold, these did not.
 ## Per-kernel alpha
 
 - **Shape Blur, Liquify**: plane-independent, so the cap simply goes.
-  Liquify's commit now matches its dialog preview, which already warped
-  alpha (premultiplied).
+  Liquify's commit now moves alpha with the mesh as its dialog preview
+  already did. The preview interpolates premultiplied and the commit
+  straight, so at semi-transparent edges the colour can differ slightly;
+  the alpha movement is the same.
 - **Lens Blur**: the alpha plane takes the aperture's weighted average only.
   The specular bloom brightens colour by luma and the noise is grain on
   colour; applied to alpha they would add opacity that was never there.

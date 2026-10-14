@@ -573,7 +573,9 @@ pub enum Filter {
 /// bit-identical. The decision lives with the kernels, not the caller: native
 /// kernels either process every plane they are given or cap at three, the
 /// photorust path writes the pixmap's alpha back only for these kinds, and
-/// the GPU path sizes its plane count from this list.
+/// the GPU path sizes its plane count from this list. A kind added here also
+/// joins `moving_kernels()` in pictura-render's filter tests, which hold
+/// every listed kernel to moving a soft layer edge.
 pub fn filters_alpha(filter: &Filter) -> bool {
     matches!(
         filter,

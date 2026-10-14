@@ -9,8 +9,10 @@ use crate::{validate, FilterError};
 
 /// Resample every plane of `buf` through `mesh` (stretched to fit when the
 /// sizes differ): each pixel shows the source at `p + d(p)`, edge pixels
-/// repeating past the layer. An alpha plane moves with the colour, as the
-/// dialog's preview shows it.
+/// repeating past the layer. An alpha plane moves with the colour, as in the
+/// dialog's preview; the planes resample straight, not premultiplied as the
+/// preview does, so a semi-transparent edge's colour can differ from it.
+/// ponytail: straight resampling; a premultiplied commit would close that gap.
 pub fn liquify(buf: &mut PixelBuffer, mesh: &LiquifyMesh) -> Result<(), FilterError> {
     validate(buf)?;
     if mesh.is_identity() {
