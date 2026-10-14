@@ -55,10 +55,10 @@ double snapDelta(double lo, double hi, const std::vector<double>& candidates, do
     return best;
 }
 
-// Crop (CS6's redesigned crop): choosing the tool shows a preview box in Modern
-// (dashed, no handles) or nothing in Classic, and a drag inside draws an active
-// box with eight handles, a shield over what will be cut, and rule-of-thirds
-// guides. Drag a handle to resize (ratio-locked when an aspect ratio is set),
+// Crop (CS6's redesigned crop): choosing the tool shows a canvas-sized preview
+// box with its eight handles in either mode; a handle drag resizes it, and a
+// drag inside draws a new active box with a shield over what will be cut and
+// rule-of-thirds guides. Drag a handle to resize (ratio-locked when an aspect ratio is set),
 // drag inside to move (Classic) or pan the composite under the fixed box
 // (Modern), drag outside to rotate. Enter, a double-click inside, or the options
 // bar's Apply commits; Escape or Cancel resets to no box. Ported from
@@ -71,8 +71,8 @@ public:
         addOptions(crop_.get());
     }
 
-    // The crop states: no box (Classic init), a Modern dashed preview, or an
-    // active box with handles.
+    // The crop states: no box (after Escape), the preview box the tool starts
+    // with (not yet a pending crop), or an active box.
     enum class State { None, Preview, Active };
 
     void onActivate(ToolServices& ctx) override
@@ -86,7 +86,9 @@ public:
     {
         active_ = false;
         grip_ = BoxGrip::None;
-        rotating_ = false;
+        if (rotating_) {
+            endRotation(ctx);
+        }
         drawingNew_ = false;
         previewPress_ = false;
         straightenArmed_ = false;
@@ -169,10 +171,7 @@ public:
             }
             clock_.restart();
             if (grip_ == BoxGrip::None && cropRotateZone(box_, imagePos, zoom(ctx))) {
-                rotating_ = true;
-                startAngle_ = crop_->angle();
-                const QPointF c = box_.center();
-                pressAngle_ = std::atan2(imagePos.y() - c.y(), imagePos.x() - c.x());
+                startRotation(ctx, imagePos);
                 return true;
             }
             // Far outside the box the cursor is the default arrow and a press
@@ -188,15 +187,24 @@ public:
         }
 
         if (state_ == State::Preview) {
+            if (grip_ != BoxGrip::None && grip_ != BoxGrip::Move) {
+                // A handle press resizes the preview, which becomes the crop.
+                state_ = State::Active;
+                show(ctx);
+                notifyStateChanged(ctx);
+                lastPress_ = imagePos;
+                clock_.restart();
+                start_ = imagePos;
+                startBox_ = box_;
+                offsetStart_ = contentOffset_;
+                return true;
+            }
             if (grip_ == BoxGrip::None && cropRotateZone(box_, imagePos, zoom(ctx))) {
                 // A rotate press outside activates the preview and rotates.
                 state_ = State::Active;
                 show(ctx);
                 notifyStateChanged(ctx);
-                rotating_ = true;
-                startAngle_ = crop_->angle();
-                const QPointF c = box_.center();
-                pressAngle_ = std::atan2(imagePos.y() - c.y(), imagePos.x() - c.x());
+                startRotation(ctx, imagePos);
                 return true;
             }
             // Far outside a preview nothing happens; there is no active crop yet
@@ -251,6 +259,7 @@ public:
                 angle = std::round(angle / 15.0) * 15.0;
             }
             crop_->setAngle(angle);
+            showRotation(ctx, imagePos);
             return;
         }
         if (state_ == State::Preview) {
@@ -336,7 +345,7 @@ public:
             return;
         }
         if (rotating_) {
-            rotating_ = false;
+            endRotation(ctx);
             recordState(ctx);
             return;
         }
@@ -427,12 +436,15 @@ public:
         // A box dragged past the canvas grows it; the added area takes the
         // background colour when the document has a Background layer.
         const int fill = int(ctx_->background().rgb() & 0xFFFFFF);
+        // History names the commit by its guide overlay, e.g. "Crop: Grid".
+        const QString label =
+            QStringLiteral("Crop: ") + CropOptions::overlayNames().value(crop_->gridOverlay());
         const bool ok = crop_->angle() != 0.0
             ? straighten_crop(*v, rect.x(), rect.y(), rect.width(), rect.height(),
                               crop_->angle(), crop_->pivot().x(), crop_->pivot().y(),
-                              crop_->deletePixels(), fill)
+                              crop_->deletePixels(), fill, label)
             : crop_to(*v, rect.x(), rect.y(), rect.width(), rect.height(),
-                      crop_->deletePixels(), fill);
+                      crop_->deletePixels(), fill, label);
         if (ok) {
             ctx_->emitSelectionCommitted();
             clearSession(*ctx_);
@@ -523,6 +535,9 @@ public:
     bool cancelPolygonLasso() override
     {
         grip_ = BoxGrip::None;
+        if (rotating_ && ctx_) {
+            endRotation(*ctx_);
+        }
         rotating_ = false;
         drawingNew_ = false;
         previewPress_ = false;
@@ -684,8 +699,12 @@ private:
             // Use the same 8 px grab as onPress so the cursor and the press
             // classify the preview rim identically (a 6 px default would show
             // the arrow over a point that still starts a draw).
-            if (boxGripAt(box_, p, z, kCropRotateMarginPx) != BoxGrip::None) {
+            const BoxGrip hover = boxGripAt(box_, p, z, kCropRotateMarginPx);
+            if (hover == BoxGrip::Move) {
                 return {CursorNewCrop, BoxGrip::None};
+            }
+            if (hover != BoxGrip::None) {
+                return {CursorResize, hover};
             }
             return cropRotateZone(box_, p, z) ? CursorState{CursorRotate, BoxGrip::None}
                                               : CursorState{CursorDefault, BoxGrip::None};
@@ -708,6 +727,35 @@ private:
 
     QRectF effectiveBox() const { return box_.translated(-contentOffset_); }
 
+    // The rotate gesture: CS6 swaps the guide overlay for a dense grid and shows
+    // the angle beside the pointer until the release.
+    void startRotation(ToolServices& ctx, const QPointF& imagePos)
+    {
+        rotating_ = true;
+        startAngle_ = crop_->angle();
+        const QPointF c = box_.center();
+        pressAngle_ = std::atan2(imagePos.y() - c.y(), imagePos.x() - c.x());
+        showRotation(ctx, imagePos);
+    }
+
+    void showRotation(ToolServices& ctx, const QPointF& imagePos)
+    {
+        if (ImageView* canvas = ctx.canvas()) {
+            canvas->setCropRotating(true);
+            canvas->setDragSizeHint(
+                QStringLiteral("\u2220: %1\u00B0").arg(crop_->angle(), 0, 'f', 1), imagePos);
+        }
+    }
+
+    void endRotation(ToolServices& ctx)
+    {
+        rotating_ = false;
+        if (ImageView* canvas = ctx.canvas()) {
+            canvas->setCropRotating(false);
+            canvas->clearDragSizeHint();
+        }
+    }
+
     void activateForStraighten(ToolServices& ctx)
     {
         if (state_ == State::Active) {
@@ -716,7 +764,7 @@ private:
         if (state_ == State::Preview && !box_.isNull()) {
             state_ = State::Active;
         } else {
-            // Classic init: use the full canvas so a pivot exists.
+            // No box (after Escape): use the full canvas so a pivot exists.
             box_ = QRectF(canvas_);
             state_ = State::Active;
         }
@@ -734,9 +782,9 @@ private:
         canvas_ = canvasRect(ctx);
         contentOffset_ = QPointF();
         crop_->setAngle(0.0);
-        // Modern starts with a centered, ratio-fitted preview box; Classic
-        // starts with no box, so the user draws one.
-        if (crop_->classicMode() || canvas_.isEmpty()) {
+        // Both modes start with a centered, ratio-fitted preview box, as CS6
+        // frames the whole image when the tool is chosen.
+        if (canvas_.isEmpty()) {
             box_ = QRectF();
             state_ = State::None;
         } else {

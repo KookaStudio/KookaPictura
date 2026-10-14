@@ -17,6 +17,24 @@ namespace pictura {
 
 namespace {
 
+// The rotate grid: square cells about kCropRotateGridPx on screen, fitted so
+// the lines divide the box evenly.
+constexpr double kCropRotateGridPx = 45.0;
+
+void drawCropRotateGrid(QPainter& p, const QRectF& box)
+{
+    const int cols = std::max(2, int(std::lround(box.width() / kCropRotateGridPx)));
+    const int rows = std::max(2, int(std::lround(box.height() / kCropRotateGridPx)));
+    for (int i = 1; i < cols; ++i) {
+        const double x = box.left() + box.width() * i / cols;
+        p.drawLine(QPointF(x, box.top()), QPointF(x, box.bottom()));
+    }
+    for (int i = 1; i < rows; ++i) {
+        const double y = box.top() + box.height() * i / rows;
+        p.drawLine(QPointF(box.left(), y), QPointF(box.right(), y));
+    }
+}
+
 // The active crop guide overlay: 0 Rule of Thirds, 1 Grid, 2 Diagonal,
 // 3 Triangle, 4 Golden Ratio, 5 Golden Spiral.
 void drawCropGuides(QPainter& p, const QRectF& box, int mode)
@@ -201,6 +219,15 @@ void ImageView::setCropPreview(bool preview)
     update();
 }
 
+void ImageView::setCropRotating(bool rotating)
+{
+    if (cropRotating_ == rotating) {
+        return;
+    }
+    cropRotating_ = rotating;
+    update();
+}
+
 void ImageView::setCropOverlay(int overlay)
 {
     if (cropOverlay_ == overlay) {
@@ -223,6 +250,7 @@ void ImageView::clearCropBox()
 {
     cropBox_ = QRectF();
     cropPreview_ = false;
+    cropRotating_ = false;
     cropContentOffset_ = QPointF();
     cropStraighten_ = 0.0;
     cropStraightenPivot_ = QPointF();
@@ -437,47 +465,48 @@ void ImageView::paintCropGroupOverlays(QPainter& painter)
         painter.setBrush(QColor(0, 0, 0, 150));
         painter.drawPath(shield);
         painter.setBrush(Qt::NoBrush);
-        if (cropPreview_) {
-            // The preview state: a dashed outline only, no guides or handles.
-            painter.setPen(QPen(QColor(255, 255, 255, 220), 1, Qt::DashLine));
-            painter.drawRect(box);
-        } else {
-            // The active guide overlay, chosen from the options-bar menu.
+        // The active guide overlay, chosen from the options-bar menu; the
+        // preview box the tool starts with shows its handles but no guides, and
+        // a rotation shows the dense rotate grid instead.
+        if (cropRotating_) {
+            painter.setPen(QPen(QColor(255, 255, 255, 110), 1));
+            drawCropRotateGrid(painter, box);
+        } else if (!cropPreview_) {
             painter.setPen(QPen(QColor(255, 255, 255, 90), 1));
             drawCropGuides(painter, box, cropOverlay_);
-            // CS6 handles sit inside the outline: L-bracket corners and thin edge
-            // bars, drawn white over a dark shadow so they read on any content.
-            // Shadows are clamped to the box so they never bleed onto the shield.
-            const CropHandleGlyphs glyphs = cropHandleGlyphs(box);
-            painter.setRenderHint(QPainter::Antialiasing, true);
-            painter.setOpacity(0.8);
-            painter.setBrush(Qt::NoBrush);
-            painter.setPen(QPen(QColor(40, 40, 40, 200), kCropHandleBarThickPx + 2));
-            for (const QLineF& s : glyphs.cornerStrokes) {
-                painter.drawLine(s);
-            }
-            painter.setPen(Qt::NoPen);
-            painter.setBrush(QColor(40, 40, 40, 200));
-            for (const QRectF& bar : glyphs.edgeBars) {
-                painter.drawRect(bar.adjusted(-1, -1, 1, 1).intersected(box));
-            }
-            painter.setPen(QPen(Qt::white, kCropHandleBarThickPx));
-            painter.setBrush(Qt::NoBrush);
-            for (const QLineF& s : glyphs.cornerStrokes) {
-                painter.drawLine(s);
-            }
-            painter.setPen(Qt::NoPen);
-            painter.setBrush(Qt::white);
-            for (const QRectF& bar : glyphs.edgeBars) {
-                painter.drawRect(bar);
-            }
-            painter.setOpacity(1.0);
-            // The outline is drawn last so the handle shadows cannot break it.
-            painter.setRenderHint(QPainter::Antialiasing, false);
-            painter.setBrush(Qt::NoBrush);
-            painter.setPen(QPen(QColor(255, 255, 255, 220), 1));
-            painter.drawRect(box);
         }
+        // CS6 handles sit inside the outline: L-bracket corners and thin edge
+        // bars, drawn white over a dark shadow so they read on any content.
+        // Shadows are clamped to the box so they never bleed onto the shield.
+        const CropHandleGlyphs glyphs = cropHandleGlyphs(box);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setOpacity(0.8);
+        painter.setBrush(Qt::NoBrush);
+        painter.setPen(QPen(QColor(40, 40, 40, 200), kCropHandleBarThickPx + 2));
+        for (const QLineF& s : glyphs.cornerStrokes) {
+            painter.drawLine(s);
+        }
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(40, 40, 40, 200));
+        for (const QRectF& bar : glyphs.edgeBars) {
+            painter.drawRect(bar.adjusted(-1, -1, 1, 1).intersected(box));
+        }
+        painter.setPen(QPen(Qt::white, kCropHandleBarThickPx));
+        painter.setBrush(Qt::NoBrush);
+        for (const QLineF& s : glyphs.cornerStrokes) {
+            painter.drawLine(s);
+        }
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(Qt::white);
+        for (const QRectF& bar : glyphs.edgeBars) {
+            painter.drawRect(bar);
+        }
+        painter.setOpacity(1.0);
+        // The outline is drawn last so the handle shadows cannot break it.
+        painter.setRenderHint(QPainter::Antialiasing, false);
+        painter.setBrush(Qt::NoBrush);
+        painter.setPen(QPen(QColor(255, 255, 255, 220), 1));
+        painter.drawRect(box);
     }
 
     // The straighten line tool's live horizon: a plain ruled line from press to

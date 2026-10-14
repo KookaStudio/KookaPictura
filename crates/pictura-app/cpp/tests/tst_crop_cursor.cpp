@@ -68,13 +68,14 @@ void CropCursorTest::cursorZones()
     canvas->actualPixels();
     tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(false);  // Modern: full-canvas preview
     frame.setActiveTool(pictura::ToolId::Crop);
-    // Preview: inside is the new-crop crosshair, outside the canvas rotates.
-    QCOMPARE(tools->cropCursorKindForTest(QPointF(1, 1), 0), int(NewCrop));
+    // Preview: its handles resize, inside is the new-crop crosshair, outside
+    // the canvas rotates.
+    QCOMPARE(tools->cropCursorKindForTest(QPointF(1, 1), 0), int(Resize));
     QCOMPARE(tools->cropCursorKindForTest(QPointF(60, 60), 0), int(NewCrop));
     QCOMPARE(tools->cropCursorKindForTest(QPointF(130, 130), 0), int(Rotate));
 
     // A drag inside the preview draws a new active box (60,60,60,60).
-    drag(canvas, QPointF(120, 120), QPointF(60, 60));
+    drag(canvas, QPointF(60, 60), QPointF(120, 120));
     QCOMPARE(tools->cropCursorKindForTest(QPointF(90, 90), 0), int(Box));
     QCOMPARE(tools->cropCursorKindForTest(QPointF(63, 63), 0), int(Resize));
     QCOMPARE(tools->cropCursorKindForTest(QPointF(30, 30), 0), int(Rotate));
@@ -108,7 +109,7 @@ void CropCursorTest::farZoneDefaultAndApply()
     frame.setActiveTool(pictura::ToolId::Crop);
 
     // Draw a small active box at the top-left.
-    drag(canvas, QPointF(0, 0), QPointF(30, 30));
+    drag(canvas, QPointF(30, 30), QPointF(0, 0));
 
     // Within the band (under 100 px from the corner) the cursor rotates; beyond
     // it the cursor is the default arrow and a press applies the crop.
@@ -141,7 +142,7 @@ void CropCursorTest::farZoneAppliesFromWorkspace()
     canvas->actualPixels();
     tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(true);
     frame.setActiveTool(pictura::ToolId::Crop);
-    drag(canvas, QPointF(0, 0), QPointF(30, 30));
+    drag(canvas, QPointF(30, 30), QPointF(0, 0));
 
     // A press far outside the canvas (on the workspace) still applies: the zone
     // ignores the canvas edge. (300,300) is ~380 px from the box corner.
@@ -206,7 +207,7 @@ void CropCursorTest::arrowKeysNudgeCrop()
     canvas->actualPixels();
     tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(true);
     frame.setActiveTool(pictura::ToolId::Crop);
-    drag(canvas, QPointF(0, 0), QPointF(30, 30));
+    drag(canvas, QPointF(30, 30), QPointF(0, 0));
 
     // Classic: arrow keys nudge the box (Shift steps 10 px).
     arrow(Qt::Key_Right, Qt::NoModifier);
@@ -220,7 +221,7 @@ void CropCursorTest::arrowKeysNudgeCrop()
     tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(false);
     frame.setActiveTool(pictura::ToolId::Move);
     frame.setActiveTool(pictura::ToolId::Crop);
-    drag(canvas, QPointF(120, 120), QPointF(60, 60));
+    drag(canvas, QPointF(60, 60), QPointF(120, 120));
     QCOMPARE(canvas->cropContentOffset(), QPointF());
     arrow(Qt::Key_Right, Qt::NoModifier);
     QCOMPARE(canvas->cropContentOffset(), QPointF(1, 0));
@@ -248,7 +249,7 @@ void CropCursorTest::classicMovesBoxModernMovesContent()
 
     // Classic: dragging inside moves the box.
     tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(true);
-    drag(canvas, QPointF(0, 0), QPointF(30, 30));      // draw (0,0,30,30)
+    drag(canvas, QPointF(30, 30), QPointF(0, 0));      // draw (0,0,30,30)
     const QPolygonF classicBefore = canvas->cropBoxWidgetForTest();
     drag(canvas, QPointF(10, 10), QPointF(20, 20));    // move the box +10,+10
     const QPolygonF classicAfter = canvas->cropBoxWidgetForTest();
@@ -259,7 +260,7 @@ void CropCursorTest::classicMovesBoxModernMovesContent()
     tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(false);
     frame.setActiveTool(pictura::ToolId::Move);
     frame.setActiveTool(pictura::ToolId::Crop);
-    drag(canvas, QPointF(120, 120), QPointF(60, 60));  // draw (60,60,60,60)
+    drag(canvas, QPointF(60, 60), QPointF(120, 120));  // draw (60,60,60,60)
     const QPolygonF modernBefore = canvas->cropBoxWidgetForTest();
     drag(canvas, QPointF(90, 90), QPointF(100, 100));
     QCOMPARE(canvas->cropBoxWidgetForTest(), modernBefore);
@@ -310,7 +311,7 @@ void CropCursorTest::firstBoxClampedThenGrows()
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
-    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(true);  // start boxless and draw one
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(true);  // draw a box inside the start box
     frame.setActiveTool(pictura::ToolId::Crop);
 
     // The first box is clamped to the canvas, even if the drag goes past it.

@@ -17,6 +17,7 @@
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QLineEdit>
+#include <QtWidgets/QMenu>
 #include <QtWidgets/QToolButton>
 #include <QtGui/QValidator>
 
@@ -31,8 +32,10 @@ private slots:
     void resolutionModeShowsPixels();
     void resetRestoresCanvasBox();
     void straightenToggleArmsLineMode();
-    void contentAwareIsADisabledPlaceholder();
+    void noContentAwareCheckbox();
     void cropOptionsPersist();
+    void historyNamesTheOverlay();
+    void overlayMenuShowsIcons();
     void overlayModesRenderDifferently();
     void integerFieldsRejectFractions();
 
@@ -84,8 +87,8 @@ void CropOptionsTest::ratioPresetLocksTheBox()
     QVERIFY(combo);
     combo->setCurrentIndex(combo->findText(QStringLiteral("1 : 1 (Square)")));
     // Dragging inside the preview draws a new box honoring the square ratio.
-    drag(canvas, QPointF(40, 40), QPointF(20, 10));
-    QCOMPARE(tools->pendingCropRect(), QRect(20, 20, 20, 20));
+    drag(canvas, QPointF(30, 30), QPointF(10, 0));
+    QCOMPARE(tools->pendingCropRect(), QRect(10, 10, 20, 20));
 
     frame.setActiveTool(pictura::ToolId::Move);
     frame.closeDocument(doc, false);
@@ -143,7 +146,7 @@ void CropOptionsTest::resetRestoresCanvasBox()
     canvas->actualPixels();
     tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(true);
     frame.setActiveTool(pictura::ToolId::Crop);
-    drag(canvas, QPointF(0, 0), QPointF(30, 30));
+    drag(canvas, QPointF(30, 30), QPointF(0, 0));
     combo->setCurrentIndex(combo->findText(QStringLiteral("16 : 9")));
 
     // Reset makes the box the whole canvas and blanks the ratio fields.
@@ -231,18 +234,93 @@ void CropOptionsTest::straightenToggleArmsLineMode()
     frame.closeDocument(doc, false);
 }
 
-void CropOptionsTest::contentAwareIsADisabledPlaceholder()
+// Content-Aware crop arrived after CS6 (CC 2015.5), so the bar has no checkbox.
+void CropOptionsTest::noContentAwareCheckbox()
 {
     pictura::PicturaMainWindow& frame = *window_;
     QVERIFY(frame.newDocument(QStringLiteral("OptContentAware"), 32, 32, QStringLiteral("rgb"), 8,
                               QStringLiteral("white")));
     const int doc = frame.activeDocumentIndex();
     frame.setActiveTool(pictura::ToolId::Crop);
-    auto* contentAware =
-        frame.findChild<QCheckBox*>(QStringLiteral("optionsCropContentAware"));
-    QVERIFY(contentAware);
-    QVERIFY(!contentAware->isEnabled());
+    QVERIFY(!frame.findChild<QCheckBox*>(QStringLiteral("optionsCropContentAware")));
+    for (QCheckBox* box : frame.findChildren<QCheckBox*>()) {
+        QVERIFY(box->text() != QStringLiteral("Content-Aware"));
+    }
 
+    frame.setActiveTool(pictura::ToolId::Move);
+    frame.closeDocument(doc, false);
+}
+
+// The commit's History state names the guide overlay: "Crop: Rule of Thirds",
+// "Crop: Grid", and so on.
+void CropOptionsTest::historyNamesTheOverlay()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(tools);
+    auto* crop = tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop);
+    const int before = crop->gridOverlay();
+
+    const QStringList& names = pictura::CropOptions::overlayNames();
+    for (int i : {0, 1, 5}) {
+        QVERIFY(frame.newDocument(QStringLiteral("OptHistory"), 40, 40, QStringLiteral("rgb"), 8,
+                                  QStringLiteral("white")));
+        const int doc = frame.activeDocumentIndex();
+        pictura::PictureView* view = frame.activeView();
+        pictura::ImageView* canvas = frame.imageView();
+        QVERIFY(view && canvas);
+        canvas->actualPixels();
+        crop->setGridOverlay(i);
+        frame.setActiveTool(pictura::ToolId::Crop);
+        drag(canvas, QPointF(30, 30), QPointF(5, 5));
+        QVERIFY(tools->commitCrop());
+        QCOMPARE(view->history_label(view->history_count() - 1),
+                 QStringLiteral("Crop: ") + names.value(i));
+        frame.setActiveTool(pictura::ToolId::Move);
+        frame.closeDocument(doc, false);
+    }
+    QCOMPARE(names.value(0), QStringLiteral("Rule of Thirds"));
+    QCOMPARE(names.value(1), QStringLiteral("Grid"));
+    crop->setGridOverlay(before);
+}
+
+// Every overlay in the grid menu has its icon, and the menu button shows the
+// selected overlay's icon.
+void CropOptionsTest::overlayMenuShowsIcons()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("OptIcons"), 32, 32, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    const int doc = frame.activeDocumentIndex();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(tools);
+    auto* crop = tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop);
+    const int before = crop->gridOverlay();
+    frame.setActiveTool(pictura::ToolId::Crop);
+    auto* button = frame.findChild<QToolButton*>(QStringLiteral("optionsCropGrid"));
+    QVERIFY(button && button->menu());
+
+    const auto image = [](const QIcon& i) { return i.pixmap(QSize(18, 18)).toImage(); };
+    const QStringList& names = pictura::CropOptions::overlayNames();
+    QList<QImage> seen;
+    for (int i = 0; i < names.size(); ++i) {
+        QAction* action = nullptr;
+        for (QAction* a : button->menu()->actions()) {
+            if (a->text() == names[i]) {
+                action = a;
+            }
+        }
+        QVERIFY2(action, qPrintable(names[i]));
+        QVERIFY2(!action->icon().isNull(), qPrintable(names[i]));
+        const QImage art = image(action->icon());
+        QVERIFY2(!seen.contains(art), "each overlay has its own icon");
+        seen.append(art);
+        action->trigger();
+        QCOMPARE(crop->gridOverlay(), i);
+        QCOMPARE(image(button->icon()), art);
+    }
+
+    crop->setGridOverlay(before);
     frame.setActiveTool(pictura::ToolId::Move);
     frame.closeDocument(doc, false);
 }

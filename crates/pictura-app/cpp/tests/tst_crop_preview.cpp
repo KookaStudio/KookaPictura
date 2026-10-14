@@ -1,6 +1,7 @@
-// Crop preview/active states and the straighten preview (#282, #252): Modern
-// starts with a centered, ratio-fitted preview box; a drag inside draws a new
-// active box; a click adopts the preview; Escape clears to no box. The content
+// Crop preview/active states and the straighten preview (#282, #252): both
+// modes start with a centered, ratio-fitted preview box showing its handles; a
+// handle drag resizes it, a drag inside draws a new active box, a click adopts
+// the preview; Escape clears to no box. The content
 // rotation preview and the canvas frame still work as before.
 
 #include <QtTest/QtTest>
@@ -39,7 +40,10 @@ private slots:
     void straightenRotatesTheContent();
     void canvasGrowsToTheRotatedBounds();
     void movingTheBoxKeepsThePivot();
-    void modernStartsInPreview();
+    void bothModesStartInPreview();
+    void previewShowsItsHandles();
+    void previewHandleDragResizes();
+    void rotateShowsGridAndAngle();
     void previewDragDrawsAndClickAdopts();
     void escapeClearsToNoBoxInBothModes();
     void paddedMoveShowsTheBackdrop();
@@ -131,7 +135,7 @@ void CropPreviewTest::movingTheBoxKeepsThePivot()
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
-    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(true);  // boxless: draw a box, then move it
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(true);  // draw a box, then move it
     frame.setActiveTool(pictura::ToolId::Crop);
     drag(canvas, QPointF(40, 40), QPointF(80, 80));  // box (40,40,40,40)
     // Rotate about the box centre (press outside the box, inside the canvas).
@@ -151,7 +155,7 @@ void CropPreviewTest::movingTheBoxKeepsThePivot()
     frame.closeDocument(doc, false);
 }
 
-void CropPreviewTest::modernStartsInPreview()
+void CropPreviewTest::bothModesStartInPreview()
 {
     pictura::PicturaMainWindow& frame = *window_;
     QVERIFY(frame.newDocument(QStringLiteral("Preview"), 120, 80, QStringLiteral("rgb"), 8,
@@ -172,8 +176,118 @@ void CropPreviewTest::modernStartsInPreview()
     tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(true);
     frame.setActiveTool(pictura::ToolId::Move);
     frame.setActiveTool(pictura::ToolId::Crop);
-    QVERIFY2(!canvas->hasCropBoxForTest(), "Classic starts with no box");
+    QVERIFY2(canvas->hasCropBoxForTest() && canvas->cropPreviewForTest(),
+             "Classic also starts with a preview box");
+    QVERIFY(!tools->cropActive());
 
+    frame.setActiveTool(pictura::ToolId::Move);
+    frame.closeDocument(doc, false);
+}
+
+// CS6 frames the image with its corner and edge handles as soon as the tool is
+// chosen: the dark handle shadow shows inside the corner of a white canvas.
+void CropPreviewTest::previewShowsItsHandles()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("PreviewHandles"), 80, 80, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::ImageView* canvas = frame.imageView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(canvas);
+    QVERIFY(tools);
+    const int doc = frame.activeDocumentIndex();
+
+    canvas->actualPixels();
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(true);
+    frame.setActiveTool(pictura::ToolId::Crop);
+    QVERIFY(canvas->cropPreviewForTest());
+    const QPolygonF box = canvas->cropBoxWidgetForTest();
+    QVERIFY(!box.isEmpty());
+    const QImage shot = canvas->grab().toImage();
+    const QPointF corner = box.boundingRect().topLeft() * shot.devicePixelRatio();
+    int dark = 0;
+    for (int y = 1; y < 12; ++y) {
+        for (int x = 1; x < 12; ++x) {
+            const QPoint p = (corner + QPointF(x, y)).toPoint();
+            if (shot.rect().contains(p) && shot.pixelColor(p).lightness() < 128) {
+                ++dark;
+            }
+        }
+    }
+    QVERIFY2(dark > 0, "the preview's corner bracket is drawn");
+
+    frame.setActiveTool(pictura::ToolId::Move);
+    frame.closeDocument(doc, false);
+}
+
+void CropPreviewTest::previewHandleDragResizes()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("PreviewResize"), 80, 80, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::ImageView* canvas = frame.imageView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(canvas);
+    QVERIFY(tools);
+    const int doc = frame.activeDocumentIndex();
+
+    canvas->actualPixels();
+    for (const bool classic : {true, false}) {
+        tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(classic);
+        frame.setActiveTool(pictura::ToolId::Move);
+        frame.setActiveTool(pictura::ToolId::Crop);
+        QVERIFY(canvas->cropPreviewForTest());
+        // The bottom-right corner handle resizes the start box.
+        drag(canvas, QPointF(80, 80), QPointF(50, 60));
+        QCOMPARE(tools->pendingCropRect(), QRect(0, 0, 50, 60));
+        QVERIFY2(!canvas->cropPreviewForTest() && tools->cropActive(),
+                 "a resized preview is the active crop");
+        // So does an edge handle.
+        frame.setActiveTool(pictura::ToolId::Move);
+        frame.setActiveTool(pictura::ToolId::Crop);
+        drag(canvas, QPointF(0, 40), QPointF(20, 40));
+        QCOMPARE(tools->pendingCropRect(), QRect(20, 0, 60, 80));
+    }
+
+    frame.setActiveTool(pictura::ToolId::Move);
+    frame.closeDocument(doc, false);
+}
+
+// Rotating the box (any overlay) shows a dense grid in the box and the angle
+// beside the pointer, both gone on release.
+void CropPreviewTest::rotateShowsGridAndAngle()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("RotateGrid"), 80, 80, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::ImageView* canvas = frame.imageView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(canvas);
+    QVERIFY(tools);
+    const int doc = frame.activeDocumentIndex();
+    auto* crop = tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop);
+    const int overlay = crop->gridOverlay();
+
+    canvas->actualPixels();
+    crop->setGridOverlay(2);  // Diagonal: the rotate grid replaces any overlay
+    frame.setActiveTool(pictura::ToolId::Crop);
+    QVERIFY(!canvas->cropRotatingForTest());
+
+    // Press in the rotate band just right of the box, then swing downwards.
+    canvas->mousePressed(QPointF(95, 40), Qt::LeftButton, int(Qt::NoModifier));
+    QVERIFY(canvas->cropRotatingForTest());
+    canvas->mouseMoved(QPointF(95, 60));
+    QVERIFY(crop->angle() != 0.0);
+    QVERIFY(canvas->cropRotatingForTest());
+    QVERIFY(canvas->hasDragSizeHintForTest());
+    QCOMPARE(canvas->dragSizeHintForTest(),
+             QStringLiteral("\u2220: %1\u00B0").arg(crop->angle(), 0, 'f', 1));
+    canvas->mouseReleased(QPointF(95, 60));
+    QVERIFY2(!canvas->cropRotatingForTest(), "the grid goes on release");
+    QVERIFY2(!canvas->hasDragSizeHintForTest(), "the angle readout goes on release");
+    QVERIFY(crop->angle() != 0.0);
+
+    crop->setGridOverlay(overlay);
     frame.setActiveTool(pictura::ToolId::Move);
     frame.closeDocument(doc, false);
 }

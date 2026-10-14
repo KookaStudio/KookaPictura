@@ -40,11 +40,12 @@ void CropStraightenTest::straightenCommitCropsToTheBox()
     const int doc = frame.activeDocumentIndex();
     const int before = view->history_count();
 
-    QVERIFY(pictura::straighten_crop(*view, 5, 4, 20, 10, 30.0, 15.0, 9.0, true, -1));
+    QVERIFY(pictura::straighten_crop(*view, 5, 4, 20, 10, 30.0, 15.0, 9.0, true, -1,
+                                     QStringLiteral("Crop: Grid")));
     QCOMPARE(view->document_width(), 20);
     QCOMPARE(view->document_height(), 10);
     QCOMPARE(view->history_count(), before + 1);
-    QCOMPARE(view->history_label(view->history_count() - 1), QStringLiteral("Crop"));
+    QCOMPARE(view->history_label(view->history_count() - 1), QStringLiteral("Crop: Grid"));
 
     frame.closeDocument(doc, false);
 }
@@ -58,9 +59,10 @@ void CropStraightenTest::angleZeroIsAnAxisAlignedCrop()
     QVERIFY(view);
     const int doc = frame.activeDocumentIndex();
 
-    QVERIFY(pictura::straighten_crop(*view, 2, 3, 10, 8, 0.0, 7.0, 7.0, true, -1));
+    QVERIFY(pictura::straighten_crop(*view, 2, 3, 10, 8, 0.0, 7.0, 7.0, true, -1, QString()));
     QCOMPARE(view->document_width(), 10);
     QCOMPARE(view->document_height(), 8);
+    QCOMPARE(view->history_label(view->history_count() - 1), QStringLiteral("Crop"));
 
     frame.closeDocument(doc, false);
 }
