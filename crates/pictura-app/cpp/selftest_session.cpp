@@ -672,6 +672,10 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
             // is dropped, and every entry is an existing directory.
             const QString recentDir = QDir::tempPath() + QStringLiteral("/kooka-places");
             QDir().mkpath(recentDir);
+            // fileDialogPlaces() canonicalizes each place (symlinks resolved), so
+            // match against the canonical temp dir: on macOS QDir::tempPath() is
+            // the /var symlink while the place resolves to /private/var.
+            const QString recentDirKey = QFileInfo(recentDir).canonicalFilePath();
             const QString recentFile = recentDir + QStringLiteral("/doc.psd");
             {
                 QFile seeded(recentFile);
@@ -685,7 +689,7 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
             bool allDirs = true;
             for (const QUrl& url : pictura::fileDialogPlaces()) {
                 const QString place = url.toLocalFile();
-                hasRecent = hasRecent || place == recentDir;
+                hasRecent = hasRecent || place == recentDirKey;
                 hasMissing = hasMissing
                     || place.startsWith(QStringLiteral("/nonexistent-kooka-pictura"));
                 allDirs = allDirs && QFileInfo(place).isDir();

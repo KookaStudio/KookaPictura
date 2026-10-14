@@ -29,6 +29,10 @@
   panic when no implemented backend is compiled for the target (Apple),
   returning "no GPU" so the self-test runs on the CPU path. Verify: the macOS
   self-test runs to completion on this PR.
+- [ ] 1.6 Compare the `raster_export` self-test's recent place against the
+  canonical temp path: `fileDialogPlaces()` resolves symlinks, and macOS's
+  `QDir::tempPath()` is the `/var` symlink (`/private/var`). Verify: the macOS
+  self-test passes the `raster_export` check.
 
 ## 2. Enable the macOS build on this PR (temporary)
 
