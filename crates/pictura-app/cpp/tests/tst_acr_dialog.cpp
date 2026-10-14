@@ -116,8 +116,9 @@ void AcrDialogTest::dialogShowsEveryTab()
     QVERIFY(tabs);
     QCOMPARE(tabs->count(), 9);
     QCOMPARE(tabs->currentIndex(), 0);
-    QCOMPARE(tabs->tabText(0), QStringLiteral("Basic"));
-    QCOMPARE(tabs->tabText(8), QStringLiteral("Presets"));
+    QVERIFY2(tabs->tabText(0).isEmpty(), "tabs are icon-only");
+    QCOMPARE(tabs->tabToolTip(0), QStringLiteral("Basic"));
+    QCOMPARE(tabs->tabToolTip(8), QStringLiteral("Presets"));
 }
 
 void AcrDialogTest::basicPanelWritesKeys()
@@ -271,12 +272,14 @@ void AcrDialogTest::previewPaneAndHistogram()
     QCOMPARE(hist->seriesCountForTest(), 3);
 
     QVERIFY(setSlider(&dialog, acr::Exposure, 1.5));
+    QTest::qWait(80);
     const QImage bright = pane->image();
     QVERIFY(!bright.isNull());
     const QString brightReadout = hist->readoutForTest();
     QVERIFY2(brightReadout.contains(QStringLiteral("R:")), qPrintable(brightReadout));
 
     QVERIFY(setSlider(&dialog, acr::Exposure, -2.0));
+    QTest::qWait(80);
     const QImage dark = pane->image();
     QVERIFY(!dark.isNull());
     QVERIFY2(bright != dark, "editing a control changes the preview image");

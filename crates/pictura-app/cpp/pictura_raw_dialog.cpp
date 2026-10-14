@@ -11,6 +11,7 @@
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 
 #include <QtCore/QList>
+#include <QtCore/QTimer>
 #include <QtWidgets/QDialogButtonBox>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QStackedWidget>
@@ -37,15 +38,18 @@ PicturaRawDialog::PicturaRawDialog(PictureView* view, const QString& path,
     tabs_ = new QTabBar(this);
     auto* stack = new QStackedWidget(this);
 
+    auto* basicPanel = new AcrBasicPanel(&settings_, this);
+    auto* toneCurvePanel = new AcrToneCurvePanel(&settings_, this);
+    toneCurve_ = toneCurvePanel;
+
     struct Tab {
         QString title;
         QString iconId;
         AcrPanel* panel;
     };
     const QList<Tab> panels = {
-        {tr("Basic"), QStringLiteral("view.options"), new AcrBasicPanel(&settings_, this)},
-        {tr("Tone Curve"), QStringLiteral("window.panels.paths"),
-         new AcrToneCurvePanel(&settings_, this)},
+        {tr("Basic"), QStringLiteral("view.options"), basicPanel},
+        {tr("Tone Curve"), QStringLiteral("window.panels.paths"), toneCurvePanel},
         {tr("Detail"), QStringLiteral("tool.sharpen"), new AcrDetailPanel(&settings_, this)},
         {tr("HSL / Grayscale"), QStringLiteral("window.panels.color"),
          new AcrHslPanel(&settings_, this)},
@@ -58,10 +62,13 @@ PicturaRawDialog::PicturaRawDialog(PictureView* view, const QString& path,
          new AcrCalibrationPanel(&settings_, this)},
         {tr("Presets"), QStringLiteral("layers.fx"), new AcrPresetsPanel(&settings_, this)},
     };
+    int index = 0;
     for (const Tab& entry : panels) {
-        tabs_->addTab(pictura::icon(entry.iconId), entry.title);
+        tabs_->addTab(pictura::icon(entry.iconId), QString());
+        tabs_->setTabToolTip(index, entry.title);
         stack->addWidget(entry.panel);
         connect(entry.panel, &AcrPanel::changed, this, &PicturaRawDialog::refresh);
+        ++index;
     }
     connect(tabs_, &QTabBar::currentChanged, stack, &QStackedWidget::setCurrentIndex);
 
@@ -74,15 +81,46 @@ PicturaRawDialog::PicturaRawDialog(PictureView* view, const QString& path,
     right->addWidget(buttons);
 
     outer->addLayout(right);
+
+    refreshTimer_ = new QTimer(this);
+    refreshTimer_->setSingleShot(true);
+    refreshTimer_->setInterval(30);
+    connect(refreshTimer_, &QTimer::timeout, this, [this] {
+        if (renderPending_) {
+            renderPending_ = false;
+            render();
+            refreshTimer_->start();
+        }
+    });
+
     resize(1100, 680);
-    refresh();
+    render();
 }
 
 void PicturaRawDialog::refresh()
 {
+    // Throttle: render at once when idle, then at most every 30 ms, with a
+    // trailing render so the last value of a drag is not dropped.
+    if (!refreshTimer_) {
+        render();
+        return;
+    }
+    if (refreshTimer_->isActive()) {
+        renderPending_ = true;
+        return;
+    }
+    render();
+    refreshTimer_->start();
+}
+
+void PicturaRawDialog::render()
+{
     const QString text = settings_.encode();
     preview_->setSettingsText(text);
     histogram_->setImage(preview_->image());
+    if (toneCurve_) {
+        toneCurve_->setPreviewImage(preview_->image());
+    }
 }
 
 QString PicturaRawDialog::settingsText() const

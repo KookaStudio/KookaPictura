@@ -7,11 +7,17 @@
 #include <QtGui/QImage>
 #include <QtWidgets/QWidget>
 
+#include <array>
+
 class QLabel;
 
 namespace pictura {
 
 class HistogramView;
+
+// A 256-bin luminance histogram of `image`, used by the histogram and the tone
+// curve's parametric graph.
+std::array<int, 256> acrLumaBins(const QImage& image);
 
 class AcrHistogram : public QWidget {
     Q_OBJECT

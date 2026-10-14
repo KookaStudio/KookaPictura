@@ -1,14 +1,15 @@
 #pragma once
 
-// The ACR preview pane: the active layer rendered with the current settings,
-// over a transparency checkerboard, with a zoom readout and the shadow /
-// highlight clipping toggles.
+// The ACR preview pane: the active layer rendered with the current settings on
+// the workspace surface, with zoom controls and the shadow / highlight clipping
+// toggles.
 
 #include <QtCore/QString>
 #include <QtGui/QImage>
 #include <QtWidgets/QWidget>
 
 class QLabel;
+class QLineEdit;
 class QToolButton;
 
 namespace pictura {
@@ -30,6 +31,7 @@ public:
 
     QToolButton* shadowToggleForTest() const { return shadowToggle_; }
     QToolButton* highlightToggleForTest() const { return highlightToggle_; }
+    QLineEdit* zoomEditForTest() const { return zoomEdit_; }
 
     // Tint pixels at or below black (blue) / at or above white (red).
     static QImage applyClipping(const QImage& image, bool shadow, bool highlight);
@@ -38,10 +40,19 @@ protected:
     void paintEvent(QPaintEvent* event) override;
 
 private:
+    void setZoom(double zoom);
+    void stepZoom(int direction);
+    void commitZoomEdit();
+    void refreshZoomEdit();
+
     PictureView* view_ = nullptr;
     QString path_;
     QImage image_;
-    QLabel* zoomLabel_ = nullptr;
+    double zoom_ = 1.0;
+    bool fit_ = true;
+    QToolButton* zoomOut_ = nullptr;
+    QToolButton* zoomIn_ = nullptr;
+    QLineEdit* zoomEdit_ = nullptr;
     QToolButton* shadowToggle_ = nullptr;
     QToolButton* highlightToggle_ = nullptr;
 };

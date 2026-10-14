@@ -5,7 +5,11 @@
 
 #include "acr_controls.h"
 
+class QImage;
+
 namespace pictura {
+
+class AcrParamCurveGraph;
 
 class AcrBasicPanel : public AcrPanel {
     Q_OBJECT
@@ -22,6 +26,12 @@ class AcrToneCurvePanel : public AcrPanel {
 
 public:
     explicit AcrToneCurvePanel(AcrSettings* settings, QWidget* parent = nullptr);
+
+    // Feed the preview image so the parametric graph can draw its histogram.
+    void setPreviewImage(const QImage& image);
+
+private:
+    AcrParamCurveGraph* graph_ = nullptr;
 };
 
 class AcrDetailPanel : public AcrPanel {

@@ -7,7 +7,9 @@
 //! so they round-trip on save. ponytail: group/nested smart objects are not
 //! recursed into.
 
-use pictura_core::{Channel, Document, Layer, PicturaRawSettings, PixelBuffer, SmartObjectKind};
+use pictura_core::{
+    Channel, Document, Layer, PicturaRawSettings, PixelBuffer, PsdRect, SmartObjectKind,
+};
 
 use super::layer_ops::{resolve_path, resolve_path_mut};
 
@@ -85,9 +87,9 @@ fn write_proxy(layer: &mut Layer, src: &PixelBuffer, color_channels: usize) {
 /// Render a downscaled preview of the layer at `path` with `settings` applied,
 /// without mutating the document. `max_dim` caps the long side (clamped to at
 /// least 1). Returns `None` for a missing/ineligible target or an unrenderable
-/// rect. For an embedded smart object the source is rendered through the Pictura
-/// Raw pipeline; for a plain raster pixel layer its channels are used directly.
-/// The layer is never converted, so this is a pure read.
+/// rect. The source is rendered/scaled straight to the preview size, so the cost
+/// does not grow with the full layer. The layer is never converted, so this is a
+/// pure read.
 /// ponytail: channel bytes are treated as 8-bit; a 16-bit document previews as
 /// truncated, matching the apply path's ceiling.
 pub fn preview_pictura_raw(
@@ -104,25 +106,46 @@ pub fn preview_pictura_raw(
     if rect.width() <= 0 || rect.height() <= 0 {
         return None;
     }
+    let (pw, ph) = preview_size(rect.width() as u32, rect.height() as u32, max_dim.max(1) as u32);
+
     let src = match layer
         .smart_object
         .as_ref()
         .filter(|so| so.kind == SmartObjectKind::Embedded)
     {
-        Some(so) => crate::composite::render_smart_source(so, rect, rect)?,
-        None => raster_buffer(doc, layer),
+        // Render the payload scaled to the preview size, not the full layer rect.
+        Some(so) => {
+            let preview = PsdRect {
+                top: 0,
+                left: 0,
+                bottom: ph as i32,
+                right: pw as i32,
+            };
+            crate::composite::render_smart_source(so, preview, preview)?
+        }
+        None => raster_preview_buffer(doc, layer, pw, ph),
     };
-    let src = downscale_to(src, max_dim.max(1) as u32);
     pictura_adjust::render_pictura_raw(&src, settings).ok()
 }
 
-/// The layer's raster channels as an RGBA buffer (grayscale replicated to RGB),
-/// for a not-yet-smart pixel layer. The alpha channel is kept when present so the
-/// preview matches the applied result for a layer with transparency.
-fn raster_buffer(doc: &Document, layer: &Layer) -> PixelBuffer {
-    let w = layer.rect.width() as u32;
-    let h = layer.rect.height() as u32;
-    let plane = (w as usize) * (h as usize);
+/// The long side of a `max_dim`-capped copy of a `w`x`h` image.
+fn preview_size(w: u32, h: u32, max_dim: u32) -> (u32, u32) {
+    let (w, h) = (w.max(1), h.max(1));
+    if w <= max_dim && h <= max_dim {
+        return (w, h);
+    }
+    let scale = max_dim as f64 / w.max(h) as f64;
+    (
+        ((w as f64 * scale).round() as u32).max(1),
+        ((h as f64 * scale).round() as u32).max(1),
+    )
+}
+
+/// The layer's raster channels sampled into a `pw`x`ph` RGBA buffer (grayscale
+/// replicated to RGB, alpha kept when present), for a not-yet-smart pixel layer.
+fn raster_preview_buffer(doc: &Document, layer: &Layer, pw: u32, ph: u32) -> PixelBuffer {
+    let w = layer.rect.width().max(0) as usize;
+    let h = layer.rect.height().max(0) as usize;
     let color = doc.mode.color_channels() as usize;
     let read = |id: i16| -> Option<&[u8]> {
         layer
@@ -131,67 +154,36 @@ fn raster_buffer(doc: &Document, layer: &Layer) -> PixelBuffer {
             .find(|c| c.id == id)
             .map(|c| c.data.as_ref())
     };
+    let (red, green, blue) = (read(0), read(1), read(2));
+    let alpha = read(-1);
+    let plane = pw as usize * ph as usize;
     let mut data = vec![0u8; plane * 4];
-    if color == 1 {
-        let g = read(0).unwrap_or(&[]);
-        for i in 0..plane {
-            let v = g.get(i).copied().unwrap_or(0);
-            data[i] = v;
-            data[plane + i] = v;
-            data[2 * plane + i] = v;
+    for y in 0..ph as usize {
+        let sy = (y * h / ph as usize).min(h.saturating_sub(1));
+        for x in 0..pw as usize {
+            let sx = (x * w / pw as usize).min(w.saturating_sub(1));
+            let si = sy * w + sx;
+            let di = y * pw as usize + x;
+            let (r, g, b) = if color == 1 {
+                let v = red.and_then(|d| d.get(si)).copied().unwrap_or(0);
+                (v, v, v)
+            } else {
+                (
+                    red.and_then(|d| d.get(si)).copied().unwrap_or(0),
+                    green.and_then(|d| d.get(si)).copied().unwrap_or(0),
+                    blue.and_then(|d| d.get(si)).copied().unwrap_or(0),
+                )
+            };
+            data[di] = r;
+            data[plane + di] = g;
+            data[2 * plane + di] = b;
+            data[3 * plane + di] = alpha.and_then(|d| d.get(si)).copied().unwrap_or(255);
         }
-    } else {
-        // ponytail: a 4-channel (CMYK) layer takes its first three planes; a
-        // real CMYK->RGB preview conversion is out of scope here.
-        for c in 0..color.min(3) {
-            if let Some(src) = read(c as i16) {
-                let n = plane.min(src.len());
-                data[c * plane..c * plane + n].copy_from_slice(&src[..n]);
-            }
-        }
-    }
-    match read(-1) {
-        Some(alpha) => {
-            let n = plane.min(alpha.len());
-            data[3 * plane..3 * plane + n].copy_from_slice(&alpha[..n]);
-        }
-        None => data[3 * plane..4 * plane].fill(255),
     }
     PixelBuffer {
-        width: w,
-        height: h,
+        width: pw,
+        height: ph,
         channels: 4,
-        data: data.into(),
-    }
-}
-
-/// Nearest-neighbour downscale so the long side is at most `max_dim`; a no-op
-/// when the buffer already fits.
-fn downscale_to(src: PixelBuffer, max_dim: u32) -> PixelBuffer {
-    let (w, h) = (src.width, src.height);
-    if w <= max_dim && h <= max_dim {
-        return src;
-    }
-    let scale = (max_dim as f64 / w.max(h) as f64).min(1.0);
-    let nw = ((w as f64 * scale).round() as u32).max(1);
-    let nh = ((h as f64 * scale).round() as u32).max(1);
-    let ch = src.channels as usize;
-    let s_plane = (w * h) as usize;
-    let mut data = vec![0u8; (nw * nh) as usize * ch];
-    for y in 0..nh as usize {
-        let sy = (((y as f64 + 0.5) * h as f64 / nh as f64) as usize).min(h as usize - 1);
-        for x in 0..nw as usize {
-            let sx = (((x as f64 + 0.5) * w as f64 / nw as f64) as usize).min(w as usize - 1);
-            let dst = (y * nw as usize + x) * ch;
-            for c in 0..ch {
-                data[dst + c] = src.data[c * s_plane + sy * w as usize + sx];
-            }
-        }
-    }
-    PixelBuffer {
-        width: nw,
-        height: nh,
-        channels: src.channels,
         data: data.into(),
     }
 }
@@ -243,5 +235,26 @@ mod tests {
     #[test]
     fn raster_preview_is_opaque_without_an_alpha_channel() {
         assert_eq!(preview_alpha(None), (128, 255));
+    }
+
+    #[test]
+    fn preview_is_capped_at_max_dim() {
+        let mut layer = raster_layer(None);
+        layer.rect = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 40,
+            right: 80,
+        };
+        layer.channels = (0..3)
+            .map(|id| Channel {
+                id,
+                data: vec![10u8; 80 * 40].into(),
+            })
+            .collect();
+        let mut doc = Document::new(80, 40, ColorMode::Rgb, BitDepth::Eight);
+        doc.layers = vec![layer];
+        let buffer = preview_pictura_raw(&doc, "0", &PicturaRawSettings::default(), 16).unwrap();
+        assert_eq!((buffer.width, buffer.height), (16, 8));
     }
 }

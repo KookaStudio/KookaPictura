@@ -1,6 +1,7 @@
 #include "acr_panels.h"
 #include "acr_settings.h"
 
+#include <QtGui/QColor>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QVBoxLayout>
@@ -12,6 +13,10 @@ struct BasicKey {
     const QByteArray& key;
     bool isDouble;
 };
+
+const QList<QColor> kTemperatureRamp = {QColor(0x2b5d8a), QColor(0xf2d06b)};
+const QList<QColor> kTintRamp = {QColor(0x3fae4a), QColor(0xd83f9e)};
+const QList<QColor> kToneRamp = {QColor(0x33, 0x33, 0x33), QColor(0xdd, 0xdd, 0xdd)};
 } // namespace
 
 AcrBasicPanel::AcrBasicPanel(AcrSettings* settings, QWidget* parent)
@@ -32,8 +37,10 @@ AcrBasicPanel::AcrBasicPanel(AcrSettings* settings, QWidget* parent)
                   {tr("Fluorescent"), QByteArrayLiteral("Fluo")},
                   {tr("Flash"), QByteArrayLiteral("Flsh")},
                   {tr("Custom"), QByteArrayLiteral("Cst ")}});
-    addSlider(column, acr::Temp, tr("Temperature"), -100.0, 100.0, 0);
-    addSlider(column, acr::Tint, tr("Tint"), -100.0, 100.0, 0);
+    addSlider(column, acr::Temp, tr("Temperature"), -100.0, 100.0, 0, 0, kTemperatureRamp);
+    addSlider(column, acr::Tint, tr("Tint"), -100.0, 100.0, 0, 0, kTintRamp);
+
+    addSeparator(column);
 
     auto* links = new QHBoxLayout;
     links->addStretch(1);
@@ -47,12 +54,15 @@ AcrBasicPanel::AcrBasicPanel(AcrSettings* settings, QWidget* parent)
     connect(autoButton, &QPushButton::clicked, this, &AcrBasicPanel::resetBasic);
     connect(defaultButton, &QPushButton::clicked, this, &AcrBasicPanel::resetBasic);
 
-    addSlider(column, acr::Exposure, tr("Exposure"), -5.0, 5.0, 2);
+    addSlider(column, acr::Exposure, tr("Exposure"), -5.0, 5.0, 2, 0, kToneRamp);
     addSlider(column, acr::Contrast, tr("Contrast"), -100.0, 100.0, 0);
     addSlider(column, acr::Highlights, tr("Highlights"), -100.0, 100.0, 0);
     addSlider(column, acr::Shadows, tr("Shadows"), -100.0, 100.0, 0);
     addSlider(column, acr::Whites, tr("Whites"), -100.0, 100.0, 0);
     addSlider(column, acr::Blacks, tr("Blacks"), -100.0, 100.0, 0);
+
+    addSeparator(column);
+
     addSlider(column, acr::Clarity, tr("Clarity"), -100.0, 100.0, 0);
     addSlider(column, acr::Vibrance, tr("Vibrance"), -100.0, 100.0, 0);
     addSlider(column, acr::Saturation, tr("Saturation"), -100.0, 100.0, 0);

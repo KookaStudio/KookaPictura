@@ -6,11 +6,13 @@
 #include "acr/acr_settings.h"
 
 class QTabBar;
+class QTimer;
 
 namespace pictura {
 
 class AcrHistogram;
 class AcrPreviewPane;
+class AcrToneCurvePanel;
 class PictureView;
 
 // `Filter > Pictura Raw…`: the tabbed ACR dialog — a preview pane, a histogram,
@@ -36,12 +38,16 @@ public:
 
 private:
     void refresh();
+    void render();
 
     QString path_;
     AcrSettings settings_;
     QTabBar* tabs_ = nullptr;
     AcrPreviewPane* preview_ = nullptr;
     AcrHistogram* histogram_ = nullptr;
+    AcrToneCurvePanel* toneCurve_ = nullptr;
+    QTimer* refreshTimer_ = nullptr;
+    bool renderPending_ = false;
 };
 
 } // namespace pictura

@@ -9,6 +9,22 @@
 
 namespace pictura {
 
+std::array<int, 256> acrLumaBins(const QImage& image)
+{
+    std::array<int, 256> bins{};
+    if (image.isNull()) {
+        return bins;
+    }
+    const QImage src = image.convertToFormat(QImage::Format_RGB32);
+    for (int y = 0; y < src.height(); ++y) {
+        const QRgb* line = reinterpret_cast<const QRgb*>(src.constScanLine(y));
+        for (int x = 0; x < src.width(); ++x) {
+            bins[qGray(line[x])] += 1;
+        }
+    }
+    return bins;
+}
+
 AcrHistogram::AcrHistogram(QWidget* parent)
     : QWidget(parent)
 {

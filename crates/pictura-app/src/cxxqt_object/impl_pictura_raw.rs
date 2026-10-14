@@ -8,11 +8,11 @@
 //! for the dialog's live preview.
 
 use super::helpers::*;
+use super::helpers_composite::buffer_to_image;
 use super::qobject;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
-use cxx_qt_lib::{QImage, QImageFormat, QString};
-use pictura_core::PixelBuffer;
+use cxx_qt_lib::{QImage, QString};
 
 impl qobject::PictureView {
     /// The full Pictura Raw settings attached to `path` in the bridge text form,
@@ -86,34 +86,16 @@ impl qobject::PictureView {
         max_dim: i32,
     ) -> QImage {
         let settings = pictura_codec::pictura_raw_from_text(&settings_text.to_string());
-        let buffer = self.rust().doc.as_ref().and_then(|doc| {
-            pictura_render::preview_pictura_raw(doc, &path.to_string(), &settings, max_dim)
-        });
-        match buffer {
-            Some(buffer) => buffer_to_qimage(&buffer),
-            None => QImage::default(),
-        }
-    }
-}
-
-/// A preview buffer as an RGBA8888 `QImage`. The buffer is 3 or 4 channels.
-fn buffer_to_qimage(buffer: &PixelBuffer) -> QImage {
-    let (w, h) = (buffer.width as usize, buffer.height as usize);
-    if w == 0 || h == 0 {
-        return QImage::default();
-    }
-    let plane = w * h;
-    let channels = buffer.channels as usize;
-    let mut rgba = vec![0u8; plane * 4];
-    for i in 0..plane {
-        rgba[4 * i] = buffer.data[i];
-        rgba[4 * i + 1] = buffer.data[plane + i];
-        rgba[4 * i + 2] = buffer.data[2 * plane + i];
-        rgba[4 * i + 3] = if channels >= 4 {
-            buffer.data[3 * plane + i]
-        } else {
-            255
+        let rust = self.rust();
+        let Some(doc) = rust.doc.as_ref() else {
+            return QImage::default();
         };
+        let Some(buffer) =
+            pictura_render::preview_pictura_raw(doc, &path.to_string(), &settings, max_dim)
+        else {
+            return QImage::default();
+        };
+        // The layer is in the document working space; convert to sRGB for display.
+        buffer_to_image(&pictura_codec::buffer_to_srgb(doc, &buffer))
     }
-    unsafe { QImage::from_raw_bytes(rgba, w as i32, h as i32, QImageFormat::Format_RGBA8888) }
 }
