@@ -41,7 +41,7 @@ The triangle left of the folder icon expands/collapses a group. The `fx` arrow e
 
 ### Filter / search row (CS6)
 
-A popup selects the **filter dimension** — name, kind, effect, mode, attribute, or color label — followed by a criterion editor, and a **toggle switch** turns filtering on/off. The default dimension is **Kind**, whose criterion editor is a row of layer-type icons (pixel, adjustment, type, shape, smart object); the `name` dimension shows a text field, and the remaining dimensions show value lists. Filtering shows a subset of rows; it is a transient view and must not mutate the document or clear the underlying active layer. The full per-dimension criterion matrix is owned by `LAY-032`; this spec owns the bar's layout and the on/off state machine.
+A popup selects the **filter dimension** — name, kind, effect, mode, attribute, or color label, plus the `Selected` isolation type — followed by a criterion editor, and a **toggle switch** turns filtering on/off. The default dimension is **Kind**, whose criterion editor is a row of layer-type icons (pixel, adjustment, type, shape, smart object); the `name` dimension shows a text field, the remaining dimensions show value lists, and `Selected` has no criterion (it shows the isolated set). Filtering shows a subset of rows; it is a transient view and must not mutate the document or clear the underlying active layer. The full per-dimension criterion matrix is owned by `LAY-032`; this spec owns the bar's layout and the on/off state machine.
 
 ### Panel menu, panel options, context menus
 
@@ -61,7 +61,7 @@ Click selects; `Shift`-click extends contiguously; `Ctrl`/`Cmd`-click toggles no
 | Panel header | Blend-mode popup | — | Modes filtered by document color mode/bit depth (`LAY-010`). |
 | Panel header | Opacity / Fill | `00`, `Shift+00` (0%) | Fill hidden/disabled for groups. |
 | Panel header | Lock strip | `/` (Lock Transparency) | All / Transparent / Image / Position; type-shape force. |
-| Panel header | Filter popup + criterion + toggle | — | CS6 six-dimension filtering (`LAY-032`). |
+| Panel header | Filter popup + criterion + toggle | — | CS6 six-dimension filtering plus the `Selected` isolation type (`LAY-032`). |
 | Row → eye column | Toggle | `Alt`-click (solo) | Drag to toggle many; right-click for solo/all. |
 | Row → thumbnail | Select pixels | `Ctrl`/`Cmd`-click | Loads layer transparency as a selection. |
 | Row → name | Inline edit | double-click; `Tab`/`Shift+Tab` | CS6 next/prev while renaming. |
@@ -80,7 +80,7 @@ Click selects; `Shift`-click extends contiguously; `Ctrl`/`Cmd`-click toggles no
 | Expand New Effects | bool | on | on / off | `Panel Options`. |
 | Add "copy" to copied layers/groups | bool | on | on / off | `Panel Options`. |
 | Use Default Masks on Fill Layers | bool | on | on / off | `Panel Options`. |
-| Filter dimension | enum | kind | name / kind / effect / mode / attribute / color label | CS6; criteria in `LAY-032`. |
+| Filter dimension | enum | kind | name / kind / effect / mode / attribute / color label / selected | CS6 plus the `Selected` isolation type; criteria in `LAY-032`. |
 | Filtering enabled | bool | off | on / off | Toggle in the filter row. |
 | Blend mode | enum | Normal | 27 layer modes + group `Pass Through` | `LAY-010`. |
 | Opacity | percent | 100 | 0–100 | Groups: available; Background/locked: not. |
@@ -121,7 +121,7 @@ Widgets (not QML), consistent with `ARCH-003` for dense, keyboard-centric dock c
 |---|---|---|
 | `LayersPanel` | `QDockWidget` | Host; header, tree, bottom strip. |
 | `LayersModel` | `QAbstractItemModel` | Node rows; roles for every column + expandable effect/smart-filter child rows. |
-| `LayersFilterProxyModel` | `QSortFilterProxyModel` | CS6 six-dimension filtering; enable/disable toggle. |
+| `LayersFilterProxyModel` | `QSortFilterProxyModel` | CS6 six-dimension filtering plus the `Selected` isolation type; enable/disable toggle. |
 | `LayerRowDelegate` | `QStyledItemDelegate` | Eye, thumbnails, name, color label, mask link icon, clip indent/underline, `fx` expander, Blend If badge. |
 | `BlendModeComboBox` | `QComboBox` | Mode list, filtered by color mode/bit depth (`LAY-010`). |
 | `OpacityFillWidget` | `QWidget` | Scrubby/label + slider; enable state from the selection. |
@@ -158,7 +158,7 @@ The model is GUI-thread-only; mutations go through the command bus. Drag-and-dro
 2. Given `Alt`-click on an eye, only that layer shows; a second `Alt`-click restores the exact prior per-layer visibility.
 3. Given a group selected, Fill is disabled and Opacity is editable; given a Background layer, opacity/blend/reorder are refused.
 4. Given a type or shape layer, Lock Transparency and Lock Image are shown locked and cannot be deselected in the strip.
-5. Given each of the six CS6 filter dimensions, only matching rows show; toggling filtering off restores all rows without changing document state.
+5. Given each of the filter dimensions (the six CS6 ones plus the `Selected` isolation type), only matching rows show; toggling filtering off restores all rows without changing document state.
 6. Given multiple selected layers, one blend/lock/color change applies to all in a single undo step.
 7. Given `00` and `Shift+00`, layer opacity and fill opacity become 0%.
 8. Given a layer with customised blending options, the Blend If badge shows; with no customisation, it is absent.

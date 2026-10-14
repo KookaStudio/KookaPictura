@@ -12,6 +12,27 @@ Snapshot for resuming after a context break. Update after each milestone.
   contains reproduced Adobe Help prose or the old wording.
 - Toolchain: Rust 1.98 (`rust-toolchain.toml`), system Qt **6.11.1**, cxx-qt
   **0.10.0**, wgpu **30.0.1**, lcms2 **6.2.0** (system Little CMS 2.19).
+- **Isolation mode** (#112, OpenSpec change `isolation-mode`; new spec
+  `ui/isolation-mode`, MODIFIED `compositing/layers-filtering-search`):
+  Photoshop's Isolate Layers shipped as the Layers panel's **`Selected`** filter
+  type. The filter row gains the dimension (no criteria control — its criterion
+  is the isolated set); entering it captures the selection as a **fixed set**
+  shown alone in the panel, and scopes the Move tool's Auto-Select
+  (`auto_select_path` takes the set; a hit outside it keeps the active layer).
+  The layer row context menu offers **Release from Isolation** (drops a row; the
+  last one ends isolation), the Move tool's canvas right-click offers
+  **Isolation Mode**, and Escape / the toggle off / a document switch exit. It is
+  view-only: no document mutation, no history state, reset on document switch.
+  Ceilings (`ponytail:`): adding a layer to the set from the canvas is not built
+  (Release only shrinks it), and the Move canvas menu carries only the Isolation
+  Mode entry, not the CC layer picker. The docs contract
+  (`05-layers/layer-filtering-and-search.md`, `02-ui-ux/panels/layers-panel.md`,
+  `GLOSSARY.md`) moves `Selected` from the CC-only exclusion into scope by
+  decision (the CS6 Help does not list it). Tests: Rust `#[test]`s for the scoped
+  Auto-Select (`tests_auto_select.rs`) plus `tst_layers_panel::isolationMode`.
+  Verified: nextest 3100 passed / 23 skipped (the one failure is the pre-existing
+  local ImageMagick fixture mismatch), ctest 89/89, app self-test 474,
+  `openspec validate --all --strict` 260/260.
 - **Mask Density, Feather, and Invert** (#260, branch `feat/260-mask-refinement`,
   OpenSpec change `mask-density-feather`): `LayerMask` and `VectorMask` carry
   `density` (PSD byte, default 255) and `feather_bits` (`f64` bits so `Layer`
