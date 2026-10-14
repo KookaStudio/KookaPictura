@@ -1,0 +1,72 @@
+# Baseline allow-list for scripts/check-colour-literals.py.
+#
+# One entry per line: <repo-relative-path>  <literal>  # <reason>
+# This list only shrinks. A `data` site keeps its literal (a chosen colour, a
+# gradient stop, a preview fill, a per-channel palette). A `pending` site is
+# a theme-like grey that the theme-family work still has to convert to a token;
+# delete the entry when it is converted. Add a new site only with a reason.
+
+crates/pictura-app/cpp/blur_gallery_canvas.cpp  QColor(0xf0, 0xf0, 0xf0)  # data
+crates/pictura-app/cpp/blur_gallery_canvas.cpp  QColor(0xf4, 0xf4, 0xf4)  # data
+crates/pictura-app/cpp/blur_gallery_canvas.cpp  QColor(255, 255, 255)  # data
+crates/pictura-app/cpp/blur_gallery_canvas.cpp  QColor(55, 55, 55)  # data
+crates/pictura-app/cpp/blur_gallery_canvas.cpp  QColor(70, 70, 70)  # data
+crates/pictura-app/cpp/canvas_size_dialog.cpp  QColor(128, 128, 128)  # data
+crates/pictura-app/cpp/color_balance_dialog.cpp  QColor(130, 130, 130)  # data
+crates/pictura-app/cpp/fill_dialog.cpp  QColor(128, 128, 128)  # data
+crates/pictura-app/cpp/frame_canvas.cpp  QColor(0, 0, 0)  # data
+crates/pictura-app/cpp/frame_canvas.cpp  QColor(255, 255, 255)  # data
+crates/pictura-app/cpp/frame_canvas.cpp  QColor(82, 82, 82)  # data
+crates/pictura-app/cpp/gradient_editor_dialog.cpp  QColor(204, 204, 204)  # data
+crates/pictura-app/cpp/gradient_editor_dialog.cpp  QColor(240, 240, 240)  # data
+crates/pictura-app/cpp/gradient_editor_dialog.cpp  QColor(90, 90, 90)  # data
+crates/pictura-app/cpp/gradient_noise_page.cpp  QColor(60, 60, 60)  # data
+crates/pictura-app/cpp/image_view.cpp  QColor(204, 204, 204)  # data
+crates/pictura-app/cpp/image_view.cpp  QColor(255, 255, 255)  # data
+crates/pictura-app/cpp/image_view_overlays.cpp  QColor(40, 40, 40)  # data
+crates/pictura-app/cpp/levels_dialog.cpp  QColor(128, 128, 128)  # data
+crates/pictura-app/cpp/levels_dialog.cpp  QColor(150, 150, 150)  # data
+crates/pictura-app/cpp/levels_dialog.cpp  QColor(90, 90, 90)  # data
+crates/pictura-app/cpp/lighting_canvas.cpp  QColor(120, 120, 120)  # data
+crates/pictura-app/cpp/lighting_rig.h  QColor(255, 255, 255)  # data
+crates/pictura-app/cpp/liquify_canvas.cpp  QColor(0xa8, 0xa8, 0xa8)  # data
+crates/pictura-app/cpp/liquify_canvas.cpp  QColor(0xcc, 0xcc, 0xcc)  # data
+crates/pictura-app/cpp/liquify_canvas.cpp  QColor(255, 255, 255)  # data
+crates/pictura-app/cpp/liquify_canvas.h  QColor(128, 128, 128)  # data
+crates/pictura-app/cpp/liquify_dialog.cpp  QColor(128, 128, 128)  # data
+crates/pictura-app/cpp/options_bar_fill.cpp  QColor(0xcc, 0xcc, 0xcc)  # data
+crates/pictura-app/cpp/options_bar_paint.cpp  QColor(0x1a, 0x1a, 0x1a)  # data
+crates/pictura-app/cpp/options_bar_paint.cpp  QColor(0xcc, 0xcc, 0xcc)  # data
+crates/pictura-app/cpp/panels/brush_preset_picker.cpp  QColor(0x80, 0x80, 0x80)  # data
+crates/pictura-app/cpp/panels/brush_preset_picker.cpp  QColor(0xc0, 0xc0, 0xc0)  # data
+crates/pictura-app/cpp/panels/histogram_panel.cpp  QColor(220, 220, 220)  # data
+crates/pictura-app/cpp/picture_frame_dialog.cpp  QColor(255, 255, 255)  # data (white ground for frame thumbnails)
+crates/pictura-app/cpp/preferences_dialog.cpp  QColor(0, 0, 0)  # data
+crates/pictura-app/cpp/preferences_dialog.cpp  QColor(128, 128, 128)  # data
+crates/pictura-app/cpp/preferences_dialog.cpp  QColor(192, 192, 192)  # data
+crates/pictura-app/cpp/print_dialog.cpp  QColor(0x50, 0x50, 0x50)  # data
+crates/pictura-app/cpp/print_dialog.cpp  QColor(0x80, 0x80, 0x80)  # data
+crates/pictura-app/cpp/print_dialog.cpp  QColor(0x99, 0x99, 0x99)  # data
+crates/pictura-app/cpp/print_dialog.cpp  QColor(0xd4, 0xd4, 0xd4)  # data
+crates/pictura-app/cpp/toolbox.cpp  QColor(20, 20, 20)  # data
+crates/pictura-app/cpp/toolbox.cpp  QColor(240, 240, 240)  # data
+crates/pictura-app/cpp/toolbox.cpp  QColor(40, 40, 40)  # data
+crates/pictura-app/cpp/toolbox.cpp  QColor(90, 90, 90)  # data
+
+crates/pictura-app/cpp/blur_gallery_light_range.h  QColor(60, 60, 60)  # pending conversion (theme-family)
+crates/pictura-app/cpp/blur_gallery_light_range.h  QColor(90, 90, 90)  # pending conversion (theme-family)
+crates/pictura-app/cpp/color_picker_dialog.cpp  QColor(0x2a, 0x2a, 0x2a)  # pending conversion (theme-family)
+crates/pictura-app/cpp/filter_param_controls.cpp  QColor(0x20, 0x20, 0x20)  # pending conversion (theme-family)
+crates/pictura-app/cpp/filter_param_controls.cpp  QColor(0x50, 0x50, 0x50)  # pending conversion (theme-family)
+crates/pictura-app/cpp/filter_param_controls.cpp  QColor(0xa0, 0xa0, 0xa0)  # pending conversion (theme-family)
+crates/pictura-app/cpp/filter_param_controls.cpp  QColor(160, 160, 160)  # pending conversion (theme-family)
+crates/pictura-app/cpp/filter_param_controls.cpp  QColor(48, 48, 48)  # pending conversion (theme-family)
+crates/pictura-app/cpp/frame.cpp  QColor(128, 128, 128)  # pending conversion (theme-family)
+crates/pictura-app/cpp/lens_flare_dialog.cpp  QColor(0x14, 0x14, 0x14)  # pending conversion (theme-family)
+crates/pictura-app/cpp/lens_flare_dialog.cpp  QColor(0x2b, 0x2b, 0x2b)  # pending conversion (theme-family)
+crates/pictura-app/cpp/lens_flare_dialog.cpp  QColor(255, 255, 255)  # pending conversion (theme-family)
+crates/pictura-app/cpp/options_bar_shape.cpp  QColor(0x40, 0x40, 0x40)  # pending conversion (theme-family)
+crates/pictura-app/cpp/panels/layers_panel.cpp  QColor(153, 153, 153)  # pending conversion (theme-family)
+crates/pictura-app/cpp/panels/layers_panel_internal.h  QColor(0x20, 0x20, 0x20)  # pending conversion (theme-family)
+crates/pictura-app/cpp/panels/layers_panel_internal.h  QColor(0xC8, 0xC8, 0xC8)  # pending conversion (theme-family)
+crates/pictura-app/cpp/panels/layers_panel_internal.h  QColor(0xFF, 0xFF, 0xFF)  # pending conversion (theme-family)

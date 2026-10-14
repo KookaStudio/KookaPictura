@@ -674,6 +674,92 @@ Snapshot for resuming after a context break. Update after each milestone.
   79/79; `openspec validate --all --strict` 244/244. Ceilings: the HTML guide
   is a static reference, not a live renderer; `QCheckBox::indicator` is the
   tokenised fill, not the Fusion tick.
+- **Design system, remaining controls** (change
+  `design-system-remaining-controls`, issue #417, first of four design-system
+  workstreams; the predecessor `ui-design-system` was archived to promote the
+  `ui/design-system` capability into `openspec/specs/`): the global QSS gained
+  one tokenised definition for the controls #249 left on raw Fusion — `QGroupBox`,
+  `QRadioButton`, `QProgressBar`, `QHeaderView`, and a general `QSplitter`
+  handle — states per the #249 contract. The last custom-painted widgets that
+  hard-coded greys now read tokens through `Theme::tokenColor(key)`:
+  `CurveWidget`, `SpectrumBar`, the histogram view, and the navigator thumbnail,
+  so a theme change repaints them. Two paint-only tokens (`graphFill`,
+  `graphAxis`) joined `Theme::tokens`; because the stylesheet never references
+  them, `ds_tokens_single_source` was relaxed to cover stylesheet-referenced
+  tokens (and `tst_design_system` skips the paint-only set). `tst_design_system`
+  gained the five selectors, instance/state checks, and a grab-and-sample paint
+  assertion. A new `scripts/check-colour-literals.py` (wired into `guard.sh`)
+  rejects theme-like opaque grey literals outside `theme.cpp`, over a baseline
+  `scripts/colour-literal-allowlist.txt` (45 data, 17 pending conversion) that
+  only shrinks. Verified: `TASK_ALLOWS_DOCS=1 bash scripts/verify-full.sh` →
+  `verify-full: OK` (TOTAL 4139 passed · 22 skipped · 0 failed; app self-test
+  510); `openspec validate --all --strict` 253/253. Ceiling (`ponytail:`): the
+  guard flags opaque equal-channel greys and the grey `Qt::` values, not
+  chromatic or translucent literals.
+- **Design system, developer browser** (change
+  `design-system-developer-dialog`, issue #417, second design-system
+  workstream): the design system is browsable from inside the app at
+  `Help ▸ Developer ▸ Design System…` — a modeless tool window whose "stories"
+  are built from the real widgets (foundations, shell chrome, the standard
+  controls, composed patterns), styled by the global stylesheet. It is therefore
+  1:1 with the running UI (QSS + Fusion + the custom-painted swatches and graph
+  surfaces) instead of a hand-mirrored HTML approximation that drifts. The story
+  list is filterable; each story shows its description and QSS selector plus a
+  token readout; a brightness control previews a level live through
+  `Theme::apply` and restores the user's level on close (new
+  `Theme::currentLevel()`). New `cpp/design_system_dialog{,_pages}.cpp`; the
+  command is declared in `command_tree.cpp` and wired in `frame_menus.cpp`;
+  `tst_design_system_dialog` builds every page and asserts the curated
+  primitives are present. This replaced the standalone `design-system.html`
+  style guide as the review surface; the committed HTML and `gen-styleguide.py`
+  are left as-is (the unbuilt snapshot/coverage-gate rework was dropped).
+  Verified: `tst_design_system_dialog` 8/8; app self-test 474 passed · 0 failed ·
+  0 skipped; `guard.sh` green; `openspec validate --all --strict` 253/253.
+- **Filter Gallery preview UX** (change `filter-gallery-preview-ux`, issue
+  #417): the gallery's zoom level is an editable drop-down showing the live
+  percentage and listing CS6's presets (6 %–1600 %, Actual Pixels / Fit in View
+  / Fit on Screen); the mouse wheel zooms one level over the preview; the
+  thumbnails toggle uses the Lucide `panel.rightClose`/`panel.rightOpen` icons on
+  the shared button surface (the old «/» glyph is gone). A parameter slider in
+  the shared filter controls now focuses its value box, so Up/Down adjust the
+  same parameter. A larger pan-performance improvement is filed as issue #452.
+  Verified: 88/88 Qt tests, app self-test 474 passed / 0 failed, guard +
+  openspec green.
+- **Input-control consistency** (change `input-control-consistency`, issue
+  #417): the numeric field's slider-popup arrow is now a child of the value
+  editor, flush to its inner trailing edge behind a token hairline, and darkens
+  while the popup is open; it shows the Lucide `chevron.down` and uses the
+  default arrow cursor. `SpinArrowStyle` draws the down/up arrow for spin boxes
+  and menu buttons as the tinted `chevron.{down,up}` icon. The select's
+  `::drop-down` cell is flat and reserves the value's trailing space (fixing the
+  chevron overlapping the value, worst on the workspace switcher, which is
+  styled to match); its `::down-arrow`/`::menu-indicator` uses a per-family baked
+  chevron (`assets/ui/select-chevron{,-light}.svg`) because QSS cannot tint an
+  SVG — equivalent to a tint since the foreground is constant across levels.
+  The tokenised checkbox regained its tick (`assets/ui/checkbox-check.svg`).
+  Text inputs, editable inputs, selects, the numeric field, and the options-bar
+  workspace switcher share one surface, border, focus, and disabled treatment
+  and one text size, `${inputFontSize}` (app default − 1) substituted like
+  `${tabFontSize}`. Verified: 88/88 Qt tests, app self-test
+  474 passed / 0 failed, guard + openspec green.
+- **Theme family (dark/light) + menu-bar chrome** (change
+  `theme-family-light-dark`, issue #417): `Theme` gains a `ThemeFamily`
+  (dark/light) with an explicit light base ramp; the token accessor, stylesheet,
+  palette, and `apply` take a family, and the derived shades (hover, alternate
+  row, separator-light, disabled menu text, scrollbar hover) derive toward each
+  family's shade direction, so a light `#ffffff` table never washes out. The
+  family persists in the session (`themeFamily`), switches from a new
+  Preferences General "Theme" selector, and is toggled by the top-right menu-bar
+  chrome: a sun/moon theme button plus GitHub and Discord link buttons
+  (`QDesktopServices`), with new
+  `assets/icons/{theme.sun,theme.moon,link.github,link.discord}.svg` (lucide
+  ISC / simple-icons CC0). `Theme::currentLevel()` / `currentFamily()` back the
+  Developer dialog's family+level preview. Dark values are unchanged. Verified:
+  88/88 Qt tests, app self-test 474 passed / 0 failed, guard + file-size +
+  colour-literal + icon-provenance green; `openspec validate --all --strict`
+  255/255. `--dump-theme` also emits a `families` array (both families). The
+  change is build-verified; the remaining follow-up is the light-exposed grey
+  audit.
 - **Lighting Effects workspace** (change `lighting-effects-workspace`, issue
   #225): `render::lighting_effects` (now `render/lighting.rs`) shades a CS6 rig
   of 1–16 Spot / Point / Infinite lights with photorust's model. A Spot is an

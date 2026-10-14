@@ -8,16 +8,18 @@
 #include <QtCore/QSignalBlocker>
 #include <QtCore/QStringList>
 #include <QtCore/QTimer>
+#include <QtCore/QVector>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPainter>
 #include <QtGui/QPixmap>
 #include <QtGui/QShowEvent>
+#include <QtGui/QWheelEvent>
 #include <QtWidgets/QAbstractItemView>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QGridLayout>
 #include <QtWidgets/QHBoxLayout>
-#include <QtWidgets/QLabel>
+#include <QtWidgets/QLineEdit>
 #include <QtWidgets/QListWidget>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QScrollArea>
@@ -37,8 +39,50 @@ namespace pictura {
 namespace {
 
 const QSize kThumbnailSize(80, 56);
-const double kZoomSteps[] = {0.0625, 0.125, 0.25, 0.333, 0.5, 0.667, 1.0, 2.0, 4.0};
-const int kZoomStepCount = 9;
+
+// CS6's zoom presets: percentage levels with separators, then the three named
+// views. A positive value is a zoom factor; a negative one is a named view
+// (Actual Pixels / Fit in View / Fit on Screen).
+struct ZoomPreset {
+    const char* text;
+    double zoom;
+};
+const ZoomPreset kZoomPresets[] = {
+    {"6%", 0.0625},
+    {"12%", 0.125},
+    {"25%", 0.25},
+    {"33%", 1.0 / 3.0},
+    {"50%", 0.5},
+    {"66%", 2.0 / 3.0},
+    {"", 0.0},
+    {"100%", 1.0},
+    {"", 0.0},
+    {"200%", 2.0},
+    {"300%", 3.0},
+    {"400%", 4.0},
+    {"600%", 6.0},
+    {"800%", 8.0},
+    {"1000%", 10.0},
+    {"1200%", 12.0},
+    {"1600%", 16.0},
+    {"", 0.0},
+    {"Actual Pixels", -1.0},
+    {"Fit in View", -2.0},
+    {"Fit on Screen", -3.0},
+};
+// The step ladder is the preset percentage factors, ascending; the named views
+// resolve through fitZoom(). Derived from the presets so the +/- buttons and the
+// wheel can reach every level the drop-down lists.
+QVector<double> zoomLadder()
+{
+    QVector<double> steps;
+    for (const ZoomPreset& preset : kZoomPresets) {
+        if (preset.zoom > 0.0) {
+            steps.append(preset.zoom);
+        }
+    }
+    return steps;
+}
 // Hold the preview until the controls settle.
 const int kPreviewDelayMs = 120;
 // Screen pixels filtered past each edge of the pane, so a filter that reads
@@ -175,13 +219,15 @@ FilterGalleryDialog::FilterGalleryDialog(PictureView* view, QWidget* parent)
     auto* topRow = new QHBoxLayout;
     auto* toggle = new QToolButton(this);
     toggle->setObjectName(QStringLiteral("galleryToggleThumbnails"));
-    toggle->setText(QStringLiteral("«"));
     toggle->setToolTip(QStringLiteral("Show/hide the filter thumbnails"));
     toggle->setCheckable(true);
     toggle->setChecked(true);
+    toggle->setAutoRaise(true);
+    toggle->setIcon(icon(QStringLiteral("panel.rightClose")));
     connect(toggle, &QToolButton::toggled, thumbnailPane_, &QWidget::setVisible);
     connect(toggle, &QToolButton::toggled, toggle, [toggle](bool shown) {
-        toggle->setText(shown ? QStringLiteral("«") : QStringLiteral("»"));
+        toggle->setIcon(icon(shown ? QStringLiteral("panel.rightClose")
+                                   : QStringLiteral("panel.rightOpen")));
     });
     auto* buttons = new QVBoxLayout;
     auto* ok = new QPushButton(QStringLiteral("OK"), this);
@@ -306,28 +352,50 @@ QWidget* FilterGalleryDialog::buildPreview()
     auto* zoomIn = new QToolButton(pane);
     zoomIn->setObjectName(QStringLiteral("galleryZoomIn"));
     zoomIn->setText(QStringLiteral("+"));
-    zoomLabel_ = new QLabel(pane);
-    zoomLabel_->setObjectName(QStringLiteral("galleryZoomLabel"));
-    connect(zoomOut, &QToolButton::clicked, this, [this] {
-        for (int i = kZoomStepCount - 1; i >= 0; --i) {
-            if (kZoomSteps[i] < zoom_ - 1e-6) {
-                setZoom(kZoomSteps[i]);
-                return;
-            }
-        }
-    });
-    connect(zoomIn, &QToolButton::clicked, this, [this] {
-        for (double step : kZoomSteps) {
-            if (step > zoom_ + 1e-6) {
-                setZoom(step);
-                return;
-            }
-        }
-    });
+    connect(zoomOut, &QToolButton::clicked, this, [this] { stepZoom(false); });
+    connect(zoomIn, &QToolButton::clicked, this, [this] { stepZoom(true); });
     addZoomShortcuts(this, zoomIn, zoomOut);
+
+    // The zoom level: an editable box showing the live percentage, whose drop
+    // down lists CS6's preset levels and the named views.
+    zoomCombo_ = new QComboBox(pane);
+    zoomCombo_->setObjectName(QStringLiteral("galleryZoom"));
+    zoomCombo_->setEditable(true);
+    zoomCombo_->setInsertPolicy(QComboBox::NoInsert);
+    zoomCombo_->setMaxVisibleItems(24);
+    zoomCombo_->setToolTip(QStringLiteral("Zoom level"));
+    for (const ZoomPreset& preset : kZoomPresets) {
+        if (preset.text[0] == '\0') {
+            zoomCombo_->insertSeparator(zoomCombo_->count());
+            continue;
+        }
+        zoomCombo_->addItem(QString::fromUtf8(preset.text), preset.zoom);
+    }
+    connect(zoomCombo_, &QComboBox::activated, this, [this](int index) {
+        const double preset = zoomCombo_->itemData(index).toDouble();
+        if (preset > 0.0) {
+            setZoom(preset);
+        } else if (preset == -1.0) {
+            setZoom(1.0); // Actual Pixels
+        } else {
+            setZoom(fitZoom()); // Fit in View / Fit on Screen
+        }
+    });
+    connect(zoomCombo_->lineEdit(), &QLineEdit::editingFinished, this, [this] {
+        QString text = zoomCombo_->lineEdit()->text().trimmed();
+        text.remove(QLatin1Char('%'));
+        bool ok = false;
+        const double percent = text.toDouble(&ok);
+        if (ok && percent > 0.0) {
+            setZoom(percent / 100.0);
+        } else {
+            layoutPreview(); // restore the shown value on bad input
+        }
+    });
+
     zoomRow->addWidget(zoomOut);
     zoomRow->addWidget(zoomIn);
-    zoomRow->addWidget(zoomLabel_);
+    zoomRow->addWidget(zoomCombo_);
     zoomRow->addStretch(1);
     layout->addLayout(zoomRow);
     return pane;
@@ -564,7 +632,9 @@ void FilterGalleryDialog::layoutPreview()
     previewCanvas_->target = QRectF(previewRegion_.x() * zoom_, previewRegion_.y() * zoom_,
                                     previewRegion_.width() * zoom_, previewRegion_.height() * zoom_);
     previewCanvas_->update();
-    zoomLabel_->setText(QStringLiteral("%1%").arg(qRound(zoom_ * 1000.0) / 10.0));
+    if (zoomCombo_ && !zoomCombo_->lineEdit()->hasFocus()) {
+        zoomCombo_->setEditText(QStringLiteral("%1%").arg(qRound(zoom_ * 1000.0) / 10.0));
+    }
 }
 
 QSize FilterGalleryDialog::documentSize() const
@@ -587,7 +657,7 @@ double FilterGalleryDialog::fitZoom() const
     const QSize room = previewArea_->viewport()->size() - QSize(8, 8);
     const double fit = qMin(static_cast<double>(room.width()) / doc.width(),
                             static_cast<double>(room.height()) / doc.height());
-    return qBound(kZoomSteps[0], fit, 1.0);
+    return qBound(zoomLadder().first(), fit, 1.0);
 }
 
 void FilterGalleryDialog::setZoom(double zoom)
@@ -595,6 +665,30 @@ void FilterGalleryDialog::setZoom(double zoom)
     zoom_ = zoom;
     layoutPreview();
     schedulePreview();
+}
+
+// One step up or down CS6's zoom ladder.
+void FilterGalleryDialog::stepZoom(bool zoomIn)
+{
+    const QVector<double> ladder = zoomLadder();
+    if (zoomIn) {
+        for (double step : ladder) {
+            if (step > zoom_ + 1e-6) {
+                setZoom(step);
+                return;
+            }
+        }
+        return;
+    }
+    double next = -1.0;
+    for (double step : ladder) {
+        if (step < zoom_ - 1e-6) {
+            next = step;
+        }
+    }
+    if (next > 0.0) {
+        setZoom(next);
+    }
 }
 
 void FilterGalleryDialog::showEvent(QShowEvent* event)
@@ -639,6 +733,14 @@ bool FilterGalleryDialog::eventFilter(QObject* watched, QEvent* event)
                 return true;
             }
             break;
+        case QEvent::Wheel: {
+            const int dy = static_cast<QWheelEvent*>(event)->angleDelta().y();
+            if (dy != 0) {
+                stepZoom(dy > 0);
+                return true;
+            }
+            break;
+        }
         default:
             break;
         }

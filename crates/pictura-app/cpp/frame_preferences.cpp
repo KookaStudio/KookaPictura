@@ -29,6 +29,7 @@ void PicturaMainWindow::showPreferences(const QString& page)
         preferencesDialog_->setAutoCollapseIconic(panelColumn_->autoCollapseIconic());
         preferencesDialog_->setAutoShowHidden(panelColumn_->autoShowHidden());
         preferencesDialog_->setBrightnessLevel(brightnessLevel_);
+        preferencesDialog_->setThemeFamily(themeFamily_);
         preferencesDialog_->setGpuCompute(gpuCompute_);
         preferencesDialog_->setGpuComputeEnabled(gpuAvailable_);
         connectRecoveryPreferences(preferencesDialog_);
@@ -50,6 +51,8 @@ void PicturaMainWindow::showPreferences(const QString& page)
                     setBrightnessLevel(level);
                     saveSession();
                 });
+        connect(preferencesDialog_, &PreferencesDialog::themeFamilyChanged, this,
+                [this](int family) { setThemeFamily(family); });
         connect(preferencesDialog_, &PreferencesDialog::gpuComputeChanged, this,
                 &PicturaMainWindow::applyGpuComputePreference);
     }

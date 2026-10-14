@@ -1,6 +1,8 @@
 #include "frame_includes.h"
 #include "api/type_api.h"
 
+#include "design_system_dialog.h"
+
 #include "api/layers_api.h"
 
 #include "api/document_api.h"
@@ -11,6 +13,7 @@ namespace pictura {
 void PicturaMainWindow::buildMenus()
 {
     registry_->buildMenuBar(menuBar());
+    installMenuCornerButtons();
     if (QMenu* recent = recentMenu()) {
         connect(recent, &QMenu::aboutToShow, this, [this, recent]() { refreshRecentMenu(recent); });
     }
@@ -1122,9 +1125,23 @@ void PicturaMainWindow::registerHandlers()
                "and Qt.\n\n"
                "Licensed under the GNU GPL v3.0 or later. Built with Qt 6 (LGPLv3) and "
                "open-source Rust crates; see THIRD-PARTY-LICENSES.\n\n"
-               "Adobe, Photoshop, and Camera Raw are trademarks of Adobe Inc.; "
-               "Kooka Pictura is not affiliated with or endorsed by Adobe."));
+                "Adobe, Photoshop, and Camera Raw are trademarks of Adobe Inc.; "
+                "Kooka Pictura is not affiliated with or endorsed by Adobe."));
     });
+
+    // Help > Developer > Design System…: the in-app storybook over the real UI.
+    registry_->setHandler(command_ids::HelpDeveloperDesignSystem,
+                          [this]() { showDesignSystemDialog(); });
+}
+
+void PicturaMainWindow::showDesignSystemDialog()
+{
+    if (!designSystemDialog_) {
+        designSystemDialog_ = new DesignSystemDialog(this);
+    }
+    designSystemDialog_->show();
+    designSystemDialog_->raise();
+    designSystemDialog_->activateWindow();
 }
 
 bool PicturaMainWindow::beginFreeTransform(const QString& path)

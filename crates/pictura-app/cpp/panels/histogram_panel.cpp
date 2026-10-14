@@ -1,5 +1,7 @@
 #include "histogram_panel.h"
 
+#include "theme.h"
+
 #include "api/document_api.h"
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 
@@ -40,8 +42,8 @@ QColor HistogramView::seriesColorForTest(int index) const
 void HistogramView::paintEvent(QPaintEvent*)
 {
     QPainter painter(this);
-    painter.fillRect(rect(), QColor(32, 32, 32));
-    painter.setPen(QColor(80, 80, 80));
+    painter.fillRect(rect(), Theme::tokenColor(QStringLiteral("inputBg")));
+    painter.setPen(Theme::tokenColor(QStringLiteral("inputBorder")));
     painter.drawRect(rect().adjusted(0, 0, -1, -1));
     if (series_.isEmpty()) {
         return;

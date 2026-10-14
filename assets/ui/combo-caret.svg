@@ -1,6 +1,0 @@
-<!-- The combo box drop-down caret, matching design-system.html's `.combo .caret`
-     (a small filled triangle in the UI text colour). Original project artwork,
-     released under CC0-1.0 / MIT like the rest of the vector artwork. -->
-<svg xmlns="http://www.w3.org/2000/svg" width="8" height="5" viewBox="0 0 8 5">
-  <path d="M0 0h8L4 5z" fill="#e0e0e0" />
-</svg>
