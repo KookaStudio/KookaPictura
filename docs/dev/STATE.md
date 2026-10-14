@@ -12,6 +12,22 @@ Snapshot for resuming after a context break. Update after each milestone.
   contains reproduced Adobe Help prose or the old wording.
 - Toolchain: Rust 1.98 (`rust-toolchain.toml`), system Qt **6.11.1**, cxx-qt
   **0.10.0**, wgpu **30.0.1**, lcms2 **6.2.0** (system Little CMS 2.19).
+- **macOS release build fix** (#461, branch `fix/461-macos-rhi-header`, OpenSpec
+  change `fix-macos-release-build`; new spec `meta/macos-release-build`, ADDED
+  requirement in `ui/application-shell`): `interop.cpp`'s `#include
+  <rhi/qrhi.h>` failed only on the macOS framework Qt because the RHI include
+  dir came from a hand-built `qmake6 -query` path that matches Debian alone.
+  CMake now links the exported `Qt6::GuiPrivate` target and drops the
+  header/version query; a private-header Qt install (`qt6-base-private-dev` on
+  Debian; CI's `install-qt-action` already has it) is now a prerequisite
+  (`DEVELOPING.md`). The `macos.yml` job's release-please-only `if:` is relaxed
+  **temporarily** (the C++/packaging paths are added to its `paths:`) so the fix
+  builds on a normal PR; both edits are reverted once the macOS build is green
+  on master. New `tst_native_menu_bar` asserts the shell never opts out of the
+  native menu bar and that screen modes do not change the presentation.
+  Verified: `interop.cpp` compiles against `Qt6::GuiPrivate`,
+  `tst_native_menu_bar` passes offscreen. Follow-up: `appimage.yml:40` carries
+  the same release-only gate.
 - **Frameless dialogs and Keyboard Shortcuts** (#85, branch
   `feat/85-frameless-dialogs`, OpenSpec change
   `frameless-dialogs-keyboard-shortcuts`): `installDialogChrome()`
