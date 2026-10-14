@@ -56,6 +56,12 @@ pub fn render_gradient(width: u32, height: u32) -> GpuRender {
 }
 
 async fn create_device() -> Option<(wgpu::Instance, wgpu::Adapter, wgpu::Device, wgpu::Queue)> {
+    // wgpu::Instance::new panics where no implemented backend is compiled for
+    // the target (Apple builds no wgpu Vulkan). Return `None` so the caller
+    // keeps its CPU image, as this module's contract promises.
+    if !wgpu::Instance::enabled_backend_features().contains(wgpu::Backends::VULKAN) {
+        return None;
+    }
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
         backends: wgpu::Backends::VULKAN,
         ..wgpu::InstanceDescriptor::new_without_display_handle()

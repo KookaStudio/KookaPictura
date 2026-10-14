@@ -74,8 +74,9 @@ menu-bar contract for macOS is unverified.
     `Qt6::GuiPrivate`.
   - `crates/pictura-app/cpp/interop.cpp` — guard the Vulkan-only includes so
     the translation unit compiles against a Qt built without Vulkan.
-  - `crates/pictura-render/src/gpu/backend.rs` — report "no GPU" instead of
-    panicking where wgpu has no implemented backend (macOS).
+  - `crates/pictura-render/src/gpu/backend.rs` and
+    `crates/pictura-app/src/gpu.rs` — report "no GPU" instead of panicking
+    where wgpu has no implemented backend (macOS).
   - `.github/actions/macos-bundle/action.yml` — bundle the offscreen QPA plugin
     for the headless smoke check.
   - `.github/workflows/macos.yml` — temporary PR gating/paths relaxation

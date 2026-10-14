@@ -24,10 +24,11 @@
   `--headless` smoke check runs from the bundle alone (linux-bundle and
   windows-bundle already deploy it). Verify: the macOS job's `Smoke-check the
   deployed bundle` step passes on this PR.
-- [ ] 1.5 Guard `pictura-render`'s `request_device()` against the
-  `wgpu::Instance::new` panic when no implemented backend is compiled for the
-  target (Apple), returning "no GPU" so the self-test runs on the CPU path.
-  Verify: the macOS self-test runs to completion on this PR.
+- [ ] 1.5 Guard the GPU probes (`pictura-render` `request_device()` and
+  `pictura-app` `gpu.rs::create_device()`) against the `wgpu::Instance::new`
+  panic when no implemented backend is compiled for the target (Apple),
+  returning "no GPU" so the self-test runs on the CPU path. Verify: the macOS
+  self-test runs to completion on this PR.
 
 ## 2. Enable the macOS build on this PR (temporary)
 

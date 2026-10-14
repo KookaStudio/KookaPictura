@@ -116,9 +116,10 @@ single deploy run rewrites the plugin's framework references to the bundle.
   self-contained bundle. Qt 6's `macdeployqt` has no `-extra-plugins`
   (Linux-only/older), so a manual copy is the documented mechanism.
 
-### Guard `request_device()` against wgpu's no-backend panic
+### Guard the GPU probes against wgpu's no-backend panic
 
-Early-return `None` from `request_device()` when
+Early-return `None` from `pictura-render`'s `request_device()` and
+`pictura-app`'s `gpu.rs::create_device()` when
 `wgpu::Instance::enabled_backend_features()` does not include the Vulkan
 backend, before `wgpu::Instance::new`.
 
