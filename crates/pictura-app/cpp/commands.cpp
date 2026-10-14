@@ -8,11 +8,20 @@
 
 namespace pictura {
 
+namespace {
+
+QList<QKeySequence> bindingList(const QKeySequence& shortcut)
+{
+    return shortcut.isEmpty() ? QList<QKeySequence>() : QList<QKeySequence>{shortcut};
+}
+
+} // namespace
+
 CommandRegistry::CommandRegistry(QObject* parent) : QObject(parent) {}
 
 void CommandRegistry::add(const CommandSpec& spec)
 {
-    entries_.push_back(Entry{spec, nullptr});
+    entries_.push_back(Entry{spec, nullptr, bindingList(spec.shortcut), bindingList(spec.shortcut)});
 }
 
 void CommandRegistry::add(const QString& id, const QStringList& path, const QString& label,
@@ -24,14 +33,14 @@ void CommandRegistry::add(const QString& id, const QStringList& path, const QStr
     spec.label = label;
     spec.shortcut = shortcut;
     spec.implemented = implemented;
-    entries_.push_back(Entry{spec, nullptr});
+    entries_.push_back(Entry{spec, nullptr, bindingList(shortcut), bindingList(shortcut)});
 }
 
 void CommandRegistry::addSeparator(const QStringList& path)
 {
     CommandSpec spec;
     spec.path = path;
-    entries_.push_back(Entry{spec, nullptr});
+    entries_.push_back(Entry{spec, nullptr, {}, {}});
 }
 
 void CommandRegistry::setHandler(const QString& id, std::function<void()> handler)
@@ -69,14 +78,69 @@ void CommandRegistry::setLabelProvider(const QString& id, std::function<QString(
     labelProviders_.insert(id, std::move(label));
 }
 
-QAction* CommandRegistry::action(const QString& id) const
+const CommandRegistry::Entry* CommandRegistry::entry(const QString& id) const
 {
     for (const Entry& entry : entries_) {
         if (!entry.spec.id.isEmpty() && entry.spec.id == id) {
-            return entry.action;
+            return &entry;
         }
     }
     return nullptr;
+}
+
+QAction* CommandRegistry::action(const QString& id) const
+{
+    const Entry* found = entry(id);
+    return found ? found->action : nullptr;
+}
+
+QList<QKeySequence> CommandRegistry::shortcuts(const QString& id) const
+{
+    const Entry* found = entry(id);
+    return found ? found->shortcuts : QList<QKeySequence>();
+}
+
+QList<QKeySequence> CommandRegistry::defaultShortcuts(const QString& id) const
+{
+    const Entry* found = entry(id);
+    return found ? found->defaults : QList<QKeySequence>();
+}
+
+void CommandRegistry::setShortcuts(const QString& id, const QList<QKeySequence>& shortcuts)
+{
+    for (Entry& entry : entries_) {
+        if (!entry.spec.id.isEmpty() && entry.spec.id == id) {
+            entry.shortcuts = shortcuts;
+            if (entry.action) {
+                entry.action->setShortcuts(shortcuts);
+            }
+            return;
+        }
+    }
+}
+
+QString CommandRegistry::commandForShortcut(const QKeySequence& shortcut) const
+{
+    if (shortcut.isEmpty()) {
+        return QString();
+    }
+    for (const Entry& entry : entries_) {
+        if (!entry.spec.id.isEmpty() && entry.shortcuts.contains(shortcut)) {
+            return entry.spec.id;
+        }
+    }
+    return QString();
+}
+
+QHash<QString, QList<QKeySequence>> CommandRegistry::shortcutOverrides() const
+{
+    QHash<QString, QList<QKeySequence>> overrides;
+    for (const Entry& entry : entries_) {
+        if (!entry.spec.id.isEmpty() && entry.shortcuts != entry.defaults) {
+            overrides.insert(entry.spec.id, entry.shortcuts);
+        }
+    }
+    return overrides;
 }
 
 void CommandRegistry::buildMenuBar(QMenuBar* menuBar)
@@ -126,7 +190,7 @@ void CommandRegistry::buildMenuBar(QMenuBar* menuBar)
 
         QAction* item = parent->addAction(path.last());
         item->setData(entry.spec.id);
-        item->setShortcut(entry.spec.shortcut);
+        item->setShortcuts(entry.shortcuts);
         item->setCheckable(entry.spec.checkable);
         const QString id = entry.spec.id;
         connect(item, &QAction::triggered, this, [this, id] { dispatch(id); });

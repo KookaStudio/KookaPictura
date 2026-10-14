@@ -3,6 +3,7 @@
 #include <QtCore/QByteArray>
 #include <QtCore/QJsonArray>
 #include <QtCore/QList>
+#include <QtCore/QMap>
 #include <QtCore/QString>
 #include <QtCore/QStringList>
 
@@ -62,6 +63,11 @@ struct SessionState {
     bool autoShowHidden = false;
     QJsonArray panelGroups;
     QJsonArray panelColumns;
+    // Edit > Keyboard Shortcuts: only the differences from the default set.
+    // Command id -> its bindings as portable key text (empty: none), and
+    // tool name -> letter (empty: none).
+    QMap<QString, QStringList> shortcuts;
+    QMap<QString, QString> toolShortcuts;
     int schemaVersion = 9;
     QStringList recent;
     QByteArray windowGeometry;       // QMainWindow::saveGeometry(), empty = default

@@ -54,6 +54,7 @@ inline constexpr char EditTransformSkew[] = "edit.transform.skew";
 inline constexpr char EditTransformDistort[] = "edit.transform.distort";
 inline constexpr char EditTransformPerspective[] = "edit.transform.perspective";
 inline constexpr char EditTransformWarp[] = "edit.transform.warp";
+inline constexpr char EditKeyboardShortcuts[] = "edit.keyboardShortcuts";
 inline constexpr char EditPreferencesGeneral[] = "edit.preferences.general";
 inline constexpr char EditPreferencesInterface[] = "edit.preferences.interface";
 inline constexpr char EditPreferencesPerformance[] = "edit.preferences.performance";
@@ -227,6 +228,7 @@ inline constexpr char WindowWorkspaceTypography[] = "window.workspace.typography
 inline constexpr char WindowWorkspaceNew[] = "window.workspace.new";
 inline constexpr char WindowWorkspaceDelete[] = "window.workspace.delete";
 inline constexpr char WindowWorkspaceReset[] = "window.workspace.reset";
+inline constexpr char WindowWorkspaceKeyboardShortcuts[] = "window.workspace.keyboardShortcuts";
 inline constexpr char TypePanelsCharacter[] = "type.panels.character";
 inline constexpr char TypePanelsParagraph[] = "type.panels.paragraph";
 inline constexpr char TypePanelsParagraphStyles[] = "type.panels.paragraphStyles";
@@ -284,6 +286,17 @@ public:
 
     QAction* action(const QString& id) const;
 
+    // The command's current and built-in key bindings (Edit > Keyboard
+    // Shortcuts may give a command several, or none). setShortcuts() also
+    // updates the live action.
+    QList<QKeySequence> shortcuts(const QString& id) const;
+    QList<QKeySequence> defaultShortcuts(const QString& id) const;
+    void setShortcuts(const QString& id, const QList<QKeySequence>& shortcuts);
+    // The command holding `shortcut`, or an empty id when none does.
+    QString commandForShortcut(const QKeySequence& shortcut) const;
+    // Every command whose bindings differ from its defaults.
+    QHash<QString, QList<QKeySequence>> shortcutOverrides() const;
+
     // Build (or rebuild) `menuBar` from the command table.
     void buildMenuBar(QMenuBar* menuBar);
 
@@ -310,7 +323,10 @@ private:
     struct Entry {
         CommandSpec spec;
         QAction* action = nullptr;
+        QList<QKeySequence> shortcuts;
+        QList<QKeySequence> defaults;
     };
+    const Entry* entry(const QString& id) const;
     std::vector<Entry> entries_;
     QHash<QString, std::function<void()>> handlers_;
     QHash<QString, std::function<bool()>> enabledProviders_;

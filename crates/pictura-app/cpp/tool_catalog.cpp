@@ -2,6 +2,8 @@
 
 #include "commands.h"
 
+#include <QtCore/QHash>
+
 namespace pictura {
 
 namespace {
@@ -194,6 +196,12 @@ static_assert(kToolCount == 71, "tool table must cover every ToolId");
 
 int toolIndex(ToolId id) { return static_cast<int>(id); }
 
+QHash<int, QChar>& toolShortcutOverrideTable()
+{
+    static QHash<int, QChar> overrides;
+    return overrides;
+}
+
 } // namespace
 
 const ToolInfo& toolInfo(ToolId id)
@@ -236,11 +244,37 @@ QString toolCursorId(ToolId id, Qt::KeyboardModifiers mods)
     return base;
 }
 
+QChar toolShortcut(ToolId id)
+{
+    return toolShortcutOverrideTable().value(toolIndex(id), toolInfo(id).shortcut);
+}
+
+void setToolShortcut(ToolId id, QChar key)
+{
+    if (key == toolInfo(id).shortcut) {
+        toolShortcutOverrideTable().remove(toolIndex(id));
+    } else {
+        toolShortcutOverrideTable().insert(toolIndex(id), key);
+    }
+}
+
+void resetToolShortcuts() { toolShortcutOverrideTable().clear(); }
+
+QMap<ToolId, QChar> toolShortcutOverrides()
+{
+    QMap<ToolId, QChar> overrides;
+    for (auto it = toolShortcutOverrideTable().cbegin(); it != toolShortcutOverrideTable().cend();
+         ++it) {
+        overrides.insert(ToolId(it.key()), it.value());
+    }
+    return overrides;
+}
+
 QList<QChar> toolShortcutKeys()
 {
     QList<QChar> keys;
     for (ToolId id : allToolIds()) {
-        const QChar key = toolInfo(id).shortcut;
+        const QChar key = toolShortcut(id);
         if (!key.isNull() && !keys.contains(key)) {
             keys << key;
         }
@@ -255,7 +289,7 @@ int toolGroupForKey(QChar key)
     }
     const QChar upper = key.toUpper();
     for (ToolId id : allToolIds()) {
-        const QChar shortcut = toolInfo(id).shortcut;
+        const QChar shortcut = toolShortcut(id);
         if (!shortcut.isNull() && shortcut.toUpper() == upper) {
             return toolInfo(id).group;
         }

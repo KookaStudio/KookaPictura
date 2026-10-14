@@ -78,6 +78,10 @@ struct Ramp {
     QColor disabledText;
     // The drop/insertion accent (CS6's #2a7fff), constant across levels.
     QColor accent;
+    // Inline warning and info text (a `notice` widget): dark text on yellow,
+    // constant across levels so it stands out on every theme.
+    QColor noticeBg;
+    QColor noticeText;
     // Surfaces. Level 1 holds the explicit CS6 dark swatches; the other levels
     // derive from them by shifting every surface with `shade(level - 1)`.
     QColor window;
@@ -111,6 +115,8 @@ const Ramp kLevel1Ramp = {
     QColor(111, 168, 220),    // link
     QColor(104, 104, 104),    // disabledText
     QColor(0x2a, 0x7f, 0xff), // accent
+    QColor(0xf2, 0xd0, 0x4b), // noticeBg
+    QColor(0x1e, 0x1e, 0x1e), // noticeText
     QColor(0x36, 0x36, 0x36), // window
     QColor(0x4d, 0x4d, 0x4d), // panel
     QColor(0x4d, 0x4d, 0x4d), // activeTab
@@ -275,6 +281,17 @@ QWidget#panelColumnIconStrip { border: 0; background: ${panel}; }
 QWidget#toolsPanel { background: ${panel}; border: 0; }
 QWidget#panelIconFlyout { background: ${panel}; border: ${panelBorderWidth}px solid ${border}; }
 QWidget#panelFloat { background: ${panel}; border: ${panelBorderWidth}px solid ${border}; }
+/* Frameless dialog chrome (dialog_chrome.cpp): a header-shade title strip and
+   a 1 px outline drawn over the dialog's edge. */
+QWidget#dialogTitleBar { background: ${panelHeader}; border: 0; border-bottom: 1px solid ${panelHeaderBorder}; }
+QLabel#dialogTitleLabel { background: transparent; color: ${windowText}; font-weight: 700; }
+QToolButton#dialogCloseButton { background: transparent; border: 0; padding: 2px; }
+QToolButton#dialogCloseButton:hover { background: ${hover}; }
+QToolButton#dialogCloseButton:pressed { background: ${pressed}; }
+QWidget#dialogFrame { background: transparent; border: 1px solid ${border}; }
+/* Inline warning / info text: a label flagged `notice="true"` reads
+   dark-on-yellow; its icon and any buttons beside it keep their own look. */
+QLabel[notice="true"] { background: ${noticeBg}; color: ${noticeText}; border: 0; border-radius: 2px; padding: 3px 6px; }
 
 /* Info panel readout grid: only the inner cross of the 2x2 table is drawn, in
    the frame shade; the outer edge is the panel pane itself. The blocks flag
@@ -464,6 +481,8 @@ QVector<ThemeToken> Theme::tokens(int level)
         color("link", ramp.link),
         color("disabledText", ramp.disabledText),
         color("accent", ramp.accent),
+        color("noticeBg", ramp.noticeBg),
+        color("noticeText", ramp.noticeText),
         color("menuDisabledText", shade(ramp.disabledText, 1)),
         color("border", ramp.border),
         color("separator", ramp.separator),

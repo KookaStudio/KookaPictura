@@ -40,6 +40,7 @@
 
 #include "commands.h"
 #include "control_server.h"
+#include "dialog_chrome.h"
 #include "dialogs.h"
 #include "fonts.h"
 #include "frame.h"
@@ -96,6 +97,7 @@ int main(int argc, char* argv[])
     // Pin the UI to the bundled Noto Sans so every OS resolves the same family
     // and the weighted chrome (Medium tab labels, etc.) hits a face that exists.
     pictura::applyBundledUiFont();
+    pictura::installDialogChrome();
 
     // Surface Qt's own diagnostics (QRhi logs through qWarning) on stderr so
     // the interop probe can capture them under xvfb/offscreen.

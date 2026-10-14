@@ -133,6 +133,7 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
     gpuCompute_ = state.gpuCompute;
     colorPolicy_ = state.colorPolicy;
     useShiftKeyForToolSwitch_ = state.useShiftKeyForToolSwitch;
+    applyShortcutOverrides(state);
     autoSaveRecovery_ = state.autoSaveRecovery;
     autoSaveMinutes_ = state.autoSaveMinutes;
     loadGuideSession(state);

@@ -188,6 +188,7 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/frame.cpp
     crates/pictura-app/cpp/frame_columns.cpp
     crates/pictura-app/cpp/frame_session.cpp
+    crates/pictura-app/cpp/frame_shortcuts.cpp
     crates/pictura-app/cpp/frame_menus.cpp
     crates/pictura-app/cpp/frame_menus_select.cpp
     crates/pictura-app/cpp/frame_menus_edit.cpp
@@ -320,7 +321,9 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/tool_hint_bar.cpp
     crates/pictura-app/cpp/new_document_dialog.cpp
     crates/pictura-app/cpp/layer_new_dialog.cpp
+    crates/pictura-app/cpp/dialog_chrome.cpp
     crates/pictura-app/cpp/dialogs.cpp
+    crates/pictura-app/cpp/keyboard_shortcuts_dialog.cpp
     crates/pictura-app/cpp/commands.h
     crates/pictura-app/cpp/control_server.h
     crates/pictura-app/cpp/theme.h
@@ -410,7 +413,9 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/tool_hint_bar.h
     crates/pictura-app/cpp/new_document_dialog.h
     crates/pictura-app/cpp/layer_new_dialog.h
+    crates/pictura-app/cpp/dialog_chrome.h
     crates/pictura-app/cpp/dialogs.h
+    crates/pictura-app/cpp/keyboard_shortcuts_dialog.h
 )
 target_include_directories(pictura_shell PUBLIC
     crates/pictura-app/cpp
