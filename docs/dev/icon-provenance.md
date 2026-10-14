@@ -15,10 +15,10 @@ not edit by hand; change the JSON and regenerate.
   vendored files carry no baked colour. Internal shading uses alpha
   gradients / `stroke-opacity`.
 
-## Summary (190 icons)
+## Summary (195 icons)
 
-- Lucide-derived: **115**
-- Custom (Lucide-style): **62**
+- Lucide-derived: **114**
+- Custom (Lucide-style): **68**
 - Note / deferred: **3**
 - Out of scope (3D tools, file unchanged): **10**
 
@@ -33,7 +33,12 @@ hand-authored assets, or the note for deferred entries.
 | `crop.apply` | lucide:check | good |  |
 | `crop.cancel` | lucide:ban | good |  |
 | `crop.cog` | lucide:settings | good |  |
-| `crop.grid` | lucide:grid-3x3 | good |  |
+| `crop.overlay.ruleOfThirds` | custom (base: square) | custom | square with guides at thirds |
+| `crop.overlay.grid` | custom (base: square) | custom | square with a six-by-six grid |
+| `crop.overlay.diagonal` | custom (base: square) | custom | square with both diagonals |
+| `crop.overlay.triangle` | custom (base: square) | custom | square with diagonals and top-corner fans to the bottom centre, as the Triangle overlay draws |
+| `crop.overlay.goldenRatio` | custom (base: square) | custom | square with guides at the golden-ratio fractions |
+| `crop.overlay.goldenSpiral` | custom (base: square) | custom | square with a golden spiral about its centre |
 | `crop.swap` | lucide:arrow-left-right | good |  |
 | `edit.redo` | lucide:redo-2 | good |  |
 | `edit.stepBackward` | lucide:step-back | good |  |
