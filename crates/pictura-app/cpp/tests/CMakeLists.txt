@@ -92,6 +92,7 @@ set(PICTURA_QT_TESTS
     tst_screen_modes
     tst_dialog_chrome
     tst_keyboard_shortcuts
+    tst_native_menu_bar
 )
 
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/qt-test-results)

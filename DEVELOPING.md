@@ -59,6 +59,11 @@ owns the behavior you are changing.
 - Rust 1.98, pinned by `rust-toolchain.toml`.
 - Qt 6 with the Core, Gui, Widgets, Svg, and Network modules, plus the matching
   `qmake6` (`qt6-base-dev` on Debian/Ubuntu).
+- Qt 6 GUI **private** headers, found as the `Qt6::GuiPrivate` component
+  (`interop.cpp` includes `<rhi/qrhi.h>`). On Debian/Ubuntu that is
+  `qt6-base-private-dev`; the official Qt binaries (and CI's
+  `install-qt-action`) already ship them. Configuration fails naming the missing
+  package when they are absent.
 - CMake >= 3.24, Ninja, and the `lld` linker.
 - Little CMS 2 development headers (`liblcms2-dev`). The C++ binary links
   `-llcms2` because a Rust `staticlib` does not propagate its native link
