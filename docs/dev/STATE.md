@@ -29,8 +29,8 @@ Snapshot for resuming after a context break. Update after each milestone.
   returns "no GPU" when wgpu has no implemented backend for the target, instead
   of panicking in `Instance::new` on macOS. The `macos.yml` job's release-please-only `if:` is relaxed
   **temporarily** (the C++/packaging paths are added to its `paths:`) so the fix
-  builds on a normal PR; both edits are reverted once the macOS build is green
-  on master. New `tst_native_menu_bar` asserts the shell never opts out of the
+  builds on a normal PR; both edits are reverted within the change once the
+  macOS job goes green (`.github/workflows/macos.yml` has no net diff). New `tst_native_menu_bar` asserts the shell never opts out of the
   native menu bar and that screen modes do not change the presentation.
   Verified: `interop.cpp` compiles against `Qt6::GuiPrivate`,
   `tst_native_menu_bar` passes offscreen. Follow-up: `appimage.yml:40` carries
