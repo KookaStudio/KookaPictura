@@ -137,9 +137,10 @@ layers:
   right-click **`Isolation Mode`**, captures the current selection as a fixed
   **isolated set**.
 - **While isolated.** The panel shows only the isolated layers and their group
-  ancestors. The Move tool's **Auto-Select** hit test is scoped to the set: a
-  press whose topmost hit is outside the set keeps the active layer. Selecting a
-  shown row does not change the set.
+  ancestors. The Move tool's **Auto-Select** hit test ignores layers outside the
+  set, so a press picks the topmost isolated layer under the point (or, in Group
+  mode, its nearest isolated ancestor) and keeps the active layer when no
+  isolated layer covers it. Selecting a shown row does not change the set.
 - **Release.** The layer row context menu offers **`Release from Isolation`**,
   which removes that row from the set; releasing the last row ends isolation.
 - **Exit.** Turning the filter toggle off, choosing another dimension, pressing
