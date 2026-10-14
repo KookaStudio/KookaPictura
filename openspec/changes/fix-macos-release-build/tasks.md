@@ -19,17 +19,17 @@
   translation unit compiles against a Qt built without Vulkan (the macOS Qt).
   Verify: compile the translation unit with the guards forced to the
   no-Vulkan outcome and confirm it builds.
-- [ ] 1.4 Copy Qt's offscreen platform plugin (`libqoffscreen.dylib`) into the
+- [x] 1.4 Copy Qt's offscreen platform plugin (`libqoffscreen.dylib`) into the
   macOS bundle in `macos-bundle/action.yml` before `macdeployqt`, so the
   `--headless` smoke check runs from the bundle alone (linux-bundle and
   windows-bundle already deploy it). Verify: the macOS job's `Smoke-check the
   deployed bundle` step passes on this PR.
-- [ ] 1.5 Guard the GPU probes (`pictura-render` `request_device()` and
+- [x] 1.5 Guard the GPU probes (`pictura-render` `request_device()` and
   `pictura-app` `gpu.rs::create_device()`) against the `wgpu::Instance::new`
   panic when no implemented backend is compiled for the target (Apple),
   returning "no GPU" so the self-test runs on the CPU path. Verify: the macOS
   self-test runs to completion on this PR.
-- [ ] 1.6 Compare the `raster_export` self-test's recent place against the
+- [x] 1.6 Compare the `raster_export` self-test's recent place against the
   canonical temp path: `fileDialogPlaces()` resolves symlinks, and macOS's
   `QDir::tempPath()` is the `/var` symlink (`/private/var`). Verify: the macOS
   self-test passes the `raster_export` check.
@@ -56,7 +56,7 @@
 
 ## 4. Integration and revert
 
-- [ ] 4.1 Confirm the full macOS dry run is green on this PR (build,
+- [x] 4.1 Confirm the full macOS dry run is green on this PR (build,
   smoke-check, DMG artifact) and the Linux `qt-headless` job still builds and
   self-tests. Verify: both checks green on the same commit.
 - [ ] 4.2 Revert the temporary `macos.yml` gate/paths edits from group 2 once the
