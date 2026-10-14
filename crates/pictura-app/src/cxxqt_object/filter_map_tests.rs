@@ -736,3 +736,57 @@ fn blur_gallery_combines_each_effects_records() {
     too_many.extend([0.0; GALLERY_TAIL]);
     assert!(gallery(&too_many).is_none());
 }
+
+#[test]
+fn picture_frame_defaults_and_overrides_every_slot() {
+    let defaults = FrameOptions {
+        frame: 34,
+        vine: [60, 84, 34],
+        margin: 14,
+        size: 20,
+        arrangement: 1,
+        flower: 2,
+        flower_colour: [0, 88, 218],
+        flower_size: 20,
+        leaf: 4,
+        leaf_colour: [104, 170, 60],
+        leaf_size: 20,
+        lines: 15,
+        thickness: 29,
+        angle: 10,
+        fade: 0,
+        invert: false,
+    };
+    assert_eq!(
+        filter_from_kind_params("picture-frame", &[]),
+        Some(Filter::PictureFrame { options: defaults })
+    );
+
+    let slots = [
+        6.0, 1.0, 2.0, 3.0, 40.0, 50.0, 9.0, 20.0, 4.0, 5.0, 6.0, 70.0, 12.0, 8.0, 9.0, 10.0, 80.0,
+        25.0, 120.0, 300.0, 60.0, 1.0,
+    ];
+    assert_eq!(
+        filter_from_kind_params("picture-frame", &slots),
+        Some(Filter::PictureFrame {
+            options: FrameOptions {
+                frame: 7,
+                vine: [1, 2, 3],
+                margin: 40,
+                size: 50,
+                arrangement: 9,
+                flower: 20,
+                flower_colour: [4, 5, 6],
+                flower_size: 70,
+                leaf: 12,
+                leaf_colour: [8, 9, 10],
+                leaf_size: 80,
+                lines: 25,
+                thickness: 120,
+                angle: 300,
+                fade: 60,
+                invert: true,
+            }
+        })
+    );
+}

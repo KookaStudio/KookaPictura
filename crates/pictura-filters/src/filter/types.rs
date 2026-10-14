@@ -2,11 +2,11 @@ use std::sync::Arc;
 
 use crate::{
     BlurNoise, BlurPin, BokehParams, BrushType, ContourEdge, DepthMap, DiffuseMode, DisplaceFit,
-    DisplaceMap, ExtrudeType, GlassTexture, GrainType, HalftoneType, HdrToningParams, IrisPin,
-    IrisShape, LensType, LightDirection, Lighting, LiquifyMesh, MezzotintType, NoiseDistribution,
-    PolarKind, Quality, RadialMethod, RippleSize, SharpenRemove, ShearFill, SmartBlurMode,
-    SpherizeMode, StrokeDirection, TextureOptions, TileFill, TiltPin, TonalFade, WaveType,
-    WindMethod, ZigZagStyle,
+    DisplaceMap, ExtrudeType, FrameOptions, GlassTexture, GrainType, HalftoneType, HdrToningParams,
+    IrisPin, IrisShape, LensType, LightDirection, Lighting, LiquifyMesh, MezzotintType,
+    NoiseDistribution, PolarKind, Quality, RadialMethod, RippleSize, SharpenRemove, ShearFill,
+    SmartBlurMode, SpherizeMode, StrokeDirection, TextureOptions, TileFill, TiltPin, TonalFade,
+    WaveType, WindMethod, ZigZagStyle,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -256,6 +256,9 @@ pub enum Filter {
         color_a: [u8; 3],
         color_b: [u8; 3],
         seed: u64,
+    },
+    PictureFrame {
+        options: FrameOptions,
     },
     LensFlare {
         brightness: f64,
@@ -621,5 +624,6 @@ pub fn filters_alpha(filter: &Filter) -> bool {
             | Filter::ZigZag { .. }
             | Filter::OceanRipple { .. }
             | Filter::Glass { .. }
+            | Filter::PictureFrame { .. }
     )
 }

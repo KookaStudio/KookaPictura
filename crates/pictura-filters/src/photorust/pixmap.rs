@@ -257,6 +257,33 @@ impl Pixmap {
     }
 }
 
+/// Straight-alpha source-over of `src` at coverage `alpha` onto `dst`. Ported
+/// from perfecto25/photorust (`core/src/brush.rs`), GPL-3.0.
+pub(crate) fn source_over(dst: Rgba8, src: Rgba8, alpha: f32) -> Rgba8 {
+    let sa = (src.a as f32 / 255.0) * alpha.clamp(0.0, 1.0);
+    if sa <= 0.0 {
+        return dst;
+    }
+    let da = dst.a as f32 / 255.0;
+    let out_a = sa + da * (1.0 - sa);
+    if out_a <= 0.0 {
+        return Rgba8::TRANSPARENT;
+    }
+    // Composite in premultiplied space, then convert back to straight alpha.
+    let mix = |s: u8, d: u8| -> u8 {
+        let s = s as f32 / 255.0;
+        let d = d as f32 / 255.0;
+        let v = (s * sa + d * da * (1.0 - sa)) / out_a;
+        (v.clamp(0.0, 1.0) * 255.0 + 0.5) as u8
+    };
+    Rgba8::new(
+        mix(src.r, dst.r),
+        mix(src.g, dst.g),
+        mix(src.b, dst.b),
+        (out_a * 255.0 + 0.5) as u8,
+    )
+}
+
 /// The pixel at `(x, y)` with coordinates clamped to the image.
 pub(crate) fn sample_clamped(src: &Pixmap, x: i32, y: i32) -> Rgba8 {
     let cx = x.clamp(0, src.width() as i32 - 1);

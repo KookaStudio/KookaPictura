@@ -15,7 +15,8 @@ use super::filter_tools::liquify::liquify_mesh;
 use choices::*;
 use pictura_core::shape::CUSTOM_SHAPE_NAMES;
 use pictura_filters::{
-    Filter, Light, Lighting, ShearFill, TextureOptions, TextureSurface, TonalFade, SHEAR_MAX_POINTS,
+    Filter, FrameOptions, Light, Lighting, ShearFill, TextureOptions, TextureSurface, TonalFade,
+    SHEAR_MAX_POINTS,
 };
 
 /// Refuse a non-empty parameter list that does not match the kind's arity.
@@ -90,6 +91,11 @@ pub(super) const CUSTOM_SLOTS: usize = 25 + 2;
 /// Shear's slots: a point count, then `SHEAR_MAX_POINTS` `(position, offset)`
 /// pairs, then the fill.
 pub(super) const SHEAR_SLOTS: usize = 1 + 2 * SHEAR_MAX_POINTS + 1;
+
+/// Picture Frame's slots: the frame number, vine r/g/b, margin, size,
+/// arrangement, flower, flower r/g/b, flower size, leaf, leaf r/g/b, leaf size,
+/// then the Advanced controls Number of Lines, Thickness, Angle, Fade, Invert.
+pub(super) const PICTURE_FRAME_SLOTS: usize = 22;
 
 /// Lighting Effects' slots: the rig (colorize r/g/b, exposure, gloss, metallic,
 /// ambience, texture, height), then per light: type, visible, colour r/g/b,
@@ -544,6 +550,31 @@ pub(super) fn filter_from_kind_params(kind: &str, params: &[f64]) -> Option<Filt
                 brightness: f(params, 0, 100.0),
                 center: (f(params, 1, 0.5), f(params, 2, 0.5)),
                 lens: pick(&LENS_TYPES, params, 3, 0),
+            }
+        }
+        "picture-frame" => {
+            arity!(params, PICTURE_FRAME_SLOTS);
+            Filter::PictureFrame {
+                options: FrameOptions {
+                    // The frame is a Choice slot: the 0-based picker index,
+                    // where index 0 is Happy Vine (frame 1).
+                    frame: u32v(params, 0, 33) + 1,
+                    vine: rgb(params, 1, [60, 84, 34]),
+                    margin: u32v(params, 4, 14),
+                    size: u32v(params, 5, 20),
+                    arrangement: u32v(params, 6, 1),
+                    flower: u32v(params, 7, 2),
+                    flower_colour: rgb(params, 8, [0, 88, 218]),
+                    flower_size: u32v(params, 11, 20),
+                    leaf: u32v(params, 12, 4),
+                    leaf_colour: rgb(params, 13, [104, 170, 60]),
+                    leaf_size: u32v(params, 16, 20),
+                    lines: u32v(params, 17, 15),
+                    thickness: u32v(params, 18, 29),
+                    angle: u32v(params, 19, 10),
+                    fade: u32v(params, 20, 0),
+                    invert: flag(params, 21, false),
+                },
             }
         }
         "lighting-effects" => Filter::Lighting {

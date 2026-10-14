@@ -752,6 +752,7 @@ void addDefaultCommands(CommandRegistry& registry) {
     leaf(registry, {"Filter", "Render", "Fibers"}, QStringLiteral("Fibers"));
     leaf(registry, {"Filter", "Render", "Lens Flare"}, QStringLiteral("Lens Flare"));
     leaf(registry, {"Filter", "Render", "Lighting Effects"}, QStringLiteral("Lighting Effects"));
+    leaf(registry, {"Filter", "Render", "Picture Frame"}, QStringLiteral("Picture Frame"));
     leaf(registry, {"Filter", "Sharpen", "Smart Sharpen"}, QStringLiteral("Smart Sharpen"));
     leaf(registry, {"Filter", "Sharpen", "Unsharp Mask"}, QStringLiteral("Unsharp Mask"));
     leaf(registry, {"Filter", "Sharpen", "Sharpen"}, QStringLiteral("Sharpen"));

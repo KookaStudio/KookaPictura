@@ -21,10 +21,14 @@ use crate::{kernel::unit_f64, validate, FilterError};
 mod fibers;
 mod lens_flare;
 mod lighting;
+mod picture_frame;
 pub use fibers::fibers;
 pub use lens_flare::{lens_flare, LensType};
 pub use lighting::{
     lighting_effects, spot_hotspot, Light, LightType, Lighting, TextureChannel, MAX_LIGHTS,
+};
+pub use picture_frame::{
+    picture_frame, uses_lines, FrameOptions, FLOWER_NAMES, FRAME_NAMES, LEAF_NAMES,
 };
 
 /// Clouds: base lattice cells across the image.

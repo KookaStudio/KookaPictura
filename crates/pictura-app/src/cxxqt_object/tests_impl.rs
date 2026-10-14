@@ -396,6 +396,12 @@ fn filter_from_kind_maps_known_and_rejects_unknown() {
         })
     );
     assert_eq!(
+        filter_from_kind("picture-frame"),
+        Some(Filter::PictureFrame {
+            options: pictura_filters::FrameOptions::default(),
+        })
+    );
+    assert_eq!(
         filter_from_kind("colored-pencil"),
         Some(Filter::ColoredPencil {
             pencil_width: 4,

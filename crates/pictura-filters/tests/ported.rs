@@ -940,6 +940,18 @@ fn cases() -> Vec<Case> {
                 },
             }),
         ),
+        case(
+            "PictureFrame",
+            Filter::PictureFrame {
+                options: FrameOptions::default(),
+            },
+            Some(Filter::PictureFrame {
+                options: FrameOptions {
+                    frame: 0,
+                    ..FrameOptions::default()
+                },
+            }),
+        ),
     ]
 }
 

@@ -116,6 +116,11 @@ pub mod ffi {
         /// kind.
         fn filter_param_arity(kind: &QString) -> i32;
 
+        /// Whether a Picture Frame frame number draws lines that the Number of
+        /// Lines control sets the density of; CS6 greys the control out for the
+        /// rest.
+        fn filter_picture_frame_uses_lines(frame: i32) -> bool;
+
         /// The reason the most recent apply/preview was refused, or an empty
         /// string when it succeeded.
         fn filter_last_error(view: Pin<&mut PictureView>) -> QString;
@@ -282,8 +287,9 @@ fn filter_preview(mut view: Pin<&mut PictureView>, kind: &QString, params: &QLis
 /// and sizes itself as a fraction of the buffer, Shear shifts each row by
 /// a fraction of the buffer's half-width, Displace stretches or tiles its
 /// map from the buffer's corner, Lens Blur's depth map and Liquify's mesh
-/// align to the layer's rectangle, and the Blur Gallery (Field Blur, Iris
-/// Blur, and Tilt-Shift) places its pins as fractions of the buffer.
+/// align to the layer's rectangle, Picture Frame sizes and insets itself as a
+/// fraction of the buffer, and the Blur Gallery (Field Blur, Iris Blur, and
+/// Tilt-Shift) places its pins as fractions of the buffer.
 pub(crate) fn filter_preview_needs_whole_layer(kind: &str) -> bool {
     matches!(
         kind,
@@ -299,6 +305,7 @@ pub(crate) fn filter_preview_needs_whole_layer(kind: &str) -> bool {
             | "tilt-shift"
             | "blur-gallery"
             | "liquify"
+            | "picture-frame"
     )
 }
 
@@ -420,6 +427,10 @@ fn filter_param_arity(kind: &QString) -> i32 {
     super::filter_map::filter_param_arity(&kind.to_string())
         .map(|n| n as i32)
         .unwrap_or(-1)
+}
+
+fn filter_picture_frame_uses_lines(frame: i32) -> bool {
+    pictura_filters::uses_lines(frame.max(1) as u32)
 }
 
 fn filter_last_error(view: Pin<&mut PictureView>) -> QString {

@@ -4,7 +4,7 @@
 
 use super::{
     BLUR_GALLERY_SLOTS, CUSTOM_SLOTS, FIELD_BLUR_SLOTS, IRIS_BLUR_SLOTS, LIGHTING_LIGHT_SLOTS,
-    LIGHTING_RIG_SLOTS, SHEAR_SLOTS, TILT_SHIFT_SLOTS,
+    LIGHTING_RIG_SLOTS, PICTURE_FRAME_SLOTS, SHEAR_SLOTS, TILT_SHIFT_SLOTS,
 };
 use crate::cxxqt_object::filter_tools::displace_maps::DISPLACE_SLOTS;
 use crate::cxxqt_object::filter_tools::lens_blur_depths::LENS_BLUR_SLOTS;
@@ -68,6 +68,7 @@ pub(in crate::cxxqt_object) const FILTER_ARITIES: &[(&str, usize)] = &[
     ("difference-clouds", 8),
     ("fibers", 9),
     ("lens-flare", 4),
+    ("picture-frame", PICTURE_FRAME_SLOTS),
     (
         "lighting-effects",
         LIGHTING_RIG_SLOTS + LIGHTING_LIGHT_SLOTS,
