@@ -42,8 +42,8 @@ QPolygonF housePolygon(int cx, int base)
 
 void drawHouse(QPainter& painter, int cx, int base)
 {
-    painter.setPen(QColor(0x24, 0x24, 0x24));
-    painter.setBrush(QColor(0xdc, 0xdc, 0xdc));
+    painter.setPen(Theme::tokenColor(QStringLiteral("border")));
+    painter.setBrush(Theme::tokenColor(QStringLiteral("buttonText")));
     painter.drawPolygon(housePolygon(cx, base));
 }
 
