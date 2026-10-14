@@ -5,11 +5,13 @@
 #include "api/transform_api.h"
 #include "icons.h"
 #include "layers_panel_internal.h"
+#include "numeric_field.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/adjustment_edit.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/clipping.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_layers/mask_refine.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/vector_masks.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h"
 
@@ -85,6 +87,34 @@ QToolButton* footerButton(QWidget* parent, const QString& iconId, const QString&
     button->setToolTip(tip);
     button->setAutoRaise(true);
     return button;
+}
+
+// Mask Density as a percentage over the PSD's 0-255 byte.
+NumericField* densityField(QWidget* parent, const QString& name)
+{
+    return new NumericField(QStringLiteral("Density"),
+                            NumericFieldConfig{0.0, 100.0, 1.0, 10.0, 0, QStringLiteral("%"), true,
+                                               name, name},
+                            parent);
+}
+
+// Mask Feather in pixels, to the selection feather's 250 px maximum.
+NumericField* featherField(QWidget* parent, const QString& name)
+{
+    return new NumericField(QStringLiteral("Feather"),
+                            NumericFieldConfig{0.0, 250.0, 0.1, 1.0, 1, QStringLiteral(" px"),
+                                               true, name, name},
+                            parent);
+}
+
+int densityByte(double percent)
+{
+    return qRound(percent * 255.0 / 100.0);
+}
+
+double densityPercent(int byte)
+{
+    return qRound(byte * 100.0 / 255.0);
 }
 
 } // namespace
@@ -200,20 +230,20 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
                             QStringLiteral("propertiesMaskApply"));
     maskButtons->addStretch(1);
     maskLayout->addLayout(maskButtons);
-    const auto maskStub = [this, maskLayout](const QString& label) {
-        auto* row = new QLabel(QStringLiteral("%1 — not implemented yet").arg(label), maskSection_);
-        row->setEnabled(false);
-        row->setToolTip(QStringLiteral("%1 — not implemented yet").arg(label));
-        maskLayout->addWidget(row);
-    };
-    maskStub(QStringLiteral("Density"));
-    maskStub(QStringLiteral("Feather"));
-    maskStub(QStringLiteral("Invert"));
+    maskDensity_ = densityField(maskSection_, QStringLiteral("propertiesMaskDensity"));
+    maskFeather_ = featherField(maskSection_, QStringLiteral("propertiesMaskFeather"));
+    maskLayout->addWidget(maskDensity_);
+    maskLayout->addWidget(maskFeather_);
+    maskInvert_ = new QToolButton(maskSection_);
+    maskInvert_->setText(QStringLiteral("Invert"));
+    maskInvert_->setToolTip(QStringLiteral("Invert the layer mask"));
+    maskInvert_->setObjectName(QStringLiteral("propertiesMaskInvert"));
+    maskLayout->addWidget(maskInvert_);
     maskSection_->hide();
     layerPageLayout->addWidget(maskSection_);
 
     // Vector Mask section: shown only when the active layer carries a vector
-    // mask. Density/Feather are placeholders until the model stores them.
+    // mask.
     vectorMaskSection_ = new QWidget(layerPage_);
     auto* vectorLayout = new QVBoxLayout(vectorMaskSection_);
     vectorLayout->setContentsMargins(0, 8, 0, 0);
@@ -249,15 +279,12 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
                                         QStringLiteral("propertiesVectorMaskRasterize"));
     vectorButtons->addStretch(1);
     vectorLayout->addLayout(vectorButtons);
-    const auto vectorStub = [this, vectorLayout](const QString& label) {
-        auto* row =
-            new QLabel(QStringLiteral("%1 — not implemented yet").arg(label), vectorMaskSection_);
-        row->setEnabled(false);
-        row->setToolTip(QStringLiteral("%1 — not implemented yet").arg(label));
-        vectorLayout->addWidget(row);
-    };
-    vectorStub(QStringLiteral("Density"));
-    vectorStub(QStringLiteral("Feather"));
+    vectorMaskDensity_ =
+        densityField(vectorMaskSection_, QStringLiteral("propertiesVectorMaskDensity"));
+    vectorMaskFeather_ =
+        featherField(vectorMaskSection_, QStringLiteral("propertiesVectorMaskFeather"));
+    vectorLayout->addWidget(vectorMaskDensity_);
+    vectorLayout->addWidget(vectorMaskFeather_);
     vectorMaskSection_->hide();
     layerPageLayout->addWidget(vectorMaskSection_);
 
@@ -291,6 +318,33 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     connect(maskApply_, &QToolButton::clicked, this, [this]() {
         if (view_ && layer_mask_apply(*view_)) {
             refresh();
+        }
+    });
+
+    // Dragging previews; the finished edit records one history state.
+    const auto wireRefinement = [this](NumericField* field, auto set) {
+        connect(field, &NumericField::valueChanged, this, [this, set](double v) {
+            if (view_) {
+                set(*view_, v, false);
+            }
+        });
+        connect(field, &NumericField::valueCommitted, this, [this, set](double v) {
+            if (view_) {
+                set(*view_, v, true);
+            }
+        });
+    };
+    wireRefinement(maskDensity_, [](PictureView& view, double percent, bool commit) {
+        return layer_mask_set_density(view, densityByte(percent), commit);
+    });
+    wireRefinement(maskFeather_, &layer_mask_set_feather);
+    wireRefinement(vectorMaskDensity_, [](PictureView& view, double percent, bool commit) {
+        return vector_mask_set_density(view, densityByte(percent), commit);
+    });
+    wireRefinement(vectorMaskFeather_, &vector_mask_set_feather);
+    connect(maskInvert_, &QToolButton::clicked, this, [this]() {
+        if (view_) {
+            layer_mask_invert(*view_);
         }
     });
 
@@ -639,6 +693,14 @@ void PropertiesPanel::showLayer(const pictura::layers_api::LayerRow& row)
                              layerPage_));
     maskSection_->setVisible(row.hasMask);
     vectorMaskSection_->setVisible(row.hasVectorMask);
+    if (row.hasMask) {
+        maskDensity_->setValue(densityPercent(layer_mask_density(*view_)));
+        maskFeather_->setValue(layer_mask_feather(*view_));
+    }
+    if (row.hasVectorMask) {
+        vectorMaskDensity_->setValue(densityPercent(vector_mask_density(*view_)));
+        vectorMaskFeather_->setValue(vector_mask_feather(*view_));
+    }
 }
 
 void PropertiesPanel::showAdjustment(const QStringList& page)

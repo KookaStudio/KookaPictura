@@ -61,7 +61,10 @@ pub fn layer_shape_paths(layer: &Layer, width: u32, height: u32) -> Option<Vec<S
 /// Replace the layer's `vmsk` outline with `subpaths` and rebuild its view.
 pub fn set_layer_shape_paths(layer: &mut Layer, subpaths: &[Subpath], width: u32, height: u32) {
     let data = pictura_codec::encode_vector_mask(subpaths, width, height);
-    layer.vector_mask = pictura_codec::decode_vector_mask(&data, width, height);
+    layer.vector_mask = super::vector_masks::keep_params(
+        layer.vector_mask.as_ref(),
+        pictura_codec::decode_vector_mask(&data, width, height),
+    );
     set_block(layer, VMSK, Some(data));
 }
 

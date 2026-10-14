@@ -1158,14 +1158,15 @@ pub(crate) fn sample(data: Option<&[u8]>, idx: usize) -> Option<u8> {
 /// an absent or disabled part contributes `255`.
 pub(crate) fn mask_alpha(layer: &Layer, x: i32, y: i32) -> u8 {
     let raster = raster_mask_alpha(layer, x, y);
-    let vector = crate::vector_mask::coverage(layer.vector_mask.as_ref(), x, y);
+    let vector = crate::mask_refine::vector(layer.vector_mask.as_ref(), x, y);
     ((raster as u16 * vector as u16 + 127) / 255) as u8
 }
 
-/// The raster layer-mask sample at a canvas pixel; `255` when absent/disabled.
+/// The raster layer-mask sample at a canvas pixel, with its density and
+/// feather; `255` when absent/disabled.
 pub(crate) fn raster_mask_alpha(layer: &Layer, x: i32, y: i32) -> u8 {
     match layer.mask.as_ref() {
-        Some(mask) => mask_value(mask, x, y),
+        Some(mask) => crate::mask_refine::raster(mask, x, y),
         None => 255,
     }
 }

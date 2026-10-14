@@ -221,6 +221,7 @@ mod tests {
             flags: 0,
             data: Some(vec![99; 6 * 6].into()),
             extra: Vec::new(),
+            ..Default::default()
         });
         let map = materialize(&rust, 2).expect("mask");
         let expected: Vec<u8> = (0..6)

@@ -6,6 +6,7 @@ use std::io::Read;
 use crate::common::*;
 use crate::depth::{depth_bits, planar_len, row_bytes, undo_prediction};
 use crate::error::PsdError;
+use crate::mask_params;
 
 /// Fallback for an Indexed document's palette; unreachable because
 /// `palette_from` errors on a malformed Indexed palette before conversion.
@@ -767,6 +768,7 @@ fn read_layer_record(r: &mut Reader, is_psb: bool) -> Result<RawLayer, PsdError>
     // Layer mask / adjustment layer data block.
     let mask_len = er.u32()? as usize;
     let mut mask = None;
+    let mut vector_params = None;
     if mask_len > 0 {
         let bytes = er.take(mask_len)?;
         let mut mr = Reader::new(bytes);
@@ -778,14 +780,23 @@ fn read_layer_record(r: &mut Reader, is_psb: bool) -> Result<RawLayer, PsdError>
         };
         let default_color = mr.u8()?;
         let mask_flags = mr.u8()?;
-        mask = Some(LayerMask {
-            rect: mask_rect,
-            default_color,
-            disabled: mask_flags & 0x02 != 0,
-            flags: mask_flags,
-            data: None,
-            extra: bytes.get(18..).unwrap_or(&[]).to_vec(),
-        });
+        let has_real = channel_ids.contains(&-3);
+        let tail = mask_params::read_tail(mask_flags, bytes.get(18..).unwrap_or(&[]), has_real);
+        vector_params = mask_params::vector_placeholder(tail.vector);
+        // A record with no `-2` channel and no rect only carries parameters.
+        let empty = mask_rect.width() <= 0 || mask_rect.height() <= 0;
+        if channel_ids.contains(&-2) || !empty {
+            mask = Some(LayerMask {
+                rect: mask_rect,
+                default_color,
+                disabled: mask_flags & mask_params::FLAG_DISABLED != 0,
+                flags: mask_flags,
+                data: None,
+                extra: tail.extra,
+                density: tail.user.0,
+                feather_bits: tail.user.1,
+            });
+        }
     }
 
     // Layer blending ranges, kept verbatim for lossless re-save.
@@ -917,7 +928,7 @@ fn read_layer_record(r: &mut Reader, is_psb: bool) -> Result<RawLayer, PsdError>
             extra_blocks,
             raw_channels: Vec::new(),
             smart_object: None,
-            vector_mask: None,
+            vector_mask: vector_params,
             type_tool: None,
             applied_character_style: None,
             applied_paragraph_style: None,

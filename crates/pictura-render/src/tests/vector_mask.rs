@@ -112,7 +112,7 @@ fn mask_alpha_multiplies_raster_and_vector() {
         }],
         invert: false,
         disabled: false,
-        rows: Default::default(),
+        ..Default::default()
     });
 
     assert_eq!(

@@ -719,9 +719,27 @@ pub struct LayerMask {
     pub disabled: bool,
     pub flags: u8,
     pub data: Option<Plane<u8>>,
-    /// Mask block bytes after the fixed 18-byte header, preserved verbatim for
-    /// lossless re-save.
+    /// The real-user-mask header (when the layer has a `-3` channel) and any
+    /// unknown bytes after the mask parameters, preserved verbatim; the
+    /// parameters and the record padding are parsed out.
     pub extra: Vec<u8>,
+    /// PSD user-mask density, 0-255; 255 is the mask as painted.
+    pub density: u8,
+    /// [`f64::to_bits`] of the feather radius in pixels; read it through
+    /// [`LayerMask::feather`]. Bits, not a float, so [`Layer`] keeps `Eq`
+    /// and a CS6 value re-saves exactly.
+    pub feather_bits: u64,
+}
+
+impl LayerMask {
+    /// The feather radius in pixels.
+    pub fn feather(&self) -> f64 {
+        f64::from_bits(self.feather_bits)
+    }
+
+    pub fn set_feather(&mut self, radius: f64) {
+        self.feather_bits = radius.to_bits();
+    }
 }
 
 impl Default for LayerMask {
@@ -738,6 +756,8 @@ impl Default for LayerMask {
             flags: 0,
             data: None,
             extra: Vec::new(),
+            density: 255,
+            feather_bits: 0,
         }
     }
 }

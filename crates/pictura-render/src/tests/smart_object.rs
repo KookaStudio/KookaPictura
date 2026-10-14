@@ -802,6 +802,7 @@ fn replace_swaps_source_and_drops_preserved_blocks() {
         flags: 0,
         data: Some(vec![0, 64, 128, 255].into()),
         extra: Vec::new(),
+        ..Default::default()
     });
     d.layers[index].color = ColorLabel::Violet;
     d.layers[index].lock = LockFlags::default()

@@ -16,15 +16,33 @@ use std::sync::Arc;
 /// hold the same bytes. Every mutable access clears it before a byte can
 /// change and a clone keeps it, so the history can tell an untouched plane from
 /// a written one without comparing them. Only [`Plane::set_stamp`] sets one.
-#[derive(Clone)]
+///
+/// An **ident** ([`Plane::ident`]) is the same promise made lazily through a
+/// shared reference, for caches derived from the bytes: it is assigned on the
+/// first query, kept by a clone, and cleared by every mutable access.
 pub struct Plane<T = u8> {
     data: Arc<[T]>,
     stamp: u64,
+    ident: AtomicU64,
 }
 
 impl<T> Plane<T> {
     fn wrap(data: Arc<[T]>) -> Self {
-        Self { data, stamp: 0 }
+        Self {
+            data,
+            stamp: 0,
+            ident: AtomicU64::new(0),
+        }
+    }
+}
+
+impl<T> Clone for Plane<T> {
+    fn clone(&self) -> Self {
+        Self {
+            data: Arc::clone(&self.data),
+            stamp: self.stamp,
+            ident: AtomicU64::new(self.ident.load(Ordering::Relaxed)),
+        }
     }
 }
 
@@ -53,6 +71,7 @@ impl<T> Deref for Plane<T> {
 impl<T: Clone> DerefMut for Plane<T> {
     fn deref_mut(&mut self) -> &mut [T] {
         self.stamp = 0;
+        *self.ident.get_mut() = 0;
         Arc::make_mut(&mut self.data)
     }
 }
@@ -84,6 +103,23 @@ impl<T> Plane<T> {
     /// The plane's stamp; `0` when it has none.
     pub fn stamp(&self) -> u64 {
         self.stamp
+    }
+
+    /// A nonzero id no plane with different bytes has carried, assigned on
+    /// first query. Two planes with the same ident hold the same bytes.
+    pub fn ident(&self) -> u64 {
+        let id = self.ident.load(Ordering::Relaxed);
+        if id != 0 {
+            return id;
+        }
+        let fresh = fresh_stamp();
+        match self
+            .ident
+            .compare_exchange(0, fresh, Ordering::Relaxed, Ordering::Relaxed)
+        {
+            Ok(_) => fresh,
+            Err(won) => won,
+        }
     }
 
     /// Mark the plane's bytes with `stamp`. The caller vouches that every plane
@@ -227,6 +263,19 @@ mod tests {
         assert!(!shares(&a, &b), "a write must fork the plane");
         assert_eq!(a, vec![9, 2, 3, 4]);
         assert_eq!(b, vec![1, 2, 3, 4], "the sharer keeps the old bytes");
+    }
+
+    #[test]
+    fn an_ident_is_shared_by_copies_and_lost_by_any_change() {
+        let mut a: Plane<u8> = vec![1, 2, 3].into();
+        let id = a.ident();
+        assert_ne!(id, 0);
+        assert_eq!(a.ident(), id, "an ident is stable until a write");
+        let b = a.clone();
+        assert_eq!(b.ident(), id, "a clone keeps the ident");
+        a.as_mut_slice()[0] = 9;
+        assert_ne!(a.ident(), id, "a mutable access retires the ident");
+        assert_eq!(b.ident(), id, "the untouched copy keeps it");
     }
 
     #[test]

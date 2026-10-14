@@ -88,6 +88,7 @@ pub fn add_layer_mask(
         flags: MASK_FLAG_LINKED,
         data: Some(data.into()),
         extra: Vec::new(),
+        ..Default::default()
     });
     true
 }
@@ -146,7 +147,7 @@ pub fn apply_layer_mask(doc: &mut Document, path: &str) -> bool {
         for col in 0..width {
             let x = rect.left + col as i32;
             let y = rect.top + row as i32;
-            let coverage = u32::from(crate::composite::mask_value(&mask, x, y));
+            let coverage = u32::from(crate::mask_refine::raster(&mask, x, y));
             let index = row * width + col;
             if let Some(sample) = layer.channels[alpha].data.get_mut(index) {
                 *sample = ((u32::from(*sample) * coverage + 127) / 255) as u8;
@@ -154,6 +155,57 @@ pub fn apply_layer_mask(doc: &mut Document, path: &str) -> bool {
         }
     }
     true
+}
+
+/// Set the mask's density (PSD 0-255; 255 is the mask as painted). Returns
+/// false without a mask or with no change.
+pub fn set_layer_mask_density(doc: &mut Document, path: &str, density: u8) -> bool {
+    let Some(mask) = resolve_path_mut(doc, path).and_then(|layer| layer.mask.as_mut()) else {
+        return false;
+    };
+    if mask.density == density {
+        return false;
+    }
+    mask.density = density;
+    true
+}
+
+/// Set the mask's feather radius in pixels. Returns false without a mask, for a
+/// negative or non-finite radius, or with no change.
+pub fn set_layer_mask_feather(doc: &mut Document, path: &str, radius: f64) -> bool {
+    if !radius.is_finite() || radius < 0.0 {
+        return false;
+    }
+    let Some(mask) = resolve_path_mut(doc, path).and_then(|layer| layer.mask.as_mut()) else {
+        return false;
+    };
+    if mask.feather() == radius {
+        return false;
+    }
+    mask.set_feather(radius);
+    true
+}
+
+/// Invert the mask's pixels and its default colour in place, the Properties
+/// panel's Invert. Returns false without a mask.
+pub fn invert_layer_mask(doc: &mut Document, path: &str) -> bool {
+    let Some(mask) = resolve_path_mut(doc, path).and_then(|layer| layer.mask.as_mut()) else {
+        return false;
+    };
+    mask.default_color = 255 - mask.default_color;
+    if let Some(data) = mask.data.as_mut() {
+        for v in data.as_mut_slice() {
+            *v = 255 - *v;
+        }
+    }
+    true
+}
+
+/// The mask's density (0-255) and feather radius in pixels; `None` without a
+/// mask.
+pub fn layer_mask_refinement(doc: &Document, path: &str) -> Option<(u8, f64)> {
+    let mask = resolve_path(doc, path)?.mask.as_ref()?;
+    Some((mask.density, mask.feather()))
 }
 
 /// Set the mask's enabled state (`enabled == false` sets its disabled bit).
@@ -254,6 +306,62 @@ mod tests {
             data: Some(data.to_vec().into()),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn density_reveals_a_hidden_layer_and_reports_changes() {
+        let mut doc = doc(2, 2);
+        assert!(!set_layer_mask_density(&mut doc, "0", 128), "no mask");
+        assert!(add_layer_mask(&mut doc, "0", LayerMaskKind::HideAll, None));
+        assert_eq!(alpha(&composite_rgba(&doc), 0, 0), 0);
+        assert!(set_layer_mask_density(&mut doc, "0", 128));
+        assert!(!set_layer_mask_density(&mut doc, "0", 128), "unchanged");
+        assert_eq!(alpha(&composite_rgba(&doc), 0, 0), 127);
+        assert_eq!(layer_mask_refinement(&doc, "0"), Some((128, 0.0)));
+    }
+
+    #[test]
+    fn feather_rejects_unusable_radii() {
+        let mut doc = doc(2, 2);
+        assert!(add_layer_mask(
+            &mut doc,
+            "0",
+            LayerMaskKind::RevealAll,
+            None
+        ));
+        for bad in [-1.0, f64::NAN, f64::INFINITY] {
+            assert!(!set_layer_mask_feather(&mut doc, "0", bad), "{bad}");
+        }
+        assert!(set_layer_mask_feather(&mut doc, "0", 2.5));
+        assert!(!set_layer_mask_feather(&mut doc, "0", 2.5), "unchanged");
+        assert_eq!(layer_mask_refinement(&doc, "0"), Some((255, 2.5)));
+        assert_eq!(layer_mask_refinement(&doc, "9"), None);
+    }
+
+    #[test]
+    fn invert_flips_pixels_and_default_colour() {
+        let mut doc = doc(2, 1);
+        assert!(!invert_layer_mask(&mut doc, "0"), "no mask");
+        doc.layers[0].mask = Some(selection(&[40, 255]));
+        assert!(invert_layer_mask(&mut doc, "0"));
+        let mask = doc.layers[0].mask.as_ref().unwrap();
+        assert_eq!(mask.data.as_deref(), Some(&[215u8, 0][..]));
+        assert_eq!(mask.default_color, 255);
+        assert_eq!(alpha(&composite_rgba(&doc), 1, 0), 0);
+    }
+
+    #[test]
+    fn apply_bakes_the_refined_mask() {
+        let mut doc = doc(2, 2);
+        assert!(add_layer_mask(&mut doc, "0", LayerMaskKind::HideAll, None));
+        assert!(set_layer_mask_density(&mut doc, "0", 128));
+        let shown = composite_rgba(&doc).data;
+        assert!(apply_layer_mask(&mut doc, "0"));
+        assert_eq!(
+            composite_rgba(&doc).data,
+            shown,
+            "the composite is unchanged"
+        );
     }
 
     #[test]

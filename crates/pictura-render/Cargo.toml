@@ -18,6 +18,8 @@ pictura-ops = { path = "../pictura-ops" }
 pictura-filters = { path = "../pictura-filters" }
 # Decode an embedded PSD/PSB smart-object source when a layer has no raster proxy.
 pictura-codec = { path = "../pictura-codec" }
+# Mask feather reuses the selection feather's blur.
+pictura-select = { path = "../pictura-select" }
 # wgpu/pollster versions track `pictura-app`, which already pulls wgpu 30.0.1.
 wgpu = { version = "30.0.1", default-features = false, features = ["std", "vulkan", "wgsl"] }
 pollster = "1"

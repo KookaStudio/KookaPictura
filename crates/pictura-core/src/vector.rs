@@ -31,13 +31,31 @@ pub struct VectorSubpath {
 }
 
 /// A layer's decoded vector mask.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VectorMask {
     pub subpaths: Vec<VectorSubpath>,
     pub invert: bool,
     pub disabled: bool,
+    /// PSD vector-mask density, 0-255; 255 is the path as drawn.
+    pub density: u8,
+    /// [`f64::to_bits`] of the feather radius in pixels, as on
+    /// [`crate::LayerMask`].
+    pub feather_bits: u64,
     /// The sampling cache [`VectorMask::inside`] builds; leave it `Default`.
     pub rows: CoverageRows,
+}
+
+impl Default for VectorMask {
+    fn default() -> Self {
+        Self {
+            subpaths: Vec::new(),
+            invert: false,
+            disabled: false,
+            density: 255,
+            feather_bits: 0,
+            rows: CoverageRows::default(),
+        }
+    }
 }
 
 /// A mask's closed subpaths as per-row edge crossings, built on the first
@@ -64,6 +82,9 @@ impl std::fmt::Debug for CoverageRows {
 
 #[derive(Clone)]
 struct Rows {
+    /// Names these subpaths for caches derived from them; see
+    /// [`VectorMask::ident`].
+    ident: u64,
     /// The pixel row of `crossings[0]`.
     top: i32,
     non_zero: bool,
@@ -94,6 +115,7 @@ impl Rows {
         }
         if top >= bottom {
             return Rows {
+                ident: crate::fresh_stamp(),
                 top: 0,
                 non_zero,
                 crossings: Vec::new(),
@@ -116,6 +138,7 @@ impl Rows {
             }
         }
         Rows {
+            ident: crate::fresh_stamp(),
             top,
             non_zero,
             crossings,
@@ -124,6 +147,25 @@ impl Rows {
 }
 
 impl VectorMask {
+    /// The feather radius in pixels.
+    pub fn feather(&self) -> f64 {
+        f64::from_bits(self.feather_bits)
+    }
+
+    pub fn set_feather(&mut self, radius: f64) {
+        self.feather_bits = radius.to_bits();
+    }
+
+    /// A nonzero id shared by this mask's clones and by no mask built from
+    /// other subpaths, for caches of its coverage. Like the row index it
+    /// rides on, it assumes `subpaths` is set before the first query.
+    pub fn ident(&self) -> u64 {
+        self.rows
+            .0
+            .get_or_init(|| Rows::build(&self.subpaths))
+            .ident
+    }
+
     /// Whether the centre of pixel `(x, y)` lies inside the mask's closed
     /// subpaths: even-odd, or non-zero when any subpath declares it. Ignores
     /// `invert` and `disabled`.

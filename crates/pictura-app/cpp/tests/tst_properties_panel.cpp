@@ -5,7 +5,9 @@
 #include "panels/layers_panel.h"
 #include "panels/properties_panel.h"
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "panels/numeric_field.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_layers/mask_refine.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/vector_masks.cxxqt.h"
 
 #include <QtWidgets/QCheckBox>
@@ -31,8 +33,13 @@ private slots:
     void canvasSectionReadsAndResizes();
     void maskSectionAppearsForAMaskedLayer();
     void vectorMaskSectionAppears();
+    void maskDensityFeatherAndInvertEdit();
+    void vectorMaskDensityAndFeatherEdit();
 
 private:
+    // A white 16x16 document whose layer is selected and shown in the panel.
+    bool setupLayer(const QString& name);
+
     // A white 16x16 document with one `kind` adjustment layer, selected.
     bool setupAdjustment(const QString& kind);
 
@@ -337,6 +344,93 @@ void PropertiesPanelTest::vectorMaskSectionAppears()
     panel_->refresh();
     QVERIFY2(!panel_->vectorMaskSectionVisibleForTest(), "section gone after delete");
     QVERIFY(!vector_mask_present(*view_));
+}
+
+bool PropertiesPanelTest::setupLayer(const QString& name)
+{
+    if (!window_->newDocument(name, 16, 16, QStringLiteral("rgb"), 8, QStringLiteral("white"))) {
+        return false;
+    }
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::PropertiesPanel*>(QStringLiteral("propertiesPanel"));
+    auto* layers = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    if (!view_ || !panel_ || !layers) {
+        return false;
+    }
+    layers->setView(view_);
+    if (!layers->selectRowForTest(pictura::layers_api::rowAt(*view_, 0).path)) {
+        return false;
+    }
+    panel_->setView(view_);
+    return true;
+}
+
+// Density and Feather preview while dragged and record one state on commit;
+// Invert flips the mask in one state (lmk_props_refine, lmk_props_invert).
+void PropertiesPanelTest::maskDensityFeatherAndInvertEdit()
+{
+    QVERIFY2(setupLayer(QStringLiteral("MaskRefine")), "mask refine fixture");
+    QVERIFY(layer_mask_add(*view_, QStringLiteral("hide-all")));
+    panel_->refresh();
+    auto* density = panel_->findChild<pictura::NumericField*>(QStringLiteral("propertiesMaskDensity"));
+    auto* feather = panel_->findChild<pictura::NumericField*>(QStringLiteral("propertiesMaskFeather"));
+    auto* invert = panel_->findChild<QToolButton*>(QStringLiteral("propertiesMaskInvert"));
+    QVERIFY(density && feather && invert);
+    QCOMPARE(density->value(), 100.0);
+    QCOMPARE(feather->value(), 0.0);
+
+    const int history = view_->history_count();
+    emit density->valueChanged(30.0);
+    QCOMPARE(layer_mask_density(*view_), 77);
+    QCOMPARE(view_->history_count(), history);
+    emit density->valueCommitted(50.0);
+    QCOMPARE(layer_mask_density(*view_), 128);
+    QCOMPARE(view_->history_count(), history + 1);
+    QCOMPARE(view_->history_label(view_->history_index()), QStringLiteral("Mask Density"));
+
+    emit feather->valueCommitted(4.0);
+    QCOMPARE(layer_mask_feather(*view_), 4.0);
+    QCOMPARE(view_->history_count(), history + 2);
+    QCOMPARE(view_->history_label(view_->history_index()), QStringLiteral("Mask Feather"));
+    panel_->refresh();
+    QCOMPARE(density->value(), 50.0);
+    QCOMPARE(feather->value(), 4.0);
+
+    QVERIFY(view_->undo());
+    QCOMPARE(layer_mask_feather(*view_), 0.0);
+    QVERIFY(view_->redo());
+
+    invert->click();
+    QCOMPARE(view_->history_count(), history + 3);
+    QCOMPARE(view_->history_label(view_->history_index()), QStringLiteral("Invert"));
+    QVERIFY(view_->undo());
+    QCOMPARE(view_->history_label(view_->history_index()), QStringLiteral("Mask Feather"));
+}
+
+// The Vector Mask section's Density and Feather edit the vector mask, each
+// commit one state (vmk_props_refine).
+void PropertiesPanelTest::vectorMaskDensityAndFeatherEdit()
+{
+    QVERIFY2(setupLayer(QStringLiteral("VectorRefine")), "vector refine fixture");
+    QVERIFY(vector_mask_add(*view_, QStringLiteral("hide-all")));
+    panel_->refresh();
+    auto* density =
+        panel_->findChild<pictura::NumericField*>(QStringLiteral("propertiesVectorMaskDensity"));
+    auto* feather =
+        panel_->findChild<pictura::NumericField*>(QStringLiteral("propertiesVectorMaskFeather"));
+    QVERIFY(density && feather);
+    QCOMPARE(density->value(), 100.0);
+
+    const int history = view_->history_count();
+    emit density->valueCommitted(50.0);
+    emit feather->valueCommitted(4.0);
+    QCOMPARE(vector_mask_density(*view_), 128);
+    QCOMPARE(vector_mask_feather(*view_), 4.0);
+    QCOMPARE(view_->history_count(), history + 2);
+    QCOMPARE(view_->history_label(view_->history_index()),
+             QStringLiteral("Vector Mask Feather"));
+    emit feather->valueCommitted(4.0);
+    QCOMPARE(view_->history_count(), history + 2);
 }
 
 QTEST_MAIN(PropertiesPanelTest)

@@ -21,9 +21,19 @@ const SUBDIVISIONS: u32 = 16;
 /// Never fails: an absent or unparseable block leaves `vector_mask` unset.
 pub(crate) fn resolve_vector_masks(layers: &mut [Layer], width: u32, height: u32) {
     for layer in layers.iter_mut() {
+        // The reader leaves the mask record's vector density and feather on a
+        // placeholder view.
+        let params = layer.vector_mask.take();
         layer.vector_mask = layer
             .extra_block(b"vmsk")
-            .and_then(|block| decode(&block.data, width, height));
+            .and_then(|block| decode(&block.data, width, height))
+            .map(|mut view| {
+                if let Some(params) = params {
+                    view.density = params.density;
+                    view.feather_bits = params.feather_bits;
+                }
+                view
+            });
         resolve_vector_masks(&mut layer.children, width, height);
     }
 }
@@ -193,7 +203,7 @@ fn decode(data: &[u8], width: u32, height: u32) -> Option<VectorMask> {
         subpaths: Vec::new(),
         invert: flags & 0x01 != 0,
         disabled: flags & 0x04 != 0,
-        rows: Default::default(),
+        ..Default::default()
     };
     while r.remaining() >= RECORD {
         let selector = r.u16().ok()?;

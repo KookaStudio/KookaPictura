@@ -34,6 +34,7 @@ mod icc;
 mod image_resources;
 mod iptc;
 mod live_shape;
+mod mask_params;
 mod metadata;
 mod path_resources;
 mod patterns;

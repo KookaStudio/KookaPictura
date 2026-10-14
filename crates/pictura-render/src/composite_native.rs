@@ -46,7 +46,7 @@ pub(crate) fn mask_alpha_unit(doc: &Document, layer: &Layer, x: i32, y: i32) -> 
     let Some(raster) = native_mask_unit(doc, layer, x, y) else {
         return crate::composite::mask_alpha(layer, x, y) as f32 / 255.0;
     };
-    let vector = crate::vector_mask::coverage(layer.vector_mask.as_ref(), x, y) as f32 / 255.0;
+    let vector = crate::mask_refine::vector(layer.vector_mask.as_ref(), x, y) as f32 / 255.0;
     raster * vector
 }
 
@@ -56,7 +56,12 @@ pub(crate) fn mask_alpha_unit(doc: &Document, layer: &Layer, x: i32, y: i32) -> 
 fn native_mask_unit(doc: &Document, layer: &Layer, x: i32, y: i32) -> Option<f32> {
     doc.source_depth?;
     let mask = layer.mask.as_ref()?;
-    if mask.disabled || mask.data.is_none() {
+    // ponytail: a refined mask samples through the 8-bit path, so density and
+    // feather quantize a high-depth mask to 8 bits.
+    if mask.disabled
+        || mask.data.is_none()
+        || crate::mask_refine::is_refined(mask.density, mask.feather())
+    {
         return None;
     }
     let mw = mask.rect.width();

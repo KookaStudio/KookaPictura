@@ -4,7 +4,7 @@
 //! layer's preserved `vmsk` block, which stays the source of truth.
 
 use pictura_core::path::{PathPoint, Subpath};
-use pictura_core::{Document, Layer, LayerBlock, LayerMask, PsdRect};
+use pictura_core::{Document, Layer, LayerBlock, LayerMask, PsdRect, VectorMask};
 
 use super::layer_masks::MASK_FLAG_LINKED;
 use super::paths::{resolve_path, resolve_path_mut};
@@ -78,8 +78,22 @@ fn patch_flag(layer: &mut Layer, bit: u32, on: bool, width: u32, height: u32) ->
         write_flags(data, updated);
         pictura_codec::decode_vector_mask(data, width, height)
     };
-    layer.vector_mask = view;
+    layer.vector_mask = keep_params(layer.vector_mask.as_ref(), view);
     true
+}
+
+/// `view` re-decoded from `vmsk` bytes, carrying `old`'s density and feather:
+/// they live in the layer's mask record, not in the block.
+pub(crate) fn keep_params(
+    old: Option<&VectorMask>,
+    view: Option<VectorMask>,
+) -> Option<VectorMask> {
+    let mut view = view?;
+    if let Some(old) = old {
+        view.density = old.density;
+        view.feather_bits = old.feather_bits;
+    }
+    Some(view)
 }
 
 /// Re-encode a layer's in-memory `VectorMask` view into its `vmsk` block,
@@ -240,9 +254,9 @@ pub fn rasterize_vector_mask(doc: &mut Document, path: &str) -> bool {
         for col in 0..width {
             let x = rect.left + col as i32;
             let y = rect.top + row as i32;
-            let vector = u32::from(crate::vector_mask::coverage(Some(&vector), x, y));
+            let vector = u32::from(crate::mask_refine::vector(Some(&vector), x, y));
             let raster = existing.as_ref().map_or(255, |mask| {
-                u32::from(crate::composite::mask_value(mask, x, y))
+                u32::from(crate::mask_refine::raster(mask, x, y))
             });
             data[row * width + col] = ((vector * raster + 127) / 255) as u8;
         }
@@ -253,9 +267,47 @@ pub fn rasterize_vector_mask(doc: &mut Document, path: &str) -> bool {
         disabled: false,
         flags: MASK_FLAG_LINKED,
         data: Some(data.into()),
-        extra: Vec::new(),
+        ..Default::default()
     });
     true
+}
+
+/// Set the vector mask's density (PSD 0-255; 255 is the path as drawn).
+/// Returns false without a vector mask or with no change.
+pub fn set_vector_mask_density(doc: &mut Document, path: &str, density: u8) -> bool {
+    let Some(mask) = resolve_path_mut(doc, path).and_then(|layer| layer.vector_mask.as_mut())
+    else {
+        return false;
+    };
+    if mask.density == density {
+        return false;
+    }
+    mask.density = density;
+    true
+}
+
+/// Set the vector mask's feather radius in pixels. Returns false without a
+/// vector mask, for a negative or non-finite radius, or with no change.
+pub fn set_vector_mask_feather(doc: &mut Document, path: &str, radius: f64) -> bool {
+    if !radius.is_finite() || radius < 0.0 {
+        return false;
+    }
+    let Some(mask) = resolve_path_mut(doc, path).and_then(|layer| layer.vector_mask.as_mut())
+    else {
+        return false;
+    };
+    if mask.feather() == radius {
+        return false;
+    }
+    mask.set_feather(radius);
+    true
+}
+
+/// The vector mask's density (0-255) and feather radius in pixels; `None`
+/// without a vector mask.
+pub fn vector_mask_refinement(doc: &Document, path: &str) -> Option<(u8, f64)> {
+    let mask = resolve_path(doc, path)?.vector_mask.as_ref()?;
+    Some((mask.density, mask.feather()))
 }
 
 /// Whether the layer at `path` has a vector mask.
@@ -304,6 +356,28 @@ mod tests {
         assert_eq!(composite_rgba(&doc).data, plain, "reveal all is a no-op");
         assert!(!add_vector_mask(&mut doc, "0", VectorMaskKind::RevealAll));
         assert!(!add_vector_mask(&mut doc, "9", VectorMaskKind::RevealAll));
+    }
+
+    #[test]
+    fn density_and_feather_survive_a_flag_change_and_rasterize() {
+        let mut doc = doc(4, 4);
+        assert!(!set_vector_mask_density(&mut doc, "0", 128), "no mask");
+        assert!(add_vector_mask(&mut doc, "0", VectorMaskKind::HideAll));
+        assert!(set_vector_mask_density(&mut doc, "0", 128));
+        assert!(!set_vector_mask_density(&mut doc, "0", 128), "unchanged");
+        assert_eq!(alpha(&composite_rgba(&doc), 0, 0), 127);
+        assert!(!set_vector_mask_feather(&mut doc, "0", -2.0));
+        assert!(set_vector_mask_feather(&mut doc, "0", 1.5));
+        assert!(set_vector_mask_linked(&mut doc, "0", false));
+        assert_eq!(
+            vector_mask_refinement(&doc, "0"),
+            Some((128, 1.5)),
+            "a re-decoded view keeps the record's parameters"
+        );
+        let shown = composite_rgba(&doc).data;
+        assert!(rasterize_vector_mask(&mut doc, "0"));
+        assert_eq!(composite_rgba(&doc).data, shown, "rasterize bakes them");
+        assert_eq!(vector_mask_refinement(&doc, "0"), None);
     }
 
     #[test]
