@@ -476,17 +476,29 @@ pub(super) fn auto_select_path(
     }
     Some(hit.split('/').next().unwrap_or(&hit).to_string())
 }
-/// Panel Options "Entire Document": render a pixel layer inside a transparent
-/// `size`×`size` document square, placing its pixels at their document position
-/// (`rect.left/top`) scaled by `size / max(doc_width, doc_height)`, so a small
-/// layer appears small in its document context.
+/// The `size`-bounded extent (long edge `size`, short edge proportional) that
+/// preserves `width`:`height`, rounded like the delegate's `letterboxedThumb` so
+/// the emitted thumbnail shares the rect it is drawn into.
+pub(super) fn aspect_thumbnail_extent(width: u32, height: u32, size: u32) -> (u32, u32) {
+    let short =
+        |edge: u32, long: u32| ((edge as f64 * size as f64 / long as f64).round() as u32).max(1);
+    if width >= height {
+        (size, short(height, width))
+    } else {
+        (short(width, height), size)
+    }
+}
+/// Panel Options "Entire Document": render a pixel layer over the document's
+/// aspect ratio, placing its pixels at their document position (`rect.left/top`)
+/// scaled into the document-sized thumbnail, so a small layer appears small in
+/// its document context and a full-width layer leaves no transparent strip.
 pub(super) fn layer_thumbnail_positioned(
     layer: &Layer,
     doc_width: u32,
     doc_height: u32,
     size: u32,
 ) -> Option<QImage> {
-    if doc_width == 0 || doc_height == 0 {
+    if doc_width == 0 || doc_height == 0 || size == 0 {
         return None;
     }
     let width = layer.rect.width();
@@ -494,16 +506,18 @@ pub(super) fn layer_thumbnail_positioned(
     if width <= 0 || height <= 0 {
         return None;
     }
-    let scale = size as f64 / doc_width.max(doc_height) as f64;
-    let dest_left = (layer.rect.left as f64 * scale).round() as i64;
-    let dest_top = (layer.rect.top as f64 * scale).round() as i64;
-    let dest_w = ((width as f64 * scale).round() as i64).max(1);
-    let dest_h = ((height as f64 * scale).round() as i64).max(1);
+    let (tw, th) = aspect_thumbnail_extent(doc_width, doc_height, size);
+    let scale_x = tw as f64 / doc_width as f64;
+    let scale_y = th as f64 / doc_height as f64;
+    let dest_left = (layer.rect.left as f64 * scale_x).round() as i64;
+    let dest_top = (layer.rect.top as f64 * scale_y).round() as i64;
+    let dest_w = ((width as f64 * scale_x).round() as i64).max(1);
+    let dest_h = ((height as f64 * scale_y).round() as i64).max(1);
     let (src_w, src_h) = (width as u32, height as u32);
 
-    let mut rgba = vec![0u8; (size as u64 * size as u64 * 4) as usize];
-    for py in 0..size as i64 {
-        for px in 0..size as i64 {
+    let mut rgba = vec![0u8; (tw as u64 * th as u64 * 4) as usize];
+    for py in 0..th as i64 {
+        for px in 0..tw as i64 {
             if px < dest_left
                 || py < dest_top
                 || px >= dest_left + dest_w
@@ -516,11 +530,11 @@ pub(super) fn layer_thumbnail_positioned(
             let Some([r, g, b, a]) = layer_pixel(layer, sx, sy) else {
                 continue;
             };
-            let o = ((py as u32 * size + px as u32) * 4) as usize;
+            let o = ((py as u32 * tw + px as u32) * 4) as usize;
             rgba[o..o + 4].copy_from_slice(&[r, g, b, a]);
         }
     }
-    Some(rgba_image(rgba, size as i32, size as i32))
+    Some(rgba_image(rgba, tw as i32, th as i32))
 }
 /// Downsample a layer mask's grayscale data into a `size`-bounded square (long
 /// edge `size`, aspect kept), replicating the value across RGB. Null without

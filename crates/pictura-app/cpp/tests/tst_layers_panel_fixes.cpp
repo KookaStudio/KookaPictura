@@ -66,6 +66,7 @@ private slots:
     void blendComboArrowAndKeys();
     void blendChangeHistoryLabel();
     void thumbnailFillsRow();
+    void tallThumbnailKeepsDocumentAspect();
     void linkGlyphRotatedAndLarger();
 
 private:
@@ -408,6 +409,26 @@ void LayersPanelFixesTest::thumbnailFillsRow()
     QVERIFY2(thumb.height() > thumb.width(), "a tall thumbnail fills vertically");
     QCOMPARE(thumb.height(),
              panel_->rowHeightForTest() - 2 * pictura::LayerRowDelegate::kThumbVerticalPad);
+}
+
+// A tall document's Entire Document thumbnail keeps the document aspect, so a
+// full-width layer reaches the right edge instead of leaving a transparent
+// column that the delegate would then squash into its letterboxed rect.
+void LayersPanelFixesTest::tallThumbnailKeepsDocumentAspect()
+{
+    const bool created = window_->newDocument(QStringLiteral("TallAspect"), 10, 20,
+                                              QStringLiteral("rgb"), 8, QStringLiteral("white"));
+    view_ = window_->activeView();
+    QVERIFY2(created && view_, "tall fixture");
+
+    const pictura::layers_api::Snapshot snap =
+        pictura::layers_api::snapshot(*view_, 24, true);
+    QVERIFY2(!snap.rows.isEmpty(), "positioned rows");
+    const QImage thumb = snap.rows.first().thumbnail;
+    QVERIFY2(!thumb.isNull(), "positioned thumbnail");
+    QCOMPARE(thumb.width() * 2, thumb.height());
+    QCOMPARE(thumb.pixelColor(thumb.width() - 1, thumb.height() / 2).alpha(), 255);
+    window_->closeDocument(window_->activeDocumentIndex(), false);
 }
 
 // The mask chain glyph is drawn two pixels larger than its slot and rotated a
