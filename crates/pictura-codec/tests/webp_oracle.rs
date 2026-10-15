@@ -8,6 +8,7 @@
 
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use pictura_codec::{decode_webp, encode_webp, ImageBudget};
 use pictura_testkit::compare;
@@ -19,9 +20,14 @@ fn magick_available() -> bool {
         .is_ok_and(|o| o.status.success())
 }
 
+// A unique path per call: nextest runs the tests of one binary in parallel
+// threads, so the process id alone would let two tests clobber each other's
+// temp file.
 fn scratch(tag: &str, ext: &str) -> PathBuf {
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    let n = SEQ.fetch_add(1, Ordering::Relaxed);
     std::env::temp_dir().join(format!(
-        "pictura-webp-oracle-{}-{tag}.{ext}",
+        "pictura-webp-oracle-{}-{tag}-{n}.{ext}",
         std::process::id()
     ))
 }
