@@ -3,6 +3,7 @@
 #include <QtTest/QtTest>
 
 #include "export_as_dialog.h"
+#include "frame.h"
 
 #include <QtCore/QTemporaryDir>
 #include <QtWidgets/QCheckBox>
@@ -12,7 +13,12 @@
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QSpinBox>
 
+#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/svg_export.cxxqt.h"
+
 #include "qt_test_support.h"
+
+#include <memory>
 
 namespace {
 
@@ -70,6 +76,7 @@ private slots:
     void layerList();
     void saveToBytes();
     void sizeEstimate();
+    void svgExport();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -80,11 +87,12 @@ void ExportAsTest::formatsAndControls()
     pictura::ExportAsDialog dialog(entries());
     auto* format = child<QComboBox>(dialog, "exportAsFormat");
     QVERIFY(format);
-    QCOMPARE(format->count(), 4);
+    QCOMPARE(format->count(), 5);
     QCOMPARE(format->itemText(0), QStringLiteral("PNG"));
     QCOMPARE(format->itemText(1), QStringLiteral("JPG"));
     QCOMPARE(format->itemText(2), QStringLiteral("PNG-8"));
     QCOMPARE(format->itemText(3), QStringLiteral("GIF"));
+    QCOMPARE(format->itemText(4), QStringLiteral("SVG"));
 
     // PNG: transparency on, quality off.
     QCOMPARE(dialog.suffix(), QStringLiteral("png"));
@@ -101,6 +109,12 @@ void ExportAsTest::formatsAndControls()
     format->setCurrentIndex(pictura::ExportAsDialog::Gif);
     QCOMPARE(dialog.suffix(), QStringLiteral("gif"));
     QVERIFY(child<QCheckBox>(dialog, "exportAsTransparency")->isEnabled());
+    QVERIFY(!child<QSpinBox>(dialog, "exportAsQuality")->isEnabled());
+
+    // SVG: neither raster control applies.
+    format->setCurrentIndex(pictura::ExportAsDialog::Svg);
+    QCOMPARE(dialog.suffix(), QStringLiteral("svg"));
+    QVERIFY(!child<QCheckBox>(dialog, "exportAsTransparency")->isEnabled());
     QVERIFY(!child<QSpinBox>(dialog, "exportAsQuality")->isEnabled());
 }
 
@@ -211,6 +225,23 @@ void ExportAsTest::sizeEstimate()
     // The estimate is computed on a short debounce; a small image gets a size.
     QTRY_VERIFY_WITH_TIMEOUT(!label->text().isEmpty(), 2000);
     QVERIFY(label->text().contains(QStringLiteral("64 x 48")));
+}
+
+void ExportAsTest::svgExport()
+{
+    QVERIFY(stateHome_.isValid());
+    auto window = pictura::test::makeMainWindow();
+    QVERIFY(window != nullptr);
+    QVERIFY(window->newDocument(QStringLiteral("Svg"), 16, 12, QStringLiteral("rgb"), 8,
+                                QStringLiteral("white")));
+    pictura::PictureView* view = window->activeView();
+    QVERIFY(view);
+
+    const QString svg = pictura::svg_from_view(*view);
+    QVERIFY(svg.startsWith(QStringLiteral("<svg ")));
+    QVERIFY(svg.contains(QStringLiteral("viewBox=\"0 0 16 12\"")));
+    QVERIFY(svg.contains(QStringLiteral("data:img/png;base64,")));
+    QVERIFY(svg.endsWith(QStringLiteral("</svg>\n")));
 }
 
 QTEST_MAIN(ExportAsTest)
