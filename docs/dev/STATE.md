@@ -12,6 +12,38 @@ Snapshot for resuming after a context break. Update after each milestone.
   contains reproduced Adobe Help prose or the old wording.
 - Toolchain: Rust 1.98 (`rust-toolchain.toml`), system Qt **6.11.1**, cxx-qt
   **0.10.0**, wgpu **30.0.1**, lcms2 **6.2.0** (system Little CMS 2.19).
+- **Path Blur** (#462, branch `feat/462-path-blur`, OpenSpec change
+  `path-blur-gallery`): a **post-CS6** Blur Gallery effect brought into scope
+  by owner decision and labelled non-parity (row tooltip, workspace hint,
+  `blur-gallery.md`). `pictura_filters::blur::path` (`BlurPath`,
+  `PathMotion`, `Filter::PathBlur`) blends each path's Catmull-Rom tangent
+  and arc-length-interpolated end speeds into a gridded motion field
+  (inverse-square, as Field Blur's pins) and gathers up to 64 bilinear taps
+  along its streamline (Centered Blur or trailing), weighted by Taper,
+  Strobe Strength/Flashes, and Rear Sync Flash; alpha included, then Noise.
+  `Filter::BlurGallery` gains `path`/`motion`: the paths blur after the
+  radius effects, Bokeh stays on the radius weights (inferred), and the
+  no-path output is byte-identical (the old gallery digest held). Slots:
+  `path-blur` 27 canonical, `blur-gallery` 51. `BlurGalleryMode::Path`
+  (`blur_gallery_path.cpp`, `blur_gallery_canvas_path.cpp`): the Path Blur
+  row (Basic Blur / Rear Sync Flash / Custom, Speed, Taper, Centered Blur,
+  End Point Speed for a selected end, a disabled Edit Blur Shapes), a live
+  Motion Effects tab, and paths with points and an end arrow: clicks on
+  empty picture pin a new path's stops while the curve follows the pointer
+  (double-click / Enter / Esc ends it), under a hand-drawn `cursor.pinAdd`
+  pushpin; drag a point, press the curve to insert one, Ctrl-drag the
+  path, Delete. Selecting Path Blur disables the Effects tab (Bokeh) and
+  enables Motion Effects; the Noise checkbox now defaults on in every
+  gallery mode (Amount 0, so no output changes). Opening path and defaults
+  follow the owner's CC screenshots. Ceilings (`ponytail:`): the motion field, gather, flash
+  weights, ranges, and gestures are inferred; Edit Blur Shapes is not built
+  (blur shapes follow the tangent); Spin Blur stays a stub. Tests: 15
+  engine units + 2 gallery units, two new kernel digests, a no-equivalent
+  oracle row, mapping tests, `tst_path_blur` (12), and the gallery suites
+  updated for the live row. Verified: `TASK_ALLOWS_DOCS=1 bash
+  scripts/verify-fast.sh` OK — nextest 3120 passed / 23 skipped, app
+  self-test 510, Qt 675, unified 4305 passed · 24 skipped · 0 failed;
+  `openspec validate --all --strict` 263/263.
 - **Frameless dialogs and Keyboard Shortcuts** (#85, branch
   `feat/85-frameless-dialogs`, OpenSpec change
   `frameless-dialogs-keyboard-shortcuts`): `installDialogChrome()`
