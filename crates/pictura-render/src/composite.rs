@@ -135,7 +135,7 @@ fn composite_banded(doc: &Document, x0: u32, y0: u32, rw: u32, rh: u32) -> Pixel
 /// Whether the layer (or a descendant) carries a layer-effects block, which the
 /// region compositor cannot restrict to a rectangle. Conservative: a disabled
 /// effect still forces the full-composite fallback.
-fn has_effect_block(layer: &Layer) -> bool {
+pub(crate) fn has_effect_block(layer: &Layer) -> bool {
     layer.extra_block(b"lfx2").is_some()
         || layer.extra_block(b"lrFX").is_some()
         || layer.children.iter().any(has_effect_block)

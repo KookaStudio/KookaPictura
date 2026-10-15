@@ -90,7 +90,7 @@ mod fill;
 pub use fill::{decode_layer_fill, decode_vector_fill, encode_gradient_fill};
 
 mod svg;
-pub use svg::layer_content;
+pub use svg::{encode_document_svg, svg_nodes};
 
 pub mod layer_effects;
 pub use layer_effects::{

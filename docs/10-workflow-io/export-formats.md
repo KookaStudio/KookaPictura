@@ -121,9 +121,9 @@ settings and a live preview, and this project carries it as a deliberate
    row previews it.
 2. **Preview** — the selected target after sizing and canvasing, with Fit / 1:1
    and zoom controls, and — for a small target — an estimated output size.
-3. **File Settings** — **Format** is PNG, JPG, PNG-8, or GIF; **Transparency**
-   is offered for PNG, PNG-8, and GIF, **Quality** for JPG. SVG export is a
-   separate, deferred capability (issue #459), not offered here.
+3. **File Settings** — **Format** is PNG, JPG, PNG-8, GIF, or SVG;
+   **Transparency** is offered for PNG, PNG-8, and GIF, **Quality** for JPG. SVG
+   is document-level (see *SVG (CC)* below).
 4. **Image Size** — Width, Height, Scale (percent), and a **Resample** menu
    (Bicubic, Bicubic Automatic, Bicubic Sharper, Bicubic Smoother, Bilinear,
    Nearest Neighbor, Preserve Details).
@@ -138,6 +138,55 @@ PNG and JPG are written through the Qt image writers (`WF-003`/`WF-004`); PNG-8
 and GIF through the engine web encoders (`WF-005`, `interop/raster-export`). A
 layer target is the layer rendered alone on transparency, cropped to its bounds.
 `Export As` never changes the document's path, modified state, or history.
+
+### SVG (CC)
+
+The `SVG` format writes the whole document as one `.svg` text file (atomic,
+temp file plus rename); the checked rows do not select SVG targets. It is not a
+traced raster: vector content becomes SVG primitives and everything else an
+embedded PNG.
+
+- **Header.** Taken verbatim from a shipped CC sample: `<svg>` with `xmlns`,
+  `xmlns:xlink`, `preserveAspectRatio="xMidYMid"`, `width`, `height`, and
+  `viewBox="0 0 W H"` in that order, document pixels, two-space indentation, no
+  XML declaration, and a trailing newline.
+- **Raster fallback.** `<image xlink:href="data:img/png;base64,…" width="W"
+  height="H"/>` at the document size with no `x`/`y`; the MIME subtype is
+  spelled `img/png` as CC writes it. The PNG is 8-bit RGBA, straight alpha, sRGB.
+- **Vector vs. raster.** Per layer, bottom to top, hidden and zero-opacity layers
+  skipped:
+  - a shape layer with a solid fill and no layer effects or pixel mask is a
+    primitive — a live rectangle `<rect>`, a live rounded rectangle `<rect rx
+    ry>` (one uniform radius), a live ellipse `<ellipse>`, any other outline
+    `<path d>` (even-odd); the fill opacity scales `fill-opacity`;
+  - a group is a nested `<g>`; a non-pass-through group is isolated
+    (`isolation:isolate` when no opacity or blend already isolates it);
+  - opacity and a CSS-representable blend wrap the element in `<g opacity
+    style="mix-blend-mode:…">`;
+  - every other layer — pixels, type, smart object, gradient or pattern fill, a
+    shape with effects — is its own raster at full opacity and Normal, clipped
+    by its vector mask, with the opacity and blend on the wrapping `<g>`;
+  - a plain clipping stack (base and clipped layers all Normal, base at full
+    opacity) is one raster;
+  - content SVG cannot express — an adjustment layer, a blend mode with no CSS
+    form (`Dissolve`, `Linear Burn`, `Linear Dodge`, `Darker Color`,
+    `Lighter Color`, `Vivid Light`, `Linear Light`, `Pin Light`, `Hard Mix`,
+    `Subtract`, `Divide`), any other clipping stack, or a faded or masked
+    pass-through group — flattens with everything beneath it in its container
+    into one raster. Inside an isolated group that is the group's own lower
+    children; a pass-through group defers to its parent.
+- **Text.** A type layer is emitted as its raster fallback, not live `<text>`
+  or outlined glyphs: live text depends on the viewer's fonts and outlining
+  needs a glyph source. *(Decision, issue #477.)*
+- **Not yet emitted.** Gradient and pattern fills (`<linearGradient>` /
+  `<pattern>`), vector strokes, and per-layer SVG files are rasterized or absent.
+
+**Provenance.** No Adobe source. The header and raster fallback come from a
+shipped CC sample of a raster-only document; there is no CC sample with vector
+content, so the primitives, the fill rule, the blend map, and the coordinate
+precision (three decimals, trailing zeros trimmed) are *(inferred)*. A librsvg
+oracle checks a vector document's rendering against the CPU composite at the
+pixel level; nothing claims byte parity with CC.
 
 ### Mobile preview (legacy)
 

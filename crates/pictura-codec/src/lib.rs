@@ -111,7 +111,7 @@ pub use smart_filter::{
 pub use smart_object::remove_linked_source;
 pub use svg::{
     blend_css, ellipse_element, encode_svg, image_element, path_data, path_element, rect_element,
-    rounded_rect_element, subpath_data, text_element, SvgContent, SvgOptions,
+    rounded_rect_element, subpath_data, text_element, SvgContent, SvgNode, SvgOptions,
 };
 pub use type_tool::encode_type_tool;
 pub use type_write::author_type_tool;
