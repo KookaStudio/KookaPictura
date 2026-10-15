@@ -378,6 +378,11 @@ CS6 reworked the 3D engine; each command below is named in the CS6 Help
 - System Info *(unverified)*
 - About Photoshop / About Photoshop Extended ✓
 
+> **App extension (not CS6).** *Help ▸ Developer ▸ Design System…* opens the
+> in-app design-system browser: a modeless storybook over the real widgets
+> (foundations, shell, controls, patterns) with a live brightness preview. It is
+> a Kooka Pictura developer affordance, deliberately outside the CS6 Help menu.
+
 ### Panel-context and canvas-context menus
 
 - **Tool icon in options bar:** right-click → `Reset Tool` / `Reset All Tools` ✓.

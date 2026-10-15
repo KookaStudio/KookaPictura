@@ -33,7 +33,7 @@ set(CMAKE_AUTORCC ON)
 # every translation unit regardless of include order; other compilers ignore it.
 add_compile_definitions(_USE_MATH_DEFINES)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Svg Network PrintSupport)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Svg Network PrintSupport GuiPrivate)
 
 # Enables BUILD_TESTING (default ON); the Qt Test suites live under cpp/tests.
 include(CTest)
@@ -55,13 +55,6 @@ find_program(QMAKE_EXECUTABLE NAMES qmake6 qmake)
 if(NOT QMAKE_EXECUTABLE)
     message(FATAL_ERROR "qmake not found — install qt6-base-dev")
 endif()
-
-# The RHI headers live under the versioned QtGui include dir, which the plain
-# Qt6::Gui target does not export on Debian (no Qt6::GuiPrivate package).
-execute_process(COMMAND "${QMAKE_EXECUTABLE}" -query QT_INSTALL_HEADERS
-    OUTPUT_VARIABLE QT_HEADERS_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)
-execute_process(COMMAND "${QMAKE_EXECUTABLE}" -query QT_VERSION
-    OUTPUT_VARIABLE QT_VERSION_STR OUTPUT_STRIP_TRAILING_WHITESPACE)
 
 cxx_qt_import_crate(
     MANIFEST_PATH crates/pictura-app/Cargo.toml
@@ -188,6 +181,7 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/svg_icon_engine.cpp
     crates/pictura-app/cpp/file_drop_router.cpp
     crates/pictura-app/cpp/frame.cpp
+    crates/pictura-app/cpp/frame_chrome.cpp
     crates/pictura-app/cpp/frame_columns.cpp
     crates/pictura-app/cpp/frame_session.cpp
     crates/pictura-app/cpp/frame_shortcuts.cpp
@@ -326,6 +320,9 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/dialog_chrome.cpp
     crates/pictura-app/cpp/dialogs.cpp
     crates/pictura-app/cpp/keyboard_shortcuts_dialog.cpp
+    crates/pictura-app/cpp/design_system_dialog.cpp
+    crates/pictura-app/cpp/design_system_dialog_pages.cpp
+    crates/pictura-app/cpp/design_system_dialog.h
     crates/pictura-app/cpp/commands.h
     crates/pictura-app/cpp/control_server.h
     crates/pictura-app/cpp/theme.h
@@ -421,7 +418,6 @@ add_library(pictura_shell STATIC
 )
 target_include_directories(pictura_shell PUBLIC
     crates/pictura-app/cpp
-    "${QT_HEADERS_DIR}/QtGui/${QT_VERSION_STR}/QtGui"
 )
 # The Rust static lib embeds `pictura-color` (Little CMS 2). On Linux the
 # `lcms2-sys` crate links the system library dynamically, so the C++ link needs
@@ -430,6 +426,10 @@ target_include_directories(pictura_shell PUBLIC
 # enabling lcms2-sys's `static` feature (pictura-color), so neither platform
 # links anything external.
 target_link_libraries(pictura_shell PUBLIC pictura_app Qt6::Svg Qt6::Network Qt6::PrintSupport)
+# RHI/private headers: interop.cpp includes <rhi/qrhi.h>. The exported private
+# target carries the platform-correct include dir (Debian, macOS framework,
+# Windows), so no hand-built qmake-derived path is needed.
+target_link_libraries(pictura_shell PRIVATE Qt6::GuiPrivate)
 if(UNIX AND NOT APPLE)
     find_library(LCMS2_LIBRARY NAMES lcms2 REQUIRED)
     target_link_libraries(pictura_shell PUBLIC "${LCMS2_LIBRARY}")

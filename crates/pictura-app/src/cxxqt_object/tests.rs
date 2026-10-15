@@ -249,6 +249,24 @@ fn row_thumbnails_respect_contents_and_masks() {
 }
 
 #[test]
+fn positioned_thumbnail_follows_document_aspect() {
+    let tall = layer_thumbnail_positioned(&pixel_layer("tall", 10, 20, (0, 128, 255)), 10, 20, 24)
+        .expect("tall document");
+    assert_eq!((tall.width(), tall.height()), (12, 24));
+    assert_eq!(
+        tall.pixel_color(11, 12).alpha(),
+        255,
+        "a full-width layer leaves no transparent right column"
+    );
+    assert_eq!(tall.pixel_color(11, 12).green(), 128);
+    assert_eq!(tall.pixel_color(11, 12).blue(), 255);
+
+    let square = layer_thumbnail_positioned(&pixel_layer("square", 2, 2, (255, 0, 0)), 2, 2, 8)
+        .expect("square document");
+    assert_eq!((square.width(), square.height()), (8, 8));
+}
+
+#[test]
 fn move_preview_base_equals_full_composite_with_layer_hidden() {
     let mut doc = Document::new(64, 64, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = vec![

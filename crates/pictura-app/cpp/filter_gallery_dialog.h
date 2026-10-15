@@ -13,7 +13,6 @@
 #include "filter_commands.h"
 
 class QComboBox;
-class QLabel;
 class QListWidget;
 class QListWidgetItem;
 class QScrollArea;
@@ -103,6 +102,7 @@ private:
     void layoutPreview();
     QSize documentSize() const;
     void setZoom(double zoom);
+    void stepZoom(bool zoomIn);
     double fitZoom() const;
     void renderNextThumbnail();
 
@@ -117,7 +117,7 @@ private:
     QScrollArea* previewArea_ = nullptr;
     GalleryPreviewCanvas* previewCanvas_ = nullptr;
     QRect previewRegion_;
-    QLabel* zoomLabel_ = nullptr;
+    QComboBox* zoomCombo_ = nullptr;
     QWidget* thumbnailPane_ = nullptr;
     QList<QToolButton*> thumbnails_;
     QComboBox* filterCombo_ = nullptr;

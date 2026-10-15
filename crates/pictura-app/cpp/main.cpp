@@ -138,23 +138,36 @@ int main(int argc, char* argv[])
     // The theme dump is a machine-readable read of the token contract; it needs
     // no window, session store, or document.
     if (dumpTheme) {
+        const auto levelsFor = [](pictura::Theme::ThemeFamily family) {
+            QJsonArray levels;
+            for (int level = 0; level < pictura::Theme::kLevelCount; ++level) {
+                QJsonObject colors;
+                QJsonObject metrics;
+                for (const pictura::ThemeToken& token : pictura::Theme::tokens(family, level)) {
+                    (token.color ? colors : metrics).insert(token.key, token.value);
+                }
+                QJsonObject entry;
+                entry.insert(QStringLiteral("level"), level);
+                entry.insert(QStringLiteral("colors"), colors);
+                entry.insert(QStringLiteral("metrics"), metrics);
+                levels.append(entry);
+            }
+            return levels;
+        };
         QJsonObject root;
         root.insert(QStringLiteral("defaultLevel"), pictura::Theme::kDefaultLevel);
         root.insert(QStringLiteral("levelCount"), pictura::Theme::kLevelCount);
-        QJsonArray levels;
-        for (int level = 0; level < pictura::Theme::kLevelCount; ++level) {
-            QJsonObject colors;
-            QJsonObject metrics;
-            for (const pictura::ThemeToken& token : pictura::Theme::tokens(level)) {
-                (token.color ? colors : metrics).insert(token.key, token.value);
-            }
+        root.insert(QStringLiteral("levels"), levelsFor(pictura::Theme::kDefaultFamily));
+        // Both families, keyed by name, so the dump covers the whole contract.
+        QJsonArray families;
+        for (const pictura::Theme::ThemeFamily family :
+             {pictura::Theme::ThemeFamily::Dark, pictura::Theme::ThemeFamily::Light}) {
             QJsonObject entry;
-            entry.insert(QStringLiteral("level"), level);
-            entry.insert(QStringLiteral("colors"), colors);
-            entry.insert(QStringLiteral("metrics"), metrics);
-            levels.append(entry);
+            entry.insert(QStringLiteral("name"), pictura::Theme::familyName(family));
+            entry.insert(QStringLiteral("levels"), levelsFor(family));
+            families.append(entry);
         }
-        root.insert(QStringLiteral("levels"), levels);
+        root.insert(QStringLiteral("families"), families);
         const QByteArray json = QJsonDocument(root).toJson(QJsonDocument::Indented);
         std::fwrite(json.constData(), 1, static_cast<std::size_t>(json.size()), stdout);
         std::fflush(stdout);

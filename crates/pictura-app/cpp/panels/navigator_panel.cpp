@@ -1,5 +1,7 @@
 #include "navigator_panel.h"
 
+#include "theme.h"
+
 #include "api/document_api.h"
 #include "image_view.h"
 #include "jump_slider.h"
@@ -96,10 +98,10 @@ QRect NavigatorThumbnail::imageRect() const
 void NavigatorThumbnail::paintEvent(QPaintEvent*)
 {
     QPainter painter(this);
-    painter.fillRect(rect(), QColor(45, 45, 45));
+    painter.fillRect(rect(), Theme::tokenColor(QStringLiteral("inputBg")));
     const QRect area = imageRect();
     if (source_.isNull() || area.isEmpty()) {
-        painter.setPen(QColor(150, 150, 150));
+        painter.setPen(Theme::tokenColor(QStringLiteral("text")));
         painter.drawText(rect(), Qt::AlignCenter, QStringLiteral("No document"));
         return;
     }

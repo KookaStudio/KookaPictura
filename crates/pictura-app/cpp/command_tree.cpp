@@ -999,6 +999,10 @@ void addDefaultCommands(CommandRegistry& registry) {
     registry.addSeparator({"Help"});
     registry.add(command_ids::HelpAbout, {"Help", "About Kooka Pictura"},
                  QStringLiteral("About Kooka Pictura"), QKeySequence(), true);
+    registry.addSeparator({"Help"});
+    registry.add(command_ids::HelpDeveloperDesignSystem,
+                 {"Help", "Developer", "Design System..."},
+                 QStringLiteral("Design System..."), QKeySequence(), true);
 }
 
 } // namespace pictura

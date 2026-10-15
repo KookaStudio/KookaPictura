@@ -42,6 +42,7 @@ public:
     void setAutoCollapseIconic(bool on);
     void setAutoShowHidden(bool on);
     void setBrightnessLevel(int level);
+    void setThemeFamily(int family);
     void setGpuCompute(bool on);
     void setGpuComputeEnabled(bool on);
     // File Handling: Automatically Save Recovery Information Every `minutes`.
@@ -64,6 +65,7 @@ signals:
     void autoCollapseIconicChanged(bool on);
     void autoShowHiddenChanged(bool on);
     void brightnessLevelChanged(int level);
+    void themeFamilyChanged(int family);
     void gpuComputeChanged(bool on);
     void autoSaveRecoveryChanged(bool on, int minutes);
     void guideAppearanceChanged(const QColor& color, bool dashed);
@@ -83,6 +85,7 @@ private:
     QStringList realPages_;
     QHash<QString, QCheckBox*> checkboxes_;
     NumericField* brightness_ = nullptr;
+    QComboBox* themeFamily_ = nullptr;
     QComboBox* autoSaveMinutes_ = nullptr;
     QComboBox* guideColor_ = nullptr;
     QComboBox* guideStyle_ = nullptr;

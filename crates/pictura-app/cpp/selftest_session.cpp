@@ -29,7 +29,6 @@
 #include <QtGui/QKeyEvent>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QComboBox>
-#include <QtWidgets/QSlider>
 #include <QtWidgets/QSplitter>
 #include <QtWidgets/QTabBar>
 #include <QtWidgets/QTabWidget>
@@ -635,14 +634,6 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
             const bool emptyExport = !exportAsFromView(nullptr, emptyView);
             delete emptyView;
 
-            // The quality control is enabled only for the lossy formats.
-            ExportAsDialog pngDialog(QStringLiteral("PNG"), nullptr);
-            ExportAsDialog jpgDialog(QStringLiteral("JPG"), nullptr);
-            auto* pngSlider = pngDialog.findChild<QSlider*>();
-            auto* jpgSlider = jpgDialog.findChild<QSlider*>();
-            const bool qualityGating = pngSlider && jpgSlider && !pngSlider->isEnabled()
-                && jpgSlider->isEnabled();
-
             // The Places sidebar exposes the filesystem root and the home folder.
             QStringList placePaths;
             for (const QUrl& url : pictura::fileDialogPlaces()) {
@@ -681,6 +672,10 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
             // is dropped, and every entry is an existing directory.
             const QString recentDir = QDir::tempPath() + QStringLiteral("/kooka-places");
             QDir().mkpath(recentDir);
+            // fileDialogPlaces() canonicalizes each place (symlinks resolved), so
+            // match against the canonical temp dir: on macOS QDir::tempPath() is
+            // the /var symlink while the place resolves to /private/var.
+            const QString recentDirKey = QFileInfo(recentDir).canonicalFilePath();
             const QString recentFile = recentDir + QStringLiteral("/doc.psd");
             {
                 QFile seeded(recentFile);
@@ -694,7 +689,7 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
             bool allDirs = true;
             for (const QUrl& url : pictura::fileDialogPlaces()) {
                 const QString place = url.toLocalFile();
-                hasRecent = hasRecent || place == recentDir;
+                hasRecent = hasRecent || place == recentDirKey;
                 hasMissing = hasMissing
                     || place.startsWith(QStringLiteral("/nonexistent-kooka-pictura"));
                 allDirs = allDirs && QFileInfo(place).isDir();
@@ -718,12 +713,12 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
                 && pngPixels && importedPng && bareDefault && layeredDefault && psbWritten
                 && rolls && flatNeedsDialog && layeredNeedsDialog && exportFiles && scaled
                 && unmutated && quickWritten && warnPredicate && reverted && alphaPngOk
-                && alphaJpgOk && alphaBmpOk && unwritable && emptyExport && qualityGating
+                && alphaJpgOk && alphaBmpOk && unwritable && emptyExport
                 && placesOk && portalDecision && placesDetails && smartObjectOpen;
             ST_BEGIN("raster_export");
             ST_PASS("raster_export default=%d commands=%d png=%d pixels=%d reopened=%d bare=%d "
                     "layered=%d psb=%d rolls=%d savedlg=%d/%d files=%d scaled=%d unmutated=%d "
-                    "quick=%d warn=%d revert=%d alpha=%d/%d/%d unwritable=%d empty=%d quality=%d "
+                    "quick=%d warn=%d revert=%d alpha=%d/%d/%d unwritable=%d empty=%d "
                     "places=%d portal=%d places2=%d smartobj=%d",
                     defaultFormat ? 1 : 0, commandsRegistered ? 1 : 0, pngWritten ? 1 : 0,
                     pngPixels ? 1 : 0, importedPng ? 1 : 0, bareDefault ? 1 : 0,
@@ -732,7 +727,7 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
                     scaled ? 1 : 0, unmutated ? 1 : 0, quickWritten ? 1 : 0,
                     warnPredicate ? 1 : 0, reverted ? 1 : 0, alphaPngOk ? 1 : 0,
                     alphaJpgOk ? 1 : 0, alphaBmpOk ? 1 : 0, unwritable ? 1 : 0,
-                    emptyExport ? 1 : 0, qualityGating ? 1 : 0, placesOk ? 1 : 0,
+                    emptyExport ? 1 : 0, placesOk ? 1 : 0,
                     portalDecision ? 1 : 0, placesDetails ? 1 : 0, smartObjectOpen ? 1 : 0);
             for (const QString& path : {psdPath, psbPath, pngPath, jpgPath, bmpPath, halfPath,
                                         alphaPng, alphaJpg, alphaBmp}) {

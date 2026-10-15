@@ -66,6 +66,7 @@ private slots:
     void blendComboArrowAndKeys();
     void blendChangeHistoryLabel();
     void thumbnailFillsRow();
+    void tallThumbnailKeepsDocumentAspect();
     void linkGlyphRotatedAndLarger();
 
 private:
@@ -410,6 +411,26 @@ void LayersPanelFixesTest::thumbnailFillsRow()
              panel_->rowHeightForTest() - 2 * pictura::LayerRowDelegate::kThumbVerticalPad);
 }
 
+// A tall document's Entire Document thumbnail keeps the document aspect, so a
+// full-width layer reaches the right edge instead of leaving a transparent
+// column that the delegate would then squash into its letterboxed rect.
+void LayersPanelFixesTest::tallThumbnailKeepsDocumentAspect()
+{
+    const bool created = window_->newDocument(QStringLiteral("TallAspect"), 10, 20,
+                                              QStringLiteral("rgb"), 8, QStringLiteral("white"));
+    view_ = window_->activeView();
+    QVERIFY2(created && view_, "tall fixture");
+
+    const pictura::layers_api::Snapshot snap =
+        pictura::layers_api::snapshot(*view_, 24, true);
+    QVERIFY2(!snap.rows.isEmpty(), "positioned rows");
+    const QImage thumb = snap.rows.first().thumbnail;
+    QVERIFY2(!thumb.isNull(), "positioned thumbnail");
+    QCOMPARE(thumb.width() * 2, thumb.height());
+    QCOMPARE(thumb.pixelColor(thumb.width() - 1, thumb.height() / 2).alpha(), 255);
+    window_->closeDocument(window_->activeDocumentIndex(), false);
+}
+
 // The mask chain glyph is drawn two pixels larger than its slot and rotated a
 // quarter turn so it reads vertically between the thumbnails.
 void LayersPanelFixesTest::linkGlyphRotatedAndLarger()
@@ -474,8 +495,9 @@ void LayersPanelFixesTest::blendComboArrowAndKeys()
     QVERIFY(combo != nullptr);
     QVERIFY2(combo->isEnabled(), "the blend combo is enabled for the selected layer");
 
-    // The caret is a down-pointing triangle in the drop-down strip: the ink's
-    // widest row sits above its vertical centre.
+    // The drop-down strip carries the chevron: ink sits in a narrow band inside
+    // the frame, and the lowest row is the narrowest (the glyph converges
+    // downward). Frame/border rows are excluded so only the glyph is measured.
     const QImage shot = combo->grab().toImage();
     QVERIFY(!shot.isNull());
     const QColor surface = shot.pixelColor(2, shot.height() / 2);
@@ -494,21 +516,21 @@ void LayersPanelFixesTest::blendComboArrowAndKeys()
     int minY = shot.height();
     int maxY = -1;
     QVector<int> widths(shot.height(), 0);
-    for (int y = 1; y < shot.height() - 1; ++y) {
+    for (int y = 2; y < shot.height() - 2; ++y) {
         widths[y] = inkAt(y);
         if (widths[y] > 0) {
             minY = qMin(minY, y);
             maxY = qMax(maxY, y);
         }
     }
-    QVERIFY2(maxY >= minY, "the drop-down caret is visible in the strip");
+    QVERIFY2(maxY >= minY, "the drop-down chevron is visible in the strip");
     int widest = minY;
     for (int y = minY; y <= maxY; ++y) {
         if (widths[y] > widths[widest]) {
             widest = y;
         }
     }
-    QVERIFY2(widest <= (minY + maxY) / 2, "the drop-down caret points down");
+    QVERIFY2(widths[maxY] < widths[widest], "the drop-down chevron points down");
 
     combo->setFocus();
     QCoreApplication::processEvents();

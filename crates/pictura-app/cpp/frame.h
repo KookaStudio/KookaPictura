@@ -38,6 +38,7 @@ class ColorPanel;
 class ChannelsPanel;
 class ColorState;
 class CanvasScrollBars;
+class DesignSystemDialog;
 class FileDropRouter;
 class HistogramPanel;
 class HistoryPanel;
@@ -200,6 +201,11 @@ public:
     int brightnessLevel() const { return brightnessLevel_; }
     void setBrightnessLevel(int level);
 
+    // Theme family: 0 dark / 1 light. Switching applies the palette live and
+    // persists the choice; the menu-bar theme button toggles it.
+    int themeFamily() const { return themeFamily_; }
+    void setThemeFamily(int family);
+
     ScreenMode screenMode() const { return screenMode_; }
     void setScreenMode(ScreenMode mode);
     void cycleScreenMode(bool forward);
@@ -314,6 +320,13 @@ public:
     // Edit > Color Settings…: show the sRGB working space and incoming-profile
     // policy; on OK persist the choice and apply it to every open view.
     void showColorSettings();
+    // Help > Developer > Design System…: the in-app storybook over the real
+    // widgets (modeless; the single instance is reused).
+    void showDesignSystemDialog();
+    // The top-right menu-bar chrome: the theme toggle and the GitHub / Discord
+    // links.
+    void installMenuCornerButtons();
+    void updateThemeCornerIcon();
 
 protected:
     void closeEvent(QCloseEvent* event) override;
@@ -565,6 +578,7 @@ private:
     // Dynamic user-workspace actions the Window > Workspace menu rebuilds.
     QList<QAction*> workspaceMenuActions_;
     PreferencesDialog* preferencesDialog_ = nullptr;
+    QPointer<DesignSystemDialog> designSystemDialog_;
     ToolController* tools_ = nullptr;
     OptionsBar* optionsBar_ = nullptr;
     Toolbox* toolbox_ = nullptr;
@@ -594,6 +608,8 @@ private:
     QList<QAction*> recentActions_;
     int untitledCounter_ = 0;
     int brightnessLevel_ = 1;
+    int themeFamily_ = 0;
+    QToolButton* themeCornerButton_ = nullptr;
     bool gpuCompute_ = true;
     int colorPolicy_ = 0;
     bool gpuAvailable_ = true;

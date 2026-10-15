@@ -99,6 +99,7 @@ SessionState loadSession()
     const QJsonObject obj = doc.object();
     state.schemaVersion = obj.value(QStringLiteral("schemaVersion")).toInt(1);
     state.brightnessLevel = obj.value(QStringLiteral("brightnessLevel")).toInt(1);
+    state.themeFamily = obj.value(QStringLiteral("themeFamily")).toInt(0);
     state.gpuCompute = obj.value(QStringLiteral("gpuCompute")).toBool(true);
     const int colorPolicy = obj.value(QStringLiteral("colorPolicy")).toInt(0);
     state.colorPolicy = (colorPolicy == 1 || colorPolicy == 2) ? colorPolicy : 0;
@@ -203,6 +204,7 @@ bool saveSession(const SessionState& state)
     obj.insert(QStringLiteral("writtenAt"), QDateTime::currentMSecsSinceEpoch());
     obj.insert(QStringLiteral("schemaVersion"), state.schemaVersion);
     obj.insert(QStringLiteral("brightnessLevel"), state.brightnessLevel);
+    obj.insert(QStringLiteral("themeFamily"), state.themeFamily);
     obj.insert(QStringLiteral("gpuCompute"), state.gpuCompute);
     obj.insert(QStringLiteral("colorPolicy"), state.colorPolicy);
     obj.insert(QStringLiteral("layersThumbSize"), state.layersThumbSize);

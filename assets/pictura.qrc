@@ -8,14 +8,22 @@
     <file>fonts/NotoSans-MediumItalic.ttf</file>
     <file>fonts/NotoSans-SemiBoldItalic.ttf</file>
     <file>fonts/NotoSans-BoldItalic.ttf</file>
-    <file>ui/combo-caret.svg</file>
-    <file>ui/combo-caret-disabled.svg</file>
+    <file>ui/checkbox-check.svg</file>
+    <file>ui/select-chevron.svg</file>
+    <file>ui/select-chevron-light.svg</file>
+    <file>ui/select-chevron-disabled.svg</file>
     <file>icons/app.png</file>
+    <file>icons/chevron.down.svg</file>
+    <file>icons/chevron.up.svg</file>
     <file>icons/edit.redo.svg</file>
     <file>icons/edit.stepBackward.svg</file>
     <file>icons/edit.stepForward.svg</file>
     <file>icons/edit.undo.svg</file>
     <file>icons/ellipsis.svg</file>
+    <file>icons/link.discord.svg</file>
+    <file>icons/link.github.svg</file>
+    <file>icons/theme.moon.svg</file>
+    <file>icons/theme.sun.svg</file>
     <file>icons/file.closeAll.svg</file>
     <file>icons/file.close.svg</file>
     <file>icons/file.exit.svg</file>
@@ -93,6 +101,8 @@
     <file>icons/panel.columnsOne.svg</file>
     <file>icons/panel.columnsTwo.svg</file>
     <file>icons/panel.menu.svg</file>
+    <file>icons/panel.rightClose.svg</file>
+    <file>icons/panel.rightOpen.svg</file>
     <file>icons/path.delete.svg</file>
     <file>icons/path.fill.svg</file>
     <file>icons/path.loadSelection.svg</file>

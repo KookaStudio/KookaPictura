@@ -18,6 +18,7 @@ struct SessionState {
     int layoutRevision = 0;          // chrome revision that wrote `layout`; a
                                      // mismatch discards the layout on restore
     int brightnessLevel = 1;         // Theme level
+    int themeFamily = 0;             // Theme family: 0 dark / 1 light
     bool gpuCompute = true;          // GPU compositing preference
     int colorPolicy = 0;             // incoming RGB profile policy (0 Preserve)
     int layersThumbSize = 2;         // 0 None / 1 Small / 2 Medium / 3 Large

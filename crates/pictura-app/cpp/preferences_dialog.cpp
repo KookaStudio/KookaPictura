@@ -122,6 +122,12 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     brightness_ = new NumericField(QString(), brightnessConfig, generalPage);
     brightness_->setValue(Theme::kDefaultLevel);
     generalForm->addRow(tr("Brightness"), brightness_);
+
+    themeFamily_ = new QComboBox(generalPage);
+    themeFamily_->setObjectName(QStringLiteral("preferencesThemeFamily"));
+    themeFamily_->addItem(tr("Dark"), 0);
+    themeFamily_->addItem(tr("Light"), 1);
+    generalForm->addRow(tr("Theme"), themeFamily_);
     stack_->addWidget(generalPage);
 
     auto* interfacePage = new QWidget(this);
@@ -194,6 +200,8 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     });
     connect(brightness_, &NumericField::valueChanged, this,
             [this](double level) { emit brightnessLevelChanged(qRound(level)); });
+    connect(themeFamily_, &QComboBox::currentIndexChanged, this,
+            [this](int index) { emit themeFamilyChanged(themeFamily_->itemData(index).toInt()); });
     pageList_->setCurrentRow(0);
 }
 
@@ -250,6 +258,16 @@ void PreferencesDialog::setAutoShowHidden(bool on)
 void PreferencesDialog::setBrightnessLevel(int level)
 {
     brightness_->setValue(level);
+}
+
+void PreferencesDialog::setThemeFamily(int family)
+{
+    if (themeFamily_) {
+        const int index = themeFamily_->findData(family == 1 ? 1 : 0);
+        if (index >= 0) {
+            themeFamily_->setCurrentIndex(index);
+        }
+    }
 }
 
 void PreferencesDialog::setGpuCompute(bool on)

@@ -23,6 +23,14 @@ public:
     static constexpr int kLevelCount = 4;
     static constexpr int kDefaultLevel = 1;
 
+    // The palette family: a dark and a light ramp with identical role keys.
+    enum class ThemeFamily { Dark, Light };
+    static constexpr int kFamilyCount = 2;
+    static constexpr ThemeFamily kDefaultFamily = ThemeFamily::Dark;
+
+    static QString familyName(ThemeFamily family);
+    static ThemeFamily familyFromName(const QString& name);
+
     // M44: chosen chrome dimensions (unsourced CS6 metrics), shared so the
     // stylesheet and the splitter agree.
     static constexpr int kPanelBorderWidth = 1;
@@ -43,17 +51,27 @@ public:
     // Clamp a level into [0, kLevelCount).
     static int clampLevel(int level);
 
-    // The named tokens of `level`: every colour the stylesheet substitutes
-    // (including the derived shades) and every shared metric. The stylesheet
-    // builder and the `--dump-theme` JSON both consume this list.
+    // The named tokens of `family` at `level`: every colour the stylesheet
+    // substitutes (including the derived shades) and every shared metric. The
+    // stylesheet builder and the `--dump-theme` JSON both consume this list.
+    static QVector<ThemeToken> tokens(ThemeFamily family, int level);
     static QVector<ThemeToken> tokens(int level);
 
-    // CS6-style chrome QSS for `level`.
+    // CS6-style chrome QSS for `family` at `level`.
+    static QString styleSheet(ThemeFamily family, int level);
     static QString styleSheet(int level);
 
     // Monotonic counter bumped on every apply(); icon engines fold it into
     // their cache key so QIcon re-renders after a brightness change.
     static quint64 paletteGeneration();
+
+    // The brightness level most recently passed to apply(). A temporary preview
+    // (the developer design-system dialog) reads it to restore the user's level
+    // when it closes.
+    static int currentLevel();
+
+    // The family most recently passed to apply().
+    static ThemeFamily currentFamily();
 
     // The empty-workspace surface for `level` (explicit #1f1f1f at the default
     // level). The level form is safe before the QApplication exists (static
@@ -65,8 +83,16 @@ public:
     // the panel/footer chrome.
     static QColor panelColor();
 
-    // Apply the Fusion style and the palette for `level`. Call once after the
-    // QApplication exists, and again whenever the level changes.
+    // The current-level value of a colour token by key, for custom-painted
+    // widgets that need a specific token rather than a QPalette role (for
+    // example the paint-only graph tokens). Returns an invalid QColor if the
+    // key is unknown.
+    static QColor tokenColor(const QString& key);
+
+    // Apply the Fusion style and the palette for `family` at `level`. Call once
+    // after the QApplication exists, and again whenever the family or level
+    // changes. The level-only overload applies the default family.
+    static void apply(ThemeFamily family, int level);
     static void apply(int level);
 };
 

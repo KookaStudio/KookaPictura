@@ -43,7 +43,7 @@ def main() -> int:
     for pid, rec in sorted(entries.items()):
         if rec.get("kind") == "lucide" and not rec.get("slug"):
             errors.append(f"lucide entry without a slug: {pid}")
-        if rec.get("kind") not in {"lucide", "custom", "note", "out-of-scope"}:
+        if rec.get("kind") not in {"lucide", "custom", "brand", "note", "out-of-scope"}:
             errors.append(f"unknown kind for {pid}: {rec.get('kind')!r}")
 
     # The Lucide style contract for every vendored or hand-authored asset.
@@ -51,7 +51,7 @@ def main() -> int:
 
     root_re = re.compile(r"<svg\b[^>]*>", re.S)
     for pid, rec in sorted(entries.items()):
-        if rec.get("kind") not in ("lucide", "custom"):
+        if rec.get("kind") not in ("lucide", "custom", "brand"):
             continue
         svg = (ICONS / f"{pid}.svg").read_text(encoding="utf-8")
         root = root_re.search(svg)
@@ -59,8 +59,14 @@ def main() -> int:
             errors.append(f"{pid}: no <svg> root element")
             continue
         tag = root.group(0)
-        for attr, want in (("viewBox", "0 0 24 24"), ("fill", "none"),
-                           ("stroke", "currentColor"), ("stroke-width", "2")):
+        # Brand marks (simple-icons) are filled silhouettes; everything else
+        # follows the stroked Lucide contract.
+        if rec["kind"] == "brand":
+            wants = (("viewBox", "0 0 24 24"), ("fill", "currentColor"))
+        else:
+            wants = (("viewBox", "0 0 24 24"), ("fill", "none"),
+                     ("stroke", "currentColor"), ("stroke-width", "2"))
+        for attr, want in wants:
             if f'{attr}="{want}"' not in tag:
                 errors.append(f'{pid}: root missing {attr}="{want}"')
         if re.search(r'(?:stroke|fill)="#', svg):

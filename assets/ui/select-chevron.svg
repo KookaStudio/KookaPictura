@@ -1,0 +1,11 @@
+<!-- The combo box / select drop-down chevron for the dark theme family: the
+     Lucide "chevron-down" glyph in the button-text colour (#e0e0e0). The Qt
+     stylesheet engine cannot tint an SVG (`currentColor` renders black), so the
+     glyph ships in each family's foreground colour; the colour is constant
+     across the four brightness levels, so the two files match a runtime tint.
+     Original project artwork, CC0-1.0 / MIT. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+     fill="none" stroke="#e0e0e0" stroke-width="2" stroke-linecap="round"
+     stroke-linejoin="round">
+  <path d="m6 9 6 6 6-6" />
+</svg>

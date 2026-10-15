@@ -5,23 +5,28 @@
 #include <QtGui/QColor>
 #include <QtGui/QFont>
 #include <QtGui/QPainter>
-#include <QtGui/QPainterPath>
 #include <QtGui/QPalette>
 #include <QtGui/QPixmapCache>
 #include <QtWidgets/QAbstractSpinBox>
 #include <QtWidgets/QApplication>
+#include <QtWidgets/QComboBox>
 #include <QtWidgets/QProxyStyle>
 #include <QtWidgets/QStyleOption>
 #include <QtWidgets/QStyleFactory>
+#include <QtWidgets/QToolButton>
+
+#include "icons.h"
 
 namespace pictura {
 
 namespace {
 
 // Fusion under the app stylesheet draws a spin box's up/down buttons as dark
-// outlines with no visible arrows. Paint the buttons a lighter cell and the
-// arrows as small triangles in the button-text colour, so they read on the
-// dark ramp.
+// outlines with no visible arrows. Paint the button cells and draw the arrow as
+// a small Lucide chevron in the widget's foreground colour, tinted at render
+// time (the stylesheet engine cannot tint an SVG). The spin-box and menu-button
+// arrows go through here; the select's chevron is a per-family stylesheet image,
+// but the combo branch keeps a combo tinted if the stylesheet supplies none.
 class SpinArrowStyle : public QProxyStyle {
 public:
     using QProxyStyle::QProxyStyle;
@@ -38,32 +43,29 @@ public:
         }
         const bool up = element == PE_IndicatorSpinUp || element == PE_IndicatorArrowUp;
         const bool down = element == PE_IndicatorSpinDown || element == PE_IndicatorArrowDown;
-        if (!spin || (!up && !down)) {
+        const bool combo = qobject_cast<const QComboBox*>(widget) != nullptr;
+        const bool menuButton = qobject_cast<const QToolButton*>(widget) != nullptr;
+        if ((!spin && !combo && !menuButton) || (!up && !down)) {
             QProxyStyle::drawPrimitive(element, option, painter, widget);
             return;
         }
-        // The arrow rect is a few pixels; size the glyph from the constant.
-        constexpr qreal half = 3.5;
-        const QPointF c = QRectF(option->rect).center();
-        const qreal tip = up ? -2.0 : 2.0;
-        QPainterPath path;
-        path.moveTo(c.x() - half, c.y() - tip);
-        path.lineTo(c.x() + half, c.y() - tip);
-        path.lineTo(c.x(), c.y() + tip);
-        path.closeSubpath();
         const bool enabled = option->state & State_Enabled;
+        const QColor color = option->palette.color(enabled ? QPalette::Active : QPalette::Disabled,
+                                                   QPalette::ButtonText);
+        constexpr int kGlyph = 10;
+        QRect box(0, 0, kGlyph, kGlyph);
+        box.moveCenter(option->rect.center());
         painter->save();
         painter->setRenderHint(QPainter::Antialiasing);
-        painter->setPen(Qt::NoPen);
-        painter->setBrush(option->palette.color(enabled ? QPalette::Active : QPalette::Disabled,
-                                                QPalette::ButtonText));
-        painter->drawPath(path);
+        icon(up ? QStringLiteral("chevron.up") : QStringLiteral("chevron.down"), color)
+            .paint(painter, box);
         painter->restore();
     }
 };
 
 quint64 g_paletteGeneration = 0;
 int g_level = Theme::kDefaultLevel;
+Theme::ThemeFamily g_family = Theme::kDefaultFamily;
 
 struct Ramp {
     // Text and accent colours are constant across brightness levels.
@@ -101,6 +103,10 @@ struct Ramp {
     QColor iconHoverBorder;
     QColor hover;
     QColor iconHover;
+    // Custom-painted graph surfaces (curve editor, spectrum, histogram,
+    // navigator) so their greys track the ramp instead of being literals.
+    QColor graphFill;
+    QColor graphAxis;
 };
 
 // The default-brightness (level 1) palette. Other levels are derived from it.
@@ -134,33 +140,79 @@ const Ramp kLevel1Ramp = {
     QColor(0x59, 0x59, 0x59), // iconHoverBorder
     QColor(),                 // hover (filled in rampFor)
     QColor(),                 // iconHover (filled in rampFor)
+    QColor(0x55, 0x55, 0x55), // graphFill
+    QColor(0x80, 0x80, 0x80), // graphAxis
 };
 
-Ramp rampFor(int level)
+// The light family's default-brightness (level 1) palette: the dark ramp's role
+// keys with light surfaces and dark text/icons. Derived levels and shades use
+// the per-family direction in `rampFor`/`tokens`.
+const Ramp kLight1Ramp = {
+    QColor(43, 43, 43),       // windowText
+    QColor(43, 43, 43),       // text
+    QColor(43, 43, 43),       // buttonText
+    QColor(61, 111, 153),     // highlight
+    QColor(255, 255, 255),    // highlightedText
+    QColor(0xf0, 0xf0, 0xf0), // toolTipBase
+    QColor(43, 43, 43),       // toolTipText
+    QColor(0x1a, 0x5f, 0xa8), // link
+    QColor(0x9a, 0x9a, 0x9a), // disabledText
+    QColor(0x2a, 0x7f, 0xff), // accent
+    QColor(0xf2, 0xd0, 0x4b), // noticeBg
+    QColor(0x1e, 0x1e, 0x1e), // noticeText
+    QColor(0xd9, 0xd9, 0xd9), // window
+    QColor(0xe4, 0xe4, 0xe4), // panel
+    QColor(0xf0, 0xf0, 0xf0), // activeTab
+    QColor(0xf0, 0xf0, 0xf0), // workspace
+    QColor(0xd0, 0xd0, 0xd0), // panelHeader
+    QColor(0xc0, 0xc0, 0xc0), // separator
+    QColor(0xff, 0xff, 0xff), // tableBg
+    QColor(0xb0, 0xb0, 0xb0), // border
+    QColor(0xff, 0xff, 0xff), // inputBg
+    QColor(0xa0, 0xa0, 0xa0), // inputBorder
+    QColor(0xed, 0xed, 0xed), // button
+    QColor(0xa0, 0xa0, 0xa0), // buttonBorder
+    QColor(0xd0, 0xd0, 0xd0), // buttonPressed
+    QColor(0xd0, 0xd0, 0xd0), // iconPressed
+    QColor(0xa0, 0xa0, 0xa0), // iconHoverBorder
+    QColor(),                 // hover (filled in rampFor)
+    QColor(),                 // iconHover (filled in rampFor)
+    QColor(0xf5, 0xf5, 0xf5), // graphFill
+    QColor(0x80, 0x80, 0x80), // graphAxis
+};
+
+Ramp rampFor(Theme::ThemeFamily family, int level)
 {
-    Ramp ramp = kLevel1Ramp;
+    Ramp ramp = family == Theme::ThemeFamily::Light ? kLight1Ramp : kLevel1Ramp;
     const int steps = level - Theme::kDefaultLevel;
     QColor* surfaces[] = {
         &ramp.window,        &ramp.panel,        &ramp.activeTab,    &ramp.workspace,
         &ramp.panelHeader,   &ramp.separator,    &ramp.tableBg,      &ramp.border,
         &ramp.inputBg,       &ramp.inputBorder,  &ramp.button,       &ramp.buttonBorder,
         &ramp.buttonPressed, &ramp.iconPressed,  &ramp.iconHoverBorder,
+        &ramp.graphFill,     &ramp.graphAxis,
     };
     for (QColor* surface : surfaces) {
         *surface = Theme::shade(*surface, steps);
     }
-    ramp.hover = Theme::shade(ramp.panel, 1);
+    // Hover reads as a lift on the dark ramp and as a shade-down on the light
+    // ramp, where a lighter hover would wash out against the surface.
+    const int hoverDirection = family == Theme::ThemeFamily::Light ? -1 : 1;
+    ramp.hover = Theme::shade(ramp.panel, hoverDirection);
     ramp.iconHover = ramp.hover;
     return ramp;
 }
 
-QPalette paletteFor(const Ramp& ramp)
+QPalette paletteFor(Theme::ThemeFamily family, const Ramp& ramp)
 {
+    // Alternate rows shade toward the family's direction, matching the token
+    // layer; a light `#ffffff` table would otherwise stay white.
+    const int dir = family == Theme::ThemeFamily::Light ? -1 : 1;
     QPalette pal;
     pal.setColor(QPalette::Window, ramp.window);
     pal.setColor(QPalette::WindowText, ramp.windowText);
     pal.setColor(QPalette::Base, ramp.tableBg);
-    pal.setColor(QPalette::AlternateBase, Theme::shade(ramp.tableBg, 1));
+    pal.setColor(QPalette::AlternateBase, Theme::shade(ramp.tableBg, dir));
     pal.setColor(QPalette::Text, ramp.text);
     pal.setColor(QPalette::Button, ramp.button);
     pal.setColor(QPalette::ButtonText, ramp.buttonText);
@@ -326,24 +378,39 @@ QWidget#canvasRulerCorner { background: ${panel}; }
 QToolTip { background: ${toolTipBase}; color: ${toolTipText}; border: 1px solid ${border}; padding: 2px; }
 
 QListView, QTreeView, QTableView { background: ${tableBg}; color: ${text}; border: 1px solid ${separator}; alternate-background-color: ${alternateTableBg}; selection-background-color: ${highlight}; selection-color: ${highlightedText}; }
-QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QPlainTextEdit { background: ${inputBg}; color: ${text}; border: 1px solid ${inputBorder}; border-radius: 2px; padding: 1px 2px; }
-QLineEdit:hover, QSpinBox:hover, QDoubleSpinBox:hover, QComboBox:hover, QPlainTextEdit:hover { border-color: ${inputBorder}; }
-QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus, QPlainTextEdit:focus { border-color: ${highlight}; }
-QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled, QComboBox:disabled, QPlainTextEdit:disabled { color: ${disabledText}; border-color: ${border}; }
-QComboBox::drop-down { background: transparent; border: 0; width: 16px; }
-QComboBox::down-arrow { image: url(:/ui/combo-caret.svg); width: 8px; height: 5px; }
-QComboBox::down-arrow:disabled { image: url(:/ui/combo-caret-disabled.svg); }
+QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QPlainTextEdit, QTextEdit { background: ${inputBg}; color: ${text}; border: 1px solid ${inputBorder}; border-radius: 2px; padding: 1px 2px; font-size: ${inputFontSize}px; }
+/* Spin boxes stand this tall (their buttons set the floor); lift the other
+   inputs to match, so a select and a text field are the same height. */
+QLineEdit, QComboBox, QPlainTextEdit, QTextEdit { min-height: 20px; }
+QLineEdit:hover, QSpinBox:hover, QDoubleSpinBox:hover, QComboBox:hover, QPlainTextEdit:hover, QTextEdit:hover { border-color: ${inputBorder}; }
+QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus, QPlainTextEdit:focus, QTextEdit:focus { border-color: ${highlight}; }
+QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled, QComboBox:disabled, QPlainTextEdit:disabled, QTextEdit:disabled { color: ${disabledText}; border-color: ${border}; }
+/* An editable combo's line edit is the field itself: no second frame. */
+QComboBox QLineEdit { background: transparent; border: 0; border-radius: 0; padding: 0 2px; font-size: ${inputFontSize}px; }
+/* A flat drop-down cell reserves the value's right space; the chevron is a
+   baked per-family asset because the stylesheet engine cannot tint an SVG. */
+QComboBox::drop-down { background: transparent; border: 0; width: 18px; }
+QComboBox::down-arrow { image: url(${selectChevron}); width: 10px; height: 10px; }
+QComboBox::down-arrow:disabled { image: url(:/ui/select-chevron-disabled.svg); }
 QComboBox QAbstractItemView { background: ${panel}; color: ${text}; border: 1px solid ${border}; selection-background-color: ${highlight}; selection-color: ${highlightedText}; }
+/* The workspace switcher reads as a select on the same input surface. */
+QToolButton#workspaceSwitcher { background: ${inputBg}; color: ${text}; border: 1px solid ${inputBorder}; border-radius: 2px; padding: 1px 18px 1px 4px; font-size: ${inputFontSize}px; }
+QToolButton#workspaceSwitcher:hover { border-color: ${inputBorder}; }
+QToolButton#workspaceSwitcher:focus, QToolButton#workspaceSwitcher:open { border-color: ${highlight}; }
+QToolButton#workspaceSwitcher:disabled { color: ${disabledText}; border-color: ${border}; }
+QToolButton#workspaceSwitcher::menu-button { background: transparent; border: 0; width: 18px; }
+QToolButton#workspaceSwitcher::menu-indicator { subcontrol-origin: padding; subcontrol-position: center right; image: url(${selectChevron}); width: 10px; height: 10px; }
 
-QWidget#numericField, QWidget#percentField QLineEdit { background: ${inputBg}; color: ${text}; border: 1px solid ${inputBorder}; border-radius: 2px; padding: 1px 2px; }
-QWidget#numericField, QWidget#percentField QLineEdit:disabled { color: ${disabledText}; }
-QWidget#numericField, QWidget#percentField QToolButton { background: transparent; color: ${buttonText}; border: 0; border-left: 1px solid ${border}; border-radius: 0; padding: 0 2px; }
-QWidget#numericField, QWidget#percentField QToolButton:hover { background: ${hover}; }
-QWidget#numericField, QWidget#percentField QToolButton:disabled { color: ${disabledText}; }
+/* The numeric-field arrow sits inside the box, separated by a hairline; the
+   button darkens on hover and while its slider popup is open. */
+QLineEdit QToolButton { background: transparent; color: ${buttonText}; border: 0; border-left: 1px solid ${border}; border-radius: 0; padding: 0 2px; }
+QLineEdit QToolButton:hover { background: ${hover}; }
+QLineEdit QToolButton:pressed, QLineEdit QToolButton:checked { background: ${pressed}; }
+QLineEdit QToolButton:disabled { color: ${disabledText}; }
 QTabWidget::tab-bar { alignment: left; }
 
-QWidget#numericField, QWidget#percentField QSlider::groove:horizontal { height: 4px; background: ${border}; border-radius: 2px; }
-QWidget#numericField, QWidget#percentField QSlider::handle:horizontal { width: 10px; margin: -4px 0; background: ${buttonText}; border-radius: 3px; }
+QWidget#percentField QSlider::groove:horizontal { height: 4px; background: ${border}; border-radius: 2px; }
+QWidget#percentField QSlider::handle:horizontal { width: 10px; margin: -4px 0; background: ${buttonText}; border-radius: 3px; }
 
 QWidget#layersFilterBar { background: ${panel}; border-bottom: 1px solid ${separator}; }
 QWidget#layersFilterBar QComboBox, QWidget#layersFilterBar QLineEdit { background: ${inputBg}; color: ${text}; border: 1px solid ${inputBorder}; border-radius: 2px; padding: 1px 2px; }
@@ -367,7 +434,7 @@ QCheckBox { color: ${text}; spacing: 5px; }
 QCheckBox:disabled { color: ${disabledText}; }
 QCheckBox::indicator { width: 13px; height: 13px; border: 1px solid ${inputBorder}; border-radius: 2px; background: ${inputBg}; }
 QCheckBox::indicator:hover { border-color: ${highlight}; }
-QCheckBox::indicator:checked { background: ${highlight}; border-color: ${highlight}; }
+QCheckBox::indicator:checked { background: ${highlight}; border-color: ${highlight}; image: url(:/ui/checkbox-check.svg); }
 QCheckBox::indicator:checked:hover { background: ${link}; border-color: ${link}; }
 QCheckBox::indicator:disabled { border-color: ${border}; }
 QCheckBox::indicator:checked:disabled { background: ${disabledText}; border-color: ${disabledText}; }
@@ -379,6 +446,33 @@ QSlider::groove:vertical { width: 4px; background: ${border}; border-radius: 2px
 QSlider::handle:vertical { height: 10px; margin: 0 -4px; background: ${buttonText}; border-radius: 3px; }
 QSlider::handle:vertical:hover { background: ${highlight}; }
 QSlider::handle:horizontal:disabled, QSlider::handle:vertical:disabled { background: ${disabledText}; }
+
+QGroupBox { color: ${text}; border: 1px solid ${separator}; border-radius: 3px; margin-top: 8px; padding-top: 6px; }
+QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; left: 8px; padding: 0 3px; color: ${windowText}; font-weight: 700; }
+QGroupBox:disabled, QGroupBox::title:disabled { color: ${disabledText}; }
+
+QRadioButton { color: ${text}; spacing: 5px; }
+QRadioButton:disabled { color: ${disabledText}; }
+QRadioButton::indicator { width: 13px; height: 13px; border: 1px solid ${inputBorder}; border-radius: 7px; background: ${inputBg}; }
+QRadioButton::indicator:hover { border-color: ${highlight}; }
+QRadioButton::indicator:checked { background: ${highlight}; border-color: ${highlight}; }
+QRadioButton::indicator:checked:hover { background: ${link}; border-color: ${link}; }
+QRadioButton::indicator:disabled { border-color: ${border}; }
+QRadioButton::indicator:checked:disabled { background: ${disabledText}; border-color: ${disabledText}; }
+
+QProgressBar { background: ${inputBg}; border: 1px solid ${inputBorder}; border-radius: 3px; text-align: center; color: ${text}; }
+QProgressBar::chunk { background: ${highlight}; border-radius: 2px; }
+QProgressBar:disabled { color: ${disabledText}; border-color: ${border}; }
+
+QHeaderView { background: ${panelHeader}; border: 0; }
+QHeaderView::section { background: ${panelHeader}; color: ${text}; border: 0; border-right: 1px solid ${separator}; border-bottom: 1px solid ${separator}; padding: 3px 6px; }
+QHeaderView::section:hover { background: ${hover}; }
+QHeaderView::section:disabled { color: ${disabledText}; }
+
+/* The panel-column splitter keeps its object-scoped rule (below); this is the
+   general handle so any other splitter is tokenised too. */
+QSplitter::handle { background: ${border}; }
+QSplitter::handle:hover { background: ${highlight}; }
 
 /* A colour swatch paints its data colour itself; the global rule only removes
    the button chrome and the focus ring comes from the paint. */
@@ -402,13 +496,15 @@ QLabel#sectionTabLabel { font-weight: 700; padding: 3px 0; }
     for (const ThemeToken& token : tokens) {
         qss.replace(QStringLiteral("${") + token.key + QLatin1Char('}'), token.value);
     }
-    // Tab labels run 2 px under the app default; a point-sized default font
-    // (pixelSize() < 0) falls back to 12 px (~9 pt) at 96 DPI.
+    // Tab labels run 2 px under the app default and input/select text 1 px
+    // under it; a point-sized default font (pixelSize() < 0) falls back to
+    // 12 px (~9 pt) at 96 DPI.
     int baseFontPx = 12;
     if (QApplication::instance() != nullptr && QApplication::font().pixelSize() > 0) {
         baseFontPx = QApplication::font().pixelSize();
     }
     qss.replace(QStringLiteral("${tabFontSize}"), QString::number(baseFontPx - 2));
+    qss.replace(QStringLiteral("${inputFontSize}"), QString::number(baseFontPx - 1));
     return qss;
 }
 
@@ -441,27 +537,52 @@ int Theme::clampLevel(int level)
 
 QColor Theme::workspaceColor(int level)
 {
-    return rampFor(clampLevel(level)).workspace;
+    return rampFor(Theme::kDefaultFamily, clampLevel(level)).workspace;
 }
 
 QColor Theme::workspaceColor()
 {
-    return workspaceColor(g_level);
+    return rampFor(g_family, clampLevel(g_level)).workspace;
 }
 
 QColor Theme::panelColor()
 {
-    return rampFor(clampLevel(g_level)).panel;
+    return rampFor(g_family, clampLevel(g_level)).panel;
+}
+
+QColor Theme::tokenColor(const QString& key)
+{
+    for (const ThemeToken& token : tokens(g_family, g_level)) {
+        if (token.color && token.key == key) {
+            return QColor(token.value);
+        }
+    }
+    return {};
+}
+
+QString Theme::styleSheet(Theme::ThemeFamily family, int level)
+{
+    QString qss = styleSheetFor(tokens(family, level));
+    // The select chevron is a baked asset (QSS cannot tint an SVG); pick the
+    // family's foreground-coloured file.
+    qss.replace(QStringLiteral("${selectChevron}"),
+                family == Theme::ThemeFamily::Light
+                    ? QStringLiteral(":/ui/select-chevron-light.svg")
+                    : QStringLiteral(":/ui/select-chevron.svg"));
+    return qss;
 }
 
 QString Theme::styleSheet(int level)
 {
-    return styleSheetFor(tokens(level));
+    return styleSheet(Theme::kDefaultFamily, level);
 }
 
-QVector<ThemeToken> Theme::tokens(int level)
+QVector<ThemeToken> Theme::tokens(Theme::ThemeFamily family, int level)
 {
-    const Ramp ramp = rampFor(clampLevel(level));
+    const Ramp ramp = rampFor(family, clampLevel(level));
+    // Derived shades go toward the family's lighter/darker direction so light
+    // surfaces (tableBg #ffffff, panelHeader #d0d0d0) do not wash toward white.
+    const int dir = family == Theme::ThemeFamily::Light ? -1 : 1;
     const auto color = [](const char* key, const QColor& value) {
         return ThemeToken{QString::fromLatin1(key), value.name(QColor::HexRgb), true};
     };
@@ -483,12 +604,12 @@ QVector<ThemeToken> Theme::tokens(int level)
         color("accent", ramp.accent),
         color("noticeBg", ramp.noticeBg),
         color("noticeText", ramp.noticeText),
-        color("menuDisabledText", shade(ramp.disabledText, 1)),
+        color("menuDisabledText", shade(ramp.disabledText, dir)),
         color("border", ramp.border),
         color("separator", ramp.separator),
-        color("separatorLight", shade(ramp.separator, 1)),
+        color("separatorLight", shade(ramp.separator, dir)),
         color("tableBg", ramp.tableBg),
-        color("alternateTableBg", shade(ramp.tableBg, 1)),
+        color("alternateTableBg", shade(ramp.tableBg, dir)),
         color("inputBg", ramp.inputBg),
         color("inputBorder", ramp.inputBorder),
         color("buttonBorder", ramp.buttonBorder),
@@ -505,7 +626,9 @@ QVector<ThemeToken> Theme::tokens(int level)
         color("panelHeaderBorder", shade(ramp.panelHeader, -1)),
         color("scrollbar", ramp.panelHeader),
         color("scrollbarThumb", ramp.buttonBorder),
-        color("scrollbarThumbHover", shade(ramp.buttonBorder, 1)),
+        color("scrollbarThumbHover", shade(ramp.buttonBorder, dir)),
+        color("graphFill", ramp.graphFill),
+        color("graphAxis", ramp.graphAxis),
         metric("panelBorderWidth", kPanelBorderWidth),
         metric("chromeBorderWidth", kChromeBorderWidth),
         metric("groupDividerWidth", kGroupDividerWidth),
@@ -517,20 +640,54 @@ QVector<ThemeToken> Theme::tokens(int level)
     };
 }
 
+QVector<ThemeToken> Theme::tokens(int level)
+{
+    return tokens(Theme::kDefaultFamily, level);
+}
+
+QString Theme::familyName(Theme::ThemeFamily family)
+{
+    return family == Theme::ThemeFamily::Light ? QStringLiteral("light")
+                                               : QStringLiteral("dark");
+}
+
+Theme::ThemeFamily Theme::familyFromName(const QString& name)
+{
+    return name.compare(QStringLiteral("light"), Qt::CaseInsensitive) == 0
+        ? Theme::ThemeFamily::Light
+        : Theme::ThemeFamily::Dark;
+}
+
 quint64 Theme::paletteGeneration()
 {
     return g_paletteGeneration;
 }
 
-void Theme::apply(int level)
+int Theme::currentLevel()
+{
+    return g_level;
+}
+
+Theme::ThemeFamily Theme::currentFamily()
+{
+    return g_family;
+}
+
+void Theme::apply(Theme::ThemeFamily family, int level)
 {
     const int clamped = clampLevel(level);
+    g_family = family;
     g_level = clamped;
     ++g_paletteGeneration;
     QPixmapCache::clear();
     QApplication::setStyle(new SpinArrowStyle(QStyleFactory::create(QStringLiteral("Fusion"))));
-    qApp->setPalette(paletteFor(rampFor(clamped)));
-    qApp->setStyleSheet(styleSheet(clamped));
+    qApp->setPalette(paletteFor(family, rampFor(family, clamped)));
+    qApp->setStyleSheet(styleSheet(family, clamped));
+}
+
+void Theme::apply(int level)
+{
+    apply(Theme::kDefaultFamily, level);
 }
 
 } // namespace pictura

@@ -637,7 +637,12 @@ void FilterParamControls::addControl(const FilterParamSpec& spec)
         const double frac = span > 0.0 ? (control.spin->value() - spec.minimum) / span : 0.0;
         control.slider->setValue(static_cast<int>(frac * 1000.0));
         connect(control.slider, &QSlider::sliderPressed, this,
-                [this] { sliderDragging_ = true; });
+                [this, spin = control.spin] {
+                    sliderDragging_ = true;
+                    // Clicking the slider activates its value box, so Up/Down
+                    // (and a typed value) adjust the same parameter.
+                    spin->setFocus(Qt::MouseFocusReason);
+                });
         connect(control.slider, &QSlider::sliderReleased, this, [this] {
             sliderDragging_ = false;
             emit changed();

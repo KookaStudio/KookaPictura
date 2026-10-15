@@ -1,9 +1,11 @@
 #include "numeric_field.h"
 
+#include "icons.h"
 #include "jump_slider.h"
 
 #include <QtCore/QEvent>
 #include <QtCore/QLocale>
+#include <QtCore/QSize>
 #include <QtGui/QDoubleValidator>
 #include <QtGui/QIntValidator>
 #include <QtGui/QKeyEvent>
@@ -49,6 +51,19 @@ QRect lineEditContents(const QLineEdit* edit)
         : 0;
     option.state |= QStyle::State_Sunken;
     return edit->style()->subElementRect(QStyle::SE_LineEditContents, &option, edit);
+}
+
+// The edit's frame, inside its border but outside its padding: the inset
+// widgets (the suffix and the popup arrow) hug this rect.
+QRect lineEditFrame(const QLineEdit* edit)
+{
+    QStyleOptionFrame option;
+    option.initFrom(edit);
+    option.rect = edit->rect();
+    const int border = edit->hasFrame()
+        ? edit->style()->pixelMetric(QStyle::PM_DefaultFrameWidth, &option, edit)
+        : 0;
+    return edit->rect().adjusted(border, border, -border, -border);
 }
 
 } // namespace
@@ -104,13 +119,24 @@ NumericField::NumericField(const QString& label, const NumericFieldConfig& confi
     reserveWidth();
 
     if (config_.popup) {
-        arrow_ = new QToolButton(this);
+        // The arrow lives inside the edit, flush to its right edge, like the
+        // suffix; the QSS `QLineEdit QToolButton` rule draws the hairline
+        // separator. It is checkable so it stays darker while the popup is open.
+        arrow_ = new QToolButton(edit_);
         arrow_->setObjectName(config_.namePrefix + QStringLiteral("Arrow"));
         arrow_->setAutoRaise(true);
-        arrow_->setArrowType(Qt::DownArrow);
-        arrow_->setFixedWidth(16);
+        arrow_->setCheckable(true);
+        arrow_->setFocusPolicy(Qt::NoFocus);
+        // The arrow is a child of the text editor, which shows an I-beam; use
+        // the default arrow cursor so the button reads as a button.
+        arrow_->setCursor(Qt::ArrowCursor);
+        arrow_->setArrowType(Qt::NoArrow);
+        arrow_->setIcon(icon(QStringLiteral("chevron.down")));
+        arrow_->setIconSize(QSize(12, 12));
+        // 18 px matches the select's drop-down cell, leaving the 12 px icon room
+        // after the 2 px padding and 1 px hairline.
+        arrow_->setFixedWidth(18);
         arrow_->setToolTip(tr("Slider"));
-        layout->addWidget(arrow_);
 
         popup_ = new QWidget(this, Qt::Popup);
         popup_->setObjectName(config_.namePrefix + QStringLiteral("Popup"));
@@ -131,26 +157,29 @@ NumericField::NumericField(const QString& label, const NumericFieldConfig& confi
         connect(slider_, &QSlider::sliderReleased, this, [this] { commitPending(); });
         connect(arrow_, &QToolButton::clicked, this, [this] { showPopup(); });
         popup_->installEventFilter(this);
+        reserveWidth();
     }
 
     connect(edit_, &QLineEdit::editingFinished, this, [this] { commitEdit(); });
-    connect(edit_, &QLineEdit::textChanged, this, [this] { layoutSuffix(); });
+    connect(edit_, &QLineEdit::textChanged, this, [this] { layoutInset(); });
 }
 
 void NumericField::reserveWidth()
 {
-    // Measured against the polished style so the widest value and the suffix
-    // fit without QLineEdit scrolling the start of the text out of view.
+    // Measured against the polished style so the widest value, the suffix, and
+    // the inset arrow fit without QLineEdit scrolling the start of the text out
+    // of view.
     edit_->ensurePolished();
     const QFontMetrics metrics = edit_->fontMetrics();
     const int valueWidth = std::max(metrics.horizontalAdvance(formatValue(config_.maximum)),
                                     metrics.horizontalAdvance(formatValue(config_.minimum)));
     const int suffixWidth =
         suffix_ && !suffix_->isHidden() ? metrics.horizontalAdvance(config_.suffix) : 0;
+    const int arrowWidth = arrow_ ? arrow_->width() : 0;
     const int frame = edit_->width() - lineEditContents(edit_).width();
     // One extra pixel each for the text cursor and rounding.
-    edit_->setFixedWidth(frame + 2 * kTextInset + valueWidth + suffixWidth + 2);
-    layoutSuffix();
+    edit_->setFixedWidth(frame + 2 * kTextInset + valueWidth + suffixWidth + arrowWidth + 2);
+    layoutInset();
 }
 
 QString NumericField::labelText() const
@@ -263,22 +292,36 @@ void NumericField::commitPending()
     }
 }
 
-void NumericField::layoutSuffix()
+void NumericField::layoutInset()
 {
-    if (!suffix_ || !edit_) {
+    if (!edit_) {
         return;
     }
-    suffix_->adjustSize();
-    // The suffix hugs the value ("25%"); the right margin keeps typed text
-    // from running under it.
-    // `isHidden`, not `isVisible`: the field may not be shown yet.
-    const int suffixWidth = suffix_->isHidden() ? 0 : suffix_->width();
-    edit_->setTextMargins(0, 0, suffixWidth, 0);
+    const int arrowWidth = arrow_ ? arrow_->width() : 0;
+    int suffixWidth = 0;
+    if (suffix_) {
+        suffix_->adjustSize();
+        // `isHidden`, not `isVisible`: the field may not be shown yet.
+        suffixWidth = suffix_->isHidden() ? 0 : suffix_->width();
+    }
+    // The right margin keeps typed text from running under the suffix or the
+    // arrow, both of which are children of the edit.
+    edit_->setTextMargins(0, 0, suffixWidth + arrowWidth, 0);
     const QRect contents = lineEditContents(edit_);
-    const int textEnd =
-        contents.left() + kTextInset + edit_->fontMetrics().horizontalAdvance(edit_->text());
-    suffix_->move(std::min(textEnd, contents.right() + 1 - suffix_->width()),
-                  (edit_->height() - suffix_->height()) / 2);
+    if (suffix_) {
+        // The suffix hugs the value ("25%"), stopping short of the arrow.
+        const int textEnd =
+            contents.left() + kTextInset + edit_->fontMetrics().horizontalAdvance(edit_->text());
+        const int limit = contents.right() + 1 - arrowWidth - suffix_->width();
+        suffix_->move(std::min(textEnd, limit), (edit_->height() - suffix_->height()) / 2);
+        suffix_->raise();
+    }
+    if (arrow_) {
+        const QRect frame = lineEditFrame(edit_);
+        arrow_->setGeometry(frame.right() + 1 - arrowWidth, frame.top(), arrowWidth,
+                            frame.height());
+        arrow_->raise();
+    }
 }
 
 void NumericField::showPopup()
@@ -290,6 +333,9 @@ void NumericField::showPopup()
     const int x = (width() - popup_->width()) / 2;
     popup_->move(mapToGlobal(QPoint(x, height())));
     popup_->show();
+    if (arrow_) {
+        arrow_->setChecked(true);
+    }
     // The popup window may never take keyboard focus, but focusing the slider
     // keeps the native step behaviour when it does.
     slider_->setFocus(Qt::PopupFocusReason);
@@ -300,7 +346,7 @@ bool NumericField::eventFilter(QObject* watched, QEvent* event)
     if (watched == edit_) {
         switch (event->type()) {
         case QEvent::Resize:
-            layoutSuffix();
+            layoutInset();
             return QWidget::eventFilter(watched, event);
         case QEvent::FontChange:
         case QEvent::StyleChange:
@@ -331,6 +377,9 @@ bool NumericField::eventFilter(QObject* watched, QEvent* event)
     }
     if (watched == popup_) {
         if (event->type() == QEvent::Hide) {
+            if (arrow_) {
+                arrow_->setChecked(false);
+            }
             commitPending();
         } else if (event->type() == QEvent::KeyPress) {
             auto* key = static_cast<QKeyEvent*>(event);

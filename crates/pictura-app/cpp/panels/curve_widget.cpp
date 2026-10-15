@@ -1,5 +1,7 @@
 #include "curve_widget.h"
 
+#include "theme.h"
+
 #include <QtCore/QRectF>
 #include <QtCore/QStringList>
 #include <QtGui/QColor>
@@ -257,7 +259,7 @@ void CurveWidget::paintEvent(QPaintEvent*)
 {
     QPainter p(this);
     const QRectF r = plot();
-    p.fillRect(r, QColor(0x3a, 0x3a, 0x3a));
+    p.fillRect(r, Theme::tokenColor(QStringLiteral("inputBg")));
 
     if (showRamps_) {
         QLinearGradient vertical(r.left(), r.bottom(), r.left(), r.top());
@@ -280,10 +282,10 @@ void CurveWidget::paintEvent(QPaintEvent*)
         }
         area.lineTo(r.bottomRight());
         area.closeSubpath();
-        p.fillPath(area, QColor(0x55, 0x55, 0x55));
+        p.fillPath(area, Theme::tokenColor(QStringLiteral("graphFill")));
     }
 
-    p.setPen(QPen(QColor(0x2a, 0x2a, 0x2a), 1));
+    p.setPen(QPen(Theme::tokenColor(QStringLiteral("inputBorder")), 1));
     for (int i = 1; i < 4; ++i) {
         const qreal x = r.left() + i * r.width() / 4.0;
         const qreal y = r.top() + i * r.height() / 4.0;
@@ -293,7 +295,7 @@ void CurveWidget::paintEvent(QPaintEvent*)
 
     p.setRenderHint(QPainter::Antialiasing);
     if (showBaseline_) {
-        p.setPen(QPen(QColor(0x80, 0x80, 0x80), 1));
+        p.setPen(QPen(Theme::tokenColor(QStringLiteral("graphAxis")), 1));
         p.drawLine(r.bottomLeft(), r.topRight());
     }
 
@@ -302,7 +304,7 @@ void CurveWidget::paintEvent(QPaintEvent*)
     for (int i = 1; i < 256; ++i) {
         curve.lineTo(toWidget(QPointF(i / 255.0, curve_[i])));
     }
-    p.setPen(QPen(QColor(0xf0, 0xf0, 0xf0), 1.6));
+    p.setPen(QPen(Theme::tokenColor(QStringLiteral("text")), 1.6));
     p.setBrush(Qt::NoBrush);
     p.drawPath(curve);
 
@@ -310,13 +312,13 @@ void CurveWidget::paintEvent(QPaintEvent*)
     for (int i = 0; i < points_.size(); ++i) {
         const QPointF c = toWidget(points_[i]);
         const qreal half = i == selected_ ? 4.0 : 3.0;
-        p.setPen(QPen(QColor(0xf0, 0xf0, 0xf0), 1));
-        p.setBrush(i == selected_ ? QColor(0xf0, 0xf0, 0xf0) : QColor(0x3a, 0x3a, 0x3a));
+        p.setPen(QPen(Theme::tokenColor(QStringLiteral("text")), 1));
+        p.setBrush(i == selected_ ? Theme::tokenColor(QStringLiteral("text")) : Theme::tokenColor(QStringLiteral("inputBg")));
         p.drawRect(QRectF(c.x() - half, c.y() - half, 2 * half, 2 * half));
     }
 
     p.setRenderHint(QPainter::Antialiasing, false);
-    p.setPen(QPen(QColor(0x22, 0x22, 0x22), 1));
+    p.setPen(QPen(Theme::tokenColor(QStringLiteral("inputBorder")), 1));
     p.setBrush(Qt::NoBrush);
     p.drawRect(r.adjusted(-0.5, -0.5, 0.5, 0.5));
 }

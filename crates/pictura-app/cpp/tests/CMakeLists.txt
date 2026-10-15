@@ -7,6 +7,7 @@ set(PICTURA_QT_TESTS
     tst_transform_api
     tst_fonts
     tst_design_system
+    tst_design_system_dialog
     tst_edit_clipboard
     tst_mask_edit
     tst_image_ops
@@ -40,6 +41,7 @@ set(PICTURA_QT_TESTS
     tst_shape_tools
     tst_rotate_view
     tst_save_for_web
+    tst_export_as
     tst_type_tools
     tst_type_panels
     tst_character_paragraph_panels
@@ -92,6 +94,7 @@ set(PICTURA_QT_TESTS
     tst_screen_modes
     tst_dialog_chrome
     tst_keyboard_shortcuts
+    tst_native_menu_bar
 )
 
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/qt-test-results)
