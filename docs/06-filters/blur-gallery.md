@@ -171,7 +171,11 @@ implemented.
   Blur is selected the Effects (Bokeh) tab is disabled and Motion Effects
   enabled, and the reverse for the other effects. The Noise checkbox
   defaults on in every gallery mode, as in the owner's screenshots; Amount
-  0 adds nothing. The `path-blur` kind takes `[count, (point
+  0 adds nothing. In every mode the workspace cannot be squeezed below what
+  its side column needs, so every slider and value box keeps its height.
+  One Blur Tools row is open at a time: opening a row (its arrow, or
+  selecting its effect) closes the open one, so the floor stays at most
+  ~754 px, Path Blur's row being the tallest. The `path-blur` kind takes `[count, (point
   count, (x, y)×point count, start speed, end speed)…, speed, taper,
   centered, rear sync, strobe strength, strobe flashes, bokeh …, noise …]`
   (27 canonical); `blur-gallery` appends the path count, records, and motion

@@ -35,11 +35,16 @@ Snapshot for resuming after a context break. Update after each milestone.
   path, Delete. Selecting Path Blur disables the Effects tab (Bokeh) and
   enables Motion Effects; the Noise checkbox now defaults on in every
   gallery mode (Amount 0, so no output changes). Opening path and defaults
-  follow the owner's CC screenshots. Ceilings (`ponytail:`): the motion field, gather, flash
+  follow the owner's CC screenshots. The workspace's minimum size is now its
+  layout's (`QLayout::SetMinimumSize`, the hint label clipping), so
+  squeezing it never crushes a slider or value box, and the Blur Tools rows
+  are an accordion (opening one closes the open one): at least 756 px wide
+  and 594–754 px tall, Path Blur's row the tallest
+  (`squeezingKeepsEveryControlReadable`). Ceilings (`ponytail:`): the motion field, gather, flash
   weights, ranges, and gestures are inferred; Edit Blur Shapes is not built
   (blur shapes follow the tangent); Spin Blur stays a stub. Tests: 15
   engine units + 2 gallery units, two new kernel digests, a no-equivalent
-  oracle row, mapping tests, `tst_path_blur` (12), and the gallery suites
+  oracle row, mapping tests, `tst_path_blur` (11), and the gallery suites
   updated for the live row. Verified: `TASK_ALLOWS_DOCS=1 bash
   scripts/verify-fast.sh` OK — nextest 3120 passed / 23 skipped, app
   self-test 510, Qt 675, unified 4305 passed · 24 skipped · 0 failed;
