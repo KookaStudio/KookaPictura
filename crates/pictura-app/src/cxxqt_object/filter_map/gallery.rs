@@ -1,5 +1,6 @@
 //! The Blur Gallery kinds' variable slot lists: a pin count, a fixed-stride
-//! record per pin, then the shared 13-slot effects tail (bokeh
+//! record per pin (Path Blur's records carry their own point count, then its
+//! six motion slots), then the shared 13-slot effects tail (bokeh
 //! enabled/light/color/range, noise
 //! enabled/amount/size/roughness/color/highlights/kind/seed). The arity
 //! table's canonical list is one pin plus the tail; its all-defaults form
@@ -7,7 +8,10 @@
 
 use super::choices::BLUR_NOISE_KINDS;
 use super::{f, flag, pick, u32v, u64v, u8v};
-use pictura_filters::{BlurNoise, BlurPin, BokehParams, Filter, IrisPin, TiltPin, MAX_FIELD_PINS};
+use pictura_filters::{
+    BlurNoise, BlurPath, BlurPin, BokehParams, Filter, IrisPin, PathMotion, TiltPin,
+    MAX_FIELD_PINS, MAX_PATH_POINTS,
+};
 
 pub(in crate::cxxqt_object) const GALLERY_TAIL: usize = 13;
 /// Field Blur's pin record: `(x, y, blur)`.
@@ -21,10 +25,23 @@ pub(in crate::cxxqt_object) const IRIS_BLUR_SLOTS: usize = 1 + IRIS_PIN_SLOTS + 
 /// above, fade below, distortion, symmetric, blur)`.
 const TILT_PIN_SLOTS: usize = 10;
 pub(in crate::cxxqt_object) const TILT_SHIFT_SLOTS: usize = 1 + TILT_PIN_SLOTS + GALLERY_TAIL;
-/// The combined kind's canonical list: one record of each effect plus the
-/// tail.
-pub(in crate::cxxqt_object) const BLUR_GALLERY_SLOTS: usize =
-    3 + FIELD_PIN_SLOTS + IRIS_PIN_SLOTS + TILT_PIN_SLOTS + GALLERY_TAIL;
+/// Path Blur's canonical path record: `(point count, (x, y)×2, start speed,
+/// end speed)`.
+const PATH_RECORD_SLOTS: usize = 1 + 2 * 2 + 2;
+/// Path Blur's motion section: `(speed, taper, centered, rear sync, strobe
+/// strength, strobe flashes)`.
+const PATH_MOTION_SLOTS: usize = 6;
+pub(in crate::cxxqt_object) const PATH_BLUR_SLOTS: usize =
+    1 + PATH_RECORD_SLOTS + PATH_MOTION_SLOTS + GALLERY_TAIL;
+/// The combined kind's canonical list: one record of each effect, the motion
+/// section, and the tail.
+pub(in crate::cxxqt_object) const BLUR_GALLERY_SLOTS: usize = 4
+    + FIELD_PIN_SLOTS
+    + IRIS_PIN_SLOTS
+    + TILT_PIN_SLOTS
+    + PATH_RECORD_SLOTS
+    + PATH_MOTION_SLOTS
+    + GALLERY_TAIL;
 
 const FIELD_DEFAULT_PIN: BlurPin = BlurPin {
     x: 0.5,
@@ -85,12 +102,99 @@ pub(super) fn tilt_shift(params: &[f64]) -> Option<Filter> {
     Some(Filter::TiltShift { pins, bokeh, noise })
 }
 
+/// The list-level default path: the workspace's opening stroke with the
+/// owner's 100 % screenshot's ~33 px blur shapes. The dialog sizes its own
+/// opening speeds to the document instead.
+fn default_path() -> BlurPath {
+    BlurPath {
+        points: vec![(0.5, 0.5), (0.58, 0.5)],
+        start_speed: 33.0,
+        end_speed: 33.0,
+    }
+}
+
+/// The `path-blur` kind. An empty list and the canonical list with count 0
+/// map to one default path.
+pub(super) fn path_blur(params: &[f64]) -> Option<Filter> {
+    if params.is_empty() {
+        return Some(Filter::PathBlur {
+            paths: vec![default_path()],
+            motion: PathMotion::default(),
+            noise: BlurNoise::default(),
+        });
+    }
+    let canonical = params.len() == PATH_BLUR_SLOTS && params[0] == 0.0;
+    let (paths, at) = if canonical {
+        (vec![default_path()], 1 + PATH_RECORD_SLOTS)
+    } else {
+        let mut at = 0;
+        (path_section(params, &mut at)?, at)
+    };
+    if params.len() != at + PATH_MOTION_SLOTS + GALLERY_TAIL {
+        return None;
+    }
+    let (_, noise) = effects(params, at + PATH_MOTION_SLOTS);
+    Some(Filter::PathBlur {
+        paths,
+        motion: read_motion(params, at),
+        noise,
+    })
+}
+
+/// A path count and its records starting at `*at`, advancing past them.
+fn path_section(params: &[f64], at: &mut usize) -> Option<Vec<BlurPath>> {
+    let count = whole(*params.get(*at)?, MAX_FIELD_PINS)?;
+    *at += 1;
+    let mut paths = Vec::with_capacity(count);
+    for _ in 0..count {
+        let points = whole(*params.get(*at)?, MAX_PATH_POINTS)?;
+        if points < 2 {
+            return None;
+        }
+        let record = params.get(*at + 1..*at + 1 + 2 * points + 2)?;
+        paths.push(BlurPath {
+            points: record[..2 * points]
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|&[x, y]| (x, y))
+                .collect(),
+            start_speed: record[2 * points],
+            end_speed: record[2 * points + 1],
+        });
+        *at += 1 + 2 * points + 2;
+    }
+    Some(paths)
+}
+
+/// A non-negative integral slot up to `max`.
+fn whole(value: f64, max: usize) -> Option<usize> {
+    (value >= 0.0 && value.fract() == 0.0 && value <= max as f64).then_some(value as usize)
+}
+
+fn read_motion(params: &[f64], at: usize) -> PathMotion {
+    let d = PathMotion::default();
+    PathMotion {
+        speed: f(params, at, d.speed),
+        taper: f(params, at + 1, d.taper),
+        centered: flag(params, at + 2, d.centered),
+        rear_sync: flag(params, at + 3, d.rear_sync),
+        strobe_strength: f(params, at + 4, d.strobe_strength),
+        strobe_flashes: u32v(params, at + 5, d.strobe_flashes),
+    }
+}
+
 /// The combined `blur-gallery` kind: each effect's count and records in
-/// turn (Field, Iris, Tilt-Shift; a count of 0 turns it off), then the tail.
-/// An empty list and the canonical all-defaults list (every count 0) map to
-/// one default Field pin.
+/// turn (Field, Iris, Tilt-Shift, Path; a count of 0 turns it off), the
+/// motion section, then the tail. An empty list and the canonical
+/// all-defaults list (every count 0) map to one default Field pin.
 pub(super) fn blur_gallery(params: &[f64]) -> Option<Filter> {
-    let canonical_counts = [0, 1 + FIELD_PIN_SLOTS, 2 + FIELD_PIN_SLOTS + IRIS_PIN_SLOTS];
+    let canonical_counts = [
+        0,
+        1 + FIELD_PIN_SLOTS,
+        2 + FIELD_PIN_SLOTS + IRIS_PIN_SLOTS,
+        3 + FIELD_PIN_SLOTS + IRIS_PIN_SLOTS + TILT_PIN_SLOTS,
+    ];
     let defaults = params.is_empty()
         || (params.len() == BLUR_GALLERY_SLOTS
             && canonical_counts.iter().all(|&i| params[i] == 0.0));
@@ -100,6 +204,8 @@ pub(super) fn blur_gallery(params: &[f64]) -> Option<Filter> {
             field: vec![FIELD_DEFAULT_PIN],
             iris: Vec::new(),
             tilt: Vec::new(),
+            path: Vec::new(),
+            motion: PathMotion::default(),
             bokeh,
             noise,
         });
@@ -108,14 +214,18 @@ pub(super) fn blur_gallery(params: &[f64]) -> Option<Filter> {
     let field = section(params, &mut at, FIELD_PIN_SLOTS, read_field)?;
     let iris = section(params, &mut at, IRIS_PIN_SLOTS, read_iris)?;
     let tilt = section(params, &mut at, TILT_PIN_SLOTS, read_tilt)?;
-    if params.len() != at + GALLERY_TAIL {
+    let path = path_section(params, &mut at)?;
+    if params.len() != at + PATH_MOTION_SLOTS + GALLERY_TAIL {
         return None;
     }
-    let (bokeh, noise) = effects(params, at);
+    let motion = read_motion(params, at);
+    let (bokeh, noise) = effects(params, at + PATH_MOTION_SLOTS);
     Some(Filter::BlurGallery {
         field,
         iris,
         tilt,
+        path,
+        motion,
         bokeh,
         noise,
     })
@@ -190,7 +300,7 @@ fn effects(params: &[f64], tail: usize) -> (BokehParams, BlurNoise) {
         },
     };
     let noise = BlurNoise {
-        enabled: flag(params, tail + 5, false),
+        enabled: flag(params, tail + 5, true),
         amount: f(params, tail + 6, 0.0),
         size: f(params, tail + 7, 50.0),
         roughness: f(params, tail + 8, 50.0),

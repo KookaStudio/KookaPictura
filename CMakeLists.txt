@@ -129,9 +129,11 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/lighting_effects_dialog.h
     crates/pictura-app/cpp/blur_gallery_canvas.cpp
     crates/pictura-app/cpp/blur_gallery_canvas.h
+    crates/pictura-app/cpp/blur_gallery_canvas_path.cpp
     crates/pictura-app/cpp/blur_gallery_dialog.cpp
     crates/pictura-app/cpp/blur_gallery_dialog.h
     crates/pictura-app/cpp/blur_gallery_light_range.h
+    crates/pictura-app/cpp/blur_gallery_path.cpp
     crates/pictura-app/cpp/lighting_rig.cpp
     crates/pictura-app/cpp/lighting_rig.h
     crates/pictura-app/cpp/liquify_canvas.cpp

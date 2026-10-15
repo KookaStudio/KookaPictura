@@ -82,14 +82,17 @@ void BlurGalleryCanvas::setImage(const QImage& image)
 
 void BlurGalleryCanvas::setMode(BlurGalleryMode mode)
 {
+    finishPath();
     mode_ = mode;
     update();
 }
 
 void BlurGalleryCanvas::setPins(QList<BlurGalleryPin>* pins, int selected)
 {
+    finishPath();
     pins_ = pins;
     selected_ = pins_ && selected >= 0 && selected < pins_->size() ? selected : 0;
+    selectedPoint_ = -1;
     drag_ = Drag::None;
     unsetCursor();
     update();
@@ -106,7 +109,18 @@ void BlurGalleryCanvas::setSelected(int index)
     if (!pins_ || index < 0 || index >= pins_->size()) {
         return;
     }
+    if (index != selected_) {
+        selectedPoint_ = -1;
+    }
     selected_ = index;
+    update();
+}
+
+void BlurGalleryCanvas::setSelectedPoint(int point)
+{
+    const bool valid = pins_ && selected_ >= 0 && selected_ < pins_->size() && point >= 0
+                       && point < pins_->at(selected_).points.size();
+    selectedPoint_ = valid ? point : -1;
     update();
 }
 
@@ -256,6 +270,12 @@ void BlurGalleryCanvas::dragTo(const QPointF& widget)
     if (!pins_ || selected_ < 0 || selected_ >= pins_->size()) {
         return;
     }
+    if (drag_ == Drag::Point || drag_ == Drag::Path) {
+        dragPath(widget);
+        update();
+        emit pinsEdited();
+        return;
+    }
     BlurGalleryPin& pin = (*pins_)[selected_];
     if (drag_ == Drag::Move) {
         pin.pos = toFraction(widget);
@@ -290,6 +310,10 @@ void BlurGalleryCanvas::paintEvent(QPaintEvent*)
         return;
     }
     painter.setRenderHint(QPainter::Antialiasing, true);
+    if (mode_ == BlurGalleryMode::Path) {
+        paintPaths(painter);
+        return;
+    }
     if (mode_ == BlurGalleryMode::Iris) {
         paintIris(painter, pins_->at(selected_));
     } else if (mode_ == BlurGalleryMode::TiltShift) {
@@ -554,6 +578,10 @@ void BlurGalleryCanvas::mousePressEvent(QMouseEvent* event)
         return;
     }
     const QPointF pos = event->position();
+    if (mode_ == BlurGalleryMode::Path) {
+        pressPath(pos, event->modifiers());
+        return;
+    }
     bool onRing = false;
     const int index = hitPin(pos, &onRing);
     if (index < 0 && (grabIrisHandle(pos) || grabTiltHandle(pos))) {
@@ -592,6 +620,16 @@ void BlurGalleryCanvas::mousePressEvent(QMouseEvent* event)
 
 void BlurGalleryCanvas::mouseMoveEvent(QMouseEvent* event)
 {
+    if (drag_ == Drag::None && mode_ == BlurGalleryMode::Path && pins_ && uiVisible_) {
+        // The path being placed follows the pointer; hover shows the pin
+        // that places a stop.
+        if (building_) {
+            moveFloatingStop(event->position());
+        }
+        updatePathCursor(event->position());
+        QWidget::mouseMoveEvent(event);
+        return;
+    }
     if (drag_ == Drag::None) {
         // Hover: a Tilt-Shift line or dot shows the drag it would start; a
         // pin wins over a line it sits on, as a press does.
@@ -620,8 +658,27 @@ void BlurGalleryCanvas::mouseReleaseEvent(QMouseEvent* event)
     emit dragFinished();
 }
 
+void BlurGalleryCanvas::mouseDoubleClickEvent(QMouseEvent* event)
+{
+    // The double-click's first press already pinned this stop. A stray
+    // double-click never starts a path: Qt delivers its second press as this
+    // event, so forwarding it would.
+    if (mode_ == BlurGalleryMode::Path) {
+        finishPath();
+        return;
+    }
+    QWidget::mouseDoubleClickEvent(event);
+}
+
 void BlurGalleryCanvas::keyPressEvent(QKeyEvent* event)
 {
+    const int key = event->key();
+    if (building_
+        && (key == Qt::Key_Return || key == Qt::Key_Enter || key == Qt::Key_Escape)) {
+        finishPath();
+        return;
+    }
+    finishPath();
     if (event->key() == Qt::Key_Delete || event->key() == Qt::Key_Backspace) {
         emit deleteRequested();
         return;

@@ -416,6 +416,15 @@ const MAPPING: &[Mapping] = &[
                determinism unit tests",
     },
     Mapping {
+        filter: "PathBlur",
+        im: None,
+        tolerance: 0,
+        note: "Motion blur along a field blended from drawn Catmull-Rom paths, gathered along \
+               its streamlines: ImageMagick's -motion-blur takes one fixed angle and length. \
+               Guarded by the row/stripe, trailing, strobe, taper, rear sync, curved-field, \
+               nearest-path, no-op, validation and determinism unit tests",
+    },
+    Mapping {
         filter: "BlurGallery",
         im: None,
         tolerance: 0,
@@ -426,7 +435,7 @@ const MAPPING: &[Mapping] = &[
 ];
 
 /// Filters the table marks as having no faithful ImageMagick equivalent.
-const NO_EQUIVALENT: [&str; 37] = [
+const NO_EQUIVALENT: [&str; 38] = [
     "MotionBlur",
     "RadialBlur",
     "Average",
@@ -463,14 +472,15 @@ const NO_EQUIVALENT: [&str; 37] = [
     "FieldBlur",
     "IrisBlur",
     "TiltShift",
+    "PathBlur",
     "BlurGallery",
 ];
 
 #[test]
 fn mapping_marks_no_equivalent_operators() {
-    assert_eq!(MAPPING.len(), 53, "one mapping row per Filter variant");
+    assert_eq!(MAPPING.len(), 54, "one mapping row per Filter variant");
     // Exactly one row per `Filter` variant, no duplicates, full enum coverage.
-    let all: [&str; 53] = [
+    let all: [&str; 54] = [
         "GaussianBlur",
         "BoxBlur",
         "ShapeBlur",
@@ -523,6 +533,7 @@ fn mapping_marks_no_equivalent_operators() {
         "FieldBlur",
         "IrisBlur",
         "TiltShift",
+        "PathBlur",
         "BlurGallery",
     ];
     let mut mapped: Vec<&str> = MAPPING.iter().map(|m| m.filter).collect();

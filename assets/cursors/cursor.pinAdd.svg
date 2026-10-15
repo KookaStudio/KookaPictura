@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <!-- A pushpin leaning right, its needle tip on the (4, 20) hotspot, with a
+       plus beside it: a click places a stop point. -->
+  <g stroke="#ffffff" stroke-width="3.5">
+    <path d="M4 20 9.5 14.5"/>
+    <path d="M7.5 11.5 12.5 16.5M10 9.5 14.5 14 17 11.5 12.5 7Z"/>
+    <path d="M12.5 7 14.5 3.5 20.5 9.5 17 11.5"/>
+    <path d="M18 16v6M15 19h6"/>
+  </g>
+  <g stroke="#202020" stroke-width="1.5">
+    <path d="M4 20 9.5 14.5"/>
+    <path d="M7.5 11.5 12.5 16.5M10 9.5 14.5 14 17 11.5 12.5 7Z"/>
+    <path d="M12.5 7 14.5 3.5 20.5 9.5 17 11.5"/>
+    <path d="M18 16v6M15 19h6"/>
+  </g>
+</svg>

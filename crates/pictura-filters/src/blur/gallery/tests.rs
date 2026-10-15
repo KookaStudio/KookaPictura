@@ -1,6 +1,7 @@
 use super::*;
 use crate::blur::field::field_blur;
 use crate::blur::iris::iris_blur;
+use crate::blur::path::path_blur;
 use crate::blur::tilt::tilt_shift;
 
 fn noise_picture(w: u32, h: u32) -> PixelBuffer {
@@ -78,7 +79,17 @@ fn one_effect_alone_matches_its_own_kernel() {
     ];
     for (f, i, t) in cases {
         let mut combined = base.clone();
-        blur_gallery(&mut combined, f, i, t, &bokeh, &noise).unwrap();
+        blur_gallery(
+            &mut combined,
+            f,
+            i,
+            t,
+            &[],
+            &PathMotion::default(),
+            &bokeh,
+            &noise,
+        )
+        .unwrap();
         let mut alone = base.clone();
         if !f.is_empty() {
             field_blur(&mut alone, f, &bokeh, &noise).unwrap();
@@ -112,7 +123,17 @@ fn combined_effects_blur_where_either_one_does() {
     let mut iris = base.clone();
     iris_blur(&mut iris, &[iris_pin()], &bokeh, &noise).unwrap();
     let mut both = base.clone();
-    blur_gallery(&mut both, &[], &[iris_pin()], &[tilt_pin()], &bokeh, &noise).unwrap();
+    blur_gallery(
+        &mut both,
+        &[],
+        &[iris_pin()],
+        &[tilt_pin()],
+        &[],
+        &PathMotion::default(),
+        &bokeh,
+        &noise,
+    )
+    .unwrap();
     assert!(!changed(&band, 56, 16) && changed(&iris, 56, 16));
     assert!(!changed(&iris, 19, 32) && changed(&band, 19, 32));
     // Each sharp area blurs where the other effect blurs it...
@@ -131,7 +152,17 @@ fn combined_effects_blur_where_either_one_does() {
         y: 0.25,
         ..iris_pin()
     };
-    blur_gallery(&mut sharp, &[], &[near], &[tilt_pin()], &bokeh, &noise).unwrap();
+    blur_gallery(
+        &mut sharp,
+        &[],
+        &[near],
+        &[tilt_pin()],
+        &[],
+        &PathMotion::default(),
+        &bokeh,
+        &noise,
+    )
+    .unwrap();
     assert!(
         !changed(&sharp, 32, 16),
         "a pixel sharp in both effects changed"
@@ -143,14 +174,33 @@ fn no_pins_is_a_no_op_and_bad_pins_are_refused() {
     let (bokeh, noise) = effects();
     let base = noise_picture(16, 16);
     let mut buf = base.clone();
-    blur_gallery(&mut buf, &[], &[], &[], &bokeh, &noise).unwrap();
+    blur_gallery(
+        &mut buf,
+        &[],
+        &[],
+        &[],
+        &[],
+        &PathMotion::default(),
+        &bokeh,
+        &noise,
+    )
+    .unwrap();
     assert_eq!(buf.data, base.data);
     let bad = TiltPin {
         distortion: 200.0,
         ..TiltPin::default()
     };
     assert!(matches!(
-        blur_gallery(&mut buf, &[], &[iris_pin()], &[bad], &bokeh, &noise),
+        blur_gallery(
+            &mut buf,
+            &[],
+            &[iris_pin()],
+            &[bad],
+            &[],
+            &PathMotion::default(),
+            &bokeh,
+            &noise
+        ),
         Err(FilterError::InvalidParams(_))
     ));
     assert_eq!(buf.data, base.data);
@@ -167,7 +217,84 @@ fn equal_inputs_are_bit_identical() {
     let mut a = noise_picture(40, 30);
     let mut b = a.clone();
     for buf in [&mut a, &mut b] {
-        blur_gallery(buf, &field, &[iris_pin()], &[tilt_pin()], &bokeh, &noise).unwrap();
+        blur_gallery(
+            buf,
+            &field,
+            &[iris_pin()],
+            &[tilt_pin()],
+            &[],
+            &PathMotion::default(),
+            &bokeh,
+            &noise,
+        )
+        .unwrap();
     }
     assert_eq!(a.data, b.data);
+}
+
+fn path() -> BlurPath {
+    BlurPath {
+        points: vec![(0.2, 0.6), (0.5, 0.4), (0.8, 0.6)],
+        start_speed: 6.0,
+        end_speed: 14.0,
+    }
+}
+
+fn path_motion() -> PathMotion {
+    PathMotion {
+        speed: 100.0,
+        taper: 20.0,
+        ..PathMotion::default()
+    }
+}
+
+#[test]
+fn paths_alone_match_their_own_kernel() {
+    let (bokeh, noise) = effects();
+    let mut combined = noise_picture(48, 40);
+    let mut alone = combined.clone();
+    let paths = [path()];
+    blur_gallery(
+        &mut combined,
+        &[],
+        &[],
+        &[],
+        &paths,
+        &path_motion(),
+        &bokeh,
+        &noise,
+    )
+    .unwrap();
+    path_blur(&mut alone, &paths, &path_motion(), &noise).unwrap();
+    assert_eq!(combined.data, alone.data);
+}
+
+#[test]
+fn paths_add_to_a_radius_effect() {
+    let (bokeh, noise) = effects();
+    let base = noise_picture(48, 40);
+    let field = [BlurPin {
+        x: 0.2,
+        y: 0.3,
+        blur: 6.0,
+    }];
+    let paths = [path()];
+    let mut both = base.clone();
+    blur_gallery(
+        &mut both,
+        &field,
+        &[],
+        &[],
+        &paths,
+        &path_motion(),
+        &bokeh,
+        &noise,
+    )
+    .unwrap();
+    let mut field_only = base.clone();
+    field_blur(&mut field_only, &field, &bokeh, &noise).unwrap();
+    let mut path_only = base.clone();
+    path_blur(&mut path_only, &paths, &path_motion(), &noise).unwrap();
+    assert_ne!(both.data, field_only.data);
+    assert_ne!(both.data, path_only.data);
 }

@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
 use crate::{
-    BlurNoise, BlurPin, BokehParams, BrushType, ContourEdge, DepthMap, DiffuseMode, DisplaceFit,
-    DisplaceMap, ExtrudeType, FrameOptions, GlassTexture, GrainType, HalftoneType, HdrToningParams,
-    IrisPin, IrisShape, LensType, LightDirection, Lighting, LiquifyMesh, MezzotintType,
-    NoiseDistribution, PolarKind, Quality, RadialMethod, RippleSize, SharpenRemove, ShearFill,
-    SmartBlurMode, SpherizeMode, StrokeDirection, TextureOptions, TileFill, TiltPin, TonalFade,
-    WaveType, WindMethod, ZigZagStyle,
+    BlurNoise, BlurPath, BlurPin, BokehParams, BrushType, ContourEdge, DepthMap, DiffuseMode,
+    DisplaceFit, DisplaceMap, ExtrudeType, FrameOptions, GlassTexture, GrainType, HalftoneType,
+    HdrToningParams, IrisPin, IrisShape, LensType, LightDirection, Lighting, LiquifyMesh,
+    MezzotintType, NoiseDistribution, PathMotion, PolarKind, Quality, RadialMethod, RippleSize,
+    SharpenRemove, ShearFill, SmartBlurMode, SpherizeMode, StrokeDirection, TextureOptions,
+    TileFill, TiltPin, TonalFade, WaveType, WindMethod, ZigZagStyle,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -85,13 +85,23 @@ pub enum Filter {
         bokeh: BokehParams,
         noise: BlurNoise,
     },
+    /// Blur Gallery Path Blur (post-CS6, non-parity): motion blur along the
+    /// field the paths' tangents and end-point speeds (buffer pixels) blend
+    /// into, with the Noise pass.
+    PathBlur {
+        paths: Vec<BlurPath>,
+        motion: PathMotion,
+        noise: BlurNoise,
+    },
     /// The Blur Gallery with several effects on: each list's radius field as
-    /// its own kernel builds it, combined per pixel by the largest; an empty
-    /// list turns that effect off.
+    /// its own kernel builds it, combined per pixel by the largest, then the
+    /// path gather over the result; an empty list turns that effect off.
     BlurGallery {
         field: Vec<BlurPin>,
         iris: Vec<IrisPin>,
         tilt: Vec<TiltPin>,
+        path: Vec<BlurPath>,
+        motion: PathMotion,
         bokeh: BokehParams,
         noise: BlurNoise,
     },
@@ -599,6 +609,7 @@ pub fn filters_alpha(filter: &Filter) -> bool {
             | Filter::FieldBlur { .. }
             | Filter::IrisBlur { .. }
             | Filter::TiltShift { .. }
+            | Filter::PathBlur { .. }
             | Filter::BlurGallery { .. }
             | Filter::Sharpen
             | Filter::SharpenMore

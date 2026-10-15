@@ -207,6 +207,7 @@
     <file>icons/window.panels.swatches.svg</file>
     <file>icons/window.panels.tools.svg</file>
     <file>cursors/cursor.moveSelection.svg</file>
+    <file>cursors/cursor.pinAdd.svg</file>
     <file>cursors/cursor.rotate.svg</file>
     <file>cursors/cursor.workspace.svg</file>
     <file>cursors/tool.addanchorpoint.svg</file>

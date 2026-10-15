@@ -59,7 +59,7 @@ QImage pattern(int w = 96, int h = 64)
 
 QList<double> defaultTail()
 {
-    return {1.0, 14.0, 40.0, 40.0, 118.0, 0.0, 0.0, 50.0, 50.0, 0.0, 0.0, 0.0, 1.0};
+    return {1.0, 14.0, 40.0, 40.0, 118.0, 1.0, 0.0, 50.0, 50.0, 0.0, 0.0, 0.0, 1.0};
 }
 
 // One centred band: angle 0, focus 0.1 and fade 0.15 of the height each way,
@@ -171,12 +171,12 @@ void TiltShiftTest::workspaceOpensOnTheDefaultBand()
     QCOMPARE(distortion->maximum(), 100.0);
     auto* symmetric = dialog.findChild<QCheckBox*>(QStringLiteral("tiltSymmetric"));
     QVERIFY(symmetric != nullptr && !symmetric->isChecked());
-    for (const char* name : {"fieldBlurEnabled", "irisBlurEnabled"}) {
+    for (const char* name : {"fieldBlurEnabled", "irisBlurEnabled", "pathBlurEnabled"}) {
         auto* other = dialog.findChild<QCheckBox*>(QLatin1String(name));
         QVERIFY2(other != nullptr, name);
         QVERIFY2(!other->isChecked() && other->isEnabled(), name);
     }
-    for (const char* name : {"pathBlurEnabled", "spinBlurEnabled"}) {
+    for (const char* name : {"spinBlurEnabled"}) {
         auto* other = dialog.findChild<QCheckBox*>(QLatin1String(name));
         QVERIFY2(other != nullptr, name);
         QVERIFY2(!other->isChecked() && !other->isEnabled(), name);
