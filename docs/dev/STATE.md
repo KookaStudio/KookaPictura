@@ -12,6 +12,26 @@ Snapshot for resuming after a context break. Update after each milestone.
   contains reproduced Adobe Help prose or the old wording.
 - Toolchain: Rust 1.98 (`rust-toolchain.toml`), system Qt **6.11.1**, cxx-qt
   **0.10.0**, wgpu **30.0.1**, lcms2 **6.2.0** (system Little CMS 2.19).
+- **SVG export parity** (#477, branch `feat/477-svg-export-parity-followups`,
+  OpenSpec change `svg-export`, now archived into `interop/svg-export`): the
+  SVG export from #459 walks the layer tree instead of top-level layers only.
+  `pictura_codec::svg` serializes a tree of `SvgNode { content, opacity, blend,
+  clip }` with `SvgContent::Group { children, isolated }` (document-unique clip
+  ids; an isolated group with no opacity/blend carries `isolation:isolate`).
+  `pictura_render::svg_nodes` / `encode_document_svg` build it, taking a
+  `raster` closure that composites a scratch document (the app bridge passes
+  `composite_active`). Rules (design D10): a stack is a base plus its clipped
+  layers; an adjustment layer, a non-CSS blend, a non-plain clipping stack, or a
+  faded/masked pass-through group flattens its container's layers up to it into
+  one raster (a pass-through group defers to its parent); a plain clipping stack
+  is one raster; a raster fallback no longer bakes in the opacity its `<g>`
+  re-applies (v1 applied it twice); a shape scales its fill by fill opacity and
+  rasterizes with effects or a pixel mask. Text stays a raster (decision).
+  Oracle: `pictura-render/tests/svg_oracle.rs` renders a vector document with
+  ImageMagick's `RSVG:` coder (librsvg) and compares with the CPU composite on
+  white (2% / mean 1.5 edge tolerance; self-skips without the coder). Docs:
+  `export-formats.md` *SVG (CC)*. Not done (#652): gradient/pattern
+  `<defs>`, `vstk` strokes, per-layer SVG files.
 - **Windows C2026 stylesheet fix** (#474, branch `fix/474-windows-c2026-theme-qss`,
   OpenSpec change `fix-windows-c2026-theme-qss`, ADDED requirement in
   `meta/windows-release-build`): `theme.cpp` built its stylesheet from one
@@ -141,8 +161,8 @@ Snapshot for resuming after a context break. Update after each milestone.
   each into a chosen folder. A layer target is rendered alone and cropped to its
   bounds (`web_export.rs::layer_flattened`). PNG/JPG go through the Qt edge,
   PNG-8/GIF through the `pictura_codec::web` encoders. It is a deliberate
-  **CC-only scope extension** (CS6 has no Export As dialog); SVG is deferred to
-  #459. Ceilings (`ponytail:`): the bicubic Resample family collapses to Qt's
+  **CC-only scope extension** (CS6 has no Export As dialog); SVG shipped in
+  #459 and #477 (entry above). Ceilings (`ponytail:`): the bicubic Resample family collapses to Qt's
   smooth filter (only Nearest Neighbor differs), Canvas Size anchors top-left,
   and a layer's effects are not expanded past its rect. Tests: Rust `#[test]`s
   for `layer_flattened`, Qt Test `tst_export_as` (8 cases); the self-test's
