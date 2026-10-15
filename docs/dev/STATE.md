@@ -933,12 +933,15 @@ Snapshot for resuming after a context break. Update after each milestone.
   falls back to Qt otherwise; `save`/`export_image` route `WEBP` through a shared
   `export::encode_raster` that rescales via the boundary's new `scale_rgba`
   helper (so the percent-scale contract matches the Qt formats) and writes
-  temp-file + rename. Export As still offers its CC-parity subset (PNG/JPG/PNG-8/
-  GIF/SVG); WebP is reachable by the Save As extension, like TIFF and BMP.
-  Oracle `webp_oracle` (magick decodes our lossless output exactly and we decode
-  its lossy output within tolerance) and Qt Test `tst_webp` (save + reopen round
-  trip, scaled export) cover it. Ceiling (`// ponytail:`): lossless export only —
-  no pure-Rust lossy WebP encoder exists, so there is no WebP quality control.
+  temp-file + rename. `File ▸ Export As…` gains a `WebP` format entry that
+  encodes each checked target in memory through a new `webp_encode` bridge (so
+  the size estimate and the write share the engine encoder), with transparency
+  enabled and quality off (lossless). Oracle `webp_oracle` (magick decodes our
+  lossless output exactly and we decode its lossy output within tolerance), Qt
+  Test `tst_webp` (save + reopen round trip, scaled export), and `tst_export_as`
+  (WebP combo entry, controls, in-memory encode) cover it. Ceiling (`//
+  ponytail:`): lossless export only — no pure-Rust lossy WebP encoder exists, so
+  there is no WebP quality control.
 - **Pictura Raw core** (change `pictura-raw-core`, new capability `pictura-raw`):
   the Camera Raw Filter's 11 PV2012 Basic controls now round-trip and render,
   staying Photoshop's standard smart filter (`filterID 2683`, `"Camera Raw
