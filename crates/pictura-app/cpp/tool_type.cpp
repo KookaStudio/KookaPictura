@@ -19,6 +19,7 @@
 // one style (its first run's).
 
 #include "tool_handler.h"
+#include "tool_sessions.h"
 
 #include "image_view.h"
 #include "text_input.h"
@@ -152,7 +153,7 @@ private:
     std::function<void(const QKeyEvent&)> key_;
 };
 
-class TypeToolHandler : public ToolHandler {
+class TypeToolHandler : public ToolHandler, public TextSession {
 public:
     TypeToolHandler(ToolId id, std::shared_ptr<TypeGroup> type)
         : toolVertical_(id == ToolId::VerticalType || id == ToolId::VerticalTypeMask)

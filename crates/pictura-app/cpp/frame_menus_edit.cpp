@@ -318,7 +318,8 @@ bool PicturaMainWindow::dispatchCommandKey(QKeyEvent* event)
 
 bool PicturaMainWindow::handleDeleteKey()
 {
-    if (tools_ && tools_->textActive()) {
+    TextSession* session = tools_ ? tools_->textSession() : nullptr;
+    if (session && session->textActive()) {
         return false;
     }
     if (isTextInput(QApplication::focusWidget())) {
@@ -326,7 +327,7 @@ bool PicturaMainWindow::handleDeleteKey()
     }
     // An active lasso trace, a selected slice, or a selected path component
     // owns the key.
-    if (tools_ && tools_->removeLassoPoint()) {
+    if (tools_ && tools_->handleDeletePoint()) {
         return true;
     }
     PictureView* view = activeView();

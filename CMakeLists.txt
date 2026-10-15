@@ -422,6 +422,7 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/tool_options.h
     crates/pictura-app/cpp/tool_services.h
     crates/pictura-app/cpp/tool_handler.h
+    crates/pictura-app/cpp/tool_sessions.h
     crates/pictura-app/cpp/tool_registry.h
     crates/pictura-app/cpp/text_input.h
     crates/pictura-app/cpp/selection_geometry.h

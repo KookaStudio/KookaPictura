@@ -167,7 +167,8 @@ void GlyphsPanel::chooseGlyph(QListWidgetItem* item)
         return;
     }
     // A glyph needs a live caret to land, as in Photoshop.
-    if (!controller_->textActive()) {
+    TextSession* session = controller_->textSession();
+    if (!session || !session->textActive()) {
         hint_->show();
         return;
     }
@@ -182,7 +183,7 @@ void GlyphsPanel::chooseGlyph(QListWidgetItem* item)
         o.family = family_->currentFont().family();
         type_->set(o);
     }
-    controller_->insertText(text);
+    session->insertText(text);
 }
 
 void GlyphsPanel::showEvent(QShowEvent* event)

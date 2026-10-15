@@ -3,7 +3,6 @@
 #include "tool_services.h"
 
 #include <QtCore/QPointF>
-#include <QtCore/QRect>
 #include <QtCore/QString>
 #include <QtCore/Qt>
 #include <QtGui/QCursor>
@@ -12,9 +11,13 @@
 
 namespace pictura {
 
-// One tool's pointer behavior. Returning true from `onPress` consumes the
-// event; the other hooks are fire-and-forget. The default no-ops let a handler
-// override only what it needs.
+// One tool's pointer behavior. `onPress` returns whether it consumes the event,
+// as do the keyboard gestures `onFinishPath`/`onEscape`/`onDeletePoint`; the
+// other hooks are fire-and-forget. The default no-ops let a handler override only
+// what it needs.
+//
+// Tool-specific session commands (crop box, perspective quad, type edit) do not
+// live here; a handler exposes those through the ports in `tool_sessions.h`.
 class ToolHandler {
 public:
     virtual ~ToolHandler() = default;
@@ -52,35 +55,18 @@ public:
     // A tool option changed (e.g. the crop aspect ratio); re-apply it.
     virtual void onOptionsChanged(ToolServices& ctx) {}
 
-    // Tool-specific commands the controller forwards by active tool.
-    virtual bool commitPolygonLasso() { return false; }
-    virtual bool cancelPolygonLasso() { return false; }
-    // Delete: drop the last point of a click-driven lasso outline.
-    virtual bool removeLassoPoint() { return false; }
-    // True while a click-driven outline is open, so presses inside a live
-    // selection extend it instead of starting a selection move.
-    virtual bool lassoInProgress() const { return false; }
-    virtual bool commitCrop() { return false; }
-    // True while an active (not preview, not init) crop box exists; the options
-    // bar shows Cancel/Apply/Reset only then.
-    virtual bool cropActive() const { return false; }
-    // The Crop straighten line tool: arm/disarm the draw-a-horizon gesture.
-    virtual void setStraightenMode(bool on) { (void)on; }
-    // The options bar's W/H fields: resize the crop box to `width`×`height`
-    // (image px), honoring an active ratio. False when there is no crop box.
-    virtual bool resizeCrop(double width, double height)
-    {
-        (void)width;
-        (void)height;
-        return false;
-    }
-    virtual double cropWidth() const { return 0.0; }
-    virtual double cropHeight() const { return 0.0; }
-    // Reset the active crop box to the whole canvas and clear the angle.
-    virtual bool resetCropBox() { return false; }
-    // The crop box centre (image space); the straighten pivot. Empty without a
-    // box.
-    virtual QPointF cropCenter() const { return QPointF(); }
+    // The frame dispatches the generic keyboard gestures to whatever tool is
+    // active; each returns whether the tool consumed the key. They are named for
+    // the gesture, not for one family: `onEscape` cancels the active gesture,
+    // `onDeletePoint` removes the selected point, `onFinishPath` closes the path.
+    virtual bool onFinishPath() { return false; }
+    virtual bool onEscape() { return false; }
+    virtual bool onDeletePoint() { return false; }
+    // True while a click-driven gesture is open (a live polygonal/magnetic lasso
+    // outline), so presses inside a live selection extend it instead of starting
+    // a selection move.
+    virtual bool gestureInProgress() const { return false; }
+
     // Arrow-key nudge for the active tool, in image pixels (`dx`/`dy` already
     // scaled by the caller). True when the tool consumed the key.
     virtual bool nudge(int dx, int dy)
@@ -114,6 +100,7 @@ public:
         (void)mods;
         return -1;
     }
+
     // The modal tool session's transient undo/redo. While a tool holds session
     // steps the global Edit Undo/Redo act on the session before the document
     // history; the default no-session returns false.
@@ -121,14 +108,7 @@ public:
     virtual bool toolRedo() { return false; }
     virtual bool canToolUndo() const { return false; }
     virtual bool canToolRedo() const { return false; }
-    // The Type tools' Commit (Ctrl+Enter) and Cancel (Esc), and whether text is
-    // being typed.
-    virtual bool commitText() { return false; }
-    virtual bool cancelText() { return false; }
-    virtual bool textActive() const { return false; }
-    // Insert `text` at the open type edit's caret (the Glyphs panel); false
-    // when no edit is open.
-    virtual bool insertText(const QString& text) { return false; }
+
     // The options bar's Clear: drop the tool's color samplers, notes, or ruler.
     virtual bool clearAnnotations() { return false; }
 
@@ -142,19 +122,6 @@ public:
     virtual Qt::KeyboardModifiers dragMods() const { return Qt::NoModifier; }
     // A marquee drag's pivot-mirror flag after a second Alt edge (tests).
     virtual bool marqueeMirror() const { return false; }
-    // The Crop handler's staged rectangle; the controller exposes it.
-    virtual bool hasPendingCrop() const { return false; }
-    virtual QRect pendingCropRect() const { return QRect(); }
-    // Perspective Crop: the forced output size in pixels (0 = auto from the
-    // quad) and whether the quad is fully staged (for the Cancel/Apply buttons).
-    virtual void setPerspectiveOutput(int width, int height)
-    {
-        (void)width;
-        (void)height;
-    }
-    virtual bool perspectiveQuadComplete() const { return false; }
-    // Perspective Crop: show the inch grid overlay.
-    virtual void setPerspectiveShowGrid(bool on) { (void)on; }
 
 protected:
     // Register a family option group for `optionsFor<T>`; call it from the

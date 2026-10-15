@@ -1,4 +1,5 @@
 #include "tool_handler.h"
+#include "tool_sessions.h"
 
 #include "crop_grip.h"
 #include "icons.h"
@@ -32,7 +33,9 @@ namespace {
 // whole quad moves it; dragging outside the completed quad rotates it about its
 // centre. Ported from photorust's CanvasView, reshaped to CS6's four-click
 // staging.
-class PerspectiveCropToolHandler : public ToolHandler {
+class PerspectiveCropToolHandler : public ToolHandler,
+                                   public CropCommitSession,
+                                   public PerspectiveCropSession {
 public:
     explicit PerspectiveCropToolHandler(std::shared_ptr<CropOptions> crop)
         : crop_(std::move(crop))
@@ -152,7 +155,6 @@ public:
 
     bool commitCrop() override { return ctx_ && commit(*ctx_); }
 
-    bool hasPendingCrop() const override { return quad_.size() == 4; }
     bool perspectiveQuadComplete() const override { return quad_.size() == 4; }
 
     void setPerspectiveOutput(int width, int height) override
@@ -170,7 +172,7 @@ public:
     }
 
     // Escape discards the staged quad.
-    bool cancelPolygonLasso() override
+    bool onEscape() override
     {
         if (quad_.isEmpty()) {
             return false;

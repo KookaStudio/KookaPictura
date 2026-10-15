@@ -320,7 +320,9 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
     if (controller_) {
         const auto applyFields = [this, width, height]() {
             if (cropResolutionMode_) {
-                controller_->resizeCrop(width->value(), height->value());
+                if (CropBoxSession* box = cropBox()) {
+                    box->resizeCrop(width->value(), height->value());
+                }
             } else {
                 crop_->setRatio(
                     height->value() > 0.0 ? width->value() / height->value() : 0.0);
@@ -334,7 +336,9 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
             const double w = width->value();
             const double h = height->value();
             if (cropResolutionMode_) {
-                controller_->resizeCrop(h, w);
+                if (CropBoxSession* box = cropBox()) {
+                    box->resizeCrop(h, w);
+                }
             } else {
                 crop_->setRatio(w > 0.0 ? h / w : 0.0);
             }
@@ -358,7 +362,9 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
         connect(clear, &QToolButton::clicked, this, resetRatio);
         connect(reset, &QToolButton::clicked, this, [this, resetRatio, spirit]() {
             resetRatio();
-            controller_->resetCrop();
+            if (CropBoxSession* box = cropBox()) {
+                box->resetCropBox();
+            }
             if (spirit->isChecked()) {
                 spirit->setChecked(false);
             }
@@ -390,8 +396,8 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
                         setResolutionFields(true);
                         const QSignalBlocker bw(width);
                         const QSignalBlocker bh(height);
-                        width->setValue(controller_->cropWidth());
-                        height->setValue(controller_->cropHeight());
+                        width->setValue(cropBox() ? cropBox()->cropWidth() : 0.0);
+                        height->setValue(cropBox() ? cropBox()->cropHeight() : 0.0);
                         resolution->setValue(defaultPpi());
                         return;
                     }
@@ -432,13 +438,18 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
                 });
         connect(deletePixels, &QCheckBox::toggled, this,
                 [this](bool on) { crop_->setDeletePixels(on); });
-        connect(cancel, &QToolButton::clicked, this, [this]() { controller_->cancelCrop(); });
-        connect(commit, &QToolButton::clicked, this, [this]() { controller_->commitCrop(); });
+        connect(cancel, &QToolButton::clicked, this, [this]() { controller_->handleEscape(); });
+        connect(commit, &QToolButton::clicked, this, [this]() {
+            if (CropCommitSession* session = cropCommit()) {
+                session->commitCrop();
+            }
+        });
         // Cancel/Apply/Reset are visible only while a box is active (not in the
         // preview or the no-box state after Escape). Re-synced on every crop-state
         // change, not just the tool switch.
         const auto syncCommitControls = [this, reset, cancel, commit]() {
-            const bool on = controller_ && controller_->cropActive();
+            CropBoxSession* box = cropBox();
+            const bool on = box && box->cropActive();
             reset->setVisible(on);
             cancel->setVisible(on);
             commit->setVisible(on);
@@ -459,8 +470,8 @@ void OptionsBar::syncCropFields()
     const QSignalBlocker bw(cropWidthField_);
     const QSignalBlocker bh(cropHeightField_);
     if (cropResolutionMode_) {
-        cropWidthField_->setValue(controller_->cropWidth());
-        cropHeightField_->setValue(controller_->cropHeight());
+        cropWidthField_->setValue(cropBox() ? cropBox()->cropWidth() : 0.0);
+        cropHeightField_->setValue(cropBox() ? cropBox()->cropHeight() : 0.0);
     } else if (cropRatioW_ > 0.0 && cropRatioH_ > 0.0) {
         cropWidthField_->setValue(cropRatioW_);
         cropHeightField_->setValue(cropRatioH_);
@@ -563,8 +574,11 @@ QWidget* OptionsBar::buildPerspectiveCropPage(ToolId id)
 
     if (controller_) {
         const auto pushOutput = [this, width, height]() {
-            controller_->setPerspectiveOutput(width->isBlank() ? 0 : int(std::lround(width->value())),
-                                              height->isBlank() ? 0 : int(std::lround(height->value())));
+            if (PerspectiveCropSession* perspective = perspectiveCrop()) {
+                perspective->setPerspectiveOutput(
+                    width->isBlank() ? 0 : int(std::lround(width->value())),
+                    height->isBlank() ? 0 : int(std::lround(height->value())));
+            }
         };
         connect(width, &NumericField::valueChanged, this, [pushOutput](double) { pushOutput(); });
         connect(height, &NumericField::valueChanged, this, [pushOutput](double) { pushOutput(); });
@@ -590,10 +604,17 @@ QWidget* OptionsBar::buildPerspectiveCropPage(ToolId id)
             height->setBlank(true);
             pushOutput();
         });
-        connect(showGrid, &QToolButton::toggled, this,
-                [this](bool on) { controller_->setPerspectiveShowGrid(on); });
-        connect(cancel, &QToolButton::clicked, this, [this]() { controller_->cancelCrop(); });
-        connect(apply, &QToolButton::clicked, this, [this]() { controller_->commitCrop(); });
+        connect(showGrid, &QToolButton::toggled, this, [this](bool on) {
+            if (PerspectiveCropSession* perspective = perspectiveCrop()) {
+                perspective->setPerspectiveShowGrid(on);
+            }
+        });
+        connect(cancel, &QToolButton::clicked, this, [this]() { controller_->handleEscape(); });
+        connect(apply, &QToolButton::clicked, this, [this]() {
+            if (CropCommitSession* session = cropCommit()) {
+                session->commitCrop();
+            }
+        });
         perspectiveApply_ = apply;
         perspectiveCancel_ = cancel;
         syncPerspectiveButtons();
@@ -609,7 +630,8 @@ void OptionsBar::syncPerspectiveButtons()
     if (!perspectiveApply_ || !perspectiveCancel_) {
         return;
     }
-    const bool on = controller_ && controller_->perspectiveQuadComplete();
+    PerspectiveCropSession* perspective = perspectiveCrop();
+    const bool on = perspective && perspective->perspectiveQuadComplete();
     perspectiveApply_->setVisible(on);
     perspectiveCancel_->setVisible(on);
 }

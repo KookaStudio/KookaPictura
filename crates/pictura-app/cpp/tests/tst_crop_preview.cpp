@@ -132,6 +132,8 @@ void CropPreviewTest::movingTheBoxKeepsThePivot()
     auto* tools = frame.findChild<pictura::ToolController*>();
     QVERIFY(canvas);
     QVERIFY(tools);
+    QVERIFY(tools->cropBoxSession());
+    QVERIFY(tools->cropCommitSession());
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
@@ -164,6 +166,8 @@ void CropPreviewTest::bothModesStartInPreview()
     auto* tools = frame.findChild<pictura::ToolController*>();
     QVERIFY(canvas);
     QVERIFY(tools);
+    QVERIFY(tools->cropBoxSession());
+    QVERIFY(tools->cropCommitSession());
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
@@ -171,14 +175,14 @@ void CropPreviewTest::bothModesStartInPreview()
     frame.setActiveTool(pictura::ToolId::Crop);
     QVERIFY2(canvas->hasCropBoxForTest() && canvas->cropPreviewForTest(),
              "Modern starts with a preview box");
-    QVERIFY2(!tools->cropActive(), "the preview is not an active crop");
+    QVERIFY2(!tools->cropBoxSession()->cropActive(), "the preview is not an active crop");
 
     tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(true);
     frame.setActiveTool(pictura::ToolId::Move);
     frame.setActiveTool(pictura::ToolId::Crop);
     QVERIFY2(canvas->hasCropBoxForTest() && canvas->cropPreviewForTest(),
              "Classic also starts with a preview box");
-    QVERIFY(!tools->cropActive());
+    QVERIFY(!tools->cropBoxSession()->cropActive());
 
     frame.setActiveTool(pictura::ToolId::Move);
     frame.closeDocument(doc, false);
@@ -195,6 +199,8 @@ void CropPreviewTest::previewShowsItsHandles()
     auto* tools = frame.findChild<pictura::ToolController*>();
     QVERIFY(canvas);
     QVERIFY(tools);
+    QVERIFY(tools->cropBoxSession());
+    QVERIFY(tools->cropCommitSession());
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
@@ -229,6 +235,8 @@ void CropPreviewTest::previewHandleDragResizes()
     auto* tools = frame.findChild<pictura::ToolController*>();
     QVERIFY(canvas);
     QVERIFY(tools);
+    QVERIFY(tools->cropBoxSession());
+    QVERIFY(tools->cropCommitSession());
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
@@ -240,7 +248,7 @@ void CropPreviewTest::previewHandleDragResizes()
         // The bottom-right corner handle resizes the start box.
         drag(canvas, QPointF(80, 80), QPointF(50, 60));
         QCOMPARE(tools->pendingCropRect(), QRect(0, 0, 50, 60));
-        QVERIFY2(!canvas->cropPreviewForTest() && tools->cropActive(),
+        QVERIFY2(!canvas->cropPreviewForTest() && tools->cropBoxSession()->cropActive(),
                  "a resized preview is the active crop");
         // So does an edge handle.
         frame.setActiveTool(pictura::ToolId::Move);
@@ -264,6 +272,8 @@ void CropPreviewTest::rotateShowsGridAndAngle()
     auto* tools = frame.findChild<pictura::ToolController*>();
     QVERIFY(canvas);
     QVERIFY(tools);
+    QVERIFY(tools->cropBoxSession());
+    QVERIFY(tools->cropCommitSession());
     const int doc = frame.activeDocumentIndex();
     auto* crop = tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop);
     const int overlay = crop->gridOverlay();
@@ -301,6 +311,8 @@ void CropPreviewTest::previewDragDrawsAndClickAdopts()
     auto* tools = frame.findChild<pictura::ToolController*>();
     QVERIFY(canvas);
     QVERIFY(tools);
+    QVERIFY(tools->cropBoxSession());
+    QVERIFY(tools->cropCommitSession());
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
@@ -310,7 +322,7 @@ void CropPreviewTest::previewDragDrawsAndClickAdopts()
 
     // A drag inside the preview draws a new active box.
     drag(canvas, QPointF(40, 40), QPointF(20, 20));
-    QVERIFY2(!canvas->cropPreviewForTest() && tools->cropActive(),
+    QVERIFY2(!canvas->cropPreviewForTest() && tools->cropBoxSession()->cropActive(),
              "a preview drag draws an active box");
     QVERIFY(frame.hasPendingCrop());
 
@@ -319,7 +331,7 @@ void CropPreviewTest::previewDragDrawsAndClickAdopts()
     frame.setActiveTool(pictura::ToolId::Crop);
     QVERIFY(canvas->cropPreviewForTest());
     drag(canvas, QPointF(40, 40), QPointF(40, 40));
-    QVERIFY2(!canvas->cropPreviewForTest() && tools->cropActive(),
+    QVERIFY2(!canvas->cropPreviewForTest() && tools->cropBoxSession()->cropActive(),
              "a click adopts the preview as the active box");
 
     frame.setActiveTool(pictura::ToolId::Move);
@@ -335,6 +347,8 @@ void CropPreviewTest::escapeClearsToNoBoxInBothModes()
     auto* tools = frame.findChild<pictura::ToolController*>();
     QVERIFY(canvas);
     QVERIFY(tools);
+    QVERIFY(tools->cropBoxSession());
+    QVERIFY(tools->cropCommitSession());
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
@@ -342,7 +356,7 @@ void CropPreviewTest::escapeClearsToNoBoxInBothModes()
     frame.setActiveTool(pictura::ToolId::Crop);
     QVERIFY(canvas->hasCropBoxForTest());
     sendEsc(frame);
-    QVERIFY2(!canvas->hasCropBoxForTest() && !tools->cropActive(),
+    QVERIFY2(!canvas->hasCropBoxForTest() && !tools->cropBoxSession()->cropActive(),
              "Escape clears the Modern preview to no box");
 
     tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(true);
@@ -401,6 +415,8 @@ void CropPreviewTest::ratioDragPinsTheStartCorner()
     auto* tools = frame.findChild<pictura::ToolController*>();
     QVERIFY(canvas);
     QVERIFY(tools);
+    QVERIFY(tools->cropBoxSession());
+    QVERIFY(tools->cropCommitSession());
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();

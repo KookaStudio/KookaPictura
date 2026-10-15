@@ -49,6 +49,8 @@ void CropSnapTest::handleSnapsToTheCanvasEdge()
     auto* tools = frame.findChild<pictura::ToolController*>();
     QVERIFY(canvas);
     QVERIFY(tools);
+    QVERIFY(tools->cropBoxSession());
+    QVERIFY(tools->cropCommitSession());
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
@@ -56,7 +58,7 @@ void CropSnapTest::handleSnapsToTheCanvasEdge()
     frame.setActiveTool(pictura::ToolId::Crop);
     // Adopt the full-canvas preview as the active box.
     drag(canvas, QPointF(40, 40), QPointF(40, 40));
-    QVERIFY2(tools->cropActive(), "clicking the preview activates it");
+    QVERIFY2(tools->cropBoxSession()->cropActive(), "clicking the preview activates it");
     // Drag the bottom-right handle to 37,37 — within the 6px threshold of the
     // canvas edge — so it snaps back to 40 and the box stays canvas-sized.
     drag(canvas, QPointF(40, 40), QPointF(37, 37));
@@ -75,6 +77,8 @@ void CropSnapTest::handleBeyondTheThresholdDoesNotSnap()
     auto* tools = frame.findChild<pictura::ToolController*>();
     QVERIFY(canvas);
     QVERIFY(tools);
+    QVERIFY(tools->cropBoxSession());
+    QVERIFY(tools->cropCommitSession());
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();

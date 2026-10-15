@@ -18,6 +18,7 @@
 #include "tool_options.h"
 #include "tool_registry.h"
 #include "tool_services.h"
+#include "tool_sessions.h"
 
 #include <algorithm>
 #include <array>
@@ -222,30 +223,27 @@ public:
     int cropCursorKindForTest(const QPointF& imagePos, int mods);
     // The crop box centre (image space; test hook); empty without a box.
     QPointF cropCenterForTest();
-    bool resizeCrop(double width, double height);
-    double cropWidth() const;
-    double cropHeight() const;
-    // Esc / the options bar's Cancel: put the crop box back to the canvas.
-    void cancelCrop();
-    // True while the Crop tool holds an active (not preview) box; the options
-    // bar hides Cancel/Apply/Reset otherwise.
-    bool cropActive() const;
+
+    // The session-command ports, resolved from a tool handler with
+    // `dynamic_cast`; null when the handler does not implement the port.
+    // `cropCommitSession` is active-aware (Perspective Crop's quad lives only
+    // while its tool is active; Crop's staged box survives a switch);
+    // `cropBoxSession` and `perspectiveCropSession` target a fixed tool;
+    // `textSession` targets the active type tool.
+    CropCommitSession* cropCommitSession() const;
+    CropBoxSession* cropBoxSession() const;
+    PerspectiveCropSession* perspectiveCropSession() const;
+    TextSession* textSession() const;
 
     // The Rotate View tool's canvas rotation in degrees clockwise.
     double viewRotation() const;
     void setViewRotation(double degrees);
 
-    // The active Type tool's Commit / Cancel; false when no text is being typed.
-    bool commitText();
-    bool cancelText();
-    bool textActive() const;
     // While set, a left press on the canvas samples for a dialog (Color Range)
     // instead of reaching the active tool, under the eyedropper cursor; clear
     // it with an empty function.
     void setCanvasSampler(std::function<void(const QPointF&)> sampler);
     bool canvasSamplerActive() const { return bool(canvasSampler_); }
-    // Insert `text` into the open type edit; false when none is open.
-    bool insertText(const QString& text);
 
     QColor foreground() const override;
     void setForeground(const QColor& color);
@@ -297,22 +295,14 @@ public:
 
     bool hasPendingCrop() const
     {
-        ToolHandler* h = registry_.forTool(ToolId::Crop);
-        return h && h->hasPendingCrop();
+        CropBoxSession* box = cropBoxSession();
+        return box && box->hasPendingCrop();
     }
     QRect pendingCropRect() const
     {
-        ToolHandler* h = registry_.forTool(ToolId::Crop);
-        return h ? h->pendingCropRect() : QRect();
+        CropBoxSession* box = cropBoxSession();
+        return box ? box->pendingCropRect() : QRect();
     }
-    bool commitCrop();
-    // Reset the active crop box to the whole canvas and clear its angle.
-    bool resetCrop();
-    // Perspective Crop: the forced output size (0 = auto) and whether its quad
-    // is fully staged.
-    void setPerspectiveOutput(int width, int height);
-    bool perspectiveQuadComplete() const;
-    void setPerspectiveShowGrid(bool on);
     // Arrow-key nudge: the active tool first (Crop nudges its box / pans), then
     // the Move tool's layer nudge. True when a key was consumed.
     bool handleNudgeKey(int key, Qt::KeyboardModifiers mods);
@@ -348,13 +338,13 @@ public:
                                  bool ctrlPreview);
     bool contentMoveActiveForTest() const { return contentMove_; }
 
-    // Polygonal Lasso interaction state. `commitPolygonLasso` closes the
-    // in-progress path (Enter); `cancelPolygonLasso` discards it (Esc) and
-    // returns whether anything was discarded.
-    bool commitPolygonLasso();
-    bool cancelPolygonLasso();
-    // Delete while a click-driven lasso is open: drop its last point.
-    bool removeLassoPoint();
+    // The generic keyboard gestures the frame forwards to the active tool:
+    // `handleFinishPath` closes the current path (Enter), `handleEscape` cancels
+    // the active gesture (Esc) and returns whether anything was discarded,
+    // `handleDeletePoint` drops the selected point (Delete).
+    bool handleFinishPath();
+    bool handleEscape();
+    bool handleDeletePoint();
 
     // Free Transform session. `beginFreeTransform` starts a session on `path`
     // and shows its overlay; commit/cancel end it. While a session is active

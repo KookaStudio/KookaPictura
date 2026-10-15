@@ -1,4 +1,5 @@
 #include "tool_handler.h"
+#include "tool_sessions.h"
 
 #include "api/transform_api.h"
 #include "crop_grip.h"
@@ -63,7 +64,7 @@ double snapDelta(double lo, double hi, const std::vector<double>& candidates, do
 // (Modern), drag outside to rotate. Enter, a double-click inside, or the options
 // bar's Apply commits; Escape or Cancel resets to no box. Ported from
 // photorust's CanvasView resetCrop/dragCrop/applyCropRatio.
-class CropToolHandler : public ToolHandler {
+class CropToolHandler : public ToolHandler, public CropCommitSession, public CropBoxSession {
 public:
     explicit CropToolHandler(std::shared_ptr<CropOptions> crop)
         : crop_(std::move(crop))
@@ -532,7 +533,7 @@ public:
 
     // Escape / Cancel: drop the box and angle, returning to no box in BOTH
     // modes, so a fresh drag draws a new box honoring the ratio.
-    bool cancelPolygonLasso() override
+    bool onEscape() override
     {
         grip_ = BoxGrip::None;
         if (rotating_ && ctx_) {

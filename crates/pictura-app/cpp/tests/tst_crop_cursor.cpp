@@ -63,6 +63,8 @@ void CropCursorTest::cursorZones()
     auto* tools = frame.findChild<pictura::ToolController*>();
     QVERIFY(canvas);
     QVERIFY(tools);
+    QVERIFY(tools->cropBoxSession());
+    QVERIFY(tools->cropCommitSession());
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
@@ -102,6 +104,8 @@ void CropCursorTest::farZoneDefaultAndApply()
     QVERIFY(canvas);
     QVERIFY(view);
     QVERIFY(tools);
+    QVERIFY(tools->cropBoxSession());
+    QVERIFY(tools->cropCommitSession());
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
@@ -119,7 +123,7 @@ void CropCursorTest::farZoneDefaultAndApply()
     canvas->mouseReleased(QPointF(115, 115));
     QCOMPARE(view->document_width(), 30);
     QCOMPARE(view->document_height(), 30);
-    QVERIFY(!tools->cropActive());
+    QVERIFY(!tools->cropBoxSession()->cropActive());
 
     tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(true);
     frame.setActiveTool(pictura::ToolId::Move);
@@ -137,6 +141,8 @@ void CropCursorTest::farZoneAppliesFromWorkspace()
     QVERIFY(canvas);
     QVERIFY(view);
     QVERIFY(tools);
+    QVERIFY(tools->cropBoxSession());
+    QVERIFY(tools->cropCommitSession());
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
@@ -166,6 +172,8 @@ void CropCursorTest::previewFarIsNoOp()
     QVERIFY(canvas);
     QVERIFY(view);
     QVERIFY(tools);
+    QVERIFY(tools->cropBoxSession());
+    QVERIFY(tools->cropCommitSession());
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
@@ -181,7 +189,7 @@ void CropCursorTest::previewFarIsNoOp()
     canvas->mouseReleased(QPointF(300, 300));
     QCOMPARE(view->document_width(), 120);
     QCOMPARE(view->document_height(), 120);
-    QVERIFY(!tools->cropActive());
+    QVERIFY(!tools->cropBoxSession()->cropActive());
 
     tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(true);
     frame.setActiveTool(pictura::ToolId::Move);
@@ -197,6 +205,8 @@ void CropCursorTest::arrowKeysNudgeCrop()
     auto* tools = frame.findChild<pictura::ToolController*>();
     QVERIFY(canvas);
     QVERIFY(tools);
+    QVERIFY(tools->cropBoxSession());
+    QVERIFY(tools->cropCommitSession());
     const int doc = frame.activeDocumentIndex();
 
     const auto arrow = [&frame](int key, Qt::KeyboardModifiers mods) {
@@ -242,6 +252,8 @@ void CropCursorTest::classicMovesBoxModernMovesContent()
     auto* tools = frame.findChild<pictura::ToolController*>();
     QVERIFY(canvas);
     QVERIFY(tools);
+    QVERIFY(tools->cropBoxSession());
+    QVERIFY(tools->cropCommitSession());
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
@@ -308,6 +320,8 @@ void CropCursorTest::firstBoxClampedThenGrows()
     QVERIFY(canvas);
     QVERIFY(view);
     QVERIFY(tools);
+    QVERIFY(tools->cropBoxSession());
+    QVERIFY(tools->cropCommitSession());
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
@@ -323,7 +337,7 @@ void CropCursorTest::firstBoxClampedThenGrows()
     QCOMPARE(tools->pendingCropRect(), QRect(60, 60, 140, 140));
 
     // Committing grows the document to the box (padding the added area).
-    QVERIFY(tools->commitCrop());
+    QVERIFY(tools->cropCommitSession()->commitCrop());
     QCOMPARE(view->document_width(), 140);
     QCOMPARE(view->document_height(), 140);
 

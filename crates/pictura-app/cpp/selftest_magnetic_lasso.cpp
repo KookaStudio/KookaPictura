@@ -78,7 +78,7 @@ int pictura::runMagneticLassoChecks(pictura::PicturaMainWindow& frame)
     key(Qt::Key_Backspace);
     const bool stillOpen = canvas->hasSelectionPreviewForTest();
     key(Qt::Key_Delete);
-    const bool peeled = connector && stillOpen && !tools->commitPolygonLasso()
+    const bool peeled = connector && stillOpen && !tools->handleFinishPath()
         && view->history_count() == peelBase && !view->has_selection()
         && !canvas->hasSelectionPreviewForTest() && !canvas->hasSelectionPreviewOriginForTest();
 
@@ -90,7 +90,7 @@ int pictura::runMagneticLassoChecks(pictura::PicturaMainWindow& frame)
     click(12, 27);
     key(Qt::Key_Escape);
     const bool escaped = view->history_count() == escBase && view->selection_count() == escCount
-        && view->selection_coverage(2, 2) > 0 && !tools->commitPolygonLasso();
+        && view->selection_coverage(2, 2) > 0 && !tools->handleFinishPath();
     // A double-click on one spot outside a selection encloses nothing: in New
     // mode it deselects as one "Deselect" state.
     view->select_rect(1, 1, 4, 4, QStringLiteral("new"), 0.0);
@@ -107,7 +107,7 @@ int pictura::runMagneticLassoChecks(pictura::PicturaMainWindow& frame)
         click(12, 12);
         canvas->mouseMoved(QPointF(12, 27));
         int deletes = 0;
-        while (tools->removeLassoPoint() && deletes < 10) {
+        while (tools->handleDeletePoint() && deletes < 10) {
             ++deletes;
         }
         return deletes;

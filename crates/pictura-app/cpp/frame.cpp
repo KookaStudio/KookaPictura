@@ -280,7 +280,8 @@ bool PicturaMainWindow::hasPendingCrop() const
 
 bool PicturaMainWindow::commitCrop()
 {
-    if (!tools_ || !tools_->commitCrop()) {
+    CropCommitSession* session = tools_ ? tools_->cropCommitSession() : nullptr;
+    if (!session || !session->commitCrop()) {
         return false;
     }
     refresh();
@@ -1070,17 +1071,14 @@ void PicturaMainWindow::keyPressEvent(QKeyEvent* event)
     if (!event->isAutoRepeat()
         && (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)
         && tools_
-        && (tools_->activeTool() == ToolId::PolygonalLasso
-            || tools_->activeTool() == ToolId::MagneticLasso
-            || tools_->activeTool() == ToolId::Pen)) {
-        tools_->commitPolygonLasso();
+        && tools_->handleFinishPath()) {
         return;
     }
     if (dispatchCommandKey(event)) {
         return;
     }
     if (!event->isAutoRepeat() && event->key() == Qt::Key_Escape && tools_
-        && tools_->cancelPolygonLasso()) {
+        && tools_->handleEscape()) {
         return;
     }
     // Escape leaves isolation mode before it leaves a full-screen screen mode.
