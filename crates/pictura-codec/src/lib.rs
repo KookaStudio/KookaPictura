@@ -51,6 +51,7 @@ mod type_tool;
 mod type_write;
 mod vector_mask;
 mod web;
+mod webp;
 mod write;
 mod write_bitmap;
 mod write_duotone;
@@ -121,6 +122,7 @@ pub use web::{
     encode_gif, encode_wbmp, quantize, web_safe_palette, ColorReduction, Dither, Indexed,
     PaletteOptions,
 };
+pub use webp::{decode_webp, encode_webp};
 pub use write::{write_psb, write_psd};
 pub use xmp::{parse_xmp, patch_xmp, patch_xmp_values, to_xmp_packet, XmpField, XmpProperties};
 

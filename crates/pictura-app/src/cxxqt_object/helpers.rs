@@ -539,28 +539,44 @@ pub(super) fn move_preview_region(
     clamp_region(rect, width, height)
 }
 
-/// Probe `bytes`, decode them with Qt to packed RGBA8888, and enforce the
-/// budget against the actual decoded allocation.
+/// Probe `bytes`, decode them to packed RGBA8888, and enforce the budget
+/// against the actual decoded allocation.
 ///
 /// Returns `(rgba, width, height)`, or `None` when a recognized header is over
-/// budget, Qt cannot decode the bytes, or the decoded allocation is over budget.
+/// budget, neither codec can decode the bytes, or the decoded allocation is over
+/// budget.
 ///
-/// Qt's runtime decoders are the authoritative allow-list: the probe is only a
-/// fast-path guard that pre-empts a recognized header, so a container the probe
-/// does not recognize is still handed to Qt and capped afterwards.
+/// A probed WebP container is decoded by the engine (Qt's WebP reader is an
+/// optional plugin); every other container goes to Qt, whose runtime decoders
+/// are the authoritative allow-list. The probe is only a fast-path guard that
+/// pre-empts a recognized header, so a container the probe does not recognize is
+/// still handed to Qt and capped afterwards.
 pub(super) fn decode_import(bytes: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
     let budget = pictura_codec::ImageBudget::default();
-    match pictura_codec::probe_image(bytes, budget) {
-        Ok(_) | Err(pictura_codec::ImportError::UnknownContainer { .. }) => {}
+    let is_webp = match pictura_codec::probe_image(bytes, budget) {
+        Ok(probe) => probe.format == pictura_codec::ImageFormat::WebP,
+        Err(pictura_codec::ImportError::UnknownContainer { .. }) => false,
         Err(_) => return None,
-    }
-    let mut width = 0i32;
-    let mut height = 0i32;
-    let rgba = super::qobject::decode_image_rgba(bytes, &mut width, &mut height);
-    if width <= 0 || height <= 0 {
-        return None;
-    }
-    let (w, h) = (width as u32, height as u32);
+    };
+    // Qt ships no WebP reader unless the optional qt6-imageformats package is
+    // present, so decode WebP in the engine; fall back to Qt only if it fails.
+    let native = if is_webp {
+        pictura_codec::decode_webp(bytes, budget)
+    } else {
+        None
+    };
+    let (rgba, w, h) = match native {
+        Some(decoded) => decoded,
+        None => {
+            let mut width = 0i32;
+            let mut height = 0i32;
+            let rgba = super::qobject::decode_image_rgba(bytes, &mut width, &mut height);
+            if width <= 0 || height <= 0 {
+                return None;
+            }
+            (rgba, width as u32, height as u32)
+        }
+    };
     if w > budget.max_dimension || h > budget.max_dimension {
         return None;
     }

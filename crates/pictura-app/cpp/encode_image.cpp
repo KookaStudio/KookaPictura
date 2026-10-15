@@ -1,5 +1,7 @@
 #include "encode_image.h"
 
+#include "pictura_app/src/decode_bridge.cxxqt.h"
+
 #include <QtCore/QByteArray>
 #include <QtCore/QSaveFile>
 #include <QtCore/QString>
@@ -17,6 +19,18 @@ QString toQString(::rust::Str text)
     return QString::fromUtf8(text.data(), static_cast<int>(text.size()));
 }
 
+// `source` rescaled by `scale` percent with a smooth filter, or `source` itself
+// at 100 (or an out-of-range) percent.
+QImage scaledImage(const QImage& source, int32_t width, int32_t height, int32_t scale)
+{
+    if (scale <= 0 || scale == 100) {
+        return source;
+    }
+    const int scaledWidth = std::max(1, qRound(width * scale / 100.0));
+    const int scaledHeight = std::max(1, qRound(height * scale / 100.0));
+    return source.scaled(scaledWidth, scaledHeight, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+}
+
 } // namespace
 
 bool encode_image_rgba(::rust::Slice<const uint8_t> rgba, int32_t width, int32_t height,
@@ -31,12 +45,7 @@ bool encode_image_rgba(::rust::Slice<const uint8_t> rgba, int32_t width, int32_t
 
     const QImage source(rgba.data(), width, height, width * 4, QImage::Format_RGBA8888);
 
-    QImage image = source;
-    if (scale > 0 && scale != 100) {
-        const int scaledWidth = std::max(1, qRound(width * scale / 100.0));
-        const int scaledHeight = std::max(1, qRound(height * scale / 100.0));
-        image = source.scaled(scaledWidth, scaledHeight, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-    }
+    QImage image = scaledImage(source, width, height, scale);
 
     const QString fmt = toQString(format).toUpper();
     if (fmt == QLatin1String("JPG") || fmt == QLatin1String("JPEG")
@@ -67,4 +76,27 @@ bool encode_image_rgba(::rust::Slice<const uint8_t> rgba, int32_t width, int32_t
         return false;
     }
     return file.commit();
+}
+
+::rust::Vec<uint8_t> scale_rgba(::rust::Slice<const uint8_t> rgba, int32_t width, int32_t height,
+                                int32_t scale, int32_t& out_width, int32_t& out_height)
+{
+    out_width = 0;
+    out_height = 0;
+    if (width <= 0 || height <= 0) {
+        return {};
+    }
+    if (rgba.size() < static_cast<size_t>(width) * static_cast<size_t>(height) * 4u) {
+        return {};
+    }
+    const QImage source(rgba.data(), width, height, width * 4, QImage::Format_RGBA8888);
+    const QImage out = scaledImage(source, width, height, scale)
+                           .convertToFormat(QImage::Format_RGBA8888);
+    if (out.isNull()) {
+        return {};
+    }
+    out_width = out.width();
+    out_height = out.height();
+    const size_t bytes = static_cast<size_t>(out.width()) * static_cast<size_t>(out.height()) * 4u;
+    return ::copy_bytes(::rust::Slice<const uint8_t>(out.constBits(), bytes));
 }

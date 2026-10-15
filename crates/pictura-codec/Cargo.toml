@@ -10,6 +10,11 @@ pictura-color = { path = "../pictura-color" }
 pictura-core = { path = "../pictura-core" }
 thiserror.workspace = true
 flate2 = "1"
+# WebP decode (VP8/VP8L/VP8X) and lossless encode, so WebP does not depend on
+# Qt's optional `qt6-imageformats` plugin. This is the pure-Rust crate the
+# `image` meta-crate delegates to for WebP.
+image-webp = "0.2"
 
 [dev-dependencies]
 pictura-render = { path = "../pictura-render" }
+pictura-testkit = { path = "../pictura-testkit" }

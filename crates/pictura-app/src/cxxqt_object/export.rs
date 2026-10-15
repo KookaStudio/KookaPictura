@@ -1,6 +1,7 @@
 //! The raster-export bridge: flatten the document composite and write it through
-//! Qt's image writers. Free functions over a [`PictureView`] (their own bridge,
-//! so the `PictureView` declaration list does not grow).
+//! Qt's image writers, except WebP, which the engine encodes because Qt's WebP
+//! writer is an optional plugin. Free functions over a [`PictureView`] (their own
+//! bridge, so the `PictureView` declaration list does not grow).
 //!
 //! [`PictureView`]: super::qobject::PictureView
 
@@ -26,6 +27,16 @@ pub mod ffi {
             quality: i32,
             scale: i32,
         ) -> bool;
+
+        /// Rescale packed RGBA8888 by `scale` percent with a smooth filter and report the new size in `out_width`/`out_height`.
+        fn scale_rgba(
+            rgba: &[u8],
+            width: i32,
+            height: i32,
+            scale: i32,
+            out_width: &mut i32,
+            out_height: &mut i32,
+        ) -> Vec<u8>;
     }
 
     unsafe extern "C++" {
@@ -70,13 +81,71 @@ pub fn export_image(
     let buffer = current_buffer(doc, rust.gpu_compute);
     let srgb = pictura_codec::buffer_to_srgb(doc, &buffer);
     let rgba = buffer_to_rgba_bytes(&srgb);
-    ffi::encode_image_rgba(
+    encode_raster(
         &rgba,
-        srgb.width as i32,
-        srgb.height as i32,
+        srgb.width,
+        srgb.height,
         &path,
         &format,
         quality,
         scale,
     )
+}
+
+/// Encode packed RGBA8888 to `path` in `format` at `scale` percent: `WEBP`
+/// through the engine's native codec, every other format through the Qt
+/// boundary. False without writing on any failure.
+pub(super) fn encode_raster(
+    rgba: &[u8],
+    width: u32,
+    height: u32,
+    path: &str,
+    format: &str,
+    quality: i32,
+    scale: i32,
+) -> bool {
+    if format.eq_ignore_ascii_case("WEBP") {
+        encode_webp_rgba(rgba, width, height, path, scale)
+    } else {
+        ffi::encode_image_rgba(
+            rgba,
+            width as i32,
+            height as i32,
+            path,
+            format,
+            quality,
+            scale,
+        )
+    }
+}
+
+/// Rescale through the boundary (so the percent-scale contract matches the Qt
+/// formats), encode losslessly in the engine, and write temp-file + rename.
+fn encode_webp_rgba(rgba: &[u8], width: u32, height: u32, path: &str, scale: i32) -> bool {
+    let mut out_width = width as i32;
+    let mut out_height = height as i32;
+    let scaled = ffi::scale_rgba(
+        rgba,
+        width as i32,
+        height as i32,
+        scale,
+        &mut out_width,
+        &mut out_height,
+    );
+    if out_width <= 0 || out_height <= 0 {
+        return false;
+    }
+    let Some(bytes) = pictura_codec::encode_webp(&scaled, out_width as u32, out_height as u32)
+    else {
+        return false;
+    };
+    let tmp = format!("{path}.tmp");
+    if std::fs::write(&tmp, &bytes).is_err() {
+        return false;
+    }
+    if std::fs::rename(&tmp, path).is_err() {
+        let _ = std::fs::remove_file(&tmp);
+        return false;
+    }
+    true
 }
