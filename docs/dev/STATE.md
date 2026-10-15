@@ -923,6 +923,22 @@ Snapshot for resuming after a context break. Update after each milestone.
   (`// ponytail:`): raster output
   is the 8-bit sRGB display composite, and JPEG and BMP flatten alpha onto white
   (Qt's BMP writer drops alpha; the native PSD/PSB path is unchanged).
+- **Native WebP codec** (change `native-webp-codec`; issue #483): WebP import and
+  export no longer depend on Qt's optional `qt6-imageformats` plugin (its absence
+  is why WebP files would not open). `pictura-codec` gains
+  `decode_webp(bytes, budget)` (VP8/VP8L/VP8X, first frame, Rgb8 expanded to
+  RGBA8888, budget checked before allocation) and `encode_webp(rgba, width,
+  height)` (lossless VP8L) over the pure-Rust `image-webp` crate — the one new
+  dependency. `decode_import` routes a probed WebP container to the engine and
+  falls back to Qt otherwise; `save`/`export_image` route `WEBP` through a shared
+  `export::encode_raster` that rescales via the boundary's new `scale_rgba`
+  helper (so the percent-scale contract matches the Qt formats) and writes
+  temp-file + rename. Export As still offers its CC-parity subset (PNG/JPG/PNG-8/
+  GIF/SVG); WebP is reachable by the Save As extension, like TIFF and BMP.
+  Oracle `webp_oracle` (magick decodes our lossless output exactly and we decode
+  its lossy output within tolerance) and Qt Test `tst_webp` (save + reopen round
+  trip, scaled export) cover it. Ceiling (`// ponytail:`): lossless export only —
+  no pure-Rust lossy WebP encoder exists, so there is no WebP quality control.
 - **Pictura Raw core** (change `pictura-raw-core`, new capability `pictura-raw`):
   the Camera Raw Filter's 11 PV2012 Basic controls now round-trip and render,
   staying Photoshop's standard smart filter (`filterID 2683`, `"Camera Raw
