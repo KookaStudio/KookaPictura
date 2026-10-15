@@ -35,8 +35,11 @@ solid fill, and live form), `Raster { rgba, width, height }` (straight-alpha
 RGBA8888 that the codec encodes to a base64 PNG `<image>`), or `None` (skip). The
 codec writer never needs a compositor or a `vscg` decoder.
 
-`ponytail:` the content list is indexed by top-level position; a future
-nested-group walk would key it by index path instead.
+The tree walk (#477) replaced the top-level index list: the caller supplies a
+tree of `SvgNode { content, opacity, blend, clip }`, where `content` adds
+`Group { children, isolated }`. `pictura_render::svg_nodes` builds it and takes a
+`raster` closure that composites a scratch document (the app passes the active
+backend; tests pass the CPU compositor or a fake). See D10.
 
 ### D1c. The raster fallback PNG is encoded in the engine
 
@@ -91,7 +94,9 @@ trailing zeros are trimmed.
 | live ellipse (type 5) | `<ellipse cx cy rx ry fill>` |
 | `vmsk` outline + solid fill | `<path d="…" fill-rule fill>` |
 | type layer | `<text>` (see D6) or raster fallback |
-| pixel / smart object / effect / adjustment | raster `<image>` |
+| pixel / smart object / effect / shape with effects | raster `<image>` |
+| group | nested `<g>` (D10) |
+| adjustment / non-CSS blend / clip stack | flattened raster (D10) |
 | gradient / pattern shape | raster fallback |
 
 The fill comes from `pictura_render::shape_fill_color`, which now reads the
@@ -115,11 +120,10 @@ rasterized layer.
 
 ## D6. Text
 
-`ponytail:` v1 emits a type layer as its raster fallback. Live `<text>` requires
+Decided on #477: a type layer is emitted as its raster fallback. Live `<text>` requires
 a render-time font match (CC itself outlines glyphs), and outlining needs a
 glyph source (Qt `QPainterPath::addText` at the boundary, or a Rust font crate).
-Choosing that source is an open question on #459 and is deferred; the raster
-fallback keeps the output faithful.
+The raster fallback keeps the output faithful without either.
 
 ## D7. Export As integration
 
@@ -143,9 +147,11 @@ is a later refinement.
   each primitive (`rect`, rounded `rect`, `ellipse`, `path`, `image`); XML
   escaping; the CC header byte-for-byte for a raster-only document; layer
   skipping; the opacity `<g>`.
-- An oracle (self-skipping when absent): render the SVG with a system renderer
-  (`rsvg-convert`, Inkscape, or ImageMagick's delegate) and compare pixels
-  against the CPU composite for a vector-only document, within a tolerance.
+- An oracle (`pictura-render/tests/svg_oracle.rs`): ImageMagick's `RSVG:`
+  coder (librsvg) renders a vector-only document's SVG onto white and it is
+  compared with the CPU composite on white within a tolerance. `magick` is
+  already in the CI `oracles` job; the test self-skips when the coder is
+  absent.
 - Qt Test `tst_export_as`: the `SVG` format writes a well-formed, non-empty
   `.svg` for a raster document and a vector document.
 
@@ -154,3 +160,29 @@ is a later refinement.
 No Adobe source. Header and raster shape from the shipped CC sample; primitives,
 blend map, and text handling inferred and `ponytail:`-marked. The renderer is an
 oracle only.
+
+## D10. Groups, clipping, and flattening (#477)
+
+The walk handles one container's layers as *stacks*: a base plus the layers
+clipped to it. Each stack is skipped (hidden or zero opacity), emitted as a
+node, or needs the **backdrop** — it reads what lies beneath it:
+
+- an adjustment layer (an adjustment block that is not a fill);
+- a blend with no CSS form;
+- a clipping stack that is not plain source-over (a clipped stack composited
+  alone equals its in-place result only when base and members are Normal and the
+  base is opaque);
+- a faded or masked pass-through group (a `<g opacity>` would isolate it).
+
+A backdrop stack replaces the container's nodes so far with one raster of the
+container's layers up to and including it. That is exact for the document and
+for an isolated group (which composites on transparency). A pass-through group's
+backdrop lies outside it, so its walk fails and the parent flattens instead.
+
+A raster fallback is composited at full opacity and Normal blend and its node
+carries the layer's opacity and blend, so the `<g>` does not apply them twice
+(v1 baked the opacity into the raster and wrapped it again). A non-pass-through
+group with no opacity or blend carries `isolation:isolate`; a masked group is
+one raster. A shape primitive scales its fill alpha by the layer's fill opacity
+and is a raster when it has layer effects (a shape stroke is an effect) or a
+pixel mask.

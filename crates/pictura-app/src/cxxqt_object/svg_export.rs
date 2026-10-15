@@ -9,8 +9,7 @@ use super::helpers_composite::buffer_to_rgba_bytes;
 use super::qobject::PictureView;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
-use pictura_codec::{encode_svg, SvgOptions};
-use pictura_core::{Document, Layer};
+use pictura_core::Document;
 
 #[cxx_qt::bridge]
 pub mod ffi {
@@ -39,43 +38,19 @@ pub fn svg_from_view(view: &PictureView) -> QString {
     QString::from(svg_for_document(doc, rust.gpu_compute).as_str())
 }
 
-/// Serialize `doc` to SVG: each top-level layer is a filled primitive (a shape
-/// layer) or a document-sized raster fallback.
+/// Serialize `doc` to SVG; each raster fallback is composited through the
+/// active backend.
 fn svg_for_document(doc: &Document, gpu_compute: bool) -> String {
-    let contents = doc
-        .layers
-        .iter()
-        .map(|layer| {
-            pictura_render::layer_content(
-                layer,
-                doc.width,
-                doc.height,
-                Some(layer_rgba(doc, layer, gpu_compute)),
-            )
-        })
-        .collect();
-    encode_svg(
-        doc,
-        &SvgOptions {
-            contents,
-            precision: 3,
-        },
-    )
-}
-
-/// Top-level `layer` composited alone on transparency at the document size,
-/// straight-alpha sRGB RGBA8888.
-fn layer_rgba(doc: &Document, layer: &Layer, gpu_compute: bool) -> Vec<u8> {
-    let mut scratch = doc.clone();
-    scratch.layers = vec![layer.clone()];
-    let buffer = pictura_render::composite_active(&scratch, gpu_compute).0;
-    buffer_to_rgba_bytes(&pictura_codec::buffer_to_srgb(&scratch, &buffer))
+    pictura_render::encode_document_svg(doc, |scratch: &Document| {
+        let buffer = pictura_render::composite_active(scratch, gpu_compute).0;
+        buffer_to_rgba_bytes(&pictura_codec::buffer_to_srgb(scratch, &buffer))
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pictura_core::{BitDepth, ColorMode, PsdRect};
+    use pictura_core::{BitDepth, ColorMode, Layer, PsdRect};
 
     fn pixel_layer(name: &str, w: u32, h: u32, rgb: (u8, u8, u8)) -> Layer {
         let mut layer = Layer {

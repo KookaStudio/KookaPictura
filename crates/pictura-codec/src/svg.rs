@@ -6,21 +6,42 @@
 //! from a shipped CC sample; the primitives are inferred and marked below.
 //!
 //! This module is Qt-free and does no compositing or fill decoding: the caller
-//! supplies each top-level layer's [`SvgContent`] — a decoded shape (outline,
-//! fill, live form) or a raster fallback as RGBA8888, which the codec encodes to
-//! a base64 PNG. `pictura-render` derives that content
-//! (`pictura_render::layer_content`), because it owns the `vscg` fill decode and
-//! the compositor, and it already depends on this crate.
+//! supplies the document as a tree of [`SvgNode`]s — a decoded shape (outline,
+//! fill, live form), a raster fallback as RGBA8888 (encoded here to a base64
+//! PNG), or a group of nodes. `pictura-render` builds that tree
+//! (`pictura_render::svg_nodes`), because it owns the `vscg` fill decode and the
+//! compositor, and it already depends on this crate.
 
 use pictura_core::path::Subpath;
-use pictura_core::{BlendMode, Document, Layer, VectorFillRule, VectorMask};
+use pictura_core::{BlendMode, Document, VectorFillRule, VectorMask};
 
 use crate::LiveShape;
 
-/// One top-level layer's SVG content, supplied by the caller. The engine cannot
-/// derive this itself: a shape layer's fill is a `vscg` vector-fill block
-/// decoded in `pictura-render`, and a pixel layer's fallback is a raster the
-/// caller composites. Index-aligned with `Document::layers`.
+/// One emitted element with the opacity and blend of the layer (or flattened
+/// run of layers) it stands for. The tree is bottom-first, like
+/// `Document::layers`.
+#[derive(Clone, Debug)]
+pub struct SvgNode {
+    pub content: SvgContent,
+    pub opacity: u8,
+    pub blend: BlendMode,
+    /// A vector mask clipping a raster fallback.
+    pub clip: Option<VectorMask>,
+}
+
+impl SvgNode {
+    /// `content` at full opacity, Normal blend, unclipped.
+    pub fn plain(content: SvgContent) -> Self {
+        Self {
+            content,
+            opacity: 255,
+            blend: BlendMode::Normal,
+            clip: None,
+        }
+    }
+}
+
+/// The content of an [`SvgNode`], decoded by the caller.
 #[derive(Clone, Debug)]
 pub enum SvgContent {
     /// A shape layer: its outline in document pixels, its solid fill, and the
@@ -37,15 +58,20 @@ pub enum SvgContent {
         width: u32,
         height: u32,
     },
-    /// No content: the layer is skipped.
-    None,
+    /// A layer group. An `isolated` group composites its children on
+    /// transparency first (any non-pass-through group); a pass-through group
+    /// lets its children blend with what lies beneath it.
+    Group {
+        children: Vec<SvgNode>,
+        isolated: bool,
+    },
 }
 
 /// SVG export options.
 #[derive(Clone, Debug)]
 pub struct SvgOptions {
-    /// Per-top-level-layer content; see [`SvgContent`].
-    pub contents: Vec<SvgContent>,
+    /// The document's top-level nodes, bottom-first; see [`SvgNode`].
+    pub nodes: Vec<SvgNode>,
     /// Decimal places for coordinates, clamped to `0..=6`.
     pub precision: u8,
 }
@@ -53,61 +79,34 @@ pub struct SvgOptions {
 impl Default for SvgOptions {
     fn default() -> Self {
         Self {
-            contents: Vec::new(),
+            nodes: Vec::new(),
             precision: 3,
         }
     }
 }
 
-/// Serialize `doc` to SVG text. `options.contents` supplies each top-level
-/// layer's content; see [`SvgOptions`].
+/// Serialize `doc` to SVG text. The document supplies only the canvas size;
+/// `options.nodes` supplies the content.
 pub fn encode_svg(doc: &Document, options: &SvgOptions) -> String {
-    let precision = options.precision.min(6);
-    let mut defs = Vec::new();
-    let mut body = Vec::new();
-    for (index, layer) in doc.layers.iter().enumerate() {
-        if !layer.visible || layer.opacity == 0 {
-            continue;
-        }
-        let element = match options.contents.get(index) {
-            Some(SvgContent::Shape {
-                subpaths,
-                fill,
-                live,
-            }) => match shape_element(subpaths, *fill, live.as_ref(), precision) {
-                Some(element) => element,
-                None => continue,
-            },
-            Some(SvgContent::Raster {
-                rgba,
-                width,
-                height,
-            }) => {
-                let Some(href) = crate::encode_png_base64(rgba, *width, *height) else {
-                    continue;
-                };
-                let clip = clip_path(layer.vector_mask.as_ref(), index, precision);
-                if let Some((id, path)) = &clip {
-                    defs.push(format!(
-                        "  <clipPath id=\"{id}\">\n    <path d=\"{}\"/>\n  </clipPath>",
-                        escape_xml(path)
-                    ));
-                }
-                image_element(&href, *width, *height, clip.as_ref().map(|c| c.0.as_str()))
-            }
-            _ => continue,
-        };
-        body.push(group_layer(&element, layer));
-    }
+    let mut writer = Writer {
+        precision: options.precision.min(6),
+        defs: Vec::new(),
+        clips: 0,
+    };
+    let body: Vec<String> = options
+        .nodes
+        .iter()
+        .filter_map(|node| writer.node(node))
+        .collect();
 
     let mut out = String::new();
     out.push_str(&format!(
         "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" preserveAspectRatio=\"xMidYMid\" width=\"{}\" height=\"{}\" viewBox=\"0 0 {} {}\">\n",
         doc.width, doc.height, doc.width, doc.height
     ));
-    if !defs.is_empty() {
+    if !writer.defs.is_empty() {
         out.push_str("  <defs>\n");
-        out.push_str(&defs.join("\n"));
+        out.push_str(&writer.defs.join("\n"));
         out.push_str("\n  </defs>\n");
     }
     for element in body {
@@ -116,6 +115,84 @@ pub fn encode_svg(doc: &Document, options: &SvgOptions) -> String {
     }
     out.push_str("</svg>\n");
     out
+}
+
+/// The tree walk's state: clip paths collect into one `<defs>` with
+/// document-unique ids.
+struct Writer {
+    precision: u8,
+    defs: Vec<String>,
+    clips: usize,
+}
+
+impl Writer {
+    /// The element for `node`, `None` when it draws nothing.
+    fn node(&mut self, node: &SvgNode) -> Option<String> {
+        if node.opacity == 0 {
+            return None;
+        }
+        let attrs = group_attrs(node.opacity, node.blend);
+        match &node.content {
+            SvgContent::Shape {
+                subpaths,
+                fill,
+                live,
+            } => {
+                let element = shape_element(subpaths, *fill, live.as_ref(), self.precision)?;
+                Some(wrap(&element, &attrs))
+            }
+            SvgContent::Raster {
+                rgba,
+                width,
+                height,
+            } => {
+                let href = crate::encode_png_base64(rgba, *width, *height)?;
+                let clip = self.clip_path(node.clip.as_ref());
+                let element = image_element(&href, *width, *height, clip.as_deref());
+                Some(wrap(&element, &attrs))
+            }
+            SvgContent::Group { children, isolated } => {
+                let inner: Vec<String> = children.iter().filter_map(|c| self.node(c)).collect();
+                if inner.is_empty() {
+                    return None;
+                }
+                let mut attrs = attrs;
+                // Opacity and a blend already isolate; a bare `<g>` does not.
+                if *isolated && attrs.is_empty() {
+                    attrs.push("style=\"isolation:isolate\"".to_string());
+                }
+                let open = if attrs.is_empty() {
+                    "<g>".to_string()
+                } else {
+                    format!("<g {}>", attrs.join(" "))
+                };
+                Some(format!(
+                    "{open}\n{}\n</g>",
+                    indent_lines(&inner.join("\n"), 1)
+                ))
+            }
+        }
+    }
+
+    /// Register a `<clipPath>` for a vector mask and return its id, `None`
+    /// when the mask is absent, disabled, or empty.
+    fn clip_path(&mut self, mask: Option<&VectorMask>) -> Option<String> {
+        let mask = mask?;
+        if mask.disabled || mask.subpaths.is_empty() {
+            return None;
+        }
+        let data = vector_mask_data(mask, self.precision);
+        if data.is_empty() {
+            return None;
+        }
+        let id = format!("clip{}", self.clips);
+        self.clips += 1;
+        self.defs.push(format!(
+            "  <clipPath id=\"{id}\">\n    <path d=\"{}\"/>\n  </clipPath>",
+            escape_xml(&data)
+        ));
+        Some(id)
+    }
 }
 
 /// The primitive for a shape layer: a live shape's `rect` / rounded `rect` /
@@ -179,19 +256,23 @@ fn with_fill(element: &str, fill: [u8; 4]) -> String {
     }
 }
 
-/// Wrap `element` in a `<g>` when the layer carries a non-default opacity or a
-/// CSS-representable blend mode.
-fn group_layer(element: &str, layer: &Layer) -> String {
+/// The `<g>` attributes for a non-default opacity or a CSS-representable blend.
+fn group_attrs(opacity: u8, blend: BlendMode) -> Vec<String> {
     let mut attrs = Vec::new();
-    if layer.opacity != 255 {
+    if opacity != 255 {
         attrs.push(format!(
             "opacity=\"{}\"",
-            format_coord(f64::from(layer.opacity) / 255.0, 3)
+            format_coord(f64::from(opacity) / 255.0, 3)
         ));
     }
-    if let Some(css) = blend_css(layer.blend) {
+    if let Some(css) = blend_css(blend) {
         attrs.push(format!("style=\"mix-blend-mode:{css}\""));
     }
+    attrs
+}
+
+/// Wrap `element` in a `<g>` carrying `attrs`, or return it as is without any.
+fn wrap(element: &str, attrs: &[String]) -> String {
     if attrs.is_empty() {
         return element.to_string();
     }
@@ -372,17 +453,6 @@ pub fn blend_css(blend: BlendMode) -> Option<&'static str> {
     })
 }
 
-/// A `<clipPath>` for a layer's vector mask as `(id, d)`, `None` when the layer
-/// has no usable mask. The mask is flattened to a polyline (1/256-pixel units).
-fn clip_path(mask: Option<&VectorMask>, index: usize, precision: u8) -> Option<(String, String)> {
-    let mask = mask?;
-    if mask.disabled || mask.subpaths.is_empty() {
-        return None;
-    }
-    let data = vector_mask_data(mask, precision);
-    (!data.is_empty()).then(|| (format!("clip{index}"), data))
-}
-
 /// The `d` data for a decoded vector mask's flattened subpaths.
 fn vector_mask_data(mask: &VectorMask, precision: u8) -> String {
     let precision = precision.min(6);
@@ -474,15 +544,23 @@ mod tests {
     use pictura_core::path::PathPoint;
     use pictura_core::VectorSubpath;
 
-    fn doc(width: u32, height: u32, layers: Vec<Layer>) -> Document {
-        let mut d = Document::new(
+    fn doc(width: u32, height: u32) -> Document {
+        Document::new(
             width,
             height,
             pictura_core::ColorMode::Rgb,
             pictura_core::BitDepth::Eight,
-        );
-        d.layers = layers;
-        d
+        )
+    }
+
+    fn svg(width: u32, height: u32, nodes: Vec<SvgNode>) -> String {
+        encode_svg(
+            &doc(width, height),
+            &SvgOptions {
+                nodes,
+                precision: 3,
+            },
+        )
     }
 
     fn straight_subpath() -> Subpath {
@@ -553,16 +631,7 @@ mod tests {
 
     #[test]
     fn a_raster_document_matches_the_cc_sample() {
-        let layer = Layer {
-            visible: true,
-            ..Default::default()
-        };
-        let d = doc(1000, 652, vec![layer]);
-        let options = SvgOptions {
-            contents: vec![raster(1000, 652)],
-            precision: 3,
-        };
-        let svg = encode_svg(&d, &options);
+        let svg = svg(1000, 652, vec![SvgNode::plain(raster(1000, 652))]);
         assert!(
             svg.starts_with(
                 "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" preserveAspectRatio=\"xMidYMid\" width=\"1000\" height=\"652\" viewBox=\"0 0 1000 652\">\n"
@@ -589,37 +658,22 @@ mod tests {
     }
 
     #[test]
-    fn hidden_and_zero_opacity_layers_are_skipped() {
-        let hidden = Layer {
-            visible: false,
-            ..Default::default()
-        };
-        let transparent = Layer {
+    fn a_zero_opacity_node_is_skipped() {
+        let node = SvgNode {
             opacity: 0,
-            ..Default::default()
+            ..SvgNode::plain(raster(4, 4))
         };
-        let d = doc(4, 4, vec![hidden, transparent]);
-        let options = SvgOptions {
-            contents: vec![raster(4, 4), raster(4, 4)],
-            precision: 3,
-        };
-        let svg = encode_svg(&d, &options);
-        assert!(!svg.contains("image"), "{svg}");
+        assert!(!svg(4, 4, vec![node]).contains("image"));
     }
 
     #[test]
     fn opacity_wraps_in_a_group() {
-        let layer = Layer {
+        let node = SvgNode {
             opacity: 128,
             blend: BlendMode::Multiply,
-            ..Default::default()
+            ..SvgNode::plain(raster(4, 4))
         };
-        let d = doc(4, 4, vec![layer]);
-        let options = SvgOptions {
-            contents: vec![raster(4, 4)],
-            precision: 3,
-        };
-        let svg = encode_svg(&d, &options);
+        let svg = svg(4, 4, vec![node]);
         assert!(
             svg.contains("<g opacity=\"0.502\" style=\"mix-blend-mode:multiply\">"),
             "{svg}"
@@ -628,71 +682,63 @@ mod tests {
 
     #[test]
     fn a_vector_mask_becomes_a_clip_path() {
-        let layer = Layer {
-            vector_mask: Some(VectorMask {
-                subpaths: vec![VectorSubpath {
-                    closed: true,
-                    operation: 1,
-                    fill_rule: VectorFillRule::EvenOdd,
-                    points: vec![[0, 0], [2560, 0], [2560, 2560], [0, 2560]],
-                }],
-                ..Default::default()
-            }),
+        let mask = VectorMask {
+            subpaths: vec![VectorSubpath {
+                closed: true,
+                operation: 1,
+                fill_rule: VectorFillRule::EvenOdd,
+                points: vec![[0, 0], [2560, 0], [2560, 2560], [0, 2560]],
+            }],
             ..Default::default()
         };
-        let d = doc(10, 10, vec![layer]);
-        let options = SvgOptions {
-            contents: vec![raster(10, 10)],
-            precision: 3,
+        let clipped = |mask: &VectorMask| SvgNode {
+            clip: Some(mask.clone()),
+            ..SvgNode::plain(raster(10, 10))
         };
-        let svg = encode_svg(&d, &options);
+        let svg = svg(10, 10, vec![clipped(&mask), clipped(&mask)]);
         assert!(svg.contains("<clipPath id=\"clip0\">"), "{svg}");
         assert!(svg.contains("clip-path=\"url(#clip0)\""), "{svg}");
+        assert!(
+            svg.contains("clip-path=\"url(#clip1)\""),
+            "ids are unique: {svg}"
+        );
         assert!(svg.contains("M 0 0 L 10 0 L 10 10 L 0 10 Z"), "{svg}");
     }
 
     #[test]
     fn a_shape_content_emits_a_filled_path() {
-        let layer = Layer::default();
-        let d = doc(10, 10, vec![layer]);
-        let options = SvgOptions {
-            contents: vec![SvgContent::Shape {
-                subpaths: vec![straight_subpath()],
-                fill: [10, 20, 30, 255],
-                live: None,
-            }],
-            precision: 3,
+        let shape = SvgContent::Shape {
+            subpaths: vec![straight_subpath()],
+            fill: [10, 20, 30, 255],
+            live: None,
         };
-        let svg = encode_svg(&d, &options);
+        let svg = svg(10, 10, vec![SvgNode::plain(shape)]);
         assert!(svg.contains("<path d=\"M 0 0 L 10 0\""), "{svg}");
         assert!(svg.contains("fill=\"#0a141e\""), "{svg}");
     }
 
     #[test]
     fn a_live_shape_emits_its_parametric_primitive() {
-        let layer = Layer::default();
-        let d = doc(10, 10, vec![layer]);
+        let shape = |fill, live| {
+            SvgNode::plain(SvgContent::Shape {
+                subpaths: Vec::new(),
+                fill,
+                live: Some(live),
+            })
+        };
         let rect = LiveShape {
             origin_type: crate::ORIGIN_RECTANGLE,
             bounds: (1.0, 2.0, 6.0, 8.0),
             radii: [0.0; 4],
         };
-        let options = SvgOptions {
-            contents: vec![SvgContent::Shape {
-                subpaths: Vec::new(),
-                fill: [255, 0, 0, 128],
-                live: Some(rect),
-            }],
-            precision: 3,
-        };
-        let svg = encode_svg(&d, &options);
+        let svg_rect = svg(10, 10, vec![shape([255, 0, 0, 128], rect)]);
         assert!(
-            svg.contains("<rect x=\"1\" y=\"2\" width=\"5\" height=\"6\""),
-            "{svg}"
+            svg_rect.contains("<rect x=\"1\" y=\"2\" width=\"5\" height=\"6\""),
+            "{svg_rect}"
         );
         assert!(
-            svg.contains("fill=\"#ff0000\" fill-opacity=\"0.502\""),
-            "{svg}"
+            svg_rect.contains("fill=\"#ff0000\" fill-opacity=\"0.502\""),
+            "{svg_rect}"
         );
 
         let ellipse = LiveShape {
@@ -700,19 +746,41 @@ mod tests {
             bounds: (0.0, 0.0, 10.0, 4.0),
             radii: [0.0; 4],
         };
-        let options = SvgOptions {
-            contents: vec![SvgContent::Shape {
-                subpaths: Vec::new(),
-                fill: [0, 0, 0, 255],
-                live: Some(ellipse),
-            }],
-            precision: 3,
-        };
-        let svg = encode_svg(&d, &options);
+        let svg_ellipse = svg(10, 10, vec![shape([0, 0, 0, 255], ellipse)]);
         assert!(
-            svg.contains("<ellipse cx=\"5\" cy=\"2\" rx=\"5\" ry=\"2\""),
-            "{svg}"
+            svg_ellipse.contains("<ellipse cx=\"5\" cy=\"2\" rx=\"5\" ry=\"2\""),
+            "{svg_ellipse}"
         );
+    }
+
+    #[test]
+    fn a_group_nests_its_children() {
+        let group = |isolated, opacity| SvgNode {
+            opacity,
+            ..SvgNode::plain(SvgContent::Group {
+                children: vec![SvgNode::plain(raster(2, 2))],
+                isolated,
+            })
+        };
+        let svg_pass = svg(2, 2, vec![group(false, 255)]);
+        assert!(svg_pass.contains("  <g>\n    <image "), "{svg_pass}");
+        let svg_iso = svg(2, 2, vec![group(true, 255)]);
+        assert!(
+            svg_iso.contains("<g style=\"isolation:isolate\">"),
+            "{svg_iso}"
+        );
+        let svg_faded = svg(2, 2, vec![group(true, 128)]);
+        assert!(svg_faded.contains("<g opacity=\"0.502\">"), "{svg_faded}");
+        assert!(!svg_faded.contains("isolation"), "{svg_faded}");
+    }
+
+    #[test]
+    fn an_empty_group_is_omitted() {
+        let group = SvgNode::plain(SvgContent::Group {
+            children: Vec::new(),
+            isolated: true,
+        });
+        assert!(!svg(2, 2, vec![group]).contains("<g"));
     }
 
     #[test]

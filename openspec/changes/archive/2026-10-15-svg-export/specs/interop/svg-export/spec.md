@@ -34,9 +34,9 @@ be atomic (temp file plus rename), so a failure never truncates an existing file
 
 ### Requirement: Raster layers embed a base64 PNG image
 
-For a layer whose content is pixels, a smart object, or a baked effect (and for
-an adjustment layer, which has no pixels of its own), the writer SHALL rasterize
-that layer alone to a PNG and embed it as
+For a layer whose content is pixels, type, a smart object, or a baked effect,
+the writer SHALL rasterize that layer alone, at full opacity and Normal blend, to
+a PNG and embed it as
 `<image xlink:href="data:img/png;base64,…" width="W" height="H"/>`. The MIME
 subtype SHALL be spelled `img/png` to match the CC sample. A raster document
 SHALL therefore produce exactly one `<image>` with no `x` / `y` attributes.
@@ -49,7 +49,7 @@ SHALL therefore produce exactly one `<image>` with no `x` / `y` attributes.
 
 #### Scenario: Hidden and zero-opacity layers are skipped
 
-- **WHEN** a top-level layer is hidden or has zero opacity
+- **WHEN** a layer is hidden or has zero opacity
 - **THEN** the SVG contains no element for that layer
 
 ### Requirement: Vector layers emit SVG primitives
@@ -77,9 +77,10 @@ anchors, MAY be written as `L`). Coordinates SHALL be document pixels with
 
 The writer SHALL wrap a layer that carries a non-default opacity or a
 CSS-representable blend mode in a `<g>` element with `opacity` (a fraction of
-`opacity/255`) and `mix-blend-mode` respectively. A blend mode with no CSS
-equivalent SHALL fall back to a rasterized layer rather than emit a wrong
-`mix-blend-mode`.
+`opacity/255`) and `mix-blend-mode` respectively. A raster fallback MUST NOT also
+bake in the opacity or blend its `<g>` applies. A blend mode with no CSS
+equivalent SHALL NOT emit a `mix-blend-mode`; the layer is flattened instead
+(see *Content SVG cannot express is flattened*).
 
 #### Scenario: Opacity becomes a group attribute
 
@@ -90,3 +91,61 @@ equivalent SHALL fall back to a rasterized layer rather than emit a wrong
 
 - **WHEN** a layer has the Multiply blend mode
 - **THEN** its group carries `mix-blend-mode:multiply`
+
+### Requirement: Groups nest as SVG groups
+
+The writer SHALL emit a layer group as a `<g>` containing its children's
+elements, bottom-first, carrying the group's opacity and CSS blend. A
+non-pass-through group SHALL be isolated (`isolation:isolate` when neither an
+opacity nor a blend already isolates it); a pass-through group at full opacity
+SHALL be a bare `<g>` so its children blend with the content beneath it. A
+masked group SHALL be rasterized alone.
+
+#### Scenario: A faded group of shapes stays vector
+
+- **WHEN** a Normal group at opacity 128 contains two solid shape layers
+- **THEN** the SVG has a `<g opacity="0.502">` containing two primitives and no
+  `<image>`
+
+### Requirement: Content SVG cannot express is flattened
+
+A layer stack that reads the content beneath it — an adjustment layer, a blend
+mode with no CSS equivalent, a clipping stack that is not plain source-over, or
+a faded or masked pass-through group — SHALL be flattened with every lower layer
+of its container into one raster, replacing their elements. Inside an isolated
+group the flattened run is the group's own lower children; a pass-through group
+SHALL defer the flatten to its parent container. A plain clipping stack (base
+and clipped layers all Normal, base at full opacity) SHALL be one raster of the
+base and its clipped layers.
+
+#### Scenario: An adjustment layer flattens what lies beneath it
+
+- **WHEN** a document has two pixel layers under an Invert adjustment layer
+- **THEN** the SVG has one `<image>` for all three layers
+
+#### Scenario: A clipped layer does not escape its base
+
+- **WHEN** a pixel layer is clipped to a base layer
+- **THEN** the base and the clipped layer are one `<image>`
+
+### Requirement: Type layers use the raster fallback
+
+The writer SHALL emit a type layer as its raster fallback, not as live `<text>`
+or outlined glyphs, so the export does not depend on the viewer's fonts.
+
+#### Scenario: A type layer is an image
+
+- **WHEN** a document has one visible type layer
+- **THEN** the SVG has an `<image>` for it and no `<text>`
+
+### Requirement: The export renders like the composite
+
+For a vector-only document, the SVG rendered by an independent SVG renderer
+SHALL match the CPU composite at the pixel level within an antialiasing
+tolerance. The check SHALL self-skip when the renderer is absent.
+
+#### Scenario: librsvg agrees with the compositor
+
+- **WHEN** a document of solid shapes with a Multiply layer and a faded group is
+  exported and rendered by librsvg onto white
+- **THEN** it matches the CPU composite flattened onto white within tolerance
