@@ -801,8 +801,8 @@ void PicturaMainWindow::registerHandlers()
     wireAdvancedSmartObjectActions();
 
     // Smart Objects. Convert to Smart Object needs the current layer to be a
-    // raster pixel layer (not a group, adjustment, Background, or already a
-    // smart object).
+    // convertible raster pixel layer or Background (not a group, adjustment, or
+    // already a smart object); a Background is unlocked first.
     const auto currentSmartPath = [this]() -> QString {
         PictureView* view = activeView();
         const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();

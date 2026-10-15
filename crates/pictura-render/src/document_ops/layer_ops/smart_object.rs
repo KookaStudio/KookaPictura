@@ -38,8 +38,8 @@ fn uuid_referenced(layers: &[Layer], uuid: &str) -> bool {
 }
 
 /// Whether `path` resolves to a single convertible raster pixel layer: not a
-/// group, no adjustment data, not the Background, no existing smart object, and
-/// a `rect` with positive width and height.
+/// group, no adjustment data, no existing smart object, and a `rect` with
+/// positive width and height. The Background layer is eligible.
 ///
 /// Also requires an 8-bit document: `write_psd` is 8-bit only (roadmap G4), so a
 /// deeper document could not serialize its embedded source.
@@ -48,7 +48,6 @@ pub fn can_convert_to_smart_object(doc: &Document, path: &str) -> bool {
         && resolve_path(doc, path).is_some_and(|layer| {
             !layer.is_group
                 && layer.adjustment.is_none()
-                && !layer.background
                 && layer.smart_object.is_none()
                 && layer.rect.width() > 0
                 && layer.rect.height() > 0
@@ -57,13 +56,17 @@ pub fn can_convert_to_smart_object(doc: &Document, path: &str) -> bool {
 
 /// Convert the raster pixel layer at `path` into an embedded smart object.
 ///
-/// Returns `false` without mutating the document for any ineligible target or
-/// when the embedded source cannot be serialized.
+/// A Background target is first unlocked — flag cleared, locks released, an
+/// opaque alpha channel added, renamed to the next free `Layer N` — as part of
+/// the same operation, so the result is an ordinary layer. Returns `false`
+/// without mutating the document for any ineligible target or when the embedded
+/// source cannot be serialized (the unlock is applied only after `write_psd`
+/// succeeds).
 pub fn convert_to_smart_object(doc: &mut Document, path: &str) -> bool {
     if !can_convert_to_smart_object(doc, path) {
         return false;
     }
-    let (payload, name) = {
+    let (payload, name, was_background) = {
         let layer = resolve_path(doc, path).expect("can_convert_to_smart_object checked");
         let w = layer.rect.width() as u32;
         let h = layer.rect.height() as u32;
@@ -77,6 +80,11 @@ pub fn convert_to_smart_object(doc: &mut Document, path: &str) -> bool {
             }
         }
         let mut copy = layer.clone();
+        if copy.background {
+            super::create::release_background(&mut copy);
+            copy.name = super::create::next_layer_name(doc, "Layer");
+        }
+        let name = copy.name.clone();
         copy.rect = PsdRect {
             top: 0,
             left: 0,
@@ -87,9 +95,13 @@ pub fn convert_to_smart_object(doc: &mut Document, path: &str) -> bool {
         let Ok(payload) = pictura_codec::write_psd(&embedded) else {
             return false;
         };
-        (payload, layer.name.clone())
+        (payload, name, layer.background)
     };
     let layer = resolve_path_mut(doc, path).expect("can_convert_to_smart_object checked");
+    if was_background {
+        super::create::release_background(layer);
+        layer.name = name.clone();
+    }
     layer.smart_object = Some(SmartObject {
         kind: SmartObjectKind::Embedded,
         payload: Some(payload),

@@ -133,7 +133,9 @@ void CommandTreeTest::menusPanel()
                   << QStringLiteral("Color Label");
 
     QStringList expectedBackground = common;
-    expectedBackground << QStringLiteral("Blending Options…") << QStringLiteral("Export As…")
+    expectedBackground << QStringLiteral("Blending Options…")
+                       << QStringLiteral("Convert to Smart Object")
+                       << QStringLiteral("Export As…")
                        << QStringLiteral("Quick Export as PNG") << QStringLiteral("Color Label");
 
     QStringList expectedGroup = common;
