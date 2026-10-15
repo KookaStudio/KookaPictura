@@ -577,6 +577,25 @@ const QList<FilterCommandSpec>& buildCommands()
              slider(QStringLiteral("Threshold:"), 0, 255, 0, 0, QStringLiteral(" levels"))}),
         def(QStringLiteral("Noise"), QStringLiteral("Median"), QStringLiteral("median"),
             {slider(QStringLiteral("Radius:"), 1, 100, 2, 0, QStringLiteral(" pixels"))}),
+        // Reduce Noise has a dedicated dialog (Basic / Advanced pages); the
+        // slot order here must stay in lock-step with `filter_map.rs` and
+        // `ReduceNoiseDialog`: Strength, Preserve Details, Reduce Color Noise,
+        // Sharpen Details, Remove JPEG Artifacts, an Advanced flag, then the
+        // per-channel Strength/Preserve pairs for R, G and B.
+        def(QStringLiteral("Noise"), QStringLiteral("Reduce Noise"),
+            QStringLiteral("reduce-noise"),
+            {slider(QStringLiteral("Strength:"), 0, 10, 6),
+             slider(QStringLiteral("Preserve Details:"), 0, 100, 0, 0, QStringLiteral(" %")),
+             slider(QStringLiteral("Reduce Color Noise:"), 0, 100, 0, 0, QStringLiteral(" %")),
+             slider(QStringLiteral("Sharpen Details:"), 0, 100, 0, 0, QStringLiteral(" %")),
+             check(QStringLiteral("Remove JPEG Artifacts"), false),
+             hidden(0.0), // Advanced flag
+             slider(QStringLiteral("Red Strength:"), 0, 10, 6),
+             slider(QStringLiteral("Red Preserve Details:"), 0, 100, 0, 0, QStringLiteral(" %")),
+             slider(QStringLiteral("Green Strength:"), 0, 10, 6),
+             slider(QStringLiteral("Green Preserve Details:"), 0, 100, 0, 0, QStringLiteral(" %")),
+             slider(QStringLiteral("Blue Strength:"), 0, 10, 6),
+             slider(QStringLiteral("Blue Preserve Details:"), 0, 100, 0, 0, QStringLiteral(" %"))}),
 
         // Pixelate
         def(QStringLiteral("Pixelate"), QStringLiteral("Color Halftone"),

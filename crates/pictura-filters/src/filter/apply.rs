@@ -97,6 +97,7 @@ pub fn apply(filter: &Filter, buf: &mut PixelBuffer) -> Result<(), FilterError> 
         } => sharpen::unsharp_mask(buf, *amount, *radius, *threshold),
         Filter::Median { radius } => noise::median(buf, *radius),
         Filter::Despeckle => noise::despeckle(buf),
+        Filter::ReduceNoise(params) => noise::reduce_noise(buf, params),
         Filter::Maximum { radius } => other::maximum(buf, *radius),
         Filter::Minimum { radius } => other::minimum(buf, *radius),
         Filter::Offset {

@@ -15,8 +15,8 @@ use super::filter_tools::liquify::liquify_mesh;
 use choices::*;
 use pictura_core::shape::CUSTOM_SHAPE_NAMES;
 use pictura_filters::{
-    Filter, FrameOptions, Light, Lighting, ShearFill, TextureOptions, TextureSurface, TonalFade,
-    SHEAR_MAX_POINTS,
+    ChannelDetail, Filter, FrameOptions, Light, Lighting, ReduceNoiseParams, ShearFill,
+    TextureOptions, TextureSurface, TonalFade, SHEAR_MAX_POINTS,
 };
 
 /// Refuse a non-empty parameter list that does not match the kind's arity.
@@ -258,6 +258,31 @@ pub(super) fn filter_from_kind_params(kind: &str, params: &[f64]) -> Option<Filt
         "despeckle" => {
             arity!(params, 0);
             Filter::Despeckle
+        }
+        // Composite Strength/Preserve Details, Reduce Color Noise, Sharpen
+        // Details, Remove JPEG Artifacts, an Advanced flag, then the per-channel
+        // Strength/Preserve pairs for R, G and B. With Advanced off the
+        // composite pair stands for every channel.
+        "reduce-noise" => {
+            arity!(params, 12);
+            let composite = ChannelDetail {
+                strength: f(params, 0, 6.0),
+                preserve_details: f(params, 1, 0.0),
+            };
+            let detail = |base: usize| ChannelDetail {
+                strength: f(params, base, composite.strength),
+                preserve_details: f(params, base + 1, composite.preserve_details),
+            };
+            Filter::ReduceNoise(ReduceNoiseParams {
+                reduce_color_noise: f(params, 2, 0.0),
+                sharpen_details: f(params, 3, 0.0),
+                remove_jpeg_artifacts: flag(params, 4, false),
+                channels: if flag(params, 5, false) {
+                    [detail(6), detail(8), detail(10)]
+                } else {
+                    [composite; 3]
+                },
+            })
         }
         "sharpen" => {
             arity!(params, 0);

@@ -38,6 +38,7 @@ pub use distort::liquify::{
     LiquifyBrush, LiquifyMesh, LiquifySource, LiquifyTool, LIQUIFY_MAX_BRUSH,
 };
 pub use hdr_toning::HdrToningParams;
+pub use noise::{ChannelDetail, ReduceNoiseParams};
 pub use render::{
     uses_lines, FrameOptions, LensType, Light, LightType, Lighting, TextureChannel, MAX_LIGHTS,
 };

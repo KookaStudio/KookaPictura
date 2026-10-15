@@ -59,6 +59,7 @@ set(PICTURA_QT_TESTS
     tst_filter_gallery
     tst_lens_flare_dialog
     tst_picture_frame_dialog
+    tst_reduce_noise_dialog
     tst_lighting_effects_dialog
     tst_shear_dialog
     tst_displace

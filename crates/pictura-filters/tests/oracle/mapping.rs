@@ -343,6 +343,15 @@ const MAPPING: &[Mapping] = &[
                exposes that gate. Guarded by the speck-removal and determinism unit tests",
     },
     Mapping {
+        filter: "ReduceNoise",
+        im: None,
+        tolerance: 0,
+        note: "An edge-preserving bilateral denoise per plane, then a luminance-holding chroma \
+               blur, an unsharp pass and an 8x8 deblock; ImageMagick has no bilateral or \
+               Reduce-Noise operator that matches. Guarded by the monotonic-Strength, \
+               Preserve-Details, chroma-variance, deblock and determinism unit tests",
+    },
+    Mapping {
         filter: "Extrude",
         im: None,
         tolerance: 0,
@@ -435,7 +444,7 @@ const MAPPING: &[Mapping] = &[
 ];
 
 /// Filters the table marks as having no faithful ImageMagick equivalent.
-const NO_EQUIVALENT: [&str; 38] = [
+const NO_EQUIVALENT: [&str; 39] = [
     "MotionBlur",
     "RadialBlur",
     "Average",
@@ -463,6 +472,7 @@ const NO_EQUIVALENT: [&str; 38] = [
     "ZigZag",
     "OceanRipple",
     "DustAndScratches",
+    "ReduceNoise",
     "Extrude",
     "Tiles",
     "TraceContour",
@@ -478,9 +488,9 @@ const NO_EQUIVALENT: [&str; 38] = [
 
 #[test]
 fn mapping_marks_no_equivalent_operators() {
-    assert_eq!(MAPPING.len(), 54, "one mapping row per Filter variant");
+    assert_eq!(MAPPING.len(), 55, "one mapping row per Filter variant");
     // Exactly one row per `Filter` variant, no duplicates, full enum coverage.
-    let all: [&str; 54] = [
+    let all: [&str; 55] = [
         "GaussianBlur",
         "BoxBlur",
         "ShapeBlur",
@@ -498,6 +508,7 @@ fn mapping_marks_no_equivalent_operators() {
         "AddNoise",
         "Median",
         "Despeckle",
+        "ReduceNoise",
         "Maximum",
         "Minimum",
         "Offset",

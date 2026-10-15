@@ -1012,6 +1012,10 @@ pub fn despeckle(buf: &mut PixelBuffer) -> Result<(), FilterError> {
     apply(&Filter::Despeckle, buf)
 }
 
+pub fn reduce_noise(buf: &mut PixelBuffer, params: &ReduceNoiseParams) -> Result<(), FilterError> {
+    apply(&Filter::ReduceNoise(*params), buf)
+}
+
 /// Rec. 601 luma, as the replaced tests measured brightness.
 pub fn luma(r: f64, g: f64, b: f64) -> f64 {
     0.299 * r + 0.587 * g + 0.114 * b

@@ -138,12 +138,16 @@ void FilterMenuTest::stubEntriesStayDisabled()
 {
     pictura::CommandRegistry* registry = window_->registry();
     QVERIFY(registry != nullptr);
+    // Reduce Noise gained a kernel (#343); a leaf with no kernel stays a stub.
+    bool sawStub = false;
     for (const pictura::CommandInfo& info : registry->describe()) {
-        if (info.id == filterId(QStringLiteral("Noise"), QStringLiteral("Reduce Noise"))) {
+        if (info.id == filterId(QStringLiteral("Video"), QStringLiteral("De-Interlace"))) {
+            sawStub = true;
             QVERIFY2(!info.implemented, qPrintable(info.id));
             QVERIFY2(!info.enabled, qPrintable(info.id));
         }
     }
+    QVERIFY(sawStub);
 }
 
 void FilterMenuTest::blurGallerySubmenuListsTheGallery()
@@ -199,6 +203,7 @@ void FilterMenuTest::dialogCollectsParameterSlots()
         {QStringLiteral("Render"), QStringLiteral("Lens Flare"), 4},
         {QStringLiteral("Render"), QStringLiteral("Lighting Effects"), 22},
         {QStringLiteral("Noise"), QStringLiteral("Add Noise"), 4},
+        {QStringLiteral("Noise"), QStringLiteral("Reduce Noise"), 12},
         {QStringLiteral("Stylize"), QStringLiteral("Diffuse"), 1},
         {QStringLiteral("Stylize"), QStringLiteral("Extrude"), 6},
         {QStringLiteral("Stylize"), QStringLiteral("Glowing Edges"), 3},
