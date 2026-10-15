@@ -33,7 +33,7 @@ int pictura::runLayersSmartObjectConvertChecks(pictura::PicturaMainWindow& frame
     // lpr_smart_object_convert (277): converting a raster pixel layer
     // authors an embedded smart object while keeping its raster proxy, so
     // the composite is unchanged and the object survives save→load; a group
-    // and the Background refuse without history.
+    // refuses without history.
     const bool socCreated = frame.newDocument(QStringLiteral("SmartObjectCtl"), 4, 4,
                                               QStringLiteral("rgb"), 8,
                                               QStringLiteral("white"));
@@ -55,10 +55,8 @@ int pictura::runLayersSmartObjectConvertChecks(pictura::PicturaMainWindow& frame
         && socState.mid(9).toInt() > 0
         && !socView->layer_can_convert_to_smart_object(socPath);
     const QString socGroup = socView->add_group_in(QString());
-    socView->background_from_layer(QStringLiteral("0"));
     const int socRefBase = socView->history_count();
     const bool socRefGroup = !socView->convert_to_smart_object(socGroup);
-    const bool socRefBackground = !socView->convert_to_smart_object(QStringLiteral("0"));
     const bool socRefHistory = socView->history_count() == socRefBase;
     const QString socSavePath =
         QDir::tempPath() + QStringLiteral("/kooka-pictura-smart-object.psd");
@@ -72,14 +70,14 @@ int pictura::runLayersSmartObjectConvertChecks(pictura::PicturaMainWindow& frame
         && socReloadState.startsWith(QStringLiteral("embedded:"))
         && socReloadState.mid(9).toInt() > 0;
     const bool socOk = socRaster && socCan && socConverted && socProxy && socRecorded
-        && socEmbedded && socRefGroup && socRefBackground && socRefHistory && socSaved
+        && socEmbedded && socRefGroup && socRefHistory && socSaved
         && socRoundTrip;
     ST_BEGIN("lpr_smart_object_convert");
     ST_PASS("lpr_smart_object_convert raster=%d can=%d convert=%d state=%s proxy=%d "
-            "history=%d group=%d bg=%d saved=%d reload=%s",
+            "history=%d group=%d saved=%d reload=%s",
             socRaster ? 1 : 0, socCan ? 1 : 0, socConverted ? 1 : 0, qPrintable(socState),
             socProxy ? 1 : 0, socRecorded ? 1 : 0, socRefGroup ? 1 : 0,
-            socRefBackground ? 1 : 0, socSaved ? 1 : 0, qPrintable(socReloadState));
+            socSaved ? 1 : 0, qPrintable(socReloadState));
     if (!socOk) {
         return pictura::selfTest().fail(277, "smart object convert");
     }

@@ -32,6 +32,7 @@ private slots:
     void rowMenuOffersSmartRows();
     void rowMenuOffersSmartObjectContents();
     void commandsRequireASmartObject();
+    void backgroundRowConvertsToSmartObject();
     void resetTransformRecordsOneState();
     void convertToLayersConsumesObject();
     void newViaCopyAddsIndependentLayer();
@@ -271,6 +272,52 @@ void SmartObjectActionsTest::newViaCopyAddsIndependentLayer()
     QCOMPARE(view->history_count(), before + 1);
     QCOMPARE(pictura::layers_api::rowCount(*view), layersBefore + 1);
     QVERIFY2(!view->layer_smart_object_state(path).isEmpty(), "original keeps its source");
+}
+
+// A Background is a convertible target: the row menu and the command offer
+// Convert to Smart Object, the conversion unlocks it (no longer a Background)
+// and records one state, and a group row still omits the row.
+void SmartObjectActionsTest::backgroundRowConvertsToSmartObject()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("SmartBackground"), 16, 16,
+                                 QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    pictura::PictureView* view = window_->activeView();
+    auto* panel = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    pictura::CommandRegistry* registry = window_->registry();
+    QVERIFY(view && panel && registry);
+
+    // The bridge newDocument makes a plain layer; flag it as the Background.
+    const QString path = pictura::layers_api::rowAt(*view, 0).path;
+    QVERIFY2(view->background_from_layer(path), "the layer becomes the Background");
+    panel->refresh();
+    QCOMPARE(view->layer_kind(path.toInt()), QStringLiteral("background"));
+
+    QVERIFY2(panel->rowMenuEnabledForPathForTest(path, QStringLiteral("Convert to Smart Object")),
+             "a Background row enables Convert to Smart Object");
+    panel->selectPaths({path}, path);
+    registry->refresh();
+    QVERIFY(registry->action(id(pictura::command_ids::LayerSmartObjectConvertTo))->isEnabled());
+
+    // A group row does not offer the command.
+    const QString group = view->add_group_in(QString());
+    panel->refresh();
+    QVERIFY2(!panel->rowMenuTextsForPathForTest(group)
+                  .contains(QStringLiteral("Convert to Smart Object")),
+             "a group row omits Convert to Smart Object");
+
+    panel->selectPaths({path}, path);
+    registry->refresh();
+    const int before = view->history_count();
+    QVERIFY2(panel->performRowActionForTest(QStringLiteral("convertToSmartObject"), path),
+             "the Background row converts");
+    QCOMPARE(view->history_count(), before + 1);
+    QCOMPARE(view->history_label(before), QStringLiteral("Convert to Smart Object"));
+    QVERIFY2(view->layer_kind(path.toInt()) != QStringLiteral("background"),
+             "the row is no longer a Background");
+    QVERIFY2(!view->layer_smart_object_state(path).isEmpty(), "the Background became a smart object");
+    panel->refresh();
+    QVERIFY2(!panel->rowMenuEnabledForPathForTest(path, QStringLiteral("Convert to Smart Object")),
+             "an existing smart object disables Convert to Smart Object");
 }
 
 QTEST_MAIN(SmartObjectActionsTest)

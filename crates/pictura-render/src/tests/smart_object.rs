@@ -1,7 +1,7 @@
 use super::*;
 use pictura_codec::{decode_pictura_raw_settings, read_psd, write_psd};
 use pictura_core::{
-    Channel, CrsSettings, LayerBlock, PicturaRawSettings, SmartObject, SmartObjectKind,
+    Channel, CrsSettings, LayerBlock, LockFlags, PicturaRawSettings, SmartObject, SmartObjectKind,
 };
 
 fn section_has_uuid(bytes: &[u8], uuid: &str) -> bool {
@@ -336,22 +336,6 @@ fn convert_refuses_ineligible_targets() {
                 vec![adjustment_layer("Adj", *b"inv ", vec![0], 255, None)],
             ),
         ),
-        ("background", {
-            let mut d = doc(
-                4,
-                4,
-                vec![solid(
-                    "Background",
-                    full(4, 4),
-                    (0, 0, 0),
-                    255,
-                    BlendMode::Normal,
-                    255,
-                )],
-            );
-            d.layers[0].background = true;
-            d
-        }),
         (
             "zero-size",
             doc(
@@ -396,6 +380,63 @@ fn convert_refuses_ineligible_targets() {
     let converted = d.clone();
     assert!(!convert_to_smart_object(&mut d, "0"));
     assert_eq!(d, converted);
+}
+
+#[test]
+fn convert_background_unlocks_and_embeds() {
+    let mut d = doc(
+        4,
+        4,
+        vec![solid(
+            "Background",
+            full(4, 4),
+            (1, 2, 3),
+            255,
+            BlendMode::Normal,
+            255,
+        )],
+    );
+    d.layers[0].background = true;
+    d.layers[0].lock = LockFlags::all();
+    let before = composite_rgba(&d);
+
+    assert!(can_convert_to_smart_object(&d, "0"));
+    assert!(convert_to_smart_object(&mut d, "0"));
+
+    let layer = &d.layers[0];
+    assert!(!layer.background, "no longer the Background");
+    assert_eq!(layer.lock.bits(), 0, "unlocked");
+    assert_eq!(layer.name, "Layer 1", "renamed to the next free Layer N");
+    assert!(layer.smart_object.is_some(), "carries a smart object");
+    assert_eq!(composite_rgba(&d), before, "composite unchanged");
+
+    let converted = d.clone();
+    assert!(
+        !convert_to_smart_object(&mut d, "0"),
+        "already a smart object"
+    );
+    assert_eq!(d, converted);
+}
+
+#[test]
+fn convert_for_smart_filters_unlocks_a_background() {
+    let mut d = doc(
+        4,
+        4,
+        vec![solid(
+            "Background",
+            full(4, 4),
+            (4, 5, 6),
+            255,
+            BlendMode::Normal,
+            255,
+        )],
+    );
+    d.layers[0].background = true;
+
+    assert!(convert_for_smart_filters(&mut d, "0"));
+    assert!(!d.layers[0].background);
+    assert!(d.layers[0].smart_object.is_some());
 }
 
 #[test]
