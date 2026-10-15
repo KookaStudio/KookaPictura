@@ -27,6 +27,10 @@ this: "unable to open webp files".
 - **WebP export no longer depends on Qt.** `save`/`save_as` and `export_image`
   route a `WEBP` target to `pictura_codec::encode_webp` (after the boundary
   rescales, so the percent-scale contract is unchanged) and write atomically.
+- **WebP in the Export As dialog.** `File ▸ Export As…` gains a `WebP` format
+  entry that encodes each checked target through the engine (in memory, so the
+  size estimate and the write share one encoder), with the transparency control
+  enabled and the quality control off (the engine encoder is lossless).
 - **One new dependency**, `image-webp = "0.2"` (MIT OR Apache-2.0, pure Rust),
   added to `pictura-codec`. It is the underlying WebP crate the `image`
   meta-crate wraps and is already named in `docs/01-architecture/file-formats.md`.

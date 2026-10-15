@@ -58,7 +58,21 @@ pub mod ffi {
             quality: i32,
             scale: i32,
         ) -> bool;
+
+        /// Encode packed RGBA8888 as a lossless WebP container; empty on refusal.
+        fn webp_encode(rgba: &[u8], width: i32, height: i32) -> Vec<u8>;
     }
+}
+
+/// Encode packed RGBA8888 as a lossless WebP container; empty on refusal.
+///
+/// The Export As dialog previews and writes per-entry bytes in memory, so this
+/// exposes the engine encoder directly rather than the path-based save edge.
+pub fn webp_encode(rgba: &[u8], width: i32, height: i32) -> Vec<u8> {
+    if width <= 0 || height <= 0 {
+        return Vec::new();
+    }
+    pictura_codec::encode_webp(rgba, width as u32, height as u32).unwrap_or_default()
 }
 
 pub fn output_format(view: &PictureView) -> QString {

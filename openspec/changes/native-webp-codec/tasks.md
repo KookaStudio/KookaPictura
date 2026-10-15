@@ -34,21 +34,30 @@
   ceiling. Verify a `.webp` save writes a file that reopens through the native
   decoder with matching pixels, and an unwritable path leaves no partial file.
 
-## 4. Oracle and integration checks
+## 4. WebP in the Export As dialog
 
-- [x] 4.1 Add `crates/pictura-codec/tests/webp_oracle.rs`: encode a fixture with
+- [x] 4.1 Add a `WebP` entry to `export_as_dialog.cpp` (format combo, suffix,
+  `formatForPath`, `retargetPath`), enable the transparency control for it, and
+  leave the quality control off (the engine encoder is lossless). Add a
+  `webp_encode` bridge in `export.rs` so the dialog's in-memory encode and size
+  estimate use the engine. Verify with `tst_export_as`: the combo lists WebP, its
+  controls gate correctly, and `encoded`/`saveTo` write a RIFF/WEBP container.
+
+## 5. Oracle and integration checks
+
+- [x] 5.1 Add `crates/pictura-codec/tests/webp_oracle.rs`: encode a fixture with
   `encode_webp`, decode it with `magick` and compare through
   `pictura-testkit::compare`; also have `magick` write a lossy WebP and decode
   it with `decode_webp`, comparing to the source. Self-skip when `magick` is
   absent and include a check that a wrong output fails.
-- [x] 4.2 Add a Qt Test case (new `tst_webp.cpp` or an existing suite) that
+- [x] 5.2 Add a Qt Test case (new `tst_webp.cpp` or an existing suite) that
   saves a document to `.webp`, reopens it through `open_image`, and asserts the
   dimensions and a pixel survive the round trip with no Qt WebP plugin.
 
-## 5. Verify and record
+## 6. Verify and record
 
-- [x] 5.1 `cargo fmt --all`, `cargo clippy --workspace --all-targets -- -D warnings`,
+- [x] 6.1 `cargo fmt --all`, `cargo clippy --workspace --all-targets -- -D warnings`,
   `cargo nextest run --workspace`, `cargo test --workspace --doc`,
   `openspec validate --all --strict`, and `bash scripts/verify-full.sh`.
-- [x] 5.2 Update `docs/dev/STATE.md` with the change record (commit carries
+- [x] 6.2 Update `docs/dev/STATE.md` with the change record (commit carries
   `TASK-ALLOWS-DOCS`).

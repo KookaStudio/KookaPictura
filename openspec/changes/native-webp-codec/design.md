@@ -70,14 +70,15 @@ so the requirements are narrowed: Qt remains the codec for every format except
 WebP; WebP is decoded and encoded by the engine because its Qt plugin is
 optional. The engine stays Qt-free either way.
 
-### D5 — Export As dialog format list is unchanged
+### D5 — Export As offers WebP through the engine
 
-`export_as_dialog.cpp` deliberately offers a CC-parity subset (PNG, JPG, PNG-8,
-GIF, SVG) and already omits TIFF and BMP as well as WebP. WebP is reachable the
-same way TIFF and BMP are — the Save As path's extension and the
-`export_image` bridge — so WebP is at parity with those formats without touching
-the dialog. Adding WebP (but not TIFF/BMP) to the combo would be an inconsistent
-partial change; reconciling the whole list with the spec is separate work.
+`export_as_dialog.cpp` keeps its CC-parity list and adds a `WebP` entry. The
+dialog encodes per-entry bytes in memory (for the size estimate and the write),
+so it cannot use the path-based `export_image`; it calls a new `webp_encode`
+bridge that wraps `pictura_codec::encode_webp`. The transparency control is
+enabled (WebP carries alpha) and the quality control is off, because the engine
+encoder is lossless. TIFF and BMP remain out of the combo; reconciling the whole
+list with the spec is separate work.
 
 ## Risks
 

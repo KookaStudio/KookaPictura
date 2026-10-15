@@ -44,6 +44,43 @@ failure without producing a partial file.
 - **WHEN** the encode edge is given a path in a directory that does not exist
 - **THEN** it returns failure and no file is created
 
+### Requirement: Export As writes the flattened composite
+
+The application SHALL provide `File ▸ Export As…`. It SHALL present a format
+choice (PNG, JPG, PNG-8, GIF, SVG, WebP), a quality control enabled for the
+formats that take one (JPG), a transparency control for the formats that carry
+alpha (PNG, PNG-8, GIF, WebP), and a percent scale, then write the document's
+flattened composite to the chosen path through the encode edge — WebP through
+the engine's encoder, every other raster format through the Qt boundary. It
+SHALL NOT change the document's path, modified state, or history, and SHALL NOT
+write a single layer or a selection. A refusal SHALL write nothing and leave the
+document unchanged.
+
+#### Scenario: Export As writes a raster without modifying the document
+
+- **WHEN** the user runs Export As, chooses PNG, and confirms a path
+- **THEN** a PNG holding the flattened composite is written, the document's path and modified state are unchanged, and no history state is added
+
+#### Scenario: Quality applies only where meaningful
+
+- **WHEN** the user runs Export As and selects JPEG
+- **THEN** the quality control is enabled and its value is passed to the encoder
+
+#### Scenario: Export As offers WebP and preserves alpha
+
+- **WHEN** the user runs Export As, chooses WebP, and confirms a path
+- **THEN** a WebP holding the flattened composite is written, its transparent pixels stay transparent, and the document's path and modified state are unchanged
+
+#### Scenario: Export As honors the typed extension
+
+- **WHEN** the user runs Export As with the format combo on PNG but types `photo.jpg`
+- **THEN** the written file is a JPEG, because the extension names the format
+
+#### Scenario: Export As on an empty view refuses
+
+- **WHEN** Export As is invoked with no open document
+- **THEN** nothing is written and no history state is added
+
 ## ADDED Requirements
 
 ### Requirement: The engine encodes WebP natively
