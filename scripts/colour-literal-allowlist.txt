@@ -11,6 +11,8 @@ crates/pictura-app/cpp/blur_gallery_canvas.cpp  QColor(0xf4, 0xf4, 0xf4)  # data
 crates/pictura-app/cpp/blur_gallery_canvas.cpp  QColor(255, 255, 255)  # data
 crates/pictura-app/cpp/blur_gallery_canvas.cpp  QColor(55, 55, 55)  # data
 crates/pictura-app/cpp/blur_gallery_canvas.cpp  QColor(70, 70, 70)  # data
+crates/pictura-app/cpp/blur_gallery_canvas_path.cpp  QColor(0x20, 0x20, 0x20)  # data: on-image path point fill
+crates/pictura-app/cpp/blur_gallery_canvas_path.cpp  QColor(255, 255, 255)  # data: on-image path point fill
 crates/pictura-app/cpp/canvas_size_dialog.cpp  QColor(128, 128, 128)  # data
 crates/pictura-app/cpp/color_balance_dialog.cpp  QColor(130, 130, 130)  # data
 crates/pictura-app/cpp/fill_dialog.cpp  QColor(128, 128, 128)  # data

@@ -60,7 +60,9 @@ void BlurGalleryDialog::buildPathControls(QWidget* box, QVBoxLayout* controls)
     controls->addWidget(pathEditShapes_);
 
     connect(pathPreset_, &QComboBox::currentIndexChanged, this, [this](int index) {
-        if (index < 0 || index == kCustomPreset) {
+        // The Motion Effects tab, which owns the strobe, is built after this
+        // row.
+        if (index < 0 || index == kCustomPreset || !strobeStrength_.spin) {
             return;
         }
         // A preset replaces the custom strobe.

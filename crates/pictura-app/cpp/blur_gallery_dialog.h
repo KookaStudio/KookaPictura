@@ -3,10 +3,11 @@
 // CS6's Blur Gallery workspace as the Field Blur, Iris Blur, Tilt-Shift, and
 // (post-CS6) Path Blur entries open it: the picture with its on-image pins
 // or paths beside a Blur Tools panel and the Effects / Motion Effects / Noise
-// tabbed panel. Each of the four effects keeps its own pin list here and can be switched on with its
-// row's checkbox; the selected effect (its row's name, or checking it) is the
-// one the canvas edits, and its arrow expands its controls. The command's
-// kind opens with that effect on and selected. The preview re-renders the
+// tabbed panel. Each of the four effects keeps its own pin list here and can
+// be switched on with its row's checkbox; the selected effect (its row's
+// name, or checking it) is the one the canvas edits, and its arrow opens its
+// controls, closing the row that was open. The command's kind opens with
+// that effect on and selected. The preview re-renders the
 // active layer through `filter_proxy_layer` over the rest of the document;
 // the document is untouched until OK.
 
