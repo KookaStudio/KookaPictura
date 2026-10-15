@@ -3,8 +3,9 @@
 
 use pictura_core::PixelBuffer;
 use pictura_filters::{
-    apply, BlurNoise, BlurNoiseKind, BlurPath, BlurPin, BokehParams, DepthMap, Filter, IrisPin,
-    IrisShape, NoiseDistribution, PathMotion, Quality, RadialMethod, SmartBlurMode, TiltPin,
+    apply, BlurNoise, BlurNoiseKind, BlurPath, BlurPin, BokehParams, ChannelDetail, DepthMap,
+    Filter, IrisPin, IrisShape, NoiseDistribution, PathMotion, Quality, RadialMethod,
+    ReduceNoiseParams, SmartBlurMode, TiltPin,
 };
 
 /// A deterministic 4-channel picture with noise, gradients and hard edges, in
@@ -52,6 +53,28 @@ fn kernels() -> Vec<(&'static str, Filter)> {
         ),
         ("median 1", Filter::Median { radius: 1 }),
         ("median 4", Filter::Median { radius: 4 }),
+        (
+            "reduce noise",
+            Filter::ReduceNoise(ReduceNoiseParams {
+                reduce_color_noise: 50.0,
+                sharpen_details: 40.0,
+                remove_jpeg_artifacts: true,
+                channels: [
+                    ChannelDetail {
+                        strength: 7.0,
+                        preserve_details: 20.0,
+                    },
+                    ChannelDetail {
+                        strength: 5.0,
+                        preserve_details: 40.0,
+                    },
+                    ChannelDetail {
+                        strength: 9.0,
+                        preserve_details: 0.0,
+                    },
+                ],
+            }),
+        ),
         (
             "motion 30",
             Filter::MotionBlur {
@@ -426,6 +449,7 @@ fn row_parallel_kernels_keep_their_serial_bytes() {
         ("unsharp", 0x034f_4a46_fc10_95bd),
         ("median 1", 0x6c43_94f5_21a7_60ef),
         ("median 4", 0x7df2_1565_3253_8682),
+        ("reduce noise", 0x8ef2_36aa_9e18_5691),
         ("motion 30", 0x06c6_d5a7_5020_9627),
         ("motion -75", 0xc47c_d47d_da23_3405),
         ("box 2", 0xb4f7_9300_d71d_b971),

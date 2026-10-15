@@ -30,6 +30,7 @@ pub(in crate::cxxqt_object) const FILTER_ARITIES: &[(&str, usize)] = &[
     ("blur-more", 0),
     ("median", 1),
     ("despeckle", 0),
+    ("reduce-noise", 12),
     ("sharpen", 0),
     ("sharpen-more", 0),
     ("sharpen-edges", 0),

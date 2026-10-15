@@ -1,15 +1,19 @@
-//! Noise family: Add Noise, Median, Despeckle (`FILT-030`).
+//! Noise family: Add Noise, Median, Despeckle, Reduce Noise (`FILT-030`).
 //!
 //! Add Noise is the only randomized filter in the crate; the seed is part of
-//! the parameters so a re-apply is bit-identical. Median and Despeckle are
-//! deterministic. Every filter touches the color planes only; alpha is never
-//! modified. The reference's kernels are closed, so the choices marked `ponytail:`
-//! below are documented approximations, not verified parity.
+//! the parameters so a re-apply is bit-identical. Median, Despeckle and Reduce
+//! Noise are deterministic. Median and Despeckle are moving kernels — they run
+//! over every plane, alpha included; Add Noise and Reduce Noise leave alpha
+//! bit-identical. The reference's kernels are closed, so the choices marked
+//! `ponytail:` below are documented approximations, not verified parity.
 
 use pictura_core::PixelBuffer;
 
 use crate::{kernel::clamp_index, validate, FilterError};
 use rayon::prelude::*;
+
+mod reduce;
+pub use reduce::{reduce_noise, ChannelDetail, ReduceNoiseParams};
 
 /// Despeckle: how far outside a flat neighborhood the center must sit before
 /// it reads as an isolated outlier rather than texture.

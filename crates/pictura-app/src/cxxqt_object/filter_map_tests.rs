@@ -3,9 +3,10 @@ use super::gallery::GALLERY_TAIL;
 use super::*;
 use pictura_core::shape::CUSTOM_SHAPE_NAMES;
 use pictura_filters::{
-    BlurNoise, BlurNoiseKind, BlurPath, BlurPin, BokehParams, DisplaceFit, GlassTexture, IrisPin,
-    IrisShape, LightType, NoiseDistribution, PathMotion, Quality, RadialMethod, SharpenRemove,
-    SmartBlurMode, TextureChannel, TiltPin, WaveType, WindMethod, MAX_FIELD_PINS, MAX_PATH_POINTS,
+    BlurNoise, BlurNoiseKind, BlurPath, BlurPin, BokehParams, ChannelDetail, DisplaceFit,
+    GlassTexture, IrisPin, IrisShape, LightType, NoiseDistribution, PathMotion, Quality,
+    RadialMethod, ReduceNoiseParams, SharpenRemove, SmartBlurMode, TextureChannel, TiltPin,
+    WaveType, WindMethod, MAX_FIELD_PINS, MAX_PATH_POINTS,
 };
 
 #[test]
@@ -77,6 +78,73 @@ fn parameter_values_override_defaults() {
             method: WindMethod::Stagger,
             from_right: false,
         })
+    );
+}
+
+#[test]
+fn reduce_noise_defaults_and_per_channel_mapping() {
+    // Empty slots: composite Strength 6, everything else off, all channels equal.
+    assert_eq!(
+        filter_from_kind_params("reduce-noise", &[]),
+        Some(Filter::ReduceNoise(ReduceNoiseParams {
+            reduce_color_noise: 0.0,
+            sharpen_details: 0.0,
+            remove_jpeg_artifacts: false,
+            channels: [ChannelDetail {
+                strength: 6.0,
+                preserve_details: 0.0,
+            }; 3],
+        }))
+    );
+    // Advanced off: the composite pair stands for every channel.
+    let mut slots = vec![0.0f64; 12];
+    slots[0] = 8.0;
+    slots[1] = 30.0;
+    slots[2] = 40.0;
+    slots[3] = 20.0;
+    slots[4] = 1.0;
+    slots[6] = 1.0; // ignored while Advanced is off
+    assert_eq!(
+        filter_from_kind_params("reduce-noise", &slots),
+        Some(Filter::ReduceNoise(ReduceNoiseParams {
+            reduce_color_noise: 40.0,
+            sharpen_details: 20.0,
+            remove_jpeg_artifacts: true,
+            channels: [ChannelDetail {
+                strength: 8.0,
+                preserve_details: 30.0,
+            }; 3],
+        }))
+    );
+    // Advanced on: each channel keeps its own pair.
+    slots[5] = 1.0;
+    slots[6] = 2.0;
+    slots[7] = 10.0;
+    slots[8] = 4.0;
+    slots[9] = 50.0;
+    slots[10] = 9.0;
+    slots[11] = 90.0;
+    assert_eq!(
+        filter_from_kind_params("reduce-noise", &slots),
+        Some(Filter::ReduceNoise(ReduceNoiseParams {
+            reduce_color_noise: 40.0,
+            sharpen_details: 20.0,
+            remove_jpeg_artifacts: true,
+            channels: [
+                ChannelDetail {
+                    strength: 2.0,
+                    preserve_details: 10.0,
+                },
+                ChannelDetail {
+                    strength: 4.0,
+                    preserve_details: 50.0,
+                },
+                ChannelDetail {
+                    strength: 9.0,
+                    preserve_details: 90.0,
+                },
+            ],
+        }))
     );
 }
 

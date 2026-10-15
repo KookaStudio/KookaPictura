@@ -4,9 +4,10 @@ use crate::{
     BlurNoise, BlurPath, BlurPin, BokehParams, BrushType, ContourEdge, DepthMap, DiffuseMode,
     DisplaceFit, DisplaceMap, ExtrudeType, FrameOptions, GlassTexture, GrainType, HalftoneType,
     HdrToningParams, IrisPin, IrisShape, LensType, LightDirection, Lighting, LiquifyMesh,
-    MezzotintType, NoiseDistribution, PathMotion, PolarKind, Quality, RadialMethod, RippleSize,
-    SharpenRemove, ShearFill, SmartBlurMode, SpherizeMode, StrokeDirection, TextureOptions,
-    TileFill, TiltPin, TonalFade, WaveType, WindMethod, ZigZagStyle,
+    MezzotintType, NoiseDistribution, PathMotion, PolarKind, Quality, RadialMethod,
+    ReduceNoiseParams, RippleSize, SharpenRemove, ShearFill, SmartBlurMode, SpherizeMode,
+    StrokeDirection, TextureOptions, TileFill, TiltPin, TonalFade, WaveType, WindMethod,
+    ZigZagStyle,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -123,6 +124,9 @@ pub enum Filter {
         radius: u32,
     },
     Despeckle,
+    /// Edge-preserving luminance/chroma denoise (`FILT-030`). A value kernel:
+    /// alpha is left bit-identical.
+    ReduceNoise(ReduceNoiseParams),
     Maximum {
         radius: u32,
     },

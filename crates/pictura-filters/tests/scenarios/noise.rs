@@ -157,6 +157,47 @@ fn dust_and_scratches_uniform_is_bit_unchanged() {
 }
 
 #[test]
+fn reduce_noise_routes_through_apply_and_lowers_luminance_variance() {
+    let mut buf = plane(32, 32, 3, [128, 128, 128]);
+    let n = buf.pixel_count();
+    let mut state = 12345u64;
+    for i in 0..n {
+        state = state
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        let v = (128 + ((state >> 33) as i32 % 41) - 20).clamp(0, 255) as u8;
+        buf.data[i] = v;
+        buf.data[n + i] = v;
+        buf.data[2 * n + i] = v;
+    }
+    let variance = |b: &PixelBuffer| {
+        let n = b.pixel_count();
+        let vals = &b.data[0..n];
+        let mean = vals.iter().map(|&v| f64::from(v)).sum::<f64>() / n as f64;
+        vals.iter()
+            .map(|&v| (f64::from(v) - mean).powi(2))
+            .sum::<f64>()
+            / n as f64
+    };
+    let before = variance(&buf);
+    reduce_noise(
+        &mut buf,
+        &ReduceNoiseParams {
+            channels: [ChannelDetail {
+                strength: 8.0,
+                preserve_details: 0.0,
+            }; 3],
+            ..ReduceNoiseParams::default()
+        },
+    )
+    .unwrap();
+    assert!(
+        variance(&buf) < before,
+        "Strength 8 must lower the variance"
+    );
+}
+
+#[test]
 fn alpha_is_untouched_and_tiny_images_do_not_panic() {
     for &(w, h) in &[(1u32, 1u32), (2, 2), (3, 3), (8, 8)] {
         let base = plane(w, h, 4, [100, 100, 100]);
