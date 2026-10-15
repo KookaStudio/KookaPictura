@@ -171,7 +171,7 @@ public:
     }
 
     // Delete / Backspace removes a component selected whole.
-    bool removeLassoPoint() override
+    bool onDeletePoint() override
     {
         PictureView* v = ctx_ ? ctx_->view() : nullptr;
         if (!v || !v->has_document() || !whole_ || gesture_ != Gesture::None

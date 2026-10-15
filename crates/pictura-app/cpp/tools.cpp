@@ -146,16 +146,16 @@ ToolController::ToolController(QObject* parent)
         emit cropOptionsChanged();
     };
     crop->angleChanged = [this]() {
-        if (ToolHandler* h = registry_.forTool(ToolId::Crop)) {
-            crop_->setPivot(h->cropCenter());
+        if (CropBoxSession* box = cropBoxSession()) {
+            crop_->setPivot(box->cropCenter());
         }
         if (canvas_) {
             canvas_->setCropStraighten(crop_->angle(), crop_->pivot());
         }
     };
     crop->straightenChanged = [this]() {
-        if (ToolHandler* h = registry_.forTool(ToolId::Crop)) {
-            h->setStraightenMode(crop_->straightenMode());
+        if (CropBoxSession* box = cropBoxSession()) {
+            box->setStraightenMode(crop_->straightenMode());
         }
         refreshCursor();
         emit cropOptionsChanged();
@@ -313,28 +313,27 @@ void ToolController::setActiveTool(ToolId id)
     emit activeToolChanged(id);
 }
 
-bool ToolController::commitText()
+CropCommitSession* ToolController::cropCommitSession() const
 {
-    ToolHandler* h = registry_.forTool(active_);
-    return h && h->commitText();
+    // Crop's staged box survives a tool switch, so commit reaches the Crop
+    // handler unless Perspective Crop is active (its quad lives only then).
+    const ToolId target = active_ == ToolId::PerspectiveCrop ? ToolId::PerspectiveCrop : ToolId::Crop;
+    return dynamic_cast<CropCommitSession*>(registry_.forTool(target));
 }
 
-bool ToolController::cancelText()
+CropBoxSession* ToolController::cropBoxSession() const
 {
-    ToolHandler* h = registry_.forTool(active_);
-    return h && h->cancelText();
+    return dynamic_cast<CropBoxSession*>(registry_.forTool(ToolId::Crop));
 }
 
-bool ToolController::textActive() const
+PerspectiveCropSession* ToolController::perspectiveCropSession() const
 {
-    ToolHandler* h = registry_.forTool(active_);
-    return h && h->textActive();
+    return dynamic_cast<PerspectiveCropSession*>(registry_.forTool(ToolId::PerspectiveCrop));
 }
 
-bool ToolController::insertText(const QString& text)
+TextSession* ToolController::textSession() const
 {
-    ToolHandler* h = registry_.forTool(active_);
-    return h && h->insertText(text);
+    return dynamic_cast<TextSession*>(registry_.forTool(active_));
 }
 
 double ToolController::viewRotation() const
@@ -374,46 +373,10 @@ int ToolController::cropCursorKindForTest(const QPointF& imagePos, int mods)
 
 QPointF ToolController::cropCenterForTest()
 {
-    if (ToolHandler* h = registry_.forTool(ToolId::Crop)) {
-        return h->cropCenter();
+    if (CropBoxSession* box = cropBoxSession()) {
+        return box->cropCenter();
     }
     return QPointF();
-}
-
-bool ToolController::resizeCrop(double width, double height)
-{
-    if (ToolHandler* h = registry_.forTool(ToolId::Crop)) {
-        return h->resizeCrop(width, height);
-    }
-    return false;
-}
-
-double ToolController::cropWidth() const
-{
-    ToolHandler* h = registry_.forTool(ToolId::Crop);
-    return h ? h->cropWidth() : 0.0;
-}
-
-double ToolController::cropHeight() const
-{
-    ToolHandler* h = registry_.forTool(ToolId::Crop);
-    return h ? h->cropHeight() : 0.0;
-}
-
-void ToolController::cancelCrop()
-{
-    // Works for both crop tools, mirroring commitCrop.
-    const ToolId target =
-        active_ == ToolId::PerspectiveCrop ? ToolId::PerspectiveCrop : ToolId::Crop;
-    if (ToolHandler* h = registry_.forTool(target)) {
-        h->cancelPolygonLasso();
-    }
-}
-
-bool ToolController::cropActive() const
-{
-    ToolHandler* h = registry_.forTool(ToolId::Crop);
-    return h && h->cropActive();
 }
 
 void ToolController::updateSamplingRing(const QPointF& imagePos)
@@ -753,7 +716,7 @@ void ToolController::handlePressed(const QPointF& imagePos, int button, int modi
         return;
     }
     ToolHandler* handler = registry_.forTool(active_);
-    if (isSelectionTool(active_) && !(handler && handler->lassoInProgress())) {
+    if (isSelectionTool(active_) && !(handler && handler->gestureInProgress())) {
         // A press inside a live selection moves the mask or its content instead
         // of starting a new shape; the selection handler never sees the event.
         const bool ctrl = mods.testFlag(Qt::ControlModifier);
@@ -874,68 +837,28 @@ void ToolController::handleReleased(const QPointF& imagePos)
     syncTransformControls();
 }
 
-bool ToolController::commitPolygonLasso()
+bool ToolController::handleFinishPath()
 {
     if (ToolHandler* h = registry_.forTool(active_)) {
-        return h->commitPolygonLasso();
+        return h->onFinishPath();
     }
     return false;
 }
 
-bool ToolController::cancelPolygonLasso()
+bool ToolController::handleEscape()
 {
     if (ToolHandler* h = registry_.forTool(active_)) {
-        return h->cancelPolygonLasso();
+        return h->onEscape();
     }
     return false;
 }
 
-bool ToolController::removeLassoPoint()
+bool ToolController::handleDeletePoint()
 {
     if (ToolHandler* h = registry_.forTool(active_)) {
-        return h->removeLassoPoint();
+        return h->onDeletePoint();
     }
     return false;
-}
-
-bool ToolController::commitCrop()
-{
-    // The staged crop survives a tool switch, so reach the Crop handler
-    // directly rather than through whatever is active now; a Perspective Crop
-    // quad lives only while its tool is active.
-    const ToolId target = active_ == ToolId::PerspectiveCrop ? ToolId::PerspectiveCrop : ToolId::Crop;
-    if (ToolHandler* h = registry_.forTool(target)) {
-        return h->commitCrop();
-    }
-    return false;
-}
-
-bool ToolController::resetCrop()
-{
-    if (ToolHandler* h = registry_.forTool(ToolId::Crop)) {
-        return h->resetCropBox();
-    }
-    return false;
-}
-
-void ToolController::setPerspectiveOutput(int width, int height)
-{
-    if (ToolHandler* h = registry_.forTool(ToolId::PerspectiveCrop)) {
-        h->setPerspectiveOutput(width, height);
-    }
-}
-
-bool ToolController::perspectiveQuadComplete() const
-{
-    ToolHandler* h = registry_.forTool(ToolId::PerspectiveCrop);
-    return h && h->perspectiveQuadComplete();
-}
-
-void ToolController::setPerspectiveShowGrid(bool on)
-{
-    if (ToolHandler* h = registry_.forTool(ToolId::PerspectiveCrop)) {
-        h->setPerspectiveShowGrid(on);
-    }
 }
 
 bool ToolController::handleNudgeKey(int key, Qt::KeyboardModifiers mods)

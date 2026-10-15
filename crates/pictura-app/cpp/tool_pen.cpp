@@ -299,8 +299,8 @@ public:
     }
 
     // Enter and Esc end the subpath being drawn, leaving it open.
-    bool commitPolygonLasso() override { return finishDrawing(); }
-    bool cancelPolygonLasso() override { return finishDrawing(); }
+    bool onFinishPath() override { return finishDrawing(); }
+    bool onEscape() override { return finishDrawing(); }
 
     // A live gesture is this tool session's one step: Edit Undo cancels the
     // gesture — restoring the pre-press path — before the document history.

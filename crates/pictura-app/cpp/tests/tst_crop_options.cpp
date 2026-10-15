@@ -78,6 +78,8 @@ void CropOptionsTest::ratioPresetLocksTheBox()
     auto* tools = frame.findChild<pictura::ToolController*>();
     QVERIFY(canvas);
     QVERIFY(tools);
+    QVERIFY(tools->cropBoxSession());
+    QVERIFY(tools->cropCommitSession());
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
@@ -103,6 +105,8 @@ void CropOptionsTest::ratioFieldsShowRatioValues()
     auto* tools = frame.findChild<pictura::ToolController*>();
     QVERIFY(canvas);
     QVERIFY(tools);
+    QVERIFY(tools->cropBoxSession());
+    QVERIFY(tools->cropCommitSession());
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
@@ -167,6 +171,8 @@ void CropOptionsTest::ratioFieldsAcceptDecimals()
                               QStringLiteral("white")));
     auto* tools = frame.findChild<pictura::ToolController*>();
     QVERIFY(tools);
+    QVERIFY(tools->cropBoxSession());
+    QVERIFY(tools->cropCommitSession());
     const int doc = frame.activeDocumentIndex();
 
     frame.setActiveTool(pictura::ToolId::Crop);
@@ -190,6 +196,8 @@ void CropOptionsTest::resolutionModeShowsPixels()
     auto* tools = frame.findChild<pictura::ToolController*>();
     QVERIFY(canvas);
     QVERIFY(tools);
+    QVERIFY(tools->cropBoxSession());
+    QVERIFY(tools->cropCommitSession());
     const int doc = frame.activeDocumentIndex();
 
     canvas->actualPixels();
@@ -219,6 +227,8 @@ void CropOptionsTest::straightenToggleArmsLineMode()
                               QStringLiteral("white")));
     auto* tools = frame.findChild<pictura::ToolController*>();
     QVERIFY(tools);
+    QVERIFY(tools->cropBoxSession());
+    QVERIFY(tools->cropCommitSession());
     const int doc = frame.activeDocumentIndex();
     frame.setActiveTool(pictura::ToolId::Crop);
     auto* spirit = frame.findChild<QToolButton*>(QStringLiteral("optionsCropSpirit"));
@@ -258,6 +268,8 @@ void CropOptionsTest::historyNamesTheOverlay()
     pictura::PicturaMainWindow& frame = *window_;
     auto* tools = frame.findChild<pictura::ToolController*>();
     QVERIFY(tools);
+    QVERIFY(tools->cropBoxSession());
+    QVERIFY(tools->cropCommitSession());
     auto* crop = tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop);
     const int before = crop->gridOverlay();
 
@@ -273,7 +285,7 @@ void CropOptionsTest::historyNamesTheOverlay()
         crop->setGridOverlay(i);
         frame.setActiveTool(pictura::ToolId::Crop);
         drag(canvas, QPointF(30, 30), QPointF(5, 5));
-        QVERIFY(tools->commitCrop());
+        QVERIFY(tools->cropCommitSession()->commitCrop());
         QCOMPARE(view->history_label(view->history_count() - 1),
                  QStringLiteral("Crop: ") + names.value(i));
         frame.setActiveTool(pictura::ToolId::Move);
@@ -294,6 +306,8 @@ void CropOptionsTest::overlayMenuShowsIcons()
     const int doc = frame.activeDocumentIndex();
     auto* tools = frame.findChild<pictura::ToolController*>();
     QVERIFY(tools);
+    QVERIFY(tools->cropBoxSession());
+    QVERIFY(tools->cropCommitSession());
     auto* crop = tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop);
     const int before = crop->gridOverlay();
     frame.setActiveTool(pictura::ToolId::Crop);
@@ -330,6 +344,8 @@ void CropOptionsTest::cropOptionsPersist()
     pictura::PicturaMainWindow& frame = *window_;
     auto* tools = frame.findChild<pictura::ToolController*>();
     QVERIFY(tools);
+    QVERIFY(tools->cropBoxSession());
+    QVERIFY(tools->cropCommitSession());
 
     // Changing a crop option persists it through the session store.
     tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(true);  // force a known start, then toggle

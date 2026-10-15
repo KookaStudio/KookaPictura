@@ -170,7 +170,7 @@ void TypeToolsTest::horizontalTypeTool()
     const int layers = f.view->layer_count();
     const int base = f.view->history_index();
     f.drag({QPointF(20, 60)});
-    QVERIFY(f.tools->textActive());
+    QVERIFY(f.tools->textSession() && f.tools->textSession()->textActive());
     QVERIFY(f.canvas->typeOverlayActiveForTest());
     QVERIFY(!f.canvas->typeOverlayHasTextForTest());
     QTest::keyClicks(f.canvas, QStringLiteral("Big"));
@@ -184,7 +184,7 @@ void TypeToolsTest::horizontalTypeTool()
     // Ctrl+Enter commits one type layer, selected, with the text as typed.
     QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
     QVERIFY2(f.committedOnce(base, "Horizontal Type"), "one Horizontal Type state");
-    QVERIFY(!f.tools->textActive());
+    QVERIFY(!f.tools->textSession() || !f.tools->textSession()->textActive());
     QVERIFY(!f.canvas->typeOverlayActiveForTest());
     QCOMPARE(f.view->layer_count(), layers + 1);
     const QString path = typeLayer(f);
@@ -229,7 +229,7 @@ void TypeToolsTest::typeKeysAndCancel()
     f.drag({QPointF(20, 60)});
     QTest::keyClicks(f.canvas, QStringLiteral("gone"));
     QTest::keyClick(f.canvas, Qt::Key_Escape);
-    QVERIFY(!f.tools->textActive());
+    QVERIFY(!f.tools->textSession() || !f.tools->textSession()->textActive());
     QCOMPARE(f.view->history_index(), base);
 
     // Backspace back to nothing commits nothing.
@@ -246,7 +246,7 @@ void TypeToolsTest::typeKeysAndCancel()
     QTest::keyClicks(f.canvas, QStringLiteral("one"));
     f.drag({QPointF(150, 150)});
     QVERIFY2(f.committedOnce(base, "Horizontal Type"), "click away commits");
-    QVERIFY(!f.tools->textActive());
+    QVERIFY(!f.tools->textSession() || !f.tools->textSession()->textActive());
     f.drag({QPointF(20, 120)});
     QTest::keyClicks(f.canvas, QStringLiteral("two"));
     frame.setActiveTool(pictura::ToolId::Move);
@@ -286,7 +286,7 @@ void TypeToolsTest::reopenTypeLayer()
     // A click on the type reopens it: hidden under its own text, nothing
     // recorded, and the bar shows the layer's size.
     f.drag({QPointF(before.center())});
-    QVERIFY(f.tools->textActive());
+    QVERIFY(f.tools->textSession() && f.tools->textSession()->textActive());
     QVERIFY(!f.view->layer_visible(index));
     QVERIFY(f.canvas->typeOverlayHasTextForTest());
     QCOMPARE(f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get().size, 30.0);
@@ -368,7 +368,7 @@ void TypeToolsTest::freeTransformKeepsType()
     QVERIFY2(qAbs(stretched.width() - 2 * before.width()) <= 4, "twice as wide");
     frame.setActiveTool(pictura::ToolId::HorizontalType);
     f.drag({QPointF(stretched.center())});
-    QVERIFY(f.tools->textActive());
+    QVERIFY(f.tools->textSession() && f.tools->textSession()->textActive());
     QTest::keyClicks(f.canvas, QStringLiteral("r"));
     QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
     QVERIFY2(f.committedOnce(base + 1, "Edit Type Layer"), "edited after the transform");
@@ -504,7 +504,7 @@ void TypeToolsTest::editLikeATextField()
 
     // Clicking into the text puts the caret there; typing inserts at it.
     f.drag({QPointF(11, 50)});
-    QVERIFY(f.tools->textActive());
+    QVERIFY(f.tools->textSession() && f.tools->textSession()->textActive());
     QVERIFY(f.canvas->typeOverlayCaretForTest().p1().x() < end.p1().x() - 40);
     QTest::keyClicks(f.canvas, QStringLiteral(">"));
     // Shift+arrows select, which typing replaces; Delete removes forward.
@@ -652,7 +652,7 @@ void TypeToolsTest::characterAttributeEdits()
     const QByteArray beforeParagraph =
         paragraphFingerprint(pictura::type_api::layerParagraphSetting(*f.view, path));
     f.drag({QPointF(layerRect(f, path).center())});
-    QVERIFY(f.tools->textActive());
+    QVERIFY(f.tools->textSession() && f.tools->textSession()->textActive());
     QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).tracking, 0.0);
     QTest::keyClick(f.canvas, Qt::Key_Escape);
     QCOMPARE(f.view->history_index(), restoredBase);
@@ -739,7 +739,7 @@ void TypeToolsTest::reopenKeepsAntiAlias()
     // Reopen and commit without touching the combo: still None.
     const int base = f.view->history_index();
     f.drag({QPointF(layerRect(f, path).center())});
-    QVERIFY(f.tools->textActive());
+    QVERIFY(f.tools->textSession() && f.tools->textSession()->textActive());
     QTest::keyClick(f.canvas, Qt::Key_End);
     QTest::keyClicks(f.canvas, QStringLiteral("!"));
     QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
@@ -748,7 +748,7 @@ void TypeToolsTest::reopenKeepsAntiAlias()
 
     // Esc leaves it as it was.
     f.drag({QPointF(layerRect(f, path).center())});
-    QVERIFY(f.tools->textActive());
+    QVERIFY(f.tools->textSession() && f.tools->textSession()->textActive());
     QTest::keyClicks(f.canvas, QStringLiteral("?"));
     QTest::keyClick(f.canvas, Qt::Key_Escape);
     QCOMPARE(f.view->history_index(), base + 1);

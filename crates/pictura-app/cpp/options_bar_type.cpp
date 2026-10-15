@@ -228,7 +228,8 @@ QWidget* OptionsBar::buildTypePage(ToolId id)
         if (QAbstractButton* button = align->button(o.justification)) {
             button->setChecked(true);
         }
-        const bool editing = controller_->textActive();
+        TextSession* session = textSession();
+        const bool editing = session && session->textActive();
         cancel->setEnabled(editing);
         commit->setEnabled(editing);
     };
@@ -279,8 +280,16 @@ QWidget* OptionsBar::buildTypePage(ToolId id)
             [update](int i) { update([i](TypeOptions& o) { o.antialias = i; }); });
     connect(align, &QButtonGroup::idClicked, this,
             [update](int j) { update([j](TypeOptions& o) { o.justification = j; }); });
-    connect(cancel, &QToolButton::clicked, this, [this]() { controller_->cancelText(); });
-    connect(commit, &QToolButton::clicked, this, [this]() { controller_->commitText(); });
+    connect(cancel, &QToolButton::clicked, this, [this]() {
+        if (textSession()) {
+            textSession()->cancelText();
+        }
+    });
+    connect(commit, &QToolButton::clicked, this, [this]() {
+        if (textSession()) {
+            textSession()->commitText();
+        }
+    });
     return page;
 }
 

@@ -71,7 +71,7 @@ public:
     }
 
     // Esc: Reset View.
-    bool cancelPolygonLasso() override
+    bool onEscape() override
     {
         if (!ctx_) {
             return false;

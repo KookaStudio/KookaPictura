@@ -324,7 +324,7 @@ public:
         }
     }
 
-    bool commitPolygonLasso() override
+    bool onFinishPath() override
     {
         if (!polygonInProgress_) {
             return false;
@@ -335,7 +335,7 @@ public:
         return true;
     }
 
-    bool cancelPolygonLasso() override
+    bool onEscape() override
     {
         if (!polygonInProgress_) {
             return false;

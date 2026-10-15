@@ -121,19 +121,19 @@ void TypePanelsTest::glyphsPanel()
 
     // Without an open type edit there is nowhere for the glyph to go.
     frame.setActiveTool(pictura::ToolId::HorizontalType);
-    QVERIFY(!f.tools->textActive());
+    QVERIFY(!f.tools->textSession() || !f.tools->textSession()->textActive());
     panel->chooseGlyph(items.first());
     QVERIFY(hint->isVisible());
 
     // With one, it lands at the caret.
     f.drag({QPointF(20, 60)});
-    QVERIFY(f.tools->textActive());
+    QVERIFY(f.tools->textSession() && f.tools->textSession()->textActive());
     QTest::keyClicks(f.canvas, QStringLiteral("a"));
     panel->chooseGlyph(items.first());
     QVERIFY(!hint->isVisible());
-    QVERIFY(f.tools->textActive());
+    QVERIFY(f.tools->textSession() && f.tools->textSession()->textActive());
     const int base = f.view->history_index();
-    QVERIFY(f.tools->commitText());
+    QVERIFY(f.tools->textSession() && f.tools->textSession()->commitText());
     QVERIFY2(f.committedOnce(base, "Horizontal Type"), "commit");
     QCOMPARE(QString(pictura::type_api::layerText(*f.view, typeLayer(f))), QStringLiteral("aZ"));
 }

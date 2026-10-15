@@ -85,7 +85,7 @@ public:
         showPreview(ctx);
     }
 
-    bool commitPolygonLasso() override
+    bool onFinishPath() override
     {
         if (!active_ || !ctx_) {
             return false;
@@ -94,7 +94,7 @@ public:
         return true;
     }
 
-    bool cancelPolygonLasso() override
+    bool onEscape() override
     {
         if (!active_ || !ctx_) {
             return false;
@@ -103,7 +103,7 @@ public:
         return true;
     }
 
-    bool removeLassoPoint() override
+    bool onDeletePoint() override
     {
         if (!active_ || !ctx_) {
             return false;
@@ -119,7 +119,7 @@ public:
         return true;
     }
 
-    bool lassoInProgress() const override { return active_; }
+    bool gestureInProgress() const override { return active_; }
 
 private:
     void begin(ToolServices& ctx, PictureView& v, const QPoint& p, Qt::KeyboardModifiers mods)

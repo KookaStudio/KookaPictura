@@ -199,8 +199,8 @@ public:
         showSlices(ctx, selected_);
     }
 
-    // Delete / Backspace (routed through the controller's remove-point hook).
-    bool removeLassoPoint() override
+    // Delete / Backspace (routed through the controller's delete-point hook).
+    bool onDeletePoint() override
     {
         PictureView* v = ctx_ ? ctx_->view() : nullptr;
         if (!v || selected_ < 0) {
@@ -214,7 +214,7 @@ public:
     }
 
     // Escape deselects.
-    bool cancelPolygonLasso() override
+    bool onEscape() override
     {
         if (selected_ < 0 || !ctx_) {
             return false;

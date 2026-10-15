@@ -145,7 +145,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
             && ellipseView->selection_count() == cancelSelBefore;
         // A commit attempt must now find nothing in progress; this is the
         // observable proof that Escape reached the controller.
-        const bool cancelCleared = !tools->commitPolygonLasso();
+        const bool cancelCleared = !tools->handleFinishPath();
         polygonClick(2, 2);
         polygonClick(12, 2);
         polygonClick(2, 2);
@@ -851,7 +851,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
             && ellipseCanvas->selectionPreviewSolidForTest();
         const int bandPoints = ellipseCanvas->selectionPreviewPointCountForTest();
         const bool bandCancelled =
-            tools->cancelPolygonLasso() && !ellipseCanvas->hasSelectionPreviewForTest();
+            tools->handleEscape() && !ellipseCanvas->hasSelectionPreviewForTest();
         ST_BEGIN("tsc_polygon_cursor_band");
         ST_PASS("tsc_polygon_cursor_band open=%d points=%d cancelled=%d", bandOpen ? 1 : 0,
                 bandPoints, bandCancelled ? 1 : 0);

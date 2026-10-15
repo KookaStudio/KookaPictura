@@ -59,6 +59,18 @@ signals:
 public:
     // Self-test hook: the controller the size field is wired to.
     ToolController* controllerForTest() const { return controller_; }
+    // The session-command ports behind the crop, perspective, and type pages,
+    // or null when the controller/handler does not provide them.
+    CropBoxSession* cropBox() const { return controller_ ? controller_->cropBoxSession() : nullptr; }
+    CropCommitSession* cropCommit() const
+    {
+        return controller_ ? controller_->cropCommitSession() : nullptr;
+    }
+    PerspectiveCropSession* perspectiveCrop() const
+    {
+        return controller_ ? controller_->perspectiveCropSession() : nullptr;
+    }
+    TextSession* textSession() const { return controller_ ? controller_->textSession() : nullptr; }
     // Test hook: the built options page for `id` (stack index = enum value).
     QWidget* pageForTest(ToolId id) const;
     // Test hooks: the Free Transform page and the stack's current page.
