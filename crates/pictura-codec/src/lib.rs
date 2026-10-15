@@ -40,11 +40,13 @@ mod path_resources;
 mod patterns;
 mod patterns_write;
 mod pictura_raw;
+mod png;
 mod probe;
 mod read;
 mod smart_filter;
 mod smart_object;
 mod smart_writer;
+mod svg;
 mod type_tool;
 mod type_write;
 mod vector_mask;
@@ -97,6 +99,7 @@ pub use live_shape::{
     ORIGIN_ROUNDED_RECTANGLE,
 };
 pub use pictura_color::{Policy, Profile};
+pub use png::{encode_base64 as encode_png_base64, encode_rgba as encode_png_rgba};
 pub use probe::{probe_image, ImageBudget, ImageFormat, ImageProbe, ImportError, LimitKind};
 pub use read::{read_psd, read_psd_with};
 pub use smart_filter::{
@@ -104,6 +107,10 @@ pub use smart_filter::{
     set_smart_filter_enabled, set_smart_filters_enabled,
 };
 pub use smart_object::remove_linked_source;
+pub use svg::{
+    blend_css, ellipse_element, encode_svg, image_element, path_data, path_element, rect_element,
+    rounded_rect_element, subpath_data, text_element, SvgContent, SvgOptions,
+};
 pub use type_tool::encode_type_tool;
 pub use type_write::author_type_tool;
 pub use vector_mask::{
