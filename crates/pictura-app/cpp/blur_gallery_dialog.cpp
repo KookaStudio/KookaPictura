@@ -84,10 +84,8 @@ BlurGalleryDialog::BlurGalleryDialog(PictureView* view, const FilterCommandSpec&
 {
     setWindowTitle(spec.label);
     setObjectName(QStringLiteral("blurGalleryDialog"));
-    setMinimumSize(760, 520);
     const QWidget* frame = parent ? parent->window() : nullptr;
-    resize(frame ? (QSizeF(frame->size()) * 0.92).toSize().expandedTo(minimumSize())
-                 : QSize(1100, 720));
+    resize(frame ? (QSizeF(frame->size()) * 0.92).toSize() : QSize(1100, 720));
 
     canvas_ = new BlurGalleryCanvas(nullptr, this);
     if (view_ && view_->has_document()) {
@@ -137,6 +135,10 @@ BlurGalleryDialog::BlurGalleryDialog(PictureView* view, const FilterCommandSpec&
     auto* outer = new QVBoxLayout(this);
     outer->setContentsMargins(4, 4, 4, 4);
     outer->setSpacing(4);
+    // The window can never be squeezed below what the side column needs, so
+    // every slider and value box keeps its height; the floor grows as rows
+    // expand. An explicit minimum size would override this.
+    outer->setSizeConstraint(QLayout::SetMinimumSize);
     outer->addLayout(body, 1);
     outer->addWidget(buildOptionsBar());
 
@@ -165,6 +167,8 @@ QWidget* BlurGalleryDialog::buildOptionsBar()
     row->addSpacing(12);
     hint_ = new QLabel(bar);
     hint_->setEnabled(false);
+    // A long hint clips rather than setting the workspace's minimum width.
+    hint_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     row->addWidget(hint_);
     row->addStretch(1);
 
@@ -782,9 +786,16 @@ void BlurGalleryDialog::setEffectEnabled(BlurGalleryMode mode, bool on)
 
 void BlurGalleryDialog::setExpanded(BlurGalleryMode mode, bool on)
 {
-    const Effect& effect = effects_[int(mode)];
-    effect.controls->setVisible(on);
-    effect.arrow->setText(on ? QStringLiteral("▼") : QStringLiteral("▶"));
+    // One row open at a time: opening a row closes the one that was open, so
+    // the column (and the workspace's minimum height) stays short.
+    for (int m = 0; m < kEffects; ++m) {
+        if (m != int(mode) && !on) {
+            continue;
+        }
+        const bool open = on && m == int(mode);
+        effects_[m].controls->setVisible(open);
+        effects_[m].arrow->setText(open ? QStringLiteral("▼") : QStringLiteral("▶"));
+    }
 }
 
 void BlurGalleryDialog::selectPin(int index)

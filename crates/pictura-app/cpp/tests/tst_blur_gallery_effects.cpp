@@ -7,6 +7,10 @@
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QDoubleSpinBox>
+#include <QtWidgets/QComboBox>
+#include <QtWidgets/QLayout>
+#include <QtWidgets/QSlider>
+#include <QtWidgets/QTabWidget>
 #include <QtWidgets/QToolButton>
 
 #include "blur_gallery_canvas.h"
@@ -92,6 +96,7 @@ private slots:
     void menuCommitsTheCombinedGalleryAndReopensIt();
     void okWithEveryEffectOffCommitsNothing();
 
+    void squeezingKeepsEveryControlReadable();
 private:
     pictura::test::ScopedStateHome stateHome_;
     QTemporaryDir dir_;
@@ -121,8 +126,9 @@ void BlurGalleryEffectsTest::aRowNameSelectsAndExpandsItsEffect()
     QVERIFY(dialog.findChild<QCheckBox*>(QStringLiteral("irisBlurEnabled"))->isChecked());
     QVERIFY(dialog.effectEnabled(Mode::Field) && dialog.effectEnabled(Mode::Iris));
     QVERIFY(shown(&dialog, QStringLiteral("irisBlurSpin")));
-    // Selecting another effect keeps the first one expanded and on.
-    QVERIFY(shown(&dialog, QStringLiteral("fieldBlurSpin")));
+    // Selecting another effect keeps the first one on but closes its row:
+    // one row is open at a time.
+    QVERIFY(!shown(&dialog, QStringLiteral("fieldBlurSpin")));
     QCOMPARE(dialog.kind(), QStringLiteral("blur-gallery"));
     // The new effect opens on its default pin.
     QCOMPARE(dialog.findChild<QDoubleSpinBox*>(QStringLiteral("irisBlurSpin"))->value(), 15.0);
@@ -133,11 +139,18 @@ void BlurGalleryEffectsTest::theArrowOnlyExpands()
 {
     pictura::BlurGalleryDialog dialog(window_->activeView(), spec(QStringLiteral("Iris Blur")));
     QVERIFY(!shown(&dialog, QStringLiteral("tiltShiftSpin")));
+    QVERIFY(shown(&dialog, QStringLiteral("irisBlurSpin")));
+    // Opening Tilt-Shift's row closes Iris Blur's, without selecting it.
     click(&dialog, QStringLiteral("tiltShiftEnabledArrow"));
     QVERIFY(shown(&dialog, QStringLiteral("tiltShiftSpin")));
     QVERIFY(dialog.findChild<QWidget*>(QStringLiteral("tiltDistortionSpin"))->isVisibleTo(&dialog));
+    QVERIFY(!shown(&dialog, QStringLiteral("irisBlurSpin")));
     QCOMPARE(dialog.selectedEffect(), Mode::Iris);
     QVERIFY(!dialog.effectEnabled(Mode::TiltShift));
+    // Reopening Iris Blur's closes Tilt-Shift's; its arrow then closes it.
+    click(&dialog, QStringLiteral("irisBlurEnabledArrow"));
+    QVERIFY(shown(&dialog, QStringLiteral("irisBlurSpin")));
+    QVERIFY(!shown(&dialog, QStringLiteral("tiltShiftSpin")));
     click(&dialog, QStringLiteral("irisBlurEnabledArrow"));
     QVERIFY(!shown(&dialog, QStringLiteral("irisBlurSpin")));
     QCOMPARE(dialog.selectedEffect(), Mode::Iris);
@@ -280,6 +293,66 @@ void BlurGalleryEffectsTest::okWithEveryEffectOffCommitsNothing()
     });
     QVERIFY(window_->registry()->dispatch(menuId(QStringLiteral("Field Blur"))));
     QCOMPARE(view->history_count(), before);
+}
+
+void BlurGalleryEffectsTest::squeezingKeepsEveryControlReadable()
+{
+    // One Blur Tools row is open at a time: opening another closes it.
+    // However far the workspace is squeezed, each slider, value box, check
+    // box, and dropdown keeps at least its minimum height, in every mode,
+    // with each row open in turn and on every tab.
+    const char* const rows[] = {"fieldBlur", "irisBlur", "tiltShift", "pathBlur"};
+    const auto arrow = [](QWidget* dialog, const char* row) {
+        return dialog->findChild<QToolButton*>(QLatin1String(row)
+                                               + QStringLiteral("EnabledArrow"));
+    };
+    for (const QString& leaf : {QStringLiteral("Field Blur"), QStringLiteral("Iris Blur"),
+                                QStringLiteral("Tilt-Shift"), QStringLiteral("Path Blur")}) {
+        pictura::BlurGalleryDialog dialog(window_->activeView(), spec(leaf));
+        dialog.resize(1000, 700);
+        dialog.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+        auto* tabs = dialog.findChild<QTabWidget*>(QStringLiteral("blurEffectsTabs"));
+        for (const char* row : rows) {
+            if (arrow(&dialog, row)->text() == QStringLiteral("▶")) {
+                arrow(&dialog, row)->click();
+            }
+            for (const char* other : rows) {
+                const QString want = other == row ? QStringLiteral("▼") : QStringLiteral("▶");
+                QVERIFY2(arrow(&dialog, other)->text() == want, other);
+            }
+            for (int tab = 0; tab < tabs->count(); ++tab) {
+                if (!tabs->isTabEnabled(tab)) {
+                    continue;
+                }
+                tabs->setCurrentIndex(tab);
+                // Let the layout apply the row's new minimum, then squeeze.
+                QCoreApplication::processEvents();
+                dialog.resize(600, 100);
+                QCoreApplication::processEvents();
+                QVERIFY2(dialog.height() >= dialog.layout()->minimumSize().height(),
+                         qPrintable(leaf));
+                const auto controls = dialog.findChildren<QWidget*>();
+                for (QWidget* control : controls) {
+                    const bool kind = qobject_cast<QSlider*>(control)
+                                      || qobject_cast<QAbstractSpinBox*>(control)
+                                      || qobject_cast<QCheckBox*>(control)
+                                      || qobject_cast<QComboBox*>(control);
+                    if (!kind || !control->isVisibleTo(&dialog)) {
+                        continue;
+                    }
+                    QVERIFY2(control->height() >= control->minimumSizeHint().height(),
+                             qPrintable(leaf + QStringLiteral(": ") + control->objectName()
+                                        + QStringLiteral(" is ")
+                                        + QString::number(control->height())
+                                        + QStringLiteral(" px")));
+                }
+            }
+        }
+        qInfo().noquote() << leaf << "minimum with Path Blur's row open"
+                          << dialog.minimumSize();
+        dialog.reject();
+    }
 }
 
 QTEST_MAIN(BlurGalleryEffectsTest)

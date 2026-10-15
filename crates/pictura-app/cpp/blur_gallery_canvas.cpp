@@ -69,7 +69,8 @@ BlurGalleryCanvas::BlurGalleryCanvas(QList<BlurGalleryPin>* pins, QWidget* paren
     : QWidget(parent), pins_(pins)
 {
     setObjectName(QStringLiteral("blurGalleryCanvas"));
-    setMinimumSize(320, 240);
+    // With the side column, this keeps the workspace at least ~760 px wide.
+    setMinimumSize(480, 320);
     setFocusPolicy(Qt::ClickFocus);
     setMouseTracking(true);
 }
