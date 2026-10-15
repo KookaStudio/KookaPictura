@@ -356,7 +356,7 @@ QWidget#infoBlock QToolButton { background: transparent; border: 0; padding: 2px
 QWidget#infoBlock QToolButton:hover { background: ${hover}; }
 QWidget#infoBlock QToolButton:pressed { background: ${pressed}; }
 
-
+)") + QStringLiteral(R"(
 QStatusBar { background: ${panel}; color: ${windowText}; }
 QStatusBar::item { border: 0; }
 QFrame#statusSeparator { background: ${separator}; border: 0; }

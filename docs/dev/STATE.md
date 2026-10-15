@@ -12,6 +12,24 @@ Snapshot for resuming after a context break. Update after each milestone.
   contains reproduced Adobe Help prose or the old wording.
 - Toolchain: Rust 1.98 (`rust-toolchain.toml`), system Qt **6.11.1**, cxx-qt
   **0.10.0**, wgpu **30.0.1**, lcms2 **6.2.0** (system Little CMS 2.19).
+- **Windows C2026 stylesheet fix** (#474, branch `fix/474-windows-c2026-theme-qss`,
+  OpenSpec change `fix-windows-c2026-theme-qss`, ADDED requirement in
+  `meta/windows-release-build`): `theme.cpp` built its stylesheet from one
+  `QStringLiteral(R"(...)")` literal, which had grown to ~19.7 KB — over MSVC's
+  16,380-byte per-literal cap (error C2026) that applies before adjacent
+  literals are concatenated. GCC/Clang accept the longer literal, so the failure
+  only surfaced on the Release PR's `windows` job. The literal is now two
+  `QStringLiteral` pieces joined with `+` at a CSS section boundary, assembling
+  byte-for-byte the same stylesheet. New `scripts/check-msvc-string-limits.py`
+  (wired into `guard.sh`) fails when any single C++ string literal under
+  `crates/pictura-app/cpp` exceeds 16,000 bytes, so the breakage is caught on
+  Linux before a Windows runner. The `windows.yml` job's release-please-only
+  `if:` is relaxed **temporarily** (the C++/packaging paths added to its
+  `paths:`) so the fix builds on a normal PR; this scaffolding is reverted within
+  the change once the Windows job goes green, so the change's final diff leaves
+  `.github/workflows/windows.yml` with no net diff. Verified: the split
+  round-trips byte-identically, the guard fails on the pre-split file, and its
+  `--self-test` passes.
 - **Path Blur** (#462, branch `feat/462-path-blur`, OpenSpec change
   `path-blur-gallery`): a **post-CS6** Blur Gallery effect brought into scope
   by owner decision and labelled non-parity (row tooltip, workspace hint,

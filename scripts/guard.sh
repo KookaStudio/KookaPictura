@@ -14,6 +14,7 @@
 #   8. a missing required legal artifact (LICENSE, notices, deny.toml, CONTRIBUTING).
 #   9. a release-please version marker dropped from a version file.
 #  10. a theme-like grey colour literal outside the theme layer.
+#  11. a C++ string literal longer than MSVC's per-literal limit (C2026).
 #
 # Runnable locally with no setup:   bash scripts/guard.sh
 #
@@ -145,6 +146,15 @@ for f in Cargo.toml CMakeLists.txt; do
         fail=1
     fi
 done
+
+# --- 11. C++ string literals within MSVC's per-literal limit ------------------
+# MSVC caps a string literal at 16,380 bytes before adjacent literals are
+# concatenated (C2026); GCC/Clang do not, so only the Windows build catches it.
+echo "check: C++ string literals within MSVC's per-literal limit"
+if ! python3 "$(dirname "$0")/check-msvc-string-limits.py" --self-test \
+    || ! python3 "$(dirname "$0")/check-msvc-string-limits.py"; then
+    fail=1
+fi
 
 if [ "$fail" -ne 0 ]; then
     echo "guard: FAILED"
