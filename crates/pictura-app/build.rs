@@ -91,6 +91,7 @@ fn main() {
                 "src/cxxqt_object/paths.rs",
                 "src/cxxqt_object/shapes.rs",
                 "src/cxxqt_object/type_tools.rs",
+                "src/cxxqt_object/svg_export.rs",
                 "src/cxxqt_object/web_export.rs",
             ])
             .cc_builder(|cc| {

@@ -87,7 +87,10 @@ pub use color_lookup_presets::{preset_cube, COLOR_LOOKUP_PRESETS};
 mod vector_mask;
 
 mod fill;
-pub use fill::encode_gradient_fill;
+pub use fill::{decode_layer_fill, decode_vector_fill, encode_gradient_fill};
+
+mod svg;
+pub use svg::layer_content;
 
 pub mod layer_effects;
 pub use layer_effects::{

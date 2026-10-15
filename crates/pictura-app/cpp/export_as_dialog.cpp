@@ -5,6 +5,7 @@
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/export.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/svg_export.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/web_export.cxxqt.h"
 
 #include <QtCore/QBuffer>
@@ -53,6 +54,7 @@ constexpr FormatEntry kFormats[] = {
     {"JPG", "JPG", "jpg"},
     {"PNG-8", "PNG8", "png"},
     {"GIF", "GIF", "gif"},
+    {"SVG", "SVG", "svg"},
 };
 
 QString suffixForFormat(const QString& format)
@@ -88,6 +90,9 @@ ExportAsDialog::Format formatForPath(const QString& path, ExportAsDialog::Format
     }
     if (suffix == QLatin1String("gif")) {
         return ExportAsDialog::Gif;
+    }
+    if (suffix == QLatin1String("svg")) {
+        return ExportAsDialog::Svg;
     }
     if (suffix == QLatin1String("png")) {
         return fallback == ExportAsDialog::Png8 ? ExportAsDialog::Png8 : ExportAsDialog::Png;
@@ -181,7 +186,8 @@ QString retargetPath(const QString& path, const QString& chosenFormat)
 {
     const QString lower = QFileInfo(path).suffix().toLower();
     if (lower == QLatin1String("png") || lower == QLatin1String("jpg")
-        || lower == QLatin1String("jpeg") || lower == QLatin1String("gif")) {
+        || lower == QLatin1String("jpeg") || lower == QLatin1String("gif")
+        || lower == QLatin1String("svg")) {
         return path;
     }
     QString base = path;
@@ -544,6 +550,10 @@ QByteArray ExportAsDialog::encodedAs(int entry, Format format) const
     case Gif:
         indexedImage(image, transparency_->isChecked(), &out);
         break;
+    case Svg:
+        // SVG is document-level text, written by `exportAsFromView` through the
+        // `svg_from_view` bridge; it has no per-entry `QImage` encoding.
+        break;
     }
     return out;
 }
@@ -698,6 +708,30 @@ bool exportAsFromView(QWidget* parent, PictureView* view)
         return false;
     }
     const QString documentPath = document_api::filePath(*view);
+
+    // SVG is document-level text, not a per-entry `QImage`: one `.svg` holds the
+    // whole document, so the checked entries do not select targets.
+    if (dialog.format() == QLatin1String("SVG")) {
+        const QString svg = svg_from_view(*view);
+        if (svg.isEmpty()) {
+            return false;
+        }
+        QString directory = QFileInfo(documentPath).absolutePath();
+        if (directory.isEmpty()) {
+            directory = defaultFileDialogDirectory();
+        }
+        const QString path = getSaveFileName(
+            parent, QObject::tr("Export As"),
+            directory + QLatin1Char('/') + entries[0].name + QStringLiteral(".svg"),
+            {QStringLiteral("SVG (*.SVG)")}, nullptr);
+        if (path.isEmpty()) {
+            return false;
+        }
+        const QByteArray data = svg.toUtf8();
+        QSaveFile file(retargetPath(path, QStringLiteral("SVG")));
+        return file.open(QIODevice::WriteOnly) && file.write(data) == data.size()
+            && file.commit();
+    }
 
     if (checked.size() == 1) {
         const int entry = checked.first();

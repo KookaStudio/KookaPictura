@@ -11,7 +11,6 @@ use pictura_core::{Document, Layer, LayerBlock, PsdRect};
 
 use super::create::{add_solid_fill, next_layer_name};
 use super::paths::resolve_path_mut;
-use super::rasterize::is_fill_content_layer;
 
 const VMSK: &[u8; 4] = b"vmsk";
 const VOGK: &[u8; 4] = b"vogk";
@@ -38,9 +37,19 @@ pub fn add_shape_layer(
     created
 }
 
-/// A fill-content layer with a vector mask.
+/// A fill-content layer with a vector mask: its fill comes from a modeled
+/// adjustment block (an app-authored shape) or a preserved `vscg` vector-fill
+/// block (an imported CC shape).
 pub fn is_shape_layer(layer: &Layer) -> bool {
-    layer.extra_block(VMSK).is_some() && is_fill_content_layer(layer)
+    layer.extra_block(VMSK).is_some()
+        && matches!(
+            crate::fill::decode_layer_fill(layer),
+            Some(
+                pictura_adjust::Adjustment::SolidFill(_)
+                    | pictura_adjust::Adjustment::GradientFill(_)
+                    | pictura_adjust::Adjustment::PatternFill(_)
+            )
+        )
 }
 
 /// Whether the layer forces Lock Transparency and Lock Image on in the Layers
@@ -80,7 +89,7 @@ pub fn set_layer_live_shape(layer: &mut Layer, live: Option<&LiveShape>) {
 
 /// The shape layer's solid fill color; `None` for another fill or layer.
 pub fn shape_fill_color(layer: &Layer) -> Option<[u8; 4]> {
-    match crate::decode_adjustment(layer.adjustment.as_ref()?)? {
+    match crate::fill::decode_layer_fill(layer)? {
         pictura_adjust::Adjustment::SolidFill(rgba) if is_shape_layer(layer) => Some(rgba),
         _ => None,
     }
@@ -167,5 +176,38 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn an_imported_vscg_shape_layer_is_recognized_and_colored() {
+        let square = pictura_core::shape::outline(
+            ShapeOptions::new(ShapeKind::Rectangle, 0.0, 3),
+            (1.0, 1.0),
+            (5.0, 5.0),
+            false,
+            false,
+        )
+        .unwrap();
+        let vmsk = pictura_codec::encode_vector_mask(std::slice::from_ref(&square), 8, 8);
+        // A preserved `vscg` block: the 4-byte fill key, then the version-16
+        // descriptor that `encode_solid_color_fill` builds.
+        let fill = crate::encode_solid_color_fill([10, 20, 30]);
+        let mut vscg = fill.key.to_vec();
+        vscg.extend_from_slice(&fill.data);
+        let layer = Layer {
+            extra_blocks: vec![
+                LayerBlock {
+                    key: *b"vmsk",
+                    data: vmsk,
+                },
+                LayerBlock {
+                    key: *b"vscg",
+                    data: vscg,
+                },
+            ],
+            ..Default::default()
+        };
+        assert!(is_shape_layer(&layer));
+        assert_eq!(shape_fill_color(&layer), Some([10, 20, 30, 255]));
     }
 }

@@ -43,6 +43,7 @@ mod path_list;
 mod paths;
 mod shapes;
 mod state;
+mod svg_export;
 mod type_tools;
 mod web_export;
 pub use state::PictureViewRust;

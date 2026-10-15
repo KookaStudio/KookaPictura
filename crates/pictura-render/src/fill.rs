@@ -37,7 +37,7 @@ pub fn decode_gradient_fill(d: &[u8]) -> Option<Adjustment> {
 ///
 /// ponytail: the 4-byte key is consumed but ignored; the descriptor's content is
 /// the dispatch authority, mirroring ag-psd `parseVectorContent`.
-pub(crate) fn decode_vector_fill(d: &[u8]) -> Option<Adjustment> {
+pub fn decode_vector_fill(d: &[u8]) -> Option<Adjustment> {
     let body = d.get(4..)?;
     let obj = pictura_codec::read_descriptor(body).ok()?;
     if desc_item(&obj, b"Grad").is_some() {
@@ -59,7 +59,7 @@ pub(crate) fn decode_vector_fill(d: &[u8]) -> Option<Adjustment> {
 /// The choice is strict: an adjustment block is consulted on its own, so an
 /// undecodable key is a no-op and never falls through to the `vscg` fill; the
 /// `vscg` block is decoded only when the layer has no adjustment block.
-pub(crate) fn decode_layer_fill(layer: &Layer) -> Option<Adjustment> {
+pub fn decode_layer_fill(layer: &Layer) -> Option<Adjustment> {
     match layer.adjustment.as_ref() {
         Some(data) => crate::decode_adjustment(data),
         None => layer
