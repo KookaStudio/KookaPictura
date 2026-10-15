@@ -43,10 +43,19 @@ fn rsvg_render(svg: &str, tag: &str) -> Result<Vec<u8>, String> {
     Ok(out.stdout)
 }
 
-/// Whether magick runs and has the librsvg coder.
+/// Whether magick has the librsvg coder. A build without librsvg still
+/// accepts the `RSVG:` prefix but silently renders with its internal MSVG
+/// renderer, which ignores `mix-blend-mode`, so a successful render is not
+/// enough; the format list must name librsvg.
 fn rsvg_available() -> bool {
-    let probe = r#"<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>"#;
-    rsvg_render(probe, "probe").is_ok()
+    Command::new("magick")
+        .args(["-list", "format"])
+        .output()
+        .is_ok_and(|o| {
+            String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .any(|line| line.trim_start().starts_with("RSVG") && line.contains("Librsvg"))
+        })
 }
 
 /// `doc`'s CPU composite flattened onto white, as interleaved RGB8.
