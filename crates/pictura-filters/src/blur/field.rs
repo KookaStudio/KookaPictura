@@ -96,8 +96,9 @@ pub struct BlurNoise {
 
 impl Default for BlurNoise {
     fn default() -> Self {
+        // Switched on as in the owner's CC screenshots; Amount 0 adds nothing.
         Self {
-            enabled: false,
+            enabled: true,
             amount: 0.0,
             size: 50.0,
             roughness: 50.0,

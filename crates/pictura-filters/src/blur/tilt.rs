@@ -249,7 +249,7 @@ pub(super) fn smear(buf: &mut PixelBuffer, field: &TiltField) {
 }
 
 /// A clamped-edge bilinear sample at pixel coordinates.
-fn bilinear(plane: &[u8], w: usize, h: usize, x: f64, y: f64) -> f64 {
+pub(super) fn bilinear(plane: &[u8], w: usize, h: usize, x: f64, y: f64) -> f64 {
     let x = x.clamp(0.0, (w - 1) as f64);
     let y = y.clamp(0.0, (h - 1) as f64);
     let (x0, y0) = (x.floor() as usize, y.floor() as usize);

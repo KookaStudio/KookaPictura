@@ -63,7 +63,7 @@ QImage pattern()
 // Grain, seed 1.
 QList<double> defaultTail()
 {
-    return {1.0, 14.0, 40.0, 40.0, 118.0, 0.0, 0.0, 50.0, 50.0, 0.0, 0.0, 0.0, 1.0};
+    return {1.0, 14.0, 40.0, 40.0, 118.0, 1.0, 0.0, 50.0, 50.0, 0.0, 0.0, 0.0, 1.0};
 }
 
 QList<double> defaultValues()
@@ -162,15 +162,15 @@ void BlurGalleryDialogTest::workspaceFollowsCs6()
     auto* preview = dialog.findChild<QCheckBox*>(QStringLiteral("filterPreview"));
     QVERIFY(preview != nullptr && preview->isChecked());
     // Iris Blur and Tilt-Shift are off but selectable, their controls
-    // collapsed; Path Blur and Spin Blur list as disabled rows.
-    for (const char* name : {"irisBlurEnabled", "tiltShiftEnabled"}) {
+    // collapsed; Spin Blur lists as a disabled row.
+    for (const char* name : {"irisBlurEnabled", "tiltShiftEnabled", "pathBlurEnabled"}) {
         auto* row = dialog.findChild<QCheckBox*>(QLatin1String(name));
         QVERIFY2(row != nullptr, name);
         QVERIFY2(!row->isChecked() && row->isEnabled(), name);
     }
     QVERIFY(!dialog.findChild<QDoubleSpinBox*>(QStringLiteral("irisBlurSpin"))->isVisibleTo(&dialog));
     QVERIFY(spin->isVisibleTo(&dialog));
-    for (const char* name : {"pathBlurEnabled", "spinBlurEnabled"}) {
+    for (const char* name : {"spinBlurEnabled"}) {
         auto* row = dialog.findChild<QCheckBox*>(QLatin1String(name));
         QVERIFY2(row != nullptr, name);
         QVERIFY2(!row->isChecked() && !row->isEnabled(), name);
@@ -301,9 +301,11 @@ void BlurGalleryDialogTest::noiseTabCarriesTheGrainControls()
     QCOMPARE(kind->itemText(0), QStringLiteral("Gaussian"));
     QCOMPARE(kind->itemText(1), QStringLiteral("Uniform"));
     QCOMPARE(kind->itemText(2), QStringLiteral("Grain"));
-    QVERIFY(enabled != nullptr && !enabled->isChecked());
+    // On by default, as in the owner's CC screenshots; Amount 0 adds nothing.
+    QVERIFY(enabled != nullptr && enabled->isChecked());
     QVERIFY(amount != nullptr && amount->value() == 0.0);
     // The controls stay available while the effect is switched off.
+    enabled->setChecked(false);
     QVERIFY(kind->isEnabled());
     QVERIFY(amount->isEnabled());
     for (const char* name : {"noiseSizeSpin", "noiseRoughnessSpin", "noiseColorSpin",
@@ -411,12 +413,12 @@ void BlurGalleryDialogTest::irisWorkspaceOpensOnTheDefaultOutline()
     QVERIFY(spin != nullptr && spin->value() == 15.0 && spin->maximum() == 500.0);
     QVERIFY(!dialog.findChild<QDoubleSpinBox*>(QStringLiteral("fieldBlurSpin"))
                  ->isVisibleTo(&dialog));
-    for (const char* name : {"fieldBlurEnabled", "tiltShiftEnabled"}) {
+    for (const char* name : {"fieldBlurEnabled", "tiltShiftEnabled", "pathBlurEnabled"}) {
         auto* row = dialog.findChild<QCheckBox*>(QLatin1String(name));
         QVERIFY2(row != nullptr, name);
         QVERIFY2(!row->isChecked() && row->isEnabled(), name);
     }
-    for (const char* name : {"pathBlurEnabled", "spinBlurEnabled"}) {
+    for (const char* name : {"spinBlurEnabled"}) {
         auto* row = dialog.findChild<QCheckBox*>(QLatin1String(name));
         QVERIFY2(row != nullptr, name);
         QVERIFY2(!row->isChecked() && !row->isEnabled(), name);

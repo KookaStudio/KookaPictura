@@ -77,7 +77,7 @@ bool runFilterDialog(PictureView* view, const FilterCommandSpec& spec,
         return PictureFrameDialog::get(view, spec, initial, out, parent);
     }
     if (spec.kind == QStringLiteral("field-blur") || spec.kind == QStringLiteral("iris-blur")
-        || spec.kind == QStringLiteral("tilt-shift")
+        || spec.kind == QStringLiteral("tilt-shift") || spec.kind == QStringLiteral("path-blur")
         || spec.kind == QStringLiteral("blur-gallery")) {
         return BlurGalleryDialog::get(view, spec, initial, out, kind, parent);
     }

@@ -197,7 +197,7 @@ QList<FilterParamSpec> galleryEffects()
             slider(QStringLiteral("Bokeh Color:"), 0, 100, 40, 0, QStringLiteral(" %")),
             slider(QStringLiteral("Light Range Low:"), 0, 255, 40),
             slider(QStringLiteral("Light Range High:"), 0, 255, 118),
-            check(QStringLiteral("Noise"), false),
+            check(QStringLiteral("Noise"), true),
             slider(QStringLiteral("Noise Amount:"), 0, 100, 0, 0, QStringLiteral(" %")),
             slider(QStringLiteral("Noise Size:"), 0, 100, 50, 0, QStringLiteral(" %")),
             slider(QStringLiteral("Noise Roughness:"), 0, 100, 50, 0, QStringLiteral(" %")),
@@ -357,6 +357,25 @@ const QList<FilterCommandSpec>& buildCommands()
                 slider(QStringLiteral("Distortion:"), -100, 100, 0, 0, QStringLiteral(" %")),
                 check(QStringLiteral("Symmetric Distortion"), false),
                 slider(QStringLiteral("Blur:"), 0, 500, 15, 0, QStringLiteral(" pixels"))}
+                + galleryEffects()),
+        // Path Blur (post-CS6): one two-point path, its end speeds in pixels,
+        // then the motion section. The workspace sizes the opening speeds to
+        // the document.
+        def(QStringLiteral("Blur Gallery"), QStringLiteral("Path Blur"),
+            QStringLiteral("path-blur"),
+            QList<FilterParamSpec>{
+                hidden(1), // path count
+                hidden(2), // point count
+                placement(QStringLiteral("Start:"), 0.5, 0.5),
+                placement(QStringLiteral("End:"), 0.58, 0.5),
+                slider(QStringLiteral("Start Speed:"), 0, 500, 33, 0, QStringLiteral(" px")),
+                slider(QStringLiteral("End Speed:"), 0, 500, 33, 0, QStringLiteral(" px")),
+                slider(QStringLiteral("Speed:"), 0, 500, 50, 0, QStringLiteral("%")),
+                slider(QStringLiteral("Taper:"), 0, 100, 0, 0, QStringLiteral("%")),
+                check(QStringLiteral("Centered Blur"), true),
+                check(QStringLiteral("Rear Sync Flash"), false),
+                slider(QStringLiteral("Strobe Strength:"), 0, 100, 0, 0, QStringLiteral("%")),
+                slider(QStringLiteral("Strobe Flashes:"), 1, 100, 4)}
                 + galleryEffects()),
         def(QStringLiteral("Blur"), QStringLiteral("Gaussian Blur"), QStringLiteral("gaussian-blur"),
             {slider(QStringLiteral("Radius:"), 0.1, 250.0, 5.0, 1, QStringLiteral(" pixels"))}),
@@ -977,10 +996,11 @@ const FilterCommandSpec* filterCommandForKind(const QString& kind)
     // Several Blur Gallery effects at once commit `blur-gallery`, which has
     // no menu row: it names the history state and Last Filter, and Last
     // Filter Settings reopens the gallery with it. Canonical slots: no pins
-    // of each effect (one record's worth each) plus the effects tail.
+    // of each effect (one record's worth each), the path motion section, and
+    // the effects tail.
     static const FilterCommandSpec gallery = [] {
         QList<FilterParamSpec> params;
-        for (int i = 0; i < 3 + 3 + 8 + 10; ++i) {
+        for (int i = 0; i < 4 + 3 + 8 + 10 + 7 + 6; ++i) {
             params << hidden(0);
         }
         FilterCommandSpec spec = def(QStringLiteral("Blur Gallery"), QStringLiteral("Blur Gallery"),

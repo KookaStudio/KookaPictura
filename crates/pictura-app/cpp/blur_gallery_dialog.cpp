@@ -44,6 +44,7 @@ const int kDraftEdge = 360;
 const int kColumnWidth = 264;
 const double kMaxBlur = 500.0;
 const int kEffectsTail = 13;
+const int kMotionSlots = 6;
 const double kMinIrisRadius = 0.0001;
 const double kMaxIrisRadius = 10.0;
 const double kMaxTiltExtent = 10.0;
@@ -52,6 +53,9 @@ BlurGalleryMode modeForKind(const QString& kind)
 {
     if (kind == QStringLiteral("iris-blur")) {
         return BlurGalleryMode::Iris;
+    }
+    if (kind == QStringLiteral("path-blur")) {
+        return BlurGalleryMode::Path;
     }
     return kind == QStringLiteral("tilt-shift") ? BlurGalleryMode::TiltShift
                                                 : BlurGalleryMode::Field;
@@ -80,10 +84,8 @@ BlurGalleryDialog::BlurGalleryDialog(PictureView* view, const FilterCommandSpec&
 {
     setWindowTitle(spec.label);
     setObjectName(QStringLiteral("blurGalleryDialog"));
-    setMinimumSize(760, 520);
     const QWidget* frame = parent ? parent->window() : nullptr;
-    resize(frame ? (QSizeF(frame->size()) * 0.92).toSize().expandedTo(minimumSize())
-                 : QSize(1100, 720));
+    resize(frame ? (QSizeF(frame->size()) * 0.92).toSize() : QSize(1100, 720));
 
     canvas_ = new BlurGalleryCanvas(nullptr, this);
     if (view_ && view_->has_document()) {
@@ -133,6 +135,10 @@ BlurGalleryDialog::BlurGalleryDialog(PictureView* view, const FilterCommandSpec&
     auto* outer = new QVBoxLayout(this);
     outer->setContentsMargins(4, 4, 4, 4);
     outer->setSpacing(4);
+    // The window can never be squeezed below what the side column needs, so
+    // every slider and value box keeps its height; the floor grows as rows
+    // expand. An explicit minimum size would override this.
+    outer->setSizeConstraint(QLayout::SetMinimumSize);
     outer->addLayout(body, 1);
     outer->addWidget(buildOptionsBar());
 
@@ -161,6 +167,8 @@ QWidget* BlurGalleryDialog::buildOptionsBar()
     row->addSpacing(12);
     hint_ = new QLabel(bar);
     hint_->setEnabled(false);
+    // A long hint clips rather than setting the workspace's minimum width.
+    hint_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     row->addWidget(hint_);
     row->addStretch(1);
 
@@ -290,7 +298,7 @@ QWidget* BlurGalleryDialog::buildBlurToolsPanel()
         {"Field Blur", "fieldBlur", int(BlurGalleryMode::Field)},
         {"Iris Blur", "irisBlur", int(BlurGalleryMode::Iris)},
         {"Tilt-Shift", "tiltShift", int(BlurGalleryMode::TiltShift)},
-        {"Path Blur", "pathBlur", -1},
+        {"Path Blur", "pathBlur", int(BlurGalleryMode::Path)},
         {"Spin Blur", "spinBlur", -1},
     };
     for (const auto& row : rows) {
@@ -301,6 +309,10 @@ QWidget* BlurGalleryDialog::buildBlurToolsPanel()
             continue;
         }
         const auto mode = BlurGalleryMode(row.mode);
+        if (mode == BlurGalleryMode::Path) {
+            effect->title->setToolTip(
+                QStringLiteral("A post-CS6 (Photoshop CC) effect; the blur is approximated"));
+        }
         effect->controls = buildEffectControls(panel, mode, name);
         effect->controls->setVisible(false);
         layout->addWidget(effect->controls);
@@ -321,6 +333,10 @@ QWidget* BlurGalleryDialog::buildEffectControls(QWidget* parent, BlurGalleryMode
     auto* controls = new QVBoxLayout(box);
     controls->setContentsMargins(18, 0, 0, 0);
     controls->setSpacing(3);
+    if (mode == BlurGalleryMode::Path) {
+        buildPathControls(box, controls);
+        return box;
+    }
     auto* blurRow = new QHBoxLayout;
     auto* label = new QLabel(QStringLiteral("Blur:"), box);
     effect.blurSpin = makeValueBox(box, name + QStringLiteral("Spin"), 0.0, kMaxBlur, 0.0);
@@ -383,12 +399,12 @@ QWidget* BlurGalleryDialog::buildEffectsPanel()
     panel->setFrameShape(QFrame::StyledPanel);
     auto* layout = new QVBoxLayout(panel);
     layout->setContentsMargins(2, 2, 2, 2);
-    auto* tabs = new QTabWidget(panel);
-    tabs->setObjectName(QStringLiteral("blurEffectsTabs"));
-    tabs->addTab(buildBokehTab(), QStringLiteral("Effects"));
-    tabs->addTab(buildMotionTab(), QStringLiteral("Motion Effects"));
-    tabs->addTab(buildNoiseTab(), QStringLiteral("Noise"));
-    layout->addWidget(tabs);
+    effectsTabs_ = new QTabWidget(panel);
+    effectsTabs_->setObjectName(QStringLiteral("blurEffectsTabs"));
+    effectsTabs_->addTab(buildBokehTab(), QStringLiteral("Effects"));
+    effectsTabs_->addTab(buildMotionTab(), QStringLiteral("Motion Effects"));
+    effectsTabs_->addTab(buildNoiseTab(), QStringLiteral("Noise"));
+    layout->addWidget(effectsTabs_);
     return panel;
 }
 
@@ -446,22 +462,6 @@ QWidget* BlurGalleryDialog::buildBokehTab()
     return tab;
 }
 
-QWidget* BlurGalleryDialog::buildMotionTab()
-{
-    auto* tab = new QWidget(this);
-    auto* layout = new QVBoxLayout(tab);
-    layout->setContentsMargins(6, 6, 6, 6);
-    auto* hint = new QLabel(
-        QStringLiteral("Motion Effects apply to Path Blur and Spin Blur, which are not "
-                       "implemented yet."),
-        tab);
-    hint->setWordWrap(true);
-    hint->setEnabled(false);
-    layout->addWidget(hint);
-    layout->addStretch(1);
-    return tab;
-}
-
 QWidget* BlurGalleryDialog::buildNoiseTab()
 {
     auto* tab = new QWidget(this);
@@ -476,6 +476,8 @@ QWidget* BlurGalleryDialog::buildNoiseTab()
         {QStringLiteral("Gaussian"), QStringLiteral("Uniform"), QStringLiteral("Grain")});
     noiseEnabled_ = new QCheckBox(tab);
     noiseEnabled_->setObjectName(QStringLiteral("noiseEnabled"));
+    // On by default as in the owner's CC screenshots; Amount 0 adds nothing.
+    noiseEnabled_->setChecked(true);
     row->addWidget(noiseKind_, 1);
     row->addWidget(noiseEnabled_);
     layout->addLayout(row);
@@ -500,7 +502,8 @@ QWidget* BlurGalleryDialog::buildNoiseTab()
 
 namespace {
 
-const char* const kEffectKinds[] = {"field-blur", "iris-blur", "tilt-shift"};
+const char* const kEffectKinds[] = {"field-blur", "iris-blur", "tilt-shift", "path-blur"};
+// Path Blur's records carry their own point count (`readPaths`).
 const int kPinStrides[] = {3, 8, 10};
 
 } // namespace
@@ -509,7 +512,7 @@ QString BlurGalleryDialog::kind() const
 {
     int on = 0;
     int last = 0;
-    for (int m = 0; m < 3; ++m) {
+    for (int m = 0; m < kEffects; ++m) {
         if (effects_[m].enabled && !effects_[m].pins.isEmpty()) {
             ++on;
             last = m;
@@ -551,8 +554,14 @@ QList<double> BlurGalleryDialog::slotList(double scale) const
 {
     QList<double> out;
     const QString commit = kind();
-    for (int m = 0; m < 3; ++m) {
-        if (commit == QStringLiteral("blur-gallery") || commit == QLatin1String(kEffectKinds[m])) {
+    for (int m = 0; m < kEffects; ++m) {
+        if (commit != QStringLiteral("blur-gallery") && commit != QLatin1String(kEffectKinds[m])) {
+            continue;
+        }
+        if (BlurGalleryMode(m) == BlurGalleryMode::Path) {
+            appendPaths(&out, scale);
+            appendMotion(&out);
+        } else {
             appendPins(&out, BlurGalleryMode(m), scale);
         }
     }
@@ -570,6 +579,9 @@ QList<double> BlurGalleryDialog::slotList(double scale) const
 bool BlurGalleryDialog::readPins(const QList<double>& values, int* at, BlurGalleryMode mode,
                                  QList<BlurGalleryPin>* pins) const
 {
+    if (mode == BlurGalleryMode::Path) {
+        return readPaths(values, at, pins);
+    }
     const int stride = kPinStrides[int(mode)];
     if (*at >= values.size()) {
         return false;
@@ -630,21 +642,27 @@ void BlurGalleryDialog::readTail(const QList<double>& values, int tail)
 
 void BlurGalleryDialog::setValues(const QList<double>& values)
 {
-    // The opening command's layout: one effect's list, or all three in turn.
+    // The opening command's layout: one effect's list, or all four in turn,
+    // Path Blur's followed by the motion section.
     const bool combined = spec_.kind == QStringLiteral("blur-gallery");
     const BlurGalleryMode opening = modeForKind(spec_.kind);
-    QList<BlurGalleryPin> parsed[3];
+    const bool motion = combined || opening == BlurGalleryMode::Path;
+    QList<BlurGalleryPin> parsed[kEffects];
     int at = 0;
     bool whole = !values.isEmpty();
-    for (int m = 0; m < 3 && whole; ++m) {
+    for (int m = 0; m < kEffects && whole; ++m) {
         if (combined || BlurGalleryMode(m) == opening) {
             whole = readPins(values, &at, BlurGalleryMode(m), &parsed[m]);
         }
     }
+    const int motionAt = at;
+    if (motion) {
+        at += kMotionSlots;
+    }
     whole = whole && values.size() == at + kEffectsTail
             && (combined || !parsed[int(opening)].isEmpty());
     canvas_->setPins(nullptr, 0);
-    for (int m = 0; m < 3; ++m) {
+    for (int m = 0; m < kEffects; ++m) {
         Effect& effect = effects_[m];
         effect.pins = whole ? parsed[m] : QList<BlurGalleryPin>();
         effect.selected = 0;
@@ -654,10 +672,13 @@ void BlurGalleryDialog::setValues(const QList<double>& values)
         setExpanded(BlurGalleryMode(m), false);
     }
     if (whole) {
+        if (motion) {
+            readMotion(values, motionAt);
+        }
         readTail(values, at);
     }
     BlurGalleryMode first = opening;
-    for (int m = 2; m >= 0; --m) {
+    for (int m = kEffects - 1; m >= 0; --m) {
         if (effects_[m].enabled && (combined || BlurGalleryMode(m) == opening)) {
             first = BlurGalleryMode(m);
         }
@@ -669,6 +690,15 @@ void BlurGalleryDialog::setValues(const QList<double>& values)
 BlurGalleryPin BlurGalleryDialog::defaultPin(BlurGalleryMode mode) const
 {
     BlurGalleryPin pin;
+    if (mode == BlurGalleryMode::Path) {
+        // The owner's opening screenshot (at 100 %): a short stroke right
+        // from the centre with blur shapes about half its length.
+        const double width =
+            view_ && view_->has_document() ? double(view_->document_width()) : 830.0;
+        pin.points = {QPointF(0.5, 0.5), QPointF(0.58, 0.5)};
+        pin.speeds[0] = pin.speeds[1] = qRound(0.04 * width);
+        return pin;
+    }
     if (mode == BlurGalleryMode::TiltShift) {
         // The band's extents open at `pictura_filters::TiltPin::default()`.
         pin.blur = 15.0;
@@ -706,7 +736,7 @@ void BlurGalleryDialog::selectEffect(BlurGalleryMode mode)
         effect.check->setChecked(true);
     }
     // The edited effect's name reads bold.
-    for (int m = 0; m < 3; ++m) {
+    for (int m = 0; m < kEffects; ++m) {
         QFont font = effects_[m].title->font();
         font.setBold(m == int(mode));
         effects_[m].title->setFont(font);
@@ -714,6 +744,19 @@ void BlurGalleryDialog::selectEffect(BlurGalleryMode mode)
     canvas_->setMode(mode);
     canvas_->setPins(&effect.pins, effect.selected);
     setExpanded(mode, true);
+    // Bokeh does not apply to Path Blur and the Motion Effects apply only to
+    // it, so the tab that does not fit the selected effect is disabled.
+    if (effectsTabs_) {
+        const bool path = mode == BlurGalleryMode::Path;
+        // Disabling the current tab moves Qt to the next one; land on the
+        // tab that took its place instead.
+        const bool lost = effectsTabs_->currentIndex() == (path ? 0 : 1);
+        effectsTabs_->setTabEnabled(0, !path);
+        effectsTabs_->setTabEnabled(1, path);
+        if (lost) {
+            effectsTabs_->setCurrentIndex(path ? 1 : 0);
+        }
+    }
     if (hint_) {
         const QString hints[] = {
             QStringLiteral("Click the image to add a pin, drag a pin to move it, its ring to "
@@ -722,6 +765,8 @@ void BlurGalleryDialog::selectEffect(BlurGalleryMode mode)
                            "square it; H hides the overlay"),
             QStringLiteral("Click to add a band; drag its lines to set the sharp and fade "
                            "areas, a dot to turn it; H hides the overlay"),
+            QStringLiteral("Click to pin stop points, double-click to end; drag a point to move "
+                           "it, Ctrl-drag a path; H hides the paths (post-CS6)"),
         };
         hint_->setText(hints[int(mode)]);
     }
@@ -741,9 +786,16 @@ void BlurGalleryDialog::setEffectEnabled(BlurGalleryMode mode, bool on)
 
 void BlurGalleryDialog::setExpanded(BlurGalleryMode mode, bool on)
 {
-    const Effect& effect = effects_[int(mode)];
-    effect.controls->setVisible(on);
-    effect.arrow->setText(on ? QStringLiteral("▼") : QStringLiteral("▶"));
+    // One row open at a time: opening a row closes the one that was open, so
+    // the column (and the workspace's minimum height) stays short.
+    for (int m = 0; m < kEffects; ++m) {
+        if (m != int(mode) && !on) {
+            continue;
+        }
+        const bool open = on && m == int(mode);
+        effects_[m].controls->setVisible(open);
+        effects_[m].arrow->setText(open ? QStringLiteral("▼") : QStringLiteral("▶"));
+    }
 }
 
 void BlurGalleryDialog::selectPin(int index)
@@ -763,6 +815,10 @@ void BlurGalleryDialog::pinsEdited()
 
 void BlurGalleryDialog::deleteSelectedPin()
 {
+    if (active_ == BlurGalleryMode::Path) {
+        deleteSelectedPathPart();
+        return;
+    }
     const int index = canvas_->selected();
     if (pins().size() <= 1 || index < 0 || index >= pins().size()) {
         return;
@@ -801,10 +857,11 @@ void BlurGalleryDialog::setSelectedDistortion(double distortion, bool symmetric)
 void BlurGalleryDialog::syncControls()
 {
     // Each row shows its own effect's selected pin.
-    for (int m = 0; m < 3; ++m) {
+    syncPathControls();
+    for (int m = 0; m < kEffects; ++m) {
         Effect& effect = effects_[m];
         const int index = m == int(active_) ? canvas_->selected() : effect.selected;
-        if (index < 0 || index >= effect.pins.size()) {
+        if (!effect.blurSpin || index < 0 || index >= effect.pins.size()) {
             continue;
         }
         const BlurGalleryPin& pin = effect.pins.at(index);
@@ -848,7 +905,9 @@ void BlurGalleryDialog::scheduleRender()
 bool BlurGalleryDialog::interacting() const
 {
     const auto held = [](const QSlider* slider) { return slider && slider->isSliderDown(); };
-    bool any = canvas_->dragging() || held(distortionSlider_);
+    bool any = canvas_->dragging() || held(distortionSlider_) || held(pathSpeed_.slider)
+               || held(pathTaper_.slider) || held(pathEndSpeed_.slider)
+               || held(strobeStrength_.slider) || held(strobeFlashes_.slider);
     for (const Effect& effect : effects_) {
         any = any || held(effect.blurSlider);
     }
@@ -896,7 +955,12 @@ bool BlurGalleryDialog::get(PictureView* view, const FilterCommandSpec& spec,
 {
     BlurGalleryDialog dialog(view, spec, parent);
     dialog.setValues(initial);
-    if (runDialog(dialog, parent) != QDialog::Accepted || dialog.kind().isEmpty()) {
+    if (runDialog(dialog, parent) != QDialog::Accepted) {
+        return false;
+    }
+    // OK while a path is being placed keeps the stops pinned so far.
+    dialog.canvas()->finishPath();
+    if (dialog.kind().isEmpty()) {
         return false;
     }
     *kind = dialog.kind();

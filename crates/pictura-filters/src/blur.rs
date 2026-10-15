@@ -9,6 +9,7 @@ pub mod field;
 pub mod gallery;
 pub mod iris;
 pub mod lens;
+pub mod path;
 
 use pictura_core::PixelBuffer;
 

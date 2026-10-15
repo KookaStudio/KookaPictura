@@ -3,9 +3,9 @@ use super::gallery::GALLERY_TAIL;
 use super::*;
 use pictura_core::shape::CUSTOM_SHAPE_NAMES;
 use pictura_filters::{
-    BlurNoise, BlurNoiseKind, BlurPin, BokehParams, DisplaceFit, GlassTexture, IrisPin, IrisShape,
-    LightType, NoiseDistribution, Quality, RadialMethod, SharpenRemove, SmartBlurMode,
-    TextureChannel, TiltPin, WaveType, WindMethod, MAX_FIELD_PINS,
+    BlurNoise, BlurNoiseKind, BlurPath, BlurPin, BokehParams, DisplaceFit, GlassTexture, IrisPin,
+    IrisShape, LightType, NoiseDistribution, PathMotion, Quality, RadialMethod, SharpenRemove,
+    SmartBlurMode, TextureChannel, TiltPin, WaveType, WindMethod, MAX_FIELD_PINS, MAX_PATH_POINTS,
 };
 
 #[test]
@@ -687,9 +687,15 @@ fn blur_gallery_combines_each_effects_records() {
             field,
             iris,
             tilt,
+            path,
+            motion,
             bokeh,
             noise,
-        }) => Some((field, iris, tilt, bokeh, noise)),
+        }) => {
+            assert!(path.is_empty(), "these lists carry no paths");
+            assert_eq!(motion, PathMotion::default());
+            Some((field, iris, tilt, bokeh, noise))
+        }
         Some(other) => panic!("blur-gallery mapped to {other:?}"),
         None => None,
     };
@@ -713,6 +719,8 @@ fn blur_gallery_combines_each_effects_records() {
     list.push(2.0);
     list.extend([0.5, 0.4, 15.0, 0.1, 0.05, 0.2, 0.3, 40.0, 1.0, 20.0]);
     list.extend([0.2, 0.8, -30.0, 0.0, 0.0, 0.1, 0.1, -60.0, 0.0, 8.0]);
+    list.push(0.0); // no paths
+    list.extend([50.0, 0.0, 1.0, 0.0, 0.0, 4.0]);
     list.extend([1.0, 30.0, 50.0, 40.0, 200.0]);
     list.extend([1.0, 20.0, 40.0, 30.0, 25.0, 10.0, 2.0, 7.0]);
     let (field, iris, tilt, bokeh, noise) = gallery(&list).unwrap();
@@ -732,9 +740,119 @@ fn blur_gallery_combines_each_effects_records() {
     assert!(gallery(&fractional).is_none());
     let mut too_many = vec![(MAX_FIELD_PINS + 1) as f64];
     too_many.extend(vec![0.5; 3 * (MAX_FIELD_PINS + 1)]);
-    too_many.extend([0.0, 0.0]);
+    too_many.extend([0.0, 0.0, 0.0]);
+    too_many.extend([50.0, 0.0, 1.0, 0.0, 0.0, 4.0]);
     too_many.extend([0.0; GALLERY_TAIL]);
     assert!(gallery(&too_many).is_none());
+}
+
+/// The motion section and tail after the path records.
+fn path_tail(list: &mut Vec<f64>) {
+    list.extend([120.0, 30.0, 0.0, 1.0, 40.0, 6.0]);
+    list.extend([1.0, 30.0, 50.0, 40.0, 200.0]);
+    list.extend([1.0, 20.0, 40.0, 30.0, 25.0, 10.0, 1.0, 9.0]);
+}
+
+#[test]
+fn path_blur_defaults_and_accepts_variable_paths() {
+    let path_blur = |params: &[f64]| match filter_from_kind_params("path-blur", params) {
+        Some(Filter::PathBlur {
+            paths,
+            motion,
+            noise,
+        }) => Some((paths, motion, noise)),
+        Some(other) => panic!("path-blur mapped to {other:?}"),
+        None => None,
+    };
+    let default_path = BlurPath {
+        points: vec![(0.5, 0.5), (0.58, 0.5)],
+        start_speed: 33.0,
+        end_speed: 33.0,
+    };
+    let (paths, motion, noise) = path_blur(&[]).unwrap();
+    assert_eq!(paths, vec![default_path.clone()]);
+    assert_eq!(motion, PathMotion::default());
+    assert_eq!(noise, BlurNoise::default());
+    let (paths, _, _) = path_blur(&[0.0; PATH_BLUR_SLOTS]).unwrap();
+    assert_eq!(
+        paths,
+        vec![default_path],
+        "the canonical list is one default path"
+    );
+
+    // A straight path and a three-point curve, then the motion and tail.
+    let mut two = vec![2.0];
+    two.extend([2.0, 0.1, 0.2, 0.3, 0.4, 5.0, 25.0]);
+    two.extend([3.0, 0.5, 0.5, 0.6, 0.4, 0.9, 0.5, 40.0, 0.0]);
+    path_tail(&mut two);
+    let (paths, motion, noise) = path_blur(&two).unwrap();
+    assert_eq!(
+        paths,
+        vec![
+            BlurPath {
+                points: vec![(0.1, 0.2), (0.3, 0.4)],
+                start_speed: 5.0,
+                end_speed: 25.0,
+            },
+            BlurPath {
+                points: vec![(0.5, 0.5), (0.6, 0.4), (0.9, 0.5)],
+                start_speed: 40.0,
+                end_speed: 0.0,
+            },
+        ]
+    );
+    assert_eq!(
+        motion,
+        PathMotion {
+            speed: 120.0,
+            taper: 30.0,
+            centered: false,
+            rear_sync: true,
+            strobe_strength: 40.0,
+            strobe_flashes: 6,
+        }
+    );
+    assert_eq!(noise.kind, BlurNoiseKind::Uniform);
+    assert_eq!(noise.seed, 9);
+
+    // A short list, a one-point path, too many points, and a fractional
+    // count are refused.
+    assert!(path_blur(&two[..two.len() - 1]).is_none());
+    let mut lonely = vec![1.0, 1.0, 0.5, 0.5, 10.0, 10.0];
+    path_tail(&mut lonely);
+    assert!(path_blur(&lonely).is_none());
+    let mut crowded = vec![1.0, (MAX_PATH_POINTS + 1) as f64];
+    crowded.extend(vec![0.5; 2 * (MAX_PATH_POINTS + 1) + 2]);
+    path_tail(&mut crowded);
+    assert!(path_blur(&crowded).is_none());
+    let mut fractional = two.clone();
+    fractional[0] = 1.5;
+    assert!(path_blur(&fractional).is_none());
+}
+
+#[test]
+fn blur_gallery_carries_the_path_section() {
+    let mut list = vec![1.0, 0.2, 0.3, 6.0, 0.0, 0.0];
+    list.extend([1.0, 2.0, 0.1, 0.2, 0.3, 0.4, 5.0, 25.0]);
+    path_tail(&mut list);
+    match filter_from_kind_params("blur-gallery", &list) {
+        Some(Filter::BlurGallery {
+            field,
+            iris,
+            tilt,
+            path,
+            motion,
+            ..
+        }) => {
+            assert_eq!((field.len(), iris.len(), tilt.len()), (1, 0, 0));
+            assert_eq!(path.len(), 1);
+            assert_eq!(path[0].end_speed, 25.0);
+            assert!(motion.rear_sync && !motion.centered);
+        }
+        other => panic!("blur-gallery mapped to {other:?}"),
+    }
+    assert_eq!(BLUR_GALLERY_SLOTS, 51);
+    assert_eq!(PATH_BLUR_SLOTS, 27);
 }
 
 #[test]

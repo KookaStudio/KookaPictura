@@ -483,10 +483,10 @@ fn cpu_preferred_kernels_skip_the_gpu() {
 /// that visibly move a 24×24 picture.
 fn moving_kernels() -> Vec<Filter> {
     use pictura_filters::{
-        BlurNoise, BlurPin, BokehParams, DisplaceFit, DisplaceMap, FrameOptions, GlassTexture,
-        IrisPin, LiquifyBrush, LiquifyMesh, LiquifyTool, PolarKind, Quality, RadialMethod,
-        RippleSize, SharpenRemove, ShearFill, SmartBlurMode, SpherizeMode, TiltPin, TonalFade,
-        WaveType, ZigZagStyle,
+        BlurNoise, BlurPath, BlurPin, BokehParams, DisplaceFit, DisplaceMap, FrameOptions,
+        GlassTexture, IrisPin, LiquifyBrush, LiquifyMesh, LiquifyTool, PathMotion, PolarKind,
+        Quality, RadialMethod, RippleSize, SharpenRemove, ShearFill, SmartBlurMode, SpherizeMode,
+        TiltPin, TonalFade, WaveType, ZigZagStyle,
     };
     let pin = BlurPin {
         x: 0.5,
@@ -497,6 +497,11 @@ fn moving_kernels() -> Vec<Filter> {
         radius_x: 0.1,
         radius_y: 0.1,
         ..IrisPin::default()
+    };
+    let path = BlurPath {
+        points: vec![(0.3, 0.5), (0.7, 0.5)],
+        start_speed: 12.0,
+        end_speed: 12.0,
     };
     let mut mesh = LiquifyMesh::new(24, 24);
     let brush = LiquifyBrush::new(LiquifyTool::ForwardWarp, 16.0);
@@ -644,10 +649,17 @@ fn moving_kernels() -> Vec<Filter> {
             bokeh: BokehParams::default(),
             noise: BlurNoise::default(),
         },
+        Filter::PathBlur {
+            paths: vec![path.clone()],
+            motion: PathMotion::default(),
+            noise: BlurNoise::default(),
+        },
         Filter::BlurGallery {
             field: vec![pin],
             iris: vec![iris],
             tilt: vec![TiltPin::default()],
+            path: vec![path],
+            motion: PathMotion::default(),
             bokeh: BokehParams::default(),
             noise: BlurNoise::default(),
         },

@@ -159,13 +159,13 @@ void FilterMenuTest::blurGallerySubmenuListsTheGallery()
     QVERIFY(registry->action(filterId(QStringLiteral("Blur"), QStringLiteral("Field Blur")))
             == nullptr);
     for (const QString& leaf : {QStringLiteral("Field Blur"), QStringLiteral("Iris Blur"),
-                                QStringLiteral("Tilt-Shift")}) {
+                                QStringLiteral("Tilt-Shift"), QStringLiteral("Path Blur")}) {
         QAction* live = registry->action(galleryId(leaf));
         QVERIFY2(live != nullptr, qPrintable(leaf));
         QVERIFY2(live->isEnabled(), qPrintable(leaf));
         QVERIFY2(live->text().endsWith(QStringLiteral("…")), qPrintable(leaf));
     }
-    for (const QString& leaf : {QStringLiteral("Path Blur"), QStringLiteral("Spin Blur")}) {
+    for (const QString& leaf : {QStringLiteral("Spin Blur")}) {
         QAction* stub = registry->action(galleryId(leaf));
         QVERIFY2(stub != nullptr, qPrintable(leaf));
         QVERIFY2(!stub->isEnabled(), qPrintable(leaf));
@@ -186,6 +186,7 @@ void FilterMenuTest::dialogCollectsParameterSlots()
         {QStringLiteral("Blur Gallery"), QStringLiteral("Field Blur"), 17},
         {QStringLiteral("Blur Gallery"), QStringLiteral("Iris Blur"), 22},
         {QStringLiteral("Blur Gallery"), QStringLiteral("Tilt-Shift"), 24},
+        {QStringLiteral("Blur Gallery"), QStringLiteral("Path Blur"), 27},
         {QStringLiteral("Blur"), QStringLiteral("Gaussian Blur"), 1},
         {QStringLiteral("Blur"), QStringLiteral("Radial Blur"), 3},
         {QStringLiteral("Blur"), QStringLiteral("Shape Blur"), 2},

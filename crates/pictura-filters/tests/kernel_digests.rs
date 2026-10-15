@@ -3,8 +3,8 @@
 
 use pictura_core::PixelBuffer;
 use pictura_filters::{
-    apply, BlurNoise, BlurNoiseKind, BlurPin, BokehParams, DepthMap, Filter, IrisPin, IrisShape,
-    NoiseDistribution, Quality, RadialMethod, SmartBlurMode, TiltPin,
+    apply, BlurNoise, BlurNoiseKind, BlurPath, BlurPin, BokehParams, DepthMap, Filter, IrisPin,
+    IrisShape, NoiseDistribution, PathMotion, Quality, RadialMethod, SmartBlurMode, TiltPin,
 };
 
 /// A deterministic 4-channel picture with noise, gradients and hard edges, in
@@ -328,6 +328,8 @@ fn kernels() -> Vec<(&'static str, Filter)> {
                         blur: 12.0,
                     },
                 ],
+                path: Vec::new(),
+                motion: PathMotion::default(),
                 bokeh: BokehParams {
                     enabled: true,
                     light_bokeh: 30.0,
@@ -346,6 +348,68 @@ fn kernels() -> Vec<(&'static str, Filter)> {
                 },
             },
         ),
+        (
+            "path blur",
+            Filter::PathBlur {
+                paths: path_blur_paths(),
+                motion: PathMotion {
+                    speed: 120.0,
+                    taper: 25.0,
+                    centered: false,
+                    rear_sync: true,
+                    strobe_strength: 30.0,
+                    strobe_flashes: 5,
+                },
+                noise: BlurNoise {
+                    enabled: true,
+                    amount: 15.0,
+                    seed: 3,
+                    ..BlurNoise::default()
+                },
+            },
+        ),
+        (
+            "blur gallery paths",
+            Filter::BlurGallery {
+                field: vec![BlurPin {
+                    x: 0.9,
+                    y: 0.1,
+                    blur: 9.0,
+                }],
+                iris: Vec::new(),
+                tilt: Vec::new(),
+                path: path_blur_paths(),
+                motion: PathMotion::default(),
+                bokeh: BokehParams {
+                    enabled: true,
+                    light_bokeh: 30.0,
+                    bokeh_color: 50.0,
+                    light_range: (40, 200),
+                },
+                noise: BlurNoise {
+                    enabled: true,
+                    amount: 20.0,
+                    seed: 7,
+                    ..BlurNoise::default()
+                },
+            },
+        ),
+    ]
+}
+
+/// A curved path and a straight one with unequal end speeds.
+fn path_blur_paths() -> Vec<BlurPath> {
+    vec![
+        BlurPath {
+            points: vec![(0.1, 0.8), (0.4, 0.3), (0.85, 0.55)],
+            start_speed: 8.0,
+            end_speed: 30.0,
+        },
+        BlurPath {
+            points: vec![(0.7, 0.1), (0.95, 0.4)],
+            start_speed: 20.0,
+            end_speed: 4.0,
+        },
     ]
 }
 
@@ -382,6 +446,8 @@ fn row_parallel_kernels_keep_their_serial_bytes() {
         ("iris blur", 0xc3bb_434e_14ef_8186),
         ("tilt-shift", 0x0c98_ef52_c090_cca3),
         ("blur gallery", 0x4ab9_0f60_c404_69f0),
+        ("path blur", 0x5de5_0e6d_9851_2588),
+        ("blur gallery paths", 0xfbc3_9ea9_6582_f8b9),
     ];
     let source = picture();
     for ((name, filter), (want_name, want)) in kernels().into_iter().zip(expected) {

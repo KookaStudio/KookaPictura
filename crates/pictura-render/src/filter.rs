@@ -9,7 +9,7 @@ use pictura_adjust::Adjustment;
 use pictura_core::{
     layer_pixel_locked, layer_transparency_locked, Layer, LayerMask, PixelBuffer, PsdRect,
 };
-use pictura_filters::{Filter, FilterError};
+use pictura_filters::{BlurPath, Filter, FilterError, PathMotion};
 use rayon::prelude::*;
 
 use crate::channel;
@@ -311,6 +311,14 @@ fn intersect_rect(a: PsdRect, b: PsdRect) -> PsdRect {
     }
 }
 
+/// The longest trail any path's end speeds reach at the motion's Speed.
+fn path_reach(paths: &[BlurPath], motion: &PathMotion) -> f64 {
+    paths
+        .iter()
+        .map(|path| path.start_speed.max(path.end_speed) * motion.speed / 100.0)
+        .fold(0.0, f64::max)
+}
+
 /// A conservative document-pixel margin a preview must keep around a viewport
 /// so a neighborhood filter's result is exact across the visible area.
 pub fn preview_apron(filter: &Filter) -> i32 {
@@ -339,8 +347,15 @@ pub fn preview_apron(filter: &Filter) -> i32 {
             .iter()
             .map(|pin| pin.blur * (1.0 + pin.distortion.abs() / 100.0))
             .fold(0.0, f64::max),
+        // A trail reaches its length along the streamline.
+        Filter::PathBlur { paths, motion, .. } => path_reach(paths, motion),
         Filter::BlurGallery {
-            field, iris, tilt, ..
+            field,
+            iris,
+            tilt,
+            path,
+            motion,
+            ..
         } => field
             .iter()
             .map(|pin| pin.blur)
@@ -349,7 +364,8 @@ pub fn preview_apron(filter: &Filter) -> i32 {
                 tilt.iter()
                     .map(|pin| pin.blur * (1.0 + pin.distortion.abs() / 100.0)),
             )
-            .fold(0.0, f64::max),
+            .fold(0.0, f64::max)
+            .max(path_reach(path, motion)),
         Filter::RadialBlur { amount, .. } => *amount,
         Filter::Offset {
             horizontal,
