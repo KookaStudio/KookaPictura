@@ -17,8 +17,10 @@ use crate::descriptor::{self, get_object_item, get_object_item_mut, set_object_i
 use crate::error::PsdError;
 
 mod codec;
+mod text;
 
 pub use codec::{decode_pictura_raw_settings, encode_pictura_raw_fltr};
+pub use text::{pictura_raw_from_text, pictura_raw_to_text};
 
 #[cfg(test)]
 mod tests;

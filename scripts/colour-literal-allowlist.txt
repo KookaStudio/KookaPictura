@@ -6,6 +6,11 @@
 # a theme-like grey that the theme-family work still has to convert to a token;
 # delete the entry when it is converted. Add a new site only with a reason.
 
+crates/pictura-app/cpp/acr/acr_basic_panel.cpp  QColor(0x33, 0x33, 0x33)  # data (tone ramp stop)
+crates/pictura-app/cpp/acr/acr_basic_panel.cpp  QColor(0xdd, 0xdd, 0xdd)  # data (tone ramp stop)
+crates/pictura-app/cpp/acr/acr_hsl_panel.cpp  QColor(0x33, 0x33, 0x33)  # data (luminance ramp stop)
+crates/pictura-app/cpp/acr/acr_hsl_panel.cpp  QColor(0xdd, 0xdd, 0xdd)  # data (luminance ramp stop)
+crates/pictura-app/cpp/acr/acr_lens_panel.cpp  QColor(0x33, 0x33, 0x33)  # data (neutral ramp stop)
 crates/pictura-app/cpp/blur_gallery_canvas.cpp  QColor(0xf0, 0xf0, 0xf0)  # data
 crates/pictura-app/cpp/blur_gallery_canvas.cpp  QColor(0xf4, 0xf4, 0xf4)  # data
 crates/pictura-app/cpp/blur_gallery_canvas.cpp  QColor(255, 255, 255)  # data

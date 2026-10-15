@@ -935,20 +935,12 @@ void PicturaMainWindow::registerHandlers()
         if (!view || path.isEmpty()) {
             return;
         }
-        QList<double> initial;
-        const QStringList tokens =
-            view->layer_pictura_raw_settings(path).split(QLatin1Char(' '), Qt::SkipEmptyParts);
-        for (const QString& token : tokens) {
-            initial.append(token.toDouble());
-        }
-        QList<double> values;
-        if (!PicturaRawDialog::get(this, initial, &values) || values.size() != 11) {
+        const QString initial = view->layer_pictura_raw_settings(path);
+        QString settings;
+        if (!PicturaRawDialog::get(this, view, path, initial, &settings)) {
             return;
         }
-        if (view->apply_pictura_raw_filter(path, values.at(0), values.at(1), values.at(2),
-                                           values.at(3), values.at(4), values.at(5),
-                                           values.at(6), values.at(7), values.at(8),
-                                           values.at(9), values.at(10))) {
+        if (view->apply_pictura_raw_filter(path, settings)) {
             refresh();
         }
     });

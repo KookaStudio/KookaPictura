@@ -687,33 +687,33 @@ pub mod qobject {
         #[qinvokable]
         fn export_smart_object_contents(&self, path: &QString, dest: &QString) -> bool;
 
-        /// The Pictura Raw Basic settings attached to `path` as 11 space-separated
-        /// values in dialog order (temperature, tint, exposure, contrast,
-        /// highlights, shadows, whites, blacks, clarity, vibrance, saturation),
-        /// or empty when the layer has no Pictura Raw smart filter. Read-only.
+        /// The full Pictura Raw settings attached to `path` in the bridge text
+        /// form, or empty when the layer has no Pictura Raw smart filter.
+        /// Read-only.
         #[qinvokable]
         fn layer_pictura_raw_settings(&self, path: &QString) -> QString;
 
         /// `Filter > Pictura Raw…`: convert `path` to an embedded smart
-        /// object when it is a plain raster pixel layer, then apply the 11 Basic
-        /// controls and record one "Pictura Raw" state. False without a
+        /// object when it is a plain raster pixel layer, then apply
+        /// `settings_text` and record one "Pictura Raw" state. False without a
         /// document/target or when the engine refuses; records nothing then.
         #[qinvokable]
         fn apply_pictura_raw_filter(
             self: Pin<&mut Self>,
             path: &QString,
-            temperature: f64,
-            tint: f64,
-            exposure: f64,
-            contrast: f64,
-            highlights: f64,
-            shadows: f64,
-            whites: f64,
-            blacks: f64,
-            clarity: f64,
-            vibrance: f64,
-            saturation: f64,
+            settings_text: &QString,
         ) -> bool;
+
+        /// A downscaled preview of the layer at `path` rendered with
+        /// `settings_text`, for the dialog's live preview. Read-only; a null
+        /// image for an ineligible target.
+        #[qinvokable]
+        fn pictura_raw_preview(
+            &self,
+            path: &QString,
+            settings_text: &QString,
+            max_dim: i32,
+        ) -> QImage;
 
         /// Set layer `i` visibility, recomposite, and emit [`changed`].
         #[qinvokable]

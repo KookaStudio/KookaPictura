@@ -1,29 +1,53 @@
 #pragma once
 
-#include <QtCore/QList>
+#include <QtCore/QString>
 #include <QtWidgets/QDialog>
 
-class QDoubleSpinBox;
+#include "acr/acr_settings.h"
+
+class QTabBar;
+class QTimer;
 
 namespace pictura {
 
-// CS6 `Filter > Pictura Raw…` (a post-CS6 extension kept under the CS6
-// label). The eleven PV2012 Basic controls in dialog order: temperature, tint,
-// exposure, contrast, highlights, shadows, whites, blacks, clarity, vibrance,
-// saturation.
+class AcrHistogram;
+class AcrPreviewPane;
+class AcrToneCurvePanel;
+class PictureView;
+
+// `Filter > Pictura Raw…`: the tabbed ACR dialog — a preview pane, a histogram,
+// an icon/text tab strip of the nine panels, and OK / Cancel, over the shared
+// settings map carried as text.
 class PicturaRawDialog : public QDialog {
     Q_OBJECT
 
 public:
-    explicit PicturaRawDialog(const QList<double>& initial, QWidget* parent = nullptr);
+    PicturaRawDialog(PictureView* view, const QString& path, const QString& initialSettings,
+                     QWidget* parent = nullptr);
 
-    QList<double> values() const;
+    // The full settings text with the edited values written back.
+    QString settingsText() const;
 
-    // Run the dialog modally; returns true and fills `out` on OK.
-    static bool get(QWidget* parent, const QList<double>& initial, QList<double>* out);
+    // Run the dialog modally; on OK fill `out` with the edited settings text.
+    static bool get(QWidget* parent, PictureView* view, const QString& path,
+                    const QString& initialSettings, QString* out);
+
+    QTabBar* tabBarForTest() const { return tabs_; }
+    AcrPreviewPane* previewPaneForTest() const { return preview_; }
+    AcrHistogram* histogramForTest() const { return histogram_; }
 
 private:
-    QDoubleSpinBox* spins_[11] = {};
+    void refresh();
+    void render();
+
+    QString path_;
+    AcrSettings settings_;
+    QTabBar* tabs_ = nullptr;
+    AcrPreviewPane* preview_ = nullptr;
+    AcrHistogram* histogram_ = nullptr;
+    AcrToneCurvePanel* toneCurve_ = nullptr;
+    QTimer* refreshTimer_ = nullptr;
+    bool renderPending_ = false;
 };
 
 } // namespace pictura
