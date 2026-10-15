@@ -12,6 +12,7 @@ lives in `crates/`.
   The source of truth for test mechanics; don't restate it, follow it.
 - `DEVELOPING.md` — onboarding: build, architecture, common tasks, OpenSpec CLI.
 - `CONTRIBUTING.md` — provenance, asset, and dependency rules (not optional).
+- `docs/dev/doc-code-parity-gaps.md` — docs↔code parity-gap register: what is specified but missing, partial, or divergent, each gap linked to its issue.
 
 ## Layout
 
