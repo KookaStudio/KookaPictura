@@ -198,3 +198,13 @@ non-trivial changes and works from the CLI, with or without an agent** (the
   requires an explicit note in the task result.
 - Committing build artifacts (`target/`, `build/`, `.opencode/node_modules/`).
 - Touching unrelated files. Keep diffs scoped to the task.
+
+## Workflow (mandatory order)
+1. DELEGATE: Use the `gh-reader` subagent for all GitHub reads
+   (repo status, PRs, issue body/comments, CI status). Never read these yourself.
+2. CLARIFY: Before writing any code, list unclear requirements, risks, or
+   missing info from the issue. Ask the user and WAIT for answers.
+   If nothing is unclear, say so explicitly and proceed.
+3. IMPLEMENT: Write all code changes. Do NOT run build/compile/test-build commands.
+4. COMPILE LAST: Only after all code is finished, run the build once.
+   Fix errors, then rebuild only if code changed.
