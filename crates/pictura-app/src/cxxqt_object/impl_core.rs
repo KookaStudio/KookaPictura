@@ -308,15 +308,9 @@ impl qobject::PictureView {
                     }
                     let buffer = current_buffer(doc, gpu_compute);
                     let srgb = pictura_codec::buffer_to_srgb(doc, &buffer);
-                    (
-                        buffer_to_rgba_bytes(&srgb),
-                        srgb.width as i32,
-                        srgb.height as i32,
-                    )
+                    (buffer_to_rgba_bytes(&srgb), srgb.width, srgb.height)
                 };
-                if !super::export::ffi::encode_image_rgba(
-                    &rgba, width, height, &path, format, 90, 100,
-                ) {
+                if !super::export::encode_raster(&rgba, width, height, &path, format, 90, 100) {
                     return false;
                 }
             }

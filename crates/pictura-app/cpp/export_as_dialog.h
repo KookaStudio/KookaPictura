@@ -34,7 +34,7 @@ class ExportAsDialog : public QDialog {
     Q_OBJECT
 
 public:
-    enum Format { Png = 0, Jpg = 1, Png8 = 2, Gif = 3, Svg = 4 };
+    enum Format { Png = 0, Jpg = 1, Png8 = 2, Gif = 3, Svg = 4, Webp = 5 };
 
     explicit ExportAsDialog(const QVector<ExportEntry>& entries, QWidget* parent = nullptr);
 

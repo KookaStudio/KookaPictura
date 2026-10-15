@@ -55,6 +55,7 @@ constexpr FormatEntry kFormats[] = {
     {"PNG-8", "PNG8", "png"},
     {"GIF", "GIF", "gif"},
     {"SVG", "SVG", "svg"},
+    {"WebP", "WEBP", "webp"},
 };
 
 QString suffixForFormat(const QString& format)
@@ -93,6 +94,9 @@ ExportAsDialog::Format formatForPath(const QString& path, ExportAsDialog::Format
     }
     if (suffix == QLatin1String("svg")) {
         return ExportAsDialog::Svg;
+    }
+    if (suffix == QLatin1String("webp")) {
+        return ExportAsDialog::Webp;
     }
     if (suffix == QLatin1String("png")) {
         return fallback == ExportAsDialog::Png8 ? ExportAsDialog::Png8 : ExportAsDialog::Png;
@@ -187,7 +191,7 @@ QString retargetPath(const QString& path, const QString& chosenFormat)
     const QString lower = QFileInfo(path).suffix().toLower();
     if (lower == QLatin1String("png") || lower == QLatin1String("jpg")
         || lower == QLatin1String("jpeg") || lower == QLatin1String("gif")
-        || lower == QLatin1String("svg")) {
+        || lower == QLatin1String("svg") || lower == QLatin1String("webp")) {
         return path;
     }
     QString base = path;
@@ -485,8 +489,10 @@ void ExportAsDialog::syncCanvasToImage()
 void ExportAsDialog::refreshFormatControls()
 {
     const Format format = Format(format_->currentIndex());
+    // WebP export is lossless (the engine has no lossy encoder), so its quality
+    // control stays off even though the format carries alpha.
     const bool lossy = format == Jpg;
-    const bool alpha = format == Png || format == Png8 || format == Gif;
+    const bool alpha = format == Png || format == Png8 || format == Gif || format == Webp;
     quality_->setEnabled(lossy);
     qualityLabel_->setEnabled(lossy);
     transparency_->setEnabled(alpha);
@@ -554,6 +560,15 @@ QByteArray ExportAsDialog::encodedAs(int entry, Format format) const
         // SVG is document-level text, written by `exportAsFromView` through the
         // `svg_from_view` bridge; it has no per-entry `QImage` encoding.
         break;
+    case Webp: {
+        // Qt's WebP writer is an optional plugin, so encode through the engine.
+        const QImage source = transparency_->isChecked() ? image : over(image, matte);
+        const QImage rgba = rgbaOf(source);
+        const ::rust::Vec<std::uint8_t> bytes =
+            webp_encode(bytesOf(rgba), rgba.width(), rgba.height());
+        out = QByteArray(reinterpret_cast<const char*>(bytes.data()), qsizetype(bytes.size()));
+        break;
+    }
     }
     return out;
 }

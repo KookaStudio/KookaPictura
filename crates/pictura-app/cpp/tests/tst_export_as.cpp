@@ -72,6 +72,7 @@ class ExportAsTest : public QObject {
 private slots:
     void formatsAndControls();
     void png8AndGif();
+    void webpExport();
     void imageSizeAndCanvas();
     void layerList();
     void saveToBytes();
@@ -87,12 +88,13 @@ void ExportAsTest::formatsAndControls()
     pictura::ExportAsDialog dialog(entries());
     auto* format = child<QComboBox>(dialog, "exportAsFormat");
     QVERIFY(format);
-    QCOMPARE(format->count(), 5);
+    QCOMPARE(format->count(), 6);
     QCOMPARE(format->itemText(0), QStringLiteral("PNG"));
     QCOMPARE(format->itemText(1), QStringLiteral("JPG"));
     QCOMPARE(format->itemText(2), QStringLiteral("PNG-8"));
     QCOMPARE(format->itemText(3), QStringLiteral("GIF"));
     QCOMPARE(format->itemText(4), QStringLiteral("SVG"));
+    QCOMPARE(format->itemText(5), QStringLiteral("WebP"));
 
     // PNG: transparency on, quality off.
     QCOMPARE(dialog.suffix(), QStringLiteral("png"));
@@ -116,6 +118,36 @@ void ExportAsTest::formatsAndControls()
     QCOMPARE(dialog.suffix(), QStringLiteral("svg"));
     QVERIFY(!child<QCheckBox>(dialog, "exportAsTransparency")->isEnabled());
     QVERIFY(!child<QSpinBox>(dialog, "exportAsQuality")->isEnabled());
+
+    // WebP: transparency on (it carries alpha), quality off (lossless engine).
+    format->setCurrentIndex(pictura::ExportAsDialog::Webp);
+    QCOMPARE(dialog.suffix(), QStringLiteral("webp"));
+    QVERIFY(child<QCheckBox>(dialog, "exportAsTransparency")->isEnabled());
+    QVERIFY(!child<QSpinBox>(dialog, "exportAsQuality")->isEnabled());
+}
+
+// WebP export encodes through the engine, so it works without the optional Qt
+// WebP plugin.
+void ExportAsTest::webpExport()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    pictura::ExportAsDialog dialog(entries());
+    auto* format = child<QComboBox>(dialog, "exportAsFormat");
+    format->setCurrentIndex(pictura::ExportAsDialog::Webp);
+    QCOMPARE(dialog.suffix(), QStringLiteral("webp"));
+
+    const QByteArray bytes = dialog.encoded(0);
+    QVERIFY(bytes.size() > 12);
+    QCOMPARE(bytes.left(4), QByteArrayLiteral("RIFF"));
+    QCOMPARE(bytes.mid(8, 4), QByteArrayLiteral("WEBP"));
+
+    // A matching suffix writes exactly the encoded bytes.
+    const QString path = dir.filePath(QStringLiteral("out.webp"));
+    QVERIFY(dialog.saveTo(0, path));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(file.readAll(), bytes);
 }
 
 void ExportAsTest::png8AndGif()
