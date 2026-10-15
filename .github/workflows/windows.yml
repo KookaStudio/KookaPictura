@@ -15,11 +15,6 @@ on:
       - CHANGELOG.md
       - version.txt
       - .release-please-manifest.json
-      # ponytail: temporary (#474) — the C++ source and Windows packaging paths
-      # are listed only so this fix builds on a normal PR. Once the Windows build
-      # is green, drop these two entries and restore the job `if:` below.
-      - crates/pictura-app/cpp/**
-      - packaging/windows/**
   workflow_call:
     inputs:
       tag:
@@ -43,9 +38,7 @@ jobs:
   windows:
     runs-on: windows-2022
     timeout-minutes: 90
-    # ponytail: temporary (#474) — this job built only the release-please PR so a
-    # Windows-only breakage never surfaced on a feature PR. The gate is restored
-    # (release-please branch only) once the Windows build is green.
+    if: github.event_name != 'pull_request' || github.head_ref == 'release-please--branches--master'
     env:
       TAG: ${{ inputs.tag }}
       VERSION: ${{ inputs.tag || format('pr{0}', github.event.number) }}

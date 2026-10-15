@@ -23,7 +23,7 @@
   `bash scripts/guard.sh` both pass, and the QSS assembled from the two pieces is
   byte-identical to the pre-change literal extracted with
   `git show HEAD:crates/pictura-app/cpp/theme.cpp`.
-- [ ] 2.2 Confirm no behavior change. Verify: `tst_design_system` passes in CI
+- [x] 2.2 Confirm no behavior change. Verify: `tst_design_system` passes in CI
   (`bash scripts/verify-full.sh` runs it) and the byte-identity check in 2.1
   holds; `--dump-theme` (the token contract, untouched by the split) is unchanged.
 
@@ -33,16 +33,16 @@
   `packaging/windows/**` to `pull_request.paths:` and drop the job `if:`, each
   with a `ponytail:` comment naming the ceiling. Verify: `git diff` shows only
   those two temporary edits.
-- [ ] 3.2 Push and confirm the Windows job builds this PR. Verify: the `windows`
+- [x] 3.2 Push and confirm the Windows job builds this PR. Verify: the `windows`
   check is green on the PR head and its smoke check prints
   `SUMMARY passed=<n> failed=0`.
-- [ ] 3.3 Revert the two temporary edits once the Windows job is green. Verify:
+- [x] 3.3 Revert the two temporary edits once the Windows job is green. Verify:
   `git diff master -- .github/workflows/windows.yml` is empty, so the windows job
   no longer runs on an ordinary feature PR and still runs on the Release PR/tag.
 
 ## 4. Record and validate
 
-- [ ] 4.1 Update `docs/dev/STATE.md` with the fix, the guard, and the reverted
+- [x] 4.1 Update `docs/dev/STATE.md` with the fix, the guard, and the reverted
   gate. Verify: the resume anchor names the outcome and the guard; the commit
   carries `TASK-ALLOWS-DOCS`.
 - [x] 4.2 Validate the change. Verify: `openspec validate --all --strict` exits 0.
