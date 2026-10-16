@@ -3,7 +3,8 @@
 // session in the dragged box, and an Alt-click (Horizontal / Vertical Type)
 // asks for the box size first. The box shows eight handles that resize it and
 // reflow the text, with a `+` on the bottom-right one while text overflows.
-// The session edits like a text field (`TypeTextEdit`): click to place the caret, drag or Shift-click
+// Away from the text the pointer is the Move tool's: a drag there moves the
+// whole text (a plain click still commits). The session edits like a text field (`TypeTextEdit`): click to place the caret, drag or Shift-click
 // to select, double-click a word, arrows / Home / End (Ctrl by word or whole
 // text, Shift to extend), Backspace / Delete, Ctrl+A / C / X / V, Enter for a
 // new line or column; Ctrl+Enter or keypad Enter commits and Esc cancels. The
@@ -25,6 +26,7 @@
 #include "tool_handler.h"
 #include "tool_sessions.h"
 
+#include "icons.h"
 #include "image_view.h"
 #include "paragraph_text_size_dialog.h"
 #include "text_input.h"
@@ -269,6 +271,14 @@ public:
                 refreshOverlay();
                 return true;
             }
+            // Away from the text: a drag moves it, a plain click commits
+            // (decided on release).
+            if (v == view_) {
+                movePending_ = true;
+                moveStart_ = imagePos;
+                moveOrigin_ = origin_;
+                return true;
+            }
             commitText();
             return true;
         }
@@ -289,6 +299,15 @@ public:
     void onMove(ToolServices&, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         if (!active_) {
+            return;
+        }
+        if (movePending_) {
+            if (!movingText_ && QLineF(moveStart_, imagePos).length() * zoom() <= 3.0) {
+                return;
+            }
+            movingText_ = true;
+            origin_ = moveOrigin_ + (imagePos - moveStart_);
+            refreshOverlay();
             return;
         }
         if (handle_ >= 0) {
@@ -314,6 +333,16 @@ public:
     // dialogs do, and opens the box with its top-left at the click.
     void onRelease(ToolServices& ctx, const QPointF&, Qt::KeyboardModifiers) override
     {
+        if (movePending_) {
+            const bool moved = movingText_;
+            movePending_ = false;
+            movingText_ = false;
+            ctx_ = &ctx;
+            if (!moved) {
+                commitText();
+            }
+            return;
+        }
         selecting_ = false;
         boxDrag_ = false;
         handle_ = -1;
@@ -392,6 +421,38 @@ public:
     }
 
     bool textActive() const override { return active_; }
+
+    // While typing, the cursor follows the pointer: the Move tool's away from
+    // the text (where a drag moves it), the tool's own I-beam over it.
+    bool pointerCursor() const override { return active_; }
+
+    bool hoverCursor(const ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods,
+                     QCursor& out) const override
+    {
+        if (pointerCursorKind(ctx, imagePos, mods) != 1) {
+            return false;
+        }
+        const ToolInfo& info = toolInfo(ToolId::Move);
+        const QCursor c = cursor(toolCursorId(ToolId::Move, Qt::NoModifier), info.hotspotX,
+                                 info.hotspotY);
+        out = c.pixmap().isNull() ? QCursor(info.cursor) : c;
+        return true;
+    }
+
+    // 1 where a press would move the text, -1 elsewhere.
+    int pointerCursorKind(const ToolServices&, const QPointF& imagePos,
+                          Qt::KeyboardModifiers) const override
+    {
+        if (!active_) {
+            return -1;
+        }
+        if (movingText_) {
+            return 1;
+        }
+        const bool onText = hitsText(imagePos) || insideBox(imagePos)
+            || (boxed_ && handleAt(imagePos) >= 0);
+        return onText || selecting_ || handle_ >= 0 ? -1 : 1;
+    }
 
     bool insertText(const QString& text) override
     {
@@ -708,6 +769,8 @@ private:
         boxDrag_ = false;
         handle_ = -1;
         boxed_ = false;
+        movePending_ = false;
+        movingText_ = false;
         if (ctx_ && ctx_->canvas()) {
             ctx_->canvas()->clearTypeOverlay();
         }
@@ -851,6 +914,13 @@ private:
     int handle_ = -1;
     bool altClick_ = false;
     QSizeF boxSize_{200.0, 100.0};
+    // A press away from the text: armed until release (a click commits), and
+    // `movingText_` once it drags, carrying the origin from `moveOrigin_` by
+    // the pointer's travel from `moveStart_`.
+    bool movePending_ = false;
+    bool movingText_ = false;
+    QPointF moveStart_;
+    QPointF moveOrigin_;
     QElapsedTimer lastPress_;
     QPointF lastPos_;
     SelectionMode mode_ = SelectionMode::New;

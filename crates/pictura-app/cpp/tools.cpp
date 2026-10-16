@@ -363,6 +363,14 @@ void ToolController::applyCropOptions(bool classic, bool deletePixels, double ra
     }
 }
 
+int ToolController::activeCursorKindForTest(const QPointF& imagePos, int mods)
+{
+    if (ToolHandler* h = registry_.forTool(active_)) {
+        return h->pointerCursorKind(*this, imagePos, Qt::KeyboardModifiers(mods));
+    }
+    return -1;
+}
+
 int ToolController::cropCursorKindForTest(const QPointF& imagePos, int mods)
 {
     if (ToolHandler* h = registry_.forTool(ToolId::Crop)) {

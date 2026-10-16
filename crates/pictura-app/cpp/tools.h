@@ -363,6 +363,8 @@ public:
     // The box is shown but no session runs: it is drawn from the layer's
     // content bounds and the layer is untouched until a handle is grabbed.
     bool transformControlsIdleForTest() const { return controlsIdle_; }
+    // The active tool's pointer cursor zone at `imagePos` (`pointerCursorKind`).
+    int activeCursorKindForTest(const QPointF& imagePos, int mods);
     // Show or hide the controls box for the current tool, checkbox, selection,
     // and active layer; rebuild it when its target or content rect went stale.
     void syncTransformControls();
