@@ -2,7 +2,9 @@
 // rows that apply, the mask button walks Add layer mask → Add vector mask →
 // Add a mask, and the mask thumbnail's menu (whose selection commands
 // tst_mask_edit covers) toggles, deletes and applies the mask, refines it, and
-// sets the rubylith overlay's display options. The overlay is display only.
+// sets the rubylith overlay's display options. The overlay is display only. The
+// vector-mask thumbnail has its own menu, and the trash deletes a doubly-masked
+// layer's vector mask after a "Delete Vector Mask?" prompt (#480).
 
 #include <QtTest/QtTest>
 
@@ -11,6 +13,7 @@
 #include "mask_display_options_dialog.h"
 #include "panels/layers_panel.h"
 #include "refine_edge_dialog.h"
+#include "session.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
@@ -19,7 +22,10 @@
 
 #include "qt_test_support.h"
 
+#include <QtWidgets/QCheckBox>
+#include <QtWidgets/QMessageBox>
 #include <QtWidgets/QSpinBox>
+#include <QtWidgets/QTreeView>
 
 class LayersMaskCommandsTest : public QObject {
     Q_OBJECT
@@ -37,6 +43,9 @@ private slots:
     void rubylithOverlay();
     void rubylithEndsWithItsLayer();
     void maskOptions();
+    void vectorMaskMenu();
+    void trashDeletesTheVectorMask();
+    void trashActsOnTheSelectedRow();
 
 private:
     // A white `side`² document with a rasterized fill layer selected; returns
@@ -386,6 +395,135 @@ void LayersMaskCommandsTest::maskOptions()
     const QImage overlay = window_->imageView()->maskOverlayForTest();
     QVERIFY(!overlay.isNull());
     QCOMPARE(overlay.pixelColor(0, 0), QColor(0, 0, 255, 204));
+}
+
+// lmc_vector_menu
+void LayersMaskCommandsTest::vectorMaskMenu()
+{
+    const QString path = fillLayer(16);
+    QVERIFY(!path.isEmpty());
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(pictura::layer_mask_add(*view, QStringLiteral("reveal-all")));
+    QVERIFY(pictura::vector_mask_add(*view, QStringLiteral("reveal-all")));
+    QCoreApplication::processEvents();
+    panel_->refresh();
+
+    QCOMPARE(panel_->maskMenuTextsForPathForTest(path).first(),
+             QStringLiteral("Disable Layer Mask"));
+    // The vector thumbnail sits right of the layer-mask thumbnail.
+    QCOMPARE(panel_->vectorMenuTextsForTest(path),
+             (QStringList{QStringLiteral("Disable Vector Mask"),
+                          QStringLiteral("Delete Vector Mask"),
+                          QStringLiteral("Rasterize Vector Mask")}));
+
+    QVERIFY(panel_->performMaskActionForTest(QStringLiteral("vectorToggleEnabled"), path));
+    QVERIFY(pictura::vector_mask_disabled(*view));
+    panel_->refresh();
+    QCOMPARE(panel_->vectorMenuTextsForTest(path).first(), QStringLiteral("Enable Vector Mask"));
+    QVERIFY(panel_->performMaskActionForTest(QStringLiteral("vectorToggleEnabled"), path));
+    QVERIFY(!pictura::vector_mask_disabled(*view));
+
+    QVERIFY(panel_->performMaskActionForTest(QStringLiteral("vectorDelete"), path));
+    QVERIFY(!pictura::vector_mask_present(*view));
+    QVERIFY(view->undo());
+    QVERIFY(pictura::vector_mask_present(*view));
+    QVERIFY(panel_->performMaskActionForTest(QStringLiteral("vectorRasterize"), path));
+    QVERIFY(!pictura::vector_mask_present(*view));
+    QCOMPARE(view->history_label(view->history_count() - 1),
+             QStringLiteral("Rasterize Vector Mask"));
+}
+
+// lmc_trash_vector_prompt
+void LayersMaskCommandsTest::trashDeletesTheVectorMask()
+{
+    const QString path = fillLayer(16);
+    QVERIFY(!path.isEmpty());
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(pictura::layer_mask_add(*view, QStringLiteral("reveal-all")));
+    QVERIFY(pictura::vector_mask_add(*view, QStringLiteral("reveal-all")));
+    QCoreApplication::processEvents();
+    panel_->refresh();
+    const int layers = view->layer_count();
+
+    QString prompt;
+    bool accept = false;
+    bool dontShow = false;
+    int prompts = 0;
+    panel_->setDialogDriverForTest([&](QDialog& dialog) {
+        ++prompts;
+        auto* box = qobject_cast<QMessageBox*>(&dialog);
+        prompt = box ? box->text() : QString();
+        if (box && box->checkBox()) {
+            box->checkBox()->setChecked(dontShow);
+        }
+        return accept;
+    });
+
+    // Cancel keeps both masks and the layer.
+    panel_->clickDeleteButtonForTest();
+    QCOMPARE(prompt, QStringLiteral("Delete Vector Mask?"));
+    QVERIFY(pictura::vector_mask_present(*view));
+    QVERIFY(pictura::layer_mask_present(*view));
+
+    // OK deletes only the vector mask.
+    accept = true;
+    dontShow = true;
+    panel_->clickDeleteButtonForTest();
+    QCoreApplication::processEvents();
+    QVERIFY(!pictura::vector_mask_present(*view));
+    QVERIFY(pictura::layer_mask_present(*view));
+    QCOMPARE(view->layer_count(), layers);
+    QVERIFY(!pictura::loadSession().confirmDeleteVectorMask);
+
+    // "Don't show again": the next one goes without asking.
+    QVERIFY(pictura::vector_mask_add(*view, QStringLiteral("reveal-all")));
+    QCoreApplication::processEvents();
+    panel_->refresh();
+    panel_->clickDeleteButtonForTest();
+    QCOMPARE(prompts, 2);
+    QVERIFY(!pictura::vector_mask_present(*view));
+    QCOMPARE(view->layer_count(), layers);
+
+    pictura::SessionState session = pictura::loadSession();
+    session.confirmDeleteVectorMask = true;
+    pictura::saveSession(session);
+}
+
+// lmc_trash_selected_row: in the extended-selection tree the current row can
+// sit outside the selection (Ctrl+arrow); the trash still acts on the
+// selected layer, prompting for its vector mask rather than deleting it.
+void LayersMaskCommandsTest::trashActsOnTheSelectedRow()
+{
+    const QString path = fillLayer(16);
+    QVERIFY(!path.isEmpty());
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(pictura::layer_mask_add(*view, QStringLiteral("reveal-all")));
+    QVERIFY(pictura::vector_mask_add(*view, QStringLiteral("reveal-all")));
+    QCoreApplication::processEvents();
+    panel_->refresh();
+    panel_->selectPaths({path}, path);
+    const int layers = view->layer_count();
+
+    auto* tree = panel_->findChild<QTreeView*>();
+    QVERIFY(tree != nullptr);
+    tree->setFocus();
+    QTest::keyClick(tree, Qt::Key_Down, Qt::ControlModifier);
+    QCoreApplication::processEvents();
+    QCOMPARE(panel_->selectedPaths(), QStringList{path});
+    QVERIFY2(panel_->currentPath() != path, "the current row left the selection");
+
+    int prompts = 0;
+    panel_->setDialogDriverForTest([&](QDialog&) {
+        ++prompts;
+        return true;
+    });
+    QVERIFY(panel_->deleteButtonEnabledForTest());
+    panel_->clickDeleteButtonForTest();
+    QCoreApplication::processEvents();
+    QCOMPARE(prompts, 1);
+    QCOMPARE(view->layer_count(), layers);
+    QVERIFY2(!pictura::vector_mask_present_path(*view, path), "the selected layer's vector mask");
+    QVERIFY(pictura::layer_mask_present_path(*view, path));
 }
 
 QTEST_MAIN(LayersMaskCommandsTest)

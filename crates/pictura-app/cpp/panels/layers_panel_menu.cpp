@@ -6,6 +6,7 @@
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layers_surface.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/smart_object_actions.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_layers/vector_masks.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/layer_style.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/shapes.cxxqt.h"
 
@@ -183,6 +184,13 @@ void LayersPanel::showContextMenu(const QPoint& pos)
     }
 
     QMenu menu(tree_);
+    // The vector-mask thumbnail has its own menu of vector-mask commands.
+    const QRect vectorThumb = delegate_->vectorMaskThumbRect(tree_->visualRect(index), index);
+    if (!vectorThumb.isEmpty() && vectorThumb.contains(pos)) {
+        populateVectorMaskMenu(menu, path);
+        menu.exec(tree_->viewport()->mapToGlobal(pos));
+        return;
+    }
     populateRowMenu(menu, path, index.data(ColorRole).toInt(), index.data(KindRole).toString(),
                     index.data(LayerRowShapeRole).toBool(), index.data(SmartObjectRole).toBool());
     menu.exec(tree_->viewport()->mapToGlobal(pos));
@@ -264,6 +272,15 @@ bool LayersPanel::performMaskAction(const QString& id, const QString& path)
     }
     if (id == QLatin1String("maskIntersect")) {
         return view_->mask_selection(path, QStringLiteral("intersect"));
+    }
+    if (id == QLatin1String("vectorToggleEnabled")) {
+        return vector_mask_set_enabled_path(*view_, path, vector_mask_disabled_path(*view_, path));
+    }
+    if (id == QLatin1String("vectorDelete")) {
+        return vector_mask_delete_path(*view_, path);
+    }
+    if (id == QLatin1String("vectorRasterize")) {
+        return vector_mask_rasterize_path(*view_, path);
     }
     if (id == QLatin1String("refineMask")) {
         openRefineMask(path);

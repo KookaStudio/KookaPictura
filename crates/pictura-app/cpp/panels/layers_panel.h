@@ -257,6 +257,8 @@ public:
     void clickMaskButtonForTest();
     bool deleteButtonEnabledForTest() const;
     void clickDeleteButtonForTest();
+    // The texts of the menu a right-click on `path`'s vector-mask thumbnail opens.
+    QStringList vectorMenuTextsForTest(const QString& path);
     // Drive the panel's modal dialogs (Refine Mask, Mask Options): the driver
     // edits the dialog and returns whether it was accepted. Empty restores
     // `runDialog`.
@@ -308,12 +310,20 @@ private:
     void selectLayer(int index);
     void selectPath(const QString& path);
     void showContextMenu(const QPoint& pos);
+    void populateVectorMaskMenu(QMenu& menu, const QString& path);
+    // The sole selected path when that layer has both masks: the trash then
+    // deletes its vector mask. Empty otherwise.
+    QString trashVectorMaskPath() const;
     void openRefineMask(const QString& path);
     void openMaskOptions();
     bool runPanelDialog(QDialog& dialog);
     // The mask and trash buttons follow the active layer and the selection.
     void syncStripButtons();
     void addMaskFromButton();
+    // The trash: with both masks on the layer it deletes the vector mask after
+    // a "Delete Vector Mask?" prompt; otherwise it deletes the selection.
+    void deleteFromTrash();
+    bool confirmDeleteVectorMask();
     void populateRowMenu(QMenu& menu, const QString& path, int color, const QString& kind,
                          bool shape = false, bool smart = false);
     bool performRowAction(const QString& id, const QString& path);

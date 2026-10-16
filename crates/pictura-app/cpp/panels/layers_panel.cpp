@@ -421,7 +421,7 @@ LayersPanel::LayersPanel(QWidget* parent)
             addLayerAt(currentPath());
         }
     });
-    connect(deleteButton_, &QToolButton::clicked, this, [this] { deleteSelection(); });
+    connect(deleteButton_, &QToolButton::clicked, this, [this] { deleteFromTrash(); });
 }
 
 void LayersPanel::setView(PictureView* view)

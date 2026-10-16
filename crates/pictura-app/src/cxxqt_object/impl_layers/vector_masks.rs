@@ -65,8 +65,22 @@ pub mod ffi {
         /// "Rasterize Vector Mask" state. False without a vector mask.
         fn vector_mask_rasterize(view: Pin<&mut PictureView>) -> bool;
 
+        /// Delete the vector mask on the layer at `path`; one "Delete Vector
+        /// Mask" state. The thumbnail menu edits the clicked row.
+        fn vector_mask_delete_path(view: Pin<&mut PictureView>, path: &QString) -> bool;
+
+        /// Convert the vector mask on the layer at `path` to a layer mask; one
+        /// "Rasterize Vector Mask" state.
+        fn vector_mask_rasterize_path(view: Pin<&mut PictureView>, path: &QString) -> bool;
+
         /// Whether the active layer has a vector mask.
         fn vector_mask_present(view: &PictureView) -> bool;
+
+        /// Whether the layer at `path` has a vector mask.
+        fn vector_mask_present_path(view: &PictureView, path: &QString) -> bool;
+
+        /// Whether the layer at `path` has a vector mask that is disabled.
+        fn vector_mask_disabled_path(view: &PictureView, path: &QString) -> bool;
 
         /// Whether the active layer's vector mask is linked to the layer.
         fn vector_mask_linked(view: &PictureView) -> bool;
@@ -75,6 +89,20 @@ pub mod ffi {
         fn vector_mask_disabled(view: &PictureView) -> bool;
 
     }
+}
+
+fn vector_mask_present_path(view: &PictureView, path: &QString) -> bool {
+    view.rust()
+        .doc
+        .as_ref()
+        .is_some_and(|doc| pictura_render::has_vector_mask(doc, &path.to_string()))
+}
+
+fn vector_mask_disabled_path(view: &PictureView, path: &QString) -> bool {
+    view.rust()
+        .doc
+        .as_ref()
+        .is_some_and(|doc| pictura_render::vector_mask_disabled(doc, &path.to_string()))
 }
 
 fn kind_from(name: &str) -> Option<VectorMaskKind> {
@@ -119,6 +147,11 @@ fn vector_mask_delete(view: Pin<&mut PictureView>) -> bool {
     let Some(path) = active_path(&view) else {
         return false;
     };
+    vector_mask_delete_path(view, &QString::from(path.as_str()))
+}
+
+fn vector_mask_delete_path(view: Pin<&mut PictureView>, path: &QString) -> bool {
+    let path = path.to_string();
     let changed = view.batch_changed(&one(&path), "Delete Vector Mask", |doc, paths| {
         let mut changed = 0;
         for &path in paths {
@@ -191,6 +224,11 @@ fn vector_mask_rasterize(view: Pin<&mut PictureView>) -> bool {
     let Some(path) = active_path(&view) else {
         return false;
     };
+    vector_mask_rasterize_path(view, &QString::from(path.as_str()))
+}
+
+fn vector_mask_rasterize_path(view: Pin<&mut PictureView>, path: &QString) -> bool {
+    let path = path.to_string();
     let changed = view.batch_changed(&one(&path), "Rasterize Vector Mask", |doc, paths| {
         let mut changed = 0;
         for &path in paths {
