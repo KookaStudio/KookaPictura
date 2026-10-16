@@ -9,6 +9,8 @@
 
 #include <QtCore/QPointer>
 #include <QtCore/QStringList>
+#include <QtGui/QAction>
+#include <QtWidgets/QMenu>
 
 namespace pictura {
 
@@ -47,6 +49,10 @@ constexpr int kCanvasColorCount = 4;
 // pane across brightness changes.
 const QColor kCanvasColors[kCanvasColorCount] = {
     QColor(), QColor(82, 82, 82), QColor(0, 0, 0), QColor(255, 255, 255)};
+// The names the canvas-background menu shows, one per `kCanvasColors` entry.
+const char* const kCanvasColorNames[kCanvasColorCount] = {
+    QT_TR_NOOP("Custom"), QT_TR_NOOP("Dark Gray"), QT_TR_NOOP("Black"),
+    QT_TR_NOOP("White")};
 
 } // namespace
 
@@ -64,6 +70,32 @@ void PicturaMainWindow::cycleCanvasColor(bool forward)
             entry.canvas->setCanvasColor(canvasColorForIndex(canvasColorIndex_));
         }
     }
+}
+
+QMenu* PicturaMainWindow::canvasBackgroundMenu()
+{
+    auto* menu = new QMenu(this);
+    for (int i = 0; i < kCanvasColorCount; ++i) {
+        QAction* action = menu->addAction(tr(kCanvasColorNames[i]));
+        connect(action, &QAction::triggered, this, [this, i]() {
+            canvasColorIndex_ = i;
+            const QColor chosen = canvasColorForIndex(i);
+            for (const DocEntry& entry : docs_) {
+                if (entry.canvas) {
+                    entry.canvas->setCanvasColor(chosen);
+                }
+            }
+        });
+    }
+    return menu;
+}
+
+void PicturaMainWindow::showCanvasBackgroundMenu(const QPoint& globalPos)
+{
+    if (!backgroundMenu_) {
+        backgroundMenu_ = canvasBackgroundMenu();
+    }
+    backgroundMenu_->popup(globalPos);
 }
 
 void PicturaMainWindow::applyWorkspaceCanvasColor()

@@ -379,6 +379,11 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
             const QSignalBlocker block(spirit);
             spirit->setChecked(crop_->straightenMode());
         });
+        // The canvas context menu can toggle Delete Cropped Pixels; mirror it.
+        connect(controller_, &ToolController::cropOptionsChanged, this, [this, deletePixels]() {
+            const QSignalBlocker block(deletePixels);
+            deletePixels->setChecked(crop_->deletePixels());
+        });
         // Resample-free resolution: the field defaults to the document's
         // resolution (CS6's 72 ppi fallback). ponytail: metadata only for now;
         // the crop engine isolates pixels and does not resample on commit.

@@ -9,15 +9,19 @@ the active tool, and what each tool's canvas menu contains.
 
 ### Requirement: Canvas right-click routes to the active tool
 
-A right-click over the document SHALL open the active tool's canvas context
-menu, positioned near the pointer. A tool that defines no canvas menu SHALL open
-no menu. A right-click on the pasteboard outside the document SHALL open the
-canvas-background menu regardless of the active tool.
+A right-click over a document's canvas SHALL open that document's active tool's
+context menu, positioned near the pointer and acting on the document that was
+clicked rather than another open document. The active tool's menu SHALL take
+precedence over the pasteboard fallback wherever it is shown, including over
+the pasteboard (the Zoom menu shows there). A tool that defines no canvas menu
+SHALL open no menu over the document, and SHALL open the canvas-background menu
+when the click is on the pasteboard outside the document.
 
 #### Scenario: A tool with a menu opens it
 
-- **WHEN** the Zoom tool is active and the user right-clicks over the document
-- **THEN** the Zoom canvas menu opens at the pointer
+- **WHEN** the Eyedropper tool is active and the user right-clicks over the
+  document
+- **THEN** the Eyedropper canvas menu opens at the pointer
 
 #### Scenario: A tool without a menu opens nothing
 
@@ -26,39 +30,36 @@ canvas-background menu regardless of the active tool.
 
 #### Scenario: The pasteboard opens the background menu
 
-- **WHEN** any tool is active and the user right-clicks on the pasteboard
-  outside the document bounds
+- **WHEN** a tool with no canvas menu is active and the user right-clicks on the
+  pasteboard outside the document bounds
 - **THEN** the canvas-background menu opens
 
-### Requirement: Zoom canvas menu
+#### Scenario: A tool menu wins on the pasteboard
 
-The Zoom tool's canvas menu SHALL offer Fit on Screen, 100%, 200%, Print Size,
-Zoom In, and Zoom Out. Each entry SHALL act on the active document's canvas.
-Print Size SHALL set the zoom to 96 divided by the document resolution in ppi.
-Every entry SHALL be disabled when no document is open.
+- **WHEN** the Zoom tool is active and the user right-clicks on the pasteboard
+- **THEN** the Zoom canvas menu opens rather than the canvas-background menu
 
-#### Scenario: Fit on Screen from the canvas menu
+#### Scenario: The menu acts on the clicked document
 
-- **WHEN** the Zoom tool is active and the user chooses Fit on Screen
-- **THEN** the active canvas fits the document on screen
-
-#### Scenario: The entries disable with no document
-
-- **WHEN** no document is open and the Zoom canvas menu is opened
-- **THEN** every entry is disabled
+- **WHEN** two documents are open, the second is active, and the user
+  right-clicks on the first document's canvas with the Move tool
+- **THEN** the menu describes the first document and choosing an entry changes
+  the first document, not the active one
 
 ### Requirement: Move canvas menu
 
 When the Move tool is active and Auto Select is off, its canvas menu SHALL list,
-topmost first, every visible layer that has a non-transparent pixel under the
-pointer; choosing a listed layer SHALL make it the active layer. The menu SHALL
-also offer Isolation Mode.
+topmost first, every layer the Auto-Select hit test considers a hit under the
+pointer — a visible layer with non-zero opacity and a non-transparent pixel at
+that point, excluding adjustment layers and honouring any active isolation set.
+Choosing a listed layer SHALL make it the active layer. The menu SHALL also
+offer Isolation Mode regardless of the Auto Select state.
 
 #### Scenario: Layers under the pointer are listed
 
 - **WHEN** the Move tool is active with Auto Select off and the user right-clicks
   over overlapping layer content
-- **THEN** the menu lists each layer with a pixel at that point, topmost first
+- **THEN** the menu lists each hit layer, topmost first
 
 #### Scenario: Choosing a listed layer selects it
 
@@ -73,8 +74,9 @@ also offer Isolation Mode.
 ### Requirement: Eyedropper canvas menu
 
 The Eyedropper tool's canvas menu SHALL offer Sample Size (Point Sample, 3 by 3,
-5 by 5, 11 by 11, 31 by 31, 51 by 51, and 101 by 101) and Sample (All Layers and
-Current Layer). Choosing an entry SHALL update the tool option, and the options
+5 by 5, 11 by 11, 31 by 31, 51 by 51, and 101 by 101) and Sample (Current Layer,
+Current & Below, All Layers, All Layers No Adjustments, and Current & Below No
+Adjustments). Choosing an entry SHALL update the tool option, and the options
 bar SHALL reflect the new value.
 
 #### Scenario: Change the sample size
@@ -85,7 +87,8 @@ bar SHALL reflect the new value.
 #### Scenario: Change the sample source
 
 - **WHEN** the user chooses Current Layer from the Sample submenu
-- **THEN** the Eyedropper samples the current layer only
+- **THEN** the Eyedropper samples the current layer only and the options bar
+  shows it
 
 ### Requirement: Crop canvas menu
 
@@ -103,40 +106,22 @@ resets the box to the whole canvas.
 - **WHEN** the user chooses Reset Crop
 - **THEN** the crop box returns to the whole canvas
 
-### Requirement: Slice canvas menu
-
-The Slice and Slice Select tools' canvas menu SHALL offer Combine Slices, the
-stacking-order entries Bring To Front, Bring Forward, Send Backward, and Send To
-Back, and Delete Slice. Combine Slices SHALL be enabled only when more than one
-user slice is selected and SHALL NOT combine a layer-based slice.
-
-#### Scenario: Combine two user slices
-
-- **WHEN** two user slices are selected and the user chooses Combine Slices
-- **THEN** the two slices become one user slice covering their bounding box
-
-#### Scenario: A layer-based slice cannot combine
-
-- **WHEN** the selection includes a layer-based slice
-- **THEN** Combine Slices is disabled
-
 ### Requirement: Canvas-background menu
 
-The canvas-background menu SHALL offer the pasteboard colours that `Space+F`
-cycles: Black, Dark Gray, Medium Gray, Light Gray, and the custom colour.
-Choosing one SHALL set the canvas colour.
+The canvas-background menu SHALL offer the pasteboard colours in the same cycle
+that `Space+F` steps through; choosing one SHALL set the canvas colour.
 
 #### Scenario: Pick a pasteboard colour
 
-- **WHEN** the user chooses Dark Gray from the canvas-background menu
-- **THEN** the canvas colour becomes dark gray
+- **WHEN** the user chooses a colour from the canvas-background menu
+- **THEN** the canvas colour becomes that colour
 
 ### Requirement: Paint-tool canvas menu
 
-When a paint tool that uses the brush tip is active, a canvas right-click SHALL
-open the Brush Preset picker, exposing Size, Hardness, and the preset grid. This
-menu is a deliberate product decision, not CS6 parity: the corpus documents the
-picker as an options-bar control and the on-canvas size/hardness gesture as the
+When the Brush or Pencil tool is active, a canvas right-click SHALL open the
+Brush Preset picker, exposing Size, Hardness, and the preset grid. This menu is
+a deliberate product decision, not CS6 parity: the corpus documents the picker
+as an options-bar control and the on-canvas size/hardness gesture as the
 `Alt+Right-drag` HUD.
 
 #### Scenario: Open the brush picker on the canvas
@@ -148,3 +133,23 @@ picker as an options-bar control and the on-canvas size/hardness gesture as the
 
 - **WHEN** the user picks a preset in the canvas-opened picker
 - **THEN** the active paint tip becomes that preset
+
+### Requirement: The paint-tool picker does not capture the pointer
+
+The Brush Preset picker SHALL be a non-grabbing overlay: it SHALL NOT take a
+mouse or keyboard grab, and it SHALL dismiss on an outside pointer press without
+consuming that press, and on Escape. While it is open the document canvas SHALL
+keep receiving pointer movement so the brush-size cursor ring follows the
+pointer, and a single press on the canvas SHALL begin the paint stroke and
+dismiss the picker in that same press.
+
+#### Scenario: The brush ring follows the pointer while the picker is open
+
+- **WHEN** the Brush tool is active, the picker is open over the canvas, and the
+  user moves the pointer over the document
+- **THEN** the brush-size cursor ring follows the pointer
+
+#### Scenario: One press paints and dismisses the picker
+
+- **WHEN** the picker is open and the user presses the pointer on the document
+- **THEN** the paint stroke begins with that press and the picker closes

@@ -91,6 +91,16 @@ public:
         }
     }
 
+    // The paint tool's canvas menu is the options-bar Brush Preset picker; the
+    // frame owns it.
+    bool hasCanvasContextMenu() const override { return true; }
+    void onContextMenu(ToolServices& ctx, const QPointF& imagePos,
+                       const QPoint& globalPos) override
+    {
+        (void)imagePos;
+        ctx.requestBrushPicker(globalPos);
+    }
+
 private:
     bool aliased_;
     std::optional<paint_api::Stroke> stroke_;

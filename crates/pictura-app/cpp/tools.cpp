@@ -14,6 +14,7 @@
 #include <QtGui/QGuiApplication>
 #include <QtGui/QPainterPath>
 #include <QtWidgets/QApplication>
+#include <QtWidgets/QMenu>
 
 #include <algorithm>
 #include <cmath>
@@ -186,6 +187,7 @@ ToolController::ToolController(QObject* parent)
         if (!eyedropper_->get().ring && canvas_ && active_ == ToolId::Eyedropper) {
             canvas_->clearSamplingRing();
         }
+        emit eyedropperOptionsChanged();
     };
     mixer->changed = [this]() { emit mixerReservoirChanged(mixer_->get().reservoir); };
 
@@ -638,6 +640,40 @@ void ToolController::unbindCanvas()
     dragCommitted_ = false;
     cancelSelectionMove();
     cursorOverSelection_ = false;
+}
+
+void ToolController::setCanvasActivationHandler(std::function<void(ImageView*)> handler)
+{
+    canvasActivationHandler_ = std::move(handler);
+}
+
+bool ToolController::routeCanvasContextMenu(ImageView* canvas, const QPointF& imagePos,
+                                            const QPoint& globalPos)
+{
+    ToolHandler* h = registry_.forTool(active_);
+    // A menu-less tool's right-click has no effect (not even document switch).
+    if (!h || !h->hasCanvasContextMenu()) {
+        return false;
+    }
+    // A right-click on a non-active document activates it first, so the menu's
+    // handlers see the clicked view through `view()` / `canvas()`.
+    if (canvas && canvas != canvas_ && canvasActivationHandler_) {
+        canvasActivationHandler_(canvas);
+    }
+    h->onContextMenu(*this, imagePos, globalPos);
+    return true;
+}
+
+QMenu* ToolController::contextMenuForTest(ImageView* canvas, const QPointF& imagePos)
+{
+    ToolHandler* h = registry_.forTool(active_);
+    if (!h || !h->hasCanvasContextMenu()) {
+        return nullptr;
+    }
+    if (canvas && canvas != canvas_ && canvasActivationHandler_) {
+        canvasActivationHandler_(canvas);
+    }
+    return h->buildContextMenu(*this, imagePos);
 }
 
 void ToolController::applyToolPolicy()

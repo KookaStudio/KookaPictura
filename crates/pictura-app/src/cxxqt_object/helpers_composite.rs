@@ -476,6 +476,66 @@ pub(super) fn auto_select_path(
     }
     Some(hit.split('/').next().unwrap_or(&hit).to_string())
 }
+
+/// Every layer path the Auto-Select hit test considers a hit at `(x, y)`,
+/// topmost first. The same rules as [`auto_select_path`] without group
+/// resolution: a hit is a visible, non-zero-opacity, non-adjustment layer whose
+/// own channel alpha at the point is non-zero, scoped to `isolation` when
+/// present. Used by the Move tool's canvas context menu to list the layers
+/// under the pointer.
+pub(super) fn layers_under_point(
+    doc: &Document,
+    x: i32,
+    y: i32,
+    isolation: Option<&[String]>,
+) -> Vec<String> {
+    let isolated = |path: &str| {
+        isolation.is_none_or(|set| {
+            set.iter()
+                .any(|m| path == m || path.strip_prefix(m).is_some_and(|r| r.starts_with('/')))
+        })
+    };
+    fn walk(
+        layers: &[Layer],
+        prefix: &str,
+        x: i32,
+        y: i32,
+        isolated: &impl Fn(&str) -> bool,
+        out: &mut Vec<String>,
+    ) {
+        for (i, layer) in layers.iter().enumerate().rev() {
+            if !layer.visible || layer.opacity == 0 {
+                continue;
+            }
+            let path = if prefix.is_empty() {
+                i.to_string()
+            } else {
+                format!("{prefix}/{i}")
+            };
+            if layer.is_group {
+                walk(&layer.children, &path, x, y, isolated, out);
+                continue;
+            }
+            if layer.adjustment.is_some() {
+                continue;
+            }
+            let lx = x - layer.rect.left;
+            let ly = y - layer.rect.top;
+            if lx < 0 || ly < 0 {
+                continue;
+            }
+            if isolated(&path)
+                && layer_pixel(layer, lx as u32, ly as u32).is_some_and(|px| px[3] > 0)
+            {
+                out.push(path);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(&doc.layers, "", x, y, &isolated, &mut out);
+    out
+}
+
 /// The `size`-bounded extent (long edge `size`, short edge proportional) that
 /// preserves `width`:`height`, rounded like the delegate's `letterboxedThumb` so
 /// the emitted thumbnail shares the rect it is drawn into.

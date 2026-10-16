@@ -388,6 +388,14 @@ CS6 reworked the 3D engine; each command below is named in the CS6 Help
 - **Tool icon in options bar:** right-click → `Reset Tool` / `Reset All Tools` ✓.
 - **Canvas (Eyedropper / sampling tools):** sample-size options ✓ (CS6 added
   "ignore adjustment layers" and "current layer and below" to the Sample menu).
+- **Canvas (Move):** lists the layers with pixels under the pointer (when Auto
+  Select is off) plus `Isolation Mode`.
+- **Canvas (paint tools):** right-click opens the Brush Preset picker (size,
+  hardness, and the preset grid). This is a deliberate Kooka Pictura affordance,
+  not CS6 parity: the corpus documents the picker as an options-bar control and
+  the on-canvas size/hardness gesture as the `Alt+Right-drag` HUD. The picker is
+  a non-grabbing overlay, so the brush cursor ring keeps tracking the pointer
+  and a single press on the document paints and closes it.
 - **Canvas background:** right-click → canvas colour ✓ (also `Space+F`).
 - **Document tab:** New / Open on CS6 Windows ✓.
 - **Layers / Channels / Paths panels:** layer/channel/path commands
