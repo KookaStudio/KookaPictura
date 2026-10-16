@@ -45,13 +45,15 @@ active document changes.
 The system SHALL apply visibility, name, blend mode, opacity, fill, lock, and
 color-label edits to the active document through the bridge, addressed by the
 layer's path (a `/`-separated sequence of bottom-first child indices). Every
-edit SHALL mark the document modified and be undoable. When more than one layer
-is selected, a header edit SHALL apply to every selected layer in a single undo
-step, and a layer that the CS6 contract excludes SHALL be skipped rather than
-fail the edit. The system SHALL report and edit opacity and fill through the
-bridge as a value in `0..=255`, where `255` is fully opaque; the panel SHALL
-present both as percentages per the Opacity and Fill percent controls
-requirement. A layer's lock state SHALL be reported and edited per flag
+edit SHALL mark the document modified and be undoable. A blend-mode edit SHALL
+record one undo state whose label is `Blending Change: <mode name>`, using the
+mode's CS6 display name (for example `Blending Change: Color Burn`). When more
+than one layer is selected, a header edit SHALL apply to every selected layer in
+a single undo step, and a layer that the CS6 contract excludes SHALL be skipped
+rather than fail the edit. The system SHALL report and edit opacity and fill
+through the bridge as a value in `0..=255`, where `255` is fully opaque; the
+panel SHALL present both as percentages per the Opacity and Fill percent
+controls requirement. A layer's lock state SHALL be reported and edited per flag
 (transparency, image pixels, position, nesting, or all). A layer's color label
 SHALL be one of `None`, `Red`, `Orange`, `Yellow`, `Green`, `Blue`, `Violet`, or
 `Gray`. The system SHALL refuse, rather than apply, an edit that the CS6
@@ -70,6 +72,11 @@ unchanged.
 
 - **WHEN** the user selects a blend mode for a layer
 - **THEN** the layer's blend mode changes and the composite updates
+
+#### Scenario: A blend change records its mode name [lpr_blend_history]
+
+- **WHEN** a layer's blend mode is set to Color Burn
+- **THEN** one undo state is recorded labelled `Blending Change: Color Burn`
 
 #### Scenario: Rename a layer [m39_rename]
 
@@ -126,7 +133,8 @@ selected row is a group, as that group's topmost child; with no selection they
 SHALL insert at the top of the stack, and the new row SHALL become selected.
 Duplicating SHALL deep-copy each selected layer — children, mask, adjustment
 data, and all attributes included — directly above itself, naming the copy
-`"<name> copy"`. Deleting SHALL remove every selected, eligible layer. Move
+`"<name> copy"`, except that the copy of the Background SHALL be an ordinary
+layer: not the Background, unlocked, and with an opaque alpha channel. Deleting SHALL remove every selected, eligible layer. Move
 Layer Up/Down SHALL swap the selected layer with its neighbour within its own
 container. Each applied operation SHALL mark the document modified and be one
 undoable step.
@@ -161,6 +169,11 @@ undoable step.
 
 - **WHEN** the user moves the selected layer up or down from the panel or row menu
 - **THEN** its order within its container changes, the rows reorder, and the composite updates
+
+#### Scenario: Duplicating the Background makes an ordinary layer
+
+- **WHEN** the Background is duplicated
+- **THEN** `Background copy` sits above it as an unlocked pixel layer with no lock badge, and the original stays the Background
 
 ### Requirement: Layers panel docking and toggle
 The system SHALL host the Layers panel in a registered dock with a stable
@@ -346,18 +359,22 @@ SHALL show a disclosure icon — right when collapsed, down when expanded — at
 indented position, and clicking that icon SHALL expand or collapse the group. A
 **regular (non-group) layer's thumbnail SHALL be drawn over a cached two-tone
 checkerboard** so transparency reads under it, while a group keeps its folder
-glyph and no checkerboard. **Every thumbnail SHALL carry a 1 px black outline**,
-and **when exactly one layer is active** (the same singular active-layer
-resolution tool edits use) its thumbnail SHALL additionally show white 1 px
-corner brackets drawn one pixel outside the outline; with zero or multiple active
-layers no brackets are drawn. A layer whose row reports the smart-object
-projection SHALL paint the `layers.kindSmartObject` badge on the thumbnail's
-lower-right corner, whether the smart object is embedded or placed/external; the
-badge SHALL be omitted when the asset is missing. Row typography SHALL derive
-from the layer: a `background` layer's name SHALL be italic/cursive, every other
-name normal, and a layer that is a member of the frame's link set or a
-placed/external smart object SHALL be underlined through the new
-`LayerRowLinkedRole` and `LayerRowPlacedRole` projections. The delegate SHALL
+glyph and no checkerboard. The thumbnail SHALL be laid out in a box `thumb` wide
+and the row's full height minus a small pad, and SHALL be letterboxed to the
+document's aspect ratio inside that box, so a tall document's thumbnail fills the
+row vertically rather than floating in a square box. **Every non-group thumbnail
+SHALL carry a 1 px black outline**; a group's folder glyph SHALL draw no
+outline, and **when exactly one layer is active** (the same singular
+active-layer resolution tool edits use) its thumbnail SHALL additionally show
+white 1 px corner brackets drawn one pixel outside the outline; with zero or
+multiple active layers no brackets are drawn. A layer whose row reports the
+smart-object projection SHALL paint the `layers.kindSmartObject` badge on the
+thumbnail's lower-right corner, whether the smart object is embedded or
+placed/external; the badge SHALL be omitted when the asset is missing. Row
+typography SHALL derive from the layer: a `background` layer's name SHALL be
+italic/cursive, every other name normal, and a layer that is a member of the
+frame's link set or a placed/external smart object SHALL be underlined through
+the `LayerRowLinkedRole` and `LayerRowPlacedRole` projections. The delegate SHALL
 report a row height of at least **28 px** through one named constant used by both
 `sizeHint` and the vertical centring math. If an expected icon asset is
 unavailable, the delegate SHALL omit that badge while keeping the row legible
@@ -444,6 +461,18 @@ rather than fail.
 - **THEN** the singular active layer's thumbnail additionally shows white
   corner brackets one pixel outside the outline, and a multi- or zero-selection
   row shows no brackets
+
+#### Scenario: A group icon has no outline [lpr_group_no_outline]
+
+- **WHEN** a group row is shown
+- **THEN** its folder glyph carries no 1 px black outline, while a regular
+  layer's thumbnail keeps its outline
+
+#### Scenario: A tall thumbnail fills the row [lpr_thumb_fill]
+
+- **WHEN** a portrait document's layer row is shown
+- **THEN** its letterboxed thumbnail is taller than it is wide and spans the
+  row's full height minus the thumbnail pad
 
 #### Scenario: Row typography follows the layer kind [lpr_row_fonts]
 
@@ -683,13 +712,23 @@ the shape bridge and acting on that row. A shape row SHALL be resolved by its
 shape-layer projection (a fill cut to a vector mask), not by its adjustment
 kind, so it is not offered the adjustment-only `Edit Adjustment…` row.
 
-A smart-object row SHALL, in addition to the common and pixel commands, offer
-**Reset Transform**, **Convert to Layers**, and **New Smart Object via Copy**,
-each wired to the smart-object bridge and acting on that row. Reset Transform
-and Convert to Layers SHALL be enabled only when the row's embedded source
-parses as a PSD/PSB document; New Smart Object via Copy SHALL be enabled for a
-non-group, non-adjustment `Embedded` smart object with a payload. A non-smart
-row SHALL NOT offer these rows. Each applied action SHALL be one undoable step.
+A pixel row SHALL offer **Convert to Smart Object**, wired to the convert bridge
+and acting on that row; it SHALL be enabled only when the row is a convertible
+raster pixel layer, and a successful conversion SHALL select the new smart
+object. A smart-object row SHALL, in addition to the common and pixel commands,
+offer **Reset Transform**, **Convert to Layers**, **New Smart Object via Copy**,
+**Edit Contents**, **Replace Contents…**, and **Export Contents…**, each wired
+to its bridge and acting on that row, plus the not-yet-implemented
+**Relink to File…** and **Convert to Linked…** rows rendered disabled with the
+`— not implemented yet` tooltip. Reset Transform and Convert to Layers SHALL be
+enabled only when the row's embedded source parses as a PSD/PSB document; New
+Smart Object via Copy SHALL be enabled for a non-group, non-adjustment
+`Embedded` smart object with a payload; Edit Contents SHALL be enabled only when
+the row's embedded source parses as a PSD/PSB document; Replace Contents SHALL
+be enabled only for a replaceable `Embedded` object with a payload; and Export
+Contents SHALL be enabled only for a smart object with a non-empty payload. A
+non-smart row SHALL NOT offer the smart-object-only rows. Each applied action
+SHALL be one undoable step.
 
 For a pixel row the menu SHALL offer **Add Layer Mask**, **Delete Layer Mask**,
 **Enable Layer Mask**, and **Disable Layer Mask**, each wired to the layer-mask
@@ -751,17 +790,37 @@ buttons, so Move Up/Down SHALL NOT appear in the strip.
 - **WHEN** the user opens the row menu for a shape layer
 - **THEN** it does not contain Edit Adjustment…
 
+#### Scenario: A pixel row offers Convert to Smart Object [lpr_convert_row]
+
+- **WHEN** the user opens the row menu for a convertible raster pixel layer
+- **THEN** it contains Convert to Smart Object, enabled and wired to the convert
+  bridge, and picking it converts the layer and selects the new smart object
+
+#### Scenario: An existing smart object disables Convert to Smart Object
+
+- **WHEN** the user opens the row menu for a layer that is already a smart object
+- **THEN** it offers Convert to Smart Object, disabled, because the row is not a
+  convertible raster pixel layer
+
 #### Scenario: A smart-object row offers its smart-object commands [lpr_smart_rows]
 
 - **WHEN** the user opens the row menu for a smart-object layer
-- **THEN** it contains Reset Transform, Convert to Layers, and New Smart Object
-  via Copy, enabled and wired to the smart-object bridge
+- **THEN** it contains Reset Transform, Convert to Layers, New Smart Object via
+  Copy, Edit Contents, Replace Contents…, and Export Contents…, enabled and wired
+  to their bridges
+
+#### Scenario: A smart-object row offers the linked rows disabled [lpr_smart_linked]
+
+- **WHEN** the user opens the row menu for a smart-object layer
+- **THEN** it contains Relink to File… and Convert to Linked…, each disabled and
+  showing the `— not implemented yet` tooltip
 
 #### Scenario: A plain pixel row omits the smart-object commands
 
 - **WHEN** the user opens the row menu for a plain pixel layer
-- **THEN** it does not contain Reset Transform, Convert to Layers, or New Smart
-  Object via Copy
+- **THEN** it does not contain Reset Transform, Convert to Layers, New Smart
+  Object via Copy, Edit Contents, Replace Contents…, Export Contents…, Relink to
+  File…, or Convert to Linked…
 
 #### Scenario: A pixel row offers its full command set
 
@@ -911,10 +970,12 @@ filter/search row; a row containing the blend-mode popup and a labeled Opacity
 field; a row containing the five lock toggles and a labeled Fill field; the
 layer list; and the action strip. The Opacity and Fill fields SHALL each carry a
 leading text label, and each field's popup slider SHALL open centred
-horizontally under the field rather than aligned to its right edge. The panel
-SHALL NOT provide its own menu button; the wired Layer commands SHALL remain
-reachable from the panel-group widget menu. The five lock toggles SHALL all sit
-in the single lock row above the layer list, not below it.
+horizontally under the field rather than aligned to its right edge. The Opacity
+field's label SHALL be right-aligned against its value box; the Fill field's
+label SHALL keep its left alignment. The panel SHALL NOT provide its own menu
+button; the wired Layer commands SHALL remain reachable from the panel-group
+widget menu. The five lock toggles SHALL all sit in the single lock row above
+the layer list, not below it.
 
 #### Scenario: The header order is filter / blend+Opacity / locks+Fill / list [lpc_order]
 
@@ -928,6 +989,12 @@ in the single lock row above the layer list, not below it.
 - **WHEN** the Layers panel is shown
 - **THEN** the Opacity field and the Fill field each have a text label directly
   to their left
+
+#### Scenario: The Opacity label is right-aligned [lpc_opacity_label_right]
+
+- **WHEN** the Layers panel header is laid out
+- **THEN** the Opacity field's label text is right-aligned against its value box
+  and the Fill field's label stays left-aligned
 
 #### Scenario: The percent picker opens centered [lpc_popup]
 
@@ -1193,15 +1260,28 @@ hit-targets SHALL all mirror this layout.
 
 A layer row thumbnail SHALL be drawn at the document's aspect ratio inside the
 row's thumbnail box, letterboxed rather than stretched into a square, so a wide
-or tall document is not distorted. The thumbnail outline, the transparency
-checkerboard, the active bracket, and the thumbnail hit-target SHALL all use the
-letterboxed rect. A group's folder glyph keeps its square slot.
+or tall document is not distorted. The thumbnail image itself SHALL also carry
+the document's aspect ratio: a thumbnail built for Entire Document placement
+SHALL size its output from the document aspect (`size` on the document's long
+edge and the proportional length on the short edge), placing the layer's content
+at its document-relative position, so a full-width layer has no transparent
+padding strip and is not squashed. A shape layer's thumbnail SHALL likewise
+carry the document aspect. The thumbnail outline, the transparency checkerboard,
+the active bracket, and the thumbnail hit-target SHALL all use the letterboxed
+rect. A group's folder glyph keeps its square slot.
 
 #### Scenario: A non-square document is not stretched [lpr_thumb_aspect]
 
 - **WHEN** a regular layer of a document whose width and height differ is shown
 - **THEN** the drawn thumbnail's aspect ratio matches the document, with the
   unused part of the row's thumbnail box left empty
+
+#### Scenario: A full-width layer has no transparent strip [lpr_thumb_source_aspect]
+
+- **WHEN** a layer spanning the full width of a tall document is shown with
+  Entire Document thumbnail contents
+- **THEN** the thumbnail image has the document's aspect ratio and its rightmost
+  column is layer content rather than transparent padding
 
 ### Requirement: Layer drag shows a CS6 drop indicator
 
@@ -1691,11 +1771,13 @@ Within a layer row the mask thumbnail SHALL sit immediately to the right of the
 image thumbnail with a chain glyph between them (a broken-chain glyph when the
 link is off), and a vector-mask thumbnail SHALL sit immediately to the right of
 the mask thumbnail with the same chain glyph between them. The mask and vector
-thumbnails SHALL have the same aspect ratio as the image thumbnail. A row's
-active edit target SHALL be marked with brackets around that thumbnail, and
-clicking a thumbnail SHALL make it the active target; Alt+clicking a thumbnail
-SHALL also activate it in the composite. A group row SHALL NOT draw brackets
-around its icon.
+thumbnails SHALL have the same aspect ratio as the image thumbnail. The chain
+glyph SHALL be drawn two pixels larger than its slot and rotated a quarter turn
+so it reads vertically between the side-by-side thumbnails, in both the linked
+and unlinked states. A row's active edit target SHALL be marked with brackets
+around that thumbnail, and clicking a thumbnail SHALL make it the active target;
+Alt+clicking a thumbnail SHALL also activate it in the composite. A group row
+SHALL NOT draw brackets around its icon.
 
 #### Scenario: Mask thumbnail adjacency [uip_layers_mask_adjacency]
 
@@ -1707,17 +1789,29 @@ around its icon.
 - **WHEN** a layer thumbnail is clicked to become the edit target
 - **THEN** brackets mark that thumbnail and a group row never shows brackets on its icon
 
+#### Scenario: The chain glyph is larger and rotated [uip_layers_link_glyph]
+
+- **WHEN** a masked or vector-masked row is shown, linked or unlinked
+- **THEN** its chain glyph is drawn two pixels larger than the slot and rotated
+  a quarter turn, so its ink is taller than it is wide
+
 ### Requirement: Layers panel folder rows
 
 A folder row SHALL be vertically shorter than a layer row, its folder icon SHALL
-be about half the row thumbnail size, and its right column SHALL use less
-left-side padding without changing child-layer visibility controls. A group row
-SHALL show its expand/collapse chevron even when it has no children.
+be about three quarters of the row thumbnail size, and its right column SHALL use
+less left-side padding without changing child-layer visibility controls. A group
+row SHALL show its expand/collapse chevron even when it has no children.
 
 #### Scenario: Empty group is expandable [uip_layers_folder_chevron]
 
 - **WHEN** a group with no children is shown
 - **THEN** the row shows its chevron and can be expanded
+
+#### Scenario: The folder glyph is near thumbnail size [uip_layers_folder_icon]
+
+- **WHEN** a group row is shown
+- **THEN** its folder glyph is about three quarters of the row thumbnail size,
+  larger than half
 
 ### Requirement: Layers panel visibility toggle responsiveness
 
@@ -1751,3 +1845,170 @@ select the row, which is no longer a Background.
 
 - **WHEN** the user picks Convert to Smart Object on the Background row
 - **THEN** the row becomes a smart object, is no longer a Background, one undo state is recorded, and the panel reselects the row
+
+### Requirement: The Background's lock badge unlocks it
+
+Clicking the lock badge on the Background row SHALL convert the Background into an ordinary layer at once, without a dialog: it SHALL be named with the next free `Layer N` name, unflagged, unlocked, and given an opaque alpha channel, as one undoable step. Converting a Background by any path SHALL give it an alpha channel so it can take transparency.
+
+#### Scenario: Clicking the Background's lock unlocks it
+
+- **WHEN** the lock badge on an opened photo's Background row is clicked
+- **THEN** the row becomes an unlocked pixel layer and exactly one history state is recorded
+
+### Requirement: Active layer row reflects the document
+
+The system SHALL keep the document's active layer selected in the panel. On
+open, on a document switch, and on any refresh that finds no selected row, the
+panel SHALL select the document's active-layer path, falling back to the first
+displayed row only when the document has no active layer. Because the model
+reset a refresh performs clears the document's active layer through the
+selection sync, the panel SHALL capture the active-layer path before rebuilding
+the model. An explicit deselect (Select > Deselect Layers, or a click on empty
+space) SHALL clear the document's active layer and SHALL NOT be undone by the
+next refresh. A document whose only layer is the locked `Background` SHALL
+report that row as active.
+
+#### Scenario: The Background is active when it is the only layer [lpr_bg_active]
+
+- **WHEN** a document whose only layer is the locked Background is opened or refreshed
+- **THEN** the Background row is the selected and active row, and the document's
+  active-layer path is its path
+
+#### Scenario: The active layer is restored when it is not the first row [lpr_active_restore]
+
+- **WHEN** a refresh finds no selected row and the document's active layer is not
+  the first displayed row
+- **THEN** the panel selects the document's active-layer path rather than the
+  first displayed row
+
+#### Scenario: An explicit deselect is preserved [lpr_active_deselect]
+
+- **WHEN** the user clears the layer selection, leaving the document with no
+  active layer
+- **THEN** the next refresh leaves the panel with no selected row
+
+### Requirement: Drag a layer into another document
+
+A Layers-panel drag SHALL carry the document it started from. A Move-tool
+drag on the canvas with no selection SHALL become such a drag of the active
+layer once the pointer reaches another document's tab, leaving the source
+layer where it was. While dragging,
+hovering another open document's tab SHALL make that document active, and
+releasing the drag on that tab or on its canvas SHALL deep-copy the dragged
+layer (children, masks, effects, and attributes included) into it. The copy
+SHALL be placed by the New Layer insertion rule relative to the destination's
+current layer, SHALL keep its name and document position, and SHALL become the
+selected row, all as one undoable "Duplicate Layer" step. The source document
+SHALL be unchanged. A copy of the Background SHALL be an ordinary, unlocked
+layer. A drop on the source document's own tab or canvas SHALL copy nothing. A
+destination of a different color mode or bit depth SHALL refuse the drop,
+leaving both documents unchanged. The Layers panel SHALL NOT treat a drag from
+another document as a drop on its rows or strip buttons.
+
+#### Scenario: Drop a layer on another document's tab [lpr_drag_to_document]
+
+- **WHEN** layer `Sky` is dragged from one document onto another document's tab and released
+- **THEN** that document becomes active and gains a selected layer `Sky` with
+  the same opacity in one undo step, and the source keeps its layers
+
+#### Scenario: Move-tool drag from the canvas onto another document's tab
+
+- **WHEN** the Move tool drags from one document's canvas onto another document's tab and releases
+- **THEN** that document becomes active and gains a copy of the active layer, and the source layer has not moved
+
+#### Scenario: Drop a layer on another document's canvas
+
+- **WHEN** a layer is dragged from one document and released on the canvas of another, active document
+- **THEN** that document gains a copy of the layer
+
+#### Scenario: A mode mismatch refuses the drop
+
+- **WHEN** a layer of an RGB document is released on a Grayscale document's tab
+- **THEN** the Grayscale document is unchanged
+
+#### Scenario: The destination panel ignores the foreign drag
+
+- **WHEN** a drag from one document is released on the Layers panel rows after another document became active
+- **THEN** the drop is refused and the active document is unchanged
+
+### Requirement: Layer row drop bands
+
+During a layer drag the Layers panel SHALL resolve the release point on a row by
+the row's kind. A row that is not a group SHALL be a sibling target across its
+whole height: a release in its upper half SHALL drop above it and a release in
+its lower half SHALL drop below it, and it SHALL NOT resolve to a drop into the
+row. A group row SHALL resolve a release within its upper quarter (at least
+2 px) to above, within its lower quarter (at least 2 px) to below, and anywhere
+between to a drop into the group.
+
+#### Scenario: A release inside a layer row reorders [lpr_drop_row_halves]
+
+- **WHEN** layer A is dragged and released a quarter of the way down layer B's row
+- **THEN** A moves directly above B in one undo step
+
+#### Scenario: The lower half of a layer row drops below it
+
+- **WHEN** a layer is dragged and released three quarters of the way down another layer's row
+- **THEN** it moves directly below that layer
+
+#### Scenario: The centre of a group row still drops into it
+
+- **WHEN** a layer is dragged and released at the vertical centre of a group row
+- **THEN** it becomes a child of that group
+
+### Requirement: Layers panel combo affordances
+
+The Layers panel's blend-mode and layer-filter combo boxes SHALL draw a
+drop-down caret — a small down-pointing triangle in the UI text colour, matching
+the design system's `.combo .caret` — so their selectable nature is visible, and
+SHALL cycle their options with the Up and Down arrow keys while the field holds
+keyboard focus. A value change SHALL NOT drop the field's focus, so repeated
+arrow keys keep cycling until focus moves elsewhere.
+
+#### Scenario: A combo shows a drop-down caret [lpr_combo_arrow]
+
+- **WHEN** a Layers panel combo box is shown
+- **THEN** it draws a small down-pointing caret at its right edge
+
+#### Scenario: Arrow keys cycle the focused combo [lpr_combo_arrows]
+
+- **WHEN** a Layers panel combo box has keyboard focus and Down is pressed
+- **THEN** its current option advances by one, and Up moves it back
+
+#### Scenario: The field keeps focus across a change [lpr_combo_focus]
+
+- **WHEN** a focused combo changes its value (its blend edit refreshes the panel)
+- **THEN** the field still holds focus and the next arrow key cycles it again
+
+### Requirement: Group expansion survives a structural change
+
+A group's expanded/collapsed state SHALL survive a structural change that shifts
+the group's index-based path — adding, removing, or moving a layer, or dropping a
+layer into the group. The panel SHALL re-find the group by its ancestor name
+chain, disambiguating same-named siblings by their order among them, and keep it
+expanded or collapsed as before. A rename, which leaves the index path intact,
+SHALL keep the state through the unchanged path. A refused operation SHALL change
+neither the document nor the expansion.
+
+#### Scenario: Adding a layer outside an expanded group keeps it open [lpr_add_keeps_expanded]
+
+- **WHEN** a group is expanded and a layer is added elsewhere in the document so
+  the group's index-based path shifts
+- **THEN** the group stays expanded with its children visible
+
+#### Scenario: A rename keeps the group expanded [lpr_rename_keeps_expanded]
+
+- **WHEN** an expanded group is renamed in place
+- **THEN** it stays expanded, because the rename leaves its index path intact
+
+#### Scenario: Same-named sibling groups stay distinct [lpr_dup_group_names]
+
+- **WHEN** two sibling groups share a name, one is expanded, and a structural
+  change shifts their paths
+- **THEN** the group that was expanded is the one that stays expanded
+
+#### Scenario: A drop into an open group keeps it open [lpr_drop_into_expanded]
+
+- **WHEN** an open group is a valid drop-into target and a layer is dropped onto it
+- **THEN** the move succeeds as one undo step and the group stays expanded with
+  the dropped layer visible as its child

@@ -2,23 +2,26 @@
 
 ## Purpose
 A live, transient layer filter with a predicate, row controls, and ancestor promotion.
+
 ## Requirements
+
 ### Requirement: Filter row and controls
 
 The Layers panel SHALL provide a filter/search row at the top of the header,
 containing a dimension popup, a criteria control, and an on/off lightswitch
-toggle. The dimension popup SHALL offer Name, Kind, Effect, Mode, Attribute, and
-Color, defaulting to Kind. Selecting a dimension SHALL swap the criteria control
-to that dimension's editor: Name is a free-text field, Kind is a set of toggle
-buttons (multi-select), and Effect, Mode, Attribute, and Color are value menus.
-Each Kind toggle button SHALL carry an icon for its kind — pixel, adjustment,
-group, background, or type — with the kind name as its tooltip. The Effect dimension
-SHALL be present but disabled, with a "not implemented yet" tooltip, until layer
-effects exist; the other five dimensions SHALL work against the data the row
-projection already exposes. The toggle SHALL be shown as a lightswitch icon,
-SHALL default to on, and SHALL enable or disable the predicate without
-discarding the chosen dimension or criteria. With no criterion chosen the
-enabled toggle SHALL leave every row visible.
+toggle. The dimension popup SHALL offer Name, Kind, Effect, Mode, Attribute,
+Color, and Selected, defaulting to Kind. Selecting a dimension SHALL swap the
+criteria control to that dimension's editor: Name is a free-text field, Kind is
+a set of toggle buttons (multi-select), Effect, Mode, Attribute, and Color are
+value menus, and Selected has no criteria control because its criterion is the
+isolated set. Each Kind toggle button SHALL carry an icon for its kind —
+pixel, adjustment, group, background, or type — with the kind name as its
+tooltip. The Effect dimension SHALL be present but disabled, with a "not
+implemented yet" tooltip, until layer effects exist; the other six dimensions
+SHALL work against the data the row projection already exposes. The toggle SHALL
+be shown as a lightswitch icon, SHALL default to on, and SHALL enable or disable
+the predicate without discarding the chosen dimension or criteria. With no
+criterion chosen the enabled toggle SHALL leave every row visible.
 
 #### Scenario: The Kind buttons carry icons [lfs_row]
 
@@ -44,6 +47,12 @@ enabled toggle SHALL leave every row visible.
 - **THEN** the criteria control becomes a text field, and picking Mode makes it
   a blend-mode menu
 
+#### Scenario: Selected has no criteria control [lfs_row_selected]
+
+- **WHEN** the user picks Selected from the dimension popup
+- **THEN** the criteria control becomes empty, because the criterion is the
+  current selection
+
 #### Scenario: The Effect dimension is disabled [lfs_row]
 
 - **WHEN** the user opens the dimension popup before layer effects exist
@@ -61,12 +70,15 @@ The system SHALL match a layer against the active filter as follows. Name SHALL
 match as a case-insensitive substring of the layer or group name. Kind SHALL
 match when the layer's kind is one of the selected kinds, where the selectable
 kinds are exactly those the model exposes (pixel, adjustment, group,
-background, type). Mode SHALL match the layer's blend-mode key exactly. Color SHALL
-match the layer's color label index exactly. Attribute SHALL match one of
-Visible, Hidden, Locked, Has Mask, or Clipped against the row's state. Multiple
-active criteria SHALL be combined with AND, and the selected Kind values with
-OR. A dimension with no value selected or typed SHALL be inactive. A filter
-that matches no layer SHALL show an empty list without changing the document.
+background, type). Mode SHALL match the layer's blend-mode key exactly. Color
+SHALL match the layer's color label index exactly. Attribute SHALL match one of
+Visible, Hidden, Locked, Has Mask, or Clipped against the row's state. Selected
+SHALL match when the row's layer is in the isolated set. A
+group ancestor of a matching descendant SHALL be shown so the hierarchy stays
+navigable. Multiple active criteria SHALL be combined with AND, and the selected
+Kind values with OR. A dimension with no value selected or typed SHALL be
+inactive. A filter that matches no layer SHALL show an empty list without
+changing the document.
 
 #### Scenario: Name narrows to a substring [lfs_name]
 
@@ -95,6 +107,11 @@ that matches no layer SHALL show an empty list without changing the document.
 
 - **WHEN** the Color filter is enabled with Red
 - **THEN** only layers whose color label is Red are shown
+
+#### Scenario: Selected matches the isolated set [lfs_selected]
+
+- **WHEN** the Selected filter is enabled with an isolated set of two layers
+- **THEN** only those two layers (and their ancestor groups) are shown
 
 #### Scenario: Criteria combine with AND [lfs_mode]
 
@@ -159,4 +176,3 @@ with no criterion active the reset shows the full tree.
 - **WHEN** the active document changes while a filter is active
 - **THEN** the filter returns to Kind/on with no criterion and the new
   document's full tree is shown
-

@@ -28,10 +28,10 @@ the document unchanged with no history state.
 ### Requirement: Crop tool
 The system SHALL place a crop box over the whole canvas when the Crop tool is
 chosen (fitted to the aspect ratio when one is set), shading the canvas area
-outside it — not the workspace around the canvas — and drawing rule-of-thirds
-guides, its frame, and eight handles. Selecting the tool SHALL show a preview
-box (dashed, no guides, no handles) in Modern, fitted to the ratio and centered,
-and no box in Classic. Dragging a handle of an active box SHALL resize the box
+outside it — not the workspace around the canvas — and drawing its frame and
+eight handles (an active box also draws the selected guide overlay). Selecting
+the tool SHALL show a preview box fitted to the ratio and centered in either
+mode, drawn with its frame and handles but no guides. Dragging a handle of an active box SHALL resize the box
 (keeping the aspect ratio when one is set) and SHALL snap the dragged edge or
 corner to the canvas or a layer bounding edge within a screen-pixel threshold;
 dragging inside an active box SHALL move the box in Classic mode and reposition
@@ -42,7 +42,8 @@ new box SHALL be drawn from the preview or when no box exists, with the matching
 move/resize/rotate cursor over each part. The first box drawn SHALL be clamped to
 the canvas and its press corner SHALL stay fixed; a handle resize after that MAY
 extend the box beyond the canvas and SHALL grow the canvas to contain it. Enter, a double-click inside the box, or the options bar's Apply SHALL crop the
-document to the box as one "Crop" state, applying any straighten angle; Escape
+document to the box as one "Crop: <overlay>" state named for the active guide
+overlay (e.g. "Crop: Rule of Thirds", "Crop: Grid"), applying any straighten angle; Escape
 or the options bar's Cancel SHALL clear the box and angle, discard the tool
 session, and leave the Crop tool active with no box shown, so a fresh drag draws
 a new box honoring the active ratio. The options bar
@@ -87,6 +88,10 @@ commits a pending crop or else crops to the current selection bounds.
 - **WHEN** crop is committed with no pending region and no selection
 - **THEN** nothing changes
 
+#### Scenario: History names the guide overlay
+- **WHEN** a crop is committed with the Grid overlay chosen in the grid menu
+- **THEN** the new History state is named "Crop: Grid" (and "Crop: Rule of Thirds" with the default overlay)
+
 ### Requirement: Eyedropper samples a colour
 The system SHALL sample the composited colour at a canvas point, expose it as a
 packed ARGB value, and record it as the frame's foreground colour.
@@ -109,14 +114,21 @@ Navigator proxy — so that at least one display inch of 96 logical pixels of th
 canvas remains visible on each axis whenever the document is larger than that
 axis. The clamp SHALL slide each axis by the minimum needed rather than
 recentering, and the canvas SHALL remain the single source of the offset.
-**Zoom SHALL target the pointer: the Zoom tool's click SHALL anchor the zoom at
-the clicked image point rather than the canvas centre, and the Navigator slider
-SHALL anchor at the click/cursor point on the proxy, so the point under the
-cursor stays fixed. The wheel SHALL apply one shared modifier precedence: a
+**Zoom-in SHALL target the pointer: the Zoom tool's zoom-in click SHALL anchor
+the zoom at the clicked image point, and a wheel zoom-in SHALL keep the point
+under the cursor fixed. Zoom-out SHALL anchor at the canvas centre so the image
+does not drift off the pointer: a wheel zoom-out, an `Alt`/`Option` (modified)
+Zoom-tool click, and `View > Zoom Out` SHALL all step about the viewport centre.
+Dragging with the Zoom tool (press, move, release) SHALL draw a marquee, and on
+release the view SHALL zoom so that rectangle fills the viewport at the highest
+magnification that fits it, centred on the rectangle; holding `Space` mid-marquee
+SHALL reposition the marquee instead of resizing it. A press-release with no drag
+SHALL keep the click step. The Navigator slider SHALL anchor at the click/cursor
+point on the proxy. The wheel SHALL apply one shared modifier precedence: a
 horizontal side-wheel (`angleDelta().x() != 0`) SHALL pan horizontally; a
 `Ctrl+Alt` vertical wheel SHALL pan vertically; an `Alt` (without `Ctrl`)
-vertical wheel SHALL pan horizontally; otherwise the vertical wheel SHALL zoom
-at the cursor, with `Shift` doubling the wheel zoom step.**
+vertical wheel SHALL pan horizontally; otherwise the vertical wheel SHALL zoom,
+with `Shift` doubling the wheel zoom step.**
 
 #### Scenario: Zoom in by click
 
@@ -130,15 +142,34 @@ at the cursor, with `Shift` doubling the wheel zoom step.**
 
 #### Scenario: Zoom click targets the cursor [lct_zoom_cursor]
 
-- **WHEN** the Zoom tool clicks a point away from the canvas centre
+- **WHEN** the Zoom tool clicks a point away from the canvas centre without a modifier
 - **THEN** the zoom is anchored at that point so it stays under the cursor rather
   than the view zooming about the centre
+
+#### Scenario: Zoom-out anchors at the canvas centre [zta_zoom_out_centre]
+
+- **WHEN** the wheel zooms out, or the Zoom tool is clicked with `Alt`/`Option`
+- **THEN** the document centre stays at (near) the centre of the viewport and the
+  image does not drift toward the pointer
+
+#### Scenario: A Zoom drag draws a marquee [zta_marquee]
+
+- **WHEN** the Zoom tool is pressed, dragged over a sub-rectangle, and released
+- **THEN** a marquee is drawn during the drag, and on release the view zooms so
+  that rectangle fills the viewport at the highest magnification that fits it,
+  centred
+
+#### Scenario: A click without a drag still steps once [zta_click_steps]
+
+- **WHEN** the Zoom tool is pressed and released at the same point
+- **THEN** the zoom steps once (in, or out with `Alt`/`Option`) rather than
+  drawing a marquee
 
 #### Scenario: Shift doubles the wheel step [lct_wheel_shift]
 
 - **WHEN** the vertical wheel is scrolled with Shift held
-- **THEN** the zoom step is twice the unmodified step, still anchored at the
-  cursor
+- **THEN** the zoom step is twice the unmodified step, still anchored the same way
+  (cursor for zoom-in, centre for zoom-out)
 
 #### Scenario: Alt pans horizontally [lct_wheel_alt_pan]
 
@@ -375,4 +406,65 @@ document-size replacement — SHALL honour the same policy.
 #### Scenario: An empty document is unaffected [lct_free_pan_empty]
 
 - **WHEN** Free Pan is off and the canvas has no document
+- **THEN** the clamp keeps today's behaviour and no centring offset is produced
+
+### Requirement: Zoom tool context menu
+
+Right-clicking the Zoom tool's toolbox slot SHALL open a menu with **Fit on
+Screen**, **100%**, **200%**, **Print Size**, a separator, **Zoom In**, and
+**Zoom Out**. Each entry SHALL apply to the active document's canvas and SHALL be
+disabled when no document is open. Fit on Screen, 100%, Zoom In, and Zoom Out
+SHALL match the View menu commands; 200% SHALL set the zoom to 200%; Print Size
+SHALL set the zoom so the document displays at its print size, one image inch per
+logical screen inch, from the document's resolution (CS6's 72 ppi default). The
+Zoom slot SHALL show no member flyout triangle.
+
+#### Scenario: The Zoom slot opens the preset menu [ztm_menu]
+
+- **WHEN** the Zoom tool's toolbox slot is right-clicked
+- **THEN** a menu with Fit on Screen, 100%, 200%, Print Size, Zoom In, and Zoom
+  Out opens, and the slot shows no member flyout triangle
+
+#### Scenario: A preset applies to the canvas [ztm_apply]
+
+- **WHEN** 200%, 100%, Print Size, or Fit on Screen is chosen with a document open
+- **THEN** the active canvas zooms to 200%, 100%, the print-size zoom
+  (`96 / ppi`), or the fit zoom respectively
+
+### Requirement: Workspace snap clamp policy
+
+When `view.snapCanvasToWorkspace` is checked and the scaled document fits
+entirely inside the viewport on both axes, the shared range helper SHALL collapse
+both axes to the single centred offset `(viewport − scaledDocument) / 2`, so the
+canvas is pinned to the workspace centre and panning cannot move it. While the
+scaled document overflows either axis, the helper SHALL behave exactly as if the
+flag were unchecked, so the free-pan policy still governs and panning works. A
+zero-size or empty document SHALL be unaffected. Every mutation point that routes
+through the shared range helper — pan, zoom anchoring, centre, fit, actual
+pixels, initial view, resize, and a document-size replacement — SHALL honour the
+policy, and the canvas SHALL remain the single source of the offset.
+
+#### Scenario: A fitting document is pinned to centre [lct_ws_snap_pinned]
+
+- **WHEN** Snap Canvas To Workspace is on and the scaled document fits the
+  viewport on both axes
+- **THEN** the offset is the workspace centre on both axes and a pan attempt
+  leaves it unchanged
+
+#### Scenario: An overflowing document pans normally [lct_ws_snap_overflow]
+
+- **WHEN** Snap Canvas To Workspace is on and the scaled document overflows the
+  viewport on an axis
+- **THEN** the canvas pans through the reveal-margin clamp exactly as it does
+  with the flag off
+
+#### Scenario: The toggle re-clamps immediately [lct_ws_snap_toggle]
+
+- **WHEN** Snap Canvas To Workspace is turned on while a fitting document is
+  panned away from centre
+- **THEN** the canvas re-clamps to the centred position at once and repaints
+
+#### Scenario: An empty document is unaffected [lct_ws_snap_empty]
+
+- **WHEN** Snap Canvas To Workspace is on and the canvas has no document
 - **THEN** the clamp keeps today's behaviour and no centring offset is produced

@@ -36,3 +36,7 @@ jobs:
         run: bash scripts/check-worktree-hook.sh
       - name: OpenSpec validation
         run: openspec validate --all --strict
+      - name: OpenSpec archive
+        run: |
+          bash scripts/check-openspec-archived.sh --self-test
+          bash scripts/check-openspec-archived.sh

@@ -12,17 +12,20 @@ Export As and Quick Export entry points that use it.
 
 The application SHALL encode a document's flattened composite to a raster file
 using Qt's image writers at the C++ app boundary and MUST NOT add a raster
-encoder to the engine crates. The engine SHALL remain Qt-free; the app SHALL
-produce a packed RGBA8888 buffer from the composite and hand it to the boundary,
-which SHALL build a `QImage` and save it. Supported output formats SHALL be PNG,
-JPEG, TIFF, WebP, and BMP, selected by the output path's extension and
-independent of case. PNG, TIFF, and WebP SHALL preserve the composite's alpha;
-JPEG and BMP, which cannot portably carry it, SHALL be written flattened onto an
-opaque background. The boundary SHALL accept a percent scale and SHALL rescale
-the image with a smooth filter when the scale is not 100. Writes SHALL be atomic
-(temp file plus rename), so a failure never truncates an existing file and a
-missing or unwritable path, an unwritable format, or a format the runtime Qt
-build cannot write SHALL return failure without producing a partial file.
+encoder to the engine crates, with the sole exception of the native WebP encoder
+required because Qt's WebP writer is an optional plugin (see the requirement
+below). The engine SHALL remain Qt-free; the app SHALL produce a packed RGBA8888
+buffer from the composite and hand it to the boundary, which SHALL build a
+`QImage` and save it, except for WebP, which the engine SHALL encode. Supported
+output formats SHALL be PNG, JPEG, TIFF, WebP, and BMP, selected by the output
+path's extension and independent of case. PNG, TIFF, and WebP SHALL preserve the
+composite's alpha; JPEG and BMP, which cannot portably carry it, SHALL be written
+flattened onto an opaque background. The boundary SHALL accept a percent scale
+and SHALL rescale the image with a smooth filter when the scale is not 100, for
+the WebP path as well. Writes SHALL be atomic (temp file plus rename), so a
+failure never truncates an existing file and a missing or unwritable path, an
+unwritable format, or a format the runtime build cannot write SHALL return
+failure without producing a partial file.
 
 #### Scenario: PNG preserves the composite alpha
 
@@ -51,13 +54,15 @@ build cannot write SHALL return failure without producing a partial file.
 
 ### Requirement: Export As writes the flattened composite
 
-The application SHALL provide `File ▸ Export As…`. It SHALL present a format
-choice (PNG, JPEG, TIFF, WebP, BMP), a quality control enabled for the formats
-that take one (JPEG and WebP), and a percent scale, then write the document's
-flattened composite to the chosen path through the Qt-boundary encode edge. It
-SHALL NOT change the document's path, modified state, or history, and SHALL NOT
-write a single layer or a selection. A refusal SHALL write nothing and leave the
-document unchanged.
+The application SHALL provide `File ▸ Export As…`. It SHALL open the CC-style
+Export As dialog (`ui/export-as-dialog`), whose checked rows are the export
+targets: the flattened document composite and, optionally, one or more top-level
+layers. It SHALL write each target through the encode edge — WebP through the
+engine's native encoder, PNG-8 and GIF through the engine web encoders, every
+other raster format through the Qt boundary. WebP and the formats that carry
+alpha SHALL preserve the target's transparency. It SHALL NOT change the
+document's path, modified state, or history, and SHALL NOT write a selection. A
+refusal SHALL write nothing and leave the document unchanged.
 
 #### Scenario: Export As writes a raster without modifying the document
 
@@ -69,6 +74,11 @@ document unchanged.
 - **WHEN** the user runs Export As and selects JPEG
 - **THEN** the quality control is enabled and its value is passed to the encoder
 
+#### Scenario: Export As offers WebP and preserves alpha
+
+- **WHEN** the user runs Export As, chooses WebP, and confirms a path
+- **THEN** a WebP holding the flattened composite is written, its transparent pixels stay transparent, and the document's path and modified state are unchanged
+
 #### Scenario: Export As honors the typed extension
 
 - **WHEN** the user runs Export As with the format combo on PNG but types `photo.jpg`
@@ -78,6 +88,11 @@ document unchanged.
 
 - **WHEN** Export As is invoked with no open document
 - **THEN** nothing is written and no history state is added
+
+#### Scenario: Export As honors the dialog settings
+
+- **WHEN** the user runs Export As, sets Image Size to 50 percent and Canvas Size to the image size, and confirms a path
+- **THEN** the written raster is half the document size in each dimension
 
 ### Requirement: Quick Export as PNG writes beside the source
 
@@ -123,3 +138,94 @@ File menu commands of the same name.
 
 - **WHEN** the user picks Quick Export as PNG from a pixel row's menu
 - **THEN** the same file is written as the File menu Quick Export as PNG command writes
+
+### Requirement: Export As format list and controls
+
+The Export As Format list SHALL offer PNG, JPG, PNG-8, GIF, SVG, and WebP, and
+the written suffix SHALL be `png`, `jpg`, `png`, `gif`, `svg`, and `webp`
+respectively. PNG-8 SHALL be quantized to an indexed palette by the engine web
+palette and written by Qt; GIF SHALL be encoded as GIF89a by the engine web
+encoder; SVG SHALL be written by the engine SVG writer (`interop/svg-export`);
+WebP SHALL be written by the engine's native WebP encoder. A Transparency
+control SHALL be enabled for PNG, PNG-8, GIF, and WebP, and a Quality control
+for JPG only (WebP export is lossless); a control that does not apply to the
+chosen format SHALL be disabled.
+
+#### Scenario: PNG-8 writes an indexed image
+
+- **WHEN** the user exports a colourful document as PNG-8
+- **THEN** the written PNG decodes to the target size and holds no more than 256 distinct colours
+
+#### Scenario: GIF writes a GIF89a file
+
+- **WHEN** the user exports the document as GIF
+- **THEN** the written file begins with the GIF89a signature and decodes to the target size
+
+#### Scenario: Quality applies only to JPG
+
+- **WHEN** the Format is PNG-8 or WebP
+- **THEN** the Quality control is disabled and the Transparency control is enabled
+
+#### Scenario: The full format list is offered
+
+- **WHEN** the Format list is opened
+- **THEN** it contains PNG, JPG, PNG-8, GIF, SVG, and WebP
+
+### Requirement: Export As exports selected layers
+
+The dialog's layer list SHALL contain the flattened document plus each top-level
+layer that has pixels (adjustment layers SHALL be excluded). Each row SHALL carry
+a checkbox, and the checked rows SHALL be the export targets; the document SHALL
+be checked by default. With exactly one row checked, `Export…` SHALL request a
+file and write that row; with several, it SHALL request a folder and write one
+file per row, the document named from the document and a layer from the layer
+name. Each layer target SHALL be the layer rendered alone against transparency,
+cropped to the layer's bounds, so a group exports its subtree and a pixel layer
+exports its own pixels.
+
+#### Scenario: A single checked layer writes one file
+
+- **WHEN** only a layer row is checked and the user confirms a path
+- **THEN** one file is written holding that layer's pixels on transparency, and the flattened document is not written
+
+#### Scenario: Several checked rows write one file each
+
+- **WHEN** the document and one layer are checked and the user chooses a folder
+- **THEN** the folder contains a file named from the document and a file named from the layer
+
+#### Scenario: Adjustment layers are not offered
+
+- **WHEN** the document contains an adjustment layer
+- **THEN** the layer list has no row for it
+
+#### Scenario: A group exports its subtree
+
+- **WHEN** a group layer row is checked and exported
+- **THEN** the written image holds the group's composited children on transparency, cropped to their union bounds
+
+### Requirement: The engine encodes WebP natively
+
+The codec SHALL expose `pictura_codec::encode_webp(rgba: &[u8], width: u32,
+height: u32) -> Option<Vec<u8>>`. It SHALL encode tightly packed RGBA8888 as a
+WebP container without Qt and SHALL preserve alpha. It SHALL return `None`
+without panicking when `width` or `height` is zero or when `rgba` is shorter
+than `width * height * 4`. The application SHALL route a `WEBP` save or export
+target to this encoder — rescaling through the boundary first when a percent
+scale is given — and SHALL write the result atomically (temp file plus rename),
+so a failed encode leaves no partial file and does not change the document's
+path, modified state, or history.
+
+#### Scenario: WebP export preserves alpha
+
+- **WHEN** a document whose composite has a transparent pixel is exported to a `.webp`
+- **THEN** the written WebP has that pixel transparent
+
+#### Scenario: WebP save round-trips through the engine
+
+- **WHEN** a document is saved to a `.webp` path and reopened
+- **THEN** the reopened pixels match the flattened composite, because both the write and the read use the engine's WebP codec rather than Qt
+
+#### Scenario: A malformed buffer is refused
+
+- **WHEN** `encode_webp` is given a zero dimension or a buffer shorter than `width * height * 4`
+- **THEN** it returns `None` and does not panic

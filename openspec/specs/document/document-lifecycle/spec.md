@@ -7,7 +7,11 @@ New, Open, Save, Save As, modified-state tracking, the unsaved-changes prompt, a
 
 ### Requirement: New document creation
 The system SHALL create a new document from a New Document dialog that specifies
-name, width, height, color mode, bit depth, and background. Creation SHALL be
+name, width, height, color mode, bit depth, and background. When the system
+clipboard holds an image, the dialog SHALL open with its Document Type
+preselected to Clipboard and its width and height preloaded from that image's
+pixel dimensions; with no image on the clipboard the dialog SHALL open on its
+default type and leave the Clipboard type unavailable. Creation SHALL be
 supported for 8-bit Grayscale and 8-bit RGB with a white or transparent
 background; requests outside that set SHALL be rejected rather than produce a
 document the codec cannot write. A new document SHALL be untitled, unmodified,
@@ -36,6 +40,14 @@ disabled.
 - **WHEN** the user runs New after a launch with no document
 - **THEN** a document is created and the document-requiring commands become
   enabled
+
+#### Scenario: An image on the clipboard preloads the New size
+- **WHEN** the system clipboard holds an image and the user opens File > New
+- **THEN** the Document Type is Clipboard and the width and height fields show the clipboard image's pixel dimensions
+
+#### Scenario: An empty clipboard keeps the default size
+- **WHEN** the system clipboard holds no image and the user opens File > New
+- **THEN** the Document Type is the default size and the Clipboard type is disabled
 
 ### Requirement: Open documents
 The system SHALL open a PSD/PSB file chosen from a file dialog into a new
@@ -129,6 +141,7 @@ the modified state.
 
 - **WHEN** a document is saved to a `.psb` path
 - **THEN** the written file is a version-2 PSB
+
 ### Requirement: Modified state tracking
 The system SHALL expose `is_dirty()` for the active document. Every successful
 mutating command SHALL mark the document modified; opening and saving SHALL clear

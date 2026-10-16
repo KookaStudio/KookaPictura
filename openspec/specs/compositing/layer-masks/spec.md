@@ -19,7 +19,9 @@ rectangle contributing the mask's default color so the result is reveal-everythi
 or hide-everything respectively. Creation SHALL be refused, leaving the document
 and history unchanged, when the target layer already has a mask or when the path
 does not resolve. A refused creation SHALL report failure and a created mask
-SHALL report success.
+SHALL report success. A successful creation SHALL make the new mask the view's
+mask edit target, so the brush, fill, and filters write its coverage at once; a
+refused creation SHALL leave the target unchanged.
 
 #### Scenario: Reveal All creates a full mask
 
@@ -33,6 +35,12 @@ SHALL report success.
 - **WHEN** Hide All is applied to a pixel layer that has no mask
 - **THEN** the layer gains one mask whose samples and outside-rectangle default
   color are 0, and the layer contributes nothing to the composite
+
+#### Scenario: A created mask becomes the edit target [lpr_mask_add_target]
+
+- **WHEN** a layer mask is added to the active layer
+- **THEN** the view's mask edit target names that layer, so painting and filling
+  edit the mask's coverage
 
 #### Scenario: A second mask is refused
 
@@ -354,3 +362,51 @@ step.
 
 - **WHEN** a mask is loaded as a selection with the `Subtract` mode
 - **THEN** the mask's white areas are removed from the current pixel selection
+
+### Requirement: Mask editing is grayscale-native and accelerated
+
+The system SHALL edit a raster layer mask's single coverage plane. The
+document through which a mask is painted SHALL carry the coverage as one
+grayscale channel, so a dab writes one byte per pixel and no per-dab channel
+copy-back is required for correctness. A mask stroke SHALL honour the same
+interactive-acceleration policy as a pixel-layer stroke: a dab within the raster
+budget SHALL use the exact CPU raster, and a larger brush SHALL use a
+reduced-level preview and/or a GPU stroke, selected by the same budget rule.
+The committed coverage SHALL be byte-identical, within the compositor's
+one-unit-per-channel tolerance, to the exact CPU raster of the same sample log.
+A mask stroke SHALL present the changed region only; it SHALL NOT rebuild the
+whole mask document, the whole pyramid, or recomposite the whole document on a
+per-dab basis. Fills and filters on the mask SHALL keep using the same
+single-channel document.
+
+#### Scenario: A dab writes the coverage plane directly
+
+- **WHEN** a mask stroke paints a dab
+- **THEN** only the mask's coverage byte changes and no RGBA mask-sized
+  intermediate is allocated or copied back
+
+#### Scenario: A large mask brush uses the accelerated path
+
+- **WHEN** the mask target is active and the brush diameter exceeds the raster
+  budget
+- **THEN** the stroke uses the reduced-level preview and/or the GPU path in place
+  of the exact full-resolution CPU raster per dab
+
+#### Scenario: The committed mask matches the exact raster
+
+- **WHEN** a mask stroke is committed after a previewed or GPU stroke
+- **THEN** the committed coverage matches a full-resolution exact CPU raster of
+  the same sample log within one unit per channel
+
+#### Scenario: The per-dab present stays region-bounded
+
+- **WHEN** a mask dab changes coverage
+- **THEN** only the dab's region is recomposited and presented, and the whole
+  document is not recomposited
+
+#### Scenario: A live mask stroke renders while dragging
+
+- **WHEN** a mask stroke is dragged across several dabs in one frame
+- **THEN** the canvas presents the accumulated region on that frame (a live mask
+  stroke counts as painting, so the shell's deferred present runs) instead of
+  showing only the first dab and the rest on release

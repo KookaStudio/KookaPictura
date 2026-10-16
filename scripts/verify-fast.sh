@@ -47,6 +47,8 @@ if [ "$docs_only" -eq 1 ]; then
   echo "verify-fast: docs-only diff; skipping fmt, clippy, and tests"
   echo "== guard =="
   bash scripts/guard.sh
+  echo "== archive =="
+  bash scripts/check-openspec-archived.sh
   echo "== test plan =="
   python3 scripts/check-test-plan.py
   echo "== openspec =="
@@ -75,6 +77,10 @@ bash scripts/check-worktree-hook.sh
 
 echo "== selftest budget =="
 bash scripts/check-selftest-budget.sh
+
+echo "== archive =="
+bash scripts/check-openspec-archived.sh --self-test
+bash scripts/check-openspec-archived.sh
 
 echo "== icon provenance =="
 python3 scripts/check-icon-provenance.py
