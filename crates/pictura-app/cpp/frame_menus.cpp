@@ -14,6 +14,10 @@ namespace pictura {
 void PicturaMainWindow::buildMenus()
 {
     registry_->buildMenuBar(menuBar());
+    // The History panel's iconic flyout is a separate top-level Qt::Popup.
+    if (QAction* undo = registry_->action(QLatin1String(command_ids::EditUndo))) {
+        undo->setShortcutContext(Qt::ApplicationShortcut);
+    }
     installMenuCornerButtons();
     if (QMenu* recent = recentMenu()) {
         connect(recent, &QMenu::aboutToShow, this, [this, recent]() { refreshRecentMenu(recent); });

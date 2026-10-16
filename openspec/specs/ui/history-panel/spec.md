@@ -2,7 +2,9 @@
 
 ## Purpose
 Labelled history states, jumping to a state, history snapshots, and the History dock and toggle.
+
 ## Requirements
+
 ### Requirement: Labeled history states
 The system SHALL record a label with every captured history state and SHALL list
 the states oldest-first with their labels in the History panel, highlighting the
@@ -46,3 +48,15 @@ The system SHALL host the History panel in a registered dock with a stable
 - **WHEN** the user toggles History from the Window menu
 - **THEN** the panel is shown or hidden
 
+### Requirement: Undo remains available in the History flyout
+The application SHALL allow Ctrl-Z to invoke the existing Edit > Undo command
+while the History panel is hosted in its iconic flyout. A focused editable text
+control SHALL retain its native Ctrl-Z undo behavior.
+
+#### Scenario: Undo from the History flyout
+- **WHEN** the user has an undoable document edit and presses Ctrl-Z while the History panel's iconic flyout is open
+- **THEN** the edit is undone without requiring the user to close the flyout
+
+#### Scenario: Text controls keep their own undo
+- **WHEN** the user presses Ctrl-Z while an editable text control has focus
+- **THEN** the text control undoes its edit and the document history is unchanged
