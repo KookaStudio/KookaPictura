@@ -58,6 +58,10 @@ QVector<double> baselines(const QString& text, const QString& font, const TypeSe
 bool overflows(const QString& text, const QString& font, const TypeSetting& setting,
                const CharacterSetting& character, const ParagraphSetting& paragraph);
 
+/// `text`'s box in its own frame (left, top, right, bottom; before the matrix).
+QVector<double> localBounds(const QString& text, const QString& font, const TypeSetting& setting,
+                            const CharacterSetting& character, const ParagraphSetting& paragraph);
+
 bool isParagraph(const PictureView& view, const QString& path);
 /// Type > Convert To Paragraph Text (`paragraph`) / Convert To Point Text: one
 /// state; false for a layer that is not type of the other kind.

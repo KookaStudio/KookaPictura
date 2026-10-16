@@ -97,6 +97,17 @@ void ImageView::paintTypeOverlay(QPainter& painter)
 
     // Markers are drawn in device pixels so they keep their size.
     painter.setTransform(QTransform());
+    if (o.hasPivot) {
+        // The reference point: a small ring with a cross, as Free Transform's.
+        const QPointF p = toDevice.map(o.pivot);
+        painter.setBrush(Qt::NoBrush);
+        painter.setPen(QPen(Qt::white, 3));
+        painter.drawEllipse(p, 4.0, 4.0);
+        painter.setPen(QPen(Qt::black, 1));
+        painter.drawEllipse(p, 4.0, 4.0);
+        painter.drawLine(QPointF(p.x() - 7.0, p.y()), QPointF(p.x() + 7.0, p.y()));
+        painter.drawLine(QPointF(p.x(), p.y() - 7.0), QPointF(p.x(), p.y() + 7.0));
+    }
     if (o.hasPlacement) {
         const QPointF p = toDevice.map(o.placement);
         painter.fillRect(QRectF(p.x() - 1.5, p.y() - 1.5, 3.0, 3.0), ink);

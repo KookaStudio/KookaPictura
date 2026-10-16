@@ -8,6 +8,7 @@
 #include "api/type_api.h"
 #include "commands.h"
 #include "selftest_paint_fixture.h"
+#include "type_frame.h"
 
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QDoubleSpinBox>
@@ -88,8 +89,15 @@ private slots:
     void altClickAsksForTheBoxSize();
     void handlesResizeAndOverflow();
     void convertCommands();
+    void frameGestureMath();
+    void boxRotatesWithReadout();
+    void resizeShowsSizeReadout();
+    void pivotDrags();
+    void ctrlScalesPointType();
 
 private:
+    // Type `text` into a 120 x 80 box dragged at (20, 30) with Horizontal Type.
+    void typeIntoBox(const Fixture& f, const QString& text);
     void showFrame();
 
     pictura::test::ScopedStateHome stateHome_;
@@ -265,6 +273,155 @@ void ParagraphTypeTest::convertCommands()
     QVERIFY2(f.committedOnce(base, "Convert To Point Text"), "one state");
     QVERIFY(!pictura::type_api::isParagraph(*f.view, path));
     QCOMPARE(pictura::type_api::layerText(*f.view, path), QStringLiteral("Hello type"));
+}
+
+void ParagraphTypeTest::typeIntoBox(const Fixture& f, const QString& text)
+{
+    window_->setActiveTool(pictura::ToolId::HorizontalType);
+    f.drag({QPointF(20, 30), QPointF(80, 70), QPointF(140, 110)});
+    QTest::keyClicks(f.canvas, text);
+}
+
+void ParagraphTypeTest::frameGestureMath()
+{
+    using pictura::TypeFrame;
+    const auto near = [](const QPointF& a, const QPointF& b) { return QLineF(a, b).length() < 1e-6; };
+
+    // A quarter turn about the centre (60, 45) of a 100 x 50 box at (10, 20).
+    TypeFrame f;
+    f.origin = QPointF(10, 20);
+    f.paragraph = true;
+    f.box = {0, 0, 100, 50};
+    const QPointF pivot = f.pivotPoint();
+    QVERIFY(near(pivot, QPointF(60, 45)));
+    f.begin(TypeFrame::Gesture::Rotate, -1, pivot + QPointF(60, 0));
+    f.drag(pivot + QPointF(0, 60));
+    f.end();
+    QVERIFY(qAbs(f.angleDegrees() - 90.0) < 1e-6);
+    QVERIFY(near(f.pivotPoint(), pivot));
+    QVERIFY(near(f.map(50, 25), pivot));
+
+    // Scale from the bottom-right corner: the top-left stays, x doubles.
+    TypeFrame g;
+    g.pointBox = std::array<double, 4>{0, -20, 40, 5};
+    g.begin(TypeFrame::Gesture::Scale, 4, g.map(40, 5));
+    g.drag(QPointF(80, 10));
+    QVERIFY(near(g.map(0, -20), QPointF(0, -20)));
+    QVERIFY(qAbs(g.matrix[0] - 2.0) < 1e-9 && qAbs(g.matrix[3] - 1.2) < 1e-9);
+    QVERIFY(qAbs(g.width() - 80.0) < 1e-9);
+
+    // Resize the right edge: only that edge moves.
+    TypeFrame h;
+    h.paragraph = true;
+    h.box = {0, 0, 100, 50};
+    h.begin(TypeFrame::Gesture::Resize, 3, QPointF(100, 25));
+    h.drag(QPointF(130, 40));
+    QCOMPARE(h.box, (std::array<double, 4>{0, 0, 130, 50}));
+    QVERIFY(near(h.origin, QPointF()));
+
+    // The reference point drags on its own.
+    h.end();
+    h.begin(TypeFrame::Gesture::Pivot, -1, h.pivotPoint());
+    h.drag(h.pivotPoint() + QPointF(10, 5));
+    QVERIFY(near(h.pivotPoint(), QPointF(75, 30)));
+}
+
+void ParagraphTypeTest::boxRotatesWithReadout()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_paragraph_rotate"));
+    QVERIFY2(f.ok(), "paragraph fixture");
+    showFrame();
+    typeIntoBox(f, QStringLiteral("turn me"));
+    const int base = f.view->history_index();
+
+    // Just outside the top-right corner (140, 30) is the rotate band.
+    const double zoom = f.canvas->zoom();
+    const QPointF band = QPointF(140, 30) + QPointF(12, -12) / zoom;
+    QCOMPARE(f.tools->activeCursorKindForTest(band, 0), 3);
+    const QPointF pivot = f.canvas->typeOverlayPivotForTest();
+    QVERIFY(QLineF(pivot, QPointF(80, 70)).length() < 1e-6);
+
+    // Drag a quarter turn about the reference point.
+    const QPointF start = band - pivot;
+    const QPointF turned(-start.y(), start.x());
+    f.canvas->mousePressed(band, Qt::LeftButton, int(Qt::NoModifier));
+    f.canvas->mouseMoved(pivot + turned);
+    QVERIFY2(f.canvas->dragSizeHintForTest().startsWith(QStringLiteral("∠: 90.0")),
+             qPrintable(f.canvas->dragSizeHintForTest()));
+    const QPointF corner = f.canvas->typeOverlayBoxForTest().at(1);
+    QVERIFY2(QLineF(corner, QPointF(140, 30)).length() > 20.0, "the box turned");
+    f.canvas->mouseReleased(pivot + turned);
+    QVERIFY(!f.canvas->hasDragSizeHintForTest());
+    QCOMPARE(f.view->history_index(), base);
+
+    QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
+    QVERIFY2(f.committedOnce(base, "Horizontal Type"), "one Horizontal Type state");
+    const pictura::TypeSetting s = pictura::type_api::layerSetting(*f.view, typeLayer(f));
+    QVERIFY2(qAbs(s.xx) < 1e-3 && qAbs(s.xy - 1.0) < 1e-3, "a quarter turn");
+}
+
+void ParagraphTypeTest::resizeShowsSizeReadout()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_paragraph_readout"));
+    QVERIFY2(f.ok(), "paragraph fixture");
+    showFrame();
+    typeIntoBox(f, QStringLiteral("size me"));
+    QCOMPARE(f.tools->activeCursorKindForTest(QPointF(140, 110), 0), 2);
+    f.canvas->mousePressed(QPointF(140, 110), Qt::LeftButton, int(Qt::NoModifier));
+    f.canvas->mouseMoved(QPointF(170, 130));
+    const QString hint = f.canvas->dragSizeHintForTest();
+    QVERIFY2(hint.startsWith(QStringLiteral("W: ")) && hint.contains(QStringLiteral("\nH: ")),
+             qPrintable(hint));
+    f.canvas->mouseReleased(QPointF(170, 130));
+    QVERIFY(sameRect(f.canvas->typeOverlayBoxForTest().boundingRect(), QRectF(20, 30, 150, 100)));
+    QTest::keyClick(f.canvas, Qt::Key_Escape);
+}
+
+void ParagraphTypeTest::pivotDrags()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_paragraph_pivot"));
+    QVERIFY2(f.ok(), "paragraph fixture");
+    showFrame();
+    typeIntoBox(f, QStringLiteral("pivot"));
+    const QPointF pivot = f.canvas->typeOverlayPivotForTest();
+    QCOMPARE(f.tools->activeCursorKindForTest(pivot, 0), 4);
+    f.canvas->mousePressed(pivot, Qt::LeftButton, int(Qt::NoModifier));
+    f.canvas->mouseMoved(pivot + QPointF(10, 6));
+    QVERIFY(f.canvas->dragSizeHintForTest().startsWith(QStringLiteral("X: ")));
+    f.canvas->mouseReleased(pivot + QPointF(10, 6));
+    QVERIFY(QLineF(f.canvas->typeOverlayPivotForTest(), pivot + QPointF(10, 6)).length() < 1e-6);
+    QTest::keyClick(f.canvas, Qt::Key_Escape);
+}
+
+void ParagraphTypeTest::ctrlScalesPointType()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_point_scale"));
+    QVERIFY2(f.ok(), "paragraph fixture");
+    showFrame();
+    frame.setActiveTool(pictura::ToolId::HorizontalType);
+    f.drag({QPointF(20, 60)});
+    QTest::keyClicks(f.canvas, QStringLiteral("Scale"));
+    QVERIFY2(f.canvas->typeOverlayBoxForTest().isEmpty(), "no box without Ctrl");
+
+    emit f.canvas->modifierKeyChanged(int(Qt::ControlModifier));
+    const QPolygonF box = f.canvas->typeOverlayBoxForTest();
+    QVERIFY2(box.size() == 4, "Ctrl shows the box");
+    const QPointF corner = box.at(2);
+    f.canvas->mousePressed(corner, Qt::LeftButton, int(Qt::ControlModifier));
+    f.canvas->mouseMoved(corner + QPointF(40, 20));
+    f.canvas->mouseReleased(corner + QPointF(40, 20));
+    emit f.canvas->modifierKeyChanged(int(Qt::NoModifier));
+    QVERIFY2(f.canvas->typeOverlayBoxForTest().isEmpty(), "the box goes with Ctrl");
+
+    const int base = f.view->history_index();
+    QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
+    QVERIFY2(f.committedOnce(base, "Horizontal Type"), "one Horizontal Type state");
+    const pictura::TypeSetting s = pictura::type_api::layerSetting(*f.view, typeLayer(f));
+    QVERIFY2(s.xx > 1.2 && s.yy > 1.2, "scaled up");
 }
 
 QTEST_MAIN(ParagraphTypeTest)

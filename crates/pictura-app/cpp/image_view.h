@@ -448,6 +448,9 @@ public:
         // Over a dark image the caret, guides, and placement point draw white,
         // as CS6's do, else black.
         bool lightInk = false;
+        // The box's reference point (rotation pivot), when a box is shown.
+        bool hasPivot = false;
+        QPointF pivot;
     };
     // Half of the caret's 1.5 s blink cycle.
     static constexpr int kTypeCaretBlinkMs = 750;
@@ -465,6 +468,7 @@ public:
     QPolygonF typeOverlayBoxForTest() const { return typeOverlay_.box; }
     bool typeOverlayOverflowForTest() const { return typeOverlay_.overflow; }
     bool typeOverlayLightInkForTest() const { return typeOverlay_.lightInk; }
+    QPointF typeOverlayPivotForTest() const { return typeOverlay_.pivot; }
 
     // Live marquee size readout ("W x H"), painted as a tooltip offset from the
     // mapped cursor. Empty text or clearDragSizeHint() hides it.
@@ -477,6 +481,11 @@ public:
     // The Move tool's readout for a move of `delta` document pixels:
     // "ΔX: 0.500 in" over "ΔY: 0.250 in".
     QString offsetReadout(const QPointF& delta) const;
+    // Two labelled lengths in document pixels, one per line, in the rulers'
+    // unit ("W: 1.091 in" over "H: 0.988 in"); Percent measures the first
+    // against the document width, the second against its height.
+    QString measureReadout(const QString& first, double firstPx, const QString& second,
+                           double secondPx) const;
     // The moving layer's content box (document pixels, at drag start), drawn
     // as marching ants that follow the move preview; empty clears it.
     void setMoveOutline(const QRectF& bounds);

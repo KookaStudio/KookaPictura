@@ -32,6 +32,7 @@
 #include "text_input.h"
 #include "tools.h"
 #include "type_fonts.h"
+#include "type_frame.h"
 #include "type_text_edit.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
@@ -66,6 +67,12 @@ bool commitKey(const QKeyEvent& key)
 // The keys a typing session takes: the window's single-letter tool shortcuts
 // go quiet, as CS6's do while there is a text cursor, and Ctrl+A / C / X / V
 // work on the text. Other Ctrl/Meta chords still reach their shortcuts.
+// The pointer zones `pointerCursorKind` reports (-1 is the text's I-beam).
+constexpr int kCursorMove = 1;
+constexpr int kCursorHandle = 2;
+constexpr int kCursorRotate = 3;
+constexpr int kCursorPivot = 4;
+
 bool sessionKey(const QKeyEvent& key)
 {
     if (commitKey(key)) {
@@ -113,11 +120,6 @@ double distanceToSegment(const QPointF& p, const QLineF& line)
     }
     return QLineF(p, line.p1() + t * d).length();
 }
-
-// The box handles in overlay order (TL, T, TR, R, BR, B, BL, L) as the edge
-// each moves across and down: -1 left / top, 1 right / bottom, 0 neither.
-constexpr std::array<std::array<int, 2>, 8> kBoxHandles{
-    {{-1, -1}, {0, -1}, {1, -1}, {1, 0}, {1, 1}, {0, 1}, {-1, 1}, {-1, 0}}};
 
 // The three settings a Type session edits: where the text sits, its character
 // attributes, and its paragraph attributes.
@@ -252,14 +254,13 @@ public:
         lastPress_.start();
         lastPos_ = imagePos;
         pressPos_ = imagePos;
-        // A handle resizes the box; a click in the text (or anywhere in the
-        // box) works it like any text field; one elsewhere ends the edit.
+        // On the box: the reference point drags, a handle resizes (scales with
+        // Ctrl, or on point type's Ctrl box), and just outside it rotates. A
+        // click in the text (or the box) works it like any text field; one
+        // elsewhere moves the text on a drag, or ends the edit.
         if (active_) {
-            if (v == view_ && boxed_) {
-                handle_ = handleAt(imagePos);
-                if (handle_ >= 0) {
-                    return true;
-                }
+            if (v == view_ && beginFrameGesture(imagePos, mods)) {
+                return true;
             }
             if (v == view_ && (hitsText(imagePos) || insideBox(imagePos))) {
                 if (doubleClick) {
@@ -276,7 +277,7 @@ public:
             if (v == view_) {
                 movePending_ = true;
                 moveStart_ = imagePos;
-                moveOrigin_ = origin_;
+                moveOrigin_ = frame_.origin;
                 return true;
             }
             commitText();
@@ -296,32 +297,36 @@ public:
         return true;
     }
 
-    void onMove(ToolServices&, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    void onMove(ToolServices&, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         if (!active_) {
             return;
         }
+        setCtrlBox(mods.testFlag(Qt::ControlModifier));
         if (movePending_) {
             if (!movingText_ && QLineF(moveStart_, imagePos).length() * zoom() <= 3.0) {
                 return;
             }
             movingText_ = true;
-            origin_ = moveOrigin_ + (imagePos - moveStart_);
+            const QPointF next = moveOrigin_ + (imagePos - moveStart_);
+            frame_.movePivotBy(next - frame_.origin);
+            frame_.origin = next;
             refreshOverlay();
             return;
         }
-        if (handle_ >= 0) {
-            resizeBox(imagePos);
+        if (frame_.gesture() != TypeFrame::Gesture::None) {
+            frame_.drag(imagePos);
+            showFrameReadout(imagePos);
             refreshOverlay();
         } else if (boxDrag_) {
             // Past four screen pixels the press becomes a paragraph box.
-            if (!boxed_ && QLineF(pressPos_, imagePos).length() * zoom() <= 4.0) {
+            if (!frame_.paragraph && QLineF(pressPos_, imagePos).length() * zoom() <= 4.0) {
                 return;
             }
-            boxed_ = true;
+            frame_.paragraph = true;
             const QRectF r = QRectF(pressPos_, imagePos).normalized();
-            origin_ = r.topLeft();
-            box_ = {0.0, 0.0, qMax(r.width(), 1.0), qMax(r.height(), 1.0)};
+            frame_.origin = r.topLeft();
+            frame_.box = {0.0, 0.0, qMax(r.width(), 1.0), qMax(r.height(), 1.0)};
             refreshOverlay();
         } else if (selecting_) {
             edit_.moveTo(indexAt(imagePos), true);
@@ -345,7 +350,14 @@ public:
         }
         selecting_ = false;
         boxDrag_ = false;
-        handle_ = -1;
+        if (frame_.gesture() != TypeFrame::Gesture::None) {
+            frame_.end();
+            if (ImageView* canvas = ctx.canvas()) {
+                canvas->clearDragSizeHint();
+            }
+            refreshOverlay();
+            return;
+        }
         if (!altClick_) {
             return;
         }
@@ -356,8 +368,8 @@ public:
             return;
         }
         beginSession(ctx, *v, pressPos_, Qt::NoModifier, QString());
-        boxed_ = true;
-        box_ = {0.0, 0.0, boxSize_.width(), boxSize_.height()};
+        frame_.paragraph = true;
+        frame_.box = {0.0, 0.0, boxSize_.width(), boxSize_.height()};
         refreshOverlay();
     }
 
@@ -429,17 +441,40 @@ public:
     bool hoverCursor(const ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods,
                      QCursor& out) const override
     {
-        if (pointerCursorKind(ctx, imagePos, mods) != 1) {
+        switch (pointerCursorKind(ctx, imagePos, mods)) {
+        case kCursorMove: {
+            const ToolInfo& info = toolInfo(ToolId::Move);
+            const QCursor c = cursor(toolCursorId(ToolId::Move, Qt::NoModifier), info.hotspotX,
+                                     info.hotspotY);
+            out = c.pixmap().isNull() ? QCursor(info.cursor) : c;
+            return true;
+        }
+        case kCursorHandle: {
+            // Corners diagonal, edges along their axis (TL, T, TR, R, BR, B, BL, L).
+            static constexpr std::array<Qt::CursorShape, 8> kShapes{
+                Qt::SizeFDiagCursor, Qt::SizeVerCursor, Qt::SizeBDiagCursor, Qt::SizeHorCursor,
+                Qt::SizeFDiagCursor, Qt::SizeVerCursor, Qt::SizeBDiagCursor, Qt::SizeHorCursor};
+            const int h = qBound(0, frame_.handleAt(imagePos, zoom()), 7);
+            out = QCursor(kShapes[h]);
+            return true;
+        }
+        case kCursorRotate:
+            if (ImageView* canvas = ctx.canvas()) {
+                out = rotateCursor(canvas->imageToWidget(frame_.pivotPoint()),
+                                   canvas->imageToWidget(imagePos));
+                return true;
+            }
+            return false;
+        case kCursorPivot:
+            out = QCursor(Qt::SizeAllCursor);
+            return true;
+        default:
             return false;
         }
-        const ToolInfo& info = toolInfo(ToolId::Move);
-        const QCursor c = cursor(toolCursorId(ToolId::Move, Qt::NoModifier), info.hotspotX,
-                                 info.hotspotY);
-        out = c.pixmap().isNull() ? QCursor(info.cursor) : c;
-        return true;
     }
 
-    // 1 where a press would move the text, -1 elsewhere.
+    // The zone a press at `imagePos` would act on: the text (-1, the I-beam),
+    // a move, a box handle, the rotate band, or the reference point.
     int pointerCursorKind(const ToolServices&, const QPointF& imagePos,
                           Qt::KeyboardModifiers) const override
     {
@@ -447,11 +482,38 @@ public:
             return -1;
         }
         if (movingText_) {
-            return 1;
+            return kCursorMove;
         }
-        const bool onText = hitsText(imagePos) || insideBox(imagePos)
-            || (boxed_ && handleAt(imagePos) >= 0);
-        return onText || selecting_ || handle_ >= 0 ? -1 : 1;
+        switch (frame_.gesture()) {
+        case TypeFrame::Gesture::Resize:
+        case TypeFrame::Gesture::Scale:
+            return kCursorHandle;
+        case TypeFrame::Gesture::Rotate:
+            return kCursorRotate;
+        case TypeFrame::Gesture::Pivot:
+            return kCursorPivot;
+        case TypeFrame::Gesture::None:
+            break;
+        }
+        if (frame_.onPivot(imagePos, zoom())) {
+            return kCursorPivot;
+        }
+        if (frame_.handleAt(imagePos, zoom()) >= 0) {
+            return kCursorHandle;
+        }
+        if (frame_.inRotateZone(imagePos, zoom())) {
+            return kCursorRotate;
+        }
+        const bool onText = hitsText(imagePos) || insideBox(imagePos);
+        return onText || selecting_ ? -1 : kCursorMove;
+    }
+
+    void onModifiers(ToolServices& ctx, Qt::KeyboardModifiers mods) override
+    {
+        ctx_ = &ctx;
+        if (active_) {
+            setCtrlBox(mods.testFlag(Qt::ControlModifier));
+        }
     }
 
     bool insertText(const QString& text) override
@@ -472,11 +534,10 @@ private:
     {
         active_ = true;
         view_ = &v;
-        origin_ = pos;
+        frame_ = TypeFrame();
+        frame_.origin = pos;
         edit_.reset(QString(), 0);
         vertical_ = toolVertical_;
-        matrix_ = {1.0, 0.0, 0.0, 1.0};
-        boxed_ = false;
         mode_ = ctx.resolveSelectionMode(mods, v.has_selection());
         if (!hit.isEmpty() && pictura::type_api::beginEdit(v, hit)) {
             editPath_ = hit;
@@ -484,11 +545,11 @@ private:
             const TypeSetting s = pictura::type_api::layerSetting(v, hit);
             const CharacterSetting c = pictura::type_api::layerCharacterSetting(v, hit);
             const ParagraphSetting p = pictura::type_api::layerParagraphSetting(v, hit);
-            origin_ = QPointF(s.x, s.y);
+            frame_.origin = QPointF(s.x, s.y);
             vertical_ = s.vertical;
-            matrix_ = {s.xx, s.xy, s.yx, s.yy};
-            boxed_ = s.boxed;
-            box_ = {s.box_left, s.box_top, s.box_right, s.box_bottom};
+            frame_.matrix = {s.xx, s.xy, s.yx, s.yy};
+            frame_.paragraph = s.boxed;
+            frame_.box = {s.box_left, s.box_top, s.box_right, s.box_bottom};
             TypeOptions o = type_->get();
             const QString family = familyForFontName(pictura::type_api::layerFont(v, hit));
             if (!family.isEmpty()) {
@@ -513,61 +574,76 @@ private:
         }
     }
 
-    // A point in the box's frame (relative to the origin, before the matrix)
-    // in document pixels.
-    QPointF boxPoint(double u, double v) const
-    {
-        return QPointF(origin_.x() + matrix_[0] * u + matrix_[2] * v,
-                       origin_.y() + matrix_[1] * u + matrix_[3] * v);
-    }
-
-    QPolygonF boxPolygon() const
-    {
-        return QPolygonF({boxPoint(box_[0], box_[1]), boxPoint(box_[2], box_[1]),
-                          boxPoint(box_[2], box_[3]), boxPoint(box_[0], box_[3])});
-    }
-
     bool insideBox(const QPointF& pos) const
     {
-        return boxed_ && boxPolygon().containsPoint(pos, Qt::OddEvenFill);
+        return frame_.paragraph && frame_.polygon().containsPoint(pos, Qt::OddEvenFill);
     }
 
-    // The handle within five screen pixels of `pos`, or -1.
-    int handleAt(const QPointF& pos) const
+    // Start a box gesture at `pos` when it lands on the reference point, a
+    // handle, or the rotate band.
+    bool beginFrameGesture(const QPointF& pos, Qt::KeyboardModifiers mods)
     {
-        for (int i = 0; i < int(kBoxHandles.size()); ++i) {
-            const auto [sx, sy] = kBoxHandles[i];
-            const double u = sx < 0 ? box_[0] : sx > 0 ? box_[2] : (box_[0] + box_[2]) / 2.0;
-            const double v = sy < 0 ? box_[1] : sy > 0 ? box_[3] : (box_[1] + box_[3]) / 2.0;
-            if (QLineF(pos, boxPoint(u, v)).length() * zoom() <= 5.0) {
-                return i;
-            }
+        setCtrlBox(mods.testFlag(Qt::ControlModifier));
+        if (!frame_.frameBox()) {
+            return false;
         }
-        return -1;
+        using Gesture = TypeFrame::Gesture;
+        if (frame_.onPivot(pos, zoom())) {
+            frame_.begin(Gesture::Pivot, -1, pos);
+            return true;
+        }
+        if (const int handle = frame_.handleAt(pos, zoom()); handle >= 0) {
+            const bool resize = frame_.paragraph && !mods.testFlag(Qt::ControlModifier);
+            frame_.begin(resize ? Gesture::Resize : Gesture::Scale, handle, pos);
+            return true;
+        }
+        if (frame_.inRotateZone(pos, zoom())) {
+            frame_.begin(Gesture::Rotate, -1, pos);
+            return true;
+        }
+        return false;
     }
 
-    // Move the dragged handle's edges to `pos`, mapped back into the box's
-    // frame; the box keeps at least one pixel a side.
-    void resizeBox(const QPointF& pos)
+    // Point type shows its box while Ctrl is held (paragraph type always has
+    // one); the box is the text's own bounds in its frame.
+    void setCtrlBox(bool held)
     {
-        const double det = matrix_[0] * matrix_[3] - matrix_[2] * matrix_[1];
-        if (qFuzzyIsNull(det)) {
+        if (held == ctrlHeld_ || frame_.gesture() != TypeFrame::Gesture::None) {
             return;
         }
-        const QPointF d = pos - origin_;
-        const double u = (matrix_[3] * d.x() - matrix_[2] * d.y()) / det;
-        const double v = (matrix_[0] * d.y() - matrix_[1] * d.x()) / det;
-        const auto [sx, sy] = kBoxHandles[handle_];
-        if (sx < 0) {
-            box_[0] = qMin(u, box_[2] - 1.0);
-        } else if (sx > 0) {
-            box_[2] = qMax(u, box_[0] + 1.0);
+        ctrlHeld_ = held;
+        if (!frame_.paragraph) {
+            refreshOverlay();
         }
-        if (sy < 0) {
-            box_[1] = qMin(v, box_[3] - 1.0);
-        } else if (sy > 0) {
-            box_[3] = qMax(v, box_[1] + 1.0);
+    }
+
+    // The readout by the pointer during a box gesture: W / H, the angle, or
+    // the reference point's X / Y, in the rulers' unit.
+    void showFrameReadout(const QPointF& pos)
+    {
+        ImageView* canvas = ctx_ ? ctx_->canvas() : nullptr;
+        if (!canvas) {
+            return;
         }
+        QString text;
+        switch (frame_.gesture()) {
+        case TypeFrame::Gesture::Resize:
+        case TypeFrame::Gesture::Scale:
+            text = canvas->measureReadout(QStringLiteral("W"), frame_.width(), QStringLiteral("H"),
+                                          frame_.height());
+            break;
+        case TypeFrame::Gesture::Rotate:
+            text = QStringLiteral("∠: %1°").arg(frame_.angleDegrees(), 0, 'f', 1);
+            break;
+        case TypeFrame::Gesture::Pivot: {
+            const QPointF p = frame_.pivotPoint();
+            text = canvas->measureReadout(QStringLiteral("X"), p.x(), QStringLiteral("Y"), p.y());
+            break;
+        }
+        case TypeFrame::Gesture::None:
+            break;
+        }
+        canvas->setDragSizeHint(text, pos);
     }
 
     void keyPressed(const QKeyEvent& key)
@@ -767,8 +843,11 @@ private:
         stops_.clear();
         selecting_ = false;
         boxDrag_ = false;
-        handle_ = -1;
-        boxed_ = false;
+        frame_ = TypeFrame();
+        ctrlHeld_ = false;
+        if (ctx_ && ctx_->canvas()) {
+            ctx_->canvas()->clearDragSizeHint();
+        }
         movePending_ = false;
         movingText_ = false;
         if (ctx_ && ctx_->canvas()) {
@@ -796,17 +875,17 @@ private:
         edit.character.anti_alias = o.antialias;
         edit.paragraph.justify = o.justification;
         edit.placement.vertical = vertical_;
-        edit.placement.x = origin_.x();
-        edit.placement.y = origin_.y();
-        edit.placement.xx = matrix_[0];
-        edit.placement.xy = matrix_[1];
-        edit.placement.yx = matrix_[2];
-        edit.placement.yy = matrix_[3];
-        edit.placement.boxed = boxed_;
-        edit.placement.box_left = box_[0];
-        edit.placement.box_top = box_[1];
-        edit.placement.box_right = box_[2];
-        edit.placement.box_bottom = box_[3];
+        edit.placement.x = frame_.origin.x();
+        edit.placement.y = frame_.origin.y();
+        edit.placement.xx = frame_.matrix[0];
+        edit.placement.xy = frame_.matrix[1];
+        edit.placement.yx = frame_.matrix[2];
+        edit.placement.yy = frame_.matrix[3];
+        edit.placement.boxed = frame_.paragraph;
+        edit.placement.box_left = frame_.box[0];
+        edit.placement.box_top = frame_.box[1];
+        edit.placement.box_right = frame_.box[2];
+        edit.placement.box_bottom = frame_.box[3];
         return edit;
     }
 
@@ -870,15 +949,27 @@ private:
         }
         overlay.selection = selectionShapes();
         overlay.lightInk = darkUnder(overlay.caret);
-        overlay.hasPlacement = !boxed_;
-        overlay.placement = origin_;
+        overlay.hasPlacement = !frame_.paragraph;
+        overlay.placement = frame_.origin;
         const QVector<double> lines = pictura::type_api::baselines(
             text, family, edit.placement, edit.character, edit.paragraph);
         for (int i = 0; i + 3 < lines.size(); i += 4) {
             overlay.baselines.append(QLineF(lines[i], lines[i + 1], lines[i + 2], lines[i + 3]));
         }
-        if (boxed_) {
-            overlay.box = boxPolygon();
+        frame_.pointBox.reset();
+        if (!frame_.paragraph && ctrlHeld_) {
+            const QVector<double> b = pictura::type_api::localBounds(
+                text, family, edit.placement, edit.character, edit.paragraph);
+            if (b.size() == 4) {
+                frame_.pointBox = std::array<double, 4>{b[0], b[1], b[2], b[3]};
+            }
+        }
+        overlay.box = frame_.polygon();
+        if (!overlay.box.isEmpty()) {
+            overlay.hasPivot = true;
+            overlay.pivot = frame_.pivotPoint();
+        }
+        if (frame_.paragraph) {
             overlay.overflow = pictura::type_api::overflows(text, family, edit.placement,
                                                             edit.character, edit.paragraph);
         }
@@ -894,24 +985,20 @@ private:
     // The reopened type layer, empty for new type.
     QString editPath_;
     bool vertical_ = false;
-    // A reopened layer's linear transform (Free Transform's scale / rotation),
-    // `xx, xy, yx, yy` as `TySh` orders it.
-    std::array<double, 4> matrix_{1.0, 0.0, 0.0, 1.0};
-    QPointF origin_;
+    // Where the text sits, its transform, paragraph type's box, the Ctrl box,
+    // and the reference point, with the box gestures on them.
+    TypeFrame frame_;
     TypeTextEdit edit_;
     // The caret segment at every UTF-16 boundary, from the last refresh.
     QList<QLineF> stops_;
     // True while a press in the text drags out a selection.
     bool selecting_ = false;
-    // Paragraph type: the box as left, top, right, bottom relative to the
-    // origin, before the matrix.
-    bool boxed_ = false;
-    std::array<double, 4> box_{0.0, 0.0, 0.0, 0.0};
     // The press that opened new type, which a drag turns into a box; the box
     // handle being dragged (-1 none); an Alt-click waiting for its release.
     QPointF pressPos_;
     bool boxDrag_ = false;
-    int handle_ = -1;
+    // Ctrl is held: point type shows its transform box.
+    bool ctrlHeld_ = false;
     bool altClick_ = false;
     QSizeF boxSize_{200.0, 100.0};
     // A press away from the text: armed until release (a click commits), and

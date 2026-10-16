@@ -23,12 +23,18 @@ void ImageView::setPpiProvider(std::function<double()> ppi)
 
 QString ImageView::offsetReadout(const QPointF& delta) const
 {
+    return measureReadout(QStringLiteral("ΔX"), delta.x(), QStringLiteral("ΔY"), delta.y());
+}
+
+QString ImageView::measureReadout(const QString& first, double firstPx, const QString& second,
+                                  double secondPx) const
+{
     const double ppi = measurePpi_ ? measurePpi_() : 72.0;
     const QSize doc = documentSize();
     const auto unit = RulerUnit(measureUnit_);
-    return QStringLiteral("ΔX: %1\nΔY: %2")
-        .arg(formatRulerLength(delta.x(), unit, ppi, measureTraditional_, doc.width()),
-             formatRulerLength(delta.y(), unit, ppi, measureTraditional_, doc.height()));
+    return QStringLiteral("%1: %2\n%3: %4")
+        .arg(first, formatRulerLength(firstPx, unit, ppi, measureTraditional_, doc.width()),
+             second, formatRulerLength(secondPx, unit, ppi, measureTraditional_, doc.height()));
 }
 
 void ImageView::setControlsBox(const QPolygonF& box)

@@ -309,6 +309,7 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/save_for_web_dialog.cpp
     crates/pictura-app/cpp/shape_dialogs.cpp
     crates/pictura-app/cpp/paragraph_text_size_dialog.cpp
+    crates/pictura-app/cpp/type_frame.cpp
     crates/pictura-app/cpp/screen_mode_message.cpp
     crates/pictura-app/cpp/screen_mode_message.h
     crates/pictura-app/cpp/tool_type.cpp

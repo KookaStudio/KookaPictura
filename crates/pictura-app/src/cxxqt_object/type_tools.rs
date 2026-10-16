@@ -174,6 +174,15 @@ pub mod ffi {
             paragraph: &ParagraphSetting,
         ) -> Vec<f64>;
 
+        /// `text`'s box in its own frame (relative to the origin, before the matrix) as `[left, top, right, bottom]`: paragraph type's box, point type's text bounds; empty for blank text.
+        fn type_local_bounds(
+            text: &QString,
+            font: &QString,
+            setting: &TypeSetting,
+            character: &CharacterSetting,
+            paragraph: &ParagraphSetting,
+        ) -> Vec<f64>;
+
         /// Whether paragraph type has text past its box; false for point type.
         fn type_overflows(
             text: &QString,
@@ -430,6 +439,17 @@ fn type_overflows(
     paragraph: &ParagraphSetting,
 ) -> bool {
     pictura_render::type_overflows(&spec(text, font, setting, character, paragraph))
+}
+
+fn type_local_bounds(
+    text: &QString,
+    font: &QString,
+    setting: &TypeSetting,
+    character: &CharacterSetting,
+    paragraph: &ParagraphSetting,
+) -> Vec<f64> {
+    pictura_render::type_placement(&spec(text, font, setting, character, paragraph))
+        .map_or_else(Vec::new, |p| p.bounds.to_vec())
 }
 
 fn type_layer_is_paragraph(view: &PictureView, path: &QString) -> bool {
