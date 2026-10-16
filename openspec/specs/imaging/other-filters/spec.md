@@ -24,15 +24,6 @@ The system SHALL provide `pictura_filters::apply(filter: &Filter, buf: &mut Pixe
 - **WHEN** `apply` receives an empty buffer, or a buffer whose `data.len()` does not equal `width * height * channels`, or a buffer with zero width or height
 - **THEN** `apply` returns a `FilterError` and does not panic
 
-### Requirement: Alpha channel preservation for Other filters
-
-For 4-channel buffers, every Other filter SHALL leave channel 4 bit-identical. Only channels 1 through 3 SHALL be modified.
-
-#### Scenario: Every Other variant preserves alpha
-
-- **WHEN** each Other variant is applied to an RGBA buffer
-- **THEN** the alpha plane equals the input alpha plane bit for bit
-
 ### Requirement: Maximum and Minimum
 
 The system SHALL implement `Filter::Maximum { radius: u32 }` and `Filter::Minimum { radius: u32 }`. For each color channel independently, every output sample SHALL be the maximum (`Maximum`) or the minimum (`Minimum`) of the input samples within the `(2r+1)²` square footprint centered on it, where `r` is `radius`. `radius == 0` SHALL be a bit-exact no-op. `radius` SHALL be clamped to 100; a request above 100 MUST behave as 100 and MUST NOT error. Both filters SHALL be deterministic. Oracle expectation: differential against ImageMagick `-morphology Dilate Square:{radius}` (Maximum) and `-morphology Erode Square:{radius}` (Minimum) — ImageMagick's `Square:N` argument is the radius, not the diameter — within an absolute tolerance of 0.
@@ -175,3 +166,17 @@ The system SHALL ship `scripts/filter_oracle.py`, which applies an ImageMagick o
 
 - **WHEN** `magick` is not on `PATH`
 - **THEN** the differential tests print a skip message and the suite still passes
+
+### Requirement: Other alpha follows the kernel
+
+For 4-channel buffers, Maximum and Minimum SHALL run their kernel over channel 4 as they do over the colour planes, and Offset SHALL translate channel 4 per the Offset requirement. High Pass and Custom SHALL leave channel 4 bit-identical; only channels 1 through 3 SHALL be modified.
+
+#### Scenario: Maximum, Minimum, and Offset move the layer edge
+
+- **WHEN** Maximum, Minimum, or a non-zero Offset is applied to an RGBA buffer whose alpha is a soft-edged disc
+- **THEN** the alpha plane differs from the input alpha plane
+
+#### Scenario: High Pass and Custom preserve alpha
+
+- **WHEN** High Pass or Custom is applied to an RGBA buffer
+- **THEN** the alpha plane equals the input alpha plane bit for bit

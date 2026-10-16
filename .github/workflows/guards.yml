@@ -38,3 +38,7 @@ jobs:
         run: bash scripts/check-local-build-caching.sh
       - name: OpenSpec validation
         run: openspec validate --all --strict
+      - name: OpenSpec archive
+        run: |
+          bash scripts/check-openspec-archived.sh --self-test
+          bash scripts/check-openspec-archived.sh

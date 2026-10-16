@@ -221,6 +221,7 @@ void PicturaMainWindow::buildPanels()
     // the frame, so this is wired here where the panel exists (registerHandlers
     // runs before buildPanels).
     wireSmartObjectRowMenu();
+    wireMaskOverlay();
 
     // Switching between a layer's pixels and its mask swaps in that target's
     // own FG/BG pair, so each remembers its colours.
@@ -474,10 +475,6 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
     connect(tools_, &ToolController::moveOptionsChanged, this,
             &PicturaMainWindow::updateAlignControls);
     connect(optionsBar_, &OptionsBar::refineEdgeRequested, this, [this]() {
-        registry_->dispatch(
-            commandIdForPath({QStringLiteral("Select"), QStringLiteral("Refine Edge…")}));
-    });
-    connect(layersPanel_, &LayersPanel::selectAndMaskRequested, this, [this]() {
         registry_->dispatch(
             commandIdForPath({QStringLiteral("Select"), QStringLiteral("Refine Edge…")}));
     });

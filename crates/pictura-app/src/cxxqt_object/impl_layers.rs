@@ -8,6 +8,8 @@ use pictura_core::{BlendMode, ColorLabel, Document, Layer};
 
 mod auto_select;
 mod layer_masks;
+mod mask_commands;
+pub(in crate::cxxqt_object) use mask_commands::coverage_at;
 mod layers_surface;
 mod mask_refine;
 mod matting;
@@ -771,23 +773,24 @@ impl qobject::PictureView {
         QString::from(created.as_str())
     }
 
-    pub fn remove_layer(mut self: Pin<&mut Self>, i: i32) {
-        let removed = if let Some(doc) = self.as_mut().rust_mut().doc.as_mut() {
-            let idx = i as usize;
-            if idx < doc.layers.len() {
-                doc.layers.remove(idx);
-                true
-            } else {
-                false
-            }
-        } else {
-            false
-        };
+    /// Delete the top-level layer at index `i` under the same rules as the
+    /// panel's delete (the Background, a fully locked layer, and the
+    /// document's last layer stay).
+    pub fn remove_layer(mut self: Pin<&mut Self>, i: i32) -> bool {
+        let path = i.to_string();
+        let removed = i >= 0
+            && self
+                .as_mut()
+                .rust_mut()
+                .doc
+                .as_mut()
+                .is_some_and(|doc| pictura_render::delete_paths(doc, &[&path]) > 0);
         if removed {
             self.as_mut().clear_link_sets();
             self.as_mut().recomposite();
             self.as_mut().record("Delete Layer");
         }
+        removed
     }
 
     fn layer(&self, i: i32) -> Option<&Layer> {

@@ -2,7 +2,9 @@
 
 ## Purpose
 The Brush Stroke filter family, from Accented Edges through Sumi-e, under the shared filter contract.
+
 ## Requirements
+
 ### Requirement: Brush Stroke filter application and error contract
 
 The system SHALL implement the 8 CS6 Brush Stroke filters as `Filter` variants and
@@ -73,7 +75,7 @@ output.
 
 ### Requirement: Accented Edges
 
-The system SHALL implement `Filter::AccentedEdges { edge_width, edge_brightness, smoothness }` as edge accentuation where `edge_brightness` 25 is neutral, values below 25 darken the accented edges, and values above 25 lighten them.
+The system SHALL implement `Filter::AccentedEdges { edge_width, edge_brightness, smoothness }` as edge accentuation: edges are traced into lines from the smoothed brightness and laid over the image dark when `edge_brightness` is below 25 and light (chalk) when it is above, harder the further from 25; at 25 the edges SHALL NOT be accented.
 
 #### Scenario: Edge brightness polarity
 
@@ -84,6 +86,11 @@ The system SHALL implement `Filter::AccentedEdges { edge_width, edge_brightness,
 
 - **WHEN** Accented Edges is applied at `edge_width` 1 and at 14
 - **THEN** both outputs preserve a detectable luminance change across the source edge
+
+#### Scenario: Edge brightness 25 is neutral
+
+- **WHEN** Accented Edges is applied to an edged image at `edge_brightness` 0, 25, and 50
+- **THEN** at the edge the 25 output is lighter than the 0 output and darker than the 50 output
 
 ### Requirement: Angled Strokes
 
@@ -182,4 +189,3 @@ The system SHALL implement `Filter::SumiE { stroke_width, stroke_pressure, contr
 
 - **WHEN** Sumi-e is applied at `stroke_width` 3 and at 15
 - **THEN** the two outputs differ
-

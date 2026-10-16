@@ -909,6 +909,7 @@ impl super::PictureViewRust {
         self.active_layer = None;
         self.isolation = None;
         self.mask_solo = None;
+        self.mask_overlay = None;
         self.move_base = None;
         self.move_layer = None;
         self.move_x = 0;

@@ -34,6 +34,8 @@ private slots:
     void addLayerMaskStripInverts();
     void maskContextMenu();
     void maskStrokePresentsWhileDragging();
+    void largeMaskDabPreviews();
+    void previewOnlyPixelsRestoreAtCommit();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -361,12 +363,12 @@ void MaskEditTest::maskContextMenu()
                           QStringLiteral("Add Mask To Selection"),
                           QStringLiteral("Subtract Mask From Selection"),
                           QStringLiteral("Intersect Mask With Selection"),
-                          QStringLiteral("Select and Mask…"), QStringLiteral("Mask Options…")}));
+                          QStringLiteral("Refine Mask…"), QStringLiteral("Mask Options…")}));
 
-    // Select and Mask is wired (it opens Refine Edge); Mask Options stays a
-    // disabled placeholder. Apply and Delete are enabled.
-    QVERIFY(panel->maskMenuEnabledForPathForTest(layer, QStringLiteral("Select and Mask…")));
-    QVERIFY(!panel->maskMenuEnabledForPathForTest(layer, QStringLiteral("Mask Options…")));
+    // Refine Mask and Mask Options open their dialogs (tst_layers_mask_commands);
+    // Apply and Delete are enabled.
+    QVERIFY(panel->maskMenuEnabledForPathForTest(layer, QStringLiteral("Refine Mask…")));
+    QVERIFY(panel->maskMenuEnabledForPathForTest(layer, QStringLiteral("Mask Options…")));
     QVERIFY(panel->maskMenuEnabledForPathForTest(layer, QStringLiteral("Apply Layer Mask")));
     QVERIFY(panel->maskMenuEnabledForPathForTest(layer, QStringLiteral("Delete Layer Mask")));
 
@@ -481,6 +483,119 @@ void MaskEditTest::maskStrokePresentsWhileDragging()
     QVERIFY(view->end_paint());
     QVERIFY2(!view->is_painting(), "the mask stroke ended");
     QCOMPARE(view->history_count(), history + 1);
+    frame.closeDocument(doc, false);
+}
+
+namespace {
+
+// A white document with a rasterized fill layer whose reveal-all mask is the
+// edit target; returns the fill layer's path, empty on failure.
+QString maskedFillFixture(pictura::PicturaMainWindow& frame, const QString& name, int side)
+{
+    if (!frame.newDocument(name, side, side, QStringLiteral("rgb"), 8, QStringLiteral("white"))) {
+        return {};
+    }
+    pictura::PictureView* view = frame.activeView();
+    const QString path = view ? view->add_solid_fill(0xff2244aau) : QString();
+    if (path.isEmpty() || !view->rasterize_fill_content(path)) {
+        return {};
+    }
+    frame.selectLayerPath(path);
+    if (!pictura::layer_mask_add(*view, QStringLiteral("reveal-all"))
+        || !pictura::mask_edit_target_set(*view, path)) {
+        return {};
+    }
+    return path;
+}
+
+// The stored view-pyramid pixel of `level` over document point `(x, y)`.
+QRgb levelPixel(const pictura::PictureView& view, int level, int x, int y)
+{
+    const QImage pixel = view.display_image(level, x >> level, y >> level, 1, 1);
+    return pixel.isNull() ? 0u : pixel.pixel(0, 0);
+}
+
+bool beginLargeMaskStroke(pictura::PictureView& view)
+{
+    return view.begin_paint(0xff000000u, 0xffffffffu, 600, 100, 100, 0, 100, 100, 25,
+                            QStringLiteral("normal"), false, false);
+}
+
+}
+
+// Without the GPU stroke a large mask brush previews at a pyramid level and
+// replays exactly at the commit; a cancel puts everything back.
+void MaskEditTest::largeMaskDabPreviews()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY2(!maskedFillFixture(frame, QStringLiteral("MaskPreview"), 2048).isEmpty(),
+             "fixture");
+    pictura::PictureView* view = frame.activeView();
+    const int doc = frame.activeDocumentIndex();
+    view->set_gpu_compute(false);
+    QCoreApplication::processEvents();
+    const quint32 fill = view->sample_argb(1024, 1024);
+    const int base = view->history_count();
+
+    // 600 px on 2048² is over the 262 144 px budget, and level 3 exists
+    // (2048 → 1024 → 512 → 256).
+    QVERIFY(beginLargeMaskStroke(*view));
+    QCOMPARE(view->preview_present_level(), 3);
+    QVERIFY(view->paint_dab(1024.0, 1024.0, 1.0));
+    QVERIFY(view->paint_dab(1100.0, 1024.0, 1.0));
+    view->flush_present();
+    QCOMPARE(view->history_count(), base);
+    QCOMPARE(view->sample_argb(1024, 1024), fill);
+
+    // The replay hides the layer under the brush and leaves the rest alone.
+    QVERIFY(view->end_paint());
+    QCOMPARE(view->preview_present_level(), 0);
+    QCOMPARE(view->history_count(), base + 1);
+    QCOMPARE(view->history_label(base), QStringLiteral("Brush"));
+    QCOMPARE(view->sample_argb(1024, 1024), 0xffffffffu);
+    QCOMPARE(view->sample_argb(1024 - 280, 1024), 0xffffffffu);
+    QCOMPARE(view->sample_argb(16, 16), fill);
+    QVERIFY(view->undo());
+    QCOMPARE(view->sample_argb(1024, 1024), fill);
+
+    QVERIFY(beginLargeMaskStroke(*view));
+    QVERIFY(view->paint_dab(1024.0, 1024.0, 1.0));
+    view->cancel_paint();
+    QVERIFY(!view->is_painting());
+    QCOMPARE(view->history_count(), base + 1);
+    QCOMPARE(view->sample_argb(1024, 1024), fill);
+
+    frame.closeDocument(doc, false);
+}
+
+// The preview can paint level pixels the exact stroke never touches; the commit
+// must put them back to the stroke-start level instead of leaving the preview
+// on the canvas over a mask that never changed there. (The other such case, a
+// dab crossing a mask smaller than its layer, needs a mask no app command
+// makes; `a_dab_past_the_mask_edge_previews_there_and_restores` covers it.)
+void MaskEditTest::previewOnlyPixelsRestoreAtCommit()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY2(!maskedFillFixture(frame, QStringLiteral("MaskSpacing"), 2048).isEmpty(),
+             "fixture");
+    pictura::PictureView* view = frame.activeView();
+    const int doc = frame.activeDocumentIndex();
+    view->set_gpu_compute(false);
+    QCoreApplication::processEvents();
+
+    // A sample the exact spacing skips: at 25% of 600 px the exact stroke dabs
+    // every 150 px, so it never dabs the second sample, 76 px on, while the
+    // preview does. (1376, 1024) is inside only that second preview dab.
+    QVERIFY(beginLargeMaskStroke(*view));
+    const int level = view->preview_present_level();
+    QVERIFY(level > 0);
+    const QRgb before = levelPixel(*view, level, 1376, 1024);
+    QVERIFY(view->paint_dab(1024.0, 1024.0, 1.0));
+    QVERIFY(view->paint_dab(1100.0, 1024.0, 1.0));
+    view->flush_present();
+    QVERIFY2(levelPixel(*view, level, 1376, 1024) != before, "the preview painted there");
+    QVERIFY(view->end_paint());
+    QCOMPARE(levelPixel(*view, level, 1376, 1024), before);
     frame.closeDocument(doc, false);
 }
 

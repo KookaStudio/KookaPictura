@@ -693,14 +693,14 @@ pub mod qobject {
 
         /// The full Pictura Raw settings attached to `path` in the bridge text
         /// form, or empty when the layer has no Pictura Raw smart filter.
-        /// Read-only.
         #[qinvokable]
         fn layer_pictura_raw_settings(&self, path: &QString) -> QString;
 
-        /// `Filter > Pictura Raw…`: convert `path` to an embedded smart
-        /// object when it is a plain raster pixel layer, then apply
-        /// `settings_text` and record one "Pictura Raw" state. False without a
-        /// document/target or when the engine refuses; records nothing then.
+        /// Whether `Filter > Pictura Raw…` can act on `path`. Read-only.
+        #[qinvokable]
+        fn layer_can_apply_pictura_raw(&self, path: &QString) -> bool;
+
+        /// `Filter > Pictura Raw…`: apply `settings_text` to `path`, one state.
         #[qinvokable]
         fn apply_pictura_raw_filter(
             self: Pin<&mut Self>,
@@ -1151,9 +1151,9 @@ pub mod qobject {
         /// Restore named restore point `i`, recomposite, and emit [`changed`]. Returns false when `i` is out of range.
         #[qinvokable]
         fn history_restore_snapshot(self: Pin<&mut Self>, i: i32) -> bool;
-        /// Remove layer `i`, recomposite, and emit [`changed`].
+        /// Remove top-level layer `i`, recomposite, and emit [`changed`]. False (no history) for an out-of-range index, the Background, a fully locked layer, or the document's last layer.
         #[qinvokable]
-        fn remove_layer(self: Pin<&mut Self>, i: i32);
+        fn remove_layer(self: Pin<&mut Self>, i: i32) -> bool;
         /// Offscreen GPU spike: renders a gradient on Vulkan; 0 no GPU, 1 non-blank, 2 blank.
         #[qinvokable]
         fn render_gpu(self: Pin<&mut Self>) -> i32;

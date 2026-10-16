@@ -2,7 +2,9 @@
 
 ## Purpose
 Panel docks registered by name, layout and session persistence across restart, and per-column width modes.
+
 ## Requirements
+
 ### Requirement: Panels registered as named docks
 
 The system SHALL host each right-hand panel as a plain `QWidget` content widget
@@ -91,6 +93,13 @@ with no per-column layout SHALL load a single right-hand column built from the
 legacy per-group state, and unknown keys SHALL survive a load-then-write cycle.
 The store SHALL be written on every quit path.
 
+Each write SHALL stamp the store with a per-launch writer token and write time,
+and a write SHALL be refused when the store's token belongs to another launch
+and its write time is not older than this launch's start, so a stale instance
+cannot overwrite a store a newer instance wrote. A refused frame save SHALL also
+leave the active-workspace snapshot unwritten. A store without a writer token
+SHALL be adopted and rewritten with this launch's token.
+
 #### Scenario: Session state is restored on launch
 
 - **WHEN** the application starts and a valid session state exists
@@ -148,6 +157,24 @@ The store SHALL be written on every quit path.
 - **THEN** each column's mode after launch equals its stored mode, measured after
   the first layout
 
+#### Scenario: A newer store is not overwritten [spr_stale_refused]
+
+- **WHEN** a second launch writes the store after a first launch started, and
+  the first launch then saves
+- **THEN** the first launch's save is refused and the second launch's store is
+  byte-identical afterwards
+
+#### Scenario: A store from before the launch is adopted [spr_stale_adopted]
+
+- **WHEN** the store's writer token is another launch's but its write time
+  predates this launch's start
+- **THEN** the save succeeds and the store carries this launch's token
+
+#### Scenario: A store without a token is adopted [spr_legacy_adopted]
+
+- **WHEN** the store carries no writer token
+- **THEN** the save succeeds and stamps the store with this launch's token
+
 ### Requirement: Panel width mode survives a restart for every column
 
 Each panel column's rail mode (normal vs icon/label width) and its normal width SHALL
@@ -178,3 +205,26 @@ SHALL keep its own narrow strip width.
   column never expands across the whole workspace, and an icon column stays at
   its strip width
 
+### Requirement: Self-test isolation of the session store
+
+A self-test run SHALL redirect `XDG_STATE_HOME` to a temporary directory before
+the frame is constructed and SHALL abort with a non-zero exit code when that
+directory cannot be created, rather than falling back to the user's real store.
+The self-test SHALL NOT leave its temporary state directory behind.
+
+#### Scenario: A self-test run writes only its temp store [spr_selftest_isolated]
+
+- **WHEN** the application runs `--headless --self-test`
+- **THEN** the session store is written under the temporary state directory and
+  the user's store is untouched
+
+#### Scenario: A temp-dir failure aborts [spr_selftest_no_fallback]
+
+- **WHEN** the self-test's temporary state directory cannot be created
+- **THEN** the run fails with a non-zero exit code instead of writing the real
+  store
+
+#### Scenario: No temp store is left behind [spr_selftest_clean]
+
+- **WHEN** a self-test run exits
+- **THEN** its temporary state directory has been removed

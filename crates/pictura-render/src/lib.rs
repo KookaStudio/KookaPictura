@@ -117,7 +117,7 @@ pub use smart_filter::{apply_smart_filter_chain, decode_smart_filter, SmartFilte
 pub mod locks;
 
 mod filter_proxy;
-pub use filter_proxy::FilterProxy;
+pub use filter_proxy::{FilterProxy, MaskExtremes};
 
 mod gpu_filter;
 pub use gpu_filter::{apply_filter_active, filter_gpu_available};
@@ -127,10 +127,11 @@ pub use document_ops::{
     add_gradient_fill, add_group, add_group_full, add_group_in, add_layer, add_layer_full,
     add_layer_in, add_layer_mask, add_layer_mask_converting_background, add_raster_layer_from_rgba,
     add_shape_layer, add_slice, add_smart_filter, add_solid_fill, add_vector_mask, align_layers,
-    any_effects_visible, apply_layer_mask, apply_pictura_raw, apply_visibility, arrange_path,
-    background_from_layer, can_add_smart_filter, can_align, can_arrange_path, can_convert_depth,
-    can_convert_mode, can_convert_smart_object_to_layers, can_convert_to_smart_object,
-    can_create_clipping_mask, can_distribute, can_edit_smart_object_contents, can_lift_selection,
+    any_effects_visible, apply_layer_mask, apply_pictura_raw, apply_pictura_raw_destructive,
+    apply_visibility, arrange_path, background_from_layer, can_add_smart_filter, can_align,
+    can_apply_pictura_raw_destructive, can_arrange_path, can_convert_depth, can_convert_mode,
+    can_convert_smart_object_to_layers, can_convert_to_smart_object, can_create_clipping_mask,
+    can_delete_paths, can_distribute, can_edit_smart_object_contents, can_lift_selection,
     can_merge_scope, can_merge_target, can_move_path_to, can_new_smart_object_via_copy,
     can_rasterize_smart_object, can_release_clipping_mask, can_replace_smart_object_contents,
     can_reset_smart_object_transform, clear_layer, clear_layer_style, clear_smart_filters,

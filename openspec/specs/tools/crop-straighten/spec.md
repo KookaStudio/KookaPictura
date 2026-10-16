@@ -10,8 +10,10 @@ Photoshop-style rotate-crop: the image and layers spin behind a fixed, axis-alig
 
 While a crop is active the system SHALL support a rotation angle applied to the
 document content without tilting the crop box or the canvas frame. The crop box
-SHALL remain axis-aligned and keep its position and size as the angle changes;
-the content SHALL spin about the crop box centre. The rotation pivot SHALL be
+SHALL remain axis-aligned and keep its position and size as the angle changes,
+except that a finished straighten reference line SHALL shrink it about its
+centre (see Straighten box fit); the content SHALL spin about the crop box
+centre. The rotation pivot SHALL be
 the crop box centre at the moment the angle is set and SHALL remain fixed as the
 box is moved afterwards, so repositioning the box leaves the content in place.
 The displayed canvas SHALL remain axis-aligned and SHALL grow to the
@@ -95,9 +97,10 @@ While a crop is active the pointer cursor SHALL reflect the zone under the
 pointer: a resize cursor over a handle, the workspace default arrow over the box
 body, the rotate cursor within the rotate band outside the box (from the resize
 margin out to the 100-pixel outer margin, including past the canvas edge), the
-workspace default arrow beyond the outer margin, and the new-crop crosshair only
-in the init mode where no box is drawn. The cursor SHALL be re-resolved on a
-modifier keypress or a framework refresh (tool switch, canvas rebind) and SHALL
+workspace default arrow beyond the outer margin, the new-crop crosshair only
+in the init mode where no box is drawn, and the straighten cursor (a crosshair
+with a spirit level) anywhere while the straighten line is armed. The cursor SHALL be re-resolved on a
+modifier keypress (a Ctrl keypress arms the straighten line) or a framework refresh (tool switch, canvas rebind) and SHALL
 NOT revert to the tool's static cursor while the crop is active. The workspace
 default arrow SHALL be the bare tool-arrow the tool cursors are built on (tip at
 the top left, a vertical left edge, an up-right barb, a 0° notch, and a 45° edge
@@ -133,6 +136,11 @@ surrounding workspace; panels, menus, and dialogs SHALL keep the system cursor.
 
 - **WHEN** a modifier key is pressed while the crop is active
 - **THEN** the cursor is re-resolved to the same zone, not reverted to the tool's static cursor
+
+#### Scenario: Straighten armed [lcs_cursor_straighten]
+
+- **WHEN** the straighten line is armed from the toggle or by holding Ctrl
+- **THEN** the cursor is the straighten cursor over the canvas and its workspace
 
 ### Requirement: Crop rotate cursor zones
 
@@ -254,13 +262,14 @@ Cancelling SHALL leave the document unchanged and discard the tool session.
 
 ### Requirement: Crop preview and active states
 
-The Crop tool SHALL distinguish a preview state from an active state. A box in
-the preview state SHALL be drawn as a dashed outline without rule-of-thirds
-guides and without resize handles; an active box SHALL be drawn with its frame,
-guides, and eight handles. Selecting the tool in Modern SHALL show a preview box
-fitted to the active aspect ratio and centered on the canvas; selecting it in
-Classic SHALL show no box. Dragging inside the preview SHALL draw a new active
-box clamped to the canvas; a press and release without movement inside the
+The Crop tool SHALL distinguish a preview state (the box the tool starts with,
+not yet a pending crop) from an active state. A box in the preview state SHALL
+be drawn with its frame and eight handles but without rule-of-thirds guides; an
+active box SHALL be drawn with its frame, guides, and eight handles. Selecting
+the tool in either mode SHALL show a preview box fitted to the active aspect
+ratio and centered on the canvas, as CS6 frames the whole image. Dragging a
+preview handle SHALL resize the box, which becomes the active crop box; dragging
+inside the preview SHALL draw a new active box clamped to the canvas; a press and release without movement inside the
 preview SHALL adopt the preview as the active box; a rotate press outside SHALL
 activate the box and begin rotation. Escape and Cancel SHALL clear the box and
 return to no box in both modes.
@@ -268,7 +277,17 @@ return to no box in both modes.
 #### Scenario: Modern starts in preview [lcs_preview_modern]
 
 - **WHEN** the Crop tool is selected in Modern mode
-- **THEN** a dashed preview box, centered and fitted to the active ratio, is shown with no handles or guides
+- **THEN** a preview box, centered and fitted to the active ratio, is shown with its eight handles and no guides
+
+#### Scenario: Classic starts in preview too [lcs_preview_classic]
+
+- **WHEN** the Crop tool is selected in Classic mode
+- **THEN** the same preview box with its handles is shown, not an empty canvas
+
+#### Scenario: A preview handle resizes [lcs_preview_handle]
+
+- **WHEN** a corner or edge handle of the preview box is dragged
+- **THEN** the box is resized from that handle and becomes the active crop box
 
 #### Scenario: Dragging the preview draws a new box [lcs_preview_draw]
 
@@ -330,8 +349,8 @@ is active.
 ### Requirement: Straighten from the init state
 
 A straighten line drawn while no active box exists SHALL activate the crop first
-so that the rotation can be previewed: Classic SHALL use the full canvas as the
-box and Modern SHALL use the preview box. The rotation SHALL preview from the
+so that the rotation can be previewed: the preview box when one is shown, or the
+full canvas when there is no box (after Escape). The rotation SHALL preview from the
 first drag frame and update immediately on release.
 
 #### Scenario: Drawing a straighten line activates the crop [lcs_straighten_activates]
@@ -363,3 +382,61 @@ hit zones and resize cursors SHALL remain centred on the box border.
 
 - **WHEN** a press begins within the resize margin of the box border
 - **THEN** the resize gesture begins even though the drawn bracket is inset inside the box
+
+### Requirement: Straighten control
+
+The Crop options bar SHALL carry a checkable Straighten control: a spirit-level
+icon (`crop.straighten`, original artwork) with the label `Straighten` to its right, where a click on the icon or the
+label toggles the straighten line. Holding Ctrl (Cmd on macOS) while no other
+crop gesture is in progress SHALL arm the straighten line and check the control
+until the key is released; a press with Ctrl held SHALL draw a straighten line
+even when no key event reached the canvas. Releasing Ctrl SHALL NOT disarm a
+line armed from the control, and a line being drawn SHALL finish first. A
+finished line SHALL disarm the control.
+
+#### Scenario: Icon and label toggle [lcs_straighten_control]
+
+- **WHEN** the Crop tool is active
+- **THEN** the options bar shows the Straighten icon with its label, and a click toggles the straighten line on and off
+
+#### Scenario: Holding Ctrl arms the line [lcs_straighten_ctrl]
+
+- **WHEN** Ctrl is pressed and then released with the Crop tool active
+- **THEN** the straighten line is armed while the key is held and disarmed on release, unless it was armed from the control
+
+### Requirement: Straighten reference line angle
+
+A straighten reference line from A to B SHALL rotate the content by the
+negative of the line's inclination from the nearer of the horizontal and the
+vertical, so the result lies in (-45°, 45°] whichever direction the line is
+drawn. The rotation SHALL add to any angle already set in the session, so a
+second line levels what is on screen. While the line is drawn the image SHALL
+hold still and the rotation the release will apply SHALL show beside the pointer
+in the rotate gesture's `∠: <angle>°` readout; releasing the line SHALL rotate
+the image preview by that angle, keep the crop active, and clear the readout.
+
+#### Scenario: A line at θ commits a rotation of −θ [lcs_straighten_angle]
+
+- **WHEN** a reference line at θ = 5° from the horizontal is drawn and the crop is committed
+- **THEN** the content is rotated by −θ within 0.1°
+
+#### Scenario: The image rotates on release [lcs_straighten_release]
+- **WHEN** a reference line is dragged and then released
+- **THEN** the image stays unrotated during the drag, with the readout showing the coming angle, and the preview rotates by that angle on release
+#### Scenario: Plumb lines and either direction [lcs_straighten_axis]
+
+- **WHEN** a near-vertical line, or a line drawn right to left, is drawn
+- **THEN** the angle levels it against the vertical or horizontal respectively, never rotating by more than 45°
+
+### Requirement: Straighten box fit
+
+When a straighten reference line finishes, the crop box SHALL shrink about its
+centre, keeping its aspect ratio, to the largest box whose corners lie inside the
+rotated image, so committing leaves no uncovered canvas corners. The box SHALL
+NOT grow, and a box whose centre lies outside the rotated image SHALL be left
+unchanged. The rotate-band gesture SHALL keep the box size.
+
+#### Scenario: No uncovered corners [lcs_straighten_fit]
+
+- **WHEN** a straighten line is drawn over a full-canvas box
+- **THEN** every corner of the shrunken box maps inside the unrotated canvas and one corner touches an edge

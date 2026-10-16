@@ -2,7 +2,9 @@
 
 ## Purpose
 The 14 Sketch filters, Bas Relief to Water Paper, with foreground and background inputs, texture options, and the shared contract.
+
 ## Requirements
+
 ### Requirement: Sketch filter application and error contract
 
 The system SHALL implement the 14 CS6 Sketch filters as `Filter` variants and
@@ -107,12 +109,17 @@ canvas-sized texture.
 
 ### Requirement: Bas Relief
 
-The system SHALL implement `Filter::BasRelief { detail, smoothness, light_direction, foreground, background }` as a low-relief emboss where dark (recessed) areas take the `foreground` colour and light (raised) areas take the `background` colour, illuminated from `light_direction`.
+The system SHALL implement `Filter::BasRelief { detail, smoothness, light_direction, foreground, background }` as a low relief: the image's luminance, softened by `smoothness`, is read as a height field lit from `light_direction`; a slope facing the light SHALL be driven toward the `background` colour and a slope facing away toward the `foreground` colour, by a gain that grows with `detail`, and a flat area, which catches no light, SHALL sit at the midpoint of the two colours.
+
+#### Scenario: Flat areas sit at the midpoint
+
+- **WHEN** Bas Relief is applied to an image with broad flat regions
+- **THEN** the flat regions take the midpoint of the `foreground` and `background` colours within 2 levels
 
 #### Scenario: Dark and light areas take foreground and background
 
-- **WHEN** Bas Relief is applied to an image with dark and light regions
-- **THEN** the dark regions lean toward the `foreground` colour and the light regions toward the `background` colour
+- **WHEN** Bas Relief is applied across a strong step between a dark and a light region
+- **THEN** the pixels at the step move away from the midpoint, the slope facing the light toward the `background` colour and the slope facing away toward the `foreground` colour
 
 #### Scenario: Light direction moves the illumination
 
@@ -300,4 +307,3 @@ The system SHALL implement `Filter::WaterPaper { fiber_length, brightness, contr
 
 - **WHEN** Water Paper is applied twice with the same parameters and seed
 - **THEN** the outputs are bit-identical
-

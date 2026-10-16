@@ -26,11 +26,11 @@ The destructive filter entry point: colour-channel extraction, mask-confined wri
 
 ### Requirement: Color-channel extraction and validation
 
-The function SHALL extract the layer's color channels with ids `0`, `1`, and `2`, in that order, into a planar 8-bit `PixelBuffer` of `rect.width() × rect.height()` with 3 channels. A missing color channel, or a color channel whose `data.len()` is not `rect.width() * rect.height()`, MUST return `FilterError::InvalidParams` and MUST NOT panic. Filter-level validation errors MUST propagate to the caller unchanged, and no error path may partially write the layer.
+The function SHALL extract the color channels into a planar 8-bit `PixelBuffer` of `rect.width() × rect.height()` with 3 channels. A color layer contributes channels `0`, `1`, and `2`, in that order. A Grayscale layer, which carries only channel `0`, SHALL be treated as three identical planes copied from channel `0`, and the filtered plane MUST be written back to channel `0` alone so no color planes are added. A missing channel `0`, a color channel whose `data.len()` is not `rect.width() * rect.height()`, or a layer that carries exactly one of channels `1`/`2` MUST return `FilterError::InvalidParams` and MUST NOT panic. Filter-level validation errors MUST propagate to the caller unchanged, and no error path may partially write the layer.
 
 #### Scenario: Missing color channel errors
 
-- **WHEN** the layer has no channel with id `1`
+- **WHEN** the layer has no channel with id `1`, but channel `2` is present
 - **THEN** `apply_filter` returns `FilterError::InvalidParams` and does not panic
 
 #### Scenario: Wrong channel length errors
@@ -42,6 +42,16 @@ The function SHALL extract the layer's color channels with ids `0`, `1`, and `2`
 
 - **WHEN** the filter rejects its own parameters (for example a negative Gaussian radius)
 - **THEN** `apply_filter` returns that filter's `FilterError` and the layer is unchanged
+
+#### Scenario: A Grayscale layer filters its single channel
+
+- **WHEN** `apply_filter` is called on a layer that carries channel `0` and no channels `1`/`2`
+- **THEN** channel `0` is rewritten in place, no color planes are added, and any transparency channel is filtered per the alpha rule
+
+#### Scenario: A missing channel zero is refused
+
+- **WHEN** the layer carries no channel with id `0`
+- **THEN** `apply_filter` returns `FilterError::InvalidParams` and the layer is unchanged
 
 ### Requirement: Mask-confined write
 
@@ -74,7 +84,7 @@ For each local pixel `(lx, ly)`, the coverage SHALL be the mask value at documen
 
 ### Requirement: Alpha and layer metadata preservation
 
-On a layer that is not transparency-locked, `apply_filter` SHALL filter the transparency channel (`id == -1`) only for a kernel that moves, spreads, or ranks samples independently of their value (the blurs, the sharpens, Median, Despeckle, Maximum, Minimum, Dust & Scratches, Offset, Mosaic, Crystallize, Fragment, and the geometric Distort filters), by running that kernel over the alpha plane, so the layer edge moves with the colour. Every other filter MUST leave the transparency channel bit-identical. Offset without wrap SHALL fill the area it exposes on the transparency channel per its undefined-area mode: fully opaque (255) for CS6's "Set to Background", fully clear (0) for CS6's "Set to Transparent". `apply_filter` MUST NOT change `layer.rect`, `layer.mask`, `layer.opacity`, or `layer.blend`.
+On a layer that is not transparency-locked, `apply_filter` SHALL filter the transparency channel (`id == -1`) only for a kernel that moves, spreads, or ranks samples independently of their value (the blurs — Smart Blur in Normal mode only — the sharpens, Median, Despeckle, Maximum, Minimum, Dust & Scratches, Offset, Mosaic, Crystallize, Fragment, the geometric Distort filters, and Liquify), or that composites over the picture (Picture Frame), by running that kernel over the alpha plane, so the layer edge moves with the colour or the composited border adds opacity. Every other filter MUST leave the transparency channel bit-identical. Offset without wrap SHALL fill the area it exposes on the transparency channel per its undefined-area mode: fully opaque (255) for CS6's "Set to Background", fully clear (0) for CS6's "Set to Transparent". `apply_filter` MUST NOT change `layer.rect`, `layer.mask`, `layer.opacity`, or `layer.blend`.
 
 #### Scenario: Transparency is bit-identical
 
@@ -95,6 +105,16 @@ On a layer that is not transparency-locked, `apply_filter` SHALL filter the tran
 
 - **WHEN** Offset with wrap off runs in "Set to Transparent" mode on an unlocked layer
 - **THEN** the exposed area's transparency channel is 0 while the colour planes take the dialog's Background colour
+
+#### Scenario: Every moving kernel moves a soft layer edge
+
+- **WHEN** any kernel on the moving list runs on an unlocked layer whose alpha is a soft-edged disc with a stray speck
+- **THEN** the channel with id `-1` differs from the input
+
+#### Scenario: Picture Frame may add opacity
+
+- **WHEN** Picture Frame runs on an unlocked layer that is partly transparent
+- **THEN** the transparency channel gains the composited border's opacity where the frame covers a clear pixel
 
 #### Scenario: Layer metadata is unchanged
 
@@ -156,3 +176,31 @@ pre-filter value.
 - **WHEN** a filter runs on a transparency-locked layer at a pixel whose alpha is
   zero
 - **THEN** that pixel's color and alpha are unchanged
+
+### Requirement: Region-bounded filter application
+
+`pictura-render` SHALL expose `apply_filter_region`, which applies a filter over a document rectangle clamped to the layer rect and leaves every pixel outside that rectangle unchanged. A neighborhood filter reads up to its support outside the rectangle, where the source is clamped as if the rectangle were the whole layer. `preview_apron` SHALL return a conservative support margin per filter so a viewport preview expanded by it is exact across the visible area.
+
+#### Scenario: Only the region changes
+
+- **WHEN** `apply_filter_region` is called with a region smaller than the layer
+- **THEN** pixels outside the region are bit-identical to their input
+
+#### Scenario: The region interior matches a full apply
+
+- **WHEN** the same filter is applied over the whole layer and over a region expanded by `preview_apron`
+- **THEN** pixels at least one apron inside the region match the full apply
+
+### Requirement: Ported photorust filter engine
+
+The system SHALL run the Artistic, Brush Strokes, Sketch, and Texture filters, and the Add Noise, Dust & Scratches, Average, Emboss, Find Edges, Diffuse, Glowing Edges, Extrude, Tiles, Trace Contour, Wind, Mosaic, Crystallize, Pointillize, Facet, Fragment, Mezzotint, Color Halftone, Twirl, Pinch, Spherize, Ripple, Wave, Polar Coordinates, and ZigZag filters through the engine ported from photorust (GPL-3.0). `apply` SHALL validate the buffer and each parameter against its capability's ranges before converting to the engine's interleaved image, SHALL write back only the colour planes so alpha is never modified, and SHALL fold each variant's `seed` into the engine's noise so the same seed reproduces a result bit for bit and different seeds re-roll it. The engine SHALL be deterministic regardless of thread count. Solarize SHALL stay on its ImageMagick-exact implementation.
+
+#### Scenario: Ported filters keep the shared contract
+
+- **WHEN** each ported filter is applied to RGB and RGBA buffers, twice, with an out-of-range parameter, and to 1×1, 1×N, and N×1 buffers
+- **THEN** it succeeds with alpha unchanged, repeats bit for bit, rejects the bad parameter without writing a sample, and never panics
+
+#### Scenario: Seeds re-roll the stochastic filters
+
+- **WHEN** a ported filter that takes a `seed` is applied with two different seeds
+- **THEN** the two outputs differ

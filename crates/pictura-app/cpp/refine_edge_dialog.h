@@ -13,7 +13,9 @@ namespace pictura {
 
 class PictureView;
 
-// Select > Refine Edge (SEL-003): improve a selection's edge quality. The
+// Select > Refine Edge (SEL-003): improve a selection's edge quality. Given a
+// layer path it is the mask menu's Refine Mask instead: it refines that
+// layer's mask and preselects Layer Mask output. The
 // dialog shows a live proxy of the refined coverage mask; OK applies the
 // settings to the active selection once and writes the result to the chosen
 // Output To target. Non-modal, presented through `runDialog`.
@@ -25,7 +27,11 @@ class RefineEdgeDialog : public QDialog {
     Q_OBJECT
 
 public:
-    explicit RefineEdgeDialog(PictureView* view, QWidget* parent = nullptr);
+    explicit RefineEdgeDialog(PictureView* view, QWidget* parent = nullptr,
+                              const QString& maskPath = QString());
+
+    // The layer whose mask this refines; empty for Refine Edge.
+    QString maskPath() const { return maskPath_; }
 
     // The engine parameters, read on OK.
     bool smartRadius() const;
@@ -47,6 +53,7 @@ private:
     void refreshEnabled();
 
     PictureView* view_ = nullptr;
+    QString maskPath_;
     QComboBox* viewMode_ = nullptr;
     QCheckBox* showRadius_ = nullptr;
     QCheckBox* showOriginal_ = nullptr;

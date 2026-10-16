@@ -88,6 +88,35 @@ void ImageView::paintFilterPreview(QPainter& painter)
     painter.restore();
 }
 
+void ImageView::setMaskOverlay(const QImage& overlay, const QRect& area)
+{
+    maskOverlay_ = overlay;
+    maskOverlayArea_ = area;
+    update();
+}
+
+void ImageView::clearMaskOverlay()
+{
+    if (maskOverlay_.isNull()) {
+        return;
+    }
+    maskOverlay_ = QImage();
+    maskOverlayArea_ = QRect();
+    update();
+}
+
+// Drawn like the filter preview: document space, under the document clip.
+void ImageView::paintMaskOverlay(QPainter& painter)
+{
+    if (maskOverlay_.isNull() || maskOverlayArea_.isEmpty()) {
+        return;
+    }
+    painter.save();
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    painter.drawImage(QRectF(maskOverlayArea_), maskOverlay_);
+    painter.restore();
+}
+
 QImage ImageView::image() const
 {
     if (!image_.isNull() || docSize_.isEmpty() || !levelProvider_.crop) {

@@ -169,6 +169,7 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/color_picker_dialog.cpp
     crates/pictura-app/cpp/color_range_dialog.cpp
     crates/pictura-app/cpp/refine_edge_dialog.cpp
+    crates/pictura-app/cpp/mask_display_options_dialog.cpp
     crates/pictura-app/cpp/replace_color_dialog.cpp
     crates/pictura-app/cpp/match_color_dialog.cpp
     crates/pictura-app/cpp/adjustment_dialog.cpp
@@ -223,6 +224,7 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/frame_menus_layer_ops.cpp
     crates/pictura-app/cpp/frame_menus_matting.cpp
     crates/pictura-app/cpp/frame_menus_smart_object.cpp
+    crates/pictura-app/cpp/frame_mask_overlay.cpp
     crates/pictura-app/cpp/frame_menus_image.cpp
     crates/pictura-app/cpp/frame_menus_image_mode.cpp
     crates/pictura-app/cpp/frame_recent.cpp
@@ -242,6 +244,7 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/panels/layers_filter_bar.cpp
     crates/pictura-app/cpp/panels/layers_panel_actions.cpp
     crates/pictura-app/cpp/panels/layers_panel_menu.cpp
+    crates/pictura-app/cpp/panels/layers_panel_mask_menu.cpp
     crates/pictura-app/cpp/panels/layers_panel_test.cpp
     crates/pictura-app/cpp/panels/layers_panel_test_solo.cpp
     crates/pictura-app/cpp/panels/percent_field.cpp

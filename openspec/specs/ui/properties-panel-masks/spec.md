@@ -6,15 +6,17 @@ offers the enable, disable, link, unlink, delete, and apply actions.
 
 ## Requirements
 
-### Requirement: Properties mask section
+### Requirement: Properties mask section with refinement controls
 
 When the active layer carries a layer mask, the Properties panel SHALL show a
 Mask section containing a mask name row and the actions Enable, Disable, Link,
 Unlink, Delete, and Apply, each wired to the layer-mask bridge and each one
-undoable step, plus read-only Density, Feather, and Invert rows that are
-disabled and carry the `— not implemented yet` tooltip because the model does
-not store them. The section SHALL be absent for a layer without a mask, and the
-existing adjustment page behavior SHALL be unchanged.
+undoable step, plus a Density control (0-100 %), a Feather control
+(0-250 px, one decimal), and an Invert button. Density and Feather MUST show
+the mask's stored values, preview while dragged, and record one undo step per
+committed change; Invert MUST flip the mask pixels in one undo step. The
+section SHALL be absent for a layer without a mask, and the existing adjustment
+page behavior SHALL be unchanged.
 
 #### Scenario: A masked layer shows the section [lmk_props]
 
@@ -32,8 +34,12 @@ existing adjustment page behavior SHALL be unchanged.
 - **WHEN** the user activates Delete in the Mask section
 - **THEN** the mask is removed from the active layer in one undo step and the section disappears
 
-#### Scenario: Density, Feather, and Invert are disabled placeholders [lmk_props_stubs]
+#### Scenario: Density and Feather edit the mask [lmk_props_refine]
 
-- **WHEN** the Mask section is shown
-- **THEN** its Density, Feather, and Invert rows are disabled and carry the
-  `— not implemented yet` tooltip
+- **WHEN** the user sets Density to 50 % and Feather to 4 px in the Mask section
+- **THEN** the active layer's mask stores density 128 and feather 4, each change one undo step
+
+#### Scenario: Invert flips the mask [lmk_props_invert]
+
+- **WHEN** the user activates Invert in the Mask section
+- **THEN** the mask's pixels are inverted in one undo step

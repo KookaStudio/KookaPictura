@@ -6,6 +6,7 @@
 #include "api/layers_api.h"
 
 #include "api/document_api.h"
+#include "pictura_app/src/cxxqt_object/impl_layers/layers_surface.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/layers_smart_filters.cxxqt.h"
 
 namespace pictura {
@@ -668,8 +669,10 @@ void PicturaMainWindow::registerHandlers()
     }
 
     // Delete Layer removes the Layers-panel selection, as the panel's own
-    // delete does. Delete Hidden Layers needs only a document (it records
-    // nothing when nothing is hidden); Hide Layers needs a selection.
+    // delete does, and is unavailable when that would remove nothing (the
+    // Background, locked layers, the document's last layer). Delete Hidden
+    // Layers needs only a document (it records nothing when nothing is
+    // hidden); Hide Layers needs a selection.
     registry_->setHandler(command_ids::LayerDeleteLayer, [this]() {
         if (layersPanel_) {
             layersPanel_->deleteSelection();
@@ -678,7 +681,7 @@ void PicturaMainWindow::registerHandlers()
     });
     registry_->setEnabledProvider(command_ids::LayerDeleteLayer, [this]() {
         return activeView() && activeView()->has_document() && layersPanel_
-            && !layersPanel_->selectedPaths().isEmpty();
+            && layers_can_delete(*activeView(), layersPanel_->selectedPaths());
     });
     registry_->setHandler(command_ids::LayerDeleteHiddenLayers, [this]() {
         PictureView* view = activeView();
@@ -927,8 +930,9 @@ void PicturaMainWindow::registerHandlers()
                                   });
 
     // Filter > Pictura Raw…: prefill the dialog from the layer's stored
-    // Pictura Raw settings (empty when none), then convert a plain raster target
-    // to a smart object and apply Pictura Raw in one bridge call / one history state.
+    // Pictura Raw settings (empty when none), then apply in one bridge call /
+    // one history state — destructively on a plain raster layer, as a retained
+    // camera-raw smart filter on an embedded smart object.
     registry_->setHandler(command_ids::FilterPicturaRaw, [this]() {
         PictureView* view = activeView();
         const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
@@ -948,8 +952,7 @@ void PicturaMainWindow::registerHandlers()
         PictureView* view = activeView();
         const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
         return view && view->has_document() && !path.isEmpty()
-            && (view->layer_can_convert_to_smart_object(path)
-                || view->layer_can_replace_smart_object_contents(path));
+            && view->layer_can_apply_pictura_raw(path);
     });
 
     registry_->setHandler(command_ids::ViewZoomIn, [this]() {

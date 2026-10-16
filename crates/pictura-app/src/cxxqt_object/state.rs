@@ -142,6 +142,14 @@ pub struct PictureViewRust {
     /// The layer whose raster mask is shown alone on the canvas (view-only, no
     /// history); `None` shows the composite. See `impl_core/display.rs`.
     pub(super) mask_solo: Option<String>,
+    /// The layer whose mask is shown as the rubylith overlay, if any. View
+    /// state: it never reaches the composite.
+    pub(super) mask_overlay: Option<String>,
+    /// Layer Mask Display Options: the rubylith colour (ARGB) and opacity (%).
+    pub(super) mask_display: (u32, u8),
+    /// Bumped whenever the overlay or its options change, so the shell knows
+    /// to re-render it.
+    pub(super) mask_overlay_revision: u64,
     /// The isolated set while the Layers panel's Selected filter is on: the
     /// panel paths Auto-Select may pick. `None` leaves Auto-Select unscoped.
     pub(super) isolation: Option<Vec<String>>,
@@ -312,6 +320,21 @@ pub(super) struct PreviewStroke {
     /// The stroke's configuration, so the preview rasterizes the same tip,
     /// flow and opacity the exact stroke will.
     pub(super) cfg: pictura_paint::StrokeConfig,
+    /// Set when the stroke paints a layer mask: the coverage then moves the
+    /// composite between the mask's extremes instead of laying down colour.
+    pub(super) mask: Option<MaskPreview>,
+}
+
+/// What a previewed mask stroke blends between, on the reduced-document grid
+/// (which can be a pixel short of the preview level's): the mask's coverage at
+/// stroke start, and the composite with the mask hiding and revealing
+/// everywhere, as premultiplied sRGB RGBA like the pyramid levels.
+pub(super) struct MaskPreview {
+    pub(super) width: u32,
+    pub(super) height: u32,
+    pub(super) coverage: Vec<u8>,
+    pub(super) hidden: Vec<u8>,
+    pub(super) revealed: Vec<u8>,
 }
 
 /// A live brush stroke painting a layer mask's coverage: the mask exposed as a
@@ -347,6 +370,9 @@ impl Default for PictureViewRust {
             mask_stroke: None,
             mask_edit_target: None,
             mask_solo: None,
+            mask_overlay: None,
+            mask_display: (0xFFFF_0000, 50),
+            mask_overlay_revision: 0,
             isolation: None,
             pending_present: None,
             stroke_tiles: TileSet::default(),

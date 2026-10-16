@@ -58,12 +58,14 @@ QSpinBox* addSliderRow(QVBoxLayout* layout, QWidget* parent, const QString& labe
 
 } // namespace
 
-RefineEdgeDialog::RefineEdgeDialog(PictureView* view, QWidget* parent)
+RefineEdgeDialog::RefineEdgeDialog(PictureView* view, QWidget* parent, const QString& maskPath)
     : QDialog(parent)
     , view_(view)
+    , maskPath_(maskPath)
 {
-    setWindowTitle(QStringLiteral("Refine Edge"));
-    setObjectName(QStringLiteral("refineEdgeDialog"));
+    const bool mask = !maskPath_.isEmpty();
+    setWindowTitle(mask ? QStringLiteral("Refine Mask") : QStringLiteral("Refine Edge"));
+    setObjectName(mask ? QStringLiteral("refineMaskDialog") : QStringLiteral("refineEdgeDialog"));
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(12, 12, 12, 12);
     root->setSpacing(8);
@@ -132,6 +134,9 @@ RefineEdgeDialog::RefineEdgeDialog(PictureView* view, QWidget* parent)
     output_->addItem(QStringLiteral("Layer Mask"));
     output_->addItem(QStringLiteral("New Layer"));
     output_->addItem(QStringLiteral("New Layer with Layer Mask"));
+    if (mask) {
+        output_->setCurrentIndex(1);
+    }
     outRow->addWidget(output_, 1);
     outputLayout->addLayout(outRow);
     root->addWidget(outputGroup);
@@ -205,9 +210,13 @@ void RefineEdgeDialog::refreshPreview()
     }
     int width = 0;
     int height = 0;
-    const ::rust::Vec<uint8_t> coverage = refine_edge_preview(
-        *view_, smartRadius(), radius(), smooth(), feather(), contrast(), shiftEdge(),
-        kPreviewSize, width, height);
+    const ::rust::Vec<uint8_t> coverage =
+        maskPath_.isEmpty()
+            ? refine_edge_preview(*view_, smartRadius(), radius(), smooth(), feather(),
+                                  contrast(), shiftEdge(), kPreviewSize, width, height)
+            : refine_mask_preview(*view_, maskPath_, smartRadius(), radius(), smooth(),
+                                  feather(), contrast(), shiftEdge(), kPreviewSize, width,
+                                  height);
     if (width <= 0 || height <= 0 || int(coverage.size()) != width * height) {
         preview_ = QImage();
         previewLabel_->clear();

@@ -2,7 +2,9 @@
 
 ## Purpose
 The Free Transform session: layer transforms with bilinear resampling, bounding-box hit-testing, modifiers, and undo.
+
 ## Requirements
+
 ### Requirement: Layer similarity transform entry point and refusal
 
 The system SHALL provide
@@ -144,9 +146,12 @@ source rect under the current transform and SHALL draw the quad with eight scale
 handles (four corners and four edge midpoints) and a rotate affordance. Hit
 testing SHALL be in screen space with a tolerance of 6 screen pixels for handles;
 a press inside the quad but away from a handle SHALL move, and a press within a
-20 screen-pixel band outside a corner SHALL rotate about the layer centre. The
-canvas SHALL show a diagonal, horizontal, or vertical size cursor over a handle,
-an open or closed hand while moving, and a cross cursor in the rotate band.
+20 screen-pixel band outside the quad's perimeter — any side or corner — SHALL
+rotate about the reference point. A press beyond the band SHALL be inert: it MUST
+NOT move, rotate, commit, or cancel the session. The canvas SHALL show a
+diagonal, horizontal, or vertical size cursor over a handle, an open or closed
+hand while moving, and a rotate cursor oriented to the grabbed side or corner
+throughout the rotate band.
 
 #### Scenario: Dragging a corner handle scales
 
@@ -161,7 +166,22 @@ an open or closed hand while moving, and a cross cursor in the rotate band.
 #### Scenario: Dragging the rotate band rotates
 
 - **WHEN** the user presses in the rotate band outside a corner and drags
-- **THEN** the layer rotates about its centre and the quad rotates with the pointer
+- **THEN** the layer rotates about the reference point and the quad rotates with the pointer
+
+#### Scenario: Rotating from an edge midpoint [ft_edge_rotate]
+
+- **WHEN** the user presses in the rotate band just outside an edge midpoint and drags
+- **THEN** the layer rotates about the reference point and the quad rotates with the pointer
+
+#### Scenario: A press beyond the band is inert [ft_far_press_inert]
+
+- **WHEN** the user presses and releases beyond the rotate band while a session is active
+- **THEN** the session stays active, the document is unchanged, and no history state is added
+
+#### Scenario: Projective modes keep handle-only hit testing [ft_projective_band]
+
+- **WHEN** a Distort, Perspective, or Skew session is pressed outside the quad near an edge
+- **THEN** nothing is hit and the quad does not change
 
 ### Requirement: Scale and rotate modifiers and minimum size
 
@@ -171,7 +191,8 @@ one axis. Holding Shift while rotating SHALL snap the angle to 15° steps. The
 session SHALL clamp the transform so the transformed rect keeps at least 1 pixel
 in each axis and SHALL refuse a gesture that would produce a zero-area result.
 Negative scale factors SHALL be permitted and flip the content. The reference
-point SHALL be the layer centre.
+point SHALL be the session's movable pivot, the source rect centre by default
+(see `document/transform-reference-point`).
 
 #### Scenario: Shift on a corner keeps the aspect ratio
 
@@ -353,7 +374,8 @@ The application SHALL provide implemented commands `Edit > Transform > Skew`,
 `Edit > Transform > Distort`, and `Edit > Transform > Perspective` that begin a
 Free Transform session in the matching mode on the active layer, using the same
 active-layer resolution and refusal as `Edit > Free Transform`. Each command
-SHALL be enabled exactly when `Edit > Free Transform` is enabled.
+SHALL be enabled exactly when `Edit > Free Transform` is enabled, including for
+a target whose selected pixels Free Transform lifts.
 
 #### Scenario: The Distort command enters a Distort session
 
@@ -362,7 +384,7 @@ SHALL be enabled exactly when `Edit > Free Transform` is enabled.
 
 #### Scenario: A non-transformable target leaves the command disabled
 
-- **WHEN** the active layer is a group, an adjustment layer, a Background layer, or position-locked
+- **WHEN** the active layer is a group, an adjustment layer, or position-locked, or is the Background with no active selection
 - **THEN** the Distort/Skew/Perspective commands are disabled and invoking them begins no session
 
 ### Requirement: Mesh warp op
@@ -483,3 +505,54 @@ the active view has a document and the selected path passes
 - **WHEN** no layer is selected or the selected path cannot be free-transformed
 - **THEN** `Edit > Transform > Warp` is disabled
 
+### Requirement: Free Transform of selected pixels
+
+When a non-empty, document-sized selection is active and the target is a pixel layer or the Background that is not pixel-locked, not transparency-locked while it has alpha, and not position-locked unless it is the Background, beginning a Free Transform session (in any mode) SHALL lift the selected pixels: they are copied into a floating layer directly above the target, trimmed to the selection bounds, and cleared from the target as `Edit > Clear` clears them. The session SHALL then transform the floating layer. Committing a non-identity transform SHALL composite the floating layer's pixels back over the target's own channels and remove it, leaving every other target attribute (name, locks, Background status, opacity, blend, mask, effects) unchanged; a target with alpha SHALL grow to hold pixels moved past its rect, and the Background SHALL clip them to its rect. The floating layer SHALL be sized to the selection bounds, not the document. A selection whose pixels are already the clear colour (white on a Background) SHALL still lift. A commit SHALL record exactly one `"Free Transform"` history state and SHALL drop the selection. Cancelling, or committing an identity transform, SHALL restore the document exactly as it was before the lift and record nothing. `layer_can_free_transform` SHALL report such a target as transformable, so `Edit > Free Transform` is enabled for it. Without a selection, the existing refusals (including the Background) SHALL apply unchanged.
+
+#### Scenario: A Background with no selection stays refused
+
+- **WHEN** Ctrl+T is pressed on an opened photo whose only layer is the Background and no selection is active
+- **THEN** `Edit > Free Transform` is disabled and no session begins
+
+#### Scenario: A selection on the Background is lifted and transformed
+
+- **WHEN** a rectangle is selected on the Background, Ctrl+T is pressed, the box is dragged 10 px right and 5 px down, and Return commits
+- **THEN** one `"Free Transform"` state is recorded, the document still has a single Background layer, the vacated pixels are white, the moved pixels land at the offset, and the selection is gone
+
+#### Scenario: Lifting and merging back leaves the layer exactly as it was
+
+- **WHEN** a selection on a layer with 50 % opacity, Multiply blend, and a mask is lifted and put back untransformed
+- **THEN** the document equals the one before the lift
+
+#### Scenario: Cancel restores the lifted pixels
+
+- **WHEN** a session that lifted a selection is cancelled with Escape
+- **THEN** the floating layer is gone, every pixel is as before, and no history state is recorded
+
+### Requirement: Free Transform's box hugs the layer content
+
+Beginning a Free Transform session on a whole pixel layer (no lifted selection) SHALL first trim the layer's rect to the bounds of its non-transparent pixels when it has alpha and no mask, so the transform box and its handles surround the visible content rather than the canvas-sized rect. Only fully transparent pixels SHALL be dropped, so the composite is unchanged and no history state is recorded for the trim.
+
+#### Scenario: Ctrl+T on a canvas-sized layer boxes its content
+
+- **WHEN** Ctrl+T is pressed on a canvas-sized layer whose only pixels are a 12 × 9 square at (10, 8)
+- **THEN** the transform quad is that square's bounds, and cancelling leaves the composite unchanged
+
+### Requirement: Transform overlay is not clipped to the document edge
+
+The Free Transform overlay — the bounding quad, its eight handles, the rotate
+knob, and the reference point — SHALL be painted without clipping to the
+document rectangle, so a layer transformed past the canvas edge keeps its full
+box and handles. Only the rasterised preview content SHALL be clipped to the
+canvas. The rule SHALL apply to the modal session and to the Move tool's
+controls box, which share the overlay path.
+
+#### Scenario: An off-canvas corner keeps its handle [ft_overlay_unclipped]
+
+- **WHEN** a layer is scaled so one corner lies outside the document and the canvas is painted
+- **THEN** the off-canvas corner's handle is drawn exactly as the on-canvas corner's handle
+
+#### Scenario: The preview content stays clipped [ft_preview_clipped]
+
+- **WHEN** the transformed layer extends past the document edge
+- **THEN** its rasterised preview is not painted outside the canvas rectangle

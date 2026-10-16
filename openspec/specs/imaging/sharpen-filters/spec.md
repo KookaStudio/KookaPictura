@@ -24,37 +24,38 @@ The system SHALL provide `pictura_filters::apply(filter: &Filter, buf: &mut Pixe
 - **WHEN** `apply` receives an empty buffer, or a buffer whose `data.len()` does not equal `width * height * channels`, or a buffer with zero width or height
 - **THEN** `apply` returns a `FilterError` and does not panic
 
-### Requirement: Alpha channel preservation for sharpen
-
-For 4-channel buffers, every sharpen filter SHALL leave channel 4 bit-identical. Only channels 1 through 3 SHALL be modified.
-
-#### Scenario: Every sharpen variant preserves alpha
-
-- **WHEN** each sharpen variant is applied to an RGBA buffer
-- **THEN** the alpha plane equals the input alpha plane bit for bit
-
 ### Requirement: Sharpen and Sharpen More
 
-The system SHALL implement `Filter::Sharpen` and `Filter::SharpenMore` with no parameters, as a fixed 3×3 high-pass convolution of the form `[0 −1 0; −1 5 −1; 0 −1 0]`, where `SharpenMore` uses the same kernel shape with a stronger fixed gain. A uniform-color buffer SHALL be unchanged. `SharpenMore`'s deviation from the input SHALL be at least as large as `Sharpen`'s on the same edge image. Oracle expectation: no faithful ImageMagick equivalent exists (fixed kernels), so known-value tests cover the known kernel response and the documented divergence.
+The system SHALL implement `Filter::Sharpen` and `Filter::SharpenMore` with no parameters, as Unsharp Mask at fixed settings: radius `sharpen::SHARPEN_RADIUS` (3.0, σ 1), threshold 0, and amount `sharpen::SHARPEN_AMOUNT` (50 %) for `Sharpen` and `sharpen::SHARPEN_MORE_AMOUNT` (100 %) for `SharpenMore`. A uniform-color buffer SHALL be unchanged. `SharpenMore`'s deviation from the input SHALL be at least as large as `Sharpen`'s on the same edge image. Repeated application SHALL add contrast gradually rather than amplifying fine detail without bound. Oracle expectation: differential against ImageMagick `-unsharp 0x1+0.5+0` for `Sharpen` within tolerance 2 and `-unsharp 0x1+1+0` for `SharpenMore` within tolerance 3.
 
 #### Scenario: The kernel response is a known value
 
-- **WHEN** `Sharpen` is applied to a buffer whose center pixel sits on an edge
-- **THEN** the center output equals the center boosted by the local high-pass response, and a flat neighborhood is unchanged
+- **WHEN** `Sharpen` and `UnsharpMask { amount: SHARPEN_AMOUNT, radius: SHARPEN_RADIUS, threshold: 0 }` are applied to the same edge buffer, and likewise `SharpenMore` with `SHARPEN_MORE_AMOUNT`
+- **THEN** each pair of outputs is byte-identical, and a flat neighborhood is unchanged
 
 #### Scenario: Sharpen More is stronger
 
 - **WHEN** `Sharpen` and `SharpenMore` are each applied to the same edge image
 - **THEN** the total deviation from the input is larger for `SharpenMore` than for `Sharpen`
 
+#### Scenario: Repeated Sharpen stays bounded
+
+- **WHEN** `Sharpen` is applied three times to a fine low-contrast pattern
+- **THEN** the contrast grows but stays well short of the full tonal range
+
+#### Scenario: Matches ImageMagick
+
+- **WHEN** `Sharpen` is applied to the oracle image and ImageMagick applies `-unsharp 0x1+0.5+0`, and `SharpenMore` against `-unsharp 0x1+1+0`
+- **THEN** no sample differs by more than 2 for `Sharpen` and 3 for `SharpenMore`
+
 ### Requirement: Sharpen Edges
 
-The system SHALL implement `Filter::SharpenEdges` with no parameters. It SHALL detect edges by gradient magnitude and apply the high-pass gain only where the gradient exceeds a fixed internal threshold, leaving flat regions unchanged. Oracle expectation: no faithful ImageMagick equivalent exists (a fixed-threshold edge gate), so property tests cover the flat-region no-op and the edge contrast increase, and the divergence is documented.
+The system SHALL implement `Filter::SharpenEdges` with no parameters. It SHALL measure edge strength as the Sobel gradient magnitude of the Rec.601 brightness of a σ 1 Gaussian blur of the image, and SHALL add `original − blurred` per colour channel, weighted by a smoothstep of that strength between fixed floor and ceiling levels (6 and 36). Below the floor the pixel SHALL be unchanged, so flat regions keep their values. Oracle expectation: no faithful ImageMagick equivalent exists (an edge-gated sharpen), so property tests cover the flat-region no-op and the edge contrast increase, and the divergence is documented.
 
 #### Scenario: Flat regions are unchanged
 
-- **WHEN** `SharpenEdges` is applied to a buffer with a flat area
-- **THEN** the flat-area samples are bit-exactly unchanged
+- **WHEN** `SharpenEdges` is applied to a buffer with a flat area wider than the blur and Sobel reach
+- **THEN** the flat-area samples beyond that reach are bit-exactly unchanged
 
 #### Scenario: Edge contrast increases
 
@@ -129,7 +130,7 @@ Sharpen filters SHALL be deterministic. The same filter applied to equal input b
 
 ### Requirement: Sharpen ImageMagick oracle and no-equivalent classification
 
-The system SHALL ship `scripts/filter_oracle.py` and `crates/pictura-filters/tests/oracle.rs`. The mapping table SHALL have exactly one row per `Filter` variant. Unsharp Mask SHALL be diffed against `-unsharp 0xRxA+T` within its stated tolerance. Sharpen, SharpenMore, and SharpenEdges SHALL be classified as having no faithful ImageMagick operator and SHALL use tolerance 0 with known-value or property tests, including the USM-not-an-edge-detector behavior. The differential tests SHALL skip with a message when `magick` is not on `PATH` and MUST NOT be marked `#[ignore]`.
+The system SHALL ship `scripts/filter_oracle.py` and `crates/pictura-filters/tests/oracle.rs`. The mapping table SHALL have exactly one row per `Filter` variant. Unsharp Mask, Sharpen, and Sharpen More SHALL be diffed against `-unsharp` within their stated tolerances. SharpenEdges SHALL be classified as having no faithful ImageMagick operator and SHALL use tolerance 0 with known-value or property tests, including the USM-not-an-edge-detector behavior. The differential tests SHALL skip with a message when `magick` is not on `PATH` and MUST NOT be marked `#[ignore]`.
 
 #### Scenario: Mapping table covers every sharpen variant
 
@@ -141,80 +142,12 @@ The system SHALL ship `scripts/filter_oracle.py` and `crates/pictura-filters/tes
 - **WHEN** `magick` is not on `PATH`
 - **THEN** the differential tests print a skip message and the suite still passes
 
-### Requirement: Smart Sharpen
-
-The system SHALL implement `Filter::SmartSharpen { amount: f64, radius: f64, reduce_noise: f64, remove: SharpenRemove, angle: f64, more_accurate: bool, shadow: TonalFade, highlight: TonalFade }`
-with `SharpenRemove::{GaussianBlur, LensBlur, MotionBlur}` and
-`TonalFade { amount: u8, width: u8, radius: u32 }`, computing
-`out = original + (original − blurred) × amount/100 × gain`, where the detail
-`d = original − blurred` and `gain = d²/(d² + floor²)` with
-`floor = reduce_noise/100 × 26`; `gain` SHALL be exactly 1 when `reduce_noise`
-is 0. The blur model SHALL follow `remove`: `GaussianBlur` uses the shared
-Gaussian kernel (the Unsharp Mask method), `LensBlur` uses a circular (disc)
-summed-area mean, and `MotionBlur` uses the shared motion blur along `angle`
-with distance `2·radius`, following Photoshop's counter-clockwise screen-angle
-convention (`+angle` smears toward the upper right in this y-down buffer).
-`amount` SHALL span `1.0..=500.0` percent, where 0 is
-rejected rather than a no-op; `radius` SHALL be finite and within `0.1..=64.0`;
-`reduce_noise` SHALL span `0..=100`; and `angle` SHALL be finite and within
-`-360..=360`; a value outside those ranges SHALL be rejected with
-`FilterError::InvalidParams` before any mutation. Alpha SHALL be left bit-identical and the output SHALL be
-deterministic. Oracle expectation: with `reduce_noise` 0, `more_accurate: false`,
-both fades at `amount` 0, and `GaussianBlur` the
-result is byte-identical to `unsharp_mask(amount, radius, 0)`, so it is covered
-by the existing Unsharp Mask ImageMagick differential (absolute tolerance 6);
-`LensBlur` and `MotionBlur` are classified as no-equivalent with tolerance 0 and
-covered by property tests, with the closed-PSF divergence documented.
-
-#### Scenario: A uniform image is unchanged
-
-- **WHEN** Smart Sharpen is applied to a uniform-color buffer with any valid amount
-- **THEN** the buffer is bit-exactly unchanged
-
-#### Scenario: Amount 0 is rejected
-
-- **WHEN** Smart Sharpen is applied with `amount: 0.0`
-- **THEN** `apply` returns `FilterError::InvalidParams` and the buffer is bit-identical to its prior state
-
-#### Scenario: Gaussian Blur matches Unsharp Mask
-
-- **WHEN** Smart Sharpen with `remove: GaussianBlur` and `reduce_noise: 0.0` and Unsharp Mask with threshold 0 are applied to the same RGBA image at the same amount and radius
-- **THEN** the two outputs are byte-identical
-
-#### Scenario: Lens Blur and Motion Blur change the result
-
-- **WHEN** Smart Sharpen with `remove: LensBlur` or `remove: MotionBlur` is applied to an edge image
-- **THEN** the output differs from the `GaussianBlur` run at the same amount and radius
-
-#### Scenario: Reduce Noise holds back low-contrast detail
-
-- **WHEN** Smart Sharpen is applied to a low-contrast edge with `reduce_noise: 0.0` and with `reduce_noise: 100.0`
-- **THEN** the total change from the input is smaller in the `reduce_noise: 100.0` run
-
-#### Scenario: Motion Blur follows Photoshop's angle
-
-- **WHEN** Smart Sharpen with `remove: MotionBlur` and `angle: 45` is applied to a single bright pixel
-- **THEN** the smear runs lower-left to upper-right, matching Photoshop's counter-clockwise angle
-
-#### Scenario: Out-of-range parameters are rejected untouched
-
-- **WHEN** Smart Sharpen is applied with amount below 1.0 or above 500.0, radius below 0.1 or above 64.0, `reduce_noise` above 100, or a non-finite angle
-- **THEN** `apply` returns `FilterError::InvalidParams` and the buffer is bit-identical to its prior state
-
-#### Scenario: Output is deterministic and alpha is preserved
-
-- **WHEN** Smart Sharpen is applied twice to equal RGBA buffers
-- **THEN** the two outputs are bit-identical and the alpha plane equals the input alpha plane bit for bit
-
 ### Requirement: Smart Sharpen More Accurate
 
-`more_accurate` SHALL select a higher-fidelity blur estimate for the chosen
-`remove` in place of the default path. When `more_accurate` is true, the output
-SHALL differ from the same call with `more_accurate` false for every `remove` on
-a detail image, and the result SHALL be deterministic and leave alpha
-bit-identical. The default path (`more_accurate: false`) SHALL be unchanged, so
-the Gaussian/Unsharp-Mask equivalence above SHALL hold only with
-`more_accurate: false`.
+`more_accurate` SHALL run the halo solve to convergence, eight iterations
+instead of three. When `more_accurate` is true, the output SHALL differ from
+the same call with `more_accurate` false for every `remove` on a detail
+image, and the result SHALL be deterministic and leave alpha bit-identical.
 
 #### Scenario: More Accurate changes every removal path
 
@@ -255,3 +188,99 @@ low one, and `highlight.amount` SHALL act analogously in light tones.
 
 - **WHEN** Smart Sharpen is applied with `shadow.amount` or `shadow.width` above 100, `shadow.radius` below 1 or above 100, or the analogous `highlight` values out of range
 - **THEN** `apply` returns `FilterError::InvalidParams` and the buffer is bit-identical to its prior state
+
+### Requirement: Smart Sharpen deconvolution
+
+The system SHALL implement `Filter::SmartSharpen { amount: f64, radius: f64, reduce_noise: f64, remove: SharpenRemove, angle: f64, more_accurate: bool, shadow: TonalFade, highlight: TonalFade }`
+with `SharpenRemove::{GaussianBlur, LensBlur, MotionBlur}` and
+`TonalFade { amount: u8, width: u8, radius: u32 }` as a deconvolution of the
+blur model `H = 0.62·core + 0.38·halo`. `core` SHALL be the separable 3-tap
+`[0.17, 0.66, 0.17]`, inverted exactly. `halo` SHALL follow `remove` at
+`s = 0.8·radius`: `GaussianBlur` a Gaussian of σ `s`, `LensBlur` a disc of
+radius `s` whose rows end in fractional-weight pixels, and `MotionBlur` an
+equal-weight bilinear line of length `2s` along `angle`. The motion line SHALL
+follow Photoshop's counter-clockwise screen-angle convention (`+angle` runs
+toward the upper right in this y-down buffer). The halo factor SHALL be solved
+by relaxed Van Cittert iteration starting from the original, three iterations
+by default. With the detail `d = deconvolved − original`, the output SHALL be
+`out = original + d × amount/100 × gain`, where `gain = d²/(d² + floor²)` and
+`floor = reduce_noise/100 × 10`; `gain` SHALL be exactly 1 when
+`reduce_noise` is 0. `amount` SHALL span `1.0..=500.0` percent, where 0 is
+rejected rather than a no-op; `radius` SHALL be finite and within
+`0.1..=64.0`; `reduce_noise` SHALL span `0..=100`; and `angle` SHALL be finite
+and within `-360..=360`. A value outside those ranges SHALL be rejected with
+`FilterError::InvalidParams` before any mutation. Alpha SHALL be left
+bit-identical and the output SHALL be deterministic. The model constants are
+fitted to Photoshop screenshots and are a behavioral approximation of a
+closed algorithm. Oracle expectation: ImageMagick has no deconvolution
+operator, so every `remove` is classified no-equivalent with tolerance 0 and
+covered by unit tests of the core inverse, the halo solve, and the kernels.
+
+#### Scenario: A uniform image is unchanged
+
+- **WHEN** Smart Sharpen is applied to a uniform-color buffer with any valid amount, radius, and `remove`
+- **THEN** the buffer is bit-exactly unchanged
+
+#### Scenario: Amount 0 is rejected
+
+- **WHEN** Smart Sharpen is applied with `amount: 0.0`
+- **THEN** `apply` returns `FilterError::InvalidParams` and the buffer is bit-identical to its prior state
+
+#### Scenario: Fine detail gains more than under Unsharp Mask
+
+- **WHEN** Smart Sharpen with `remove: GaussianBlur` and Unsharp Mask with threshold 0 are applied at amount 100 and radius 1 to a one-pixel alternation
+- **THEN** the Smart Sharpen output range is more than twice the Unsharp Mask output range
+
+#### Scenario: The core inverse undoes the core
+
+- **WHEN** a signal blurred by the 3-tap core is passed through the core inverse
+- **THEN** the original signal is recovered within 0.001
+
+#### Scenario: The halo solve converges
+
+- **WHEN** the halo factor is solved with the More Accurate iteration count for each `remove`
+- **THEN** `0.62·x + 0.38·halo(x)` matches the original within 0.5 at every pixel
+
+#### Scenario: Radius widens the halo
+
+- **WHEN** Smart Sharpen with `remove: GaussianBlur` is applied to a step edge at radius 1 and at radius 6
+- **THEN** the radius 6 run changes more pixels around the edge
+
+#### Scenario: Lens Blur and Motion Blur change the result
+
+- **WHEN** Smart Sharpen with `remove: LensBlur` or `remove: MotionBlur` is applied to an edge image
+- **THEN** the output differs from the `GaussianBlur` run at the same amount and radius
+
+#### Scenario: Reduce Noise holds back low-contrast detail
+
+- **WHEN** Smart Sharpen is applied to a low-contrast edge with `reduce_noise: 0.0` and with `reduce_noise: 100.0`
+- **THEN** the total change from the input is smaller in the `reduce_noise: 100.0` run
+
+#### Scenario: Motion Blur follows Photoshop's angle
+
+- **WHEN** Smart Sharpen with `remove: MotionBlur` and `angle: 45` is applied to a single bright pixel on gray
+- **THEN** the change runs along the lower-left to upper-right diagonal and exceeds the change on the other diagonal
+
+#### Scenario: Out-of-range parameters are rejected untouched
+
+- **WHEN** Smart Sharpen is applied with amount below 1.0 or above 500.0, radius below 0.1 or above 64.0, `reduce_noise` above 100, or a non-finite angle
+- **THEN** `apply` returns `FilterError::InvalidParams` and the buffer is bit-identical to its prior state
+
+#### Scenario: Output is deterministic and alpha is preserved
+
+- **WHEN** Smart Sharpen is applied twice to equal RGBA buffers
+- **THEN** the two outputs are bit-identical and the alpha plane equals the input alpha plane bit for bit
+
+### Requirement: Sharpen alpha follows the kernel
+
+For 4-channel buffers, every sharpen filter SHALL run its kernel over channel 4 as it does over the colour planes, so the layer edge sharpens with the colour, and a channel 4 that is 255 everywhere SHALL stay 255. Sharpen Edges SHALL sharpen channel 4 only where its colour edge mask does.
+
+#### Scenario: A sharpen moves a soft edge
+
+- **WHEN** a sharpen variant is applied to an RGBA buffer whose alpha is a soft-edged disc
+- **THEN** the alpha plane differs from the input alpha plane
+
+#### Scenario: An opaque buffer stays opaque
+
+- **WHEN** a sharpen variant is applied to an RGBA buffer whose alpha is 255 everywhere
+- **THEN** every alpha sample is still 255

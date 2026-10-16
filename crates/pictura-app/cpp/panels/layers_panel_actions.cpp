@@ -6,6 +6,7 @@
 #include "layer_style_dialog.h"
 
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_layers/mask_commands.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/layer_style.cxxqt.h"
 
 #include <QtCore/QHash>
@@ -34,9 +35,18 @@ void LayersPanel::syncMaskSolo()
     if (!view_) {
         return;
     }
+    const QString active = view_->active_layer_path();
     const QString soloed = mask_solo_get(*view_);
-    if (!soloed.isEmpty() && soloed != view_->active_layer_path()) {
+    if (!soloed.isEmpty() && soloed != active) {
         mask_solo_set(*view_, QString());
+    }
+    // The rubylith overlay follows the same rule; its path is positional, so
+    // a structural edit that moves the layer ends it rather than letting it
+    // land on another layer's mask.
+    const QString overlay = mask_overlay_path(*view_);
+    if (!overlay.isEmpty() && overlay != active) {
+        mask_overlay_toggle(*view_, overlay);
+        emit maskDisplayChanged();
     }
 }
 
@@ -258,6 +268,11 @@ void LayersPanel::clearSolo()
     // ungroup/delete, document switch) restores the composite.
     if (view_) {
         mask_solo_set(*view_, QString());
+        const QString overlay = mask_overlay_path(*view_);
+        if (!overlay.isEmpty()) {
+            mask_overlay_toggle(*view_, overlay);
+            emit maskDisplayChanged();
+        }
     }
     soloActive_ = false;
     soloPath_.clear();

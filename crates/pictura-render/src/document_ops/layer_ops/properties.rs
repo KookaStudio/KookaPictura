@@ -180,17 +180,16 @@ pub fn lock_group_layers(doc: &mut Document, path: &str) -> usize {
     set_lock_paths(doc, &refs, LockFlags::all().bits(), true)
 }
 
-/// Delete every listed node. Skips the Background and fully-locked nodes; a
+/// Delete every listed node. Skips the Background and fully-locked nodes, and
+/// never removes the document's last top-level node: a layerless document
+/// would composite from its stale flat image, and CS6 keeps one layer. A
 /// selected node whose ancestor is also selected is deleted once (with its
 /// ancestor). Returns the number of deletions performed.
 pub fn delete_paths(doc: &mut Document, paths: &[&str]) -> usize {
     let selected = selected_paths(doc, paths, true);
     let mut changed = 0;
     for (segments, path) in selected {
-        if is_background(doc, &path) {
-            continue;
-        }
-        if resolve_path(doc, &path).is_some_and(|layer| layer.lock.is_all()) {
+        if !deletable(doc, &segments, &path) {
             continue;
         }
         if let Some((container, index)) = container_mut(doc, &segments) {
@@ -199,6 +198,24 @@ pub fn delete_paths(doc: &mut Document, paths: &[&str]) -> usize {
         }
     }
     changed
+}
+
+/// Whether [`delete_paths`] would delete anything, read-only: it deletes
+/// nothing before its first eligible path, so this is whether any selected
+/// path is eligible in the tree as it stands.
+pub fn can_delete_paths(doc: &Document, paths: &[&str]) -> bool {
+    selected_paths(doc, paths, true)
+        .iter()
+        .any(|(segments, path)| deletable(doc, segments, path))
+}
+
+/// The rule [`delete_paths`] applies to each node, against the tree as it
+/// stands: not the Background, not the last top-level node, not fully locked,
+/// and present.
+fn deletable(doc: &Document, segments: &[usize], path: &str) -> bool {
+    !is_background(doc, path)
+        && !(segments.len() == 1 && doc.layers.len() <= 1)
+        && resolve_path(doc, path).is_some_and(|layer| !layer.lock.is_all())
 }
 
 /// Delete every layer whose effective visibility is off (its own eye and every

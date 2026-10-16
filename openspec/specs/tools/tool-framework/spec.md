@@ -2,7 +2,9 @@
 
 ## Purpose
 The tool registry, active tool, tools panel, options bar, and canvas pointer routing with cursor hints.
+
 ## Requirements
+
 ### Requirement: Tool registry and active tool
 
 The system SHALL define a fixed set of tools identified by a stable `ToolId`
@@ -565,7 +567,74 @@ to the document history as a single state.
 - **WHEN** a modal tool with several session steps is applied
 - **THEN** exactly one document history state is added
 
-### Requirement: Crop options-bar controls
+### Requirement: Active tool icon separator
+
+Every active tool's options page SHALL draw a vertical separator immediately after
+its tool icon, before its other controls, matching the Crop page.
+
+#### Scenario: Every page separates the tool icon [ltf_tool_icon_separator]
+
+- **WHEN** any tool's options bar is shown
+- **THEN** a vertical rule separates the tool icon from the next control
+
+### Requirement: Move options-bar controls
+
+The Move tool's options bar SHALL offer an `Auto-Select` checkbox, a
+Group/Layer choice that is enabled only while `Auto-Select` is checked
+(unchecked by default), a `Show Transform Controls` checkbox, the align and
+distribute button sets, and a three-dots menu drawn with the Lucide `ellipsis`
+icon listing the align and distribute actions plus an `Align To:` choice of
+Selection or Canvas. Choosing `Align To: Canvas` SHALL align to the canvas
+bounds; `Selection` SHALL align to the active selection. While `Auto-Select` is
+checked, a Move press on the canvas with no active selection SHALL make the
+topmost visible layer whose content covers the press point the active layer —
+the layer itself in Layer mode, its top-level ancestor group in Group mode — and
+SHALL keep the active layer when no layer covers the point.
+
+#### Scenario: Align To Canvas [ltf_move_align_canvas]
+
+- **WHEN** `Align To: Canvas` is chosen and an align action is invoked
+- **THEN** the selected layers are aligned to the canvas bounds
+
+#### Scenario: Auto-Select and transform controls are present [ltf_move_controls]
+
+- **WHEN** the Move options bar is shown
+- **THEN** the `Auto-Select` checkbox, the Group/Layer choice, `Show Transform
+  Controls`, align, distribute, and ellipsis-icon three-dots controls are
+  present, and the Group/Layer choice is disabled while `Auto-Select` is
+  unchecked
+
+#### Scenario: Auto-Select Layer picks the topmost covering layer [ltf_move_auto_select]
+
+- **WHEN** Auto-Select is on in Layer mode and the Move tool is pressed on a
+  point covered by two stacked pixel layers
+- **THEN** the topmost layer covering the point becomes the active layer
+
+#### Scenario: Auto-Select Group picks the ancestor group [ltf_move_auto_select_group]
+
+- **WHEN** Auto-Select is on in Group mode and the Move tool is pressed on a
+  point covered by a layer inside a group
+- **THEN** the top-level ancestor group becomes the active layer
+
+### Requirement: Eyedropper options-bar controls
+
+The Eyedropper tool's options bar SHALL offer a `Sample Size` (Point Sample
+through the N by N average sizes up to 101 by 101), a `Sample` scope (Current
+Layer, Current & Below, All Layers, All Layers No Adjustments, Current & Below
+No Adjustments), and a `Show Sampling Ring` checkbox. A sample SHALL average the
+chosen size and read the chosen scope.
+
+#### Scenario: Sample size and scope are honored [ltf_eyedropper_sample]
+
+- **WHEN** a sample size and scope are chosen and a pixel is sampled
+- **THEN** the foreground is the average of that size read from that scope
+
+#### Scenario: Sampling ring toggles [ltf_eyedropper_ring]
+
+- **WHEN** `Show Sampling Ring` is checked and the eyedropper hovers the canvas
+- **THEN** a sampling ring is drawn around the pointer
+
+### Requirement: Crop options-bar layout
 
 The Crop tool's options bar SHALL present, left to right and separated into
 groups by vertical rules: the tool icon; an aspect-ratio select whose first and
@@ -573,9 +642,9 @@ default entry is `Ratio` (a free custom aspect) and whose other entries include
 the CS6 presets plus `New Crop Preset...` and `Delete Crop Preset...`, `W` and
 `H` numeric fields, and a swap-aspect button; a `Clear` control that resets the
 ratio and a spirit-level button that toggles a straighten line mode; a grid
-overlay menu button and a settings (cog) menu button; `Delete Cropped Pixels` and
-a disabled `Content-Aware` placeholder; a reset button; and cancel and apply
-buttons. Every icon button (swap-aspect, spirit-level, grid, cog, reset, cancel,
+overlay menu button and a settings (cog) menu button; `Delete Cropped Pixels`; a
+reset button; and cancel and apply buttons. There SHALL be no `Content-Aware`
+checkbox: Content-Aware crop is not a CS6 feature. Every icon button (swap-aspect, spirit-level, grid, cog, reset, cancel,
 apply) SHALL use a Lucide SVG icon, not a text glyph. In ratio mode the `W`/`H`
 fields SHALL show the aspect-ratio values and editing them SHALL set a custom
 ratio; only the `W x H x Resolution` entry SHALL show the pixel width/height and
@@ -584,10 +653,9 @@ to the select; `Delete Crop Preset...` SHALL remove the selected user preset. Th
 spirit-level toggle SHALL arm a straighten mode in which a pressed, dragged,
 released line sets the crop angle to the line's inclination and then disarms.
 Applying a preset or field SHALL keep the crop box and any active straighten
-consistent. The cog menu SHALL offer a `Use Classic Mode` toggle (checked by
-default); a Classic drag moves the crop box, a Modern drag repositions the
-composite behind a fixed box, and the mode also decides the initial state
-(Classic boxless, Modern a centered preview box). The crop options (mode, grid
+consistent. The cog menu SHALL offer a `Use Classic Mode` toggle; a Classic drag
+moves the crop box, a Modern drag repositions the composite behind a fixed box;
+both modes start with the centered preview box. The crop options (mode, grid
 overlay, ratio, and Delete Cropped Pixels) SHALL persist across restarts.
 
 #### Scenario: Crop option buttons use Lucide icons [ltf_crop_icons]
@@ -603,7 +671,7 @@ overlay, ratio, and Delete Cropped Pixels) SHALL persist across restarts.
 #### Scenario: The mode sets the initial box [ltf_crop_mode_init]
 
 - **WHEN** the Crop tool is selected with Modern off (Classic) vs on
-- **THEN** Classic shows no box until one is drawn, and Modern shows a centered preview box immediately
+- **THEN** both show a centered preview box with its handles immediately
 
 #### Scenario: The ratio menu and resolution mode [ltf_crop_ratio_menu]
 
@@ -636,10 +704,10 @@ overlay, ratio, and Delete Cropped Pixels) SHALL persist across restarts.
 - **WHEN** the Crop options bar is shown
 - **THEN** its control groups are separated by vertical rules
 
-#### Scenario: Content-Aware is a disabled placeholder [ltf_crop_content_aware]
+#### Scenario: No Content-Aware checkbox [ltf_crop_content_aware]
 
 - **WHEN** the Crop options bar is shown
-- **THEN** a `Content-Aware` checkbox is present and disabled
+- **THEN** it has no `Content-Aware` checkbox
 
 #### Scenario: W and H set the ratio [ltf_crop_fields]
 
@@ -651,49 +719,16 @@ overlay, ratio, and Delete Cropped Pixels) SHALL persist across restarts.
 - **WHEN** the spirit-level toggle is armed and a line is dragged on the canvas
 - **THEN** the crop angle becomes the line's inclination and the mode disarms
 
-### Requirement: Active tool icon separator
+### Requirement: Options-bar action buttons mirror command enablement
 
-Every active tool's options page SHALL draw a vertical separator immediately after
-its tool icon, before its other controls, matching the Crop page.
+An options-bar button that dispatches a command SHALL be enabled exactly when
+that command is enabled for the active document, so a click can never be a
+silent no-op. The selection tools' `Select and Mask…` button SHALL therefore be
+disabled without a document or without a non-empty selection, matching
+`Select ▸ Refine Edge…`.
 
-#### Scenario: Every page separates the tool icon [ltf_tool_icon_separator]
+#### Scenario: The button follows the command [ltf_options_command_enablement]
 
-- **WHEN** any tool's options bar is shown
-- **THEN** a vertical rule separates the tool icon from the next control
-
-### Requirement: Move options-bar controls
-
-The Move tool's options bar SHALL offer an `Auto-Select` choice of Group or Layer,
-a `Show Transform Controls` checkbox, the align and distribute button sets, and a
-three-dots menu listing the align and distribute actions plus an `Align To:`
-choice of Selection or Canvas. Choosing `Align To: Canvas` SHALL align to the
-canvas bounds; `Selection` SHALL align to the active selection.
-
-#### Scenario: Align To Canvas [ltf_move_align_canvas]
-
-- **WHEN** `Align To: Canvas` is chosen and an align action is invoked
-- **THEN** the selected layers are aligned to the canvas bounds
-
-#### Scenario: Auto-Select and transform controls are present [ltf_move_controls]
-
-- **WHEN** the Move options bar is shown
-- **THEN** the `Auto-Select`, `Show Transform Controls`, align, distribute, and three-dots controls are present
-
-### Requirement: Eyedropper options-bar controls
-
-The Eyedropper tool's options bar SHALL offer a `Sample Size` (Point Sample
-through the N by N average sizes up to 101 by 101), a `Sample` scope (Current
-Layer, Current & Below, All Layers, All Layers No Adjustments, Current & Below
-No Adjustments), and a `Show Sampling Ring` checkbox. A sample SHALL average the
-chosen size and read the chosen scope.
-
-#### Scenario: Sample size and scope are honored [ltf_eyedropper_sample]
-
-- **WHEN** a sample size and scope are chosen and a pixel is sampled
-- **THEN** the foreground is the average of that size read from that scope
-
-#### Scenario: Sampling ring toggles [ltf_eyedropper_ring]
-
-- **WHEN** `Show Sampling Ring` is checked and the eyedropper hovers the canvas
-- **THEN** a sampling ring is drawn around the pointer
-
+- **WHEN** the active document has no non-empty selection
+- **THEN** the `Select and Mask…` button is disabled, and it becomes enabled
+  once a non-empty selection exists

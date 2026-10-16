@@ -678,6 +678,7 @@ void ImageView::paintEvent(QPaintEvent*)
         presentCacheRebuiltLastPaint_ = presentCache_.rebuilds != before;
     }
     paintFilterPreview(painter);
+    paintMaskOverlay(painter);
     // Hidden channels (two still shown): zero them with one multiply.
     if (channelMask_ != 0x7 && singleChannel() < 0) {
         painter.setCompositionMode(QPainter::CompositionMode_Multiply);

@@ -282,20 +282,9 @@ LayersPanel::LayersPanel(QWidget* parent)
             openLayerStyle(currentPath());
         }
     });
-    auto* maskButton =
+    maskButton_ =
         stripIconButton(QStringLiteral("layersStripMask"), QStringLiteral("layers.mask"));
-    maskButton->setToolTip(tr("Add Layer Mask — click adds a mask for the selection "
-                              "(or Reveal All); Alt-click adds Hide All"));
-    connect(maskButton, &QToolButton::clicked, this, [this] {
-        if (!view_) {
-            return;
-        }
-        const QString kind =
-            (QApplication::keyboardModifiers() & Qt::AltModifier) ? QStringLiteral("hide-all")
-            : view_->has_selection() ? QStringLiteral("reveal-selection")
-                                     : QStringLiteral("reveal-all");
-        layer_mask_add(*view_, kind);
-    });
+    connect(maskButton_, &QToolButton::clicked, this, [this] { addMaskFromButton(); });
 
     auto* addButton = stripIconButton(QStringLiteral("layersStripFillAdjustment"),
                                       QStringLiteral("layers.fillAdjustment"));
@@ -346,12 +335,12 @@ LayersPanel::LayersPanel(QWidget* parent)
     newLayerButton->setProperty("layerDropAction", QStringLiteral("duplicate"));
     newLayerButton->setAcceptDrops(true);
     newLayerButton->installEventFilter(this);
-    auto* deleteButton =
+    deleteButton_ =
         stripIconButton(QStringLiteral("layersStripDelete"), QStringLiteral("layers.delete"));
-    deleteButton->setToolTip(tr("Delete — drop a layer here to delete it"));
-    deleteButton->setProperty("layerDropAction", QStringLiteral("delete"));
-    deleteButton->setAcceptDrops(true);
-    deleteButton->installEventFilter(this);
+    deleteButton_->setToolTip(tr("Delete — drop a layer here to delete it"));
+    deleteButton_->setProperty("layerDropAction", QStringLiteral("delete"));
+    deleteButton_->setAcceptDrops(true);
+    deleteButton_->installEventFilter(this);
     layout->addLayout(buttons);
 
     connect(tree_->selectionModel(), &QItemSelectionModel::currentChanged, this,
@@ -432,7 +421,7 @@ LayersPanel::LayersPanel(QWidget* parent)
             addLayerAt(currentPath());
         }
     });
-    connect(deleteButton, &QToolButton::clicked, this, [this] { deleteSelection(); });
+    connect(deleteButton_, &QToolButton::clicked, this, [this] { deleteFromTrash(); });
 }
 
 void LayersPanel::setView(PictureView* view)
@@ -806,6 +795,7 @@ void LayersPanel::syncControls()
     }
     syncing_ = false;
     syncEditTarget();
+    syncStripButtons();
     emit selectionChanged();
 }
 

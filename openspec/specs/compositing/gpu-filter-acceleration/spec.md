@@ -2,7 +2,9 @@
 
 ## Purpose
 GPU filter application matching the CPU oracle, default-on, with deterministic CPU fallback for unsupported kernels.
+
 ## Requirements
+
 ### Requirement: GPU filter application entry point
 
 The system SHALL provide a way to apply a `pictura_filters::Filter` to a buffer
@@ -75,7 +77,12 @@ buffers), and MUST preserve the alpha channel bit-for-bit on 4-channel buffers.
 Filter application SHALL use the GPU by default when the M26 `gpuCompute`
 preference is enabled and a usable adapter exists, consistent with the default-on
 compositing requirement. When `gpuCompute` is disabled the system MUST force the
-CPU implementation for every filter.
+CPU implementation for every filter. A layer filter SHALL run on the CPU, even
+with the GPU enabled, for the kernels whose row-parallel CPU path outruns the
+GPU round trip: Gaussian Blur, Blur, Blur More, Sharpen, Sharpen More, Unsharp
+Mask, High Pass, Maximum, Minimum, Median and Custom. Its result is then
+byte-identical to `pictura_filters::apply`. `apply_filter_active` itself still
+uses the GPU whenever a kernel exists.
 
 #### Scenario: Default routes to the GPU
 
@@ -88,6 +95,12 @@ CPU implementation for every filter.
 - **WHEN** `gpuCompute` is false and a supported filter is applied
 - **THEN** `pictura_filters::apply` runs on the CPU and the reported backend is
   `Backend::Cpu`
+
+#### Scenario: A CPU-faster kernel skips the GPU on a layer
+
+- **WHEN** a Gaussian Blur, Unsharp Mask, Median or Maximum is applied to a layer
+  with GPU compute enabled
+- **THEN** the layer equals the same filter applied with GPU compute disabled
 
 ### Requirement: Unsupported kernels fall back to CPU
 
@@ -151,16 +164,24 @@ byte-identical fallback.
 
 ### Requirement: Heavy-kernel performance evidence
 
-The GPU path for the accelerated heavy kernels SHALL be materially faster than
-the CPU baseline. Specifically, a 1024×1024 RGB Surface Blur SHALL complete at
-least ~10× faster on the GPU than the CPU baseline recorded at ~7.1 s.
+The GPU path for the accelerated heavy kernels SHALL be faster than the CPU
+where it runs. Surface Blur's CPU path slides a histogram, O(r) per pixel,
+where the GPU scans the window, O(r²), so the GPU plan SHALL cover Surface Blur
+only up to radius 16 and wider radii SHALL run on the CPU. At radius 4, a
+1024×1024 RGB Surface Blur SHALL complete faster on the GPU than on the CPU.
 
 #### Scenario: Surface Blur speedup is recorded
 
-- **WHEN** Surface Blur is timed at 1024×1024 on the GPU and against the CPU
-  baseline and the evidence is recorded in `STATE.md` / the M28 brief
-- **THEN** the recorded timing shows the GPU completing the filter at least ~10×
-  faster than the CPU baseline
+- **WHEN** Surface Blur at radius 4 is timed at 1024×1024 on the GPU and on the
+  CPU with `PICTURA_GPU_BENCH=1`
+- **THEN** the GPU completes the filter faster than the CPU
+
+#### Scenario: Wide Surface Blur runs on the CPU
+
+- **WHEN** Surface Blur with a radius above 16 is applied with GPU compute
+  enabled
+- **THEN** the reported backend is `Backend::Cpu` and the result is
+  byte-identical to `pictura_filters::apply`
 
 ### Requirement: Large-buffer GPU filter dispatch
 
@@ -179,3 +200,21 @@ GPU. It SHALL preserve byte-identical CPU fallback semantics and the existing
   differs from `pictura_filters::apply` by at most 1 LSB, with alpha unchanged on
   4-channel buffers
 
+### Requirement: Radial Blur Zoom runs on the GPU
+
+With GPU compute enabled, Radial Blur's Zoom method SHALL run on the GPU and
+match `pictura_filters::apply` within ±1 LSB. Its samples lie along each
+pixel's ray, so neighbouring invocations read neighbouring memory. Spin SHALL
+stay on the CPU, with a byte-identical result. Its samples sweep arcs across
+thousands of rows, and on the measured integrated GPU it ran slower than the
+CPU's tiles (12.6 s against 5.6 s at 8000²).
+
+#### Scenario: Zoom matches the oracle on the GPU
+
+- **WHEN** a Zoom Radial Blur is applied with GPU compute enabled on a machine with a usable adapter
+- **THEN** the backend is the GPU and the result matches the oracle within ±1 LSB
+
+#### Scenario: Spin stays on the CPU
+
+- **WHEN** a Spin Radial Blur is applied with GPU compute enabled
+- **THEN** the backend is the CPU and the result is byte-identical to the oracle

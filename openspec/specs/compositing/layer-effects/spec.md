@@ -2,7 +2,9 @@
 
 ## Purpose
 Object-based layer effects, from drop shadow to the glow and shadow family, that composite behind or inside layer content.
+
 ## Requirements
+
 ### Requirement: The object-based effects descriptor decodes a drop shadow
 
 `pictura-core`'s `Layer` SHALL expose its preserved additional-layer-information
@@ -1142,26 +1144,34 @@ SHALL be a no-op (`None`) and SHALL NOT panic. An `ebbl` whose `present` or
 
 ### Requirement: A bevel and emboss composites inside the layer content
 
-An enabled `BevelEmboss` SHALL be composited inside the layer content as a lit
-interior bevel. On a visible non-group, non-destructive-adjustment layer with
+An enabled `BevelEmboss` SHALL be composited as a lit bevel whose side of the
+content edge follows its style. On a visible non-group, non-destructive-adjustment layer with
 `present` true the CPU compositor SHALL composite it **after** the layer's own
 content. It SHALL build a coverage matte `M` from the layer's content alpha — a
 pixel layer's alpha channel, a solid fill's payload alpha, an opaque gradient or
 embedded smart-object coverage, or a pattern fill's resolved pattern alpha —
-multiplied by the layer mask. It SHALL form a height field from the matte blurred
-by `size` pixels using the crate's existing blur, derive the surface normal from
-the height gradient scaled by `size` and `depth`, build the light vector from
+multiplied by the layer mask. It SHALL form a height field in floating point from
+the matte's signed Euclidean distance to its edge (positive inside, sub-pixel on
+anti-aliased edge pixels), as a chamfer rising from 0 to 1 over `size` pixels:
+inside the edge for `Inner`, outside it for `Outer`, and straddling it (half
+each side) for `Emboss` and `Pillow`. The technique SHALL round the chamfer
+with a Gaussian blur: `Smooth` by `max(size / 3, 1.5)` pixels, `ChiselSoft` by
+1 pixel, `ChiselHard` not at all. It SHALL derive the surface normal from the
+height gradient scaled by `size` and `depth`, build the light vector from
 `angle_deg`/`altitude_deg` with the same sign convention as the shipped shadows,
 and take the Lambertian shading as the signed deviation of the normal from flat.
-The signed shading SHALL be negated when `direction` is `Down` and blurred by
-`soften` pixels. The positive part tinted by the highlight colour, opacity and
-blend mode and the negative part tinted by the shadow colour, opacity and blend
-mode SHALL each be multiplied by `M` and composited above the content, with the
-shadow drawn before the highlight. Every pixel outside the content coverage `M`
-SHALL be byte-identical to the same document without the effect. This slice SHALL
-composite only the `Inner` style with the `Smooth` technique; any other `style`
-or `technique` value SHALL be a no-op, as SHALL `depth` 0 or both effect
-opacities 0. A zero-area or fully off-canvas rect or an empty matte SHALL be a
+The signed shading SHALL be negated when `direction` is `Down`; its positive
+and negative parts SHALL each be blurred by `soften` pixels separately, so they
+spread rather than cancel. The positive part tinted by the highlight colour,
+opacity and blend mode and the negative part tinted by the shadow colour,
+opacity and blend mode SHALL each be multiplied by the style's coverage and composited above the
+content, with the shadow drawn before the highlight: `Inner` by `M` (every pixel
+outside `M` byte-identical to the same document without the effect), `Outer` by
+`1 - M` (every pixel inside the content byte-identical), `Emboss` by full
+coverage, and `Pillow` by `M` plus `1 - M` with the shading negated outside.
+The `Stroke` style (which needs the Stroke effect's band) SHALL be a no-op. The
+`ChiselHard` and `ChiselSoft` techniques SHALL render as `Smooth` (a stated
+approximation). `depth` 0 or both effect opacities 0 SHALL be a no-op. A zero-area or fully off-canvas rect or an empty matte SHALL be a
 no-op. A layer with no effect, or with a disabled or not-present effect, SHALL
 composite byte-identically to the same document without the effect. The bevel
 SHALL be clipped to the canvas, SHALL NOT panic, and SHALL NOT add a dependency.
@@ -1201,10 +1211,20 @@ SHALL be clipped to the canvas, SHALL NOT panic, and SHALL NOT add a dependency.
 - **WHEN** a small content layer with a large `size` and `soften` is composited on a much larger canvas
 - **THEN** every pixel outside the content rect padded by the blur reach is byte-identical to the same document without the effect
 
+#### Scenario: Each style lights its side of the edge
+
+- **WHEN** a red square over white is beveled with each of `Inner`, `Outer`, `Emboss` and `Pillow`
+- **THEN** `Inner` changes only pixels inside the square, `Outer` only pixels outside it, `Emboss` and `Pillow` both, and `Pillow`'s outer ring differs from `Emboss`'s
+
 #### Scenario: A deferred style or technique is a no-op
 
-- **WHEN** an enabled and present bevel has a `style` other than `Inner` (e.g. `Outer`, `Emboss`, `Pillow` or `Stroke`) or a `technique` other than `Smooth` (e.g. `ChiselHard` or `ChiselSoft`)
+- **WHEN** an enabled and present bevel has the `Stroke` style, the only style still deferred
 - **THEN** the composite is byte-identical to the same document without the effect
+
+#### Scenario: Each technique rounds the chamfer differently
+
+- **WHEN** the same bevel is rendered with `Smooth`, `ChiselHard` and `ChiselSoft`
+- **THEN** the three composites differ from each other
 
 #### Scenario: A disabled or absent bevel is a no-op
 
@@ -1367,3 +1387,29 @@ canvas, SHALL NOT panic, and SHALL NOT add a dependency.
 - **WHEN** a layer's only legacy effect record has an enabled byte of 0, or the block's common state is not visible
 - **THEN** the composite is byte-identical to the same document without the legacy block
 
+### Requirement: Interior effects stack in CS6's order
+
+The effects composited after the layer's content SHALL be drawn in CS6's
+stacking order, the Layer Style list read bottom-up: Pattern Overlay, Gradient
+Overlay, Color Overlay, Satin, Inner Glow, Inner Shadow, Stroke, then Bevel &
+Emboss on top, so an opaque overlay does not hide the effects listed above it.
+
+#### Scenario: Satin and bevel show over an opaque overlay
+
+- **WHEN** a square has a 100 % blue Color Overlay, and Satin and Bevel & Emboss are switched on
+- **THEN** the composite differs from the overlay alone, and switching Satin and Bevel off again restores it exactly
+
+### Requirement: Shadow and glow noise
+
+The Drop Shadow, Inner Shadow, Outer Glow and Inner Glow SHALL decode `Nose`
+(percent, `0..=100`, default 0) and multiply the effect's alpha at canvas
+`(x, y)` by the grain factor `clamp(1 + 2·n·(2r − 1), 0, 1)`, with `n` the
+noise fraction and `r` the compositor's fixed splitmix hash of `(x, y)` in
+`[0, 1)`; noise 0 SHALL leave the effect unchanged. The grain is a stated
+approximation; Adobe's noise model is unpublished. Legacy `lrFX` effects carry
+no noise.
+
+#### Scenario: Noise breaks a drop shadow into a fixed grain
+
+- **WHEN** a hard drop shadow is rendered at noise 0 and at noise 82, twice
+- **THEN** the noisy shadow differs from the clean one with some shadow pixels lightened, and both noisy renders are identical

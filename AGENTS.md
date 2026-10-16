@@ -134,6 +134,10 @@ non-trivial changes and works from the CLI, with or without an agent** (the
 - Archive a completed change with `openspec archive <name>` to merge its deltas
   into `openspec/specs/`. Pre-OpenSpec milestone work (m0…m47) is retroactively
   archived under `openspec/changes/archive/`.
+- **Zero-open.** Author, implement, and archive a change in the pull request that
+  ships it, so only `archive/` remains under `openspec/changes/`.
+  `scripts/check-openspec-archived.sh` (guards workflow + `verify-fast.sh`) fails
+  a pull request that leaves a non-archived change.
 
 ## Git conventions
 
