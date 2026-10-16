@@ -1,12 +1,14 @@
-// The Layers panel's mask and trash buttons at the foot of the panel, and the
-// Refine Mask and Layer Mask Display Options dialogs the mask-thumbnail menu
-// opens (the menu itself is in layers_panel_menu.cpp).
+// The Layers panel's mask and trash buttons at the foot of the panel, the
+// vector-mask thumbnail menu, and the Refine Mask and Layer Mask Display
+// Options dialogs the layer-mask thumbnail menu opens (that menu itself is in
+// layers_panel_menu.cpp).
 
 #include "layers_panel.h"
 
 #include "dialogs.h"
 #include "mask_display_options_dialog.h"
 #include "refine_edge_dialog.h"
+#include "session.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
@@ -15,7 +17,11 @@
 #include "pictura_app/src/cxxqt_object/impl_layers/vector_masks.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_selection/refine.cxxqt.h"
 
+#include <QtGui/QAction>
 #include <QtWidgets/QApplication>
+#include <QtWidgets/QCheckBox>
+#include <QtWidgets/QMenu>
+#include <QtWidgets/QMessageBox>
 #include <QtWidgets/QToolButton>
 
 namespace pictura {
@@ -33,8 +39,11 @@ void LayersPanel::syncStripButtons()
     maskButton_->setToolTip(!layerMask    ? tr("Add layer mask")
                             : !vectorMask ? tr("Add vector mask")
                                           : tr("Add a mask"));
-    // The trash deletes the selection, which must leave the document a layer.
-    deleteButton_->setEnabled(view_ && layers_can_delete(*view_, selectedPaths()));
+    // The trash deletes the vector mask of a doubly-masked layer, else the
+    // selection, which must leave the document a layer.
+    deleteButton_->setEnabled(view_
+                              && (!trashVectorMaskPath().isEmpty()
+                                  || layers_can_delete(*view_, selectedPaths())));
 }
 
 void LayersPanel::addMaskFromButton()
@@ -51,6 +60,71 @@ void LayersPanel::addMaskFromButton()
         vector_mask_add(*view_, alt ? QStringLiteral("hide-all") : QStringLiteral("reveal-all"));
     }
     syncStripButtons();
+}
+
+void LayersPanel::populateVectorMaskMenu(QMenu& menu, const QString& path)
+{
+    const auto add = [this, &menu, path](const char* id, const QString& label) {
+        QAction* action = menu.addAction(label);
+        connect(action, &QAction::triggered, this,
+                [this, id, path] { performMaskAction(QLatin1String(id), path); });
+    };
+    const bool disabled = view_ && vector_mask_disabled_path(*view_, path);
+    add("vectorToggleEnabled", disabled ? tr("Enable Vector Mask") : tr("Disable Vector Mask"));
+    menu.addSeparator();
+    add("vectorDelete", tr("Delete Vector Mask"));
+    add("vectorRasterize", tr("Rasterize Vector Mask"));
+}
+
+QString LayersPanel::trashVectorMaskPath() const
+{
+    // Read the selected row, not the active layer: the current row can sit
+    // outside the selection (Ctrl+arrow), and the trash acts on the selection.
+    const QStringList paths = selectedPaths();
+    if (!view_ || paths.size() != 1) {
+        return {};
+    }
+    const QString& path = paths.first();
+    return layer_mask_present_path(*view_, path) && vector_mask_present_path(*view_, path)
+               ? path
+               : QString();
+}
+
+void LayersPanel::deleteFromTrash()
+{
+    if (!view_) {
+        return;
+    }
+    const QString vectorMask = trashVectorMaskPath();
+    if (!vectorMask.isEmpty()) {
+        if (confirmDeleteVectorMask()) {
+            vector_mask_delete_path(*view_, vectorMask);
+        }
+        return;
+    }
+    deleteSelection();
+}
+
+bool LayersPanel::confirmDeleteVectorMask()
+{
+    SessionState session = loadSession();
+    if (!session.confirmDeleteVectorMask) {
+        return true;
+    }
+    QMessageBox box(QMessageBox::Warning, QStringLiteral("Kooka Pictura"),
+                    tr("Delete Vector Mask?"), QMessageBox::Ok | QMessageBox::Cancel, this);
+    box.setObjectName(QStringLiteral("deleteVectorMaskPrompt"));
+    box.setDefaultButton(QMessageBox::Ok);
+    auto* dontShow = new QCheckBox(tr("Don't show again"), &box);
+    dontShow->setObjectName(QStringLiteral("deleteVectorMaskDontShowAgain"));
+    box.setCheckBox(dontShow);
+    const bool ok = dialogDriver_ ? dialogDriver_(box) : box.exec() == QMessageBox::Ok;
+    if (ok && dontShow->isChecked()) {
+        session = loadSession();
+        session.confirmDeleteVectorMask = false;
+        saveSession(session);
+    }
+    return ok;
 }
 
 bool LayersPanel::runPanelDialog(QDialog& dialog)
@@ -111,6 +185,19 @@ void LayersPanel::clickDeleteButtonForTest()
     if (deleteButton_) {
         deleteButton_->click();
     }
+}
+
+QStringList LayersPanel::vectorMenuTextsForTest(const QString& path)
+{
+    QMenu menu;
+    populateVectorMaskMenu(menu, path);
+    QStringList texts;
+    for (QAction* action : menu.actions()) {
+        if (!action->isSeparator()) {
+            texts.push_back(action->text());
+        }
+    }
+    return texts;
 }
 
 void LayersPanel::setDialogDriverForTest(std::function<bool(QDialog&)> driver)

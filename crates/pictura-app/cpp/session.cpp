@@ -117,6 +117,8 @@ SessionState loadSession()
         obj.value(QStringLiteral("useShiftKeyForToolSwitch")).toBool(true);
     state.confirmLiveShapeToPath =
         obj.value(QStringLiteral("confirmLiveShapeToPath")).toBool(true);
+    state.confirmDeleteVectorMask =
+        obj.value(QStringLiteral("confirmDeleteVectorMask")).toBool(true);
     state.showFullScreenMessage =
         obj.value(QStringLiteral("showFullScreenMessage")).toBool(true);
     state.autoSaveRecovery = obj.value(QStringLiteral("autoSaveRecovery")).toBool(true);
@@ -215,6 +217,7 @@ bool saveSession(const SessionState& state)
     obj.insert(QStringLiteral("toolsColumns"), state.toolsColumns);
     obj.insert(QStringLiteral("useShiftKeyForToolSwitch"), state.useShiftKeyForToolSwitch);
     obj.insert(QStringLiteral("confirmLiveShapeToPath"), state.confirmLiveShapeToPath);
+    obj.insert(QStringLiteral("confirmDeleteVectorMask"), state.confirmDeleteVectorMask);
     obj.insert(QStringLiteral("showFullScreenMessage"), state.showFullScreenMessage);
     obj.insert(QStringLiteral("autoSaveRecovery"), state.autoSaveRecovery);
     obj.insert(QStringLiteral("autoSaveMinutes"), state.autoSaveMinutes);
