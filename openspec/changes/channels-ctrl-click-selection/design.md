@@ -30,3 +30,6 @@ The composite row must respect the channel eyes ("the visible channels"), which
 are local view state held in `ChannelsPanel::mask_`. Passing it keeps the
 visibility model in one place and lets the engine zero hidden channels exactly
 as `ImageView` does with a multiply fill.
+
+A colour row ignores the mask: CS6 loads a hidden channel's plane too, so the
+mask only zeroes channels inside the composite row.

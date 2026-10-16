@@ -776,14 +776,15 @@ fn selection_from_named_channel(
 
 /// The colour-channel row layout of a document `mode`: whether a composite row
 /// leads the list, and the number of colour channels after it. Mirrors the
-/// Channels panel's `channelsForMode`.
+/// Channels panel's `channelsForMode`: a single-row mode's one row is the
+/// composite, with no separate colour channel.
 fn color_rows(mode: ColorMode) -> (bool, usize) {
     match mode {
         ColorMode::Rgb | ColorMode::Lab => (true, 3),
         ColorMode::Cmyk => (true, 4),
         ColorMode::Multichannel => (false, 3),
         ColorMode::Grayscale | ColorMode::Indexed | ColorMode::Bitmap | ColorMode::Duotone => {
-            (true, 1)
+            (true, 0)
         }
     }
 }
@@ -861,12 +862,15 @@ fn channel_row_selection(
             (r, r)
         };
         *out = if composite && row == 0 {
+            // The composite row follows the visible channels.
             q_gray(
                 if mask & 0x1 != 0 { r } else { 0 },
                 if mask & 0x2 != 0 { g } else { 0 },
                 if mask & 0x4 != 0 { b } else { 0 },
             )
         } else {
+            // A colour row is its own plane regardless of the eyes: CS6 loads a
+            // hidden channel too.
             channel_value(mode, if composite { row - 1 } else { row }, r, g, b)
         };
     }
@@ -963,5 +967,17 @@ mod tests {
             vec![0]
         );
         assert!(channel_row_selection(&doc, false, 3, 0x7).is_none());
+    }
+
+    #[test]
+    fn single_row_modes_have_no_second_channel() {
+        let mut doc = Document::new(1, 1, ColorMode::Grayscale, BitDepth::Eight);
+        doc.composite.data = vec![200].into();
+        // The one Gray row is the composite; there is no colour channel after it.
+        assert_eq!(
+            channel_row_selection(&doc, false, 0, 0x7).unwrap().data,
+            vec![200]
+        );
+        assert!(channel_row_selection(&doc, false, 1, 0x7).is_none());
     }
 }
