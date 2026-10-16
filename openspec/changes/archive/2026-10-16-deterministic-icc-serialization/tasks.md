@@ -17,5 +17,5 @@
 
 ## 4. Integration verification
 
-- [ ] 4.1 Verify the residual date-flaky `pictura-codec` byte comparisons in `crates/pictura-codec/src/icc.rs` and `crates/pictura-codec/tests/profile_assignment_oracle.rs` pass unchanged: `cargo test -p pictura-codec` and `cargo test -p pictura-codec --test profile_assignment_oracle` (PIL oracle; self-skips without PIL)
-- [ ] 4.2 Run `bash scripts/verify-fast.sh` and confirm fmt, clippy, tests, file-size, guard, and openspec all pass
+- [x] 4.1 Verify the residual date-flaky `pictura-codec` byte comparisons in `crates/pictura-codec/src/icc.rs` and `crates/pictura-codec/tests/profile_assignment_oracle.rs` pass unchanged: `cargo test -p pictura-codec` and `cargo test -p pictura-codec --test profile_assignment_oracle` (PIL oracle; self-skips without PIL)
+- [x] 4.2 Run `bash scripts/verify-fast.sh` and confirm fmt, clippy, tests, file-size, guard, and openspec all pass
