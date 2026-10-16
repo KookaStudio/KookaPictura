@@ -647,18 +647,27 @@ void ToolController::setCanvasActivationHandler(std::function<void(ImageView*)> 
     canvasActivationHandler_ = std::move(handler);
 }
 
-bool ToolController::routeCanvasContextMenu(ImageView* canvas, const QPointF& imagePos,
-                                            const QPoint& globalPos)
+ToolHandler* ToolController::canvasMenuHandler(ImageView* canvas)
 {
     ToolHandler* h = registry_.forTool(active_);
     // A menu-less tool's right-click has no effect (not even document switch).
     if (!h || !h->hasCanvasContextMenu()) {
-        return false;
+        return nullptr;
     }
     // A right-click on a non-active document activates it first, so the menu's
     // handlers see the clicked view through `view()` / `canvas()`.
     if (canvas && canvas != canvas_ && canvasActivationHandler_) {
         canvasActivationHandler_(canvas);
+    }
+    return h;
+}
+
+bool ToolController::routeCanvasContextMenu(ImageView* canvas, const QPointF& imagePos,
+                                            const QPoint& globalPos)
+{
+    ToolHandler* h = canvasMenuHandler(canvas);
+    if (!h) {
+        return false;
     }
     h->onContextMenu(*this, imagePos, globalPos);
     return true;
@@ -666,12 +675,9 @@ bool ToolController::routeCanvasContextMenu(ImageView* canvas, const QPointF& im
 
 QMenu* ToolController::contextMenuForTest(ImageView* canvas, const QPointF& imagePos)
 {
-    ToolHandler* h = registry_.forTool(active_);
-    if (!h || !h->hasCanvasContextMenu()) {
+    ToolHandler* h = canvasMenuHandler(canvas);
+    if (!h) {
         return nullptr;
-    }
-    if (canvas && canvas != canvas_ && canvasActivationHandler_) {
-        canvasActivationHandler_(canvas);
     }
     return h->buildContextMenu(*this, imagePos);
 }

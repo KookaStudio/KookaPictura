@@ -396,16 +396,69 @@ pub(super) fn layer_pixel(layer: &Layer, x: u32, y: u32) -> Option<[u8; 4]> {
     Some([r, g, b, a])
 }
 
-/// The panel path of the topmost visible pixel layer covering document
-/// `(x, y)`, or `None`. A hidden or zero-opacity layer (and its subtree) is
-/// skipped, an adjustment layer has no pixels, and a pixel layer is a hit when
-/// the point falls in its rect and its own alpha there is non-zero. `group`
-/// resolves a nested hit to its top-level ancestor. When `isolation` is `Some`,
-/// only a layer in the set (or a descendant of one) is a hit, so the Layers
-/// panel's Selected filter scopes Auto-Select.
+/// True when `path` is inside the isolation scope: the path equals a set
+/// member or is a descendant of one. `None` means no isolation, so every path
+/// is in.
+fn in_isolation(isolation: Option<&[String]>, path: &str) -> bool {
+    isolation.is_none_or(|set| {
+        set.iter()
+            .any(|m| path == m || path.strip_prefix(m).is_some_and(|r| r.starts_with('/')))
+    })
+}
+
+/// Collect the panel paths of every Auto-Select hit at `(x, y)`, topmost
+/// first. A hit is a visible, non-zero-opacity, non-adjustment pixel layer
+/// whose rect covers the point and whose own channel alpha there is non-zero,
+/// scoped to `isolation`. Stops after `limit` hits (`0` = all).
 ///
 /// ponytail: layer masks, clipping, effects, and live type/shape rendering are
 /// ignored; the layer's own channel alpha decides.
+fn collect_hits(
+    layers: &[Layer],
+    prefix: &str,
+    x: i32,
+    y: i32,
+    isolation: Option<&[String]>,
+    limit: usize,
+    out: &mut Vec<String>,
+) {
+    for (i, layer) in layers.iter().enumerate().rev() {
+        if limit != 0 && out.len() >= limit {
+            return;
+        }
+        if !layer.visible || layer.opacity == 0 {
+            continue;
+        }
+        let path = if prefix.is_empty() {
+            i.to_string()
+        } else {
+            format!("{prefix}/{i}")
+        };
+        if layer.is_group {
+            collect_hits(&layer.children, &path, x, y, isolation, limit, out);
+            continue;
+        }
+        if layer.adjustment.is_some() {
+            continue;
+        }
+        let lx = x - layer.rect.left;
+        let ly = y - layer.rect.top;
+        if lx < 0 || ly < 0 {
+            continue;
+        }
+        if in_isolation(isolation, &path)
+            && layer_pixel(layer, lx as u32, ly as u32).is_some_and(|px| px[3] > 0)
+        {
+            out.push(path);
+        }
+    }
+}
+
+/// The panel path of the topmost visible pixel layer covering document
+/// `(x, y)`, or `None`. `group` resolves a nested hit to its top-level
+/// ancestor. When `isolation` is `Some`, only a layer in the set (or a
+/// descendant of one) is a hit, so the Layers panel's Selected filter scopes
+/// Auto-Select.
 pub(super) fn auto_select_path(
     doc: &Document,
     x: i32,
@@ -413,51 +466,9 @@ pub(super) fn auto_select_path(
     group: bool,
     isolation: Option<&[String]>,
 ) -> Option<String> {
-    let isolated = |path: &str| {
-        isolation.is_none_or(|set| {
-            set.iter()
-                .any(|m| path == m || path.strip_prefix(m).is_some_and(|r| r.starts_with('/')))
-        })
-    };
-    fn walk(
-        layers: &[Layer],
-        prefix: &str,
-        x: i32,
-        y: i32,
-        isolated: &impl Fn(&str) -> bool,
-    ) -> Option<String> {
-        for (i, layer) in layers.iter().enumerate().rev() {
-            if !layer.visible || layer.opacity == 0 {
-                continue;
-            }
-            let path = if prefix.is_empty() {
-                i.to_string()
-            } else {
-                format!("{prefix}/{i}")
-            };
-            if layer.is_group {
-                if let Some(hit) = walk(&layer.children, &path, x, y, isolated) {
-                    return Some(hit);
-                }
-                continue;
-            }
-            if layer.adjustment.is_some() {
-                continue;
-            }
-            let lx = x - layer.rect.left;
-            let ly = y - layer.rect.top;
-            if lx < 0 || ly < 0 {
-                continue;
-            }
-            if isolated(&path)
-                && layer_pixel(layer, lx as u32, ly as u32).is_some_and(|px| px[3] > 0)
-            {
-                return Some(path);
-            }
-        }
-        None
-    }
-    let hit = walk(&doc.layers, "", x, y, &isolated)?;
+    let mut hits = Vec::new();
+    collect_hits(&doc.layers, "", x, y, isolation, 1, &mut hits);
+    let hit = hits.into_iter().next()?;
     if !group {
         return Some(hit);
     }
@@ -479,9 +490,7 @@ pub(super) fn auto_select_path(
 
 /// Every layer path the Auto-Select hit test considers a hit at `(x, y)`,
 /// topmost first. The same rules as [`auto_select_path`] without group
-/// resolution: a hit is a visible, non-zero-opacity, non-adjustment layer whose
-/// own channel alpha at the point is non-zero, scoped to `isolation` when
-/// present. Used by the Move tool's canvas context menu to list the layers
+/// resolution; used by the Move tool's canvas context menu to list the layers
 /// under the pointer.
 pub(super) fn layers_under_point(
     doc: &Document,
@@ -489,50 +498,8 @@ pub(super) fn layers_under_point(
     y: i32,
     isolation: Option<&[String]>,
 ) -> Vec<String> {
-    let isolated = |path: &str| {
-        isolation.is_none_or(|set| {
-            set.iter()
-                .any(|m| path == m || path.strip_prefix(m).is_some_and(|r| r.starts_with('/')))
-        })
-    };
-    fn walk(
-        layers: &[Layer],
-        prefix: &str,
-        x: i32,
-        y: i32,
-        isolated: &impl Fn(&str) -> bool,
-        out: &mut Vec<String>,
-    ) {
-        for (i, layer) in layers.iter().enumerate().rev() {
-            if !layer.visible || layer.opacity == 0 {
-                continue;
-            }
-            let path = if prefix.is_empty() {
-                i.to_string()
-            } else {
-                format!("{prefix}/{i}")
-            };
-            if layer.is_group {
-                walk(&layer.children, &path, x, y, isolated, out);
-                continue;
-            }
-            if layer.adjustment.is_some() {
-                continue;
-            }
-            let lx = x - layer.rect.left;
-            let ly = y - layer.rect.top;
-            if lx < 0 || ly < 0 {
-                continue;
-            }
-            if isolated(&path)
-                && layer_pixel(layer, lx as u32, ly as u32).is_some_and(|px| px[3] > 0)
-            {
-                out.push(path);
-            }
-        }
-    }
     let mut out = Vec::new();
-    walk(&doc.layers, "", x, y, &isolated, &mut out);
+    collect_hits(&doc.layers, "", x, y, isolation, 0, &mut out);
     out
 }
 

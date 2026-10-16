@@ -74,9 +74,11 @@ public:
         addOptions(crop_.get());
     }
 
-    // The Crop canvas menu: common crop options, shown only while a crop box is
-    // present.
-    bool hasCanvasContextMenu() const override { return true; }
+    // The Crop canvas menu: common crop options, offered only while an active
+    // crop box is present (the same gate `buildContextMenu` applies). A
+    // right-click with only the preview box must fall through, so the frame can
+    // still offer the pasteboard menu.
+    bool hasCanvasContextMenu() const override { return cropActive(); }
     QMenu* buildContextMenu(ToolServices& ctx, const QPointF& imagePos) override
     {
         (void)imagePos;

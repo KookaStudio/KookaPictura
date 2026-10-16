@@ -59,6 +59,7 @@ class CanvasContextMenusTest : public QObject {
 private slots:
     void initTestCase();
     void handOpensNothing();
+    void handRoutesNoMenu();
     void moveListsLayers();
     void moveChooseSelects();
     void multiDocumentTargetsClicked();
@@ -66,6 +67,7 @@ private slots:
     void eyeDropperMenuOpens();
     void eyeDropperSize();
     void eyeDropperScope();
+    void cropNoBoxHasNoMenu();
     void cropToggleDelete();
     void cropReset();
     void pasteboardBackgroundMenu();
@@ -96,6 +98,16 @@ void CanvasContextMenusTest::handOpensNothing()
     const QPointF over = f.canvas->widgetToImage(
         QPointF(f.canvas->width() / 2.0, f.canvas->height() / 2.0));
     QVERIFY(f.tools->contextMenuForTest(f.canvas, over) == nullptr);
+}
+
+void CanvasContextMenusTest::handRoutesNoMenu()
+{
+    Fixture f(*window_, seedImage(), QStringLiteral("ccm_hand_route"));
+    QVERIFY2(f.ok(), "hand fixture");
+    f.frame.setActiveTool(pictura::ToolId::Hand);
+    // A menu-less tool returns false, so the frame falls back to the pasteboard
+    // colour menu (a pasteboard right-click with Hand must still show it).
+    QVERIFY(!f.tools->routeCanvasContextMenu(f.canvas, QPointF(-10, -10), QPoint(0, 0)));
 }
 
 void CanvasContextMenusTest::moveListsLayers()
@@ -135,12 +147,19 @@ void CanvasContextMenusTest::multiDocumentTargetsClicked()
     Fixture b(*window_, seedImage(), QStringLiteral("ccm_multi_b"));
     QVERIFY2(b.ok(), "second fixture");
     QVERIFY(a.doc != b.doc);
+    QVERIFY(a.view->duplicate_layer(0) >= 0); // first document has two layers
     QCOMPARE(b.frame.activeDocumentIndex(), b.doc);
     b.frame.setActiveTool(pictura::ToolId::Move);
     // Right-click the first document's canvas: it becomes the active document.
     b.tools->routeCanvasContextMenu(a.canvas, QPointF(2, 2), QPoint(0, 0));
     QCOMPARE(b.frame.activeDocumentIndex(), a.doc);
     QCOMPARE(b.frame.activeView(), a.view);
+    // The menu describes the clicked document (two layers + Isolation Mode),
+    // not the previously active one.
+    QMenu* menu = b.tools->contextMenuForTest(a.canvas, QPointF(2, 2));
+    QVERIFY(menu != nullptr);
+    QCOMPARE(nonSeparatorActions(menu), 3);
+    delete menu;
 }
 
 void CanvasContextMenusTest::moveIsolation()
@@ -211,6 +230,17 @@ void CanvasContextMenusTest::eyeDropperScope()
     QVERIFY(combo != nullptr);
     QCOMPARE(combo->currentIndex(), 0);
     delete menu;
+}
+
+void CanvasContextMenusTest::cropNoBoxHasNoMenu()
+{
+    Fixture f(*window_, seedImage(), QStringLiteral("ccm_crop_none"));
+    QVERIFY2(f.ok(), "crop fixture");
+    f.frame.setActiveTool(pictura::ToolId::Crop);
+    // Only the preview box exists; the crop menu is active-box only, so the tool
+    // reports no menu and a right-click falls through (no leaking, no swallow).
+    QVERIFY(f.tools->contextMenuForTest(f.canvas, QPointF(30, 30)) == nullptr);
+    QVERIFY(!f.tools->routeCanvasContextMenu(f.canvas, QPointF(-10, -10), QPoint(0, 0)));
 }
 
 void CanvasContextMenusTest::cropToggleDelete()
@@ -355,6 +385,11 @@ void CanvasContextMenusTest::brushPickerDismissesOnOutsidePress()
     QCoreApplication::sendEvent(f.canvas, &press);
     QCOMPARE(pressSpy.count(), 1);
     QVERIFY(!picker->isVisible());
+    // Complete the gesture: the press started a brush stroke, so release it or
+    // the open stroke is torn down after the document, crashing at exit.
+    QMouseEvent release(QEvent::MouseButtonRelease, f.canvas->mapFromGlobal(outside), outside,
+                        Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(f.canvas, &release);
 }
 
 QTEST_MAIN(CanvasContextMenusTest)

@@ -253,7 +253,7 @@ void PicturaMainWindow::showCanvasContextMenu(ImageView* canvas, const QPoint& g
     }
     const bool overDocument = canvas->hasDocument()
         && QRectF(QPointF(0, 0), canvas->documentSize()).contains(imagePos);
-    if (!overDocument && tools_) {
+    if (!overDocument) {
         showCanvasBackgroundMenu(globalPos);
     }
 }

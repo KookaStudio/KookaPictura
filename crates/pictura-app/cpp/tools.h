@@ -482,6 +482,9 @@ private:
     // the overlay and pan policy. `controls` marks the Move tool's auto-managed
     // box, which the user-command take-over must not cancel.
     bool beginTransformImpl(const QString& path, const QString& mode, bool controls = false);
+    // The active tool's canvas-menu handler, after activating the clicked
+    // document so the menu acts on it; null when the tool offers no menu.
+    ToolHandler* canvasMenuHandler(ImageView* canvas);
 
     ToolRegistry registry_;
     ImageView* canvas_ = nullptr;

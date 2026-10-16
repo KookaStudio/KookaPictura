@@ -76,6 +76,9 @@ public:
                                const QPoint& globalPos)
     {
         if (QMenu* menu = buildContextMenu(ctx, imagePos)) {
+            // A popped menu has no owner step that would free it; delete it on
+            // close so repeated right-clicks do not pile up hidden menus.
+            menu->setAttribute(Qt::WA_DeleteOnClose);
             menu->popup(globalPos);
         }
     }
