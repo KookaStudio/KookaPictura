@@ -52,6 +52,13 @@ jobs:
     with:
       tag: ${{ needs.release-please.outputs.tag_name }}
 
+  flatpak:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    uses: ./.github/workflows/flatpak.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}
+
   windows:
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'

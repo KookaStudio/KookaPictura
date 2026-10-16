@@ -572,6 +572,37 @@ needs, and the application reuses `packaging/pictura.desktop` and
   `.snap` as a workflow artifact instead of uploading it; feature PRs never run
   it.
 
+### Flatpak packages
+
+`.github/workflows/flatpak.yml` builds the x86_64 bundle
+`KookaPictura-X.Y.Z-x86_64.flatpak` from the manifest
+`flatpak/io.github.KookaStudio.KookaPictura.yml`. The application id is
+`io.github.KookaStudio.KookaPictura`; the runtime is `org.kde.Platform` /
+`org.kde.Sdk` 6.11, and x86_64 is the only architecture.
+
+The build runs on the KDE SDK and performs no network I/O: the Rust crates come
+from the committed `flatpak/cargo-sources.json`, and the `cxx-qt-cmake` and
+`corrosion` dependencies CMake would otherwise fetch are vendored manifest
+sources. Regenerate the cargo sources with
+`flatpak-cargo-generator.py Cargo.lock -o flatpak/cargo-sources.json`
+(`flatpak/flatpak-builder-tools`) whenever `Cargo.lock` changes, and commit the
+result. The Rust toolchain comes from the freedesktop `rust-stable` SDK
+extension, not from `rust-toolchain.toml`.
+
+The bundle does **not** embed its runtime: `org.kde.Platform//6.11` comes from
+Flathub on the installing machine, so the user needs Flatpak installed and the
+Flathub remote configured. A cheap `flatpak-builder-lint` job validates the
+manifest and metainfo on pull requests that change them.
+
+- **Re-run for an existing tag**: `gh workflow run flatpak.yml -f tag=vX.Y.Z`,
+  also available from *Actions → Run workflow*; `--clobber` replaces the existing
+  asset. As for the other workflows, `--ref <branch>` runs the branch's workflow
+  file against the tag's tree.
+- **Dry run** — the release-please Release PR runs the same build and keeps the
+  bundle as a workflow artifact instead of uploading it.
+- **Not yet wired**: Flathub submission and generating the AppStream release
+  notes from the tag. The metainfo carries a single hand-maintained `<release>`.
+
 ## Where to go next
 
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — provenance, asset, and dependency rules.

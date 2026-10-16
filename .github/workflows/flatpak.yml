@@ -1,0 +1,101 @@
+name: flatpak
+
+# Builds the x86_64 .flatpak bundle. release-please.yml calls it after cutting a
+# release, it runs by hand for an existing tag, and the release-please Release PR
+# runs the same build as a dry run that keeps the bundle as a workflow artifact
+# instead of uploading it.
+#
+# TEMPORARY: while the manifest is being made green the build job also runs on
+# this development pull request (no gate). Before merge it is gated to the
+# Release PR (head_ref == 'release-please--branches--master') with the five
+# release-please files added to paths, matching appimage.yml. The lint job stays
+# ungated so a feature PR that touches the manifest is still validated.
+on:
+  pull_request:
+    paths:
+      - flatpak/**
+      - .github/workflows/flatpak.yml
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag, e.g. v0.1.0
+        type: string
+        required: true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # Only the pull-request and manual paths need the static check; the tag
+    # release build validates the manifest by building it.
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Lint the manifest and the metainfo
+        run: |
+          image=ghcr.io/flathub/flatpak-builder-lint@sha256:a3a5eb22b51d9f425072a59914aa933a1cc39aa81dcae66634db790172d00096
+          docker run --rm -v "$PWD:/mnt" "$image" manifest /mnt/flatpak/io.github.KookaStudio.KookaPictura.yml
+          docker run --rm -v "$PWD:/mnt" "$image" appstream /mnt/flatpak/io.github.KookaStudio.KookaPictura.metainfo.xml
+
+  flatpak:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions@sha256:b0a8a2acb9e420dd0e3e083ff552bea5a817e17e41532f1d2287ff49ef9aae0e
+      options: --privileged
+    env:
+      VERSION: ${{ inputs.tag || format('0.0.0~pr{0}', github.event.number) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Build the bundle
+        uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          manifest-path: flatpak/io.github.KookaStudio.KookaPictura.yml
+          build-bundle: true
+          upload-artifact: false
+          bundle: app.flatpak
+
+      - name: Name the bundle
+        run: mv app.flatpak "KookaPictura-${VERSION#v}-x86_64.flatpak"
+
+      - name: Smoke-test the bundle
+        run: |
+          flatpak install --user -y --noninteractive "KookaPictura-${VERSION#v}-x86_64.flatpak"
+          dbus-run-session -- flatpak run io.github.KookaStudio.KookaPictura --headless --self-test
+
+      - name: Keep the bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: flatpak
+          path: KookaPictura-*-x86_64.flatpak
+          retention-days: 7
+
+  upload:
+    runs-on: ubuntu-24.04
+    needs: flatpak
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: flatpak
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release upload "${{ inputs.tag }}" KookaPictura-*-x86_64.flatpak --clobber

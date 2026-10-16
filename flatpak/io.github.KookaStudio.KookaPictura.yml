@@ -1,0 +1,50 @@
+app-id: io.github.KookaStudio.KookaPictura
+runtime: org.kde.Platform
+runtime-version: "6.11"
+sdk: org.kde.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: pictura
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  - --socket=cups
+modules:
+  - name: pictura
+    buildsystem: cmake-ninja
+    build-options:
+      append-path: /usr/lib/sdk/rust-stable/bin
+      env:
+        CARGO_HOME: /run/build/pictura/cargo
+        CARGO_NET_OFFLINE: "true"
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DBUILD_TESTING=OFF
+      - -DFETCHCONTENT_SOURCE_DIR_CXXQT=/run/build/pictura/cxx-qt-cmake
+      - -DFETCHCONTENT_SOURCE_DIR_CORROSION=/run/build/pictura/corrosion
+      - -DFETCHCONTENT_FULLY_DISCONNECTED=ON
+    sources:
+      - cargo-sources.json
+      - type: archive
+        url: https://github.com/KDAB/cxx-qt-cmake/archive/refs/tags/0.10.0.tar.gz
+        sha256: bbf0095649d820d26ebcd91fbfbef3dbc2894de4dd10066c46927388abceacd3
+        dest: cxx-qt-cmake
+      - type: archive
+        url: https://github.com/corrosion-rs/corrosion/archive/refs/tags/v0.5.2.tar.gz
+        sha256: 6bc02411e29183a896aa60c58db6819ec6cf57c08997481d0b0da9029356b529
+        dest: corrosion
+      - type: dir
+        path: ..
+      # Corrosion may not pick up CARGO_HOME, so cargo's source replacement is
+      # also appended where a project reads it (.cargo/config.toml). Appended so
+      # the repository's fast-linker rustflags survive.
+      - type: shell
+        commands:
+          - cat cargo/config >> .cargo/config.toml
+    post-install:
+      - install -Dm644 flatpak/io.github.KookaStudio.KookaPictura.metainfo.xml ${FLATPAK_DEST}/share/metainfo/io.github.KookaStudio.KookaPictura.metainfo.xml
+      - cp ${FLATPAK_DEST}/share/applications/pictura.desktop ${FLATPAK_DEST}/share/applications/io.github.KookaStudio.KookaPictura.desktop
+      - sed -i 's/^Icon=pictura$/Icon=io.github.KookaStudio.KookaPictura/' ${FLATPAK_DEST}/share/applications/io.github.KookaStudio.KookaPictura.desktop
+      - install -Dm644 ${FLATPAK_DEST}/share/icons/hicolor/512x512/apps/pictura.png ${FLATPAK_DEST}/share/icons/hicolor/512x512/apps/io.github.KookaStudio.KookaPictura.png
