@@ -158,7 +158,15 @@ impl Profile {
     pub fn to_icc(&self) -> Vec<u8> {
         // A Profile only exists after lcms2 accepted it, so serialization
         // succeeds in practice; the empty fallback keeps this panic-free.
-        self.0.icc().unwrap_or_default()
+        let mut bytes = self.0.icc().unwrap_or_default();
+        // lcms2 stamps the wall-clock creation time at profile build and offers
+        // no setter (Little-CMS #71), so two serializations could straddle a
+        // second boundary; zero the ICC header date field (bytes 24..36) to make
+        // serialization byte-deterministic.
+        if bytes.len() >= 36 {
+            bytes[24..36].fill(0);
+        }
+        bytes
     }
 
     /// The profile's `Description` tag (`cmsInfoDescription`), when present.
@@ -548,6 +556,20 @@ mod tests {
             let reloaded = Profile::from_icc(&bytes).unwrap();
             assert_eq!(reloaded.0.color_space(), profile.0.color_space());
         }
+    }
+
+    #[test]
+    fn serialized_profiles_have_a_zeroed_creation_date() {
+        let icc = Profile::adobe_rgb().to_icc();
+        assert!(
+            icc[24..36].iter().all(|&b| b == 0),
+            "the serialized ICC creation date must be zeroed"
+        );
+    }
+
+    #[test]
+    fn serialized_profiles_are_byte_identical() {
+        assert_eq!(Profile::adobe_rgb().to_icc(), Profile::adobe_rgb().to_icc());
     }
 
     #[test]
