@@ -312,6 +312,21 @@ pub(super) struct PreviewStroke {
     /// The stroke's configuration, so the preview rasterizes the same tip,
     /// flow and opacity the exact stroke will.
     pub(super) cfg: pictura_paint::StrokeConfig,
+    /// Set when the stroke paints a layer mask: the coverage then moves the
+    /// composite between the mask's extremes instead of laying down colour.
+    pub(super) mask: Option<MaskPreview>,
+}
+
+/// What a previewed mask stroke blends between, on the reduced-document grid
+/// (which can be a pixel short of the preview level's): the mask's coverage at
+/// stroke start, and the composite with the mask hiding and revealing
+/// everywhere, as premultiplied sRGB RGBA like the pyramid levels.
+pub(super) struct MaskPreview {
+    pub(super) width: u32,
+    pub(super) height: u32,
+    pub(super) coverage: Vec<u8>,
+    pub(super) hidden: Vec<u8>,
+    pub(super) revealed: Vec<u8>,
 }
 
 /// A live brush stroke painting a layer mask's coverage: the mask exposed as a

@@ -1,7 +1,7 @@
 use super::helpers::*;
 use super::helpers_composite::{patch_composite_region, planes_of, rgba_image};
 use super::qobject;
-use super::state::{MaskStroke, PictureViewRust, PreviewStroke};
+use super::state::{PictureViewRust, PreviewStroke};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -12,6 +12,7 @@ use pictura_render::gpu::{GpuPaintMode, GpuStroke, GpuStrokeParams};
 use pictura_render::ViewPyramid;
 use std::time::Instant;
 
+mod mask;
 mod mask_gpu;
 
 impl PictureViewRust {
@@ -219,6 +220,7 @@ impl PreviewStroke {
             extent: None,
             samples: Vec::new(),
             cfg,
+            mask: None,
         })
     }
 }
@@ -285,6 +287,9 @@ fn rasterize_preview(preview: &mut PreviewStroke, sample: StrokeSample) -> bool 
 /// Dissolve and Behind present as Normal, since only the committed pixels must be
 /// exact and the preview is thrown away.
 fn preview_blend(preview: &PreviewStroke, rect: PsdRect) -> Vec<u8> {
+    if let Some(mask) = &preview.mask {
+        return mask::mask_preview_blend(preview, mask, rect);
+    }
     let (rw, rh) = (rect.width().max(0) as u32, rect.height().max(0) as u32);
     if rw == 0 || rh == 0 {
         return Vec::new();
@@ -483,143 +488,6 @@ impl qobject::PictureView {
             }
             Err(_) => false,
         }
-    }
-
-    /// Begin a stroke on the raster mask of the layer at `path`: the mask is
-    /// exposed as a mask-sized grayscale document and an ordinary [`Stroke`]
-    /// runs on it, so the mask gains the exact brush behaviour. False without a
-    /// mask, on a zero-sized mask rectangle, or when the stroke is refused.
-    pub(super) fn begin_mask_paint(
-        mut self: Pin<&mut Self>,
-        path: &str,
-        cfg: StrokeConfig,
-        label: &str,
-    ) -> bool {
-        let built = {
-            let rust = self.rust();
-            if rust.stroke.is_some() || rust.mask_stroke.is_some() {
-                return false;
-            }
-            let Some(doc) = rust.doc.as_ref() else {
-                return false;
-            };
-            let Some(mask) = pictura_render::mask_document_coverage(doc, path) else {
-                return false;
-            };
-            Stroke::begin_at(&mask.document, "0", cfg)
-                .ok()
-                .map(|stroke| MaskStroke {
-                    path: path.to_string(),
-                    rect: mask.rect,
-                    document: mask.document,
-                    stroke,
-                })
-        };
-        let Some(mask_stroke) = built else {
-            return false;
-        };
-        // A large mask brush runs the same GPU stroke the pixel path uses, with
-        // one channel: the shader blends the coverage byte only, so the mask
-        // gains accelerator parity without an RGBA round-trip.
-        let gpu = {
-            let (mw, mh) = (mask_stroke.document.width, mask_stroke.document.height);
-            match (
-                preview_level(cfg.diameter as i32, mw, mh),
-                gpu_paint_mode(cfg.mode),
-                self.rust().gpu_compute,
-            ) {
-                (Some(_), Some(mode), true) => {
-                    let seed = mask_gpu::mask_rgba_seed(&mask_stroke.document);
-                    let tip = mask_stroke.stroke.tip_params();
-                    let params = GpuStrokeParams {
-                        radius: tip.radius,
-                        round_radius: tip.round_radius,
-                        sin_t: tip.sin,
-                        cos_t: tip.cos,
-                        core: tip.core,
-                        denom: tip.denom,
-                        flow: cfg.flow as f32 / 100.0,
-                        opacity: cfg.opacity as f32 / 100.0,
-                        color: [
-                            cfg.color.r as f32 / 255.0,
-                            cfg.color.g as f32 / 255.0,
-                            cfg.color.b as f32 / 255.0,
-                            cfg.color.a as f32 / 255.0,
-                        ],
-                        aliased: tip.aliased,
-                        flip_x: tip.flip_x,
-                        flip_y: tip.flip_y,
-                        mode,
-                        channels: 1,
-                    };
-                    GpuStroke::new(mw, mh, &seed, params).ok()
-                }
-                _ => None,
-            }
-        };
-        let has_gpu = gpu.is_some();
-        let mut rust = self.as_mut().rust_mut();
-        rust.mask_stroke = Some(mask_stroke);
-        rust.stroke_label = label.to_string();
-        rust.clear_pending_present();
-        rust.gpu_stroke = gpu;
-        rust.gpu_placer = if has_gpu {
-            Some(DabPlacer::new(cfg.spacing, cfg.diameter as f32))
-        } else {
-            None
-        };
-        rust.preview = None;
-        let dims = rust.doc.as_ref().map(|doc| (doc.width, doc.height));
-        if let Some((width, height)) = dims {
-            rust.stroke_tiles.reset(width, height);
-        }
-        true
-    }
-
-    /// One dab of a mask stroke: sample the mask-local point on the mask
-    /// document, copy the changed region back into the real mask, and present
-    /// it. Returns whether a pixel changed.
-    fn mask_dab(mut self: Pin<&mut Self>, x: f64, y: f64, pressure: f64) -> bool {
-        if self.rust().gpu_stroke.is_some() {
-            return self.as_mut().mask_gpu_dab(x, y, pressure);
-        }
-        let (dirty, rect) = {
-            let mut rust = self.as_mut().rust_mut();
-            let rust = &mut *rust;
-            let Some(ctx) = rust.mask_stroke.as_mut() else {
-                return false;
-            };
-            let sample = StrokeSample {
-                x: (x - ctx.rect.left as f64) as f32,
-                y: (y - ctx.rect.top as f64) as f32,
-                pressure: pressure as f32,
-            };
-            if !ctx.stroke.sample(&mut ctx.document, sample) {
-                return false;
-            }
-            (ctx.stroke.take_dirty(), ctx.rect)
-        };
-        let Some(dirty) = dirty else {
-            return false;
-        };
-        {
-            let mut rust = self.as_mut().rust_mut();
-            let rust = &mut *rust;
-            let (Some(doc), Some(ctx)) = (rust.doc.as_mut(), rust.mask_stroke.as_ref()) else {
-                return false;
-            };
-            pictura_render::write_mask_back(doc, &ctx.path, &ctx.document, Some(dirty));
-        }
-        let present = PsdRect {
-            top: dirty.top + rect.top,
-            left: dirty.left + rect.left,
-            bottom: dirty.bottom + rect.top,
-            right: dirty.right + rect.left,
-        };
-        if let Some(region) = self.as_mut().rust_mut().queue_present(present) {
-            self.as_mut().refresh_region(region);
-        }
-        true
     }
 
     pub fn paint_dab(mut self: Pin<&mut Self>, x: f64, y: f64, pressure: f64) -> bool {
@@ -874,27 +742,7 @@ impl qobject::PictureView {
             )
         };
         if let Some(ctx) = mask_stroke {
-            // The dabs already wrote the mask; finishing only reports the
-            // extent, whose document-space regions drive the commit refresh.
-            let finished = ctx.stroke.finish();
-            let ok = match finished {
-                None => {
-                    self.as_mut().recomposite();
-                    false
-                }
-                Some(rect) => {
-                    let rect = PsdRect {
-                        top: rect.top + ctx.rect.top,
-                        left: rect.left + ctx.rect.left,
-                        bottom: rect.bottom + ctx.rect.top,
-                        right: rect.right + ctx.rect.left,
-                    };
-                    let regions = self.as_mut().rust_mut().take_stroke_regions(rect);
-                    self.as_mut().refresh_regions(&regions);
-                    self.as_mut().record(&label);
-                    true
-                }
-            };
+            let ok = self.as_mut().end_mask_paint(ctx, preview, &label);
             paint_timing::record("end_paint_total", t0.elapsed());
             paint_timing::report();
             return ok;
@@ -1034,6 +882,7 @@ mod tests {
             extent: Some(rect(w, h)),
             samples: Vec::new(),
             cfg,
+            mask: None,
         }
     }
 
