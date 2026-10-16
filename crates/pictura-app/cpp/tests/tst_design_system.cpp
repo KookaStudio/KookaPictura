@@ -61,7 +61,7 @@ QString tokenValue(int level, const QString& key)
 // tokens, not the whole paint-only set.
 bool isPaintOnlyToken(const QString& key)
 {
-    return key == QLatin1String("graphFill") || key == QLatin1String("graphAxis");
+    return key == QLatin1String("graph-fill") || key == QLatin1String("graph-axis");
 }
 
 bool imageHasColor(const QImage& image, const QColor& color)
@@ -119,8 +119,8 @@ void DesignSystemTest::tokensCoverColoursAndMetrics()
             }
         }
         // The derived shades the stylesheet uses are part of the contract.
-        for (const char* key : {"menuDisabledText", "separatorLight", "alternateTableBg",
-                                "panelHeaderBorder", "scrollbarThumbHover", "hover", "pressed"}) {
+        for (const char* key : {"content-disabled-menu", "border-subtle-alt", "surface-field-alternate",
+                                "border-header", "scrollbar-thumb-hover", "surface-hover", "surface-pressed"}) {
             QVERIFY2(tokenColor(level, QLatin1String(key)).isValid(), key);
         }
     }
@@ -131,25 +131,25 @@ void DesignSystemTest::tokensCoverColoursAndMetrics()
 
     // Inline warning / info text is dark-on-yellow at every level.
     for (int level = 0; level < Theme::kLevelCount; ++level) {
-        const QColor bg = tokenColor(level, QStringLiteral("noticeBg"));
-        const QColor text = tokenColor(level, QStringLiteral("noticeText"));
-        QCOMPARE(bg, tokenColor(0, QStringLiteral("noticeBg")));
+        const QColor bg = tokenColor(level, QStringLiteral("surface-notice"));
+        const QColor text = tokenColor(level, QStringLiteral("content-notice"));
+        QCOMPARE(bg, tokenColor(0, QStringLiteral("surface-notice")));
         QVERIFY(bg.hue() >= 40 && bg.hue() <= 60 && bg.lightness() > 140);
         QVERIFY(text.lightness() < 48);
     }
 
     // Metrics join the same contract, once.
-    QCOMPARE(tokenValue(1, QStringLiteral("panelBorderWidth")),
+    QCOMPARE(tokenValue(1, QStringLiteral("border-width-panel")),
              QString::number(Theme::kPanelBorderWidth));
-    QCOMPARE(tokenValue(1, QStringLiteral("chromeBorderWidth")),
+    QCOMPARE(tokenValue(1, QStringLiteral("border-width-chrome")),
              QString::number(Theme::kChromeBorderWidth));
-    QCOMPARE(tokenValue(1, QStringLiteral("groupDividerWidth")),
+    QCOMPARE(tokenValue(1, QStringLiteral("divider-width-group")),
              QString::number(Theme::kGroupDividerWidth));
-    QCOMPARE(tokenValue(1, QStringLiteral("slotBaseW")), QString::number(Theme::kSlotBaseW));
-    QCOMPARE(tokenValue(1, QStringLiteral("slotBaseH")), QString::number(Theme::kSlotBaseH));
-    QCOMPARE(tokenValue(1, QStringLiteral("slotIconMaxW")), QString::number(Theme::kSlotIconMaxW));
-    QCOMPARE(tokenValue(1, QStringLiteral("slotIconMaxH")), QString::number(Theme::kSlotIconMaxH));
-    QCOMPARE(tokenValue(1, QStringLiteral("shadeStep")), QString::number(Theme::kShadeStep));
+    QCOMPARE(tokenValue(1, QStringLiteral("slot-base-width")), QString::number(Theme::kSlotBaseW));
+    QCOMPARE(tokenValue(1, QStringLiteral("slot-base-height")), QString::number(Theme::kSlotBaseH));
+    QCOMPARE(tokenValue(1, QStringLiteral("slot-icon-max-width")), QString::number(Theme::kSlotIconMaxW));
+    QCOMPARE(tokenValue(1, QStringLiteral("slot-icon-max-height")), QString::number(Theme::kSlotIconMaxH));
+    QCOMPARE(tokenValue(1, QStringLiteral("shade-step")), QString::number(Theme::kShadeStep));
 }
 
 void DesignSystemTest::tokensClampTheLevel()
@@ -342,18 +342,18 @@ void DesignSystemTest::paletteMatchesTokens()
         QPalette::ColorRole role;
         const char* token;
     } roles[] = {
-        {QPalette::Window, "window"},
-        {QPalette::WindowText, "windowText"},
-        {QPalette::Base, "tableBg"},
-        {QPalette::Text, "text"},
-        {QPalette::Button, "button"},
-        {QPalette::ButtonText, "buttonText"},
-        {QPalette::Highlight, "highlight"},
-        {QPalette::HighlightedText, "highlightedText"},
-        {QPalette::ToolTipBase, "toolTipBase"},
-        {QPalette::ToolTipText, "toolTipText"},
-        {QPalette::Link, "link"},
-        {QPalette::Mid, "buttonBorder"},
+        {QPalette::Window, "surface-recessed"},
+        {QPalette::WindowText, "content"},
+        {QPalette::Base, "surface-field"},
+        {QPalette::Text, "content-body"},
+        {QPalette::Button, "surface-control"},
+        {QPalette::ButtonText, "content-control"},
+        {QPalette::Highlight, "selection"},
+        {QPalette::HighlightedText, "content-on-selection"},
+        {QPalette::ToolTipBase, "surface-tooltip"},
+        {QPalette::ToolTipText, "content-tooltip"},
+        {QPalette::Link, "content-link"},
+        {QPalette::Mid, "border-control"},
         {QPalette::Dark, "border"},
     };
     for (int level = 0; level < Theme::kLevelCount; ++level) {
@@ -366,7 +366,7 @@ void DesignSystemTest::paletteMatchesTokens()
                      tokenColor(level, QLatin1String(entry.token)).rgba());
         }
         QCOMPARE(palette.color(QPalette::Disabled, QPalette::Text).rgba(),
-                 tokenColor(level, QStringLiteral("disabledText")).rgba());
+                 tokenColor(level, QStringLiteral("content-disabled")).rgba());
     }
     Theme::apply(Theme::kDefaultLevel);
 }
@@ -396,12 +396,12 @@ void DesignSystemTest::swatchPaintsDataColour()
 void DesignSystemTest::paintedWidgetsUseTokens()
 {
     Theme::apply(Theme::kDefaultLevel);
-    const QColor inputBg = Theme::tokenColor(QStringLiteral("inputBg"));
-    const QColor inputBorder = Theme::tokenColor(QStringLiteral("inputBorder"));
-    const QColor graphFill = Theme::tokenColor(QStringLiteral("graphFill"));
-    QVERIFY(inputBg.isValid());
-    QVERIFY(inputBorder.isValid());
-    QVERIFY(graphFill.isValid());
+    const QColor inputSurface = Theme::tokenColor(QStringLiteral("surface-input"));
+    const QColor inputOutline = Theme::tokenColor(QStringLiteral("border-input"));
+    const QColor graphFillColor = Theme::tokenColor(QStringLiteral("graph-fill"));
+    QVERIFY(inputSurface.isValid());
+    QVERIFY(inputOutline.isValid());
+    QVERIFY(graphFillColor.isValid());
 
     pictura::CurveWidget curve;
     curve.resize(200, 120);
@@ -411,23 +411,23 @@ void DesignSystemTest::paintedWidgetsUseTokens()
     }
     curve.setBins(bins);
     const QImage curveImage = curve.grab().toImage();
-    QVERIFY2(imageHasColor(curveImage, inputBg), "curve plot background is the inputBg token");
-    QVERIFY2(imageHasColor(curveImage, graphFill), "curve histogram uses the graphFill token");
+    QVERIFY2(imageHasColor(curveImage, inputSurface), "curve plot background is the surface-input token");
+    QVERIFY2(imageHasColor(curveImage, graphFillColor), "curve histogram uses the graph-fill token");
 
     pictura::SpectrumBar spectrum;
     spectrum.resize(120, 16);
-    QVERIFY2(imageHasColor(spectrum.grab().toImage(), inputBorder),
-             "spectrum border is the inputBorder token");
+    QVERIFY2(imageHasColor(spectrum.grab().toImage(), inputOutline),
+             "spectrum border is the border-input token");
 
     pictura::HistogramView histogram;
     histogram.resize(200, 120);
-    QVERIFY2(imageHasColor(histogram.grab().toImage(), inputBg),
-             "histogram background is the inputBg token");
+    QVERIFY2(imageHasColor(histogram.grab().toImage(), inputSurface),
+             "histogram background is the surface-input token");
 
     pictura::NavigatorThumbnail navigator;
     navigator.resize(160, 120);
-    QVERIFY2(imageHasColor(navigator.grab().toImage(), inputBg),
-             "navigator thumbnail background is the inputBg token");
+    QVERIFY2(imageHasColor(navigator.grab().toImage(), inputSurface),
+             "navigator thumbnail background is the surface-input token");
 }
 
 void DesignSystemTest::lightFamilyTokensAreConsistent()
@@ -444,12 +444,12 @@ void DesignSystemTest::lightFamilyTokensAreConsistent()
         const QVector<ThemeToken> tokens = Theme::tokens(Theme::ThemeFamily::Light, level);
         QVERIFY2(!tokens.isEmpty(), "the light family exposes its tokens");
         // A light surface must be lighter than its text/icon roles.
-        QVERIFY2(tokenOf(tokens, QStringLiteral("panel")).lightness()
-                     > tokenOf(tokens, QStringLiteral("text")).lightness(),
+        QVERIFY2(tokenOf(tokens, QStringLiteral("surface")).lightness()
+                     > tokenOf(tokens, QStringLiteral("content-body")).lightness(),
                  "the light panel is lighter than its text");
         // The derived alternate row must not clamp back onto the base surface.
-        QVERIFY2(tokenOf(tokens, QStringLiteral("alternateTableBg"))
-                     != tokenOf(tokens, QStringLiteral("tableBg")),
+        QVERIFY2(tokenOf(tokens, QStringLiteral("surface-field-alternate"))
+                     != tokenOf(tokens, QStringLiteral("surface-field")),
                  "the light alternate row stays distinct");
     }
     QCOMPARE(Theme::familyName(Theme::ThemeFamily::Light), QStringLiteral("light"));

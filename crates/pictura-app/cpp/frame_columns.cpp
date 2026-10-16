@@ -160,7 +160,7 @@ void PicturaMainWindow::layoutWorkspaceFrame()
     }
     const int lineHeight = qMax(0, bottom - top);
     // The 1 px border is the inner edge of the 3 px band; the outer 2 px is the
-    // window `${panel}` showing through the splitter's reserved margin.
+    // window `${surface}` showing through the splitter's reserved margin.
     workspaceFrameLeft_->setGeometry(kWorkspaceFrameWidth - 1, top, 1, lineHeight);
     workspaceFrameRight_->setGeometry(qMax(0, width() - kWorkspaceFrameWidth), top, 1,
                                       lineHeight);

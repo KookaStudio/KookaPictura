@@ -548,7 +548,7 @@ int pictura::runShellRound4Checks(pictura::PicturaMainWindow& frame)
                                    && bandRect.height() >= bar->height()
                                    && bandRect.contains(cornerRect);
 
-                // The former gap above the corner is the band's `${panelHeader}`
+                // The former gap above the corner is the band's `${surface-header}`
                 // shade, which is now the inactive-tab surface.
                 const QColor headerShade(QStringLiteral("#363636"));
                 const QImage image = group->grab().toImage();

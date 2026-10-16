@@ -98,10 +98,10 @@ QRect NavigatorThumbnail::imageRect() const
 void NavigatorThumbnail::paintEvent(QPaintEvent*)
 {
     QPainter painter(this);
-    painter.fillRect(rect(), Theme::tokenColor(QStringLiteral("inputBg")));
+    painter.fillRect(rect(), Theme::tokenColor(QStringLiteral("surface-input")));
     const QRect area = imageRect();
     if (source_.isNull() || area.isEmpty()) {
-        painter.setPen(Theme::tokenColor(QStringLiteral("text")));
+        painter.setPen(Theme::tokenColor(QStringLiteral("content-body")));
         painter.drawText(rect(), Qt::AlignCenter, QStringLiteral("No document"));
         return;
     }

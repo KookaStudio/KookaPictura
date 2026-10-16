@@ -173,7 +173,7 @@ void DesignSystemDialogTest::foundationsFollowTheFamily()
 {
     const int original = Theme::currentLevel();
     Theme::apply(Theme::ThemeFamily::Light, Theme::kDefaultLevel);
-    const QColor lightWorkspace = Theme::tokenColor(QStringLiteral("workspace"));
+    const QColor lightWorkspace = Theme::tokenColor(QStringLiteral("surface-canvas"));
     {
         DesignSystemDialog dialog;
         QVERIFY(dialog.selectStoryForTest(QStringLiteral("Palette")));

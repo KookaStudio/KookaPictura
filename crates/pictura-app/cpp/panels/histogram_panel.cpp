@@ -42,8 +42,8 @@ QColor HistogramView::seriesColorForTest(int index) const
 void HistogramView::paintEvent(QPaintEvent*)
 {
     QPainter painter(this);
-    painter.fillRect(rect(), Theme::tokenColor(QStringLiteral("inputBg")));
-    painter.setPen(Theme::tokenColor(QStringLiteral("inputBorder")));
+    painter.fillRect(rect(), Theme::tokenColor(QStringLiteral("surface-input")));
+    painter.setPen(Theme::tokenColor(QStringLiteral("border-input")));
     painter.drawRect(rect().adjusted(0, 0, -1, -1));
     if (series_.isEmpty()) {
         return;

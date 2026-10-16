@@ -32,6 +32,24 @@ Snapshot for resuming after a context break. Update after each milestone.
   white (2% / mean 1.5 edge tolerance; self-skips without the coder). Docs:
   `export-formats.md` *SVG (CC)*. Not done (#652): gradient/pattern
   `<defs>`, `vstk` strokes, per-layer SVG files.
+- **Semantic theme tokens** (change `semantic-theme-tokens`, issue #419): every
+  key emitted by `Theme::tokens` and substituted into the stylesheet is renamed
+  from an implementation-surface name to a semantic role name in kebab-case —
+  39 colour tokens (`panel`→`surface`, `window`→`surface-recessed`,
+  `hover`→`surface-hover`, `inputBg`→`surface-input`, `border`→`border`,
+  `graphFill`→`graph-fill`, …), 8 metrics
+  (`panelBorderWidth`→`border-width-panel`, `slotBaseW`→`slot-base-width`, …),
+  and the 3 pseudo-tokens (`${tabFontSize}`→`${font-size-tab}`,
+  `${inputFontSize}`→`${font-size-input}`, `${selectChevron}`→`${select-chevron}`).
+  The `Ramp` fields take the same names, so `theme.cpp` reads coherently;
+  values, token count, both families, and the brightness levels are unchanged —
+  a pure rename. The six custom-painted widgets' `Theme::tokenColor` keys, the
+  in-app design-system browser's key lists and descriptive `note()` prose, the
+  drift guard (`tst_design_system`), and `scripts/gen-styleguide.py`'s
+  `var(--…)` set are updated, and `design-system.html` is regenerated (idempotent;
+  it also gains the four paint-only tokens it was missing). The full one-to-one
+  mapping is archived in the change's `design.md`. Verified: build green, 4394
+  Rust tests and the Qt design-system suites pass, `verify-fast` green.
 - **Windows C2026 stylesheet fix** (#474, branch `fix/474-windows-c2026-theme-qss`,
   OpenSpec change `fix-windows-c2026-theme-qss`, ADDED requirement in
   `meta/windows-release-build`): `theme.cpp` built its stylesheet from one

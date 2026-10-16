@@ -259,22 +259,22 @@ QWidget* palettePage()
         sections.append(column({heading(title), grid(cells, 4)}));
     };
     group(QStringLiteral("Surfaces"),
-          {QStringLiteral("window"), QStringLiteral("panel"), QStringLiteral("activeTab"),
-           QStringLiteral("tableBg"), QStringLiteral("workspace")});
+          {QStringLiteral("surface-recessed"), QStringLiteral("surface"), QStringLiteral("surface-tab-active"),
+           QStringLiteral("surface-field"), QStringLiteral("surface-canvas")});
     group(QStringLiteral("Controls"),
-          {QStringLiteral("button"), QStringLiteral("buttonBorder"), QStringLiteral("inputBg"),
-           QStringLiteral("inputBorder"), QStringLiteral("border")});
+          {QStringLiteral("surface-control"), QStringLiteral("border-control"), QStringLiteral("surface-input"),
+           QStringLiteral("border-input"), QStringLiteral("border")});
     group(QStringLiteral("Chrome and lines"),
-          {QStringLiteral("panelHeader"), QStringLiteral("separator"),
-           QStringLiteral("separatorLight"), QStringLiteral("panelHeaderBorder"),
-           QStringLiteral("scrollbar")});
+          {QStringLiteral("surface-header"), QStringLiteral("border-subtle"),
+           QStringLiteral("border-subtle-alt"), QStringLiteral("border-header"),
+           QStringLiteral("surface-scrollbar")});
     group(QStringLiteral("Selection and accent"),
-          {QStringLiteral("highlight"), QStringLiteral("highlightedText"),
-           QStringLiteral("accent"), QStringLiteral("link"), QStringLiteral("hover")});
+          {QStringLiteral("selection"), QStringLiteral("content-on-selection"),
+           QStringLiteral("accent"), QStringLiteral("content-link"), QStringLiteral("surface-hover")});
     group(QStringLiteral("Text and disabled"),
-          {QStringLiteral("text"), QStringLiteral("windowText"),
-           QStringLiteral("disabledText"), QStringLiteral("menuDisabledText"),
-           QStringLiteral("iconPressed")});
+          {QStringLiteral("content-body"), QStringLiteral("content"),
+           QStringLiteral("content-disabled"), QStringLiteral("content-disabled-menu"),
+           QStringLiteral("surface-control-active")});
     return page(sections);
 }
 
@@ -283,7 +283,7 @@ QWidget* brightnessPage()
     QList<QWidget*> columns;
     for (int level = 0; level < Theme::kLevelCount; ++level) {
         QList<QWidget*> cells;
-        for (const char* key : {"window", "panel", "button", "workspace"}) {
+        for (const char* key : {"surface-recessed", "surface", "surface-control", "surface-canvas"}) {
             cells.append(chip(level, QLatin1String(key)));
         }
         columns.append(column({heading(QStringLiteral("Level %1").arg(level)), column(cells, 4)}));
@@ -300,8 +300,9 @@ QWidget* metricsPage()
 {
     const int level = Theme::currentLevel();
     QList<QWidget*> items;
-    for (const char* key : {"panelBorderWidth", "chromeBorderWidth", "groupDividerWidth",
-                            "slotBaseW", "slotBaseH", "slotIconMaxW", "slotIconMaxH", "shadeStep"}) {
+    for (const char* key : {"border-width-panel", "border-width-chrome", "divider-width-group",
+                            "slot-base-width", "slot-base-height", "slot-icon-max-width",
+                            "slot-icon-max-height", "shade-step"}) {
         items.append(new QLabel(QLatin1String(key) + QLatin1String(" = ")
                                 + tokenValue(level, QLatin1String(key))));
     }
@@ -380,7 +381,7 @@ QWidget* menuBarPage()
         }
     }
     return page({heading(QStringLiteral("QMenuBar")),
-                 note(QStringLiteral("On the panel surface; the hovered item takes highlight. "
+                 note(QStringLiteral("On the panel surface; the hovered item takes the selection colour. "
                                      "Clicking a top-level item drops its QMenu.")),
                  row({bar})});
 }
@@ -404,8 +405,8 @@ QWidget* menuPage()
     menu->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     return page({heading(QStringLiteral("QMenu")),
                  note(QStringLiteral("A real QMenu shown inline: items pad to 22 px, the underline "
-                                     "separator is the separator token, and disabled uses "
-                                     "menuDisabledText.")),
+                                     "separator is the border-subtle token, and disabled uses the "
+                                     "menu-disabled content colour.")),
                  row({menu})});
 }
 
@@ -464,7 +465,7 @@ QWidget* panelTabsPage()
         tabs->addTab(pane, name);
     }
     return page({heading(QStringLiteral("QTabWidget#panelGroupTabs")),
-                 note(QStringLiteral("Panel-group tabs on the panelHeader strip; the active tab takes "
+                 note(QStringLiteral("Panel-group tabs on the header surface; the active tab takes "
                                      "the panel surface so it reads continuous with the pane.")),
                  tabs});
 }
@@ -496,7 +497,7 @@ QWidget* documentTabsPage()
     tabs->setCurrentIndex(2);
     return page({heading(QStringLiteral("QTabBar#documentTabBar")),
                  note(QStringLiteral("Document tabs over the workspace; the active tab takes "
-                                     "activeTab. Each carries a close button.")),
+                                     "the active-tab surface. Each carries a close button.")),
                  row({tabs})});
 }
 
@@ -549,7 +550,7 @@ QWidget* splitterPage()
     splitter->addWidget(right);
     splitter->setFixedHeight(120);
     return page({heading(QStringLiteral("QSplitter")),
-                 note(QStringLiteral("The handle is border-coloured and lightens to highlight on "
+                 note(QStringLiteral("The handle is border-coloured and lightens to the selection colour on "
                                      "hover; drag to resize.")),
                  splitter});
 }
@@ -560,7 +561,7 @@ QWidget* pushButtonPage()
 {
     return page({
         heading(QStringLiteral("QPushButton")),
-        note(QStringLiteral("button fill, a 1 px buttonBorder, a 3 px radius, and 4 x 10 padding. "
+        note(QStringLiteral("control surface fill, a 1 px control border, a 3 px radius, and 4 x 10 padding. "
                             "Pressed and checked darken; disabled greys text and border.")),
         row({pushButton(QStringLiteral("OK")), pushButton(QStringLiteral("Cancel")),
              pushButton(QStringLiteral("Checked"), [](QPushButton* b) { b->setCheckable(true); b->setChecked(true); }),
@@ -587,8 +588,8 @@ QWidget* toolButtonPage()
 {
     return page({
         heading(QStringLiteral("QToolButton")),
-        note(QStringLiteral("Transparent at rest. Hover takes iconHover and iconHoverBorder; "
-                            "checked/pressed take iconPressed.")),
+        note(QStringLiteral("Transparent at rest. Hover takes the control-hover surface and its border; "
+                            "checked/pressed take the active surface.")),
         row({toolButton(QStringLiteral("tool.brush")), toolButton(QStringLiteral("tool.eraser")),
              toolButton(QStringLiteral("tool.gradient")), toolButton(QStringLiteral("tool.zoom"))}),
         states({stateCell(QStringLiteral("rest"), [] { return toolButton(QStringLiteral("tool.brush")); }),
@@ -610,8 +611,8 @@ QWidget* lineEditPage()
     auto* disabled = new QLineEdit(QStringLiteral("Disabled"));
     disabled->setEnabled(false);
     return page({heading(QStringLiteral("QLineEdit")),
-                 note(QStringLiteral("inputBg fill, a 1 px inputBorder, a 2 px radius, and 1 x 2 "
-                                     "padding. Focus borders highlight; disabled greys text and border.")),
+                 note(QStringLiteral("input surface fill, a 1 px input border, a 2 px radius, and 1 x 2 "
+                                     "padding. Focus borders take the selection colour; disabled greys text and border.")),
                  column({new QLineEdit(QStringLiteral("Untitled-1")),
                          new QLineEdit, disabled}, 6)});
 }
@@ -647,7 +648,7 @@ QWidget* comboBoxPage()
                      QStringLiteral("Screen")});
     return page({heading(QStringLiteral("QComboBox")),
                  note(QStringLiteral("The input surface plus a 16 px drop-down with an 8 x 5 caret. "
-                                     "The popup is an item view on the panel surface with highlight "
+                                     "The popup is an item view on the panel surface with the selection colour "
                                      "selection.")),
                  row({combo})});
 }
@@ -662,8 +663,8 @@ QWidget* checkBoxPage()
     auto* disabled = new QCheckBox(QStringLiteral("Disabled"));
     disabled->setEnabled(false);
     return page({heading(QStringLiteral("QCheckBox")),
-                 note(QStringLiteral("A 13 x 13 indicator, a 2 px radius, inputBg fill; checked fills "
-                                     "highlight, checked-hover fills link.")),
+                 note(QStringLiteral("A 13 x 13 indicator, a 2 px radius, input surface fill; checked fills "
+                                     "the selection colour, checked-hover fills the link colour.")),
                  column({new QCheckBox(QStringLiteral("Preview")), checked, partial, disabled}, 4)});
 }
 
@@ -695,8 +696,8 @@ QWidget* sliderPage()
     vertical->setValue(70);
     vertical->setFixedHeight(80);
     return page({heading(QStringLiteral("QSlider")),
-                 note(QStringLiteral("A 4 px groove on border and a 10 px handle on buttonText; the "
-                                     "handle hovers to highlight and greys when disabled.")),
+                 note(QStringLiteral("A 4 px groove on the border and a 10 px handle on the control text; the "
+                                     "handle hovers to the selection colour and greys when disabled.")),
                  column({horizontal, disabled}), row({vertical})});
 }
 
@@ -710,8 +711,8 @@ QWidget* progressBarPage()
     disabled->setValue(20);
     disabled->setEnabled(false);
     return page({heading(QStringLiteral("QProgressBar")),
-                 note(QStringLiteral("inputBg fill, a 1 px inputBorder, a 3 px radius, centred text; "
-                                     "the chunk is highlight with a 2 px radius.")),
+                 note(QStringLiteral("input surface fill, a 1 px input border, a 3 px radius, centred text; "
+                                     "the chunk is the selection colour with a 2 px radius.")),
                  column({forty, disabled})});
 }
 
@@ -736,7 +737,7 @@ QWidget* headerViewPage()
                       {{QStringLiteral("Background"), QStringLiteral("Normal"), QStringLiteral("100%")},
                        {QStringLiteral("Layer 1"), QStringLiteral("Multiply"), QStringLiteral("80%")}});
     return page({heading(QStringLiteral("QHeaderView")),
-                 note(QStringLiteral("Sections on panelHeader with 1 px separator rules on the right "
+                 note(QStringLiteral("Sections on the header surface with 1 px separator rules on the right "
                                      "and bottom; a section lightens on hover.")),
                  view});
 }
@@ -753,8 +754,8 @@ QWidget* scrollBarPage()
     }
     area->setWidget(content);
     return page({heading(QStringLiteral("QScrollBar")),
-                 note(QStringLiteral("A 12 px track on scrollbar with a 3 px-radius thumb on "
-                                     "scrollbarThumb; the thumb lightens on hover.")),
+                 note(QStringLiteral("A 12 px track on the scrollbar surface with a 3 px-radius thumb on "
+                                     "the thumb surface; the thumb lightens on hover.")),
                  area});
 }
 
@@ -768,8 +769,8 @@ QWidget* treeViewPage()
     view->setFixedWidth(320);
     view->topLevelItem(1)->setSelected(true);
     return page({heading(QStringLiteral("QTreeView / QListView")),
-                 note(QStringLiteral("tableBg fill, a 1 px separator frame, alternating rows on "
-                                     "alternateTableBg, and highlight selection.")), view});
+                 note(QStringLiteral("The field surface, a 1 px separator frame, alternating rows on the "
+                                     "alternate field surface, and the selection colour for selected rows.")), view});
 }
 
 QWidget* tooltipPage()
@@ -779,7 +780,7 @@ QWidget* tooltipPage()
     auto* slot = toolSlot(QStringLiteral("tool.brush"));
     slot->setToolTip(QStringLiteral("Brush Tool (B)"));
     return page({heading(QStringLiteral("QToolTip")),
-                 note(QStringLiteral("toolTipBase at 80 % with toolTipText and a 1 px border. It is a "
+                 note(QStringLiteral("The tooltip surface at 80 % with the tooltip content colour and a 1 px border. It is a "
                                      "top-level popup, so hover the controls below to see it live.")),
                  row({button, slot})});
 }
@@ -820,7 +821,7 @@ QWidget* panelHeaderBandPage()
     tabs->addTab(QStringLiteral("Channels"));
     tabs->setCurrentIndex(0);
     return page({heading(QStringLiteral("QWidget#panelHeaderBand")),
-                 note(QStringLiteral("The panelHeader strip a group's header, drag grip and corner "
+                 note(QStringLiteral("The header-surface strip a group's header, drag grip and corner "
                                      "sit on; it carries no rule of its own.")),
                  column({band, tabs})});
 }
@@ -949,20 +950,20 @@ QVector<DesignSystemStory> designSystemStories()
     return {
         // Foundations
         {QStringLiteral("Foundations"), QStringLiteral("Palette"),
-         QStringLiteral("Every colour token at the current brightness. highlight is selection; accent "
-                        "is the drop/insertion indicator."),
-         {QStringLiteral("window"), QStringLiteral("panel"), QStringLiteral("button"),
-          QStringLiteral("highlight"), QStringLiteral("accent")},
+         QStringLiteral("Every colour token at the current brightness. selection is the emphasis "
+                        "fill; accent is the drop/insertion indicator."),
+         {QStringLiteral("surface-recessed"), QStringLiteral("surface"), QStringLiteral("surface-control"),
+          QStringLiteral("selection"), QStringLiteral("accent")},
          QString(), palettePage},
         {QStringLiteral("Foundations"), QStringLiteral("Brightness levels"),
          QStringLiteral("The four brightness levels of the one dark family; text and accent stay "
                         "constant across levels."),
-         {QStringLiteral("shadeStep")}, QString(), brightnessPage},
+         {QStringLiteral("shade-step")}, QString(), brightnessPage},
         {QStringLiteral("Foundations"), QStringLiteral("Metrics"),
          QStringLiteral("Shared chrome metrics from the stylesheet constants."),
-         {QStringLiteral("panelBorderWidth"), QStringLiteral("chromeBorderWidth"),
-          QStringLiteral("groupDividerWidth"), QStringLiteral("slotBaseW"),
-          QStringLiteral("slotBaseH")},
+         {QStringLiteral("border-width-panel"), QStringLiteral("border-width-chrome"),
+          QStringLiteral("divider-width-group"), QStringLiteral("slot-base-width"),
+          QStringLiteral("slot-base-height")},
          QString(), metricsPage},
         {QStringLiteral("Foundations"), QStringLiteral("Typography"),
          QStringLiteral("The Qt default UI font and the bold/disabled/link variants; panel tabs run "
@@ -970,7 +971,8 @@ QVector<DesignSystemStory> designSystemStories()
          {}, QString(), typographyPage},
         {QStringLiteral("Foundations"), QStringLiteral("Interaction states"),
          QStringLiteral("The shared state vocabulary: hover, pressed/checked, and disabled."),
-         {QStringLiteral("hover"), QStringLiteral("pressed"), QStringLiteral("disabledText")},
+         {QStringLiteral("surface-hover"), QStringLiteral("surface-pressed"),
+          QStringLiteral("content-disabled")},
          QString(), statesPage},
 
         // Shell
@@ -983,99 +985,99 @@ QVector<DesignSystemStory> designSystemStories()
         {QStringLiteral("Shell"), QStringLiteral("Options bar"),
          QStringLiteral("QToolBar#optionsBar with tool buttons, numeric fields, a combo, and a check "
                         "box."),
-         {QStringLiteral("panel"), QStringLiteral("border"), QStringLiteral("separatorLight")},
+         {QStringLiteral("surface"), QStringLiteral("border"), QStringLiteral("border-subtle-alt")},
          QStringLiteral("QToolBar#optionsBar"), optionsBarPage},
         {QStringLiteral("Shell"), QStringLiteral("Tools column"),
          QStringLiteral("The tools column with 36 x 28 tool slots."),
-         {QStringLiteral("slotBaseW"), QStringLiteral("slotBaseH")},
+         {QStringLiteral("slot-base-width"), QStringLiteral("slot-base-height")},
          QStringLiteral("QWidget#toolsColumn"), toolsColumnPage},
         {QStringLiteral("Shell"), QStringLiteral("Panel group"),
          QStringLiteral("QTabWidget#panelGroupTabs: the CS6 panel-group tabs."),
-         {QStringLiteral("panelHeader"), QStringLiteral("panel")},
+         {QStringLiteral("surface-header"), QStringLiteral("surface")},
          QStringLiteral("QTabBar#panelTabBar"), panelGroupPage},
         {QStringLiteral("Shell"), QStringLiteral("Panel tabs"),
          QStringLiteral("The panel-group tab widget and its pane."),
-         {QStringLiteral("panelHeader"), QStringLiteral("panel")},
+         {QStringLiteral("surface-header"), QStringLiteral("surface")},
          QStringLiteral("QTabWidget#panelGroupTabs"), panelTabsPage},
         {QStringLiteral("Shell"), QStringLiteral("Document tabs"),
          QStringLiteral("QTabBar#documentTabBar over the workspace."),
-         {QStringLiteral("window"), QStringLiteral("activeTab")},
+         {QStringLiteral("surface-recessed"), QStringLiteral("surface-tab-active")},
          QStringLiteral("QTabBar#documentTabBar"), documentTabsPage},
         {QStringLiteral("Shell"), QStringLiteral("Floating panel"),
          QStringLiteral("A detached panel (QWidget#panelFloat) over the workspace."),
-         {QStringLiteral("panel"), QStringLiteral("border")},
+         {QStringLiteral("surface"), QStringLiteral("border")},
          QStringLiteral("QWidget#panelFloat"), floatingPanelPage},
         {QStringLiteral("Shell"), QStringLiteral("Status bar"),
          QStringLiteral("QStatusBar: the footer strip."), {},
          QStringLiteral("QStatusBar"), statusBarPage},
         {QStringLiteral("Shell"), QStringLiteral("Splitter"),
          QStringLiteral("QSplitter handle with hover highlight."),
-         {QStringLiteral("border"), QStringLiteral("highlight")},
+         {QStringLiteral("border"), QStringLiteral("selection")},
          QStringLiteral("QSplitter"), splitterPage},
 
         // Controls
         {QStringLiteral("Controls"), QStringLiteral("Push button"),
          QStringLiteral("QPushButton in rest, hover, pressed, checked, and disabled states."),
-         {QStringLiteral("button"), QStringLiteral("buttonBorder"),
-          QStringLiteral("buttonPressed")},
+         {QStringLiteral("surface-control"), QStringLiteral("border-control"),
+          QStringLiteral("surface-control-pressed")},
          QStringLiteral("QPushButton"), pushButtonPage},
         {QStringLiteral("Controls"), QStringLiteral("Tool button"),
-         QStringLiteral("QToolButton: transparent at rest, iconHover on hover, iconPressed when "
-                        "checked."),
-         {QStringLiteral("iconHover"), QStringLiteral("iconPressed")},
+         QStringLiteral("QToolButton: transparent at rest, the control-hover surface on hover, the "
+                        "active surface when checked."),
+         {QStringLiteral("surface-control-hover"), QStringLiteral("surface-control-active")},
          QStringLiteral("QToolButton"), toolButtonPage},
         {QStringLiteral("Controls"), QStringLiteral("Line edit"),
          QStringLiteral("QLineEdit with rest, focus, and disabled states."),
-         {QStringLiteral("inputBg"), QStringLiteral("inputBorder")},
+         {QStringLiteral("surface-input"), QStringLiteral("border-input")},
          QStringLiteral("QLineEdit"), lineEditPage},
         {QStringLiteral("Controls"), QStringLiteral("Plain text edit"),
          QStringLiteral("QPlainTextEdit, the multi-line input surface."),
-         {QStringLiteral("inputBg"), QStringLiteral("inputBorder")},
+         {QStringLiteral("surface-input"), QStringLiteral("border-input")},
          QStringLiteral("QPlainTextEdit"), plainTextEditPage},
         {QStringLiteral("Controls"), QStringLiteral("Spin box"),
          QStringLiteral("QSpinBox / QDoubleSpinBox with the painted arrows."),
-         {QStringLiteral("inputBg"), QStringLiteral("buttonText")},
+         {QStringLiteral("surface-input"), QStringLiteral("content-control")},
          QStringLiteral("QSpinBox"), spinBoxPage},
         {QStringLiteral("Controls"), QStringLiteral("Combo box"),
          QStringLiteral("QComboBox and its item-view popup."),
-         {QStringLiteral("inputBg"), QStringLiteral("panel")},
+         {QStringLiteral("surface-input"), QStringLiteral("surface")},
          QStringLiteral("QComboBox"), comboBoxPage},
         {QStringLiteral("Controls"), QStringLiteral("Check box"),
          QStringLiteral("QCheckBox: the 13 x 13 indicator with checked, partial, and disabled "
                         "states."),
-         {QStringLiteral("highlight"), QStringLiteral("link")},
+         {QStringLiteral("selection"), QStringLiteral("content-link")},
          QStringLiteral("QCheckBox"), checkBoxPage},
         {QStringLiteral("Controls"), QStringLiteral("Radio button"),
          QStringLiteral("QRadioButton: the 13 x 13 circle."),
-         {QStringLiteral("highlight"), QStringLiteral("link")},
+         {QStringLiteral("selection"), QStringLiteral("content-link")},
          QStringLiteral("QRadioButton"), radioButtonPage},
         {QStringLiteral("Controls"), QStringLiteral("Slider"),
          QStringLiteral("QSlider with the 4 px groove and 10 px handle, horizontal and vertical."),
-         {QStringLiteral("border"), QStringLiteral("buttonText")},
+         {QStringLiteral("border"), QStringLiteral("content-control")},
          QStringLiteral("QSlider"), sliderPage},
         {QStringLiteral("Controls"), QStringLiteral("Progress bar"),
-         QStringLiteral("QProgressBar with the highlight chunk."),
-         {QStringLiteral("inputBg"), QStringLiteral("highlight")},
+         QStringLiteral("QProgressBar with the selection chunk."),
+         {QStringLiteral("surface-input"), QStringLiteral("selection")},
          QStringLiteral("QProgressBar"), progressBarPage},
         {QStringLiteral("Controls"), QStringLiteral("Group box"),
          QStringLiteral("QGroupBox with its title on the panel surface."),
-         {QStringLiteral("separator"), QStringLiteral("panel")},
+         {QStringLiteral("border-subtle"), QStringLiteral("surface")},
          QStringLiteral("QGroupBox"), groupBoxPage},
         {QStringLiteral("Controls"), QStringLiteral("Header view"),
-         QStringLiteral("QHeaderView sections on panelHeader."),
-         {QStringLiteral("panelHeader"), QStringLiteral("separator")},
+         QStringLiteral("QHeaderView sections on the header surface."),
+         {QStringLiteral("surface-header"), QStringLiteral("border-subtle")},
          QStringLiteral("QHeaderView"), headerViewPage},
         {QStringLiteral("Controls"), QStringLiteral("Scrollbar"),
          QStringLiteral("QScrollBar track and thumb, hover on the thumb."),
-         {QStringLiteral("scrollbar"), QStringLiteral("scrollbarThumb")},
+         {QStringLiteral("surface-scrollbar"), QStringLiteral("scrollbar-thumb")},
          QStringLiteral("QScrollBar"), scrollBarPage},
         {QStringLiteral("Controls"), QStringLiteral("Tree / layer view"),
          QStringLiteral("QTreeView with selection and alternating rows."),
-         {QStringLiteral("tableBg"), QStringLiteral("highlight")},
+         {QStringLiteral("surface-field"), QStringLiteral("selection")},
          QStringLiteral("QTreeView"), treeViewPage},
         {QStringLiteral("Controls"), QStringLiteral("Tooltip"),
-         QStringLiteral("QToolTip on toolTipBase; a top-level popup shown live on hover."),
-         {QStringLiteral("toolTipBase"), QStringLiteral("toolTipText")},
+         QStringLiteral("QToolTip on the tooltip surface; a top-level popup shown live on hover."),
+         {QStringLiteral("surface-tooltip"), QStringLiteral("content-tooltip")},
          QStringLiteral("QToolTip"), tooltipPage},
         {QStringLiteral("Controls"), QStringLiteral("Colour swatch"),
          QStringLiteral("ColorSwatchWidget (QPushButton#colorSwatch) paints its own colour."),
@@ -1083,27 +1085,27 @@ QVector<DesignSystemStory> designSystemStories()
          QStringLiteral("QPushButton#colorSwatch"), colorSwatchPage},
         {QStringLiteral("Controls"), QStringLiteral("Numeric field"),
          QStringLiteral("The app's NumericField: label, value, suffix, and slider popup."),
-         {QStringLiteral("inputBg"), QStringLiteral("inputBorder")},
+         {QStringLiteral("surface-input"), QStringLiteral("border-input")},
          QStringLiteral("QWidget#numericField"), numericFieldPage},
         {QStringLiteral("Controls"), QStringLiteral("Panel header band"),
-         QStringLiteral("QWidget#panelHeaderBand, the panelHeader strip."),
-         {QStringLiteral("panelHeader")},
+         QStringLiteral("QWidget#panelHeaderBand, the header strip."),
+         {QStringLiteral("surface-header")},
          QStringLiteral("QWidget#panelHeaderBand"), panelHeaderBandPage},
 
         // Patterns
         {QStringLiteral("Patterns"), QStringLiteral("Dialog"),
          QStringLiteral("A dialog composed from the primitives."),
-         {QStringLiteral("panel"), QStringLiteral("separator")}, QString(), dialogPage},
+         {QStringLiteral("surface"), QStringLiteral("border-subtle")}, QString(), dialogPage},
         {QStringLiteral("Patterns"), QStringLiteral("Layers panel"),
          QStringLiteral("The Layers panel: header, filter row, tree, and selection."),
-         {QStringLiteral("panel"), QStringLiteral("panelHeader"), QStringLiteral("tableBg")},
+         {QStringLiteral("surface"), QStringLiteral("surface-header"), QStringLiteral("surface-field")},
          QString(), layersPanelPage},
         {QStringLiteral("Patterns"), QStringLiteral("Colour panel"),
          QStringLiteral("Colour panel: the foreground/background pair, RGB fields, and swatches."),
-         {QStringLiteral("panel"), QStringLiteral("inputBg")}, QString(), colorPanelPage},
+         {QStringLiteral("surface"), QStringLiteral("surface-input")}, QString(), colorPanelPage},
         {QStringLiteral("Patterns"), QStringLiteral("Docked column"),
          QStringLiteral("Tools column, panel group, splitter, and workspace."),
-         {QStringLiteral("panel"), QStringLiteral("separator")}, QString(), dockedColumnPage},
+         {QStringLiteral("surface"), QStringLiteral("border-subtle")}, QString(), dockedColumnPage},
     };
 }
 

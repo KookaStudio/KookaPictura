@@ -186,7 +186,7 @@ public:
     // stale chrome cannot reappear over the menu bar. v9 moved Tools from a dock
     // into a central-splitter column, so the old layout is discarded.
     static constexpr int kLayoutRevision = 3;
-    // The central-band frame width: 2 px of `${panel}` outside, 1 px `${border}`.
+    // The central-band frame width: 2 px of `${surface}` outside, 1 px `${border}`.
     static constexpr int kWorkspaceFrameWidth = 3;
     int layoutRevisionForTest() const { return kLayoutRevision; }
     bool restoreStoredLayout(const QByteArray& layout, int revision);
@@ -521,7 +521,7 @@ private:
     QMetaObject::Connection spacePanFocusConn_;
     FileDropRouter* fileDropRouter_ = nullptr;
     QSplitter* centerSplitter_ = nullptr;
-    // The 3 px central-band frame lines (outer 2 px is the window `${panel}`).
+    // The 3 px central-band frame lines (outer 2 px is the window `${surface}`).
     QWidget* workspaceFrameLeft_ = nullptr;
     QWidget* workspaceFrameRight_ = nullptr;
     QTimer* panelRefreshTimer_ = nullptr;
