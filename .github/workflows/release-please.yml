@@ -45,6 +45,13 @@ jobs:
     with:
       tag: ${{ needs.release-please.outputs.tag_name }}
 
+  snap:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    uses: ./.github/workflows/snap.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}
+
   windows:
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'
