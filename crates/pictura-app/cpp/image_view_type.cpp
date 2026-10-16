@@ -88,7 +88,10 @@ void ImageView::paintTypeOverlay(QPainter& painter)
         painter.drawLine(o.caret);
     }
     if (!o.box.isEmpty()) {
-        painter.setPen(QPen(o.mask ? Qt::white : QColor(64, 64, 64), 0, Qt::DashLine));
+        // White under black dashes, as the marquee and transform boxes draw.
+        painter.setPen(QPen(Qt::white, 0, Qt::SolidLine));
+        painter.drawPolygon(o.box);
+        painter.setPen(QPen(Qt::black, 0, Qt::DashLine));
         painter.drawPolygon(o.box);
     }
 
@@ -100,7 +103,7 @@ void ImageView::paintTypeOverlay(QPainter& painter)
     }
     if (o.box.size() >= 4) {
         const QPolygonF box = toDevice.map(o.box);
-        painter.setPen(QPen(QColor(64, 64, 64), 0));
+        painter.setPen(QPen(Qt::black, 0, Qt::SolidLine));
         painter.setBrush(Qt::white);
         for (int i = 0; i < 4; ++i) {
             const QPointF corner = box.at(i);
