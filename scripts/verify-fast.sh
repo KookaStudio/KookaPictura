@@ -73,6 +73,9 @@ bash scripts/check-file-size.sh
 echo "== worktree hook =="
 bash scripts/check-worktree-hook.sh
 
+echo "== build caching =="
+bash scripts/check-local-build-caching.sh
+
 echo "== selftest budget =="
 bash scripts/check-selftest-budget.sh
 
