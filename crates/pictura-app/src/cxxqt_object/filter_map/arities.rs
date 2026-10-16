@@ -24,7 +24,7 @@ pub(in crate::cxxqt_object) const FILTER_ARITIES: &[(&str, usize)] = &[
     ("path-blur", PATH_BLUR_SLOTS),
     ("blur-gallery", BLUR_GALLERY_SLOTS),
     ("motion-blur", 2),
-    ("radial-blur", 3),
+    ("radial-blur", 5),
     ("average", 0),
     ("blur", 0),
     ("blur-more", 0),

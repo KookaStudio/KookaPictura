@@ -22,11 +22,12 @@ pub(super) enum Plan {
         angle: f32,
         taps: u32,
     },
-    /// Radial Blur's Zoom: `samples` taps along the pixel's ray from the
-    /// centre, spanning `span` of its radius.
+    /// Radial Blur's Zoom: `samples` taps along the pixel's ray from `center`
+    /// (normalized to the image), spanning `span` of its radius.
     RadialZoom {
         samples: u32,
         span: f32,
+        center: (f32, f32),
     },
     Surface {
         radius: u32,
@@ -116,10 +117,14 @@ pub(super) fn plan(filter: &Filter) -> Option<Plan> {
         Filter::RadialBlur {
             method: RadialMethod::Zoom,
             amount,
+            center,
             quality,
         } => {
             // Zero is the identity; the CPU returns it untouched.
             if !amount.is_finite() || *amount <= 0.0 || *amount > 100.0 {
+                return None;
+            }
+            if !center.0.is_finite() || !center.1.is_finite() {
                 return None;
             }
             Some(Plan::RadialZoom {
@@ -129,6 +134,10 @@ pub(super) fn plan(filter: &Filter) -> Option<Plan> {
                     Quality::Best => 32,
                 },
                 span: (amount / 100.0) as f32,
+                center: (
+                    center.0.clamp(0.0, 1.0) as f32,
+                    center.1.clamp(0.0, 1.0) as f32,
+                ),
             })
         }
         Filter::UnsharpMask {

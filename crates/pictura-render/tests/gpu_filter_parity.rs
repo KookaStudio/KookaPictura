@@ -42,7 +42,14 @@ fn accelerated_filters() -> Vec<Filter> {
         Filter::RadialBlur {
             method: RadialMethod::Zoom,
             amount: 70.0,
+            center: (0.5, 0.5),
             quality: Quality::Best,
+        },
+        Filter::RadialBlur {
+            method: RadialMethod::Zoom,
+            amount: 70.0,
+            center: (0.25, 0.75),
+            quality: Quality::Good,
         },
         Filter::SurfaceBlur {
             radius: 2,
@@ -292,6 +299,7 @@ fn radial_spin_runs_on_the_cpu() {
     let filter = Filter::RadialBlur {
         method: RadialMethod::Spin,
         amount: 40.0,
+        center: (0.5, 0.5),
         quality: Quality::Good,
     };
     let base = gradient_rgba();

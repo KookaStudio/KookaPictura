@@ -59,6 +59,7 @@ private slots:
     void blurGallerySubmenuListsTheGallery();
     void dialogCollectsParameterSlots();
     void radialBlurHasNoThumbnail();
+    void radialBlurCarriesBlurCenter();
     void parameterlessAppliesDirectly();
     void previewCancelRestores();
     void lastFilterReappliesAndNamesItself();
@@ -192,7 +193,7 @@ void FilterMenuTest::dialogCollectsParameterSlots()
         {QStringLiteral("Blur Gallery"), QStringLiteral("Tilt-Shift"), 24},
         {QStringLiteral("Blur Gallery"), QStringLiteral("Path Blur"), 27},
         {QStringLiteral("Blur"), QStringLiteral("Gaussian Blur"), 1},
-        {QStringLiteral("Blur"), QStringLiteral("Radial Blur"), 3},
+        {QStringLiteral("Blur"), QStringLiteral("Radial Blur"), 5},
         {QStringLiteral("Blur"), QStringLiteral("Shape Blur"), 2},
         {QStringLiteral("Blur"), QStringLiteral("Smart Blur"), 4},
         {QStringLiteral("Blur"), QStringLiteral("Lens Blur"), 15},
@@ -226,6 +227,18 @@ void FilterMenuTest::radialBlurHasNoThumbnail()
     QVERIFY(!spec->previewPane);
     pictura::FilterPreviewDialog dialog(window_->activeView(), *spec);
     QCOMPARE(dialog.windowTitle(), QStringLiteral("Radial Blur"));
+}
+
+void FilterMenuTest::radialBlurCarriesBlurCenter()
+{
+    const pictura::FilterCommandSpec* spec = pictura::filterCommandForPath(
+        {QStringLiteral("Filter"), QStringLiteral("Blur"), QStringLiteral("Radial Blur")});
+    QVERIFY(spec != nullptr);
+    pictura::FilterPreviewDialog dialog(window_->activeView(), *spec);
+    const QList<double> values = dialog.values();
+    QCOMPARE(values.size(), 5);
+    QCOMPARE(values.at(3), 0.5);
+    QCOMPARE(values.at(4), 0.5);
 }
 
 void FilterMenuTest::parameterlessAppliesDirectly()

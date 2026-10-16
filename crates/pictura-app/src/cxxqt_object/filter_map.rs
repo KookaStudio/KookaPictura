@@ -230,11 +230,12 @@ pub(super) fn filter_from_kind_params(kind: &str, params: &[f64]) -> Option<Filt
         "path-blur" => gallery::path_blur(params)?,
         "blur-gallery" => gallery::blur_gallery(params)?,
         "radial-blur" => {
-            arity!(params, 3);
+            arity!(params, 5);
             Filter::RadialBlur {
                 method: pick(&RADIAL_METHODS, params, 0, 0),
                 amount: f(params, 1, 10.0),
                 quality: pick(&QUALITIES, params, 2, 1),
+                center: (f(params, 3, 0.5), f(params, 4, 0.5)),
             }
         }
         "average" => {

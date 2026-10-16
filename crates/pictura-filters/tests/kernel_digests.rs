@@ -154,6 +154,7 @@ fn kernels() -> Vec<(&'static str, Filter)> {
             Filter::RadialBlur {
                 method: RadialMethod::Spin,
                 amount: 30.0,
+                center: (0.5, 0.5),
                 quality: Quality::Good,
             },
         ),
@@ -162,6 +163,7 @@ fn kernels() -> Vec<(&'static str, Filter)> {
             Filter::RadialBlur {
                 method: RadialMethod::Zoom,
                 amount: 60.0,
+                center: (0.5, 0.5),
                 quality: Quality::Best,
             },
         ),

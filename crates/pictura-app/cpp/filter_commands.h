@@ -20,7 +20,7 @@ enum class FilterControl {
     CheckBox,  // one slot, 0 or 1
     Color,     // three slots: red, green, blue (0..255)
     Placement, // two slots: x, y (normalized 0..1)
-    BlurCenter, // display-only centre pad, contributes no slot
+    BlurCenter, // two slots: x, y (normalized 0..1); a draggable centre pad
     ShearCurve, // a point count and up to kShearMaxPoints (position, offset) pairs
     Hidden,     // one slot carried through the dialog with no widget (Displace's map id)
     Number,     // one slot, a value box with no slider

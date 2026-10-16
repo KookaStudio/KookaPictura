@@ -30,6 +30,8 @@ pub enum Filter {
     RadialBlur {
         method: RadialMethod,
         amount: f64,
+        /// Blur origin normalized to the image, `(0.5, 0.5)` the centre.
+        center: (f64, f64),
         quality: Quality,
     },
     Average,

@@ -45,7 +45,7 @@ int slotCount(FilterControl control)
     case FilterControl::Placement:
         return 2;
     case FilterControl::BlurCenter:
-        return 0;
+        return 2;
     case FilterControl::ShearCurve:
         return 1 + 2 * kShearMaxPoints;
     case FilterControl::Matrix:
@@ -70,8 +70,8 @@ int compactSpinWidth(const QWidget* widget)
     return widget->fontMetrics().horizontalAdvance(QStringLiteral("-00000.0")) + 34;
 }
 
-// Display-only draggable centre pad for Radial Blur: concentric rings for a
-// spin, rays for a zoom. It carries no value.
+// Draggable centre pad for Radial Blur: concentric rings for a spin, rays for
+// a zoom. It carries the blur origin as fractions (0..1) of the image.
 class BlurCenterWidget : public QWidget {
 public:
     explicit BlurCenterWidget(QWidget* parent = nullptr) : QWidget(parent)
@@ -80,43 +80,49 @@ public:
         setCursor(Qt::CrossCursor);
     }
 
+    std::function<void(double, double)> moved;
+
     void setZoom(bool zoom)
     {
         zoom_ = zoom;
         update();
     }
 
-protected:
-    void resizeEvent(QResizeEvent*) override
+    double x() const { return nx_; }
+    double y() const { return ny_; }
+
+    void setNormalized(double nx, double ny)
     {
-        if (!moved_) {
-            center_ = QPointF(width() / 2.0, height() / 2.0);
-        }
+        nx_ = qBound(0.0, nx, 1.0);
+        ny_ = qBound(0.0, ny, 1.0);
+        update();
     }
 
+protected:
     void paintEvent(QPaintEvent*) override
     {
         QPainter painter(this);
         painter.fillRect(rect(), QColor(48, 48, 48));
+        const QPointF center(nx_ * width(), ny_ * height());
         const double radius = qMin(width(), height()) / 2.0 - 4.0;
         painter.setPen(QPen(QColor(160, 160, 160), 1));
         for (int i = 1; i <= 4; ++i) {
-            painter.drawEllipse(center_, radius * i / 4.0, radius * i / 4.0);
+            painter.drawEllipse(center, radius * i / 4.0, radius * i / 4.0);
         }
         if (zoom_) {
             for (int degrees = 0; degrees < 360; degrees += 30) {
                 const double a = qDegreesToRadians(static_cast<double>(degrees));
-                painter.drawLine(QPointF(center_.x() + qCos(a) * radius * 0.15,
-                                         center_.y() + qSin(a) * radius * 0.15),
-                                 QPointF(center_.x() + qCos(a) * radius,
-                                         center_.y() + qSin(a) * radius));
+                painter.drawLine(QPointF(center.x() + qCos(a) * radius * 0.15,
+                                         center.y() + qSin(a) * radius * 0.15),
+                                 QPointF(center.x() + qCos(a) * radius,
+                                         center.y() + qSin(a) * radius));
             }
         }
         painter.setPen(QPen(Qt::white, 2));
-        painter.drawLine(QPointF(center_.x() - 6, center_.y()),
-                         QPointF(center_.x() + 6, center_.y()));
-        painter.drawLine(QPointF(center_.x(), center_.y() - 6),
-                         QPointF(center_.x(), center_.y() + 6));
+        painter.drawLine(QPointF(center.x() - 6, center.y()),
+                         QPointF(center.x() + 6, center.y()));
+        painter.drawLine(QPointF(center.x(), center.y() - 6),
+                         QPointF(center.x(), center.y() + 6));
     }
 
     void mousePressEvent(QMouseEvent* event) override { moveTo(event->position()); }
@@ -131,15 +137,17 @@ protected:
 private:
     void moveTo(const QPointF& pos)
     {
-        moved_ = true;
-        center_ = QPointF(qBound(0.0, pos.x(), static_cast<double>(width())),
-                          qBound(0.0, pos.y(), static_cast<double>(height())));
+        nx_ = width() > 0 ? qBound(0.0, pos.x() / width(), 1.0) : 0.5;
+        ny_ = height() > 0 ? qBound(0.0, pos.y() / height(), 1.0) : 0.5;
         update();
+        if (moved) {
+            moved(nx_, ny_);
+        }
     }
 
-    QPointF center_{60.0, 60.0};
+    double nx_ = 0.5;
+    double ny_ = 0.5;
     bool zoom_ = false;
-    bool moved_ = false;
 };
 
 // Draggable normalized-placement pad for Lens Flare: shows the image (or a
@@ -572,7 +580,10 @@ void FilterParamControls::addControl(const FilterParamSpec& spec)
         break;
     }
     case FilterControl::BlurCenter: {
-        control.center = new BlurCenterWidget(parent_);
+        auto* center = new BlurCenterWidget(parent_);
+        center->setNormalized(fallback(0, 0.5), fallback(1, 0.5));
+        center->moved = [this](double, double) { emit changed(); };
+        control.center = center;
         break;
     }
     case FilterControl::Hidden:
@@ -818,8 +829,12 @@ void FilterParamControls::setValues(const QList<double>& initial)
                                                                      control.y->value());
             }
             break;
-        case FilterControl::BlurCenter:
+        case FilterControl::BlurCenter: {
+            const double cx = slot < initial.size() ? initial.at(slot) : 0.5;
+            const double cy = slot + 1 < initial.size() ? initial.at(slot + 1) : 0.5;
+            static_cast<BlurCenterWidget*>(control.center)->setNormalized(cx, cy);
             break;
+        }
         case FilterControl::Hidden:
             if (slot < initial.size()) {
                 control.hidden = initial.at(slot);
@@ -861,7 +876,10 @@ double FilterParamControls::controlValue(const Control& control, int slot) const
     }
     case FilterControl::Placement:
         return slot == 0 ? control.x->value() : control.y->value();
-    case FilterControl::BlurCenter:
+    case FilterControl::BlurCenter: {
+        const auto* center = static_cast<const BlurCenterWidget*>(control.center);
+        return slot == 0 ? center->x() : center->y();
+    }
     case FilterControl::ShearCurve:
         return 0.0;
     case FilterControl::Hidden:

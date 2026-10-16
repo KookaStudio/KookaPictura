@@ -517,6 +517,7 @@ fn moving_kernels() -> Vec<Filter> {
         Filter::RadialBlur {
             method: RadialMethod::Zoom,
             amount: 20.0,
+            center: (0.5, 0.5),
             quality: Quality::Good,
         },
         Filter::Average,

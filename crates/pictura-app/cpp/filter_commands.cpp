@@ -95,6 +95,9 @@ FilterParamSpec blurCenter(const QString& label)
     FilterParamSpec p;
     p.control = FilterControl::BlurCenter;
     p.label = label;
+    p.minimum = 0.0;
+    p.maximum = 1.0;
+    p.initial = {0.5, 0.5};
     return p;
 }
 
