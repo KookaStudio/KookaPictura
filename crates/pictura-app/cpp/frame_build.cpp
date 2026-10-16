@@ -477,6 +477,10 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
         registry_->dispatch(
             commandIdForPath({QStringLiteral("Select"), QStringLiteral("Refine Edge…")}));
     });
+    connect(layersPanel_, &LayersPanel::selectAndMaskRequested, this, [this]() {
+        registry_->dispatch(
+            commandIdForPath({QStringLiteral("Select"), QStringLiteral("Refine Edge…")}));
+    });
     brushPanel_->setController(tools_);
     cloneSourcePanel_->setController(tools_);
     glyphsPanel_->setController(tools_);

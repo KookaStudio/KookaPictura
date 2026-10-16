@@ -456,6 +456,8 @@ fn cs_dab(@builtin(global_invocation_id) gid: vec3<u32>) {
     // per-dimension workgroup limit spans several y rows, so `idx` must walk
     // both, exactly like `cs_planar`.
     let stride = u32(params[22]);
+    // 1 for a single-channel mask (blend byte 0 only), 4 for an RGBA layer.
+    let channels = u32(params[23]);
 
     let idx = gid.x + gid.y * stride;
     if (idx >= bw * bh) { return; }
@@ -498,7 +500,14 @@ fn cs_dab(@builtin(global_invocation_id) gid: vec3<u32>) {
     // Composite from the immutable base, not the accumulated layer, so a pixel
     // covered by many dabs matches the CPU oracle exactly.
     let w = base[i];
-    if (mode == 0u) {
+    if (channels == 1u) {
+        // A mask: byte 0 is the coverage and the paint is its luma, so the
+        // composite collapses to a single-channel lerp (base is opaque).
+        let dr = f32(byte_at(w, 0u));
+        let sa = color.a * a;
+        let out = dr * (1.0 - sa) + color.r * 255.0 * sa;
+        layer[i] = put_byte(w, 0u, u8_round(out));
+    } else if (mode == 0u) {
         let dr = f32(byte_at(w, 0u));
         let dg = f32(byte_at(w, 8u));
         let db = f32(byte_at(w, 16u));

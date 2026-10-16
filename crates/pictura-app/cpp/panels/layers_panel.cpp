@@ -355,7 +355,10 @@ LayersPanel::LayersPanel(QWidget* parent)
     layout->addLayout(buttons);
 
     connect(tree_->selectionModel(), &QItemSelectionModel::currentChanged, this,
-            [this](const QModelIndex&, const QModelIndex&) { syncControls(); });
+            [this](const QModelIndex&, const QModelIndex&) {
+                syncControls();
+                syncMaskSolo();
+            });
     connect(tree_->selectionModel(), &QItemSelectionModel::selectionChanged, this,
             [this](const QItemSelection&, const QItemSelection&) { syncControls(); });
     connect(tree_, &QTreeView::expanded, this, [this](const QModelIndex& index) {

@@ -168,6 +168,12 @@ public:
     // its mask or layer thumbnail as a user would (test seam).
     bool rowMaskTargetForTest(const QString& path) const;
     bool clickMaskThumbnailForTest(const QString& path);
+    // Alt-click the mask thumbnail of `path`'s row as a user would (the mask
+    // solo toggle); false when the row shows no mask.
+    bool altClickMaskThumbnailForTest(const QString& path);
+    // Alt+Shift-click the mask thumbnail (the reserved rubylith gesture); false
+    // when the row shows no mask.
+    bool altShiftClickMaskThumbnailForTest(const QString& path);
     bool clickLayerThumbnailForTest(const QString& path);
     // The row's active edit target (0 image, 1 raster mask, 2 vector mask).
     int rowActiveThumbForTest(const QString& path) const;
@@ -235,6 +241,11 @@ public:
     QStringList rowMenuTextsForPathForTest(const QString& path);
     bool rowMenuEnabledForPathForTest(const QString& path, const QString& text);
     bool performRowActionForTest(const QString& id, const QString& path);
+    // The mask-thumbnail context menu: its item texts/enabled states, and a
+    // direct run of one command by its action id (test seam).
+    QStringList maskMenuTextsForPathForTest(const QString& path);
+    bool maskMenuEnabledForPathForTest(const QString& path, const QString& text);
+    bool performMaskActionForTest(const QString& id, const QString& path);
     void setFilterEffectForTest(const QString& effect, bool enabled);
 
     // Phase D: run a wired Layers per-widget menu entry by its action id.
@@ -255,6 +266,12 @@ public:
     // Delete the selected layers; Layer > Delete Layer routes here too.
     void deleteSelection();
 
+    // Whether a raster mask is the current mask edit target.
+    bool maskEditing() const { return maskEditing_; }
+    // Delete the current mask edit target's mask (no confirmation dialog). The
+    // Delete key and the mask-thumbnail menu's Delete Layer Mask route here.
+    void deleteActiveMask();
+
 signals:
     void selectionChanged();
     // The edit target moved between the active layer's pixels and its mask.
@@ -262,6 +279,9 @@ signals:
     // A smart-object contents command chosen from a row's context menu, to be
     // run by the frame on `path`: `edit`, `replace`, or `export`.
     void smartObjectContentsRequested(const QString& action, const QString& path);
+    // The mask context menu's Select and Mask…; the frame opens Refine Edge
+    // (the same editor as the selection tools' Select and Mask button).
+    void selectAndMaskRequested();
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -269,6 +289,8 @@ protected:
 private:
     void syncControls();
     void syncEditTarget();
+    // End a mask solo view whose layer is no longer the current one.
+    void syncMaskSolo();
     void selectLayer(int index);
     void selectPath(const QString& path);
     void showContextMenu(const QPoint& pos);
@@ -276,6 +298,9 @@ private:
                          bool shape = false, bool smart = false);
     bool performRowAction(const QString& id, const QString& path);
     void showEyeMenu(const QPoint& pos, const QModelIndex& index);
+    void showMaskThumbMenu(const QPoint& pos, const QModelIndex& index);
+    void populateMaskMenu(QMenu& menu, const QString& path, const QModelIndex& index);
+    bool performMaskAction(const QString& id, const QString& path);
     void addColorLabelActions(QMenu* menu, int currentLabel);
     void openPanelOptions();
     void persistOptions();
@@ -298,6 +323,8 @@ private:
     void clearSolo();
     QStringList soloPaths(const QString& path, const QHash<QString, bool>& snapshot) const;
     void setActiveThumb(const QString& path, int thumb);
+    // Synthesize a left-click with `mods` on `path`'s mask thumbnail.
+    bool clickMaskThumbWithModifiersForTest(const QString& path, Qt::KeyboardModifiers mods);
 
     PictureView* view_ = nullptr;
     LayersModel* model_ = nullptr;

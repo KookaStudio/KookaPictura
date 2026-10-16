@@ -161,6 +161,13 @@ void LayersPanel::showContextMenu(const QPoint& pos)
         showEyeMenu(pos, index);
         return;
     }
+    // A right-click on a raster mask thumbnail opens the mask menu (not the
+    // generic row menu), as CS6 does.
+    const QRect maskThumb = delegate_->maskThumbRect(tree_->visualRect(index), index);
+    if (!maskThumb.isEmpty() && maskThumb.contains(pos)) {
+        showMaskThumbMenu(pos, index);
+        return;
+    }
     const QString path = pathForProxyIndex(index);
     if (path.isEmpty()) {
         return;
@@ -173,6 +180,117 @@ void LayersPanel::showContextMenu(const QPoint& pos)
     populateRowMenu(menu, path, index.data(ColorRole).toInt(), index.data(KindRole).toString(),
                     index.data(LayerRowShapeRole).toBool(), index.data(SmartObjectRole).toBool());
     menu.exec(tree_->viewport()->mapToGlobal(pos));
+}
+
+void LayersPanel::showMaskThumbMenu(const QPoint& pos, const QModelIndex& index)
+{
+    const QString path = pathForProxyIndex(index);
+    if (path.isEmpty() || !view_) {
+        return;
+    }
+    // CS6 makes the clicked mask the edit target, so the menu's commands act on
+    // it; selecting the row activates its layer (the target only routes strokes
+    // while its layer is active).
+    tree_->setCurrentIndex(index);
+    setActiveThumb(path, 1);
+    mask_edit_target_set(*view_, path);
+    syncEditTarget();
+    QMenu menu(tree_);
+    populateMaskMenu(menu, path, index);
+    menu.exec(tree_->viewport()->mapToGlobal(pos));
+}
+
+void LayersPanel::populateMaskMenu(QMenu& menu, const QString& path, const QModelIndex& index)
+{
+    const bool disabled = index.data(MaskDisabledRole).toBool();
+    const bool smart = index.data(SmartObjectRole).toBool();
+    const auto add = [&](const char* id, const QString& label, bool enabled, const QString& tip) {
+        QAction* action = menu.addAction(label);
+        action->setEnabled(enabled);
+        if (!tip.isEmpty()) {
+            action->setToolTip(tip);
+        }
+        connect(action, &QAction::triggered, this,
+                [this, id, path] { performMaskAction(QLatin1String(id), path); });
+    };
+    add("enableLayerMask",
+        disabled ? tr("Enable Layer Mask") : tr("Disable Layer Mask"), true, QString());
+    menu.addSeparator();
+    add("deleteLayerMask", tr("Delete Layer Mask"), true, QString());
+    add("applyLayerMask", tr("Apply Layer Mask"), !smart,
+        smart ? tr("Apply Layer Mask — not available for a smart object") : QString());
+    menu.addSeparator();
+    add("maskAdd", tr("Add Mask To Selection"), true, QString());
+    add("maskSubtract", tr("Subtract Mask From Selection"), true, QString());
+    add("maskIntersect", tr("Intersect Mask With Selection"), true, QString());
+    menu.addSeparator();
+    add("selectAndMask", tr("Select and Mask…"), true, QString());
+    menu.addSeparator();
+    add("maskOptions", tr("Mask Options…"), false, tr("Mask Options… — not implemented yet"));
+}
+
+bool LayersPanel::performMaskAction(const QString& id, const QString& path)
+{
+    if (!view_) {
+        return false;
+    }
+    if (id == QLatin1String("enableLayerMask")) {
+        const QModelIndex index = model_ ? model_->indexForPath(path) : QModelIndex();
+        return layer_mask_set_enabled_path(*view_, path, index.data(MaskDisabledRole).toBool());
+    }
+    if (id == QLatin1String("deleteLayerMask")) {
+        return layer_mask_delete_path(*view_, path);
+    }
+    if (id == QLatin1String("applyLayerMask")) {
+        return layer_mask_apply_path(*view_, path);
+    }
+    if (id == QLatin1String("maskAdd")) {
+        return view_->mask_selection(path, QStringLiteral("add"));
+    }
+    if (id == QLatin1String("maskSubtract")) {
+        return view_->mask_selection(path, QStringLiteral("subtract"));
+    }
+    if (id == QLatin1String("maskIntersect")) {
+        return view_->mask_selection(path, QStringLiteral("intersect"));
+    }
+    if (id == QLatin1String("selectAndMask")) {
+        // Refine Edge lives in the frame; hand off rather than reach for it here.
+        emit selectAndMaskRequested();
+        return true;
+    }
+    return false;
+}
+
+QStringList LayersPanel::maskMenuTextsForPathForTest(const QString& path)
+{
+    const QModelIndex index = model_ ? model_->indexForPath(path) : QModelIndex();
+    QMenu menu;
+    populateMaskMenu(menu, path, index);
+    QStringList texts;
+    for (QAction* action : menu.actions()) {
+        if (!action->isSeparator()) {
+            texts.push_back(action->text());
+        }
+    }
+    return texts;
+}
+
+bool LayersPanel::maskMenuEnabledForPathForTest(const QString& path, const QString& text)
+{
+    const QModelIndex index = model_ ? model_->indexForPath(path) : QModelIndex();
+    QMenu menu;
+    populateMaskMenu(menu, path, index);
+    for (QAction* action : menu.actions()) {
+        if (!action->isSeparator() && action->text() == text) {
+            return action->isEnabled();
+        }
+    }
+    return false;
+}
+
+bool LayersPanel::performMaskActionForTest(const QString& id, const QString& path)
+{
+    return performMaskAction(id, path);
 }
 
 void LayersPanel::populateRowMenu(QMenu& menu, const QString& path, int color,

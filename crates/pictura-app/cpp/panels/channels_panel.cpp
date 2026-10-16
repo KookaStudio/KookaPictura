@@ -5,6 +5,7 @@
 #include "theme.h"
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/channels.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QEvent>
@@ -25,6 +26,9 @@ namespace pictura {
 namespace {
 
 constexpr int kThumbnailSize = 24;
+
+// The `alpha` sentinel for the active layer's mask channel row.
+constexpr int kMaskChannel = -2;
 
 struct ChannelDef {
     const char* name;
@@ -169,7 +173,12 @@ ChannelsPanel::ChannelsPanel(QWidget* parent)
     }
     layout->addLayout(footer);
 
-    connect(list_, &QListWidget::currentRowChanged, this, &ChannelsPanel::updateFooter);
+    connect(list_, &QListWidget::currentRowChanged, this, [this](int row) {
+        updateFooter();
+        if (!syncing_) {
+            applyChannelSolo(row);
+        }
+    });
     connect(load_, &QToolButton::clicked, this, [this]() {
         const int alpha = selectedAlpha();
         if (view_ && alpha >= 0) {
@@ -238,9 +247,21 @@ void ChannelsPanel::rebuild(const QString& mode, int alphaCount)
 {
     list_->clear();
     rows_.clear();
+    maskRowIndex_ = -1;
+    maskName_.clear();
     const QList<ChannelDef> defs = channelsForMode(mode);
     for (const ChannelDef& def : defs) {
         addRow(QLatin1String(def.name), QLatin1String(def.shortcut), -1);
+    }
+    // The active layer's raster mask, when it has one, is the next channel row
+    // (CS6 lists it after the colour channels, before the alpha channels).
+    if (view_ && view_->has_document()) {
+        const QString name = QString(channels_active_mask_name(*view_));
+        if (!name.isEmpty()) {
+            maskName_ = name;
+            maskRowIndex_ = rows_.size();
+            addRow(name, QStringLiteral("Ctrl+\\"), kMaskChannel);
+        }
     }
     // Alpha channels follow on the next Ctrl+number, as far as Ctrl+9 goes.
     int key = QString::fromLatin1(defs.last().shortcut).back().digitValue() + 1;
@@ -268,7 +289,13 @@ void ChannelsPanel::rebuild(const QString& mode, int alphaCount)
         mask_ = 0x7;
         emit channelMaskChanged(mask_);
     }
-    list_->setCurrentRow(0);
+    // Keep the mask channel selected while it is soloed; otherwise show the
+    // composite row. `syncing_` stops this from ending the solo.
+    const bool soloed = maskRowIndex_ >= 0 && view_ && view_->has_document()
+                        && !mask_solo_get(*view_).isEmpty();
+    syncing_ = true;
+    list_->setCurrentRow(soloed ? maskRowIndex_ : 0);
+    syncing_ = false;
 }
 
 void ChannelsPanel::setView(PictureView* view)
@@ -286,7 +313,8 @@ void ChannelsPanel::refresh()
     const bool document = view_ && view_->has_document();
     const QString mode = document ? QString(channels_mode(*view_)) : QStringLiteral("rgb");
     const int alphas = document ? view_->selection_channel_count() : 0;
-    if (mode != mode_ || alphas != alphaCount_) {
+    const QString maskName = document ? QString(channels_active_mask_name(*view_)) : QString();
+    if (mode != mode_ || alphas != alphaCount_ || maskName != maskName_) {
         rebuild(mode, alphas);
     }
     refreshThumbnails();
@@ -312,6 +340,19 @@ void ChannelsPanel::refreshThumbnails()
     }
     for (int i = 0; i < rows_.size(); ++i) {
         const Row& row = rows_.at(i);
+        if (row.alpha == kMaskChannel) {
+            int w = 0;
+            int h = 0;
+            const ::rust::Vec<std::uint8_t> plane =
+                view_ ? channels_active_mask_thumbnail(*view_, kThumbnailSize, w, h)
+                      : ::rust::Vec<std::uint8_t>();
+            QImage gray(w, h, QImage::Format_Grayscale8);
+            for (int y = 0; y < h && int(plane.size()) == w * h; ++y) {
+                std::copy_n(plane.data() + size_t(y) * size_t(w), w, gray.scanLine(y));
+            }
+            row.thumbnail->setPixmap(QPixmap::fromImage(gray));
+            continue;
+        }
         if (row.alpha < 0) {
             row.thumbnail->setPixmap(thumbnail(source, mode_, i));
             continue;
@@ -356,6 +397,22 @@ int ChannelsPanel::selectedAlpha() const
 {
     const int row = list_->currentRow();
     return row >= 0 && row < rows_.size() ? rows_.at(row).alpha : -1;
+}
+
+int ChannelsPanel::maskRowIndexForTest() const { return maskRowIndex_; }
+
+void ChannelsPanel::applyChannelSolo(int row)
+{
+    // Selecting the mask channel shows that layer's mask on the canvas (the
+    // view-only solo); selecting any other row restores the composite.
+    if (!view_ || !view_->has_document()) {
+        return;
+    }
+    if (row >= 0 && row == maskRowIndex_) {
+        mask_solo_set(*view_, view_->active_layer_path());
+    } else {
+        mask_solo_set(*view_, QString());
+    }
 }
 
 void ChannelsPanel::updateFooter()

@@ -22,7 +22,9 @@ void wireCanvasLevelProvider(PictureView* view, ImageView* canvas)
     QPointer<PictureView> levelView = view;
     canvas->setLevelProvider(ImageView::LevelProvider{
         [levelView](int level, int x, int y, int w, int h) {
-            return levelView ? levelView->display_image(level, x, y, w, h) : QImage();
+            // The canvas display source: the solo mask plane while a mask is
+            // soloed, else the composite. Other panels keep `display_image`.
+            return levelView ? levelView->canvas_display_image(level, x, y, w, h) : QImage();
         },
         [levelView]() { return levelView ? document_api::levelCount(*levelView) : 0; },
         [levelView](int level) {

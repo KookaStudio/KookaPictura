@@ -403,6 +403,29 @@ impl qobject::PictureView {
         self.as_mut().apply_selection(shape, CombineMode::New)
     }
 
+    /// Load the raster mask on the layer at `path` as a selection, combined with
+    /// `mode` (`add`/`subtract`/`intersect`, else `New`). White coverage is
+    /// selected. One undo state; false for an unresolved path or a layer with no
+    /// raster mask.
+    pub fn mask_selection(mut self: Pin<&mut Self>, path: &QString, mode: &QString) -> bool {
+        let path = path.to_string();
+        let shape = {
+            let rust = self.rust();
+            let Some(doc) = rust.doc.as_ref() else {
+                return false;
+            };
+            let mask =
+                pictura_render::resolve_path(doc, &path).and_then(|layer| layer.mask.as_ref());
+            let Some(mask) = mask else {
+                return false;
+            };
+            pictura_select::selection_from_mask(mask, doc.width, doc.height)
+        };
+        let mode = combine_mode_from(&mode.to_string());
+        self.as_mut()
+            .apply_selection_labeled(shape, mode, "Mask to Selection")
+    }
+
     pub fn has_selection(&self) -> bool {
         self.rust().selection.is_some()
     }

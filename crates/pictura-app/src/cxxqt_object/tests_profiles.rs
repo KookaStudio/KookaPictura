@@ -812,3 +812,67 @@ fn feather_selection_profile() {
         );
     }
 }
+
+/// Print-only 4000² mask-dab profile: the exact mask raster through the old
+/// RGBA stand-in versus the new single-channel document, per dab. No pass/fail
+/// budget (the reference machine is not pinned).
+#[test]
+#[ignore = "4000x4000 mask-dab profile; run explicitly with --ignored --nocapture"]
+fn mask_dab_profile_4000() {
+    use pictura_core::LayerMask;
+    use pictura_paint::{spacing::SpacingMode, Stroke, StrokeConfig, StrokeSample};
+
+    let mut doc = Document::new(4000, 4000, ColorMode::Rgb, BitDepth::Eight);
+    let mut layer = pixel_layer("top", 4000, 4000, (200, 100, 50));
+    layer.mask = Some(LayerMask {
+        rect: PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 4000,
+            right: 4000,
+        },
+        default_color: 255,
+        data: Some(vec![255u8; 4000 * 4000].into()),
+        ..Default::default()
+    });
+    doc.layers = vec![layer];
+
+    let cfg = StrokeConfig {
+        color: rgba_from_argb(0xFF000000),
+        diameter: 512,
+        hardness: 100,
+        spacing: SpacingMode::Fixed(25),
+        ..StrokeConfig::default()
+    };
+    let time = |mut document: Document| {
+        let mut stroke = Stroke::begin_at(&document, "0", cfg).expect("stroke begins");
+        let mut total = std::time::Duration::ZERO;
+        let mut dabs = 0u32;
+        for i in 0..16 {
+            let sample = StrokeSample {
+                x: 600.0 + i as f32 * 180.0,
+                y: 2000.0,
+                pressure: 1.0,
+            };
+            let t = std::time::Instant::now();
+            if stroke.sample(&mut document, sample) {
+                dabs += 1;
+            }
+            total += t.elapsed();
+            let _ = stroke.take_dirty();
+        }
+        (dabs, total)
+    };
+
+    let (rgba_dabs, rgba_time) = time(pictura_render::mask_document(&doc, "0").unwrap().document);
+    let (cov_dabs, cov_time) = time(
+        pictura_render::mask_document_coverage(&doc, "0")
+            .unwrap()
+            .document,
+    );
+    println!(
+        "mask_dab_profile dabs={rgba_dabs} rgba_per_dab={:.2}ms coverage_per_dab={:.2}ms",
+        rgba_time.as_secs_f64() * 1000.0 / f64::from(rgba_dabs.max(1)),
+        cov_time.as_secs_f64() * 1000.0 / f64::from(cov_dabs.max(1)),
+    );
+}
