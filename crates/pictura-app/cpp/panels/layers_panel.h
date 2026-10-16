@@ -9,8 +9,11 @@
 #include <QtGui/QImage>
 #include <QtWidgets/QWidget>
 
+#include <functional>
+
 class QComboBox;
 class QColor;
+class QDialog;
 class QEvent;
 class QImage;
 class QMenu;
@@ -171,7 +174,7 @@ public:
     // Alt-click the mask thumbnail of `path`'s row as a user would (the mask
     // solo toggle); false when the row shows no mask.
     bool altClickMaskThumbnailForTest(const QString& path);
-    // Alt+Shift-click the mask thumbnail (the reserved rubylith gesture); false
+    // Alt+Shift-click the mask thumbnail (the rubylith overlay toggle); false
     // when the row shows no mask.
     bool altShiftClickMaskThumbnailForTest(const QString& path);
     bool clickLayerThumbnailForTest(const QString& path);
@@ -248,6 +251,15 @@ public:
     bool performMaskActionForTest(const QString& id, const QString& path);
     void setFilterEffectForTest(const QString& effect, bool enabled);
 
+    // The mask button (layers_panel_mask_menu.cpp).
+    QString maskButtonToolTipForTest() const;
+    bool maskButtonEnabledForTest() const;
+    void clickMaskButtonForTest();
+    // Drive the panel's modal dialogs (Refine Mask, Mask Options): the driver
+    // edits the dialog and returns whether it was accepted. Empty restores
+    // `runDialog`.
+    void setDialogDriverForTest(std::function<bool(QDialog&)> driver);
+
     // Phase D: run a wired Layers per-widget menu entry by its action id.
     // Returns false for ids this panel does not own.
     bool performPanelMenuAction(const QString& actionId);
@@ -279,9 +291,9 @@ signals:
     // A smart-object contents command chosen from a row's context menu, to be
     // run by the frame on `path`: `edit`, `replace`, or `export`.
     void smartObjectContentsRequested(const QString& action, const QString& path);
-    // The mask context menu's Select and Mask…; the frame opens Refine Edge
-    // (the same editor as the selection tools' Select and Mask button).
-    void selectAndMaskRequested();
+    // The rubylith overlay or its display options changed; the frame re-renders
+    // the overlay.
+    void maskDisplayChanged();
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -294,6 +306,12 @@ private:
     void selectLayer(int index);
     void selectPath(const QString& path);
     void showContextMenu(const QPoint& pos);
+    void openRefineMask(const QString& path);
+    void openMaskOptions();
+    bool runPanelDialog(QDialog& dialog);
+    // The mask button follows the active layer's masks.
+    void syncStripButtons();
+    void addMaskFromButton();
     void populateRowMenu(QMenu& menu, const QString& path, int color, const QString& kind,
                          bool shape = false, bool smart = false);
     bool performRowAction(const QString& id, const QString& path);
@@ -340,6 +358,8 @@ private:
     QToolButton* lockPosition_ = nullptr;
     QToolButton* lockNesting_ = nullptr;
     QToolButton* lockAll_ = nullptr;
+    QToolButton* maskButton_ = nullptr;
+    std::function<bool(QDialog&)> dialogDriver_;
     QSet<QString> expandedPaths_;
     // Panel-local active edit target per row path: 0 image, 1 mask, 2 vector.
     QHash<QString, int> activeThumbByPath_;

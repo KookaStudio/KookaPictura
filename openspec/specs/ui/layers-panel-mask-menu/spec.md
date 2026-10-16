@@ -29,31 +29,34 @@ with a `— not implemented yet` tooltip rather than being hidden.
   carries no raster mask
 - **THEN** no mask menu is shown
 
-### Requirement: Mask context menu commands
+### Requirement: CS6 mask context menu commands
 
 The mask context menu SHALL list, in this order: **Enable Layer Mask** /
 **Disable Layer Mask** (rendered per the mask's current enabled state), then
 **Delete Layer Mask** and **Apply Layer Mask**, then **Add Mask To Selection**,
 **Subtract Mask From Selection**, and **Intersect Mask With Selection**, then
-**Select and Mask…**, then the disabled placeholder **Mask Options…** (Layer Mask
-Display Options); a separator SHALL divide each of those groups.
+**Refine Mask…**, then **Mask Options…** (Layer Mask Display Options); a
+separator SHALL divide each of those groups.
 
 - **Delete Layer Mask** SHALL remove the mask without applying it.
 - **Apply Layer Mask** SHALL fold the mask's coverage into the layer's pixel
   alpha (multiplying the existing alpha) and then remove the mask. It SHALL be
-  disabled on a smart-object layer, which cannot take a permanent mask.
+  disabled, and refused without changing the document, on a smart-object layer,
+  which cannot take a permanent mask, and on a group or an adjustment/fill
+  layer, which renders from its children or content rather than its own alpha.
 - **Add/Subtract/Intersect Mask To/From/With Selection** SHALL load the mask's
   coverage as a pixel selection (white = selected) combined with `Add`,
   `Subtract`, or `Intersect` respectively.
-- **Select and Mask…** SHALL be enabled and SHALL open the Refine Edge editor
-  (the same dialog the selection tools' Select and Mask button opens).
+- **Refine Mask…** SHALL be enabled and SHALL open Refine Mask on the clicked
+  layer's mask (`ui/layers-mask-commands`).
+- **Mask Options…** SHALL be enabled and SHALL open Layer Mask Display Options.
 
 #### Scenario: The menu lists the CS6 items in order [lmm_items]
 
 - **WHEN** the user opens the mask context menu for a raster-mask row
 - **THEN** it contains Enable/Disable Layer Mask, Delete Layer Mask, Apply Layer
   Mask, Add Mask To Selection, Subtract Mask From Selection, Intersect Mask With
-  Selection, Select and Mask…, and Mask Options… in that order
+  Selection, Refine Mask…, and Mask Options… in that order
 
 #### Scenario: The enable/disable label follows the state [lmm_label]
 
@@ -79,18 +82,22 @@ Display Options); a separator SHALL divide each of those groups.
 - **WHEN** the mask context menu is opened for a smart-object layer
 - **THEN** Apply Layer Mask is disabled
 
+#### Scenario: Apply needs a layer that renders from its pixels [lmm_apply_pixel_only]
+
+- **WHEN** the mask context menu is opened for a fill layer, and Apply Layer Mask is run on a group or a fill layer anyway
+- **THEN** Apply Layer Mask is disabled, the run is refused, the mask stays, and no undo state is recorded
+
 #### Scenario: The selection commands combine the mask coverage [lmm_selection]
 
 - **WHEN** the user picks Add Mask To Selection for a mask
 - **THEN** the mask's white areas are added to the pixel selection
 
-#### Scenario: Select and Mask opens Refine Edge [lmm_select_and_mask]
+#### Scenario: Refine Mask opens on the clicked mask [lmm_refine_mask]
 
-- **WHEN** the user picks Select and Mask… from the mask context menu
-- **THEN** the Refine Edge editor opens
+- **WHEN** the user picks Refine Mask… from the mask context menu
+- **THEN** the Refine Edge dialog opens titled "Refine Mask" on that layer's mask
 
-#### Scenario: Mask Options is a disabled placeholder [lmm_placeholders]
+#### Scenario: Mask Options opens the display options [lmm_mask_options]
 
-- **WHEN** the mask context menu is opened
-- **THEN** Mask Options… is present but disabled with the `— not implemented yet`
-  tooltip
+- **WHEN** the user picks Mask Options… from the mask context menu
+- **THEN** Layer Mask Display Options opens with the current rubylith colour and opacity

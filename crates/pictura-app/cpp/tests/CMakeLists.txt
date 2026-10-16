@@ -10,6 +10,7 @@ set(PICTURA_QT_TESTS
     tst_design_system_dialog
     tst_edit_clipboard
     tst_mask_edit
+    tst_layers_mask_commands
     tst_image_ops
     tst_image_rotate
     tst_crop_straighten

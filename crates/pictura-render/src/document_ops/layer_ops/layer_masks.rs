@@ -116,13 +116,15 @@ pub fn delete_layer_mask(doc: &mut Document, path: &str) -> bool {
 }
 
 /// Fold the mask coverage into the layer's alpha and clear the mask. Refused on
-/// a smart-object layer, which cannot take a permanent mask. A disabled mask is
-/// a no-op on the pixels but is still cleared.
+/// a smart-object layer, which cannot take a permanent mask, and on a group or
+/// an adjustment/fill layer, which renders from its children or its content
+/// rather than its own alpha, so dropping the mask would reveal what it hid. A
+/// disabled mask is a no-op on the pixels but is still cleared.
 pub fn apply_layer_mask(doc: &mut Document, path: &str) -> bool {
     let Some(layer) = resolve_path_mut(doc, path) else {
         return false;
     };
-    if layer.smart_object.is_some() {
+    if layer.smart_object.is_some() || layer.is_group || layer.adjustment.is_some() {
         return false;
     }
     let Some(mask) = layer.mask.take() else {
@@ -515,6 +517,26 @@ mod tests {
         doc.layers[0].smart_object = Some(SmartObject::default());
         assert!(!apply_layer_mask(&mut doc, "0"));
         assert!(has_layer_mask(&doc, "0"));
+    }
+
+    #[test]
+    fn apply_refuses_a_group_and_a_fill_layer() {
+        let mut group = doc(2, 1);
+        assert!(add_layer_mask(
+            &mut group,
+            "0",
+            LayerMaskKind::HideAll,
+            None
+        ));
+        group.layers[0].is_group = true;
+        assert!(!apply_layer_mask(&mut group, "0"));
+        assert!(has_layer_mask(&group, "0"), "the mask keeps hiding");
+
+        let mut fill = doc(2, 1);
+        assert!(add_layer_mask(&mut fill, "0", LayerMaskKind::HideAll, None));
+        fill.layers[0].adjustment = Some(crate::encode_solid_color_fill([255, 0, 0]));
+        assert!(!apply_layer_mask(&mut fill, "0"));
+        assert!(has_layer_mask(&fill, "0"));
     }
 
     #[test]

@@ -1,4 +1,5 @@
-//! Select > Refine Edge: the dialog's preview mask and its OK. Free functions
+//! Select > Refine Edge and the mask menu's Refine Mask: the dialog's preview
+//! mask and its OK, refining the selection or a layer's mask. Free functions
 //! over a [`PictureView`] (their own bridge, so the `PictureView` declaration
 //! list does not grow). Ports CS6 Refine Edge (SEL-003) onto
 //! [`pictura_select::refine`].
@@ -7,15 +8,20 @@
 
 use super::super::helpers::active_pixel_layer;
 use super::super::helpers_composite::{current_buffer, selection_to_mask};
+use super::super::impl_layers::coverage_at;
 use super::super::qobject::PictureView;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
+use cxx_qt_lib::QString;
 use pictura_core::{LayerMask, PsdRect};
 use pictura_select::{refine, OutputTarget, RefineEdgeSettings, Selection};
 
 #[cxx_qt::bridge]
 pub mod ffi {
     unsafe extern "C++" {
+        include!("cxx-qt-lib/qstring.h");
+        type QString = cxx_qt_lib::QString;
+
         include!("pictura_app/src/cxxqt_object.cxxqt.h");
         #[namespace = "pictura"]
         type PictureView = super::PictureView;
@@ -61,6 +67,97 @@ pub mod ffi {
             amount: i32,
             output: i32,
         ) -> bool;
+
+        /// Whether Refine Mask can run on the layer at `path`: it has a layer
+        /// mask.
+        fn refine_mask_available(view: &PictureView, path: &QString) -> bool;
+
+        /// As `refine_edge_preview`, refining the mask of the layer at `path`.
+        #[allow(clippy::too_many_arguments)]
+        fn refine_mask_preview(
+            view: &PictureView,
+            path: &QString,
+            smart_radius: bool,
+            radius: i32,
+            smooth: i32,
+            feather: i32,
+            contrast: i32,
+            shift_edge: i32,
+            max_side: i32,
+            width: &mut i32,
+            height: &mut i32,
+        ) -> Vec<u8>;
+
+        /// As `refine_edge_apply`, refining the mask of the layer at `path` and
+        /// writing a Layer Mask or new-layer output for that layer; one "Refine
+        /// Mask" state.
+        #[allow(clippy::too_many_arguments)]
+        fn refine_mask_apply(
+            view: Pin<&mut PictureView>,
+            path: &QString,
+            smart_radius: bool,
+            radius: i32,
+            smooth: i32,
+            feather: i32,
+            contrast: i32,
+            shift_edge: i32,
+            decontaminate: bool,
+            amount: i32,
+            output: i32,
+        ) -> bool;
+    }
+}
+
+/// What a refine starts from: the active selection (Refine Edge) or the mask
+/// of the layer at a path (Refine Mask).
+enum Source<'a> {
+    Selection,
+    Mask(&'a str),
+}
+
+impl Source<'_> {
+    /// The coverage to refine, document-sized, for the commit; `None` when it
+    /// is absent.
+    fn coverage(&self, view: &PictureView) -> Option<Selection> {
+        let rust = view.rust();
+        match self {
+            Source::Selection => rust.selection.clone(),
+            Source::Mask(path) => {
+                let doc = rust.doc.as_ref()?;
+                let mask = pictura_render::resolve_path(doc, path)?.mask.as_ref()?;
+                let (w, h) = (doc.width, doc.height);
+                Some(sample_mask(mask, w, h, w, h))
+            }
+        }
+    }
+
+    /// The coverage nearest-sampled at `w × h` for a preview, read in place:
+    /// a preview update never materializes a document-sized plane.
+    fn preview_coverage(&self, view: &PictureView, w: u32, h: u32) -> Option<Selection> {
+        let rust = view.rust();
+        match self {
+            Source::Selection => Some(shrink_selection(rust.selection.as_ref()?, w, h)),
+            Source::Mask(path) => {
+                let doc = rust.doc.as_ref()?;
+                let mask = pictura_render::resolve_path(doc, path)?.mask.as_ref()?;
+                Some(sample_mask(mask, doc.width, doc.height, w, h))
+            }
+        }
+    }
+
+    /// The layer a Layer Mask or new-layer output writes to.
+    fn layer(&self, view: &PictureView) -> Option<String> {
+        match self {
+            Source::Selection => view.rust().active_layer.clone(),
+            Source::Mask(path) => Some(path.to_string()),
+        }
+    }
+
+    fn label(&self) -> &'static str {
+        match self {
+            Source::Selection => "Refine Edge",
+            Source::Mask(_) => "Refine Mask",
+        }
     }
 }
 
@@ -150,6 +247,27 @@ fn shrink(buffer: pictura_core::PixelBuffer, max_side: u32) -> pictura_core::Pix
 }
 
 /// Shrink a selection mask to a proxy the same way [`shrink`] shrinks a buffer.
+/// The stored coverage of `mask` over a `doc_w × doc_h` document,
+/// nearest-sampled at `w × h` the way [`shrink_selection`] samples a selection.
+/// A disabled mask reads its coverage too: Refine Mask edits what is stored,
+/// unlike a mask loaded as a selection.
+fn sample_mask(mask: &LayerMask, doc_w: u32, doc_h: u32, w: u32, h: u32) -> Selection {
+    let (sw, sh) = (doc_w as usize, doc_h as usize);
+    let columns: Vec<i32> = (0..w as usize)
+        .map(|x| (x * sw / w as usize).min(sw - 1) as i32)
+        .collect();
+    let mut data = Vec::with_capacity(w as usize * h as usize);
+    for y in 0..h as usize {
+        let sy = (y * sh / h as usize).min(sh - 1) as i32;
+        data.extend(columns.iter().map(|&sx| coverage_at(mask, sx, sy)));
+    }
+    Selection {
+        width: w,
+        height: h,
+        data,
+    }
+}
+
 fn shrink_selection(sel: &Selection, w: u32, h: u32) -> Selection {
     let (sw, sh) = (sel.width as usize, sel.height as usize);
     let mut data = vec![0u8; w as usize * h as usize];
@@ -185,17 +303,60 @@ fn refine_edge_preview(
     if !refine_edge_available(view) {
         return Vec::new();
     }
+    let p = params(smart_radius, radius, smooth, feather, contrast, shift_edge);
+    preview(view, &Source::Selection, p, max_side, width, height)
+}
+
+fn refine_mask_available(view: &PictureView, path: &QString) -> bool {
+    view.rust()
+        .doc
+        .as_ref()
+        .is_some_and(|doc| pictura_render::has_layer_mask(doc, &path.to_string()))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn refine_mask_preview(
+    view: &PictureView,
+    path: &QString,
+    smart_radius: bool,
+    radius: i32,
+    smooth: i32,
+    feather: i32,
+    contrast: i32,
+    shift_edge: i32,
+    max_side: i32,
+    width: &mut i32,
+    height: &mut i32,
+) -> Vec<u8> {
+    *width = 0;
+    *height = 0;
+    let path = path.to_string();
+    let p = params(smart_radius, radius, smooth, feather, contrast, shift_edge);
+    preview(view, &Source::Mask(&path), p, max_side, width, height)
+}
+
+/// The refined coverage of `source`, scaled to fit `max_side`, with its size
+/// in `width` / `height`; empty when the source is absent or the refine fails.
+fn preview(
+    view: &PictureView,
+    source: &Source,
+    p: EngineParams,
+    max_side: i32,
+    width: &mut i32,
+    height: &mut i32,
+) -> Vec<u8> {
     let rust = view.rust();
-    let (Some(doc), Some(selection)) = (rust.doc.as_ref(), rust.selection.as_ref()) else {
+    let Some(doc) = rust.doc.as_ref() else {
         return Vec::new();
     };
     let image = shrink(
         current_buffer(doc, rust.gpu_compute),
         max_side.max(0) as u32,
     );
-    let mask = shrink_selection(selection, image.width, image.height);
-    let settings = params(smart_radius, radius, smooth, feather, contrast, shift_edge).settings();
-    match refine(&mask, &image, &settings) {
+    let Some(mask) = source.preview_coverage(view, image.width, image.height) else {
+        return Vec::new();
+    };
+    match refine(&mask, &image, &p.settings()) {
         Ok(refined) => {
             *width = refined.width as i32;
             *height = refined.height as i32;
@@ -205,24 +366,20 @@ fn refine_edge_preview(
     }
 }
 
-/// Write `data` into the layer at `path` as a document-sized raster mask.
+/// Write `data` into the layer at `path` as a document-sized raster mask. An
+/// existing mask keeps its flags, density and feather; only its pixels change.
 fn set_layer_mask(doc: &mut pictura_core::Document, path: &str, data: Vec<u8>) {
     let (w, h) = (doc.width as i32, doc.height as i32);
     if let Some(layer) = pictura_render::resolve_path_mut(doc, path) {
-        layer.mask = Some(LayerMask {
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: h,
-                right: w,
-            },
-            default_color: 0,
-            disabled: false,
-            flags: 0,
-            data: Some(data.into()),
-            extra: Vec::new(),
-            ..Default::default()
-        });
+        let mask = layer.mask.get_or_insert_with(LayerMask::default);
+        mask.rect = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: h,
+            right: w,
+        };
+        mask.default_color = 0;
+        mask.data = Some(data.into());
     }
 }
 
@@ -269,7 +426,7 @@ fn write_decontaminated(
 
 #[allow(clippy::too_many_arguments)]
 fn refine_edge_apply(
-    mut view: Pin<&mut PictureView>,
+    view: Pin<&mut PictureView>,
     smart_radius: bool,
     radius: i32,
     smooth: i32,
@@ -283,24 +440,61 @@ fn refine_edge_apply(
     if !refine_edge_available(&view) {
         return false;
     }
+    let p = params(smart_radius, radius, smooth, feather, contrast, shift_edge);
+    apply(view, &Source::Selection, p, decontaminate, amount, output)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn refine_mask_apply(
+    view: Pin<&mut PictureView>,
+    path: &QString,
+    smart_radius: bool,
+    radius: i32,
+    smooth: i32,
+    feather: i32,
+    contrast: i32,
+    shift_edge: i32,
+    decontaminate: bool,
+    amount: i32,
+    output: i32,
+) -> bool {
+    let path = path.to_string();
+    let p = params(smart_radius, radius, smooth, feather, contrast, shift_edge);
+    apply(view, &Source::Mask(&path), p, decontaminate, amount, output)
+}
+
+/// Refine `source` once and write the result to the `output` target; one undo
+/// state under the source's label. False when the source is absent or the
+/// target is refused.
+fn apply(
+    mut view: Pin<&mut PictureView>,
+    source: &Source,
+    p: EngineParams,
+    decontaminate: bool,
+    amount: i32,
+    output: i32,
+) -> bool {
     let Some(target) = OutputTarget::from_index(output) else {
         return false;
     };
-    let settings = params(smart_radius, radius, smooth, feather, contrast, shift_edge).settings();
+    let settings = p.settings();
     // Decontamination writes colour, so it only combines with a colour target.
     if decontaminate && !target.is_color_output() {
         return false;
     }
+    let Some(coverage) = source.coverage(&view) else {
+        return false;
+    };
 
     // Compute the refined mask (and, for a colour target, the decontaminated
     // pixels) against the composite before mutating anything.
     let prepared = {
         let rust = view.rust();
-        let (Some(doc), Some(selection)) = (rust.doc.as_ref(), rust.selection.as_ref()) else {
+        let Some(doc) = rust.doc.as_ref() else {
             return false;
         };
         let image = current_buffer(doc, rust.gpu_compute);
-        let refined = match refine(selection, &image, &settings) {
+        let refined = match refine(&coverage, &image, &settings) {
             Ok(refined) => refined,
             Err(_) => return false,
         };
@@ -316,12 +510,12 @@ fn refine_edge_apply(
     };
     let (refined, decon) = prepared;
 
-    let active = view.rust().active_layer.clone();
+    let layer = source.layer(&view);
     let source_is_pixel = view
         .rust()
         .doc
         .as_ref()
-        .is_some_and(|doc| active_pixel_layer(doc, active.as_deref()).is_some());
+        .is_some_and(|doc| active_pixel_layer(doc, layer.as_deref()).is_some());
     let mut new_layer_path: Option<String> = None;
 
     let applied = {
@@ -332,10 +526,17 @@ fn refine_edge_apply(
         match target {
             OutputTarget::Selection => true,
             OutputTarget::LayerMask => {
-                let Some(path) = active.clone() else {
+                let Some(path) = layer.clone() else {
                     return false;
                 };
-                if active_pixel_layer(doc, Some(&path)).is_none() {
+                // Refine Mask replaces the mask the layer already carries,
+                // whatever the layer renders from; Refine Edge adds one only to
+                // a pixel layer.
+                let eligible = match source {
+                    Source::Mask(_) => pictura_render::resolve_path(doc, &path).is_some(),
+                    Source::Selection => active_pixel_layer(doc, Some(&path)).is_some(),
+                };
+                if !eligible {
                     return false;
                 }
                 set_layer_mask(doc, &path, refined.data.clone());
@@ -345,7 +546,7 @@ fn refine_edge_apply(
                 if !source_is_pixel {
                     return false;
                 }
-                let Some(path) = active.clone() else {
+                let Some(path) = layer.clone() else {
                     return false;
                 };
                 let mask = selection_to_mask(&refined, doc);
@@ -378,7 +579,7 @@ fn refine_edge_apply(
         }
     }
     view.as_mut().recomposite();
-    view.as_mut().record("Refine Edge");
+    view.as_mut().record(source.label());
     true
 }
 
@@ -395,6 +596,43 @@ mod tests {
         let small = shrink_selection(&sel, 4, 2);
         assert_eq!((small.width, small.height), (4, 2));
         assert_eq!(&small.data[..4], &[0, 20, 40, 60]);
+    }
+
+    #[test]
+    fn the_mask_preview_samples_like_the_materialized_mask() {
+        // A 12×6 mask in a 16×10 document, with a gradient and the default
+        // colour around it.
+        let mask = LayerMask {
+            rect: PsdRect {
+                top: 2,
+                left: 3,
+                bottom: 8,
+                right: 15,
+            },
+            default_color: 200,
+            data: Some((0..72u8).map(|i| i * 3).collect::<Vec<_>>().into()),
+            ..Default::default()
+        };
+        let full = sample_mask(&mask, 16, 10, 16, 10);
+        assert_eq!(full.data[0], 200, "the default colour outside the rect");
+        assert_eq!(full.data[2 * 16 + 3], 0, "the rect's first pixel");
+        assert_eq!(full.data[7 * 16 + 14], 213, "the rect's last pixel");
+        for (w, h) in [(5, 3), (7, 9)] {
+            assert_eq!(
+                sample_mask(&mask, 16, 10, w, h).data,
+                shrink_selection(&full, w, h).data,
+                "{w}×{h}"
+            );
+        }
+        let disabled = LayerMask {
+            disabled: true,
+            ..mask
+        };
+        assert_eq!(
+            sample_mask(&disabled, 16, 10, 16, 10).data,
+            full.data,
+            "a disabled mask refines its stored coverage"
+        );
     }
 
     #[test]

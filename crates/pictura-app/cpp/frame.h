@@ -433,6 +433,10 @@ private:
     // frame_menus_smart_object.cpp: run the Layers row menu's Edit / Replace /
     // Export Contents actions on the row's path.
     void wireSmartObjectRowMenu();
+    // frame_mask_overlay.cpp: re-render the rubylith overlay when the Layers
+    // panel changes it, and draw the view's overlay on `canvas`.
+    void wireMaskOverlay();
+    void syncMaskOverlay(PictureView* view, ImageView* canvas);
     // frame_menus_smart_object.cpp: Layer > Smart Filter > Clear Smart Filters.
     void wireSmartFilterActions();
     void alignSelectedLayers(int edge, bool toSelection, int alignTo = 0);

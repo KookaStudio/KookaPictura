@@ -18,6 +18,7 @@
 #include "pictura_app/src/cxxqt_object/clipping.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layers_surface.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_layers/mask_commands.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/vector_masks.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/layer_style.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/layers_smart_filters.cxxqt.h"
@@ -170,15 +171,22 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                     syncEditTarget();
                 }
                 const QRect maskThumb = delegate_->maskThumbRect(vr, index);
+                const Qt::KeyboardModifiers rubylith = Qt::AltModifier | Qt::ShiftModifier;
+                if (!maskThumb.isEmpty() && maskThumb.contains(pos)
+                    && (mouse->modifiers() & rubylith) == rubylith) {
+                    // Alt+Shift-click toggles the rubylith overlay. It is
+                    // display only, so it leaves the edit target alone, but it
+                    // selects the row: the overlay belongs to the current layer
+                    // and ends when that changes (syncMaskSolo).
+                    tree_->setCurrentIndex(index);
+                    mask_overlay_toggle(*view_, rowPath);
+                    emit maskDisplayChanged();
+                    return true;
+                }
                 if (!maskThumb.isEmpty() && maskThumb.contains(pos)) {
                     setActiveThumb(rowPath, 1);
                     const bool alt = mouse->modifiers().testFlag(Qt::AltModifier);
                     const bool shift = mouse->modifiers().testFlag(Qt::ShiftModifier);
-                    if (alt && shift) {
-                        // Reserved for the rubylith overlay (not implemented):
-                        // consume it so it never disables or solos the mask.
-                        return true;
-                    }
                     if (shift) {
                         // Toggling the enabled bit keeps any solo on this mask:
                         // the solo shows the mask's stored coverage, not what the

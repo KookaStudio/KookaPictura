@@ -74,6 +74,12 @@ pub mod ffi {
         /// Whether the active layer has a raster layer mask.
         fn layer_mask_present(view: &PictureView) -> bool;
 
+        /// Whether the layer at `path` has a raster layer mask.
+        fn layer_mask_present_path(view: &PictureView, path: &QString) -> bool;
+
+        /// Whether the layer at `path` has a raster layer mask that is disabled.
+        fn layer_mask_disabled_path(view: &PictureView, path: &QString) -> bool;
+
         /// Make the raster mask on the layer at `path` the view's mask edit
         /// target, so the brush, fill, and filters write its coverage; an empty
         /// path clears the target. False without a mask on that layer. Records
@@ -267,6 +273,20 @@ fn layer_mask_present(view: &PictureView) -> bool {
             .as_ref()
             .is_some_and(|doc| pictura_render::has_layer_mask(doc, &path))
     })
+}
+
+fn layer_mask_present_path(view: &PictureView, path: &QString) -> bool {
+    view.rust()
+        .doc
+        .as_ref()
+        .is_some_and(|doc| pictura_render::has_layer_mask(doc, &path.to_string()))
+}
+
+fn layer_mask_disabled_path(view: &PictureView, path: &QString) -> bool {
+    view.rust()
+        .doc
+        .as_ref()
+        .is_some_and(|doc| pictura_render::layer_mask_disabled(doc, &path.to_string()))
 }
 
 fn mask_edit_target_set(mut view: Pin<&mut PictureView>, path: &QString) -> bool {

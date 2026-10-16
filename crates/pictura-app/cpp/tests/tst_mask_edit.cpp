@@ -363,12 +363,12 @@ void MaskEditTest::maskContextMenu()
                           QStringLiteral("Add Mask To Selection"),
                           QStringLiteral("Subtract Mask From Selection"),
                           QStringLiteral("Intersect Mask With Selection"),
-                          QStringLiteral("Select and Mask…"), QStringLiteral("Mask Options…")}));
+                          QStringLiteral("Refine Mask…"), QStringLiteral("Mask Options…")}));
 
-    // Select and Mask is wired (it opens Refine Edge); Mask Options stays a
-    // disabled placeholder. Apply and Delete are enabled.
-    QVERIFY(panel->maskMenuEnabledForPathForTest(layer, QStringLiteral("Select and Mask…")));
-    QVERIFY(!panel->maskMenuEnabledForPathForTest(layer, QStringLiteral("Mask Options…")));
+    // Refine Mask and Mask Options open their dialogs (tst_layers_mask_commands);
+    // Apply and Delete are enabled.
+    QVERIFY(panel->maskMenuEnabledForPathForTest(layer, QStringLiteral("Refine Mask…")));
+    QVERIFY(panel->maskMenuEnabledForPathForTest(layer, QStringLiteral("Mask Options…")));
     QVERIFY(panel->maskMenuEnabledForPathForTest(layer, QStringLiteral("Apply Layer Mask")));
     QVERIFY(panel->maskMenuEnabledForPathForTest(layer, QStringLiteral("Delete Layer Mask")));
 
