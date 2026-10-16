@@ -816,12 +816,6 @@ pub mod qobject {
         #[qinvokable]
         fn load_selection(self: Pin<&mut Self>, name: &QString) -> bool;
 
-        /// Load Channels-panel colour row `row` (0 = the composite) as the
-        /// selection; `mask` is the visible RGB channels (bit 0 red, 1 green,
-        /// 2 blue). False for a row outside the mode's colour rows.
-        #[qinvokable]
-        fn load_channel_selection(self: Pin<&mut Self>, row: i32, mask: i32) -> bool;
-
         /// Number of document extra channels (saved selections).
         #[qinvokable]
         fn selection_channel_count(&self) -> i32;
