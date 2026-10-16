@@ -693,22 +693,14 @@ pub mod qobject {
 
         /// The full Pictura Raw settings attached to `path` in the bridge text
         /// form, or empty when the layer has no Pictura Raw smart filter.
-        /// Read-only.
         #[qinvokable]
         fn layer_pictura_raw_settings(&self, path: &QString) -> QString;
 
-        /// Whether `Filter > Pictura Raw…` can act on `path`: an embedded
-        /// smart object with a payload, or a layer the destructive op accepts
-        /// (an RGB/Grayscale raster leaf). Independent of the conversion
-        /// predicate. Read-only.
+        /// Whether `Filter > Pictura Raw…` can act on `path`. Read-only.
         #[qinvokable]
         fn layer_can_apply_pictura_raw(&self, path: &QString) -> bool;
 
-        /// `Filter > Pictura Raw…`: apply `settings_text` to `path`. An embedded
-        /// smart object gets the camera-raw smart filter (settings retained); a
-        /// plain raster pixel layer is filtered destructively with no smart
-        /// object and no retained settings. Records one "Pictura Raw" state on
-        /// success; false without a document/target or when the engine refuses.
+        /// `Filter > Pictura Raw…`: apply `settings_text` to `path`, one state.
         #[qinvokable]
         fn apply_pictura_raw_filter(
             self: Pin<&mut Self>,
