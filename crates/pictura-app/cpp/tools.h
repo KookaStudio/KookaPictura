@@ -5,6 +5,7 @@
 #include <QtCore/QMap>
 #include <QtCore/QMetaType>
 #include <QtCore/QObject>
+#include <QtCore/QPoint>
 #include <QtCore/QPointF>
 #include <QtCore/QRect>
 #include <QtCore/QString>
@@ -24,6 +25,8 @@
 #include <array>
 #include <functional>
 #include <utility>
+
+class QMenu;
 
 namespace pictura {
 
@@ -260,6 +263,21 @@ public:
     void unbindCanvas();
     ImageView* canvas() const override { return canvas_; }
 
+    // Route a canvas right-click to the active tool's context menu. `canvas` is
+    // the document that was clicked; when it is not the bound one, the frame's
+    // canvas-activation handler switches to it first so the menu acts on the
+    // clicked document. Returns false when the tool offers no canvas menu, so
+    // the frame can fall back to the pasteboard colour menu.
+    bool routeCanvasContextMenu(ImageView* canvas, const QPointF& imagePos,
+                                const QPoint& globalPos);
+    // Test hook: build the active tool's canvas menu (no popup), or null when
+    // the tool has none.
+    QMenu* contextMenuForTest(ImageView* canvas, const QPointF& imagePos);
+    // The frame's handler for "a canvas right-click landed on a non-active
+    // document": it switches to that document so the menu acts on the clicked
+    // one. Unset by default (no cross-document activation).
+    void setCanvasActivationHandler(std::function<void(ImageView*)> handler);
+
     // ToolServices: the shared services a handler receives.
     PictureView* view() const override;
     void sampledForeground(const QColor& color) override;
@@ -281,6 +299,15 @@ public:
     void setCurrentNote(int index) override;
     void notifyRulerChanged() override { emit rulerChanged(); }
     void notifyCountChanged() override { emit countChanged(); }
+    // A canvas context menu asks the frame to open the shared widget menu that
+    // this controller cannot reach (the toolbox Zoom menu, the options-bar
+    // Brush Preset picker) or to enter isolation mode.
+    void requestZoomMenu(const QPoint& globalPos) override { emit zoomMenuRequested(globalPos); }
+    void requestBrushPicker(const QPoint& globalPos) override
+    {
+        emit brushPickerRequested(globalPos);
+    }
+    void requestIsolationMode() override { emit isolationModeRequested(); }
     // The options bar's Clear for the active Color Sampler, Note, or Ruler tool.
     bool clearAnnotations();
 
@@ -395,6 +422,9 @@ signals:
     void mixerReservoirChanged(const QColor& color);
     // Hardness or a Brush Tip Shape field changed (size has brushSizeChanged).
     void brushTipChanged();
+    // An Eyedropper option changed (the bar or the canvas context menu); the
+    // options bar re-reads its Sample Size / Sample readouts.
+    void eyedropperOptionsChanged();
     // The active Clone Source slot or its contents changed.
     void cloneSourceChanged();
     // The foreground or background colour changed.
@@ -423,6 +453,11 @@ signals:
     // A Free Transform session began, ended, or changed (a canvas gesture, a
     // pivot press, or an options-bar setter); the options bar re-reads it.
     void transformChanged();
+    // A canvas context menu asks the frame to open the toolbox Zoom preset
+    // menu, the options-bar Brush Preset picker, or isolation mode.
+    void zoomMenuRequested(const QPoint& globalPos);
+    void brushPickerRequested(const QPoint& globalPos);
+    void isolationModeRequested();
 
 private:
     void applyToolPolicy();
@@ -447,10 +482,14 @@ private:
     // the overlay and pan policy. `controls` marks the Move tool's auto-managed
     // box, which the user-command take-over must not cancel.
     bool beginTransformImpl(const QString& path, const QString& mode, bool controls = false);
+    // The active tool's canvas-menu handler, after activating the clicked
+    // document so the menu acts on it; null when the tool offers no menu.
+    ToolHandler* canvasMenuHandler(ImageView* canvas);
 
     ToolRegistry registry_;
     ImageView* canvas_ = nullptr;
     std::function<PictureView*()> viewProvider_;
+    std::function<void(ImageView*)> canvasActivationHandler_;
     ToolId active_ = ToolId::Move;
     SelectionMode dragMode_ = SelectionMode::New;
 

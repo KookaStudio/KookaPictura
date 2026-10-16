@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QtCore/QPoint>
 #include <QtGui/QPixmap>
 #include <QtWidgets/QWidget>
 
@@ -42,6 +43,10 @@ public:
     // Re-read the controller and show below `anchor`, kept on screen.
     void popUpUnder(QWidget* anchor);
 
+    // Re-read the controller and show at `globalPos`, kept on screen (the
+    // canvas right-click path).
+    void popUpAt(const QPoint& globalPos);
+
     // The controller's current tip at `edge` px square, for the bar's button.
     static QPixmap tipIcon(const PaintTip& tip, int edge);
 
@@ -49,10 +54,16 @@ public:
     // Self-test hook: pick preset `index` as a click on the grid would.
     void choosePresetForTest(int index);
 
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
 private:
     void sync();
     void applyPreset(int index);
     void buildGrid();
+    // Place the overlay with its top-left at `globalTopLeft`, clamped to the
+    // parent rect (the overlay is an in-window child, not a top-level window).
+    void moveWithinParent(const QPoint& globalTopLeft);
 
     ToolController* controller_ = nullptr;
     PaintOptions* paint_ = nullptr;

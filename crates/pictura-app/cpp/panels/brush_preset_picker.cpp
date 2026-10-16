@@ -6,10 +6,13 @@
 
 #include "pictura_app/src/cxxqt_object/paint_tools.cxxqt.h"
 
+#include <QtCore/QEvent>
 #include <QtCore/QString>
 #include <QtGui/QImage>
+#include <QtGui/QKeyEvent>
+#include <QtGui/QMouseEvent>
 #include <QtGui/QPainter>
-#include <QtGui/QScreen>
+#include <QtWidgets/QApplication>
 #include <QtWidgets/QGridLayout>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QListWidget>
@@ -144,11 +147,18 @@ QPixmap BrushPresetPicker::tipIcon(const PaintTip& tip, int edge)
 }
 
 BrushPresetPicker::BrushPresetPicker(ToolController* controller, QWidget* parent)
-    : QWidget(parent, Qt::Popup)
+    : QWidget(parent)
     , controller_(controller)
     , paint_(controller ? controller->optionsFor<PaintOptions>(ToolId::Brush) : nullptr)
 {
     setObjectName(QStringLiteral("brushPresetPicker"));
+    // An in-window overlay, not a Qt::Popup: a popup grabs the pointer, which
+    // freezes the canvas brush ring and swallows the first press. The frame
+    // styles this widget (QWidget#brushPresetPicker) as a floating panel.
+    setAttribute(Qt::WA_StyledBackground, true);
+    // Dismiss on an outside press or Escape while visible; installed for the
+    // widget's lifetime, so `eventFilter` early-returns when hidden.
+    qApp->installEventFilter(this);
     auto* outer = new QVBoxLayout(this);
     outer->setContentsMargins(8, 8, 8, 8);
     outer->setSpacing(8);
@@ -304,19 +314,63 @@ void BrushPresetPicker::popUpUnder(QWidget* anchor)
 {
     sync();
     adjustSize();
-    QPoint where = anchor ? anchor->mapToGlobal(QPoint(0, anchor->height())) : pos();
-    if (anchor) {
-        if (const QScreen* screen = anchor->screen()) {
-            const QRect available = screen->availableGeometry();
-            where.setX(std::clamp(where.x(), available.left(),
-                                  std::max(available.left(), available.right() - width())));
-            if (where.y() + height() > available.bottom()) {
-                where.setY(anchor->mapToGlobal(QPoint(0, 0)).y() - height());
-            }
-        }
-    }
-    move(where);
+    const QPoint where = anchor ? anchor->mapToGlobal(QPoint(0, anchor->height()))
+                                : mapToGlobal(QPoint(0, 0));
+    moveWithinParent(where);
+    raise();
     show();
+}
+
+void BrushPresetPicker::popUpAt(const QPoint& globalPos)
+{
+    sync();
+    adjustSize();
+    // A small offset keeps the pointer off the overlay, so the canvas brush ring
+    // stays visible at once.
+    moveWithinParent(globalPos + QPoint(12, 12));
+    raise();
+    show();
+}
+
+void BrushPresetPicker::moveWithinParent(const QPoint& globalTopLeft)
+{
+    QWidget* host = parentWidget();
+    if (!host) {
+        move(globalTopLeft);
+        return;
+    }
+    const QPoint local = host->mapFromGlobal(globalTopLeft);
+    move(std::clamp(local.x(), 0, std::max(0, host->width() - width())),
+         std::clamp(local.y(), 0, std::max(0, host->height() - height())));
+}
+
+bool BrushPresetPicker::eventFilter(QObject* watched, QEvent* event)
+{
+    if (!isVisible()) {
+        return QWidget::eventFilter(watched, event);
+    }
+    switch (event->type()) {
+    case QEvent::MouseButtonPress:
+    case QEvent::NonClientAreaMouseButtonPress: {
+        const auto* mouse = static_cast<QMouseEvent*>(event);
+        const QRect frame(mapToGlobal(QPoint(0, 0)), size());
+        if (!frame.contains(mouse->globalPosition().toPoint())) {
+            // Hide without consuming: the press reaches the widget under the
+            // pointer, so a press on the canvas starts the stroke.
+            hide();
+        }
+        break;
+    }
+    case QEvent::KeyPress:
+        if (static_cast<QKeyEvent*>(event)->key() == Qt::Key_Escape) {
+            hide();
+            return true;
+        }
+        break;
+    default:
+        break;
+    }
+    return QWidget::eventFilter(watched, event);
 }
 
 } // namespace pictura

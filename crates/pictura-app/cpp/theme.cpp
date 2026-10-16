@@ -334,6 +334,9 @@ QWidget#panelColumnIconStrip { border: 0; background: ${surface}; }
 QWidget#toolsPanel { background: ${surface}; border: 0; }
 QWidget#panelIconFlyout { background: ${surface}; border: ${border-width-panel}px solid ${border}; }
 QWidget#panelFloat { background: ${surface}; border: ${border-width-panel}px solid ${border}; }
+/* The Brush Preset picker: a non-grabbing in-window overlay, styled like a
+   floating panel so it reads as a popup. */
+QWidget#brushPresetPicker { background: ${surface}; border: ${border-width-panel}px solid ${border}; }
 /* Frameless dialog chrome (dialog_chrome.cpp): a header-shade title strip and
    a 1 px outline drawn over the dialog's edge. */
 QWidget#dialogTitleBar { background: ${surface-header}; border: 0; border-bottom: 1px solid ${border-header}; }

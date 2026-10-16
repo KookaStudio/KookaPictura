@@ -97,6 +97,15 @@ public:
         }
     }
 
+    // The Zoom tool's canvas menu is the toolbox preset menu; the frame owns it.
+    bool hasCanvasContextMenu() const override { return true; }
+    void onContextMenu(ToolServices& ctx, const QPointF& imagePos,
+                       const QPoint& globalPos) override
+    {
+        (void)imagePos;
+        ctx.requestZoomMenu(globalPos);
+    }
+
 private:
     // Display the marquee area at the highest magnification that still fits it
     // in the viewport, centred.

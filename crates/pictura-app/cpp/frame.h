@@ -215,6 +215,8 @@ public:
 
     int canvasColorIndex() const { return canvasColorIndex_; }
     void cycleCanvasColor(bool forward);
+    // Test hook: the built pasteboard colour menu, without popping it.
+    QMenu* canvasBackgroundMenuForTest() { return canvasBackgroundMenu(); }
 
     bool panelsHidden() const { return panelsHidden_; }
     void setPanelsHidden(bool hidden);
@@ -346,9 +348,13 @@ private:
     // window shortcuts so the focus location is irrelevant, and from
     // `dispatchCommandKey` so synthetic events reach the same path.
     bool handleDeleteKey();
-    // The canvas right-click menu: the Zoom slot's preset menu, or (Move) the
-    // Isolation Mode entry. Non-modal, so it never blocks the event loop.
-    void showCanvasContextMenu(const QPoint& globalPos);
+    // The canvas right-click menu: the active tool's menu over the document,
+    // or the pasteboard colour menu on the background. Non-modal, so it never
+    // blocks the event loop.
+    void showCanvasContextMenu(ImageView* canvas, const QPoint& globalPos);
+    // The pasteboard colour menu, built from the same palette `Space+F` cycles.
+    QMenu* canvasBackgroundMenu();
+    void showCanvasBackgroundMenu(const QPoint& globalPos);
     // Leave isolation mode if active; true when it was. Escape routes here.
     bool releaseIsolation();
     struct DocEntry {
@@ -542,9 +548,8 @@ private:
     QList<int> resizeStartSizes_;
     CommandRegistry* registry_ = nullptr;
     LayersPanel* layersPanel_ = nullptr;
-    // The Move tool's canvas right-click menu (Isolation Mode), created lazily
-    // and popped up non-modally like the Zoom slot menu.
-    QMenu* moveContextMenu_ = nullptr;
+    // The pasteboard colour menu, created lazily and popped up non-modally.
+    QMenu* backgroundMenu_ = nullptr;
     HistoryPanel* historyPanel_ = nullptr;
     NavigatorPanel* navigatorPanel_ = nullptr;
     ColorState* colorState_ = nullptr;

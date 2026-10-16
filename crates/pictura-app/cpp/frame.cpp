@@ -469,9 +469,11 @@ int PicturaMainWindow::addDocument(PictureView* view, const QString& path)
             infoPanel_->setCursorPosition(p);
         }
     });
-    // The Zoom slot's preset menu or, with the Move tool, Isolation Mode.
+    // The active tool's canvas context menu (or the pasteboard colour menu).
     connect(entry.canvas, &ImageView::contextMenuRequested, this,
-            [this](const QPoint& globalPos) { showCanvasContextMenu(globalPos); });
+            [this, canvas = entry.canvas](const QPoint& globalPos) {
+                showCanvasContextMenu(canvas, globalPos);
+            });
 
     docs_.append(entry);
     const int index = docs_.size() - 1;

@@ -91,6 +91,28 @@ public:
         }
     }
 
+    // The paint tool's canvas menu is the options-bar Brush Preset picker; the
+    // frame owns it.
+    bool hasCanvasContextMenu() const override { return true; }
+    void onContextMenu(ToolServices& ctx, const QPointF& imagePos,
+                       const QPoint& globalPos) override
+    {
+        (void)imagePos;
+        ctx.requestBrushPicker(globalPos);
+    }
+
+    // Finish any open stroke before the handler stops owning the canvas, so a
+    // tool switch mid-drag commits it instead of leaving the Stroke to be torn
+    // down later (its destructor calls back into the view).
+    void onDeactivate(ToolServices& ctx) override
+    {
+        if (stroke_) {
+            stroke_->finish();
+            stroke_.reset();
+        }
+        ctx.setDragging(false);
+    }
+
 private:
     bool aliased_;
     std::optional<paint_api::Stroke> stroke_;

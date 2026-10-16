@@ -1,7 +1,7 @@
 //! The Move tool's Auto-Select hit-test: which layer a press picks, including
 //! the isolation scope the Layers panel's Selected filter pushes.
 
-use super::helpers_composite::auto_select_path;
+use super::helpers_composite::{auto_select_path, layers_under_point};
 use super::tests::pixel_layer;
 use pictura_core::{BitDepth, ColorMode, Document, Layer, PsdRect};
 
@@ -150,4 +150,30 @@ fn auto_select_isolation_reaches_a_group_descendant() {
     );
     // The bottom layer is outside the group set.
     assert_eq!(auto_select_path(&doc, 3, 3, false, Some(&group_set)), None);
+}
+
+#[test]
+fn layers_under_point_lists_hits_topmost_first_skipping_non_hits() {
+    let mut doc = Document::new(6, 4, ColorMode::Rgb, BitDepth::Eight);
+    let mut hidden = placed(pixel_layer("hidden", 6, 4, (0, 0, 255)), 0, 0);
+    hidden.visible = false;
+    let mut faded = placed(pixel_layer("faded", 6, 4, (0, 0, 255)), 0, 0);
+    faded.opacity = 0;
+    doc.layers = vec![
+        pixel_layer("bottom", 6, 4, (255, 0, 0)),
+        hidden,
+        faded,
+        placed(pixel_layer("top", 2, 2, (0, 255, 0)), 1, 1),
+    ];
+
+    // (1,1): the top layer (index 3) and the bottom (index 0) both cover it,
+    // topmost first; the hidden and zero-opacity layers are skipped.
+    assert_eq!(
+        layers_under_point(&doc, 1, 1, None),
+        vec!["3".to_string(), "0".to_string()]
+    );
+    // (4,1): only the bottom layer covers it.
+    assert_eq!(layers_under_point(&doc, 4, 1, None), vec!["0".to_string()]);
+    // Off the canvas: nothing.
+    assert!(layers_under_point(&doc, -1, 1, None).is_empty());
 }

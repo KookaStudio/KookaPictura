@@ -10,8 +10,12 @@
 
 #include <QtCore/QDebug>
 #include <QtCore/QElapsedTimer>
+#include <QtCore/QObject>
+#include <QtCore/QStringList>
+#include <QtGui/QAction>
 #include <QtGui/QDrag>
 #include <QtGui/QImage>
+#include <QtWidgets/QMenu>
 
 #include <memory>
 
@@ -41,6 +45,38 @@ public:
         pendingDuplicate_ = false;
         duplicated_ = false;
         pressed_ = false;
+    }
+
+    // The Move canvas menu: with Auto Select off, every layer with a pixel under
+    // the pointer (topmost first) picks that layer; Isolation Mode is always
+    // offered.
+    bool hasCanvasContextMenu() const override { return true; }
+    QMenu* buildContextMenu(ToolServices& ctx, const QPointF& imagePos) override
+    {
+        ImageView* canvas = ctx.canvas();
+        PictureView* v = ctx.view();
+        if (!canvas || !v) {
+            return nullptr;
+        }
+        auto* menu = new QMenu(canvas);
+        ToolServices* services = &ctx;
+        if (!move_->get().autoSelectOn) {
+            const QStringList paths =
+                layers_under_layer(*v, qRound(imagePos.x()), qRound(imagePos.y()));
+            for (const QString& path : paths) {
+                const QString name = layer_name_for_path(*v, path);
+                QAction* action = menu->addAction(name.isEmpty() ? path : name);
+                QObject::connect(action, &QAction::triggered, menu,
+                        [services, path]() { services->selectLayer(path); });
+            }
+            if (!paths.isEmpty()) {
+                menu->addSeparator();
+            }
+        }
+        QAction* isolate = menu->addAction(QObject::tr("Isolation Mode"));
+        QObject::connect(isolate, &QAction::triggered, menu,
+                [services]() { services->requestIsolationMode(); });
+        return menu;
     }
 
     bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override

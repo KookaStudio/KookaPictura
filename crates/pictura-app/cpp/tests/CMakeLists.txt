@@ -103,6 +103,7 @@ set(PICTURA_QT_TESTS
     tst_pictura_raw
     tst_acr_settings
     tst_acr_dialog
+    tst_canvas_context_menus
 )
 
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/qt-test-results)

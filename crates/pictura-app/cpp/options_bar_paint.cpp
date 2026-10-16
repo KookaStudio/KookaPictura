@@ -110,7 +110,9 @@ void OptionsBar::addBrushTipFields(QHBoxLayout* layout, QWidget* page)
 BrushPresetPicker* OptionsBar::brushPicker()
 {
     if (!brushPicker_) {
-        brushPicker_ = new BrushPresetPicker(controller_, this);
+        // Parent to the main window, not the bar: the picker is a non-grabbing
+        // overlay that opens over the canvas, far outside the bar's rect.
+        brushPicker_ = new BrushPresetPicker(controller_, window());
     }
     return brushPicker_;
 }
