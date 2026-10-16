@@ -32,6 +32,21 @@ Snapshot for resuming after a context break. Update after each milestone.
   caret line blinks on a 1.5 s cycle (`ImageView::kTypeCaretBlinkMs`, reset
   on every overlay set). Point type marks its origin with a placement square
   and draws a guide along each visible line's baseline (`type_baselines`).
+- **Tool feedback and persistence** (#541 branch, OpenSpec change
+  `tool-feedback-and-persistence`). Show Transform Controls is **on by
+  default** (owner decision; CS6 ships it off). The controls box is now
+  **idle**: it is drawn from `pictura_render::content_rect` (no session, layer
+  untouched), and a Free Transform session (with its trim) starts only when a
+  handle is grabbed. `untrim_to` pads a trimmed layer back when a session ends
+  without a transform, and type layers are never trimmed. The box no longer
+  steals focus, and Space pans over it. Every tool's options persist in the
+  session store's `toolOptions` (`tool_options_json`: one `fields()` list per
+  struct, restored before the options bar is built). The caret draws white
+  over a dark image. A type or shape layer's forced Transparency/Image locks
+  show no row padlock (`LockBadgeRole`). A Move drag draws marching ants round
+  the content plus a ΔX / ΔY readout in the ruler unit (`formatRulerLength`,
+  shared with the rulers). The self-test, and older tests that read canvas
+  pixels under the Move tool, run with the box off.
 - **SVG export parity** (#477, branch `feat/477-svg-export-parity-followups`,
   OpenSpec change `svg-export`, now archived into `interop/svg-export`): the
   SVG export from #459 walks the layer tree instead of top-level layers only.
