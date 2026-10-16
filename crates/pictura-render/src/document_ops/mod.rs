@@ -71,7 +71,10 @@ pub use mode::{
     save_view, BitmapMethod,
 };
 pub use orient::{flip_document, rotate_document};
-pub use pictura_raw::{apply_pictura_raw, preview_pictura_raw};
+pub use pictura_raw::{
+    apply_pictura_raw, apply_pictura_raw_destructive, can_apply_pictura_raw_destructive,
+    preview_pictura_raw,
+};
 pub use resize::resize_document;
 pub use rotate_in::{rotate_document_in, rotate_document_in_offset};
 pub use slices::{add_slice, remove_slice, resolve_slices, set_slice, Slice};

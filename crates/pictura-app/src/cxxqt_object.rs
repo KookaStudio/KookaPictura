@@ -693,14 +693,14 @@ pub mod qobject {
 
         /// The full Pictura Raw settings attached to `path` in the bridge text
         /// form, or empty when the layer has no Pictura Raw smart filter.
-        /// Read-only.
         #[qinvokable]
         fn layer_pictura_raw_settings(&self, path: &QString) -> QString;
 
-        /// `Filter > Pictura Raw…`: convert `path` to an embedded smart
-        /// object when it is a plain raster pixel layer, then apply
-        /// `settings_text` and record one "Pictura Raw" state. False without a
-        /// document/target or when the engine refuses; records nothing then.
+        /// Whether `Filter > Pictura Raw…` can act on `path`. Read-only.
+        #[qinvokable]
+        fn layer_can_apply_pictura_raw(&self, path: &QString) -> bool;
+
+        /// `Filter > Pictura Raw…`: apply `settings_text` to `path`, one state.
         #[qinvokable]
         fn apply_pictura_raw_filter(
             self: Pin<&mut Self>,
