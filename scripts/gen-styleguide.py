@@ -93,8 +93,8 @@ __LEVELS__
 body {
   margin: 0;
   padding: 24px;
-  background: var(--workspace);
-  color: var(--windowText);
+  background: var(--surface-canvas);
+  color: var(--content);
   font: 12px/1.6 "Noto Sans", sans-serif;
 }
 h1 { font-size: 20px; margin: 0 0 4px; }
@@ -102,15 +102,15 @@ h2 {
   font-size: 14px;
   margin: 32px 0 12px;
   padding-bottom: 4px;
-  border-bottom: calc(var(--chromeBorderWidth) * 1px) solid var(--separator);
+  border-bottom: calc(var(--border-width-chrome) * 1px) solid var(--border-subtle);
 }
-h3 { font-size: 12px; margin: 16px 0 6px; color: var(--link); }
+h3 { font-size: 12px; margin: 16px 0 6px; color: var(--content-link); }
 p { margin: 4px 0; }
-code { font-family: monospace; color: var(--text); }
-small { color: var(--disabledText); margin-left: 6px; }
+code { font-family: monospace; color: var(--content-body); }
+small { color: var(--content-disabled); margin-left: 6px; }
 .panel {
-  background: var(--panel);
-  border: calc(var(--panelBorderWidth) * 1px) solid var(--border);
+  background: var(--surface);
+  border: calc(var(--border-width-panel) * 1px) solid var(--border);
   padding: 12px;
 }
 .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 6px 0; }
@@ -120,68 +120,68 @@ small { color: var(--disabledText); margin-left: 6px; }
 
 .tokens { border-collapse: collapse; width: 100%; }
 .tokens th, .tokens td {
-  border: 1px solid var(--separator);
+  border: 1px solid var(--border-subtle);
   padding: 3px 6px;
   text-align: left;
   vertical-align: middle;
 }
-.tokens thead th { background: var(--panelHeader); }
-.tokens td { background: var(--tableBg); }
+.tokens thead th { background: var(--surface-header); }
+.tokens td { background: var(--surface-field); }
 .chip {
   display: inline-block;
   width: 22px;
   height: 14px;
   margin-right: 6px;
-  border: 1px solid var(--buttonBorder);
+  border: 1px solid var(--border-control);
   vertical-align: middle;
 }
 
 /* Primitives: the same states the global stylesheet declares, drawn from the
    generated variables. */
 .btn {
-  background: var(--button);
-  color: var(--buttonText);
-  border: 1px solid var(--buttonBorder);
+  background: var(--surface-control);
+  color: var(--content-control);
+  border: 1px solid var(--border-control);
   border-radius: 3px;
   padding: 4px 10px;
 }
-.btn.is-hover { border-color: var(--buttonBorder); }
-.btn.is-pressed { background: var(--buttonPressed); }
-.btn.is-checked { background: var(--buttonPressed); border-color: var(--inputBorder); }
-.btn.is-disabled { color: var(--disabledText); border-color: var(--border); }
-.btn.is-focus { border-color: var(--highlight); }
+.btn.is-hover { border-color: var(--border-control); }
+.btn.is-pressed { background: var(--surface-control-pressed); }
+.btn.is-checked { background: var(--surface-control-pressed); border-color: var(--border-input); }
+.btn.is-disabled { color: var(--content-disabled); border-color: var(--border); }
+.btn.is-focus { border-color: var(--selection); }
 
 .iconbtn {
   background: transparent;
-  color: var(--buttonText);
+  color: var(--content-control);
   border: 1px solid transparent;
   border-radius: 3px;
   padding: 3px 7px;
 }
-.iconbtn.is-hover { background: var(--iconHover); border-color: var(--iconHoverBorder); }
+.iconbtn.is-hover { background: var(--surface-control-hover); border-color: var(--border-control-hover); }
 .iconbtn.is-pressed, .iconbtn.is-checked {
-  background: var(--iconPressed);
-  border-color: var(--iconHoverBorder);
+  background: var(--surface-control-active);
+  border-color: var(--border-control-hover);
 }
-.iconbtn.is-disabled { color: var(--disabledText); }
-.iconbtn.is-focus { border-color: var(--highlight); }
+.iconbtn.is-disabled { color: var(--content-disabled); }
+.iconbtn.is-focus { border-color: var(--selection); }
 
 .input {
-  background: var(--inputBg);
-  color: var(--text);
-  border: 1px solid var(--inputBorder);
+  background: var(--surface-input);
+  color: var(--content-body);
+  border: 1px solid var(--border-input);
   border-radius: 2px;
   padding: 2px 4px;
   min-width: 120px;
 }
-.input.is-hover { border-color: var(--inputBorder); }
-.input.is-focus { border-color: var(--highlight); }
-.input.is-disabled { color: var(--disabledText); border-color: var(--border); }
+.input.is-hover { border-color: var(--border-input); }
+.input.is-focus { border-color: var(--selection); }
+.input.is-disabled { color: var(--content-disabled); border-color: var(--border); }
 
 .numeric { display: inline-flex; align-items: center; gap: 3px; }
 .numeric .input { min-width: 52px; text-align: left; }
 .numeric .arrow {
-  color: var(--buttonText);
+  color: var(--content-control);
   border-left: 1px solid var(--border);
   padding: 0 3px;
 }
@@ -196,7 +196,7 @@ small { color: var(--disabledText); margin-left: 6px; }
   height: 0;
   border-left: 4px solid transparent;
   border-right: 4px solid transparent;
-  border-top: 5px solid var(--buttonText);
+  border-top: 5px solid var(--content-control);
   transform: translateY(-50%);
 }
 
@@ -204,18 +204,18 @@ small { color: var(--disabledText); margin-left: 6px; }
 .checkbox .box {
   width: 13px;
   height: 13px;
-  background: var(--inputBg);
-  border: 1px solid var(--inputBorder);
+  background: var(--surface-input);
+  border: 1px solid var(--border-input);
   border-radius: 2px;
 }
-.checkbox.is-hover .box { border-color: var(--highlight); }
-.checkbox.is-checked .box { background: var(--highlight); border-color: var(--highlight); }
-.checkbox.is-checked.is-hover .box { background: var(--link); border-color: var(--link); }
-.checkbox.is-disabled { color: var(--disabledText); }
+.checkbox.is-hover .box { border-color: var(--selection); }
+.checkbox.is-checked .box { background: var(--selection); border-color: var(--selection); }
+.checkbox.is-checked.is-hover .box { background: var(--content-link); border-color: var(--content-link); }
+.checkbox.is-disabled { color: var(--content-disabled); }
 .checkbox.is-disabled .box { border-color: var(--border); }
 .checkbox.is-checked.is-disabled .box {
-  background: var(--disabledText);
-  border-color: var(--disabledText);
+  background: var(--content-disabled);
+  border-color: var(--content-disabled);
 }
 
 .slider { width: 160px; height: 16px; position: relative; }
@@ -234,56 +234,56 @@ small { color: var(--disabledText); margin-left: 6px; }
   left: 40%;
   width: 10px;
   height: 12px;
-  background: var(--buttonText);
+  background: var(--content-control);
   border-radius: 3px;
 }
-.slider.is-hover .handle { background: var(--highlight); }
-.slider.is-disabled .handle { background: var(--disabledText); }
+.slider.is-hover .handle { background: var(--selection); }
+.slider.is-disabled .handle { background: var(--content-disabled); }
 
 .tabs { display: inline-flex; }
 .tab {
-  background: var(--window);
-  color: var(--windowText);
+  background: var(--surface-recessed);
+  color: var(--content);
   border: 1px solid var(--border);
   border-bottom: 0;
   padding: 4px 10px;
   margin-right: 1px;
 }
-.tab.is-hover { background: var(--hover); }
-.tab.is-selected { background: var(--activeTab); }
-.tab.is-disabled { color: var(--disabledText); }
-.tab.panel { background: var(--panelHeader); border-width: calc(var(--panelBorderWidth) * 1px); }
-.tab.panel.is-hover { background: var(--hover); }
-.tab.panel.is-selected { background: var(--panel); }
-.tab.panel.is-disabled { color: var(--disabledText); }
+.tab.is-hover { background: var(--surface-hover); }
+.tab.is-selected { background: var(--surface-tab-active); }
+.tab.is-disabled { color: var(--content-disabled); }
+.tab.panel { background: var(--surface-header); border-width: calc(var(--border-width-panel) * 1px); }
+.tab.panel.is-hover { background: var(--surface-hover); }
+.tab.panel.is-selected { background: var(--surface); }
+.tab.panel.is-disabled { color: var(--content-disabled); }
 
 .menu {
   display: inline-block;
   min-width: 160px;
-  background: var(--panel);
-  color: var(--text);
+  background: var(--surface);
+  color: var(--content-body);
   border: 1px solid var(--border);
   padding: 2px 0;
 }
 .menu .item { padding: 4px 22px; }
-.menu .item.is-selected { background: var(--highlight); color: var(--highlightedText); }
-.menu .item.is-disabled { color: var(--menuDisabledText); }
-.menu .separator { background: var(--separator); height: 1px; margin: 4px 6px; }
+.menu .item.is-selected { background: var(--selection); color: var(--content-on-selection); }
+.menu .item.is-disabled { color: var(--content-disabled-menu); }
+.menu .separator { background: var(--border-subtle); height: 1px; margin: 4px 6px; }
 
 .swatch {
   display: inline-block;
   width: 40px;
   height: 24px;
-  background: var(--highlight);
-  border: 1px solid var(--buttonBorder);
+  background: var(--selection);
+  border: 1px solid var(--border-control);
 }
-.swatch.is-active { border: 2px solid var(--highlight); }
+.swatch.is-active { border: 2px solid var(--selection); }
 
 .panel-header {
   display: inline-block;
   padding: 4px 10px;
-  background: var(--panelHeader);
-  border-bottom: 1px solid var(--panelHeaderBorder);
+  background: var(--surface-header);
+  border-bottom: 1px solid var(--border-header);
   font-weight: 700;
 }
 """

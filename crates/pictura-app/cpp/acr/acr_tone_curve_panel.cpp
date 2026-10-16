@@ -137,7 +137,7 @@ protected:
             painter.drawLine(plot.left(), y, plot.right(), y);
         }
 
-        painter.setPen(Theme::tokenColor(QStringLiteral("graphAxis")));
+        painter.setPen(Theme::tokenColor(QStringLiteral("graph-axis")));
         painter.drawLine(plot.bottomLeft(), plot.topRight());
 
         for (double region : s_) {
@@ -145,7 +145,7 @@ protected:
             QPolygonF handle;
             handle << QPointF(x, plot.bottom() + 1) << QPointF(x - 6, plot.bottom() + 11)
                    << QPointF(x + 6, plot.bottom() + 11);
-            painter.setBrush(Theme::tokenColor(QStringLiteral("buttonText")));
+            painter.setBrush(Theme::tokenColor(QStringLiteral("content-control")));
             painter.setPen(Theme::tokenColor(QStringLiteral("border")));
             painter.drawPolygon(handle);
         }

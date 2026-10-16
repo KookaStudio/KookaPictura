@@ -40,7 +40,7 @@ void SpectrumBar::paintEvent(QPaintEvent*)
     }
     p.fillRect(0, 0, w, h, grad);
 
-    p.setPen(QPen(Theme::tokenColor(QStringLiteral("inputBorder")), 1));
+    p.setPen(QPen(Theme::tokenColor(QStringLiteral("border-input")), 1));
     p.drawRect(0, 0, w - 1, h - 1);
 }
 

@@ -155,7 +155,7 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
     }
     buildStatusBar();
     // The two 1 px inner frame lines span the whole central band (options bar
-    // included); the outer 2 px is the window `${panel}` showing through the
+    // included); the outer 2 px is the window `${surface}` showing through the
     // reserved margin. They are raised above the chrome in layoutWorkspaceFrame.
     workspaceFrameLeft_ = new QWidget(this);
     workspaceFrameRight_ = new QWidget(this);

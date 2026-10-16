@@ -75,7 +75,7 @@ PanelGroup::PanelGroup(QWidget* parent)
     tabs_->tabBar()->setDrawBase(false);
     tabs_->tabBar()->installEventFilter(this);
     // M43: name the panel-group tab bar so the scoped theme can make the active
-    // tab use the pane `${panel}` colour without touching the document tabs. The
+    // tab use the pane `${surface}` colour without touching the document tabs. The
     // tab bar elides instead of forcing width, and does not expand, so the
     // corner `▾` button keeps its place at the column minimum width.
     tabs_->tabBar()->setObjectName(QStringLiteral("panelTabBar"));

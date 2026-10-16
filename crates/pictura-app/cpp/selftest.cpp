@@ -4037,8 +4037,8 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         }
 
         // m43_tabcolors (141): the panel tab bar is named `panelTabBar`; its
-        // selected tab uses the panel surface `${panel}` colour and its
-        // inactive tab uses the darker `${panelHeader}` (which differs); the
+        // selected tab uses the panel surface `${surface}` colour and its
+        // inactive tab uses the darker `${surface-header}` (which differs); the
         // document tab bar is not the scoped one, so it keeps the unscoped
         // rules.
         bool colorsActive = false;
@@ -4621,8 +4621,8 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                 ST_FAIL(155, "default active panel");
             }
 
-            // 156: the active panel tab matches the panel surface (`panel`),
-            // the inactive tab is the darker `panelHeader`, and neither uses the
+            // 156: the active panel tab matches the panel surface (`surface`),
+            // the inactive tab is the darker `surface-header`, and neither uses the
             // other.
             const bool tabSelected =
                 sheet.contains(QStringLiteral("QTabBar#panelTabBar::tab:selected { background: ") + themePanelHex)
