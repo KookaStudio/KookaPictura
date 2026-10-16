@@ -219,11 +219,13 @@ fn no_equivalent_filters_properties() {
         Filter::RadialBlur {
             method: RadialMethod::Spin,
             amount: 0.0,
+            center: (0.5, 0.5),
             quality: Quality::Best,
         },
         Filter::RadialBlur {
             method: RadialMethod::Zoom,
             amount: 0.0,
+            center: (0.5, 0.5),
             quality: Quality::Best,
         },
     ] {

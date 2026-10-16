@@ -108,12 +108,18 @@ pub fn radial(
     buf: &mut PixelBuffer,
     method: RadialMethod,
     amount: f64,
+    center: (f64, f64),
     quality: Quality,
 ) -> Result<(), FilterError> {
     validate(buf)?;
     if !amount.is_finite() || amount < 0.0 {
         return Err(FilterError::InvalidParams(format!(
             "radial amount {amount} must be finite and non-negative"
+        )));
+    }
+    if !center.0.is_finite() || !center.1.is_finite() {
+        return Err(FilterError::InvalidParams(format!(
+            "radial center {center:?} must be finite"
         )));
     }
     if amount == 0.0 {
@@ -133,8 +139,10 @@ pub fn radial(
         Quality::Good => 16,
         Quality::Best => 32,
     };
-    let cx = (w as f64 - 1.0) / 2.0;
-    let cy = (h as f64 - 1.0) / 2.0;
+    // Blur Center is normalized to the image, so the default (0.5, 0.5) lands
+    // on the pixel centre and the kernel stays resolution-independent.
+    let cx = center.0.clamp(0.0, 1.0) * (w as f64 - 1.0);
+    let cy = center.1.clamp(0.0, 1.0) * (h as f64 - 1.0);
     // The planes interleaved, so a tap reads one cache line however far
     // along its arc the sample lands.
     let mut pixels = vec![[0u8; 4]; n];
@@ -598,14 +606,67 @@ mod tests {
         let mut base = PixelBuffer::new(11, 11, 3);
         base.data[2 * 11 + 2] = 255;
         let mut zoom = base.clone();
-        radial(&mut zoom, RadialMethod::Zoom, 50.0, Quality::Good).unwrap();
+        radial(
+            &mut zoom,
+            RadialMethod::Zoom,
+            50.0,
+            (0.5, 0.5),
+            Quality::Good,
+        )
+        .unwrap();
         assert!(base.data.iter().zip(zoom.data.iter()).any(|(a, b)| a != b));
         let mut spin = base.clone();
-        radial(&mut spin, RadialMethod::Spin, 20.0, Quality::Good).unwrap();
+        radial(
+            &mut spin,
+            RadialMethod::Spin,
+            20.0,
+            (0.5, 0.5),
+            Quality::Good,
+        )
+        .unwrap();
         assert!(base.data.iter().zip(spin.data.iter()).any(|(a, b)| a != b));
         let mut noop = base.clone();
-        radial(&mut noop, RadialMethod::Spin, 0.0, Quality::Best).unwrap();
+        radial(
+            &mut noop,
+            RadialMethod::Spin,
+            0.0,
+            (0.5, 0.5),
+            Quality::Best,
+        )
+        .unwrap();
         assert_eq!(noop.data, base.data);
+    }
+
+    #[test]
+    fn radial_center_moves_the_origin() {
+        let mut base = PixelBuffer::new(21, 21, 3);
+        base.data[5 * 21 + 5] = 255;
+        let mut centred = base.clone();
+        radial(
+            &mut centred,
+            RadialMethod::Spin,
+            30.0,
+            (0.5, 0.5),
+            Quality::Good,
+        )
+        .unwrap();
+        let mut off = base.clone();
+        radial(
+            &mut off,
+            RadialMethod::Spin,
+            30.0,
+            (0.2, 0.2),
+            Quality::Good,
+        )
+        .unwrap();
+        assert!(
+            centred
+                .data
+                .iter()
+                .zip(off.data.iter())
+                .any(|(a, b)| a != b),
+            "blur center did not move the origin"
+        );
     }
 
     #[test]
@@ -631,7 +692,7 @@ mod tests {
         motion(&mut b3, 30.0, 5).unwrap();
         check(&b3);
         let mut b4 = base.clone();
-        radial(&mut b4, RadialMethod::Spin, 10.0, Quality::Good).unwrap();
+        radial(&mut b4, RadialMethod::Spin, 10.0, (0.5, 0.5), Quality::Good).unwrap();
         check(&b4);
         let mut b5 = base.clone();
         average(&mut b5).unwrap();
@@ -652,14 +713,29 @@ mod tests {
         assert!(motion(&mut b, 400.0, 3).is_err());
         assert!(motion(&mut b, 0.0, 0).is_err());
         assert!(motion(&mut b, 0.0, 1000).is_err());
-        assert!(radial(&mut b, RadialMethod::Zoom, 101.0, Quality::Good).is_err());
-        assert!(radial(&mut b, RadialMethod::Spin, f64::NAN, Quality::Good).is_err());
+        assert!(radial(&mut b, RadialMethod::Zoom, 101.0, (0.5, 0.5), Quality::Good).is_err());
+        assert!(radial(
+            &mut b,
+            RadialMethod::Spin,
+            f64::NAN,
+            (0.5, 0.5),
+            Quality::Good
+        )
+        .is_err());
+        assert!(radial(
+            &mut b,
+            RadialMethod::Spin,
+            10.0,
+            (f64::NAN, 0.5),
+            Quality::Good
+        )
+        .is_err());
         assert!(surface(&mut b, 0, 10).is_err());
         assert!(surface(&mut b, 101, 10).is_err());
         assert!(surface(&mut b, 2, 0).is_err());
         assert!(gaussian(&mut b, 0.0).is_ok());
         assert!(motion(&mut b, 0.0, 1).is_ok());
-        assert!(radial(&mut b, RadialMethod::Spin, 0.0, Quality::Good).is_ok());
+        assert!(radial(&mut b, RadialMethod::Spin, 0.0, (0.5, 0.5), Quality::Good).is_ok());
     }
 
     #[test]
@@ -675,7 +751,7 @@ mod tests {
             simple(&mut a, true).unwrap();
             average(&mut a).unwrap();
             motion(&mut a, 45.0, 7).unwrap();
-            radial(&mut a, RadialMethod::Zoom, 50.0, Quality::Draft).unwrap();
+            radial(&mut a, RadialMethod::Zoom, 50.0, (0.5, 0.5), Quality::Draft).unwrap();
             surface(&mut a, 3, 20).unwrap();
 
             let px4v: Vec<[u8; 4]> = (0..n)
@@ -687,7 +763,7 @@ mod tests {
             simple(&mut b, true).unwrap();
             average(&mut b).unwrap();
             motion(&mut b, 45.0, 7).unwrap();
-            radial(&mut b, RadialMethod::Spin, 10.0, Quality::Best).unwrap();
+            radial(&mut b, RadialMethod::Spin, 10.0, (0.5, 0.5), Quality::Best).unwrap();
             surface(&mut b, 3, 20).unwrap();
         }
     }

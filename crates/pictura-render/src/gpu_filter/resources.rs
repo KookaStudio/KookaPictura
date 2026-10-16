@@ -141,10 +141,16 @@ pub(super) fn run_chunked(
             );
             &b
         }
-        Plan::RadialZoom { samples, span } => {
+        Plan::RadialZoom {
+            samples,
+            span,
+            center,
+        } => {
             let mut p = Params::new(MODE_RADIAL_ZOOM, w, h, planes);
             p.taps = *samples;
             p.angle = *span;
+            p.center_x = center.0;
+            p.center_y = center.1;
             dispatch(
                 device, queue, &p, &a, &b, &mid, &weights, &params, count, budget,
             );
@@ -294,6 +300,9 @@ struct Params {
     /// Planes the run carries: 3 (colour only) or 4 (colour + alpha for a
     /// moving kernel). Serialized into the shader's spare `_p3` slot.
     planes: u32,
+    /// Radial Zoom's blur centre, normalized to the image.
+    center_x: f32,
+    center_y: f32,
 }
 
 impl Params {
@@ -328,6 +337,8 @@ impl Params {
             base: 0,
             end: 0,
             planes,
+            center_x: 0.5,
+            center_y: 0.5,
         }
     }
 
@@ -363,6 +374,8 @@ impl Params {
             self.base,
             self.end,
             self.planes,
+            self.center_x.to_bits(),
+            self.center_y.to_bits(),
         ];
         for (i, v) in fields.iter().enumerate() {
             out[i * 4..i * 4 + 4].copy_from_slice(&v.to_le_bytes());
@@ -587,8 +600,8 @@ struct FParams {
     base: u32,
     end: u32,
     planes: u32,
-    _p4: u32,
-    _p5: u32,
+    center_x: f32,
+    center_y: f32,
     _p6: u32,
 };
 
@@ -736,8 +749,8 @@ fn radial_zoom_val(idx: u32) -> f32 {
     let plane = idx / n;
     let rem = idx % n;
     let base = plane * n;
-    let cx = (f32(p.w) - 1.0) / 2.0;
-    let cy = (f32(p.h) - 1.0) / 2.0;
+    let cx = p.center_x * (f32(p.w) - 1.0);
+    let cy = p.center_y * (f32(p.h) - 1.0);
     let px = f32(rem % p.w) - cx;
     let py = f32(rem / p.w) - cy;
     let radius = sqrt(px * px + py * py);

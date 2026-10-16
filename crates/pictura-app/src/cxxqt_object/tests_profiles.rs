@@ -710,6 +710,7 @@ fn radial_blur_commit_profile() {
         let filter = Filter::RadialBlur {
             method,
             amount: 100.0,
+            center: (0.5, 0.5),
             quality: Quality::Best,
         };
         let t = Instant::now();

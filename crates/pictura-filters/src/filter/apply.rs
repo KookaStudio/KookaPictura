@@ -31,8 +31,9 @@ pub fn apply(filter: &Filter, buf: &mut PixelBuffer) -> Result<(), FilterError> 
         Filter::RadialBlur {
             method,
             amount,
+            center,
             quality,
-        } => blur::radial(buf, *method, *amount, *quality),
+        } => blur::radial(buf, *method, *amount, *center, *quality),
         Filter::LensBlur {
             depth,
             focal,

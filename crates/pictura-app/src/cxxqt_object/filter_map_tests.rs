@@ -57,11 +57,12 @@ fn parameter_values_override_defaults() {
         })
     );
     assert_eq!(
-        filter_from_kind_params("radial-blur", &[1.0, 20.0, 2.0]),
+        filter_from_kind_params("radial-blur", &[1.0, 20.0, 2.0, 0.25, 0.75]),
         Some(Filter::RadialBlur {
             method: RadialMethod::Zoom,
             amount: 20.0,
             quality: Quality::Best,
+            center: (0.25, 0.75),
         })
     );
     // Wind direction is a Choice index: 0 = "From the Right", 1 = "From the Left".
