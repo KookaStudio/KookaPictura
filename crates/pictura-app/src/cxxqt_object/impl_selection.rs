@@ -4,7 +4,8 @@ use super::qobject;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QString, QStringList};
-use pictura_core::Channel;
+use pictura_codec::buffer_to_srgb;
+use pictura_core::{Channel, ColorMode, Document};
 use pictura_select::{CombineMode, Selection};
 
 mod refine;
@@ -329,6 +330,25 @@ impl qobject::PictureView {
         self.as_mut().record("Load Selection");
         self.changed();
         true
+    }
+
+    /// Load the Channels-panel colour row `row` (0 = the composite) as the
+    /// selection, using the same grayscale derivation as the row thumbnails.
+    /// `mask` is the visible RGB channels (bit 0 red, 1 green, 2 blue); a hidden
+    /// channel is zeroed in the composite row, matching the canvas. One
+    /// "Load Selection" state; false for a row outside the mode's colour rows.
+    pub fn load_channel_selection(self: Pin<&mut Self>, row: i32, mask: i32) -> bool {
+        let shape = {
+            let rust = self.rust();
+            let Some(doc) = rust.doc.as_ref() else {
+                return false;
+            };
+            channel_row_selection(doc, rust.gpu_compute, row, mask as u8)
+        };
+        let Some(shape) = shape else {
+            return false;
+        };
+        self.apply_selection_labeled(shape, CombineMode::New, "Load Selection")
     }
 
     pub fn selection_channel_count(&self) -> i32 {
@@ -754,9 +774,117 @@ fn selection_from_named_channel(
     Selection::from_channel(channel, width, height).ok()
 }
 
+/// The colour-channel row layout of a document `mode`: whether a composite row
+/// leads the list, and the number of colour channels after it. Mirrors the
+/// Channels panel's `channelsForMode`: a single-row mode's one row is the
+/// composite, with no separate colour channel.
+fn color_rows(mode: ColorMode) -> (bool, usize) {
+    match mode {
+        ColorMode::Rgb | ColorMode::Lab => (true, 3),
+        ColorMode::Cmyk => (true, 4),
+        ColorMode::Multichannel => (false, 3),
+        ColorMode::Grayscale | ColorMode::Indexed | ColorMode::Bitmap | ColorMode::Duotone => {
+            (true, 0)
+        }
+    }
+}
+
+/// Qt's `qGray`: `(r*11 + g*16 + b*5) >> 5`.
+fn q_gray(r: u8, g: u8, b: u8) -> u8 {
+    ((r as u32 * 11 + g as u32 * 16 + b as u32 * 5) >> 5) as u8
+}
+
+/// The naive CMYK ink level `0..=255` for one channel of an RGB pixel, matching
+/// the panel's `toCmyk`.
+fn cmyk_ink(r: u8, g: u8, b: u8, index: usize) -> u8 {
+    let (rf, gf, bf) = (r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0);
+    let k = 1.0 - rf.max(gf).max(bf);
+    let inv = if k < 1.0 { 1.0 / (1.0 - k) } else { 0.0 };
+    let inks = [
+        (1.0 - rf - k) * inv,
+        (1.0 - gf - k) * inv,
+        (1.0 - bf - k) * inv,
+        k,
+    ];
+    (inks[index].clamp(0.0, 1.0) * 255.0).round() as u8
+}
+
+/// The panel thumbnail's grayscale value for colour row `index`
+/// (`channelValue`): RGB uses its own plane, CMYK and Multichannel their naive
+/// ink coverage, everything else the composite luminance.
+fn channel_value(mode: ColorMode, index: usize, r: u8, g: u8, b: u8) -> u8 {
+    match mode {
+        ColorMode::Rgb => [r, g, b][index.min(2)],
+        ColorMode::Cmyk => 255 - cmyk_ink(r, g, b, index.min(3)),
+        ColorMode::Multichannel => 255 - cmyk_ink(r, g, b, index.min(2)),
+        _ => q_gray(r, g, b),
+    }
+}
+
+/// The selection a Channels-panel colour `row` holds: the composite (row 0) is
+/// its luminance over the visible `mask` channels, each colour row its own
+/// grayscale plane (the same derivation the row thumbnails use). `None` for a
+/// row outside the mode's colour rows or a buffer that does not match the
+/// document.
+// ponytail: the derived-mode planes (CMYK inks, Lab) are the naive
+// conversions the thumbnails already use, not real separations.
+fn channel_row_selection(
+    doc: &Document,
+    gpu_compute: bool,
+    row: i32,
+    mask: u8,
+) -> Option<Selection> {
+    let row = usize::try_from(row).ok()?;
+    let mode = doc.source_mode.unwrap_or(doc.mode);
+    let (composite, channels) = color_rows(mode);
+    if row >= channels + usize::from(composite) {
+        return None;
+    }
+    let buffer = current_buffer(doc, gpu_compute);
+    let srgb = buffer_to_srgb(doc, &buffer);
+    let buffer = srgb.as_ref();
+    let plane = buffer.pixel_count();
+    let depth = buffer.channels as usize;
+    if plane == 0
+        || depth == 0
+        || buffer.width != doc.width
+        || buffer.height != doc.height
+        || buffer.data.len() != plane * depth
+    {
+        return None;
+    }
+    let mut data = vec![0u8; plane];
+    for (i, out) in data.iter_mut().enumerate() {
+        let r = buffer.data[i];
+        let (g, b) = if depth >= 3 {
+            (buffer.data[plane + i], buffer.data[2 * plane + i])
+        } else {
+            (r, r)
+        };
+        *out = if composite && row == 0 {
+            // The composite row follows the visible channels.
+            q_gray(
+                if mask & 0x1 != 0 { r } else { 0 },
+                if mask & 0x2 != 0 { g } else { 0 },
+                if mask & 0x4 != 0 { b } else { 0 },
+            )
+        } else {
+            // A colour row is its own plane regardless of the eyes: CS6 loads a
+            // hidden channel too.
+            channel_value(mode, if composite { row - 1 } else { row }, r, g, b)
+        };
+    }
+    Some(Selection {
+        width: doc.width,
+        height: doc.height,
+        data,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pictura_core::BitDepth;
 
     fn channel(id: i16, len: usize) -> Channel {
         Channel {
@@ -781,5 +909,75 @@ mod tests {
         assert!(selection_from_named_channel(&channels, 2, 2, "Alpha 1").is_none());
         assert!(selection_from_named_channel(&channels, 1, 3, "Alpha 1").is_some());
         assert!(selection_from_named_channel(&channels, 2, 2, "Alpha 2").is_none());
+    }
+
+    #[test]
+    fn gray_and_ink_match_the_panel_derivation() {
+        assert_eq!(q_gray(100, 150, 200), 140);
+        assert_eq!(q_gray(0, 150, 200), 106);
+        assert_eq!(q_gray(255, 255, 255), 255);
+        // Pure red: no cyan or black ink, full magenta and yellow.
+        assert_eq!(cmyk_ink(255, 0, 0, 0), 0);
+        assert_eq!(cmyk_ink(255, 0, 0, 1), 255);
+        assert_eq!(cmyk_ink(0, 0, 0, 3), 255);
+    }
+
+    #[test]
+    fn channel_row_selection_reads_the_row_plane() {
+        let mut doc = Document::new(2, 1, ColorMode::Rgb, BitDepth::Eight);
+        // Planes 0/1/2 are R/G/B.
+        doc.composite.data = vec![100, 100, 150, 150, 200, 200].into();
+
+        let red = channel_row_selection(&doc, false, 1, 0x7).unwrap();
+        assert_eq!(red.data, vec![100, 100]);
+        let green = channel_row_selection(&doc, false, 2, 0x7).unwrap();
+        assert_eq!(green.data, vec![150, 150]);
+        let blue = channel_row_selection(&doc, false, 3, 0x7).unwrap();
+        assert_eq!(blue.data, vec![200, 200]);
+
+        let composite = channel_row_selection(&doc, false, 0, 0x7).unwrap();
+        assert_eq!(composite.data, vec![140, 140]);
+
+        // A hidden red channel is zeroed in the composite row.
+        let hidden = channel_row_selection(&doc, false, 0, 0x6).unwrap();
+        assert_eq!(hidden.data, vec![106, 106]);
+
+        // Rows past the colour channels are refused.
+        assert!(channel_row_selection(&doc, false, 4, 0x7).is_none());
+        assert!(channel_row_selection(&doc, false, -1, 0x7).is_none());
+    }
+
+    #[test]
+    fn multichannel_rows_derive_naive_inks() {
+        let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
+        doc.source_mode = Some(ColorMode::Multichannel);
+        doc.composite.data = vec![255, 0, 0].into();
+        // Row 0 is Cyan (ink 0), rows 1/2 Magenta and Yellow (full ink) — and
+        // there is no composite row in Multichannel.
+        assert_eq!(
+            channel_row_selection(&doc, false, 0, 0x7).unwrap().data,
+            vec![255]
+        );
+        assert_eq!(
+            channel_row_selection(&doc, false, 1, 0x7).unwrap().data,
+            vec![0]
+        );
+        assert_eq!(
+            channel_row_selection(&doc, false, 2, 0x7).unwrap().data,
+            vec![0]
+        );
+        assert!(channel_row_selection(&doc, false, 3, 0x7).is_none());
+    }
+
+    #[test]
+    fn single_row_modes_have_no_second_channel() {
+        let mut doc = Document::new(1, 1, ColorMode::Grayscale, BitDepth::Eight);
+        doc.composite.data = vec![200].into();
+        // The one Gray row is the composite; there is no colour channel after it.
+        assert_eq!(
+            channel_row_selection(&doc, false, 0, 0x7).unwrap().data,
+            vec![200]
+        );
+        assert!(channel_row_selection(&doc, false, 1, 0x7).is_none());
     }
 }

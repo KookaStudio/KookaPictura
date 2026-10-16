@@ -179,12 +179,8 @@ ChannelsPanel::ChannelsPanel(QWidget* parent)
             applyChannelSolo(row);
         }
     });
-    connect(load_, &QToolButton::clicked, this, [this]() {
-        const int alpha = selectedAlpha();
-        if (view_ && alpha >= 0) {
-            view_->load_selection(QStringLiteral("Alpha %1").arg(alpha + 1));
-        }
-    });
+    connect(load_, &QToolButton::clicked, this,
+            [this]() { loadRowSelection(list_->currentRow()); });
     connect(save_, &QToolButton::clicked, this, [this]() {
         if (view_ && view_->save_selection(QString())) {
             refresh();
@@ -452,10 +448,15 @@ bool ChannelsPanel::eventFilter(QObject* watched, QEvent* event)
         if (event->type() == QEvent::MouseMove || event->type() == QEvent::HoverMove) {
             auto* mouse = static_cast<QMouseEvent*>(event);
             const QPoint pos = widget->mapTo(list_->viewport(), mouse->position().toPoint());
-            QListWidgetItem* item = list_->itemAt(pos);
-            const int row = item ? list_->row(item) : -1;
+            const int row = rowAt(pos);
             list_->viewport()->setCursor(row >= 0 ? Qt::PointingHandCursor : Qt::ArrowCursor);
             updateCtrlOverlay(row, pos, mouse->modifiers());
+        } else if (event->type() == QEvent::MouseButtonPress) {
+            auto* mouse = static_cast<QMouseEvent*>(event);
+            if (mouse->button() == Qt::LeftButton && (mouse->modifiers() & Qt::ControlModifier)) {
+                const QPoint pos = widget->mapTo(list_->viewport(), mouse->position().toPoint());
+                loadRowSelection(rowAt(pos));
+            }
         } else if (event->type() == QEvent::Leave) {
             list_->viewport()->unsetCursor();
             if (ctrlOverlay_) {
@@ -464,6 +465,26 @@ bool ChannelsPanel::eventFilter(QObject* watched, QEvent* event)
         }
     }
     return QWidget::eventFilter(watched, event);
+}
+
+int ChannelsPanel::rowAt(const QPoint& viewportPos) const
+{
+    QListWidgetItem* item = list_->itemAt(viewportPos);
+    return item ? list_->row(item) : -1;
+}
+
+void ChannelsPanel::loadRowSelection(int row)
+{
+    if (!view_ || row < 0 || row >= rows_.size()) {
+        return;
+    }
+    const int alpha = rows_.at(row).alpha;
+    if (alpha >= 0) {
+        view_->load_selection(QStringLiteral("Alpha %1").arg(alpha + 1));
+    } else if (alpha == -1) {
+        // The mask row (kMaskChannel) keeps its view-only solo, not a load.
+        channels_load_color_selection(*view_, row, mask_);
+    }
 }
 
 void ChannelsPanel::updateCtrlOverlay(int index, const QPoint& pos, Qt::KeyboardModifiers mods)
@@ -526,6 +547,19 @@ int ChannelsPanel::hoverChannelForTest(int index, Qt::KeyboardModifiers mods)
     QCoreApplication::sendEvent(list_->viewport(), &move);
     return static_cast<int>(list_->viewport()->cursor().shape());
 }
+
+void ChannelsPanel::clickChannelForTest(int index, Qt::KeyboardModifiers mods)
+{
+    if (index < 0 || index >= rows_.size()) {
+        return;
+    }
+    const QPoint pos = list_->visualItemRect(list_->item(index)).center();
+    QMouseEvent press(QEvent::MouseButtonPress, pos, list_->viewport()->mapToGlobal(pos),
+                      Qt::LeftButton, Qt::LeftButton, mods);
+    QCoreApplication::sendEvent(list_->viewport(), &press);
+}
+
+int ChannelsPanel::currentChannelForTest() const { return list_->currentRow(); }
 
 bool ChannelsPanel::ctrlOverlayVisibleForTest() const
 {

@@ -20,6 +20,7 @@ private slots:
     void rowsAndThumbnails();
     void eyesHideChannelsOnTheCanvas();
     void alphaChannelsAndFooter();
+    void ctrlClickLoadsChannelSelection();
     void refreshKeepsRows();
     void grayscaleDocumentShowsSingleGrayRow();
     void thumbnailsTrackDocument();
@@ -167,6 +168,52 @@ void ChannelsPanelTest::alphaChannelsAndFooter()
     QVERIFY(view_->has_selection());
     QCOMPARE(view_->selection_coverage(4, 4), 255);
     QCOMPARE(view_->selection_coverage(12, 12), 0);
+
+    // A Ctrl-click on the alpha row loads it through the same path.
+    view_->deselect();
+    panel_->clickChannelForTest(4, Qt::ControlModifier);
+    QVERIFY(view_->has_selection());
+    QCOMPARE(view_->selection_coverage(4, 4), 255);
+    QCOMPARE(view_->selection_coverage(12, 12), 0);
+}
+
+// Ctrl-clicking a colour row loads that channel's pixels as the selection: the
+// composite row its luminance over the visible channels, each colour row its
+// own plane; a plain click only moves the current row (#438).
+void ChannelsPanelTest::ctrlClickLoadsChannelSelection()
+{
+    QTemporaryDir dir;
+    QImage image(16, 16, QImage::Format_RGB32);
+    image.fill(QColor(100, 150, 200));
+    const QString path = dir.filePath(QStringLiteral("flat.png"));
+    QVERIFY(image.save(path) && window_->openDocumentAtPath(path));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    QVERIFY(view_ && panel_);
+    panel_->setView(view_);
+
+    panel_->clickChannelForTest(1, Qt::ControlModifier);
+    QVERIFY(view_->has_selection());
+    QCOMPARE(view_->selection_coverage(8, 8), 100);
+    panel_->clickChannelForTest(2, Qt::ControlModifier);
+    QCOMPARE(view_->selection_coverage(8, 8), 150);
+    panel_->clickChannelForTest(3, Qt::ControlModifier);
+    QCOMPARE(view_->selection_coverage(8, 8), 200);
+    panel_->clickChannelForTest(0, Qt::ControlModifier);
+    QCOMPARE(view_->selection_coverage(8, 8), 140);
+
+    // The composite follows the visible channels: hiding Red loads (0, 150, 200).
+    panel_->toggleChannelForTest(1);
+    panel_->clickChannelForTest(0, Qt::ControlModifier);
+    QCOMPARE(view_->selection_coverage(8, 8), 106);
+    panel_->toggleChannelForTest(1);
+
+    // A plain click moves the current row but loads no selection.
+    view_->deselect();
+    panel_->selectChannelForTest(1);
+    panel_->clickChannelForTest(3, Qt::NoModifier);
+    QCOMPARE(panel_->currentChannelForTest(), 3);
+    QVERIFY(!view_->has_selection());
 }
 
 void ChannelsPanelTest::refreshKeepsRows()

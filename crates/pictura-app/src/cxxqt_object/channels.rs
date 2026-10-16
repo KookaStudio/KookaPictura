@@ -43,6 +43,9 @@ pub mod ffi {
         /// Delete alpha channel `index`; one "Delete Channel" state. False for a bad index.
         fn channels_delete_alpha(view: Pin<&mut PictureView>, index: i32) -> bool;
 
+        /// Load colour channel row `row` (0 = the composite) as the selection; `mask` is the visible RGB channels (bit 0 red, 1 green, 2 blue). False for a row outside the mode's colour rows.
+        fn channels_load_color_selection(view: Pin<&mut PictureView>, row: i32, mask: i32) -> bool;
+
         /// The active layer's raster-mask channel name (`"<layer name> Mask"`), or
         /// empty when the active layer carries no raster mask.
         fn channels_active_mask_name(view: &PictureView) -> QString;
@@ -160,6 +163,10 @@ fn channels_delete_alpha(mut view: Pin<&mut PictureView>, index: i32) -> bool {
         view.as_mut().record("Delete Channel");
     }
     removed
+}
+
+fn channels_load_color_selection(view: Pin<&mut PictureView>, row: i32, mask: i32) -> bool {
+    view.load_channel_selection(row, mask)
 }
 
 fn channels_active_mask_name(view: &PictureView) -> QString {

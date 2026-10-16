@@ -50,6 +50,9 @@ public:
     // Hover the row at `index` with `mods` held and return the viewport cursor's
     // shape; also drives the Ctrl select-all overlay.
     int hoverChannelForTest(int index, Qt::KeyboardModifiers mods);
+    // Press the row at `index` with `mods`; a Ctrl press loads it as a selection.
+    void clickChannelForTest(int index, Qt::KeyboardModifiers mods);
+    int currentChannelForTest() const;
     bool ctrlOverlayVisibleForTest() const;
     // The row widget's surface colour, for the Layers-style restyle check.
     QColor rowSurfaceForTest(int index) const;
@@ -82,6 +85,11 @@ private:
     // else restore the composite; drives the view-only solo view.
     void applyChannelSolo(int row);
     void updateCtrlOverlay(int index, const QPoint& pos, Qt::KeyboardModifiers mods);
+    // The list row under a viewport position, or -1 outside any row.
+    int rowAt(const QPoint& viewportPos) const;
+    // Load the row as a selection: an alpha row via `load_selection`, a colour
+    // row (or the composite) via `load_channel_selection` under `mask_`.
+    void loadRowSelection(int row);
 
     PictureView* view_ = nullptr;
     QListWidget* list_ = nullptr;
