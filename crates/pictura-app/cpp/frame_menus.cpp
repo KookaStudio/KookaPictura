@@ -6,6 +6,7 @@
 #include "api/layers_api.h"
 
 #include "api/document_api.h"
+#include "pictura_app/src/cxxqt_object/impl_layers/layers_surface.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/layers_smart_filters.cxxqt.h"
 
 namespace pictura {
@@ -668,8 +669,10 @@ void PicturaMainWindow::registerHandlers()
     }
 
     // Delete Layer removes the Layers-panel selection, as the panel's own
-    // delete does. Delete Hidden Layers needs only a document (it records
-    // nothing when nothing is hidden); Hide Layers needs a selection.
+    // delete does, and is unavailable when that would remove nothing (the
+    // Background, locked layers, the document's last layer). Delete Hidden
+    // Layers needs only a document (it records nothing when nothing is
+    // hidden); Hide Layers needs a selection.
     registry_->setHandler(command_ids::LayerDeleteLayer, [this]() {
         if (layersPanel_) {
             layersPanel_->deleteSelection();
@@ -678,7 +681,7 @@ void PicturaMainWindow::registerHandlers()
     });
     registry_->setEnabledProvider(command_ids::LayerDeleteLayer, [this]() {
         return activeView() && activeView()->has_document() && layersPanel_
-            && !layersPanel_->selectedPaths().isEmpty();
+            && layers_can_delete(*activeView(), layersPanel_->selectedPaths());
     });
     registry_->setHandler(command_ids::LayerDeleteHiddenLayers, [this]() {
         PictureView* view = activeView();

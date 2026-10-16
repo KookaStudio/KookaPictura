@@ -335,12 +335,12 @@ LayersPanel::LayersPanel(QWidget* parent)
     newLayerButton->setProperty("layerDropAction", QStringLiteral("duplicate"));
     newLayerButton->setAcceptDrops(true);
     newLayerButton->installEventFilter(this);
-    auto* deleteButton =
+    deleteButton_ =
         stripIconButton(QStringLiteral("layersStripDelete"), QStringLiteral("layers.delete"));
-    deleteButton->setToolTip(tr("Delete — drop a layer here to delete it"));
-    deleteButton->setProperty("layerDropAction", QStringLiteral("delete"));
-    deleteButton->setAcceptDrops(true);
-    deleteButton->installEventFilter(this);
+    deleteButton_->setToolTip(tr("Delete — drop a layer here to delete it"));
+    deleteButton_->setProperty("layerDropAction", QStringLiteral("delete"));
+    deleteButton_->setAcceptDrops(true);
+    deleteButton_->installEventFilter(this);
     layout->addLayout(buttons);
 
     connect(tree_->selectionModel(), &QItemSelectionModel::currentChanged, this,
@@ -421,7 +421,7 @@ LayersPanel::LayersPanel(QWidget* parent)
             addLayerAt(currentPath());
         }
     });
-    connect(deleteButton, &QToolButton::clicked, this, [this] { deleteSelection(); });
+    connect(deleteButton_, &QToolButton::clicked, this, [this] { deleteSelection(); });
 }
 
 void LayersPanel::setView(PictureView* view)

@@ -1,6 +1,6 @@
-// The Layers panel's mask button at the foot of the panel, and the Refine Mask
-// and Layer Mask Display Options dialogs the mask-thumbnail menu opens (the
-// menu itself is in layers_panel_menu.cpp).
+// The Layers panel's mask and trash buttons at the foot of the panel, and the
+// Refine Mask and Layer Mask Display Options dialogs the mask-thumbnail menu
+// opens (the menu itself is in layers_panel_menu.cpp).
 
 #include "layers_panel.h"
 
@@ -10,6 +10,7 @@
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_layers/layers_surface.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/mask_commands.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/vector_masks.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_selection/refine.cxxqt.h"
@@ -21,7 +22,7 @@ namespace pictura {
 
 void LayersPanel::syncStripButtons()
 {
-    if (!maskButton_) {
+    if (!maskButton_ || !deleteButton_) {
         return;
     }
     // CS6 adds a layer mask first, then a vector mask; with both there is
@@ -32,6 +33,8 @@ void LayersPanel::syncStripButtons()
     maskButton_->setToolTip(!layerMask    ? tr("Add layer mask")
                             : !vectorMask ? tr("Add vector mask")
                                           : tr("Add a mask"));
+    // The trash deletes the selection, which must leave the document a layer.
+    deleteButton_->setEnabled(view_ && layers_can_delete(*view_, selectedPaths()));
 }
 
 void LayersPanel::addMaskFromButton()
@@ -95,6 +98,18 @@ void LayersPanel::clickMaskButtonForTest()
 {
     if (maskButton_) {
         maskButton_->click();
+    }
+}
+
+bool LayersPanel::deleteButtonEnabledForTest() const
+{
+    return deleteButton_ && deleteButton_->isEnabled();
+}
+
+void LayersPanel::clickDeleteButtonForTest()
+{
+    if (deleteButton_) {
+        deleteButton_->click();
     }
 }
 

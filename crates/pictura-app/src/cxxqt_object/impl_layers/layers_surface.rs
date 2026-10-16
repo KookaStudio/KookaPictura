@@ -1,6 +1,6 @@
 //! Layers-panel surface bridge: the CS6 Panel Options that gate duplicate
-//! naming and default fill masks, and the `Layer > Lock All Layers In Group…`
-//! batch.
+//! naming and default fill masks, the `Layer > Lock All Layers In Group…`
+//! batch, and whether a selection can be deleted.
 //!
 //! Free functions over a [`PictureView`] (their own bridge, so the
 //! `PictureView` declaration list in `cxxqt_object.rs` stays at its size
@@ -11,13 +11,15 @@
 use super::super::qobject::PictureView;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
-use cxx_qt_lib::QString;
+use cxx_qt_lib::{QString, QStringList};
 
 #[cxx_qt::bridge]
 pub mod ffi {
     unsafe extern "C++" {
         include!("cxx-qt-lib/qstring.h");
         type QString = cxx_qt_lib::QString;
+        include!("cxx-qt-lib/qstringlist.h");
+        type QStringList = cxx_qt_lib::QStringList;
 
         include!("pictura_app/src/cxxqt_object.cxxqt.h");
         #[namespace = "pictura"]
@@ -41,6 +43,11 @@ pub mod ffi {
         /// `group_path`; one "Lock Group Layers" state. Returns the number of
         /// layers changed, `0` when `group_path` is not a group.
         fn lock_group_layers_run(view: Pin<&mut PictureView>, group_path: &QString) -> i32;
+
+        /// Whether deleting `paths` would remove anything: false for an empty
+        /// selection, the Background, fully-locked layers, and the document's
+        /// last layer, all of which Delete Layer refuses.
+        fn layers_can_delete(view: &PictureView, paths: &QStringList) -> bool;
     }
 }
 
@@ -64,4 +71,13 @@ fn lock_group_layers_run(mut view: Pin<&mut PictureView>, group_path: &QString) 
         view.as_mut().record("Lock Group Layers");
     }
     changed as i32
+}
+
+fn layers_can_delete(view: &PictureView, paths: &QStringList) -> bool {
+    let Some(doc) = view.rust().doc.as_ref() else {
+        return false;
+    };
+    let owned: Vec<String> = paths.iter().map(ToString::to_string).collect();
+    let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
+    pictura_render::can_delete_paths(doc, &refs)
 }
