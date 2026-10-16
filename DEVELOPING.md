@@ -280,16 +280,51 @@ The shared `../.target` survives removal; reclaim it like any `target/` with
 
 ## Speeding up local builds
 
-`sccache` is optional. To route Rust compilation through it, export the wrapper
-before building or testing:
+`sccache` is optional. When it is on `PATH`, a plain
+`cmake -S . -B build` configures it as the C++ compiler launcher
+automatically; an explicit `-DCMAKE_CXX_COMPILER_LAUNCHER=...` still wins. The
+launcher applies on a fresh configure, so delete `build/` to pick it up. To route
+Rust compilation through it too, export the wrapper before building or testing:
 
 ```bash
 export RUSTC_WRAPPER=sccache
 ```
 
-`scripts/verify-full.sh` adds `-DCMAKE_CXX_COMPILER_LAUNCHER=sccache` to the
-CMake configure automatically when `sccache` is on `PATH`. It applies only on a
-fresh configure, so delete `build/` to pick it up.
+`sccache` persists its cache between sessions: on Linux `~/.cache/sccache`
+(macOS `~/Library/Caches/Mozilla.sccache`, Windows
+`%LOCALAPPDATA%\Mozilla\sccache`), capped at 10 GiB by default. Override the
+location and cap with `SCCACHE_DIR` and `SCCACHE_CACHE_SIZE` (for example
+`SCCACHE_CACHE_SIZE=20G`); `sccache --show-stats` reports both plus the hit rate.
+If the cache server is unreachable, `SCCACHE_IGNORE_SERVER_IO_ERROR=1` makes the
+build fall back to the compiler instead of failing.
+
+Rebuilding the same tree from a different worktree path misses the cache
+(keys use absolute paths). To share C++ objects across worktrees, opt in once
+per clone:
+
+```bash
+git config kooka.sccache-share true
+```
+
+With that set (it lives in the shared git config, so it reaches every worktree),
+`.githooks/post-checkout` writes an sccache config — `$SCCACHE_CONF` if set, else
+Linux `${XDG_CONFIG_HOME:-$HOME/.config}/sccache/config` and macOS
+`~/Library/Application Support/Mozilla.sccache/config` — that lists every
+worktree root as a `basedirs` entry and disables `hash_working_directory`, so an
+object built in one worktree is reused in a sibling. The list refreshes when a
+worktree is added (a removed worktree leaves a stale entry until then, which is
+harmless), and the daemon restarts only when the file changes. The hook touches
+only a file whose first line is its repo-specific managed-header comment; your
+own sccache config, or another clone's, is left alone and sharing simply does
+not engage. Opt out by deleting that file and running `sccache --stop-server`.
+
+Two things are machine-global, not per-repo: the config file (so
+`hash_working_directory = false` applies to every project using sccache on this
+account) and the daemon restart (adding a worktree can restart the server a
+concurrent build is using — export `SCCACHE_IGNORE_SERVER_IO_ERROR=1` so such
+builds fall back to the compiler instead of failing). Only identical source and
+compiler flags hit — a worktree on a different branch still rebuilds — and Rust
+is unaffected because worktrees already share `../.target`.
 
 `target/` grows to tens of GB. Reclaim space with `cargo sweep` (install
 `cargo-sweep` if you want it) or a plain `cargo clean`.

@@ -54,6 +54,10 @@ Toolchain is pinned by `rust-toolchain.toml` (1.98). Qt is the system Qt 6
 CMake builds with Ninja. `deny.toml` gates licenses and dependencies; CI runs
 `cargo deny check`.
 
+Local C++ builds use `sccache` automatically when it is installed. Sharing that
+cache across git worktrees is opt-in: `git config kooka.sccache-share true`
+(see `DEVELOPING.md`, "Speeding up local builds").
+
 ## Serena (symbol intelligence)
 
 The repo is already a Serena project: commit `.serena/project.yml` and
