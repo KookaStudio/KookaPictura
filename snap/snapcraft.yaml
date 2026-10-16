@@ -62,4 +62,12 @@ parts:
       channel="$(sed -n 's/^channel *= *"\([^"]*\)"/\1/p' "$CRAFT_PROJECT_DIR/rust-toolchain.toml")"
       rustup toolchain install "$channel" --profile minimal
       rustup default "$channel"
+      # CXX-Qt's qt-build-utils probes qmake with a cleared environment, which
+      # strips the SDK's LD_LIBRARY_PATH. Make the SDK's Qt libraries resolvable
+      # through the loader cache so the probe works without the environment.
+      printf '%s\n%s\n' \
+        /snap/kde-qt6-core24-sdk/current/usr/lib/x86_64-linux-gnu \
+        /snap/kde-qt6-core24-sdk/current/usr/lib \
+        > /etc/ld.so.conf.d/kde-qt6-core24-sdk.conf
+      ldconfig
       craftctl default
