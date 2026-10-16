@@ -145,8 +145,12 @@ void EditShortcutsTest::ctrlZWorksWhileHistoryIconFlyoutIsOpen()
     pictura::PanelColumn* column = nullptr;
     const auto cleanup = qScopeGuard([&] {
         if (column) {
+            column->triggerFlyoutCloseForTest();
             column->setRailMode(false);
         }
+        // The popup took the active window; later shortcut tests need it back.
+        frame.activateWindow();
+        QTest::qWaitForWindowActive(&frame);
         frame.closeDocument(doc, false);
     });
     QCOMPARE(view->duplicate_layer(0), 1);
@@ -167,6 +171,8 @@ void EditShortcutsTest::ctrlZWorksWhileHistoryIconFlyoutIsOpen()
     list->setFocus();
     QTRY_COMPARE(QApplication::focusWidget(), static_cast<QWidget*>(list));
 
+    // Undo's enabled state follows the registry, which the duplicate left stale.
+    frame.registry()->refresh();
     QTest::keyClick(list, Qt::Key_Z, Qt::ControlModifier);
     QCOMPARE(view->layer_count(), 1);
 }
