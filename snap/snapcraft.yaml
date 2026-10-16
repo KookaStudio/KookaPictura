@@ -41,6 +41,7 @@ parts:
       - lld
       - liblcms2-dev
       - libvulkan-dev
+      - libxkbcommon-dev
     stage-packages:
       - liblcms2-2
     cmake-parameters:
