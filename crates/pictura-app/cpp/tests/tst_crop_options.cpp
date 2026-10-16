@@ -233,6 +233,10 @@ void CropOptionsTest::straightenToggleArmsLineMode()
     frame.setActiveTool(pictura::ToolId::Crop);
     auto* spirit = frame.findChild<QToolButton*>(QStringLiteral("optionsCropSpirit"));
     QVERIFY(spirit);
+    // The icon carries its label to the right; a click on either toggles.
+    QCOMPARE(spirit->text(), QStringLiteral("Straighten"));
+    QCOMPARE(spirit->toolButtonStyle(), Qt::ToolButtonTextBesideIcon);
+    QVERIFY(!spirit->icon().pixmap(18, 18).isNull());  // the spirit level
 
     QVERIFY(!tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->straightenMode());
     spirit->click();

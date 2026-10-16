@@ -208,4 +208,4 @@ non-trivial changes and works from the CLI, with or without an agent** (the
    If nothing is unclear, say so explicitly and proceed.
 3. IMPLEMENT: Write all code changes. Do NOT run build/compile/test-build commands.
 4. COMPILE LAST: Only after all code is finished, run the build once.
-   Fix errors, then rebuild only if code changed.
+   Fix errors, then rebuild only if code changed. Do not use more than 80% of available CPUs for compiling.

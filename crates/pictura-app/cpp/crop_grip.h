@@ -83,15 +83,57 @@ inline double cropRotateZoneAngle(const QPointF& delta)
     return best;
 }
 
-// The straighten angle (degrees) for a horizon line from `a` to `b`: the
-// content rotation that levels it, i.e. the negative of the line's inclination.
-// A degenerate line is a no-op.
+// The straighten angle (degrees) for a reference line from `a` to `b`: the
+// content rotation that levels it against the nearer of the horizontal and the
+// vertical, i.e. the negative of its inclination from that axis, in (-45, 45].
+// The drawing direction does not matter. A degenerate line is a no-op.
 inline double straightenAngle(const QPointF& a, const QPointF& b)
 {
     if (std::hypot(b.x() - a.x(), b.y() - a.y()) < 1e-6) {
         return 0.0;
     }
-    return -std::atan2(b.y() - a.y(), b.x() - a.x()) * 180.0 / M_PI;
+    double angle = -std::atan2(b.y() - a.y(), b.x() - a.x()) * 180.0 / M_PI;
+    while (angle > 45.0) {
+        angle -= 90.0;
+    }
+    while (angle <= -45.0) {
+        angle += 90.0;
+    }
+    return angle;
+}
+
+// `box` scaled about its centre (never grown) so all four corners fall inside
+// `content` rotated `degrees` about `pivot`, the rotation the crop preview
+// draws (QTransform::rotate, clockwise on screen). A box whose centre lies
+// outside the rotated content is returned unchanged.
+inline QRectF fitBoxInRotated(const QRectF& box, const QRectF& content, double degrees,
+                              const QPointF& pivot)
+{
+    const double rad = degrees * M_PI / 180.0;
+    const double c = std::cos(rad);
+    const double s = std::sin(rad);
+    // Into the unrotated content frame: the inverse rotation about the pivot.
+    const auto unrotate = [c, s](const QPointF& v) {
+        return QPointF(c * v.x() + s * v.y(), -s * v.x() + c * v.y());
+    };
+    const QPointF centre = pivot + unrotate(box.center() - pivot);
+    if (!content.contains(centre)) {
+        return box;
+    }
+    double scale = 1.0;
+    const QPointF half(box.width() / 2.0, box.height() / 2.0);
+    for (const QPointF& corner : {QPointF(-half.x(), -half.y()), QPointF(half.x(), -half.y()),
+                                  QPointF(half.x(), half.y()), QPointF(-half.x(), half.y())}) {
+        const QPointF v = unrotate(corner);
+        // The largest t with centre + t*v still inside, per axis.
+        if (v.x() > 1e-12) scale = std::min(scale, (content.right() - centre.x()) / v.x());
+        if (v.x() < -1e-12) scale = std::min(scale, (content.left() - centre.x()) / v.x());
+        if (v.y() > 1e-12) scale = std::min(scale, (content.bottom() - centre.y()) / v.y());
+        if (v.y() < -1e-12) scale = std::min(scale, (content.top() - centre.y()) / v.y());
+    }
+    QRectF fitted(0.0, 0.0, box.width() * scale, box.height() * scale);
+    fitted.moveCenter(box.center());
+    return fitted;
 }
 
 // The handle of `box` (image space) under `p`, within `grabPx` screen pixels at

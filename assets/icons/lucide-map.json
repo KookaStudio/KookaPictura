@@ -67,6 +67,11 @@
       "note": "square with diagonals and top-corner fans to the bottom centre, as the Triangle overlay draws",
       "base": "square"
     },
+    "crop.straighten": {
+      "kind": "custom",
+      "match": "custom",
+      "note": "spirit level: a bar with a centred bubble vial, the Crop Straighten toggle"
+    },
     "crop.swap": {
       "kind": "lucide",
       "slug": "arrow-left-right",

@@ -992,8 +992,9 @@ void ImageView::showEvent(QShowEvent* event)
 
 void ImageView::keyPressEvent(QKeyEvent* event)
 {
-    if (modifierFlag(event->key())) {
-        emit modifierKeyChanged(int(event->modifiers()));
+    // A modifier's own press may not carry its flag yet (platform-dependent).
+    if (const int flag = modifierFlag(event->key())) {
+        emit modifierKeyChanged(int(event->modifiers()) | flag);
     }
     if (transformActive_) {
         if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {

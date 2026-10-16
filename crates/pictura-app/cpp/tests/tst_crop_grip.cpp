@@ -20,6 +20,7 @@ private slots:
     void edgeGripDrivesTheRatio();
     void altMirrorScalesAboutTheCentre();
     void straightenAngleFromLine();
+    void fitBoxInsideRotatedContent();
 
 private:
     static QRectF box() { return QRectF(10, 20, 100, 60); }
@@ -119,13 +120,51 @@ void CropGripTest::altMirrorScalesAboutTheCentre()
 
 void CropGripTest::straightenAngleFromLine()
 {
-    // A level line needs no rotation; a down-right line rotates the content the
-    // other way; a vertical line is -90°; a degenerate line is a no-op.
+    // A level or plumb line needs no rotation; a down-right line rotates the
+    // content the other way; a near-vertical line levels against the vertical;
+    // the drawing direction does not matter; a degenerate line is a no-op.
     const auto near = [](double a, double b) { return std::abs(a - b) < 1e-6; };
+    const double tilt = std::atan(0.1) * 180.0 / M_PI;
     QVERIFY(near(pictura::straightenAngle(QPointF(0, 0), QPointF(10, 0)), 0.0));
-    QVERIFY(near(pictura::straightenAngle(QPointF(0, 0), QPointF(10, 10)), -45.0));
-    QVERIFY(near(pictura::straightenAngle(QPointF(0, 0), QPointF(0, 10)), -90.0));
+    QVERIFY(near(pictura::straightenAngle(QPointF(0, 0), QPointF(10, 10)), 45.0));
+    QVERIFY(near(pictura::straightenAngle(QPointF(0, 0), QPointF(0, 10)), 0.0));
+    QVERIFY(near(pictura::straightenAngle(QPointF(0, 0), QPointF(10, 1)), -tilt));
+    QVERIFY(near(pictura::straightenAngle(QPointF(10, 1), QPointF(0, 0)), -tilt));
+    QVERIFY(near(pictura::straightenAngle(QPointF(0, 0), QPointF(1, 10)), tilt));
     QVERIFY(near(pictura::straightenAngle(QPointF(5, 5), QPointF(5, 5)), 0.0));
+}
+
+void CropGripTest::fitBoxInsideRotatedContent()
+{
+    const QRectF content(0, 0, 200, 100);
+    const QPointF pivot = content.center();
+    // No rotation keeps the box.
+    QCOMPARE(pictura::fitBoxInRotated(content, content, 0.0, pivot), content);
+    // A rotated content shrinks the box about its centre, keeping its aspect,
+    // until its corners touch the rotated edges.
+    const QRectF fitted = pictura::fitBoxInRotated(content, content, 10.0, pivot);
+    QVERIFY(fitted.width() < 200.0 && fitted.height() < 100.0);
+    QVERIFY(std::abs(fitted.width() / fitted.height() - 2.0) < 1e-9);
+    QVERIFY(std::abs(fitted.center().x() - 100.0) < 1e-9);
+    QVERIFY(std::abs(fitted.center().y() - 50.0) < 1e-9);
+    const double rad = 10.0 * M_PI / 180.0;
+    double worst = 1e9;
+    for (const QPointF& p : {fitted.topLeft(), fitted.topRight(), fitted.bottomRight(),
+                             fitted.bottomLeft()}) {
+        const QPointF u = p - pivot;
+        const QPointF q = pivot
+            + QPointF(std::cos(rad) * u.x() + std::sin(rad) * u.y(),
+                      -std::sin(rad) * u.x() + std::cos(rad) * u.y());
+        QVERIFY(q.x() >= -1e-9 && q.x() <= 200.0 + 1e-9 && q.y() >= -1e-9 && q.y() <= 100.0 + 1e-9);
+        worst = std::min({worst, q.x(), 200.0 - q.x(), q.y(), 100.0 - q.y()});
+    }
+    QVERIFY(worst < 1e-9);  // the largest fit: a corner touches an edge
+    // A small box well inside is not grown, and a box centred off the content
+    // is left alone.
+    const QRectF small(90, 45, 20, 10);
+    QCOMPARE(pictura::fitBoxInRotated(small, content, 10.0, pivot), small);
+    const QRectF off(300, 300, 20, 10);
+    QCOMPARE(pictura::fitBoxInRotated(off, content, 10.0, pivot), off);
 }
 
 QTEST_GUILESS_MAIN(CropGripTest)

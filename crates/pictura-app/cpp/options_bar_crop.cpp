@@ -159,13 +159,17 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
     clear->setToolTip(QStringLiteral("Clear the aspect ratio"));
     layout->addWidget(clear);
 
-    // The spirit-level: a checkable toggle that arms the draw-a-horizon line tool.
+    // The spirit-level: a checkable toggle that arms the draw-a-horizon line
+    // tool, labelled to its right so the icon and the label both toggle it.
     auto* spirit = new QToolButton(page);
     spirit->setObjectName(QStringLiteral("optionsCropSpirit"));
     spirit->setCheckable(true);
-    spirit->setIcon(icon(QStringLiteral("info.protractor")));
+    spirit->setIcon(icon(QStringLiteral("crop.straighten")));
     spirit->setIconSize(QSize(18, 18));
-    spirit->setToolTip(QStringLiteral("Straighten: drag a line along the horizon"));
+    spirit->setText(QStringLiteral("Straighten"));
+    spirit->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    spirit->setToolTip(
+        QStringLiteral("Straighten: drag a line along the horizon (hold Ctrl to invoke)"));
     layout->addWidget(spirit);
     layout->addWidget(separator());
 
