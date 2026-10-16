@@ -126,7 +126,7 @@ void CropStraightenTest::referenceLineLevelsWithoutEmptyCorners()
     QVERIFY(!crop->straightenMode());
     QVERIFY(std::abs(crop->angle() + theta) < 0.1);
     QCOMPARE(canvas->cropStraightenForTest(), crop->angle());
-    QVERIFY(tools->cropActive());
+    QVERIFY(tools->cropBoxSession()->cropActive());
 
     // Every corner of the box maps back inside the unrotated 120x80 canvas
     // (one pixel of slack for the integer crop rect).
@@ -145,7 +145,7 @@ void CropStraightenTest::referenceLineLevelsWithoutEmptyCorners()
                  qPrintable(QStringLiteral("corner %1,%2 uncovered").arg(q.x()).arg(q.y())));
     }
 
-    QVERIFY(tools->commitCrop());
+    QVERIFY(tools->cropCommitSession()->commitCrop());
     QCOMPARE(frame.activeView()->document_width(), rect.width());
     QCOMPARE(frame.activeView()->document_height(), rect.height());
 
@@ -209,7 +209,7 @@ void CropStraightenTest::ctrlPressDrawsALineWithoutAKeyEvent()
     drawLine(canvas, 5.0, Qt::ControlModifier);
     QVERIFY(std::abs(crop->angle() + 5.0) < 0.1);
     QVERIFY(!crop->straightenMode());
-    QVERIFY(tools->cropActive());
+    QVERIFY(tools->cropBoxSession()->cropActive());
 
     frame.setActiveTool(pictura::ToolId::Move);
     frame.closeDocument(doc, false);
