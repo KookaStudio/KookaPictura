@@ -15,3 +15,8 @@
 
 - [x] 3.1 The line drag shows the `∠` readout of the coming angle, cleared on release; the image rotates only on release; Qt Test asserts no rotation mid-drag and the canvas angle after.
 - [x] 3.2 `cursor.straighten` (qrc, `assets/PROVENANCE.md`) while armed; Qt Test asserts the cursor kind.
+
+## 4. Test plan
+
+- [x] 4.1 `test-plan.md` maps every scenario to a test or a justified manual check.
+- [x] 4.2 Qt Tests for the remaining gaps: a Ctrl press with no key event draws, releasing Ctrl mid-line finishes it, and a second line adds to the angle.

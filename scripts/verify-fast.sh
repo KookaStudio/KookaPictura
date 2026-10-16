@@ -47,6 +47,8 @@ if [ "$docs_only" -eq 1 ]; then
   echo "verify-fast: docs-only diff; skipping fmt, clippy, and tests"
   echo "== guard =="
   bash scripts/guard.sh
+  echo "== test plan =="
+  python3 scripts/check-test-plan.py
   echo "== openspec =="
   openspec validate --all --strict 2>&1 | tail -1
   echo "verify-fast: OK (docs-only)"
@@ -79,6 +81,10 @@ python3 scripts/check-icon-provenance.py
 
 echo "== guard =="
 bash scripts/guard.sh
+
+echo "== test plan =="
+python3 scripts/check-test-plan.py --self-test
+python3 scripts/check-test-plan.py
 
 echo "== openspec =="
 openspec validate --all --strict 2>&1 | tail -1

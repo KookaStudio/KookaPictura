@@ -19,3 +19,9 @@ rules:
   specs:
     - "Write each capability delta at the mirrored path `changes/<name>/specs/{domain}/{capability}/spec.md`."
     - "Keep the delta path identical to the main spec path it targets."
+  tasks:
+    - "Pair tasks.md with a test-plan.md in the change folder: one table row per spec scenario (its [tag], or its title when untagged) whose last column, Coverage, names the automated tests (`tst_<suite>::<case>` or `<crate>::<fn>`) or reads `manual: <reason>`."
+    - "Add a task to write each automated test the plan names that does not exist yet."
+  tasks:
+    - "End tasks.md with a 'Test plan' section: one row per scenario tag ([lcs_...]) mapping it to the test that covers it, or 'manual: <reason>'."
+    - "Include a task to write each missing automated test before the implementation tasks are checked off."

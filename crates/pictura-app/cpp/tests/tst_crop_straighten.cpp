@@ -28,8 +28,21 @@ private slots:
     void angleZeroIsAnAxisAlignedCrop();
     void referenceLineLevelsWithoutEmptyCorners();
     void holdingCtrlArmsTheLine();
+    void ctrlPressDrawsALineWithoutAKeyEvent();
+    void ctrlReleaseMidLineFinishesIt();
+    void secondLineAddsToTheAngle();
 
 private:
+    // A left-to-right reference line at `degrees` from the horizontal.
+    static void drawLine(pictura::ImageView* canvas, double degrees, Qt::KeyboardModifiers mods)
+    {
+        const QPointF a(10, 40);
+        const QPointF b(110, 40 + 100 * std::tan(degrees * M_PI / 180.0));
+        canvas->mousePressed(a, Qt::LeftButton, int(mods));
+        canvas->mouseMoved(b);
+        canvas->mouseReleased(b);
+    }
+
     pictura::test::ScopedStateHome stateHome_;
     std::unique_ptr<pictura::PicturaMainWindow> window_;
 };
@@ -171,6 +184,100 @@ void CropStraightenTest::holdingCtrlArmsTheLine()
     key(QEvent::KeyRelease);
     QVERIFY(crop->straightenMode());
     crop->setStraightenMode(false);
+
+    frame.setActiveTool(pictura::ToolId::Move);
+    frame.closeDocument(doc, false);
+}
+
+// A press carrying Ctrl draws a line even when the key event went elsewhere
+// (a focused panel), so the canvas never saw it.
+void CropStraightenTest::ctrlPressDrawsALineWithoutAKeyEvent()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("StraightenCtrlPress"), 120, 80,
+                              QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    pictura::ImageView* canvas = frame.imageView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(canvas);
+    QVERIFY(tools);
+    auto* crop = tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop);
+    const int doc = frame.activeDocumentIndex();
+
+    crop->setClassicMode(true);
+    frame.setActiveTool(pictura::ToolId::Crop);
+    QVERIFY(!crop->straightenMode());
+    drawLine(canvas, 5.0, Qt::ControlModifier);
+    QVERIFY(std::abs(crop->angle() + 5.0) < 0.1);
+    QVERIFY(!crop->straightenMode());
+    QVERIFY(tools->cropActive());
+
+    frame.setActiveTool(pictura::ToolId::Move);
+    frame.closeDocument(doc, false);
+}
+
+// Releasing Ctrl while the line is drawn does not drop it: the line finishes
+// on the mouse release, then disarms.
+void CropStraightenTest::ctrlReleaseMidLineFinishesIt()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("StraightenCtrlMid"), 120, 80,
+                              QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    pictura::ImageView* canvas = frame.imageView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(canvas);
+    QVERIFY(tools);
+    auto* crop = tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop);
+    const int doc = frame.activeDocumentIndex();
+    const auto key = [canvas](QEvent::Type type) {
+        QKeyEvent event(type, Qt::Key_Control,
+                        type == QEvent::KeyPress ? Qt::ControlModifier : Qt::NoModifier);
+        QApplication::sendEvent(canvas, &event);
+    };
+
+    crop->setClassicMode(true);
+    frame.setActiveTool(pictura::ToolId::Crop);
+    key(QEvent::KeyPress);
+    QVERIFY(crop->straightenMode());
+    const QPointF a(10, 40);
+    const QPointF b(110, 40 + 100 * std::tan(5.0 * M_PI / 180.0));
+    canvas->mousePressed(a, Qt::LeftButton, int(Qt::ControlModifier));
+    canvas->mouseMoved(b);
+    key(QEvent::KeyRelease);
+    QVERIFY(crop->straightenMode());
+    canvas->mouseReleased(b);
+    QVERIFY(std::abs(crop->angle() + 5.0) < 0.1);
+    QVERIFY(!crop->straightenMode());
+
+    frame.setActiveTool(pictura::ToolId::Move);
+    frame.closeDocument(doc, false);
+}
+
+// A second line levels what is on screen: its angle adds to the session's.
+void CropStraightenTest::secondLineAddsToTheAngle()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("StraightenTwice"), 120, 80, QStringLiteral("rgb"),
+                              8, QStringLiteral("white")));
+    pictura::ImageView* canvas = frame.imageView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(canvas);
+    QVERIFY(tools);
+    auto* crop = tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop);
+    const int doc = frame.activeDocumentIndex();
+
+    crop->setClassicMode(true);
+    frame.setActiveTool(pictura::ToolId::Crop);
+    crop->setStraightenMode(true);
+    drawLine(canvas, 5.0, Qt::NoModifier);
+    QVERIFY(std::abs(crop->angle() + 5.0) < 0.1);
+    const QRect first = tools->pendingCropRect();
+
+    crop->setStraightenMode(true);
+    drawLine(canvas, 3.0, Qt::NoModifier);
+    QVERIFY2(std::abs(crop->angle() + 8.0) < 0.1, qPrintable(QString::number(crop->angle())));
+    // The box only ever shrinks to fit.
+    const QRect second = tools->pendingCropRect();
+    QVERIFY(second.width() <= first.width() && second.height() <= first.height());
 
     frame.setActiveTool(pictura::ToolId::Move);
     frame.closeDocument(doc, false);
