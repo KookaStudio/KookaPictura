@@ -227,7 +227,7 @@ The system SHALL implement `Adjustment::Auto(AutoKind::Tone | AutoKind::Contrast
 
 ### Requirement: Hue/Saturation adjustment
 
-The system SHALL implement `Adjustment::HueSaturation(HueSaturationParams { hue, saturation, lightness })`. Hue SHALL default to 0 and span `-180..=180`; saturation SHALL default to 0 and span `-100..=100`; lightness SHALL default to 0 and span `-100..=100`. It SHALL convert each pixel to HSL, rotate hue by the hue value, scale saturation by `1 + saturation/100`, adjust lightness toward white for positive values and toward black for negative values, and convert back. All-zero parameters SHALL be an exact identity, and saturation -100 SHALL produce a neutral grey at the pixel's HSL lightness. This change covers the composite (Master) path only. Oracle expectation: ImageMagick `-modulate` uses its own HSL space (observed max delta 45), so property tests cover the identity and increased channel spread under positive saturation.
+The system SHALL implement `Adjustment::HueSaturation(HueSaturationParams { hue, saturation, lightness })`. Hue SHALL default to 0 and span `-180..=180`; saturation SHALL default to 0 and span `-100..=100`; lightness SHALL default to 0 and span `-100..=100`. It SHALL convert each pixel to HSL, rotate hue by the hue value, scale saturation by `1 + saturation/100`, and convert back at the pixel's HSL lightness; it SHALL then blend each RGB channel toward white by `lightness/100` for positive lightness (`c + l·(1 − c)`) and toward black for negative lightness (`c·(1 + l)`), so lightness never changes a pixel's hue or relative chroma. All-zero parameters SHALL be an exact identity, and saturation -100 with lightness 0 SHALL produce a neutral grey at the pixel's HSL lightness. This change covers the composite (Master) path only; the CPU kernels and the GPU shader SHALL implement the same model. Oracle expectation: ImageMagick `-modulate` uses its own HSL space (observed max delta 45), so property tests cover the identity and increased channel spread under positive saturation. The lightness model approximates Photoshop's closed kernel and is not claimed as parity.
 
 #### Scenario: Neutral parameters are identity
 
@@ -238,6 +238,11 @@ The system SHALL implement `Adjustment::HueSaturation(HueSaturationParams { hue,
 
 - **WHEN** Hue/Saturation is applied with saturation -100
 - **THEN** all three color channels of every pixel are equal to the rounded HSL lightness
+
+#### Scenario: Lightness keeps a near-neutral pixel near neutral
+
+- **WHEN** Hue/Saturation is applied with lightness 66 to the dark, nearly neutral pixel `(10, 5, 8)`
+- **THEN** each channel moves the same fraction toward white, giving `(172, 170, 171)`, and lightness ±100 gives pure white or black
 
 ### Requirement: Black & White adjustment
 
@@ -550,7 +555,7 @@ The system SHALL implement `Adjustment::ShadowsHighlights(ShadowsHighlightsParam
 
 ### Requirement: Replace Color adjustment
 
-The system SHALL implement `Adjustment::ReplaceColor(ReplaceColorParams { samples, fuzziness, localized, hue, saturation, lightness })`. `samples` is a list of `(x, y, rgb)` picks; `fuzziness` spans `0.0..=200.0`; `hue` spans `-180.0..=180.0` degrees; `saturation` and `lightness` span `-100.0..=100.0`. For each pixel the system SHALL compute a weight as the maximum over samples of a Chebyshev colour-distance ramp (exact match when fuzziness is 0), optionally attenuated by a Gaussian of the pixel-to-sample distance when `localized` is set, then blend the pixel toward its hue-rotated, saturation- and lightness-shifted HSL result by that weight. An empty sample list SHALL be an exact identity, alpha SHALL be preserved, and out-of-range or non-finite parameters SHALL be rejected as `AdjustError::InvalidParams`.
+The system SHALL implement `Adjustment::ReplaceColor(ReplaceColorParams { samples, fuzziness, localized, hue, saturation, lightness })`. `samples` is a list of `(x, y, rgb)` picks; `fuzziness` spans `0.0..=200.0`; `hue` spans `-180.0..=180.0` degrees; `saturation` and `lightness` span `-100.0..=100.0`. For each pixel the system SHALL compute a weight as the maximum over samples of a Chebyshev colour-distance ramp (exact match when fuzziness is 0), optionally attenuated by a Gaussian of the pixel-to-sample distance when `localized` is set (a sample with a negative position has no canvas position and is not attenuated), then blend the pixel toward its shifted result by that weight. The shifted result SHALL rotate the hue in HSL, scale each channel's distance from the HSL lightness by `1 / (1 − s)` for `s = saturation/100 ≥ 0` (bounded) or `1 + s` for `s < 0`, and then blend each channel toward white or black by `lightness/100` as Hue/Saturation does; an achromatic pixel therefore takes no hue or chroma. An empty sample list SHALL be an exact identity, alpha SHALL be preserved, and out-of-range or non-finite parameters SHALL be rejected as `AdjustError::InvalidParams`. The shift approximates Photoshop's closed kernel and is not claimed as parity.
 
 #### Scenario: Zero fuzziness selects exact samples only
 
@@ -566,6 +571,16 @@ The system SHALL implement `Adjustment::ReplaceColor(ReplaceColorParams { sample
 
 - **WHEN** Replace Color is applied with an empty sample list, or to an RGBA buffer
 - **THEN** the buffer is unchanged, and in the RGBA case the alpha plane is bit-identical
+
+#### Scenario: Raising saturation keeps dark noise near neutral
+
+- **WHEN** Replace Color with saturation 81 is applied to near-black noise pixels of different hues
+- **THEN** each stays within 20 levels of neutral, while a dark brown deepens
+
+#### Scenario: A gray cannot be replaced with a colour
+
+- **WHEN** the dialog's Result colour is picked as blue for a black sample
+- **THEN** only Lightness moves (hue 0, saturation 0, lightness 50), and the Result swatch and the canvas both show the gray `(128, 128, 128)`
 
 ### Requirement: Destructive Color Lookup dialog
 
@@ -617,3 +632,76 @@ the colour unchanged. Closing the picker SHALL end the sampling.
 - **WHEN** the Color Picker closes
 - **THEN** the canvas sampler is disarmed and a later click reaches the
   active tool again
+
+### Requirement: Match Color adjustment
+
+The system SHALL implement `Adjustment::MatchColor(MatchColorParams { target, source, neutralize, luminance, color_intensity, fade })` where `target` and `source` are Lab-space statistics (per-channel mean and standard deviation) and the command is reachable from `Image ▸ Adjustments ▸ Match Color…` only for RGB documents with an editable pixel layer active. For each pixel the system SHALL convert to CIELAB and transfer each channel by `(in − target.mean) · (source.std / target.std) + source.mean` (a flat target channel with zero standard deviation SHALL use a scale of 1; zeroed source statistics — no pixel contributed weight — SHALL leave the buffer bit-exactly unchanged), then multiply `L` by `luminance/100` and `a`/`b` by `(color_intensity − 1)/99`. When `neutralize` is set the source mean SHALL be replaced by `[source.mean_L, 0, 0]` so the transfer imposes no colour cast (a gray-world cast removal when the source statistics are the target's own). The result SHALL be blended toward the original pixel by `fade/100`, where fade 0 is the full match and 100 is an exact identity; statistics equal between source and target with default options SHALL be an exact no-op. Statistics SHALL be computed over a whole layer or document composite, each pixel weighted by its straight alpha and, when a selection plane is given, by that selection's coverage. `luminance` and `color_intensity` SHALL span `1..=200` and `fade` `0..=100`; out-of-range or non-finite values SHALL be rejected as `AdjustError::InvalidParams`. Alpha SHALL be preserved, and native-depth apply SHALL refuse the operation (it is dialog-only, with no PSD encoding). The transfer approximates Photoshop's closed kernel and is not claimed as parity.
+
+#### Scenario: Statistics transfer moves the target toward the source
+
+- **WHEN** Match Color is applied to a target with source statistics from a differently coloured image, neutralize off, luminance and colour intensity at 100, and fade 0
+- **THEN** the target's per-channel Lab mean moves toward the source's within tolerance
+
+#### Scenario: Neutralize removes the colour cast
+
+- **WHEN** Match Color is applied with neutralize set
+- **THEN** the output's mean `a` and `b` are zero (the mean is `[mean_L, 0, 0]`), regardless of the source's cast
+
+#### Scenario: Colour intensity 1 is exactly gray
+
+- **WHEN** Match Color is applied with colour intensity 1
+- **THEN** every pixel's three RGB channels are equal within 1 LSB
+
+#### Scenario: Fade extremes
+
+- **WHEN** Match Color is applied with fade 100, or with the source statistics equal to the target's and default options
+- **THEN** the buffer is bit-exactly unchanged
+
+#### Scenario: Zeroed source statistics are an identity
+
+- **WHEN** Match Color is applied with zeroed source statistics (an all-transparent source, or "Use Selection In Source" over an empty selection) against a non-flat target
+- **THEN** the buffer is bit-exactly unchanged; the target is not collapsed onto the zeroed mean
+
+#### Scenario: Selection-weighted statistics
+
+- **WHEN** statistics are computed over a selection plane
+- **THEN** only pixels with non-zero coverage contribute, weighted by their coverage and alpha
+
+#### Scenario: Ignore selection applies to the whole layer
+
+- **WHEN** Match Color is applied with a target selection active and "Ignore Selection When Applying Adjustment" checked
+- **THEN** the whole layer is adjusted; with it unchecked, only the selected pixels change
+
+#### Scenario: Invalid parameters are refused
+
+- **WHEN** Match Color is applied with luminance, colour intensity, or fade outside its range or non-finite
+- **THEN** the operation fails with `AdjustError::InvalidParams` and the buffer is unchanged, and alpha is never modified
+
+### Requirement: Image > Adjustments dialogs
+
+Each Image > Adjustments dialog entry SHALL open a dialog on the adjustment's
+CS6 defaults whose controls preview on the active pixel layer within the
+selection; Cancel SHALL restore the layer exactly and record nothing, and OK
+SHALL apply the adjustment as one state named for it. The entries SHALL be
+enabled only when the active layer can take a destructive edit.
+
+#### Scenario: Preview, cancel, apply on an opened image
+
+- **WHEN** the `tst_image_adjustments` test opens an image, checks the menu, and in a Hue/Saturation dialog drags Lightness to -100, cancels, then repeats and presses OK and undoes
+- **THEN** the dialog and direct entries are enabled (Levels… with Ctrl+L, Match Color still disabled), the canvas darkens during the preview, Cancel restores the pixels with no state, OK records one "Hue/Saturation" state, and undo restores the image
+
+#### Scenario: Every dialog opens on its defaults
+
+- **WHEN** the `adjustment_defaults` unit test builds each of the fourteen dialog blocks
+- **THEN** each decodes under its CS6 title and every control starts at its default
+
+### Requirement: Direct adjustment commands
+
+Invert, Desaturate, Equalize, and Auto Tone / Auto Contrast / Auto Color SHALL
+apply at once to the active pixel layer within the selection, as one state
+named for the command, leaving transparency unchanged.
+
+#### Scenario: Invert in a selection, Desaturate, Equalize
+
+- **WHEN** the `tst_image_adjustments` test inverts the left half of a selection, then desaturates and equalizes the image, and the unit tests equalize three greys and invert a layer region
+- **THEN** only the selected half inverts, the image turns neutral grey, Equalize spreads the levels present to the ends of the range (a flat image is unchanged), and alpha is never touched

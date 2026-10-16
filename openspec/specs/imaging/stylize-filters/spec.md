@@ -35,17 +35,22 @@ For 4-channel buffers, every Stylize filter SHALL leave channel 4 bit-identical.
 
 ### Requirement: Emboss
 
-The system SHALL implement `Filter::Emboss { angle: f64, height: f64, amount: f64 }`. It SHALL compute a directional difference of the image along `angle`, scale the difference by `height`, add a 128 mid-gray bias, and scale the deviation from mid-gray by `amount` percent, so the output is a gray relief in which all three color channels carry the same value. `angle` SHALL be finite and within `-360.0..=360.0`; `height` and `amount` SHALL be finite and strictly greater than 0. A value outside those ranges SHALL be rejected with `FilterError::InvalidParams`. A uniform-color region SHALL become mid-gray 128. Oracle expectation: differential against ImageMagick `-emboss 0xH+angle` if that kernel is verified faithful, otherwise classified as no-equivalent with the divergence documented and covered by a property test that confirms the gray output and the angle-sign highlight/shadow swap.
+The system SHALL implement `Filter::Emboss { angle: f64, height: f64, amount: f64 }`. It SHALL difference each colour channel across `height` pixels along `angle`, the direction the light comes from, add a 128 mid-gray bias, and scale the deviation from mid-gray by `amount` percent, so flat areas become mid-gray and edges carry a light and a dark side traced in the original colour, as CS6 Help describes ("converting its fill color to gray and tracing the edges with the original fill color"). A gray image SHALL stay gray. `angle` SHALL be finite and within `-360.0..=360.0`; `height` and `amount` SHALL be finite and strictly greater than 0. A value outside those ranges SHALL be rejected with `FilterError::InvalidParams`. Oracle expectation: classified as no-equivalent (ImageMagick `-emboss` has no angle, height, or amount), covered by property tests.
 
 #### Scenario: The output is gray
 
-- **WHEN** Emboss is applied to a color image
-- **THEN** every output pixel has R, G, and B equal to one another
+- **WHEN** Emboss is applied to a gray image (R, G, and B planes equal)
+- **THEN** every output pixel has R, G, and B equal to one another; a colour image keeps its edge colours (see "Coloured edges keep their colour")
+
+#### Scenario: Coloured edges keep their colour
+
+- **WHEN** Emboss is applied to a colour image with coloured edges
+- **THEN** some output pixel has R different from B
 
 #### Scenario: Negating the angle swaps the highlight and shadow
 
-- **WHEN** Emboss is applied with angle A and then with angle −A to the same edge image
-- **THEN** the highlight side of the edge under A becomes the shadow side under −A and vice versa
+- **WHEN** Emboss is applied to the same edge image with the light at angle A and at the opposite side, A + 180
+- **THEN** the highlight side of the edge under one becomes the shadow side under the other
 
 #### Scenario: A uniform field becomes mid-gray
 

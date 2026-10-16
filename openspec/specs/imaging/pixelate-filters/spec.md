@@ -2,7 +2,9 @@
 
 ## Purpose
 Mosaic, Crystallize, Facet, Fragment, Mezzotint, Pointillize, and Color Halftone with validation and oracle classification.
+
 ## Requirements
+
 ### Requirement: Pixelate filter application and error contract
 
 The system SHALL provide `pictura_filters::apply(filter: &Filter, buf: &mut PixelBuffer) -> Result<(), FilterError>`. It SHALL operate in place on a planar 8-bit buffer whose `channels` is 3 (RGB) or 4 (RGBA), treating channels 1 through 3 as the color planes and channel 4, when present, as alpha. It SHALL transform every color sample or return an error; it MUST NOT partially apply a filter and then fail. Malformed buffers MUST return `FilterError` instead of panicking.
@@ -21,15 +23,6 @@ The system SHALL provide `pictura_filters::apply(filter: &Filter, buf: &mut Pixe
 
 - **WHEN** `apply` receives an empty buffer, or a buffer whose `data.len()` does not equal `width * height * channels`, or a buffer with zero width or height
 - **THEN** `apply` returns a `FilterError` and does not panic
-
-### Requirement: Alpha channel preservation for Pixelate filters
-
-For 4-channel buffers, every Pixelate filter SHALL leave channel 4 bit-identical. Only channels 1 through 3 SHALL be modified.
-
-#### Scenario: Every Pixelate variant preserves alpha
-
-- **WHEN** each of the seven Pixelate variants is applied to an RGBA buffer
-- **THEN** the alpha plane equals the input alpha plane bit for bit
 
 ### Requirement: Parameter validation for Pixelate filters
 
@@ -250,3 +243,16 @@ The system SHALL ship `scripts/filter_oracle.py`, which applies an ImageMagick o
 - **WHEN** `magick` is not on `PATH`
 - **THEN** the differential tests print a skip message and the suite still passes
 
+### Requirement: Pixelate alpha follows the kernel
+
+For 4-channel buffers, Mosaic, Crystallize, and Fragment SHALL run their kernel over channel 4 as they do over the colour planes, and a channel 4 that is 255 everywhere SHALL stay 255. Facet, Mezzotint, Pointillize, and Color Halftone SHALL leave channel 4 bit-identical; only channels 1 through 3 SHALL be modified.
+
+#### Scenario: Mosaic, Crystallize, and Fragment move a soft edge
+
+- **WHEN** Mosaic, Crystallize, or Fragment is applied to an RGBA buffer whose alpha is a soft-edged disc
+- **THEN** the alpha plane differs from the input alpha plane
+
+#### Scenario: The value-clustering variants preserve alpha
+
+- **WHEN** Facet, Mezzotint, Pointillize, or Color Halftone is applied to an RGBA buffer
+- **THEN** the alpha plane equals the input alpha plane bit for bit

@@ -24,18 +24,9 @@ The system SHALL provide `pictura_filters::apply(filter: &Filter, buf: &mut Pixe
 - **WHEN** `apply` receives an empty buffer, or a buffer whose `data.len()` does not equal `width * height * channels`, or a buffer with zero width or height
 - **THEN** `apply` returns a `FilterError` and does not panic
 
-### Requirement: Alpha channel preservation for noise
-
-For 4-channel buffers, every noise filter SHALL leave channel 4 bit-identical. Only channels 1 through 3 SHALL be modified.
-
-#### Scenario: Every noise variant preserves alpha
-
-- **WHEN** each noise variant is applied to an RGBA buffer
-- **THEN** the alpha plane equals the input alpha plane bit for bit
-
 ### Requirement: Add Noise
 
-The system SHALL implement `Filter::AddNoise { amount: f64, distribution: NoiseDistribution, monochromatic: bool, seed: u64 }`. For `NoiseDistribution::Uniform` it SHALL add a delta drawn uniformly from `[−amount, +amount]`; for `NoiseDistribution::Gaussian` it SHALL add a zero-mean Gaussian `N(0, σ)` delta with σ proportional to `amount`. `amount` SHALL be a finite percentage in `0..=400`; `amount == 0` SHALL be a no-op, and negative, non-finite, or `> 400` values SHALL be rejected with `FilterError::InvalidParams`. When `monochromatic` is true it SHALL draw one delta per pixel and apply it to all three color channels, preserving hue; otherwise it SHALL draw a delta per channel, producing colored speckle. The deltas SHALL come from a seeded RNG driven by `seed`. Oracle expectation: no faithful ImageMagick equivalent exists (RNG streams differ), so statistical tests cover the distribution shape and same-seed tests cover reproducibility, and the divergence is documented.
+The system SHALL implement `Filter::AddNoise { amount: f64, distribution: NoiseDistribution, monochromatic: bool, seed: u64 }`. `amount` is a percentage of half the tonal range: for `NoiseDistribution::Uniform` it SHALL add a delta drawn uniformly from `[−m, +m]` with `m = amount / 100 × 127.5`; for `NoiseDistribution::Gaussian` it SHALL add a zero-mean, bell-shaped delta whose spread is proportional to `amount`. `amount` SHALL be a finite percentage in `0..=400`; `amount == 0` SHALL be a no-op, and negative, non-finite, or `> 400` values SHALL be rejected with `FilterError::InvalidParams`. When `monochromatic` is true it SHALL draw one delta per pixel and apply it to all three color channels, preserving hue; otherwise it SHALL draw a delta per channel, producing colored speckle. The deltas SHALL come from a deterministic per-pixel hash seeded by `seed`. Oracle expectation: no faithful ImageMagick equivalent exists (noise streams differ), so statistical tests cover the distribution shape and same-seed tests cover reproducibility, and the divergence is documented.
 
 #### Scenario: Uniform noise is zero-mean
 
@@ -181,4 +172,74 @@ documented.
 #### Scenario: Alpha is preserved
 
 - **WHEN** Dust & Scratches is applied to an RGBA buffer
+- **THEN** the alpha plane equals the input alpha plane bit for bit
+
+### Requirement: Reduce Noise
+
+The system SHALL implement `Filter::ReduceNoise(ReduceNoiseParams)` over the
+colour planes; alpha SHALL be left bit-identical. Each colour plane SHALL be
+smoothed by an edge-preserving bilateral filter whose range sigma grows with the
+channel's Strength (`0..=10`) and shrinks with its Preserve Details (`0..=100`),
+so Strength 0 is a no-op and, at equal Strength, a higher Preserve Details
+retains more edge contrast. When Reduce Color Noise (`0..=100`) is above 0 the
+colour SHALL be blurred and recombined with the original luminance, lowering
+chroma variance without changing luminance. When Sharpen Details (`0..=100`) is
+above 0 an unsharp pass SHALL be added on luminance. When Remove JPEG Artifacts
+is set, the two samples straddling each 8-pixel block seam SHALL be averaged
+when their step is below a fixed gate. The filter SHALL be deterministic (no
+RNG) and SHALL reject any parameter outside its range with
+`FilterError::InvalidParams` before mutating the buffer. Oracle expectation: no
+faithful ImageMagick equivalent exists (the kernel is closed and ImageMagick has
+no bilateral or Reduce-Noise operator), so property tests and a kernel digest
+cover it, and the divergence is documented.
+
+#### Scenario: Strength lowers luminance noise monotonically
+
+- **WHEN** Reduce Noise is applied to a noisy grey image at increasing Strength
+  with Preserve Details 0
+- **THEN** the luminance variance does not grow with Strength and is lower at
+  high Strength
+
+#### Scenario: Preserve Details retains edge contrast
+
+- **WHEN** Reduce Noise is applied to a subtle noisy edge at equal Strength with
+  Preserve Details 0 and 100
+- **THEN** the 100 output retains more contrast than the 0 output
+
+#### Scenario: Reduce Color Noise lowers chroma variance
+
+- **WHEN** Reduce Noise with Reduce Color Noise above 0 is applied to a grey
+  image with per-channel jitter
+- **THEN** the chroma variance falls while the luminance is kept
+
+#### Scenario: Remove JPEG Artifacts softens block seams
+
+- **WHEN** Remove JPEG Artifacts is applied to an image of 8×8 blocks
+- **THEN** the step across the block seams is reduced relative to the same
+  settings with it off
+
+#### Scenario: Deterministic and alpha-preserving
+
+- **WHEN** Reduce Noise is applied twice to equal RGBA buffers
+- **THEN** the outputs are bit-identical and the alpha plane is unchanged
+
+#### Scenario: Out-of-range parameters are rejected untouched
+
+- **WHEN** Reduce Noise is applied with a negative or over-range Strength,
+  Preserve Details, Reduce Color Noise or Sharpen Details
+- **THEN** `apply` returns `FilterError::InvalidParams` and the buffer is
+  bit-identical to its prior state
+
+### Requirement: Noise alpha follows the kernel
+
+For 4-channel buffers, Median, Despeckle, and Dust & Scratches SHALL run their kernel over channel 4 as they do over the colour planes, and a channel 4 that is 255 everywhere SHALL stay 255. Add Noise SHALL leave channel 4 bit-identical; only channels 1 through 3 SHALL be modified.
+
+#### Scenario: A rank filter moves a soft edge
+
+- **WHEN** Median, Despeckle, or Dust & Scratches is applied to an RGBA buffer whose alpha is a soft-edged disc with a stray speck
+- **THEN** the alpha plane differs from the input alpha plane
+
+#### Scenario: Add Noise preserves alpha
+
+- **WHEN** Add Noise is applied to an RGBA buffer
 - **THEN** the alpha plane equals the input alpha plane bit for bit

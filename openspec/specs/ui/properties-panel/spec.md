@@ -1,10 +1,9 @@
 # ui/properties-panel Specification
 
 ## Purpose
-The read-only CS6 Properties panel: it identifies the active layer and, when
-that layer is an adjustment, names it. It is display-only because the bridge
-exposes no adjustment-parameter access and the engine has no edit session for
-adjustments.
+The CS6 Properties panel: it identifies the active layer and, for an adjustment
+layer, hosts the descriptor-driven controls that edit it
+(`ui/properties-panel-editing`); any other layer shows a read-only summary.
 
 ## Requirements
 
@@ -36,16 +35,17 @@ rows and matching `layer_row_path` against `active_layer_path`.
 - **WHEN** an adjustment layer is added, made active, and the panel is refreshed
 - **THEN** the panel's message contains that adjustment layer's name
 
-### Requirement: Properties panel is display-only
+### Requirement: Properties panel edits the active adjustment layer
 
-The `PropertiesPanel` SHALL NOT edit any adjustment parameter: the bridge
-provides no adjustment-parameter get/set call and no edit session, and
-adjustments are opaque. This deferral SHALL be recorded as a known ceiling.
+The `PropertiesPanel` SHALL build the active adjustment layer's controls from
+its descriptor, apply edits to the canvas live, and record one "Modify `Title`
+Layer" state per gesture; the parameter model and edit session are specified in
+`ui/properties-panel-editing`.
 
-#### Scenario: The slice edits nothing [pp_readonly]
+#### Scenario: The panel edits the active adjustment [pp_edits]
 
 - **WHEN** the panel shows an active adjustment layer
-- **THEN** it only renders the name and exposes no editable control
+- **THEN** it exposes live-editable controls and records one history state per gesture
 
 #### Scenario: The suite is registered [pp_contract_suite]
 

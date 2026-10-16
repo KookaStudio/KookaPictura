@@ -7,15 +7,16 @@ actions, with disabled Density/Feather placeholders.
 
 ## Requirements
 
-### Requirement: Properties vector mask section
+### Requirement: Properties vector mask section with refinement controls
 
 When the active layer carries a vector mask, the Properties panel SHALL show a
 Vector Mask section containing a name row and the actions Enable, Disable, Link,
 Unlink, Delete, and Rasterize, each wired to the vector-mask bridge and each one
-undoable step, plus read-only Density and Feather rows that are disabled and
-carry the `— not implemented yet` tooltip because the model does not store them.
-The section SHALL be absent for a layer without a vector mask, and the existing
-adjustment page and layer-mask section behavior SHALL be unchanged.
+undoable step, plus a Density control (0-100 %) and a Feather control
+(0-250 px, one decimal) that show the vector mask's stored values, preview
+while dragged, and record one undo step per committed change. The section
+SHALL be absent for a layer without a vector mask, and the existing adjustment
+page and layer-mask section behavior SHALL be unchanged.
 
 #### Scenario: A vector-masked layer shows the section [vmk_props]
 
@@ -40,8 +41,7 @@ adjustment page and layer-mask section behavior SHALL be unchanged.
 - **THEN** the vector mask is converted to a layer mask in one undo step and the
   Vector Mask section disappears
 
-#### Scenario: Density and Feather are disabled placeholders [vmk_props_stubs]
+#### Scenario: Density and Feather edit the vector mask [vmk_props_refine]
 
-- **WHEN** the Vector Mask section is shown
-- **THEN** its Density and Feather rows are disabled and carry the `— not
-  implemented yet` tooltip
+- **WHEN** the user sets Density to 50 % and Feather to 4 px in the Vector Mask section
+- **THEN** the active layer's vector mask stores density 128 and feather 4, each change one undo step

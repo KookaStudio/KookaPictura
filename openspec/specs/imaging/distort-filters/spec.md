@@ -2,7 +2,9 @@
 
 ## Purpose
 The Distort filter family using bilinear inverse mapping, with undefined-area, tiny-image, and determinism rules.
+
 ## Requirements
+
 ### Requirement: Distort filter application and error contract
 
 The system SHALL provide `pictura_filters::apply(filter: &Filter, buf: &mut PixelBuffer) -> Result<(), FilterError>`. It SHALL operate in place on a planar 8-bit buffer whose `channels` is 3 (RGB) or 4 (RGBA), treating channels 1 through 3 as the color planes and channel 4, when present, as alpha. It SHALL transform every color sample or return an error; it MUST NOT partially apply a filter and then fail. Malformed buffers MUST return `FilterError` instead of panicking.
@@ -21,15 +23,6 @@ The system SHALL provide `pictura_filters::apply(filter: &Filter, buf: &mut Pixe
 
 - **WHEN** `apply` receives an empty buffer, or a buffer whose `data.len()` does not equal `width * height * channels`, or a buffer with zero width or height
 - **THEN** `apply` returns a `FilterError` and does not panic
-
-### Requirement: Alpha channel preservation for Distort filters
-
-For 4-channel buffers, every Distort filter SHALL leave channel 4 bit-identical. Only channels 1 through 3 SHALL be modified, even where the warp moves color samples.
-
-#### Scenario: Every Distort variant preserves alpha
-
-- **WHEN** each of the nine Distort variants is applied to an RGBA buffer
-- **THEN** the alpha plane equals the input alpha plane bit for bit
 
 ### Requirement: Parameter validation for Distort filters
 
@@ -284,35 +277,6 @@ The system SHALL implement `Filter::PolarCoordinates { kind: PolarKind }`. It SH
 - **WHEN** the oracle mapping table is checked
 - **THEN** Polar Coordinates has a row naming `-distort DePolar` / `-distort Polar`, tolerance 0, a non-empty no-equivalent note, and the recorded measured maximum and mean delta
 
-### Requirement: Shear
-
-The system SHALL implement `Filter::Shear { curve: Vec<(f64, f64)>, fill: ShearFill }`. It SHALL shift each column vertically by the control-point `curve`: the piecewise-linear interpolation of the `(x, y)` points, with `x` and `y` in `-1.0..=1.0`, maps a column's normalized horizontal position to a vertical displacement, and the column SHALL be resampled bilinearly at the displaced source coordinate. `curve` SHALL contain at least two finite points with strictly increasing `x`; otherwise the system SHALL return `FilterError::InvalidParams`. A curve whose `y` values are uniformly `0.0` SHALL be a no-op. `ShearFill::WrapAround` SHALL wrap rows shifted off-canvas around to the opposite edge, and `ShearFill::RepeatEdgePixels` SHALL repeat the nearest edge sample; the two modes MUST be observably different where a column's displacement moves rows beyond the image bounds. `ShearFill` is a closed set that requires no range check. Oracle expectation: the closest ImageMagick operator is `-shear x<angle>` (plus a crop or background removal), but it is not faithful, so Shear SHALL be classified as no-equivalent with tolerance 0 and a property or known-value test, recording the measured maximum and mean per-sample delta against it (max 255 / mean 18–23).
-
-#### Scenario: A flat curve is a no-op
-
-- **WHEN** Shear is applied with a curve whose `y` values are all `0.0`
-- **THEN** the output equals the input within 1 LSB
-
-#### Scenario: A curved control-point set displaces columns
-
-- **WHEN** Shear is applied with a curve that maps some `x` to a non-zero `y`
-- **THEN** the columns near those normalized positions are shifted vertically relative to the input
-
-#### Scenario: An invalid curve is rejected
-
-- **WHEN** Shear is applied with fewer than two points, a non-finite coordinate, or `x` values that are not strictly increasing
-- **THEN** `apply` returns `FilterError::InvalidParams` and leaves the buffer unchanged
-
-#### Scenario: The two fill modes differ off-canvas
-
-- **WHEN** Shear with the same curve but `ShearFill::WrapAround` and `ShearFill::RepeatEdgePixels` is applied to a buffer whose displacement moves rows beyond an edge
-- **THEN** the two outputs differ
-
-#### Scenario: No faithful equivalent is asserted without measurement
-
-- **WHEN** the oracle mapping table is checked
-- **THEN** Shear has a row naming `-shear`, tolerance 0, a non-empty no-equivalent note, and the recorded measured maximum and mean delta
-
 ### Requirement: ZigZag
 
 The system SHALL implement `Filter::ZigZag { amount: f64, ridges: u32, style: ZigZagStyle }`. It SHALL apply a radial displacement whose magnitude scales with `amount` and whose number of direction reversals from the center to the edge is set by `ridges`, with `ZigZagStyle` selecting the direction: `AroundCenter` rotates about the center, `OutFromCenter` pushes radially, and `PondRipples` biases diagonally. `amount` SHALL be within `-100.0..=100.0` and `ridges` SHALL be within `0..=20`; any value outside its range, and any non-finite `amount`, SHALL be rejected with `FilterError::InvalidParams` and MUST NOT panic. `amount` `0.0` SHALL be a no-op, and `ridges` `0` SHALL produce a single displacement direction with no reversals. `ZigZagStyle` is a closed set that requires no range check. Oracle expectation: no faithful ImageMagick operator (ImageMagick `-swirl` has a different falloff and no ridge model), so ZigZag is classified as no-equivalent with tolerance 0 and property tests, and the observed delta SHALL be recorded.
@@ -376,3 +340,89 @@ The system SHALL implement `Filter::OceanRipple { size: u32, magnitude: u32, see
 - **WHEN** the oracle mapping table is checked
 - **THEN** Ocean Ripple has no faithful ImageMagick operator, tolerance 0, a non-empty no-equivalent note, and a recorded observed delta
 
+### Requirement: Displace
+
+The system SHALL implement `Filter::Displace { map: Arc<DisplaceMap>, horizontal_scale: f64, vertical_scale: f64, fit: DisplaceFit, wrap: bool }`. A `DisplaceMap` SHALL hold two 8-bit planes of equal size, horizontal and vertical. Each destination pixel SHALL read the source, bilinearly, at an offset of `(h − 128) × horizontal_scale / 100` pixels across and `(v − 128) × vertical_scale / 100` pixels down, where `h` and `v` are the map's samples for that pixel, so a sample of 128 moves nothing and 100% reaches 127 px at 255 and 128 px at 0. `DisplaceFit::StretchToFit` SHALL scale the map over the buffer, sampling it bilinearly, and `DisplaceFit::Tile` SHALL repeat it at its own size from the buffer's top-left corner. `wrap` SHALL read positions past an edge from the opposite edge (Wrap Around); otherwise it SHALL repeat the nearest edge pixel (Repeat Edge Pixels). A map whose samples are all 128, or scales that are both 0, SHALL leave the buffer bit-identical. Scales outside `-999.0..=999.0` SHALL return `FilterError::InvalidParams`. The alpha plane SHALL be displaced the same way as colour. Oracle expectation: ImageMagick's `-compose displace` with `compose:args` of `1.275 × scale` is a faithful operator, and Repeat Edge Pixels SHALL match it within 8 levels on the oracle test image.
+
+#### Scenario: A neutral map is a no-op
+
+- **WHEN** Displace is applied with a map of all 128, at any scale, to a buffer with translucent pixels
+- **THEN** the output equals the input exactly
+
+#### Scenario: Full deflection at 100% reaches about 128 pixels
+
+- **WHEN** Displace is applied at 100% with a horizontal plane of 255 to a picture with a vertical line
+- **THEN** the line moves 127 pixels to the left; with a plane of 0 at 50% it moves 64 pixels to the right
+
+#### Scenario: The two planes drive the two axes
+
+- **WHEN** Displace is applied once with only the horizontal plane away from 128 and once with only the vertical plane away from 128
+- **THEN** the first shifts content only sideways, the second only up or down, and the two results differ
+
+#### Scenario: One plane twice shifts along the diagonal
+
+- **WHEN** both planes hold the same samples and the scales differ
+- **THEN** each pixel moves by the same deflection times each axis's scale
+
+#### Scenario: Stretch and tile place the map differently
+
+- **WHEN** a two-pixel map is applied once with `StretchToFit` and once with `Tile`
+- **THEN** stretching spreads each map sample over half the buffer, and tiling alternates them per column
+
+#### Scenario: The undefined-areas modes differ
+
+- **WHEN** Displace pulls content past the right edge with `wrap` true and with `wrap` false
+- **THEN** Wrap Around brings in the left edge's pixels and Repeat Edge Pixels repeats the right edge's
+
+#### Scenario: The ImageMagick oracle agrees
+
+- **WHEN** Displace with Repeat Edge Pixels and the oracle's ramp map is diffed against `MAP -compose displace -define compose:args=XxY -composite` with `X = 1.275 × scale`
+- **THEN** every sample is within 8 levels at scales 4×4 and 6×−5
+
+### Requirement: Shear row shift
+
+The system SHALL implement `Filter::Shear { curve: Vec<(f64, f64)>, fill: ShearFill }`. It SHALL shift each row horizontally by the control-point `curve`: a cubic Hermite interpolation of the `(position, offset)` points with Catmull-Rom tangents, with `position` and `offset` in `-1.0..=1.0`, maps a row's normalized vertical position (top row `-1.0`, bottom row `1.0`) to a horizontal displacement of `offset × width/2` pixels, and the row SHALL be resampled bilinearly at the displaced source coordinate. The interpolation SHALL be continuous in slope at every control point, and a two-point curve SHALL be exactly the straight line between its points. A positive `offset` SHALL move that row's content to the right. `curve` SHALL contain at least two finite points with strictly increasing `position`; otherwise the system SHALL return `FilterError::InvalidParams`. A curve whose `offset` values are uniformly `0.0` SHALL be a no-op. `ShearFill::WrapAround` SHALL wrap columns shifted off-canvas around to the opposite edge, and `ShearFill::RepeatEdgePixels` SHALL repeat the nearest edge sample; the two modes MUST be observably different where a row's displacement moves columns beyond the image bounds. `ShearFill` is a closed set that requires no range check. Oracle expectation: the closest ImageMagick operator is `-shear {angle}x0` (a horizontal whole-canvas shear that grows and background-fills the canvas), but it is not faithful, so Shear SHALL be classified as no-equivalent with tolerance 0 and a property or known-value test. The measured delta against `-shear -26.565x0 -crop 16x16+4+0 +repage` for the curve `[(-1,-0.5),(1,0.5)]` is max 255 / mean 18.4 for `RepeatEdgePixels` (mean 23.4 for `WrapAround`).
+
+#### Scenario: A flat curve is a no-op
+
+- **WHEN** Shear is applied with a curve whose `offset` values are all `0.0`
+- **THEN** the output equals the input within 1 LSB
+
+#### Scenario: A curved control-point set displaces rows horizontally
+
+- **WHEN** Shear is applied with a curve that is `0.0` at the top row and bends to a non-zero `offset` lower down
+- **THEN** the top row is unchanged, the lower rows shift horizontally, and a row with a positive `offset` moves its content to the right
+
+#### Scenario: A two-point curve is a straight line
+
+- **WHEN** Shear is applied with exactly two control points at `(-1.0, -0.5)` and `(1.0, 0.5)`
+- **THEN** the horizontal displacement grows linearly with the row position, with no easing at the ends
+
+#### Scenario: An invalid curve is rejected
+
+- **WHEN** Shear is applied with fewer than two points, a non-finite coordinate, `position` values that are not strictly increasing, or a `position` / `offset` outside `-1.0..=1.0`
+- **THEN** `apply` returns `FilterError::InvalidParams` and leaves the buffer unchanged
+
+#### Scenario: The two fill modes differ off-canvas
+
+- **WHEN** Shear with the same curve but `ShearFill::WrapAround` and `ShearFill::RepeatEdgePixels` is applied to a buffer whose displacement moves rows beyond an edge
+- **THEN** the two outputs differ
+
+#### Scenario: No faithful equivalent is asserted without measurement
+
+- **WHEN** the oracle mapping table is checked
+- **THEN** Shear has a row naming `-shear {angle}x0`, tolerance 0, a non-empty no-equivalent note, and the recorded measured maximum and mean delta
+
+### Requirement: Distort alpha follows the kernel
+
+For 4-channel buffers, every Distort filter SHALL resample channel 4 through the same warp as the colour planes, so the layer edge moves with the colour, and a channel 4 that is 255 everywhere SHALL stay 255.
+
+#### Scenario: A warp moves a soft edge
+
+- **WHEN** a Distort variant is applied to an RGBA buffer whose alpha is a soft-edged disc
+- **THEN** the alpha plane differs from the input alpha plane
+
+#### Scenario: An opaque buffer stays opaque
+
+- **WHEN** a Distort variant is applied to an RGBA buffer whose alpha is 255 everywhere
+- **THEN** every alpha sample is still 255
