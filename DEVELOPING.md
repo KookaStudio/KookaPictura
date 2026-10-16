@@ -169,6 +169,12 @@ Layout and format:
 - Prefer a new capability name over `MODIFIED` unless the requirement itself
   changes.
 
+The change list is **zero-open**: a change is authored, implemented, and archived
+in the pull request that ships it, so `openspec/changes/` holds only `archive/`
+on `master`. `scripts/check-openspec-archived.sh` fails a pull request that leaves
+a non-archived change; it runs in the guards workflow (including on the release
+pull request when `RELEASE_PLEASE_TOKEN` is set) and in `scripts/verify-fast.sh`.
+
 After a CLI upgrade, run `openspec update` to regenerate
 `.opencode/skills/openspec-*` and `.opencode/commands/opsx-*`, then commit the
 diff. The workflow commands are `/opsx-explore`, `/opsx-propose`, `/opsx-apply`,
@@ -187,6 +193,7 @@ cargo test --workspace --doc                     # doctests; nextest skips them
 bash scripts/verify-fast.sh                      # fmt, clippy, test-report, guards, openspec
 bash scripts/verify-full.sh                      # CMake build first, then verify-fast
 openspec validate --all --strict
+bash scripts/check-openspec-archived.sh          # zero-open change gate
 ```
 
 Oracle suites self-skip when `magick` / `psd-tools` are absent. Profiling and
