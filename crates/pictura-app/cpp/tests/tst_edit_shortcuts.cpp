@@ -8,15 +8,19 @@
 #include "commands.h"
 #include "frame.h"
 #include "image_view.h"
+#include "panels/history_panel.h"
 #include "panels/layers_panel.h"
+#include "panels/panel_column.h"
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
 
 #include "qt_test_support.h"
 
+#include <QtCore/QScopeGuard>
 #include <QtCore/QTemporaryDir>
 #include <QtGui/QImage>
 #include <QtWidgets/QApplication>
+#include <QtWidgets/QListWidget>
 #include <QtWidgets/QLineEdit>
 
 class EditShortcutsTest : public QObject {
@@ -27,6 +31,8 @@ private slots:
     void deleteAndBackspaceClearTheSelection();
     void deleteKeyDeletesTheActiveLayerAwayFromTheCanvas();
     void deleteKeyLeavesAFocusedTextFieldAlone();
+    void ctrlZWorksWhileHistoryIconFlyoutIsOpen();
+    void textFieldKeepsNativeCtrlZUndo();
     void ctrlEqualsZoomsIn();
     void freeTransformLiftsTheSelectedPixels();
     void freeTransformBoxHugsTheLayerContent();
@@ -126,6 +132,69 @@ void EditShortcutsTest::deleteKeyLeavesAFocusedTextFieldAlone()
     QCOMPARE(edit.text(), QStringLiteral("c"));
     QCOMPARE(view->layer_count(), 2);
     frame.closeDocument(doc, false);
+}
+
+void EditShortcutsTest::ctrlZWorksWhileHistoryIconFlyoutIsOpen()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("History Undo"), 40, 30, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY(view);
+    const int doc = frame.activeDocumentIndex();
+    pictura::PanelColumn* column = nullptr;
+    const auto cleanup = qScopeGuard([&] {
+        if (column) {
+            column->setRailMode(false);
+        }
+        frame.closeDocument(doc, false);
+    });
+    QCOMPARE(view->duplicate_layer(0), 1);
+    QCOMPARE(view->layer_count(), 2);
+
+    auto* history = frame.findChild<pictura::HistoryPanel*>(QStringLiteral("historyPanel"));
+    column = frame.columnForPanel(QStringLiteral("historyPanel"));
+    QVERIFY(history);
+    QVERIFY(column);
+    column->setRailMode(true);
+    QVERIFY(column->openIconFlyoutForTest(QStringLiteral("historyPanel")));
+    QVERIFY(column->iconFlyoutVisibleForTest());
+
+    auto* list = history->findChild<QListWidget*>();
+    QVERIFY(list);
+    QTRY_VERIFY(list->isVisible());
+    QCOMPARE(list->window()->objectName(), QStringLiteral("panelIconFlyout"));
+    list->setFocus();
+    QTRY_COMPARE(QApplication::focusWidget(), static_cast<QWidget*>(list));
+
+    QTest::keyClick(list, Qt::Key_Z, Qt::ControlModifier);
+    QCOMPARE(view->layer_count(), 1);
+}
+
+void EditShortcutsTest::textFieldKeepsNativeCtrlZUndo()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("Text Undo"), 40, 30, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY(view);
+    const int doc = frame.activeDocumentIndex();
+    const auto cleanup = qScopeGuard([&] { frame.closeDocument(doc, false); });
+    QCOMPARE(view->duplicate_layer(0), 1);
+    QCOMPARE(view->layer_count(), 2);
+
+    QLineEdit edit(&frame);
+    edit.show();
+    edit.setFocus();
+    QTRY_COMPARE(QApplication::focusWidget(), static_cast<QWidget*>(&edit));
+    QTest::keyClick(&edit, Qt::Key_A);
+    QCOMPARE(edit.text(), QStringLiteral("a"));
+    const int historyIndex = view->history_index();
+
+    QTest::keyClick(&edit, Qt::Key_Z, Qt::ControlModifier);
+    QCOMPARE(edit.text(), QString());
+    QCOMPARE(view->history_index(), historyIndex);
+    QCOMPARE(view->layer_count(), 2);
 }
 
 void EditShortcutsTest::ctrlEqualsZoomsIn()

@@ -402,6 +402,10 @@ bool PicturaMainWindow::copyLayerFromDocument(const void* source, const QString&
 // straighten steps) the session is undone first; otherwise the document history.
 void PicturaMainWindow::wireEditHistory()
 {
+    // The History panel's iconic flyout is a separate top-level Qt::Popup.
+    if (QAction* undo = registry_->action(QLatin1String(command_ids::EditUndo))) {
+        undo->setShortcutContext(Qt::ApplicationShortcut);
+    }
     registry_->setHandler(command_ids::EditUndo, [this]() {
         if (tools_ && tools_->toolUndo()) {
             refresh();
