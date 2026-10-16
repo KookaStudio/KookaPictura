@@ -288,6 +288,7 @@ public:
     // While the box is being rotated a dense grid replaces the guide overlay.
     void setCropRotating(bool rotating);
     bool cropRotatingForTest() const { return cropRotating_; }
+    double cropStraightenForTest() const { return cropStraighten_; }
     // The active crop guide overlay: 0 Rule of Thirds, 1 Grid, 2 Diagonal,
     // 3 Triangle, 4 Golden Ratio, 5 Golden Spiral. Drawn only on an active box.
     void setCropOverlay(int overlay);

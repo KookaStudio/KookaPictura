@@ -21,6 +21,13 @@ jobs:
         env:
           GUARD_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: bash scripts/guard.sh
+      - name: Test plan
+        env:
+          GUARD_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$GUARD_BASE"
+          python3 scripts/check-test-plan.py --self-test
+          python3 scripts/check-test-plan.py
       - name: File size
         run: bash scripts/check-file-size.sh
       - name: Self-test budget

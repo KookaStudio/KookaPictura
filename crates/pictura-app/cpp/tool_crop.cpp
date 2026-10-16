@@ -94,6 +94,7 @@ public:
         previewPress_ = false;
         straightenArmed_ = false;
         straightenDragging_ = false;
+        ctrlArmed_ = false;
         box_ = QRectF();
         state_ = State::None;
         contentOffset_ = QPointF();
@@ -132,25 +133,46 @@ public:
         straightenArmed_ = on;
         if (!on) {
             straightenDragging_ = false;
+            ctrlArmed_ = false;
             if (ctx_ && ctx_->canvas()) {
                 ctx_->canvas()->clearCropStraightenLine();
+                ctx_->canvas()->clearDragSizeHint();
             }
         }
     }
 
-    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
+    // Holding Ctrl (Cmd) arms the straighten line until the key is released,
+    // as CS6 does; a line already being drawn finishes first.
+    void onModifiers(ToolServices& ctx, Qt::KeyboardModifiers mods) override
+    {
+        if (!active_) {
+            return;
+        }
+        ctx_ = &ctx;
+        const bool ctrl = mods.testFlag(Qt::ControlModifier);
+        const bool busy = grip_ != BoxGrip::None || rotating_ || drawingNew_ || previewPress_;
+        if (ctrl && !straightenArmed_ && !busy) {
+            crop_->setStraightenMode(true);
+            ctrlArmed_ = true;
+        } else if (!ctrl && ctrlArmed_ && !straightenDragging_) {
+            crop_->setStraightenMode(false);
+        }
+    }
+
+    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         PictureView* v = ctx.view();
         if (!v || !v->has_document()) {
             return true;
         }
         ctx_ = &ctx;
-        if (straightenArmed_) {
+        if (straightenArmed_ || mods.testFlag(Qt::ControlModifier)) {
             // A straighten drag from none/preview activates a box first so the
             // pivot exists and the rotation can preview.
             activateForStraighten(ctx);
             straightenDragging_ = true;
             straightenStart_ = imagePos;
+            straightenBase_ = crop_->angle();
             return true;
         }
         grip_ = boxGripAt(box_, imagePos, zoom(ctx), kCropRotateMarginPx);
@@ -243,10 +265,13 @@ public:
         if (straightenDragging_) {
             if (ImageView* canvas = ctx.canvas()) {
                 canvas->setCropStraightenLine(QLineF(straightenStart_, imagePos));
-                // Preview the rotation from the first drag frame.
+                // The image holds still under the line, as CS6 does; the readout
+                // shows the rotation the release will apply.
                 if (std::hypot(imagePos.x() - straightenStart_.x(),
                                imagePos.y() - straightenStart_.y()) > 1.0) {
-                    crop_->setAngle(straightenAngle(straightenStart_, imagePos));
+                    canvas->setDragSizeHint(
+                        angleReadout(straightenBase_ + straightenAngle(straightenStart_, imagePos)),
+                        imagePos);
                 }
             }
             return;
@@ -337,9 +362,14 @@ public:
             const double dx = imagePos.x() - straightenStart_.x();
             const double dy = imagePos.y() - straightenStart_.y();
             if (std::hypot(dx, dy) > 1.0) {
-                // The drawn horizon becomes horizontal: rotate the content by
-                // the negative of the line's inclination.
-                crop_->setAngle(straightenAngle(straightenStart_, imagePos));
+                // The drawn line becomes level (or plumb): rotate the content by
+                // the negative of its inclination, then shrink the box inside
+                // the rotated image so the commit has no empty corners.
+                crop_->setAngle(straightenBase_ + straightenAngle(straightenStart_, imagePos));
+                box_ = fitBoxInRotated(effectiveBox(), QRectF(canvas_), crop_->angle(),
+                                       crop_->pivot())
+                           .translated(contentOffset_);
+                show(ctx);
                 recordState(ctx);
             }
             crop_->setStraightenMode(false);  // disarm, clear the line, uncheck
@@ -544,6 +574,7 @@ public:
         previewPress_ = false;
         straightenArmed_ = false;
         straightenDragging_ = false;
+        ctrlArmed_ = false;
         box_ = QRectF();
         startBox_ = QRectF();
         state_ = State::None;
@@ -575,7 +606,8 @@ public:
         CursorRotate,   // in the rotate band outside the box: straighten
         CursorResize,   // on a handle
         CursorNewCrop,  // where a new box can be drawn
-        CursorDefault   // beyond the rotate band: the workspace arrow, a press applies
+        CursorDefault,  // beyond the rotate band: the workspace arrow, a press applies
+        CursorStraighten  // the straighten line is armed: crosshair and spirit level
     };
 
     int pointerCursorKind(const ToolServices& ctx, const QPointF& imagePos,
@@ -608,6 +640,9 @@ public:
         }
         case CursorResize: out = QCursor(boxGripCursor(s.grip, Qt::ArrowCursor)); return true;
         case CursorNewCrop: out = QCursor(Qt::CrossCursor); return true;
+        case CursorStraighten:
+            out = cursorOr(QStringLiteral("cursor.straighten"), 8, 8, Qt::CrossCursor);
+            return true;
         default: return false;
         }
     }
@@ -687,7 +722,7 @@ private:
             return {};
         }
         if (straightenArmed_ || straightenDragging_) {
-            return {CursorNewCrop, BoxGrip::None};
+            return {CursorStraighten, BoxGrip::None};
         }
         if (rotating_) {
             return {CursorRotate, BoxGrip::None};
@@ -743,9 +778,13 @@ private:
     {
         if (ImageView* canvas = ctx.canvas()) {
             canvas->setCropRotating(true);
-            canvas->setDragSizeHint(
-                QStringLiteral("\u2220: %1\u00B0").arg(crop_->angle(), 0, 'f', 1), imagePos);
+            canvas->setDragSizeHint(angleReadout(crop_->angle()), imagePos);
         }
+    }
+
+    static QString angleReadout(double degrees)
+    {
+        return QStringLiteral("\u2220: %1\u00B0").arg(degrees, 0, 'f', 1);
     }
 
     void endRotation(ToolServices& ctx)
@@ -892,7 +931,11 @@ private:
     // is the press point (image space) of the horizon being drawn.
     bool straightenArmed_ = false;
     bool straightenDragging_ = false;
+    // Armed by holding Ctrl rather than the toggle; releasing Ctrl disarms.
+    bool ctrlArmed_ = false;
     QPointF straightenStart_;
+    // The angle before this line, so a second line levels what is on screen.
+    double straightenBase_ = 0.0;
     double startAngle_ = 0.0;
     double pressAngle_ = 0.0;
     std::vector<CropState> history_;

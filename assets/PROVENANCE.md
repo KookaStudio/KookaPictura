@@ -20,6 +20,12 @@ here.
 - `cursors/cursor.pinAdd.svg` (a pushpin with a plus, the Path Blur stop-point
   cursor) is original project artwork drawn by hand in the house cursor
   style, under the same licenses.
+- `cursors/cursor.straighten.svg` (a crosshair with a spirit level, the Crop
+  tool's straighten-line cursor) is original project artwork drawn by hand in
+  the house cursor style, under the same licenses.
+- `icons/crop.straighten.svg` (a spirit level, the Crop tool's Straighten
+  toggle) is original project artwork drawn by hand in the house icon style,
+  released under **CC0-1.0 / MIT**.
 - The `info.crosshair`, `info.bounds`, and `info.protractor` glyphs are original
   project artwork in the same house style, released under **CC0-1.0 / MIT**.
 - `theme.sun.svg` and `theme.moon.svg` are from **lucide-static v1.50.0**

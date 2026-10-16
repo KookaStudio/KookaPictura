@@ -43,6 +43,7 @@
     <file>icons/crop.overlay.triangle.svg</file>
     <file>icons/crop.overlay.goldenRatio.svg</file>
     <file>icons/crop.overlay.goldenSpiral.svg</file>
+    <file>icons/crop.straighten.svg</file>
     <file>icons/crop.swap.svg</file>
     <file>icons/image.crop.svg</file>
     <file>icons/image.flipHorizontal.svg</file>
@@ -219,6 +220,7 @@
     <file>cursors/cursor.moveSelection.svg</file>
     <file>cursors/cursor.pinAdd.svg</file>
     <file>cursors/cursor.rotate.svg</file>
+    <file>cursors/cursor.straighten.svg</file>
     <file>cursors/cursor.workspace.svg</file>
     <file>cursors/tool.addanchorpoint.svg</file>
     <file>cursors/tool.arthistorybrush.svg</file>

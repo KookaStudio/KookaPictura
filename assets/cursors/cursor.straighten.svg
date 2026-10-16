@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <!-- A crosshair centred on the (8, 8) hotspot with a spirit level below-right
+       of it, its bubble centred: the Crop tool's straighten line is armed. -->
+  <g stroke="#ffffff" stroke-width="3.5">
+    <path d="M8 2v4M8 10v4M2 8h4M10 8h4"/>
+    <rect x="11" y="16" width="11" height="5" rx="1"/>
+    <path d="M15.5 18.5h2"/>
+  </g>
+  <g stroke="#202020" stroke-width="1.5">
+    <path d="M8 2v4M8 10v4M2 8h4M10 8h4"/>
+    <rect x="11" y="16" width="11" height="5" rx="1"/>
+    <path d="M15.5 18.5h2"/>
+  </g>
+</svg>

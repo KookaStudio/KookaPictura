@@ -206,6 +206,16 @@ non-trivial changes and works from the CLI, with or without an agent** (the
 2. CLARIFY: Before writing any code, list unclear requirements, risks, or
    missing info from the issue. Ask the user and WAIT for answers.
    If nothing is unclear, say so explicitly and proceed.
-3. IMPLEMENT: Write all code changes. Do NOT run build/compile/test-build commands.
-4. COMPILE LAST: Only after all code is finished, run the build once.
-   Fix errors, then rebuild only if code changed.
+3. TEST PLAN: Before implementing, write `test-plan.md` in the change folder:
+   one row per spec scenario (its `[tag]`, or its title when untagged) →
+   steps, expected result, and a Coverage cell naming the automated tests
+   (`tst_<suite>::<case>` for Qt Test, `<crate>::<fn>` for Rust) or
+   `manual: <reason it can't be automated>`. The `/test-plan` skill drafts it.
+4. IMPLEMENT: Write all code changes, plus a test for every plan row that can be
+   automated (Qt Test for GUI, std #[test] for engine). Do NOT run
+   build/compile/test-build commands.
+5. COMPILE LAST: Only after all code is finished, run the build once.
+   Fix errors, then rebuild only if code changed. Do not use more than 80% of available CPUs for compiling.
+6. PR: List the plan's manual rows in the PR body as a reviewer checklist.
+   `scripts/check-test-plan.py` (verify-fast and the guards workflow) fails a
+   touched change with no plan, an unplanned scenario, or a missing test.
