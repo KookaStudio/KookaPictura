@@ -3,20 +3,19 @@ name: flatpak
 # Builds the x86_64 .flatpak bundle. release-please.yml calls it after cutting a
 # release, it runs by hand for an existing tag, and the release-please Release PR
 # runs the same build as a dry run that keeps the bundle as a workflow artifact
-# instead of uploading it.
-#
-# TEMPORARY: while the manifest is being made green the build job also runs on
-# this development pull request (no gate). Before merge it is gated to the
-# Release PR (head_ref == 'release-please--branches--master') with the five
-# release-please files added to paths, matching appimage.yml. The lint job stays
-# ungated so a feature PR that touches the manifest is still validated.
+# instead of uploading it. A feature PR that touches the manifest is linted but
+# does not build: the build job is gated to the Release PR head, matching
+# appimage.yml.
 on:
   pull_request:
     paths:
       - flatpak/**
-      - CMakeLists.txt
       - Cargo.toml
       - Cargo.lock
+      - CMakeLists.txt
+      - CHANGELOG.md
+      - version.txt
+      - .release-please-manifest.json
       - .github/workflows/flatpak.yml
   workflow_call:
     inputs:
@@ -53,6 +52,7 @@ jobs:
   flatpak:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    if: github.event_name != 'pull_request' || github.head_ref == 'release-please--branches--master'
     container:
       image: ghcr.io/flathub-infra/flatpak-github-actions@sha256:b0a8a2acb9e420dd0e3e083ff552bea5a817e17e41532f1d2287ff49ef9aae0e
       options: --privileged
