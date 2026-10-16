@@ -22,6 +22,7 @@ None.
 
 ## Impact
 
-- `crates/pictura-app/cpp/frame_menus_edit.cpp` — shortcut routing for Edit > Undo.
+- `crates/pictura-app/cpp/frame_menus.cpp` — shortcut context after menu action creation.
+- `crates/pictura-app/cpp/frame_menus_edit.cpp` — existing Edit > Undo handler remains unchanged.
 - `crates/pictura-app/cpp/tests/tst_edit_shortcuts.cpp` — regression coverage.
 - No API or dependency changes; no `docs/` changes.

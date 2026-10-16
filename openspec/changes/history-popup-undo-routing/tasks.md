@@ -7,8 +7,8 @@
 
 ## 2. Shortcut routing
 
-- [ ] 2.1 Set the existing Edit Undo action to application shortcut context while preserving its current handler and binding; verify the popup regression test passes.
+- [x] 2.1 Set the existing Edit Undo action to application shortcut context after menu creation while preserving its current handler and binding; the CI failure identified that the action was unavailable during handler wiring.
 
 ## 3. Validation
 
-- [ ] 3.1 Run the focused Qt Test suite and the repository-required validation gates; record results and include the manual desktop check in the PR body.
+- [ ] 3.1 Run the focused Qt Test suite and the repository-required validation gates; record results and include the manual desktop check in the PR body. Local Qt test execution is unavailable because this environment has no `qmake6`; rerun and inspect CI after pushing the fix.

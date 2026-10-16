@@ -26,10 +26,12 @@ flyout is a separate `Qt::Popup` window, so the main window's default
 
 ### Use the existing action with application shortcut context
 
-Set the Edit Undo action's shortcut context to `Qt::ApplicationShortcut` when
-the main window wires its history commands. This keeps the same customizable
-Ctrl-Z binding, enabled state, and handler while making the accelerator active
-from the popup top-level window.
+Set the Edit Undo action's shortcut context to `Qt::ApplicationShortcut`
+immediately after `buildMenus()` asks the command registry to create the menu
+bar. The action does not exist when `wireEditHistory()` runs, so configuring it
+there has no effect. This keeps the same customizable Ctrl-Z binding, enabled
+state, and handler while making the accelerator active from the popup top-level
+window.
 
 Adding another `QShortcut` to the History panel or flyout would duplicate the
 binding and could bypass the existing command handler, including its tool
