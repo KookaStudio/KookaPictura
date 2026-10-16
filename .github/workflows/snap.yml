@@ -2,18 +2,17 @@ name: snap
 
 # Builds the x86_64 snap for a release tag and attaches it to that release.
 # Same shape as appimage.yml: release-please.yml calls it after cutting a
-# release, it runs by hand for an existing tag, and it dry-runs on pull requests.
-#
-# TEMPORARY: while the snap build is new, the pull-request trigger is broad (it
-# fires on any pull request that changes the snap build), so the dry run can be
-# exercised before it is trusted. A follow-up change narrows the trigger to the
-# release-please Release PR, the policy the other packagers use. See
-# openspec/changes/add-snap-release-build.
+# release, it runs by hand for an existing tag, and the release-please Release PR
+# runs it as a dry run that keeps the .snap as a workflow artifact. Feature PRs
+# never run it.
 on:
   pull_request:
     paths:
-      - 'snap/**'
-      - '.github/workflows/snap.yml'
+      - Cargo.toml
+      - CMakeLists.txt
+      - CHANGELOG.md
+      - version.txt
+      - .release-please-manifest.json
   workflow_call:
     inputs:
       tag:
@@ -36,6 +35,7 @@ permissions:
 jobs:
   snap:
     runs-on: ubuntu-24.04
+    if: github.event_name != 'pull_request' || github.head_ref == 'release-please--branches--master'
     # snapcraft builds inside an LXD container; allow for the cold toolchain and
     # the full Rust + C++ build.
     timeout-minutes: 90

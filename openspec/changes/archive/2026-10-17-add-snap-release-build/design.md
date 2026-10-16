@@ -22,15 +22,14 @@ See `proposal.md` for motivation. Constraints that shape the approach:
 
 - A strictly-confined, x86_64 snap built from the release tag and attached to
   the GitHub Release as a (unsigned) asset.
-- A pull-request dry run that exercises the build while the packaging is new,
-  with the same keep-artifact behavior as the other packagers.
+- A Release-PR dry run, with the same keep-artifact behavior as the other
+  packagers.
 
 **Non-Goals:**
 
 - Snap Store publishing, channel management, and store credentials.
 - Other package managers (Flatpak, etc.).
 - Reusing the `linux-bundle` AppDir or the `install-qt-action` Qt.
-- Automating the phase-2 trigger narrowing (a separate change does that).
 
 ## Decisions
 
@@ -76,19 +75,21 @@ has to reproduce that environment. It never publishes, so the dry run and the
 tag build share it. This is the one new third-party action. It requires a VM
 runner (`ubuntu-24.04` is one) and 14 GB of disk, which the job must watch.
 
-**Phase-1 pull-request trigger is the snap path, not the whole repo.** The
-workflow lists `snap/**` and `.github/workflows/snap.yml`, so it fires on this
-change and on later snap iteration, without re-running a full LXD build on every
-feature PR. This is deliberately the temporary bootstrap the proposal describes:
-the follow-up change replaces the path list with the five Release-PR files and
-adds the `head_ref == 'release-please--branches--master'` gate, matching
-`appimage.yml`.
+**The pull-request trigger is gated to the Release PR, like the other packagers.**
+GitHub has no head-branch filter on `pull_request`, so gating is two-part:
+`on.pull_request.paths` lists the five files release-please bumps in every
+Release PR (`Cargo.toml`, `CMakeLists.txt`, `CHANGELOG.md`, `version.txt`,
+`.release-please-manifest.json`), and a job-level `if` accepts only the Release
+PR head (`github.head_ref == 'release-please--branches--master'`). Feature PRs
+never schedule a snap runner. This matches `appimage.yml` and
+`linux-packages.yml`; the snap build was exercised on a temporary broad trigger
+while it was being brought up, and the trigger was narrowed once it went green.
 
 **Smoke-check by installing the built snap.** Install the `.snap` with
-`snap install --dangerous` and run the headless self-test, mirroring the
-container smoke checks the other packagers do. If strict confinement fights the
-offscreen self-test on the runner, fall back to installing a `--devmode` build
-or to asserting only that the pack succeeded.
+`snap install --dangerous` and run the headless self-test under strict
+confinement. A strict failure is re-run in `--devmode` only to distinguish a
+broken build from a confinement gap, then the step still fails: the strict
+self-test is the contract, not an optional fallback.
 
 ## Risks / Trade-offs
 
@@ -97,15 +98,17 @@ or to asserting only that the pack succeeded.
   before building if the disk fills. Pin `snapcore/action-build@v1`.
 - **Strict confinement + headless self-test on the runner** → the devmode /
   pack-only fallback above; the app already handles `SNAP`/`SNAP_NAME`.
-- **The extension SDK may omit `Qt6::GuiPrivate`** → verified at build time; if
-  missing, pull it from the KDE neon apt repo in a small part, as the extension
-  docs describe for omitted modules.
+- **The SDK's Qt Gui config needs a system dev header** → `Qt6GuiPrivate`
+  requires `libxkbcommon-dev`, which the SDK does not carry; it is added as a
+  `build-package`.
+- **`qt-build-utils` probes qmake with a cleared environment** → it strips the
+  SDK's `LD_LIBRARY_PATH`, so the SDK's qmake cannot load its Qt; the build adds
+  the SDK library dirs to the loader cache (`ldconfig`) so the probe works
+  without the environment.
 - **Distro Rust is older than the pinned toolchain** → the build part installs
   rustup and reads `rust-toolchain.toml`; the C++ deps are `build-packages`.
 - **The `kf6-core24` content snap auto-updates independently** → only forward
   compatibility (newer Qt) is guaranteed; acceptable for an unsigned asset.
-- **Temporary broad dry-run cost** → bounded by the `snap/**` path filter and
-  removed by the phase-2 follow-up.
 - **New third-party action** → `snapcore/action-build`, justified in the
   proposal; no already-present action provisions an LXD snap build.
 - **Session/workspace state under strict confinement** → the app stores state at
@@ -119,10 +122,8 @@ or to asserting only that the pack succeeded.
 
 1. Land `snap/snapcraft.yaml`, `snap.yml`, the `release-please.yml` job, and the
    `DEVELOPING.md` section.
-2. Observe the dry run on this pull request; iterate on `snapcraft.yaml`.
-3. Follow-up change: narrow the dry-run trigger to the release-please Release
-   PR and update both the "keys off the release and dry-runs on pull requests"
-   requirement and the "Snap packaging is documented" requirement (REMOVED +
-   ADDED, as the 2026-10-12 packaging-gate change did).
-4. Future change: register the snap name, add `SNAPCRAFT_STORE_CREDENTIALS`,
+2. The pull-request dry run was exercised on a temporary broad trigger while the
+   build was brought up; the trigger is now gated to the release-please Release
+   PR, matching the other packagers.
+3. Future change: register the snap name, add `SNAPCRAFT_STORE_CREDENTIALS`,
    and publish with `snapcore/action-publish`.

@@ -49,12 +49,14 @@
 
 ## 5. Integration verification
 
-- [ ] 5.1 Confirm on this pull request that the dry run keeps the `.snap` as a
-  workflow artifact and uploads nothing to a release.
+- [x] 5.1 Confirm the snap dry run keeps the `.snap` as a workflow artifact and
+  uploads nothing to a release (validated on a temporary broad pull-request
+  trigger while the build was brought up).
 - [x] 5.2 `openspec validate --all --strict` passes.
-- [ ] 5.3 Open the phase-2 follow-up issue ("gate the snap dry-run to the
-  release-please Release PR"); verify it exists and references this change.
-- [ ] 5.4 Open a follow-up issue for snap state persistence under strict
+- [x] 5.3 Gate the pull-request dry run to the release-please Release PR (the
+  five release files plus the `head_ref` job gate) and update the spec, design,
+  proposal, and docs to match.
+- [x] 5.4 Opened follow-up issue #700 for snap state persistence under strict
   confinement (the `home` interface does not grant the app's default
   `$HOME/.local/state`), noting the snap-aware state root or `personal-files`
-  options; verify it exists.
+  options.

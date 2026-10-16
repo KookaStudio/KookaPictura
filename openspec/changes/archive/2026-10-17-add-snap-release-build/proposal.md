@@ -10,8 +10,8 @@ project builds on, and users currently have nothing to `snap install`.
 
 The codebase has also never been built against a snap base and the KDE Qt6
 extension, so a snap packaging break would stay invisible until a release is
-attempted. Building it once per pull request, before the release-PR gate is
-applied, surfaces those breaks early.
+attempted. The release-please Release PR builds it as a dry run, so a break
+surfaces before the tag is cut.
 
 ## What Changes
 
@@ -24,14 +24,9 @@ applied, surfaces those breaks early.
   plugs the extension supplies.
 - Add `.github/workflows/snap.yml`, modelled on `appimage.yml`: callable by
   `release-please.yml` for a release tag, runnable by hand for an existing tag,
-  and runnable on pull requests as a dry run that keeps the `.snap` as a
-  workflow artifact instead of uploading it. The tag build attaches the
-  `.snap` to the GitHub Release as a release asset.
-- **Temporary**: in this change the pull-request dry run fires on normal feature
-  PRs, to validate that the new snap build works before it is trusted. A
-  follow-up change narrows the trigger to the release-please Release PR, the
-  same policy the other packagers use. The pull-request path filter is the
-  mechanism that will be narrowed.
+  and run by the release-please Release PR as a dry run that keeps the `.snap`
+  as a workflow artifact instead of uploading it. Feature PRs never run it. The
+  tag build attaches the `.snap` to the GitHub Release as a release asset.
 - Wire a `snap` job into `.github/workflows/release-please.yml`, mirroring the
   `appimage`/`linux-packages` jobs.
 - Add a "Snap packages" section to `DEVELOPING.md`.
@@ -47,7 +42,7 @@ applied, surfaces those breaks early.
 
 - `meta/snap-release-build`: the repository builds a strictly-confined snap of
   the application from a release tag with the KDE Qt6 extension, attaches it to
-  the GitHub Release, and dry-runs the build on pull requests.
+  the GitHub Release, and dry-runs the build from the release-please Release PR.
 
 ### Modified Capabilities
 

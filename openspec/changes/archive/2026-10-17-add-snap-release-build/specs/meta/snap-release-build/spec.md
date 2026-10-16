@@ -55,30 +55,36 @@ supplies (`home`, `removable-media`, `cups`).
 - **THEN** they include `home`, `removable-media`, and `cups` alongside the
   desktop, GPU, and network plugs supplied by the extension
 
-### Requirement: The snap workflow keys off the release and dry-runs on pull requests
+### Requirement: The snap workflow keys off the release and dry-runs on the Release PR
 
 The snap workflow SHALL be callable by `release-please.yml` when a release is
-created and runnable by hand for an existing tag. Until a follow-up change
-narrows it, a pull request whose changes touch the snap build SHALL run the same
-build as a dry run that keeps the `.snap` as a workflow artifact instead of
-uploading it to a release.
+created and runnable by hand for an existing tag. The release-please Release PR
+SHALL run the same build as a dry run that keeps the `.snap` as a workflow
+artifact instead of uploading it to a release. No other pull request SHALL run
+the workflow.
 
 #### Scenario: release-please triggers the build
 
 - **WHEN** `release-please.yml` detects a created release
 - **THEN** it calls the snap workflow with the release tag
 
-#### Scenario: A pull request dry-runs
+#### Scenario: The Release PR dry-runs
 
-- **WHEN** a pull request that changes the snap build is opened or updated
+- **WHEN** the release-please Release PR is opened or updated
 - **THEN** the workflow builds the snap, keeps it as a workflow artifact, and
   uploads nothing to a release
+
+#### Scenario: A feature pull request does not run it
+
+- **WHEN** a pull request whose head branch is not the release-please Release PR
+  is opened or updated
+- **THEN** the snap job is skipped
 
 ### Requirement: Snap packaging is documented
 
 `DEVELOPING.md` SHALL document the snap packaging flow: the artifact and its
 confinement, the release-asset publish (and that the Snap Store is not yet
-wired), how the workflow is triggered (release, dispatch, pull-request dry run),
+wired), how the workflow is triggered (release, dispatch, Release-PR dry run),
 and how to re-run it for an existing tag.
 
 #### Scenario: A maintainer reads the docs

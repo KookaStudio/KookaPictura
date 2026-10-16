@@ -568,10 +568,9 @@ needs, and the application reuses `packaging/pictura.desktop` and
   also available from *Actions → Run workflow*; `--clobber` replaces an existing
   asset. As for the other workflows, `--ref <branch>` runs the branch's workflow
   file against the tag's tree.
-- **Dry run** — while the snap build is new, a pull request that changes
-  `snap/**` or the workflow runs the same build and keeps the `.snap` as a
-  workflow artifact instead of uploading it. A follow-up change moves this to
-  the release-please Release PR, matching the other packagers.
+- **Dry run** — the release-please Release PR runs the same build and keeps the
+  `.snap` as a workflow artifact instead of uploading it; feature PRs never run
+  it.
 
 ## Where to go next
 
