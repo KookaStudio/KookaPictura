@@ -255,6 +255,8 @@ public:
     QString maskButtonToolTipForTest() const;
     bool maskButtonEnabledForTest() const;
     void clickMaskButtonForTest();
+    bool deleteButtonEnabledForTest() const;
+    void clickDeleteButtonForTest();
     // Drive the panel's modal dialogs (Refine Mask, Mask Options): the driver
     // edits the dialog and returns whether it was accepted. Empty restores
     // `runDialog`.
@@ -309,7 +311,7 @@ private:
     void openRefineMask(const QString& path);
     void openMaskOptions();
     bool runPanelDialog(QDialog& dialog);
-    // The mask button follows the active layer's masks.
+    // The mask and trash buttons follow the active layer and the selection.
     void syncStripButtons();
     void addMaskFromButton();
     void populateRowMenu(QMenu& menu, const QString& path, int color, const QString& kind,
@@ -359,6 +361,7 @@ private:
     QToolButton* lockNesting_ = nullptr;
     QToolButton* lockAll_ = nullptr;
     QToolButton* maskButton_ = nullptr;
+    QToolButton* deleteButton_ = nullptr;
     std::function<bool(QDialog&)> dialogDriver_;
     QSet<QString> expandedPaths_;
     // Panel-local active edit target per row path: 0 image, 1 mask, 2 vector.

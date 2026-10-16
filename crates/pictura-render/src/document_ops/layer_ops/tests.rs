@@ -644,10 +644,59 @@ fn apply_visibility_is_solo() {
 fn delete_paths_nested_pair_deletes_once() {
     let mut group = empty_group("Group 1");
     group.children.push(pixel_layer("child", 4, 4, 1));
-    let mut doc = doc_with(vec![group]);
+    let mut doc = doc_with(vec![pixel_layer("below", 4, 4, 1), group]);
 
-    assert_eq!(delete_paths(&mut doc, &["0", "0/0"]), 1);
-    assert!(doc.layers.is_empty());
+    assert_eq!(delete_paths(&mut doc, &["1", "1/0"]), 1);
+    assert_eq!(doc.layers.len(), 1);
+}
+
+#[test]
+fn delete_paths_keeps_the_last_layer() {
+    let mut doc = doc_with(vec![pixel_layer("a", 4, 4, 1), pixel_layer("b", 4, 4, 2)]);
+    assert_eq!(
+        delete_paths(&mut doc, &["0", "1"]),
+        1,
+        "deleting every layer keeps one"
+    );
+    assert_eq!(doc.layers.len(), 1);
+    assert_eq!(delete_paths(&mut doc, &["0"]), 0, "the only layer stays");
+    assert_eq!(doc.layers.len(), 1);
+
+    let mut group = empty_group("Group 1");
+    group.children.push(pixel_layer("child", 4, 4, 1));
+    let mut doc = doc_with(vec![group]);
+    assert_eq!(delete_paths(&mut doc, &["0"]), 0, "the only group stays");
+    assert_eq!(
+        delete_paths(&mut doc, &["0/0"]),
+        1,
+        "a nested layer may go: the group remains"
+    );
+}
+
+#[test]
+fn can_delete_paths_agrees_with_a_real_delete() {
+    let mut background = pixel_layer("bg", 4, 4, 0);
+    background.background = true;
+    let mut group = empty_group("Group 1");
+    group.children.push(pixel_layer("child", 4, 4, 1));
+    let docs = [
+        doc_with(vec![pixel_layer("only", 4, 4, 1)]),
+        doc_with(vec![background.clone(), pixel_layer("top", 4, 4, 1)]),
+        doc_with(vec![background, locked_layer("locked")]),
+        doc_with(vec![pixel_layer("a", 4, 4, 1), pixel_layer("b", 4, 4, 2)]),
+        doc_with(vec![group]),
+    ];
+    let selections: [&[&str]; 6] = [&[], &["0"], &["1"], &["0", "1"], &["0/0"], &["7"]];
+    for (d, doc) in docs.iter().enumerate() {
+        for paths in selections {
+            let mut copy = doc.clone();
+            assert_eq!(
+                can_delete_paths(doc, paths),
+                delete_paths(&mut copy, paths) > 0,
+                "document {d}, paths {paths:?}"
+            );
+        }
+    }
 }
 
 #[test]

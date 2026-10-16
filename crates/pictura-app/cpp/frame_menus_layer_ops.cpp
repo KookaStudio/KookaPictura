@@ -65,20 +65,6 @@ void PicturaMainWindow::wireLayerArrangeStamp()
             && view->can_merge_layers(QStringList{path});
     });
 
-    // Layer > Delete Layer: the panel selection.
-    registry_->setHandler(command_ids::LayerDeleteLayer, [this]() {
-        PictureView* view = activeView();
-        const QStringList paths = layersPanel_ ? layersPanel_->selectedPaths() : QStringList{};
-        if (view && !paths.isEmpty() && view->delete_layers(paths) > 0) {
-            refresh();
-        }
-    });
-    registry_->setEnabledProvider(command_ids::LayerDeleteLayer, [this]() {
-        PictureView* view = activeView();
-        return view && view->has_document() && layersPanel_
-            && !layersPanel_->selectedPaths().isEmpty();
-    });
-
     // Stamp Visible / Stamp Selected: composite into a new layer, non-destructive.
     const auto currentLayerVisible = [this]() {
         PictureView* view = activeView();

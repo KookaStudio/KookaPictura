@@ -280,7 +280,9 @@ QJsonObject ControlServer::methodLayerOp(const QJsonObject& params)
         if (!indexValid) {
             return invalid(QStringLiteral("index out of range"));
         }
-        view->remove_layer(index);
+        if (!view->remove_layer(index)) {
+            return refused(QStringLiteral("delete refused"));
+        }
     } else if (op == QStringLiteral("duplicate")) {
         if (!indexValid) {
             return invalid(QStringLiteral("index out of range"));

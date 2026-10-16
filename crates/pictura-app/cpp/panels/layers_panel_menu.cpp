@@ -4,6 +4,7 @@
 #include "layers_panel_internal.h"
 
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_layers/layers_surface.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/smart_object_actions.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/layer_style.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/shapes.cxxqt.h"
@@ -81,6 +82,7 @@ struct RowSpec {
         HasMask,
         MaskDisabled,
         MaskEnabled,
+        CanDelete,
     };
     Enable enable = Always;
 };
@@ -93,7 +95,7 @@ const RowSpec kRowSpecs[] = {
     {"newLayer", "New Layer", kAllKinds, true},
     {"newGroup", "New Group", kAllKinds, true},
     {"duplicate", "Duplicate Layer(s)", kAllKinds, true},
-    {"delete", "Delete Layer(s)", kAllKinds, true},
+    {"delete", "Delete Layer(s)", kAllKinds, true, RowSpec::CanDelete},
     {"group", "Group Layers", kAllKinds, true},
     {"ungroup", "Ungroup Layers", kAllKinds, true},
     {"moveUp", "Move Layer Up", kAllKinds, true},
@@ -407,6 +409,15 @@ void LayersPanel::populateRowMenu(QMenu& menu, const QString& path, int color,
                 enabled = view_ && layer_mask_present_path(*view_, path)
                           && !layer_mask_disabled_path(*view_, path);
                 break;
+            case RowSpec::CanDelete: {
+                // The row action deletes the selection when the row is in it.
+                const QStringList selected = selectedPaths();
+                enabled = view_
+                          && layers_can_delete(*view_, selected.contains(path)
+                                                           ? selected
+                                                           : QStringList{path});
+                break;
+            }
             case RowSpec::Always:
                 break;
             }

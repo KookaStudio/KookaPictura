@@ -616,12 +616,14 @@ void LayersPanelTest::dropOnDelete()
         window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
     QVERIFY2(created && view && panel, "drop fixture");
     const int doc = window_->activeDocumentIndex();
+    // A second layer to drop: the document's last layer cannot be deleted (#670).
+    const QString target = view->add_layer_in(QString());
     panel->setView(view);
     panel->refresh();
     const int rows = pictura::layers_api::rowCount(*view);
     const int base = view->history_count();
     const bool dropped = panel->dropOnStripButtonForTest(
-        QStringLiteral("layersStripDelete"), {QStringLiteral("0")});
+        QStringLiteral("layersStripDelete"), {target});
     QVERIFY2(dropped && pictura::layers_api::rowCount(*view) == rows - 1
                  && view->history_count() == base + 1,
              "drop on delete is one undo step");
