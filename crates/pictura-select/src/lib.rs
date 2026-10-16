@@ -10,7 +10,7 @@
 
 use std::collections::{HashSet, VecDeque};
 
-use pictura_core::{Channel, Layer, PixelBuffer};
+use pictura_core::{Channel, Layer, LayerMask, PixelBuffer};
 
 mod color_range;
 pub use color_range::{color_range, ColorRangeSelect};
@@ -621,6 +621,43 @@ pub fn selection_from_layer_alpha(layer: &Layer, width: u32, height: u32) -> Sel
     Selection::from_channel(&channel, width, height).expect("document-sized selection channel")
 }
 
+/// Build a document-sized selection from a raster `mask`'s coverage. Follows the
+/// compositor's mask rule (`pictura_render::composite::mask_value`): the stored
+/// coverage inside the mask's rect, `default_color` outside it, and fully
+/// selected (`255`) when the mask is disabled or carries no decoded pixels.
+/// White (non-zero) means selected, matching the layer-mask convention.
+pub fn selection_from_mask(mask: &LayerMask, width: u32, height: u32) -> Selection {
+    let mut data = vec![0u8; width as usize * height as usize];
+    let full = mask.disabled || mask.data.is_none();
+    if !full {
+        let mw = mask.rect.width();
+        let mh = mask.rect.height();
+        let pixels = mask.data.as_deref().unwrap_or(&[]);
+        for y in 0..height as i32 {
+            let my = y - mask.rect.top;
+            for x in 0..width as i32 {
+                let mx = x - mask.rect.left;
+                let value = if mw > 0 && mh > 0 && mx >= 0 && my >= 0 && mx < mw && my < mh {
+                    pixels
+                        .get(my as usize * mw as usize + mx as usize)
+                        .copied()
+                        .unwrap_or(mask.default_color)
+                } else {
+                    mask.default_color
+                };
+                data[y as usize * width as usize + x as usize] = value;
+            }
+        }
+    } else {
+        data.fill(255);
+    }
+    let channel = Channel {
+        id: -1,
+        data: data.into(),
+    };
+    Selection::from_channel(&channel, width, height).expect("document-sized selection channel")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -858,6 +895,49 @@ mod tests {
         assert_eq!(sel.data[at(2, 2)], 128);
         assert_eq!(sel.data[at(3, 2)], 0);
         assert_eq!(sel.data[at(4, 2)], 255);
+    }
+
+    #[test]
+    fn mask_selection_uses_the_coverage_rule() {
+        use pictura_core::{LayerMask, PsdRect};
+        let rect = PsdRect {
+            top: 1,
+            left: 2,
+            bottom: 3,
+            right: 5,
+        }; // 3x2
+        let at = |x: usize, y: usize| y * 6 + x;
+        let mask = LayerMask {
+            rect,
+            default_color: 0,
+            data: Some(vec![0, 64, 255, 128, 0, 255].into()),
+            ..Default::default()
+        };
+        let sel = selection_from_mask(&mask, 6, 4);
+        assert_eq!(sel.data[at(2, 1)], 0);
+        assert_eq!(sel.data[at(3, 1)], 64);
+        assert_eq!(sel.data[at(4, 1)], 255);
+        assert_eq!(sel.data[at(2, 2)], 128);
+        assert_eq!(sel.data[at(4, 2)], 255);
+        assert_eq!(sel.data[at(2, 0)], 0, "outside the rect uses default_color");
+        assert_eq!(sel.data[at(5, 1)], 0, "right edge exclusive");
+        // default_color fills outside the rect.
+        let mask = LayerMask {
+            default_color: 200,
+            ..mask.clone()
+        };
+        let sel = selection_from_mask(&mask, 6, 4);
+        assert_eq!(sel.data[at(0, 0)], 200);
+        assert_eq!(sel.data[at(3, 1)], 64, "inside still uses the pixels");
+
+        // A disabled or data-less mask selects the whole document.
+        let disabled = LayerMask {
+            disabled: true,
+            ..mask.clone()
+        };
+        assert_eq!(selection_from_mask(&disabled, 6, 4), Selection::all(6, 4));
+        let dataless = LayerMask { data: None, ..mask };
+        assert_eq!(selection_from_mask(&dataless, 6, 4), Selection::all(6, 4));
     }
 
     #[test]

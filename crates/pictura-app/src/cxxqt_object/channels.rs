@@ -42,6 +42,20 @@ pub mod ffi {
 
         /// Delete alpha channel `index`; one "Delete Channel" state. False for a bad index.
         fn channels_delete_alpha(view: Pin<&mut PictureView>, index: i32) -> bool;
+
+        /// The active layer's raster-mask channel name (`"<layer name> Mask"`), or
+        /// empty when the active layer carries no raster mask.
+        fn channels_active_mask_name(view: &PictureView) -> QString;
+
+        /// The active layer's raster-mask coverage scaled to fit `max_side` (one
+        /// byte a pixel, row-major), its size in `width` / `height`; empty without
+        /// a mask. A disabled mask still shows its stored coverage.
+        fn channels_active_mask_thumbnail(
+            view: &PictureView,
+            max_side: i32,
+            width: &mut i32,
+            height: &mut i32,
+        ) -> Vec<u8>;
     }
 }
 
@@ -146,6 +160,36 @@ fn channels_delete_alpha(mut view: Pin<&mut PictureView>, index: i32) -> bool {
         view.as_mut().record("Delete Channel");
     }
     removed
+}
+
+fn channels_active_mask_name(view: &PictureView) -> QString {
+    let rust = view.rust();
+    let (Some(doc), Some(path)) = (rust.doc.as_ref(), rust.active_layer.as_ref()) else {
+        return QString::default();
+    };
+    if !pictura_render::has_layer_mask(doc, path) {
+        return QString::default();
+    }
+    match pictura_render::resolve_path(doc, path) {
+        Some(layer) => QString::from(format!("{} Mask", layer.name)),
+        None => QString::default(),
+    }
+}
+
+fn channels_active_mask_thumbnail(
+    view: &PictureView,
+    max_side: i32,
+    width: &mut i32,
+    height: &mut i32,
+) -> Vec<u8> {
+    *width = 0;
+    *height = 0;
+    let Some((plane, w, h)) = view.rust().mask_channel_thumbnail(max_side.max(0) as u32) else {
+        return Vec::new();
+    };
+    *width = w as i32;
+    *height = h as i32;
+    plane
 }
 
 #[cfg(test)]

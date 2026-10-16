@@ -11,6 +11,7 @@ use pictura_core::{
 };
 use std::time::Instant;
 
+mod display;
 mod recovery;
 
 /// Finish an imported raster document. When every decoded pixel is opaque the
@@ -907,6 +908,7 @@ impl super::PictureViewRust {
         self.stroke_label.clear();
         self.active_layer = None;
         self.isolation = None;
+        self.mask_solo = None;
         self.move_base = None;
         self.move_layer = None;
         self.move_x = 0;
@@ -960,6 +962,8 @@ impl super::PictureViewRust {
             Some(planes) => pictura_render::ViewPyramid::rebuild(planes),
             None => pictura_render::ViewPyramid::default(),
         };
+        // A recomposite keeps a solo mask view current; a no-op otherwise.
+        self.rebuild_mask_solo_source();
         self.canvas_revision = self.canvas_revision.wrapping_add(1);
         self.frame_revision = self.frame_revision.wrapping_add(1);
     }
@@ -1004,42 +1008,6 @@ impl super::PictureViewRust {
         (rect.width() > 0 && rect.height() > 0).then_some(rect)
     }
 
-    /// A premultiplied crop of pyramid `level` at `rect`, or an empty image for
-    /// an out-of-range level, a rectangle that does not intersect the level, or
-    /// an absent source. A partial overlap is transparent where it falls outside.
-    pub(super) fn display_crop(&self, level: i32, rect: PsdRect) -> QImage {
-        if level < 0 {
-            return QImage::default();
-        }
-        let level = level as usize;
-        if level >= self.pyramid.level_count() {
-            return QImage::default();
-        }
-        let (lw, lh) = self.pyramid.level_size(level);
-        if rect.right <= 0 || rect.bottom <= 0 || rect.left >= lw as i32 || rect.top >= lh as i32 {
-            return QImage::default();
-        }
-        let Some(planes) = self.level0.as_ref().and_then(planes_of) else {
-            return QImage::default();
-        };
-        let crop = self.pyramid.crop(planes, level, rect);
-        if crop.width() == 0 || crop.height() == 0 {
-            return QImage::default();
-        }
-        level_display_image(&crop)
-    }
-
-    pub(super) fn display_level_count(&self) -> i32 {
-        self.pyramid.level_count() as i32
-    }
-
-    pub(super) fn display_level_size(&self, level: i32) -> Option<(u32, u32)> {
-        if level < 0 || level as usize >= self.pyramid.level_count() {
-            return None;
-        }
-        Some(self.pyramid.level_size(level as usize))
-    }
-
     /// Fold each commit rectangle into level 0, the damage account and the
     /// pyramid, and hand back the one blit image the shell needs (with its
     /// origin), or `None` when nothing landed.
@@ -1050,7 +1018,8 @@ impl super::PictureViewRust {
     /// crop, which is the one image that keeps the shell's region handler (and
     /// the command registry it refreshes) to a single run per commit.
     pub(super) fn refresh_regions(&mut self, rects: &[PsdRect]) -> Option<(QImage, i32, i32)> {
-        let single = rects.len() == 1;
+        let solo = self.mask_solo_active();
+        let single = rects.len() == 1 && !solo;
         let mut union: Option<PsdRect> = None;
         let mut direct: Option<(QImage, i32, i32)> = None;
         for &rect in rects {
@@ -1065,13 +1034,18 @@ impl super::PictureViewRust {
             self.apply_refreshed_region(x0, y0, clipped, srgb);
             union = Some(union.map_or(clipped, |u| union_rect(u, clipped)));
         }
-        union.map(|union| match direct {
-            Some(image) => image,
-            None => {
-                let t = Instant::now();
-                let image = self.display_crop(0, union);
-                paint_timing::record("rr_to_qimage", t.elapsed());
-                (image, union.left, union.top)
+        union.map(|union| {
+            if solo {
+                return (self.canvas_present_image(0, union), union.left, union.top);
+            }
+            match direct {
+                Some(image) => image,
+                None => {
+                    let t = Instant::now();
+                    let image = self.display_crop(0, union);
+                    paint_timing::record("rr_to_qimage", t.elapsed());
+                    (image, union.left, union.top)
+                }
             }
         })
     }
@@ -1129,12 +1103,23 @@ impl qobject::PictureView {
         let t_rr = Instant::now();
         let prepared = self.as_mut().rust_mut().refresh_region_buffer(rect);
         if let Some((x0, y0, clipped, srgb)) = prepared {
-            let t = Instant::now();
-            let image = premultiplied_display_image(&srgb);
-            paint_timing::record("rr_to_qimage", t.elapsed());
+            let solo = self.rust().mask_solo_active();
+            let composite = if solo {
+                QImage::default()
+            } else {
+                let t = Instant::now();
+                let image = premultiplied_display_image(&srgb);
+                paint_timing::record("rr_to_qimage", t.elapsed());
+                image
+            };
             self.as_mut()
                 .rust_mut()
                 .apply_refreshed_region(x0, y0, clipped, srgb);
+            let image = if solo {
+                self.rust().canvas_present_image(0, clipped)
+            } else {
+                composite
+            };
             let t = Instant::now();
             self.region_blitted(image, x0, y0);
             paint_timing::record("rr_blit_emit(C++)", t.elapsed());

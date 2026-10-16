@@ -670,6 +670,7 @@ the CS6 shortcut sheet.
 | Subtract from current selection | Control + Alt-click layer thumbnail. | Command + Option-click layer thumbnail. |
 | Intersect with current selection | Control + Shift + Alt-click layer thumbnail. | Command + Shift + Option-click layer thumbnail. |
 | Load filter mask as a selection | Control-click filter mask thumbnail | Command-click filter mask thumbnail |
+| Load layer mask as a selection | Control-click layer mask thumbnail | Command-click layer mask thumbnail |
 | Group layers | Control + G | Command + G |
 | Ungroup layers | Control + Shift + G | Command-Shift + G |
 | Create/release clipping mask | Control + Alt + G | Command-Option + G |
@@ -699,6 +700,8 @@ the CS6 shortcut sheet.
 | Toggle filter mask on/off | Shift-click filter mask thumbnail | Shift-click filter mask thumbnail |
 | Toggle between layer mask/composite image | Alt-click layer mask thumbnail | Option-click layer mask thumbnail |
 | Toggle between filter mask/composite image | Alt-click filter mask thumbnail | Option-click filter mask thumbnail |
+| Open the layer mask context menu | Right-click layer mask thumbnail | Right-click (Control-click) layer mask thumbnail |
+| Delete the active layer mask | Delete or Backspace | Delete or Backspace |
 | Toggle rubylith mode for layer mask on/off | \ (backslash), or Shift + Alt-click | \ (backslash), or Shift + Option-click |
 | Select all type; temporarily select Type tool | Double-click type layer thumbnail | Double-click type layer thumbnail |
 | Create a clipping mask | Alt-click the line dividing two layers | Option-click the line dividing two layers |

@@ -66,10 +66,16 @@ transparency.
   Properties/Masks panel.)
 - **View as rubylith overlay:** Alt+Shift/Option+Shift-click the mask thumbnail
   to overlay the mask in the rubylith masking color; repeat to turn it off.
-- **Change rubylith color/opacity:** double-click the mask channel (or, in CS5,
-  the mask thumbnail) to open **Layer Mask Display Options**; pick a color and an
-  opacity 0–100%. **These settings affect only the display, not how underlying
-  areas are protected.**
+- **Mask thumbnail context menu:** right-click the mask thumbnail (Control-click
+  on macOS) to open the mask menu: `Enable Layer Mask` / `Disable Layer Mask`
+  (per the current state), `Delete Layer Mask`, `Apply Layer Mask`, `Add Mask To
+  Selection`, `Subtract Mask From Selection`, `Intersect Mask With Selection`,
+  `Select and Mask…` (CC only, not CS6), and `Mask Options…` (Layer Mask Display
+  Options). Apply bakes the coverage into the layer's alpha and is unavailable
+  for a Smart Object layer; Delete removes the mask with no pixel change.
+- **Change rubylith color/opacity:** double-click the mask thumbnail to open
+  **Layer Mask Display Options**; pick a color and an opacity 0–100%. **These
+  settings affect only the display, not how underlying areas are protected.**
 - **Paste a copied selection into a mask:** Alt/Option-click the mask thumbnail,
   `Edit > Paste`, then `Select > Deselect`; the selection is converted to
   grayscale and added to the mask.
@@ -88,12 +94,16 @@ transparency.
   alpha channels, so applying/deleting can reduce file size. Via `Apply Mask` in
   the Masks/Properties panel, or the `Layer` menu. (You cannot apply a layer mask
   permanently to a Smart Object layer when deleting the mask.)
-- **Delete without applying:** `Delete` in the panel then confirm, or the Layer
-  menu.
+- **Delete without applying:** `Delete`/`Backspace` while the mask thumbnail is
+  the active edit target, `Delete Layer Mask` in the mask thumbnail's right-click
+  menu, or the Layer menu — all remove the mask with no pixel change and no
+  confirmation.
 - **Load mask as a selection:** Ctrl/Cmd-click the mask thumbnail selects the
   unmasked areas; Shift adds, Alt/Option subtracts, Ctrl+Alt+Shift/Option+Shift
-  intersects. (Ctrl/Cmd-clicking the layer thumbnail selects the layer's
-  non-transparent areas instead.)
+  intersects. The mask thumbnail's right-click menu offers the same combine
+  operations as `Add Mask To Selection`, `Subtract Mask From Selection`, and
+  `Intersect Mask With Selection`. (Ctrl/Cmd-clicking the layer thumbnail selects
+  the layer's non-transparent areas instead.)
 
 ### Density, feather, invert, Mask Edge, Color Range
 
@@ -180,7 +190,9 @@ filter masks are moved/copied between smart-filter effects. See
    pixels to hidden mask pixels and opaque pixels to revealed; the color left
    behind is implementation-dependent *(matching the Help's warning)*.
 6. **Apply** bakes `layer_alpha ×= mask` and removes the mask channel; **Delete**
-   discards it with no pixel change.
+   discards it with no pixel change. The mask thumbnail's right-click menu exposes
+   both (`Apply Layer Mask` / `Delete Layer Mask`), and `Delete`/`Backspace` while
+   the mask is the edit target deletes it without applying.
 7. **Selection round-trip.** Ctrl/Cmd-clicking the mask thumbnail loads
    `mask > 0` (unmasked areas) as a selection; the inverse is masked areas.
    *(inferred from documented behavior.)*

@@ -7,7 +7,7 @@
 //! single layer is transparency-locked so opacity stays 255 while its colour
 //! plane carries the coverage.
 
-use pictura_core::{Document, LockFlags, PsdRect};
+use pictura_core::{BitDepth, Channel, ColorMode, Document, Layer, LockFlags, PsdRect};
 
 use super::paths::{resolve_path, resolve_path_mut};
 
@@ -24,6 +24,19 @@ pub struct MaskDocument {
 /// a layer mask, for a zero-sized mask rectangle, or when the path does not
 /// resolve. A data-less mask is materialised from its default colour.
 pub fn mask_document(doc: &Document, path: &str) -> Option<MaskDocument> {
+    build_mask_document(doc, path, false)
+}
+
+/// [`mask_document`] as a **single-channel** grayscale document: its one layer
+/// carries the coverage as channel `0` only. The paint stroke edits the mask
+/// through this form, so a dab writes one byte per pixel instead of moving an
+/// RGBA stand-in and copying channel 0 back. Filters and fills keep the RGBA
+/// [`mask_document`] a filter may expect.
+pub fn mask_document_coverage(doc: &Document, path: &str) -> Option<MaskDocument> {
+    build_mask_document(doc, path, true)
+}
+
+fn build_mask_document(doc: &Document, path: &str, single_channel: bool) -> Option<MaskDocument> {
     let layer = resolve_path(doc, path)?;
     let mask = layer.mask.as_ref()?;
     let rect = mask.rect;
@@ -36,29 +49,59 @@ pub fn mask_document(doc: &Document, path: &str) -> Option<MaskDocument> {
         Some(data) if data.len() == count => data.as_slice(),
         _ => {
             return Some(MaskDocument {
-                document: gray_document(w, h, None, mask.default_color),
+                document: gray_document(w, h, None, mask.default_color, single_channel),
                 rect,
             })
         }
     };
     Some(MaskDocument {
-        document: gray_document(w, h, Some(coverage), 0),
+        document: gray_document(w, h, Some(coverage), 0, single_channel),
         rect,
     })
 }
 
 /// A `w × h` opaque document whose colour plane is `coverage` (or `fill` when
 /// absent), with transparency locked so an edit cannot rewrite the opacity.
-fn gray_document(w: u32, h: u32, coverage: Option<&[u8]>, fill: u8) -> Document {
+/// `single_channel` builds a one-channel grayscale document (coverage as channel
+/// `0`) for the paint path; otherwise the RGBA form filters and fills use.
+fn gray_document(
+    w: u32,
+    h: u32,
+    coverage: Option<&[u8]>,
+    fill: u8,
+    single_channel: bool,
+) -> Document {
     let count = (w as usize) * (h as usize);
+    let value = |i: usize| coverage.map_or(fill, |data| data.get(i).copied().unwrap_or(fill));
+    let lock = LockFlags::default().with(LockFlags::TRANSPARENCY, true);
+    if single_channel {
+        let data: Vec<u8> = (0..count).map(value).collect();
+        let mut document = Document::new(w, h, ColorMode::Grayscale, BitDepth::Eight);
+        document.layers.push(Layer {
+            name: "Mask".to_string(),
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: h as i32,
+                right: w as i32,
+            },
+            channels: vec![Channel {
+                id: 0,
+                data: data.into(),
+            }],
+            lock,
+            ..Default::default()
+        });
+        return document;
+    }
     let mut rgba = Vec::with_capacity(count * 4);
     for i in 0..count {
-        let v = coverage.map_or(fill, |data| data.get(i).copied().unwrap_or(fill));
+        let v = value(i);
         rgba.extend_from_slice(&[v, v, v, 255]);
     }
     let mut document = Document::from_rgba("Mask", w, h, &rgba);
     if let Some(layer) = document.layers.first_mut() {
-        layer.lock = LockFlags::default().with(LockFlags::TRANSPARENCY, true);
+        layer.lock = lock;
     }
     document
 }
@@ -218,6 +261,81 @@ mod tests {
             .data = vec![9u8; 16].into();
         assert!(write_mask_back(&mut doc, "0", &edited, None));
         assert!(coverage(&doc).iter().all(|&v| v == 9));
+    }
+
+    #[test]
+    fn a_coverage_document_is_single_channel() {
+        let doc = masked_doc();
+        let mask = mask_document_coverage(&doc, "0").unwrap();
+        let layer = &mask.document.layers[0];
+        assert_eq!(layer.channels.len(), 1, "one coverage channel");
+        assert_eq!(layer.channels[0].id, 0);
+        assert_eq!(layer.channels[0].data.len(), 16);
+        assert_eq!(layer.channels[0].data[0], 0, "the coverage is mirrored");
+        assert_eq!(layer.channels[0].data[2], 255);
+    }
+
+    #[test]
+    fn coverage_and_rgba_documents_paint_the_same_coverage() {
+        use pictura_paint::spacing::SpacingMode;
+        use pictura_paint::{Rgba, Stroke, StrokeConfig, StrokeSample};
+
+        let doc = masked_doc();
+        let cfg = StrokeConfig {
+            color: Rgba {
+                r: 255,
+                g: 255,
+                b: 255,
+                a: 255,
+            },
+            diameter: 3,
+            hardness: 100,
+            opacity: 100,
+            flow: 100,
+            spacing: SpacingMode::Fixed(10),
+            ..Default::default()
+        };
+        let samples = [
+            StrokeSample {
+                x: 1.0,
+                y: 1.0,
+                pressure: 1.0,
+            },
+            StrokeSample {
+                x: 2.0,
+                y: 3.0,
+                pressure: 1.0,
+            },
+        ];
+        let paint = |mut document: Document| {
+            let mut stroke = Stroke::begin_at(&document, "0", cfg).expect("stroke begins");
+            for sample in samples {
+                stroke.sample(&mut document, sample);
+            }
+            stroke.finish();
+            document
+        };
+
+        let rgba = paint(mask_document(&doc, "0").unwrap().document);
+        let coverage = paint(mask_document_coverage(&doc, "0").unwrap().document);
+
+        let channel0 = |d: &Document| {
+            d.layers[0]
+                .channels
+                .iter()
+                .find(|c| c.id == 0)
+                .expect("coverage channel")
+                .data
+                .to_vec()
+        };
+        let (a, b) = (channel0(&rgba), channel0(&coverage));
+        assert_eq!(a.len(), b.len(), "same plane size");
+        for (i, (x, y)) in a.iter().zip(b.iter()).enumerate() {
+            assert!(
+                (*x as i32 - *y as i32).abs() <= 1,
+                "pixel {i}: RGBA {x} vs 1-channel {y}"
+            );
+        }
     }
 
     #[test]

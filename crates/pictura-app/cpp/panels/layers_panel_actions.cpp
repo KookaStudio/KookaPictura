@@ -26,6 +26,20 @@ void LayersPanel::syncEditTarget()
     }
 }
 
+void LayersPanel::syncMaskSolo()
+{
+    // A solo tied to another layer ends when the current layer changes (a layer
+    // thumbnail/row click, another layer's mask thumbnail, a menu, anything):
+    // the mask plane belongs to its own layer, so showing the composite again.
+    if (!view_) {
+        return;
+    }
+    const QString soloed = mask_solo_get(*view_);
+    if (!soloed.isEmpty() && soloed != view_->active_layer_path()) {
+        mask_solo_set(*view_, QString());
+    }
+}
+
 void LayersPanel::addLayerAt(const QString& path)
 {
     if (!view_) {
@@ -144,6 +158,21 @@ void LayersPanel::deleteSelection()
     view_->delete_layers(paths);
 }
 
+void LayersPanel::deleteActiveMask()
+{
+    if (!view_) {
+        return;
+    }
+    const QString target = mask_edit_target_get(*view_);
+    if (target.isEmpty()) {
+        return;
+    }
+    // No confirmation dialog: Delete removes the mask without applying it, as
+    // the mask menu's Delete Layer Mask does.
+    layer_mask_delete_path(*view_, target);
+    syncEditTarget();
+}
+
 void LayersPanel::groupSelection()
 {
     if (!view_) {
@@ -225,6 +254,11 @@ void LayersPanel::restoreSolo()
 
 void LayersPanel::clearSolo()
 {
+    // End any mask solo view too: every shared reset (add/duplicate/group/
+    // ungroup/delete, document switch) restores the composite.
+    if (view_) {
+        mask_solo_set(*view_, QString());
+    }
     soloActive_ = false;
     soloPath_.clear();
     soloSnapshot_.clear();

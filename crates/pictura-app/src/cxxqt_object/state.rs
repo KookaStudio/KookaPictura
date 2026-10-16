@@ -139,6 +139,9 @@ pub struct PictureViewRust {
     /// The layer whose raster mask is the edit target, so the brush, fill, and
     /// filters write its coverage; `None` edits the layer's pixels.
     pub(super) mask_edit_target: Option<String>,
+    /// The layer whose raster mask is shown alone on the canvas (view-only, no
+    /// history); `None` shows the composite. See `impl_core/display.rs`.
+    pub(super) mask_solo: Option<String>,
     /// The isolated set while the Layers panel's Selected filter is on: the
     /// panel paths Auto-Select may pick. `None` leaves Auto-Select unscoped.
     pub(super) isolation: Option<Vec<String>>,
@@ -179,9 +182,10 @@ pub struct PictureViewRust {
     /// `image` or the pyramid is rebuilt. Lets the shell cache without draining
     /// the damage account before `image` reads it.
     pub(super) canvas_revision: u64,
-    /// Bumped only when the level-0 frame is rebuilt whole; a region change
-    /// always reaches the shell as a `region_blitted`. A shell whose copy of
-    /// the frame carries this revision needs no full image on `changed`.
+    /// Bumped when the level-0 frame is rebuilt whole **or the canvas display
+    /// source changes** (mask solo enter/exit); a region change always reaches
+    /// the shell as a `region_blitted`. A shell whose copy of the frame carries
+    /// this revision needs no full image on `changed`.
     pub(super) frame_revision: u64,
     /// The document before a stroke that had to change its structure to begin
     /// (the Background Eraser layering a Background); cancelling restores it,
@@ -196,6 +200,12 @@ pub struct PictureViewRust {
     /// from this frame on demand (`PictureView::image`) rather than cached, so
     /// only one full-resolution frame is held.
     pub(super) level0: Option<PixelBuffer>,
+    /// The solo mask's document-sized grayscale plane and its view pyramid,
+    /// built while `mask_solo` is set and dropped when it clears. The canvas
+    /// presents these instead of the composite (`impl_core/display.rs`); no
+    /// other display consumer reads them.
+    pub(super) mask_level0: Option<PixelBuffer>,
+    pub(super) mask_pyramid: ViewPyramid,
     pub(super) link_sets: HashMap<String, u32>,
     /// Magnetic Lasso edge field, live for one gesture (`magnetic_begin` to
     /// `magnetic_end`): one `f32` per pixel, too costly to rebuild per move.
@@ -336,6 +346,7 @@ impl Default for PictureViewRust {
             stroke_label: String::new(),
             mask_stroke: None,
             mask_edit_target: None,
+            mask_solo: None,
             isolation: None,
             pending_present: None,
             stroke_tiles: TileSet::default(),
@@ -362,6 +373,8 @@ impl Default for PictureViewRust {
             stroke_base: None,
             pyramid: ViewPyramid::default(),
             level0: None,
+            mask_level0: None,
+            mask_pyramid: ViewPyramid::default(),
             link_sets: HashMap::new(),
             edge_map: None,
             ruler: None,

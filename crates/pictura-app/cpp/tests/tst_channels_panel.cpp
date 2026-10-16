@@ -4,6 +4,7 @@
 #include "image_view.h"
 #include "panels/channels_panel.h"
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
 
 #include <QtCore/QTemporaryDir>
 #include <QtWidgets/QToolButton>
@@ -22,6 +23,7 @@ private slots:
     void refreshKeepsRows();
     void grayscaleDocumentShowsSingleGrayRow();
     void thumbnailsTrackDocument();
+    void maskChannelRow();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -207,6 +209,47 @@ void ChannelsPanelTest::thumbnailsTrackDocument()
     QVERIFY2(created && view_, "thumbs fixture");
     panel_->setView(view_);
     QVERIFY2(!panel_->channelThumbnailForTest(0).isNull(), "document -> thumbnail");
+}
+
+// The active layer's raster mask is listed as a channel after the colour rows,
+// with a Ctrl+\ label; selecting it shows the mask on the canvas (view-only
+// solo), and selecting a colour row restores the composite.
+void ChannelsPanelTest::maskChannelRow()
+{
+    const bool created = window_->newDocument(QStringLiteral("MaskChannel"), 32, 32,
+                                              QStringLiteral("rgb"), 8, QStringLiteral("white"));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    QVERIFY2(created && view_ && panel_, "mask channel fixture");
+    panel_->setView(view_);
+    panel_->refresh();
+    QCOMPARE(panel_->maskRowIndexForTest(), -1);
+
+    const QString layer = view_->add_solid_fill(0xff2244aau);
+    QVERIFY(!layer.isEmpty());
+    QVERIFY(view_->rasterize_fill_content(layer));
+    window_->selectLayerPath(layer);
+    QVERIFY2(pictura::layer_mask_add(*view_, QStringLiteral("reveal-all")), "add mask");
+    panel_->setView(view_);
+    panel_->refresh();
+
+    const int maskRow = panel_->maskRowIndexForTest();
+    QVERIFY2(maskRow >= 0, "the mask row is present");
+    QVERIFY(panel_->channelNameForTest(maskRow).endsWith(QStringLiteral("Mask")));
+    QCOMPARE(panel_->channelShortcutForTest(maskRow), QStringLiteral("Ctrl+\\"));
+    QVERIFY2(!panel_->channelThumbnailForTest(maskRow).isNull(), "mask thumbnail");
+
+    // Selecting the mask row shows the mask (view-only solo), with no history.
+    const int base = view_->history_count();
+    panel_->selectChannelForTest(maskRow);
+    QCoreApplication::processEvents();
+    QCOMPARE(pictura::mask_solo_get(*view_), layer);
+    QCOMPARE(view_->history_count(), base);
+
+    // Selecting a colour row restores the composite.
+    panel_->selectChannelForTest(0);
+    QCoreApplication::processEvents();
+    QVERIFY(pictura::mask_solo_get(*view_).isEmpty());
 }
 
 QTEST_MAIN(ChannelsPanelTest)

@@ -224,6 +224,10 @@ pub mod qobject {
         #[qinvokable]
         fn display_image(&self, level: i32, x: i32, y: i32, w: i32, h: i32) -> QImage;
 
+        /// The **canvas display source** crop at `(x, y, w, h)`: the solo mask plane while a mask is soloed, else the composite. The canvas provider uses this; other panels keep `display_image`.
+        #[qinvokable]
+        fn canvas_display_image(&self, level: i32, x: i32, y: i32, w: i32, h: i32) -> QImage;
+
         /// Extents of every view-pyramid level as flat `w,h` pairs; empty without a document.
         #[qinvokable]
         fn display_level_extents(&self) -> Vec<i32>;
@@ -742,6 +746,10 @@ pub mod qobject {
         /// `path`; missing alpha is opaque. Replaces the selection, one undo state.
         #[qinvokable]
         fn select_layer_alpha(self: Pin<&mut Self>, path: &QString) -> bool;
+
+        /// Load the raster mask at `path` as a selection, combined per `mode`; one undo state.
+        #[qinvokable]
+        fn mask_selection(self: Pin<&mut Self>, path: &QString, mode: &QString) -> bool;
 
         /// Whether a selection is currently active.
         #[qinvokable]

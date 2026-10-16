@@ -166,21 +166,42 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                 if (!layerThumb.isEmpty() && layerThumb.contains(pos)
                     && !(mouse->modifiers() & Qt::ControlModifier)) {
                     mask_edit_target_set(*view_, QString());
+                    mask_solo_set(*view_, QString());
                     syncEditTarget();
                 }
                 const QRect maskThumb = delegate_->maskThumbRect(vr, index);
                 if (!maskThumb.isEmpty() && maskThumb.contains(pos)) {
                     setActiveThumb(rowPath, 1);
-                    if (mouse->modifiers() & Qt::ShiftModifier) {
+                    const bool alt = mouse->modifiers().testFlag(Qt::AltModifier);
+                    const bool shift = mouse->modifiers().testFlag(Qt::ShiftModifier);
+                    if (alt && shift) {
+                        // Reserved for the rubylith overlay (not implemented):
+                        // consume it so it never disables or solos the mask.
+                        return true;
+                    }
+                    if (shift) {
+                        // Toggling the enabled bit keeps any solo on this mask:
+                        // the solo shows the mask's stored coverage, not what the
+                        // mask does to the layer (see ui/mask-solo-view).
                         layer_mask_set_enabled_path(*view_, rowPath,
                                                     index.data(MaskDisabledRole).toBool());
-                    } else {
-                        // The target belongs to the active layer, so select the
-                        // row first (its selection sets the active layer).
-                        tree_->setCurrentIndex(index);
-                        mask_edit_target_set(*view_, rowPath);
-                        refresh();
+                        return false;
                     }
+                    // The target belongs to the active layer, so select the row
+                    // first (its selection sets the active layer).
+                    tree_->setCurrentIndex(index);
+                    mask_edit_target_set(*view_, rowPath);
+                    if (alt) {
+                        // Alt toggles the mask solo view on this thumbnail; a
+                        // second Alt-click on the same mask restores.
+                        const QString soloed = mask_solo_get(*view_);
+                        mask_solo_set(*view_, soloed == rowPath ? QString() : rowPath);
+                        refresh();
+                        return true;
+                    }
+                    // Any other mask-thumb click restores the composite.
+                    mask_solo_set(*view_, QString());
+                    refresh();
                     return false;
                 }
                 const QRect linkGlyph = delegate_->linkGlyphRect(vr, index);
@@ -194,6 +215,7 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                 if (!vectorThumb.isEmpty() && vectorThumb.contains(pos)) {
                     // The vector mask becomes the target; drop any raster target.
                     mask_edit_target_set(*view_, QString());
+                    mask_solo_set(*view_, QString());
                     setActiveThumb(rowPath, 2);
                     if (mouse->modifiers() & Qt::ShiftModifier) {
                         vector_mask_set_enabled_path(
@@ -213,6 +235,7 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                 const QRect imageThumb = delegate_->thumbRect(vr, index);
                 if (!imageThumb.isEmpty() && imageThumb.contains(pos)
                     && !(mouse->modifiers() & Qt::ControlModifier)) {
+                    mask_solo_set(*view_, QString());
                     setActiveThumb(rowPath, 0);
                     return false;
                 }

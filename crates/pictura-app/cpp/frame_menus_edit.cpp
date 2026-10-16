@@ -4,6 +4,7 @@
 #include "text_input.h"
 
 #include "pictura_app/src/cxxqt_object/clipboard.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
 
 #include <QtCore/QMimeData>
@@ -304,6 +305,20 @@ bool PicturaMainWindow::dispatchCommandKey(QKeyEvent* event)
         event->accept();
         return true;
     }
+    // Ctrl+\ selects the active layer's mask channel: it shows the mask on the
+    // canvas (the view-only solo) and toggles back to the composite, matching
+    // the Channels panel's mask channel row.
+    if ((mods & Qt::ControlModifier) && !(mods & Qt::AltModifier)
+        && event->key() == Qt::Key_Backslash) {
+        PictureView* view = activeView();
+        if (view && view->has_document() && layer_mask_present(*view)) {
+            const QString path = view->active_layer_path();
+            mask_solo_set(*view, mask_solo_get(*view) == path ? QString() : path);
+            refresh();
+            event->accept();
+            return true;
+        }
+    }
     // CS6: Delete / Backspace clear a selection, else delete the selected
     // layer(s), once no tool has claimed the key.
     if (!event->isAutoRepeat() && mods == Qt::NoModifier
@@ -328,6 +343,22 @@ bool PicturaMainWindow::handleDeleteKey()
     // An active lasso trace, a selected slice, or a selected path component
     // owns the key.
     if (tools_ && tools_->handleDeletePoint()) {
+        return true;
+    }
+    // The mask edit target owns the key: with a pixel selection, Delete fills
+    // that selection's area of the mask with the background colour (as a
+    // background-colour fill does); with no selection it removes the mask (no
+    // apply, no confirmation), ahead of the pixel-selection and layer branches.
+    if (layersPanel_ && layersPanel_->maskEditing()) {
+        PictureView* view = activeView();
+        if (view && view->has_selection() && tools_) {
+            const QColor background = tools_->background();
+            edit_fill(*view, uint32_t(background.rgba()), -1, QStringLiteral("normal"), 100,
+                      false);
+        } else {
+            layersPanel_->deleteActiveMask();
+        }
+        refresh();
         return true;
     }
     PictureView* view = activeView();

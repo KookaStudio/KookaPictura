@@ -6,6 +6,7 @@
 // separate FG/BG pairs.
 
 #include <QtTest/QtTest>
+#include <QtWidgets/QToolButton>
 #include "api/layers_api.h"
 
 #include "frame.h"
@@ -28,6 +29,11 @@ private slots:
     void paintAndFillWriteCoverage();
     void canvasToolsWriteCoverage();
     void colorsFollowTheEditTarget();
+    void maskSoloView();
+    void maskSoloFollowsLayerChange();
+    void addLayerMaskStripInverts();
+    void maskContextMenu();
+    void maskStrokePresentsWhileDragging();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -247,6 +253,324 @@ void MaskEditTest::colorsFollowTheEditTarget()
     frame.closeDocument(doc, false);
     QCoreApplication::processEvents();
     QCOMPARE(colors->foreground(), imageFg);
+}
+
+// Alt-clicking a mask thumbnail shows the mask alone (view-only, no history);
+// a second Alt-click, another thumbnail click, or a shared reset restores the
+// composite, and painting the mask while soloed keeps the mode.
+void MaskEditTest::maskSoloView()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const bool created = frame.newDocument(QStringLiteral("MaskSolo"), 32, 32,
+                                           QStringLiteral("rgb"), 8, QStringLiteral("white"));
+    pictura::PictureView* view = frame.activeView();
+    auto* panel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY2(created && view && panel, "mask solo fixture");
+    const int doc = frame.activeDocumentIndex();
+    const QString layer = view->add_solid_fill(0xff2244aau);
+    QVERIFY(!layer.isEmpty());
+    QVERIFY(view->rasterize_fill_content(layer));
+    frame.selectLayerPath(layer);
+    QVERIFY2(pictura::layer_mask_add(*view, QStringLiteral("reveal-all")), "add mask");
+
+    // The bridge is view-only: set/clear round-trips with no history change.
+    const int base = view->history_count();
+    const int baseIndex = view->history_index();
+    QVERIFY(pictura::mask_solo_set(*view, layer));
+    QCOMPARE(pictura::mask_solo_get(*view), layer);
+    QVERIFY(pictura::mask_solo_set(*view, QString()));
+    QVERIFY(pictura::mask_solo_get(*view).isEmpty());
+    QCOMPARE(view->history_count(), base);
+    QCOMPARE(view->history_index(), baseIndex);
+    QVERIFY2(!pictura::mask_solo_set(*view, QStringLiteral("99")), "no mask at path");
+
+    // The panel gesture: Alt-click solos and keeps the mask the edit target.
+    panel->setView(view);
+    panel->selectPaths({layer}, layer);
+    panel->refresh();
+    frame.show();
+    QTest::qWait(50);
+    QVERIFY2(panel->altClickMaskThumbnailForTest(layer), "mask thumbnail exists");
+    QCoreApplication::processEvents();
+    QCOMPARE(pictura::mask_solo_get(*view), layer);
+    QVERIFY2(panel->rowMaskTargetForTest(layer), "the mask stays the edit target");
+    QCOMPARE(view->history_count(), base);
+
+    // A second Alt-click restores; Alt then a plain click restores too.
+    QVERIFY(panel->altClickMaskThumbnailForTest(layer));
+    QCoreApplication::processEvents();
+    QVERIFY(pictura::mask_solo_get(*view).isEmpty());
+    QVERIFY(panel->altClickMaskThumbnailForTest(layer));
+    QCoreApplication::processEvents();
+    QCOMPARE(pictura::mask_solo_get(*view), layer);
+    QVERIFY(panel->clickMaskThumbnailForTest(layer));
+    QCoreApplication::processEvents();
+    QVERIFY(pictura::mask_solo_get(*view).isEmpty());
+
+    // Alt+Shift is reserved for rubylith: neither solos nor disables.
+    QVERIFY(panel->altShiftClickMaskThumbnailForTest(layer));
+    QCoreApplication::processEvents();
+    QVERIFY(pictura::mask_solo_get(*view).isEmpty());
+    QVERIFY2(!panel->rowMaskDisabledForTest(layer), "Alt+Shift did not disable the mask");
+
+    // Painting the soloed mask keeps the mode and records one edit.
+    QVERIFY(pictura::mask_solo_set(*view, layer));
+    QVERIFY(pictura::mask_edit_target_set(*view, layer));
+    const int paintBase = view->history_count();
+    QVERIFY(view->begin_paint(0xff000000u, 0xffffffffu, 20, 100, 100, 0, 100, 100, 25,
+                              QStringLiteral("normal"), false, false));
+    QVERIFY(view->paint_dab(16.0, 16.0, 1.0));
+    QVERIFY(view->end_paint());
+    QCOMPARE(view->history_count(), paintBase + 1);
+    QCOMPARE(pictura::mask_solo_get(*view), layer);
+
+    // Deleting the mask ends solo.
+    QVERIFY(pictura::layer_mask_delete(*view));
+    QVERIFY(pictura::mask_solo_get(*view).isEmpty());
+
+    frame.closeDocument(doc, false);
+}
+
+// The mask thumbnail's right-click menu (#436): the CS6 item set and order, the
+// enable/disable label, Apply/Delete, the selection combine commands, and the
+// Delete key removing the mask.
+void MaskEditTest::maskContextMenu()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const bool created = frame.newDocument(QStringLiteral("MaskMenu"), 32, 32,
+                                           QStringLiteral("rgb"), 8, QStringLiteral("white"));
+    pictura::PictureView* view = frame.activeView();
+    auto* panel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY2(created && view && panel, "mask menu fixture");
+    const int doc = frame.activeDocumentIndex();
+    const QString layer = view->add_solid_fill(0xff2244aau);
+    QVERIFY(!layer.isEmpty());
+    QVERIFY(view->rasterize_fill_content(layer));
+    frame.selectLayerPath(layer);
+    QVERIFY2(pictura::layer_mask_add(*view, QStringLiteral("reveal-all")), "add mask");
+    panel->setView(view);
+    panel->selectPaths({layer}, layer);
+    panel->refresh();
+    frame.show();
+    QTest::qWait(50);
+
+    // The menu lists the CS6 items and order.
+    QCOMPARE(panel->maskMenuTextsForPathForTest(layer),
+             QStringList({QStringLiteral("Disable Layer Mask"),
+                          QStringLiteral("Delete Layer Mask"), QStringLiteral("Apply Layer Mask"),
+                          QStringLiteral("Add Mask To Selection"),
+                          QStringLiteral("Subtract Mask From Selection"),
+                          QStringLiteral("Intersect Mask With Selection"),
+                          QStringLiteral("Select and Mask…"), QStringLiteral("Mask Options…")}));
+
+    // Select and Mask is wired (it opens Refine Edge); Mask Options stays a
+    // disabled placeholder. Apply and Delete are enabled.
+    QVERIFY(panel->maskMenuEnabledForPathForTest(layer, QStringLiteral("Select and Mask…")));
+    QVERIFY(!panel->maskMenuEnabledForPathForTest(layer, QStringLiteral("Mask Options…")));
+    QVERIFY(panel->maskMenuEnabledForPathForTest(layer, QStringLiteral("Apply Layer Mask")));
+    QVERIFY(panel->maskMenuEnabledForPathForTest(layer, QStringLiteral("Delete Layer Mask")));
+
+    // The enable/disable label follows the state.
+    QVERIFY(pictura::layer_mask_set_enabled_path(*view, layer, false));
+    panel->refresh();
+    const QStringList off = panel->maskMenuTextsForPathForTest(layer);
+    QVERIFY(off.contains(QStringLiteral("Enable Layer Mask")));
+    QVERIFY(!off.contains(QStringLiteral("Disable Layer Mask")));
+    QVERIFY(pictura::layer_mask_set_enabled_path(*view, layer, true));
+    panel->refresh();
+
+    // Apply folds the coverage into the layer and clears the mask, one state.
+    const int base = view->history_count();
+    QVERIFY(panel->performMaskActionForTest(QStringLiteral("applyLayerMask"), layer));
+    panel->refresh();
+    QVERIFY2(!panel->rowHasMaskForTest(layer), "apply removed the mask");
+    QCOMPARE(view->history_count(), base + 1);
+    QCOMPARE(view->history_label(base), QStringLiteral("Apply Layer Mask"));
+
+    // Apply is disabled on a smart object (a mask can be added, not applied).
+    view->add_layer(-1);
+    panel->refresh();
+    const QString smart = pictura::layers_api::rowAt(*view, 0).path;
+    QVERIFY(view->convert_to_smart_object(smart));
+    QVERIFY(pictura::layer_mask_add_path(*view, smart, QStringLiteral("reveal-all")));
+    panel->refresh();
+    QVERIFY(panel->rowSmartObjectForTest(smart));
+    QVERIFY2(!panel->maskMenuEnabledForPathForTest(smart, QStringLiteral("Apply Layer Mask")),
+             "apply disabled for a smart object");
+
+    // The selection commands load the mask coverage (white = selected).
+    QVERIFY(view->select_rect(0, 0, 16, 32, QStringLiteral("new"), 0.0));
+    QVERIFY(pictura::layer_mask_add_path(*view, layer, QStringLiteral("reveal-selection")));
+    view->deselect();
+    QVERIFY(panel->performMaskActionForTest(QStringLiteral("maskAdd"), layer));
+    QVERIFY2(view->selection_coverage(4, 16) > 0, "the mask's left half is selected");
+    QCOMPARE(view->selection_coverage(28, 16), 0);
+
+    // With a pixel selection, Delete fills that selection with the background
+    // colour (the mask survives); with no selection it removes the mask.
+    frame.selectLayerPath(layer);
+    QVERIFY(pictura::mask_edit_target_set(*view, layer));
+    panel->refresh();
+    QVERIFY(panel->maskEditing());
+    panel->setFocus();
+    QCoreApplication::processEvents();
+    // The mask's right half is black (hidden) and the edit target's background
+    // is white, so a Delete-fill reveals it. Select that half.
+    QVERIFY(view->select_rect(16, 0, 16, 32, QStringLiteral("new"), 0.0));
+    panel->refresh();
+    QVERIFY2(view->selection_coverage(24, 16) > 0, "a selection is active");
+    const quint32 revealed = view->sample_argb(8, 16);
+    QVERIFY2(view->sample_argb(24, 16) != revealed, "the mask hides the right half");
+    const int fillBase = view->history_count();
+    QTest::keyClick(panel, Qt::Key_Delete);
+    panel->refresh();
+    QVERIFY2(panel->rowHasMaskForTest(layer), "Delete filled the selection, mask survives");
+    QCOMPARE(view->history_label(fillBase), QStringLiteral("Fill"));
+    QCOMPARE(view->history_count(), fillBase + 1);
+    QCOMPARE(view->sample_argb(24, 16), revealed);
+
+    // No selection: Delete removes the mask.
+    view->deselect();
+    panel->refresh();
+    const int delBase = view->history_count();
+    QTest::keyClick(panel, Qt::Key_Delete);
+    panel->refresh();
+    QVERIFY2(!panel->rowHasMaskForTest(layer), "Delete removed the mask");
+    QCOMPARE(view->history_count(), delBase + 1);
+
+    frame.closeDocument(doc, false);
+}
+
+// A live mask stroke must count as painting, so the shell's `regionBlitted`
+// slot schedules `flush_present` and the drag renders frame by frame instead of
+// only on release. Guards `PictureView::is_painting` including `mask_stroke`.
+void MaskEditTest::maskStrokePresentsWhileDragging()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const bool created = frame.newDocument(QStringLiteral("MaskDrag"), 64, 64,
+                                           QStringLiteral("rgb"), 8, QStringLiteral("white"));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY2(created && view, "mask drag fixture");
+    const int doc = frame.activeDocumentIndex();
+    const QString layer = view->add_solid_fill(0xff2244aau);
+    QVERIFY(!layer.isEmpty());
+    QVERIFY(view->rasterize_fill_content(layer));
+    frame.selectLayerPath(layer);
+    QVERIFY2(pictura::layer_mask_add(*view, QStringLiteral("reveal-all")), "add mask");
+    QVERIFY(pictura::mask_edit_target_set(*view, layer));
+
+    QSignalSpy blit(view, &pictura::PictureView::regionBlitted);
+    QVERIFY2(blit.isValid(), "regionBlitted spy");
+    const int history = view->history_count();
+    // A small brush stays on the exact CPU mask path.
+    QVERIFY2(view->begin_paint(0xff000000u, 0xffffffffu, 24, 100, 100, 0, 100, 100, 25,
+                               QStringLiteral("normal"), false, false),
+             "begin a mask stroke");
+    QVERIFY2(view->is_painting(), "a mask stroke is a paint stroke");
+
+    // The frame-opening dab presents itself.
+    QVERIFY(view->paint_dab(16.0, 16.0, 1.0));
+    const int afterOpen = blit.count();
+    QVERIFY2(afterOpen >= 1, "the first mask dab presents");
+
+    // A later dab accumulates; the shell's deferred flush presents the union.
+    QVERIFY(view->paint_dab(44.0, 16.0, 1.0));
+    QVERIFY(view->flush_present());
+    QVERIFY2(blit.count() > afterOpen, "the flush presents the accumulated drag");
+
+    QVERIFY(view->end_paint());
+    QVERIFY2(!view->is_painting(), "the mask stroke ended");
+    QCOMPARE(view->history_count(), history + 1);
+    frame.closeDocument(doc, false);
+}
+
+// Mask solo is tied to the current layer: selecting a different layer ends it,
+// while a Shift-click that only toggles the mask's enabled bit keeps it.
+void MaskEditTest::maskSoloFollowsLayerChange()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const bool created = frame.newDocument(QStringLiteral("MaskSoloFollow"), 32, 32,
+                                           QStringLiteral("rgb"), 8, QStringLiteral("white"));
+    pictura::PictureView* view = frame.activeView();
+    auto* panel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY2(created && view && panel, "mask solo follow fixture");
+    const int doc = frame.activeDocumentIndex();
+
+    const QString masked = view->add_solid_fill(0xff2244aau);
+    QVERIFY(!masked.isEmpty());
+    QVERIFY(view->rasterize_fill_content(masked));
+    QVERIFY2(pictura::layer_mask_add_path(*view, masked, QStringLiteral("reveal-all")), "mask");
+
+    // A different layer: the document's own Background (it carries no mask).
+    QString other;
+    for (int i = 0; i < 4 && other.isEmpty(); ++i) {
+        const auto row = pictura::layers_api::rowAt(*view, i);
+        if (row.path.isEmpty()) {
+            break;
+        }
+        if (row.path != masked && !row.hasMask) {
+            other = row.path;
+        }
+    }
+    QVERIFY2(!other.isEmpty(), "a second layer exists");
+
+    panel->setView(view);
+    frame.selectLayerPath(masked);
+    panel->selectPaths({masked}, masked);
+    panel->refresh();
+    frame.show();
+    QTest::qWait(50);
+    QVERIFY(pictura::mask_solo_set(*view, masked));
+
+    // Selecting another layer ends the solo.
+    panel->selectPaths({other}, other);
+    QCoreApplication::processEvents();
+    QVERIFY2(pictura::mask_solo_get(*view).isEmpty(), "another layer ends the solo");
+
+    // A Shift-click that toggles the enabled bit keeps the solo.
+    frame.selectLayerPath(masked);
+    panel->selectPaths({masked}, masked);
+    panel->refresh();
+    QCoreApplication::processEvents();
+    QVERIFY(pictura::mask_solo_set(*view, masked));
+    QVERIFY(panel->shiftClickMaskThumbnailForTest(masked));
+    QCoreApplication::processEvents();
+    QCOMPARE(pictura::mask_solo_get(*view), masked);
+    QVERIFY2(panel->rowMaskDisabledForTest(masked), "Shift-click disabled the mask");
+
+    frame.closeDocument(doc, false);
+}
+
+// The Layers action-strip Add Layer Mask button: an Alt-click adds a Hide All
+// (black) mask, inverting rather than revealing.
+void MaskEditTest::addLayerMaskStripInverts()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const bool created = frame.newDocument(QStringLiteral("MaskStripInvert"), 32, 32,
+                                           QStringLiteral("rgb"), 8, QStringLiteral("white"));
+    pictura::PictureView* view = frame.activeView();
+    auto* panel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY2(created && view && panel, "mask strip invert fixture");
+    const int doc = frame.activeDocumentIndex();
+    const QString layer = view->add_solid_fill(0xff2244aau);
+    QVERIFY(!layer.isEmpty());
+    QVERIFY(view->rasterize_fill_content(layer));
+    frame.selectLayerPath(layer);
+    panel->setView(view);
+    panel->selectPaths({layer}, layer);
+    panel->refresh();
+    frame.show();
+    QTest::qWait(50);
+
+    auto* button = frame.findChild<QToolButton*>(QStringLiteral("layersStripMask"));
+    QVERIFY(button != nullptr);
+    const quint32 fill = view->sample_argb(16, 16);
+    QTest::mouseClick(button, Qt::LeftButton, Qt::AltModifier);
+    QCoreApplication::processEvents();
+    QVERIFY2(panel->rowHasMaskForTest(layer), "Alt-click added a mask");
+    QVERIFY2(view->sample_argb(16, 16) != fill, "Alt-click added a Hide All (black) mask");
+
+    frame.closeDocument(doc, false);
 }
 
 QTEST_MAIN(MaskEditTest)

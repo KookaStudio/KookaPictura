@@ -1362,13 +1362,21 @@ disabled. When a row carries a vector mask, the delegate SHALL likewise draw a
 vector-mask thumbnail with its own link glyph when linked and red cross when
 disabled. Clicking a mask's link glyph SHALL toggle that mask's linked state,
 and `Shift`-clicking a mask thumbnail SHALL toggle that mask's enabled state,
-through the matching bridge; those clicks SHALL be consumed so they do not start
-a rename, select another row, or begin a drag. A plain click on a layer mask
+through the matching bridge; a `Shift`-click SHALL NOT end a mask solo view on
+that mask (the solo keeps showing the mask's stored coverage); those clicks SHALL
+be consumed so they do not start a rename, select another row, or begin a drag. A plain click on a layer mask
 thumbnail SHALL make that mask the view's mask edit target through the bridge,
 and a plain click on the layer thumbnail SHALL clear the target, so the mask
-thumbnail of the targeted row SHALL draw a focus border. The model SHALL expose
-the per-row mask and vector-mask linked and disabled states through roles
-populated from the bridge.
+thumbnail of the targeted row SHALL draw a focus border. An `Alt`/`Option`-click
+on a layer mask thumbnail SHALL toggle the mask solo view (see
+`ui/mask-solo-view`): it SHALL select the clicked row (activating its layer),
+make that mask the mask edit target so the focus border stays on it, and toggle
+the solo display, recording no history state. It SHALL be consumed so it starts
+no rename, selects no *other* row, and begins no drag. `Alt`+`Shift`-clicking a
+mask thumbnail SHALL be consumed without toggling the mask's enabled state or
+the solo view: that combination is reserved for the rubylith overlay, which is
+not implemented here. The model SHALL expose the per-row mask and vector-mask
+linked and disabled states through roles populated from the bridge.
 
 #### Scenario: A linked mask shows the link glyph [lmk_row_link]
 
@@ -1390,6 +1398,18 @@ populated from the bridge.
 - **WHEN** the user `Shift`-clicks the mask thumbnail of an enabled mask
 - **THEN** the mask is disabled in one undoable step
 
+#### Scenario: Shift-clicking a soloed mask keeps it soloed [lmk_row_shift_solo]
+
+- **WHEN** a mask is soloed and the user `Shift`-clicks its thumbnail to toggle
+  its enabled state
+- **THEN** the mask's enabled state toggles and the canvas still shows the mask
+  plane
+
+#### Scenario: Selecting another layer ends the solo [lmk_row_solo_exit]
+
+- **WHEN** a mask is soloed and the user selects a different layer row
+- **THEN** the solo view ends and the canvas shows the composite
+
 #### Scenario: A plain click activates the mask [lmk_row_activate]
 
 - **WHEN** the user clicks the mask thumbnail of a row that carries a mask
@@ -1401,6 +1421,22 @@ populated from the bridge.
 - **WHEN** a mask is the edit target and the user clicks that row's layer
   thumbnail
 - **THEN** the mask edit target is cleared and the focus border disappears
+
+#### Scenario: Alt-clicking the mask thumbnail toggles solo [lmk_row_alt_solo]
+
+- **WHEN** the user `Alt`-clicks the mask thumbnail of a raster-mask row
+- **THEN** the row is selected, the mask becomes the edit target with its focus
+  border, and the canvas shows the mask plane, with no history state
+
+#### Scenario: A second Alt-click restores the composite [lmk_row_alt_restore]
+
+- **WHEN** the user `Alt`-clicks the same mask thumbnail again while it is soloed
+- **THEN** the composite is shown again and the mask stays the edit target
+
+#### Scenario: Alt+Shift is reserved for rubylith [lmk_row_alt_shift]
+
+- **WHEN** the user `Alt`+`Shift`-clicks a mask thumbnail
+- **THEN** neither the solo view nor the enabled-state toggle takes effect
 
 #### Scenario: A vector mask shows its own indicator [vmk_row_vector]
 

@@ -36,6 +36,12 @@ pub mod ffi {
         /// Fold the active layer's mask into its alpha and clear it; one "Apply Layer Mask" state. False without a mask or on a smart object.
         fn layer_mask_apply(view: Pin<&mut PictureView>) -> bool;
 
+        /// Fold the mask on the layer at `path` into its alpha and clear it;
+        /// one "Apply Layer Mask" state. False without a mask or on a smart
+        /// object. The mask-thumbnail menu acts on the clicked row, not the
+        /// active layer.
+        fn layer_mask_apply_path(view: Pin<&mut PictureView>, path: &QString) -> bool;
+
         /// Set the active layer's mask enabled; one "Enable/Disable Layer Mask" state. False without a mask or no change.
         fn layer_mask_set_enabled(view: Pin<&mut PictureView>, enabled: bool) -> bool;
 
@@ -78,6 +84,16 @@ pub mod ffi {
         /// when none. Clears a target whose layer, mask, or active-layer status
         /// no longer holds.
         fn mask_edit_target_get(view: Pin<&mut PictureView>) -> QString;
+
+        /// Show the raster mask on the layer at `path` alone on the canvas, or
+        /// restore the composite when `path` is empty. View-only: records no
+        /// history and leaves the document unchanged. False when `path` has no
+        /// raster mask, or when clearing an already-clear solo.
+        fn mask_solo_set(view: Pin<&mut PictureView>, path: &QString) -> bool;
+
+        /// The path whose raster mask is shown alone, empty when none. Clears a
+        /// solo whose mask is gone.
+        fn mask_solo_get(view: Pin<&mut PictureView>) -> QString;
 
         /// Whether the active layer's mask is linked to the layer.
         fn layer_mask_linked(view: &PictureView) -> bool;
@@ -175,6 +191,11 @@ fn layer_mask_apply(view: Pin<&mut PictureView>) -> bool {
     let Some(path) = active_path(&view) else {
         return false;
     };
+    layer_mask_apply_path(view, &QString::from(path.as_str()))
+}
+
+fn layer_mask_apply_path(view: Pin<&mut PictureView>, path: &QString) -> bool {
+    let path = path.to_string();
     let changed = view.batch_changed(&one(&path), "Apply Layer Mask", |doc, paths| {
         let mut changed = 0;
         for &path in paths {
@@ -277,6 +298,50 @@ fn mask_edit_target_get(mut view: Pin<&mut PictureView>) -> QString {
         .is_some_and(|doc| pictura_render::has_layer_mask(doc, &path));
     if !resolves {
         view.as_mut().rust_mut().mask_edit_target = None;
+        return QString::default();
+    }
+    QString::from(path)
+}
+
+fn mask_solo_set(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
+    let path = path.to_string();
+    if path.is_empty() && view.rust().mask_solo.is_none() {
+        return false;
+    }
+    if !path.is_empty() {
+        let resolves = view
+            .rust()
+            .doc
+            .as_ref()
+            .is_some_and(|doc| pictura_render::has_layer_mask(doc, &path));
+        if !resolves {
+            return false;
+        }
+    }
+    {
+        let mut rust = view.as_mut().rust_mut();
+        rust.mask_solo = (!path.is_empty()).then_some(path);
+        rust.canvas_revision = rust.canvas_revision.wrapping_add(1);
+        rust.frame_revision = rust.frame_revision.wrapping_add(1);
+    }
+    view.as_mut().rust_mut().rebuild_mask_solo_source();
+    view.as_mut().changed();
+    true
+}
+
+fn mask_solo_get(mut view: Pin<&mut PictureView>) -> QString {
+    let Some(path) = view.rust().mask_solo.clone() else {
+        return QString::default();
+    };
+    let resolves = view
+        .rust()
+        .doc
+        .as_ref()
+        .is_some_and(|doc| pictura_render::has_layer_mask(doc, &path));
+    if !resolves {
+        let mut rust = view.as_mut().rust_mut();
+        rust.mask_solo = None;
+        rust.drop_mask_solo_source();
         return QString::default();
     }
     QString::from(path)

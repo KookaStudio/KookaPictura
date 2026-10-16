@@ -43,6 +43,8 @@ public:
     QPixmap channelThumbnailForTest(int index) const;
     bool channelVisibleForTest(int index) const;
     bool channelEyeEnabledForTest(int index) const;
+    // Row index of the active layer's mask channel, or -1 when it has none.
+    int maskRowIndexForTest() const;
     void toggleChannelForTest(int index);
     void selectChannelForTest(int index);
     // Hover the row at `index` with `mods` held and return the viewport cursor's
@@ -76,6 +78,9 @@ private:
     void updateFooter();
     void styleRows();
     int selectedAlpha() const;
+    // Show the mask channel's layer alone (solo) when `row` is the mask row,
+    // else restore the composite; drives the view-only solo view.
+    void applyChannelSolo(int row);
     void updateCtrlOverlay(int index, const QPoint& pos, Qt::KeyboardModifiers mods);
 
     PictureView* view_ = nullptr;
@@ -85,6 +90,12 @@ private:
     QString mode_;
     int alphaCount_ = -1;
     int mask_ = 0x7;
+    // The active layer's mask channel row (`-1` when it has no raster mask) and
+    // its name, so `refresh` rebuilds when the mask appears or disappears.
+    int maskRowIndex_ = -1;
+    QString maskName_;
+    // Guards the panel's own row changes during `rebuild` from ending a solo.
+    bool syncing_ = false;
     // The colour rows the eyes drive (composite first), 0 when they are disabled.
     int liveRows_ = 0;
     QToolButton* load_ = nullptr;

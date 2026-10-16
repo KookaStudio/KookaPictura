@@ -135,6 +135,9 @@ above but not every control's widget form.)
 | Result | Windows | Mac OS |
 |---|---|---|
 | Load layer transparency as selection | Ctrl-click thumbnail | Cmd-click thumbnail |
+| Load layer mask as selection | Ctrl-click mask thumb | Cmd-click mask thumb |
+| Open the layer mask menu | Right-click mask thumb | Right-click mask thumb |
+| Delete the active layer mask | Delete/Backspace | Delete/Backspace |
 | Group layers | Ctrl+G | Cmd+G |
 | Ungroup layers | Ctrl+Shift+G | Cmd+Shift+G |
 | Create/release clipping mask | Ctrl+Alt+G | Cmd+Option+G |

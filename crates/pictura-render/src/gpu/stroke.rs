@@ -37,6 +37,9 @@ pub struct GpuStrokeParams {
     pub flip_x: bool,
     pub flip_y: bool,
     pub mode: GpuPaintMode,
+    /// 4 for an RGBA layer, 1 for a single-channel mask. A 1-channel stroke
+    /// blends only byte 0 and leaves the other channels untouched.
+    pub channels: u32,
 }
 
 /// The `Dab` uniform's byte size; 24 words, padded to a 16-byte multiple.
@@ -233,6 +236,7 @@ impl GpuStroke {
         )
         .map_or(0, |(gx, _)| gx * 64);
         put(&mut buf, 88, stride as f32);
+        put(&mut buf, 92, c.channels as f32);
         self.queue.write_buffer(&self.params, 0, &buf);
     }
 
@@ -457,6 +461,7 @@ mod tests {
             flip_x: false,
             flip_y: false,
             mode: GpuPaintMode::Normal,
+            channels: 4,
         };
         assert!(matches!(
             GpuStroke::new(2, 2, &[0u8; 16], cfg),
@@ -561,6 +566,7 @@ mod tests {
             flip_x: cfg.flip_x,
             flip_y: cfg.flip_y,
             mode: GpuPaintMode::Normal,
+            channels: 4,
         }
     }
 
@@ -682,6 +688,100 @@ mod tests {
         assert!(
             worst <= 1,
             "GPU stroke differs from the CPU oracle by {worst} LSB"
+        );
+    }
+
+    #[test]
+    #[ignore = "GPU mask stroke parity; run explicitly with --ignored"]
+    fn gpu_mask_stroke_matches_the_cpu_oracle() {
+        if !GpuStroke::available() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let (w, h) = (64u32, 64u32);
+        let base = 130u8;
+        let cfg = pictura_paint::StrokeConfig {
+            color: pictura_paint::Rgba {
+                r: 200,
+                g: 200,
+                b: 200,
+                a: 255,
+            },
+            diameter: 32,
+            hardness: 60,
+            roundness: 100,
+            opacity: 80,
+            flow: 70,
+            spacing: SpacingMode::Fixed(50),
+            ..Default::default()
+        };
+        let dabs: Vec<(f32, f32)> = (0..8)
+            .map(|i| (16.0 + i as f32 * 5.0, 16.0 + i as f32 * 5.0))
+            .collect();
+        let flat = |v: u8| Layer {
+            name: "mask".into(),
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: h as i32,
+                right: w as i32,
+            },
+            channels: vec![Channel {
+                id: 0,
+                data: vec![v; (w * h) as usize].into(),
+            }],
+            ..Default::default()
+        };
+
+        // CPU oracle on the 1-channel mask document.
+        let mut doc = Document::new(w, h, ColorMode::Grayscale, BitDepth::Eight);
+        doc.layers.push(flat(base));
+        let mut stroke = Stroke::begin_at(&doc, "0", cfg).expect("stroke begins");
+        for &(x, y) in &dabs {
+            stroke.sample(
+                &mut doc,
+                StrokeSample {
+                    x,
+                    y,
+                    pressure: 1.0,
+                },
+            );
+        }
+        stroke.finish();
+        let cpu = doc.layers[0]
+            .channels
+            .iter()
+            .find(|c| c.id == 0)
+            .unwrap()
+            .data
+            .to_vec();
+
+        // GPU 1-channel stroke: the coverage lives in byte 0.
+        let n = (w * h) as usize;
+        let mut seed = vec![0u8; n * 4];
+        for px in seed.as_chunks_mut::<4>().0 {
+            px.copy_from_slice(&[base, base, base, 255]);
+        }
+        let mut params = params_from(&cfg);
+        params.channels = 1;
+        let mut gpu = GpuStroke::new(w, h, &seed, params).expect("gpu stroke");
+        let mut placer = pictura_paint::spacing::DabPlacer::new(cfg.spacing, cfg.diameter as f32);
+        let mut placed = Vec::new();
+        for &(x, y) in &dabs {
+            placed.clear();
+            placer.feed(x, y, &mut placed);
+            for (cx, cy) in &placed {
+                let _ = gpu.dab(*cx, *cy).expect("gpu dab");
+            }
+        }
+        let got = gpu.layer_rgba().expect("readback");
+        let mut worst = 0i32;
+        for i in 0..n {
+            worst = worst.max((i32::from(cpu[i]) - i32::from(got[i * 4])).abs());
+        }
+        assert!(
+            worst <= 1,
+            "GPU mask stroke differs from the CPU oracle by {worst} LSB"
         );
     }
 }

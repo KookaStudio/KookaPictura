@@ -12,6 +12,8 @@ use pictura_render::gpu::{GpuPaintMode, GpuStroke, GpuStrokeParams};
 use pictura_render::ViewPyramid;
 use std::time::Instant;
 
+mod mask_gpu;
+
 impl PictureViewRust {
     /// Fold a dab's `rect` into the frame-bounded present. `Some(rect)` is the
     /// region to present now — the dab that opens a frame — and `None` means it
@@ -131,6 +133,8 @@ impl PictureViewRust {
         let t = Instant::now();
         self.update_pyramid(clipped);
         paint_timing::record("rr_update_pyramid", t.elapsed());
+        // Keep a soloed mask plane in step with the mask's new coverage.
+        self.sync_mask_solo_region(clipped);
     }
 }
 
@@ -448,6 +452,7 @@ impl qobject::PictureView {
                                 flip_x: tip.flip_x,
                                 flip_y: tip.flip_y,
                                 mode,
+                                channels: 4,
                             };
                             let t = Instant::now();
                             let gpu = GpuStroke::new(w, h, &seed, params);
@@ -498,7 +503,7 @@ impl qobject::PictureView {
             let Some(doc) = rust.doc.as_ref() else {
                 return false;
             };
-            let Some(mask) = pictura_render::mask_document(doc, path) else {
+            let Some(mask) = pictura_render::mask_document_coverage(doc, path) else {
                 return false;
             };
             Stroke::begin_at(&mask.document, "0", cfg)
@@ -513,10 +518,57 @@ impl qobject::PictureView {
         let Some(mask_stroke) = built else {
             return false;
         };
+        // A large mask brush runs the same GPU stroke the pixel path uses, with
+        // one channel: the shader blends the coverage byte only, so the mask
+        // gains accelerator parity without an RGBA round-trip.
+        let gpu = {
+            let (mw, mh) = (mask_stroke.document.width, mask_stroke.document.height);
+            match (
+                preview_level(cfg.diameter as i32, mw, mh),
+                gpu_paint_mode(cfg.mode),
+                self.rust().gpu_compute,
+            ) {
+                (Some(_), Some(mode), true) => {
+                    let seed = mask_gpu::mask_rgba_seed(&mask_stroke.document);
+                    let tip = mask_stroke.stroke.tip_params();
+                    let params = GpuStrokeParams {
+                        radius: tip.radius,
+                        round_radius: tip.round_radius,
+                        sin_t: tip.sin,
+                        cos_t: tip.cos,
+                        core: tip.core,
+                        denom: tip.denom,
+                        flow: cfg.flow as f32 / 100.0,
+                        opacity: cfg.opacity as f32 / 100.0,
+                        color: [
+                            cfg.color.r as f32 / 255.0,
+                            cfg.color.g as f32 / 255.0,
+                            cfg.color.b as f32 / 255.0,
+                            cfg.color.a as f32 / 255.0,
+                        ],
+                        aliased: tip.aliased,
+                        flip_x: tip.flip_x,
+                        flip_y: tip.flip_y,
+                        mode,
+                        channels: 1,
+                    };
+                    GpuStroke::new(mw, mh, &seed, params).ok()
+                }
+                _ => None,
+            }
+        };
+        let has_gpu = gpu.is_some();
         let mut rust = self.as_mut().rust_mut();
         rust.mask_stroke = Some(mask_stroke);
         rust.stroke_label = label.to_string();
         rust.clear_pending_present();
+        rust.gpu_stroke = gpu;
+        rust.gpu_placer = if has_gpu {
+            Some(DabPlacer::new(cfg.spacing, cfg.diameter as f32))
+        } else {
+            None
+        };
+        rust.preview = None;
         let dims = rust.doc.as_ref().map(|doc| (doc.width, doc.height));
         if let Some((width, height)) = dims {
             rust.stroke_tiles.reset(width, height);
@@ -528,6 +580,9 @@ impl qobject::PictureView {
     /// document, copy the changed region back into the real mask, and present
     /// it. Returns whether a pixel changed.
     fn mask_dab(mut self: Pin<&mut Self>, x: f64, y: f64, pressure: f64) -> bool {
+        if self.rust().gpu_stroke.is_some() {
+            return self.as_mut().mask_gpu_dab(x, y, pressure);
+        }
         let (dirty, rect) = {
             let mut rust = self.as_mut().rust_mut();
             let rust = &mut *rust;
@@ -939,7 +994,7 @@ impl qobject::PictureView {
     }
 
     pub fn is_painting(&self) -> bool {
-        self.rust().stroke.is_some()
+        self.rust().stroke.is_some() || self.rust().mask_stroke.is_some()
     }
 }
 
