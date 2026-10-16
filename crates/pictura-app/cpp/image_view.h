@@ -73,6 +73,13 @@ public:
     void clearFilterPreview();
     bool filterPreviewShownForTest() const { return !filterPreview_.isNull(); }
 
+    // The rubylith overlay of a layer mask: `overlay`, a reduced image of the
+    // document rect `area`, drawn over the document until cleared. Display
+    // only; the document is untouched.
+    void setMaskOverlay(const QImage& overlay, const QRect& area);
+    void clearMaskOverlay();
+    QImage maskOverlayForTest() const { return maskOverlay_; }
+
     // Supplies document crops from the view pyramid so the present path never
     // scales the full-resolution `image()`. `crop` returns a premultiplied crop
     // of `level` at the level-space rect `(x, y, w, h)`; `levelCount`/`levelSize`
@@ -518,6 +525,9 @@ private:
     void paintFilterPreview(QPainter& painter);
     QImage filterPreview_;
     QRect filterPreviewArea_;
+    void paintMaskOverlay(QPainter& painter);
+    QImage maskOverlay_;
+    QRect maskOverlayArea_;
     PathOverlay pathOverlay_;
     TypeOverlay typeOverlay_;
     QList<QPointF> samplerOverlay_;

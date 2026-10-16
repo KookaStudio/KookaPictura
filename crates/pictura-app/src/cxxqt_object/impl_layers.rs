@@ -8,6 +8,8 @@ use pictura_core::{BlendMode, ColorLabel, Document, Layer};
 
 mod auto_select;
 mod layer_masks;
+mod mask_commands;
+pub(in crate::cxxqt_object) use mask_commands::coverage_at;
 mod layers_surface;
 mod mask_refine;
 mod matting;

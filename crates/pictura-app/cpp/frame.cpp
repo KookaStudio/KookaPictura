@@ -960,6 +960,7 @@ void PicturaMainWindow::refresh()
     if (tools_) {
         tools_->bindCanvas(canvas);
     }
+    syncMaskOverlay(view, canvas);
 
     panelRefreshTimer_->start();
     updateStatus();

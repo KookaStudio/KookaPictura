@@ -77,6 +77,10 @@ struct RowSpec {
         EditContentsCan,
         ReplaceContentsCan,
         ExportContentsCan,
+        NoMask,
+        HasMask,
+        MaskDisabled,
+        MaskEnabled,
     };
     Enable enable = Always;
 };
@@ -95,10 +99,10 @@ const RowSpec kRowSpecs[] = {
     {"moveUp", "Move Layer Up", kAllKinds, true},
     {"moveDown", "Move Layer Down", kAllKinds, true},
     // Kind-specific rows.
-    {"addLayerMask", "Add Layer Mask", Pixel, true},
-    {"deleteLayerMask", "Delete Layer Mask", Pixel, true},
-    {"enableLayerMask", "Enable Layer Mask", Pixel, true},
-    {"disableLayerMask", "Disable Layer Mask", Pixel, true},
+    {"addLayerMask", "Add Layer Mask", Pixel, true, RowSpec::NoMask},
+    {"deleteLayerMask", "Delete Layer Mask", Pixel, true, RowSpec::HasMask},
+    {"enableLayerMask", "Enable Layer Mask", Pixel, true, RowSpec::MaskDisabled},
+    {"disableLayerMask", "Disable Layer Mask", Pixel, true, RowSpec::MaskEnabled},
     {"blendingOptions", "Blending Options…", Pixel | Background | Group | Type, true,
      RowSpec::StyleEdit},
     {"copyLayerStyle", "Copy Layer Style", Pixel, true, RowSpec::HasStyle},
@@ -204,6 +208,13 @@ void LayersPanel::populateMaskMenu(QMenu& menu, const QString& path, const QMode
 {
     const bool disabled = index.data(MaskDisabledRole).toBool();
     const bool smart = index.data(SmartObjectRole).toBool();
+    // Apply bakes the mask into the layer's own alpha, so it needs a layer that
+    // renders from its pixels: not a smart object, group, or adjustment/fill.
+    const QString kind = index.data(KindRole).toString();
+    const bool procedural = kind == QLatin1String("group") || kind == QLatin1String("adjustment");
+    const QString applyTip = smart        ? tr("Apply Layer Mask — not available for a smart object")
+                             : procedural ? tr("Apply Layer Mask — needs a pixel layer")
+                                          : QString();
     const auto add = [&](const char* id, const QString& label, bool enabled, const QString& tip) {
         QAction* action = menu.addAction(label);
         action->setEnabled(enabled);
@@ -217,16 +228,15 @@ void LayersPanel::populateMaskMenu(QMenu& menu, const QString& path, const QMode
         disabled ? tr("Enable Layer Mask") : tr("Disable Layer Mask"), true, QString());
     menu.addSeparator();
     add("deleteLayerMask", tr("Delete Layer Mask"), true, QString());
-    add("applyLayerMask", tr("Apply Layer Mask"), !smart,
-        smart ? tr("Apply Layer Mask — not available for a smart object") : QString());
+    add("applyLayerMask", tr("Apply Layer Mask"), applyTip.isEmpty(), applyTip);
     menu.addSeparator();
     add("maskAdd", tr("Add Mask To Selection"), true, QString());
     add("maskSubtract", tr("Subtract Mask From Selection"), true, QString());
     add("maskIntersect", tr("Intersect Mask With Selection"), true, QString());
     menu.addSeparator();
-    add("selectAndMask", tr("Select and Mask…"), true, QString());
+    add("refineMask", tr("Refine Mask…"), true, QString());
     menu.addSeparator();
-    add("maskOptions", tr("Mask Options…"), false, tr("Mask Options… — not implemented yet"));
+    add("maskOptions", tr("Mask Options…"), true, QString());
 }
 
 bool LayersPanel::performMaskAction(const QString& id, const QString& path)
@@ -235,8 +245,8 @@ bool LayersPanel::performMaskAction(const QString& id, const QString& path)
         return false;
     }
     if (id == QLatin1String("enableLayerMask")) {
-        const QModelIndex index = model_ ? model_->indexForPath(path) : QModelIndex();
-        return layer_mask_set_enabled_path(*view_, path, index.data(MaskDisabledRole).toBool());
+        // Read the document, not the row: the model lags until the next refresh.
+        return layer_mask_set_enabled_path(*view_, path, layer_mask_disabled_path(*view_, path));
     }
     if (id == QLatin1String("deleteLayerMask")) {
         return layer_mask_delete_path(*view_, path);
@@ -253,9 +263,12 @@ bool LayersPanel::performMaskAction(const QString& id, const QString& path)
     if (id == QLatin1String("maskIntersect")) {
         return view_->mask_selection(path, QStringLiteral("intersect"));
     }
-    if (id == QLatin1String("selectAndMask")) {
-        // Refine Edge lives in the frame; hand off rather than reach for it here.
-        emit selectAndMaskRequested();
+    if (id == QLatin1String("refineMask")) {
+        openRefineMask(path);
+        return true;
+    }
+    if (id == QLatin1String("maskOptions")) {
+        openMaskOptions();
         return true;
     }
     return false;
@@ -380,6 +393,19 @@ void LayersPanel::populateRowMenu(QMenu& menu, const QString& path, int color,
                 break;
             case RowSpec::ExportContentsCan:
                 enabled = view_ && view_->layer_can_export_smart_object_contents(path);
+                break;
+            case RowSpec::NoMask:
+                enabled = view_ && !layer_mask_present_path(*view_, path);
+                break;
+            case RowSpec::HasMask:
+                enabled = view_ && layer_mask_present_path(*view_, path);
+                break;
+            case RowSpec::MaskDisabled:
+                enabled = view_ && layer_mask_disabled_path(*view_, path);
+                break;
+            case RowSpec::MaskEnabled:
+                enabled = view_ && layer_mask_present_path(*view_, path)
+                          && !layer_mask_disabled_path(*view_, path);
                 break;
             case RowSpec::Always:
                 break;
