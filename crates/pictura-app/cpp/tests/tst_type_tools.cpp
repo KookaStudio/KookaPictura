@@ -13,6 +13,7 @@
 #include "api/type_api.h"
 
 #include <QtCore/QDataStream>
+#include <QtCore/QElapsedTimer>
 #include <QtGui/QClipboard>
 #include <QtGui/QFontDatabase>
 #include <QtGui/QFontInfo>
@@ -119,6 +120,8 @@ private slots:
     void typeMaskTools();
     void typeOptionsBar();
     void typeBarSizeAlignAndColor();
+    void caretBlinks();
+    void caretPlacementAndBaseline();
 
 private:
     void showFrame();
@@ -932,6 +935,61 @@ void TypeToolsTest::typeBarSizeAlignAndColor()
 
     f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(saved);
     f.tools->setForeground(foreground);
+}
+
+void TypeToolsTest::caretBlinks()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_type_blink"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    frame.setActiveTool(pictura::ToolId::HorizontalType);
+
+    // Shown on open, hidden after one 750 ms half-cycle, then back.
+    f.drag({QPointF(20, 60)});
+    QCOMPARE(f.canvas->typeCaretBlinkIntervalForTest(), 750);
+    QElapsedTimer clock;
+    clock.start();
+    QVERIFY(f.canvas->typeCaretShownForTest());
+    QTRY_VERIFY_WITH_TIMEOUT(!f.canvas->typeCaretShownForTest(), 3000);
+    QVERIFY2(clock.elapsed() >= 600, "hidden only after the interval");
+    QTRY_VERIFY_WITH_TIMEOUT(f.canvas->typeCaretShownForTest(), 3000);
+
+    // A keystroke while hidden shows the caret at once.
+    QTRY_VERIFY_WITH_TIMEOUT(!f.canvas->typeCaretShownForTest(), 3000);
+    QTest::keyClicks(f.canvas, QStringLiteral("a"));
+    QVERIFY(f.canvas->typeCaretShownForTest());
+    QTest::keyClick(f.canvas, Qt::Key_Escape);
+    QVERIFY(!f.canvas->typeOverlayActiveForTest());
+}
+
+void TypeToolsTest::caretPlacementAndBaseline()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_type_baseline"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    frame.setActiveTool(pictura::ToolId::HorizontalType);
+
+    // Empty text: the caret and the placement point at the click, no guide.
+    f.drag({QPointF(20, 60)});
+    QVERIFY(f.canvas->typeOverlayHasPlacementForTest());
+    QCOMPARE(f.canvas->typeOverlayPlacementForTest(), QPointF(20, 60));
+    QVERIFY(f.canvas->typeOverlayBaselinesForTest().isEmpty());
+
+    // Typed text: one guide from the click along its baseline to the caret.
+    QTest::keyClicks(f.canvas, QStringLiteral("some text"));
+    const QList<QLineF> guides = f.canvas->typeOverlayBaselinesForTest();
+    QCOMPARE(guides.size(), 1);
+    const QLineF guide = guides.first();
+    QVERIFY2(qAbs(guide.p1().x() - 20.0) <= 1.0 && qAbs(guide.p1().y() - 60.0) <= 1.0,
+             "starts at the click");
+    QVERIFY2(qAbs(guide.p2().y() - guide.p1().y()) < 0.01, "along the baseline");
+    const QLineF caret = f.canvas->typeOverlayCaretForTest();
+    QVERIFY2(qAbs(guide.p2().x() - caret.p1().x()) < 0.01, "ends at the caret");
+    QVERIFY2(caret.p1().y() < 60.0 && caret.p2().y() > 60.0, "the caret crosses the guide");
+    QVERIFY(f.canvas->typeOverlayHasPlacementForTest());
+    QTest::keyClick(f.canvas, Qt::Key_Escape);
 }
 
 QTEST_MAIN(TypeToolsTest)

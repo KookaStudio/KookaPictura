@@ -354,6 +354,7 @@ void PicturaMainWindow::registerHandlers()
     registerEditHandlers();
     wireFilterMenu();
     wireAlignMenu();
+    wireTypeMenu();
     wireLayerStyleMenu();
     wireImageAdjustments();
     wireLayerAdjustments();

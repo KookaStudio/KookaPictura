@@ -15,9 +15,8 @@
 //! `ascent + descent` cell — no `vert` alternates, rotated Latin, or tate-chu-yoko.
 
 use pictura_core::{
-    AntiAlias, BitDepth, Channel, ColorMode, Document, KerningMode, LayerBlock, LayoutLine,
-    LockFlags, PixelBuffer, PlacedGlyph, PsdRect, RasterRequest, TextLayout, TextStyle, TypeSpec,
-    TypeTool,
+    AntiAlias, BitDepth, Channel, ColorMode, Document, LayerBlock, LayoutLine, LockFlags,
+    PixelBuffer, PlacedGlyph, PsdRect, RasterRequest, TextLayout, TextStyle, TypeSpec, TypeTool,
 };
 
 use crate::text_render::{blit_glyph, layout_type, render_text_buffer, BundledText};
@@ -138,16 +137,20 @@ pub(crate) fn text_box_any(spec: &TypeSpec) -> Option<(f32, f32, f32, f32)> {
     if size.is_nan() || size <= 0.0 {
         return None;
     }
+    // Paragraph type occupies its box, whatever the text inside.
+    if let Some(b) = spec.box_bounds {
+        let (x, y) = (spec.origin.0, spec.origin.1);
+        return Some((
+            (x + b[0]) as f32,
+            (y + b[1]) as f32,
+            (b[2] - b[0]) as f32,
+            (b[3] - b[1]) as f32,
+        ));
+    }
     let ascent = bundled.ascent(size);
     let descent = bundled.descent(size);
     let leading = leading_px(size, spec.character.leading);
-    let h = (spec.character.horizontal_scale / 100.0) as f32;
     let v = (spec.character.vertical_scale / 100.0) as f32;
-    let extra = match spec.character.kerning {
-        KerningMode::Manual(value) => value as f32,
-        KerningMode::Metrics => 0.0,
-    };
-    let tracking = spec.character.tracking as f32 + extra;
     let factor = align_factor(spec.justification());
     let (x, y) = (spec.origin.0 as f32, spec.origin.1 as f32);
     let (left, top, width, height) = if spec.vertical {
@@ -163,11 +166,7 @@ pub(crate) fn text_box_any(spec: &TypeSpec) -> Option<(f32, f32, f32, f32)> {
     } else {
         let width = lines
             .iter()
-            .map(|line| {
-                let glyphs = bundled.shape_line(line, size, 0.0);
-                let count = glyphs.len() as f32;
-                glyphs.iter().map(|g| g.advance).sum::<f32>() * h + tracking * size / 1000.0 * count
-            })
+            .map(|line| crate::type_paragraph::line_advance(bundled, line, &spec.character))
             .fold(0.0f32, f32::max);
         let height = (lines.len() - 1) as f32 * leading + ascent + descent;
         (x - width * factor, y - ascent, width, height)
@@ -247,6 +246,7 @@ fn render_view(spec: &TypeSpec) -> TypeTool {
             applied_paragraph_style: None,
         }),
         vertical: spec.vertical,
+        box_bounds: spec.box_bounds,
     }
 }
 
@@ -465,6 +465,7 @@ pub fn type_layer_spec(layer: &pictura_core::Layer) -> Option<TypeSpec> {
             tool.transform[2],
             tool.transform[3],
         ],
+        box_bounds: tool.box_bounds,
         character,
         paragraph: style.paragraph.clone(),
         applied_character_style: layer.applied_character_style.clone(),

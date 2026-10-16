@@ -181,7 +181,9 @@ pub use text_render::{materialize_text_rgba, render_text_layer, BundledRasterize
 mod fonts;
 pub use fonts::{font_family, font_postscript_name, register_font};
 mod type_caret;
-pub use type_caret::type_caret_stops;
+pub use type_caret::{type_baselines, type_caret_stops};
+mod type_paragraph;
+pub use type_paragraph::{type_overflows, type_to_paragraph, type_to_point};
 mod type_layer;
 pub use type_layer::{
     add_type_layer, apply_type_style, render_type, replace_type_layer, type_layer_at,

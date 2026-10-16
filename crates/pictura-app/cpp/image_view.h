@@ -423,6 +423,11 @@ public:
     // caret. The Type Mask tools pass `mask`: the `canvas` is tinted red and
     // `image` is the tint over the type's rect, the letters cut out of it.
     // `selection` holds one quad per selected character.
+    // A Type session's overlay. `placement` is point type's origin (the
+    // square on the baseline), `baselines` the guide under each typed line, and
+    // `box` paragraph type's box (empty for point type) with `overflow` the
+    // `+` on its bottom-right handle. Every set shows the caret and restarts
+    // its blink.
     struct TypeOverlay {
         bool active = false;
         bool mask = false;
@@ -431,13 +436,27 @@ public:
         QPoint topLeft;
         QLineF caret;
         QList<QPolygonF> selection;
+        bool hasPlacement = false;
+        QPointF placement;
+        QList<QLineF> baselines;
+        QPolygonF box;
+        bool overflow = false;
     };
+    // Half of the caret's 1.5 s blink cycle.
+    static constexpr int kTypeCaretBlinkMs = 750;
     void setTypeOverlay(const TypeOverlay& overlay);
     void clearTypeOverlay();
     bool typeOverlayActiveForTest() const { return typeOverlay_.active; }
     bool typeOverlayHasTextForTest() const { return !typeOverlay_.image.isNull(); }
     int typeOverlaySelectionForTest() const { return int(typeOverlay_.selection.size()); }
     QLineF typeOverlayCaretForTest() const { return typeOverlay_.caret; }
+    bool typeCaretShownForTest() const { return typeCaretShown_; }
+    int typeCaretBlinkIntervalForTest() const;
+    bool typeOverlayHasPlacementForTest() const { return typeOverlay_.hasPlacement; }
+    QPointF typeOverlayPlacementForTest() const { return typeOverlay_.placement; }
+    QList<QLineF> typeOverlayBaselinesForTest() const { return typeOverlay_.baselines; }
+    QPolygonF typeOverlayBoxForTest() const { return typeOverlay_.box; }
+    bool typeOverlayOverflowForTest() const { return typeOverlay_.overflow; }
 
     // Live marquee size readout ("W x H"), painted as a tooltip offset from the
     // mapped cursor. Empty text or clearDragSizeHint() hides it.
@@ -530,6 +549,8 @@ private:
     QRect maskOverlayArea_;
     PathOverlay pathOverlay_;
     TypeOverlay typeOverlay_;
+    QTimer* typeCaretBlink_ = nullptr;
+    bool typeCaretShown_ = true;
     QList<QPointF> samplerOverlay_;
     QList<QPointF> noteOverlay_;
     QList<CountOverlayMark> countOverlay_;

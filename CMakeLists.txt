@@ -219,6 +219,7 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/frame_menus_edit.cpp
     crates/pictura-app/cpp/frame_menus_filter.cpp
     crates/pictura-app/cpp/frame_menus_align.cpp
+    crates/pictura-app/cpp/frame_menus_type.cpp
     crates/pictura-app/cpp/frame_menus_layer_style.cpp
     crates/pictura-app/cpp/frame_menus_adjust.cpp
     crates/pictura-app/cpp/frame_menus_layer_ops.cpp
@@ -305,6 +306,7 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/tool_rotate_view.cpp
     crates/pictura-app/cpp/save_for_web_dialog.cpp
     crates/pictura-app/cpp/shape_dialogs.cpp
+    crates/pictura-app/cpp/paragraph_text_size_dialog.cpp
     crates/pictura-app/cpp/screen_mode_message.cpp
     crates/pictura-app/cpp/screen_mode_message.h
     crates/pictura-app/cpp/tool_type.cpp

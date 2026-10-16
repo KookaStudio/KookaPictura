@@ -29,7 +29,9 @@ pub mod ffi {
     /// centre for vertical type — the linear part `xx, xy, yx, yy` a
     /// transformed type layer reopens with (identity for new type), and the
     /// orientation. Placement rides separately from the character and paragraph
-    /// attribute sets.
+    /// attribute sets. `boxed` makes it paragraph type, wrapping to the box
+    /// `box_left, box_top, box_right, box_bottom` relative to `(x, y)` before
+    /// the linear part (a dragged box has its top-left at `(x, y)`).
     #[namespace = "pictura"]
     struct TypeSetting {
         vertical: bool,
@@ -39,6 +41,11 @@ pub mod ffi {
         xy: f64,
         yx: f64,
         yy: f64,
+        boxed: bool,
+        box_left: f64,
+        box_top: f64,
+        box_right: f64,
+        box_bottom: f64,
     }
 
     /// The character attribute set as the bridge carries it: enums as `i32`
@@ -157,6 +164,30 @@ pub mod ffi {
             character: &CharacterSetting,
             paragraph: &ParagraphSetting,
         ) -> Vec<f64>;
+
+        /// The baseline guide under each non-blank line, flat `[x0, y0, x1, y1, …]` in document pixels.
+        fn type_baselines(
+            text: &QString,
+            font: &QString,
+            setting: &TypeSetting,
+            character: &CharacterSetting,
+            paragraph: &ParagraphSetting,
+        ) -> Vec<f64>;
+
+        /// Whether paragraph type has text past its box; false for point type.
+        fn type_overflows(
+            text: &QString,
+            font: &QString,
+            setting: &TypeSetting,
+            character: &CharacterSetting,
+            paragraph: &ParagraphSetting,
+        ) -> bool;
+
+        /// Convert the type layer at `path` to paragraph type (`paragraph` true) or point type and record one "Convert To Paragraph Text" / "Convert To Point Text" state; false (no state) when it is not a type layer of the other kind.
+        fn type_convert(view: Pin<&mut PictureView>, path: &QString, paragraph: bool) -> bool;
+
+        /// Whether the type layer at `path` is paragraph type; false for point type or a non-type layer.
+        fn type_layer_is_paragraph(view: &PictureView, path: &QString) -> bool;
 
         /// `text` rendered over its preview rect as packed straight RGBA; empty when nothing renders.
         fn type_preview_rgba(
@@ -336,6 +367,12 @@ fn spec(
     spec.vertical = placement.vertical;
     spec.origin = (placement.x, placement.y);
     spec.matrix = [placement.xx, placement.xy, placement.yx, placement.yy];
+    spec.box_bounds = placement.boxed.then_some([
+        placement.box_left,
+        placement.box_top,
+        placement.box_right,
+        placement.box_bottom,
+    ]);
     spec.character = character_attrs(character);
     spec.character.font_family = font.to_string();
     spec.paragraph = paragraph_attrs(paragraph);
@@ -370,6 +407,64 @@ fn type_caret_stops(
         .into_iter()
         .flatten()
         .collect()
+}
+
+fn type_baselines(
+    text: &QString,
+    font: &QString,
+    setting: &TypeSetting,
+    character: &CharacterSetting,
+    paragraph: &ParagraphSetting,
+) -> Vec<f64> {
+    pictura_render::type_baselines(&spec(text, font, setting, character, paragraph))
+        .into_iter()
+        .flatten()
+        .collect()
+}
+
+fn type_overflows(
+    text: &QString,
+    font: &QString,
+    setting: &TypeSetting,
+    character: &CharacterSetting,
+    paragraph: &ParagraphSetting,
+) -> bool {
+    pictura_render::type_overflows(&spec(text, font, setting, character, paragraph))
+}
+
+fn type_layer_is_paragraph(view: &PictureView, path: &QString) -> bool {
+    layer_spec(view, path).is_some_and(|s| s.box_bounds.is_some())
+}
+
+fn type_convert(mut view: Pin<&mut PictureView>, path: &QString, paragraph: bool) -> bool {
+    let Some(previous) = layer_spec(view.as_ref().get_ref(), path) else {
+        return false;
+    };
+    let converted = if paragraph {
+        pictura_render::type_to_paragraph(&previous)
+    } else {
+        pictura_render::type_to_point(&previous)
+    };
+    let Some(spec) = converted.filter(|s| !s.text.trim().is_empty()) else {
+        return false;
+    };
+    let replaced = view
+        .as_mut()
+        .rust_mut()
+        .doc
+        .as_mut()
+        .is_some_and(|doc| pictura_render::replace_type_layer(doc, &path.to_string(), &spec));
+    if replaced {
+        view.as_mut().clear_link_sets();
+        view.as_mut().recomposite();
+        view.as_mut().record(if paragraph {
+            "Convert To Paragraph Text"
+        } else {
+            "Convert To Point Text"
+        });
+        view.as_mut().changed();
+    }
+    replaced
 }
 
 fn type_preview_rgba(
@@ -482,6 +577,7 @@ fn type_layer_font(view: &PictureView, path: &QString) -> QString {
 }
 
 fn placement_setting(spec: &TypeSpec) -> TypeSetting {
+    let b = spec.box_bounds.unwrap_or_default();
     TypeSetting {
         vertical: spec.vertical,
         x: spec.origin.0,
@@ -490,6 +586,11 @@ fn placement_setting(spec: &TypeSpec) -> TypeSetting {
         xy: spec.matrix[1],
         yx: spec.matrix[2],
         yy: spec.matrix[3],
+        boxed: spec.box_bounds.is_some(),
+        box_left: b[0],
+        box_top: b[1],
+        box_right: b[2],
+        box_bottom: b[3],
     }
 }
 
@@ -503,6 +604,11 @@ fn type_layer_setting(view: &PictureView, path: &QString) -> TypeSetting {
             xy: 0.0,
             yx: 0.0,
             yy: 1.0,
+            boxed: false,
+            box_left: 0.0,
+            box_top: 0.0,
+            box_right: 0.0,
+            box_bottom: 0.0,
         },
         |spec| placement_setting(&spec),
     )

@@ -691,6 +691,9 @@ fn merge_paragraph(attrs: &mut ParagraphAttrs, over: &ParagraphOverrides) {
 /// Decoded type-tool framing. `transform` is `xx, xy, yx, yy, tx, ty`;
 /// `bounds` is `left, top, right, bottom`. `vertical` is the text
 /// descriptor's `Ornt` (`Vrtc`): the Vertical Type tool's columns.
+/// `box_bounds` is paragraph type's box (EngineData `BoxBounds`: left, top,
+/// right, bottom relative to the origin, before the transform's linear part);
+/// `None` for point type.
 #[derive(Debug, Clone)]
 pub struct TypeTool {
     pub transform: [f64; 6],
@@ -701,6 +704,7 @@ pub struct TypeTool {
     pub fonts: Vec<String>,
     pub style: Option<TextStyle>,
     pub vertical: bool,
+    pub box_bounds: Option<[f64; 4]>,
 }
 
 /// Effective text style of a type layer's first style run, with the
@@ -734,13 +738,17 @@ impl TextStyle {
 /// justification, and anti-aliasing. `matrix` is the linear part of the `TySh`
 /// transform (`xx, xy, yx, yy`: `x' = xx·x + yx·y`, `y' = xy·x + yy·y`) mapping
 /// the laid-out text about the origin — Free Transform's scale and rotation;
-/// identity for new type.
+/// identity for new type. `box_bounds` makes it paragraph type: the box the
+/// text wraps to, left, top, right, bottom relative to the origin before
+/// `matrix` (a dragged box has its top-left at the origin); `None` is point
+/// type.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypeSpec {
     pub text: String,
     pub vertical: bool,
     pub origin: (f64, f64),
     pub matrix: [f64; 4],
+    pub box_bounds: Option<[f64; 4]>,
     pub character: CharacterAttrs,
     pub paragraph: ParagraphAttrs,
     /// The named styles this run applies, in memory only (a style definition is
@@ -763,6 +771,7 @@ impl TypeSpec {
             vertical: false,
             origin: (0.0, 0.0),
             matrix: Self::IDENTITY,
+            box_bounds: None,
             character: CharacterAttrs {
                 font_family: font.into(),
                 size,
@@ -796,6 +805,8 @@ impl PartialEq for TypeTool {
             && self.fonts == other.fonts
             && self.style == other.style
             && self.vertical == other.vertical
+            && self.box_bounds.map(|b| b.map(f64::to_bits))
+                == other.box_bounds.map(|b| b.map(f64::to_bits))
     }
 }
 

@@ -1,6 +1,9 @@
 // The Type tools: Horizontal / Vertical Type and their Type Mask twins. A
-// click opens a point-type session at the click and the session edits like a
-// text field (`TypeTextEdit`): click to place the caret, drag or Shift-click
+// click opens a point-type session at the click; a drag opens a paragraph-type
+// session in the dragged box, and an Alt-click (Horizontal / Vertical Type)
+// asks for the box size first. The box shows eight handles that resize it and
+// reflow the text, with a `+` on the bottom-right one while text overflows.
+// The session edits like a text field (`TypeTextEdit`): click to place the caret, drag or Shift-click
 // to select, double-click a word, arrows / Home / End (Ctrl by word or whole
 // text, Shift to extend), Backspace / Delete, Ctrl+A / C / X / V, Enter for a
 // new line or column; Ctrl+Enter or keypad Enter commits and Esc cancels. The
@@ -15,13 +18,15 @@
 // re-sets it in place (`type_api::commitEdit`); the mask tools start new type.
 // Ported from photorust's CanvasView type entry (typeKeyPress / commit).
 //
-// ponytail: no input-method composition, and a reopened layer is retyped in
-// one style (its first run's).
+// ponytail: no input-method composition, a reopened layer is retyped in one
+// style (its first run's), and the box handles only resize (rotate and skew
+// come from Free Transform on the committed layer).
 
 #include "tool_handler.h"
 #include "tool_sessions.h"
 
 #include "image_view.h"
+#include "paragraph_text_size_dialog.h"
 #include "text_input.h"
 #include "tools.h"
 #include "type_fonts.h"
@@ -105,6 +110,11 @@ double distanceToSegment(const QPointF& p, const QLineF& line)
     }
     return QLineF(p, line.p1() + t * d).length();
 }
+
+// The box handles in overlay order (TL, T, TR, R, BR, B, BL, L) as the edge
+// each moves across and down: -1 left / top, 1 right / bottom, 0 neither.
+constexpr std::array<std::array<int, 2>, 8> kBoxHandles{
+    {{-1, -1}, {0, -1}, {1, -1}, {1, 0}, {1, 1}, {0, 1}, {-1, 1}, {-1, 0}}};
 
 // The three settings a Type session edits: where the text sits, its character
 // attributes, and its paragraph attributes.
@@ -238,10 +248,17 @@ public:
             && QLineF(lastPos_, imagePos).length() * zoom() < 4.0;
         lastPress_.start();
         lastPos_ = imagePos;
-        // A click in the text works it like any text field; one elsewhere
-        // ends the edit.
+        pressPos_ = imagePos;
+        // A handle resizes the box; a click in the text (or anywhere in the
+        // box) works it like any text field; one elsewhere ends the edit.
         if (active_) {
-            if (v == view_ && hitsText(imagePos)) {
+            if (v == view_ && boxed_) {
+                handle_ = handleAt(imagePos);
+                if (handle_ >= 0) {
+                    return true;
+                }
+            }
+            if (v == view_ && (hitsText(imagePos) || insideBox(imagePos))) {
                 if (doubleClick) {
                     edit_.selectWord(indexAt(imagePos));
                 } else {
@@ -257,59 +274,61 @@ public:
         if (!v || !v->has_document()) {
             return true;
         }
-        active_ = true;
-        view_ = v;
-        origin_ = imagePos;
-        edit_.reset(QString(), 0);
-        vertical_ = toolVertical_;
-        matrix_ = {1.0, 0.0, 0.0, 1.0};
-        mode_ = ctx.resolveSelectionMode(mods, v->has_selection());
         const QString hit = mask_ ? QString() : pictura::type_api::layerAt(*v, imagePos.x(), imagePos.y());
-        if (!hit.isEmpty() && pictura::type_api::beginEdit(*v, hit)) {
-            editPath_ = hit;
-            edit_.reset(pictura::type_api::layerText(*v, hit), 0);
-            const TypeSetting s = pictura::type_api::layerSetting(*v, hit);
-            const CharacterSetting c = pictura::type_api::layerCharacterSetting(*v, hit);
-            const ParagraphSetting p = pictura::type_api::layerParagraphSetting(*v, hit);
-            origin_ = QPointF(s.x, s.y);
-            vertical_ = s.vertical;
-            matrix_ = {s.xx, s.xy, s.yx, s.yy};
-            TypeOptions o = type_->get();
-            const QString family = familyForFontName(pictura::type_api::layerFont(*v, hit));
-            if (!family.isEmpty()) {
-                o.family = family;
-            }
-            o.size = c.size;
-            o.justification = p.justify;
-            o.color = QColor::fromRgba(c.color);
-            o.antialias = c.anti_alias;
-            type_->set(o);
+        // The mask tools keep Alt for selection subtract.
+        if (hit.isEmpty() && !mask_ && mods.testFlag(Qt::AltModifier)) {
+            altClick_ = true;
+            return true;
         }
-        filter_ = std::make_unique<TypeKeyFilter>(
-            [this]() { return ctx_ && ctx_->canvas() ? ctx_->canvas()->window() : nullptr; },
-            [this](const QKeyEvent& key) { keyPressed(key); });
-        qApp->installEventFilter(filter_.get());
-        ctx.notifyTextEditing(true);
-        refreshOverlay();
-        if (!editPath_.isEmpty()) {
-            edit_.moveTo(indexAt(imagePos), false);
-            selecting_ = true;
-            refreshOverlay();
-        }
+        beginSession(ctx, *v, imagePos, mods, hit);
+        boxDrag_ = editPath_.isEmpty();
         return true;
     }
 
     void onMove(ToolServices&, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
-        if (active_ && selecting_) {
+        if (!active_) {
+            return;
+        }
+        if (handle_ >= 0) {
+            resizeBox(imagePos);
+            refreshOverlay();
+        } else if (boxDrag_) {
+            // Past four screen pixels the press becomes a paragraph box.
+            if (!boxed_ && QLineF(pressPos_, imagePos).length() * zoom() <= 4.0) {
+                return;
+            }
+            boxed_ = true;
+            const QRectF r = QRectF(pressPos_, imagePos).normalized();
+            origin_ = r.topLeft();
+            box_ = {0.0, 0.0, qMax(r.width(), 1.0), qMax(r.height(), 1.0)};
+            refreshOverlay();
+        } else if (selecting_) {
             edit_.moveTo(indexAt(imagePos), true);
             refreshOverlay();
         }
     }
 
-    void onRelease(ToolServices&, const QPointF&, Qt::KeyboardModifiers) override
+    // An Alt-click asks for the box on release, as the shape tools' Create
+    // dialogs do, and opens the box with its top-left at the click.
+    void onRelease(ToolServices& ctx, const QPointF&, Qt::KeyboardModifiers) override
     {
         selecting_ = false;
+        boxDrag_ = false;
+        handle_ = -1;
+        if (!altClick_) {
+            return;
+        }
+        altClick_ = false;
+        ctx_ = &ctx;
+        PictureView* v = ctx.view();
+        if (!v || !v->has_document() || !execParagraphTextSizeDialog(boxSize_, ctx.canvas())) {
+            return;
+        }
+        beginSession(ctx, *v, pressPos_, Qt::NoModifier, QString());
+        boxed_ = true;
+        box_ = {0.0, 0.0, boxSize_.width(), boxSize_.height()};
+        refreshOverlay();
     }
 
     bool commitText() override
@@ -384,6 +403,111 @@ public:
     }
 
 private:
+    // Open a session at `pos`: new type, or the type layer `hit` reopened in
+    // its own orientation, box, and settings.
+    void beginSession(ToolServices& ctx, PictureView& v, const QPointF& pos,
+                      Qt::KeyboardModifiers mods, const QString& hit)
+    {
+        active_ = true;
+        view_ = &v;
+        origin_ = pos;
+        edit_.reset(QString(), 0);
+        vertical_ = toolVertical_;
+        matrix_ = {1.0, 0.0, 0.0, 1.0};
+        boxed_ = false;
+        mode_ = ctx.resolveSelectionMode(mods, v.has_selection());
+        if (!hit.isEmpty() && pictura::type_api::beginEdit(v, hit)) {
+            editPath_ = hit;
+            edit_.reset(pictura::type_api::layerText(v, hit), 0);
+            const TypeSetting s = pictura::type_api::layerSetting(v, hit);
+            const CharacterSetting c = pictura::type_api::layerCharacterSetting(v, hit);
+            const ParagraphSetting p = pictura::type_api::layerParagraphSetting(v, hit);
+            origin_ = QPointF(s.x, s.y);
+            vertical_ = s.vertical;
+            matrix_ = {s.xx, s.xy, s.yx, s.yy};
+            boxed_ = s.boxed;
+            box_ = {s.box_left, s.box_top, s.box_right, s.box_bottom};
+            TypeOptions o = type_->get();
+            const QString family = familyForFontName(pictura::type_api::layerFont(v, hit));
+            if (!family.isEmpty()) {
+                o.family = family;
+            }
+            o.size = c.size;
+            o.justification = p.justify;
+            o.color = QColor::fromRgba(c.color);
+            o.antialias = c.anti_alias;
+            type_->set(o);
+        }
+        filter_ = std::make_unique<TypeKeyFilter>(
+            [this]() { return ctx_ && ctx_->canvas() ? ctx_->canvas()->window() : nullptr; },
+            [this](const QKeyEvent& key) { keyPressed(key); });
+        qApp->installEventFilter(filter_.get());
+        ctx.notifyTextEditing(true);
+        refreshOverlay();
+        if (!editPath_.isEmpty()) {
+            edit_.moveTo(indexAt(pos), false);
+            selecting_ = true;
+            refreshOverlay();
+        }
+    }
+
+    // A point in the box's frame (relative to the origin, before the matrix)
+    // in document pixels.
+    QPointF boxPoint(double u, double v) const
+    {
+        return QPointF(origin_.x() + matrix_[0] * u + matrix_[2] * v,
+                       origin_.y() + matrix_[1] * u + matrix_[3] * v);
+    }
+
+    QPolygonF boxPolygon() const
+    {
+        return QPolygonF({boxPoint(box_[0], box_[1]), boxPoint(box_[2], box_[1]),
+                          boxPoint(box_[2], box_[3]), boxPoint(box_[0], box_[3])});
+    }
+
+    bool insideBox(const QPointF& pos) const
+    {
+        return boxed_ && boxPolygon().containsPoint(pos, Qt::OddEvenFill);
+    }
+
+    // The handle within five screen pixels of `pos`, or -1.
+    int handleAt(const QPointF& pos) const
+    {
+        for (int i = 0; i < int(kBoxHandles.size()); ++i) {
+            const auto [sx, sy] = kBoxHandles[i];
+            const double u = sx < 0 ? box_[0] : sx > 0 ? box_[2] : (box_[0] + box_[2]) / 2.0;
+            const double v = sy < 0 ? box_[1] : sy > 0 ? box_[3] : (box_[1] + box_[3]) / 2.0;
+            if (QLineF(pos, boxPoint(u, v)).length() * zoom() <= 5.0) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    // Move the dragged handle's edges to `pos`, mapped back into the box's
+    // frame; the box keeps at least one pixel a side.
+    void resizeBox(const QPointF& pos)
+    {
+        const double det = matrix_[0] * matrix_[3] - matrix_[2] * matrix_[1];
+        if (qFuzzyIsNull(det)) {
+            return;
+        }
+        const QPointF d = pos - origin_;
+        const double u = (matrix_[3] * d.x() - matrix_[2] * d.y()) / det;
+        const double v = (matrix_[0] * d.y() - matrix_[1] * d.x()) / det;
+        const auto [sx, sy] = kBoxHandles[handle_];
+        if (sx < 0) {
+            box_[0] = qMin(u, box_[2] - 1.0);
+        } else if (sx > 0) {
+            box_[2] = qMax(u, box_[0] + 1.0);
+        }
+        if (sy < 0) {
+            box_[1] = qMin(v, box_[3] - 1.0);
+        } else if (sy > 0) {
+            box_[3] = qMax(v, box_[1] + 1.0);
+        }
+    }
+
     void keyPressed(const QKeyEvent& key)
     {
         if (commitKey(key)) {
@@ -562,6 +686,9 @@ private:
         edit_.reset(QString(), 0);
         stops_.clear();
         selecting_ = false;
+        boxDrag_ = false;
+        handle_ = -1;
+        boxed_ = false;
         if (ctx_ && ctx_->canvas()) {
             ctx_->canvas()->clearTypeOverlay();
         }
@@ -593,6 +720,11 @@ private:
         edit.placement.xy = matrix_[1];
         edit.placement.yx = matrix_[2];
         edit.placement.yy = matrix_[3];
+        edit.placement.boxed = boxed_;
+        edit.placement.box_left = box_[0];
+        edit.placement.box_top = box_[1];
+        edit.placement.box_right = box_[2];
+        edit.placement.box_bottom = box_[3];
         return edit;
     }
 
@@ -655,6 +787,18 @@ private:
             overlay.caret = stops_.at(edit_.caret());
         }
         overlay.selection = selectionShapes();
+        overlay.hasPlacement = !boxed_;
+        overlay.placement = origin_;
+        const QVector<double> lines = pictura::type_api::baselines(
+            text, family, edit.placement, edit.character, edit.paragraph);
+        for (int i = 0; i + 3 < lines.size(); i += 4) {
+            overlay.baselines.append(QLineF(lines[i], lines[i + 1], lines[i + 2], lines[i + 3]));
+        }
+        if (boxed_) {
+            overlay.box = boxPolygon();
+            overlay.overflow = pictura::type_api::overflows(text, family, edit.placement,
+                                                            edit.character, edit.paragraph);
+        }
         canvas->setTypeOverlay(overlay);
     }
 
@@ -676,6 +820,17 @@ private:
     QList<QLineF> stops_;
     // True while a press in the text drags out a selection.
     bool selecting_ = false;
+    // Paragraph type: the box as left, top, right, bottom relative to the
+    // origin, before the matrix.
+    bool boxed_ = false;
+    std::array<double, 4> box_{0.0, 0.0, 0.0, 0.0};
+    // The press that opened new type, which a drag turns into a box; the box
+    // handle being dragged (-1 none); an Alt-click waiting for its release.
+    QPointF pressPos_;
+    bool boxDrag_ = false;
+    int handle_ = -1;
+    bool altClick_ = false;
+    QSizeF boxSize_{200.0, 100.0};
     QElapsedTimer lastPress_;
     QPointF lastPos_;
     SelectionMode mode_ = SelectionMode::New;

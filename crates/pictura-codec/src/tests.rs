@@ -1010,6 +1010,7 @@ fn synthetic_tysh() -> Vec<u8> {
         fonts: Vec::new(),
         style: None,
         vertical: false,
+        box_bounds: None,
     })
 }
 

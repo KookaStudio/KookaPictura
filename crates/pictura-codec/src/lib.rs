@@ -47,6 +47,7 @@ mod smart_filter;
 mod smart_object;
 mod smart_writer;
 mod svg;
+mod type_shape;
 mod type_tool;
 mod type_write;
 mod vector_mask;

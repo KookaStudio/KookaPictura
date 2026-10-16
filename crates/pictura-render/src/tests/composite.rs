@@ -683,6 +683,7 @@ fn type_layer(style: Option<TextStyle>) -> Layer {
             fonts: vec!["Arial".into()],
             style,
             vertical: false,
+            box_bounds: None,
         }),
         ..Default::default()
     }

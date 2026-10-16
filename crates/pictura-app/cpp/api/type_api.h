@@ -51,6 +51,17 @@ QVector<double> caretStops(const QString& text, const QString& font, const TypeS
                            const CharacterSetting& character, const ParagraphSetting& paragraph);
 QByteArray previewRgba(const QString& text, const QString& font, const TypeSetting& setting,
                        const CharacterSetting& character, const ParagraphSetting& paragraph);
+/// The baseline guide under each non-blank line, flat `x0, y0, x1, y1, …`.
+QVector<double> baselines(const QString& text, const QString& font, const TypeSetting& setting,
+                          const CharacterSetting& character, const ParagraphSetting& paragraph);
+/// Whether paragraph type has text past its box (the `+` on its handle).
+bool overflows(const QString& text, const QString& font, const TypeSetting& setting,
+               const CharacterSetting& character, const ParagraphSetting& paragraph);
+
+bool isParagraph(const PictureView& view, const QString& path);
+/// Type > Convert To Paragraph Text (`paragraph`) / Convert To Point Text: one
+/// state; false for a layer that is not type of the other kind.
+bool convert(PictureView& view, const QString& path, bool paragraph);
 
 QString commitLayer(PictureView& view, const QString& text, const QString& font,
                     const TypeSetting& setting, const CharacterSetting& character,

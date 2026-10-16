@@ -378,3 +378,40 @@ fn font_index_ignores_a_document_resources_set_the_reader_skips() {
     assert_eq!(font_set(&root, "DocumentResources").len(), 1);
     assert_eq!(run_font_index(&root), 1, "the index names the reader's set");
 }
+
+fn shape_type(root: &EngineValue) -> Option<&EngineValue> {
+    path(root, &["EngineDict", "Rendered", "Shapes", "Children"])
+        .and_then(|list| as_list(list).first())
+        .and_then(|shape| path(shape, &["Cookie", "Photoshop", "ShapeType"]))
+}
+
+#[test]
+fn paragraph_box_round_trips() {
+    let mut boxed = spec("a long caption", false);
+    boxed.box_bounds = Some([0.0, 0.0, 120.5, 80.0]);
+    let tool = author_type_tool(&boxed, [0.0, 0.0, 120.5, 80.0], None, None);
+    let back = decode_type_tool(&crate::encode_type_tool(&tool)).expect("decodes");
+    assert_eq!(back.box_bounds, Some([0.0, 0.0, 120.5, 80.0]));
+    assert_eq!(back, tool);
+    let root = parse_engine_data(&skeleton_engine_data(&boxed, None)).expect("parses");
+    assert_eq!(shape_type(&root), Some(&EngineValue::Int(1)));
+
+    let point = author_type_tool(&spec("Hi", false), [0.0, -30.0, 40.0, 10.0], None, None);
+    let back = decode_type_tool(&crate::encode_type_tool(&point)).expect("decodes");
+    assert_eq!(back.box_bounds, None);
+    let root = parse_engine_data(&skeleton_engine_data(&spec("Hi", false), None)).expect("parses");
+    assert_eq!(shape_type(&root), Some(&EngineValue::Int(0)));
+
+    // A merge over existing EngineData (no shape, or the other kind) writes
+    // the spec's shape, and a box with a non-zero corner survives.
+    let existing = descriptor_with_engine(
+        b"<< /EngineDict << /Editor << /Text (\xFE\xFF\x00H\x00i\x00\r) >> >> >>",
+    );
+    boxed.box_bounds = Some([-10.0, -20.0, 50.0, 30.0]);
+    let merged = author_type_tool(&boxed, [-10.0, -20.0, 50.0, 30.0], Some(&existing), None);
+    let back = decode_type_tool(&crate::encode_type_tool(&merged)).expect("decodes");
+    assert_eq!(back.box_bounds, Some([-10.0, -20.0, 50.0, 30.0]));
+    let to_point = author_type_tool(&spec("Hi", false), [0.0; 4], Some(&merged.text_desc), None);
+    let back = decode_type_tool(&crate::encode_type_tool(&to_point)).expect("decodes");
+    assert_eq!(back.box_bounds, None, "re-set as point type drops the box");
+}
