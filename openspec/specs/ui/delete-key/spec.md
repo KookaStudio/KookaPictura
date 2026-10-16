@@ -12,11 +12,17 @@ tool that consumes the key keeps it.
 The system SHALL route Delete and Backspace through application-level shortcuts
 on the main window, so the key acts regardless of which widget holds focus.
 Unless a type-editing session is active, an editable text field has focus, or
-an active tool consumes the key, Delete/Backspace SHALL clear the pixel
-selection when one exists (as `Edit > Clear`) and otherwise delete the selected
-layer(s) exactly as `Layer > Delete Layer` does. The key SHALL not auto-repeat
-into repeated deletions, and an open dialog SHALL keep the key, as it does for
-the window's other shortcuts.
+an active tool consumes the key, Delete/Backspace SHALL act in this order: when a
+raster layer mask is the current mask edit target, SHALL act on the mask — with a
+pixel selection present, SHALL fill the selection's area of the mask with the
+background colour (one `Fill` state, the mask's coverage set to the background's
+luma, as `Edit > Fill` with the background colour does); with no pixel selection,
+SHALL delete that mask without applying it (as `Delete Layer Mask`, with no
+confirmation dialog). Otherwise, when a pixel selection exists, SHALL clear it (as
+`Edit > Clear`); otherwise SHALL delete the selected layer(s) exactly as
+`Layer > Delete Layer` does. The key SHALL
+not auto-repeat into repeated deletions, and an open dialog SHALL keep the key, as
+it does for the window's other shortcuts.
 
 #### Scenario: Deletion works away from the canvas [dk_delete_any_focus]
 
@@ -24,9 +30,25 @@ the window's other shortcuts.
   is pressed
 - **THEN** the layer is deleted and one undo state is recorded
 
+#### Scenario: The active mask is deleted instead [dk_mask_target]
+
+- **WHEN** a raster layer mask is the mask edit target, no pixel selection
+  exists, and Delete or Backspace is pressed
+- **THEN** the mask is removed (the layer's pixels are unchanged) and one undo
+  state is recorded
+
+#### Scenario: A selection on a mask is filled, not the mask deleted [dk_mask_fill]
+
+- **WHEN** a raster layer mask is the mask edit target, a pixel selection exists,
+  and Delete or Backspace is pressed
+- **THEN** the selection's area of the mask is filled with the background
+  colour's luma as one `Fill` state, the mask survives, and the layer's pixels are
+  unchanged
+
 #### Scenario: A pixel selection is cleared instead [dk_selection_clear]
 
-- **WHEN** a pixel selection exists and Delete or Backspace is pressed
+- **WHEN** a pixel selection exists, no mask is the edit target, and Delete or
+  Backspace is pressed
 - **THEN** the selection's pixels are cleared with one `Clear` state and the
   layer itself survives
 

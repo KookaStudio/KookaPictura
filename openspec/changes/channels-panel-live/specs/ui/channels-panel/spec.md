@@ -7,17 +7,30 @@ document's mode — the opened file's mode when it was converted for editing —
 with CS6's Ctrl+number labels (RGB: "RGB" Ctrl+2, "Red" Ctrl+3, "Green" Ctrl+4,
 "Blue" Ctrl+5; Gray: "Gray" Ctrl+2; CMYK, Lab, Multichannel, Indexed, Bitmap,
 and Duotone likewise), followed by one "Alpha N" row per document alpha channel.
-`refresh` SHALL keep the row set stable while the mode and alpha count do not
-change.
+When the active layer carries a raster layer mask, the panel SHALL also list a
+`<layer name> Mask` row after the colour rows and before the alpha rows.
+`refresh` SHALL keep the row set stable while the mode, alpha count, and active
+layer's mask do not change.
 
 #### Scenario: An RGB document shows four rows [cp_rows_four]
 
 - **WHEN** an RGB document is open and the panel is refreshed
 - **THEN** the panel reports four rows named "RGB", "Red", "Green", and "Blue", labelled Ctrl+2 to Ctrl+5
 
+#### Scenario: The active layer's mask adds a row [cp_rows_mask]
+
+- **WHEN** the active layer carries a raster layer mask
+- **THEN** the panel reports an additional row named "`<layer name>` Mask" after
+  "Blue"
+
+#### Scenario: A layer change updates the mask row [cp_rows_mask_change]
+
+- **WHEN** the active layer changes to one that carries no raster layer mask
+- **THEN** the mask row is removed
+
 #### Scenario: Refresh keeps the rows [cp_rows_stable]
 
-- **WHEN** `refresh` runs again
+- **WHEN** `refresh` runs again with the active layer unchanged
 - **THEN** the row count is unchanged
 
 ## ADDED Requirements
