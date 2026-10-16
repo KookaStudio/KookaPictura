@@ -1,7 +1,7 @@
 ---
 description: Read-only GitHub investigator for issues, PRs, CI status
 mode: subagent
-model: anthropic/claude-haiku-4-5
+model: opencode/deepseek-v4.1-flash-free
 tools:
   write: false
   edit: false
