@@ -94,7 +94,7 @@
 
 ## 6. Gate the dry run to the Release PR
 
-- [ ] 6.1 Once the lint and build jobs are green, gate the build job:
+- [x] 6.1 Once the lint and build jobs are green, gate the build job:
   `if: github.event_name != 'pull_request' || github.head_ref == 'release-please--branches--master'`,
   and extend `on.pull_request.paths` with the five release-please files
   (`Cargo.toml`, `CMakeLists.txt`, `CHANGELOG.md`, `version.txt`,
@@ -105,6 +105,6 @@
   `tag: ${{ needs.release-please.outputs.tag_name }}`, gated on
   `needs.release-please.outputs.release_created == 'true'`. Verify
   `openspec validate --all --strict` and the guard scripts pass.
-- [ ] 6.3 Archive the change with `openspec archive add-flatpak-release-build`
+- [x] 6.3 Archive the change with `openspec archive add-flatpak-release-build`
   before the PR ships (zero-open rule). Verify `scripts/check-openspec-archived.sh`
   passes.
