@@ -239,21 +239,68 @@ fn grow_to(layer: &mut Layer, rect: PsdRect) {
     layer.rect = rect;
 }
 
+/// Undo [`trim_to_content`]: pad the layer at `path` back out to `rect` with
+/// transparent pixels, so a transform box shown and dismissed without a
+/// transform leaves the layer's extent (and later filters' room to spread) as
+/// it was. The composite is unchanged. False when the layer is gone, is a group,
+/// has no alpha, or no longer lies inside `rect`.
+pub fn untrim_to(doc: &mut Document, path: &str, rect: PsdRect) -> bool {
+    let Some(layer) = resolve_path_mut(doc, path) else {
+        return false;
+    };
+    if layer.is_group
+        || layer.rect == rect
+        || union(layer.rect, rect) != rect
+        || !layer.channels.iter().any(|c| c.id == -1)
+    {
+        return false;
+    }
+    grow_to(layer, rect);
+    true
+}
+
 /// Trim the pixel layer at `path` to the bounds of its non-transparent pixels,
 /// so a transform's box hugs the content as Photoshop's does. Only fully
 /// transparent pixels are dropped, so the composite is unchanged. False (and
 /// nothing changes) for a layer without alpha, with a mask, already tight, or
-/// with no visible pixels.
+/// with no visible pixels, and for a type layer: its rect is set by its layout
+/// (a paragraph layer's is its box) and its origin is read back against it.
 pub fn trim_to_content(doc: &mut Document, path: &str) -> bool {
-    let Some(layer) = resolve_path(doc, path) else {
+    let Some(bounds) = resolve_path(doc, path).and_then(trim_bounds) else {
         return false;
     };
-    if layer.mask.is_some() || layer.is_group {
-        return false;
+    if let Some(layer) = resolve_path_mut(doc, path) {
+        trim_layer(layer, bounds);
     }
-    let Some(alpha) = layer.channels.iter().find(|c| c.id == -1) else {
-        return false;
-    };
+    true
+}
+
+/// The rect a transform box on the layer at `path` hugs: what
+/// [`trim_to_content`] would trim it to, else its rect. Changes nothing, so the
+/// Move tool's controls box can show it without touching the layer. `None` when
+/// the path does not resolve or the layer has no visible pixels (no box, as in
+/// CS6).
+pub fn content_rect(doc: &Document, path: &str) -> Option<PsdRect> {
+    let layer = resolve_path(doc, path)?;
+    if let Some(bounds) = trim_bounds(layer) {
+        return Some(bounds);
+    }
+    let empty = !layer.is_type()
+        && layer
+            .channels
+            .iter()
+            .find(|c| c.id == -1)
+            .is_some_and(|alpha| alpha.data.iter().all(|a| *a == 0));
+    (!empty).then_some(layer.rect)
+}
+
+/// The bounds [`trim_to_content`] trims `layer` to; `None` when it would not
+/// trim (see there).
+fn trim_bounds(layer: &Layer) -> Option<PsdRect> {
+    if layer.mask.is_some() || layer.is_group || layer.is_type() {
+        return None;
+    }
+    let alpha = layer.channels.iter().find(|c| c.id == -1)?;
     let rect = layer.rect;
     let (w, h) = (rect.width().max(0) as usize, rect.height().max(0) as usize);
     let (mut left, mut top, mut right, mut bottom) = (w, h, 0, 0);
@@ -268,18 +315,14 @@ pub fn trim_to_content(doc: &mut Document, path: &str) -> bool {
         }
     }
     if right == 0 || (left, top, right, bottom) == (0, 0, w, h) {
-        return false;
+        return None;
     }
-    let bounds = PsdRect {
+    Some(PsdRect {
         top: rect.top + top as i32,
         left: rect.left + left as i32,
         bottom: rect.top + bottom as i32,
         right: rect.left + right as i32,
-    };
-    if let Some(layer) = resolve_path_mut(doc, path) {
-        trim_layer(layer, bounds);
-    }
-    true
+    })
 }
 
 /// Crop `layer`'s channels from its rect to `bounds` (clamped inside it).
@@ -581,6 +624,56 @@ mod tests {
         empty.layers[0].channels[3].data = vec![0; 16].into();
         assert!(!trim_to_content(&mut empty, "0"));
         assert_eq!(empty.layers[0].rect, rect(4, 4));
+        assert_eq!(
+            content_rect(&empty, "0"),
+            None,
+            "an empty layer shows no box"
+        );
+    }
+
+    #[test]
+    fn untrim_restores_the_extent_without_changing_pixels() {
+        let mut layer = pixel_layer("square", 4, 4, 40);
+        layer.channels.iter_mut().find(|c| c.id == -1).unwrap().data = square_coverage().into();
+        let mut doc = doc_with(vec![layer]);
+        let before = doc.layers[0].clone();
+        let hugged = content_rect(&doc, "0").unwrap();
+        assert_eq!(
+            doc.layers[0].rect,
+            rect(4, 4),
+            "content_rect changes nothing"
+        );
+        assert!(trim_to_content(&mut doc, "0"));
+        assert_eq!(
+            doc.layers[0].rect, hugged,
+            "the box shown is the box trimmed to"
+        );
+        assert!(untrim_to(&mut doc, "0", rect(4, 4)));
+        assert_eq!(doc.layers[0].rect, rect(4, 4));
+        assert_eq!(alpha(&doc.layers[0]), alpha(&before));
+        assert_eq!(
+            channel(&doc.layers[0], 0)[5],
+            40,
+            "the content keeps its place"
+        );
+        assert!(
+            !untrim_to(&mut doc, "0", rect(4, 4)),
+            "already at the extent"
+        );
+        assert!(!untrim_to(&mut doc, "9", rect(4, 4)), "no such layer");
+    }
+
+    #[test]
+    fn trim_leaves_type_layers() {
+        let mut layer = pixel_layer("type", 4, 4, 40);
+        layer.channels.iter_mut().find(|c| c.id == -1).unwrap().data = square_coverage().into();
+        layer.extra_blocks.push(pictura_core::LayerBlock {
+            key: *b"TySh",
+            data: Vec::new(),
+        });
+        let mut doc = doc_with(vec![layer]);
+        assert!(!trim_to_content(&mut doc, "0"));
+        assert_eq!(doc.layers[0].rect, rect(4, 4));
     }
 
     #[test]

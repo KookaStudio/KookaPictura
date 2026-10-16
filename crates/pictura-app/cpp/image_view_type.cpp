@@ -77,7 +77,7 @@ void ImageView::paintTypeOverlay(QPainter& painter)
         painter.drawPolygon(quad);
     }
     // The caret, guides, and box stay one device pixel wide at any zoom.
-    const QColor ink = o.mask ? Qt::white : Qt::black;
+    const QColor ink = o.mask || o.lightInk ? Qt::white : Qt::black;
     painter.setRenderHint(QPainter::Antialiasing, false);
     painter.setBrush(Qt::NoBrush);
     painter.setPen(QPen(ink, 0));

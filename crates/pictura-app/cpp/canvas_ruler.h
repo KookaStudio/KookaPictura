@@ -20,6 +20,12 @@ class ImageView;
 enum class RulerUnit { Pixels, Inches, Centimeters, Millimeters, Points, Picas, Percent };
 inline constexpr int kRulerUnitCount = 7;
 QString rulerUnitName(RulerUnit unit);
+// Document pixels per one `unit` at `ppi`; `percentBase` is the document
+// extent along the measured axis (Percent).
+double pixelsPerRulerUnit(RulerUnit unit, double ppi, bool traditionalPoints, double percentBase);
+// `pixels` in `unit` with the unit's precision and abbreviation ("0.500 in").
+QString formatRulerLength(double pixels, RulerUnit unit, double ppi, bool traditionalPoints,
+                          double percentBase);
 
 // One of the canvas's two rulers: the horizontal one sits above the canvas,
 // the vertical one left of it. Both measure from the document's top-left

@@ -158,20 +158,22 @@ void ImageView::paintTransformPivot(QPainter& painter)
 // document clip so a layer dragged past the canvas edge keeps its full box.
 void ImageView::paintTransformOverlay(QPainter& painter)
 {
-    if (!transformActive_ || transformQuad_.size() < 4) {
+    // A session's live quad, else the Move tool's idle controls box.
+    const QPolygonF& quad = transformActive_ ? transformQuad_ : controlsBox_;
+    if (quad.size() < 4) {
         return;
     }
     painter.setBrush(Qt::NoBrush);
     painter.setPen(QPen(Qt::white, 0, Qt::SolidLine));
-    painter.drawPolygon(transformQuad_);
+    painter.drawPolygon(quad);
     painter.setPen(QPen(Qt::black, 0, Qt::DashLine));
-    painter.drawPolygon(transformQuad_);
+    painter.drawPolygon(quad);
 
     // Eight scale handles at the corners and edge midpoints.
-    const QPointF tl = transformQuad_.at(0);
-    const QPointF tr = transformQuad_.at(1);
-    const QPointF br = transformQuad_.at(2);
-    const QPointF bl = transformQuad_.at(3);
+    const QPointF tl = quad.at(0);
+    const QPointF tr = quad.at(1);
+    const QPointF br = quad.at(2);
+    const QPointF bl = quad.at(3);
     const QPointF handles[8] = {
         tl,
         tr,

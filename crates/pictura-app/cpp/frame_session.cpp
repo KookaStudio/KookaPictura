@@ -159,6 +159,9 @@ void PicturaMainWindow::saveSession()
         state.cropRatio = crop->ratio();
         state.cropGridOverlay = crop->gridOverlay();
     }
+    if (tools_) {
+        state.toolOptions = toolOptionsToJson(*tools_);
+    }
     if (panelColumn_) {
         const bool iconic = panelColumn_->railMode();
         state.panelRailMode = iconic ? QStringLiteral("iconic") : QStringLiteral("normal");

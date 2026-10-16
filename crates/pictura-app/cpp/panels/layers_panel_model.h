@@ -168,6 +168,10 @@ enum LayerRole {
     StyleEffectsRole,
     HasBlendIfRole,
     ActiveThumbRole,
+    // The row's padlock: its lock bits less the Transparency and Image locks
+    // a type or shape layer is forced to carry, which CS6 shows only in the
+    // Lock strip (LockRole), never as a row badge.
+    LockBadgeRole,
 };
 
 struct Node {
@@ -293,6 +297,9 @@ public:
             return row.fill;
         case LockRole:
             return row.lockBits;
+        case LockBadgeRole:
+            return row.kind == QLatin1String("type") || row.shape ? row.lockBits & ~0x03
+                                                                  : row.lockBits;
         case ColorRole:
             return row.color;
         case ClippingRole:

@@ -77,6 +77,9 @@ void CanvasPanTest::panHidesTheBrushRing()
     seed.fill(Qt::red);
     Fixture f(frame, seed, QStringLiteral("pictura_canvas_pan_ring"));
     QVERIFY2(f.ok(), "canvas-pan fixture");
+    // The ring is a brush's; on the Move tool the controls box (on by
+    // default) would draw its edge where the ring is sampled.
+    frame.setActiveTool(pictura::ToolId::Brush);
     frame.show();
     QVERIFY(QTest::qWaitForWindowExposed(&frame));
     QCoreApplication::processEvents();

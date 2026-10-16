@@ -270,9 +270,11 @@ void PicturaMainWindow::togglePanel(const QString& objectName)
     }
 }
 
-void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwitch)
+void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwitch,
+                                   const QJsonObject& toolOptions)
 {
     tools_ = new ToolController(this);
+    applyToolOptionsJson(*tools_, toolOptions);
     tools_->setViewProvider([this]() { return activeView(); });
     pathsPanel_->setToolServices(tools_);
 
@@ -508,6 +510,13 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
     });
     // Crop options (mode, grid, ratio, delete pixels) persist across restarts.
     connect(tools_, &ToolController::cropOptionsChanged, this, [this]() { saveSession(); });
+    // Every tool's options persist too: saved on close and quit, and on these
+    // changes so a crash keeps the last tool switch or bar edit.
+    for (auto signal : {&ToolController::moveOptionsChanged, &ToolController::typeOptionsChanged,
+                        &ToolController::shapeOptionsChanged}) {
+        connect(tools_, signal, this, [this]() { saveSession(); });
+    }
+    connect(tools_, &ToolController::activeToolChanged, this, [this]() { saveSession(); });
     // The Note tool opens a note in the Notes panel; the panel's
     // previous/next/delete hand the current note back to the controller.
     connect(tools_, &ToolController::layerCreated, this, &PicturaMainWindow::selectLayerPath);

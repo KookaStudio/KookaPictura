@@ -49,6 +49,7 @@
 #include "theme.h"
 #include "tool_hint_bar.h"
 #include "toolbox.h"
+#include "tool_options_json.h"
 #include "tools.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"

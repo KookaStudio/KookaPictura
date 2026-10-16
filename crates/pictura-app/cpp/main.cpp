@@ -53,6 +53,7 @@
 #include "session.h"
 #include "theme.h"
 #include "toolbox.h"
+#include "tools.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 
@@ -268,6 +269,16 @@ int main(int argc, char* argv[])
     }
 
     if (selfTest) {
+        // The checks predate Show Transform Controls being on by default and
+        // read canvas pixels with the Move tool active; run them with the box
+        // off (tst_transform_controls covers it). The state dir is temporary.
+        if (auto* tools = frame.findChild<pictura::ToolController*>()) {
+            if (auto* move = tools->optionsFor<pictura::MoveGroup>(pictura::ToolId::Move)) {
+                pictura::MoveOptions options = move->get();
+                options.showTransformControls = false;
+                move->set(options);
+            }
+        }
         const int rc = runSelfTest(app, headless, psdPath, frame, view, image,
                                    codecLoaded, gpu);
         if (rc != 0) {

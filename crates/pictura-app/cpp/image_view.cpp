@@ -231,7 +231,7 @@ void ImageView::clearSelectionPreview()
 void ImageView::updateAntsTimer()
 {
     const bool run = (!selectionContours_.isEmpty() && selectionEdgesVisible_)
-                     || !previewContours_.isEmpty();
+                     || !previewContours_.isEmpty() || !moveOutline_.isEmpty();
     const bool active = run && isVisible();
     if (active && !antsTimer_->isActive()) {
         antsTimer_->start();
@@ -260,6 +260,7 @@ void ImageView::setMovePreviewDelta(const QPointF& delta)
 
 void ImageView::endMovePreview()
 {
+    setMoveOutline(QRectF());
     movePreviewActive_ = false;
     moveBase_ = QImage();
     moveLayer_ = QImage();
@@ -782,6 +783,7 @@ void ImageView::paintEvent(QPaintEvent*)
     paintAnnotations(painter);
     paintPathOverlay(painter);
     paintTypeOverlay(painter);
+    paintMoveOutline(painter);
     if (compassVisible_) {
         paintCompass(painter);
     }
@@ -795,8 +797,10 @@ void ImageView::paintEvent(QPaintEvent*)
         font.setPointSize(10);
         painter.setFont(font);
         const QFontMetrics fm(painter.font());
+        // Multi-line readouts (the Move tool's ΔX over ΔY) size to every line.
         QRectF boxRect(widgetPos + QPointF(14, 14),
-                       fm.boundingRect(dragSizeText_).size() + QSize(10, 10));
+                       fm.boundingRect(QRect(0, 0, 4000, 4000), Qt::AlignLeft, dragSizeText_).size()
+                           + QSize(10, 10));
         if (boxRect.right() > rect().right()) {
             boxRect.moveRight(rect().right());
         }

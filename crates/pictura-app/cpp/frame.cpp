@@ -148,7 +148,7 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
     registerHandlers();
     buildMenus();
     buildPanels();
-    buildTools(state.toolsColumns, state.useShiftKeyForToolSwitch);
+    buildTools(state.toolsColumns, state.useShiftKeyForToolSwitch, state.toolOptions);
     if (tools_) {
         tools_->applyCropOptions(state.cropClassicMode, state.cropDeletePixels, state.cropRatio,
                                  state.cropGridOverlay);
@@ -1050,7 +1050,10 @@ void PicturaMainWindow::keyPressEvent(QKeyEvent* event)
     }
     if (!event->isAutoRepeat() && event->key() == Qt::Key_Space) {
         ImageView* canvas = imageView();
-        if (canvas && (!tools_ || !tools_->transformSessionActive())) {
+        // A modal transform keeps Space; the Move tool's controls box (on by
+        // default) is passive and pans like the bare canvas.
+        if (canvas
+            && (!tools_ || !tools_->transformSessionActive() || tools_->transformControlsSession())) {
             canvas->setSpacePan(true);
             event->accept();
             return;

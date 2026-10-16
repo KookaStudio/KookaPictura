@@ -138,6 +138,7 @@ SessionState loadSession()
     state.cropDeletePixels = obj.value(QStringLiteral("cropDeletePixels")).toBool(true);
     state.cropRatio = obj.value(QStringLiteral("cropRatio")).toDouble(0.0);
     state.cropGridOverlay = obj.value(QStringLiteral("cropGridOverlay")).toInt(0);
+    state.toolOptions = obj.value(QStringLiteral("toolOptions")).toObject();
     state.panelRailMode = obj.value(QStringLiteral("panelRailMode")).toString(
         QStringLiteral("normal"));
     if (state.panelRailMode != QStringLiteral("iconic")) {
@@ -234,6 +235,7 @@ bool saveSession(const SessionState& state)
     obj.insert(QStringLiteral("cropDeletePixels"), state.cropDeletePixels);
     obj.insert(QStringLiteral("cropRatio"), state.cropRatio);
     obj.insert(QStringLiteral("cropGridOverlay"), state.cropGridOverlay);
+    obj.insert(QStringLiteral("toolOptions"), state.toolOptions);
     obj.insert(QStringLiteral("panelRailMode"), state.panelRailMode);
     obj.insert(QStringLiteral("railWidth"), state.railWidth);
     obj.insert(QStringLiteral("autoCollapseIconic"), state.autoCollapseIconic);

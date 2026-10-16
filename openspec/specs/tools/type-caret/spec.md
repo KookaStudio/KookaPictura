@@ -35,3 +35,14 @@ show the caret and the placement point only.
 
 - **WHEN** `pictura-render::baselines_follow_the_layout` asks for the baselines of horizontal "ab\r\rc" and vertical "ab"
 - **THEN** horizontal type gets one horizontal segment per non-blank line (none for the blank one), the first at the origin's y and the next two leadings lower, each ending at its line's last caret stop; vertical type gets one vertical segment on the column's centre axis
+
+### Requirement: The caret contrasts with the image
+
+The caret, the baseline guides, and the placement point SHALL draw white when
+the image under the caret is dark (mean luminance below half, transparency read
+as light) and black otherwise, re-evaluated on every edit and caret move.
+
+#### Scenario: White over a dark image, black over a light one [caret_contrast]
+
+- **WHEN** `tst_type_tools::caretContrastsWithTheImage` opens a Horizontal Type session on a black image, then on a white image
+- **THEN** the caret draws white on the black image and black on the white one

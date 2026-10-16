@@ -682,6 +682,21 @@ void ToolController::handlePressed(const QPointF& imagePos, int button, int modi
     }
     PictureView* v = view();
     const Qt::KeyboardModifiers mods = Qt::KeyboardModifiers(modifiers);
+    // The idle controls box: a handle starts its session for this gesture;
+    // anywhere else is an ordinary Move drag, the box hidden until release.
+    if (v && controlsIdle_ && !v->transform_session_active()) {
+        // The active layer can change without a refresh (a direct
+        // `set_active_layer`); never grab a stale box.
+        syncTransformControls();
+    }
+    if (v && controlsIdle_ && !v->transform_session_active()) {
+        const int hit = controlsHit(imagePos);
+        if (hit >= 0 && hit != 9) {
+            beginControlsGesture(v);
+        } else {
+            clearControlsBox();
+        }
+    }
     if (v && v->transform_session_active()) {
         const double z = canvas_ ? canvas_->zoom() : 1.0;
         const int hit = v->transform_press(imagePos.x(), imagePos.y(), z,
@@ -762,6 +777,20 @@ void ToolController::handleMoved(const QPointF& imagePos)
     if (guideDrag_ >= 0) {
         dragGuide(imagePos);
         return;
+    }
+    // Over an idle controls box's handle, the handle's cursor; elsewhere the
+    // Move tool's own.
+    if (controlsIdle_ && canvas_ && !dragging_) {
+        const int hit = controlsHit(imagePos);
+        if (hit >= 0 && hit != 9) {
+            setHandleCursor(hit, imagePos, QRectF(controlsBox_).adjusted(0, 0, 1, 1).center());
+            controlsHandleCursor_ = true;
+            return;
+        }
+        if (controlsHandleCursor_) {
+            controlsHandleCursor_ = false;
+            refreshCursor();
+        }
     }
     updateGuideHover(imagePos);
     updateSelectionHover(imagePos);

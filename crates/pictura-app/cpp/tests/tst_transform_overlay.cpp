@@ -72,14 +72,14 @@ void TransformOverlayTest::controlsBoxDrawsPastTheDocumentEdge()
     auto* box = frame.findChild<QCheckBox*>(QStringLiteral("optionsMoveTransform"));
     QVERIFY(box);
     box->setChecked(true);
-    QVERIFY(view->transform_session_active());
+    QVERIFY(!canvas->controlsBoxForTest().isEmpty());
 
     // Drag the top-left handle past the canvas edge: the box scales about the
     // fixed bottom-right corner to (-10,-2)-(30,28).
     canvas->mousePressed(QPointF(10.0, 8.0), Qt::LeftButton, int(Qt::NoModifier));
     canvas->mouseMoved(QPointF(-10.0, -2.0));
     canvas->mouseReleased(QPointF(-10.0, -2.0));
-    QCOMPARE(pictura::transform_session_rect(*view), QStringLiteral("-10 -2 30 28"));
+    QCOMPARE(canvas->controlsBoxForTest().boundingRect(), QRectF(-10, -2, 40, 30));
 
     // The off-canvas corner handle is painted (its centre pixel is the handle
     // fill), not clipped away with the document.

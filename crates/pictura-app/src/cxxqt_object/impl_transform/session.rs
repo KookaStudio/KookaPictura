@@ -157,11 +157,15 @@ impl qobject::PictureView {
         }
         self.as_mut().drop_transform_session();
         let mut lifted = None;
+        let mut untrimmed = None;
         if !lift {
             // The box hugs the layer's visible pixels, not its (often
             // canvas-sized) rect; the composite is unchanged.
             if let Some(doc) = self.as_mut().rust_mut().doc.as_mut() {
-                pictura_render::trim_to_content(doc, &path);
+                let before = pictura_render::resolve_path(doc, &path).map(|layer| layer.rect);
+                if pictura_render::trim_to_content(doc, &path) {
+                    untrimmed = before;
+                }
             }
         }
         if lift {
@@ -221,6 +225,7 @@ impl qobject::PictureView {
             warp: None,
             warp_preview_quad: None,
             lifted,
+            untrimmed,
         });
         true
     }
@@ -253,9 +258,19 @@ impl qobject::PictureView {
         self.drop_transform_session();
     }
 
-    /// Drop any session, restoring the document from before a lift.
+    /// Drop any session, restoring the document from before a lift, or the
+    /// layer's untrimmed extent (the Move tool's controls box opens on every
+    /// selected layer, and a trimmed layer would clip later filters).
     fn drop_transform_session(mut self: Pin<&mut Self>) {
         let session = self.as_mut().rust_mut().transform_session.take();
+        if let Some((path, rect)) = session
+            .as_ref()
+            .and_then(|s| s.untrimmed.map(|rect| (s.path.clone(), rect)))
+        {
+            if let Some(doc) = self.as_mut().rust_mut().doc.as_mut() {
+                pictura_render::untrim_to(doc, &path, rect);
+            }
+        }
         if let Some((_, before)) = session.and_then(|session| session.lifted) {
             self.as_mut().rust_mut().doc = Some(*before);
             self.as_mut().recomposite();

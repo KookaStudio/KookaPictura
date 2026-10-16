@@ -204,6 +204,7 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/image_view_document.cpp
     crates/pictura-app/cpp/image_view_paths.cpp
     crates/pictura-app/cpp/image_view_type.cpp
+    crates/pictura-app/cpp/image_view_move.cpp
     crates/pictura-app/cpp/canvas_scrollbars.cpp
     crates/pictura-app/cpp/canvas_ruler.cpp
     crates/pictura-app/cpp/icons.cpp
@@ -290,6 +291,7 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/panels/panel_column_indicator.cpp
     crates/pictura-app/cpp/panels/panel_column_test.cpp
     crates/pictura-app/cpp/tools.cpp
+    crates/pictura-app/cpp/tool_options_json.cpp
     crates/pictura-app/cpp/tool_registry.cpp
     crates/pictura-app/cpp/tool_hand_zoom.cpp
     crates/pictura-app/cpp/tool_eyedropper.cpp

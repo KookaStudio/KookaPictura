@@ -289,7 +289,7 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
             }
             // A regular layer's lock badge unlocks it with one click; the
             // Background badge above converts instead.
-            if (index.isValid() && view_ && index.data(LockRole).toInt() != 0
+            if (index.isValid() && view_ && index.data(LockBadgeRole).toInt() != 0
                 && index.data(KindRole).toString() != QLatin1String("background")
                 && delegate_->lockRect(tree_->visualRect(index)).contains(pos)) {
                 view_->set_layers_lock(QStringList{pathForProxyIndex(index)},

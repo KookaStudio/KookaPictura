@@ -1,0 +1,102 @@
+// Tool options survive a restart: the session store carries every tool's
+// options-bar settings, and bad entries fall back to the defaults.
+
+#include <QtTest/QtTest>
+
+#include "tool_options_json.h"
+#include "tools.h"
+
+#include <QtCore/QJsonObject>
+#include <QtWidgets/QCheckBox>
+
+#include <memory>
+
+#include "qt_test_support.h"
+
+class ToolOptionsPersistenceTest : public QObject {
+    Q_OBJECT
+
+private slots:
+    void initTestCase();
+    void optionsSurviveARestart();
+    void badEntriesKeepDefaults();
+
+private:
+    pictura::test::ScopedStateHome stateHome_;
+};
+
+void ToolOptionsPersistenceTest::initTestCase()
+{
+    QVERIFY(stateHome_.isValid());
+}
+
+void ToolOptionsPersistenceTest::optionsSurviveARestart()
+{
+    using namespace pictura;
+    {
+        auto window = test::makeMainWindow();
+        auto* tools = window->findChild<ToolController*>();
+        QVERIFY(tools);
+        MoveGroup* move = tools->optionsFor<MoveGroup>(ToolId::Move);
+        MoveOptions m = move->get();
+        m.showTransformControls = false;
+        move->set(m);
+        TypeGroup* type = tools->optionsFor<TypeGroup>(ToolId::HorizontalType);
+        TypeOptions t = type->get();
+        t.size = 48.0;
+        type->set(t);
+        PaintOptions* paint = tools->optionsFor<PaintOptions>(ToolId::Brush);
+        paint->setSize(77);
+        paint->setOpacity(40);
+        tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setFeather(5.5);
+        RetouchGroup* blur = tools->optionsFor<RetouchGroup>(ToolId::Blur);
+        RetouchOptions r = blur->get();
+        r.strength = 80;
+        blur->set(r);
+        ToneGroup* burn = tools->optionsFor<ToneGroup>(ToolId::Burn);
+        ToneOptions b = burn->get();
+        b.amount = 20;
+        burn->set(b);
+        window->saveSession();
+    }
+
+    auto window = test::makeMainWindow();
+    auto* tools = window->findChild<ToolController*>();
+    QVERIFY(tools);
+    QVERIFY(!tools->optionsFor<MoveGroup>(ToolId::Move)->get().showTransformControls);
+    // The options bar starts from the restored values.
+    auto* transform = window->findChild<QCheckBox*>(QStringLiteral("optionsMoveTransform"));
+    QVERIFY(transform && !transform->isChecked());
+    QCOMPARE(tools->optionsFor<TypeGroup>(ToolId::HorizontalType)->get().size, 48.0);
+    QCOMPARE(tools->optionsFor<PaintOptions>(ToolId::Brush)->size(), 77);
+    QCOMPARE(tools->optionsFor<PaintOptions>(ToolId::Brush)->opacity(), 40);
+    QCOMPARE(tools->optionsFor<SelectionOptions>(ToolId::Marquee)->feather(), 5.5);
+    QCOMPARE(tools->optionsFor<RetouchGroup>(ToolId::Blur)->get().strength, 80);
+    QCOMPARE(tools->optionsFor<ToneGroup>(ToolId::Burn)->get().amount, 20);
+    // Each retouch and toning tool keeps its own options.
+    QCOMPARE(tools->optionsFor<RetouchGroup>(ToolId::Sharpen)->get().strength,
+             RetouchOptions{}.strength);
+    QCOMPARE(tools->optionsFor<ToneGroup>(ToolId::Dodge)->get().amount, ToneOptions{}.amount);
+}
+
+void ToolOptionsPersistenceTest::badEntriesKeepDefaults()
+{
+    using namespace pictura;
+    auto window = test::makeMainWindow();
+    auto* tools = window->findChild<ToolController*>();
+    QVERIFY(tools);
+    const int brushSize = tools->optionsFor<PaintOptions>(ToolId::Brush)->size();
+    const int eraserMode = tools->optionsFor<EraserGroup>(ToolId::Eraser)->get().mode;
+    QJsonObject json;
+    json.insert(QStringLiteral("type"), QJsonObject{{QStringLiteral("size"), 99999.0}});
+    json.insert(QStringLiteral("brush"), 5);
+    json.insert(QStringLiteral("eraser"), QJsonObject{{QStringLiteral("mode"), QStringLiteral("x")}});
+    json.insert(QStringLiteral("unknownTool"), QJsonObject{{QStringLiteral("a"), 1}});
+    applyToolOptionsJson(*tools, json);
+    QCOMPARE(tools->optionsFor<TypeGroup>(ToolId::HorizontalType)->get().size, 1296.0);
+    QCOMPARE(tools->optionsFor<PaintOptions>(ToolId::Brush)->size(), brushSize);
+    QCOMPARE(tools->optionsFor<EraserGroup>(ToolId::Eraser)->get().mode, eraserMode);
+}
+
+QTEST_MAIN(ToolOptionsPersistenceTest)
+#include "tst_tool_options_persistence.moc"

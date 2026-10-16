@@ -37,6 +37,7 @@
 
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QObject>
+#include <QtCore/QtMath>
 #include <QtCore/QPointer>
 #include <QtGui/QClipboard>
 #include <QtGui/QGuiApplication>
@@ -623,6 +624,24 @@ private:
         return box.adjusted(-slack, -slack, slack, slack).contains(pos);
     }
 
+    // Whether the image under the caret is dark (mean luminance below half,
+    // transparency read as the light checkerboard), so the caret draws white.
+    bool darkUnder(const QLineF& caret) const
+    {
+        if (!view_) {
+            return false;
+        }
+        double sum = 0.0;
+        constexpr int kSamples = 5;
+        for (int i = 0; i < kSamples; ++i) {
+            const QPointF p = caret.pointAt((i + 0.5) / kSamples);
+            const QColor c = QColor::fromRgba(view_->sample_argb(qFloor(p.x()), qFloor(p.y())));
+            const double a = c.alphaF();
+            sum += a * (0.299 * c.red() + 0.587 * c.green() + 0.114 * c.blue()) + (1.0 - a) * 255.0;
+        }
+        return sum / kSamples < 128.0;
+    }
+
     QList<QPolygonF> selectionShapes() const
     {
         QList<QPolygonF> shapes;
@@ -787,6 +806,7 @@ private:
             overlay.caret = stops_.at(edit_.caret());
         }
         overlay.selection = selectionShapes();
+        overlay.lightInk = darkUnder(overlay.caret);
         overlay.hasPlacement = !boxed_;
         overlay.placement = origin_;
         const QVector<double> lines = pictura::type_api::baselines(

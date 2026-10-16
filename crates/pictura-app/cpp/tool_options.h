@@ -256,11 +256,12 @@ struct CloneSource {
 };
 
 // The Move tool options: Auto-Select on/off and 0 Group / 1 Layer, Show
-// Transform Controls, Align To 0 Selection / 1 Canvas.
+// Transform Controls (on by default by owner decision; CS6 ships it off),
+// Align To 0 Selection / 1 Canvas.
 struct MoveOptions {
     bool autoSelectOn = false;
     int autoSelect = 0;
-    bool showTransformControls = false;
+    bool showTransformControls = true;
     int alignTo = 0;
 };
 

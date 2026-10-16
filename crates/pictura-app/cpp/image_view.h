@@ -33,6 +33,10 @@ class QShowEvent;
 class QHideEvent;
 class QTimer;
 
+namespace pictura {
+enum class RulerUnit;
+}
+
 namespace pictura::selection_api {
 struct SelectionContour;
 }
@@ -441,6 +445,9 @@ public:
         QList<QLineF> baselines;
         QPolygonF box;
         bool overflow = false;
+        // Over a dark image the caret, guides, and placement point draw white,
+        // as CS6's do, else black.
+        bool lightInk = false;
     };
     // Half of the caret's 1.5 s blink cycle.
     static constexpr int kTypeCaretBlinkMs = 750;
@@ -457,11 +464,27 @@ public:
     QList<QLineF> typeOverlayBaselinesForTest() const { return typeOverlay_.baselines; }
     QPolygonF typeOverlayBoxForTest() const { return typeOverlay_.box; }
     bool typeOverlayOverflowForTest() const { return typeOverlay_.overflow; }
+    bool typeOverlayLightInkForTest() const { return typeOverlay_.lightInk; }
 
     // Live marquee size readout ("W x H"), painted as a tooltip offset from the
     // mapped cursor. Empty text or clearDragSizeHint() hides it.
     void setDragSizeHint(const QString& text, const QPointF& imagePos);
     void clearDragSizeHint();
+
+    // The unit and resolution drag readouts measure in (the rulers').
+    void setMeasureUnit(RulerUnit unit, bool traditionalPoints);
+    void setPpiProvider(std::function<double()> ppi);
+    // The Move tool's readout for a move of `delta` document pixels:
+    // "ΔX: 0.500 in" over "ΔY: 0.250 in".
+    QString offsetReadout(const QPointF& delta) const;
+    // The moving layer's content box (document pixels, at drag start), drawn
+    // as marching ants that follow the move preview; empty clears it.
+    void setMoveOutline(const QRectF& bounds);
+    QRectF moveOutlineForTest() const { return moveOutline_.translated(moveDelta_); }
+    // The Move tool's idle `Show Transform Controls` box (no session): drawn
+    // like Free Transform's box; empty hides it.
+    void setControlsBox(const QPolygonF& box);
+    QPolygonF controlsBoxForTest() const { return controlsBox_; }
     bool hasDragSizeHintForTest() const { return dragSizeActive_ && !dragSizeText_.isEmpty(); }
     QString dragSizeHintForTest() const { return dragSizeText_; }
 
@@ -541,6 +564,12 @@ private:
     bool guidePreviewActive_ = false;
     void paintPathOverlay(QPainter& painter);
     void paintTypeOverlay(QPainter& painter);
+    void paintMoveOutline(QPainter& painter);
+    QRectF moveOutline_;
+    QPolygonF controlsBox_;
+    int measureUnit_ = 1;
+    bool measureTraditional_ = false;
+    std::function<double()> measurePpi_;
     void paintFilterPreview(QPainter& painter);
     QImage filterPreview_;
     QRect filterPreviewArea_;

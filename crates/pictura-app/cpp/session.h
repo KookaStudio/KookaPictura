@@ -2,6 +2,7 @@
 
 #include <QtCore/QByteArray>
 #include <QtCore/QJsonArray>
+#include <QtCore/QJsonObject>
 #include <QtCore/QList>
 #include <QtCore/QMap>
 #include <QtCore/QString>
@@ -54,6 +55,8 @@ struct SessionState {
     bool cropDeletePixels = true;    // discard pixels outside the crop
     double cropRatio = 0.0;          // locked aspect ratio, 0 = unconstrained
     int cropGridOverlay = 0;         // 0 Rule of Thirds, 1 Grid, ...
+    // Every other tool's options bar, by option group (tool_options_json.h).
+    QJsonObject toolOptions;
     // v5-v8 panel-column state. `panelGroups` is the legacy flat JSON array of
     // {name, order, visible, minimized, collapsed} for the primary column;
     // `panelColumns` is the ordered array of

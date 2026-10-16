@@ -32,7 +32,7 @@ pub use layer_ops::{
     can_lift_selection, can_merge_scope, can_merge_target, can_move_path_to,
     can_new_smart_object_via_copy, can_rasterize_smart_object, can_release_clipping_mask,
     can_replace_smart_object_contents, can_reset_smart_object_transform, clear_layer,
-    clear_layer_style, convert_for_smart_filters, convert_smart_object_to_layers,
+    clear_layer_style, content_rect, convert_for_smart_filters, convert_smart_object_to_layers,
     convert_to_smart_object, copy_layer, copy_layer_style, copy_merged, copy_path_to_document,
     copy_shape_attributes, coverage_bounds, create_clipping_mask, delete_hidden_layers,
     delete_layer_mask, delete_paths, delete_vector_mask, distribute_layers, duplicate_layer,
@@ -59,10 +59,10 @@ pub use layer_ops::{
     smart_object_source_bytes, stamp_scope, style_mesh, sync_vector_mask_block, transform_layer,
     transform_layer_quad, transform_layer_quad_with, transform_layer_warp,
     transform_layer_warp_with, transform_layer_with, trim_to_content, ungroup_layer, ungroup_paths,
-    vector_mask_disabled, vector_mask_linked, vector_mask_refinement, write_mask_back, AlignEdge,
-    Arrange, Clip, Interpolation, LayerMaskKind, LayerStyle, LayerTransform, MaskDocument,
-    MergeError, MergeOutcome, MergeScope, NewLayerSpec, PasteMode, ShapeAttributes, ShapeStroke,
-    StampScope, VectorMaskKind, WarpMesh, WarpParams, WarpStyle, MASK_FLAG_LINKED,
+    untrim_to, vector_mask_disabled, vector_mask_linked, vector_mask_refinement, write_mask_back,
+    AlignEdge, Arrange, Clip, Interpolation, LayerMaskKind, LayerStyle, LayerTransform,
+    MaskDocument, MergeError, MergeOutcome, MergeScope, NewLayerSpec, PasteMode, ShapeAttributes,
+    ShapeStroke, StampScope, VectorMaskKind, WarpMesh, WarpParams, WarpStyle, MASK_FLAG_LINKED,
     VECTOR_MASK_FLAG_DISABLED, VECTOR_MASK_FLAG_INVERT, VECTOR_MASK_FLAG_NOT_LINKED,
 };
 pub use matting::{defringe, remove_matte, MatteBackground, MattingError};

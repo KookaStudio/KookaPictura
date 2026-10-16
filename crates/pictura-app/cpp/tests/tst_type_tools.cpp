@@ -122,6 +122,8 @@ private slots:
     void typeBarSizeAlignAndColor();
     void caretBlinks();
     void caretPlacementAndBaseline();
+    void caretContrastsWithTheImage();
+    void typeLayerRowHasNoLockBadge();
 
 private:
     void showFrame();
@@ -990,6 +992,48 @@ void TypeToolsTest::caretPlacementAndBaseline()
     QVERIFY2(caret.p1().y() < 60.0 && caret.p2().y() > 60.0, "the caret crosses the guide");
     QVERIFY(f.canvas->typeOverlayHasPlacementForTest());
     QTest::keyClick(f.canvas, Qt::Key_Escape);
+}
+
+void TypeToolsTest::caretContrastsWithTheImage()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    for (const bool dark : {true, false}) {
+        QImage image = seed();
+        image.fill(dark ? Qt::black : Qt::white);
+        Fixture f(frame, image, QStringLiteral("pictura_type_contrast"));
+        QVERIFY2(f.ok(), "type fixture");
+        showFrame();
+        frame.setActiveTool(pictura::ToolId::HorizontalType);
+        f.drag({QPointF(20, 60)});
+        QVERIFY(f.canvas->typeOverlayActiveForTest());
+        QCOMPARE(f.canvas->typeOverlayLightInkForTest(), dark);
+        QTest::keyClick(f.canvas, Qt::Key_Escape);
+    }
+}
+
+void TypeToolsTest::typeLayerRowHasNoLockBadge()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_type_lockbadge"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    frame.setActiveTool(pictura::ToolId::HorizontalType);
+    f.drag({QPointF(20, 60)});
+    QTest::keyClicks(f.canvas, QStringLiteral("locks"));
+    QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
+    frame.setActiveTool(pictura::ToolId::Move);
+    const QString path = typeLayer(f);
+    QVERIFY2(!path.isEmpty(), "a type layer");
+    QCOMPARE(f.view->layer_lock(path.toInt()) & 0x03, 0x03);
+
+    auto* panel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(panel);
+    panel->refresh();
+    QVERIFY2(panel->lockBadgeLeftForTest(path) < 0, "forced locks show no badge");
+
+    f.view->set_layers_lock(QStringList{path}, QStringLiteral("position"), true);
+    panel->refresh();
+    QVERIFY2(panel->lockBadgeLeftForTest(path) >= 0, "a user lock shows the badge");
 }
 
 QTEST_MAIN(TypeToolsTest)
