@@ -51,6 +51,12 @@ Snapshot for resuming after a context break. Update after each milestone.
   (`pointerCursor` / `hoverCursor` on `TypeToolHandler`). A drag there moves
   the session origin, so the text, caret, guides, and box follow; a plain click
   still commits (change `type-session-move`).
+  The session's placement lives in `TypeFrame` (type_frame.{h,cpp}): paragraph
+  type's box, and point type's text bounds while Ctrl is held, with handles
+  (resize the box, or scale the text with Ctrl or on point type), a rotate band
+  just outside it, and a draggable reference point, each with its cursor and a
+  W / H, angle, or X / Y readout (`ImageView::measureReadout`). The transform
+  is the layer's own `TySh` matrix (change `type-transform-box`).
 - **SVG export parity** (#477, branch `feat/477-svg-export-parity-followups`,
   OpenSpec change `svg-export`, now archived into `interop/svg-export`): the
   SVG export from #459 walks the layer tree instead of top-level layers only.
