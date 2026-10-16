@@ -1771,6 +1771,23 @@ Snapshot for resuming after a context break. Update after each milestone.
   `tst_channels_panel` reads canvas pixels. Ceilings (`ponytail:`): eyes for
   CMYK / Lab / other source modes are disabled (channels derived from RGB
   working data); no alpha overlays or channel-targeted edits.
+- **Ctrl-click channel selection** (#438, change
+  `channels-ctrl-click-selection`): Ctrl-clicking a Channels-panel row now loads
+  it as the selection. `ChannelsPanel::eventFilter` gains a `MouseButtonPress`
+  branch that resolves the row and calls `loadRowSelection`, which routes an
+  alpha row through the existing `load_selection("Alpha N")` and a colour or
+  composite row through the new `PictureView::load_channel_selection(row, mask)`.
+  The engine builds the selection from the sRGB composite with the row
+  thumbnails' grayscale derivation (`color_rows`/`channel_value`): the composite
+  row is its luminance over the visible channels (hidden RGB channels zeroed, the
+  `mask` from the panel), each colour row its own plane (RGB planes, CMYK /
+  Multichannel naive inks, otherwise luminance), committed as one "Load
+  Selection" state. A plain click still only moves the current row. The footer
+  Load button reuses `loadRowSelection`. Tests: three Rust derivation units and
+  `tst_channels_panel::ctrlClickLoadsChannelSelection` plus an alpha Ctrl-click.
+  Ceiling (`ponytail:`): no Shift/Alt add/subtract/intersect. Verified: nextest
+  3182 passed / 23 skipped, app self-test 473, Qt 100/100, `openspec validate
+  --all --strict` 272/272.
 - **Shape options bar** (change `shape-options-bar`, owner follow-up on #48
   from a CS6 screenshot): all six shape tools share CS6's bar — Mode, Fill,
   Stroke (width, type pop-up with Align), W / link / H, disabled path
