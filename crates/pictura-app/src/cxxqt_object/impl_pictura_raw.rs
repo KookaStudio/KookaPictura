@@ -1,11 +1,12 @@
 //! Pictura Raw bridge commands.
 //!
-//! `apply_pictura_raw_filter` turns a plain raster layer into an embedded smart
-//! object when needed, then bakes the full settings into its proxy and attaches
-//! them, recording one "Pictura Raw" history state. A refusal records nothing.
+//! `apply_pictura_raw_filter` dispatches on the target: an embedded smart object
+//! gets the camera-raw smart filter (settings retained), a plain raster pixel
+//! layer is filtered destructively (no smart object, no settings), recording one
+//! "Pictura Raw" history state. A refusal records nothing.
 //! `layer_pictura_raw_settings` reads the stored settings back as bridge text so
-//! the dialog can prefill, and `pictura_raw_preview` renders a downscaled copy
-//! for the dialog's live preview.
+//! the dialog can prefill, `layer_can_apply_pictura_raw` gates the menu, and
+//! `pictura_raw_preview` renders a downscaled copy for the dialog's live preview.
 
 use super::helpers::*;
 use super::helpers_composite::buffer_to_image;
@@ -36,10 +37,27 @@ impl qobject::PictureView {
         }
     }
 
-    /// `Filter > Pictura Raw…`: apply `settings_text` to `path`, converting a
-    /// plain raster pixel layer to an embedded smart object first. Records one
-    /// "Pictura Raw" state on success; false (no state) without a document or
-    /// target, or when the engine refuses.
+    /// Whether `Filter > Pictura Raw…` can act on `path`: an embedded smart
+    /// object with a payload, or a layer the destructive op accepts. Read-only,
+    /// and independent of the conversion predicate.
+    pub fn layer_can_apply_pictura_raw(&self, path: &QString) -> bool {
+        let path = path.to_string();
+        let rust = self.rust();
+        let Some(doc) = rust.doc.as_ref() else {
+            return false;
+        };
+        if path.is_empty() {
+            return false;
+        }
+        pictura_render::can_replace_smart_object_contents(doc, &path)
+            || pictura_render::can_apply_pictura_raw_destructive(doc, &path)
+    }
+
+    /// `Filter > Pictura Raw…`: apply `settings_text` to `path`. An embedded
+    /// smart object gets the camera-raw smart filter (settings retained); a
+    /// plain raster pixel layer is filtered destructively (no smart object, no
+    /// settings). Records one "Pictura Raw" state on success; false (no state)
+    /// without a document or target, or when the engine refuses.
     pub fn apply_pictura_raw_filter(
         mut self: Pin<&mut Self>,
         path: &QString,
@@ -52,12 +70,11 @@ impl qobject::PictureView {
             let Some(doc) = rust.doc.as_mut() else {
                 return false;
             };
-            if pictura_render::can_convert_to_smart_object(doc, &path)
-                && !pictura_render::convert_to_smart_object(doc, &path)
-            {
-                return false;
+            if pictura_render::can_replace_smart_object_contents(doc, &path) {
+                pictura_render::apply_pictura_raw(doc, &path, &settings)
+            } else {
+                pictura_render::apply_pictura_raw_destructive(doc, &path, &settings)
             }
-            pictura_render::apply_pictura_raw(doc, &path, &settings)
         };
         if applied {
             self.as_mut().clear_link_sets();

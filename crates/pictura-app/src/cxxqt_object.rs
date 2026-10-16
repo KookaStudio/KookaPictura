@@ -697,10 +697,18 @@ pub mod qobject {
         #[qinvokable]
         fn layer_pictura_raw_settings(&self, path: &QString) -> QString;
 
-        /// `Filter > Pictura Raw…`: convert `path` to an embedded smart
-        /// object when it is a plain raster pixel layer, then apply
-        /// `settings_text` and record one "Pictura Raw" state. False without a
-        /// document/target or when the engine refuses; records nothing then.
+        /// Whether `Filter > Pictura Raw…` can act on `path`: an embedded
+        /// smart object with a payload, or a layer the destructive op accepts
+        /// (an RGB/Grayscale raster leaf). Independent of the conversion
+        /// predicate. Read-only.
+        #[qinvokable]
+        fn layer_can_apply_pictura_raw(&self, path: &QString) -> bool;
+
+        /// `Filter > Pictura Raw…`: apply `settings_text` to `path`. An embedded
+        /// smart object gets the camera-raw smart filter (settings retained); a
+        /// plain raster pixel layer is filtered destructively with no smart
+        /// object and no retained settings. Records one "Pictura Raw" state on
+        /// success; false without a document/target or when the engine refuses.
         #[qinvokable]
         fn apply_pictura_raw_filter(
             self: Pin<&mut Self>,

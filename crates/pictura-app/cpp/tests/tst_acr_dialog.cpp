@@ -303,6 +303,8 @@ void AcrDialogTest::applyAcrossTabsRecordsOneState()
     const QString path = makeRasterLayer();
     QVERIFY(!path.isEmpty());
     PictureView* view = window_->activeView();
+    // A smart object retains the settings across apply and readback.
+    QVERIFY(view->convert_to_smart_object(path));
     PicturaRawDialog dialog(view, path, QString(), nullptr);
     QVERIFY(setSlider(&dialog, acr::Temp, 20));
     QVERIFY(setSlider(&dialog, acr::Dehaze, 7));

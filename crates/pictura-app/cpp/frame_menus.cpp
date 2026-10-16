@@ -927,8 +927,9 @@ void PicturaMainWindow::registerHandlers()
                                   });
 
     // Filter > Pictura Raw…: prefill the dialog from the layer's stored
-    // Pictura Raw settings (empty when none), then convert a plain raster target
-    // to a smart object and apply Pictura Raw in one bridge call / one history state.
+    // Pictura Raw settings (empty when none), then apply in one bridge call /
+    // one history state — destructively on a plain raster layer, as a retained
+    // camera-raw smart filter on an embedded smart object.
     registry_->setHandler(command_ids::FilterPicturaRaw, [this]() {
         PictureView* view = activeView();
         const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
@@ -948,8 +949,7 @@ void PicturaMainWindow::registerHandlers()
         PictureView* view = activeView();
         const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
         return view && view->has_document() && !path.isEmpty()
-            && (view->layer_can_convert_to_smart_object(path)
-                || view->layer_can_replace_smart_object_contents(path));
+            && view->layer_can_apply_pictura_raw(path);
     });
 
     registry_->setHandler(command_ids::ViewZoomIn, [this]() {
