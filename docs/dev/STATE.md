@@ -47,6 +47,10 @@ Snapshot for resuming after a context break. Update after each milestone.
   the content plus a ΔX / ΔY readout in the ruler unit (`formatRulerLength`,
   shared with the rulers). The self-test, and older tests that read canvas
   pixels under the Move tool, run with the box off.
+  While typing, the pointer away from the text is the Move tool's cursor
+  (`pointerCursor` / `hoverCursor` on `TypeToolHandler`). A drag there moves
+  the session origin, so the text, caret, guides, and box follow; a plain click
+  still commits (change `type-session-move`).
 - **SVG export parity** (#477, branch `feat/477-svg-export-parity-followups`,
   OpenSpec change `svg-export`, now archived into `interop/svg-export`): the
   SVG export from #459 walks the layer tree instead of top-level layers only.
