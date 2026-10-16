@@ -307,13 +307,20 @@ build fall back to the compiler instead of failing.
 
 Rebuilding the same tree from a different worktree path misses the cache
 (keys use absolute paths). To share C++ objects across worktrees, opt in once
-per clone:
+per machine by creating the user-global env file from the committed example:
 
 ```bash
-git config kooka.sccache-share true
+mkdir -p ~/.config/kooka-pictura
+cp .env.example ~/.config/kooka-pictura/env
+# then uncomment KOOKA_SCCACHE_SHARE=1 in that file
 ```
 
-With that set (it lives in the shared git config, so it reaches every worktree),
+`.env.example` lists every environment variable the project uses and is a no-op
+as shipped. The real file lives outside the repository and is never committed —
+repo-local `.env` files are gitignored — so the opt-in cannot be forced on other
+contributors.
+
+With `KOOKA_SCCACHE_SHARE=1` set (in that file or the process environment),
 `.githooks/post-checkout` writes an sccache config — `$SCCACHE_CONF` if set, else
 Linux `${XDG_CONFIG_HOME:-$HOME/.config}/sccache/config` and macOS
 `~/Library/Application Support/Mozilla.sccache/config` — that lists every

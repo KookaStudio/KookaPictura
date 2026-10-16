@@ -9,10 +9,12 @@
 # stderr only. See DEVELOPING.md, "Worktrees".
 #
 # Also, opt-in, shares the local C++ compiler cache across worktrees by writing
-# a managed sccache config (design: openspec/changes/share-cmake-cache-across-
-# worktrees). Enable with `git config kooka.sccache-share true` or
-# `KOOKA_SCCACHE_SHARE=1`. The config is user-global and the daemon restart is
-# machine-global; see DEVELOPING.md for the caveats.
+# a managed sccache config (design: openspec/changes/local-only-sccache-opt-in).
+# Enable with `KOOKA_SCCACHE_SHARE=1` in the process environment or in the
+# user-global env file ${XDG_CONFIG_HOME:-$HOME/.config}/kooka-pictura/env
+# (override with KOOKA_ENV_FILE; create it from the committed .env.example). No
+# committed file can enable it. The config is user-global and the daemon restart
+# is machine-global; see DEVELOPING.md.
 
 cd "$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
 
@@ -50,11 +52,24 @@ if [ ! -e reference-fixtures ] && [ ! -L reference-fixtures ]; then
     fi
 fi
 
-# True when the developer opted in to sharing the C++ compiler cache. The git
-# config lives in the shared common config, so it cascades to every worktree.
+# The opt-in is local-only: the process environment, else a user-global env file
+# outside the repository. Nothing committed can enable it.
+kooka_env_file() {
+    printf '%s' "${KOOKA_ENV_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/kooka-pictura/env}"
+}
+
+kooka_env_var() { # <NAME> -> value from the user-global env file, or empty
+    local file
+    file=$(kooka_env_file)
+    [ -r "$file" ] || return 0
+    sed -nE "s/^[[:space:]]*(export[[:space:]]+)?$1=//p" "$file" 2>/dev/null \
+        | tail -1 | sed -E "s/^[[:space:]]*[\"']?//; s/[\"']?[[:space:]]*$//"
+}
+
+# True when the developer opted in to sharing the C++ compiler cache.
 sccache_share_enabled() {
     [ "${KOOKA_SCCACHE_SHARE:-}" = "1" ] && return 0
-    [ "$(git config --bool --get kooka.sccache-share 2>/dev/null)" = "true" ]
+    [ "$(kooka_env_var KOOKA_SCCACHE_SHARE)" = "1" ]
 }
 
 # Path of the sccache config: SCCACHE_CONF, else the platform default.

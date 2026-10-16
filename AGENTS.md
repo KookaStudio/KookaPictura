@@ -55,8 +55,9 @@ CMake builds with Ninja. `deny.toml` gates licenses and dependencies; CI runs
 `cargo deny check`.
 
 Local C++ builds use `sccache` automatically when it is installed. Sharing that
-cache across git worktrees is opt-in: `git config kooka.sccache-share true`
-(see `DEVELOPING.md`, "Speeding up local builds").
+cache across git worktrees is opt-in: set `KOOKA_SCCACHE_SHARE=1` in the
+user-global env file created from `.env.example` (see `DEVELOPING.md`, "Speeding
+up local builds").
 
 ## Serena (symbol intelligence)
 
