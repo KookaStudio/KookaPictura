@@ -481,7 +481,8 @@ void ChannelsPanel::loadRowSelection(int row)
     const int alpha = rows_.at(row).alpha;
     if (alpha >= 0) {
         view_->load_selection(QStringLiteral("Alpha %1").arg(alpha + 1));
-    } else {
+    } else if (alpha == -1) {
+        // The mask row (kMaskChannel) keeps its view-only solo, not a load.
         view_->load_channel_selection(row, mask_);
     }
 }
