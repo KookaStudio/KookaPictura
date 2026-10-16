@@ -40,7 +40,7 @@
   confirm no token-key occurrence remains, and that the only survivors are the
   non-token words (`QMainWindow`/QSS selectors, `QPalette::Window`-style enums,
   the story labels, `tst_keyboard_shortcuts.cpp:363`).
-- [ ] 4.3 Run `bash scripts/verify-fast.sh` and confirm fmt, clippy, the unified
+- [x] 4.3 Run `bash scripts/verify-fast.sh` and confirm fmt, clippy, the unified
   test report, file-size, guard, and openspec all pass.
 
 ## 5. Docs
