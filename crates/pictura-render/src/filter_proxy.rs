@@ -21,6 +21,21 @@ pub struct FilterProxy {
     selection: Option<LayerMask>,
 }
 
+/// A raster mask's reduced coverage and the reduced composites at its two
+/// extremes, for a live mask-stroke preview to interpolate between. Every
+/// plane is `width × height` on the proxy grid; the composites are planar.
+pub struct MaskExtremes {
+    pub width: u32,
+    pub height: u32,
+    /// The mask's coverage at each proxy pixel, `default_color` outside its
+    /// rect, as the mask edit document sees it.
+    pub coverage: Vec<u8>,
+    /// The proxy composited with the mask hiding everywhere.
+    pub hidden: PixelBuffer,
+    /// The proxy composited with the mask revealing everywhere.
+    pub revealed: PixelBuffer,
+}
+
 impl FilterProxy {
     /// The part of `doc` inside `region` (clamped to the canvas), scaled by
     /// `scale` (clamped to `(0, 1]`), with `selection`, a canvas-sized mask,
@@ -88,6 +103,57 @@ impl FilterProxy {
             }
         }
         Ok(crate::composite_rgba(&doc))
+    }
+
+    /// The reduced coverage of the raster mask of the layer at panel path
+    /// `layer`, with the proxy composited under a constant-0 and a constant-255
+    /// mask. `None` without such a mask.
+    pub fn mask_extremes(&self, layer: &str) -> Option<MaskExtremes> {
+        let (w, h) = (self.doc.width, self.doc.height);
+        let mask = crate::resolve_path(&self.doc, layer)?.mask.as_ref()?;
+        let (mw, mh) = (mask.rect.width().max(0), mask.rect.height().max(0));
+        let data = mask
+            .data
+            .as_ref()
+            .filter(|data| data.len() == (mw * mh) as usize);
+        let mut coverage = vec![mask.default_color; w as usize * h as usize];
+        if let Some(data) = data {
+            for (y, row) in coverage.chunks_mut(w as usize).enumerate() {
+                let my = y as i32 - mask.rect.top;
+                if !(0..mh).contains(&my) {
+                    continue;
+                }
+                for (x, value) in row.iter_mut().enumerate() {
+                    let mx = x as i32 - mask.rect.left;
+                    if (0..mw).contains(&mx) {
+                        *value = data[(my * mw + mx) as usize];
+                    }
+                }
+            }
+        }
+        let flat = |value: u8| {
+            let mut doc = self.doc.clone();
+            if let Some(mask) =
+                crate::resolve_path_mut(&mut doc, layer).and_then(|l| l.mask.as_mut())
+            {
+                mask.rect = PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: h as i32,
+                    right: w as i32,
+                };
+                mask.default_color = value;
+                mask.data = Some(vec![value; w as usize * h as usize].into());
+            }
+            crate::composite_rgba(&doc)
+        };
+        Some(MaskExtremes {
+            width: w,
+            height: h,
+            coverage,
+            hidden: flat(0),
+            revealed: flat(255),
+        })
     }
 }
 
@@ -356,5 +422,50 @@ mod tests {
         let reduced = proxy.selection.as_ref().unwrap();
         assert_eq!(reduced.rect, rect(0, 0, 10, 10));
         assert_eq!(reduced.data.as_ref().unwrap().len(), 100);
+    }
+
+    #[test]
+    fn mask_extremes_reduce_the_coverage_and_bracket_the_composite() {
+        let mut doc = doc_with_layer(40, 40, rect(0, 0, 40, 40));
+        let unmasked = doc.clone();
+        // Left half hidden, right half revealed; the rect covers the top 20 rows,
+        // so the default colour shows below it.
+        doc.layers[0].mask = Some(LayerMask {
+            rect: rect(0, 0, 40, 20),
+            default_color: 255,
+            data: Some(
+                (0..800)
+                    .map(|i| if i % 40 < 20 { 0u8 } else { 255 })
+                    .collect::<Vec<_>>()
+                    .into(),
+            ),
+            ..Default::default()
+        });
+        let proxy = FilterProxy::new(&doc, None, rect(0, 0, 40, 40), 0.5).unwrap();
+        let ex = proxy.mask_extremes("0").unwrap();
+        assert_eq!((ex.width, ex.height), (20, 20));
+        assert_eq!(ex.coverage[0], 0, "hidden half");
+        assert_eq!(ex.coverage[15], 255, "revealed half");
+        assert_eq!(ex.coverage[15 * 20], 255, "default colour outside the rect");
+
+        let revealed = FilterProxy::new(&unmasked, None, rect(0, 0, 40, 40), 0.5)
+            .unwrap()
+            .render("0", &[], false)
+            .unwrap();
+        assert_eq!(
+            ex.revealed, revealed,
+            "255 everywhere is the unmasked layer"
+        );
+        let mut hidden = unmasked;
+        hidden.layers[0].visible = false;
+        let hidden = FilterProxy::new(&hidden, None, rect(0, 0, 40, 40), 0.5)
+            .unwrap()
+            .render("0", &[], false)
+            .unwrap();
+        assert_eq!(ex.hidden, hidden, "0 everywhere hides the layer");
+        assert!(FilterProxy::new(&doc, None, rect(0, 0, 40, 40), 0.5)
+            .unwrap()
+            .mask_extremes("9")
+            .is_none());
     }
 }

@@ -7,7 +7,7 @@
 //! single layer is transparency-locked so opacity stays 255 while its colour
 //! plane carries the coverage.
 
-use pictura_core::{BitDepth, Channel, ColorMode, Document, Layer, LockFlags, PsdRect};
+use pictura_core::{BitDepth, Channel, ColorMode, Document, Layer, LockFlags, Plane, PsdRect};
 
 use super::paths::{resolve_path, resolve_path_mut};
 
@@ -24,19 +24,50 @@ pub struct MaskDocument {
 /// a layer mask, for a zero-sized mask rectangle, or when the path does not
 /// resolve. A data-less mask is materialised from its default colour.
 pub fn mask_document(doc: &Document, path: &str) -> Option<MaskDocument> {
-    build_mask_document(doc, path, false)
+    build_mask_document(doc, path)
 }
 
 /// [`mask_document`] as a **single-channel** grayscale document: its one layer
-/// carries the coverage as channel `0` only. The paint stroke edits the mask
-/// through this form, so a dab writes one byte per pixel instead of moving an
-/// RGBA stand-in and copying channel 0 back. Filters and fills keep the RGBA
-/// [`mask_document`] a filter may expect.
+/// carries the coverage as channel `0` only, sharing the mask's plane, and the
+/// document has no composite. The paint stroke edits the mask through this
+/// form, so starting a stroke copies nothing, a dab writes one byte per pixel,
+/// and only the coverage plane forks, on the first write. Filters and fills
+/// keep the RGBA [`mask_document`] a filter may expect.
 pub fn mask_document_coverage(doc: &Document, path: &str) -> Option<MaskDocument> {
-    build_mask_document(doc, path, true)
+    let mask = resolve_path(doc, path)?.mask.as_ref()?;
+    let rect = mask.rect;
+    let (w, h) = (rect.width().max(0) as u32, rect.height().max(0) as u32);
+    let count = (w as usize) * (h as usize);
+    if count == 0 {
+        return None;
+    }
+    let coverage: Plane<u8> = match &mask.data {
+        Some(data) if data.len() == count => data.clone(),
+        _ => vec![mask.default_color; count].into(),
+    };
+    // Sized after construction, so `new` allocates no composite.
+    let mut document = Document::new(0, 0, ColorMode::Grayscale, BitDepth::Eight);
+    document.width = w;
+    document.height = h;
+    document.layers.push(Layer {
+        name: "Mask".to_string(),
+        rect: PsdRect {
+            top: 0,
+            left: 0,
+            bottom: h as i32,
+            right: w as i32,
+        },
+        channels: vec![Channel {
+            id: 0,
+            data: coverage,
+        }],
+        lock: LockFlags::default().with(LockFlags::TRANSPARENCY, true),
+        ..Default::default()
+    });
+    Some(MaskDocument { document, rect })
 }
 
-fn build_mask_document(doc: &Document, path: &str, single_channel: bool) -> Option<MaskDocument> {
+fn build_mask_document(doc: &Document, path: &str) -> Option<MaskDocument> {
     let layer = resolve_path(doc, path)?;
     let mask = layer.mask.as_ref()?;
     let rect = mask.rect;
@@ -49,59 +80,29 @@ fn build_mask_document(doc: &Document, path: &str, single_channel: bool) -> Opti
         Some(data) if data.len() == count => data.as_slice(),
         _ => {
             return Some(MaskDocument {
-                document: gray_document(w, h, None, mask.default_color, single_channel),
+                document: gray_document(w, h, None, mask.default_color),
                 rect,
             })
         }
     };
     Some(MaskDocument {
-        document: gray_document(w, h, Some(coverage), 0, single_channel),
+        document: gray_document(w, h, Some(coverage), 0),
         rect,
     })
 }
 
-/// A `w × h` opaque document whose colour plane is `coverage` (or `fill` when
-/// absent), with transparency locked so an edit cannot rewrite the opacity.
-/// `single_channel` builds a one-channel grayscale document (coverage as channel
-/// `0`) for the paint path; otherwise the RGBA form filters and fills use.
-fn gray_document(
-    w: u32,
-    h: u32,
-    coverage: Option<&[u8]>,
-    fill: u8,
-    single_channel: bool,
-) -> Document {
+/// A `w × h` opaque RGBA document whose colour plane is `coverage` (or `fill`
+/// when absent), with transparency locked so an edit cannot rewrite the opacity.
+fn gray_document(w: u32, h: u32, coverage: Option<&[u8]>, fill: u8) -> Document {
     let count = (w as usize) * (h as usize);
-    let value = |i: usize| coverage.map_or(fill, |data| data.get(i).copied().unwrap_or(fill));
-    let lock = LockFlags::default().with(LockFlags::TRANSPARENCY, true);
-    if single_channel {
-        let data: Vec<u8> = (0..count).map(value).collect();
-        let mut document = Document::new(w, h, ColorMode::Grayscale, BitDepth::Eight);
-        document.layers.push(Layer {
-            name: "Mask".to_string(),
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: h as i32,
-                right: w as i32,
-            },
-            channels: vec![Channel {
-                id: 0,
-                data: data.into(),
-            }],
-            lock,
-            ..Default::default()
-        });
-        return document;
-    }
     let mut rgba = Vec::with_capacity(count * 4);
     for i in 0..count {
-        let v = value(i);
+        let v = coverage.map_or(fill, |data| data.get(i).copied().unwrap_or(fill));
         rgba.extend_from_slice(&[v, v, v, 255]);
     }
     let mut document = Document::from_rgba("Mask", w, h, &rgba);
     if let Some(layer) = document.layers.first_mut() {
-        layer.lock = lock;
+        layer.lock = LockFlags::default().with(LockFlags::TRANSPARENCY, true);
     }
     document
 }
@@ -273,6 +274,12 @@ mod tests {
         assert_eq!(layer.channels[0].data.len(), 16);
         assert_eq!(layer.channels[0].data[0], 0, "the coverage is mirrored");
         assert_eq!(layer.channels[0].data[2], 255);
+        let source = resolve_path(&doc, "0").unwrap().mask.as_ref().unwrap();
+        assert!(
+            layer.channels[0].data.shares(source.data.as_ref().unwrap()),
+            "the stroke start shares the mask's plane instead of copying it"
+        );
+        assert!(mask.document.composite.data.is_empty(), "no composite");
     }
 
     #[test]
