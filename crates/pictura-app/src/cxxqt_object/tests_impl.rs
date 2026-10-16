@@ -1,6 +1,6 @@
 use super::helpers::*;
 use super::helpers_composite::*;
-use super::tests::{pixel_layer, undated_icc};
+use super::tests::pixel_layer;
 use crate::history::{History, Snapshot};
 use pictura_core::{BitDepth, Channel, ColorMode, Document, PsdRect};
 use pictura_select::Selection;
@@ -1095,8 +1095,8 @@ fn convert_profile_is_byte_reversible_through_history() {
         &mut doc,
         &pictura_codec::Profile::adobe_rgb()
     ));
-    let adobe = Some(undated_icc(&pictura_codec::Profile::adobe_rgb().to_icc()));
-    assert_eq!(doc.document_icc.as_deref().map(undated_icc), adobe);
+    let adobe = Some(pictura_codec::Profile::adobe_rgb().to_icc());
+    assert_eq!(doc.document_icc, adobe);
     assert_ne!(
         doc.composite, original.composite,
         "convert changes the composite"
@@ -1140,7 +1140,7 @@ fn assign_profile_retags_and_is_reversible_through_history() {
     );
 
     pictura_codec::assign_document_profile(&mut doc, &pictura_codec::Profile::adobe_rgb());
-    let adobe = Some(undated_icc(&pictura_codec::Profile::adobe_rgb().to_icc()));
+    let adobe = Some(pictura_codec::Profile::adobe_rgb().to_icc());
     assert_eq!(
         doc.composite, original.composite,
         "assign leaves the composite bytes untouched"
@@ -1149,7 +1149,7 @@ fn assign_profile_retags_and_is_reversible_through_history() {
         doc.layers, original.layers,
         "assign leaves the layer bytes untouched"
     );
-    assert_eq!(doc.document_icc.as_deref().map(undated_icc), adobe);
+    assert_eq!(doc.document_icc, adobe);
     assert_ne!(
         doc.image_resources, original.image_resources,
         "assign writes resource 1039"

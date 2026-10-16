@@ -9,13 +9,6 @@ use pictura_core::{
 };
 use pictura_select::Selection;
 
-/// `icc` with its header date zeroed: Little CMS stamps the build time.
-pub(super) fn undated_icc(icc: &[u8]) -> Vec<u8> {
-    let mut icc = icc.to_vec();
-    icc[24..36].fill(0);
-    icc
-}
-
 pub(super) fn pixel_layer(name: &str, w: u32, h: u32, rgb: (u8, u8, u8)) -> Layer {
     let n = (w * h) as usize;
     Layer {
