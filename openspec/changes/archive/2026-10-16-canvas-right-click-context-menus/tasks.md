@@ -39,7 +39,7 @@
 
 - [x] 8.1 Record the paint-tool canvas picker as a deliberate non-parity affordance in `docs/02-ui-ux/menus.md` (commit with `TASK-ALLOWS-DOCS`).
 - [x] 8.2 Run `ctest --test-dir build -R '^tst_' --output-on-failure` and confirm `tst_canvas_context_menus` and the existing toolbox/Zoom suites all pass.
-- [ ] 8.3 Run `bash scripts/verify-fast.sh` and confirm fmt, clippy, file-size, guard (including `check-test-plan.py`), and openspec checks pass; update `docs/dev/STATE.md`.
+- [x] 8.3 Run `bash scripts/verify-fast.sh` and confirm fmt, clippy, file-size, guard (including `check-test-plan.py`), and openspec checks pass; update `docs/dev/STATE.md`.
 
 ## 9. Non-grabbing brush picker
 
@@ -47,10 +47,11 @@
 - [x] 9.2 Offset `popUpAt` from the pointer so the brush ring stays visible; add the `QWidget#brushPresetPicker` theme rule; add cases `brushPickerIsNotACapturingPopup`, `brushPickerDismissesOnOutsidePress`, `brushPickerKeepsBrushHover`.
 - [x] 9.3 Note the non-capturing picker behaviour in `docs/02-ui-ux/menus.md` (with `TASK-ALLOWS-DOCS`).
 
-> 8.2 passed (102/102 Qt tests) before section 9. The Rust workspace runs 3164
-> passed; the 33 failures are `::oracle` ImageMagick tests in crates this change
-> does not touch (no `magick`/oracle script in this environment). `openspec
-> validate --all`, `check-test-plan.py`, `cargo fmt --check`, `check-file-size`,
-> and `check-selftest-budget` all pass. Section 9's code and tests are written
-> but not yet compiled; 8.3's `verify-fast.sh` and the `STATE.md` update are still
-> open.
+> 8.2 and 8.3 passed: 104/104 Qt suites green (`ctest -R '^tst_'`), `openspec
+> validate --all --strict` 259/259, `check-file-size`, `check-test-plan`, and
+> `guard` all pass. Section 9 compiles and its cases run clean; a review pass
+> fixed the canvas-menu QMenu lifetime (delete-on-close), made the Crop menu
+> gate on an active box so a boxless right-click falls through to the pasteboard
+> menu, deduplicated the Auto-Select hit walk into one `collect_hits` collector,
+> and finalised an open brush stroke on tool deactivation (an unfinished stroke
+> crashed at teardown).
