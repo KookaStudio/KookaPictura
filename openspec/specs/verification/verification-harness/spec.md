@@ -301,40 +301,6 @@ these rules:
 - **WHEN** the gating condition skips a build job on a pull request
 - **THEN** that job's check run reports a successful conclusion rather than never reporting, so it cannot block a required check
 
-### Requirement: Local verification fast path and compiler caching
-
-`scripts/verify-fast.sh` SHALL detect the changed paths of the working tree
-(committed diff against the merge base with `master`, plus untracked files). When
-every changed path matches `docs/**`, `openspec/**`, `*.md`, or `.serena/**`, it
-SHALL run only `scripts/guard.sh`, `scripts/check-openspec-archived.sh`,
-`scripts/check-test-plan.py`, and `openspec validate --all --strict` and skip
-format, lint, and tests. When the
-changed-path set is empty or contains any other path, it SHALL run the full gate.
-`scripts/verify-full.sh` SHALL pass
-`-DCMAKE_CXX_COMPILER_LAUNCHER=sccache` to the CMake configure only when
-`sccache` is available, and `DEVELOPING.md` SHALL document opting into
-`RUSTC_WRAPPER=sccache` and cleaning `target/`.
-
-#### Scenario: Docs-only working diff
-
-- **WHEN** `scripts/verify-fast.sh` runs and every changed path is `docs/**`, `openspec/**`, `*.md`, or `.serena/**`
-- **THEN** it runs the guard, the archive check, the test plan, and OpenSpec validation and does not run fmt, clippy, or tests
-
-#### Scenario: Clean tree or code change
-
-- **WHEN** the working diff is empty or contains a path outside the fast-path set
-- **THEN** `scripts/verify-fast.sh` runs the full gate
-
-#### Scenario: sccache present
-
-- **WHEN** `scripts/verify-full.sh` runs on a machine where `sccache` is on `PATH`
-- **THEN** the CMake configure receives `-DCMAKE_CXX_COMPILER_LAUNCHER=sccache`
-
-#### Scenario: sccache absent
-
-- **WHEN** `sccache` is not on `PATH`
-- **THEN** `scripts/verify-full.sh` configures CMake without a compiler launcher and still builds
-
 ### Requirement: Paint present-tiling self-check
 
 The C++ self-test SHALL include a check, with the next free append-only exit
@@ -361,3 +327,23 @@ the observed dab and rebuild counts.
 - **WHEN** the unit check commits a single-region stroke and compares its blit
   image with the level-0 crop of the same rectangle
 - **THEN** every pixel channel is identical
+
+### Requirement: Local verification fast path
+
+`scripts/verify-fast.sh` SHALL detect the changed paths of the working tree
+(committed diff against the merge base with `master`, plus untracked files). When
+every changed path matches `docs/**`, `openspec/**`, `*.md`, or `.serena/**`, it
+SHALL run only `scripts/guard.sh`, `scripts/check-openspec-archived.sh`,
+`scripts/check-test-plan.py`, and `openspec validate --all --strict` and skip
+format, lint, and tests. When the changed-path set is empty or contains any other
+path, it SHALL run the full gate.
+
+#### Scenario: Docs-only working diff
+
+- **WHEN** `scripts/verify-fast.sh` runs and every changed path is `docs/**`, `openspec/**`, `*.md`, or `.serena/**`
+- **THEN** it runs the guard, the archive check, the test plan, and OpenSpec validation and does not run fmt, clippy, or tests
+
+#### Scenario: Clean tree or code change
+
+- **WHEN** the working diff is empty or contains a path outside the fast-path set
+- **THEN** `scripts/verify-fast.sh` runs the full gate

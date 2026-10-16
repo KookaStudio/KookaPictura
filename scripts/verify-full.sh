@@ -10,14 +10,13 @@ cd "$(dirname "$0")/.."
 
 echo "== cmake =="
 if [ ! -d build ]; then
-  cmake_args=(-S . -B build -G Ninja -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld)
-  if command -v sccache >/dev/null 2>&1; then
-    cmake_args+=(-DCMAKE_CXX_COMPILER_LAUNCHER=sccache)
-  fi
-  cmake "${cmake_args[@]}"
+  cmake -S . -B build -G Ninja -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld
 fi
 cmake --build build --parallel
 echo "cmake_build=ok"
+
+echo "== build cache =="
+bash scripts/check-local-build-caching.sh --rebuild --dir build
 
 bash scripts/verify-fast.sh
 

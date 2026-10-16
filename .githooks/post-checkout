@@ -7,12 +7,26 @@
 # `git clone` until the hooks path is set.) Idempotent and unconditionally
 # exit 0 — this hook's exit status IS the checkout status. Diagnostics on
 # stderr only. See DEVELOPING.md, "Worktrees".
+#
+# Also, opt-in, shares the local C++ compiler cache across worktrees by writing
+# a managed sccache config (design: openspec/changes/local-only-sccache-opt-in).
+# Enable with `KOOKA_SCCACHE_SHARE=1` in the process environment or in the
+# user-global env file ${XDG_CONFIG_HOME:-$HOME/.config}/kooka-pictura/env
+# (override with KOOKA_ENV_FILE; create it from the committed .env.example). No
+# committed file can enable it. The config is user-global and the daemon restart
+# is machine-global; see DEVELOPING.md.
 
 cd "$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
 
 git_dir=$(git rev-parse --git-dir 2>/dev/null) || exit 0
 common=$(git rev-parse --git-common-dir 2>/dev/null) || exit 0
 [ "$git_dir" = "$common" ] && exit 0
+
+common_abs=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || common_abs=
+main_root=${common_abs%/*}
+# Repo-specific so two opted-in clones do not clobber each other's basedirs; a
+# config carrying a different repo's sentinel is treated as unmanaged and left.
+SCCACHE_SENTINEL="# managed by kooka-pictura post-checkout (share-cmake-cache-across-worktrees) ${main_root}"
 
 # Shared cargo tree for every worktree under this root. mkdir before ln: a
 # dangling target symlink makes cargo's create_dir_all("target") fail.
@@ -25,8 +39,6 @@ if [ ! -e target ] && [ ! -L target ]; then
 fi
 
 if [ ! -e reference-fixtures ] && [ ! -L reference-fixtures ]; then
-    common_abs=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || common_abs=
-    main_root=${common_abs%/*}
     if [ -n "$common_abs" ] && [ -d "$main_root/reference-fixtures" ]; then
         # Relative link so it still resolves if the main checkout moves
         # alongside the worktree; absolute only if realpath cannot compute one.
@@ -39,5 +51,101 @@ if [ ! -e reference-fixtures ] && [ ! -L reference-fixtures ]; then
         fi
     fi
 fi
+
+# The opt-in is local-only: the process environment, else a user-global env file
+# outside the repository. Nothing committed can enable it.
+kooka_env_file() {
+    printf '%s' "${KOOKA_ENV_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/kooka-pictura/env}"
+}
+
+kooka_env_var() { # <NAME> -> value from the user-global env file, or empty
+    local file
+    file=$(kooka_env_file)
+    [ -r "$file" ] || return 0
+    sed -nE "s/^[[:space:]]*(export[[:space:]]+)?$1=//p" "$file" 2>/dev/null \
+        | tail -1 | sed -E "s/^[[:space:]]*[\"']?//; s/[\"']?[[:space:]]*$//"
+}
+
+# True when the developer opted in to sharing the C++ compiler cache.
+sccache_share_enabled() {
+    [ "${KOOKA_SCCACHE_SHARE:-}" = "1" ] && return 0
+    [ "$(kooka_env_var KOOKA_SCCACHE_SHARE)" = "1" ]
+}
+
+# Path of the sccache config: SCCACHE_CONF, else the platform default.
+sccache_config_path() {
+    if [ -n "${SCCACHE_CONF:-}" ]; then
+        printf '%s' "$SCCACHE_CONF"
+        return 0
+    fi
+    case "$(uname -s 2>/dev/null)" in
+        Darwin) printf '%s' "$HOME/Library/Application Support/Mozilla.sccache/config" ;;
+        *)      printf '%s' "${XDG_CONFIG_HOME:-$HOME/.config}/sccache/config" ;;
+    esac
+}
+
+# Write the managed sccache config listing every worktree root as a basedir, so
+# the same object built under different worktree paths shares one cache entry.
+# Never touches a config it did not write; rewrites (and restarts the daemon)
+# only when the content changed, so a branch switch stays a silent no-op.
+share_sccache_cache() {
+    command -v sccache >/dev/null 2>&1 || return 0
+    sccache_share_enabled || return 0
+
+    conf=$(sccache_config_path)
+    [ -n "$conf" ] || return 0
+
+    # An empty file is treated as writable; a non-empty file we did not write is
+    # left alone (its first line is not our sentinel).
+    if [ -s "$conf" ] && [ "$(sed -n '1p' "$conf" 2>/dev/null)" != "$SCCACHE_SENTINEL" ]; then
+        echo "post-checkout: $conf is not managed by kooka-pictura; leaving it" >&2
+        return 0
+    fi
+
+    local roots unsafe=0 root
+    roots=$(git worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p')
+    while IFS= read -r root; do
+        [ -n "$root" ] || continue
+        case "$root" in
+            *'"'* | *'\'*) unsafe=1; break ;;
+        esac
+    done <<<"$roots"
+    if [ "$unsafe" -eq 1 ]; then
+        echo "post-checkout: a worktree path has a quote or backslash; skipping sccache config" >&2
+        return 0
+    fi
+
+    local tmp first=1
+    tmp=$(mktemp 2>/dev/null) || return 0
+    {
+        printf '%s\n' "$SCCACHE_SENTINEL"
+        printf '# Managed by .githooks/post-checkout; delete and run `sccache --stop-server` to opt out.\n'
+        printf 'basedirs = ['
+        while IFS= read -r root; do
+            [ -n "$root" ] || continue
+            if [ "$first" -eq 1 ]; then first=0; else printf ', '; fi
+            printf '"%s"' "$root"
+        done <<<"$roots"
+        printf ']\n'
+        printf '[cache.disk.preprocessor_cache_mode]\n'
+        printf 'hash_working_directory = false\n'
+    } >"$tmp" || { rm -f "$tmp"; return 0; }
+
+    if [ -e "$conf" ] && cmp -s "$tmp" "$conf"; then
+        rm -f "$tmp"
+        return 0
+    fi
+
+    mkdir -p "$(dirname "$conf")" 2>/dev/null || { rm -f "$tmp"; return 0; }
+    if mv "$tmp" "$conf" 2>/dev/null; then
+        sccache --stop-server >/dev/null 2>&1 || true
+        echo "post-checkout: sccache cache shared across worktrees ($conf)" >&2
+    else
+        rm -f "$tmp"
+    fi
+    return 0
+}
+
+share_sccache_cache || echo "post-checkout: skipped sccache cache sharing" >&2
 
 exit 0

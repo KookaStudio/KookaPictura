@@ -30,6 +30,12 @@ __pycache__/
 *.flatpak
 *.snap
 
+# Local environment files (the real file is user-global and never committed)
+.env
+.env.*
+!.env.example
+.envrc
+
 # OS / editor
 .DS_Store
 *.swp

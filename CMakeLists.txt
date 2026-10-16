@@ -7,6 +7,19 @@ cmake_minimum_required(VERSION 3.24)
 
 project(kooka_pictura VERSION 0.1.0 LANGUAGES CXX) # x-release-please-version
 
+# Route local C++ compilation through sccache when it is installed. An explicit
+# -DCMAKE_CXX_COMPILER_LAUNCHER or the same-named environment variable wins: the
+# cache variable is seeded from the environment during project(), so this runs
+# after a user override is already visible. The nested guard keeps a missing
+# sccache from setting the launcher to SCCACHE_EXECUTABLE-NOTFOUND.
+if(NOT CMAKE_CXX_COMPILER_LAUNCHER)
+    find_program(SCCACHE_EXECUTABLE sccache)
+    if(SCCACHE_EXECUTABLE)
+        set(CMAKE_CXX_COMPILER_LAUNCHER "${SCCACHE_EXECUTABLE}")
+        message(STATUS "C++ compiler launcher: ${SCCACHE_EXECUTABLE}")
+    endif()
+endif()
+
 # clangd (and therefore Serena's C++ symbol tools) reads compile_commands.json
 # from the repo root. CMake writes it into the build dir, so link it back.
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
