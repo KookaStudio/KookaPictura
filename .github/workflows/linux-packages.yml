@@ -61,18 +61,24 @@ jobs:
       - name: Smoke-check the .deb on Ubuntu 24.04
         run: |
           docker run --rm -v "$PWD/dist:/dist:ro" ubuntu:24.04 bash -ec '
+            set -x
             apt-get update -qq
             DEBIAN_FRONTEND=noninteractive apt-get install -y -qq /dist/*.deb
-            test -f /usr/share/doc/kooka-pictura/copyright
-            test -f /usr/share/metainfo/pictura.metainfo.xml
+            for f in /usr/share/doc/kooka-pictura/copyright \
+                     /usr/share/metainfo/pictura.metainfo.xml; do
+              if [ ! -f "$f" ]; then echo "missing $f"; dpkg -L kooka-pictura; exit 1; fi
+            done
             pictura --headless --self-test'
 
       - name: Smoke-check the .rpm on Fedora
         run: |
           docker run --rm -v "$PWD/dist:/dist:ro" fedora:latest bash -ec '
+            set -x
             dnf install -y -q /dist/*.rpm
-            test -f /usr/share/doc/kooka-pictura/copyright
-            test -f /usr/share/metainfo/pictura.metainfo.xml
+            for f in /usr/share/doc/kooka-pictura/copyright \
+                     /usr/share/metainfo/pictura.metainfo.xml; do
+              if [ ! -f "$f" ]; then echo "missing $f"; rpm -ql kooka-pictura; exit 1; fi
+            done
             pictura --headless --self-test'
 
       - name: Keep the packages
