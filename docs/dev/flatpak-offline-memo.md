@@ -1,6 +1,10 @@
 # Flatpak offline memo
 
-Status: investigation note, no work scheduled. Written 2026-09-19.
+Status: historical investigation note, written 2026-09-19 and superseded by the
+shipped Flatpak manifest `flatpak/io.github.KookaStudio.KookaPictura.yml` and
+the packaging sections of `DEVELOPING.md`. The findings below are kept for
+context; the "What was true at the time" section describes the pre-manifest
+state.
 
 The question: ca Kooka Pictura be built as a Flatpak with no network at build
 time, handed to someone with no network, and then run under Flatpak on their
@@ -10,7 +14,7 @@ Short answer: yes on all three, with conditions. Nothing here is decided and no
 task is open. This records what the build system and Flatpak actually allow, so
 a later proposal does not have to rediscover it.
 
-## What is true today
+## What was true at the time
 
 - The repo has no Flatpak manifest, no application id, no `install()` rules, no
   desktop file, no AppStream metainfo, and no MIME definitions. `project()`

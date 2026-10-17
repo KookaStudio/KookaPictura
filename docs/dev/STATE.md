@@ -12,6 +12,21 @@ Snapshot for resuming after a context break. Update after each milestone.
   contains reproduced Adobe Help prose or the old wording.
 - Toolchain: Rust 1.98 (`rust-toolchain.toml`), system Qt **6.11.1**, cxx-qt
   **0.10.0**, wgpu **30.0.1**, lcms2 **6.2.0** (system Little CMS 2.19).
+- **Release build hardening** (#703 / #710, OpenSpec change
+  `release-build-hardening`, archived into `meta/release-build-hardening`). All
+  six packagers (`appimage`, `linux-packages`, `snap`, `flatpak`, `windows`,
+  `macos`) now use unique concurrency groups, a fork gate that checks the PR
+  head repository, read-only PR dry runs with a separate `contents: write`
+  upload job, SHA-pinned actions and pinned downloads, and one tag normalizer.
+  Each artifact is exercised in the form users receive it: the AppImage in a
+  clean `ubuntu:24.04` container, the Flatpak bundle's self-test, the Windows
+  portable zip and silent-installed NSIS installer (with the install marker
+  guard and uninstall round-trip), and the mounted macOS DMG. The Flatpak lint
+  job also runs `scripts/check-flatpak-cargo-sources.py`, and snap asserts the
+  tag matches `version.txt`. `README.md`, `DEVELOPING.md`, and the parity
+  register were updated. The temporary PR dry-run trigger widening used to
+  exercise all six workflows was reverted before merge, so feature PRs still
+  skip the full builds.
 - **Photoshop PDF writer** (#626, branch `feat/626-photoshop-pdf-writer`,
   OpenSpec change `photoshop-pdf-writer`, archived into `interop/pdf-export`).
   `pictura_codec::pdf` writes one page holding the rendered composite as one

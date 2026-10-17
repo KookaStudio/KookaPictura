@@ -49,7 +49,8 @@ Deeper technical status for PSD/PSB lives in
 - [x] Open PNG, JPEG, GIF, BMP, TIFF, and WebP
 - [ ] Save As / Export to PNG, JPEG, TIFF, WebP, and BMP
 - [ ] Save for Web
-- [ ] Installers: Flatpak, AppImage, and `.deb`
+- [x] Installers: AppImage, `.deb`/`.rpm`, snap, Flatpak, Windows
+      portable/installer, and macOS DMG
 
 ### Tools
 
