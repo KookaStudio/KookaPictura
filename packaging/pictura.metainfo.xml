@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>pictura</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Kooka Pictura</name>
+  <summary>Raster image editor modeled on Photoshop CS6</summary>
+  <description>
+    <p>
+      Kooka Pictura is a documentation-first reimplementation of Adobe
+      Photoshop CS6 in Rust and Qt 6.
+    </p>
+  </description>
+  <launchable type="desktop-id">pictura.desktop</launchable>
+  <url type="homepage">https://github.com/KookaStudio/KookaPictura</url>
+  <developer id="io.github.kookastudio">
+    <name>Kooka Studio</name>
+  </developer>
+  <content_rating type="oars-1.1"/>
+</component>

@@ -11,7 +11,7 @@ runs:
       run: rustup show active-toolchain
 
     - name: Install Qt
-      uses: jurplel/install-qt-action@v4
+      uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4 (branch head)
       with:
         version: '6.11.1'
         arch: win64_msvc2022_64
@@ -25,14 +25,18 @@ runs:
 
     # Puts cl.exe and the Windows SDK on PATH for Ninja + Cargo.
     - name: Set up MSVC
-      uses: ilammy/msvc-dev-cmd@v1.13.0
+      uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
 
     # The workflows set RUSTC_WRAPPER/SCCACHE_GHA_ENABLED; this only installs
     # the binary (same action and version ci.yml uses).
     - name: Install sccache
-      uses: mozilla-actions/sccache-action@v0.0.11
+      uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+      with:
+        # The action installs whatever it downloads; pin the binary that speaks
+        # the GitHub Actions cache v2 backend on Windows.
+        version: v0.18.0
 
-    - uses: Swatinem/rust-cache@v2
+    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       with:
         cache-targets: "false"
 
@@ -49,20 +53,19 @@ runs:
         cmake --build build --config Release
         cmake --install build --config Release
 
-    # windeployqt gathers the Qt DLLs and the platforms plugins next to the
-    # executable. Its default also copies the MSVC runtime, which is what lets
-    # the portable archive run on a machine without the VC++ redistributable.
+    # windeployqt gathers the Qt DLLs and the platform plugins next to the
+    # executable. Do not pass --compiler-runtime: it ships the vc_redist
+    # installer alongside the loose runtime DLLs copied below (~25 MB bloat).
     - name: Deploy Qt
       shell: pwsh
       run: |
         $ErrorActionPreference = 'Stop'
         $PSNativeCommandUseErrorActionPreference = $true
-        windeployqt --release --compiler-runtime "$env:GITHUB_WORKSPACE\stage\bin\pictura.exe"
+        windeployqt --release "$env:GITHUB_WORKSPACE\stage\bin\pictura.exe"
 
-    # windeployqt's platform-plugin set varies by Qt version, and 6.11.1 skips
-    # the MSVC runtime even with --compiler-runtime. Make the deployed folder
-    # self-contained: the offscreen QPA plugin the headless check needs, plus
-    # the C/C++ runtime DLLs copied from the installed VS redistributable.
+    # windeployqt's platform-plugin set varies by Qt version. Make the deployed
+    # folder self-contained: the offscreen QPA plugin the headless check needs,
+    # plus the C/C++ runtime DLLs copied from the installed VS redistributable.
     - name: Ensure the offscreen plugin and MSVC runtime
       shell: pwsh
       run: |
@@ -70,7 +73,9 @@ runs:
         $bin = "$env:GITHUB_WORKSPACE\stage\bin"
         $dst = "$bin\platforms"
         New-Item -ItemType Directory -Force -Path $dst | Out-Null
-        Copy-Item "$env:QT_ROOT_DIR\plugins\platforms\qoffscreen.dll" $dst -Force -ErrorAction SilentlyContinue
+        $offscreen = "$env:QT_ROOT_DIR\plugins\platforms\qoffscreen.dll"
+        if (-not (Test-Path $offscreen)) { throw "qoffscreen.dll not found at $offscreen" }
+        Copy-Item $offscreen $dst -Force
         $crt = Get-ChildItem "$env:VCToolsRedistDir\x64\Microsoft.VC*.CRT" -Directory -ErrorAction SilentlyContinue |
           Select-Object -First 1
         if (-not $crt) { throw "MSVC redistributable CRT folder not found under $env:VCToolsRedistDir" }

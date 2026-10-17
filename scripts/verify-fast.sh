@@ -72,6 +72,10 @@ bash scripts/test-report.sh never
 echo "== file-size =="
 bash scripts/check-file-size.sh
 
+echo "== flatpak sources =="
+python3 scripts/check-flatpak-cargo-sources.py --self-test
+python3 scripts/check-flatpak-cargo-sources.py
+
 echo "== worktree hook =="
 bash scripts/check-worktree-hook.sh
 

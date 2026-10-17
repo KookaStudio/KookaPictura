@@ -18,6 +18,10 @@
   ; packaging/windows/, not the invocation cwd.
   !define APP_ICON "..\..\assets\icons\app.ico"
 !endif
+!ifndef VI_VERSION
+  ; VIProductVersion wants four numeric parts; the workflow passes this.
+  !define VI_VERSION "0.0.0.0"
+!endif
 
 Unicode true
 Name "Kooka Pictura ${VERSION}"
@@ -43,17 +47,57 @@ SetCompressor /SOLID lzma
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "English"
 
+VIProductVersion "${VI_VERSION}"
+VIAddVersionKey /LANG=${LANG_ENGLISH} "ProductName" "Kooka Pictura"
+VIAddVersionKey /LANG=${LANG_ENGLISH} "ProductVersion" "${VERSION}"
+VIAddVersionKey /LANG=${LANG_ENGLISH} "FileDescription" "Kooka Pictura installer"
+VIAddVersionKey /LANG=${LANG_ENGLISH} "FileVersion" "${VERSION}"
+VIAddVersionKey /LANG=${LANG_ENGLISH} "LegalCopyright" "GPL-3.0-or-later"
+
 Function .onInit
   SetRegView 64
   SetShellVarContext all
 FunctionEnd
 
+; Reject a shared directory unless it is a previous Kooka Pictura install. The
+; marker is written by this installer, so an unmarked directory belongs to
+; someone else and the uninstaller would not be allowed to clean it anyway.
+; Called from .onVerifyInstDir for interactive installs and again from the
+; section, because the directory page (and its callback) is skipped in silent
+; mode.
+Function CheckInstallDir
+  IfFileExists "$INSTDIR\.kooka-pictura-install" done
+  FindFirst $0 $1 "$INSTDIR\*.*"
+  loop:
+    StrCmp $1 "" empty
+    StrCmp $1 "." next
+    StrCmp $1 ".." next
+    FindClose $0
+    MessageBox MB_OK|MB_ICONSTOP \
+      "$INSTDIR is not empty and is not a Kooka Pictura installation. Choose an empty folder or a previous install directory."
+    Abort
+  next:
+    FindNext $0 $1
+    Goto loop
+  empty:
+    FindClose $0
+  done:
+FunctionEnd
+
+Function .onVerifyInstDir
+  Call CheckInstallDir
+FunctionEnd
+
 Section "Kooka Pictura" SecMain
   SetRegView 64
+  Call CheckInstallDir
   SetOutPath "$INSTDIR"
   ; The staged tree is already self-contained: pictura.exe, the Qt DLLs, the
   ; platforms plugins, and the MSVC runtime that windeployqt copied.
   File /r "${STAGE_DIR}\*"
+  FileOpen $0 "$INSTDIR\.kooka-pictura-install" w
+  FileWrite $0 "${VERSION}$\r$\n"
+  FileClose $0
   WriteUninstaller "$INSTDIR\uninstall.exe"
 
   CreateDirectory "$SMPROGRAMS\Kooka Pictura"
@@ -86,10 +130,12 @@ SectionEnd
 Section "Uninstall"
   SetRegView 64
   SetShellVarContext all
-  ; Never wipe a directory that is not our install: the sentinel only exists in
-  ; a tree this installer created, so a user who pointed the installer at a
-  ; shared or non-empty folder is not silently cleaned out.
-  IfFileExists "$INSTDIR\bin\pictura.exe" 0 not_ours
+  ; Never wipe a directory that is not our install: the marker is written by
+  ; this installer, so a user who pointed the installer at a shared or
+  ; non-empty folder is not silently cleaned out. Quit rather than fall
+  ; through: leaving the files must also leave the uninstall entry and
+  ; shortcuts, otherwise the install is orphaned.
+  IfFileExists "$INSTDIR\.kooka-pictura-install" 0 not_ours
     Delete "$SMPROGRAMS\Kooka Pictura\Kooka Pictura.lnk"
     RMDir "$SMPROGRAMS\Kooka Pictura"
     Delete "$DESKTOP\Kooka Pictura.lnk"
@@ -97,6 +143,7 @@ Section "Uninstall"
     Goto remove_reg
   not_ours:
     MessageBox MB_OK|MB_ICONEXCLAMATION "$INSTDIR does not contain a Kooka Pictura install; nothing was removed."
+    Quit
   remove_reg:
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\KookaPictura"
   DeleteRegKey HKLM "Software\KookaPictura"

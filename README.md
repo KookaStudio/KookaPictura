@@ -25,9 +25,13 @@ clone of every corner of Photoshop. For what is in and out of scope, see
 
 ## Getting it
 
-Kooka Pictura is not packaged for download yet. You build it from source.
+Prebuilt artifacts are published on the GitHub Releases page: AppImage,
+`.deb`/`.rpm`, snap, Flatpak, Windows portable archive and installer, and an
+Apple Silicon DMG. The macOS DMG is **unsigned and not notarized**; on first
+launch allow it in **System Settings → Privacy & Security → Open Anyway**.
 
-Requirements: Rust 1.98, Qt 6, CMake, Ninja, `lld`, and the Little CMS 2 headers.
+You can also build it from source. Requirements: Rust 1.98, Qt 6, CMake, Ninja,
+`lld`, and the Little CMS 2 headers.
 
 ```bash
 cmake -S . -B build -G Ninja -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld
@@ -36,8 +40,7 @@ cmake --build build --parallel
 ```
 
 Full prerequisites, test commands, and packaging notes are in
-[`DEVELOPING.md`](DEVELOPING.md). Installers (Flatpak, AppImage, `.deb`) are on
-the roadmap.
+[`DEVELOPING.md`](DEVELOPING.md).
 
 ## Quick start
 

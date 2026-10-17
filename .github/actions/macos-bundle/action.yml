@@ -12,7 +12,7 @@ runs:
       run: rustup show active-toolchain
 
     - name: Install Qt
-      uses: jurplel/install-qt-action@v4
+      uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4 (branch head)
       with:
         version: '6.11.1'
         cache: true
@@ -20,30 +20,61 @@ runs:
     # The workflows set RUSTC_WRAPPER/SCCACHE_GHA_ENABLED; this only installs
     # the binary (same action and version ci.yml uses).
     - name: Install sccache
-      uses: mozilla-actions/sccache-action@v0.0.11
+      uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+      with:
+        version: v0.18.0
 
-    - uses: Swatinem/rust-cache@v2
+    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       with:
         cache-targets: "false"
 
     # No --locked: the Release PR bumps Cargo.toml but not Cargo.lock
-    # (DEVELOPING.md). No -fuse-ld=lld: that is a Linux linker flag. The
-    # deployment target matches the bundle's LSMinimumSystemVersion (Qt 6.11's
-    # macOS 13 floor).
+    # (DEVELOPING.md). No -fuse-ld=lld: that is a Linux linker flag.
     #
-    # macdeployqt deploys only the cocoa platform plugin; the --headless smoke
-    # check needs offscreen. Copy it into the bundle before macdeployqt so that
-    # run rewrites the plugin's Qt framework references to the bundle (the same
-    # thing linux-bundle's EXTRA_PLATFORM_PLUGINS and windows-bundle's manual
-    # copy do for their platforms).
+    # The deployment target must reach Cargo/cxx-qt as well as CMake, hence the
+    # exported MACOSX_DEPLOYMENT_TARGET (CMAKE_OSX_DEPLOYMENT_TARGET alone left
+    # the Rust and cxx-qt objects built for the runner's macOS). Qt 6.11's floor
+    # is macOS 13.
+    #
+    # macdeployqt skips bundle files that already exist, so the pre-copied
+    # offscreen plugin would keep its runner-Qt framework paths. -always-overwrite
+    # makes macdeployqt rewrite them like it does for the cocoa plugin. The
+    # bundle is then ad-hoc signed, which Apple Silicon requires even unsigned.
     - name: Build and deploy the bundle
       shell: bash
+      env:
+        MACOSX_DEPLOYMENT_TARGET: "13.0"
       run: |
+        set -o pipefail
         cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
           -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 \
           -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
-        cmake --build build --parallel
+        cmake --build build --parallel 2>&1 | tee build.log
+        if grep -q "built for newer 'macOS'" build.log; then
+          echo "::error::the link used objects built for a newer macOS than 13.0"
+          exit 1
+        fi
         mkdir -p build/pictura.app/Contents/PlugIns/platforms
         cp "$QT_ROOT_DIR/plugins/platforms/libqoffscreen.dylib" \
           build/pictura.app/Contents/PlugIns/platforms/
-        macdeployqt build/pictura.app
+        macdeployqt build/pictura.app -always-overwrite
+
+    - name: Verify the deployment target and bundle-relative references
+      shell: bash
+      run: |
+        app=build/pictura.app
+        minos=$(otool -l "$app/Contents/MacOS/pictura" |
+          awk '/minos/{print $2; exit} /LC_VERSION_MIN_MACOSX/{want=1; next} want && /version/{print $2; exit}')
+        if [ "$minos" != "13.0" ]; then
+          echo "::error::pictura minos is $minos, expected 13.0"
+          exit 1
+        fi
+        for f in "$app/Contents/MacOS/pictura" \
+                 "$app/Contents/PlugIns/platforms/libqoffscreen.dylib"; do
+          otool -L "$f"
+        done > otool.txt
+        if grep -F "$QT_ROOT_DIR" otool.txt; then
+          echo "::error::a bundle binary still references the runner's Qt"
+          exit 1
+        fi
+        codesign --force --deep --sign - "$app"

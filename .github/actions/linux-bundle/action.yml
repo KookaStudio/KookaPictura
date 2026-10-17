@@ -18,7 +18,7 @@ runs:
       run: sudo apt-get update && sudo apt-get install -y lld ninja-build liblcms2-dev libvulkan-dev libfuse2t64
 
     - name: Install Qt
-      uses: jurplel/install-qt-action@v4
+      uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4 (branch head)
       with:
         version: '6.11.1'
         cache: true
@@ -26,9 +26,11 @@ runs:
     # The workflows set RUSTC_WRAPPER/SCCACHE_GHA_ENABLED; this only installs
     # the binary (same action and version ci.yml uses).
     - name: Install sccache
-      uses: mozilla-actions/sccache-action@v0.0.11
+      uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+      with:
+        version: v0.18.0
 
-    - uses: Swatinem/rust-cache@v2
+    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       with:
         cache-targets: "false"
 
@@ -51,8 +53,15 @@ runs:
         # linuxdeploy's bundled strip cannot read RELR sections (newer toolchains).
         NO_STRIP: "1"
       run: |
+        # Pinned releases, not :continuous, and verified before execution.
+        ld_version=1-alpha-20251107-1
+        ld_qt_version=1-alpha-20250213-1
         base=https://github.com/linuxdeploy
-        curl -fsSLO "$base/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage"
-        curl -fsSLO "$base/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage"
+        curl -fsSL -o linuxdeploy-x86_64.AppImage \
+          "$base/linuxdeploy/releases/download/$ld_version/linuxdeploy-x86_64.AppImage"
+        curl -fsSL -o linuxdeploy-plugin-qt-x86_64.AppImage \
+          "$base/linuxdeploy-plugin-qt/releases/download/$ld_qt_version/linuxdeploy-plugin-qt-x86_64.AppImage"
+        echo "c20cd71e3a4e3b80c3483cef793cda3f4e990aca14014d23c544ca3ce1270b4d  linuxdeploy-x86_64.AppImage" | sha256sum -c -
+        echo "15106be885c1c48a021198e7e1e9a48ce9d02a86dd0a1848f00bdbf3c1c92724  linuxdeploy-plugin-qt-x86_64.AppImage" | sha256sum -c -
         chmod +x linuxdeploy*.AppImage
         ./linuxdeploy-x86_64.AppImage --appdir AppDir --plugin qt

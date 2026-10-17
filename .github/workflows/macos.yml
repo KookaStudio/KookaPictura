@@ -8,15 +8,21 @@ name: macos
 # the DMG as a workflow artifact. Feature PRs never run it.
 #
 # The bundle and DMG are unsigned: there is no Apple Developer account yet, so
-# the workflow takes no signing secrets and passes no signing options.
+# the workflow takes no signing secrets and passes no signing options. The
+# bundle is ad-hoc signed because Apple Silicon requires a signature; that is
+# not notarization. Signing/notarization is #704.
 on:
   pull_request:
     paths:
       - Cargo.toml
+      - Cargo.lock
       - CMakeLists.txt
       - CHANGELOG.md
       - version.txt
       - .release-please-manifest.json
+      - .github/workflows/macos.yml
+      - .github/actions/macos-bundle/action.yml
+      - packaging/**
   workflow_call:
     inputs:
       tag:
@@ -25,33 +31,37 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing release tag, e.g. v0.1.0
+        description: Existing release tag, e.g. v0.1.0 (a leading v is added if omitted)
         type: string
         required: true
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: macos-${{ inputs.tag || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Release uploads live in their own job; a pull-request dry run is read-only.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   macos:
     runs-on: macos-15
     timeout-minutes: 90
-    if: github.event_name != 'pull_request' || github.head_ref == 'release-please--branches--master'
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.head_ref == 'release-please--branches--master' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
     env:
       TAG: ${{ inputs.tag }}
-      VERSION: ${{ inputs.tag || format('pr{0}', github.event.number) }}
+      VERSION: ${{ inputs.tag || format('0.0.0~pr{0}', github.event.number) }}
       # sccache, the same setup ci.yml uses.
       RUSTC_WRAPPER: sccache
       SCCACHE_GHA_ENABLED: "true"
       CARGO_INCREMENTAL: "0"
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ inputs.tag }}
+          ref: ${{ inputs.tag != '' && (startsWith(inputs.tag, 'v') && inputs.tag || format('v{0}', inputs.tag)) || github.sha }}
 
       - uses: ./.github/actions/macos-bundle
 
@@ -60,33 +70,72 @@ jobs:
       - name: Smoke-check the deployed bundle
         run: |
           env -u QT_PLUGIN_PATH -u QML2_IMPORT_PATH \
+            -u DYLD_LIBRARY_PATH -u DYLD_FALLBACK_LIBRARY_PATH \
             ./build/pictura.app/Contents/MacOS/pictura --headless --self-test
 
-      # ponytail: unsigned DMG; add codesign --sign "Developer ID Application"
-      # plus notarytool when an Apple Developer account exists.
+      # create-dmg is pinned by tag and hash. The release tarball is used
+      # because the script needs its sibling support/ directory.
+      # --skip-jenkins skips the Finder AppleScript that needs an interactive
+      # session (and makes --app-drop-link a no-op, so it is not passed).
       - name: Pack the DMG
         run: |
-          brew install create-dmg
+          curl -fsSL -o create-dmg.tar.gz \
+            https://github.com/create-dmg/create-dmg/archive/refs/tags/v1.3.0.tar.gz
+          echo "c50d2bc97c3d6292642bac55f530d247eaf4bf65ee605f26b4caf339383e381c  create-dmg.tar.gz" | shasum -a 256 -c -
+          tar -xzf create-dmg.tar.gz
           mkdir -p dist
           cp -R build/pictura.app dist/
-          create-dmg \
+          ./create-dmg-1.3.0/create-dmg \
             --volname "Kooka Pictura ${VERSION#v}" \
             --volicon assets/icons/app.icns \
-            --app-drop-link 480 200 \
             --skip-jenkins \
             "KookaPictura-${VERSION#v}-macOS.dmg" \
             dist/
 
+      # Test the artifact users get, from the mounted image, with no runner
+      # DYLD/Qt paths in the environment.
+      - name: Smoke-check the mounted DMG
+        run: |
+          set -euo pipefail
+          dmg=$(ls KookaPictura-*-macOS.dmg)
+          mountpoint=/Volumes/kooka-pictura-test
+          hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mountpoint"
+          trap 'hdiutil detach "$mountpoint" || true' EXIT
+          app="$mountpoint/pictura.app"
+          test -f "$app/Contents/Resources/qt.conf"
+          env -u QT_PLUGIN_PATH -u QML2_IMPORT_PATH \
+            -u DYLD_LIBRARY_PATH -u DYLD_FALLBACK_LIBRARY_PATH \
+            "$app/Contents/MacOS/pictura" --headless --self-test 2>&1 |
+            tee dmg-selftest.log
+          grep -q 'SUMMARY passed=[0-9]* failed=0' dmg-selftest.log
+          if otool -L "$app/Contents/MacOS/pictura" | grep -F "$QT_ROOT_DIR"; then
+            echo "::error::the DMG binary references the runner's Qt"
+            exit 1
+          fi
+
       - name: Keep the dry-run DMG
-        if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: macos
           path: KookaPictura-*-macOS.dmg
           retention-days: 7
+          if-no-files-found: error
+
+  upload:
+    runs-on: ubuntu-24.04
+    needs: macos
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ inputs.tag != '' && (startsWith(inputs.tag, 'v') && inputs.tag || format('v{0}', inputs.tag)) || '' }}
+    steps:
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: macos
 
       - name: Upload release assets
-        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$TAG" KookaPictura-*-macOS.dmg --clobber
+          GH_REPO: ${{ github.repository }}
+        run: gh release upload "$RELEASE_TAG" KookaPictura-*-macOS.dmg --clobber

@@ -16,7 +16,9 @@ on:
       - CHANGELOG.md
       - version.txt
       - .release-please-manifest.json
+      - packaging/**
       - .github/workflows/flatpak.yml
+      - scripts/check-flatpak-cargo-sources.py
   workflow_call:
     inputs:
       tag:
@@ -25,13 +27,17 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing release tag, e.g. v0.1.0
+        description: Existing release tag, e.g. v0.1.0 (a leading v is added if omitted)
         type: string
         required: true
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: flatpak-${{ inputs.tag || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# The release upload job is the only writer; the dry run is read-only.
+permissions:
+  contents: read
 
 jobs:
   lint:
@@ -41,30 +47,36 @@ jobs:
     # release build validates the manifest by building it.
     if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Check the vendored crates match Cargo.lock
+        run: python3 scripts/check-flatpak-cargo-sources.py
 
       - name: Lint the manifest and the metainfo
         run: |
           image=ghcr.io/flathub/flatpak-builder-lint@sha256:a3a5eb22b51d9f425072a59914aa933a1cc39aa81dcae66634db790172d00096
-          docker run --rm -v "$PWD:/mnt" "$image" manifest /mnt/flatpak/io.github.KookaStudio.KookaPictura.yml
-          docker run --rm -v "$PWD:/mnt" "$image" appstream /mnt/flatpak/io.github.KookaStudio.KookaPictura.metainfo.xml
+          docker run --rm -v "$PWD:/mnt:ro" "$image" manifest /mnt/flatpak/io.github.KookaStudio.KookaPictura.yml
+          docker run --rm -v "$PWD:/mnt:ro" "$image" appstream /mnt/flatpak/io.github.KookaStudio.KookaPictura.metainfo.xml
 
   flatpak:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
-    if: github.event_name != 'pull_request' || github.head_ref == 'release-please--branches--master'
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.head_ref == 'release-please--branches--master' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
     container:
       image: ghcr.io/flathub-infra/flatpak-github-actions@sha256:b0a8a2acb9e420dd0e3e083ff552bea5a817e17e41532f1d2287ff49ef9aae0e
       options: --privileged
     env:
       VERSION: ${{ inputs.tag || format('0.0.0~pr{0}', github.event.number) }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ inputs.tag }}
+          ref: ${{ inputs.tag != '' && (startsWith(inputs.tag, 'v') && inputs.tag || format('v{0}', inputs.tag)) || github.sha }}
 
       - name: Build the bundle
-        uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        uses: flatpak/flatpak-github-actions/flatpak-builder@79327416609af08178ad73b352877e51450790b3 # v6
         with:
           manifest-path: flatpak/io.github.KookaStudio.KookaPictura.yml
           build-bundle: true
@@ -74,17 +86,20 @@ jobs:
       - name: Name the bundle
         run: mv app.flatpak "KookaPictura-${VERSION#v}-x86_64.flatpak"
 
+      # #647: the runner has no portal implementation, so the self-test proves
+      # the sandbox launches the app; it does not prove portal-backed dialogs.
       - name: Smoke-test the bundle
         run: |
           flatpak install --user -y --noninteractive "KookaPictura-${VERSION#v}-x86_64.flatpak"
           dbus-run-session -- flatpak run io.github.KookaStudio.KookaPictura --headless --self-test
 
       - name: Keep the bundle
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: flatpak
           path: KookaPictura-*-x86_64.flatpak
           retention-days: 7
+          if-no-files-found: error
 
   upload:
     runs-on: ubuntu-24.04
@@ -92,8 +107,10 @@ jobs:
     if: github.event_name != 'pull_request'
     permissions:
       contents: write
+    env:
+      RELEASE_TAG: ${{ inputs.tag != '' && (startsWith(inputs.tag, 'v') && inputs.tag || format('v{0}', inputs.tag)) || '' }}
     steps:
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: flatpak
 
@@ -101,4 +118,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release upload "${{ inputs.tag }}" KookaPictura-*-x86_64.flatpak --clobber
+        run: gh release upload "$RELEASE_TAG" KookaPictura-*-x86_64.flatpak --clobber
