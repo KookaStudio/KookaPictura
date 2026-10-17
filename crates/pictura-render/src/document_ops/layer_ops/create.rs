@@ -1,6 +1,7 @@
 use pictura_adjust::{GradientKind, GradientStop};
 use pictura_core::{BlendMode, Channel, ColorLabel, Document, Layer, LockFlags, PsdRect};
 
+use super::clipping::{normalize_clipping, release_run_above};
 use super::paths::{
     container_mut, container_of_mut, format_segments, parse_path, resolve_path, resolve_path_mut,
 };
@@ -245,23 +246,29 @@ pub fn ungroup_layer(doc: &mut Document, index: i32) -> bool {
     if !doc.layers[at].is_group {
         return false;
     }
+    let was_clipped = doc.layers[at].clipping;
+    release_run_above(doc.layers.as_mut_slice(), at, was_clipped);
     let group = doc.layers.remove(at);
     for (offset, child) in group.children.into_iter().enumerate() {
         doc.layers.insert(at + offset, child);
     }
+    normalize_clipping(doc.layers.as_mut_slice(), None);
     true
 }
 
 /// Insert `node` inside `selection_path` when it is a group (as its top child),
 /// otherwise directly above the selected node in its container, otherwise on
 /// top of the document. Returns the new path, or empty on failure.
-pub(crate) fn insert_node(doc: &mut Document, selection_path: &str, node: Layer) -> String {
+pub(crate) fn insert_node(doc: &mut Document, selection_path: &str, mut node: Layer) -> String {
     if let Some(segments) = parse_path(selection_path) {
         if resolve_path(doc, selection_path).is_some_and(|layer| layer.is_group) {
             let Some(container) = container_of_mut(doc, &segments) else {
                 return String::new();
             };
             let index = container.len();
+            if index == 0 {
+                node.clipping = false;
+            }
             container.push(node);
             let mut new_segments = segments;
             new_segments.push(index);
@@ -269,6 +276,9 @@ pub(crate) fn insert_node(doc: &mut Document, selection_path: &str, node: Layer)
         }
         if let Some((container, index)) = container_mut(doc, &segments) {
             let at = insertion_index(container.len(), index as i32);
+            if at == 0 {
+                node.clipping = false;
+            }
             container.insert(at, node);
             let mut new_segments = segments;
             if let Some(last) = new_segments.last_mut() {
@@ -278,6 +288,9 @@ pub(crate) fn insert_node(doc: &mut Document, selection_path: &str, node: Layer)
         }
     }
     let at = insertion_index(doc.layers.len(), -1);
+    if at == 0 {
+        node.clipping = false;
+    }
     doc.layers.insert(at, node);
     format_segments(&[at])
 }
@@ -535,19 +548,28 @@ pub fn background_from_layer(doc: &mut Document, path: &str) -> bool {
     let Some(segments) = parse_path(path) else {
         return false;
     };
-    match resolve_path(doc, path) {
-        Some(layer) if !layer.is_group && layer.adjustment.is_none() && !layer.background => {}
+    let was_clipped = match resolve_path(doc, path) {
+        Some(layer) if !layer.is_group && layer.adjustment.is_none() && !layer.background => {
+            layer.clipping
+        }
         _ => return false,
-    }
+    };
     if let Some(layer) = resolve_path_mut(doc, path) {
         opaque_transparency(layer, [255, 255, 255]);
         layer.background = true;
     }
-    let Some((container, index)) = container_mut(doc, &segments) else {
-        return false;
+    let node = {
+        let Some((container, index)) = container_mut(doc, &segments) else {
+            return false;
+        };
+        release_run_above(container.as_mut_slice(), index, was_clipped);
+        let mut node = container.remove(index);
+        node.clipping = false;
+        normalize_clipping(container.as_mut_slice(), None);
+        node
     };
-    let node = container.remove(index);
     doc.layers.insert(0, node);
+    normalize_clipping(doc.layers.as_mut_slice(), None);
     true
 }
 

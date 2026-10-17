@@ -194,16 +194,13 @@ impl qobject::PictureView {
         changed
     }
 
+    /// Move the top-level layer at index `i` by `delta`. The render-side
+    /// `move_path` shifts the node and clamps at the container bounds, so
+    /// `|delta| > 1` shifts rather than swapping two endpoints, and locked
+    /// layers or the Background are refused.
     pub fn move_layer(mut self: Pin<&mut Self>, i: i32, delta: i32) -> bool {
         let changed = if let Some(doc) = self.as_mut().rust_mut().doc.as_mut() {
-            let len = doc.layers.len() as i32;
-            let target = i + delta;
-            if i < 0 || i >= len || delta == 0 || target < 0 || target >= len {
-                false
-            } else {
-                doc.layers.swap(i as usize, target as usize);
-                true
-            }
+            pictura_render::move_path(doc, &i.to_string(), delta)
         } else {
             false
         };
