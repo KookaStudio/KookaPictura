@@ -139,8 +139,18 @@ jobs:
         run: |
           $json = sccache --show-stats --stats-format json | ConvertFrom-Json
           $stats = if ($json.stats) { $json.stats } else { $json }
-          if ($stats.cache_errors -gt 0) { throw "sccache reported $($stats.cache_errors) cache errors" }
-          if (($stats.cache_writes + $stats.cache_hits) -le 0) {
+          # sccache 0.18 reports each counter as {counts=..., adv_counts=...};
+          # older releases report a plain number.
+          function Get-Count($value) {
+            if ($null -eq $value) { return 0 }
+            if ($null -ne $value.counts) { return [long]$value.counts }
+            return [long]$value
+          }
+          $errors = Get-Count $stats.cache_errors
+          $writes = Get-Count $stats.cache_writes
+          $hits = Get-Count $stats.cache_hits
+          if ($errors -gt 0) { throw "sccache reported $errors cache errors" }
+          if (($writes + $hits) -le 0) {
             throw "sccache made no cache writes or hits; the backend is not working"
           }
 
