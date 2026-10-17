@@ -12,6 +12,32 @@ Snapshot for resuming after a context break. Update after each milestone.
   contains reproduced Adobe Help prose or the old wording.
 - Toolchain: Rust 1.98 (`rust-toolchain.toml`), system Qt **6.11.1**, cxx-qt
   **0.10.0**, wgpu **30.0.1**, lcms2 **6.2.0** (system Little CMS 2.19).
+- **Generic PDF / EPS import and Open As** (#627, branch
+  `feat/627-eps-pdf-import`, OpenSpec change `pdf-eps-import`, archived into
+  `interop/pdf-eps-import` and `interop/open-as`). Ghostscript (`gs`, or
+  `PICTURA_GHOSTSCRIPT`) runs as a `-dSAFER` child process, never linked
+  (`pictura_codec::ghostscript`); absent, opening a PDF/EPS reports an error
+  naming it. `pictura_codec::pdf::import`: page boxes and `/Rotate` from a
+  `runpdfbegin`/`pdfgetpage` PostScript program (PDF box defaults applied, all
+  in rotated view space), Bounding Box from the `bbox` device, pages rendered
+  with `pngalpha` at per-axis resolution and cropped to the box (a minimal PNG
+  reader in `png.rs`), thumbnails in one run. Images mode: a scan-based object
+  reader (`N G obj` in file order, object streams; no xref parsing) lists
+  image XObjects (through Form XObjects) and wraps each in a one-page PDF for
+  Ghostscript; encrypted PDFs disable it. `pictura_codec::eps`: DOS binary
+  header, `%%HiResBoundingBox`/`%%BoundingBox` (`(atend)` too), `-dEPSCrop`.
+  App: routing by signature (`vector_sniff`; a Pictura Photoshop PDF still
+  reopens with layers first), password prompt (`-sPDFPassword`), the Import
+  PDF dialog (`ImportPdfDialog`, CS6 layout and defaults from the owner's
+  screenshots: Bounding Box, 300 ppi, Inches, RGB, 8 bit, Small) and Rasterize
+  Generic EPS Format dialog sharing `RasterSizeFields`; each page/image opens
+  as an untitled document with one transparent `Layer 1`, mode/depth via
+  `convert_mode`/`convert_bit_depth` after an 8-bit RGB render (ponytail);
+  several pages are named `<stem>-<n>.<ext>`; Ghostscript's `****` warnings
+  show in one box unless Suppress Warnings. `File > Open As…` (`file.openAs`)
+  checks the chosen format's signature and reports "format mismatch or damaged
+  file". Agentic `open` imports with the dialog defaults, no modal. The Flatpak
+  builds Ghostscript 10.06.0 as its own module.
 - **Release build hardening** (#703 / #710, OpenSpec change
   `release-build-hardening`, archived into `meta/release-build-hardening`). All
   six packagers (`appimage`, `linux-packages`, `snap`, `flatpak`, `windows`,
