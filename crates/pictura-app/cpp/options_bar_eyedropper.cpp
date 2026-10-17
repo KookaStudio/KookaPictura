@@ -3,6 +3,9 @@
 
 #include "options_bar.h"
 
+#include "tools.h"
+
+#include <QtCore/QSignalBlocker>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QHBoxLayout>
@@ -62,6 +65,17 @@ QWidget* OptionsBar::buildEyedropperPage(ToolId id)
             options.ring = on;
             eyedropper_->set(options);
         });
+        // A canvas-context-menu change reaches the bar through the controller.
+        connect(controller_, &ToolController::eyedropperOptionsChanged, this,
+                [this, size, sample, ring]() {
+                    const EyedropperOptions o = eyedropper_->get();
+                    const QSignalBlocker blockSize(size);
+                    size->setCurrentIndex((o.sampleSize - 1) / 2);
+                    const QSignalBlocker blockSample(sample);
+                    sample->setCurrentIndex(o.scope);
+                    const QSignalBlocker blockRing(ring);
+                    ring->setChecked(o.ring);
+                });
     }
 
     layout->addStretch(1);

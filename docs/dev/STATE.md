@@ -2987,6 +2987,19 @@ Snapshot for resuming after a context break. Update after each milestone.
   Refine Radius / Erase Refinements brush strokes or their local band override,
   no view-mode keyboard shortcuts (F/X/P/J), no Properties-panel mask entry, and
   the surface/edge model is a behavioural approximation of a closed algorithm.
+- **Canvas right-click context menus** (#306, change
+  `canvas-right-click-context-menus`, archived into `ui/canvas-context-menus`):
+  `ImageView::contextMenuRequested` routes a right-click to the active tool's
+  `ToolHandler::onContextMenu`, which may also fire over the pasteboard (the
+  Zoom menu); with no tool menu the pasteboard falls back to the
+  canvas-background colour menu. Move lists the layers under the pointer (Auto
+  Select off) plus Isolation Mode; Eyedropper offers Sample Size/Sample; Crop
+  offers Delete Cropped Pixels/Reset Crop only while an active box exists; the
+  paint tools open the non-grabbing Brush Preset picker (an in-window overlay,
+  not `Qt::Popup`, so the brush ring keeps tracking and the first press paints).
+  Tested by `tst_canvas_context_menus` (21 cases, Qt Test). Menus build per
+  right-click and delete on close; `BrushToolHandler` finalises an open stroke on
+  deactivate.
 
 ## Commands
 

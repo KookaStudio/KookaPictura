@@ -14,7 +14,9 @@
 #include <QtCore/QPointF>
 #include <QtCore/QRect>
 #include <QtCore/QStringList>
+#include <QtGui/QAction>
 #include <QtWidgets/QApplication>
+#include <QtWidgets/QMenu>
 
 #include <cmath>
 #include <memory>
@@ -70,6 +72,29 @@ public:
         : crop_(std::move(crop))
     {
         addOptions(crop_.get());
+    }
+
+    // The Crop canvas menu: common crop options, offered only while an active
+    // crop box is present (the same gate `buildContextMenu` applies). A
+    // right-click with only the preview box must fall through, so the frame can
+    // still offer the pasteboard menu.
+    bool hasCanvasContextMenu() const override { return cropActive(); }
+    QMenu* buildContextMenu(ToolServices& ctx, const QPointF& imagePos) override
+    {
+        (void)imagePos;
+        ImageView* canvas = ctx.canvas();
+        if (!canvas || !cropActive()) {
+            return nullptr;
+        }
+        auto* menu = new QMenu(canvas);
+        QAction* del = menu->addAction(QObject::tr("Delete Cropped Pixels"));
+        del->setCheckable(true);
+        del->setChecked(crop_->deletePixels());
+        QObject::connect(del, &QAction::triggered, menu,
+                [this](bool on) { crop_->setDeletePixels(on); });
+        QAction* reset = menu->addAction(QObject::tr("Reset Crop"));
+        QObject::connect(reset, &QAction::triggered, menu, [this]() { resetCropBox(); });
+        return menu;
     }
 
     // The crop states: no box (after Escape), the preview box the tool starts

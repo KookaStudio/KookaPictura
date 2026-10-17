@@ -1,6 +1,7 @@
 #include "frame_includes.h"
 
 #include "fonts.h"
+#include "panels/brush_preset_picker.h"
 #include "panels/numeric_field.h"
 #include "text_input.h"
 
@@ -541,6 +542,34 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
             colorState_->setForeground(color);
         }
         updateToolHint();
+    });
+
+    // Canvas context-menu requests: the shared widget menus the controller
+    // cannot reach (the toolbox Zoom preset menu, the options-bar Brush Preset
+    // picker), isolation mode, and activation of the clicked document so its
+    // menu acts on the right document.
+    connect(tools_, &ToolController::zoomMenuRequested, this, [this](const QPoint& pos) {
+        if (toolbox_ && toolbox_->zoomMenu()) {
+            toolbox_->zoomMenu()->popup(pos);
+        }
+    });
+    connect(tools_, &ToolController::brushPickerRequested, this, [this](const QPoint& pos) {
+        if (optionsBar_) {
+            optionsBar_->brushPicker()->popUpAt(pos);
+        }
+    });
+    connect(tools_, &ToolController::isolationModeRequested, this, [this]() {
+        if (layersPanel_) {
+            layersPanel_->enterIsolation();
+        }
+    });
+    tools_->setCanvasActivationHandler([this](ImageView* canvas) {
+        for (int i = 0; i < docs_.size(); ++i) {
+            if (docs_.at(i).canvas == canvas) {
+                setActiveDocumentIndex(i);
+                break;
+            }
+        }
     });
 
     if (optionsBar_) {

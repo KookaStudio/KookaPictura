@@ -5,6 +5,8 @@
 
 #include "refine_edge_dialog.h"
 
+#include <QtCore/QPointF>
+#include <QtCore/QRectF>
 #include <QtWidgets/QInputDialog>
 #include <QtWidgets/QLineEdit>
 
@@ -237,22 +239,22 @@ void PicturaMainWindow::registerSelectHandlers()
     });
 }
 
-void PicturaMainWindow::showCanvasContextMenu(const QPoint& globalPos)
+void PicturaMainWindow::showCanvasContextMenu(ImageView* canvas, const QPoint& globalPos)
 {
-    if (activeTool() == ToolId::Zoom && toolbox_ && toolbox_->zoomMenu()) {
-        toolbox_->zoomMenu()->popup(globalPos);
+    if (!canvas) {
         return;
     }
-    // With the Move tool, the canvas offers Isolation Mode on the current
-    // selection (the Selected layer filter). A persistent, non-modal popup
-    // keeps the menu from blocking the event loop.
-    if (activeTool() == ToolId::Move && layersPanel_) {
-        if (!moveContextMenu_) {
-            moveContextMenu_ = new QMenu(this);
-            QAction* isolate = moveContextMenu_->addAction(tr("Isolation Mode"));
-            connect(isolate, &QAction::triggered, layersPanel_, &LayersPanel::enterIsolation);
-        }
-        moveContextMenu_->popup(globalPos);
+    // A right-click routes to the active tool's menu, which may also show over
+    // the pasteboard (e.g. the Zoom menu). With no tool menu, the pasteboard
+    // falls back to the canvas-background colour menu.
+    const QPointF imagePos = canvas->widgetToImage(canvas->mapFromGlobal(globalPos));
+    if (tools_ && tools_->routeCanvasContextMenu(canvas, imagePos, globalPos)) {
+        return;
+    }
+    const bool overDocument = canvas->hasDocument()
+        && QRectF(QPointF(0, 0), canvas->documentSize()).contains(imagePos);
+    if (!overDocument) {
+        showCanvasBackgroundMenu(globalPos);
     }
 }
 

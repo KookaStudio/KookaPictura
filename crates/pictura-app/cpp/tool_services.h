@@ -2,6 +2,7 @@
 
 #include "tool_options.h"
 
+#include <QtCore/QPoint>
 #include <QtCore/QPointF>
 #include <QtCore/QString>
 #include <QtCore/Qt>
@@ -66,6 +67,12 @@ struct ToolServices {
     // A Type tool started or stopped taking keystrokes.
     virtual void notifyTextEditing(bool active) = 0;
     virtual void emitSelectionCommitted() = 0;
+
+    // Canvas context-menu requests a handler raises; the frame wires them to the
+    // widget that owns the menu, which the controller cannot reach.
+    virtual void requestZoomMenu(const QPoint& globalPos) = 0;
+    virtual void requestBrushPicker(const QPoint& globalPos) = 0;
+    virtual void requestIsolationMode() = 0;
 };
 
 } // namespace pictura

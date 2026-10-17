@@ -2,10 +2,12 @@
 
 #include "tool_services.h"
 
+#include <QtCore/QPoint>
 #include <QtCore/QPointF>
 #include <QtCore/QString>
 #include <QtCore/Qt>
 #include <QtGui/QCursor>
+#include <QtWidgets/QMenu>
 
 #include <vector>
 
@@ -54,6 +56,32 @@ public:
     virtual void onDocumentRefreshed(ToolServices& ctx) {}
     // A tool option changed (e.g. the crop aspect ratio); re-apply it.
     virtual void onOptionsChanged(ToolServices& ctx) {}
+
+    // Canvas context menu. `buildContextMenu` returns the menu for `imagePos`
+    // (parented to `ctx.canvas()`), or null when the tool has none.
+    // `onContextMenu` is the live path: it builds and pops the menu. The test
+    // path calls `buildContextMenu` directly and inspects it.
+    virtual QMenu* buildContextMenu(ToolServices& ctx, const QPointF& imagePos)
+    {
+        (void)ctx;
+        (void)imagePos;
+        return nullptr;
+    }
+    // Whether this tool offers any canvas context menu (a built menu, or a
+    // shared widget menu raised from `onContextMenu`). The router consults this
+    // before touching the document, so a menu-less tool's right-click has no
+    // effect.
+    virtual bool hasCanvasContextMenu() const { return false; }
+    virtual void onContextMenu(ToolServices& ctx, const QPointF& imagePos,
+                               const QPoint& globalPos)
+    {
+        if (QMenu* menu = buildContextMenu(ctx, imagePos)) {
+            // A popped menu has no owner step that would free it; delete it on
+            // close so repeated right-clicks do not pile up hidden menus.
+            menu->setAttribute(Qt::WA_DeleteOnClose);
+            menu->popup(globalPos);
+        }
+    }
 
     // The frame dispatches the generic keyboard gestures to whatever tool is
     // active; each returns whether the tool consumed the key. They are named for
