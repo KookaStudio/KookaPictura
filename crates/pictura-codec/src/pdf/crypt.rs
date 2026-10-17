@@ -293,6 +293,9 @@ impl Encryptor {
         entropy: &Entropy,
         ivs: Entropy,
     ) -> Encryptor {
+        // ponytail: ISO 32000-2 SASLpreps a revision 6 password before taking
+        // its first 127 UTF-8 bytes; the raw bytes are used here, so only an
+        // ASCII password is sure to match what a reader computes.
         let truncate = |s: &str| -> Vec<u8> { s.as_bytes()[..s.len().min(127)].to_vec() };
         let user = truncate(&security.open_password);
         let owner = if security.permissions_password.is_empty() {
