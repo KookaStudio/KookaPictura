@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QtCore/QHash>
+#include <QtCore/QList>
 #include <QtCore/QObject>
 #include <QtCore/QPoint>
 #include <QtCore/QSet>
@@ -317,7 +318,8 @@ private:
     void openRefineMask(const QString& path);
     void openMaskOptions();
     bool runPanelDialog(QDialog& dialog);
-    // The mask and trash buttons follow the active layer and the selection.
+    // The action strip is disabled without a document; the mask and trash
+    // buttons also follow the active layer and the selection.
     void syncStripButtons();
     void addMaskFromButton();
     // The trash: with both masks on the layer it deletes the vector mask after
@@ -372,6 +374,9 @@ private:
     QToolButton* lockAll_ = nullptr;
     QToolButton* maskButton_ = nullptr;
     QToolButton* deleteButton_ = nullptr;
+    // The six actionable strip buttons. Link is excluded because it stays
+    // disabled until its operation exists.
+    QList<QToolButton*> stripButtons_;
     std::function<bool(QDialog&)> dialogDriver_;
     QSet<QString> expandedPaths_;
     // Panel-local active edit target per row path: 0 image, 1 mask, 2 vector.

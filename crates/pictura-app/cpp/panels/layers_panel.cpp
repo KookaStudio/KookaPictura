@@ -251,7 +251,8 @@ LayersPanel::LayersPanel(QWidget* parent)
     layout->addWidget(tree_, 1);
 
     auto* buttons = new QHBoxLayout();
-    buttons->setSpacing(0);
+    buttons->setSpacing(2);
+    buttons->addStretch(1);
     const auto stripIconButton = [body, buttons](const QString& objectName,
                                                  const QString& assetId) {
         auto* button = new QToolButton(body);
@@ -341,7 +342,11 @@ LayersPanel::LayersPanel(QWidget* parent)
     deleteButton_->setProperty("layerDropAction", QStringLiteral("delete"));
     deleteButton_->setAcceptDrops(true);
     deleteButton_->installEventFilter(this);
+    buttons->addStretch(1);
     layout->addLayout(buttons);
+    stripButtons_ = {fxButton,       maskButton_,      addButton,
+                     newGroupButton, newLayerButton, deleteButton_};
+    syncStripButtons();
 
     connect(tree_->selectionModel(), &QItemSelectionModel::currentChanged, this,
             [this](const QModelIndex&, const QModelIndex&) {
