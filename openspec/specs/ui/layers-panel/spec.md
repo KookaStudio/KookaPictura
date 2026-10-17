@@ -342,7 +342,9 @@ row's right-edge badge run left of the `fx` and lock badges, and its advance
 SHALL be reserved by the same right-edge walk that lays out the mask thumbnails
 and the name rect so nothing overlaps. A layer whose lock
 state has any flag set SHALL also show a lock badge at the right side of its
-row; an unlocked layer SHALL show none. The visibility toggle SHALL be an eye
+row, except that the Transparency and Image locks a type or shape layer is
+forced to carry SHALL NOT by themselves show one (CS6 shows them only in the
+Lock strip); an unlocked layer SHALL show none. The visibility toggle SHALL be an eye
 icon (`layers.eyeOn`/`layers.eyeOff`) drawn slightly inset from the panel's left
 edge and at the same x for every row, independent of nesting depth; the nesting
 indentation SHALL apply to the thumbnail and name, not to the visibility toggle.
@@ -448,6 +450,11 @@ rather than fail.
 - **WHEN** a layer has any lock flag set
 - **THEN** its row draws a lock badge on the right side, and an unlocked layer
   draws no lock badge
+
+#### Scenario: A type layer's forced locks show no badge [lpc_forced_lock_badge]
+
+- **WHEN** `tst_type_tools::typeLayerRowHasNoLockBadge` commits a type layer, then also locks its position
+- **THEN** the layer carries the Transparency and Image locks and its row has no lock badge; with Position locked too the badge shows
 
 #### Scenario: A regular thumbnail shows a checkerboard [lpr_thumb_checker]
 

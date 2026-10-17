@@ -61,6 +61,10 @@ private:
     QWidget* rulerCorner_ = nullptr;
     QWidget* corner_ = nullptr;
     bool syncing_ = false;
+    // Held for a canvas set later; the canvas's drag readouts measure in them.
+    int unit_ = 1;
+    bool traditionalPoints_ = false;
+    std::function<double()> ppi_;
 };
 
 } // namespace pictura

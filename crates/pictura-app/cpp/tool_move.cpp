@@ -17,11 +17,44 @@
 #include <QtGui/QImage>
 #include <QtWidgets/QMenu>
 
+#include <algorithm>
 #include <memory>
 
 namespace pictura {
 
 namespace {
+
+// The box round `layer`'s non-transparent pixels in its own coordinates; the
+// whole image when it has no alpha (or is not a 32-bit format).
+QRectF contentBounds(const QImage& layer)
+{
+    if (layer.isNull()) {
+        return QRectF();
+    }
+    QRect box = layer.rect();
+    if (layer.hasAlphaChannel() && layer.depth() == 32) {
+        int left = layer.width();
+        int right = -1;
+        int top = layer.height();
+        int bottom = -1;
+        for (int y = 0; y < layer.height(); ++y) {
+            const auto* row = reinterpret_cast<const QRgb*>(layer.constScanLine(y));
+            for (int x = 0; x < layer.width(); ++x) {
+                if (qAlpha(row[x]) != 0) {
+                    left = std::min(left, x);
+                    right = std::max(right, x);
+                    top = std::min(top, y);
+                    bottom = std::max(bottom, y);
+                }
+            }
+        }
+        if (right < 0) {
+            return QRectF();
+        }
+        box = QRect(QPoint(left, top), QPoint(right, bottom));
+    }
+    return QRectF(box);
+}
 
 // Move: whole-layer translate and, when a selection exists, the content move.
 // It owns the warm-preview cache so the first press after activation skips the
@@ -126,9 +159,16 @@ public:
                 warmView_ = v;
                 warmValid_ = !warmBase_.isNull();
             }
-            canvas->beginMovePreview(warmBase_, warmLayer_,
-                                     QPointF(v->move_preview_x(), v->move_preview_y()),
+            const QPointF origin(v->move_preview_x(), v->move_preview_y());
+            canvas->beginMovePreview(warmBase_, warmLayer_, origin,
                                      v->move_preview_opacity() / 255.0);
+            // The moving layer's content box as marching ants, as CS6 draws.
+            // The scan is cached per layer image, so a warm press stays cheap.
+            if (warmLayer_.cacheKey() != boundsKey_) {
+                boundsKey_ = warmLayer_.cacheKey();
+                bounds_ = contentBounds(warmLayer_);
+            }
+            canvas->setMoveOutline(bounds_.translated(origin));
         }
         return true;
     }
@@ -168,6 +208,10 @@ public:
         }
         if (ImageView* canvas = ctx.canvas()) {
             canvas->setMovePreviewDelta(totalDelta_);
+            // ΔX / ΔY in the rulers' unit, by the pointer.
+            canvas->setDragSizeHint(
+                canvas->offsetReadout(QPointF(qRound(totalDelta_.x()), qRound(totalDelta_.y()))),
+                imagePos);
         }
     }
 
@@ -189,6 +233,7 @@ public:
         pendingDuplicate_ = false;
         if (ImageView* canvas = ctx.canvas()) {
             canvas->endMovePreview();
+            canvas->clearDragSizeHint();
         }
     }
 
@@ -209,6 +254,7 @@ private:
         }
         if (moving) {
             canvas->endMovePreview();
+            canvas->clearDragSizeHint();
             v->end_move_preview();
         }
         const QString path = v->active_layer_path();
@@ -241,6 +287,8 @@ private:
 
     QPointF last_;
     QPointF totalDelta_;
+    qint64 boundsKey_ = 0;
+    QRectF bounds_;
     PictureView* warmView_ = nullptr;
     QImage warmBase_;
     QImage warmLayer_;

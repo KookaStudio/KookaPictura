@@ -12,6 +12,51 @@ Snapshot for resuming after a context break. Update after each milestone.
   contains reproduced Adobe Help prose or the old wording.
 - Toolchain: Rust 1.98 (`rust-toolchain.toml`), system Qt **6.11.1**, cxx-qt
   **0.10.0**, wgpu **30.0.1**, lcms2 **6.2.0** (system Little CMS 2.19).
+- **Paragraph type and the type caret** (#682 / #681, branch
+  `feat/541-advanced-type-tools`, OpenSpec changes `paragraph-type` and
+  `type-caret-blink`, archived into `tools/paragraph-type` and
+  `tools/type-caret`). #541 is split into #682 (paragraph type), #683 (type
+  on a path), #684 (Warp Text), and #685 (gamma blend, on by default at 1.45
+  with goldens rebaselined, plus missing fonts). `TypeSpec` / `TypeTool`
+  carry `box_bounds` (left, top, right, bottom relative to the origin, before
+  the matrix). `pictura_render::type_paragraph::visual_lines` is the single
+  line source for layout, placement, caret stops, and baselines: greedy word
+  wrap to the box width (character break for a too-wide word), vertical
+  columns of `⌊h / cell⌋`, and lines past the box are overflow (laid out for
+  the caret, not rendered, `type_overflows`). The EngineData gains `/Rendered`
+  with `ShapeType` 0/1 and `BoxBounds` (`pictura_codec::type_shape`), read
+  back on open. The tool opens a box on a drag past 4 screen px or on an
+  Alt-click (Paragraph Text Size dialog). Its eight handles resize and
+  reflow, and a `+` on the bottom-right handle marks overflow. `Type >
+  Convert To Point / Paragraph Text` are live (`frame_menus_type.cpp`). The
+  caret line blinks on a 1.5 s cycle (`ImageView::kTypeCaretBlinkMs`, reset
+  on every overlay set). Point type marks its origin with a placement square
+  and draws a guide along each visible line's baseline (`type_baselines`).
+- **Tool feedback and persistence** (#541 branch, OpenSpec change
+  `tool-feedback-and-persistence`). Show Transform Controls is **on by
+  default** (owner decision; CS6 ships it off). The controls box is now
+  **idle**: it is drawn from `pictura_render::content_rect` (no session, layer
+  untouched), and a Free Transform session (with its trim) starts only when a
+  handle is grabbed. `untrim_to` pads a trimmed layer back when a session ends
+  without a transform, and type layers are never trimmed. The box no longer
+  steals focus, and Space pans over it. Every tool's options persist in the
+  session store's `toolOptions` (`tool_options_json`: one `fields()` list per
+  struct, restored before the options bar is built). The caret draws white
+  over a dark image. A type or shape layer's forced Transparency/Image locks
+  show no row padlock (`LockBadgeRole`). A Move drag draws marching ants round
+  the content plus a ΔX / ΔY readout in the ruler unit (`formatRulerLength`,
+  shared with the rulers). The self-test, and older tests that read canvas
+  pixels under the Move tool, run with the box off.
+  While typing, the pointer away from the text is the Move tool's cursor
+  (`pointerCursor` / `hoverCursor` on `TypeToolHandler`). A drag there moves
+  the session origin, so the text, caret, guides, and box follow; a plain click
+  still commits (change `type-session-move`).
+  The session's placement lives in `TypeFrame` (type_frame.{h,cpp}): paragraph
+  type's box, and point type's text bounds while Ctrl is held, with handles
+  (resize the box, or scale the text with Ctrl or on point type), a rotate band
+  just outside it, and a draggable reference point, each with its cursor and a
+  W / H, angle, or X / Y readout (`ImageView::measureReadout`). The transform
+  is the layer's own `TySh` matrix (change `type-transform-box`).
 - **SVG export parity** (#477, branch `feat/477-svg-export-parity-followups`,
   OpenSpec change `svg-export`, now archived into `interop/svg-export`): the
   SVG export from #459 walks the layer tree instead of top-level layers only.

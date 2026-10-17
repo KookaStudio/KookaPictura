@@ -147,7 +147,7 @@ public:
             return {};
         }
         int right = itemRect.right() - 3;
-        if (index.data(LockRole).toInt() != 0
+        if (index.data(LockBadgeRole).toInt() != 0
             && !pictura::icon(QStringLiteral("layers.lockAll"))
                     .pixmap(lockBadgeSide(), lockBadgeSide())
                     .isNull()) {
@@ -273,7 +273,7 @@ public:
         const int thumb = qMax(0, thumbnailSize_);
         const int badge = qMax(12, thumb > 0 ? thumb : 16);
         int right = itemRect.right() - 3;
-        if (index.data(LockRole).toInt() != 0
+        if (index.data(LockBadgeRole).toInt() != 0
             && !pictura::icon(QStringLiteral("layers.lockAll"))
                     .pixmap(lockBadgeSide(), lockBadgeSide())
                     .isNull()) {
@@ -377,7 +377,7 @@ public:
         int x = thumbsRight(itemRect, index) + kNameGap;
         int right = itemRect.right() - 3;
         const int badge = qMax(12, thumb > 0 ? thumb : 16);
-        if (index.data(LockRole).toInt() != 0
+        if (index.data(LockBadgeRole).toInt() != 0
             && !pictura::icon(QStringLiteral("layers.lockAll"))
                     .pixmap(lockBadgeSide(), lockBadgeSide())
                     .isNull()) {
@@ -662,7 +662,7 @@ public:
         // fx. A null icon is omitted.
         int right = rect.right() - 3;
         const QIcon fxIcon = pictura::icon(QStringLiteral("layers.fx"));
-        if (index.data(LockRole).toInt() != 0) {
+        if (index.data(LockBadgeRole).toInt() != 0) {
             const int lockSide = lockBadgeSide();
             const QPixmap lockPix =
                 pictura::icon(QStringLiteral("layers.lockAll")).pixmap(lockSide, lockSide);

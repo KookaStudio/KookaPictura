@@ -88,6 +88,8 @@ void CanvasScrollBars::setView(ImageView* view)
         view_->setParent(this);
         grid_->addWidget(view_, 1, 1);
         view_->show();
+        view_->setMeasureUnit(RulerUnit(unit_), traditionalPoints_);
+        view_->setPpiProvider(ppi_);
         connect(view_, &ImageView::viewChanged, this, [this]() { syncFromView(); });
         connect(view_, &ImageView::mouseMoved, this, [this](const QPointF& imagePos) {
             hruler_->setCursorPosition(imagePos);
@@ -105,12 +107,21 @@ void CanvasScrollBars::setRulerUnit(RulerUnit unit, bool traditionalPoints)
         ruler->setUnit(unit);
         ruler->setTraditionalPoints(traditionalPoints);
     }
+    unit_ = int(unit);
+    traditionalPoints_ = traditionalPoints;
+    if (view_) {
+        view_->setMeasureUnit(unit, traditionalPoints);
+    }
 }
 
 void CanvasScrollBars::setPpiProvider(const std::function<double()>& ppi)
 {
     hruler_->setPpiProvider(ppi);
     vruler_->setPpiProvider(ppi);
+    ppi_ = ppi;
+    if (view_) {
+        view_->setPpiProvider(ppi);
+    }
 }
 
 void CanvasScrollBars::setRulersVisible(bool on)

@@ -6,9 +6,10 @@
 //! anti-aliasing, bounds); its `EngineData` is the text engine's own dump. That
 //! dump has to be complete enough for Photoshop to build a live text object —
 //! the run lengths must add up to the string, the run must name a font in the
-//! font set — or it falls back to the pixels. Not written: warping (the warp
-//! descriptor says none), kinsoku / mojikumi sets (empty), and the `Rendered`
-//! cache Photoshop rebuilds. Ported from photorust's `core/src/psd/text_write.rs`.
+//! font set — or it falls back to the pixels. `/Rendered` carries only the
+//! shape (point or paragraph box, [`crate::type_shape`]); its line cache is
+//! left for Photoshop to rebuild. Not written: warping (the warp descriptor
+//! says none) and kinsoku / mojikumi sets (empty). Ported from photorust's `core/src/psd/text_write.rs`.
 //!
 //! When the layer already has a text descriptor, its EngineData is parsed and
 //! the modelled keys of the single style run, paragraph sheet, and text are
@@ -54,6 +55,7 @@ pub fn author_type_tool(
         fonts: Vec::new(),
         style: None,
         vertical: spec.vertical,
+        box_bounds: spec.box_bounds,
     };
     if let Some(decoded) = decode_type_tool(&crate::encode_type_tool(&tool)) {
         tool.fonts = decoded.fonts;
@@ -127,7 +129,8 @@ fn text_descriptor(
                 key("AntA"),
                 enumerated("Annt", ant_alias_spelling(spec.character.anti_alias)),
             ),
-            // Point text without a warp occupies exactly its own box.
+            // Unwarped type occupies exactly its own box: the text's for
+            // point type, the paragraph box for paragraph type.
             (key("bounds"), bounds_object("bounds", bounds)),
             (key("boundingBox"), bounds_object("boundingBox", bounds)),
             (key("TextIndex"), DescValue::Long(0)),
@@ -230,6 +233,11 @@ fn merge_engine_data(root: &mut EngineValue, spec: &TypeSpec, font_name: Option<
         engine,
         "UseFractionalGlyphWidths",
         EngineValue::Bool(spec.character.fractional_widths),
+    );
+    set_child(
+        engine,
+        "Rendered",
+        crate::type_shape::rendered(spec.box_bounds),
     );
 
     let style_run = child(engine, "StyleRun");
@@ -670,6 +678,9 @@ fn skeleton_engine_data(spec: &TypeSpec, font_name: Option<&str>) -> Vec<u8> {
             spec.character.fractional_widths
         ),
     );
+    if let Ok(shape) = encode_engine_data(&crate::type_shape::rendered(spec.box_bounds)) {
+        d.line(2, &format!("/Rendered {}", String::from_utf8_lossy(&shape)));
+    }
     d.close(1);
     // `ResourceDict` is what this layer uses, `DocumentResources` what the
     // document offers; identical is right for a lone text layer.

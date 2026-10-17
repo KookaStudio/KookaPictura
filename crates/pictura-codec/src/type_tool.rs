@@ -49,7 +49,7 @@ pub(crate) fn decode_type_tool(data: &[u8]) -> Option<TypeTool> {
     descriptor::read_descriptor(&mut r).ok()?;
     let warp_desc = data.get(warp_start..r.pos)?.to_vec();
     let bounds = [r.i32().ok()?, r.i32().ok()?, r.i32().ok()?, r.i32().ok()?];
-    let (fonts, style) = engine_data_view(&text_value);
+    let (fonts, style, box_bounds) = engine_data_view(&text_value);
     Some(TypeTool {
         transform,
         text: extract_text(&text_value),
@@ -59,6 +59,7 @@ pub(crate) fn decode_type_tool(data: &[u8]) -> Option<TypeTool> {
         fonts,
         style,
         vertical: is_vertical(&text_value),
+        box_bounds,
     })
 }
 
@@ -73,23 +74,24 @@ fn is_vertical(value: &DescValue) -> bool {
 /// Best-effort view of the `Txt ` descriptor's opaque `EngineData` blob; a
 /// missing or malformed blob leaves the style unset rather than failing. The
 /// anti-aliasing method comes from the descriptor's `AntA` enum when present,
-/// overriding the EngineData `/AntiAlias` flag.
-fn engine_data_view(text: &DescValue) -> (Vec<String>, Option<TextStyle>) {
+/// overriding the EngineData `/AntiAlias` flag. The third value is paragraph
+/// type's box, `None` for point type.
+fn engine_data_view(text: &DescValue) -> (Vec<String>, Option<TextStyle>, Option<[f64; 4]>) {
     let DescValue::Object { items, .. } = text else {
-        return (Vec::new(), None);
+        return (Vec::new(), None, None);
     };
     let Some(DescValue::Raw(raw)) = get_object_item(items, b"EngineData") else {
-        return (Vec::new(), None);
+        return (Vec::new(), None, None);
     };
     let Ok(root) = parse_engine_data(engine_data_payload(raw)) else {
-        return (Vec::new(), None);
+        return (Vec::new(), None, None);
     };
     let fonts = extract_fonts(&root);
     let mut style = extract_style(&root, &fonts);
     if let Some(anti_alias) = descriptor_ant_alias(items) {
         style.character.anti_alias = anti_alias;
     }
-    (fonts, Some(style))
+    (fonts, Some(style), crate::type_shape::extract_box(&root))
 }
 
 /// The `AntA` enum value as an [`AntiAlias`], if the descriptor carries one.

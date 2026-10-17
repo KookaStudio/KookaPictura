@@ -8,8 +8,8 @@
 use super::super::qobject::PictureView;
 use super::super::state::{TransformSession, TransformWarp};
 use super::geometry::{
-    projective_coefficients, quad_anchors, session_quad, set_pivot, source_corners, store_quad,
-    MapParams,
+    hit_test_quad, projective_coefficients, quad_anchors, session_quad, set_pivot, source_corners,
+    store_quad, MapParams,
 };
 use super::session::build_transform_preview;
 use core::pin::Pin;
@@ -39,6 +39,22 @@ pub mod ffi {
         /// The layer at `path`'s rect as flat `[left, top, right, bottom]`;
         /// empty when the path does not resolve to a layer.
         fn layer_rect_extents(view: &PictureView, path: &QString) -> Vec<i32>;
+        /// The rect the Move tool's controls box hugs on the layer at `path`
+        /// (the content Free Transform trims to) as flat `[left, top, right,
+        /// bottom]`, changing nothing; empty when the path does not resolve.
+        fn controls_box_extents(view: &PictureView, path: &QString) -> Vec<i32>;
+        /// Hit-test the box `left, top, right, bottom` at document-space
+        /// `(x, y)` as `transform_hit_test` does a session's: 0..=7 scale
+        /// handles, 8 rotate, 9 inside, -1 none.
+        fn controls_box_hit_test(
+            left: i32,
+            top: i32,
+            right: i32,
+            bottom: i32,
+            x: f64,
+            y: f64,
+            zoom: f64,
+        ) -> i32;
         /// The session quad's four document-space corners as flat
         /// `[x0, y0, …, x3, y3]`; empty without a session.
         fn transform_quad_extents(view: &PictureView) -> Vec<f64>;
@@ -153,6 +169,34 @@ fn layer_rect_extents(view: &PictureView, path: &QString) -> Vec<i32> {
         .map_or_else(Vec::new, |rect| {
             vec![rect.left, rect.top, rect.right, rect.bottom]
         })
+}
+
+fn controls_box_extents(view: &PictureView, path: &QString) -> Vec<i32> {
+    view.rust()
+        .doc
+        .as_ref()
+        .and_then(|doc| pictura_render::content_rect(doc, &path.to_string()))
+        .map_or_else(Vec::new, |rect| {
+            vec![rect.left, rect.top, rect.right, rect.bottom]
+        })
+}
+
+fn controls_box_hit_test(
+    left: i32,
+    top: i32,
+    right: i32,
+    bottom: i32,
+    x: f64,
+    y: f64,
+    zoom: f64,
+) -> i32 {
+    let rect = pictura_core::PsdRect {
+        top,
+        left,
+        bottom,
+        right,
+    };
+    hit_test_quad(&source_corners(rect), false, x, y, zoom)
 }
 
 fn transform_quad_extents(view: &PictureView) -> Vec<f64> {

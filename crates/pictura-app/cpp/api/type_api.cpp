@@ -92,6 +92,47 @@ QVector<double> caretStops(const QString& text, const QString& font, const TypeS
     return out;
 }
 
+QVector<double> baselines(const QString& text, const QString& font, const TypeSetting& setting,
+                          const CharacterSetting& character, const ParagraphSetting& paragraph)
+{
+    const ::rust::Vec<double> lines
+        = ::pictura::type_baselines(text, font, setting, character, paragraph);
+    QVector<double> out;
+    out.reserve(int(lines.size()));
+    for (const double value : lines) {
+        out.append(value);
+    }
+    return out;
+}
+
+bool overflows(const QString& text, const QString& font, const TypeSetting& setting,
+               const CharacterSetting& character, const ParagraphSetting& paragraph)
+{
+    return ::pictura::type_overflows(text, font, setting, character, paragraph);
+}
+
+QVector<double> localBounds(const QString& text, const QString& font, const TypeSetting& setting,
+                            const CharacterSetting& character, const ParagraphSetting& paragraph)
+{
+    const ::rust::Vec<double> bounds
+        = ::pictura::type_local_bounds(text, font, setting, character, paragraph);
+    QVector<double> out;
+    for (const double value : bounds) {
+        out.append(value);
+    }
+    return out;
+}
+
+bool isParagraph(const PictureView& view, const QString& path)
+{
+    return ::pictura::type_layer_is_paragraph(view, path);
+}
+
+bool convert(PictureView& view, const QString& path, bool paragraph)
+{
+    return ::pictura::type_convert(view, path, paragraph);
+}
+
 QByteArray previewRgba(const QString& text, const QString& font, const TypeSetting& setting,
                        const CharacterSetting& character, const ParagraphSetting& paragraph)
 {

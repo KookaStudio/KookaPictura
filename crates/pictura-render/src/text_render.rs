@@ -332,6 +332,9 @@ pub(crate) fn render_text_buffer(
 /// kerning, horizontal/vertical scale, and baseline shift; and the left /
 /// centre / right alignment.
 ///
+/// Paragraph type (`box_bounds`) wraps to its box and aligns across its
+/// width; lines past the box are not laid out (see `type_paragraph`).
+///
 /// ponytail: paragraph indents, space before/after, hanging punctuation,
 /// hyphenation, word/letter/glyph spacing, the composer, and the full
 /// justification variants 3-6 are authored to the engine data but not laid out;
@@ -354,15 +357,26 @@ pub(crate) fn layout_type(
     };
     let tracking = c.tracking as f32 + extra;
     let shift = c.baseline_shift as f32;
-    let lines = crate::type_layer::type_lines(&type_tool.text);
+    let lines = crate::type_paragraph::visual_lines(
+        bundled,
+        &type_tool.text,
+        type_tool.vertical,
+        type_tool.box_bounds,
+        c,
+    )
+    .rendered();
+    let (width, height) = match type_tool.box_bounds {
+        Some(b) => ((b[2] - b[0]) as f32, (b[3] - b[1]) as f32),
+        None => (width as f32, height as f32),
+    };
     let layout = if type_tool.vertical {
         crate::type_layer::vertical_layout(
             bundled,
             &lines,
             font_size,
             style.paragraph.justify.index(),
-            width as f32,
-            height as f32,
+            width,
+            height,
             leading,
             h,
             v,
@@ -392,7 +406,7 @@ pub(crate) fn layout_type(
                 tracking,
                 leading,
                 align: TextAlign::from_justification(style.paragraph.justify.index()),
-                wrap_width: Some(width as f32),
+                wrap_width: Some(width),
             },
         );
         // Baseline shift moves the run off its baseline (positive is up).
@@ -605,6 +619,7 @@ mod tests {
                 fonts: vec!["Arial".into()],
                 style,
                 vertical: false,
+                box_bounds: None,
             }),
             ..Default::default()
         }

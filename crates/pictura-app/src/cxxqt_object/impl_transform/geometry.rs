@@ -748,6 +748,7 @@ mod tests {
             warp: None,
             warp_preview_quad: None,
             lifted: None,
+            untrimmed: None,
         }
     }
 

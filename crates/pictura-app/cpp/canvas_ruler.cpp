@@ -130,11 +130,10 @@ void CanvasRuler::setPpiProvider(std::function<double()> ppi)
     update();
 }
 
-double CanvasRuler::pixelsPerUnit() const
+double pixelsPerRulerUnit(RulerUnit unit, double ppi, bool traditionalPoints, double percentBase)
 {
-    const double ppi = ppi_ ? ppi_() : 72.0;
-    const double pointsPerInch = traditionalPoints_ ? 72.27 : 72.0;
-    switch (unit_) {
+    const double pointsPerInch = traditionalPoints ? 72.27 : 72.0;
+    switch (unit) {
     case RulerUnit::Pixels:
         return 1.0;
     case RulerUnit::Inches:
@@ -148,13 +147,42 @@ double CanvasRuler::pixelsPerUnit() const
     case RulerUnit::Picas:
         return ppi / pointsPerInch * 12.0;
     case RulerUnit::Percent:
-        if (view_) {
-            const QSize size = view_->documentSize();
-            return (orientation_ == Qt::Horizontal ? size.width() : size.height()) / 100.0;
-        }
-        return 1.0;
+        return percentBase > 0.0 ? percentBase / 100.0 : 1.0;
     }
     return 1.0;
+}
+
+QString formatRulerLength(double pixels, RulerUnit unit, double ppi, bool traditionalPoints,
+                          double percentBase)
+{
+    const double value = pixels / pixelsPerRulerUnit(unit, ppi, traditionalPoints, percentBase);
+    switch (unit) {
+    case RulerUnit::Pixels:
+        return QStringLiteral("%1 px").arg(qRound(value));
+    case RulerUnit::Inches:
+        return QStringLiteral("%1 in").arg(value, 0, 'f', 3);
+    case RulerUnit::Centimeters:
+        return QStringLiteral("%1 cm").arg(value, 0, 'f', 2);
+    case RulerUnit::Millimeters:
+        return QStringLiteral("%1 mm").arg(value, 0, 'f', 1);
+    case RulerUnit::Points:
+        return QStringLiteral("%1 pt").arg(value, 0, 'f', 1);
+    case RulerUnit::Picas:
+        return QStringLiteral("%1 pica").arg(value, 0, 'f', 2);
+    case RulerUnit::Percent:
+        return QStringLiteral("%1%").arg(value, 0, 'f', 1);
+    }
+    return QString();
+}
+
+double CanvasRuler::pixelsPerUnit() const
+{
+    double percentBase = 0.0;
+    if (view_) {
+        const QSize size = view_->documentSize();
+        percentBase = orientation_ == Qt::Horizontal ? size.width() : size.height();
+    }
+    return pixelsPerRulerUnit(unit_, ppi_ ? ppi_() : 72.0, traditionalPoints_, percentBase);
 }
 
 void CanvasRuler::contextMenuEvent(QContextMenuEvent* event)

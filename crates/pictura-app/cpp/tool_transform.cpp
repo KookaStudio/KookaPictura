@@ -48,9 +48,10 @@ bool ToolController::beginTransformImpl(const QString& path, const QString& mode
         return false;
     }
     if (transformControls_ && !controls) {
-            // A user command takes the Move tool's controls box over as a modal
+        // A user command takes the Move tool's controls box over as a modal
         // session (the same path would otherwise be a begin no-op).
         transformControls_ = false;
+        clearControlsBox();
         v->cancel_transform();
     }
     const bool ok = mode.isEmpty() ? v->begin_free_transform(path)
@@ -69,7 +70,12 @@ bool ToolController::beginTransformImpl(const QString& path, const QString& mode
         // pan-disable is not swallowed by the override's pan guard.
         canvas_->setSpacePan(false);
         canvas_->setPanEnabled(false);
-        canvas_->setFocus();
+        // Only the modal command takes the keyboard. The Move tool's controls
+        // box is rebuilt on every refresh and must not pull focus from a text
+        // field.
+        if (!controls) {
+            canvas_->setFocus();
+        }
     }
     emit transformChanged();
     return true;
@@ -107,6 +113,11 @@ void ToolController::setTransformCursor(const QPointF& imagePos)
     const int hit = transformDragging_
         ? transformHandle_
         : v->transform_hit_test(imagePos.x(), imagePos.y(), canvas_->zoom());
+    setHandleCursor(hit, imagePos, quadCentre(transform_api::quad(*v), imagePos));
+}
+
+void ToolController::setHandleCursor(int hit, const QPointF& imagePos, const QPointF& centre)
+{
     switch (hit) {
     case 0:
     case 2:
@@ -133,8 +144,7 @@ void ToolController::setTransformCursor(const QPointF& imagePos)
     case kRotateHandle:
         // In widget space, so a turned view (Rotate View) turns the arrow too.
         canvas_->setCursor(
-            rotateCursor(canvas_->imageToWidget(quadCentre(transform_api::quad(*v), imagePos)),
-                         canvas_->imageToWidget(imagePos)));
+            rotateCursor(canvas_->imageToWidget(centre), canvas_->imageToWidget(imagePos)));
         break;
     default:
         canvas_->setCursor(Qt::ArrowCursor);
@@ -176,59 +186,93 @@ void ToolController::cancelFreeTransform()
     emit transformChanged();
 }
 
-// The Move tool's `Show Transform Controls` box: an auto-managed Free
-// Transform session on the active layer, applied per gesture. Hidden for any
+// The Move tool's `Show Transform Controls` box. Idle, it is only drawn: the
+// box round the active layer's content (`controls_box_extents`), the layer
+// untouched, so filters and other edits see its full extent. A press on one of
+// its handles starts a Free Transform session for that one gesture, applied on
+// release (`handleReleased`), after which the box is idle again. Hidden for any
 // other tool, an unchecked box, an active selection, or an untransformable
-// layer; rebuilt when the target layer or its content rect changed.
+// layer; rebuilt when the target layer, its rect, or the history step changed.
 void ToolController::syncTransformControls()
 {
     PictureView* v = view();
     if (!v) {
         transformControls_ = false;
+        clearControlsBox();
         return;
     }
     // A modal (Ctrl+T) session owns the overlay; never touch it here.
     if (v->transform_session_active() && !transformControls_) {
         return;
     }
+    // A gesture in progress keeps its session until the release applies it.
+    if (transformControls_ && v->transform_session_active()) {
+        return;
+    }
     const bool want = active_ == ToolId::Move && move_->get().showTransformControls
         && !v->has_selection();
-    if (!want) {
+    const QString active = v->active_layer_path();
+    // The content scan runs only when the layer, its rect, or the history step
+    // changed; a refresh or a press on an unchanged box reuses the last one.
+    const QString key = want && !active.isEmpty()
+        ? QStringLiteral("%1 %2 %3").arg(active, transform_api::layerRect(*v, active).toString())
+              .arg(v->history_index())
+        : QString();
+    if (controlsIdle_ && !key.isEmpty() && key == controlsKey_) {
+        return;
+    }
+    const ::rust::Vec<int32_t> box = !key.isEmpty() && v->layer_can_free_transform(active)
+        ? controls_box_extents(*v, active)
+        : ::rust::Vec<int32_t>();
+    if (box.size() != 4) {
         if (transformControls_) {
             transformControls_ = false;
-            v->cancel_transform();
-            if (canvas_) {
-                canvas_->clearTransformPreview();
-            }
+            clearControlsBox();
             emit transformChanged();
         }
         return;
     }
-    const QString active = v->active_layer_path();
-    if (transformControls_ && v->transform_session_active()
-        && v->transform_session_path() == active
-        && transform_session_rect(*v) == transform_api::layerRect(*v, active).toString()) {
-        return;
-    }
-    if (transformControls_ && v->transform_session_active()) {
-        // A stale box (a content edit, an undo, another layer): rebuild it.
-        v->cancel_transform();
-        if (canvas_) {
-            canvas_->clearTransformPreview();
-        }
-    }
-    transformControls_ = false;
-    if (active.isEmpty() || !v->layer_can_free_transform(active)) {
-        return;
-    }
+    const bool was = transformControls_;
     transformControls_ = true;
-    if (!beginTransformImpl(active, QString(), true)) {
+    controlsIdle_ = true;
+    controlsPath_ = active;
+    controlsKey_ = key;
+    controlsBox_ = QRect(QPoint(box[0], box[1]), QPoint(box[2] - 1, box[3] - 1));
+    if (canvas_) {
+        canvas_->setControlsBox(QPolygonF(QRectF(QPointF(box[0], box[1]), QPointF(box[2], box[3]))));
+    }
+    if (!was) {
+        emit transformChanged();
+    }
+}
+
+int ToolController::controlsHit(const QPointF& imagePos) const
+{
+    return controls_box_hit_test(controlsBox_.left(), controlsBox_.top(), controlsBox_.right() + 1,
+                                 controlsBox_.bottom() + 1, imagePos.x(), imagePos.y(),
+                                 canvas_ ? canvas_->zoom() : 1.0);
+}
+
+void ToolController::clearControlsBox()
+{
+    controlsIdle_ = false;
+    controlsKey_.clear();
+    if (canvas_) {
+        canvas_->setControlsBox(QPolygonF());
+    }
+}
+
+bool ToolController::beginControlsGesture(PictureView* v)
+{
+    clearControlsBox();
+    if (!beginTransformImpl(controlsPath_, QString(), true)) {
         transformControls_ = false;
-        return;
+        return false;
     }
     // CS6's controls box has no reference point (that is the modal command's).
     transform_set_show_pivot(*v, false);
     updateTransformOverlay(v);
+    return true;
 }
 
 bool ToolController::setTransformPivot(double x, double y)

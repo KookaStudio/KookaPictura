@@ -96,6 +96,12 @@ void OptionsBarsParityTest::toolIconSeparatorOnEveryPage()
 
 void OptionsBarsParityTest::moveControlsAndAlignToCanvas()
 {
+    // Show Transform Controls starts checked (owner decision); turn it off
+    // before any Move box opens, so the align below sees the untrimmed,
+    // document-sized copy.
+    auto* startTransform = window_->findChild<QCheckBox*>(QStringLiteral("optionsMoveTransform"));
+    QVERIFY(startTransform && startTransform->isChecked());
+    startTransform->setChecked(false);
     QVERIFY(window_->newDocument(QStringLiteral("Move"), 40, 40, QStringLiteral("rgb"), 8,
                                  QStringLiteral("white")));
     pictura::PictureView* view = window_->activeView();

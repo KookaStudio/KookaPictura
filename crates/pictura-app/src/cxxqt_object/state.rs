@@ -99,6 +99,9 @@ pub struct TransformSession {
     /// source): the source path and the document before the lift, which a
     /// cancel restores.
     pub(super) lifted: Option<(String, Box<Document>)>,
+    /// The layer's rect before `trim_to_content` hugged the box to its pixels;
+    /// a session dropped without a transform pads the layer back out to it.
+    pub(super) untrimmed: Option<PsdRect>,
 }
 
 /// Backing Rust state for [`super::qobject::PictureView`].

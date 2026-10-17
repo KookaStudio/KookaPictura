@@ -659,7 +659,7 @@ int LayersPanel::dragOpacitySliderForTest(int fromX1000, int toX1000)
 int LayersPanel::lockBadgeLeftForTest(const QString& path) const
 {
     const QModelIndex index = proxyIndexForPath(path);
-    if (!index.isValid() || index.data(LockRole).toInt() == 0 || !delegate_ || !tree_) {
+    if (!index.isValid() || index.data(LockBadgeRole).toInt() == 0 || !delegate_ || !tree_) {
         return -1;
     }
     return delegate_->lockRect(tree_->visualRect(index)).left();
@@ -668,7 +668,7 @@ int LayersPanel::lockBadgeLeftForTest(const QString& path) const
 bool LayersPanel::clickLockBadgeForTest(const QString& path)
 {
     const QModelIndex index = proxyIndexForPath(path);
-    if (!index.isValid() || index.data(LockRole).toInt() == 0 || !delegate_ || !tree_) {
+    if (!index.isValid() || index.data(LockBadgeRole).toInt() == 0 || !delegate_ || !tree_) {
         return false;
     }
     const QPoint pos = delegate_->lockRect(tree_->visualRect(index)).center();

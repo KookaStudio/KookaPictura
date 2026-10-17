@@ -1,0 +1,46 @@
+# Test plan
+
+One row per spec scenario. Coverage names the automated test, or
+`manual: <reason>` when it cannot be automated. Checked by
+`scripts/check-test-plan.py`.
+
+| Scenario | Steps | Expected | Coverage |
+|---|---|---|---|
+| `move_drag_feedback` | Drag a type layer 36 × 18 px at 72 ppi, inches; release | Ants box = content box moved; readout ΔX 0.500 in / ΔY 0.250 in; both clear on release | `tst_move_feedback::dragShowsAntsAndReadout` |
+| `move_drag_units` | Read a 36 × 72 px offset on a 200 × 160, 72 ppi document in px, cm, percent | 36 px / 72 px; 1.27 cm / 2.54 cm; 18.0% / 45.0% | `tst_move_feedback::readoutFollowsTheRulerUnit` |
+| `lmtc_box_shown` | Check Show Transform Controls with Move on a raster layer | Box and handles round the content; no pivot; no session | `tst_transform_controls::checkingTheBoxShowsControls` |
+| `lmtc_box_hidden` | Uncheck while shown | Box gone; no session | `tst_transform_controls::checkingTheBoxShowsControls` |
+| `lmtc_box_follows` | Select another layer; change its content | Box on the new content rect | `tst_transform_controls::boxFollowsTheActiveLayer` |
+| `lmtc_box_refused` | Background document; tool switch | No box | `tst_transform_controls::backgroundAndToolSwitchSuppressTheBox` |
+| `lmtc_box_selection` | Make a selection, then deselect | Box hidden, then back | `tst_transform_controls::selectionSuppressesTheBox` |
+| `lmtc_box_no_history` | Show and hide the box | History unchanged | `tst_transform_controls::checkingTheBoxShowsControls` |
+| `lmtc_box_idle` | Show the box on a canvas-sized layer holding a square | Box hugs the square; layer rect stays 0 0 40 30 | `tst_transform_controls::idleBoxLeavesTheLayerAlone` |
+| `mtc_default_on` | Fresh session store; read the Move options | Show Transform Controls checked | `tst_move_feedback::transformControlsOnByDefault` |
+| `mtc_type_untrimmed` | Trim a type layer whose pixels cover its middle | Unchanged rect | `pictura-render::trim_leaves_type_layers` |
+| `mtc_untrim` | Trim a layer to its content, then untrim it | Original rect and alpha; content in place | `pictura-render::untrim_restores_the_extent_without_changing_pixels` |
+| `caret_contrast` | Type session on a black image, then a white one | White caret on black, black on white | `tst_type_tools::caretContrastsWithTheImage` |
+| `lpr_eye` | Unchanged row-delegate behaviour carried by the modified requirement | As before this change | manual: unchanged by this change and checked by the C++ self-test token of the same name (`pictura --headless --self-test`); the self-test is not a test-plan reference type |
+| `lpr_label_tint` | Unchanged row-delegate behaviour carried by the modified requirement | As before this change | manual: unchanged by this change and checked by the C++ self-test token of the same name (`pictura --headless --self-test`); the self-test is not a test-plan reference type |
+| `lpr_label_chip` | Unchanged row-delegate behaviour carried by the modified requirement | As before this change | manual: unchanged by this change and checked by the C++ self-test token of the same name (`pictura --headless --self-test`); the self-test is not a test-plan reference type |
+| `lpr_label_tint_none` | Unchanged row-delegate behaviour carried by the modified requirement | As before this change | manual: unchanged by this change and checked by the C++ self-test token of the same name (`pictura --headless --self-test`); the self-test is not a test-plan reference type |
+| `lpr_smart_badge` | Unchanged row-delegate behaviour carried by the modified requirement | As before this change | manual: unchanged by this change and checked by the C++ self-test token of the same name (`pictura --headless --self-test`); the self-test is not a test-plan reference type |
+| `lpr_smart_badge_absent` | Unchanged row-delegate behaviour carried by the modified requirement | As before this change | manual: unchanged by this change and checked by the C++ self-test token of the same name (`pictura --headless --self-test`); the self-test is not a test-plan reference type |
+| `lpr_chevron` | Unchanged row-delegate behaviour carried by the modified requirement | As before this change | manual: unchanged by this change and checked by the C++ self-test token of the same name (`pictura --headless --self-test`); the self-test is not a test-plan reference type |
+| `m39_badges` | Unchanged row-delegate behaviour carried by the modified requirement | As before this change | manual: unchanged by this change and checked by the C++ self-test token of the same name (`pictura --headless --self-test`); the self-test is not a test-plan reference type |
+| `lpc_clip` | Unchanged row-delegate behaviour carried by the modified requirement | As before this change | manual: unchanged by this change and checked by the C++ self-test token of the same name (`pictura --headless --self-test`); the self-test is not a test-plan reference type |
+| `lpc_lockbadge` | Unchanged row-delegate behaviour carried by the modified requirement | As before this change | manual: unchanged by this change and checked by the C++ self-test token of the same name (`pictura --headless --self-test`); the self-test is not a test-plan reference type |
+| `lpc_forced_lock_badge` | Commit a type layer; lock its position too | Forced locks set, no badge; with Position, a badge | `tst_type_tools::typeLayerRowHasNoLockBadge` |
+| `lpr_thumb_checker` | Unchanged row-delegate behaviour carried by the modified requirement | As before this change | manual: unchanged by this change and checked by the C++ self-test token of the same name (`pictura --headless --self-test`); the self-test is not a test-plan reference type |
+| `lpr_thumb_bracket` | Unchanged row-delegate behaviour carried by the modified requirement | As before this change | manual: unchanged by this change and checked by the C++ self-test token of the same name (`pictura --headless --self-test`); the self-test is not a test-plan reference type |
+| `lpr_group_no_outline` | Unchanged row-delegate behaviour carried by the modified requirement | As before this change | manual: unchanged by this change and checked by the C++ self-test token of the same name (`pictura --headless --self-test`); the self-test is not a test-plan reference type |
+| `lpr_thumb_fill` | Unchanged row-delegate behaviour carried by the modified requirement | As before this change | manual: unchanged by this change and checked by the C++ self-test token of the same name (`pictura --headless --self-test`); the self-test is not a test-plan reference type |
+| `lpr_row_fonts` | Unchanged row-delegate behaviour carried by the modified requirement | As before this change | manual: unchanged by this change and checked by the C++ self-test token of the same name (`pictura --headless --self-test`); the self-test is not a test-plan reference type |
+| `lpr_row_height` | Unchanged row-delegate behaviour carried by the modified requirement | As before this change | manual: unchanged by this change and checked by the C++ self-test token of the same name (`pictura --headless --self-test`); the self-test is not a test-plan reference type |
+| A styled layer shows the fx badge | Unchanged row-delegate behaviour carried by the modified requirement | As before this change | manual: unchanged by this change and checked by the C++ self-test token of the same name (`pictura --headless --self-test`); the self-test is not a test-plan reference type |
+| `lpr_blendif_badge` | Unchanged row-delegate behaviour carried by the modified requirement | As before this change | manual: unchanged by this change and checked by the C++ self-test token of the same name (`pictura --headless --self-test`); the self-test is not a test-plan reference type |
+| `lpr_blendif_badge_absent` | Unchanged row-delegate behaviour carried by the modified requirement | As before this change | manual: unchanged by this change and checked by the C++ self-test token of the same name (`pictura --headless --self-test`); the self-test is not a test-plan reference type |
+| `lpr_blendif_raw` | Unchanged row-delegate behaviour carried by the modified requirement | As before this change | manual: unchanged by this change and checked by the C++ self-test token of the same name (`pictura --headless --self-test`); the self-test is not a test-plan reference type |
+| `top_round_trip` | Change Move, Type, brush, selection, Blur, Burn options; save; new window | Every value restored; Sharpen and Dodge keep their defaults | `tst_tool_options_persistence::optionsSurviveARestart` |
+| `top_bad_entries` | Restore an out-of-range size, a non-object group, an unknown key | Size clamped; others default; no failure | `tst_tool_options_persistence::badEntriesKeepDefaults` |
+| Caret and ants on screen | On a real display: type over a dark photo; Move-drag a layer | The caret turns white over dark areas; ants crawl round the content and the readout follows the pointer | manual: on-screen look and animation need a real display |
+| Settings survive a real restart | Change several tool options, quit, relaunch | The options bar shows the changed values | manual: a full process restart is outside the offscreen Qt Test harness; the in-process round trip is automated above |

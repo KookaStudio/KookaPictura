@@ -451,6 +451,7 @@ fn rasterize_all_layers_rasterizes_a_type_layer() {
                 ..pictura_core::TextStyle::default()
             }),
             vertical: false,
+            box_bounds: None,
         }),
         ..Default::default()
     });

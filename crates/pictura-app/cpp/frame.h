@@ -2,6 +2,7 @@
 
 #include <QtCore/QByteArray>
 #include <QtCore/QHash>
+#include <QtCore/QJsonObject>
 #include <QtCore/QList>
 #include <QtCore/QPointer>
 #include <QtCore/QPoint>
@@ -381,7 +382,10 @@ private:
 
     void buildMenus();
     void buildPanels();
-    void buildTools(int toolsColumns, bool useShiftKeyForToolSwitch);
+    // `toolOptions` is the session's saved tool options, restored before the
+    // options bar is built so its controls start from them.
+    void buildTools(int toolsColumns, bool useShiftKeyForToolSwitch,
+                    const QJsonObject& toolOptions = QJsonObject());
     void buildDocumentTabs();
     void buildStatusBar();
     // Filter the tab pane so a double-click on the empty workspace (no document
@@ -400,6 +404,7 @@ private:
     // frame_menus_align.cpp: Layer > Align / Align Layers To Selection /
     // Distribute, and the Move tool's buttons, over the selected layers.
     void wireAlignMenu();
+    void wireTypeMenu();
     // frame_menus_layer_style.cpp: Layer > Layer Style, the Layer Style dialog
     // and the style commands over the Layers panel's selection.
     void wireLayerStyleMenu();

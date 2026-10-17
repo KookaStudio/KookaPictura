@@ -328,6 +328,9 @@ void EditShortcutsTest::freeTransformBoxHugsTheLayerContent()
     QVERIFY(openPhoto(dir));
     pictura::PictureView* view = frame.activeView();
     const int doc = frame.activeDocumentIndex();
+    // Off the Move tool, whose controls box (on by default) would come back
+    // once the modal session ends.
+    frame.setActiveTool(pictura::ToolId::Marquee);
     const int added = view->add_layer(0);
     QVERIFY(added > 0);
     const QString layer = QString::number(added);

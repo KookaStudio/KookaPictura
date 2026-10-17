@@ -17,6 +17,21 @@
 
 #include <QtWidgets/QCheckBox>
 
+namespace {
+
+// The idle controls box on the canvas as "left top right bottom", or empty.
+QString boxRect(const pictura::ImageView& canvas)
+{
+    const QPolygonF box = canvas.controlsBoxForTest();
+    if (box.size() < 4) {
+        return QString();
+    }
+    const QRectF r = box.boundingRect();
+    return QStringLiteral("%1 %2 %3 %4").arg(r.left()).arg(r.top()).arg(r.right()).arg(r.bottom());
+}
+
+} // namespace
+
 class TransformControlsTest : public QObject {
     Q_OBJECT
 
@@ -32,6 +47,7 @@ private slots:
     void selectionSuppressesTheBox();
     void backgroundAndToolSwitchSuppressTheBox();
     void ctrlTTakesTheBoxOver();
+    void idleBoxLeavesTheLayerAlone();
 
 private:
     // New document + one filled raster layer selected, Move active; toggles the
@@ -104,24 +120,24 @@ void TransformControlsTest::checkingTheBoxShowsControls()
     auto* bar = frame.findChild<pictura::OptionsBar*>(QStringLiteral("optionsBar"));
     QVERIFY(view && canvas && tools && bar);
 
+    // The box is up but idle: drawn, no session until a handle is grabbed.
     QVERIFY(tools->transformControlsSession());
-    QVERIFY(view->transform_session_active());
-    QCOMPARE(view->transform_session_path(), layer);
-    QVERIFY(canvas->transformPreviewActive());
+    QVERIFY(tools->transformControlsIdleForTest());
+    QVERIFY(!view->transform_session_active());
     // CS6's controls box has no reference point.
     QVERIFY(!canvas->transformPivotVisibleForTest());
     // The bar stays on the Move page.
     QCOMPARE(bar->currentPageForTest(), bar->pageForTest(pictura::ToolId::Move));
     // The box hugs the filled square.
-    QCOMPARE(pictura::transform_session_rect(*view), QStringLiteral("10 8 30 28"));
+    QCOMPARE(boxRect(*canvas), QStringLiteral("10 8 30 28"));
 
     // Unchecking hides the box without recording anything.
     const int history = view->history_count();
     auto* box = frame.findChild<QCheckBox*>(QStringLiteral("optionsMoveTransform"));
     QVERIFY(box);
     box->setChecked(false);
-    QVERIFY(!view->transform_session_active());
-    QVERIFY(!canvas->transformPreviewActive());
+    QVERIFY(!tools->transformControlsSession());
+    QVERIFY(boxRect(*canvas).isEmpty());
     QCOMPARE(view->history_count(), history);
 }
 
@@ -131,8 +147,9 @@ void TransformControlsTest::boxFollowsTheActiveLayer()
     const QString first = beginControls(frame, true);
     QVERIFY(!first.isEmpty());
     pictura::PictureView* view = frame.activeView();
-    QVERIFY(view);
-    QVERIFY(view->transform_session_active());
+    pictura::ImageView* canvas = frame.imageView();
+    QVERIFY(view && canvas);
+    QCOMPARE(boxRect(*canvas), QStringLiteral("10 8 30 28"));
 
     const int added = view->add_layer(0);
     QVERIFY(added > 0);
@@ -144,8 +161,7 @@ void TransformControlsTest::boxFollowsTheActiveLayer()
     view->deselect();
 
     // The box rebuilt on the new layer's content rect.
-    QCOMPARE(view->transform_session_path(), second);
-    QCOMPARE(pictura::transform_session_rect(*view), QStringLiteral("2 2 8 8"));
+    QCOMPARE(boxRect(*canvas), QStringLiteral("2 2 8 8"));
 }
 
 void TransformControlsTest::handleDragScalesAndCommits()
@@ -165,10 +181,10 @@ void TransformControlsTest::handleDragScalesAndCommits()
 
     QCOMPARE(view->history_count(), base + 1);
     QCOMPARE(view->history_label(base), QStringLiteral("Free Transform"));
-    // The box returns on the scaled layer.
-    QVERIFY(tools->transformControlsSession());
-    QVERIFY(view->transform_session_active());
-    QCOMPARE(pictura::transform_session_rect(*view), QStringLiteral("4 2 30 28"));
+    // The box returns, idle, on the scaled layer.
+    QVERIFY(tools->transformControlsIdleForTest());
+    QVERIFY(!view->transform_session_active());
+    QCOMPARE(boxRect(*canvas), QStringLiteral("4 2 30 28"));
 }
 
 void TransformControlsTest::insideDragMovesAndRecordsMove()
@@ -189,8 +205,8 @@ void TransformControlsTest::insideDragMovesAndRecordsMove()
     // An inside drag is the Move tool's, not the session's.
     QCOMPARE(view->history_count(), base + 1);
     QCOMPARE(view->history_label(base), QStringLiteral("Move Layer"));
-    QVERIFY(tools->transformControlsSession());
-    QCOMPARE(pictura::transform_session_rect(*view), QStringLiteral("15 11 35 31"));
+    QVERIFY(tools->transformControlsIdleForTest());
+    QCOMPARE(boxRect(*canvas), QStringLiteral("15 11 35 31"));
 }
 
 void TransformControlsTest::clickInsideLeavesTheDocumentAlone()
@@ -208,8 +224,8 @@ void TransformControlsTest::clickInsideLeavesTheDocumentAlone()
     canvas->mouseReleased(QPointF(15.0, 13.0));
     QCOMPARE(view->history_count(), history);
     // The box is back even though nothing changed.
-    QVERIFY(tools->transformControlsSession());
-    QVERIFY(view->transform_session_active());
+    QVERIFY(tools->transformControlsIdleForTest());
+    QCOMPARE(boxRect(*canvas), QStringLiteral("10 8 30 28"));
 }
 
 void TransformControlsTest::selectionSuppressesTheBox()
@@ -218,14 +234,15 @@ void TransformControlsTest::selectionSuppressesTheBox()
     const QString layer = beginControls(frame, true);
     QVERIFY(!layer.isEmpty());
     pictura::PictureView* view = frame.activeView();
-    QVERIFY(view);
-    QVERIFY(view->transform_session_active());
+    pictura::ImageView* canvas = frame.imageView();
+    QVERIFY(view && canvas);
+    QVERIFY(!boxRect(*canvas).isEmpty());
 
     QVERIFY(view->select_rect(5, 5, 6, 6, QStringLiteral("new"), 0.0));
-    QVERIFY(!view->transform_session_active());
+    QVERIFY(boxRect(*canvas).isEmpty());
 
     view->deselect();
-    QVERIFY(view->transform_session_active());
+    QVERIFY(!boxRect(*canvas).isEmpty());
 }
 
 void TransformControlsTest::backgroundAndToolSwitchSuppressTheBox()
@@ -244,6 +261,7 @@ void TransformControlsTest::backgroundAndToolSwitchSuppressTheBox()
     frame.setActiveTool(pictura::ToolId::Move);
     box->setChecked(true);
     QVERIFY(!view->transform_session_active());
+    QVERIFY(boxRect(*frame.imageView()).isEmpty());
     frame.closeDocument(frame.activeDocumentIndex(), false);
 
     // A tool switch hides a shown box; returning to Move shows it again.
@@ -253,10 +271,11 @@ void TransformControlsTest::backgroundAndToolSwitchSuppressTheBox()
     auto* tools = frame.findChild<pictura::ToolController*>();
     QVERIFY(view && tools && tools->transformControlsSession());
     frame.setActiveTool(pictura::ToolId::Brush);
-    QVERIFY(!view->transform_session_active());
+    QVERIFY(!tools->transformControlsSession());
+    QVERIFY(boxRect(*frame.imageView()).isEmpty());
     frame.setActiveTool(pictura::ToolId::Move);
     QVERIFY(tools->transformControlsSession());
-    QVERIFY(view->transform_session_active());
+    QVERIFY(!boxRect(*frame.imageView()).isEmpty());
 }
 
 void TransformControlsTest::ctrlTTakesTheBoxOver()
@@ -279,6 +298,22 @@ void TransformControlsTest::ctrlTTakesTheBoxOver()
     tools->cancelFreeTransform();
     QVERIFY(tools->transformControlsSession());
     QCOMPARE(bar->currentPageForTest(), bar->pageForTest(pictura::ToolId::Move));
+}
+
+void TransformControlsTest::idleBoxLeavesTheLayerAlone()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginControls(frame, true);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    pictura::ImageView* canvas = frame.imageView();
+    QVERIFY(view && canvas);
+    // The box hugs the square, but the canvas-sized layer keeps its extent, so
+    // a filter run now can still spread past the square.
+    QCOMPARE(boxRect(*canvas), QStringLiteral("10 8 30 28"));
+    const ::rust::Vec<int32_t> rect = pictura::layer_rect_extents(*view, layer);
+    QCOMPARE(int(rect.size()), 4);
+    QCOMPARE(QList<int>({rect[0], rect[1], rect[2], rect[3]}), QList<int>({0, 0, 40, 30}));
 }
 
 QTEST_MAIN(TransformControlsTest)

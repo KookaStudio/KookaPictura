@@ -13,6 +13,7 @@
 #include "api/type_api.h"
 
 #include <QtCore/QDataStream>
+#include <QtCore/QElapsedTimer>
 #include <QtGui/QClipboard>
 #include <QtGui/QFontDatabase>
 #include <QtGui/QFontInfo>
@@ -119,6 +120,11 @@ private slots:
     void typeMaskTools();
     void typeOptionsBar();
     void typeBarSizeAlignAndColor();
+    void caretBlinks();
+    void caretPlacementAndBaseline();
+    void caretContrastsWithTheImage();
+    void typeLayerRowHasNoLockBadge();
+    void dragOutsideMovesTheText();
 
 private:
     void showFrame();
@@ -932,6 +938,153 @@ void TypeToolsTest::typeBarSizeAlignAndColor()
 
     f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(saved);
     f.tools->setForeground(foreground);
+}
+
+void TypeToolsTest::caretBlinks()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_type_blink"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    frame.setActiveTool(pictura::ToolId::HorizontalType);
+
+    // Shown on open, hidden after one 750 ms half-cycle, then back.
+    f.drag({QPointF(20, 60)});
+    QCOMPARE(f.canvas->typeCaretBlinkIntervalForTest(), 750);
+    QElapsedTimer clock;
+    clock.start();
+    QVERIFY(f.canvas->typeCaretShownForTest());
+    QTRY_VERIFY_WITH_TIMEOUT(!f.canvas->typeCaretShownForTest(), 3000);
+    QVERIFY2(clock.elapsed() >= 600, "hidden only after the interval");
+    QTRY_VERIFY_WITH_TIMEOUT(f.canvas->typeCaretShownForTest(), 3000);
+
+    // A keystroke while hidden shows the caret at once.
+    QTRY_VERIFY_WITH_TIMEOUT(!f.canvas->typeCaretShownForTest(), 3000);
+    QTest::keyClicks(f.canvas, QStringLiteral("a"));
+    QVERIFY(f.canvas->typeCaretShownForTest());
+    QTest::keyClick(f.canvas, Qt::Key_Escape);
+    QVERIFY(!f.canvas->typeOverlayActiveForTest());
+}
+
+void TypeToolsTest::caretPlacementAndBaseline()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_type_baseline"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    frame.setActiveTool(pictura::ToolId::HorizontalType);
+
+    // Empty text: the caret and the placement point at the click, no guide.
+    f.drag({QPointF(20, 60)});
+    QVERIFY(f.canvas->typeOverlayHasPlacementForTest());
+    QCOMPARE(f.canvas->typeOverlayPlacementForTest(), QPointF(20, 60));
+    QVERIFY(f.canvas->typeOverlayBaselinesForTest().isEmpty());
+
+    // Typed text: one guide from the click along its baseline to the caret.
+    QTest::keyClicks(f.canvas, QStringLiteral("some text"));
+    const QList<QLineF> guides = f.canvas->typeOverlayBaselinesForTest();
+    QCOMPARE(guides.size(), 1);
+    const QLineF guide = guides.first();
+    QVERIFY2(qAbs(guide.p1().x() - 20.0) <= 1.0 && qAbs(guide.p1().y() - 60.0) <= 1.0,
+             "starts at the click");
+    QVERIFY2(qAbs(guide.p2().y() - guide.p1().y()) < 0.01, "along the baseline");
+    const QLineF caret = f.canvas->typeOverlayCaretForTest();
+    QVERIFY2(qAbs(guide.p2().x() - caret.p1().x()) < 0.01, "ends at the caret");
+    QVERIFY2(caret.p1().y() < 60.0 && caret.p2().y() > 60.0, "the caret crosses the guide");
+    QVERIFY(f.canvas->typeOverlayHasPlacementForTest());
+    QTest::keyClick(f.canvas, Qt::Key_Escape);
+}
+
+void TypeToolsTest::caretContrastsWithTheImage()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    for (const bool dark : {true, false}) {
+        QImage image = seed();
+        image.fill(dark ? Qt::black : Qt::white);
+        Fixture f(frame, image, QStringLiteral("pictura_type_contrast"));
+        QVERIFY2(f.ok(), "type fixture");
+        showFrame();
+        frame.setActiveTool(pictura::ToolId::HorizontalType);
+        f.drag({QPointF(20, 60)});
+        QVERIFY(f.canvas->typeOverlayActiveForTest());
+        QCOMPARE(f.canvas->typeOverlayLightInkForTest(), dark);
+        QTest::keyClick(f.canvas, Qt::Key_Escape);
+    }
+}
+
+void TypeToolsTest::typeLayerRowHasNoLockBadge()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_type_lockbadge"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    frame.setActiveTool(pictura::ToolId::HorizontalType);
+    f.drag({QPointF(20, 60)});
+    QTest::keyClicks(f.canvas, QStringLiteral("locks"));
+    QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
+    frame.setActiveTool(pictura::ToolId::Move);
+    const QString path = typeLayer(f);
+    QVERIFY2(!path.isEmpty(), "a type layer");
+    QCOMPARE(f.view->layer_lock(path.toInt()) & 0x03, 0x03);
+
+    auto* panel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(panel);
+    panel->refresh();
+    QVERIFY2(panel->lockBadgeLeftForTest(path) < 0, "forced locks show no badge");
+
+    f.view->set_layers_lock(QStringList{path}, QStringLiteral("position"), true);
+    panel->refresh();
+    QVERIFY2(panel->lockBadgeLeftForTest(path) >= 0, "a user lock shows the badge");
+}
+
+void TypeToolsTest::dragOutsideMovesTheText()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QRect unmoved;
+    {
+        Fixture f(frame, seed(), QStringLiteral("pictura_type_unmoved"));
+        QVERIFY2(f.ok(), "type fixture");
+        showFrame();
+        frame.setActiveTool(pictura::ToolId::HorizontalType);
+        f.drag({QPointF(20, 60)});
+        QTest::keyClicks(f.canvas, QStringLiteral("Move me"));
+        QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
+        unmoved = layerRect(f, typeLayer(f));
+        QVERIFY(unmoved.isValid());
+    }
+
+    Fixture f(frame, seed(), QStringLiteral("pictura_type_moved"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    frame.setActiveTool(pictura::ToolId::HorizontalType);
+    f.drag({QPointF(20, 60)});
+    QTest::keyClicks(f.canvas, QStringLiteral("Move me"));
+
+    // Away from the text the pointer would move it; over the text it edits.
+    QCOMPARE(f.tools->activeCursorKindForTest(QPointF(140, 120), 0), 1);
+    const QLineF caret = f.canvas->typeOverlayCaretForTest();
+    QCOMPARE(f.tools->activeCursorKindForTest(caret.center() - QPointF(8, 0), 0), -1);
+
+    // The drag carries the text, its placement point, and its guide along.
+    const int base = f.view->history_index();
+    const QLineF guide = f.canvas->typeOverlayBaselinesForTest().value(0);
+    f.canvas->mousePressed(QPointF(140, 120), Qt::LeftButton, int(Qt::NoModifier));
+    f.canvas->mouseMoved(QPointF(155, 130));
+    f.canvas->mouseMoved(QPointF(170, 140));
+    QCOMPARE(f.canvas->typeOverlayPlacementForTest(), QPointF(50, 80));
+    const QLineF movedGuide = f.canvas->typeOverlayBaselinesForTest().value(0);
+    QVERIFY2(QLineF(movedGuide.p1() - guide.p1(), QPointF(30, 20)).length() < 0.01,
+             "the guide moved with the text");
+    f.canvas->mouseReleased(QPointF(170, 140));
+    QVERIFY2(f.tools->textSession() && f.tools->textSession()->textActive(),
+             "a drag does not commit");
+    QCOMPARE(f.view->history_index(), base);
+
+    QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
+    QVERIFY2(f.committedOnce(base, "Horizontal Type"), "one Horizontal Type state");
+    const QRect moved = layerRect(f, typeLayer(f));
+    QCOMPARE(moved.topLeft() - unmoved.topLeft(), QPoint(30, 20));
+    QCOMPARE(moved.size(), unmoved.size());
 }
 
 QTEST_MAIN(TypeToolsTest)

@@ -78,7 +78,8 @@ pub use merge::{
     MergeError, MergeOutcome, MergeScope, StampScope,
 };
 pub use move_content::{
-    can_lift_selection, lift_selection, merge_lifted, move_selection_content, trim_to_content,
+    can_lift_selection, content_rect, lift_selection, merge_lifted, move_selection_content,
+    trim_to_content, untrim_to,
 };
 pub use paths::{flatten_rows, is_background, parent_path, resolve_path, resolve_path_mut};
 pub use perspective_crop::{

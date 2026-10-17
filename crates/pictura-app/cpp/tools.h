@@ -383,9 +383,15 @@ public:
     void commitFreeTransform();
     void cancelFreeTransform();
     bool transformSessionActive() const;
-    // Whether the active session is the Move tool's `Show Transform Controls`
-    // box (an auto-managed, per-drag-commit session), not a modal Ctrl+T one.
+    // Whether the Move tool's `Show Transform Controls` box is up (idle, or
+    // mid-gesture as an auto-managed, per-drag-commit session), not a modal
+    // Ctrl+T one.
     bool transformControlsSession() const { return transformControls_; }
+    // The box is shown but no session runs: it is drawn from the layer's
+    // content bounds and the layer is untouched until a handle is grabbed.
+    bool transformControlsIdleForTest() const { return controlsIdle_; }
+    // The active tool's pointer cursor zone at `imagePos` (`pointerCursorKind`).
+    int activeCursorKindForTest(const QPointF& imagePos, int mods);
     // Show or hide the controls box for the current tool, checkbox, selection,
     // and active layer; rebuild it when its target or content rect went stale.
     void syncTransformControls();
@@ -529,8 +535,23 @@ private:
 
     bool transformDragging_ = false;
     int transformHandle_ = -1;
-    // True while the active session is the Move tool's controls box.
+    // True while the Move tool's controls box is up (idle or mid-gesture).
     bool transformControls_ = false;
+    // The box is up with no session (`controlsIdle_`): on `controlsPath_`,
+    // last built for `controlsKey_` (path, rect, history step).
+    bool controlsIdle_ = false;
+    QString controlsPath_;
+    QString controlsKey_;
+    QRect controlsBox_;
+    // `controls_box_hit_test` on the idle box at `imagePos`.
+    int controlsHit(const QPointF& imagePos) const;
+    // The pointer shows an idle box handle's cursor.
+    bool controlsHandleCursor_ = false;
+    void clearControlsBox();
+    // A press grabbed an idle box's handle: start its session (Free
+    // Transform's, which trims the layer to the box). False if it cannot.
+    bool beginControlsGesture(PictureView* v);
+    void setHandleCursor(int hit, const QPointF& imagePos, const QPointF& centre);
     int currentNote_ = -1;
 
     // The guide a press would pick up at `imagePos` (Move tool, or Ctrl with
