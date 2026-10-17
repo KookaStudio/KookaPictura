@@ -11,10 +11,14 @@ on:
   pull_request:
     paths:
       - Cargo.toml
+      - Cargo.lock
       - CMakeLists.txt
       - CHANGELOG.md
       - version.txt
       - .release-please-manifest.json
+      - packaging/**
+      - .github/workflows/windows.yml
+      - .github/actions/windows-bundle/action.yml
   workflow_call:
     inputs:
       tag:
@@ -23,34 +27,38 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing release tag, e.g. v0.1.0
+        description: Existing release tag, e.g. v0.1.0 (a leading v is added if omitted)
         type: string
         required: true
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: windows-${{ inputs.tag || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Release uploads live in their own job; a pull-request dry run is read-only.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   windows:
     runs-on: windows-2022
     timeout-minutes: 90
-    if: github.event_name != 'pull_request' || github.head_ref == 'release-please--branches--master'
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.head_ref == 'release-please--branches--master' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
     env:
       TAG: ${{ inputs.tag }}
-      VERSION: ${{ inputs.tag || format('pr{0}', github.event.number) }}
+      VERSION: ${{ inputs.tag || format('0.0.0~pr{0}', github.event.number) }}
       # sccache, the same setup ci.yml uses. Cargo and the C++ shell recompile
       # only what changed instead of a cold build every run.
       RUSTC_WRAPPER: sccache
       SCCACHE_GHA_ENABLED: "true"
       CARGO_INCREMENTAL: "0"
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ inputs.tag }}
+          ref: ${{ inputs.tag != '' && (startsWith(inputs.tag, 'v') && inputs.tag || format('v{0}', inputs.tag)) || github.sha }}
 
       - uses: ./.github/actions/windows-bundle
 
@@ -67,6 +75,7 @@ jobs:
       - name: Smoke-check the staged binary
         shell: pwsh
         run: |
+          Remove-Item Env:QT_PLUGIN_PATH,Env:QML2_IMPORT_PATH,Env:QT_QPA_PLATFORM_PLUGIN_PATH -ErrorAction SilentlyContinue
           $log = "$env:GITHUB_WORKSPACE\selftest.log"
           & "$env:GITHUB_WORKSPACE\stage\bin\pictura.exe" --headless --self-test 2>&1 |
             Tee-Object -FilePath $log
@@ -87,29 +96,102 @@ jobs:
         run: |
           $ver = $env:VERSION -replace '^v', ''
           $stage = "$env:GITHUB_WORKSPACE\stage"
+          # VIProductVersion needs four numeric parts; dry-run versions like
+          # 0.0.0~prN are not numeric, so keep the metadata at 0.0.0.0 there.
+          $vi = if ($ver -match '^\d+\.\d+\.\d+$') { "$ver.0" } else { "0.0.0.0" }
           $makensis = (Get-Command makensis -ErrorAction SilentlyContinue).Source
           if (-not $makensis) { $makensis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe" }
-          & $makensis "/DSTAGE_DIR=$stage" "/DVERSION=$ver" `
+          & $makensis "/DSTAGE_DIR=$stage" "/DVERSION=$ver" "/DVI_VERSION=$vi" `
             "/DOUTFILE=$env:GITHUB_WORKSPACE\KookaPictura-$ver-windows-x64-setup.exe" `
             "packaging/windows/installer.nsi"
 
+      # Exercise the artifacts users download, not only the staging folder.
+      - name: Smoke-check the portable archive
+        shell: pwsh
+        run: |
+          Remove-Item Env:QT_PLUGIN_PATH,Env:QML2_IMPORT_PATH,Env:QT_QPA_PLATFORM_PLUGIN_PATH -ErrorAction SilentlyContinue
+          $ver = $env:VERSION -replace '^v', ''
+          $tmp = "$env:RUNNER_TEMP\portable"
+          Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive -Path "KookaPictura-$ver-windows-x64-portable.zip" -DestinationPath $tmp
+          $log = "$env:GITHUB_WORKSPACE\portable-selftest.log"
+          & "$tmp\bin\pictura.exe" --headless --self-test 2>&1 | Tee-Object -FilePath $log
+          if ($LASTEXITCODE -ne 0) { throw "portable self-test exited $LASTEXITCODE" }
+          if (-not (Select-String -Path $log -Quiet -Pattern 'SUMMARY passed=\d+ failed=0')) {
+            throw "portable self-test did not report a passing summary"
+          }
+
+      - name: Smoke-check the installer round-trip
+        shell: pwsh
+        run: |
+          Remove-Item Env:QT_PLUGIN_PATH,Env:QML2_IMPORT_PATH,Env:QT_QPA_PLATFORM_PLUGIN_PATH -ErrorAction SilentlyContinue
+          $ver = $env:VERSION -replace '^v', ''
+          $setup = "$env:GITHUB_WORKSPACE\KookaPictura-$ver-windows-x64-setup.exe"
+          $target = "$env:RUNNER_TEMP\kooka-install"
+          Remove-Item $target -Recurse -Force -ErrorAction SilentlyContinue
+          $install = Start-Process -Wait -PassThru -FilePath $setup -ArgumentList '/S', "/D=$target"
+          if ($install.ExitCode -ne 0) { throw "installer exited $($install.ExitCode)" }
+          $log = "$env:GITHUB_WORKSPACE\installed-selftest.log"
+          & "$target\bin\pictura.exe" --headless --self-test 2>&1 | Tee-Object -FilePath $log
+          if ($LASTEXITCODE -ne 0) { throw "installed self-test exited $LASTEXITCODE" }
+          if (-not (Select-String -Path $log -Quiet -Pattern 'SUMMARY passed=\d+ failed=0')) {
+            throw "installed self-test did not report a passing summary"
+          }
+          $uninstall = Start-Process -Wait -PassThru -FilePath "$target\uninstall.exe" -ArgumentList '/S'
+          if ($uninstall.ExitCode -ne 0) { throw "uninstaller exited $($uninstall.ExitCode)" }
+          for ($i = 0; $i -lt 60 -and (Test-Path $target); $i++) { Start-Sleep -Seconds 1 }
+          if (Test-Path $target) { throw "the install directory survived uninstall" }
+
+      - name: Check the sccache backend
+        shell: pwsh
+        run: |
+          $json = sccache --show-stats --stats-format json | ConvertFrom-Json
+          $stats = if ($json.stats) { $json.stats } else { $json }
+          # sccache 0.18 reports grouped counters as {counts={key=n; ...};
+          # adv_counts={...}}. Sum the keys; plain counters stay numbers.
+          function Get-Count($value) {
+            if ($null -eq $value) { return 0 }
+            if ($value -is [System.Management.Automation.PSCustomObject] -and
+                $null -ne $value.counts) {
+              $total = 0
+              foreach ($p in $value.counts.PSObject.Properties) { $total += [long]$p.Value }
+              return $total
+            }
+            return [long]$value
+          }
+          $errors = Get-Count $stats.cache_errors
+          $writes = Get-Count $stats.cache_writes
+          $hits = Get-Count $stats.cache_hits
+          if ($errors -gt 0) { throw "sccache reported $errors cache errors" }
+          if (($writes + $hits) -le 0) {
+            throw "sccache made no cache writes or hits; the backend is not working"
+          }
+
       - name: Keep the dry-run artifacts
-        if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: windows
           path: |
             KookaPictura-*-windows-x64-portable.zip
             KookaPictura-*-windows-x64-setup.exe
           retention-days: 7
+          if-no-files-found: error
+
+  upload:
+    runs-on: ubuntu-24.04
+    needs: windows
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ inputs.tag != '' && (startsWith(inputs.tag, 'v') && inputs.tag || format('v{0}', inputs.tag)) || '' }}
+    steps:
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: windows
 
       - name: Upload release assets
-        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
-        shell: pwsh
-        run: |
-          $ver = $env:VERSION -replace '^v', ''
-          gh release upload "$env:TAG" `
-            "KookaPictura-$ver-windows-x64-portable.zip" `
-            "KookaPictura-$ver-windows-x64-setup.exe" --clobber
+          GH_REPO: ${{ github.repository }}
+        run: gh release upload "$RELEASE_TAG" KookaPictura-*-windows-x64-portable.zip KookaPictura-*-windows-x64-setup.exe --clobber

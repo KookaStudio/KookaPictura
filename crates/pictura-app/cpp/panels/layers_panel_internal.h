@@ -256,14 +256,28 @@ public:
                      box.top() + (box.height() - height) / 2, width, height);
     }
 
+    /// The image thumbnail's drawn card rect: a type layer keeps a square (1:1)
+    /// "T" card regardless of the document's aspect, every other non-group
+    /// layer is letterboxed to the document. A group keeps its square box.
+    QRect thumbnailCard(const QRect& box, const QModelIndex& index) const
+    {
+        if (!box.isEmpty() && index.data(KindRole).toString() == QLatin1String("type")) {
+            const int side = qMin(box.width(), box.height());
+            return QRect(box.left() + (box.width() - side) / 2,
+                         box.top() + (box.height() - side) / 2, side, side);
+        }
+        return letterboxedThumb(box, index);
+    }
+
     /// The thumbnail's hit-target, mirroring the x/y math paint() lays out, as
-    /// the letterboxed (document-aspect) rect. Empty when thumbnails are off.
+    /// the drawn card (document-aspect for a regular layer, square for a type
+    /// card). Empty when thumbnails are off.
     QRect thumbRect(const QRect& itemRect, const QModelIndex& index) const
     {
         if (thumbSize() <= 0) {
             return {};
         }
-        return letterboxedThumb(imageThumbBox(itemRect, index), index);
+        return thumbnailCard(imageThumbBox(itemRect, index), index);
     }
 
     /// The right edge left for the mask thumbnail after the lock and fx badges,
@@ -532,7 +546,7 @@ public:
         }
         if (thumb > 0) {
             const QRect box = thumbSlot(rect, x);
-            const QRect shaped = letterboxedThumb(box, index);
+            const QRect shaped = thumbnailCard(box, index);
             thumbBox = shaped;
             if (index.data(KindRole).toString() == QLatin1String("group")) {
                 // The folder glyph is about three quarters of the row thumbnail,
@@ -575,8 +589,9 @@ public:
                 }
             }
             // 1 px black outline around the letterboxed thumbnail. A group's
-            // folder glyph keeps no outline.
-            if (index.data(KindRole).toString() != QLatin1String("group")) {
+            // folder glyph and a type layer's white "T" card keep no outline.
+            const QString outlineKind = index.data(KindRole).toString();
+            if (outlineKind != QLatin1String("group") && outlineKind != QLatin1String("type")) {
                 painter->setPen(QPen(Qt::black, 1));
                 painter->setBrush(Qt::NoBrush);
                 painter->drawRect(shaped.adjusted(0, 0, -1, -1));

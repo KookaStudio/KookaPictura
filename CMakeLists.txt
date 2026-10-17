@@ -21,14 +21,18 @@ if(NOT CMAKE_CXX_COMPILER_LAUNCHER)
 endif()
 
 # clangd (and therefore Serena's C++ symbol tools) reads compile_commands.json
-# from the repo root. CMake writes it into the build dir, so link it back.
+# from the repo root. CMake writes it into the build dir, so link it back. An
+# in-source build (flatpak-builder's cmake buildsystem) has no separate build
+# dir, so there is nothing to link.
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(_compile_db "${CMAKE_SOURCE_DIR}/compile_commands.json")
-if(IS_SYMLINK "${_compile_db}")
-    file(REMOVE "${_compile_db}")
-endif()
-if(NOT EXISTS "${_compile_db}")
-    file(CREATE_LINK "${CMAKE_BINARY_DIR}/compile_commands.json" "${_compile_db}" SYMBOLIC)
+if(NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
+    if(IS_SYMLINK "${_compile_db}")
+        file(REMOVE "${_compile_db}")
+    endif()
+    if(NOT EXISTS "${_compile_db}")
+        file(CREATE_LINK "${CMAKE_BINARY_DIR}/compile_commands.json" "${_compile_db}" SYMBOLIC)
+    endif()
 endif()
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
@@ -622,7 +626,11 @@ include(GNUInstallDirs)
 install(TARGETS pictura
     BUNDLE DESTINATION ${CMAKE_INSTALL_BINDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-install(FILES packaging/pictura.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
-install(FILES assets/icons/app.png
-    DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/512x512/apps
-    RENAME pictura.png)
+if(NOT WIN32)
+    install(FILES packaging/pictura.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+    install(FILES assets/icons/app.png
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/512x512/apps
+        RENAME pictura.png)
+    install(FILES packaging/pictura.metainfo.xml
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo)
+endif()

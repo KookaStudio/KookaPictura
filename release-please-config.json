@@ -6,7 +6,8 @@
       "initial-version": "0.1.0",
       "extra-files": [
         { "type": "generic", "path": "Cargo.toml" },
-        { "type": "generic", "path": "CMakeLists.txt" }
+        { "type": "generic", "path": "CMakeLists.txt" },
+        { "type": "generic", "path": "flatpak/io.github.KookaStudio.KookaPictura.metainfo.xml" }
       ]
     }
   }

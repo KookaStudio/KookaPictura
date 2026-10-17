@@ -451,8 +451,10 @@ the release/tag event, not `master`.
    the open `chore(master): release X.Y.Z` PR current after every push.
 2. Review that PR's `CHANGELOG.md` and version bumps, then squash-merge it.
 3. The `release-please` run on that merge tags `vX.Y.Z`, publishes the GitHub
-   release, and calls `appimage.yml` and `linux-packages.yml` for the tag; they
-   attach the AppImage, `.deb`, and `.rpm` to the release.
+   release, and calls the packaging workflows for the tag (`appimage.yml`,
+   `linux-packages.yml`, `snap.yml`, `flatpak.yml`, `windows.yml`, `macos.yml`);
+   they attach the AppImage, `.deb`/`.rpm`, `.snap`, `.flatpak`, Windows
+   installer/portable archive, and macOS DMG to the release.
 
 ### Linux packages
 
@@ -465,7 +467,9 @@ The install rules, the desktop file (`packaging/pictura.desktop`), and the icon
 all use the binary's name, `pictura`.
 
 - **AppImage** (`appimage.yml`): packs the AppDir, runs `--headless --self-test`
-  against the AppImage, uploads `KookaPictura-X.Y.Z-x86_64.AppImage`.
+  against the AppImage inside a clean `ubuntu:24.04` container (so the runner's
+  Qt cannot hide a missing bundled library), and uploads
+  `KookaPictura-X.Y.Z-x86_64.AppImage`.
 - **deb / rpm** (`linux-packages.yml`): `packaging/build-packages.sh` moves the
   AppDir to `/opt/kooka-pictura` (the `$ORIGIN` rpath and `qt.conf` keep working),
   links `/usr/bin/pictura`, and installs the desktop entry and icon under
@@ -474,7 +478,9 @@ all use the binary's name, `pictura`.
   the bundled sonames excluded from `Requires`/`Provides`. Each package is
   installed into a clean `ubuntu:24.04` / `fedora:latest` container and
   self-tested before `KookaPictura_X.Y.Z_amd64.deb` and
-  `KookaPictura-X.Y.Z-1.x86_64.rpm` are uploaded.
+  `KookaPictura-X.Y.Z-1.x86_64.rpm` are uploaded. Both packages install the
+  license texts under `/usr/share/doc/kooka-pictura/` and the native AppStream
+  metainfo (`packaging/pictura.metainfo.xml`) for `pictura.desktop`.
 
 - **Re-run for an existing tag** (failed upload, packaging fix):
   `gh workflow run appimage.yml -f tag=vX.Y.Z` or
@@ -505,8 +511,13 @@ stages `cmake --install` into `stage/`, and runs `windeployqt --release` over
 `stage/bin/pictura.exe`, so both artifacts carry the Qt runtime and the MSVC
 runtime — the portable archive runs without a preinstalled Qt or Visual C++
 redistributable. The workflow packs the archive with `Compress-Archive`, builds
-the installer with `makensis` and `packaging/windows/installer.nsi`, and
-smoke-tests the staged binary with `--headless --self-test`.
+the installer with `makensis` and `packaging/windows/installer.nsi`. It then
+smoke-tests the shipped forms, not only the staging folder: it extracts the
+portable archive and runs `--headless --self-test`, silent-installs `setup.exe`
+into a temporary directory and self-tests there, then uninstalls and asserts the
+directory is gone. The installer writes an install marker and refuses a
+non-empty, unmarked directory; the uninstaller removes files only when that
+marker is present.
 
 - **Re-run for an existing tag**: `gh workflow run windows.yml -f tag=vX.Y.Z`,
   also available from *Actions → Run workflow*; `--clobber` replaces existing
@@ -522,17 +533,24 @@ smoke-tests the staged binary with `--headless --self-test`.
 
 `.github/workflows/macos.yml` builds the Apple Silicon DMG on a `macos-15`
 runner: `KookaPictura-X.Y.Z-macOS.dmg`. The bundle targets macOS 13 or later
-(Qt 6.11's floor) and is **unsigned** — until an Apple Developer account
-exists, Gatekeeper requires a right-click → Open (or
-`xattr -d com.apple.quarantine`) on first launch.
+(Qt 6.11's floor) and is **unsigned** — there is no Apple Developer account, so
+it is not notarized either. Gatekeeper blocks the first launch; macOS 15 removed
+the old right-click → Open shortcut. The user has to open the app once, then go
+to **System Settings → Privacy & Security → Open Anyway** (or run
+`xattr -d com.apple.quarantine /Applications/Kooka\ Pictura.app`). Signing and
+notarization are tracked as follow-up #704.
 
 The shared composite action `.github/actions/macos-bundle` builds the
 `MACOSX_BUNDLE` target `pictura.app` (`Info.plist` from
 `packaging/macos/Info.plist.in`, icon `assets/icons/app.icns`), then runs
-`macdeployqt` to embed the Qt frameworks and plugins into `Contents/`. The
-workflow smoke-tests the deployed bundle with `--headless --self-test`, then
-packs the DMG with `create-dmg`; `--skip-jenkins` skips the Finder AppleScript,
-which needs an interactive session. Little CMS is linked statically on macOS
+`macdeployqt -always-overwrite` to embed the Qt frameworks and plugins into
+`Contents/` (the flag also rewrites the pre-copied offscreen plugin's framework
+paths), then ad-hoc signs the bundle. The workflow packs the DMG with the pinned
+`create-dmg`; `--skip-jenkins` skips the Finder AppleScript, which needs an
+interactive session. It then mounts the DMG, runs `--headless --self-test` from
+the bundle on the volume with `DYLD_*` and Qt plugin variables unset, and checks
+`qt.conf` and bundle-relative `otool -L` output. Little CMS is linked
+statically on macOS
 (`lcms2-sys`'s vendored copy, as on Windows), so the DMG needs no Homebrew
 dylibs.
 
@@ -544,6 +562,67 @@ dylibs.
   DMG as a workflow artifact instead of uploading it; feature PRs never run it.
 - **The macOS build cannot run on Linux.** clang/arm64, `macdeployqt`, and
   `create-dmg` are macOS-only, so this job always runs on a macOS runner.
+
+### Snap packages
+
+`.github/workflows/snap.yml` builds a strictly-confined snap for x86_64 from a
+release tag and attaches it to the release as
+`kooka-pictura_X.Y.Z_amd64.snap`. The snap is **unsigned** — install it with
+`snap install --dangerous ./kooka-pictura_X.Y.Z_amd64.snap`.
+
+The snap is built from source inside snapcraft (`snap/snapcraft.yaml`), not from
+the AppDir the Linux packages share: the `kde-neon-6` extension supplies Qt from
+its content snap and plugs, so bundling the linuxdeploy Qt stack would mix two
+copies. The build installs the pinned Rust toolchain (`rust-toolchain.toml`) it
+needs, and the application reuses `packaging/pictura.desktop` and
+`assets/icons/app.png`.
+
+- **Snap Store is not wired yet.** Publishing to the store (credentials, name
+  registration, channels) is a future change; for now the `.snap` is a release
+  asset only.
+- **Re-run for an existing tag**: `gh workflow run snap.yml -f tag=vX.Y.Z`,
+  also available from *Actions → Run workflow*; `--clobber` replaces an existing
+  asset. As for the other workflows, `--ref <branch>` runs the branch's workflow
+  file against the tag's tree.
+- **Dry run** — the release-please Release PR runs the same build and keeps the
+  `.snap` as a workflow artifact instead of uploading it; feature PRs never run
+  it.
+
+### Flatpak packages
+
+`.github/workflows/flatpak.yml` builds the x86_64 bundle
+`KookaPictura-X.Y.Z-x86_64.flatpak` from the manifest
+`flatpak/io.github.KookaStudio.KookaPictura.yml`. The application id is
+`io.github.KookaStudio.KookaPictura`; the runtime is `org.kde.Platform` /
+`org.kde.Sdk` 6.11, and x86_64 is the only architecture.
+
+The build runs on the KDE SDK. `flatpak-builder` downloads every declared
+source over the network during the build: the Rust crates from the committed
+`flatpak/cargo-sources.json` and the `cxx-qt-cmake`/`corrosion` archives from
+the manifest. CMake and Cargo then run offline against those vendored trees.
+Regenerate the cargo sources with
+`flatpak-cargo-generator.py Cargo.lock -o flatpak/cargo-sources.json`
+(`flatpak/flatpak-builder-tools`) whenever `Cargo.lock` changes, and commit the
+result; `scripts/check-flatpak-cargo-sources.py` fails the lint job when a locked
+crate is missing. The Rust toolchain comes from the freedesktop `rust-stable`
+SDK extension, not from `rust-toolchain.toml`.
+
+The bundle does **not** embed its runtime: `org.kde.Platform//6.11` comes from
+Flathub on the installing machine, so the user needs Flatpak installed and the
+Flathub remote configured. A cheap `flatpak-builder-lint` job validates the
+manifest and metainfo on pull requests that change them.
+
+- **Re-run for an existing tag**: `gh workflow run flatpak.yml -f tag=vX.Y.Z`,
+  also available from *Actions → Run workflow*; `--clobber` replaces the existing
+  asset. As for the other workflows, `--ref <branch>` runs the branch's workflow
+  file against the tag's tree.
+- **Dry run** — the release-please Release PR runs the same build and keeps the
+  bundle as a workflow artifact instead of uploading it.
+- **Not yet wired**: Flathub submission (#708). The metainfo's `<release>`
+  version is updated by release-please; its date and release notes are not.
+- **Portal confinement is not proven**: the smoke test proves the sandbox
+  launches the app, not that portal-backed file dialogs work. That part of the
+  confinement story remains #647.
 
 ## Where to go next
 

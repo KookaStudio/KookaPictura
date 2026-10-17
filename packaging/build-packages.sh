@@ -32,12 +32,19 @@ mkdir -p "$root$prefix" "$root/usr/bin" "$root/usr/share"
 for dir in "$appdir"/usr/*; do
     [ "$(basename "$dir")" = share ] || cp -a "$dir" "$root$prefix/"
 done
-cp -a "$appdir/usr/share/applications" "$appdir/usr/share/icons" "$root/usr/share/"
+for dir in applications icons metainfo; do
+    if [ -d "$appdir/usr/share/$dir" ]; then
+        cp -a "$appdir/usr/share/$dir" "$root/usr/share/"
+    fi
+done
+install -d "$root/usr/share/doc/$name"
+install -m644 LICENSE "$root/usr/share/doc/$name/copyright"
+install -m644 THIRD-PARTY-LICENSES "$root/usr/share/doc/$name/THIRD-PARTY-LICENSES"
 # Anything else linuxdeploy put in share/ (bundled libraries' copyright files)
 # stays private so it cannot collide with distro packages.
 for dir in "$appdir"/usr/share/*; do
     case $(basename "$dir") in
-        applications | icons) ;;
+        applications | icons | metainfo) ;;
         *) mkdir -p "$root$prefix/share" && cp -a "$dir" "$root$prefix/share/" ;;
     esac
 done
@@ -88,7 +95,7 @@ build_rpm() {
 %global _build_id_links none
 
 Name: $name
-Version: ${version//-/_}
+Version: $version
 Release: 1
 Summary: $summary
 License: GPL-3.0-or-later
@@ -106,6 +113,9 @@ $prefix
 /usr/bin/pictura
 /usr/share/applications/pictura.desktop
 /usr/share/icons/hicolor/512x512/apps/pictura.png
+/usr/share/metainfo/pictura.metainfo.xml
+%license /usr/share/doc/$name/copyright
+%license /usr/share/doc/$name/THIRD-PARTY-LICENSES
 EOF
     rpmbuild -bb --define "_topdir $work/rpm" "$work/rpm/$name.spec"
     cp "$work"/rpm/RPMS/x86_64/*.rpm "$outdir/KookaPictura-${version}-1.x86_64.rpm"
