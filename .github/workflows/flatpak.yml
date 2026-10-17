@@ -8,17 +8,7 @@ name: flatpak
 # appimage.yml.
 on:
   pull_request:
-    paths:
-      - flatpak/**
-      - Cargo.toml
-      - Cargo.lock
-      - CMakeLists.txt
-      - CHANGELOG.md
-      - version.txt
-      - .release-please-manifest.json
-      - packaging/**
-      - .github/workflows/flatpak.yml
-      - scripts/check-flatpak-cargo-sources.py
+    paths: ['**']
   workflow_call:
     inputs:
       tag:
@@ -63,6 +53,7 @@ jobs:
     timeout-minutes: 120
     if: >-
       github.event_name != 'pull_request' ||
+      github.head_ref == 'ci/703-release-build-hardening' ||
       (github.head_ref == 'release-please--branches--master' &&
        github.event.pull_request.head.repo.full_name == github.repository)
     container:
