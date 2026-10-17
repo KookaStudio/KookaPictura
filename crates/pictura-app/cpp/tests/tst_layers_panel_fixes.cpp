@@ -1,12 +1,14 @@
 // The Layers panel manual-test pass (#378): the Opacity label alignment, the
 // active thumbnail after adding a mask, keeping a dropped-into group expanded,
 // the group icon outline, the thumbnail's vertical fill, and the chain glyph.
+// Also #439: the bottom action strip's fixed-gap, centred geometry.
 
 #include <QtTest/QtTest>
 #include "api/layers_api.h"
 #include "api/type_api.h"
 
 #include <QtCore/QCoreApplication>
+#include <QtCore/QList>
 #include <QtCore/QMimeData>
 #include <QtCore/QModelIndex>
 #include <QtCore/QPoint>
@@ -17,9 +19,11 @@
 #include <QtGui/QDragMoveEvent>
 #include <QtGui/QDropEvent>
 #include <QtGui/QImage>
-#include <QtWidgets/QLabel>
 #include <QtWidgets/QComboBox>
+#include <QtWidgets/QLabel>
+#include <QtWidgets/QLayout>
 #include <QtWidgets/QLineEdit>
+#include <QtWidgets/QToolButton>
 #include <QtWidgets/QTreeView>
 
 #include "frame.h"
@@ -64,6 +68,49 @@ bool dropOnViewport(QWidget* viewport, const void* document, const QString& sour
     return drop.isAccepted();
 }
 
+QList<QRect> actionStripRects(const pictura::LayersPanel& panel)
+{
+    const QStringList names = {
+        QStringLiteral("layersStripLink"),
+        QStringLiteral("layersStripFx"),
+        QStringLiteral("layersStripMask"),
+        QStringLiteral("layersStripFillAdjustment"),
+        QStringLiteral("layersStripGroup"),
+        QStringLiteral("layersStripNewLayer"),
+        QStringLiteral("layersStripDelete"),
+    };
+    QList<QRect> rects;
+    rects.reserve(names.size());
+    for (const QString& name : names) {
+        auto* button = panel.findChild<QToolButton*>(name);
+        if (!button) {
+            return {};
+        }
+        rects.push_back(button->geometry());
+    }
+    return rects;
+}
+
+bool actionStripGapsAreFixed(const QList<QRect>& rects)
+{
+    for (int i = 1; i < rects.size(); ++i) {
+        const QRect& previous = rects.at(i - 1);
+        const QRect& current = rects.at(i);
+        if (current.x() - (previous.x() + previous.width()) != 2) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool actionStripIsCentred(const QList<QRect>& rects, int panelWidth)
+{
+    return !rects.isEmpty()
+        && qAbs(rects.first().x()
+                - (panelWidth - (rects.last().x() + rects.last().width())))
+               <= 1;
+}
+
 } // namespace
 
 class LayersPanelFixesTest : public QObject {
@@ -87,6 +134,8 @@ private slots:
     void linkGlyphRotatedAndLarger();
     void dragBelowBaseReleasesClip();
     void legacyMoveLayerShiftsAndRefuses();
+    void actionStripStaysFixedAndCentred();
+    void bottomStripDisabledWithoutDocument();
 
 private:
     bool setupNest();
@@ -741,6 +790,64 @@ void LayersPanelFixesTest::legacyMoveLayerShiftsAndRefuses()
 
     QVERIFY(view_->set_layer_lock(1, QStringLiteral("all"), true));
     QVERIFY(!view_->move_layer(1, -1));
+}
+
+// The bottom action strip keeps 2 px gaps and stays centred when the panel is
+// widened, instead of distributing the surplus width between its buttons.
+void LayersPanelFixesTest::actionStripStaysFixedAndCentred()
+{
+    pictura::LayersPanel panel;
+    panel.ensurePolished();
+    const int narrow = panel.minimumSizeHint().width() + 80;
+    const int wide = narrow + 240;
+    panel.resize(narrow, 420);
+    panel.show();
+    QTest::qWait(50);
+    QCOMPARE(panel.width(), narrow);
+
+    const QList<QRect> narrowRects = actionStripRects(panel);
+    QCOMPARE(narrowRects.size(), 7);
+    QVERIFY2(actionStripGapsAreFixed(narrowRects), "the narrow strip has 2 px gaps");
+    QVERIFY2(actionStripIsCentred(narrowRects, panel.width()),
+             "the narrow strip is centred");
+
+    panel.resize(wide, panel.height());
+    QVERIFY(panel.layout() != nullptr);
+    panel.layout()->activate();
+    QTest::qWait(50);
+    QCOMPARE(panel.width(), wide);
+
+    const QList<QRect> wideRects = actionStripRects(panel);
+    QCOMPARE(wideRects.size(), 7);
+    QVERIFY2(actionStripGapsAreFixed(wideRects), "the wide strip has 2 px gaps");
+    QVERIFY2(actionStripIsCentred(wideRects, panel.width()),
+             "the wide strip stays centred");
+    for (int i = 0; i < wideRects.size(); ++i) {
+        QCOMPARE(wideRects.at(i).width(), narrowRects.at(i).width());
+    }
+}
+
+// With no document open, every action-strip button is inert.
+void LayersPanelFixesTest::bottomStripDisabledWithoutDocument()
+{
+    auto* panel = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(panel != nullptr);
+    panel->setView(nullptr);
+
+    const QStringList names = {
+        QStringLiteral("layersStripLink"),
+        QStringLiteral("layersStripFx"),
+        QStringLiteral("layersStripMask"),
+        QStringLiteral("layersStripFillAdjustment"),
+        QStringLiteral("layersStripGroup"),
+        QStringLiteral("layersStripNewLayer"),
+        QStringLiteral("layersStripDelete"),
+    };
+    for (const QString& name : names) {
+        auto* button = panel->findChild<QToolButton*>(name);
+        QVERIFY2(button != nullptr, qPrintable(name));
+        QVERIFY2(!button->isEnabled(), qPrintable(name));
+    }
 }
 
 QTEST_MAIN(LayersPanelFixesTest)

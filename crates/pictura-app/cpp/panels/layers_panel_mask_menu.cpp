@@ -1,7 +1,7 @@
-// The Layers panel's mask and trash buttons at the foot of the panel, the
-// vector-mask thumbnail menu, and the Refine Mask and Layer Mask Display
-// Options dialogs the layer-mask thumbnail menu opens (that menu itself is in
-// layers_panel_menu.cpp).
+// The Layers panel's action strip (including the mask and trash buttons) at the
+// foot of the panel, the vector-mask thumbnail menu, and the Refine Mask and
+// Layer Mask Display Options dialogs the layer-mask thumbnail menu opens (that
+// menu itself is in layers_panel_menu.cpp).
 
 #include "layers_panel.h"
 
@@ -29,6 +29,13 @@ namespace pictura {
 void LayersPanel::syncStripButtons()
 {
     if (!maskButton_ || !deleteButton_) {
+        return;
+    }
+    const bool hasDocument = view_ != nullptr;
+    for (QToolButton* button : stripButtons_) {
+        button->setEnabled(hasDocument);
+    }
+    if (!hasDocument) {
         return;
     }
     // CS6 adds a layer mask first, then a vector mask; with both there is

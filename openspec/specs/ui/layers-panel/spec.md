@@ -260,7 +260,8 @@ The **Layer Style** (`fx`) button SHALL be active: a click SHALL open the Layer
 Style dialog on Blending Options for the active layer when that layer can carry
 a style, and an `Alt`-click SHALL toggle all effects through the layer-style
 bridge in one undoable step. The **Link Layers** button SHALL be shown disabled
-until its operation lands.
+until its operation lands. When no document is open, every action-strip button
+SHALL be disabled.
 
 #### Scenario: The implemented strip buttons carry icons
 
@@ -271,6 +272,12 @@ until its operation lands.
 
 - **WHEN** the Layers panel is shown before the link operation exists
 - **THEN** the link button is disabled
+
+#### Scenario: No document disables the strip [lpc_strip_no_document]
+
+- **WHEN** no document is open
+- **THEN** the Link, fx, Mask, New Fill/Adjustment, New Group, New Layer, and
+  Delete buttons are disabled
 
 #### Scenario: The mask button adds a mask [lmk_strip]
 
@@ -2032,3 +2039,22 @@ neither the document nor the expansion.
 - **WHEN** an open group is a valid drop-into target and a layer is dropped onto it
 - **THEN** the move succeeds as one undo step and the group stays expanded with
   the dropped layer visible as its child
+
+### Requirement: Layers panel action strip geometry
+
+The Layers panel's seven-button action strip SHALL keep a constant 2 px gap
+between adjacent buttons and SHALL stay horizontally centred in the panel as the
+panel width changes. Each strip button SHALL keep its intrinsic width. Surplus
+panel width SHALL be absorbed by the space at the strip's leading and trailing
+ends, not by the inter-button gaps or the buttons. The strip's button order,
+object names, icons, tooltips, click behaviour, and drop targets SHALL remain
+unchanged.
+
+#### Scenario: The strip keeps its fixed gap and stays centred [lpc_strip_geometry]
+
+- **WHEN** the Layers panel is shown and then widened while its overall width
+  stays above the panel's minimum width
+- **THEN** every adjacent pair of strip buttons keeps the same 2 px gap, each
+  button keeps the same width it had before the resize, and the distance from
+  the panel's left edge to the first button equals the distance from the last
+  button to the panel's right edge within one pixel
