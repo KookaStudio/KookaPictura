@@ -27,7 +27,9 @@ Snapshot for resuming after a context break. Update after each milestone.
   Ghostscript; encrypted PDFs disable it. `pictura_codec::eps`: DOS binary
   header, `%%HiResBoundingBox`/`%%BoundingBox` (`(atend)` too), `-dEPSCrop`.
   App: routing by signature (`vector_sniff`; a Pictura Photoshop PDF still
-  reopens with layers first), password prompt (`-sPDFPassword` in a 0600 `@file`, never argv), the Import
+  reopens with layers first, then Photoshop's own: `pdf::photoshop_psd`
+  rebuilds a PSD from `/PieceInfo /AdobePhotoshop /Private`, change
+  `photoshop-pdf-layers`), password prompt (`-sPDFPassword` in a 0600 `@file`, never argv), the Import
   PDF dialog (`ImportPdfDialog`, CS6 layout and defaults from the owner's
   screenshots: Bounding Box, 300 ppi, Inches, RGB, 8 bit, Small) and Rasterize
   Generic EPS Format dialog sharing `RasterSizeFields`; each page/image opens
