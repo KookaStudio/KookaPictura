@@ -263,8 +263,11 @@ void ImportPdfTest::picturaPdfSkipsDialog()
     test::ScopedStateHome stateHome;
     QTemporaryDir dir;
     auto window = test::makeMainWindow();
-    QVERIFY(window->newDocument(QStringLiteral("Layers"), 16, 16, QStringLiteral("rgb"), 8,
-                                QStringLiteral("white")));
+    QImage image(16, 12, QImage::Format_RGB32);
+    image.fill(QColor(30, 140, 220));
+    const QString png = dir.filePath(QStringLiteral("blue.png"));
+    QVERIFY(image.save(png));
+    QVERIFY(window->openImagePath(png));
     window->activeView()->add_layer(0);
     const QString path = dir.filePath(QStringLiteral("layers.pdf"));
     window->setPdfDialogDriverForTest([](QDialog&) { return true; });
@@ -272,8 +275,11 @@ void ImportPdfTest::picturaPdfSkipsDialog()
     Seen seen;
     window->setImportDialogDriverForTest(driver(window.get(), &seen));
     QVERIFY(window->openDocumentAtPath(path));
-    QCOMPARE(window->activeView()->layer_count(), 2);
+    PictureView* view = window->activeView();
+    QCOMPARE(view->layer_count(), 2);
     QCOMPARE(seen.pdfDialogs, 0);
+    // The canvas shows the reopened pixels, not a blank frame.
+    QCOMPARE(pixel(view, 5, 5).rgba(), QColor(30, 140, 220).rgba());
 }
 
 // pdf_sniff_signature

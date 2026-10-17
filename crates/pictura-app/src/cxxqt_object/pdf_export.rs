@@ -230,9 +230,11 @@ pub fn pdf_open(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
     let rendered = current_buffer(&doc, gpu_compute);
     store_composite(&mut doc, &rendered);
     let mut rust = view.as_mut().rust_mut();
-    rust.reset_edit_state();
     rust.active_layer = topmost_pixel_layer_index(&doc).map(|i| i.to_string());
+    // The document goes in first: reset_edit_state rebuilds the display
+    // pyramid from it (before, the canvas showed the previous, or no, document).
     rust.doc = Some(doc);
+    rust.reset_edit_state();
     let rust = &mut *rust;
     if let Some(doc) = rust.doc.as_mut() {
         rust.history.capture_live(doc, &None, "Open");
