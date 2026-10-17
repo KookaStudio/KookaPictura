@@ -345,6 +345,9 @@ QWidget#dialogFrame { background: transparent; border: 1px solid ${border}; }
 /* Inline warning / info text: a label flagged `notice="true"` reads
    dark-on-yellow; its icon and any buttons beside it keep their own look. */
 QLabel[notice="true"] { background: ${surface-notice}; color: ${content-notice}; border: 0; border-radius: 2px; padding: 3px 6px; }
+/* The document-open loading banner: a boxed "Opening <file>…" at the window's
+   lower-left, on the notice yellow so it stands out over the canvas. */
+QLabel#documentOpenBanner { background: ${surface-notice}; color: ${content-notice}; border: 0; border-radius: 6px; padding: 6px 12px; }
 
 /* Info panel readout grid: only the inner cross of the 2x2 table is drawn, in
    the frame shade; the outer edge is the panel pane itself. The blocks flag
