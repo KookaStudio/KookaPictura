@@ -14,6 +14,12 @@ flate2 = "1"
 # Qt's optional `qt6-imageformats` plugin. This is the pure-Rust crate the
 # `image` meta-crate delegates to for WebP.
 image-webp = "0.2"
+# The Photoshop PDF standard security handler (RC4-40 … AES-256): MD5, AES,
+# and SHA-256/384/512 primitives from RustCrypto rather than hand-rolled
+# cryptography; RC4 and CBC chaining are written over them in `pdf/crypt.rs`.
+md-5 = "0.10"
+aes = "0.8"
+sha2 = "0.10"
 
 [dev-dependencies]
 pictura-render = { path = "../pictura-render" }

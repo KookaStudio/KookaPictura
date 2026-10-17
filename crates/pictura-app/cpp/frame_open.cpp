@@ -126,6 +126,9 @@ bool PicturaMainWindow::isNativeDocumentPath(const QString& path)
 
 bool PicturaMainWindow::openDocumentAtPath(const QString& path)
 {
+    if (isPdfPath(path)) {
+        return openPdfPath(path);
+    }
     return isNativeDocumentPath(path) ? openPath(path) : openImagePath(path);
 }
 

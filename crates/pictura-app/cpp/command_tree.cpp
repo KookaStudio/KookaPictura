@@ -169,7 +169,8 @@ void addDefaultCommands(CommandRegistry& registry) {
     registry.add(command_ids::EditPurgeAll, {"Edit", "Purge", "All"},
                  QStringLiteral("All"), QKeySequence(), true);
     registry.addSeparator({"Edit"});
-    leaf(registry, {"Edit", "PDF Presets…"}, QStringLiteral("PDF Presets…"));
+    registry.add(command_ids::EditPdfPresets, {"Edit", "Adobe PDF Presets…"},
+                 QStringLiteral("Adobe PDF Presets…"), QKeySequence(), true);
     leaf(registry, {"Edit", "Presets", "Preset Manager…"}, QStringLiteral("Preset Manager…"));
     leaf(registry, {"Edit", "Presets", "Migrate Presets…"}, QStringLiteral("Migrate Presets…"));
     leaf(registry, {"Edit", "Presets", "Export Presets…"}, QStringLiteral("Export Presets…"));

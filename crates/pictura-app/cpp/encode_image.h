@@ -22,3 +22,10 @@ bool encode_image_rgba(::rust::Slice<const uint8_t> rgba, int32_t width, int32_t
 // percent-scale contract the Qt formats already have.
 ::rust::Vec<uint8_t> scale_rgba(::rust::Slice<const uint8_t> rgba, int32_t width, int32_t height,
                                 int32_t scale, int32_t& out_width, int32_t& out_height);
+
+// Encode interleaved 8-bit samples of `width` × `height` with `components`
+// 1 (gray), 3 (RGB), or 4 (CMYK, 0 = no ink) as a JPEG at `quality` 0–100 and
+// return the bytes; empty on any refusal. The Photoshop PDF writer's DCT
+// images come from here so the engine carries no JPEG encoder.
+::rust::Vec<uint8_t> encode_jpeg(::rust::Slice<const uint8_t> samples, int32_t width,
+                                 int32_t height, int32_t components, int32_t quality);

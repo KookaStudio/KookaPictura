@@ -87,6 +87,9 @@ bool PicturaMainWindow::saveAsWithDialog()
     if (QFileInfo(path).suffix().isEmpty()) {
         path += defaultSuffixForFilter(filterIndex);
     }
+    if (isPdfPath(path)) {
+        return savePdfWithDialog(path);
+    }
     if (saveAsNeedsFeatureWarning(path, view)) {
         const auto choice = QMessageBox::warning(
             this, tr("Save As"),
@@ -136,6 +139,7 @@ void PicturaMainWindow::registerHandlers()
 
     registry_->setHandler(command_ids::FileSave, [this]() { saveActive(); });
     registry_->setHandler(command_ids::FileSaveAs, [this]() { saveAsWithDialog(); });
+    wirePdfCommands();
     registry_->setHandler(command_ids::FileExportAs,
                           [this]() { exportAsFromView(this, activeView()); });
     // File > Print… and Print One Copy (WF-013).

@@ -32,3 +32,6 @@ rayon = "1"
 
 [dev-dependencies]
 pictura-testkit = { path = "../pictura-testkit" }
+# Inflate the PDF content stream the live-text tests read; already in the tree
+# through pictura-codec.
+flate2 = "1"

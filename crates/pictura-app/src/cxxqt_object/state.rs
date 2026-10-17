@@ -131,6 +131,9 @@ pub struct PictureViewRust {
     /// Output format remembered from the import source, used to preselect the
     /// Save As filter: a lowercased extension (`"png"`) or `"psd"` when native.
     pub(super) source_format: String,
+    /// The canonical `.joboptions` text this document was last saved to PDF
+    /// with, so Save on the `.pdf` path reopens the dialog with it.
+    pub(super) pdf_options: Option<String>,
     pub(super) interop: Option<crate::gpu::InteropState>,
     pub(super) pending_lasso: Vec<(i32, i32)>,
     pub(super) pending_lasso_mode: String,
@@ -365,6 +368,7 @@ impl Default for PictureViewRust {
             path_gesture: None,
             dirty: false,
             source_format: "psd".to_string(),
+            pdf_options: None,
             interop: None,
             pending_lasso: Vec::new(),
             pending_lasso_mode: String::new(),

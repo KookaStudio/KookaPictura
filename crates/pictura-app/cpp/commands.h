@@ -63,6 +63,7 @@ inline constexpr char EditPreferencesGuides[] = "edit.preferences.guidesGridSlic
 inline constexpr char EditAssignProfile[] = "edit.assignProfile";
 inline constexpr char EditConvertProfile[] = "edit.convertProfile";
 inline constexpr char EditColorSettings[] = "edit.colorSettings";
+inline constexpr char EditPdfPresets[] = "edit.pdfPresets";
 inline constexpr char FilterPicturaRaw[] = "filter.picturaRaw";
 inline constexpr char FilterConvertForSmartFilters[] = "filter.convertForSmartFilters";
 inline constexpr char FilterLastFilter[] = "filter.last";

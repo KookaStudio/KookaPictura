@@ -90,6 +90,7 @@ fn main() {
                 "src/cxxqt_object/impl_history/display.rs",
                 "src/cxxqt_object/impl_history/purge.rs",
                 "src/cxxqt_object/paths.rs",
+                "src/cxxqt_object/pdf_export.rs",
                 "src/cxxqt_object/shapes.rs",
                 "src/cxxqt_object/type_tools.rs",
                 "src/cxxqt_object/svg_export.rs",

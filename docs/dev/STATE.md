@@ -12,6 +12,33 @@ Snapshot for resuming after a context break. Update after each milestone.
   contains reproduced Adobe Help prose or the old wording.
 - Toolchain: Rust 1.98 (`rust-toolchain.toml`), system Qt **6.11.1**, cxx-qt
   **0.10.0**, wgpu **30.0.1**, lcms2 **6.2.0** (system Little CMS 2.19).
+- **Photoshop PDF writer** (#626, branch `feat/626-photoshop-pdf-writer`,
+  OpenSpec change `photoshop-pdf-writer`, archived into `interop/pdf-export`).
+  `pictura_codec::pdf` writes one page holding the rendered composite as one
+  image: page size from the resolution; Gray / RGB / DeviceCMYK (the
+  profile-free CMYK source, inverted) / Lab / Indexed / 1-bit CCITT G4 by
+  output mode, Multichannel refused; ICC tagging (v2 at PDF ≤ 1.4); soft-mask
+  alpha or flatten onto white; None / ZIP / JPEG (encoded at the Qt boundary,
+  `encode_jpeg`; JPEG2000 listed but disabled); Average / Subsampling / Bicubic
+  downsampling; 16-bit at PDF ≥ 1.5; thumbnails; notes as text annotations;
+  XMP; PDF/X-1a/X-3/X-4 and PDF/A-1b output intents and info keys; standard
+  security R2/R3/R4/R6 (`md-5`, `aes`, `sha2`; RC4 and CBC hand-written);
+  linearization with hint tables (`qpdf --check-linearization` clean).
+  Options are one `PdfOptions` serialized as canonical `.joboptions` (also the
+  preset file format and the C++↔Rust interchange: `pdf_option` /
+  `pdf_set_option` / `pdf_option_locked`), with twelve inferred built-in
+  presets. Preserve Photoshop Editing Capabilities embeds Pictura's own PSD in
+  `/PieceInfo /Pictura` (approximation); `File > Open` / Revert of such a PDF
+  restores the layers (`pdf_open`), any other PDF stays #627. App: Save As
+  `Photoshop PDF (*.PDF *.PDP)` → `PdfSaveDialog` (Save options, preset,
+  standard, compatibility; General / Compression / Output / Security / Summary),
+  the path becomes the `.pdf`, Save on it reopens the dialog with that
+  document's settings, `Edit > Adobe PDF Presets…` (`PdfPresetsDialog`, user
+  presets in `<state dir>/PDF Presets/`). CMYK destination and PDF/X intent:
+  PhotoCraft's synthetic CC0 profile (`assets/icc/`). CI installs
+  `poppler-utils`, `ghostscript`, `qpdf` for the render / structure /
+  linearization / decryption oracles (renders sampled at 4× pixel centres:
+  poppler filters images at 1:1).
 - **Paragraph type and the type caret** (#682 / #681, branch
   `feat/541-advanced-type-tools`, OpenSpec changes `paragraph-type` and
   `type-caret-blink`, archived into `tools/paragraph-type` and

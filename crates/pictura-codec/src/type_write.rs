@@ -186,7 +186,7 @@ fn engine_data(spec: &TypeSpec, existing: Option<&[u8]>, font_name: Option<&str>
 
 /// The parsed EngineData of a text descriptor, or `None` when the descriptor or
 /// its EngineData is missing or unparseable.
-fn existing_engine_tree(text_desc: &[u8]) -> Option<EngineValue> {
+pub(crate) fn existing_engine_tree(text_desc: &[u8]) -> Option<EngineValue> {
     let mut reader = crate::common::Reader::new(text_desc);
     let value = crate::descriptor::read_descriptor(&mut reader).ok()?;
     let DescValue::Object { items, .. } = value else {

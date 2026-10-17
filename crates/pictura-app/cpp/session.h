@@ -49,6 +49,9 @@ struct SessionState {
     // hide the workspace scrollbars. Default off.
     bool snapCanvasToWorkspace = false;
     QString guideColor = QStringLiteral("#4affff");
+    // The last Save Adobe PDF settings as canonical `.joboptions` text, minus
+    // the passwords (empty until the first PDF save).
+    QString pdfOptions;
     bool guideDashed = false;
     // Crop options bar, persisted across restarts.
     bool cropClassicMode = true;     // Classic (default) vs Modern drag semantics

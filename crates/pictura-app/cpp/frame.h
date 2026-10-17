@@ -12,11 +12,15 @@
 #include <QtGui/QColor>
 #include <QtWidgets/QMainWindow>
 
+#include <functional>
+
 #include "canvas_ruler.h"
 #include "panels/panel_column.h"
 #include "recovery_store.h"
 #include "tools.h"
 #include "workspace_store.h"
+
+class QDialog;
 
 class QDockWidget;
 class QFrame;
@@ -310,6 +314,23 @@ public:
     // before flattening a layered document into a raster format.
     bool saveAsWithDialog();
     bool revertActive();
+    // frame_pdf.cpp: Photoshop PDF save through the Save Adobe PDF dialog,
+    // reopening a Pictura Photoshop PDF, and Edit > Adobe PDF Presets.
+    static bool isPdfPath(const QString& path);
+    bool savePdfWithDialog(const QString& path);
+    bool openPdfPath(const QString& path);
+    void showPdfPresets();
+    // Test seams: answer the PDF dialogs (the Save Adobe PDF dialog, the
+    // features warning, the presets manager and its editor) and catch View PDF
+    // After Saving instead of launching the system viewer.
+    void setPdfDialogDriverForTest(std::function<bool(QDialog&)> driver)
+    {
+        pdfDialogDriver_ = std::move(driver);
+    }
+    void setPdfViewerForTest(std::function<void(const QString&)> viewer)
+    {
+        pdfViewer_ = std::move(viewer);
+    }
     bool closeDocument(int index, bool interactive);
     // The recent-files list, most recent first; setting it persists it.
     const QStringList& recentFiles() const { return recent_; }
@@ -400,6 +421,8 @@ private:
     // open) opens the Open dialog.
     void installWorkspaceOpenGesture();
     void registerHandlers();
+    void wirePdfCommands();
+    bool runPdfDialog(QDialog& dialog);
     void registerSelectHandlers();
     void registerEditHandlers();
     // Wire the CS6 Filter menu: one handler per implemented filter, plus Last
@@ -700,6 +723,8 @@ private:
     bool guidesLocked_ = false;
     QColor guideColor_{0x4a, 0xff, 0xff};
     bool guideDashed_ = false;
+    std::function<bool(QDialog&)> pdfDialogDriver_;
+    std::function<void(const QString&)> pdfViewer_;
 };
 
 } // namespace pictura

@@ -90,9 +90,8 @@ void PicturaMainWindow::refreshRecentMenu(QMenu* menu)
 
 void PicturaMainWindow::openRecent(const QString& path)
 {
-    // The same routing as File > Open: PSD/PSB through the codec, anything
-    // else through the image importer.
-    const bool opened = isNativeDocumentPath(path) ? openPath(path) : openImagePath(path);
+    // The same routing as File > Open.
+    const bool opened = openDocumentAtPath(path);
     if (!opened) {
         statusBar()->showMessage(tr("Could not open %1").arg(QFileInfo(path).fileName()), 4000);
     }

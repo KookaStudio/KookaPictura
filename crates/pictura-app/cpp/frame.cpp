@@ -10,6 +10,7 @@
 #include "screen_mode_message.h"
 #include "pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_history/display.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/pdf_export.cxxqt.h"
 
 #include <QtCore/QHash>
 #include <QtCore/QTemporaryDir>
@@ -525,6 +526,9 @@ bool PicturaMainWindow::saveActive()
         return true;
     }
     QString path = docs_.at(index).path;
+    if (!path.isEmpty() && isPdfPath(path)) {
+        return savePdfWithDialog(path);
+    }
     if (path.isEmpty()
         || savePathNeedsFormatDialog(path, view, isNativeDocumentPath(path))) {
         return saveAsWithDialog();
@@ -556,9 +560,10 @@ bool PicturaMainWindow::revertActive()
         return false;
     }
     // Reload in place: a raster path re-imports through the Qt edge, a PSD/PSB
-    // path through the native reader.
-    const bool reloaded = isNativeDocumentPath(path) ? document_api::open(*view, path)
-                                                     : document_api::openImage(*view, path);
+    // path through the native reader, a PDF from its embedded PSD.
+    const bool reloaded = isPdfPath(path)               ? pdf_open(*view, path)
+                          : isNativeDocumentPath(path) ? document_api::open(*view, path)
+                                                       : document_api::openImage(*view, path);
     if (!reloaded) {
         return false;
     }
