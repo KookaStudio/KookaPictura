@@ -79,8 +79,8 @@ jobs:
         run: rustup show active-toolchain
 
       - &apt
-        name: Install lld, ninja, lcms2, and Vulkan headers
-        run: sudo apt-get update && sudo apt-get install -y lld ninja-build liblcms2-dev libvulkan-dev
+        name: Install lld, ninja, lcms2, Vulkan headers, and the PDF oracle tools
+        run: sudo apt-get update && sudo apt-get install -y lld ninja-build liblcms2-dev libvulkan-dev poppler-utils ghostscript qpdf
 
       - &qt
         name: Install Qt
@@ -188,8 +188,8 @@ jobs:
       - *checkout
       - *toolchain
 
-      - name: Install lld and lcms2
-        run: sudo apt-get update && sudo apt-get install -y lld liblcms2-dev
+      - name: Install lld, lcms2, and the PDF oracle tools
+        run: sudo apt-get update && sudo apt-get install -y lld liblcms2-dev poppler-utils ghostscript qpdf
 
       - *sccache
       - *rustcache

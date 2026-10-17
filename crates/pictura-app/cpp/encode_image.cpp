@@ -2,6 +2,7 @@
 
 #include "pictura_app/src/decode_bridge.cxxqt.h"
 
+#include <QtCore/QBuffer>
 #include <QtCore/QByteArray>
 #include <QtCore/QSaveFile>
 #include <QtCore/QString>
@@ -99,4 +100,40 @@ bool encode_image_rgba(::rust::Slice<const uint8_t> rgba, int32_t width, int32_t
     out_height = out.height();
     const size_t bytes = static_cast<size_t>(out.width()) * static_cast<size_t>(out.height()) * 4u;
     return ::copy_bytes(::rust::Slice<const uint8_t>(out.constBits(), bytes));
+}
+
+::rust::Vec<uint8_t> encode_jpeg(::rust::Slice<const uint8_t> samples, int32_t width,
+                                 int32_t height, int32_t components, int32_t quality)
+{
+    QImage::Format format = QImage::Format_Invalid;
+    switch (components) {
+    case 1:
+        format = QImage::Format_Grayscale8;
+        break;
+    case 3:
+        format = QImage::Format_RGB888;
+        break;
+    case 4:
+        format = QImage::Format_CMYK8888;
+        break;
+    default:
+        return {};
+    }
+    if (width <= 0 || height <= 0
+        || samples.size()
+               < static_cast<size_t>(width) * static_cast<size_t>(height)
+                     * static_cast<size_t>(components)) {
+        return {};
+    }
+    const QImage image(samples.data(), width, height, width * components, format);
+    QByteArray bytes;
+    QBuffer buffer(&bytes);
+    buffer.open(QIODevice::WriteOnly);
+    QImageWriter writer(&buffer, QByteArrayLiteral("JPEG"));
+    writer.setQuality(std::clamp(quality, 0, 100));
+    if (!writer.write(image)) {
+        return {};
+    }
+    return ::copy_bytes(::rust::Slice<const uint8_t>(
+        reinterpret_cast<const uint8_t*>(bytes.constData()), static_cast<size_t>(bytes.size())));
 }

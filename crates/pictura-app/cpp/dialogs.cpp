@@ -100,7 +100,8 @@ bool isKnownImageSuffix(const QString& suffix)
                                       QStringLiteral("png"), QStringLiteral("jpg"),
                                       QStringLiteral("jpeg"), QStringLiteral("jpe"),
                                       QStringLiteral("tif"), QStringLiteral("tiff"),
-                                      QStringLiteral("webp"), QStringLiteral("bmp")};
+                                      QStringLiteral("webp"), QStringLiteral("bmp"),
+                                      QStringLiteral("pdf"), QStringLiteral("pdp")};
     return known.contains(suffix);
 }
 
@@ -170,8 +171,9 @@ const QStringList& saveFileFilters()
         QStringLiteral("TIFF (*.TIF *.TIFF)"),
         QStringLiteral("WebP (*.WEBP)"),
         QStringLiteral("BMP (*.BMP)"),
+        QStringLiteral("Photoshop PDF (*.PDF *.PDP)"),
         QStringLiteral("All Formats (*.PSD *.PSB *.PNG *.JPG *.JPEG *.JPE *.TIF *.TIFF "
-                       "*.WEBP *.BMP)"),
+                       "*.WEBP *.BMP *.PDF *.PDP)"),
     };
     return filters;
 }
@@ -180,7 +182,7 @@ const QStringList& openFileFilters()
 {
     static const QStringList filters = {
         QStringLiteral("All Formats (*.PSD *.PSB *.PNG *.JPG *.JPEG *.JPE *.GIF *.BMP "
-                       "*.TIF *.TIFF *.WEBP)"),
+                       "*.TIF *.TIFF *.WEBP *.PDF *.PDP)"),
         QStringLiteral("Photoshop (*.PSD)"),
         QStringLiteral("Photoshop Large Format (*.PSB)"),
         QStringLiteral("PNG (*.PNG)"),
@@ -189,6 +191,7 @@ const QStringList& openFileFilters()
         QStringLiteral("WebP (*.WEBP)"),
         QStringLiteral("GIF (*.GIF)"),
         QStringLiteral("BMP (*.BMP)"),
+        QStringLiteral("Photoshop PDF (*.PDF *.PDP)"),
         QStringLiteral("All files (*)"),
     };
     return filters;
@@ -232,6 +235,9 @@ int defaultSaveFilterIndex(PictureView* view)
     if (format == QLatin1String("bmp")) {
         return 6;
     }
+    if (format == QLatin1String("pdf")) {
+        return 7;
+    }
     return 0;
 }
 
@@ -264,6 +270,8 @@ QString defaultSuffixForFilter(int filterIndex)
         return QStringLiteral(".webp");
     case 6:
         return QStringLiteral(".bmp");
+    case 7:
+        return QStringLiteral(".pdf");
     default:
         return QStringLiteral(".psd");
     }

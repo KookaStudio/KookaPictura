@@ -180,6 +180,8 @@ mod text_render;
 pub use text_render::{materialize_text_rgba, render_text_layer, BundledRasterizer, BundledText};
 mod fonts;
 pub use fonts::{font_family, font_postscript_name, register_font};
+mod pdf_text;
+pub use pdf_text::{pdf_live_type, pdf_type_fonts, LiveType};
 mod type_caret;
 pub use type_caret::{type_baselines, type_caret_stops};
 mod type_paragraph;

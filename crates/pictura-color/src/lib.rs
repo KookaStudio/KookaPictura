@@ -9,8 +9,8 @@
 //! so no Adobe profile files are distributed.
 
 use lcms2::{
-    CIExyY, CIExyYTRIPLE, Flags, InfoType, Intent as LcmsIntent, Locale, PixelFormat,
-    Profile as LcmsProfile, ToneCurve, Transform,
+    CIExyY, CIExyYTRIPLE, ColorSpaceSignature, Flags, InfoType, Intent as LcmsIntent, Locale,
+    PixelFormat, Profile as LcmsProfile, ToneCurve, Transform,
 };
 
 /// Rendering intent (ICC).
@@ -32,6 +32,8 @@ impl Intent {
         }
     }
 }
+
+const COATED_CMYK_ICC: &[u8] = include_bytes!("../../../assets/icc/photocraft-coated-cmyk.icc");
 
 #[derive(Debug, thiserror::Error)]
 pub enum ColorError {
@@ -147,6 +149,43 @@ impl Profile {
         )
     }
 
+    /// The bundled synthetic coated-offset CMYK output profile
+    /// (`assets/icc/photocraft-coated-cmyk.icc`, CC0). ponytail: a modelled
+    /// press, not a measured characterisation.
+    pub fn coated_cmyk() -> Profile {
+        Profile::from_icc(COATED_CMYK_ICC).expect("bundled CMYK profile parses")
+    }
+
+    /// The bundled CMYK profile's bytes, embedded verbatim where a file needs
+    /// the exact profile (a PDF output intent).
+    pub fn coated_cmyk_icc() -> &'static [u8] {
+        COATED_CMYK_ICC
+    }
+
+    /// Gray with a 2.2 gamma tone curve and a D50 white.
+    pub fn gray_gamma22() -> Profile {
+        let white = CIExyY {
+            x: 0.34567,
+            y: 0.35850,
+            Y: 1.0,
+        };
+        Profile(
+            LcmsProfile::new_gray(&white, &ToneCurve::new(2.2))
+                .expect("built-in gray profile is valid"),
+        )
+    }
+
+    /// Colour channels of the profile's data space: 1 gray, 3 RGB/Lab, 4 CMYK;
+    /// `None` for any other space.
+    pub fn channels(&self) -> Option<u8> {
+        match self.0.color_space() {
+            ColorSpaceSignature::GrayData => Some(1),
+            ColorSpaceSignature::RgbData | ColorSpaceSignature::LabData => Some(3),
+            ColorSpaceSignature::CmykData => Some(4),
+            _ => None,
+        }
+    }
+
     /// Parse an ICC profile from raw bytes. Malformed input yields an error.
     pub fn from_icc(bytes: &[u8]) -> Result<Profile, ColorError> {
         LcmsProfile::new_icc(bytes)
@@ -163,6 +202,20 @@ impl Profile {
         // no setter (Little-CMS #71), so two serializations could straddle a
         // second boundary; zero the ICC header date field (bytes 24..36) to make
         // serialization byte-deterministic.
+        if bytes.len() >= 36 {
+            bytes[24..36].fill(0);
+        }
+        bytes
+    }
+
+    /// The profile re-serialized as ICC version 2.1, for files whose format
+    /// predates ICC v4 (PDF 1.4 and older). lcms2 picks v2 tag types on save.
+    pub fn to_icc_v2(&self) -> Vec<u8> {
+        let Ok(mut copy) = LcmsProfile::new_icc(&self.to_icc()) else {
+            return self.to_icc();
+        };
+        copy.set_version(2.1);
+        let mut bytes = copy.icc().unwrap_or_default();
         if bytes.len() >= 36 {
             bytes[24..36].fill(0);
         }
@@ -264,6 +317,53 @@ pub fn convert(
     .map_err(|e| ColorError::Unsupported(e.to_string()))?;
 
     let mut out = vec![0u8; expected];
+    transform.transform_pixels(data, &mut out);
+    Ok(out)
+}
+
+/// Convert interleaved 8-bit samples between two profiles whose colour spaces
+/// may differ (RGB → CMYK, RGB → gray, gray → RGB, …). Each side's channel
+/// count is its profile's ([`Profile::channels`]); there is no alpha. Lab
+/// profiles are not accepted.
+pub fn convert_space(
+    src: &Profile,
+    dst: &Profile,
+    data: &[u8],
+    intent: Intent,
+    black_point_compensation: bool,
+) -> Result<Vec<u8>, ColorError> {
+    let format = |profile: &Profile| match profile.0.color_space() {
+        ColorSpaceSignature::GrayData => Ok((PixelFormat::GRAY_8, 1usize)),
+        ColorSpaceSignature::RgbData => Ok((PixelFormat::RGB_8, 3)),
+        ColorSpaceSignature::CmykData => Ok((PixelFormat::CMYK_8, 4)),
+        other => Err(ColorError::Unsupported(format!("colour space {other:?}"))),
+    };
+    let (in_format, in_channels) = format(src)?;
+    let (out_format, out_channels) = format(dst)?;
+    if !data.len().is_multiple_of(in_channels) {
+        return Err(ColorError::Unsupported(format!(
+            "{} bytes is not a whole number of {in_channels}-channel pixels",
+            data.len()
+        )));
+    }
+    let pixels = data.len() / in_channels;
+    let mut out = vec![0u8; pixels * out_channels];
+    if pixels == 0 {
+        return Ok(out);
+    }
+    let mut flags = Flags::default();
+    if black_point_compensation {
+        flags = flags | Flags::BLACKPOINT_COMPENSATION;
+    }
+    let transform: Transform<u8, u8> = Transform::new_flags(
+        &src.0,
+        in_format,
+        &dst.0,
+        out_format,
+        intent.to_lcms(),
+        flags,
+    )
+    .map_err(|e| ColorError::Unsupported(e.to_string()))?;
     transform.transform_pixels(data, &mut out);
     Ok(out)
 }
@@ -588,5 +688,57 @@ mod tests {
         }
         assert_eq!(Policy::from_code(-1), None);
         assert_eq!(Policy::from_code(3), None);
+    }
+
+    #[test]
+    fn convert_space_maps_rgb_to_cmyk_and_gray() {
+        let cmyk = Profile::coated_cmyk();
+        assert_eq!(cmyk.channels(), Some(4));
+        assert_eq!(Profile::gray_gamma22().channels(), Some(1));
+        let rgb = [255, 255, 255, 0, 0, 0, 0, 180, 255];
+        let inks = convert_space(
+            &Profile::srgb(),
+            &cmyk,
+            &rgb,
+            Intent::RelativeColorimetric,
+            true,
+        )
+        .unwrap();
+        assert_eq!(inks.len(), 12);
+        assert!(inks[..4].iter().all(|&v| v <= 2), "white carries no ink");
+        assert!(inks[7] > 200, "black carries heavy K");
+        assert!(inks[8] > inks[10], "a cyan-blue is more cyan than yellow");
+        let gray = convert_space(
+            &Profile::srgb(),
+            &Profile::gray_gamma22(),
+            &rgb,
+            Intent::RelativeColorimetric,
+            false,
+        )
+        .unwrap();
+        assert_eq!(gray.len(), 3);
+        assert!(gray[0] > 250 && gray[1] < 5);
+        assert!(convert_space(
+            &Profile::srgb(),
+            &cmyk,
+            &rgb[..4],
+            Intent::Perceptual,
+            false
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn v2_serialization_keeps_the_colour_space() {
+        for profile in [
+            Profile::srgb(),
+            Profile::coated_cmyk(),
+            Profile::gray_gamma22(),
+        ] {
+            let v2 = profile.to_icc_v2();
+            assert_eq!(v2[8], 2, "major version byte");
+            let reparsed = Profile::from_icc(&v2).expect("v2 bytes parse");
+            assert_eq!(reparsed.channels(), profile.channels());
+        }
     }
 }

@@ -39,6 +39,7 @@ mod metadata;
 mod path_resources;
 mod patterns;
 mod patterns_write;
+pub mod pdf;
 mod pictura_raw;
 mod png;
 mod probe;
@@ -47,6 +48,7 @@ mod smart_filter;
 mod smart_object;
 mod smart_writer;
 mod svg;
+mod type_plain;
 mod type_shape;
 mod type_tool;
 mod type_write;
@@ -114,6 +116,7 @@ pub use svg::{
     blend_css, ellipse_element, encode_svg, image_element, path_data, path_element, rect_element,
     rounded_rect_element, subpath_data, text_element, SvgContent, SvgNode, SvgOptions,
 };
+pub use type_plain::type_is_plain;
 pub use type_tool::encode_type_tool;
 pub use type_write::author_type_tool;
 pub use vector_mask::{

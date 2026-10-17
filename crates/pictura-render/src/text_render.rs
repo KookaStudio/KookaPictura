@@ -25,6 +25,7 @@ const BACKEND_VERSION: &str = "0.20.1/0.2.10";
 
 /// The bundled face, parsed once.
 pub struct BundledText {
+    bytes: &'static [u8],
     ttf: ttf_parser::Face<'static>,
     face: rustybuzz::Face<'static>,
     swash: FontRef<'static>,
@@ -41,7 +42,25 @@ impl BundledText {
         let ttf = ttf_parser::Face::parse(bytes, 0).ok()?;
         let face = rustybuzz::Face::from_slice(bytes, 0)?;
         let swash = FontRef::from_index(bytes, 0)?;
-        Some(Self { ttf, face, swash })
+        Some(Self {
+            bytes,
+            ttf,
+            face,
+            swash,
+        })
+    }
+
+    /// The font file this face was parsed from.
+    pub(crate) fn bytes(&self) -> &'static [u8] {
+        self.bytes
+    }
+
+    pub(crate) fn ttf(&self) -> &ttf_parser::Face<'static> {
+        &self.ttf
+    }
+
+    pub(crate) fn shaper(&self) -> &rustybuzz::Face<'static> {
+        &self.face
     }
 
     /// The face's PostScript name (`name` ID 6), when it has one.

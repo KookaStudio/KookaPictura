@@ -189,6 +189,8 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/slider_dialog.cpp
     crates/pictura-app/cpp/hdr_toning_dialog.cpp
     crates/pictura-app/cpp/print_dialog.cpp
+    crates/pictura-app/cpp/pdf_save_dialog.cpp
+    crates/pictura-app/cpp/pdf_presets_dialog.cpp
     crates/pictura-app/cpp/export_as_dialog.cpp
     crates/pictura-app/cpp/duplicate_image_dialog.cpp
     crates/pictura-app/cpp/bitmap_mode_dialog.cpp
@@ -212,6 +214,7 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/file_drop_router.cpp
     crates/pictura-app/cpp/frame.cpp
     crates/pictura-app/cpp/frame_open.cpp
+    crates/pictura-app/cpp/frame_pdf.cpp
     crates/pictura-app/cpp/frame_chrome.cpp
     crates/pictura-app/cpp/frame_columns.cpp
     crates/pictura-app/cpp/frame_session.cpp
@@ -369,6 +372,8 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/session.h
     crates/pictura-app/cpp/workspace_store.h
     crates/pictura-app/cpp/preferences_dialog.h
+    crates/pictura-app/cpp/pdf_save_dialog.h
+    crates/pictura-app/cpp/pdf_presets_dialog.h
     crates/pictura-app/cpp/new_guide_dialog.h
     crates/pictura-app/cpp/file_info_dialog.h
     crates/pictura-app/cpp/profile_dialog.h

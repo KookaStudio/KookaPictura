@@ -264,6 +264,9 @@ impl qobject::PictureView {
     pub fn save(mut self: Pin<&mut Self>, path: &QString) -> bool {
         let path = path.to_string();
         let suffix = format_for_path(&path);
+        if matches!(suffix.as_str(), "pdf" | "pdp") {
+            return super::pdf_export::save_with_last_options(self, &QString::from(path.as_str()));
+        }
         let dirty = self.rust().dirty;
         match raster_writer_for_suffix(&suffix) {
             None => {

@@ -275,16 +275,8 @@ pub fn render_type(spec: &TypeSpec) -> Option<(PsdRect, PixelBuffer)> {
 /// glyph's pen through `spec.matrix` and rasterize its outline mapped the same
 /// way, so scaled or rotated type stays as sharp as unscaled type.
 fn render_mapped(spec: &TypeSpec, rect: PsdRect) -> Option<PixelBuffer> {
-    let bundled = crate::fonts::face_for(&spec.character.font_family)?;
-    let flat = TypeSpec {
-        matrix: TypeSpec::IDENTITY,
-        ..spec.clone()
-    };
-    let unmapped = type_placement(&flat)?.rect;
-    let view = render_view(&flat);
-    let layout = layout_type(bundled, &view, unmapped.width(), unmapped.height())?;
+    let (bundled, pens) = type_pens(spec)?;
     let size = spec.character.size as f32;
-    let ascent = bundled.ascent(size);
     let color = spec.rgba().map(|c| f64::from(c) / 255.0);
     let m = spec.matrix.map(|v| v as f32);
     // The pen positions already carry the character H/V scale (layout_type
@@ -296,17 +288,15 @@ fn render_mapped(spec: &TypeSpec, rect: PsdRect) -> Option<PixelBuffer> {
     let rasterizer = bundled.rasterizer();
     let mut out = PixelBuffer::new(rect.width() as u32, rect.height() as u32, 4);
     let mut painted = false;
-    for glyph in layout.lines.iter().flat_map(|line| &line.glyphs) {
-        let u = f64::from(unmapped.left) + f64::from(glyph.x) - spec.origin.0;
-        let v = f64::from(unmapped.top) + f64::from(glyph.y + ascent) - spec.origin.1;
-        let (dx, dy) = map(spec, u, v);
+    for (id, pen_u, pen_v) in pens {
+        let (dx, dy) = map(spec, pen_u, pen_v);
         let (fx, fy) = (
             (dx - f64::from(rect.left)) as f32,
             (dy - f64::from(rect.top)) as f32,
         );
         let (px, py) = (fx.floor(), fy.floor());
         let request = RasterRequest {
-            glyph: glyph.id,
+            glyph: id,
             px_size: size,
             subpixel_x: fx - px,
             subpixel_y: py - fy,
@@ -316,6 +306,37 @@ fn render_mapped(spec: &TypeSpec, rect: PsdRect) -> Option<PixelBuffer> {
         }
     }
     painted.then_some(out)
+}
+
+/// Glyph ids with their pens `(u, v)`, as [`type_pens`] lays them out.
+pub(crate) type Pens = Vec<(u16, f64, f64)>;
+
+/// `spec`'s face and glyphs laid out in its untransformed box: each glyph id
+/// with its pen (baseline start) relative to the origin, before `spec.matrix`.
+/// The pens carry the horizontal scale, kerning, tracking, and alignment.
+pub(crate) fn type_pens(spec: &TypeSpec) -> Option<(&'static BundledText, Pens)> {
+    let bundled = crate::fonts::face_for(&spec.character.font_family)?;
+    let flat = TypeSpec {
+        matrix: TypeSpec::IDENTITY,
+        ..spec.clone()
+    };
+    let unmapped = type_placement(&flat)?.rect;
+    let view = render_view(&flat);
+    let layout = layout_type(bundled, &view, unmapped.width(), unmapped.height())?;
+    let ascent = bundled.ascent(spec.character.size as f32);
+    let pens = layout
+        .lines
+        .iter()
+        .flat_map(|line| &line.glyphs)
+        .map(|glyph| {
+            (
+                glyph.id,
+                f64::from(unmapped.left) + f64::from(glyph.x) - spec.origin.0,
+                f64::from(unmapped.top) + f64::from(glyph.y + ascent) - spec.origin.1,
+            )
+        })
+        .collect();
+    Some((bundled, pens))
 }
 
 /// The Type Mask tools' selection: `spec`'s coverage on a `width × height`
