@@ -61,7 +61,6 @@ jobs:
       - name: Smoke-check the .deb on Ubuntu 24.04
         run: |
           docker run --rm -v "$PWD/dist:/dist:ro" ubuntu:24.04 bash -ec '
-            set -x
             apt-get update -qq
             DEBIAN_FRONTEND=noninteractive apt-get install -y -qq /dist/*.deb
             for f in /usr/share/doc/kooka-pictura/copyright \
@@ -73,7 +72,6 @@ jobs:
       - name: Smoke-check the .rpm on Fedora
         run: |
           docker run --rm -v "$PWD/dist:/dist:ro" fedora:latest bash -ec '
-            set -x
             dnf install -y -q /dist/*.rpm
             for f in /usr/share/doc/kooka-pictura/copyright \
                      /usr/share/metainfo/pictura.metainfo.xml; do

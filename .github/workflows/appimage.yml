@@ -65,12 +65,13 @@ jobs:
       - name: Smoke-check the packaged binary in a clean container
         run: |
           appimage=$(ls KookaPictura-*-x86_64.AppImage)
-          # libgl1/libegl1 are host drivers that linuxdeploy deliberately does
-          # not bundle; every desktop has them. Nothing else comes from the host.
+          # GL/EGL drivers and fontconfig/freetype are host libraries that
+          # linuxdeploy deliberately does not bundle; every desktop has them.
+          # Nothing else comes from the host.
           docker run --rm -e APPIMAGE_EXTRACT_AND_RUN=1 \
             -v "$PWD:/w:ro" ubuntu:24.04 bash -ec "
               apt-get update -qq
-              apt-get install -y -qq libgl1 libegl1
+              apt-get install -y -qq libgl1 libegl1 libfontconfig1 libfreetype6
               \"/w/$appimage\" --headless --self-test"
 
       - name: Keep the AppImage

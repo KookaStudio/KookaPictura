@@ -93,7 +93,7 @@ jobs:
           mountpoint=/Volumes/kooka-pictura-test
           hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mountpoint"
           trap 'hdiutil detach "$mountpoint" || true' EXIT
-          app="$mountpoint/Kooka Pictura.app"
+          app="$mountpoint/pictura.app"
           test -f "$app/Contents/Resources/qt.conf"
           env -u QT_PLUGIN_PATH -u QML2_IMPORT_PATH \
             -u DYLD_LIBRARY_PATH -u DYLD_FALLBACK_LIBRARY_PATH \

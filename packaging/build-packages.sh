@@ -114,8 +114,8 @@ $prefix
 /usr/share/applications/pictura.desktop
 /usr/share/icons/hicolor/512x512/apps/pictura.png
 /usr/share/metainfo/pictura.metainfo.xml
-/usr/share/doc/$name/copyright
-/usr/share/doc/$name/THIRD-PARTY-LICENSES
+%license /usr/share/doc/$name/copyright
+%license /usr/share/doc/$name/THIRD-PARTY-LICENSES
 EOF
     rpmbuild -bb --define "_topdir $work/rpm" "$work/rpm/$name.spec"
     cp "$work"/rpm/RPMS/x86_64/*.rpm "$outdir/KookaPictura-${version}-1.x86_64.rpm"
