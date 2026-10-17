@@ -451,8 +451,10 @@ the release/tag event, not `master`.
    the open `chore(master): release X.Y.Z` PR current after every push.
 2. Review that PR's `CHANGELOG.md` and version bumps, then squash-merge it.
 3. The `release-please` run on that merge tags `vX.Y.Z`, publishes the GitHub
-   release, and calls `appimage.yml` and `linux-packages.yml` for the tag; they
-   attach the AppImage, `.deb`, and `.rpm` to the release.
+   release, and calls the packaging workflows for the tag (`appimage.yml`,
+   `linux-packages.yml`, `snap.yml`, `windows.yml`, `macos.yml`); they attach
+   the AppImage, `.deb`/`.rpm`, `.snap`, Windows installer/portable archive, and
+   macOS DMG to the release.
 
 ### Linux packages
 
@@ -544,6 +546,31 @@ dylibs.
   DMG as a workflow artifact instead of uploading it; feature PRs never run it.
 - **The macOS build cannot run on Linux.** clang/arm64, `macdeployqt`, and
   `create-dmg` are macOS-only, so this job always runs on a macOS runner.
+
+### Snap packages
+
+`.github/workflows/snap.yml` builds a strictly-confined snap for x86_64 from a
+release tag and attaches it to the release as
+`kooka-pictura_X.Y.Z_amd64.snap`. The snap is **unsigned** — install it with
+`snap install --dangerous ./kooka-pictura_X.Y.Z_amd64.snap`.
+
+The snap is built from source inside snapcraft (`snap/snapcraft.yaml`), not from
+the AppDir the Linux packages share: the `kde-neon-6` extension supplies Qt from
+its content snap and plugs, so bundling the linuxdeploy Qt stack would mix two
+copies. The build installs the pinned Rust toolchain (`rust-toolchain.toml`) it
+needs, and the application reuses `packaging/pictura.desktop` and
+`assets/icons/app.png`.
+
+- **Snap Store is not wired yet.** Publishing to the store (credentials, name
+  registration, channels) is a future change; for now the `.snap` is a release
+  asset only.
+- **Re-run for an existing tag**: `gh workflow run snap.yml -f tag=vX.Y.Z`,
+  also available from *Actions → Run workflow*; `--clobber` replaces an existing
+  asset. As for the other workflows, `--ref <branch>` runs the branch's workflow
+  file against the tag's tree.
+- **Dry run** — the release-please Release PR runs the same build and keeps the
+  `.snap` as a workflow artifact instead of uploading it; feature PRs never run
+  it.
 
 ## Where to go next
 

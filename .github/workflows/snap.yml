@@ -1,0 +1,90 @@
+name: snap
+
+# Builds the x86_64 snap for a release tag and attaches it to that release.
+# Same shape as appimage.yml: release-please.yml calls it after cutting a
+# release, it runs by hand for an existing tag, and the release-please Release PR
+# runs it as a dry run that keeps the .snap as a workflow artifact. Feature PRs
+# never run it.
+on:
+  pull_request:
+    paths:
+      - Cargo.toml
+      - CMakeLists.txt
+      - CHANGELOG.md
+      - version.txt
+      - .release-please-manifest.json
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag, e.g. v0.1.0
+        type: string
+        required: true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: write
+
+jobs:
+  snap:
+    runs-on: ubuntu-24.04
+    if: github.event_name != 'pull_request' || github.head_ref == 'release-please--branches--master'
+    # snapcraft builds inside an LXD container; allow for the cold toolchain and
+    # the full Rust + C++ build.
+    timeout-minutes: 90
+    env:
+      TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+
+      # The LXD build environment, the Qt6 SDK snap, and the Rust toolchain share
+      # the runner's ~14 GB disk. Drop the preinstalled toolchains we do not use.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /opt/hostedtoolcache /usr/local/lib/android \
+            /usr/share/dotnet /opt/ghc /usr/local/share/boost
+          df -h /
+
+      - name: Build the snap
+        id: build
+        uses: snapcore/action-build@v1
+
+      # Install the snap and run the app's headless self-test under strict
+      # confinement. A strict failure is re-run in devmode only to tell a broken
+      # build apart from a confinement gap; the strict self-test is the contract,
+      # so the step still fails.
+      - name: Smoke-check the snap
+        run: |
+          SNAP="${{ steps.build.outputs.snap }}"
+          if sudo snap install --dangerous "$SNAP" \
+             && kooka-pictura.pictura --headless --self-test; then
+            exit 0
+          fi
+          sudo snap remove kooka-pictura || true
+          sudo snap install --dangerous --devmode "$SNAP"
+          kooka-pictura.pictura --headless --self-test || true
+          echo "::error::the snap self-test did not pass under strict confinement"
+          exit 1
+
+      - name: Keep the dry-run snap
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: snap
+          path: ${{ steps.build.outputs.snap }}
+          retention-days: 7
+
+      - name: Upload release assets
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" "${{ steps.build.outputs.snap }}" --clobber
