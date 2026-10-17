@@ -4,11 +4,13 @@
 
 #include <QtTest/QtTest>
 #include "api/layers_api.h"
+#include "api/type_api.h"
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QMimeData>
 #include <QtCore/QModelIndex>
 #include <QtCore/QPoint>
+#include <QtCore/QPointF>
 #include <QtCore/QRect>
 #include <QtCore/QStringList>
 #include <QtGui/QDragEnterEvent>
@@ -24,6 +26,7 @@
 #include "panels/layers_panel.h"
 #include "panels/layers_panel_internal.h"
 #include "panels/percent_field.h"
+#include "selftest_paint_fixture.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
@@ -62,6 +65,7 @@ private slots:
     void renameKeepsGroupExpanded();
     void duplicateGroupNamesStayDistinct();
     void groupIconHasNoOutline();
+    void typeThumbnailIsSquareWithoutOutline();
     void groupIconIsLarger();
     void blendComboArrowAndKeys();
     void blendChangeHistoryLabel();
@@ -370,6 +374,64 @@ void LayersPanelFixesTest::groupIconHasNoOutline()
     const QColor groupBorder = groupImage.pixelColor(groupThumb.center().x(), groupThumb.top());
     QVERIFY2(groupBorder.red() > 100 && groupBorder.green() > 100 && groupBorder.blue() > 100,
              "a group's folder glyph has no black outline");
+}
+
+// A type layer's thumbnail is a square (1:1) "T" card with no black outline for
+// any document aspect ratio, and the hit rectangle is that same square card; a
+// regular layer on the same portrait document stays letterboxed and outlined.
+void LayersPanelFixesTest::typeThumbnailIsSquareWithoutOutline()
+{
+    QImage seed(80, 160, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    paint_fixture::Fixture f(*window_, seed, QStringLiteral("pictura_type_thumb"));
+    QVERIFY2(f.ok(), "type thumbnail fixture");
+    window_->setActiveTool(pictura::ToolId::HorizontalType);
+    f.drag({QPointF(10, 60)});
+    QTest::keyClicks(f.canvas, QStringLiteral("Hi"));
+    QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
+    window_->setActiveTool(pictura::ToolId::Move);
+
+    QString typePath;
+    QString pixelPath;
+    for (int i = 0; i < f.view->layer_count(); ++i) {
+        const QString path = QString::number(i);
+        if (pictura::type_api::isType(*f.view, path)) {
+            typePath = path;
+        } else if (pixelPath.isEmpty()) {
+            pixelPath = path;
+        }
+    }
+    QVERIFY2(!typePath.isEmpty(), "a type layer");
+    QVERIFY2(!pixelPath.isEmpty(), "a regular layer");
+
+    auto* panel = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(panel != nullptr);
+    panel->setView(f.view);
+    panel->refresh();
+    window_->show();
+    QTest::qWait(50);
+
+    // The portrait document letterboxes a regular thumbnail and outlines it...
+    const QRect pixelThumb = panel->rowThumbRectForTest(pixelPath);
+    QVERIFY2(!pixelThumb.isEmpty(), "regular thumbnail laid out");
+    QVERIFY2(pixelThumb.height() > pixelThumb.width(), "a regular thumbnail letterboxes");
+    const QImage pixelImage = panel->rowImageForTest(pixelPath);
+    QVERIFY(!pixelImage.isNull());
+    const QColor pixelBorder = pixelImage.pixelColor(pixelThumb.center().x(), pixelThumb.top());
+    QVERIFY2(pixelBorder.red() < 80 && pixelBorder.green() < 80 && pixelBorder.blue() < 80,
+             "a regular thumbnail keeps its black outline");
+
+    // ...but the type card is square, and its hit rect is that square card.
+    const QRect typeThumb = panel->rowThumbRectForTest(typePath);
+    QVERIFY2(!typeThumb.isEmpty(), "type thumbnail laid out");
+    QCOMPARE(typeThumb.width(), typeThumb.height());
+
+    // No black outline: the card's top edge at its centre is the white card.
+    const QImage image = panel->rowImageForTest(typePath);
+    QVERIFY(!image.isNull());
+    const QColor border = image.pixelColor(typeThumb.center().x(), typeThumb.top());
+    QVERIFY2(border.red() > 100 && border.green() > 100 && border.blue() > 100,
+             "the type card has no black outline");
 }
 
 // The folder glyph is larger than the old half-thumbnail size, close to a layer

@@ -361,14 +361,20 @@ SHALL show a disclosure icon — right when collapsed, down when expanded — at
 indented position, and clicking that icon SHALL expand or collapse the group. A
 **regular (non-group) layer's thumbnail SHALL be drawn over a cached two-tone
 checkerboard** so transparency reads under it, while a group keeps its folder
-glyph and no checkerboard. The thumbnail SHALL be laid out in a box `thumb` wide
+glyph and no checkerboard. A **type layer's thumbnail SHALL be drawn as a
+square (1:1) white card bearing a "T"**, sized to the thumbnail's side and
+centred in its slot, regardless of the document's aspect ratio; it SHALL NOT be
+letterboxed to the document, and its hit rectangle SHALL be that square card.
+Every other non-group layer's thumbnail SHALL be laid out in a box `thumb` wide
 and the row's full height minus a small pad, and SHALL be letterboxed to the
 document's aspect ratio inside that box, so a tall document's thumbnail fills the
 row vertically rather than floating in a square box. **Every non-group thumbnail
-SHALL carry a 1 px black outline**; a group's folder glyph SHALL draw no
-outline, and **when exactly one layer is active** (the same singular
+other than a type layer's SHALL carry a 1 px black outline**; a type layer's
+card and a group's folder glyph SHALL draw no outline, and **when exactly one
+layer is active** (the same singular
 active-layer resolution tool edits use) its thumbnail SHALL additionally show
-white 1 px corner brackets drawn one pixel outside the outline; with zero or
+white 1 px corner brackets drawn one pixel outside the thumbnail card (for a
+regular layer, outside the outline); with zero or
 multiple active layers no brackets are drawn. A layer whose row reports the
 smart-object projection SHALL paint the `layers.kindSmartObject` badge on the
 thumbnail's lower-right corner, whether the smart object is embedded or
@@ -474,6 +480,13 @@ rather than fail.
 - **WHEN** a group row is shown
 - **THEN** its folder glyph carries no 1 px black outline, while a regular
   layer's thumbnail keeps its outline
+
+#### Scenario: A type card is square with no outline [lpr_type_thumb_card]
+
+- **WHEN** a type layer row is shown in a document of any aspect ratio
+- **THEN** its thumbnail is a square white card with a "T" whose width equals
+  its height, it is not letterboxed to the document, it carries no 1 px black
+  outline, and the thumbnail's hit rectangle is that same square card
 
 #### Scenario: A tall thumbnail fills the row [lpr_thumb_fill]
 
