@@ -281,8 +281,10 @@ public:
                      int depth, const QString& background);
     bool openPath(const QString& path);
     bool openImagePath(const QString& path);
-    // Route `path` to the PSD/PSB reader or the Qt raster import by suffix.
-    bool openDocumentAtPath(const QString& path);
+    // Route `path` by signature (PDF, EPS) or suffix (PSD/PSB, Qt raster
+    // import). With `interactive` off (agentic control) a PDF or EPS imports
+    // with the dialogs' defaults and no prompt.
+    bool openDocumentAtPath(const QString& path, bool interactive = true);
     // True when `path`'s suffix routes to the native PSD/PSB reader rather than
     // the Qt image decode edge.
     static bool isNativeDocumentPath(const QString& path);
@@ -318,8 +320,22 @@ public:
     // reopening a Pictura Photoshop PDF, and Edit > Adobe PDF Presets.
     static bool isPdfPath(const QString& path);
     bool savePdfWithDialog(const QString& path);
-    bool openPdfPath(const QString& path);
+    bool openPdfPath(const QString& path, bool interactive = true);
     void showPdfPresets();
+    // frame_import.cpp: a generic PDF through the password prompt and the
+    // Import PDF dialog, an EPS through the Rasterize Generic EPS Format
+    // dialog, and File > Open As with a chosen decoder (index into
+    // openAsFileFilters()). Each opened page or image is an untitled document.
+    bool importPdfPath(const QString& path, bool interactive = true);
+    bool importEpsPath(const QString& path, bool interactive = true);
+    void showOpenAsDialog();
+    bool openAsPath(const QString& path, int formatIndex);
+    // Test seam: answer the import dialogs (password prompt, Import PDF,
+    // Rasterize Generic EPS Format, the warnings box).
+    void setImportDialogDriverForTest(std::function<bool(QDialog&)> driver)
+    {
+        importDialogDriver_ = std::move(driver);
+    }
     // Test seams: answer the PDF dialogs (the Save Adobe PDF dialog, the
     // features warning, the presets manager and its editor) and catch View PDF
     // After Saving instead of launching the system viewer.
@@ -423,6 +439,8 @@ private:
     void registerHandlers();
     void wirePdfCommands();
     bool runPdfDialog(QDialog& dialog);
+    bool runImportDialog(QDialog& dialog);
+    void reportImportError(const QString& path, const QString& reason);
     void registerSelectHandlers();
     void registerEditHandlers();
     // Wire the CS6 Filter menu: one handler per implemented filter, plus Last
@@ -724,6 +742,7 @@ private:
     QColor guideColor_{0x4a, 0xff, 0xff};
     bool guideDashed_ = false;
     std::function<bool(QDialog&)> pdfDialogDriver_;
+    std::function<bool(QDialog&)> importDialogDriver_;
     std::function<void(const QString&)> pdfViewer_;
 };
 

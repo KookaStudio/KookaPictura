@@ -20,6 +20,7 @@ namespace pictura {
 namespace command_ids {
 inline constexpr char FileOpen[] = "file.open";
 inline constexpr char FileOpenAsSmartObject[] = "file.openAsSmartObject";
+inline constexpr char FileOpenAs[] = "file.openAs";
 inline constexpr char FileNew[] = "file.new";
 inline constexpr char FileSave[] = "file.save";
 inline constexpr char FileSaveAs[] = "file.saveAs";

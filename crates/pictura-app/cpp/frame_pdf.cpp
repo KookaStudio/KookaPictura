@@ -110,7 +110,7 @@ bool PicturaMainWindow::savePdfWithDialog(const QString& path)
     return true;
 }
 
-bool PicturaMainWindow::openPdfPath(const QString& path)
+bool PicturaMainWindow::openPdfPath(const QString& path, bool interactive)
 {
     auto* view = new PictureView(this);
     view->set_color_policy(colorPolicy_);
@@ -119,11 +119,7 @@ bool PicturaMainWindow::openPdfPath(const QString& path)
     endOpenIndicator();
     if (!loaded) {
         delete view;
-        // Arbitrary PDF import (rasterizing pages) is #627.
-        statusBar()->showMessage(
-            tr("%1 carries no Photoshop editing data Pictura can open.")
-                .arg(QFileInfo(path).fileName()));
-        return false;
+        return importPdfPath(path, interactive);
     }
     addDocument(view, path);
     return true;

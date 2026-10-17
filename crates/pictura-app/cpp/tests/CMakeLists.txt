@@ -86,6 +86,7 @@ set(PICTURA_QT_TESTS
     tst_match_color
     tst_print
     tst_save_pdf
+    tst_import_pdf
     tst_image_adjustments
     tst_layers_smart_filters
     tst_smart_object_actions
