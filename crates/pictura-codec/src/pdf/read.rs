@@ -1,6 +1,6 @@
 //! Reopening a Pictura Photoshop PDF: find the PSD payload the writer embeds
 //! under `/PieceInfo /Pictura` (design D6). This reads Pictura's own output
-//! only; importing arbitrary PDFs is #627.
+//! only; any other PDF goes through `import` (#627).
 
 use std::io::Read as _;
 

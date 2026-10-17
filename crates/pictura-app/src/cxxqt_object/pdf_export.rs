@@ -7,6 +7,8 @@
 //!
 //! [`PictureView`]: super::qobject::PictureView
 
+mod import;
+
 use super::helpers::topmost_pixel_layer_index;
 use super::helpers_composite::{current_buffer, store_composite};
 use super::qobject::PictureView;

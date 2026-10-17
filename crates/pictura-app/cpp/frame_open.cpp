@@ -6,6 +6,8 @@
 
 #include "api/document_api.h"
 
+#include "pictura_app/src/cxxqt_object/pdf_export/import.cxxqt.h"
+
 #include <QtCore/QEventLoop>
 #include <QtCore/QFileInfo>
 #include <QtWidgets/QApplication>
@@ -124,10 +126,14 @@ bool PicturaMainWindow::isNativeDocumentPath(const QString& path)
     return suffix == QStringLiteral("psd") || suffix == QStringLiteral("psb");
 }
 
-bool PicturaMainWindow::openDocumentAtPath(const QString& path)
+bool PicturaMainWindow::openDocumentAtPath(const QString& path, bool interactive)
 {
-    if (isPdfPath(path)) {
-        return openPdfPath(path);
+    const QString kind(vector_sniff(path));
+    if (kind == QStringLiteral("pdf") || isPdfPath(path)) {
+        return openPdfPath(path, interactive);
+    }
+    if (kind == QStringLiteral("eps")) {
+        return importEpsPath(path, interactive);
     }
     return isNativeDocumentPath(path) ? openPath(path) : openImagePath(path);
 }

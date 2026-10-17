@@ -27,8 +27,10 @@ mod descriptor;
 mod duotone;
 mod engine_data;
 mod engine_data_encode;
+pub mod eps;
 mod error;
 mod exif;
+mod ghostscript;
 mod guide_resources;
 mod icc;
 mod image_resources;
@@ -79,6 +81,7 @@ pub use engine_data::{extract_fonts, extract_style, parse_engine_data, EngineVal
 pub use engine_data_encode::encode_engine_data;
 pub use error::PsdError;
 pub use exif::{exif_tag_name, parse_exif, Exif, ExifValue};
+pub use ghostscript::{sniff_vector, Ghostscript, Raster, RasterError, VectorKind};
 pub use icc::{assign_document_profile, buffer_to_srgb, convert_document, profile_description};
 pub use image_resources::{
     decode_image_resources, document_resolution, encode_image_resources, frame_image_resource,

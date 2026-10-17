@@ -6,6 +6,7 @@
 mod ccitt;
 mod crypt;
 mod image;
+pub mod import;
 mod joboptions;
 mod linearize;
 mod object;

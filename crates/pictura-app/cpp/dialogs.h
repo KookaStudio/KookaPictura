@@ -62,6 +62,9 @@ void setNonInteractiveUnsavedChoice(UnsavedChoice choice);
 // comma would become part of the pattern), uppercase for display.
 const QStringList& saveFileFilters();
 const QStringList& openFileFilters();
+// File > Open As: one filter per decoder, in the order `openAsPath` indexes
+// (defined in frame_import.cpp beside the format table).
+const QStringList& openAsFileFilters();
 
 // Places shown in the file dialogs' sidebar: root, mounted volumes, the XDG
 // folders, KDE/GTK bookmark directories, and the application's recent

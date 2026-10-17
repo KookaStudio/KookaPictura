@@ -12,6 +12,25 @@ finish-args:
   - --device=dri
   - --socket=cups
 modules:
+  # PDF and EPS import rasterize through Ghostscript, run as a separate `gs`
+  # process (never linked), so its AGPL covers only this module.
+  - name: ghostscript
+    buildsystem: autotools
+    config-opts:
+      - --disable-cups
+      - --disable-gtk
+      - --disable-dbus
+      - --without-x
+      - --without-tesseract
+      - --without-libpaper
+    cleanup:
+      - /share/doc
+      - /share/man
+      - /share/ghostscript/*/examples
+    sources:
+      - type: archive
+        url: https://github.com/ArtifexSoftware/ghostpdl-downloads/releases/download/gs10060/ghostscript-10.06.0.tar.xz
+        sha256: 64352648c2c081c8a9fb1a12dc1965e01ead7c57f58b72d1b54f6ef1cef3c561
   - name: pictura
     buildsystem: cmake-ninja
     build-options:
