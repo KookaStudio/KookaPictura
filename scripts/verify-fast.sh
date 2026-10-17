@@ -17,6 +17,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# shellcheck source=scripts/build-lock.sh
+. scripts/build-lock.sh
+
 base=""
 for ref in master main kooka/master kooka/main origin/master origin/main; do
   if git rev-parse --verify -q "$ref" >/dev/null 2>&1; then
@@ -57,6 +60,9 @@ if [ "$docs_only" -eq 1 ]; then
   exit 0
 fi
 
+build_lock_install_traps
+build_lock_acquire || exit 1
+
 echo "== fmt =="
 cargo fmt --all --check
 echo "fmt=ok"
@@ -81,6 +87,9 @@ bash scripts/check-worktree-hook.sh
 
 echo "== build caching =="
 bash scripts/check-local-build-caching.sh
+
+echo "== build lock =="
+bash scripts/check-build-lock.sh
 
 echo "== selftest budget =="
 bash scripts/check-selftest-budget.sh
