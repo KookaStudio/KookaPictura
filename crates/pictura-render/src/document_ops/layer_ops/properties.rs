@@ -1,5 +1,6 @@
 use pictura_core::{BlendMode, ColorLabel, Document, Layer, LockFlags};
 
+use super::clipping::{base_below, normalize_clipping, release_run_above, Moved};
 use super::create::{empty_group, next_layer_name};
 use super::merge::is_visible_in_panel;
 use super::paths::{
@@ -193,7 +194,10 @@ pub fn delete_paths(doc: &mut Document, paths: &[&str]) -> usize {
             continue;
         }
         if let Some((container, index)) = container_mut(doc, &segments) {
+            let was_clipped = container[index].clipping;
+            release_run_above(container.as_mut_slice(), index, was_clipped);
             container.remove(index);
+            normalize_clipping(container.as_mut_slice(), None);
             changed += 1;
         }
     }
@@ -364,13 +368,16 @@ pub fn ungroup_paths(doc: &mut Document, paths: &[&str]) -> usize {
         if !layer.is_group || layer.lock.is_all() || layer.lock.contains(LockFlags::NESTING) {
             continue;
         }
+        let was_clipped = layer.clipping;
         let Some((container, index)) = container_mut(doc, &segments) else {
             continue;
         };
+        release_run_above(container.as_mut_slice(), index, was_clipped);
         let group = container.remove(index);
         for (offset, child) in group.children.into_iter().enumerate() {
             container.insert(index + offset, child);
         }
+        normalize_clipping(container.as_mut_slice(), None);
         changed += 1;
     }
     changed
@@ -415,8 +422,27 @@ pub fn move_path(doc: &mut Document, path: &str, delta: i32) -> bool {
     if target == index {
         return false;
     }
+    let was_clipped = container[index].clipping;
+    let former_base = if was_clipped {
+        base_below(container.as_slice(), index)
+    } else {
+        None
+    };
+    release_run_above(container.as_mut_slice(), index, was_clipped);
     let layer = container.remove(index);
     container.insert(target, layer);
+    let same_base_below = former_base.is_some_and(|base| {
+        let base = if target <= base { base + 1 } else { base };
+        target > 0 && target - 1 == base
+    });
+    normalize_clipping(
+        container.as_mut_slice(),
+        Some(Moved {
+            index: target,
+            was_clipped,
+            same_base_below,
+        }),
+    );
     true
 }
 
@@ -525,11 +551,23 @@ pub fn move_path_to(doc: &mut Document, path: &str, target: &str, mode: i32) -> 
 
     let src_parent = src[..src.len() - 1].to_vec();
     let src_index = *src.last().expect("non-empty");
-    let removed = {
+    let was_clipped = resolve_path(doc, path).is_some_and(|layer| layer.clipping);
+    let same_container = dest_parent == src_parent;
+    let (removed, former_base) = {
         let Some((container, index)) = container_mut(doc, &src) else {
             return false;
         };
-        container.remove(index)
+        let former_base = if same_container && was_clipped {
+            base_below(container.as_slice(), index)
+        } else {
+            None
+        };
+        release_run_above(container.as_mut_slice(), index, was_clipped);
+        let removed = container.remove(index);
+        if !same_container {
+            normalize_clipping(container.as_mut_slice(), None);
+        }
+        (removed, former_base)
     };
 
     let mut dest_index = dest_index;
@@ -549,6 +587,18 @@ pub fn move_path_to(doc: &mut Document, path: &str, target: &str, mode: i32) -> 
     };
     let at = dest_index.map_or(container.len(), |index| index.min(container.len()));
     container.insert(at, removed);
+    let same_base_below = former_base.is_some_and(|base| {
+        let base = if at <= base { base + 1 } else { base };
+        at > 0 && at - 1 == base
+    });
+    normalize_clipping(
+        container.as_mut_slice(),
+        Some(Moved {
+            index: at,
+            was_clipped,
+            same_base_below,
+        }),
+    );
     true
 }
 
@@ -648,5 +698,6 @@ pub fn reverse_paths(doc: &mut Document, paths: &[&str]) -> bool {
         return false;
     };
     container[start..=end].reverse();
+    normalize_clipping(container.as_mut_slice(), None);
     true
 }

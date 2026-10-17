@@ -30,10 +30,23 @@
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/clipping.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/shapes.cxxqt.h"
 
 #include "qt_test_support.h"
 
 namespace {
+
+pictura::layers_api::LayerRow rowNamed(pictura::PictureView& view, const QString& name)
+{
+    for (int i = 0; i < pictura::layers_api::rowCount(view); ++i) {
+        const auto row = pictura::layers_api::rowAt(view, i);
+        if (row.name == name) {
+            return row;
+        }
+    }
+    return {};
+}
 
 bool dropOnViewport(QWidget* viewport, const void* document, const QString& source,
                     const QPoint& pos)
@@ -72,6 +85,8 @@ private slots:
     void thumbnailFillsRow();
     void tallThumbnailKeepsDocumentAspect();
     void linkGlyphRotatedAndLarger();
+    void dragBelowBaseReleasesClip();
+    void legacyMoveLayerShiftsAndRefuses();
 
 private:
     bool setupNest();
@@ -640,6 +655,92 @@ void LayersPanelFixesTest::blendChangeHistoryLabel()
     QCoreApplication::processEvents();
     QCOMPARE(view_->history_label(view_->history_index()),
              QStringLiteral("Blending Change: Luminosity"));
+}
+
+// Issue #658: dragging a clipped layer below its base releases the clip, and
+// the panel glyph follows the flag.
+void LayersPanelFixesTest::dragBelowBaseReleasesClip()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("DragClip"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(view_ && panel_);
+
+    pictura::ShapeSpec square{};
+    square.kind = 0;
+    square.boxed = true;
+    square.x0 = 2;
+    square.y0 = 2;
+    square.x1 = 8;
+    square.y1 = 8;
+    const QString base = pictura::shape_add_layer(*view_, square, 0xffff0000u);
+    const QString fill = view_->add_solid_fill(0xff00ff00u);
+    QVERIFY(!base.isEmpty() && !fill.isEmpty());
+    view_->set_layer_name_path(base, QStringLiteral("Base"));
+    view_->set_layer_name_path(fill, QStringLiteral("Fill"));
+
+    const QRgb green = 0xff00ff00u;
+    const QRgb white = 0xffffffffu;
+    QVERIFY(pictura::clipping_toggle(*view_, fill));
+    QCoreApplication::processEvents();
+    panel_->refresh();
+    QVERIFY(rowNamed(*view_, QStringLiteral("Fill")).clipping);
+    QCOMPARE(view_->sample_argb(12, 12), white);
+    QCOMPARE(view_->sample_argb(4, 4), green);
+
+    const QString fillPath = rowNamed(*view_, QStringLiteral("Fill")).path;
+    const QString basePath = rowNamed(*view_, QStringLiteral("Base")).path;
+    QVERIFY(!fillPath.isEmpty() && !basePath.isEmpty());
+    QVERIFY(view_->move_layer_to(fillPath, basePath, 1));
+    QCoreApplication::processEvents();
+    panel_->refresh();
+
+    const auto movedFill = rowNamed(*view_, QStringLiteral("Fill"));
+    const auto movedBase = rowNamed(*view_, QStringLiteral("Base"));
+    QVERIFY(!movedFill.clipping);
+    QVERIFY(!panel_->rowClippingForTest(movedFill.path));
+    QVERIFY(!panel_->rowClipBaseForTest(movedBase.path));
+    QCOMPARE(view_->sample_argb(12, 12), green);
+}
+
+// The legacy top-level move bridge shifts by delta, releases a run when its
+// base leaves, and refuses the Background and fully locked layers.
+void LayersPanelFixesTest::legacyMoveLayerShiftsAndRefuses()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("LegacyMove1"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    QVERIFY(view_);
+    QVERIFY(!view_->move_layer(0, 1));
+    const QString a = view_->add_layer_in(QString());
+    const QString b = view_->add_layer_in(QString());
+    view_->set_layer_name_path(a, QStringLiteral("A"));
+    view_->set_layer_name_path(b, QStringLiteral("B"));
+    QVERIFY(pictura::clipping_toggle(*view_, b));
+    QVERIFY(view_->move_layer(2, -1));
+    QCoreApplication::processEvents();
+    QCOMPARE(rowNamed(*view_, QStringLiteral("B")).path, QStringLiteral("1"));
+    QVERIFY(!rowNamed(*view_, QStringLiteral("B")).clipping);
+
+    QVERIFY(window_->newDocument(QStringLiteral("LegacyMove2"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    QVERIFY(view_);
+    const QString a2 = view_->add_layer_in(QString());
+    const QString b2 = view_->add_layer_in(QString());
+    const QString c2 = view_->add_layer_in(QString());
+    view_->set_layer_name_path(a2, QStringLiteral("A"));
+    view_->set_layer_name_path(b2, QStringLiteral("B"));
+    view_->set_layer_name_path(c2, QStringLiteral("C"));
+    QVERIFY(pictura::clipping_toggle(*view_, b2));
+    QVERIFY(view_->move_layer(1, 2));
+    QCoreApplication::processEvents();
+    QCOMPARE(rowNamed(*view_, QStringLiteral("A")).path, QStringLiteral("3"));
+    QVERIFY(!rowNamed(*view_, QStringLiteral("B")).clipping);
+
+    QVERIFY(view_->set_layer_lock(1, QStringLiteral("all"), true));
+    QVERIFY(!view_->move_layer(1, -1));
 }
 
 QTEST_MAIN(LayersPanelFixesTest)

@@ -1,0 +1,24 @@
+# Test Plan
+
+All tests run on CPU. Rust tests live in the `clipping` tests module in
+`crates/pictura-render/src/document_ops/layer_ops/clipping.rs` (the stamp case in
+`merge_tests.rs`, the insertion case in `tests.rs`); the GUI cases live in
+`crates/pictura-app/cpp/tests/tst_layers_panel_fixes.cpp`.
+
+| Scenario | Steps | Expected result | Coverage |
+|---|---|---|---|
+| A clipped layer dragged below its base is released | Build base A and clipped B above it; drag B below A through the reorder API; read the row flag | Rust: B's clipping flag is false. Qt: the row has no clipping arrow and B composites unclipped | `pictura-render::dragging_a_clipped_layer_below_its_base_releases_it`, `tst_layers_panel_fixes::dragBelowBaseReleasesClip`, `tst_layers_panel_fixes::legacyMoveLayerShiftsAndRefuses`, `pictura-render::arranging_a_clipped_layer_to_the_back_releases_it` |
+| A clipped layer dragged above a non-member is released | Build base A with clipped B and B2, plus unclipped C above; drag B above C | B is released; B2 stays clipped to A | `pictura-render::dragging_a_clipped_layer_above_a_non_member_releases_it` |
+| A clipped layer moved into another run joins it | Build two clip runs; drag the top clipped layer of the lower run directly under a clipped layer of the upper run | The moved layer is clipped to the upper run | `pictura-render::moving_a_clipped_layer_into_another_run_joins_it` |
+| A layer dropped inside the run joins | Build base A and clipped B; drag an unclipped C between A and B; separately stamp above a clipped layer | C's clipping flag is true and B stays clipped; the stamp lands at the anchor with the documented clipping state | `pictura-render::dropping_a_layer_inside_the_run_joins_it`, `pictura-render::stamp_above_a_clip_run_keeps_its_placement` |
+| A clipped layer moved to the top of its run stays clipped | Build base A with clipped B and C; move B above C; separately move a clipped layer to the top of the document | B and C are still clipped; the top-of-document move does not panic | `pictura-render::moving_a_clipped_layer_to_the_top_of_its_run_keeps_it_clipped`, `pictura-render::moving_a_clipped_layer_to_the_top_of_the_document_is_safe` |
+| A clipped layer moved to the bottom of its run stays clipped | Build base A with clipped B and C; move C directly above A | C is still clipped | `pictura-render::moving_a_clipped_layer_to_the_bottom_of_its_run_keeps_it_clipped` |
+| Released layers do not rejoin when reordered back | Move the base out of a run to release its layers; move the released layers back above the base | The layers stay released | `pictura-render::released_layers_stay_released_when_reordered_back` |
+| Deleting the base releases its run | Build base A with clipped B and C; delete A | B and C are released and do not clip to a lower layer | `pictura-render::deleting_the_base_releases_its_run` |
+| Moving the base out releases its run | Build base A with clipped B and C; move A above the run; separately move the only child out of a group | B and C are released; the only-child move is safe and does not panic | `pictura-render::moving_the_base_out_releases_its_run`, `pictura-render::moving_the_only_child_out_of_a_group_is_safe`, `tst_layers_panel_fixes::legacyMoveLayerShiftsAndRefuses` |
+| Converting the base to Background releases its run | Build base A with clipped B; convert A to Background; separately convert a base inside a group | B is released and A is not clipped at the document bottom; the grouped source container is normalized | `pictura-render::converting_the_base_to_background_releases_its_run`, `pictura-render::converting_a_grouped_base_to_background_releases_its_run` |
+| Deleting a clipped layer keeps the run | Build base A with clipped B and C; delete B | C remains clipped to A | `pictura-render::deleting_a_clipped_layer_keeps_the_run` |
+| Ungrouping a base group releases its run | Build parent [X, G, C] where G is an unclipped group and C is clipped to G; ungroup G | C is released and does not clip to G's top child | `pictura-render::ungrouping_a_base_group_releases_its_run` |
+| Reverse never leaves a clipped bottom layer | Put a base and one clipped layer at the bottom of a group or a document without a Background; reverse them | The new bottom layer is not clipped | `pictura-render::reverse_clears_a_clipped_bottom` |
+| Ungrouping never leaves a clipped bottom layer | Ungroup a group whose first child carries a clipped flag | The spliced bottom layer is not clipped | `pictura-render::ungroup_clears_a_clipped_bottom` |
+| A new clipped layer at a container bottom is released | Insert a layer with `clipping = true` at the bottom of an empty group through the New Layer path | The inserted layer's clipping flag is false | `pictura-render::new_clipped_layer_at_container_bottom_is_released` |

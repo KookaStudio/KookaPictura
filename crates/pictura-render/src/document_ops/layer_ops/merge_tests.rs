@@ -667,6 +667,30 @@ fn stamp_selected_composites_only_the_selection() {
 }
 
 #[test]
+fn stamp_above_a_clip_run_keeps_its_placement() {
+    let base = solid("base", rect(4, 4), 10, 0, 0, 255);
+    let mut clipped = solid("clipped", rect(4, 4), 0, 10, 0, 255);
+    clipped.clipping = true;
+    let mut doc = doc_with(4, 4, vec![base, clipped]);
+    stamp_scope(&mut doc, StampScope::Visible("1"), "0").expect("stamp");
+    let stamp = stamp_index(&doc);
+    assert_eq!(stamp, 1, "the stamp sits directly above the base");
+    assert!(doc.layers[stamp].clipping, "inside the run joins the clip");
+
+    let base = solid("base", rect(4, 4), 10, 0, 0, 255);
+    let mut clipped = solid("clipped", rect(4, 4), 0, 10, 0, 255);
+    clipped.clipping = true;
+    let mut doc = doc_with(4, 4, vec![base, clipped]);
+    stamp_scope(&mut doc, StampScope::Visible("1"), "1").expect("stamp");
+    let stamp = stamp_index(&doc);
+    assert_eq!(stamp, 2, "the stamp sits above the clipped layer");
+    assert!(
+        !doc.layers[stamp].clipping,
+        "above the run is outside the clip"
+    );
+}
+
+#[test]
 fn stamp_refuses_empty_selection_and_bad_anchor() {
     let mut doc = doc_with(4, 4, vec![solid("a", rect(4, 4), 1, 2, 3, 255)]);
     let before = doc.clone();
