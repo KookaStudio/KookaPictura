@@ -63,7 +63,8 @@ runs:
       shell: bash
       run: |
         app=build/pictura.app
-        minos=$(otool -l "$app/Contents/MacOS/pictura" | awk '/minos/{print $2; exit}')
+        minos=$(otool -l "$app/Contents/MacOS/pictura" |
+          awk '/minos/{print $2; exit} /LC_VERSION_MIN_MACOSX/{want=1; next} want && /version/{print $2; exit}')
         if [ "$minos" != "13.0" ]; then
           echo "::error::pictura minos is $minos, expected 13.0"
           exit 1
