@@ -7,7 +7,16 @@ name: snap
 # never run it.
 on:
   pull_request:
-    paths: ['**']
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - CMakeLists.txt
+      - CHANGELOG.md
+      - version.txt
+      - .release-please-manifest.json
+      - snap/**
+      - packaging/**
+      - .github/workflows/snap.yml
   workflow_call:
     inputs:
       tag:
@@ -33,7 +42,6 @@ jobs:
     runs-on: ubuntu-24.04
     if: >-
       github.event_name != 'pull_request' ||
-      github.head_ref == 'ci/703-release-build-hardening' ||
       (github.head_ref == 'release-please--branches--master' &&
        github.event.pull_request.head.repo.full_name == github.repository)
     # snapcraft builds inside an LXD container; allow for the cold toolchain and
