@@ -10,10 +10,14 @@ on:
   pull_request:
     paths:
       - Cargo.toml
+      - Cargo.lock
       - CMakeLists.txt
       - CHANGELOG.md
       - version.txt
       - .release-please-manifest.json
+      - packaging/**
+      - .github/workflows/appimage.yml
+      - .github/actions/linux-bundle/action.yml
   workflow_call:
     inputs:
       tag:
@@ -22,33 +26,37 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing release tag, e.g. v0.1.0
+        description: Existing release tag, e.g. v0.1.0 (a leading v is added if omitted)
         type: string
         required: true
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: appimage-${{ inputs.tag || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Release uploads live in their own job; a pull-request dry run is read-only.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   appimage:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    if: github.event_name != 'pull_request' || github.head_ref == 'release-please--branches--master'
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.head_ref == 'release-please--branches--master' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
     env:
       TAG: ${{ inputs.tag }}
-      VERSION: ${{ inputs.tag || format('pr{0}', github.event.number) }}
+      VERSION: ${{ inputs.tag || format('0.0.0~pr{0}', github.event.number) }}
       # sccache, the same setup ci.yml uses.
       RUSTC_WRAPPER: sccache
       SCCACHE_GHA_ENABLED: "true"
       CARGO_INCREMENTAL: "0"
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ inputs.tag }}
+          ref: ${{ inputs.tag != '' && (startsWith(inputs.tag, 'v') && inputs.tag || format('v{0}', inputs.tag)) || github.sha }}
 
       - uses: ./.github/actions/linux-bundle
 
@@ -59,19 +67,38 @@ jobs:
           OUTPUT="KookaPictura-${VERSION#v}-x86_64.AppImage" \
             ./linuxdeploy-x86_64.AppImage --appdir AppDir --output appimage
 
-      - name: Smoke-check the packaged binary
-        run: APPIMAGE_EXTRACT_AND_RUN=1 ./KookaPictura-*-x86_64.AppImage --headless --self-test
+      # The runner has install-qt-action's Qt on the loader path, which can hide
+      # a library linuxdeploy failed to bundle. Run from a clean container with
+      # only the artifact mounted.
+      - name: Smoke-check the packaged binary in a clean container
+        run: |
+          appimage=$(ls KookaPictura-*-x86_64.AppImage)
+          docker run --rm -e APPIMAGE_EXTRACT_AND_RUN=1 \
+            -v "$PWD:/w:ro" ubuntu:24.04 "/w/$appimage" --headless --self-test
 
-      - name: Keep the dry-run AppImage
-        if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v7
+      - name: Keep the AppImage
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: appimage
           path: KookaPictura-*-x86_64.AppImage
           retention-days: 7
+          if-no-files-found: error
+
+  upload:
+    runs-on: ubuntu-24.04
+    needs: appimage
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ inputs.tag != '' && (startsWith(inputs.tag, 'v') && inputs.tag || format('v{0}', inputs.tag)) || '' }}
+    steps:
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: appimage
 
       - name: Upload release assets
-        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$TAG" KookaPictura-*-x86_64.AppImage --clobber
+          GH_REPO: ${{ github.repository }}
+        run: gh release upload "$RELEASE_TAG" KookaPictura-*-x86_64.AppImage --clobber

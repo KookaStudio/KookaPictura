@@ -4,6 +4,11 @@ grade: stable
 confinement: strict
 adopt-info: pictura
 summary: Raster image editor modeled on Photoshop CS6
+license: GPL-3.0-or-later
+contact: https://github.com/KookaStudio/KookaPictura/issues
+website: https://github.com/KookaStudio/KookaPictura
+source-code: https://github.com/KookaStudio/KookaPictura
+issues: https://github.com/KookaStudio/KookaPictura/issues
 description: |
   Kooka Pictura is a documentation-first reimplementation of Adobe Photoshop
   CS6 in Rust and Qt6. It opens and edits raster images with a layer-based
@@ -51,7 +56,11 @@ parts:
       - -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld
     override-pull: |
       craftctl default
-      craftctl set version="$(cat "$CRAFT_PROJECT_DIR/version.txt")"
+      # version.txt is the version of record; the workflow writes the dry-run
+      # version there before the build. #700: state under ~/.local/state is not
+      # writable under strict confinement (the `home` interface excludes hidden
+      # paths); persistence across restarts is tracked separately.
+      craftctl set version="$(sed 's/^v//' "$CRAFT_PROJECT_DIR/version.txt")"
     override-build: |
       # Rust is not part of the KDE SDK, so install the pinned toolchain (named
       # by rust-toolchain.toml at the project root) before the CMake build drives

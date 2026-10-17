@@ -621,7 +621,11 @@ include(GNUInstallDirs)
 install(TARGETS pictura
     BUNDLE DESTINATION ${CMAKE_INSTALL_BINDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-install(FILES packaging/pictura.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
-install(FILES assets/icons/app.png
-    DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/512x512/apps
-    RENAME pictura.png)
+if(NOT WIN32)
+    install(FILES packaging/pictura.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+    install(FILES assets/icons/app.png
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/512x512/apps
+        RENAME pictura.png)
+    install(FILES packaging/pictura.metainfo.xml
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo)
+endif()
