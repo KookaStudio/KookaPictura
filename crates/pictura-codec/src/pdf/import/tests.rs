@@ -344,6 +344,10 @@ fn encrypted_pdf_disables_images() {
 
 /// `plain` encrypted by Ghostscript's `pdfwrite` with user password `kooka`.
 fn encrypted(gs: &Ghostscript, scratch: &ScratchDir) -> PathBuf {
+    encrypted_with(gs, scratch, "kooka")
+}
+
+fn encrypted_with(gs: &Ghostscript, scratch: &ScratchDir, password: &str) -> PathBuf {
     let plain = write(
         scratch,
         "plain.pdf",
@@ -356,7 +360,7 @@ fn encrypted(gs: &Ghostscript, scratch: &ScratchDir) -> PathBuf {
         &[
             "-sDEVICE=pdfwrite".into(),
             "-sOwnerPassword=owner".into(),
-            "-sUserPassword=kooka".into(),
+            format!("-sUserPassword={password}"),
             "-dEncryptionR=3".into(),
             "-dKeyLength=128".into(),
             format!("-sOutputFile={}", out.display()),
@@ -391,6 +395,20 @@ fn password_required_is_reported() {
     )
     .expect("render");
     assert_eq!(pixel(&out.raster, 50, 37), [255, 0, 0, 255]);
+}
+
+#[test]
+fn password_with_quotes_and_spaces_opens() {
+    let Some(gs) = gs() else { return };
+    let scratch = ScratchDir::new().unwrap();
+    let password = "two \"words\" back\\slash";
+    let locked = encrypted_with(&gs, &scratch, password);
+    let pages = page_info(&gs, &locked, Some(password)).expect("the argument file quotes it");
+    assert_eq!(pages.len(), 1);
+    assert_eq!(
+        page_info(&gs, &locked, Some("two words")).err(),
+        Some(RasterError::WrongPassword)
+    );
 }
 
 #[test]

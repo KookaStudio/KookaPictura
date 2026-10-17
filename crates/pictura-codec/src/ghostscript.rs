@@ -68,14 +68,9 @@ impl Ghostscript {
         password: Option<&str>,
         args: &[String],
     ) -> Result<Run, RasterError> {
-        let mut command = Command::new(&self.exe);
-        command
-            .args(["-dSAFER", "-dBATCH", "-dNOPAUSE", "-dNOPROMPT"])
-            .arg(format!("--permit-file-read={}", input.display()));
-        if let Some(password) = password.filter(|p| !p.is_empty()) {
-            command.arg(format!("-sPDFPassword={password}"));
-        }
-        command.args(args);
+        // Holds the password argument file until Ghostscript has exited.
+        let scratch = ScratchDir::new()?;
+        let mut command = self.command(input, password, args, &scratch)?;
         let output = command.output().map_err(|_| RasterError::NoGhostscript)?;
         let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
         let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
@@ -100,6 +95,69 @@ impl Ghostscript {
             output: all,
         })
     }
+}
+
+impl Ghostscript {
+    /// The Ghostscript command line. A password never appears in argv (where
+    /// `ps` and `/proc` would show it): it goes in an owner-only argument file
+    /// in `scratch`, passed as `@file`.
+    fn command(
+        &self,
+        input: &Path,
+        password: Option<&str>,
+        args: &[String],
+        scratch: &ScratchDir,
+    ) -> Result<Command, RasterError> {
+        let mut command = Command::new(&self.exe);
+        command
+            .args(["-dSAFER", "-dBATCH", "-dNOPAUSE", "-dNOPROMPT"])
+            .arg(format!("--permit-file-read={}", input.display()));
+        if let Some(password) = password.filter(|p| !p.is_empty()) {
+            match password_argument(password) {
+                Some(line) => {
+                    let file = scratch.path("args");
+                    write_private(&file, line.as_bytes())?;
+                    command.arg(format!("@{}", file.display()));
+                }
+                // ponytail: a password ending in `\` (or holding a line
+                // break) has no `@file` spelling, so it alone still goes on
+                // the command line, visible to `ps` while Ghostscript runs.
+                None => {
+                    command.arg(format!("-sPDFPassword={password}"));
+                }
+            }
+        }
+        command.args(args);
+        Ok(command)
+    }
+}
+
+/// `-sPDFPassword=…` as one quoted argument-file line. Ghostscript's `@file`
+/// reader keeps a backslash literally except before `"`, where `\"` is a
+/// quote; so only quotes are escaped, and a trailing backslash (which would
+/// escape the closing quote) or a line break cannot be spelled: `None`.
+fn password_argument(password: &str) -> Option<String> {
+    if password.ends_with('\\') || password.contains(['\n', '\r']) {
+        return None;
+    }
+    Some(format!(
+        "\"-sPDFPassword={}\"\n",
+        password.replace('"', "\\\"")
+    ))
+}
+
+/// Create `path` (which must not exist) readable and writable by its owner
+/// only, holding `bytes`.
+fn write_private(path: &Path, bytes: &[u8]) -> Result<(), RasterError> {
+    use std::io::Write as _;
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    options
+        .open(path)
+        .and_then(|mut file| file.write_all(bytes))
+        .map_err(|e| RasterError::Failed(e.to_string()))
 }
 
 /// Ghostscript's `****` complaints as sentences, one per report.
@@ -150,15 +208,30 @@ pub fn sniff_vector(head: &[u8]) -> Option<VectorKind> {
 pub(crate) struct ScratchDir(PathBuf);
 
 impl ScratchDir {
+    /// A new owner-only directory under the temp dir with an unguessable
+    /// name. Creation fails rather than reuse a path that already exists, so
+    /// another user cannot pre-create (or symlink) it.
     pub(crate) fn new() -> Result<ScratchDir, RasterError> {
         static NEXT: AtomicU32 = AtomicU32::new(0);
-        let dir = std::env::temp_dir().join(format!(
-            "pictura-gs-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
-        std::fs::create_dir_all(&dir).map_err(|e| RasterError::Failed(e.to_string()))?;
-        Ok(ScratchDir(dir))
+        let mut last_error = None;
+        for _ in 0..8 {
+            let dir = std::env::temp_dir().join(format!(
+                "pictura-gs-{}-{}-{:016x}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed),
+                random_u64()
+            ));
+            let mut builder = std::fs::DirBuilder::new();
+            #[cfg(unix)]
+            std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
+            match builder.create(&dir) {
+                Ok(()) => return Ok(ScratchDir(dir)),
+                Err(e) => last_error = Some(e),
+            }
+        }
+        Err(RasterError::Failed(
+            last_error.map_or_else(String::new, |e| e.to_string()),
+        ))
     }
 
     pub(crate) fn path(&self, name: &str) -> PathBuf {
@@ -170,6 +243,19 @@ impl Drop for ScratchDir {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.0);
     }
+}
+
+/// 64 unpredictable bits: std's `RandomState` keys are seeded from the OS
+/// random source (the `os_entropy` pattern of the PDF writer's bridge).
+fn random_u64() -> u64 {
+    use std::hash::{BuildHasher, Hasher};
+    let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or_default();
+    hasher.write_u128(nanos);
+    hasher.finish()
 }
 
 /// Read a `pngalpha` page Ghostscript wrote.
@@ -231,6 +317,65 @@ mod tests {
             found.run(input, None, &[]).err(),
             Some(RasterError::NoGhostscript)
         );
+    }
+
+    #[test]
+    fn password_stays_out_of_argv() {
+        let gs = Ghostscript {
+            exe: PathBuf::from("/bin/true"),
+        };
+        let scratch = ScratchDir::new().unwrap();
+        let secret = "s3cret \"quoted\" back\\slash";
+        let command = gs
+            .command(Path::new("/x/in.pdf"), Some(secret), &[], &scratch)
+            .unwrap();
+        let argv: Vec<String> = command
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            argv.iter()
+                .all(|a| !a.contains("s3cret") && !a.contains("PDFPassword")),
+            "{argv:?}"
+        );
+        let file = scratch.path("args");
+        assert!(argv.contains(&format!("@{}", file.display())));
+        assert_eq!(
+            std::fs::read_to_string(&file).unwrap(),
+            "\"-sPDFPassword=s3cret \\\"quoted\\\" back\\slash\"\n"
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&file).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o600);
+        }
+    }
+
+    #[test]
+    fn unspellable_passwords_have_no_argument_file_line() {
+        assert_eq!(password_argument("end\\"), None);
+        assert_eq!(password_argument("two\nlines"), None);
+        assert_eq!(
+            password_argument("a\\\"b").as_deref(),
+            Some("\"-sPDFPassword=a\\\\\"b\"\n")
+        );
+    }
+
+    #[test]
+    fn scratch_dirs_are_private_and_unique() {
+        let a = ScratchDir::new().unwrap();
+        let b = ScratchDir::new().unwrap();
+        assert_ne!(a.0, b.0);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&a.0).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o700);
+        }
+        let gone = a.0.clone();
+        drop(a);
+        assert!(!gone.exists(), "removed on drop");
     }
 
     #[test]

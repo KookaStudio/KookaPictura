@@ -100,11 +100,17 @@ path, so the source PDF is never overwritten; Open Recent remembers the PDF.
 
 ### D7 Encrypted PDFs
 
-Ghostscript reports `This file requires a password` (or an `/invalidfileaccess`
+Ghostscript reports `This file requires a password` (or `Password did not work`
 on a wrong one). The window then asks for a password (`QInputDialog`, echo off)
 and retries; Cancel opens nothing. The password reaches Ghostscript as
-`-sPDFPassword=`, which is visible in the process list while it runs.
-ponytail: argv password, not a pipe; acceptable for a desktop single user.
+`-sPDFPassword=` inside an owner-only (0600) `@file` argument file in the
+run's scratch directory, never in argv, where `ps` and `/proc` would show it.
+That file format escapes only `"` and cannot spell a trailing backslash or a
+line break. ponytail: such a password alone falls back to argv.
+
+Scratch directories (renders, wrapped images, the argument file) are created
+with `create_dir`, mode 0700, and an unguessable random suffix, so another
+user cannot pre-create or symlink the path.
 
 ### D8 Suppress Warnings
 
