@@ -3,16 +3,15 @@
 Status: historical investigation note, written 2026-09-19 and superseded by the
 shipped Flatpak manifest `flatpak/io.github.KookaStudio.KookaPictura.yml` and
 the packaging sections of `DEVELOPING.md`. The findings below are kept for
-context; the "What was true at the time" section describes the pre-manifest
-state.
+context and describe the pre-manifest state.
 
-The question: ca Kooka Pictura be built as a Flatpak with no network at build
+The question: can Kooka Pictura be built as a Flatpak with no network at build
 time, handed to someone with no network, and then run under Flatpak on their
 machine?
 
-Short answer: yes on all three, with conditions. Nothing here is decided and no
-task is open. This records what the build system and Flatpak actually allow, so
-a later proposal does not have to rediscover it.
+Short answer: yes on all three, with conditions. Nothing here was decided and
+no task was open at the time. This records what the build system and Flatpak
+actually allowed, so a later proposal would not have to rediscover it.
 
 ## What was true at the time
 
@@ -30,8 +29,8 @@ a later proposal does not have to rediscover it.
 ## The finding that matters most
 
 `crates/pictura-app/cpp/interop.cpp:3` includes `<rhi/qrhi.h>`, a private Qt
-API. Today the include path is assembled by hand from qmake's version at
-`CMakeLists.txt:138`, which is fragile across distributions and is the reason
+API. At the time, the include path was assembled by hand from qmake's version at
+`CMakeLists.txt:138`, which was fragile across distributions and was the reason
 for the existing Debian comment.
 
 The blast radius is small. `interop.h` includes no Qt header. The QRhi code
@@ -59,13 +58,14 @@ SDK. This is the first thing a feasibility check would settle.
   missing.
 - `--extra-sources=DIR` feeds pre-fetched sources in the state-directory layout.
 
-The catch is what counts as a source. The manifest only covers what it declares.
-Kooka Pictura resolves two dependency layers over the network during the build:
+The catch was what counted as a source. The manifest only covers what it
+declares. At the time, Kooka Pictura resolved two dependency layers over the
+network during the build:
 
 - Cargo crates from crates.io.
 - `cxx-qt-cmake` 0.10.0, pulled by `FetchContent` at `CMakeLists.txt:24`.
 
-Both have to become manifest sources. The Cargo side is the standard
+Both had to become manifest sources. The Cargo side is the standard
 `flatpak-cargo-generator.py` output committed as `cargo-sources.json`, with the
 build running `cargo build --offline`. The cxx-qt side is the source vendored as
 a module and the fetch redirected with `-DFETCHCONTENT_SOURCE_DIR_CXXQT=<path>`,

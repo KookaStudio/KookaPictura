@@ -15,11 +15,13 @@ Snapshot for resuming after a context break. Update after each milestone.
 - **Release build hardening** (#703 / #710, OpenSpec change
   `release-build-hardening`, archived into `meta/release-build-hardening`). All
   six packagers (`appimage`, `linux-packages`, `snap`, `flatpak`, `windows`,
-  `macos`) now use unique concurrency groups, a fork gate that checks the PR
-  head repository, read-only PR dry runs with a separate `contents: write`
-  upload job, SHA-pinned actions and pinned downloads, and one tag normalizer.
-  Each artifact is exercised in the form users receive it: the AppImage in a
-  clean `ubuntu:24.04` container, the Flatpak bundle's self-test, the Windows
+  `macos`) now use unique concurrency groups, a fork gate that requires the
+  release-please head branch in this repository, read-only PR dry runs with a
+  separate `contents: write` upload job, SHA-pinned actions and pinned
+  downloads, and the same tag-normalization expression in each workflow.
+  Artifacts are exercised in the form users receive them: the AppImage in a
+  clean `ubuntu:24.04` container, the `.deb`/`.rpm` installs and the snap
+  install each run the self-test, the Flatpak bundle's self-test, the Windows
   portable zip and silent-installed NSIS installer (with the install marker
   guard and uninstall round-trip), and the mounted macOS DMG. The Flatpak lint
   job also runs `scripts/check-flatpak-cargo-sources.py`, and snap asserts the

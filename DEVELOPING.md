@@ -606,10 +606,11 @@ needs, and the application reuses `packaging/pictura.desktop` and
 `io.github.KookaStudio.KookaPictura`; the runtime is `org.kde.Platform` /
 `org.kde.Sdk` 6.11, and x86_64 is the only architecture.
 
-The build runs on the KDE SDK. `flatpak-builder` downloads every declared
-source over the network during the build: the Rust crates from the committed
-`flatpak/cargo-sources.json` and the `cxx-qt-cmake`/`corrosion` archives from
-the manifest. CMake and Cargo then run offline against those vendored trees.
+The build runs on the KDE SDK. Before compiling, `flatpak-builder` fetches the
+declared sources: the Rust crates from the committed
+`flatpak/cargo-sources.json` and the `cxx-qt-cmake`/`corrosion` archives are
+downloaded over the network, and the repository tree is copied locally. CMake
+and Cargo then run offline against those vendored trees.
 Regenerate the cargo sources with
 `flatpak-cargo-generator.py Cargo.lock -o flatpak/cargo-sources.json`
 (`flatpak/flatpak-builder-tools`) whenever `Cargo.lock` changes, and commit the

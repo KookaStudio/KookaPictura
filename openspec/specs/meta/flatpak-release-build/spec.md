@@ -30,8 +30,8 @@ release tag and SHALL NOT depend on artifacts produced by a `master` merge.
 
 The Flatpak build SHALL build the C++ shell and the Rust static library against
 `org.kde.Platform`/`org.kde.Sdk` version 6.11. `flatpak-builder` SHALL fetch
-every build-time dependency from a source declared in the manifest, and the
-compile phase SHALL perform no network I/O. The Rust crates SHALL be resolved
+the sources declared in the manifest before the build, and the compile phase
+SHALL perform no network I/O. The Rust crates SHALL be resolved
 from a committed `cargo-sources.json` with cargo in offline mode, and the
 `cxx-qt-cmake` and `corrosion` dependencies that CMake would otherwise fetch
 SHALL be provided as vendored sources that `FetchContent` is pointed at. The
