@@ -73,6 +73,10 @@ pub(crate) fn vertical_cell(bundled: &BundledText, c: &CharacterAttrs) -> f32 {
 }
 
 /// Break `line` to `width` and append its pieces to `out`.
+///
+/// ponytail: each candidate break re-shapes its prefix, so a line costs
+/// O(n²) shaping in its length (a single long unbroken word most of all).
+/// Fine for interactive type; cache per-glyph advances if long paragraphs lag.
 fn wrap_line(line: &str, width: f32, measure: &dyn Fn(&str) -> f32, out: &mut Vec<VisualLine>) {
     let chars: Vec<char> = line.chars().collect();
     let n = chars.len();

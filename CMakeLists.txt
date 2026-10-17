@@ -221,6 +221,7 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/frame_menus_filter.cpp
     crates/pictura-app/cpp/frame_menus_align.cpp
     crates/pictura-app/cpp/frame_menus_type.cpp
+    crates/pictura-app/cpp/frame_keys.cpp
     crates/pictura-app/cpp/frame_menus_layer_style.cpp
     crates/pictura-app/cpp/frame_menus_adjust.cpp
     crates/pictura-app/cpp/frame_menus_layer_ops.cpp
