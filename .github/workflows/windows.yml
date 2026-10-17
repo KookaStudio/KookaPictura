@@ -147,11 +147,16 @@ jobs:
         run: |
           $json = sccache --show-stats --stats-format json | ConvertFrom-Json
           $stats = if ($json.stats) { $json.stats } else { $json }
-          # sccache 0.18 reports each counter as {counts=..., adv_counts=...};
-          # older releases report a plain number.
+          # sccache 0.18 reports grouped counters as {counts={key=n; ...};
+          # adv_counts={...}}. Sum the keys; plain counters stay numbers.
           function Get-Count($value) {
             if ($null -eq $value) { return 0 }
-            if ($null -ne $value.counts) { return [long]$value.counts }
+            if ($value -is [System.Management.Automation.PSCustomObject] -and
+                $null -ne $value.counts) {
+              $total = 0
+              foreach ($p in $value.counts.PSObject.Properties) { $total += [long]$p.Value }
+              return $total
+            }
             return [long]$value
           }
           $errors = Get-Count $stats.cache_errors
