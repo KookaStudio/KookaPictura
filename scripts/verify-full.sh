@@ -8,6 +8,15 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# shellcheck source=scripts/build-lock.sh
+. scripts/build-lock.sh
+
+build_lock_install_traps
+build_lock_acquire || exit 1
+if [ "${_build_lock_owned:-0}" = "1" ]; then
+    export PICTURA_VERIFY_LOCK_HELD=1
+fi
+
 echo "== cmake =="
 if [ ! -d build ]; then
   cmake -S . -B build -G Ninja -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld

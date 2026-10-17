@@ -274,6 +274,16 @@ cmake -S . -B build -G Ninja -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld
 cmake --build build --parallel
 ```
 
+Heavy local verification can be serialized across worktrees. It is **off by
+default**: set `PICTURA_VERIFY_LOCK=1` in your shell or the user-global env file
+(see [Speeding up local builds](#speeding-up-local-builds)) to make
+`scripts/verify-fast.sh` and `scripts/verify-full.sh` queue behind one another
+instead of running their CMake, cargo, Qt link, and test steps at the same time.
+`PICTURA_VERIFY_LOCK_TIMEOUT` bounds the wait in seconds (default 3600; `0`
+waits without a limit). A docs-only `verify-fast.sh` run never takes the lock.
+The lock lives under `XDG_RUNTIME_DIR` (or `TMPDIR`), so runs that use different
+runtime directories do not serialize against each other.
+
 A new worktree benefits from `sccache` (see
 [Speeding up local builds](#speeding-up-local-builds)) and needs a one-time
 `serena project index` if you use Serena there. Remove a finished worktree with:
