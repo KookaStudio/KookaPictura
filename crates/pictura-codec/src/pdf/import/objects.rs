@@ -211,14 +211,25 @@ pub(crate) fn decode_stream(file: &PdfObjects, dict: &Dict, data: &[u8]) -> Opti
         .and_then(|p| p.get("Predictor"))
         .and_then(Object::as_int)
         .unwrap_or(1);
+    let parm = |key, default| {
+        parms
+            .and_then(|p| p.get(key))
+            .and_then(Object::as_int)
+            .unwrap_or(default)
+            .max(1) as usize
+    };
+    if predictor == 2 {
+        return Some(undo_tiff_predictor(
+            out,
+            parm("Columns", 1),
+            parm("Colors", 1),
+            parm("BitsPerComponent", 8),
+        ));
+    }
     if predictor < 10 {
         return Some(out);
     }
-    let columns = parms
-        .and_then(|p| p.get("Columns"))
-        .and_then(Object::as_int)
-        .unwrap_or(1)
-        .max(1) as usize;
+    let columns = parm("Columns", 1);
     let mut rows = Vec::with_capacity(out.len());
     let mut prior = vec![0u8; columns];
     for line in out.chunks(columns + 1) {
@@ -255,6 +266,33 @@ pub(crate) fn decode_stream(file: &PdfObjects, dict: &Dict, data: &[u8]) -> Opti
         prior = row;
     }
     Some(rows)
+}
+
+/// Undo TIFF predictor 2 (horizontal differencing per component) on 8- or
+/// 16-bit samples; other depths are returned as they are.
+fn undo_tiff_predictor(mut data: Vec<u8>, columns: usize, colors: usize, bits: usize) -> Vec<u8> {
+    let bytes = match bits {
+        8 => 1,
+        16 => 2,
+        _ => return data,
+    };
+    let row = columns * colors * bytes;
+    for line in data.chunks_mut(row) {
+        if line.len() < row {
+            break;
+        }
+        for i in colors..columns * colors {
+            if bytes == 1 {
+                line[i] = line[i].wrapping_add(line[i - colors]);
+            } else {
+                let at = i * 2;
+                let prev = u16::from_be_bytes([line[at - colors * 2], line[at - colors * 2 + 1]]);
+                let cur = u16::from_be_bytes([line[at], line[at + 1]]).wrapping_add(prev);
+                line[at..at + 2].copy_from_slice(&cur.to_be_bytes());
+            }
+        }
+    }
+    data
 }
 
 /// `N G obj` starting exactly at `at` (after a delimiter): the object number

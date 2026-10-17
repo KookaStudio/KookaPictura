@@ -30,7 +30,7 @@ pub use options::{
     OutputIntent, PdfOptions, Printing, ProfileInclusion, Quality, Security, Standard, FIELDS,
 };
 pub use presets::{builtin_preset, BUILTIN_PRESETS};
-pub use read::embedded_psd;
+pub use read::{embedded_psd, photoshop_psd};
 pub use text::{LiveText, PdfFont, PdfGlyph, PdfText, TextPolicy};
 
 use crate::error::PsdError;

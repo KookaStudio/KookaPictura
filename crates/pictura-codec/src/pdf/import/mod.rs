@@ -3,7 +3,7 @@
 //! a minimal object reader (D4).
 
 mod images;
-mod objects;
+pub(crate) mod objects;
 #[cfg(test)]
 mod tests;
 

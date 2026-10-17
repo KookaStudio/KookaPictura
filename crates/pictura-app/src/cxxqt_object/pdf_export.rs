@@ -49,7 +49,7 @@ pub mod ffi {
         /// The options this document was last saved to PDF with; empty when never.
         fn pdf_view_options(view: &PictureView) -> QString;
 
-        /// Open a Pictura Photoshop PDF from its embedded PSD into the view; false, unchanged, for any other file.
+        /// Open a Photoshop PDF with its layers (Pictura's embedded PSD, or Photoshop's own editing data rebuilt into a PSD) into the view; false, unchanged, for any other file.
         fn pdf_open(view: Pin<&mut PictureView>, path: &QString) -> bool;
 
         /// `[Photoshop Default]` as canonical options text.
@@ -221,7 +221,7 @@ pub fn pdf_open(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
     let policy = view.rust().color_policy;
     let Some(mut doc) = std::fs::read(&path)
         .ok()
-        .and_then(|bytes| pdf::embedded_psd(&bytes))
+        .and_then(|bytes| pdf::embedded_psd(&bytes).or_else(|| pdf::photoshop_psd(&bytes)))
         .and_then(|psd| pictura_codec::read_psd_with(&psd, policy).ok())
     else {
         return false;
