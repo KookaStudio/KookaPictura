@@ -56,6 +56,21 @@ QString tokenValue(int level, const QString& key)
     return {};
 }
 
+// The declaration block of `selector` in `qss`, or empty when it has no rule.
+QString ruleBody(const QString& qss, const QString& selector)
+{
+    const int start = qss.indexOf(selector);
+    if (start < 0) {
+        return {};
+    }
+    const int open = qss.indexOf(QLatin1Char('{'), start);
+    const int close = qss.indexOf(QLatin1Char('}'), open);
+    if (open < 0 || close < 0) {
+        return {};
+    }
+    return qss.mid(open + 1, close - open - 1);
+}
+
 // Tokens consumed only by custom-painted widgets, which the global stylesheet
 // never references; the single-source rule below covers stylesheet-referenced
 // tokens, not the whole paint-only set.
@@ -92,6 +107,7 @@ private slots:
     void tokensClampTheLevel();
     void stylesheetSubstitutesEveryToken();
     void stylesheetDeclaresPrimitives();
+    void openBannerUsesTheNoticeStyle();
     void primitivesCarryTheirContract();
     void paletteMatchesTokens();
     void swatchPaintsDataColour();
@@ -232,6 +248,20 @@ void DesignSystemTest::stylesheetDeclaresPrimitives()
     for (const char* selector : selectors) {
         QVERIFY2(qss.contains(QLatin1String(selector)), selector);
     }
+}
+
+// The document-open loading banner is a rounded box on the notice yellow with
+// dark notice text, so it reads clearly over the canvas.
+void DesignSystemTest::openBannerUsesTheNoticeStyle()
+{
+    const QString qss = Theme::styleSheet(Theme::kDefaultLevel);
+    const QString body = ruleBody(qss, QStringLiteral("#documentOpenBanner"));
+    QVERIFY2(!body.isEmpty(), "the loading banner has a stylesheet rule");
+    QVERIFY2(body.contains(tokenValue(Theme::kDefaultLevel, QStringLiteral("surface-notice"))),
+             "the banner background is the notice yellow");
+    QVERIFY2(body.contains(tokenValue(Theme::kDefaultLevel, QStringLiteral("content-notice"))),
+             "the banner text is the notice dark");
+    QVERIFY2(body.contains(QStringLiteral("border-radius")), "the banner has rounded corners");
 }
 
 void DesignSystemTest::primitivesCarryTheirContract()

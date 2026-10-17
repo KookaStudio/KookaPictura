@@ -95,6 +95,9 @@ public:
     CommandRegistry* registry() const { return registry_; }
     ImageView* imageView() const;       // active canvas, or nullptr with no document
     PictureView* activeView() const;    // active document, or nullptr
+    // frame_open.cpp: the loading banner's text, and whether it is showing.
+    QString openBannerTextForTest() const;
+    bool openBannerVisibleForTest() const;
     // Creates two documents and drags the last tab before its neighbour through
     // the real tab bar; returns whether docs_, viewAt and the active view stayed
     // aligned with the new visual order.
@@ -331,6 +334,11 @@ public:
     void installMenuCornerButtons();
     void updateThemeCornerIcon();
 
+Q_SIGNALS:
+    // Emitted while the loading indication is showing, immediately before a
+    // blocking document read/decode begins. Test seam for the open banner.
+    void documentOpenStarted(const QString& path);
+
 protected:
     void closeEvent(QCloseEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
@@ -516,6 +524,10 @@ private:
     void rememberRecent(const QString& path);
     // Repopulate File > Open Recent from `recent_` each time it opens.
     void refreshRecentMenu(QMenu* menu);
+    // frame_open.cpp: the loading indication around a blocking document open.
+    void beginOpenIndicator(const QString& path);
+    void endOpenIndicator();
+    void positionOpenBanner();
     void openRecent(const QString& path);
     void applyBrightness(int level);
     QColor canvasColorForIndex(int index) const;
@@ -605,6 +617,9 @@ private:
     QFrame* hintSeparator_ = nullptr;
     QLabel* backendLabel_ = nullptr;
     QToolButton* statusOptionsButton_ = nullptr;
+    // The floating "Opening <file>…" banner (frame_open.cpp): a child of the
+    // window, shown at the lower-left while a document load runs.
+    QLabel* openBanner_ = nullptr;
     QString statusReadout_ = QStringLiteral("sizes");
     bool hintsVisible_ = true;
     // View > Free Pan: whether a canvas may pan off-centre when the document

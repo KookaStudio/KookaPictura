@@ -211,6 +211,7 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/svg_icon_engine.cpp
     crates/pictura-app/cpp/file_drop_router.cpp
     crates/pictura-app/cpp/frame.cpp
+    crates/pictura-app/cpp/frame_open.cpp
     crates/pictura-app/cpp/frame_chrome.cpp
     crates/pictura-app/cpp/frame_columns.cpp
     crates/pictura-app/cpp/frame_session.cpp
