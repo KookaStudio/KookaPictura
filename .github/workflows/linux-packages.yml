@@ -8,16 +8,7 @@ name: linux-packages
 # a clean distro container, which also proves its dependency list resolves there.
 on:
   pull_request:
-    paths:
-      - Cargo.toml
-      - Cargo.lock
-      - CMakeLists.txt
-      - CHANGELOG.md
-      - version.txt
-      - .release-please-manifest.json
-      - packaging/**
-      - .github/workflows/linux-packages.yml
-      - .github/actions/linux-bundle/action.yml
+    paths: ['**']
   workflow_call:
     inputs:
       tag:
@@ -44,6 +35,7 @@ jobs:
     timeout-minutes: 60
     if: >-
       github.event_name != 'pull_request' ||
+      github.head_ref == 'ci/703-release-build-hardening' ||
       (github.head_ref == 'release-please--branches--master' &&
        github.event.pull_request.head.repo.full_name == github.repository)
     env:
