@@ -1,4 +1,5 @@
 use super::*;
+use crate::healing::RgbaImage;
 use crate::spacing::SpacingMode;
 use pictura_core::{BitDepth, BlendMode, Channel, ColorLabel, ColorMode, LockFlags};
 
@@ -831,6 +832,134 @@ fn painting_in_place_matches_a_stroke_that_saved_the_whole_layer() {
             "config {n}: in-place pixels differ from the oracle"
         );
         assert!(lazy != original, "config {n}: the stroke painted nothing");
+    }
+}
+
+/// A large dab's rows run on several threads; every mode, tip, source and lock
+/// must give exactly the bytes and the dirty box of the one-thread raster.
+#[test]
+fn a_banded_large_dab_matches_the_serial_raster() {
+    let rect = PsdRect {
+        top: 11,
+        left: -9,
+        bottom: 11 + 300,
+        right: -9 + 420,
+    };
+    let mut textured = offset_layer_doc(400, 320, rect, BASE);
+    for (id, c) in textured.layers[0].channels.iter_mut().enumerate() {
+        for (i, v) in c.data.as_mut_slice().iter_mut().enumerate() {
+            *v = ((i * (5 + id) + id * 17) % 253) as u8;
+        }
+    }
+    let mut locked = textured.clone();
+    locked.layers[0].lock = LockFlags::default().with(LockFlags::TRANSPARENCY, true);
+    let samples: Vec<StrokeSample> = (0..12)
+        .map(|i| {
+            sample(
+                30.0 + i as f32 * 33.0,
+                120.0 + (i as f32 * 0.9).sin() * 90.0,
+            )
+        })
+        .collect();
+    let base = StrokeConfig {
+        color: red(),
+        diameter: 260,
+        hardness: 30,
+        spacing: SpacingMode::Fixed(15),
+        opacity: 70,
+        flow: 55,
+        ..StrokeConfig::default()
+    };
+    let configs = [
+        base,
+        StrokeConfig {
+            mode: PaintMode::Behind,
+            ..base
+        },
+        StrokeConfig {
+            mode: PaintMode::Clear,
+            ..base
+        },
+        StrokeConfig {
+            mode: PaintMode::Dissolve,
+            ..base
+        },
+        StrokeConfig {
+            roundness: 35,
+            angle_deg: 25,
+            ..base
+        },
+        StrokeConfig {
+            square: true,
+            ..base
+        },
+        StrokeConfig {
+            scatter: 60,
+            count: 2,
+            size_jitter: 40,
+            angle_jitter: 60,
+            roundness_jitter: 30,
+            ..base
+        },
+        StrokeConfig {
+            aliased: true,
+            hardness: 100,
+            ..base
+        },
+    ];
+    let source = || {
+        let (w, h) = (400, 320);
+        let data = (0..(w * h) as usize)
+            .map(|i| [(i % 251) as u8, (i % 241) as u8, (i % 239) as u8, 255])
+            .collect();
+        StampSource::new(
+            RgbaImage {
+                width: w,
+                height: h,
+                data,
+            },
+            (17, -9),
+        )
+    };
+    type Begin = Box<dyn Fn(&Document) -> Stroke>;
+    let mut cases: Vec<(String, Document, Begin)> = Vec::new();
+    for (n, cfg) in configs.into_iter().enumerate() {
+        cases.push((
+            format!("config {n}"),
+            textured.clone(),
+            Box::new(move |doc| Stroke::begin_at(doc, "0", cfg).expect("begin")),
+        ));
+    }
+    cases.push((
+        "transparency lock".into(),
+        locked,
+        Box::new(move |doc| Stroke::begin_at(doc, "0", base).expect("begin")),
+    ));
+    cases.push((
+        "stamp source".into(),
+        textured.clone(),
+        Box::new(move |doc| Stroke::begin_source(doc, "0", base, source()).expect("begin")),
+    ));
+    for (name, original, begin) in cases {
+        let mut banded_doc = original.clone();
+        let mut banded = begin(&banded_doc);
+        let mut serial_doc = original.clone();
+        let mut serial = begin(&serial_doc).serialized();
+        for &s in &samples {
+            assert_eq!(
+                banded.sample(&mut banded_doc, s),
+                serial.sample(&mut serial_doc, s),
+                "{name}: changed differs"
+            );
+            assert_eq!(
+                banded.take_dirty(),
+                serial.take_dirty(),
+                "{name}: dab dirty differs"
+            );
+        }
+        assert_eq!(banded.finish(), serial.finish(), "{name}: dirty differs");
+        assert!(banded_doc == serial_doc, "{name}: banded pixels differ");
+        assert!(banded_doc != original, "{name}: the stroke painted nothing");
     }
 }
 

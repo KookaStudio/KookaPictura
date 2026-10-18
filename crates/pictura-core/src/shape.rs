@@ -479,10 +479,18 @@ fn rasterize(
         .fold((f64::MAX, f64::MIN), |(t, b), p| (t.min(p.1), b.max(p.1)));
     let first_row = top.floor().max(0.0) as usize;
     let last_row = (bottom.ceil().max(0.0) as usize).min(h);
+    // Every span lies between two crossings, so within the contours' columns:
+    // only those are cleared and written back, not the whole document row.
+    let (left, right) = contours
+        .iter()
+        .flat_map(|c| c.iter())
+        .fold((f64::MAX, f64::MIN), |(l, r), p| (l.min(p.0), r.max(p.0)));
+    let first_col = (left.floor().max(0.0) as usize).min(w);
+    let end_col = ((right.floor().max(0.0) as usize) + 1).min(w);
     let mut row = vec![0f32; w + 1];
     let mut crossings: Vec<(f64, i32)> = Vec::new();
     for y in first_row..last_row {
-        row.iter_mut().for_each(|c| *c = 0.0);
+        row[first_col..=end_col].iter_mut().for_each(|c| *c = 0.0);
         for s in 0..SUBROWS {
             let sy = y as f64 + (s as f64 + 0.5) / SUBROWS as f64;
             crossings.clear();
@@ -512,8 +520,9 @@ fn rasterize(
                 }
             }
         }
-        for (x, c) in row[..w].iter().enumerate() {
-            mask[y * w + x] = (c / SUBROWS as f32 * 255.0).round().clamp(0.0, 255.0) as u8;
+        for (x, c) in row[first_col..end_col].iter().enumerate() {
+            mask[y * w + first_col + x] =
+                (c / SUBROWS as f32 * 255.0).round().clamp(0.0, 255.0) as u8;
         }
     }
     mask
@@ -797,6 +806,27 @@ mod tests {
         )
         .unwrap();
         assert_eq!(coverage(&off, 8, 8).len(), 64, "clipped to the canvas");
+    }
+
+    #[test]
+    fn coverage_does_not_depend_on_the_columns_beside_the_path() {
+        // Only the path's own columns are swept per row; a shape whose span
+        // moves row to row, or hangs off the left edge, must come out as it
+        // does on a canvas wider than the path.
+        for (from, to) in [((4.0, 3.0), (25.0, 20.0)), ((-6.0, 2.0), (14.0, 18.0))] {
+            let s = outline(opts(ShapeKind::Ellipse), from, to, false, false).unwrap();
+            let narrow = coverage(&s, 30, 24);
+            let wide = coverage(&s, 90, 24);
+            for y in 0..24 {
+                assert_eq!(
+                    narrow[y * 30..(y + 1) * 30],
+                    wide[y * 90..y * 90 + 30],
+                    "row {y} of the ellipse from {from:?}"
+                );
+                assert!(wide[y * 90 + 30..(y + 1) * 90].iter().all(|&v| v == 0));
+            }
+            assert!(narrow.contains(&255));
+        }
     }
 
     /// A closed rectangle path, clockwise unless `reverse`.

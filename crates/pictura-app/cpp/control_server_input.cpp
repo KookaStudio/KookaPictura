@@ -170,7 +170,8 @@ QJsonObject ControlServer::methodPointer(const QJsonObject& params)
     const QString op = params.value(QStringLiteral("op")).toString();
     const bool knownOp = op == QStringLiteral("click") || op == QStringLiteral("dblclick")
                          || op == QStringLiteral("move") || op == QStringLiteral("drag")
-                         || op == QStringLiteral("scroll");
+                         || op == QStringLiteral("scroll") || op == QStringLiteral("down")
+                         || op == QStringLiteral("up");
     if (!knownOp) {
         return error(QStringLiteral("invalid_param"),
                      QStringLiteral("unknown op: %1").arg(op));
@@ -281,9 +282,17 @@ QJsonObject ControlServer::methodPointer(const QJsonObject& params)
                   heldButton, modifiers);
         sendMouse(QEvent::MouseButtonRelease, target, first.local, first.global, button,
                   Qt::NoButton, modifiers);
+    } else if (op == QStringLiteral("down")) {
+        heldButtons_ = heldButton;
+        sendMouse(QEvent::MouseButtonPress, target, first.local, first.global, button, heldButton,
+                  modifiers);
+    } else if (op == QStringLiteral("up")) {
+        heldButtons_ = Qt::NoButton;
+        sendMouse(QEvent::MouseButtonRelease, target, first.local, first.global, button,
+                  Qt::NoButton, modifiers);
     } else if (op == QStringLiteral("move")) {
         sendMouse(QEvent::MouseMove, target, first.local, first.global, Qt::NoButton,
-                  Qt::NoButton, modifiers);
+                  heldButtons_, modifiers);
     } else if (op == QStringLiteral("drag")) {
         const Mapped last = mapPoint(x2, y2);
         sendMouse(QEvent::MouseButtonPress, target, first.local, first.global, button, heldButton,

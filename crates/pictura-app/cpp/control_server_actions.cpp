@@ -6,6 +6,7 @@
 
 #include "api/selection_api.h"
 #include "frame.h"
+#include "tool_options_json.h"
 #include "tools.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
@@ -46,6 +47,26 @@ QJsonObject ControlServer::methodSetTool(const QJsonObject& params)
     frame_->setActiveTool(id);
     QJsonObject result;
     result.insert(QStringLiteral("active_tool"), toolIdName(frame_->activeTool()));
+    return ok(result);
+}
+
+QJsonObject ControlServer::methodToolOptions(const QJsonObject& params)
+{
+    auto* tools = frame_->findChild<ToolController*>();
+    if (!tools) {
+        return error(QStringLiteral("internal"), QStringLiteral("no tool controller"));
+    }
+    const QJsonValue options = params.value(QStringLiteral("options"));
+    if (!options.isUndefined() && !options.isObject()) {
+        return error(QStringLiteral("invalid_param"), QStringLiteral("options must be an object"));
+    }
+    // The session-store reader merges: a group or field the patch leaves out
+    // keeps its current value, and every value is clamped as its setter would.
+    if (options.isObject()) {
+        applyToolOptionsJson(*tools, options.toObject());
+    }
+    QJsonObject result;
+    result.insert(QStringLiteral("options"), toolOptionsToJson(*tools));
     return ok(result);
 }
 

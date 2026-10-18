@@ -480,6 +480,9 @@ QJsonObject ControlServer::dispatch(const QString& method, const QJsonObject& pa
     if (method == QStringLiteral("set_tool")) {
         return methodSetTool(params);
     }
+    if (method == QStringLiteral("tool_options")) {
+        return methodToolOptions(params);
+    }
     if (method == QStringLiteral("selection")) {
         return methodSelection(params);
     }

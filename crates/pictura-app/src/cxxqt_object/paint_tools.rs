@@ -974,6 +974,7 @@ fn begin(
     label: &str,
     start: impl FnOnce(&Document, &str, &PictureViewRust) -> Option<Stroke>,
 ) -> bool {
+    super::helpers::paint_timing::start(label);
     let stroke = {
         let rust = view.rust();
         let (Some(doc), Some(path)) = (rust.doc.as_ref(), rust.active_layer.as_deref()) else {
