@@ -86,6 +86,13 @@ PanelFloat* PanelColumn::createFloat(PanelGroup* group, const QPoint& globalPos)
     // Re-dock routes through the float's group, so commitDrop takes the panel
     // out of the one-panel float (or re-inserts the whole group).
     dragGroup_ = hosted;
+    // A tab drag that leaves the flyout's group with no visible panel empties
+    // the popup; close it so it cannot linger as an empty rectangle. A drag
+    // that leaves visible panels keeps the popup open on them.
+    if (flyout_ && flyout_->isVisible() && flyoutGroup_ == group
+        && (hosted == group || group->visibleTitles().isEmpty())) {
+        closeIconFlyout();
+    }
     return floatWindow;
 }
 
