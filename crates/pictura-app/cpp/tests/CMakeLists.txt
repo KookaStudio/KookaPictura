@@ -78,6 +78,7 @@ set(PICTURA_QT_TESTS
     tst_tilt_shift
     tst_blur_gallery_effects
     tst_path_blur
+    tst_spin_blur
     tst_liquify_dialog
     tst_layer_style
     tst_color_range

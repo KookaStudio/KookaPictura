@@ -2,9 +2,9 @@
 
 - **Spec ID:** `FILT-092`
 - **Status:** `Partial` — Field Blur, Iris Blur, Tilt-Shift, the post-CS6
-  Path Blur (by owner decision, non-parity), combining them, and the shared
-  workspace are implemented (see `## Implementation status`); the `M` mask
-  view and Spin Blur are not.
+  Path Blur and Spin Blur (by owner decision, non-parity), combining them,
+  and the shared workspace are implemented (see `## Implementation status`);
+  the `M` mask view is not.
 - **Parity tier:** `Core` — the Blur Gallery shipped in CS6 Standard and Extended. **GPU/OpenCL-gated**: the three CS6 effects are OpenCL-accelerated and the Help's GPU FAQ ties them to an OpenCL-capable card.
 - **New in CS6:** `Yes` — CS6 introduces the **Blur Gallery** workspace with **Field Blur, Iris Blur, and Tilt-Shift** and a **Blur Effects** panel (Light Bokeh, Bokeh Color, Light Range). CS6's own Help and launch videos describe a **three-effect** gallery. **Path Blur, Spin Blur, Motion Blur Effects, Noise, and Edge Glow are post-CS6 (CC) additions** — see the clearly-marked subsection under `## CS6 behavior`. Smart-filter support is also CC-only.
 - **Depends on:** `FILT-001` filters-overview, `FILT-010` blur-filters (shares the blur-kernel vocabulary), `ARCH-006` gpu-rendering-pipeline, `ARCH-003` qt6-ui-design, `ARCH-007` color-management, `ARCH-009` undo-history, `LAY-021` smart-filters, `LAY-020` smart-objects, `IMG-005` bit-depth-and-conversion.
@@ -19,10 +19,10 @@
 ## Implementation status
 
 Field Blur, Iris Blur, Tilt-Shift, their Blur Effects, and the shared Blur
-Gallery workspace are implemented. The Noise tab and Path Blur are post-CS6
-additions ported on the owner's request (issue #462 for Path Blur, from the
-owner's CC screenshots) and are **not CS6 parity**; Spin Blur is not
-implemented.
+Gallery workspace are implemented. The Noise tab, Path Blur, and Spin Blur
+are post-CS6 additions ported on the owner's request (issue #462 for Path
+Blur and #464 for Spin Blur, each from the owner's CC screenshots) and are
+**not CS6 parity**.
 
 - **Engine.** `pictura_filters::blur::field` (`BlurPin { x, y, blur }`,
   `BokehParams`, `BlurNoise`, `field_blur`, `MAX_FIELD_RADIUS = 500`,
@@ -72,12 +72,12 @@ implemented.
   ring's white arc shows the blur amount — full at 100 px, Delete removes,
   `H` hides the UI), the Blur Tools panel with the selected pin's
   Blur (`0..=500 px`), the other effects' rows (see **Combined effects**),
-  a disabled Spin Blur row, an Effects / Motion Effects / Noise tabbed panel (Bokeh
+  an Effects / Motion Effects / Noise tabbed panel (Bokeh
   with Light Bokeh, Bokeh Color, and the two-handle Light Range; Noise with
   the Gaussian/Uniform/Grain picker, Amount, Size, Roughness, Color,
   Highlights), Preview / Cancel / OK, and one history state on commit. The
   `Blur Gallery`
-  submenu also lists a disabled `Spin Blur…` stub; its placement follows the later Photoshop menu (the
+  submenu's placement follows the later Photoshop menu (the
   owner's screenshot) rather than CS6's `Filter ▸ Blur` listing. Last Filter /
   Last Filter Settings reuse the pin list. The `field-blur` kind takes
   `[count, x, y, blur, …, bokeh …, noise …]`.
@@ -178,8 +178,46 @@ implemented.
   ~754 px, Path Blur's row being the tallest. The `path-blur` kind takes `[count, (point
   count, (x, y)×point count, start speed, end speed)…, speed, taper,
   centered, rear sync, strobe strength, strobe flashes, bokeh …, noise …]`
-  (27 canonical); `blur-gallery` appends the path count, records, and motion
-  slots after the Tilt-Shift section (51 canonical).
+  (27 canonical); `blur-gallery` appends the path count and records after
+  the Tilt-Shift section, then the spin count and records, the motion slots,
+  and the flash duration (62 canonical).
+- **Spin Blur engine (post-CS6, non-parity).** `pictura_filters::blur::spin`
+  (`SpinPin { x, y, radius_x, radius_y, angle, feather, blur_angle,
+  pivot_x, pivot_y }`, `SpinStrobe { strength, flashes, duration }`,
+  `spin_blur`, `MAX_SPIN_ANGLE = 360`): each spin is an ellipse (semi-axes
+  as fractions of the width, as Iris) with a feather ring and a rotation
+  centre offset from its centre. A pixel's mask is 1 inside the feather
+  ring, 0 outside the ellipse, and a smoothstep between; in several spins it
+  takes the largest. The pixel averages up to 128 bilinear taps along the
+  circle through it round the rotation centre, centred on the pixel,
+  sweeping the full **Blur Angle** inside the feather ring and, past it,
+  the ring's arc length times the mask (so the smear shortens toward the
+  outline, as the owner's CC comparison shows, rather than growing with the
+  radius); the **Strobe** flashes (evenly spaced over the
+  sweep, each lighting the taps within half its **Strobe Flash Duration**,
+  at least the nearest) mix in by Strobe Strength. The gather covers alpha;
+  Noise follows, weighted by the mask; Bokeh does not apply. In a combined
+  pass the spins blur what the paths left, and Noise takes the largest of
+  the radius, path, and spin weights. All of this is inferred; Adobe's
+  model is closed, and long arcs undersample to 128 taps.
+- **Spin Blur workspace.** `Filter ▸ Blur Gallery ▸ Spin Blur…` opens the
+  workspace in Spin mode: the Spin Blur row (Blur Angle `0..=360°`, default
+  15) and the Motion Effects tab, where Strobe Strength and Strobe Flashes
+  are shared with Path Blur and Strobe Flash Duration (`0..=360°`, default
+  1) shows only while Spin Blur is selected (the owner's screenshots). It
+  opens on one centred circle 0.13 of the width across, feather 0.5 (the
+  owner's opening screenshot; the feather is unverified). The selected spin
+  draws Iris's outline without the roundness diamond — four radius handles
+  (drag to resize and turn) and four feather dots; each spin's marker sits
+  on its rotation centre with the pin ring, whose arc shows the Blur Angle
+  (full at 360°). Dragging the ring sets the angle (1° per pixel), dragging
+  the marker moves the spin, Alt-dragging it moves only the rotation
+  centre, a click on empty picture adds a spin copying the selected one
+  (rotation centre reset), and Delete removes the selected spin while
+  another remains. The `spin-blur` kind takes `[count, (x, y, radius x,
+  radius y, angle, feather, blur angle, pivot x, pivot y)…, strobe
+  strength, strobe flashes, flash duration, bokeh …, noise …]` (26
+  canonical); the Blur Angle is never scaled to the proxy.
 - **Ceilings.** The canvas shows only the selected effect's pins; the distortion is a line-sampled smear, not
   Adobe's shader; an Iris feather dot moves all four together (no Alt-drag of
   one); the `M` mask view is not shipped; Edit Blur Shapes is not built
@@ -188,8 +226,11 @@ implemented.
   ranges, and gestures are inferred; pins are drawn
   as fractions of the document while the preview and the commit place them
   as fractions of the active layer's bounds, so on a layer that does not
-  cover the document the overlay sits off the effect it controls; no GPU path; Spin
-  Blur stays a post-CS6 non-goal.
+  cover the document the overlay sits off the effect it controls; no GPU path;
+  Spin Blur's mask, arc gather, flash windows, shared strobe, ranges, and
+  gestures are inferred, its sliders are linear where CC's Blur Angle and
+  Flash Duration sliders are not, and duplicating a spin by drag is not
+  built.
 
 ## CS6 behavior
 
@@ -226,7 +267,7 @@ The Blur Effects panel takes a value for each of:
 
 ### Post-CS6 additions — NOT CS6 parity
 
-The task brief names Path Blur, Spin Blur, and "noise/color/edge glow" blur effects. The fetched CS6 sources contain **none** of these; they are **later Creative Cloud** additions. Recorded here so the boundary is explicit. By owner decision, the Noise tab and **Path Blur** are implemented anyway as labelled non-parity extensions (see `## Implementation status`); the rest stay out of scope.
+The task brief names Path Blur, Spin Blur, and "noise/color/edge glow" blur effects. The fetched CS6 sources contain **none** of these; they are **later Creative Cloud** additions. Recorded here so the boundary is explicit. By owner decision, the Noise tab, **Path Blur**, and **Spin Blur** are implemented anyway as labelled non-parity extensions (see `## Implementation status`); the rest stay out of scope.
 
 - **Path Blur** *(CC)* — motion blur along one or more drawn paths; overlay path with endpoints; controls include **Speed** (applied to all path blurs) and **Taper** (blur trails off gradually), a **Basic Blur / Rear Sync Flash** choice (Rear Sync Flash simulates a flash fired at the end of the exposure), and per-endpoint **End Point Speed**. *(Secondary source: Adobe Help snapshot, CreativePro.)*
 - **Spin Blur** *(CC)* — radial blur around one or more points, measured in **Blur Angle 0–360°**, with an ellipse of centre points; supports **Strobe Strength**, **Strobe Flashes**, and **Strobe Flash Duration** (motion effects). *(Secondary source: Adobe Help snapshot, PCWorld.)*
@@ -250,7 +291,7 @@ The task brief names Path Blur, Spin Blur, and "noise/color/edge glow" blur effe
 | Pin context | on-canvas | `Delete` | Remove selected pin; click image to add |
 | `Edit > Fade Field/Iris/Tilt-Shift` | menu, dialog | `Shift+Ctrl/Cmd+F` *(inferred)* | Opacity + mode after commit |
 | `Filter > Blur Gallery > Path Blur` | workspace | — | **Post-CS6 (CC)**; implemented by owner decision, non-parity |
-| `Filter > Blur Gallery > Spin Blur` | workspace | — | **Post-CS6 (CC) only**; disabled stub |
+| `Filter > Blur Gallery > Spin Blur` | workspace | — | **Post-CS6 (CC)**; implemented by owner decision, non-parity |
 
 ## Parameters & ranges
 
@@ -276,8 +317,9 @@ CS6 Help does **not** publish numeric ranges for the CS6 controls; the entries b
 | Path Blur | Basic Blur / Rear Sync Flash | enum | Basic | Basic / Rear Sync Flash (Custom while strobing) | **No (CC)** |
 | Path Blur | End Point Speed | int px | — | 0–500 *(unverified)*; per endpoint | **No (CC)** |
 | Path Blur | Strobe Strength / Strobe Flashes | int % / int | 0 / 4 *(screenshot)* | 0–100 / 1–100 *(unverified)* | **No (CC)** |
-| Spin Blur | Blur Angle | float ° | — | 0–360 | **No (CC)** |
-| Spin/Path | Strobe Strength / Flashes / Flash Duration | float/%/int/° | — | motion effects | **No (CC)** |
+| Spin Blur | Blur Angle | float ° | 15 *(screenshot)* | 0–360 | **No (CC)** |
+| Spin Blur | Strobe Flash Duration | int ° | 1 *(screenshot)* | 0–360 *(unverified)*; shown for Spin Blur only | **No (CC)** |
+| Spin/Path | Strobe Strength / Flashes | int % / int | 0 / 4 *(screenshot)* | shared motion effects | **No (CC)** |
 | All | Noise amount / size / roughness / colour / highlights | float | — | reported later builds | **No (CC/later)** |
 | All | Noise Distribution | enum | — | Uniform / Gaussian (reported) | **No (CC/later)** |
 | All | Monochromatic | bool | — | reported | **No (CC/later)** |
@@ -371,7 +413,7 @@ Rationale: on-image editing with many hit-testable handles and a live GPU previe
 6. Given a commit, exactly one history state appears and `Ctrl+Z` restores the pre-filter pixels bit-exactly.
 7. Given a selection, pixels outside it are bit-identical.
 8. On the CPU fallback, acceptance results match the GPU path within tolerance.
-9. **CS6-boundary:** `Spin Blur` is **absent**; `Path Blur` is present only as a labelled non-parity extension (owner decision, #462): its row tooltip and workspace hint mark it post-CS6, and nothing claims CS6 parity for it.
+9. **CS6-boundary:** `Path Blur` and `Spin Blur` are present only as labelled non-parity extensions (owner decisions, #462 and #464): their row tooltips and workspace hints mark them post-CS6, and nothing claims CS6 parity for them.
 
 ## Sources
 

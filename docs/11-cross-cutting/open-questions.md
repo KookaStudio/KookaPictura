@@ -60,7 +60,7 @@ audit the decisions.
 | A3 | Camera Raw as a filter is CS6 | Camera Raw **filter** added in **CC 2013 (ACR 8)**; CS6 has ACR 7 for open/open-as-Smart-Object only | `FILT-100`, `00-overview/cs6-editions-and-constraints.md` | Adobe What's-New / ACR 8 release notes. |
 | A4 | Shake Reduction is CS6 | Added in **CC 2013** | `FILT-093`, `FILT-020` | Adobe CC release notes; absent from CS6 Help PDF. |
 | A5 | Extract / Pattern Maker removed in CS6 | Removed from default install in **CS4**; optional plug-ins in CS6 | `FILT-104` | CS4 release notes; CS6 Help "optional plug-ins". |
-| A6 | Blur Gallery has Field/Iris/Tilt-Shift/Path/Spin | CS6 has **Field, Iris, Tilt-Shift only**; Path/Spin Blur and Blur Effects noise/edge-glow are **CC**. Noise and Path Blur are implemented anyway by owner decision, labelled non-parity | `FILT-092` | CS6 Help Blur Gallery topic vs CC Help. |
+| A6 | Blur Gallery has Field/Iris/Tilt-Shift/Path/Spin | CS6 has **Field, Iris, Tilt-Shift only**; Path/Spin Blur and Blur Effects noise/edge-glow are **CC**. Noise, Path Blur, and Spin Blur are implemented anyway by owner decision, labelled non-parity | `FILT-092` | CS6 Help Blur Gallery topic vs CC Help. |
 | A7 | Flame / Tree / Picture Frame are CS6 Render filters | Added in **CC 2014.2** | `FILT-060` | CS6 Help Render menu vs CC 2014.2 update. |
 | A8 | Face-Aware Liquify is CS6 | Added in **CC 2015.5** | `FILT-090` | CC release notes. |
 | A9 | Refine Edge expanded in CS6 | Smart Radius/Decontaminate are **CS5**; Select-and-Mask "Remember Settings"/Mask view are **CC** | `SEL-003` | CS5 Help vs CS6 Help. |

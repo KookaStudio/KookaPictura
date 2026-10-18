@@ -92,14 +92,19 @@ QWidget* BlurGalleryDialog::buildMotionTab()
                                QStringLiteral("%"));
     strobeFlashes_ = addField(layout, tab, QStringLiteral("Strobe Flashes:"),
                               QStringLiteral("strobeFlashes"), 1, 100, 4, 0, QString());
-    auto* hint = new QLabel(QStringLiteral("Motion Effects apply to Path Blur."), tab);
+    // Shown only while Spin Blur is selected (the owner's screenshots).
+    strobeDuration_ = addField(layout, tab, QStringLiteral("Strobe Flash Duration:"),
+                               QStringLiteral("strobeDuration"), 0, 360, 1, 0,
+                               QStringLiteral("°"));
+    auto* hint =
+        new QLabel(QStringLiteral("Motion Effects apply to Path Blur and Spin Blur."), tab);
     hint->setWordWrap(true);
     hint->setEnabled(false);
     layout->addWidget(hint);
     layout->addStretch(1);
     connect(strobeStrength_.spin, &QDoubleSpinBox::valueChanged, this, [this] { syncPreset(); });
     connect(strobeStrength_.slider, &QSlider::valueChanged, this, [this] { syncPreset(); });
-    for (QSlider* slider : {strobeStrength_.slider, strobeFlashes_.slider}) {
+    for (QSlider* slider : {strobeStrength_.slider, strobeFlashes_.slider, strobeDuration_.slider}) {
         connect(slider, &QSlider::sliderReleased, this, &BlurGalleryDialog::scheduleRender);
     }
     return tab;

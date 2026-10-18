@@ -48,6 +48,8 @@ const int kMotionSlots = 6;
 const double kMinIrisRadius = 0.0001;
 const double kMaxIrisRadius = 10.0;
 const double kMaxTiltExtent = 10.0;
+const double kMaxSpinAngle = 360.0;
+const int kSpinStrobeSlots = 3;
 
 BlurGalleryMode modeForKind(const QString& kind)
 {
@@ -56,6 +58,9 @@ BlurGalleryMode modeForKind(const QString& kind)
     }
     if (kind == QStringLiteral("path-blur")) {
         return BlurGalleryMode::Path;
+    }
+    if (kind == QStringLiteral("spin-blur")) {
+        return BlurGalleryMode::Spin;
     }
     return kind == QStringLiteral("tilt-shift") ? BlurGalleryMode::TiltShift
                                                 : BlurGalleryMode::Field;
@@ -299,7 +304,7 @@ QWidget* BlurGalleryDialog::buildBlurToolsPanel()
         {"Iris Blur", "irisBlur", int(BlurGalleryMode::Iris)},
         {"Tilt-Shift", "tiltShift", int(BlurGalleryMode::TiltShift)},
         {"Path Blur", "pathBlur", int(BlurGalleryMode::Path)},
-        {"Spin Blur", "spinBlur", -1},
+        {"Spin Blur", "spinBlur", int(BlurGalleryMode::Spin)},
     };
     for (const auto& row : rows) {
         const QString name = QLatin1String(row.name);
@@ -309,7 +314,7 @@ QWidget* BlurGalleryDialog::buildBlurToolsPanel()
             continue;
         }
         const auto mode = BlurGalleryMode(row.mode);
-        if (mode == BlurGalleryMode::Path) {
+        if (mode == BlurGalleryMode::Path || mode == BlurGalleryMode::Spin) {
             effect->title->setToolTip(
                 QStringLiteral("A post-CS6 (Photoshop CC) effect; the blur is approximated"));
         }
@@ -337,10 +342,13 @@ QWidget* BlurGalleryDialog::buildEffectControls(QWidget* parent, BlurGalleryMode
         buildPathControls(box, controls);
         return box;
     }
+    // Spin Blur's amount is its Blur Angle.
+    const bool spin = mode == BlurGalleryMode::Spin;
+    const double top = spin ? kMaxSpinAngle : kMaxBlur;
     auto* blurRow = new QHBoxLayout;
-    auto* label = new QLabel(QStringLiteral("Blur:"), box);
-    effect.blurSpin = makeValueBox(box, name + QStringLiteral("Spin"), 0.0, kMaxBlur, 0.0);
-    effect.blurSpin->setSuffix(QStringLiteral(" px"));
+    auto* label = new QLabel(spin ? QStringLiteral("Blur Angle:") : QStringLiteral("Blur:"), box);
+    effect.blurSpin = makeValueBox(box, name + QStringLiteral("Spin"), 0.0, top, 0.0);
+    effect.blurSpin->setSuffix(spin ? QStringLiteral("°") : QStringLiteral(" px"));
     label->setBuddy(effect.blurSpin);
     blurRow->addWidget(label);
     blurRow->addStretch(1);
@@ -348,7 +356,7 @@ QWidget* BlurGalleryDialog::buildEffectControls(QWidget* parent, BlurGalleryMode
     controls->addLayout(blurRow);
     effect.blurSlider = new JumpSlider(Qt::Horizontal, box);
     effect.blurSlider->setObjectName(name + QStringLiteral("Slider"));
-    effect.blurSlider->setRange(0, int(kMaxBlur));
+    effect.blurSlider->setRange(0, int(top));
     controls->addWidget(effect.blurSlider);
     // An amount edits the effect's own selected pin, selecting the effect.
     const auto setBlur = [this, mode](double value) {
@@ -502,8 +510,10 @@ QWidget* BlurGalleryDialog::buildNoiseTab()
 
 namespace {
 
-const char* const kEffectKinds[] = {"field-blur", "iris-blur", "tilt-shift", "path-blur"};
-// Path Blur's records carry their own point count (`readPaths`).
+const char* const kEffectKinds[] = {"field-blur", "iris-blur", "tilt-shift", "path-blur",
+                                    "spin-blur"};
+// Path Blur's records carry their own point count (`readPaths`); Spin
+// Blur's are read by `readSpins`.
 const int kPinStrides[] = {3, 8, 10};
 
 } // namespace
@@ -531,6 +541,10 @@ QList<double> BlurGalleryDialog::values() const
 
 void BlurGalleryDialog::appendPins(QList<double>* out, BlurGalleryMode mode, double scale) const
 {
+    if (mode == BlurGalleryMode::Spin) {
+        appendSpins(out);
+        return;
+    }
     const Effect& effect = effects_[int(mode)];
     const bool on = effect.enabled;
     *out << (on ? effect.pins.size() : 0);
@@ -554,19 +568,30 @@ QList<double> BlurGalleryDialog::slotList(double scale) const
 {
     QList<double> out;
     const QString commit = kind();
+    if (commit.isEmpty()) {
+        return out;
+    }
+    const bool combined = commit == QStringLiteral("blur-gallery");
     for (int m = 0; m < kEffects; ++m) {
-        if (commit != QStringLiteral("blur-gallery") && commit != QLatin1String(kEffectKinds[m])) {
+        if (!combined && commit != QLatin1String(kEffectKinds[m])) {
             continue;
         }
         if (BlurGalleryMode(m) == BlurGalleryMode::Path) {
             appendPaths(&out, scale);
-            appendMotion(&out);
         } else {
             appendPins(&out, BlurGalleryMode(m), scale);
         }
     }
-    if (out.isEmpty()) {
-        return out;
+    // The motion section follows the last effect's records; the combined
+    // list adds the flash duration, Spin Blur alone takes its three strobe
+    // slots.
+    if (combined || commit == QStringLiteral("path-blur")) {
+        appendMotion(&out);
+    }
+    if (combined) {
+        out << strobeDuration_.spin->value();
+    } else if (commit == QStringLiteral("spin-blur")) {
+        appendSpinStrobe(&out);
     }
     out << (bokehEnabled_->isChecked() ? 1.0 : 0.0) << bokehLight_.spin->value()
         << bokehColor_.spin->value() << bokehRangeLow_->value() << bokehRangeHigh_->value()
@@ -581,6 +606,9 @@ bool BlurGalleryDialog::readPins(const QList<double>& values, int* at, BlurGalle
 {
     if (mode == BlurGalleryMode::Path) {
         return readPaths(values, at, pins);
+    }
+    if (mode == BlurGalleryMode::Spin) {
+        return readSpins(values, at, pins);
     }
     const int stride = kPinStrides[int(mode)];
     if (*at >= values.size()) {
@@ -642,11 +670,13 @@ void BlurGalleryDialog::readTail(const QList<double>& values, int tail)
 
 void BlurGalleryDialog::setValues(const QList<double>& values)
 {
-    // The opening command's layout: one effect's list, or all four in turn,
-    // Path Blur's followed by the motion section.
+    // The opening command's layout: one effect's list, or all five in turn,
+    // then the motion section (and the flash duration), Path Blur's records
+    // followed by the motion section, or Spin Blur's by its strobe slots.
     const bool combined = spec_.kind == QStringLiteral("blur-gallery");
     const BlurGalleryMode opening = modeForKind(spec_.kind);
     const bool motion = combined || opening == BlurGalleryMode::Path;
+    const bool spinStrobe = !combined && opening == BlurGalleryMode::Spin;
     QList<BlurGalleryPin> parsed[kEffects];
     int at = 0;
     bool whole = !values.isEmpty();
@@ -657,7 +687,9 @@ void BlurGalleryDialog::setValues(const QList<double>& values)
     }
     const int motionAt = at;
     if (motion) {
-        at += kMotionSlots;
+        at += kMotionSlots + (combined ? 1 : 0);
+    } else if (spinStrobe) {
+        at += kSpinStrobeSlots;
     }
     whole = whole && values.size() == at + kEffectsTail
             && (combined || !parsed[int(opening)].isEmpty());
@@ -674,6 +706,11 @@ void BlurGalleryDialog::setValues(const QList<double>& values)
     if (whole) {
         if (motion) {
             readMotion(values, motionAt);
+        }
+        if (combined) {
+            setStrobeDuration(values.at(motionAt + kMotionSlots));
+        } else if (spinStrobe) {
+            readSpinStrobe(values, motionAt);
         }
         readTail(values, at);
     }
@@ -697,6 +734,14 @@ BlurGalleryPin BlurGalleryDialog::defaultPin(BlurGalleryMode mode) const
             view_ && view_->has_document() ? double(view_->document_width()) : 830.0;
         pin.points = {QPointF(0.5, 0.5), QPointF(0.58, 0.5)};
         pin.speeds[0] = pin.speeds[1] = qRound(0.04 * width);
+        return pin;
+    }
+    if (mode == BlurGalleryMode::Spin) {
+        // The owner's opening screenshot: a centred circle 0.13 of the width
+        // across at 15°, as `pictura_filters::SpinPin::default()`.
+        pin.radii = QSizeF(0.13, 0.13);
+        pin.feather = 0.5;
+        pin.blur = 15.0;
         return pin;
     }
     if (mode == BlurGalleryMode::TiltShift) {
@@ -744,19 +789,7 @@ void BlurGalleryDialog::selectEffect(BlurGalleryMode mode)
     canvas_->setMode(mode);
     canvas_->setPins(&effect.pins, effect.selected);
     setExpanded(mode, true);
-    // Bokeh does not apply to Path Blur and the Motion Effects apply only to
-    // it, so the tab that does not fit the selected effect is disabled.
-    if (effectsTabs_) {
-        const bool path = mode == BlurGalleryMode::Path;
-        // Disabling the current tab moves Qt to the next one; land on the
-        // tab that took its place instead.
-        const bool lost = effectsTabs_->currentIndex() == (path ? 0 : 1);
-        effectsTabs_->setTabEnabled(0, !path);
-        effectsTabs_->setTabEnabled(1, path);
-        if (lost) {
-            effectsTabs_->setCurrentIndex(path ? 1 : 0);
-        }
-    }
+    syncMotionTab();
     if (hint_) {
         const QString hints[] = {
             QStringLiteral("Click the image to add a pin, drag a pin to move it, its ring to "
@@ -767,6 +800,8 @@ void BlurGalleryDialog::selectEffect(BlurGalleryMode mode)
                            "areas, a dot to turn it; H hides the overlay"),
             QStringLiteral("Click to pin stop points, double-click to end; drag a point to move "
                            "it, Ctrl-drag a path; H hides the paths (post-CS6)"),
+            QStringLiteral("Click to add a spin; drag its handles to size or turn it, its ring "
+                           "to spin, Alt-drag its centre to move the rotation point (post-CS6)"),
         };
         hint_->setText(hints[int(mode)]);
     }
@@ -836,7 +871,8 @@ void BlurGalleryDialog::setSelectedBlur(double blur)
     if (index < 0 || index >= pins().size()) {
         return;
     }
-    pins()[index].blur = qBound(0.0, blur, kMaxBlur);
+    pins()[index].blur =
+        qBound(0.0, blur, active_ == BlurGalleryMode::Spin ? kMaxSpinAngle : kMaxBlur);
     syncControls();
     canvas_->update();
     scheduleRender();
@@ -907,7 +943,8 @@ bool BlurGalleryDialog::interacting() const
     const auto held = [](const QSlider* slider) { return slider && slider->isSliderDown(); };
     bool any = canvas_->dragging() || held(distortionSlider_) || held(pathSpeed_.slider)
                || held(pathTaper_.slider) || held(pathEndSpeed_.slider)
-               || held(strobeStrength_.slider) || held(strobeFlashes_.slider);
+               || held(strobeStrength_.slider) || held(strobeFlashes_.slider)
+               || held(strobeDuration_.slider);
     for (const Effect& effect : effects_) {
         any = any || held(effect.blurSlider);
     }

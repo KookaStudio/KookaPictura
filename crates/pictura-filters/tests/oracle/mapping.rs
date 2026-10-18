@@ -434,6 +434,15 @@ const MAPPING: &[Mapping] = &[
                nearest-path, no-op, validation and determinism unit tests",
     },
     Mapping {
+        filter: "SpinBlur",
+        im: None,
+        tolerance: 0,
+        note: "Rotational blur along arcs round each spin's rotation centre inside a feathered \
+               ellipse, with strobe flashes: ImageMagick's -rotational-blur turns the whole \
+               image round one centre without a mask. Guarded by the ellipse, circles/spokes, \
+               pivot, strobe, validation, alpha, no-op and determinism unit tests",
+    },
+    Mapping {
         filter: "BlurGallery",
         im: None,
         tolerance: 0,
@@ -444,7 +453,7 @@ const MAPPING: &[Mapping] = &[
 ];
 
 /// Filters the table marks as having no faithful ImageMagick equivalent.
-const NO_EQUIVALENT: [&str; 39] = [
+const NO_EQUIVALENT: [&str; 40] = [
     "MotionBlur",
     "RadialBlur",
     "Average",
@@ -483,14 +492,15 @@ const NO_EQUIVALENT: [&str; 39] = [
     "IrisBlur",
     "TiltShift",
     "PathBlur",
+    "SpinBlur",
     "BlurGallery",
 ];
 
 #[test]
 fn mapping_marks_no_equivalent_operators() {
-    assert_eq!(MAPPING.len(), 55, "one mapping row per Filter variant");
+    assert_eq!(MAPPING.len(), 56, "one mapping row per Filter variant");
     // Exactly one row per `Filter` variant, no duplicates, full enum coverage.
-    let all: [&str; 55] = [
+    let all: [&str; 56] = [
         "GaussianBlur",
         "BoxBlur",
         "ShapeBlur",
@@ -545,6 +555,7 @@ fn mapping_marks_no_equivalent_operators() {
         "IrisBlur",
         "TiltShift",
         "PathBlur",
+        "SpinBlur",
         "BlurGallery",
     ];
     let mut mapped: Vec<&str> = MAPPING.iter().map(|m| m.filter).collect();

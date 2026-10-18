@@ -2,6 +2,7 @@ use super::*;
 use crate::blur::field::field_blur;
 use crate::blur::iris::iris_blur;
 use crate::blur::path::path_blur;
+use crate::blur::spin::spin_blur;
 use crate::blur::tilt::tilt_shift;
 
 fn noise_picture(w: u32, h: u32) -> PixelBuffer {
@@ -86,6 +87,8 @@ fn one_effect_alone_matches_its_own_kernel() {
             t,
             &[],
             &PathMotion::default(),
+            &[],
+            &SpinStrobe::default(),
             &bokeh,
             &noise,
         )
@@ -130,6 +133,8 @@ fn combined_effects_blur_where_either_one_does() {
         &[tilt_pin()],
         &[],
         &PathMotion::default(),
+        &[],
+        &SpinStrobe::default(),
         &bokeh,
         &noise,
     )
@@ -159,6 +164,8 @@ fn combined_effects_blur_where_either_one_does() {
         &[tilt_pin()],
         &[],
         &PathMotion::default(),
+        &[],
+        &SpinStrobe::default(),
         &bokeh,
         &noise,
     )
@@ -181,6 +188,8 @@ fn no_pins_is_a_no_op_and_bad_pins_are_refused() {
         &[],
         &[],
         &PathMotion::default(),
+        &[],
+        &SpinStrobe::default(),
         &bokeh,
         &noise,
     )
@@ -198,6 +207,8 @@ fn no_pins_is_a_no_op_and_bad_pins_are_refused() {
             &[bad],
             &[],
             &PathMotion::default(),
+            &[],
+            &SpinStrobe::default(),
             &bokeh,
             &noise
         ),
@@ -224,6 +235,8 @@ fn equal_inputs_are_bit_identical() {
             &[tilt_pin()],
             &[],
             &PathMotion::default(),
+            &[],
+            &SpinStrobe::default(),
             &bokeh,
             &noise,
         )
@@ -261,6 +274,8 @@ fn paths_alone_match_their_own_kernel() {
         &[],
         &paths,
         &path_motion(),
+        &[],
+        &SpinStrobe::default(),
         &bokeh,
         &noise,
     )
@@ -287,6 +302,8 @@ fn paths_add_to_a_radius_effect() {
         &[],
         &paths,
         &path_motion(),
+        &[],
+        &SpinStrobe::default(),
         &bokeh,
         &noise,
     )
@@ -297,4 +314,86 @@ fn paths_add_to_a_radius_effect() {
     path_blur(&mut path_only, &paths, &path_motion(), &noise).unwrap();
     assert_ne!(both.data, field_only.data);
     assert_ne!(both.data, path_only.data);
+}
+
+fn spins() -> [SpinPin; 2] {
+    [
+        SpinPin {
+            x: 0.35,
+            y: 0.5,
+            radius_x: 0.3,
+            radius_y: 0.25,
+            feather: 0.6,
+            blur_angle: 60.0,
+            ..SpinPin::default()
+        },
+        SpinPin {
+            x: 0.8,
+            y: 0.3,
+            blur_angle: 120.0,
+            pivot_x: 0.04,
+            ..SpinPin::default()
+        },
+    ]
+}
+
+fn spin_strobe() -> SpinStrobe {
+    SpinStrobe {
+        strength: 30.0,
+        flashes: 5,
+        duration: 4.0,
+    }
+}
+
+#[test]
+fn spins_alone_match_their_kernel() {
+    let (bokeh, noise) = effects();
+    let mut combined = noise_picture(48, 40);
+    let mut alone = combined.clone();
+    blur_gallery(
+        &mut combined,
+        &[],
+        &[],
+        &[],
+        &[],
+        &PathMotion::default(),
+        &spins(),
+        &spin_strobe(),
+        &bokeh,
+        &noise,
+    )
+    .unwrap();
+    spin_blur(&mut alone, &spins(), &spin_strobe(), &noise).unwrap();
+    assert_eq!(combined.data, alone.data);
+}
+
+#[test]
+fn spins_add_to_a_radius_effect() {
+    let (bokeh, noise) = effects();
+    let base = noise_picture(48, 40);
+    let field = [BlurPin {
+        x: 0.2,
+        y: 0.3,
+        blur: 6.0,
+    }];
+    let mut both = base.clone();
+    blur_gallery(
+        &mut both,
+        &field,
+        &[],
+        &[],
+        &[],
+        &PathMotion::default(),
+        &spins(),
+        &spin_strobe(),
+        &bokeh,
+        &noise,
+    )
+    .unwrap();
+    let mut field_only = base.clone();
+    field_blur(&mut field_only, &field, &bokeh, &noise).unwrap();
+    let mut spin_only = base.clone();
+    spin_blur(&mut spin_only, &spins(), &spin_strobe(), &noise).unwrap();
+    assert_ne!(both.data, field_only.data);
+    assert_ne!(both.data, spin_only.data);
 }

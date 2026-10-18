@@ -349,6 +349,10 @@ pub fn preview_apron(filter: &Filter) -> i32 {
             .fold(0.0, f64::max),
         // A trail reaches its length along the streamline.
         Filter::PathBlur { paths, motion, .. } => path_reach(paths, motion),
+        // A spin's reach is its ellipse, sized as a fraction of the buffer
+        // this margin cannot see; take the widest.
+        Filter::SpinBlur { .. } => 512.0,
+        Filter::BlurGallery { spin, .. } if !spin.is_empty() => 512.0,
         Filter::BlurGallery {
             field,
             iris,

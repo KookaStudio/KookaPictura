@@ -183,7 +183,7 @@ void PathBlurTest::workspaceOpensOnTheDefaultPath()
     auto* row = dialog.findChild<QCheckBox*>(QStringLiteral("pathBlurEnabled"));
     QVERIFY(row != nullptr && row->isChecked() && row->isEnabled());
     auto* spin = dialog.findChild<QCheckBox*>(QStringLiteral("spinBlurEnabled"));
-    QVERIFY(spin != nullptr && !spin->isEnabled());
+    QVERIFY(spin != nullptr && spin->isEnabled() && !spin->isChecked());
     auto* preset = dialog.findChild<QComboBox*>(QStringLiteral("pathBlurPreset"));
     QVERIFY(preset != nullptr);
     QCOMPARE(preset->currentText(), QStringLiteral("Basic Blur"));
@@ -458,13 +458,16 @@ void PathBlurTest::combinesWithFieldBlur()
     QCOMPARE(dialog.selectedEffect(), pictura::BlurGalleryMode::Path);
     QCOMPARE(dialog.kind(), QStringLiteral("blur-gallery"));
     const QList<double> v = dialog.values();
-    // One Field pin, no Iris or Tilt-Shift, one path, the motion, the tail.
-    QCOMPARE(v.size(), 1 + 3 + 1 + 1 + 1 + 7 + 6 + 13);
+    // One Field pin, no Iris or Tilt-Shift, one path, no spins, the motion,
+    // the flash duration, the tail.
+    QCOMPARE(v.size(), 1 + 3 + 1 + 1 + 1 + 7 + 1 + 6 + 1 + 13);
     QCOMPARE(v.at(0), 1.0);
     QCOMPARE(v.at(4), 0.0);
     QCOMPARE(v.at(5), 0.0);
     QCOMPARE(v.mid(6, 8), QList<double>({1.0, 2.0, 0.5, 0.5, 0.58, 0.5, 4.0, 4.0}));
-    QCOMPARE(v.mid(14, 6), defaultMotion());
+    QCOMPARE(v.at(14), 0.0);
+    QCOMPARE(v.mid(15, 6), defaultMotion());
+    QCOMPARE(v.at(21), 1.0);
 
     pictura::BlurGalleryDialog reopened(
         window_->activeView(), *pictura::filterCommandForKind(QStringLiteral("blur-gallery")));

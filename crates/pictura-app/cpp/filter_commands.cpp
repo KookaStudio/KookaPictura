@@ -380,6 +380,25 @@ const QList<FilterCommandSpec>& buildCommands()
                 slider(QStringLiteral("Strobe Strength:"), 0, 100, 0, 0, QStringLiteral("%")),
                 slider(QStringLiteral("Strobe Flashes:"), 1, 100, 4)}
                 + galleryEffects()),
+        // Spin Blur (post-CS6): one centred circular spin, its radii fractions
+        // of the picture's width, its Blur Angle and the strobe in degrees.
+        def(QStringLiteral("Blur Gallery"), QStringLiteral("Spin Blur"),
+            QStringLiteral("spin-blur"),
+            QList<FilterParamSpec>{
+                hidden(1), // spin count
+                placement(QStringLiteral("Center:"), 0.5, 0.5),
+                slider(QStringLiteral("Radius X:"), 0, 10, 0.13, 3),
+                slider(QStringLiteral("Radius Y:"), 0, 10, 0.13, 3),
+                slider(QStringLiteral("Angle:"), -360, 360, 0, 1, QStringLiteral("°")),
+                slider(QStringLiteral("Feather:"), 0, 1, 0.5, 2),
+                slider(QStringLiteral("Blur Angle:"), 0, 360, 15, 0, QStringLiteral("°")),
+                slider(QStringLiteral("Rotation Center X:"), -10, 10, 0, 3),
+                slider(QStringLiteral("Rotation Center Y:"), -10, 10, 0, 3),
+                slider(QStringLiteral("Strobe Strength:"), 0, 100, 0, 0, QStringLiteral("%")),
+                slider(QStringLiteral("Strobe Flashes:"), 1, 100, 4),
+                slider(QStringLiteral("Strobe Flash Duration:"), 0, 360, 1, 0,
+                       QStringLiteral("°"))}
+                + galleryEffects()),
         def(QStringLiteral("Blur"), QStringLiteral("Gaussian Blur"), QStringLiteral("gaussian-blur"),
             {slider(QStringLiteral("Radius:"), 0.1, 250.0, 5.0, 1, QStringLiteral(" pixels"))}),
         def(QStringLiteral("Blur"), QStringLiteral("Motion Blur"), QStringLiteral("motion-blur"),
@@ -1018,11 +1037,11 @@ const FilterCommandSpec* filterCommandForKind(const QString& kind)
     // Several Blur Gallery effects at once commit `blur-gallery`, which has
     // no menu row: it names the history state and Last Filter, and Last
     // Filter Settings reopens the gallery with it. Canonical slots: no pins
-    // of each effect (one record's worth each), the path motion section, and
-    // the effects tail.
+    // of each effect (one record's worth each), the path motion section, the
+    // spin flash duration, and the effects tail.
     static const FilterCommandSpec gallery = [] {
         QList<FilterParamSpec> params;
-        for (int i = 0; i < 4 + 3 + 8 + 10 + 7 + 6; ++i) {
+        for (int i = 0; i < 5 + 3 + 8 + 10 + 7 + 9 + 6 + 1; ++i) {
             params << hidden(0);
         }
         FilterCommandSpec spec = def(QStringLiteral("Blur Gallery"), QStringLiteral("Blur Gallery"),
