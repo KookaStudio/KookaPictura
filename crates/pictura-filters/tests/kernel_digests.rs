@@ -5,7 +5,7 @@ use pictura_core::PixelBuffer;
 use pictura_filters::{
     apply, BlurNoise, BlurNoiseKind, BlurPath, BlurPin, BokehParams, ChannelDetail, DepthMap,
     Filter, IrisPin, IrisShape, NoiseDistribution, PathMotion, Quality, RadialMethod,
-    ReduceNoiseParams, SmartBlurMode, TiltPin,
+    ReduceNoiseParams, SmartBlurMode, SpinPin, SpinStrobe, TiltPin,
 };
 
 /// A deterministic 4-channel picture with noise, gradients and hard edges, in
@@ -355,6 +355,8 @@ fn kernels() -> Vec<(&'static str, Filter)> {
                 ],
                 path: Vec::new(),
                 motion: PathMotion::default(),
+                spin: Vec::new(),
+                spin_strobe: SpinStrobe::default(),
                 bokeh: BokehParams {
                     enabled: true,
                     light_bokeh: 30.0,
@@ -405,6 +407,8 @@ fn kernels() -> Vec<(&'static str, Filter)> {
                 tilt: Vec::new(),
                 path: path_blur_paths(),
                 motion: PathMotion::default(),
+                spin: Vec::new(),
+                spin_strobe: SpinStrobe::default(),
                 bokeh: BokehParams {
                     enabled: true,
                     light_bokeh: 30.0,
@@ -419,6 +423,69 @@ fn kernels() -> Vec<(&'static str, Filter)> {
                 },
             },
         ),
+        (
+            "spin blur",
+            Filter::SpinBlur {
+                spins: spin_blur_spins(),
+                strobe: SpinStrobe {
+                    strength: 40.0,
+                    flashes: 3,
+                    duration: 8.0,
+                },
+                noise: BlurNoise {
+                    enabled: true,
+                    amount: 15.0,
+                    seed: 3,
+                    ..BlurNoise::default()
+                },
+            },
+        ),
+        (
+            "blur gallery spins",
+            Filter::BlurGallery {
+                field: vec![BlurPin {
+                    x: 0.9,
+                    y: 0.1,
+                    blur: 9.0,
+                }],
+                iris: Vec::new(),
+                tilt: Vec::new(),
+                path: path_blur_paths(),
+                motion: PathMotion::default(),
+                spin: spin_blur_spins(),
+                spin_strobe: SpinStrobe::default(),
+                bokeh: BokehParams::default(),
+                noise: BlurNoise {
+                    enabled: true,
+                    amount: 20.0,
+                    seed: 7,
+                    ..BlurNoise::default()
+                },
+            },
+        ),
+    ]
+}
+
+/// An elliptical spin with a moved rotation centre and a small circle.
+fn spin_blur_spins() -> Vec<SpinPin> {
+    vec![
+        SpinPin {
+            x: 0.4,
+            y: 0.45,
+            radius_x: 0.35,
+            radius_y: 0.2,
+            angle: 30.0,
+            feather: 0.6,
+            blur_angle: 70.0,
+            pivot_x: 0.05,
+            pivot_y: -0.03,
+        },
+        SpinPin {
+            x: 0.8,
+            y: 0.75,
+            blur_angle: 200.0,
+            ..SpinPin::default()
+        },
     ]
 }
 
@@ -474,6 +541,8 @@ fn row_parallel_kernels_keep_their_serial_bytes() {
         ("blur gallery", 0x4ab9_0f60_c404_69f0),
         ("path blur", 0x5de5_0e6d_9851_2588),
         ("blur gallery paths", 0xfbc3_9ea9_6582_f8b9),
+        ("spin blur", 0xd4c7_91b5_baea_e074),
+        ("blur gallery spins", 0xac82_6ac3_4d1e_5d6b),
     ];
     let source = picture();
     for ((name, filter), (want_name, want)) in kernels().into_iter().zip(expected) {

@@ -163,9 +163,9 @@ void BlurGalleryEffectsTest::theCheckboxSwitchesAnEffect()
     dialog.findChild<QCheckBox*>(QStringLiteral("tiltShiftEnabled"))->setChecked(true);
     QCOMPARE(dialog.selectedEffect(), Mode::TiltShift);
     QCOMPARE(dialog.kind(), QStringLiteral("blur-gallery"));
-    // Field, Iris, Tilt-Shift, Path counts and records, the motion section,
-    // the tail.
-    QCOMPARE(dialog.values().size(), 1 + 3 + 1 + 1 + 10 + 1 + 6 + 13);
+    // Field, Iris, Tilt-Shift, Path, Spin counts and records, the motion
+    // section, the flash duration, the tail.
+    QCOMPARE(dialog.values().size(), 1 + 3 + 1 + 1 + 10 + 1 + 1 + 6 + 1 + 13);
 
     // Field off: Tilt-Shift alone commits as itself.
     dialog.findChild<QCheckBox*>(QStringLiteral("fieldBlurEnabled"))->setChecked(false);
@@ -218,7 +218,9 @@ void BlurGalleryEffectsTest::theCombinedListRoundTrips()
     QList<double> list = {0.0, 1.0, 0.3, 0.4, 0.2, 0.1, 30.0, 60.0, 0.5, 12.0, 1.0,
                           0.5, 0.4, 15.0, 0.1, 0.05, 0.2, 0.3, 40.0, 1.0, 20.0,
                           0.0, // no paths
-                          50.0, 0.0, 1.0, 0.0, 0.0, 4.0}; // the motion section
+                          0.0, // no spins
+                          50.0, 0.0, 1.0, 0.0, 0.0, 4.0, // the motion section
+                          1.0}; // the flash duration
     list += defaultTail();
     dialog.setValues(list);
     QCOMPARE(dialog.kind(), QStringLiteral("blur-gallery"));

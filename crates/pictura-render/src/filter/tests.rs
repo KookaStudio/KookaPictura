@@ -486,7 +486,7 @@ fn moving_kernels() -> Vec<Filter> {
         BlurNoise, BlurPath, BlurPin, BokehParams, DisplaceFit, DisplaceMap, FrameOptions,
         GlassTexture, IrisPin, LiquifyBrush, LiquifyMesh, LiquifyTool, PathMotion, PolarKind,
         Quality, RadialMethod, RippleSize, SharpenRemove, ShearFill, SmartBlurMode, SpherizeMode,
-        TiltPin, TonalFade, WaveType, ZigZagStyle,
+        SpinPin, SpinStrobe, TiltPin, TonalFade, WaveType, ZigZagStyle,
     };
     let pin = BlurPin {
         x: 0.5,
@@ -502,6 +502,13 @@ fn moving_kernels() -> Vec<Filter> {
         points: vec![(0.3, 0.5), (0.7, 0.5)],
         start_speed: 12.0,
         end_speed: 12.0,
+    };
+    let spin = SpinPin {
+        radius_x: 0.45,
+        radius_y: 0.45,
+        feather: 1.0,
+        blur_angle: 120.0,
+        ..SpinPin::default()
     };
     let mut mesh = LiquifyMesh::new(24, 24);
     let brush = LiquifyBrush::new(LiquifyTool::ForwardWarp, 16.0);
@@ -655,12 +662,19 @@ fn moving_kernels() -> Vec<Filter> {
             motion: PathMotion::default(),
             noise: BlurNoise::default(),
         },
+        Filter::SpinBlur {
+            spins: vec![spin],
+            strobe: SpinStrobe::default(),
+            noise: BlurNoise::default(),
+        },
         Filter::BlurGallery {
             field: vec![pin],
             iris: vec![iris],
             tilt: vec![TiltPin::default()],
             path: vec![path],
             motion: PathMotion::default(),
+            spin: vec![spin],
+            spin_strobe: SpinStrobe::default(),
             bokeh: BokehParams::default(),
             noise: BlurNoise::default(),
         },

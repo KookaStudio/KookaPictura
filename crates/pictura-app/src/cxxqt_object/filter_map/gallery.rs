@@ -1,6 +1,7 @@
 //! The Blur Gallery kinds' variable slot lists: a pin count, a fixed-stride
 //! record per pin (Path Blur's records carry their own point count, then its
-//! six motion slots), then the shared 13-slot effects tail (bokeh
+//! six motion slots; Spin Blur's records are followed by its three strobe
+//! slots), then the shared 13-slot effects tail (bokeh
 //! enabled/light/color/range, noise
 //! enabled/amount/size/roughness/color/highlights/kind/seed). The arity
 //! table's canonical list is one pin plus the tail; its all-defaults form
@@ -9,8 +10,8 @@
 use super::choices::BLUR_NOISE_KINDS;
 use super::{f, flag, pick, u32v, u64v, u8v};
 use pictura_filters::{
-    BlurNoise, BlurPath, BlurPin, BokehParams, Filter, IrisPin, PathMotion, TiltPin,
-    MAX_FIELD_PINS, MAX_PATH_POINTS,
+    BlurNoise, BlurPath, BlurPin, BokehParams, Filter, IrisPin, PathMotion, SpinPin, SpinStrobe,
+    TiltPin, MAX_FIELD_PINS, MAX_PATH_POINTS,
 };
 
 pub(in crate::cxxqt_object) const GALLERY_TAIL: usize = 13;
@@ -33,14 +34,23 @@ const PATH_RECORD_SLOTS: usize = 1 + 2 * 2 + 2;
 const PATH_MOTION_SLOTS: usize = 6;
 pub(in crate::cxxqt_object) const PATH_BLUR_SLOTS: usize =
     1 + PATH_RECORD_SLOTS + PATH_MOTION_SLOTS + GALLERY_TAIL;
+/// Spin Blur's record: `(x, y, radius x, radius y, angle, feather, blur
+/// angle, pivot x, pivot y)`.
+const SPIN_PIN_SLOTS: usize = 9;
+/// Spin Blur's strobe section: `(strength, flashes, duration)`.
+const SPIN_STROBE_SLOTS: usize = 3;
+pub(in crate::cxxqt_object) const SPIN_BLUR_SLOTS: usize =
+    1 + SPIN_PIN_SLOTS + SPIN_STROBE_SLOTS + GALLERY_TAIL;
 /// The combined kind's canonical list: one record of each effect, the motion
-/// section, and the tail.
-pub(in crate::cxxqt_object) const BLUR_GALLERY_SLOTS: usize = 4
+/// section, the flash duration, and the tail.
+pub(in crate::cxxqt_object) const BLUR_GALLERY_SLOTS: usize = 5
     + FIELD_PIN_SLOTS
     + IRIS_PIN_SLOTS
     + TILT_PIN_SLOTS
     + PATH_RECORD_SLOTS
+    + SPIN_PIN_SLOTS
     + PATH_MOTION_SLOTS
+    + 1
     + GALLERY_TAIL;
 
 const FIELD_DEFAULT_PIN: BlurPin = BlurPin {
@@ -84,6 +94,21 @@ fn read_tilt(s: &[f64]) -> TiltPin {
         distortion: f(s, 7, d.distortion),
         symmetric: flag(s, 8, d.symmetric),
         blur: f(s, 9, d.blur),
+    }
+}
+
+fn read_spin(s: &[f64]) -> SpinPin {
+    let d = SpinPin::default();
+    SpinPin {
+        x: f(s, 0, d.x),
+        y: f(s, 1, d.y),
+        radius_x: f(s, 2, d.radius_x),
+        radius_y: f(s, 3, d.radius_y),
+        angle: f(s, 4, d.angle),
+        feather: f(s, 5, d.feather),
+        blur_angle: f(s, 6, d.blur_angle),
+        pivot_x: f(s, 7, d.pivot_x),
+        pivot_y: f(s, 8, d.pivot_y),
     }
 }
 
@@ -184,16 +209,52 @@ fn read_motion(params: &[f64], at: usize) -> PathMotion {
     }
 }
 
+/// The `spin-blur` kind. An empty list and the canonical list with count 0
+/// map to one default spin.
+pub(super) fn spin_blur(params: &[f64]) -> Option<Filter> {
+    if params.is_empty() {
+        return Some(Filter::SpinBlur {
+            spins: vec![SpinPin::default()],
+            strobe: SpinStrobe::default(),
+            noise: BlurNoise::default(),
+        });
+    }
+    let canonical = params.len() == SPIN_BLUR_SLOTS && params[0] == 0.0;
+    let (spins, at) = if canonical {
+        (vec![SpinPin::default()], 1 + SPIN_PIN_SLOTS)
+    } else {
+        let mut at = 0;
+        (section(params, &mut at, SPIN_PIN_SLOTS, read_spin)?, at)
+    };
+    if params.len() != at + SPIN_STROBE_SLOTS + GALLERY_TAIL {
+        return None;
+    }
+    let d = SpinStrobe::default();
+    let strobe = SpinStrobe {
+        strength: f(params, at, d.strength),
+        flashes: u32v(params, at + 1, d.flashes),
+        duration: f(params, at + 2, d.duration),
+    };
+    let (_, noise) = effects(params, at + SPIN_STROBE_SLOTS);
+    Some(Filter::SpinBlur {
+        spins,
+        strobe,
+        noise,
+    })
+}
+
 /// The combined `blur-gallery` kind: each effect's count and records in
-/// turn (Field, Iris, Tilt-Shift, Path; a count of 0 turns it off), the
-/// motion section, then the tail. An empty list and the canonical
-/// all-defaults list (every count 0) map to one default Field pin.
+/// turn (Field, Iris, Tilt-Shift, Path, Spin; a count of 0 turns it off),
+/// the motion section, the spin flash duration, then the tail. Spins take
+/// the motion section's strobe strength and flashes. An empty list and the
+/// canonical all-defaults list (every count 0) map to one default Field pin.
 pub(super) fn blur_gallery(params: &[f64]) -> Option<Filter> {
     let canonical_counts = [
         0,
         1 + FIELD_PIN_SLOTS,
         2 + FIELD_PIN_SLOTS + IRIS_PIN_SLOTS,
         3 + FIELD_PIN_SLOTS + IRIS_PIN_SLOTS + TILT_PIN_SLOTS,
+        4 + FIELD_PIN_SLOTS + IRIS_PIN_SLOTS + TILT_PIN_SLOTS + PATH_RECORD_SLOTS,
     ];
     let defaults = params.is_empty()
         || (params.len() == BLUR_GALLERY_SLOTS
@@ -206,6 +267,8 @@ pub(super) fn blur_gallery(params: &[f64]) -> Option<Filter> {
             tilt: Vec::new(),
             path: Vec::new(),
             motion: PathMotion::default(),
+            spin: Vec::new(),
+            spin_strobe: SpinStrobe::default(),
             bokeh,
             noise,
         });
@@ -215,17 +278,29 @@ pub(super) fn blur_gallery(params: &[f64]) -> Option<Filter> {
     let iris = section(params, &mut at, IRIS_PIN_SLOTS, read_iris)?;
     let tilt = section(params, &mut at, TILT_PIN_SLOTS, read_tilt)?;
     let path = path_section(params, &mut at)?;
-    if params.len() != at + PATH_MOTION_SLOTS + GALLERY_TAIL {
+    let spin = section(params, &mut at, SPIN_PIN_SLOTS, read_spin)?;
+    if params.len() != at + PATH_MOTION_SLOTS + 1 + GALLERY_TAIL {
         return None;
     }
     let motion = read_motion(params, at);
-    let (bokeh, noise) = effects(params, at + PATH_MOTION_SLOTS);
+    let spin_strobe = SpinStrobe {
+        strength: motion.strobe_strength,
+        flashes: motion.strobe_flashes,
+        duration: f(
+            params,
+            at + PATH_MOTION_SLOTS,
+            SpinStrobe::default().duration,
+        ),
+    };
+    let (bokeh, noise) = effects(params, at + PATH_MOTION_SLOTS + 1);
     Some(Filter::BlurGallery {
         field,
         iris,
         tilt,
         path,
         motion,
+        spin,
+        spin_strobe,
         bokeh,
         noise,
     })

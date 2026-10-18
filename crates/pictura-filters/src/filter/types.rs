@@ -5,9 +5,9 @@ use crate::{
     DisplaceFit, DisplaceMap, ExtrudeType, FrameOptions, GlassTexture, GrainType, HalftoneType,
     HdrToningParams, IrisPin, IrisShape, LensType, LightDirection, Lighting, LiquifyMesh,
     MezzotintType, NoiseDistribution, PathMotion, PolarKind, Quality, RadialMethod,
-    ReduceNoiseParams, RippleSize, SharpenRemove, ShearFill, SmartBlurMode, SpherizeMode,
-    StrokeDirection, TextureOptions, TileFill, TiltPin, TonalFade, WaveType, WindMethod,
-    ZigZagStyle,
+    ReduceNoiseParams, RippleSize, SharpenRemove, ShearFill, SmartBlurMode, SpherizeMode, SpinPin,
+    SpinStrobe, StrokeDirection, TextureOptions, TileFill, TiltPin, TonalFade, WaveType,
+    WindMethod, ZigZagStyle,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -96,15 +96,26 @@ pub enum Filter {
         motion: PathMotion,
         noise: BlurNoise,
     },
+    /// Blur Gallery Spin Blur (post-CS6, non-parity): rotational blur along
+    /// arcs round each spin's rotation centre inside its feathered ellipse,
+    /// with the Noise pass.
+    SpinBlur {
+        spins: Vec<SpinPin>,
+        strobe: SpinStrobe,
+        noise: BlurNoise,
+    },
     /// The Blur Gallery with several effects on: each list's radius field as
     /// its own kernel builds it, combined per pixel by the largest, then the
-    /// path gather over the result; an empty list turns that effect off.
+    /// path and spin gathers over the result; an empty list turns that effect
+    /// off.
     BlurGallery {
         field: Vec<BlurPin>,
         iris: Vec<IrisPin>,
         tilt: Vec<TiltPin>,
         path: Vec<BlurPath>,
         motion: PathMotion,
+        spin: Vec<SpinPin>,
+        spin_strobe: SpinStrobe,
         bokeh: BokehParams,
         noise: BlurNoise,
     },
@@ -616,6 +627,7 @@ pub fn filters_alpha(filter: &Filter) -> bool {
             | Filter::IrisBlur { .. }
             | Filter::TiltShift { .. }
             | Filter::PathBlur { .. }
+            | Filter::SpinBlur { .. }
             | Filter::BlurGallery { .. }
             | Filter::Sharpen
             | Filter::SharpenMore

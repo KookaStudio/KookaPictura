@@ -171,15 +171,11 @@ void TiltShiftTest::workspaceOpensOnTheDefaultBand()
     QCOMPARE(distortion->maximum(), 100.0);
     auto* symmetric = dialog.findChild<QCheckBox*>(QStringLiteral("tiltSymmetric"));
     QVERIFY(symmetric != nullptr && !symmetric->isChecked());
-    for (const char* name : {"fieldBlurEnabled", "irisBlurEnabled", "pathBlurEnabled"}) {
+    for (const char* name :
+         {"fieldBlurEnabled", "irisBlurEnabled", "pathBlurEnabled", "spinBlurEnabled"}) {
         auto* other = dialog.findChild<QCheckBox*>(QLatin1String(name));
         QVERIFY2(other != nullptr, name);
         QVERIFY2(!other->isChecked() && other->isEnabled(), name);
-    }
-    for (const char* name : {"spinBlurEnabled"}) {
-        auto* other = dialog.findChild<QCheckBox*>(QLatin1String(name));
-        QVERIFY2(other != nullptr, name);
-        QVERIFY2(!other->isChecked() && !other->isEnabled(), name);
     }
     dialog.reject();
 }

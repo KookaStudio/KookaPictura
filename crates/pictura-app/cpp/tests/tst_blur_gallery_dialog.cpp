@@ -161,20 +161,15 @@ void BlurGalleryDialogTest::workspaceFollowsCs6()
     QVERIFY(enabled != nullptr && enabled->isChecked() && enabled->isEnabled());
     auto* preview = dialog.findChild<QCheckBox*>(QStringLiteral("filterPreview"));
     QVERIFY(preview != nullptr && preview->isChecked());
-    // Iris Blur and Tilt-Shift are off but selectable, their controls
-    // collapsed; Spin Blur lists as a disabled row.
-    for (const char* name : {"irisBlurEnabled", "tiltShiftEnabled", "pathBlurEnabled"}) {
+    // The other effects are off but selectable, their controls collapsed.
+    for (const char* name :
+         {"irisBlurEnabled", "tiltShiftEnabled", "pathBlurEnabled", "spinBlurEnabled"}) {
         auto* row = dialog.findChild<QCheckBox*>(QLatin1String(name));
         QVERIFY2(row != nullptr, name);
         QVERIFY2(!row->isChecked() && row->isEnabled(), name);
     }
     QVERIFY(!dialog.findChild<QDoubleSpinBox*>(QStringLiteral("irisBlurSpin"))->isVisibleTo(&dialog));
     QVERIFY(spin->isVisibleTo(&dialog));
-    for (const char* name : {"spinBlurEnabled"}) {
-        auto* row = dialog.findChild<QCheckBox*>(QLatin1String(name));
-        QVERIFY2(row != nullptr, name);
-        QVERIFY2(!row->isChecked() && !row->isEnabled(), name);
-    }
     dialog.reject();
 }
 
@@ -413,15 +408,11 @@ void BlurGalleryDialogTest::irisWorkspaceOpensOnTheDefaultOutline()
     QVERIFY(spin != nullptr && spin->value() == 15.0 && spin->maximum() == 500.0);
     QVERIFY(!dialog.findChild<QDoubleSpinBox*>(QStringLiteral("fieldBlurSpin"))
                  ->isVisibleTo(&dialog));
-    for (const char* name : {"fieldBlurEnabled", "tiltShiftEnabled", "pathBlurEnabled"}) {
+    for (const char* name :
+         {"fieldBlurEnabled", "tiltShiftEnabled", "pathBlurEnabled", "spinBlurEnabled"}) {
         auto* row = dialog.findChild<QCheckBox*>(QLatin1String(name));
         QVERIFY2(row != nullptr, name);
         QVERIFY2(!row->isChecked() && row->isEnabled(), name);
-    }
-    for (const char* name : {"spinBlurEnabled"}) {
-        auto* row = dialog.findChild<QCheckBox*>(QLatin1String(name));
-        QVERIFY2(row != nullptr, name);
-        QVERIFY2(!row->isChecked() && !row->isEnabled(), name);
     }
     dialog.reject();
 }

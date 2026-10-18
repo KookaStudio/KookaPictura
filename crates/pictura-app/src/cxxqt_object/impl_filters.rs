@@ -897,7 +897,9 @@ mod tests {
                     1.0, 0.85, 0.85, 0.05, 0.05, 0.0, 50.0, 0.3, 30.0, // one iris
                     1.0, 0.5, 0.85, 15.0, 0.03, 0.03, 0.05, 0.05, 50.0, 0.0, 30.0, // one band
                     0.0,  // no paths
+                    0.0,  // no spins
                     50.0, 0.0, 1.0, 0.0, 0.0, 4.0, // motion
+                    1.0, // flash duration
                     0.0, 0.0, 0.0, 0.0, 0.0, // bokeh off
                     0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, // noise off
                 ],
@@ -957,6 +959,10 @@ mod tests {
                 "{kind}: a cropped preview unexpectedly matched the commit"
             );
         }
+        // A spin's apron is the widest (its reach is a fraction of the
+        // buffer), so on this picture a crop is the whole layer and cannot
+        // show the mismatch; the kind still escalates.
+        assert!(filter_preview_needs_whole_layer("spin-blur"));
     }
 
     fn mask_coverage(rust: &PictureViewRust) -> Vec<u8> {

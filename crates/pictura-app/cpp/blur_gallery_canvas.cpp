@@ -32,6 +32,7 @@ const double kFeatherDot = 4.5;
 const double kMinIrisRadius = 0.005;
 const double kMaxIrisRadius = 10.0;
 const double kMaxTiltExtent = 10.0;
+const double kMaxSpinAngle = 360.0;
 
 // The superellipse exponent for a squareness, as `pictura_filters::iris_exponent`.
 double irisExponent(double squareness)
@@ -151,6 +152,11 @@ QPointF BlurGalleryCanvas::toWidget(const QPointF& fraction) const
     return {area.x() + fraction.x() * area.width(), area.y() + fraction.y() * area.height()};
 }
 
+QPointF BlurGalleryCanvas::markerAt(const BlurGalleryPin& pin) const
+{
+    return toWidget(mode_ == BlurGalleryMode::Spin ? pin.pos + pin.pivot : pin.pos);
+}
+
 QPointF BlurGalleryCanvas::toFraction(const QPointF& widget) const
 {
     const QRectF area = imageRect();
@@ -162,7 +168,8 @@ QPointF BlurGalleryCanvas::toFraction(const QPointF& widget) const
 
 namespace {
 
-IrisFrame irisFrame(const BlurGalleryPin& pin, const QPointF& centre, double widthPx)
+// A spin's outline is always an ellipse (`round`), whatever its squareness.
+IrisFrame irisFrame(const BlurGalleryPin& pin, const QPointF& centre, double widthPx, bool round)
 {
     const double radians = qDegreesToRadians(pin.angle);
     IrisFrame frame;
@@ -171,7 +178,7 @@ IrisFrame irisFrame(const BlurGalleryPin& pin, const QPointF& centre, double wid
     frame.across = {-std::sin(radians), std::cos(radians)};
     frame.a = pin.radii.width() * widthPx;
     frame.b = pin.radii.height() * widthPx;
-    frame.exponent = irisExponent(pin.squareness);
+    frame.exponent = round ? 2.0 : irisExponent(pin.squareness);
     return frame;
 }
 
@@ -184,12 +191,12 @@ int BlurGalleryCanvas::hitPin(const QPointF& widget, bool* onRing) const
         return -1;
     }
     for (int i = pins_->size() - 1; i >= 0; --i) {
-        if (QLineF(widget, toWidget(pins_->at(i).pos)).length() <= kRingSmall + 2.0) {
+        if (QLineF(widget, markerAt(pins_->at(i))).length() <= kRingSmall + 2.0) {
             return i;
         }
     }
     if (selected_ >= 0 && selected_ < pins_->size()
-        && std::abs(QLineF(widget, toWidget(pins_->at(selected_).pos)).length() - kRing) <= kGrab) {
+        && std::abs(QLineF(widget, markerAt(pins_->at(selected_))).length() - kRing) <= kGrab) {
         *onRing = true;
         return selected_;
     }
@@ -198,16 +205,17 @@ int BlurGalleryCanvas::hitPin(const QPointF& widget, bool* onRing) const
 
 bool BlurGalleryCanvas::grabIrisHandle(const QPointF& widget)
 {
-    if (mode_ != BlurGalleryMode::Iris || !pins_ || selected_ < 0
+    const bool spin = mode_ == BlurGalleryMode::Spin;
+    if ((mode_ != BlurGalleryMode::Iris && !spin) || !pins_ || selected_ < 0
         || selected_ >= pins_->size()) {
         return false;
     }
     const BlurGalleryPin& pin = pins_->at(selected_);
-    const IrisFrame frame = irisFrame(pin, toWidget(pin.pos), imageRect().width());
+    const IrisFrame frame = irisFrame(pin, toWidget(pin.pos), imageRect().width(), spin);
     const auto near = [&](const QPointF& handle, double size) {
         return QLineF(widget, handle).length() <= size + kGrab;
     };
-    if (near(frame.diamond(), kHandle)) {
+    if (!spin && near(frame.diamond(), kHandle)) {
         drag_ = Drag::Roundness;
         return true;
     }
@@ -235,7 +243,8 @@ void BlurGalleryCanvas::dragIris(const QPointF& widget, BlurGalleryPin& pin) con
     if (widthPx <= 0.0) {
         return;
     }
-    const IrisFrame frame = irisFrame(pin, toWidget(pin.pos), widthPx);
+    const IrisFrame frame =
+        irisFrame(pin, toWidget(pin.pos), widthPx, mode_ == BlurGalleryMode::Spin);
     const QPointF offset = widget - frame.centre;
     if (drag_ == Drag::Radius) {
         // The grabbed handle follows the pointer: its distance sets that
@@ -278,8 +287,15 @@ void BlurGalleryCanvas::dragTo(const QPointF& widget)
         return;
     }
     BlurGalleryPin& pin = (*pins_)[selected_];
+    const bool spin = mode_ == BlurGalleryMode::Spin;
     if (drag_ == Drag::Move) {
-        pin.pos = toFraction(widget);
+        // The marker follows the pointer; a spin's outline keeps its offset.
+        pin.pos = toFraction(widget) - (spin ? pin.pivot : QPointF());
+    } else if (drag_ == Drag::Pivot) {
+        pin.pivot = toFraction(widget) - pin.pos;
+    } else if (drag_ == Drag::Blur && spin) {
+        // A degree of Blur Angle per pixel dragged.
+        pin.blur = qBound(0.0, dragStartBlur_ + widget.x() - dragStart_.x(), kMaxSpinAngle);
     } else if (drag_ == Drag::Blur) {
         const QRectF area = imageRect();
         const double docPerWidget = area.width() > 0.0 && documentSize_.width() > 0
@@ -315,7 +331,8 @@ void BlurGalleryCanvas::paintEvent(QPaintEvent*)
         paintPaths(painter);
         return;
     }
-    if (mode_ == BlurGalleryMode::Iris) {
+    const bool spin = mode_ == BlurGalleryMode::Spin;
+    if (mode_ == BlurGalleryMode::Iris || spin) {
         paintIris(painter, pins_->at(selected_));
     } else if (mode_ == BlurGalleryMode::TiltShift) {
         paintTilt(painter, pins_->at(selected_));
@@ -327,10 +344,11 @@ void BlurGalleryCanvas::paintEvent(QPaintEvent*)
             if ((pass == 0) == selected) {
                 continue;
             }
-            const QPointF at = toWidget(pins_->at(i).pos);
+            const QPointF at = markerAt(pins_->at(i));
             // The selected pin is the larger circle with the blur handle ring;
             // the others are small target dots, all equally draggable. The
-            // ring's white arc shows the pin's blur amount (full at 100 px).
+            // ring's white arc shows the pin's blur amount (full at 100 px),
+            // or a spin's Blur Angle (full at 360°).
             const double ring = selected ? kRing : kRingSmall;
             const double dot = selected ? kPin : kDot;
             const double ringPen = selected ? 2.8 : 2.0;
@@ -342,7 +360,7 @@ void BlurGalleryCanvas::paintEvent(QPaintEvent*)
             painter.setPen(QPen(base, ringPen));
             painter.drawEllipse(at, ring, ring);
             const double span =
-                360.0 * std::clamp(pins_->at(i).blur / 100.0, 0.0, 1.0);
+                360.0 * std::clamp(pins_->at(i).blur / (spin ? kMaxSpinAngle : 100.0), 0.0, 1.0);
             if (span > 0.0) {
                 const QRectF circle(at.x() - ring, at.y() - ring, 2.0 * ring, 2.0 * ring);
                 painter.setPen(QPen(fill, ringPen, Qt::SolidLine, Qt::FlatCap));
@@ -354,8 +372,9 @@ void BlurGalleryCanvas::paintEvent(QPaintEvent*)
         }
     }
     const BlurGalleryPin& pin = pins_->at(selected_);
-    const QPointF at = toWidget(pin.pos);
-    const QString text = QStringLiteral("Blur: %1").arg(qRound(pin.blur));
+    const QPointF at = markerAt(pin);
+    const QString text = spin ? QStringLiteral("Blur Angle: %1°").arg(qRound(pin.blur))
+                              : QStringLiteral("Blur: %1").arg(qRound(pin.blur));
     const QRectF textRect = QFontMetricsF(painter.font()).boundingRect(text);
     QRectF box = textRect.adjusted(-7.0, -3.0, 7.0, 3.0);
     box.moveBottomLeft(QPointF(at.x() - box.width() / 2.0, at.y() - kRing - 5.0));
@@ -372,7 +391,8 @@ void BlurGalleryCanvas::paintEvent(QPaintEvent*)
 
 void BlurGalleryCanvas::paintIris(QPainter& painter, const BlurGalleryPin& pin) const
 {
-    const IrisFrame frame = irisFrame(pin, toWidget(pin.pos), imageRect().width());
+    const bool spin = mode_ == BlurGalleryMode::Spin;
+    const IrisFrame frame = irisFrame(pin, toWidget(pin.pos), imageRect().width(), spin);
     QPainterPath outline;
     const int steps = 144;
     const double power = 2.0 / frame.exponent;
@@ -401,6 +421,9 @@ void BlurGalleryCanvas::paintIris(QPainter& painter, const BlurGalleryPin& pin) 
         painter.drawEllipse(frame.at(0.0, sign), kHandle, kHandle);
         painter.drawEllipse(frame.at(sign * pin.feather, 0.0), kFeatherDot, kFeatherDot);
         painter.drawEllipse(frame.at(0.0, sign * pin.feather), kFeatherDot, kFeatherDot);
+    }
+    if (spin) {
+        return;
     }
     const QPointF tip = frame.diamond();
     const double d = kHandle + 1.5;
@@ -594,7 +617,9 @@ void BlurGalleryCanvas::mousePressEvent(QMouseEvent* event)
             selected_ = index;
             emit pinSelected(index);
         }
-        drag_ = onRing ? Drag::Blur : Drag::Move;
+        const bool pivot =
+            mode_ == BlurGalleryMode::Spin && (event->modifiers() & Qt::AltModifier);
+        drag_ = onRing ? Drag::Blur : (pivot ? Drag::Pivot : Drag::Move);
         dragStart_ = pos;
         dragStartBlur_ = pins_->at(index).blur;
         update();
@@ -607,6 +632,7 @@ void BlurGalleryCanvas::mousePressEvent(QMouseEvent* event)
             pin = pins_->at(selected_);
         }
         pin.pos = toFraction(pos);
+        pin.pivot = QPointF();
         pins_->append(pin);
         selected_ = pins_->size() - 1;
         drag_ = Drag::Move;

@@ -289,8 +289,8 @@ fn filter_preview(mut view: Pin<&mut PictureView>, kind: &QString, params: &QLis
 /// map from the buffer's corner, Lens Blur's depth map and Liquify's mesh
 /// align to the layer's rectangle, Picture Frame sizes and insets itself as a
 /// fraction of the buffer, and the Blur Gallery (Field Blur, Iris Blur,
-/// Tilt-Shift, and Path Blur) places its pins and paths as fractions of the
-/// buffer.
+/// Tilt-Shift, Path Blur, and Spin Blur) places its pins, paths, and spins as
+/// fractions of the buffer.
 pub(crate) fn filter_preview_needs_whole_layer(kind: &str) -> bool {
     matches!(
         kind,
@@ -305,6 +305,7 @@ pub(crate) fn filter_preview_needs_whole_layer(kind: &str) -> bool {
             | "iris-blur"
             | "tilt-shift"
             | "path-blur"
+            | "spin-blur"
             | "blur-gallery"
             | "liquify"
             | "picture-frame"

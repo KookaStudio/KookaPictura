@@ -1,9 +1,10 @@
 #pragma once
 
 // CS6's Blur Gallery workspace as the Field Blur, Iris Blur, Tilt-Shift, and
-// (post-CS6) Path Blur entries open it: the picture with its on-image pins
-// or paths beside a Blur Tools panel and the Effects / Motion Effects / Noise
-// tabbed panel. Each of the four effects keeps its own pin list here and can
+// (post-CS6) Path Blur and Spin Blur entries open it: the picture with its
+// on-image pins, paths, or spins beside a Blur Tools panel and the Effects /
+// Motion Effects / Noise tabbed panel. Each of the five effects keeps its own
+// pin list here and can
 // be switched on with its row's checkbox; the selected effect (its row's
 // name, or checking it) is the one the canvas edits, and its arrow opens its
 // controls, closing the row that was open. The command's kind opens with
@@ -41,8 +42,8 @@ public:
                       QWidget* parent = nullptr);
 
     // The kind OK commits: the one effect switched on (`field-blur`,
-    // `iris-blur`, `tilt-shift`, `path-blur`), `blur-gallery` for several, or
-    // empty for none.
+    // `iris-blur`, `tilt-shift`, `path-blur`, `spin-blur`), `blur-gallery`
+    // for several, or empty for none.
     QString kind() const;
     // `kind()`'s slots. A single effect: the count, then per pin `(x, y,
     // blur)` for Field, `(x, y, radius x, radius y, angle, squareness,
@@ -50,9 +51,12 @@ public:
     // fade above, fade below, distortion, symmetric, blur)` for Tilt-Shift,
     // or per path `(point count, (x, y)×point count, start speed, end
     // speed)` then the motion section `(speed, taper, centered, rear sync,
-    // strobe strength, strobe flashes)` for Path Blur. `blur-gallery`: each
-    // effect's count and records in that order (0 for one switched off),
-    // then the motion section. Then the effects tail (bokeh
+    // strobe strength, strobe flashes)` for Path Blur, or per spin `(x, y,
+    // radius x, radius y, angle, feather, blur angle, pivot x, pivot y)` then
+    // `(strobe strength, strobe flashes, flash duration)` for Spin Blur.
+    // `blur-gallery`: each effect's count and records in that order (0 for
+    // one switched off), then the motion section and the flash duration.
+    // Then the effects tail (bokeh
     // enabled/light/color/range, noise
     // enabled/amount/size/roughness/color/highlights/kind/seed).
     QList<double> values() const;
@@ -93,6 +97,15 @@ private:
     QWidget* buildEffectControls(QWidget* parent, BlurGalleryMode mode, const QString& name);
     // Path Blur's row and Motion Effects tab (blur_gallery_path.cpp).
     void buildPathControls(QWidget* box, QVBoxLayout* controls);
+    // Spin Blur's records and strobe slots (blur_gallery_spin.cpp).
+    void appendSpins(QList<double>* out) const;
+    bool readSpins(const QList<double>& values, int* at, QList<BlurGalleryPin>* spins) const;
+    void appendSpinStrobe(QList<double>* out) const;
+    void readSpinStrobe(const QList<double>& values, int at);
+    void setStrobeDuration(double degrees);
+    // The Motion Effects tab fits Path and Spin Blur; Strobe Flash Duration
+    // shows only for Spin Blur.
+    void syncMotionTab();
     Field addField(QVBoxLayout* layout, QWidget* parent, const QString& label, const QString& name,
                    double minimum, double maximum, double value, int decimals,
                    const QString& suffix);
@@ -148,7 +161,7 @@ private:
         QDoubleSpinBox* blurSpin = nullptr;
         QSlider* blurSlider = nullptr;
     };
-    static constexpr int kEffects = 4;
+    static constexpr int kEffects = 5;
     Effect effects_[kEffects];
     BlurGalleryMode active_ = BlurGalleryMode::Field;
     BlurGalleryCanvas* canvas_ = nullptr;
@@ -168,6 +181,7 @@ private:
     QCheckBox* pathEditShapes_ = nullptr;
     Field strobeStrength_;
     Field strobeFlashes_;
+    Field strobeDuration_;
     bool rearSync_ = false;
 
     QCheckBox* bokehEnabled_ = nullptr;

@@ -5,8 +5,8 @@ use pictura_core::shape::CUSTOM_SHAPE_NAMES;
 use pictura_filters::{
     BlurNoise, BlurNoiseKind, BlurPath, BlurPin, BokehParams, ChannelDetail, DisplaceFit,
     GlassTexture, IrisPin, IrisShape, LightType, NoiseDistribution, PathMotion, Quality,
-    RadialMethod, ReduceNoiseParams, SharpenRemove, SmartBlurMode, TextureChannel, TiltPin,
-    WaveType, WindMethod, MAX_FIELD_PINS, MAX_PATH_POINTS,
+    RadialMethod, ReduceNoiseParams, SharpenRemove, SmartBlurMode, SpinPin, SpinStrobe,
+    TextureChannel, TiltPin, WaveType, WindMethod, MAX_FIELD_PINS, MAX_PATH_POINTS,
 };
 
 #[test]
@@ -758,10 +758,13 @@ fn blur_gallery_combines_each_effects_records() {
             tilt,
             path,
             motion,
+            spin,
             bokeh,
             noise,
+            ..
         }) => {
             assert!(path.is_empty(), "these lists carry no paths");
+            assert!(spin.is_empty(), "these lists carry no spins");
             assert_eq!(motion, PathMotion::default());
             Some((field, iris, tilt, bokeh, noise))
         }
@@ -789,7 +792,9 @@ fn blur_gallery_combines_each_effects_records() {
     list.extend([0.5, 0.4, 15.0, 0.1, 0.05, 0.2, 0.3, 40.0, 1.0, 20.0]);
     list.extend([0.2, 0.8, -30.0, 0.0, 0.0, 0.1, 0.1, -60.0, 0.0, 8.0]);
     list.push(0.0); // no paths
+    list.push(0.0); // no spins
     list.extend([50.0, 0.0, 1.0, 0.0, 0.0, 4.0]);
+    list.push(1.0); // flash duration
     list.extend([1.0, 30.0, 50.0, 40.0, 200.0]);
     list.extend([1.0, 20.0, 40.0, 30.0, 25.0, 10.0, 2.0, 7.0]);
     let (field, iris, tilt, bokeh, noise) = gallery(&list).unwrap();
@@ -903,7 +908,9 @@ fn path_blur_defaults_and_accepts_variable_paths() {
 fn blur_gallery_carries_the_path_section() {
     let mut list = vec![1.0, 0.2, 0.3, 6.0, 0.0, 0.0];
     list.extend([1.0, 2.0, 0.1, 0.2, 0.3, 0.4, 5.0, 25.0]);
+    list.push(0.0); // no spins
     path_tail(&mut list);
+    list.insert(list.len() - GALLERY_TAIL, 1.0); // flash duration
     match filter_from_kind_params("blur-gallery", &list) {
         Some(Filter::BlurGallery {
             field,
@@ -920,8 +927,119 @@ fn blur_gallery_carries_the_path_section() {
         }
         other => panic!("blur-gallery mapped to {other:?}"),
     }
-    assert_eq!(BLUR_GALLERY_SLOTS, 51);
+    assert_eq!(BLUR_GALLERY_SLOTS, 62);
     assert_eq!(PATH_BLUR_SLOTS, 27);
+}
+
+/// One spin record: `(x, y, radius x, radius y, angle, feather, blur angle,
+/// pivot x, pivot y)`.
+const SPIN_RECORD: [f64; 9] = [0.3, 0.6, 0.2, 0.1, 25.0, 0.4, 90.0, 0.05, -0.02];
+
+fn spin_record() -> SpinPin {
+    SpinPin {
+        x: 0.3,
+        y: 0.6,
+        radius_x: 0.2,
+        radius_y: 0.1,
+        angle: 25.0,
+        feather: 0.4,
+        blur_angle: 90.0,
+        pivot_x: 0.05,
+        pivot_y: -0.02,
+    }
+}
+
+#[test]
+fn spin_blur_defaults_and_accepts_spins() {
+    let spin_blur = |params: &[f64]| match filter_from_kind_params("spin-blur", params) {
+        Some(Filter::SpinBlur {
+            spins,
+            strobe,
+            noise,
+        }) => Some((spins, strobe, noise)),
+        Some(other) => panic!("spin-blur mapped to {other:?}"),
+        None => None,
+    };
+    assert_eq!(SPIN_BLUR_SLOTS, 26);
+    let (spins, strobe, noise) = spin_blur(&[]).unwrap();
+    assert_eq!(spins, vec![SpinPin::default()]);
+    assert_eq!(strobe, SpinStrobe::default());
+    assert_eq!(noise, BlurNoise::default());
+    let (spins, _, _) = spin_blur(&[0.0; SPIN_BLUR_SLOTS]).unwrap();
+    assert_eq!(spins, vec![SpinPin::default()]);
+
+    // Two spins, a custom strobe, the tail.
+    let mut two = vec![2.0];
+    two.extend(SPIN_RECORD);
+    two.extend([0.8, 0.2, 0.1, 0.1, 0.0, 1.0, 300.0, 0.0, 0.0]);
+    two.extend([40.0, 6.0, 12.0]);
+    two.extend([1.0, 30.0, 50.0, 40.0, 200.0]);
+    two.extend([1.0, 20.0, 40.0, 30.0, 25.0, 10.0, 1.0, 9.0]);
+    let (spins, strobe, noise) = spin_blur(&two).unwrap();
+    assert_eq!(spins.len(), 2);
+    assert_eq!(spins[0], spin_record());
+    assert_eq!(spins[1].blur_angle, 300.0);
+    assert_eq!(
+        strobe,
+        SpinStrobe {
+            strength: 40.0,
+            flashes: 6,
+            duration: 12.0,
+        }
+    );
+    assert_eq!(noise.amount, 20.0);
+
+    // A short list and an over-cap count are refused.
+    assert!(spin_blur(&two[..two.len() - 1]).is_none());
+    let mut crowded = two.clone();
+    crowded[0] = (MAX_FIELD_PINS + 1) as f64;
+    assert!(spin_blur(&crowded).is_none());
+}
+
+#[test]
+fn blur_gallery_reads_the_spin_section() {
+    // One Field pin, no Iris, Tilt-Shift, or paths, one spin.
+    let mut list = vec![1.0, 0.2, 0.3, 6.0, 0.0, 0.0, 0.0, 1.0];
+    list.extend(SPIN_RECORD);
+    list.extend([50.0, 0.0, 1.0, 0.0, 35.0, 7.0]); // motion
+    list.push(20.0); // flash duration
+    list.extend([0.0; GALLERY_TAIL]);
+    match filter_from_kind_params("blur-gallery", &list) {
+        Some(Filter::BlurGallery {
+            field,
+            path,
+            spin,
+            spin_strobe,
+            ..
+        }) => {
+            assert_eq!(field.len(), 1);
+            assert!(path.is_empty());
+            assert_eq!(spin, vec![spin_record()]);
+            // The spins share the motion section's strength and flashes.
+            assert_eq!(
+                spin_strobe,
+                SpinStrobe {
+                    strength: 35.0,
+                    flashes: 7,
+                    duration: 20.0,
+                }
+            );
+        }
+        other => panic!("blur-gallery mapped to {other:?}"),
+    }
+    // The all-defaults list needs the spin count 0 too.
+    let mut defaults = vec![0.0; BLUR_GALLERY_SLOTS];
+    match filter_from_kind_params("blur-gallery", &defaults) {
+        Some(Filter::BlurGallery { field, spin, .. }) => {
+            assert_eq!(field.len(), 1);
+            assert!(spin.is_empty());
+        }
+        other => panic!("blur-gallery mapped to {other:?}"),
+    }
+    // With a spin counted it is read in sequence instead, and this list is
+    // too long for that.
+    defaults[32] = 1.0;
+    assert!(filter_from_kind_params("blur-gallery", &defaults).is_none());
 }
 
 #[test]

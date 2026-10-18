@@ -10,8 +10,11 @@
 // each pin is a path drawn as the curve through its points with an end
 // arrow: clicks on empty picture pin a new path's stop points while its last
 // point follows the pointer (double-click, Enter, or Esc ends it), a point
-// drags, a press on the curve inserts one, and Ctrl-drag moves the path. The dialog handles
-// `H` (hide the markers) and Delete.
+// drags, a press on the curve inserts one, and Ctrl-drag moves the path. In
+// Spin mode the selected spin shows Iris's outline and handles without the
+// roundness diamond, each spin's marker sits on its rotation centre, its
+// ring sets the Blur Angle, and Alt-drag moves the rotation centre alone.
+// The dialog handles `H` (hide the markers) and Delete.
 
 #include <QtCore/QList>
 #include <QtCore/QPointF>
@@ -33,7 +36,10 @@ namespace pictura {
 // as fractions of the picture's height, and the distortion
 // (`pictura_filters::TiltPin`). Path Blur uses only `points` (fractions of
 // the picture, at least two) and the start and end `speeds` in document
-// pixels (`pictura_filters::BlurPath`).
+// pixels (`pictura_filters::BlurPath`). Spin Blur shares Iris's outline
+// (squareness unused), takes `blur` as its Blur Angle in degrees, and adds
+// the rotation centre's offset from `pos` as fractions of the picture
+// (`pictura_filters::SpinPin`).
 struct BlurGalleryPin {
     QPointF pos{0.5, 0.5};
     double blur = 0.0;
@@ -47,10 +53,11 @@ struct BlurGalleryPin {
     bool symmetric = false;
     QList<QPointF> points;
     double speeds[2] = {0.0, 0.0};
+    QPointF pivot{0.0, 0.0};
 };
 
 // The gallery effect the workspace edits.
-enum class BlurGalleryMode { Field, Iris, TiltShift, Path };
+enum class BlurGalleryMode { Field, Iris, TiltShift, Path, Spin };
 
 class BlurGalleryCanvas : public QWidget {
     Q_OBJECT
@@ -108,6 +115,8 @@ private:
     QRectF imageRect() const;
     QPointF toWidget(const QPointF& fraction) const;
     QPointF toFraction(const QPointF& widget) const;
+    // Where a pin's marker sits: a spin's rotation centre, else its position.
+    QPointF markerAt(const BlurGalleryPin& pin) const;
     // The pin under `widget` and whether the press grabbed its blur ring.
     int hitPin(const QPointF& widget, bool* onRing) const;
     // Arms an Iris handle drag on the selected pin; false when none is hit.
@@ -125,7 +134,8 @@ private:
         Fade,
         Rotate,
         Point,
-        Path
+        Path,
+        Pivot
     };
     // The Tilt-Shift line or rotation dot of the selected pin under `widget`
     // (`*sign` -1 above the band, +1 below), or `None`.

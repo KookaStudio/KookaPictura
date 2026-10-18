@@ -10,6 +10,7 @@ pub mod gallery;
 pub mod iris;
 pub mod lens;
 pub mod path;
+pub mod spin;
 
 use pictura_core::PixelBuffer;
 
