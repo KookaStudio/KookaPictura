@@ -60,6 +60,10 @@ struct SessionState {
     int cropGridOverlay = 0;         // 0 Rule of Thirds, 1 Grid, ...
     // Every other tool's options bar, by option group (tool_options_json.h).
     QJsonObject toolOptions;
+    // Swatches panel contents as [{name, color}]. `swatchesLoaded` separates an
+    // absent key (use the default palette) from an intentionally empty panel.
+    QJsonArray swatches;
+    bool swatchesLoaded = false;
     // v5-v8 panel-column state. `panelGroups` is the legacy flat JSON array of
     // {name, order, visible, minimized, collapsed} for the primary column;
     // `panelColumns` is the ordered array of

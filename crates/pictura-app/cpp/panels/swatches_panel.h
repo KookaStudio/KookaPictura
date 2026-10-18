@@ -33,6 +33,9 @@ public:
     void addSwatch(const Swatch& swatch);
     bool removeSwatch(int index);
 
+    // The next unused "Swatch N" name, counting the names already in the grid.
+    QString nextSwatchName() const;
+
     static QList<Swatch> defaultSwatches();
 
     int indexAt(const QPoint& pos) const;

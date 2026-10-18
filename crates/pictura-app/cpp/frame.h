@@ -431,7 +431,7 @@ private:
     };
 
     void buildMenus();
-    void buildPanels();
+    void buildPanels(const SessionState& state);
     // `toolOptions` is the session's saved tool options, restored before the
     // options bar is built so its controls start from them.
     void buildTools(int toolsColumns, bool useShiftKeyForToolSwitch,
