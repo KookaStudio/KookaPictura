@@ -128,6 +128,60 @@ fn shape_layer_region_profile() {
     time(&d, "4 shapes, one stroked away from the region");
 }
 
+/// Print-only: what adding one shape layer costs on a large document (issue
+/// #719) — the full composite the commit used to run, against a composite of
+/// the shape's bounds only, on the CPU and (when present) the GPU, for a
+/// rectangle and an ellipse. `PICTURA_PROFILE_SIZE` sets the square edge
+/// (default 8000; the world map is ~16000).
+#[test]
+#[ignore = "profiling: prints a shape layer's commit composite cost"]
+fn shape_commit_profile() {
+    let n: u32 = std::env::var("PICTURA_PROFILE_SIZE")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(8000);
+    let base = Document::from_rgba("Background", n, n, &vec![200; (n as usize).pow(2) * 4]);
+    let gpu = crate::gpu_available();
+    let box_ = (
+        n as f64 * 0.2,
+        n as f64 * 0.2,
+        n as f64 * 0.5,
+        n as f64 * 0.45,
+    );
+    for kind in [ShapeKind::Rectangle, ShapeKind::Ellipse] {
+        for backend in [false, true] {
+            if backend && !gpu {
+                continue;
+            }
+            let mut d = base.clone();
+            let s = outline_in_box(ShapeOptions::new(kind, 0.0, 5), box_).unwrap();
+            let path = crate::add_shape_layer(&mut d, "", [255, 0, 0, 255], "S", &s, None);
+            let (l, t, r, b) =
+                crate::shape_bounds(crate::resolve_path(&d, &path).unwrap(), n, n).unwrap();
+            let rect = PsdRect {
+                top: t.floor() as i32 - 2,
+                left: l.floor() as i32 - 2,
+                bottom: b.ceil() as i32 + 2,
+                right: r.ceil() as i32 + 2,
+            };
+            let t = std::time::Instant::now();
+            let _ = crate::composite_active(&d, backend);
+            let full = t.elapsed();
+            let t = std::time::Instant::now();
+            let _ = crate::composite_region_active(&d, rect, backend);
+            let region = t.elapsed();
+            eprintln!(
+                "shape_commit_profile {n}x{n} {kind:?} gpu={backend}: full={:.1}ms \
+                 bounds={:.1}ms ({}x{})",
+                full.as_secs_f64() * 1000.0,
+                region.as_secs_f64() * 1000.0,
+                rect.width(),
+                rect.height(),
+            );
+        }
+    }
+}
+
 /// `layer` with every channel textured, so a band composited from the wrong
 /// rows or columns cannot go unnoticed.
 fn textured(mut layer: Layer, seed: usize) -> Layer {

@@ -15,6 +15,10 @@ use crate::{PaintMode, Rgba, StrokeConfig, StrokeSample};
 use pictura_core::{
     layer_pixel_locked, layer_transparency_locked, BitDepth, Document, Layer, PsdRect,
 };
+use raster::{
+    plane_slices, split_bands, write_band, BandPlanes, DabRaster, BAND_PX, PARALLEL_MIN_PX,
+};
+use rayon::prelude::*;
 
 /// Deterministic stroke seed; Dissolve randomness must not vary between runs.
 const STROKE_SEED: u64 = 0x9E37_79B9_7F4A_7C15;
@@ -219,6 +223,9 @@ pub struct Stroke {
     painted: bool,
     per_dab: Option<PerDab>,
     source: Option<StampSource>,
+    /// Raster every dab on one thread: the reference the banded raster is
+    /// held to.
+    serial: bool,
 }
 
 impl Stroke {
@@ -293,6 +300,7 @@ impl Stroke {
             painted: false,
             per_dab,
             source: None,
+            serial: false,
         })
     }
 
@@ -432,6 +440,10 @@ impl Stroke {
 
         let flow = cfg.flow as f32 / 100.0;
         let mut changed = false;
+        // Dissolve draws one random roll per painted pixel in raster order, so
+        // its dabs stay on one thread; every other pixel depends on nothing but
+        // its own inputs, so the bands give the serial raster's bytes.
+        let serial = self.serial || cfg.mode == PaintMode::Dissolve;
 
         // Place and jitter every dab of this step first, so the raster below can
         // split `self` and read the base layer while writing the working one.
@@ -482,13 +494,13 @@ impl Stroke {
         let stencil = Stencil {
             base: saved.planes(),
             locked: *locked,
-            ch: *ch,
             cfg,
             paint: *paint,
             source: source.as_ref(),
             rect: *rect,
         };
 
+        let mut planes = plane_slices(work_layer, *ch, w * h);
         for (dab_x, dab_y, jittered) in placed {
             // The hoisted profile is exact when the dynamics left the tip
             // alone; a jittered dab rebuilds it from its own tip.
@@ -498,37 +510,49 @@ impl Stroke {
             };
             let y0 = ((dab_y - radius).floor() as i32).max(0);
             let y1 = ((dab_y + radius).ceil() as i32).min(h as i32 - 1);
-            for ly in y0..=y1 {
-                let dy = (ly as f32 + 0.5) - dab_y;
-                // A round tip's support on this row is a chord, so the corners
-                // of its square bounding box cost nothing. A non-round shape
-                // returns the full width and its out-of-support pixels fall to
-                // the `cov <= 0.0` filter below.
-                let Some((xlo, xhi)) = params.x_span(dy) else {
-                    continue;
-                };
-                let x0 = ((dab_x + xlo).floor() as i32).max(0);
-                let x1 = ((dab_x + xhi).ceil() as i32).min(w as i32 - 1);
-                for lx in x0..=x1 {
-                    let dx = (lx as f32 + 0.5) - dab_x;
-                    let dy = (ly as f32 + 0.5) - dab_y;
-                    let cov = params.coverage(dx, dy);
-                    if cov <= 0.0 {
-                        continue;
-                    }
-                    let i = ly as usize * w + lx as usize;
-                    let acc = 1.0 - (1.0 - scratch[i] as f32 / 255.0) * (1.0 - flow * cov);
-                    let v = (acc.clamp(0.0, 1.0) * 255.0).round() as u8;
-                    scratch[i] = v;
-                    if v == applied[i] {
-                        continue;
-                    }
-                    applied[i] = v;
-                    stencil.composite(work_layer, rng, i, v);
-                    Self::grow_dirty(dirty, dab_dirty, lx, ly);
-                    *painted = true;
-                    changed = true;
-                }
+            if y1 < y0 {
+                continue;
+            }
+            let rows = (y1 - y0 + 1) as usize;
+            let span = ((2.0 * radius).ceil() as usize + 2).min(w);
+            let band_rows = if serial || rows * span < PARALLEL_MIN_PX {
+                rows
+            } else {
+                (BAND_PX / span.max(1)).max(4)
+            };
+            let dab = DabRaster {
+                params: &params,
+                dab_x,
+                dab_y,
+                flow,
+                width: w,
+                stencil: &stencil,
+            };
+            let bands = split_bands(
+                y0 as usize,
+                rows,
+                band_rows,
+                w,
+                scratch,
+                applied,
+                &mut planes,
+            );
+            let bbox = if bands.len() == 1 {
+                bands
+                    .into_iter()
+                    .next()
+                    .and_then(|band| dab.band(band, serial.then_some(&mut *rng)))
+            } else {
+                bands
+                    .into_par_iter()
+                    .filter_map(|band| dab.band(band, None))
+                    .reduce_with(union_rect)
+            };
+            if let Some(bbox) = bbox {
+                Self::grow_dirty(dirty, dab_dirty, bbox.left, bbox.top);
+                Self::grow_dirty(dirty, dab_dirty, bbox.right - 1, bbox.bottom - 1);
+                *painted = true;
+                changed = true;
             }
         }
         changed
@@ -786,6 +810,13 @@ impl Stroke {
         Some(self.dirty_doc(local))
     }
 
+    /// The same stroke rastering every dab on one thread.
+    #[cfg(test)]
+    fn serialized(mut self) -> Self {
+        self.serial = true;
+        self
+    }
+
     /// Save every tile up front, as a stroke that copied the whole layer would
     /// have: the oracle the lazily saving stroke is held to.
     #[cfg(test)]
@@ -866,7 +897,6 @@ impl Stroke {
 struct Stencil<'a> {
     base: [Option<&'a [u8]>; 4],
     locked: bool,
-    ch: PlaneIndex,
     cfg: StrokeConfig,
     paint: Rgba,
     /// Clone Stamp / Pattern Stamp / History Brush: the colour at each pixel
@@ -876,7 +906,17 @@ struct Stencil<'a> {
 }
 
 impl Stencil<'_> {
-    fn composite(&self, work: &mut Layer, rng: &mut u64, i: usize, coverage: u8) {
+    /// Lay the paint at `coverage` over the saved pixel `i` (layer-local) and
+    /// write it to `planes` at `at`, the same pixel's index in the band the
+    /// planes were cut to. `rng` is the stroke's Dissolve state.
+    fn composite(
+        &self,
+        planes: &mut BandPlanes<'_>,
+        at: usize,
+        i: usize,
+        rng: Option<&mut u64>,
+        coverage: u8,
+    ) {
         let cov = coverage as f32 / 255.0;
         let a = (cov * self.cfg.opacity as f32 / 100.0).clamp(0.0, 1.0);
         let plane = |k: usize, missing: u8| {
@@ -902,10 +942,9 @@ impl Stencil<'_> {
             }
         };
         let mode = self.cfg.mode;
-        let roll = if mode == PaintMode::Dissolve {
-            Stroke::next_f32(rng)
-        } else {
-            0.0
+        let roll = match rng {
+            Some(rng) if mode == PaintMode::Dissolve => Stroke::next_f32(rng),
+            _ => 0.0,
         };
         let Some((r, g, b, alpha)) = blend_pixel(mode, (dr, dg, db, da), &s, a, roll) else {
             return;
@@ -917,9 +956,9 @@ impl Stencil<'_> {
             if da == 0 {
                 return;
             }
-            write_pixel(work, self.ch, i, mode, (r, g, b, da));
+            write_band(planes, at, mode, (r, g, b, da));
         } else {
-            write_pixel(work, self.ch, i, mode, (r, g, b, alpha));
+            write_band(planes, at, mode, (r, g, b, alpha));
         }
     }
 }
@@ -1123,5 +1162,6 @@ pub(crate) fn parse_layer_path(path: &str) -> Option<Vec<usize>> {
         .collect()
 }
 
+mod raster;
 #[cfg(test)]
 mod tests;

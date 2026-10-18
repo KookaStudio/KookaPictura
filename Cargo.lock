@@ -1025,6 +1025,7 @@ name = "pictura-paint"
 version = "0.1.0"
 dependencies = [
  "pictura-core",
+ "rayon",
 ]
 
 [[package]]

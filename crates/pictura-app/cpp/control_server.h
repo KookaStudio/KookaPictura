@@ -71,6 +71,7 @@ private:
     QJsonObject methodUiTree(const QJsonObject& params);
     QJsonObject methodLayerThumbnail(const QJsonObject& params);
     QJsonObject methodSetTool(const QJsonObject& params);
+    QJsonObject methodToolOptions(const QJsonObject& params);
     QJsonObject methodSelection(const QJsonObject& params);
     QJsonObject methodFilter(const QJsonObject& params);
     QJsonObject methodAdjustment(const QJsonObject& params);
@@ -89,6 +90,9 @@ private:
     // Tracked unsaved-prompt policy, mirrored from the global set in dialogs.cpp.
     bool unsavedInteractive_ = false;
     QString unsavedChoice_ = QStringLiteral("discard");
+    // The button a `pointer` `down` holds until its `up`, carried by `move`s
+    // in between so a client can time each move of a drag on its own.
+    Qt::MouseButtons heldButtons_ = Qt::NoButton;
 };
 
 } // namespace pictura

@@ -3,11 +3,12 @@
 //! Brush mode through the selection.
 
 use crate::replace::grow;
-use crate::stroke::{blend_pixel, layer_at_mut, parse_layer_path};
+use crate::stroke::{blend_pixel, layer_at_mut, parse_layer_path, union_rect};
 use crate::{PaintMode, Rgba};
 use pictura_core::{
     layer_pixel_locked, layer_transparency_locked, BitDepth, ColorMode, Document, PsdRect,
 };
+use rayon::prelude::*;
 
 /// Fill the pixel layer at `path`. `source` is asked, per document pixel, for
 /// the colour to lay and its coverage (0.0–1.0); `None` leaves the pixel
@@ -16,13 +17,16 @@ use pictura_core::{
 /// pixel's alpha. Returns the document rectangle changed, or `None` when
 /// nothing changed or the layer cannot be filled: a group, an adjustment,
 /// locked pixels, or Clear under a transparency lock.
-// ponytail: 8-bit RGB only, within the layer's own rectangle, on one thread.
+///
+/// Rows run on every core: `source` sees each pixel once, in no fixed order,
+/// so it must not depend on the pixels it was asked about before.
+// ponytail: 8-bit RGB only, within the layer's own rectangle.
 pub(crate) fn fill_layer(
     doc: &mut Document,
     path: &str,
     mode: PaintMode,
     selection: Option<&[u8]>,
-    mut source: impl FnMut(i32, i32) -> Option<(Rgba, f32)>,
+    source: impl Fn(i32, i32) -> Option<(Rgba, f32)> + Sync,
 ) -> Option<PsdRect> {
     if doc.depth != BitDepth::Eight || doc.mode != ColorMode::Rgb {
         return None;
@@ -42,67 +46,103 @@ pub(crate) fn fill_layer(
     let rect = layer.rect;
     let w = rect.width().max(0);
     let n = (w * rect.height().max(0)) as usize;
-    let plane = |id: i16| {
-        layer
-            .channels
-            .iter()
-            .position(|c| c.id == id && c.data.len() == n)
-    };
-    let (Some(r), Some(g), Some(b)) = (plane(0), plane(1), plane(2)) else {
+    let (y0, y1) = (rect.top.max(0), rect.bottom.min(canvas.1));
+    let (x0, x1) = (rect.left.max(0), rect.right.min(canvas.0));
+    if y1 <= y0 || x1 <= x0 {
         return None;
-    };
-    let alpha = plane(-1);
-    let mut dirty = None;
-    for y in rect.top.max(0)..rect.bottom.min(canvas.1) {
-        for x in rect.left.max(0)..rect.right.min(canvas.0) {
-            let selected = selection.map_or(255, |s| s[(y * canvas.0 + x) as usize]);
-            if selected == 0 {
-                continue;
-            }
-            let Some((color, cover)) = source(x, y) else {
-                continue;
-            };
-            let mut strength = cover.clamp(0.0, 1.0) * selected as f32 / 255.0;
-            let mut color = color;
-            if mode == PaintMode::Dissolve {
-                // A see-through colour dissolves into fewer pixels, not fainter ones.
-                strength *= color.a as f32 / 255.0;
-                color.a = 255;
-            }
-            if strength <= 0.0 {
-                continue;
-            }
-            let i = ((y - rect.top) * w + (x - rect.left)) as usize;
-            let dst = (
-                layer.channels[r].data[i],
-                layer.channels[g].data[i],
-                layer.channels[b].data[i],
-                alpha.map_or(255, |p| layer.channels[p].data[i]),
-            );
-            if keep_alpha && dst.3 == 0 {
-                continue;
-            }
-            let Some(out) = blend_pixel(mode, dst, &color, strength, pixel_noise(x, y)) else {
-                continue;
-            };
-            let out_alpha = if keep_alpha || alpha.is_none() {
-                dst.3
-            } else {
-                out.3
-            };
-            if (out.0, out.1, out.2, out_alpha) == dst {
-                continue;
-            }
-            layer.channels[r].data[i] = out.0;
-            layer.channels[g].data[i] = out.1;
-            layer.channels[b].data[i] = out.2;
-            if let Some(p) = alpha {
-                layer.channels[p].data[i] = out_alpha;
-            }
-            dirty = Some(grow(dirty, x, y));
+    }
+    // The R, G, B and alpha planes, each a whole layer long; a missing colour
+    // plane refuses the fill, a missing alpha is an opaque layer.
+    let mut planes: [Option<&mut [u8]>; 4] = [None, None, None, None];
+    for c in layer.channels.iter_mut() {
+        let k = match c.id {
+            0 => 0,
+            1 => 1,
+            2 => 2,
+            -1 => 3,
+            _ => continue,
+        };
+        if c.data.len() == n && planes[k].is_none() {
+            planes[k] = Some(c.data.as_mut_slice());
         }
     }
-    dirty
+    let [Some(r), Some(g), Some(b), alpha] = planes else {
+        return None;
+    };
+    let row = |ly: i32| {
+        let a = (ly * w) as usize;
+        a..a + w as usize
+    };
+    // Only the layer rows on the canvas are cut into the row tasks.
+    let span = row(y0 - rect.top).start..row(y1 - 1 - rect.top).end;
+    let w_us = w as usize;
+    let rows = r[span.clone()]
+        .chunks_mut(w_us)
+        .zip(g[span.clone()].chunks_mut(w_us))
+        .zip(b[span.clone()].chunks_mut(w_us))
+        .zip(rows_of(alpha.map(|a| &mut a[span]), w_us))
+        .enumerate()
+        .map(|(k, (((r, g), b), a))| (y0 + k as i32, r, g, b, a))
+        .collect::<Vec<_>>();
+    rows.into_par_iter()
+        .filter_map(|(y, r, g, b, mut a)| {
+            let mut dirty = None;
+            for x in x0..x1 {
+                let selected = selection.map_or(255, |s| s[(y * canvas.0 + x) as usize]);
+                if selected == 0 {
+                    continue;
+                }
+                let Some((color, cover)) = source(x, y) else {
+                    continue;
+                };
+                let mut strength = cover.clamp(0.0, 1.0) * selected as f32 / 255.0;
+                let mut color = color;
+                if mode == PaintMode::Dissolve {
+                    // A see-through colour dissolves into fewer pixels, not fainter ones.
+                    strength *= color.a as f32 / 255.0;
+                    color.a = 255;
+                }
+                if strength <= 0.0 {
+                    continue;
+                }
+                let i = (x - rect.left) as usize;
+                let dst = (r[i], g[i], b[i], a.as_ref().map_or(255, |a| a[i]));
+                if keep_alpha && dst.3 == 0 {
+                    continue;
+                }
+                let Some(out) = blend_pixel(mode, dst, &color, strength, pixel_noise(x, y)) else {
+                    continue;
+                };
+                let out_alpha = if keep_alpha || a.is_none() {
+                    dst.3
+                } else {
+                    out.3
+                };
+                if (out.0, out.1, out.2, out_alpha) == dst {
+                    continue;
+                }
+                r[i] = out.0;
+                g[i] = out.1;
+                b[i] = out.2;
+                if let Some(a) = a.as_deref_mut() {
+                    a[i] = out_alpha;
+                }
+                dirty = Some(grow(dirty, x, y));
+            }
+            dirty
+        })
+        .reduce_with(union_rect)
+}
+
+/// `plane` cut into rows of `w`, or endless `None`s for an absent plane.
+fn rows_of(plane: Option<&mut [u8]>, w: usize) -> impl Iterator<Item = Option<&mut [u8]>> {
+    let mut rows = plane.map(|p| p.chunks_mut(w));
+    std::iter::from_fn(move || {
+        Some(match rows.as_mut() {
+            Some(rows) => Some(rows.next()?),
+            None => None,
+        })
+    })
 }
 
 /// A fixed value in `0.0..1.0` for a pixel: the same fill must come out the
@@ -213,12 +253,13 @@ pub(crate) mod tests {
     fn a_layer_is_filled_in_document_space() {
         // The layer sits at (3, 0) and hangs off the 8 px canvas.
         let mut d = doc_at((8, 2), (3, 0), [255; 4], false);
-        let mut asked = Vec::new();
+        let asked = std::sync::Mutex::new(Vec::new());
         let dirty = fill_layer(&mut d, "0", PaintMode::Normal, None, |x, y| {
-            asked.push((x, y));
+            asked.lock().unwrap().push((x, y));
             (x == 5).then_some((RED, 1.0))
         })
         .expect("filled");
+        let asked = asked.into_inner().unwrap();
         assert_eq!((dirty.left, dirty.right), (5, 6));
         assert_eq!(pixel(&d, 2, 1), [220, 0, 0, 255]);
         assert!(asked.iter().all(|&(x, _)| (3..8).contains(&x)));

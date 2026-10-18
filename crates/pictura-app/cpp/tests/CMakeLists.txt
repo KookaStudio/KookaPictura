@@ -96,6 +96,7 @@ set(PICTURA_QT_TESTS
     tst_workspaces
     tst_zoom_tool
     tst_large_document
+    tst_tool_commit
     tst_recovery
     tst_session_store
     tst_rulers_guides

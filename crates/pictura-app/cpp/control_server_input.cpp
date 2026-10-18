@@ -170,7 +170,8 @@ QJsonObject ControlServer::methodPointer(const QJsonObject& params)
     const QString op = params.value(QStringLiteral("op")).toString();
     const bool knownOp = op == QStringLiteral("click") || op == QStringLiteral("dblclick")
                          || op == QStringLiteral("move") || op == QStringLiteral("drag")
-                         || op == QStringLiteral("scroll");
+                         || op == QStringLiteral("scroll") || op == QStringLiteral("down")
+                         || op == QStringLiteral("up");
     if (!knownOp) {
         return error(QStringLiteral("invalid_param"),
                      QStringLiteral("unknown op: %1").arg(op));
@@ -266,6 +267,19 @@ QJsonObject ControlServer::methodPointer(const QJsonObject& params)
         QApplication::sendEvent(widget, &event);
     };
 
+    // A `down` holds its button until `up`; a second `down` would leave the
+    // first one stuck on every later `move`.
+    if (op == QStringLiteral("down") && heldButtons_ != Qt::NoButton) {
+        return error(QStringLiteral("invalid_param"),
+                     QStringLiteral("a button is already down; send up first"));
+    }
+    // Every other press-and-release op ends with no button held, so a stale
+    // `down` cannot follow a later plain `move`.
+    if (op == QStringLiteral("click") || op == QStringLiteral("dblclick")
+        || op == QStringLiteral("drag")) {
+        heldButtons_ = Qt::NoButton;
+    }
+
     const Mapped first = mapPoint(x, y);
     if (op == QStringLiteral("click")) {
         sendMouse(QEvent::MouseButtonPress, target, first.local, first.global, button, heldButton,
@@ -281,9 +295,17 @@ QJsonObject ControlServer::methodPointer(const QJsonObject& params)
                   heldButton, modifiers);
         sendMouse(QEvent::MouseButtonRelease, target, first.local, first.global, button,
                   Qt::NoButton, modifiers);
+    } else if (op == QStringLiteral("down")) {
+        heldButtons_ = heldButton;
+        sendMouse(QEvent::MouseButtonPress, target, first.local, first.global, button, heldButton,
+                  modifiers);
+    } else if (op == QStringLiteral("up")) {
+        heldButtons_ = Qt::NoButton;
+        sendMouse(QEvent::MouseButtonRelease, target, first.local, first.global, button,
+                  Qt::NoButton, modifiers);
     } else if (op == QStringLiteral("move")) {
         sendMouse(QEvent::MouseMove, target, first.local, first.global, Qt::NoButton,
-                  Qt::NoButton, modifiers);
+                  heldButtons_, modifiers);
     } else if (op == QStringLiteral("drag")) {
         const Mapped last = mapPoint(x2, y2);
         sendMouse(QEvent::MouseButtonPress, target, first.local, first.global, button, heldButton,
