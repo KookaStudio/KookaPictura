@@ -55,6 +55,7 @@ bool isModalCommand(const QString& id)
         QString::fromLatin1(command_ids::FileNew),
         QString::fromLatin1(command_ids::FileOpen),
         QString::fromLatin1(command_ids::FileOpenAsSmartObject),
+        QString::fromLatin1(command_ids::FileOpenAs),
         QString::fromLatin1(command_ids::FilePlace),
         QString::fromLatin1(command_ids::FileInfo),
         QString::fromLatin1(command_ids::FileSave),
@@ -676,7 +677,7 @@ QJsonObject ControlServer::methodDocument(const QJsonObject& params)
         if (path.isEmpty()) {
             return error(QStringLiteral("invalid_param"), QStringLiteral("path is required"));
         }
-        applied = frame_->openDocumentAtPath(path);
+        applied = frame_->openDocumentAtPath(path, false);
         if (!applied) {
             return error(QStringLiteral("io_error"),
                          QStringLiteral("could not open %1").arg(path));

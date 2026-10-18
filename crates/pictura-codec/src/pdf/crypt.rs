@@ -1,12 +1,14 @@
 //! The standard security handler (design D9): ISO 32000-1 §7.6.3 algorithms
 //! 1–5 for revisions 2–4 and ISO 32000-2 algorithms 2.A/2.B/8–10 for
-//! revision 6. RC4 and the CBC chaining are written here over the RustCrypto
-//! MD5 / AES / SHA-2 primitives.
+//! revision 6, both ways: the writer encrypts, and the reader (`Decryptor`,
+//! algorithms 6 and 7 / 2.A) opens a file with its user or owner password.
+//! RC4 and the CBC chaining are written here over the RustCrypto MD5 / AES /
+//! SHA-2 primitives.
 
 use std::cell::Cell;
 
 use aes::cipher::generic_array::GenericArray;
-use aes::cipher::{BlockEncrypt, KeyInit};
+use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
 use md5::{Digest, Md5};
 use sha2::{Sha256, Sha384, Sha512};
 
@@ -98,6 +100,36 @@ fn aes_encrypt(key: &[u8], iv: [u8; 16], data: &[u8]) -> Vec<u8> {
     padded.extend(std::iter::repeat_n(pad as u8, pad));
     let mut out = iv.to_vec();
     out.extend(aes_cbc(key, &iv, &padded));
+    out
+}
+
+/// AES-CBC decryption over whole blocks of `data` (no padding removed).
+fn aes_cbc_decrypt(key: &[u8], iv: &[u8; 16], data: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(data.len());
+    let mut chain = *iv;
+    for chunk in data.as_chunks::<16>().0 {
+        let mut block = GenericArray::clone_from_slice(chunk);
+        match key.len() {
+            16 => aes::Aes128::new(GenericArray::from_slice(key)).decrypt_block(&mut block),
+            _ => aes::Aes256::new(GenericArray::from_slice(key)).decrypt_block(&mut block),
+        }
+        out.extend(block.iter().zip(chain).map(|(b, c)| b ^ c));
+        chain = *chunk;
+    }
+    out
+}
+
+/// The inverse of `aes_encrypt`: the IV is the first block; a malformed
+/// padding is left in place.
+fn aes_decrypt(key: &[u8], data: &[u8]) -> Vec<u8> {
+    let Some((iv, body)) = data.split_first_chunk::<16>() else {
+        return Vec::new();
+    };
+    let mut out = aes_cbc_decrypt(key, iv, body);
+    let pad = out.last().copied().unwrap_or(0) as usize;
+    if (1..=16).contains(&pad) && pad <= out.len() {
+        out.truncate(out.len() - pad);
+    }
     out
 }
 
@@ -222,51 +254,15 @@ impl Encryptor {
             &security.permissions_password
         };
         // Algorithm 3: the owner entry.
-        let mut hash = Md5::digest(padded(&legacy_password(owner_source))).to_vec();
-        if r >= 3 {
-            for _ in 0..50 {
-                hash = Md5::digest(&hash[..n]).to_vec();
-            }
-        }
-        let owner_key = &hash[..n];
-        let mut o = rc4(owner_key, &user);
+        let owner_key = owner_rc4_key(&padded(&legacy_password(owner_source)), r, n);
+        let mut o = rc4(&owner_key, &user);
         if r >= 3 {
             for i in 1..=19u8 {
-                let key: Vec<u8> = owner_key.iter().map(|b| b ^ i).collect();
-                o = rc4(&key, &o);
+                o = rc4(&xor_key(&owner_key, i), &o);
             }
         }
-        // Algorithm 2: the file key.
-        let mut md5 = Md5::new();
-        md5.update(user);
-        md5.update(&o);
-        md5.update((p as u32).to_le_bytes());
-        md5.update(id);
-        if r >= 4 && !encrypt_metadata {
-            md5.update([0xff; 4]);
-        }
-        let mut hash = md5.finalize().to_vec();
-        if r >= 3 {
-            for _ in 0..50 {
-                hash = Md5::digest(&hash[..n]).to_vec();
-            }
-        }
-        let key = hash[..n].to_vec();
-        // Algorithms 4 and 5: the user entry.
-        let u = if r == 2 {
-            rc4(&key, &PAD)
-        } else {
-            let mut x = rc4(
-                &key,
-                &Md5::new().chain_update(PAD).chain_update(id).finalize(),
-            );
-            for i in 1..=19u8 {
-                let k: Vec<u8> = key.iter().map(|b| b ^ i).collect();
-                x = rc4(&k, &x);
-            }
-            x.resize(32, 0);
-            x
-        };
+        let key = file_key(&user, &o, p, id, r, n, encrypt_metadata);
+        let u = user_entry(&key, r, id);
         let mut dict = Dict::new()
             .with("Filter", Obj::name("Standard"))
             .with("V", Obj::Int(v))
@@ -345,21 +341,194 @@ impl Encryptor {
             Encryption::Aes256 => aes_encrypt(&self.key, self.ivs.bytes(), data),
             level => {
                 let aes = level == Encryption::Aes128;
-                let mut md5 = Md5::new();
-                md5.update(&self.key);
-                md5.update(&num.to_le_bytes()[..3]);
-                md5.update([0, 0]);
+                let key = object_key(&self.key, num, 0, aes);
                 if aes {
-                    md5.update(b"sAlT");
-                }
-                let hash = md5.finalize();
-                let key = &hash[..(self.key.len() + 5).min(16)];
-                if aes {
-                    aes_encrypt(key, self.ivs.bytes(), data)
+                    aes_encrypt(&key, self.ivs.bytes(), data)
                 } else {
-                    rc4(key, data)
+                    rc4(&key, data)
                 }
             }
+        }
+    }
+}
+
+fn xor_key(key: &[u8], i: u8) -> Vec<u8> {
+    key.iter().map(|b| b ^ i).collect()
+}
+
+/// Algorithm 3 steps a–d: the RC4 key the owner entry is encrypted with.
+fn owner_rc4_key(owner: &[u8; 32], r: i64, n: usize) -> Vec<u8> {
+    let mut hash = Md5::digest(owner).to_vec();
+    if r >= 3 {
+        for _ in 0..50 {
+            hash = Md5::digest(&hash[..n]).to_vec();
+        }
+    }
+    hash.truncate(n);
+    hash
+}
+
+/// Algorithm 2: the file key from a padded user password.
+fn file_key(
+    user: &[u8; 32],
+    o: &[u8],
+    p: i32,
+    id: &[u8],
+    r: i64,
+    n: usize,
+    encrypt_metadata: bool,
+) -> Vec<u8> {
+    let mut md5 = Md5::new();
+    md5.update(user);
+    md5.update(o);
+    md5.update((p as u32).to_le_bytes());
+    md5.update(id);
+    if r >= 4 && !encrypt_metadata {
+        md5.update([0xff; 4]);
+    }
+    let mut hash = md5.finalize().to_vec();
+    if r >= 3 {
+        for _ in 0..50 {
+            hash = Md5::digest(&hash[..n]).to_vec();
+        }
+    }
+    hash.truncate(n);
+    hash
+}
+
+/// Algorithms 4 and 5: the user entry for a file key.
+fn user_entry(key: &[u8], r: i64, id: &[u8]) -> Vec<u8> {
+    if r == 2 {
+        return rc4(key, &PAD);
+    }
+    let mut x = rc4(
+        key,
+        &Md5::new().chain_update(PAD).chain_update(id).finalize(),
+    );
+    for i in 1..=19u8 {
+        x = rc4(&xor_key(key, i), &x);
+    }
+    x.resize(32, 0);
+    x
+}
+
+/// Algorithm 1: the key for one object's strings and streams (revisions 2–4).
+fn object_key(key: &[u8], num: u32, generation: u16, aes: bool) -> Vec<u8> {
+    let mut md5 = Md5::new();
+    md5.update(key);
+    md5.update(&num.to_le_bytes()[..3]);
+    md5.update(generation.to_le_bytes());
+    if aes {
+        md5.update(b"sAlT");
+    }
+    md5.finalize()[..(key.len() + 5).min(16)].to_vec()
+}
+
+/// How one kind of data (strings or streams) is encrypted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Method {
+    Identity,
+    Rc4,
+    Aes,
+}
+
+/// The standard security handler's `/Encrypt` entries a reader needs, and
+/// the first element of the trailer's `/ID`.
+pub(crate) struct Standard {
+    pub r: i64,
+    /// The file key length in bytes (revisions 2–4).
+    pub length: usize,
+    pub o: Vec<u8>,
+    pub u: Vec<u8>,
+    pub oe: Vec<u8>,
+    pub ue: Vec<u8>,
+    pub p: i32,
+    pub encrypt_metadata: bool,
+    pub id: Vec<u8>,
+}
+
+/// One file's decryption key, from its user or owner password.
+pub(crate) struct Decryptor {
+    key: Vec<u8>,
+    /// Revisions 5 and 6 use the file key for every object.
+    aes256: bool,
+}
+
+impl Decryptor {
+    /// The file key `password` opens, or `None` when it is neither the user
+    /// nor the owner password.
+    pub(crate) fn open(s: &Standard, password: &str) -> Option<Decryptor> {
+        if s.r >= 5 {
+            return Self::open_aes256(s, password);
+        }
+        let n = if s.r == 2 { 5 } else { s.length.clamp(5, 16) };
+        let as_user = |user: &[u8; 32]| {
+            let key = file_key(user, &s.o, s.p, &s.id, s.r, n, s.encrypt_metadata);
+            // Algorithm 6: revision 3+ compares only the first 16 bytes.
+            let m = if s.r == 2 { 32 } else { 16 };
+            let u = user_entry(&key, s.r, &s.id);
+            (s.u.len() >= m && u[..m] == s.u[..m]).then_some(Decryptor { key, aes256: false })
+        };
+        let typed = padded(&legacy_password(password));
+        if let Some(found) = as_user(&typed) {
+            return Some(found);
+        }
+        // Algorithm 7: the owner password unwraps the padded user password.
+        let owner_key = owner_rc4_key(&typed, s.r, n);
+        let mut user = s.o.get(..32)?.to_vec();
+        if s.r == 2 {
+            user = rc4(&owner_key, &user);
+        } else {
+            for i in (0..=19u8).rev() {
+                user = rc4(&xor_key(&owner_key, i), &user);
+            }
+        }
+        as_user(&user.try_into().ok()?)
+    }
+
+    /// Algorithm 2.A (and Adobe's revision 5, a single SHA-256).
+    fn open_aes256(s: &Standard, password: &str) -> Option<Decryptor> {
+        // ponytail: as in `new_r6`, the password is not SASLprepped.
+        let password = &password.as_bytes()[..password.len().min(127)];
+        let hash = |salt: &[u8], udata: &[u8]| -> [u8; 32] {
+            if s.r == 5 {
+                Sha256::new()
+                    .chain_update(password)
+                    .chain_update(salt)
+                    .chain_update(udata)
+                    .finalize()
+                    .into()
+            } else {
+                hash_2b(password, salt, udata)
+            }
+        };
+        let (u, o) = (s.u.get(..48)?, s.o.get(..48)?);
+        let (wrap, wrapped) = if hash(&u[32..40], &[]) == u[..32] {
+            (hash(&u[40..48], &[]), s.ue.get(..32)?)
+        } else if hash(&o[32..40], u) == o[..32] {
+            (hash(&o[40..48], u), s.oe.get(..32)?)
+        } else {
+            return None;
+        };
+        Some(Decryptor {
+            key: aes_cbc_decrypt(&wrap, &[0; 16], wrapped),
+            aes256: true,
+        })
+    }
+
+    /// Decrypt one string or stream of object `num` `generation`.
+    pub(crate) fn decrypt(
+        &self,
+        num: u32,
+        generation: u16,
+        method: Method,
+        data: &[u8],
+    ) -> Vec<u8> {
+        match method {
+            Method::Identity => data.to_vec(),
+            Method::Rc4 | Method::Aes if self.aes256 => aes_decrypt(&self.key, data),
+            Method::Rc4 => rc4(&object_key(&self.key, num, generation, false), data),
+            Method::Aes => aes_decrypt(&object_key(&self.key, num, generation, true), data),
         }
     }
 }
@@ -422,6 +591,66 @@ mod tests {
         assert_eq!(p & (1 << 4), 0, "no copying");
         assert_ne!(p & (1 << 9), 0, "accessibility kept");
         assert_eq!(p & 0xffff_f0c0, 0xffff_f0c0, "reserved bits set");
+    }
+
+    /// The reader's view of an `Encryptor`'s dictionary.
+    fn standard(dict: &Dict, id: &[u8]) -> Standard {
+        let bytes = |key: &str| match dict.get(key) {
+            Some(Obj::Str(s)) => s.clone(),
+            _ => Vec::new(),
+        };
+        let int = |key: &str| match dict.get(key) {
+            Some(Obj::Int(i)) => *i,
+            _ => 0,
+        };
+        Standard {
+            r: int("R"),
+            length: int("Length") as usize / 8,
+            o: bytes("O"),
+            u: bytes("U"),
+            oe: bytes("OE"),
+            ue: bytes("UE"),
+            p: int("P") as i32,
+            encrypt_metadata: !matches!(dict.get("EncryptMetadata"), Some(Obj::Bool(false))),
+            id: id.to_vec(),
+        }
+    }
+
+    #[test]
+    fn the_user_and_owner_passwords_decrypt_what_was_encrypted() {
+        let id = [9u8; 16];
+        for (open, owner) in [("kooka", "owner"), ("kooka", ""), ("", "owner")] {
+            let security = Security {
+                open_password: open.into(),
+                permissions_password: owner.into(),
+                ..Security::default()
+            };
+            for level in [
+                Encryption::Rc4_40,
+                Encryption::Rc4_128,
+                Encryption::Aes128,
+                Encryption::Aes256,
+            ] {
+                let encryptor = Encryptor::new(&security, level, &id, &Entropy::new([3; 32]));
+                let method = match level {
+                    Encryption::Rc4_40 | Encryption::Rc4_128 => Method::Rc4,
+                    _ => Method::Aes,
+                };
+                let sealed = encryptor.encrypt(12, b"layered pixels");
+                let s = standard(&encryptor.dict, &id);
+                for password in [open, owner].into_iter().filter(|p| !p.is_empty()) {
+                    let opened = Decryptor::open(&s, password)
+                        .unwrap_or_else(|| panic!("{level:?} opens with {password:?}"));
+                    assert_eq!(opened.decrypt(12, 0, method, &sealed), b"layered pixels");
+                }
+                assert_eq!(
+                    Decryptor::open(&s, "").is_some(),
+                    open.is_empty(),
+                    "{level:?}: the empty password opens only a file without an open password"
+                );
+                assert!(Decryptor::open(&s, "wrong").is_none(), "{level:?}");
+            }
+        }
     }
 
     #[test]

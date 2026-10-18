@@ -107,6 +107,7 @@ void PicturaMainWindow::registerHandlers()
 {
     registry_->setHandler(command_ids::FileNew, [this]() { showNewDocumentDialog(); });
     registry_->setHandler(command_ids::FileOpen, [this]() { showOpenDialog(); });
+    registry_->setHandler(command_ids::FileOpenAs, [this]() { showOpenAsDialog(); });
     registry_->setHandler(command_ids::FileOpenAsSmartObject, [this]() {
         const QString path = getOpenFileName(this, tr("Open As Smart Object"),
                                              documentDirectory(activeFilePath()),

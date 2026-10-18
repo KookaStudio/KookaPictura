@@ -7,6 +7,8 @@
 //!
 //! [`PictureView`]: super::qobject::PictureView
 
+mod import;
+
 use super::helpers::topmost_pixel_layer_index;
 use super::helpers_composite::{current_buffer, store_composite};
 use super::qobject::PictureView;
@@ -47,8 +49,8 @@ pub mod ffi {
         /// The options this document was last saved to PDF with; empty when never.
         fn pdf_view_options(view: &PictureView) -> QString;
 
-        /// Open a Pictura Photoshop PDF from its embedded PSD into the view; false, unchanged, for any other file.
-        fn pdf_open(view: Pin<&mut PictureView>, path: &QString) -> bool;
+        /// Open a Photoshop PDF with its layers (Pictura's embedded PSD, or Photoshop's own editing data rebuilt into a PSD) into the view, decrypting it with `password` (empty: the password this view last opened it with, else none). `ok`; else, the view unchanged, `none` (no editing data: import it), `password` (needs one), or `wrongpassword`.
+        fn pdf_open(view: Pin<&mut PictureView>, path: &QString, password: &QString) -> QString;
 
         /// `[Photoshop Default]` as canonical options text.
         fn pdf_default_options() -> QString;
@@ -214,23 +216,35 @@ pub fn pdf_view_options(view: &PictureView) -> QString {
     QString::from(view.rust().pdf_options.as_deref().unwrap_or_default())
 }
 
-pub fn pdf_open(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
+pub fn pdf_open(mut view: Pin<&mut PictureView>, path: &QString, password: &QString) -> QString {
     let path = path.to_string();
+    let typed = password.to_string();
+    // Revert passes none: reuse the password the document was opened with.
+    let password = if typed.is_empty() {
+        view.rust().pdf_password.clone().unwrap_or_default()
+    } else {
+        typed
+    };
     let policy = view.rust().color_policy;
-    let Some(mut doc) = std::fs::read(&path)
-        .ok()
-        .and_then(|bytes| pdf::embedded_psd(&bytes))
-        .and_then(|psd| pictura_codec::read_psd_with(&psd, policy).ok())
-    else {
-        return false;
+    let bytes = std::fs::read(&path).unwrap_or_default();
+    let psd = match pdf::editing_psd(&bytes, &password) {
+        pdf::EditingPsd::Psd(psd) => psd,
+        pdf::EditingPsd::Absent => return QString::from("none"),
+        pdf::EditingPsd::Locked if password.is_empty() => return QString::from("password"),
+        pdf::EditingPsd::Locked => return QString::from("wrongpassword"),
+    };
+    let Ok(mut doc) = pictura_codec::read_psd_with(&psd, policy) else {
+        return QString::from("none");
     };
     let gpu_compute = view.rust().gpu_compute;
     let rendered = current_buffer(&doc, gpu_compute);
     store_composite(&mut doc, &rendered);
     let mut rust = view.as_mut().rust_mut();
-    rust.reset_edit_state();
     rust.active_layer = topmost_pixel_layer_index(&doc).map(|i| i.to_string());
+    // The document goes in first: reset_edit_state rebuilds the display
+    // pyramid from it (before, the canvas showed the previous, or no, document).
     rust.doc = Some(doc);
+    rust.reset_edit_state();
     let rust = &mut *rust;
     if let Some(doc) = rust.doc.as_mut() {
         rust.history.capture_live(doc, &None, "Open");
@@ -238,7 +252,8 @@ pub fn pdf_open(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
     rust.path = Some(path);
     rust.dirty = false;
     rust.source_format = "pdf".into();
-    true
+    rust.pdf_password = (!password.is_empty()).then_some(password);
+    QString::from("ok")
 }
 
 pub fn pdf_default_options() -> QString {

@@ -20,8 +20,8 @@ void addDefaultCommands(CommandRegistry& registry) {
                  QKeySequence(QStringLiteral("Ctrl+N")), true);
     registry.add(command_ids::FileOpen, {"File", "Open..."}, QStringLiteral("Open..."),
                  QKeySequence(QStringLiteral("Ctrl+O")), true);
-    leaf(registry, {"File", "Open As…"}, QStringLiteral("Open As…"),
-         QStringLiteral("Ctrl+Alt+Shift+O"));
+    registry.add(command_ids::FileOpenAs, {"File", "Open As…"}, QStringLiteral("Open As…"),
+                 QKeySequence(QStringLiteral("Ctrl+Alt+Shift+O")), true);
     registry.add(command_ids::FileOpenAsSmartObject, {"File", "Open As Smart Object…"},
                  QStringLiteral("Open As Smart Object…"), QKeySequence(), true);
     // The frame fills Open Recent each time it opens; this row is shown only

@@ -259,7 +259,7 @@ The Actions panel/engine is tracked by `#301`.
 |---|---|---|---|---|---|
 | WF-1 | `save-and-save-as.md` | Save As per-format option dialogs (TIFF/JPEG/PNG/GIF/EPS/DCS/Raw/BMP/TGA/Cineon) | MISSING | `encode_image.cpp:23-64` | #625 |
 | WF-2 | `save-and-save-as.md` | Photoshop PDF writer shipped (#626); still missing: JPEG2000 compression (no encoder), Spot Colors (no spot-channel model), Use Proof Setup (no Proof Setup); Preserve Photoshop Editing Capabilities embeds Pictura's own PSD, not Adobe's layout | PARTIAL | `pictura-codec/src/pdf/options.rs:661`; `pdf_save_dialog.cpp:220,278` | #626 |
-| WF-3 | `open-and-new.md` | EPS/PDF import, Open As, Import PDF dialog | MISSING | `command_tree.cpp:23`; no PDF/EPS decoder | #627 |
+| WF-3 | `open-and-new.md` | Generic PDF/EPS import (Import PDF and Rasterize Generic EPS Format dialogs) and Open As shipped (#627) through Ghostscript; still missing: native CMYK/16-bit rendering (converted from an 8-bit RGB render), Images mode on encrypted PDFs, inline images, the 3D option | PARTIAL | `pictura-codec/src/pdf/import/mod.rs`; `import_pdf_dialog.cpp`; `frame_import.cpp` | #627 |
 | WF-4 | `save-and-save-as.md` | GIF-via-Indexed on save + Save a Copy | MISSING | `encode_image.cpp` | #628 |
 | WF-5 | `web-export-and-slices.md` | Save for Web slice HTML/CSS emitter, 2-Up/4-Up, colour-table editor, metadata menu | MISSING | `save_for_web_dialog.cpp:176-292` | #629 |
 | WF-6 | `export-formats.md` | Export Layers To Files, Data Sets As Files, Zoomify, Render Video, Paths to Illustrator | MISSING | `command_tree.cpp:53,55-57,69` | #630 |

@@ -561,7 +561,7 @@ bool PicturaMainWindow::revertActive()
     }
     // Reload in place: a raster path re-imports through the Qt edge, a PSD/PSB
     // path through the native reader, a PDF from its embedded PSD.
-    const bool reloaded = isPdfPath(path)               ? pdf_open(*view, path)
+    const bool reloaded = isPdfPath(path) ? pdf_open(*view, path, QString()) == QStringLiteral("ok")
                           : isNativeDocumentPath(path) ? document_api::open(*view, path)
                                                        : document_api::openImage(*view, path);
     if (!reloaded) {
