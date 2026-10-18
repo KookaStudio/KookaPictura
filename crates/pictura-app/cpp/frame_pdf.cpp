@@ -114,15 +114,26 @@ bool PicturaMainWindow::openPdfPath(const QString& path, bool interactive)
 {
     auto* view = new PictureView(this);
     view->set_color_policy(colorPolicy_);
-    beginOpenIndicator(path);
-    const bool loaded = pdf_open(*view, path);
-    endOpenIndicator();
-    if (!loaded) {
-        delete view;
-        return importPdfPath(path, interactive);
+    // A protected PDF asks for its password here, so its editing data opens
+    // with its layers; without editing data the import reuses the password.
+    QString password;
+    for (;;) {
+        beginOpenIndicator(path);
+        const QString result = pdf_open(*view, path, password);
+        endOpenIndicator();
+        if (result == QStringLiteral("ok")) {
+            addDocument(view, path);
+            return true;
+        }
+        if (result == QStringLiteral("none") || !interactive) {
+            delete view;
+            return importPdfPath(path, interactive, password);
+        }
+        if (!askPdfPassword(path, result == QStringLiteral("wrongpassword"), password)) {
+            delete view;
+            return false;
+        }
     }
-    addDocument(view, path);
-    return true;
 }
 
 void PicturaMainWindow::showPdfPresets()

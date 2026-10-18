@@ -216,6 +216,8 @@ class ImportPdfTest : public QObject {
 private slots:
     void genericPdfShowsDialog();
     void picturaPdfSkipsDialog();
+    void protectedPicturaPdfKeepsLayers();
+    void permissionsOnlyPdfOpensWithoutPrompt();
     void pdfRecognizedBySignature();
     void cancelOpensNothing();
     void dialogDefaults();
@@ -280,6 +282,81 @@ void ImportPdfTest::picturaPdfSkipsDialog()
     QCOMPARE(seen.pdfDialogs, 0);
     // The canvas shows the reopened pixels, not a blank frame.
     QCOMPARE(pixel(view, 5, 5).rgba(), QColor(30, 140, 220).rgba());
+}
+
+namespace {
+
+// A blue two-layer document saved as a Pictura Photoshop PDF with the given
+// passwords (empty: none).
+QString saveLayeredPdf(PicturaMainWindow* window, const QTemporaryDir& dir, const QString& open,
+                       const QString& permissions)
+{
+    QImage image(16, 12, QImage::Format_RGB32);
+    image.fill(QColor(30, 140, 220));
+    const QString png = dir.filePath(QStringLiteral("blue.png"));
+    if (!image.save(png) || !window->openImagePath(png)) {
+        return {};
+    }
+    window->activeView()->add_layer(0);
+    const QString path = dir.filePath(QStringLiteral("protected.pdf"));
+    window->setPdfDialogDriverForTest([=](QDialog& dialog) {
+        if (auto* save = qobject_cast<PdfSaveDialog*>(&dialog)) {
+            save->setFieldForTest(QStringLiteral("openPassword"), open);
+            save->setFieldForTest(QStringLiteral("permissionsPassword"), permissions);
+        }
+        return true;
+    });
+    if (!window->savePdfWithDialog(path)) {
+        return {};
+    }
+    window->closeDocument(window->activeDocumentIndex(), false);
+    return path;
+}
+
+} // namespace
+
+// pdf_encrypted_layers, pdf_encrypted_revert
+void ImportPdfTest::protectedPicturaPdfKeepsLayers()
+{
+    test::ScopedStateHome stateHome;
+    QTemporaryDir dir;
+    auto window = test::makeMainWindow();
+    const QString path =
+        saveLayeredPdf(window.get(), dir, QStringLiteral("kooka"), QStringLiteral("owner"));
+    QVERIFY(!path.isEmpty());
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QVERIFY(file.readAll().contains("/Encrypt"));
+    Seen seen;
+    window->setImportDialogDriverForTest(
+        driver(window.get(), &seen, {}, {}, {QStringLiteral("wrong"), QStringLiteral("kooka")}));
+    QVERIFY(window->openDocumentAtPath(path));
+    QCOMPARE(seen.prompts, 2);
+    QCOMPARE(seen.pdfDialogs, 0);
+    PictureView* view = window->activeView();
+    QCOMPARE(view->layer_count(), 2);
+    QCOMPARE(pixel(view, 5, 5).rgba(), QColor(30, 140, 220).rgba());
+    // Revert reopens with the password the document was opened with.
+    QVERIFY(view->remove_layer(1));
+    QVERIFY(window->revertActive());
+    QCOMPARE(window->activeView()->layer_count(), 2);
+    QCOMPARE(seen.prompts, 2);
+}
+
+// pdf_permissions_only_layers
+void ImportPdfTest::permissionsOnlyPdfOpensWithoutPrompt()
+{
+    test::ScopedStateHome stateHome;
+    QTemporaryDir dir;
+    auto window = test::makeMainWindow();
+    const QString path = saveLayeredPdf(window.get(), dir, QString(), QStringLiteral("owner"));
+    QVERIFY(!path.isEmpty());
+    Seen seen;
+    window->setImportDialogDriverForTest(driver(window.get(), &seen));
+    QVERIFY(window->openDocumentAtPath(path));
+    QCOMPARE(seen.prompts, 0);
+    QCOMPARE(seen.pdfDialogs, 0);
+    QCOMPARE(window->activeView()->layer_count(), 2);
 }
 
 // pdf_sniff_signature

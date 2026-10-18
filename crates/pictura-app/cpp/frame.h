@@ -326,7 +326,12 @@ public:
     // Import PDF dialog, an EPS through the Rasterize Generic EPS Format
     // dialog, and File > Open As with a chosen decoder (index into
     // openAsFileFilters()). Each opened page or image is an untitled document.
-    bool importPdfPath(const QString& path, bool interactive = true);
+    // `knownPassword` is one `openPdfPath` already accepted.
+    bool importPdfPath(const QString& path, bool interactive = true,
+                       const QString& knownPassword = QString());
+    // Ask for the password of a protected PDF (`refused`: the last one was
+    // wrong); false on Cancel.
+    bool askPdfPassword(const QString& path, bool refused, QString& password);
     bool importEpsPath(const QString& path, bool interactive = true);
     void showOpenAsDialog();
     bool openAsPath(const QString& path, int formatIndex);

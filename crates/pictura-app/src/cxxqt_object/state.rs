@@ -134,6 +134,9 @@ pub struct PictureViewRust {
     /// The canonical `.joboptions` text this document was last saved to PDF
     /// with, so Save on the `.pdf` path reopens the dialog with it.
     pub(super) pdf_options: Option<String>,
+    /// The password a protected PDF was opened with, kept in memory only so
+    /// Revert can reopen it.
+    pub(super) pdf_password: Option<String>,
     pub(super) interop: Option<crate::gpu::InteropState>,
     pub(super) pending_lasso: Vec<(i32, i32)>,
     pub(super) pending_lasso_mode: String,
@@ -369,6 +372,7 @@ impl Default for PictureViewRust {
             dirty: false,
             source_format: "psd".to_string(),
             pdf_options: None,
+            pdf_password: None,
             interop: None,
             pending_lasso: Vec::new(),
             pending_lasso_mode: String::new(),

@@ -472,6 +472,76 @@ fn pdf_read_refuses_foreign_pdf() {
     assert_eq!(embedded_psd(&encrypted), None, "encrypted");
 }
 
+fn layer_count(found: EditingPsd) -> usize {
+    match found {
+        EditingPsd::Psd(psd) => crate::read::read_psd(&psd).expect("a PSD").layers.len(),
+        other => panic!("no PSD: {other:?}"),
+    }
+}
+
+// pdf_encrypted_layers, pdf_owner_password_opens
+#[test]
+fn password_protected_pdf_reopens_with_its_layers() {
+    let doc = two_layer_doc();
+    for compatibility in Compatibility::ALL {
+        for fast_web_view in [false, true] {
+            let pdf = write(
+                &doc,
+                &PdfOptions {
+                    preserve_editing: true,
+                    compatibility,
+                    fast_web_view,
+                    security: Security {
+                        open_password: "kooka".into(),
+                        permissions_password: "owner".into(),
+                        ..Security::default()
+                    },
+                    ..options()
+                },
+            );
+            let case = format!("{compatibility:?}, fast web view {fast_web_view}");
+            assert_eq!(layer_count(editing_psd(&pdf, "kooka")), 2, "{case}");
+            assert_eq!(layer_count(editing_psd(&pdf, "owner")), 2, "{case}");
+            assert_eq!(editing_psd(&pdf, ""), EditingPsd::Locked, "{case}");
+            assert_eq!(editing_psd(&pdf, "wrong"), EditingPsd::Locked, "{case}");
+        }
+    }
+}
+
+// pdf_permissions_only_layers
+#[test]
+fn permissions_password_alone_reopens_without_a_password() {
+    let pdf = write(
+        &two_layer_doc(),
+        &PdfOptions {
+            preserve_editing: true,
+            security: Security {
+                permissions_password: "owner".into(),
+                ..Security::default()
+            },
+            ..options()
+        },
+    );
+    assert_eq!(embedded_psd(&pdf), None, "encrypted");
+    assert_eq!(layer_count(editing_psd(&pdf, "")), 2);
+}
+
+#[test]
+fn encrypted_pdf_without_editing_data_is_absent_once_open() {
+    let pdf = write(
+        &rgb_doc(2, 2, 72.0, None),
+        &PdfOptions {
+            security: Security {
+                open_password: "kooka".into(),
+                ..Security::default()
+            },
+            ..options()
+        },
+    );
+    assert_eq!(editing_psd(&pdf, "kooka"), EditingPsd::Absent);
+    assert_eq!(editing_psd(&pdf, "nope"), EditingPsd::Locked);
+}
+
 #[test]
 fn pdf_notes_become_text_annotations() {
     let mut doc = rgb_doc(100, 100, 72.0, None);

@@ -117,10 +117,26 @@ void PicturaMainWindow::reportImportError(const QString& path, const QString& re
         tr("Could not open %1: %2").arg(QFileInfo(path).fileName(), reason.trimmed()));
 }
 
-// The Import PDF flow once `pdf_open` found no Pictura editing data.
-bool PicturaMainWindow::importPdfPath(const QString& path, bool interactive)
+bool PicturaMainWindow::askPdfPassword(const QString& path, bool refused, QString& password)
 {
-    QString password;
+    QInputDialog ask(this);
+    ask.setObjectName(QStringLiteral("pdfPasswordPrompt"));
+    ask.setWindowTitle(tr("Password"));
+    ask.setLabelText(refused ? tr("The password is incorrect. Password:")
+                             : tr("\"%1\" is protected. Password:").arg(QFileInfo(path).fileName()));
+    ask.setTextEchoMode(QLineEdit::Password);
+    if (!runImportDialog(ask)) {
+        return false;
+    }
+    password = ask.textValue();
+    return true;
+}
+
+// The Import PDF flow once `pdf_open` found no editing data.
+bool PicturaMainWindow::importPdfPath(const QString& path, bool interactive,
+                                      const QString& knownPassword)
+{
+    QString password = knownPassword;
     PdfImportProbe probe;
     for (;;) {
         beginOpenIndicator(path);
@@ -136,17 +152,9 @@ bool PicturaMainWindow::importPdfPath(const QString& path, bool interactive)
             reportImportError(path, body);
             return false;
         }
-        QInputDialog ask(this);
-        ask.setObjectName(QStringLiteral("pdfPasswordPrompt"));
-        ask.setWindowTitle(tr("Password"));
-        ask.setLabelText(locked ? tr("\"%1\" is protected. Password:")
-                                      .arg(QFileInfo(path).fileName())
-                                : tr("The password is incorrect. Password:"));
-        ask.setTextEchoMode(QLineEdit::Password);
-        if (!runImportDialog(ask)) {
+        if (!askPdfPassword(path, refused, password)) {
             return false;
         }
-        password = ask.textValue();
     }
     if (probe.pages.isEmpty()) {
         reportImportError(path, tr("the PDF has no pages."));

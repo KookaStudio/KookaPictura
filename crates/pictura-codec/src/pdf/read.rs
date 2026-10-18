@@ -1,9 +1,69 @@
 //! Reopening a Photoshop PDF with its layers: Pictura's own (the PSD payload
 //! the writer embeds under `/PieceInfo /Pictura`, design D6) and Photoshop's
-//! (its `/PieceInfo /AdobePhotoshop` editing data, rebuilt into a PSD). Any
-//! other PDF goes through `import` (#627).
+//! (its `/PieceInfo /AdobePhotoshop` editing data, rebuilt into a PSD),
+//! decrypting a password-protected one first. Any other PDF goes through
+//! `import` (#627).
 
 use std::io::Read as _;
+
+use super::import::objects::{decode_stream, Dict, Object, PdfObjects, Unlock};
+
+/// What a PDF's editing data opens as.
+#[derive(Debug, PartialEq, Eq)]
+pub enum EditingPsd {
+    Psd(Vec<u8>),
+    /// No editing data that can be read: import the PDF instead.
+    Absent,
+    /// Encrypted, and the password opens neither its user nor owner entry.
+    Locked,
+}
+
+/// The PSD from a PDF's editing data (Pictura's payload, else Photoshop's),
+/// decrypting an encrypted file with `password`. The empty password opens a
+/// file that has only a permissions password.
+pub fn editing_psd(pdf: &[u8], password: &str) -> EditingPsd {
+    if let Some(psd) = embedded_psd(pdf).or_else(|| photoshop_psd(pdf)) {
+        return EditingPsd::Psd(psd);
+    }
+    if !pdf.starts_with(b"%PDF-") || find(pdf, b"/Encrypt", 0).is_none() {
+        return EditingPsd::Absent;
+    }
+    let Some(mut file) = PdfObjects::parse(pdf) else {
+        return EditingPsd::Absent;
+    };
+    match file.decrypt(password) {
+        Unlock::Open => {}
+        Unlock::WrongPassword => return EditingPsd::Locked,
+        Unlock::Unsupported => return EditingPsd::Absent,
+    }
+    pictura_psd_in(&file)
+        .or_else(|| photoshop_psd_in(&file))
+        .map_or(EditingPsd::Absent, EditingPsd::Psd)
+}
+
+/// The first leaf page's `/PieceInfo /<owner> /Private` dictionary.
+fn private_data<'a>(file: &'a PdfObjects, owner: &str) -> Option<&'a Dict> {
+    let catalog = file.resolve_dict(file.trailer.get("Root"))?;
+    let mut node = file.resolve_dict(catalog.get("Pages"))?;
+    while let Some(Object::Array(kids)) = node.get("Kids").map(|k| file.resolve(k)) {
+        node = file.resolve_dict(kids.first())?;
+    }
+    file.resolve_dict(
+        file.resolve_dict(file.resolve_dict(node.get("PieceInfo"))?.get(owner))?
+            .get("Private"),
+    )
+}
+
+/// Pictura's payload read through the object reader (an encrypted file,
+/// once decrypted).
+fn pictura_psd_in(file: &PdfObjects) -> Option<Vec<u8>> {
+    match file.resolve(private_data(file, "Pictura")?.get("PSD")?) {
+        Object::Stream(dict, data) => {
+            decode_stream(file, dict, data).filter(|psd| psd.starts_with(b"8BPS"))
+        }
+        _ => None,
+    }
+}
 
 fn find(haystack: &[u8], needle: &[u8], from: usize) -> Option<usize> {
     haystack
@@ -51,10 +111,9 @@ pub fn embedded_psd(pdf: &[u8]) -> Option<Vec<u8>> {
 /// not publish it.
 ///
 /// ponytail: Gray, RGB, CMYK, and Lab composites at 8 or 16 bits; an Indexed,
-/// Bitmap, Duotone, or Multichannel source, or an encrypted file, is `None`
-/// and imports flattened instead.
+/// Bitmap, Duotone, or Multichannel source is `None` and imports flattened
+/// instead. An encrypted file is `None` here; `editing_psd` decrypts it.
 pub fn photoshop_psd(pdf: &[u8]) -> Option<Vec<u8>> {
-    use super::import::objects::{decode_stream, Object, PdfObjects};
     if !pdf.starts_with(b"%PDF-") || find(pdf, b"/AdobePhotoshop", 0).is_none() {
         return None;
     }
@@ -62,22 +121,14 @@ pub fn photoshop_psd(pdf: &[u8]) -> Option<Vec<u8>> {
     if file.encrypted() {
         return None;
     }
-    let catalog = file.resolve_dict(file.trailer.get("Root"))?;
-    let mut node = file.resolve_dict(catalog.get("Pages"))?;
-    // The first leaf page.
-    while let Some(Object::Array(kids)) = node.get("Kids").map(|k| file.resolve(k)) {
-        node = file.resolve_dict(kids.first())?;
-    }
-    let private = file.resolve_dict(
-        file.resolve_dict(
-            file.resolve_dict(node.get("PieceInfo"))?
-                .get("AdobePhotoshop"),
-        )?
-        .get("Private"),
-    )?;
-    let stream = |key: &str| -> Option<(super::import::objects::Dict, Vec<u8>)> {
+    photoshop_psd_in(&file)
+}
+
+fn photoshop_psd_in(file: &PdfObjects) -> Option<Vec<u8>> {
+    let private = private_data(file, "AdobePhotoshop")?;
+    let stream = |key: &str| -> Option<(Dict, Vec<u8>)> {
         match file.resolve(private.get(key)?) {
-            Object::Stream(dict, data) => Some((dict.clone(), decode_stream(&file, dict, data)?)),
+            Object::Stream(dict, data) => Some((dict.clone(), decode_stream(file, dict, data)?)),
             _ => None,
         }
     };
@@ -95,7 +146,7 @@ pub fn photoshop_psd(pdf: &[u8]) -> Option<Vec<u8>> {
     if !(depth == 8 || depth == 16) || width <= 0 || height <= 0 {
         return None;
     }
-    let (channels, mode) = composite_mode(&file, composite_dict.get("ColorSpace")?)?;
+    let (channels, mode) = composite_mode(file, composite_dict.get("ColorSpace")?)?;
     let bytes = depth as usize / 8;
     let plane = width as usize * height as usize * bytes;
     if composite.len() < plane * channels {
@@ -170,11 +221,7 @@ pub fn photoshop_psd(pdf: &[u8]) -> Option<Vec<u8>> {
 
 /// The PSD channel count and colour-mode number for a composite's colour
 /// space, or `None` for a space the rebuild does not handle.
-fn composite_mode(
-    file: &super::import::objects::PdfObjects,
-    space: &super::import::objects::Object,
-) -> Option<(usize, usize)> {
-    use super::import::objects::Object;
+fn composite_mode(file: &PdfObjects, space: &Object) -> Option<(usize, usize)> {
     match file.resolve(space) {
         Object::Name(n) if n == b"DeviceGray" => Some((1, 1)),
         Object::Name(n) if n == b"DeviceRGB" => Some((3, 3)),

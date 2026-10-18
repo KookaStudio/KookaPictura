@@ -4,7 +4,8 @@
 //! so a damaged or missing cross-reference table is no obstacle; a later
 //! definition replaces an earlier one, as incremental updates append. Object
 //! streams are expanded. Stream data is kept as stored (still filtered): the
-//! images are copied, not decoded.
+//! images are copied, not decoded. An encrypted file stays encrypted until
+//! `decrypt` opens it with a password (#627).
 
 use std::collections::HashMap;
 use std::io::Read as _;
@@ -67,16 +68,29 @@ impl Object {
 /// Every object of one PDF file and its trailer.
 pub(crate) struct PdfObjects {
     objects: HashMap<u32, Object>,
+    /// Each object's generation number, which its decryption key includes.
+    generations: HashMap<u32, u16>,
     pub trailer: Dict,
+}
+
+/// What `PdfObjects::decrypt` did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Unlock {
+    /// Not encrypted, or now decrypted.
+    Open,
+    WrongPassword,
+    /// A security handler other than the standard one.
+    Unsupported,
 }
 
 impl PdfObjects {
     pub(crate) fn parse(bytes: &[u8]) -> Option<PdfObjects> {
         let mut objects = HashMap::new();
+        let mut generations = HashMap::new();
         let mut trailer = Dict::default();
         let mut at = 0;
         while at < bytes.len() {
-            if let Some((num, end)) = object_header(bytes, at) {
+            if let Some((num, generation, end)) = object_header(bytes, at) {
                 let mut lexer = Lexer { bytes, at: end };
                 if let Some(object) = lexer.object_body() {
                     if let Object::Stream(dict, _) = &object {
@@ -85,6 +99,7 @@ impl PdfObjects {
                         }
                     }
                     objects.insert(num, object);
+                    generations.insert(num, generation);
                     at = lexer.at;
                     continue;
                 }
@@ -102,13 +117,112 @@ impl PdfObjects {
             }
             at += 1;
         }
-        let mut file = PdfObjects { objects, trailer };
+        let mut file = PdfObjects {
+            objects,
+            generations,
+            trailer,
+        };
         file.expand_object_streams();
         (!file.objects.is_empty()).then_some(file)
     }
 
     pub(crate) fn encrypted(&self) -> bool {
         self.trailer.get("Encrypt").is_some()
+    }
+
+    /// Decrypt every string and stream with `password` through the standard
+    /// security handler, then expand the object streams the encryption hid.
+    pub(crate) fn decrypt(&mut self, password: &str) -> Unlock {
+        use super::super::crypt::{Decryptor, Method, Standard};
+        let Some(entry) = self.trailer.get("Encrypt").cloned() else {
+            return Unlock::Open;
+        };
+        let Some(dict) = self.resolve_dict(Some(&entry)).cloned() else {
+            return Unlock::Unsupported;
+        };
+        if !dict.get("Filter").is_some_and(|f| f.is_name("Standard")) {
+            return Unlock::Unsupported;
+        }
+        let int = |key: &str| {
+            dict.get(key)
+                .map(|v| self.resolve(v))
+                .and_then(Object::as_int)
+        };
+        let bytes = |key: &str| match dict.get(key).map(|v| self.resolve(v)) {
+            Some(Object::Str(s)) => s.clone(),
+            _ => Vec::new(),
+        };
+        let v = int("V").unwrap_or(0);
+        // Version 4+ names a crypt filter per kind of data; earlier ones are RC4.
+        let method = |key: &str| {
+            if v < 4 {
+                return Method::Rc4;
+            }
+            let Some(Object::Name(name)) = dict.get(key) else {
+                return Method::Identity;
+            };
+            let filter = std::str::from_utf8(name)
+                .ok()
+                .and_then(|name| self.resolve_dict(dict.get("CF"))?.get(name))
+                .and_then(|f| self.resolve_dict(Some(f)));
+            match filter.and_then(|f| f.get("CFM")) {
+                Some(cfm) if cfm.is_name("V2") => Method::Rc4,
+                Some(cfm) if cfm.is_name("AESV2") || cfm.is_name("AESV3") => Method::Aes,
+                _ => Method::Identity,
+            }
+        };
+        let (streams, strings) = (method("StmF"), method("StrF"));
+        let id = match self.trailer.get("ID").map(|i| self.resolve(i)) {
+            Some(Object::Array(items)) => match items.first().map(|i| self.resolve(i)) {
+                Some(Object::Str(s)) => s.clone(),
+                _ => Vec::new(),
+            },
+            _ => Vec::new(),
+        };
+        let standard = Standard {
+            r: int("R").unwrap_or(0),
+            length: int("Length").map_or(if v >= 4 { 16 } else { 5 }, |bits| bits as usize / 8),
+            o: bytes("O"),
+            u: bytes("U"),
+            oe: bytes("OE"),
+            ue: bytes("UE"),
+            // A writer may store /P unsigned; the low 32 bits are the flags.
+            p: int("P").unwrap_or(0) as i32,
+            encrypt_metadata: !matches!(dict.get("EncryptMetadata"), Some(Object::Bool(false))),
+            id,
+        };
+        let Some(decryptor) = Decryptor::open(&standard, password) else {
+            return Unlock::WrongPassword;
+        };
+        let skip = match entry {
+            Object::Ref(num) => Some(num),
+            _ => None,
+        };
+        for (&num, object) in &mut self.objects {
+            if Some(num) == skip {
+                continue;
+            }
+            let generation = self.generations.get(&num).copied().unwrap_or(0);
+            let mut string = |data: &[u8]| decryptor.decrypt(num, generation, strings, data);
+            match object {
+                // Cross-reference streams are never encrypted.
+                Object::Stream(dict, _) if dict.get("Type").is_some_and(|t| t.is_name("XRef")) => {}
+                Object::Stream(dict, data) => {
+                    let plain_metadata = !standard.encrypt_metadata
+                        && dict.get("Type").is_some_and(|t| t.is_name("Metadata"));
+                    if !plain_metadata {
+                        *data = decryptor.decrypt(num, generation, streams, data);
+                    }
+                    for (_, value) in &mut dict.0 {
+                        decrypt_strings(value, &mut string);
+                    }
+                }
+                other => decrypt_strings(other, &mut string),
+            }
+        }
+        self.trailer.0.retain(|(key, _)| key != b"Encrypt");
+        self.expand_object_streams();
+        Unlock::Open
     }
 
     pub(crate) fn get(&self, num: u32) -> Option<&Object> {
@@ -181,8 +295,21 @@ impl PdfObjects {
     }
 }
 
+/// Replace every string inside `object` with `decrypt` of it.
+fn decrypt_strings(object: &mut Object, decrypt: &mut impl FnMut(&[u8]) -> Vec<u8>) {
+    match object {
+        Object::Str(s) => *s = decrypt(s),
+        Object::Array(items) => items.iter_mut().for_each(|i| decrypt_strings(i, decrypt)),
+        Object::Dict(dict) => dict
+            .0
+            .iter_mut()
+            .for_each(|(_, value)| decrypt_strings(value, decrypt)),
+        _ => {}
+    }
+}
+
 fn merge_trailer(trailer: &mut Dict, from: &Dict) {
-    for key in ["Root", "Encrypt", "Info"] {
+    for key in ["Root", "Encrypt", "Info", "ID"] {
         if let Some(value) = from.get(key) {
             trailer.set(key, value.clone());
         }
@@ -295,9 +422,9 @@ fn undo_tiff_predictor(mut data: Vec<u8>, columns: usize, colors: usize, bits: u
     data
 }
 
-/// `N G obj` starting exactly at `at` (after a delimiter): the object number
-/// and the offset past `obj`.
-fn object_header(bytes: &[u8], at: usize) -> Option<(u32, usize)> {
+/// `N G obj` starting exactly at `at` (after a delimiter): the object and
+/// generation numbers and the offset past `obj`.
+fn object_header(bytes: &[u8], at: usize) -> Option<(u32, u16, usize)> {
     if at > 0 && !is_space(bytes[at - 1]) && !is_delimiter(bytes[at - 1]) {
         return None;
     }
@@ -323,6 +450,7 @@ fn object_header(bytes: &[u8], at: usize) -> Option<(u32, usize)> {
     if g == 0 || g > 5 {
         return None;
     }
+    let generation: u16 = std::str::from_utf8(&bytes[i..i + g]).ok()?.parse().ok()?;
     i += g;
     let s = spaces(i);
     if s == 0 {
@@ -332,7 +460,7 @@ fn object_header(bytes: &[u8], at: usize) -> Option<(u32, usize)> {
     if !bytes[i..].starts_with(b"obj") {
         return None;
     }
-    Some((num, i + 3))
+    Some((num, generation, i + 3))
 }
 
 fn is_space(b: u8) -> bool {
