@@ -735,6 +735,14 @@ void PanelColumn::beginGroupDrag(PanelGroup* group, const QPoint& globalPos)
     if (!group) {
         return;
     }
+    // The compact flyout hosts the group itself. A group drag out of it must
+    // close the popup, or the now-empty shell is left behind as a rectangle.
+    // Capture the offset from the popup position first so the float appears
+    // where the group was, not where it gets restored.
+    const QPoint grabOffset = globalPos - group->mapToGlobal(QPoint(0, 0));
+    if (flyout_ && flyout_->isVisible() && flyoutGroup_ == group) {
+        closeIconFlyout();
+    }
     dragActive_ = true;
     dragIsPanel_ = false;
     dragGroup_ = group;
@@ -743,7 +751,7 @@ void PanelColumn::beginGroupDrag(PanelGroup* group, const QPoint& globalPos)
     dragOriginalIndex_ = groups_.indexOf(group);
     dragOriginalPanelIndex_ = -1;
     dragFloat_ = floatForGroup(group);
-    dragGrabOffset_ = globalPos - group->mapToGlobal(QPoint(0, 0));
+    dragGrabOffset_ = grabOffset;
     dropTarget_ = {};
     if (indicatorOwner_ && indicatorOwner_ != this) {
         indicatorOwner_->clearIndicator();
