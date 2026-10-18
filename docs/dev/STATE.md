@@ -12,6 +12,26 @@ Snapshot for resuming after a context break. Update after each milestone.
   contains reproduced Adobe Help prose or the old wording.
 - Toolchain: Rust 1.98 (`rust-toolchain.toml`), system Qt **6.11.1**, cxx-qt
   **0.10.0**, wgpu **30.0.1**, lcms2 **6.2.0** (system Little CMS 2.19).
+- **Large brush and shape performance** (#719, branch
+  `fix/719-large-brush-perf`, OpenSpec change `large-tool-performance`,
+  archived into `tools/banded-dab-raster`, `tools/bounded-tool-commit`,
+  `verification/tool-profiler`, plus ADDED requirements in
+  `compositing/vector-mask-sampling` and `interop/agentic-control`). The
+  shell's Brush/Pencil/Eraser start through `paint_tools::begin` and never took
+  the preview or GPU stroke (only `begin_paint`, used by the self-test, does);
+  instead the exact raster now runs a dab of 128² px or more in parallel row
+  bands (`stroke/raster.rs`, byte-identical; Dissolve serial). In-stroke
+  presents patch `doc.composite`, so `end_paint` presents only the pending
+  region and `cancel_stroke` re-composites the extent. `VectorMask::inside`
+  answers rows beyond the path without the per-pixel edge scan (the ellipse's
+  10 s on the world map). New shape layers and `fills::apply` refresh only
+  their changed rect via `refresh_edit` (full recomposite when another layer
+  is styled, or a clipped layer sits above a new shape); `fill_layer` runs rows
+  in parallel; shape coverage sweeps only the path's columns.
+  `scripts/profile-tools.py` times tools end to end over the control server
+  (new `tool_options`; `pointer` `down`/`up`) with `--save`/`--compare`;
+  before/after tables and remaining ceilings (undo, Paint Bucket, Marquee
+  panel refresh, Gradient) are in the change's `design.md`.
 - **Hex shorthand, Add to Swatches, and swatch persistence** (#603, branch
   `feat/603-hex-shorthand-swatches`, OpenSpec changes
   `hex-shorthand-swatches` and `swatches-session-persistence`, archived into
