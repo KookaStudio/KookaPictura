@@ -12,6 +12,33 @@ Snapshot for resuming after a context break. Update after each milestone.
   contains reproduced Adobe Help prose or the old wording.
 - Toolchain: Rust 1.98 (`rust-toolchain.toml`), system Qt **6.11.1**, cxx-qt
   **0.10.0**, wgpu **30.0.1**, lcms2 **6.2.0** (system Little CMS 2.19).
+- **Spin Blur** (#464, branch `feat/464-spin-blur`, OpenSpec change
+  `spin-blur-gallery`, archived into `imaging/blur-gallery` and
+  `imaging/blur-filters`). A post-CS6 Blur Gallery effect ported on the
+  owner's request from their CC screenshots, labelled non-parity.
+  `pictura_filters::blur::spin` (`SpinPin { x, y, radius_x, radius_y,
+  angle, feather, blur_angle, pivot_x, pivot_y }`, `SpinStrobe { strength,
+  flashes, duration }`, `MAX_SPIN_ANGLE = 360`, `Filter::SpinBlur`): a
+  feathered elliptical mask (1 inside the feather ring, smoothstep to 0 at
+  the outline, largest mask wins) and an arc gather of up to 128 bilinear
+  taps round the rotation centre — the full Blur Angle inside the feather
+  ring, past it the ring's arc length × mask, so the smear shortens toward
+  the outline (owner's CC comparison) — with strobe
+  flashes of a set angular duration; alpha included, Noise after.
+  `Filter::BlurGallery` gains `spin` / `spin_strobe` (spin pass after the
+  path pass; Noise takes the largest weight; no spins is byte-identical).
+  App: `spin-blur` (26 canonical) and `blur-gallery` (62: spin section after
+  the paths, then motion and one flash-duration slot; spins share the
+  motion strength and flashes). `BlurGalleryMode::Spin`: Iris's outline
+  without the diamond, the marker on the rotation centre with an
+  angle ring (1°/px), Alt-drag moves the rotation centre; the Spin Blur row
+  (Blur Angle `0..=360°`, default 15) and Strobe Flash Duration on the
+  Motion Effects tab (shown for Spin only); spin code in
+  `blur_gallery_spin.cpp`. Ceilings (`ponytail:`): mask, arc gather, flash
+  windows, shared strobe, ranges, linear sliders, no drag-duplicate.
+  Tests: 7 spin units + 2 gallery units, two new kernel digests (existing
+  unchanged), a no-equivalent oracle row, mapping tests, `tst_spin_blur`
+  (7) and the gallery / filter-menu suites updated for the live row.
 - **Generic PDF / EPS import and Open As** (#627, branch
   `feat/627-eps-pdf-import`, OpenSpec change `pdf-eps-import`, archived into
   `interop/pdf-eps-import` and `interop/open-as`). Ghostscript (`gs`, or

@@ -320,8 +320,8 @@ path authoring · `#262` pattern fill layers · `#263` Edit Adjustment row ·
 eyedropper · `#319` Color panel · `#344`/`#345`/`#346`/`#347`/`#349`/`#350`/`#351`
 filters & watermark · `#364` Maximum filter · `#367` Help menu · `#392`/`#396`–`#402`
 Pictura Raw · `#436`/`#437`/`#438` mask/channel click · `#448` slider recomposite
-· `#451` floating panels · `#458` blur edge · `#459`/`#477` SVG export · `#464`
-Spin blur · `#465` shortcut audit · `#468` serialized builds.
+· `#451` floating panels · `#458` blur edge · `#459`/`#477` SVG export ·
+`#465` shortcut audit · `#468` serialized builds.
 
 ## G. Coverage notes
 
