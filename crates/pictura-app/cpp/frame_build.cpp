@@ -1,5 +1,6 @@
 #include "frame_includes.h"
 
+#include "color_picker_dialog.h"
 #include "fonts.h"
 #include "panels/brush_preset_picker.h"
 #include "panels/numeric_field.h"
@@ -14,7 +15,7 @@
 
 namespace pictura {
 
-void PicturaMainWindow::buildPanels()
+void PicturaMainWindow::buildPanels(const SessionState& state)
 {
     colorState_ = new ColorState(this);
 
@@ -32,6 +33,23 @@ void PicturaMainWindow::buildPanels()
 
     swatchesPanel_ = new SwatchesPanel(colorState_, this);
     swatchesPanel_->setObjectName(QStringLiteral("swatchesPanel"));
+    ColorPickerDialog::setDefaultSwatchGrid(swatchesPanel_->grid());
+    if (state.swatchesLoaded) {
+        QList<Swatch> swatches;
+        for (const QJsonValue& value : state.swatches) {
+            const QJsonObject entry = value.toObject();
+            const QColor color(entry.value(QStringLiteral("color")).toString());
+            if (color.isValid()) {
+                swatches.append({color, entry.value(QStringLiteral("name")).toString()});
+            }
+        }
+        // An intentionally empty array clears the panel; a corrupt non-empty
+        // array keeps the default palette rather than opening blank.
+        if (!swatches.isEmpty() || state.swatches.isEmpty()) {
+            swatchesPanel_->grid()->setSwatches(swatches);
+        }
+    }
+    connect(swatchesPanel_->grid(), &SwatchGrid::countChanged, this, [this]() { saveSession(); });
 
     infoPanel_ = new InfoPanel(this);
     infoPanel_->setObjectName(QStringLiteral("infoPanel"));

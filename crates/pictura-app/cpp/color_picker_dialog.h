@@ -16,6 +16,7 @@ class QSpinBox;
 
 namespace pictura {
 
+class SwatchGrid;
 class ToolController;
 
 /// The component the vertical ramp controls. In Photoshop this is chosen by the
@@ -165,6 +166,7 @@ private slots:
     void onRgbFieldsEdited();
     void onLabFieldsEdited();
     void onHexEdited();
+    void onHexCommitted();
     void onWebColorsToggled(bool on);
     void revertToOriginal();
 
@@ -172,6 +174,7 @@ private:
     void buildUi();
     void syncControls(QWidget* except = nullptr);
     void setHsv(int hue, int sat, int val);
+    bool applyHex(const QString& text, bool normalize);
     void notify();
     ColorAxis currentAxis() const;
 
@@ -226,18 +229,24 @@ private:
 /// Ported from photorust's `shell/src/dialogs/ColorPickerDialog.{h,cpp}`
 /// (<https://github.com/perfecto25/photorust>). Given a canvas, a click on the
 /// image takes its colour, as CS6's picker eyedropper does.
-/// ponytail: the eyedropper reaches only the canvas (not the screen), and Add
-/// to Swatches and Color Libraries are not wired.
+/// ponytail: the eyedropper reaches only the canvas (not the screen), and
+/// Color Libraries are not wired.
 class ColorPickerDialog : public QDialog
 {
     Q_OBJECT
 
 public:
     explicit ColorPickerDialog(const QColor& initial, QWidget* parent = nullptr,
-                               const QString& title = {});
+                               const QString& title = {}, SwatchGrid* swatches = nullptr);
     ~ColorPickerDialog() override;
 
     QColor selectedColor() const;
+
+    /// The grid Add to Swatches appends to. `PicturaMainWindow` registers its
+    /// Swatches grid so every picker entry point can add to the panel; the
+    /// pointer clears itself when the panel is destroyed.
+    static void setDefaultSwatchGrid(SwatchGrid* grid);
+    static SwatchGrid* defaultSwatchGrid();
 
     /// While the dialog is open, a canvas click (through `tools`' canvas
     /// sampler) takes `colorAt` of the clicked document pixel; an invalid
@@ -250,9 +259,13 @@ public:
                            const QString& title = {}, ToolController* tools = nullptr,
                            std::function<QColor(const QPoint&)> colorAt = {});
 
+private slots:
+    void addToSwatches();
+
 private:
     ColorPicker* m_picker = nullptr;
     QPointer<ToolController> m_tools;
+    SwatchGrid* m_swatches = nullptr;
 };
 
 /// sRGB -> CIE L*a*b* (D50), the space Photoshop's Lab readout uses.

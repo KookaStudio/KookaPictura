@@ -7,6 +7,8 @@
 #include "panels/color_panel.h"
 #include "panels/swatches_panel.h"
 
+#include "qt_test_support.h"
+
 class SwatchesPanelTest : public QObject {
     Q_OBJECT
 
@@ -15,6 +17,10 @@ private slots:
     void indexAtMapsPointToSwatch();
     void clickModifiersSetColorsAndDelete();
     void footerNewAddsSwatch();
+    void newSwatchUsesGeneratedName();
+    void freshStoreUsesDefaultPalette();
+    void addedSwatchesSurviveARestart();
+    void emptyPanelSurvivesARestart();
     void resetRestoresDefaults();
 };
 
@@ -72,6 +78,76 @@ void SwatchesPanelTest::footerNewAddsSwatch()
     QCOMPARE(grid->swatches().last().color.name(), QStringLiteral("#010203"));
     QVERIFY2(panel.findChild<QToolButton*>(QStringLiteral("swatchesNew")) != nullptr,
              "footer New button present");
+}
+
+void SwatchesPanelTest::newSwatchUsesGeneratedName()
+{
+    pictura::ColorState state;
+    pictura::SwatchesPanel panel(&state);
+    pictura::SwatchGrid* grid = panel.grid();
+
+    panel.addSwatchFromForeground();
+    QCOMPARE(grid->swatches().last().name, QStringLiteral("Swatch 1"));
+    panel.addSwatchFromForeground();
+    QCOMPARE(grid->swatches().last().name, QStringLiteral("Swatch 2"));
+}
+
+void SwatchesPanelTest::freshStoreUsesDefaultPalette()
+{
+    pictura::test::ScopedStateHome stateHome;
+    QVERIFY(stateHome.isValid());
+
+    auto window = pictura::test::makeMainWindow();
+    auto* panel = window->findChild<pictura::SwatchesPanel*>(QStringLiteral("swatchesPanel"));
+    QVERIFY(panel);
+    QCOMPARE(panel->grid()->swatches().size(), 48);
+}
+
+void SwatchesPanelTest::addedSwatchesSurviveARestart()
+{
+    pictura::test::ScopedStateHome stateHome;
+    QVERIFY(stateHome.isValid());
+
+    {
+        auto window = pictura::test::makeMainWindow();
+        auto* panel = window->findChild<pictura::SwatchesPanel*>(QStringLiteral("swatchesPanel"));
+        auto* colors = window->findChild<pictura::ColorState*>();
+        QVERIFY(panel && colors);
+        colors->setForeground(QColor(1, 2, 3));
+        panel->addSwatchFromForeground();
+        QCOMPARE(panel->grid()->swatches().size(), 49);
+        QCOMPARE(panel->grid()->swatches().last().name, QStringLiteral("Swatch 1"));
+    }
+
+    {
+        auto window = pictura::test::makeMainWindow();
+        auto* panel = window->findChild<pictura::SwatchesPanel*>(QStringLiteral("swatchesPanel"));
+        QVERIFY(panel);
+        QCOMPARE(panel->grid()->swatches().size(), 49);
+        QCOMPARE(panel->grid()->swatches().last().color, QColor(1, 2, 3));
+        QCOMPARE(panel->grid()->swatches().last().name, QStringLiteral("Swatch 1"));
+    }
+}
+
+void SwatchesPanelTest::emptyPanelSurvivesARestart()
+{
+    pictura::test::ScopedStateHome stateHome;
+    QVERIFY(stateHome.isValid());
+
+    {
+        auto window = pictura::test::makeMainWindow();
+        auto* panel = window->findChild<pictura::SwatchesPanel*>(QStringLiteral("swatchesPanel"));
+        QVERIFY(panel);
+        panel->grid()->setSwatches({});
+        QCOMPARE(panel->grid()->swatches().size(), 0);
+    }
+
+    {
+        auto window = pictura::test::makeMainWindow();
+        auto* panel = window->findChild<pictura::SwatchesPanel*>(QStringLiteral("swatchesPanel"));
+        QVERIFY(panel);
+        QCOMPARE(panel->grid()->swatches().size(), 0);
+    }
 }
 
 void SwatchesPanelTest::resetRestoresDefaults()

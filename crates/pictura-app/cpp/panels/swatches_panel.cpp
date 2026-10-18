@@ -117,6 +117,23 @@ bool SwatchGrid::removeSwatch(int index)
     return true;
 }
 
+QString SwatchGrid::nextSwatchName() const
+{
+    const QString prefix = tr("Swatch ");
+    int next = 1;
+    for (const Swatch& swatch : swatches_) {
+        if (!swatch.name.startsWith(prefix)) {
+            continue;
+        }
+        bool ok = false;
+        const int number = swatch.name.mid(prefix.size()).toInt(&ok);
+        if (ok) {
+            next = qMax(next, number + 1);
+        }
+    }
+    return tr("Swatch %1").arg(next);
+}
+
 int SwatchGrid::columnsForWidth(int width) const
 {
     const int usable = width - kMargin * 2 + kGap;
@@ -298,7 +315,7 @@ SwatchesPanel::SwatchesPanel(ColorState* state, QWidget* parent)
 void SwatchesPanel::addSwatchFromForeground()
 {
     const QColor color = state_ ? state_->foreground() : QColor(Qt::black);
-    grid_->addSwatch({color, color.name().toUpper()});
+    grid_->addSwatch({color, grid_->nextSwatchName()});
 }
 
 void SwatchesPanel::deleteCurrentSwatch() { grid_->removeSwatch(grid_->current()); }

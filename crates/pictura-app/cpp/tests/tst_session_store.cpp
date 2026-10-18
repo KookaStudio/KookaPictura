@@ -8,6 +8,7 @@
 #include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
+#include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 
@@ -27,6 +28,9 @@ private slots:
     void ownWritesRoundTrip();
     void freePanRoundTrips();
     void snapCanvasToWorkspaceRoundTrips();
+    void swatchesAbsentByDefault();
+    void swatchesRoundTrip();
+    void swatchesSurviveAnUnrelatedSave();
 
 private:
     void writeStore(int brightness, const QString& writer, qint64 writtenAt);
@@ -109,6 +113,47 @@ void SessionStoreTest::snapCanvasToWorkspaceRoundTrips()
     state.snapCanvasToWorkspace = false;
     QVERIFY(pictura::saveSession(state));
     QVERIFY(!pictura::loadSession().snapCanvasToWorkspace);
+}
+
+void SessionStoreTest::swatchesAbsentByDefault()
+{
+    const pictura::SessionState state = pictura::loadSession();
+    QVERIFY2(!state.swatchesLoaded, "an older store has no swatch key");
+    QVERIFY(state.swatches.isEmpty());
+}
+
+void SessionStoreTest::swatchesRoundTrip()
+{
+    QJsonObject entry;
+    entry.insert(QStringLiteral("name"), QStringLiteral("Swatch 1"));
+    entry.insert(QStringLiteral("color"), QStringLiteral("#010203"));
+
+    pictura::SessionState state;
+    state.swatches = QJsonArray{entry};
+    state.swatchesLoaded = true;
+    QVERIFY(pictura::saveSession(state));
+
+    const pictura::SessionState loaded = pictura::loadSession();
+    QVERIFY(loaded.swatchesLoaded);
+    QCOMPARE(loaded.swatches.size(), 1);
+    QCOMPARE(loaded.swatches.at(0).toObject().value(QStringLiteral("name")).toString(),
+             QStringLiteral("Swatch 1"));
+    QCOMPARE(loaded.swatches.at(0).toObject().value(QStringLiteral("color")).toString(),
+             QStringLiteral("#010203"));
+}
+
+void SessionStoreTest::swatchesSurviveAnUnrelatedSave()
+{
+    pictura::SessionState state = pictura::loadSession();
+    QVERIFY(state.swatchesLoaded);
+    state.freePan = !state.freePan;
+    QVERIFY(pictura::saveSession(state));
+
+    const pictura::SessionState loaded = pictura::loadSession();
+    QVERIFY(loaded.swatchesLoaded);
+    QCOMPARE(loaded.swatches.size(), 1);
+    QCOMPARE(loaded.swatches.at(0).toObject().value(QStringLiteral("name")).toString(),
+             QStringLiteral("Swatch 1"));
 }
 
 QTEST_MAIN(SessionStoreTest)

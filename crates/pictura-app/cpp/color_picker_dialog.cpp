@@ -1,5 +1,7 @@
 #include "color_picker_dialog.h"
 #include "dialogs.h"
+#include "panels/color_swatch_widget.h"
+#include "panels/swatches_panel.h"
 #include "tools.h"
 
 #include <QtGui/QMouseEvent>
@@ -189,6 +191,101 @@ constexpr double kYn = 1.00000;
 constexpr double kZn = 0.82521;
 constexpr double kEpsilon = 216.0 / 24389.0;
 constexpr double kKappa = 24389.0 / 27.0;
+
+// -- hex input --------------------------------------------------------------
+
+bool isHexDigit(QChar c)
+{
+    const ushort u = c.unicode();
+    return (u >= '0' && u <= '9') || (u >= 'a' && u <= 'f') || (u >= 'A' && u <= 'F');
+}
+
+QString hexDigits(QString text)
+{
+    text = text.trimmed();
+    if (text.startsWith(QLatin1Char('#'))) {
+        text.remove(0, 1);
+    } else if (text.startsWith(QLatin1String("0x"), Qt::CaseInsensitive)) {
+        text.remove(0, 2);
+    }
+    return text;
+}
+
+bool parseHexColor(const QString& text, QColor* color)
+{
+    QString digits = hexDigits(text);
+    if (digits.size() == 3) {
+        digits = QString(digits[0]) + digits[0] + digits[1] + digits[1] + digits[2] + digits[2];
+    }
+    if (digits.size() != 6) {
+        return false;
+    }
+    for (QChar c : digits) {
+        if (!isHexDigit(c)) {
+            return false;
+        }
+    }
+    const QColor parsed(QStringLiteral("#") + digits);
+    if (!parsed.isValid()) {
+        return false;
+    }
+    *color = parsed.toRgb();
+    return true;
+}
+
+// -- Add to Swatches --------------------------------------------------------
+
+QPointer<SwatchGrid> g_swatchGrid;
+
+bool promptForSwatchName(QWidget* parent, const QColor& color, const QString& suggested,
+                         QString* name)
+{
+    QDialog dialog(parent);
+    dialog.setObjectName(QStringLiteral("swatchNameDialog"));
+    dialog.setWindowTitle(QObject::tr("Color Swatch Name"));
+
+    auto* root = new QHBoxLayout(&dialog);
+    root->setContentsMargins(12, 12, 12, 12);
+    root->setSpacing(10);
+
+    auto* preview = new ColorSwatchWidget(&dialog);
+    preview->setObjectName(QStringLiteral("swatchNamePreview"));
+    preview->setFixedSize(44, 44);
+    preview->setFlat(true);
+    preview->setFocusPolicy(Qt::NoFocus);
+    preview->setColor(color);
+    root->addWidget(preview, 0, Qt::AlignTop);
+
+    auto* right = new QVBoxLayout();
+    auto* nameRow = new QHBoxLayout();
+    nameRow->addWidget(new QLabel(QObject::tr("Name:"), &dialog));
+    auto* edit = new QLineEdit(suggested, &dialog);
+    edit->setObjectName(QStringLiteral("swatchNameEdit"));
+    edit->setMinimumWidth(200);
+    nameRow->addWidget(edit, 1);
+    right->addLayout(nameRow);
+    right->addStretch(1);
+
+    auto* buttons = new QHBoxLayout();
+    buttons->addStretch(1);
+    auto* ok = new QPushButton(QObject::tr("OK"), &dialog);
+    ok->setDefault(true);
+    auto* cancel = new QPushButton(QObject::tr("Cancel"), &dialog);
+    buttons->addWidget(ok);
+    buttons->addWidget(cancel);
+    right->addLayout(buttons);
+    root->addLayout(right, 1);
+
+    QObject::connect(ok, &QPushButton::clicked, &dialog, &QDialog::accept);
+    QObject::connect(cancel, &QPushButton::clicked, &dialog, &QDialog::reject);
+    edit->selectAll();
+
+    if (runDialog(dialog, parent) != QDialog::Accepted) {
+        return false;
+    }
+    *name = edit->text().trimmed();
+    return true;
+}
 
 } // namespace
 
@@ -695,10 +792,11 @@ void ColorPicker::buildUi()
     grid->addWidget(new QLabel(QStringLiteral("#"), this), 6, 0,
                     Qt::AlignRight | Qt::AlignVCenter);
     m_hex = new QLineEdit(this);
-    m_hex->setFixedWidth(72);
-    m_hex->setMaxLength(6);
+    m_hex->setObjectName(QStringLiteral("colorPickerHex"));
+    m_hex->setFixedWidth(84);
+    m_hex->setMaxLength(8);
     m_hex->setValidator(new QRegularExpressionValidator(
-        QRegularExpression(QStringLiteral("[0-9A-Fa-f]{0,6}")), this));
+        QRegularExpression(QStringLiteral("(?:#|0[xX])?[0-9A-Fa-f]{0,6}")), this));
     grid->addWidget(m_hex, 6, 1, 1, 2);
 
     grid->setColumnMinimumWidth(3, 14);
@@ -723,6 +821,7 @@ void ColorPicker::buildUi()
         connect(s, &QSpinBox::valueChanged, this, &ColorPicker::onLabFieldsEdited);
     }
     connect(m_hex, &QLineEdit::textEdited, this, &ColorPicker::onHexEdited);
+    connect(m_hex, &QLineEdit::editingFinished, this, &ColorPicker::onHexCommitted);
     connect(m_webOnly, &QCheckBox::toggled, this, &ColorPicker::onWebColorsToggled);
 
     m_radioH->setChecked(true);
@@ -883,26 +982,56 @@ void ColorPicker::onLabFieldsEdited()
     notify();
 }
 
+bool ColorPicker::applyHex(const QString& text, bool normalize)
+{
+    QColor color;
+    if (!parseHexColor(text, &color)) {
+        return false;
+    }
+    if (m_webOnly->isChecked()) {
+        color = snapToWebColor(color);
+    }
+    m_color = color.toRgb();
+    toHsvPreservingHue(m_color, m_hue, m_sat, m_val);
+    syncControls(m_hex);
+    if (normalize) {
+        const QString canonical = m_color.name().mid(1).toUpper();
+        if (m_hex->text() != canonical) {
+            m_updating = true;
+            m_hex->setText(canonical);
+            m_updating = false;
+        }
+    }
+    notify();
+    return true;
+}
+
 void ColorPicker::onHexEdited()
 {
     if (m_updating) {
         return;
     }
-    const QString text = m_hex->text().trimmed();
-    if (text.size() != 6) {
+    // Three-digit shorthand waits for the commit: typing "123" towards
+    // "123456" must not turn into #112233 halfway through.
+    if (hexDigits(m_hex->text()).size() == 6) {
+        applyHex(m_hex->text(), false);
+    }
+}
+
+void ColorPicker::onHexCommitted()
+{
+    if (m_updating) {
         return;
     }
-    QColor c(QStringLiteral("#") + text);
-    if (!c.isValid()) {
+    if (applyHex(m_hex->text(), true)) {
         return;
     }
-    if (m_webOnly->isChecked()) {
-        c = snapToWebColor(c);
+    const QString canonical = m_color.name().mid(1).toUpper();
+    if (m_hex->text() != canonical) {
+        m_updating = true;
+        m_hex->setText(canonical);
+        m_updating = false;
     }
-    m_color = c.toRgb();
-    toHsvPreservingHue(m_color, m_hue, m_sat, m_val);
-    syncControls(m_hex);
-    notify();
 }
 
 void ColorPicker::onWebColorsToggled(bool on)
@@ -927,8 +1056,10 @@ void ColorPicker::revertToOriginal()
 // ColorPickerDialog
 // ===========================================================================
 
-ColorPickerDialog::ColorPickerDialog(const QColor& initial, QWidget* parent, const QString& title)
+ColorPickerDialog::ColorPickerDialog(const QColor& initial, QWidget* parent, const QString& title,
+                                     SwatchGrid* swatches)
     : QDialog(parent)
+    , m_swatches(swatches)
 {
     setWindowTitle(title.isEmpty() ? tr("Color Picker")
                                    : tr("Color Picker (%1)").arg(title));
@@ -948,11 +1079,16 @@ ColorPickerDialog::ColorPickerDialog(const QColor& initial, QWidget* parent, con
     ok->setDefault(true);
     auto* cancel = new QPushButton(tr("Cancel"), this);
     auto* addSwatch = new QPushButton(tr("Add to Swatches"), this);
+    addSwatch->setObjectName(QStringLiteral("colorPickerAddToSwatches"));
     auto* libraries = new QPushButton(tr("Color Libraries"), this);
+    libraries->setObjectName(QStringLiteral("colorPickerLibraries"));
 
-    // Present for layout fidelity; nothing behind them yet.
-    addSwatch->setEnabled(false);
-    addSwatch->setToolTip(tr("The Swatches panel is not implemented yet"));
+    if (m_swatches) {
+        connect(addSwatch, &QPushButton::clicked, this, &ColorPickerDialog::addToSwatches);
+    } else {
+        addSwatch->setEnabled(false);
+        addSwatch->setToolTip(tr("The Swatches panel is not available"));
+    }
     libraries->setEnabled(false);
     libraries->setToolTip(tr("Spot color libraries are not implemented yet"));
 
@@ -983,6 +1119,30 @@ QColor ColorPickerDialog::selectedColor() const
     return m_picker ? m_picker->color() : QColor();
 }
 
+void ColorPickerDialog::setDefaultSwatchGrid(SwatchGrid* grid)
+{
+    g_swatchGrid = grid;
+}
+
+SwatchGrid* ColorPickerDialog::defaultSwatchGrid()
+{
+    return g_swatchGrid;
+}
+
+void ColorPickerDialog::addToSwatches()
+{
+    if (!m_swatches) {
+        return;
+    }
+    const QColor color = m_picker->color();
+    const QString suggested = m_swatches->nextSwatchName();
+    QString name;
+    if (!promptForSwatchName(this, color, suggested, &name)) {
+        return;
+    }
+    m_swatches->addSwatch({color, name.isEmpty() ? suggested : name});
+}
+
 void ColorPickerDialog::sampleCanvas(ToolController* tools,
                                      std::function<QColor(const QPoint&)> colorAt)
 {
@@ -1008,7 +1168,7 @@ QColor ColorPickerDialog::getColor(const QColor& initial, QWidget* parent, const
                                    ToolController* tools,
                                    std::function<QColor(const QPoint&)> colorAt)
 {
-    ColorPickerDialog dialog(initial, parent, title);
+    ColorPickerDialog dialog(initial, parent, title, defaultSwatchGrid());
     dialog.sampleCanvas(tools, std::move(colorAt));
     if (runDialog(dialog, parent) != QDialog::Accepted) {
         return {};

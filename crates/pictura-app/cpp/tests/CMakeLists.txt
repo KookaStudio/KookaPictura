@@ -58,6 +58,7 @@ set(PICTURA_QT_TESTS
     tst_histogram_panel
     tst_tool_hint_bar
     tst_swatches_panel
+    tst_color_picker
     tst_properties_panel
     tst_channels_panel
     tst_paths_panel

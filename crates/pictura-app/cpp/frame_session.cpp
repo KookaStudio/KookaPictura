@@ -162,6 +162,17 @@ void PicturaMainWindow::saveSession()
     if (tools_) {
         state.toolOptions = toolOptionsToJson(*tools_);
     }
+    if (swatchesPanel_) {
+        QJsonArray swatches;
+        for (const Swatch& swatch : swatchesPanel_->grid()->swatches()) {
+            QJsonObject entry;
+            entry.insert(QStringLiteral("name"), swatch.name);
+            entry.insert(QStringLiteral("color"), swatch.color.name());
+            swatches.append(entry);
+        }
+        state.swatches = swatches;
+        state.swatchesLoaded = true;
+    }
     if (panelColumn_) {
         const bool iconic = panelColumn_->railMode();
         state.panelRailMode = iconic ? QStringLiteral("iconic") : QStringLiteral("normal");
