@@ -12,6 +12,26 @@ Snapshot for resuming after a context break. Update after each milestone.
   contains reproduced Adobe Help prose or the old wording.
 - Toolchain: Rust 1.98 (`rust-toolchain.toml`), system Qt **6.11.1**, cxx-qt
   **0.10.0**, wgpu **30.0.1**, lcms2 **6.2.0** (system Little CMS 2.19).
+- **Hex shorthand, Add to Swatches, and swatch persistence** (#603, branch
+  `feat/603-hex-shorthand-swatches`, OpenSpec changes
+  `hex-shorthand-swatches` and `swatches-session-persistence`, archived into
+  `ui/color-picker` and `ui/color-swatches-panel`). The picker's hex field
+  accepts `#`/`0x` and 3-digit shorthand (`#123` → `#112233`): six digits apply
+  live, shorthand applies on Enter/focus loss, a commit normalises the field,
+  and invalid input leaves the colour and restores the field. Add to Swatches
+  opens a name prompt defaulting to the panel's next `Swatch N`, appends the
+  current colour, and leaves the picker open; `PicturaMainWindow` registers its
+  `SwatchGrid` as the picker's default target so every picker entry point
+  reaches the panel. `SwatchGrid::nextSwatchName` also names the panel's New
+  swatches. The grid persists in the session store: `SessionState` carries
+  `swatches` (`{name, color}`) plus a `swatchesLoaded` flag, the frame saves
+  the live grid on every add/delete/reset and restores it in `buildPanels`; an
+  absent key opens the default palette and a stored empty panel stays empty.
+  Ceilings (`ponytail:`): `.aco`/`.ase` libraries and a dedicated preferences
+  file remain with #605/#489; 4/8-digit alpha shorthand, the Color panel hex
+  field, and the CC-only library checkbox are out of scope. Tests:
+  `tst_color_picker` (6), `tst_swatches_panel` (9), and `tst_session_store`
+  (3 new).
 - **Spin Blur** (#464, branch `feat/464-spin-blur`, OpenSpec change
   `spin-blur-gallery`, archived into `imaging/blur-gallery` and
   `imaging/blur-filters`). A post-CS6 Blur Gallery effect ported on the
