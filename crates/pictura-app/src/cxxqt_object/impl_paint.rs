@@ -833,11 +833,12 @@ impl qobject::PictureView {
     }
 
     pub fn cancel_paint(mut self: Pin<&mut Self>) {
-        // The stroke puts back the layer pixels it changed. The document
-        // composite was never patched mid-stroke, so presenting the stroke's
-        // extent from it is enough; only the level-0/pyramid and the displayed
-        // canvas carry the in-progress paint. A region still pending is
-        // dropped: the restore below repaints the whole extent anyway.
+        // The stroke puts back the layer pixels it changed, and
+        // `cancel_stroke` re-composites its extent into the document composite
+        // that the in-stroke presents had patched (a mask stroke never patched
+        // it). Presenting the extent from the composite then repairs level
+        // 0, the pyramid and the canvas. A region still pending is dropped:
+        // the restore below repaints the whole extent anyway.
         let dirty = {
             let mut rust = self.as_mut().rust_mut();
             let rust = &mut *rust;

@@ -267,6 +267,19 @@ QJsonObject ControlServer::methodPointer(const QJsonObject& params)
         QApplication::sendEvent(widget, &event);
     };
 
+    // A `down` holds its button until `up`; a second `down` would leave the
+    // first one stuck on every later `move`.
+    if (op == QStringLiteral("down") && heldButtons_ != Qt::NoButton) {
+        return error(QStringLiteral("invalid_param"),
+                     QStringLiteral("a button is already down; send up first"));
+    }
+    // Every other press-and-release op ends with no button held, so a stale
+    // `down` cannot follow a later plain `move`.
+    if (op == QStringLiteral("click") || op == QStringLiteral("dblclick")
+        || op == QStringLiteral("drag")) {
+        heldButtons_ = Qt::NoButton;
+    }
+
     const Mapped first = mapPoint(x, y);
     if (op == QStringLiteral("click")) {
         sendMouse(QEvent::MouseButtonPress, target, first.local, first.global, button, heldButton,

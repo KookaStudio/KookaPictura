@@ -93,12 +93,12 @@ impl DabRaster<'_> {
 }
 
 /// The target layer's planes as mutable slices in R, G, B, alpha order. A
-/// plane shorter than the layer is left out rather than indexed past its end.
+/// plane that is not the layer's size is left out, as `fill_layer` does.
 pub(super) fn plane_slices(layer: &mut Layer, ch: PlaneIndex, len: usize) -> BandPlanes<'_> {
     let mut out: BandPlanes<'_> = [None, None, None, None];
     for (idx, c) in layer.channels.iter_mut().enumerate() {
         if let Some(k) = ch.iter().position(|&x| x == Some(idx)) {
-            if c.data.len() >= len {
+            if c.data.len() == len {
                 out[k] = Some(c.data.as_mut_slice());
             }
         }

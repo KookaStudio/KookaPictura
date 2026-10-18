@@ -515,7 +515,9 @@ object SHALL be `invalid_param`.
 The `pointer` method SHALL also accept `op` `down` and `up`, a button press and
 release at `x`/`y`. Between a `down` and its `up`, a `move` SHALL carry the
 pressed button, so a client can send each motion of a drag as its own request
-and time it; any other `move` carries no button.
+and time it; any other `move` carries no button. A `down` while a button is
+already held SHALL be `invalid_param`, and a `click`, `dblclick` or `drag`
+SHALL leave no button held.
 
 #### Scenario: A drag sent a step at a time paints [ctl_pointer_steps]
 
@@ -523,3 +525,10 @@ and time it; any other `move` carries no button.
   and `up` in image space, then one more `move`
 - **THEN** one stroke is recorded along the moves, and the last `move` paints
   nothing
+
+#### Scenario: A held button cannot go stale [ctl_pointer_stale]
+
+- **WHEN** a client sends `down`, then a second `down`, then a `click`, then a
+  plain `move`
+- **THEN** the second `down` is `invalid_param`, and after the `click` the
+  `move` paints nothing

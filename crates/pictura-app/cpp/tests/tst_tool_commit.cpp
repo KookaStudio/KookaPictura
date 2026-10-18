@@ -40,12 +40,14 @@ QImage texturedSeed(int w, int h)
     return seed;
 }
 
-// The stored composite on a 3 px grid.
+// Every pixel of the stored composite: a stale band one pixel wide at a
+// region's edge must not slip between samples.
 QList<quint32> compositeGrid(const pictura::PictureView& view, int w, int h)
 {
     QList<quint32> out;
-    for (int y = 0; y < h; y += 3) {
-        for (int x = 0; x < w; x += 3) {
+    out.reserve(w * h);
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
             out.append(view.composite_argb(x, y));
         }
     }
@@ -277,6 +279,17 @@ void ToolCommitTest::pointerDownMoveUpPaints()
     // A plain move after the release carries no button: nothing paints.
     QVERIFY(pointer(QStringLiteral("move"), 10.0));
     QCOMPARE(f.view->history_count(), base + 1);
+
+    // A second `down` while one is held is refused; a `click` releases the
+    // held button, so a later plain move paints nothing.
+    QVERIFY(pointer(QStringLiteral("down"), 20.0));
+    QVERIFY(!pointer(QStringLiteral("down"), 30.0));
+    QVERIFY(pointer(QStringLiteral("click"), 30.0));
+    QVERIFY(!f.view->is_painting());
+    const int afterClick = f.view->history_count();
+    QVERIFY(pointer(QStringLiteral("move"), 110.0));
+    QVERIFY(!f.view->is_painting());
+    QCOMPARE(f.view->history_count(), afterClick);
 }
 
 QTEST_MAIN(ToolCommitTest)
