@@ -435,9 +435,12 @@ void LayersPanelTest::dropAnywhereOnLayerRowReorders()
     QRect row = panel_->rowViewportRectForTest(b);
     QVERIFY2(row.height() > 8, "layer B row is laid out");
     const int base = view_->history_count();
+    const QStringList selectionBefore = panel_->selectedPaths();
     QVERIFY2(dropOnViewport(tree->viewport(), view_, a,
                             QPoint(row.center().x(), row.top() + row.height() / 4)),
              "upper-half drop accepted");
+    QVERIFY(panel_->rootDropEnabledForTest());
+    QCOMPARE(panel_->selectedPaths(), selectionBefore);
     QCOMPARE(pictura::layers_api::rowAt(*view_, rowOf(QStringLiteral("2"))).name, QStringLiteral("A"));
     QCOMPARE(view_->history_count(), base + 1);
 
@@ -680,18 +683,24 @@ void LayersPanelTest::clippingMasks()
     panel_->selectPaths({base}, base);
     registry->refresh();
     QVERIFY(release->isEnabled());
+    const int beforeRelease = view_->history_count();
     release->trigger();
+    QCOMPARE(view_->history_count(), beforeRelease + 1);
     QCOMPARE(view_->history_label(view_->history_index()), QStringLiteral("Release Clipping Mask"));
     QVERIFY(!pictura::layers_api::rowAt(*view_, rowOf(fill)).clipping);
     QCOMPARE(view_->sample_argb(12, 12), green);
 
     // Alt-click on the line between the rows clips, and again releases.
     QCoreApplication::processEvents();
+    const int beforeAlt = view_->history_count();
     panel_->altClickBelowRowForTest(fill);
+    QCOMPARE(view_->history_count(), beforeAlt + 1);
     QVERIFY(pictura::layers_api::rowAt(*view_, rowOf(fill)).clipping);
     QCOMPARE(view_->sample_argb(12, 12), white);
     QCoreApplication::processEvents();
+    const int beforeAltRelease = view_->history_count();
     panel_->altClickBelowRowForTest(fill);
+    QCOMPARE(view_->history_count(), beforeAltRelease + 1);
     QVERIFY(!pictura::layers_api::rowAt(*view_, rowOf(fill)).clipping);
 }
 

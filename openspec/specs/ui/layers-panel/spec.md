@@ -136,7 +136,8 @@ data, and all attributes included — directly above itself, naming the copy
 `"<name> copy"`, except that the copy of the Background SHALL be an ordinary
 layer: not the Background, unlocked, and with an opaque alpha channel. Deleting SHALL remove every selected, eligible layer. Move
 Layer Up/Down SHALL swap the selected layer with its neighbour within its own
-container. Each applied operation SHALL mark the document modified and be one
+container and MUST refuse a move that would place the layer below the
+Background. Each applied operation SHALL mark the document modified and be one
 undoable step.
 
 #### Scenario: Add a layer
@@ -169,6 +170,12 @@ undoable step.
 
 - **WHEN** the user moves the selected layer up or down from the panel or row menu
 - **THEN** its order within its container changes, the rows reorder, and the composite updates
+
+#### Scenario: Move Down at the Background floor is refused
+
+- **WHEN** the layer directly above the Background is moved down
+- **THEN** the order is unchanged, no history state is added, and the Background
+  stays bottom-most
 
 #### Scenario: Duplicating the Background makes an ordinary layer
 
@@ -870,8 +877,9 @@ position, releasing it onto a group row SHALL reparent it as a child of that
 group, and releasing it on the empty viewport below the last row SHALL move it to
 the document root (out of any group), each as one undoable step. The system SHALL
 refuse, leaving the document unchanged, a move of the Background layer, of a
-fully-locked or nesting-locked layer, of a row onto itself, or of a row into its
-own descendant. Dropping a dragged row on a bottom-strip button SHALL apply that
+fully-locked or nesting-locked layer, of a row onto itself, of a row into its
+own descendant, or of a row to a position at or below a Background in the
+destination container. Dropping a dragged row on a bottom-strip button SHALL apply that
 button's action to the dragged row: Delete deletes it, New Layer duplicates it
 unless the dragged row is the Background — in which case New Layer converts the
 Background to a normal layer in place — and New Group groups it; buttons whose
@@ -927,6 +935,13 @@ into the row.
   refusal target such as the Background
 - **THEN** no valid drop indicator is shown and releasing the drag changes
   nothing and adds no history state
+
+#### Scenario: A drop below the Background is refused [lpr_drop_bg_below]
+
+- **WHEN** a row is dragged over the gap below the Background in the same
+  container
+- **THEN** no drop indicator is shown, releasing the drag changes nothing, and
+  no history state is added
 
 #### Scenario: A locked or Background row is refused [lpr_drag]
 

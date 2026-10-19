@@ -89,7 +89,7 @@ int pictura::runLayersFilterChecks(pictura::PicturaMainWindow& frame)
         view->set_layer_name_path(pixel, QStringLiteral("raster"));
         view->add_adjustment(QStringLiteral("invert"));
         view->add_group_in(QString());
-        view->set_layer_name_path(QStringLiteral("0"), QStringLiteral("Background"));
+        view->background_from_layer(QStringLiteral("0"));
         panel->refresh();
         const QString adjustment = pathForKind(view, QStringLiteral("adjustment"));
         panel->setFilterKindForTest({QStringLiteral("pixel"), QStringLiteral("adjustment")}, true);

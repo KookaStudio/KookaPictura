@@ -6,14 +6,27 @@
 
 use pictura_core::{Document, Layer};
 
-use super::paths::{container_of, edit_paths, is_background, parse_path, resolve_path_mut};
+use super::paths::{container_of, edit_paths, parse_path, resolve_path_mut};
 
-/// Whether `path` can clip to the layer below it: not the bottom of its
-/// container (nothing to clip to), not the Background, not already clipped.
+/// Whether `path` can clip to the layer below it: the path resolves, the
+/// selected layer is not the Background and is not already clipped, and the
+/// resolved base is not a Background.
 pub fn can_create_clipping_mask(doc: &Document, path: &str) -> bool {
-    parse_path(path).is_some_and(|s| s.last().is_some_and(|&i| i > 0))
-        && !is_background(doc, path)
-        && super::paths::resolve_path(doc, path).is_some_and(|l| !l.clipping)
+    let Some(segments) = parse_path(path) else {
+        return false;
+    };
+    let Some((&index, parent)) = segments.split_last() else {
+        return false;
+    };
+    let Some(container) = container_of(doc, parent) else {
+        return false;
+    };
+    let Some(layer) = container.get(index) else {
+        return false;
+    };
+    !layer.background
+        && !layer.clipping
+        && base_below(container, index).is_some_and(|base| !container[base].background)
 }
 
 /// Clip each of `paths` to the layer below it. Returns how many changed.
@@ -89,6 +102,12 @@ pub(crate) fn base_below(container: &[Layer], index: usize) -> Option<usize> {
     (0..index).rev().find(|&i| !container[i].clipping)
 }
 
+/// Whether a clipped node inserted at `index` has a legal base: a non-Background
+/// sibling below it.
+pub(crate) fn clipping_base_allowed(container: &[Layer], index: usize) -> bool {
+    base_below(container, index).is_some_and(|base| !container[base].background)
+}
+
 /// Clear the contiguous clipped run directly above `index` when the node leaving
 /// that position is an unclipped base. Call before removing the node. No-op when
 /// the departing node is clipped or the layer above it is not clipped.
@@ -139,6 +158,24 @@ pub(crate) fn normalize_clipping(container: &mut [Layer], moved: Option<Moved>) 
             }
         }
     }
+    let backgrounds: Vec<usize> = container
+        .iter()
+        .enumerate()
+        .filter_map(|(index, layer)| layer.background.then_some(index))
+        .collect();
+    for background in backgrounds.into_iter().rev() {
+        if container[background].clipping {
+            container[background].clipping = false;
+            changed = true;
+        }
+        for layer in container.iter_mut().skip(background + 1) {
+            if !layer.clipping {
+                break;
+            }
+            layer.clipping = false;
+            changed = true;
+        }
+    }
     changed
 }
 
@@ -147,8 +184,8 @@ mod tests {
     use super::*;
     use crate::document_ops::layer_ops::{
         add_group_in, add_layer, add_layer_full, add_layer_in, arrange_path, background_from_layer,
-        delete_paths, move_path_to, resolve_path, reverse_paths, ungroup_layer, ungroup_paths,
-        Arrange, NewLayerSpec,
+        can_background_from_layer, delete_paths, group_paths, move_path_to, resolve_path,
+        reverse_paths, ungroup_layer, ungroup_paths, Arrange, NewLayerSpec,
     };
     use pictura_core::{BitDepth, ColorMode};
 
@@ -418,5 +455,79 @@ mod tests {
         };
         assert_eq!(add_layer_full(&mut doc, &group, &spec), "0/0");
         assert!(!doc.layers[0].children[0].clipping);
+    }
+
+    #[test]
+    fn a_background_is_never_a_clipping_base() {
+        let mut doc = stack();
+        assert!(
+            !can_create_clipping_mask(&doc, "1"),
+            "the layer above the Background"
+        );
+        assert_eq!(create_clipping_mask(&mut doc, &["1"]), 0);
+        assert!(!doc.layers[1].clipping);
+        assert!(
+            can_create_clipping_mask(&doc, "2"),
+            "a normal base is still allowed"
+        );
+
+        let spec = NewLayerSpec {
+            name: "Clipped".into(),
+            clipping: true,
+            ..NewLayerSpec::default()
+        };
+        let path = add_layer_full(&mut doc, "0", &spec);
+        assert_eq!(path, "1");
+        assert!(!resolve_path(&doc, &path).is_some_and(|layer| layer.clipping));
+
+        let mut nested = empty_doc();
+        let group = add_group_in(&mut nested, "", "G");
+        add_layer_in(&mut nested, &group, "Bg");
+        add_layer_in(&mut nested, &group, "Above");
+        nested.layers[0].children[0].background = true;
+        assert!(
+            !can_create_clipping_mask(&nested, "0/1"),
+            "the nested Background"
+        );
+    }
+
+    #[test]
+    fn reverse_releases_a_clip_on_the_background() {
+        let mut doc = stack();
+        create_clipping_mask(&mut doc, &["2"]);
+        assert!(reverse_paths(&mut doc, &["1", "2"]));
+        assert_eq!(names(&doc), vec!["Background", "L2", "L1", "L3", "L4"]);
+        assert!(!doc.layers[1].clipping);
+    }
+
+    #[test]
+    fn grouping_a_clipped_layer_clears_the_new_bottom() {
+        let mut doc = doc_with(&["A", "B"]);
+        set_flags(&mut doc, &[false, true]);
+        assert_eq!(group_paths(&mut doc, &["1"]).as_deref(), Some("1"));
+        assert!(doc.layers[1].is_group);
+        assert!(!doc.layers[1].children[0].clipping);
+    }
+
+    #[test]
+    fn normalize_releases_runs_above_every_background() {
+        let mut doc = stack();
+        doc.layers[2].background = true;
+        doc.layers[1].clipping = true;
+        doc.layers[3].clipping = true;
+        normalize_clipping(doc.layers.as_mut_slice(), None);
+        assert!(!doc.layers[1].clipping);
+        assert!(!doc.layers[3].clipping);
+    }
+
+    #[test]
+    fn background_from_layer_refuses_a_second_background() {
+        let mut doc = stack();
+        let before = doc.clone();
+        assert!(!can_background_from_layer(&doc, "1"));
+        assert!(!background_from_layer(&mut doc, "1"));
+        assert_eq!(doc, before);
+        let plain = doc_with(&["A", "B"]);
+        assert!(can_background_from_layer(&plain, "1"));
     }
 }
