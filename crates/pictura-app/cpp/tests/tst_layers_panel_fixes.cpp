@@ -126,6 +126,7 @@ private slots:
     void duplicateGroupNamesStayDistinct();
     void groupIconHasNoOutline();
     void typeThumbnailIsSquareWithoutOutline();
+    void labelGlyphTintFollowsFill();
     void groupIconIsLarger();
     void blendComboArrowAndKeys();
     void blendChangeHistoryLabel();
@@ -496,6 +497,23 @@ void LayersPanelFixesTest::typeThumbnailIsSquareWithoutOutline()
     const QColor border = image.pixelColor(typeThumb.center().x(), typeThumb.top());
     QVERIFY2(border.red() > 100 && border.green() > 100 && border.blue() > 100,
              "the type card has no black outline");
+}
+
+// The eye glyph flips to a contrasting tint at the sheet-specific qGray split;
+// a None label keeps the theme glyph.
+void LayersPanelFixesTest::labelGlyphTintFollowsFill()
+{
+    for (int label = 1; label <= 7; ++label) {
+        const QColor fill = pictura::layerLabelColor(label);
+        const QColor tint = pictura::LayerRowDelegate::labelGlyphTint(fill);
+        QVERIFY2(tint.isValid(), "a labeled row tints the glyph");
+        const bool light = tint == QColor(240, 240, 240);
+        QCOMPARE(light, label == 6);
+        QVERIFY2(tint == QColor(20, 20, 20) || light,
+                 "the glyph tint is one of the two contrast colors");
+    }
+    QVERIFY2(!pictura::LayerRowDelegate::labelGlyphTint(QColor()).isValid(),
+             "a None label leaves the theme glyph");
 }
 
 // The folder glyph is larger than the old half-thumbnail size, close to a layer

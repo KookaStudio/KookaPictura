@@ -135,10 +135,11 @@ public:
     bool canMoveForTest(const QString& path, const QString& target, int mode);
     bool dropOnStripButtonForTest(const QString& buttonName, const QStringList& paths);
 
-    // Batch 1 hooks: drag flags, the tinted eye gutter, the disabled edit
-    // triggers, and a synthesized double-click at the name or the eye rect.
+    // Batch 1 hooks: drag flags, the label-filled visibility column, the
+    // disabled edit triggers, and a synthesized double-click at the name or the
+    // eye rect.
     bool layerDragFlagsForTest(const QString& path) const;
-    QColor rowGutterColorForTest(const QString& path) const;
+    QColor rowGutterColorForTest(const QString& path, int x = 1) const;
     bool editTriggersDisabledForTest() const;
     bool doubleClickAtForTest(const QString& path, bool atName);
 
@@ -197,7 +198,6 @@ public:
     bool rowPlacedForTest(const QString& path) const;
     bool rowShapeForTest(const QString& path) const;
     bool rowSmartObjectForTest(const QString& path) const;
-    QColor rowLabelChipColorForTest(const QString& path) const;
     // Alt-click the line under `path`'s row, as a user would.
     void altClickBelowRowForTest(const QString& path);
     // Click the eye of a synthetic Smart Filters row (the group header or a
