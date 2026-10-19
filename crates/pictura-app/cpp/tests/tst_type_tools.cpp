@@ -1056,6 +1056,8 @@ void TypeToolsTest::dragOutsideMovesTheText()
     Fixture f(frame, seed(), QStringLiteral("pictura_type_moved"));
     QVERIFY2(f.ok(), "type fixture");
     showFrame();
+    // This check is about the text moving, not snapping to guides.
+    f.canvas->setSmartGuidesEnabled(false);
     frame.setActiveTool(pictura::ToolId::HorizontalType);
     f.drag({QPointF(20, 60)});
     QTest::keyClicks(f.canvas, QStringLiteral("Move me"));

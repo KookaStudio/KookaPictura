@@ -117,6 +117,12 @@ fn content_bounds(layer: &Layer) -> Option<PsdRect> {
     })
 }
 
+/// The document-space ink box round the layer at `path`, as Align computes it;
+/// `None` when the path is missing, a group, an adjustment, or empty.
+pub fn layer_content_bounds(doc: &Document, path: &str) -> Option<PsdRect> {
+    content_bounds(resolve_path(doc, path)?)
+}
+
 /// Each of `paths` (deduplicated) that has content, with its content box.
 fn contents(doc: &Document, paths: &[&str]) -> Vec<(String, PsdRect)> {
     unique(paths)

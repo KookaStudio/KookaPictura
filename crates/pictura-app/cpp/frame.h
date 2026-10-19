@@ -744,6 +744,7 @@ private:
     bool traditionalPoints_ = false;
     bool guidesVisible_ = true;
     bool guidesLocked_ = false;
+    bool smartGuidesVisible_ = true;
     QColor guideColor_{0x4a, 0xff, 0xff};
     bool guideDashed_ = false;
     std::function<bool(QDialog&)> pdfDialogDriver_;

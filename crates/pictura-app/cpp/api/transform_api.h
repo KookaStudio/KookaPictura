@@ -40,6 +40,9 @@ struct Matrix {
 };
 
 LayerRect layerRect(const PictureView& view, const QString& path);
+/// A layer's ink box: the box round its non-transparent pixels, as Align
+/// computes it. Invalid when `path` does not resolve or has no content.
+LayerRect contentRect(const PictureView& view, const QString& path);
 Quad quad(const PictureView& view);
 Matrix previewMatrix(const PictureView& view);
 

@@ -43,6 +43,8 @@ struct SessionState {
     bool traditionalPoints = false;  // Units & Rulers: 72.27 rather than 72 pt/in
     bool guidesVisible = true;
     bool guidesLocked = false;
+    // View > Show > Smart Guides: alignment guides and snapping while moving.
+    bool smartGuidesVisible = true;
     // View > Free Pan: free (default) vs the Photoshop-style constrained pan.
     bool freePan = true;
     // View > Snap Canvas To Workspace: pin a fitting canvas to the centre and

@@ -36,6 +36,15 @@ LayerRect layerRect(const PictureView& view, const QString& path)
     return LayerRect{int(extents[0]), int(extents[1]), int(extents[2]), int(extents[3]), true};
 }
 
+LayerRect contentRect(const PictureView& view, const QString& path)
+{
+    const ::rust::Vec<int32_t> extents = layer_content_bounds_extents(view, path);
+    if (extents.size() != 4) {
+        return LayerRect{};
+    }
+    return LayerRect{int(extents[0]), int(extents[1]), int(extents[2]), int(extents[3]), true};
+}
+
 Quad quad(const PictureView& view)
 {
     const ::rust::Vec<double> extents = transform_quad_extents(view);
