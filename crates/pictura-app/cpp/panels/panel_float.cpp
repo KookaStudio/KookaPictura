@@ -103,6 +103,25 @@ private:
     QSize startSize_;
 };
 
+// A width-only edge grip for the persistent flyout. It resizes the flyout from
+// its canvas-facing edge and keeps the opposite edge anchored.
+class PanelEdgeGrip : public QWidget {
+public:
+    PanelEdgeGrip(PanelFlyout* flyout, bool leftEdge, QWidget* parent);
+    void setLeftEdge(bool left) { leftEdge_ = left; }
+
+protected:
+    void mousePressEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void mouseReleaseEvent(QMouseEvent* event) override;
+
+private:
+    PanelFlyout* flyout_;
+    bool leftEdge_;
+    QPoint pressGlobal_;
+    QRect startGeom_;
+};
+
 } // namespace
 
 bool PanelFloat::overlayUsesTopLevel()
@@ -122,7 +141,42 @@ void PanelFloat::setForceChildOverlayForTest(bool force)
 PanelFlyout::PanelFlyout(QWidget* parent)
     : QWidget(parent)
 {
-    setWindowFlags(Qt::Popup);
+    // The flyout is a persistent overlay, not a popup: outside presses must not
+    // dismiss it. Mirror PanelFloat's platform-adaptive hosting so the top-level
+    // window can be positioned freely and the child overlay stays in the frame.
+    if (PanelFloat::overlayUsesTopLevel()) {
+        setWindowFlags(Qt::Tool | Qt::FramelessWindowHint);
+    } else {
+        setWindowFlags(Qt::Widget);
+    }
+    setAttribute(Qt::WA_StyledBackground, true);
+    // A panel flyout is a widget-column presentation; use the same width floor
+    // as a docked column.
+    setMinimumWidth(PanelFloat::kFloatMinWidth);
+    resizeGrip_ = new PanelEdgeGrip(this, true, this);
+    resizeGrip_->setObjectName(QStringLiteral("panelIconFlyoutResizeGrip"));
+    resizeGrip_->hide();
+}
+
+void PanelFlyout::setResizeEdge(bool left)
+{
+    resizeLeft_ = left;
+    if (auto* grip = static_cast<PanelEdgeGrip*>(resizeGrip_)) {
+        grip->setLeftEdge(left);
+    }
+    updateResizeGrip();
+}
+
+void PanelFlyout::updateResizeGrip()
+{
+    if (!resizeGrip_) {
+        return;
+    }
+    const int gripWidth = 4;
+    resizeGrip_->setGeometry(resizeLeft_ ? QRect(0, 0, gripWidth, height())
+                                         : QRect(width() - gripWidth, 0, gripWidth, height()));
+    resizeGrip_->show();
+    resizeGrip_->raise();
 }
 
 void PanelFlyout::hideEvent(QHideEvent* event)
@@ -131,6 +185,12 @@ void PanelFlyout::hideEvent(QHideEvent* event)
     if (onHidden) {
         onHidden();
     }
+}
+
+void PanelFlyout::resizeEvent(QResizeEvent* event)
+{
+    QWidget::resizeEvent(event);
+    updateResizeGrip();
 }
 
 PanelFloat::PanelFloat(QWidget* parent)
@@ -319,6 +379,63 @@ void PanelFloat::resizeEvent(QResizeEvent* event)
     sizeGrip_->resize(sizeGrip_->sizeHint());
     sizeGrip_->move(width() - sizeGrip_->width() - 2, height() - sizeGrip_->height() - 2);
     sizeGrip_->raise();
+}
+
+PanelEdgeGrip::PanelEdgeGrip(PanelFlyout* flyout, bool leftEdge, QWidget* parent)
+    : QWidget(parent)
+    , flyout_(flyout)
+    , leftEdge_(leftEdge)
+{
+    setCursor(Qt::SizeHorCursor);
+    setAttribute(Qt::WA_NoSystemBackground, true);
+    setFixedWidth(4);
+}
+
+void PanelEdgeGrip::mousePressEvent(QMouseEvent* event)
+{
+    if (event->button() != Qt::LeftButton || !flyout_) {
+        return;
+    }
+    pressGlobal_ = event->globalPosition().toPoint();
+    startGeom_ = flyout_->geometry();
+    event->accept();
+}
+
+void PanelEdgeGrip::mouseMoveEvent(QMouseEvent* event)
+{
+    if (!flyout_ || !(event->buttons() & Qt::LeftButton)) {
+        return;
+    }
+    const int delta = event->globalPosition().toPoint().x() - pressGlobal_.x();
+    int maxWidth = 0;
+    if (PanelFloat::overlayUsesTopLevel()) {
+        QScreen* screen = flyout_->screen();
+        if (!screen) {
+            screen = QGuiApplication::primaryScreen();
+        }
+        const QRect bounds = screen ? screen->availableGeometry() : QRect();
+        maxWidth = leftEdge_ ? startGeom_.right() - bounds.left() + 1
+                             : bounds.right() - startGeom_.left() + 1;
+    } else {
+        QWidget* host = flyout_->parentWidget();
+        const QRect bounds = host ? host->rect() : QRect();
+        maxWidth = leftEdge_ ? startGeom_.right() - bounds.left() + 1
+                             : bounds.right() - startGeom_.left() + 1;
+    }
+    const int minimum = qMax(1, flyout_->minimumWidth());
+    const int width = qBound(minimum,
+                             startGeom_.width() + (leftEdge_ ? -delta : delta),
+                             qMax(minimum, maxWidth));
+    flyout_->resize(width, startGeom_.height());
+    if (leftEdge_) {
+        flyout_->move(startGeom_.right() - width + 1, startGeom_.top());
+    }
+    event->accept();
+}
+
+void PanelEdgeGrip::mouseReleaseEvent(QMouseEvent* event)
+{
+    event->accept();
 }
 
 } // namespace pictura

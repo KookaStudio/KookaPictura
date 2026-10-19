@@ -96,6 +96,8 @@ set(PICTURA_QT_TESTS
     tst_smart_object_actions
     tst_edit_shortcuts
     tst_workspaces
+    tst_floating_workspaces
+    tst_floating_workspaces_restart
     tst_zoom_tool
     tst_large_document
     tst_tool_commit

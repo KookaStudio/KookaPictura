@@ -162,6 +162,11 @@ PanelColumn::~PanelColumn()
     // It is parented to the frame (above the splitter) so a float cannot cover
     // it; that outlives this column, so drop it here instead of leaking.
     delete edgeIndicator_;
+    if (flyout_) {
+        flyout_->onHidden = nullptr;
+        delete flyout_;
+        flyout_ = nullptr;
+    }
 }
 
 PanelSide PanelColumn::side() const
@@ -262,6 +267,8 @@ void PanelColumn::wireGroup(PanelGroup* group)
     });
     connect(group, &PanelGroup::closeGroupRequested, this,
             [this, group]() { closeGroup(group); });
+    connect(group, &PanelGroup::flyoutCloseRequested, this,
+            [this]() { closeIconFlyout(); });
 }
 
 void PanelColumn::insertGroupAt(PanelGroup* group, int index)
@@ -275,6 +282,7 @@ void PanelColumn::insertGroupAt(PanelGroup* group, int index)
     splitter_->insertWidget(index, group);
     splitter_->setStretchFactor(index, 1);
     group->setFloating(false);
+    group->setFlyout(false);
     group->setVisible(!group->visibleTitles().isEmpty());
     wireGroup(group);
 }
@@ -288,6 +296,22 @@ bool PanelColumn::removeGroup(PanelGroup* group)
     groups_.removeAt(index);
     group->setParent(nullptr);
     return true;
+}
+
+PanelGroup* PanelColumn::takeGroup(PanelGroup* group)
+{
+    if (!group) {
+        return nullptr;
+    }
+    const int index = groups_.indexOf(group);
+    if (index < 0) {
+        return nullptr;
+    }
+    groups_.removeAt(index);
+    group->setParent(nullptr);
+    QObject::disconnect(group, nullptr, this, nullptr);
+    wired_.remove(group);
+    return group;
 }
 
 PanelGroup* PanelColumn::takeGroup(const QString& groupObjectName)
@@ -318,10 +342,16 @@ void PanelColumn::cleanupEmptyGroup(PanelGroup* group)
         // but keep it alive (and float ownership intact) so a later show works.
         if (group->visibleTitles().isEmpty()) {
             group->setVisible(false);
+            if (group == flyoutGroup_) {
+                closeIconFlyout();
+            }
             refreshFloorAfterContentChange();
             maybeRemoveSelf();
         }
         return;
+    }
+    if (group == flyoutGroup_) {
+        closeIconFlyout();
     }
     wired_.remove(group);
     if (PanelFloat* floatWindow = floatForGroup(group)) {
@@ -434,6 +464,9 @@ bool PanelColumn::showPanel(const QString& objectName, bool visible)
     refreshFloorAfterContentChange();
     emit stateChanged();
     if (!visible) {
+        if (group == flyoutGroup_ && group->visibleTitles().isEmpty()) {
+            closeIconFlyout();
+        }
         maybeRemoveSelf();
     }
     return true;
@@ -448,6 +481,11 @@ void PanelColumn::closeGroup(PanelGroup* group)
 {
     if (!group) {
         return;
+    }
+    // A group hosted in the flyout still reports its origin float. Restore it
+    // first so the close acts on the live presentation, not the empty origin.
+    if (group == flyoutGroup_) {
+        closeIconFlyout();
     }
     // A floated group has left `groups_`; closing it must tear the overlay down
     // too, or it is left as an empty ghost with no way to restore it.
@@ -467,6 +505,9 @@ void PanelColumn::closeGroup(PanelGroup* group)
     group->setVisible(false);
     refreshFloorAfterContentChange();
     emit stateChanged();
+    if (group == flyoutGroup_) {
+        closeIconFlyout();
+    }
     maybeRemoveSelf();
 }
 
@@ -704,7 +745,7 @@ void PanelColumn::setBorderEdgeSuppressed(bool left, bool right)
 
 QJsonArray PanelColumn::savePanelState() const
 {
-    auto serialize = [](PanelGroup* group, bool floating) {
+    auto serialize = [this](PanelGroup* group, bool floating) {
         QJsonObject entry;
         entry.insert(QStringLiteral("name"), group->objectName());
         QJsonArray order;
@@ -721,7 +762,9 @@ QJsonArray PanelColumn::savePanelState() const
         entry.insert(QStringLiteral("order"), order);
         entry.insert(QStringLiteral("visible"), visible);
         entry.insert(QStringLiteral("minimized"), group->isMinimized());
-        entry.insert(QStringLiteral("collapsed"), group->isCollapsedToIcons());
+        entry.insert(QStringLiteral("collapsed"),
+                     group == flyoutGroup_ ? flyoutWasCollapsed_
+                                           : group->isCollapsedToIcons());
         // A floated group has left `groups_`; record it additively so its panels
         // are kept visible on restore without hiding the group's docked siblings.
         if (floating) {
@@ -732,14 +775,28 @@ QJsonArray PanelColumn::savePanelState() const
 
     QJsonArray groups;
     for (PanelGroup* group : groups_) {
-        if (group) {
-            groups.append(serialize(group, false));
+        if (!group) {
+            continue;
         }
+        // A flyout hosted from a floating row is serialized through its origin
+        // float below, not twice as a docked group.
+        if (group == flyoutGroup_ && flyoutFloat_) {
+            continue;
+        }
+        groups.append(serialize(group, false));
     }
     for (PanelFloat* floatWindow : floats_) {
         PanelGroup* group = floatWindow ? floatWindow->group() : nullptr;
         if (group) {
-            groups.append(serialize(group, true));
+            QJsonObject entry = serialize(group, true);
+            const QRect rect(floatWindow->mapToGlobal(QPoint(0, 0)), floatWindow->size());
+            QJsonArray geometry;
+            geometry.append(rect.x());
+            geometry.append(rect.y());
+            geometry.append(rect.width());
+            geometry.append(rect.height());
+            entry.insert(QStringLiteral("floatGeometry"), geometry);
+            groups.append(entry);
         }
     }
     return groups;

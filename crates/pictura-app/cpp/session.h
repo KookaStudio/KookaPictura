@@ -82,7 +82,7 @@ struct SessionState {
     // tool name -> letter (empty: none).
     QMap<QString, QStringList> shortcuts;
     QMap<QString, QString> toolShortcuts;
-    int schemaVersion = 9;
+    int schemaVersion = 10;
     QStringList recent;
     QByteArray windowGeometry;       // QMainWindow::saveGeometry(), empty = default
     bool windowMaximized = false;    // restored as Qt::WindowMaximized on launch

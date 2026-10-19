@@ -240,6 +240,7 @@ PicturaMainWindow::~PicturaMainWindow()
     // Detach the focus-loss Space guard before the child widgets are torn down;
     // a child's clearFocus() emits focusChanged while tabs_ is already gone.
     QObject::disconnect(spacePanFocusConn_);
+    QObject::disconnect(deleteShortcutsFocusConn_);
     for (const SmartObjectEditSession& session : editSessions_) {
         delete session.temp;
     }

@@ -257,8 +257,16 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump(6);
         pictura::PanelColumn* column = frame.panelColumn();
-        pictura::PanelGroup* group =
-            column && !column->groups().isEmpty() ? column->groups().first() : nullptr;
+        pictura::PanelGroup* group = nullptr;
+        if (column) {
+            for (pictura::PanelGroup* candidate : column->groups()) {
+                if (candidate && !candidate->isCollapsedToIcons()
+                    && candidate->isVisible() && !candidate->visibleTitles().isEmpty()) {
+                    group = candidate;
+                    break;
+                }
+            }
+        }
         bool torn = false;
         bool headerShown = false;
         bool toggleWorks = false;
@@ -295,7 +303,8 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
                 const QRect after = column->floatGeometryForTest(0);
                 dragMoved = after.topLeft() != before.topLeft();
             }
-            column->closeFloatForTest(0);
+            group->setCollapsedToIconsForTest(false);
+            column->redockForTest(0, 0);
             pump(6);
         }
         ST_BEGIN("lss_float_header");
@@ -316,8 +325,16 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump(6);
         pictura::PanelColumn* column = frame.panelColumn();
-        pictura::PanelGroup* group =
-            column && !column->groups().isEmpty() ? column->groups().first() : nullptr;
+        pictura::PanelGroup* group = nullptr;
+        if (column) {
+            for (pictura::PanelGroup* candidate : column->groups()) {
+                if (candidate && !candidate->isCollapsedToIcons()
+                    && candidate->isVisible() && !candidate->visibleTitles().isEmpty()) {
+                    group = candidate;
+                    break;
+                }
+            }
+        }
         bool torn = false;
         bool minHeight = false;
         bool themed = false;
@@ -330,7 +347,8 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
                         && column->floatGeometryForTest(0).height()
                                >= pictura::PanelFloat::kFloatIconMinHeight;
             themed = qApp->styleSheet().contains(QStringLiteral("QWidget#panelIconGroup {"));
-            column->closeFloatForTest(0);
+            group->setCollapsedToIconsForTest(false);
+            column->redockForTest(0, 0);
             pump(6);
         }
         ST_BEGIN("lss_float_icons");
@@ -526,8 +544,16 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump(6);
         pictura::PanelColumn* column = frame.panelColumn();
-        pictura::PanelGroup* group =
-            column && !column->groups().isEmpty() ? column->groups().first() : nullptr;
+        pictura::PanelGroup* group = nullptr;
+        if (column) {
+            for (pictura::PanelGroup* candidate : column->groups()) {
+                if (candidate && !candidate->isCollapsedToIcons()
+                    && candidate->isVisible() && !candidate->visibleTitles().isEmpty()) {
+                    group = candidate;
+                    break;
+                }
+            }
+        }
         bool torn = false;
         bool placed = false;
         bool rightSide = false;
@@ -545,7 +571,8 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
                 rightSide = c.x() + close->width() >= header->width() - 6
                             && t.x() > header->width() / 2;
             }
-            column->closeFloatForTest(0);
+            group->setCollapsedToIconsForTest(false);
+            column->redockForTest(0, 0);
             pump(6);
         }
         ST_BEGIN("lss_float_toggle_place");
@@ -564,8 +591,16 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump(6);
         pictura::PanelColumn* column = frame.panelColumn();
-        pictura::PanelGroup* group =
-            column && !column->groups().isEmpty() ? column->groups().first() : nullptr;
+        pictura::PanelGroup* group = nullptr;
+        if (column) {
+            for (pictura::PanelGroup* candidate : column->groups()) {
+                if (candidate && !candidate->isCollapsedToIcons()
+                    && candidate->isVisible() && !candidate->visibleTitles().isEmpty()) {
+                    group = candidate;
+                    break;
+                }
+            }
+        }
         bool torn = false;
         bool snapped = false;
         bool shrunk = false;
@@ -583,7 +618,8 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
                       && collapsedHeight >= pictura::PanelFloat::kFloatIconMinHeight
                       && collapsedHeight <= iconHeight + 8;
             shrunk = collapsedHeight < expandedHeight;
-            column->closeFloatForTest(0);
+            group->setCollapsedToIconsForTest(false);
+            column->redockForTest(0, 0);
             pump(6);
         }
         ST_BEGIN("lss_float_icon_height");
@@ -603,8 +639,16 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump(6);
         pictura::PanelColumn* column = frame.panelColumn();
-        pictura::PanelGroup* group =
-            column && !column->groups().isEmpty() ? column->groups().first() : nullptr;
+        pictura::PanelGroup* group = nullptr;
+        if (column) {
+            for (pictura::PanelGroup* candidate : column->groups()) {
+                if (candidate && !candidate->isCollapsedToIcons()
+                    && candidate->isVisible() && !candidate->visibleTitles().isEmpty()) {
+                    group = candidate;
+                    break;
+                }
+            }
+        }
         bool torn = false;
         bool grip = false;
         bool minSize = false;
@@ -615,7 +659,8 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
             grip = floatWindow && floatWindow->sizeGripForTest() != nullptr;
             minSize = floatWindow && floatWindow->minimumWidth() > 0
                       && floatWindow->minimumHeight() > 0;
-            column->closeFloatForTest(0);
+            group->setCollapsedToIconsForTest(false);
+            column->redockForTest(0, 0);
             pump(6);
         }
         ST_BEGIN("lss_float_resize");
@@ -717,8 +762,16 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump(6);
         pictura::PanelColumn* column = frame.panelColumn();
-        pictura::PanelGroup* group =
-            column && !column->groups().isEmpty() ? column->groups().first() : nullptr;
+        pictura::PanelGroup* group = nullptr;
+        if (column) {
+            for (pictura::PanelGroup* candidate : column->groups()) {
+                if (candidate && !candidate->isCollapsedToIcons()
+                    && candidate->isVisible() && !candidate->visibleTitles().isEmpty()) {
+                    group = candidate;
+                    break;
+                }
+            }
+        }
         bool torn = false;
         bool dimmed = false;
         bool restored = false;

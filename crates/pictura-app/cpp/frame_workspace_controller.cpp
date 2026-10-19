@@ -1,3 +1,4 @@
+#include <QtCore/QRect>
 #include "frame_includes.h"
 
 #include "workspace_store.h"
@@ -28,19 +29,26 @@ const QString kDefaultWorkspace = QStringLiteral("Essentials");
 const QString kBuiltinKind = QStringLiteral("builtin");
 const QString kUserKind = QStringLiteral("user");
 
+QJsonArray rectJson(const QRect& rect)
+{
+    QJsonArray array;
+    array.append(rect.x());
+    array.append(rect.y());
+    array.append(rect.width());
+    array.append(rect.height());
+    return array;
+}
+
 } // namespace
 
 QJsonArray PicturaMainWindow::serializeWorkspaceLayout() const
 {
-    // v9: the ordered per-column layout, in central-splitter order, each with
-    // its normal-mode width and its own rail mode. The tools column is recorded
-    // with a `tools` marker (its splitter order + the 1/2 tool-column count).
-    // A floating whole column is included too (via `allPanelColumns`) so its
-    // panels survive a restart: a floated dynamic column's groups are folded
-    // into the primary column's entry instead of being lost.
+    // v10: the ordered per-column layout, in central-splitter order, each with
+    // its normal-mode width, rail mode, and floating state/geometry. The tools
+    // column is recorded with a `tools` marker and handled before the detached
+    // branch so a floating Tools column is never dropped. Floating groups keep
+    // their own entries inside their owner column's `groups` array.
     QJsonArray columns;
-    QJsonArray floatingDynamicGroups;
-    int primaryEntry = -1;
     int order = 0;
     for (PanelColumn* column : allPanelColumns()) {
         if (!column) {
@@ -51,48 +59,27 @@ QJsonArray PicturaMainWindow::serializeWorkspaceLayout() const
         if (centerSplitter_->indexOf(column) < 0 && !column->isColumnFloating()) {
             continue;
         }
-        if (column->isColumnFloating() && column != panelColumn_) {
-            for (const QJsonValue& group : column->savePanelState()) {
-                floatingDynamicGroups.append(group);
-            }
-            continue;
-        }
         QJsonObject entry;
         entry.insert(QStringLiteral("side"),
-                     sideOf(column) == PanelSide::Left ? QStringLiteral("left")
+                     column->side() == PanelSide::Left ? QStringLiteral("left")
                                                        : QStringLiteral("right"));
         entry.insert(QStringLiteral("order"), order++);
         entry.insert(QStringLiteral("width"), column->persistedWidth());
         entry.insert(QStringLiteral("railMode"),
                      column->railMode() ? QStringLiteral("iconic")
                                         : QStringLiteral("normal"));
+        if (column->isColumnFloating()) {
+            entry.insert(QStringLiteral("floating"), true);
+            entry.insert(QStringLiteral("floatGeometry"),
+                         rectJson(column->columnFloatGeometry()));
+        }
         if (column->isToolsColumn()) {
             entry.insert(QStringLiteral("tools"), true);
             entry.insert(QStringLiteral("groups"), QJsonArray());
         } else {
             entry.insert(QStringLiteral("groups"), column->savePanelState());
         }
-        if (column == panelColumn_) {
-            primaryEntry = columns.size();
-        }
         columns.append(entry);
-    }
-    if (!floatingDynamicGroups.isEmpty()) {
-        if (primaryEntry >= 0) {
-            QJsonObject entry = columns.at(primaryEntry).toObject();
-            QJsonArray groups = entry.value(QStringLiteral("groups")).toArray();
-            for (const QJsonValue& group : floatingDynamicGroups) {
-                groups.append(group);
-            }
-            entry.insert(QStringLiteral("groups"), groups);
-            columns.replace(primaryEntry, entry);
-        } else {
-            QJsonObject entry;
-            entry.insert(QStringLiteral("side"), QStringLiteral("right"));
-            entry.insert(QStringLiteral("order"), order++);
-            entry.insert(QStringLiteral("groups"), floatingDynamicGroups);
-            columns.append(entry);
-        }
     }
     return columns;
 }

@@ -46,6 +46,10 @@ PanelFloat* PanelColumn::createFloat(PanelGroup* group, const QPoint& globalPos)
         // clean it up once the drag ends.
     }
     const int index = groups_.indexOf(hosted);
+    if (!dragIsPanel_) {
+        // A whole group dragged out of the flyout takes the flyout with it.
+        detachFlyoutForDrag(group);
+    }
     if (index >= 0) {
         groups_.removeAt(index);
         hosted->setParent(nullptr);
@@ -216,6 +220,120 @@ void PanelColumn::rehomeFloatsTo(PanelColumn* target)
     floats_.clear();
 }
 
+PanelFloat* PanelColumn::restoreGroupFloat(PanelGroup* group, const QRect& geometry)
+{
+    if (!group || !geometry.isValid()) {
+        return nullptr;
+    }
+    const int index = groups_.indexOf(group);
+    if (index >= 0) {
+        groups_.removeAt(index);
+    }
+    group->setParent(nullptr);
+    QWidget* host = owningFrame();
+    if (!host) {
+        host = window();
+    }
+    if (!host) {
+        if (index >= 0) {
+            insertGroupAt(group, index);
+        }
+        return nullptr;
+    }
+    auto* floatWindow = new PanelFloat(host);
+    floatWindow->setGroup(group);
+    floatWindow->onClose = [this, floatWindow]() { closeFloat(floatWindow); };
+    group->setFlyout(false);
+    group->setVisible(true);
+    QSize size = geometry.size()
+                     .expandedTo(QSize(PanelFloat::kFloatMinWidth, PanelFloat::kFloatMinHeight));
+    const QRect bounds = floatBounds(host);
+    if (bounds.isValid()) {
+        size = size.boundedTo(bounds.size())
+                   .expandedTo(QSize(PanelFloat::kFloatMinWidth, PanelFloat::kFloatMinHeight));
+    }
+    floatWindow->resize(size);
+    moveFloat(floatWindow, geometry.topLeft());
+    floatWindow->show();
+    floatWindow->raise();
+    floats_ << floatWindow;
+    maybeRemoveSelf();
+    return floatWindow;
+}
+
+PanelFloat* PanelColumn::restoreColumnFloat(const QRect& geometry)
+{
+    if (!geometry.isValid()) {
+        return columnFloat_;
+    }
+    PanelFloat* floatWindow = floatColumn(geometry.topLeft());
+    if (!floatWindow) {
+        return nullptr;
+    }
+    if (!toolsContent_) {
+        QSize size = geometry.size()
+                         .expandedTo(QSize(PanelFloat::kFloatMinWidth, PanelFloat::kFloatMinHeight));
+        const QRect bounds = floatBounds(floatWindow->parentWidget());
+        if (bounds.isValid()) {
+            size = size.boundedTo(bounds.size())
+                       .expandedTo(QSize(PanelFloat::kFloatMinWidth, PanelFloat::kFloatMinHeight));
+        }
+        floatWindow->resize(size);
+    }
+    moveFloat(floatWindow, geometry.topLeft());
+    floatWindow->show();
+    floatWindow->raise();
+    return floatWindow;
+}
+
+QRect PanelColumn::columnFloatGeometry() const
+{
+    if (!columnFloat_) {
+        return QRect();
+    }
+    return QRect(columnFloat_->mapToGlobal(QPoint(0, 0)), columnFloat_->size());
+}
+
+void PanelColumn::reclampFloats()
+{
+    auto clamp = [this](PanelFloat* floatWindow) {
+        if (!floatWindow) {
+            return;
+        }
+        const QRect bounds = floatBounds(floatWindow->parentWidget());
+        QSize size = floatWindow->size();
+        if (bounds.isValid()) {
+            size = size.boundedTo(bounds.size()).expandedTo(floatWindow->minimumSize());
+        }
+        floatWindow->resize(size);
+        moveFloat(floatWindow, floatWindow->mapToGlobal(QPoint(0, 0)));
+    };
+    for (PanelFloat* floatWindow : floats_) {
+        clamp(floatWindow);
+    }
+    clamp(columnFloat_);
+}
+
+void PanelColumn::redockGroupFloats()
+{
+    const QList<PanelFloat*> floats = floats_;
+    for (PanelFloat* floatWindow : floats) {
+        if (!floatWindow) {
+            continue;
+        }
+        PanelGroup* group = floatWindow->group();
+        if (!group) {
+            continue;
+        }
+        floats_.removeAll(floatWindow);
+        floatWindow->hide();
+        group->setParent(nullptr);
+        group->setCollapsedToIcons(false);
+        insertGroupAt(group, groups_.size());
+        floatWindow->deleteLater();
+    }
+}
+
 PanelFloat* PanelColumn::groupFloatAtGlobal(const QPoint& globalPos) const
 {
     for (PanelFloat* floatWindow : floats_) {
@@ -241,6 +359,9 @@ PanelFloat* PanelColumn::floatColumn(const QPoint& globalTopLeft)
     if (!host) {
         return nullptr;
     }
+    // Remember the docked side before the column leaves the splitter so a
+    // restored/floating Tools or left column keeps its flyout/redock side.
+    lastSide_ = side();
     auto* floatWindow = new PanelFloat(host);
     floatWindow->setContent(this);
     if (toolsContent_) {
@@ -263,7 +384,12 @@ PanelFloat* PanelColumn::floatColumn(const QPoint& globalTopLeft)
     moveFloat(floatWindow, globalTopLeft);
     floatWindow->show();
     floatWindow->raise();
-    floatWindow->syncToContent();
+    // An already-iconic widget column keeps the two-thirds initial height; the
+    // snap happens only when its rail mode is toggled while floating. The tools
+    // column still hugs its content.
+    if (toolsContent_ || !railMode_) {
+        floatWindow->syncToContent();
+    }
     columnFloat_ = floatWindow;
     return floatWindow;
 }

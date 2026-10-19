@@ -38,7 +38,7 @@ public:
     bool containsPanel(const QString& objectName) const;
     bool setPanelVisible(const QString& objectName, bool visible);
     QString currentPanelName() const;
-    // M45 C1: make the named panel the active tab (the compact popup opens the
+    // M45 C1: make the named panel the active tab (the compact flyout opens the
     // whole group with the clicked panel current). False when unknown.
     bool setCurrentPanel(const QString& objectName);
     QString titleForPanel(const QString& objectName) const;
@@ -76,9 +76,13 @@ public:
     void setCurrentToFirstVisible();
 
     // M47 D10: a group hosted in a floating overlay shows a rightmost close
-    // control; docked and popup hosts hide it.
+    // control; docked and flyout hosts hide it.
     void setFloating(bool on);
     QToolButton* floatCloseButton() const { return floatCloseButton_; }
+    // A group hosted in a compact flyout shows a chevrons-right close control
+    // immediately left of the per-widget menu button.
+    void setFlyout(bool on);
+    QToolButton* flyoutCloseButtonForTest() const { return flyoutCloseButton_; }
 
     // Test hooks.
     int tabPositionForTest() const;    int titleCountForTest() const;
@@ -133,6 +137,8 @@ signals:
     // wires the group performs the actual close through its existing paths.
     void closePanelRequested(const QString& objectName);
     void closeGroupRequested();
+    // Emitted by the flyout-only close control.
+    void flyoutCloseRequested();
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -162,6 +168,8 @@ private:
     QWidget* floatHeader_ = nullptr;
     QToolButton* floatToggle_ = nullptr;
     QToolButton* floatCloseButton_ = nullptr;
+    // M45: the flyout-only close control in the header corner.
+    QToolButton* flyoutCloseButton_ = nullptr;
     QMenu* headerMenu_ = nullptr;
     // M48: panel icons are kept off the normal tabs but retained here for the
     // iconic/icon strip and the tab-drag payloads, keyed by panel objectName.
