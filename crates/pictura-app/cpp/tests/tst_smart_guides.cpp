@@ -73,6 +73,7 @@ private slots:
     void moveToolTextLayers();
     void gapReadout();
     void twoLines();
+    void tiePrefersLayer();
 
 private:
     void showFrame();
@@ -320,6 +321,18 @@ void SmartGuidesTest::twoLines()
         vertical += line.vertical ? 1 : 0;
     }
     QCOMPARE(vertical, 2);
+}
+
+void SmartGuidesTest::tiePrefersLayer()
+{
+    // The moving left edge is five pixels from both the document centre and the
+    // reference's left edge; the reference wins the tie.
+    const QList<QRectF> references{QRectF(490, 700, 20, 20)};
+    const pictura::SmartGuideResult result =
+        pictura::smartGuideSnap(QRectF(495, 400, 20, 20), references, QSizeF(1000, 1000), 1.0);
+    QCOMPARE(result.snap.x(), -5.0);
+    QCOMPARE(result.snap.y(), 0.0);
+    QVERIFY2(hasLine(result.lines, true, 490.0), "the reference's left edge");
 }
 
 QTEST_MAIN(SmartGuidesTest)

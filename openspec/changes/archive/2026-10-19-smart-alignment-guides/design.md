@@ -28,7 +28,7 @@
 For the x axis, candidate moving positions are `left`, `(left+right)/2`, `right`.
 Targets are the document's `0`, `width/2`, `width` and each reference's three
 positions. The smallest `|target - candidate| <= threshold` wins; ties prefer the
-document, then the earlier reference. The y axis is symmetric. After snapping,
+earlier reference, then the document. The y axis is symmetric. After snapping,
 every target that coincides with a snapped moving position within an epsilon
 adds a guide line, so a same-width layer can show two lines.
 

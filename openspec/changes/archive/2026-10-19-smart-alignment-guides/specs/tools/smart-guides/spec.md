@@ -52,8 +52,8 @@ rulers' unit, near the guide.
 ### Requirement: Smart guide geometry
 
 The smart-guide solver SHALL choose the smallest alignment offset per axis
-within the threshold, prefer the document on ties, and report every coincident
-guide line after snapping.
+within the threshold, prefer the earlier reference on ties, then the document,
+and report every coincident guide line after snapping.
 
 #### Scenario: Two coincident guides [sg_two_lines]
 
