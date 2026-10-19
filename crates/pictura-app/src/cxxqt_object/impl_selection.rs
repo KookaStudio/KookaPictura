@@ -8,6 +8,7 @@ use pictura_codec::buffer_to_srgb;
 use pictura_core::{Channel, ColorMode, Document};
 use pictura_select::{CombineMode, Selection};
 
+mod bridge;
 mod refine;
 
 impl qobject::PictureView {
@@ -121,17 +122,71 @@ impl qobject::PictureView {
         true
     }
 
-    /// Move (or, with `duplicate`, copy to a new layer) the pixels covered by the
-    /// selection origin, offset by `(dx, dy)`. One "Move Selection" state; false
-    /// (no state) on a zero offset, missing doc/selection, or engine refusal.
+    /// Move (or, with `duplicate`, copy) the content covered by the selection
+    /// origin, offset by `(dx, dy)`. A mask edit target moves mask coverage;
+    /// otherwise the active layer's pixels move (with a new layer on duplicate).
+    /// One "Move Selection" state; false (no state) on a zero offset, missing
+    /// doc/selection, or engine refusal.
     pub fn move_selection_content(
         mut self: Pin<&mut Self>,
         dx: i32,
         dy: i32,
         duplicate: bool,
+        background: u32,
     ) -> bool {
         if dx == 0 && dy == 0 {
             return false;
+        }
+        if let Some(path) = active_mask_target(self.rust()) {
+            let prepared = {
+                let rust = self.rust();
+                let Some(doc) = rust.doc.as_ref() else {
+                    return false;
+                };
+                let Some(mask) =
+                    pictura_render::resolve_path(doc, &path).and_then(|layer| layer.mask.as_ref())
+                else {
+                    return false;
+                };
+                let Some(selection) = rust
+                    .selection_move_origin
+                    .as_ref()
+                    .or(rust.selection.as_ref())
+                else {
+                    return false;
+                };
+                (
+                    crop_selection(
+                        &selection.data,
+                        selection.width,
+                        selection.height,
+                        mask.rect,
+                    ),
+                    selection.translate(dx, dy),
+                    luma_u8(rgba_from_argb(background)),
+                )
+            };
+            let (coverage, moved_selection, background) = prepared;
+            let moved = {
+                let mut rust = self.as_mut().rust_mut();
+                let Some(doc) = rust.doc.as_mut() else {
+                    return false;
+                };
+                pictura_render::move_mask_selection_content(
+                    doc, &path, &coverage, dx, dy, duplicate, background,
+                )
+            };
+            if !moved {
+                return false;
+            }
+            {
+                let mut rust = self.as_mut().rust_mut();
+                rust.selection_move_origin = None;
+                rust.selection = Some(moved_selection);
+            }
+            self.as_mut().recomposite();
+            self.as_mut().record("Move Selection");
+            return true;
         }
         let active = self.rust().active_layer.clone();
         let prepared = {
@@ -150,9 +205,13 @@ impl qobject::PictureView {
             if active_pixel_layer(doc, Some(path)).is_none() {
                 return false;
             }
-            (path.to_string(), selection_to_mask(&selection, doc))
+            (
+                path.to_string(),
+                selection_to_mask(&selection, doc),
+                selection.translate(dx, dy),
+            )
         };
-        let (path, mask) = prepared;
+        let (path, mask, moved_selection) = prepared;
         let moved = {
             let mut rust = self.as_mut().rust_mut();
             let Some(doc) = rust.doc.as_mut() else {
@@ -166,6 +225,7 @@ impl qobject::PictureView {
         {
             let mut rust = self.as_mut().rust_mut();
             rust.selection_move_origin = None;
+            rust.selection = Some(moved_selection);
             if duplicate {
                 // `layer_via_copy` inserts the copy directly above the source
                 // in the source's own container.
@@ -186,6 +246,9 @@ impl qobject::PictureView {
     /// agree. No history. False without a document, selection, editable active
     /// layer, or when the engine refuses (a locked source).
     pub fn begin_selection_duplicate_preview(mut self: Pin<&mut Self>) -> bool {
+        if active_mask_target(self.rust()).is_some() {
+            return false;
+        }
         let prepared = {
             let rust = self.rust();
             let Some(doc) = rust.doc.as_ref() else {

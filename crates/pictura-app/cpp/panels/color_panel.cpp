@@ -42,6 +42,11 @@ void ColorState::setForegroundActive(bool foreground)
     emit activeChanged(foregroundActive_);
 }
 
+void ColorState::setMaskActive(bool mask)
+{
+    maskActive_ = mask;
+}
+
 ColorPanel::ColorPanel(ColorState* state, QWidget* parent)
     : QWidget(parent)
     , state_(state)

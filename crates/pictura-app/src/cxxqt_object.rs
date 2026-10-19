@@ -776,26 +776,6 @@ pub mod qobject {
         #[qinvokable]
         fn invert_selection(self: Pin<&mut Self>) -> bool;
 
-        /// Capture the current selection as the origin of a move drag; false without one.
-        #[qinvokable]
-        fn begin_selection_move(self: Pin<&mut Self>) -> bool;
-
-        /// Set selection to the origin translated by `(dx, dy)`; no history, no `changed`.
-        #[qinvokable]
-        fn preview_selection_move(self: Pin<&mut Self>, dx: i32, dy: i32) -> bool;
-
-        /// Record one "Move Selection" state when the mask moved; false on no-op.
-        #[qinvokable]
-        fn commit_selection_move(self: Pin<&mut Self>) -> bool;
-
-        /// Restore the origin selection and drop the drag; no history.
-        #[qinvokable]
-        fn cancel_selection_move(self: Pin<&mut Self>) -> bool;
-
-        /// Move selected pixels by `(dx, dy)`; `duplicate` copies to a new layer. One undo state.
-        #[qinvokable]
-        fn move_selection_content(self: Pin<&mut Self>, dx: i32, dy: i32, duplicate: bool) -> bool;
-
         /// Apply `op` (`border`/`smooth`/`expand`/`contract`/`feather`) to the
         /// selection by `amount`; one undo state on success, none on refusal.
         #[qinvokable]

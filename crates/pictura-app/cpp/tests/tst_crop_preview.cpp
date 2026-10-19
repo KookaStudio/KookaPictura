@@ -14,11 +14,13 @@
 #include <cmath>
 
 #include "image_view.h"
+#include "panels/layers_panel.h"
 #include "selftest_paint_fixture.h"
 #include "theme.h"
 #include "tools.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
 
 #include "qt_test_support.h"
 
@@ -384,6 +386,20 @@ void CropPreviewTest::paddedMoveShowsTheBackdrop()
     QVERIFY(QTest::qWaitForWindowExposed(&frame));
     canvas->actualPixels();
     QCoreApplication::processEvents();
+
+    // A mask target swaps the paint pair to white/black; the canvas backdrop
+    // still follows the Background layer, not the mask pair.
+    auto* view = frame.activeView();
+    QVERIFY(view);
+    const int layerIndex = view->add_layer(-1);
+    QVERIFY(layerIndex >= 0);
+    const QString layer = QString::number(layerIndex);
+    QVERIFY(pictura::layer_mask_add_path(*view, layer, QStringLiteral("reveal-all")));
+    QVERIFY(pictura::mask_edit_target_set(*view, layer));
+    auto* panel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(panel);
+    panel->refresh();
+    QTest::qWait(50);
 
     // A box that extends 10px past every canvas edge; the frame follows it.
     canvas->setCropBox(QRectF(-10, -10, 60, 60));

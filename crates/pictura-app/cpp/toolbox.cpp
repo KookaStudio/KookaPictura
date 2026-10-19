@@ -269,8 +269,9 @@ QColor ForegroundBackgroundWidget::backgroundForTest() const
 void ForegroundBackgroundWidget::resetColors()
 {
     if (state_) {
-        state_->setForeground(Qt::black);
-        state_->setBackground(Qt::white);
+        const bool mask = state_->maskActive();
+        state_->setForeground(mask ? Qt::white : Qt::black);
+        state_->setBackground(mask ? Qt::black : Qt::white);
     }
     emit reset();
 }

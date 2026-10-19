@@ -60,6 +60,7 @@ fn main() {
                 "src/cxxqt_object/filter_tools/liquify.rs",
                 "src/cxxqt_object/healing.rs",
                 "src/cxxqt_object/image_adjust.rs",
+                "src/cxxqt_object/impl_selection/bridge.rs",
                 "src/cxxqt_object/impl_selection/refine.rs",
                 "src/cxxqt_object/impl_transform/bridge.rs",
                 "src/cxxqt_object/image_adjust/gradient_map.rs",
