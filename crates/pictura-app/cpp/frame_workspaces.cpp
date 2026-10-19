@@ -1,3 +1,4 @@
+#include <QtCore/QRect>
 #include "frame_includes.h"
 
 namespace pictura {
@@ -28,6 +29,15 @@ QJsonObject presetColumn(const QString& railMode, int order, int width,
     column.insert(QStringLiteral("railMode"), railMode);
     column.insert(QStringLiteral("groups"), groups);
     return column;
+}
+
+QRect rectFromJson(const QJsonArray& array)
+{
+    if (array.size() != 4) {
+        return QRect();
+    }
+    return QRect(array.at(0).toInt(), array.at(1).toInt(), array.at(2).toInt(),
+                 array.at(3).toInt());
 }
 
 } // namespace
@@ -139,18 +149,80 @@ PanelColumn* PicturaMainWindow::restoreLegacyDefaultForTest()
 
 void PicturaMainWindow::applyFreshSessionDefault(const SessionState& state)
 {
-    if (state.panelColumns.isEmpty() && state.panelGroups.isEmpty()) {
+    bool layoutHasGroups = false;
+    for (const QJsonValue& value : state.panelColumns) {
+        const QJsonObject entry = value.toObject();
+        if (!entry.value(QStringLiteral("tools")).toBool()
+            && !entry.value(QStringLiteral("groups")).toArray().isEmpty()) {
+            layoutHasGroups = true;
+            break;
+        }
+    }
+    if (state.panelGroups.isEmpty() && !layoutHasGroups) {
         regroupAndApply(workspacePresets(QStringLiteral("Essentials")));
     }
 }
 
-void PicturaMainWindow::regroupAndApply(const QJsonArray& columns)
+void PicturaMainWindow::queueOrRestoreFloat(PanelColumn* column, PanelGroup* group,
+                                           const QRect& geometry)
+{
+    if (!column || !geometry.isValid()) {
+        return;
+    }
+    if (!isVisible()) {
+        pendingFloatRestores_.append({column, group, geometry});
+        return;
+    }
+    if (group) {
+        column->restoreGroupFloat(group, geometry);
+    } else {
+        column->restoreColumnFloat(geometry);
+    }
+}
+
+void PicturaMainWindow::applyPendingFloatRestores()
+{
+    if (!isVisible() || pendingFloatRestores_.isEmpty()) {
+        return;
+    }
+    const QList<PendingFloatRestore> pending = pendingFloatRestores_;
+    pendingFloatRestores_.clear();
+    const bool wasRestoring = restoringPanelSession_;
+    restoringPanelSession_ = true;
+    for (const PendingFloatRestore& item : pending) {
+        if (!item.column) {
+            continue;
+        }
+        if (item.group) {
+            item.column->restoreGroupFloat(item.group, item.geometry);
+            continue;
+        }
+        if (!item.column->isColumnFloating()
+            && (item.column->isToolsColumn() || !item.column->groups().isEmpty())) {
+            item.column->restoreColumnFloat(item.geometry);
+        }
+    }
+    restoringPanelSession_ = wasRestoring;
+    if (workspacesInitialized_) {
+        snapshotActiveWorkspace();
+    }
+}
+
+void PicturaMainWindow::regroupAndApply(const QJsonArray& columns, bool persist)
 {
     if (!panelColumn_ || !centerSplitter_) {
         return;
     }
+    pendingFloatRestores_.clear();
     // A mid-rebuild stateChanged() must not persist a partial layout.
+    const bool wasRestoring = restoringPanelSession_;
     restoringPanelSession_ = true;
+    // A frame-parented flyout must not survive its group being harvested.
+    for (PanelColumn* column : allPanelColumns()) {
+        if (column) {
+            column->closeFlyout();
+        }
+    }
 
     struct PooledPanel {
         QWidget* panel = nullptr;
@@ -195,8 +267,9 @@ void PicturaMainWindow::regroupAndApply(const QJsonArray& columns)
             harvest(group);
         }
     }
-    // A float hosts either a single group or, for a whole-column tear-off, a
-    // column. Found through the frame so no new float enumerator is needed.
+    // Group floats first, then whole-column overlays. A group float can belong
+    // to a column that is itself floating; harvesting it before the column is
+    // torn down prevents an owner pointer into a dying column.
     const QList<PanelFloat*> floats = findChildren<PanelFloat*>(Qt::FindDirectChildrenOnly);
     for (PanelFloat* floatWindow : floats) {
         if (!floatWindow) {
@@ -207,6 +280,10 @@ void PicturaMainWindow::regroupAndApply(const QJsonArray& columns)
             if (floatWindow->onClose) {
                 floatWindow->onClose();
             }
+        }
+    }
+    for (PanelFloat* floatWindow : floats) {
+        if (!floatWindow || floatWindow->group()) {
             continue;
         }
         auto* column = qobject_cast<PanelColumn*>(floatWindow->content());
@@ -231,7 +308,7 @@ void PicturaMainWindow::regroupAndApply(const QJsonArray& columns)
         if (!group) {
             continue;
         }
-        if (PanelGroup* taken = panelColumn_->takeGroup(group->objectName())) {
+        if (PanelGroup* taken = panelColumn_->takeGroup(group)) {
             taken->deleteLater();
         }
     }
@@ -278,9 +355,11 @@ void PicturaMainWindow::regroupAndApply(const QJsonArray& columns)
         QJsonObject spec;
     };
     QList<BuiltGroup> built;
+    QHash<int, PanelColumn*> builtColumns;
 
     auto buildInto = [&](PanelColumn* column, int entryIndex) {
         const QJsonObject entry = entries.at(entryIndex);
+        builtColumns.insert(entryIndex, column);
         for (const QJsonValue& value : entry.value(QStringLiteral("groups")).toArray()) {
             const QJsonObject spec = value.toObject();
             auto* group = new PanelGroup(this);
@@ -390,14 +469,41 @@ void PicturaMainWindow::regroupAndApply(const QJsonArray& columns)
         item.group->setCurrentToFirstVisible();
     }
 
+    // Detach the stored floats after the docked layout is fully built. The
+    // whole column goes first so its group overlays have a live, floating owner
+    // and cannot trigger empty-column cleanup before the column is restored.
+    for (auto it = builtColumns.cbegin(); it != builtColumns.cend(); ++it) {
+        const QJsonObject entry = entries.at(it.key());
+        if (!entry.value(QStringLiteral("floating")).toBool(false)) {
+            continue;
+        }
+        PanelColumn* column = it.value();
+        if (!column || column->groups().isEmpty()) {
+            continue;
+        }
+        const QRect rect =
+            rectFromJson(entry.value(QStringLiteral("floatGeometry")).toArray());
+        queueOrRestoreFloat(column, nullptr, rect);
+    }
+    for (const BuiltGroup& item : built) {
+        if (!item.spec.value(QStringLiteral("floating")).toBool(false)) {
+            continue;
+        }
+        const QRect rect =
+            rectFromJson(item.spec.value(QStringLiteral("floatGeometry")).toArray());
+        queueOrRestoreFloat(item.column, item.group, rect);
+    }
+
     // `removeColumnIfEmpty` may have hidden the primary while its groups emptied;
     // an empty primary stays hidden rather than forcing a blank column visible.
     panelColumn_->setVisible(!panelColumn_->groups().isEmpty() && !panelsHidden_);
 
     PanelColumn::refreshSharedFloor(this);
     reapplyColumnStretch();
-    restoringPanelSession_ = false;
-    saveSession();
+    restoringPanelSession_ = wasRestoring;
+    if (persist && !wasRestoring && pendingFloatRestores_.isEmpty()) {
+        saveSession();
+    }
 }
 
 } // namespace pictura

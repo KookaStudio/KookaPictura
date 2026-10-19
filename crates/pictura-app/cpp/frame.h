@@ -561,8 +561,13 @@ private:
     void importSystemClipboard();
     void applyPanelSession(const SessionState& state);
     // Rebuild the widget columns from a workspace-shaped spec, moving panels
-    // between groups (the session restore only reorders/hides them).
-    void regroupAndApply(const QJsonArray& columns);
+    // between groups and restoring floating groups/columns. Shared by session
+    // restore and workspace apply.
+    void regroupAndApply(const QJsonArray& columns, bool persist = true);
+    // A float restored while the frame is hidden waits for `showEvent` so its
+    // stored position is interpreted against the restored window geometry.
+    void queueOrRestoreFloat(PanelColumn* column, PanelGroup* group, const QRect& geometry);
+    void applyPendingFloatRestores();
     // Serialize the live widget columns into the same `panelColumns` shape
     // saveSession persists, shared by the session and the workspace store.
     QJsonArray serializeWorkspaceLayout() const;
@@ -688,6 +693,7 @@ private:
     // Disconnected in the destructor: the focusChanged handler must not run
     // while the window's children are being torn down.
     QMetaObject::Connection spacePanFocusConn_;
+    QMetaObject::Connection deleteShortcutsFocusConn_;
     FileDropRouter* fileDropRouter_ = nullptr;
     QSplitter* centerSplitter_ = nullptr;
     // The 3 px central-band frame lines (outer 2 px is the window `${surface}`).
@@ -790,6 +796,12 @@ private:
     // Standard-mode chrome unchanged.
     bool fullScreenChromeShown_ = false;
     bool restoringPanelSession_ = false;
+    struct PendingFloatRestore {
+        QPointer<PanelColumn> column;
+        QPointer<PanelGroup> group;
+        QRect geometry;
+    };
+    QList<PendingFloatRestore> pendingFloatRestores_;
     // System-clipboard mirror of the bridge clipboard (frame_menus_edit.cpp):
     // `clipboardMirrored_` while both hold the same pixels, `clipboardExported_`
     // while the system clipboard holds our own export, `clipboardSetting_` only

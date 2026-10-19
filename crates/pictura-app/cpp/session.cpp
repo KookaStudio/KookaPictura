@@ -158,9 +158,11 @@ SessionState loadSession()
     state.panelGroups = obj.value(QStringLiteral("panelGroups")).toArray();
     state.panelColumns = obj.value(QStringLiteral("panelColumns")).toArray();
     // v5 (or older) stores have no per-column layout: synthesise one right-hand
-    // column from the legacy flat per-group state so they open unchanged. An
-    // explicit empty `panelColumns` is v6 and is left as-is.
-    if (!obj.contains(QStringLiteral("panelColumns"))) {
+    // column from the legacy flat per-group state so they open unchanged. A
+    // store with no legacy groups is a fresh/default store, not a one-column
+    // empty workspace.
+    if (!obj.contains(QStringLiteral("panelColumns"))
+        && !state.panelGroups.isEmpty()) {
         QJsonObject column;
         column.insert(QStringLiteral("side"), QStringLiteral("right"));
         column.insert(QStringLiteral("order"), 0);

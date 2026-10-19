@@ -811,19 +811,30 @@ void WorkspacesTest::wholeColumnFloatDoesNotPersistPhantom()
     QCoreApplication::processEvents();
     QVERIFY(main->columnFloatForTest() != nullptr);
 
-    window->switchWorkspaceForTest(QStringLiteral("Painting"));
-    QCoreApplication::processEvents();
-
+    // The floating column must have its own entry, not be folded into the
+    // primary column. Read the live layout before switching away.
     const QJsonArray layout = window->workspaceLayoutForTest();
-    QCOMPARE(layout.size(), window->panelColumnCountForTest());
+    bool sawFloating = false;
     for (const QJsonValue& value : layout) {
         const QJsonObject entry = value.toObject();
-        // The tools column is recorded as an entry with no groups by design.
         if (entry.value(QStringLiteral("tools")).toBool()) {
             continue;
         }
         QVERIFY2(!entry.value(QStringLiteral("groups")).toArray().isEmpty(),
                  "a serialized widget column must carry groups");
+        if (entry.value(QStringLiteral("floating")).toBool()) {
+            sawFloating = true;
+            QCOMPARE(entry.value(QStringLiteral("floatGeometry")).toArray().size(), 4);
+        }
+    }
+    QVERIFY2(sawFloating, "the torn-off column keeps its own floating entry");
+
+    window->switchWorkspaceForTest(QStringLiteral("Painting"));
+    QCoreApplication::processEvents();
+    for (pictura::PanelColumn* column : window->allPanelColumns()) {
+        QVERIFY(column);
+        QVERIFY(!column->isColumnFloating());
+        QCOMPARE(column->floatCountForTest(), 0);
     }
 }
 

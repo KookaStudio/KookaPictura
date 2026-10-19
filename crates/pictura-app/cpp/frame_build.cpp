@@ -451,7 +451,7 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
     // A focused editable field owns Delete / Backspace: while one has focus the
     // shortcuts are off, so the key reaches the field instead of being
     // swallowed by the shortcut map.
-    connect(qApp, &QApplication::focusChanged, this,
+    deleteShortcutsFocusConn_ = connect(qApp, &QApplication::focusChanged, this,
             [deleteShortcuts](QWidget* now, QWidget*) {
                 const bool field = isTextInput(now);
                 for (QShortcut* shortcut : deleteShortcuts) {

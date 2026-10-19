@@ -618,6 +618,21 @@ void CommandTreeTest::widgetmenuButton()
                  && column->widgetMenuHasCloseForTest(QStringLiteral("colorPanel"))
                  && historyColumn->widgetMenuHasCloseForTest(QStringLiteral("historyPanel")),
              "close stays off the widget menu");
+
+    // The flyout adds a close control to the corner; the header must reserve
+    // its width alongside the menu button.
+    const int dockedCorner = layerGroup->headerCornerWidthForTest();
+    column->setRailMode(true);
+    QCoreApplication::processEvents();
+    QVERIFY(column->openIconFlyoutForTest(QStringLiteral("layersPanel")));
+    QCoreApplication::processEvents();
+    QToolButton* flyoutClose = layerGroup->flyoutCloseButtonForTest();
+    QVERIFY2(flyoutClose && flyoutClose->isVisible(), "flyout close control visible");
+    QVERIFY2(layerGroup->headerCornerWidthForTest() >= dockedCorner + flyoutClose->width(),
+             "corner reserves the flyout close control");
+    column->triggerFlyoutCloseForTest();
+    column->setRailMode(false);
+    QCoreApplication::processEvents();
 }
 
 void CommandTreeTest::panelGroupChrome()

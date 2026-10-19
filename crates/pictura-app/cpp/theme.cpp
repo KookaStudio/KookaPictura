@@ -327,6 +327,7 @@ QWidget#workspaceFrameLine { background: ${border}; }
 QWidget#panelColumnContainer[frameEdge="left"], QWidget#toolsColumn[frameEdge="left"] { border-left: 0; }
 QWidget#panelColumnContainer[frameEdge="right"], QWidget#toolsColumn[frameEdge="right"] { border-right: 0; }
 QWidget#panelColumnHeader { background: ${surface-header}; border: 0; border-bottom: 1px solid ${border-header}; }
+QWidget#panelFloatHeader { background: ${surface-header}; border: 0; }
 /* The icon strip sits inside the bordered column container, so it must not
    draw its own side rule (that would double the column border). */
 QWidget#panelColumnIconStrip { border: 0; background: ${surface}; }
