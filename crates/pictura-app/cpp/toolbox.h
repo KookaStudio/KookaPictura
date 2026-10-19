@@ -122,7 +122,8 @@ public:
     int foregroundBackgroundWidthForTest() const;
     // Exchanges the foreground/background swatches (the frame's `X` key).
     void swapForegroundBackground();
-    // Resets the swatches to the default black/white pair (the frame's `D` key).
+    // Resets the swatches to the active target's defaults (the frame's `D` key):
+    // black/white on layer pixels, white/black on a mask.
     void resetForegroundBackground();
     ForegroundBackgroundWidget* foregroundBackgroundForTest() const { return fgbg_; }
 

@@ -7,6 +7,7 @@
 #include "image_view.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h"
 
 namespace pictura {
 
@@ -20,7 +21,7 @@ bool ToolController::maybeBeginSelectionMove(PictureView* v, const QPointF& imag
 {
     if (!v || !v->has_selection()
         || v->selection_coverage(qRound(imagePos.x()), qRound(imagePos.y())) <= 0
-        || !v->begin_selection_move()) {
+        || !pictura::begin_selection_move(*v)) {
         return false;
     }
     contentMove_ = false;
@@ -34,7 +35,7 @@ bool ToolController::maybeBeginSelectionMove(PictureView* v, const QPointF& imag
 
 void ToolController::beginContentMove(PictureView* v, const QPointF& imagePos, bool duplicate)
 {
-    if (!v || !v->begin_selection_move()) {
+    if (!v || !pictura::begin_selection_move(*v)) {
         return;
     }
     contentMove_ = true;
@@ -78,7 +79,7 @@ void ToolController::cancelSelectionMove()
     }
     PictureView* v = view();
     if (v) {
-        v->cancel_selection_move();
+        pictura::cancel_selection_move(*v);
     }
 }
 
@@ -98,7 +99,7 @@ void ToolController::dragSelectionMove(const QPointF& imagePos)
     }
     const int dx = qRound(imagePos.x() - selectionMoveAnchor_.x());
     const int dy = qRound(imagePos.y() - selectionMoveAnchor_.y());
-    if (v->preview_selection_move(dx, dy) && canvas_) {
+    if (pictura::preview_selection_move(*v, dx, dy) && canvas_) {
         canvas_->setSelectionContourOffset(QPointF(dx, dy));
     }
     if (contentPreviewActive_ && canvas_) {
@@ -123,13 +124,17 @@ void ToolController::releaseSelectionMove(const QPointF& imagePos)
     if (contentMove_) {
         contentMove_ = false;
         if (v && (dx != 0 || dy != 0)) {
-            if (v->move_selection_content(dx, dy, contentDuplicate_)) {
+            // Apply the release offset first: a release can arrive without a
+            // final pointer-move event, and the selection must follow the move.
+            pictura::preview_selection_move(*v, dx, dy);
+            if (pictura::move_selection_content(*v, dx, dy, contentDuplicate_,
+                                                quint32(background_.rgba()))) {
                 emit selectionCommitted();
             } else {
-                v->cancel_selection_move();
+                pictura::cancel_selection_move(*v);
             }
         } else if (v) {
-            v->cancel_selection_move();
+            pictura::cancel_selection_move(*v);
         }
         if (contentPreviewActive_ && canvas_) {
             canvas_->endMovePreview();
@@ -140,11 +145,11 @@ void ToolController::releaseSelectionMove(const QPointF& imagePos)
         return;
     }
     if (v && (dx != 0 || dy != 0)) {
-        if (v->preview_selection_move(dx, dy) && v->commit_selection_move()) {
+        if (pictura::preview_selection_move(*v, dx, dy) && pictura::commit_selection_move(*v)) {
             emit selectionCommitted();
         }
     } else if (v) {
-        v->cancel_selection_move();
+        pictura::cancel_selection_move(*v);
     }
     refreshCursor();
 }

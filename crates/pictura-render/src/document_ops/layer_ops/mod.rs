@@ -72,7 +72,10 @@ pub use layer_style::{
     scale_layer_effects, set_all_effects_visible, set_document_layer_style_value,
     set_layer_style_value, LayerStyle,
 };
-pub use mask_edit::{mask_document, mask_document_coverage, write_mask_back, MaskDocument};
+pub use mask_edit::{
+    mask_document, mask_document_coverage, move_mask_selection_content, write_mask_back,
+    MaskDocument,
+};
 pub use merge::{
     can_merge_scope, can_merge_target, flatten, is_visible_in_panel, merge_scope, stamp_scope,
     MergeError, MergeOutcome, MergeScope, StampScope,

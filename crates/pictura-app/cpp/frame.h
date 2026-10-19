@@ -617,9 +617,9 @@ private:
     NavigatorPanel* navigatorPanel_ = nullptr;
     ColorState* colorState_ = nullptr;
     // The FG/BG pair of the edit target that is not active: the image's while
-    // a mask is edited, the mask's (initially black/white) otherwise.
-    QColor otherForeground_{Qt::black};
-    QColor otherBackground_{Qt::white};
+    // a mask is edited, the mask's (initially white/black) otherwise.
+    QColor otherForeground_{Qt::white};
+    QColor otherBackground_{Qt::black};
     ColorPanel* colorPanel_ = nullptr;
     QPointer<ColorRangeDialog> colorRangeDialog_;
     QPointer<ReplaceColorDialog> replaceColorDialog_;

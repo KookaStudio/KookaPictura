@@ -28,6 +28,9 @@ public:
     bool foregroundActive() const { return foregroundActive_; }
     void setForegroundActive(bool foreground);
 
+    bool maskActive() const { return maskActive_; }
+    void setMaskActive(bool mask);
+
 signals:
     void foregroundChanged(QColor color);
     void backgroundChanged(QColor color);
@@ -37,6 +40,7 @@ private:
     QColor foreground_{Qt::black};
     QColor background_{Qt::white};
     bool foregroundActive_ = true;
+    bool maskActive_ = false;
 };
 
 // The Color panel: the foreground/background swatches over Photoshop's colour

@@ -19,11 +19,13 @@
 #include "frame.h"
 #include "image_view.h"
 #include "panels/channels_panel.h"
+#include "panels/color_panel.h"
 #include "panels/layers_panel.h"
 #include "panels/layers_panel_internal.h"
 #include "panels/panel_column.h"
 #include "panels/panel_group.h"
 #include "theme.h"
+#include "toolbox.h"
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/vector_masks.cxxqt.h"
@@ -294,18 +296,43 @@ void PanelsParityTest::thumbnailAdjacencyAndActiveThumb()
     QVERIFY(name.left() >= vector.right());
 
     QWidget* viewport = tree->viewport();
+    auto* colors = window_->findChild<pictura::ColorState*>();
+    auto* toolbox = window_->findChild<pictura::Toolbox*>();
+    QVERIFY(colors && toolbox);
+
     // A mask/vector click also selects the row and refreshes the model, so the
     // index is re-fetched after each click rather than reused.
-    clickMouse(viewport, mask.center(), Qt::NoModifier);
+    const QColor imageFg(200, 40, 40);
+    const QColor imageBg(20, 90, 200);
+    clickMouse(viewport, delegate->thumbRect(tree->visualRect(index), index).center(),
+               Qt::NoModifier);
+    QCOMPARE(indexForPath(tree->model(), path).data(pictura::ActiveThumbRole).toInt(), 0);
+    colors->setForeground(imageFg);
+    colors->setBackground(imageBg);
+
+    const QModelIndex beforeMask = indexForPath(tree->model(), path);
+    clickMouse(viewport,
+               delegate->maskThumbRect(tree->visualRect(beforeMask), beforeMask).center(),
+               Qt::NoModifier);
     QCOMPARE(indexForPath(tree->model(), path).data(pictura::ActiveThumbRole).toInt(), 1);
+    toolbox->resetForegroundBackground();
+    QCOMPARE(colors->foreground(), QColor(Qt::white));
+    QCOMPARE(colors->background(), QColor(Qt::black));
+
     const QModelIndex afterMask = indexForPath(tree->model(), path);
     clickMouse(viewport, delegate->vectorMaskThumbRect(tree->visualRect(afterMask), afterMask).center(),
                Qt::NoModifier);
     QCOMPARE(indexForPath(tree->model(), path).data(pictura::ActiveThumbRole).toInt(), 2);
+    // Leaving the raster target restores the image pair, including reset.
+    QCOMPARE(colors->foreground(), imageFg);
+    QCOMPARE(colors->background(), imageBg);
+
     const QModelIndex afterVector = indexForPath(tree->model(), path);
     clickMouse(viewport, delegate->thumbRect(tree->visualRect(afterVector), afterVector).center(),
                Qt::NoModifier);
     QCOMPARE(indexForPath(tree->model(), path).data(pictura::ActiveThumbRole).toInt(), 0);
+    QCOMPARE(colors->foreground(), imageFg);
+    QCOMPARE(colors->background(), imageBg);
     window_->closeDocument(doc, false);
 }
 
