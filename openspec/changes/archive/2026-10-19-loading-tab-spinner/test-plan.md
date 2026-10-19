@@ -23,7 +23,7 @@ self-skip when `gs` is absent, as the existing import suite does.
 | `lt_hover_close` | Send enter/leave to the spinner | Hover state reports the close glyph, leaving restores the spinner | `tst_loading_tab::hoverSwapsToClose` |
 | `lt_click_cancel` | Click the spinner while held; then wait past the worker delay | The tab is removed immediately, the previous tab returns, the late result is discarded, and no error is shown | `tst_loading_tab::clickingSpinnerCancels` |
 | `lt_middle_click_cancel` | Middle-click the loading tab while held | The open is cancelled and the tab removed | `tst_loading_tab::middleClickCancels` |
-| `lt_normal_tab_unchanged` | Hover and middle-click a normal document tab | No spinner is installed and its middle-click behaviour is unchanged (Qt's closable-tab close) | `tst_loading_tab::normalTabsAreUnchanged` |
+| `lt_normal_tab_middle_click` | Middle-click a normal document tab | No spinner is installed and the tab closes (the loading filter only handles loading tabs) | `tst_loading_tab::middleClickClosesNormalTab` |
 | `lt_cancel_discards` | Cancel a delayed open; let the worker finish; process events | No document and no tab appear, and no error is shown | `tst_loading_tab::cancelledResultIsDiscarded` |
 | `lt_success` | Open a PSD with no other document; wait for completion | The tab is filled, the default close button is back, and the tab is active | `tst_loading_tab::successFillsTabAndActivates` |
 | `lt_success_keeps_selection` | Open A, start B delayed, select A, let B finish | A stays active and B is filled in the background | `tst_loading_tab::userSelectedTabIsNotStolen` |

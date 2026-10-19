@@ -250,16 +250,6 @@ PicturaMainWindow::OpenOutcome PicturaMainWindow::importPdfPathWithToken(
     return OpenOutcome::Opened;
 }
 
-bool PicturaMainWindow::importPdfPath(const QString& path, bool interactive,
-                                      const QString& knownPassword)
-{
-    const quint64 token = nextOpenToken();
-    beginOpenCursor();
-    cursorTokens_.insert(token);
-    return importPdfPathWithToken(path, interactive, knownPassword, token)
-        == OpenOutcome::Opened;
-}
-
 quint64 PicturaMainWindow::startImportEpsPath(const QString& path, bool interactive)
 {
     const quint64 token = nextOpenToken();
@@ -292,12 +282,6 @@ quint64 PicturaMainWindow::startImportEpsPath(const QString& path, bool interact
     openSourcePaths_.insert(token, path);
     open_eps_start(*view, path, target);
     return token;
-}
-
-bool PicturaMainWindow::importEpsPath(const QString& path, bool interactive)
-{
-    const quint64 token = startImportEpsPath(path, interactive);
-    return token != 0 && waitForOpen(token) == OpenOutcome::Opened;
 }
 
 void PicturaMainWindow::showOpenAsDialog()
@@ -334,7 +318,12 @@ quint64 PicturaMainWindow::startOpenAsPath(const QString& path, int formatIndex)
     if (kind == QStringLiteral("eps")) {
         return startImportEpsPath(path);
     }
-    return kind == QStringLiteral("psd") ? startOpenPath(path) : startOpenImagePath(path);
+    const quint64 token = kind == QStringLiteral("psd") ? startOpenPath(path)
+                                                       : startOpenImagePath(path);
+    if (token != 0) {
+        openFailureMessages_.insert(token, tr("format mismatch or damaged file."));
+    }
+    return token;
 }
 
 bool PicturaMainWindow::openAsPath(const QString& path, int formatIndex)

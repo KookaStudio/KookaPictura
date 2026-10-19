@@ -342,20 +342,15 @@ public:
     static bool isPdfPath(const QString& path);
     bool savePdfWithDialog(const QString& path);
     quint64 startOpenPdfPath(const QString& path, bool interactive = true);
-    bool openPdfPath(const QString& path, bool interactive = true);
     void showPdfPresets();
     // frame_import.cpp: a generic PDF through the password prompt and the
     // Import PDF dialog, an EPS through the Rasterize Generic EPS Format
     // dialog, and File > Open As with a chosen decoder (index into
     // openAsFileFilters()). Each opened page or image is an untitled document.
-    // `knownPassword` is one `openPdfPath` already accepted.
-    bool importPdfPath(const QString& path, bool interactive = true,
-                       const QString& knownPassword = QString());
     // Ask for the password of a protected PDF (`refused`: the last one was
     // wrong); false on Cancel.
     bool askPdfPassword(const QString& path, bool refused, QString& password);
     quint64 startImportEpsPath(const QString& path, bool interactive = true);
-    bool importEpsPath(const QString& path, bool interactive = true);
     void showOpenAsDialog();
     quint64 startOpenAsPath(const QString& path, int formatIndex);
     bool openAsPath(const QString& path, int formatIndex);
@@ -676,6 +671,9 @@ private:
     // Per-open side data that must outlive the tab's removal.
     QHash<quint64, QString> openSourcePaths_;
     QHash<quint64, QStringList> openWarnings_;
+    // A per-open failure message for routes that must not fail silently (Open
+    // As's "format mismatch or damaged file.").
+    QHash<quint64, QString> openFailureMessages_;
     QSet<quint64> reportFailureTokens_;
     QSet<quint64> finishedOpens_;
     // Opens that own a busy-cursor reference (the outer open, not a PDF page).

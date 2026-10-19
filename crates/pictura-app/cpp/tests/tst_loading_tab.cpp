@@ -158,7 +158,7 @@ private slots:
     void hoverSwapsToClose();
     void clickingSpinnerCancels();
     void middleClickCancels();
-    void normalTabsAreUnchanged();
+    void middleClickClosesNormalTab();
     void closeButtonClosesTheDocument();
     void imageTabHasCloseButton();
     void longTitlesKeepTheCloseButton();
@@ -519,7 +519,7 @@ void LoadingTabTest::middleClickCancels()
     QCOMPARE(window_->documentCount(), 0);
 }
 
-void LoadingTabTest::normalTabsAreUnchanged()
+void LoadingTabTest::middleClickClosesNormalTab()
 {
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
@@ -531,8 +531,7 @@ void LoadingTabTest::normalTabsAreUnchanged()
     QVERIFY(bar != nullptr);
     QVERIFY2(qobject_cast<TabCloseButton*>(bar->tabButton(0, QTabBar::RightSide)) != nullptr,
              "a ready tab carries its close button");
-    // Qt closes a closable tab on middle-click; the loading filter must leave
-    // that behaviour alone for a normal tab.
+    // The loading filter only cancels loading tabs; a ready tab closes.
     const QRect rect = bar->tabRect(0);
     QTest::mouseClick(bar, Qt::MiddleButton, Qt::NoModifier, rect.center());
     QTest::qWait(100);

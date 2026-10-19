@@ -133,11 +133,6 @@ void PicturaMainWindow::startPdfProbe(const QString& path, bool interactive,
     open_pdf_start(*view, path, password);
 }
 
-bool PicturaMainWindow::openPdfPath(const QString& path, bool interactive)
-{
-    return waitForOpen(startOpenPdfPath(path, interactive)) == OpenOutcome::Opened;
-}
-
 void PicturaMainWindow::showPdfPresets()
 {
     PdfPresetsDialog dialog(PdfSaveDialog::presetsDirectory(),

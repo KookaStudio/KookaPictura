@@ -390,8 +390,8 @@ The loading tab SHALL replace its close button with an animated spinner while
 the open is in flight. The spinner SHALL animate independently of the worker.
 Hovering the spinner SHALL replace it with the normal close glyph. Clicking the
 spinner SHALL cancel the open. Middle-clicking the loading tab SHALL cancel the
-open. A normal document tab SHALL keep its close button and SHALL NOT be
-cancelled by a middle-click. Cancelling SHALL remove the loading tab
+open. A normal document tab SHALL keep its close button and SHALL close on a
+middle-click. Cancelling SHALL remove the loading tab
 immediately, discard the worker's result when it arrives, restore the
 previously active tab or the empty workspace, and show no error.
 
@@ -415,10 +415,10 @@ previously active tab or the empty workspace, and show no error.
 - **WHEN** the loading tab is middle-clicked
 - **THEN** the open is cancelled with the same result as clicking the spinner
 
-#### Scenario: Normal tabs are unchanged [lt_normal_tab_unchanged]
+#### Scenario: A middle-click closes a normal tab [lt_normal_tab_middle_click]
 
-- **WHEN** a normal document tab is hovered, closed, or middle-clicked
-- **THEN** its close button and middle-click behaviour are unchanged (the loading filter only handles loading tabs)
+- **WHEN** a normal document tab is middle-clicked
+- **THEN** its close button is present and the tab closes (the loading filter only handles loading tabs)
 
 #### Scenario: Cancel discards a late result [lt_cancel_discards]
 

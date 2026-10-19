@@ -267,6 +267,7 @@ void PicturaMainWindow::finishOpen(quint64 token, OpenOutcome outcome, const QSt
     }
     finishedOpens_.insert(token);
     reportFailureTokens_.remove(token);
+    openFailureMessages_.remove(token);
     if (cursorTokens_.remove(token)) {
         endOpenCursor();
     }
@@ -333,7 +334,10 @@ void PicturaMainWindow::reportOpenFailure(int index, const QString& status)
         break;
     case OpenKind::Psd:
     case OpenKind::Raster:
-        if (reportFailureTokens_.contains(entry.token)) {
+        if (openFailureMessages_.contains(entry.token)) {
+            const QString source = entry.path.isEmpty() ? entry.recentPath : entry.path;
+            reportImportError(source, openFailureMessages_.value(entry.token));
+        } else if (reportFailureTokens_.contains(entry.token)) {
             statusBar()->showMessage(tr("Could not open %1").arg(documentName(index)), 4000);
         }
         break;

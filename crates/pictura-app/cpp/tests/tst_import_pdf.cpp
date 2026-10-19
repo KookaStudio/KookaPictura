@@ -242,6 +242,7 @@ private slots:
     void openAsIsLive();
     void openAsForcesFormat();
     void openAsReportsMismatch();
+    void openAsReportsCorruptDecode();
     void openFiltersListPdfEps();
     void pdfEntryPointUsesLoadingTab();
     void epsEntryPointUsesLoadingTab();
@@ -886,6 +887,23 @@ void ImportPdfTest::openAsReportsMismatch()
     QVERIFY(!window->openAsPath(path, pdfFormat));
     QCOMPARE(status(*window),
              QStringLiteral("Could not open photo.png: format mismatch or damaged file."));
+    QCOMPARE(window->documentCount(), 0);
+}
+
+// A file whose signature matches the chosen Open As format but whose decode
+// fails still reports the mismatch message instead of removing the tab silently.
+void ImportPdfTest::openAsReportsCorruptDecode()
+{
+    test::ScopedStateHome stateHome;
+    QTemporaryDir dir;
+    const QString path = write(dir, QStringLiteral("corrupt.png"),
+                               QByteArray("\x89PNG\r\n\x1a\nnot a png"));
+    auto window = test::makeMainWindow();
+    const int pngFormat = int(openAsFileFilters().indexOf(QStringLiteral("PNG (*.PNG)")));
+    QVERIFY(pngFormat >= 0);
+    QVERIFY(!window->openAsPath(path, pngFormat));
+    QCOMPARE(status(*window),
+             QStringLiteral("Could not open corrupt.png: format mismatch or damaged file."));
     QCOMPARE(window->documentCount(), 0);
 }
 

@@ -768,8 +768,7 @@ bool PicturaMainWindow::eventFilter(QObject* watched, QEvent* event)
             return true;
         }
     }
-    // Middle-click on a loading tab cancels it; on a ready tab it keeps the
-    // existing close behaviour.
+    // Middle-click on a loading tab cancels it; on a ready tab it closes it.
     if (tabs_ && watched == tabs_->tabBar() && event->type() == QEvent::MouseButtonRelease) {
         auto* mouse = static_cast<QMouseEvent*>(event);
         if (mouse->button() == Qt::MiddleButton) {
