@@ -14,6 +14,7 @@
 
 #include <QtCore/QHash>
 #include <QtCore/QTemporaryDir>
+#include <QtGui/QFontMetrics>
 #include <QtWidgets/QTabBar>
 
 namespace pictura {
@@ -28,6 +29,11 @@ constexpr const char* kFrameKey = "picturaFrameRevision";
 // grabbable handle on each side of it). ponytail: chosen, not a sourced CS6
 // metric.
 constexpr int kWorkspaceMinWidth = 160;
+
+// A document tab's title is elided to this text width so the close button (or
+// the loading spinner) always has room inside the tab. The full title stays in
+// the tab tooltip.
+constexpr int kDocumentTabMaxTextWidth = 200;
 
 // The tab title's mode label for an `image_mode()` key.
 QString modeLabel(const QString& mode)
@@ -58,8 +64,13 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
     tabs_ = new QTabWidget(this);
     tabs_->setObjectName(QStringLiteral("documentTabs"));
     tabs_->tabBar()->setObjectName(QStringLiteral("documentTabBar"));
-    tabs_->setTabsClosable(true);
+    // Every tab gets a custom close button (or spinner) tab button, so the
+    // close glyph is part of the tab's size hint and never clipped.
+    tabs_->setTabsClosable(false);
     tabs_->setMovable(true);
+    tabs_->tabBar()->setElideMode(Qt::ElideRight);
+    // Middle-click on a loading tab cancels it; normal tabs are untouched.
+    tabs_->tabBar()->installEventFilter(this);
     // docs_ is indexed in lockstep with the tab order (activeDocumentIndex,
     // viewAt, removeDocument), so a dragged tab must move its DocEntry too.
     // QTabBar::tabMoved(from, to) mirrors QList::move(from, to), and Qt keeps
@@ -176,6 +187,16 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
             [this](int pos, int index) { onCenterSplitterMoved(pos, index); });
 
     connect(tabs_, &QTabWidget::currentChanged, this, [this](int) {
+        // A loading entry whose tab is not current must not steal the
+        // activation when it finishes. The frame's own switches are suppressed.
+        if (!suppressTabTracking_) {
+            const int current = tabs_->currentIndex();
+            for (int i = 0; i < docs_.size(); ++i) {
+                if (docs_.at(i).loading && i != current) {
+                    docs_[i].userMovedAway = true;
+                }
+            }
+        }
         PictureView* active = activeView();
         for (int i = 0; i < docs_.size(); ++i) {
             PictureView* view = viewAt(i);
@@ -190,9 +211,6 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
         panelRefreshTimer_->stop();
         refreshPanels();
     });
-    connect(tabs_, &QTabWidget::tabCloseRequested, this,
-            [this](int index) { closeDocument(index, true); });
-
     auto* hidePanels = new QShortcut(QKeySequence(Qt::Key_Tab), this);
     connect(hidePanels, &QShortcut::activated, this, [this]() { togglePanelsHidden(); });
     auto* hidePanelsBack = new QShortcut(QKeySequence(Qt::SHIFT | Qt::Key_Tab), this);
@@ -377,6 +395,30 @@ int PicturaMainWindow::addDocument(PictureView* view, const QString& path)
     } else {
         entry.path = path;
     }
+    setupCanvas(entry);
+    entry.page = entry.canvasHost;
+    wireCanvas(entry);
+
+    docs_.append(entry);
+    const int index = docs_.size() - 1;
+    tabs_->addTab(entry.page, documentName(index));
+    installCloseButton(index, view);
+    tabs_->setCurrentIndex(index);
+    if (!path.isEmpty()) {
+        rememberRecent(path);
+    }
+    refresh();
+    panelRefreshTimer_->stop();
+    refreshPanels();
+    return index;
+}
+
+// Create the canvas for `entry` and show its current document (or the view's
+// fallback image). A loading entry's canvas host is added to its placeholder
+// page by `finishLoadingDocument`.
+void PicturaMainWindow::setupCanvas(DocEntry& entry)
+{
+    PictureView* view = entry.view;
     entry.canvas = new ImageView(this);
     entry.canvasHost = new CanvasScrollBars(this);
     entry.canvasHost->setView(entry.canvas);
@@ -398,7 +440,12 @@ int PicturaMainWindow::addDocument(PictureView* view, const QString& path)
     // Present from the view pyramid: the canvas crops a level instead of
     // scaling the full-resolution image (see frame_canvas.cpp).
     wireCanvasLevelProvider(view, entry.canvas);
+}
 
+// Connect a ready document's view and canvas to the frame.
+void PicturaMainWindow::wireCanvas(DocEntry& entry)
+{
+    PictureView* view = entry.view;
     connect(view, &PictureView::changed, this, &PicturaMainWindow::refresh);
     trackRecovery(view);
     connect(view, &PictureView::regionBlitted, this,
@@ -446,18 +493,6 @@ int PicturaMainWindow::addDocument(PictureView* view, const QString& path)
             [this, canvas = entry.canvas](const QPoint& globalPos) {
                 showCanvasContextMenu(canvas, globalPos);
             });
-
-    docs_.append(entry);
-    const int index = docs_.size() - 1;
-    tabs_->addTab(entry.canvasHost, documentName(index));
-    tabs_->setCurrentIndex(index);
-    if (!path.isEmpty()) {
-        rememberRecent(path);
-    }
-    refresh();
-    panelRefreshTimer_->stop();
-    refreshPanels();
-    return index;
 }
 
 bool PicturaMainWindow::newDocument(const QString& name, int width, int height,
@@ -577,6 +612,11 @@ bool PicturaMainWindow::closeDocument(int index, bool interactive)
     if (index < 0 || index >= docs_.size()) {
         return false;
     }
+    // Closing a loading tab cancels its open; there is no document to save.
+    if (docs_.at(index).loading) {
+        cancelOpen(index);
+        return true;
+    }
     if (interactive && isDocumentDirty(index)) {
         switch (askUnsaved(this, documentName(index))) {
         case UnsavedChoice::Cancel:
@@ -620,11 +660,23 @@ void PicturaMainWindow::removeDocument(int index)
     }
     tabs_->removeTab(index);
     forgetRecovery(entry.view);
-    entry.view->cancel_transform();
-    entry.canvas->clearTransformPreview();
-    if (entry.canvasHost) {
+    if (entry.view) {
+        openWired_.remove(entry.view);
+        pdfProbes_.remove(entry.view);
+        entry.view->cancel_transform();
+    }
+    openSourcePaths_.remove(entry.token);
+    openWarnings_.remove(entry.token);
+    if (entry.canvas) {
+        entry.canvas->clearTransformPreview();
+    }
+    // A ready entry's page is its canvas host; a loading entry's page is the
+    // placeholder. Deleting the page deletes the host (and the canvas) it owns.
+    if (entry.page && entry.page != entry.canvasHost) {
+        delete entry.page;
+    } else if (entry.canvasHost) {
         delete entry.canvasHost;
-    } else {
+    } else if (entry.canvas) {
         delete entry.canvas;
     }
     delete entry.view;
@@ -738,7 +790,7 @@ void PicturaMainWindow::showOpenDialog()
     if (path.isEmpty()) {
         return;
     }
-    openDocumentAtPath(path);
+    startOpenDocumentAtPath(path);
 }
 
 void PicturaMainWindow::setBrightnessLevel(int level)
@@ -902,27 +954,42 @@ void PicturaMainWindow::refreshSelectionOverlay()
     }
 }
 
+bool PicturaMainWindow::isLoadingDocument(int index) const
+{
+    return index >= 0 && index < docs_.size() && docs_.at(index).loading;
+}
+
 void PicturaMainWindow::updateTabTitle(int index)
 {
     if (!tabs_ || index < 0 || index >= docs_.size()) {
         return;
     }
+    const bool loading = docs_.at(index).loading;
     QString title = documentName(index);
-    if (ImageView* canvas = canvasAt(index)) {
-        title += QStringLiteral(" @ %1%").arg(qRound(canvas->zoom() * 100.0));
-    }
-    if (PictureView* view = viewAt(index); view && view->has_document()) {
-        const QString mode = modeLabel(image_mode(*view));
-        const int bits = image_depth_bits(*view);
-        if (!mode.isEmpty() && bits > 0) {
-            title += QStringLiteral(" (%1/%2)").arg(mode).arg(bits);
+    if (!loading) {
+        if (ImageView* canvas = canvasAt(index)) {
+            title += QStringLiteral(" @ %1%").arg(qRound(canvas->zoom() * 100.0));
+        }
+        if (PictureView* view = viewAt(index); view && view->has_document()) {
+            const QString mode = modeLabel(image_mode(*view));
+            const int bits = image_depth_bits(*view);
+            if (!mode.isEmpty() && bits > 0) {
+                title += QStringLiteral(" (%1/%2)").arg(mode).arg(bits);
+            }
         }
     }
-    if (isDocumentDirty(index)) {
+    // Keep the close button (or loading spinner) inside the tab: elide the text
+    // rather than letting the tab grow past the bar. The dirty star survives.
+    const QFontMetrics metrics(tabs_->tabBar()->font());
+    const bool dirty = !loading && isDocumentDirty(index);
+    const int starWidth = dirty ? metrics.horizontalAdvance(QStringLiteral(" *")) : 0;
+    const int textWidth = qMax(0, kDocumentTabMaxTextWidth - starWidth);
+    title = metrics.elidedText(title, Qt::ElideRight, textWidth);
+    if (dirty) {
         title += QStringLiteral(" *");
     }
     tabs_->setTabText(index, title);
-    tabs_->setTabToolTip(index, docs_.at(index).path);
+    tabs_->setTabToolTip(index, docs_.at(index).path.isEmpty() ? title : docs_.at(index).path);
 }
 
 void PicturaMainWindow::updateWindowTitle()
@@ -934,6 +1001,7 @@ void PicturaMainWindow::updateWindowTitle()
 
 void PicturaMainWindow::closeEvent(QCloseEvent* event)
 {
+    cancelAllOpens();
     for (int i = 0; i < docs_.size(); ++i) {
         if (!isDocumentDirty(i)) {
             continue;

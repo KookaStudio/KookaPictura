@@ -7,14 +7,12 @@
 //! `password`, `wrongpassword`, `failed`), then one fact, warning, or the
 //! error message per line.
 
-use super::super::helpers_composite::{current_buffer, store_composite};
 use super::super::qobject::PictureView;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
-use pictura_codec::pdf::import::{self as pdf_import, PdfImages, PdfRect, Rendered};
-use pictura_codec::{eps, Ghostscript, Raster, RasterError, Resolution, VectorKind};
-use pictura_core::{BitDepth, ColorMode, Document};
+use pictura_codec::pdf::import::{self as pdf_import, PdfImages, Rendered};
+use pictura_codec::{eps, Ghostscript, Raster, RasterError, VectorKind};
 use std::path::Path;
 
 #[cxx_qt::bridge]
@@ -222,29 +220,15 @@ pub fn pdf_import_open_page(
     area: &QString,
     target: &ImportTarget,
 ) -> QString {
-    let path = path.to_string();
-    let password = password(password_text);
-    let numbers: Vec<f64> = area
-        .to_string()
-        .split_whitespace()
-        .filter_map(|t| t.parse().ok())
-        .collect();
-    let [x0, y0, x1, y1, view_height] = numbers[..] else {
-        return error_text(&RasterError::Failed("bad page area".into()));
-    };
-    let rendered = Ghostscript::locate().and_then(|gs| {
-        pdf_import::render_area(
-            &gs,
-            Path::new(&path),
-            password.as_deref(),
-            page.max(1) as u32,
-            PdfRect::new(x0, y0, x1, y1),
-            view_height,
-            (target.width.max(1) as u32, target.height.max(1) as u32),
-            target.anti_alias,
-        )
-    });
-    finish(view, rendered, target)
+    let spec = super::super::open_jobs::ImportSpec::from_target(target);
+    let rendered = super::super::open_jobs::render_pdf_page(
+        &path.to_string(),
+        &password_text.to_string(),
+        page,
+        &area.to_string(),
+        &spec,
+    );
+    finish_rendered(view, rendered, &spec)
 }
 
 pub fn pdf_import_open_image(
@@ -253,15 +237,9 @@ pub fn pdf_import_open_image(
     index: i32,
     target: &ImportTarget,
 ) -> QString {
-    let rendered = Ghostscript::locate().and_then(|gs| {
-        let found = std::fs::read(path.to_string())
-            .ok()
-            .as_deref()
-            .and_then(PdfImages::read)
-            .ok_or_else(|| RasterError::Failed("no readable images".into()))?;
-        found.render(&gs, index.max(0) as usize, None)
-    });
-    finish(view, rendered, target)
+    let spec = super::super::open_jobs::ImportSpec::from_target(target);
+    let rendered = super::super::open_jobs::render_pdf_image(&path.to_string(), index, &spec);
+    finish_rendered(view, rendered, &spec)
 }
 
 pub fn eps_import_probe(path: &QString) -> QString {
@@ -280,88 +258,34 @@ pub fn eps_import_open(
     path: &QString,
     target: &ImportTarget,
 ) -> QString {
-    let path = path.to_string();
-    let rendered = Ghostscript::locate().and_then(|gs| {
-        let bounds = std::fs::read(&path)
-            .ok()
-            .as_deref()
-            .and_then(eps::bounding_box)
-            .ok_or_else(|| RasterError::Failed("no bounding box".into()))?;
-        eps::render_eps(
-            &gs,
-            Path::new(&path),
-            bounds,
-            (target.width.max(1) as u32, target.height.max(1) as u32),
-            target.anti_alias,
-        )
-    });
-    finish(view, rendered, target)
+    let spec = super::super::open_jobs::ImportSpec::from_target(target);
+    let rendered = super::super::open_jobs::render_eps(&path.to_string(), &spec);
+    finish_rendered(view, rendered, &spec)
 }
 
 /// Install a render into the view as an untitled document, or report why not.
-fn finish(
+fn finish_rendered(
     view: Pin<&mut PictureView>,
     rendered: Result<Rendered, RasterError>,
-    target: &ImportTarget,
+    spec: &super::super::open_jobs::ImportSpec,
 ) -> QString {
     match rendered {
-        Ok(rendered) => match install(view, &rendered.raster, target) {
-            true => ok_text(&rendered.warnings),
-            false => error_text(&RasterError::Failed(
-                "the image could not be converted".into(),
-            )),
-        },
+        Ok(rendered) => {
+            match super::super::open_jobs::imported_document(
+                &rendered.raster,
+                spec,
+                view.rust().gpu_compute,
+                &|_, _| {},
+            ) {
+                Some(opened) => {
+                    super::super::open_jobs::apply_opened(&mut view.rust_mut(), opened);
+                    ok_text(&rendered.warnings)
+                }
+                None => error_text(&RasterError::Failed(
+                    "the image could not be converted".into(),
+                )),
+            }
+        }
         Err(error) => error_text(&error),
     }
-}
-
-/// The imported document: one transparent `Layer 1` in `target`'s mode,
-/// depth, and resolution (design D5, D6).
-fn import_document(raster: &Raster, target: &ImportTarget) -> Option<Document> {
-    let name = target.name.to_string();
-    let mut doc = Document::from_rgba(&name, raster.width, raster.height, &raster.rgba);
-    if let Some(layer) = doc.layers.last_mut() {
-        layer.name = "Layer 1".to_string();
-    }
-    pictura_codec::set_document_resolution(
-        &mut doc,
-        Resolution {
-            ppi: if target.ppi > 0.0 { target.ppi } else { 72.0 },
-            per_cm: target.per_cm,
-        },
-    );
-    let mode = match target.mode.to_string().as_str() {
-        "grayscale" => ColorMode::Grayscale,
-        "cmyk" => ColorMode::Cmyk,
-        "lab" => ColorMode::Lab,
-        _ => ColorMode::Rgb,
-    };
-    if mode != ColorMode::Rgb {
-        pictura_render::convert_mode(&mut doc, mode).ok()?;
-    }
-    if target.depth == 16 {
-        pictura_render::convert_bit_depth(&mut doc, BitDepth::Sixteen).ok()?;
-    }
-    Some(doc)
-}
-
-fn install(mut view: Pin<&mut PictureView>, raster: &Raster, target: &ImportTarget) -> bool {
-    let Some(mut doc) = import_document(raster, target) else {
-        return false;
-    };
-    let gpu_compute = view.rust().gpu_compute;
-    let rendered = current_buffer(&doc, gpu_compute);
-    store_composite(&mut doc, &rendered);
-    let mut rust = view.as_mut().rust_mut();
-    rust.doc = Some(doc);
-    rust.reset_edit_state();
-    rust.active_layer = Some("0".to_string());
-    let rust = &mut *rust;
-    if let Some(doc) = rust.doc.as_mut() {
-        rust.history.capture_live(doc, &None, "Open");
-    }
-    rust.path = None;
-    rust.dirty = false;
-    rust.source_format = "psd".into();
-    true
 }

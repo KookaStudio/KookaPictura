@@ -331,37 +331,173 @@ host's places.
 - **WHEN** the application runs inside a Flatpak or Snap sandbox
 - **THEN** the file dialogs use the platform/portal chooser rather than the built-in dialog
 
-### Requirement: Open shows a loading banner
+### Requirement: Open runs off the GUI thread and shows a loading tab
 
-The application SHALL display a loading banner while a document is being opened:
-a boxed indicator at the window's lower-left corner showing `Opening <file
-name>…`. The banner SHALL use the theme's notice style — a rounded box on the
-notice yellow with the dark notice text — so it stays legible over the canvas.
-The banner SHALL be shown for every open entry point — File > Open, Open Recent,
-a file drop, and Open As Smart Object — and for both PSD/PSB (native reader) and
-raster (image import) sources. The application SHALL paint the banner before the
-blocking read/decode begins, so it is visible while the open runs; the load
-itself MAY remain synchronous on the GUI thread. When the open finishes the
-application SHALL hide the banner and restore the wait cursor, whether the open
-succeeded or was refused. A successful open that reports a notice (for example
-`Converted from CMYK; saved as CMYK`) SHALL show that notice in the status bar.
+The application SHALL perform each document open's file read, decode, first
+composite, and initial history capture off the GUI thread. The GUI thread SHALL
+remain responsive to input and timers for the whole open. The application SHALL
+insert a document tab titled with the file name as soon as an open is known to
+produce a document. The tab SHALL be in a loading state: its page SHALL show an
+empty workspace with no canvas and no document image, and the application SHALL
+NOT make a document available for it before the open succeeds. When another
+document is active, the application SHALL keep that document active and visible
+and SHALL NOT switch to the loading tab. When no document is active, the
+loading tab SHALL be the active tab and its empty workspace SHALL be shown. The
+application SHALL show a busy cursor while at least one open is in flight and
+SHALL restore the previous cursor when the last open finishes or is cancelled.
+The loading-tab path SHALL cover File > Open, Open Recent, a file drop on the
+workspace, File > Open As, File > Open As Smart Object, PSD/PSB, raster import,
+PDF, and EPS.
 
-#### Scenario: Every open entry point shows the loading banner [olb_banner]
+#### Scenario: The GUI stays live while the worker runs [lt_off_thread]
 
-- **WHEN** a document is opened through File > Open, Open Recent, a file drop, or Open As Smart Object, from a PSD/PSB or a raster source
-- **THEN** while the read/decode is running the lower-left banner is visible showing `Opening <file name>…` for that file and the wait cursor is active
+- **WHEN** a document open is held in flight
+- **THEN** the application processes events (the spinner advances and input is handled) and the document is not yet available
 
-#### Scenario: The banner is a rounded notice-coloured box [olb_style]
+#### Scenario: An open inserts a loading tab [lt_loading_tab]
 
-- **WHEN** the application stylesheet is built
-- **THEN** the loading banner has a rule giving it the notice background, the dark notice text, and rounded corners
+- **WHEN** an open starts for a file named `B`
+- **THEN** a tab titled `B` exists in the loading state with an empty workspace, no canvas, and no document image
 
-#### Scenario: The banner clears when the open finishes [olb_clears]
+#### Scenario: A background open keeps the current document [lt_background]
 
-- **WHEN** an open finishes, whether it succeeded or was refused
-- **THEN** the banner is hidden and the wait cursor is restored
+- **WHEN** document `A` is active and an open starts for `B`
+- **THEN** `A` stays active and visible, and `B` becomes active only when its open succeeds
 
-#### Scenario: A notice replaces the banner [olb_notice]
+#### Scenario: A first open shows an empty workspace [lt_empty_workspace]
 
-- **WHEN** an open succeeds and the opened document reports a notice
-- **THEN** the banner is hidden and the status bar shows that notice
+- **WHEN** no document is active and an open starts for `B`
+- **THEN** the loading tab is the active tab and its page shows no canvas and no document image
+
+#### Scenario: The busy cursor spans concurrent opens [lt_busy_cursor]
+
+- **WHEN** one or more opens are in flight and each finishes, fails, or is cancelled
+- **THEN** the busy cursor is active while any open is in flight and the previous cursor is restored when the last one ends
+
+#### Scenario: A generic PDF is probed without a loading tab [lt_generic_pdf]
+
+- **WHEN** a generic PDF is opened
+- **THEN** no loading tab exists during the format probe or the Import PDF dialog, and a loading tab exists when a chosen page or image render starts
+
+#### Scenario: Every open entry point shares the path [lt_entry_points]
+
+- **WHEN** a document is opened through File > Open, Open Recent, a workspace file drop, File > Open As, File > Open As Smart Object, PSD/PSB, raster import, PDF, or EPS
+- **THEN** the open uses the loading-tab path and its completion rules
+
+### Requirement: The loading tab shows a spinner and cancels
+
+The loading tab SHALL replace its close button with an animated spinner while
+the open is in flight. The spinner SHALL animate independently of the worker.
+Hovering the spinner SHALL replace it with the normal close glyph. Clicking the
+spinner SHALL cancel the open. Middle-clicking the loading tab SHALL cancel the
+open. A normal document tab SHALL keep its close button and SHALL NOT be
+cancelled by a middle-click. Cancelling SHALL remove the loading tab
+immediately, discard the worker's result when it arrives, restore the
+previously active tab or the empty workspace, and show no error.
+
+#### Scenario: The spinner animates during the load [lt_spinner_animates]
+
+- **WHEN** a loading tab is visible while its open is held in flight
+- **THEN** the spinner's rotation advances without the worker completing
+
+#### Scenario: Hovering the spinner shows the close glyph [lt_hover_close]
+
+- **WHEN** the pointer enters the loading tab's spinner
+- **THEN** the spinner paints the normal close glyph, and leaving restores the spinner
+
+#### Scenario: Clicking the spinner cancels [lt_click_cancel]
+
+- **WHEN** the loading tab's spinner is clicked
+- **THEN** the tab is removed immediately, the worker result is discarded, the previous tab or empty workspace is restored, and no error is shown
+
+#### Scenario: Middle-clicking the loading tab cancels [lt_middle_click_cancel]
+
+- **WHEN** the loading tab is middle-clicked
+- **THEN** the open is cancelled with the same result as clicking the spinner
+
+#### Scenario: Normal tabs are unchanged [lt_normal_tab_unchanged]
+
+- **WHEN** a normal document tab is hovered, closed, or middle-clicked
+- **THEN** its close button and middle-click behaviour are unchanged (the loading filter only handles loading tabs)
+
+#### Scenario: Cancel discards a late result [lt_cancel_discards]
+
+- **WHEN** a loading tab is cancelled and the worker finishes afterwards
+- **THEN** no document is added, no tab reappears, and no error is shown
+
+### Requirement: Open completion fills or removes the tab
+
+On success the application SHALL populate the loading tab with the document,
+restore the normal close button, activate the tab unless the user selected
+another tab during the load, and keep the existing status-bar notice. On
+failure the application SHALL remove the loading tab, restore the previously
+active tab or the empty workspace, keep the existing error path, and add no
+document. The application SHALL restore the busy cursor on success, failure,
+and cancel. A user cancel SHALL be distinguished from a failure so that a
+cancel never takes the failure path.
+
+#### Scenario: Success fills the tab [lt_success]
+
+- **WHEN** an open succeeds
+- **THEN** the tab shows the document, its close button is back, and the tab is active unless the user selected another tab during the load
+
+#### Scenario: A user selection is not stolen [lt_success_keeps_selection]
+
+- **WHEN** the user selects another tab while an open is in flight and the open then succeeds
+- **THEN** the user's tab stays active and the completed tab is filled in the background
+
+#### Scenario: Success keeps the status notice [lt_notice]
+
+- **WHEN** an open succeeds and the document reports a notice such as `Converted from CMYK; saved as CMYK`
+- **THEN** the status bar shows that notice
+
+#### Scenario: Failure removes the tab [lt_failure]
+
+- **WHEN** an open fails
+- **THEN** the loading tab is removed, no document is added, the previous tab or empty workspace is restored, and the existing error path runs
+
+#### Scenario: A cancel is not a failure [lt_cancel_distinct]
+
+- **WHEN** an open is cancelled by the user
+- **THEN** the cancellation path runs, no error is shown, and the failure path is not taken
+
+### Requirement: The lower-left loading banner is removed
+
+The application SHALL NOT show the lower-left `Opening <file>…` banner. The
+banner's stylesheet rule, test hooks, and the `documentOpenStarted` signal
+SHALL be removed.
+
+#### Scenario: The banner is gone [lt_banner_removed]
+
+- **WHEN** a document is opened
+- **THEN** no `documentOpenBanner` widget or stylesheet rule exists and the open is indicated by the loading tab and spinner instead
+
+### Requirement: The loading tab shows phase progress
+
+While an open is in flight, the loading tab's empty workspace SHALL show a
+centered progress card containing the file name, the current phase, a
+determinate progress bar from 0 to 100, the percentage, and a Cancel button.
+The application SHALL report the phases `Reading file`, `Decoding`,
+`Compositing`, and `Preparing layers`, and for PDF/EPS imports
+`Rendering page`, `Rendering image`, or `Rendering EPS`, at the boundaries of
+the work they name. The percentages SHALL be phase weights rather than measured
+work; the application SHALL NOT claim sub-progress inside a phase. The card
+SHALL be hidden when the tab is filled or removed. Its Cancel button SHALL
+cancel the open exactly as the tab spinner does, restoring the previous tab and
+showing no error. A generic PDF's probe and the Import PDF dialog SHALL show no
+card; the card SHALL appear when a chosen page or image render starts.
+
+#### Scenario: The card shows the current phase and percentage [lt_phase_progress]
+
+- **WHEN** a document open is held in flight after its decode
+- **THEN** the loading tab shows a centered card with the file name, a phase such as `Preparing layers…`, a bar between 0 and 100, a percentage, and a Cancel button
+
+#### Scenario: The card's Cancel cancels the open [lt_phase_cancel]
+
+- **WHEN** the card's Cancel button is clicked
+- **THEN** the loading tab is removed, the worker result is discarded, the previous tab or empty workspace is restored, and no error is shown
+
+#### Scenario: A generic PDF probe shows no card [lt_phase_no_probe]
+
+- **WHEN** a generic PDF is opened
+- **THEN** no progress card exists during the probe or the Import PDF dialog, and a card appears when a chosen page or image render starts

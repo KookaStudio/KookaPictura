@@ -20,6 +20,7 @@
 #include <QtCore/QProcess>
 #include <QtCore/QStandardPaths>
 #include <QtCore/QTemporaryDir>
+#include <QtCore/QTimer>
 #include <QtGui/QAction>
 #include <QtGui/QImage>
 #include <QtWidgets/QInputDialog>
@@ -242,6 +243,8 @@ private slots:
     void openAsForcesFormat();
     void openAsReportsMismatch();
     void openFiltersListPdfEps();
+    void pdfEntryPointUsesLoadingTab();
+    void epsEntryPointUsesLoadingTab();
 };
 
 // pdf_import_dialog_shown
@@ -896,6 +899,44 @@ void ImportPdfTest::openFiltersListPdfEps()
     for (const char* pattern : {"*.PDF", "*.AI", "*.EPS", "*.EPSF", "*.PS"}) {
         QVERIFY2(all.contains(QLatin1String(pattern)), pattern);
     }
+}
+
+// Every entry point inserts the loading tab: a generic PDF's chosen page and an
+// EPS's render both show it while the worker runs.
+void ImportPdfTest::pdfEntryPointUsesLoadingTab()
+{
+    REQUIRE_GS();
+    test::ScopedStateHome stateHome;
+    QTemporaryDir dir;
+    auto window = test::makeMainWindow();
+    window->setOpenDelayForTest(200);
+    bool sawLoadingTab = false;
+    window->setImportDialogDriverForTest([&](QDialog&) {
+        QTimer::singleShot(50, window.get(), [&] {
+            sawLoadingTab = window->documentCount() == 1 && window->isLoadingDocument(0);
+        });
+        return true;
+    });
+    QVERIFY(window->openDocumentAtPath(write(dir, QStringLiteral("loading.pdf"), redPage())));
+    QVERIFY2(sawLoadingTab, "the chosen PDF page renders in a loading tab");
+}
+
+void ImportPdfTest::epsEntryPointUsesLoadingTab()
+{
+    REQUIRE_GS();
+    test::ScopedStateHome stateHome;
+    QTemporaryDir dir;
+    auto window = test::makeMainWindow();
+    window->setOpenDelayForTest(200);
+    bool sawLoadingTab = false;
+    window->setImportDialogDriverForTest([&](QDialog&) {
+        QTimer::singleShot(50, window.get(), [&] {
+            sawLoadingTab = window->documentCount() == 1 && window->isLoadingDocument(0);
+        });
+        return true;
+    });
+    QVERIFY(window->openDocumentAtPath(write(dir, QStringLiteral("loading.eps"), kBlueEps)));
+    QVERIFY2(sawLoadingTab, "the EPS render runs in a loading tab");
 }
 
 QTEST_MAIN(ImportPdfTest)
