@@ -29,6 +29,7 @@
 #include "icons.h"
 #include "image_view.h"
 #include "paragraph_text_size_dialog.h"
+#include "smart_guides.h"
 #include "text_input.h"
 #include "tools.h"
 #include "type_fonts.h"
@@ -107,6 +108,38 @@ bool sessionKey(const QKeyEvent& key)
         break;
     }
     return !ctrl && !key.text().isEmpty() && key.text().at(0).isPrint();
+}
+
+// The ink box of a rendered preview: the box round its non-transparent pixels
+// inside `rect`, or `rect` itself when the buffer is missing or fully blank.
+QRectF inkBox(const QRect& rect, const QByteArray& rgba)
+{
+    if (rect.isEmpty()) {
+        return QRectF();
+    }
+    const int width = rect.width();
+    const int height = rect.height();
+    if (rgba.size() != width * height * 4) {
+        return QRectF(rect);
+    }
+    int left = width;
+    int right = -1;
+    int top = height;
+    int bottom = -1;
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            if (uchar(rgba.at((y * width + x) * 4 + 3)) != 0) {
+                left = qMin(left, x);
+                right = qMax(right, x);
+                top = qMin(top, y);
+                bottom = qMax(bottom, y);
+            }
+        }
+    }
+    if (right < 0) {
+        return QRectF(rect);
+    }
+    return QRectF(rect.left() + left, rect.top() + top, right - left + 1, bottom - top + 1);
 }
 
 double distanceToSegment(const QPointF& p, const QLineF& line)
@@ -307,10 +340,38 @@ public:
             if (!movingText_ && QLineF(moveStart_, imagePos).length() * zoom() <= 3.0) {
                 return;
             }
-            movingText_ = true;
+            if (!movingText_) {
+                movingText_ = true;
+                const TypeEdit edit = currentSetting();
+                const QRect rect = previewRect(edit_.text(), edit);
+                const QByteArray rgba =
+                    rect.isEmpty()
+                        ? QByteArray()
+                        : pictura::type_api::previewRgba(edit_.text(), type_->get().family,
+                                                         edit.placement, edit.character,
+                                                         edit.paragraph);
+                movingInk_ = inkBox(rect, rgba);
+                movingInkOrigin_ = frame_.origin;
+                referenceRects_ = ctx_ && ctx_->view() && ctx_->canvas()
+                        && ctx_->canvas()->smartGuidesEnabled()
+                    ? smartGuideReferences(*ctx_->view(), editPath_)
+                    : QList<QRectF>();
+            }
             const QPointF next = moveOrigin_ + (imagePos - moveStart_);
-            frame_.movePivotBy(next - frame_.origin);
-            frame_.origin = next;
+            SmartGuideResult guides;
+            if (ctx_ && ctx_->view() && ctx_->canvas()) {
+                PictureView* v = ctx_->view();
+                if (ctx_->canvas()->smartGuidesEnabled()) {
+                    guides = smartGuideSnap(
+                        movingInk_.translated(next - movingInkOrigin_), referenceRects_,
+                        QSizeF(v->document_width(), v->document_height()),
+                        ctx_->canvas()->zoom());
+                }
+                ctx_->canvas()->setSmartGuides(guides.lines, guides.gaps);
+            }
+            const QPointF snapped = next + guides.snap;
+            frame_.movePivotBy(snapped - frame_.origin);
+            frame_.origin = snapped;
             refreshOverlay();
             return;
         }
@@ -343,6 +404,9 @@ public:
             movePending_ = false;
             movingText_ = false;
             ctx_ = &ctx;
+            if (ImageView* canvas = ctx.canvas()) {
+                canvas->clearSmartGuides();
+            }
             if (!moved) {
                 commitText();
             }
@@ -850,7 +914,10 @@ private:
         }
         movePending_ = false;
         movingText_ = false;
+        referenceRects_.clear();
+        movingInk_ = QRectF();
         if (ctx_ && ctx_->canvas()) {
+            ctx_->canvas()->clearSmartGuides();
             ctx_->canvas()->clearTypeOverlay();
         }
         if (was && ctx_) {
@@ -1008,6 +1075,11 @@ private:
     bool movingText_ = false;
     QPointF moveStart_;
     QPointF moveOrigin_;
+    // The text's ink box when the move began, and the origin it was measured
+    // at; the reference boxes gathered then.
+    QRectF movingInk_;
+    QPointF movingInkOrigin_;
+    QList<QRectF> referenceRects_;
     QElapsedTimer lastPress_;
     QPointF lastPos_;
     SelectionMode mode_ = SelectionMode::New;

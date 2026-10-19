@@ -39,6 +39,10 @@ pub mod ffi {
         /// The layer at `path`'s rect as flat `[left, top, right, bottom]`;
         /// empty when the path does not resolve to a layer.
         fn layer_rect_extents(view: &PictureView, path: &QString) -> Vec<i32>;
+        /// The layer at `path`'s ink box (the box round its non-transparent
+        /// pixels, as Align computes it) as flat `[left, top, right, bottom]`;
+        /// empty when the path does not resolve or has no content.
+        fn layer_content_bounds_extents(view: &PictureView, path: &QString) -> Vec<i32>;
         /// The rect the Move tool's controls box hugs on the layer at `path`
         /// (the content Free Transform trims to) as flat `[left, top, right,
         /// bottom]`, changing nothing; empty when the path does not resolve.
@@ -166,6 +170,16 @@ fn layer_rect_extents(view: &PictureView, path: &QString) -> Vec<i32> {
         .as_ref()
         .and_then(|doc| pictura_render::resolve_path(doc, &path.to_string()))
         .map(|layer| layer.rect)
+        .map_or_else(Vec::new, |rect| {
+            vec![rect.left, rect.top, rect.right, rect.bottom]
+        })
+}
+
+fn layer_content_bounds_extents(view: &PictureView, path: &QString) -> Vec<i32> {
+    view.rust()
+        .doc
+        .as_ref()
+        .and_then(|doc| pictura_render::layer_content_bounds(doc, &path.to_string()))
         .map_or_else(Vec::new, |rect| {
             vec![rect.left, rect.top, rect.right, rect.bottom]
         })

@@ -23,6 +23,7 @@ void PicturaMainWindow::loadGuideSession(const SessionState& state)
     traditionalPoints_ = state.traditionalPoints;
     guidesVisible_ = state.guidesVisible;
     guidesLocked_ = state.guidesLocked;
+    smartGuidesVisible_ = state.smartGuidesVisible;
     const QColor color(state.guideColor);
     if (color.isValid()) {
         guideColor_ = color;
@@ -38,6 +39,7 @@ void PicturaMainWindow::prepareCanvasGuides(const DocEntry& entry)
         return view && view->has_document() ? document_ppi(*view) : 72.0;
     });
     entry.canvas->setGuidesVisible(guidesVisible_);
+    entry.canvas->setSmartGuidesEnabled(smartGuidesVisible_);
     entry.canvas->setGuideAppearance(guideColor_, guideDashed_);
     connect(entry.canvasHost, &CanvasScrollBars::rulerUnitChosen, this,
             &PicturaMainWindow::setRulerUnit);
@@ -67,6 +69,7 @@ void PicturaMainWindow::applyGuideViewState()
         entry.canvasHost->setRulersVisible(rulersVisible_);
         entry.canvasHost->setRulerUnit(rulerUnit_, traditionalPoints_);
         entry.canvas->setGuidesVisible(guidesVisible_);
+        entry.canvas->setSmartGuidesEnabled(smartGuidesVisible_);
         entry.canvas->setGuideAppearance(guideColor_, guideDashed_);
     }
     if (tools_) {
@@ -86,6 +89,7 @@ void PicturaMainWindow::registerGuideHandlers()
     static const Toggle kToggles[] = {
         {command_ids::ViewRulers, &PicturaMainWindow::rulersVisible_},
         {command_ids::ViewShowGuides, &PicturaMainWindow::guidesVisible_},
+        {command_ids::ViewShowSmartGuides, &PicturaMainWindow::smartGuidesVisible_},
         {command_ids::ViewLockGuides, &PicturaMainWindow::guidesLocked_},
     };
     for (const Toggle& toggle : kToggles) {

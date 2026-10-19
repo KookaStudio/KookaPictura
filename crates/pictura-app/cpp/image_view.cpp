@@ -779,6 +779,7 @@ void ImageView::paintEvent(QPaintEvent*)
     paintTransformOverlay(painter);
 
     paintGuides(painter);
+    paintSmartGuides(painter);
     paintCropGroupOverlays(painter);
     paintAnnotations(painter);
     paintPathOverlay(painter);

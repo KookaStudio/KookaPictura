@@ -148,6 +148,7 @@ void PicturaMainWindow::saveSession()
     state.traditionalPoints = traditionalPoints_;
     state.guidesVisible = guidesVisible_;
     state.guidesLocked = guidesLocked_;
+    state.smartGuidesVisible = smartGuidesVisible_;
     state.freePan = freePan_;
     state.snapCanvasToWorkspace = snapCanvasToWorkspace_;
     state.guideColor = guideColor_.name();

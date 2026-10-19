@@ -129,6 +129,7 @@ SessionState loadSession()
     state.traditionalPoints = obj.value(QStringLiteral("traditionalPoints")).toBool(false);
     state.guidesVisible = obj.value(QStringLiteral("guidesVisible")).toBool(true);
     state.guidesLocked = obj.value(QStringLiteral("guidesLocked")).toBool(false);
+    state.smartGuidesVisible = obj.value(QStringLiteral("smartGuidesVisible")).toBool(true);
     state.freePan = obj.value(QStringLiteral("freePan")).toBool(true);
     state.snapCanvasToWorkspace =
         obj.value(QStringLiteral("snapCanvasToWorkspace")).toBool(false);
@@ -233,6 +234,7 @@ bool saveSession(const SessionState& state)
     obj.insert(QStringLiteral("traditionalPoints"), state.traditionalPoints);
     obj.insert(QStringLiteral("guidesVisible"), state.guidesVisible);
     obj.insert(QStringLiteral("guidesLocked"), state.guidesLocked);
+    obj.insert(QStringLiteral("smartGuidesVisible"), state.smartGuidesVisible);
     obj.insert(QStringLiteral("freePan"), state.freePan);
     obj.insert(QStringLiteral("snapCanvasToWorkspace"), state.snapCanvasToWorkspace);
     obj.insert(QStringLiteral("guideColor"), state.guideColor);

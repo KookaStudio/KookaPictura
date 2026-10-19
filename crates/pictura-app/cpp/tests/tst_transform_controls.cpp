@@ -198,6 +198,8 @@ void TransformControlsTest::insideDragMovesAndRecordsMove()
     QVERIFY(view && canvas && tools);
 
     const int base = view->history_count();
+    // This check is about the inside drag moving the layer, not snapping.
+    canvas->setSmartGuidesEnabled(false);
     canvas->mousePressed(QPointF(15.0, 13.0), Qt::LeftButton, int(Qt::NoModifier));
     canvas->mouseMoved(QPointF(20.0, 16.0));
     canvas->mouseReleased(QPointF(20.0, 16.0));

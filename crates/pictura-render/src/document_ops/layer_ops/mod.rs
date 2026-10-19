@@ -44,7 +44,9 @@ mod warp_styles;
 #[cfg(test)]
 mod warp_styles_tests;
 
-pub use align::{align_layers, can_align, can_distribute, distribute_layers, AlignEdge};
+pub use align::{
+    align_layers, can_align, can_distribute, distribute_layers, layer_content_bounds, AlignEdge,
+};
 pub use clipboard::{
     clear_layer, copy_layer, copy_merged, coverage_bounds, paste_clip, Clip, PasteMode,
 };

@@ -15,6 +15,7 @@
 #include <QtGui/QTransform>
 #include <QtWidgets/QWidget>
 
+#include "smart_guides.h"
 #include "theme.h"
 
 #include <algorithm>
@@ -398,6 +399,17 @@ public:
     void clearGuidePreview();
     const QList<GuideLine>& guides() const { return guides_; }
     bool hasGuidePreviewForTest() const { return guidePreviewActive_; }
+    // Smart alignment guides (image_view_smart_guides.cpp): magenta lines and
+    // gap labels shown while a Move or Type drag aligns content; empty clears.
+    void setSmartGuides(const QList<SmartGuideLine>& lines, const QList<SmartGuideGap>& gaps);
+    void clearSmartGuides();
+    // Whether a drag snaps to smart guides and draws them (default on).
+    void setSmartGuidesEnabled(bool on);
+    bool smartGuidesEnabled() const { return smartGuidesEnabled_; }
+    bool hasSmartGuidesForTest() const { return !smartGuideLines_.isEmpty(); }
+    QList<SmartGuideLine> smartGuidesForTest() const { return smartGuideLines_; }
+    // The first gap label in the rulers' unit, or empty when there is none.
+    QString smartGuideGapForTest() const;
 
     // The Work Path overlay (image space) while a Pen-group or path selection
     // tool is active: the curve, its anchors (`activeAnchor`, the one the Pen
@@ -565,6 +577,11 @@ private:
     void paintTransformOverlay(QPainter& painter);
     void paintAnnotations(QPainter& painter);
     void paintGuides(QPainter& painter);
+    void paintSmartGuides(QPainter& painter);
+    QString formatGuideDistance(double documentPixels) const;
+    QList<SmartGuideLine> smartGuideLines_;
+    QList<SmartGuideGap> smartGuideGaps_;
+    bool smartGuidesEnabled_ = true;
     QList<GuideLine> guides_;
     bool guidesVisible_ = true;
     QColor guideColor_{0x4a, 0xff, 0xff};

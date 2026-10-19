@@ -194,6 +194,7 @@ inline constexpr char ViewToolHints[] = "view.toolHints";
 inline constexpr char ViewShowSelectionEdges[] = "view.show.selectionEdges";
 inline constexpr char ViewRulers[] = "view.rulers";
 inline constexpr char ViewShowGuides[] = "view.show.guides";
+inline constexpr char ViewShowSmartGuides[] = "view.show.smartGuides";
 inline constexpr char ViewLockGuides[] = "view.lockGuides";
 inline constexpr char ViewClearGuides[] = "view.clearGuides";
 inline constexpr char ViewNewGuide[] = "view.newGuide";
