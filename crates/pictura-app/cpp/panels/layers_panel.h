@@ -20,6 +20,7 @@ class QImage;
 class QMenu;
 class QModelIndex;
 class QRect;
+class QTimer;
 class QToolButton;
 class QTreeView;
 
@@ -307,6 +308,22 @@ protected:
 
 private:
     void syncControls();
+    struct PendingPreview {
+        QStringList paths;
+        QStringList namePaths;
+        bool fill = false;
+        int value = 0;
+        bool valid = false;
+        quint64 generation = 0;
+    };
+    void schedulePreview(bool fill, int value);
+    void applyPendingPreview();
+    void clearPendingPreview();
+    void cancelPendingPreview();
+    void reconcileGestureTarget();
+    QStringList propertyPaths() const;
+    QStringList namePathsFor(const QStringList& paths) const;
+    QStringList gestureTargets() const;
     void syncEditTarget();
     // End a mask solo view whose layer is no longer the current one.
     void syncMaskSolo();
@@ -399,6 +416,10 @@ private:
     QString soloPath_;
     QHash<QString, bool> soloSnapshot_;
     bool syncing_ = false;
+    PendingPreview pendingPreview_;
+    PendingPreview gesture_;
+    QTimer* previewTimer_ = nullptr;
+    bool refreshing_ = false;
     QMetaObject::Connection viewConnection_;
 
     // Test seam: skip the modal Background-conversion dialog and use this result.

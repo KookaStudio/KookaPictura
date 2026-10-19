@@ -193,6 +193,7 @@ impl qobject::PictureView {
         store_composite(&mut doc, &rendered);
         let mut view = self.rust_mut();
         view.doc = Some(doc);
+        view.document_generation = view.document_generation.wrapping_add(1);
         view.reset_edit_state();
         view.active_layer = Some("0".to_string());
         let view = &mut *view;
@@ -666,6 +667,11 @@ impl qobject::PictureView {
     /// Non-consuming revision of the displayed canvas pixels.
     pub fn canvas_revision(&self) -> u64 {
         self.rust().canvas_revision
+    }
+
+    /// Identity of the loaded document; bumped when the view loads or replaces it.
+    pub fn document_generation(&self) -> u64 {
+        self.rust().document_generation
     }
 
     pub fn document_width(&self) -> i32 {

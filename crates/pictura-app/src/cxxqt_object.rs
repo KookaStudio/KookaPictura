@@ -248,14 +248,14 @@ pub mod qobject {
         /// The outstanding canvas damage as `"x y w h"`, or empty when clean.
         #[qinvokable]
         fn take_canvas_damage(self: Pin<&mut Self>) -> QString;
-
         /// Non-consuming revision of the displayed canvas pixels; bumped when the image or pyramid changes.
         #[qinvokable]
         fn canvas_revision(&self) -> u64;
+        #[qinvokable]
+        fn document_generation(&self) -> u64; // document load/replace epoch
         /// Whether a document is loaded; drives shell command enablement.
         #[qinvokable]
         fn has_document(&self) -> bool;
-
         /// Width of the loaded document in pixels (0 when none).
         #[qinvokable]
         fn document_width(&self) -> i32;
