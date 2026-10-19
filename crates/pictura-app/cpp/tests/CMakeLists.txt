@@ -35,6 +35,7 @@ set(PICTURA_QT_TESTS
     tst_options_bars_parity
     tst_transform_options
     tst_transform_controls
+    tst_transform_skew
     tst_transform_overlay
     tst_command_tree
     tst_fill_tools

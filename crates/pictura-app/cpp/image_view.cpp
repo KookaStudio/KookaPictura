@@ -302,6 +302,7 @@ void ImageView::setTransformPreviewProjective(const std::array<double, 9>& coeff
 void ImageView::setTransformPreview(double scaleX, double scaleY, double angleRadians, double dx,
                                     double dy)
 {
+    transformProjectiveActive_ = false;
     transformScaleX_ = scaleX;
     transformScaleY_ = scaleY;
     transformAngle_ = angleRadians;
@@ -592,9 +593,18 @@ void ImageView::paintEvent(QPaintEvent*)
         painter.drawImage(QPointF(0.0, 0.0), moveBase_);
         painter.setOpacity(moveOpacity_);
         painter.save();
-        painter.setTransform(transformProjectiveActive_ ? transformProjective_
-                                                        : transformPreviewMatrix(), true);
-        painter.drawImage(moveLayerPos_, moveLayer_);
+        if (transformProjectiveActive_) {
+            // The projective map is in the layer image's own coordinates. The
+            // document-space form has a large translation and, for a strong
+            // perspective, a vanishing line close to the image; Qt's raster
+            // engine can drop the whole image in that form.
+            painter.translate(moveLayerPos_);
+            painter.setTransform(transformProjective_, true);
+            painter.drawImage(QPointF(0.0, 0.0), moveLayer_);
+        } else {
+            painter.setTransform(transformPreviewMatrix(), true);
+            painter.drawImage(moveLayerPos_, moveLayer_);
+        }
         painter.restore();
         painter.setOpacity(1.0);
         presentCacheRebuiltLastPaint_ = false;

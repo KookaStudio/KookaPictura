@@ -662,6 +662,9 @@ private:
     // The rule between the GPU readout and the hint strip; hidden with the strip.
     QFrame* hintSeparator_ = nullptr;
     QLabel* backendLabel_ = nullptr;
+    QLabel* actionLabel_ = nullptr;
+    // The rule before the action label; hidden with the label.
+    QFrame* actionSeparator_ = nullptr;
     QToolButton* statusOptionsButton_ = nullptr;
     // The floating "Opening <file>…" banner (frame_open.cpp): a child of the
     // window, shown at the lower-left while a document load runs.

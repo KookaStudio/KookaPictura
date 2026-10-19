@@ -54,6 +54,7 @@
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/clipping.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/export.cxxqt.h"
 

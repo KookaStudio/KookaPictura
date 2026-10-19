@@ -42,5 +42,6 @@ struct Matrix {
 LayerRect layerRect(const PictureView& view, const QString& path);
 Quad quad(const PictureView& view);
 Matrix previewMatrix(const PictureView& view);
+Matrix previewLocalMatrix(const PictureView& view);
 
 } // namespace pictura::transform_api

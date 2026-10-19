@@ -61,6 +61,10 @@ pub mod ffi {
         /// The nine preview-map coefficients in `QTransform` constructor
         /// order; empty without a session.
         fn transform_preview_matrix_extents(view: &PictureView) -> Vec<f64>;
+        /// The nine preview-map coefficients in `QTransform` constructor
+        /// order, expressed in the moving image's own coordinates (origin at
+        /// the image's top-left); empty without a projective session.
+        fn transform_preview_local_matrix_extents(view: &PictureView) -> Vec<f64>;
         /// Move the reference point to document-space `(x, y)`, leaving the
         /// rendered quad unchanged.
         fn transform_set_pivot(view: Pin<&mut PictureView>, x: f64, y: f64) -> bool;
@@ -232,6 +236,32 @@ fn transform_preview_matrix_extents(view: &PictureView) -> Vec<f64> {
         Some([a[0][0], a[1][0], 0.0, a[0][1], a[1][1], 0.0, tx, ty, 1.0])
     };
     coeffs.map_or_else(Vec::new, |c| c.to_vec())
+}
+
+fn transform_preview_local_matrix_extents(view: &PictureView) -> Vec<f64> {
+    let rust = view.rust();
+    let Some(session) = rust.transform_session.as_ref() else {
+        return Vec::new();
+    };
+    if session.warp.is_some() {
+        return vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0];
+    }
+    if !session.mode.is_projective() {
+        return Vec::new();
+    }
+    if rust.move_layer.is_none() {
+        return Vec::new();
+    }
+    let (x, y) = (f64::from(rust.move_x), f64::from(rust.move_y));
+    let rect = session.orig_rect;
+    let source = [
+        (f64::from(rect.left) - x, f64::from(rect.top) - y),
+        (f64::from(rect.right) - x, f64::from(rect.top) - y),
+        (f64::from(rect.right) - x, f64::from(rect.bottom) - y),
+        (f64::from(rect.left) - x, f64::from(rect.bottom) - y),
+    ];
+    let target = session_quad(session).map(|(qx, qy)| (qx - x, qy - y));
+    projective_coefficients(source, target).map_or_else(Vec::new, |c| c.to_vec())
 }
 
 fn transform_set_pivot(mut view: Pin<&mut PictureView>, x: f64, y: f64) -> bool {
