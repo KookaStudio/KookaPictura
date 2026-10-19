@@ -7,6 +7,7 @@
 #include "text_input.h"
 
 #include <QtCore/QEvent>
+#include <QtCore/QTimer>
 #include <QtGui/QFont>
 #include <QtGui/QMouseEvent>
 #include <QtWidgets/QApplication>
@@ -770,6 +771,28 @@ bool PicturaMainWindow::eventFilter(QObject* watched, QEvent* event)
         if (mouse->button() == Qt::LeftButton) {
             showOpenDialog();
             return true;
+        }
+    }
+    // Middle-click on a loading tab cancels it; on a ready tab it closes it.
+    if (tabs_ && watched == tabs_->tabBar() && event->type() == QEvent::MouseButtonRelease) {
+        auto* mouse = static_cast<QMouseEvent*>(event);
+        if (mouse->button() == Qt::MiddleButton) {
+            const int index = tabs_->tabBar()->tabAt(mouse->position().toPoint());
+            if (index >= 0) {
+                const bool loading = isLoadingDocument(index);
+                const QPointer<PictureView> guard(viewAt(index));
+                QTimer::singleShot(0, this, [this, guard, loading] {
+                    if (!guard) {
+                        return;
+                    }
+                    if (loading) {
+                        cancelOpenForView(guard.data());
+                    } else {
+                        closeDocument(indexOfView(guard.data()), true);
+                    }
+                });
+                return true;
+            }
         }
     }
     return QMainWindow::eventFilter(watched, event);

@@ -238,6 +238,8 @@ int main(int argc, char* argv[])
     // every quit path persists the session. The `closeEvent` save is unchanged
     // (and idempotent).
     QObject::connect(&app, &QApplication::aboutToQuit, &frame,
+                     &pictura::PicturaMainWindow::cancelAllOpens);
+    QObject::connect(&app, &QApplication::aboutToQuit, &frame,
                      &pictura::PicturaMainWindow::saveSession);
 
     bool codecLoaded = false;

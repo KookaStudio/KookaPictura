@@ -109,7 +109,7 @@ set(PICTURA_QT_TESTS
     tst_dialog_chrome
     tst_keyboard_shortcuts
     tst_native_menu_bar
-    tst_open_loading_banner
+    tst_loading_tab
     tst_pictura_raw
     tst_acr_settings
     tst_acr_dialog

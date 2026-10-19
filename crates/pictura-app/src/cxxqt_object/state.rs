@@ -276,6 +276,11 @@ pub struct PictureViewRust {
     /// The background crash-recovery snapshot write in flight, if any
     /// (`impl_core/recovery.rs`); its result is whether the file landed.
     pub(super) recovery_write: Option<std::thread::JoinHandle<bool>>,
+    /// Set when a loading tab's open is cancelled; the worker's queued result
+    /// is dropped instead of applied (`open_jobs`).
+    pub(super) open_cancelled: bool,
+    /// Test seam: hold a started open's completion for this many milliseconds.
+    pub(super) open_delay_for_test: u64,
 }
 
 /// The pre-filter pixels backing a live filter preview.
@@ -429,6 +434,8 @@ impl Default for PictureViewRust {
             use_default_masks: true,
             shape_attributes: None,
             recovery_write: None,
+            open_cancelled: false,
+            open_delay_for_test: 0,
         }
     }
 }

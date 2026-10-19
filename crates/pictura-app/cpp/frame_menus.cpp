@@ -114,7 +114,7 @@ void PicturaMainWindow::registerHandlers()
                                              documentDirectory(activeFilePath()),
                                              openFileFilters());
         if (!path.isEmpty()) {
-            openAsSmartObjectPath(path);
+            startOpenAsSmartObjectPath(path);
         }
     });
     registry_->setHandler(command_ids::FilePlace, [this]() {

@@ -137,14 +137,12 @@ void PicturaMainWindow::resizeEvent(QResizeEvent* event)
 {
     QMainWindow::resizeEvent(event);
     layoutWorkspaceFrame();
-    positionOpenBanner();
 }
 
 void PicturaMainWindow::showEvent(QShowEvent* event)
 {
     QMainWindow::showEvent(event);
     layoutWorkspaceFrame();
-    positionOpenBanner();
 }
 
 void PicturaMainWindow::layoutWorkspaceFrame()

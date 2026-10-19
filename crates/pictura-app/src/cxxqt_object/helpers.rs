@@ -568,6 +568,13 @@ pub(super) fn decode_import(bytes: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
     let (rgba, w, h) = match native {
         Some(decoded) => decoded,
         None => {
+            // Qt's image plugin loader is not safe for concurrent readers; the
+            // open workers can decode several files at once, so serialize the
+            // Qt edge (the engine's WebP path above stays parallel).
+            static QT_DECODE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+            let _guard = QT_DECODE
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             let mut width = 0i32;
             let mut height = 0i32;
             let rgba = super::qobject::decode_image_rgba(bytes, &mut width, &mut height);

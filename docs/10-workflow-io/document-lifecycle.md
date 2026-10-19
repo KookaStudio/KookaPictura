@@ -35,6 +35,24 @@ commands group under `File`.
 opens through a format-specific options dialog before the document materialises
 in Photoshop.
 
+Pictura opens off the GUI thread and inserts the document tab immediately. The
+tab is titled with the file name and shows an empty workspace while the read,
+decode, first composite, and history capture run; its close button is an
+animated spinner that cancels (discards the result) and middle-click also
+cancels. Another active document stays active and visible until the open
+succeeds. A generic PDF's probe and Import PDF dialog show no loading tab; the
+tab appears when a chosen page or image render starts. The lower-left
+`Opening <file>…` banner is gone.
+
+While a tab loads, its empty workspace shows a centered progress card with the
+file name, the current phase, a progress bar, the percentage, and Cancel. The
+phases are `Reading file`, `Decoding`, `Compositing`, and `Preparing layers`,
+plus `Rendering page`, `Rendering image`, or `Rendering EPS` for imports. The
+percentages are phase weights, not measured work: a long decode holds its phase
+percentage while the tab spinner and phase text show that work continues. The
+card's Cancel behaves like the tab spinner: it removes the tab, discards the
+worker result, restores the previous tab, and shows no error.
+
 ### Save
 
 - `File > Save` writes changes to the current file **in the current format**. If
