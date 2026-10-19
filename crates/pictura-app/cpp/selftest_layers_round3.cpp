@@ -200,9 +200,9 @@ int runLayersRound3Checks(PicturaMainWindow& frame)
         frame.closeDocument(doc, false);
     }
 
-    // The color-label eye-tint check (retired, was exit code 357) now lives in
+    // The color-label fill check (retired, was exit code 357) now lives in
     // the Qt Test suite (`tst_layers_panel::layerSurfaceCompleteness`), which
-    // also asserts the new label chip.
+    // asserts the full visibility-column fill and no chip.
 
     // lpr_highlight_clip (358): the selection highlight changes the content but
     // not the eye column, which is repainted with the base colour.

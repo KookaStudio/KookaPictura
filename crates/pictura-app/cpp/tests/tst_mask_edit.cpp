@@ -8,10 +8,13 @@
 #include <QtTest/QtTest>
 #include <QtWidgets/QToolButton>
 #include "api/layers_api.h"
+#include "api/selection_api.h"
 
 #include "frame.h"
 #include "panels/color_panel.h"
 #include "panels/layers_panel.h"
+#include "selftest_paint_fixture.h"
+#include "toolbox.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
@@ -19,6 +22,40 @@
 #include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
 
 #include "qt_test_support.h"
+
+namespace {
+
+QImage maskMoveSeed()
+{
+    QImage seed(32, 32, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    return seed;
+}
+
+// A blue pixel layer carrying a hide-all mask with a white patch at (8, 8), so
+// the patch reveals the layer and the rest hides it. Leaves the mask target
+// active. `layer` receives the masked layer's path.
+bool setUpMaskedLayer(paint_fixture::Fixture& f, QString& layer)
+{
+    layer = f.view->add_solid_fill(0xff2244aau);
+    if (layer.isEmpty() || !f.view->rasterize_fill_content(layer)) {
+        return false;
+    }
+    f.frame.selectLayerPath(layer);
+    if (!pictura::layer_mask_add(*f.view, QStringLiteral("hide-all"))) {
+        return false;
+    }
+    if (!f.view->begin_paint(0xffffffffu, 0xff000000u, 12, 100, 100, 0, 100, 100, 25,
+                             QStringLiteral("normal"), false, false)) {
+        return false;
+    }
+    if (!f.view->paint_dab(8.0, 8.0, 1.0)) {
+        return false;
+    }
+    return f.view->end_paint();
+}
+
+} // namespace
 
 class MaskEditTest : public QObject {
     Q_OBJECT
@@ -29,6 +66,10 @@ private slots:
     void paintAndFillWriteCoverage();
     void canvasToolsWriteCoverage();
     void colorsFollowTheEditTarget();
+    void resetColorsFollowTheEditTarget();
+    void moveSelectionOnMaskMovesCoverage();
+    void altDragCopiesMaskCoverage();
+    void ctrlDragOnMaskMovesCoverage();
     void maskSoloView();
     void maskSoloFollowsLayerChange();
     void addLayerMaskStripInverts();
@@ -215,11 +256,16 @@ void MaskEditTest::colorsFollowTheEditTarget()
     panel->refresh();
     QTest::qWait(50);
 
+    // The mask pair is global across documents; start from the CS6 defaults.
+    auto* toolbox = frame.findChild<pictura::Toolbox*>();
+    QVERIFY(toolbox);
+    toolbox->resetForegroundBackground();
+
     // Adding a mask makes it the edit target, so the colour state is already the
-    // mask pair (black on white).
+    // mask pair (white on black).
     QCOMPARE(pictura::mask_edit_target_get(*view), layer);
-    QCOMPARE(colors->foreground(), QColor(Qt::black));
-    QCOMPARE(colors->background(), QColor(Qt::white));
+    QCOMPARE(colors->foreground(), QColor(Qt::white));
+    QCOMPARE(colors->background(), QColor(Qt::black));
 
     // Switch to the layer's pixels and set the image pair.
     QVERIFY(panel->clickLayerThumbnailForTest(layer));
@@ -230,12 +276,12 @@ void MaskEditTest::colorsFollowTheEditTarget()
     colors->setForeground(imageFg);
     colors->setBackground(imageBg);
 
-    // Back to the mask: it remembers its own pair (black/white).
+    // Back to the mask: it remembers its own pair (white/black).
     QVERIFY(panel->clickMaskThumbnailForTest(layer));
     QCoreApplication::processEvents();
     QCOMPARE(pictura::mask_edit_target_get(*view), layer);
-    QCOMPARE(colors->foreground(), QColor(Qt::black));
-    QCOMPARE(colors->background(), QColor(Qt::white));
+    QCOMPARE(colors->foreground(), QColor(Qt::white));
+    QCOMPARE(colors->background(), QColor(Qt::black));
 
     // The mask remembers its own pair; the image gets its pair back.
     const QColor maskFg(128, 128, 128);
@@ -249,12 +295,180 @@ void MaskEditTest::colorsFollowTheEditTarget()
     QVERIFY(panel->clickMaskThumbnailForTest(layer));
     QCoreApplication::processEvents();
     QCOMPARE(colors->foreground(), maskFg);
-    QCOMPARE(colors->background(), QColor(Qt::white));
+    QCOMPARE(colors->background(), QColor(Qt::black));
 
     // Closing the document leaves the mask, which restores the image pair.
     frame.closeDocument(doc, false);
     QCoreApplication::processEvents();
     QCOMPARE(colors->foreground(), imageFg);
+}
+
+void MaskEditTest::resetColorsFollowTheEditTarget()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    paint_fixture::Fixture f(frame, maskMoveSeed(), QStringLiteral("pictura_mask_reset"));
+    QVERIFY2(f.ok(), "mask reset fixture");
+    QString layer;
+    QVERIFY2(setUpMaskedLayer(f, layer), "masked layer");
+    auto* panel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    auto* colors = frame.findChild<pictura::ColorState*>();
+    auto* toolbox = frame.findChild<pictura::Toolbox*>();
+    QVERIFY(panel && colors && toolbox);
+    frame.show();
+    panel->refresh();
+    QTest::qWait(50);
+
+    // The mask pair is global across documents; start from the CS6 defaults.
+    toolbox->resetForegroundBackground();
+    QCOMPARE(colors->foreground(), QColor(Qt::white));
+    QCOMPARE(colors->background(), QColor(Qt::black));
+
+    colors->setForeground(QColor(128, 128, 128));
+    toolbox->resetForegroundBackground();
+    QCOMPARE(colors->foreground(), QColor(Qt::white));
+    QCOMPARE(colors->background(), QColor(Qt::black));
+
+    QVERIFY(panel->clickLayerThumbnailForTest(layer));
+    QCoreApplication::processEvents();
+    QVERIFY(pictura::mask_edit_target_get(*f.view).isEmpty());
+    colors->setForeground(QColor(200, 40, 40));
+    colors->setBackground(QColor(20, 90, 200));
+    toolbox->resetForegroundBackground();
+    QCOMPARE(colors->foreground(), QColor(Qt::black));
+    QCOMPARE(colors->background(), QColor(Qt::white));
+}
+
+void MaskEditTest::moveSelectionOnMaskMovesCoverage()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    paint_fixture::Fixture f(frame, maskMoveSeed(), QStringLiteral("pictura_mask_move"));
+    QVERIFY2(f.ok(), "mask move fixture");
+    QString layer;
+    QVERIFY2(setUpMaskedLayer(f, layer), "masked layer");
+    auto* panel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    auto* colors = frame.findChild<pictura::ColorState*>();
+    auto* toolbox = frame.findChild<pictura::Toolbox*>();
+    QVERIFY(panel && colors && toolbox);
+    panel->refresh();
+    QTest::qWait(50);
+    toolbox->resetForegroundBackground();
+    QCOMPARE(colors->foreground(), QColor(Qt::white));
+    QCOMPARE(colors->background(), QColor(Qt::black));
+
+    const quint32 blue = f.view->sample_argb(8, 8);
+    QCOMPARE(blue, 0xff2244aau);
+    frame.setActiveTool(pictura::ToolId::Move);
+    f.view->select_all();
+    QCOMPARE(pictura::selection_api::bounds(*f.view).toString(), QStringLiteral("0 0 32 32"));
+    const int base = f.view->history_index();
+
+    f.canvas->mousePressed(QPointF(8, 8), Qt::LeftButton, int(Qt::NoModifier));
+    f.canvas->mouseMoved(QPointF(16, 8));
+    f.canvas->mouseReleased(QPointF(16, 8));
+    QCOMPARE(f.view->history_index(), base + 1);
+    QCOMPARE(f.view->history_label(base + 1), QStringLiteral("Move Selection"));
+    QCOMPARE(f.view->sample_argb(16, 8), blue);
+    QCOMPARE(f.view->sample_argb(8, 8), 0xffffffffu);
+    QCOMPARE(pictura::selection_api::bounds(*f.view).toString(), QStringLiteral("8 0 24 32"));
+    QVERIFY2(panel->rowHasMaskForTest(layer), "the mask survives the move");
+
+    // Undo restores the mask and the selection.
+    QVERIFY(f.view->undo());
+    QCOMPARE(pictura::selection_api::bounds(*f.view).toString(), QStringLiteral("0 0 32 32"));
+    QCOMPARE(f.view->sample_argb(8, 8), blue);
+    QCOMPARE(f.view->sample_argb(16, 8), 0xffffffffu);
+
+    // A zero-offset press/release records nothing.
+    const int zeroBase = f.view->history_index();
+    f.canvas->mousePressed(QPointF(8, 8), Qt::LeftButton, int(Qt::NoModifier));
+    f.canvas->mouseReleased(QPointF(8, 8));
+    QCOMPARE(f.view->history_index(), zeroBase);
+
+    // A release at a moved point without a final move event still commits the
+    // content and leaves the selection at the offset.
+    const int releaseBase = f.view->history_index();
+    f.canvas->mousePressed(QPointF(8, 8), Qt::LeftButton, int(Qt::NoModifier));
+    f.canvas->mouseReleased(QPointF(16, 8));
+    QCOMPARE(f.view->history_index(), releaseBase + 1);
+    QCOMPARE(f.view->history_label(releaseBase + 1), QStringLiteral("Move Selection"));
+    QCOMPARE(pictura::selection_api::bounds(*f.view).toString(), QStringLiteral("8 0 24 32"));
+
+    // The layer pixels never moved: deleting the mask reveals the same blue.
+    QVERIFY(pictura::layer_mask_delete_path(*f.view, layer));
+    QCOMPARE(f.view->sample_argb(8, 8), blue);
+    QCOMPARE(f.view->sample_argb(16, 8), blue);
+}
+
+void MaskEditTest::altDragCopiesMaskCoverage()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    paint_fixture::Fixture f(frame, maskMoveSeed(), QStringLiteral("pictura_mask_alt"));
+    QVERIFY2(f.ok(), "mask alt fixture");
+    QString layer;
+    QVERIFY2(setUpMaskedLayer(f, layer), "masked layer");
+    auto* panel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    auto* toolbox = frame.findChild<pictura::Toolbox*>();
+    QVERIFY(panel && toolbox);
+    panel->refresh();
+    QTest::qWait(50);
+    toolbox->resetForegroundBackground();
+
+    const quint32 blue = f.view->sample_argb(8, 8);
+    const int layers = f.view->layer_count();
+    const QString active = f.view->active_layer_path();
+    frame.setActiveTool(pictura::ToolId::Move);
+    // A small selection keeps the copied coverage from landing on the source.
+    QVERIFY(f.view->select_rect(4, 4, 8, 8, QStringLiteral("new"), 0.0));
+    const int base = f.view->history_count();
+
+    f.canvas->mousePressed(QPointF(8, 8), Qt::LeftButton, int(Qt::AltModifier));
+    f.canvas->mouseMoved(QPointF(20, 8));
+    QVERIFY2(!f.canvas->movePreviewActive(), "no pixel-clone preview on a mask");
+    f.canvas->mouseReleased(QPointF(20, 8));
+
+    QCOMPARE(f.view->history_count(), base + 1);
+    QCOMPARE(f.view->history_label(base), QStringLiteral("Move Selection"));
+    QCOMPARE(f.view->layer_count(), layers);
+    QCOMPARE(f.view->active_layer_path(), active);
+    QVERIFY2(panel->rowHasMaskForTest(layer), "the mask survives the copy");
+    QCOMPARE(f.view->sample_argb(8, 8), blue);
+    QCOMPARE(f.view->sample_argb(20, 8), blue);
+}
+
+void MaskEditTest::ctrlDragOnMaskMovesCoverage()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    paint_fixture::Fixture f(frame, maskMoveSeed(), QStringLiteral("pictura_mask_ctrl"));
+    QVERIFY2(f.ok(), "mask ctrl fixture");
+    QString layer;
+    QVERIFY2(setUpMaskedLayer(f, layer), "masked layer");
+    auto* panel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    auto* toolbox = frame.findChild<pictura::Toolbox*>();
+    QVERIFY(panel && toolbox);
+    panel->refresh();
+    QTest::qWait(50);
+    toolbox->resetForegroundBackground();
+
+    const quint32 blue = f.view->sample_argb(8, 8);
+    frame.setActiveTool(pictura::ToolId::Marquee);
+    f.view->select_all();
+    const int base = f.view->history_count();
+
+    f.canvas->mousePressed(QPointF(8, 8), Qt::LeftButton, int(Qt::ControlModifier));
+    f.canvas->mouseMoved(QPointF(16, 8));
+    f.canvas->mouseReleased(QPointF(16, 8));
+
+    QCOMPARE(f.view->history_count(), base + 1);
+    QCOMPARE(f.view->history_label(base), QStringLiteral("Move Selection"));
+    QCOMPARE(f.view->sample_argb(16, 8), blue);
+    QCOMPARE(f.view->sample_argb(8, 8), 0xffffffffu);
+    QCOMPARE(pictura::selection_api::bounds(*f.view).toString(), QStringLiteral("8 0 24 32"));
+    QVERIFY2(panel->rowHasMaskForTest(layer), "the mask survives the Ctrl move");
+
+    // The layer pixels never moved: deleting the mask reveals the same blue.
+    QVERIFY(pictura::layer_mask_delete_path(*f.view, layer));
+    QCOMPARE(f.view->sample_argb(8, 8), blue);
+    QCOMPARE(f.view->sample_argb(16, 8), blue);
 }
 
 // Alt-clicking a mask thumbnail shows the mask alone (view-only, no history);
@@ -417,7 +631,11 @@ void MaskEditTest::maskContextMenu()
     panel->setFocus();
     QCoreApplication::processEvents();
     // The mask's right half is black (hidden) and the edit target's background
-    // is white, so a Delete-fill reveals it. Select that half.
+    // must be white for a Delete-fill to reveal it. The CS6 mask default is
+    // black, so set the mask background explicitly.
+    auto* colors = frame.findChild<pictura::ColorState*>();
+    QVERIFY(colors);
+    colors->setBackground(Qt::white);
     QVERIFY(view->select_rect(16, 0, 16, 32, QStringLiteral("new"), 0.0));
     panel->refresh();
     QVERIFY2(view->selection_coverage(24, 16) > 0, "a selection is active");

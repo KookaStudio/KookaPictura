@@ -244,9 +244,13 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
 
     // Switching between a layer's pixels and its mask swaps in that target's
     // own FG/BG pair, so each remembers its colours.
-    connect(layersPanel_, &LayersPanel::editTargetChanged, this, [this](bool) {
+    connect(layersPanel_, &LayersPanel::editTargetChanged, this, [this](bool mask) {
         if (!colorState_) {
             return;
+        }
+        colorState_->setMaskActive(mask);
+        if (tools_) {
+            tools_->setMaskActive(mask);
         }
         const QColor foreground = colorState_->foreground();
         const QColor background = colorState_->background();
@@ -419,8 +423,9 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
                 }
             });
 
-    // M43: `D` resets fg/bg to the CS6 defaults (black/white). `D` is also
-    // unassigned in the tool letter catalogue (see tools.cpp `kToolTable`).
+    // M43: `D` resets fg/bg to the active target's CS6 defaults (black/white
+    // for layer pixels, white/black for a mask). `D` is also unassigned in the
+    // tool letter catalogue (see tools.cpp `kToolTable`).
     connect(new QShortcut(QKeySequence(Qt::Key_D), this), &QShortcut::activated, this,
             [this]() {
                 if (toolbox_) {

@@ -70,9 +70,10 @@ int pictura::runLayersDragChecks(pictura::PicturaMainWindow& frame)
             return pictura::selfTest().fail(299, "layer drag flags");
         }
 
-        // lpr_label_tint (300): a non-None label tints the eye gutter; None
-        // leaves the normal row background. An unselected labeled row sampled at
-        // the gutter's left edge must read redder than the unlabeled row.
+        // lpr_label_tint (300): a non-None label fills the visibility column;
+        // None leaves the normal row background. An unselected labeled row
+        // sampled at the column's left edge must read redder than the
+        // unlabeled row.
         const bool colored = view->set_layer_color(bottom.toInt(), 1);
         panel->selectPaths(QStringList{}, QString());
         panel->refresh();

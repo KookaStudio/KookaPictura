@@ -4,6 +4,7 @@
 
 #include <QtGui/QFontMetrics>
 #include <QtGui/QTransform>
+#include <QtGui/qrgb.h>
 
 namespace pictura {
 class LayerRowDelegate : public QStyledItemDelegate {
@@ -25,31 +26,6 @@ public:
     static constexpr int kNameGap = 8;
     // The gap either side of a chain glyph between two thumbnails.
     static constexpr int kThumbLinkGap = 2;
-    // The color-label chip's width and the gap that follows it, before the
-    // thumbnail. CS6 shows a label as a small bar next to the thumbnail.
-    static constexpr int kLabelChipWidth = 3;
-    static constexpr int kLabelChipGap = 3;
-
-    /// The horizontal space a row's color-label chip consumes before the
-    /// thumbnail, or 0 when the row has no label. Shared by paint, thumbRect,
-    /// and nameRect so the three never disagree.
-    int labelChipAdvance(const QModelIndex& index) const
-    {
-        return layerLabelColor(index.data(ColorRole).toInt()).isValid()
-            ? kLabelChipWidth + kLabelChipGap
-            : 0;
-    }
-
-    /// The color-label chip's rect at the start of a row's content, as painted;
-    /// empty when the row has no label.
-    QRect labelChipRect(const QRect& itemRect, const QModelIndex& index) const
-    {
-        if (!layerLabelColor(index.data(ColorRole).toInt()).isValid()) {
-            return {};
-        }
-        return QRect(contentLeft(itemRect, index), itemRect.top() + 3, kLabelChipWidth,
-                     qMax(1, itemRect.height() - 6));
-    }
 
     /// True when `pos` (row-local) lands in the non-selectable visibility
     /// gutter at the row's left edge.
@@ -65,6 +41,17 @@ public:
         const int width = qBound(12, itemRect.height(), 16);
         return QRect(itemRect.left() + (kEyeColumn - width) / 2, itemRect.top(), width,
                      itemRect.height());
+    }
+
+    /// The eye glyph's tint for `label`: a dark tint on bright fills and a
+    /// light tint on dark fills, so the glyph stays legible.
+    static QColor labelGlyphTint(const QColor& label)
+    {
+        if (!label.isValid()) {
+            return {};
+        }
+        // ponytail: fixed 85 qGray split, retune if the label sheet changes.
+        return qGray(label.rgb()) >= 85 ? QColor(20, 20, 20) : QColor(240, 240, 240);
     }
 
     /// Side of the (shrunken) lock badge: about two thirds of the thumbnail, so
@@ -108,7 +95,6 @@ public:
     QRect imageThumbBox(const QRect& itemRect, const QModelIndex& index) const
     {
         int x = contentLeft(itemRect, index);
-        x += labelChipAdvance(index);
         if (index.data(ClippingRole).toBool()) {
             const int thumb = thumbSize();
             const int side = qMax(10, thumb > 0 ? thumb - 8 : 12);
@@ -493,23 +479,24 @@ public:
         const QRect eye = eyeRect(rect);
         // The visibility gutter never takes the selection highlight.
         painter->fillRect(QRect(rect.left(), rect.top(), kEyeColumn, height), gutterSurface);
+        // A non-None color label fills the whole visibility column behind the
+        // eye glyph. Paint it before the bottom rule so the rule stays visible.
+        const QColor label = layerLabelColor(index.data(ColorRole).toInt());
+        if (label.isValid()) {
+            painter->fillRect(QRect(rect.left(), rect.top(), kEyeColumn, height), label);
+        }
         // 1 px bottom rule per row.
         painter->fillRect(QRect(rect.left(), rect.bottom(), rect.width(), 1),
                           option.palette.color(QPalette::Base).darker(115));
 
         painter->save();
         const QPalette& palette = option.palette;
-        // A non-None color label tints the eye toggle's own background; the
-        // alpha keeps the eye glyph legible.
-        QColor label = layerLabelColor(index.data(ColorRole).toInt());
-        if (label.isValid()) {
-            label.setAlpha(90);
-            painter->fillRect(eye, label);
-        }
         // Eye icon, anchored at the panel's left edge for every depth.
+        const QColor glyphTint = labelGlyphTint(label);
         paintAsset(painter, eye,
                    index.data(VisibleRole).toBool() ? QStringLiteral("layers.eyeOn")
-                                                    : QStringLiteral("layers.eyeOff"));
+                                                    : QStringLiteral("layers.eyeOff"),
+                   glyphTint);
         // 1 px darker-grey separator at the gutter's right edge, between the
         // eye and the row content.
         const QColor separator = palette.color(QPalette::Base).darker(115);
@@ -520,13 +507,6 @@ public:
         const int thumb = qMax(0, thumbnailSize_);
         int x = contentLeft(rect, index);
         QRect thumbBox;
-        // A small color-label chip sits at the content start, before the
-        // thumbnail (CS6 draws the label as a bar next to the thumbnail).
-        const QColor chipColor = layerLabelColor(index.data(ColorRole).toInt());
-        if (chipColor.isValid()) {
-            painter->fillRect(labelChipRect(rect, index), chipColor);
-        }
-        x += labelChipAdvance(index);
         if (index.data(ExpandableRole).toBool()) {
             const auto* treeView = qobject_cast<const QTreeView*>(option.widget);
             const bool expanded = treeView && treeView->isExpanded(index);
@@ -794,7 +774,8 @@ private:
         return tile;
     }
 
-    static void paintAsset(QPainter* painter, const QRect& rect, const QString& assetId)
+    static void paintAsset(QPainter* painter, const QRect& rect, const QString& assetId,
+                           const QColor& tint = QColor())
     {
         // Render the SVG at the largest square that fits, at the painter's
         // device pixel ratio, so it stays crisp instead of being scaled from a
@@ -804,7 +785,9 @@ private:
             return;
         }
         const qreal dpr = painter->device() ? painter->device()->devicePixelRatioF() : 1.0;
-        const QPixmap pixmap = pictura::icon(assetId).pixmap(QSize(side, side), dpr);
+        const QPixmap pixmap =
+            (tint.isValid() ? pictura::icon(assetId, tint) : pictura::icon(assetId))
+                .pixmap(QSize(side, side), dpr);
         if (!pixmap.isNull()) {
             painter->drawPixmap(
                 QRect(rect.left() + (rect.width() - side) / 2,

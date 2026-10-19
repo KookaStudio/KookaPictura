@@ -5,7 +5,8 @@ class PicturaMainWindow;
 
 // Runs the Batch 1 layers-interaction checks:
 //   lpr_drag_flags (299)      the model advertises drag and drop for a row
-//   lpr_label_tint (300)      a color label tints the eye gutter, None does not
+//   lpr_label_tint (300)      a color label fills the visibility column,
+//                             None does not
 //   lpr_ctrl_g (301)          the Layer > Group Layers action wraps the whole
 //                             selection in one group in one undo step
 //   lpr_rename_name_only (302) disabled edit triggers; a double-click inside the

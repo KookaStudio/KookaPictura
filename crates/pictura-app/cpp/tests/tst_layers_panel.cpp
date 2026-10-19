@@ -435,9 +435,12 @@ void LayersPanelTest::dropAnywhereOnLayerRowReorders()
     QRect row = panel_->rowViewportRectForTest(b);
     QVERIFY2(row.height() > 8, "layer B row is laid out");
     const int base = view_->history_count();
+    const QStringList selectionBefore = panel_->selectedPaths();
     QVERIFY2(dropOnViewport(tree->viewport(), view_, a,
                             QPoint(row.center().x(), row.top() + row.height() / 4)),
              "upper-half drop accepted");
+    QVERIFY(panel_->rootDropEnabledForTest());
+    QCOMPARE(panel_->selectedPaths(), selectionBefore);
     QCOMPARE(pictura::layers_api::rowAt(*view_, rowOf(QStringLiteral("2"))).name, QStringLiteral("A"));
     QCOMPARE(view_->history_count(), base + 1);
 
@@ -680,18 +683,24 @@ void LayersPanelTest::clippingMasks()
     panel_->selectPaths({base}, base);
     registry->refresh();
     QVERIFY(release->isEnabled());
+    const int beforeRelease = view_->history_count();
     release->trigger();
+    QCOMPARE(view_->history_count(), beforeRelease + 1);
     QCOMPARE(view_->history_label(view_->history_index()), QStringLiteral("Release Clipping Mask"));
     QVERIFY(!pictura::layers_api::rowAt(*view_, rowOf(fill)).clipping);
     QCOMPARE(view_->sample_argb(12, 12), green);
 
     // Alt-click on the line between the rows clips, and again releases.
     QCoreApplication::processEvents();
+    const int beforeAlt = view_->history_count();
     panel_->altClickBelowRowForTest(fill);
+    QCOMPARE(view_->history_count(), beforeAlt + 1);
     QVERIFY(pictura::layers_api::rowAt(*view_, rowOf(fill)).clipping);
     QCOMPARE(view_->sample_argb(12, 12), white);
     QCoreApplication::processEvents();
+    const int beforeAltRelease = view_->history_count();
     panel_->altClickBelowRowForTest(fill);
+    QCOMPARE(view_->history_count(), beforeAltRelease + 1);
     QVERIFY(!pictura::layers_api::rowAt(*view_, rowOf(fill)).clipping);
 }
 
@@ -1005,8 +1014,8 @@ void LayersPanelTest::fillAdjustmentMenu()
     window_->closeDocument(doc, false);
 }
 
-// lpr_label_chip / lpr_smart_badge: a labeled row paints a colour chip at the
-// row content edge and a smart-object layer reports the smart-object role.
+// lpr_label_tint / lpr_label_tint_none / lpr_smart_badge: a labeled row fills
+// the whole visibility column and a smart-object layer reports the role.
 void LayersPanelTest::layerSurfaceCompleteness()
 {
     QVERIFY2(setupNest(), "surface fixture");
@@ -1017,16 +1026,30 @@ void LayersPanelTest::layerSurfaceCompleteness()
     window_->show();
     QTest::qWait(50);
 
-    QVERIFY2(!panel_->rowLabelChipColorForTest(a_).isValid(), "no chip before a label");
+    const int column = pictura::LayerRowDelegate::kEyeColumn;
+    const QColor plainLeft = panel_->rowGutterColorForTest(a_, 1);
+    const QColor plainRight = panel_->rowGutterColorForTest(a_, column - 2);
+    QCOMPARE(plainLeft.rgb(), plainRight.rgb());
+    QVERIFY2(plainLeft.red() == plainLeft.green() && plainLeft.green() == plainLeft.blue(),
+             "an unlabeled column is the neutral gutter");
+
     QVERIFY2(view_->set_layers_color(QStringList{a_}, 1) == 1, "set red label");
     panel_->refresh();
-    const QColor chip = panel_->rowLabelChipColorForTest(a_);
-    QVERIFY2(chip.isValid(), "labeled row paints a chip");
-    QCOMPARE(chip.rgb(), QColor(255, 0, 0).rgb());
-    const QColor gutter = panel_->rowGutterColorForTest(a_);
-    QVERIFY2(gutter.red() > gutter.green() && gutter.red() > gutter.blue(),
-             "label still tints the eye toggle");
-    QVERIFY2(!panel_->rowLabelChipColorForTest(b_).isValid(), "unlabeled row has no chip");
+    QCOMPARE(panel_->rowGutterColorForTest(a_, 0).rgb(), QColor(255, 0, 0).rgb());
+    QCOMPARE(panel_->rowGutterColorForTest(a_, 1).rgb(), QColor(255, 0, 0).rgb());
+    QCOMPARE(panel_->rowGutterColorForTest(a_, column - 2).rgb(), QColor(255, 0, 0).rgb());
+    QCOMPARE(panel_->rowThumbRectForTest(a_).left(), panel_->rowThumbRectForTest(b_).left());
+    QCOMPARE(panel_->rowNameRectForTest(a_).left(), panel_->rowNameRectForTest(b_).left());
+
+    panel_->selectPaths({a_}, a_);
+    const QImage selected = panel_->rowImageForTest(a_);
+    QCOMPARE(selected.pixelColor(1, 1).rgb(), QColor(255, 0, 0).rgb());
+    QCOMPARE(selected.pixelColor(column - 2, 1).rgb(), QColor(255, 0, 0).rgb());
+    QCOMPARE(selected.pixelColor(1, selected.height() - 2).rgb(), QColor(255, 0, 0).rgb());
+    const QColor selectionSurface = pictura::Theme::shade(QColor(128, 128, 128), 3);
+    QCOMPARE(selected.pixelColor(column + 2, 1).rgb(), selectionSurface.rgb());
+    QCOMPARE(panel_->rowGutterColorForTest(a_, 1).rgb(), QColor(255, 0, 0).rgb());
+    QCOMPARE(panel_->rowGutterColorForTest(b_, 1).rgb(), plainLeft.rgb());
 
     QVERIFY2(!panel_->rowSmartObjectForTest(a_), "plain layer is not a smart object");
     QVERIFY2(view_->convert_to_smart_object(a_), "convert to smart object");

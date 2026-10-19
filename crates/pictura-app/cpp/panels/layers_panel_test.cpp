@@ -750,14 +750,14 @@ bool LayersPanel::layerDragFlagsForTest(const QString& path) const
     return flags.testFlag(Qt::ItemIsDragEnabled) && flags.testFlag(Qt::ItemIsDropEnabled);
 }
 
-QColor LayersPanel::rowGutterColorForTest(const QString& path) const
+QColor LayersPanel::rowGutterColorForTest(const QString& path, int x) const
 {
     const QModelIndex index = proxyIndexForPath(path);
     if (!index.isValid() || !delegate_ || !tree_) {
         return {};
     }
     const QRect vr = tree_->visualRect(index);
-    if (vr.width() <= 4 || vr.height() <= 2) {
+    if (vr.width() <= 4 || vr.height() <= 2 || x < 0 || x >= vr.width()) {
         return {};
     }
     QImage image(vr.size(), QImage::Format_ARGB32_Premultiplied);
@@ -768,12 +768,14 @@ QColor LayersPanel::rowGutterColorForTest(const QString& path) const
     option.palette = tree_->palette();
     option.widget = tree_;
     option.state = QStyle::State_Enabled;
+    if (tree_->selectionModel() && tree_->selectionModel()->isSelected(index)) {
+        option.state |= QStyle::State_Selected;
+    }
     delegate_->paint(&painter, option, index);
     painter.end();
-    // The tint now lives in the eye toggle's own background, not the whole
-    // gutter: sample just inside its top-left corner, above the glyph.
-    const QRect eye = delegate_->eyeRect(option.rect);
-    return image.pixelColor(eye.left() + 2, eye.top() + 1);
+    // Sample the visibility column above the glyph; x lets the caller check
+    // both edges of the full-column label fill.
+    return image.pixelColor(option.rect.left() + x, option.rect.top() + 1);
 }
 
 bool LayersPanel::editTriggersDisabledForTest() const
@@ -1205,33 +1207,6 @@ bool LayersPanel::rowShapeForTest(const QString& path) const
 bool LayersPanel::rowSmartObjectForTest(const QString& path) const
 {
     return model_ && model_->indexForPath(path).data(SmartObjectRole).toBool();
-}
-
-QColor LayersPanel::rowLabelChipColorForTest(const QString& path) const
-{
-    const QModelIndex index = proxyIndexForPath(path);
-    if (!index.isValid() || !delegate_ || !tree_) {
-        return {};
-    }
-    const QRect vr = tree_->visualRect(index);
-    if (vr.width() <= 4 || vr.height() <= 2) {
-        return {};
-    }
-    QImage image(vr.size(), QImage::Format_ARGB32_Premultiplied);
-    image.fill(tree_->palette().color(QPalette::Base));
-    QPainter painter(&image);
-    QStyleOptionViewItem option;
-    option.rect = QRect(0, 0, vr.width(), vr.height());
-    option.palette = tree_->palette();
-    option.widget = tree_;
-    option.state = QStyle::State_Enabled;
-    delegate_->paint(&painter, option, index);
-    painter.end();
-    const QRect chip = delegate_->labelChipRect(option.rect, index);
-    if (chip.isEmpty()) {
-        return {};
-    }
-    return image.pixelColor(chip.left() + 1, chip.center().y());
 }
 
 bool LayersPanel::rowNameItalicForTest(const QString& path) const

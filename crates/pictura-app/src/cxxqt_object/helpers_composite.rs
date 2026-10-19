@@ -962,3 +962,33 @@ pub(super) fn test_image() -> QImage {
 
     rgba_image(rgba, width, height)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::crop_selection;
+    use pictura_core::PsdRect;
+
+    #[test]
+    fn crop_selection_maps_an_offset_rect() {
+        let data = [0u8, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+        let rect = PsdRect {
+            top: 1,
+            left: 1,
+            bottom: 3,
+            right: 3,
+        };
+        assert_eq!(crop_selection(&data, 4, 3, rect), vec![5, 6, 9, 10]);
+    }
+
+    #[test]
+    fn crop_selection_zeroes_pixels_outside_the_document() {
+        let data = [0u8, 1, 2, 3, 4, 5, 6, 7, 8];
+        let rect = PsdRect {
+            top: 2,
+            left: 2,
+            bottom: 4,
+            right: 5,
+        };
+        assert_eq!(crop_selection(&data, 3, 3, rect), vec![8, 0, 0, 0, 0, 0]);
+    }
+}
