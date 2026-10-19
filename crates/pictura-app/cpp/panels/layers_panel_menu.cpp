@@ -84,6 +84,8 @@ struct RowSpec {
         MaskDisabled,
         MaskEnabled,
         CanDelete,
+        CanMoveUp,
+        CanMoveDown,
     };
     Enable enable = Always;
 };
@@ -99,8 +101,8 @@ const RowSpec kRowSpecs[] = {
     {"delete", "Delete Layer(s)", kAllKinds, true, RowSpec::CanDelete},
     {"group", "Group Layers", kAllKinds, true},
     {"ungroup", "Ungroup Layers", kAllKinds, true},
-    {"moveUp", "Move Layer Up", kAllKinds, true},
-    {"moveDown", "Move Layer Down", kAllKinds, true},
+    {"moveUp", "Move Layer Up", kAllKinds, true, RowSpec::CanMoveUp},
+    {"moveDown", "Move Layer Down", kAllKinds, true, RowSpec::CanMoveDown},
     // Kind-specific rows.
     {"addLayerMask", "Add Layer Mask", Pixel, true, RowSpec::NoMask},
     {"deleteLayerMask", "Delete Layer Mask", Pixel, true, RowSpec::HasMask},
@@ -435,6 +437,12 @@ void LayersPanel::populateRowMenu(QMenu& menu, const QString& path, int color,
                                                            : QStringList{path});
                 break;
             }
+            case RowSpec::CanMoveUp:
+                enabled = canMovePath(path, 1);
+                break;
+            case RowSpec::CanMoveDown:
+                enabled = canMovePath(path, -1);
+                break;
             case RowSpec::Always:
                 break;
             }

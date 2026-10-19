@@ -1,7 +1,7 @@
 use pictura_adjust::{GradientKind, GradientStop};
 use pictura_core::{BlendMode, Channel, ColorLabel, Document, Layer, LockFlags, PsdRect};
 
-use super::clipping::{normalize_clipping, release_run_above};
+use super::clipping::{clipping_base_allowed, normalize_clipping, release_run_above};
 use super::paths::{
     container_mut, container_of_mut, format_segments, parse_path, resolve_path, resolve_path_mut,
 };
@@ -221,18 +221,24 @@ pub fn duplicate_layer(doc: &mut Document, index: i32) -> i32 {
 }
 
 /// Wrap layer `index` in a new group at the same stack position: the group
-/// takes the layer's slot and the layer becomes its only child. Returns the
-/// group's index, or -1 when `index` is out of range.
+/// takes the layer's slot and the layer becomes its only child. Refuses the
+/// Background. Returns the group's index, or -1 when `index` is out of range or
+/// the layer is the Background.
 pub fn group_layer(doc: &mut Document, index: i32) -> i32 {
     if index < 0 || index as usize >= doc.layers.len() {
         return -1;
     }
     let source = index as usize;
+    if doc.layers[source].background {
+        return -1;
+    }
     let child = doc.layers.remove(source);
     let name = next_layer_name(doc, "Group");
     let mut group = empty_group(&name);
     group.children.push(child);
+    normalize_clipping(group.children.as_mut_slice(), None);
     doc.layers.insert(source, group);
+    normalize_clipping(doc.layers.as_mut_slice(), None);
     source as i32
 }
 
@@ -266,7 +272,7 @@ pub(crate) fn insert_node(doc: &mut Document, selection_path: &str, mut node: La
                 return String::new();
             };
             let index = container.len();
-            if index == 0 {
+            if node.clipping && !clipping_base_allowed(container, index) {
                 node.clipping = false;
             }
             container.push(node);
@@ -276,7 +282,7 @@ pub(crate) fn insert_node(doc: &mut Document, selection_path: &str, mut node: La
         }
         if let Some((container, index)) = container_mut(doc, &segments) {
             let at = insertion_index(container.len(), index as i32);
-            if at == 0 {
+            if node.clipping && !clipping_base_allowed(container, at) {
                 node.clipping = false;
             }
             container.insert(at, node);
@@ -288,7 +294,7 @@ pub(crate) fn insert_node(doc: &mut Document, selection_path: &str, mut node: La
         }
     }
     let at = insertion_index(doc.layers.len(), -1);
-    if at == 0 {
+    if node.clipping && !clipping_base_allowed(&doc.layers, at) {
         node.clipping = false;
     }
     doc.layers.insert(at, node);
@@ -537,23 +543,37 @@ pub(super) fn release_background(layer: &mut Layer) {
     }
 }
 
+/// Whether any node in the tree carries the Background flag.
+fn has_background(layers: &[Layer]) -> bool {
+    layers
+        .iter()
+        .any(|layer| layer.background || has_background(&layer.children))
+}
+
+/// Whether `path` can become the Background: it is a raster layer that is not
+/// already the Background, and the document has no Background yet.
+pub fn can_background_from_layer(doc: &Document, path: &str) -> bool {
+    resolve_path(doc, path)
+        .is_some_and(|layer| !layer.is_group && layer.adjustment.is_none() && !layer.background)
+        && !has_background(&doc.layers)
+}
+
 /// `Background From Layer`: flag the node at `path` as the Background, make its
 /// fully transparent pixels opaque with the background color, and move it to
 /// the bottom of the document. Refuses a group, an adjustment/fill-content
-/// layer, or an already-background layer.
+/// layer, an already-background layer, or a document that already has a
+/// Background.
 //
 // ponytail: the background color is opaque white; plumb the toolbox's current
 // background color through the bridge when that state is exposed.
 pub fn background_from_layer(doc: &mut Document, path: &str) -> bool {
+    if !can_background_from_layer(doc, path) {
+        return false;
+    }
     let Some(segments) = parse_path(path) else {
         return false;
     };
-    let was_clipped = match resolve_path(doc, path) {
-        Some(layer) if !layer.is_group && layer.adjustment.is_none() && !layer.background => {
-            layer.clipping
-        }
-        _ => return false,
-    };
+    let was_clipped = resolve_path(doc, path).is_some_and(|layer| layer.clipping);
     if let Some(layer) = resolve_path_mut(doc, path) {
         opaque_transparency(layer, [255, 255, 255]);
         layer.background = true;

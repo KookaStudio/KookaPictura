@@ -30,6 +30,12 @@ pub mod ffi {
         /// would reorder the layer at `path`.
         fn arrange_layer_can(view: &PictureView, path: &QString, arrange: i32) -> bool;
 
+        /// Whether a delta move would change the order; no history.
+        fn can_move_layer_path(view: &PictureView, path: &QString, delta: i32) -> bool;
+
+        /// Whether `path` can become the Background; no history.
+        fn can_background_from_layer(view: &PictureView, path: &QString) -> bool;
+
         /// Apply `arrange` to `path` within its container; one "Arrange Layer"
         /// state when the order changes.
         fn arrange_layer_run(view: Pin<&mut PictureView>, path: &QString, arrange: i32) -> bool;
@@ -55,6 +61,20 @@ pub mod ffi {
             paths: &QStringList,
             active: &QString,
         ) -> QString;
+    }
+}
+
+fn can_move_layer_path(view: &PictureView, path: &QString, delta: i32) -> bool {
+    match view.rust().doc.as_ref() {
+        Some(doc) => pictura_render::can_move_path(doc, &path.to_string(), delta),
+        None => false,
+    }
+}
+
+fn can_background_from_layer(view: &PictureView, path: &QString) -> bool {
+    match view.rust().doc.as_ref() {
+        Some(doc) => pictura_render::can_background_from_layer(doc, &path.to_string()),
+        None => false,
     }
 }
 

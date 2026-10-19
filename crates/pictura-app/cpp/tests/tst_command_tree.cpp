@@ -60,6 +60,7 @@ private slots:
     void layerMenuGroupsAndDelete();
     void layerContentOptions();
     void layerArrangeStamp();
+    void arrangeStopsAtBackground();
     void layerLockCommands();
     void shapeLayerCommands();
     void layerMattingCommands();
@@ -1093,7 +1094,9 @@ void CommandTreeTest::layerArrangeStamp()
     layers->selectPaths({pictura::layers_api::rowAt(*view, 1).path}, pictura::layers_api::rowAt(*view, 1).path);
     registry->refresh();
     QVERIFY2(action(pictura::command_ids::LayerArrangeForward)->isEnabled(), "forward enabled");
+    const int beforeForward = view->history_count();
     QVERIFY(registry->dispatch(QString::fromLatin1(pictura::command_ids::LayerArrangeForward)));
+    QCOMPARE(view->history_count(), beforeForward + 1);
     layers->refresh();
     QCOMPARE(pictura::layers_api::rowAt(*view, 0).name, middleName);
     QCOMPARE(pictura::layers_api::rowAt(*view, 1).name, topName);
@@ -1104,7 +1107,9 @@ void CommandTreeTest::layerArrangeStamp()
     layers->selectPaths({run0, run1}, run0);
     registry->refresh();
     QVERIFY2(action(pictura::command_ids::LayerArrangeReverse)->isEnabled(), "reverse enabled");
+    const int beforeReverse = view->history_count();
     QVERIFY(registry->dispatch(QString::fromLatin1(pictura::command_ids::LayerArrangeReverse)));
+    QCOMPARE(view->history_count(), beforeReverse + 1);
     layers->refresh();
     QCOMPARE(pictura::layers_api::rowAt(*view, 0).name, topName);
     QCOMPARE(pictura::layers_api::rowAt(*view, 1).name, middleName);
@@ -1135,6 +1140,74 @@ void CommandTreeTest::layerArrangeStamp()
     QVERIFY(registry->dispatch(QString::fromLatin1(pictura::command_ids::LayerDeleteLayer)));
     QCOMPARE(pictura::layers_api::rowCount(*view), beforeDelete - 1);
 
+    window_->closeDocument(doc, false);
+}
+
+// Issue #717: Send to Back stops directly above the Background; Send Backward
+// at that boundary is disabled and records nothing.
+void CommandTreeTest::arrangeStopsAtBackground()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("ArrangeBg"), 32, 32,
+                                 QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    const int doc = window_->activeDocumentIndex();
+    pictura::PictureView* view = window_->activeView();
+    auto* layers = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    pictura::CommandRegistry* registry = window_->registry();
+    QVERIFY(view && layers && registry);
+    const auto action = [registry](const char* id) {
+        return registry->action(QString::fromLatin1(id));
+    };
+    QVERIFY(view->background_from_layer(QStringLiteral("0")));
+    view->add_layer_in(QString());
+    view->add_layer_in(QString());
+    view->set_layer_name_path(QStringLiteral("1"), QStringLiteral("Mid"));
+    view->set_layer_name_path(QStringLiteral("2"), QStringLiteral("Top"));
+    layers->refresh();
+
+    const QString topPath = pictura::layers_api::rowAt(*view, 0).path;
+    layers->selectPaths({topPath}, topPath);
+    registry->refresh();
+    QVERIFY2(!action(pictura::command_ids::LayerNewBackgroundFromLayer)->isEnabled(),
+             "a second Background is not offered");
+    QVERIFY2(action(pictura::command_ids::LayerArrangeBack)->isEnabled(), "back enabled");
+    const int base = view->history_count();
+    QVERIFY(registry->dispatch(QString::fromLatin1(pictura::command_ids::LayerArrangeBack)));
+    QCOMPARE(view->history_count(), base + 1);
+    QCOMPARE(pictura::layers_api::rowAt(*view, 0).name, QStringLiteral("Mid"));
+    QCOMPARE(pictura::layers_api::rowAt(*view, 1).name, QStringLiteral("Top"));
+    QCOMPARE(pictura::layers_api::rowAt(*view, 2).kind, QStringLiteral("background"));
+
+    const QString floorPath = pictura::layers_api::rowAt(*view, 1).path;
+    layers->selectPaths({floorPath}, floorPath);
+    registry->refresh();
+    QVERIFY2(!action(pictura::command_ids::LayerArrangeBackward)->isEnabled(),
+             "backward disabled at the floor");
+    const int after = view->history_count();
+    registry->dispatch(QString::fromLatin1(pictura::command_ids::LayerArrangeBackward));
+    QCOMPARE(view->history_count(), after);
+
+    // Front records one state and restores the top order.
+    const QString frontPath = pictura::layers_api::rowAt(*view, 1).path;
+    layers->selectPaths({frontPath}, frontPath);
+    registry->refresh();
+    QVERIFY2(action(pictura::command_ids::LayerArrangeFront)->isEnabled(), "front enabled");
+    const int beforeFront = view->history_count();
+    QVERIFY(registry->dispatch(QString::fromLatin1(pictura::command_ids::LayerArrangeFront)));
+    QCOMPARE(view->history_count(), beforeFront + 1);
+    layers->refresh();
+    QCOMPARE(pictura::layers_api::rowAt(*view, 0).name, QStringLiteral("Top"));
+    QCOMPARE(pictura::layers_api::rowAt(*view, 1).name, QStringLiteral("Mid"));
+
+    // The front layer cannot move further forward; both commands are disabled.
+    const QString boundaryPath = pictura::layers_api::rowAt(*view, 0).path;
+    layers->selectPaths({boundaryPath}, boundaryPath);
+    registry->refresh();
+    QVERIFY(!action(pictura::command_ids::LayerArrangeFront)->isEnabled());
+    QVERIFY(!action(pictura::command_ids::LayerArrangeForward)->isEnabled());
+    const int beforeBoundary = view->history_count();
+    registry->dispatch(QString::fromLatin1(pictura::command_ids::LayerArrangeFront));
+    registry->dispatch(QString::fromLatin1(pictura::command_ids::LayerArrangeForward));
+    QCOMPARE(view->history_count(), beforeBoundary);
     window_->closeDocument(doc, false);
 }
 

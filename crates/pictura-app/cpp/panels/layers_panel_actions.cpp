@@ -8,6 +8,7 @@
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/mask_commands.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/layer_style.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/layer_arrange.cxxqt.h"
 
 #include <QtCore/QHash>
 #include <QtCore/QString>
@@ -214,13 +215,27 @@ void LayersPanel::ungroupSelection()
     view_->ungroup_layers(paths);
 }
 
+bool LayersPanel::canMoveCurrent(int delta) const
+{
+    if (!view_) {
+        return false;
+    }
+    const QString path = currentPath();
+    return !path.isEmpty() && canMovePath(path, delta);
+}
+
+bool LayersPanel::canMovePath(const QString& path, int delta) const
+{
+    return view_ && !path.isEmpty() && pictura::can_move_layer_path(*view_, path, delta);
+}
+
 void LayersPanel::moveCurrent(int delta)
 {
     if (!view_) {
         return;
     }
     const QString path = currentPath();
-    if (path.isEmpty()) {
+    if (path.isEmpty() || !canMovePath(path, delta)) {
         return;
     }
     clearSolo();

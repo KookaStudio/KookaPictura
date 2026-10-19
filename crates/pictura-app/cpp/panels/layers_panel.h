@@ -282,6 +282,8 @@ public:
     void ungroupSelection();
     // Delete the selected layers; Layer > Delete Layer routes here too.
     void deleteSelection();
+    // Whether Move Layer Up/Down would change the current row (dry run).
+    bool canMoveCurrent(int delta) const;
 
     // Whether a raster mask is the current mask edit target.
     bool maskEditing() const { return maskEditing_; }
@@ -349,6 +351,7 @@ private:
     void addGroupAt(const QString& path);
     void duplicateSelection();
     void moveCurrent(int delta);
+    bool canMovePath(const QString& path, int delta) const;
 
     void toggleSolo(const QString& path);
     void restoreSolo();

@@ -1,7 +1,7 @@
 use pictura_core::{BlendMode, ColorLabel, Document, Layer, LockFlags};
 
 use super::clipping::{base_below, normalize_clipping, release_run_above, Moved};
-use super::create::{empty_group, next_layer_name};
+use super::create::{empty_group, next_layer_name, release_background};
 use super::merge::is_visible_in_panel;
 use super::paths::{
     container_mut, container_of, container_of_mut, edit_paths, flatten_rows, format_segments,
@@ -347,9 +347,11 @@ pub fn group_paths(doc: &mut Document, paths: &[&str]) -> Option<String> {
 
     let mut group = empty_group(&name);
     group.children = children;
+    normalize_clipping(group.children.as_mut_slice(), None);
     let container = container_of_mut(doc, &parent)?;
     let at = insert_at.min(container.len());
     container.insert(at, group);
+    normalize_clipping(container.as_mut_slice(), None);
     let mut new_segments = parent;
     new_segments.push(at);
     Some(format_segments(&new_segments))
@@ -383,29 +385,67 @@ pub fn ungroup_paths(doc: &mut Document, paths: &[&str]) -> usize {
     changed
 }
 
-/// Rename the node at `path`. The Background flag follows the PSD name+position
-/// convention in-session: the bottom top-level non-group renamed to
-/// `"Background"` becomes the Background, any other rename clears the flag.
-/// Returns false for a path that does not resolve.
+/// Rename the node at `path`. Renaming a Background to another name converts
+/// it to an ordinary layer (unflagged, unlocked, with an alpha channel) so the
+/// new name survives a PSD round trip; `Layer from Background` remains the
+/// explicit conversion command. Renaming any other layer only changes its
+/// name. Returns false for a path that does not resolve.
 pub fn rename_path(doc: &mut Document, path: &str, name: &str) -> bool {
-    let Some(segments) = parse_path(path) else {
+    if parse_path(path).is_none() {
         return false;
-    };
+    }
     match resolve_path_mut(doc, path) {
         Some(layer) => {
+            if layer.background && name != "Background" {
+                release_background(layer);
+            }
             layer.name = name.to_string();
-            layer.background =
-                segments.len() == 1 && segments[0] == 0 && !layer.is_group && name == "Background";
             true
         }
         None => false,
     }
 }
 
+/// Lowest child index a non-Background node may occupy: one above the highest
+/// flagged Background in `container`, or `0` when there is none.
+fn background_floor(container: &[Layer]) -> usize {
+    container
+        .iter()
+        .rposition(|layer| layer.background)
+        .map_or(0, |index| index + 1)
+}
+
+/// Dry-run form of [`move_path`]: whether the delta move would change the
+/// order. Performs the same guards and never mutates the document.
+pub fn can_move_path(doc: &Document, path: &str, delta: i32) -> bool {
+    let Some(segments) = parse_path(path) else {
+        return false;
+    };
+    if is_background(doc, path) || resolve_path(doc, path).is_some_and(|layer| layer.lock.is_all())
+    {
+        return false;
+    }
+    let Some((&index, parent)) = segments.split_last() else {
+        return false;
+    };
+    let Some(container) = container_of(doc, parent) else {
+        return false;
+    };
+    let floor = background_floor(container);
+    let last = container.len() - 1;
+    if index < floor || floor > last {
+        return false;
+    }
+    let target = (index as i32 + delta).clamp(floor as i32, last as i32) as usize;
+    target != index
+}
+
 /// Move the node `delta` places within its own container, clamped to the
-/// container bounds. Refuses the Background and fully-locked nodes (LAY-002:
-/// they do not reorder), and returns false (state unchanged) at a boundary or
-/// for a path that does not resolve.
+/// container bounds above the Background floor. Refuses the Background,
+/// fully-locked nodes, a source already below the Background, and a container
+/// whose highest Background sits above all content (LAY-002: they do not
+/// reorder). Returns false (state unchanged) at a boundary or for a path that
+/// does not resolve.
 pub fn move_path(doc: &mut Document, path: &str, delta: i32) -> bool {
     let Some(segments) = parse_path(path) else {
         return false;
@@ -417,8 +457,12 @@ pub fn move_path(doc: &mut Document, path: &str, delta: i32) -> bool {
     let Some((container, index)) = container_mut(doc, &segments) else {
         return false;
     };
-    let last = container.len() as i32 - 1;
-    let target = (index as i32 + delta).clamp(0, last) as usize;
+    let floor = background_floor(container);
+    let last = container.len() - 1;
+    if index < floor || floor > last {
+        return false;
+    }
+    let target = (index as i32 + delta).clamp(floor as i32, last as i32) as usize;
     if target == index {
         return false;
     }
@@ -499,6 +543,15 @@ fn move_path_to_dest(
         }
     };
     let src_parent = &src[..src.len() - 1];
+    // A same-container move from a node already below the Background is
+    // malformed; refuse it rather than jumping a sibling. Moving the node out
+    // to another container is allowed.
+    if dest_parent.as_slice() == src_parent {
+        let src_container = container_of(doc, src_parent)?;
+        if *src.last().expect("non-empty") < background_floor(src_container) {
+            return None;
+        }
+    }
     // Nesting lock: a drop that changes the layer's parent is refused when
     // either the destination container or the current parent carries `NESTING`.
     // A within-container reorder keeps the same parent and stays allowed.
@@ -509,7 +562,10 @@ fn move_path_to_dest(
     }
     // `dest_parent` is in pre-removal coordinates, so it is validated pre-
     // removal here and converted once in `move_path_to` after the removal.
-    container_of(doc, &dest_parent)?;
+    let dest_container = container_of(doc, &dest_parent)?;
+    if dest_index.is_some_and(|index| index < background_floor(dest_container)) {
+        return None;
+    }
     Some((dest_parent, dest_index))
 }
 
@@ -538,7 +594,8 @@ pub fn can_move_path_to(doc: &Document, path: &str, target: &str, mode: i32) -> 
 /// Move the node at `path` relative to `target`: mode `0` = above, `1` = below,
 /// `2` = into `target` (which must be a group). An empty target means the top of
 /// the document. Refuses the Background, a fully- or nesting-locked source, a
-/// move into or out of a nesting-locked group, a malformed/unknown target, a
+/// destination at or below a Background, a move into or out of a
+/// nesting-locked group, a malformed/unknown target, a
 /// drop onto the source or into its own descendant, and an `Into` target that is
 /// not a group.
 pub fn move_path_to(doc: &mut Document, path: &str, target: &str, mode: i32) -> bool {
@@ -613,7 +670,9 @@ pub enum Arrange {
 }
 
 /// The child index [`arrange_path`] would move `path` to, or `None` when the
-/// path does not resolve or the node carries no reorder (Background/locked).
+/// path does not resolve, the node carries no reorder (Background/locked), the
+/// node already sits below a Background, or the container has no position above
+/// its Background.
 fn arrange_target(doc: &Document, path: &str, arrange: Arrange) -> Option<usize> {
     let segments = parse_path(path)?;
     if is_background(doc, path) || resolve_path(doc, path).is_some_and(|layer| layer.lock.is_all())
@@ -627,12 +686,17 @@ fn arrange_target(doc: &Document, path: &str, arrange: Arrange) -> Option<usize>
     }
     let index = *last;
     let front = container.len() - 1;
-    Some(match arrange {
+    let floor = background_floor(container);
+    if index < floor || floor > front {
+        return None;
+    }
+    let target = match arrange {
         Arrange::Front => front,
         Arrange::Forward => (index + 1).min(front),
         Arrange::Backward => index.saturating_sub(1),
-        Arrange::Back => 0,
-    })
+        Arrange::Back => floor,
+    };
+    Some(target.clamp(floor, front))
 }
 
 /// Move the node at `path` to [`Arrange`]'s position within its own container.

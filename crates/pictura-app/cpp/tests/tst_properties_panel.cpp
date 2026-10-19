@@ -28,6 +28,7 @@ private slots:
     void cleanup();
     void plainDocumentShowsNoProperties();
     void adjustmentLayerShowsItsName();
+    void clipIsDisabledAboveABackground();
     void slidersEditLiveAndCommitOnce();
     void groupsCurvesAndFooter();
     void canvasSectionReadsAndResizes();
@@ -463,6 +464,33 @@ void PropertiesPanelTest::maskRefineEditsStayScoped()
     emit density->valueCommitted(density->value());
     QCOMPARE(layer_mask_density(*view_), 76);
     QCOMPARE(view_->history_count(), before);
+}
+
+void PropertiesPanelTest::clipIsDisabledAboveABackground()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("ClipAboveBg"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::PropertiesPanel*>(QStringLiteral("propertiesPanel"));
+    layers_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(view_ && panel_ && layers_);
+    QVERIFY(view_->background_from_layer(QStringLiteral("0")));
+    QVERIFY(view_->add_adjustment(QStringLiteral("invert")));
+    path_.clear();
+    for (int i = 0; i < pictura::layers_api::rowCount(*view_); ++i) {
+        const auto row = pictura::layers_api::rowAt(*view_, i);
+        if (row.hasAdjustment) {
+            path_ = row.path;
+        }
+    }
+    QVERIFY(!path_.isEmpty());
+    panel_->setView(view_);
+    layers_->setView(view_);
+    QVERIFY(layers_->selectRowForTest(path_));
+    panel_->refresh();
+    auto* clip = panel_->findChild<QToolButton*>(QStringLiteral("propertiesClip"));
+    QVERIFY(clip != nullptr);
+    QVERIFY2(!clip->isEnabled(), "clip is disabled above a Background");
 }
 
 QTEST_MAIN(PropertiesPanelTest)

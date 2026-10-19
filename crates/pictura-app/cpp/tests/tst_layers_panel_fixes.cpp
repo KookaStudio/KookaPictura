@@ -137,6 +137,9 @@ private slots:
     void legacyMoveLayerShiftsAndRefuses();
     void actionStripStaysFixedAndCentred();
     void bottomStripDisabledWithoutDocument();
+    void dropBelowBackgroundRefused();
+    void cannotClipToBackground();
+    void moveDownStopsAtBackground();
 
 private:
     bool setupNest();
@@ -866,6 +869,100 @@ void LayersPanelFixesTest::bottomStripDisabledWithoutDocument()
         QVERIFY2(button != nullptr, qPrintable(name));
         QVERIFY2(!button->isEnabled(), qPrintable(name));
     }
+}
+
+// Issue #717: a layer dropped below the Background shows no indicator, is
+// ignored, and records nothing.
+void LayersPanelFixesTest::dropBelowBackgroundRefused()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("BgFloor"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(view_ && panel_);
+    QVERIFY(view_->background_from_layer(QStringLiteral("0")));
+    const QString layer = view_->add_layer_in(QString());
+    QVERIFY(!layer.isEmpty());
+    view_->set_layer_name_path(layer, QStringLiteral("L"));
+    panel_->setView(view_);
+    panel_->refresh();
+    window_->show();
+    QTest::qWait(50);
+
+    QVERIFY2(!panel_->canMoveForTest(layer, QStringLiteral("0"), 1),
+             "can_move_layer_to rejects a drop below the Background");
+    QTreeView* tree = panel_->findChild<QTreeView*>();
+    QVERIFY(tree != nullptr);
+    const QRect row = panel_->rowViewportRectForTest(QStringLiteral("0"));
+    QVERIFY2(row.height() > 8, "the Background row is laid out");
+    const QPoint pos(row.center().x(), row.bottom() - row.height() / 4);
+
+    QMimeData mime;
+    mime.setData(pictura::kLayerMimeType, layer.toUtf8());
+    mime.setData(pictura::kLayerSourceMimeType,
+                 QByteArray::number(reinterpret_cast<quintptr>(view_)));
+    QDragEnterEvent enter(pos, Qt::MoveAction, &mime, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(tree->viewport(), &enter);
+    QDragMoveEvent move(pos, Qt::MoveAction, &mime, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(tree->viewport(), &move);
+    QVERIFY2(!panel_->dropIndicatorShownForTest(), "no indicator below the Background");
+
+    const int base = view_->history_count();
+    QDropEvent drop(QPointF(pos), Qt::MoveAction, &mime, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(tree->viewport(), &drop);
+    QVERIFY2(!drop.isAccepted(), "the drop below the Background is ignored");
+    QCOMPARE(view_->history_count(), base);
+    QCOMPARE(pictura::layers_api::rowAt(*view_, 1).kind, QStringLiteral("background"));
+}
+
+// Issue #717: the Background cannot be a clipping base, through either the
+// menu predicate, the Alt-click toggle, or the New Layer dialog.
+void LayersPanelFixesTest::cannotClipToBackground()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("BgClip"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    QVERIFY(view_);
+    QVERIFY(view_->background_from_layer(QStringLiteral("0")));
+    const QString layer = view_->add_layer_in(QString());
+    QVERIFY(!layer.isEmpty());
+    view_->set_layer_name_path(layer, QStringLiteral("L"));
+    const int base = view_->history_count();
+    QVERIFY2(!pictura::clipping_can_create(*view_, QStringList{layer}),
+             "the menu predicate rejects the Background base");
+    QVERIFY2(!pictura::clipping_toggle(*view_, layer), "the Alt-click toggle is a no-op");
+    QCOMPARE(view_->history_count(), base);
+
+    const QString created = view_->new_layer_dialog(
+        QStringLiteral("0"), QStringLiteral("Clipped"), 0, QStringLiteral("norm"), 255, 255,
+        false, true);
+    QVERIFY(!created.isEmpty());
+    QVERIFY2(!rowNamed(*view_, QStringLiteral("Clipped")).clipping,
+             "the New Layer clip is dropped above the Background");
+}
+
+// Issue #717: Move Layer Down on the layer directly above the Background is a
+// no-op and records nothing.
+void LayersPanelFixesTest::moveDownStopsAtBackground()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("BgMove"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(view_ && panel_);
+    QVERIFY(view_->background_from_layer(QStringLiteral("0")));
+    const QString layer = view_->add_layer_in(QString());
+    QVERIFY(!layer.isEmpty());
+    panel_->setView(view_);
+    panel_->refresh();
+    QVERIFY2(!panel_->rowMenuEnabledForPathForTest(layer, QStringLiteral("Move Layer Down")),
+             "the row menu disables Move Layer Down at the floor");
+    QVERIFY2(!panel_->rowMenuEnabledForPathForTest(QStringLiteral("0"),
+                                                   QStringLiteral("Move Layer Up")),
+             "the row menu disables moving the Background up");
+    const int base = view_->history_count();
+    QVERIFY2(!view_->move_layer_path(layer, -1), "move down refuses the floor");
+    QCOMPARE(view_->history_count(), base);
 }
 
 QTEST_MAIN(LayersPanelFixesTest)

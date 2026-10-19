@@ -180,6 +180,17 @@ fn group_layer_wraps_in_place() {
 }
 
 #[test]
+fn group_layer_refuses_the_background() {
+    let mut doc = doc_with(vec![
+        pixel_layer("Background", 4, 4, 0),
+        pixel_layer("top", 4, 4, 1),
+    ]);
+    let before = doc.clone();
+    assert_eq!(group_layer(&mut doc, 0), -1);
+    assert_eq!(doc, before);
+}
+
+#[test]
 fn group_layer_names_after_existing_groups() {
     let mut doc = doc_with(vec![pixel_layer("a", 4, 4, 1)]);
     group_layer(&mut doc, 0);
@@ -733,6 +744,24 @@ fn add_layer_in_inside_group_and_on_top() {
 }
 
 #[test]
+fn renaming_a_background_converts_it() {
+    let mut doc = doc_with(vec![
+        pixel_layer("Background", 4, 4, 0),
+        pixel_layer("top", 4, 4, 1),
+    ]);
+    doc.layers[0].lock = LockFlags::all();
+    doc.layers[0].channels.retain(|channel| channel.id != -1);
+    assert!(rename_path(&mut doc, "0", "Sky"));
+    assert_eq!(doc.layers[0].name, "Sky");
+    assert!(!doc.layers[0].background);
+    assert_eq!(doc.layers[0].lock, LockFlags::default());
+    assert!(doc.layers[0]
+        .channels
+        .iter()
+        .any(|channel| channel.id == -1));
+}
+
+#[test]
 fn move_path_clamps_and_rename_resolves() {
     let mut doc = doc_with(vec![pixel_layer("a", 4, 4, 0), pixel_layer("b", 4, 4, 1)]);
     assert!(!move_path(&mut doc, "0", -1), "boundary");
@@ -745,6 +774,13 @@ fn move_path_clamps_and_rename_resolves() {
     assert!(rename_path(&mut doc, "1", "renamed"));
     assert_eq!(doc.layers[1].name, "renamed");
     assert!(!rename_path(&mut doc, "9", "x"));
+
+    assert!(rename_path(&mut doc, "0", "Background"));
+    assert_eq!(doc.layers[0].name, "Background");
+    assert!(
+        !doc.layers[0].background,
+        "renaming does not create a Background"
+    );
 }
 
 #[test]
@@ -1194,10 +1230,19 @@ fn arrange_moves_within_container_and_refuses_edges() {
     assert!(arrange_path(&mut doc, "2", Arrange::Backward));
     assert_eq!(names(&doc), ["bottom", "top", "middle"]);
 
+    // Forward then Backward on the same middle layer is an inverse pair.
+    let mut doc = doc_with(layers());
+    assert!(arrange_path(&mut doc, "1", Arrange::Forward));
+    assert_eq!(names(&doc), ["bottom", "top", "middle"]);
+    assert!(arrange_path(&mut doc, "2", Arrange::Backward));
+    assert_eq!(names(&doc), ["bottom", "middle", "top"]);
+
     // The front layer cannot move further forward; the command is disabled.
     let mut doc = doc_with(layers());
     assert!(!arrange_path(&mut doc, "2", Arrange::Forward));
     assert!(!can_arrange_path(&doc, "2", Arrange::Forward));
+    assert!(!arrange_path(&mut doc, "2", Arrange::Front));
+    assert!(!can_arrange_path(&doc, "2", Arrange::Front));
     assert!(can_arrange_path(&doc, "0", Arrange::Front));
 }
 
@@ -1209,14 +1254,23 @@ fn arrange_refuses_background_and_locked() {
         pixel_layer("normal", 4, 4, 3),
     ]);
     let before = doc.clone();
-    assert!(!arrange_path(&mut doc, "0", Arrange::Front));
-    assert!(!can_arrange_path(&doc, "0", Arrange::Front));
+    for arrange in [
+        Arrange::Front,
+        Arrange::Forward,
+        Arrange::Backward,
+        Arrange::Back,
+    ] {
+        assert!(!arrange_path(&mut doc, "0", arrange));
+        assert!(!can_arrange_path(&doc, "0", arrange));
+    }
     assert!(!arrange_path(&mut doc, "1", Arrange::Front));
     assert!(!can_arrange_path(&doc, "1", Arrange::Front));
     assert_eq!(doc, before, "Background and locked nodes do not reorder");
 
     assert!(arrange_path(&mut doc, "2", Arrange::Back));
-    assert_eq!(doc.layers[0].name, "normal");
+    assert_eq!(doc.layers[0].name, "Background");
+    assert_eq!(doc.layers[1].name, "normal");
+    assert_eq!(doc.layers[2].name, "locked");
 }
 
 #[test]
