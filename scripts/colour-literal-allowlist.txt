@@ -59,6 +59,8 @@ crates/pictura-app/cpp/toolbox.cpp  QColor(20, 20, 20)  # data
 crates/pictura-app/cpp/toolbox.cpp  QColor(240, 240, 240)  # data
 crates/pictura-app/cpp/toolbox.cpp  QColor(40, 40, 40)  # data
 crates/pictura-app/cpp/toolbox.cpp  QColor(90, 90, 90)  # data
+crates/pictura-app/cpp/panels/layers_panel_internal.h  QColor(20, 20, 20)  # data: eye-glyph contrast on a color-label fill
+crates/pictura-app/cpp/panels/layers_panel_internal.h  QColor(240, 240, 240)  # data: eye-glyph contrast on a color-label fill
 
 crates/pictura-app/cpp/blur_gallery_light_range.h  QColor(60, 60, 60)  # pending conversion (theme-family)
 crates/pictura-app/cpp/blur_gallery_light_range.h  QColor(90, 90, 90)  # pending conversion (theme-family)
