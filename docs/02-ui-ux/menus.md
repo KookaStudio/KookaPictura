@@ -339,8 +339,8 @@ CS6 reworked the 3D engine; each command below is named in the CS6 Help
 - New Guide… ✓
 - Lock Slices ✓
 - Show ▸ ✓ (Selection Edges ✓, Target Path ✓, Layer Edges ✓, 3D Axis ✓,
-  Guides ✓, Grid ✓, Smart Guides ✓, Count ✓, Slices ✓, Notes, Pixel Grid ✓,
-  All ✓, None ✓, Show Extra Options ✓)
+  Guides ✓, Grid ✓, Count ✓, Smart Guides — `Ctrl+Shift+;` ✓, Slices ✓,
+  Notes, Pixel Grid ✓, All ✓, None ✓, Show Extra Options ✓)
 - Extras — `Ctrl+H` ✓
 - `Align` / `Align To` — not Photoshop menu items (they belong to Illustrator);
   removed from the CS6 tree
