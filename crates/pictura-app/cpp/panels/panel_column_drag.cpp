@@ -791,7 +791,7 @@ void PanelColumn::updateDrag(const QPoint& globalPos)
         if (!dragFloat_ && dragGroup_) {
             // A group lifted out of a flyout must leave the flyout and its empty
             // origin overlay behind before the new float is created.
-            if (dragGroup_ == flyoutGroup_) {
+            if (!dragIsPanel_ && dragGroup_ == flyoutGroup_) {
                 PanelFloat* origin = flyoutFloat_;
                 detachFlyoutForDrag(dragGroup_);
                 if (origin) {
