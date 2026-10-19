@@ -155,6 +155,7 @@ NumericField::NumericField(const QString& label, const NumericFieldConfig& confi
             }
         });
         connect(slider_, &QSlider::sliderReleased, this, [this] { commitPending(); });
+        connect(slider_, &QSlider::sliderPressed, this, [this] { canceled_ = false; });
         connect(arrow_, &QToolButton::clicked, this, [this] { showPopup(); });
         popup_->installEventFilter(this);
         reserveWidth();
@@ -211,6 +212,7 @@ void NumericField::setValue(double value)
 {
     decimalTyped_ = false;
     blank_ = false;
+    pending_ = false;
     value_ = std::clamp(value, config_.minimum, config_.maximum);
     edit_->setText(formatValue(value_));
     syncSlider();
@@ -235,6 +237,14 @@ void NumericField::setSuffixVisible(bool visible)
     reserveWidth();
 }
 
+void NumericField::cancelPending()
+{
+    const bool active = pressed_ || pending_ || (slider_ && slider_->isSliderDown());
+    pending_ = false;
+    scrubbing_ = false;
+    canceled_ = active;
+}
+
 void NumericField::syncSlider()
 {
     if (!slider_) {
@@ -247,6 +257,9 @@ void NumericField::syncSlider()
 
 void NumericField::commitEdit()
 {
+    if (canceled_) {
+        return;
+    }
     if (edit_->text().trimmed().isEmpty()) {
         if (blank_) {
             return;
@@ -268,6 +281,9 @@ void NumericField::commitEdit()
 
 void NumericField::applyUserValue(double value)
 {
+    if (canceled_) {
+        return;
+    }
     blank_ = false;
     value = std::clamp(value, config_.minimum, config_.maximum);
     if (config_.decimals == 0 && !decimalTyped_) {
@@ -286,7 +302,7 @@ void NumericField::applyUserValue(double value)
 
 void NumericField::commitPending()
 {
-    if (pending_) {
+    if (pending_ && !canceled_) {
         pending_ = false;
         emit valueCommitted(value_);
     }
@@ -329,6 +345,7 @@ void NumericField::showPopup()
     if (!popup_ || !slider_) {
         return;
     }
+    canceled_ = false;
     popup_->adjustSize();
     const int x = (width() - popup_->width()) / 2;
     popup_->move(mapToGlobal(QPoint(x, height())));
@@ -419,6 +436,8 @@ bool NumericField::eventFilter(QObject* watched, QEvent* event)
     if (event->type() == QEvent::MouseButtonPress) {
         auto* mouse = static_cast<QMouseEvent*>(event);
         if (mouse->button() == Qt::LeftButton && isEnabled()) {
+            canceled_ = false;
+            pressed_ = true;
             scrubbing_ = false;
             scrubOrigin_ = mouse->globalPosition().toPoint();
             scrubStart_ = value_;
@@ -435,10 +454,13 @@ bool NumericField::eventFilter(QObject* watched, QEvent* event)
                 return true;
             }
         }
-    } else if (event->type() == QEvent::MouseButtonRelease && scrubbing_) {
-        scrubbing_ = false;
-        commitPending();
-        return true;
+    } else if (event->type() == QEvent::MouseButtonRelease) {
+        pressed_ = false;
+        if (scrubbing_) {
+            scrubbing_ = false;
+            commitPending();
+            return true;
+        }
     }
     return QWidget::eventFilter(watched, event);
 }

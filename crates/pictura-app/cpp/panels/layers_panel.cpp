@@ -76,6 +76,8 @@
 
 namespace pictura {
 
+constexpr int kLayerPreviewDelayMs = 120;
+
 // CS6 sheet colors (PSD `lclr`), index 1..7; 0 is no label.
 QColor layerLabelColor(int label)
 {
@@ -374,41 +376,47 @@ LayersPanel::LayersPanel(QWidget* parent)
             view_->set_layers_blend(paths, blend_->itemData(index).toString());
         }
     });
+    previewTimer_ = new QTimer(this);
+    previewTimer_->setSingleShot(true);
+    previewTimer_->setInterval(kLayerPreviewDelayMs);
+    connect(previewTimer_, &QTimer::timeout, this, &LayersPanel::applyPendingPreview);
     connect(opacity_, &PercentField::valueChanged, this, [this](double pct) {
-        if (syncing_ || !view_) {
-            return;
-        }
-        const QStringList paths = selectedPaths();
-        if (!paths.isEmpty()) {
-            view_->preview_layers_opacity(paths, qRound(pct * 255.0 / 100.0));
-        }
+        schedulePreview(false, qRound(pct * 255.0 / 100.0));
     });
     connect(opacity_, &PercentField::valueCommitted, this, [this](double pct) {
-        if (syncing_ || !view_) {
+        if (!gesture_.valid) {
+            clearPendingPreview();
             return;
         }
-        const QStringList paths = selectedPaths();
-        if (!paths.isEmpty()) {
-            view_->commit_layers_opacity(paths, qRound(pct * 255.0 / 100.0));
+        if (gesture_.fill) {
+            return;
         }
+        const QStringList paths = gestureTargets();
+        const bool sameDocument = view_ && view_->document_generation() == gesture_.generation;
+        clearPendingPreview();
+        if (syncing_ || !view_ || !sameDocument || paths.isEmpty()) {
+            return;
+        }
+        view_->commit_layers_opacity(paths, qRound(pct * 255.0 / 100.0));
     });
     connect(fill_, &PercentField::valueChanged, this, [this](double pct) {
-        if (syncing_ || !view_) {
-            return;
-        }
-        const QStringList paths = selectedPaths();
-        if (!paths.isEmpty()) {
-            view_->preview_layers_fill(paths, qRound(pct * 255.0 / 100.0));
-        }
+        schedulePreview(true, qRound(pct * 255.0 / 100.0));
     });
     connect(fill_, &PercentField::valueCommitted, this, [this](double pct) {
-        if (syncing_ || !view_) {
+        if (!gesture_.valid) {
+            clearPendingPreview();
             return;
         }
-        const QStringList paths = selectedPaths();
-        if (!paths.isEmpty()) {
-            view_->commit_layers_fill(paths, qRound(pct * 255.0 / 100.0));
+        if (!gesture_.fill) {
+            return;
         }
+        const QStringList paths = gestureTargets();
+        const bool sameDocument = view_ && view_->document_generation() == gesture_.generation;
+        clearPendingPreview();
+        if (syncing_ || !view_ || !sameDocument || paths.isEmpty()) {
+            return;
+        }
+        view_->commit_layers_fill(paths, qRound(pct * 255.0 / 100.0));
     });
     connect(tree_, &QTreeView::customContextMenuRequested, this,
             &LayersPanel::showContextMenu);
@@ -435,7 +443,12 @@ void LayersPanel::setView(PictureView* view)
         QObject::disconnect(viewConnection_);
     }
     // A different view means a document switch: solo paths and the filter are
-    // transient, so both reset.
+    // transient, so both reset. A replacement inside the same view bumps the
+    // document generation, which also ends the gesture.
+    if (view_ != view
+        || (gesture_.valid && (!view || view->document_generation() != gesture_.generation))) {
+        cancelPendingPreview();
+    }
     if (view_ != view) {
         clearSolo();
         activeThumbByPath_.clear();
@@ -462,6 +475,8 @@ void LayersPanel::setView(PictureView* view)
 
 void LayersPanel::refresh()
 {
+    const bool wasRefreshing = refreshing_;
+    refreshing_ = true;
     const QStringList selected = selectedPaths();
     const QString selectedPath = currentPath();
     // The model reset below clears the tree's current index, whose
@@ -626,7 +641,9 @@ void LayersPanel::refresh()
             tree_->edit(editIndex);
         }
     }
+    reconcileGestureTarget();
     syncControls();
+    refreshing_ = wasRefreshing;
 }
 
 int LayersPanel::currentLayer() const
@@ -736,7 +753,22 @@ void LayersPanel::syncControls()
         const QStringList scope(isolatedPaths_.begin(), isolatedPaths_.end());
         view_->isolation_set(scope, isolated);
     }
+
+    // A real target change cancels an in-flight property gesture. A refresh's
+    // transient empty selection is not a target change; refresh reconciles the
+    // restored selection once the model reset finishes.
+    if (!refreshing_ && gesture_.valid) {
+        const QStringList targets = propertyPaths();
+        if (!view_ || view_->document_generation() != gesture_.generation
+            || targets.isEmpty() || namePathsFor(targets) != gesture_.namePaths) {
+            cancelPendingPreview();
+        }
+    }
+    bool pendingOpacity = gesture_.valid && !gesture_.fill;
+    bool pendingFill = gesture_.valid && gesture_.fill;
+
     const bool active = view_ && !paths.isEmpty();
+    const QStringList targets = propertyPaths();
     syncing_ = true;
     const std::array<QToolButton*, 5> lockButtons = {
         lockTransparency_, lockPixels_, lockPosition_, lockNesting_, lockAll_};
@@ -748,14 +780,31 @@ void LayersPanel::syncControls()
     bool opacityAny = false;
     bool fillAny = false;
     bool forcedLocks = false;
+    int opacityPct = 100;
+    int fillPct = 100;
     if (active) {
-        // Show the current row's value; apply to the whole selection.
-        const QModelIndex valueIndex =
-            current.isValid() ? current : model_->indexForPath(paths.first());
+        // Show the current row's value; apply to the whole selection. A
+        // synthetic Smart Filters row has no value of its own.
+        QModelIndex valueIndex;
+        if (current.isValid() && !current.data(SyntheticRole).toBool()) {
+            valueIndex = current;
+        }
+        if (!valueIndex.isValid()) {
+            for (const QString& path : targets) {
+                const QModelIndex index = model_->indexForPath(path);
+                if (index.isValid()) {
+                    valueIndex = index;
+                    break;
+                }
+            }
+        }
+        if (!valueIndex.isValid()) {
+            valueIndex = model_->indexForPath(paths.first());
+        }
         const int blend = blend_->findData(valueIndex.data(BlendRole).toString());
         blend_->setCurrentIndex(blend >= 0 ? blend : 0);
-        opacity_->setValue(qRound(valueIndex.data(OpacityRole).toInt() * 100.0 / 255.0));
-        fill_->setValue(qRound(valueIndex.data(FillRole).toInt() * 100.0 / 255.0));
+        opacityPct = qRound(valueIndex.data(OpacityRole).toInt() * 100.0 / 255.0);
+        fillPct = qRound(valueIndex.data(FillRole).toInt() * 100.0 / 255.0);
         const int lockBits = valueIndex.data(LockRole).toInt();
         lockTransparency_->setChecked((lockBits & 0x01) != 0);
         lockPixels_->setChecked((lockBits & 0x02) != 0);
@@ -764,7 +813,7 @@ void LayersPanel::syncControls()
         lockAll_->setChecked((lockBits & 0x0F) == 0x0F);
 
         // Enable iff at least one selected node is eligible (frozen table).
-        for (const QString& path : paths) {
+        for (const QString& path : targets) {
             const QModelIndex index = model_->indexForPath(path);
             const QString kind = index.data(KindRole).toString();
             const bool background = kind == QLatin1String("background");
@@ -786,11 +835,36 @@ void LayersPanel::syncControls()
         forcedLocks = valueIndex.data(LayerRowShapeRole).toBool()
             || valueIndex.data(KindRole).toString() == QLatin1String("type");
     }
+
+    // A real eligibility loss ends the gesture and falls back to the default.
+    if (!refreshing_ && pendingOpacity && !opacityAny) {
+        cancelPendingPreview();
+        opacity_->cancelPending();
+        pendingOpacity = false;
+    }
+    if (!refreshing_ && pendingFill && !fillAny) {
+        cancelPendingPreview();
+        fill_->cancelPending();
+        pendingFill = false;
+    }
+    // A pending preview owns its field until the timer applies it. Do not let a
+    // panel refresh overwrite the user's value or disable the control mid-drag.
+    if (!pendingOpacity) {
+        opacity_->setValue(opacityAny ? opacityPct : 100);
+    }
+    if (!pendingFill) {
+        fill_->setValue(fillAny ? fillPct : 100);
+    }
+
     // Set the final enabled state once: a control that stays enabled keeps its
     // keyboard focus, where a transient disable would drop it.
     blend_->setEnabled(blendAny);
-    opacity_->setEnabled(opacityAny);
-    fill_->setEnabled(fillAny);
+    if (!pendingOpacity) {
+        opacity_->setEnabled(opacityAny);
+    }
+    if (!pendingFill) {
+        fill_->setEnabled(fillAny);
+    }
     for (QToolButton* button : lockButtons) {
         button->setEnabled(lockAny);
     }

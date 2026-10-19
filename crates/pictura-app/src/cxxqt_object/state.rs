@@ -128,6 +128,9 @@ pub struct PictureViewRust {
     /// cancels the live gesture (`paths.rs`). `None` between gestures.
     pub(super) path_gesture: Option<(super::paths::ActivePath, VectorPath)>,
     pub(super) dirty: bool,
+    /// Bumped whenever the view loads or replaces its document, so a panel can
+    /// drop a gesture whose target no longer belongs to the current document.
+    pub(super) document_generation: u64,
     /// Output format remembered from the import source, used to preselect the
     /// Save As filter: a lowercased extension (`"png"`) or `"psd"` when native.
     pub(super) source_format: String,
@@ -375,6 +378,7 @@ impl Default for PictureViewRust {
             active_path: super::paths::ActivePath::Work,
             path_gesture: None,
             dirty: false,
+            document_generation: 0,
             source_format: "psd".to_string(),
             pdf_options: None,
             pdf_password: None,

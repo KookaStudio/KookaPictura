@@ -16,6 +16,24 @@ mod matting;
 mod smart_object_actions;
 mod vector_masks;
 
+fn property_compositing(doc: &Document, path: &str) -> Option<(BlendMode, u8, u8)> {
+    pictura_render::resolve_path(doc, path).map(|layer| (layer.blend, layer.opacity, layer.fill))
+}
+
+fn changed_property_region(
+    doc: &Document,
+    refs: &[&str],
+    before: &[Option<(BlendMode, u8, u8)>],
+) -> Option<Option<pictura_core::PsdRect>> {
+    refs.iter()
+        .zip(before)
+        .filter(|(path, before)| property_compositing(doc, path) != **before)
+        .try_fold(None, |union: Option<pictura_core::PsdRect>, (path, _)| {
+            let rect = pictura_render::resolve_path(doc, path).and_then(layer_visibility_region)?;
+            Some(Some(union.map_or(rect, |u| union_rect(u, rect))))
+        })
+}
+
 impl qobject::PictureView {
     pub fn layer_count(&self) -> i32 {
         self.rust()
@@ -581,13 +599,29 @@ impl qobject::PictureView {
         let value = value.clamp(0, 255) as u8;
         let owned = list_of_strings(paths);
         let refs = as_str_slice(&owned);
-        let changed = match self.as_mut().rust_mut().doc.as_mut() {
-            Some(doc) => pictura_render::set_opacity_paths(doc, &refs, value),
-            None => 0,
+        let (changed, region) = match self.as_mut().rust_mut().doc.as_mut() {
+            Some(doc) => {
+                let before: Vec<_> = refs
+                    .iter()
+                    .map(|path| property_compositing(doc, path))
+                    .collect();
+                let changed = pictura_render::set_opacity_paths(doc, &refs, value);
+                let region = if changed > 0 {
+                    changed_property_region(doc, &refs, &before)
+                } else {
+                    Some(None)
+                };
+                (changed, region)
+            }
+            None => (0, None),
         };
         if changed > 0 {
-            self.as_mut().recomposite();
+            match region {
+                Some(Some(rect)) => self.as_mut().refresh_region(rect),
+                _ => self.as_mut().recomposite(),
+            }
             let mut rust = self.as_mut().rust_mut();
+            rust.dirty = true;
             rust.content_revision = rust.content_revision.wrapping_add(1);
             rust.opacity_preview_changed = true;
         }
@@ -598,15 +632,36 @@ impl qobject::PictureView {
         let value = value.clamp(0, 255) as u8;
         let owned = list_of_strings(paths);
         let refs = as_str_slice(&owned);
-        let changed = match self.as_mut().rust_mut().doc.as_mut() {
-            Some(doc) => pictura_render::set_opacity_paths(doc, &refs, value),
-            None => 0,
+        let (changed, region) = match self.as_mut().rust_mut().doc.as_mut() {
+            Some(doc) => {
+                let before: Vec<_> = refs
+                    .iter()
+                    .map(|path| property_compositing(doc, path))
+                    .collect();
+                let changed = pictura_render::set_opacity_paths(doc, &refs, value);
+                let region = if changed > 0 {
+                    changed_property_region(doc, &refs, &before)
+                } else {
+                    Some(None)
+                };
+                (changed, region)
+            }
+            None => (0, None),
         };
         let pending = self.rust().opacity_preview_changed;
         self.as_mut().rust_mut().opacity_preview_changed = false;
+        let bounded = matches!(region, Some(Some(_)));
+        if changed > 0 {
+            match region {
+                Some(Some(rect)) => self.as_mut().refresh_region(rect),
+                _ => self.as_mut().recomposite(),
+            }
+        }
         if changed > 0 || pending {
-            self.as_mut().recomposite();
             self.as_mut().record("Opacity");
+            if changed == 0 || bounded {
+                self.as_mut().changed();
+            }
         }
         changed as i32
     }
@@ -615,13 +670,29 @@ impl qobject::PictureView {
         let value = value.clamp(0, 255) as u8;
         let owned = list_of_strings(paths);
         let refs = as_str_slice(&owned);
-        let changed = match self.as_mut().rust_mut().doc.as_mut() {
-            Some(doc) => pictura_render::set_fill_paths(doc, &refs, value),
-            None => 0,
+        let (changed, region) = match self.as_mut().rust_mut().doc.as_mut() {
+            Some(doc) => {
+                let before: Vec<_> = refs
+                    .iter()
+                    .map(|path| property_compositing(doc, path))
+                    .collect();
+                let changed = pictura_render::set_fill_paths(doc, &refs, value);
+                let region = if changed > 0 {
+                    changed_property_region(doc, &refs, &before)
+                } else {
+                    Some(None)
+                };
+                (changed, region)
+            }
+            None => (0, None),
         };
         if changed > 0 {
-            self.as_mut().recomposite();
+            match region {
+                Some(Some(rect)) => self.as_mut().refresh_region(rect),
+                _ => self.as_mut().recomposite(),
+            }
             let mut rust = self.as_mut().rust_mut();
+            rust.dirty = true;
             rust.content_revision = rust.content_revision.wrapping_add(1);
             rust.fill_preview_changed = true;
         }
@@ -632,15 +703,36 @@ impl qobject::PictureView {
         let value = value.clamp(0, 255) as u8;
         let owned = list_of_strings(paths);
         let refs = as_str_slice(&owned);
-        let changed = match self.as_mut().rust_mut().doc.as_mut() {
-            Some(doc) => pictura_render::set_fill_paths(doc, &refs, value),
-            None => 0,
+        let (changed, region) = match self.as_mut().rust_mut().doc.as_mut() {
+            Some(doc) => {
+                let before: Vec<_> = refs
+                    .iter()
+                    .map(|path| property_compositing(doc, path))
+                    .collect();
+                let changed = pictura_render::set_fill_paths(doc, &refs, value);
+                let region = if changed > 0 {
+                    changed_property_region(doc, &refs, &before)
+                } else {
+                    Some(None)
+                };
+                (changed, region)
+            }
+            None => (0, None),
         };
         let pending = self.rust().fill_preview_changed;
         self.as_mut().rust_mut().fill_preview_changed = false;
+        let bounded = matches!(region, Some(Some(_)));
+        if changed > 0 {
+            match region {
+                Some(Some(rect)) => self.as_mut().refresh_region(rect),
+                _ => self.as_mut().recomposite(),
+            }
+        }
         if changed > 0 || pending {
-            self.as_mut().recomposite();
             self.as_mut().record("Fill Opacity");
+            if changed == 0 || bounded {
+                self.as_mut().changed();
+            }
         }
         changed as i32
     }
@@ -893,25 +985,17 @@ impl qobject::PictureView {
         let refs = as_str_slice(&owned);
         let (changed, region) = match self.as_mut().rust_mut().doc.as_mut() {
             Some(doc) => {
-                // Only a layer whose compositing inputs moved reaches the
-                // repaint, so a skipped or unchanged group cannot unbound it.
-                let compositing = |doc: &Document, path: &str| {
-                    pictura_render::resolve_path(doc, path)
-                        .map(|layer| (layer.blend, layer.opacity, layer.fill))
-                };
-                let before: Vec<_> = refs.iter().map(|path| compositing(doc, path)).collect();
-                let changed = op(doc, &refs);
-                // `None`: unbounded; `Some(None)`: no pixel to repaint.
-                let region = refs
+                let before: Vec<_> = refs
                     .iter()
-                    .zip(before)
-                    .filter(|(path, before)| compositing(doc, path) != *before)
-                    .try_fold(None, |union: Option<pictura_core::PsdRect>, (path, _)| {
-                        let rect = pictura_render::resolve_path(doc, path)
-                            .and_then(layer_visibility_region)?;
-                        Some(Some(union.map_or(rect, |u| union_rect(u, rect))))
-                    });
-                (changed, if repaint { region } else { Some(None) })
+                    .map(|path| property_compositing(doc, path))
+                    .collect();
+                let changed = op(doc, &refs);
+                let region = if repaint {
+                    changed_property_region(doc, &refs, &before)
+                } else {
+                    Some(None)
+                };
+                (changed, region)
             }
             None => (0, None),
         };
@@ -929,5 +1013,43 @@ impl qobject::PictureView {
         }
         paint_timing::report();
         changed as i32
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pictura_core::{BlendMode, Document};
+
+    fn compositing(doc: &Document, path: &str) -> Option<(BlendMode, u8, u8)> {
+        pictura_render::resolve_path(doc, path)
+            .map(|layer| (layer.blend, layer.opacity, layer.fill))
+    }
+
+    #[test]
+    fn changed_property_region_bounds_a_pixel_layer_and_rejects_a_group() {
+        let base = vec![80u8; 64 * 64 * 4];
+        let mut doc = Document::from_rgba("base", 64, 64, &base);
+        let top: Vec<u8> = (0..32 * 32 * 4).map(|i| (i % 200) as u8).collect();
+        let path = pictura_render::add_raster_layer_from_rgba(&mut doc, "top", 32, 32, &top);
+        assert!(!path.is_empty());
+        let target = doc.layers.last().unwrap().rect;
+        let before = vec![compositing(&doc, &path)];
+        doc.layers.last_mut().unwrap().opacity = 128;
+        assert_eq!(
+            changed_property_region(&doc, &[path.as_str()], &before),
+            Some(Some(target)),
+            "a pixel layer is bounded by its rect"
+        );
+
+        let group = pictura_render::add_group_in(&mut doc, "", "group");
+        assert!(!group.is_empty());
+        let before = vec![compositing(&doc, &group)];
+        doc.layers.last_mut().unwrap().opacity = 128;
+        assert_eq!(
+            changed_property_region(&doc, &[group.as_str()], &before),
+            None,
+            "a group is unbounded"
+        );
     }
 }

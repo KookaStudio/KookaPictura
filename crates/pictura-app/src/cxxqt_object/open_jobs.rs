@@ -149,6 +149,7 @@ impl ImportSpec {
 /// Apply a decoded document to a view on the GUI thread.
 pub(super) fn apply_opened(rust: &mut PictureViewRust, opened: OpenedDocument) {
     rust.doc = Some(opened.doc);
+    rust.document_generation = rust.document_generation.wrapping_add(1);
     rust.reset_edit_state();
     rust.history = opened.history;
     rust.active_layer = opened.active_layer;
