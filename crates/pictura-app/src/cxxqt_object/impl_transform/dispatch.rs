@@ -2,10 +2,10 @@ use super::super::helpers::*;
 use super::super::qobject;
 use super::super::state::TransformMode;
 use super::geometry::{
-    gesture_distort, gesture_perspective, gesture_rotate, gesture_scale, gesture_skew,
-    gesture_translate, hit_test_quad, pivot_drag, pivot_hit, session_quad, MOVE_HANDLE,
-    PIVOT_HANDLE, ROTATE_HANDLE,
+    gesture_distort, gesture_perspective, gesture_rotate, gesture_scale, gesture_translate,
+    hit_test_quad, pivot_drag, pivot_hit, session_quad, MOVE_HANDLE, PIVOT_HANDLE, ROTATE_HANDLE,
 };
+use super::skew::gesture_skew;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -88,7 +88,7 @@ impl qobject::PictureView {
         y: f64,
         zoom: f64,
         shift: bool,
-        _alt: bool,
+        alt: bool,
     ) -> bool {
         if !x.is_finite() || !y.is_finite() {
             return false;
@@ -109,7 +109,7 @@ impl qobject::PictureView {
         match mode {
             TransformMode::Distort => gesture_distort(session, handle, x, y),
             TransformMode::Perspective => gesture_perspective(session, handle, x, y),
-            TransformMode::Skew => gesture_skew(session, handle, x, y, shift),
+            TransformMode::Skew => gesture_skew(session, handle, x, y, alt),
             TransformMode::Free => match handle {
                 MOVE_HANDLE => {
                     gesture_translate(session, x, y);

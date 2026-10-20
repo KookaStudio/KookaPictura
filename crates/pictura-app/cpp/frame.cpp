@@ -1061,6 +1061,27 @@ void PicturaMainWindow::updateStatus()
         PictureView* view = activeView();
         backendLabel_->setText(view ? view->active_backend() : QStringLiteral("—"));
     }
+    if (actionLabel_) {
+        QString action;
+        PictureView* view = activeView();
+        if (hasDoc && view && tools_ && tools_->transformSessionActive()) {
+            const QString mode = transform_session_mode(*view);
+            if (mode == QStringLiteral("skew")) {
+                action = QStringLiteral("Skew in progress");
+            } else if (mode == QStringLiteral("distort")) {
+                action = QStringLiteral("Distort in progress");
+            } else if (mode == QStringLiteral("perspective")) {
+                action = QStringLiteral("Perspective in progress");
+            } else {
+                action = QStringLiteral("Free Transform in progress");
+            }
+        }
+        actionLabel_->setText(action);
+        actionLabel_->setVisible(!action.isEmpty());
+        if (actionSeparator_) {
+            actionSeparator_->setVisible(!action.isEmpty());
+        }
+    }
     const bool showHints = hasDoc && hintsVisible_;
     if (hintBar_) {
         hintBar_->setVisible(showHints);

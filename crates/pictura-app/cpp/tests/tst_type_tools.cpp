@@ -109,6 +109,7 @@ private slots:
     void typeKeysAndCancel();
     void reopenTypeLayer();
     void freeTransformKeepsType();
+    void skewKeepsType();
     void freeTransformRotateCursor();
     void textEditModel();
     void editLikeATextField();
@@ -380,6 +381,42 @@ void TypeToolsTest::freeTransformKeepsType()
     QVERIFY2(f.committedOnce(base + 1, "Edit Type Layer"), "edited after the transform");
     QVERIFY(layerRect(f, path).width() > stretched.width() + 10);
     QCOMPARE(layerRect(f, path).height(), stretched.height());
+    f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(saved);
+}
+
+// A Skew corner drag slides the whole followed edge on an editable type layer,
+// so the quad stays affine and the layer is re-set as type rather than
+// resampled.
+void TypeToolsTest::skewKeepsType()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_type_skew"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    frame.setActiveTool(pictura::ToolId::HorizontalType);
+    const pictura::TypeOptions saved = f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get();
+    pictura::TypeOptions o = saved;
+    o.size = 30.0;
+    f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(o);
+    f.drag({QPointF(10, 60)});
+    QTest::keyClicks(f.canvas, QStringLiteral("Wide"));
+    QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
+    const QString path = typeLayer(f);
+    QVERIFY2(!path.isEmpty(), "a type layer");
+    const QRect before = layerRect(f, path);
+    frame.setActiveTool(pictura::ToolId::Move);
+
+    // Drag the top-right corner mostly horizontally: the top edge slides.
+    QVERIFY(f.view->begin_transform_mode(path, QStringLiteral("skew")));
+    QVERIFY(f.view->transform_press(before.right() + 1, before.top(), 1.0, false, false) == 1);
+    QVERIFY(f.view->transform_move(before.right() + 11, before.top() + 3, 1.0, false, false));
+    f.view->transform_release();
+    const int base = f.view->history_index();
+    QVERIFY(f.view->commit_transform());
+    QVERIFY2(f.committedOnce(base, "Free Transform"), "one Free Transform state");
+
+    QVERIFY2(pictura::type_api::isType(*f.view, path), "the skew stays type");
+    QVERIFY2(layerRect(f, path).width() > before.width(), "the top edge slid");
     f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(saved);
 }
 

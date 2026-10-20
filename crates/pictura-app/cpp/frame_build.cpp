@@ -670,6 +670,9 @@ void PicturaMainWindow::buildStatusBar()
 
     backendLabel_ = new QLabel(QStringLiteral("—"), bar);
     backendLabel_->setObjectName(QStringLiteral("statusBackendLabel"));
+    actionLabel_ = new QLabel(bar);
+    actionLabel_->setObjectName(QStringLiteral("statusActionLabel"));
+    actionLabel_->hide();
     hintBar_ = new ToolHintBar(bar);
     // A ~28px status strip: cap the readouts and hint so the bar trims 4px
     // without clipping. (The theme already dropped the bar's top border.)
@@ -678,6 +681,7 @@ void PicturaMainWindow::buildStatusBar()
     sizeLabel_->setFixedHeight(kStatusItemHeight);
     statusOptionsButton_->setFixedHeight(kStatusItemHeight);
     backendLabel_->setFixedHeight(kStatusItemHeight);
+    actionLabel_->setFixedHeight(kStatusItemHeight);
     hintBar_->setFixedHeight(kStatusItemHeight);
 
     // A 1px themable rule between the footer groups. Mouse-transparent so it
@@ -700,6 +704,10 @@ void PicturaMainWindow::buildStatusBar()
     bar->addWidget(statusOptionsButton_);
     bar->addWidget(makeSeparator());
     bar->addWidget(backendLabel_);
+    // The action readout ("Skew in progress") travels with its rule.
+    actionSeparator_ = makeSeparator();
+    bar->addWidget(actionSeparator_);
+    bar->addWidget(actionLabel_);
     // The rule before the hint strip travels with the strip's visibility.
     hintSeparator_ = makeSeparator();
     bar->addWidget(hintSeparator_);
@@ -711,6 +719,9 @@ void PicturaMainWindow::buildStatusBar()
                             QPointF(canvas->width() / 2.0, canvas->height() / 2.0));
         }
     });
+    if (tools_) {
+        connect(tools_, &ToolController::transformChanged, this, [this]() { updateStatus(); });
+    }
     updateToolHint();
 }
 

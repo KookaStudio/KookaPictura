@@ -764,6 +764,9 @@ private:
     // The rule between the GPU readout and the hint strip; hidden with the strip.
     QFrame* hintSeparator_ = nullptr;
     QLabel* backendLabel_ = nullptr;
+    QLabel* actionLabel_ = nullptr;
+    // The rule before the action label; hidden with the label.
+    QFrame* actionSeparator_ = nullptr;
     QToolButton* statusOptionsButton_ = nullptr;
     QString statusReadout_ = QStringLiteral("sizes");
     bool hintsVisible_ = true;

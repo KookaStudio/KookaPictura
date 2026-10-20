@@ -1069,8 +1069,9 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
     frame.imageView()->clearTransformPreview();
     const bool skewEdge = skewAfter.size() == 4
         && std::abs(skewAfter.at(0).x() - sRect.left() - 2.0) < 1e-6
+        && std::abs(skewAfter.at(0).y() - sRect.top()) < 1e-6
         && std::abs(skewAfter.at(1).x() - sRect.right() - 2.0) < 1e-6
-        && std::abs(skewAfter.at(1).y() - sRect.top() - 3.0) < 1e-6
+        && std::abs(skewAfter.at(1).y() - sRect.top()) < 1e-6
         && std::abs(skewAfter.at(2).y() - sRect.bottom()) < 1e-6
         && std::abs(skewAfter.at(3).y() - sRect.bottom()) < 1e-6;
 

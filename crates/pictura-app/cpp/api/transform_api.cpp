@@ -8,6 +8,23 @@
 
 namespace pictura::transform_api {
 
+namespace {
+
+Matrix matrixFromExtents(const ::rust::Vec<double>& extents)
+{
+    Matrix out;
+    if (extents.size() != 9) {
+        return out;
+    }
+    for (size_t i = 0; i < 9; ++i) {
+        out.coefficients[i] = extents[i];
+    }
+    out.valid = true;
+    return out;
+}
+
+} // namespace
+
 QString LayerRect::toString() const
 {
     if (!valid) {
@@ -57,16 +74,12 @@ Quad quad(const PictureView& view)
 
 Matrix previewMatrix(const PictureView& view)
 {
-    const ::rust::Vec<double> extents = transform_preview_matrix_extents(view);
-    Matrix out;
-    if (extents.size() != 9) {
-        return out;
-    }
-    for (size_t i = 0; i < 9; ++i) {
-        out.coefficients[i] = extents[i];
-    }
-    out.valid = true;
-    return out;
+    return matrixFromExtents(transform_preview_matrix_extents(view));
+}
+
+Matrix previewLocalMatrix(const PictureView& view)
+{
+    return matrixFromExtents(transform_preview_local_matrix_extents(view));
 }
 
 } // namespace pictura::transform_api

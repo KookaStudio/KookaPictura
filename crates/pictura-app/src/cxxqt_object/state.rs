@@ -77,6 +77,9 @@ pub struct TransformSession {
     pub(super) dragging: bool,
     /// Gesture mode; `Free` uses the similarity scalars.
     pub(super) mode: TransformMode,
+    /// Whether the target is an editable type layer: Skew keeps it a
+    /// parallelogram so the text stays type.
+    pub(super) type_layer: bool,
     /// Live target quad for a projective mode; `None` in `Free`.
     pub(super) quad: Option<[(f64, f64); 4]>,
     /// Quad captured at begin/press for a projective gesture.

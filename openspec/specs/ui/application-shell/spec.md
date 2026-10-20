@@ -175,7 +175,11 @@ is open the status bar SHALL show no readouts and no tool hint — only its
 background — and SHALL show them again once a document opens. The status bar
 SHALL use a small left padding and SHALL NOT draw the right-side size-grip
 corner triangle. The status-bar magnification readout and any zoom control SHALL
-show the same value in the same format.
+show the same value in the same format. While a Free Transform, Skew, Distort,
+or Perspective session is active the status bar SHALL also show an action
+readout naming it (`Free Transform in progress`, `Skew in progress`, `Distort in
+progress`, or `Perspective in progress`); the readout SHALL clear when the
+session commits or cancels.
 
 #### Scenario: Magnification and size shown
 
@@ -196,6 +200,11 @@ show the same value in the same format.
 
 - **WHEN** the status bar is shown
 - **THEN** it draws no right-side size-grip corner triangle and uses a small left padding
+
+#### Scenario: A transform session names its action [las_status_action]
+
+- **WHEN** `Edit > Transform > Skew` begins a session
+- **THEN** the status bar shows `Skew in progress` until the session commits or cancels
 
 ### Requirement: CS6-style chrome styling
 

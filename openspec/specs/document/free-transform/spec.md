@@ -216,7 +216,12 @@ layer hidden plus a cached image of the target layer under the current
 `QTransform`, reusing the Move tool's cached base/layer overlay. The session MUST
 NOT rebuild the document composite on each mouse move. For a channel-less
 embedded target the preview layer image SHALL be rendered from its embedded
-source without mutating the document.
+source without mutating the document. When the target's raw channels do not
+carry its whole appearance — a layer mask, vector mask, layer style, fill
+adjustment, clipping group, or editable type — the preview layer image SHALL instead be rendered
+through the compositor with the layer's opacity and blend neutralized, cropped
+to the layer's rect, so the live preview keeps that appearance. The preview
+SHALL apply the layer opacity once.
 
 #### Scenario: A drag does not recomposite
 
@@ -227,6 +232,11 @@ source without mutating the document.
 
 - **WHEN** a session is begun on a channel-less embedded smart object
 - **THEN** the document equals its pre-session value until commit
+
+#### Scenario: A styled layer keeps its color [ft_preview_appearance]
+
+- **WHEN** a transform session begins on a layer whose visible color comes from a layer style, layer mask, vector mask, fill adjustment, clipping group, or type
+- **THEN** the live preview shows that appearance rather than the bare channels
 
 ### Requirement: Place starts a Free Transform session
 
@@ -332,16 +342,22 @@ drive the transform; in a projective mode the session SHALL hold the live target
 quad and the scalars SHALL be unused. A corner drag in `Distort` SHALL set that
 corner to the pointer; a corner drag in `Perspective` SHALL set that corner to
 the pointer and move the opposite corner by the negated delta about the quad
-centre; an edge drag in `Skew` SHALL translate that edge's two endpoints by the
-same delta, constrained to the edge axis when Shift is held. A projective-mode
-gesture that would make the quad degenerate SHALL be refused. Hit testing in a
-projective mode SHALL accept only the eight bounding handles; a press away from a
-handle SHALL not move or rotate. Committing SHALL call `transform_layer_quad` for
-the projective modes and `transform_layer` for `Free`, recomposite, and record
+centre. In `Skew`, a corner drag SHALL move that corner alone along whichever of
+its two adjacent edges the drag follows most, and an edge drag SHALL slide that
+edge's two endpoints only along the edge's own axis. Holding Alt in `Skew` SHALL
+move the opposite corner, or the opposite edge, by the same displacement in the
+opposite direction; Shift SHALL have no effect in `Skew`. A `Skew` corner drag on
+an editable type layer SHALL slide the whole followed edge, keeping the quad a
+parallelogram so the text stays type. A `Skew` corner drag SHALL stop where the
+quad would become concave or fold over itself. A projective-mode gesture that
+would make the quad degenerate SHALL be refused. Hit testing in a projective mode
+SHALL accept only the eight bounding handles; a press away from a handle SHALL
+not move or rotate. Committing SHALL call `transform_layer_quad` for the
+projective modes and `transform_layer` for `Free`, recomposite, and record
 exactly one `"Free Transform"` history state; an identity commit SHALL record
 none; Escape SHALL leave the document bit-identical with no history state added.
-The precise gesture semantics are inferred from CS6 behavior (no reference image
-oracle); the projective map itself is exact.
+The precise gesture semantics are inferred from Photoshop's Skew mode (no
+reference image oracle); the projective map itself is exact.
 
 #### Scenario: Distort commits the dragged corner
 
@@ -353,10 +369,30 @@ oracle); the projective map itself is exact.
 - **WHEN** a `Perspective` session drags a corner by a delta and commits
 - **THEN** the opposite corner moves by the negated delta and the quad centre is unchanged
 
+#### Scenario: A Skew corner follows its dominant edge [skew_corner]
+
+- **WHEN** a `Skew` session drags a corner mostly along one of its two adjacent edges
+- **THEN** only that corner moves, along that edge, and the other corners stay put
+
 #### Scenario: Skew slides one edge
 
-- **WHEN** a `Skew` session drags an edge handle and commits
-- **THEN** that edge translates by the drag delta, the opposite edge is unchanged, and exactly one `"Free Transform"` state is added
+- **WHEN** a `Skew` session drags an edge handle with an off-axis component
+- **THEN** the edge's two endpoints move only along the edge's axis and the opposite edge is unchanged
+
+#### Scenario: Alt mirrors the opposite corner or edge [skew_alt]
+
+- **WHEN** a `Skew` session drags a corner or edge with Alt held
+- **THEN** the opposite corner or edge moves by the same displacement in the opposite direction
+
+#### Scenario: Skew keeps editable type a parallelogram [skew_type]
+
+- **WHEN** a `Skew` session on an editable type layer drags a corner
+- **THEN** the corner's whole followed edge slides and the quad remains a parallelogram
+
+#### Scenario: A Skew corner stops before folding [skew_convex]
+
+- **WHEN** a `Skew` session drags a corner past the point where the quad would become concave
+- **THEN** the stored quad stays convex and the dragged corner has not crossed to the other side
 
 #### Scenario: Escape cancels a projective mode exactly
 
