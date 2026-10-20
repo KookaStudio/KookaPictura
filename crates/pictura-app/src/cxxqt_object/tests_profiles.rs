@@ -19,10 +19,10 @@ fn ms(label: &str, d: std::time::Duration) {
 #[ignore = "4000x4000 opacity preview profile; run explicitly with --ignored --nocapture"]
 fn opacity_preview_profile_4000() {
     let mut doc = Document::new(4000, 4000, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
         pixel_layer("base", 4000, 4000, (30, 60, 90)),
         pixel_layer("top", 512, 512, (200, 100, 50)),
-    ];
+    ]);
     let rect = doc.layers.last().unwrap().rect;
     let steps = 3usize;
     let start = std::time::Instant::now();

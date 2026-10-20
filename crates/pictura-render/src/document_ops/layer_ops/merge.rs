@@ -455,12 +455,10 @@ fn splice_result(
     node: Layer,
 ) -> Option<String> {
     let (anchor_index, parent) = anchor.split_last()?;
-    let at = doc
+    let path = doc
         .layers
         .splice(remove, parent, *anchor_index, vec![node])
         .ok()?;
-    let mut path = parent.to_vec();
-    path.push(at);
     Some(format_segments(&path))
 }
 

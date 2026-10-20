@@ -29,10 +29,7 @@ impl qobject::PictureView {
         };
         let region = layer_visibility_region(&layer);
         let pushed = match self.as_mut().rust_mut().doc.as_mut() {
-            Some(doc) => {
-                let _ = doc.layers.push(layer);
-                true
-            }
+            Some(doc) => doc.layers.push(layer).is_ok(),
             None => false,
         };
         if pushed {

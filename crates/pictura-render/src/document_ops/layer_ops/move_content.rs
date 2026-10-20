@@ -32,15 +32,15 @@ pub fn lift_selection(doc: &mut Document, source_path: &str, coverage: &[u8]) ->
     let Some(floating) = lifted_copy(source, coverage, doc.width, doc.height) else {
         return String::new();
     };
-    // `can_lift_selection` already refused the locks `clear_layer` checks, so
-    // its result only says whether a sample changed (white on white does not).
-    clear_layer(doc, source_path, Some(coverage));
     let Some((&index, parent)) = segments.split_last() else {
         return String::new();
     };
     if doc.layers.insert(parent, index + 1, floating).is_err() {
         return String::new();
     }
+    // Clear only after the floating layer is safely in the stack: a refused
+    // insert must not erase the source pixels.
+    clear_layer(doc, source_path, Some(coverage));
     let mut path = segments;
     if let Some(last) = path.last_mut() {
         *last = index + 1;
@@ -155,6 +155,12 @@ pub fn merge_lifted(doc: &mut Document, lifted_path: &str) -> bool {
     };
     if index == 0 {
         return false;
+    }
+    // The floating layer is a temporary base for the run above it. Mark it
+    // clipped for the removal so the run stays clipped to the layer below,
+    // matching the pre-LayerStack lift/merge behavior.
+    if let Some(floating) = resolve_path_mut(doc, lifted_path) {
+        floating.clipping = true;
     }
     let Some(floating) = doc.layers.remove(&segments) else {
         return false;

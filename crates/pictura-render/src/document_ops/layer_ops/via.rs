@@ -40,15 +40,15 @@ fn via(doc: &mut Document, source_path: &str, mask: &LayerMask, cut: bool) -> St
         let name = format!("{} copy", source.name);
         copy_source(source, mask, mask_data, doc.width, doc.height, name)
     };
-    if cut {
-        clear_source(doc, &segments, mask, mask_data);
-    }
     let Some((&index, parent)) = segments.split_last() else {
         return String::new();
     };
     let at = index + 1;
     if doc.layers.insert(parent, at, copy).is_err() {
         return String::new();
+    }
+    if cut {
+        clear_source(doc, &segments, mask, mask_data);
     }
     let mut path = segments;
     if let Some(last) = path.last_mut() {

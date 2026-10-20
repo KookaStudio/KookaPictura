@@ -257,19 +257,19 @@ pub(crate) fn insert_node(doc: &mut Document, selection_path: &str, node: Layer)
             new_segments.push(index);
             return format_segments(&new_segments);
         }
-        let Some((&index, parent)) = segments.split_last() else {
-            return String::new();
-        };
-        let len = container_of(doc, parent).map_or(0, |container| container.len());
-        let at = insertion_index(len, index as i32);
-        if doc.layers.insert(parent, at, node).is_err() {
-            return String::new();
+        if let Some((&index, parent)) = segments.split_last() {
+            if let Some(container) = container_of(doc, parent) {
+                let at = insertion_index(container.len(), index as i32);
+                if doc.layers.insert(parent, at, node).is_err() {
+                    return String::new();
+                }
+                let mut new_segments = segments;
+                if let Some(last) = new_segments.last_mut() {
+                    *last = at;
+                }
+                return format_segments(&new_segments);
+            }
         }
-        let mut new_segments = segments;
-        if let Some(last) = new_segments.last_mut() {
-            *last = at;
-        }
-        return format_segments(&new_segments);
     }
     let at = insertion_index(doc.layers.len(), -1);
     if doc.layers.insert(&[], at, node).is_err() {
@@ -399,7 +399,9 @@ pub fn add_raster_layer_from_rgba(
         ..Default::default()
     };
     let index = doc.layers.len();
-    let _ = doc.layers.push(layer);
+    if doc.layers.push(layer).is_err() {
+        return String::new();
+    }
     format_segments(&[index])
 }
 
@@ -520,19 +522,12 @@ pub(super) fn release_background(layer: &mut Layer) {
     }
 }
 
-/// Whether any node in the tree carries the Background flag.
-fn has_background(layers: &[Layer]) -> bool {
-    layers
-        .iter()
-        .any(|layer| layer.background || has_background(&layer.children))
-}
-
 /// Whether `path` can become the Background: it is a raster layer that is not
 /// already the Background, and the document has no Background yet.
 pub fn can_background_from_layer(doc: &Document, path: &str) -> bool {
     resolve_path(doc, path)
         .is_some_and(|layer| !layer.is_group && layer.adjustment.is_none() && !layer.background)
-        && !has_background(&doc.layers)
+        && !doc.layers.has_background()
 }
 
 pub fn background_from_layer(doc: &mut Document, path: &str) -> bool {

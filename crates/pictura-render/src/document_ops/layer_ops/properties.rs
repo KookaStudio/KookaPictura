@@ -391,6 +391,9 @@ pub fn can_move_path(doc: &Document, path: &str, delta: i32) -> bool {
     let Some(container) = container_of(doc, parent) else {
         return false;
     };
+    if container.is_empty() {
+        return false;
+    }
     let floor = background_floor(container);
     let last = container.len() - 1;
     if index < floor || floor > last {
