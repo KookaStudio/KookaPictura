@@ -103,11 +103,15 @@ private slots:
     void distortCommandDisabledForEditableType();
     void distortCommandDisabledForGroup();
     void projectivePreviewClipsAtTheHorizon();
+    void projectivePreviewSamplesAtTheViewScale();
+    void projectivePreviewFollowsTheViewport();
+    void warpPresetPreviewKeepsContentOutsideTheBox();
 
 private:
     QString beginLayer(Fixture& fixture);
     QString beginTypeLayer(Fixture& fixture);
     void beginDistort(Fixture& fixture, const QString& path);
+    QString beginLargeLayer(Fixture& fixture, const QRect& box);
 
     pictura::test::ScopedStateHome stateHome_;
     std::unique_ptr<pictura::PicturaMainWindow> window_;
@@ -176,6 +180,24 @@ QString TransformDistortTest::beginTypeLayer(Fixture& fixture)
     options->set(saved);
     fixture.frame.setActiveTool(pictura::ToolId::Move);
     return path;
+}
+
+QString TransformDistortTest::beginLargeLayer(Fixture& fixture, const QRect& box)
+{
+    const int added = fixture.view->add_layer(0);
+    if (added <= 0) {
+        return QString();
+    }
+    const QString layer = QString::number(added);
+    fixture.frame.selectLayerPath(layer);
+    if (!fixture.view->select_rect(box.x(), box.y(), box.width(), box.height(),
+                                   QStringLiteral("new"), 0.0)
+        || !pictura::edit_fill(*fixture.view, qRgba(0, 0, 0, 255), -1,
+                               QStringLiteral("normal"), 100, false)) {
+        return QString();
+    }
+    fixture.view->deselect();
+    return layer;
 }
 
 void TransformDistortTest::beginDistort(Fixture& fixture, const QString& path)
@@ -620,30 +642,136 @@ void TransformDistortTest::distortCommandDisabledForGroup()
 void TransformDistortTest::projectivePreviewClipsAtTheHorizon()
 {
     // The source's forward divisor is 1 - 0.02x: positive at x = 0, negative
-    // at x = 100. The centre is on the positive side, so the front half-plane
-    // is x' > -50 in the local destination.
+    // at x = 100, and zero at the centre, which counts as the front side. The
+    // projected corners span x' in [-100, 0], but the front side also reaches
+    // x' > 0 (destination 50.5 maps back to source 25.12).
     QImage source(100, 100, QImage::Format_ARGB32_Premultiplied);
     source.fill(Qt::white);
     const std::array<double, 9> local{1.0, 0.0, -0.02, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
     const pictura::WarpedTransformPreview warped = pictura::warpTransformPreview(
         source, QPointF(0.0, 0.0), local, QRectF(0.0, 0.0, 100.0, 100.0),
-        QRectF(-100.0, -100.0, 200.0, 200.0));
+        QRectF(-200.0, -200.0, 400.0, 400.0), 1.0);
     QVERIFY(!warped.image.isNull());
-    const QPoint front = (QPointF(0.0, 0.0) - warped.origin).toPoint();
-    const QPoint far = (QPointF(-100.0, 0.0) - warped.origin).toPoint();
-    QVERIFY(warped.image.rect().contains(front));
-    QCOMPARE(qAlpha(warped.image.pixel(front)), 255);
-    QVERIFY2(!warped.image.rect().contains(far), "the far side is not drawn");
+    const auto alphaAt = [&warped](const QPointF& destination) {
+        const QPoint pixel = (destination - warped.origin).toPoint();
+        return warped.image.rect().contains(pixel) ? qAlpha(warped.image.pixel(pixel)) : -1;
+    };
+    QCOMPARE(alphaAt(QPointF(0.5, 0.5)), 255);
+    QVERIFY2(alphaAt(QPointF(50.5, 50.5)) == 255,
+             "the front side beyond the projected corners is drawn");
+    // Destination (-150, -100) maps back to source (75, 50), on the far side.
+    QVERIFY2(alphaAt(QPointF(-149.5, -99.5)) == 0, "the far side is transparent");
 
     // An affine map has no horizon and keeps the whole source.
     const std::array<double, 9> identity{1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
     const pictura::WarpedTransformPreview plain = pictura::warpTransformPreview(
         source, QPointF(0.0, 0.0), identity, QRectF(0.0, 0.0, 100.0, 100.0),
-        QRectF(-100.0, -100.0, 200.0, 200.0));
+        QRectF(-100.0, -100.0, 200.0, 200.0), 1.0);
     QVERIFY(!plain.image.isNull());
     const QPoint middle = (QPointF(50.0, 50.0) - plain.origin).toPoint();
     QVERIFY(plain.image.rect().contains(middle));
     QCOMPARE(qAlpha(plain.image.pixel(middle)), 255);
+}
+
+void TransformDistortTest::projectivePreviewSamplesAtTheViewScale()
+{
+    // At 10% a 1000-pixel layer warps to about 100 output pixels a side that
+    // still cover the whole layer in document space.
+    QImage source(1000, 1000, QImage::Format_ARGB32_Premultiplied);
+    source.fill(Qt::white);
+    const std::array<double, 9> identity{1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
+    const pictura::WarpedTransformPreview warped = pictura::warpTransformPreview(
+        source, QPointF(0.0, 0.0), identity, QRectF(0.0, 0.0, 1000.0, 1000.0),
+        QRectF(0.0, 0.0, 1000.0, 1000.0), 0.1);
+    QVERIFY(!warped.image.isNull());
+    QCOMPARE(warped.scale, 0.1);
+    QVERIFY2(warped.image.width() <= 101 && warped.image.height() <= 101,
+             qPrintable(QStringLiteral("output %1x%2")
+                            .arg(warped.image.width())
+                            .arg(warped.image.height())));
+    const QRectF extent(warped.origin, QSizeF(warped.image.size()) / warped.scale);
+    QVERIFY(extent.contains(QRectF(0.5, 0.5, 999.0, 999.0)));
+    QCOMPARE(qAlpha(warped.image.pixel(50, 50)), 255);
+}
+
+void TransformDistortTest::projectivePreviewFollowsTheViewport()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&frame));
+    QTest::qWait(50);
+
+    QImage seed(500, 400, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_distort_viewport"));
+    QVERIFY(f.ok());
+    const QString layer = beginLargeLayer(f, QRect(125, 165, 210, 50));
+    QVERIFY(!layer.isEmpty());
+    beginDistort(f, layer);
+
+    // Zoom in on the left end so the right end is off screen when the warp is
+    // built, then zoom back out without another transform update.
+    const double zoom = f.canvas->zoom();
+    const QPointF anchor = f.canvas->imageToWidget(QPointF(150.0, 190.0));
+    f.canvas->setZoom(zoom * 8.0, anchor);
+    QVERIFY(!f.canvas->visibleDocumentRect().contains(QPointF(380.0, 180.0)));
+    f.canvas->mousePressed(quadOf(f.view).at(1), Qt::LeftButton, int(Qt::NoModifier));
+    f.canvas->mouseMoved(QPointF(445.0, 165.0));
+    f.canvas->mouseReleased(QPointF(445.0, 165.0));
+    QVERIFY(samePoint(quadOf(f.view).at(1), QPointF(445.0, 165.0)));
+    f.canvas->grab();
+
+    f.canvas->setZoom(zoom, anchor);
+    QCoreApplication::processEvents();
+    const QImage shot = f.canvas->grab().toImage();
+    for (const QPointF& point : {QPointF(150.0, 190.0), QPointF(300.0, 190.0),
+                                 QPointF(380.0, 180.0)}) {
+        const QPoint mapped = f.canvas->imageToWidget(point).toPoint();
+        QVERIFY(shot.rect().contains(mapped));
+        QVERIFY2(shot.pixelColor(mapped) == QColor(Qt::black),
+                 qPrintable(QStringLiteral("the preview is drawn at %1,%2 after zooming out (%3)")
+                                .arg(point.x())
+                                .arg(point.y())
+                                .arg(shot.pixelColor(mapped).name())));
+    }
+    f.tools->cancelFreeTransform();
+}
+
+void TransformDistortTest::warpPresetPreviewKeepsContentOutsideTheBox()
+{
+    // A preset warp hands the canvas an already-warped preview layer with an
+    // identity matrix and no source box; the whole layer is drawn, including
+    // content past the original box.
+    // ponytail: drives the canvas directly; drive setTransformWarp end to end
+    // once preset warps keep layer content (#751).
+    pictura::PicturaMainWindow& frame = *window_;
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&frame));
+    QTest::qWait(50);
+
+    QImage seed(500, 400, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_distort_warp_preset"));
+    QVERIFY(f.ok());
+    QImage base(500, 400, QImage::Format_ARGB32_Premultiplied);
+    base.fill(Qt::white);
+    QImage warped(250, 100, QImage::Format_ARGB32_Premultiplied);
+    warped.fill(Qt::black);
+    const std::array<double, 9> identity{1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
+    f.canvas->beginTransformPreview(base, warped, QPointF(100.0, 100.0), 1.0);
+    f.canvas->setTransformPreviewProjective(identity, QRectF());
+
+    const QImage shot = f.canvas->grab().toImage();
+    for (const QPointF& point : {QPointF(150.0, 150.0), QPointF(320.0, 150.0)}) {
+        const QPoint mapped = f.canvas->imageToWidget(point).toPoint();
+        QVERIFY(shot.rect().contains(mapped));
+        QVERIFY2(shot.pixelColor(mapped) == QColor(Qt::black),
+                 qPrintable(QStringLiteral("the warped preview is drawn at %1,%2 (%3)")
+                                .arg(point.x())
+                                .arg(point.y())
+                                .arg(shot.pixelColor(mapped).name())));
+    }
+    f.canvas->clearTransformPreview();
 }
 
 QTEST_MAIN(TransformDistortTest)

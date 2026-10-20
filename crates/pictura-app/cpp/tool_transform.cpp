@@ -100,8 +100,12 @@ void ToolController::updateTransformOverlay(PictureView* v)
                                transform_show_pivot(*v));
     const transform_api::Matrix matrix = transform_api::previewLocalMatrix(*v);
     if (matrix.valid) {
+        // A warped preview layer already carries the transform and warp, so it
+        // is drawn whole (an empty source); otherwise sample the original box.
         QRectF source;
-        const QStringList parts = transform_session_rect(*v).split(QLatin1Char(' '));
+        const QStringList parts = transform_warp_active(*v)
+            ? QStringList()
+            : transform_session_rect(*v).split(QLatin1Char(' '));
         if (parts.size() == 4) {
             const double x = v->move_preview_x();
             const double y = v->move_preview_y();

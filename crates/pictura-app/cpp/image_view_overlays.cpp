@@ -130,6 +130,7 @@ void ImageView::updateTransformPreviewLayer(const QImage& layer, const QPointF& 
 {
     moveLayer_ = layer;
     moveLayerPos_ = layerPos;
+    transformWarpedStale_ = true;
     update();
 }
 

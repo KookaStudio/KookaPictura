@@ -1,8 +1,9 @@
 // CPU-warped live projective preview. Qt's raster engine can drop one triangle
 // of an image drawn under a projective QTransform at some angles; warping the
 // preview layer here keeps the whole shape and matches the committed engine.
-// ponytail: the warp runs on the GUI thread per move, bounded by the visible
-// canvas; cap its resolution if 4K canvases lag.
+// ponytail: the warp runs on the GUI thread, bounded by the visible canvas at
+// the view's scale (about one sample per screen pixel); move it off-thread if a
+// 4K viewport lags. Zoomed-out samples are point-bilinear, not area-averaged.
 
 #include "image_view.h"
 
@@ -50,10 +51,11 @@ QRgb bilinear(const QImage& image, double x, double y)
 WarpedTransformPreview warpTransformPreview(const QImage& source, const QPointF& sourceOrigin,
                                             const std::array<double, 9>& coefficients,
                                             const QRectF& sourceRect,
-                                            const QRectF& visibleDocument)
+                                            const QRectF& visibleDocument, double scale)
 {
     WarpedTransformPreview out;
-    if (source.isNull() || sourceRect.isEmpty() || visibleDocument.isEmpty()) {
+    if (source.isNull() || sourceRect.isEmpty() || visibleDocument.isEmpty()
+        || !(scale > 0.0)) {
         return out;
     }
     const QTransform forward(coefficients[0], coefficients[1], coefficients[2],
@@ -73,23 +75,10 @@ WarpedTransformPreview warpTransformPreview(const QImage& source, const QPointF&
         QPointF(sourceRect.right(), sourceRect.bottom()),
         QPointF(sourceRect.left(), sourceRect.bottom()),
     };
-    double minX = std::numeric_limits<double>::infinity();
-    double minY = std::numeric_limits<double>::infinity();
-    double maxX = -std::numeric_limits<double>::infinity();
-    double maxY = -std::numeric_limits<double>::infinity();
     int ahead = 0;
     for (const QPointF& corner : corners) {
-        const QPointF mapped = forward.map(corner);
-        if (!std::isfinite(mapped.x()) || !std::isfinite(mapped.y())) {
-            return out;
-        }
-        minX = std::min(minX, mapped.x());
-        minY = std::min(minY, mapped.y());
-        maxX = std::max(maxX, mapped.x());
-        maxY = std::max(maxY, mapped.y());
         ahead += w(corner.x(), corner.y()) > 0.0 ? 1 : 0;
     }
-    const QRectF bounds(minX, minY, maxX - minX, maxY - minY);
     const double front = ahead >= 3   ? 1.0
         : ahead <= 1                  ? -1.0
         : (w((sourceRect.left() + sourceRect.right()) / 2.0,
@@ -98,11 +87,35 @@ WarpedTransformPreview warpTransformPreview(const QImage& source, const QPointF&
                ? 1.0
                : -1.0);
     const QRectF visibleLocal = visibleDocument.translated(-sourceOrigin);
-    const QRectF destination = bounds.intersected(visibleLocal);
+    QRectF destination = visibleLocal;
+    // A source that crosses the horizon maps its front side outside its own
+    // projected corners, so only a one-sided source is bounded by them; the
+    // per-sample front-side check rejects the far side.
+    if (ahead == 0 || ahead == 4) {
+        double minX = std::numeric_limits<double>::infinity();
+        double minY = std::numeric_limits<double>::infinity();
+        double maxX = -std::numeric_limits<double>::infinity();
+        double maxY = -std::numeric_limits<double>::infinity();
+        for (const QPointF& corner : corners) {
+            const QPointF mapped = forward.map(corner);
+            if (!std::isfinite(mapped.x()) || !std::isfinite(mapped.y())) {
+                return out;
+            }
+            minX = std::min(minX, mapped.x());
+            minY = std::min(minY, mapped.y());
+            maxX = std::max(maxX, mapped.x());
+            maxY = std::max(maxY, mapped.y());
+        }
+        destination = QRectF(minX, minY, maxX - minX, maxY - minY).intersected(visibleLocal);
+    }
     if (destination.isEmpty()) {
         return out;
     }
-    const QRect pixels = destination.toAlignedRect();
+    const QRect pixels =
+        QRectF(destination.topLeft() * scale, destination.size() * scale).toAlignedRect();
+    if (pixels.isEmpty()) {
+        return out;
+    }
     QImage src = source.format() == QImage::Format_ARGB32_Premultiplied
         ? source
         : source.convertToFormat(QImage::Format_ARGB32_Premultiplied);
@@ -112,8 +125,8 @@ WarpedTransformPreview warpTransformPreview(const QImage& source, const QPointF&
     for (int y = 0; y < pixels.height(); ++y) {
         QRgb* row = reinterpret_cast<QRgb*>(result.scanLine(y));
         for (int x = 0; x < pixels.width(); ++x) {
-            const QPointF sourcePoint =
-                inverse.map(QPointF(pixels.left() + x + 0.5, pixels.top() + y + 0.5));
+            const QPointF sourcePoint = inverse.map(
+                QPointF(pixels.left() + x + 0.5, pixels.top() + y + 0.5) / scale);
             if (!std::isfinite(sourcePoint.x()) || !std::isfinite(sourcePoint.y())) {
                 continue;
             }
@@ -139,8 +152,44 @@ WarpedTransformPreview warpTransformPreview(const QImage& source, const QPointF&
         return out;
     }
     out.image = result;
-    out.origin = QPointF(pixels.left(), pixels.top());
+    out.origin = QPointF(pixels.left(), pixels.top()) / scale;
+    out.scale = scale;
     return out;
+}
+
+void ImageView::refreshTransformWarp()
+{
+    QRectF visible;
+    if (width() > 0 && height() > 0) {
+        const QPointF a = widgetToImage(QPointF(0.0, 0.0));
+        const QPointF b = widgetToImage(QPointF(width(), 0.0));
+        const QPointF c = widgetToImage(QPointF(width(), height()));
+        const QPointF d = widgetToImage(QPointF(0.0, height()));
+        const double left = std::min({a.x(), b.x(), c.x(), d.x()});
+        const double top = std::min({a.y(), b.y(), c.y(), d.y()});
+        const double right = std::max({a.x(), b.x(), c.x(), d.x()});
+        const double bottom = std::max({a.y(), b.y(), c.y(), d.y()});
+        visible = QRectF(QPointF(left, top), QPointF(right, bottom));
+    }
+    if (visible.isEmpty() && !docSize_.isEmpty()) {
+        visible = QRectF(QPointF(0.0, 0.0), QSizeF(docSize_));
+    }
+    // Zoomed out, one sample per device pixel; zoomed in, one per document
+    // pixel (the painter magnifies it like the plain layer).
+    const double scale = std::min(1.0, zoom_ * devicePixelRatioF());
+    if (!transformWarpedStale_ && visible == transformWarpedVisible_
+        && scale == transformWarpedScale_) {
+        return;
+    }
+    const QRectF sourceRect = transformProjectiveSource_.isEmpty()
+        ? QRectF(QPointF(0.0, 0.0), QSizeF(moveLayer_.size()))
+        : transformProjectiveSource_;
+    transformWarped_ = warpTransformPreview(moveLayer_, moveLayerPos_,
+                                            transformProjectiveCoefficients_, sourceRect,
+                                            visible, scale);
+    transformWarpedVisible_ = visible;
+    transformWarpedScale_ = scale;
+    transformWarpedStale_ = false;
 }
 
 } // namespace pictura
