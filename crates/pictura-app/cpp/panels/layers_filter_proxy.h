@@ -34,8 +34,6 @@ public:
     bool hasActiveCriteria() const;
     bool hasMatchingDescendant(const QModelIndex& sourceIndex) const;
 
-    void setSourceModel(QAbstractItemModel* sourceModel) override;
-
 protected:
     bool filterAcceptsRow(int sourceRow, const QModelIndex& sourceParent) const override;
 

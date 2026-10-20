@@ -124,7 +124,7 @@ void KeyboardShortcutsTest::selectedRowTakesTypedKeys()
     auto registry = makeRegistry();
     KeyboardShortcutsDialog dialog(registry.get());
     dialog.show();
-    QApplication::setActiveWindow(&dialog);
+    dialog.activateWindow();
     QVERIFY(QTest::qWaitForWindowActive(&dialog));
     QVERIFY(dialog.selectRowForTest(kNew));
     // The key field has focus as soon as the row is chosen: keys go to it,
