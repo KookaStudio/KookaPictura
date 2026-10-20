@@ -330,6 +330,39 @@ fn higher_flow_reaches_more_coverage() {
 }
 
 #[test]
+fn airbrush_soft_round_spacing_keeps_the_stroke_airy() {
+    // Issue #731's Airbrush Soft Round 50% flow: 45 px, hardness 0, 50 % flow,
+    // 25 % spacing. The wider spacing keeps the core below full opacity; the
+    // owner's comparison showed a dense 10 % spacing building a heavy, nearly
+    // solid core instead.
+    let cfg = |spacing| StrokeConfig {
+        color: red(),
+        diameter: 45,
+        hardness: 0,
+        spacing: SpacingMode::Fixed(spacing),
+        opacity: 100,
+        flow: 50,
+        ..StrokeConfig::default()
+    };
+    let path = [sample(20.0, 64.0), sample(236.0, 64.0)];
+    let mut airy = transparent_doc(256, 128);
+    paint(&mut airy, &cfg(25), &path).expect("airy");
+    let mut dense = transparent_doc(256, 128);
+    paint(&mut dense, &cfg(10), &path).expect("dense");
+
+    let peak = max_alpha(&airy);
+    assert!(
+        (150..=220).contains(&peak),
+        "expected a light core, got alpha {peak}"
+    );
+    let dense_peak = max_alpha(&dense);
+    assert!(
+        dense_peak > peak + 20,
+        "10 % spacing did not build a heavier core: {peak} vs {dense_peak}"
+    );
+}
+
+#[test]
 fn pencil_is_binary_brush_has_soft_edges() {
     let path = [sample(2.0, 16.0), sample(60.0, 16.0)];
     let cfg = |aliased| StrokeConfig {
@@ -619,6 +652,96 @@ fn scatter_and_count_spread_a_cluster_off_the_path() {
 }
 
 #[test]
+fn grain_breaks_up_the_dab_alpha() {
+    let cfg = dab(16);
+    let mut plain = transparent_doc(64, 64);
+    let mut grained = transparent_doc(64, 64);
+    paint(&mut plain, &cfg, &[sample(32.0, 32.0)]);
+    paint(
+        &mut grained,
+        &StrokeConfig { grain: 75, ..cfg },
+        &[sample(32.0, 32.0)],
+    );
+
+    let alpha = |doc: &Document, i: usize| chan(doc, -1, i);
+    let solid = (0..64 * 64).filter(|&i| alpha(&plain, i) == 255).count();
+    let partial = (0..64 * 64)
+        .filter(|&i| {
+            let a = alpha(&grained, i);
+            a > 0 && a < 255
+        })
+        .count();
+    let core_zero = (0..64 * 64)
+        .filter(|&i| {
+            let (dx, dy) = ((i % 64) as i32 - 32, (i / 64) as i32 - 32);
+            dx * dx + dy * dy <= 25
+        })
+        .filter(|&i| alpha(&grained, i) == 0)
+        .count();
+    let sum = |doc: &Document| (0..64 * 64).map(|i| u32::from(alpha(doc, i))).sum::<u32>();
+    assert!(solid > 0, "the plain dab is not solid");
+    assert!(partial > 0, "grain left no partial alpha");
+    assert_eq!(core_zero, 0, "grain punched holes in the dab core");
+    assert!(
+        sum(&grained) * 2 > sum(&plain),
+        "grain scattered the dab: {} vs {}",
+        sum(&grained),
+        sum(&plain)
+    );
+    assert!(sum(&grained) < sum(&plain), "grain did not reduce coverage");
+    let ratio = sum(&grained) as f32 / sum(&plain) as f32;
+    assert!(
+        (0.55..=0.67).contains(&ratio),
+        "grain 75 should leave about 60 % coverage, got {ratio:.2}"
+    );
+
+    let mut repeat = transparent_doc(64, 64);
+    paint(
+        &mut repeat,
+        &StrokeConfig { grain: 75, ..cfg },
+        &[sample(32.0, 32.0)],
+    );
+    for id in [0, 1, 2, -1] {
+        assert_eq!(
+            channel_data(&grained.layers[0], id).unwrap(),
+            channel_data(&repeat.layers[0], id).unwrap(),
+            "channel {id} differed between runs"
+        );
+    }
+}
+
+#[test]
+fn grain_strength_matches_the_pencil_presets() {
+    let cfg = dab(16);
+    let mut plain = transparent_doc(64, 64);
+    paint(&mut plain, &cfg, &[sample(32.0, 32.0)]);
+    let sum = |doc: &Document| {
+        (0..64 * 64)
+            .map(|i| u32::from(chan(doc, -1, i)))
+            .sum::<u32>()
+    };
+    let ratio = |grain: u8| {
+        let mut grained = transparent_doc(64, 64);
+        paint(
+            &mut grained,
+            &StrokeConfig { grain, ..cfg },
+            &[sample(32.0, 32.0)],
+        );
+        sum(&grained) as f32 / sum(&plain) as f32
+    };
+    let blue = ratio(55);
+    let pencil = ratio(50);
+    assert!(
+        (0.67..=0.77).contains(&blue),
+        "grain 55 should leave about 72 %, got {blue:.2}"
+    );
+    assert!(
+        (0.70..=0.80).contains(&pencil),
+        "grain 50 should leave about 75 %, got {pencil:.2}"
+    );
+}
+
+#[test]
 fn size_jitter_only_ever_shrinks() {
     let jittered = inked(&StrokeConfig {
         size_jitter: 90,
@@ -880,4 +1003,193 @@ fn a_stroke_refuses_a_target_moved_under_it() {
     );
     stroke.cancel(&mut doc);
     assert!(doc == before, "a refused stroke touched the document");
+}
+
+#[test]
+fn multiply_darkens_by_the_backdrop() {
+    let grey = Rgba {
+        r: 128,
+        g: 128,
+        b: 128,
+        a: 255,
+    };
+    let cfg = StrokeConfig {
+        color: grey,
+        diameter: 12,
+        hardness: 100,
+        spacing: SpacingMode::Fixed(10),
+        opacity: 100,
+        flow: 100,
+        mode: PaintMode::Multiply,
+        ..StrokeConfig::default()
+    };
+    let path = [sample(5.0, 16.0), sample(55.0, 16.0)];
+    let i = 16 * 64 + 30;
+    let rgba = |doc: &Document| {
+        (
+            chan(doc, 0, i),
+            chan(doc, 1, i),
+            chan(doc, 2, i),
+            chan(doc, -1, i),
+        )
+    };
+
+    let mut opaque = layer_doc(64, 32, (200, 100, 50, 255));
+    paint(&mut opaque, &cfg, &path).expect("multiply");
+    assert_eq!(rgba(&opaque), (100, 50, 25, 255));
+
+    let mut empty = transparent_doc(64, 32);
+    paint(&mut empty, &cfg, &path).expect("multiply");
+    assert_eq!(rgba(&empty), (128, 128, 128, 255));
+}
+
+#[test]
+fn wet_edges_lighten_the_core_and_darken_the_rim() {
+    // Issue #731's Paintbrush Oval 45 pixels Multiply, measured from the
+    // owner's Photoshop screenshot: on white a lone dab paints 26 below white,
+    // a stroke's interior 20, and its rim back up near the dab's tone.
+    let cfg = StrokeConfig {
+        color: Rgba {
+            r: 0x47,
+            g: 0x48,
+            b: 0x4a,
+            a: 255,
+        },
+        diameter: 45,
+        hardness: 100,
+        roundness: 50,
+        angle_deg: -50,
+        spacing: SpacingMode::Fixed(5),
+        opacity: 35,
+        flow: 50,
+        mode: PaintMode::Multiply,
+        wet_edges: true,
+        ..StrokeConfig::default()
+    };
+    let white = (255, 255, 255, 255);
+    let below_white = |doc: &Document, x: usize, y: usize| 255 - chan(doc, 0, y * 200 + x);
+
+    let mut stroke = layer_doc(200, 200, white);
+    paint(
+        &mut stroke,
+        &cfg,
+        &[sample(40.0, 100.0), sample(160.0, 100.0)],
+    )
+    .expect("stroke");
+    let core = below_white(&stroke, 100, 100);
+    assert!((18..=22).contains(&core), "stroke interior {core}");
+    let column: Vec<u8> = (0..200).map(|y| below_white(&stroke, 100, y)).collect();
+    let top = column.iter().position(|&v| v > 0).expect("painted column");
+    let rim = *column[top..top + 3].iter().max().unwrap();
+    assert!(
+        rim >= core + 2,
+        "rim {rim} is not darker than the core {core}"
+    );
+
+    let mut dab = layer_doc(200, 200, white);
+    paint(&mut dab, &cfg, &[sample(100.0, 100.0)]).expect("dab");
+    let lone = below_white(&dab, 100, 100);
+    assert!((24..=28).contains(&lone), "single dab {lone}");
+
+    let mut dry = layer_doc(200, 200, white);
+    let dry_cfg = StrokeConfig {
+        wet_edges: false,
+        ..cfg
+    };
+    paint(
+        &mut dry,
+        &dry_cfg,
+        &[sample(40.0, 100.0), sample(160.0, 100.0)],
+    )
+    .expect("dry");
+    assert!(
+        below_white(&dry, 100, 100) > core * 2,
+        "Wet Edges did not lighten the interior"
+    );
+}
+
+#[test]
+fn two_b_pencil_paints_the_reference_profile() {
+    // Issue #731's 2B Pencil, measured from the owner's Photoshop pixel-grid
+    // screenshot: a ~7 px soft-shouldered stroke whose cross-section integrates
+    // to ~3.7 px of full coverage and peaks near 0.8 under the grain.
+    let cfg = StrokeConfig {
+        color: Rgba {
+            r: 0x47,
+            g: 0x48,
+            b: 0x4a,
+            a: 255,
+        },
+        diameter: 8,
+        hardness: 25,
+        spacing: SpacingMode::Fixed(25),
+        size_jitter: 20,
+        grain: 50,
+        ..StrokeConfig::default()
+    };
+    let mut doc = layer_doc(128, 64, (255, 255, 255, 255));
+    paint(&mut doc, &cfg, &[sample(10.0, 32.0), sample(118.0, 32.0)]).expect("pencil");
+    let cov = |x: usize, y: usize| (255 - chan(&doc, 0, y * 128 + x)) as f32 / 184.0;
+    let columns = 20..108;
+    let n = columns.len() as f32;
+    let (mut footprint, mut width, mut peak) = (0.0, 0.0, 0.0);
+    for x in columns {
+        let section: Vec<f32> = (0..64).map(|y| cov(x, y)).collect();
+        footprint += section.iter().filter(|&&c| c > 0.05).count() as f32;
+        width += section.iter().sum::<f32>();
+        peak += section.iter().cloned().fold(0.0, f32::max);
+    }
+    let (footprint, width, peak) = (footprint / n, width / n, peak / n);
+    assert!(
+        (6.0..=8.0).contains(&footprint),
+        "footprint {footprint:.2} px"
+    );
+    assert!(
+        (3.2..=4.4).contains(&width),
+        "effective width {width:.2} px"
+    );
+    assert!((0.70..=0.88).contains(&peak), "mean peak {peak:.2}");
+}
+
+#[test]
+fn non_photo_blue_pencil_paints_the_reference_profile() {
+    // Issue #731's Non-Photo Blue Pencil, measured from the owner's Photoshop
+    // pixel-grid screenshot: a ~3.5 px line whose cross-section integrates to
+    // ~1.8 px of full coverage and peaks near 0.74 under the grain.
+    let cfg = StrokeConfig {
+        color: Rgba {
+            r: 0x73,
+            g: 0xd6,
+            b: 0xff,
+            a: 255,
+        },
+        diameter: 4,
+        hardness: 0,
+        spacing: SpacingMode::Fixed(20),
+        grain: 55,
+        ..StrokeConfig::default()
+    };
+    let mut doc = layer_doc(128, 64, (255, 255, 255, 255));
+    paint(&mut doc, &cfg, &[sample(10.0, 32.0), sample(118.0, 32.5)]).expect("pencil");
+    // Red carries the most range for #73d6ff: 255 − 0x73 = 140 levels.
+    let cov = |x: usize, y: usize| (255 - chan(&doc, 0, y * 128 + x)) as f32 / 140.0;
+    let columns = 20..108;
+    let n = columns.len() as f32;
+    let (mut footprint, mut width, mut peak) = (0.0, 0.0, 0.0);
+    for x in columns {
+        let section: Vec<f32> = (0..64).map(|y| cov(x, y)).collect();
+        footprint += section.iter().filter(|&&c| c > 0.05).count() as f32;
+        width += section.iter().sum::<f32>();
+        peak += section.iter().cloned().fold(0.0, f32::max);
+    }
+    let (footprint, width, peak) = (footprint / n, width / n, peak / n);
+    assert!(
+        (2.5..=4.5).contains(&footprint),
+        "footprint {footprint:.2} px"
+    );
+    assert!(
+        (1.5..=2.1).contains(&width),
+        "effective width {width:.2} px"
+    );
+    assert!((0.64..=0.84).contains(&peak), "mean peak {peak:.2}");
 }

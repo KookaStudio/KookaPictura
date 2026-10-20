@@ -378,6 +378,8 @@ int PicturaMainWindow::addDocument(PictureView* view, const QString& path)
         entry.path = path;
     }
     entry.canvas = new ImageView(this);
+    entry.tipPreview = new BrushTipPreview(entry.canvas);
+    entry.tipPreview->move(BrushTipPreview::kMargin, BrushTipPreview::kMargin);
     entry.canvasHost = new CanvasScrollBars(this);
     entry.canvasHost->setView(entry.canvas);
     if (fileDropRouter_) {
@@ -874,6 +876,7 @@ void PicturaMainWindow::refresh()
     if (tools_) {
         tools_->bindCanvas(canvas);
     }
+    syncBrushTipPreview();
     syncMaskOverlay(view, canvas);
 
     panelRefreshTimer_->start();
@@ -899,6 +902,29 @@ void PicturaMainWindow::refreshSelectionOverlay()
         canvas->setSelectionContour(selection_api::contour(*view));
     } else {
         canvas->clearSelectionContour();
+    }
+}
+
+void PicturaMainWindow::syncBrushTipPreview()
+{
+    const int active = activeDocumentIndex();
+    const PaintOptions* paint =
+        tools_ ? tools_->optionsFor<PaintOptions>(ToolId::Brush) : nullptr;
+    const bool paintTool = tools_
+        && (tools_->activeTool() == ToolId::Brush || tools_->activeTool() == ToolId::Pencil);
+    const bool penTip = paint && paint->penTip();
+    for (int i = 0; i < docs_.size(); ++i) {
+        BrushTipPreview* preview = docs_.at(i).tipPreview;
+        if (!preview) {
+            continue;
+        }
+        ImageView* canvas = docs_.at(i).canvas;
+        const bool show =
+            i == active && paintTool && penTip && canvas && canvas->hasDocument();
+        preview->setVisible(show);
+        if (show) {
+            preview->raise();
+        }
     }
 }
 

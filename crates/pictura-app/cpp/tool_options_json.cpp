@@ -239,9 +239,9 @@ template <typename F> void fields(ToneOptions& o, F&& f)
 // The paint family's shared brush, read through its getters and written back
 // through its clamping setters.
 struct PaintFields {
-    int size, hardness, opacity, flow, roundness, tipAngle, spacing;
+    int size, hardness, opacity, flow, roundness, tipAngle, spacing, grain;
     QString mode;
-    bool autoErase, flipX, flipY;
+    bool autoErase, flipX, flipY, penTip, aliased, wetEdges;
     BrushDynamics dynamics;
 };
 
@@ -256,8 +256,12 @@ template <typename F> void fields(PaintFields& o, F&& f)
     f("roundness", o.roundness);
     f("tipAngle", o.tipAngle);
     f("spacing", o.spacing);
+    f("grain", o.grain);
     f("flipX", o.flipX);
     f("flipY", o.flipY);
+    f("penTip", o.penTip);
+    f("aliased", o.aliased);
+    f("wetEdges", o.wetEdges);
     f("scatter", o.dynamics.scatter);
     f("count", o.dynamics.count);
     f("sizeJitter", o.dynamics.sizeJitter);
@@ -268,8 +272,9 @@ template <typename F> void fields(PaintFields& o, F&& f)
 PaintFields paintFields(const PaintOptions& p)
 {
     return {p.size(),     p.hardness(), p.opacity(), p.flow(),  p.roundness(),
-            p.tipAngle(), p.spacing(),  p.mode(),    p.autoErase(), p.flipX(),
-            p.flipY(),    p.dynamics()};
+            p.tipAngle(), p.spacing(),  p.grain(),   p.mode(),    p.autoErase(),
+            p.flipX(),    p.flipY(),    p.penTip(),  p.aliased(), p.wetEdges(),
+            p.dynamics()};
 }
 
 void applyPaint(PaintOptions& p, const PaintFields& v)
@@ -283,7 +288,11 @@ void applyPaint(PaintOptions& p, const PaintFields& v)
     p.setRoundness(v.roundness);
     p.setTipAngle(v.tipAngle);
     p.setSpacing(v.spacing);
+    p.setGrain(v.grain);
     p.setFlip(v.flipX, v.flipY);
+    p.setPenTip(v.penTip);
+    p.setAliased(v.aliased);
+    p.setWetEdges(v.wetEdges);
     p.setDynamics(v.dynamics);
 }
 

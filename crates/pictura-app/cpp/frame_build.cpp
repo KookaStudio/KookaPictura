@@ -296,6 +296,20 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
                 &ToolController::setForeground);
         connect(colorState_, &ColorState::backgroundChanged, tools_,
                 &ToolController::setBackground);
+        // A tool or preset that changes a colour (e.g. a brush preset) reaches
+        // the controller, not ColorState; mirror it back so the toolbox swatch
+        // and the Color panel follow.
+        connect(tools_, &ToolController::colorsChanged, this, [this]() {
+            if (!colorState_) {
+                return;
+            }
+            if (colorState_->foreground() != tools_->foreground()) {
+                colorState_->setForeground(tools_->foreground());
+            }
+            if (colorState_->background() != tools_->background()) {
+                colorState_->setBackground(tools_->background());
+            }
+        });
     }
 
     auto* toolbox = new Toolbox(tools_, colorState_, this);
@@ -501,7 +515,10 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
             infoPanel_->setRulerMode(id == ToolId::Ruler);
         }
         updateToolHint();
+        syncBrushTipPreview();
     });
+    connect(tools_, &ToolController::brushTipChanged, this,
+            [this]() { syncBrushTipPreview(); });
     // A modal tool session (Crop) recorded or discarded a step; re-evaluate the
     // Undo/Redo commands so Ctrl+Z reaches the session.
     connect(tools_, &ToolController::toolSessionChanged, this, [this]() {

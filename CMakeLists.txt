@@ -206,6 +206,8 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/fill_dialog.cpp
     crates/pictura-app/cpp/defringe_dialog.cpp
     crates/pictura-app/cpp/stroke_dialog.cpp
+    crates/pictura-app/cpp/brush_tip_preview.cpp
+    crates/pictura-app/cpp/brush_tip_preview.h
     crates/pictura-app/cpp/image_view.cpp
     crates/pictura-app/cpp/image_view_overlays.cpp
     crates/pictura-app/cpp/image_view_annotations.cpp

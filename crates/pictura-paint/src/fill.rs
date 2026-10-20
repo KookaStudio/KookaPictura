@@ -115,6 +115,33 @@ pub(crate) fn pixel_noise(x: i32, y: i32) -> f32 {
     (h & 0xFFFF) as f32 / 65_536.0
 }
 
+/// A fixed value in `0.0..1.0` for a pixel, clumped so the stroke grain reads
+/// as pencil texture instead of single-pixel static: the fine hash blended
+/// with bilinear value noise on 2 px and 3 px grids.
+pub(crate) fn grain_noise(x: i32, y: i32) -> f32 {
+    let fine = pixel_noise(x, y);
+    let mid = value_noise(x, y, 2.0);
+    let broad = value_noise(x, y, 3.0);
+    // Weighted toward the clumps and mildly expanded to match the 2B Pencil
+    // reference's grain (5×5 residual sd ~0.065, neighbour correlation ~0.38);
+    // the clamp only bites at the extremes.
+    ((0.2 * fine + 0.35 * mid + 0.45 * broad - 0.5) * 1.3 + 0.5).clamp(0.0, 1.0)
+}
+
+/// Bilinear value noise on a `scale` px grid, deterministic for a pixel.
+fn value_noise(x: i32, y: i32, scale: f32) -> f32 {
+    let (fx, fy) = (x as f32 / scale, y as f32 / scale);
+    let (x0, y0) = (fx.floor(), fy.floor());
+    let (tx, ty) = (fx - x0, fy - y0);
+    let (sx, sy) = (tx * tx * (3.0 - 2.0 * tx), ty * ty * (3.0 - 2.0 * ty));
+    let (xi, yi) = (x0 as i32, y0 as i32);
+    let (a, b) = (pixel_noise(xi, yi), pixel_noise(xi + 1, yi));
+    let (c, d) = (pixel_noise(xi, yi + 1), pixel_noise(xi + 1, yi + 1));
+    let top = a + (b - a) * sx;
+    let bottom = c + (d - c) * sx;
+    top + (bottom - top) * sy
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
@@ -292,5 +319,59 @@ pub(crate) mod tests {
         // Half strength of a half-opaque colour: about a quarter of 4096.
         assert!((800..1250).contains(&painted), "{painted} pixels");
         assert_eq!(layer_rgba(&run().layers[0]), layer_rgba(&d.layers[0]));
+    }
+
+    #[test]
+    fn grain_noise_is_deterministic_and_clumpy() {
+        let mut values = Vec::new();
+        let mut blocks = Vec::new();
+        for y in 0..64 {
+            for x in 0..64 {
+                let v = grain_noise(x, y);
+                assert!((0.0..=1.0).contains(&v), "grain {v} out of range");
+                assert_eq!(v, grain_noise(x, y), "grain is not deterministic");
+                values.push(v);
+            }
+        }
+        for y in 0..32 {
+            for x in 0..32 {
+                let (x, y) = (2 * x, 2 * y);
+                blocks.push(
+                    (grain_noise(x, y)
+                        + grain_noise(x + 1, y)
+                        + grain_noise(x, y + 1)
+                        + grain_noise(x + 1, y + 1))
+                        / 4.0,
+                );
+            }
+        }
+        let mean = |v: &[f32]| v.iter().sum::<f32>() / v.len() as f32;
+        let std = |v: &[f32]| {
+            let m = mean(v);
+            (v.iter().map(|x| (x - m) * (x - m)).sum::<f32>() / v.len() as f32).sqrt()
+        };
+        // A 2 px box average of pure per-pixel static loses half its spread;
+        // clumped grain keeps most of it.
+        assert!(
+            std(&blocks) > std(&values) * 0.6,
+            "grain is not clumped: block spread {:.3} vs pixel spread {:.3}",
+            std(&blocks),
+            std(&values)
+        );
+        let neighbour = {
+            let m = mean(&values);
+            let pairs = (0..64).flat_map(|y| (0..63).map(move |x| (y * 64 + x, y * 64 + x + 1)));
+            let cov: f32 = pairs
+                .map(|(a, b)| (values[a] - m) * (values[b] - m))
+                .sum::<f32>()
+                / (64.0 * 63.0);
+            cov / (std(&values) * std(&values))
+        };
+        // The 2B Pencil reference's clumps: neighbours correlate more than the
+        // earlier static-heavy mix (~0.47) without smearing into blotches.
+        assert!(
+            (0.55..=0.72).contains(&neighbour),
+            "grain neighbour correlation {neighbour:.3}"
+        );
     }
 }

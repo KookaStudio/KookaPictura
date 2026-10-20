@@ -2,6 +2,7 @@
 
 #include "frame.h"
 
+#include "brush_tip_preview.h"
 #include "commands.h"
 #include "dialogs.h"
 #include "duplicate_image_dialog.h"

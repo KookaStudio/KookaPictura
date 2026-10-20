@@ -53,6 +53,7 @@ class CharacterPanel;
 class ParagraphPanel;
 class GlyphsPanel;
 class ParagraphStylesPanel;
+class BrushTipPreview;
 class ImageView;
 class InfoPanel;
 class LayersPanel;
@@ -257,6 +258,9 @@ public:
     // Mirror the active document's selection outline onto its canvas (or clear
     // it). Called from refresh() and on toolbar selection commits; view-only.
     void refreshSelectionOverlay();
+    // Show the pen-tip model only on the active document's canvas, while the
+    // Brush or Pencil tool has a pen-tip preset.
+    void syncBrushTipPreview();
 
     // Document operations.
     int documentCount() const { return docs_.size(); }
@@ -411,6 +415,7 @@ private:
     struct DocEntry {
         PictureView* view = nullptr;
         ImageView* canvas = nullptr;
+        BrushTipPreview* tipPreview = nullptr;
         CanvasScrollBars* canvasHost = nullptr;
         QString path;
         // Display name for a path-less import (Open Image / Open As Smart

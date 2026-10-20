@@ -421,7 +421,8 @@ using MixerGroup = ToolOption<MixerOptions>;
 
 // The paint family's shared brush: tip shape, dynamics, and paint stroke. The
 // size has its own notification (the hover ring and the size readouts); every
-// other tip field shares `tipChanged`.
+// other tip field shares `tipChanged`; Opacity, Flow, and Mode share
+// `paintSettingsChanged` so the options bar follows a preset.
 class PaintOptions : public ToolOptions {
 public:
     int size() const { return size_; }
@@ -449,17 +450,93 @@ public:
         }
     }
 
+    int grain() const { return grain_; }
+    void setGrain(int grain)
+    {
+        const int clamped = std::clamp(grain, 0, 100);
+        if (clamped != grain_) {
+            grain_ = clamped;
+            if (tipChanged) {
+                tipChanged();
+            }
+        }
+    }
+
+    // Wet Edges: a built-up stroke paints lighter than its darker rim.
+    bool wetEdges() const { return wetEdges_; }
+    void setWetEdges(bool on)
+    {
+        if (on != wetEdges_) {
+            wetEdges_ = on;
+            if (tipChanged) {
+                tipChanged();
+            }
+        }
+    }
+
     int opacity() const { return opacity_; }
-    void setOpacity(int opacity) { opacity_ = std::clamp(opacity, 0, 100); }
+    void setOpacity(int opacity)
+    {
+        const int clamped = std::clamp(opacity, 0, 100);
+        if (clamped != opacity_) {
+            opacity_ = clamped;
+            if (paintSettingsChanged) {
+                paintSettingsChanged();
+            }
+        }
+    }
 
     int flow() const { return flow_; }
-    void setFlow(int flow) { flow_ = std::clamp(flow, 0, 100); }
+    void setFlow(int flow)
+    {
+        const int clamped = std::clamp(flow, 0, 100);
+        if (clamped != flow_) {
+            flow_ = clamped;
+            if (paintSettingsChanged) {
+                paintSettingsChanged();
+            }
+        }
+    }
 
     const QString& mode() const { return mode_; }
-    void setMode(const QString& mode) { mode_ = mode; }
+    void setMode(const QString& mode)
+    {
+        if (mode != mode_) {
+            mode_ = mode;
+            if (paintSettingsChanged) {
+                paintSettingsChanged();
+            }
+        }
+    }
 
     bool autoErase() const { return autoErase_; }
     void setAutoErase(bool on) { autoErase_ = on; }
+
+    // Preview-only: a preset whose tip is drawn as a pen nib. The stroke
+    // engine never reads it.
+    bool penTip() const { return penTip_; }
+    void setPenTip(bool on)
+    {
+        if (on != penTip_) {
+            penTip_ = on;
+            if (tipChanged) {
+                tipChanged();
+            }
+        }
+    }
+
+    // A pencil preset's hard, aliased edge. The Brush handler ORs it with its
+    // own Pencil flag.
+    bool aliased() const { return aliased_; }
+    void setAliased(bool on)
+    {
+        if (on != aliased_) {
+            aliased_ = on;
+            if (tipChanged) {
+                tipChanged();
+            }
+        }
+    }
 
     int roundness() const { return roundness_; }
     void setRoundness(int roundness)
@@ -533,14 +610,19 @@ public:
 
     std::function<void(int)> sizeChanged;
     std::function<void()> tipChanged;
+    std::function<void()> paintSettingsChanged;
 
 private:
     int size_ = 12;
     int hardness_ = 100;
+    int grain_ = 0;
+    bool wetEdges_ = false;
     int opacity_ = 100;
     int flow_ = 100;
     QString mode_ = QStringLiteral("normal");
     bool autoErase_ = false;
+    bool penTip_ = false;
+    bool aliased_ = false;
     int roundness_ = 100;
     int tipAngle_ = 0;
     int spacing_ = 25;

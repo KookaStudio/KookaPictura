@@ -139,6 +139,7 @@ ToolController::ToolController(QObject* parent)
     // consumer keeps following an option change.
     paint->sizeChanged = [this](int size) { emit brushSizeChanged(size); };
     paint->tipChanged = [this]() { emit brushTipChanged(); };
+    paint->paintSettingsChanged = [this]() { emit paintSettingsChanged(); };
     selection->magneticWidthChanged = [this](int width) { emit magneticWidthChanged(width); };
     crop->optionsChanged = [this]() {
         if (ToolHandler* h = registry_.forTool(ToolId::Crop)) {

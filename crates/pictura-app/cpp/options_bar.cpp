@@ -644,7 +644,7 @@ QWidget* OptionsBar::buildPaintPage(ToolId id)
     layout->setContentsMargins(4, 2, 4, 2);
     layout->addWidget(toolButton(id, page));
 
-    addBrushTipFields(layout, page);
+    addBrushTipFields(layout, page, true);
     auto addField = [&](const QString& label, const QString& name, const QString& suffix, int lo,
                         int hi, int value, std::function<void(int)> setter) {
         auto* field =
@@ -655,13 +655,16 @@ QWidget* OptionsBar::buildPaintPage(ToolId id)
             connect(field, &NumericField::valueChanged, this,
                     [setter](double v) { setter(qRound(v)); });
         }
+        return field;
     };
 
-    addField(QStringLiteral("Opacity"), QStringLiteral("optionsBrushOpacity"),
-             QStringLiteral("%"), 0, 100, controller_ ? paint_->opacity() : 100,
-             [this](int v) { paint_->setOpacity(v); });
-    addField(QStringLiteral("Flow"), QStringLiteral("optionsBrushFlow"), QStringLiteral("%"), 0,
-             100, controller_ ? paint_->flow() : 100, [this](int v) { paint_->setFlow(v); });
+    NumericField* opacityField =
+        addField(QStringLiteral("Opacity"), QStringLiteral("optionsBrushOpacity"),
+                 QStringLiteral("%"), 0, 100, controller_ ? paint_->opacity() : 100,
+                 [this](int v) { paint_->setOpacity(v); });
+    NumericField* flowField =
+        addField(QStringLiteral("Flow"), QStringLiteral("optionsBrushFlow"), QStringLiteral("%"), 0,
+                 100, controller_ ? paint_->flow() : 100, [this](int v) { paint_->setFlow(v); });
 
     layout->addWidget(new QLabel(QStringLiteral("Mode"), page));
     auto* combo = new QComboBox(page);
@@ -670,10 +673,26 @@ QWidget* OptionsBar::buildPaintPage(ToolId id)
     combo->addItem(QStringLiteral("Behind"), QStringLiteral("behind"));
     combo->addItem(QStringLiteral("Clear"), QStringLiteral("clear"));
     if (controller_) {
-        combo->setCurrentIndex(combo->findData(paint_->mode()));
+        const int modeIndex = combo->findData(paint_->mode());
+        if (modeIndex >= 0) {
+            combo->setCurrentIndex(modeIndex);
+        }
         connect(combo, &QComboBox::currentIndexChanged, this, [this, combo](int) {
             paint_->setMode(combo->currentData().toString());
         });
+        // A preset writes Opacity, Flow, and Mode straight into the shared
+        // options; mirror them back into the bar so it never shows stale
+        // values (the issue #731 airbrush must read Flow 50).
+        auto syncSettings = [this, opacityField, flowField, combo]() {
+            opacityField->setValue(paint_->opacity());
+            flowField->setValue(paint_->flow());
+            const int index = combo->findData(paint_->mode());
+            if (index >= 0) {
+                const QSignalBlocker blocker(combo);
+                combo->setCurrentIndex(index);
+            }
+        };
+        connect(controller_, &ToolController::paintSettingsChanged, this, syncSettings);
     }
     layout->addWidget(combo);
 

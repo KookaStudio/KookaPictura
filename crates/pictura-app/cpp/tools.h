@@ -428,6 +428,9 @@ signals:
     void mixerReservoirChanged(const QColor& color);
     // Hardness or a Brush Tip Shape field changed (size has brushSizeChanged).
     void brushTipChanged();
+    // Opacity, Flow, or Mode changed (a preset applying its defaults); the
+    // options bar re-reads them.
+    void paintSettingsChanged();
     // An Eyedropper option changed (the bar or the canvas context menu); the
     // options bar re-reads its Sample Size / Sample readouts.
     void eyedropperOptionsChanged();

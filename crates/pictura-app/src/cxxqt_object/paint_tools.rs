@@ -50,7 +50,8 @@ pub mod ffi {
     /// Shape. `diameter` 1–5000 px, `hardness` and `roundness` 0–100 %,
     /// `angle` −180–180°, `spacing` a percentage of the diameter. The
     /// dynamics: `count` dabs per step (1–16), `scatter` % of the diameter,
-    /// `size_jitter` / `roundness_jitter` %, `angle_jitter` degrees.
+    /// `size_jitter` / `roundness_jitter` %, `angle_jitter` degrees, and
+    /// `grain` % (the pencil's paper texture), and `wet_edges` (Wet Edges).
     #[namespace = "pictura"]
     struct PaintTip {
         diameter: i32,
@@ -63,6 +64,8 @@ pub mod ffi {
         size_jitter: i32,
         angle_jitter: i32,
         roundness_jitter: i32,
+        grain: i32,
+        wet_edges: bool,
     }
 
     unsafe extern "C++" {
@@ -416,6 +419,8 @@ fn tip_config(tip: &PaintTip) -> StrokeConfig {
         size_jitter: tip.size_jitter.clamp(0, 100) as u8,
         angle_jitter: tip.angle_jitter.clamp(0, 180) as u16,
         roundness_jitter: tip.roundness_jitter.clamp(0, 100) as u8,
+        grain: tip.grain.clamp(0, 100) as u8,
+        wet_edges: tip.wet_edges,
         ..StrokeConfig::default()
     }
     .sanitized()

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QtCore/QPoint>
+#include <QtCore/QString>
 #include <QtGui/QPixmap>
 #include <QtWidgets/QWidget>
 
@@ -51,6 +52,11 @@ public:
     static QPixmap tipIcon(const PaintTip& tip, int edge);
 
     int presetCount() const;
+    // The four presets added for issue #731, for the options bar's quick list.
+    static int additionalPresetCount();
+    static QString additionalPresetName(int index);
+    static QPixmap additionalPresetIcon(int index, int edge);
+    void chooseAdditionalPreset(int index);
     // Self-test hook: pick preset `index` as a click on the grid would.
     void choosePresetForTest(int index);
 
