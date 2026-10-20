@@ -455,7 +455,7 @@ impl qobject::PictureView {
 
     /// Commit the session: one transform op (the similarity, an affine quad
     /// when a shear is set, or `transform_layer_quad` in a projective mode), or
-    /// in Warp mode the warp alone (it already carries the box), a recomposite,
+    /// in Warp mode the warp followed by the box's frame, a recomposite,
     /// and one `"Free Transform"` history state on success. An identity
     /// transform or warp records nothing; an engine refusal records nothing.
     /// The session always clears.
@@ -475,14 +475,14 @@ impl qobject::PictureView {
         else {
             return false;
         };
+        let unmoved = || {
+            quad.iter()
+                .zip(source_corners(orig_rect).iter())
+                .all(|(q, s)| (q.0 - s.0).abs() <= 1e-9 && (q.1 - s.1).abs() <= 1e-9)
+        };
         let identity = match &warp {
-            Some(warp) => warp.is_identity(),
-            None if mode.is_projective() => {
-                let source = source_corners(orig_rect);
-                quad.iter()
-                    .zip(source.iter())
-                    .all(|(q, s)| (q.0 - s.0).abs() <= 1e-9 && (q.1 - s.1).abs() <= 1e-9)
-            }
+            Some(warp) => warp.is_identity() && unmoved(),
+            None if mode.is_projective() => unmoved(),
             None => params.is_identity(),
         };
         if identity {
@@ -491,7 +491,7 @@ impl qobject::PictureView {
         }
         let changed = match (self.as_mut().rust_mut().doc.as_mut(), &warp) {
             (Some(doc), Some(warp)) => {
-                pictura_render::transform_layer_warp(doc, &path, warp, interpolation)
+                pictura_render::transform_layer_warp(doc, &path, warp, Some(quad), interpolation)
             }
             (Some(doc), None) => {
                 apply_session_transform(doc, &path, mode, quad, params, orig_rect, interpolation)

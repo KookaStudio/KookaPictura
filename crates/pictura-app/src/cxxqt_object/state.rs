@@ -47,8 +47,8 @@ impl TransformMode {
     }
 }
 
-/// What a Warp-mode press grabbed; `pts0` is the mesh's control grid at the
-/// press.
+/// What a Warp-mode press grabbed; `start` (the press) and `pts0` (the mesh's
+/// control grid at the press) are in source space.
 pub enum WarpDrag {
     /// An anchor or handle: it follows the pointer (an anchor takes its handles
     /// along).
@@ -105,8 +105,8 @@ pub struct TransformSession {
     pub(super) skew_y: f64,
     /// The session's resample method.
     pub(super) interpolation: pictura_render::Interpolation,
-    /// Warp mode: the warp over `orig_rect` that replaces the box (entering
-    /// Warp bakes the box into a custom mesh); committed instead of the box.
+    /// Warp mode: the warp over `orig_rect`, in source space; the box's quad
+    /// stays its projective frame, applied after it on display and commit.
     pub(super) warp: Option<pictura_core::warp::Warp>,
     /// The Warp-mode drag in progress.
     pub(super) warp_drag: Option<WarpDrag>,

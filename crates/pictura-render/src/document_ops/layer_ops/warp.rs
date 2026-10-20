@@ -1,8 +1,10 @@
 //! Edit ▸ Transform ▸ Warp: a layer resampled through a [`Warp`] (a preset
 //! style or a custom bicubic Bezier mesh, `pictura_core::warp`).
 //!
-//! The warp is a forward map in document space over the layer's rect; pixels,
-//! the layer mask and a retained 16/32-bit store all go through the same
+//! The warp is a forward map in document space over the layer's rect, followed
+//! by the session box's projective map (a Distort or Perspective made before
+//! Warp stays exact, as Photoshop keeps `Trnf` apart from `warp`); pixels, the
+//! layer mask and a retained 16/32-bit store all go through the same
 //! triangulation (`warp_raster`), so they stay in register. The mask's outside
 //! reads as its default colour, as photocraft's `warp_mesh_gray` has it.
 //! Ported from photocraft's `engine::warp_cmds` (see `NOTICE.md`); the preset
@@ -16,7 +18,7 @@ use pictura_core::warp::{Warp, WarpStyle};
 use pictura_core::{Channel, Document, LayerMask, PsdRect, Sample, Samples, SourceChannels};
 
 use super::kernel::Interpolation;
-use super::transform::{prepare_layer, write_layer, LayerOutput};
+use super::transform::{prepare_layer, solve_homography, write_layer, LayerOutput, PlaneMap};
 use super::warp_raster::{triangulate, warp_planes, Planes, Triangles};
 
 fn rect_of(d: (i32, i32, i32, i32)) -> PsdRect {
@@ -45,6 +47,21 @@ fn warp_is_valid(warp: &Warp) -> bool {
         _ => true,
     };
     finite && mesh_ok
+}
+
+/// The corners of `bounds` in TL, TR, BR, BL order.
+fn bounds_corners(b: [f64; 4]) -> [(f64, f64); 4] {
+    [(b[0], b[1]), (b[2], b[1]), (b[2], b[3]), (b[0], b[3])]
+}
+
+/// `warp.map` extended past the box for a mask wider than the layer: a point
+/// outside moves with the nearest box point, so a translating warp moves the
+/// whole mask.
+fn map_beyond_box(warp: &Warp, x: f64, y: f64) -> (f64, f64) {
+    let b = warp.bounds;
+    let (cx, cy) = (x.clamp(b[0], b[2]), y.clamp(b[1], b[3]));
+    let (mx, my) = warp.map(cx, cy);
+    (mx + x - cx, my + y - cy)
 }
 
 /// Planes of one sample type to unit `f32`: 8/16-bit through [`Sample`], 32-bit
@@ -179,26 +196,46 @@ fn warp_store(
     SourceChannels::new(store.depth, rect_of(t.dest), planes)
 }
 
-/// Warp the layer at `path` through `warp` (document space), resampling with
-/// `interpolation`.
+/// Warp the layer at `path` through `warp` (document space), then send the
+/// warp box's corners onto `quad` (TL, TR, BR, BL) projectively; `None` keeps
+/// the box where it is. Resamples with `interpolation`.
 ///
 /// Refuses (leaving `doc` bit-identical) for every case `transform_layer`
-/// refuses, for an identity or malformed warp, and when the warped box is
-/// degenerate or out of range. `pure_translate` is always false: a warp drops
-/// an unmodeled raw channel stream.
+/// refuses, for an identity or malformed warp with no box change, a singular
+/// `quad`, a mask that cannot follow the pixels, and when the warped box is
+/// degenerate, out of range, or too large. `pure_translate` is always false: a
+/// warp drops an unmodeled raw channel stream.
 pub fn transform_layer_warp(
     doc: &mut Document,
     path: &str,
     warp: &Warp,
+    quad: Option<[(f64, f64); 4]>,
     interpolation: Interpolation,
 ) -> bool {
-    if !warp_is_valid(warp) || warp.is_identity() {
+    let corners = bounds_corners(warp.bounds);
+    let quad = quad.filter(|q| {
+        q.iter()
+            .zip(&corners)
+            .any(|(a, b)| (a.0 - b.0).abs() > 1e-9 || (a.1 - b.1).abs() > 1e-9)
+    });
+    if !warp_is_valid(warp) || (warp.is_identity() && quad.is_none()) {
         return false;
     }
+    let frame = match quad {
+        Some(q) => match solve_homography(corners, q) {
+            Some(h) => Some(h),
+            None => return false,
+        },
+        None => None,
+    };
     let Some(prepared) = prepare_layer(doc, path) else {
         return false;
     };
-    let f = |x: f64, y: f64| warp.map(x, y);
+    let project = |(x, y): (f64, f64)| match &frame {
+        Some(h) => h.forward(x, y).unwrap_or((f64::NAN, f64::NAN)),
+        None => (x, y),
+    };
+    let f = |x: f64, y: f64| project(warp.map(x, y));
     let Some(t) = triangulate(prepared.rect, &f) else {
         return false;
     };
@@ -226,10 +263,18 @@ pub fn transform_layer_warp(
                 .into(),
         })
         .collect();
-    let mask = prepared
-        .mask
-        .as_ref()
-        .and_then(|m| warp_mask(m, &f, interpolation));
+    let fm = |x: f64, y: f64| project(map_beyond_box(warp, x, y));
+    // A mask with area that cannot be warped would stay behind while the
+    // pixels move, hiding them: refuse instead.
+    let mask = match prepared.mask.as_ref() {
+        Some(m) if m.rect.width() > 0 && m.rect.height() > 0 => {
+            match warp_mask(m, &fm, interpolation) {
+                Some(warped) => Some(warped),
+                None => return false,
+            }
+        }
+        _ => None,
+    };
     let native = prepared.native.as_ref().map(|store| {
         let mask_info = prepared
             .mask

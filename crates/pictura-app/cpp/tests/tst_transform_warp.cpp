@@ -45,6 +45,7 @@ private slots:
     void boxTransformCarriesIntoTheMesh();
     void presetStyleAndValuesFromTheBar();
     void anchorDragCommitsOneState();
+    void releaseHidesTheDraggedHandles();
     void pressOnAPresetMakesItCustom();
     void escapeRestoresAWarpedSession();
     void identityWarpCommitsNothing();
@@ -269,6 +270,33 @@ void TransformWarpTest::anchorDragCommitsOneState()
     QVERIFY(after.toString() != before);
     QCOMPARE(after.left, 4);
     QCOMPARE(after.top, 2);
+}
+
+void TransformWarpTest::releaseHidesTheDraggedHandles()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginLayer(frame);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    auto* canvas = frame.findChild<pictura::ImageView*>();
+    QVERIFY(view && tools && canvas && tools->beginWarp(layer));
+
+    const auto draggedHandles = [canvas]() {
+        int n = 0;
+        for (const pictura::transform_api::WarpPoint& p : canvas->transformWarpForTest().points) {
+            n += p.kind == pictura::transform_api::WarpPoint::DraggedHandle ? 1 : 0;
+        }
+        return n;
+    };
+    canvas->mousePressed(QPointF(10.0, 8.0), Qt::LeftButton, int(Qt::NoModifier));
+    canvas->mouseMoved(QPointF(6.0, 5.0));
+    QCOMPARE(draggedHandles(), 2);
+    // The release hands the canvas a fresh overlay: the anchor's handles are
+    // ordinary again, shown only near the pointer.
+    canvas->mouseReleased(QPointF(6.0, 5.0));
+    QCOMPARE(draggedHandles(), 0);
+    tools->cancelFreeTransform();
 }
 
 void TransformWarpTest::pressOnAPresetMakesItCustom()

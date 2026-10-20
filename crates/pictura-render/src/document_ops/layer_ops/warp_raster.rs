@@ -22,6 +22,7 @@ use pictura_core::PsdRect;
 use rayon::prelude::*;
 
 use super::kernel::{self, Interpolation};
+use super::transform::integer_bbox;
 
 /// Grid cell size (source px) used to approximate the map.
 const CELL: f64 = 4.0;
@@ -48,7 +49,8 @@ pub(super) struct Triangles {
 }
 
 /// Triangulate `src` through the forward map `f` (document → document).
-/// `None` for an empty rect or a non-finite or out-of-range mapped vertex.
+/// `None` for an empty rect, a non-finite or out-of-range mapped vertex, or a
+/// destination larger than the other transform ops allow ([`integer_bbox`]).
 pub(super) fn triangulate(
     src: PsdRect,
     f: &(dyn Fn(f64, f64) -> (f64, f64) + Sync),
@@ -80,6 +82,9 @@ pub(super) fn triangulate(
             verts.push(([dx, dy], [sx, sy]));
         }
     }
+    // The coordinate limit alone admits a 2^21-square result; hold the area to
+    // the transform ops' ceiling before anything is allocated for it.
+    integer_bbox(&[(x0, y0), (x1, y1)])?;
     let w1 = nx + 1;
     let mut tris = Vec::with_capacity(nx * ny * 2);
     for j in 0..ny {

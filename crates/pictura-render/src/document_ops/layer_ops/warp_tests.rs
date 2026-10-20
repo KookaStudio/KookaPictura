@@ -4,6 +4,8 @@
 
 use super::kernel::Interpolation;
 use super::paths::resolve_path;
+use super::transform::solve_homography;
+use super::transform::PlaneMap;
 use super::transform_layer_warp;
 use super::warp_raster::{triangulate, warp_planes, Planes};
 use pictura_core::warp::{BezierMesh, Warp, WarpStyle};
@@ -96,6 +98,7 @@ fn identity_warps_are_refused_and_change_nothing() {
             &mut doc,
             "0",
             &warp,
+            None,
             Interpolation::Bicubic
         ));
         assert_eq!(doc, before);
@@ -115,6 +118,7 @@ fn a_translating_mesh_moves_the_pixels_exactly() {
             &mut doc,
             "0",
             &shifted(bounds(r), 10.0, -2.0),
+            None,
             interp
         ));
         let before = pixel_layer(r);
@@ -137,6 +141,7 @@ fn arc_keeps_the_bottom_corners_and_spreads_the_top() {
         &mut doc,
         "0",
         &warp,
+        None,
         Interpolation::Bilinear
     ));
     let out = resolve_path(&doc, "0").unwrap().rect;
@@ -204,12 +209,13 @@ fn a_shrinking_warp_is_prefiltered() {
 
 #[test]
 fn a_fold_draws_the_later_cell_on_top() {
-    // Every source column lands on the same destination column: the last
-    // (right-most) source column is what shows.
+    // The left half is mirrored onto the strip the right half covers, so the
+    // two cells overlap everywhere: the sampled pixel reads about 1/8 from the
+    // earlier (left) cell and 7/8 from the later (right) one.
     let r = rect(0, 0, 8, 4);
     let values: Vec<f32> = (0..32).map(|i| (i % 8) as f32 / 8.0).collect();
     let src = Planes::new(vec![values, vec![1.0; 32]], 8, 4, Some(1));
-    let fold = |x: f64, y: f64| (2.0 + x / 4.0, y);
+    let fold = |x: f64, y: f64| (2.0 + (x - 4.0).abs() / 2.0, y);
     let t = triangulate(r, &fold).unwrap();
     let out = warp_planes(&src, r, &t, Interpolation::Nearest, false);
     let (dl, dt, dr, _) = t.dest;
@@ -232,6 +238,7 @@ fn the_layer_mask_moves_and_keeps_its_default() {
         &mut doc,
         "0",
         &shifted(bounds(r), 5.0, 0.0),
+        None,
         Interpolation::Bilinear
     ));
     let mask = resolve_path(&doc, "0").unwrap().mask.clone().unwrap();
@@ -277,6 +284,7 @@ fn depth16_warp_resamples_and_keeps_the_native_store() {
         &mut doc,
         "0",
         &Warp::custom(mesh, b),
+        None,
         Interpolation::Bicubic
     ));
     let layer = resolve_path(&doc, "0").unwrap();
@@ -289,4 +297,112 @@ fn depth16_warp_resamples_and_keeps_the_native_store() {
     assert!(store.planes.iter().all(|(_, s)| s.len() == area));
     let bytes = pictura_codec::write_psd(&doc).expect("a warped high-depth layer saves");
     assert_eq!(u16::from_be_bytes(bytes[22..24].try_into().unwrap()), 16);
+}
+
+#[test]
+fn a_projective_box_is_kept_exactly() {
+    // Entering Warp after Perspective keeps the box's homography after the
+    // (identity) mesh: interior pixels sample where the inverse homography
+    // says. A Bezier patch through the projected control points would put the
+    // source centre 1.6 px left of where the homography does.
+    let r = rect(0, 0, 40, 40);
+    let mut layer = pixel_layer(r);
+    let gradient: Vec<u8> = (0..1600).map(|i| (i % 40) as u8 * 6).collect();
+    layer.channels.iter_mut().find(|c| c.id == 0).unwrap().data = gradient.into();
+    let quad = [(0.0, 0.0), (40.0, 8.0), (40.0, 32.0), (0.0, 40.0)];
+    let b = bounds(r);
+    let mut doc = doc_with(layer);
+    assert!(transform_layer_warp(
+        &mut doc,
+        "0",
+        &Warp::custom(BezierMesh::identity(b, 1, 1), b),
+        Some(quad),
+        Interpolation::Bilinear
+    ));
+    let out = resolve_path(&doc, "0").unwrap();
+    let corners = [(0.0, 0.0), (40.0, 0.0), (40.0, 40.0), (0.0, 40.0)];
+    let inverse = solve_homography(quad, corners).unwrap();
+    for x in [10, 18, 25, 33] {
+        let (u, _) = inverse.forward(f64::from(x) + 0.5, 20.5).unwrap();
+        let i = ((20 - out.rect.top) * out.rect.width() + (x - out.rect.left)) as usize;
+        let got = f64::from(channel(out, 0)[i]);
+        assert!(
+            (got - 6.0 * (u - 0.5)).abs() <= 3.0,
+            "column {x}: {got} for source x {u}"
+        );
+    }
+}
+
+#[test]
+fn a_mask_wider_than_the_layer_moves_with_it() {
+    // The mask reaches 6 px right of the layer: the outside part follows the
+    // translation instead of collapsing onto the box edge.
+    let r = rect(4, 4, 14, 14);
+    let mut layer = pixel_layer(r);
+    layer.mask = Some(LayerMask {
+        rect: rect(4, 4, 20, 14),
+        default_color: 255,
+        data: Some(vec![0u8; 160].into()),
+        ..Default::default()
+    });
+    let mut doc = doc_with(layer);
+    assert!(transform_layer_warp(
+        &mut doc,
+        "0",
+        &shifted(bounds(r), 5.0, 0.0),
+        None,
+        Interpolation::Bilinear
+    ));
+    let mask = resolve_path(&doc, "0").unwrap().mask.clone().unwrap();
+    assert_eq!(mask.rect, rect(9, 4, 25, 14));
+    assert!(mask.data.unwrap().iter().all(|v| *v == 0));
+}
+
+#[test]
+fn a_mask_that_cannot_follow_refuses_the_warp() {
+    // A one-row mask reaching almost to the coordinate limit: the pixels can
+    // move 1000 px right, the mask cannot. The op refuses rather than move the
+    // pixels and leave the mask behind.
+    let r = rect(4, 4, 14, 14);
+    let right = 1_048_000;
+    let mut layer = pixel_layer(r);
+    layer.mask = Some(LayerMask {
+        rect: rect(4, 4, right, 5),
+        default_color: 255,
+        data: Some(vec![0u8; (right - 4) as usize].into()),
+        ..Default::default()
+    });
+    let mut doc = doc_with(layer);
+    let before = doc.clone();
+    assert!(!transform_layer_warp(
+        &mut doc,
+        "0",
+        &shifted(bounds(r), 1000.0, 0.0),
+        None,
+        Interpolation::Bilinear
+    ));
+    assert_eq!(doc, before);
+}
+
+#[test]
+fn a_warp_past_the_result_area_ceiling_is_refused() {
+    // Inside the coordinate limit but billions of pixels in area: refused
+    // before any plane is allocated.
+    let r = rect(0, 0, 4, 4);
+    let b = bounds(r);
+    let huge = Warp::custom(
+        BezierMesh::identity(b, 1, 1).map_points(|p| [p[0] * 16_384.0, p[1] * 16_384.0]),
+        b,
+    );
+    assert!(triangulate(r, &|x, y| huge.map(x, y)).is_none());
+    let mut doc = doc_with(pixel_layer(r));
+    let before = doc.clone();
+    assert!(!transform_layer_warp(
+        &mut doc,
+        "0",
+        &huge,
+        None,
+        Interpolation::Bilinear
+    ));
+    assert_eq!(doc, before);
 }
