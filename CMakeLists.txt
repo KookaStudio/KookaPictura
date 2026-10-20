@@ -50,6 +50,11 @@ set(CMAKE_AUTORCC ON)
 # every translation unit regardless of include order; other compilers ignore it.
 add_compile_definitions(_USE_MATH_DEFINES)
 
+# Qt6::GuiPrivate supplies the RHI headers used by interop.cpp. The private
+# dependency is deliberate, so mute Qt's configure-time warning at the boundary
+# instead of filtering build logs.
+set(QT_NO_PRIVATE_MODULE_WARNING ON)
+
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Svg Network PrintSupport GuiPrivate)
 
 # Enables BUILD_TESTING (default ON); the Qt Test suites live under cpp/tests.
