@@ -211,6 +211,7 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/defringe_dialog.cpp
     crates/pictura-app/cpp/stroke_dialog.cpp
     crates/pictura-app/cpp/image_view.cpp
+    crates/pictura-app/cpp/image_view_transform_warp.cpp
     crates/pictura-app/cpp/image_view_overlays.cpp
     crates/pictura-app/cpp/image_view_annotations.cpp
     crates/pictura-app/cpp/image_view_guides.cpp

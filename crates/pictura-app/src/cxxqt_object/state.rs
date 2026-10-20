@@ -87,6 +87,9 @@ pub struct TransformSession {
     /// The reference point (document space) and its position at begin.
     pub(super) pivot: (f64, f64),
     pub(super) pivot_origin: (f64, f64),
+    /// The reference point captured at press; a Distort drag carries it with
+    /// the quad from this anchor.
+    pub(super) start_pivot: (f64, f64),
     /// Whether the canvas draws the reference point.
     pub(super) show_pivot: bool,
     /// Horizontal/vertical skew in radians.

@@ -285,16 +285,44 @@ void ImageView::beginTransformPreview(const QImage& base, const QImage& layer,
     transformDx_ = 0.0;
     transformDy_ = 0.0;
     transformProjective_ = QTransform();
+    transformProjectiveCoefficients_ = {};
+    transformProjectiveSource_ = QRectF();
+    transformWarped_ = QImage();
+    transformWarpedOrigin_ = QPointF();
+    transformWarpedValid_ = false;
     transformProjectiveActive_ = false;
     transformQuad_.clear();
     update();
 }
 
-void ImageView::setTransformPreviewProjective(const std::array<double, 9>& coefficients)
+void ImageView::setTransformPreviewProjective(const std::array<double, 9>& coefficients,
+                                              const QRectF& sourceRect)
 {
     transformProjective_ = QTransform(coefficients[0], coefficients[1], coefficients[2],
                                       coefficients[3], coefficients[4], coefficients[5],
                                       coefficients[6], coefficients[7], coefficients[8]);
+    transformProjectiveCoefficients_ = coefficients;
+    transformProjectiveSource_ = sourceRect;
+    QRectF visible;
+    if (width() > 0 && height() > 0) {
+        const QPointF a = widgetToImage(QPointF(0.0, 0.0));
+        const QPointF b = widgetToImage(QPointF(width(), 0.0));
+        const QPointF c = widgetToImage(QPointF(width(), height()));
+        const QPointF d = widgetToImage(QPointF(0.0, height()));
+        const double left = std::min({a.x(), b.x(), c.x(), d.x()});
+        const double top = std::min({a.y(), b.y(), c.y(), d.y()});
+        const double right = std::max({a.x(), b.x(), c.x(), d.x()});
+        const double bottom = std::max({a.y(), b.y(), c.y(), d.y()});
+        visible = QRectF(QPointF(left, top), QPointF(right, bottom));
+    }
+    if (visible.isEmpty() && !docSize_.isEmpty()) {
+        visible = QRectF(QPointF(0.0, 0.0), QSizeF(docSize_));
+    }
+    const WarpedTransformPreview warped =
+        warpTransformPreview(moveLayer_, moveLayerPos_, coefficients, sourceRect, visible);
+    transformWarped_ = warped.image;
+    transformWarpedOrigin_ = warped.origin;
+    transformWarpedValid_ = !warped.image.isNull();
     transformProjectiveActive_ = true;
     update();
 }
@@ -321,6 +349,11 @@ void ImageView::clearTransformPreview()
 {
     transformActive_ = false;
     transformProjective_ = QTransform();
+    transformProjectiveCoefficients_ = {};
+    transformProjectiveSource_ = QRectF();
+    transformWarped_ = QImage();
+    transformWarpedOrigin_ = QPointF();
+    transformWarpedValid_ = false;
     transformProjectiveActive_ = false;
     transformQuad_.clear();
     transformPivotVisible_ = false;
@@ -599,8 +632,12 @@ void ImageView::paintEvent(QPaintEvent*)
             // perspective, a vanishing line close to the image; Qt's raster
             // engine can drop the whole image in that form.
             painter.translate(moveLayerPos_);
-            painter.setTransform(transformProjective_, true);
-            painter.drawImage(QPointF(0.0, 0.0), moveLayer_);
+            if (transformWarpedValid_) {
+                painter.drawImage(transformWarpedOrigin_, transformWarped_);
+            } else {
+                painter.setTransform(transformProjective_, true);
+                painter.drawImage(QPointF(0.0, 0.0), moveLayer_);
+            }
         } else {
             painter.setTransform(transformPreviewMatrix(), true);
             painter.drawImage(moveLayerPos_, moveLayer_);

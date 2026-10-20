@@ -12,6 +12,23 @@ Snapshot for resuming after a context break. Update after each milestone.
   contains reproduced Adobe Help prose or the old wording.
 - Toolchain: Rust 1.98 (`rust-toolchain.toml`), system Qt **6.11.1**, cxx-qt
   **0.10.0**, wgpu **30.0.1**, lcms2 **6.2.0** (system Little CMS 2.19).
+- **Distort transform parity** (#748, branch `fix/748-transform-distort`,
+  OpenSpec change `distort-transform-parity`, archived into
+  `document/free-transform` and `document/transform-reference-point`).
+  `Edit > Transform > Distort` now moves the grabbed corner by the
+  press-to-pointer delta (keeping the grab offset), stops at the last convex
+  quad, carries the reference point with the box, snaps corners to visible
+  guides within 8 screen px, and refuses editable type (menu disabled) unless a
+  selection lifts its pixels. The projective engine (`QuadMap`) and the live
+  preview clip to the front side of the horizon, so a direct quad past it no
+  longer samples the mirrored far side. Qt's projective `drawImage` could drop
+  a triangle at some angles, so the live preview is CPU-warped
+  (`image_view_transform_warp.cpp`) and the Qt projective draw is only a
+  fallback. Perspective and Skew are unchanged. Ceilings (`ponytail:`): Distort
+  snaps whenever guides are visible because
+  `View > Snap` / `Snap To > Guides` are stubs; gate it on that state when it
+  exists. Tests: `tst_transform_distort` (10), Rust gesture/engine units; the
+  self-test's Distort/Perspective/Skew checks still pass.
 - **Large brush and shape performance** (#719, branch
   `fix/719-large-brush-perf`, OpenSpec change `large-tool-performance`,
   archived into `tools/banded-dab-raster`, `tools/bounded-tool-commit`,

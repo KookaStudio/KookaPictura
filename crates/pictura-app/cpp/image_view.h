@@ -7,6 +7,7 @@
 #include <QtCore/QRect>
 #include <QtCore/QRectF>
 #include <QtCore/QSize>
+#include <QtCore/QSizeF>
 #include <QtCore/QString>
 #include <QtGui/QColor>
 #include <QtGui/QImage>
@@ -270,7 +271,8 @@ public:
     // `QTransform(m11,m12,m13,m21,m22,m23,m31,m32,m33)` order, mapping source
     // document space onto the target quad. Overrides the similarity preview
     // until the next `beginTransformPreview`.
-    void setTransformPreviewProjective(const std::array<double, 9>& coefficients);
+    void setTransformPreviewProjective(const std::array<double, 9>& coefficients,
+                                       const QRectF& sourceRect);
     void setTransformQuad(const QPolygonF& corners);
     // The Free Transform reference point (image space) and its marker
     // visibility; drawn as a target glyph with the transform overlay.
@@ -718,6 +720,11 @@ private:
     double transformDx_ = 0.0;
     double transformDy_ = 0.0;
     QTransform transformProjective_;
+    std::array<double, 9> transformProjectiveCoefficients_{};
+    QRectF transformProjectiveSource_;
+    QImage transformWarped_;
+    QPointF transformWarpedOrigin_;
+    bool transformWarpedValid_ = false;
     bool transformProjectiveActive_ = false;
     QPolygonF transformQuad_;
     QPointF transformPivot_;
@@ -748,5 +755,20 @@ private:
     };
     PressTrace pressTrace_;
 };
+
+/// A CPU-warped live projective preview: the warped image and its local
+/// destination origin (relative to the moving layer's document origin).
+struct WarpedTransformPreview {
+    QImage image;
+    QPointF origin;
+};
+
+/// Warp `source` (whose document origin is `sourceOrigin`) by `coefficients`
+/// (source-local to destination-local, `QTransform` order), keeping only the
+/// part inside `visibleDocument`. Empty when nothing is visible.
+WarpedTransformPreview warpTransformPreview(const QImage& source, const QPointF& sourceOrigin,
+                                            const std::array<double, 9>& coefficients,
+                                            const QRectF& sourceRect,
+                                            const QRectF& visibleDocument);
 
 } // namespace pictura

@@ -1,5 +1,7 @@
 mod bridge;
+mod convex;
 mod dispatch;
+mod distort;
 mod geometry;
 mod session;
 mod skew;
