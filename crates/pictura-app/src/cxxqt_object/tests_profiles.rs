@@ -11,6 +11,33 @@ fn ms(label: &str, d: std::time::Duration) {
     println!("{label}: {:.2} ms", d.as_secs_f64() * 1000.0);
 }
 
+/// Print-only 4000² opacity preview profile: a 512² bounded layer's region
+/// composite against the full-document composite the old preview path ran per
+/// tick. Run with `cargo test -p pictura_app opacity_preview_profile_4000 --
+/// --ignored --nocapture`.
+#[test]
+#[ignore = "4000x4000 opacity preview profile; run explicitly with --ignored --nocapture"]
+fn opacity_preview_profile_4000() {
+    let mut doc = Document::new(4000, 4000, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers = vec![
+        pixel_layer("base", 4000, 4000, (30, 60, 90)),
+        pixel_layer("top", 512, 512, (200, 100, 50)),
+    ];
+    let rect = doc.layers.last().unwrap().rect;
+    let steps = 3usize;
+    let start = std::time::Instant::now();
+    for _ in 0..steps {
+        let _ = pictura_render::composite_active(&doc, false);
+    }
+    let full = start.elapsed().as_secs_f64() * 1000.0 / steps as f64;
+    let start = std::time::Instant::now();
+    for _ in 0..steps {
+        let _ = pictura_render::composite_region_active(&doc, rect, false);
+    }
+    let region = start.elapsed().as_secs_f64() * 1000.0 / steps as f64;
+    println!("opacity_preview_profile_4000 full={full:.2}ms region={region:.2}ms steps={steps}");
+}
+
 /// The C++ `ImageView::presentLevelForZoom` formula, so the profile crops the
 /// level the canvas would. ponytail: mirrored, not shared across the FFI.
 fn present_level(zoom: f64, level_count: usize) -> usize {

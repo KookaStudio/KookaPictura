@@ -429,8 +429,17 @@ QColor ToolController::background() const { return background_; }
 void ToolController::setBackground(const QColor& color)
 {
     background_ = color;
-    updateCanvasBackdrop();
+    // A mask pair is for painting coverage, not for document chrome: keep the
+    // canvas backdrop on the image pair while a mask is the edit target.
+    if (!maskActive_) {
+        updateCanvasBackdrop();
+    }
     emit colorsChanged();
+}
+
+void ToolController::setMaskActive(bool mask)
+{
+    maskActive_ = mask;
 }
 
 void ToolController::updateCanvasBackdrop()

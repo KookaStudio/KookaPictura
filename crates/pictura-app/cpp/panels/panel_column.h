@@ -4,6 +4,7 @@
 #include <QtCore/QJsonArray>
 #include <QtCore/QList>
 #include <QtCore/QPoint>
+#include <QtCore/QPointer>
 #include <QtCore/QRect>
 #include <QtCore/QSet>
 #include <QtCore/QString>
@@ -98,17 +99,27 @@ private:
     QWidget* indicator_ = nullptr;
 };
 
-// The frameless `Qt::Popup` that hosts the whole `PanelGroup` a compact-strip
-// icon was clicked in (M45 C1), so docked, popup, and floating present the same
-// widget with no parity differences. It reports its own hide so the column can
-// put the group back exactly once.
+// The frameless overlay that hosts the whole `PanelGroup` a compact-strip icon
+// was clicked in (M45 C1), so docked, flyout, and floating present the same
+// widget with no parity differences. It is persistent (not a `Qt::Popup`) and
+// reports its own hide so the column can put the group back exactly once.
 class PanelFlyout : public QWidget {
 public:
     explicit PanelFlyout(QWidget* parent = nullptr);
     std::function<void()> onHidden;
+    // Which canvas-facing edge carries the width grip: true for the left edge.
+    void setResizeEdge(bool left);
+    QWidget* resizeGripForTest() const { return resizeGrip_; }
 
 protected:
     void hideEvent(QHideEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
+
+private:
+    void updateResizeGrip();
+
+    QWidget* resizeGrip_ = nullptr;
+    bool resizeLeft_ = true;
 };
 
 // The right-hand panel host. A vertical QSplitter of PanelGroups inside a
@@ -151,14 +162,29 @@ public:
     // overlay. A floated column is not a splitter pane, so the empty-column
     // cleanup must never delete it.
     bool isColumnFloating() const { return columnFloat_ != nullptr; }
+    PanelFloat* columnFloat() const { return columnFloat_; }
+    QRect columnFloatGeometry() const;
     // Drop a live whole-column tear-off overlay without moving the column (used
     // when a session rebuild re-parents the column into the splitter).
     void cancelColumnFloat();
+    // Rebuild a restored overlay at a stored geometry.
+    PanelFloat* restoreGroupFloat(PanelGroup* group, const QRect& geometry);
+    PanelFloat* restoreColumnFloat(const QRect& geometry);
+    // Re-clamp live overlays after the frame geometry changes.
+    void reclampFloats();
+    // Re-dock this column's group overlays into the column (empty-layout reset).
+    void redockGroupFloats();
+    // Hide the flyout from the frame's hide-all / rebuild paths.
+    void closeFlyout() { closeIconFlyout(); }
+    // Re-place a live child-mode flyout after the frame geometry changes.
+    void reclampFlyout();
 
     // M43 session v6: detach a group so it can be adopted by another column
     // (used to rebuild a stored multi-column layout at startup). Returns the
     // live group, unwired from this column, or nullptr when unknown.
     PanelGroup* takeGroup(const QString& groupObjectName);
+    // Pointer overload: safe when group names collide after a tear-off.
+    PanelGroup* takeGroup(PanelGroup* group);
 
     // D1: a tools column hosts one plain content widget instead of groups. It
     // has no tab bar, no `PanelGroup`, and no rail mode; it is atomic (the drop
@@ -321,13 +347,15 @@ public:
     QString flyoutSideForTest() const;
     QString activeIconNameForTest() const { return activeIconName_; }
     QRect iconFlyoutGeometryForTest() const;
+    QWidget* iconFlyoutForTest() const { return flyout_; }
+    QWidget* iconFlyoutResizeGripForTest() const;
     QString flyoutHeaderTitleForTest() const;
     bool flyoutHeaderCloseForTest() const;
     bool triggerFlyoutCloseForTest();
     // M44 C1/S2: the flyout shares the docked widget's scoped style/container.
     bool popupStyleParityForTest(const QString& objectName) const;
-    // M45 C1: the whole PanelGroup currently hosted in the popup, or null when
-    // the popup is closed. The caller compares it to the docked group.
+    // M45 C1: the whole PanelGroup currently hosted in the flyout, or null when
+    // the flyout is closed. The caller compares it to the docked group.
     PanelGroup* iconFlyoutGroupForTest() const { return flyoutGroup_; }
 
     // M44 Phase C: whole-widget-column docking and compact drop.
@@ -426,6 +454,9 @@ private:
     // live float, so the flyout resolves both before it opens.
     PanelGroup* resolveFlyoutGroup(const QString& objectName) const;
     void closeIconFlyout();
+    // Remove a group from the flyout without restoring it (it is being dragged
+    // out into its own overlay).
+    void detachFlyoutForDrag(PanelGroup* group);
     void restoreFlyoutGroup();
     void placeFlyout(const QRect& buttonGlobalRect, const QSize& size);
     QString flyoutSide() const;
@@ -552,9 +583,10 @@ private:
     QString flyoutName_;
     int flyoutGroupIndex_ = -1;
     // Phase 7: the live float that hosted the group when its compact icon was
-    // clicked, so the popup returns it there instead of docking it.
-    PanelFloat* flyoutFloat_ = nullptr;
-    // Phase 7: a collapsed group is expanded for the popup and re-collapsed on
+    // clicked, so the flyout returns it there instead of docking it.
+    QPointer<PanelFloat> flyoutFloat_;
+    QRect flyoutAnchorRect_;
+    // Phase 7: a collapsed group is expanded for the flyout and re-collapsed on
     // close, so a compact icon opens the same content a docked strip icon does.
     bool flyoutWasCollapsed_ = false;
     bool restoringFlyout_ = false;

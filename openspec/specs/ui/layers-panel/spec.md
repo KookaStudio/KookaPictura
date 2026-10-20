@@ -136,7 +136,8 @@ data, and all attributes included — directly above itself, naming the copy
 `"<name> copy"`, except that the copy of the Background SHALL be an ordinary
 layer: not the Background, unlocked, and with an opaque alpha channel. Deleting SHALL remove every selected, eligible layer. Move
 Layer Up/Down SHALL swap the selected layer with its neighbour within its own
-container. Each applied operation SHALL mark the document modified and be one
+container and MUST refuse a move that would place the layer below the
+Background. Each applied operation SHALL mark the document modified and be one
 undoable step.
 
 #### Scenario: Add a layer
@@ -169,6 +170,12 @@ undoable step.
 
 - **WHEN** the user moves the selected layer up or down from the panel or row menu
 - **THEN** its order within its container changes, the rows reorder, and the composite updates
+
+#### Scenario: Move Down at the Background floor is refused
+
+- **WHEN** the layer directly above the Background is moved down
+- **THEN** the order is unchanged, no history state is added, and the Background
+  stays bottom-most
 
 #### Scenario: Duplicating the Background makes an ordinary layer
 
@@ -333,218 +340,6 @@ without panicking and without changing the document.
 
 - **WHEN** a setter is called with a path whose final segment is past the end of its container
 - **THEN** the call fails, no history state is added, and the document is unchanged
-
-### Requirement: Layer row badges and delegate
-
-The system SHALL draw each row with a delegate that paints, in CS6 order, the
-visibility toggle, the thumbnail (a folder glyph for a group), the name, a
-clipping-mask indicator for a clipped layer, the clipping indentation and base
-underline, the layer-mask thumbnail when a mask is present, an adjustment badge
-when adjustment content is present, a layer-style `fx` badge when the layer
-carries a layer style (an `lfx2` or legacy `lrFX` block), and a compact
-**`Blend If` text chip** when the layer's advanced blending is customised — a
-non-default `Blend If` view, or a raw `blending_ranges` block present without a
-typed view. The chip SHALL be a text-only badge (no icon asset) drawn in the
-row's right-edge badge run left of the `fx` and lock badges, and its advance
-SHALL be reserved by the same right-edge walk that lays out the mask thumbnails
-and the name rect so nothing overlaps. A layer whose lock
-state has any flag set SHALL also show a lock badge at the right side of its
-row, except that the Transparency and Image locks a type or shape layer is
-forced to carry SHALL NOT by themselves show one (CS6 shows them only in the
-Lock strip); an unlocked layer SHALL show none. The visibility toggle SHALL be an eye
-icon (`layers.eyeOn`/`layers.eyeOff`) drawn slightly inset from the panel's left
-edge and at the same x for every row, independent of nesting depth; the nesting
-indentation SHALL apply to the thumbnail and name, not to the visibility toggle.
-A layer whose color label is not `None` SHALL tint the **visibility toggle's own
-background** (`eyeRect`) with that label color behind the eye glyph, and SHALL
-additionally paint a small color-label **chip** — a short bar of the label
-color, one row tall — at the start of the row content immediately before the
-thumbnail, with the thumbnail and name laid out after the chip so no rect
-overlaps; the tint SHALL keep the eye glyph and any selection highlight legible,
-and the label color elsewhere on the row SHALL fall back to the row background.
-The chip is a paint-only affordance and SHALL NOT alter hit-testing beyond the
-thumbnail and name rects accounting for it. A group with at least one child
-SHALL show a disclosure icon — right when collapsed, down when expanded — at its
-indented position, and clicking that icon SHALL expand or collapse the group. A
-**regular (non-group) layer's thumbnail SHALL be drawn over a cached two-tone
-checkerboard** so transparency reads under it, while a group keeps its folder
-glyph and no checkerboard. A **type layer's thumbnail SHALL be drawn as a
-square (1:1) white card bearing a "T"**, sized to the thumbnail's side and
-centred in its slot, regardless of the document's aspect ratio; it SHALL NOT be
-letterboxed to the document, and its hit rectangle SHALL be that square card.
-Every other non-group layer's thumbnail SHALL be laid out in a box `thumb` wide
-and the row's full height minus a small pad, and SHALL be letterboxed to the
-document's aspect ratio inside that box, so a tall document's thumbnail fills the
-row vertically rather than floating in a square box. **Every non-group thumbnail
-other than a type layer's SHALL carry a 1 px black outline**; a type layer's
-card and a group's folder glyph SHALL draw no outline, and **when exactly one
-layer is active** (the same singular
-active-layer resolution tool edits use) its thumbnail SHALL additionally show
-white 1 px corner brackets drawn one pixel outside the thumbnail card (for a
-regular layer, outside the outline); with zero or
-multiple active layers no brackets are drawn. A layer whose row reports the
-smart-object projection SHALL paint the `layers.kindSmartObject` badge on the
-thumbnail's lower-right corner, whether the smart object is embedded or
-placed/external; the badge SHALL be omitted when the asset is missing. Row
-typography SHALL derive from the layer: a `background` layer's name SHALL be
-italic/cursive, every other name normal, and a layer that is a member of the
-frame's link set or a placed/external smart object SHALL be underlined through
-the `LayerRowLinkedRole` and `LayerRowPlacedRole` projections. The delegate SHALL
-report a row height of at least **28 px** through one named constant used by both
-`sizeHint` and the vertical centring math. If an expected icon asset is
-unavailable, the delegate SHALL omit that badge while keeping the row legible
-rather than fail.
-
-#### Scenario: The visibility toggle is an eye icon [lpr_eye]
-
-- **WHEN** a layer row is shown
-- **THEN** its visibility toggle is drawn from the eye icon asset, and a hidden
-  layer uses the off variant
-
-#### Scenario: The eye is left-anchored for every depth [lpr_eye]
-
-- **WHEN** a nested layer is shown under its group
-- **THEN** its eye icon is at the same x as a top-level row's, while its
-  thumbnail and name are indented
-
-#### Scenario: The color label tints only the eye toggle [lpr_label_tint]
-
-- **WHEN** a layer with a non-`None` color label is shown
-- **THEN** the eye toggle's background is filled with that label color behind
-  the eye glyph and a chip of the same color is painted at the row content edge
-  before the thumbnail, and the rest of the row background is unchanged
-
-#### Scenario: The label chip sits before the thumbnail [lpr_label_chip]
-
-- **WHEN** a labeled row is shown
-- **THEN** the chip is drawn between the disclosure/clipping glyph and the
-  thumbnail, and the thumbnail's left edge follows the chip so the two do not
-  overlap
-
-#### Scenario: An unlabeled layer has no gutter tint [lpr_label_tint_none]
-
-- **WHEN** a layer with color label `None` is shown
-- **THEN** its eye gutter uses the normal row background and no chip is painted
-
-#### Scenario: A smart object shows the badge [lpr_smart_badge]
-
-- **WHEN** an embedded or placed smart-object layer is shown
-- **THEN** its thumbnail draws the smart-object badge on the lower-right corner
-
-#### Scenario: A non-smart layer shows no smart badge [lpr_smart_badge_absent]
-
-- **WHEN** an ordinary pixel layer is shown
-- **THEN** no smart-object badge is drawn on its thumbnail
-
-#### Scenario: A group shows a disclosure icon [lpr_chevron]
-
-- **WHEN** a group with children is shown collapsed and then expanded
-- **THEN** it shows the right-pointing icon when collapsed and the down-pointing
-  icon when expanded, and clicking the icon toggles it
-
-#### Scenario: A masked layer shows a mask thumbnail [m39_badges]
-
-- **WHEN** a layer carries a layer mask
-- **THEN** its row shows a mask thumbnail and the mask-presence flag is set
-
-#### Scenario: A clipped layer shows the clipping indicator [lpc_clip]
-
-- **WHEN** a layer is clipped to the layer below it
-- **THEN** its row draws the clipping-mask indicator in addition to the
-  indentation and the base layer's underline
-
-#### Scenario: A group row is expandable [m39_badges]
-
-- **WHEN** a group has children
-- **THEN** its row is marked expandable and shows an expand/collapse control
-
-#### Scenario: A locked layer shows a right-side lock badge [lpc_lockbadge]
-
-- **WHEN** a layer has any lock flag set
-- **THEN** its row draws a lock badge on the right side, and an unlocked layer
-  draws no lock badge
-
-#### Scenario: A type layer's forced locks show no badge [lpc_forced_lock_badge]
-
-- **WHEN** `tst_type_tools::typeLayerRowHasNoLockBadge` commits a type layer, then also locks its position
-- **THEN** the layer carries the Transparency and Image locks and its row has no lock badge; with Position locked too the badge shows
-
-#### Scenario: A regular thumbnail shows a checkerboard [lpr_thumb_checker]
-
-- **WHEN** a regular (non-group) layer with translucent pixels is shown
-- **THEN** its thumbnail is drawn over a two-tone checkerboard, while a group
-  row keeps its folder glyph and draws no checkerboard
-
-#### Scenario: Thumbnails are outlined and the active layer is bracketed [lpr_thumb_bracket]
-
-- **WHEN** a regular layer row is shown with a 1 px black thumbnail outline
-- **THEN** the singular active layer's thumbnail additionally shows white
-  corner brackets one pixel outside the outline, and a multi- or zero-selection
-  row shows no brackets
-
-#### Scenario: A group icon has no outline [lpr_group_no_outline]
-
-- **WHEN** a group row is shown
-- **THEN** its folder glyph carries no 1 px black outline, while a regular
-  layer's thumbnail keeps its outline
-
-#### Scenario: A type card is square with no outline [lpr_type_thumb_card]
-
-- **WHEN** a type layer row is shown in a document of any aspect ratio
-- **THEN** its thumbnail is a square white card with a "T" whose width equals
-  its height, it is not letterboxed to the document, it carries no 1 px black
-  outline, and the thumbnail's hit rectangle is that same square card
-
-#### Scenario: A tall thumbnail fills the row [lpr_thumb_fill]
-
-- **WHEN** a portrait document's layer row is shown
-- **THEN** its letterboxed thumbnail is taller than it is wide and spans the
-  row's full height minus the thumbnail pad
-
-#### Scenario: Row typography follows the layer kind [lpr_row_fonts]
-
-- **WHEN** the rows for the Background, a linked layer, and a placed smart
-  object are inspected
-- **THEN** the Background name is italic/cursive, ordinary names are normal, and
-  the linked and placed rows are underlined through their roles
-
-#### Scenario: The row height has a floor [lpr_row_height]
-
-- **WHEN** a row's size hint is read
-- **THEN** its height is at least 28 px from the single named row-height
-  constant
-
-#### Scenario: A missing badge asset does not break the row [m39_badges]
-
-- **WHEN** the adjustment badge's icon asset is missing
-- **THEN** the row is still drawn and the badge is simply omitted
-
-#### Scenario: A styled layer shows the fx badge
-
-- **WHEN** a layer that carries a layer style is shown
-- **THEN** its row draws the `layers.fx` badge at its right edge beside the lock
-  and mask badges, and a layer with no style draws no fx badge
-
-#### Scenario: A customised Blend If shows the badge [lpr_blendif_badge]
-
-- **WHEN** a layer whose advanced blending is customised (its Blend If view is
-  not the full `(0, 65535)` default, or a raw `blending_ranges` block is
-  present without a typed view) is shown
-- **THEN** its row draws a compact `Blend If` text chip in the right-edge badge
-  run, and the name elides before the chip so no rect overlaps
-
-#### Scenario: A default Blend If shows no badge [lpr_blendif_badge_absent]
-
-- **WHEN** a layer with no Blend If view and no `blending_ranges` block, or one
-  whose every range is the full default, is shown
-- **THEN** no `Blend If` chip is drawn on its row and the name keeps the full
-  right-edge run
-
-#### Scenario: A raw blending-ranges block without a typed view still badges [lpr_blendif_raw]
-
-- **WHEN** a layer carries a non-empty `blending_ranges` block that cannot be
-  parsed into a typed Blend If view
-- **THEN** its row still draws the `Blend If` chip
 
 ### Requirement: Multi-selection edits and refusals
 
@@ -911,13 +706,32 @@ beside it. The control SHALL convert between the displayed percentage and the
 stored `0..=255` value with `round(pct * 255 / 100)` on edit and `round(value *
 100 / 255)` on display, so `100`% is `255`, `50`% is `128`, and `0`% is `0`. The
 control SHALL distinguish a live preview from a commit: while a scrub or slider
-drag is in progress it SHALL emit preview changes that update the canvas without
-adding a history state, and when the edit finishes it SHALL emit one commit that
-adds exactly one undo state for the whole edit. A completed text edit SHALL also
-add one state. The control SHALL emit nothing for a programmatic sync, so a
+drag is in progress the control SHALL emit preview changes without adding a
+history state, and when the edit finishes it SHALL emit one commit. The panel
+SHALL coalesce applying those previews to at most one canvas update per short coalescing interval (about
+120 ms), using the latest value, including while the pointer is held stationary
+mid-drag. The interval SHALL start on the first change of a gesture and SHALL NOT
+be restarted by later changes. A pending preview SHALL NOT be overwritten or discarded by a panel
+sync: the field SHALL keep the user's latest value until the preview is applied
+on its interval, and a panel refresh MUST NOT apply the pending preview early.
+A gesture that returns to its starting value before the interval elapses SHALL
+composite nothing and add no state when the final stored byte equals the
+starting stored byte. A real view change, a document replacement in the same
+view, or a change to the selected targets SHALL cancel the gesture and the
+field's pending commit, whether the change happens before or after the preview
+fires, and MUST NOT apply a value to the new target. A panel model reset SHALL
+NOT by itself cancel the gesture: a transiently empty selection is not a target
+change, but a restored non-empty selection whose layers differ SHALL cancel. The
+commit SHALL be a no-op when the captured target no longer resolves. A canceled
+gesture whose preview already changed pixels SHALL leave those pixels in the
+document and mark it modified; it adds no history state. The commit SHALL stop
+and discard any pending preview and apply the final value exactly once, adding
+exactly one undo state for the whole edit. A completed text edit SHALL also add
+one state. The control SHALL emit nothing for a programmatic sync, so a
 programmatic sync does not feed back. The existing enable/refusal rules SHALL be
-unchanged: Fill is unavailable for a group, and the Background and a fully locked
-layer disable both controls.
+unchanged: Fill is unavailable for a group, and the Background and a fully
+locked layer disable both controls. Synthetic display-only rows SHALL NOT count
+as eligible targets.
 
 #### Scenario: A percentage maps to the stored byte [lpc_percent]
 
@@ -933,7 +747,7 @@ layer disable both controls.
 
 - **WHEN** the user drags the Opacity popup slider or drags horizontally on the
   Opacity field
-- **THEN** the percentage changes, the canvas updates live, and the whole drag is
+- **THEN** the percentage changes, previews are emitted, and the whole drag is
   applied in one undo step
 
 #### Scenario: A drag adds one undo state only at release [lpc_preview]
@@ -941,6 +755,47 @@ layer disable both controls.
 - **WHEN** an Opacity or Fill drag previews several values and is then released
 - **THEN** no undo state was added during the drag and exactly one undo state is
   added on release
+
+#### Scenario: Rapid ticks coalesce into one preview [lpc_coalesced]
+
+- **WHEN** an Opacity or Fill drag emits several values within one coalescing
+  interval
+- **THEN** at most one preview is applied for that interval, using the latest
+  value, no undo state is added, and the interval is not restarted by later
+  changes
+
+#### Scenario: A mid-drag pause previews while the button is held [lpc_pause]
+
+- **WHEN** the pointer stops moving during a drag but the button is still held
+- **THEN** the latest value is previewed within the coalescing interval and no
+  undo state is added
+
+#### Scenario: A fast round trip with no stored-byte change does nothing [lpc_round_trip]
+
+- **WHEN** a drag changes the value and returns to the starting value before the
+  interval elapses, the final stored byte equals the starting stored byte, and
+  the edit is released
+- **THEN** no composite runs and no undo state is added
+
+#### Scenario: The commit wins over a pending preview [lpc_commit_wins]
+
+- **WHEN** the edit finishes while a preview is still pending
+- **THEN** the commit applies the final value exactly once and adds exactly one
+  undo state
+
+#### Scenario: A panel sync preserves a pending preview [lpc_preserve]
+
+- **WHEN** a panel refresh or model sync runs while a preview is pending
+- **THEN** the field keeps the latest user value, no preview is applied early,
+  and the pending preview is applied on its coalescing interval
+
+#### Scenario: A target change cancels the gesture [lpc_target_change]
+
+- **WHEN** the view changes, the document is replaced in the same view, or the
+  selected targets change, before or after a preview fires
+- **THEN** the gesture and the field's pending commit are canceled, no value is
+  applied to the new target, and a preview that already ran leaves the document
+  modified and dirty with no added history state
 
 #### Scenario: The percent sign is inside the value box [lpr_percent]
 
@@ -1082,8 +937,9 @@ position, releasing it onto a group row SHALL reparent it as a child of that
 group, and releasing it on the empty viewport below the last row SHALL move it to
 the document root (out of any group), each as one undoable step. The system SHALL
 refuse, leaving the document unchanged, a move of the Background layer, of a
-fully-locked or nesting-locked layer, of a row onto itself, or of a row into its
-own descendant. Dropping a dragged row on a bottom-strip button SHALL apply that
+fully-locked or nesting-locked layer, of a row onto itself, of a row into its
+own descendant, or of a row to a position at or below a Background in the
+destination container. Dropping a dragged row on a bottom-strip button SHALL apply that
 button's action to the dragged row: Delete deletes it, New Layer duplicates it
 unless the dragged row is the Background — in which case New Layer converts the
 Background to a normal layer in place — and New Group groups it; buttons whose
@@ -1139,6 +995,13 @@ into the row.
   refusal target such as the Background
 - **THEN** no valid drop indicator is shown and releasing the drag changes
   nothing and adds no history state
+
+#### Scenario: A drop below the Background is refused [lpr_drop_bg_below]
+
+- **WHEN** a row is dragged over the gap below the Background in the same
+  container
+- **THEN** no drop indicator is shown, releasing the drag changes nothing, and
+  no history state is added
 
 #### Scenario: A locked or Background row is refused [lpr_drag]
 
@@ -1261,7 +1124,7 @@ separator in a slightly darker grey at the gutter's right edge, between the
 visibility toggle and the row content. The expand/collapse chevron slot SHALL be
 reserved only for rows that are expandable, so a regular (non-group) layer's
 thumbnail begins immediately after the gutter instead of leaving an empty
-chevron-width gap. The eye hit-target, the label tint, and the thumbnail/name
+chevron-width gap. The eye hit-target, the label fill, and the thumbnail/name
 hit-targets SHALL all mirror this layout.
 
 #### Scenario: The eye is centred in its gutter [lpr_eye_gutter]
@@ -1435,8 +1298,8 @@ delegate rather than the palette's blue highlight, and the delegate SHALL be the
 single source of that selection colour with no scoped stylesheet selection rule
 for the tree view. The content column SHALL carry a 2 px left padding so the
 thumbnail and name are not flush against the visibility gutter. The visibility
-toggle's label tint and its 1 px gutter separator SHALL be unchanged, and the
-gutter separator SHALL stay 1 px.
+column's label fill and its 1 px gutter separator SHALL remain unchanged by
+selection, and the gutter separator SHALL stay 1 px.
 
 #### Scenario: The row background steps lighter than the list [lpr_row_surface]
 
@@ -2058,3 +1921,246 @@ unchanged.
   button keeps the same width it had before the resize, and the distance from
   the panel's left edge to the first button equals the distance from the last
   button to the panel's right edge within one pixel
+
+### Requirement: Layer row badges, labels, and delegate
+
+The system SHALL draw each row with a delegate that paints, in CS6 order, the
+visibility toggle, the thumbnail (a folder glyph for a group), the name, a
+clipping-mask indicator for a clipped layer, the clipping indentation and base
+underline, the layer-mask thumbnail when a mask is present, an adjustment badge
+when adjustment content is present, a layer-style `fx` badge when the layer
+carries a layer style (an `lfx2` or legacy `lrFX` block), and a compact
+**`Blend If` text chip** when the layer's advanced blending is customised — a
+non-default `Blend If` view, or a raw `blending_ranges` block present without a
+typed view. The chip SHALL be a text-only badge (no icon asset) drawn in the
+row's right-edge badge run left of the `fx` and lock badges, and its advance
+SHALL be reserved by the same right-edge walk that lays out the mask thumbnails
+and the name rect so nothing overlaps. A layer whose lock
+state has any flag set SHALL also show a lock badge at the right side of its
+row, except that the Transparency and Image locks a type or shape layer is
+forced to carry SHALL NOT by themselves show one (CS6 shows them only in the
+Lock strip); an unlocked layer SHALL show none. The visibility toggle SHALL be an eye
+icon (`layers.eyeOn`/`layers.eyeOff`) drawn slightly inset from the panel's left
+edge and at the same x for every row, independent of nesting depth; the nesting
+indentation SHALL apply to the thumbnail and name, not to the visibility toggle.
+A layer whose color label is not `None` SHALL fill the **whole visibility
+column** (the full 30 px column, at the row's full height) with that label
+color at full opacity behind the eye glyph. The eye glyph SHALL remain legible
+against the fill, a selected labeled row SHALL keep the label fill in its
+visibility column rather than the selection surface, and the label color
+elsewhere on the row SHALL fall back to the row background. The fill is
+paint-only and SHALL NOT alter the visibility column's hit target. The labeled
+row's thumbnail, name, mask, link, and vector hit rectangles SHALL match an
+unlabeled row's x, with no color-label chip or chip-reserved space before the
+thumbnail. The row's 1 px bottom rule and the gutter's 1 px separator SHALL
+remain drawn over the fill. A group with at least one child
+SHALL show a disclosure icon — right when collapsed, down when expanded — at its
+indented position, and clicking that icon SHALL expand or collapse the group. A
+**regular (non-group) layer's thumbnail SHALL be drawn over a cached two-tone
+checkerboard** so transparency reads under it, while a group keeps its folder
+glyph and no checkerboard. A **type layer's thumbnail SHALL be drawn as a
+square (1:1) white card bearing a "T"**, sized to the thumbnail's side and
+centred in its slot, regardless of the document's aspect ratio; it SHALL NOT be
+letterboxed to the document, and its hit rectangle SHALL be that square card.
+Every other non-group layer's thumbnail SHALL be laid out in a box `thumb` wide
+and the row's full height minus a small pad, and SHALL be letterboxed to the
+document's aspect ratio inside that box, so a tall document's thumbnail fills the
+row vertically rather than floating in a square box. **Every non-group thumbnail
+other than a type layer's SHALL carry a 1 px black outline**; a type layer's
+card and a group's folder glyph SHALL draw no outline, and **when exactly one
+layer is active** (the same singular
+active-layer resolution tool edits use) its thumbnail SHALL additionally show
+white 1 px corner brackets drawn one pixel outside the thumbnail card (for a
+regular layer, outside the outline); with zero or
+multiple active layers no brackets are drawn. A layer whose row reports the
+smart-object projection SHALL paint the `layers.kindSmartObject` badge on the
+thumbnail's lower-right corner, whether the smart object is embedded or
+placed/external; the badge SHALL be omitted when the asset is missing. Row
+typography SHALL derive from the layer: a `background` layer's name SHALL be
+italic/cursive, every other name normal, and a layer that is a member of the
+frame's link set or a placed/external smart object SHALL be underlined through
+the `LayerRowLinkedRole` and `LayerRowPlacedRole` projections. The delegate SHALL
+report a row height of at least **28 px** through one named constant used by both
+`sizeHint` and the vertical centring math. If an expected icon asset is
+unavailable, the delegate SHALL omit that badge while keeping the row legible
+rather than fail.
+
+#### Scenario: The visibility toggle is an eye icon [lpr_eye]
+
+- **WHEN** a layer row is shown
+- **THEN** its visibility toggle is drawn from the eye icon asset, and a hidden
+  layer uses the off variant
+
+#### Scenario: The eye is left-anchored for every depth [lpr_eye]
+
+- **WHEN** a nested layer is shown under its group
+- **THEN** its eye icon is at the same x as a top-level row's, while its
+  thumbnail and name are indented
+
+#### Scenario: The color label fills the visibility cell [lpr_label_tint]
+
+- **WHEN** a layer with a non-`None` color label is shown
+- **THEN** the entire visibility column is filled with that label color behind
+  the eye glyph, the glyph stays legible against the fill, no separate chip is
+  painted, and the rest of the row background is unchanged
+
+#### Scenario: An unlabeled layer keeps the normal gutter [lpr_label_tint_none]
+
+- **WHEN** a layer with color label `None` is shown
+- **THEN** its whole visibility column uses the normal gutter surface and no
+  tint or chip is painted
+
+#### Scenario: The eye glyph stays legible on every label [lpr_label_glyph]
+
+- **WHEN** a row carries each of the seven color labels
+- **THEN** the eye glyph is drawn with a dark tint on bright fills and a light
+  tint on dark fills, so it stays readable against the fill
+
+#### Scenario: A smart object shows the badge [lpr_smart_badge]
+
+- **WHEN** an embedded or placed smart-object layer is shown
+- **THEN** its thumbnail draws the smart-object badge on the lower-right corner
+
+#### Scenario: A non-smart layer shows no smart badge [lpr_smart_badge_absent]
+
+- **WHEN** an ordinary pixel layer is shown
+- **THEN** no smart-object badge is drawn on its thumbnail
+
+#### Scenario: A group shows a disclosure icon [lpr_chevron]
+
+- **WHEN** a group with children is shown collapsed and then expanded
+- **THEN** it shows the right-pointing icon when collapsed and the down-pointing
+  icon when expanded, and clicking the icon toggles it
+
+#### Scenario: A masked layer shows a mask thumbnail [m39_badges]
+
+- **WHEN** a layer carries a layer mask
+- **THEN** its row shows a mask thumbnail and the mask-presence flag is set
+
+#### Scenario: A clipped layer shows the clipping indicator [lpc_clip]
+
+- **WHEN** a layer is clipped to the layer below it
+- **THEN** its row draws the clipping-mask indicator in addition to the
+  indentation and the base layer's underline
+
+#### Scenario: A group row is expandable [m39_badges]
+
+- **WHEN** a group has children
+- **THEN** its row is marked expandable and shows an expand/collapse control
+
+#### Scenario: A locked layer shows a right-side lock badge [lpc_lockbadge]
+
+- **WHEN** a layer has any lock flag set
+- **THEN** its row draws a lock badge on the right side, and an unlocked layer
+  draws no lock badge
+
+#### Scenario: A type layer's forced locks show no badge [lpc_forced_lock_badge]
+
+- **WHEN** `tst_type_tools::typeLayerRowHasNoLockBadge` commits a type layer, then also locks its position
+- **THEN** the layer carries the Transparency and Image locks and its row has no lock badge; with Position locked too the badge shows
+
+#### Scenario: A regular thumbnail shows a checkerboard [lpr_thumb_checker]
+
+- **WHEN** a regular (non-group) layer with translucent pixels is shown
+- **THEN** its thumbnail is drawn over a two-tone checkerboard, while a group
+  row keeps its folder glyph and draws no checkerboard
+
+#### Scenario: Thumbnails are outlined and the active layer is bracketed [lpr_thumb_bracket]
+
+- **WHEN** a regular layer row is shown with a 1 px black thumbnail outline
+- **THEN** the singular active layer's thumbnail additionally shows white
+  corner brackets one pixel outside the outline, and a multi- or zero-selection
+  row shows no brackets
+
+#### Scenario: A group icon has no outline [lpr_group_no_outline]
+
+- **WHEN** a group row is shown
+- **THEN** its folder glyph carries no 1 px black outline, while a regular
+  layer's thumbnail keeps its outline
+
+#### Scenario: A type card is square with no outline [lpr_type_thumb_card]
+
+- **WHEN** a type layer row is shown in a document of any aspect ratio
+- **THEN** its thumbnail is a square white card with a "T" whose width equals
+  its height, it is not letterboxed to the document, it carries no 1 px black
+  outline, and the thumbnail's hit rectangle is that same square card
+
+#### Scenario: A tall thumbnail fills the row [lpr_thumb_fill]
+
+- **WHEN** a portrait document's layer row is shown
+- **THEN** its letterboxed thumbnail is taller than it is wide and spans the
+  row's full height minus the thumbnail pad
+
+#### Scenario: Row typography follows the layer kind [lpr_row_fonts]
+
+- **WHEN** the rows for the Background, a linked layer, and a placed smart
+  object are inspected
+- **THEN** the Background name is italic/cursive, ordinary names are normal, and
+  the linked and placed rows are underlined through their roles
+
+#### Scenario: The row height has a floor [lpr_row_height]
+
+- **WHEN** a row's size hint is read
+- **THEN** its height is at least 28 px from the single named row-height
+  constant
+
+#### Scenario: A missing badge asset does not break the row [m39_badges]
+
+- **WHEN** the adjustment badge's icon asset is missing
+- **THEN** the row is still drawn and the badge is simply omitted
+
+#### Scenario: A styled layer shows the fx badge
+
+- **WHEN** a layer that carries a layer style is shown
+- **THEN** its row draws the `layers.fx` badge at its right edge beside the lock
+  and mask badges, and a layer with no style draws no fx badge
+
+#### Scenario: A customised Blend If shows the badge [lpr_blendif_badge]
+
+- **WHEN** a layer whose advanced blending is customised (its Blend If view is
+  not the full `(0, 65535)` default, or a raw `blending_ranges` block is
+  present without a typed view) is shown
+- **THEN** its row draws a compact `Blend If` text chip in the right-edge badge
+  run, and the name elides before the chip so no rect overlaps
+
+#### Scenario: A default Blend If shows no badge [lpr_blendif_badge_absent]
+
+- **WHEN** a layer with no Blend If view and no `blending_ranges` block, or one
+  whose every range is the full default, is shown
+- **THEN** no `Blend If` chip is drawn on its row and the name keeps the full
+  right-edge run
+
+#### Scenario: A raw blending-ranges block without a typed view still badges [lpr_blendif_raw]
+
+- **WHEN** a layer carries a non-empty `blending_ranges` block that cannot be
+  parsed into a typed Blend If view
+- **THEN** its row still draws the `Blend If` chip
+
+### Requirement: Disabled opacity and fill show the default
+
+When no layer is selected, or no selected layer is eligible for a field, the
+Layers panel SHALL display `100%` in that field and SHALL leave it disabled. The
+eligibility test SHALL be over the whole selection: a field with at least one
+eligible selected layer remains enabled and SHALL display the current row's
+value. This covers an empty selection, the Background, a fully locked layer, a
+group's Fill when no selected layer is eligible for Fill, and a synthetic Smart
+Filters row. Synthetic display-only rows SHALL NOT count as eligible targets.
+The Background's "neither opacity nor fill" means it offers no editable value;
+the disabled control still displays the default.
+
+#### Scenario: No selection shows the default [lpc_no_selection]
+
+- **WHEN** the Layers panel has no selected layer
+- **THEN** the Opacity and Fill fields both show `100%` and are disabled
+
+#### Scenario: An ineligible target shows the default [lpc_ineligible_default]
+
+- **WHEN** the Background, a fully locked layer, or a synthetic Smart Filters row
+  is selected, or a group is the only selected layer and the field is Fill
+- **THEN** each field without an eligible target shows `100%` and is disabled
+
+#### Scenario: One eligible layer keeps a multi-selection field enabled [lpc_multi_eligible]
+
+- **WHEN** a selection includes at least one layer eligible for the field
+  alongside an ineligible layer
+- **THEN** the field stays enabled and displays the current row's value

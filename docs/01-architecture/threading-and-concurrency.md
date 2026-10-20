@@ -63,9 +63,13 @@ report progress.
    filters, adjustments, resampling, analysis. Workers have **no Qt types** and
    no access to the document's shared mutable state; they operate on owned or
    `Arc`-shared immutable inputs and produce owned outputs.
-4. **Async I/O (proposed: a small runtime or std threads).** File open/save,
-   decoding, RAW, and PSD parse/serialize. Runs off the GUI thread and posts
-   completion to the command queue.
+4. **Async I/O (implemented for document open).** The open path's file read,
+   decoding, first composite, and initial history capture run on a std thread;
+   the worker owns no Qt types and posts its owned result back with a
+   `CxxQtThread` queued signal. The GUI thread applies it, inserts the loading
+   tab's document, and emits the completion. Cancelling a loading tab drops the
+   result; the decode itself is not interrupted. Save, RAW, and
+   PSD serialization remain on the GUI thread (Background Save is separate).
 5. **Writer.** Document mutations are serialized through one logical writer.
    For the first implementation the writer **is the GUI thread**, which is the
    lazy correct choice: it removes the need for a second full consistency model
@@ -240,10 +244,10 @@ Fetched for this document:
 - **Undo-during-job policy.** Cancel-then-undo versus refuse-to-undo is not
   chosen. Resolve with a design note here; either is acceptable if it is fixed
   and tested.
-- **Async runtime choice.** Whether a runtime (for example tokio) is warranted
-  for I/O, or std threads and channels suffice. Resolve by prototyping PSD open
-  and save and measuring complexity; a runtime is extra dependency weight if the
-  concurrency is simple.
+- **Async runtime choice (resolved for open).** The document open uses std
+  threads plus a `CxxQtThread` queued completion; no runtime is warranted for
+  one owned result per open. Save remains synchronous, so a runtime decision for
+  Background Save is still open.
 - **Dedicated document writer.** When to move the writer off the GUI thread and
   what consistency model (double buffer versus immutable snapshots) it uses.
   Resolve with a profile once the single-writer version is complete.

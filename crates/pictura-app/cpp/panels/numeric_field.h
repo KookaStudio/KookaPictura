@@ -56,6 +56,8 @@ public:
     void setLabelAlignment(Qt::Alignment alignment);
     // Show or hide the in-box suffix (e.g. " px"); the row reflows.
     void setSuffixVisible(bool visible);
+    // Drop a pending user commit (a view or target change cancels the gesture).
+    void cancelPending();
 
 signals:
     void valueChanged(double value);
@@ -84,7 +86,11 @@ private:
     double value_ = 0.0;
     bool syncing_ = false;
     bool scrubbing_ = false;
+    bool pressed_ = false;
     bool pending_ = false;
+    // A canceled gesture stays canceled until a fresh press or popup open, so a
+    // continued drag cannot re-arm against a new target.
+    bool canceled_ = false;
     // True while the box shows an empty value (no number entered yet).
     bool blank_ = false;
     // True when the last typed edit contained a decimal point; an integer field

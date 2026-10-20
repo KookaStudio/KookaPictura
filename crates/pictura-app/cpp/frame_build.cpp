@@ -1,11 +1,13 @@
 #include "frame_includes.h"
 
+#include "color_picker_dialog.h"
 #include "fonts.h"
 #include "panels/brush_preset_picker.h"
 #include "panels/numeric_field.h"
 #include "text_input.h"
 
 #include <QtCore/QEvent>
+#include <QtCore/QTimer>
 #include <QtGui/QFont>
 #include <QtGui/QMouseEvent>
 #include <QtWidgets/QApplication>
@@ -14,7 +16,7 @@
 
 namespace pictura {
 
-void PicturaMainWindow::buildPanels()
+void PicturaMainWindow::buildPanels(const SessionState& state)
 {
     colorState_ = new ColorState(this);
 
@@ -32,6 +34,23 @@ void PicturaMainWindow::buildPanels()
 
     swatchesPanel_ = new SwatchesPanel(colorState_, this);
     swatchesPanel_->setObjectName(QStringLiteral("swatchesPanel"));
+    ColorPickerDialog::setDefaultSwatchGrid(swatchesPanel_->grid());
+    if (state.swatchesLoaded) {
+        QList<Swatch> swatches;
+        for (const QJsonValue& value : state.swatches) {
+            const QJsonObject entry = value.toObject();
+            const QColor color(entry.value(QStringLiteral("color")).toString());
+            if (color.isValid()) {
+                swatches.append({color, entry.value(QStringLiteral("name")).toString()});
+            }
+        }
+        // An intentionally empty array clears the panel; a corrupt non-empty
+        // array keeps the default palette rather than opening blank.
+        if (!swatches.isEmpty() || state.swatches.isEmpty()) {
+            swatchesPanel_->grid()->setSwatches(swatches);
+        }
+    }
+    connect(swatchesPanel_->grid(), &SwatchGrid::countChanged, this, [this]() { saveSession(); });
 
     infoPanel_ = new InfoPanel(this);
     infoPanel_->setObjectName(QStringLiteral("infoPanel"));
@@ -226,9 +245,13 @@ void PicturaMainWindow::buildPanels()
 
     // Switching between a layer's pixels and its mask swaps in that target's
     // own FG/BG pair, so each remembers its colours.
-    connect(layersPanel_, &LayersPanel::editTargetChanged, this, [this](bool) {
+    connect(layersPanel_, &LayersPanel::editTargetChanged, this, [this](bool mask) {
         if (!colorState_) {
             return;
+        }
+        colorState_->setMaskActive(mask);
+        if (tools_) {
+            tools_->setMaskActive(mask);
         }
         const QColor foreground = colorState_->foreground();
         const QColor background = colorState_->background();
@@ -415,8 +438,9 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
                 }
             });
 
-    // M43: `D` resets fg/bg to the CS6 defaults (black/white). `D` is also
-    // unassigned in the tool letter catalogue (see tools.cpp `kToolTable`).
+    // M43: `D` resets fg/bg to the active target's CS6 defaults (black/white
+    // for layer pixels, white/black for a mask). `D` is also unassigned in the
+    // tool letter catalogue (see tools.cpp `kToolTable`).
     connect(new QShortcut(QKeySequence(Qt::Key_D), this), &QShortcut::activated, this,
             [this]() {
                 if (toolbox_) {
@@ -441,7 +465,7 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
     // A focused editable field owns Delete / Backspace: while one has focus the
     // shortcuts are off, so the key reaches the field instead of being
     // swallowed by the shortcut map.
-    connect(qApp, &QApplication::focusChanged, this,
+    deleteShortcutsFocusConn_ = connect(qApp, &QApplication::focusChanged, this,
             [deleteShortcuts](QWidget* now, QWidget*) {
                 const bool field = isTextInput(now);
                 for (QShortcut* shortcut : deleteShortcuts) {
@@ -663,6 +687,9 @@ void PicturaMainWindow::buildStatusBar()
 
     backendLabel_ = new QLabel(QStringLiteral("—"), bar);
     backendLabel_->setObjectName(QStringLiteral("statusBackendLabel"));
+    actionLabel_ = new QLabel(bar);
+    actionLabel_->setObjectName(QStringLiteral("statusActionLabel"));
+    actionLabel_->hide();
     hintBar_ = new ToolHintBar(bar);
     // A ~28px status strip: cap the readouts and hint so the bar trims 4px
     // without clipping. (The theme already dropped the bar's top border.)
@@ -671,6 +698,7 @@ void PicturaMainWindow::buildStatusBar()
     sizeLabel_->setFixedHeight(kStatusItemHeight);
     statusOptionsButton_->setFixedHeight(kStatusItemHeight);
     backendLabel_->setFixedHeight(kStatusItemHeight);
+    actionLabel_->setFixedHeight(kStatusItemHeight);
     hintBar_->setFixedHeight(kStatusItemHeight);
 
     // A 1px themable rule between the footer groups. Mouse-transparent so it
@@ -693,6 +721,10 @@ void PicturaMainWindow::buildStatusBar()
     bar->addWidget(statusOptionsButton_);
     bar->addWidget(makeSeparator());
     bar->addWidget(backendLabel_);
+    // The action readout ("Skew in progress") travels with its rule.
+    actionSeparator_ = makeSeparator();
+    bar->addWidget(actionSeparator_);
+    bar->addWidget(actionLabel_);
     // The rule before the hint strip travels with the strip's visibility.
     hintSeparator_ = makeSeparator();
     bar->addWidget(hintSeparator_);
@@ -704,6 +736,9 @@ void PicturaMainWindow::buildStatusBar()
                             QPointF(canvas->width() / 2.0, canvas->height() / 2.0));
         }
     });
+    if (tools_) {
+        connect(tools_, &ToolController::transformChanged, this, [this]() { updateStatus(); });
+    }
     updateToolHint();
 }
 
@@ -764,6 +799,28 @@ bool PicturaMainWindow::eventFilter(QObject* watched, QEvent* event)
         if (mouse->button() == Qt::LeftButton) {
             showOpenDialog();
             return true;
+        }
+    }
+    // Middle-click on a loading tab cancels it; on a ready tab it closes it.
+    if (tabs_ && watched == tabs_->tabBar() && event->type() == QEvent::MouseButtonRelease) {
+        auto* mouse = static_cast<QMouseEvent*>(event);
+        if (mouse->button() == Qt::MiddleButton) {
+            const int index = tabs_->tabBar()->tabAt(mouse->position().toPoint());
+            if (index >= 0) {
+                const bool loading = isLoadingDocument(index);
+                const QPointer<PictureView> guard(viewAt(index));
+                QTimer::singleShot(0, this, [this, guard, loading] {
+                    if (!guard) {
+                        return;
+                    }
+                    if (loading) {
+                        cancelOpenForView(guard.data());
+                    } else {
+                        closeDocument(indexOfView(guard.data()), true);
+                    }
+                });
+                return true;
+            }
         }
     }
     return QMainWindow::eventFilter(watched, event);

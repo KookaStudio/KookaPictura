@@ -10,6 +10,8 @@
 #include "session.h"
 #include "type_fonts.h"
 
+#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/open_jobs.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/pdf_export.cxxqt.h"
 
 #include <QtCore/QFileInfo>
@@ -110,30 +112,25 @@ bool PicturaMainWindow::savePdfWithDialog(const QString& path)
     return true;
 }
 
-bool PicturaMainWindow::openPdfPath(const QString& path, bool interactive)
+quint64 PicturaMainWindow::startOpenPdfPath(const QString& path, bool interactive)
+{
+    const quint64 token = nextOpenToken();
+    beginOpenCursor();
+    cursorTokens_.insert(token);
+    startPdfProbe(path, interactive, QString(), token);
+    return token;
+}
+
+void PicturaMainWindow::startPdfProbe(const QString& path, bool interactive,
+                                      const QString& password, quint64 token)
 {
     auto* view = new PictureView(this);
     view->set_color_policy(colorPolicy_);
-    // A protected PDF asks for its password here, so its editing data opens
-    // with its layers; without editing data the import reuses the password.
-    QString password;
-    for (;;) {
-        beginOpenIndicator(path);
-        const QString result = pdf_open(*view, path, password);
-        endOpenIndicator();
-        if (result == QStringLiteral("ok")) {
-            addDocument(view, path);
-            return true;
-        }
-        if (result == QStringLiteral("none") || !interactive) {
-            delete view;
-            return importPdfPath(path, interactive, password);
-        }
-        if (!askPdfPassword(path, result == QStringLiteral("wrongpassword"), password)) {
-            delete view;
-            return false;
-        }
-    }
+    view->set_gpu_compute(gpuCompute_);
+    open_set_delay(*view, quint64(openDelayForTest_));
+    wireOpenSignals(view);
+    pdfProbes_.insert(view, PdfProbe{token, path, interactive, password});
+    open_pdf_start(*view, path, password);
 }
 
 void PicturaMainWindow::showPdfPresets()

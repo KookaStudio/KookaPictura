@@ -13,9 +13,9 @@
 //!
 //! [`PictureView`]: super::qobject::PictureView
 
-use super::helpers::rgba_from_argb;
+use super::helpers::{paint_timing, rgba_from_argb};
 use super::helpers_composite::{aspect_thumbnail_extent, rgba_image};
-use super::paint_tools::fills::{apply, selection};
+use super::paint_tools::fills::{apply, refresh_edit, selection};
 use super::qobject::PictureView;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -24,7 +24,7 @@ use ffi::ShapeSpec;
 use pictura_codec::LiveShape;
 use pictura_core::path::{Subpath, VectorPath};
 use pictura_core::shape::{self, Arrowheads, ShapeKind, ShapeOptions, CUSTOM_SHAPE_NAMES};
-use pictura_core::Layer;
+use pictura_core::{Layer, PsdRect};
 use pictura_paint::bucket::{self, BucketPaint};
 use pictura_paint::PaintMode;
 
@@ -257,6 +257,8 @@ fn shape_add_layer(mut view: Pin<&mut PictureView>, spec: &ShapeSpec, foreground
     let Some((kind, subpath)) = outline(spec) else {
         return QString::default();
     };
+    paint_timing::start("Shape layer");
+    let t = std::time::Instant::now();
     let live = live_shape(spec, kind, &subpath);
     let c = rgba_from_argb(foreground);
     let created = {
@@ -274,27 +276,73 @@ fn shape_add_layer(mut view: Pin<&mut PictureView>, spec: &ShapeSpec, foreground
             None => String::new(),
         }
     };
-    if let Some(layer) = view
-        .as_mut()
-        .rust_mut()
-        .doc
-        .as_mut()
-        .and_then(|doc| pictura_render::resolve_path_mut(doc, &created))
-    {
-        if spec.no_fill {
-            pictura_render::set_shape_fill(layer, None);
+    let mut reach = None;
+    if let Some(doc) = view.as_mut().rust_mut().doc.as_mut() {
+        let (width, height) = (doc.width, doc.height);
+        if let Some(layer) = pictura_render::resolve_path_mut(doc, &created) {
+            if spec.no_fill {
+                pictura_render::set_shape_fill(layer, None);
+            }
+            let mut stroke_width = 0;
+            if spec.stroke {
+                let stroke = stroke_of(spec.stroke_color, spec.stroke_width, spec.stroke_align);
+                stroke_width = stroke.width as i32;
+                pictura_render::set_shape_stroke(layer, Some(&stroke));
+            }
+            reach = pictura_render::shape_bounds(layer, width, height)
+                .map(|bounds| shape_reach(bounds, stroke_width));
         }
-        if spec.stroke {
-            let stroke = stroke_of(spec.stroke_color, spec.stroke_width, spec.stroke_align);
-            pictura_render::set_shape_stroke(layer, Some(&stroke));
+        // A clipped layer just above now clips to the new layer: what it shows
+        // changes wherever it reaches, not only under the shape.
+        if clipped_above(doc, &created) {
+            reach = None;
         }
     }
+    paint_timing::record("shape_add_layer", t.elapsed());
     if !created.is_empty() {
         view.as_mut().clear_link_sets();
-        view.as_mut().recomposite();
+        // The new layer shows nowhere outside its outline and stroke, so only
+        // that region of the composite changes.
+        refresh_edit(view.as_mut(), reach, &created);
         view.as_mut().record(&label(kind));
     }
+    paint_timing::report();
     QString::from(created.as_str())
+}
+
+/// The document pixels a shape with outline `bounds` (`left, top, right,
+/// bottom`) and a stroke `stroke_width` wide can touch: the stroke's whole width
+/// on every side (it may be outside), plus a pixel for the edge's coverage.
+fn shape_reach(bounds: (f64, f64, f64, f64), stroke_width: i32) -> PsdRect {
+    let (l, t, r, b) = bounds;
+    let pad = stroke_width + 1;
+    let at = |v: f64| v.clamp(i32::MIN as f64 / 2.0, i32::MAX as f64 / 2.0);
+    PsdRect {
+        top: at(t.floor()) as i32 - pad,
+        left: at(l.floor()) as i32 - pad,
+        bottom: at(b.ceil()) as i32 + pad,
+        right: at(r.ceil()) as i32 + pad,
+    }
+}
+
+/// Whether the sibling above the layer at `path` is clipped (or `path` does
+/// not resolve, which is treated the same: refresh everything).
+fn clipped_above(doc: &pictura_core::Document, path: &str) -> bool {
+    let (parent, index) = match path.rsplit_once('/') {
+        Some((parent, index)) => (Some(parent), index),
+        None => (None, path),
+    };
+    let Ok(index) = index.parse::<usize>() else {
+        return true;
+    };
+    let siblings = match parent {
+        None => &doc.layers,
+        Some(parent) => match pictura_render::resolve_path(doc, parent) {
+            Some(layer) => &layer.children,
+            None => return true,
+        },
+    };
+    siblings.get(index + 1).is_some_and(|layer| layer.clipping)
 }
 
 fn shape_add_path(mut view: Pin<&mut PictureView>, spec: &ShapeSpec) -> bool {
@@ -318,8 +366,11 @@ fn shape_fill_pixels(view: Pin<&mut PictureView>, spec: &ShapeSpec, foreground: 
         return false;
     };
     let paint = BucketPaint::Foreground(rgba_from_argb(foreground));
-    apply(view, &label(kind), |doc, path, rust| {
+    paint_timing::start("Shape pixels");
+    let applied = apply(view, &label(kind), |doc, path, rust| {
+        let t = std::time::Instant::now();
         let mask = shape::coverage(&subpath, doc.width, doc.height);
+        paint_timing::record("shape_coverage", t.elapsed());
         bucket::fill(
             doc,
             path,
@@ -329,7 +380,9 @@ fn shape_fill_pixels(view: Pin<&mut PictureView>, spec: &ShapeSpec, foreground: 
             1.0,
             selection(rust),
         )
-    })
+    });
+    paint_timing::report();
+    applied
 }
 
 fn shape_custom_count() -> i32 {

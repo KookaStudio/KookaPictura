@@ -19,9 +19,13 @@
 #include "frame.h"
 #include "image_view.h"
 #include "panels/channels_panel.h"
+#include "panels/color_panel.h"
 #include "panels/layers_panel.h"
 #include "panels/layers_panel_internal.h"
+#include "panels/panel_column.h"
+#include "panels/panel_group.h"
 #include "theme.h"
+#include "toolbox.h"
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/vector_masks.cxxqt.h"
@@ -66,6 +70,17 @@ void clickMouse(QWidget* target, const QPoint& pos, Qt::KeyboardModifiers mods)
     QCoreApplication::sendEvent(target, &release);
 }
 
+// A point over the document area, clear of every column and of the workspace's
+// new-column edge bands, so a drag there resolves an outside tear-off.
+QPoint outsideColumnPoint(pictura::PicturaMainWindow* window)
+{
+    QWidget* central = window ? window->centralWidget() : nullptr;
+    if (!central) {
+        return QPoint(-10000, -10000);
+    }
+    return central->mapToGlobal(QPoint(central->width() / 2, central->height() / 2));
+}
+
 } // namespace
 
 class PanelsParityTest : public QObject {
@@ -83,10 +98,14 @@ private slots:
     void visibilityToggleIsResponsive();
     void channelHoverAndCtrlOverlay();
     void channelRowsUseLayerSurfaces();
+    void compactFlyoutClosesWhenGroupTearsOff();
+    void compactFlyoutStaysOpenForTabTearOff();
+    void compactFlyoutClosesWhenTabEmptiesIt();
 
 private:
     bool setupLayers();
     int rowOf(const QString& path);
+    void redockAllFloats(pictura::PanelColumn* column);
 
     pictura::test::ScopedStateHome stateHome_;
     std::unique_ptr<pictura::PicturaMainWindow> window_;
@@ -277,18 +296,43 @@ void PanelsParityTest::thumbnailAdjacencyAndActiveThumb()
     QVERIFY(name.left() >= vector.right());
 
     QWidget* viewport = tree->viewport();
+    auto* colors = window_->findChild<pictura::ColorState*>();
+    auto* toolbox = window_->findChild<pictura::Toolbox*>();
+    QVERIFY(colors && toolbox);
+
     // A mask/vector click also selects the row and refreshes the model, so the
     // index is re-fetched after each click rather than reused.
-    clickMouse(viewport, mask.center(), Qt::NoModifier);
+    const QColor imageFg(200, 40, 40);
+    const QColor imageBg(20, 90, 200);
+    clickMouse(viewport, delegate->thumbRect(tree->visualRect(index), index).center(),
+               Qt::NoModifier);
+    QCOMPARE(indexForPath(tree->model(), path).data(pictura::ActiveThumbRole).toInt(), 0);
+    colors->setForeground(imageFg);
+    colors->setBackground(imageBg);
+
+    const QModelIndex beforeMask = indexForPath(tree->model(), path);
+    clickMouse(viewport,
+               delegate->maskThumbRect(tree->visualRect(beforeMask), beforeMask).center(),
+               Qt::NoModifier);
     QCOMPARE(indexForPath(tree->model(), path).data(pictura::ActiveThumbRole).toInt(), 1);
+    toolbox->resetForegroundBackground();
+    QCOMPARE(colors->foreground(), QColor(Qt::white));
+    QCOMPARE(colors->background(), QColor(Qt::black));
+
     const QModelIndex afterMask = indexForPath(tree->model(), path);
     clickMouse(viewport, delegate->vectorMaskThumbRect(tree->visualRect(afterMask), afterMask).center(),
                Qt::NoModifier);
     QCOMPARE(indexForPath(tree->model(), path).data(pictura::ActiveThumbRole).toInt(), 2);
+    // Leaving the raster target restores the image pair, including reset.
+    QCOMPARE(colors->foreground(), imageFg);
+    QCOMPARE(colors->background(), imageBg);
+
     const QModelIndex afterVector = indexForPath(tree->model(), path);
     clickMouse(viewport, delegate->thumbRect(tree->visualRect(afterVector), afterVector).center(),
                Qt::NoModifier);
     QCOMPARE(indexForPath(tree->model(), path).data(pictura::ActiveThumbRole).toInt(), 0);
+    QCOMPARE(colors->foreground(), imageFg);
+    QCOMPARE(colors->background(), imageBg);
     window_->closeDocument(doc, false);
 }
 
@@ -371,6 +415,127 @@ void PanelsParityTest::channelRowsUseLayerSurfaces()
     const QColor base = panel->palette().color(QPalette::Window);
     QCOMPARE(panel->rowSurfaceForTest(0).rgba(), pictura::Theme::shade(base, 3).rgba());
     QCOMPARE(panel->rowSurfaceForTest(1).rgba(), pictura::Theme::shade(base, 1).rgba());
+}
+
+void PanelsParityTest::redockAllFloats(pictura::PanelColumn* column)
+{
+    for (int i = 0; i < 8 && column->floatCountForTest() > 0; ++i) {
+        if (!column->redockForTest(0, 0)) {
+            break;
+        }
+        QCoreApplication::processEvents();
+    }
+}
+
+void PanelsParityTest::compactFlyoutClosesWhenGroupTearsOff()
+{
+    window_->resize(1100, 700);
+    window_->show();
+    QTest::qWait(50);
+    pictura::PanelColumn* column = window_->columnForPanel(QStringLiteral("layersPanel"));
+    QVERIFY(column != nullptr);
+    column->setRailMode(true);
+    QTest::qWait(20);
+
+    QVERIFY(column->openIconFlyoutForTest(QStringLiteral("layersPanel")));
+    QVERIFY(column->iconFlyoutVisibleForTest());
+    pictura::PanelGroup* group = column->groupForPanel(QStringLiteral("layersPanel"));
+    QVERIFY(group != nullptr);
+    QStringList expected;
+    for (QWidget* panel : group->panels()) {
+        if (panel) {
+            expected << panel->objectName();
+        }
+    }
+    QVERIFY(expected.contains(QStringLiteral("layersPanel")));
+
+    const int before = column->floatCountForTest();
+    const QPoint outside = outsideColumnPoint(window_.get());
+    QVERIFY(column->beginGroupDragForTest(QStringLiteral("layersPanel")));
+    column->dragToForTest(outside);
+    QVERIFY(column->dropForTest(outside));
+    QCoreApplication::processEvents();
+
+    QVERIFY2(!column->iconFlyoutVisibleForTest(), "the empty flyout is closed");
+    QCOMPARE(column->floatCountForTest(), before + 1);
+    QCOMPARE(column->floatPanelNamesForTest(column->floatCountForTest() - 1), expected);
+    QVERIFY(column->groupForPanel(QStringLiteral("layersPanel")) == nullptr);
+
+    redockAllFloats(column);
+    column->setRailMode(false);
+    QCoreApplication::processEvents();
+}
+
+void PanelsParityTest::compactFlyoutStaysOpenForTabTearOff()
+{
+    window_->resize(1100, 700);
+    window_->show();
+    QTest::qWait(50);
+    pictura::PanelColumn* column = window_->columnForPanel(QStringLiteral("layersPanel"));
+    QVERIFY(column != nullptr);
+    column->setRailMode(true);
+    QTest::qWait(20);
+
+    QVERIFY(column->openIconFlyoutForTest(QStringLiteral("layersPanel")));
+    QVERIFY(column->iconFlyoutVisibleForTest());
+    pictura::PanelGroup* group = column->groupForPanel(QStringLiteral("layersPanel"));
+    QVERIFY(group != nullptr);
+    QVERIFY(group->containsPanel(QStringLiteral("channelsPanel")));
+
+    const int before = column->floatCountForTest();
+    const QPoint outside = outsideColumnPoint(window_.get());
+    QVERIFY(column->beginTabDragForTest(QStringLiteral("channelsPanel")));
+    column->dragToForTest(outside);
+    QVERIFY(column->dropForTest(outside));
+    QCoreApplication::processEvents();
+
+    QVERIFY2(column->iconFlyoutVisibleForTest(), "the flyout keeps the remaining panels");
+    QCOMPARE(column->iconFlyoutGroupForTest(), group);
+    QVERIFY(group->containsPanel(QStringLiteral("layersPanel")));
+    QVERIFY(group->containsPanel(QStringLiteral("pathsPanel")));
+    QVERIFY(!group->containsPanel(QStringLiteral("channelsPanel")));
+    QCOMPARE(column->floatCountForTest(), before + 1);
+    QCOMPARE(column->floatPanelNamesForTest(column->floatCountForTest() - 1),
+             QStringList{QStringLiteral("channelsPanel")});
+
+    QVERIFY(column->triggerFlyoutCloseForTest());
+    QCoreApplication::processEvents();
+    redockAllFloats(column);
+    column->setRailMode(false);
+    QCoreApplication::processEvents();
+}
+
+void PanelsParityTest::compactFlyoutClosesWhenTabEmptiesIt()
+{
+    window_->resize(1100, 700);
+    window_->show();
+    QTest::qWait(50);
+    pictura::PanelColumn* column = window_->columnForPanel(QStringLiteral("propertiesPanel"));
+    QVERIFY(column != nullptr);
+    column->setRailMode(true);
+    QTest::qWait(20);
+
+    QVERIFY(column->openIconFlyoutForTest(QStringLiteral("propertiesPanel")));
+    QVERIFY(column->iconFlyoutVisibleForTest());
+    pictura::PanelGroup* group = column->groupForPanel(QStringLiteral("propertiesPanel"));
+    QVERIFY(group != nullptr);
+    QCOMPARE(static_cast<int>(group->visibleTitles().size()), 1);
+
+    const int before = column->floatCountForTest();
+    const QPoint outside = outsideColumnPoint(window_.get());
+    QVERIFY(column->beginTabDragForTest(QStringLiteral("propertiesPanel")));
+    column->dragToForTest(outside);
+    QVERIFY(column->dropForTest(outside));
+    QCoreApplication::processEvents();
+
+    QVERIFY2(!column->iconFlyoutVisibleForTest(), "the emptied flyout is closed");
+    QCOMPARE(column->floatCountForTest(), before + 1);
+    QCOMPARE(column->floatPanelNamesForTest(column->floatCountForTest() - 1),
+             QStringList{QStringLiteral("propertiesPanel")});
+
+    redockAllFloats(column);
+    column->setRailMode(false);
+    QCoreApplication::processEvents();
 }
 
 QTEST_MAIN(PanelsParityTest)

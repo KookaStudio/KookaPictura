@@ -107,7 +107,7 @@ private slots:
     void tokensClampTheLevel();
     void stylesheetSubstitutesEveryToken();
     void stylesheetDeclaresPrimitives();
-    void openBannerUsesTheNoticeStyle();
+    void loadingBannerRuleIsGone();
     void primitivesCarryTheirContract();
     void paletteMatchesTokens();
     void swatchPaintsDataColour();
@@ -250,18 +250,12 @@ void DesignSystemTest::stylesheetDeclaresPrimitives()
     }
 }
 
-// The document-open loading banner is a rounded box on the notice yellow with
-// dark notice text, so it reads clearly over the canvas.
-void DesignSystemTest::openBannerUsesTheNoticeStyle()
+// The synchronous loading banner is gone; the loading tab and its spinner are
+// the open indication now.
+void DesignSystemTest::loadingBannerRuleIsGone()
 {
     const QString qss = Theme::styleSheet(Theme::kDefaultLevel);
-    const QString body = ruleBody(qss, QStringLiteral("#documentOpenBanner"));
-    QVERIFY2(!body.isEmpty(), "the loading banner has a stylesheet rule");
-    QVERIFY2(body.contains(tokenValue(Theme::kDefaultLevel, QStringLiteral("surface-notice"))),
-             "the banner background is the notice yellow");
-    QVERIFY2(body.contains(tokenValue(Theme::kDefaultLevel, QStringLiteral("content-notice"))),
-             "the banner text is the notice dark");
-    QVERIFY2(body.contains(QStringLiteral("border-radius")), "the banner has rounded corners");
+    QVERIFY(!qss.contains(QStringLiteral("documentOpenBanner")));
 }
 
 void DesignSystemTest::primitivesCarryTheirContract()

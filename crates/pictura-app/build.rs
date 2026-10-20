@@ -60,6 +60,7 @@ fn main() {
                 "src/cxxqt_object/filter_tools/liquify.rs",
                 "src/cxxqt_object/healing.rs",
                 "src/cxxqt_object/image_adjust.rs",
+                "src/cxxqt_object/impl_selection/bridge.rs",
                 "src/cxxqt_object/impl_selection/refine.rs",
                 "src/cxxqt_object/impl_transform/bridge.rs",
                 "src/cxxqt_object/image_adjust/gradient_map.rs",
@@ -83,6 +84,7 @@ fn main() {
                 "src/cxxqt_object/impl_layers/smart_object_actions.rs",
                 "src/cxxqt_object/impl_layers/vector_masks.rs",
                 "src/cxxqt_object/magnetic.rs",
+                "src/cxxqt_object/open_jobs.rs",
                 "src/cxxqt_object/image_adjust/new_document.rs",
                 "src/cxxqt_object/paint_tools.rs",
                 "src/cxxqt_object/paint_tools/fills.rs",
@@ -99,6 +101,12 @@ fn main() {
             ])
             .cc_builder(|cc| {
                 cc.include("cpp");
+                // The hand-written bridge edges live in `cpp/`; CMake compiles
+                // them into the shell, and the Rust test binary needs its own
+                // copies (static libraries only pull what they resolve).
+                cc.file("cpp/decode_image.cpp");
+                cc.file("cpp/render_text.cpp");
+                cc.file("cpp/encode_image.cpp");
             })
             .build();
     }

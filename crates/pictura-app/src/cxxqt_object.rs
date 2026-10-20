@@ -38,6 +38,7 @@ mod layer_path;
 mod layer_style;
 mod layers_smart_filters;
 mod magnetic;
+mod open_jobs;
 mod paint_tools;
 mod path_list;
 mod paths;
@@ -118,23 +119,35 @@ pub mod qobject {
         /// Emitted whenever the layer stack changes and the image is refreshed.
         #[qsignal]
         fn changed(self: Pin<&mut Self>);
-
         /// Emitted after a region composite. The receiver blits `region` at `(x, y)`; the full image was not rebuilt.
         #[qsignal]
         #[cxx_name = "regionBlitted"]
         fn region_blitted(self: Pin<&mut Self>, region: QImage, x: i32, y: i32);
+        /// Emitted on the GUI thread when a started document open ends. `status`
+        /// is `ok`, a PDF probe status, or `error:<message>`; `warnings` are the
+        /// renderer's recoverable problems (PDF/EPS imports).
+        #[qsignal]
+        #[cxx_name = "openFinished"]
+        fn open_finished(self: Pin<&mut Self>, status: QString, warnings: QStringList);
+        /// Emitted on the GUI thread when a PDF probe found editing data, before
+        /// its PSD decode: the frame creates the loading tab here.
+        #[qsignal]
+        #[cxx_name = "openDetected"]
+        fn open_detected(self: Pin<&mut Self>);
+        /// Emitted on the GUI thread at an open phase boundary; `percent` is a
+        /// phase weight, not measured work.
+        #[qsignal]
+        #[cxx_name = "openProgress"]
+        fn open_progress(self: Pin<&mut Self>, percent: i32, phase: QString);
         /// Try to load a PSD through `pictura-codec`. Returns `false` and falls back to a generated test image when the file is missing or unsupported.
         #[qinvokable]
         fn open(self: Pin<&mut Self>, path: &QString) -> bool;
-
         /// `File > Open` for a common raster image: decode `path` into an untitled RGB/8-bit document; `false` without mutating on any refusal.
         #[qinvokable]
         fn open_image(self: Pin<&mut Self>, path: &QString) -> bool;
-
         /// `File > Open As Smart Object…`: open `path` as a new untitled document holding that PSD/PSB source as an embedded smart object; one state.
         #[qinvokable]
         fn open_as_smart_object(self: Pin<&mut Self>, path: &QString) -> bool;
-
         /// Create a new `width`×`height` document. `mode` is `"rgb"`/`"grayscale"`, `depth` must be 8, `background` is `"white"`/`"transparent"`. Resets selection/history; false without mutating on any invalid parameter.
         #[qinvokable]
         fn new_document(
@@ -148,7 +161,6 @@ pub mod qobject {
         /// Serialize the document to `path` in the format named by the path's extension: PSD/PSB through the codec, WebP through the engine encoder, every other raster format through the Qt encode edge. Clears the dirty flag; false on any encode/IO error.
         #[qinvokable]
         fn save(self: Pin<&mut Self>, path: &QString) -> bool;
-
         /// Whether the document has unsaved changes (false when none).
         #[qinvokable]
         fn is_dirty(&self) -> bool;
@@ -236,14 +248,14 @@ pub mod qobject {
         /// The outstanding canvas damage as `"x y w h"`, or empty when clean.
         #[qinvokable]
         fn take_canvas_damage(self: Pin<&mut Self>) -> QString;
-
         /// Non-consuming revision of the displayed canvas pixels; bumped when the image or pyramid changes.
         #[qinvokable]
         fn canvas_revision(&self) -> u64;
+        #[qinvokable]
+        fn document_generation(&self) -> u64; // document load/replace epoch
         /// Whether a document is loaded; drives shell command enablement.
         #[qinvokable]
         fn has_document(&self) -> bool;
-
         /// Width of the loaded document in pixels (0 when none).
         #[qinvokable]
         fn document_width(&self) -> i32;
@@ -776,26 +788,6 @@ pub mod qobject {
         #[qinvokable]
         fn invert_selection(self: Pin<&mut Self>) -> bool;
 
-        /// Capture the current selection as the origin of a move drag; false without one.
-        #[qinvokable]
-        fn begin_selection_move(self: Pin<&mut Self>) -> bool;
-
-        /// Set selection to the origin translated by `(dx, dy)`; no history, no `changed`.
-        #[qinvokable]
-        fn preview_selection_move(self: Pin<&mut Self>, dx: i32, dy: i32) -> bool;
-
-        /// Record one "Move Selection" state when the mask moved; false on no-op.
-        #[qinvokable]
-        fn commit_selection_move(self: Pin<&mut Self>) -> bool;
-
-        /// Restore the origin selection and drop the drag; no history.
-        #[qinvokable]
-        fn cancel_selection_move(self: Pin<&mut Self>) -> bool;
-
-        /// Move selected pixels by `(dx, dy)`; `duplicate` copies to a new layer. One undo state.
-        #[qinvokable]
-        fn move_selection_content(self: Pin<&mut Self>, dx: i32, dy: i32, duplicate: bool) -> bool;
-
         /// Apply `op` (`border`/`smooth`/`expand`/`contract`/`feather`) to the
         /// selection by `amount`; one undo state on success, none on refusal.
         #[qinvokable]
@@ -1197,4 +1189,6 @@ pub mod qobject {
         #[qinvokable]
         fn color_policy(&self) -> i32;
     }
+
+    impl cxx_qt::Threading for PictureView {}
 }

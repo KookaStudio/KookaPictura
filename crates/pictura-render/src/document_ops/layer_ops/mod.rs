@@ -25,6 +25,8 @@ mod smart_object;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
+mod tests_background;
+#[cfg(test)]
 mod tests_clipboard;
 #[cfg(test)]
 mod tests_perspective_crop;
@@ -44,7 +46,9 @@ mod warp_styles;
 #[cfg(test)]
 mod warp_styles_tests;
 
-pub use align::{align_layers, can_align, can_distribute, distribute_layers, AlignEdge};
+pub use align::{
+    align_layers, can_align, can_distribute, distribute_layers, layer_content_bounds, AlignEdge,
+};
 pub use clipboard::{
     clear_layer, copy_layer, copy_merged, coverage_bounds, paste_clip, Clip, PasteMode,
 };
@@ -56,8 +60,8 @@ pub(crate) use create::insert_node;
 pub use create::{
     add_gradient_fill, add_group, add_group_full, add_group_in, add_layer, add_layer_full,
     add_layer_in, add_raster_layer_from_rgba, add_solid_fill, background_from_layer,
-    duplicate_layer, group_layer, layer_from_background, neutral_color, next_layer_name,
-    ungroup_layer, NewLayerSpec,
+    can_background_from_layer, duplicate_layer, group_layer, layer_from_background, neutral_color,
+    next_layer_name, ungroup_layer, NewLayerSpec,
 };
 pub use kernel::Interpolation;
 pub use layer_masks::{
@@ -72,7 +76,10 @@ pub use layer_style::{
     scale_layer_effects, set_all_effects_visible, set_document_layer_style_value,
     set_layer_style_value, LayerStyle,
 };
-pub use mask_edit::{mask_document, mask_document_coverage, write_mask_back, MaskDocument};
+pub use mask_edit::{
+    mask_document, mask_document_coverage, move_mask_selection_content, write_mask_back,
+    MaskDocument,
+};
 pub use merge::{
     can_merge_scope, can_merge_target, flatten, is_visible_in_panel, merge_scope, stamp_scope,
     MergeError, MergeOutcome, MergeScope, StampScope,
@@ -86,10 +93,11 @@ pub use perspective_crop::{
     perspective_crop, perspective_crop_refusal, perspective_crop_size, perspective_crop_sized,
 };
 pub use properties::{
-    apply_visibility, arrange_path, can_arrange_path, can_delete_paths, can_move_path_to,
-    delete_hidden_layers, delete_paths, duplicate_paths, group_paths, lock_group_layers, move_path,
-    move_path_to, rename_path, reverse_paths, select_similar, set_blend_paths, set_color_paths,
-    set_fill_paths, set_lock_paths, set_opacity_paths, set_visible_paths, ungroup_paths, Arrange,
+    apply_visibility, arrange_path, can_arrange_path, can_delete_paths, can_move_path,
+    can_move_path_to, delete_hidden_layers, delete_paths, duplicate_paths, group_paths,
+    lock_group_layers, move_path, move_path_to, rename_path, reverse_paths, select_similar,
+    set_blend_paths, set_color_paths, set_fill_paths, set_lock_paths, set_opacity_paths,
+    set_visible_paths, ungroup_paths, Arrange,
 };
 pub use rasterize::{
     is_fill_content_layer, rasterize_all_layers, rasterize_fill_content, rasterize_shape,

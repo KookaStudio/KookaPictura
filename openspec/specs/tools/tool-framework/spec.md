@@ -64,8 +64,10 @@ foreground/background control SHALL provide, besides the two swatches and the
 default-colour (X) reset, a swap control drawn as a top-left and a down-left
 arrow that exchanges the foreground and background colours, the `X` key SHALL
 swap them when no tool shortcut claims it, and the `D` key SHALL reset them to
-the default colours (black foreground, white background) when no tool shortcut
-claims it. The panel SHALL show a Paint Mask Mode toggle button in the slot
+the active edit target's defaults when no tool shortcut claims it: black
+foreground / white background while a layer's pixels are edited, white
+foreground / black background while a raster layer mask is edited. The panel
+SHALL show a Paint Mask Mode toggle button in the slot
 immediately to the left of the screen-mode control, and the screen-mode control
 SHALL open the screen-mode menu. A left-button drag on the Tools column's header
 SHALL be tracked for the whole gesture, whether the column starts column-hosted,

@@ -55,15 +55,20 @@ impl PictureViewRust {
     }
 
     /// Composite `rect` of the current source (the active stroke's working
-    /// document, else the app document), patch the authoritative `doc.composite`
-    /// when idle, and hand back the clamped origin, clipped rect and straight
-    /// sRGB region. `None` for an empty clamp, an absent source, or an empty
-    /// region. Level 0, damage and the pyramid are the caller's to fold in.
+    /// document, else the app document), patch the authoritative `doc.composite`,
+    /// and hand back the clamped origin, clipped rect and straight sRGB region.
+    /// `None` for an empty clamp, an absent source, or an empty region. Level 0,
+    /// damage and the pyramid are the caller's to fold in.
+    ///
+    /// A layer stroke's presents patch the composite as they go, so its commit
+    /// composites only what is still pending; cancelling repairs the extent
+    /// (`cancel_stroke`). A mask stroke leaves it alone: its cancel restores
+    /// the view from the untouched composite.
     pub(super) fn refresh_region_buffer(
         &mut self,
         rect: PsdRect,
     ) -> Option<(i32, i32, PsdRect, PixelBuffer)> {
-        let painting = self.stroke.is_some() || self.mask_stroke.is_some();
+        let painting = self.mask_stroke.is_some();
         let source: &Document = self.doc.as_ref()?;
         let (x0, y0, w, h) = clamp_region(rect, source.width, source.height)?;
         let gpu_compute = self.gpu_compute;
@@ -113,7 +118,18 @@ impl PictureViewRust {
         let dirty = stroke.dirty();
         match (self.stroke_base.take(), self.doc.as_mut()) {
             (Some(base), _) => self.doc = Some(base),
-            (None, Some(doc)) => stroke.cancel(doc),
+            (None, Some(doc)) => {
+                stroke.cancel(doc);
+                // The stroke's presents patched the composite; put the
+                // restored pixels back into it before anything reads it.
+                if let Some(rect) = dirty {
+                    let buffer =
+                        pictura_render::composite_region_active(doc, rect, self.gpu_compute).0;
+                    if let Some((x0, y0, _, _)) = clamp_region(rect, doc.width, doc.height) {
+                        patch_composite_region(doc, &buffer, x0, y0);
+                    }
+                }
+            }
             (None, None) => {}
         }
         dirty
@@ -736,11 +752,11 @@ impl qobject::PictureView {
 
     pub fn end_paint(mut self: Pin<&mut Self>) -> bool {
         let t0 = Instant::now();
-        let (stroke, mask_stroke, label, preview, base) = {
+        let (stroke, mask_stroke, label, preview, base, pending) = {
             let mut rust = self.as_mut().rust_mut();
-            // The commit refresh covers the stroke's whole extent, so it
-            // supersedes any region still pending; it runs before `record`.
-            rust.clear_pending_present();
+            // Every region a live stroke presented already reached the
+            // composite; the commit presents the one still pending.
+            let pending = rust.take_pending_present();
             rust.gpu_stroke = None;
             rust.gpu_placer = None;
             (
@@ -749,6 +765,7 @@ impl qobject::PictureView {
                 rust.stroke_label.clone(),
                 rust.preview.take(),
                 rust.stroke_base.take(),
+                pending,
             )
         };
         if let Some(ctx) = mask_stroke {
@@ -764,6 +781,7 @@ impl qobject::PictureView {
                 // commits with no replay. A previewed stroke never fed the exact
                 // stroke: replay its log now, so every committed pixel matches a
                 // stroke that rasterized at full resolution from the first dab.
+                let previewed = preview.is_some();
                 if let Some(preview) = preview {
                     let t = Instant::now();
                     let mut rust = self.as_mut().rust_mut();
@@ -792,16 +810,25 @@ impl qobject::PictureView {
                         false
                     }
                     Some(rect) => {
-                        // The commit is a described change: refresh only the
-                        // stroke's dirty tiles. Decomposing them into disjoint
-                        // rectangles keeps a diagonal stroke from recompositing
-                        // its whole bounding box; the collapse in
+                        // A previewed stroke never presented full resolution:
+                        // refresh its dirty tiles. Decomposing them into
+                        // disjoint rectangles keeps a diagonal stroke from
+                        // recompositing its whole bounding box; the collapse in
                         // `take_stroke_regions` falls back to the union when the
                         // tiles are not worth splitting. Patching level 0 and
                         // rebuilding from it is also what overwrites the preview
                         // level, so the canvas returns to the zoom-selected one.
-                        let regions = self.as_mut().rust_mut().take_stroke_regions(rect);
-                        self.as_mut().refresh_regions(&regions);
+                        // Any other stroke presented as it went, so only the
+                        // region still pending is left.
+                        let regions = if previewed {
+                            self.as_mut().rust_mut().take_stroke_regions(rect)
+                        } else {
+                            self.as_mut().rust_mut().stroke_tiles = Default::default();
+                            pending.into_iter().collect()
+                        };
+                        if !regions.is_empty() {
+                            self.as_mut().refresh_regions(&regions);
+                        }
                         let t = Instant::now();
                         self.as_mut().record(&label);
                         paint_timing::record("commit_record_history", t.elapsed());
@@ -816,11 +843,12 @@ impl qobject::PictureView {
     }
 
     pub fn cancel_paint(mut self: Pin<&mut Self>) {
-        // The stroke puts back the layer pixels it changed. The document
-        // composite was never patched mid-stroke, so presenting the stroke's
-        // extent from it is enough; only the level-0/pyramid and the displayed
-        // canvas carry the in-progress paint. A region still pending is
-        // dropped: the restore below repaints the whole extent anyway.
+        // The stroke puts back the layer pixels it changed, and
+        // `cancel_stroke` re-composites its extent into the document composite
+        // that the in-stroke presents had patched (a mask stroke never patched
+        // it). Presenting the extent from the composite then repairs level
+        // 0, the pyramid and the canvas. A region still pending is dropped:
+        // the restore below repaints the whole extent anyway.
         let dirty = {
             let mut rust = self.as_mut().rust_mut();
             let rust = &mut *rust;

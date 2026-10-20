@@ -10,14 +10,20 @@
 #include "raster_size_fields.h"
 #include "rasterize_eps_dialog.h"
 
+#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/open_jobs.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/pdf_export/import.cxxqt.h"
 
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
+#include <QtCore/QTimer>
+#include <QtWidgets/QApplication>
 #include <QtWidgets/QInputDialog>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QStatusBar>
+
+#include <memory>
 
 namespace pictura {
 
@@ -85,6 +91,16 @@ QPair<QString, QString> splitResult(const QString& result)
     return {result.left(newline), result.mid(newline + 1)};
 }
 
+// The probe and thumbnail work is synchronous; a wait cursor marks it without
+// blocking the dialog's own interaction.
+class ScopedWaitCursor {
+public:
+    ScopedWaitCursor() { QApplication::setOverrideCursor(Qt::WaitCursor); }
+    ~ScopedWaitCursor() { QApplication::restoreOverrideCursor(); }
+    ScopedWaitCursor(const ScopedWaitCursor&) = delete;
+    ScopedWaitCursor& operator=(const ScopedWaitCursor&) = delete;
+};
+
 } // namespace
 
 const QStringList& openAsFileFilters()
@@ -132,16 +148,21 @@ bool PicturaMainWindow::askPdfPassword(const QString& path, bool refused, QStrin
     return true;
 }
 
-// The Import PDF flow once `pdf_open` found no editing data.
-bool PicturaMainWindow::importPdfPath(const QString& path, bool interactive,
-                                      const QString& knownPassword)
+// The Import PDF flow once `pdf_open` found no editing data. The probe and the
+// dialog are synchronous; each chosen page is rendered on a worker with its own
+// loading tab, and the flow waits for that page before starting the next.
+PicturaMainWindow::OpenOutcome PicturaMainWindow::importPdfPathWithToken(
+    const QString& path, bool interactive, const QString& knownPassword, quint64 token)
 {
     QString password = knownPassword;
     PdfImportProbe probe;
     for (;;) {
-        beginOpenIndicator(path);
-        const auto [head, body] = splitResult(QString(pdf_import_probe(path, password)));
-        endOpenIndicator();
+        QString result;
+        {
+            ScopedWaitCursor wait;
+            result = QString(pdf_import_probe(path, password));
+        }
+        const auto [head, body] = splitResult(result);
         if (head == QStringLiteral("ok")) {
             probe = PdfImportProbe::parse(body);
             break;
@@ -150,107 +171,117 @@ bool PicturaMainWindow::importPdfPath(const QString& path, bool interactive,
         const bool refused = head == QStringLiteral("error wrongpassword");
         if (!interactive || (!locked && !refused)) {
             reportImportError(path, body);
-            return false;
+            finishOpen(token, OpenOutcome::Failed, body);
+            return OpenOutcome::Failed;
         }
         if (!askPdfPassword(path, refused, password)) {
-            return false;
+            finishOpen(token, OpenOutcome::Cancelled);
+            return OpenOutcome::Cancelled;
         }
     }
     if (probe.pages.isEmpty()) {
-        reportImportError(path, tr("the PDF has no pages."));
-        return false;
+        const QString reason = tr("the PDF has no pages.");
+        reportImportError(path, reason);
+        finishOpen(token, OpenOutcome::Failed, reason);
+        return OpenOutcome::Failed;
     }
 
     // The dialog renders the page thumbnails as it is built.
-    beginOpenIndicator(path);
-    ImportPdfDialog dialog(path, password, probe, this);
-    endOpenIndicator();
-    if (interactive && !runImportDialog(dialog)) {
-        return false;
+    std::unique_ptr<ImportPdfDialog> dialog;
+    {
+        ScopedWaitCursor wait;
+        dialog = std::make_unique<ImportPdfDialog>(path, password, probe, this);
     }
-    const QList<int> chosen = dialog.selection();
-    const bool images = dialog.imagesMode();
+    if (interactive && !runImportDialog(*dialog)) {
+        finishOpen(token, OpenOutcome::Cancelled);
+        return OpenOutcome::Cancelled;
+    }
+    const QList<int> chosen = dialog->selection();
+    const bool images = dialog->imagesMode();
+    const QString baseName = dialog->name();
+    const bool suppressWarnings = dialog->suppressWarnings();
     QStringList warnings;
     int opened = 0;
-    beginOpenIndicator(path);
     for (int index : chosen) {
         const QString name =
-            chosen.size() == 1 ? dialog.name() : numberedName(dialog.name(), index + 1);
+            chosen.size() == 1 ? baseName : numberedName(baseName, index + 1);
         const QSize pixels = images ? QSize(probe.images.value(index).width,
                                             probe.images.value(index).height)
-                                    : dialog.pixelSizeFor(index);
+                                    : dialog->pixelSizeFor(index);
         const ImportTarget target =
-            targetFrom(*dialog.sizeFields(), pixels, dialog.antiAliased(), name);
+            targetFrom(*dialog->sizeFields(), pixels, dialog->antiAliased(), name);
+        const QString area = images ? QString() : dialog->areaFor(index);
+
+        const quint64 pageToken = nextOpenToken();
         auto* view = new PictureView(this);
-        view->set_color_policy(colorPolicy_);
-        const QString result =
-            images ? QString(pdf_import_open_image(*view, path, index, target))
-                   : QString(pdf_import_open_page(*view, path, password, index + 1,
-                                                  dialog.areaFor(index), target));
-        const auto [head, body] = splitResult(result);
-        if (head != QStringLiteral("ok")) {
-            delete view;
-            endOpenIndicator();
-            reportImportError(path, body);
-            return opened > 0;
+        beginLoadingDocument(view, QString(), name, pageToken, QString(), OpenKind::PdfPage);
+        openSourcePaths_.insert(pageToken, path);
+        if (images) {
+            open_pdf_image_start(*view, path, index, target);
+        } else {
+            open_pdf_page_start(*view, path, password, index + 1, area, target);
         }
-        warnings += body.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
-        const int tab = addDocument(view, QString());
-        if (tab >= 0) {
-            docs_[tab].displayName = name;
-            updateTabTitle(tab);
+        const OpenOutcome outcome = waitForOpen(pageToken);
+        warnings += openWarnings_.take(pageToken);
+        if (outcome == OpenOutcome::Cancelled) {
+            finishOpen(token, OpenOutcome::Cancelled);
+            return OpenOutcome::Cancelled;
+        }
+        if (outcome != OpenOutcome::Opened) {
+            const OpenOutcome result = opened > 0 ? OpenOutcome::Opened : OpenOutcome::Failed;
+            finishOpen(token, result);
+            return result;
         }
         ++opened;
     }
-    endOpenIndicator();
     if (opened == 0) {
-        return false;
+        finishOpen(token, OpenOutcome::Failed);
+        return OpenOutcome::Failed;
     }
     rememberRecent(path);
     warnings.removeDuplicates();
-    if (interactive && !warnings.isEmpty() && !dialog.suppressWarnings()) {
+    if (interactive && !warnings.isEmpty() && !suppressWarnings) {
         QMessageBox box(QMessageBox::Warning, tr("Import PDF"), warnings.join(QLatin1Char('\n')),
                         QMessageBox::Ok, this);
         box.setObjectName(QStringLiteral("importWarnings"));
         runImportDialog(box);
     }
-    return true;
+    finishOpen(token, OpenOutcome::Opened);
+    return OpenOutcome::Opened;
 }
 
-bool PicturaMainWindow::importEpsPath(const QString& path, bool interactive)
+quint64 PicturaMainWindow::startImportEpsPath(const QString& path, bool interactive)
 {
+    const quint64 token = nextOpenToken();
     const auto [head, body] = splitResult(QString(eps_import_probe(path)));
     const QStringList box = body.split(QLatin1Char(' '), Qt::SkipEmptyParts);
     if (head != QStringLiteral("ok") || box.size() != 4) {
-        reportImportError(path, tr("format mismatch or damaged file."));
-        return false;
+        const QString reason = tr("format mismatch or damaged file.");
+        reportImportError(path, reason);
+        QTimer::singleShot(0, this, [this, token, reason] {
+            finishOpen(token, OpenOutcome::Failed, reason);
+        });
+        return token;
     }
     const QSizeF points(box[2].toDouble() - box[0].toDouble(),
                         box[3].toDouble() - box[1].toDouble());
     RasterizeEpsDialog dialog(points, this);
     if (interactive && !runImportDialog(dialog)) {
-        return false;
+        QTimer::singleShot(0, this, [this, token] {
+            finishOpen(token, OpenOutcome::Cancelled);
+        });
+        return token;
     }
     const QString name = QFileInfo(path).fileName();
     const ImportTarget target = targetFrom(*dialog.sizeFields(), dialog.sizeFields()->pixelSize(),
                                            dialog.antiAliased(), name);
+    beginOpenCursor();
+    cursorTokens_.insert(token);
     auto* view = new PictureView(this);
-    view->set_color_policy(colorPolicy_);
-    beginOpenIndicator(path);
-    const auto [status, detail] = splitResult(QString(eps_import_open(*view, path, target)));
-    endOpenIndicator();
-    if (status != QStringLiteral("ok")) {
-        delete view;
-        reportImportError(path, detail);
-        return false;
-    }
-    const int tab = addDocument(view, QString());
-    if (tab >= 0) {
-        docs_[tab].displayName = name;
-        updateTabTitle(tab);
-    }
-    rememberRecent(path);
-    return true;
+    beginLoadingDocument(view, QString(), name, token, QString(), OpenKind::Eps);
+    openSourcePaths_.insert(token, path);
+    open_eps_start(*view, path, target);
+    return token;
 }
 
 void PicturaMainWindow::showOpenAsDialog()
@@ -259,11 +290,11 @@ void PicturaMainWindow::showOpenAsDialog()
     const QString path = getOpenFileName(this, tr("Open As"), documentDirectory(activeFilePath()),
                                          openAsFileFilters(), &selected);
     if (!path.isEmpty()) {
-        openAsPath(path, std::max(0, int(openAsFileFilters().indexOf(selected))));
+        startOpenAsPath(path, std::max(0, int(openAsFileFilters().indexOf(selected))));
     }
 }
 
-bool PicturaMainWindow::openAsPath(const QString& path, int formatIndex)
+quint64 PicturaMainWindow::startOpenAsPath(const QString& path, int formatIndex)
 {
     const OpenAsFormat& format =
         openAsFormats().at(std::clamp(formatIndex, 0, int(openAsFormats().size()) - 1));
@@ -277,21 +308,28 @@ bool PicturaMainWindow::openAsPath(const QString& path, int formatIndex)
     if (kind == QStringLiteral("pdf") || kind == QStringLiteral("eps")) {
         matches = QString(vector_sniff(path)) == kind;
     }
-    const auto mismatch = [&]() {
-        reportImportError(path, tr("format mismatch or damaged file."));
-        return false;
-    };
     if (!matches) {
-        return mismatch();
+        reportImportError(path, tr("format mismatch or damaged file."));
+        return 0;
     }
     if (kind == QStringLiteral("pdf")) {
-        return openPdfPath(path);
+        return startOpenPdfPath(path);
     }
     if (kind == QStringLiteral("eps")) {
-        return importEpsPath(path);
+        return startImportEpsPath(path);
     }
-    const bool opened = kind == QStringLiteral("psd") ? openPath(path) : openImagePath(path);
-    return opened || mismatch();
+    const quint64 token = kind == QStringLiteral("psd") ? startOpenPath(path)
+                                                       : startOpenImagePath(path);
+    if (token != 0) {
+        openFailureMessages_.insert(token, tr("format mismatch or damaged file."));
+    }
+    return token;
+}
+
+bool PicturaMainWindow::openAsPath(const QString& path, int formatIndex)
+{
+    const quint64 token = startOpenAsPath(path, formatIndex);
+    return token != 0 && waitForOpen(token) == OpenOutcome::Opened;
 }
 
 } // namespace pictura

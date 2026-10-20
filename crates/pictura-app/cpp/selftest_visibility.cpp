@@ -131,6 +131,8 @@ int pictura::runVisibilityChecks(pictura::PicturaMainWindow& frame)
         const int historyBefore = view->history_count();
 
         frame.setActiveTool(pictura::ToolId::Move);
+        // This check is about the invisible layer moving, not smart-guide snap.
+        canvas->setSmartGuidesEnabled(false);
         canvas->mousePressed(QPointF(8, 8), Qt::LeftButton, int(Qt::NoModifier));
         canvas->mouseMoved(QPointF(16, 16));
         canvas->mouseReleased(QPointF(16, 16));

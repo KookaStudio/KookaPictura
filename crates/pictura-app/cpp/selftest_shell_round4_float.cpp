@@ -132,7 +132,7 @@ int pictura::runShellRound4FloatCheck(pictura::PicturaMainWindow& frame)
             if (child) {
                 const QPoint a(
                     frame.mapToGlobal(QPoint(frame.width() / 2, frame.height() / 4)));
-                const QPoint b = a + QPoint(24, 18);
+                const QPoint b = a + QPoint(4, 18);
                 const bool movedA = column->floatClampedForTest(index, a);
                 const QPoint posA = floatWindow->pos();
                 const bool movedB = column->floatClampedForTest(index, b);

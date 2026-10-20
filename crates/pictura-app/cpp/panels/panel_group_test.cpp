@@ -12,11 +12,14 @@ namespace pictura {
 
 int PanelGroup::headerCornerWidthForTest() const
 {
-    // M47: the reserved grip plus the per-widget menu button; the float close
-    // button no longer lives in the corner. M48: the corner keeps a right margin.
+    // The reserved grip, the flyout-only close control when visible, and the
+    // per-widget menu button; the corner keeps a right margin.
     int width = 0;
     if (headerGrip_) {
         width += headerGrip_->width();
+    }
+    if (flyoutCloseButton_ && flyoutCloseButton_->isVisible()) {
+        width += flyoutCloseButton_->width();
     }
     if (headerButton_) {
         width += headerButton_->width();

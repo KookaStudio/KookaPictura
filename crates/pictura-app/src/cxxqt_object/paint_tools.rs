@@ -993,9 +993,13 @@ fn begin(
         {
             return false;
         }
+        // Opened only once the stroke can start, so a refused call never leaves
+        // a session for the next tool to report under its title.
+        super::helpers::paint_timing::start(label);
         start(doc, path, rust)
     };
     let Some(stroke) = stroke else {
+        super::helpers::paint_timing::report();
         return false;
     };
     let mut rust = view.as_mut().rust_mut();

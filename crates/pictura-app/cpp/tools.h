@@ -252,6 +252,10 @@ public:
     void setForeground(const QColor& color);
     QColor background() const override;
     void setBackground(const QColor& color);
+    // Whether the current FG/BG pair belongs to a mask target. The canvas
+    // backdrop and other document chrome keep the image pair while a mask is
+    // edited, even though paint and fill use the mask pair.
+    void setMaskActive(bool mask);
     void adjustBrushSize(int delta);
     void adjustBrushHardness(int delta);
     // Apply the `[`/`]` brush shortcut by Qt key value or native scan code
@@ -519,6 +523,7 @@ private:
     std::function<void(const QPointF&)> canvasSampler_;
     QColor foreground_{Qt::black};
     QColor background_{Qt::white};
+    bool maskActive_ = false;
 
     bool dragging_ = false;
     bool dragCommitted_ = false;

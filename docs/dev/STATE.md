@@ -12,6 +12,46 @@ Snapshot for resuming after a context break. Update after each milestone.
   contains reproduced Adobe Help prose or the old wording.
 - Toolchain: Rust 1.98 (`rust-toolchain.toml`), system Qt **6.11.1**, cxx-qt
   **0.10.0**, wgpu **30.0.1**, lcms2 **6.2.0** (system Little CMS 2.19).
+- **Large brush and shape performance** (#719, branch
+  `fix/719-large-brush-perf`, OpenSpec change `large-tool-performance`,
+  archived into `tools/banded-dab-raster`, `tools/bounded-tool-commit`,
+  `verification/tool-profiler`, plus ADDED requirements in
+  `compositing/vector-mask-sampling` and `interop/agentic-control`). The
+  shell's Brush/Pencil/Eraser start through `paint_tools::begin` and never took
+  the preview or GPU stroke (only `begin_paint`, used by the self-test, does);
+  instead the exact raster now runs a dab of 128² px or more in parallel row
+  bands (`stroke/raster.rs`, byte-identical; Dissolve serial). In-stroke
+  presents patch `doc.composite`, so `end_paint` presents only the pending
+  region and `cancel_stroke` re-composites the extent. `VectorMask::inside`
+  answers rows beyond the path without the per-pixel edge scan (the ellipse's
+  10 s on the world map). New shape layers and `fills::apply` refresh only
+  their changed rect via `refresh_edit` (full recomposite when another layer
+  is styled, or a clipped layer sits above a new shape); `fill_layer` runs rows
+  in parallel; shape coverage sweeps only the path's columns.
+  `scripts/profile-tools.py` times tools end to end over the control server
+  (new `tool_options`; `pointer` `down`/`up`) with `--save`/`--compare`;
+  before/after tables and remaining ceilings (undo, Paint Bucket, Marquee
+  panel refresh, Gradient) are in the change's `design.md`.
+- **Hex shorthand, Add to Swatches, and swatch persistence** (#603, branch
+  `feat/603-hex-shorthand-swatches`, OpenSpec changes
+  `hex-shorthand-swatches` and `swatches-session-persistence`, archived into
+  `ui/color-picker` and `ui/color-swatches-panel`). The picker's hex field
+  accepts `#`/`0x` and 3-digit shorthand (`#123` → `#112233`): six digits apply
+  live, shorthand applies on Enter/focus loss, a commit normalises the field,
+  and invalid input leaves the colour and restores the field. Add to Swatches
+  opens a name prompt defaulting to the panel's next `Swatch N`, appends the
+  current colour, and leaves the picker open; `PicturaMainWindow` registers its
+  `SwatchGrid` as the picker's default target so every picker entry point
+  reaches the panel. `SwatchGrid::nextSwatchName` also names the panel's New
+  swatches. The grid persists in the session store: `SessionState` carries
+  `swatches` (`{name, color}`) plus a `swatchesLoaded` flag, the frame saves
+  the live grid on every add/delete/reset and restores it in `buildPanels`; an
+  absent key opens the default palette and a stored empty panel stays empty.
+  Ceilings (`ponytail:`): `.aco`/`.ase` libraries and a dedicated preferences
+  file remain with #605/#489; 4/8-digit alpha shorthand, the Color panel hex
+  field, and the CC-only library checkbox are out of scope. Tests:
+  `tst_color_picker` (6), `tst_swatches_panel` (9), and `tst_session_store`
+  (3 new).
 - **Spin Blur** (#464, branch `feat/464-spin-blur`, OpenSpec change
   `spin-blur-gallery`, archived into `imaging/blur-gallery` and
   `imaging/blur-filters`). A post-CS6 Blur Gallery effect ported on the

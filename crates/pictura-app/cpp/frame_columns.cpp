@@ -137,14 +137,23 @@ void PicturaMainWindow::resizeEvent(QResizeEvent* event)
 {
     QMainWindow::resizeEvent(event);
     layoutWorkspaceFrame();
-    positionOpenBanner();
+    for (PanelColumn* column : allPanelColumns()) {
+        if (column) {
+            column->reclampFloats();
+            column->reclampFlyout();
+        }
+    }
 }
 
 void PicturaMainWindow::showEvent(QShowEvent* event)
 {
     QMainWindow::showEvent(event);
     layoutWorkspaceFrame();
-    positionOpenBanner();
+    if (!pendingFloatRestores_.isEmpty()) {
+        // Let the compositor apply the restored/maximized frame geometry first;
+        // an in-window overlay then converts its stored global rect against it.
+        QTimer::singleShot(0, this, &PicturaMainWindow::applyPendingFloatRestores);
+    }
 }
 
 void PicturaMainWindow::layoutWorkspaceFrame()
@@ -296,11 +305,14 @@ void PicturaMainWindow::removeColumnIfEmpty(PanelColumn* column)
     // splitter child takes no space and `PanelColumn::showPanel` re-shows it.
     // M47: it survives even with a live float, so the floats stay wired.
     if (column == panelColumn_) {
+        column->closeFlyout();
         column->hide();
         PanelColumn::refreshSharedFloor(this);
         saveSession();
         return;
     }
+    // A frame-parented flyout must not survive its owning column.
+    column->closeFlyout();
     // M47: a dynamic column may still own a live float; rewire it to the primary
     // before the column is destroyed so the float stays re-dockable.
     column->rehomeFloatsTo(panelColumn_);
@@ -311,7 +323,7 @@ void PicturaMainWindow::removeColumnIfEmpty(PanelColumn* column)
         if (!group) {
             continue;
         }
-        if (PanelGroup* taken = column->takeGroup(group->objectName())) {
+        if (PanelGroup* taken = column->takeGroup(group)) {
             panelColumn_->adoptGroup(taken);
         }
     }
@@ -506,12 +518,13 @@ void PicturaMainWindow::clearDynamicColumns()
         if (!column || column == panelColumn_ || column->isToolsColumn()) {
             continue;
         }
+        column->closeFlyout();
         const QList<PanelGroup*> groups = column->groups();
         for (PanelGroup* group : groups) {
             if (!group) {
                 continue;
             }
-            if (PanelGroup* taken = column->takeGroup(group->objectName())) {
+            if (PanelGroup* taken = column->takeGroup(group)) {
                 panelColumn_->addGroup(taken);
             }
         }

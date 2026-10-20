@@ -314,9 +314,8 @@ QTabWidget#documentTabs QStackedWidget { background: ${surface-canvas}; }
 QTabBar#documentTabBar { border: 0; }
 QTabBar#documentTabBar { background: ${surface-header}; }
 QTabBar#documentTabBar::tab { font-size: ${font-size-tab}px; font-weight: 700; padding-right: 4px; border: 0; }
-QTabBar#documentTabBar::close-button { image: url(:/icons/panel.close.light.png); background: transparent; border: 0; margin-left: 2px; margin-right: 8px; }
-QTabBar#documentTabBar::close-button:hover { background: ${surface-hover}; }
-QTabBar#documentTabBar::close-button:pressed { background: ${surface-hover}; }
+QToolButton#tabCloseButton { border: 0; background: transparent; }
+QToolButton#tabCloseButton:hover, QToolButton#tabCloseButton:pressed { background: ${surface-hover}; }
 /* Columns keep their side rules only; the top and bottom edges are open, and
    the header carries no rule of its own. */
 QWidget#panelColumnContainer { border: 0; border-left: ${border-width-panel}px solid ${border-subtle}; border-right: ${border-width-panel}px solid ${border-subtle}; border-bottom: ${border-width-panel}px solid ${border-subtle}; background: ${surface}; }
@@ -328,6 +327,7 @@ QWidget#workspaceFrameLine { background: ${border}; }
 QWidget#panelColumnContainer[frameEdge="left"], QWidget#toolsColumn[frameEdge="left"] { border-left: 0; }
 QWidget#panelColumnContainer[frameEdge="right"], QWidget#toolsColumn[frameEdge="right"] { border-right: 0; }
 QWidget#panelColumnHeader { background: ${surface-header}; border: 0; border-bottom: 1px solid ${border-header}; }
+QWidget#panelFloatHeader { background: ${surface-header}; border: 0; }
 /* The icon strip sits inside the bordered column container, so it must not
    draw its own side rule (that would double the column border). */
 QWidget#panelColumnIconStrip { border: 0; background: ${surface}; }
@@ -348,10 +348,6 @@ QWidget#dialogFrame { background: transparent; border: 1px solid ${border}; }
 /* Inline warning / info text: a label flagged `notice="true"` reads
    dark-on-yellow; its icon and any buttons beside it keep their own look. */
 QLabel[notice="true"] { background: ${surface-notice}; color: ${content-notice}; border: 0; border-radius: 2px; padding: 3px 6px; }
-/* The document-open loading banner: a boxed "Opening <file>…" at the window's
-   lower-left, on the notice yellow so it stands out over the canvas. */
-QLabel#documentOpenBanner { background: ${surface-notice}; color: ${content-notice}; border: 0; border-radius: 6px; padding: 6px 12px; }
-
 /* Info panel readout grid: only the inner cross of the 2x2 table is drawn, in
    the frame shade; the outer edge is the panel pane itself. The blocks flag
    their inner sides with the `gridRight`/`gridBottom` dynamic properties. */
@@ -470,6 +466,9 @@ QRadioButton::indicator:checked:disabled { background: ${content-disabled}; bord
 QProgressBar { background: ${surface-input}; border: 1px solid ${border-input}; border-radius: 3px; text-align: center; color: ${content-body}; }
 QProgressBar::chunk { background: ${selection}; border-radius: 2px; }
 QProgressBar:disabled { color: ${content-disabled}; border-color: ${border}; }
+QFrame#loadingCard { background: ${surface}; border: 1px solid ${border}; border-radius: 8px; }
+QFrame#loadingCard QLabel#loadingCardName { color: ${content}; }
+QFrame#loadingCard QLabel#loadingCardPhase, QFrame#loadingCard QLabel#loadingCardPercent { color: ${content-body}; }
 
 QHeaderView { background: ${surface-header}; border: 0; }
 QHeaderView::section { background: ${surface-header}; color: ${content-body}; border: 0; border-right: 1px solid ${border-subtle}; border-bottom: 1px solid ${border-subtle}; padding: 3px 6px; }

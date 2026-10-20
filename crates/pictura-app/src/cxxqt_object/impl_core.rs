@@ -76,30 +76,20 @@ impl qobject::PictureView {
     pub fn open(self: Pin<&mut Self>, path: &QString) -> bool {
         let path = path.to_string();
         let policy = self.rust().color_policy;
-        let mut loaded = std::fs::read(&path)
-            .ok()
-            .and_then(|bytes| pictura_codec::read_psd_with(&bytes, policy).ok());
-
-        let ok = loaded.is_some();
         let gpu_compute = self.rust().gpu_compute;
-        let rendered = loaded.as_ref().map(|doc| current_buffer(doc, gpu_compute));
-        if let (Some(doc), Some(rendered)) = (loaded.as_mut(), rendered.as_ref()) {
-            store_composite(doc, rendered);
+        match super::open_jobs::decode_psd(&path, policy, gpu_compute, &|_, _| {}) {
+            Some(opened) => {
+                super::open_jobs::apply_opened(&mut self.rust_mut(), opened);
+                true
+            }
+            None => {
+                let mut view = self.rust_mut();
+                view.doc = None;
+                view.reset_edit_state();
+                view.path = None;
+                false
+            }
         }
-        let mut view = self.rust_mut();
-        view.doc = loaded;
-        view.reset_edit_state();
-        view.active_layer = view
-            .doc
-            .as_ref()
-            .and_then(|doc| topmost_pixel_layer_index(doc).map(|i| i.to_string()));
-        let view = &mut *view;
-        if let Some(doc) = view.doc.as_mut() {
-            view.history.capture_live(doc, &None, "Open");
-        }
-        view.path = if ok { Some(path) } else { None };
-        view.dirty = false;
-        ok
     }
 
     /// `File > Open` for a raster image: read `path`, probe and decode it with
@@ -110,31 +100,14 @@ impl qobject::PictureView {
     /// left intact so a Revert reload keeps the document's file association.
     pub fn open_image(self: Pin<&mut Self>, path: &QString) -> bool {
         let path = path.to_string();
-        let name = std::path::Path::new(&path)
-            .file_stem()
-            .map(|stem| stem.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        let Some((rgba, width, height)) =
-            std::fs::read(&path).ok().as_deref().and_then(decode_import)
-        else {
-            return false;
-        };
-        let mut doc = Document::from_rgba(&name, width, height, &rgba);
-        finalize_import(&mut doc, &rgba);
         let gpu_compute = self.rust().gpu_compute;
-        let rendered = current_buffer(&doc, gpu_compute);
-        store_composite(&mut doc, &rendered);
-        let mut view = self.rust_mut();
-        view.doc = Some(doc);
-        view.reset_edit_state();
-        view.active_layer = Some("0".to_string());
-        let view = &mut *view;
-        if let Some(doc) = view.doc.as_mut() {
-            view.history.capture_live(doc, &None, "Open");
+        match super::open_jobs::decode_image(&path, gpu_compute, &|_, _| {}) {
+            Some(opened) => {
+                super::open_jobs::apply_opened(&mut self.rust_mut(), opened);
+                true
+            }
+            None => false,
         }
-        view.source_format = format_for_path(&path);
-        view.dirty = false;
-        true
     }
 
     /// `File > Open As Smart Object…`: read `path` and replace the view with a
@@ -145,44 +118,14 @@ impl qobject::PictureView {
     /// file is missing, unreadable, or an unsupported format.
     pub fn open_as_smart_object(self: Pin<&mut Self>, path: &QString) -> bool {
         let path = path.to_string();
-        let name = std::path::Path::new(&path)
-            .file_stem()
-            .map(|stem| stem.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        let bytes = std::fs::read(&path).ok();
-        let mut doc = match bytes
-            .as_deref()
-            .and_then(|bytes| pictura_render::open_as_smart_object(&name, bytes))
-        {
-            Some(doc) => doc,
-            None => {
-                // Not a PSD/PSB: import a supported raster and embed its layer
-                // as a smart object, the same recipe `place_image` uses.
-                let Some((rgba, width, height)) = bytes.as_deref().and_then(decode_import) else {
-                    return false;
-                };
-                let mut doc = Document::from_rgba(&name, width, height, &rgba);
-                if !pictura_render::convert_to_smart_object(&mut doc, "0") {
-                    return false;
-                }
-                doc
-            }
-        };
         let gpu_compute = self.rust().gpu_compute;
-        let rendered = current_buffer(&doc, gpu_compute);
-        store_composite(&mut doc, &rendered);
-        let mut view = self.rust_mut();
-        view.doc = Some(doc);
-        view.reset_edit_state();
-        view.active_layer = Some("0".to_string());
-        let view = &mut *view;
-        if let Some(doc) = view.doc.as_mut() {
-            view.history
-                .capture_live(doc, &None, "Open As Smart Object");
+        match super::open_jobs::decode_smart_object(&path, gpu_compute, &|_, _| {}) {
+            Some(opened) => {
+                super::open_jobs::apply_opened(&mut self.rust_mut(), opened);
+                true
+            }
+            None => false,
         }
-        view.path = None;
-        view.dirty = false;
-        true
     }
 
     pub fn new_document(
@@ -250,6 +193,7 @@ impl qobject::PictureView {
         store_composite(&mut doc, &rendered);
         let mut view = self.rust_mut();
         view.doc = Some(doc);
+        view.document_generation = view.document_generation.wrapping_add(1);
         view.reset_edit_state();
         view.active_layer = Some("0".to_string());
         let view = &mut *view;
@@ -723,6 +667,11 @@ impl qobject::PictureView {
     /// Non-consuming revision of the displayed canvas pixels.
     pub fn canvas_revision(&self) -> u64 {
         self.rust().canvas_revision
+    }
+
+    /// Identity of the loaded document; bumped when the view loads or replaces it.
+    pub fn document_generation(&self) -> u64 {
+        self.rust().document_generation
     }
 
     pub fn document_width(&self) -> i32 {

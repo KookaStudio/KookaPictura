@@ -90,11 +90,9 @@ void PicturaMainWindow::refreshRecentMenu(QMenu* menu)
 
 void PicturaMainWindow::openRecent(const QString& path)
 {
-    // The same routing as File > Open.
-    const bool opened = openDocumentAtPath(path);
-    if (!opened) {
-        statusBar()->showMessage(tr("Could not open %1").arg(QFileInfo(path).fileName()), 4000);
-    }
+    // The same routing as File > Open; the completion shows the failure message
+    // for a file that could not be read.
+    startOpenDocumentAtPath(path, true, true);
 }
 
 } // namespace pictura

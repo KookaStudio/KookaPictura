@@ -88,6 +88,8 @@ void MoveFeedbackTest::dragShowsAntsAndReadout()
     QVERIFY2(f.ok(), "move fixture");
     showFrame();
     QVERIFY2(qAbs(pictura::document_ppi(*f.view) - 72.0) < 0.1, "72 ppi");
+    // This check is about the ants and readout, not snapping.
+    f.canvas->setSmartGuidesEnabled(false);
 
     frame.setActiveTool(pictura::ToolId::HorizontalType);
     f.drag({QPointF(20, 60)});

@@ -280,6 +280,9 @@ void populatePanelMenu(QMenu* menu, const QString& panelName,
             }
             QAction* action = menu->addAction(row.label);
             action->setCheckable(row.checkable);
+            if (!row.action.isEmpty()) {
+                action->setData(row.action);
+            }
             if (row.action.isEmpty()) {
                 action->setEnabled(false);
                 action->setToolTip(
@@ -296,6 +299,9 @@ void populatePanelMenu(QMenu* menu, const QString& panelName,
         }
         QAction* action = submenu->addAction(row.label);
         action->setCheckable(row.checkable);
+        if (!row.action.isEmpty()) {
+            action->setData(row.action);
+        }
         if (row.action.isEmpty()) {
             action->setEnabled(false);
             action->setToolTip(QStringLiteral("%1 — not implemented yet").arg(row.label));
@@ -348,6 +354,17 @@ void PanelGroup::updateHeaderMenu()
     headerMenu_ = new QMenu(headerButton_);
     populatePanelMenu(headerMenu_, panel,
                       [this](const QString& id) { runPanelMenuAction(id); });
+    QObject::connect(headerMenu_, &QMenu::aboutToShow, headerMenu_, [this] {
+        auto* layers = qobject_cast<LayersPanel*>(tabs_->currentWidget());
+        for (QAction* action : headerMenu_->findChildren<QAction*>()) {
+            const QString id = action->data().toString();
+            if (id == QLatin1String("moveUp") || id == QLatin1String("moveDown")) {
+                action->setEnabled(layers
+                                   && layers->canMoveCurrent(
+                                       id == QLatin1String("moveUp") ? 1 : -1));
+            }
+        }
+    });
     headerButton_->setMenu(headerMenu_);
 }
 

@@ -129,6 +129,7 @@ SessionState loadSession()
     state.traditionalPoints = obj.value(QStringLiteral("traditionalPoints")).toBool(false);
     state.guidesVisible = obj.value(QStringLiteral("guidesVisible")).toBool(true);
     state.guidesLocked = obj.value(QStringLiteral("guidesLocked")).toBool(false);
+    state.smartGuidesVisible = obj.value(QStringLiteral("smartGuidesVisible")).toBool(true);
     state.freePan = obj.value(QStringLiteral("freePan")).toBool(true);
     state.snapCanvasToWorkspace =
         obj.value(QStringLiteral("snapCanvasToWorkspace")).toBool(false);
@@ -140,6 +141,11 @@ SessionState loadSession()
     state.cropRatio = obj.value(QStringLiteral("cropRatio")).toDouble(0.0);
     state.cropGridOverlay = obj.value(QStringLiteral("cropGridOverlay")).toInt(0);
     state.toolOptions = obj.value(QStringLiteral("toolOptions")).toObject();
+    if (obj.contains(QStringLiteral("swatches"))
+        && obj.value(QStringLiteral("swatches")).isArray()) {
+        state.swatches = obj.value(QStringLiteral("swatches")).toArray();
+        state.swatchesLoaded = true;
+    }
     state.panelRailMode = obj.value(QStringLiteral("panelRailMode")).toString(
         QStringLiteral("normal"));
     if (state.panelRailMode != QStringLiteral("iconic")) {
@@ -152,9 +158,11 @@ SessionState loadSession()
     state.panelGroups = obj.value(QStringLiteral("panelGroups")).toArray();
     state.panelColumns = obj.value(QStringLiteral("panelColumns")).toArray();
     // v5 (or older) stores have no per-column layout: synthesise one right-hand
-    // column from the legacy flat per-group state so they open unchanged. An
-    // explicit empty `panelColumns` is v6 and is left as-is.
-    if (!obj.contains(QStringLiteral("panelColumns"))) {
+    // column from the legacy flat per-group state so they open unchanged. A
+    // store with no legacy groups is a fresh/default store, not a one-column
+    // empty workspace.
+    if (!obj.contains(QStringLiteral("panelColumns"))
+        && !state.panelGroups.isEmpty()) {
         QJsonObject column;
         column.insert(QStringLiteral("side"), QStringLiteral("right"));
         column.insert(QStringLiteral("order"), 0);
@@ -228,6 +236,7 @@ bool saveSession(const SessionState& state)
     obj.insert(QStringLiteral("traditionalPoints"), state.traditionalPoints);
     obj.insert(QStringLiteral("guidesVisible"), state.guidesVisible);
     obj.insert(QStringLiteral("guidesLocked"), state.guidesLocked);
+    obj.insert(QStringLiteral("smartGuidesVisible"), state.smartGuidesVisible);
     obj.insert(QStringLiteral("freePan"), state.freePan);
     obj.insert(QStringLiteral("snapCanvasToWorkspace"), state.snapCanvasToWorkspace);
     obj.insert(QStringLiteral("guideColor"), state.guideColor);
@@ -238,6 +247,9 @@ bool saveSession(const SessionState& state)
     obj.insert(QStringLiteral("cropRatio"), state.cropRatio);
     obj.insert(QStringLiteral("cropGridOverlay"), state.cropGridOverlay);
     obj.insert(QStringLiteral("toolOptions"), state.toolOptions);
+    if (state.swatchesLoaded) {
+        obj.insert(QStringLiteral("swatches"), state.swatches);
+    }
     obj.insert(QStringLiteral("panelRailMode"), state.panelRailMode);
     obj.insert(QStringLiteral("railWidth"), state.railWidth);
     obj.insert(QStringLiteral("autoCollapseIconic"), state.autoCollapseIconic);

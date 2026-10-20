@@ -45,6 +45,7 @@ class ColorState;
 class CanvasScrollBars;
 class DesignSystemDialog;
 class FileDropRouter;
+class LoadingCard;
 class HistogramPanel;
 class HistoryPanel;
 class BrushPanel;
@@ -100,9 +101,6 @@ public:
     CommandRegistry* registry() const { return registry_; }
     ImageView* imageView() const;       // active canvas, or nullptr with no document
     PictureView* activeView() const;    // active document, or nullptr
-    // frame_open.cpp: the loading banner's text, and whether it is showing.
-    QString openBannerTextForTest() const;
-    bool openBannerVisibleForTest() const;
     // Creates two documents and drags the last tab before its neighbour through
     // the real tab bar; returns whether docs_, viewAt and the active view stayed
     // aligned with the new visual order.
@@ -279,20 +277,43 @@ public:
     // opens the Open dialog.
     bool workspaceOpenArmed() const { return docs_.isEmpty(); }
 
+    // How an open ended. A user cancel is not a failure: callers must not show
+    // an error for it.
+    enum class OpenOutcome { Opened, Cancelled, Failed };
+
     // Takes ownership of `view` and adds it as a document tab.
     int addDocument(PictureView* view, const QString& path);
     bool newDocument(const QString& name, int width, int height, const QString& mode,
                      int depth, const QString& background);
-    bool openPath(const QString& path);
-    bool openImagePath(const QString& path);
+    // Start an open and return its token; completion arrives on
+    // `documentOpenFinished`. The loading tab is inserted immediately (or, for
+    // a PDF probe, when the worker finds editing data). `reportFailure` shows
+    // the Open Recent status message on failure.
+    quint64 startOpenPath(const QString& path);
+    quint64 startOpenImagePath(const QString& path);
+    quint64 startOpenAsSmartObjectPath(const QString& path);
     // Route `path` by signature (PDF, EPS) or suffix (PSD/PSB, Qt raster
     // import). With `interactive` off (agentic control) a PDF or EPS imports
     // with the dialogs' defaults and no prompt.
+    quint64 startOpenDocumentAtPath(const QString& path, bool interactive = true,
+                                    bool reportFailure = false);
+    // Synchronous wrappers for the self-test, the control server, and tests:
+    // start the open and pump a local event loop until it finishes.
+    bool openPath(const QString& path);
+    bool openImagePath(const QString& path);
     bool openDocumentAtPath(const QString& path, bool interactive = true);
+    OpenOutcome openDocumentAtPathOutcome(const QString& path, bool interactive = true);
     // True when `path`'s suffix routes to the native PSD/PSB reader rather than
     // the Qt image decode edge.
     static bool isNativeDocumentPath(const QString& path);
     bool openAsSmartObjectPath(const QString& path);
+    // Test seam: hold a started open's completion for `ms` milliseconds so the
+    // loading tab, spinner, hover, and cancel are observable.
+    void setOpenDelayForTest(int ms) { openDelayForTest_ = ms; }
+    // Pump events until every started open has finished or been cancelled. The
+    // self-test's drop checks need the asynchronous opens to land.
+    void waitForOpensForTest();
+    bool isLoadingDocument(int index) const;
     bool editSmartObjectContents(const QString& layerPath);
     // Replace the embedded source of `layerPath` from a chosen PSD/PSB file, or
     // write that source to a chosen destination. Both refuse without a
@@ -324,20 +345,18 @@ public:
     // reopening a Pictura Photoshop PDF, and Edit > Adobe PDF Presets.
     static bool isPdfPath(const QString& path);
     bool savePdfWithDialog(const QString& path);
-    bool openPdfPath(const QString& path, bool interactive = true);
+    quint64 startOpenPdfPath(const QString& path, bool interactive = true);
     void showPdfPresets();
     // frame_import.cpp: a generic PDF through the password prompt and the
     // Import PDF dialog, an EPS through the Rasterize Generic EPS Format
     // dialog, and File > Open As with a chosen decoder (index into
     // openAsFileFilters()). Each opened page or image is an untitled document.
-    // `knownPassword` is one `openPdfPath` already accepted.
-    bool importPdfPath(const QString& path, bool interactive = true,
-                       const QString& knownPassword = QString());
     // Ask for the password of a protected PDF (`refused`: the last one was
     // wrong); false on Cancel.
     bool askPdfPassword(const QString& path, bool refused, QString& password);
-    bool importEpsPath(const QString& path, bool interactive = true);
+    quint64 startImportEpsPath(const QString& path, bool interactive = true);
     void showOpenAsDialog();
+    quint64 startOpenAsPath(const QString& path, int formatIndex);
     bool openAsPath(const QString& path, int formatIndex);
     // Test seam: answer the import dialogs (password prompt, Import PDF,
     // Rasterize Generic EPS Format, the warnings box).
@@ -363,6 +382,9 @@ public:
     // File > Open Recent, or null before the menu bar is built.
     QMenu* recentMenu() const;
     bool closeActiveDocument(bool interactive);
+    // Cancel every in-flight open (window close, File > Exit). The loading tabs
+    // disappear and their workers' results are discarded.
+    void cancelAllOpens();
     void showNewDocumentDialog();
     void showOpenDialog();
     void showFileInfo();
@@ -381,9 +403,9 @@ public:
     void updateThemeCornerIcon();
 
 Q_SIGNALS:
-    // Emitted while the loading indication is showing, immediately before a
-    // blocking document read/decode begins. Test seam for the open banner.
-    void documentOpenStarted(const QString& path);
+    // Emitted on the GUI thread when a started open ends. `outcome` is
+    // `OpenOutcome`; `error` is the failure message (empty for success/cancel).
+    void documentOpenFinished(quint64 token, int outcome, const QString& error);
 
 protected:
     void closeEvent(QCloseEvent* event) override;
@@ -412,17 +434,45 @@ private:
     void showCanvasBackgroundMenu(const QPoint& globalPos);
     // Leave isolation mode if active; true when it was. Escape routes here.
     bool releaseIsolation();
+    enum class OpenKind { Psd, Raster, SmartObject, Pdf, PdfPage, Eps };
+
     struct DocEntry {
         PictureView* view = nullptr;
         ImageView* canvas = nullptr;
         BrushTipPreview* tipPreview = nullptr;
         CanvasScrollBars* canvasHost = nullptr;
+        // The tab page. A ready document's page is its canvas host; a loading
+        // document's page is a placeholder until finishLoadingDocument adds the
+        // canvas host to it.
+        QWidget* page = nullptr;
         QString path;
         // Display name for a path-less import (Open Image / Open As Smart
         // Object); preferred over the generated Untitled-N name. The tab title
         // uses it while `path` stays empty so Save cannot overwrite the source.
         QString displayName;
+        // The path Open Recent should remember for a path-less import.
+        QString recentPath;
         int untitledNumber = 0;
+        bool loading = false;
+        quint64 token = 0;
+        OpenKind kind = OpenKind::Psd;
+        // The user selected another tab while this one loaded; do not steal the
+        // activation when it finishes.
+        bool userMovedAway = false;
+        // The document that was active when this open started; a failure or
+        // cancel restores it. Guarded because the user may close it mid-load.
+        QPointer<PictureView> previousActiveView;
+        // The empty-workspace progress card while loading; null once filled.
+        QPointer<LoadingCard> loadingCard;
+    };
+
+    // A PDF probe that has no tab yet. `token` is the open the caller waits on;
+    // `password` is the one already accepted, if any.
+    struct PdfProbe {
+        quint64 token = 0;
+        QString path;
+        bool interactive = true;
+        QString password;
     };
 
     // One open Edit Contents editor: the untitled tab, the document that owns
@@ -436,7 +486,7 @@ private:
     };
 
     void buildMenus();
-    void buildPanels();
+    void buildPanels(const SessionState& state);
     // `toolOptions` is the session's saved tool options, restored before the
     // options bar is built so its controls start from them.
     void buildTools(int toolsColumns, bool useShiftKeyForToolSwitch,
@@ -516,8 +566,13 @@ private:
     void importSystemClipboard();
     void applyPanelSession(const SessionState& state);
     // Rebuild the widget columns from a workspace-shaped spec, moving panels
-    // between groups (the session restore only reorders/hides them).
-    void regroupAndApply(const QJsonArray& columns);
+    // between groups and restoring floating groups/columns. Shared by session
+    // restore and workspace apply.
+    void regroupAndApply(const QJsonArray& columns, bool persist = true);
+    // A float restored while the frame is hidden waits for `showEvent` so its
+    // stored position is interpreted against the restored window geometry.
+    void queueOrRestoreFloat(PanelColumn* column, PanelGroup* group, const QRect& geometry);
+    void applyPendingFloatRestores();
     // Serialize the live widget columns into the same `panelColumns` shape
     // saveSession persists, shared by the session and the workspace store.
     QJsonArray serializeWorkspaceLayout() const;
@@ -575,10 +630,35 @@ private:
     void rememberRecent(const QString& path);
     // Repopulate File > Open Recent from `recent_` each time it opens.
     void refreshRecentMenu(QMenu* menu);
-    // frame_open.cpp: the loading indication around a blocking document open.
-    void beginOpenIndicator(const QString& path);
-    void endOpenIndicator();
-    void positionOpenBanner();
+    // frame_open.cpp: the loading-tab lifecycle and the async open entry points.
+    quint64 nextOpenToken();
+    void beginOpenCursor();
+    void endOpenCursor();
+    void wireOpenSignals(PictureView* view);
+    void beginLoadingDocument(PictureView* view, const QString& path,
+                              const QString& displayName, quint64 token,
+                              const QString& recentPath, OpenKind kind);
+    void setupCanvas(DocEntry& entry);
+    void wireCanvas(DocEntry& entry);
+    void installCloseButton(int index, PictureView* view);
+    void finishLoadingDocument(int index);
+    void restorePreviousTab(PictureView* view);
+    void cancelOpen(int index);
+    void cancelOpenForView(PictureView* view);
+    void onOpenDetected(PictureView* view);
+    void onOpenFinished(PictureView* view, const QString& status,
+                        const QStringList& warnings);
+    void onOpenProgress(PictureView* view, int percent, const QString& phase);
+    void handlePdfProbeFinished(PictureView* view, const PdfProbe& probe,
+                                const QString& status, const QStringList& warnings);
+    void startPdfProbe(const QString& path, bool interactive, const QString& password,
+                       quint64 token);
+    OpenOutcome importPdfPathWithToken(const QString& path, bool interactive,
+                                       const QString& knownPassword, quint64 token);
+    void finishOpen(quint64 token, OpenOutcome outcome, const QString& error = QString());
+    OpenOutcome waitForOpen(quint64 token);
+    int indexOfView(PictureView* view) const;
+    void reportOpenFailure(int index, const QString& status);
     void openRecent(const QString& path);
     void applyBrightness(int level);
     QColor canvasColorForIndex(int index) const;
@@ -593,10 +673,32 @@ private:
 
     QList<DocEntry> docs_;
     QList<SmartObjectEditSession> editSessions_;
+    // PDF probes that have no tab yet, keyed by their temporary view.
+    QHash<PictureView*, PdfProbe> pdfProbes_;
+    // Views whose open signals are already wired (a PDF probe's view becomes a
+    // tab, so it is wired once).
+    QSet<PictureView*> openWired_;
+    // Per-open side data that must outlive the tab's removal.
+    QHash<quint64, QString> openSourcePaths_;
+    QHash<quint64, QStringList> openWarnings_;
+    // A per-open failure message for routes that must not fail silently (Open
+    // As's "format mismatch or damaged file.").
+    QHash<quint64, QString> openFailureMessages_;
+    QSet<quint64> reportFailureTokens_;
+    QSet<quint64> finishedOpens_;
+    // Opens that own a busy-cursor reference (the outer open, not a PDF page).
+    QSet<quint64> cursorTokens_;
+    quint64 nextOpenToken_ = 1;
+    int openCount_ = 0;
+    int openDelayForTest_ = 0;
+    // Set while the frame changes tabs itself, so a loading entry does not read
+    // the programmatic switch as a user selection.
+    bool suppressTabTracking_ = false;
     QTabWidget* tabs_ = nullptr;
     // Disconnected in the destructor: the focusChanged handler must not run
     // while the window's children are being torn down.
     QMetaObject::Connection spacePanFocusConn_;
+    QMetaObject::Connection deleteShortcutsFocusConn_;
     FileDropRouter* fileDropRouter_ = nullptr;
     QSplitter* centerSplitter_ = nullptr;
     // The 3 px central-band frame lines (outer 2 px is the window `${surface}`).
@@ -622,9 +724,9 @@ private:
     NavigatorPanel* navigatorPanel_ = nullptr;
     ColorState* colorState_ = nullptr;
     // The FG/BG pair of the edit target that is not active: the image's while
-    // a mask is edited, the mask's (initially black/white) otherwise.
-    QColor otherForeground_{Qt::black};
-    QColor otherBackground_{Qt::white};
+    // a mask is edited, the mask's (initially white/black) otherwise.
+    QColor otherForeground_{Qt::white};
+    QColor otherBackground_{Qt::black};
     ColorPanel* colorPanel_ = nullptr;
     QPointer<ColorRangeDialog> colorRangeDialog_;
     QPointer<ReplaceColorDialog> replaceColorDialog_;
@@ -667,10 +769,10 @@ private:
     // The rule between the GPU readout and the hint strip; hidden with the strip.
     QFrame* hintSeparator_ = nullptr;
     QLabel* backendLabel_ = nullptr;
+    QLabel* actionLabel_ = nullptr;
+    // The rule before the action label; hidden with the label.
+    QFrame* actionSeparator_ = nullptr;
     QToolButton* statusOptionsButton_ = nullptr;
-    // The floating "Opening <file>…" banner (frame_open.cpp): a child of the
-    // window, shown at the lower-left while a document load runs.
-    QLabel* openBanner_ = nullptr;
     QString statusReadout_ = QStringLiteral("sizes");
     bool hintsVisible_ = true;
     // View > Free Pan: whether a canvas may pan off-centre when the document
@@ -702,6 +804,12 @@ private:
     // Standard-mode chrome unchanged.
     bool fullScreenChromeShown_ = false;
     bool restoringPanelSession_ = false;
+    struct PendingFloatRestore {
+        QPointer<PanelColumn> column;
+        QPointer<PanelGroup> group;
+        QRect geometry;
+    };
+    QList<PendingFloatRestore> pendingFloatRestores_;
     // System-clipboard mirror of the bridge clipboard (frame_menus_edit.cpp):
     // `clipboardMirrored_` while both hold the same pixels, `clipboardExported_`
     // while the system clipboard holds our own export, `clipboardSetting_` only
@@ -749,6 +857,7 @@ private:
     bool traditionalPoints_ = false;
     bool guidesVisible_ = true;
     bool guidesLocked_ = false;
+    bool smartGuidesVisible_ = true;
     QColor guideColor_{0x4a, 0xff, 0xff};
     bool guideDashed_ = false;
     std::function<bool(QDialog&)> pdfDialogDriver_;

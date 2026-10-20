@@ -480,6 +480,9 @@ QJsonObject ControlServer::dispatch(const QString& method, const QJsonObject& pa
     if (method == QStringLiteral("set_tool")) {
         return methodSetTool(params);
     }
+    if (method == QStringLiteral("tool_options")) {
+        return methodToolOptions(params);
+    }
     if (method == QStringLiteral("selection")) {
         return methodSelection(params);
     }
@@ -677,9 +680,13 @@ QJsonObject ControlServer::methodDocument(const QJsonObject& params)
         if (path.isEmpty()) {
             return error(QStringLiteral("invalid_param"), QStringLiteral("path is required"));
         }
-        applied = frame_->openDocumentAtPath(path, false);
+        const PicturaMainWindow::OpenOutcome outcome =
+            frame_->openDocumentAtPathOutcome(path, false);
+        applied = outcome == PicturaMainWindow::OpenOutcome::Opened;
         if (!applied) {
-            return error(QStringLiteral("io_error"),
+            return error(outcome == PicturaMainWindow::OpenOutcome::Cancelled
+                             ? QStringLiteral("cancelled")
+                             : QStringLiteral("io_error"),
                          QStringLiteral("could not open %1").arg(path));
         }
     } else if (op == QStringLiteral("new")) {

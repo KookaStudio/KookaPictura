@@ -43,6 +43,8 @@ struct SessionState {
     bool traditionalPoints = false;  // Units & Rulers: 72.27 rather than 72 pt/in
     bool guidesVisible = true;
     bool guidesLocked = false;
+    // View > Show > Smart Guides: alignment guides and snapping while moving.
+    bool smartGuidesVisible = true;
     // View > Free Pan: free (default) vs the Photoshop-style constrained pan.
     bool freePan = true;
     // View > Snap Canvas To Workspace: pin a fitting canvas to the centre and
@@ -60,6 +62,10 @@ struct SessionState {
     int cropGridOverlay = 0;         // 0 Rule of Thirds, 1 Grid, ...
     // Every other tool's options bar, by option group (tool_options_json.h).
     QJsonObject toolOptions;
+    // Swatches panel contents as [{name, color}]. `swatchesLoaded` separates an
+    // absent key (use the default palette) from an intentionally empty panel.
+    QJsonArray swatches;
+    bool swatchesLoaded = false;
     // v5-v8 panel-column state. `panelGroups` is the legacy flat JSON array of
     // {name, order, visible, minimized, collapsed} for the primary column;
     // `panelColumns` is the ordered array of
@@ -76,7 +82,7 @@ struct SessionState {
     // tool name -> letter (empty: none).
     QMap<QString, QStringList> shortcuts;
     QMap<QString, QString> toolShortcuts;
-    int schemaVersion = 9;
+    int schemaVersion = 10;
     QStringList recent;
     QByteArray windowGeometry;       // QMainWindow::saveGeometry(), empty = default
     bool windowMaximized = false;    // restored as Qt::WindowMaximized on launch

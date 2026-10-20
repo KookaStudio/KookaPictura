@@ -290,11 +290,24 @@ void PanelColumn::ensureFlyout()
     if (flyout_) {
         return;
     }
-    flyout_ = new PanelFlyout(this);
+    // The flyout is parented to the frame so a child-mode overlay can extend
+    // across the workspace rather than being clipped to this column.
+    QWidget* host = owningFrame();
+    if (!host) {
+        host = this;
+    }
+    flyout_ = new PanelFlyout(host);
     flyout_->setObjectName(QStringLiteral("panelIconFlyout"));
-    // M45 C1: a frameless popup host only. The clicked group is reparented in
-    // as-is, so its own tab bar (and the per-widget `▾` menu) is the popup
-    // chrome — no bespoke one-tab header, no parity difference from docked.
+    connect(flyout_, &QObject::destroyed, this, [this](QObject* object) {
+        if (flyout_ == object) {
+            flyout_ = nullptr;
+            flyoutLayout_ = nullptr;
+        }
+    });
+    flyout_->setMinimumWidth(PanelFloat::kFloatMinWidth);
+    // M45 C1: the clicked group is reparented in as-is, so its own tab bar (and
+    // the per-widget `▾` menu) is the flyout chrome — no bespoke one-tab header,
+    // no parity difference from docked.
     flyoutLayout_ = new QVBoxLayout(flyout_);
     flyoutLayout_->setContentsMargins(1, 1, 1, 1);
     flyoutLayout_->setSpacing(0);
@@ -303,6 +316,12 @@ void PanelColumn::ensureFlyout()
 
 void PanelColumn::openIconFlyout(const QString& objectName, const QPoint& globalPos)
 {
+    // The same icon toggles its flyout closed; another icon in the same column
+    // replaces it. A column owns at most one flyout.
+    if (flyout_ && flyout_->isVisible() && flyoutName_ == objectName) {
+        closeIconFlyout();
+        return;
+    }
     closeIconFlyout();
     PanelGroup* group = resolveFlyoutGroup(objectName);
     if (!group) {
@@ -319,38 +338,55 @@ void PanelColumn::openIconFlyout(const QString& objectName, const QPoint& global
     flyoutGroup_ = group;
     flyoutName_ = objectName;
     flyoutGroupIndex_ = groups_.indexOf(group);
-    // Phase 7: a compact icon in a float opens the same popup; remember the
+    // Phase 7: a compact icon in a float opens the same flyout; remember the
     // overlay to return the group to on close.
     flyoutFloat_ = floatForGroup(group);
-    // A collapsed group's icon row is not the panel content the popup shows;
-    // expand it for the popup and re-collapse it on close.
+    // Capture the anchor before the group is reparented: a floating row's icon
+    // button moves into the flyout with the group, so it cannot be used later.
+    if (PanelFloat* origin = flyoutFloat_) {
+        flyoutAnchorRect_ =
+            QRect(origin->mapToGlobal(QPoint(0, 0)), origin->size());
+    } else if (QToolButton* button = flyoutButtonFor(objectName)) {
+        flyoutAnchorRect_ =
+            QRect(button->mapToGlobal(QPoint(0, 0)), button->size());
+    } else {
+        flyoutAnchorRect_ =
+            QRect(globalPos - QPoint(kIconButtonSize, 0),
+                  QSize(kIconButtonSize, kIconButtonSize));
+    }
+    // A collapsed group's icon row is not the panel content the flyout shows;
+    // remember the state and expand it only after it is in the flyout, so the
+    // origin float is not expanded into a ghost.
     flyoutWasCollapsed_ = group->isCollapsedToIcons();
+    // Detach the whole group from the column splitter, then host it in the
+    // flyout: one reparent out, one back on close, never two parents.
+    group->setParent(nullptr);
+    flyoutLayout_->addWidget(group);
     if (flyoutWasCollapsed_) {
         group->setCollapsedToIcons(false);
     }
-    // Detach the whole group from the column splitter, then host it in the
-    // popup: one reparent out, one back on close, never two parents.
-    group->setParent(nullptr);
-    flyoutLayout_->addWidget(group);
+    // A floating group keeps its own top bar while collapsed; the flyout is the
+    // only header while it hosts the group.
+    group->setFloating(false);
+    group->setFlyout(true);
     group->setVisible(true);
+    if (PanelFloat* origin = flyoutFloat_) {
+        origin->hide();
+    }
     setActiveIcon(objectName);
-    QSize size = group->sizeHint().expandedTo(QSize(220, 180));
+    QSize size = group->sizeHint().expandedTo(QSize(PanelFloat::kFloatMinWidth, 180));
     if (size.width() > 480) {
         size.setWidth(480);
     }
+    flyout_->setResizeEdge(flyoutSide() == QStringLiteral("left"));
     flyout_->resize(size);
-    // M43: derive the flyout position from the button's actual geometry (not
-    // `anchorRightTop ± kIconButtonSize`), so it meets the inner edge exactly
-    // and never overlaps the button.
-    if (QToolButton* button = flyoutButtonFor(objectName)) {
-        placeFlyout(QRect(button->mapToGlobal(QPoint(0, 0)), button->size()), size);
-    } else {
-        placeFlyout(QRect(globalPos - QPoint(kIconButtonSize, 0),
-                           QSize(kIconButtonSize, kIconButtonSize)),
-                    size);
-    }
+    placeFlyout(flyoutAnchorRect_, flyout_->size());
     flyout_->show();
     flyout_->raise();
+    if (PanelFloat::overlayUsesTopLevel()) {
+        // The History panel's shortcuts need keyboard focus in the flyout.
+        flyout_->activateWindow();
+    }
 }
 
 PanelGroup* PanelColumn::resolveFlyoutGroup(const QString& objectName) const
@@ -372,7 +408,7 @@ PanelGroup* PanelColumn::resolveFlyoutGroup(const QString& objectName) const
 QString PanelColumn::flyoutSide() const
 {
     // M43: the inner side generalises to N columns from the column's own
-    // layout side (right column => popup to its left, left column => to its
+    // layout side (right column => flyout to its left, left column => to its
     // right), not from the window-edge heuristic.
     return side() == PanelSide::Right ? QStringLiteral("left") : QStringLiteral("right");
 }
@@ -400,7 +436,36 @@ void PanelColumn::placeFlyout(const QRect& buttonGlobalRect, const QSize& size)
         x = qBound(avail.left(), x, avail.right() - size.width() + 1);
         y = qBound(avail.top(), y, avail.bottom() - size.height() + 1);
     }
-    flyout_->move(x, y);
+    if (PanelFloat::overlayUsesTopLevel()) {
+        flyout_->move(x, y);
+        return;
+    }
+    // A child overlay moves in parent-relative coordinates and is clipped to
+    // the frame rect, so convert and clamp there.
+    QWidget* host = flyout_->parentWidget();
+    if (!host) {
+        return;
+    }
+    const QPoint local = host->mapFromGlobal(QPoint(x, y));
+    const int maxX = qMax(0, host->width() - size.width());
+    const int maxY = qMax(0, host->height() - size.height());
+    flyout_->move(qBound(0, local.x(), maxX), qBound(0, local.y(), maxY));
+}
+
+void PanelColumn::reclampFlyout()
+{
+    if (!flyout_ || !flyout_->isVisible()) {
+        return;
+    }
+    if (!PanelFloat::overlayUsesTopLevel()) {
+        QWidget* host = flyout_->parentWidget();
+        if (host) {
+            const QSize size = flyout_->size().boundedTo(host->size()).expandedTo(
+                flyout_->minimumSize());
+            flyout_->resize(size);
+        }
+    }
+    placeFlyout(flyoutAnchorRect_, flyout_->size());
 }
 
 QToolButton* PanelColumn::flyoutButtonFor(const QString& objectName) const
@@ -418,7 +483,7 @@ QToolButton* PanelColumn::flyoutButtonFor(const QString& objectName) const
         }
     }
     // Phase 7: the compact icon may belong to a live float rather than a docked
-    // group; anchor the popup to that button too.
+    // group; anchor the flyout to that button too.
     for (PanelFloat* floatWindow : floats_) {
         PanelGroup* group = floatWindow ? floatWindow->group() : nullptr;
         if (!group) {
@@ -455,6 +520,31 @@ void PanelColumn::closeIconFlyout()
     }
 }
 
+void PanelColumn::detachFlyoutForDrag(PanelGroup* group)
+{
+    if (!flyoutGroup_ || flyoutGroup_ != group) {
+        return;
+    }
+    flyoutGroup_ = nullptr;
+    flyoutName_.clear();
+    flyoutGroupIndex_ = -1;
+    flyoutFloat_ = nullptr;
+    flyoutWasCollapsed_ = false;
+    group->setFlyout(false);
+    if (flyoutLayout_) {
+        flyoutLayout_->removeWidget(group);
+    }
+    if (flyout_) {
+        flyout_->hide();
+    }
+    setActiveIcon(QString());
+}
+
+QWidget* PanelColumn::iconFlyoutResizeGripForTest() const
+{
+    return flyout_ ? flyout_->resizeGripForTest() : nullptr;
+}
+
 void PanelColumn::restoreFlyoutGroup()
 {
     if (!flyoutGroup_ || restoringFlyout_) {
@@ -470,8 +560,9 @@ void PanelColumn::restoreFlyoutGroup()
     flyoutGroupIndex_ = -1;
     flyoutFloat_ = nullptr;
     flyoutWasCollapsed_ = false;
+    group->setFlyout(false);
     if (group->parentWidget() != flyout_) {
-        // A drag rehomed the group (e.g. tore it off) before the popup hid;
+        // A drag rehomed the group (e.g. tore it off) before the flyout hid;
         // leave it where it went rather than stealing it back.
         restoringFlyout_ = false;
         setActiveIcon(QString());
@@ -481,11 +572,14 @@ void PanelColumn::restoreFlyoutGroup()
         flyoutLayout_->removeWidget(group);
     }
     if (originFloat) {
-        // Phase 7: the compact icon opened this popup, so the group goes back
+        // Phase 7: the compact icon opened this flyout, so the group goes back
         // into its overlay (not the splitter), re-collapsed, exactly once.
         group->setParent(nullptr);
         originFloat->setContent(group);
         group->setVisible(true);
+        group->setFloating(true);
+        originFloat->show();
+        originFloat->raise();
         if (wasCollapsed) {
             group->setCollapsedToIcons(true);
         }
@@ -501,9 +595,10 @@ void PanelColumn::restoreFlyoutGroup()
     group->setParent(nullptr);
     splitter_->insertWidget(qBound(0, index, splitter_->count()), group);
     splitter_->setStretchFactor(qBound(0, index, splitter_->count()), 1);
+    group->setFloating(false);
     group->setVisible(!group->visibleTitles().isEmpty());
     wireGroup(group);
-    // A docked compact group was expanded only for the popup; put the icon row
+    // A docked compact group was expanded only for the flyout; put the icon row
     // back on close.
     if (wasCollapsed) {
         group->setCollapsedToIcons(true);

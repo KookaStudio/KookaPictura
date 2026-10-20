@@ -136,8 +136,10 @@ bool FileDropRouter::eventFilter(QObject* watched, QEvent* event)
         }
     } else {
         for (const QString& path : paths) {
-            const bool opened = frame_->openDocumentAtPath(path);
-            changed = changed || opened;
+            // Start every path; `changed || start(...)` would short-circuit the
+            // second and later files.
+            const quint64 token = frame_->startOpenDocumentAtPath(path);
+            changed = changed || token != 0;
         }
     }
     if (changed) {

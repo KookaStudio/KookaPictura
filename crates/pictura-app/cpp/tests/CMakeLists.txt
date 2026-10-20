@@ -30,11 +30,13 @@ set(PICTURA_QT_TESTS
     tst_image_mode
     tst_layers_panel
     tst_layers_panel_fixes
+    tst_layers_preview_coalescing
     tst_layers_snapshot
     tst_align_distribute
     tst_options_bars_parity
     tst_transform_options
     tst_transform_controls
+    tst_transform_skew
     tst_transform_overlay
     tst_command_tree
     tst_fill_tools
@@ -50,6 +52,7 @@ set(PICTURA_QT_TESTS
     tst_type_panels
     tst_paragraph_type
     tst_move_feedback
+    tst_smart_guides
     tst_tool_options_persistence
     tst_character_paragraph_panels
     tst_paragraph_styles_panel
@@ -58,6 +61,7 @@ set(PICTURA_QT_TESTS
     tst_histogram_panel
     tst_tool_hint_bar
     tst_swatches_panel
+    tst_color_picker
     tst_properties_panel
     tst_channels_panel
     tst_paths_panel
@@ -93,8 +97,11 @@ set(PICTURA_QT_TESTS
     tst_smart_object_actions
     tst_edit_shortcuts
     tst_workspaces
+    tst_floating_workspaces
+    tst_floating_workspaces_restart
     tst_zoom_tool
     tst_large_document
+    tst_tool_commit
     tst_recovery
     tst_session_store
     tst_rulers_guides
@@ -106,7 +113,7 @@ set(PICTURA_QT_TESTS
     tst_dialog_chrome
     tst_keyboard_shortcuts
     tst_native_menu_bar
-    tst_open_loading_banner
+    tst_loading_tab
     tst_pictura_raw
     tst_acr_settings
     tst_acr_dialog

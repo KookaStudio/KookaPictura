@@ -2481,7 +2481,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
 
         // Fixture: a Background, a group "1" with two pixel children and a
         // nested group "1/2", and a masked adjustment layer "2" on top.
-        anatomyView->set_layer_name_path(QStringLiteral("0"), QStringLiteral("Background"));
+        anatomyView->background_from_layer(QStringLiteral("0"));
         const QString anatomyGroup = anatomyView->add_group_in(QString());
         const QString childA = anatomyView->add_layer_in(anatomyGroup);
         const QString childB = anatomyView->add_layer_in(anatomyGroup);

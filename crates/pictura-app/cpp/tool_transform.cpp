@@ -95,7 +95,7 @@ void ToolController::updateTransformOverlay(PictureView* v)
     canvas_->setTransformQuad(transform_api::quad(*v).corners);
     canvas_->setTransformPivot(QPointF(transform_pivot_x(*v), transform_pivot_y(*v)),
                                transform_show_pivot(*v));
-    const transform_api::Matrix matrix = transform_api::previewMatrix(*v);
+    const transform_api::Matrix matrix = transform_api::previewLocalMatrix(*v);
     if (matrix.valid) {
         canvas_->setTransformPreviewProjective(matrix.coefficients);
     } else {

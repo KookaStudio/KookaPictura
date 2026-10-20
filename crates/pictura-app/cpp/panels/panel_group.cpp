@@ -8,7 +8,6 @@
 #include <QtGui/QMouseEvent>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QBoxLayout>
-#include <QtWidgets/QGraphicsOpacityEffect>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QSizePolicy>
@@ -41,6 +40,7 @@ PanelGroup::PanelGroup(QWidget* parent)
     // when the group is hosted in a `PanelFloat`.
     floatHeader_ = new QWidget(this);
     floatHeader_->setObjectName(QStringLiteral("panelFloatHeader"));
+    floatHeader_->setAttribute(Qt::WA_StyledBackground, true);
     // M47: the bar is a fixed-height strip; extra overlay height belongs to the
     // group body, not to padding around the toggle/close controls.
     floatHeader_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
@@ -120,15 +120,26 @@ PanelGroup::PanelGroup(QWidget* parent)
     headerGrip_->installEventFilter(this);
     cornerLayout->addWidget(headerGrip_, 0, Qt::AlignVCenter);
 
+    // The flyout-only close control sits immediately left of the per-widget
+    // menu button. It is hidden in docked and floating presentations.
+    flyoutCloseButton_ = new QToolButton(headerCorner_);
+    flyoutCloseButton_->setObjectName(QStringLiteral("panelFlyoutClose"));
+    flyoutCloseButton_->setIcon(icon(QStringLiteral("panel.columnsTwo")));
+    flyoutCloseButton_->setIconSize(QSize(14, 14));
+    flyoutCloseButton_->setFixedSize(kHeaderButtonSize, kHeaderButtonSize);
+    flyoutCloseButton_->setAutoRaise(true);
+    flyoutCloseButton_->setToolTip(tr("Close Flyout"));
+    flyoutCloseButton_->setVisible(false);
+    connect(flyoutCloseButton_, &QToolButton::clicked, this,
+            [this]() { emit flyoutCloseRequested(); });
+    cornerLayout->addWidget(flyoutCloseButton_, 0, Qt::AlignVCenter);
+
     headerButton_ = new QToolButton(headerCorner_);
     headerButton_->setObjectName(QStringLiteral("panelWidgetMenu"));
     headerButton_->setIcon(icon(QStringLiteral("panel.menu")));
-    // The glyph runs smaller than the button and a touch translucent so it reads
-    // as a quiet affordance rather than a filled control.
+    // The glyph runs smaller than the button so it reads as a quiet affordance
+    // rather than a filled control.
     headerButton_->setIconSize(QSize(13, 13));
-    auto* menuOpacity = new QGraphicsOpacityEffect(headerButton_);
-    menuOpacity->setOpacity(0.9);
-    headerButton_->setGraphicsEffect(menuOpacity);
     headerButton_->setAutoRaise(true);
     headerButton_->setPopupMode(QToolButton::InstantPopup);
     headerButton_->setFixedSize(kHeaderButtonSize, kHeaderButtonSize);
@@ -779,8 +790,26 @@ void PanelGroup::setFloating(bool on)
     if (floatHeader_) {
         floatHeader_->setVisible(on);
     }
+    if (on && flyoutCloseButton_) {
+        flyoutCloseButton_->setVisible(false);
+    }
     updateFloatToggle();
     updateHeaderMenu();
+}
+
+void PanelGroup::setFlyout(bool on)
+{
+    if (flyoutCloseButton_) {
+        flyoutCloseButton_->setVisible(on);
+    }
+    if (on && floatHeader_) {
+        floatHeader_->setVisible(false);
+        if (floatCloseButton_) {
+            floatCloseButton_->setVisible(false);
+        }
+    }
+    updateHeaderMenu();
+    updateHeaderBand();
 }
 
 } // namespace pictura

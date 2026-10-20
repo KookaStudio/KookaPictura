@@ -198,27 +198,35 @@ In `iconic` mode the column SHALL collapse to a narrow vertical strip
 containing one icon button per panel with group dividers between groups, and
 SHALL show the panel labels when the strip is widened. Each strip icon button
 SHALL be larger than the M41 strip and SHALL render its icon at a larger pixmap
-size. Clicking a panel icon SHALL open a frameless `Qt::Popup` flyout that hosts
-the **same `PanelGroup`** as the docked group: the group's full tab set, with
-the clicked panel set current, styled and behaving exactly as when docked or
+size. Clicking a panel icon SHALL open a frameless flyout overlay that hosts the
+**same `PanelGroup`** as the docked group: the group's full tab set, with the
+clicked panel set current, styled and behaving exactly as when docked or
 floating, with no parity differences between the three presentations, and the
 group SHALL be restored to its column position when the flyout closes. The
-flyout SHALL open on the inner side of the column: to the left of the strip when
-the column is on the right, and to the right of the strip when the column is on
-the left. The icon whose flyout is open SHALL render in the active/pressed
-state. The flyout SHALL close on click-away and SHALL NOT steal focus
-permanently. The strip width SHALL be fixed while the column is iconic, so a
+flyout SHALL be a persistent overlay rather than a transient popup: it SHALL
+remain open when the user clicks elsewhere in the workspace, and pressing Escape
+SHALL NOT close it. The flyout SHALL open on the inner side of the column: to the
+left of the strip when the column is on the right, and to the right of the strip
+when the column is on the left. The icon whose flyout is open SHALL render in the
+active/pressed state. The flyout SHALL NOT steal focus permanently. A column
+SHALL have at most one flyout open: clicking the same panel icon again SHALL
+close it, and clicking a different panel icon in the same column SHALL replace it
+with the newly clicked panel's group. When the hosted group leaves the flyout
+because it is dragged out, its last visible panel or group is closed, or its
+owning column is removed, the flyout SHALL be hidden and its state cleared
+rather than left as an empty overlay. Hiding all panels SHALL also hide the
+flyout. The strip width SHALL be fixed while the column is iconic, so a
 neighbouring pane's splitter handle drag SHALL NOT resize it. The strip icon
-button and pixmap sizes SHALL be larger than the M42 sizes. The flyout placement
-SHALL be derived from the actual button geometry and SHALL clamp only the
-inner-side coordinate, so the flyout can never cross to the outer side of the
-column. The compact strip SHALL show each group's icon buttons as one visual
-unit, and SHALL expose a small drag-handle affordance above each group that
-drags the whole group. The divider between compact groups SHALL be dark grey,
-not white; the group container SHALL use the panel surface shade and the drag
-dots SHALL be dark gray. Strip labels SHALL elide and appear as soon as any room
-exists, rather than only once the full label width is available. A drop onto or
-very close above/below a compact group SHALL insert into that group at that
+button and pixmap sizes SHALL be larger than the M42 sizes.
+The flyout placement SHALL be derived from the actual button geometry and SHALL
+clamp only the inner-side coordinate, so the flyout can never cross to the outer
+side of the column. The compact strip SHALL show each group's icon buttons as one
+visual unit, and SHALL expose a small drag-handle affordance above each group
+that drags the whole group. The divider between compact groups SHALL be dark
+grey, not white; the group container SHALL use the panel surface shade and the
+drag dots SHALL be dark gray. Strip labels SHALL elide and appear as soon as any
+room exists, rather than only once the full label width is available. A drop onto
+or very close above/below a compact group SHALL insert into that group at that
 place; a drop on a group's drag-handle grip SHALL create a new group directly
 above that group; and a drop between groups, above the top group, or below the
 bottom group SHALL create a new group at that boundary. Pressing and dragging a
@@ -240,9 +248,9 @@ like a tab or group drag.
 #### Scenario: The popup hosts the whole group with the clicked panel active [m45_popup_group]
 
 - **WHEN** a panel icon is clicked in the iconic strip
-- **THEN** the popup hosts the whole `PanelGroup` with all of the group's tabs,
+- **THEN** the flyout hosts the whole `PanelGroup` with all of the group's tabs,
   the clicked panel is current, and the group is restored to its column position
-  when the popup closes
+  when the flyout closes
 
 #### Scenario: The flyout opens on the inner side [m42_flyout]
 
@@ -316,6 +324,34 @@ like a tab or group drag.
   handle between them is dragged
 - **THEN** the iconic column keeps its strip width and only the normal column
   resizes
+
+#### Scenario: The flyout stays open on outside clicks [pc_flyout_persists]
+
+- **WHEN** a flyout is open and the user clicks elsewhere in the workspace
+- **THEN** the flyout remains visible and the group remains hosted in it
+
+#### Scenario: The flyout toggles and switches from its icon [pc_flyout_toggle]
+
+- **WHEN** the icon whose flyout is open is clicked again, or another panel icon
+  in the same column is clicked
+- **THEN** the former closes the flyout, the latter replaces it with the other
+  panel's group, and the column never shows two flyouts
+
+#### Scenario: Escape does not close the flyout [pc_flyout_escape]
+
+- **WHEN** a flyout is open and the user presses Escape
+- **THEN** the flyout remains visible
+
+#### Scenario: The flyout closes when its group leaves [pc_flyout_group_leaves]
+
+- **WHEN** the hosted group is dragged out of the flyout, its last visible panel
+  or group is closed, or its owning column is removed
+- **THEN** the flyout is hidden and no empty overlay remains
+
+#### Scenario: Hiding all panels hides the flyout [pc_flyout_hide_all]
+
+- **WHEN** all panels are hidden with `Tab`
+- **THEN** the flyout is hidden with them and restored only by reopening it
 
 ### Requirement: Panel tab context menu
 
@@ -582,21 +618,24 @@ Tools column SHALL draw the new-column mark at that edge like any other column.
 
 ### Requirement: Panel column session state
 
-The session store SHALL advance to schema version 8 and SHALL persist the
+The session store SHALL advance to schema version 10 and SHALL persist the
 per-column layout, where each column records its side, its order, its width, its
-rail mode (`normal` or `iconic`), and its groups' order, visibility, minimized
+rail mode (`normal` or `iconic`), whether the column and its groups are
+floating, the overlay geometry, and its groups' order, visibility, minimized
 state, and collapsed state (the version-5 per-group shape nested per column). The
 store SHALL also persist `panelRailMode`, `railWidth`, `autoCollapseIconic`, and
 `autoShowHidden` as legacy values. A store that is missing a field or older than
-version 8 SHALL load the defaults, where a store with no per-column layout SHALL
-load a single right-hand column built from the legacy per-group state, a
-version-7 per-column entry with no rail mode SHALL load the mode from the legacy
-top-level `panelRailMode` for every column, a version-6 per-column entry with no
-width SHALL load the default width (seeded from the legacy `railWidth` for the
-primary column), and the load-then-write path SHALL preserve unknown keys and the
-version-4 `toolsColumns` and `useShiftKeyForToolSwitch` values. The system SHALL
-restore each column's own rail mode, and SHALL NOT apply one column's mode to
-every column.
+version 10 SHALL load that field's documented default while preserving every
+field it already has; a store with no per-column layout SHALL load a single
+right-hand column built from the legacy per-group state, a version-7 per-column
+entry with no rail mode SHALL load the mode from the legacy top-level
+`panelRailMode` for every column, a version-6 per-column entry with no width
+SHALL load the default width (seeded from the legacy `railWidth` for the primary
+column), a version-9 entry without the floating fields SHALL load docked, and the
+load-then-write path SHALL preserve unknown keys and the version-4
+`toolsColumns` and `useShiftKeyForToolSwitch` values. The system SHALL restore
+each column's own rail mode and floating state, and SHALL NOT apply one column's
+mode to every column.
 
 #### Scenario: Panel column state round-trips [m41_session]
 
@@ -614,8 +653,8 @@ every column.
 
 - **WHEN** a left column and a right column with different groups and different
   rail modes are arranged, the session is saved, and the store is reloaded
-- **THEN** each column's side, order, width, rail mode, and group state are
-  restored
+- **THEN** each column's side, order, width, rail mode, floating state, overlay
+  geometry, and group state are restored
 
 #### Scenario: A version-5 store loads a single right-hand column [m43_session]
 
@@ -1227,9 +1266,10 @@ the platform permits client positioning of top-level windows, and an in-window
 child of the frame otherwise; in neither case SHALL it be a decorated
 operating-system window. It SHALL keep a minimum width and SHALL offer a resize
 grip. A widget-column overlay SHALL open at about two thirds of the column's
-docked height, clamped to the overlay minimum. When the hosted column is iconic
-the overlay SHALL snap to the column's content height and its narrow content
-width. A release over a valid column or workspace edge SHALL re-place the
+docked height, clamped to the overlay minimum, whether the column is in normal
+or iconic mode. When the rail mode is toggled to iconic while the column is
+floating, the overlay SHALL snap to the column's content height and its narrow
+content width. A release over a valid column or workspace edge SHALL re-place the
 column; a release with no valid target SHALL leave the overlay floating.
 
 #### Scenario: Dragging a whole column floats it in-window [pc_col_float]
@@ -1248,10 +1288,15 @@ column; a release with no valid target SHALL leave the overlay floating.
 - **WHEN** a widget column is torn off and floats
 - **THEN** its default height is strictly less than its docked height
 
+#### Scenario: An iconic column tear-off keeps the two-thirds height [pc_col_float_iconic_initial]
+
+- **WHEN** a widget column that is already in iconic mode is torn off
+- **THEN** the overlay opens at about two thirds of the docked height, clamped to
+  the overlay minimum, rather than collapsing to the icon-row minimum
+
 #### Scenario: An iconic column float snaps narrow [pc_col_float_iconic_snap]
 
-- **WHEN** a floating whole-column overlay hosts a column that is collapsed to
-  its iconic strip
+- **WHEN** a floating whole-column overlay's rail mode is toggled to iconic
 - **THEN** the overlay snaps to the column's content height and narrow content
   width instead of keeping the normal-width body
 
@@ -1358,22 +1403,31 @@ overlay and the layout SHALL be unchanged.
 ### Requirement: Floating icon row parity
 
 A floating compact/icon row SHALL behave like the docked icon strip. Clicking an
-icon in a floating icon row SHALL open the same `Qt::Popup` flyout hosting the
+icon in a floating icon row SHALL open the same persistent flyout hosting the
 whole group with the clicked panel current, and the group's drag-handle grip
 SHALL drag the whole group through the same drag grammar the docked strip uses.
-The flyout SHALL open on the inner side of the floating row and SHALL restore the
-group when it closes.
+The flyout SHALL obey the same persistence, close-control, toggle/switch, and
+one-per-column rules as the docked strip's flyout. It SHALL open on the inner
+side of the floating row and SHALL restore the group when it closes. While the
+group is hosted in the flyout, its floating top bar and float close control
+SHALL be hidden; returning the group to the floating row SHALL restore them.
 
 #### Scenario: Clicking a floating icon opens the flyout [pc_float_icon_click]
 
 - **WHEN** an icon in a floating compact row is clicked
-- **THEN** the same popup flyout as the docked strip opens with the clicked panel
-  current
+- **THEN** the same flyout as the docked strip opens with the clicked panel
+  current and remains open when the user clicks elsewhere
 
 #### Scenario: The floating grip drags the group [pc_float_icon_grip]
 
 - **WHEN** the drag-handle grip above a floating row's group is dragged
 - **THEN** the whole group is dragged through the docked strip's drag grammar
+
+#### Scenario: The flyout shows only its own header [pc_float_icon_single_header]
+
+- **WHEN** a group from a floating icon row is hosted in the flyout
+- **THEN** the floating top bar and its close control are hidden and only the
+  flyout's own close control and tab-bar header are visible
 
 ### Requirement: Column-edge self-anchor docking
 
@@ -1435,3 +1489,120 @@ edge — and the resulting width SHALL persist.
 - **WHEN** an iconic column is docked on the right and its left edge is dragged,
   or docked on the left and its right edge is dragged
 - **THEN** its width changes in both cases and the new width is kept
+
+### Requirement: Flyout drag handoff
+
+Dragging out of the compact-strip flyout SHALL hand the hosted `PanelGroup` back
+to the drag system without leaving the popup behind as an empty shell. Dragging
+the group out of the flyout SHALL close the flyout before the floating overlay
+follows the cursor, and the overlay SHALL keep the grab offset the group had in
+the popup. Dragging a single tab out of the flyout SHALL keep the flyout open on
+the remaining visible panels; when the drag leaves no visible panel, the flyout
+SHALL close instead. The existing tear-off, re-dock, cancel, and drop rules SHALL
+apply unchanged to the drag.
+
+#### Scenario: A group dragged out of the flyout closes it [cfd_group_tearoff]
+
+- **WHEN** a group is dragged out of an open compact-strip flyout and dropped
+  outside every column
+- **THEN** the group floats in one overlay, the flyout is no longer visible, and
+  no empty popup is left over the workspace
+
+#### Scenario: A tab dragged out keeps the flyout on the remaining panels [cfd_tab_tearoff]
+
+- **WHEN** a tab is dragged out of an open compact-strip flyout whose group still
+  has other visible panels and dropped outside every column
+- **THEN** only that panel floats, the flyout stays visible, and the flyout's
+  group keeps the remaining panels
+
+#### Scenario: A tab that empties the flyout closes it [cfd_empty_tearoff]
+
+- **WHEN** a tab is dragged out of an open compact-strip flyout whose group has
+  no other visible panel and dropped outside every column
+- **THEN** the panel floats and the flyout is no longer visible
+
+### Requirement: Flyout close control
+
+While a group is hosted in a flyout, its header corner SHALL show a close
+control immediately to the left of the per-widget context-menu button. The
+control SHALL use the bundled Lucide `chevrons-right` glyph (asset id
+`panel.columnsTwo`) and SHALL be hidden while the group is docked or hosted in a
+floating overlay. Activating it SHALL hide the flyout and restore the group to
+its column position. This control and clicking a panel icon in the same column
+SHALL be the only user-initiated close paths; clicking elsewhere and pressing
+Escape SHALL NOT close the flyout.
+
+#### Scenario: The close control sits left of the widget menu [pc_flyout_close_placement]
+
+- **WHEN** a group is shown in a flyout
+- **THEN** a chevrons-right close control is visible immediately to the left of
+  the per-widget context-menu button in the header corner
+
+#### Scenario: The close control hides the flyout [pc_flyout_close_action]
+
+- **WHEN** the flyout close control is activated
+- **THEN** the flyout is hidden and the group returns to its column position
+
+#### Scenario: The close control is flyout-only [pc_flyout_close_visibility]
+
+- **WHEN** the same group is docked or floating
+- **THEN** its flyout close control is not visible
+
+### Requirement: Flyout width resize
+
+A flyout SHALL be width-resizable by dragging its canvas-facing edge: the left
+edge for a right-hand column or floating row, and the right edge for a left-hand
+column or floating row. The opposite edge SHALL stay anchored while the width
+changes, the height SHALL stay unchanged, and the width SHALL NOT shrink below
+the shared normal-mode minimum width. The flyout SHALL open at or above that
+minimum width. In child-overlay mode the flyout and its width changes SHALL stay
+within the frame rect.
+
+#### Scenario: A right-hand flyout resizes from its left edge [pc_flyout_resize_left]
+
+- **WHEN** a flyout beside a right-hand column is dragged by its left edge
+- **THEN** its width changes while its right edge stays fixed
+
+#### Scenario: A left-hand flyout resizes from its right edge [pc_flyout_resize_right]
+
+- **WHEN** a flyout beside a left-hand column is dragged by its right edge
+- **THEN** its width changes while its left edge stays fixed
+
+#### Scenario: The flyout keeps its minimum width [pc_flyout_resize_min]
+
+- **WHEN** a flyout is dragged narrower than the shared normal-mode minimum width
+- **THEN** it stops at that minimum and does not collapse below it
+
+#### Scenario: A floating-row flyout resizes from its canvas edge [pc_flyout_resize_floating_row]
+
+- **WHEN** a flyout opened from a floating icon row is dragged by its
+  canvas-facing edge
+- **THEN** its width changes and the opposite edge stays fixed
+
+#### Scenario: The flyout opens at the minimum width [pc_flyout_resize_open_width]
+
+- **WHEN** a flyout is opened
+- **THEN** its initial width is at least the shared normal-mode minimum width
+
+#### Scenario: The child-mode flyout stays inside the frame [pc_flyout_child_bounds]
+
+- **WHEN** a flyout is hosted as an in-window child and opened or width-resized
+- **THEN** its rect stays within the frame rect
+
+### Requirement: Floating group header chrome
+
+A floating group's top bar SHALL use the same panel-header surface as a docked
+column header. The per-widget context-menu button in a floating group's tab-bar
+corner SHALL be fully painted and hit-testable, with the same hit rectangle it
+has while docked; it SHALL NOT be visually absent while retaining its hit area.
+
+#### Scenario: The float top bar matches the docked header [pc_float_header_surface]
+
+- **WHEN** a floating group's top bar and a docked column header are compared
+- **THEN** both use the shared panel-header background
+
+#### Scenario: The floating corner menu is painted and clickable [pc_float_corner_menu_painted]
+
+- **WHEN** a group is floating
+- **THEN** its corner context-menu button is painted, occupies the same hit
+  rectangle as when docked, and opens its per-widget menu

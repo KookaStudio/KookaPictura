@@ -307,6 +307,10 @@ int pictura::runShellRound4Checks(pictura::PicturaMainWindow& frame)
         bool indicator = false;
         bool groupMerged = false;
         bool oneFloat = false;
+        if (primary && primary->groups().size() < 3) {
+            primary = frame.restoreLegacyDefaultForTest();
+            pump4(6);
+        }
         if (primary) {
             // Pick three live groups: one to float, one to feed a panel, one to
             // merge whole. The accumulated test session group layout is not fixed.

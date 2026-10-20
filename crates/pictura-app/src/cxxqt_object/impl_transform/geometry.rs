@@ -367,39 +367,6 @@ pub(super) fn gesture_perspective(
     store_quad(session, quad)
 }
 
-/// Skew: slide edge `edge`'s two endpoints by the pointer delta from press,
-/// leaving the opposite edge fixed. Shift constrains the delta to the edge's own
-/// axis (top/bottom → x, left/right → y).
-pub(super) fn gesture_skew(
-    session: &mut TransformSession,
-    edge: i32,
-    x: f64,
-    y: f64,
-    shift: bool,
-) -> bool {
-    let (e0, e1) = match edge {
-        4 => (0, 1),
-        5 => (1, 2),
-        6 => (2, 3),
-        7 => (3, 0),
-        _ => return false,
-    };
-    let (mut dx, mut dy) = (x - session.press_x, y - session.press_y);
-    if shift {
-        match edge {
-            4 | 6 => dy = 0.0,
-            5 | 7 => dx = 0.0,
-            _ => {}
-        }
-    }
-    let start = session.start_quad;
-    let mut quad = start;
-    for e in [e0, e1] {
-        quad[e] = (start[e].0 + dx, start[e].1 + dy);
-    }
-    store_quad(session, quad)
-}
-
 /// Solve the homography sending `src[i]` to `dst[i]` and return its nine
 /// coefficients in the order `QTransform(m11,m12,m13,m21,m22,m23,m31,m32,m33)`
 /// expects, so the C++ preview maps source document points onto the quad.
@@ -737,6 +704,7 @@ mod tests {
             start: [1.0, 1.0, 0.0, 0.0, 0.0],
             dragging: true,
             mode: TransformMode::Free,
+            type_layer: false,
             quad: None,
             start_quad: source_corners(rect4()),
             pivot: (2.0, 2.0),
@@ -994,25 +962,6 @@ mod tests {
         let cx = q.iter().map(|p| p.0).sum::<f64>() / 4.0;
         let cy = q.iter().map(|p| p.1).sum::<f64>() / 4.0;
         assert!((cx - 2.0).abs() < 1e-9 && (cy - 2.0).abs() < 1e-9);
-    }
-
-    #[test]
-    fn skew_slides_one_edge_and_leaves_the_opposite() {
-        let mut s = projective();
-        s.press_x = 0.0;
-        s.press_y = 0.0;
-        assert!(gesture_skew(&mut s, 4, 2.0, 1.0, false));
-        let q = s.quad.unwrap();
-        assert_eq!(q[0], (2.0, 1.0));
-        assert_eq!(q[1], (6.0, 1.0));
-        assert_eq!(q[2], (4.0, 4.0));
-        assert_eq!(q[3], (0.0, 4.0));
-
-        let mut shifted = projective();
-        shifted.press_x = 0.0;
-        shifted.press_y = 0.0;
-        assert!(gesture_skew(&mut shifted, 4, 2.0, 1.0, true));
-        assert_eq!(shifted.quad.unwrap()[0], (2.0, 0.0));
     }
 
     #[test]

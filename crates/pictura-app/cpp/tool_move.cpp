@@ -3,6 +3,7 @@
 #include "file_drop_router.h"
 #include "image_view.h"
 #include "panels/layers_panel_internal.h"
+#include "smart_guides.h"
 #include "tools.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
@@ -69,8 +70,11 @@ public:
 
     void onActivate(ToolServices& ctx) override { warm(ctx); }
 
-    void onDeactivate(ToolServices&) override
+    void onDeactivate(ToolServices& ctx) override
     {
+        if (ImageView* canvas = ctx.canvas()) {
+            canvas->clearSmartGuides();
+        }
         warmView_ = nullptr;
         warmBase_ = QImage();
         warmLayer_ = QImage();
@@ -151,7 +155,12 @@ public:
         ctx.setDragCommitted(false);
         last_ = imagePos;
         totalDelta_ = QPointF();
-        if (ImageView* canvas = ctx.canvas()) {
+        rawDelta_ = QPointF();
+        ImageView* canvas = ctx.canvas();
+        referenceRects_ = canvas && canvas->smartGuidesEnabled()
+            ? smartGuideReferences(*v, v->active_layer_path())
+            : QList<QRectF>();
+        if (canvas) {
             const bool reuse = warmValid_ && warmView_ == v && v->move_preview_cache_hit();
             if (!reuse) {
                 warmBase_ = v->move_preview_base();
@@ -187,13 +196,13 @@ public:
         if (!ctx.dragging()) {
             return;
         }
-        totalDelta_ += imagePos - last_;
+        rawDelta_ += imagePos - last_;
         last_ = imagePos;
         // Defer the Alt clone to the first real movement, so a bare Alt press
         // with no movement inserts nothing. The clone appears with the preview
         // rebuilt for the copy, then follows the pointer like the source did.
         if (pendingDuplicate_
-            && (qRound(totalDelta_.x()) != 0 || qRound(totalDelta_.y()) != 0)) {
+            && (qRound(rawDelta_.x()) != 0 || qRound(rawDelta_.y()) != 0)) {
             pendingDuplicate_ = false;
             PictureView* v = ctx.view();
             if (v && v->begin_move_duplicate()) {
@@ -206,7 +215,18 @@ public:
                 }
             }
         }
-        if (ImageView* canvas = ctx.canvas()) {
+        PictureView* v = ctx.view();
+        ImageView* canvas = ctx.canvas();
+        if (v && canvas) {
+            const QPointF origin(v->move_preview_x(), v->move_preview_y());
+            const SmartGuideResult guides =
+                canvas->smartGuidesEnabled()
+                    ? smartGuideSnap(bounds_.translated(origin + rawDelta_), referenceRects_,
+                                     QSizeF(v->document_width(), v->document_height()),
+                                     canvas->zoom())
+                    : SmartGuideResult{};
+            totalDelta_ = rawDelta_ + guides.snap;
+            canvas->setSmartGuides(guides.lines, guides.gaps);
             canvas->setMovePreviewDelta(totalDelta_);
             // ΔX / ΔY in the rulers' unit, by the pointer.
             canvas->setDragSizeHint(
@@ -234,6 +254,7 @@ public:
         if (ImageView* canvas = ctx.canvas()) {
             canvas->endMovePreview();
             canvas->clearDragSizeHint();
+            canvas->clearSmartGuides();
         }
     }
 
@@ -255,6 +276,7 @@ private:
         if (moving) {
             canvas->endMovePreview();
             canvas->clearDragSizeHint();
+            canvas->clearSmartGuides();
             v->end_move_preview();
         }
         const QString path = v->active_layer_path();
@@ -286,7 +308,10 @@ private:
     }
 
     QPointF last_;
+    // The pointer's travel; `totalDelta_` is that plus the smart-guide snap.
+    QPointF rawDelta_;
     QPointF totalDelta_;
+    QList<QRectF> referenceRects_;
     qint64 boundsKey_ = 0;
     QRectF bounds_;
     PictureView* warmView_ = nullptr;

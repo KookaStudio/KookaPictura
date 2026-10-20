@@ -16,7 +16,7 @@ use super::super::PictureViewRust;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
-use pictura_core::{Document, PsdRect};
+use pictura_core::{Document, Layer, PsdRect};
 use pictura_paint::bucket::{self, BucketPaint};
 use pictura_paint::eraser::antialias_mask;
 use pictura_paint::gradient::{self, GradientOptions, GradientStyle, PRESET_NAMES};
@@ -441,13 +441,82 @@ pub(crate) fn apply(
             return false;
         }
         let mut edited = doc.clone();
-        edit(&mut edited, path, rust).map(|_| edited)
+        edit(&mut edited, path, rust).map(|rect| (edited, rect))
     };
-    let Some(doc) = edited else {
+    let Some((doc, rect)) = edited else {
         return false;
     };
     view.as_mut().rust_mut().doc = Some(doc);
-    view.as_mut().recomposite();
+    refresh_edit(view.as_mut(), Some(rect), "");
     view.as_mut().record(label);
     true
+}
+
+/// Present an edit that changed only `rect` of the document: composite that
+/// region, not the document, then emit `changed` for the panels. A layer style
+/// could carry the change past `rect` (a shadow, a glow), so with one anywhere
+/// but on `own` (a layer whose style `rect` already covers), or with no `rect`,
+/// the whole document is recomposited.
+pub(crate) fn refresh_edit(mut view: Pin<&mut PictureView>, rect: Option<PsdRect>, own: &str) {
+    let styled = view
+        .rust()
+        .doc
+        .as_ref()
+        .is_none_or(|doc| styled_except(&doc.layers, "", own));
+    match rect {
+        Some(rect) if !styled => {
+            view.as_mut().refresh_regions(&[rect]);
+            view.as_mut().changed();
+        }
+        _ => view.as_mut().recomposite(),
+    }
+}
+
+/// Whether a layer under `prefix` other than the one at path `own` carries a
+/// layer style.
+fn styled_except(layers: &[Layer], prefix: &str, own: &str) -> bool {
+    layers.iter().enumerate().any(|(i, l)| {
+        let path = if prefix.is_empty() {
+            i.to_string()
+        } else {
+            format!("{prefix}/{i}")
+        };
+        (path != own && pictura_render::has_layer_style(l))
+            || styled_except(&l.children, &path, own)
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::super::tests::pixel_layer;
+    use super::styled_except;
+    use pictura_core::{Layer, LayerBlock};
+
+    fn styled() -> Layer {
+        let mut layer = pixel_layer("styled", 1, 1, (0, 0, 0));
+        layer.extra_blocks.push(LayerBlock {
+            key: *b"lfx2",
+            data: Vec::new(),
+        });
+        layer
+    }
+
+    #[test]
+    fn a_style_anywhere_but_the_exempt_layer_counts() {
+        let plain = pixel_layer("plain", 1, 1, (0, 0, 0));
+        let mut group = pixel_layer("group", 1, 1, (0, 0, 0));
+        group.is_group = true;
+        group.children = vec![plain.clone(), styled()];
+        let layers = vec![plain.clone(), group];
+        assert!(styled_except(&layers, "", ""), "a nested style is found");
+        assert!(
+            !styled_except(&layers, "", "1/1"),
+            "the exempt layer's own style"
+        );
+        assert!(
+            styled_except(&layers, "", "1"),
+            "exempting the group spares not its child"
+        );
+        assert!(!styled_except(&[plain], "", ""));
+    }
 }

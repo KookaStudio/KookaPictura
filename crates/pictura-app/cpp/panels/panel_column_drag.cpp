@@ -735,6 +735,14 @@ void PanelColumn::beginGroupDrag(PanelGroup* group, const QPoint& globalPos)
     if (!group) {
         return;
     }
+    // The compact flyout hosts the group itself. A group drag out of it must
+    // close the popup, or the now-empty shell is left behind as a rectangle.
+    // Capture the offset from the popup position first so the float appears
+    // where the group was, not where it gets restored.
+    const QPoint grabOffset = globalPos - group->mapToGlobal(QPoint(0, 0));
+    if (flyout_ && flyout_->isVisible() && flyoutGroup_ == group) {
+        closeIconFlyout();
+    }
     dragActive_ = true;
     dragIsPanel_ = false;
     dragGroup_ = group;
@@ -743,7 +751,7 @@ void PanelColumn::beginGroupDrag(PanelGroup* group, const QPoint& globalPos)
     dragOriginalIndex_ = groups_.indexOf(group);
     dragOriginalPanelIndex_ = -1;
     dragFloat_ = floatForGroup(group);
-    dragGrabOffset_ = globalPos - group->mapToGlobal(QPoint(0, 0));
+    dragGrabOffset_ = grabOffset;
     dropTarget_ = {};
     if (indicatorOwner_ && indicatorOwner_ != this) {
         indicatorOwner_->clearIndicator();
@@ -781,6 +789,15 @@ void PanelColumn::updateDrag(const QPoint& globalPos)
     const bool floatNow = dropTarget_.outside;
     if (floatNow) {
         if (!dragFloat_ && dragGroup_) {
+            // A group lifted out of a flyout must leave the flyout and its empty
+            // origin overlay behind before the new float is created.
+            if (!dragIsPanel_ && dragGroup_ == flyoutGroup_) {
+                PanelFloat* origin = flyoutFloat_;
+                detachFlyoutForDrag(dragGroup_);
+                if (origin) {
+                    destroyFloat(origin);
+                }
+            }
             dragFloat_ = createFloat(dragGroup_, globalPos);
         } else if (dragFloat_) {
             moveFloat(dragFloat_, globalPos - dragGrabOffset_);
@@ -813,6 +830,13 @@ bool PanelColumn::commitDrop()
     }
     indicatorOwner_ = nullptr;
     clearIndicator();
+    if (!dragIsPanel_ && dragGroup_ == flyoutGroup_) {
+        PanelFloat* origin = flyoutFloat_;
+        detachFlyoutForDrag(dragGroup_);
+        if (origin) {
+            destroyFloat(origin);
+        }
+    }
     if (target.valid && !target.outside) {
         if (target.kind == DropKind::NewColumnLeft || target.kind == DropKind::NewColumnRight) {
             ok = applyNewColumnDrop(target.kind == DropKind::NewColumnLeft ? PanelSide::Left

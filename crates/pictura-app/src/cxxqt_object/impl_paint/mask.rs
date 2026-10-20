@@ -150,12 +150,13 @@ impl qobject::PictureView {
         };
         // A large mask brush runs the same GPU stroke the pixel path uses, with
         // one channel: the shader blends the coverage byte only, so the mask
-        // gains accelerator parity without an RGBA round-trip.
+        // gains accelerator parity without an RGBA round-trip. The shader has
+        // no paper grain or wet-edge curve, so such a tip stays on the CPU.
         let gpu = {
             let (mw, mh) = (mask_stroke.document.width, mask_stroke.document.height);
             match (
                 preview_level(cfg.diameter as i32, mw, mh),
-                gpu_paint_mode(cfg.mode),
+                gpu_paint_mode(cfg.mode).filter(|_| cfg.grain == 0 && !cfg.wet_edges),
                 self.rust().gpu_compute,
             ) {
                 (Some(_), Some(mode), true) => {

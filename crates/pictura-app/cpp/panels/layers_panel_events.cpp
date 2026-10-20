@@ -224,6 +224,7 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                     // The vector mask becomes the target; drop any raster target.
                     mask_edit_target_set(*view_, QString());
                     mask_solo_set(*view_, QString());
+                    syncEditTarget();
                     setActiveThumb(rowPath, 2);
                     if (mouse->modifiers() & Qt::ShiftModifier) {
                         vector_mask_set_enabled_path(

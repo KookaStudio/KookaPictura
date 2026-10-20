@@ -774,6 +774,7 @@ int pictura::runFileDropChecks(pictura::PicturaMainWindow& frame)
     const DropResult barDrop = bar ? sendDrop(bar, barMime) : DropResult{};
     const DropResult menuDrop = sendDrop(frame.menuBar(), menuMime);
     const DropResult optionsDrop = optionsBar ? sendDrop(optionsBar, optionsMime) : DropResult{};
+    frame.waitForOpensForTest();
     const bool opened = bar && optionsBar && barDrop.enter && barDrop.drop && menuDrop.enter
         && menuDrop.drop && optionsDrop.enter && optionsDrop.drop
         && frame.documentCount() == openBase + 4;
@@ -784,6 +785,7 @@ int pictura::runFileDropChecks(pictura::PicturaMainWindow& frame)
     QMimeData psdBarMime;
     psdBarMime.setUrls({QUrl::fromLocalFile(psdPath)});
     const DropResult psdBarDrop = bar ? sendDrop(bar, psdBarMime) : DropResult{};
+    frame.waitForOpensForTest();
     const bool psdOpened = bar && psdBarDrop.enter && psdBarDrop.drop
         && frame.documentCount() == psdOpenBase + 1
         && frame.documentPath(frame.activeDocumentIndex()) == psdPath;
@@ -799,6 +801,7 @@ int pictura::runFileDropChecks(pictura::PicturaMainWindow& frame)
     const DropResult internalDrop = sendDrop(bar, internalMime);
     const DropResult dirDrop = sendDrop(bar, dirMime);
     const DropResult badDrop = sendDrop(bar, badMime);
+    frame.waitForOpensForTest();
     pictura::PictureView* guardView = frame.activeView();
     const int guardRows = guardView ? pictura::layers_api::rowCount(*guardView) : -1;
     const int guardHistory = guardView ? guardView->history_count() : -1;
@@ -818,6 +821,7 @@ int pictura::runFileDropChecks(pictura::PicturaMainWindow& frame)
     QMimeData noDocMime;
     noDocMime.setUrls({QUrl::fromLocalFile(pngA), QUrl::fromLocalFile(pngB)});
     const DropResult noDoc = tabs ? sendDrop(tabs, noDocMime) : DropResult{};
+    frame.waitForOpensForTest();
     const bool fallback = tabs && noDoc.enter && noDoc.drop && frame.documentCount() == 2;
 
     const bool ok = placed && mixedPlaced && psdNative && opened && psdOpened && ignored
@@ -1065,8 +1069,9 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
     frame.imageView()->clearTransformPreview();
     const bool skewEdge = skewAfter.size() == 4
         && std::abs(skewAfter.at(0).x() - sRect.left() - 2.0) < 1e-6
+        && std::abs(skewAfter.at(0).y() - sRect.top()) < 1e-6
         && std::abs(skewAfter.at(1).x() - sRect.right() - 2.0) < 1e-6
-        && std::abs(skewAfter.at(1).y() - sRect.top() - 3.0) < 1e-6
+        && std::abs(skewAfter.at(1).y() - sRect.top()) < 1e-6
         && std::abs(skewAfter.at(2).y() - sRect.bottom()) < 1e-6
         && std::abs(skewAfter.at(3).y() - sRect.bottom()) < 1e-6;
 

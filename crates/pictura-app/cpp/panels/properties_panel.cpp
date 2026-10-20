@@ -617,6 +617,10 @@ void PropertiesPanel::refresh()
         return;
     }
     clip_->setChecked(row.clipping);
+    const QStringList clipPaths{path_};
+    clip_->setEnabled(view_
+                      && (row.clipping ? pictura::clipping_can_release(*view_, clipPaths)
+                                       : pictura::clipping_can_create(*view_, clipPaths)));
     visible_->setIcon(icon(row.visible ? QStringLiteral("layers.eyeOn")
                                        : QStringLiteral("layers.eyeOff")));
     showAdjustment(page);

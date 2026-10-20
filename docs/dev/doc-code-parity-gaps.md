@@ -213,12 +213,11 @@ are already tracked.
 |---|---|---|---|---|---|
 | CLR-1 | `gradient-presets.md` | Gradient Editor reachable from the Gradient tool + opacity stops + midpoint | PARTIAL | `options_bar_fill.cpp:129-131`; `gradient_editor_dialog.cpp:481-484` | #598 |
 | CLR-2 | `pattern-presets.md` | Define Pattern, `.pat` library, Scripted Patterns | MISSING | `command_tree.cpp:159`; `codec/patterns.rs` | #599 |
-| CLR-3 | `color-picker.md` | Gamut/web alerts, Color Libraries (PANTONE), picker preference | MISSING | `color_picker_dialog.cpp:951-957` | #600 |
+| CLR-3 | `color-picker.md` | Gamut/web alerts, Color Libraries (PANTONE), picker preference | MISSING | `color_picker_dialog.cpp:1083-1085` | #600 |
 | CLR-4 | `color-picker.md` | HUD colour picker | MISSING | none found | #601 |
 | CLR-5 | `color-picker.md` | HDR colour picker (32-bpc) | MISSING | `color_picker_dialog.cpp` 8-bit only | #602 |
-| CLR-6 | `color-picker.md` | Hex shorthand parsing + Add-to-Swatches | MISSING | `color_picker_dialog.cpp:699-701,950-955` | #603 |
-| CLR-7 | `color-models.md` | Out-of-gamut triangle, CMYK→working space, 16/32-bit picker fields | MISSING | `color_picker_dialog.cpp:680-683` | #604 |
-| CLR-8 | `swatches-and-libraries.md` | `.aco`/`.ase` libraries, rename, display modes | MISSING | `swatches_panel.h:71` | #605 |
+| CLR-7 | `color-models.md` | Out-of-gamut triangle, CMYK→working space, 16/32-bit picker fields | MISSING | `color_picker_dialog.cpp:777-780` | #604 |
+| CLR-8 | `swatches-and-libraries.md` | `.aco`/`.ase` libraries, rename, display modes | MISSING | `swatches_panel.h:74` | #605 |
 | CLR-9 | `pattern-presets.md` | Pattern Overlay Snap To Origin + style Texture sub-options | PARTIAL | `layer_style_pages.cpp:297-315` | #606 |
 | CLR-10 | `bristle-brushes.md` | Bristle brushes | MISSING | `paint/tip.rs` | #607 |
 | CLR-11 | `brush-presets.md` | `.abr` libraries, Brush Presets panel, ABR v10 read | MISSING | `brush_panel.cpp:137-139` | #608 |

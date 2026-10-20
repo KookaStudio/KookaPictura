@@ -136,6 +136,10 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/filter_commands.h
     crates/pictura-app/cpp/filter_commit.cpp
     crates/pictura-app/cpp/filter_commit.h
+    crates/pictura-app/cpp/tab_spinner.cpp
+    crates/pictura-app/cpp/tab_spinner.h
+    crates/pictura-app/cpp/loading_card.cpp
+    crates/pictura-app/cpp/loading_card.h
     crates/pictura-app/cpp/filter_gallery_dialog.cpp
     crates/pictura-app/cpp/filter_gallery_dialog.h
     crates/pictura-app/cpp/filter_param_controls.cpp
@@ -212,6 +216,8 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/image_view_overlays.cpp
     crates/pictura-app/cpp/image_view_annotations.cpp
     crates/pictura-app/cpp/image_view_guides.cpp
+    crates/pictura-app/cpp/image_view_smart_guides.cpp
+    crates/pictura-app/cpp/smart_guides.cpp
     crates/pictura-app/cpp/image_view_channels.cpp
     crates/pictura-app/cpp/image_view_document.cpp
     crates/pictura-app/cpp/image_view_paths.cpp
@@ -256,6 +262,7 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/frame_canvas.cpp
     crates/pictura-app/cpp/frame_canvas.h
     crates/pictura-app/cpp/panels/layers_panel.cpp
+    crates/pictura-app/cpp/panels/layers_panel_preview.cpp
     crates/pictura-app/cpp/panels/layers_panel_events.cpp
     crates/pictura-app/cpp/panels/paths_panel.cpp
     crates/pictura-app/cpp/panels/layers_filter_proxy.cpp

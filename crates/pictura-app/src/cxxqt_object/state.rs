@@ -77,6 +77,9 @@ pub struct TransformSession {
     pub(super) dragging: bool,
     /// Gesture mode; `Free` uses the similarity scalars.
     pub(super) mode: TransformMode,
+    /// Whether the target is an editable type layer: Skew keeps it a
+    /// parallelogram so the text stays type.
+    pub(super) type_layer: bool,
     /// Live target quad for a projective mode; `None` in `Free`.
     pub(super) quad: Option<[(f64, f64); 4]>,
     /// Quad captured at begin/press for a projective gesture.
@@ -128,6 +131,9 @@ pub struct PictureViewRust {
     /// cancels the live gesture (`paths.rs`). `None` between gestures.
     pub(super) path_gesture: Option<(super::paths::ActivePath, VectorPath)>,
     pub(super) dirty: bool,
+    /// Bumped whenever the view loads or replaces its document, so a panel can
+    /// drop a gesture whose target no longer belongs to the current document.
+    pub(super) document_generation: u64,
     /// Output format remembered from the import source, used to preselect the
     /// Save As filter: a lowercased extension (`"png"`) or `"psd"` when native.
     pub(super) source_format: String,
@@ -276,6 +282,11 @@ pub struct PictureViewRust {
     /// The background crash-recovery snapshot write in flight, if any
     /// (`impl_core/recovery.rs`); its result is whether the file landed.
     pub(super) recovery_write: Option<std::thread::JoinHandle<bool>>,
+    /// Set when a loading tab's open is cancelled; the worker's queued result
+    /// is dropped instead of applied (`open_jobs`).
+    pub(super) open_cancelled: bool,
+    /// Test seam: hold a started open's completion for this many milliseconds.
+    pub(super) open_delay_for_test: u64,
 }
 
 /// The pre-filter pixels backing a live filter preview.
@@ -370,6 +381,7 @@ impl Default for PictureViewRust {
             active_path: super::paths::ActivePath::Work,
             path_gesture: None,
             dirty: false,
+            document_generation: 0,
             source_format: "psd".to_string(),
             pdf_options: None,
             pdf_password: None,
@@ -429,6 +441,8 @@ impl Default for PictureViewRust {
             use_default_masks: true,
             shape_attributes: None,
             recovery_write: None,
+            open_cancelled: false,
+            open_delay_for_test: 0,
         }
     }
 }

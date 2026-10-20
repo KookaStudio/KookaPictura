@@ -101,6 +101,9 @@ impl std::fmt::Debug for CoverageRows {
 struct Rows {
     /// The pixel row of `crossings[0]`.
     top: i32,
+    /// The rows any edge can cross, `[first, end)`: a row outside them has no
+    /// crossing, whatever the table covers.
+    span: (i32, i32),
     non_zero: bool,
     /// Per pixel row, each edge crossing the row's centre line: its x (1/256
     /// px) and direction (+1 downward, -1 upward).
@@ -153,6 +156,7 @@ impl Rows {
         if lo >= hi {
             return Rows {
                 top: 0,
+                span: (top, bottom),
                 non_zero,
                 crossings: Vec::new(),
             };
@@ -175,6 +179,7 @@ impl Rows {
         }
         Rows {
             top: lo,
+            span: (top, bottom),
             non_zero,
             crossings,
         }
@@ -220,6 +225,11 @@ impl VectorMask {
             .and_then(|i| rows.crossings.get(i))
         {
             return scan(row.iter().copied(), cx, rows.non_zero);
+        }
+        // Above or below every edge: nothing to scan. Without this, each pixel
+        // of such a row walked the whole flattened path.
+        if y < rows.span.0 || y >= rows.span.1 {
+            return false;
         }
         let mut crossings = Vec::new();
         for s in &self.subpaths {
@@ -294,6 +304,36 @@ mod tests {
             258,
             "256 rows plus one each side, not the path's millions"
         );
+    }
+
+    #[test]
+    fn a_row_beyond_the_path_is_outside_whatever_the_cached_clip() {
+        // Rows above and below every edge answer without walking the edges;
+        // under either fill rule they are outside, inverted or not later.
+        for rule in [VectorFillRule::EvenOdd, VectorFillRule::NonZero] {
+            let mut mask = rectangle(vec![[0, 2560], [512, 2560], [512, 5120], [0, 5120]]);
+            mask.subpaths[0].fill_rule = rule;
+            let narrow = PsdRect {
+                top: 12,
+                left: 0,
+                bottom: 14,
+                right: 256,
+            };
+            assert!(
+                mask.inside(1, 13, narrow),
+                "{rule:?}: a cached row inside the path"
+            );
+            assert!(
+                mask.inside(1, 17, narrow),
+                "{rule:?}: an uncached row inside the path"
+            );
+            for y in [-5, 0, 9, 20, 21, 400] {
+                assert!(
+                    !mask.inside(1, y, narrow),
+                    "{rule:?}: row {y} is beyond the path"
+                );
+            }
+        }
     }
 
     #[test]

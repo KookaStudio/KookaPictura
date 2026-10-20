@@ -1,3 +1,4 @@
+#include <QtCore/QRect>
 #include "frame_includes.h"
 
 #include "pictura_debug_timing.h"
@@ -12,6 +13,15 @@ namespace pictura {
 void PicturaMainWindow::setPanelsHidden(bool hidden)
 {
     panelsHidden_ = hidden;
+    if (hidden) {
+        // Frame-parented flyouts are not panel-column children; hide them with
+        // the rest of the panels.
+        for (PanelColumn* column : allPanelColumns()) {
+            if (column) {
+                column->closeFlyout();
+            }
+        }
+    }
     setPanelColumnsVisible(!hidden);
 }
 
@@ -148,6 +158,7 @@ void PicturaMainWindow::saveSession()
     state.traditionalPoints = traditionalPoints_;
     state.guidesVisible = guidesVisible_;
     state.guidesLocked = guidesLocked_;
+    state.smartGuidesVisible = smartGuidesVisible_;
     state.freePan = freePan_;
     state.snapCanvasToWorkspace = snapCanvasToWorkspace_;
     state.guideColor = guideColor_.name();
@@ -161,6 +172,17 @@ void PicturaMainWindow::saveSession()
     }
     if (tools_) {
         state.toolOptions = toolOptionsToJson(*tools_);
+    }
+    if (swatchesPanel_) {
+        QJsonArray swatches;
+        for (const Swatch& swatch : swatchesPanel_->grid()->swatches()) {
+            QJsonObject entry;
+            entry.insert(QStringLiteral("name"), swatch.name);
+            entry.insert(QStringLiteral("color"), swatch.color.name());
+            swatches.append(entry);
+        }
+        state.swatches = swatches;
+        state.swatchesLoaded = true;
     }
     if (panelColumn_) {
         const bool iconic = panelColumn_->railMode();
@@ -182,7 +204,7 @@ void PicturaMainWindow::saveSession()
     // v9: the ordered per-column layout, in central-splitter order; shared with
     // the workspace store's arrangement shape (see serializeWorkspaceLayout).
     state.panelColumns = serializeWorkspaceLayout();
-    state.schemaVersion = 9;
+    state.schemaVersion = 10;
     state.recent = recent_;
     // A refused write means another instance wrote the store after this one
     // launched; leave its workspace snapshot alone too.
@@ -247,179 +269,167 @@ void PicturaMainWindow::applyPanelSession(const SessionState& state)
         return;
     }
     restoringPanelSession_ = true;
-    clearDynamicColumns();
+    // A new session apply supersedes any float restore still waiting for show.
+    pendingFloatRestores_.clear();
 
-    // Order the stored columns by `order` (a stable selection sort: the list is
-    // at most a handful of entries).
-    QList<QJsonObject> entries;
+    bool layoutHasGroups = false;
     for (const QJsonValue& value : state.panelColumns) {
-        if (value.isObject()) {
-            entries.append(value.toObject());
+        const QJsonObject entry = value.toObject();
+        if (!entry.value(QStringLiteral("tools")).toBool()
+            && !entry.value(QStringLiteral("groups")).toArray().isEmpty()) {
+            layoutHasGroups = true;
+            break;
         }
     }
-    for (int i = 0; i < entries.size(); ++i) {
-        for (int j = i + 1; j < entries.size(); ++j) {
-            if (entries.at(j).value(QStringLiteral("order")).toInt()
-                < entries.at(i).value(QStringLiteral("order")).toInt()) {
-                entries.swapItemsAt(i, j);
+    if (state.panelColumns.isEmpty() || !layoutHasGroups) {
+        // No per-column layout: keep the legacy flat-state behaviour and reset
+        // the tools column to its default left slot.
+        // An empty layout carries no float state: dock every live group and
+        // column overlay before applying the legacy flat state.
+        const QList<PanelColumn*> live = allPanelColumns();
+        for (PanelColumn* column : live) {
+            if (column) {
+                column->closeFlyout();
             }
         }
+        for (PanelColumn* column : live) {
+            if (column) {
+                column->redockGroupFloats();
+            }
+        }
+        for (PanelColumn* column : live) {
+            if (!column || !column->isColumnFloating()) {
+                continue;
+            }
+            column->cancelColumnFloat();
+            if (centerSplitter_->indexOf(column) < 0) {
+                centerSplitter_->insertWidget(centerSplitter_->count(), column);
+            }
+            column->setVisible(!panelsHidden_);
+        }
+        clearDynamicColumns();
+        panelColumn_->restorePanelState(state.panelGroups);
+        // The legacy reset path still restores the primary rail mode and width.
+        panelColumn_->setRailMode(state.panelRailMode == QStringLiteral("iconic"));
+        panelColumn_->setRestoredWidth(state.railWidth > 0
+                                            ? state.railWidth
+                                            : PanelColumn::kDefaultNormalWidth);
+        // A test/reset apply should leave the primary column visible when any
+        // group still has visible tabs.
+        bool anyVisible = false;
+        for (PanelGroup* group : panelColumn_->groups()) {
+            if (!group) {
+                continue;
+            }
+            const bool visible = !group->visibleTitles().isEmpty();
+            group->setVisible(visible);
+            anyVisible = anyVisible || visible;
+        }
+        if (anyVisible) {
+            panelColumn_->setVisible(!panelsHidden_);
+        }
+        if (toolsColumn_ && centerSplitter_) {
+            toolsColumn_->cancelColumnFloat();
+            toolsColumn_->setParent(nullptr);
+            centerSplitter_->insertWidget(0, toolsColumn_);
+            toolsColumn_->setVisible(!panelsHidden_);
+            reapplyColumnStretch();
+        }
+        for (PanelColumn* column : allPanelColumns()) {
+            if (column) {
+                column->setAutoCollapseIconic(state.autoCollapseIconic);
+                column->setAutoShowHidden(state.autoShowHidden);
+            }
+        }
+        restoringPanelSession_ = false;
+        return;
     }
 
-    // The primary column is the first stored right-hand column; its groups stay
-    // in `panelColumn_`. Every other stored column adopts its groups from the
-    // current column stack. A column whose groups are all unknown is skipped.
-    int primary = -1;
-    QList<int> leftIndices;
-    QList<int> rightIndices;
-    // D5: the tools column entry (if any) is placed by side after the widget
-    // columns are rebuilt; it carries no groups and is never the primary column.
-    int toolsEntry = -1;
-    for (int i = 0; i < entries.size(); ++i) {
-        if (entries.at(i).value(QStringLiteral("tools")).toBool()) {
-            toolsEntry = i;
+    // Normalise pre-v7/v8 entries before the one layout builder runs. The first
+    // right-hand column is the primary: it inherits the legacy railWidth; every
+    // other column gets the default normal width.
+    QJsonArray layout = state.panelColumns;
+    int primaryIndex = -1;
+    int primaryOrder = (1 << 30);
+    for (int i = 0; i < layout.size(); ++i) {
+        const QJsonObject entry = layout.at(i).toObject();
+        if (entry.value(QStringLiteral("tools")).toBool()
+            || entry.value(QStringLiteral("side")).toString() == QStringLiteral("left")) {
             continue;
         }
-        if (entries.at(i).value(QStringLiteral("side")).toString()
-            == QStringLiteral("left")) {
-            leftIndices.append(i);
-        } else {
-            rightIndices.append(i);
+        const int order = entry.value(QStringLiteral("order")).toInt(0);
+        if (order < primaryOrder) {
+            primaryOrder = order;
+            primaryIndex = i;
         }
     }
-    if (!rightIndices.isEmpty()) {
-        primary = rightIndices.first();
+    for (int i = 0; i < layout.size(); ++i) {
+        QJsonObject entry = layout.at(i).toObject();
+        if (entry.value(QStringLiteral("tools")).toBool()) {
+            continue;
+        }
+        if (!entry.contains(QStringLiteral("railMode"))) {
+            entry.insert(QStringLiteral("railMode"), state.panelRailMode);
+        }
+        if (entry.value(QStringLiteral("width")).toInt() <= 0) {
+            entry.insert(QStringLiteral("width"),
+                         i == primaryIndex && state.railWidth > 0
+                             ? state.railWidth
+                             : PanelColumn::kDefaultNormalWidth);
+        }
+        layout.replace(i, entry);
     }
 
-    // The width to restore for stored column `i`: its own v7 width, else the
-    // legacy top-level `railWidth` for the primary column, else the default.
-    auto restoredWidth = [&state, primary, &entries](int i) {
-        const int stored = entries.at(i).value(QStringLiteral("width")).toInt(0);
-        if (stored > 0) {
-            return stored;
-        }
-        if (i == primary && state.railWidth > 0) {
-            return state.railWidth;
-        }
-        return PanelColumn::kDefaultNormalWidth;
-    };
-    QList<QPair<PanelColumn*, int>> restoredWidths;
+    regroupAndApply(layout, false);
 
-    // The rail mode to restore for stored column `i`: its own v8 mode, else the
-    // legacy top-level `panelRailMode` (v7 and older).
-    auto restoredRailMode = [&state, &entries](int i) {
-        const QString stored =
-            entries.at(i).value(QStringLiteral("railMode")).toString();
-        if (stored == QStringLiteral("iconic")) {
-            return true;
-        }
-        if (stored == QStringLiteral("normal")) {
-            return false;
-        }
-        return state.panelRailMode == QStringLiteral("iconic");
-    };
-    QHash<PanelColumn*, bool> restoredRails;
-
-    auto buildColumn = [this, &entries, &restoredWidth, &restoredWidths, &restoredRailMode,
-                        &restoredRails](int entryIndex, PanelSide side) {
-        const QJsonObject entry = entries.at(entryIndex);
-        const QJsonArray groups = entry.value(QStringLiteral("groups")).toArray();
-        QList<PanelGroup*> moved;
-        for (const QJsonValue& value : groups) {
-            const QString name =
-                value.toObject().value(QStringLiteral("name")).toString();
-            if (PanelGroup* group = panelColumn_->takeGroup(name)) {
-                moved.append(group);
-            }
-        }
-        if (moved.isEmpty()) {
-            return;
-        }
-        PanelColumn* column = createPanelColumn(side);
+    // regroupAndApply creates fresh columns; re-apply the legacy global flags to
+    // every docked and floating column.
+    for (PanelColumn* column : allPanelColumns()) {
         if (!column) {
-            for (PanelGroup* group : moved) {
-                panelColumn_->addGroup(group);
-            }
-            return;
+            continue;
         }
-        for (PanelGroup* group : moved) {
-            column->addGroup(group);
-        }
-        column->restorePanelState(groups);
-        column->setRestoredWidth(restoredWidth(entryIndex));
-        restoredWidths.append({column, restoredWidth(entryIndex)});
-        restoredRails.insert(column, restoredRailMode(entryIndex));
-    };
-
-    if (entries.isEmpty()) {
-        // No v6 layout (or an explicit empty one): keep the legacy behaviour.
-        panelColumn_->restorePanelState(state.panelGroups);
-    } else {
-        // Left columns are inserted at the splitter head, so adopt them
-        // outermost-first to preserve their left-to-right order.
-        for (int k = leftIndices.size() - 1; k >= 0; --k) {
-            buildColumn(leftIndices.at(k), PanelSide::Left);
-        }
-        for (int i = 0; i < rightIndices.size(); ++i) {
-            if (rightIndices.at(i) != primary) {
-                buildColumn(rightIndices.at(i), PanelSide::Right);
-            }
-        }
-        if (primary >= 0) {
-            panelColumn_->restorePanelState(
-                entries.at(primary).value(QStringLiteral("groups")).toArray());
-        }
-    }
-
-    const bool legacyIconic = state.panelRailMode == QStringLiteral("iconic");
-    // The primary column's mode also comes from its own entry when present, else
-    // from the legacy top-level value.
-    restoredRails.insert(panelColumn_,
-                         primary >= 0 ? restoredRailMode(primary) : legacyIconic);
-    for (PanelColumn* column : panelColumns()) {
         column->setAutoCollapseIconic(state.autoCollapseIconic);
         column->setAutoShowHidden(state.autoShowHidden);
-        column->setRailMode(restoredRails.value(column, legacyIconic));
     }
-    // The primary column's width is stored in `panelColumn_`, not a dynamic one,
-    // so it is not in `restoredWidths` yet. `setRailMode` above resets an iconic
-    // column's remembered width, so seed it after the mode change. A legacy
-    // store with no per-column layout keeps its old no-op when `railWidth` is 0.
-    const int primaryWidth = primary >= 0 ? restoredWidth(primary) : state.railWidth;
-    if (primaryWidth > 0) {
-        panelColumn_->setRestoredWidth(primaryWidth);
-        restoredWidths.append({panelColumn_, primaryWidth});
+
+    // The tools entry is skipped by regroupAndApply (workspace apply must leave
+    // Tools untouched), so place it here and restore a floating Tools overlay
+    // only on the session path.
+    bool haveTools = false;
+    bool toolsRight = false;
+    bool toolsFloating = false;
+    QRect toolsGeometry;
+    for (const QJsonValue& value : state.panelColumns) {
+        const QJsonObject entry = value.toObject();
+        if (!entry.value(QStringLiteral("tools")).toBool()) {
+            continue;
+        }
+        haveTools = true;
+        toolsRight = entry.value(QStringLiteral("side")).toString() == QStringLiteral("right");
+        toolsFloating = entry.value(QStringLiteral("floating")).toBool(false);
+        const QJsonArray geometry = entry.value(QStringLiteral("floatGeometry")).toArray();
+        if (geometry.size() == 4) {
+            toolsGeometry = QRect(geometry.at(0).toInt(), geometry.at(1).toInt(),
+                                  geometry.at(2).toInt(), geometry.at(3).toInt());
+        }
+        break;
     }
-    // D5: place the tools column at its recorded side. A store with no tools
-    // entry (v8 and older) loads the default left tools column at index 0.
     if (toolsColumn_ && centerSplitter_) {
-        const bool right = toolsEntry >= 0
-                           && entries.at(toolsEntry).value(QStringLiteral("side")).toString()
-                                  == QStringLiteral("right");
-        // A live whole-column tear-off from a previous session must be dropped
-        // before the column is re-parented into the splitter.
         toolsColumn_->cancelColumnFloat();
         toolsColumn_->setParent(nullptr);
-        const int at = right ? centerSplitter_->count() : 0;
+        const int at = toolsRight ? centerSplitter_->count() : 0;
         centerSplitter_->insertWidget(at, toolsColumn_);
         toolsColumn_->setVisible(!panelsHidden_);
         if (toolsColumn_->toolsContentForTest()) {
             toolsColumn_->refreshToolsWidth();
         }
-        // Re-inserting the column created fresh, enabled handles; restore the
-        // tools column's fixed-size handle state (beside it, no resize drag).
         reapplyColumnStretch();
-    }
-    restoringPanelSession_ = false;
-    // Before the first layout the splitter has no width, so `setPreferredWidth`
-    // only remembers the value; re-apply once the event loop has laid out.
-    QTimer::singleShot(0, this, [restoredWidths]() {
-        for (const QPair<PanelColumn*, int>& entry : restoredWidths) {
-            if (entry.first) {
-                entry.first->setRestoredWidth(entry.second);
-            }
+        if (haveTools && toolsFloating && toolsGeometry.isValid()) {
+            queueOrRestoreFloat(toolsColumn_, nullptr, toolsGeometry);
         }
-    });
+    }
+
+    restoringPanelSession_ = false;
 }
 
 } // namespace pictura

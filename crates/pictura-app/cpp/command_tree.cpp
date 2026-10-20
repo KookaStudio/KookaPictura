@@ -875,6 +875,10 @@ void addDefaultCommands(CommandRegistry& registry) {
                              true, true});
     leaf(registry, {"View", "Show", "Grid"}, QStringLiteral("Grid"));
     leaf(registry, {"View", "Show", "Count"}, QStringLiteral("Count"));
+    registry.add(CommandSpec{command_ids::ViewShowSmartGuides,
+                             {"View", "Show", "Smart Guides"},
+                             QStringLiteral("Smart Guides"),
+                             QKeySequence(QStringLiteral("Ctrl+Shift+;")), true, true});
     leaf(registry, {"View", "Show", "Slices"}, QStringLiteral("Slices"));
     leaf(registry, {"View", "Show", "Notes"}, QStringLiteral("Notes"));
     leaf(registry, {"View", "Show", "Pixel Grid"}, QStringLiteral("Pixel Grid"));

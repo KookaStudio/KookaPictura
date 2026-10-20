@@ -8,6 +8,7 @@
 #include "api/document_api.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layers_surface.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/layers_smart_filters.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/layer_arrange.cxxqt.h"
 
 namespace pictura {
 
@@ -113,7 +114,7 @@ void PicturaMainWindow::registerHandlers()
                                              documentDirectory(activeFilePath()),
                                              openFileFilters());
         if (!path.isEmpty()) {
-            openAsSmartObjectPath(path);
+            startOpenAsSmartObjectPath(path);
         }
     });
     registry_->setHandler(command_ids::FilePlace, [this]() {
@@ -566,7 +567,8 @@ void PicturaMainWindow::registerHandlers()
 
     // Background conversion. The applicable kind gates each command: "Layer
     // from Background…" needs the Background; "Background From Layer" needs a
-    // raster pixel layer (groups and adjustment/fill layers are refused).
+    // raster pixel layer and a document with no Background yet (groups,
+    // adjustment/fill layers, and a second Background are refused).
     auto currentLayerKind = [this]() -> QString {
         PictureView* view = activeView();
         const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
@@ -593,8 +595,10 @@ void PicturaMainWindow::registerHandlers()
             refresh();
         }
     });
-    registry_->setEnabledProvider(command_ids::LayerNewBackgroundFromLayer, [currentLayerKind]() {
-        return currentLayerKind() == QStringLiteral("pixel");
+    registry_->setEnabledProvider(command_ids::LayerNewBackgroundFromLayer, [this]() {
+        PictureView* view = activeView();
+        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+        return view && !path.isEmpty() && pictura::can_background_from_layer(*view, path);
     });
 
     // Layer via Copy / Cut. Both need an active selection and an active layer
