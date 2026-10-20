@@ -317,14 +317,14 @@ fn validation_document() -> Document {
             mask: None,
             adjustment: None,
             channels,
-            children: Vec::new(),
+            children: pictura_core::LayerStack::default(),
             is_group: false,
             background: false,
             ..Default::default()
         }
     };
     let mut doc = Document::new(N, N, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
         layer("base", BlendMode::Normal, |x, y| {
             (x as u8 * 32, y as u8 * 32, (x + y) as u8 * 16, 255)
         }),
@@ -336,7 +336,7 @@ fn validation_document() -> Document {
                 64 + x as u8 * 16,
             )
         }),
-    ];
+    ]);
     doc
 }
 
@@ -599,23 +599,25 @@ mod tests {
             bottom: h as i32,
             right: w as i32,
         };
-        doc.layers = (0..2u8)
-            .map(|k| Layer {
-                rect,
-                opacity: 200,
-                fill: 255,
-                visible: true,
-                channels: (-1..3)
-                    .map(|id| Channel {
-                        id,
-                        data: (0..(w * h) as usize)
-                            .map(|i| (i * (3 + k as usize) + (id + 1) as usize * 40) as u8)
-                            .collect(),
-                    })
-                    .collect(),
-                ..Default::default()
-            })
-            .collect();
+        doc.layers = pictura_core::LayerStack::from_layers(
+            (0..2u8)
+                .map(|k| Layer {
+                    rect,
+                    opacity: 200,
+                    fill: 255,
+                    visible: true,
+                    channels: (-1..3)
+                        .map(|id| Channel {
+                            id,
+                            data: (0..(w * h) as usize)
+                                .map(|i| (i * (3 + k as usize) + (id + 1) as usize * 40) as u8)
+                                .collect(),
+                        })
+                        .collect(),
+                    ..Default::default()
+                })
+                .collect(),
+        );
         // Stamp every plane, as the history does after each capture.
         let stamp_all = |doc: &mut Document| {
             for layer in &mut doc.layers {
@@ -713,7 +715,7 @@ mod tests {
             mask: None,
             adjustment: None,
             channels,
-            children: Vec::new(),
+            children: pictura_core::LayerStack::default(),
             is_group: false,
             background: false,
             ..Default::default()
@@ -851,7 +853,7 @@ mod tests {
         let payload = pictura_codec::write_psd(&source).expect("payload writes");
 
         let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = vec![Layer {
+        doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
             name: "placed".into(),
             rect: px_rect(w, h),
             channels: Vec::new(),
@@ -862,7 +864,7 @@ mod tests {
                 ..Default::default()
             }),
             ..Default::default()
-        }];
+        }]);
 
         // `check_supported` rejects the stack before any device is touched, so
         // this holds on a device-less host too.
@@ -932,7 +934,7 @@ mod tests {
                     data: a.into(),
                 },
             ],
-            children: Vec::new(),
+            children: pictura_core::LayerStack::default(),
             is_group: false,
             background: false,
             ..Default::default()
@@ -979,10 +981,10 @@ mod tests {
             return;
         }
         let mut doc = Document::new(n, n, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = vec![
+        doc.layers = pictura_core::LayerStack::from_layers(vec![
             profile_layer(n, 0, BlendMode::Normal),
             profile_layer(n, 1, BlendMode::Multiply),
-        ];
+        ]);
         // Warm-up keeps device/pipeline setup out of the phase numbers.
         let _ = composite_gpu_region(&doc, 0, 0, n, n);
         let gpu = match Gpu::new(0, 0, n, n) {

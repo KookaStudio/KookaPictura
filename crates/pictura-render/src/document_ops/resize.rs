@@ -214,7 +214,7 @@ mod tests {
                     data: vec![255; n].into(),
                 },
             ],
-            children: Vec::new(),
+            children: pictura_core::LayerStack::default(),
             is_group: false,
             background: false,
             ..Default::default()
@@ -231,10 +231,10 @@ mod tests {
             data: Some(vec![128; 16].into()),
             ..Default::default()
         };
-        doc.layers = vec![
+        doc.layers = pictura_core::LayerStack::from_layers(vec![
             pixel_layer("full", rect(0, 0, 4, 4), None),
             pixel_layer("masked", rect(1, 1, 3, 3), Some(mask)),
-        ];
+        ]);
         doc.channels = vec![Channel {
             id: -1,
             data: vec![7; 16].into(),

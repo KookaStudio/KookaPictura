@@ -1,10 +1,7 @@
 use pictura_adjust::{GradientKind, GradientStop};
 use pictura_core::{BlendMode, Channel, ColorLabel, Document, Layer, LockFlags, PsdRect};
 
-use super::clipping::{clipping_base_allowed, normalize_clipping, release_run_above};
-use super::paths::{
-    container_mut, container_of_mut, format_segments, parse_path, resolve_path, resolve_path_mut,
-};
+use super::paths::{container_of, format_segments, parse_path, resolve_path, resolve_path_mut};
 
 fn insertion_index(len: usize, above: i32) -> usize {
     if above < 0 {
@@ -56,7 +53,7 @@ pub(super) fn transparent_layer(width: u32, height: u32, name: &str) -> Layer {
                 data: vec![0; pixels].into(),
             },
         ],
-        children: Vec::new(),
+        children: pictura_core::LayerStack::default(),
         is_group: false,
         background: false,
         ..Default::default()
@@ -83,7 +80,7 @@ pub(super) fn empty_group(name: &str) -> Layer {
         mask: None,
         adjustment: None,
         channels: Vec::new(),
-        children: Vec::new(),
+        children: pictura_core::LayerStack::default(),
         is_group: true,
         background: false,
         ..Default::default()
@@ -184,28 +181,28 @@ pub fn next_layer_name(doc: &Document, prefix: &str) -> String {
     format!("{prefix} {}", highest + 1)
 }
 
-/// Insert a new transparent raster layer directly above `above`; returns its
-/// index, or -1 for a document with a zero dimension.
 pub fn add_layer(doc: &mut Document, above: i32, name: &str) -> i32 {
     if doc.width == 0 || doc.height == 0 {
         return -1;
     }
     let index = insertion_index(doc.layers.len(), above);
-    doc.layers
-        .insert(index, transparent_layer(doc.width, doc.height, name));
-    index as i32
+    match doc
+        .layers
+        .insert(&[], index, transparent_layer(doc.width, doc.height, name))
+    {
+        Ok(()) => index as i32,
+        Err(_) => -1,
+    }
 }
 
-/// Insert an empty group directly above `above`; returns its index.
 pub fn add_group(doc: &mut Document, above: i32, name: &str) -> i32 {
     let index = insertion_index(doc.layers.len(), above);
-    doc.layers.insert(index, empty_group(name));
-    index as i32
+    match doc.layers.insert(&[], index, empty_group(name)) {
+        Ok(()) => index as i32,
+        Err(_) => -1,
+    }
 }
 
-/// Deep-clone layer `index` (children, channels, mask, adjustment and all
-/// attributes) and insert the copy directly above it. The copy is named
-/// `"<name> copy"`. Returns the new index, or -1 when `index` is out of range.
 pub fn duplicate_layer(doc: &mut Document, index: i32) -> i32 {
     if index < 0 || index as usize >= doc.layers.len() {
         return -1;
@@ -216,14 +213,12 @@ pub fn duplicate_layer(doc: &mut Document, index: i32) -> i32 {
     if copy.background {
         release_background(&mut copy);
     }
-    doc.layers.insert(source + 1, copy);
-    (source + 1) as i32
+    match doc.layers.insert(&[], source + 1, copy) {
+        Ok(()) => (source + 1) as i32,
+        Err(_) => -1,
+    }
 }
 
-/// Wrap layer `index` in a new group at the same stack position: the group
-/// takes the layer's slot and the layer becomes its only child. Refuses the
-/// Background. Returns the group's index, or -1 when `index` is out of range or
-/// the layer is the Background.
 pub fn group_layer(doc: &mut Document, index: i32) -> i32 {
     if index < 0 || index as usize >= doc.layers.len() {
         return -1;
@@ -232,18 +227,13 @@ pub fn group_layer(doc: &mut Document, index: i32) -> i32 {
     if doc.layers[source].background {
         return -1;
     }
-    let child = doc.layers.remove(source);
     let name = next_layer_name(doc, "Group");
-    let mut group = empty_group(&name);
-    group.children.push(child);
-    normalize_clipping(group.children.as_mut_slice(), None);
-    doc.layers.insert(source, group);
-    normalize_clipping(doc.layers.as_mut_slice(), None);
-    source as i32
+    match doc.layers.group(&[], &[source], empty_group(&name)) {
+        Ok(at) => at as i32,
+        Err(_) => -1,
+    }
 }
 
-/// Splice a group's children into the parent at the group's position. Returns
-/// false (state unchanged) when `index` is out of range or not a group.
 pub fn ungroup_layer(doc: &mut Document, index: i32) -> bool {
     if index < 0 || index as usize >= doc.layers.len() {
         return false;
@@ -252,52 +242,39 @@ pub fn ungroup_layer(doc: &mut Document, index: i32) -> bool {
     if !doc.layers[at].is_group {
         return false;
     }
-    let was_clipped = doc.layers[at].clipping;
-    release_run_above(doc.layers.as_mut_slice(), at, was_clipped);
-    let group = doc.layers.remove(at);
-    for (offset, child) in group.children.into_iter().enumerate() {
-        doc.layers.insert(at + offset, child);
-    }
-    normalize_clipping(doc.layers.as_mut_slice(), None);
-    true
+    let children: Vec<Layer> = doc.layers[at].children.iter().cloned().collect();
+    doc.layers.replace(&[at], children).is_ok()
 }
 
-/// Insert `node` inside `selection_path` when it is a group (as its top child),
-/// otherwise directly above the selected node in its container, otherwise on
-/// top of the document. Returns the new path, or empty on failure.
-pub(crate) fn insert_node(doc: &mut Document, selection_path: &str, mut node: Layer) -> String {
+pub(crate) fn insert_node(doc: &mut Document, selection_path: &str, node: Layer) -> String {
     if let Some(segments) = parse_path(selection_path) {
         if resolve_path(doc, selection_path).is_some_and(|layer| layer.is_group) {
-            let Some(container) = container_of_mut(doc, &segments) else {
+            let index = resolve_path(doc, selection_path).map_or(0, |group| group.children.len());
+            if doc.layers.insert(&segments, index, node).is_err() {
                 return String::new();
-            };
-            let index = container.len();
-            if node.clipping && !clipping_base_allowed(container, index) {
-                node.clipping = false;
             }
-            container.push(node);
             let mut new_segments = segments;
             new_segments.push(index);
             return format_segments(&new_segments);
         }
-        if let Some((container, index)) = container_mut(doc, &segments) {
-            let at = insertion_index(container.len(), index as i32);
-            if node.clipping && !clipping_base_allowed(container, at) {
-                node.clipping = false;
-            }
-            container.insert(at, node);
-            let mut new_segments = segments;
-            if let Some(last) = new_segments.last_mut() {
-                *last = at;
-            }
-            return format_segments(&new_segments);
+        let Some((&index, parent)) = segments.split_last() else {
+            return String::new();
+        };
+        let len = container_of(doc, parent).map_or(0, |container| container.len());
+        let at = insertion_index(len, index as i32);
+        if doc.layers.insert(parent, at, node).is_err() {
+            return String::new();
         }
+        let mut new_segments = segments;
+        if let Some(last) = new_segments.last_mut() {
+            *last = at;
+        }
+        return format_segments(&new_segments);
     }
     let at = insertion_index(doc.layers.len(), -1);
-    if node.clipping && !clipping_base_allowed(&doc.layers, at) {
-        node.clipping = false;
+    if doc.layers.insert(&[], at, node).is_err() {
+        return String::new();
     }
-    doc.layers.insert(at, node);
     format_segments(&[at])
 }
 
@@ -354,7 +331,7 @@ pub fn add_solid_fill(doc: &mut Document, selection_path: &str, rgba: [u8; 4]) -
         // pass 0xFF); thread alpha through if a non-opaque fill is ever needed.
         adjustment: Some(crate::encode_solid_color_fill([rgba[0], rgba[1], rgba[2]])),
         channels: Vec::new(),
-        children: Vec::new(),
+        children: pictura_core::LayerStack::default(),
         is_group: false,
         background: false,
         ..Default::default()
@@ -422,7 +399,7 @@ pub fn add_raster_layer_from_rgba(
         ..Default::default()
     };
     let index = doc.layers.len();
-    doc.layers.push(layer);
+    let _ = doc.layers.push(layer);
     format_segments(&[index])
 }
 
@@ -469,7 +446,7 @@ pub fn add_gradient_fill(doc: &mut Document, selection_path: &str) -> String {
             0.0,
         )),
         channels: Vec::new(),
-        children: Vec::new(),
+        children: pictura_core::LayerStack::default(),
         is_group: false,
         background: false,
         ..Default::default()
@@ -558,14 +535,6 @@ pub fn can_background_from_layer(doc: &Document, path: &str) -> bool {
         && !has_background(&doc.layers)
 }
 
-/// `Background From Layer`: flag the node at `path` as the Background, make its
-/// fully transparent pixels opaque with the background color, and move it to
-/// the bottom of the document. Refuses a group, an adjustment/fill-content
-/// layer, an already-background layer, or a document that already has a
-/// Background.
-//
-// ponytail: the background color is opaque white; plumb the toolbox's current
-// background color through the bridge when that state is exposed.
 pub fn background_from_layer(doc: &mut Document, path: &str) -> bool {
     if !can_background_from_layer(doc, path) {
         return false;
@@ -573,24 +542,10 @@ pub fn background_from_layer(doc: &mut Document, path: &str) -> bool {
     let Some(segments) = parse_path(path) else {
         return false;
     };
-    let was_clipped = resolve_path(doc, path).is_some_and(|layer| layer.clipping);
     if let Some(layer) = resolve_path_mut(doc, path) {
         opaque_transparency(layer, [255, 255, 255]);
-        layer.background = true;
     }
-    let node = {
-        let Some((container, index)) = container_mut(doc, &segments) else {
-            return false;
-        };
-        release_run_above(container.as_mut_slice(), index, was_clipped);
-        let mut node = container.remove(index);
-        node.clipping = false;
-        normalize_clipping(container.as_mut_slice(), None);
-        node
-    };
-    doc.layers.insert(0, node);
-    normalize_clipping(doc.layers.as_mut_slice(), None);
-    true
+    doc.layers.promote_background(&segments).is_ok()
 }
 
 /// Set every fully transparent pixel (`alpha == 0`) to `rgb` at full opacity,

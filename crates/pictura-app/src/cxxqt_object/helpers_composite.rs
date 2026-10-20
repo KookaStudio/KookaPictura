@@ -761,20 +761,24 @@ fn parse_layer_path(path: &str) -> Option<Vec<usize>> {
     path.split('/').map(|s| s.parse::<usize>().ok()).collect()
 }
 
-fn truncate_above(layers: &mut Vec<Layer>, path: &[usize]) {
-    if let Some((&i, rest)) = path.split_first() {
-        layers.truncate(i + 1);
-        if let Some(layer) = layers.get_mut(i) {
-            truncate_above(&mut layer.children, rest);
+fn truncate_above(layers: &mut pictura_core::LayerStack, path: &[usize]) {
+    fn walk(layers: &mut pictura_core::LayerStack, parent: &mut Vec<usize>, path: &[usize]) {
+        let Some((&index, rest)) = path.split_first() else {
+            return;
+        };
+        layers.truncate(parent, index + 1);
+        if rest.is_empty() {
+            return;
         }
+        parent.push(index);
+        walk(layers, parent, rest);
+        parent.pop();
     }
+    walk(layers, &mut Vec::new(), path);
 }
 
-fn strip_adjustments(layers: &mut Vec<Layer>) {
-    layers.retain(|l| l.adjustment.is_none());
-    for layer in layers {
-        strip_adjustments(&mut layer.children);
-    }
+fn strip_adjustments(layers: &mut pictura_core::LayerStack) {
+    layers.retain_tree(&[], &mut |layer| layer.adjustment.is_none());
 }
 
 /// Convert a planar 8-bit buffer (1 = gray, 2 = gray+alpha, 3 = RGB, 4 = RGBA)

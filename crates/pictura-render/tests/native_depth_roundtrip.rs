@@ -119,7 +119,7 @@ fn refresh_leaves_out_of_scope_documents_untouched() {
     let base = read_psd(&bytes).unwrap();
 
     let mut no_layers = base.clone();
-    no_layers.layers.clear();
+    no_layers.layers = pictura_core::LayerStack::default();
     let mut converted = base.clone();
     converted.source_mode = Some(ColorMode::Cmyk);
     let mut no_depth = base.clone();

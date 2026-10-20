@@ -10,7 +10,7 @@ use pictura_core::{
     BitDepth, BlendMode, Channel, Document, Layer, PsdRect, SmartObject, SmartObjectKind,
 };
 
-use super::paths::{container_mut, format_segments, parse_path, resolve_path, resolve_path_mut};
+use super::paths::{format_segments, parse_path, resolve_path, resolve_path_mut};
 
 /// Remove the document-level linked-source record for `uuid`, but only when no
 /// layer still references it. [`super::create::duplicate_layer`] copies a smart
@@ -91,7 +91,7 @@ pub fn convert_to_smart_object(doc: &mut Document, path: &str) -> bool {
             bottom: h as i32,
             right: w as i32,
         };
-        embedded.layers = vec![copy];
+        embedded.layers = pictura_core::LayerStack::from_layers(vec![copy]);
         let Ok(payload) = pictura_codec::write_psd(&embedded) else {
             return false;
         };
@@ -214,7 +214,7 @@ pub fn replace_smart_object_contents(
 pub fn place_smart_object(doc: &mut Document, filename: &str, bytes: &[u8]) -> Option<String> {
     let decoded = pictura_codec::read_psd(bytes).ok()?;
     let index = doc.layers.len();
-    doc.layers.push(Layer {
+    let layer = Layer {
         name: filename.to_string(),
         rect: PsdRect {
             top: 0,
@@ -236,7 +236,10 @@ pub fn place_smart_object(doc: &mut Document, filename: &str, bytes: &[u8]) -> O
             ..Default::default()
         }),
         ..Default::default()
-    });
+    };
+    if doc.layers.insert(&[], index, layer).is_err() {
+        return None;
+    }
     Some(format_segments(&[index]))
 }
 
@@ -411,12 +414,8 @@ pub fn convert_smart_object_to_layers(doc: &mut Document, path: &str) -> bool {
             .map(|layer| map_layer(layer, sx, sy, obj_rect.left, obj_rect.top))
             .collect()
     };
-    let Some((container, index)) = container_mut(doc, &segments) else {
+    if doc.layers.replace(&segments, replacement).is_err() {
         return false;
-    };
-    container.remove(index);
-    for (offset, layer) in replacement.into_iter().enumerate() {
-        container.insert(index + offset, layer);
     }
     remove_link_if_unreferenced(doc, &uuid);
     true
@@ -489,11 +488,13 @@ fn map_layer(layer: &Layer, sx: f64, sy: f64, ox: i32, oy: i32) -> Layer {
         });
     }
     if !out.children.is_empty() {
-        out.children = layer
-            .children
-            .iter()
-            .map(|child| map_layer(child, sx, sy, ox, oy))
-            .collect();
+        out.children = pictura_core::LayerStack::from_layers(
+            layer
+                .children
+                .iter()
+                .map(|child| map_layer(child, sx, sy, ox, oy))
+                .collect(),
+        );
     }
     if out.background {
         super::create::release_background(&mut out);
@@ -574,8 +575,7 @@ pub fn new_smart_object_via_copy(doc: &mut Document, path: &str) -> Option<Strin
         return None;
     }
     let segments = parse_path(path)?;
-    let (container, index) = container_mut(doc, &segments)?;
-    let mut copy = container[index].clone();
+    let mut copy = resolve_path(doc, path)?.clone();
     copy.name = format!("{} copy", copy.name);
     copy.extra_blocks
         .retain(|block| !matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd"));
@@ -583,7 +583,10 @@ pub fn new_smart_object_via_copy(doc: &mut Document, path: &str) -> Option<Strin
         so.config_descriptor.clear();
         so.uuid.clear();
     }
-    container.insert(index + 1, copy);
+    let (&index, parent) = segments.split_last()?;
+    if doc.layers.insert(parent, index + 1, copy).is_err() {
+        return None;
+    }
     let mut new_segments = segments;
     if let Some(last) = new_segments.last_mut() {
         *last = index + 1;

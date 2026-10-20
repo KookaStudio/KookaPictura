@@ -671,7 +671,7 @@ fn pattern_fill_shadow_is_confined_to_the_fill() {
         BlendMode::Normal,
         255,
     );
-    d.layers = vec![backdrop, layer];
+    d.layers = pictura_core::LayerStack::from_layers(vec![backdrop, layer]);
     let out = composite_rgba(&d);
     assert!(rgb(&out, 2, 4)[0] < 200, "the shadow is near the fill");
     assert_eq!(rgb(&out, 0, 4), [255, 255, 255], "no shadow off the fill");

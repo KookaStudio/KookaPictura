@@ -95,7 +95,7 @@ fn group_vs_pixel_layer() {
             id: 0,
             data: vec![0; 16].into(),
         }],
-        children: Vec::new(),
+        children: crate::LayerStack::default(),
         is_group: false,
         background: false,
         ..Default::default()
@@ -116,7 +116,7 @@ fn group_vs_pixel_layer() {
         mask: None,
         adjustment: None,
         channels: Vec::new(),
-        children: vec![pixel],
+        children: crate::LayerStack::from_layers(vec![pixel]),
         is_group: true,
         background: false,
         ..Default::default()
@@ -146,7 +146,7 @@ fn mask_present_and_absent() {
         mask: None,
         adjustment: None,
         channels: Vec::new(),
-        children: Vec::new(),
+        children: crate::LayerStack::default(),
         is_group: false,
         background: false,
         ..Default::default()
@@ -217,7 +217,7 @@ fn field_and_method_is_group_agree() {
         mask: None,
         adjustment: None,
         channels: Vec::new(),
-        children: Vec::new(),
+        children: crate::LayerStack::default(),
         is_group: true,
         background: false,
         ..Default::default()
@@ -245,7 +245,7 @@ fn default_layer_attribute_values() {
         mask: None,
         adjustment: None,
         channels: Vec::new(),
-        children: Vec::new(),
+        children: crate::LayerStack::default(),
         is_group: false,
         background: false,
         ..Default::default()
@@ -373,7 +373,7 @@ fn retains_source_depth_tracks_the_retained_store() {
     // A layer store alone also counts (a layered file with no composite).
     let mut layered = Document::new(1, 1, ColorMode::Rgb, BitDepth::Sixteen);
     layered.source_depth = Some(BitDepth::Sixteen);
-    layered.layers.push(Layer {
+    layered.layers = crate::LayerStack::from_layers(vec![Layer {
         source_channels: Some(SourceChannels {
             depth: BitDepth::Sixteen,
             rect: PsdRect {
@@ -385,7 +385,7 @@ fn retains_source_depth_tracks_the_retained_store() {
             planes: vec![(0, Samples::U16(vec![0]))],
         }),
         ..Default::default()
-    });
+    }]);
     assert!(layered.retains_source_depth());
 }
 

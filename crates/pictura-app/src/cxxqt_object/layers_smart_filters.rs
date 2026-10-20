@@ -315,12 +315,12 @@ mod tests {
 
     fn camera_raw_exposure_doc() -> Document {
         let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = vec![super::super::tests::pixel_layer(
+        doc.layers = pictura_core::LayerStack::from_layers(vec![super::super::tests::pixel_layer(
             "Layer",
             4,
             4,
             (40, 80, 120),
-        )];
+        )]);
         assert!(pictura_render::convert_to_smart_object(&mut doc, "0"));
         let layer = pictura_render::resolve_path_mut(&mut doc, "0").expect("layer");
         let settings = pictura_core::PicturaRawSettings {

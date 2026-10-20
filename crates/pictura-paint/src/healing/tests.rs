@@ -354,36 +354,38 @@ fn mode_round_trips_through_its_integer() {
 fn layer_doc(w: u32, h: u32, rgba: [u8; 4]) -> Document {
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
     let n = (w * h) as usize;
-    doc.layers.push(Layer {
-        name: "px".into(),
-        rect: rect(w as i32, h as i32),
-        blend: BlendMode::Normal,
-        opacity: 255,
-        fill: 255,
-        lock: LockFlags::default(),
-        color: ColorLabel::None,
-        clipping: false,
-        visible: true,
-        channels: vec![
-            Channel {
-                id: 0,
-                data: vec![rgba[0]; n].into(),
-            },
-            Channel {
-                id: 1,
-                data: vec![rgba[1]; n].into(),
-            },
-            Channel {
-                id: 2,
-                data: vec![rgba[2]; n].into(),
-            },
-            Channel {
-                id: -1,
-                data: vec![rgba[3]; n].into(),
-            },
-        ],
-        ..Layer::default()
-    });
+    {
+        let _ = doc.layers.push(Layer {
+            name: "px".into(),
+            rect: rect(w as i32, h as i32),
+            blend: BlendMode::Normal,
+            opacity: 255,
+            fill: 255,
+            lock: LockFlags::default(),
+            color: ColorLabel::None,
+            clipping: false,
+            visible: true,
+            channels: vec![
+                Channel {
+                    id: 0,
+                    data: vec![rgba[0]; n].into(),
+                },
+                Channel {
+                    id: 1,
+                    data: vec![rgba[1]; n].into(),
+                },
+                Channel {
+                    id: 2,
+                    data: vec![rgba[2]; n].into(),
+                },
+                Channel {
+                    id: -1,
+                    data: vec![rgba[3]; n].into(),
+                },
+            ],
+            ..Layer::default()
+        });
+    };
     doc
 }
 
@@ -431,11 +433,13 @@ fn heal_layer_writes_the_pixels_and_returns_a_document_rect() {
 #[test]
 fn heal_layer_refuses_a_group_or_bad_path() {
     let mut doc = layer_doc(16, 16, BASE);
-    doc.layers.push(Layer {
-        name: "group".into(),
-        is_group: true,
-        ..Layer::default()
-    });
+    {
+        let _ = doc.layers.push(Layer {
+            name: "group".into(),
+            is_group: true,
+            ..Layer::default()
+        });
+    };
     let region = rect(4, 4);
     let op = |img: &mut RgbaImage, local, cov: &[f32]| {
         heal_region(img, local, cov, HealMode::ProximityMatch)

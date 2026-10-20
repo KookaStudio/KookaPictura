@@ -152,7 +152,7 @@ fn layer_flattened_buffer(
         return Vec::new();
     };
     let mut scratch = doc.clone();
-    scratch.layers = vec![layer.clone()];
+    scratch.layers = pictura_core::LayerStack::from_layers(vec![layer.clone()]);
     let buffer = pictura_render::composite_active(&scratch, gpu_compute).0;
     let srgb = pictura_codec::buffer_to_srgb(&scratch, &buffer);
     let rgba = buffer_to_rgba_bytes(&srgb);
@@ -264,10 +264,10 @@ mod tests {
     #[test]
     fn layer_flattened_crops_a_pixel_layer_to_its_rect() {
         let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = vec![
+        doc.layers = pictura_core::LayerStack::from_layers(vec![
             pixel_layer("base", 4, 4, (10, 20, 30)),
             at(pixel_layer("top", 2, 2, (200, 100, 50)), 1, 1),
-        ];
+        ]);
         let rgba = layer_flattened_buffer(&doc, 1, false);
         // 2 x 2, the top layer's colour, fully opaque.
         assert_eq!(dims(&rgba), (2, 2));
@@ -283,11 +283,11 @@ mod tests {
         let mut group = pixel_layer("group", 0, 0, (0, 0, 0));
         group.is_group = true;
         group.channels.clear();
-        group.children = vec![
+        group.children = pictura_core::LayerStack::from_layers(vec![
             at(pixel_layer("a", 2, 2, (1, 2, 3)), 1, 1),
             at(pixel_layer("b", 1, 1, (4, 5, 6)), 5, 5),
-        ];
-        doc.layers = vec![group];
+        ]);
+        doc.layers = pictura_core::LayerStack::from_layers(vec![group]);
         let rgba = layer_flattened_buffer(&doc, 0, false);
         // The union of (1,1)-(3,3) and (5,5)-(6,6) is (1,1)-(6,6): 5 x 5.
         assert_eq!(dims(&rgba), (5, 5));

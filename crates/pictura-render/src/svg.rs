@@ -175,7 +175,7 @@ fn normalized(layer: &Layer) -> Layer {
 
 fn raster_content(doc: &Document, layers: &[Layer], raster: &mut Rasterize) -> SvgContent {
     let mut scratch = doc.clone();
-    scratch.layers = layers.to_vec();
+    scratch.layers = pictura_core::LayerStack::from_layers(layers.to_vec());
     SvgContent::Raster {
         rgba: raster(&scratch),
         width: doc.width,

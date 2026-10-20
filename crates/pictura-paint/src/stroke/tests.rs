@@ -9,46 +9,48 @@ fn layer_doc(w: u32, h: u32, rgba: (u8, u8, u8, u8)) -> Document {
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
     let n = (w * h) as usize;
     let (r, g, b, a) = rgba;
-    doc.layers.push(Layer {
-        name: "px".into(),
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: h as i32,
-            right: w as i32,
-        },
-        blend: BlendMode::Normal,
-        opacity: 255,
-        fill: 255,
-        lock: LockFlags::default(),
-        color: ColorLabel::None,
-        clipping: false,
-        visible: true,
-        mask: None,
-        adjustment: None,
-        channels: vec![
-            Channel {
-                id: 0,
-                data: vec![r; n].into(),
+    {
+        let _ = doc.layers.push(Layer {
+            name: "px".into(),
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: h as i32,
+                right: w as i32,
             },
-            Channel {
-                id: 1,
-                data: vec![g; n].into(),
-            },
-            Channel {
-                id: 2,
-                data: vec![b; n].into(),
-            },
-            Channel {
-                id: -1,
-                data: vec![a; n].into(),
-            },
-        ],
-        children: Vec::new(),
-        is_group: false,
-        background: false,
-        ..Default::default()
-    });
+            blend: BlendMode::Normal,
+            opacity: 255,
+            fill: 255,
+            lock: LockFlags::default(),
+            color: ColorLabel::None,
+            clipping: false,
+            visible: true,
+            mask: None,
+            adjustment: None,
+            channels: vec![
+                Channel {
+                    id: 0,
+                    data: vec![r; n].into(),
+                },
+                Channel {
+                    id: 1,
+                    data: vec![g; n].into(),
+                },
+                Channel {
+                    id: 2,
+                    data: vec![b; n].into(),
+                },
+                Channel {
+                    id: -1,
+                    data: vec![a; n].into(),
+                },
+            ],
+            children: pictura_core::LayerStack::default(),
+            is_group: false,
+            background: false,
+            ..Default::default()
+        });
+    };
     doc
 }
 
@@ -444,29 +446,31 @@ fn empty_samples_leave_document_unchanged() {
 #[test]
 fn group_only_document_has_no_raster_layer() {
     let mut doc = Document::new(16, 16, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers.push(Layer {
-        name: "group".into(),
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 16,
-            right: 16,
-        },
-        blend: BlendMode::Normal,
-        opacity: 255,
-        fill: 255,
-        lock: LockFlags::default(),
-        color: ColorLabel::None,
-        clipping: false,
-        visible: true,
-        mask: None,
-        adjustment: None,
-        channels: Vec::new(),
-        children: Vec::new(),
-        is_group: true,
-        background: false,
-        ..Default::default()
-    });
+    {
+        let _ = doc.layers.push(Layer {
+            name: "group".into(),
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 16,
+                right: 16,
+            },
+            blend: BlendMode::Normal,
+            opacity: 255,
+            fill: 255,
+            lock: LockFlags::default(),
+            color: ColorLabel::None,
+            clipping: false,
+            visible: true,
+            mask: None,
+            adjustment: None,
+            channels: Vec::new(),
+            children: pictura_core::LayerStack::default(),
+            is_group: true,
+            background: false,
+            ..Default::default()
+        });
+    };
     assert!(matches!(
         Stroke::begin_at(&doc, "0", StrokeConfig::default()),
         Err(PaintError::NoRasterLayer)
@@ -646,30 +650,32 @@ fn offset_layer_doc(w: u32, h: u32, rect: PsdRect, rgba: (u8, u8, u8, u8)) -> Do
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
     let n = (rect.width() * rect.height()) as usize;
     let (r, g, b, a) = rgba;
-    doc.layers.push(Layer {
-        name: "px".into(),
-        rect,
-        blend: BlendMode::Normal,
-        channels: vec![
-            Channel {
-                id: 0,
-                data: vec![r; n].into(),
-            },
-            Channel {
-                id: 1,
-                data: vec![g; n].into(),
-            },
-            Channel {
-                id: 2,
-                data: vec![b; n].into(),
-            },
-            Channel {
-                id: -1,
-                data: vec![a; n].into(),
-            },
-        ],
-        ..Default::default()
-    });
+    {
+        let _ = doc.layers.push(Layer {
+            name: "px".into(),
+            rect,
+            blend: BlendMode::Normal,
+            channels: vec![
+                Channel {
+                    id: 0,
+                    data: vec![r; n].into(),
+                },
+                Channel {
+                    id: 1,
+                    data: vec![g; n].into(),
+                },
+                Channel {
+                    id: 2,
+                    data: vec![b; n].into(),
+                },
+                Channel {
+                    id: -1,
+                    data: vec![a; n].into(),
+                },
+            ],
+            ..Default::default()
+        });
+    };
     doc
 }
 

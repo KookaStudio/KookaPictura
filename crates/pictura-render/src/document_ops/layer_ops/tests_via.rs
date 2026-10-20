@@ -91,7 +91,7 @@ fn layer_via_cut_clears_full_and_scales_partial_coverage() {
 #[test]
 fn layer_via_copy_lands_above_the_source_inside_its_group() {
     let mut group = empty_group("Group 1");
-    group.children.push(pixel_layer("child", 4, 4, 40));
+    let _ = group.children.push(pixel_layer("child", 4, 4, 40));
     let mut doc = doc_with(vec![group]);
 
     let path = layer_via_copy(&mut doc, "0/0", &selection_mask(vec![255; 16]));
@@ -118,7 +118,7 @@ fn layer_via_refuses_missing_group_and_empty_mask() {
     assert_eq!(doc, before);
 
     let mut group = empty_group("Group 1");
-    group.children.push(pixel_layer("child", 4, 4, 1));
+    let _ = group.children.push(pixel_layer("child", 4, 4, 1));
     let mut doc = doc_with(vec![group]);
     let before = doc.clone();
     assert!(layer_via_copy(&mut doc, "0", &selection_mask(vec![255; 16])).is_empty());

@@ -272,9 +272,9 @@ mod tests {
         };
 
         let mut plain = Document::new(2, 1, ColorMode::Rgb, BitDepth::Eight);
-        plain.layers = vec![base.clone()];
+        plain.layers = pictura_core::LayerStack::from_layers(vec![base.clone()]);
         let mut adjusted = Document::new(2, 1, ColorMode::Rgb, BitDepth::Eight);
-        adjusted.layers = vec![base, adjustment];
+        adjusted.layers = pictura_core::LayerStack::from_layers(vec![base, adjustment]);
 
         assert_ne!(
             crate::composite_rgba(&adjusted).data,

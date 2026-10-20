@@ -518,21 +518,23 @@ fn short_high_depth_lab_cmyk_source_plane_is_a_typed_error() {
             height: 2,
             samples: Samples::from_bytes(&[0u8; 48], bits),
         });
-        doc.layers.push(Layer {
-            rect,
-            channels: (0i16..3)
-                .map(|id| Channel {
-                    id,
-                    data: vec![1].into(),
-                })
-                .collect(),
-            source_channels: Some(SourceChannels::new(
-                bits,
+        {
+            let _ = doc.layers.push(Layer {
                 rect,
-                vec![(0, Samples::from_bytes(&vec![0u8; native_len], bits))],
-            )),
-            ..Default::default()
-        });
+                channels: (0i16..3)
+                    .map(|id| Channel {
+                        id,
+                        data: vec![1].into(),
+                    })
+                    .collect(),
+                source_channels: Some(SourceChannels::new(
+                    bits,
+                    rect,
+                    vec![(0, Samples::from_bytes(&vec![0u8; native_len], bits))],
+                )),
+                ..Default::default()
+            });
+        };
         assert!(
             matches!(write_psd(&doc), Err(PsdError::Invalid(_))),
             "{mode:?}: a short native plane is a typed error, not a panic"
@@ -628,15 +630,17 @@ fn short_high_depth_layer_plane_is_a_typed_error() {
         height: 2,
         samples: Samples::U16(vec![0; 12]),
     });
-    doc.layers.push(Layer {
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 2,
-            right: 2,
-        },
-        ..Default::default()
-    });
+    {
+        let _ = doc.layers.push(Layer {
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 2,
+                right: 2,
+            },
+            ..Default::default()
+        });
+    };
 
     // A modeled color channel with a one-byte plane.
     doc.layers[0].channels = vec![Channel {

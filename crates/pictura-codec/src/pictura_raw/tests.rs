@@ -259,7 +259,7 @@ fn attach_authors_then_write_read_round_trips() {
         pictura_core::ColorMode::Rgb,
         pictura_core::BitDepth::Eight,
     );
-    doc.layers = vec![layer];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
     let bytes = crate::write_psd(&doc).expect("writes");
     let back = crate::read_psd(&bytes).expect("re-reads");
     let filter = &back.layers[0]
@@ -327,7 +327,7 @@ fn attach_inserts_into_a_preserved_sold_and_preserves_other_keys() {
             pictura_core::ColorMode::Rgb,
             pictura_core::BitDepth::Eight,
         );
-        doc.layers = vec![layer];
+        doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         doc
     })
     .expect("writes");
@@ -463,7 +463,7 @@ fn reattach_a_generic_filter_replaces_only_its_own_entry() {
             pictura_core::ColorMode::Rgb,
             pictura_core::BitDepth::Eight,
         );
-        doc.layers = vec![layer];
+        doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         doc
     };
     let back = crate::read_psd(&crate::write_psd(&doc).expect("writes")).expect("re-reads");

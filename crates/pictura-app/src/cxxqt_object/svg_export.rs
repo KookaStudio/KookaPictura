@@ -88,7 +88,8 @@ mod tests {
     #[test]
     fn a_raster_document_serializes_to_one_image() {
         let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = vec![pixel_layer("bg", 2, 2, (10, 20, 30))];
+        doc.layers =
+            pictura_core::LayerStack::from_layers(vec![pixel_layer("bg", 2, 2, (10, 20, 30))]);
         let svg = svg_for_document(&doc, false);
         assert!(svg.starts_with("<svg "), "{svg}");
         assert!(svg.contains("viewBox=\"0 0 2 2\""), "{svg}");
@@ -109,7 +110,7 @@ mod tests {
         let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
         let mut hidden = pixel_layer("hidden", 2, 2, (1, 2, 3));
         hidden.visible = false;
-        doc.layers = vec![hidden];
+        doc.layers = pictura_core::LayerStack::from_layers(vec![hidden]);
         assert!(!svg_for_document(&doc, false).contains("<image "));
     }
 }

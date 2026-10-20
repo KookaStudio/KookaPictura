@@ -220,7 +220,7 @@ fn editing_payload(
                 }
             }
         }
-        payload.layers.clear();
+        payload.layers = pictura_core::LayerStack::default();
         payload.global_layer_mask.clear();
         payload.layer_section_extra.clear();
         payload.merged_composite_present = true;

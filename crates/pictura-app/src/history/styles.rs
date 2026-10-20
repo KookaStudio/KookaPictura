@@ -1,4 +1,6 @@
-use pictura_core::{CharacterOverrides, Document, Layer, ParagraphOverrides, StyleError};
+use pictura_core::{
+    CharacterOverrides, Document, Layer, LayerStack, ParagraphOverrides, StyleError,
+};
 
 /// Create a named character style. No history; the caller records one state.
 pub fn create_character_style(
@@ -111,7 +113,7 @@ fn styled_layer_paths(
     }
 }
 
-fn clear_applied(layers: &mut [Layer], name: &str, paragraph: bool) {
+fn clear_applied(layers: &mut LayerStack, name: &str, paragraph: bool) {
     for layer in layers {
         if layer.is_group {
             clear_applied(&mut layer.children, name, paragraph);

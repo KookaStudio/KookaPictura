@@ -13,10 +13,10 @@ use pictura_select::Selection;
 #[ignore = "4000x4000 region profile; run explicitly with --ignored --nocapture"]
 fn region_refresh_profile_4000() {
     let mut doc = Document::new(4000, 4000, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
         pixel_layer("base", 4000, 4000, (30, 60, 90)),
         pixel_layer("top", 4000, 4000, (200, 100, 50)),
-    ];
+    ]);
     let (_, backend) = pictura_render::composite_active(&doc, true);
     for side in [512u32, 1024u32] {
         let rect = PsdRect {
@@ -56,10 +56,10 @@ fn paint_dab_profile_4000() {
     use pictura_paint::{spacing::SpacingMode, Stroke, StrokeConfig, StrokeSample};
 
     let mut doc = Document::new(4000, 4000, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
         pixel_layer("base", 4000, 4000, (30, 60, 90)),
         pixel_layer("top", 4000, 4000, (200, 100, 50)),
-    ];
+    ]);
     // Prime the GPU adapter and allocator once, untimed, so the GPU comparison
     // below measures the per-call round-trip rather than first-call setup.
     let (_, prime_backend) = pictura_render::composite_active(&doc, true);
@@ -150,7 +150,10 @@ fn visibility_region_profile_4000() {
         right: 2100,
     };
     let mut doc = Document::new(4000, 4000, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![pixel_layer("base", 4000, 4000, (30, 60, 90)), small];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
+        pixel_layer("base", 4000, 4000, (30, 60, 90)),
+        small,
+    ]);
     let rendered = current_buffer(&doc, false);
     store_composite(&mut doc, &rendered);
 
@@ -643,7 +646,10 @@ fn filter_confines_to_selection_and_skips_adjustment_layer() {
         ch.data = (0..8).map(|x| if x < 4 { 40u8 } else { 200 }).collect();
     }
     // A topmost adjustment must be skipped in favour of the pixel layer.
-    doc.layers = vec![base, adjustment_layer("invert", None).expect("known kind")];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
+        base,
+        adjustment_layer("invert", None).expect("known kind"),
+    ]);
 
     let selection = Selection {
         width: 8,
@@ -710,7 +716,7 @@ fn parse_anchor_maps_known_and_rejects_unknown() {
 #[test]
 fn document_ops_wire_parsed_values_and_reject_invalid_params() {
     let mut doc = Document::new(2, 1, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![pixel_layer("base", 2, 1, (0, 0, 0))];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pixel_layer("base", 2, 1, (0, 0, 0))]);
     doc.layers[0].channels = vec![
         Channel {
             id: 0,
@@ -775,10 +781,10 @@ fn document_ops_wire_parsed_values_and_reject_invalid_params() {
 #[test]
 fn composite_rgba_timing_1024() {
     let mut doc = Document::new(1024, 1024, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
         pixel_layer("base", 1024, 1024, (30, 60, 90)),
         pixel_layer("top", 1024, 1024, (200, 100, 50)),
-    ];
+    ]);
     let _ = pictura_render::composite_rgba(&doc);
     const ITERS: u32 = 5;
     let start = std::time::Instant::now();
@@ -807,10 +813,10 @@ fn move_profile(n: u32) {
 
     let mut doc = Document::new(n, n, ColorMode::Rgb, BitDepth::Eight);
     doc.composite.data.fill(255);
-    doc.layers = vec![
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
         pixel_layer("base", n, n, (255, 255, 255)),
         pixel_layer("top", n, n, (200, 100, 50)),
-    ];
+    ]);
 
     // Prime the GPU adapter OnceLock and the allocator once, untimed.
     let (_, backend) = pictura_render::composite_active(&doc, true);
@@ -930,10 +936,10 @@ fn move_profile(n: u32) {
     // begin_move_preview with the moved layer covering only a sub-rectangle.
     let mut partial = Document::new(n, n, ColorMode::Rgb, BitDepth::Eight);
     partial.composite.data.fill(255);
-    partial.layers = vec![
+    partial.layers = pictura_core::LayerStack::from_layers(vec![
         pixel_layer("base", n, n, (255, 255, 255)),
         pixel_layer("top", 512, 512, (200, 100, 50)),
-    ];
+    ]);
     let rendered = current_buffer(&partial, true);
     store_composite(&mut partial, &rendered);
     let mut partial_preview = partial.clone();
@@ -1036,10 +1042,10 @@ fn undo_profile_4000() {
     };
 
     let mut doc = Document::new(4000, 4000, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
         pixel_layer("base", 4000, 4000, (30, 60, 90)),
         pixel_layer("top", 4000, 4000, (200, 100, 50)),
-    ];
+    ]);
 
     // Prime the GPU adapter and allocator once, untimed.
     let (_, backend) = pictura_render::composite_active(&doc, true);
@@ -1080,7 +1086,8 @@ fn undo_profile_4000() {
 fn convert_profile_is_byte_reversible_through_history() {
     let mut doc = Document::new(2, 1, ColorMode::Rgb, BitDepth::Eight);
     doc.composite.data = vec![200, 10, 100, 20, 50, 30].into();
-    doc.layers = vec![pixel_layer("base", 2, 1, (200, 100, 50))];
+    doc.layers =
+        pictura_core::LayerStack::from_layers(vec![pixel_layer("base", 2, 1, (200, 100, 50))]);
     let original = doc.clone();
     let mut history = History::default();
     history.capture(
@@ -1128,7 +1135,8 @@ fn convert_profile_is_byte_reversible_through_history() {
 fn assign_profile_retags_and_is_reversible_through_history() {
     let mut doc = Document::new(2, 1, ColorMode::Rgb, BitDepth::Eight);
     doc.composite.data = vec![200, 10, 100, 20, 50, 30].into();
-    doc.layers = vec![pixel_layer("base", 2, 1, (200, 100, 50))];
+    doc.layers =
+        pictura_core::LayerStack::from_layers(vec![pixel_layer("base", 2, 1, (200, 100, 50))]);
     let original = doc.clone();
     let mut history = History::default();
     history.capture(
@@ -1178,7 +1186,8 @@ fn assign_profile_retags_and_is_reversible_through_history() {
 fn open_first_frame_converts_the_document_profile() {
     let mut doc = Document::new(2, 1, ColorMode::Rgb, BitDepth::Eight);
     doc.composite.data = vec![200, 10, 100, 20, 50, 30].into();
-    doc.layers = vec![pixel_layer("base", 2, 1, (200, 100, 50))];
+    doc.layers =
+        pictura_core::LayerStack::from_layers(vec![pixel_layer("base", 2, 1, (200, 100, 50))]);
     doc.document_icc = Some(pictura_codec::Profile::adobe_rgb().to_icc());
 
     let rendered = current_buffer(&doc, false);

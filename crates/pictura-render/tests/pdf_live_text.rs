@@ -266,7 +266,7 @@ fn pdf_covered_type_stays_in_image() {
     let mut doc = type_doc();
     let mut cover = doc.layers[0].clone();
     cover.name = "cover".into();
-    doc.layers.push(cover);
+    let _ = doc.layers.push(cover);
     doc.composite = pictura_render::composite_rgba(&doc);
     let (pdf, background) = write_live(&doc, &options());
     assert!(background.is_none());

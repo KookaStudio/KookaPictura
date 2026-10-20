@@ -328,7 +328,7 @@ mod tests {
     #[test]
     fn align_skips_groups_and_dedupes_paths() {
         let mut d = squares(&[(10, 40, 20)]);
-        d.layers.push(super::super::create::empty_group("Group"));
+        let _ = d.layers.push(super::super::create::empty_group("Group"));
         assert!(!can_align(&d, &["0", "0", "1"], None));
     }
 

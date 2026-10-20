@@ -76,7 +76,7 @@ fn layer(name: &str, interleaved: &[u8], with_alpha: bool) -> Layer {
         mask: None,
         adjustment: None,
         channels,
-        children: Vec::new(),
+        children: pictura_core::LayerStack::default(),
         is_group: false,
         background: false,
         ..Default::default()
@@ -89,7 +89,10 @@ fn merged_alpha_pair() -> Vec<u8> {
     let src = std::fs::read(fixtures_dir().join("alpha_src.rgba")).expect("alpha_src fixture");
 
     let mut doc = Document::new(SIZE, SIZE, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![layer("base", &base, false), layer("src", &src, true)];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
+        layer("base", &base, false),
+        layer("src", &src, true),
+    ]);
 
     merge_scope(&mut doc, MergeScope::Down("1")).expect("merge down");
     let node = &doc.layers[0];

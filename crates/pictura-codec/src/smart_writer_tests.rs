@@ -67,7 +67,7 @@ fn doc_with(layers: Vec<Layer>) -> Document {
     for (i, b) in doc.composite.data.iter_mut().enumerate() {
         *b = (i * 7 + 3) as u8;
     }
-    doc.layers = layers;
+    doc.layers = pictura_core::LayerStack::from_layers(layers);
     doc
 }
 

@@ -190,7 +190,7 @@ fn link_with_layer_false_anchors_at_document_origin() {
     let mut doc = pattern_fixture_doc();
     let mut layer = doc.layers[1].clone();
     layer.rect = rect(1, 1, 8, 8); // top, left, bottom, right: a (1,1) offset
-    doc.layers = vec![layer];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
     resolve_path_mut(&mut doc, "0").unwrap().adjustment =
         Some(ptfl(&params("pictura-pattern", 100.0, false, (0, 0))));
 
@@ -206,7 +206,7 @@ fn link_with_layer_true_anchors_at_layer_rect() {
     let mut doc = pattern_fixture_doc();
     let mut layer = doc.layers[1].clone();
     layer.rect = rect(1, 1, 8, 8); // top, left, bottom, right: a (1,1) offset
-    doc.layers = vec![layer];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
     resolve_path_mut(&mut doc, "0").unwrap().adjustment =
         Some(ptfl(&params("pictura-pattern", 100.0, true, (0, 0))));
 

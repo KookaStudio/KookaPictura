@@ -72,7 +72,7 @@ struct Found<'d> {
 impl Found<'_> {
     /// Take qualifying type layers from the top of `layers` down, hiding each;
     /// false once something else covers what lies below.
-    fn walk(&mut self, layers: &mut [Layer]) -> bool {
+    fn walk(&mut self, layers: &mut pictura_core::LayerStack) -> bool {
         for layer in layers.iter_mut().rev() {
             if !layer.visible || layer.opacity == 0 {
                 continue;

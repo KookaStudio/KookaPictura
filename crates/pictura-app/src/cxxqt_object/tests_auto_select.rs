@@ -19,10 +19,10 @@ fn placed(mut layer: Layer, left: i32, top: i32) -> Layer {
 #[test]
 fn auto_select_picks_the_topmost_covering_layer() {
     let mut doc = Document::new(6, 4, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
         pixel_layer("bottom", 6, 4, (255, 0, 0)),
         placed(pixel_layer("top", 2, 2, (0, 255, 0)), 1, 1),
-    ];
+    ]);
 
     assert_eq!(
         auto_select_path(&doc, 1, 1, false, None),
@@ -51,13 +51,13 @@ fn auto_select_skips_hidden_transparent_and_adjustment_layers() {
         key: *b"inv ",
         data: Vec::new(),
     });
-    doc.layers = vec![
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
         pixel_layer("bottom", 4, 4, (255, 0, 0)),
         hidden,
         faded,
         clear,
         adjustment,
-    ];
+    ]);
 
     assert_eq!(
         auto_select_path(&doc, 0, 0, false, None),
@@ -71,10 +71,17 @@ fn auto_select_group_resolves_the_top_level_ancestor() {
     let group = Layer {
         name: "group".into(),
         is_group: true,
-        children: vec![placed(pixel_layer("inner", 2, 2, (0, 255, 0)), 0, 0)],
+        children: pictura_core::LayerStack::from_layers(vec![placed(
+            pixel_layer("inner", 2, 2, (0, 255, 0)),
+            0,
+            0,
+        )]),
         ..Default::default()
     };
-    doc.layers = vec![pixel_layer("bottom", 4, 4, (255, 0, 0)), group];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
+        pixel_layer("bottom", 4, 4, (255, 0, 0)),
+        group,
+    ]);
 
     assert_eq!(
         auto_select_path(&doc, 1, 1, false, None),
@@ -97,10 +104,10 @@ fn auto_select_group_resolves_the_top_level_ancestor() {
 #[test]
 fn auto_select_isolation_scopes_the_hit() {
     let mut doc = Document::new(6, 4, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
         pixel_layer("bottom", 6, 4, (255, 0, 0)),
         placed(pixel_layer("top", 2, 2, (0, 255, 0)), 1, 1),
-    ];
+    ]);
     let only_bottom = vec!["0".to_string()];
     let only_top = vec!["1".to_string()];
 
@@ -123,10 +130,17 @@ fn auto_select_isolation_reaches_a_group_descendant() {
     let group = Layer {
         name: "group".into(),
         is_group: true,
-        children: vec![placed(pixel_layer("inner", 2, 2, (0, 255, 0)), 0, 0)],
+        children: pictura_core::LayerStack::from_layers(vec![placed(
+            pixel_layer("inner", 2, 2, (0, 255, 0)),
+            0,
+            0,
+        )]),
         ..Default::default()
     };
-    doc.layers = vec![pixel_layer("bottom", 4, 4, (255, 0, 0)), group];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
+        pixel_layer("bottom", 4, 4, (255, 0, 0)),
+        group,
+    ]);
     let group_set = vec!["1".to_string()];
     let child_set = vec!["1/0".to_string()];
 
@@ -159,12 +173,12 @@ fn layers_under_point_lists_hits_topmost_first_skipping_non_hits() {
     hidden.visible = false;
     let mut faded = placed(pixel_layer("faded", 6, 4, (0, 0, 255)), 0, 0);
     faded.opacity = 0;
-    doc.layers = vec![
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
         pixel_layer("bottom", 6, 4, (255, 0, 0)),
         hidden,
         faded,
         placed(pixel_layer("top", 2, 2, (0, 255, 0)), 1, 1),
-    ];
+    ]);
 
     // (1,1): the top layer (index 3) and the bottom (index 0) both cover it,
     // topmost first; the hidden and zero-opacity layers are skipped.

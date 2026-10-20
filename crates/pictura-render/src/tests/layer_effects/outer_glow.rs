@@ -625,7 +625,7 @@ fn pattern_fill_glow_is_confined_to_the_fill() {
         BlendMode::Normal,
         255,
     );
-    d.layers = vec![backdrop, layer];
+    d.layers = pictura_core::LayerStack::from_layers(vec![backdrop, layer]);
     let out = composite_rgba(&d);
     let near = rgb(&out, 2, 4);
     assert_ne!(near, [255, 255, 255], "the glow is near the fill: {near:?}");

@@ -36,7 +36,7 @@ fn overlay_layer(block: Option<LayerBlock>) -> Layer {
 
 fn compose_pattern(overlaid: Layer) -> PixelBuffer {
     let mut d = pattern_fixture_doc();
-    d.layers = vec![
+    d.layers = pictura_core::LayerStack::from_layers(vec![
         solid(
             "Backdrop",
             full(8, 8),
@@ -46,7 +46,7 @@ fn compose_pattern(overlaid: Layer) -> PixelBuffer {
             255,
         ),
         overlaid,
-    ];
+    ]);
     composite_rgba(&d)
 }
 
@@ -393,7 +393,7 @@ fn small_pattern_overlay_layer_on_a_larger_canvas_is_bounded() {
         if !effect {
             layer.extra_blocks.clear();
         }
-        d.layers = vec![
+        d.layers = pictura_core::LayerStack::from_layers(vec![
             solid(
                 "Backdrop",
                 full(32, 32),
@@ -403,7 +403,7 @@ fn small_pattern_overlay_layer_on_a_larger_canvas_is_bounded() {
                 255,
             ),
             layer,
-        ];
+        ]);
         composite_rgba(&d)
     };
     let with = build(spec_layer(&PatternSpec::default()), true);
@@ -423,7 +423,7 @@ fn small_pattern_overlay_layer_on_a_larger_canvas_is_bounded() {
 #[test]
 fn gpu_rejects_a_pattern_overlay_layer_and_falls_back() {
     let mut d = pattern_fixture_doc();
-    d.layers = vec![
+    d.layers = pictura_core::LayerStack::from_layers(vec![
         solid(
             "Backdrop",
             full(8, 8),
@@ -433,7 +433,7 @@ fn gpu_rejects_a_pattern_overlay_layer_and_falls_back() {
             255,
         ),
         spec_layer(&PatternSpec::default()),
-    ];
+    ]);
     assert!(
         matches!(composite_gpu(&d), Err(GpuError::UnsupportedLayerEffect)),
         "check_supported rejects before dispatch"

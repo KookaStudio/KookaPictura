@@ -3,14 +3,16 @@ use super::*;
 #[test]
 fn appends_topmost_native_size_layer() {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers.push(solid(
-        "base",
-        full(4, 4),
-        (0, 0, 0),
-        255,
-        BlendMode::Normal,
-        255,
-    ));
+    {
+        let _ = doc.layers.push(solid(
+            "base",
+            full(4, 4),
+            (0, 0, 0),
+            255,
+            BlendMode::Normal,
+            255,
+        ));
+    };
     let rgba: Vec<u8> = vec![
         10, 20, 30, 255, 40, 50, 60, 128, 70, 80, 90, 255, 100, 110, 120, 255,
     ];

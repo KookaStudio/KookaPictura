@@ -104,7 +104,7 @@ fn advanced_blending_non_defaults_round_trip_and_defaults_omit_keys() {
     layer.knockout = Knockout::Deep;
     layer.blend_clipping = false;
     layer.blend_interior = false;
-    doc.layers = vec![layer];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
 
     let bytes = write_psd(&doc).unwrap();
     assert!(has_key(&bytes, b"knko"));
@@ -117,7 +117,13 @@ fn advanced_blending_non_defaults_round_trip_and_defaults_omit_keys() {
     assert_eq!(back, doc);
 
     let mut defaults = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-    defaults.layers = vec![pixel("Plain", rect(0, 0, 2, 2), 3, BlendMode::Normal, 255)];
+    defaults.layers = pictura_core::LayerStack::from_layers(vec![pixel(
+        "Plain",
+        rect(0, 0, 2, 2),
+        3,
+        BlendMode::Normal,
+        255,
+    )]);
     let plain = write_psd(&defaults).unwrap();
     for key in [b"knko", b"clbl", b"infx"] {
         assert!(!has_key(&plain, key), "{key:?} omitted at default");

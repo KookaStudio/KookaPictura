@@ -37,12 +37,12 @@ fn groups_and_masks_match_cpu() {
         ..Default::default()
     });
     let mut doc = Document::new(SIZE, SIZE, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![base_layer(), masked];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![base_layer(), masked]);
     check_scene_parity(&doc, &mut max_delta);
 
     // Isolated group (packed inner canvas source) over the backdrop.
     let mut doc = Document::new(SIZE, SIZE, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
         base_layer(),
         group(
             "iso",
@@ -52,7 +52,7 @@ fn groups_and_masks_match_cpu() {
                 (255 - x as u8 * 20, 40 + y as u8 * 20, x as u8 * 32, 255)
             })],
         ),
-    ];
+    ]);
     check_scene_parity(&doc, &mut max_delta);
 
     // Adjustment layer gated by a mask.
@@ -75,7 +75,7 @@ fn groups_and_masks_match_cpu() {
         ..Default::default()
     });
     let mut doc = Document::new(SIZE, SIZE, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![base_layer(), adj];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![base_layer(), adj]);
     check_scene_parity(&doc, &mut max_delta);
 
     // Pixel layer clipped by a document-relative vector mask (per-pixel plane).
@@ -95,7 +95,7 @@ fn groups_and_masks_match_cpu() {
         ..Default::default()
     });
     let mut doc = Document::new(SIZE, SIZE, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![base_layer(), shaped];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![base_layer(), shaped]);
     check_scene_parity(&doc, &mut max_delta);
 
     eprintln!("group/mask parity: max delta {max_delta} LSB");
@@ -111,7 +111,7 @@ fn fill_scene_matches_cpu() {
     top.opacity = 180;
     top.fill = 96;
     let mut doc = Document::new(SIZE, SIZE, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![base_layer(), top];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![base_layer(), top]);
 
     let mut max_delta = 0i32;
     check_scene_parity(&doc, &mut max_delta);
@@ -145,7 +145,10 @@ fn adjustment_layers_match_cpu() {
     let mut max_delta = 0i32;
     for (name, data) in cases {
         let mut doc = Document::new(SIZE, SIZE, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = vec![base_layer(), adjustment_layer(name, data.clone())];
+        doc.layers = pictura_core::LayerStack::from_layers(vec![
+            base_layer(),
+            adjustment_layer(name, data.clone()),
+        ]);
         let cpu = composite_rgba(&doc);
         let gpu = match composite_gpu(&doc) {
             Ok(buf) => buf,
@@ -189,7 +192,10 @@ fn unsupported_adjustment_falls_back_or_errors() {
     ];
     for data in cases {
         let mut doc = Document::new(SIZE, SIZE, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = vec![base_layer(), adjustment_layer("unsupported", data)];
+        doc.layers = pictura_core::LayerStack::from_layers(vec![
+            base_layer(),
+            adjustment_layer("unsupported", data),
+        ]);
         assert!(
             matches!(composite_gpu(&doc), Err(GpuError::UnsupportedAdjustment)),
             "expected UnsupportedAdjustment"

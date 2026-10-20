@@ -97,7 +97,7 @@ mod tests {
 
     fn smart_doc() -> Document {
         let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = vec![raster_layer()];
+        doc.layers = pictura_core::LayerStack::from_layers(vec![raster_layer()]);
         assert!(crate::convert_to_smart_object(&mut doc, "0"));
         doc
     }
@@ -138,7 +138,7 @@ mod tests {
     #[test]
     fn ops_refuse_a_non_smart_layer() {
         let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = vec![raster_layer()];
+        doc.layers = pictura_core::LayerStack::from_layers(vec![raster_layer()]);
         assert!(!add_smart_filter(&mut doc, "0", 2683, "x", &[]));
         assert!(!delete_smart_filter(&mut doc, "0", 0));
         assert!(!reorder_smart_filters(&mut doc, "0", 0, 1));

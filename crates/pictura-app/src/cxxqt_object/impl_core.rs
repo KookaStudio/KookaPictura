@@ -165,29 +165,31 @@ impl qobject::PictureView {
             id: -1,
             data: vec![fill; pixels].into(),
         });
-        doc.layers.push(Layer {
-            name: "Layer 0".to_string(),
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: height,
-                right: width,
-            },
-            blend: BlendMode::Normal,
-            opacity: 255,
-            fill: 255,
-            lock: LockFlags::default(),
-            color: ColorLabel::None,
-            clipping: false,
-            visible: true,
-            mask: None,
-            adjustment: None,
-            channels,
-            children: Vec::new(),
-            is_group: false,
-            background: false,
-            ..Default::default()
-        });
+        {
+            let _ = doc.layers.push(Layer {
+                name: "Layer 0".to_string(),
+                rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: height,
+                    right: width,
+                },
+                blend: BlendMode::Normal,
+                opacity: 255,
+                fill: 255,
+                lock: LockFlags::default(),
+                color: ColorLabel::None,
+                clipping: false,
+                visible: true,
+                mask: None,
+                adjustment: None,
+                channels,
+                children: pictura_core::LayerStack::default(),
+                is_group: false,
+                background: false,
+                ..Default::default()
+            });
+        };
         let gpu_compute = self.rust().gpu_compute;
         let rendered = current_buffer(&doc, gpu_compute);
         store_composite(&mut doc, &rendered);

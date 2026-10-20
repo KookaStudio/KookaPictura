@@ -30,7 +30,7 @@ impl qobject::PictureView {
         let region = layer_visibility_region(&layer);
         let pushed = match self.as_mut().rust_mut().doc.as_mut() {
             Some(doc) => {
-                doc.layers.push(layer);
+                let _ = doc.layers.push(layer);
                 true
             }
             None => false,
@@ -596,7 +596,7 @@ mod tests {
                 .map(|i| if i % 16 < 8 { 40u8 } else { 200 })
                 .collect();
         }
-        doc.layers = vec![layer];
+        doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         PictureViewRust {
             doc: Some(doc),
             active_layer: Some("0".to_string()),
@@ -635,7 +635,7 @@ mod tests {
                 .collect();
             ch.data = plane.into();
         }
-        doc.layers = vec![layer];
+        doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         PictureViewRust {
             doc: Some(doc),
             active_layer: Some("0".to_string()),
@@ -684,7 +684,9 @@ mod tests {
         let pixel_before = red(&rust);
         // An adjustment layer (no pixels) as the sole active target.
         let adj = adjustment_layer("invert", None).expect("adjustment");
-        rust.doc.as_mut().unwrap().layers.push(adj);
+        {
+            let _ = rust.doc.as_mut().unwrap().layers.push(adj);
+        };
         rust.active_layer = Some("1".to_string());
         assert!(apply_filter_active(&mut rust, "gaussian-blur", &[2.0], true).is_none());
         assert_eq!(red(&rust), pixel_before, "pixel layer untouched");
@@ -694,7 +696,8 @@ mod tests {
     #[test]
     fn preview_on_another_layer_is_refused_and_keeps_baseline() {
         let mut rust = state();
-        rust.doc
+        let _ = rust
+            .doc
             .as_mut()
             .unwrap()
             .layers

@@ -21,10 +21,10 @@ fn large_document_over_1d_limit_composites_on_gpu() {
     const W: u32 = 4096;
     const H: u32 = 2048;
     let mut doc = Document::new(W, H, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
         large_layer(W, H, 0, BlendMode::Normal),
         large_layer(W, H, 1, BlendMode::Multiply),
-    ];
+    ]);
     if !gpu_available() {
         eprintln!("no usable Vulkan GPU; skipping large-document parity");
         return;
@@ -57,11 +57,11 @@ fn full_4000_document_composites_on_gpu() {
     }
     const N: u32 = 4000;
     let mut doc = Document::new(N, N, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
         large_layer(N, N, 0, BlendMode::Normal),
         large_layer(N, N, 1, BlendMode::Screen),
         large_layer(N, N, 2, BlendMode::Overlay),
-    ];
+    ]);
     if !gpu_available() {
         eprintln!("no usable Vulkan GPU; skipping 4000² parity");
         return;
@@ -102,7 +102,7 @@ fn document_past_2d_product_limit_returns_too_large() {
         mode: ColorMode::Rgb,
         depth: BitDepth::Eight,
         composite: PixelBuffer::new(0, 0, 3),
-        layers: Vec::new(),
+        layers: pictura_core::LayerStack::default(),
         channels: Vec::new(),
         ..Default::default()
     };
@@ -125,11 +125,13 @@ fn gpu_vs_cpu_timing_1024() {
         BlendMode::Overlay,
     ];
     let mut doc = Document::new(N, N, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = modes
-        .iter()
-        .enumerate()
-        .map(|(i, &blend)| timing_layer(N, i as u32, blend))
-        .collect();
+    doc.layers = pictura_core::LayerStack::from_layers(
+        modes
+            .iter()
+            .enumerate()
+            .map(|(i, &blend)| timing_layer(N, i as u32, blend))
+            .collect(),
+    );
 
     let t = Instant::now();
     let _ = composite_rgba(&doc);

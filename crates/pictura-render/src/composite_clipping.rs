@@ -69,7 +69,7 @@ pub(crate) fn composite_siblings(
             blend_if: None,
             is_group: true,
             channels: Vec::new(),
-            children: Vec::new(),
+            children: pictura_core::LayerStack::default(),
             ..base.clone()
         };
         composite_canvas(canvas, &proxy, doc, &group);

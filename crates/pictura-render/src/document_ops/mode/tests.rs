@@ -149,12 +149,14 @@ fn indexed_flattens_a_layered_document_and_discards_hidden_layers() {
     let mut hidden = doc.layers[0].clone();
     hidden.name = "hidden".into();
     hidden.visible = false;
-    doc.layers.push(hidden);
-    doc.layers.push(Layer {
-        name: "group".into(),
-        is_group: true,
-        ..Default::default()
-    });
+    let _ = doc.layers.push(hidden);
+    {
+        let _ = doc.layers.push(Layer {
+            name: "group".into(),
+            is_group: true,
+            ..Default::default()
+        });
+    };
     convert_to_indexed(
         &mut doc,
         indexed_options(ColorReduction::Adaptive, Dither::None),

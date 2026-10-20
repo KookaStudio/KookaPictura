@@ -31,6 +31,8 @@ mod tests_clipboard;
 #[cfg(test)]
 mod tests_perspective_crop;
 #[cfg(test)]
+mod tests_stack;
+#[cfg(test)]
 mod tests_transfer;
 #[cfg(test)]
 mod tests_via;

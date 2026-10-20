@@ -447,7 +447,7 @@ mod tests {
             data: Some(vec![255u8; 64 * 32].into()),
             ..Default::default()
         });
-        doc.layers = vec![layer];
+        doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         let whole = PsdRect {
             top: 0,
             left: 0,
