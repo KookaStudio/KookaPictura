@@ -63,5 +63,5 @@ opt-level = 2
 [profile.test.package.pictura-testkit]
 opt-level = 2
 
-[profile.test.package.pictura-app]
+[profile.test.package.pictura_app]
 opt-level = 2

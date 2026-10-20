@@ -990,6 +990,22 @@ pub(crate) fn blend_pixel(
     let (dr, dg, db, da) = dst;
     match mode {
         PaintMode::Normal => Some(normal_pixel(dr, dg, db, da, s, a)),
+        PaintMode::Multiply => {
+            // W3C separable blending: the product shows in proportion to the
+            // backdrop's alpha, so a transparent pixel takes the plain colour.
+            let da_f = da as f32 / 255.0;
+            let m = |src: u8, dst: u8| {
+                let src = src as f32;
+                to_u8((1.0 - da_f) * src + da_f * src * dst as f32 / 255.0)
+            };
+            let product = Rgba {
+                r: m(s.r, dr),
+                g: m(s.g, dg),
+                b: m(s.b, db),
+                a: s.a,
+            };
+            Some(normal_pixel(dr, dg, db, da, &product, a))
+        }
         PaintMode::Dissolve => (roll < a).then_some((s.r, s.g, s.b, s.a)),
         PaintMode::Behind => (da != 255).then(|| behind_pixel(dr, dg, db, da, s, a)),
         PaintMode::Clear => {

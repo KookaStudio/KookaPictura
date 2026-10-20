@@ -271,13 +271,13 @@ void PicturaMainWindow::registerHandlers()
                 refresh();
             }
         });
-        registry_->setEnabledProvider(id, [this]() {
+        registry_->setEnabledProvider(id, [this, mode]() {
             PictureView* view = activeView();
             const QString path = (layersPanel_ && layersPanel_->selectedPaths().size() == 1)
                                      ? layersPanel_->currentPath()
                                      : QString();
             return view && view->has_document() && !path.isEmpty()
-                && view->layer_can_free_transform(path);
+                && layer_can_transform_mode(*view, path, mode);
         });
     }
 

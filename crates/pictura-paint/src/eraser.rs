@@ -97,6 +97,10 @@ pub fn begin_erase(
                 square: true,
                 opacity: 100,
                 flow: 100,
+                // A brush preset's grain or Wet Edges would leave the square
+                // partly opaque; Block always clears fully.
+                grain: 0,
+                wet_edges: false,
                 ..cfg
             }
         }
@@ -475,8 +479,12 @@ mod tests {
 
     #[test]
     fn block_erases_a_hard_square_at_full_strength() {
+        // Settings inherited from a pencil or wet-edged preset must not leak in.
         let cfg = StrokeConfig {
             opacity: 10,
+            flow: 50,
+            grain: 55,
+            wet_edges: true,
             ..StrokeConfig::default()
         };
         let mut out = doc(false);
@@ -492,6 +500,7 @@ mod tests {
         stroke.finish().unwrap();
         // The square's corner is erased; a round 16 px tip would miss it.
         assert_eq!(pixel(&out, 13, 3)[3], 0);
+        assert_eq!(pixel(&out, 20, 10)[3], 0);
         assert_eq!(pixel(&out, 11, 10)[3], 255);
     }
 

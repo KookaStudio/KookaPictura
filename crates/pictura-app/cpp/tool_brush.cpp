@@ -48,7 +48,8 @@ public:
             stroke_ = paint_api::beginBrush(*v, quint32(ctx.foreground().rgba()),
                                             quint32(ctx.background().rgba()), paintTip(*paint_),
                                             paint_->opacity(), paint_->flow(), paint_->mode(),
-                                            aliased_, paint_->autoErase());
+                                            aliased_ || paint_->aliased(),
+                                            paint_->autoErase());
         }
         if (!stroke_) {
             if (activePixelLocked(v)) {

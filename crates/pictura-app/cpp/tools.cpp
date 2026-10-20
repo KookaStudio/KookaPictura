@@ -22,6 +22,60 @@
 
 namespace pictura {
 
+namespace {
+
+// A Distort corner's guide snap: the adjusted point and the guides it landed
+// on. `ImageView::GuideLine` is the canvas's document-space guide.
+struct GuideSnap {
+    QPointF point;
+    QList<ImageView::GuideLine> lines;
+};
+
+// Snap `p` to the nearest visible vertical and horizontal guides within eight
+// screen pixels. ponytail: Distort snaps whenever guides are visible because
+// View > Snap / Snap To > Guides are still stubs; gate this on that state when
+// it exists.
+GuideSnap snapDistortCornerToGuides(const QPointF& p,
+                                    const QList<ImageView::GuideLine>& guides, double zoom)
+{
+    GuideSnap out;
+    out.point = p;
+    const double tolerance = 8.0 / (zoom > 1e-9 ? zoom : 1.0);
+    double bestVertical = tolerance;
+    double bestHorizontal = tolerance;
+    ImageView::GuideLine vertical;
+    ImageView::GuideLine horizontal;
+    bool haveVertical = false;
+    bool haveHorizontal = false;
+    for (const ImageView::GuideLine& guide : guides) {
+        const double distance =
+            std::abs((guide.vertical ? p.x() : p.y()) - guide.position);
+        if (distance > tolerance) {
+            continue;
+        }
+        if (guide.vertical && (!haveVertical || distance <= bestVertical)) {
+            bestVertical = distance;
+            vertical = guide;
+            haveVertical = true;
+        } else if (!guide.vertical && (!haveHorizontal || distance <= bestHorizontal)) {
+            bestHorizontal = distance;
+            horizontal = guide;
+            haveHorizontal = true;
+        }
+    }
+    if (haveVertical) {
+        out.point.setX(vertical.position);
+        out.lines.append(vertical);
+    }
+    if (haveHorizontal) {
+        out.point.setY(horizontal.position);
+        out.lines.append(horizontal);
+    }
+    return out;
+}
+
+} // namespace
+
 // Concrete handlers live in their own translation units; ToolController owns
 // only the registry. The factories take the family option groups the handlers
 // own (shared within a family) and read directly.
@@ -139,6 +193,7 @@ ToolController::ToolController(QObject* parent)
     // consumer keeps following an option change.
     paint->sizeChanged = [this](int size) { emit brushSizeChanged(size); };
     paint->tipChanged = [this]() { emit brushTipChanged(); };
+    paint->paintSettingsChanged = [this]() { emit paintSettingsChanged(); };
     selection->magneticWidthChanged = [this](int width) { emit magneticWidthChanged(width); };
     crop->optionsChanged = [this]() {
         if (ToolHandler* h = registry_.forTool(ToolId::Crop)) {
@@ -761,6 +816,8 @@ void ToolController::handlePressed(const QPointF& imagePos, int button, int modi
         const int hit = v->transform_press(imagePos.x(), imagePos.y(), z,
                                            mods.testFlag(Qt::ShiftModifier),
                                            mods.testFlag(Qt::AltModifier));
+        transformGuideSnap_ = false;
+        transformPressPos_ = imagePos;
         if (transformControls_ && (hit < 0 || hit == 9)) {
             // Inside or outside the Move tool's controls box: an ordinary Move
             // drag. Suspend the box for the drag; the release path brings it
@@ -770,11 +827,20 @@ void ToolController::handlePressed(const QPointF& imagePos, int button, int modi
             v->cancel_transform();
             if (canvas_) {
                 canvas_->clearTransformPreview();
+                canvas_->clearSmartGuides();
             }
         } else {
             if (hit >= 0) {
                 transformDragging_ = true;
                 transformHandle_ = hit;
+                const ::rust::Vec<double> quad = transform_quad_extents(*v);
+                if (hit <= 3 && canvas_ && canvas_->guidesVisible()
+                    && transform_session_mode(*v) == QStringLiteral("distort")
+                    && quad.size() >= 8) {
+                    transformGuideSnap_ = true;
+                    transformStartCorner_ =
+                        QPointF(quad[2 * hit], quad[2 * hit + 1]);
+                }
                 updateTransformOverlay(v);
                 setTransformCursor(imagePos);
                 emit transformChanged();
@@ -825,8 +891,33 @@ void ToolController::handleMoved(const QPointF& imagePos)
         PictureView* v = view();
         const Qt::KeyboardModifiers mods = QGuiApplication::queryKeyboardModifiers();
         if (transformDragging_ && v && canvas_) {
-            v->transform_move(imagePos.x(), imagePos.y(), canvas_->zoom(),
+            QPointF pointer = imagePos;
+            GuideSnap snap;
+            if (transformGuideSnap_) {
+                const QPointF proposed =
+                    transformStartCorner_ + (imagePos - transformPressPos_);
+                snap = snapDistortCornerToGuides(proposed, canvas_->guides(),
+                                                 canvas_->zoom());
+                pointer = imagePos + (snap.point - proposed);
+            }
+            v->transform_move(pointer.x(), pointer.y(), canvas_->zoom(),
                               mods.testFlag(Qt::ShiftModifier), mods.testFlag(Qt::AltModifier));
+            if (transformGuideSnap_) {
+                // A corner the convex clamp stopped short of a guide keeps no
+                // line for it.
+                const ::rust::Vec<double> quad = transform_quad_extents(*v);
+                QList<SmartGuideLine> lines;
+                if (quad.size() >= 8) {
+                    const double x = quad[2 * transformHandle_];
+                    const double y = quad[2 * transformHandle_ + 1];
+                    for (const ImageView::GuideLine& guide : snap.lines) {
+                        if (std::abs((guide.vertical ? x : y) - guide.position) < 1e-6) {
+                            lines.append({guide.vertical, guide.position});
+                        }
+                    }
+                }
+                canvas_->setSmartGuides(lines, {});
+            }
             updateTransformOverlay(v);
             emit transformChanged();
         }
@@ -888,9 +979,13 @@ void ToolController::handleReleased(const QPointF& imagePos)
         if (transformDragging_) {
             transformDragging_ = false;
             transformHandle_ = -1;
+            transformGuideSnap_ = false;
             PictureView* v = view();
             if (v) {
                 v->transform_release();
+                if (canvas_) {
+                    canvas_->clearSmartGuides();
+                }
                 if (transformControls_) {
                     // The controls box applies each gesture on release and stays
                     // on the resulting layer.

@@ -8,6 +8,8 @@
 #include "pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_transform/warp.cxxqt.h"
 
+#include <QtCore/QStringList>
+
 namespace pictura {
 
 namespace {
@@ -62,6 +64,7 @@ bool ToolController::beginTransformImpl(const QString& path, const QString& mode
     }
     transformDragging_ = false;
     transformHandle_ = -1;
+    transformGuideSnap_ = false;
     if (canvas_) {
         canvas_->beginTransformPreview(v->move_preview_base(), v->move_preview_layer(),
                                       QPointF(v->move_preview_x(), v->move_preview_y()),
@@ -107,7 +110,20 @@ void ToolController::updateTransformOverlay(PictureView* v)
     }
     const transform_api::Matrix matrix = transform_api::previewLocalMatrix(*v);
     if (matrix.valid) {
-        canvas_->setTransformPreviewProjective(matrix.coefficients);
+        // A warped preview layer already carries the transform and warp, so it
+        // is drawn whole (an empty source); otherwise sample the original box.
+        QRectF source;
+        const QStringList parts = transform_warp_active(*v)
+            ? QStringList()
+            : transform_session_rect(*v).split(QLatin1Char(' '));
+        if (parts.size() == 4) {
+            const double x = v->move_preview_x();
+            const double y = v->move_preview_y();
+            source = QRectF(parts[0].toDouble() - x, parts[1].toDouble() - y,
+                            parts[2].toDouble() - parts[0].toDouble(),
+                            parts[3].toDouble() - parts[1].toDouble());
+        }
+        canvas_->setTransformPreviewProjective(matrix.coefficients, source);
     } else {
         canvas_->setTransformPreview(1.0, 1.0, 0.0, 0.0, 0.0);
     }
@@ -172,8 +188,10 @@ void ToolController::commitFreeTransform()
     v->commit_transform();
     transformDragging_ = false;
     transformHandle_ = -1;
+    transformGuideSnap_ = false;
     if (canvas_) {
         canvas_->clearTransformPreview();
+        canvas_->clearSmartGuides();
     }
     applyToolPolicy();
     emit transformChanged();
@@ -189,8 +207,10 @@ void ToolController::cancelFreeTransform()
     v->cancel_transform();
     transformDragging_ = false;
     transformHandle_ = -1;
+    transformGuideSnap_ = false;
     if (canvas_) {
         canvas_->clearTransformPreview();
+        canvas_->clearSmartGuides();
     }
     applyToolPolicy();
     emit transformChanged();

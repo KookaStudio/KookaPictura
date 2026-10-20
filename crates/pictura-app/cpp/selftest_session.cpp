@@ -679,7 +679,7 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
             const QString recentFile = recentDir + QStringLiteral("/doc.psd");
             {
                 QFile seeded(recentFile);
-                seeded.open(QIODevice::WriteOnly);
+                (void)seeded.open(QIODevice::WriteOnly);
                 seeded.write("x");
             }
             pictura::setFileDialogRecentPaths(

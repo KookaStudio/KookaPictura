@@ -285,16 +285,24 @@ void ImageView::beginTransformPreview(const QImage& base, const QImage& layer,
     transformDx_ = 0.0;
     transformDy_ = 0.0;
     transformProjective_ = QTransform();
+    transformProjectiveCoefficients_ = {};
+    transformProjectiveSource_ = QRectF();
+    transformWarped_ = WarpedTransformPreview();
+    transformWarpedStale_ = true;
     transformProjectiveActive_ = false;
     transformQuad_.clear();
     update();
 }
 
-void ImageView::setTransformPreviewProjective(const std::array<double, 9>& coefficients)
+void ImageView::setTransformPreviewProjective(const std::array<double, 9>& coefficients,
+                                              const QRectF& sourceRect)
 {
     transformProjective_ = QTransform(coefficients[0], coefficients[1], coefficients[2],
                                       coefficients[3], coefficients[4], coefficients[5],
                                       coefficients[6], coefficients[7], coefficients[8]);
+    transformProjectiveCoefficients_ = coefficients;
+    transformProjectiveSource_ = sourceRect;
+    transformWarpedStale_ = true;
     transformProjectiveActive_ = true;
     update();
 }
@@ -321,6 +329,10 @@ void ImageView::clearTransformPreview()
 {
     transformActive_ = false;
     transformProjective_ = QTransform();
+    transformProjectiveCoefficients_ = {};
+    transformProjectiveSource_ = QRectF();
+    transformWarped_ = WarpedTransformPreview();
+    transformWarpedStale_ = true;
     transformProjectiveActive_ = false;
     transformQuad_.clear();
     transformPivotVisible_ = false;
@@ -600,8 +612,16 @@ void ImageView::paintEvent(QPaintEvent*)
             // perspective, a vanishing line close to the image; Qt's raster
             // engine can drop the whole image in that form.
             painter.translate(moveLayerPos_);
-            painter.setTransform(transformProjective_, true);
-            painter.drawImage(QPointF(0.0, 0.0), moveLayer_);
+            refreshTransformWarp();
+            if (!transformWarped_.image.isNull()) {
+                painter.drawImage(QRectF(transformWarped_.origin,
+                                         QSizeF(transformWarped_.image.size())
+                                             / transformWarped_.scale),
+                                  transformWarped_.image);
+            } else {
+                painter.setTransform(transformProjective_, true);
+                painter.drawImage(QPointF(0.0, 0.0), moveLayer_);
+            }
         } else {
             painter.setTransform(transformPreviewMatrix(), true);
             painter.drawImage(moveLayerPos_, moveLayer_);

@@ -1,7 +1,7 @@
 use super::super::helpers::*;
 use super::super::helpers_composite::*;
 use super::super::qobject;
-use super::super::state::{TransformMode, TransformSession};
+use super::super::state::{PictureViewRust, TransformMode, TransformSession};
 use super::geometry::{
     apply_session_transform, rect_center, session_quad, source_corners, MapParams,
 };
@@ -241,10 +241,26 @@ fn lift_coverage(rust: &super::super::state::PictureViewRust) -> Option<Vec<u8>>
 
 /// Whether a selection on `path` lifts its pixels for the transform (CS6
 /// transforms the selected pixels, a Background's included).
-fn lifts_selection(rust: &super::super::state::PictureViewRust, path: &str) -> bool {
+fn lifts_selection(rust: &PictureViewRust, path: &str) -> bool {
     rust.doc.as_ref().is_some_and(|doc| {
         pictura_render::resolve_path(doc, path).is_some_and(pictura_render::can_lift_selection)
     }) && lift_coverage(rust).is_some()
+}
+
+/// Whether `mode` may begin on `path`: the Free Transform target rules, plus
+/// Distort's refusal for editable type (a lifted selection targets pixels, not
+/// the type layer).
+pub(super) fn can_begin_mode(rust: &PictureViewRust, path: &str, mode: TransformMode) -> bool {
+    let lift = lifts_selection(rust, path);
+    let Some(doc) = rust.doc.as_ref() else {
+        return false;
+    };
+    if !lift && !can_free_transform(doc, path) {
+        return false;
+    }
+    !(mode == TransformMode::Distort
+        && !lift
+        && pictura_render::resolve_path(doc, path).is_some_and(|layer| layer.is_type()))
 }
 
 impl qobject::PictureView {
@@ -304,13 +320,7 @@ impl qobject::PictureView {
             }
         }
         let lift = lifts_selection(self.rust(), &path);
-        if !lift
-            && !self
-                .rust()
-                .doc
-                .as_ref()
-                .is_some_and(|doc| can_free_transform(doc, &path))
-        {
+        if !can_begin_mode(self.rust(), &path, mode) {
             return false;
         }
         self.as_mut().drop_transform_session();
@@ -383,6 +393,7 @@ impl qobject::PictureView {
             start_quad: corners,
             pivot: center,
             pivot_origin: center,
+            start_pivot: center,
             show_pivot: true,
             skew_x: 0.0,
             skew_y: 0.0,

@@ -150,7 +150,7 @@ void EditShortcutsTest::ctrlZWorksWhileHistoryIconFlyoutIsOpen()
         }
         // The popup took the active window; later shortcut tests need it back.
         frame.activateWindow();
-        QTest::qWaitForWindowActive(&frame);
+        (void)QTest::qWaitForWindowActive(&frame);
         frame.closeDocument(doc, false);
     });
     QCOMPARE(view->duplicate_layer(0), 1);

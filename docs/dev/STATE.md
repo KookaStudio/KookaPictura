@@ -34,6 +34,23 @@ Snapshot for resuming after a context break. Update after each milestone.
   preview re-warps the full-resolution layer on every edit (`ponytail:` in
   `refresh_warp_preview`). Credit is in `NOTICE.md` and
   `docs/03-tools/move-and-transform.md`.
+- **Distort transform parity** (#748, branch `fix/748-transform-distort`,
+  OpenSpec change `distort-transform-parity`, archived into
+  `document/free-transform` and `document/transform-reference-point`).
+  `Edit > Transform > Distort` now moves the grabbed corner by the
+  press-to-pointer delta (keeping the grab offset), stops at the last convex
+  quad, carries the reference point with the box, snaps corners to visible
+  guides within 8 screen px, and refuses editable type (menu disabled) unless a
+  selection lifts its pixels. The projective engine (`QuadMap`) and the live
+  preview clip to the front side of the horizon, so a direct quad past it no
+  longer samples the mirrored far side. Qt's projective `drawImage` could drop
+  a triangle at some angles, so the live preview is CPU-warped
+  (`image_view_transform_warp.cpp`) and the Qt projective draw is only a
+  fallback. Perspective and Skew are unchanged. Ceilings (`ponytail:`): Distort
+  snaps whenever guides are visible because
+  `View > Snap` / `Snap To > Guides` are stubs; gate it on that state when it
+  exists. Tests: `tst_transform_distort` (10), Rust gesture/engine units; the
+  self-test's Distort/Perspective/Skew checks still pass.
 - **Large brush and shape performance** (#719, branch
   `fix/719-large-brush-perf`, OpenSpec change `large-tool-performance`,
   archived into `tools/banded-dab-raster`, `tools/bounded-tool-commit`,
@@ -193,6 +210,60 @@ Snapshot for resuming after a context break. Update after each milestone.
   caret line blinks on a 1.5 s cycle (`ImageView::kTypeCaretBlinkMs`, reset
   on every overlay set). Point type marks its origin with a placement square
   and draws a guide along each visible line's baseline (`type_baselines`).
+- **Additional brush presets and the pen-tip preview** (#731, branch
+  `feat/731-paintbrush-types-pen-tip`, OpenSpec changes
+  `paintbrush-types-pen-tip` (archived into `ui/brush-preset-picker` and
+  `ui/brush-tip-preview`), `paintbrush-preset-defaults`,
+  `pencil-grain-texture`, `paintbrush-reference-texture`,
+  `paintbrush-oval-wet-edges`, `two-b-pencil-reference-profile`, and
+  `non-photo-blue-pencil-reference-profile` (archived into `ui/brush-preset-picker` and
+  `tools/paint-engine`)). The Brush Preset
+  picker appends the owner's four brushes — `2B Pencil` (8 px, hardness 25,
+  25 % spacing, grain 50, `#47484a`), `Airbrush Soft Round 50% flow` (45 px, `#47484a`,
+  Flow 50, 25 % spacing so its core stays light), `Non-Photo Blue Pencil`
+  (4 px, hardness 0, 20 % spacing, grain 55, `#73d6ff`), and `Paintbrush Oval 45 pixels
+  Multiply` (45 px, hardness 100, roundness 50, angle −50, 5 % spacing,
+  Wet Edges, `#47484a`, Multiply, Opacity 35, Flow 50) —
+  after the CS6 set (48 total). Selecting one of the four applies its tip and
+  those default paint settings; the existing CS6 presets still change only
+  the tip. The options bar re-reads Opacity, Flow, and Mode through
+  `PaintOptions::paintSettingsChanged`, so a preset never leaves stale values
+  there. Tip values are approximated from the issue's screenshots (no
+  `.abr`).
+  The two pencils set `PaintOptions::penTip` (persisted with the brush
+  options), which shows a 2D pen-nib model (`cpp/brush_tip_preview.*`) at the
+  active canvas's top-left while the Brush or Pencil tool is active. The
+  overlay is a child of each document's `ImageView`, hides for other
+  tips/tools/documents, and is draggable within the canvas without starting a
+  stroke. Both pencils also set `PaintOptions::grain`, which the stroke engine
+  applies as a fixed alpha modulation keyed to the layer coordinates. The
+  noise is `fill::grain_noise` (a per-pixel hash blended with 2 px and 3 px
+  bilinear value noise, weighted 0.2 / 0.35 / 0.45 at contrast 1.3 to match
+  the 2B reference's clumps), so the 2B Pencil's 50 % grain leaves about 75 % mean
+  core coverage and the blue pencil's 55 % grain about 72 %, reading as
+  light, clumpy paper texture rather than static; the soft edge stays
+  anti-aliased (the Pencil tool's own aliased edge is separate), and grainy
+  strokes stay on the CPU path. The options bar's tool icon lists the four added presets with their
+  tip icons; the adjacent tip button opens the full Brush Preset picker.
+  The oval is measured from the owner's ~770 % pixel-grid screenshot. On white,
+  a lone dab paints 26 below white, a stroke's interior 20, and its rim about
+  26. `StrokeConfig::wet_edges` reproduces this with `tip::wet_edge`
+  (`1.3·a·(1 − 0.76·a)` on the accumulated coverage, fitted to those two
+  tones). Wet-edge strokes stay on the CPU path, and the large-dab preview
+  applies the same curve. `PaintMode::Multiply` replaces the Brush's old
+  Normal fallback for `"multiply"`; the other unmapped Brush modes still paint
+  as Normal. In this engine a positive tip angle tilts the major axis
+  down-right, so the preset uses −50 for Photoshop's up-right tilt. Stroke
+  caps show 2–3 stepped rings where Photoshop draws one thin rim.
+  The 2B Pencil is fitted the same way (~670 % screenshot): a ~7 px stroke
+  with soft shoulders integrating to ~3.7 px of coverage. At 100 % flow our
+  accumulation saturates overlapping dabs, so a larger or denser tip paints a
+  flat top; Photoshop's dab-raises-toward-its-own-alpha accumulation is not
+  modelled. The Non-Photo Blue Pencil is fitted the same way: a ~3.5 px line
+  integrating to ~1.8 px of coverage with peaks around 0.74.
+  `tst_brush_tip_preview` covers the preset data, the quick list, and the
+  overlay; ceilings: the brush values are non-parity approximations, and the
+  preview is painted 2D, not Photoshop's 3D Brush Preview.
 - **Tool feedback and persistence** (#541 branch, OpenSpec change
   `tool-feedback-and-persistence`). Show Transform Controls is **on by
   default** (owner decision; CS6 ships it off). The controls box is now

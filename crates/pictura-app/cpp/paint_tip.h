@@ -12,7 +12,7 @@ inline PaintTip paintTip(const PaintOptions& paint)
     const BrushDynamics& d = paint.dynamics();
     return PaintTip{paint.size(), paint.hardness(), paint.roundness(), paint.angle(),
                     paint.spacing(), d.scatter, d.count, d.sizeJitter, d.angleJitter,
-                    d.roundnessJitter};
+                    d.roundnessJitter, paint.grain(), paint.wetEdges()};
 }
 
 } // namespace pictura

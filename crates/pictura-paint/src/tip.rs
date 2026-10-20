@@ -111,6 +111,17 @@ pub fn tip_coverage(cfg: &StrokeConfig, dx: f32, dy: f32) -> f32 {
     TipParams::new(cfg).coverage(dx, dy)
 }
 
+/// Wet Edges' transfer from accumulated coverage to painted coverage:
+/// `1.3·a·(1 − 0.76·a)`. It peaks near `a = 0.66` and falls to about 31 % at
+/// full coverage, so a stroke's built-up interior paints lighter than a single
+/// 50 %-flow dab (about 40 %) and its partially covered edge forms a darker rim.
+/// ponytail: fitted to two tones measured from the owner's Photoshop
+/// screenshot (a lone dab and a stroke interior), not Adobe's curve.
+pub fn wet_edge(coverage: u8) -> u8 {
+    let a = coverage as f32 / 255.0;
+    ((1.3 * a * (1.0 - 0.76 * a)).clamp(0.0, 1.0) * 255.0).round() as u8
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -303,5 +314,17 @@ mod tests {
             ..StrokeConfig::default()
         };
         assert_eq!(TipParams::new(&elliptical).x_span(0.0), Some((-20.0, 20.0)));
+    }
+
+    #[test]
+    fn wet_edge_curve_peaks_then_falls() {
+        assert_eq!(wet_edge(0), 0);
+        assert!((101..=105).contains(&wet_edge(128)), "{}", wet_edge(128));
+        assert!((78..=82).contains(&wet_edge(255)), "{}", wet_edge(255));
+        let curve: Vec<u8> = (0..=255).map(wet_edge).collect();
+        let peak = (0..=255).max_by_key(|&i| curve[i]).unwrap();
+        assert!((150..=190).contains(&peak), "peak at {peak}");
+        assert!(curve[..=peak].windows(2).all(|w| w[0] <= w[1]));
+        assert!(curve[peak..].windows(2).all(|w| w[0] >= w[1]));
     }
 }

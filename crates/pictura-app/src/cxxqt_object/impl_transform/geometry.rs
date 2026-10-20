@@ -337,16 +337,6 @@ pub(super) fn store_quad(session: &mut TransformSession, quad: [(f64, f64); 4]) 
     true
 }
 
-/// Distort: set corner `corner` to the pointer.
-pub(super) fn gesture_distort(session: &mut TransformSession, corner: i32, x: f64, y: f64) -> bool {
-    if !(0..=3).contains(&corner) {
-        return false;
-    }
-    let mut quad = session.start_quad;
-    quad[corner as usize] = (x, y);
-    store_quad(session, quad)
-}
-
 /// Perspective: set corner `corner` to the pointer and move the opposite corner
 /// by the negated delta, keeping the quad centre fixed.
 pub(super) fn gesture_perspective(
@@ -669,6 +659,8 @@ fn point_segment_dist2(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::super::super::state::TransformMode;
+    use super::super::convex::quad_is_convex;
+    use super::super::distort::gesture_distort;
     use super::*;
 
     fn rect4() -> PsdRect {
@@ -709,6 +701,7 @@ mod tests {
             start_quad: source_corners(rect4()),
             pivot: (2.0, 2.0),
             pivot_origin: (2.0, 2.0),
+            start_pivot: (2.0, 2.0),
             show_pivot: true,
             skew_x: 0.0,
             skew_y: 0.0,
@@ -942,17 +935,6 @@ mod tests {
     }
 
     #[test]
-    fn distort_moves_one_corner() {
-        let mut s = projective();
-        assert!(gesture_distort(&mut s, 0, -2.0, -1.0));
-        let q = s.quad.unwrap();
-        assert_eq!(q[0], (-2.0, -1.0));
-        assert_eq!(q[1], (4.0, 0.0));
-        assert_eq!(q[2], (4.0, 4.0));
-        assert_eq!(q[3], (0.0, 4.0));
-    }
-
-    #[test]
     fn perspective_mirrors_the_opposite_corner() {
         let mut s = projective();
         assert!(gesture_perspective(&mut s, 0, 2.0, 1.0));
@@ -968,8 +950,10 @@ mod tests {
     fn degenerate_gesture_is_refused() {
         let mut s = projective();
         let before = s.quad.unwrap();
-        assert!(!gesture_distort(&mut s, 0, 4.0, 0.0));
+        assert!(!gesture_distort(&mut s, 0, f64::NAN, 0.0));
         assert_eq!(s.quad.unwrap(), before);
+        assert!(gesture_distort(&mut s, 0, 4.0, 0.0));
+        assert!(quad_is_convex(&s.quad.unwrap(), 1.0, 0.0));
     }
 
     #[test]

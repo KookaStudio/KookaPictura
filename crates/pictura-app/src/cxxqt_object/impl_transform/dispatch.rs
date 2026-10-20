@@ -1,9 +1,10 @@
 use super::super::helpers::*;
 use super::super::qobject;
 use super::super::state::TransformMode;
+use super::distort::gesture_distort;
 use super::geometry::{
-    gesture_distort, gesture_perspective, gesture_rotate, gesture_scale, gesture_translate,
-    hit_test_quad, pivot_drag, pivot_hit, session_quad, MOVE_HANDLE, PIVOT_HANDLE, ROTATE_HANDLE,
+    gesture_perspective, gesture_rotate, gesture_scale, gesture_translate, hit_test_quad,
+    pivot_drag, pivot_hit, session_quad, MOVE_HANDLE, PIVOT_HANDLE, ROTATE_HANDLE,
 };
 use super::skew::gesture_skew;
 use super::warp::{refresh_warp_preview, warp_hit_test, warp_move, warp_press};
@@ -61,6 +62,7 @@ impl qobject::PictureView {
                 session.dy,
             ];
             session.start_quad = start_quad;
+            session.start_pivot = session.pivot;
         }
         hit
     }

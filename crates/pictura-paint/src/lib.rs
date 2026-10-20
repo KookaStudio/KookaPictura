@@ -31,6 +31,7 @@ pub enum PaintMode {
     Dissolve,
     Behind,
     Clear,
+    Multiply,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -65,6 +66,12 @@ pub struct StrokeConfig {
     pub size_jitter: u8,
     pub angle_jitter: u16,
     pub roundness_jitter: u8,
+    /// A fixed per-pixel coverage drop in `0..=100` %, keyed to the layer
+    /// coordinates: the pencil's paper grain. 0 is off.
+    pub grain: u8,
+    /// Wet Edges: the accumulated coverage goes through [`tip::wet_edge`], so a
+    /// built-up interior paints lighter than its partially covered rim.
+    pub wet_edges: bool,
     pub flip_x: bool,
     pub flip_y: bool,
     pub auto_erase: bool,
@@ -86,6 +93,7 @@ impl StrokeConfig {
             size_jitter: self.size_jitter.min(100),
             angle_jitter: self.angle_jitter.min(180),
             roundness_jitter: self.roundness_jitter.min(100),
+            grain: self.grain.min(100),
             ..*self
         }
     }
@@ -121,6 +129,8 @@ impl Default for StrokeConfig {
             size_jitter: 0,
             angle_jitter: 0,
             roundness_jitter: 0,
+            grain: 0,
+            wet_edges: false,
             flip_x: false,
             flip_y: false,
             auto_erase: false,
@@ -130,7 +140,7 @@ impl Default for StrokeConfig {
 
 pub use healing::HealStroke;
 pub use stroke::{paint_stroke, PaintError, Stroke, StrokeKind, StrokeOutcome};
-pub use tip::tip_coverage;
+pub use tip::{tip_coverage, wet_edge};
 
 #[cfg(test)]
 mod tests {

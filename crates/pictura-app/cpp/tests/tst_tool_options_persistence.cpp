@@ -48,6 +48,10 @@ void ToolOptionsPersistenceTest::optionsSurviveARestart()
         PaintOptions* paint = tools->optionsFor<PaintOptions>(ToolId::Brush);
         paint->setSize(77);
         paint->setOpacity(40);
+        paint->setGrain(75);
+        paint->setPenTip(true);
+        paint->setAliased(true);
+        paint->setWetEdges(true);
         tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setFeather(5.5);
         RetouchGroup* blur = tools->optionsFor<RetouchGroup>(ToolId::Blur);
         RetouchOptions r = blur->get();
@@ -70,6 +74,10 @@ void ToolOptionsPersistenceTest::optionsSurviveARestart()
     QCOMPARE(tools->optionsFor<TypeGroup>(ToolId::HorizontalType)->get().size, 48.0);
     QCOMPARE(tools->optionsFor<PaintOptions>(ToolId::Brush)->size(), 77);
     QCOMPARE(tools->optionsFor<PaintOptions>(ToolId::Brush)->opacity(), 40);
+    QCOMPARE(tools->optionsFor<PaintOptions>(ToolId::Brush)->grain(), 75);
+    QVERIFY(tools->optionsFor<PaintOptions>(ToolId::Brush)->penTip());
+    QVERIFY(tools->optionsFor<PaintOptions>(ToolId::Brush)->aliased());
+    QVERIFY(tools->optionsFor<PaintOptions>(ToolId::Brush)->wetEdges());
     QCOMPARE(tools->optionsFor<SelectionOptions>(ToolId::Marquee)->feather(), 5.5);
     QCOMPARE(tools->optionsFor<RetouchGroup>(ToolId::Blur)->get().strength, 80);
     QCOMPARE(tools->optionsFor<ToneGroup>(ToolId::Burn)->get().amount, 20);

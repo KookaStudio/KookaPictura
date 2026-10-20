@@ -439,6 +439,9 @@ signals:
     void mixerReservoirChanged(const QColor& color);
     // Hardness or a Brush Tip Shape field changed (size has brushSizeChanged).
     void brushTipChanged();
+    // Opacity, Flow, or Mode changed (a preset applying its defaults); the
+    // options bar re-reads them.
+    void paintSettingsChanged();
     // An Eyedropper option changed (the bar or the canvas context menu); the
     // options bar re-reads its Sample Size / Sample readouts.
     void eyedropperOptionsChanged();
@@ -547,6 +550,10 @@ private:
 
     bool transformDragging_ = false;
     int transformHandle_ = -1;
+    // A Distort corner's press point and start corner, for guide snapping.
+    QPointF transformPressPos_;
+    QPointF transformStartCorner_;
+    bool transformGuideSnap_ = false;
     // True while the Move tool's controls box is up (idle or mid-gesture).
     bool transformControls_ = false;
     // The box is up with no session (`controlsIdle_`): on `controlsPath_`,
