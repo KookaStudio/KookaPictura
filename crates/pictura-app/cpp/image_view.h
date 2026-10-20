@@ -7,6 +7,7 @@
 #include <QtCore/QRect>
 #include <QtCore/QRectF>
 #include <QtCore/QSize>
+#include <QtCore/QSizeF>
 #include <QtCore/QString>
 #include <QtGui/QColor>
 #include <QtGui/QImage>
@@ -43,6 +44,15 @@ struct SelectionContour;
 }
 
 namespace pictura {
+
+/// A CPU-warped live projective preview: the warped image, its local
+/// destination origin (relative to the moving layer's document origin), and
+/// its pixels per document pixel; it covers `image.size() / scale`.
+struct WarpedTransformPreview {
+    QImage image;
+    QPointF origin;
+    double scale = 1.0;
+};
 
 // The central document canvas: paints a QImage under a pan/zoom transform over
 // a plain canvas colour. GPU compositing is out of scope (CPU image for now).
@@ -269,8 +279,10 @@ public:
     // Projective layer preview: nine space-separated coefficients in
     // `QTransform(m11,m12,m13,m21,m22,m23,m31,m32,m33)` order, mapping source
     // document space onto the target quad. Overrides the similarity preview
-    // until the next `beginTransformPreview`.
-    void setTransformPreviewProjective(const std::array<double, 9>& coefficients);
+    // until the next `beginTransformPreview`. An empty `sourceRect` samples the
+    // whole preview layer.
+    void setTransformPreviewProjective(const std::array<double, 9>& coefficients,
+                                       const QRectF& sourceRect);
     void setTransformQuad(const QPolygonF& corners);
     // The Free Transform reference point (image space) and its marker
     // visibility; drawn as a target glyph with the transform overlay.
@@ -572,6 +584,9 @@ private:
     void paintCropGroupOverlays(QPainter& painter);
     // The Free Transform reference point marker (image_view_overlays.cpp).
     void paintTransformPivot(QPainter& painter);
+    // Rewarp the projective preview when its inputs, the visible region, or the
+    // view scale changed since the last warp.
+    void refreshTransformWarp();
     // The Free Transform box, handles, rotate knob, and reference point,
     // unclipped by the document rect (image_view_overlays.cpp).
     void paintTransformOverlay(QPainter& painter);
@@ -718,6 +733,14 @@ private:
     double transformDx_ = 0.0;
     double transformDy_ = 0.0;
     QTransform transformProjective_;
+    std::array<double, 9> transformProjectiveCoefficients_{};
+    QRectF transformProjectiveSource_;
+    // The warp covers only the visible region at the view scale, so paint
+    // rebuilds it when either changes.
+    WarpedTransformPreview transformWarped_;
+    QRectF transformWarpedVisible_;
+    double transformWarpedScale_ = 0.0;
+    bool transformWarpedStale_ = true;
     bool transformProjectiveActive_ = false;
     QPolygonF transformQuad_;
     QPointF transformPivot_;
@@ -748,5 +771,14 @@ private:
     };
     PressTrace pressTrace_;
 };
+
+/// Warp `source` (whose document origin is `sourceOrigin`) by `coefficients`
+/// (source-local to destination-local, `QTransform` order), keeping only the
+/// part inside `visibleDocument`, sampled at `scale` output pixels per document
+/// pixel. Empty when nothing is visible.
+WarpedTransformPreview warpTransformPreview(const QImage& source, const QPointF& sourceOrigin,
+                                            const std::array<double, 9>& coefficients,
+                                            const QRectF& sourceRect,
+                                            const QRectF& visibleDocument, double scale);
 
 } // namespace pictura

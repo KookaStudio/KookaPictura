@@ -119,6 +119,22 @@ impl PlaneMap for Map {
 pub(super) struct QuadMap {
     h: [f64; 9],
     inv: [f64; 9],
+    /// The side of the horizon the source rect's majority lies on (+1 or -1).
+    front: f64,
+}
+
+impl QuadMap {
+    /// The inverse map's homogeneous divisor at `(x, y)`: its sign is the side
+    /// of the horizon the destination point samples.
+    #[cfg(test)]
+    pub(super) fn inverse_w(&self, x: f64, y: f64) -> f64 {
+        self.inv[6] * x + self.inv[7] * y + self.inv[8]
+    }
+
+    #[cfg(test)]
+    pub(super) fn front(&self) -> f64 {
+        self.front
+    }
 }
 
 impl PlaneMap for QuadMap {
@@ -127,11 +143,37 @@ impl PlaneMap for QuadMap {
     }
 
     fn inverse(&self, qx: f64, qy: f64) -> Option<(f64, f64)> {
-        apply_homography(&self.inv, qx, qy)
+        let w = self.inv[6] * qx + self.inv[7] * qy + self.inv[8];
+        if !w.is_finite() || w.abs() < HOMOGRAPHY_EPSILON || w * self.front <= 0.0 {
+            return None;
+        }
+        let px = (self.inv[0] * qx + self.inv[1] * qy + self.inv[2]) / w;
+        let py = (self.inv[3] * qx + self.inv[4] * qy + self.inv[5]) / w;
+        (px.is_finite() && py.is_finite()).then_some((px, py))
     }
 
     fn for_rect(&self, _rect: PsdRect) -> Self {
         *self
+    }
+}
+
+/// The side of the horizon holding the majority of `src`'s four forward
+/// homogeneous divisors; the centre's side on a tie.
+fn front_side(h: &[f64; 9], src: &[(f64, f64); 4]) -> f64 {
+    let w = |(x, y): (f64, f64)| h[6] * x + h[7] * y + h[8];
+    let ahead = src.iter().filter(|p| w(**p) > 0.0).count();
+    match ahead {
+        3 | 4 => 1.0,
+        0 | 1 => -1.0,
+        _ => {
+            let cx = src.iter().map(|p| p.0).sum::<f64>() / 4.0;
+            let cy = src.iter().map(|p| p.1).sum::<f64>() / 4.0;
+            if w((cx, cy)) >= 0.0 {
+                1.0
+            } else {
+                -1.0
+            }
+        }
     }
 }
 
@@ -251,7 +293,11 @@ pub(super) fn solve_homography(src: [(f64, f64); 4], dst: [(f64, f64); 4]) -> Op
     let s = gaussian_solve(a, b)?;
     let h = [s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7], 1.0];
     let inv = invert3(&h)?;
-    Some(QuadMap { h, inv })
+    Some(QuadMap {
+        h,
+        inv,
+        front: front_side(&h, &src),
+    })
 }
 
 /// Largest result area the op will allocate for one plane, in pixels. A

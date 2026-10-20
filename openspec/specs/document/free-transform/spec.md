@@ -303,11 +303,16 @@ projective map sending the source corners to `quad`, SHALL set the layer `rect`
 to the integer bounding box of `quad` (`floor(min x)`, `floor(min y)`,
 `ceil(max x)`, `ceil(max y)`), and SHALL return `true`. A destination pixel whose
 inverse-mapped source point lies outside `[0, w) × [0, h)` SHALL be written as
-`0`, and bilinear taps SHALL be edge-clamped. The operation SHALL refuse and MUST
-leave `doc` bit-identical for every case `transform_layer` refuses, and also when
-any corner is non-finite, the projective map is singular or near-singular, or the
-result rect has zero area or exceeds the op's pixel ceiling. It SHALL NOT
-recomposite the document and MUST NOT panic on any input.
+`0`, and bilinear taps SHALL be edge-clamped. A destination pixel whose
+inverse-mapped source point lies on the far side of the projective horizon SHALL
+also be written as `0`. The front side SHALL be the side holding the majority of
+the source rect's four corners' forward homogeneous divisors, or the centre's
+side on a tie. The live projective preview SHALL clip to the same front side.
+The operation SHALL refuse and MUST leave `doc` bit-identical for every case
+`transform_layer` refuses, and also when any corner is non-finite, the
+projective map is singular or near-singular, or the result rect has zero area or
+exceeds the op's pixel ceiling. It SHALL NOT recomposite the document and MUST
+NOT panic on any input.
 
 #### Scenario: An identity quad is the source rect
 
@@ -334,35 +339,78 @@ recomposite the document and MUST NOT panic on any input.
 - **WHEN** a projective quad pulls part of the destination outside the source rect
 - **THEN** every destination pixel whose source point is outside the source rect has all channels equal to `0`
 
+#### Scenario: Past the horizon only the front side is drawn [quad_front_side]
+
+- **WHEN** a projective quad leaves part of the source rect beyond the horizon
+- **THEN** every destination pixel whose inverse-mapped source point is on the far side is transparent, while the front side is drawn
+
+#### Scenario: The projective preview clips at the horizon [preview_front_side]
+
+- **WHEN** a live projective preview's map has a horizon crossing the source
+- **THEN** the preview draws only the front side and never the mirrored far side
+
 ### Requirement: Skew, Distort, and Perspective transform modes
 
 The Free Transform session SHALL expose a mode of `Free` (the existing
 similarity), `Skew`, `Distort`, or `Perspective`. In `Free` the existing scalars
 drive the transform; in a projective mode the session SHALL hold the live target
-quad and the scalars SHALL be unused. A corner drag in `Distort` SHALL set that
-corner to the pointer; a corner drag in `Perspective` SHALL set that corner to
-the pointer and move the opposite corner by the negated delta about the quad
-centre. In `Skew`, a corner drag SHALL move that corner alone along whichever of
-its two adjacent edges the drag follows most, and an edge drag SHALL slide that
-edge's two endpoints only along the edge's own axis. Holding Alt in `Skew` SHALL
-move the opposite corner, or the opposite edge, by the same displacement in the
+quad and the scalars SHALL be unused. A corner drag in `Distort` SHALL move that
+corner by the press-to-pointer delta, preserving the grab offset, and SHALL stop
+where the quad would become concave or fold over itself. A `Distort` corner drag
+SHALL carry the reference point with the quad, keeping its position within the
+box. When document guides are visible, a `Distort` corner SHALL snap to a
+vertical guide and/or a horizontal guide within 8 screen pixels of its proposed
+position, and the snapped position SHALL be the one committed. `Distort` SHALL
+be refused for an editable type layer unless the session targets pixels lifted
+by a selection. A corner drag in `Perspective` SHALL set that corner to the
+pointer and move the opposite corner by the negated delta about the quad centre.
+In `Skew`, a corner drag SHALL move that corner alone along whichever of its two
+adjacent edges the drag follows most, and an edge drag SHALL slide that edge's
+two endpoints only along the edge's own axis. Holding Alt in `Skew` SHALL move
+the opposite corner, or the opposite edge, by the same displacement in the
 opposite direction; Shift SHALL have no effect in `Skew`. A `Skew` corner drag on
 an editable type layer SHALL slide the whole followed edge, keeping the quad a
 parallelogram so the text stays type. A `Skew` corner drag SHALL stop where the
 quad would become concave or fold over itself. A projective-mode gesture that
-would make the quad degenerate SHALL be refused. Hit testing in a projective mode
+would make the quad degenerate SHALL be clamped to the last convex quad, or
+refused when no finite convex result exists. Hit testing in a projective mode
 SHALL accept only the eight bounding handles; a press away from a handle SHALL
 not move or rotate. Committing SHALL call `transform_layer_quad` for the
 projective modes and `transform_layer` for `Free`, recomposite, and record
 exactly one `"Free Transform"` history state; an identity commit SHALL record
 none; Escape SHALL leave the document bit-identical with no history state added.
-The precise gesture semantics are inferred from Photoshop's Skew mode (no
-reference image oracle); the projective map itself is exact.
+The precise gesture semantics are inferred from Photoshop's Distort and Skew
+modes (no reference image oracle); the projective map itself is exact.
 
 #### Scenario: Distort commits the dragged corner
 
 - **WHEN** a `Distort` session drags one corner and commits
-- **THEN** the layer's source corner is at the pointer's document position and exactly one `"Free Transform"` state is added
+- **THEN** the layer's source corner is at its press-time position plus the pointer delta and exactly one `"Free Transform"` state is added
+
+#### Scenario: A Distort corner keeps the grab offset [distort_grab_offset]
+
+- **WHEN** a `Distort` corner is grabbed a few pixels away from its exact handle position and dragged
+- **THEN** the corner moves by the pointer delta and does not jump to the pointer
+
+#### Scenario: A Distort corner stops before folding [distort_convex]
+
+- **WHEN** a `Distort` session drags a corner past the point where the quad would become concave
+- **THEN** the stored quad stays convex and the dragged corner has not crossed to the other side
+
+#### Scenario: A Distort corner carries the reference point [distort_pivot]
+
+- **WHEN** a `Distort` session drags a corner
+- **THEN** the reference point keeps the same position within the moving box
+
+#### Scenario: A Distort corner snaps to a visible guide [distort_guide_snap]
+
+- **WHEN** a `Distort` corner is dragged within 8 screen pixels of a visible document guide
+- **THEN** the corner lands on the guide and the committed quad uses that position
+
+#### Scenario: Distort is refused on editable type [distort_type]
+
+- **WHEN** `Distort` is begun on an editable type layer without a selection that lifts its pixels
+- **THEN** no session begins and the document is unchanged
 
 #### Scenario: Perspective mirrors the opposite corner
 
@@ -409,14 +457,22 @@ reference image oracle); the projective map itself is exact.
 The application SHALL provide implemented commands `Edit > Transform > Skew`,
 `Edit > Transform > Distort`, and `Edit > Transform > Perspective` that begin a
 Free Transform session in the matching mode on the active layer, using the same
-active-layer resolution and refusal as `Edit > Free Transform`. Each command
-SHALL be enabled exactly when `Edit > Free Transform` is enabled, including for
-a target whose selected pixels Free Transform lifts.
+active-layer resolution and refusal as `Edit > Free Transform`. The Skew and
+Perspective commands SHALL be enabled exactly when `Edit > Free Transform` is
+enabled, including for a target whose selected pixels Free Transform lifts. The
+Distort command SHALL additionally be disabled when the target is an editable
+type layer whose whole layer would move; a selection that lifts its pixels keeps
+the command enabled.
 
 #### Scenario: The Distort command enters a Distort session
 
 - **WHEN** `Edit > Transform > Distort` is invoked with exactly one transformable layer active
 - **THEN** a session begins in `Distort` mode on that layer
+
+#### Scenario: The Distort command is disabled for editable type [distort_menu_type]
+
+- **WHEN** the active layer is an editable type layer and no selection lifts its pixels
+- **THEN** the Distort command is disabled and invoking it begins no session
 
 #### Scenario: A non-transformable target leaves the command disabled
 
@@ -592,3 +648,47 @@ controls box, which share the overlay path.
 
 - **WHEN** the transformed layer extends past the document edge
 - **THEN** its rasterised preview is not painted outside the canvas rectangle
+
+### Requirement: Live projective preview uses a CPU warp
+
+The live preview for a projective transform SHALL render the moving layer by
+inverse-mapping the visible destination region through the projective matrix
+and sampling the preview layer image on the CPU, rather than drawing the image
+under a projective `QTransform`. The warp SHALL keep the whole shape at every
+convex quad, SHALL omit pixels on the far side of the horizon, and SHALL be
+bounded by the visible canvas region sampled at the view's scale (at most one
+sample per document pixel). A source that crosses the horizon SHALL NOT be
+bounded by its projected corners. The warp SHALL be rebuilt when the view pans,
+zooms, rotates, or resizes. While a preset warp is active the preview SHALL
+draw the whole warped preview layer. When the warp produces no image the
+preview MAY fall back to the projective `QTransform` draw.
+
+#### Scenario: A steep Distort keeps the whole shape [distort_preview_full]
+
+- **WHEN** a live Distort preview maps a filled rectangle to a steep convex quad
+- **THEN** the preview shows the layer across the whole quad, not one triangle
+
+#### Scenario: Masked and clipped content survives the warp [distort_preview_layers]
+
+- **WHEN** the moving layer's appearance comes from a layer mask, vector mask, or clipping group
+- **THEN** the warped preview shows that appearance across the whole quad
+
+#### Scenario: The far side of the horizon is omitted [distort_preview_front]
+
+- **WHEN** the warp's projective map has a horizon through the source
+- **THEN** the preview draws only the front side and leaves the far side transparent
+
+#### Scenario: A zoomed-out preview samples at the view scale [distort_preview_scale]
+
+- **WHEN** the view is zoomed out below 100% during a live projective preview
+- **THEN** the warp samples about one output pixel per screen pixel, covering the same document region
+
+#### Scenario: Changing the viewport redraws the preview [distort_preview_viewport]
+
+- **WHEN** the view zooms out or pans during a live projective preview without another transform update
+- **THEN** the newly visible parts of the moving layer are drawn
+
+#### Scenario: A preset warp is not clipped to the original box [warp_preview_whole]
+
+- **WHEN** a preset warp is applied after the transform moved content outside the original box
+- **THEN** the preview draws that content

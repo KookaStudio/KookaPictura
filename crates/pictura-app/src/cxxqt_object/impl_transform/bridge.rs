@@ -6,12 +6,12 @@
 //! [`PictureView`]: super::super::qobject::PictureView
 
 use super::super::qobject::PictureView;
-use super::super::state::{TransformSession, TransformWarp};
+use super::super::state::{TransformMode, TransformSession, TransformWarp};
 use super::geometry::{
     hit_test_quad, projective_coefficients, quad_anchors, session_quad, set_pivot, source_corners,
     store_quad, MapParams,
 };
-use super::session::build_transform_preview;
+use super::session::{build_transform_preview, can_begin_mode};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -39,6 +39,10 @@ pub mod ffi {
         /// The layer at `path`'s rect as flat `[left, top, right, bottom]`;
         /// empty when the path does not resolve to a layer.
         fn layer_rect_extents(view: &PictureView, path: &QString) -> Vec<i32>;
+        /// Whether a transform in `mode` ("skew", "distort", "perspective", or
+        /// empty/"free") may begin on `path`, including Distort's editable-type
+        /// refusal.
+        fn layer_can_transform_mode(view: &PictureView, path: &QString, mode: &QString) -> bool;
         /// The layer at `path`'s ink box (the box round its non-transparent
         /// pixels, as Align computes it) as flat `[left, top, right, bottom]`;
         /// empty when the path does not resolve or has no content.
@@ -177,6 +181,11 @@ fn layer_rect_extents(view: &PictureView, path: &QString) -> Vec<i32> {
         .map_or_else(Vec::new, |rect| {
             vec![rect.left, rect.top, rect.right, rect.bottom]
         })
+}
+
+fn layer_can_transform_mode(view: &PictureView, path: &QString, mode: &QString) -> bool {
+    let mode = TransformMode::parse(&mode.to_string()).unwrap_or(TransformMode::Free);
+    can_begin_mode(view.rust(), &path.to_string(), mode)
 }
 
 fn layer_content_bounds_extents(view: &PictureView, path: &QString) -> Vec<i32> {

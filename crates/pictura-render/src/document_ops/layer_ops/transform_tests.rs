@@ -550,6 +550,34 @@ fn quad_degenerate_inputs_are_refused_bit_identically() {
 }
 
 #[test]
+fn quad_past_horizon_draws_only_the_front_side() {
+    let mut doc = doc_with(pixel_layer(100, 100));
+    let quad = [(0.0, 0.0), (300.0, 0.0), (60.0, 60.0), (0.0, 300.0)];
+    let source = [(0.0, 0.0), (100.0, 0.0), (100.0, 100.0), (0.0, 100.0)];
+    let map = super::transform::solve_homography(source, quad).unwrap();
+    assert!(transform_layer_quad(&mut doc, "0", quad));
+    let layer = resolve_path(&doc, "0").unwrap();
+    let alpha = layer.channels.iter().find(|c| c.id == -1).unwrap();
+    let (w, h) = (layer.rect.width() as usize, layer.rect.height() as usize);
+    let (mut drawn, mut behind) = (0, 0);
+    for y in 0..h {
+        for x in 0..w {
+            if alpha.data[y * w + x] == 0 {
+                continue;
+            }
+            drawn += 1;
+            let dx = f64::from(layer.rect.left) + x as f64 + 0.5;
+            let dy = f64::from(layer.rect.top) + y as f64 + 0.5;
+            if map.front() * map.inverse_w(dx, dy) <= 0.0 {
+                behind += 1;
+            }
+        }
+    }
+    assert!(drawn > 1000, "the front side is drawn ({drawn} px)");
+    assert_eq!(behind, 0, "{behind} pixels came from behind the horizon");
+}
+
+#[test]
 fn quad_out_of_source_pixels_are_zero() {
     let mut doc = doc_with(pixel_layer(4, 4));
     // A trapezoid inside the source bbox: bbox pixels outside it inverse-map

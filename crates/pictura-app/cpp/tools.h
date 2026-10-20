@@ -543,6 +543,10 @@ private:
 
     bool transformDragging_ = false;
     int transformHandle_ = -1;
+    // A Distort corner's press point and start corner, for guide snapping.
+    QPointF transformPressPos_;
+    QPointF transformStartCorner_;
+    bool transformGuideSnap_ = false;
     // True while the Move tool's controls box is up (idle or mid-gesture).
     bool transformControls_ = false;
     // The box is up with no session (`controlsIdle_`): on `controlsPath_`,

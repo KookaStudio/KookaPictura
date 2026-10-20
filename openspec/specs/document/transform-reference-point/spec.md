@@ -83,10 +83,12 @@ point's current image position fixed while changing the transform:
   reference point; the shear SHALL be committed through the projective
   (affine quad) op.
 
-Handle drags SHALL keep the opposite-handle anchor and MUST NOT move the
-reference point. In a projective mode the W/H setters SHALL be unavailable and
-the angle and H/V setters SHALL rotate/shear the live quad about the reference
-point.
+Handle drags in `Free`, `Skew`, and `Perspective` SHALL keep the
+opposite-handle anchor and MUST NOT move the reference point. A `Distort`
+corner drag SHALL carry the reference point with the quad, preserving the
+reference point's position within the box. In a projective mode the W/H setters
+SHALL be unavailable and the angle and H/V setters SHALL rotate/shear the live
+quad about the reference point.
 
 #### Scenario: Rotating about a moved pivot keeps it fixed
 
@@ -107,6 +109,11 @@ point.
 
 - **WHEN** H is set to 30° and the session commits
 - **THEN** the layer's vertical edges deviate 30° from vertical and one `"Free Transform"` state is recorded
+
+#### Scenario: A Distort corner drag carries the reference point [distort_pivot_carry]
+
+- **WHEN** a `Distort` corner drag moves the box
+- **THEN** the reference point moves with the box and keeps its position within it
 
 ### Requirement: Skew readouts
 
