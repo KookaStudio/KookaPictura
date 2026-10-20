@@ -1019,8 +1019,10 @@ int pictura::runShellRound4Checks(pictura::PicturaMainWindow& frame)
         pump4(6);
         // Shrink the frame below the offscreen screen so a screen-clamped float
         // has room outside it; the old central-rect clamp would pull it back.
+        const QPoint framePosBefore = frame.pos();
         const QSize frameBefore = frame.size();
         frame.resize(700, 500);
+        frame.move(0, 0);
         pump4(8);
         pictura::PanelColumn* column = frame.panelColumn();
         bool torn = false;
@@ -1081,6 +1083,7 @@ int pictura::runShellRound4Checks(pictura::PicturaMainWindow& frame)
             return pictura::selfTest().fail(437, "float screen bounds");
         }
         frame.resize(frameBefore);
+        frame.move(framePosBefore);
         pump4(6);
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump4(6);

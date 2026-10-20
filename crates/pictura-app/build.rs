@@ -101,6 +101,11 @@ fn main() {
             ])
             .cc_builder(|cc| {
                 cc.include("cpp");
+                // GCC 16 warns inside Qt's QChar and the generated
+                // Vec<LayerRow> constructor; both are cxx-qt/Qt glue, not this
+                // project's code.
+                cc.flag_if_supported("-Wno-sfinae-incomplete");
+                cc.flag_if_supported("-Wno-maybe-uninitialized");
                 // The hand-written bridge edges live in `cpp/`; CMake compiles
                 // them into the shell, and the Rust test binary needs its own
                 // copies (static libraries only pull what they resolve).

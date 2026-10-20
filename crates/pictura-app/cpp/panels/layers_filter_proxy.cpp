@@ -12,24 +12,10 @@ LayersFilterProxyModel::LayersFilterProxyModel(QAbstractItemModel* source, QObje
     }
 }
 
-void LayersFilterProxyModel::setSourceModel(QAbstractItemModel* sourceModel)
-{
-    if (QAbstractItemModel* previous = QSortFilterProxyModel::sourceModel()) {
-        disconnect(previous, nullptr, this, nullptr);
-    }
-    QSortFilterProxyModel::setSourceModel(sourceModel);
-    if (sourceModel) {
-        connect(sourceModel, &QAbstractItemModel::modelReset, this,
-                [this] { invalidateFilter(); });
-        connect(sourceModel, &QAbstractItemModel::dataChanged, this,
-                [this] { invalidateFilter(); });
-    }
-}
-
 void LayersFilterProxyModel::setFilter(const LayerFilter& filter)
 {
     filter_ = filter;
-    invalidateFilter();
+    invalidate();
 }
 
 bool LayersFilterProxyModel::hasActiveCriteria() const
