@@ -24,7 +24,9 @@ Snapshot for resuming after a context break. Update after each milestone.
   - `layer_ops/warp_raster.rs` is photocraft's adaptive triangle resampler:
     premultiplied, area-averaged when shrinking, and parallel by 64-row bands.
   - Warp is a Free Transform mode (`impl_transform/warp.rs`). The menu or the
-    options-bar toggle bakes the box into a one-patch mesh. The options bar
+    options-bar toggle starts a one-patch mesh over the source box and keeps
+    the box's quad as a projective frame after it (review fix: a baked patch
+    bent a Perspective box). The options bar
     shows the style, orientation, and Bend/H/V. The canvas draws the grid and
     points.
 

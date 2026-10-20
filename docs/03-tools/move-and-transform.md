@@ -121,7 +121,7 @@ Warp is a **bicubic Bezier patch** deformation: a control grid (Photoshop's defa
 
 - *Geometry* (`pictura_core::warp`, from photocraft `geom::warp`): each preset style is one bicubic Bezier patch whose control grid follows the bend, fitted to Photoshop renders. It is the identity at bend 0. These are approximations, not verified parity. A custom warp is a one-patch 4×4 control grid. Dragging an anchor carries its handles; dragging a handle turns the opposite one; a press elsewhere pulls the surface under the pointer.
 - *Resampling* (`pictura_render::transform_layer_warp`, from photocraft `algo::warp`): the source is cut into cells a few pixels across, and each cell's two triangles are mapped forward and rasterized. Planes are sampled premultiplied. A shrinking warp area-averages its source footprint. Where the warp folds, the later cell wins. The layer mask is flattened onto its default colour.
-- *Session* (from photocraft's Warp mode): `Edit > Transform > Warp`, or the options-bar toggle, bakes the current box into the mesh. The options bar shows `Warp:` (style), the orientation toggle, and `Bend`/`H`/`V`. Commit applies the warp alone, as one `Free Transform` history state.
+- *Session* (from photocraft's Warp mode): `Edit > Transform > Warp`, or the options-bar toggle, starts a mesh over the layer's box and keeps the box's current transform, Distort and Perspective included, as a frame after the mesh. The options bar shows `Warp:` (style), the orientation toggle, and `Bend`/`H`/`V`. Commit applies the warp and the box together, as one `Free Transform` history state.
 - *Out of scope:* Split Warp and the Grid menu (Photoshop CC 2020, not CS6), and smart-object and Warp Text warps through this path.
 
 ### Puppet Warp
