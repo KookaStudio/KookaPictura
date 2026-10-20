@@ -68,6 +68,22 @@ impl DabRaster<'_> {
                 let acc = 1.0 - (1.0 - band.scratch[at] as f32 / 255.0) * (1.0 - self.flow * cov);
                 let v = (acc.clamp(0.0, 1.0) * 255.0).round() as u8;
                 band.scratch[at] = v;
+                let cfg = &self.stencil.cfg;
+                let v = if cfg.wet_edges { crate::wet_edge(v) } else { v };
+                // The pencil's paper grain: a fixed alpha modulation keyed to
+                // the layer coordinates. It dims the stroke by up to `grain` %
+                // where the noise is lowest instead of dropping pixels to zero,
+                // which would scatter the stroke into isolated dots; the pattern
+                // is fixed, so overlapping dabs only deepen it. The noise is
+                // clumped at 2–3 px so the stroke reads as pencil texture
+                // rather than static.
+                let v = if cfg.grain > 0 {
+                    let noise = crate::fill::grain_noise(lx, ly as i32);
+                    let keep = 1.0 - cfg.grain as f32 / 100.0 * (1.0 - noise);
+                    (v as f32 * keep).round() as u8
+                } else {
+                    v
+                };
                 if v == band.applied[at] {
                     continue;
                 }

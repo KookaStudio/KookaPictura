@@ -44,6 +44,12 @@ crates/pictura-app/cpp/liquify_dialog.cpp  QColor(128, 128, 128)  # data
 crates/pictura-app/cpp/options_bar_fill.cpp  QColor(0xcc, 0xcc, 0xcc)  # data
 crates/pictura-app/cpp/options_bar_paint.cpp  QColor(0x1a, 0x1a, 0x1a)  # data
 crates/pictura-app/cpp/options_bar_paint.cpp  QColor(0xcc, 0xcc, 0xcc)  # data
+crates/pictura-app/cpp/brush_tip_preview.cpp  QColor(0x1d, 0x1d, 0x1d)  # data (brush tip preview model)
+crates/pictura-app/cpp/brush_tip_preview.cpp  QColor(0xa0, 0xa0, 0xa0)  # data (brush tip preview model)
+crates/pictura-app/cpp/brush_tip_preview.cpp  QColor(0xb3, 0xb3, 0xb3)  # data (brush tip preview model)
+crates/pictura-app/cpp/brush_tip_preview.cpp  QColor(0xce, 0xce, 0xce)  # data (brush tip preview model)
+crates/pictura-app/cpp/brush_tip_preview.cpp  QColor(0xe1, 0xe1, 0xe1)  # data (brush tip preview model)
+crates/pictura-app/cpp/brush_tip_preview.cpp  QColor(0xeb, 0xeb, 0xeb)  # data (brush tip preview model)
 crates/pictura-app/cpp/panels/brush_preset_picker.cpp  QColor(0x80, 0x80, 0x80)  # data
 crates/pictura-app/cpp/panels/brush_preset_picker.cpp  QColor(0xc0, 0xc0, 0xc0)  # data
 crates/pictura-app/cpp/panels/histogram_panel.cpp  QColor(220, 220, 220)  # data

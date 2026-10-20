@@ -300,8 +300,9 @@ fn rasterize_preview(preview: &mut PreviewStroke, sample: StrokeSample) -> bool 
 /// The premultiplied level-space region for `rect` of `preview`: the stroke-start
 /// snapshot blended with the accumulated coverage under the stroke's paint mode.
 /// Normal is source-over; Clear removes the snapshot's coverage (`dst * (1 - k)`);
-/// Dissolve and Behind present as Normal, since only the committed pixels must be
-/// exact and the preview is thrown away.
+/// Dissolve, Behind, and Multiply present as Normal, since only the committed
+/// pixels must be exact and the preview is thrown away. Wet Edges remaps the
+/// coverage as the stroke does, so the preview keeps the stroke's tone.
 fn preview_blend(preview: &PreviewStroke, rect: PsdRect) -> Vec<u8> {
     if let Some(mask) = &preview.mask {
         return mask::mask_preview_blend(preview, mask, rect);
@@ -318,7 +319,12 @@ fn preview_blend(preview: &PreviewStroke, rect: PsdRect) -> Vec<u8> {
     for y in 0..rh as usize {
         for x in 0..rw as usize {
             let li = (rect.top as usize + y) * preview.width as usize + (rect.left as usize + x);
-            let alpha = opacity * preview.coverage[li] as f32 / 255.0;
+            let coverage = if preview.cfg.wet_edges {
+                pictura_paint::wet_edge(preview.coverage[li])
+            } else {
+                preview.coverage[li]
+            };
+            let alpha = opacity * coverage as f32 / 255.0;
             // Normal carries the foreground alpha; Clear removes coverage and
             // ignores it, exactly as `Stencil::composite` does.
             let k = if clear { alpha } else { alpha * tint };
@@ -445,7 +451,11 @@ impl qobject::PictureView {
                     .doc
                     .as_ref()
                     .and_then(|doc| preview_level(cfg.diameter as i32, doc.width, doc.height));
-                let gpu_mode = gpu_paint_mode(cfg.mode).filter(|_| !cfg.auto_erase);
+                // The GPU dab shader has no paper grain or wet-edge curve; such a
+                // tip stays on the CPU oracle so the stroke matches its
+                // committed pixels.
+                let gpu_mode = gpu_paint_mode(cfg.mode)
+                    .filter(|_| !cfg.auto_erase && cfg.grain == 0 && !cfg.wet_edges);
                 if level.is_some() && rust.gpu_compute {
                     let seeded = match (gpu_mode, rust.stroke.as_ref(), rust.doc.as_ref()) {
                         (Some(mode), Some(stroke), Some(doc)) if !stroke.transparency_locked() => {
@@ -923,6 +933,7 @@ mod tests {
         assert_eq!(gpu_paint_mode(PaintMode::Clear), Some(GpuPaintMode::Clear));
         assert_eq!(gpu_paint_mode(PaintMode::Dissolve), None);
         assert_eq!(gpu_paint_mode(PaintMode::Behind), None);
+        assert_eq!(gpu_paint_mode(PaintMode::Multiply), None);
     }
 
     #[test]

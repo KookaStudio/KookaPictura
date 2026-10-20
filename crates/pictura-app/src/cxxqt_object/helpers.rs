@@ -242,6 +242,7 @@ pub(super) fn paint_mode_from(mode: &str) -> PaintMode {
         "dissolve" => PaintMode::Dissolve,
         "behind" => PaintMode::Behind,
         "clear" => PaintMode::Clear,
+        "multiply" => PaintMode::Multiply,
         _ => PaintMode::Normal,
     }
 }

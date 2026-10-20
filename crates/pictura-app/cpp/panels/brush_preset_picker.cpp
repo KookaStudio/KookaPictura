@@ -61,7 +61,11 @@ namespace {
 constexpr int kCell = 32;
 
 // One entry of the default set: size, hardness, roundness %, angle°, scatter %,
-// count, size / angle° / roundness jitter, spacing %.
+// count, size / angle° / roundness jitter, spacing %, whether the tip preview
+// model is a pen nib, the grain %, whether the edge is aliased, and optional
+// paint settings (foreground colour, Mode, Opacity, Flow), and Wet Edges. A
+// null colour / negative setting is left as the user has it, which keeps the
+// CS6 presets tip-only.
 struct Preset {
     const char* name;
     int size;
@@ -74,6 +78,14 @@ struct Preset {
     int angleJitter;
     int roundnessJitter;
     int spacing;
+    bool penTip = false;
+    int grain = 0;
+    bool aliased = false;
+    const char* color = nullptr;
+    const char* mode = nullptr;
+    int opacity = -1;
+    int flow = -1;
+    bool wetEdges = false;
 };
 
 // CS6's default brush set in its order, one family per run. The numbers under
@@ -124,14 +136,39 @@ const Preset kPresets[] = {
     {"Hard Round 100", 100, 100, 100, 0, 0, 1, 0, 0, 0, 25},
     {"Soft Round 200", 200, 0, 100, 0, 0, 1, 0, 0, 0, 25},
     {"Soft Round 300", 300, 0, 100, 0, 0, 1, 0, 0, 0, 25},
+    // Issue #731's four brushes. There is no Photoshop tip data to port, so
+    // these are approximated from the owner's strokes (non-parity). Unlike the
+    // CS6 set, each carries the default foreground, Mode, Opacity, and Flow
+    // seen in the owner's screenshots. The airbrush's 25% spacing keeps its
+    // 50% flow from building a solid core, matching the airy reference stroke.
+    // Both pencils are fitted to the owner's pixel-grid screenshots. The 2B's
+    // 8 px, 25% hardness tip at 25% spacing gives its ~7 px soft-shouldered
+    // stroke, and the blue pencil's 4 px soft tip at 20% spacing its ~3.5 px
+    // line (the 100% flow saturates overlapping dabs, so a larger or denser
+    // tip turns flat-topped). The grain strengths (50% and 55%) leave roughly
+    // 75% and 72% mean core coverage.
+    // The oval is measured from the owner's pixel-grid screenshot: a hard
+    // ellipse at half roundness tilted up-right (-50 in this engine's angle
+    // sign), Wet Edges for the light core and darker rim, and 5% spacing so
+    // the 50% flow builds a flat interior.
+    {"2B Pencil", 8, 25, 100, 0, 0, 1, 20, 0, 0, 25, true, 50, false, "#47484a",
+     "normal", 100, 100},
+    {"Airbrush Soft Round 50% flow", 45, 0, 100, 0, 0, 1, 0, 0, 0, 25, false, 0, false,
+     "#47484a", "normal", 100, 50},
+    {"Non-Photo Blue Pencil", 4, 0, 100, 0, 0, 1, 0, 0, 0, 20, true, 55, false, "#73d6ff",
+     "normal", 100, 100},
+    {"Paintbrush Oval 45 pixels Multiply", 45, 100, 50, -50, 0, 1, 0, 0, 0, 5, false, 0,
+     false, "#47484a", "multiply", 35, 50, true},
 };
 
 constexpr int kPresetCount = int(std::size(kPresets));
+constexpr int kAdditionalCount = 4;
 
 PaintTip tipOf(const Preset& p)
 {
     return PaintTip{p.size,    p.hardness, p.roundness,  p.angle,       p.spacing,
-                    p.scatter, p.count,    p.sizeJitter, p.angleJitter, p.roundnessJitter};
+                    p.scatter, p.count,    p.sizeJitter, p.angleJitter, p.roundnessJitter,
+                    p.grain,   p.wetEdges};
 }
 
 } // namespace
@@ -238,6 +275,32 @@ BrushPresetPicker::BrushPresetPicker(ToolController* controller, QWidget* parent
 
 int BrushPresetPicker::presetCount() const { return kPresetCount; }
 
+int BrushPresetPicker::additionalPresetCount() { return kAdditionalCount; }
+
+QString BrushPresetPicker::additionalPresetName(int index)
+{
+    if (index < 0 || index >= kAdditionalCount) {
+        return QString();
+    }
+    return QString::fromLatin1(kPresets[kPresetCount - kAdditionalCount + index].name);
+}
+
+QPixmap BrushPresetPicker::additionalPresetIcon(int index, int edge)
+{
+    if (index < 0 || index >= kAdditionalCount) {
+        return QPixmap();
+    }
+    return tipIcon(tipOf(kPresets[kPresetCount - kAdditionalCount + index]), edge);
+}
+
+void BrushPresetPicker::chooseAdditionalPreset(int index)
+{
+    if (index < 0 || index >= kAdditionalCount) {
+        return;
+    }
+    applyPreset(kPresetCount - kAdditionalCount + index);
+}
+
 void BrushPresetPicker::choosePresetForTest(int index) { applyPreset(index); }
 
 void BrushPresetPicker::buildGrid()
@@ -276,6 +339,22 @@ void BrushPresetPicker::applyPreset(int index)
     paint_->setFlip(false, false);
     paint_->setDynamics(
         BrushDynamics{p.scatter, p.count, p.sizeJitter, p.angleJitter, p.roundnessJitter});
+    paint_->setGrain(p.grain);
+    paint_->setWetEdges(p.wetEdges);
+    paint_->setPenTip(p.penTip);
+    paint_->setAliased(p.aliased);
+    if (controller_ && p.color) {
+        controller_->setForeground(QColor(QString::fromLatin1(p.color)));
+    }
+    if (p.mode) {
+        paint_->setMode(QString::fromLatin1(p.mode));
+    }
+    if (p.opacity >= 0) {
+        paint_->setOpacity(p.opacity);
+    }
+    if (p.flow >= 0) {
+        paint_->setFlow(p.flow);
+    }
     current_->setText(QString::fromLatin1(p.name));
     grid_->setCurrentRow(index);
 }
