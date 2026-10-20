@@ -510,7 +510,7 @@ struct RawLayer {
 /// `(layers, global_layer_mask, layer_section_extra, layer_compression)` read
 /// from the section; the compression is `None` when no engine-encoded layer
 /// channel was present.
-type LayerSection = (Vec<Layer>, Vec<u8>, Vec<u8>, Option<Compression>);
+type LayerSection = (LayerStack, Vec<u8>, Vec<u8>, Option<Compression>);
 
 fn read_layer_section(
     r: &mut Reader,
@@ -525,7 +525,7 @@ fn read_layer_section(
         r.u32()? as usize
     };
     if section_len == 0 {
-        return Ok((Vec::new(), Vec::new(), Vec::new(), None));
+        return Ok((LayerStack::default(), Vec::new(), Vec::new(), None));
     }
     let section_end = r
         .pos
@@ -540,7 +540,7 @@ fn read_layer_section(
     } else {
         r.u32()? as usize
     };
-    let mut layers = Vec::new();
+    let mut layers = LayerStack::default();
     let mut layer_compression = None;
     if info_len != 0 {
         let info_end = r
@@ -581,7 +581,7 @@ fn read_layer_info(
     color_channels: usize,
     depth: u16,
     retain: bool,
-) -> Result<(Vec<Layer>, Option<Compression>), PsdError> {
+) -> Result<(LayerStack, Option<Compression>), PsdError> {
     let count = r.i16()?;
     let n = count.unsigned_abs() as usize;
     let mut raws: Vec<RawLayer> = Vec::new();
@@ -702,7 +702,7 @@ fn read_layer_info(
 
 /// PSD has no background bit: the bottom top-level, non-group layer named
 /// `"Background"` is the Background (design D5, marked inferred).
-fn derive_background(layers: &mut [Layer]) {
+fn derive_background(layers: &mut LayerStack) {
     if let Some(bottom) = layers.first_mut() {
         if !bottom.is_group && bottom.name == "Background" {
             bottom.background = true;
@@ -916,7 +916,7 @@ fn read_layer_record(r: &mut Reader, is_psb: bool) -> Result<RawLayer, PsdError>
             mask,
             adjustment,
             channels: Vec::new(),
-            children: Vec::new(),
+            children: pictura_core::LayerStack::default(),
             is_group: false,
             background: false,
             blend_key,
@@ -1153,7 +1153,7 @@ pub(crate) fn decode_channel_data(
 
 /// Assemble the bottom-first layer tree from flat records. Section dividers
 /// (`'lsct'` type 3) open a group; folder records (types 1/2) close it.
-fn build_tree(raws: Vec<RawLayer>) -> Vec<Layer> {
+fn build_tree(raws: Vec<RawLayer>) -> LayerStack {
     let mut stack: Vec<Vec<Layer>> = vec![Vec::new()];
     for raw in raws {
         match raw.section {
@@ -1163,7 +1163,7 @@ fn build_tree(raws: Vec<RawLayer>) -> Vec<Layer> {
                 group.is_group = true;
                 group.channels = Vec::new();
                 group.mask = None;
-                group.children = stack.pop().unwrap_or_default();
+                group.children = LayerStack::from_layers(stack.pop().unwrap_or_default());
                 stack.last_mut().unwrap().push(group);
             }
             _ => stack.last_mut().unwrap().push(raw.layer),
@@ -1175,7 +1175,7 @@ fn build_tree(raws: Vec<RawLayer>) -> Vec<Layer> {
         let contents = stack.pop().unwrap();
         stack.last_mut().unwrap().extend(contents);
     }
-    stack.pop().unwrap()
+    LayerStack::from_layers(stack.pop().unwrap())
 }
 
 #[cfg(test)]

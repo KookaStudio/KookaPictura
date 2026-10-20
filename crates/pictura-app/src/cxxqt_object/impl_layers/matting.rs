@@ -179,7 +179,7 @@ mod tests {
 
     fn state(layer: Layer) -> PictureViewRust {
         let mut doc = pictura_core::Document::new(4, 1, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = vec![layer];
+        doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         PictureViewRust {
             doc: Some(doc),
             active_layer: Some("0".to_string()),

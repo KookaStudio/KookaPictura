@@ -7,7 +7,7 @@
 //! re-encode framing-only (EngineData stays opaque inside those bytes). A
 //! malformed block leaves the view unset rather than failing the document.
 
-use pictura_core::{AntiAlias, Layer, TextStyle, TypeTool};
+use pictura_core::{AntiAlias, LayerStack, TextStyle, TypeTool};
 
 use crate::common::Reader;
 use crate::descriptor::{self, get_object_item, DescValue};
@@ -15,7 +15,7 @@ use crate::engine_data::{extract_fonts, extract_style, parse_engine_data};
 
 /// Resolve `TySh` for `layers` (and their children). Never fails: an absent or
 /// unparseable block leaves `type_tool` unset.
-pub(crate) fn resolve_type_tools(layers: &mut [Layer]) {
+pub(crate) fn resolve_type_tools(layers: &mut LayerStack) {
     for layer in layers.iter_mut() {
         layer.type_tool = layer
             .extra_block(b"TySh")
@@ -172,6 +172,7 @@ fn extract_text(value: &DescValue) -> String {
 mod tests {
     use super::*;
     use crate::descriptor::write_descriptor;
+    use pictura_core::Layer;
 
     const TEXT: &str = "Hi\rThere";
 
@@ -363,13 +364,13 @@ mod tests {
         bytes[text_version_at..text_version_at + 2].copy_from_slice(&49u16.to_be_bytes());
         assert!(decode_type_tool(&bytes).is_none(), "text version != 50");
 
-        let mut layers = [Layer {
+        let mut layers = LayerStack::from_layers(vec![Layer {
             extra_blocks: vec![pictura_core::LayerBlock {
                 key: *b"TySh",
                 data: bad_version,
             }],
             ..Default::default()
-        }];
+        }]);
         resolve_type_tools(&mut layers);
         assert!(layers[0].type_tool.is_none(), "view stays unset");
         assert!(layers[0].is_type(), "kind detection stays presence-only");

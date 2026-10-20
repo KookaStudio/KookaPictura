@@ -430,31 +430,33 @@ fn rasterize_shape_refuses_a_plain_layer() {
 fn rasterize_all_layers_rasterizes_a_type_layer() {
     let mut d = doc(200, 80, Vec::new());
     add_solid_fill(&mut d, "", [1, 1, 1, 255]);
-    d.layers.push(Layer {
-        name: "text".into(),
-        rect: full(200, 80),
-        type_tool: Some(pictura_core::TypeTool {
-            transform: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
-            text: "Hi".into(),
-            bounds: [0, 0, 200, 80],
-            text_desc: Vec::new(),
-            warp_desc: Vec::new(),
-            fonts: Vec::new(),
-            style: Some(pictura_core::TextStyle {
-                font: Some("Arial".into()),
-                character: pictura_core::CharacterAttrs {
-                    size: 48.0,
-                    fill_color: [1.0, 0.0, 0.0, 0.0],
-                    ..pictura_core::CharacterAttrs::default()
-                },
-                paragraph: pictura_core::ParagraphAttrs::default(),
-                ..pictura_core::TextStyle::default()
+    {
+        let _ = d.layers.push(Layer {
+            name: "text".into(),
+            rect: full(200, 80),
+            type_tool: Some(pictura_core::TypeTool {
+                transform: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+                text: "Hi".into(),
+                bounds: [0, 0, 200, 80],
+                text_desc: Vec::new(),
+                warp_desc: Vec::new(),
+                fonts: Vec::new(),
+                style: Some(pictura_core::TextStyle {
+                    font: Some("Arial".into()),
+                    character: pictura_core::CharacterAttrs {
+                        size: 48.0,
+                        fill_color: [1.0, 0.0, 0.0, 0.0],
+                        ..pictura_core::CharacterAttrs::default()
+                    },
+                    paragraph: pictura_core::ParagraphAttrs::default(),
+                    ..pictura_core::TextStyle::default()
+                }),
+                vertical: false,
+                box_bounds: None,
             }),
-            vertical: false,
-            box_bounds: None,
-        }),
-        ..Default::default()
-    });
+            ..Default::default()
+        });
+    };
     assert_eq!(
         rasterize_all_layers(&mut d),
         2,

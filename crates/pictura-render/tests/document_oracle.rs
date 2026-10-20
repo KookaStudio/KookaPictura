@@ -72,7 +72,7 @@ fn pixel_layer(name: &str, r: PsdRect, mask: Option<LayerMask>) -> Layer {
                 data: plane(200, n).into(),
             },
         ],
-        children: Vec::new(),
+        children: pictura_core::LayerStack::default(),
         is_group: false,
         background: false,
         ..Default::default()
@@ -93,7 +93,7 @@ fn group(name: &str, children: Vec<Layer>) -> Layer {
         mask: None,
         adjustment: None,
         channels: Vec::new(),
-        children,
+        children: pictura_core::LayerStack::from_layers(children),
         is_group: true,
         background: false,
         ..Default::default()
@@ -113,11 +113,11 @@ fn sample_doc() -> Document {
         data: Some(plane(10, 8).into()),
         ..Default::default()
     };
-    doc.layers = vec![
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
         pixel_layer("base", rect(0, 0, 4, 6), None),
         pixel_layer("masked", rect(1, 1, 3, 5), Some(mask)),
         group("grp", vec![pixel_layer("inner", rect(0, 0, 2, 3), None)]),
-    ];
+    ]);
     doc.channels = vec![Channel {
         id: -1,
         data: plane(0, 24).into(),
@@ -129,10 +129,10 @@ fn sample_doc() -> Document {
 /// Plain two-layer document for the external `psd-tools` check.
 fn plain_doc() -> Document {
     let mut doc = Document::new(8, 6, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
         pixel_layer("bottom", rect(0, 0, 6, 8), None),
         pixel_layer("top", rect(0, 0, 3, 4), None),
-    ];
+    ]);
     doc.composite = composite_rgba(&doc);
     doc
 }
@@ -241,7 +241,8 @@ fn rotate_document_in_right_angle_matches_exact_remap() {
 fn rotate_document_in_matches_rotate_in_kernel() {
     // One full-canvas layer: the doc-level resample is the buffer kernel.
     let mut doc = Document::new(6, 4, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![pixel_layer("only", rect(0, 0, 4, 6), None)];
+    doc.layers =
+        pictura_core::LayerStack::from_layers(vec![pixel_layer("only", rect(0, 0, 4, 6), None)]);
     doc.composite = composite_rgba(&doc);
     let before = doc.layers[0].channels[0].data.to_vec();
 
@@ -518,7 +519,7 @@ fn rotate_document_in_matches_imagemagick_central_region() {
         layer.channels[c].data = planar[c * plane..(c + 1) * plane].to_vec().into();
     }
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![layer];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
     doc.composite = composite_rgba(&doc);
 
     let (reference, (iw, ih)) = oracle_rotate(&planar, "16x16", "30");

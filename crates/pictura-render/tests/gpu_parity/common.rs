@@ -104,7 +104,7 @@ pub(crate) fn layer(
                 data: a.into(),
             },
         ],
-        children: Vec::new(),
+        children: pictura_core::LayerStack::default(),
         is_group: false,
         background: false,
         ..Default::default()
@@ -131,7 +131,7 @@ pub(crate) fn group(name: &str, blend: BlendMode, opacity: u8, children: Vec<Lay
         mask: None,
         adjustment: None,
         channels: Vec::new(),
-        children,
+        children: pictura_core::LayerStack::from_layers(children),
         is_group: true,
         background: false,
         ..Default::default()
@@ -152,7 +152,7 @@ pub(crate) fn scene(mode: BlendMode) -> Document {
             64 + x as u8 * 16,
         )
     });
-    doc.layers = vec![base, top];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![base, top]);
     doc
 }
 
@@ -188,7 +188,7 @@ pub(crate) fn adjustment_layer(name: &str, adjustment: AdjustmentData) -> Layer 
         mask: None,
         adjustment: Some(adjustment),
         channels: Vec::new(),
-        children: Vec::new(),
+        children: pictura_core::LayerStack::default(),
         is_group: false,
         background: false,
         ..Default::default()
@@ -249,7 +249,7 @@ pub(crate) fn large_layer(w: u32, h: u32, seed: u32, blend: BlendMode) -> Layer 
                 data: a.into(),
             },
         ],
-        children: Vec::new(),
+        children: pictura_core::LayerStack::default(),
         is_group: false,
         background: false,
         ..Default::default()

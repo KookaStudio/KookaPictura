@@ -6,8 +6,8 @@ use super::merge::{
 };
 use super::properties::{delete_hidden_layers, select_similar};
 use pictura_core::{
-    BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LockFlags, PixelBuffer,
-    PsdRect,
+    BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LayerMask, LockFlags,
+    PixelBuffer, PsdRect,
 };
 
 fn rect(w: i32, h: i32) -> PsdRect {
@@ -60,7 +60,7 @@ fn solid(name: &str, bounds: PsdRect, r: u8, g: u8, b: u8, a: u8) -> Layer {
                 data: vec![a; n].into(),
             },
         ],
-        children: Vec::new(),
+        children: pictura_core::LayerStack::default(),
         is_group: false,
         background: false,
         ..Default::default()
@@ -88,7 +88,7 @@ fn group(name: &str, children: Vec<Layer>) -> Layer {
         mask: None,
         adjustment: None,
         channels: Vec::new(),
-        children,
+        children: pictura_core::LayerStack::from_layers(children),
         is_group: true,
         background: false,
         ..Default::default()
@@ -97,7 +97,7 @@ fn group(name: &str, children: Vec<Layer>) -> Layer {
 
 fn doc_with(w: u32, h: u32, layers: Vec<Layer>) -> Document {
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = layers;
+    doc.layers = pictura_core::LayerStack::from_layers(layers);
     doc
 }
 
@@ -141,7 +141,7 @@ fn node_interleaved(layer: &Layer) -> Vec<u8> {
 /// The oracle: `composite_rgba` of exactly the inputs, cropped to the node.
 fn inputs_composite(inputs: Vec<Layer>, doc: &Document, bounds: PsdRect) -> Vec<u8> {
     let mut scratch = Document::new(doc.width, doc.height, doc.mode, doc.depth);
-    scratch.layers = inputs;
+    scratch.layers = pictura_core::LayerStack::from_layers(inputs);
     crop(&crate::composite_rgba(&scratch), bounds)
 }
 
@@ -180,6 +180,48 @@ fn merge_down_union_rect_covers_both_content_boxes() {
 }
 
 #[test]
+fn merge_down_applies_masks_into_alpha() {
+    let mut lower = solid("lower", rect(4, 4), 10, 20, 30, 255);
+    let lower_alpha = lower
+        .channels
+        .iter_mut()
+        .find(|channel| channel.id == -1)
+        .expect("lower alpha");
+    lower_alpha.data = vec![
+        255, 255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0,
+    ]
+    .into();
+
+    let mut upper = solid("upper", rect(4, 4), 200, 210, 220, 255);
+    upper.mask = Some(LayerMask {
+        rect: rect(4, 4),
+        default_color: 255,
+        data: Some(vec![0, 0, 255, 0, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255].into()),
+        ..Default::default()
+    });
+
+    let mut doc = doc_with(4, 4, vec![lower.clone(), upper.clone()]);
+    let outcome = merge_scope(&mut doc, MergeScope::Down("1")).unwrap();
+    assert_eq!(outcome.replaced, 2);
+    let merged = &doc.layers[0];
+    let expected = inputs_composite(vec![lower, upper], &doc, rect(4, 4));
+    assert_eq!(node_interleaved(merged), expected);
+    let alpha = merged
+        .channels
+        .iter()
+        .find(|channel| channel.id == -1)
+        .expect("merged alpha");
+    let expected_alpha = [
+        255, 255, 255, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    ];
+    assert_eq!(&alpha.data[..], &expected_alpha[..]);
+    assert!(
+        merged.mask.is_none(),
+        "the result owns its pixels, not a mask"
+    );
+}
+
+#[test]
 fn merge_down_refuses_without_a_layer_below() {
     let mut doc = doc_with(4, 4, vec![solid("only", rect(4, 4), 1, 2, 3, 255)]);
     let before = doc.clone();
@@ -206,6 +248,25 @@ fn merge_down_refuses_adjustment_targets() {
         Err(MergeError::InvalidTarget)
     );
     assert_eq!(doc, before);
+}
+
+#[test]
+fn merge_down_bakes_an_adjustment_source() {
+    let lower = solid("lower", rect(4, 4), 40, 60, 80, 255);
+    let adj = adjustment("adj", rect(4, 4));
+    let mut doc = doc_with(4, 4, vec![lower.clone(), adj.clone()]);
+
+    assert!(can_merge_scope(&doc, &MergeScope::Down("1")));
+    merge_scope(&mut doc, MergeScope::Down("1")).unwrap();
+    assert_eq!(doc.layers.len(), 1);
+    let merged = &doc.layers[0];
+    assert_eq!(merged.name, "lower");
+    assert_eq!(merged.blend, lower.blend);
+    assert_eq!(merged.opacity, lower.opacity);
+    assert!(merged.adjustment.is_none());
+
+    let expected = inputs_composite(vec![lower, adj], &doc, rect(4, 4));
+    assert_eq!(node_interleaved(merged), expected);
 }
 
 #[test]
@@ -267,6 +328,26 @@ fn merge_layers_refuses_adjustment_bottom() {
         Err(MergeError::InvalidTarget)
     );
     assert_eq!(doc, before);
+}
+
+#[test]
+fn merge_layers_bakes_an_adjustment_above_the_bottom() {
+    let bottom = solid("bottom", rect(4, 4), 20, 40, 60, 255);
+    let adj = adjustment("adj", rect(4, 4));
+    let top = solid("top", rect(4, 4), 200, 10, 10, 255);
+    let mut doc = doc_with(4, 4, vec![bottom.clone(), adj.clone(), top.clone()]);
+
+    let selected = vec!["0".to_string(), "1".to_string(), "2".to_string()];
+    merge_scope(&mut doc, MergeScope::Selected(&selected)).unwrap();
+    assert_eq!(doc.layers.len(), 1);
+    let merged = &doc.layers[0];
+    assert_eq!(merged.name, "top");
+    assert_eq!(merged.blend, BlendMode::Normal);
+    assert_eq!(merged.opacity, 255);
+    assert!(merged.adjustment.is_none());
+
+    let expected = inputs_composite(vec![bottom, adj, top], &doc, rect(4, 4));
+    assert_eq!(node_interleaved(merged), expected);
 }
 
 #[test]
@@ -471,6 +552,16 @@ fn can_merge_scope_matches_the_merge_guards() {
     );
     assert!(!can_merge_scope(&adj, &MergeScope::Down("1")));
 
+    let adj_source = doc_with(
+        4,
+        4,
+        vec![
+            solid("lower", rect(4, 4), 1, 2, 3, 255),
+            adjustment("adj", rect(4, 4)),
+        ],
+    );
+    assert!(can_merge_scope(&adj_source, &MergeScope::Down("1")));
+
     let two = vec!["0".to_string(), "1".to_string()];
     assert!(can_merge_scope(&pair, &MergeScope::Selected(&two)));
     let one = vec!["0".to_string()];
@@ -530,7 +621,7 @@ fn select_similar_matches_class_adjustment_kind_and_blend() {
     posterize.adjustment = Some(crate::encode_posterize(4));
 
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
         background,                            // 0
         solid("p1", rect(4, 4), 1, 1, 1, 255), // 1
         multiply,                              // 2
@@ -540,7 +631,7 @@ fn select_similar_matches_class_adjustment_kind_and_blend() {
         posterize,                             // 6
         group("g1", Vec::new()),               // 7
         group("g2", Vec::new()),               // 8
-    ];
+    ]);
 
     // Same pixel class and Normal blend, topmost-first, reference excluded.
     assert_eq!(select_similar(&doc, "3"), vec!["1".to_string()]);
@@ -562,7 +653,11 @@ fn delete_hidden_layers_removes_hidden_and_counts_nested_group_once() {
     nested.visible = false;
 
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![solid("v", rect(4, 4), 1, 1, 1, 255), hidden, nested];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
+        solid("v", rect(4, 4), 1, 1, 1, 255),
+        hidden,
+        nested,
+    ]);
 
     assert_eq!(delete_hidden_layers(&mut doc), 2);
     assert_eq!(doc.layers.len(), 1);
@@ -572,10 +667,10 @@ fn delete_hidden_layers_removes_hidden_and_counts_nested_group_once() {
 #[test]
 fn delete_hidden_layers_is_noop_without_hidden_layers() {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
         solid("a", rect(4, 4), 1, 1, 1, 255),
         solid("b", rect(4, 4), 1, 1, 1, 255),
-    ];
+    ]);
     let before = doc.clone();
     assert_eq!(delete_hidden_layers(&mut doc), 0);
     assert_eq!(doc, before);

@@ -1,6 +1,6 @@
-// Layer > Arrange / Reverse / Merge Down / Delete Layer, the non-destructive
-// Stamp Visible / Stamp Selected, and the Lock Layers / Lock All Layers In
-// Group commands, over the Layers panel selection and the active layer.
+// Layer > Arrange / Reverse / Delete Layer, the non-destructive Stamp Visible /
+// Stamp Selected, and the Lock Layers / Lock All Layers In Group commands, over
+// the Layers panel selection and the active layer.
 
 #include "frame_includes.h"
 
@@ -48,21 +48,6 @@ void PicturaMainWindow::wireLayerArrangeStamp()
         PictureView* view = activeView();
         return view && view->has_document() && layersPanel_
             && layersPanel_->selectedPaths().size() >= 2;
-    });
-
-    // Layer > Merge Down: the active layer and the layer directly below it.
-    registry_->setHandler(command_ids::LayerMergeDown, [this]() {
-        PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
-        if (view && !path.isEmpty() && merge_down_run(*view, path) > 0) {
-            refresh();
-        }
-    });
-    registry_->setEnabledProvider(command_ids::LayerMergeDown, [this]() {
-        PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
-        return view && view->has_document() && !path.isEmpty()
-            && view->can_merge_layers(QStringList{path});
     });
 
     // Stamp Visible / Stamp Selected: composite into a new layer, non-destructive.

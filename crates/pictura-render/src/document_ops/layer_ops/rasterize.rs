@@ -96,7 +96,7 @@ pub fn rasterize_shape(doc: &mut Document, path: &str) -> bool {
     source.opacity = 255;
     source.mask = None;
     source.blend = pictura_core::BlendMode::Normal;
-    scratch.layers = vec![source];
+    scratch.layers = pictura_core::LayerStack::from_layers(vec![source]);
     let rendered = crate::composite_rgba(&scratch);
 
     let Some(layer) = resolve_path_mut(doc, path) else {

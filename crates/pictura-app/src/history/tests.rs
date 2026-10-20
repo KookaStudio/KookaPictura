@@ -499,7 +499,7 @@ fn region_deltas_retain_only_changed_tiles() {
 #[test]
 fn every_state_matches_a_reference_copy() {
     let mut doc = doc(200, 130, 5);
-    doc.layers = vec![Layer {
+    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
         name: "paint".into(),
         rect: pictura_core::PsdRect {
             top: 0,
@@ -512,7 +512,7 @@ fn every_state_matches_a_reference_copy() {
             data: vec![9u8; 200 * 130].into(),
         }],
         ..Default::default()
-    }];
+    }]);
 
     let mut history = History::default();
     let mut reference: Vec<Snapshot> = Vec::new();
@@ -605,7 +605,7 @@ fn geometry_change_uses_a_full_anchor_and_still_undoes() {
 #[test]
 fn paint_commit_undo_restores_the_prior_pixels() {
     let mut doc = Document::new(64, 64, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![Layer {
+    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
         name: "base".into(),
         rect: pictura_core::PsdRect {
             top: 0,
@@ -624,7 +624,7 @@ fn paint_commit_undo_restores_the_prior_pixels() {
             },
         ],
         ..Default::default()
-    }];
+    }]);
     let prior_layer = doc.layers[0].channels[0].data.clone();
     let prior_composite = doc.composite.data.clone();
 
@@ -859,7 +859,7 @@ fn live_restores_match_a_full_snapshot_history() {
         let mut rng = Rng(seed);
         let mut live = doc(w, h, 3);
         live.composite.data = (0..(w * h * 3) as usize).map(|i| (i % 251) as u8).collect();
-        live.layers = vec![model_layer("base", w, h, 1)];
+        live.layers = pictura_core::LayerStack::from_layers(vec![model_layer("base", w, h, 1)]);
         let mut selection: Option<Selection> = None;
         let mut history = History::default();
         history.capture_live(&mut live, &selection, "Open");
@@ -928,11 +928,13 @@ fn live_restores_match_a_full_snapshot_history() {
                             }
                         }
                     }
-                    5 => live
-                        .layers
-                        .push(model_layer("added", w, h, rng.next() as u8)),
+                    5 => {
+                        let _ = live
+                            .layers
+                            .push(model_layer("added", w, h, rng.next() as u8));
+                    }
                     6 if live.layers.len() > 1 => {
-                        live.layers.pop();
+                        let _ = live.layers.pop();
                     }
                     7 => live.layers[0].opacity = rng.next() as u8,
                     _ => selection = Some(Selection::rect(w, h, 2, 3, 1 + rng.below(20) as i32, 4)),
@@ -990,13 +992,16 @@ fn live_restores_match_a_full_snapshot_history() {
 fn undoing_a_reorder_of_equal_layers_reports_the_whole_document() {
     let (w, h) = (40u32, 30u32);
     let mut live = doc(w, h, 3);
-    live.layers = vec![model_layer("a", w, h, 1), model_layer("b", w, h, 90)];
+    live.layers = pictura_core::LayerStack::from_layers(vec![
+        model_layer("a", w, h, 1),
+        model_layer("b", w, h, 90),
+    ]);
     let mut selection: Option<Selection> = None;
     let mut history = History::default();
     history.capture_live(&mut live, &selection, "Open");
     let open = live.clone();
 
-    live.layers.swap(0, 1);
+    assert!(live.layers.move_node(&[0], &[], 2).is_ok());
     history.capture_live(&mut live, &selection, "Reorder");
     assert_eq!(history.anchor_count(), 2, "a reorder starts a new segment");
 

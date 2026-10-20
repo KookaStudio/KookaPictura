@@ -76,7 +76,7 @@ fn solid(
                 data: vec![alpha; n].into(),
             },
         ],
-        children: Vec::new(),
+        children: pictura_core::LayerStack::default(),
         is_group: false,
         background: false,
         ..Default::default()
@@ -103,7 +103,7 @@ fn group(
         mask,
         adjustment: None,
         channels: Vec::new(),
-        children,
+        children: pictura_core::LayerStack::from_layers(children),
         is_group: true,
         background: false,
         ..Default::default()
@@ -112,7 +112,7 @@ fn group(
 
 fn doc(w: u32, h: u32, layers: Vec<Layer>) -> Document {
     let mut d = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
-    d.layers = layers;
+    d.layers = pictura_core::LayerStack::from_layers(layers);
     d
 }
 
@@ -163,7 +163,7 @@ fn adjustment_layer(
         mask,
         adjustment: Some(adjdata(key, data)),
         channels: Vec::new(),
-        children: Vec::new(),
+        children: pictura_core::LayerStack::default(),
         is_group: false,
         background: false,
         ..Default::default()

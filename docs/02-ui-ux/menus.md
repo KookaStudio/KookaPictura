@@ -189,7 +189,7 @@ Legend: **✓** confirmed in the CS6 Help or a CS6-derived reference;
   Left, Horizontal Center, Right)
 - Distribute ▸ ✓ (Top, Vertical Center, Bottom, Left, Horizontal Center, Right)
 - Lock All Layers In Group… ✓
-- Merge Layers — `Ctrl+E` ✓
+- Merge Down / Merge Layers (one selection-dependent item) — `Ctrl+E` ✓
 - Merge Visible — `Shift+Ctrl+E` ✓
 - Flatten Image ✓
 - Matting ▸ ✓ (Defringe… ✓; Remove Black Matte ✓; Remove White Matte ✓)

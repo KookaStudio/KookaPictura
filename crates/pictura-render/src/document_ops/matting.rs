@@ -318,7 +318,7 @@ mod tests {
                     data: alpha.into(),
                 },
             ],
-            children: Vec::new(),
+            children: pictura_core::LayerStack::default(),
             is_group: false,
             background: false,
             ..Default::default()

@@ -11,7 +11,7 @@
 //! a rounding LSB. Rendering intent is fixed at relative-colorimetric.
 
 use pictura_color::{convert, ByteTransform, Intent, Policy, Profile};
-use pictura_core::{ColorMode, Document, Layer, PixelBuffer};
+use pictura_core::{ColorMode, Document, Layer, LayerStack, PixelBuffer};
 
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -150,7 +150,7 @@ fn convert_layer(layer: &mut Layer, src: &Profile, dst: &Profile) {
 
 /// Convert every layer in `layers` and, recursively, every descendant of a
 /// group, so a nested pixel layer is not left in the old profile.
-fn convert_layers(layers: &mut [Layer], src: &Profile, dst: &Profile) {
+fn convert_layers(layers: &mut LayerStack, src: &Profile, dst: &Profile) {
     for layer in layers {
         convert_layer(layer, src, dst);
         convert_layers(&mut layer.children, src, dst);
@@ -464,20 +464,22 @@ mod tests {
         let profile = Profile::adobe_rgb().to_icc();
         let mut doc = rgb_document();
         doc.image_resources = icc_resource(&profile);
-        doc.layers.push(Layer {
-            name: "partial".into(),
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 1,
-                right: 2,
-            },
-            channels: vec![Channel {
-                id: 0,
-                data: vec![1, 2].into(),
-            }],
-            ..Default::default()
-        });
+        {
+            let _ = doc.layers.push(Layer {
+                name: "partial".into(),
+                rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: 1,
+                    right: 2,
+                },
+                channels: vec![Channel {
+                    id: 0,
+                    data: vec![1, 2].into(),
+                }],
+                ..Default::default()
+            });
+        };
         let original = doc.layers[0].channels[0].data.clone();
         let out = apply_icc(doc);
         assert_eq!(out.layers[0].channels[0].data, original);
@@ -530,31 +532,33 @@ mod tests {
         let profile = Profile::adobe_rgb().to_icc();
         let mut doc = rgb_document();
         doc.image_resources = icc_resource(&profile);
-        doc.layers.push(Layer {
-            name: "bgr".into(),
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 1,
-                right: 1,
-            },
-            // Stored G, B, R; id-based selection must convert [R, G, B].
-            channels: vec![
-                Channel {
-                    id: 1,
-                    data: vec![10].into(),
+        {
+            let _ = doc.layers.push(Layer {
+                name: "bgr".into(),
+                rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: 1,
+                    right: 1,
                 },
-                Channel {
-                    id: 2,
-                    data: vec![20].into(),
-                },
-                Channel {
-                    id: 0,
-                    data: vec![30].into(),
-                },
-            ],
-            ..Default::default()
-        });
+                // Stored G, B, R; id-based selection must convert [R, G, B].
+                channels: vec![
+                    Channel {
+                        id: 1,
+                        data: vec![10].into(),
+                    },
+                    Channel {
+                        id: 2,
+                        data: vec![20].into(),
+                    },
+                    Channel {
+                        id: 0,
+                        data: vec![30].into(),
+                    },
+                ],
+                ..Default::default()
+            });
+        };
 
         let out = apply_icc(doc);
         let id = |id: i16| {
@@ -640,20 +644,22 @@ mod tests {
     #[test]
     fn convert_with_incomplete_layer_channels_is_not_an_error() {
         let mut doc = rgb_document();
-        doc.layers.push(Layer {
-            name: "partial".into(),
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 1,
-                right: 2,
-            },
-            channels: vec![Channel {
-                id: 0,
-                data: vec![1, 2].into(),
-            }],
-            ..Default::default()
-        });
+        {
+            let _ = doc.layers.push(Layer {
+                name: "partial".into(),
+                rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: 1,
+                    right: 2,
+                },
+                channels: vec![Channel {
+                    id: 0,
+                    data: vec![1, 2].into(),
+                }],
+                ..Default::default()
+            });
+        };
         let before = doc.layers[0].channels[0].data.clone();
         assert!(convert_document(&mut doc, &Profile::adobe_rgb()));
         assert_eq!(doc.layers[0].channels[0].data, before);
@@ -735,12 +741,14 @@ mod tests {
         let mut doc = rgb_document();
         let child = rgb_layer("child");
         let before = child.channels[0].data.clone();
-        doc.layers.push(Layer {
-            name: "group".into(),
-            is_group: true,
-            children: vec![child],
-            ..Default::default()
-        });
+        {
+            let _ = doc.layers.push(Layer {
+                name: "group".into(),
+                is_group: true,
+                children: pictura_core::LayerStack::from_layers(vec![child]),
+                ..Default::default()
+            });
+        };
         assert!(convert_document(&mut doc, &Profile::adobe_rgb()));
         assert_ne!(
             doc.layers[0].children[0].channels[0].data, before,
@@ -755,12 +763,14 @@ mod tests {
         doc.image_resources = icc_resource(&profile);
         let child = rgb_layer("child");
         let before = child.channels[0].data.clone();
-        doc.layers.push(Layer {
-            name: "group".into(),
-            is_group: true,
-            children: vec![child],
-            ..Default::default()
-        });
+        {
+            let _ = doc.layers.push(Layer {
+                name: "group".into(),
+                is_group: true,
+                children: pictura_core::LayerStack::from_layers(vec![child]),
+                ..Default::default()
+            });
+        };
         let out = apply_icc(doc);
         assert_ne!(out.layers[0].children[0].channels[0].data, before);
     }

@@ -549,8 +549,6 @@ void addDefaultCommands(CommandRegistry& registry) {
     registry.add(command_ids::LayerLockAllInGroup, {"Layer", "Lock All Layers In Group…"},
                  QStringLiteral("Lock All Layers In Group…"), QKeySequence(), true);
     registry.addSeparator({"Layer"});
-    registry.add(command_ids::LayerMergeDown, {"Layer", "Merge Down"},
-                 QStringLiteral("Merge Down"), QKeySequence(), true);
     registry.add(command_ids::LayerMergeLayers, {"Layer", "Merge Layers"},
                  QStringLiteral("Merge Layers"), QKeySequence(QStringLiteral("Ctrl+E")), true);
     registry.add(command_ids::LayerMergeVisible, {"Layer", "Merge Visible"},

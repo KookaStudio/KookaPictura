@@ -101,13 +101,15 @@ fn vector_document() -> Document {
         [30, 200, 80, 255],
     );
     let grouped = doc.layers.pop().unwrap();
-    doc.layers.push(Layer {
-        name: "Group".into(),
-        is_group: true,
-        opacity: 160,
-        children: vec![grouped],
-        ..Default::default()
-    });
+    {
+        let _ = doc.layers.push(Layer {
+            name: "Group".into(),
+            is_group: true,
+            opacity: 160,
+            children: pictura_core::LayerStack::from_layers(vec![grouped]),
+            ..Default::default()
+        });
+    };
     let ellipse = &mut doc.layers[1];
     ellipse.blend = BlendMode::Multiply;
     ellipse.opacity = 200;

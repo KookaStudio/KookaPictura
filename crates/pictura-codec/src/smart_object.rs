@@ -6,7 +6,7 @@
 //! view and degrades to [`SmartObjectKind::Unresolved`] rather than failing a
 //! file whose smart-object data is malformed but preserved.
 
-use pictura_core::{Layer, LayerBlock, SmartFilter, SmartObject, SmartObjectKind};
+use pictura_core::{Layer, LayerBlock, LayerStack, SmartFilter, SmartObject, SmartObjectKind};
 
 use crate::common::{is_psb_big_key, Reader};
 use crate::descriptor::DescValue;
@@ -29,7 +29,7 @@ struct LinkedRecord {
 /// document-level linked-layer bytes. Never fails: an unparseable list or
 /// descriptor leaves the layer unresolved.
 pub(crate) fn resolve_smart_objects(
-    layers: &mut [Layer],
+    layers: &mut LayerStack,
     layer_section_extra: &[u8],
     is_psb: bool,
 ) {
@@ -703,7 +703,7 @@ mod tests {
         let record = linked_layer(b"liFE", 3, uuid, "linked.psd", &[]);
         let section = tagged(b"lnk2", &linked_list(&[record]));
 
-        let mut layers = vec![config_layer(uuid)];
+        let mut layers = LayerStack::from_layers(vec![config_layer(uuid)]);
         resolve_smart_objects(&mut layers, &section, false);
         let so = layers[0].smart_object.as_ref().expect("resolved");
         assert_eq!(so.kind, SmartObjectKind::External);
@@ -713,7 +713,8 @@ mod tests {
 
     #[test]
     fn config_without_matching_record_is_unresolved() {
-        let mut layers = vec![config_layer("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")];
+        let mut layers =
+            LayerStack::from_layers(vec![config_layer("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")]);
         resolve_smart_objects(&mut layers, &tagged(b"lnk2", &linked_list(&[])), false);
         let so = layers[0].smart_object.as_ref().expect("resolved");
         assert_eq!(so.kind, SmartObjectKind::Unresolved);
@@ -727,7 +728,7 @@ mod tests {
         let record = linked_layer(b"liFD", 7, uuid, "Layer 1.psb", b"8BPS\x00\x02raw");
         let section = tagged(b"lnk2", &linked_list(&[record]));
 
-        let mut layers = vec![config_layer(uuid)];
+        let mut layers = LayerStack::from_layers(vec![config_layer(uuid)]);
         resolve_smart_objects(&mut layers, &section, false);
         let so = layers[0].smart_object.as_ref().expect("resolved");
         assert_eq!(so.kind, SmartObjectKind::Embedded);
@@ -746,7 +747,7 @@ crs:Exposure2012=\"+0.50\"/></rdf:RDF></x:xmpmeta>";
         let record = linked_layer(b"liFD", 7, uuid, "raw.psb", xmp);
         let section = tagged(b"lnk2", &linked_list(&[record]));
 
-        let mut layers = vec![config_layer(uuid)];
+        let mut layers = LayerStack::from_layers(vec![config_layer(uuid)]);
         resolve_smart_objects(&mut layers, &section, false);
         let so = layers[0].smart_object.as_ref().expect("resolved");
         assert_eq!(so.kind, SmartObjectKind::Embedded);

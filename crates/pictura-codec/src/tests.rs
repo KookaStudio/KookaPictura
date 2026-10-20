@@ -1,3 +1,5 @@
+mod clipping_invariants;
+
 use super::*;
 
 use crate::common::{
@@ -320,7 +322,7 @@ fn pixel(name: &str, r: PsdRect, color_channels: u8, blend: BlendMode, opacity: 
         mask: None,
         adjustment: None,
         channels,
-        children: Vec::new(),
+        children: pictura_core::LayerStack::default(),
         is_group: false,
         background: false,
         ..Default::default()
@@ -350,7 +352,7 @@ fn round_trip_layers_group_and_mask() {
         mask: None,
         adjustment: None,
         channels: Vec::new(),
-        children: vec![green, blue],
+        children: pictura_core::LayerStack::from_layers(vec![green, blue]),
         is_group: true,
         background: false,
         ..Default::default()
@@ -366,7 +368,7 @@ fn round_trip_layers_group_and_mask() {
         ..Default::default()
     });
 
-    doc.layers = vec![red, group, masked];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![red, group, masked]);
 
     let bytes = write_psd(&doc).unwrap();
     let back = read_psd(&bytes).unwrap();
@@ -395,7 +397,7 @@ fn round_trip_layers_group_and_mask() {
 fn pass_through_group_round_trips() {
     let mut doc = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
     let child = pixel("Child", rect(0, 0, 4, 4), 3, BlendMode::Multiply, 255);
-    doc.layers = vec![Layer {
+    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
         name: "Pass Group".to_string(),
         rect: rect(0, 0, 0, 0),
         blend: BlendMode::PassThrough,
@@ -408,11 +410,11 @@ fn pass_through_group_round_trips() {
         mask: None,
         adjustment: None,
         channels: Vec::new(),
-        children: vec![child],
+        children: pictura_core::LayerStack::from_layers(vec![child]),
         is_group: true,
         background: false,
         ..Default::default()
-    }];
+    }]);
 
     let bytes = write_psd(&doc).unwrap();
     let back = read_psd(&bytes).unwrap();
@@ -424,7 +426,13 @@ fn pass_through_group_round_trips() {
 #[test]
 fn gray_layer_round_trips() {
     let mut doc = Document::new(8, 8, ColorMode::Grayscale, BitDepth::Eight);
-    doc.layers = vec![pixel("Gray", rect(0, 0, 8, 8), 1, BlendMode::Normal, 255)];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pixel(
+        "Gray",
+        rect(0, 0, 8, 8),
+        1,
+        BlendMode::Normal,
+        255,
+    )]);
     let bytes = write_psd(&doc).unwrap();
     assert_eq!(read_psd(&bytes).unwrap(), doc);
 }
@@ -471,13 +479,13 @@ fn adjustment_layers_round_trip_key_and_bytes() {
                 data: data.clone(),
             }),
             channels: Vec::new(),
-            children: Vec::new(),
+            children: pictura_core::LayerStack::default(),
             is_group: false,
             background: false,
             ..Default::default()
         });
     }
-    doc.layers = layers;
+    doc.layers = pictura_core::LayerStack::from_layers(layers);
 
     let back = read_psd(&write_psd(&doc).unwrap()).unwrap();
     assert_eq!(back, doc);
@@ -513,12 +521,12 @@ fn solid_fill_layer_round_trips_its_payload() {
             data: vec![10, 20, 30, 255],
         }),
         channels: Vec::new(),
-        children: Vec::new(),
+        children: pictura_core::LayerStack::default(),
         is_group: false,
         background: false,
         ..Default::default()
     };
-    doc.layers = vec![fill];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![fill]);
 
     let back = read_psd(&write_psd(&doc).unwrap()).unwrap();
     assert_eq!(back, doc);
@@ -539,7 +547,7 @@ fn descriptor_shaped_soco_is_preserved_verbatim() {
     // A real `'Clr '` descriptor is longer than the 4-byte subset; the codec
     // must carry it unchanged rather than interpreting it.
     let descriptor = vec![0u8, 0, 0, 0, 0, 1, 8, 66, 73, 77, 67, 108, 114, 32];
-    doc.layers = vec![Layer {
+    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
         name: "Descriptor Fill".into(),
         rect: rect(0, 0, 0, 0),
         blend: BlendMode::Normal,
@@ -555,11 +563,11 @@ fn descriptor_shaped_soco_is_preserved_verbatim() {
             data: descriptor.clone(),
         }),
         channels: Vec::new(),
-        children: Vec::new(),
+        children: pictura_core::LayerStack::default(),
         is_group: false,
         background: false,
         ..Default::default()
-    }];
+    }]);
 
     let bytes = write_psd(&doc).unwrap();
     let back = read_psd(&bytes).unwrap();
@@ -570,7 +578,13 @@ fn descriptor_shaped_soco_is_preserved_verbatim() {
 #[test]
 fn malformed_layer_section_is_error_not_panic() {
     let mut doc = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![pixel("Only", rect(0, 0, 8, 8), 3, BlendMode::Normal, 255)];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pixel(
+        "Only",
+        rect(0, 0, 8, 8),
+        3,
+        BlendMode::Normal,
+        255,
+    )]);
     let good = write_psd(&doc).unwrap();
 
     // Truncated inside the layer/mask section.
@@ -591,7 +605,13 @@ fn malformed_layer_section_is_error_not_panic() {
 #[test]
 fn invalid_zip_layer_payload_errors() {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![pixel("Only", rect(0, 0, 4, 4), 3, BlendMode::Normal, 255)];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pixel(
+        "Only",
+        rect(0, 0, 4, 4),
+        3,
+        BlendMode::Normal,
+        255,
+    )]);
     let mut bytes = write_psd(&doc).unwrap();
     // Layer channel data follows the first (and only) record's extra data.
     let extra_len = u32::from_be_bytes(bytes[98..102].try_into().unwrap()) as usize;
@@ -610,7 +630,7 @@ fn layer_with_too_many_channels_is_rejected() {
             data: vec![0; 1].into(),
         })
         .collect();
-    doc.layers = vec![layer];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
 
     assert!(matches!(
         write_psd(&doc),
@@ -651,7 +671,7 @@ fn default_document() -> Document {
             data: Vec::new(),
         }),
         channels: Vec::new(),
-        children: Vec::new(),
+        children: pictura_core::LayerStack::default(),
         is_group: false,
         background: false,
         ..Default::default()
@@ -669,18 +689,18 @@ fn default_document() -> Document {
         mask: None,
         adjustment: None,
         channels: Vec::new(),
-        children: vec![pixel(
+        children: pictura_core::LayerStack::from_layers(vec![pixel(
             "Inner",
             rect(1, 1, 3, 3),
             3,
             BlendMode::Multiply,
             128,
-        )],
+        )]),
         is_group: true,
         background: false,
         ..Default::default()
     };
-    doc.layers = vec![masked, adj, group];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![masked, adj, group]);
     doc
 }
 
@@ -764,7 +784,7 @@ fn verbatim_channels_stay_unchanged() {
         id: -3,
         data: stream.clone(),
     }];
-    doc.layers = vec![layer];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
 
     let bytes = write_psd(&doc).unwrap();
     let back = read_psd(&bytes).unwrap();
@@ -785,7 +805,7 @@ fn layer_attributes_round_trip() {
     layer.lock = LockFlags::default()
         .with(LockFlags::TRANSPARENCY, true)
         .with(LockFlags::POSITION, true);
-    doc.layers = vec![layer];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
 
     let bytes = write_psd(&doc).unwrap();
     let back = read_psd(&bytes).unwrap();
@@ -800,7 +820,7 @@ fn nesting_lock_bit_round_trips_through_lspf() {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
     let mut layer = pixel("Nested", rect(0, 0, 2, 2), 3, BlendMode::Normal, 255);
     layer.lock = LockFlags::default().with(LockFlags::NESTING, true);
-    doc.layers = vec![layer];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
 
     let bytes = write_psd(&doc).unwrap();
     let back = read_psd(&bytes).unwrap();
@@ -814,10 +834,10 @@ fn background_flag_round_trips_and_is_derived_on_read() {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
     let mut background = pixel("Background", rect(0, 0, 4, 4), 3, BlendMode::Normal, 255);
     background.background = true;
-    doc.layers = vec![
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
         background,
         pixel("top", rect(0, 0, 4, 4), 3, BlendMode::Normal, 255),
-    ];
+    ]);
 
     let back = read_psd(&write_psd(&doc).unwrap()).unwrap();
     assert!(back.layers[0].background, "the bottom flag round-trips");
@@ -828,7 +848,7 @@ fn background_flag_round_trips_and_is_derived_on_read() {
     let mut renamed = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
     let mut layer = pixel("Base", rect(0, 0, 4, 4), 3, BlendMode::Normal, 255);
     layer.background = true;
-    renamed.layers = vec![layer];
+    renamed.layers = pictura_core::LayerStack::from_layers(vec![layer]);
     let back = read_psd(&write_psd(&renamed).unwrap()).unwrap();
     assert_eq!(back.layers[0].name, "Background");
     assert!(back.layers[0].background);
@@ -980,7 +1000,7 @@ fn tysh_forces_type_locks_and_round_trips() {
         key: *b"TySh",
         data: vec![9, 8, 7, 6],
     }];
-    out.layers = vec![type_layer];
+    out.layers = pictura_core::LayerStack::from_layers(vec![type_layer]);
     let back = read_psd(&write_psd(&out).unwrap()).unwrap();
     assert_eq!(back, out);
     assert!(back.layers[0].is_type());
@@ -1026,7 +1046,7 @@ fn type_tool_open_save_preserves_bytes() {
         key: *b"TySh",
         data: tysh.clone(),
     }];
-    doc.layers = vec![type_layer];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![type_layer]);
 
     let back = read_psd(&write_psd(&doc).unwrap()).unwrap();
     assert_eq!(back.layers[0].extra_block(b"TySh").unwrap().data, tysh);
@@ -1149,7 +1169,7 @@ fn zip_layer_channel_and_mask_round_trip() {
         data: Some((0..16).map(|i| (i * 5) as u8).collect()),
         ..Default::default()
     });
-    doc.layers = vec![layer];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
 
     let bytes = write_psd(&doc).unwrap();
     let back = read_psd(&bytes).unwrap();
@@ -1161,7 +1181,13 @@ fn zip_write_is_deterministic() {
     let mut doc = patterned_document();
     doc.composite_compression = Compression::Zip;
     doc.layer_compression = Compression::Zip;
-    doc.layers = vec![pixel("Zip", rect(0, 0, 4, 4), 3, BlendMode::Normal, 255)];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pixel(
+        "Zip",
+        rect(0, 0, 4, 4),
+        3,
+        BlendMode::Normal,
+        255,
+    )]);
     assert_eq!(write_psd(&doc).unwrap(), write_psd(&doc).unwrap());
 }
 
@@ -1203,7 +1229,7 @@ fn group_fixture_records_layer_compression_from_surviving_channels() {
 #[test]
 fn empty_group_document_round_trips_with_default_layer_compression() {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![Layer {
+    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
         name: "Group".to_string(),
         rect: rect(0, 0, 0, 0),
         blend: BlendMode::PassThrough,
@@ -1216,11 +1242,11 @@ fn empty_group_document_round_trips_with_default_layer_compression() {
         mask: None,
         adjustment: None,
         channels: Vec::new(),
-        children: Vec::new(),
+        children: pictura_core::LayerStack::default(),
         is_group: true,
         background: false,
         ..Default::default()
-    }];
+    }]);
 
     let back = read_psd(&write_psd(&doc).unwrap()).unwrap();
     assert_eq!(back.layer_compression, Compression::Rle);
@@ -1230,7 +1256,13 @@ fn empty_group_document_round_trips_with_default_layer_compression() {
 #[test]
 fn no_composite_document_writes_no_image_data_and_round_trips() {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![pixel("Only", rect(0, 0, 4, 4), 3, BlendMode::Normal, 255)];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pixel(
+        "Only",
+        rect(0, 0, 4, 4),
+        3,
+        BlendMode::Normal,
+        255,
+    )]);
     doc.merged_composite_present = false;
 
     let bytes = write_psd(&doc).unwrap();
@@ -1271,7 +1303,13 @@ fn unknown_blend_key_reads_as_normal() {
 #[test]
 fn absent_composite_yields_zero_composite() {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![pixel("Only", rect(0, 0, 4, 4), 3, BlendMode::Normal, 255)];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pixel(
+        "Only",
+        rect(0, 0, 4, 4),
+        3,
+        BlendMode::Normal,
+        255,
+    )]);
     let bytes = write_psd(&doc).unwrap();
     let section_len = u32::from_be_bytes(bytes[34..38].try_into().unwrap()) as usize;
 
@@ -1330,7 +1368,7 @@ fn opaque_layer_blocks_round_trip() {
         id: -3,
         data: vec![0, 0, 9, 9],
     }];
-    doc.layers = vec![layer];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
 
     let back = read_psd(&write_psd(&doc).unwrap()).unwrap();
     assert_eq!(back, doc);
@@ -1349,7 +1387,7 @@ fn opaque_layer_blocks_round_trip() {
 fn recognized_blend_key_is_not_stored() {
     let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
     let known = pixel("Known", rect(0, 0, 2, 2), 3, BlendMode::Multiply, 255);
-    doc.layers = vec![known];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![known]);
     let back = read_psd(&write_psd(&doc).unwrap()).unwrap();
     assert_eq!(back.layers[0].blend_key, None);
     assert_eq!(back, doc);
@@ -1365,7 +1403,7 @@ fn mask_extra_round_trips() {
         extra: vec![7, 8, 9],
         ..Default::default()
     });
-    doc.layers = vec![layer];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
     let back = read_psd(&write_psd(&doc).unwrap()).unwrap();
     assert_eq!(back.layers[0].mask.as_ref().unwrap().extra, vec![7, 8, 9]);
     assert_eq!(back, doc);

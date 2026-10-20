@@ -9,7 +9,7 @@ use pictura_core::{
 
 use super::clipboard::{clear_layer, coverage_bounds};
 use super::merge::{merge_scope, MergeScope};
-use super::paths::{container_mut, format_segments, parse_path, resolve_path, resolve_path_mut};
+use super::paths::{format_segments, parse_path, resolve_path, resolve_path_mut};
 use super::via::{layer_via_copy, layer_via_cut};
 use crate::document_ops::canvas::offset_rect;
 
@@ -32,13 +32,15 @@ pub fn lift_selection(doc: &mut Document, source_path: &str, coverage: &[u8]) ->
     let Some(floating) = lifted_copy(source, coverage, doc.width, doc.height) else {
         return String::new();
     };
-    // `can_lift_selection` already refused the locks `clear_layer` checks, so
-    // its result only says whether a sample changed (white on white does not).
-    clear_layer(doc, source_path, Some(coverage));
-    let Some((container, index)) = container_mut(doc, &segments) else {
+    let Some((&index, parent)) = segments.split_last() else {
         return String::new();
     };
-    container.insert(index + 1, floating);
+    if doc.layers.insert(parent, index + 1, floating).is_err() {
+        return String::new();
+    }
+    // Clear only after the floating layer is safely in the stack: a refused
+    // insert must not erase the source pixels.
+    clear_layer(doc, source_path, Some(coverage));
     let mut path = segments;
     if let Some(last) = path.last_mut() {
         *last = index + 1;
@@ -107,7 +109,7 @@ fn lifted_copy(source: &Layer, coverage: &[u8], doc_w: u32, doc_h: u32) -> Optio
         mask: None,
         adjustment: None,
         channels,
-        children: Vec::new(),
+        children: pictura_core::LayerStack::default(),
         is_group: false,
         background: false,
         ..Default::default()
@@ -148,14 +150,27 @@ pub fn merge_lifted(doc: &mut Document, lifted_path: &str) -> bool {
     let Some(segments) = parse_path(lifted_path) else {
         return false;
     };
-    let Some((container, index)) = container_mut(doc, &segments) else {
+    let Some((&index, parent)) = segments.split_last() else {
         return false;
     };
-    if index == 0 || index >= container.len() {
+    if index == 0 {
         return false;
     }
-    let floating = container.remove(index);
-    composite_over(&mut container[index - 1], &floating);
+    // The floating layer is a temporary base for the run above it. Mark it
+    // clipped for the removal so the run stays clipped to the layer below,
+    // matching the pre-LayerStack lift/merge behavior.
+    if let Some(floating) = resolve_path_mut(doc, lifted_path) {
+        floating.clipping = true;
+    }
+    let Some(floating) = doc.layers.remove(&segments) else {
+        return false;
+    };
+    let mut below = parent.to_vec();
+    below.push(index - 1);
+    let Some(base) = resolve_path_mut(doc, &format_segments(&below)) else {
+        return false;
+    };
+    composite_over(base, &floating);
     true
 }
 
@@ -447,7 +462,7 @@ mod tests {
                     data: vec![255; n].into(),
                 },
             ],
-            children: Vec::new(),
+            children: pictura_core::LayerStack::default(),
             is_group: false,
             background: false,
             ..Default::default()
@@ -456,7 +471,7 @@ mod tests {
 
     fn doc_with(layers: Vec<Layer>) -> Document {
         let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = layers;
+        doc.layers = pictura_core::LayerStack::from_layers(layers);
         doc
     }
 

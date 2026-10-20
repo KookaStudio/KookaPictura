@@ -35,7 +35,14 @@ pub(super) fn payload_2x2(colors: [[u8; 3]; 4]) -> Vec<u8> {
 
 fn absent_composite_layers_payload(rgb: (u8, u8, u8)) -> Vec<u8> {
     let mut d = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-    d.layers = vec![solid("green", full(4, 4), rgb, 255, BlendMode::Normal, 255)];
+    d.layers = pictura_core::LayerStack::from_layers(vec![solid(
+        "green",
+        full(4, 4),
+        rgb,
+        255,
+        BlendMode::Normal,
+        255,
+    )]);
     let bytes = write_psd(&d).expect("payload writes");
     let section_len = u32::from_be_bytes(bytes[34..38].try_into().unwrap()) as usize;
     bytes[..38 + section_len].to_vec()
@@ -442,14 +449,14 @@ fn convert_for_smart_filters_unlocks_a_background() {
 #[test]
 fn sixteen_bit_document_refuses_conversion() {
     let mut d = Document::new(4, 4, ColorMode::Rgb, BitDepth::Sixteen);
-    d.layers = vec![solid(
+    d.layers = pictura_core::LayerStack::from_layers(vec![solid(
         "Raster",
         full(4, 4),
         (10, 20, 30),
         255,
         BlendMode::Normal,
         255,
-    )];
+    )]);
     let before = d.clone();
     assert!(!can_convert_to_smart_object(&d, "0"));
     assert!(!convert_to_smart_object(&mut d, "0"));
@@ -459,7 +466,7 @@ fn sixteen_bit_document_refuses_conversion() {
 #[test]
 fn grayscale_layer_converts_to_grayscale_source() {
     let mut d = Document::new(2, 2, ColorMode::Grayscale, BitDepth::Eight);
-    d.layers = vec![Layer {
+    d.layers = pictura_core::LayerStack::from_layers(vec![Layer {
         name: "Gray".into(),
         rect: full(2, 2),
         channels: vec![
@@ -473,7 +480,7 @@ fn grayscale_layer_converts_to_grayscale_source() {
             },
         ],
         ..Default::default()
-    }];
+    }]);
     assert!(convert_to_smart_object(&mut d, "0"));
     let payload = d.layers[0]
         .smart_object

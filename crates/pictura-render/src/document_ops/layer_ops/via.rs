@@ -6,7 +6,7 @@
 use pictura_core::{Document, Layer, LayerMask};
 
 use super::create::transparent_layer;
-use super::paths::{container_mut, format_segments, parse_path, resolve_path, resolve_path_mut};
+use super::paths::{format_segments, parse_path, resolve_path, resolve_path_mut};
 
 /// Copy the pixels covered by `mask` from the layer at `source_path` into a new
 /// document-sized pixel layer directly above it, named `"<source> copy"`.
@@ -40,14 +40,16 @@ fn via(doc: &mut Document, source_path: &str, mask: &LayerMask, cut: bool) -> St
         let name = format!("{} copy", source.name);
         copy_source(source, mask, mask_data, doc.width, doc.height, name)
     };
-    if cut {
-        clear_source(doc, &segments, mask, mask_data);
-    }
-    let Some((container, index)) = container_mut(doc, &segments) else {
+    let Some((&index, parent)) = segments.split_last() else {
         return String::new();
     };
     let at = index + 1;
-    container.insert(at, copy);
+    if doc.layers.insert(parent, at, copy).is_err() {
+        return String::new();
+    }
+    if cut {
+        clear_source(doc, &segments, mask, mask_data);
+    }
     let mut path = segments;
     if let Some(last) = path.last_mut() {
         *last = at;

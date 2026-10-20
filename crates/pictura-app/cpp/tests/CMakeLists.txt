@@ -40,6 +40,7 @@ set(PICTURA_QT_TESTS
     tst_transform_overlay
     tst_transform_warp
     tst_command_tree
+    tst_merge_commands
     tst_fill_tools
     tst_retouch_tools
     tst_pen_tools

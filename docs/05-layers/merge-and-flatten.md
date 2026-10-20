@@ -22,8 +22,7 @@ state.
 
 | Command | Path / shortcut | Input | Result |
 |---|---|---|---|
-| **Merge Down** | `Layer > Merge Down` | Active layer + the one directly below | One layer; `Layer > Merge Down` is the CS6 menu name (Layers panel menu also exposes it) |
-| **Merge Layers** | `Layer > Merge Layers`, `Ctrl+E` / `Cmd+E` | Two or more selected layers/groups | One layer from the selected set |
+| **Merge Down / Merge Layers** | `Layer > Merge Down / Merge Layers`, `Ctrl+E` / `Cmd+E` | One selected layer (Merge Down) or two or more selected layers/groups (Merge Layers) | One layer; the menu item's label follows the selection |
 | **Merge Visible** | Layers panel menu / `Layer > Merge Visible`, `Ctrl+Shift+E` | All layers showing the eye icon (requires a visible layer to be selected) | One visible layer; hidden layers untouched |
 | **Merge Clipping Mask** | `Layer > Merge Clipping Mask` | Raster base layer of a clipping mask | Clipping group collapsed into the base; base must be raster |
 | **Stamp (selected)** | `Ctrl+Alt+E` | Multiple selected layers | New layer with the merged content; originals intact |
@@ -42,7 +41,8 @@ state.
   (Extended).
 - Linked layers can be merged after `Layer > Select Linked Layers`.
 - Two adjacent layers/groups can be merged by selecting the top item and
-  choosing `Merge Layers`.
+  choosing the merge command; with one selected layer the item reads
+  `Merge Down`, and with two or more it reads `Merge Layers`.
 
 ### Flatten Image
 
@@ -89,8 +89,7 @@ state.
 
 | Location | Type | Shortcut | Notes |
 |---|---|---|---|
-| `Layer > Merge Down` | Menu | none listed | Also in Layers panel menu; `Alt`-invoked variant copies to the layer below |
-| `Layer > Merge Layers` | Menu | `Ctrl+E` / `Cmd+E` | Merges selected layers |
+| `Layer > Merge Down / Merge Layers` | Menu | `Ctrl+E` / `Cmd+E` | One context-sensitive item: the label follows the selection; also in the Layers panel menu |
 | `Layer > Merge Visible` | Menu | `Ctrl+Shift+E` | All visible; one visible layer must be selected |
 | `Layer > Merge Clipping Mask` | Menu | n/a | Base layer must be raster |
 | `Layer > Flatten Image` | Menu | none listed | Also Layers panel menu |
@@ -99,13 +98,13 @@ state.
 | `Ctrl+Shift+Alt+E` | Shortcut | yes | Stamp all visible to a new layer |
 | Path Selection options bar | Tool options | `A` | Path Operations drop-down → `Merge Shape Components` |
 | `File > Automate > Merge To HDR Pro` | Dialog | n/a | HDR workflow, separate document |
-| Layer context menu | Context menu | n/a | Merge Down / Merge Visible etc. |
+| Layer context menu | Context menu | n/a | Merge Down / Merge Visible etc. *(not yet exposed by the row menu)* |
 
 ## Parameters & ranges
 
 | Control | Type | Default | Range / options | Notes |
 |---|---|---|---|---|
-| Merge command | enum | none | Merge Down, Merge Layers, Merge Visible, Merge Clipping Mask, Flatten | Selection-dependent enablement |
+| Merge command | enum | selection-dependent | Merge Down (one selected), Merge Layers (two or more), Merge Visible, Merge Clipping Mask, Flatten | Selection-dependent label and enablement |
 | Merge To HDR Pro source files | file list | n/a | Browse / Add Open Files / Use Folder | At least 3 exposures recommended, minimum 3 |
 | Attempt To Automatically Align Source Images | bool | off *(inferred)* | on / off | Equivalent to Auto-Align for hand-held shots |
 | HDR bit depth | enum | 32 *(inferred)* | 32 / 16 / 8 bits/channel | Only 32-bit stores the full range |
@@ -210,7 +209,7 @@ directly by the UI.
 
 | Proposal | Base | Responsibility |
 |---|---|---|
-| `LayerMergeActions` | `QActionGroup` | Merge Down / Layers / Visible / Clipping Mask / Flatten / Stamp; enable state from selection and neighbor kind |
+| `LayerMergeActions` | `QActionGroup` | One selection-dependent Merge Down / Merge Layers item, plus Visible / Clipping Mask / Flatten / Stamp; enable state from selection and neighbor kind |
 | `LayersPanelMenu` | `QMenu` | Mirrors the Layer menu merge entries |
 | `FlattenConfirmDialog` | `QMessageBox` | Confirms discarding hidden layers on flatten (if CS6 prompts) |
 | `HdrMergeDialog` | `QDialog` | File list, align/ghost options, bit depth, tone-mapping controls, histogram, response-curve preset |
@@ -244,8 +243,9 @@ atomically.
 
 ## Edge cases
 
-- **Only one layer** — Merge Down disabled (nothing below); Merge Layers/Visible
-  disabled when fewer than two eligible layers.
+- **Only one layer** — the merge item reads Merge Down and is disabled when
+  there is nothing below; the Merge Layers case and Merge Visible are disabled
+  when fewer than two eligible layers are selected or visible.
 - **Target is adjustment or fill layer** — merge must be rejected.
 - **Hidden active layer** — Merge Visible requires the selected layer to be
   visible; hidden layers are not merged into the result.

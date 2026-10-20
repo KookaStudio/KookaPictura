@@ -544,7 +544,7 @@ fn empty_layer(name: &str) -> Layer {
         mask: None,
         adjustment: None,
         channels: Vec::new(),
-        children: Vec::new(),
+        children: pictura_core::LayerStack::default(),
         is_group: false,
         background: false,
         ..Default::default()

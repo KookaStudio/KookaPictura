@@ -369,7 +369,7 @@ mod tests {
 
     fn preview_alpha(alpha: Option<u8>) -> (u8, u8) {
         let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = vec![raster_layer(alpha)];
+        doc.layers = pictura_core::LayerStack::from_layers(vec![raster_layer(alpha)]);
         let buffer = preview_pictura_raw(&doc, "0", &PicturaRawSettings::default(), 16).unwrap();
         assert_eq!(buffer.channels, 4);
         (buffer.data[0], buffer.data[3 * 4])
@@ -401,14 +401,14 @@ mod tests {
             })
             .collect();
         let mut doc = Document::new(80, 40, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = vec![layer];
+        doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         let buffer = preview_pictura_raw(&doc, "0", &PicturaRawSettings::default(), 16).unwrap();
         assert_eq!((buffer.width, buffer.height), (16, 8));
     }
 
     fn destructive_doc(alpha: Option<u8>) -> Document {
         let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = vec![raster_layer(alpha)];
+        doc.layers = pictura_core::LayerStack::from_layers(vec![raster_layer(alpha)]);
         doc
     }
 
@@ -443,7 +443,7 @@ mod tests {
         assert!(!apply_pictura_raw_destructive(&mut missing, "9", &settings));
 
         let mut group = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
-        group.layers = vec![Layer {
+        group.layers = pictura_core::LayerStack::from_layers(vec![Layer {
             name: "g".into(),
             rect: PsdRect {
                 top: 0,
@@ -453,7 +453,7 @@ mod tests {
             },
             is_group: true,
             ..Default::default()
-        }];
+        }]);
         assert!(!apply_pictura_raw_destructive(&mut group, "0", &settings));
 
         let mut smart = destructive_doc(None);
@@ -468,7 +468,7 @@ mod tests {
         assert!(!apply_pictura_raw_destructive(&mut locked, "0", &settings));
 
         let mut cmyk = Document::new(2, 2, ColorMode::Cmyk, BitDepth::Eight);
-        cmyk.layers = vec![raster_layer(None)];
+        cmyk.layers = pictura_core::LayerStack::from_layers(vec![raster_layer(None)]);
         assert!(!apply_pictura_raw_destructive(&mut cmyk, "0", &settings));
 
         let mut adjustment = destructive_doc(None);
@@ -513,7 +513,7 @@ mod tests {
     #[test]
     fn destructive_apply_handles_grayscale() {
         let mut doc = Document::new(2, 2, ColorMode::Grayscale, BitDepth::Eight);
-        doc.layers = vec![Layer {
+        doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
             name: "L".into(),
             rect: PsdRect {
                 top: 0,
@@ -526,7 +526,7 @@ mod tests {
                 data: vec![128u8; 4].into(),
             }],
             ..Default::default()
-        }];
+        }]);
         assert!(apply_pictura_raw_destructive(
             &mut doc,
             "0",
@@ -552,7 +552,7 @@ mod tests {
         ));
         let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
         doc.source_depth = Some(BitDepth::Sixteen);
-        doc.layers = vec![layer];
+        doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
 
         assert!(apply_pictura_raw_destructive(
             &mut doc,

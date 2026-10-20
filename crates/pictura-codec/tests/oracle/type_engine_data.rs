@@ -257,7 +257,7 @@ fn authored_type_layer_psd_round_trips_through_psd_tools() {
     let tysh = encode_type_tool(&tool);
 
     let mut doc = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![Layer {
+    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
         name: "Pin".into(),
         rect: PsdRect {
             top: 0,
@@ -288,7 +288,7 @@ fn authored_type_layer_psd_round_trips_through_psd_tools() {
             data: tysh,
         }],
         ..Default::default()
-    }];
+    }]);
 
     let bytes = write_psd(&doc).expect("write_psd");
     let out = psd_tools_type_values(&bytes);

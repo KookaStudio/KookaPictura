@@ -182,7 +182,7 @@ pub(crate) mod tests {
         } else {
             &[0, 1, 2, -1]
         };
-        doc.layers.push(Layer {
+        doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
             rect: PsdRect {
                 top,
                 left,
@@ -198,7 +198,7 @@ pub(crate) mod tests {
                 .collect(),
             background,
             ..Default::default()
-        });
+        }]);
         doc
     }
 

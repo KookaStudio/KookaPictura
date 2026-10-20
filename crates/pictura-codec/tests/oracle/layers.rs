@@ -46,12 +46,12 @@ fn psd_tools_sees_layer_attributes() {
                 data: vec![7; 4].into(),
             },
         ],
-        children: Vec::new(),
+        children: pictura_core::LayerStack::default(),
         is_group: false,
         background: false,
         ..Default::default()
     };
-    doc.layers = vec![layer];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
 
     let dir = scratch_dir("psd-attrs");
     let path = dir.join("attrs.psd");
@@ -131,12 +131,12 @@ fn psd_tools_sees_background_name_for_flagged_layer() {
                 data: vec![7; 4].into(),
             },
         ],
-        children: Vec::new(),
+        children: pictura_core::LayerStack::default(),
         is_group: false,
         background: true,
         ..Default::default()
     };
-    doc.layers = vec![layer];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
 
     let dir = scratch_dir("psd-background");
     let path = dir.join("background.psd");

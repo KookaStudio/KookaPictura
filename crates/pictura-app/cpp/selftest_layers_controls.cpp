@@ -210,13 +210,13 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         mdView->set_layer_opacity(1, 128);
         mdView->set_layer_name(2, QStringLiteral("Upper"));
         const int mdBase = mdView->history_count();
-        const int mdReplaced = mdView->merge_layers(QStringList{QStringLiteral("2")});
-        const bool mdOk = mdReplaced == 2 && mdView->layer_count() == 2
+        const QString mdMerged = mdView->merge_layers(QStringList{QStringLiteral("2")});
+        const bool mdOk = mdMerged == QStringLiteral("1") && mdView->layer_count() == 2
             && mdView->layer_name(1) == QStringLiteral("Lower")
             && mdView->layer_blend(1) == QStringLiteral("mul ")
             && mdView->layer_opacity(1) == 128 && mdView->history_count() == mdBase + 1;
         ST_BEGIN("lpr_merge_down");
-        ST_PASS("lpr_merge_down replaced=%d count=%d", mdReplaced, mdView->layer_count());
+        ST_PASS("lpr_merge_down path=%s count=%d", qPrintable(mdMerged), mdView->layer_count());
         if (!mdOk) {
             return pictura::selfTest().fail(219, "merge down");
         }
@@ -238,17 +238,18 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         mvView->set_layer_name(2, QStringLiteral("Hidden"));
         mvView->set_layer_visible(2, false);
         const int mvBase = mvView->history_count();
-        const int mvReplaced = mvView->merge_visible(QStringLiteral("1"));
+        const QString mvMerged = mvView->merge_visible(QStringLiteral("1"));
         bool mvHiddenSurvives = false;
         for (int i = 0; i < pictura::layers_api::rowCount(*mvView); ++i) {
             if (pictura::layers_api::rowAt(*mvView, i).name == QStringLiteral("Hidden")) {
                 mvHiddenSurvives = !pictura::layers_api::rowAt(*mvView, i).visible;
             }
         }
-        const bool mvOk = mvReplaced == 2 && pictura::layers_api::rowCount(*mvView) == 2 && mvHiddenSurvives
+        const bool mvOk = mvMerged == QStringLiteral("0")
+            && pictura::layers_api::rowCount(*mvView) == 2 && mvHiddenSurvives
             && mvView->history_count() == mvBase + 1;
         ST_BEGIN("lpr_merge_visible");
-        ST_PASS("lpr_merge_visible replaced=%d rows=%d hidden=%d", mvReplaced,
+        ST_PASS("lpr_merge_visible path=%s rows=%d hidden=%d", qPrintable(mvMerged),
                 pictura::layers_api::rowCount(*mvView), mvHiddenSurvives ? 1 : 0);
         if (!mvOk) {
             return pictura::selfTest().fail(220, "merge visible");

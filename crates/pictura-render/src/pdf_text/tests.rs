@@ -62,16 +62,18 @@ fn a_top_type_layer_becomes_live_text_and_is_hidden() {
 #[test]
 fn covered_type_stays_in_the_image() {
     let mut doc = doc();
-    doc.layers.push(Layer {
-        name: "cover".into(),
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 10,
-            right: 10,
-        },
-        ..doc.layers[0].clone()
-    });
+    {
+        let _ = doc.layers.push(Layer {
+            name: "cover".into(),
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 10,
+                right: 10,
+            },
+            ..doc.layers[0].clone()
+        });
+    };
     assert!(pdf_live_type(&doc, OPEN).is_none());
 }
 

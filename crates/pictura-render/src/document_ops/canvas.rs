@@ -245,7 +245,7 @@ mod tests {
                     data: vec![255; n].into(),
                 },
             ],
-            children: Vec::new(),
+            children: pictura_core::LayerStack::default(),
             is_group: false,
             background: false,
             ..Default::default()
@@ -254,7 +254,8 @@ mod tests {
 
     fn sample_doc() -> Document {
         let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = vec![pixel_layer("layer", full(4, 4), None)];
+        doc.layers =
+            pictura_core::LayerStack::from_layers(vec![pixel_layer("layer", full(4, 4), None)]);
         doc.channels = vec![Channel {
             id: -1,
             data: (0..16u8).collect(),
@@ -381,7 +382,8 @@ mod tests {
     #[test]
     fn one_by_one_does_not_panic() {
         let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = vec![pixel_layer("one", full(1, 1), None)];
+        doc.layers =
+            pictura_core::LayerStack::from_layers(vec![pixel_layer("one", full(1, 1), None)]);
         doc.channels = vec![Channel {
             id: -1,
             data: vec![9].into(),

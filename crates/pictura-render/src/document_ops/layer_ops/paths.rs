@@ -1,4 +1,4 @@
-use pictura_core::{Document, Layer};
+use pictura_core::{Document, Layer, LayerStack};
 
 // ---------------------------------------------------------------------------
 // M39 path/tree core. See `docs/dev/m39-panel-anatomy.md` §3.1–3.3.
@@ -86,7 +86,7 @@ pub fn is_background(doc: &Document, path: &str) -> bool {
 pub(super) fn container_mut<'a>(
     doc: &'a mut Document,
     segments: &[usize],
-) -> Option<(&'a mut Vec<Layer>, usize)> {
+) -> Option<(&'a mut LayerStack, usize)> {
     let (last, parent) = segments.split_last()?;
     let container = container_of_mut(doc, parent)?;
     if *last >= container.len() {
@@ -108,8 +108,8 @@ pub(super) fn container_of<'a>(doc: &'a Document, parent: &[usize]) -> Option<&'
 pub(super) fn container_of_mut<'a>(
     doc: &'a mut Document,
     parent: &[usize],
-) -> Option<&'a mut Vec<Layer>> {
-    let mut layers: &'a mut Vec<Layer> = &mut doc.layers;
+) -> Option<&'a mut LayerStack> {
+    let mut layers: &'a mut LayerStack = &mut doc.layers;
     for &index in parent {
         if index >= layers.len() {
             return None;

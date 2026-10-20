@@ -9,6 +9,7 @@ mod annotations;
 pub mod blur;
 mod crs;
 mod guides;
+mod layer_stack;
 pub mod nonseparable;
 pub mod path;
 mod plane;
@@ -27,6 +28,7 @@ pub use annotations::{
 };
 pub use crs::CrsSettings;
 pub use guides::{guide_near, Guide, GuideOrientation};
+pub use layer_stack::{LayerStack, StackError, StackViolation};
 pub use plane::{fresh_stamp, Plane};
 pub use raw_settings::{
     CameraCalibration, Detail, Effects, Hsl, Lens, PicturaRawSettings, RawMode, SplitToning,
@@ -211,7 +213,7 @@ pub struct Document {
     /// a PSD and for new/blank documents. Selects the PSB container and its
     /// widened length fields on re-save.
     pub is_psb: bool,
-    pub layers: Vec<Layer>,
+    pub layers: LayerStack,
     /// Document-level extra channels (saved selections / spot channels), which
     /// live after the color channels in the PSD image-data section.
     pub channels: Vec<Channel>,
@@ -266,7 +268,7 @@ impl Document {
             composite_compression: Compression::Rle,
             layer_compression: Compression::Rle,
             is_psb: false,
-            layers: Vec::new(),
+            layers: LayerStack::default(),
             channels: Vec::new(),
             color_mode_data: Vec::new(),
             image_resources: Vec::new(),
@@ -331,7 +333,7 @@ impl Document {
             channels: 4,
             data: composite.into(),
         };
-        doc.layers.push(Layer {
+        doc.layers = LayerStack::from_layers(vec![Layer {
             name: name.to_string(),
             rect: PsdRect {
                 top: 0,
@@ -341,7 +343,7 @@ impl Document {
             },
             channels,
             ..Default::default()
-        });
+        }]);
         doc
     }
 
@@ -866,7 +868,7 @@ pub struct Layer {
     pub mask: Option<LayerMask>,
     pub adjustment: Option<AdjustmentData>,
     pub channels: Vec<Channel>,
-    pub children: Vec<Layer>,
+    pub children: LayerStack,
     pub is_group: bool,
     /// First-class Background flag. PSD has no background bit; the codec infers
     /// it from the bottom top-level non-group named `"Background"` and writes
@@ -931,7 +933,7 @@ impl Default for Layer {
             mask: None,
             adjustment: None,
             channels: Vec::new(),
-            children: Vec::new(),
+            children: LayerStack::default(),
             is_group: false,
             background: false,
             blend_key: None,

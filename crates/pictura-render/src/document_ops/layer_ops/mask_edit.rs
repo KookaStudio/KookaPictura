@@ -49,7 +49,7 @@ pub fn mask_document_coverage(doc: &Document, path: &str) -> Option<MaskDocument
     let mut document = Document::new(0, 0, ColorMode::Grayscale, BitDepth::Eight);
     document.width = w;
     document.height = h;
-    document.layers.push(Layer {
+    document.layers = pictura_core::LayerStack::from_layers(vec![Layer {
         name: "Mask".to_string(),
         rect: PsdRect {
             top: 0,
@@ -63,7 +63,7 @@ pub fn mask_document_coverage(doc: &Document, path: &str) -> Option<MaskDocument
         }],
         lock: LockFlags::default().with(LockFlags::TRANSPARENCY, true),
         ..Default::default()
-    });
+    }]);
     Some(MaskDocument { document, rect })
 }
 

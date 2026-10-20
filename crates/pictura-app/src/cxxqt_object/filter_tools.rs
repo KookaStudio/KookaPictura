@@ -999,10 +999,10 @@ mod tests {
         use pictura_core::{BitDepth, ColorMode};
 
         let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = vec![
+        doc.layers = pictura_core::LayerStack::from_layers(vec![
             pixel_layer("bottom", 4, 4, (255, 0, 0)),
             pixel_layer("top", 4, 4, (0, 0, 255)),
-        ];
+        ]);
         doc.composite = pictura_render::composite_rgba(&doc);
 
         let base = hidden_layer_buffer(&mut doc, "1", false).expect("base");
@@ -1026,7 +1026,10 @@ mod tests {
             bottom: 4,
             right: 4,
         };
-        doc.layers = vec![pixel_layer("bottom", 8, 8, (255, 0, 0)), top];
+        doc.layers = pictura_core::LayerStack::from_layers(vec![
+            pixel_layer("bottom", 8, 8, (255, 0, 0)),
+            top,
+        ]);
 
         let frame = proxy_layer_frame_buffer(&doc.layers[1], 8, 8, 8, "gaussian-blur", &[1.0])
             .expect("frame");
@@ -1062,11 +1065,11 @@ mod tests {
         let mut group = pixel_layer("group", 4, 4, (0, 0, 0));
         group.is_group = true;
         group.channels.clear();
-        group.children = vec![
+        group.children = pictura_core::LayerStack::from_layers(vec![
             pixel_layer("nested-red", 4, 4, (255, 0, 0)),
             pixel_layer("nested-blue", 4, 4, (0, 0, 255)),
-        ];
-        doc.layers = vec![group];
+        ]);
+        doc.layers = pictura_core::LayerStack::from_layers(vec![group]);
         doc.composite = pictura_render::composite_rgba(&doc);
 
         // The group itself is not a proxy target; the nested leaf is.

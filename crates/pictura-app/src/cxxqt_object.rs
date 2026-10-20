@@ -514,15 +514,13 @@ pub mod qobject {
         #[qinvokable]
         fn can_merge_clipping_mask(&self, path: &QString) -> bool;
 
-        /// Merge Down / Merge Layers for `paths` (one command, CS6 design D4).
-        /// Records one undo state; returns inputs replaced, 0 on refusal.
+        /// Merge Down / Merge Layers for `paths`; returns the merged path, empty on refusal.
         #[qinvokable]
-        fn merge_layers(self: Pin<&mut Self>, paths: &QStringList) -> i32;
+        fn merge_layers(self: Pin<&mut Self>, paths: &QStringList) -> QString;
 
-        /// Merge every eye-visible layer anchored on `path`; records one
-        /// "Merge Visible" state. Returns replaced, 0 on refusal.
+        /// Merge every eye-visible layer anchored on `path`; returns the merged path, empty on refusal.
         #[qinvokable]
-        fn merge_visible(self: Pin<&mut Self>, path: &QString) -> i32;
+        fn merge_visible(self: Pin<&mut Self>, path: &QString) -> QString;
 
         /// Collapse the clipping group above `path`; records one
         /// "Merge Clipping Mask" state. Returns replaced, 0 on refusal.
