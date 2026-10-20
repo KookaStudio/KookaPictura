@@ -94,7 +94,7 @@ fn nearest<T: Sample>(src: &[T], w: usize, h: usize, lx: f64, ly: f64) -> T {
 }
 
 /// The Mitchell–Netravali cubic convolution kernel at distance `x`.
-fn cubic_weight(x: f64, b: f64, c: f64) -> f64 {
+pub(super) fn cubic_weight(x: f64, b: f64, c: f64) -> f64 {
     let x = x.abs();
     if x < 1.0 {
         ((12.0 - 9.0 * b - 6.0 * c) * x.powi(3)
@@ -118,6 +118,17 @@ const CATMULL_ROM: (f64, f64) = (0.0, 0.5);
 const B_SPLINE: (f64, f64) = (1.0, 0.0);
 /// The sharper overshoot (the Bicubic Sharper method).
 const SHARPER: (f64, f64) = (0.0, 0.75);
+
+/// The `(B, C)` parameters of a cubic method; `None` for Nearest, Bilinear and
+/// the unresolved Automatic.
+pub(super) fn cubic_params(interpolation: Interpolation) -> Option<(f64, f64)> {
+    match interpolation {
+        Interpolation::Bicubic => Some(CATMULL_ROM),
+        Interpolation::BicubicSmoother => Some(B_SPLINE),
+        Interpolation::BicubicSharper => Some(SHARPER),
+        _ => None,
+    }
+}
 
 /// Separable 4×4 cubic convolution with the given `(B, C)` parameters; taps
 /// are edge-clamped.

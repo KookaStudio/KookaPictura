@@ -324,6 +324,7 @@ void ImageView::clearTransformPreview()
     transformProjectiveActive_ = false;
     transformQuad_.clear();
     transformPivotVisible_ = false;
+    transformWarp_ = transform_api::WarpOverlay();
     movePreviewActive_ = false;
     moveBase_ = QImage();
     moveLayer_ = QImage();
@@ -929,6 +930,10 @@ void ImageView::mouseMoveEvent(QMouseEvent* event)
             pressTrace_.firstMoveHwMs = event->timestamp();
         }
         emit mouseMoved(widgetToImage(event->position()));
+    }
+    if (!transformWarp_.points.isEmpty()) {
+        warpHover_ = widgetToImage(event->position());
+        update();
     }
     QWidget::mouseMoveEvent(event);
 }

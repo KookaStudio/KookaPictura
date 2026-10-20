@@ -6,6 +6,7 @@ use super::geometry::{
     hit_test_quad, pivot_drag, pivot_hit, session_quad, MOVE_HANDLE, PIVOT_HANDLE, ROTATE_HANDLE,
 };
 use super::skew::gesture_skew;
+use super::warp::{refresh_warp_preview, warp_hit_test, warp_move, warp_press};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -24,13 +25,13 @@ impl qobject::PictureView {
         let (hit, start_quad) = {
             let rust = self.rust();
             match rust.transform_session.as_ref() {
+                Some(session) if session.warp.is_some() => {
+                    let hit = warp_hit_test(session, x, y, zoom);
+                    (hit, session_quad(session))
+                }
                 Some(session) => {
                     if pivot_hit(session, x, y, zoom) {
                         (PIVOT_HANDLE, session_quad(session))
-                    } else if session.warp.is_some() {
-                        // A preset warp's box gestures are suspended; only the
-                        // reference point (and Apply/Cancel) stays active.
-                        (-1, session_quad(session))
                     } else {
                         let quad = session_quad(session);
                         let hit = hit_test_quad(&quad, session.mode.is_projective(), x, y, zoom);
@@ -45,6 +46,9 @@ impl qobject::PictureView {
         }
         let mut rust = self.as_mut().rust_mut();
         if let Some(session) = rust.transform_session.as_mut() {
+            if session.warp.is_some() && warp_press(session, x, y, zoom) < 0 {
+                return -1;
+            }
             session.handle = hit;
             session.dragging = true;
             session.press_x = x;
@@ -64,12 +68,10 @@ impl qobject::PictureView {
     /// Hover hit-test for cursor selection; no session is mutated.
     pub fn transform_hit_test(&self, x: f64, y: f64, zoom: f64) -> i32 {
         match self.rust().transform_session.as_ref() {
+            Some(session) if session.warp.is_some() => warp_hit_test(session, x, y, zoom),
             Some(session) => {
                 if pivot_hit(session, x, y, zoom) {
                     return PIVOT_HANDLE;
-                }
-                if session.warp.is_some() {
-                    return -1;
                 }
                 let quad = session_quad(session);
                 hit_test_quad(&quad, session.mode.is_projective(), x, y, zoom)
@@ -99,6 +101,12 @@ impl qobject::PictureView {
         };
         if !session.dragging {
             return false;
+        }
+        if session.warp.is_some() {
+            if !warp_move(session, x, y) {
+                return false;
+            }
+            return refresh_warp_preview(self);
         }
         if session.handle == PIVOT_HANDLE {
             pivot_drag(session, x, y, zoom);
@@ -136,6 +144,7 @@ impl qobject::PictureView {
         };
         session.dragging = false;
         session.handle = -1;
+        session.warp_drag = None;
         true
     }
 }
@@ -328,58 +337,5 @@ impl qobject::PictureView {
             self.as_mut().record("HDR Conversion");
         }
         converted
-    }
-
-    /// Apply a named warp preset to the layer at `path`: build the style's
-    /// control net at `bend` percent, warp through the engine op with the X/Y
-    /// distortion, recomposite, and record one `"Warp"` history state. Returns
-    /// false without a document, for an unknown style or path, for `None`/
-    /// `Custom` (no preset mesh), or when the engine refuses.
-    pub fn apply_warp_preset(
-        mut self: Pin<&mut Self>,
-        path: &QString,
-        style: &QString,
-        bend: f64,
-        distort_x: f64,
-        distort_y: f64,
-        rotate_vertical: bool,
-    ) -> bool {
-        let Some(style) = pictura_render::WarpStyle::from_id(&style.to_string()) else {
-            return false;
-        };
-        let path = path.to_string();
-        let applied = {
-            let mut rust = self.as_mut().rust_mut();
-            let Some(doc) = rust.doc.as_mut() else {
-                return false;
-            };
-            let Some(layer) = pictura_render::resolve_path(doc, &path) else {
-                return false;
-            };
-            let rect = layer.rect;
-            let Some(mesh) = pictura_render::style_mesh(
-                style,
-                bend,
-                rotate_vertical,
-                rect.width(),
-                rect.height(),
-            ) else {
-                return false;
-            };
-            pictura_render::transform_layer_warp(
-                doc,
-                &path,
-                &mesh,
-                pictura_render::WarpParams {
-                    distort_h: distort_x,
-                    distort_v: distort_y,
-                },
-            )
-        };
-        if applied {
-            self.as_mut().recomposite();
-            self.as_mut().record("Warp");
-        }
-        applied
     }
 }

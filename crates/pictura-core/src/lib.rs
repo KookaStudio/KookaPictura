@@ -18,6 +18,7 @@ pub mod shape;
 mod text_render;
 mod type_tool;
 mod vector;
+pub mod warp;
 pub use advanced_blending::{BlendIf, Knockout};
 pub use annotations::{
     Annotations, CountGroup, Marker, MarkerKind, Measurement, Ruler, COUNT_LABEL_SIZE_MAX,

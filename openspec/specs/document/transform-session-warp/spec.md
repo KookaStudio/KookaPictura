@@ -1,79 +1,91 @@
 # document/transform-session-warp Specification
 
 ## Purpose
-The in-session preset warp: a warp chosen during a Free Transform session is
-part of the session state, previewed live, and committed with the transform as
-one history state.
+Warp mode of a Free Transform session, ported from photocraft: the box baked
+into an editable Bezier mesh or replaced by a preset style, previewed live, and
+committed as one history state.
 
 ## Requirements
 
-### Requirement: In-session warp state and dialog
+### Requirement: Warp mode commit
 
-The Free Transform session SHALL hold an optional preset warp carrying a warp
-style id, a bend, X/Y distortion percents, and a vertical-orientation flag. The
-application SHALL expose a warp button on the transform options bar that opens
-the existing `WarpPresetDialog`; on accept, a style with a preset mesh SHALL be
-stored on the session (the mesh built for the current target rect) and
-`None`/`Custom` (no preset mesh) SHALL clear the warp. The session SHALL report
-whether a warp is set and its values through the bridge, and SHALL accept a
-direct set and a clear.
+Committing a session in Warp mode SHALL apply the session's warp alone (it
+already carries the box), resampling with the session's interpolation through
+`transform_layer_warp`, then recomposite and record exactly one
+`"Free Transform"` history state when the layer changed. An identity warp SHALL
+record nothing. Escape SHALL end the session with the document bit-identical to
+its pre-session value and no history state added.
 
-#### Scenario: A preset becomes session state
+#### Scenario: A dragged anchor commits one state [tsw_commit]
 
-- **WHEN** the warp dialog is accepted with the Arc style at 50% bend during a session
-- **THEN** the session reports an active warp with the Arc id and 50% bend
+- **WHEN** a Warp-mode session drags the top-left anchor up and left, then Apply is clicked
+- **THEN** the layer's rect starts at the dragged corner and exactly one `"Free Transform"` state is added
 
-#### Scenario: None clears the warp
+#### Scenario: An untouched warp records nothing [tsw_identity]
 
-- **WHEN** the warp dialog is accepted with the None style while a warp is set
-- **THEN** the session reports no active warp
+- **WHEN** a session enters Warp mode and commits without an edit
+- **THEN** the history count is unchanged
 
-#### Scenario: No session, no warp
+#### Scenario: Escape restores a warped session exactly [tsw_escape]
 
-- **WHEN** a warp is set with no active session
-- **THEN** the call returns false and no state changes
-
-### Requirement: Warped preview and suspended gestures
-
-While a warp is set the session SHALL show a preview of the warped layer,
-computed on a document clone by applying the live transform and then the warp
-mesh, without mutating the document; the preview SHALL use the session's
-interpolation. Box gestures (scale, rotate, move, distort, skew, perspective)
-SHALL be suspended while a warp is set: a press away from the reference point
-SHALL report no hit. The document MUST equal its pre-session value until
-commit.
-
-#### Scenario: The preview mutates nothing
-
-- **WHEN** a warp is set and the preview is computed
-- **THEN** the document equals its pre-session value and no history state is added
-
-#### Scenario: Box gestures are suspended while warped
-
-- **WHEN** a warp is set and a press lands on a box handle
-- **THEN** no gesture begins
-
-### Requirement: Warp commit contract
-
-Committing a warped session SHALL apply the live similarity or projective
-transform first and the warp mesh second, resampling with the session's
-interpolation, recomposite, and record exactly one `"Free Transform"` history
-state when anything changed. The warp mesh for the commit SHALL be built from
-the target rect after the transform. An identity session (no transform, no
-warp) SHALL record nothing. Escape SHALL end the session with the document
-bit-identical to its pre-session value and no history state added.
-
-#### Scenario: Transform then warp records one state
-
-- **WHEN** a session scales its layer and sets a warp, then commits
-- **THEN** the layer is scaled and warped and exactly one `"Free Transform"` state is added
-
-#### Scenario: A warp-only session commits the warp
-
-- **WHEN** a session sets a warp without any box gesture and commits
-- **THEN** the layer is warped and exactly one `"Free Transform"` state is added
-
-#### Scenario: Escape restores a warped session exactly
-
-- **WHEN** a session sets a warp and Escape is pressed
+- **WHEN** a Warp-mode session picks a preset and Escape is pressed
 - **THEN** the document equals its pre-session value and the history count is unchanged
+
+### Requirement: Warp mode
+
+`Edit > Transform > Warp` SHALL open the active layer's Free Transform session in
+Warp mode, or switch an open session into it, as photocraft's Warp mode does.
+Entering Warp SHALL map the identity one-patch Bezier mesh over the session's
+source box through the box's current transform, so a transform made first
+carries over. While warping, the session SHALL report the mesh's corner anchors
+as its quad, and the canvas SHALL draw the patch boundaries, the
+rule-of-thirds guides of a one-patch grid, and, for a custom warp, its anchors
+(always) and handles (near the pointer or while their anchor is dragged) in
+place of the box and reference point. Leaving Warp SHALL drop the warp and
+restore the box as it was. Post-CS6 split warps and the Grid menu are not
+provided.
+
+#### Scenario: The menu opens Warp mode [tsw_menu]
+
+- **WHEN** `Edit > Transform > Warp` is invoked on a transformable layer
+- **THEN** a session is open in Warp mode with the `custom` style, and the canvas shows four boundaries, four guides, and twelve points of which four are anchors
+
+#### Scenario: The toggle switches between box and warp [tsw_toggle]
+
+- **WHEN** the options-bar warp toggle is clicked twice during a session
+- **THEN** the first click enters Warp mode (a box corner is now an anchor) and the second restores the box and its handles
+
+#### Scenario: A box transform carries into the mesh [tsw_carry]
+
+- **WHEN** a session is rotated 30° and then enters Warp mode
+- **THEN** the mesh's corners equal the rotated box's corners, and leaving Warp gives back the 30° box
+
+### Requirement: Warp gestures
+
+In Warp mode a press within 12 screen pixels of a custom warp's anchor or handle
+SHALL drag that point: an anchor carries its handles, and a handle turns the
+opposite handle. A press elsewhere inside the warped grid SHALL pull the
+surface under the pointer. A press outside the grid SHALL grab nothing. A press
+that grabs something on a preset SHALL first turn the preset into the same shape
+as a custom mesh.
+
+#### Scenario: Presses grab a point, the surface, or nothing [tsw_grab]
+
+- **WHEN** a custom warp is pressed on an anchor, on a handle, inside the grid, and far outside it
+- **THEN** the press grabs the anchor, the handle, the surface, and nothing respectively
+
+#### Scenario: A press on a preset makes it custom [tsw_preset_press]
+
+- **WHEN** a Bulge preset is pressed outside its grid, then inside it, and dragged
+- **THEN** the outside press grabs nothing and keeps Bulge, the inside press pulls the surface and the style becomes `custom`, and the grabbed shape equals the preset's
+
+### Requirement: Warp preview
+
+Every warp edit SHALL refresh the preview by warping the layer on a document
+clone with the session's interpolation and handing only the moving image to the
+canvas. The document MUST equal its pre-session value until commit.
+
+#### Scenario: A preset previews its shape [tsw_preview]
+
+- **WHEN** Arc is chosen in Warp mode
+- **THEN** the preview image is taller than the unwarped layer image and no history state is added

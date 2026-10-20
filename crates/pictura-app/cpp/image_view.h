@@ -15,6 +15,7 @@
 #include <QtGui/QTransform>
 #include <QtWidgets/QWidget>
 
+#include "api/transform_api.h"
 #include "smart_guides.h"
 #include "theme.h"
 
@@ -278,6 +279,10 @@ public:
     // Replace the previewed layer image and its document-space origin (a warped
     // preview recomputes the whole layer, so its rect may move).
     void updateTransformPreviewLayer(const QImage& layer, const QPointF& layerPos);
+    // Warp mode's grid and control points (document space), drawn instead of
+    // the box; an empty overlay brings the box back.
+    void setTransformWarp(const transform_api::WarpOverlay& overlay);
+    const transform_api::WarpOverlay& transformWarpForTest() const { return transformWarp_; }
     QPointF transformPivotForTest() const { return transformPivot_; }
     bool transformPivotVisibleForTest() const { return transformPivotVisible_; }
     void clearTransformPreview();
@@ -572,6 +577,7 @@ private:
     void paintCropGroupOverlays(QPainter& painter);
     // The Free Transform reference point marker (image_view_overlays.cpp).
     void paintTransformPivot(QPainter& painter);
+    void paintWarpOverlay(QPainter& painter);
     // The Free Transform box, handles, rotate knob, and reference point,
     // unclipped by the document rect (image_view_overlays.cpp).
     void paintTransformOverlay(QPainter& painter);
@@ -722,6 +728,9 @@ private:
     QPolygonF transformQuad_;
     QPointF transformPivot_;
     bool transformPivotVisible_ = false;
+    transform_api::WarpOverlay transformWarp_;
+    // The pointer in image space, for revealing the warp handles near it.
+    QPointF warpHover_;
 
     QString dragSizeText_;
     QPointF dragSizeImagePos_;

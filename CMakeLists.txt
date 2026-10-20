@@ -131,7 +131,6 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/acr/acr_effects_panel.cpp
     crates/pictura-app/cpp/acr/acr_calibration_panel.cpp
     crates/pictura-app/cpp/acr/acr_presets_panel.cpp
-    crates/pictura-app/cpp/warp_preset_dialog.cpp
     crates/pictura-app/cpp/filter_commands.cpp
     crates/pictura-app/cpp/filter_commands.h
     crates/pictura-app/cpp/filter_commit.cpp
@@ -420,7 +419,6 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/acr/acr_preview_pane.h
     crates/pictura-app/cpp/acr/acr_histogram.h
     crates/pictura-app/cpp/acr/acr_panels.h
-    crates/pictura-app/cpp/warp_preset_dialog.h
     crates/pictura-app/cpp/color_settings_dialog.h
     crates/pictura-app/cpp/color_picker_dialog.h
     crates/pictura-app/cpp/export_as_dialog.h
@@ -551,7 +549,6 @@ add_executable(pictura
     crates/pictura-app/cpp/selftest_tools_selection.cpp
     crates/pictura-app/cpp/selftest_ui_persistence.cpp
     crates/pictura-app/cpp/selftest_visibility.cpp
-    crates/pictura-app/cpp/selftest_warp_preset.cpp
     crates/pictura-app/cpp/selftest_workspace_input.cpp
     crates/pictura-app/cpp/selftest_active_layer.h
     crates/pictura-app/cpp/selftest_annotations.h
@@ -590,7 +587,6 @@ add_executable(pictura
     crates/pictura-app/cpp/selftest_tools_selection.h
     crates/pictura-app/cpp/selftest_ui_persistence.h
     crates/pictura-app/cpp/selftest_visibility.h
-    crates/pictura-app/cpp/selftest_warp_preset.h
     crates/pictura-app/cpp/selftest_workspace_input.h
 )
 target_link_libraries(pictura PRIVATE pictura_shell pictura_assets)

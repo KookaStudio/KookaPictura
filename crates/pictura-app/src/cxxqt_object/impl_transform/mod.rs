@@ -3,6 +3,7 @@ mod dispatch;
 mod geometry;
 mod session;
 mod skew;
+mod warp;
 
 use super::helpers::*;
 use super::helpers_composite::*;

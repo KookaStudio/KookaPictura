@@ -42,9 +42,9 @@ mod transform_tests;
 mod vector_masks;
 mod via;
 mod warp;
-mod warp_styles;
+mod warp_raster;
 #[cfg(test)]
-mod warp_styles_tests;
+mod warp_tests;
 
 pub use align::{
     align_layers, can_align, can_distribute, distribute_layers, layer_content_bounds, AlignEdge,
@@ -131,7 +131,4 @@ pub use vector_masks::{
     VECTOR_MASK_FLAG_NOT_LINKED,
 };
 pub use via::{layer_via_copy, layer_via_cut};
-pub use warp::{
-    identity_mesh, transform_layer_warp, transform_layer_warp_with, WarpMesh, WarpParams,
-};
-pub use warp_styles::{style_mesh, WarpStyle};
+pub use warp::transform_layer_warp;

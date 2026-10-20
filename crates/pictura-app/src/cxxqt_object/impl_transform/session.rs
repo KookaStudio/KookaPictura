@@ -153,10 +153,34 @@ pub(super) fn build_transform_preview(
     path: &str,
     gpu_compute: bool,
 ) -> Option<(QImage, QImage, i32, i32, i32)> {
+    let opacity = pictura_render::resolve_path(doc, path)?.opacity as i32;
+    let (image, x, y) = transform_preview_layer(doc, path, gpu_compute)?;
+    let mut base_doc = doc.clone();
+    for target_path in &clipping_group(doc, path) {
+        if let Some(target) = pictura_render::resolve_path_mut(&mut base_doc, target_path) {
+            target.visible = false;
+        }
+    }
+    let rendered = current_buffer(&base_doc, gpu_compute);
+    Some((
+        buffer_to_image(&pictura_codec::buffer_to_srgb(doc, &rendered)),
+        image,
+        x,
+        y,
+        opacity,
+    ))
+}
+
+/// The moving pixels of [`build_transform_preview`] and their document-space
+/// origin: the layer (or its clipping group, or its rendered appearance).
+pub(super) fn transform_preview_layer(
+    doc: &pictura_core::Document,
+    path: &str,
+    gpu_compute: bool,
+) -> Option<(QImage, i32, i32)> {
     let layer = pictura_render::resolve_path(doc, path)?;
-    let opacity = layer.opacity as i32;
     let group = clipping_group(doc, path);
-    let (image, x, y) = if group.len() > 1 {
+    let image = if group.len() > 1 {
         rendered_clipping_group(doc, &group, gpu_compute)?
     } else if needs_rendered_appearance(layer) {
         rendered_layer_image(doc, path, gpu_compute)?
@@ -177,20 +201,7 @@ pub(super) fn build_transform_preview(
             }
         }
     };
-    let mut base_doc = doc.clone();
-    for target_path in &group {
-        if let Some(target) = pictura_render::resolve_path_mut(&mut base_doc, target_path) {
-            target.visible = false;
-        }
-    }
-    let rendered = current_buffer(&base_doc, gpu_compute);
-    Some((
-        buffer_to_image(&pictura_codec::buffer_to_srgb(doc, &rendered)),
-        image,
-        x,
-        y,
-        opacity,
-    ))
+    Some(image)
 }
 
 /// Whether `path` resolves to a transformable target: a raster pixel layer, or
@@ -377,7 +388,7 @@ impl qobject::PictureView {
             skew_y: 0.0,
             interpolation: Interpolation::Bicubic,
             warp: None,
-            warp_preview_quad: None,
+            warp_drag: None,
             lifted,
             untrimmed,
         });
@@ -432,11 +443,11 @@ impl qobject::PictureView {
     }
 
     /// Commit the session: one transform op (the similarity, an affine quad
-    /// when a shear is set, or `transform_layer_quad` in a projective mode),
-    /// then the session warp when one is set, a recomposite, and one
-    /// `"Free Transform"` history state on success. An identity transform with
-    /// no warp records nothing; an engine refusal records nothing. The session
-    /// always clears.
+    /// when a shear is set, or `transform_layer_quad` in a projective mode), or
+    /// in Warp mode the warp alone (it already carries the box), a recomposite,
+    /// and one `"Free Transform"` history state on success. An identity
+    /// transform or warp records nothing; an engine refusal records nothing.
+    /// The session always clears.
     pub fn commit_transform(mut self: Pin<&mut Self>) -> bool {
         let Some((path, mode, quad, params, orig_rect, interpolation, warp)) =
             self.rust().transform_session.as_ref().map(|session| {
@@ -453,62 +464,28 @@ impl qobject::PictureView {
         else {
             return false;
         };
-        let identity = if mode.is_projective() {
-            let source = source_corners(orig_rect);
-            quad.iter()
-                .zip(source.iter())
-                .all(|(q, s)| (q.0 - s.0).abs() <= 1e-9 && (q.1 - s.1).abs() <= 1e-9)
-        } else {
-            params.is_identity()
+        let identity = match &warp {
+            Some(warp) => warp.is_identity(),
+            None if mode.is_projective() => {
+                let source = source_corners(orig_rect);
+                quad.iter()
+                    .zip(source.iter())
+                    .all(|(q, s)| (q.0 - s.0).abs() <= 1e-9 && (q.1 - s.1).abs() <= 1e-9)
+            }
+            None => params.is_identity(),
         };
-        if identity && warp.is_none() {
+        if identity {
             self.as_mut().drop_transform_session();
             return false;
         }
-        let changed = match self.as_mut().rust_mut().doc.as_mut() {
-            Some(doc) => {
-                let mut changed = if identity {
-                    false
-                } else {
-                    apply_session_transform(
-                        doc,
-                        &path,
-                        mode,
-                        quad,
-                        params,
-                        orig_rect,
-                        interpolation,
-                    )
-                };
-                if let Some(warp) = &warp {
-                    if changed || identity {
-                        let mesh = pictura_render::resolve_path(doc, &path).and_then(|layer| {
-                            let rect = layer.rect;
-                            pictura_render::style_mesh(
-                                warp.style,
-                                warp.bend,
-                                warp.vertical,
-                                rect.width(),
-                                rect.height(),
-                            )
-                        });
-                        if let Some(mesh) = mesh {
-                            changed = pictura_render::transform_layer_warp_with(
-                                doc,
-                                &path,
-                                &mesh,
-                                pictura_render::WarpParams {
-                                    distort_h: warp.distort_x,
-                                    distort_v: warp.distort_y,
-                                },
-                                interpolation,
-                            ) || changed;
-                        }
-                    }
-                }
-                changed
+        let changed = match (self.as_mut().rust_mut().doc.as_mut(), &warp) {
+            (Some(doc), Some(warp)) => {
+                pictura_render::transform_layer_warp(doc, &path, warp, interpolation)
             }
-            None => false,
+            (Some(doc), None) => {
+                apply_session_transform(doc, &path, mode, quad, params, orig_rect, interpolation)
+            }
+            (None, _) => false,
         };
         let lifted = self
             .as_mut()

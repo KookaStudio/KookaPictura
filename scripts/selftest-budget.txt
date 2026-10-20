@@ -10,4 +10,6 @@
 # (#138) concurrently with the guard; from here it only shrinks. Lowered to 511
 # when those three checks moved to the tst_fill_tools / tst_retouch_tools suites.
 # Lowered to 510 when the pictura_raw check moved to tst_pictura_raw.
-510
+# Lowered to 508 when the lpr_warp_preset check (exit code 527, retired) went
+# with the preset-only Warp dialog; Warp mode is covered by tst_transform_warp.
+508

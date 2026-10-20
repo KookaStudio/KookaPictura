@@ -43,13 +43,18 @@ or custom) is recorded in
 
 ## Ported code
 
-Parts of the filter engine are ported from **PhotoCraft**
+Parts of the engine are ported from **PhotoCraft**
 (<https://github.com/storytold/photocraft>), Copyright (c) 2026 ArtCraft Team
 and the PhotoCraft contributors, licensed under the MIT License or the Apache
 License 2.0 at the recipient's option; Kooka Pictura takes it under the
 **MIT License**. The ported code is `Filter ▸ Liquify` (the displacement
 mesh, brush-dab model and resampling in
-`crates/pictura-filters/src/distort/liquify.rs` and its submodules) and
+`crates/pictura-filters/src/distort/liquify.rs` and its submodules),
 `Filter ▸ Artistic ▸ Palette Knife`
-(`crates/pictura-filters/src/photorust/artistic/knife_glow_grain.rs`). The
+(`crates/pictura-filters/src/photorust/artistic/knife_glow_grain.rs`), and
+`Edit ▸ Transform ▸ Warp` (the warp styles and Bezier mesh in
+`crates/pictura-core/src/warp.rs` and `warp/`, the mesh resampler in
+`crates/pictura-render/src/document_ops/layer_ops/warp.rs` and
+`warp_raster.rs`, and the Warp-mode session in
+`crates/pictura-app/src/cxxqt_object/impl_transform/warp.rs`). The
 full license text is in [`LICENSES/photocraft.txt`](LICENSES/photocraft.txt).

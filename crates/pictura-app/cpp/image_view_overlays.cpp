@@ -154,10 +154,64 @@ void ImageView::paintTransformPivot(QPainter& painter)
     painter.drawEllipse(p, 1.5 / z, 1.5 / z);
 }
 
+void ImageView::setTransformWarp(const transform_api::WarpOverlay& overlay)
+{
+    transformWarp_ = overlay;
+    update();
+}
+
+// Warp mode's chrome in image space (photocraft's warp overlay): the patch
+// boundaries solid, a single patch's rule-of-thirds guides faint, and for a
+// custom warp its anchors always; a handle and its arm only near the pointer or
+// while its anchor is dragged, so the grid does not bury the picture in dots.
+void ImageView::paintWarpOverlay(QPainter& painter)
+{
+    const double z = zoom_ > 0.0 ? zoom_ : 1.0;
+    // How near the pointer (screen px) a handle or its anchor reveals it.
+    const double reveal = 56.0 / z;
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(QPen(QColor(255, 255, 255, 150), 0, Qt::SolidLine));
+    for (const QPolygonF& guide : transformWarp_.guides) {
+        painter.drawPolyline(guide);
+    }
+    for (const QPolygonF& line : transformWarp_.grid) {
+        painter.setPen(QPen(Qt::white, 0, Qt::SolidLine));
+        painter.drawPolyline(line);
+        painter.setPen(QPen(Qt::black, 0, Qt::DashLine));
+        painter.drawPolyline(line);
+    }
+    const auto near = [this, reveal](const QPointF& p) {
+        return QLineF(p, warpHover_).length() <= reveal;
+    };
+    const double hs = 2.5 / z;
+    const double hr = 2.75 / z;
+    for (const transform_api::WarpPoint& point : transformWarp_.points) {
+        if (point.kind == transform_api::WarpPoint::Anchor) {
+            painter.setBrush(Qt::white);
+            painter.setPen(QPen(Qt::black, 0, Qt::SolidLine));
+            painter.drawRect(QRectF(point.pos.x() - hs, point.pos.y() - hs, 2.0 * hs, 2.0 * hs));
+            continue;
+        }
+        if (point.kind != transform_api::WarpPoint::DraggedHandle && !near(point.pos)
+            && !near(point.anchor)) {
+            continue;
+        }
+        painter.setPen(QPen(Qt::white, 0, Qt::SolidLine));
+        painter.drawLine(point.anchor, point.pos);
+        painter.setBrush(Qt::white);
+        painter.setPen(QPen(Qt::black, 0, Qt::SolidLine));
+        painter.drawEllipse(point.pos, hr, hr);
+    }
+}
+
 // The Free Transform box and its chrome in image space. Called outside the
 // document clip so a layer dragged past the canvas edge keeps its full box.
 void ImageView::paintTransformOverlay(QPainter& painter)
 {
+    if (transformActive_ && !transformWarp_.isEmpty()) {
+        paintWarpOverlay(painter);
+        return;
+    }
     // A session's live quad, else the Move tool's idle controls box.
     const QPolygonF& quad = transformActive_ ? transformQuad_ : controlsBox_;
     if (quad.size() < 4) {

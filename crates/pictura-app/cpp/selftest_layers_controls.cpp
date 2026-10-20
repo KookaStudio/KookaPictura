@@ -7,7 +7,6 @@
 #include "selftest_layers_interactions.h"
 #include "selftest_layers_round3.h"
 #include "selftest_layers_smart_object.h"
-#include "selftest_warp_preset.h"
 #include "selftest_ports.h"
 #include "selftest_numeric.h"
 #include "selftest_paint_perf.h"
@@ -947,8 +946,6 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         if (const int lso = pictura::runImageImportChecks(frame); lso != 0) { return lso; }
 
         if (const int ft = pictura::runFreeTransformChecks(frame); ft != 0) { return ft; }
-
-        if (const int wp = pictura::runWarpPresetChecks(frame); wp != 0) { return wp; }
 
         if (const int ports = pictura::runPortChecks(frame); ports != 0) { return ports; }
 
