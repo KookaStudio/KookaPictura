@@ -102,10 +102,10 @@ pub(crate) fn recompute(doc: &mut pictura_core::Document) {
 
 /// Visit each layer depth-first, groups before their children.
 pub(crate) fn for_each_layer(
-    layers: &mut [pictura_core::Layer],
+    layers: &mut pictura_core::LayerStack,
     f: &mut impl FnMut(&mut pictura_core::Layer),
 ) {
-    for layer in layers.iter_mut() {
+    for layer in layers {
         f(layer);
         for_each_layer(&mut layer.children, f);
     }

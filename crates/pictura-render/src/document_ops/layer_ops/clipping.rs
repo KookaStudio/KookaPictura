@@ -6,11 +6,10 @@
 
 use pictura_core::{Document, Layer};
 
-use super::paths::{container_of, edit_paths, parse_path, resolve_path_mut};
+use super::paths::{container_of, parse_path};
 
-/// Whether `path` can clip to the layer below it: the path resolves, the
-/// selected layer is not the Background and is not already clipped, and the
-/// resolved base is not a Background.
+/// Whether `path` can clip to the layer below it: the layer resolves, is not
+/// the Background, is not already clipped, and has a non-Background base.
 pub fn can_create_clipping_mask(doc: &Document, path: &str) -> bool {
     let Some(segments) = parse_path(path) else {
         return false;
@@ -26,20 +25,25 @@ pub fn can_create_clipping_mask(doc: &Document, path: &str) -> bool {
     };
     !layer.background
         && !layer.clipping
+        && index > 0
         && base_below(container, index).is_some_and(|base| !container[base].background)
 }
 
 /// Clip each of `paths` to the layer below it. Returns how many changed.
 pub fn create_clipping_mask(doc: &mut Document, paths: &[&str]) -> usize {
-    edit_paths(
-        doc,
-        paths,
-        |doc, path, _| can_create_clipping_mask(doc, path),
-        |layer: &mut Layer| {
-            layer.clipping = true;
-            true
-        },
-    )
+    let mut changed = 0;
+    for path in paths {
+        if !can_create_clipping_mask(doc, path) {
+            continue;
+        }
+        let Some(segments) = parse_path(path) else {
+            continue;
+        };
+        if doc.layers.set_clipping(&segments, true) {
+            changed += 1;
+        }
+    }
+    changed
 }
 
 /// The sibling indices Release Clipping Mask frees for `path`: a clipped
@@ -88,8 +92,10 @@ pub fn release_clipping_mask(doc: &mut Document, paths: &[&str]) -> usize {
     freed.dedup();
     let mut changed = 0;
     for path in &freed {
-        if let Some(layer) = resolve_path_mut(doc, path) {
-            layer.clipping = false;
+        let Some(segments) = parse_path(path) else {
+            continue;
+        };
+        if doc.layers.set_clipping(&segments, false) {
             changed += 1;
         }
     }
@@ -98,85 +104,8 @@ pub fn release_clipping_mask(doc: &mut Document, paths: &[&str]) -> usize {
 
 /// The nearest non-clipped sibling below `index`: the base of the run a clipped
 /// layer at `index` belongs to.
-pub(crate) fn base_below(container: &[Layer], index: usize) -> Option<usize> {
+fn base_below(container: &[Layer], index: usize) -> Option<usize> {
     (0..index).rev().find(|&i| !container[i].clipping)
-}
-
-/// Whether a clipped node inserted at `index` has a legal base: a non-Background
-/// sibling below it.
-pub(crate) fn clipping_base_allowed(container: &[Layer], index: usize) -> bool {
-    base_below(container, index).is_some_and(|base| !container[base].background)
-}
-
-/// Clear the contiguous clipped run directly above `index` when the node leaving
-/// that position is an unclipped base. Call before removing the node. No-op when
-/// the departing node is clipped or the layer above it is not clipped.
-pub(crate) fn release_run_above(container: &mut [Layer], index: usize, was_clipped: bool) -> bool {
-    if was_clipped {
-        return false;
-    }
-    let mut changed = false;
-    for layer in container.iter_mut().skip(index.saturating_add(1)) {
-        if !layer.clipping {
-            break;
-        }
-        layer.clipping = false;
-        changed = true;
-    }
-    changed
-}
-
-/// The moved node's final position and the clip state it brought with it.
-pub(crate) struct Moved {
-    pub index: usize,
-    pub was_clipped: bool,
-    /// A same-container move landed directly above the base it was clipped to
-    /// before the move.
-    pub same_base_below: bool,
-}
-
-/// Reconcile clipping flags after a stack edit. Clears a clipped container
-/// bottom and, when `moved` names the relocated node, sets its flag by position:
-/// a node dropped under a clipped layer joins that run; a clipped node stays
-/// when it is still inside a run or directly above its former base; otherwise it
-/// is released. An empty container is untouched.
-pub(crate) fn normalize_clipping(container: &mut [Layer], moved: Option<Moved>) -> bool {
-    let mut changed = false;
-    if container.first().is_some_and(|layer| layer.clipping) {
-        container[0].clipping = false;
-        changed = true;
-    }
-    if let Some(moved) = moved {
-        if moved.index < container.len() {
-            let above = container.get(moved.index + 1).is_some_and(|l| l.clipping);
-            let below = moved.index > 0 && container[moved.index - 1].clipping;
-            let clipped = moved.index > 0
-                && (above || (moved.was_clipped && (below || moved.same_base_below)));
-            if container[moved.index].clipping != clipped {
-                container[moved.index].clipping = clipped;
-                changed = true;
-            }
-        }
-    }
-    let backgrounds: Vec<usize> = container
-        .iter()
-        .enumerate()
-        .filter_map(|(index, layer)| layer.background.then_some(index))
-        .collect();
-    for background in backgrounds.into_iter().rev() {
-        if container[background].clipping {
-            container[background].clipping = false;
-            changed = true;
-        }
-        for layer in container.iter_mut().skip(background + 1) {
-            if !layer.clipping {
-                break;
-            }
-            layer.clipping = false;
-            changed = true;
-        }
-    }
-    changed
 }
 
 #[cfg(test)]
@@ -507,17 +436,6 @@ mod tests {
         assert_eq!(group_paths(&mut doc, &["1"]).as_deref(), Some("1"));
         assert!(doc.layers[1].is_group);
         assert!(!doc.layers[1].children[0].clipping);
-    }
-
-    #[test]
-    fn normalize_releases_runs_above_every_background() {
-        let mut doc = stack();
-        doc.layers[2].background = true;
-        doc.layers[1].clipping = true;
-        doc.layers[3].clipping = true;
-        normalize_clipping(doc.layers.as_mut_slice(), None);
-        assert!(!doc.layers[1].clipping);
-        assert!(!doc.layers[3].clipping);
     }
 
     #[test]

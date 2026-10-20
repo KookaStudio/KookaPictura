@@ -68,11 +68,11 @@ fn arrange_stops_above_background() {
 #[test]
 fn a_group_with_a_background_keeps_it_bottom() {
     let mut group = empty_group("Group");
-    group.children = vec![
+    group.children = pictura_core::LayerStack::from_layers(vec![
         pixel_layer("Background", 4, 4, 0),
         pixel_layer("above", 4, 4, 1),
         pixel_layer("top", 4, 4, 2),
-    ];
+    ]);
     let mut doc = doc_with(vec![group]);
     let before = doc.clone();
     assert!(

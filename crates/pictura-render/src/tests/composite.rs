@@ -403,7 +403,7 @@ fn pass_through_group_with_opacity_falls_back_to_isolated() {
 #[test]
 fn bounds_and_negative_rect_clipping() {
     let mut d = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
-    d.layers = vec![
+    d.layers = pictura_core::LayerStack::from_layers(vec![
         // Covers only canvas (0,0): local (1,1) of a 2x2 rect anchored at -1,-1.
         solid(
             "neg",
@@ -431,7 +431,7 @@ fn bounds_and_negative_rect_clipping() {
             BlendMode::Normal,
             255,
         ),
-    ];
+    ]);
     let out = composite_rgba(&d);
     assert_eq!(px(&out, 0, 0), [255, 0, 0, 255]);
     assert_eq!(px(&out, 1, 0), [0, 0, 0, 0]);
@@ -502,7 +502,7 @@ fn dissolve_is_binary_and_deterministic() {
 #[test]
 fn grayscale_layer_replicates_channel() {
     let mut d = Document::new(1, 1, ColorMode::Grayscale, BitDepth::Eight);
-    d.layers = vec![Layer {
+    d.layers = pictura_core::LayerStack::from_layers(vec![Layer {
         name: "gray".into(),
         rect: full(1, 1),
         blend: BlendMode::Normal,
@@ -518,11 +518,11 @@ fn grayscale_layer_replicates_channel() {
             id: 0,
             data: vec![120].into(),
         }],
-        children: Vec::new(),
+        children: pictura_core::LayerStack::default(),
         is_group: false,
         background: false,
         ..Default::default()
-    }];
+    }]);
     assert_eq!(px(&composite_rgba(&d), 0, 0), [120, 120, 120, 255]);
 }
 
@@ -799,7 +799,7 @@ fn none_knockout_is_byte_identical_to_no_field() {
     let with_field = composite_rgba(&knockout_stack(Knockout::None));
     let mut layers = knockout_stack(Knockout::None).layers;
     layers[2].knockout = Knockout::None;
-    let without = composite_rgba(&doc(1, 1, layers));
+    let without = composite_rgba(&doc(1, 1, layers.to_vec()));
     assert_eq!(with_field.data, without.data);
 }
 

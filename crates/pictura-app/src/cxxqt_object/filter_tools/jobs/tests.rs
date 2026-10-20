@@ -19,7 +19,7 @@ fn striped() -> PictureViewRust {
             .collect::<Vec<_>>()
             .into();
     }
-    doc.layers = vec![layer];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
     let rendered = current_buffer(&doc, false);
     store_composite(&mut doc, &rendered);
     let mut rust = PictureViewRust {

@@ -88,7 +88,7 @@ impl qobject::PictureView {
                     // A refusal must leave the document unchanged: undo the
                     // append. `add_raster_layer_from_rgba` pushes exactly one
                     // top-level layer and a failed conversion adds none.
-                    doc.layers.pop();
+                    let _ = doc.layers.pop();
                     return QString::default();
                 }
                 path

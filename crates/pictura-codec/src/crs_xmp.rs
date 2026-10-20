@@ -6,7 +6,7 @@
 //! is preserved but not edited. Widen to a URI-bound scanner when a fixture
 //! needs it.
 
-use pictura_core::{CrsSettings, Document, Layer, SmartObject, SmartObjectKind};
+use pictura_core::{CrsSettings, Document, Layer, LayerStack, SmartObject, SmartObjectKind};
 
 use crate::error::PsdError;
 use crate::smart_object::{find_subslice, replace_embedded_payload};
@@ -230,7 +230,10 @@ fn find_smart_object<'a>(layers: &'a [Layer], uuid: &str) -> Option<&'a SmartObj
     None
 }
 
-fn find_smart_object_mut<'a>(layers: &'a mut [Layer], uuid: &str) -> Option<&'a mut SmartObject> {
+fn find_smart_object_mut<'a>(
+    layers: &'a mut LayerStack,
+    uuid: &str,
+) -> Option<&'a mut SmartObject> {
     for layer in layers.iter_mut() {
         if layer
             .smart_object
@@ -363,7 +366,7 @@ crs:Exposure2012=\"+0.50\" crs:Contrast2012=\"-10\"/></rdf:RDF></x:xmpmeta>"
         for (i, b) in doc.composite.data.iter_mut().enumerate() {
             *b = (i * 7 + 1) as u8;
         }
-        let mut layer = Layer {
+        let layer = Layer {
             name: "Smart".into(),
             rect: PsdRect {
                 top: 0,
@@ -395,12 +398,8 @@ crs:Exposure2012=\"+0.50\" crs:Contrast2012=\"-10\"/></rdf:RDF></x:xmpmeta>"
             }],
             ..Default::default()
         };
-        crate::smart_object::resolve_smart_objects(
-            std::slice::from_mut(&mut layer),
-            &section,
-            false,
-        );
-        doc.layers = vec![layer];
+        doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
+        crate::smart_object::resolve_smart_objects(&mut doc.layers, &section, false);
         doc.layer_section_extra = section;
         doc
     }

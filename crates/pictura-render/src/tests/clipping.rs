@@ -81,7 +81,7 @@ fn a_run_shares_the_base_and_a_bottom_or_hidden_base_behaves() {
         255,
     );
     blue.clipping = true;
-    d.layers.push(blue);
+    let _ = d.layers.push(blue);
     let out = composite_rgba(&d);
     // Blue covers x < 4; the base covers x and y in 2..6.
     assert_eq!(
@@ -105,8 +105,8 @@ fn a_run_shares_the_base_and_a_bottom_or_hidden_base_behaves() {
     );
 
     let mut alone = clipped_doc();
-    alone.layers.remove(0);
-    alone.layers.remove(0);
+    let _ = alone.layers.remove(&[0]);
+    let _ = alone.layers.remove(&[0]);
     assert_eq!(
         rgb(&composite_rgba(&alone), 8, 8),
         GREEN,

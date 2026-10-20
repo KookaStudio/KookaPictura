@@ -128,7 +128,7 @@ fn layer(name: &str, blend: BlendMode, interleaved: &[u8], with_alpha: bool) -> 
         mask: None,
         adjustment: None,
         channels,
-        children: Vec::new(),
+        children: pictura_core::LayerStack::default(),
         is_group: false,
         background: false,
         ..Default::default()
@@ -139,10 +139,10 @@ fn layer(name: &str, blend: BlendMode, interleaved: &[u8], with_alpha: bool) -> 
 /// above, matching the two layers ImageMagick composited.
 fn scene(base: &[u8], src: &[u8], mode: BlendMode) -> Document {
     let mut doc = Document::new(SIZE, SIZE, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
         layer("base", BlendMode::Normal, base, false),
         layer("src", mode, src, true),
-    ];
+    ]);
     doc
 }
 

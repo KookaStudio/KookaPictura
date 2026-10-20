@@ -473,46 +473,48 @@ mod tests {
         let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
         let n = (w * h) as usize;
         let (r, g, b, a) = rgba;
-        doc.layers.push(Layer {
-            name: "px".into(),
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: h as i32,
-                right: w as i32,
-            },
-            blend: BlendMode::Normal,
-            opacity: 255,
-            fill: 255,
-            lock: LockFlags::default(),
-            color: ColorLabel::None,
-            clipping: false,
-            visible: true,
-            mask: None,
-            adjustment: None,
-            channels: vec![
-                Channel {
-                    id: 0,
-                    data: vec![r; n].into(),
+        {
+            let _ = doc.layers.push(Layer {
+                name: "px".into(),
+                rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: h as i32,
+                    right: w as i32,
                 },
-                Channel {
-                    id: 1,
-                    data: vec![g; n].into(),
-                },
-                Channel {
-                    id: 2,
-                    data: vec![b; n].into(),
-                },
-                Channel {
-                    id: -1,
-                    data: vec![a; n].into(),
-                },
-            ],
-            children: Vec::new(),
-            is_group: false,
-            background: false,
-            ..Default::default()
-        });
+                blend: BlendMode::Normal,
+                opacity: 255,
+                fill: 255,
+                lock: LockFlags::default(),
+                color: ColorLabel::None,
+                clipping: false,
+                visible: true,
+                mask: None,
+                adjustment: None,
+                channels: vec![
+                    Channel {
+                        id: 0,
+                        data: vec![r; n].into(),
+                    },
+                    Channel {
+                        id: 1,
+                        data: vec![g; n].into(),
+                    },
+                    Channel {
+                        id: 2,
+                        data: vec![b; n].into(),
+                    },
+                    Channel {
+                        id: -1,
+                        data: vec![a; n].into(),
+                    },
+                ],
+                children: pictura_core::LayerStack::default(),
+                is_group: false,
+                background: false,
+                ..Default::default()
+            });
+        };
         doc
     }
 
@@ -735,7 +737,7 @@ mod tests {
 
         // CPU oracle on the 1-channel mask document.
         let mut doc = Document::new(w, h, ColorMode::Grayscale, BitDepth::Eight);
-        doc.layers.push(flat(base));
+        let _ = doc.layers.push(flat(base));
         let mut stroke = Stroke::begin_at(&doc, "0", cfg).expect("stroke begins");
         for &(x, y) in &dabs {
             stroke.sample(

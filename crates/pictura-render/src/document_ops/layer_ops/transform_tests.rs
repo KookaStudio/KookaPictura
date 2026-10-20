@@ -48,7 +48,7 @@ fn pixel_layer(w: u32, h: u32) -> Layer {
 
 fn doc_with(layer: Layer) -> Document {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![layer];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
     doc
 }
 

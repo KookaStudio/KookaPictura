@@ -494,7 +494,7 @@ mod tests {
         };
         let mut top = pixel_layer("top", rect(0, 0, 3, 5), 15);
         top.mask = Some(mask);
-        doc.layers = vec![bg, top];
+        doc.layers = pictura_core::LayerStack::from_layers(vec![bg, top]);
         doc.composite = crate::composite_rgba(&doc);
         doc
     }
@@ -554,7 +554,7 @@ mod tests {
             layer.rect,
             vec![(0, Samples::U16(vec![100u16; 6]))],
         ));
-        d.layers = vec![layer];
+        d.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         d.composite = crate::composite_rgba(&d);
 
         assert!(rotate_document_in(&mut d, 30.0, (1.5, 1.0)));
@@ -593,7 +593,7 @@ mod tests {
             }],
             ..Default::default()
         });
-        d.layers = vec![layer];
+        d.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         d.composite = crate::composite_rgba(&d);
 
         // 180° about the centre: (0,0) -> (10,10) in 1/256 units.

@@ -14,7 +14,7 @@ fn fresh_white_document(w: u32, h: u32) -> Document {
     doc.composite.data.fill(255);
     let n = (w as usize) * (h as usize);
     let plane = || vec![255u8; n];
-    doc.layers = vec![Layer {
+    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
         name: "Layer 0".into(),
         rect: PsdRect {
             top: 0,
@@ -49,11 +49,11 @@ fn fresh_white_document(w: u32, h: u32) -> Document {
                 data: plane().into(),
             },
         ],
-        children: Vec::new(),
+        children: pictura_core::LayerStack::default(),
         is_group: false,
         background: false,
         ..Default::default()
-    }];
+    }]);
     doc
 }
 

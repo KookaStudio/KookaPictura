@@ -1,11 +1,10 @@
-use pictura_core::{BlendMode, ColorLabel, Document, Layer, LockFlags};
+use pictura_core::{BlendMode, ColorLabel, Document, Layer, LayerStack, LockFlags};
 
-use super::clipping::{base_below, normalize_clipping, release_run_above, Moved};
 use super::create::{empty_group, next_layer_name, release_background};
 use super::merge::is_visible_in_panel;
 use super::paths::{
-    container_mut, container_of, container_of_mut, edit_paths, flatten_rows, format_segments,
-    is_background, parse_path, resolve_path, resolve_path_mut, selected_paths, unique,
+    container_of, edit_paths, flatten_rows, format_segments, is_background, parse_path,
+    resolve_path, resolve_path_mut, selected_paths, unique,
 };
 use super::shape_layer::has_forced_locks;
 
@@ -38,7 +37,7 @@ pub fn apply_visibility(doc: &mut Document, paths: &[&str]) -> usize {
         .map(str::to_string)
         .collect();
     fn walk(
-        layers: &mut [Layer],
+        layers: &mut LayerStack,
         prefix: &str,
         visible: &std::collections::HashSet<String>,
     ) -> usize {
@@ -181,11 +180,6 @@ pub fn lock_group_layers(doc: &mut Document, path: &str) -> usize {
     set_lock_paths(doc, &refs, LockFlags::all().bits(), true)
 }
 
-/// Delete every listed node. Skips the Background and fully-locked nodes, and
-/// never removes the document's last top-level node: a layerless document
-/// would composite from its stale flat image, and CS6 keeps one layer. A
-/// selected node whose ancestor is also selected is deleted once (with its
-/// ancestor). Returns the number of deletions performed.
 pub fn delete_paths(doc: &mut Document, paths: &[&str]) -> usize {
     let selected = selected_paths(doc, paths, true);
     let mut changed = 0;
@@ -193,11 +187,7 @@ pub fn delete_paths(doc: &mut Document, paths: &[&str]) -> usize {
         if !deletable(doc, &segments, &path) {
             continue;
         }
-        if let Some((container, index)) = container_mut(doc, &segments) {
-            let was_clipped = container[index].clipping;
-            release_run_above(container.as_mut_slice(), index, was_clipped);
-            container.remove(index);
-            normalize_clipping(container.as_mut_slice(), None);
+        if doc.layers.remove(&segments).is_some() {
             changed += 1;
         }
     }
@@ -277,22 +267,24 @@ fn match_key(layer: &Layer) -> (u8, [u8; 4], BlendMode) {
     (class, adjustment, layer.blend)
 }
 
-/// Deep-clone every listed node directly above itself, naming each copy
-/// `"<name> copy"`. Eligible everywhere (Background and locked included); a
-/// Background's copy is an ordinary, unlocked layer. Returns the new paths.
 pub fn duplicate_paths(doc: &mut Document, paths: &[&str]) -> Vec<String> {
     let selected = selected_paths(doc, paths, true);
     let mut created = Vec::new();
-    for (segments, _) in selected {
-        let Some((container, index)) = container_mut(doc, &segments) else {
+    for (segments, path) in selected {
+        let Some(source) = resolve_path(doc, &path) else {
             continue;
         };
-        let mut copy = container[index].clone();
+        let mut copy = source.clone();
         copy.name = format!("{} copy", copy.name);
         if copy.background {
-            super::create::release_background(&mut copy);
+            release_background(&mut copy);
         }
-        container.insert(index + 1, copy);
+        let Some((&index, parent)) = segments.split_last() else {
+            continue;
+        };
+        if doc.layers.insert(parent, index + 1, copy).is_err() {
+            continue;
+        }
         let mut new_segments = segments;
         if let Some(last) = new_segments.last_mut() {
             *last = index + 1;
@@ -302,10 +294,6 @@ pub fn duplicate_paths(doc: &mut Document, paths: &[&str]) -> Vec<String> {
     created
 }
 
-/// Wrap the selection in one new group inserted at the topmost selected node's
-/// position. Refuses the whole operation (`None`) when the paths span more than
-/// one container, or any is the Background, fully locked, or nesting locked.
-/// Returns the new group's path.
 pub fn group_paths(doc: &mut Document, paths: &[&str]) -> Option<String> {
     let selected = selected_paths(doc, paths, true);
     let (first, _) = selected.first()?;
@@ -325,41 +313,20 @@ pub fn group_paths(doc: &mut Document, paths: &[&str]) -> Option<String> {
         }
     }
     let name = next_layer_name(doc, "Group");
-    let top = selected
+    let mut indices: Vec<usize> = selected
         .iter()
         .map(|(segments, _)| *segments.last().expect("non-empty"))
-        .max()
-        .expect("selection is non-empty");
-    let removed_below = selected
-        .iter()
-        .filter(|(segments, _)| *segments.last().expect("non-empty") < top)
-        .count();
-    let insert_at = top - removed_below;
-
-    let mut selected = selected;
-    selected.sort_by(|a, b| b.0.last().cmp(&a.0.last()));
-    let mut children = Vec::new();
-    for (segments, _) in selected {
-        let (container, index) = container_mut(doc, &segments)?;
-        children.push(container.remove(index));
-    }
-    children.reverse();
-
-    let mut group = empty_group(&name);
-    group.children = children;
-    normalize_clipping(group.children.as_mut_slice(), None);
-    let container = container_of_mut(doc, &parent)?;
-    let at = insert_at.min(container.len());
-    container.insert(at, group);
-    normalize_clipping(container.as_mut_slice(), None);
+        .collect();
+    indices.sort_unstable();
+    let at = doc
+        .layers
+        .group(&parent, &indices, empty_group(&name))
+        .ok()?;
     let mut new_segments = parent;
     new_segments.push(at);
     Some(format_segments(&new_segments))
 }
 
-/// Splice each listed group's children into its container. Skips non-groups,
-/// the Background, fully-locked nodes, and nesting-locked nodes. Returns the
-/// number of groups changed.
 pub fn ungroup_paths(doc: &mut Document, paths: &[&str]) -> usize {
     let selected = selected_paths(doc, paths, false);
     let mut changed = 0;
@@ -370,17 +337,10 @@ pub fn ungroup_paths(doc: &mut Document, paths: &[&str]) -> usize {
         if !layer.is_group || layer.lock.is_all() || layer.lock.contains(LockFlags::NESTING) {
             continue;
         }
-        let was_clipped = layer.clipping;
-        let Some((container, index)) = container_mut(doc, &segments) else {
-            continue;
-        };
-        release_run_above(container.as_mut_slice(), index, was_clipped);
-        let group = container.remove(index);
-        for (offset, child) in group.children.into_iter().enumerate() {
-            container.insert(index + offset, child);
+        let children: Vec<Layer> = layer.children.iter().cloned().collect();
+        if doc.layers.replace(&segments, children).is_ok() {
+            changed += 1;
         }
-        normalize_clipping(container.as_mut_slice(), None);
-        changed += 1;
     }
     changed
 }
@@ -431,6 +391,9 @@ pub fn can_move_path(doc: &Document, path: &str, delta: i32) -> bool {
     let Some(container) = container_of(doc, parent) else {
         return false;
     };
+    if container.is_empty() {
+        return false;
+    }
     let floor = background_floor(container);
     let last = container.len() - 1;
     if index < floor || floor > last {
@@ -440,12 +403,6 @@ pub fn can_move_path(doc: &Document, path: &str, delta: i32) -> bool {
     target != index
 }
 
-/// Move the node `delta` places within its own container, clamped to the
-/// container bounds above the Background floor. Refuses the Background,
-/// fully-locked nodes, a source already below the Background, and a container
-/// whose highest Background sits above all content (LAY-002: they do not
-/// reorder). Returns false (state unchanged) at a boundary or for a path that
-/// does not resolve.
 pub fn move_path(doc: &mut Document, path: &str, delta: i32) -> bool {
     let Some(segments) = parse_path(path) else {
         return false;
@@ -454,9 +411,15 @@ pub fn move_path(doc: &mut Document, path: &str, delta: i32) -> bool {
     {
         return false;
     }
-    let Some((container, index)) = container_mut(doc, &segments) else {
+    let Some((&index, parent)) = segments.split_last() else {
         return false;
     };
+    let Some(container) = container_of(doc, parent) else {
+        return false;
+    };
+    if container.is_empty() {
+        return false;
+    }
     let floor = background_floor(container);
     let last = container.len() - 1;
     if index < floor || floor > last {
@@ -466,45 +429,8 @@ pub fn move_path(doc: &mut Document, path: &str, delta: i32) -> bool {
     if target == index {
         return false;
     }
-    let was_clipped = container[index].clipping;
-    let former_base = if was_clipped {
-        base_below(container.as_slice(), index)
-    } else {
-        None
-    };
-    release_run_above(container.as_mut_slice(), index, was_clipped);
-    let layer = container.remove(index);
-    container.insert(target, layer);
-    let same_base_below = former_base.is_some_and(|base| {
-        let base = if target <= base { base + 1 } else { base };
-        target > 0 && target - 1 == base
-    });
-    normalize_clipping(
-        container.as_mut_slice(),
-        Some(Moved {
-            index: target,
-            was_clipped,
-            same_base_below,
-        }),
-    );
-    true
-}
-
-/// Map a pre-removal parent path to its post-removal coordinates. Removing the
-/// node at (`src_parent`, `src_index`) shifts every later sibling of that node
-/// down by one, at every depth that forks off the source's parent path.
-fn to_post_removal(parent: &[usize], src_parent: &[usize], src_index: usize) -> Vec<usize> {
-    parent
-        .iter()
-        .enumerate()
-        .map(|(depth, &index)| {
-            if &parent[..depth] == src_parent && index > src_index {
-                index - 1
-            } else {
-                index
-            }
-        })
-        .collect()
+    let insertion = if target > index { target + 1 } else { target };
+    doc.layers.move_node(&segments, parent, insertion).is_ok()
 }
 
 /// Resolve where a `move_path_to` candidate would land: the destination parent
@@ -591,13 +517,6 @@ pub fn can_move_path_to(doc: &Document, path: &str, target: &str, mode: i32) -> 
     move_path_to_dest(doc, path, target, mode).is_some()
 }
 
-/// Move the node at `path` relative to `target`: mode `0` = above, `1` = below,
-/// `2` = into `target` (which must be a group). An empty target means the top of
-/// the document. Refuses the Background, a fully- or nesting-locked source, a
-/// destination at or below a Background, a move into or out of a
-/// nesting-locked group, a malformed/unknown target, a
-/// drop onto the source or into its own descendant, and an `Into` target that is
-/// not a group.
 pub fn move_path_to(doc: &mut Document, path: &str, target: &str, mode: i32) -> bool {
     let Some(src) = parse_path(path) else {
         return false;
@@ -605,58 +524,9 @@ pub fn move_path_to(doc: &mut Document, path: &str, target: &str, mode: i32) -> 
     let Some((dest_parent, dest_index)) = move_path_to_dest(doc, path, target, mode) else {
         return false;
     };
-
-    let src_parent = src[..src.len() - 1].to_vec();
-    let src_index = *src.last().expect("non-empty");
-    let was_clipped = resolve_path(doc, path).is_some_and(|layer| layer.clipping);
-    let same_container = dest_parent == src_parent;
-    let (removed, former_base) = {
-        let Some((container, index)) = container_mut(doc, &src) else {
-            return false;
-        };
-        let former_base = if same_container && was_clipped {
-            base_below(container.as_slice(), index)
-        } else {
-            None
-        };
-        release_run_above(container.as_mut_slice(), index, was_clipped);
-        let removed = container.remove(index);
-        if !same_container {
-            normalize_clipping(container.as_mut_slice(), None);
-        }
-        (removed, former_base)
-    };
-
-    let mut dest_index = dest_index;
-    if let Some(index) = dest_index.as_mut() {
-        if dest_parent == src_parent && *index > src_index {
-            *index -= 1;
-        }
-    }
-
-    let dest_parent = to_post_removal(&dest_parent, &src_parent, src_index);
-    let Some(container) = container_of_mut(doc, &dest_parent) else {
-        // Unreachable after the guards; re-insert rather than drop the node.
-        if let Some(container) = container_of_mut(doc, &src_parent) {
-            container.insert(src_index.min(container.len()), removed);
-        }
-        return false;
-    };
-    let at = dest_index.map_or(container.len(), |index| index.min(container.len()));
-    container.insert(at, removed);
-    let same_base_below = former_base.is_some_and(|base| {
-        let base = if at <= base { base + 1 } else { base };
-        at > 0 && at - 1 == base
-    });
-    normalize_clipping(
-        container.as_mut_slice(),
-        Some(Moved {
-            index: at,
-            was_clipped,
-            same_base_below,
-        }),
-    );
-    true
+    doc.layers
+        .move_node(&src, &dest_parent, dest_index.unwrap_or(usize::MAX))
+        .is_ok()
 }
 
 /// Where [`arrange_path`] moves the node within its own container. `Front` is
@@ -724,10 +594,6 @@ pub fn can_arrange_path(doc: &Document, path: &str, arrange: Arrange) -> bool {
     segments.last().copied() != Some(target)
 }
 
-/// Reverse the stacking order of the selected nodes. The selection MUST be two
-/// or more nodes sharing one container that form a contiguous run of child
-/// indices; otherwise nothing changes. Refuses the Background and fully-locked
-/// nodes. Returns whether the order changed.
 pub fn reverse_paths(doc: &mut Document, paths: &[&str]) -> bool {
     let selected = selected_paths(doc, paths, true);
     if selected.len() < 2 {
@@ -758,10 +624,5 @@ pub fn reverse_paths(doc: &mut Document, paths: &[&str]) -> bool {
         return false;
     }
     let (start, end) = (indices[0], indices[indices.len() - 1]);
-    let Some(container) = container_of_mut(doc, &parent) else {
-        return false;
-    };
-    container[start..=end].reverse();
-    normalize_clipping(container.as_mut_slice(), None);
-    true
+    doc.layers.reverse(&parent, start, end + 1)
 }

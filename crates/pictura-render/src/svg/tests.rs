@@ -43,7 +43,7 @@ fn group(blend: BlendMode, children: Vec<Layer>) -> Layer {
     Layer {
         is_group: true,
         blend,
-        children,
+        children: pictura_core::LayerStack::from_layers(children),
         ..Default::default()
     }
 }
@@ -60,7 +60,7 @@ fn adjustment() -> Layer {
 
 fn doc(layers: Vec<Layer>) -> Document {
     let mut doc = Document::new(SIZE, SIZE, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = layers;
+    doc.layers = pictura_core::LayerStack::from_layers(layers);
     doc
 }
 

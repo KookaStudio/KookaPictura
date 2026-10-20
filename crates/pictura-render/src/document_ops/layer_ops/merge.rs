@@ -13,10 +13,7 @@ use pictura_core::{
 };
 
 use super::create::{add_raster_layer_from_rgba, next_layer_name};
-use super::paths::{
-    container_mut, container_of_mut, flatten_rows, format_segments, parse_path, resolve_path,
-    selected_paths,
-};
+use super::paths::{flatten_rows, format_segments, parse_path, resolve_path, selected_paths};
 use super::properties::move_path_to;
 
 /// Which layers a merge consumes. The app resolves panel selection to paths and
@@ -156,11 +153,10 @@ pub fn flatten(doc: &mut Document) -> Result<MergeOutcome, MergeError> {
 
     // White backdrop first, then the tree; `composite_rgba` skips hidden layers.
     let mut scratch = Document::new(doc.width, doc.height, doc.mode, doc.depth);
-    scratch.layers = Vec::with_capacity(doc.layers.len() + 1);
-    scratch
-        .layers
-        .push(opaque_white_layer(doc.width, doc.height));
-    scratch.layers.extend(doc.layers.iter().cloned());
+    let mut scratch_layers = Vec::with_capacity(doc.layers.len() + 1);
+    scratch_layers.push(opaque_white_layer(doc.width, doc.height));
+    scratch_layers.extend(doc.layers.iter().cloned());
+    scratch.layers = pictura_core::LayerStack::from_layers(scratch_layers);
 
     let buffer = crate::composite_rgba(&scratch);
     let channels = bake(&buffer, rect);
@@ -172,7 +168,7 @@ pub fn flatten(doc: &mut Document) -> Result<MergeOutcome, MergeError> {
         channels,
     );
     result.background = true;
-    doc.layers = vec![result];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![result]);
 
     Ok(MergeOutcome {
         path: "0".to_string(),
@@ -428,7 +424,7 @@ fn bake_inputs(
     opacity: u8,
 ) -> Result<MergeOutcome, MergeError> {
     let mut scratch = Document::new(doc.width, doc.height, doc.mode, doc.depth);
-    scratch.layers = inputs.to_vec();
+    scratch.layers = pictura_core::LayerStack::from_layers(inputs.to_vec());
     let buffer = crate::composite_rgba(&scratch);
 
     let union = inputs.iter().filter_map(content_rect).reduce(union_rect);
@@ -459,36 +455,10 @@ fn splice_result(
     node: Layer,
 ) -> Option<String> {
     let (anchor_index, parent) = anchor.split_last()?;
-    let anchor_index = *anchor_index;
-    let parent = parent.to_vec();
-
-    let removed_before = remove
-        .iter()
-        .filter(|segments| {
-            segments.len() == anchor.len()
-                && segments[..segments.len() - 1] == parent[..]
-                && segments.last().copied().unwrap_or(usize::MAX) < anchor_index
-        })
-        .count();
-
-    // Children and higher-index siblings first so a removal cannot invalidate
-    // another removal's path.
-    let mut ordered = remove.to_vec();
-    ordered.sort_by(|a, b| b.iter().rev().cmp(a.iter().rev()));
-    for segments in &ordered {
-        if let Some((container, index)) = container_mut(doc, segments) {
-            container.remove(index);
-        }
-    }
-
-    let container = container_of_mut(doc, &parent)?;
-    let at = anchor_index
-        .saturating_sub(removed_before)
-        .min(container.len());
-    container.insert(at, node);
-
-    let mut path = parent;
-    path.push(at);
+    let path = doc
+        .layers
+        .splice(remove, parent, *anchor_index, vec![node])
+        .ok()?;
     Some(format_segments(&path))
 }
 
@@ -604,7 +574,7 @@ fn pixel_result(
         mask: None,
         adjustment: None,
         channels,
-        children: Vec::new(),
+        children: pictura_core::LayerStack::default(),
         is_group: false,
         background: false,
         ..Default::default()
@@ -650,7 +620,7 @@ fn opaque_white_layer(width: u32, height: u32) -> Layer {
                 data: white.into(),
             },
         ],
-        children: Vec::new(),
+        children: pictura_core::LayerStack::default(),
         is_group: false,
         background: false,
         ..Default::default()
@@ -749,7 +719,7 @@ pub fn stamp_scope(doc: &mut Document, scope: StampScope<'_>, anchor: &str) -> O
     }
 
     let mut scratch = Document::new(doc.width, doc.height, doc.mode, doc.depth);
-    scratch.layers = std::mem::take(&mut inputs);
+    scratch.layers = pictura_core::LayerStack::from_layers(std::mem::take(&mut inputs));
     let buffer = crate::composite_rgba(&scratch);
 
     let name = next_layer_name(doc, "Stamp");
@@ -759,9 +729,7 @@ pub fn stamp_scope(doc: &mut Document, scope: StampScope<'_>, anchor: &str) -> O
     }
     if !move_path_to(doc, &path, anchor, 0) {
         if let Some(segments) = parse_path(&path) {
-            if let Some((container, index)) = container_mut(doc, &segments) {
-                container.remove(index);
-            }
+            doc.layers.remove(&segments);
         }
         return None;
     }

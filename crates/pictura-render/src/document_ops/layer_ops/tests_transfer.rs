@@ -25,7 +25,7 @@ fn copy_keeps_attributes_and_lands_above_the_selection() {
 #[test]
 fn copy_without_a_selection_goes_on_top_and_groups_carry_children() {
     let mut group = empty_group("G");
-    group.children = vec![pixel_layer("child", 4, 4, 7)];
+    group.children = pictura_core::LayerStack::from_layers(vec![pixel_layer("child", 4, 4, 7)]);
     let src = doc_with(vec![group]);
     let mut dst = doc_with(vec![pixel_layer("a", 4, 4, 1)]);
 

@@ -9,7 +9,7 @@ use super::{build_move_preview_base, duplicate_move_target};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QRect, QString};
-use pictura_core::{layer_move_locked, BlendMode, LockFlags};
+use pictura_core::{layer_move_locked, BlendMode, LayerStack, LockFlags};
 use pictura_render::Interpolation;
 
 /// Whether the layer's channels alone are not its whole appearance: a layer
@@ -64,7 +64,7 @@ fn rendered_layer_image(
     // document's ICC profile, pattern library, and type stylesheet, which the
     // compositor needs to reproduce the layer's appearance.
     let mut scratch = source_doc.clone();
-    scratch.layers = vec![source];
+    scratch.layers = LayerStack::from_layers(vec![source]);
     let rendered = current_buffer(&scratch, gpu_compute);
     let image = buffer_to_image(&pictura_codec::buffer_to_srgb(&scratch, &rendered));
     Some((image.copy(&QRect::new(x0, y0, x1 - x0, y1 - y0)), x0, y0))
@@ -139,7 +139,7 @@ fn rendered_clipping_group(
         return None;
     }
     let mut scratch = doc.clone();
-    scratch.layers = layers;
+    scratch.layers = LayerStack::from_layers(layers);
     let rendered = current_buffer(&scratch, gpu_compute);
     let image = buffer_to_image(&pictura_codec::buffer_to_srgb(&scratch, &rendered));
     Some((image.copy(&QRect::new(x0, y0, x1 - x0, y1 - y0)), x0, y0))

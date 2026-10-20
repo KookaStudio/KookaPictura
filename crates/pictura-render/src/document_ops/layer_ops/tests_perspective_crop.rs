@@ -14,7 +14,7 @@ fn canvas(w: u32, h: u32) -> [(f64, f64); 4] {
 /// A `w×h` document with one opaque layer of gray `value`.
 fn doc(w: u32, h: u32, value: u8) -> Document {
     let mut d = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
-    d.layers = vec![pixel_layer("base", w, h, value)];
+    d.layers = pictura_core::LayerStack::from_layers(vec![pixel_layer("base", w, h, value)]);
     d
 }
 

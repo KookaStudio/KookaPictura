@@ -6,7 +6,7 @@
 //! leaves the view unset rather than failing the document.
 
 use pictura_core::path::{PathPoint, Subpath};
-use pictura_core::{Layer, VectorFillRule, VectorMask, VectorSubpath};
+use pictura_core::{LayerStack, VectorFillRule, VectorMask, VectorSubpath};
 
 use crate::common::Reader;
 
@@ -19,7 +19,7 @@ const SUBDIVISIONS: u32 = 16;
 
 /// Resolve `vmsk` for `layers` (and their children) against the document size.
 /// Never fails: an absent or unparseable block leaves `vector_mask` unset.
-pub(crate) fn resolve_vector_masks(layers: &mut [Layer], width: u32, height: u32) {
+pub(crate) fn resolve_vector_masks(layers: &mut LayerStack, width: u32, height: u32) {
     for layer in layers.iter_mut() {
         // The reader leaves the mask record's vector density and feather on a
         // placeholder view.
@@ -314,7 +314,7 @@ fn cubic(p0: [i32; 2], p1: [i32; 2], p2: [i32; 2], p3: [i32; 2], t: f64) -> [i32
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pictura_core::LayerBlock;
+    use pictura_core::{Layer, LayerBlock};
 
     fn mask_layer(data: Vec<u8>) -> Layer {
         Layer {
@@ -327,9 +327,9 @@ mod tests {
     }
 
     fn resolve(data: Vec<u8>) -> Option<VectorMask> {
-        let mut layer = mask_layer(data);
-        resolve_vector_masks(std::slice::from_mut(&mut layer), 8, 8);
-        layer.vector_mask
+        let mut layers = LayerStack::from_layers(vec![mask_layer(data)]);
+        resolve_vector_masks(&mut layers, 8, 8);
+        layers[0].vector_mask.take()
     }
 
     fn header(version: u32, flags: u32) -> Vec<u8> {

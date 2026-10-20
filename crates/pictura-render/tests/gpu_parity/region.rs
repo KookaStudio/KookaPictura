@@ -36,7 +36,10 @@ fn region_scenes() -> Vec<(&'static str, Document)> {
     let nonseparable = scene(BlendMode::Hue);
 
     let mut adjustment = Document::new(SIZE, SIZE, ColorMode::Rgb, BitDepth::Eight);
-    adjustment.layers = vec![base_layer(), adjustment_layer("invert", encode_invert())];
+    adjustment.layers = pictura_core::LayerStack::from_layers(vec![
+        base_layer(),
+        adjustment_layer("invert", encode_invert()),
+    ]);
 
     let mut masked_layer = layer("masked", BlendMode::Multiply, |x, y| {
         (x as u8 * 16 + 8, y as u8 * 16 + 8, 255 - x as u8 * 16, 200)
@@ -51,10 +54,10 @@ fn region_scenes() -> Vec<(&'static str, Document)> {
         ..Default::default()
     });
     let mut masked = Document::new(SIZE, SIZE, ColorMode::Rgb, BitDepth::Eight);
-    masked.layers = vec![base_layer(), masked_layer];
+    masked.layers = pictura_core::LayerStack::from_layers(vec![base_layer(), masked_layer]);
 
     let mut iso = Document::new(SIZE, SIZE, ColorMode::Rgb, BitDepth::Eight);
-    iso.layers = vec![
+    iso.layers = pictura_core::LayerStack::from_layers(vec![
         base_layer(),
         group(
             "iso",
@@ -64,7 +67,7 @@ fn region_scenes() -> Vec<(&'static str, Document)> {
                 (255 - x as u8 * 20, 40 + y as u8 * 20, x as u8 * 32, 255)
             })],
         ),
-    ];
+    ]);
 
     vec![
         ("separable_multiply", separable),
@@ -266,10 +269,10 @@ fn region_vs_full_timing_4000() {
         return;
     }
     let mut doc = Document::new(N, N, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
         large_layer(N, N, 0, BlendMode::Normal),
         large_layer(N, N, 1, BlendMode::Multiply),
-    ];
+    ]);
     let _ = composite_active(&doc, true); // warm-up: keep device/pipeline setup out of the numbers
 
     let t = Instant::now();

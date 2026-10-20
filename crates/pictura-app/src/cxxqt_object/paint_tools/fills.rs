@@ -506,7 +506,7 @@ mod tests {
         let plain = pixel_layer("plain", 1, 1, (0, 0, 0));
         let mut group = pixel_layer("group", 1, 1, (0, 0, 0));
         group.is_group = true;
-        group.children = vec![plain.clone(), styled()];
+        group.children = pictura_core::LayerStack::from_layers(vec![plain.clone(), styled()]);
         let layers = vec![plain.clone(), group];
         assert!(styled_except(&layers, "", ""), "a nested style is found");
         assert!(

@@ -805,7 +805,7 @@ fn pattern_fill_inner_glow_is_confined_to_the_fill() {
             })];
         }
         let mut d = pattern_fixture_doc();
-        d.layers = vec![
+        d.layers = pictura_core::LayerStack::from_layers(vec![
             solid(
                 "Backdrop",
                 full(8, 8),
@@ -815,7 +815,7 @@ fn pattern_fill_inner_glow_is_confined_to_the_fill() {
                 255,
             ),
             layer,
-        ];
+        ]);
         composite_rgba(&d)
     };
     let with = build(true);

@@ -31,7 +31,13 @@ fn write_psb_small_document_widens_lengths() {
     for (i, b) in doc.composite.data.iter_mut().enumerate() {
         *b = (i * 3 + 1) as u8;
     }
-    doc.layers = vec![pixel("One", rect(0, 0, 2, 2), 3, BlendMode::Normal, 255)];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pixel(
+        "One",
+        rect(0, 0, 2, 2),
+        3,
+        BlendMode::Normal,
+        255,
+    )]);
 
     let bytes = write_psb(&doc).unwrap();
     assert_eq!(
@@ -103,7 +109,7 @@ fn psb_widens_preserved_verbatim_channel_length() {
         id: -3,
         data: stream.clone(),
     }];
-    doc.layers = vec![layer];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
 
     let bytes = write_psb(&doc).unwrap();
     let (_, info_len, info_start) = layer_lengths(&bytes);
@@ -136,7 +142,7 @@ fn psb_preserved_big_key_block_uses_u64_length() {
         key: *b"Lr16",
         data: vec![1, 2, 3, 4, 5],
     }];
-    doc.layers = vec![layer];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
 
     let bytes = write_psb(&doc).unwrap();
     let sig = bytes
@@ -238,7 +244,7 @@ fn iopa_block_is_four_bytes() {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
     let mut layer = pixel("Fill", rect(0, 0, 2, 2), 3, BlendMode::Normal, 255);
     layer.fill = 128;
-    doc.layers = vec![layer];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
 
     let bytes = write_psd(&doc).unwrap();
     let sig = bytes
@@ -281,7 +287,13 @@ fn psb_write_is_deterministic() {
     for (i, b) in doc.composite.data.iter_mut().enumerate() {
         *b = (i * 11 + 3) as u8;
     }
-    doc.layers = vec![pixel("One", rect(0, 0, 2, 2), 3, BlendMode::Normal, 255)];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pixel(
+        "One",
+        rect(0, 0, 2, 2),
+        3,
+        BlendMode::Normal,
+        255,
+    )]);
     assert_eq!(write_psb(&doc).unwrap(), write_psb(&doc).unwrap());
 }
 
@@ -293,7 +305,7 @@ fn psb_non_big_key_block_keeps_u32_length() {
         key: *b"lfx2",
         data: vec![1, 2, 3, 4],
     }];
-    doc.layers = vec![layer];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
 
     let bytes = write_psb(&doc).unwrap();
     let sig = bytes

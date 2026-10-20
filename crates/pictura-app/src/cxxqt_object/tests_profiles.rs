@@ -19,10 +19,10 @@ fn ms(label: &str, d: std::time::Duration) {
 #[ignore = "4000x4000 opacity preview profile; run explicitly with --ignored --nocapture"]
 fn opacity_preview_profile_4000() {
     let mut doc = Document::new(4000, 4000, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
         pixel_layer("base", 4000, 4000, (30, 60, 90)),
         pixel_layer("top", 512, 512, (200, 100, 50)),
-    ];
+    ]);
     let rect = doc.layers.last().unwrap().rect;
     let steps = 3usize;
     let start = std::time::Instant::now();
@@ -152,9 +152,11 @@ fn stroke_split_profile_4000() {
 
     for layers in [1usize, 8] {
         let mut doc = Document::new(4000, 4000, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = (0..layers)
-            .map(|i| pixel_layer(&format!("L{i}"), 4000, 4000, (30, 60, 90)))
-            .collect();
+        doc.layers = pictura_core::LayerStack::from_layers(
+            (0..layers)
+                .map(|i| pixel_layer(&format!("L{i}"), 4000, 4000, (30, 60, 90)))
+                .collect(),
+        );
         // Prime the adapter, allocator and pipelines once, untimed.
         let _ = pictura_render::composite_active(&doc, true);
         let gpu = pictura_render::gpu_available();
@@ -261,9 +263,11 @@ fn commit_refresh_profile_4000() {
                     continue;
                 }
                 let mut doc = Document::new(4000, 4000, ColorMode::Rgb, BitDepth::Eight);
-                doc.layers = (0..layers)
-                    .map(|i| pixel_layer(&format!("L{i}"), 4000, 4000, (30, 60, 90)))
-                    .collect();
+                doc.layers = pictura_core::LayerStack::from_layers(
+                    (0..layers)
+                        .map(|i| pixel_layer(&format!("L{i}"), 4000, 4000, (30, 60, 90)))
+                        .collect(),
+                );
                 doc.composite = pictura_render::composite_active(&doc, gpu).0;
                 let mut rust = PictureViewRust {
                     doc: Some(doc),
@@ -331,7 +335,8 @@ fn large_brush_profile_4000() {
     use pictura_paint::{spacing::SpacingMode, Stroke, StrokeConfig, StrokeSample};
 
     let mut doc = Document::new(4000, 4000, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![pixel_layer("base", 4000, 4000, (30, 60, 90))];
+    doc.layers =
+        pictura_core::LayerStack::from_layers(vec![pixel_layer("base", 4000, 4000, (30, 60, 90))]);
     let _ = pictura_render::composite_active(&doc, true);
     let gpu = pictura_render::gpu_available();
 
@@ -405,7 +410,8 @@ fn large_document_stroke_profile() {
 
     let (w, h) = (16507u32, 16196u32);
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![pixel_layer("Background", w, h, (30, 60, 90))];
+    doc.layers =
+        pictura_core::LayerStack::from_layers(vec![pixel_layer("Background", w, h, (30, 60, 90))]);
     doc.composite = pictura_render::composite_active(&doc, false).0;
     let mut rust = PictureViewRust {
         doc: Some(doc),
@@ -531,7 +537,7 @@ fn large_document_filter_profile() {
             *px = ((x * 7 + y * 13 + c * 53) % 256) as u8;
         }
     }
-    doc.layers = vec![layer];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
     doc.composite = pictura_render::composite_active(&doc, false).0;
     let mut rust = PictureViewRust {
         doc: Some(doc),
@@ -720,7 +726,7 @@ fn radial_blur_commit_profile() {
             *px = ((x * 7 + y * 13 + c * 53) % 256) as u8;
         }
     }
-    doc.layers = vec![layer];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
     doc.composite = pictura_render::composite_active(&doc, false).0;
     let mut rust = PictureViewRust {
         doc: Some(doc),
@@ -772,7 +778,8 @@ fn marquee_selection_profile() {
 
     let (w, h) = (8000u32, 6000u32);
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![pixel_layer("Background", w, h, (30, 60, 90))];
+    doc.layers =
+        pictura_core::LayerStack::from_layers(vec![pixel_layer("Background", w, h, (30, 60, 90))]);
     doc.composite = pictura_render::composite_active(&doc, false).0;
     let mut rust = PictureViewRust {
         doc: Some(doc),
@@ -862,7 +869,7 @@ fn mask_dab_profile_4000() {
         data: Some(vec![255u8; 4000 * 4000].into()),
         ..Default::default()
     });
-    doc.layers = vec![layer];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
 
     let cfg = StrokeConfig {
         color: rgba_from_argb(0xFF000000),

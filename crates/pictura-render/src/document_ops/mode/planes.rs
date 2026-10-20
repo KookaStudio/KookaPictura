@@ -46,7 +46,10 @@ fn rgb_store_to_gray<T: Sample>(v: &[T], plane: usize) -> Vec<T> {
 }
 
 /// Visit every non-group layer in the tree, depth first.
-pub(super) fn for_each_layer(layers: &mut [Layer], f: &mut impl FnMut(&mut Layer)) {
+pub(super) fn for_each_layer(
+    layers: &mut pictura_core::LayerStack,
+    f: &mut impl FnMut(&mut Layer),
+) {
     for layer in layers {
         if layer.is_group() {
             for_each_layer(&mut layer.children, f);
@@ -112,7 +115,7 @@ pub(super) fn background_from_composite(doc: &mut Document) {
         id: -1,
         data: vec![255; plane].into(),
     });
-    doc.layers.push(Layer {
+    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
         name: "Background".to_string(),
         rect: PsdRect {
             top: 0,
@@ -123,7 +126,7 @@ pub(super) fn background_from_composite(doc: &mut Document) {
         channels,
         background: true,
         ..Default::default()
-    });
+    }]);
 }
 
 /// Reshape a working Grayscale document to working RGB by replicating the gray

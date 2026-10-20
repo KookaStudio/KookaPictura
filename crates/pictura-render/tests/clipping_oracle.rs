@@ -58,7 +58,7 @@ fn psd_tools_composites_a_clipping_group_alike() {
         return;
     }
     let mut doc = Document::new(24, 16, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
         layer(
             "Background",
             rect(0, 0, 24, 16),
@@ -69,7 +69,7 @@ fn psd_tools_composites_a_clipping_group_alike() {
         layer("Base", rect(4, 4, 14, 12), [200, 30, 30, 255], 255, false),
         layer("Green", rect(0, 0, 24, 16), [20, 200, 40, 255], 153, true),
         layer("Blue", rect(8, 0, 24, 8), [30, 60, 220, 255], 255, true),
-    ];
+    ]);
     let ours = pictura_render::composite_rgba(&doc);
     let path = std::env::temp_dir().join(format!("pictura-clip-{}.psd", std::process::id()));
     std::fs::write(&path, pictura_codec::write_psd(&doc).expect("writes")).expect("write");

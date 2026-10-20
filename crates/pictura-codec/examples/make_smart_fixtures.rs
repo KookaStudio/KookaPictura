@@ -255,7 +255,7 @@ fn document(layer: Layer) -> Document {
     for (i, byte) in doc.composite.data.iter_mut().enumerate() {
         *byte = (i * 7 + 3) as u8;
     }
-    doc.layers = vec![layer];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
     doc
 }
 

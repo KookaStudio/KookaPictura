@@ -181,7 +181,7 @@ mod tests {
             ..Default::default()
         };
         layer.lock = LockFlags::default();
-        doc.layers = vec![layer];
+        doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         PictureViewRust {
             doc: Some(doc),
             active_layer: Some("0".to_string()),

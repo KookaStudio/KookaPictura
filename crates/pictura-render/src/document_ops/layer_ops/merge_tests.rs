@@ -60,7 +60,7 @@ fn solid(name: &str, bounds: PsdRect, r: u8, g: u8, b: u8, a: u8) -> Layer {
                 data: vec![a; n].into(),
             },
         ],
-        children: Vec::new(),
+        children: pictura_core::LayerStack::default(),
         is_group: false,
         background: false,
         ..Default::default()
@@ -88,7 +88,7 @@ fn group(name: &str, children: Vec<Layer>) -> Layer {
         mask: None,
         adjustment: None,
         channels: Vec::new(),
-        children,
+        children: pictura_core::LayerStack::from_layers(children),
         is_group: true,
         background: false,
         ..Default::default()
@@ -97,7 +97,7 @@ fn group(name: &str, children: Vec<Layer>) -> Layer {
 
 fn doc_with(w: u32, h: u32, layers: Vec<Layer>) -> Document {
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = layers;
+    doc.layers = pictura_core::LayerStack::from_layers(layers);
     doc
 }
 
@@ -141,7 +141,7 @@ fn node_interleaved(layer: &Layer) -> Vec<u8> {
 /// The oracle: `composite_rgba` of exactly the inputs, cropped to the node.
 fn inputs_composite(inputs: Vec<Layer>, doc: &Document, bounds: PsdRect) -> Vec<u8> {
     let mut scratch = Document::new(doc.width, doc.height, doc.mode, doc.depth);
-    scratch.layers = inputs;
+    scratch.layers = pictura_core::LayerStack::from_layers(inputs);
     crop(&crate::composite_rgba(&scratch), bounds)
 }
 
@@ -530,7 +530,7 @@ fn select_similar_matches_class_adjustment_kind_and_blend() {
     posterize.adjustment = Some(crate::encode_posterize(4));
 
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
         background,                            // 0
         solid("p1", rect(4, 4), 1, 1, 1, 255), // 1
         multiply,                              // 2
@@ -540,7 +540,7 @@ fn select_similar_matches_class_adjustment_kind_and_blend() {
         posterize,                             // 6
         group("g1", Vec::new()),               // 7
         group("g2", Vec::new()),               // 8
-    ];
+    ]);
 
     // Same pixel class and Normal blend, topmost-first, reference excluded.
     assert_eq!(select_similar(&doc, "3"), vec!["1".to_string()]);
@@ -562,7 +562,11 @@ fn delete_hidden_layers_removes_hidden_and_counts_nested_group_once() {
     nested.visible = false;
 
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![solid("v", rect(4, 4), 1, 1, 1, 255), hidden, nested];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
+        solid("v", rect(4, 4), 1, 1, 1, 255),
+        hidden,
+        nested,
+    ]);
 
     assert_eq!(delete_hidden_layers(&mut doc), 2);
     assert_eq!(doc.layers.len(), 1);
@@ -572,10 +576,10 @@ fn delete_hidden_layers_removes_hidden_and_counts_nested_group_once() {
 #[test]
 fn delete_hidden_layers_is_noop_without_hidden_layers() {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = vec![
+    doc.layers = pictura_core::LayerStack::from_layers(vec![
         solid("a", rect(4, 4), 1, 1, 1, 255),
         solid("b", rect(4, 4), 1, 1, 1, 255),
-    ];
+    ]);
     let before = doc.clone();
     assert_eq!(delete_hidden_layers(&mut doc), 0);
     assert_eq!(doc, before);

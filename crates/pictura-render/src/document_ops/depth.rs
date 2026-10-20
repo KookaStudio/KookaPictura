@@ -12,7 +12,7 @@
 //! values above white to tone-map.
 
 use pictura_adjust::{exposure_gamma, ExposureGamma};
-use pictura_core::{BitDepth, ColorMode, Document, Layer, PixelBuffer, Samples, SourcePlanes};
+use pictura_core::{BitDepth, ColorMode, Document, PixelBuffer, Samples, SourcePlanes};
 use pictura_ops::OpsError;
 
 /// Convert a 32-bit Grayscale/RGB `doc` to `out` (16 or 8) with the CS6 HDR
@@ -117,7 +117,7 @@ fn source_samples(doc: &Document, color_len: usize) -> Result<Vec<f32>, OpsError
 
 /// Clear every layer's retained native store, recursing into groups, so a 32-bit
 /// store cannot be re-emitted into the converted document.
-fn drop_layer_source(layers: &mut [Layer]) {
+fn drop_layer_source(layers: &mut pictura_core::LayerStack) {
     for layer in layers {
         layer.source_channels = None;
         drop_layer_source(&mut layer.children);

@@ -215,7 +215,7 @@ pub fn convert_to_bitmap(doc: &mut Document, method: BitmapMethod) -> Result<(),
             packed[(i / w) * row + (i % w) / 8] |= 0x80 >> (i % w % 8);
         }
     }
-    doc.layers.clear();
+    doc.layers = pictura_core::LayerStack::default();
     doc.channels.clear();
     doc.mode = ColorMode::Rgb;
     doc.composite = PixelBuffer {

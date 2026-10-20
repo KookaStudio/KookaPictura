@@ -254,7 +254,7 @@ pub fn translate_layer_path(doc: &mut Document, path: &str, dx: i32, dy: i32) ->
     true
 }
 
-fn topmost_pixel_layer(layers: &mut [Layer]) -> Option<&mut Layer> {
+fn topmost_pixel_layer(layers: &mut pictura_core::LayerStack) -> Option<&mut Layer> {
     layers
         .iter_mut()
         .rev()
@@ -315,7 +315,7 @@ mod tests {
                     data: vec![255; n].into(),
                 },
             ],
-            children: Vec::new(),
+            children: pictura_core::LayerStack::default(),
             is_group: false,
             background: false,
             ..Default::default()
@@ -324,7 +324,8 @@ mod tests {
 
     fn sample_doc() -> Document {
         let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = vec![pixel_layer("layer", full(4, 4), None)];
+        doc.layers =
+            pictura_core::LayerStack::from_layers(vec![pixel_layer("layer", full(4, 4), None)]);
         doc.channels = vec![Channel {
             id: -1,
             data: (0..16u8).collect(),
@@ -461,7 +462,7 @@ mod tests {
     #[test]
     fn translate_layer_rejects_non_pixel_layers() {
         let mut doc = sample_doc();
-        doc.layers = vec![Layer {
+        doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
             name: "adj".into(),
             rect: full(4, 4),
             blend: BlendMode::Normal,
@@ -477,11 +478,11 @@ mod tests {
                 data: vec![],
             }),
             channels: Vec::new(),
-            children: Vec::new(),
+            children: pictura_core::LayerStack::default(),
             is_group: false,
             background: false,
             ..Default::default()
-        }];
+        }]);
         let before = doc.clone();
         assert!(!translate_layer(&mut doc, 2, 2));
         assert_eq!(doc, before);
@@ -500,7 +501,7 @@ mod tests {
         assert_eq!(doc, before, "refusal leaves the document unchanged");
 
         let mut doc = sample_doc();
-        doc.layers.push(pixel_layer("top", full(4, 4), None));
+        let _ = doc.layers.push(pixel_layer("top", full(4, 4), None));
         doc.layers[0].lock = LockFlags::default().with(LockFlags::POSITION, true);
         assert!(
             super::super::move_path(&mut doc, "0", 1),
@@ -548,7 +549,7 @@ mod tests {
 
         let (w, h) = (4000u32, 4000u32);
         let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = vec![pixel_layer(
+        doc.layers = pictura_core::LayerStack::from_layers(vec![pixel_layer(
             "big",
             PsdRect {
                 top: 0,
@@ -557,7 +558,7 @@ mod tests {
                 right: w as i32,
             },
             None,
-        )];
+        )]);
         doc.composite = crate::composite_rgba(&doc);
 
         let full = Instant::now();
@@ -589,10 +590,10 @@ mod tests {
             data: Some((0..64).map(|i| i as u8).collect()),
             ..Default::default()
         };
-        doc.layers = vec![
+        doc.layers = pictura_core::LayerStack::from_layers(vec![
             pixel_layer("kept", full(8, 8), Some(mask)),
             pixel_layer("off", rect(0, 0, 2, 2), None),
-        ];
+        ]);
         assert!(crop_document(&mut doc, 2, 3, 4, 4));
         // Before trimming the layer still hangs off the new canvas.
         assert_eq!(doc.layers[0].rect, rect(-3, -2, 5, 6));
@@ -627,7 +628,7 @@ mod tests {
             rect: full(8, 8),
             planes: Vec::new(),
         });
-        doc.layers = vec![layer];
+        doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         assert!(crop_document(&mut doc, 2, 2, 4, 4));
         assert_eq!(delete_cropped_pixels(&mut doc), 0);
         assert_eq!(doc.layers[0].rect, rect(-2, -2, 6, 6));

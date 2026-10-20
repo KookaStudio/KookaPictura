@@ -2,7 +2,9 @@
 //! 8-bit RGB. Bitmap and Indexed are exact; CMYK and Lab are approximations of
 //! the reference's color-managed transforms.
 
-use pictura_core::{BitDepth, Channel, ColorMode, Document, Layer, Samples, SourceChannels};
+use pictura_core::{
+    BitDepth, Channel, ColorMode, Document, Layer, LayerStack, Samples, SourceChannels,
+};
 
 /// Expand a depth-1 Bitmap plane into planar RGB. Rows are `ceil(width / 8)`
 /// bytes, MSB-first; a set bit is black (0) and a clear bit is white (255).
@@ -225,7 +227,7 @@ fn lab_byte(value: f64) -> u8 {
 /// `normalize` converts them to RGB, so `write_psd` re-emits an unedited layer
 /// exactly. Only color channels (ids `0..3`) are stored; masks and alpha are not
 /// Lab-encoded. No-op at any depth other than 8.
-pub(crate) fn retain_lab_layer_planes(layers: &mut [Layer], depth: u16) {
+pub(crate) fn retain_lab_layer_planes(layers: &mut LayerStack, depth: u16) {
     if depth != 8 {
         return;
     }
@@ -250,7 +252,7 @@ pub(crate) fn retain_lab_layer_planes(layers: &mut [Layer], depth: u16) {
 /// `normalize` converts them to RGB, so `write_psd` re-emits an unedited layer
 /// exactly. Only color channels (ids `0..4`) are stored; masks and alpha are not
 /// CMYK-encoded. No-op at any depth other than 8.
-pub(crate) fn retain_cmyk_layer_planes(layers: &mut [Layer], depth: u16) {
+pub(crate) fn retain_cmyk_layer_planes(layers: &mut LayerStack, depth: u16) {
     if depth != 8 {
         return;
     }
@@ -275,7 +277,7 @@ pub(crate) fn retain_cmyk_layer_planes(layers: &mut [Layer], depth: u16) {
 /// `normalize` expands it through the palette to RGB, so `write_psd` re-emits an
 /// unedited layer exactly. Only the single index channel (id `0`) is stored;
 /// masks and alpha are not palette-encoded. No-op at any depth other than 8.
-pub(crate) fn retain_indexed_layer_planes(layers: &mut [Layer], depth: u16) {
+pub(crate) fn retain_indexed_layer_planes(layers: &mut LayerStack, depth: u16) {
     if depth != 8 {
         return;
     }

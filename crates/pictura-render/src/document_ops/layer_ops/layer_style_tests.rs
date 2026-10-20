@@ -38,10 +38,10 @@ fn doc() -> Document {
         right,
     };
     let mut d = Document::new(12, 12, ColorMode::Rgb, BitDepth::Eight);
-    d.layers = vec![
+    d.layers = pictura_core::LayerStack::from_layers(vec![
         layer("Backdrop", rect(0, 0, 12, 12), [255, 255, 255]),
         layer("Square", rect(4, 4, 8, 8), [255, 0, 0]),
-    ];
+    ]);
     d
 }
 

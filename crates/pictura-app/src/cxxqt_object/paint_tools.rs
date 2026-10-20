@@ -930,21 +930,23 @@ fn brush_dab_preview(tip: &PaintTip, edge: i32) -> Vec<u8> {
 fn white_preview(cfg: StrokeConfig, w: i32, h: i32, samples: &[StrokeSample]) -> Vec<u8> {
     let mut doc = Document::new(w as u32, h as u32, ColorMode::Rgb, BitDepth::Eight);
     let n = (w * h) as usize;
-    doc.layers.push(Layer {
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: h,
-            right: w,
-        },
-        channels: [0, 1, 2, -1]
-            .map(|id| Channel {
-                id,
-                data: vec![0; n].into(),
-            })
-            .into(),
-        ..Default::default()
-    });
+    {
+        let _ = doc.layers.push(Layer {
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: h,
+                right: w,
+            },
+            channels: [0, 1, 2, -1]
+                .map(|id| Channel {
+                    id,
+                    data: vec![0; n].into(),
+                })
+                .into(),
+            ..Default::default()
+        });
+    };
     let cfg = StrokeConfig {
         color: Rgba {
             r: 255,

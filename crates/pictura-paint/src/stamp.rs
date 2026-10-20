@@ -22,7 +22,7 @@
 use crate::healing::RgbaImage;
 use crate::stroke::{layer_at, layer_rgba, parse_layer_path};
 use crate::Rgba;
-use pictura_core::{Document, Layer, PixelBuffer};
+use pictura_core::{Document, PixelBuffer};
 
 /// Where a stamp stroke reads its paint: a document-space image and the offset
 /// added to a destination pixel to find its source, so `(-40, 0)` paints what
@@ -200,20 +200,24 @@ pub fn sample_scope(
 }
 
 // Layers are stored bottom-first, so everything after an index is above it.
-fn truncate_above(layers: &mut Vec<Layer>, path: &[usize]) {
-    if let Some((&i, rest)) = path.split_first() {
-        layers.truncate(i + 1);
-        if let Some(layer) = layers.get_mut(i) {
-            truncate_above(&mut layer.children, rest);
+fn truncate_above(layers: &mut pictura_core::LayerStack, path: &[usize]) {
+    fn walk(layers: &mut pictura_core::LayerStack, parent: &mut Vec<usize>, path: &[usize]) {
+        let Some((&index, rest)) = path.split_first() else {
+            return;
+        };
+        layers.truncate(parent, index + 1);
+        if rest.is_empty() {
+            return;
         }
+        parent.push(index);
+        walk(layers, parent, rest);
+        parent.pop();
     }
+    walk(layers, &mut Vec::new(), path);
 }
 
-fn strip_adjustments(layers: &mut Vec<Layer>) {
-    layers.retain(|l| l.adjustment.is_none());
-    for layer in layers {
-        strip_adjustments(&mut layer.children);
-    }
+fn strip_adjustments(layers: &mut pictura_core::LayerStack) {
+    layers.retain_tree(&[], &mut |layer| layer.adjustment.is_none());
 }
 
 /// A planar RGBA composite (`pictura_render::composite_rgba`) as a surface.
@@ -279,7 +283,7 @@ pub fn tiled(tile: &RgbaImage, width: u32, height: u32, origin: (i32, i32)) -> O
 mod tests {
     use super::*;
     use crate::{pattern, Stroke, StrokeConfig, StrokeSample};
-    use pictura_core::{AdjustmentData, BitDepth, Channel, ColorMode, PsdRect};
+    use pictura_core::{AdjustmentData, BitDepth, Channel, ColorMode, Layer, PsdRect};
 
     const RED: [u8; 4] = [220, 20, 20, 255];
     const BLUE: [u8; 4] = [20, 20, 220, 255];
@@ -305,7 +309,7 @@ mod tests {
 
     fn doc(layers: Vec<Layer>) -> Document {
         let mut doc = Document::new(32, 32, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = layers;
+        doc.layers = pictura_core::LayerStack::from_layers(layers);
         doc
     }
 

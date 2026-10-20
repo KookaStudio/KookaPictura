@@ -965,7 +965,7 @@ fn lab_document_without_a_merged_composite_writes_lab() {
     let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
     doc.source_mode = Some(ColorMode::Lab);
     doc.merged_composite_present = false;
-    doc.layers = vec![Layer {
+    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
         rect: PsdRect {
             top: 0,
             left: 0,
@@ -987,7 +987,7 @@ fn lab_document_without_a_merged_composite_writes_lab() {
             },
         ],
         ..Default::default()
-    }];
+    }]);
 
     let p = write_psd(&doc).unwrap();
     assert_eq!(
@@ -1290,16 +1290,18 @@ fn added_empty_layer_keeps_indexed_on_save() {
     let palette = indexed_palette();
     let p = layered_psd_with_data(8, 2, 1, &palette, &[&[2]], &[(0, &[5]), (-1, &[200])]);
     let mut doc = read_psd(&p).unwrap();
-    doc.layers.push(Layer {
-        name: "adjustment".into(),
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 1,
-            right: 1,
-        },
-        ..Default::default()
-    });
+    {
+        let _ = doc.layers.push(Layer {
+            name: "adjustment".into(),
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 1,
+                right: 1,
+            },
+            ..Default::default()
+        });
+    };
 
     let out = write_psd(&doc).unwrap();
     assert_eq!(

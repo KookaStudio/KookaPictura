@@ -182,7 +182,7 @@ pub(super) fn cmyk_doc() -> Document {
     doc.composite.channels = 3;
     let plane = 12;
     doc.composite.data = doc.composite.data[..3 * plane].to_vec().into();
-    doc.layers.clear();
+    doc.layers = pictura_core::LayerStack::default();
     doc.source_mode = Some(ColorMode::Cmyk);
     doc
 }
@@ -369,7 +369,7 @@ fn pdf_downsample_below_threshold_keeps_size() {
 
 fn sixteen_bit_doc() -> (Document, Vec<u16>) {
     let mut doc = rgb_doc(3, 2, 72.0, None);
-    doc.layers.clear();
+    doc.layers = pictura_core::LayerStack::default();
     doc.composite.channels = 3;
     doc.composite.data = doc.composite.data[..18].to_vec().into();
     let native: Vec<u16> = doc
@@ -420,7 +420,7 @@ fn two_layer_doc() -> Document {
     let mut doc = rgb_doc(4, 4, 72.0, None);
     let mut second = doc.layers[0].clone();
     second.name = "second".into();
-    doc.layers.push(second);
+    let _ = doc.layers.push(second);
     doc
 }
 

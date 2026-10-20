@@ -7,7 +7,7 @@ fn embedded_smart_doc() -> Document {
     for (i, b) in doc.composite.data.iter_mut().enumerate() {
         *b = (i * 7 + 1) as u8;
     }
-    doc.layers = vec![Layer {
+    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
         name: "Smart".into(),
         rect: PsdRect {
             top: 0,
@@ -40,7 +40,7 @@ fn embedded_smart_doc() -> Document {
             ..Default::default()
         }),
         ..Default::default()
-    }];
+    }]);
     doc
 }
 

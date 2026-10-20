@@ -246,7 +246,7 @@ mod tests {
                     data: plane(200, n).into(),
                 },
             ],
-            children: Vec::new(),
+            children: pictura_core::LayerStack::default(),
             is_group: false,
             background: false,
             ..Default::default()
@@ -266,10 +266,10 @@ mod tests {
             data: Some(vec![1, 2, 3].into()),
             ..Default::default()
         };
-        doc.layers = vec![
+        doc.layers = pictura_core::LayerStack::from_layers(vec![
             pixel_layer("full", rect(0, 0, 3, 5), None),
             pixel_layer("partial", rect(1, 1, 2, 4), Some(mask)),
-        ];
+        ]);
         doc.channels = vec![Channel {
             id: -1,
             data: plane(0, 15).into(),
@@ -303,7 +303,11 @@ mod tests {
     #[test]
     fn rotate90_cw_remaps_channel_bytes_exactly() {
         let mut doc = Document::new(3, 2, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = vec![pixel_layer("only", rect(0, 0, 2, 3), None)];
+        doc.layers = pictura_core::LayerStack::from_layers(vec![pixel_layer(
+            "only",
+            rect(0, 0, 2, 3),
+            None,
+        )]);
         doc.composite = crate::composite_rgba(&doc);
 
         rotate_document(&mut doc, 1).unwrap();
@@ -403,7 +407,7 @@ mod tests {
                 Samples::U16((0..6).map(|i| i as u16 * 257 + 5).collect()),
             )],
         ));
-        doc.layers = vec![layer];
+        doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         doc.composite = crate::composite_rgba(&doc);
 
         rotate_document(&mut doc, 1).unwrap();

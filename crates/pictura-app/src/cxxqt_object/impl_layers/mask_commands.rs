@@ -154,20 +154,22 @@ mod tests {
     /// first column; the default colour (255) reveals the rest.
     fn doc() -> Document {
         let mut doc = Document::new(4, 2, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers.push(Layer {
-            mask: Some(LayerMask {
-                rect: PsdRect {
-                    top: 0,
-                    left: 0,
-                    bottom: 2,
-                    right: 2,
-                },
-                default_color: 255,
-                data: Some(vec![0u8, 128, 0, 128].into()),
+        {
+            let _ = doc.layers.push(Layer {
+                mask: Some(LayerMask {
+                    rect: PsdRect {
+                        top: 0,
+                        left: 0,
+                        bottom: 2,
+                        right: 2,
+                    },
+                    default_color: 255,
+                    data: Some(vec![0u8, 128, 0, 128].into()),
+                    ..Default::default()
+                }),
                 ..Default::default()
-            }),
-            ..Default::default()
-        });
+            });
+        };
         doc
     }
 
