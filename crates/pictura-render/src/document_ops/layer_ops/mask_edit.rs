@@ -9,6 +9,7 @@
 
 use pictura_core::{BitDepth, Channel, ColorMode, Document, Layer, LockFlags, Plane, PsdRect};
 
+use super::clipboard::coverage_bounds;
 use super::paths::{resolve_path, resolve_path_mut};
 
 /// A layer's raster mask as a standalone document: `document` is a mask-sized
@@ -199,35 +200,43 @@ pub fn move_mask_selection_content(
     }
     // An empty selection has nothing to lift; refusing here keeps it from
     // materialising a data-less mask and recording an empty move.
-    if coverage.iter().all(|&value| value == 0) {
+    let Some(bounds) = coverage_bounds(coverage, w as u32, h as u32) else {
         return false;
-    }
+    };
     let snapshot: Vec<u8> = match &mask.data {
         Some(data) if data.len() == w * h => data.as_slice().to_vec(),
         _ => vec![mask.default_color; w * h],
     };
     let mut out = snapshot.clone();
     if !duplicate {
-        for (i, &selected) in coverage.iter().enumerate() {
-            if selected != 0 {
-                out[i] = blend(background, selected, snapshot[i]);
+        for y in bounds.top..bounds.bottom {
+            let row = y as usize * w;
+            let start = row + bounds.left as usize;
+            let end = row + bounds.right as usize;
+            for (i, &selected) in coverage[start..end].iter().enumerate() {
+                if selected != 0 {
+                    let at = start + i;
+                    out[at] = blend(background, selected, snapshot[at]);
+                }
             }
         }
     }
-    for dest_y in 0..h {
-        for dest_x in 0..w {
-            let src_x = dest_x as i32 - dx;
-            let src_y = dest_y as i32 - dy;
-            if src_x < 0 || src_y < 0 || src_x >= w as i32 || src_y >= h as i32 {
-                continue;
+    let dest_top = (bounds.top + dy).max(0);
+    let dest_bottom = (bounds.bottom + dy).min(h as i32);
+    let dest_left = (bounds.left + dx).max(0);
+    let dest_right = (bounds.right + dx).min(w as i32);
+    let span = (dest_right - dest_left).max(0) as usize;
+    for dest_y in dest_top..dest_bottom {
+        let src_start = (dest_y - dy) as usize * w + (dest_left - dx) as usize;
+        let dest_start = dest_y as usize * w + dest_left as usize;
+        let covered = &coverage[src_start..src_start + span];
+        let source = &snapshot[src_start..src_start + span];
+        let target = &mut out[dest_start..dest_start + span];
+        for i in 0..span {
+            let selected = covered[i];
+            if selected != 0 {
+                target[i] = blend(source[i], selected, target[i]);
             }
-            let src = src_y as usize * w + src_x as usize;
-            let selected = coverage[src];
-            if selected == 0 {
-                continue;
-            }
-            let dest = dest_y * w + dest_x;
-            out[dest] = blend(snapshot[src], selected, out[dest]);
         }
     }
     mask.data = Some(out.into());
@@ -619,5 +628,148 @@ mod tests {
                 .to_vec(),
             vec![0, 0, 255, 0]
         );
+    }
+
+    /// The pre-bounding full-plane loop, kept as the oracle for the bounded move.
+    fn reference_move(
+        mask: &[u8],
+        coverage: &[u8],
+        w: usize,
+        h: usize,
+        dx: i32,
+        dy: i32,
+        duplicate: bool,
+    ) -> Vec<u8> {
+        let background = 7;
+        let snapshot = mask.to_vec();
+        let mut out = snapshot.clone();
+        if !duplicate {
+            for (i, &selected) in coverage.iter().enumerate() {
+                if selected != 0 {
+                    out[i] = blend(background, selected, snapshot[i]);
+                }
+            }
+        }
+        for dest_y in 0..h {
+            for dest_x in 0..w {
+                let src_x = dest_x as i32 - dx;
+                let src_y = dest_y as i32 - dy;
+                if src_x < 0 || src_y < 0 || src_x >= w as i32 || src_y >= h as i32 {
+                    continue;
+                }
+                let src = src_y as usize * w + src_x as usize;
+                let selected = coverage[src];
+                if selected == 0 {
+                    continue;
+                }
+                let dest = dest_y * w + dest_x;
+                out[dest] = blend(snapshot[src], selected, out[dest]);
+            }
+        }
+        out
+    }
+
+    fn plane_doc(w: u32, h: u32, mask: &[u8]) -> Document {
+        let mut layer = pixel_layer("base", w, h, 40);
+        layer.mask = Some(LayerMask {
+            rect: mask_rect(0, 0, w as i32, h as i32),
+            default_color: 255,
+            data: Some(mask.to_vec().into()),
+            ..Default::default()
+        });
+        let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
+        doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
+        doc
+    }
+
+    /// Fixed-seed LCG so the equivalence case is deterministic.
+    fn next_byte(state: &mut u64) -> u8 {
+        *state = state
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        (*state >> 33) as u8
+    }
+
+    fn moved_mask(
+        mask: &[u8],
+        coverage: &[u8],
+        w: u32,
+        h: u32,
+        dx: i32,
+        dy: i32,
+        duplicate: bool,
+    ) -> Vec<u8> {
+        let mut doc = plane_doc(w, h, mask);
+        assert!(move_mask_selection_content(
+            &mut doc, "0", coverage, dx, dy, duplicate, 7
+        ));
+        doc.layers[0]
+            .mask
+            .as_ref()
+            .unwrap()
+            .data
+            .as_ref()
+            .unwrap()
+            .to_vec()
+    }
+
+    #[test]
+    fn bounded_mask_move_equals_the_full_plane_move() {
+        let (w, h) = (64usize, 64usize);
+        let mut state = 0x5eed_1234_u64;
+        let mask: Vec<u8> = (0..w * h).map(|_| next_byte(&mut state)).collect();
+        // A quarter-covered plane with soft edges, so partial coverage and the
+        // empty border are both exercised.
+        let coverage: Vec<u8> = (0..w * h)
+            .map(|i| {
+                let (x, y) = (i % w, i / w);
+                if (12..52).contains(&x) && (10..40).contains(&y) {
+                    next_byte(&mut state)
+                } else {
+                    0
+                }
+            })
+            .collect();
+        for (dx, dy) in [(5, -3), (-9, 11), (0, 7), (-70, 3), (70, -70)] {
+            for duplicate in [false, true] {
+                let expected = reference_move(&mask, &coverage, w, h, dx, dy, duplicate);
+                let actual = moved_mask(&mask, &coverage, w as u32, h as u32, dx, dy, duplicate);
+                assert_eq!(
+                    actual, expected,
+                    "bounded move differs from the full-plane loop at ({dx}, {dy}), duplicate={duplicate}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn bounded_mask_move_leaves_outside_pixels_untouched() {
+        let (w, h) = (32usize, 32usize);
+        let mask: Vec<u8> = (0..w * h).map(|i| (i * 7 % 251) as u8).collect();
+        let mut coverage = vec![0u8; w * h];
+        for y in 8..24 {
+            for x in 8..24 {
+                coverage[y * w + x] = 255;
+            }
+        }
+        let (dx, dy) = (4, 4);
+        let actual = moved_mask(&mask, &coverage, w as u32, h as u32, dx, dy, false);
+        let source = (8, 8, 24, 24);
+        let destination = (12, 12, 28, 28);
+        for y in 0..h {
+            for x in 0..w {
+                let inside = ((source.0..source.2).contains(&x)
+                    && (source.1..source.3).contains(&y))
+                    || ((destination.0..destination.2).contains(&x)
+                        && (destination.1..destination.3).contains(&y));
+                if !inside {
+                    assert_eq!(
+                        actual[y * w + x],
+                        mask[y * w + x],
+                        "pixel ({x}, {y}) outside the move changed"
+                    );
+                }
+            }
+        }
     }
 }

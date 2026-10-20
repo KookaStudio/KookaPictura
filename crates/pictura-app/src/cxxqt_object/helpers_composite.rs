@@ -169,18 +169,23 @@ pub(super) fn selection_to_mask(selection: &Selection, doc: &Document) -> LayerM
 pub(super) fn crop_selection(data: &[u8], doc_w: u32, doc_h: u32, rect: PsdRect) -> Vec<u8> {
     let (w, h) = (rect.width().max(0) as usize, rect.height().max(0) as usize);
     let mut out = vec![0u8; w * h];
+    if w == 0 || h == 0 {
+        return out;
+    }
+    let x0 = rect.left.max(0);
+    let x1 = rect.right.min(doc_w as i32);
+    if x1 <= x0 {
+        return out;
+    }
+    let (col0, cols) = ((x0 - rect.left) as usize, (x1 - x0) as usize);
     for y in 0..h {
         let dy = rect.top + y as i32;
         if dy < 0 || dy >= doc_h as i32 {
             continue;
         }
-        for x in 0..w {
-            let dx = rect.left + x as i32;
-            if dx < 0 || dx >= doc_w as i32 {
-                continue;
-            }
-            out[y * w + x] = data[dy as usize * doc_w as usize + dx as usize];
-        }
+        let src = dy as usize * doc_w as usize + x0 as usize;
+        let dst = y * w + col0;
+        out[dst..dst + cols].copy_from_slice(&data[src..src + cols]);
     }
     out
 }

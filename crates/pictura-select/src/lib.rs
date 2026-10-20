@@ -29,6 +29,8 @@ pub use refine::{
 
 mod translate;
 
+mod bounds;
+
 #[derive(Debug, thiserror::Error)]
 pub enum SelectError {
     #[error("size mismatch: {0}")]

@@ -5,7 +5,7 @@ use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QString, QStringList};
 use pictura_codec::buffer_to_srgb;
-use pictura_core::{Channel, ColorMode, Document};
+use pictura_core::{Channel, ColorMode, Document, PsdRect};
 use pictura_select::{CombineMode, Selection};
 
 mod bridge;
@@ -77,35 +77,19 @@ impl qobject::PictureView {
     /// Capture the current selection as the origin of a move-selection drag.
     /// Refuses (false) without a selection.
     pub fn begin_selection_move(mut self: Pin<&mut Self>) -> bool {
-        let Some(origin) = self.rust().selection.clone() else {
-            return false;
-        };
-        self.as_mut().rust_mut().selection_move_origin = Some(origin);
-        true
+        self.as_mut().rust_mut().begin_selection_move()
     }
 
-    /// Set the selection to the origin translated by `(dx, dy)`. No history and
-    /// no `changed` emission: the tool drives the overlay. False without a drag.
+    /// Record the drag offset. No history and no `changed` emission: the tool
+    /// drives the overlay. False without a drag.
     pub fn preview_selection_move(mut self: Pin<&mut Self>, dx: i32, dy: i32) -> bool {
-        let moved = {
-            let rust = self.rust();
-            let Some(origin) = rust.selection_move_origin.as_ref() else {
-                return false;
-            };
-            origin.translate(dx, dy)
-        };
-        self.as_mut().rust_mut().selection = Some(moved);
-        true
+        self.as_mut().rust_mut().preview_selection_move(dx, dy)
     }
 
-    /// Commit the move: one "Move Selection" state when the mask actually moved,
-    /// nothing when it lands on the origin. Clears the origin.
+    /// Commit the move: one "Move Selection" state when the selection actually
+    /// moved, nothing when it lands on the origin. Clears the drag.
     pub fn commit_selection_move(mut self: Pin<&mut Self>) -> bool {
-        let origin = self.as_mut().rust_mut().selection_move_origin.take();
-        let Some(origin) = origin else {
-            return false;
-        };
-        if self.rust().selection.as_ref() == Some(&origin) {
+        if !self.as_mut().rust_mut().commit_selection_move() {
             return false;
         }
         self.as_mut().record("Move Selection");
@@ -115,11 +99,7 @@ impl qobject::PictureView {
 
     /// Restore the origin selection and drop the drag. No history.
     pub fn cancel_selection_move(mut self: Pin<&mut Self>) -> bool {
-        let Some(origin) = self.as_mut().rust_mut().selection_move_origin.take() else {
-            return false;
-        };
-        self.as_mut().rust_mut().selection = Some(origin);
-        true
+        self.as_mut().rust_mut().cancel_selection_move()
     }
 
     /// Move (or, with `duplicate`, copy) the content covered by the selection
@@ -164,9 +144,10 @@ impl qobject::PictureView {
                     ),
                     selection.translate(dx, dy),
                     luma_u8(rgba_from_argb(background)),
+                    move_dirty_rect(selection, dx, dy),
                 )
             };
-            let (coverage, moved_selection, background) = prepared;
+            let (coverage, moved_selection, background, dirty) = prepared;
             let moved = {
                 let mut rust = self.as_mut().rust_mut();
                 let Some(doc) = rust.doc.as_mut() else {
@@ -182,9 +163,13 @@ impl qobject::PictureView {
             {
                 let mut rust = self.as_mut().rust_mut();
                 rust.selection_move_origin = None;
+                rust.selection_move_delta = None;
                 rust.selection = Some(moved_selection);
             }
-            self.as_mut().recomposite();
+            match dirty {
+                Some(rect) => self.as_mut().recomposite_region(rect),
+                None => self.as_mut().recomposite(),
+            }
             self.as_mut().record("Move Selection");
             return true;
         }
@@ -209,9 +194,10 @@ impl qobject::PictureView {
                 path.to_string(),
                 selection_to_mask(&selection, doc),
                 selection.translate(dx, dy),
+                move_dirty_rect(&selection, dx, dy),
             )
         };
-        let (path, mask, moved_selection) = prepared;
+        let (path, mask, moved_selection, dirty) = prepared;
         let moved = {
             let mut rust = self.as_mut().rust_mut();
             let Some(doc) = rust.doc.as_mut() else {
@@ -225,6 +211,7 @@ impl qobject::PictureView {
         {
             let mut rust = self.as_mut().rust_mut();
             rust.selection_move_origin = None;
+            rust.selection_move_delta = None;
             rust.selection = Some(moved_selection);
             if duplicate {
                 // `layer_via_copy` inserts the copy directly above the source
@@ -234,7 +221,10 @@ impl qobject::PictureView {
                 }
             }
         }
-        self.as_mut().recomposite();
+        match dirty {
+            Some(rect) => self.as_mut().recomposite_region(rect),
+            None => self.as_mut().recomposite(),
+        }
         self.as_mut().record("Move Selection");
         true
     }
@@ -523,14 +513,7 @@ impl qobject::PictureView {
     /// Coverage byte at `(x, y)` (0 outside, 255 fully inside, intermediate on
     /// a feathered edge). 0 without a document/selection or out of bounds.
     pub fn selection_coverage(&self, x: i32, y: i32) -> i32 {
-        let rust = self.rust();
-        let Some(sel) = rust.selection.as_ref() else {
-            return 0;
-        };
-        if x < 0 || y < 0 || x as u32 >= sel.width || y as u32 >= sel.height {
-            return 0;
-        }
-        sel.data[y as usize * sel.width as usize + x as usize] as i32
+        i32::from(self.rust().selection_coverage_at(x, y))
     }
 
     /// Merge a document-sized `shape` into the current selection with `mode`,
@@ -724,30 +707,14 @@ impl qobject::PictureView {
     /// The selected pixels' bounding box as flat `[x, y, w, h]`; empty when
     /// nothing is selected. View-only: derives from the mask, records no history.
     pub fn selection_bounds_extents(&self) -> Vec<i32> {
-        let rust = self.rust();
-        let Some(sel) = rust.selection.as_ref() else {
-            return Vec::new();
-        };
-        let mut bounds: Option<(u32, u32, u32, u32)> = None;
-        for (i, &v) in sel.data.iter().enumerate() {
-            if v == 0 {
-                continue;
-            }
-            let x = i as u32 % sel.width;
-            let y = i as u32 / sel.width;
-            bounds = Some(match bounds {
-                Some((x0, y0, x1, y1)) => (x0.min(x), y0.min(y), x1.max(x), y1.max(y)),
-                None => (x, y, x, y),
-            });
-        }
-        let Some((x0, y0, x1, y1)) = bounds else {
+        let Some(bounds) = self.rust().selection_bounds() else {
             return Vec::new();
         };
         vec![
-            x0 as i32,
-            y0 as i32,
-            (x1 - x0 + 1) as i32,
-            (y1 - y0 + 1) as i32,
+            bounds.left,
+            bounds.top,
+            bounds.right - bounds.left,
+            bounds.bottom - bounds.top,
         ]
     }
 
@@ -787,6 +754,27 @@ fn layer_above(path: &str) -> Option<String> {
     } else {
         format!("{prefix}/{}", index + 1)
     })
+}
+
+/// The document rectangle a selection move can change: the union of the
+/// selection's bounds and their translated destination, clipped to the canvas.
+/// `None` when the selection is empty or the union misses the canvas.
+pub(super) fn move_dirty_rect(selection: &Selection, dx: i32, dy: i32) -> Option<PsdRect> {
+    let bounds = selection.bounds()?;
+    let (w, h) = (selection.width as i32, selection.height as i32);
+    let destination = PsdRect {
+        top: bounds.top + dy,
+        left: bounds.left + dx,
+        bottom: bounds.bottom + dy,
+        right: bounds.right + dx,
+    };
+    let rect = PsdRect {
+        top: bounds.top.min(destination.top).clamp(0, h),
+        left: bounds.left.min(destination.left).clamp(0, w),
+        bottom: bounds.bottom.max(destination.bottom).clamp(0, h),
+        right: bounds.right.max(destination.right).clamp(0, w),
+    };
+    (rect.right > rect.left && rect.bottom > rect.top).then_some(rect)
 }
 
 /// the commit uses, so the preview matches the committed layer exactly. Returns
