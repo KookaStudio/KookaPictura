@@ -421,11 +421,18 @@ void PicturaMainWindow::registerHandlers()
     });
 
     // Merge and flatten. Merge Down and Merge Layers share one id (design D4):
-    // one selected path merges down, several merge the selection.
+    // one selected layer merges down, two or more merge the selection, and the
+    // label follows the selection.
     registry_->setHandler(command_ids::LayerMergeLayers, [this]() {
         PictureView* view = activeView();
         const QStringList paths = layersPanel_ ? layersPanel_->selectedPaths() : QStringList{};
-        if (view && !paths.isEmpty() && view->merge_layers(paths) > 0) {
+        if (!view || paths.isEmpty()) {
+            return;
+        }
+        const QString merged = view->merge_layers(paths);
+        if (!merged.isEmpty()) {
+            layersPanel_->refresh();
+            layersPanel_->selectPaths(QStringList{merged}, merged);
             refresh();
         }
     });
@@ -434,11 +441,21 @@ void PicturaMainWindow::registerHandlers()
         return view && view->has_document() && layersPanel_
             && view->can_merge_layers(layersPanel_->selectedPaths());
     });
+    registry_->setLabelProvider(command_ids::LayerMergeLayers, [this]() {
+        const bool one = layersPanel_ && layersPanel_->selectedPaths().size() == 1;
+        return one ? QStringLiteral("Merge Down") : QStringLiteral("Merge Layers");
+    });
 
     registry_->setHandler(command_ids::LayerMergeVisible, [this]() {
         PictureView* view = activeView();
         const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
-        if (view && !path.isEmpty() && view->merge_visible(path) > 0) {
+        if (!view || path.isEmpty()) {
+            return;
+        }
+        const QString merged = view->merge_visible(path);
+        if (!merged.isEmpty()) {
+            layersPanel_->refresh();
+            layersPanel_->selectPaths(QStringList{merged}, merged);
             refresh();
         }
     });

@@ -1,6 +1,7 @@
 //! Merge and flatten bridge commands. Engine: `pictura_render::merge_scope` /
 //! `flatten`; each successful command recomposites then records one undo state,
-//! and every refusal records nothing and returns 0.
+//! and every refusal records nothing. Merge commands return the merged path
+//! (empty on refusal); flatten returns the replaced count.
 
 use super::helpers::*;
 use super::qobject;
@@ -11,17 +12,20 @@ use pictura_core::ColorLabel;
 
 impl qobject::PictureView {
     /// Merge Down when `paths` names one layer, Merge Layers when it names two
-    /// or more (CS6 shares one command, design D4). Returns the number of
-    /// inputs replaced, 0 on refusal.
-    pub fn merge_layers(mut self: Pin<&mut Self>, paths: &QStringList) -> i32 {
+    /// or more (CS6 shares one command, design D4). Returns the merged node's
+    /// path, empty on refusal.
+    pub fn merge_layers(mut self: Pin<&mut Self>, paths: &QStringList) -> QString {
         let owned = list_of_strings(paths);
-        if owned.len() == 1 {
-            self.as_mut()
-                .merge_scope_changed(pictura_render::MergeScope::Down(&owned[0]), "Merge Down")
+        let (scope, label) = if owned.len() == 1 {
+            (pictura_render::MergeScope::Down(&owned[0]), "Merge Down")
         } else {
-            self.as_mut()
-                .merge_scope_changed(pictura_render::MergeScope::Selected(&owned), "Merge Layers")
-        }
+            (pictura_render::MergeScope::Selected(&owned), "Merge Layers")
+        };
+        self.as_mut()
+            .merge_scope_changed(scope, label)
+            .map_or_else(QString::default, |outcome| {
+                QString::from(outcome.path.as_str())
+            })
     }
 
     /// Whether [`merge_layers`] would apply to `paths`, without mutating the
@@ -59,22 +63,27 @@ impl qobject::PictureView {
         pictura_render::can_merge_scope(doc, &pictura_render::MergeScope::ClippingMask(&path))
     }
 
-    /// Merge every eye-visible layer, anchored on `path`. Returns the number of
-    /// inputs replaced, 0 on refusal (including a hidden active layer).
-    pub fn merge_visible(mut self: Pin<&mut Self>, path: &QString) -> i32 {
+    /// Merge every eye-visible layer, anchored on `path`. Returns the merged
+    /// node's path, empty on refusal (including a hidden active layer).
+    pub fn merge_visible(mut self: Pin<&mut Self>, path: &QString) -> QString {
         let path = path.to_string();
         self.as_mut()
             .merge_scope_changed(pictura_render::MergeScope::Visible(&path), "Merge Visible")
+            .map_or_else(QString::default, |outcome| {
+                QString::from(outcome.path.as_str())
+            })
     }
 
     /// Collapse the clipping group above `path` into its raster base. Returns
     /// the number of inputs replaced, 0 on refusal.
     pub fn merge_clipping_mask(mut self: Pin<&mut Self>, path: &QString) -> i32 {
         let path = path.to_string();
-        self.as_mut().merge_scope_changed(
-            pictura_render::MergeScope::ClippingMask(&path),
-            "Merge Clipping Mask",
-        )
+        self.as_mut()
+            .merge_scope_changed(
+                pictura_render::MergeScope::ClippingMask(&path),
+                "Merge Clipping Mask",
+            )
+            .map_or(0, |outcome| outcome.replaced as i32)
     }
 
     /// Flatten the whole tree into one opaque Background layer. Returns the
@@ -170,18 +179,18 @@ impl qobject::PictureView {
         mut self: Pin<&mut Self>,
         scope: pictura_render::MergeScope<'_>,
         label: &str,
-    ) -> i32 {
-        let replaced = match self.as_mut().rust_mut().doc.as_mut() {
-            Some(doc) => {
-                pictura_render::merge_scope(doc, scope).map_or(0, |outcome| outcome.replaced)
-            }
-            None => 0,
+    ) -> Option<pictura_render::MergeOutcome> {
+        let outcome = match self.as_mut().rust_mut().doc.as_mut() {
+            Some(doc) => pictura_render::merge_scope(doc, scope).ok(),
+            None => None,
         };
-        if replaced > 0 {
+        if outcome.as_ref().is_some_and(|outcome| outcome.replaced > 0) {
             self.as_mut().clear_link_sets();
             self.as_mut().recomposite();
             self.as_mut().record(label);
+            outcome
+        } else {
+            None
         }
-        replaced as i32
     }
 }

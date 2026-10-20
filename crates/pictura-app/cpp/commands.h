@@ -112,7 +112,6 @@ inline constexpr char LayerGroupLayers[] = "layer.group.layers";
 inline constexpr char LayerUngroupLayers[] = "layer.ungroup.layers";
 inline constexpr char LayerMergeLayers[] = "layer.merge.layers";
 inline constexpr char LayerMergeVisible[] = "layer.merge.visible";
-inline constexpr char LayerMergeDown[] = "layer.merge.down";
 inline constexpr char LayerArrangeFront[] = "layer.arrange.front";
 inline constexpr char LayerArrangeForward[] = "layer.arrange.forward";
 inline constexpr char LayerArrangeBackward[] = "layer.arrange.backward";

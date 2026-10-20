@@ -734,6 +734,11 @@ QStringList LayersPanel::selectedPaths() const
     return paths;
 }
 
+bool LayersPanel::canMergeSelection() const
+{
+    return view_ && view_->can_merge_layers(selectedPaths());
+}
+
 void LayersPanel::syncControls()
 {
     const QModelIndex current = tree_->currentIndex();

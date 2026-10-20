@@ -647,16 +647,21 @@ bool LayersPanel::performPanelMenuAction(const QString& actionId)
         if (view_) {
             const QStringList paths = selectedPaths();
             const QString path = currentPath();
+            QString merged;
             if (actionId == QLatin1String("mergeDown")) {
                 if (!paths.isEmpty()) {
-                    view_->merge_layers(paths);
+                    merged = view_->merge_layers(paths);
                 }
             } else if (actionId == QLatin1String("mergeVisible")) {
                 if (!path.isEmpty()) {
-                    view_->merge_visible(path);
+                    merged = view_->merge_visible(path);
                 }
             } else if (!path.isEmpty()) {
                 view_->merge_clipping_mask(path);
+            }
+            if (!merged.isEmpty()) {
+                refresh();
+                selectPaths(QStringList{merged}, merged);
             }
         }
     } else if (actionId == QLatin1String("flatten")) {

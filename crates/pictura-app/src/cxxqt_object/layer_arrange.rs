@@ -1,7 +1,7 @@
-//! Layer > Arrange / Reverse, Merge Down, and the non-destructive Stamp
-//! Visible / Stamp Selected. Free functions over a [`PictureView`] (their own
-//! bridge, so the `PictureView` declaration list does not grow). Each edit
-//! recomposites and records one state.
+//! Layer > Arrange / Reverse and the non-destructive Stamp Visible / Stamp
+//! Selected. Free functions over a [`PictureView`] (their own bridge, so the
+//! `PictureView` declaration list does not grow). Each edit recomposites and
+//! records one state.
 //!
 //! [`PictureView`]: super::qobject::PictureView
 
@@ -43,10 +43,6 @@ pub mod ffi {
         /// Reverse the selected contiguous run; one "Reverse Layers" state when
         /// the order changes.
         fn reverse_layers_run(view: Pin<&mut PictureView>, paths: &QStringList) -> bool;
-
-        /// Merge `path` with the layer directly below it; one "Merge Down"
-        /// state. Returns the number of inputs replaced, `0` on refusal.
-        fn merge_down_run(view: Pin<&mut PictureView>, path: &QString) -> i32;
 
         /// Composite the eye-visible layers into a NEW layer directly above
         /// `path`, leaving the originals. One "Stamp Visible" state. Returns
@@ -131,19 +127,6 @@ fn reverse_layers_run(mut view: Pin<&mut PictureView>, paths: &QStringList) -> b
         finish(view, "Reverse Layers");
     }
     changed
-}
-
-fn merge_down_run(mut view: Pin<&mut PictureView>, path: &QString) -> i32 {
-    let path = path.to_string();
-    let replaced = match view.as_mut().rust_mut().doc.as_mut() {
-        Some(doc) => pictura_render::merge_scope(doc, pictura_render::MergeScope::Down(&path))
-            .map_or(0, |outcome| outcome.replaced),
-        None => 0,
-    };
-    if replaced > 0 {
-        finish(view, "Merge Down");
-    }
-    replaced as i32
 }
 
 fn stamp_visible_run(mut view: Pin<&mut PictureView>, path: &QString) -> QString {

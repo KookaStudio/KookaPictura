@@ -1063,9 +1063,8 @@ void CommandTreeTest::snapCanvasToWorkspaceToggle()
     QVERIFY2(underView, "Snap Canvas To Workspace sits under the View menu");
 }
 
-// Layer > Arrange / Reverse / Merge Down / Delete Layer / Stamp: the new
-// leaves exist, enable where applicable, and stamp adds one layer while
-// preserving the source layers.
+// Layer > Arrange / Reverse / Delete Layer / Stamp: the leaves exist, enable
+// where applicable, and stamp adds one layer while preserving the source layers.
 void CommandTreeTest::layerArrangeStamp()
 {
     QVERIFY(window_->newDocument(QStringLiteral("ArrangeStamp"), 32, 32,
@@ -1094,7 +1093,6 @@ void CommandTreeTest::layerArrangeStamp()
                            pictura::command_ids::LayerArrangeBackward,
                            pictura::command_ids::LayerArrangeBack,
                            pictura::command_ids::LayerArrangeReverse,
-                           pictura::command_ids::LayerMergeDown,
                            pictura::command_ids::LayerDeleteLayer,
                            pictura::command_ids::LayerStampVisible,
                            pictura::command_ids::LayerStampSelected}) {
@@ -1124,14 +1122,6 @@ void CommandTreeTest::layerArrangeStamp()
     layers->refresh();
     QCOMPARE(pictura::layers_api::rowAt(*view, 0).name, topName);
     QCOMPARE(pictura::layers_api::rowAt(*view, 1).name, middleName);
-
-    // Merge Down folds the active layer into the layer below it.
-    layers->selectPaths({pictura::layers_api::rowAt(*view, 0).path}, pictura::layers_api::rowAt(*view, 0).path);
-    registry->refresh();
-    QVERIFY2(action(pictura::command_ids::LayerMergeDown)->isEnabled(), "merge down enabled");
-    const int beforeMerge = pictura::layers_api::rowCount(*view);
-    QVERIFY(registry->dispatch(QString::fromLatin1(pictura::command_ids::LayerMergeDown)));
-    QCOMPARE(pictura::layers_api::rowCount(*view), beforeMerge - 1);
 
     // Stamp Visible adds exactly one layer and keeps every source.
     layers->refresh();
