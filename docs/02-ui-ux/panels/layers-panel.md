@@ -45,7 +45,7 @@ A popup selects the **filter dimension** — name, kind, effect, mode, attribute
 
 ### Panel menu, panel options, context menus
 
-- **Panel menu** (top-right triangle): `Panel Options`, `New Layer`/`New Group`, `Duplicate Layer`/`Duplicate Group`, `Delete Layer`/`Delete Group`, `Merge Down`/`Merge Visible`/`Flatten Image`, `Blending Options`, lock and select entries, mask/vector-mask/clipping entries, `Convert to Smart Object`, and the remaining `Layer`-menu commands.
+- **Panel menu** (top-right triangle): `Panel Options`, `New Layer`/`New Group`, `Duplicate Layer`/`Duplicate Group`, `Delete Layer`/`Delete Group`, `Merge Down`/`Merge Layers` (one context-sensitive entry)/`Merge Visible`/`Flatten Image`, `Blending Options`, lock and select entries, mask/vector-mask/clipping entries, `Convert to Smart Object`, and the remaining `Layer`-menu commands.
 - **Panel Options**: thumbnail size (`None`/small/medium/large), thumbnail contents (`Entire Document` / `Layer Bounds`), `Expand New Effects`, `Add "copy" to Copied Layers and Groups`, and `Use Default Masks on Fill Layers`. CS6 Help names only the first three; the CS6-era sources show the copy-name and default-mask options in the same dialog (defaults: `Entire Document`, `Expand New Effects` on, `Add "copy"` on, `Use Default Masks` on).
 - **Row context menu**: CS6 color label, layer-type-specific actions, `Copy CSS`, group commands, and the merge/rasterize/clipping entries valid for the row. Right-clicking the eye is the solo/all visibility menu noted above.
 
