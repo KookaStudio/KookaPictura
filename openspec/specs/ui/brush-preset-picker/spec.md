@@ -78,8 +78,8 @@ the settings are approximated from the owner's reference and marked non-parity.
   different foreground colour, Mode, Opacity, and Flow
 - **THEN** the preset's tip and its default colour, Mode, Opacity, and Flow are
   applied; `Non-Photo Blue Pencil` paints `#73d6ff`, the others `#47484a`, the
-  pencils report 65 % hardness and 50 % / 75 % grain, and `Paintbrush Oval 45
-  pixels Multiply` uses Multiply at 35 % opacity and 50 % flow
+  pencils report 25 % / 0 % hardness and 50 % / 55 % grain, and `Paintbrush
+  Oval 45 pixels Multiply` uses Multiply at 35 % opacity and 50 % flow
 
 #### Scenario: The airbrush paints a light, soft stroke
 

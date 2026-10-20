@@ -672,6 +672,7 @@ QWidget* OptionsBar::buildPaintPage(ToolId id)
     combo->addItem(QStringLiteral("Dissolve"), QStringLiteral("dissolve"));
     combo->addItem(QStringLiteral("Behind"), QStringLiteral("behind"));
     combo->addItem(QStringLiteral("Clear"), QStringLiteral("clear"));
+    combo->addItem(QStringLiteral("Multiply"), QStringLiteral("multiply"));
     if (controller_) {
         const int modeIndex = combo->findData(paint_->mode());
         if (modeIndex >= 0) {

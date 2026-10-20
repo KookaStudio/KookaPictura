@@ -87,7 +87,12 @@ pub(super) fn mask_preview_blend(
             let lx = rect.left as usize + x;
             let li = ly * preview.width as usize + lx;
             let mi = my * mw + lx.min(mw - 1);
-            let k = strength * preview.coverage[li] as f32 / 255.0;
+            let coverage = if cfg.wet_edges {
+                pictura_paint::wet_edge(preview.coverage[li])
+            } else {
+                preview.coverage[li]
+            };
+            let k = strength * coverage as f32 / 255.0;
             let start = mask.coverage[mi] as f32;
             let t = (value - start) * k / 255.0;
             let o = (y * rw + x) * 4;
@@ -409,6 +414,23 @@ mod tests {
             ),
             snapshot.to_vec(),
             "Behind changes nothing on the opaque mask"
+        );
+    }
+
+    #[test]
+    fn mask_preview_applies_wet_edges_like_the_commit() {
+        let mask = revealed_mask();
+        let snapshot = [34, 68, 170, 255];
+        let wet = StrokeConfig {
+            wet_edges: true,
+            ..black(PaintMode::Normal)
+        };
+        let out = mask_preview_blend(&preview(255, snapshot, wet), &mask, PIXEL);
+        let k = pictura_paint::wet_edge(255) as f32 / 255.0;
+        let expected = 34.0 + k * (255.0 - 34.0);
+        assert!(
+            (out[0] as f32 - expected).abs() <= 1.0,
+            "full coverage previews the wet-edged interior, not the full hidden tone: {out:?}"
         );
     }
 

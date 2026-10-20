@@ -297,6 +297,13 @@ void BrushTipPreviewTest::presetUpdatesTheOptionsBar()
     QVERIFY(choosePreset(picker, QStringLiteral("Paintbrush Oval 45 pixels Multiply")));
     QCOMPARE(opacity->value(), 35.0);
     QCOMPARE(flow->value(), 50.0);
+    QCOMPARE(mode->currentData().toString(), QStringLiteral("multiply"));
+
+    // The bar now tracks the preset's mode, so picking Normal really resets it.
+    auto* paint = f.tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush);
+    QVERIFY(paint);
+    mode->setCurrentIndex(mode->findData(QStringLiteral("normal")));
+    QCOMPARE(paint->mode(), QStringLiteral("normal"));
 }
 
 void BrushTipPreviewTest::existingPresetSetsTipOnly()
