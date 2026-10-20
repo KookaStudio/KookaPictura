@@ -286,15 +286,7 @@ void PicturaMainWindow::registerHandlers()
         const QString path = (layersPanel_ && layersPanel_->selectedPaths().size() == 1)
                                  ? layersPanel_->currentPath()
                                  : QString();
-        if (!view) {
-            return;
-        }
-        WarpPresetSpec spec;
-        if (!WarpPresetDialog::get(this, &spec)) {
-            return;
-        }
-        if (view->apply_warp_preset(path, spec.style_id, spec.bend, spec.distort_x,
-                                    spec.distort_y, spec.vertical)) {
+        if (view && tools_ && tools_->beginWarp(path)) {
             refresh();
         }
     });

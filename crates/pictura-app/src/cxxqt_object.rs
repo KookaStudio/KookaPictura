@@ -1033,18 +1033,6 @@ pub mod qobject {
         #[qinvokable]
         fn convert_depth(self: Pin<&mut Self>, bits: i32, exposure_ev: f64, gamma: f64) -> bool;
 
-        /// Apply a named warp preset and record one "Warp" state.
-        #[qinvokable]
-        fn apply_warp_preset(
-            self: Pin<&mut Self>,
-            path: &QString,
-            style: &QString,
-            bend: f64,
-            distort_x: f64,
-            distort_y: f64,
-            rotate_vertical: bool,
-        ) -> bool;
-
         /// Whether `path` resolves to a transformable Free Transform target.
         #[qinvokable]
         fn layer_can_free_transform(&self, path: &QString) -> bool;

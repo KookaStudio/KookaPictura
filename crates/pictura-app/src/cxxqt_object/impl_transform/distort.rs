@@ -90,7 +90,7 @@ mod tests {
             skew_y: 0.0,
             interpolation: pictura_render::Interpolation::Bicubic,
             warp: None,
-            warp_preview_quad: None,
+            warp_drag: None,
             lifted: None,
             untrimmed: None,
         }

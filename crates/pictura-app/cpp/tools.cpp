@@ -1,10 +1,12 @@
 #include "tools.h"
 
+#include "api/transform_api.h"
 #include "icons.h"
 #include "image_view.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_transform/warp.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/annotations.cxxqt.h"
 
 #include <QtCore/QDebug>
@@ -985,6 +987,10 @@ void ToolController::handleReleased(const QPointF& imagePos)
                 v->transform_release();
                 if (canvas_) {
                     canvas_->clearSmartGuides();
+                    // The released anchor's handles go back to near-pointer.
+                    if (transform_warp_active(*v)) {
+                        canvas_->setTransformWarp(transform_api::warpOverlay(*v));
+                    }
                 }
                 if (transformControls_) {
                     // The controls box applies each gesture on release and stays

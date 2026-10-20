@@ -12,6 +12,30 @@ Snapshot for resuming after a context break. Update after each milestone.
   contains reproduced Adobe Help prose or the old wording.
 - Toolchain: Rust 1.98 (`rust-toolchain.toml`), system Qt **6.11.1**, cxx-qt
   **0.10.0**, wgpu **30.0.1**, lcms2 **6.2.0** (system Little CMS 2.19).
+- **Warp ported from photocraft** (#751, branch `fix/751-warp-algorithm`,
+  OpenSpec change `port-photocraft-warp`, archived into
+  `document/transform-warp-engine`, `document/transform-session-warp`,
+  `ui/transform-options-bar`, with the old warp requirements removed from
+  `document/free-transform`). The preset dialog, `apply_warp_preset`, the
+  Patchy preset nets and the 16×16 cell rasterizer are gone. The port has three
+  parts:
+  - `pictura_core::warp` is photocraft's `geom::warp`: styles fitted to
+    Photoshop renders, and the bicubic Bezier mesh with pull and point drag.
+  - `layer_ops/warp_raster.rs` is photocraft's adaptive triangle resampler:
+    premultiplied, area-averaged when shrinking, and parallel by 64-row bands.
+  - Warp is a Free Transform mode (`impl_transform/warp.rs`). The menu or the
+    options-bar toggle starts a one-patch mesh over the source box and keeps
+    the box's quad as a projective frame after it (review fix: a baked patch
+    bent a Perspective box). The options bar
+    shows the style, orientation, and Bend/H/V. The canvas draws the grid and
+    points.
+
+  Split Warp and the Grid menu (post-CS6) are not ported, and smart-object and
+  Warp Text warps are unchanged. Self-test `lpr_warp_preset` (exit 527) is
+  retired, and Qt Test `tst_transform_warp` covers the mode. Ceiling: the
+  preview re-warps the full-resolution layer on every edit (`ponytail:` in
+  `refresh_warp_preview`). Credit is in `NOTICE.md` and
+  `docs/03-tools/move-and-transform.md`.
 - **Distort transform parity** (#748, branch `fix/748-transform-distort`,
   OpenSpec change `distort-transform-parity`, archived into
   `document/free-transform` and `document/transform-reference-point`).

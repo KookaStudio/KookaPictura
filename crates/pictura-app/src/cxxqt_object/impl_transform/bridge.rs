@@ -1,17 +1,17 @@
 //! The transform options bar's bridge: the session's reference point, numeric
-//! scale/rotation/skew setters and readouts, the interpolation choice, and the
-//! in-session warp. Free functions over [`PictureView`] (their own bridge, so
+//! scale/rotation/skew setters and readouts, and the interpolation choice
+//! (Warp mode is `warp.rs`). Free functions over [`PictureView`] (their own bridge, so
 //! the `PictureView` declaration list does not grow).
 //!
 //! [`PictureView`]: super::super::qobject::PictureView
 
 use super::super::qobject::PictureView;
-use super::super::state::{TransformMode, TransformSession, TransformWarp};
+use super::super::state::{TransformMode, TransformSession};
 use super::geometry::{
     hit_test_quad, projective_coefficients, quad_anchors, session_quad, set_pivot, source_corners,
     store_quad, MapParams,
 };
-use super::session::{build_transform_preview, can_begin_mode};
+use super::session::can_begin_mode;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -95,22 +95,6 @@ pub mod ffi {
         fn transform_skew_h_degrees(view: &PictureView) -> f64;
         fn transform_skew_v_degrees(view: &PictureView) -> f64;
         fn transform_interpolation_id(view: &PictureView) -> QString;
-        /// Set the in-session preset warp (`None`/`Custom` clears it).
-        fn transform_set_warp(
-            view: Pin<&mut PictureView>,
-            style: &QString,
-            bend: f64,
-            distort_x: f64,
-            distort_y: f64,
-            vertical: bool,
-        ) -> bool;
-        fn transform_clear_warp(view: Pin<&mut PictureView>) -> bool;
-        fn transform_warp_active(view: &PictureView) -> bool;
-        fn transform_warp_style_id(view: &PictureView) -> QString;
-        fn transform_warp_bend(view: &PictureView) -> f64;
-        fn transform_warp_distort_x(view: &PictureView) -> f64;
-        fn transform_warp_distort_y(view: &PictureView) -> f64;
-        fn transform_warp_vertical(view: &PictureView) -> bool;
     }
 }
 
@@ -230,9 +214,7 @@ fn transform_quad_extents(view: &PictureView) -> Vec<f64> {
     let Some(session) = view.rust().transform_session.as_ref() else {
         return Vec::new();
     };
-    let quad = session
-        .warp_preview_quad
-        .unwrap_or_else(|| session_quad(session));
+    let quad = super::warp::warp_corners(session).unwrap_or_else(|| session_quad(session));
     let mut out = Vec::with_capacity(8);
     for (x, y) in quad {
         out.push(x);
@@ -507,184 +489,6 @@ fn transform_interpolation_id(view: &PictureView) -> QString {
         .as_ref()
         .map(|s| QString::from(s.interpolation.id()))
         .unwrap_or_else(|| QString::from(Interpolation::Bicubic.id()))
-}
-
-/// Set the session's preset warp, or clear it for `None`/`Custom` (no preset
-/// mesh). False for an unknown style id, a non-finite value, or without a
-/// session.
-fn transform_set_warp(
-    mut view: Pin<&mut PictureView>,
-    style: &QString,
-    bend: f64,
-    distort_x: f64,
-    distort_y: f64,
-    vertical: bool,
-) -> bool {
-    let Some(style) = pictura_render::WarpStyle::from_id(&style.to_string()) else {
-        return false;
-    };
-    if !bend.is_finite() || !distort_x.is_finite() || !distort_y.is_finite() {
-        return false;
-    }
-    if pictura_render::style_mesh(style, bend, vertical, 1, 1).is_none() {
-        return transform_clear_warp(view);
-    }
-    {
-        let mut rust = view.as_mut().rust_mut();
-        let Some(session) = rust.transform_session.as_mut() else {
-            return false;
-        };
-        session.warp = Some(TransformWarp {
-            style,
-            bend,
-            distort_x,
-            distort_y,
-            vertical,
-        });
-    }
-    refresh_warp_preview(view)
-}
-
-/// Clear the session warp and restore the plain transform preview.
-fn transform_clear_warp(mut view: Pin<&mut PictureView>) -> bool {
-    let path = {
-        let mut rust = view.as_mut().rust_mut();
-        let Some(session) = rust.transform_session.as_mut() else {
-            return false;
-        };
-        if session.warp.is_none() {
-            return true;
-        }
-        session.warp = None;
-        session.warp_preview_quad = None;
-        session.path.clone()
-    };
-    view.as_mut().compute_transform_preview(&path)
-}
-
-fn transform_warp_active(view: &PictureView) -> bool {
-    view.rust()
-        .transform_session
-        .as_ref()
-        .is_some_and(|s| s.warp.is_some())
-}
-
-fn transform_warp_style_id(view: &PictureView) -> QString {
-    view.rust()
-        .transform_session
-        .as_ref()
-        .and_then(|s| s.warp.as_ref())
-        .map(|w| QString::from(w.style.id()))
-        .unwrap_or_default()
-}
-
-fn transform_warp_bend(view: &PictureView) -> f64 {
-    view.rust()
-        .transform_session
-        .as_ref()
-        .and_then(|s| s.warp.as_ref())
-        .map_or(0.0, |w| w.bend)
-}
-
-fn transform_warp_distort_x(view: &PictureView) -> f64 {
-    view.rust()
-        .transform_session
-        .as_ref()
-        .and_then(|s| s.warp.as_ref())
-        .map_or(0.0, |w| w.distort_x)
-}
-
-fn transform_warp_distort_y(view: &PictureView) -> f64 {
-    view.rust()
-        .transform_session
-        .as_ref()
-        .and_then(|s| s.warp.as_ref())
-        .map_or(0.0, |w| w.distort_y)
-}
-
-fn transform_warp_vertical(view: &PictureView) -> bool {
-    view.rust()
-        .transform_session
-        .as_ref()
-        .and_then(|s| s.warp.as_ref())
-        .is_some_and(|w| w.vertical)
-}
-
-/// Recompute the warped preview: a document clone with the live transform and
-/// then the warp applied, handed to the canvas as the preview layer (with an
-/// identity preview transform). Mutates nothing.
-fn refresh_warp_preview(mut view: Pin<&mut PictureView>) -> bool {
-    let gpu_compute = view.rust().gpu_compute;
-    let prepared = (|| {
-        let rust = view.rust();
-        let doc = rust.doc.as_ref()?;
-        let session = rust.transform_session.as_ref()?;
-        let warp = session.warp.as_ref()?;
-        let params = super::geometry::MapParams::of(session);
-        let quad = session_quad(session);
-        let identity = if session.mode.is_projective() {
-            let source = super::geometry::source_corners(session.orig_rect);
-            quad.iter()
-                .zip(source.iter())
-                .all(|(q, s)| (q.0 - s.0).abs() <= 1e-9 && (q.1 - s.1).abs() <= 1e-9)
-        } else {
-            params.is_identity()
-        };
-        let mut clone = doc.clone();
-        if !identity
-            && !super::geometry::apply_session_transform(
-                &mut clone,
-                &session.path,
-                session.mode,
-                quad,
-                params,
-                session.orig_rect,
-                session.interpolation,
-            )
-        {
-            return None;
-        }
-        let rect = pictura_render::resolve_path(&clone, &session.path).map(|l| l.rect)?;
-        let mesh = pictura_render::style_mesh(
-            warp.style,
-            warp.bend,
-            warp.vertical,
-            rect.width(),
-            rect.height(),
-        )?;
-        if !pictura_render::transform_layer_warp_with(
-            &mut clone,
-            &session.path,
-            &mesh,
-            pictura_render::WarpParams {
-                distort_h: warp.distort_x,
-                distort_v: warp.distort_y,
-            },
-            session.interpolation,
-        ) {
-            return None;
-        }
-        let after = pictura_render::resolve_path(&clone, &session.path).map(|l| l.rect)?;
-        let (base, image, x, y, opacity) =
-            build_transform_preview(&clone, &session.path, gpu_compute)?;
-        Some((base, image, x, y, opacity, after))
-    })();
-    let Some((base, image, x, y, opacity, after)) = prepared else {
-        return false;
-    };
-    let mut guard = view.as_mut().rust_mut();
-    let rust = &mut *guard;
-    rust.move_base = Some(base);
-    rust.move_layer = Some(image);
-    rust.move_x = x;
-    rust.move_y = y;
-    rust.move_opacity = opacity;
-    rust.move_prepared_revision = rust.content_revision;
-    rust.move_prepared_layer = String::new();
-    if let Some(session) = rust.transform_session.as_mut() {
-        session.warp_preview_quad = Some(super::geometry::source_corners(after));
-    }
-    true
 }
 
 /// Rotate `quad` about the reference point by `delta`; degenerate results are

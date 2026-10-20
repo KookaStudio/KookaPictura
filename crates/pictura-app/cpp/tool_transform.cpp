@@ -6,6 +6,7 @@
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_transform/warp.cxxqt.h"
 
 #include <QtCore/QStringList>
 
@@ -96,8 +97,17 @@ void ToolController::updateTransformOverlay(PictureView* v)
         return;
     }
     canvas_->setTransformQuad(transform_api::quad(*v).corners);
+    const bool warping = transform_warp_active(*v);
+    // Warp mode has no reference point: the grid replaces the box.
     canvas_->setTransformPivot(QPointF(transform_pivot_x(*v), transform_pivot_y(*v)),
-                               transform_show_pivot(*v));
+                               transform_show_pivot(*v) && !warping);
+    if (warping) {
+        canvas_->updateTransformPreviewLayer(v->move_preview_layer(),
+                                             QPointF(v->move_preview_x(), v->move_preview_y()));
+        canvas_->setTransformWarp(transform_api::warpOverlay(*v));
+    } else {
+        canvas_->setTransformWarp(transform_api::WarpOverlay());
+    }
     const transform_api::Matrix matrix = transform_api::previewLocalMatrix(*v);
     if (matrix.valid) {
         // A warped preview layer already carries the transform and warp, so it
@@ -382,13 +392,35 @@ bool ToolController::setTransformInterpolation(const QString& id)
     return true;
 }
 
-bool ToolController::setTransformWarp(const QString& styleId, double bend, double dx, double dy,
-                                      bool vertical)
+bool ToolController::beginWarp(const QString& path)
 {
-    PictureView* v = view();
-    if (!v || !transform_set_warp(*v, styleId, bend, dx, dy, vertical)) {
+    if (!transformSessionActive() && !beginFreeTransform(path)) {
         return false;
     }
+    return enterTransformWarp();
+}
+
+bool ToolController::enterTransformWarp()
+{
+    PictureView* v = view();
+    if (!v || !transform_enter_warp(*v)) {
+        return false;
+    }
+    transformDragging_ = false;
+    transformHandle_ = -1;
+    updateTransformOverlay(v);
+    emit transformChanged();
+    return true;
+}
+
+bool ToolController::leaveTransformWarp()
+{
+    PictureView* v = view();
+    if (!v || !transform_leave_warp(*v)) {
+        return false;
+    }
+    transformDragging_ = false;
+    transformHandle_ = -1;
     if (canvas_) {
         canvas_->updateTransformPreviewLayer(v->move_preview_layer(),
                                              QPointF(v->move_preview_x(), v->move_preview_y()));
@@ -398,18 +430,37 @@ bool ToolController::setTransformWarp(const QString& styleId, double bend, doubl
     return true;
 }
 
-void ToolController::clearTransformWarp()
+bool ToolController::setTransformWarpStyle(const QString& id)
 {
     PictureView* v = view();
-    if (!v || !transform_clear_warp(*v)) {
-        return;
-    }
-    if (canvas_) {
-        canvas_->updateTransformPreviewLayer(v->move_preview_layer(),
-                                             QPointF(v->move_preview_x(), v->move_preview_y()));
+    if (!v || !transform_set_warp_style(*v, id)) {
+        return false;
     }
     updateTransformOverlay(v);
     emit transformChanged();
+    return true;
+}
+
+bool ToolController::setTransformWarpValues(double bend, double hDistort, double vDistort)
+{
+    PictureView* v = view();
+    if (!v || !transform_set_warp_values(*v, bend, hDistort, vDistort)) {
+        return false;
+    }
+    updateTransformOverlay(v);
+    emit transformChanged();
+    return true;
+}
+
+bool ToolController::setTransformWarpVertical(bool vertical)
+{
+    PictureView* v = view();
+    if (!v || !transform_set_warp_vertical(*v, vertical)) {
+        return false;
+    }
+    updateTransformOverlay(v);
+    emit transformChanged();
+    return true;
 }
 
 } // namespace pictura

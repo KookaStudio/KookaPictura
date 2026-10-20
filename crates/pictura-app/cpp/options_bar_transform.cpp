@@ -1,6 +1,7 @@
 // The session-keyed Free Transform options page (#296): reference point
 // locator, numeric X/Y/W/H/angle/H/V, the interpolation menu, and the warp /
-// Cancel / Apply controls. Every write goes through ToolController so the
+// Cancel / Apply controls. In Warp mode the box fields give way to the warp
+// style, orientation, and Bend/H/V fields. Every write goes through ToolController so the
 // canvas overlay and the fields stay in step.
 
 #include "options_bar.h"
@@ -8,10 +9,10 @@
 #include "icons.h"
 #include "image_view.h"
 #include "panels/numeric_field.h"
-#include "warp_preset_dialog.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_transform/warp.cxxqt.h"
 
 #include <QtCore/QSignalBlocker>
 #include <QtGui/QIcon>
@@ -42,6 +43,30 @@ const InterpolationEntry kInterpolations[] = {
     {"Bicubic Smoother", "bicubic-smoother"},
     {"Bicubic Sharper", "bicubic-sharper"},
     {"Bicubic Automatic", "bicubic-automatic"},
+};
+
+// The Warp style menu, in CS6 order: display name and the bridge id
+// (`pictura_core::warp::WarpStyle::id`; keep the two lists in step).
+struct WarpStyleEntry {
+    const char* name;
+    const char* id;
+};
+
+const WarpStyleEntry kWarpStyles[] = {
+    {"None", "none"},           {"Custom", "custom"},        {"Arc", "arc"},
+    {"Arc Lower", "arcLower"},  {"Arc Upper", "arcUpper"},   {"Arch", "arch"},
+    {"Bulge", "bulge"},         {"Shell Lower", "shellLower"}, {"Shell Upper", "shellUpper"},
+    {"Flag", "flag"},           {"Wave", "wave"},            {"Fish", "fish"},
+    {"Rise", "rise"},           {"Fisheye", "fisheye"},      {"Inflate", "inflate"},
+    {"Squeeze", "squeeze"},     {"Twist", "twist"},
+};
+
+// The Free Transform fields Warp mode hides.
+const char* const kBoxFields[] = {
+    "optionsTransformShowPivot", "optionsTransformPivotGrid", "optionsTransformX",
+    "optionsTransformRelative",  "optionsTransformY",         "optionsTransformW",
+    "optionsTransformLink",      "optionsTransformH",         "optionsTransformAngle",
+    "optionsTransformSkewH",     "optionsTransformSkewV",
 };
 
 // A small right-pointing triangle for the relative-positioning toggle.
@@ -275,6 +300,8 @@ QWidget* OptionsBar::buildTransformPage()
         }
     });
 
+    layout->addWidget(buildWarpFields(page));
+
     auto* interpolation = new QComboBox(page);
     interpolation->setObjectName(QStringLiteral("optionsTransformInterpolation"));
     for (const InterpolationEntry& entry : kInterpolations) {
@@ -296,21 +323,16 @@ QWidget* OptionsBar::buildTransformPage()
                             page);
     warp->setCheckable(true);
     layout->addWidget(warp);
-    connect(warp, &QToolButton::clicked, this, [this]() {
+    connect(warp, &QToolButton::clicked, this, [this](bool on) {
         if (!controller_) {
             return;
         }
-        WarpPresetSpec spec;
-        if (!WarpPresetDialog::get(this, &spec)) {
-            return;
-        }
-        if (spec.style_id == QStringLiteral("warpNone")
-            || spec.style_id == QStringLiteral("warpCustom")) {
-            controller_->clearTransformWarp();
+        if (on) {
+            controller_->enterTransformWarp();
         } else {
-            controller_->setTransformWarp(spec.style_id, spec.bend, spec.distort_x,
-                                          spec.distort_y, spec.vertical);
+            controller_->leaveTransformWarp();
         }
+        refreshTransformPage();
     });
 
     auto* cancel = iconButton(QStringLiteral("optionsTransformCancel"),
@@ -334,6 +356,63 @@ QWidget* OptionsBar::buildTransformPage()
 
     layout->addStretch(1);
     return page;
+}
+
+// Warp mode's fields: the style menu, the orientation toggle, and the
+// Bend/H/V percentages, which act only on a preset style.
+QWidget* OptionsBar::buildWarpFields(QWidget* page)
+{
+    auto* fields = new QWidget(page);
+    fields->setObjectName(QStringLiteral("optionsWarpFields"));
+    fields->setVisible(false);
+    auto* layout = new QHBoxLayout(fields);
+    layout->setContentsMargins(0, 0, 0, 0);
+
+    auto* style = new QComboBox(fields);
+    style->setObjectName(QStringLiteral("optionsWarpStyle"));
+    for (const WarpStyleEntry& entry : kWarpStyles) {
+        style->addItem(QString::fromLatin1(entry.name), QString::fromLatin1(entry.id));
+    }
+    style->setToolTip(QStringLiteral("Warp"));
+    layout->addWidget(style);
+    connect(style, &QComboBox::currentIndexChanged, this, [this, style](int) {
+        if (controller_) {
+            controller_->setTransformWarpStyle(style->currentData().toString());
+            refreshTransformPage();
+        }
+    });
+
+    auto* orientation = iconButton(QStringLiteral("optionsWarpOrientation"),
+                                   QStringLiteral("options.warp"),
+                                   QStringLiteral("Change The Warp Orientation"), fields);
+    orientation->setCheckable(true);
+    layout->addWidget(orientation);
+    connect(orientation, &QToolButton::toggled, this, [this](bool on) {
+        if (controller_) {
+            controller_->setTransformWarpVertical(on);
+        }
+    });
+
+    NumericField* values[3] = {};
+    const char* const names[3] = {"optionsWarpBend", "optionsWarpH", "optionsWarpV"};
+    const char* const labels[3] = {"Bend", "H", "V"};
+    for (int i = 0; i < 3; ++i) {
+        values[i] = new NumericField(
+            QString::fromLatin1(labels[i]),
+            numericConfig(-100.0, 100.0, 1.0, 1, QStringLiteral("%"), true,
+                          QString::fromLatin1(names[i])),
+            fields);
+        layout->addWidget(values[i]);
+    }
+    for (int i = 0; i < 3; ++i) {
+        connect(values[i], &NumericField::valueChanged, this, [this, values](double) {
+            if (controller_) {
+                controller_->setTransformWarpValues(values[0]->value(), values[1]->value(),
+                                                    values[2]->value());
+            }
+        });
+    }
+    return fields;
 }
 
 void OptionsBar::refreshTransformPage()
@@ -415,9 +494,52 @@ void OptionsBar::refreshTransformPage()
             interpolation->setCurrentIndex(index);
         }
     }
+    const bool warping = transform_warp_active(*v);
     {
         const QSignalBlocker block(warp);
-        warp->setChecked(transform_warp_active(*v));
+        warp->setChecked(warping);
+    }
+    for (const char* name : kBoxFields) {
+        if (QWidget* w = transformPage_->findChild<QWidget*>(QString::fromLatin1(name))) {
+            w->setVisible(!warping);
+        }
+    }
+    refreshWarpFields(v, warping);
+}
+
+void OptionsBar::refreshWarpFields(PictureView* v, bool warping)
+{
+    auto* fields = transformPage_->findChild<QWidget*>(QStringLiteral("optionsWarpFields"));
+    auto* style = transformPage_->findChild<QComboBox*>(QStringLiteral("optionsWarpStyle"));
+    auto* orientation =
+        transformPage_->findChild<QToolButton*>(QStringLiteral("optionsWarpOrientation"));
+    auto* bend = transformPage_->findChild<NumericField*>(QStringLiteral("optionsWarpBend"));
+    auto* h = transformPage_->findChild<NumericField*>(QStringLiteral("optionsWarpH"));
+    auto* vField = transformPage_->findChild<NumericField*>(QStringLiteral("optionsWarpV"));
+    if (!fields || !style || !orientation || !bend || !h || !vField) {
+        return;
+    }
+    fields->setVisible(warping);
+    if (!warping) {
+        return;
+    }
+    const QString id = QString::fromUtf8(transform_warp_style_id(*v).toUtf8());
+    const bool preset = id != QStringLiteral("none") && id != QStringLiteral("custom");
+    {
+        const QSignalBlocker block(style);
+        style->setCurrentIndex(style->findData(id));
+    }
+    const QSignalBlocker bo(orientation);
+    const QSignalBlocker bb(bend);
+    const QSignalBlocker bh(h);
+    const QSignalBlocker bv(vField);
+    orientation->setChecked(transform_warp_vertical(*v));
+    bend->setValue(transform_warp_bend(*v));
+    h->setValue(transform_warp_h_distort(*v));
+    vField->setValue(transform_warp_v_distort(*v));
+    for (QWidget* w : {static_cast<QWidget*>(orientation), static_cast<QWidget*>(bend),
+                       static_cast<QWidget*>(h), static_cast<QWidget*>(vField)}) {
+        w->setEnabled(preset);
     }
 }
 

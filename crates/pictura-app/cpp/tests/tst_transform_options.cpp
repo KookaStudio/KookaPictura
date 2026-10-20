@@ -1,6 +1,6 @@
 // The Free Transform options bar (#296): the session-keyed page, its numeric
-// setters, the interpolation menu, the canvas reference point drag, and the
-// in-session warp.
+// setters, the interpolation menu, and the canvas reference point drag (Warp
+// mode is tst_transform_warp).
 
 #include <QtTest/QtTest>
 
@@ -43,8 +43,6 @@ private slots:
     void interpolationComboReachesTheSession();
     void canvasPivotDragSnapsToAnAnchor();
     void perimeterRotatesAndFarPressDoesNotCommit();
-    void warpSetAndClear();
-    void warpCommitsOneState();
     void applyCommitsCancelRestores();
 
 private:
@@ -359,65 +357,6 @@ void TransformOptionsTest::perimeterRotatesAndFarPressDoesNotCommit()
     QVERIFY(view->transform_session_active());
     QCOMPARE(view->history_count(), history);
     tools->cancelFreeTransform();
-}
-
-void TransformOptionsTest::warpSetAndClear()
-{
-    pictura::PicturaMainWindow& frame = *window_;
-    const QString layer = beginLayer(frame);
-    QVERIFY(!layer.isEmpty());
-    pictura::PictureView* view = frame.activeView();
-    auto* tools = frame.findChild<pictura::ToolController*>();
-    QVERIFY(view && tools && tools->beginFreeTransform(layer));
-
-    auto* warp = frame.findChild<QToolButton*>(QStringLiteral("optionsTransformWarp"));
-    QVERIFY(tools && warp);
-
-    QVERIFY(tools->setTransformWarp(QStringLiteral("warpArc"), 50.0, 0.0, 0.0, false));
-    QVERIFY(pictura::transform_warp_active(*view));
-    QCOMPARE(pictura::transform_warp_style_id(*view), QStringLiteral("warpArc"));
-    QVERIFY(warp->isChecked());
-
-    // Box gestures are suspended while a warp is set.
-    QCOMPARE(view->transform_press(10.0, 8.0, 1.0, false, false), -1);
-
-    tools->clearTransformWarp();
-    QVERIFY(!pictura::transform_warp_active(*view));
-    QVERIFY(!warp->isChecked());
-    QVERIFY(view->transform_press(10.0, 8.0, 1.0, false, false) >= 0);
-    view->transform_release();
-    tools->cancelFreeTransform();
-}
-
-void TransformOptionsTest::warpCommitsOneState()
-{
-    pictura::PicturaMainWindow& frame = *window_;
-    const QString layer = beginLayer(frame);
-    QVERIFY(!layer.isEmpty());
-    pictura::PictureView* view = frame.activeView();
-    auto* tools = frame.findChild<pictura::ToolController*>();
-    QVERIFY(view && tools && tools->beginFreeTransform(layer));
-
-    const QString before = pictura::transform_api::layerRect(*view, layer).toString();
-    const int base = view->history_count();
-    QVERIFY(tools->setTransformWarp(QStringLiteral("warpArc"), 50.0, 0.0, 0.0, false));
-    auto* apply = frame.findChild<QToolButton*>(QStringLiteral("optionsTransformApply"));
-    QVERIFY(apply);
-    apply->click();
-    QVERIFY(!view->transform_session_active());
-    QCOMPARE(view->history_count(), base + 1);
-    QCOMPARE(view->history_label(base), QStringLiteral("Free Transform"));
-    QVERIFY(pictura::transform_api::layerRect(*view, layer).toString() != before);
-
-    // Escape on a warped session restores the document and adds no state.
-    const int cancelBase = view->history_count();
-    const QString settled = pictura::transform_api::layerRect(*view, layer).toString();
-    QVERIFY(tools->beginFreeTransform(layer));
-    QVERIFY(tools->setTransformWarp(QStringLiteral("warpArc"), 50.0, 0.0, 0.0, false));
-    tools->cancelFreeTransform();
-    QVERIFY(!view->transform_session_active());
-    QCOMPARE(view->history_count(), cancelBase);
-    QCOMPARE(pictura::transform_api::layerRect(*view, layer).toString(), settled);
 }
 
 void TransformOptionsTest::applyCommitsCancelRestores()

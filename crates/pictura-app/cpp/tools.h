@@ -409,8 +409,15 @@ public:
     bool setTransformAngle(double degrees);
     bool setTransformSkew(double hDegrees, double vDegrees);
     bool setTransformInterpolation(const QString& id);
-    bool setTransformWarp(const QString& styleId, double bend, double dx, double dy, bool vertical);
-    void clearTransformWarp();
+    // Edit > Transform > Warp: switch the open session into Warp mode, or
+    // begin a Free Transform session on `path` first.
+    bool beginWarp(const QString& path);
+    // Warp mode's options-bar setters (`impl_transform/warp.rs`).
+    bool enterTransformWarp();
+    bool leaveTransformWarp();
+    bool setTransformWarpStyle(const QString& id);
+    bool setTransformWarpValues(double bend, double hDistort, double vDistort);
+    bool setTransformWarpVertical(bool vertical);
 
 signals:
     void activeToolChanged(ToolId id);

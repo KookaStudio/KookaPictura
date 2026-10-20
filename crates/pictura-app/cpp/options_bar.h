@@ -144,7 +144,9 @@ private:
     // options_bar_transform.cpp: the session-keyed Free Transform page and its
     // refresh from the live session.
     QWidget* buildTransformPage();
+    QWidget* buildWarpFields(QWidget* page);
     void refreshTransformPage();
+    void refreshWarpFields(PictureView* v, bool warping);
     // Apply the current page's size policy so only it sets the bar's minimum.
     void updateStackPolicies();
     void addStampPaintFields(QHBoxLayout* layout, QWidget* page);

@@ -117,6 +117,13 @@ Bounding-box handles are computed in source space and mapped through the live ma
 
 Warp is a **bicubic Bezier patch** deformation: a control grid (Photoshop's default visual mesh is the familiar small grid) is displaced by the user, and the patch interpolates the interior. Preset Warp Styles are parameterised by `Bend` and `X`/`Y` distortion. This is standard Coons/Bezier-patch surface deformation; the exact Adobe patch degree and preset parameters are closed. Mark as *behavioral parity only, algorithm TBD* for preset exactness.
 
+**Implementation (ported from photocraft).** Kooka Pictura's Warp is ported from [PhotoCraft](https://github.com/storytold/photocraft) (Copyright (c) 2026 ArtCraft Team and the PhotoCraft contributors, MIT OR Apache-2.0, taken under MIT; see `NOTICE.md`):
+
+- *Geometry* (`pictura_core::warp`, from photocraft `geom::warp`): each preset style is one bicubic Bezier patch whose control grid follows the bend, fitted to Photoshop renders. It is the identity at bend 0. These are approximations, not verified parity. A custom warp is a one-patch 4×4 control grid. Dragging an anchor carries its handles; dragging a handle turns the opposite one; a press elsewhere pulls the surface under the pointer.
+- *Resampling* (`pictura_render::transform_layer_warp`, from photocraft `algo::warp`): the source is cut into cells a few pixels across, and each cell's two triangles are mapped forward and rasterized. Planes are sampled premultiplied. A shrinking warp area-averages its source footprint. Where the warp folds, the later cell wins. The layer mask is flattened onto its default colour.
+- *Session* (from photocraft's Warp mode): `Edit > Transform > Warp`, or the options-bar toggle, starts a mesh over the layer's box and keeps the box's current transform, Distort and Perspective included, as a frame after the mesh. The options bar shows `Warp:` (style), the orientation toggle, and `Bend`/`H`/`V`. Commit applies the warp and the box together, as one `Free Transform` history state.
+- *Out of scope:* Split Warp and the Grid menu (Photoshop CC 2020, not CS6), and smart-object and Warp Text warps through this path.
+
 ### Puppet Warp
 
 Puppet Warp is a **triangulated mesh** with interactive pins. Moving a pin solves for a deformation that keeps mesh triangles as rigid as possible. The known family of algorithms is *As-Rigid-As-Possible* shape manipulation (Igarashi et al.) with a per-vertex log-polar / rigid-weighted solve; Adobe's exact solver and `Mode` elasticity weights are closed. Proposed implementation: Delaunay/regular triangulation at `Density`, pins as position constraints, iterative ARAP solve, `Expansion` as a border offset, `Rigid`/`Normal`/`Distort` mapping to stiffness weights. Mark inferred.

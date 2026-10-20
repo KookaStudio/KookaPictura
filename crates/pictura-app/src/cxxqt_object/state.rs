@@ -47,15 +47,23 @@ impl TransformMode {
     }
 }
 
-/// A preset warp chosen during a session (the interactive cage is out of
-/// scope); committed after the live transform as one state.
-#[derive(Clone)]
-pub struct TransformWarp {
-    pub(super) style: pictura_render::WarpStyle,
-    pub(super) bend: f64,
-    pub(super) distort_x: f64,
-    pub(super) distort_y: f64,
-    pub(super) vertical: bool,
+/// What a Warp-mode press grabbed; `start` (the press) and `pts0` (the mesh's
+/// control grid at the press) are in source space.
+pub enum WarpDrag {
+    /// An anchor or handle: it follows the pointer (an anchor takes its handles
+    /// along).
+    Point {
+        index: usize,
+        start: [f64; 2],
+        pts0: Vec<[f64; 2]>,
+    },
+    /// Anywhere else on the grid: the surface under the pointer follows it.
+    Surface {
+        s: f64,
+        t: f64,
+        start: [f64; 2],
+        pts0: Vec<[f64; 2]>,
+    },
 }
 
 /// The live Free Transform session: the target path, the source rect, the
@@ -97,10 +105,11 @@ pub struct TransformSession {
     pub(super) skew_y: f64,
     /// The session's resample method.
     pub(super) interpolation: pictura_render::Interpolation,
-    /// A preset warp applied after the transform at commit.
-    pub(super) warp: Option<TransformWarp>,
-    /// The warped preview's bounding quad while a warp is set.
-    pub(super) warp_preview_quad: Option<[(f64, f64); 4]>,
+    /// Warp mode: the warp over `orig_rect`, in source space; the box's quad
+    /// stays its projective frame, applied after it on display and commit.
+    pub(super) warp: Option<pictura_core::warp::Warp>,
+    /// The Warp-mode drag in progress.
+    pub(super) warp_drag: Option<WarpDrag>,
     /// For a selection's pixels lifted onto `path` (a floating layer above the
     /// source): the source path and the document before the lift, which a
     /// cancel restores.
