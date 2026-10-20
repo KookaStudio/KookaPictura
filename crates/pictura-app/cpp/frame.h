@@ -530,8 +530,8 @@ private:
     // frame_menus_adjust.cpp: Layer > Layer Content Options, which opens the
     // active fill/adjustment layer's Properties page.
     void wireLayerContentOptions();
-    // frame_menus_layer_ops.cpp: Layer > Arrange / Reverse, Merge Down, Delete
-    // Layer, and the non-destructive Stamp Visible / Stamp Selected.
+    // frame_menus_layer_ops.cpp: Layer > Arrange / Reverse, Delete Layer, and
+    // the non-destructive Stamp Visible / Stamp Selected.
     void wireLayerArrangeStamp();
     // frame_menus_layer_ops.cpp: Layer > Rasterize Shape and Copy/Paste Shape
     // Attributes over the current shape layer.

@@ -115,14 +115,10 @@ fn can_merge_down(doc: &Document, path: &str) -> bool {
         return false;
     }
     let lower_segments: Vec<usize> = segments.iter().copied().chain([index - 1]).collect();
-    let upper_segments: Vec<usize> = segments.iter().copied().chain([index]).collect();
     let Some(lower) = resolve_path(doc, &format_segments(&lower_segments)) else {
         return false;
     };
-    let Some(upper) = resolve_path(doc, &format_segments(&upper_segments)) else {
-        return false;
-    };
-    can_merge_target(lower) && can_merge_target(upper)
+    resolve_path(doc, path).is_some() && can_merge_target(lower)
 }
 
 fn can_merge_selected(doc: &Document, paths: &[String]) -> bool {
@@ -195,7 +191,7 @@ fn merge_down(doc: &mut Document, path: &str) -> Result<MergeOutcome, MergeError
 
     let lower = resolve_path(doc, &lower_path).ok_or(MergeError::NoLayerBelow)?;
     let upper = resolve_path(doc, path).ok_or(MergeError::InvalidTarget)?;
-    if !can_merge_target(lower) || !can_merge_target(upper) {
+    if !can_merge_target(lower) {
         return Err(MergeError::InvalidTarget);
     }
 

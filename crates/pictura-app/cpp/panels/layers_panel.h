@@ -54,6 +54,10 @@ public:
     /// Frozen paths of every selected row (empty when nothing is selected).
     QStringList selectedPaths() const;
 
+    /// Whether the current selection can be merged through the
+    /// context-sensitive Merge Down / Merge Layers command.
+    bool canMergeSelection() const;
+
     /// Replace the panel selection with `paths`, making `current` the current
     /// row (falling back to the first when `current` is not among them).
     void selectPaths(const QStringList& paths, const QString& current);
