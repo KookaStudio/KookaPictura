@@ -75,9 +75,9 @@ document on the next release.
 Implementation is staged so each phase leaves the build green: session lifecycle
 first, then document-state ownership and the edit transaction, then the display
 frame. The change builds on #739 (`edit-transaction`), which must land first;
-it uses #739's current `Edit::{None, Meta, Record, Regions(Vec<PsdRect>), Full,
-Structural}` and `Effect::{Nothing, Notify, Blit, Rebuild}` and adds the
-notification bit only at the session boundary.
+it uses #739's current `Edit::{None, Meta, Record, Regions { rects, notify },
+Full, Structural}` and `Effect::{Nothing, Notify, Blit { notify }, Rebuild}`
+and adds notification-only effects for cancellations.
 
 ## Capabilities
 

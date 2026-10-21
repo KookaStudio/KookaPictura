@@ -21,9 +21,9 @@ reach.
 `DocumentSession` must stay Qt-free: `QImage` overlay caches, GPU interop, async
 jobs, tool preferences, and the mask display options stay in the adapter. The
 change builds on #739's declared-outcome transaction. #739 currently defines
-`Edit::{None, Meta, Record, Regions(Vec<PsdRect>), Full, Structural}` and
-`Effect::{Nothing, Notify, Blit, Rebuild}`; this change must not invent a second
-transaction or silently change those variant names.
+`Edit::{None, Meta, Record, Regions { rects, notify }, Full, Structural}` and
+`Effect::{Nothing, Notify, Blit { notify }, Rebuild}`; this change must not
+invent a second transaction or silently change those variant names.
 
 ## Goals / Non-Goals
 
@@ -124,6 +124,39 @@ construction literals are renamed mechanically. A
 `Deref<Target = DocumentSession>` would keep the call sites unchanged but hides
 the seam and makes IDE/compiler errors resolve through two types. Rejected.
 
+### The live session is a rule, not a nested type
+
+Phase 1 keeps the live gesture fields (`stroke`, `mask_stroke`, `heal_stroke`,
+`transform_session`, `path_gesture`, the lasso points, the previews) where they
+are and adds the slot as a *rule* over them:
+
+```rust
+fn active_session_kind(&self) -> Option<SessionKind>   // inferred from the live state
+fn slot_allows(&self, kind: SessionKind) -> bool         // the per-kind begin rule
+```
+
+A begin of another kind is refused; a repeat begin follows its kind's rule (a
+transform replaces its own session, a filter or mode preview updates it, a
+lasso attaches to the magnetic gesture it started, and a healing,
+selection-move, path, or paint begin is refused). Every begin path consults
+`slot_allows` before it touches the document, and one `cancel_active_sessions`
+cancels all of them.
+
+A nested `ActiveSession` enum would own the payloads, but that move is the same
+churn as the document-state move and buys no behavior the rule does not already
+give. The fields move in phase 2, together with the document state they belong
+to. `PendingPreviews` is already one struct: the three panel-preview flags
+travel together and are cleared together.
+
+### The session module is split in two
+
+`cxxqt_object/document_session/session.rs` is the plain-Rust core: the slot
+rules, the cancel path, the replacement, and the change report. It imports no
+Qt type. `cxxqt_object/document_session/adapter.rs` is the Qt half: it turns the
+session's report into `region_blitted`, `changed`, and `recomposite`. The
+phase-2 check that the session names no `cxx_qt` therefore applies to
+`session.rs`; the adapter is Qt by definition.
+
 ### Cancel before replace or restore
 
 `replace_document` and every history navigation call `cancel_active()` first.
@@ -156,6 +189,12 @@ and abort it on Escape/cancel; otherwise Rust has nothing to restore. The
 `Path Selection` command remains commit-on-deactivate, so `onDeactivate` commits
 and ends the gesture, while Revert/Undo cancels it through `cancel_active`.
 
+A Work or Saved path is restored from the gesture's backup, which changes no
+pixel: the abort reports a notification. A shape layer's outline lives in the
+layer, so the pre-gesture document backup is the only way to restore it. Until
+that backup lands in phase 2, an abort on a shape-layer path asks for a rebuild
+instead of a notification, because the layer's pixels changed.
+
 ### Tool switching ends the session according to its contract
 
 `ToolController::setActiveTool` keeps calling `old->onDeactivate` first. Brush,
@@ -179,7 +218,7 @@ C++ sessions are reached too. `PicturaMainWindow::wireCanvas` connects it per
 view. This signal is also the only safe way to stop a Move Alt-clone or a Path
 Selection drag before the next pointer release.
 
-### Reuse #739's transaction; add notification only at the session boundary
+### Reuse #739's transaction and effect report
 
 The session's `edit(label, mutation)` takes #739's `Edit`. The session adds a
 `SessionChange`:
@@ -191,29 +230,25 @@ struct RegionBlit {
 }
 
 struct SessionChange {
-    effect: Effect,           // #739: Nothing | Notify | Blit | Rebuild
+    effect: Effect,           // #739: Nothing | Notify | Blit { notify } | Rebuild
     regions: Vec<RegionBlit>, // payload for Blit; empty means no blit
-    notify: bool,             // extra full change notification
 }
 ```
 
-#739 still owns the transaction, history capture, and the base signal policy.
-The session adds `notify` for healing, patch, red-eye, and batch-property
-commits (region + `changed`), and for Work/Saved path or selection restores
-(notify without a pixel change). `DocumentSession` also exposes
-`edit_notify(label, mutation)` (or an equivalent `notify` parameter) so a
-closure returning #739's `Edit` can request the extra notification; the plain
-`edit` keeps the #739 policy. Batch-property commands that need region + notify
-use that entry point.
+#739 still owns the transaction, history capture, and the signal policy,
+including the per-region `notify` bit. The session reuses `Effect::Notify` for
+notification-only cancellations and `Effect::Blit { notify: true }` for region +
+`changed` commits such as healing, patch, red-eye, and batch property. There is
+no separate session-level notify parameter and no `edit_notify`; a mutation
+declares `Edit::Regions { rects, notify: true }` when it needs both.
 
 Adapter dispatch order:
 
-1. Apply the display effect (`Nothing`/`Notify`: none; `Blit`: emit the
-   non-empty region blits; `Rebuild`: rebuild the frame).
-2. If `notify`, emit exactly one `changed`.
-
-`Nothing + notify` therefore means notification-only, and `Notify + notify`
-cannot double-emit because the adapter emits at most once.
+1. `Nothing`: no display and no notification.
+2. `Notify`: emit exactly one `changed`.
+3. `Blit { notify }`: emit the non-empty region blits, then one `changed` when
+   `notify` is true.
+4. `Rebuild`: rebuild the frame, then one `changed`.
 
 In phase 1 `RegionBlit.srgb` is `None` and the adapter composites. In phase 2
 the session fills it and the adapter only premultiplies/patches. #739's
