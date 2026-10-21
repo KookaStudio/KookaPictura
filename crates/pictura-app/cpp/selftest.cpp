@@ -2151,13 +2151,13 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         }
         frame.closeDocument(blitAltDocIndex, false);
 
-        // Move-preview base cache: warm prepare -> begin hit, base reused byte-for-byte, content change -> miss. 197: cache.
+        // Move-preview base cache: warm prepare -> begin hit, base reused byte-for-byte, recorded change -> miss. 197: cache.
         const bool mpcCreated = frame.newDocument(QStringLiteral("MovePreviewCache"), 32, 32, QStringLiteral("rgb"), 8, QStringLiteral("white"));
         pictura::PictureView* mpcView = frame.activeView();
         const bool mpcHit = mpcCreated && mpcView && mpcView->prepare_move_preview() && mpcView->begin_move_preview() && mpcView->move_preview_cache_hit();
         const QImage mpcBase = mpcView ? mpcView->move_preview_base() : QImage();
         const bool mpcReuse = mpcView && mpcView->begin_move_preview() && mpcView->move_preview_cache_hit() && !mpcBase.isNull() && samePixels(mpcBase, mpcView->move_preview_base());
-        const bool mpcAfterMove = mpcView && mpcView->commit_move(1, 1) && mpcView->begin_move_preview() && mpcView->move_preview_cache_hit(); if (mpcView) mpcView->set_layer_visible(0, false);
+        const bool mpcAfterMove = mpcView && mpcView->commit_move(1, 1) && mpcView->begin_move_preview() && mpcView->move_preview_cache_hit(); if (mpcView) mpcView->set_layer_name(0, QStringLiteral("MovePreviewCache Renamed"));
         const bool mpcMiss = mpcView && mpcView->begin_move_preview() && !mpcView->move_preview_cache_hit();
         if (mpcView) mpcView->end_move_preview();
         ST_BEGIN("move_preview_cache_hit");
