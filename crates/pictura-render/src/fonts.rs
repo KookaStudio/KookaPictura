@@ -69,6 +69,13 @@ pub(crate) fn face_for(name: &str) -> Option<&'static BundledText> {
     lookup(name).map(|r| &r.face).or_else(bundled)
 }
 
+/// Which of the Character panel's eight OpenType features the face for
+/// `name` carries, one bit each in panel order (bit 0 Standard Ligatures …
+/// bit 7 Fractions); 0 when no face resolves.
+pub fn opentype_features(name: &str) -> u32 {
+    face_for(name).map_or(0, crate::type_style::opentype_support)
+}
+
 /// A registered family's PostScript name, which `TySh` should carry.
 pub fn font_postscript_name(name: &str) -> Option<String> {
     lookup(name).map(|r| r.postscript.clone())

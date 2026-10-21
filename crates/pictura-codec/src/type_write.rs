@@ -61,6 +61,13 @@ pub fn author_type_tool(
         tool.fonts = decoded.fonts;
         tool.style = decoded.style;
     }
+    // EngineData writes Optical as Metrics (see `merge_character`), so carry
+    // the authored mode onto the decoded style for the open document.
+    if let Some(style) = tool.style.as_mut() {
+        if spec.character.kerning == KerningMode::Optical {
+            style.character.kerning = KerningMode::Optical;
+        }
+    }
     tool
 }
 
@@ -318,7 +325,8 @@ fn merge_character(data: &mut EngineValue, spec: &TypeSpec, font_index: i64) {
     );
     let (auto_kerning, kerning) = match c.kerning {
         KerningMode::Manual(value) => (false, value),
-        KerningMode::Metrics => (true, 0),
+        // ponytail: EngineData has no groundable Optical key; it reopens as Metrics.
+        KerningMode::Metrics | KerningMode::Optical => (true, 0),
     };
     set_child(data, "Kerning", EngineValue::Int(kerning as i64));
     set_child(data, "AutoKerning", EngineValue::Bool(auto_kerning));
@@ -777,7 +785,8 @@ fn style_sheet(d: &mut Dump, depth: usize, spec: &TypeSpec, font_index: usize) {
     let c = &spec.character;
     let (auto_kerning, kerning) = match c.kerning {
         KerningMode::Manual(value) => (false, value),
-        KerningMode::Metrics => (true, 0),
+        // ponytail: EngineData has no groundable Optical key; it reopens as Metrics.
+        KerningMode::Metrics | KerningMode::Optical => (true, 0),
     };
     let mut lines = vec![
         format!("/Font {font_index}"),

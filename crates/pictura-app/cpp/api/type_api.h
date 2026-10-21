@@ -6,6 +6,8 @@
 
 #include <rust/cxx.h>
 
+#include <cstdint>
+
 #include "pictura_app/src/cxxqt_object/type_tools.cxxqt.h"
 
 namespace pictura {
@@ -44,6 +46,9 @@ LayerType readLayer(const PictureView& view, const QString& path);
 CharacterSetting defaultCharacterSetting();
 ParagraphSetting defaultParagraphSetting();
 bool registerFont(const QString& family, ::rust::Slice<const std::uint8_t> bytes);
+/// The Character panel's OpenType features `family`'s face carries, one bit
+/// each in panel order (bit 0 Standard Ligatures … bit 7 Fractions).
+std::uint32_t openTypeFeatures(const QString& family);
 
 QVector<int> previewRect(const QString& text, const QString& font, const TypeSetting& setting,
                          const CharacterSetting& character, const ParagraphSetting& paragraph);

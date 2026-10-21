@@ -50,9 +50,8 @@ pub mod ffi {
     }
 
     /// The character attribute set as the bridge carries it: enums as `i32`
-    /// (`leading_mode` 0 Auto / 1 Fixed, `kerning_mode` 0 Metrics / 2 Manual —
-    /// the legacy `1` also maps to Metrics because the model has no Optical,
-    /// `anti_alias` 0 None … 4 Smooth), `color` as `0xAARRGGBB`, the toggles as
+    /// (`leading_mode` 0 Auto / 1 Fixed, `kerning_mode` 0 Metrics / 1 Optical /
+    /// 2 Manual, `anti_alias` 0 None … 4 Smooth), `color` as `0xAARRGGBB`, the toggles as
     /// `bool`, and the model's units for sizes, scales, and spacing. The font
     /// family and PostScript style ride separately: `font_style` here, the
     /// family on the bridge functions' dedicated `font` argument.
@@ -156,6 +155,12 @@ pub mod ffi {
 
         /// Register `bytes` (an sfnt Qt resolved for `family`) so type set in `family` renders in it; false for bytes that do not parse.
         fn type_register_font(family: &QString, bytes: &[u8]) -> bool;
+
+        /// Which of the Character panel's eight OpenType features `family`'s
+        /// face carries: bit 0 Standard Ligatures, 1 Contextual Alternates, 2
+        /// Discretionary Ligatures, 3 Swash, 4 Stylistic Alternates, 5 Titling
+        /// Alternates, 6 Ordinals, 7 Fractions.
+        fn type_font_opentype_features(family: &QString) -> u32;
 
         /// The caret at every UTF-16 boundary of `text` (`len + 1` segments), flat `[x0, y0, x1, y1, …]` in document pixels; empty for a non-positive size.
         fn type_caret_stops(
@@ -404,6 +409,10 @@ fn type_preview_rect(
 
 fn type_register_font(family: &QString, bytes: &[u8]) -> bool {
     pictura_render::register_font(&family.to_string(), bytes.to_vec())
+}
+
+fn type_font_opentype_features(family: &QString) -> u32 {
+    pictura_render::opentype_features(&family.to_string())
 }
 
 fn type_caret_stops(

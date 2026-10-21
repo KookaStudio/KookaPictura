@@ -11,11 +11,12 @@
 //! ponytail: greedy wrap, not Adobe's every-line composer; no hyphenation, and
 //! vertical columns break by character count with no kinsoku rules.
 
-use pictura_core::{CharacterAttrs, KerningMode, TypeSpec};
+use pictura_core::{CharacterAttrs, TypeSpec};
 
 use crate::fonts::face_for;
 use crate::text_render::BundledText;
 use crate::type_layer::{align_factor, leading_px, map, type_lines, type_placement};
+use crate::type_style::{shape_styled, tracking};
 
 /// Float slack: a line measured at exactly the box width still fits it.
 const FIT: f32 = 0.01;
@@ -47,22 +48,12 @@ impl Lines {
     }
 }
 
-/// Tracking plus manual kerning, in 1/1000 em.
-fn tracking(c: &CharacterAttrs) -> f32 {
-    let extra = match c.kerning {
-        KerningMode::Manual(value) => value as f32,
-        KerningMode::Metrics => 0.0,
-    };
-    c.tracking as f32 + extra
-}
-
-/// `text`'s advance as the layout sets it: shaped advance × horizontal scale,
-/// plus tracking per glyph.
+/// `text`'s advance as the layout sets it: the styled run's advance (scale,
+/// caps, Faux Bold, kerning mode), plus tracking per glyph.
 pub(crate) fn line_advance(bundled: &BundledText, text: &str, c: &CharacterAttrs) -> f32 {
     let size = c.size as f32;
-    let glyphs = bundled.shape_line(text, size, 0.0);
-    let h = (c.horizontal_scale / 100.0) as f32;
-    glyphs.iter().map(|g| g.advance).sum::<f32>() * h
+    let glyphs = shape_styled(bundled, text, c);
+    glyphs.iter().map(|g| g.advance).sum::<f32>()
         + tracking(c) * size / 1000.0 * glyphs.len() as f32
 }
 

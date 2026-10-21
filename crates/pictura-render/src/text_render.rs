@@ -8,10 +8,11 @@
 //! `ttf-parser` answers the metrics (glyph count, lookup, ascent).
 
 use pictura_core::{
-    layout_lines, Channel, Document, GlyphMask, KerningMode, Layer, LayoutParams, PixelBuffer,
-    PsdRect, RasterRequest, Rasterizer, ShapedGlyph, TextAlign, TextLayout, TextProvenance,
-    TypeTool,
+    layout_lines, Channel, Document, GlyphMask, Layer, LayoutParams, PixelBuffer, PsdRect,
+    RasterRequest, Rasterizer, ShapedGlyph, TextAlign, TextLayout, TextProvenance, TypeTool,
 };
+
+use crate::type_style::{shape_styled, tracking, RunStyle};
 use rustybuzz::ttf_parser;
 use swash::scale::{Render, ScaleContext, Source};
 use swash::zeno::{Transform, Vector};
@@ -91,6 +92,16 @@ impl BundledText {
     ///
     /// `_tracking` is ignored here: spacing is the layout's job (design D2).
     pub fn shape_line(&self, text: &str, font_size: f32, _tracking: f32) -> Vec<ShapedGlyph> {
+        self.shape_with(text, font_size, &[])
+    }
+
+    /// [`Self::shape_line`] with explicit OpenType feature settings.
+    pub(crate) fn shape_with(
+        &self,
+        text: &str,
+        font_size: f32,
+        features: &[rustybuzz::Feature],
+    ) -> Vec<ShapedGlyph> {
         let upem = self.face.units_per_em() as f32;
         if upem <= 0.0 {
             return Vec::new();
@@ -100,7 +111,7 @@ impl BundledText {
         buffer.push_str(&cleaned);
         buffer.set_direction(rustybuzz::Direction::LeftToRight);
         buffer.guess_segment_properties();
-        let shaped = rustybuzz::shape(&self.face, &[], buffer);
+        let shaped = rustybuzz::shape(&self.face, features, buffer);
         let scale = font_size / upem;
         shaped
             .glyph_infos()
@@ -113,6 +124,7 @@ impl BundledText {
                     advance: pos.x_advance as f32 * scale,
                     x_offset: pos.x_offset as f32 * scale,
                     y_offset: pos.y_offset as f32 * scale,
+                    scale: 1.0,
                 })
             })
             .collect()
@@ -157,21 +169,29 @@ pub struct BundledRasterizer<'a> {
 
 impl BundledRasterizer<'_> {
     /// As [`Rasterizer::rasterize`], the outline first mapped by the y-down
-    /// linear part `m` (`xx, xy, yx, yy`, the `TySh` transform's order).
-    pub(crate) fn rasterize_mapped(
+    /// linear part `m` (`xx, xy, yx, yy`, the `TySh` transform's order) and
+    /// emboldened by `embolden` pixels (Faux Bold).
+    pub(crate) fn rasterize_styled(
         &self,
         request: &RasterRequest,
         m: [f32; 4],
+        embolden: f32,
     ) -> Option<GlyphMask> {
         // swash's outline is y-up: conjugating by the y flip negates the
         // off-diagonal terms.
         self.render(
             request,
             Some(Transform::new(m[0], -m[1], -m[2], m[3], 0.0, 0.0)),
+            embolden,
         )
     }
 
-    fn render(&self, request: &RasterRequest, transform: Option<Transform>) -> Option<GlyphMask> {
+    fn render(
+        &self,
+        request: &RasterRequest,
+        transform: Option<Transform>,
+        embolden: f32,
+    ) -> Option<GlyphMask> {
         // Guard the glyph count so a bogus id cannot reach a panicking lookup.
         if request.glyph >= self.ttf.number_of_glyphs() {
             return None;
@@ -185,7 +205,7 @@ impl BundledRasterizer<'_> {
             .hint(false)
             .build();
         let mut render = Render::new(&[Source::Outline]);
-        render.transform(transform);
+        render.transform(transform).embolden(embolden);
         render.offset(Vector::new(request.subpixel_x, request.subpixel_y));
         let image = render.render(&mut scaler, request.glyph)?;
         if image.placement.width == 0 || image.placement.height == 0 {
@@ -209,7 +229,7 @@ impl BundledRasterizer<'_> {
 
 impl Rasterizer for BundledRasterizer<'_> {
     fn rasterize(&self, request: &RasterRequest) -> Option<GlyphMask> {
-        self.render(request, None)
+        self.render(request, None, 0.0)
     }
 }
 
@@ -336,20 +356,27 @@ pub(crate) fn render_text_buffer(
     let color = style.rgba().map(|c| f64::from(c) / 255.0);
     let bundled = crate::fonts::face_for(style.font.as_deref().unwrap_or_default())?;
     let layout = layout_type(bundled, type_tool, width, height)?;
-    let scale = [
-        (style.character.horizontal_scale / 100.0) as f32,
-        (style.character.vertical_scale / 100.0) as f32,
-    ];
-    paint_layout_scaled(bundled, &layout, width, height, font_size, color, scale)
+    let run = RunStyle::of(bundled, &style.character);
+    let ascent = bundled.ascent(font_size);
+    paint_run(
+        bundled,
+        &layout,
+        [width, height],
+        ascent,
+        &run,
+        color,
+        type_tool.vertical,
+    )
 }
 
 /// Lay a type tool's text out in a `width × height` box (horizontal lines
 /// aligned across it, or vertical columns); glyph `y` is the baseline less the
 /// ascent, as [`paint_layout`] expects. `None` without a style or any glyph.
 ///
-/// Renders the character attributes: auto/fixed leading, tracking, manual
-/// kerning, horizontal/vertical scale, and baseline shift; and the left /
-/// centre / right alignment.
+/// Renders the character attributes: auto/fixed leading, tracking, the kerning
+/// modes, horizontal/vertical scale, baseline shift, and the styling
+/// `type_style` shapes (OpenType features, caps, super/subscript, Faux Bold);
+/// and the left / centre / right alignment.
 ///
 /// Paragraph type (`box_bounds`) wraps to its box and aligns across its
 /// width; lines past the box are not laid out (see `type_paragraph`).
@@ -367,15 +394,7 @@ pub(crate) fn layout_type(
     let style = type_tool.style.as_ref()?;
     let c = &style.character;
     let font_size = c.size as f32;
-    let h = (c.horizontal_scale / 100.0) as f32;
-    let v = (c.vertical_scale / 100.0) as f32;
     let leading = crate::type_layer::leading_px(font_size, c.leading);
-    let extra = match c.kerning {
-        KerningMode::Manual(value) => value as f32,
-        KerningMode::Metrics => 0.0,
-    };
-    let tracking = c.tracking as f32 + extra;
-    let shift = c.baseline_shift as f32;
     let lines = crate::type_paragraph::visual_lines(
         bundled,
         &type_tool.text,
@@ -392,46 +411,34 @@ pub(crate) fn layout_type(
         crate::type_layer::vertical_layout(
             bundled,
             &lines,
-            font_size,
+            c,
             style.paragraph.justify.index(),
             width,
             height,
             leading,
-            h,
-            v,
-            shift,
         )
     } else {
         let shaped: Vec<Vec<ShapedGlyph>> = lines
             .iter()
-            .map(|line| {
-                bundled
-                    .shape_line(line, font_size, 0.0)
-                    .into_iter()
-                    .map(|mut g| {
-                        g.advance *= h;
-                        g.x_offset *= h;
-                        g.y_offset *= v;
-                        g
-                    })
-                    .collect()
-            })
+            .map(|line| shape_styled(bundled, line, c))
             .collect();
         let mut layout = layout_lines(
             &shaped,
             &LayoutParams {
                 font_size,
                 units_per_em: font_size,
-                tracking,
+                tracking: tracking(c),
                 leading,
                 align: TextAlign::from_justification(style.paragraph.justify.index()),
                 wrap_width: Some(width),
             },
         );
-        // Baseline shift moves the run off its baseline (positive is up).
+        // Baseline shift and super/subscript move the run off its baseline
+        // (positive is up).
+        let rise = RunStyle::of(bundled, c).rise;
         for line in &mut layout.lines {
             for glyph in &mut line.glyphs {
-                glyph.y -= shift;
+                glyph.y -= rise;
             }
         }
         layout
@@ -453,43 +460,53 @@ pub(crate) fn paint_layout(
     font_size: f32,
     color: [f64; 4],
 ) -> Option<PixelBuffer> {
-    paint_layout_scaled(bundled, layout, width, height, font_size, color, [1.0, 1.0])
+    let ascent = bundled.ascent(font_size);
+    let run = RunStyle::plain(font_size);
+    paint_run(bundled, layout, [width, height], ascent, &run, color, false)
 }
 
-/// [`paint_layout`] with the character H/V scale applied to each glyph outline
-/// (`[1.0, 1.0]` is identity).
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn paint_layout_scaled(
+/// A glyph's outline transform under `run` (y-down `xx, xy, yx, yy`): the H/V
+/// scale times the glyph's own scale, then Faux Italic's slant.
+pub(crate) fn glyph_matrix(run: &RunStyle, scale: f32) -> [f32; 4] {
+    let (h, v) = (run.h * scale, run.v * scale);
+    [h, 0.0, -run.skew * v, v]
+}
+
+/// Paint a laid-out styled run into a `size[0] × size[1]` buffer: each glyph
+/// at the run's size, mapped by [`glyph_matrix`] and emboldened by Faux Bold,
+/// its baseline at its `y + ascent` (the authored size's ascent the layout
+/// used); then the underline and strikethrough.
+pub(crate) fn paint_run(
     bundled: &BundledText,
     layout: &TextLayout,
-    width: i32,
-    height: i32,
-    font_size: f32,
+    size: [i32; 2],
+    ascent: f32,
+    run: &RunStyle,
     color: [f64; 4],
-    scale: [f32; 2],
+    vertical: bool,
 ) -> Option<PixelBuffer> {
-    let mut out = PixelBuffer::new(width as u32, height as u32, 4);
+    let mut out = PixelBuffer::new(size[0] as u32, size[1] as u32, 4);
     let rasterizer = bundled.rasterizer();
-    let baseline_shift = bundled.ascent(font_size);
     let mut painted = false;
     for line in &layout.lines {
         for glyph in &line.glyphs {
             let fx = glyph.x;
             let px = fx.floor();
-            let fy = glyph.y + baseline_shift;
+            let fy = glyph.y + ascent;
             let py = fy.floor();
             let request = RasterRequest {
                 glyph: glyph.id,
-                px_size: font_size,
+                px_size: run.size,
                 subpixel_x: fx - px,
                 // swash offsets the outline in its y-up frame, so a baseline
                 // `frac` below `py` needs the opposite-signed offset.
                 subpixel_y: py - fy,
             };
-            let mask = if scale == [1.0, 1.0] {
+            let m = glyph_matrix(run, glyph.scale);
+            let mask = if m == [1.0, 0.0, 0.0, 1.0] && run.embolden == 0.0 {
                 rasterizer.rasterize(&request)
             } else {
-                rasterizer.rasterize_mapped(&request, [scale[0], 0.0, 0.0, scale[1]])
+                rasterizer.rasterize_styled(&request, m, run.embolden)
             };
             let Some(mask) = mask else {
                 continue;
@@ -497,10 +514,12 @@ pub(crate) fn paint_layout_scaled(
             painted |= blit_glyph(&mut out, &mask, px as i32, py as i32, color);
         }
     }
-    if !painted {
-        return None;
+    if run.decorated() {
+        for rect in crate::type_decor::decorations(run, layout, vertical, ascent) {
+            painted |= crate::type_decor::fill_rect(&mut out, rect, color);
+        }
     }
-    Some(out)
+    painted.then_some(out)
 }
 
 /// Lay one glyph `mask` into planar RGBA `out` with its pen at `(px, py)`:
@@ -727,7 +746,12 @@ mod tests {
         let id = bundled.glyph_for('A');
         let layout = TextLayout {
             lines: vec![LayoutLine {
-                glyphs: vec![PlacedGlyph { id, x, y: 0.0 }],
+                glyphs: vec![PlacedGlyph {
+                    id,
+                    x,
+                    y: 0.0,
+                    scale: 1.0,
+                }],
                 advance: 0.0,
                 baseline: 0.0,
             }],
@@ -900,7 +924,12 @@ mod tests {
         let paint = |dy: f32| {
             let layout = TextLayout {
                 lines: vec![LayoutLine {
-                    glyphs: vec![PlacedGlyph { id, x: 20.0, y: dy }],
+                    glyphs: vec![PlacedGlyph {
+                        id,
+                        x: 20.0,
+                        y: dy,
+                        scale: 1.0,
+                    }],
                     advance: 0.0,
                     baseline: 0.0,
                 }],

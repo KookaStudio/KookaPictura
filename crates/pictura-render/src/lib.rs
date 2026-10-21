@@ -180,9 +180,11 @@ pub use document_ops::{
 };
 
 mod text_render;
+mod type_decor;
+mod type_style;
 pub use text_render::{materialize_text_rgba, render_text_layer, BundledRasterizer, BundledText};
 mod fonts;
-pub use fonts::{font_family, font_postscript_name, register_font};
+pub use fonts::{font_family, font_postscript_name, opentype_features, register_font};
 mod pdf_text;
 pub use pdf_text::{pdf_live_type, pdf_type_fonts, LiveType};
 mod type_caret;

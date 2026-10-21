@@ -30,7 +30,7 @@ pub(super) fn character_attrs(setting: &CharacterSetting) -> CharacterAttrs {
             Leading::Auto
         },
         kerning: match setting.kerning_mode {
-            1 => KerningMode::Metrics,
+            1 => KerningMode::Optical,
             2 => KerningMode::Manual(setting.kerning_value),
             _ => KerningMode::Metrics,
         },
@@ -120,6 +120,7 @@ pub(super) fn character_setting(attrs: &CharacterAttrs) -> CharacterSetting {
         },
         kerning_mode: match attrs.kerning {
             KerningMode::Metrics => 0,
+            KerningMode::Optical => 1,
             KerningMode::Manual(_) => 2,
         },
         kerning_value: match attrs.kerning {
@@ -430,4 +431,104 @@ pub(super) fn edited_overrides(previous: &TypeSpec, next: &TypeSpec) -> StyleOve
         &after.hyphenate_caps,
     );
     overrides
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn non_default_setting() -> CharacterSetting {
+        CharacterSetting {
+            font_style: QString::from("Bold"),
+            size: 48.0,
+            leading_mode: 1,
+            leading_value: 60.0,
+            kerning_mode: 2,
+            kerning_value: -25,
+            tracking: 50.0,
+            horizontal_scale: 120.0,
+            vertical_scale: 80.0,
+            baseline_shift: 3.0,
+            anti_alias: 3,
+            color: 0x80ff_4020,
+            all_caps: true,
+            small_caps: false,
+            superscript: false,
+            subscript: true,
+            underline: true,
+            strikethrough: true,
+            fractional_widths: false,
+            faux_bold: true,
+            faux_italic: true,
+            standard_ligatures: false,
+            contextual_alternates: false,
+            discretionary_ligatures: true,
+            swash: true,
+            oldstyle: true,
+            stylistic_alternates: true,
+            titling_alternates: true,
+            ornaments: true,
+            ordinals: true,
+            fractions: true,
+            language: QString::from("German: 2006 Reform"),
+            vertical_roman_alignment: false,
+        }
+    }
+
+    #[test]
+    fn character_setting_round_trips_every_field() {
+        let a = non_default_setting();
+        let b = character_setting(&character_attrs(&a));
+        assert_eq!(a.font_style.to_string(), b.font_style.to_string());
+        assert_eq!(a.language.to_string(), b.language.to_string());
+        assert_eq!(
+            (a.size, a.leading_mode, a.leading_value, a.kerning_mode),
+            (b.size, b.leading_mode, b.leading_value, b.kerning_mode)
+        );
+        assert_eq!(
+            (a.kerning_value, a.tracking, a.anti_alias, a.color),
+            (b.kerning_value, b.tracking, b.anti_alias, b.color)
+        );
+        assert_eq!(
+            (a.horizontal_scale, a.vertical_scale, a.baseline_shift),
+            (b.horizontal_scale, b.vertical_scale, b.baseline_shift)
+        );
+        let toggles = |s: &CharacterSetting| {
+            [
+                s.all_caps,
+                s.small_caps,
+                s.superscript,
+                s.subscript,
+                s.underline,
+                s.strikethrough,
+                s.fractional_widths,
+                s.faux_bold,
+                s.faux_italic,
+                s.standard_ligatures,
+                s.contextual_alternates,
+                s.discretionary_ligatures,
+                s.swash,
+                s.oldstyle,
+                s.stylistic_alternates,
+                s.titling_alternates,
+                s.ornaments,
+                s.ordinals,
+                s.fractions,
+                s.vertical_roman_alignment,
+            ]
+        };
+        assert_eq!(toggles(&a), toggles(&b));
+    }
+
+    #[test]
+    fn optical_kerning_crosses_the_bridge() {
+        let setting = CharacterSetting {
+            kerning_mode: 1,
+            kerning_value: 0,
+            ..non_default_setting()
+        };
+        let attrs = character_attrs(&setting);
+        assert_eq!(attrs.kerning, KerningMode::Optical);
+        assert_eq!(character_setting(&attrs).kerning_mode, 1);
+    }
 }
