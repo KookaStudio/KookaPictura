@@ -94,6 +94,7 @@ impl qobject::PictureView {
             None => 0,
         };
         if replaced > 0 {
+            self.as_mut().rust_mut().select_only_layer("0");
             self.as_mut().clear_link_sets();
             self.as_mut().recomposite();
             self.as_mut().record("Flatten Image");
@@ -110,6 +111,7 @@ impl qobject::PictureView {
             None => false,
         };
         if changed {
+            self.as_mut().rust_mut().select_only_layer(&path);
             self.as_mut().clear_link_sets();
             self.as_mut().recomposite();
             self.as_mut().record("Layer from Background");
@@ -150,6 +152,7 @@ impl qobject::PictureView {
             None => false,
         };
         if changed {
+            self.as_mut().rust_mut().select_only_layer(&path);
             self.as_mut().clear_link_sets();
             self.as_mut().recomposite();
             self.as_mut().record("Layer from Background");
@@ -168,6 +171,7 @@ impl qobject::PictureView {
             None => false,
         };
         if changed {
+            self.as_mut().rust_mut().select_only_layer("0");
             self.as_mut().clear_link_sets();
             self.as_mut().recomposite();
             self.as_mut().record("Background From Layer");
@@ -184,7 +188,12 @@ impl qobject::PictureView {
             Some(doc) => pictura_render::merge_scope(doc, scope).ok(),
             None => None,
         };
-        if outcome.as_ref().is_some_and(|outcome| outcome.replaced > 0) {
+        let merged = outcome
+            .as_ref()
+            .filter(|outcome| outcome.replaced > 0)
+            .map(|outcome| outcome.path.clone());
+        if let Some(path) = merged {
+            self.as_mut().rust_mut().select_only_layer(&path);
             self.as_mut().clear_link_sets();
             self.as_mut().recomposite();
             self.as_mut().record(label);

@@ -80,6 +80,7 @@ fn main() {
                 "src/cxxqt_object/image_replace_color.rs",
                 "src/cxxqt_object/image_match_color.rs",
                 "src/cxxqt_object/layer_style.rs",
+                "src/cxxqt_object/layer_target_bridge.rs",
                 "src/cxxqt_object/layer_path.rs",
                 "src/cxxqt_object/layers_smart_filters.rs",
                 "src/cxxqt_object/layer_arrange.rs",

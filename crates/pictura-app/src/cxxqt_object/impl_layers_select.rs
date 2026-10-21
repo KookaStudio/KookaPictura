@@ -73,6 +73,18 @@ impl qobject::PictureView {
             None => 0,
         };
         if removed > 0 {
+            let mut rust = self.as_mut().rust_mut();
+            let target = {
+                let mut target = rust.layer_target.clone();
+                if let Some(doc) = rust.doc.as_ref() {
+                    target.retain_resolving(doc);
+                }
+                target
+            };
+            rust.set_layer_target(target);
+            if rust.layer_target.is_empty() {
+                select_top_layer(&mut rust);
+            }
             self.as_mut().clear_link_sets();
             self.as_mut().recomposite();
             self.as_mut().record("Delete Hidden Layers");

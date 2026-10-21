@@ -427,14 +427,16 @@ fields.
 
 ### Requirement: Active layer resolution for tool edits
 
-The application SHALL maintain exactly one active layer for the active document
-and SHALL resolve it through one shared active-layer resolver used by every
-tool-edit entry point (paint, filter, Free Transform, and content move). The
-Layers panel SHALL push its selection into the view when the selection changes,
-and a non-PSD raster import SHALL make its imported layer active. A tool edit
+The application SHALL maintain one authoritative layer target per active document
+and SHALL resolve its single tool-edit target through one shared resolver used by
+every tool-edit entry point (paint, filter, Free Transform, and content move).
+The Layers panel SHALL write its selection into the document target and SHALL
+display that target; it SHALL NOT be the source the resolver reads. A tool edit
 SHALL be refused, with the document unchanged and a user-visible refusal, when no
-layer is active or when more than one layer is selected. No tool-edit entry point
-SHALL fall back to the topmost raster layer.
+layer is selected or when more than one layer is selected. No tool-edit entry
+point SHALL fall back to the topmost raster layer. A non-PSD raster import SHALL
+make its imported layer active. Structural and property commands SHALL remain
+available on a multi-selection and SHALL act on the whole selected set.
 
 #### Scenario: Exactly one active layer receives the edit [ltf_active_layer]
 
@@ -444,7 +446,7 @@ SHALL fall back to the topmost raster layer.
 #### Scenario: The panel pushes its selection [ltf_active_layer_push]
 
 - **WHEN** the user changes the selected layer in the Layers panel
-- **THEN** the view's active layer follows the panel selection and the next tool
+- **THEN** the document target follows the panel selection and the next tool
   edit targets it
 
 #### Scenario: Zero or multiple selection refuses [ltf_active_layer_refuse]
@@ -453,6 +455,12 @@ SHALL fall back to the topmost raster layer.
   selected
 - **THEN** the edit is refused with a user-visible refusal, the document is
   unchanged, and no history state is added
+
+#### Scenario: A multi-selection keeps structural commands available [ltf_multi_commands]
+
+- **WHEN** two layers are selected
+- **THEN** a paint or filter edit is refused, while Group Layers, Merge Layers,
+  Delete Layers, and the property controls act on both selected layers
 
 ### Requirement: Active-layer scope of the resolver
 

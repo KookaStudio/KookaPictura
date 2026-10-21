@@ -251,7 +251,7 @@ pub(super) fn paint_mode_from(mode: &str) -> PaintMode {
 pub(super) fn active_mask_target(rust: &super::state::PictureViewRust) -> Option<String> {
     rust.mask_edit_target
         .clone()
-        .filter(|path| rust.active_layer.as_deref() == Some(path.as_str()))
+        .filter(|path| rust.layer_target.anchor() == Some(path.as_str()))
 }
 /// The Rec.601 luma a mask paints for a colour; Adobe's mask conversion is
 /// closed, so this is the approximation `pictura-adjust` uses.
@@ -278,6 +278,60 @@ pub(super) fn mask_stroke_config(cfg: pictura_paint::StrokeConfig) -> pictura_pa
         ..cfg
     }
 }
+/// The survivor the delete transition selects: below the deleted run in the
+/// topmost deleted layer's container, then above it, then the document top.
+pub(super) fn survivor_after_delete(doc: &Document, deleted: &[String]) -> Option<String> {
+    let top = topmost_path(deleted.iter().map(String::as_str))?;
+    let parent = pictura_render::parent_path(top).unwrap_or("").to_string();
+    let index = top
+        .rsplit('/')
+        .next()
+        .and_then(|segment| segment.parse::<usize>().ok())?;
+    let mut indices: Vec<usize> = deleted
+        .iter()
+        .filter(|path| pictura_render::parent_path(path).unwrap_or("") == parent)
+        .filter_map(|path| {
+            path.rsplit('/')
+                .next()
+                .and_then(|segment| segment.parse::<usize>().ok())
+        })
+        .collect();
+    indices.sort_unstable();
+    let deleted_set: std::collections::HashSet<&str> = deleted.iter().map(String::as_str).collect();
+    let final_index = |original: usize| {
+        original
+            - indices
+                .iter()
+                .filter(|&&candidate| candidate < original)
+                .count()
+    };
+    let mut below = index;
+    while below > 0 {
+        below -= 1;
+        let candidate = join_path(&parent, below);
+        if !deleted_set.contains(candidate.as_str()) {
+            let at = final_index(below);
+            let path = join_path(&parent, at);
+            if pictura_render::resolve_path(doc, &path).is_some() {
+                return Some(path);
+            }
+        }
+    }
+    let above = index + 1;
+    let above_path = join_path(&parent, above);
+    if !deleted_set.contains(above_path.as_str()) {
+        let at = final_index(above);
+        let path = join_path(&parent, at);
+        if pictura_render::resolve_path(doc, &path).is_some() {
+            return Some(path);
+        }
+    }
+    doc.layers
+        .len()
+        .checked_sub(1)
+        .map(|index| index.to_string())
+}
+
 /// Index of the topmost pixel layer: the last layer (bottom-first order) that is
 /// neither a group nor an adjustment.
 pub(super) fn topmost_pixel_layer_index(doc: &Document) -> Option<usize> {
@@ -753,6 +807,66 @@ pub(crate) mod paint_timing {
             record(self.0, self.1.elapsed());
         }
     }
+}
+
+/// Join a container path and a child index into a panel path.
+pub(super) fn join_path(parent: &str, index: usize) -> String {
+    if parent.is_empty() {
+        index.to_string()
+    } else {
+        format!("{parent}/{index}")
+    }
+}
+
+/// Number of children in the container named by `parent` (empty = document).
+pub(super) fn container_len(doc: &Document, parent: &str) -> Option<usize> {
+    if parent.is_empty() {
+        Some(doc.layers.len())
+    } else {
+        pictura_render::resolve_path(doc, parent).map(|layer| layer.children.len())
+    }
+}
+
+/// Select the topmost top-level layer, or clear when the document is empty.
+pub(super) fn select_top_layer(rust: &mut super::state::PictureViewRust) {
+    let path = rust
+        .doc
+        .as_ref()
+        .and_then(|doc| doc.layers.len().checked_sub(1))
+        .map(|index| index.to_string());
+    match path {
+        Some(path) => rust.select_only_layer(&path),
+        None => rust.layer_target.clear(),
+    }
+}
+
+/// The topmost path in a selection. Panel order is depth-first, top-first:
+/// the first differing child index decides (higher wins), and a group row sits
+/// above its children.
+pub(super) fn topmost_path<'a>(paths: impl IntoIterator<Item = &'a str>) -> Option<&'a str> {
+    fn segments(path: &str) -> Option<Vec<usize>> {
+        path.split('/')
+            .map(|segment| segment.parse::<usize>().ok())
+            .collect()
+    }
+    fn above(a: &[usize], b: &[usize]) -> bool {
+        for (left, right) in a.iter().zip(b) {
+            if left != right {
+                return left > right;
+            }
+        }
+        a.len() < b.len()
+    }
+    let mut best: Option<(Vec<usize>, &str)> = None;
+    for path in paths {
+        let Some(segments) = segments(path) else {
+            continue;
+        };
+        if best.as_ref().is_none_or(|(kept, _)| above(&segments, kept)) {
+            best = Some((segments, path));
+        }
+    }
+    best.map(|(_, path)| path)
 }
 
 #[cfg(test)]

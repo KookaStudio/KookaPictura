@@ -119,7 +119,7 @@ fn kind_from(name: &str) -> Option<LayerMaskKind> {
 }
 
 fn active_path(view: &PictureView) -> Option<String> {
-    view.rust().active_layer.clone()
+    view.rust().layer_target.anchor().map(str::to_string)
 }
 
 fn one(path: &str) -> QStringList {

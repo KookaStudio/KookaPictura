@@ -3,6 +3,7 @@
 #include "type_fonts.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
 #include "api/type_api.h"
 
 #include <QtCore/QSignalBlocker>
@@ -87,7 +88,7 @@ bool ParagraphPanel::hasTypeLayer() const
     if (!view_ || !view_->has_document()) {
         return false;
     }
-    const QString path = view_->active_layer_path();
+    const QString path = layer_selection_anchor(*view_);
     return !path.isEmpty() && pictura::type_api::isType(*view_, path);
 }
 
@@ -105,7 +106,7 @@ QSize ParagraphPanel::minimumSizeHint() const
 void ParagraphPanel::refresh()
 {
     const bool type = hasTypeLayer();
-    const QString path = type ? view_->active_layer_path() : QString();
+    const QString path = type ? layer_selection_anchor(*view_) : QString();
     const ParagraphSetting p = type ? pictura::type_api::layerParagraphSetting(*view_, path)
                                     : pictura::type_api::defaultParagraphSetting();
 
@@ -141,7 +142,7 @@ void ParagraphPanel::apply()
     if (!hasTypeLayer()) {
         return;
     }
-    const QString path = view_->active_layer_path();
+    const QString path = layer_selection_anchor(*view_);
     const pictura::type_api::LayerType layer = pictura::type_api::readLayer(*view_, path);
     ParagraphSetting p = layer.paragraph;
     p.justify = justify_->currentIndex();

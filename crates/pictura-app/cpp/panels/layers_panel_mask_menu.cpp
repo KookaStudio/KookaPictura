@@ -50,7 +50,7 @@ void LayersPanel::syncStripButtons()
     // selection, which must leave the document a layer.
     deleteButton_->setEnabled(view_
                               && (!trashVectorMaskPath().isEmpty()
-                                  || layers_can_delete(*view_, selectedPaths())));
+                                  || layers_can_delete(*view_, targetPaths())));
 }
 
 void LayersPanel::addMaskFromButton()
@@ -87,7 +87,7 @@ QString LayersPanel::trashVectorMaskPath() const
 {
     // Read the selected row, not the active layer: the current row can sit
     // outside the selection (Ctrl+arrow), and the trash acts on the selection.
-    const QStringList paths = selectedPaths();
+    const QStringList paths = targetPaths();
     if (!view_ || paths.size() != 1) {
         return {};
     }

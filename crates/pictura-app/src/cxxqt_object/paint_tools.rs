@@ -638,7 +638,7 @@ fn begin_background_eraser(
         let rust = view.rust();
         rust.doc
             .as_ref()
-            .zip(rust.active_layer.as_deref())
+            .zip(rust.layer_target.single())
             .and_then(|(doc, path)| unlocked_background(doc, path))
     };
     if let Some(layered) = layered {
@@ -768,7 +768,7 @@ fn magic_erase_at(
 ) -> bool {
     let erased = {
         let rust = view.rust();
-        let (Some(doc), Some(path)) = (rust.doc.as_ref(), rust.active_layer.as_deref()) else {
+        let (Some(doc), Some(path)) = (rust.doc.as_ref(), rust.layer_target.single()) else {
             return false;
         };
         if rust.stroke.is_some()
@@ -983,7 +983,7 @@ fn begin(
 ) -> bool {
     let stroke = {
         let rust = view.rust();
-        let (Some(doc), Some(path)) = (rust.doc.as_ref(), rust.active_layer.as_deref()) else {
+        let (Some(doc), Some(path)) = (rust.doc.as_ref(), rust.layer_target.single()) else {
             return false;
         };
         // ponytail: only the Brush, Pencil, and Eraser paint a mask; the other

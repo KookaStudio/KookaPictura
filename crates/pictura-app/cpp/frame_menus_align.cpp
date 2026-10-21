@@ -19,7 +19,7 @@ const char* const kEdgeLeaves[] = {"Top",  "Vertical Center",   "Bottom",
 void PicturaMainWindow::wireAlignMenu()
 {
     const auto selectedPaths = [this]() {
-        return layersPanel_ ? layersPanel_->selectedPaths() : QStringList();
+        return selectedLayerPaths();
     };
     for (int edge = 0; edge < 6; ++edge) {
         const QString leaf = QLatin1String(kEdgeLeaves[edge]);
@@ -56,7 +56,7 @@ void PicturaMainWindow::alignSelectedLayers(int edge, bool toSelection, int alig
 {
     PictureView* view = activeView();
     if (view && layersPanel_
-        && align_apply(*view, layersPanel_->selectedPaths(), edge, toSelection, alignTo) > 0) {
+        && align_apply(*view, selectedLayerPaths(), edge, toSelection, alignTo) > 0) {
         refresh();
     }
 }
@@ -64,7 +64,7 @@ void PicturaMainWindow::alignSelectedLayers(int edge, bool toSelection, int alig
 void PicturaMainWindow::distributeSelectedLayers(int edge)
 {
     PictureView* view = activeView();
-    if (view && layersPanel_ && distribute_apply(*view, layersPanel_->selectedPaths(), edge) > 0) {
+    if (view && layersPanel_ && distribute_apply(*view, selectedLayerPaths(), edge) > 0) {
         refresh();
     }
 }
@@ -75,7 +75,7 @@ void PicturaMainWindow::updateAlignControls()
         return;
     }
     PictureView* view = activeView();
-    const QStringList paths = layersPanel_ ? layersPanel_->selectedPaths() : QStringList();
+    const QStringList paths = selectedLayerPaths();
     const MoveGroup* move = tools_ ? tools_->optionsFor<MoveGroup>(ToolId::Move) : nullptr;
     const int alignTo = move ? move->get().alignTo : 0;
     optionsBar_->setAlignEnabled(view && align_can(*view, paths, alignTo == 0, alignTo),

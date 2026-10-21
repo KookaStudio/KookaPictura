@@ -1,4 +1,5 @@
 #include "frame_includes.h"
+#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
 
 #include "api/history_api.h"
 #include "text_input.h"
@@ -115,7 +116,7 @@ void PicturaMainWindow::registerEditHandlers()
     });
 
     const auto currentPath = [this]() {
-        return layersPanel_ ? layersPanel_->currentPath() : QString();
+        return layerAnchor();
     };
     const auto layerCommand = [this, currentPath](const auto& run) {
         PictureView* view = activeView();
@@ -312,7 +313,7 @@ bool PicturaMainWindow::dispatchCommandKey(QKeyEvent* event)
         && event->key() == Qt::Key_Backslash) {
         PictureView* view = activeView();
         if (view && view->has_document() && layer_mask_present(*view)) {
-            const QString path = view->active_layer_path();
+            const QString path = layer_selection_anchor(*view);
             mask_solo_set(*view, mask_solo_get(*view) == path ? QString() : path);
             refresh();
             event->accept();
@@ -388,7 +389,7 @@ bool PicturaMainWindow::copyLayerFromDocument(const void* source, const QString&
     if (!target || !from || from == target || path.isEmpty()) {
         return false;
     }
-    const QString selection = layersPanel_ ? layersPanel_->currentPath() : QString();
+    const QString selection = layerAnchor();
     const QString created = copy_layer_from_document(*target, *from, path, selection);
     if (created.isEmpty()) {
         return false;

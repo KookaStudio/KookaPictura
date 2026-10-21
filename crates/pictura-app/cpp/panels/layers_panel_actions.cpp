@@ -5,6 +5,7 @@
 #include "layer_new_dialog.h"
 #include "layer_style_dialog.h"
 
+#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/mask_commands.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/layer_style.cxxqt.h"
@@ -21,7 +22,7 @@ void LayersPanel::syncEditTarget()
     // Mirrors the bridge's `active_mask_target`: a target only routes strokes
     // while its layer is the active one.
     const QString target = view_ ? mask_edit_target_get(*view_) : QString();
-    const bool mask = !target.isEmpty() && target == view_->active_layer_path();
+    const bool mask = !target.isEmpty() && target == layer_selection_anchor(*view_);
     if (mask != maskEditing_) {
         maskEditing_ = mask;
         emit editTargetChanged(mask);
@@ -36,7 +37,7 @@ void LayersPanel::syncMaskSolo()
     if (!view_) {
         return;
     }
-    const QString active = view_->active_layer_path();
+    const QString active = layer_selection_anchor(*view_);
     const QString soloed = mask_solo_get(*view_);
     if (!soloed.isEmpty() && soloed != active) {
         mask_solo_set(*view_, QString());
@@ -60,7 +61,6 @@ void LayersPanel::addLayerAt(const QString& path)
     const QString created = view_->add_layer_in(path);
     if (!created.isEmpty()) {
         refresh();
-        selectPath(created);
     }
 }
 
@@ -74,7 +74,6 @@ void LayersPanel::addGroupAt(const QString& path)
     if (!created.isEmpty()) {
         expandedPaths_.insert(created);
         refresh();
-        selectPath(created);
     }
 }
 
@@ -88,12 +87,11 @@ void LayersPanel::openNewLayerDialog()
         return;
     }
     clearSolo();
-    const QString created = view_->new_layer_dialog(currentPath(), spec.name, spec.color, spec.blend,
+    const QString created = view_->new_layer_dialog(layer_selection_anchor(*view_), spec.name, spec.color, spec.blend,
                                                     spec.opacity, 255, spec.neutralFill,
                                                     spec.clipping);
     if (!created.isEmpty()) {
         refresh();
-        selectPath(created);
     }
 }
 
@@ -108,11 +106,10 @@ void LayersPanel::openNewGroupDialog()
     }
     clearSolo();
     const QString created =
-        view_->new_group_dialog(currentPath(), spec.name, spec.color, spec.blend, spec.opacity);
+        view_->new_group_dialog(layer_selection_anchor(*view_), spec.name, spec.color, spec.blend, spec.opacity);
     if (!created.isEmpty()) {
         expandedPaths_.insert(created);
         refresh();
-        selectPath(created);
     }
 }
 
@@ -121,7 +118,7 @@ void LayersPanel::openGroupFromLayersDialog()
     if (!view_) {
         return;
     }
-    const QStringList paths = selectedPaths();
+    const QStringList paths = view_ ? selected_layer_paths(*view_) : QStringList{};
     if (paths.isEmpty()) {
         return;
     }
@@ -135,7 +132,6 @@ void LayersPanel::openGroupFromLayersDialog()
     if (!created.isEmpty()) {
         expandedPaths_.insert(created);
         refresh();
-        selectPath(created);
     }
 }
 
@@ -144,7 +140,7 @@ void LayersPanel::duplicateSelection()
     if (!view_) {
         return;
     }
-    const QStringList paths = selectedPaths();
+    const QStringList paths = view_ ? selected_layer_paths(*view_) : QStringList{};
     if (paths.isEmpty()) {
         return;
     }
@@ -161,7 +157,7 @@ void LayersPanel::deleteSelection()
     if (!view_) {
         return;
     }
-    const QStringList paths = selectedPaths();
+    const QStringList paths = view_ ? selected_layer_paths(*view_) : QStringList{};
     if (paths.isEmpty()) {
         return;
     }
@@ -189,7 +185,7 @@ void LayersPanel::groupSelection()
     if (!view_) {
         return;
     }
-    const QStringList paths = selectedPaths();
+    const QStringList paths = view_ ? selected_layer_paths(*view_) : QStringList{};
     if (paths.isEmpty()) {
         return;
     }
@@ -198,7 +194,6 @@ void LayersPanel::groupSelection()
     if (!created.isEmpty()) {
         expandedPaths_.insert(created);
         refresh();
-        selectPath(created);
     }
 }
 
@@ -207,7 +202,7 @@ void LayersPanel::ungroupSelection()
     if (!view_) {
         return;
     }
-    const QStringList paths = selectedPaths();
+    const QStringList paths = view_ ? selected_layer_paths(*view_) : QStringList{};
     if (paths.isEmpty()) {
         return;
     }
@@ -220,7 +215,7 @@ bool LayersPanel::canMoveCurrent(int delta) const
     if (!view_) {
         return false;
     }
-    const QString path = currentPath();
+    const QString path = view_ ? layer_selection_anchor(*view_) : QString();
     return !path.isEmpty() && canMovePath(path, delta);
 }
 
@@ -234,7 +229,7 @@ void LayersPanel::moveCurrent(int delta)
     if (!view_) {
         return;
     }
-    const QString path = currentPath();
+    const QString path = view_ ? layer_selection_anchor(*view_) : QString();
     if (path.isEmpty() || !canMovePath(path, delta)) {
         return;
     }

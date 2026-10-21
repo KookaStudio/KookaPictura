@@ -3,6 +3,7 @@
 #include "export_as_dialog.h"
 #include "layers_panel_internal.h"
 
+#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layers_surface.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/smart_object_actions.cxxqt.h"
@@ -430,7 +431,7 @@ void LayersPanel::populateRowMenu(QMenu& menu, const QString& path, int color,
                 break;
             case RowSpec::CanDelete: {
                 // The row action deletes the selection when the row is in it.
-                const QStringList selected = selectedPaths();
+                const QStringList selected = targetPaths();
                 enabled = view_
                           && layers_can_delete(*view_, selected.contains(path)
                                                            ? selected
@@ -590,7 +591,7 @@ void LayersPanel::addColorLabelActions(QMenu* menu, int currentLabel)
             action->setIcon(QIcon(swatch));
         }
         connect(action, &QAction::triggered, this, [this, label] {
-            const QStringList paths = selectedPaths();
+            const QStringList paths = targetPaths();
             if (view_ && !paths.isEmpty()) {
                 view_->set_layers_color(paths, label);
             }
@@ -614,7 +615,7 @@ bool LayersPanel::performPanelMenuAction(const QString& actionId)
         ungroupSelection();
     } else if (actionId == QLatin1String("hide")) {
         if (view_) {
-            const QStringList paths = selectedPaths();
+            const QStringList paths = targetPaths();
             if (!paths.isEmpty()) {
                 view_->set_layers_visible(paths, false);
             }
@@ -625,14 +626,14 @@ bool LayersPanel::performPanelMenuAction(const QString& actionId)
         }
     } else if (actionId == QLatin1String("link")) {
         if (view_) {
-            const QStringList paths = selectedPaths();
+            const QStringList paths = targetPaths();
             if (!paths.isEmpty()) {
                 view_->link_layers(paths, true);
             }
         }
     } else if (actionId == QLatin1String("selectLinked")) {
         if (view_) {
-            const QString path = currentPath();
+            const QString path = view_ ? layer_selection_anchor(*view_) : QString();
             const QStringList linked = path.isEmpty() ? QStringList() : view_->select_linked(path);
             if (!linked.isEmpty()) {
                 selectPaths(linked, path);
@@ -645,8 +646,8 @@ bool LayersPanel::performPanelMenuAction(const QString& actionId)
     } else if (actionId == QLatin1String("mergeDown") || actionId == QLatin1String("mergeVisible")
                || actionId == QLatin1String("mergeClippingMask")) {
         if (view_) {
-            const QStringList paths = selectedPaths();
-            const QString path = currentPath();
+            const QStringList paths = targetPaths();
+            const QString path = view_ ? layer_selection_anchor(*view_) : QString();
             QString merged;
             if (actionId == QLatin1String("mergeDown")) {
                 if (!paths.isEmpty()) {

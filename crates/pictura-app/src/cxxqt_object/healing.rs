@@ -109,7 +109,7 @@ fn healing_begin(mut view: Pin<&mut PictureView>, diameter: i32, hardness: i32) 
         let Some(doc) = rust.doc.as_ref() else {
             return false;
         };
-        let Some(path) = rust.active_layer.as_deref() else {
+        let Some(path) = rust.layer_target.single() else {
             return false;
         };
         HealStroke::begin(
@@ -215,7 +215,7 @@ fn patch_selection(
         let (Some(doc), Some(selection), Some(path)) = (
             rust.doc.as_mut(),
             rust.selection.as_ref(),
-            rust.active_layer.as_deref(),
+            rust.layer_target.single(),
         ) else {
             return false;
         };
@@ -249,7 +249,7 @@ fn content_aware_move(
         let (Some(doc), Some(selection), Some(path)) = (
             rust.doc.as_mut(),
             rust.selection.as_mut(),
-            rust.active_layer.as_deref(),
+            rust.layer_target.single(),
         ) else {
             return false;
         };
@@ -285,7 +285,7 @@ fn red_eye(
     let dirty = {
         let mut rust = view.as_mut().rust_mut();
         let rust = &mut *rust;
-        let (Some(doc), Some(path)) = (rust.doc.as_mut(), rust.active_layer.as_deref()) else {
+        let (Some(doc), Some(path)) = (rust.doc.as_mut(), rust.layer_target.single()) else {
             return false;
         };
         let (pupil, darken) = (pupil.clamp(0, 100) as u32, darken.clamp(0, 100) as u32);

@@ -332,6 +332,9 @@ public:
     // Make `path` the active Layers-panel row (refresh first so a just-created
     // layer is present in the model). No-op without the panel or an empty path.
     void selectLayerPath(const QString& path);
+    // The active document's selected layer paths and current row, from Rust.
+    QStringList selectedLayerPaths() const;
+    QString layerAnchor() const;
     // Copy the layer node at `path` of the open document whose address is
     // `source` into the active document, above its current layer, as one
     // "Duplicate Layer" state. False when `source` is not another open document

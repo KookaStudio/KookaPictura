@@ -67,6 +67,7 @@ impl qobject::PictureView {
             None => String::new(),
         };
         if !created.is_empty() {
+            self.as_mut().rust_mut().select_only_layer(&created);
             self.as_mut().clear_link_sets();
             self.as_mut().recomposite();
             self.as_mut().record("New Layer");
@@ -103,6 +104,7 @@ impl qobject::PictureView {
             None => String::new(),
         };
         if !created.is_empty() {
+            self.as_mut().rust_mut().select_only_layer(&created);
             self.as_mut().clear_link_sets();
             self.as_mut().recomposite();
             self.as_mut().record("New Group");
@@ -147,6 +149,7 @@ impl qobject::PictureView {
             None => String::new(),
         };
         if !created.is_empty() {
+            self.as_mut().rust_mut().select_only_layer(&created);
             self.as_mut().clear_link_sets();
             self.as_mut().recomposite();
             self.as_mut().record("Group from Layers");
@@ -195,6 +198,7 @@ impl qobject::PictureView {
             None => String::new(),
         };
         if !created.is_empty() {
+            self.as_mut().rust_mut().select_only_layer(&created);
             self.as_mut().clear_link_sets();
             self.as_mut().recomposite();
             let label = if cut {

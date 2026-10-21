@@ -263,7 +263,11 @@ fn shape_add_layer(mut view: Pin<&mut PictureView>, spec: &ShapeSpec, foreground
     let c = rgba_from_argb(foreground);
     let created = {
         let mut rust = view.as_mut().rust_mut();
-        let above = rust.active_layer.clone().unwrap_or_default();
+        let above = rust
+            .layer_target
+            .anchor()
+            .map(str::to_string)
+            .unwrap_or_default();
         match rust.doc.as_mut() {
             Some(doc) => pictura_render::add_shape_layer(
                 doc,
@@ -300,6 +304,7 @@ fn shape_add_layer(mut view: Pin<&mut PictureView>, spec: &ShapeSpec, foreground
     }
     paint_timing::record("shape_add_layer", t.elapsed());
     if !created.is_empty() {
+        view.as_mut().rust_mut().select_only_layer(&created);
         view.as_mut().clear_link_sets();
         // The new layer shows nowhere outside its outline and stroke, so only
         // that region of the composite changes.
@@ -418,7 +423,7 @@ fn edit_active(
     let changed = {
         let mut rust = view.as_mut().rust_mut();
         let rust = &mut *rust;
-        let (Some(doc), Some(path)) = (rust.doc.as_mut(), rust.active_layer.as_deref()) else {
+        let (Some(doc), Some(path)) = (rust.doc.as_mut(), rust.layer_target.single()) else {
             return false;
         };
         let (width, height) = (doc.width, doc.height);
@@ -439,15 +444,15 @@ fn argb(rgb: [u8; 3]) -> f64 {
 
 fn shape_active(view: &PictureView) -> Vec<f64> {
     let rust = view.rust();
-    let Some((doc, layer)) = rust
-        .doc
-        .as_ref()
-        .zip(rust.active_layer.as_deref())
-        .and_then(|(doc, path)| {
-            pictura_render::resolve_path(doc, path)
-                .filter(|l| pictura_render::is_shape_layer(l))
-                .map(|l| (doc, l))
-        })
+    let Some((doc, layer)) =
+        rust.doc
+            .as_ref()
+            .zip(rust.layer_target.single())
+            .and_then(|(doc, path)| {
+                pictura_render::resolve_path(doc, path)
+                    .filter(|l| pictura_render::is_shape_layer(l))
+                    .map(|l| (doc, l))
+            })
     else {
         return Vec::new();
     };

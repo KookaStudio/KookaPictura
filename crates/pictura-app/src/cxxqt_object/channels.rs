@@ -171,7 +171,7 @@ fn channels_load_color_selection(view: Pin<&mut PictureView>, row: i32, mask: i3
 
 fn channels_active_mask_name(view: &PictureView) -> QString {
     let rust = view.rust();
-    let (Some(doc), Some(path)) = (rust.doc.as_ref(), rust.active_layer.as_ref()) else {
+    let (Some(doc), Some(path)) = (rust.doc.as_ref(), rust.layer_target.anchor()) else {
         return QString::default();
     };
     if !pictura_render::has_layer_mask(doc, path) {

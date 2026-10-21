@@ -161,7 +161,7 @@ impl PictureViewRust {
     /// shows its stored coverage (see [`mask_sample`]).
     pub(crate) fn mask_channel_thumbnail(&self, max_side: u32) -> Option<(Vec<u8>, u32, u32)> {
         let doc = self.doc.as_ref()?;
-        let path = self.active_layer.as_ref()?;
+        let path = self.layer_target.anchor()?;
         let mask = pictura_render::resolve_path(doc, path)?.mask.as_ref()?;
         let (width, height) = (doc.width, doc.height);
         if width == 0 || height == 0 || max_side == 0 {

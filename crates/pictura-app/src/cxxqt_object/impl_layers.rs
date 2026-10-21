@@ -1,6 +1,7 @@
 use super::helpers::*;
 use super::helpers_composite::*;
 use super::qobject;
+use crate::layer_target::LayerTarget;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QString, QStringList};
@@ -14,6 +15,7 @@ mod layers_surface;
 mod mask_refine;
 mod matting;
 mod smart_object_actions;
+mod target_transitions;
 mod vector_masks;
 
 fn property_compositing(doc: &Document, path: &str) -> Option<(BlendMode, u8, u8)> {
@@ -223,6 +225,12 @@ impl qobject::PictureView {
             false
         };
         if changed {
+            let mut rust = self.as_mut().rust_mut();
+            let len = rust.doc.as_ref().map_or(0, |doc| doc.layers.len());
+            if len > 0 {
+                let index = (i + delta).clamp(0, len as i32 - 1) as usize;
+                rust.select_only_layer(&index.to_string());
+            }
             self.as_mut().clear_link_sets();
             self.as_mut().recomposite();
             self.as_mut().record("Reorder Layer");
@@ -242,6 +250,10 @@ impl qobject::PictureView {
             }
         };
         if created >= 0 {
+            self.as_mut()
+                .rust_mut()
+                .layer_target
+                .select_only(&created.to_string());
             self.as_mut().clear_link_sets();
             self.as_mut().recomposite();
             self.as_mut().record("New Layer");
@@ -261,6 +273,10 @@ impl qobject::PictureView {
             }
         };
         if created >= 0 {
+            self.as_mut()
+                .rust_mut()
+                .layer_target
+                .select_only(&created.to_string());
             self.as_mut().clear_link_sets();
             self.as_mut().recomposite();
             self.as_mut().record("New Group");
@@ -281,6 +297,10 @@ impl qobject::PictureView {
             None => -1,
         };
         if created >= 0 {
+            self.as_mut()
+                .rust_mut()
+                .layer_target
+                .select_only(&created.to_string());
             self.as_mut().clear_link_sets();
             self.as_mut().recomposite();
             self.as_mut().record("Duplicate Layer");
@@ -294,6 +314,10 @@ impl qobject::PictureView {
             None => -1,
         };
         if created >= 0 {
+            self.as_mut()
+                .rust_mut()
+                .layer_target
+                .select_only(&created.to_string());
             self.as_mut().clear_link_sets();
             self.as_mut().recomposite();
             self.as_mut().record("Group Layers");
@@ -307,6 +331,14 @@ impl qobject::PictureView {
             None => false,
         };
         if changed {
+            let mut rust = self.as_mut().rust_mut();
+            let len = rust.doc.as_ref().map_or(0, |doc| doc.layers.len());
+            if len > 0 {
+                let index = index.clamp(0, len as i32 - 1) as usize;
+                rust.select_only_layer(&index.to_string());
+            } else {
+                rust.layer_target.clear();
+            }
             self.as_mut().clear_link_sets();
             self.as_mut().recomposite();
             self.as_mut().record("Ungroup Layers");
@@ -498,6 +530,22 @@ impl qobject::PictureView {
             None => false,
         };
         if changed {
+            let path = path.to_string();
+            let mut rust = self.as_mut().rust_mut();
+            if let Some(doc) = rust.doc.as_ref() {
+                let parent = pictura_render::parent_path(&path).unwrap_or("");
+                if let (Some(index), Some(len)) = (
+                    path.rsplit('/')
+                        .next()
+                        .and_then(|segment| segment.parse::<usize>().ok()),
+                    container_len(doc, parent),
+                ) {
+                    if len > 0 {
+                        let index = (index as i32 + delta).clamp(0, len as i32 - 1) as usize;
+                        rust.select_only_layer(&join_path(parent, index));
+                    }
+                }
+            }
             self.as_mut().clear_link_sets();
             self.as_mut().recomposite();
             self.as_mut().record("Move Layer");
@@ -513,16 +561,18 @@ impl qobject::PictureView {
     ) -> bool {
         let path = path.to_string();
         let target = target.to_string();
-        let changed = match self.as_mut().rust_mut().doc.as_mut() {
-            Some(doc) => pictura_render::move_path_to(doc, &path, &target, mode),
-            None => false,
+        let moved = match self.as_mut().rust_mut().doc.as_mut() {
+            Some(doc) => pictura_render::move_path_to_result(doc, &path, &target, mode),
+            None => None,
         };
-        if changed {
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record("Move Layer");
-        }
-        changed
+        let Some(moved) = moved else {
+            return false;
+        };
+        self.as_mut().rust_mut().select_only_layer(&moved);
+        self.as_mut().clear_link_sets();
+        self.as_mut().recomposite();
+        self.as_mut().record("Move Layer");
+        true
     }
 
     pub fn can_move_layer_to(&self, path: &QString, target: &QString, mode: i32) -> bool {
@@ -770,16 +820,6 @@ impl qobject::PictureView {
         })
     }
 
-    pub fn delete_layers(mut self: Pin<&mut Self>, paths: &QStringList) -> i32 {
-        let changed =
-            self.as_mut()
-                .batch_changed(paths, "Delete Layers", pictura_render::delete_paths);
-        if changed > 0 {
-            self.as_mut().clear_link_sets();
-        }
-        changed
-    }
-
     pub fn duplicate_layers(mut self: Pin<&mut Self>, paths: &QStringList) -> QStringList {
         let add_copy = self.rust().add_copy;
         let owned = list_of_strings(paths);
@@ -801,39 +841,19 @@ impl qobject::PictureView {
             None => Vec::new(),
         };
         if !created.is_empty() {
+            let mut rust = self.as_mut().rust_mut();
+            let anchor = created.last().cloned();
+            let target = {
+                let mut target = LayerTarget::default();
+                target.select(created.clone(), anchor, rust.doc.as_ref());
+                target
+            };
+            rust.set_layer_target(target);
             self.as_mut().clear_link_sets();
             self.as_mut().recomposite();
             self.as_mut().record("Duplicate Layer");
         }
         created.into_iter().map(QString::from).collect()
-    }
-
-    pub fn group_layers(mut self: Pin<&mut Self>, paths: &QStringList) -> QString {
-        let owned = list_of_strings(paths);
-        let refs = as_str_slice(&owned);
-        let created = match self.as_mut().rust_mut().doc.as_mut() {
-            Some(doc) => pictura_render::group_paths(doc, &refs),
-            None => None,
-        };
-        match created {
-            Some(path) => {
-                self.as_mut().clear_link_sets();
-                self.as_mut().recomposite();
-                self.as_mut().record("Group Layers");
-                QString::from(path.as_str())
-            }
-            None => QString::default(),
-        }
-    }
-
-    pub fn ungroup_layers(mut self: Pin<&mut Self>, paths: &QStringList) -> i32 {
-        let changed =
-            self.as_mut()
-                .batch_changed(paths, "Ungroup Layers", pictura_render::ungroup_paths);
-        if changed > 0 {
-            self.as_mut().clear_link_sets();
-        }
-        changed
     }
 
     pub fn add_layer_in(mut self: Pin<&mut Self>, selection_path: &QString) -> QString {
@@ -842,6 +862,7 @@ impl qobject::PictureView {
             None => String::new(),
         };
         if !created.is_empty() {
+            self.as_mut().rust_mut().select_only_layer(&created);
             self.as_mut().clear_link_sets();
             self.as_mut().recomposite();
             self.as_mut().record("New Layer");
@@ -855,31 +876,12 @@ impl qobject::PictureView {
             None => String::new(),
         };
         if !created.is_empty() {
+            self.as_mut().rust_mut().select_only_layer(&created);
             self.as_mut().clear_link_sets();
             self.as_mut().recomposite();
             self.as_mut().record("New Group");
         }
         QString::from(created.as_str())
-    }
-
-    /// Delete the top-level layer at index `i` under the same rules as the
-    /// panel's delete (the Background, a fully locked layer, and the
-    /// document's last layer stay).
-    pub fn remove_layer(mut self: Pin<&mut Self>, i: i32) -> bool {
-        let path = i.to_string();
-        let removed = i >= 0
-            && self
-                .as_mut()
-                .rust_mut()
-                .doc
-                .as_mut()
-                .is_some_and(|doc| pictura_render::delete_paths(doc, &[&path]) > 0);
-        if removed {
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record("Delete Layer");
-        }
-        removed
     }
 
     fn layer(&self, i: i32) -> Option<&Layer> {

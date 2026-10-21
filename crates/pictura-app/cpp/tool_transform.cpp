@@ -5,6 +5,7 @@
 #include "image_view.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_transform/warp.cxxqt.h"
 
@@ -275,7 +276,7 @@ void ToolController::syncTransformControls()
     }
     const bool want = active_ == ToolId::Move && move_->get().showTransformControls
         && !v->has_selection();
-    const QString active = v->active_layer_path();
+    const QString active = layer_selection_anchor(*v);
     // The content scan runs only when the layer, its rect, or the history step
     // changed; a refresh or a press on an unchanged box reuses the last one.
     const QString key = want && !active.isEmpty()

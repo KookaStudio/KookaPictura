@@ -17,6 +17,7 @@ class QColor;
 class QDialog;
 class QEvent;
 class QImage;
+class QLineEdit;
 class QMenu;
 class QModelIndex;
 class QRect;
@@ -53,6 +54,8 @@ public:
 
     /// Frozen paths of every selected row (empty when nothing is selected).
     QStringList selectedPaths() const;
+    // The document target, even when a filter hides its rows.
+    QStringList targetLayerPaths() const;
 
     /// Whether the current selection can be merged through the
     /// context-sensitive Merge Down / Merge Layers command.
@@ -84,6 +87,12 @@ public:
     bool rowExpandableForTest(const QString& path) const;
     QString rowToolTipForTest(const QString& path) const;
     bool beginRenameForTest(const QString& path);
+    /// Open the inline editor on `path` for a test and return the editor the
+    /// view registered for it, or null when it opened none.
+    QLineEdit* openRenameEditorForTest(const QString& path);
+    /// Drop every inline editor the tree still holds and leave the view out of
+    /// its editing state, so the next programmatic edit is not ignored.
+    void clearStaleEditorsForTest();
     QObject* itemDelegateForTest() const;
     void toggleSoloForTest(const QString& path);
     int thumbSizeIndexForTest() const;
@@ -314,6 +323,13 @@ protected:
 
 private:
     void syncControls();
+    // Write the tree selection into the document target (user intent only).
+    void writeTarget();
+    // Apply the document target to the tree without writing it back.
+    void applyTargetSelection();
+    void setTreeSelection(const QStringList& paths, const QString& current);
+    // The document's selected layer paths, independent of the filter proxy.
+    QStringList targetPaths() const;
     struct PendingPreview {
         QStringList paths;
         QStringList namePaths;
@@ -425,6 +441,7 @@ private:
     PendingPreview gesture_;
     QTimer* previewTimer_ = nullptr;
     bool refreshing_ = false;
+    bool applyingTarget_ = false;
     QMetaObject::Connection viewConnection_;
 
     // Test seam: skip the modal Background-conversion dialog and use this result.

@@ -248,16 +248,19 @@ fn commit(mut view: Pin<&mut PictureView>, convert: impl FnOnce(&mut Document) -
 
 fn refresh_active_layer(mut view: Pin<&mut PictureView>) {
     let mut rust = view.as_mut().rust_mut();
-    let Some(doc) = rust.doc.as_ref() else {
+    let Some(count) = rust.doc.as_ref().map(|doc| doc.layers.len()) else {
         return;
     };
-    let count = doc.layers.len();
-    let stale = rust
-        .active_layer
-        .as_deref()
-        .is_none_or(|path| pictura_render::resolve_path(doc, path).is_none());
-    if stale {
-        rust.active_layer = (count > 0).then(|| (count - 1).to_string());
+    let target = {
+        let mut target = rust.layer_target.clone();
+        if let Some(doc) = rust.doc.as_ref() {
+            target.retain_resolving(doc);
+        }
+        target
+    };
+    rust.set_layer_target(target);
+    if rust.layer_target.is_empty() && count > 0 {
+        rust.select_only_layer(&(count - 1).to_string());
     }
 }
 

@@ -29,6 +29,6 @@ fn sample_argb_scoped(view: &PictureView, x: i32, y: i32, size: i32, scope: i32)
     let Some(doc) = rust.doc.as_ref() else {
         return 0;
     };
-    let path = rust.active_layer.as_deref().unwrap_or_default();
+    let path = rust.layer_target.single().unwrap_or_default();
     sample_scoped(doc, path, x, y, size, scope)
 }

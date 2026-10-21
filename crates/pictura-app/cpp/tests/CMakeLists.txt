@@ -29,6 +29,7 @@ set(PICTURA_QT_TESTS
     tst_new_document
     tst_image_mode
     tst_layers_panel
+    tst_layer_target
     tst_layers_panel_fixes
     tst_layers_preview_coalescing
     tst_layers_snapshot

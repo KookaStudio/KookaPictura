@@ -1,6 +1,7 @@
 use super::helpers::rgba_from_argb;
 use super::helpers_composite::buffer_to_image;
 use super::tests::pixel_layer;
+use crate::layer_target::LayerTarget;
 use pictura_core::{BitDepth, ColorMode, Document, PixelBuffer, PsdRect};
 use pictura_render::{Planes, ViewPyramid};
 
@@ -420,8 +421,12 @@ fn large_document_stroke_profile() {
     rust.reset_pyramid();
     let t = Instant::now();
     let r = &mut rust;
-    r.history
-        .capture_live(r.doc.as_mut().expect("document"), &None, "Open");
+    r.history.capture_live(
+        r.doc.as_mut().expect("document"),
+        &None,
+        &r.layer_target,
+        "Open",
+    );
     println!(
         "large_document_open history_capture={:.2}ms",
         t.elapsed().as_secs_f64() * 1000.0
@@ -479,8 +484,12 @@ fn large_document_stroke_profile() {
 
         let t = Instant::now();
         let r = &mut rust;
-        r.history
-            .capture_live(r.doc.as_mut().expect("document"), &None, "Brush");
+        r.history.capture_live(
+            r.doc.as_mut().expect("document"),
+            &None,
+            &r.layer_target,
+            "Brush",
+        );
         let capture = t.elapsed().as_secs_f64() * 1000.0;
         paint_timing::report();
 
@@ -496,7 +505,11 @@ fn large_document_stroke_profile() {
     let r = &mut rust;
     let restored = r
         .history
-        .undo_live(r.doc.as_mut().expect("document"), &mut r.selection)
+        .undo_live(
+            r.doc.as_mut().expect("document"),
+            &mut r.selection,
+            &mut r.layer_target,
+        )
         .expect("a stroke to undo");
     let history_undo = t.elapsed().as_secs_f64() * 1000.0;
     let t = Instant::now();
@@ -541,14 +554,18 @@ fn large_document_filter_profile() {
     doc.composite = pictura_render::composite_active(&doc, false).0;
     let mut rust = PictureViewRust {
         doc: Some(doc),
-        active_layer: Some("0".to_string()),
+        layer_target: LayerTarget::only("0"),
         gpu_compute: std::env::var_os("PICTURA_PROFILE_GPU").is_some(),
         ..Default::default()
     };
     rust.reset_pyramid();
     let r = &mut rust;
-    r.history
-        .capture_live(r.doc.as_mut().expect("document"), &None, "Open");
+    r.history.capture_live(
+        r.doc.as_mut().expect("document"),
+        &None,
+        &r.layer_target,
+        "Open",
+    );
 
     let timed = |label: &str, f: &mut dyn FnMut()| {
         let t = Instant::now();
@@ -695,8 +712,12 @@ fn large_document_filter_profile() {
         let refreshed = t.elapsed();
         let t = Instant::now();
         let r = &mut rust;
-        r.history
-            .capture_live(r.doc.as_mut().expect("document"), &None, "Filter");
+        r.history.capture_live(
+            r.doc.as_mut().expect("document"),
+            &None,
+            &r.layer_target,
+            "Filter",
+        );
         println!(
             "{kind} commit: filter={:.0}ms refresh={:.0}ms history_capture={:.0}ms",
             filter.as_secs_f64() * 1000.0,
@@ -730,14 +751,18 @@ fn radial_blur_commit_profile() {
     doc.composite = pictura_render::composite_active(&doc, false).0;
     let mut rust = PictureViewRust {
         doc: Some(doc),
-        active_layer: Some("0".to_string()),
+        layer_target: LayerTarget::only("0"),
         gpu_compute: std::env::var_os("PICTURA_PROFILE_GPU").is_some(),
         ..Default::default()
     };
     rust.reset_pyramid();
     let r = &mut rust;
-    r.history
-        .capture_live(r.doc.as_mut().expect("document"), &None, "Open");
+    r.history.capture_live(
+        r.doc.as_mut().expect("document"),
+        &None,
+        &r.layer_target,
+        "Open",
+    );
 
     for method in [RadialMethod::Spin, RadialMethod::Zoom] {
         let filter = Filter::RadialBlur {
@@ -786,8 +811,12 @@ fn marquee_selection_profile() {
         ..Default::default()
     };
     let r = &mut rust;
-    r.history
-        .capture_live(r.doc.as_mut().expect("document"), &None, "Open");
+    r.history.capture_live(
+        r.doc.as_mut().expect("document"),
+        &None,
+        &r.layer_target,
+        "Open",
+    );
 
     for (name, elliptical) in [("rect", false), ("ellipse", true)] {
         let t = Instant::now();
@@ -802,6 +831,7 @@ fn marquee_selection_profile() {
         r.history.capture_live(
             r.doc.as_mut().expect("document"),
             &r.selection,
+            &r.layer_target,
             "Rectangular Marquee",
         );
         let record = t.elapsed();

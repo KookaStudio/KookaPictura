@@ -6,6 +6,7 @@
 #include "type_fonts.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
 #include "api/type_api.h"
 
 #include <QtCore/QSignalBlocker>
@@ -128,7 +129,7 @@ void ParagraphStylesPanel::applyRow(int row)
         return;
     }
     const QString name = item->text();
-    const QString path = view_->active_layer_path();
+    const QString path = layer_selection_anchor(*view_);
     if (path.isEmpty() || !pictura::type_api::isType(*view_, path)) {
         return;
     }

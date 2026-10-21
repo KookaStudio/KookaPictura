@@ -36,6 +36,7 @@ mod impl_transform;
 mod layer_arrange;
 mod layer_path;
 mod layer_style;
+mod layer_target_bridge;
 mod layers_smart_filters;
 mod magnetic;
 mod open_jobs;

@@ -54,6 +54,7 @@ impl qobject::PictureView {
         let Some(created) = created else {
             return QString::default();
         };
+        self.as_mut().rust_mut().select_only_layer(&created);
         self.as_mut().clear_link_sets();
         self.as_mut().recomposite();
         self.as_mut().record("Place");
@@ -95,6 +96,7 @@ impl qobject::PictureView {
             }
             None => return QString::default(),
         };
+        self.as_mut().rust_mut().select_only_layer(&created);
         self.as_mut().clear_link_sets();
         self.as_mut().recomposite();
         self.as_mut().record("Place");

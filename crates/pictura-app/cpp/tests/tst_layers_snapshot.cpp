@@ -124,13 +124,17 @@ bool buildFixture(std::unique_ptr<pictura::PictureView>& view, QString* why = nu
     if (!pictura::layer_mask_add(*view, QStringLiteral("reveal-all"))) {
         return fail("raster mask");
     }
-    if (view->link_layers(QStringList{pixPath, grpPath}, true) != 2
-        || !pictura::mask_edit_target_set(*view, nestedPath)) {
-        return fail("link/mask target");
+    if (view->link_layers(QStringList{pixPath, grpPath}, true) != 2) {
+        return fail("link layers");
     }
     view->set_active_layer(pixPath);
     if (!pictura::vector_mask_add(*view, QStringLiteral("reveal-all"))) {
         return fail("vector mask");
+    }
+    // The mask edit target belongs to the active layer, so it is set after the
+    // last active-layer change.
+    if (!pictura::mask_edit_target_set(*view, nestedPath)) {
+        return fail("mask target");
     }
     return true;
 }

@@ -517,13 +517,17 @@ fn type_commit_layer(
     let spec = spec(text, font, setting, character, paragraph);
     let created = {
         let mut rust = view.as_mut().rust_mut();
-        let above = rust.active_layer.clone().unwrap_or_default();
+        let above = rust
+            .layer_target
+            .anchor()
+            .map(str::to_string)
+            .unwrap_or_default();
         let created = match rust.doc.as_mut() {
             Some(doc) => pictura_render::add_type_layer(doc, &above, &spec),
             None => String::new(),
         };
         if !created.is_empty() {
-            rust.active_layer = Some(created.clone());
+            rust.select_only_layer(&created);
         }
         created
     };

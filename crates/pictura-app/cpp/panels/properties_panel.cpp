@@ -8,6 +8,7 @@
 #include "numeric_field.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/adjustment_edit.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/clipping.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
@@ -587,7 +588,7 @@ QString PropertiesPanel::activePath() const
     if (!view_ || !view_->has_document()) {
         return QString();
     }
-    const QString active = view_->active_layer_path();
+    const QString active = layer_selection_anchor(*view_);
     if (!active.isEmpty()
         && pictura::layers_api::rowForPath(*view_, active).path == active) {
         return active;

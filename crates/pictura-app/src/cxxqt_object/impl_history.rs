@@ -5,6 +5,7 @@ use super::helpers::clamp_region;
 use super::helpers_composite::{crop_planar, into_rgba_frame, premultiplied_display_image};
 use super::{qobject, PictureViewRust};
 use crate::history::{detached_copy, History, Restored, Snapshot};
+use crate::layer_target::LayerTarget;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QString};
@@ -39,16 +40,27 @@ impl PictureViewRust {
     /// pixels were never captured.
     fn restore(
         &mut self,
-        step: impl FnOnce(&mut History, &mut Document, &mut Option<Selection>) -> Option<Restored>,
+        step: impl FnOnce(
+            &mut History,
+            &mut Document,
+            &mut Option<Selection>,
+            &mut LayerTarget,
+        ) -> Option<Restored>,
         legacy: impl FnOnce(&mut History) -> Option<Snapshot>,
     ) -> Option<Restored> {
         let painting = self.stroke.is_some();
         self.cancel_stroke();
-        let restored = match self.doc.as_mut() {
-            Some(doc) => step(&mut self.history, doc, &mut self.selection),
-            None => legacy(&mut self.history).map(|snapshot| {
-                self.doc = Some(snapshot.doc);
-                self.selection = snapshot.selection;
+        let rust = &mut *self;
+        let restored = match rust.doc.as_mut() {
+            Some(doc) => step(
+                &mut rust.history,
+                doc,
+                &mut rust.selection,
+                &mut rust.layer_target,
+            ),
+            None => legacy(&mut rust.history).map(|snapshot| {
+                rust.doc = Some(snapshot.doc);
+                rust.selection = snapshot.selection;
                 Restored::Everywhere
             }),
         }?;
@@ -147,7 +159,7 @@ impl qobject::PictureView {
             return false;
         }
         let restored = self.as_mut().rust_mut().restore(
-            |history, doc, selection| history.jump_live(i, doc, selection),
+            |history, doc, selection, target| history.jump_live(i, doc, selection, target),
             |history| history.jump(i),
         );
         self.show_restored(restored, true)
@@ -163,10 +175,11 @@ impl qobject::PictureView {
             doc: detached_copy(&snapshot.doc),
             ..snapshot
         };
+        let target = self.rust().layer_target.clone();
         self.as_mut()
             .rust_mut()
             .history
-            .add_snapshot(&label.to_string(), snapshot);
+            .add_snapshot(&label.to_string(), snapshot, target);
         self.changed();
         true
     }
@@ -189,9 +202,18 @@ impl qobject::PictureView {
         let Some(snapshot) = self.rust().history.snapshot(i as usize) else {
             return false;
         };
+        let target = self.rust().history.snapshot_target(i as usize);
         let mut rust = self.as_mut().rust_mut();
         rust.doc = Some(detached_copy(&snapshot.doc));
         rust.selection = snapshot.selection;
+        if let Some(mut target) = target {
+            if let Some(doc) = rust.doc.as_ref() {
+                target.retain_resolving(doc);
+            }
+            rust.set_layer_target(target);
+        }
+        let target = rust.layer_target.clone();
+        rust.history.set_current_target(&target);
         rust.content_revision = rust.content_revision.wrapping_add(1);
         rust.stroke = None;
         self.as_mut().recomposite();

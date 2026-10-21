@@ -37,6 +37,7 @@
 #include "type_text_edit.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
 #include "api/type_api.h"
 
 #include <QtCore/QElapsedTimer>
@@ -867,7 +868,7 @@ private:
     void loadLayerOptions()
     {
         PictureView* v = ctx_ ? ctx_->view() : nullptr;
-        const QString path = v ? QString(v->active_layer_path()) : QString();
+        const QString path = v ? layer_selection_anchor(*v) : QString();
         if (path == layerPath_) {
             return;
         }

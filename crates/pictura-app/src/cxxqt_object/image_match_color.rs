@@ -113,7 +113,7 @@ fn match_color_target_stats(view: &PictureView, use_selection: bool) -> Vec<f64>
     };
     // Statistics cover the whole layer being adjusted, never a preview
     // section, so the numbers cannot change as the view scrolls.
-    let Some(path) = rust.active_layer.as_deref() else {
+    let Some(path) = rust.layer_target.single() else {
         return Vec::new();
     };
     let Some(image) = layer_surface(doc, path) else {

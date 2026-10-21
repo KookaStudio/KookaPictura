@@ -14,6 +14,7 @@
 #include "percent_field.h"
 #include "session.h"
 
+#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/clipping.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
@@ -175,7 +176,7 @@ LayersPanel::LayersPanel(QWidget* parent)
             if (syncing_ || !view_) {
                 return;
             }
-            const QStringList paths = selectedPaths();
+            const QStringList paths = targetPaths();
             if (!paths.isEmpty()) {
                 view_->set_layers_lock(paths, flag, on);
             }
@@ -282,7 +283,7 @@ LayersPanel::LayersPanel(QWidget* parent)
         if (QApplication::keyboardModifiers().testFlag(Qt::AltModifier)) {
             layer_style_set_all_visible(*view_, !layer_style_any_visible(*view_, true));
         } else {
-            openLayerStyle(currentPath());
+            openLayerStyle(view_ ? layer_selection_anchor(*view_) : QString());
         }
     });
     maskButton_ =
@@ -352,11 +353,15 @@ LayersPanel::LayersPanel(QWidget* parent)
 
     connect(tree_->selectionModel(), &QItemSelectionModel::currentChanged, this,
             [this](const QModelIndex&, const QModelIndex&) {
+                writeTarget();
                 syncControls();
                 syncMaskSolo();
             });
     connect(tree_->selectionModel(), &QItemSelectionModel::selectionChanged, this,
-            [this](const QItemSelection&, const QItemSelection&) { syncControls(); });
+            [this](const QItemSelection&, const QItemSelection&) {
+                writeTarget();
+                syncControls();
+            });
     connect(tree_, &QTreeView::expanded, this, [this](const QModelIndex& index) {
         const QString path = pathForProxyIndex(index);
         if (!path.isEmpty()) {
@@ -371,7 +376,7 @@ LayersPanel::LayersPanel(QWidget* parent)
         if (syncing_ || !view_) {
             return;
         }
-        const QStringList paths = selectedPaths();
+        const QStringList paths = targetPaths();
         if (!paths.isEmpty()) {
             view_->set_layers_blend(paths, blend_->itemData(index).toString());
         }
@@ -424,14 +429,14 @@ LayersPanel::LayersPanel(QWidget* parent)
         if (QApplication::keyboardModifiers().testFlag(Qt::AltModifier)) {
             openNewGroupDialog();
         } else {
-            addGroupAt(currentPath());
+            addGroupAt(view_ ? layer_selection_anchor(*view_) : QString());
         }
     });
     connect(newLayerButton, &QToolButton::clicked, this, [this] {
         if (QApplication::keyboardModifiers().testFlag(Qt::AltModifier)) {
             openNewLayerDialog();
         } else {
-            addLayerAt(currentPath());
+            addLayerAt(view_ ? layer_selection_anchor(*view_) : QString());
         }
     });
     connect(deleteButton_, &QToolButton::clicked, this, [this] { deleteFromTrash(); });
@@ -461,6 +466,9 @@ void LayersPanel::setView(PictureView* view)
             proxy_->setFilter(defaultFilter);
         }
     }
+    if (viewConnection_) {
+        disconnect(viewConnection_);
+    }
     view_ = view;
     model_->setView(view);
     tree_->setDragSource(view);
@@ -476,13 +484,10 @@ void LayersPanel::setView(PictureView* view)
 void LayersPanel::refresh()
 {
     const bool wasRefreshing = refreshing_;
+    const bool wasApplying = applyingTarget_;
     refreshing_ = true;
-    const QStringList selected = selectedPaths();
+    applyingTarget_ = true;
     const QString selectedPath = currentPath();
-    // The model reset below clears the tree's current index, whose
-    // `selectionChanged` syncs an empty active layer; remember the document's
-    // active layer now so the fallback can restore it afterwards.
-    const QString activePath = view_ ? view_->active_layer_path() : QString();
     // A Tab rename commits through `changed`; the queued refresh must keep the
     // next row's editor alive rather than dropping it on the model reset.
     const bool wasEditing = tree_->viewport()->findChild<QLineEdit*>() != nullptr;
@@ -618,31 +623,19 @@ void LayersPanel::refresh()
         expandMatchingGroups();
     }
 
-    if (!selected.isEmpty()) {
-        selectPaths(selected, selectedPath);
-    }
-    // A document switch or a model reset can leave the tree with no selected
-    // row. Photoshop always has an active layer, so restore the document's
-    // active layer (the topmost pixel layer on open), falling back to the
-    // first displayed row only when the document has none.
-    if (tree_->selectionModel()->selectedRows(0).isEmpty() && proxy_->rowCount() > 0) {
-        const QModelIndex activeIndex =
-            activePath.isEmpty() ? QModelIndex() : proxyIndexForPath(activePath);
-        if (activeIndex.isValid()) {
-            selectPaths(QStringList{activePath}, activePath);
-        } else if (!tree_->currentIndex().isValid()) {
-            tree_->setCurrentIndex(proxy_->index(0, 0));
-        }
-    }
+    applyTargetSelection();
     if (wasEditing) {
         const QModelIndex editIndex = proxyIndexForPath(selectedPath);
         if (editIndex.isValid()) {
-            tree_->setCurrentIndex(editIndex);
+            // The selection model's own move keeps the multi-selection; the
+            // view's would clear it for a single row.
+            tree_->selectionModel()->setCurrentIndex(editIndex, QItemSelectionModel::NoUpdate);
             tree_->edit(editIndex);
         }
     }
     reconcileGestureTarget();
     syncControls();
+    applyingTarget_ = wasApplying;
     refreshing_ = wasRefreshing;
 }
 
@@ -677,17 +670,31 @@ void LayersPanel::selectPath(const QString& path)
     }
     const QModelIndex index = proxyIndexForPath(path);
     if (index.isValid()) {
-        tree_->setCurrentIndex(index);
+        tree_->selectionModel()->setCurrentIndex(
+            index, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
     }
 }
 
 void LayersPanel::selectPaths(const QStringList& paths, const QString& current)
 {
+    if (!view_) {
+        return;
+    }
+    set_layer_target(*view_, paths, current);
+    const bool wasApplying = applyingTarget_;
+    applyingTarget_ = true;
+    setTreeSelection(paths, current);
+    applyingTarget_ = wasApplying;
+}
+
+void LayersPanel::setTreeSelection(const QStringList& paths, const QString& current)
+{
     if (!model_ || !tree_ || !tree_->selectionModel()) {
         return;
     }
+    tree_->selectionModel()->clearSelection();
+    tree_->selectionModel()->setCurrentIndex(QModelIndex(), QItemSelectionModel::NoUpdate);
     if (paths.isEmpty()) {
-        tree_->selectionModel()->clearSelection();
         return;
     }
     QItemSelection selection;
@@ -727,31 +734,64 @@ QStringList LayersPanel::selectedPaths() const
     const QModelIndexList rows = tree_->selectionModel()->selectedRows(0);
     for (const QModelIndex& index : rows) {
         const QString path = pathForProxyIndex(index);
-        if (!path.isEmpty()) {
+        if (!path.isEmpty() && !path.contains(QStringLiteral("/@sf"))) {
             paths.push_back(path);
         }
     }
     return paths;
 }
 
+QStringList LayersPanel::targetPaths() const
+{
+    return view_ ? selected_layer_paths(*view_) : QStringList{};
+}
+
+QStringList LayersPanel::targetLayerPaths() const
+{
+    return targetPaths();
+}
+
+void LayersPanel::writeTarget()
+{
+    if (!view_ || applyingTarget_ || syncing_) {
+        return;
+    }
+    const QString current = currentPath();
+    if (current.contains(QStringLiteral("/@sf"))) {
+        return;
+    }
+    QStringList paths = selectedPaths();
+    if (paths.isEmpty()) {
+        set_layer_target(*view_, {}, {});
+        return;
+    }
+    const QString anchor = paths.contains(current) ? current : paths.first();
+    set_layer_target(*view_, paths, anchor);
+}
+
+void LayersPanel::applyTargetSelection()
+{
+    if (!view_ || !model_ || !tree_) {
+        return;
+    }
+    const bool wasApplying = applyingTarget_;
+    applyingTarget_ = true;
+    const QStringList target = selected_layer_paths(*view_);
+    const QString anchor = layer_selection_anchor(*view_);
+    setTreeSelection(target, anchor);
+    applyingTarget_ = wasApplying;
+}
+
 bool LayersPanel::canMergeSelection() const
 {
-    return view_ && view_->can_merge_layers(selectedPaths());
+    return view_ && view_->can_merge_layers(targetPaths());
 }
 
 void LayersPanel::syncControls()
 {
     const QModelIndex current = tree_->currentIndex();
-    const QStringList paths = selectedPaths();
+    const QStringList paths = targetPaths();
     if (view_) {
-        const QString current = currentPath();
-        view_->set_active_layer(paths.size() == 1 ? current : QString());
-        // A mask edit target belongs to the active layer; selecting a different
-        // layer drops it so the next paint edits the layer's pixels again. A
-        // transient empty selection (a model reset) keeps it.
-        if (!current.isEmpty() && mask_edit_target_get(*view_) != current) {
-            mask_edit_target_set(*view_, QString());
-        }
         // While the Selected filter isolates a set, scope Move Auto-Select to
         // it; otherwise leave Auto-Select unscoped.
         const bool isolated = proxy_ && proxy_->filter().enabled && proxy_->filter().selected;
@@ -998,6 +1038,8 @@ void LayersPanel::applyFilter(const LayerFilter& filter)
     if (!proxy_) {
         return;
     }
+    const bool wasApplying = applyingTarget_;
+    applyingTarget_ = true;
     LayerFilter effective = filter;
     const bool wasIsolated = proxy_->filter().enabled && proxy_->filter().selected;
     const bool nowIsolated = effective.enabled && effective.selected;
@@ -1005,7 +1047,7 @@ void LayersPanel::applyFilter(const LayerFilter& filter)
         // A new isolation session: capture the current selection as the fixed
         // set. Re-entering after a release or a toggle-off re-captures rather
         // than resuming a stale or empty set.
-        const QStringList paths = selectedPaths();
+        const QStringList paths = targetPaths();
         isolatedPaths_ = QSet<QString>(paths.begin(), paths.end());
     }
     effective.selectedPaths = isolatedPaths_;
@@ -1020,12 +1062,14 @@ void LayersPanel::applyFilter(const LayerFilter& filter)
             }
         }
     }
+    applyTargetSelection();
+    applyingTarget_ = wasApplying;
     syncControls();
 }
 
 void LayersPanel::enterIsolation()
 {
-    const QStringList paths = selectedPaths();
+    const QStringList paths = targetPaths();
     // Isolating nothing would blank the panel; leave the filter as it is.
     if (paths.isEmpty()) {
         return;
@@ -1055,7 +1099,7 @@ void LayersPanel::releaseIsolationFor(const QString& path)
     // Keep the panel selection within the reduced set (in its existing order,
     // so the new current row is deterministic), then re-filter.
     QStringList remaining;
-    for (const QString& selected : selectedPaths()) {
+    for (const QString& selected : targetPaths()) {
         if (isolatedPaths_.contains(selected)) {
             remaining.push_back(selected);
         }

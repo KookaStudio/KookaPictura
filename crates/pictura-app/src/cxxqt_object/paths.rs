@@ -224,9 +224,9 @@ pub mod ffi {
 /// layer target is on (Path Selection, Direct Selection, the shape tools) and
 /// the active layer is a shape layer; the Work Path otherwise.
 fn layer_target(rust: &PictureViewRust) -> Option<String> {
-    let path = rust.active_layer.as_ref().filter(|_| rust.path_on_layer)?;
+    let path = rust.layer_target.single().filter(|_| rust.path_on_layer)?;
     let layer = pictura_render::resolve_path(rust.doc.as_ref()?, path)?;
-    pictura_render::is_shape_layer(layer).then(|| path.clone())
+    pictura_render::is_shape_layer(layer).then(|| path.to_string())
 }
 
 pub(super) fn path(view: &PictureView) -> Option<VectorPath> {

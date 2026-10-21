@@ -5,6 +5,7 @@
 #include "type_fonts.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
 #include "api/type_api.h"
 
 #include <QtCore/QSignalBlocker>
@@ -162,7 +163,7 @@ bool CharacterPanel::hasTypeLayer() const
     if (!view_ || !view_->has_document()) {
         return false;
     }
-    const QString path = view_->active_layer_path();
+    const QString path = layer_selection_anchor(*view_);
     return !path.isEmpty() && pictura::type_api::isType(*view_, path);
 }
 
@@ -182,7 +183,7 @@ void CharacterPanel::updateColorIcon() { colorButton_->setIcon(swatchIcon(color_
 void CharacterPanel::refresh()
 {
     const bool type = hasTypeLayer();
-    const QString path = type ? view_->active_layer_path() : QString();
+    const QString path = type ? layer_selection_anchor(*view_) : QString();
     const CharacterSetting c = type ? pictura::type_api::layerCharacterSetting(*view_, path)
                                     : pictura::type_api::defaultCharacterSetting();
     const QString family = type ? familyForFontName(pictura::type_api::layerFont(*view_, path)) : QString();
@@ -243,7 +244,7 @@ void CharacterPanel::apply()
     if (!hasTypeLayer()) {
         return;
     }
-    const QString path = view_->active_layer_path();
+    const QString path = layer_selection_anchor(*view_);
     const pictura::type_api::LayerType layer = pictura::type_api::readLayer(*view_, path);
     CharacterSetting c = layer.character;
     c.size = size_->value();

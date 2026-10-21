@@ -13,6 +13,8 @@ use pictura_filters::DepthMap;
 use super::super::helpers::active_pixel_layer;
 use super::super::helpers_composite::selection_to_mask;
 use super::super::state::PictureViewRust;
+#[cfg(test)]
+use crate::layer_target::LayerTarget;
 
 /// Preview, Source, Blur Focal Distance, Invert, Shape, Radius, Blade
 /// Curvature, Rotation, Specular Brightness, Specular Threshold, Noise Amount,
@@ -91,7 +93,7 @@ pub(in crate::cxxqt_object) fn depth_map(id: u32) -> Option<Arc<DepthMap>> {
 /// document, or a non-pixel active layer.
 pub(super) fn materialize(rust: &PictureViewRust, source: i32) -> Option<DepthMap> {
     let doc = rust.doc.as_ref()?;
-    let layer = active_pixel_layer(doc, rust.active_layer.as_deref())?;
+    let layer = active_pixel_layer(doc, rust.layer_target.single())?;
     let lrect = layer.rect;
     if lrect.width() <= 0 || lrect.height() <= 0 {
         return None;
@@ -184,7 +186,7 @@ mod tests {
         doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         PictureViewRust {
             doc: Some(doc),
-            active_layer: Some("0".to_string()),
+            layer_target: LayerTarget::only("0"),
             ..Default::default()
         }
     }

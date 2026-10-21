@@ -1,6 +1,7 @@
 use super::*;
 use crate::cxxqt_object::impl_filters::apply_filter_active;
 use crate::cxxqt_object::tests::pixel_layer;
+use crate::layer_target::LayerTarget;
 use pictura_core::{BitDepth, ColorMode};
 
 /// A 96×80 layer of diagonal stripes, so every filter here changes it.
@@ -24,13 +25,17 @@ fn striped() -> PictureViewRust {
     store_composite(&mut doc, &rendered);
     let mut rust = PictureViewRust {
         doc: Some(doc),
-        active_layer: Some("0".to_string()),
+        layer_target: LayerTarget::only("0"),
         gpu_compute: false,
         ..Default::default()
     };
     let r = &mut rust;
-    r.history
-        .capture_live(r.doc.as_mut().expect("document"), &None, "Open");
+    r.history.capture_live(
+        r.doc.as_mut().expect("document"),
+        &None,
+        &r.layer_target,
+        "Open",
+    );
     rust
 }
 

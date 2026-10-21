@@ -21,6 +21,7 @@ use super::super::state::PictureViewRust;
 use super::canvas_proxy::{pre_preview_sources, section_buffer};
 use super::resolve_stack;
 use crate::history::History;
+use crate::layer_target::LayerTarget;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QList, QString, QStringList};
@@ -266,7 +267,7 @@ pub(in crate::cxxqt_object) fn exact_preview_start(
     if active_mask_target(rust).is_some() {
         return false;
     }
-    let Some(path) = rust.active_layer.clone() else {
+    let Some(path) = rust.layer_target.single().map(str::to_string) else {
         return false;
     };
     let request = Request {
@@ -359,11 +360,12 @@ pub(in crate::cxxqt_object) fn commit_start(
         _ => Source::Filter,
     };
     let selection = rust.selection.clone();
+    let target = rust.layer_target.clone();
     let history = std::mem::take(&mut rust.history);
     let gpu = rust.gpu_compute;
     let handle = std::thread::spawn(move || {
         commit(
-            doc, history, &path, &filters, source, mask, &selection, &label, gpu,
+            doc, history, target, &path, &filters, source, mask, &selection, &label, gpu,
         )
     });
     rust.filter_jobs.commit = Some(CommitJob {
@@ -377,6 +379,7 @@ pub(in crate::cxxqt_object) fn commit_start(
 fn commit(
     mut doc: Document,
     mut history: History,
+    target: LayerTarget,
     path: &str,
     filters: &[Filter],
     source: Source,
@@ -442,7 +445,7 @@ fn commit(
             None => Refresh::Nothing,
         }
     };
-    history.capture_live(&mut doc, selection, label);
+    history.capture_live(&mut doc, selection, &target, label);
     Committed {
         doc,
         history,

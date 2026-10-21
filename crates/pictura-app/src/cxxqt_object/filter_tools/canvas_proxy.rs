@@ -7,6 +7,8 @@
 use super::super::helpers::active_mask_target;
 use super::super::helpers_composite::selection_to_mask;
 use super::super::state::{CanvasProxy, PictureViewRust};
+#[cfg(test)]
+use crate::layer_target::LayerTarget;
 use pictura_core::{Document, LayerMask, PixelBuffer, PsdRect};
 
 /// [`super::ffi::filter_canvas_proxy`]'s render as straight sRGB, building or
@@ -21,7 +23,7 @@ pub(in crate::cxxqt_object) fn canvas_proxy_buffer(
     if active_mask_target(rust).is_some() {
         return None;
     }
-    let path = rust.active_layer.clone()?;
+    let path = rust.layer_target.single().map(str::to_string)?;
     let key = (region, scale.to_bits(), rust.content_revision);
     if rust
         .canvas_proxy
@@ -71,7 +73,7 @@ pub(in crate::cxxqt_object) fn section_buffer(
     if active_mask_target(rust).is_some() {
         return None;
     }
-    let path = rust.active_layer.clone()?;
+    let path = rust.layer_target.single().map(str::to_string)?;
     let (source, selection) = pre_preview_sources(rust)?;
     let canvas = PsdRect {
         top: 0,
@@ -160,7 +162,7 @@ mod tests {
         doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         PictureViewRust {
             doc: Some(doc),
-            active_layer: Some("0".to_string()),
+            layer_target: LayerTarget::only("0"),
             gpu_compute: false,
             ..Default::default()
         }

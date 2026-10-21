@@ -181,17 +181,23 @@ pub fn lock_group_layers(doc: &mut Document, path: &str) -> usize {
 }
 
 pub fn delete_paths(doc: &mut Document, paths: &[&str]) -> usize {
+    delete_paths_report(doc, paths).len()
+}
+
+/// [`delete_paths`] plus the pre-deletion paths it actually removed, topmost
+/// first. Used to keep the layer target on a deterministic survivor.
+pub fn delete_paths_report(doc: &mut Document, paths: &[&str]) -> Vec<String> {
     let selected = selected_paths(doc, paths, true);
-    let mut changed = 0;
+    let mut deleted = Vec::new();
     for (segments, path) in selected {
         if !deletable(doc, &segments, &path) {
             continue;
         }
         if doc.layers.remove(&segments).is_some() {
-            changed += 1;
+            deleted.push(path);
         }
     }
-    changed
+    deleted
 }
 
 /// Whether [`delete_paths`] would delete anything, read-only: it deletes
@@ -518,15 +524,23 @@ pub fn can_move_path_to(doc: &Document, path: &str, target: &str, mode: i32) -> 
 }
 
 pub fn move_path_to(doc: &mut Document, path: &str, target: &str, mode: i32) -> bool {
-    let Some(src) = parse_path(path) else {
-        return false;
-    };
-    let Some((dest_parent, dest_index)) = move_path_to_dest(doc, path, target, mode) else {
-        return false;
-    };
-    doc.layers
+    move_path_to_result(doc, path, target, mode).is_some()
+}
+
+/// [`move_path_to`] plus the moved node's post-operation path.
+pub fn move_path_to_result(
+    doc: &mut Document,
+    path: &str,
+    target: &str,
+    mode: i32,
+) -> Option<String> {
+    let src = parse_path(path)?;
+    let (dest_parent, dest_index) = move_path_to_dest(doc, path, target, mode)?;
+    let moved = doc
+        .layers
         .move_node(&src, &dest_parent, dest_index.unwrap_or(usize::MAX))
-        .is_ok()
+        .ok()?;
+    Some(format_segments(&moved))
 }
 
 /// Where [`arrange_path`] moves the node within its own container. `Front` is
@@ -573,14 +587,15 @@ fn arrange_target(doc: &Document, path: &str, arrange: Arrange) -> Option<usize>
 /// Refuses the Background, fully-locked nodes, a boundary no-op, and a path
 /// that does not resolve. Returns whether the order changed.
 pub fn arrange_path(doc: &mut Document, path: &str, arrange: Arrange) -> bool {
-    let Some(target) = arrange_target(doc, path, arrange) else {
-        return false;
-    };
-    let Some(segments) = parse_path(path) else {
-        return false;
-    };
-    let index = *segments.last().expect("arrange_target checked non-empty") as i32;
-    move_path(doc, path, target as i32 - index)
+    arrange_path_index(doc, path, arrange).is_some()
+}
+
+/// [`arrange_path`] plus the position the node landed at.
+pub fn arrange_path_index(doc: &mut Document, path: &str, arrange: Arrange) -> Option<usize> {
+    let target = arrange_target(doc, path, arrange)?;
+    let segments = parse_path(path)?;
+    let index = *segments.last()? as i32;
+    move_path(doc, path, target as i32 - index).then_some(target)
 }
 
 /// Dry-run form of [`arrange_path`]: whether the move would change the order.
@@ -595,24 +610,45 @@ pub fn can_arrange_path(doc: &Document, path: &str, arrange: Arrange) -> bool {
 }
 
 pub fn reverse_paths(doc: &mut Document, paths: &[&str]) -> bool {
+    reverse_run(doc, paths).is_some()
+}
+
+/// [`reverse_paths`] plus every selected node's post-operation path.
+pub fn reverse_paths_result(doc: &mut Document, paths: &[&str]) -> Option<Vec<String>> {
+    let selected = selected_paths(doc, paths, true);
+    let (parent, start, end) = reverse_run(doc, paths)?;
+    Some(
+        selected
+            .iter()
+            .map(|(segments, _)| {
+                let index = *segments.last().expect("selected_paths keeps non-empty");
+                let mut mapped = parent.clone();
+                mapped.push(start + end - index);
+                format_segments(&mapped)
+            })
+            .collect(),
+    )
+}
+
+fn reverse_run(doc: &mut Document, paths: &[&str]) -> Option<(Vec<usize>, usize, usize)> {
     let selected = selected_paths(doc, paths, true);
     if selected.len() < 2 {
-        return false;
+        return None;
     }
-    let parent: Vec<usize> = match selected[0].0.split_last() {
-        Some((_, parent)) => parent.to_vec(),
-        None => return false,
-    };
+    let parent: Vec<usize> = selected[0]
+        .0
+        .split_last()
+        .map(|(_, parent)| parent.to_vec())?;
     if selected.iter().any(|(segments, _)| {
         segments.len() != parent.len() + 1 || segments[..segments.len() - 1] != parent[..]
     }) {
-        return false;
+        return None;
     }
     for (_, path) in &selected {
         if is_background(doc, path)
             || resolve_path(doc, path).is_some_and(|layer| layer.lock.is_all())
         {
-            return false;
+            return None;
         }
     }
     let mut indices: Vec<usize> = selected
@@ -621,8 +657,10 @@ pub fn reverse_paths(doc: &mut Document, paths: &[&str]) -> bool {
         .collect();
     indices.sort_unstable();
     if indices.windows(2).any(|window| window[1] != window[0] + 1) {
-        return false;
+        return None;
     }
     let (start, end) = (indices[0], indices[indices.len() - 1]);
-    doc.layers.reverse(&parent, start, end + 1)
+    doc.layers
+        .reverse(&parent, start, end + 1)
+        .then_some((parent, start, end))
 }
