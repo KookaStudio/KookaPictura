@@ -2648,16 +2648,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         anatomyPanel->refresh();
         QCoreApplication::processEvents();
         auto anatomyEdit = [anatomyPanel](const QString& path, const QString& text, int key) {
-            QCoreApplication::processEvents();
-            // Drop the editor the previous step left open: it keeps the view
-            // in EditingState, so the edit below is ignored.
-            anatomyPanel->clearStaleEditorsForTest();
-            if (!anatomyPanel->beginRenameForTest(path)) {
-                return false;
-            }
-            QCoreApplication::processEvents();
-            auto* tree = anatomyPanel->findChild<QTreeView*>();
-            QLineEdit* editor = tree ? tree->viewport()->findChild<QLineEdit*>() : nullptr;
+            QLineEdit* editor = anatomyPanel->openRenameEditorForTest(path);
             QObject* delegate = anatomyPanel->itemDelegateForTest();
             if (!editor || !delegate) {
                 return false;

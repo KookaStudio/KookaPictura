@@ -17,6 +17,7 @@ class QColor;
 class QDialog;
 class QEvent;
 class QImage;
+class QLineEdit;
 class QMenu;
 class QModelIndex;
 class QRect;
@@ -86,6 +87,9 @@ public:
     bool rowExpandableForTest(const QString& path) const;
     QString rowToolTipForTest(const QString& path) const;
     bool beginRenameForTest(const QString& path);
+    /// Open the inline editor on `path` for a test and return the editor the
+    /// view registered for it, or null when it opened none.
+    QLineEdit* openRenameEditorForTest(const QString& path);
     /// Drop every inline editor the tree still holds and leave the view out of
     /// its editing state, so the next programmatic edit is not ignored.
     void clearStaleEditorsForTest();

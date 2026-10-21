@@ -101,6 +101,24 @@ bool LayersPanel::beginRenameForTest(const QString& path)
     return true;
 }
 
+QLineEdit* LayersPanel::openRenameEditorForTest(const QString& path)
+{
+    QCoreApplication::processEvents();
+    // An editor a previous step left open keeps the view in EditingState, so
+    // the edit below would be ignored.
+    clearStaleEditorsForTest();
+    const QModelIndex index = proxyIndexForPath(path);
+    if (!index.isValid()) {
+        return nullptr;
+    }
+    tree_->setCurrentIndex(index);
+    tree_->edit(index);
+    QCoreApplication::processEvents();
+    // The editor the view registered for the row, not any editor the viewport
+    // still holds: a stale one would be rejected by the delegate's commit.
+    return qobject_cast<QLineEdit*>(tree_->indexWidget(tree_->currentIndex()));
+}
+
 void LayersPanel::clearStaleEditorsForTest()
 {
     // An editor a previous check left open keeps the view in EditingState,
@@ -810,24 +828,7 @@ bool LayersPanel::doubleClickAtForTest(const QString& path, bool atName)
     if (!delegate_ || !tree_) {
         return false;
     }
-    // An editor a previous check left open keeps the view in EditingState, which
-    // makes the next programmatic edit fail. Revert it and delete every stale
-    // editor so findChild below returns only the editor this double-click makes.
-    const QList<QLineEdit*> stale = tree_->viewport()->findChildren<QLineEdit*>();
-    for (QLineEdit* editor : stale) {
-        if (editor->isVisible()) {
-            QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
-            QCoreApplication::sendEvent(editor, &escape);
-        }
-        editor->deleteLater();
-    }
-    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-    // A model reset during an earlier edit can leave the view in EditingState
-    // with no live editor, which wedges programmatic edits. There is no editor
-    // to close at this point, so normalize the state.
-    if (tree_->editStateForTest() != 0) {
-        tree_->resetEditStateForTest();
-    }
+    clearStaleEditorsForTest();
 
     const QModelIndex index = proxyIndexForPath(path);
     if (!index.isValid()) {
