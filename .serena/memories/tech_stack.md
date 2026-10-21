@@ -29,9 +29,14 @@ Workspace layout/commands: `mem:core`, `mem:suggested_commands`.
 
 ## Linker / build
 
-- `lld` is required: `.cargo/config.toml` sets `-C link-arg=-fuse-ld=lld` for
-  `x86_64-unknown-linux-gnu`; CMake builds with Ninja and `-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld`.
-  CXX-Qt on Linux expects a fast linker.
+- `.cargo/config.toml` sets `-C link-arg=-fuse-ld=lld` for
+  `x86_64-unknown-linux-gnu`; `lld` is required for Rust test binaries.
+- CMake links C++ with `mold` when the compiler accepts `-fuse-ld=mold`, then
+  `lld`, then the compiler default; macOS and Windows keep the native linker.
+  CMake builds with Ninja.
+- Development builds (`BUILD_TESTING` on) use a shared `pictura_shell` and the
+  Cargo `app` profile; release and packaging use `-DBUILD_TESTING=OFF` and the
+  static shell.
 
 ## Test/report/spec tooling
 

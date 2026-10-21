@@ -31,10 +31,11 @@ Apple Silicon DMG. The macOS DMG is **unsigned and not notarized**; on first
 launch allow it in **System Settings → Privacy & Security → Open Anyway**.
 
 You can also build it from source. Requirements: Rust 1.98, Qt 6, CMake, Ninja,
-`lld`, and the Little CMS 2 headers.
+`lld`, and the Little CMS 2 headers. C++ links use `mold` when it is installed
+and the compiler accepts it.
 
 ```bash
-cmake -S . -B build -G Ninja -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld
+cmake -S . -B build -G Ninja
 cmake --build build --parallel
 ./build/pictura
 ```
