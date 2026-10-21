@@ -40,6 +40,42 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     message(STATUS "No CMAKE_BUILD_TYPE set; defaulting to RelWithDebInfo")
 endif()
 
+# Prefer mold on ELF platforms, then lld, then the compiler's default linker.
+# check_linker_flag proves the compiler accepts the flag, so an installed mold
+# with a GCC older than 12.1 falls through instead of failing at link time. An
+# explicit -fuse-ld= in the user's linker flags wins. macOS and Windows keep
+# their native linker.
+include(CheckLinkerFlag)
+if(UNIX AND NOT APPLE AND NOT MSVC
+   AND NOT CMAKE_LINKER_TYPE
+   AND NOT CMAKE_EXE_LINKER_FLAGS MATCHES "-fuse-ld="
+   AND NOT CMAKE_SHARED_LINKER_FLAGS MATCHES "-fuse-ld=")
+    find_program(MOLD_EXECUTABLE mold)
+    if(MOLD_EXECUTABLE)
+        check_linker_flag(CXX "-fuse-ld=mold" PICTURA_LINKER_ACCEPTS_MOLD)
+    endif()
+    if(PICTURA_LINKER_ACCEPTS_MOLD)
+        set(_pictura_linker_flag "-fuse-ld=mold")
+    else()
+        check_linker_flag(CXX "-fuse-ld=lld" PICTURA_LINKER_ACCEPTS_LLD)
+        if(PICTURA_LINKER_ACCEPTS_LLD)
+            set(_pictura_linker_flag "-fuse-ld=lld")
+        endif()
+    endif()
+    if(_pictura_linker_flag)
+        add_link_options("${_pictura_linker_flag}")
+        message(STATUS "C++ linker flag: ${_pictura_linker_flag}")
+    endif()
+endif()
+
+# Bound concurrent link steps: a highly parallel compile can otherwise start
+# several large links at once and thrash memory. These must be set before the
+# first target is created.
+if(CMAKE_GENERATOR MATCHES "Ninja")
+    set(CMAKE_JOB_POOLS link=4)
+    set(CMAKE_JOB_POOL_LINK link)
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
@@ -85,7 +121,15 @@ cxx_qt_import_crate(
     QMAKE "${QMAKE_EXECUTABLE}"
 )
 
-add_library(pictura_shell STATIC
+# Compile the Qt resource once: the shared shell carries it, and the static
+# configuration links this object library into the executable and each test.
+# POSITION_INDEPENDENT_CODE: object libraries default to non-PIC, but they are
+# linked into PIE executables and the shared shell; lld rejects the qrc's
+# references without it.
+add_library(pictura_assets OBJECT assets/pictura.qrc)
+set_target_properties(pictura_assets PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/api/document_api.cpp
     crates/pictura-app/cpp/api/document_api.h
     crates/pictura-app/cpp/api/history_api.cpp
@@ -491,33 +535,59 @@ add_library(pictura_shell STATIC
     crates/pictura-app/cpp/dialogs.h
     crates/pictura-app/cpp/keyboard_shortcuts_dialog.h
 )
+
+# A shared shell lets each Qt Test executable link one small library instead of
+# two large static archives. Release, packaging, and Windows keep the static
+# shell so the shipped binary stays self-contained and no symbol exports are
+# needed.
+if(BUILD_TESTING AND NOT WIN32)
+    set(PICTURA_SHELL_SHARED ON)
+    add_library(pictura_shell SHARED ${PICTURA_SHELL_SOURCES})
+else()
+    set(PICTURA_SHELL_SHARED OFF)
+    add_library(pictura_shell STATIC ${PICTURA_SHELL_SOURCES})
+endif()
+
 target_include_directories(pictura_shell PUBLIC
     crates/pictura-app/cpp
 )
+# In the shared configuration pictura_app and the resource object are private to
+# the library, so the generated cxx-qt headers have to be republished for the
+# test executables.
+if(PICTURA_SHELL_SHARED)
+    get_target_property(_pictura_cxx_qt_export_dir pictura_app CXX_QT_EXPORT_DIR)
+    if(_pictura_cxx_qt_export_dir)
+        target_include_directories(pictura_shell PUBLIC
+            "${_pictura_cxx_qt_export_dir}/crates/pictura_app/include")
+    endif()
+endif()
+
 # The Rust static lib embeds `pictura-color` (Little CMS 2). On Linux the
 # `lcms2-sys` crate links the system library dynamically, so the C++ link needs
 # `-llcms2`. On Windows pkg-config finds no system lcms2 and `lcms2-sys`'s static
 # fallback compiles the vendored copy into `pictura_app`; macOS does the same by
 # enabling lcms2-sys's `static` feature (pictura-color), so neither platform
 # links anything external.
-target_link_libraries(pictura_shell PUBLIC pictura_app Qt6::Svg Qt6::Network Qt6::PrintSupport)
+if(PICTURA_SHELL_SHARED)
+    target_link_libraries(pictura_shell PUBLIC Qt6::Widgets Qt6::Svg Qt6::Network Qt6::PrintSupport)
+    target_link_libraries(pictura_shell PRIVATE pictura_app pictura_assets)
+else()
+    target_link_libraries(pictura_shell PUBLIC pictura_app Qt6::Svg Qt6::Network Qt6::PrintSupport)
+endif()
 # RHI/private headers: interop.cpp includes <rhi/qrhi.h>. The exported private
 # target carries the platform-correct include dir (Debian, macOS framework,
 # Windows), so no hand-built qmake-derived path is needed.
 target_link_libraries(pictura_shell PRIVATE Qt6::GuiPrivate)
 if(UNIX AND NOT APPLE)
     find_library(LCMS2_LIBRARY NAMES lcms2 REQUIRED)
-    target_link_libraries(pictura_shell PUBLIC "${LCMS2_LIBRARY}")
+    if(PICTURA_SHELL_SHARED)
+        target_link_libraries(pictura_shell PRIVATE "${LCMS2_LIBRARY}")
+    else()
+        target_link_libraries(pictura_shell PUBLIC "${LCMS2_LIBRARY}")
+    endif()
 endif()
 
-# Compile the Qt resource once: the executable and every Qt Test binary link
-# this object library instead of each embedding its own copy of the .qrc.
-# POSITION_INDEPENDENT_CODE: object libraries default to non-PIC, but they are
-# linked into PIE executables; lld rejects the qrc's references without it.
-add_library(pictura_assets OBJECT assets/pictura.qrc)
-set_target_properties(pictura_assets PROPERTIES POSITION_INDEPENDENT_CODE ON)
-
-# The shell is a static library so the Qt Test suites under cpp/tests can link the
+# The shell is a library so the Qt Test suites under cpp/tests can link the
 # UI without a second main. Only main.cpp and the self-test sources stay here.
 add_executable(pictura
     crates/pictura-app/cpp/main.cpp
@@ -597,7 +667,19 @@ add_executable(pictura
     crates/pictura-app/cpp/selftest_visibility.h
     crates/pictura-app/cpp/selftest_workspace_input.h
 )
-target_link_libraries(pictura PRIVATE pictura_shell pictura_assets)
+# Menu construction is not on a hot path but compiles slowly; a lighter
+# optimization level keeps it off the development critical path.
+if(BUILD_TESTING AND CMAKE_BUILD_TYPE MATCHES "^(Release|RelWithDebInfo)$")
+    set_source_files_properties(
+        crates/pictura-app/cpp/command_tree.cpp
+        crates/pictura-app/cpp/filter_commands.cpp
+        PROPERTIES COMPILE_OPTIONS "$<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-O1>")
+endif()
+
+target_link_libraries(pictura PRIVATE pictura_shell)
+if(NOT PICTURA_SHELL_SHARED)
+    target_link_libraries(pictura PRIVATE pictura_assets)
+endif()
 
 # Windows-only presentation: a GUI-subsystem executable (no console window) with
 # an embedded icon and manifest. A plain `add_executable` never runs Qt's
