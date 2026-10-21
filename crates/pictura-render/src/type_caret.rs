@@ -86,9 +86,11 @@ fn caret_lines(spec: &TypeSpec) -> Option<(Vec<CaretLine>, f64)> {
                 } else {
                     0.0
                 };
-                let shift = if extra > 0.0 {
-                    0.0
-                } else if crate::type_justify::spreads(justify) && line.soft {
+                // A spread line fills the column, and a line that cannot be
+                // spread stays flush left; the paragraph's last line, or a
+                // plainly aligned one, takes the alignment.
+                let no_shift = extra > 0.0 || (crate::type_justify::spreads(justify) && line.soft);
+                let shift = if no_shift {
                     0.0
                 } else {
                     (aw - ink_advance) * factor

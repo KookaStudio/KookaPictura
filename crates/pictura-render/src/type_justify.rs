@@ -41,9 +41,7 @@ pub(crate) fn space_extra(
     advance: f32,
     column: f32,
 ) -> Option<f32> {
-    if bundled.space_glyph().is_none() {
-        return None;
-    }
+    bundled.space_glyph()?;
     let spaces = spaces(line);
     if spaces == 0 {
         return None;
