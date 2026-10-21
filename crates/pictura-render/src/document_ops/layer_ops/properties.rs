@@ -536,22 +536,11 @@ pub fn move_path_to_result(
 ) -> Option<String> {
     let src = parse_path(path)?;
     let (dest_parent, dest_index) = move_path_to_dest(doc, path, target, mode)?;
-    doc.layers
+    let moved = doc
+        .layers
         .move_node(&src, &dest_parent, dest_index.unwrap_or(usize::MAX))
         .ok()?;
-    let len = container_of(doc, &dest_parent)?.len();
-    let at = match dest_index {
-        None => len.checked_sub(1)?,
-        Some(mut index) => {
-            if dest_parent.as_slice() == &src[..src.len() - 1] && index > *src.last()? {
-                index -= 1;
-            }
-            index.min(len.checked_sub(1)?)
-        }
-    };
-    let mut segments = dest_parent;
-    segments.push(at);
-    Some(format_segments(&segments))
+    Some(format_segments(&moved))
 }
 
 /// Where [`arrange_path`] moves the node within its own container. `Front` is

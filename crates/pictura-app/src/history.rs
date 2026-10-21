@@ -59,8 +59,19 @@ enum Stored {
 struct Entry {
     label: String,
     stored: Stored,
+    /// The live target before the operation that created this state.
     target_before: LayerTarget,
+    /// The live target after the operation that created this state.
     target_after: LayerTarget,
+}
+
+/// How a restore picks the layer target: an undo reverses one operation, a
+/// redo re-applies one, and a jump lands on a state the user picked.
+#[derive(Clone, Copy)]
+enum TargetMode {
+    Undo,
+    Redo,
+    Jump,
 }
 
 struct Named {
@@ -278,7 +289,8 @@ impl History {
         selection: &mut Option<Selection>,
         target: &mut LayerTarget,
     ) -> Option<Restored> {
-        (self.cursor > 0).then(|| self.restore_live(self.cursor - 1, doc, selection, target))
+        (self.cursor > 0)
+            .then(|| self.restore_live(self.cursor - 1, TargetMode::Undo, doc, selection, target))
     }
 
     /// Redo into the live document in place; `None` at the newest state.
@@ -289,7 +301,7 @@ impl History {
         target: &mut LayerTarget,
     ) -> Option<Restored> {
         (self.cursor + 1 < self.states.len())
-            .then(|| self.restore_live(self.cursor + 1, doc, selection, target))
+            .then(|| self.restore_live(self.cursor + 1, TargetMode::Redo, doc, selection, target))
     }
 
     /// Jump the live document to state `i` in place; `None` when out of range.
@@ -300,7 +312,8 @@ impl History {
         selection: &mut Option<Selection>,
         target: &mut LayerTarget,
     ) -> Option<Restored> {
-        (i < self.states.len()).then(|| self.restore_live(i, doc, selection, target))
+        (i < self.states.len())
+            .then(|| self.restore_live(i, TargetMode::Jump, doc, selection, target))
     }
 
     pub fn can_undo(&self) -> bool {
@@ -436,20 +449,12 @@ impl History {
     fn restore_live(
         &mut self,
         target: usize,
+        mode: TargetMode,
         doc: &mut Document,
         selection: &mut Option<Selection>,
         layer_target: &mut LayerTarget,
     ) -> Restored {
-        let leaving_after = self
-            .states
-            .get(self.cursor)
-            .map(|entry| entry.target_after.clone())
-            .unwrap_or_default();
-        let arriving_after = self
-            .states
-            .get(target)
-            .map(|entry| entry.target_after.clone())
-            .unwrap_or_default();
+        let leaving = self.cursor;
         let agreed = self
             .current
             .as_ref()
@@ -468,8 +473,39 @@ impl History {
             *doc = private_copy(&mut cur.doc);
         }
         *selection = cur.selection.clone();
-        if *layer_target == leaving_after {
-            *layer_target = arriving_after;
+        // The target the restore carries: an undo reverses the operation and
+        // lands on the target from before it, a redo re-applies it and lands
+        // on the target it produced, and a jump lands on the target captured
+        // with the state the user picked. The live target only follows when
+        // the user left it alone.
+        let (untouched, restored) = match mode {
+            TargetMode::Undo => (
+                self.states
+                    .get(leaving)
+                    .map(|entry| entry.target_after.clone()),
+                self.states
+                    .get(leaving)
+                    .map(|entry| entry.target_before.clone()),
+            ),
+            TargetMode::Redo => (
+                self.states
+                    .get(target)
+                    .map(|entry| entry.target_before.clone()),
+                self.states
+                    .get(target)
+                    .map(|entry| entry.target_after.clone()),
+            ),
+            TargetMode::Jump => (
+                self.states
+                    .get(leaving)
+                    .map(|entry| entry.target_after.clone()),
+                self.states
+                    .get(target)
+                    .map(|entry| entry.target_after.clone()),
+            ),
+        };
+        if Some(&*layer_target) == untouched.as_ref() {
+            *layer_target = restored.unwrap_or_default();
         } else {
             layer_target.retain_resolving(doc);
         }

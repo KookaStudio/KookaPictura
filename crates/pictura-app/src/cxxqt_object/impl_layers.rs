@@ -856,25 +856,6 @@ impl qobject::PictureView {
         created.into_iter().map(QString::from).collect()
     }
 
-    pub fn group_layers(mut self: Pin<&mut Self>, paths: &QStringList) -> QString {
-        let owned = list_of_strings(paths);
-        let refs = as_str_slice(&owned);
-        let created = match self.as_mut().rust_mut().doc.as_mut() {
-            Some(doc) => pictura_render::group_paths(doc, &refs),
-            None => None,
-        };
-        match created {
-            Some(path) => {
-                self.as_mut().rust_mut().select_only_layer(&path);
-                self.as_mut().clear_link_sets();
-                self.as_mut().recomposite();
-                self.as_mut().record("Group Layers");
-                QString::from(path.as_str())
-            }
-            None => QString::default(),
-        }
-    }
-
     pub fn add_layer_in(mut self: Pin<&mut Self>, selection_path: &QString) -> QString {
         let created = match self.as_mut().rust_mut().doc.as_mut() {
             Some(doc) => pictura_render::add_layer_in(doc, &selection_path.to_string(), ""),

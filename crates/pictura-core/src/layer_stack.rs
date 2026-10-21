@@ -225,13 +225,14 @@ impl LayerStack {
     }
 
     /// Move a node between containers, or within one. `to_index == usize::MAX`
-    /// appends. Coordinates are pre-removal.
+    /// appends. Coordinates are pre-removal. Returns the moved node's path
+    /// after the move.
     pub fn move_node(
         &mut self,
         from: &[usize],
         to_parent: &[usize],
         to_index: usize,
-    ) -> Result<(), StackError> {
+    ) -> Result<Vec<usize>, StackError> {
         let was_well_formed = self.snapshot_valid();
         let (&src_index, src_parent) = from.split_last().ok_or(StackError::NoSuchPath)?;
         let source = self.container(src_parent).ok_or(StackError::NoSuchPath)?;
@@ -300,7 +301,9 @@ impl LayerStack {
             same_base_below,
         }));
         self.debug_check(was_well_formed);
-        Ok(())
+        let mut moved = post_parent;
+        moved.push(at);
+        Ok(moved)
     }
 
     /// Remove several nodes and insert a replacement block at the anchor.

@@ -101,6 +101,28 @@ bool LayersPanel::beginRenameForTest(const QString& path)
     return true;
 }
 
+void LayersPanel::clearStaleEditorsForTest()
+{
+    // An editor a previous check left open keeps the view in EditingState,
+    // which makes the next programmatic edit fail. Revert it and delete every
+    // stale editor so findChild returns only the editor the next edit makes.
+    const QList<QLineEdit*> stale = tree_->viewport()->findChildren<QLineEdit*>();
+    for (QLineEdit* editor : stale) {
+        if (editor->isVisible()) {
+            QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+            QCoreApplication::sendEvent(editor, &escape);
+        }
+        editor->deleteLater();
+    }
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    // A model reset during an earlier edit can leave the view in EditingState
+    // with no live editor, which wedges programmatic edits. There is no editor
+    // to close at this point, so normalize the state.
+    if (tree_->editStateForTest() != 0) {
+        tree_->resetEditStateForTest();
+    }
+}
+
 bool LayersPanel::selectRowForTest(const QString& path)
 {
     if (!model_ || !model_->indexForPath(path).isValid()) {

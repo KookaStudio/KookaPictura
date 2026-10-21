@@ -1,5 +1,6 @@
-//! Target transitions for delete and ungroup: these need the pre-deletion
-//! structure to choose deterministic survivors and remap spliced children.
+//! Target transitions for the structural commands: group, delete, and ungroup
+//! need the pre-operation structure to choose deterministic survivors and
+//! remap the paths the operation moved.
 
 use super::super::helpers::{
     as_str_slice, join_path, list_of_strings, survivor_after_delete, topmost_path,
@@ -9,8 +10,45 @@ use crate::layer_target::LayerTarget;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QString, QStringList};
+use pictura_core::Document;
 
 impl qobject::PictureView {
+    pub fn group_layers(mut self: Pin<&mut Self>, paths: &QStringList) -> QString {
+        let owned = list_of_strings(paths);
+        let refs = as_str_slice(&owned);
+        // The grouped layers and the user's selection, both as pre-operation
+        // paths: the group moves the layers around it.
+        let (grouped, selected) = {
+            let rust = self.rust();
+            (
+                grouped_paths(rust.doc.as_ref(), &refs),
+                rust.layer_target.selected().to_vec(),
+            )
+        };
+        let created = match self.as_mut().rust_mut().doc.as_mut() {
+            Some(doc) => pictura_render::group_paths(doc, &refs),
+            None => None,
+        };
+        match created {
+            Some(path) => {
+                let mut rust = self.as_mut().rust_mut();
+                let target_paths =
+                    group_target_paths(&grouped, &selected, &path, rust.doc.as_ref());
+                let target = {
+                    let mut target = LayerTarget::default();
+                    target.select(target_paths, Some(path.clone()), rust.doc.as_ref());
+                    target
+                };
+                rust.set_layer_target(target);
+                self.as_mut().clear_link_sets();
+                self.as_mut().recomposite();
+                self.as_mut().record("Group Layers");
+                QString::from(path.as_str())
+            }
+            None => QString::default(),
+        }
+    }
+
     pub fn delete_layers(mut self: Pin<&mut Self>, paths: &QStringList) -> i32 {
         let owned = list_of_strings(paths);
         let refs = as_str_slice(&owned);
@@ -178,4 +216,84 @@ impl qobject::PictureView {
         }
         removed
     }
+}
+
+/// The paths a group operation groups: the given ones that resolve, minus the
+/// descendants of another given path (the operation swallows them with their
+/// parent).
+fn grouped_paths(doc: Option<&Document>, paths: &[&str]) -> Vec<String> {
+    let Some(doc) = doc else {
+        return Vec::new();
+    };
+    let mut kept: Vec<String> = Vec::new();
+    for path in paths {
+        if pictura_render::resolve_path(doc, path).is_none() {
+            continue;
+        }
+        if paths
+            .iter()
+            .any(|other| *other != *path && path.starts_with(&format!("{other}/")))
+        {
+            continue;
+        }
+        kept.push(path.to_string());
+    }
+    kept
+}
+
+/// The paths a group operation leaves selected: the new group plus the layers
+/// the user had selected that the group did not swallow, remapped to the paths
+/// the operation gave them.
+fn group_target_paths(
+    grouped: &[String],
+    selected: &[String],
+    group_path: &str,
+    doc: Option<&Document>,
+) -> Vec<String> {
+    let mut paths = vec![group_path.to_string()];
+    let Some(first) = grouped.first() else {
+        return paths;
+    };
+    let parent = pictura_render::parent_path(first).unwrap_or("").to_string();
+    let indices: Vec<usize> = grouped
+        .iter()
+        .filter_map(|path| path.rsplit('/').next().and_then(|s| s.parse().ok()))
+        .collect();
+    let group_at = group_path
+        .rsplit('/')
+        .next()
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(0);
+    for path in selected {
+        if grouped.iter().any(|grouped| grouped == path) {
+            continue;
+        }
+        // A selected descendant of a grouped layer moves into the group; a
+        // sibling moves down by the grouped layers below it and up by one past
+        // the group.
+        let remapped = if let Some(suffix) = grouped
+            .iter()
+            .find_map(|grouped| path.strip_prefix(&format!("{grouped}/")))
+        {
+            format!("{group_path}/{suffix}")
+        } else if pictura_render::parent_path(path).unwrap_or("") == parent {
+            let index = path
+                .rsplit('/')
+                .next()
+                .and_then(|s| s.parse::<usize>().ok())
+                .unwrap_or(0);
+            let below = indices.iter().filter(|&&at| at < index).count();
+            let shifted = index - below;
+            join_path(&parent, shifted + usize::from(shifted >= group_at))
+        } else {
+            path.clone()
+        };
+        if doc
+            .and_then(|doc| pictura_render::resolve_path(doc, &remapped))
+            .is_some()
+        {
+            paths.push(remapped);
+        }
+    }
+    paths
 }

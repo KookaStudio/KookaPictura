@@ -121,7 +121,7 @@ impl qobject::PictureView {
             let rust = self.rust();
             rust.doc
                 .as_ref()
-                .is_some_and(|doc| active_layer_visible(doc, rust.active_layer.as_deref()))
+                .is_some_and(|doc| active_layer_visible(doc, rust.layer_target.single()))
         };
         if !editable {
             return false;

@@ -627,7 +627,9 @@ void LayersPanel::refresh()
     if (wasEditing) {
         const QModelIndex editIndex = proxyIndexForPath(selectedPath);
         if (editIndex.isValid()) {
-            tree_->setCurrentIndex(editIndex);
+            // The selection model's own move keeps the multi-selection; the
+            // view's would clear it for a single row.
+            tree_->selectionModel()->setCurrentIndex(editIndex, QItemSelectionModel::NoUpdate);
             tree_->edit(editIndex);
         }
     }

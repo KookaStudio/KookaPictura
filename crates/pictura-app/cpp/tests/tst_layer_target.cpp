@@ -501,14 +501,18 @@ void LayerTargetTest::historyJumpRestoresTarget()
 void LayerTargetTest::pasteBecomesTargetAndUndo()
 {
     QVERIFY(newDoc(QStringLiteral("Paste"), 2));
-    select({QStringLiteral("1")}, QStringLiteral("1"));
-    QVERIFY(pictura::clipboard_copy(*view_, QStringLiteral("1"), false));
+    // A copy needs pixels: rasterize a solid fill into a layer of its own.
+    const QString filled = view_->add_solid_fill(0xff2244aau);
+    QVERIFY(!filled.isEmpty());
+    QVERIFY(view_->rasterize_fill_content(filled));
+    select({filled}, filled);
+    QVERIFY(pictura::clipboard_copy(*view_, filled, false));
     const QString pasted =
-        pictura::clipboard_paste(*view_, QStringLiteral("1"), pictura::PasteKind::Plain, 0.0, 0.0);
+        pictura::clipboard_paste(*view_, filled, pictura::PasteKind::Plain, 0.0, 0.0);
     QVERIFY(!pasted.isEmpty());
     QCOMPARE(pictura::selected_layer_paths(*view_), QStringList{pasted});
     QVERIFY(view_->undo());
-    QCOMPARE(pictura::layer_selection_anchor(*view_), QStringLiteral("1"));
+    QCOMPARE(pictura::layer_selection_anchor(*view_), filled);
     QVERIFY(view_->redo());
     QCOMPARE(pictura::selected_layer_paths(*view_), QStringList{pasted});
 }

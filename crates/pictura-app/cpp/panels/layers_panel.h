@@ -86,6 +86,9 @@ public:
     bool rowExpandableForTest(const QString& path) const;
     QString rowToolTipForTest(const QString& path) const;
     bool beginRenameForTest(const QString& path);
+    /// Drop every inline editor the tree still holds and leave the view out of
+    /// its editing state, so the next programmatic edit is not ignored.
+    void clearStaleEditorsForTest();
     QObject* itemDelegateForTest() const;
     void toggleSoloForTest(const QString& path);
     int thumbSizeIndexForTest() const;

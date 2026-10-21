@@ -2649,13 +2649,12 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         QCoreApplication::processEvents();
         auto anatomyEdit = [anatomyPanel](const QString& path, const QString& text, int key) {
             QCoreApplication::processEvents();
+            // Drop the editor the previous step left open: it keeps the view
+            // in EditingState, so the edit below is ignored.
+            anatomyPanel->clearStaleEditorsForTest();
             if (!anatomyPanel->beginRenameForTest(path)) {
                 return false;
             }
-            QCoreApplication::processEvents();
-            // Drop editors from the previous step that are pending deleteLater,
-            // so findChild returns the editor the view currently has registered.
-            QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
             QCoreApplication::processEvents();
             auto* tree = anatomyPanel->findChild<QTreeView*>();
             QLineEdit* editor = tree ? tree->viewport()->findChild<QLineEdit*>() : nullptr;
@@ -2672,6 +2671,8 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         };
         const QString firstRow = QStringLiteral("2");
         const QString lastRow = QStringLiteral("0");
+        // A row whose neighbour is a top-level row, open groups or not.
+        const QString middleRow = QStringLiteral("1");
         const bool downSent = anatomyEdit(firstRow, QStringLiteral("TopAdj"), Qt::Key_Tab);
         const bool downMoved =
             downSent
@@ -2686,9 +2687,9 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             && pictura::layers_api::rowAt(*anatomyView, rowOf(firstRow)).name == QStringLiteral("TopAdj");
         const bool downOk = downMoved && downUndoOk;
         const bool upOk =
-            anatomyEdit(lastRow, QStringLiteral("Bottom"), Qt::Key_Backtab)
-            && pictura::layers_api::rowAt(*anatomyView, rowOf(lastRow)).name == QStringLiteral("Bottom")
-            && anatomyPanel->currentPath() == QStringLiteral("1");
+            anatomyEdit(middleRow, QStringLiteral("Bottom"), Qt::Key_Backtab)
+            && pictura::layers_api::rowAt(*anatomyView, rowOf(middleRow)).name == QStringLiteral("Bottom")
+            && anatomyPanel->currentPath() == firstRow;
         const bool noWrapFirst =
             anatomyEdit(firstRow, QStringLiteral("First"), Qt::Key_Backtab)
             && pictura::layers_api::rowAt(*anatomyView, rowOf(firstRow)).name == QStringLiteral("First")

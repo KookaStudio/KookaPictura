@@ -11,7 +11,7 @@
 //! and the import bridges share the decode helpers, so Revert, Edit Contents,
 //! the self-test, and the existing tests keep their behaviour.
 
-use super::helpers::{decode_import, topmost_pixel_layer_index};
+use super::helpers::decode_import;
 use super::helpers_composite::{current_buffer, store_composite};
 use super::impl_core::{finalize_import, format_for_path};
 use super::pdf_export::import::ffi::ImportTarget;
