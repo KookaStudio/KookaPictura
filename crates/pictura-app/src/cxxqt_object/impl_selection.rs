@@ -117,6 +117,15 @@ impl qobject::PictureView {
         if dx == 0 && dy == 0 {
             return false;
         }
+        let editable = {
+            let rust = self.rust();
+            rust.doc
+                .as_ref()
+                .is_some_and(|doc| active_layer_visible(doc, rust.active_layer.as_deref()))
+        };
+        if !editable {
+            return false;
+        }
         if let Some(path) = active_mask_target(self.rust()) {
             let prepared = {
                 let rust = self.rust();
@@ -251,6 +260,9 @@ impl qobject::PictureView {
             let (Some(selection), Some(path)) = (selection, rust.active_layer.as_deref()) else {
                 return false;
             };
+            if !active_layer_visible(doc, Some(path)) {
+                return false;
+            }
             selection_duplicate_preview(doc, path, selection, rust.gpu_compute)
         };
         let Some((base, layer, opacity)) = prepared else {

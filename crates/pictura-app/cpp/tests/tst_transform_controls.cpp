@@ -9,6 +9,8 @@
 #include "options_bar.h"
 #include "tools.h"
 
+#include "commands.h"
+
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
@@ -16,6 +18,8 @@
 #include "qt_test_support.h"
 
 #include <QtWidgets/QCheckBox>
+#include <QtCore/QCoreApplication>
+#include <QtGui/QAction>
 
 namespace {
 
@@ -46,6 +50,8 @@ private slots:
     void clickInsideLeavesTheDocumentAlone();
     void selectionSuppressesTheBox();
     void backgroundAndToolSwitchSuppressTheBox();
+    void hiddenLayerShowsNoControlsOrMove();
+    void hiddenLayerRefusesTransforms();
     void ctrlTTakesTheBoxOver();
     void idleBoxLeavesTheLayerAlone();
 
@@ -278,6 +284,73 @@ void TransformControlsTest::backgroundAndToolSwitchSuppressTheBox()
     frame.setActiveTool(pictura::ToolId::Move);
     QVERIFY(tools->transformControlsSession());
     QVERIFY(!boxRect(*frame.imageView()).isEmpty());
+}
+
+void TransformControlsTest::hiddenLayerShowsNoControlsOrMove()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginControls(frame, true);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    pictura::ImageView* canvas = frame.imageView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(view && canvas && tools);
+    QVERIFY(tools->transformControlsSession());
+    QVERIFY(!boxRect(*canvas).isEmpty());
+
+    view->set_layer_visible(layer.toInt(), false);
+    QCoreApplication::processEvents();
+
+    // A hidden layer shows no controls box.
+    QVERIFY(!tools->transformControlsSession());
+    QVERIFY(boxRect(*canvas).isEmpty());
+
+    const auto rectOf = [view, &layer]() {
+        const ::rust::Vec<int32_t> rect = pictura::layer_rect_extents(*view, layer);
+        return QList<int>({rect[0], rect[1], rect[2], rect[3]});
+    };
+    const QList<int> before = rectOf();
+    const int history = view->history_count();
+    canvas->setSmartGuidesEnabled(false);
+    canvas->mousePressed(QPointF(15.0, 13.0), Qt::LeftButton, int(Qt::NoModifier));
+    QVERIFY(!canvas->movePreviewActive());
+    canvas->mouseMoved(QPointF(25.0, 23.0));
+    canvas->mouseReleased(QPointF(25.0, 23.0));
+
+    // The Move drag neither moves the hidden layer nor records a state.
+    QCOMPARE(rectOf(), before);
+    QCOMPARE(view->history_count(), history);
+}
+
+void TransformControlsTest::hiddenLayerRefusesTransforms()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginControls(frame, true);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY(view);
+    pictura::CommandRegistry* registry = frame.registry();
+    QVERIFY(registry);
+    QAction* free = registry->action(QString::fromLatin1(pictura::command_ids::EditFreeTransform));
+    QVERIFY(free);
+
+    view->set_layer_visible(layer.toInt(), false);
+    QCoreApplication::processEvents();
+    registry->refresh();
+
+    QVERIFY(!view->layer_can_free_transform(layer));
+    QVERIFY(!free->isEnabled());
+    QVERIFY(!view->begin_free_transform(layer));
+    QVERIFY(!view->transform_session_active());
+    QVERIFY(!frame.beginFreeTransform(layer));
+    QVERIFY(!view->begin_move_preview());
+
+    // A selection cannot lift a hidden layer's pixels either.
+    QVERIFY(view->select_rect(5, 5, 6, 6, QStringLiteral("new"), 0.0));
+    QVERIFY(!view->layer_can_free_transform(layer));
+    QVERIFY(!view->begin_free_transform(layer));
+    QVERIFY(!view->transform_session_active());
+    view->deselect();
 }
 
 void TransformControlsTest::ctrlTTakesTheBoxOver()

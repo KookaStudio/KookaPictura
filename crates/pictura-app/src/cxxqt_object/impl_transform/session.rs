@@ -206,13 +206,14 @@ pub(super) fn transform_preview_layer(
 
 /// Whether `path` resolves to a transformable target: a raster pixel layer, or
 /// a channel-less embedded smart object whose source materializes. False for a
-/// group, adjustment layer, Background layer, position-locked layer, or a
-/// zero-area target.
+/// hidden layer, a group, adjustment layer, Background layer, position-locked
+/// layer, or a zero-area target.
 fn can_free_transform(doc: &pictura_core::Document, path: &str) -> bool {
     let Some(layer) = pictura_render::resolve_path(doc, path) else {
         return false;
     };
-    if layer.is_group
+    if !layer.visible
+        || layer.is_group
         || layer.adjustment.is_some()
         || layer.background
         || layer.lock.contains(LockFlags::POSITION)
@@ -240,10 +241,12 @@ fn lift_coverage(rust: &super::super::state::PictureViewRust) -> Option<Vec<u8>>
 }
 
 /// Whether a selection on `path` lifts its pixels for the transform (CS6
-/// transforms the selected pixels, a Background's included).
+/// transforms the selected pixels, a Background's included; a hidden layer's
+/// does not).
 fn lifts_selection(rust: &PictureViewRust, path: &str) -> bool {
     rust.doc.as_ref().is_some_and(|doc| {
-        pictura_render::resolve_path(doc, path).is_some_and(pictura_render::can_lift_selection)
+        pictura_render::resolve_path(doc, path)
+            .is_some_and(|layer| layer.visible && pictura_render::can_lift_selection(layer))
     }) && lift_coverage(rust).is_some()
 }
 
@@ -621,7 +624,7 @@ impl qobject::PictureView {
             else {
                 return false;
             };
-            if layer_move_locked(layer) {
+            if !layer.visible || layer_move_locked(layer) {
                 return false;
             }
         }
@@ -686,7 +689,7 @@ impl qobject::PictureView {
             else {
                 return false;
             };
-            if layer_move_locked(layer) {
+            if !layer.visible || layer_move_locked(layer) {
                 return false;
             }
         }
@@ -782,6 +785,15 @@ impl qobject::PictureView {
         let Some(path) = self.as_ref().move_cache_target() else {
             return false;
         };
+        let editable = self
+            .rust()
+            .doc
+            .as_ref()
+            .and_then(|doc| pictura_render::resolve_path(doc, &path))
+            .is_some_and(|layer| layer.visible && !layer_move_locked(layer));
+        if !editable {
+            return false;
+        }
         let before = {
             let rust = self.rust();
             let Some(doc) = rust.doc.as_ref() else {

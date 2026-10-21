@@ -361,7 +361,8 @@ void PicturaMainWindow::registerHandlers()
 
     // M37: layer creation and grouping. Layer…/Group… open the modal dialog,
     // whose accept step places the node above the selection; Group from Layers…
-    // wraps the panel selection. The remaining commands target the active
+    // wraps the panel selection, and Duplicate Layer acts on every selected
+    // path like the panel's row menu. Group/Ungroup still target the active
     // document's current layer — the Layers panel's selected row, -1 when none.
     // ponytail: one current layer; M38's multi-selection upgrades these to
     // per-selection operations.
@@ -384,8 +385,8 @@ void PicturaMainWindow::registerHandlers()
         }
     });
     registry_->setHandler(command_ids::LayerDuplicateLayer, [this]() {
-        if (PictureView* view = activeView()) {
-            view->duplicate_layer(layersPanel_ ? layersPanel_->currentLayer() : -1);
+        if (layersPanel_) {
+            layersPanel_->duplicateSelection();
             refresh();
         }
     });
@@ -402,11 +403,15 @@ void PicturaMainWindow::registerHandlers()
         }
     });
     for (const char* id : {command_ids::LayerNewLayer, command_ids::LayerNewGroup,
-                           command_ids::LayerDuplicateLayer, command_ids::LayerGroupLayers,
+                           command_ids::LayerGroupLayers,
                            command_ids::LayerUngroupLayers}) {
         registry_->setEnabledProvider(id,
                                       [this]() { return activeView() && activeView()->has_document(); });
     }
+    registry_->setEnabledProvider(command_ids::LayerDuplicateLayer, [this]() {
+        return activeView() && activeView()->has_document() && layersPanel_
+            && !layersPanel_->selectedPaths().isEmpty();
+    });
     registry_->setEnabledProvider(command_ids::LayerNewGroupFromLayers, [this]() {
         return activeView() && activeView()->has_document() && layersPanel_
             && !layersPanel_->selectedPaths().isEmpty();

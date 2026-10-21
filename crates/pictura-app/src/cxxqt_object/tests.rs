@@ -577,21 +577,20 @@ fn duplicate_move_target_duplicates_and_repoints_the_active_layer() {
 }
 
 #[test]
-fn duplicate_move_target_preserves_visibility_and_refuses_locks() {
+fn duplicate_move_target_refuses_hidden_and_locked() {
     let mut hidden = pixel_layer("hidden", 8, 8, (1, 2, 3));
     hidden.visible = false;
     let mut doc = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
     doc.layers =
         pictura_core::LayerStack::from_layers(vec![pixel_layer("base", 8, 8, (0, 0, 0)), hidden]);
     let mut active = Some("1".to_string());
-    assert_eq!(
-        duplicate_move_target(&mut doc, &mut active),
-        Some("2".to_string())
-    );
+    let before = doc.clone();
     assert!(
-        !doc.layers[2].visible,
-        "the clone of an invisible layer stays invisible"
+        duplicate_move_target(&mut doc, &mut active).is_none(),
+        "a hidden target refuses"
     );
+    assert_eq!(doc, before, "a hidden target refuses without mutation");
+    assert_eq!(active.as_deref(), Some("1"));
 
     // A position-locked target refuses without mutating the document or the
     // active path, and a group is not a target at all.
