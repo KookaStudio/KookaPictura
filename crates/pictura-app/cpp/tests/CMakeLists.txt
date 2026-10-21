@@ -130,7 +130,9 @@ set(PICTURA_QT_TESTS
 
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/qt-test-results)
 
+set(PICTURA_QT_TEST_SOURCES "")
 foreach(test_name IN LISTS PICTURA_QT_TESTS)
+    list(APPEND PICTURA_QT_TEST_SOURCES ${test_name}.cpp)
     add_executable(${test_name} ${test_name}.cpp)
     if(PICTURA_SHELL_SHARED)
         target_link_libraries(${test_name} PRIVATE pictura_shell Qt6::Test)
@@ -147,3 +149,7 @@ foreach(test_name IN LISTS PICTURA_QT_TESTS)
         TIMEOUT 120
     )
 endforeach()
+
+# The suites include the generated cxx-qt header, so they follow the bridge
+# stamp like the shell does.
+pictura_depend_on_bridge_stamp(${PICTURA_QT_TEST_SOURCES})
