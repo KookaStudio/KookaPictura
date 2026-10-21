@@ -36,20 +36,28 @@ The CTest critical path before the change named one suite:
 work — window and panel construction, PDF parsing — rather than sleeping, so
 the lever is splitting them, not replacing waits.
 
-The QMAKE spike (task 1.4) came out **go**: with
-`QMAKE = { value = "qmake6" }` in `.cargo/config.toml`, switching the
-environment between a set and an unset `QMAKE` cost 0.0 s instead of 145 s.
+The QMAKE spike (task 1.4) came out **go** on the question it asked —
 Cargo's `[env]` table does reach the build-script fingerprint on toolchain
-1.98, so the fallback in decision 5 is not needed. The fingerprint records
-`qmake6` in both target directories — the bare Cargo one and the
-`build/cargo/build` one the CMake build drives — and a different value
-(`QMAKE=/usr/bin/qmake6 cargo build -p pictura_app`) still reruns the cxx-qt
-build script, in 207 s.
+1.98 — but the value it can hold is not usable. `qt-build-utils` runs qmake
+with a **cleared environment**, where a bare name is not found on the PATH:
+the value has to be a path, and a path is machine-specific. The CI proved
+it: its Qt is not in `/usr/bin`, and the cxx-qt build script failed with
+"Could not find Qt installation: QMAKE environment variable specified as
+qmake6".
 
-The value is a name, and `qt-build-utils` runs qmake with a **cleared
-environment**, where a bare name is not found on the PATH: the cxx-qt build
-script resolves the name to a path before it runs. Without that, the CI
-fails, because its Qt is not in `/usr/bin`.
+So the value is not pinned in `.cargo/config.toml`. What decision 5 settles is
+that **no script and no build system exports a QMAKE of its own**:
+
+- a bare `cargo build`, `cargo clippy`, `cargo nextest` and rust-analyzer's
+  flycheck have no `QMAKE` in their environment, and the cxx-qt build script
+  finds qmake on the PATH itself;
+- the CMake build's cargo invocation gets the path the cxx-qt module chose
+  (`Qt::qmake`), which is a path every machine has.
+
+The fingerprint is therefore stable in each build tree, which is what the
+cascade needed: the bare Cargo tree records no `QMAKE` and the CMake tree
+records the same path on every run. A different qmake still reruns the build
+script: `QMAKE=/usr/bin/qmake6 cargo build -p pictura_app` takes 207 s.
 
 `scripts/check-build-lock.sh` takes 17.5 s of wall time and 0.9 s of CPU.
 Every second of it is a deliberate sleep: the queue case holds the lock for
@@ -226,10 +234,10 @@ build script reruns.
 The fix is to make the process environment carry the same value in every
 flow. Cargo's `[env]` table in `.cargo/config.toml` is the one mechanism
 that applies to every cargo invocation regardless of who started it, and
-Nothing else exports a `QMAKE`: the CMake build does not pass one to the
-cargo invocation, so the value does not depend on which tool started the
-build. An explicit `QMAKE` in the environment wins over the default and
-reruns the build script, as it should.
+Nothing else exports a `QMAKE`: the local verification scripts export none,
+so the value does not depend on which tool started the build. An explicit
+`QMAKE` in the environment is honoured and reruns the build script, as it
+should.
 
 Whether Cargo's `[env]` reaches the fingerprint is **not** a given:
 rust-lang/cargo#10358 reports that `cargo:rerun-if-env-changed` does not
@@ -238,13 +246,14 @@ this a **spike with a recorded outcome**, and the fallback — CMake honours
 `$ENV{QMAKE}` when it is set, and the developer exports it once — is written
 down before the implementation starts rather than discovered halfway.
 
-The value is the bare name `qmake6`, not an absolute path: the fingerprint
-compares strings, and an absolute path differs between machines and between
-a shell that exports one and one that does not. Both supported distributions
-ship `qmake6` (`scripts/install-deps-fedora.sh:133` names the Fedora
-package). The name has to be resolved to a path before qmake runs, because
-`qt-build-utils` clears the environment when it runs qmake, and a cleared
-environment has no PATH to search; the cxx-qt build script does that.
+The value the fingerprint compares has to be a **path**, because
+`qt-build-utils` runs qmake with a cleared environment, where a bare name is
+not found on the PATH. A path is machine-specific, so it cannot be pinned in
+a committed file: the CMake build uses the one the cxx-qt module chose
+(`Qt::qmake`, which `find_package(Qt6)` resolved), and a bare Cargo
+invocation exports none and lets the build script find qmake on the PATH.
+Both supported distributions ship `qmake6`
+(`scripts/install-deps-fedora.sh:133` names the Fedora package).
 
 *Alternative considered*: `QMAKE=<absolute path>` from a wrapper script in
 the repository. The path differs per worktree, so the fingerprint would

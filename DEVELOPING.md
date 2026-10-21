@@ -121,13 +121,14 @@ recompiled against the regenerated header in the same build that regenerates
 it. The stamp is rewritten only when the bridge content changes, so a
 re-configure does not dirty the whole C++ tree.
 
-Every cargo invocation sees the same `QMAKE`: `.cargo/config.toml` sets
-`QMAKE = { value = "qmake6" }`, and neither a script nor the CMake build
-exports one of its own, so the value does not depend on which tool started the
-build. The cxx-qt build script resolves the name to a path — `qt-build-utils`
-runs qmake with a cleared environment, where a bare name is not found on the
-PATH. An explicit `QMAKE` in the environment wins over the default and reruns
-the build script, as it should:
+No script and no build system exports a `QMAKE` of its own, so the value the
+cxx-qt build script's fingerprint compares does not depend on which tool
+started the build. A bare `cargo build` has no `QMAKE` and the build script
+finds qmake on the PATH; the CMake build's cargo invocation gets the path the
+cxx-qt module chose (`Qt::qmake`). The value has to be a path:
+`qt-build-utils` runs qmake with a cleared environment, where a bare name is
+not found on the PATH. An explicit `QMAKE` in the environment is honoured and
+reruns the build script, as it should:
 
 ```bash
 QMAKE=/path/to/qmake cargo build -p pictura_app

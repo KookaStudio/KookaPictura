@@ -11,7 +11,7 @@ because `check-openspec-archived.sh` fails while the change directory is open.
 - [x] 1.1 Write `test-plan.md` in this change folder with one row per scenario in every delta spec, and verify `python3 scripts/check-test-plan.py` reports no missing row
 - [x] 1.2 Record the before numbers on this machine with command and duration for each row: a clean configure and build (wall, `build/.ninja_log` CPU-s, `du -sh build`), a rebuild after touching one shell `.cpp` (both the first and the second build), a rebuild after touching a non-bridge `.rs`, a rebuild after editing a bridge `.rs` (both builds), `ctest -R '^tst_'`, `verify-fast.sh`, and `verify-full.sh`; verify every row has a number
 - [x] 1.3 Record the CTest critical path and the three slowest suites' individual durations; verify the critical path currently names one suite, so the "not bounded by its slowest suite" requirement has a before value
-- [x] 1.4 Spike the QMAKE mechanism: add `QMAKE = { value = "qmake6" }` to `.cargo/config.toml`, build `pictura_app` with `QMAKE` unset, then with `QMAKE=/usr/bin/qmake6`, then unset again, with `CARGO_LOG=cargo::core::compiler::fingerprint=info`; verify the third build does not recompile `cxx-qt-lib`, `cxx-qt` or `pictura_app`; record go/no-go in `design.md` and, if it is a no-go, keep the fallback there
+- [x] 1.4 Spike the QMAKE mechanism: with `CARGO_LOG=cargo::core::compiler::fingerprint=info`, build `pictura_app` with `QMAKE` unset, then with `QMAKE=/usr/bin/qmake6`, then unset again; verify the third build does not recompile `cxx-qt-lib`, `cxx-qt` or `pictura_app`; record the outcome in `design.md` -- Cargo's `[env]` table reaches the fingerprint, but a bare name is not usable, because `qt-build-utils` runs qmake with a cleared environment
 - [x] 1.5 Verify the exported header tree's layout in a built tree (`$CXX_QT_EXPORT_DIR/crates/pictura_app/include`), so the write-if-changed snapshot has a known shape; record the file count and the total size
 
 ## 2. Build script change tracking
@@ -29,7 +29,7 @@ because `check-openspec-archived.sh` fails while the change directory is open.
 
 ## 4. QMAKE
 
-- [x] 4.1 Act on the spike's outcome: `config.toml`'s `[env]` reaches the fingerprint, so `QMAKE = { value = "qmake6" }` stays in `.cargo/config.toml`; the CMake build exports no `QMAKE` of its own, and the cxx-qt build script resolves the name to a path because `qt-build-utils` runs qmake with a cleared environment; verify the mechanism the spike chose
+- [x] 4.1 Act on the spike's outcome: a bare name cannot be the value, so `.cargo/config.toml` pins no `QMAKE`; the CMake build's cargo invocation keeps the path the cxx-qt module chose (`Qt::qmake`), a bare Cargo invocation exports none and the cxx-qt build script finds qmake on the PATH; verify the mechanism the spike chose
 - [x] 4.2 Delete `scripts/qmake-env.sh` and its two `source` lines in `scripts/verify-fast.sh` and `scripts/test-report.sh`; verify no script exports `QMAKE` any more and that alternating `verify-full.sh` and `verify-fast.sh` does not rebuild `pictura_app` because of `QMAKE`
 - [x] 4.3 Verify that a genuinely different `QMAKE` still reruns the cxx-qt build script, and record the fingerprint-log evidence for both rows
 

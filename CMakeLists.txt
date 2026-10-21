@@ -108,11 +108,10 @@ if(NOT CxxQt_FOUND)
 endif()
 
 # cxx-qt reaches Qt through qmake. Debian/Ubuntu ship qmake6 for Qt 6; the bare
-# `qmake` is Qt 5, so look for qmake6 first. The value the build uses is one
-# string for every cargo invocation: `.cargo/config.toml` pins it, and the
-# cxx-qt build script resolves it to a path. Exporting the path found here
-# would give the cargo invocation a different fingerprint than a bare
-# `cargo build`, which is the churn this avoids.
+# `qmake` is Qt 5, so look for qmake6 first. The value the build uses is the
+# same in every cargo invocation: no script and no build system exports a
+# QMAKE, so the cxx-qt build script finds qmake on the PATH itself. The
+# lookup here is the early error for a machine without one.
 find_program(QMAKE_EXECUTABLE NAMES qmake6 qmake)
 if(NOT QMAKE_EXECUTABLE)
     message(FATAL_ERROR "qmake not found — install qt6-base-dev")

@@ -92,15 +92,14 @@ includes its moc, not a central moc compilation unit.
 
 Every cargo invocation — the one the CMake build drives, a bare `cargo build`,
 `cargo clippy`, `cargo nextest`, and rust-analyzer's flycheck — SHALL observe
-the same `QMAKE` value, so the cxx-qt build script's
+a `QMAKE` value that does not change between the invocations that share a
+build tree, so the cxx-qt build script's
 `rerun-if-env-changed=QMAKE` fingerprint does not change between them. The
-value SHALL come from one source of truth that does not depend on which tool
-started the build; the local verification scripts SHALL NOT export a `QMAKE` of
-their own, the helper script that did SHALL be removed, and the CMake build
-SHALL NOT export one to the cargo invocation it drives. The value SHALL name
-a qmake the cxx-qt build script can resolve to a path, because it runs qmake
-with a cleared environment. Selecting a genuinely different qmake SHALL still
-rerun the build script.
+local verification scripts SHALL NOT export a `QMAKE` of their own, and the
+helper script that did SHALL be removed. The value SHALL be one the cxx-qt
+build script can run: it runs qmake with a cleared environment, where a bare
+name is not found on the PATH, so only a path works. Selecting a genuinely
+different qmake SHALL still rerun the build script.
 
 #### Scenario: alternating gates do not rerun the build script [bp_qmake_stable]
 

@@ -36,13 +36,14 @@ Workspace layout/commands: `mem:core`, `mem:suggested_commands`.
   CMake builds with Ninja.
 - Development builds (`BUILD_TESTING` on) use a shared `pictura_shell`; release
   and packaging use `-DBUILD_TESTING=OFF` and the static shell.
-- `.cargo/config.toml` also pins `QMAKE = { value = "qmake6" }`, and neither a
-  script nor the CMake build exports one of its own, so every cargo invocation
-  sees the same value and the cxx-qt build script's fingerprint does not change
-  between them. The build script resolves the name to a path: `qt-build-utils`
-  runs qmake with a cleared environment, where a bare name is not found on the
-  PATH. An explicit `QMAKE` in the environment wins and reruns the build
-  script.
+- No script and no build system exports a `QMAKE` of its own, so the value the
+  cxx-qt build script's fingerprint compares does not depend on which tool
+  started the build: a bare Cargo invocation has none and the build script
+  finds qmake on the PATH, the CMake build's cargo invocation gets the path
+  the cxx-qt module chose (`Qt::qmake`). The value has to be a path, because
+  `qt-build-utils` runs qmake with a cleared environment, where a bare name is
+  not found on the PATH. An explicit `QMAKE` in the environment is honoured and
+  reruns the build script.
 - The cxx-qt build script watches only the bridge sources and the hand-written
   bridge edges; CMake hashes the bridge sources into `build/pictura_bridge.stamp`
   at configure time, and the translation units that include a generated header

@@ -9,7 +9,7 @@ reviewer checklist in the PR.
 
 | Scenario | Steps | Expected result | Coverage |
 |---|---|---|---|
-| `bp_qmake_stable` | Run `verify-full.sh`, then `verify-fast.sh`, with `CARGO_LOG=cargo::core::compiler::fingerprint=info` | Both cargo invocations observe the same `QMAKE`; the cxx-qt build script does not rerun because of it | manual: read the fingerprint log for a `QMAKE` change, and print the value each flow sees |
+| `bp_qmake_stable` | Run `verify-full.sh`, then `verify-fast.sh`, with `CARGO_LOG=cargo::core::compiler::fingerprint=info` | The `QMAKE` value does not change between the invocations of a build tree; the cxx-qt build script does not rerun because of it | manual: read the fingerprint log for a `QMAKE` change, and print the value each flow sees |
 | `bp_qmake_change` | Build with `QMAKE` naming a different qmake than the previous run | The cxx-qt build script reruns | manual: `QMAKE=/usr/bin/qmake6 cargo build -p pictura_app` and read the fingerprint log |
 | `bp_bridge_tracking` | Touch one shell `.cpp` that no bridge includes; record the build-script fingerprint directory's mtime; build | The build script did not rerun; the generated headers keep their timestamps | manual: `stat` the fingerprint file under `target/**/build/pictura_app-*/` and the exported header before and after the build |
 | `bp_bridge_header_tracking` | Edit `crates/pictura-app/cpp/decode_image.h`; build | The build script reruns and the Rust static library is rebuilt | manual: the fingerprint log shows a `pictura_app` rebuild after the edit |
