@@ -94,11 +94,10 @@ linked into the C++ `pictura` binary. cxx-qt codegen is driven by
 Qt-free; only `pictura-app` touches Qt.
 
 Development builds (`BUILD_TESTING` on, the default) compile `pictura_shell` as
-a shared library and the Rust crate with the lighter `app` profile, so the Qt
-Test suites link one small library instead of two static archives. Release and
-packaging builds pass `-DBUILD_TESTING=OFF`, keep the static shell, and are the
-only installable form; `cmake --install` on a development build is not
-supported.
+a shared library, so the Qt Test suites link one small library instead of two
+static archives. Release and packaging builds pass `-DBUILD_TESTING=OFF`, keep
+the static shell, and are the only installable form; `cmake --install` on a
+development build is not supported.
 
 `CMakeLists.txt` lists every `.cpp`/`.h` explicitly, so a new source file must be
 added there. Each QObject header's matching `.cpp` ends with
@@ -106,6 +105,29 @@ added there. Each QObject header's matching `.cpp` ends with
 instead of a central moc unit. The CMake configure also links
 `compile_commands.json` into the repo root for clangd/Serena C++ navigation; if
 C++ cross-file references look fuzzy, reconfigure.
+
+### What the build reacts to
+
+The cxx-qt build script (`crates/pictura-app/build.rs`) watches only what it
+consumes: the bridge Rust sources that define the generated C++ interface and
+the three hand-written bridge edges under `cpp/`. A shell translation unit, a
+test source or a document does not rerun it, and the generated headers keep
+their timestamps when their content is unchanged.
+
+A change to a bridge source is picked up in **one** build. At configure time
+CMake hashes the bridge sources into `build/pictura_bridge.stamp` and makes the
+translation units that include a generated header depend on it, so the C++ is
+recompiled against the regenerated header in the same build that regenerates
+it. The stamp is rewritten only when the bridge content changes, so a
+re-configure does not dirty the whole C++ tree.
+
+Every cargo invocation sees the same `QMAKE`: `.cargo/config.toml` sets
+`QMAKE = { value = "qmake6", force = true }`, and the value reaches the cxx-qt
+build script's fingerprint in the CMake-driven build and in a bare `cargo
+build` alike. The bare name is searched on `PATH`. To use another qmake, set
+it through the command line — `cargo --config
+'env.QMAKE.value="/path/to/qmake"' build` — which reruns the build script, as
+it should.
 
 ## Architecture and data flow
 
@@ -212,6 +234,24 @@ GPU tests are `#[ignore]`d with a reason string and run with
 [`docs/dev/testing-conventions.md`](docs/dev/testing-conventions.md) for how
 each layer is built and reports.
 
+`scripts/test-report.sh` folds the layers into one report. The two
+application self-test invocations run concurrently with each other and with
+the CTest layer, and a suite that CTest registered but that produced no report
+is a failure, named in the report — a suite that never started is not a
+silently missing line.
+
+`scripts/check-build-tree.sh` compares the build tree with the sources under
+it: the full gate fails when the application binary predates a tracked source
+or when a registered suite has no executable, and the fast gate reports the
+same staleness. Run `cmake --build build` before the fast gate when it warns.
+
+The slow Qt Test suites are registered in several entries each
+(`crates/pictura-app/cpp/tests/CMakeLists.txt`): an entry runs a share of the
+suite's test functions, chosen by the `PICTURA_TEST_SHARD` environment
+variable, so the layer's wall time is set by the parallel level rather than by
+one suite. A suite whose test functions share state keeps one entry.
+`CTEST_PARALLEL_LEVEL` overrides the level, which is four by default.
+
 ## Headless
 
 ```bash
@@ -314,13 +354,15 @@ an explicit `-DCMAKE_EXE_LINKER_FLAGS` needs `-U CMAKE_EXE_LINKER_FLAGS` (or a
 fresh directory) to re-probe; `verify-full.sh` does that for you, so force a
 choice through the `CMAKE_EXE_LINKER_FLAGS` environment variable instead of a
 cached `-D` value. Development builds link `pictura_shell` as a shared library,
-and the Rust app builds with the `app` profile (`opt-level = 2`, line tables);
-release and packaging keep the static shell and `--release`.
+and the Rust app builds with the `dev` profile; release and packaging keep the
+static shell and `--release`.
 
 CTest suites run four at a time; set `CTEST_PARALLEL_LEVEL` to override it. The
 local build-caching check reuses a user-level FetchContent checkout cache under
 `${XDG_CACHE_HOME:-$HOME/.cache}/kooka-pictura/fetchcontent`, so repeated
-configures do not re-clone cxx-qt-cmake or Corrosion.
+configures do not re-clone cxx-qt-cmake or Corrosion. In its default mode the
+check configures the project once; `--full` adds the two other launcher cases
+and is what CI runs.
 
 `sccache` is optional. When it is on `PATH`, a plain
 `cmake -S . -B build` configures it as the C++ compiler launcher
