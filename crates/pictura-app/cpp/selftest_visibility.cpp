@@ -113,8 +113,8 @@ int pictura::runVisibilityChecks(pictura::PicturaMainWindow& frame)
         frame.closeDocument(doc, false);
     }
 
-    // vis_invisible_move (365): a Move drag on an invisible active layer
-    // translates it, records exactly one state, and leaves it invisible.
+    // vis_invisible_move (365): a Move drag on an invisible active layer is
+    // refused: it neither moves nor records a state, and stays invisible.
     {
         const bool created = frame.newDocument(QStringLiteral("VisMove"), 32, 32,
                                                QStringLiteral("rgb"), 8,
@@ -131,7 +131,8 @@ int pictura::runVisibilityChecks(pictura::PicturaMainWindow& frame)
         const int historyBefore = view->history_count();
 
         frame.setActiveTool(pictura::ToolId::Move);
-        // This check is about the invisible layer moving, not smart-guide snap.
+        // This check is about the invisible layer refusing the move, not
+        // smart-guide snap.
         canvas->setSmartGuidesEnabled(false);
         canvas->mousePressed(QPointF(8, 8), Qt::LeftButton, int(Qt::NoModifier));
         canvas->mouseMoved(QPointF(16, 16));
@@ -139,13 +140,13 @@ int pictura::runVisibilityChecks(pictura::PicturaMainWindow& frame)
 
         const bool moved = transform_api::layerRect(*view, QStringLiteral("0")).toString() != rectBefore;
         const bool stillInvisible = !view->layer_visible(0);
-        const bool oneState = view->history_count() == historyBefore + 1;
+        const bool noState = view->history_count() == historyBefore;
         ST_BEGIN("vis_invisible_move");
         ST_PASS("vis_invisible_move moved=%d invisible=%d hist=%d", moved ? 1 : 0,
                 stillInvisible ? 1 : 0, view->history_count() - historyBefore);
-        if (!moved || !stillInvisible || !oneState) {
+        if (moved || !stillInvisible || !noState) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(365, "invisible layer must still move");
+            return pictura::selfTest().fail(365, "invisible layer must not move");
         }
         frame.closeDocument(doc, false);
     }
