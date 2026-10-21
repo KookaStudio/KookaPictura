@@ -11,6 +11,7 @@
 //! [`PictureView`]: super::qobject::PictureView
 
 use super::qobject::PictureView;
+use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use pictura_core::PsdRect;
@@ -180,8 +181,10 @@ fn healing_commit(
         let mut rust = view.as_mut().rust_mut();
         rust.doc = Some(outcome.document);
     }
-    view.as_mut().refresh_region(outcome.dirty);
-    view.as_mut().record(label);
+    view.as_mut().edit(label, |_| Edit::Regions {
+        rects: vec![outcome.dirty],
+        notify: false,
+    });
     view.as_mut().changed();
     true
 }
@@ -224,8 +227,10 @@ fn patch_selection(
             _ => return false,
         }
     };
-    view.as_mut().refresh_region(dirty);
-    view.as_mut().record("Patch Tool");
+    view.as_mut().edit("Patch Tool", |_| Edit::Regions {
+        rects: vec![dirty],
+        notify: false,
+    });
     view.as_mut().changed();
     true
 }
@@ -261,8 +266,10 @@ fn content_aware_move(
             _ => return false,
         }
     };
-    view.as_mut().refresh_region(dirty);
-    view.as_mut().record("Content-Aware Move");
+    view.as_mut().edit("Content-Aware Move", |_| Edit::Regions {
+        rects: vec![dirty],
+        notify: false,
+    });
     view.as_mut().changed();
     true
 }
@@ -294,8 +301,10 @@ fn red_eye(
             _ => return false,
         }
     };
-    view.as_mut().refresh_region(dirty);
-    view.as_mut().record("Red Eye Tool");
+    view.as_mut().edit("Red Eye Tool", |_| Edit::Regions {
+        rects: vec![dirty],
+        notify: false,
+    });
     view.as_mut().changed();
     true
 }

@@ -7,6 +7,7 @@
 //! [`PictureView`]: super::qobject::PictureView
 
 use super::qobject::PictureView;
+use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -144,7 +145,7 @@ fn channels_new_alpha(mut view: Pin<&mut PictureView>) -> i32 {
         });
         doc.channels.len() as i32 - 1
     };
-    view.as_mut().record("New Channel");
+    view.as_mut().edit("New Channel", |_| Edit::Record);
     index
 }
 
@@ -160,7 +161,7 @@ fn channels_delete_alpha(mut view: Pin<&mut PictureView>, index: i32) -> bool {
         }
     };
     if removed {
-        view.as_mut().record("Delete Channel");
+        view.as_mut().edit("Delete Channel", |_| Edit::Record);
     }
     removed
 }

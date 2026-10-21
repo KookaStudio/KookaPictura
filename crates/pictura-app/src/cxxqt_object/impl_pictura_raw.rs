@@ -8,9 +8,9 @@
 //! the dialog can prefill, `layer_can_apply_pictura_raw` gates the menu, and
 //! `pictura_raw_preview` renders a downscaled copy for the dialog's live preview.
 
-use super::helpers::*;
 use super::helpers_composite::buffer_to_image;
 use super::qobject;
+use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QString};
@@ -77,18 +77,7 @@ impl qobject::PictureView {
             }
         };
         if applied {
-            self.as_mut().clear_link_sets();
-            let region = self
-                .rust()
-                .doc
-                .as_ref()
-                .and_then(|doc| pictura_render::resolve_path(doc, &path))
-                .and_then(layer_visibility_region);
-            match region {
-                Some(rect) => self.as_mut().refresh_region(rect),
-                None => self.as_mut().recomposite(),
-            }
-            self.as_mut().record("Pictura Raw");
+            self.as_mut().edit("Pictura Raw", |_| Edit::Structural);
         }
         applied
     }

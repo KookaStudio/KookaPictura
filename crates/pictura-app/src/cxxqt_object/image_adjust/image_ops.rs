@@ -6,6 +6,7 @@
 
 use super::super::helpers_composite::{buffer_to_rgba_bytes, current_buffer};
 use super::super::qobject::PictureView;
+use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -79,8 +80,7 @@ fn finish(mut view: Pin<&mut PictureView>, doc: Document, label: &str) -> bool {
         rust.reset_edit_state();
         rust.select_only_layer("0");
     }
-    view.as_mut().recomposite();
-    view.as_mut().record(label);
+    view.as_mut().edit(label, |_| Edit::Full);
     view.as_mut().changed();
     true
 }
@@ -147,8 +147,7 @@ fn rotate_document_arbitrary(mut view: Pin<&mut PictureView>, angle_deg: f64) ->
     };
     if rotated {
         view.as_mut().rust_mut().selection = None;
-        view.as_mut().recomposite();
-        view.as_mut().record("Rotate");
+        view.as_mut().edit("Rotate", |_| Edit::Full);
     }
     rotated
 }

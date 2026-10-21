@@ -148,7 +148,7 @@ oracle.
 |---|---|---|
 | Structural | After each op, `write_psd` → `read_psd` preserves `doc.width`/`doc.height` and the top-level layer count. | Exact |
 | Structural | Depth-first `(name, rect)` list is identical before write and after read (groups and children included). | Exact |
-| Consistency | `doc.composite == composite_rgba(&doc)` after every op. | Exact (`PartialEq` on the `PixelBuffer`) |
+| Consistency | The engine leaves `doc.composite` untouched; the oracle materializes it with `composite_rgba(&doc)` before writing. | Exact (`PartialEq` on the `PixelBuffer`) |
 | Exactness | Four `rotate_document(1)` calls equal the original document. | Exact |
 | Exactness | `flip_document` twice (each axis) equals the original document. | Exact |
 | Exactness | Canvas grow centered, then shrink centered back to the original size, equals the original document. | Exact |
@@ -157,7 +157,7 @@ oracle.
 
 The exactness checks compare whole `Document`s, so the original must be
 canonical: `sample_doc()` sets `doc.composite = composite_rgba(&doc)` before the
-test, matching what every op recomputes.
+test, matching what the app transaction materializes after an op.
 
 "Opposite anchor restores dimensions" is dimensions only. Opposite anchors move
 the content (a `TopLeft` grow followed by a `BottomRight` shrink shifts the

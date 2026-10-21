@@ -1,3 +1,4 @@
+use super::edit::Edit;
 use super::helpers::*;
 use super::helpers_composite::*;
 use super::qobject;
@@ -73,25 +74,22 @@ impl qobject::PictureView {
     }
 
     pub fn set_layer_visible(mut self: Pin<&mut Self>, i: i32, visible: bool) {
-        let region = {
-            let mut rust = self.as_mut().rust_mut();
-            let rust = &mut *rust;
+        self.as_mut().edit("Layer Visibility", |rust| {
             let Some(doc) = rust.doc.as_mut() else {
-                return;
+                return Edit::None;
             };
-            match doc.layers.get_mut(i as usize) {
-                Some(layer) => {
-                    layer.visible = visible;
-                    layer_visibility_region(layer)
-                }
-                None => return,
+            let Some(layer) = doc.layers.get_mut(i as usize) else {
+                return Edit::None;
+            };
+            layer.visible = visible;
+            match layer_visibility_region(layer) {
+                Some(rect) => Edit::Regions {
+                    rects: vec![rect],
+                    notify: false,
+                },
+                None => Edit::Full,
             }
-        };
-        match region {
-            Some(rect) => self.as_mut().refresh_region(rect),
-            None => self.as_mut().recomposite(),
-        }
-        self.as_mut().record("Layer Visibility");
+        });
     }
 
     pub fn layer_blend(&self, i: i32) -> QString {
@@ -196,22 +194,17 @@ impl qobject::PictureView {
 
     pub fn set_layer_name(mut self: Pin<&mut Self>, i: i32, name: &QString) -> bool {
         let name = name.to_string();
-        let changed = if let Some(doc) = self.as_mut().rust_mut().doc.as_mut() {
-            match doc.layers.get_mut(i as usize) {
-                Some(layer) => {
-                    layer.name = name;
-                    true
-                }
-                None => false,
-            }
-        } else {
-            false
-        };
-        if changed {
-            self.as_mut().recomposite();
-            self.as_mut().record("Rename Layer");
-        }
-        changed
+        let edit = self.as_mut().edit("Rename Layer", |rust| {
+            let Some(doc) = rust.doc.as_mut() else {
+                return Edit::None;
+            };
+            let Some(layer) = doc.layers.get_mut(i as usize) else {
+                return Edit::None;
+            };
+            layer.name = name;
+            Edit::Meta
+        });
+        !matches!(edit, Edit::None)
     }
 
     /// Move the top-level layer at index `i` by `delta`. The render-side
@@ -219,119 +212,111 @@ impl qobject::PictureView {
     /// `|delta| > 1` shifts rather than swapping two endpoints, and locked
     /// layers or the Background are refused.
     pub fn move_layer(mut self: Pin<&mut Self>, i: i32, delta: i32) -> bool {
-        let changed = if let Some(doc) = self.as_mut().rust_mut().doc.as_mut() {
-            pictura_render::move_path(doc, &i.to_string(), delta)
-        } else {
-            false
-        };
-        if changed {
-            let mut rust = self.as_mut().rust_mut();
+        let edit = self.as_mut().edit("Reorder Layer", |rust| {
+            let moved = {
+                let Some(doc) = rust.doc.as_mut() else {
+                    return Edit::None;
+                };
+                pictura_render::move_path(doc, &i.to_string(), delta)
+            };
+            if !moved {
+                return Edit::None;
+            }
             let len = rust.doc.as_ref().map_or(0, |doc| doc.layers.len());
             if len > 0 {
                 let index = (i + delta).clamp(0, len as i32 - 1) as usize;
                 rust.select_only_layer(&index.to_string());
             }
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record("Reorder Layer");
-        }
-        changed
+            Edit::Structural
+        });
+        !matches!(edit, Edit::None)
     }
 
     pub fn add_layer(mut self: Pin<&mut Self>, above: i32) -> i32 {
-        let created = {
-            let mut rust = self.as_mut().rust_mut();
-            match rust.doc.as_mut() {
-                Some(doc) => {
-                    let name = pictura_render::next_layer_name(doc, "Layer");
-                    pictura_render::add_layer(doc, above, &name)
-                }
-                None => -1,
+        let mut created = -1;
+        self.as_mut().edit("New Layer", |rust| {
+            let Some(doc) = rust.doc.as_mut() else {
+                return Edit::None;
+            };
+            let name = pictura_render::next_layer_name(doc, "Layer");
+            created = pictura_render::add_layer(doc, above, &name);
+            if created >= 0 {
+                rust.layer_target.select_only(&created.to_string());
+                Edit::Structural
+            } else {
+                Edit::None
             }
-        };
-        if created >= 0 {
-            self.as_mut()
-                .rust_mut()
-                .layer_target
-                .select_only(&created.to_string());
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record("New Layer");
-        }
+        });
         created
     }
 
     pub fn add_group(mut self: Pin<&mut Self>, above: i32) -> i32 {
-        let created = {
-            let mut rust = self.as_mut().rust_mut();
-            match rust.doc.as_mut() {
-                Some(doc) => {
-                    let name = pictura_render::next_layer_name(doc, "Group");
-                    pictura_render::add_group(doc, above, &name)
-                }
-                None => -1,
+        let mut created = -1;
+        self.as_mut().edit("New Group", |rust| {
+            let Some(doc) = rust.doc.as_mut() else {
+                return Edit::None;
+            };
+            let name = pictura_render::next_layer_name(doc, "Group");
+            created = pictura_render::add_group(doc, above, &name);
+            if created >= 0 {
+                rust.layer_target.select_only(&created.to_string());
+                Edit::Structural
+            } else {
+                Edit::None
             }
-        };
-        if created >= 0 {
-            self.as_mut()
-                .rust_mut()
-                .layer_target
-                .select_only(&created.to_string());
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record("New Group");
-        }
+        });
         created
     }
 
     pub fn duplicate_layer(mut self: Pin<&mut Self>, index: i32) -> i32 {
         let add_copy = self.rust().add_copy;
-        let created = match self.as_mut().rust_mut().doc.as_mut() {
-            Some(doc) => {
-                let created = pictura_render::duplicate_layer(doc, index);
-                if created >= 0 && !add_copy {
-                    doc.layers[created as usize].name = doc.layers[index as usize].name.clone();
-                }
-                created
+        let mut created = -1;
+        self.as_mut().edit("Duplicate Layer", |rust| {
+            let Some(doc) = rust.doc.as_mut() else {
+                return Edit::None;
+            };
+            created = pictura_render::duplicate_layer(doc, index);
+            if created >= 0 && !add_copy {
+                doc.layers[created as usize].name = doc.layers[index as usize].name.clone();
             }
-            None => -1,
-        };
-        if created >= 0 {
-            self.as_mut()
-                .rust_mut()
-                .layer_target
-                .select_only(&created.to_string());
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record("Duplicate Layer");
-        }
+            if created >= 0 {
+                rust.layer_target.select_only(&created.to_string());
+                Edit::Structural
+            } else {
+                Edit::None
+            }
+        });
         created
     }
 
     pub fn group_layer(mut self: Pin<&mut Self>, index: i32) -> i32 {
-        let created = match self.as_mut().rust_mut().doc.as_mut() {
-            Some(doc) => pictura_render::group_layer(doc, index),
-            None => -1,
-        };
-        if created >= 0 {
-            self.as_mut()
-                .rust_mut()
-                .layer_target
-                .select_only(&created.to_string());
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record("Group Layers");
-        }
+        let mut created = -1;
+        self.as_mut().edit("Group Layers", |rust| {
+            let Some(doc) = rust.doc.as_mut() else {
+                return Edit::None;
+            };
+            created = pictura_render::group_layer(doc, index);
+            if created >= 0 {
+                rust.layer_target.select_only(&created.to_string());
+                Edit::Structural
+            } else {
+                Edit::None
+            }
+        });
         created
     }
 
     pub fn ungroup_layer(mut self: Pin<&mut Self>, index: i32) -> bool {
-        let changed = match self.as_mut().rust_mut().doc.as_mut() {
-            Some(doc) => pictura_render::ungroup_layer(doc, index),
-            None => false,
-        };
-        if changed {
-            let mut rust = self.as_mut().rust_mut();
+        let edit = self.as_mut().edit("Ungroup Layers", |rust| {
+            let ungrouped = {
+                let Some(doc) = rust.doc.as_mut() else {
+                    return Edit::None;
+                };
+                pictura_render::ungroup_layer(doc, index)
+            };
+            if !ungrouped {
+                return Edit::None;
+            }
             let len = rust.doc.as_ref().map_or(0, |doc| doc.layers.len());
             if len > 0 {
                 let index = index.clamp(0, len as i32 - 1) as usize;
@@ -339,11 +324,9 @@ impl qobject::PictureView {
             } else {
                 rust.layer_target.clear();
             }
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record("Ungroup Layers");
-        }
-        changed
+            Edit::Structural
+        });
+        !matches!(edit, Edit::None)
     }
 
     pub fn layer_thumbnail(&self, i: i32, size: i32) -> QImage {
@@ -513,25 +496,31 @@ impl qobject::PictureView {
     }
 
     pub fn set_layer_name_path(mut self: Pin<&mut Self>, path: &QString, name: &QString) -> bool {
-        let changed = match self.as_mut().rust_mut().doc.as_mut() {
-            Some(doc) => pictura_render::rename_path(doc, &path.to_string(), &name.to_string()),
-            None => false,
-        };
-        if changed {
-            self.as_mut().recomposite();
-            self.as_mut().record("Rename Layer");
-        }
-        changed
+        let edit = self.as_mut().edit("Rename Layer", |rust| {
+            let Some(doc) = rust.doc.as_mut() else {
+                return Edit::None;
+            };
+            if pictura_render::rename_path(doc, &path.to_string(), &name.to_string()) {
+                Edit::Meta
+            } else {
+                Edit::None
+            }
+        });
+        !matches!(edit, Edit::None)
     }
 
     pub fn move_layer_path(mut self: Pin<&mut Self>, path: &QString, delta: i32) -> bool {
-        let changed = match self.as_mut().rust_mut().doc.as_mut() {
-            Some(doc) => pictura_render::move_path(doc, &path.to_string(), delta),
-            None => false,
-        };
-        if changed {
-            let path = path.to_string();
-            let mut rust = self.as_mut().rust_mut();
+        let path = path.to_string();
+        let edit = self.as_mut().edit("Move Layer", |rust| {
+            let moved = {
+                let Some(doc) = rust.doc.as_mut() else {
+                    return Edit::None;
+                };
+                pictura_render::move_path(doc, &path, delta)
+            };
+            if !moved {
+                return Edit::None;
+            }
             if let Some(doc) = rust.doc.as_ref() {
                 let parent = pictura_render::parent_path(&path).unwrap_or("");
                 if let (Some(index), Some(len)) = (
@@ -546,11 +535,9 @@ impl qobject::PictureView {
                     }
                 }
             }
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record("Move Layer");
-        }
-        changed
+            Edit::Structural
+        });
+        !matches!(edit, Edit::None)
     }
 
     pub fn move_layer_to(
@@ -561,18 +548,20 @@ impl qobject::PictureView {
     ) -> bool {
         let path = path.to_string();
         let target = target.to_string();
-        let moved = match self.as_mut().rust_mut().doc.as_mut() {
-            Some(doc) => pictura_render::move_path_to_result(doc, &path, &target, mode),
-            None => None,
-        };
-        let Some(moved) = moved else {
-            return false;
-        };
-        self.as_mut().rust_mut().select_only_layer(&moved);
-        self.as_mut().clear_link_sets();
-        self.as_mut().recomposite();
-        self.as_mut().record("Move Layer");
-        true
+        let edit = self.as_mut().edit("Move Layer", |rust| {
+            let moved = {
+                let Some(doc) = rust.doc.as_mut() else {
+                    return Edit::None;
+                };
+                pictura_render::move_path_to_result(doc, &path, &target, mode)
+            };
+            let Some(moved) = moved else {
+                return Edit::None;
+            };
+            rust.select_only_layer(&moved);
+            Edit::Structural
+        });
+        !matches!(edit, Edit::None)
     }
 
     pub fn can_move_layer_to(&self, path: &QString, target: &QString, mode: i32) -> bool {
@@ -587,23 +576,27 @@ impl qobject::PictureView {
     pub fn set_layers_visible(mut self: Pin<&mut Self>, paths: &QStringList, visible: bool) -> i32 {
         let owned = list_of_strings(paths);
         let refs = as_str_slice(&owned);
-        let (changed, region) = {
-            let mut rust = self.as_mut().rust_mut();
-            let rust = &mut *rust;
-            match rust.doc.as_mut() {
-                Some(doc) => set_visible_paths_union(doc, &refs, visible),
-                None => (0, None),
+        let mut changed = 0;
+        self.as_mut().edit("Set Visibility", |rust| {
+            let Some(doc) = rust.doc.as_mut() else {
+                return Edit::None;
+            };
+            let (count, region) = set_visible_paths_union(doc, &refs, visible);
+            changed = count;
+            if count == 0 {
+                return Edit::None;
             }
-        };
+            match region {
+                Some(rect) => Edit::Regions {
+                    rects: vec![rect],
+                    notify: false,
+                },
+                None => Edit::Full,
+            }
+        });
         if changed == 0 {
             paint_timing::report();
-            return 0;
         }
-        match region {
-            Some(rect) => self.as_mut().refresh_region(rect),
-            None => self.as_mut().recomposite(),
-        }
-        self.as_mut().record("Set Visibility");
         changed as i32
     }
 
@@ -682,37 +675,30 @@ impl qobject::PictureView {
         let value = value.clamp(0, 255) as u8;
         let owned = list_of_strings(paths);
         let refs = as_str_slice(&owned);
-        let (changed, region) = match self.as_mut().rust_mut().doc.as_mut() {
-            Some(doc) => {
-                let before: Vec<_> = refs
-                    .iter()
-                    .map(|path| property_compositing(doc, path))
-                    .collect();
-                let changed = pictura_render::set_opacity_paths(doc, &refs, value);
-                let region = if changed > 0 {
-                    changed_property_region(doc, &refs, &before)
-                } else {
-                    Some(None)
-                };
-                (changed, region)
-            }
-            None => (0, None),
-        };
         let pending = self.rust().opacity_preview_changed;
         self.as_mut().rust_mut().opacity_preview_changed = false;
-        let bounded = matches!(region, Some(Some(_)));
-        if changed > 0 {
-            match region {
-                Some(Some(rect)) => self.as_mut().refresh_region(rect),
-                _ => self.as_mut().recomposite(),
+        let mut changed = 0;
+        self.as_mut().edit("Opacity", |rust| {
+            let Some(doc) = rust.doc.as_mut() else {
+                return Edit::None;
+            };
+            let before: Vec<_> = refs
+                .iter()
+                .map(|path| property_compositing(doc, path))
+                .collect();
+            changed = pictura_render::set_opacity_paths(doc, &refs, value);
+            if changed == 0 {
+                return if pending { Edit::Record } else { Edit::None };
             }
-        }
-        if changed > 0 || pending {
-            self.as_mut().record("Opacity");
-            if changed == 0 || bounded {
-                self.as_mut().changed();
+            match changed_property_region(doc, &refs, &before) {
+                Some(Some(rect)) => Edit::Regions {
+                    rects: vec![rect],
+                    notify: true,
+                },
+                Some(None) => Edit::Record,
+                None => Edit::Full,
             }
-        }
+        });
         changed as i32
     }
 
@@ -753,37 +739,30 @@ impl qobject::PictureView {
         let value = value.clamp(0, 255) as u8;
         let owned = list_of_strings(paths);
         let refs = as_str_slice(&owned);
-        let (changed, region) = match self.as_mut().rust_mut().doc.as_mut() {
-            Some(doc) => {
-                let before: Vec<_> = refs
-                    .iter()
-                    .map(|path| property_compositing(doc, path))
-                    .collect();
-                let changed = pictura_render::set_fill_paths(doc, &refs, value);
-                let region = if changed > 0 {
-                    changed_property_region(doc, &refs, &before)
-                } else {
-                    Some(None)
-                };
-                (changed, region)
-            }
-            None => (0, None),
-        };
         let pending = self.rust().fill_preview_changed;
         self.as_mut().rust_mut().fill_preview_changed = false;
-        let bounded = matches!(region, Some(Some(_)));
-        if changed > 0 {
-            match region {
-                Some(Some(rect)) => self.as_mut().refresh_region(rect),
-                _ => self.as_mut().recomposite(),
+        let mut changed = 0;
+        self.as_mut().edit("Fill Opacity", |rust| {
+            let Some(doc) = rust.doc.as_mut() else {
+                return Edit::None;
+            };
+            let before: Vec<_> = refs
+                .iter()
+                .map(|path| property_compositing(doc, path))
+                .collect();
+            changed = pictura_render::set_fill_paths(doc, &refs, value);
+            if changed == 0 {
+                return if pending { Edit::Record } else { Edit::None };
             }
-        }
-        if changed > 0 || pending {
-            self.as_mut().record("Fill Opacity");
-            if changed == 0 || bounded {
-                self.as_mut().changed();
+            match changed_property_region(doc, &refs, &before) {
+                Some(Some(rect)) => Edit::Regions {
+                    rects: vec![rect],
+                    notify: true,
+                },
+                Some(None) => Edit::Record,
+                None => Edit::Full,
             }
-        }
+        });
         changed as i32
     }
 
@@ -824,24 +803,24 @@ impl qobject::PictureView {
         let add_copy = self.rust().add_copy;
         let owned = list_of_strings(paths);
         let refs = as_str_slice(&owned);
-        let created = match self.as_mut().rust_mut().doc.as_mut() {
-            Some(doc) => {
-                let created = pictura_render::duplicate_paths(doc, &refs);
-                if !add_copy {
-                    for path in &created {
-                        if let Some(layer) = pictura_render::resolve_path_mut(doc, path) {
-                            if let Some(stripped) = layer.name.strip_suffix(" copy") {
-                                layer.name = stripped.to_string();
-                            }
+        let mut created: Vec<String> = Vec::new();
+        self.as_mut().edit("Duplicate Layer", |rust| {
+            let Some(doc) = rust.doc.as_mut() else {
+                return Edit::None;
+            };
+            created = pictura_render::duplicate_paths(doc, &refs);
+            if !add_copy {
+                for path in &created {
+                    if let Some(layer) = pictura_render::resolve_path_mut(doc, path) {
+                        if let Some(stripped) = layer.name.strip_suffix(" copy") {
+                            layer.name = stripped.to_string();
                         }
                     }
                 }
-                created
             }
-            None => Vec::new(),
-        };
-        if !created.is_empty() {
-            let mut rust = self.as_mut().rust_mut();
+            if created.is_empty() {
+                return Edit::None;
+            }
             let anchor = created.last().cloned();
             let target = {
                 let mut target = LayerTarget::default();
@@ -849,38 +828,42 @@ impl qobject::PictureView {
                 target
             };
             rust.set_layer_target(target);
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record("Duplicate Layer");
-        }
+            Edit::Structural
+        });
         created.into_iter().map(QString::from).collect()
     }
 
     pub fn add_layer_in(mut self: Pin<&mut Self>, selection_path: &QString) -> QString {
-        let created = match self.as_mut().rust_mut().doc.as_mut() {
-            Some(doc) => pictura_render::add_layer_in(doc, &selection_path.to_string(), ""),
-            None => String::new(),
-        };
-        if !created.is_empty() {
-            self.as_mut().rust_mut().select_only_layer(&created);
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record("New Layer");
-        }
+        let selection_path = selection_path.to_string();
+        let mut created = String::new();
+        self.as_mut().edit("New Layer", |rust| {
+            let Some(doc) = rust.doc.as_mut() else {
+                return Edit::None;
+            };
+            created = pictura_render::add_layer_in(doc, &selection_path, "");
+            if created.is_empty() {
+                return Edit::None;
+            }
+            rust.select_only_layer(&created);
+            Edit::Structural
+        });
         QString::from(created.as_str())
     }
 
     pub fn add_group_in(mut self: Pin<&mut Self>, selection_path: &QString) -> QString {
-        let created = match self.as_mut().rust_mut().doc.as_mut() {
-            Some(doc) => pictura_render::add_group_in(doc, &selection_path.to_string(), ""),
-            None => String::new(),
-        };
-        if !created.is_empty() {
-            self.as_mut().rust_mut().select_only_layer(&created);
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record("New Group");
-        }
+        let selection_path = selection_path.to_string();
+        let mut created = String::new();
+        self.as_mut().edit("New Group", |rust| {
+            let Some(doc) = rust.doc.as_mut() else {
+                return Edit::None;
+            };
+            created = pictura_render::add_group_in(doc, &selection_path, "");
+            if created.is_empty() {
+                return Edit::None;
+            }
+            rust.select_only_layer(&created);
+            Edit::Structural
+        });
         QString::from(created.as_str())
     }
 
@@ -901,28 +884,27 @@ impl qobject::PictureView {
         f: impl FnOnce(&mut Layer, bool) -> bool,
     ) -> bool {
         paint_timing::start(label);
-        let (changed, region) = if let Some(doc) = self.as_mut().rust_mut().doc.as_mut() {
+        let edit = self.as_mut().edit(label, |rust| {
+            let Some(doc) = rust.doc.as_mut() else {
+                return Edit::None;
+            };
             let background = is_background_layer(doc, i);
-            match doc.layers.get_mut(i as usize) {
-                Some(layer) => {
-                    let changed = f(layer, background);
-                    let region = changed.then(|| layer_visibility_region(layer)).flatten();
-                    (changed, region)
-                }
-                None => (false, None),
+            let Some(layer) = doc.layers.get_mut(i as usize) else {
+                return Edit::None;
+            };
+            if !f(layer, background) {
+                return Edit::None;
             }
-        } else {
-            (false, None)
-        };
-        if changed {
-            match region {
-                Some(rect) => self.as_mut().refresh_region(rect),
-                None => self.as_mut().recomposite(),
+            match layer_visibility_region(layer) {
+                Some(rect) => Edit::Regions {
+                    rects: vec![rect],
+                    notify: false,
+                },
+                None => Edit::Full,
             }
-            self.as_mut().record(label);
-        }
+        });
         paint_timing::report();
-        changed
+        !matches!(edit, Edit::None)
     }
 
     /// As [`Self::mutate_layer`] for a property that changes no pixel: record
@@ -933,20 +915,21 @@ impl qobject::PictureView {
         label: &str,
         f: impl FnOnce(&mut Layer, bool) -> bool,
     ) -> bool {
-        let changed = match self.as_mut().rust_mut().doc.as_mut() {
-            Some(doc) => {
-                let background = is_background_layer(doc, i);
-                doc.layers
-                    .get_mut(i as usize)
-                    .is_some_and(|layer| f(layer, background))
+        let edit = self.as_mut().edit(label, |rust| {
+            let Some(doc) = rust.doc.as_mut() else {
+                return Edit::None;
+            };
+            let background = is_background_layer(doc, i);
+            let Some(layer) = doc.layers.get_mut(i as usize) else {
+                return Edit::None;
+            };
+            if f(layer, background) {
+                Edit::Meta
+            } else {
+                Edit::None
             }
-            None => false,
-        };
-        if changed {
-            self.as_mut().record(label);
-            self.as_mut().changed();
-        }
-        changed
+        });
+        !matches!(edit, Edit::None)
     }
 
     /// Shared batch mutation wrapper: apply `op` to every listed path, then
@@ -960,14 +943,18 @@ impl qobject::PictureView {
     ) -> i32 {
         let owned = list_of_strings(paths);
         let refs = as_str_slice(&owned);
-        let changed = match self.as_mut().rust_mut().doc.as_mut() {
-            Some(doc) => op(doc, &refs),
-            None => 0,
-        };
-        if changed > 0 {
-            self.as_mut().recomposite();
-            self.as_mut().record(label);
-        }
+        let mut changed = 0;
+        self.as_mut().edit(label, |rust| {
+            let Some(doc) = rust.doc.as_mut() else {
+                return Edit::None;
+            };
+            changed = op(doc, &refs);
+            if changed > 0 {
+                Edit::Full
+            } else {
+                Edit::None
+            }
+        });
         changed as i32
     }
 
@@ -985,34 +972,31 @@ impl qobject::PictureView {
         paint_timing::start(label);
         let owned = list_of_strings(paths);
         let refs = as_str_slice(&owned);
-        let (changed, region) = match self.as_mut().rust_mut().doc.as_mut() {
-            Some(doc) => {
-                let before: Vec<_> = refs
-                    .iter()
-                    .map(|path| property_compositing(doc, path))
-                    .collect();
-                let changed = op(doc, &refs);
-                let region = if repaint {
-                    changed_property_region(doc, &refs, &before)
-                } else {
-                    Some(None)
-                };
-                (changed, region)
+        let mut changed = 0;
+        self.as_mut().edit(label, |rust| {
+            let Some(doc) = rust.doc.as_mut() else {
+                return Edit::None;
+            };
+            let before: Vec<_> = refs
+                .iter()
+                .map(|path| property_compositing(doc, path))
+                .collect();
+            changed = op(doc, &refs);
+            if changed == 0 {
+                return Edit::None;
             }
-            None => (0, None),
-        };
-        if changed == 0 {
-            return 0;
-        }
-        match region {
-            None => self.as_mut().recomposite(),
-            Some(Some(rect)) => self.as_mut().refresh_region(rect),
-            Some(None) => {}
-        }
-        self.as_mut().record(label);
-        if region.is_some() {
-            self.as_mut().changed();
-        }
+            if !repaint {
+                return Edit::Meta;
+            }
+            match changed_property_region(doc, &refs, &before) {
+                Some(Some(rect)) => Edit::Regions {
+                    rects: vec![rect],
+                    notify: true,
+                },
+                Some(None) => Edit::Meta,
+                None => Edit::Full,
+            }
+        });
         paint_timing::report();
         changed as i32
     }

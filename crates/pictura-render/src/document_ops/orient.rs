@@ -1,13 +1,14 @@
 //! `Image > Image Rotation` and flips at document scope (`IMG-003`).
 //!
-//! Exact 90/270/180 index remaps of every layer rect and channel plane, then
-//! `doc.composite = composite_rgba(doc)`. The per-plane remap reuses the M10
+//! Exact 90/270/180 index remaps of every layer rect and channel plane. The
+//! engine leaves `doc.composite` untouched; the app materializes it. The
+//! per-plane remap reuses the M10
 //! `pictura_ops` pixel-buffer functions.
 
 use pictura_core::{Document, PixelBuffer, PsdRect, SourceChannels};
 use pictura_ops::OpsError;
 
-use super::{for_each_layer, native_store, recompute};
+use super::{for_each_layer, native_store};
 
 /// The five exact orientation remaps.
 #[derive(Clone, Copy)]
@@ -115,6 +116,7 @@ fn transform_rect(r: PsdRect, w: i32, h: i32, kind: Kind) -> PsdRect {
 }
 
 fn transform_document(doc: &mut Document, kind: Kind) {
+    super::materialize_merged_composite(doc);
     let (w, h) = (doc.width as i32, doc.height as i32);
     let op = kind.plane();
 
@@ -160,7 +162,6 @@ fn transform_document(doc: &mut Document, kind: Kind) {
     if kind.swaps_axes() {
         std::mem::swap(&mut doc.width, &mut doc.height);
     }
-    recompute(doc);
 }
 
 /// Remap a layer's retained native store with the same exact index map; the
@@ -278,7 +279,8 @@ mod tests {
         doc
     }
 
-    fn assert_consistent(doc: &Document) {
+    fn assert_consistent(doc: &mut Document) {
+        doc.composite = crate::composite_rgba(doc);
         assert_eq!(doc.composite, crate::composite_rgba(doc));
     }
 
@@ -297,7 +299,7 @@ mod tests {
         assert_eq!(doc.layers[0].rect, rect(0, 0, 5, 3));
         assert_eq!(doc.layers[1].rect, rect(1, 1, 4, 2));
         assert_eq!(doc.channels[0].data.len(), 15);
-        assert_consistent(&doc);
+        assert_consistent(&mut doc);
     }
 
     #[test]
@@ -314,7 +316,7 @@ mod tests {
 
         assert_eq!((doc.width, doc.height), (2, 3));
         assert_eq!(doc.layers[0].channels[0].data, vec![3, 0, 4, 1, 5, 2]);
-        assert_consistent(&doc);
+        assert_consistent(&mut doc);
     }
 
     #[test]
@@ -357,7 +359,7 @@ mod tests {
         let want: Vec<u8> = vec![4, 3, 2, 1, 0, 9, 8, 7, 6, 5, 14, 13, 12, 11, 10];
         assert_eq!(doc.layers[0].channels[0].data, want);
         assert_eq!(doc.layers[0].rect, rect(0, 0, 3, 5));
-        assert_consistent(&doc);
+        assert_consistent(&mut doc);
     }
 
     #[test]
@@ -378,14 +380,14 @@ mod tests {
         let mask = doc.layers[1].mask.as_ref().unwrap();
         assert_eq!(mask.rect, rect(2, 2, 5, 3));
         assert_eq!(mask.data.as_ref().unwrap().len(), 3);
-        assert_consistent(&doc);
+        assert_consistent(&mut doc);
 
         let mut doc = sample_doc();
         flip_document(&mut doc, true);
         let mask = doc.layers[1].mask.as_ref().unwrap();
         assert_eq!(mask.rect, rect(0, 0, 1, 3));
         assert_eq!(mask.data.as_ref().unwrap().len(), 3);
-        assert_consistent(&doc);
+        assert_consistent(&mut doc);
     }
 
     #[test]
@@ -423,6 +425,7 @@ mod tests {
         assert_eq!(samples, &Samples::U16(want), "exact 90° index remap");
         let planes = doc.source_planes.as_ref().unwrap();
         assert_eq!((planes.width, planes.height), (2, 3));
+        doc.composite = crate::composite_rgba(&doc);
         let bytes = pictura_codec::write_psd(&doc).expect("a rotated high-depth doc saves");
         assert_eq!(u16::from_be_bytes(bytes[22..24].try_into().unwrap()), 16);
     }

@@ -7,6 +7,7 @@
 
 use super::helpers::{join_path, list_of_strings};
 use super::qobject::PictureView;
+use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QString, QStringList};
@@ -87,9 +88,7 @@ fn arrange_kind(arrange: i32) -> Option<pictura_render::Arrange> {
 
 /// Clear link sets, recomposite, and record one history state.
 fn finish(mut view: Pin<&mut PictureView>, label: &str) {
-    view.as_mut().clear_link_sets();
-    view.as_mut().recomposite();
-    view.as_mut().record(label);
+    view.as_mut().edit(label, |_| Edit::Structural);
 }
 
 fn arrange_layer_can(view: &PictureView, path: &QString, arrange: i32) -> bool {

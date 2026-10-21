@@ -2,8 +2,8 @@
 //!
 //! These tests check *structure*, not pixels: after each document operation the
 //! layer stack must still serialize through `write_psd` → `read_psd` with the
-//! same dimensions, layer count, names, and rects, and the cached
-//! `doc.composite` must equal `composite_rgba(&doc)`. The exact orientation and
+//! same dimensions, layer count, names, and rects. The engine leaves the cached
+//! composite untouched; the test materializes it before writing, and the exact orientation and
 //! canvas remaps are checked for identity, and a `psd-tools` check (skipped when
 //! the tool is absent) confirms an independent PSD reader sees the same
 //! dimensions and layer count. See `tests/README.md` for the mapping and
@@ -16,7 +16,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use pictura_codec::{read_psd, write_psd};
 use pictura_core::{
     BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LayerMask, LockFlags,
-    PsdRect,
+    PixelBuffer, PsdRect,
 };
 use pictura_ops::{Anchor, Resample};
 use pictura_render::{
@@ -169,7 +169,9 @@ fn flattened(layers: &[Layer]) -> Vec<(String, PsdRect)> {
 }
 
 /// Composite consistency plus structural survival through `write_psd`/`read_psd`.
-fn assert_structural_oracle(doc: &Document, label: &str) {
+fn assert_structural_oracle(doc: &mut Document, label: &str, before: &PixelBuffer) {
+    assert_eq!(&doc.composite, before, "{label}: engine must not composite");
+    doc.composite = composite_rgba(doc);
     assert_eq!(
         doc.composite,
         composite_rgba(doc),
@@ -195,32 +197,76 @@ fn assert_structural_oracle(doc: &Document, label: &str) {
 #[test]
 fn resize_document_preserves_structure_and_composite() {
     let mut doc = sample_doc();
+    let before = doc.composite.clone();
     resize_document(&mut doc, 12, 8, Resample::Nearest).unwrap();
     assert_eq!((doc.width, doc.height), (12, 8));
-    assert_structural_oracle(&doc, "resize_document");
+    assert_structural_oracle(&mut doc, "resize_document", &before);
+}
+
+fn merged_only() -> Document {
+    let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
+    let plane = 4 * 4;
+    let mut data = vec![0u8; plane * 4];
+    for i in 0..plane {
+        data[i] = (i * 11) as u8;
+        data[plane + i] = (i * 7) as u8;
+        data[2 * plane + i] = (i * 3) as u8;
+        data[3 * plane + i] = (40 + i * 13) as u8;
+    }
+    doc.composite = PixelBuffer {
+        width: 4,
+        height: 4,
+        channels: 4,
+        data: data.into(),
+    };
+    doc.merged_composite_present = true;
+    doc
+}
+
+#[test]
+fn a_merged_only_document_keeps_its_pixels_and_saves() {
+    for kind in ["resize", "canvas", "rotate"] {
+        let mut doc = merged_only();
+        match kind {
+            "resize" => resize_document(&mut doc, 8, 8, Resample::Nearest).unwrap(),
+            "canvas" => resize_canvas_document(&mut doc, 6, 6, Anchor::Center).unwrap(),
+            "rotate" => rotate_document(&mut doc, 1).unwrap(),
+            _ => unreachable!(),
+        }
+        assert_eq!(doc.layers.len(), 1, "{kind}: materialized Background");
+        assert!(doc.layers[0].background, "{kind}: Background flag");
+        doc.composite = composite_rgba(&doc);
+        let back = round_trip(&doc);
+        check_dims(&back, doc.width, doc.height).unwrap();
+        assert_eq!(back.layers.len(), 1, "{kind}: saved layer");
+        assert!(back.layers[0].background, "{kind}: saved Background");
+    }
 }
 
 #[test]
 fn resize_canvas_document_preserves_structure_and_composite() {
     let mut doc = sample_doc();
+    let before = doc.composite.clone();
     resize_canvas_document(&mut doc, 8, 6, Anchor::Center).unwrap();
     assert_eq!((doc.width, doc.height), (8, 6));
-    assert_structural_oracle(&doc, "resize_canvas_document");
+    assert_structural_oracle(&mut doc, "resize_canvas_document", &before);
 }
 
 #[test]
 fn rotate_document_preserves_structure_and_composite() {
     let mut doc = sample_doc();
+    let before = doc.composite.clone();
     rotate_document(&mut doc, 1).unwrap();
     assert_eq!((doc.width, doc.height), (4, 6));
-    assert_structural_oracle(&doc, "rotate_document");
+    assert_structural_oracle(&mut doc, "rotate_document", &before);
 }
 
 #[test]
 fn flip_document_preserves_structure_and_composite() {
     let mut doc = sample_doc();
+    let before = doc.composite.clone();
     flip_document(&mut doc, true);
-    assert_structural_oracle(&doc, "flip_document");
+    assert_structural_oracle(&mut doc, "flip_document", &before);
 }
 
 // --- document-scope arbitrary rotation (rotate_document_in) -----------------
@@ -245,9 +291,10 @@ fn rotate_document_in_matches_rotate_in_kernel() {
         pictura_core::LayerStack::from_layers(vec![pixel_layer("only", rect(0, 0, 4, 6), None)]);
     doc.composite = composite_rgba(&doc);
     let before = doc.layers[0].channels[0].data.to_vec();
+    let before_composite = doc.composite.clone();
 
     assert!(rotate_document_in(&mut doc, 30.0, (3.0, 2.0)));
-    assert_structural_oracle(&doc, "rotate_document_in");
+    assert_structural_oracle(&mut doc, "rotate_document_in", &before_composite);
 
     let mut src = pictura_core::PixelBuffer::new(6, 4, 1);
     src.data.copy_from_slice(&before);
@@ -289,10 +336,11 @@ fn flip_twice_is_identity() {
 fn canvas_grow_then_shrink_opposite_anchor_restores_dimensions() {
     let mut doc = sample_doc();
     let (w0, h0) = (doc.width, doc.height);
+    let before = doc.composite.clone();
     resize_canvas_document(&mut doc, w0 + 2, h0 + 2, Anchor::TopLeft).unwrap();
     resize_canvas_document(&mut doc, w0, h0, Anchor::BottomRight).unwrap();
     assert_eq!((doc.width, doc.height), (w0, h0));
-    assert_structural_oracle(&doc, "canvas grow/shrink");
+    assert_structural_oracle(&mut doc, "canvas grow/shrink", &before);
 }
 
 #[test]
@@ -316,6 +364,7 @@ fn canvas_center_grow_then_shrink_restores_document() {
 fn dimension_check_bites() {
     let mut doc = sample_doc();
     resize_document(&mut doc, 12, 8, Resample::Nearest).unwrap();
+    doc.composite = composite_rgba(&doc);
     let back = round_trip(&doc);
 
     assert!(check_dims(&back, 12, 8).is_ok(), "correct size must pass");
@@ -398,6 +447,7 @@ fn assert_psd_tools_sees(doc: &Document, tag: &str) {
 fn psd_tools_sees_resized_document() {
     let mut doc = plain_doc();
     resize_document(&mut doc, 16, 12, Resample::Nearest).unwrap();
+    doc.composite = composite_rgba(&doc);
     assert_psd_tools_sees(&doc, "resized");
 }
 
@@ -405,6 +455,7 @@ fn psd_tools_sees_resized_document() {
 fn psd_tools_sees_rotated_document() {
     let mut doc = plain_doc();
     rotate_document(&mut doc, 1).unwrap();
+    doc.composite = composite_rgba(&doc);
     assert_psd_tools_sees(&doc, "rotated");
 }
 

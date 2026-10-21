@@ -6,6 +6,7 @@ use super::geometry::{
     apply_session_transform, quad_driven, rect_center, session_quad, source_corners, MapParams,
 };
 use super::{build_move_preview_base, duplicate_move_target};
+use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QRect, QString};
@@ -532,9 +533,7 @@ impl qobject::PictureView {
             // ponytail: CS6 carries the selection border through the transform;
             // it is dropped here rather than left outlining the old pixels.
             self.as_mut().rust_mut().selection = None;
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record("Free Transform");
+            self.as_mut().edit("Free Transform", |_| Edit::Structural);
             return true;
         }
         if changed {
@@ -717,7 +716,7 @@ impl qobject::PictureView {
         let rust = self.rust();
         // The base is the document with the target layer hidden, so it does not
         // depend on that layer's position: a committed move leaves it valid.
-        // `record_move` deliberately does not bump `content_revision` for this
+        // The move commit deliberately does not bump `content_revision` for this
         // reason; keying on the layer rect here would throw the base away on
         // every drag and force a full region recomposite on the next press.
         rust.move_base.is_some()
@@ -823,8 +822,11 @@ impl qobject::PictureView {
                 .map_or(before, |layer| layer.rect);
             union_rect(before, after)
         };
-        self.as_mut().refresh_region(dirty);
-        self.as_mut().record_move("Move Layer");
+        self.as_mut()
+            .commit_move_edit("Move Layer", |_| Edit::Regions {
+                rects: vec![dirty],
+                notify: false,
+            });
         true
     }
 
@@ -832,8 +834,7 @@ impl qobject::PictureView {
         if self.rust().doc.is_none() {
             return false;
         }
-        self.as_mut().recomposite();
-        self.as_mut().record("Move Layer");
+        self.as_mut().commit_move_edit("Move Layer", |_| Edit::Full);
         true
     }
 }

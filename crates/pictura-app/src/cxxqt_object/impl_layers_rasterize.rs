@@ -7,6 +7,7 @@
 
 use super::helpers_composite::selection_to_mask;
 use super::qobject;
+use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -58,9 +59,7 @@ impl qobject::PictureView {
             }
         };
         if !created.is_empty() {
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record("Color Fill");
+            self.as_mut().edit("Color Fill", |_| Edit::Structural);
         }
         QString::from(created.as_str())
     }
@@ -83,9 +82,7 @@ impl qobject::PictureView {
             }
         };
         if !created.is_empty() {
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record("Gradient Fill");
+            self.as_mut().edit("Gradient Fill", |_| Edit::Structural);
         }
         QString::from(created.as_str())
     }
@@ -130,9 +127,7 @@ impl qobject::PictureView {
             None => (false, "Rasterize Layer"),
         };
         if changed {
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record(label);
+            self.as_mut().edit(label, |_| Edit::Structural);
         }
         changed
     }
@@ -146,9 +141,8 @@ impl qobject::PictureView {
             None => 0,
         };
         if count > 0 {
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record("Rasterize All Layers");
+            self.as_mut()
+                .edit("Rasterize All Layers", |_| Edit::Structural);
         }
         count as i32
     }
@@ -192,9 +186,7 @@ impl qobject::PictureView {
             None => false,
         };
         if changed {
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record("Rasterize Type");
+            self.as_mut().edit("Rasterize Type", |_| Edit::Structural);
         }
         changed
     }
@@ -217,9 +209,7 @@ impl qobject::PictureView {
             None => false,
         };
         if changed {
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record(label);
+            self.as_mut().edit(label, |_| Edit::Structural);
         }
         changed
     }

@@ -2,6 +2,7 @@ use super::helpers::*;
 use super::helpers_composite::{patch_composite_region, planes_of, rgba_image};
 use super::qobject;
 use super::state::{PictureViewRust, PreviewStroke};
+use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -826,11 +827,11 @@ impl qobject::PictureView {
                             self.as_mut().rust_mut().stroke_tiles = Default::default();
                             pending.into_iter().collect()
                         };
-                        if !regions.is_empty() {
-                            self.as_mut().refresh_regions(&regions);
-                        }
                         let t = Instant::now();
-                        self.as_mut().record(&label);
+                        self.as_mut().edit(&label, |_| Edit::Regions {
+                            rects: regions,
+                            notify: false,
+                        });
                         paint_timing::record("commit_record_history", t.elapsed());
                         true
                     }

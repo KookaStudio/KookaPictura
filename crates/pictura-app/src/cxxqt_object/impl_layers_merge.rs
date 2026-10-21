@@ -5,6 +5,7 @@
 
 use super::helpers::*;
 use super::qobject;
+use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QString, QStringList};
@@ -95,9 +96,7 @@ impl qobject::PictureView {
         };
         if replaced > 0 {
             self.as_mut().rust_mut().select_only_layer("0");
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record("Flatten Image");
+            self.as_mut().edit("Flatten Image", |_| Edit::Structural);
         }
         replaced as i32
     }
@@ -112,9 +111,8 @@ impl qobject::PictureView {
         };
         if changed {
             self.as_mut().rust_mut().select_only_layer(&path);
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record("Layer from Background");
+            self.as_mut()
+                .edit("Layer from Background", |_| Edit::Structural);
         }
         changed
     }
@@ -153,9 +151,8 @@ impl qobject::PictureView {
         };
         if changed {
             self.as_mut().rust_mut().select_only_layer(&path);
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record("Layer from Background");
+            self.as_mut()
+                .edit("Layer from Background", |_| Edit::Structural);
         }
         changed
     }
@@ -172,9 +169,8 @@ impl qobject::PictureView {
         };
         if changed {
             self.as_mut().rust_mut().select_only_layer("0");
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record("Background From Layer");
+            self.as_mut()
+                .edit("Background From Layer", |_| Edit::Structural);
         }
         changed
     }
@@ -194,9 +190,7 @@ impl qobject::PictureView {
             .map(|outcome| outcome.path.clone());
         if let Some(path) = merged {
             self.as_mut().rust_mut().select_only_layer(&path);
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record(label);
+            self.as_mut().edit(label, |_| Edit::Structural);
             outcome
         } else {
             None

@@ -9,6 +9,7 @@ use super::geometry::{
 use super::perspective::{gesture_perspective, gesture_scale_base};
 use super::skew::gesture_skew;
 use super::warp::{refresh_warp_preview, warp_hit_test, warp_move, warp_press};
+use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -179,7 +180,7 @@ impl qobject::PictureView {
             pictura_render::translate_layer_path(doc, &path, dx, dy)
         };
         if moved {
-            match (
+            let edit = match (
                 before,
                 self.rust()
                     .doc
@@ -187,10 +188,13 @@ impl qobject::PictureView {
                     .and_then(|doc| pictura_render::resolve_path(doc, &path))
                     .map(|l| (l.rect, layer_has_effects(l))),
             ) {
-                (Some(b), Some((a, false))) => self.as_mut().refresh_region(union_rect(b, a)),
-                _ => self.as_mut().recomposite(),
-            }
-            self.as_mut().record_move("Move Layer");
+                (Some(b), Some((a, false))) => Edit::Regions {
+                    rects: vec![union_rect(b, a)],
+                    notify: false,
+                },
+                _ => Edit::Full,
+            };
+            self.as_mut().commit_move_edit("Move Layer", |_| edit);
         }
         moved
     }
@@ -249,8 +253,7 @@ impl qobject::PictureView {
         };
         if resized {
             self.as_mut().rust_mut().selection = None;
-            self.as_mut().recomposite();
-            self.as_mut().record("Image Size");
+            self.as_mut().edit("Image Size", |_| Edit::Full);
         }
         resized
     }
@@ -276,8 +279,7 @@ impl qobject::PictureView {
         };
         if resized {
             self.as_mut().rust_mut().selection = None;
-            self.as_mut().recomposite();
-            self.as_mut().record("Canvas Size");
+            self.as_mut().edit("Canvas Size", |_| Edit::Full);
         }
         resized
     }
@@ -295,8 +297,7 @@ impl qobject::PictureView {
         };
         if rotated {
             self.as_mut().rust_mut().selection = None;
-            self.as_mut().recomposite();
-            self.as_mut().record("Rotate");
+            self.as_mut().edit("Rotate", |_| Edit::Full);
         }
         rotated
     }
@@ -310,8 +311,7 @@ impl qobject::PictureView {
             pictura_render::flip_document(doc, horizontal);
             rust.selection = None;
         }
-        self.as_mut().recomposite();
-        self.as_mut().record("Flip");
+        self.as_mut().edit("Flip", |_| Edit::Full);
         true
     }
 
@@ -344,8 +344,7 @@ impl qobject::PictureView {
         };
         if converted {
             self.as_mut().rust_mut().selection = None;
-            self.as_mut().recomposite();
-            self.as_mut().record("HDR Conversion");
+            self.as_mut().edit("HDR Conversion", |_| Edit::Full);
         }
         converted
     }

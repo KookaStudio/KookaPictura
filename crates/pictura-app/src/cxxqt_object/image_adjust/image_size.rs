@@ -6,6 +6,7 @@
 
 use super::super::helpers::{parse_anchor, parse_resample};
 use super::super::qobject::PictureView;
+use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -119,12 +120,14 @@ fn image_size_apply(
     if !changed {
         return false;
     }
-    if resized {
-        view.as_mut().rust_mut().selection = None;
-        view.as_mut().recomposite();
-    }
-    view.as_mut().record("Image Size");
-    view.as_mut().changed();
+    view.as_mut().edit("Image Size", |rust| {
+        if resized {
+            rust.selection = None;
+            Edit::Full
+        } else {
+            Edit::Meta
+        }
+    });
     true
 }
 
@@ -156,8 +159,7 @@ fn canvas_size_apply(
         pictura_render::extend_background(doc, [(fill >> 16) as u8, (fill >> 8) as u8, fill as u8]);
         rust.selection = None;
     }
-    view.as_mut().recomposite();
-    view.as_mut().record("Canvas Size");
+    view.as_mut().edit("Canvas Size", |_| Edit::Full);
     view.as_mut().changed();
     true
 }

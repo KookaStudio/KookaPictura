@@ -9,6 +9,7 @@
 //! [`PictureView`]: super::super::qobject::PictureView
 
 use super::super::qobject::PictureView;
+use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QString, QStringList};
@@ -67,8 +68,7 @@ fn lock_group_layers_run(mut view: Pin<&mut PictureView>, group_path: &QString) 
         None => 0,
     };
     if changed > 0 {
-        view.as_mut().recomposite();
-        view.as_mut().record("Lock Group Layers");
+        view.as_mut().edit("Lock Group Layers", |_| Edit::Full);
     }
     changed as i32
 }

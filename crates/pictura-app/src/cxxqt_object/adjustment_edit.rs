@@ -6,6 +6,7 @@
 //!
 //! [`PictureView`]: super::qobject::PictureView
 
+use super::edit::Edit;
 use super::helpers::layer_visibility_region;
 use super::qobject::PictureView;
 use core::pin::Pin;
@@ -113,26 +114,27 @@ fn edit_adjustment(
     edit: impl FnOnce(&AdjustmentData) -> Option<AdjustmentData>,
 ) -> bool {
     let path = path.to_string();
-    let region = {
-        let mut rust = view.as_mut().rust_mut();
+    let applied = view.as_mut().preview(|rust| {
         let Some(layer) = rust
             .doc
             .as_mut()
             .and_then(|doc| pictura_render::resolve_path_mut(doc, &path))
         else {
-            return false;
+            return Edit::None;
         };
         let Some(next) = layer.adjustment.as_ref().and_then(edit) else {
-            return false;
+            return Edit::None;
         };
         layer.adjustment = Some(next);
-        layer_visibility_region(layer)
-    };
-    match region {
-        Some(rect) => view.as_mut().refresh_region(rect),
-        None => view.as_mut().recomposite(),
-    }
-    true
+        match layer_visibility_region(layer) {
+            Some(rect) => Edit::Regions {
+                rects: vec![rect],
+                notify: false,
+            },
+            None => Edit::Full,
+        }
+    });
+    !matches!(applied, Edit::None)
 }
 
 fn adjustment_set(view: Pin<&mut PictureView>, path: &QString, key: &QString, value: f64) -> bool {
@@ -189,8 +191,9 @@ fn adjustment_reset(view: Pin<&mut PictureView>, path: &QString) -> bool {
     edit_adjustment(view, path, pictura_render::reset_adjustment)
 }
 
-fn adjustment_commit(view: Pin<&mut PictureView>, title: &QString) {
-    view.record(&format!("Modify {title} Layer"));
+fn adjustment_commit(mut view: Pin<&mut PictureView>, title: &QString) {
+    let label = format!("Modify {title} Layer");
+    view.as_mut().edit(&label, |_| Edit::Record);
 }
 
 #[cfg(test)]

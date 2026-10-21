@@ -10,6 +10,7 @@ use super::super::helpers::{active_layer_visible, active_pixel_layer, active_pix
 use super::super::helpers_composite::selection_to_mask;
 use super::super::qobject::PictureView;
 use super::super::state::PictureViewRust;
+use crate::cxxqt_object::edit::Edit;
 #[cfg(test)]
 use crate::layer_target::LayerTarget;
 use core::pin::Pin;
@@ -88,8 +89,7 @@ fn run(mut view: Pin<&mut PictureView>, op: MattingOp, label: &str) -> bool {
         apply_matte(&mut rust, op)
     };
     if matches!(outcome, Some(Ok(()))) {
-        view.as_mut().recomposite();
-        view.as_mut().record(label);
+        view.as_mut().edit(label, |_| Edit::Full);
         true
     } else {
         false

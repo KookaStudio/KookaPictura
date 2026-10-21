@@ -10,6 +10,7 @@ use super::super::helpers::active_pixel_layer;
 use super::super::helpers_composite::{current_buffer, selection_to_mask};
 use super::super::impl_layers::coverage_at;
 use super::super::qobject::PictureView;
+use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -578,8 +579,7 @@ fn apply(
             rust.select_only_layer(&path);
         }
     }
-    view.as_mut().recomposite();
-    view.as_mut().record(source.label());
+    view.as_mut().edit(source.label(), |_| Edit::Full);
     true
 }
 

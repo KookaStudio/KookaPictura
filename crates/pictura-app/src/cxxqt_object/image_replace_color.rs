@@ -10,6 +10,7 @@ use super::helpers::active_pixel_layer;
 use super::helpers_composite::current_buffer;
 use super::impl_filters::{apply_op_active_region, ActiveOp};
 use super::qobject::PictureView;
+use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QImageFormat, QString};
@@ -196,12 +197,20 @@ fn run(
     let Some(region) = region else {
         return false;
     };
-    match region {
-        Some(rect) => view.as_mut().refresh_region(rect),
-        None => view.as_mut().recomposite(),
-    }
-    if let Some(label) = label {
-        view.as_mut().record(label);
+    let outcome = match region {
+        Some(rect) => Edit::Regions {
+            rects: vec![rect],
+            notify: false,
+        },
+        None => Edit::Full,
+    };
+    match label {
+        Some(label) => {
+            view.as_mut().edit(label, |_| outcome);
+        }
+        None => {
+            view.as_mut().preview(|_| outcome);
+        }
     }
     true
 }

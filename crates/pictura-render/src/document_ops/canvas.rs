@@ -1,6 +1,6 @@
 //! `Image > Canvas Size` at document scope (`IMG-002`).
 
-use super::{for_each_layer, recompute, valid_size};
+use super::{for_each_layer, materialize_merged_composite, valid_size};
 
 // ponytail: the added canvas is transparent (fill 0) — the layer-stack model has
 // no background layer, so the reference's background/extension-color options are out
@@ -21,6 +21,7 @@ pub fn resize_canvas_document(
     }
 
     let (dx, dy) = anchor_offset(anchor, old_w, old_h, width, height);
+    materialize_merged_composite(doc);
 
     for_each_layer(&mut doc.layers, &mut |layer| {
         layer.rect = offset_rect(layer.rect, dx, dy);
@@ -39,7 +40,6 @@ pub fn resize_canvas_document(
 
     doc.width = width;
     doc.height = height;
-    recompute(doc);
     Ok(())
 }
 
@@ -91,7 +91,6 @@ pub fn extend_background(doc: &mut pictura_core::Document, color: [u8; 3]) -> bo
     }
     layer.rect = canvas;
     layer.source_channels = None;
-    recompute(doc);
     true
 }
 
@@ -347,6 +346,7 @@ mod tests {
         resize_canvas_document(&mut doc, 6, 5, Anchor::MiddleRight).unwrap();
 
         assert_eq!((doc.width, doc.height), (6, 5));
+        doc.composite = crate::composite_rgba(&doc);
         assert_eq!(doc.composite, crate::composite_rgba(&doc));
         assert_eq!(doc.composite.width, 6);
         assert_eq!(doc.composite.height, 5);

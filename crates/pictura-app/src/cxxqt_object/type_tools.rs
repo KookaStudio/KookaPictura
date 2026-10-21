@@ -16,6 +16,7 @@
 
 use super::helpers::combine_mode_from;
 use super::qobject::PictureView;
+use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -475,14 +476,14 @@ fn type_convert(mut view: Pin<&mut PictureView>, path: &QString, paragraph: bool
         .as_mut()
         .is_some_and(|doc| pictura_render::replace_type_layer(doc, &path.to_string(), &spec));
     if replaced {
-        view.as_mut().clear_link_sets();
-        view.as_mut().recomposite();
-        view.as_mut().record(if paragraph {
-            "Convert To Paragraph Text"
-        } else {
-            "Convert To Point Text"
-        });
-        view.as_mut().changed();
+        view.as_mut().edit(
+            if paragraph {
+                "Convert To Paragraph Text"
+            } else {
+                "Convert To Point Text"
+            },
+            |_| Edit::Structural,
+        );
     }
     replaced
 }
@@ -532,14 +533,14 @@ fn type_commit_layer(
         created
     };
     if !created.is_empty() {
-        view.as_mut().clear_link_sets();
-        view.as_mut().recomposite();
-        view.as_mut().record(if spec.vertical {
-            "Vertical Type"
-        } else {
-            "Horizontal Type"
-        });
-        view.as_mut().changed();
+        view.as_mut().edit(
+            if spec.vertical {
+                "Vertical Type"
+            } else {
+                "Horizontal Type"
+            },
+            |_| Edit::Structural,
+        );
     }
     QString::from(created.as_str())
 }
@@ -734,9 +735,7 @@ fn type_apply_style(
         pictura_render::apply_type_style(doc, &path.to_string(), &name.to_string(), paragraph)
     });
     if applied {
-        view.as_mut().clear_link_sets();
-        view.as_mut().recomposite();
-        view.as_mut().record("Apply Type Style");
+        view.as_mut().edit("Apply Type Style", |_| Edit::Structural);
         view.as_mut().changed();
     }
     applied
@@ -751,9 +750,7 @@ fn commit_style(
 ) -> bool {
     let changed = view.as_mut().rust_mut().doc.as_mut().is_some_and(apply);
     if changed {
-        view.as_mut().clear_link_sets();
-        view.as_mut().recomposite();
-        view.as_mut().record(label);
+        view.as_mut().edit(label, |_| Edit::Structural);
         view.as_mut().changed();
     }
     changed
@@ -927,9 +924,7 @@ fn replace(
 }
 
 fn commit_edit(mut view: Pin<&mut PictureView>) {
-    view.as_mut().clear_link_sets();
-    view.as_mut().recomposite();
-    view.as_mut().record("Edit Type Layer");
+    view.as_mut().edit("Edit Type Layer", |_| Edit::Structural);
     view.as_mut().changed();
 }
 

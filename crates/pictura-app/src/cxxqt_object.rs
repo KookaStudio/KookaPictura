@@ -8,6 +8,7 @@ mod clipboard;
 mod clipping;
 mod color_range;
 mod crop_group;
+mod edit;
 mod export;
 mod eyedropper_sample;
 mod filter_map;

@@ -18,6 +18,7 @@ use super::impl_filters::{
     ActiveOp,
 };
 use super::qobject::PictureView;
+use crate::cxxqt_object::edit::Edit;
 pub(super) use canvas_proxy::canvas_proxy_buffer;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -255,11 +256,14 @@ fn apply_filter_params(
         eprintln!("pictura: filter '{kind_s}' refused: {reason}");
         return false;
     };
-    match region {
-        Some(rect) => view.as_mut().refresh_region(rect),
-        None => view.as_mut().recomposite(),
-    }
-    view.as_mut().record("Filter");
+    let outcome = match region {
+        Some(rect) => Edit::Regions {
+            rects: vec![rect],
+            notify: false,
+        },
+        None => Edit::Full,
+    };
+    view.as_mut().edit("Filter", |_| outcome);
     true
 }
 
@@ -491,12 +495,17 @@ fn run_stack(
     let Some(region) = region else {
         return false;
     };
-    match region {
-        Some(rect) => view.as_mut().refresh_region(rect),
-        None => view.as_mut().recomposite(),
-    }
+    let outcome = match region {
+        Some(rect) => Edit::Regions {
+            rects: vec![rect],
+            notify: false,
+        },
+        None => Edit::Full,
+    };
     if commit {
-        view.as_mut().record("Filter Gallery");
+        view.as_mut().edit("Filter Gallery", |_| outcome);
+    } else {
+        view.as_mut().preview(|_| outcome);
     }
     true
 }

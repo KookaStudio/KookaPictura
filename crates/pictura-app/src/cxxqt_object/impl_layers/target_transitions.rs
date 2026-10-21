@@ -6,6 +6,7 @@ use super::super::helpers::{
     as_str_slice, join_path, list_of_strings, survivor_after_delete, topmost_path,
 };
 use super::super::qobject;
+use crate::cxxqt_object::edit::Edit;
 use crate::layer_target::LayerTarget;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -25,40 +26,40 @@ impl qobject::PictureView {
                 rust.layer_target.selected().to_vec(),
             )
         };
-        let created = match self.as_mut().rust_mut().doc.as_mut() {
-            Some(doc) => pictura_render::group_paths(doc, &refs),
-            None => None,
-        };
-        match created {
-            Some(path) => {
-                let mut rust = self.as_mut().rust_mut();
-                let target_paths =
-                    group_target_paths(&grouped, &selected, &path, rust.doc.as_ref());
-                let target = {
-                    let mut target = LayerTarget::default();
-                    target.select(target_paths, Some(path.clone()), rust.doc.as_ref());
-                    target
-                };
-                rust.set_layer_target(target);
-                self.as_mut().clear_link_sets();
-                self.as_mut().recomposite();
-                self.as_mut().record("Group Layers");
-                QString::from(path.as_str())
-            }
-            None => QString::default(),
-        }
+        let mut created = String::new();
+        self.as_mut().edit("Group Layers", |rust| {
+            let Some(doc) = rust.doc.as_mut() else {
+                return Edit::None;
+            };
+            let Some(path) = pictura_render::group_paths(doc, &refs) else {
+                return Edit::None;
+            };
+            created = path.clone();
+            let target_paths = group_target_paths(&grouped, &selected, &path, rust.doc.as_ref());
+            let target = {
+                let mut target = LayerTarget::default();
+                target.select(target_paths, Some(path.clone()), rust.doc.as_ref());
+                target
+            };
+            rust.set_layer_target(target);
+            Edit::Structural
+        });
+        QString::from(created.as_str())
     }
 
     pub fn delete_layers(mut self: Pin<&mut Self>, paths: &QStringList) -> i32 {
         let owned = list_of_strings(paths);
         let refs = as_str_slice(&owned);
-        let deleted = match self.as_mut().rust_mut().doc.as_mut() {
-            Some(doc) => pictura_render::delete_paths_report(doc, &refs),
-            None => Vec::new(),
-        };
-        let changed = deleted.len();
-        if changed > 0 {
-            let mut rust = self.as_mut().rust_mut();
+        let mut changed = 0;
+        self.as_mut().edit("Delete Layers", |rust| {
+            let Some(doc) = rust.doc.as_mut() else {
+                return Edit::None;
+            };
+            let deleted = pictura_render::delete_paths_report(doc, &refs);
+            changed = deleted.len();
+            if changed == 0 {
+                return Edit::None;
+            }
             let survivor = rust
                 .doc
                 .as_ref()
@@ -67,62 +68,63 @@ impl qobject::PictureView {
                 Some(path) => rust.select_only_layer(&path),
                 None => rust.layer_target.clear(),
             }
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record("Delete Layers");
-        }
+            Edit::Structural
+        });
         changed as i32
     }
 
     pub fn ungroup_layers(mut self: Pin<&mut Self>, paths: &QStringList) -> i32 {
         let owned = list_of_strings(paths);
         let refs = as_str_slice(&owned);
-        let mut groups: Vec<(String, usize, usize)> = Vec::new();
-        let mut survivors: Vec<(String, usize)> = Vec::new();
-        if let Some(doc) = self.rust().doc.as_ref() {
-            for &path in &refs {
-                let Some(layer) = pictura_render::resolve_path(doc, path) else {
-                    continue;
-                };
-                let parent = pictura_render::parent_path(path).unwrap_or("").to_string();
-                let index = path
-                    .rsplit('/')
-                    .next()
-                    .and_then(|segment| segment.parse::<usize>().ok())
-                    .unwrap_or(0);
-                if layer.is_group
-                    && !layer.lock.is_all()
-                    && !layer.lock.contains(pictura_core::LockFlags::NESTING)
-                {
-                    groups.push((parent, index, layer.children.len()));
-                } else {
-                    survivors.push((parent, index));
+        let mut changed = 0;
+        self.as_mut().edit("Ungroup Layers", |rust| {
+            let mut groups: Vec<(String, usize, usize)> = Vec::new();
+            let mut survivors: Vec<(String, usize)> = Vec::new();
+            if let Some(doc) = rust.doc.as_ref() {
+                for &path in &refs {
+                    let Some(layer) = pictura_render::resolve_path(doc, path) else {
+                        continue;
+                    };
+                    let parent = pictura_render::parent_path(path).unwrap_or("").to_string();
+                    let index = path
+                        .rsplit('/')
+                        .next()
+                        .and_then(|segment| segment.parse::<usize>().ok())
+                        .unwrap_or(0);
+                    if layer.is_group
+                        && !layer.lock.is_all()
+                        && !layer.lock.contains(pictura_core::LockFlags::NESTING)
+                    {
+                        groups.push((parent, index, layer.children.len()));
+                    } else {
+                        survivors.push((parent, index));
+                    }
+                }
+                for path in rust.layer_target.selected() {
+                    if owned.iter().any(|owned| owned == path) {
+                        continue;
+                    }
+                    let Some(layer) = pictura_render::resolve_path(doc, path) else {
+                        continue;
+                    };
+                    let parent = pictura_render::parent_path(path).unwrap_or("").to_string();
+                    let index = path
+                        .rsplit('/')
+                        .next()
+                        .and_then(|segment| segment.parse::<usize>().ok())
+                        .unwrap_or(0);
+                    if !layer.is_group {
+                        survivors.push((parent, index));
+                    }
                 }
             }
-            for path in self.rust().layer_target.selected() {
-                if owned.iter().any(|owned| owned == path) {
-                    continue;
-                }
-                let Some(layer) = pictura_render::resolve_path(doc, path) else {
-                    continue;
-                };
-                let parent = pictura_render::parent_path(path).unwrap_or("").to_string();
-                let index = path
-                    .rsplit('/')
-                    .next()
-                    .and_then(|segment| segment.parse::<usize>().ok())
-                    .unwrap_or(0);
-                if !layer.is_group {
-                    survivors.push((parent, index));
-                }
+            let Some(doc) = rust.doc.as_mut() else {
+                return Edit::None;
+            };
+            changed = pictura_render::ungroup_paths(doc, &refs);
+            if changed == 0 {
+                return Edit::None;
             }
-        }
-        let changed = match self.as_mut().rust_mut().doc.as_mut() {
-            Some(doc) => pictura_render::ungroup_paths(doc, &refs),
-            None => 0,
-        };
-        if changed > 0 {
-            let mut rust = self.as_mut().rust_mut();
             let mut target_paths: Vec<String> = Vec::new();
             let mut anchor = None;
             if let Some(doc) = rust.doc.as_ref() {
@@ -179,10 +181,8 @@ impl qobject::PictureView {
                 target
             };
             rust.set_layer_target(target);
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record("Ungroup Layers");
-        }
+            Edit::Structural
+        });
         changed as i32
     }
 
@@ -191,17 +191,17 @@ impl qobject::PictureView {
     /// document's last layer stay).
     pub fn remove_layer(mut self: Pin<&mut Self>, i: i32) -> bool {
         let path = i.to_string();
-        let deleted = if i >= 0 {
-            match self.as_mut().rust_mut().doc.as_mut() {
-                Some(doc) => pictura_render::delete_paths_report(doc, &[&path]),
-                None => Vec::new(),
+        let removed = self.as_mut().edit("Delete Layer", |rust| {
+            if i < 0 {
+                return Edit::None;
             }
-        } else {
-            Vec::new()
-        };
-        let removed = !deleted.is_empty();
-        if removed {
-            let mut rust = self.as_mut().rust_mut();
+            let Some(doc) = rust.doc.as_mut() else {
+                return Edit::None;
+            };
+            let deleted = pictura_render::delete_paths_report(doc, &[&path]);
+            if deleted.is_empty() {
+                return Edit::None;
+            }
             let survivor = rust
                 .doc
                 .as_ref()
@@ -210,11 +210,9 @@ impl qobject::PictureView {
                 Some(path) => rust.select_only_layer(&path),
                 None => rust.layer_target.clear(),
             }
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record("Delete Layer");
-        }
-        removed
+            Edit::Structural
+        });
+        matches!(removed, Edit::Structural)
     }
 }
 

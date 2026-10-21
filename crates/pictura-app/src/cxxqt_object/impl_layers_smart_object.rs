@@ -7,6 +7,7 @@
 
 use super::helpers::decode_import;
 use super::qobject;
+use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -30,9 +31,8 @@ impl qobject::PictureView {
             None => false,
         };
         if changed {
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record("Convert to Smart Object");
+            self.as_mut()
+                .edit("Convert to Smart Object", |_| Edit::Structural);
         }
         changed
     }
@@ -55,9 +55,7 @@ impl qobject::PictureView {
             return QString::default();
         };
         self.as_mut().rust_mut().select_only_layer(&created);
-        self.as_mut().clear_link_sets();
-        self.as_mut().recomposite();
-        self.as_mut().record("Place");
+        self.as_mut().edit("Place", |_| Edit::Structural);
         QString::from(created.as_str())
     }
 
@@ -97,9 +95,7 @@ impl qobject::PictureView {
             None => return QString::default(),
         };
         self.as_mut().rust_mut().select_only_layer(&created);
-        self.as_mut().clear_link_sets();
-        self.as_mut().recomposite();
-        self.as_mut().record("Place");
+        self.as_mut().edit("Place", |_| Edit::Structural);
         QString::from(created.as_str())
     }
 
@@ -167,9 +163,7 @@ impl qobject::PictureView {
             _ => false,
         };
         if changed {
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record(label);
+            self.as_mut().edit(label, |_| Edit::Structural);
         }
         changed
     }
@@ -192,9 +186,8 @@ impl qobject::PictureView {
             None => false,
         };
         if changed {
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record("Rasterize Smart Object");
+            self.as_mut()
+                .edit("Rasterize Smart Object", |_| Edit::Structural);
         }
         changed
     }

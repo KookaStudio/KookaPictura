@@ -7,7 +7,7 @@
 use pictura_core::{layer_move_locked, Document, Layer, PsdRect};
 
 use super::canvas::{extend_channel, offset_rect, rebase_source_planes};
-use super::{for_each_layer, recompute, resolve_path_mut};
+use super::{for_each_layer, materialize_merged_composite, resolve_path_mut};
 
 /// Crop the document to the clamped `width`×`height` rect at `(x, y)`.
 ///
@@ -45,6 +45,7 @@ fn crop_to_frame(doc: &mut Document, x0: i32, y0: i32, new_w: u32, new_h: u32) -
     let old_w = doc.width;
     let old_h = doc.height;
     let (dx, dy) = (-x0, -y0);
+    materialize_merged_composite(doc);
 
     for_each_layer(&mut doc.layers, &mut |layer| {
         layer.rect = offset_rect(layer.rect, dx, dy);
@@ -61,7 +62,6 @@ fn crop_to_frame(doc: &mut Document, x0: i32, y0: i32, new_w: u32, new_h: u32) -
 
     doc.width = new_w;
     doc.height = new_h;
-    recompute(doc);
     true
 }
 
@@ -122,9 +122,6 @@ pub fn delete_cropped_pixels(doc: &mut Document) -> usize {
         layer.raw_channels.clear();
         trimmed += 1;
     });
-    if trimmed > 0 {
-        recompute(doc);
-    }
     trimmed
 }
 
@@ -180,7 +177,6 @@ pub fn translate_layer(doc: &mut Document, dx: i32, dy: i32) -> bool {
         return false;
     }
     offset_layer(layer, dx, dy);
-    recompute(doc);
     true
 }
 
@@ -188,7 +184,8 @@ pub fn translate_layer(doc: &mut Document, dx: i32, dy: i32) -> bool {
 ///
 /// Same rect/mask shift as [`translate_layer`]; the caller is expected to
 /// refresh the dirty region through the active backend. Use [`translate_layer`]
-/// or [`translate_layer_active`] when a full recomposite is wanted. Returns
+/// or [`translate_layer_active`] when a full composite is wanted (the oracle).
+/// Returns
 /// false when there is no pixel layer.
 pub fn translate_layer_rect(doc: &mut Document, dx: i32, dy: i32) -> bool {
     let Some(layer) = topmost_pixel_layer(&mut doc.layers) else {
@@ -342,6 +339,7 @@ mod tests {
         assert_eq!(doc.channels[0].data, vec![5, 6, 9, 10]);
         assert_eq!(doc.layers[0].rect, rect(-1, -1, 3, 3));
 
+        doc.composite = crate::composite_rgba(&doc);
         // The layer rect moved to (-1,-1), so doc (0,0) samples local (1,1) = 5.
         let plane = 4usize;
         assert_eq!(doc.composite.width, 2);
@@ -358,6 +356,7 @@ mod tests {
         assert_eq!((doc.width, doc.height), (1, 1));
         assert_eq!(doc.channels[0].data, vec![15]);
         assert_eq!(doc.layers[0].rect, rect(-3, -3, 1, 1));
+        doc.composite = crate::composite_rgba(&doc);
         assert_eq!(doc.composite.data[0], 15, "old (3,3) becomes the origin");
     }
 
@@ -412,13 +411,14 @@ mod tests {
     }
 
     #[test]
-    fn translate_layer_shifts_rect_and_recomposites() {
+    fn translate_layer_shifts_rect_and_leaves_the_composite() {
         let mut doc = sample_doc();
         let before = doc.composite.data[0];
         assert_eq!(before, 0, "old origin holds layer local (0,0)");
 
         assert!(translate_layer(&mut doc, 1, 1));
         assert_eq!(doc.layers[0].rect, rect(1, 1, 5, 5));
+        doc.composite = crate::composite_rgba(&doc);
 
         let plane = 16usize;
         // Doc (1,1) now samples layer local (0,0); doc (2,1) samples local (1,0).
@@ -435,6 +435,7 @@ mod tests {
         let mut oracle = sample_doc();
         assert!(translate_layer_active(&mut active, 1, 1, false));
         assert!(translate_layer(&mut oracle, 1, 1));
+        oracle.composite = crate::composite_rgba(&oracle);
         assert_eq!(active, oracle);
         assert_eq!(active.composite.data, oracle.composite.data);
     }

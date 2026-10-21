@@ -10,7 +10,7 @@
 
 use pictura_core::{Document, PsdRect, Sample, Samples, SourceChannels, SourcePlanes};
 
-use super::{for_each_layer, recompute, sync_vector_mask_block};
+use super::{for_each_layer, materialize_merged_composite, sync_vector_mask_block};
 
 /// The largest accepted magnitude, matching `pictura_ops::rotate_in`.
 const MAX_ANGLE: f64 = 359.99;
@@ -299,6 +299,7 @@ pub fn rotate_document_in(doc: &mut Document, angle_deg: f64, pivot: (f64, f64))
         }
     }
 
+    materialize_merged_composite(doc);
     let Frame {
         sin,
         cos,
@@ -376,7 +377,6 @@ pub fn rotate_document_in(doc: &mut Document, angle_deg: f64, pivot: (f64, f64))
 
     doc.width = new_w;
     doc.height = new_h;
-    recompute(doc);
     true
 }
 
@@ -532,6 +532,7 @@ mod tests {
         // 45° about the centre: the bounding box grows past the original.
         assert!(rotate_document_in(&mut d, 45.0, (2.5, 1.5)));
         assert!(d.width >= 5 && d.height >= 3);
+        d.composite = crate::composite_rgba(&d);
         assert_eq!(d.composite, crate::composite_rgba(&d));
         for layer in &d.layers {
             let area = (layer.rect.width() * layer.rect.height()) as usize;

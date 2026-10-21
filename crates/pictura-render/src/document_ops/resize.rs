@@ -1,9 +1,10 @@
 //! `Image > Image Size` at document scope (`IMG-001`).
 
-use super::{for_each_layer, recompute, resample_plane, valid_size};
+use super::{for_each_layer, materialize_merged_composite, resample_plane, valid_size};
 
 /// Scale every layer rect, resample its channel planes and mask from the old
-/// rect size to the new, then recompute `doc.composite = composite_rgba(doc)`.
+/// rect size to the new. The engine leaves `doc.composite` untouched; the
+/// app edit transaction materializes it from the resampled tree.
 pub fn resize_document(
     doc: &mut pictura_core::Document,
     width: u32,
@@ -20,6 +21,7 @@ pub fn resize_document(
     }
     let sx = width as f64 / old_w as f64;
     let sy = height as f64 / old_h as f64;
+    materialize_merged_composite(doc);
 
     for_each_layer(&mut doc.layers, &mut |layer| {
         resize_layer(layer, sx, sy, resample);
@@ -45,7 +47,6 @@ pub fn resize_document(
 
     doc.width = width;
     doc.height = height;
-    recompute(doc);
     Ok(())
 }
 
@@ -270,6 +271,7 @@ mod tests {
             }
         }
         assert_eq!(doc.channels[0].data.len(), 64);
+        doc.composite = crate::composite_rgba(&doc);
         assert_eq!(doc.composite, crate::composite_rgba(&doc));
     }
 
@@ -357,6 +359,7 @@ mod tests {
         assert_eq!((planes.width, planes.height), (8, 8));
         assert_eq!(planes.samples.len(), 3 * 64);
 
+        doc.composite = crate::composite_rgba(&doc);
         let bytes = pictura_codec::write_psd(&doc).expect("a resized high-depth doc saves");
         assert_eq!(u16::from_be_bytes(bytes[22..24].try_into().unwrap()), 16);
     }
