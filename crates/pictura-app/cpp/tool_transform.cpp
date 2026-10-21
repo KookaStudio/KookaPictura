@@ -47,6 +47,44 @@ bool ToolController::beginTransformMode(const QString& path, const QString& mode
     return beginTransformImpl(path, mode);
 }
 
+bool ToolController::setTransformMode(const QString& mode)
+{
+    PictureView* v = view();
+    if (!v || !transform_set_mode(*v, mode)) {
+        return false;
+    }
+    updateTransformOverlay(v);
+    emit transformChanged();
+    return true;
+}
+
+bool ToolController::applyTransformOp(const QString& op, bool commit, const QString& label)
+{
+    PictureView* v = view();
+    if (!v || !transform_apply(*v, op)) {
+        return false;
+    }
+    if (commit) {
+        transform_set_history_label(*v, label);
+        commitFreeTransform();
+    } else {
+        updateTransformOverlay(v);
+        emit transformChanged();
+    }
+    return true;
+}
+
+bool ToolController::repeatTransform()
+{
+    PictureView* v = view();
+    if (!v || !transform_repeat(*v)) {
+        return false;
+    }
+    transform_set_history_label(*v, QStringLiteral("Transform Again"));
+    commitFreeTransform();
+    return true;
+}
+
 bool ToolController::beginTransformImpl(const QString& path, const QString& mode, bool controls)
 {
     PictureView* v = view();

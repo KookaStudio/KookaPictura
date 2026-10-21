@@ -96,6 +96,7 @@ mod tests {
             warp_drag: None,
             lifted: None,
             untrimmed: None,
+            history_label: "Free Transform".to_string(),
         }
     }
 

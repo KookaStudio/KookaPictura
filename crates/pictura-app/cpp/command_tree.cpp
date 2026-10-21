@@ -129,10 +129,13 @@ void addDefaultCommands(CommandRegistry& registry) {
     leaf(registry, {"Edit", "Puppet Warp"}, QStringLiteral("Puppet Warp"));
     registry.add(command_ids::EditFreeTransform, {"Edit", "Free Transform"},
                  QStringLiteral("Free Transform"), QKeySequence(QStringLiteral("Ctrl+T")), true);
-    leaf(registry, {"Edit", "Transform", "Again"}, QStringLiteral("Again"),
-         QStringLiteral("Shift+Ctrl+T"));
-    leaf(registry, {"Edit", "Transform", "Scale"}, QStringLiteral("Scale"));
-    leaf(registry, {"Edit", "Transform", "Rotate"}, QStringLiteral("Rotate"));
+    registry.add(command_ids::EditTransformAgain, {"Edit", "Transform", "Again"},
+                 QStringLiteral("Again"), QKeySequence(QStringLiteral("Shift+Ctrl+T")), true);
+    registry.addSeparator({"Edit", "Transform"});
+    registry.add(command_ids::EditTransformScale, {"Edit", "Transform", "Scale"},
+                 QStringLiteral("Scale"), QKeySequence(), true);
+    registry.add(command_ids::EditTransformRotate, {"Edit", "Transform", "Rotate"},
+                 QStringLiteral("Rotate"), QKeySequence(), true);
     registry.add(command_ids::EditTransformSkew, {"Edit", "Transform", "Skew"},
                  QStringLiteral("Skew"), QKeySequence(), true);
     registry.add(command_ids::EditTransformDistort, {"Edit", "Transform", "Distort"},
@@ -141,11 +144,22 @@ void addDefaultCommands(CommandRegistry& registry) {
                  QStringLiteral("Perspective"), QKeySequence(), true);
     registry.add(command_ids::EditTransformWarp, {"Edit", "Transform", "Warp"},
                  QStringLiteral("Warp"), QKeySequence(), true);
-    leaf(registry, {"Edit", "Transform", "Rotate 90° CW"}, QStringLiteral("Rotate 90° CW"));
-    leaf(registry, {"Edit", "Transform", "Rotate 90° CCW"}, QStringLiteral("Rotate 90° CCW"));
-    leaf(registry, {"Edit", "Transform", "Rotate 180°"}, QStringLiteral("Rotate 180°"));
-    leaf(registry, {"Edit", "Transform", "Flip Horizontal"}, QStringLiteral("Flip Horizontal"));
-    leaf(registry, {"Edit", "Transform", "Flip Vertical"}, QStringLiteral("Flip Vertical"));
+    registry.addSeparator({"Edit", "Transform"});
+    registry.add(command_ids::EditTransformRotate180, {"Edit", "Transform", "Rotate 180°"},
+                 QStringLiteral("Rotate 180°"), QKeySequence(), true);
+    registry.add(command_ids::EditTransformRotate90Cw,
+                 {"Edit", "Transform", "Rotate 90° Clockwise"},
+                 QStringLiteral("Rotate 90° Clockwise"), QKeySequence(), true);
+    registry.add(command_ids::EditTransformRotate90Ccw,
+                 {"Edit", "Transform", "Rotate 90° Counter Clockwise"},
+                 QStringLiteral("Rotate 90° Counter Clockwise"), QKeySequence(), true);
+    registry.addSeparator({"Edit", "Transform"});
+    registry.add(command_ids::EditTransformFlipHorizontal,
+                 {"Edit", "Transform", "Flip Horizontal"}, QStringLiteral("Flip Horizontal"),
+                 QKeySequence(), true);
+    registry.add(command_ids::EditTransformFlipVertical,
+                 {"Edit", "Transform", "Flip Vertical"}, QStringLiteral("Flip Vertical"),
+                 QKeySequence(), true);
     leaf(registry, {"Edit", "Transform Path", "Again"}, QStringLiteral("Again"));
     leaf(registry, {"Edit", "Transform Path", "Scale"}, QStringLiteral("Scale"));
     leaf(registry, {"Edit", "Transform Path", "Rotate"}, QStringLiteral("Rotate"));

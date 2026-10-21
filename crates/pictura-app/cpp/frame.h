@@ -525,6 +525,9 @@ private:
     void wireLayerStyleMenu();
     // frame_menus_image.cpp: Image > Crop, Trim, and Duplicate.
     void wireImageMenu();
+    // frame_menus_transform.cpp: Edit > Transform Scale/Rotate/Again, the
+    // exact rotations, and the flips.
+    void wireTransformMenu();
     // frame_menus_edit.cpp: Edit > Undo/Redo/Step, honoring the active tool's
     // modal session before the document history.
     void wireEditHistory();

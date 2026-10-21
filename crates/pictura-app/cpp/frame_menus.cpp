@@ -300,6 +300,8 @@ void PicturaMainWindow::registerHandlers()
             && view->layer_can_free_transform(path);
     });
 
+    wireTransformMenu();
+
     registry_->setHandler(command_ids::ImageRotate90Cw, [this]() {
         if (PictureView* view = activeView(); view && view->rotate_doc(1)) {
             refresh();

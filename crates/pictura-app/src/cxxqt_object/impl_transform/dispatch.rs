@@ -1,6 +1,6 @@
 use super::super::helpers::*;
 use super::super::qobject;
-use super::super::state::TransformMode;
+use super::super::state::{TransformMode, TransformSession};
 use super::distort::gesture_distort;
 use super::geometry::{
     gesture_rotate, gesture_scale, gesture_translate, hit_test_quad, pivot_drag, pivot_hit,
@@ -13,6 +13,17 @@ use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
+
+/// Hit-test the session's box through its mode: a Scale session has no rotate
+/// band, and a Rotate session turns every scale handle into the rotate handle.
+fn mode_hit(session: &TransformSession, quad: &[(f64, f64); 4], x: f64, y: f64, zoom: f64) -> i32 {
+    let hit = hit_test_quad(quad, session.mode.is_projective(), x, y, zoom);
+    match session.mode {
+        TransformMode::Scale if hit == ROTATE_HANDLE => -1,
+        TransformMode::Rotate if (0..=7).contains(&hit) => ROTATE_HANDLE,
+        _ => hit,
+    }
+}
 
 impl qobject::PictureView {
     /// Begin a drag at document-space `(x, y)`; returns the hit handle
@@ -37,7 +48,7 @@ impl qobject::PictureView {
                         (PIVOT_HANDLE, session_quad(session))
                     } else {
                         let quad = session_quad(session);
-                        let hit = hit_test_quad(&quad, session.mode.is_projective(), x, y, zoom);
+                        let hit = mode_hit(session, &quad, x, y, zoom);
                         (hit, quad)
                     }
                 }
@@ -80,7 +91,7 @@ impl qobject::PictureView {
                     return PIVOT_HANDLE;
                 }
                 let quad = session_quad(session);
-                hit_test_quad(&quad, session.mode.is_projective(), x, y, zoom)
+                mode_hit(session, &quad, x, y, zoom)
             }
             None => -1,
         }
@@ -124,6 +135,28 @@ impl qobject::PictureView {
             TransformMode::Distort => gesture_distort(session, handle, x, y),
             TransformMode::Perspective => gesture_perspective(session, handle, x, y),
             TransformMode::Skew => gesture_skew(session, handle, x, y, alt),
+            TransformMode::Scale => match handle {
+                MOVE_HANDLE => {
+                    gesture_translate(session, x, y);
+                    true
+                }
+                0..=7 => {
+                    session.handle = handle;
+                    gesture_scale(session, x, y, shift)
+                }
+                _ => false,
+            },
+            TransformMode::Rotate => match handle {
+                MOVE_HANDLE => {
+                    gesture_translate(session, x, y);
+                    true
+                }
+                ROTATE_HANDLE => {
+                    gesture_rotate(session, x, y, shift);
+                    true
+                }
+                _ => false,
+            },
             TransformMode::Free if session.free_perspective => {
                 gesture_perspective(session, handle, x, y)
             }

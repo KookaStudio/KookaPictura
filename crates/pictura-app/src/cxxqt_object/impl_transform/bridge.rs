@@ -8,8 +8,8 @@
 use super::super::qobject::PictureView;
 use super::super::state::{TransformMode, TransformSession};
 use super::geometry::{
-    hit_test_quad, projective_coefficients, quad_anchors, quad_driven, session_quad, set_pivot,
-    source_corners, store_quad, MapParams,
+    hit_test_quad, projective_coefficients, quad_anchors, quad_driven, rect_center, session_quad,
+    set_pivot, source_corners, store_quad, MapParams,
 };
 use super::perspective::drag_angle_degrees;
 use super::session::can_begin_mode;
@@ -103,6 +103,20 @@ pub mod ffi {
         /// The live Perspective drag's readout angle in degrees; NaN without
         /// one.
         fn transform_drag_angle_degrees(view: &PictureView) -> f64;
+        /// Apply an exact transform op to the open session: `"rotate180"`,
+        /// `"rotate90cw"`, `"rotate90ccw"`, `"flipHorizontal"`, or
+        /// `"flipVertical"`. False without a session or for an unknown op.
+        fn transform_apply(view: Pin<&mut PictureView>, op: &QString) -> bool;
+        /// Restrict an open similarity session to Scale or Rotate gestures.
+        /// False without a session, in a projective mode, or in Warp mode.
+        fn transform_set_mode(view: Pin<&mut PictureView>, mode: &QString) -> bool;
+        /// Apply the last committed similarity transform to the open session.
+        /// False without a session or a repeatable last transform.
+        fn transform_repeat(view: Pin<&mut PictureView>) -> bool;
+        /// Whether a repeatable last transform exists.
+        fn transform_has_repeat(view: &PictureView) -> bool;
+        /// Set the label the next commit records.
+        fn transform_set_history_label(view: Pin<&mut PictureView>, label: &QString);
     }
 }
 
@@ -565,4 +579,129 @@ fn transform_drag_angle_degrees(view: &PictureView) -> f64 {
         .as_ref()
         .and_then(drag_angle_degrees)
         .unwrap_or(f64::NAN)
+}
+
+/// The exact transform commands that apply to the open session in one step.
+#[derive(Clone, Copy)]
+enum TransformOp {
+    Rotate180,
+    Rotate90Cw,
+    Rotate90Ccw,
+    FlipHorizontal,
+    FlipVertical,
+}
+
+impl TransformOp {
+    fn parse(name: &str) -> Option<Self> {
+        match name {
+            "rotate180" => Some(Self::Rotate180),
+            "rotate90cw" => Some(Self::Rotate90Cw),
+            "rotate90ccw" => Some(Self::Rotate90Ccw),
+            "flipHorizontal" => Some(Self::FlipHorizontal),
+            "flipVertical" => Some(Self::FlipVertical),
+            _ => None,
+        }
+    }
+}
+
+fn transform_apply(mut view: Pin<&mut PictureView>, op: &QString) -> bool {
+    let Some(op) = TransformOp::parse(&op.to_string()) else {
+        return false;
+    };
+    let mut rust = view.as_mut().rust_mut();
+    let Some(session) = rust.transform_session.as_mut() else {
+        return false;
+    };
+    // Warp keeps the mesh in source space; the box's similarity frame still
+    // rotates and flips, but the quad belongs to the warp path.
+    if session.warp.is_none() && session.mode.is_projective() {
+        let quad = session_quad(session);
+        return match op {
+            TransformOp::Rotate180 => rotate_quad_about(session, &quad, std::f64::consts::PI),
+            TransformOp::Rotate90Cw => {
+                rotate_quad_about(session, &quad, std::f64::consts::FRAC_PI_2)
+            }
+            TransformOp::Rotate90Ccw => {
+                rotate_quad_about(session, &quad, -std::f64::consts::FRAC_PI_2)
+            }
+            TransformOp::FlipHorizontal => reflect_quad_about(session, &quad, true),
+            TransformOp::FlipVertical => reflect_quad_about(session, &quad, false),
+        };
+    }
+    match op {
+        TransformOp::Rotate180 => session.angle += std::f64::consts::PI,
+        TransformOp::Rotate90Cw => session.angle += std::f64::consts::FRAC_PI_2,
+        TransformOp::Rotate90Ccw => session.angle -= std::f64::consts::FRAC_PI_2,
+        TransformOp::FlipHorizontal => session.scale_x = -session.scale_x,
+        TransformOp::FlipVertical => session.scale_y = -session.scale_y,
+    }
+    true
+}
+
+fn transform_set_mode(mut view: Pin<&mut PictureView>, mode: &QString) -> bool {
+    let Some(mode) = TransformMode::parse(&mode.to_string()) else {
+        return false;
+    };
+    let mut rust = view.as_mut().rust_mut();
+    let Some(session) = rust.transform_session.as_mut() else {
+        return false;
+    };
+    if session.warp.is_some() || session.mode.is_projective() || mode.is_projective() {
+        return false;
+    }
+    session.mode = mode;
+    true
+}
+
+fn transform_repeat(mut view: Pin<&mut PictureView>) -> bool {
+    let Some(last) = view.rust().last_transform else {
+        return false;
+    };
+    let mut rust = view.as_mut().rust_mut();
+    let Some(session) = rust.transform_session.as_mut() else {
+        return false;
+    };
+    if session.warp.is_some() || session.mode.is_projective() {
+        return false;
+    }
+    let (cx, cy) = rect_center(session.orig_rect);
+    session.pivot = (cx + last.pivot_offset.0, cy + last.pivot_offset.1);
+    session.pivot_origin = (cx, cy);
+    session.scale_x = last.scale_x;
+    session.scale_y = last.scale_y;
+    session.angle = last.angle;
+    session.skew_x = last.skew_x;
+    session.skew_y = last.skew_y;
+    session.dx = last.dx;
+    session.dy = last.dy;
+    true
+}
+
+fn transform_has_repeat(view: &PictureView) -> bool {
+    view.rust().last_transform.is_some()
+}
+
+fn transform_set_history_label(mut view: Pin<&mut PictureView>, label: &QString) {
+    if let Some(session) = view.as_mut().rust_mut().transform_session.as_mut() {
+        session.history_label = label.to_string();
+    }
+}
+
+/// Reflect `quad` about the reference point's horizontal or vertical axis;
+/// degenerate results are refused.
+fn reflect_quad_about(
+    session: &mut TransformSession,
+    quad: &[(f64, f64); 4],
+    horizontal: bool,
+) -> bool {
+    let (px, py) = session.pivot;
+    let mut out = *quad;
+    for corner in &mut out {
+        if horizontal {
+            corner.0 = 2.0 * px - corner.0;
+        } else {
+            corner.1 = 2.0 * py - corner.1;
+        }
+    }
+    store_quad(session, out)
 }

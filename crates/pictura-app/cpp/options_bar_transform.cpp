@@ -446,7 +446,9 @@ void OptionsBar::refreshTransformPage()
         return;
     }
 
-    const bool freeMode = transform_session_mode(*v) == QStringLiteral("free");
+    const QString mode = transform_session_mode(*v);
+    const bool freeMode = mode == QStringLiteral("free") || mode == QStringLiteral("scale")
+        || mode == QStringLiteral("rotate");
     const QString blockedTip =
         QStringLiteral("Not editable in Skew, Distort, or Perspective; drag a handle instead.");
     wField->setEnabled(freeMode);
