@@ -2,3 +2,13 @@
 # choice. Applies to cargo test/clippy and to Corrosion's cargo call from CMake.
 [target.x86_64-unknown-linux-gnu]
 rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+# One QMAKE value for every cargo invocation. The cxx-qt build script tracks
+# QMAKE (rerun-if-env-changed), and the CMake build exports an absolute path
+# that a bare cargo run does not, so alternating the two gates used to rebuild
+# cxx-qt-lib, cxx-qt and pictura_app for nothing. `force` makes this value win
+# over the path the CMake build exports, so the fingerprint is the same string
+# whoever started the build. The bare name is searched on PATH by the cxx-qt
+# build script; both supported distributions ship qmake6.
+[env]
+QMAKE = { value = "qmake6", force = true }
