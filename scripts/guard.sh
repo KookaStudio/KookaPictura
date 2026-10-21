@@ -15,6 +15,9 @@
 #   9. a release-please version marker dropped from a version file.
 #  10. a theme-like grey colour literal outside the theme layer.
 #  11. a C++ string literal longer than MSVC's per-literal limit (C2026).
+#  12. a file under docs/ claiming the repository has no code.
+#  13. an open ROADMAP.md item that names no tracking issue, or a cited path
+#      that does not exist.
 #
 # Runnable locally with no setup:   bash scripts/guard.sh
 #
@@ -153,6 +156,18 @@ done
 echo "check: C++ string literals within MSVC's per-literal limit"
 if ! python3 "$(dirname "$0")/check-msvc-string-limits.py" --self-test \
     || ! python3 "$(dirname "$0")/check-msvc-string-limits.py"; then
+    fail=1
+fi
+
+# --- 12. docs/ may not deny the implementation --------------------------------
+echo "check: docs/ does not claim the repository has no code"
+if ! python3 "$(dirname "$0")/check-doc-claims.py" corpus; then
+    fail=1
+fi
+
+# --- 13. the roadmap's open items and cited paths resolve ----------------------
+echo "check: every open ROADMAP.md item links a tracking issue"
+if ! python3 "$(dirname "$0")/check-doc-claims.py" roadmap paths; then
     fail=1
 fi
 
