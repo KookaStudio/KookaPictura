@@ -1012,26 +1012,27 @@ int pictura::runShellRound4Checks(pictura::PicturaMainWindow& frame)
         pump4(6);
     }
 
-    // float_screen_bounds (437): a float can be moved outside the main window
-    // rect, because movement is clamped to the screen rather than the window.
+    // float_screen_bounds (437): movement is clamped to the screen rather than
+    // the main window, so a move past the screen's bottom-right corner lands
+    // the float on that corner.
     {
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump4(6);
-        // Shrink the frame below the offscreen screen so a screen-clamped float
-        // has room outside it; the old central-rect clamp would pull it back.
+        // The frame's minimum size exceeds the offscreen screen, so no band
+        // exists between the frame and the screen edge; the clamp is observed
+        // from the screen's corner instead. Keep the frame at the screen origin
+        // so the setup is explicit, and restore its position afterwards.
         const QPoint framePosBefore = frame.pos();
-        const QSize frameBefore = frame.size();
-        frame.resize(700, 500);
         frame.move(0, 0);
         pump4(8);
         pictura::PanelColumn* column = frame.panelColumn();
         bool torn = false;
         bool onScreen = false;
-        bool outsideFrame = false;
+        bool onScreenEdge = false;
         int screenBottom = 0;
-        int frameBottom = 0;
         int screenRight = 0;
-        int frameRight = 0;
+        int floatBottom = 0;
+        int floatRight = 0;
         if (column) {
             pictura::PanelGroup* group = nullptr;
             for (pictura::PanelGroup* candidate : column->groups()) {
@@ -1054,35 +1055,31 @@ int pictura::runShellRound4Checks(pictura::PicturaMainWindow& frame)
                 pump4(8);
                 const int index = column->floatCountForTest() - 1;
                 const QRect screen = column->floatHostRectForTest();
-                const QRect frameRect(frame.mapToGlobal(QPoint(0, 0)), frame.size());
+                // Ask for a position past the screen's bottom-right corner; the
+                // float has to come back clamped to the screen.
+                onScreen = column->floatClampedForTest(
+                    index, screen.bottomRight() + QPoint(400, 400));
+                const QRect after = column->floatGeometryForTest(index);
                 screenBottom = screen.bottom();
-                frameBottom = frameRect.bottom();
                 screenRight = screen.right();
-                frameRight = frameRect.right();
-                const bool lowBand = screen.bottom() > frameRect.bottom();
-                const bool rightBand = screen.right() > frameRect.right();
-                if (torn && (lowBand || rightBand)) {
-                    const QPoint want = lowBand
-                        ? QPoint(screen.center().x(), screen.bottom() + 400)
-                        : QPoint(screen.right() + 400, screen.center().y());
-                    const bool clamped = column->floatClampedForTest(index, want);
-                    const QRect after = column->floatGeometryForTest(index);
-                    onScreen = clamped && screen.contains(after);
-                    outsideFrame = lowBand ? after.bottom() > frameRect.bottom()
-                                           : after.right() > frameRect.right();
-                }
+                floatBottom = after.bottom();
+                floatRight = after.right();
+                // A frame-relative clamp would rest the float on the frame's
+                // edge instead, whatever the frame's size or position.
+                onScreenEdge = after.bottom() == screen.bottom()
+                               && after.right() == screen.right();
                 column->closeFloatForTest(index);
                 pump4(6);
             }
         }
         ST_BEGIN("float_screen_bounds");
-        ST_PASS("float_screen_bounds torn=%d on_screen=%d outside=%d sb=%d fb=%d sr=%d fr=%d",
-                torn ? 1 : 0, onScreen ? 1 : 0, outsideFrame ? 1 : 0, screenBottom,
-                frameBottom, screenRight, frameRight);
-        if (!(torn && onScreen && outsideFrame)) {
+        ST_PASS("float_screen_bounds torn=%d on_screen=%d on_screen_edge=%d "
+                "sb=%d sr=%d fb=%d fr=%d",
+                torn ? 1 : 0, onScreen ? 1 : 0, onScreenEdge ? 1 : 0, screenBottom,
+                screenRight, floatBottom, floatRight);
+        if (!(torn && onScreen && onScreenEdge)) {
             return pictura::selfTest().fail(437, "float screen bounds");
         }
-        frame.resize(frameBefore);
         frame.move(framePosBefore);
         pump4(6);
         frame.applyPanelSessionForTest(pictura::SessionState{});
