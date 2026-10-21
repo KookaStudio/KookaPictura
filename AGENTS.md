@@ -220,6 +220,9 @@ non-trivial changes and works from the CLI, with or without an agent** (the
     `crates/pictura-app/cpp/tests/`, never new `runSelfTest()` checks; the
     self-test only shrinks and retired exit codes are never reused (see
     Verification).
+12. **Roadmap.** A pull request that ships or removes a feature updates
+    `ROADMAP.md` in the same change: shipped items get ticked, and every
+    remaining `[ ]` item links the GitHub issue that tracks it.
 
 ## Anti-patterns
 
