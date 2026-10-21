@@ -10,6 +10,32 @@ Snapshot for resuming after a context break. Update after each milestone.
   two-team process (`docs/00-overview/licensing-and-provenance.md`).
 - **Provenance history:** the git history was rewritten so no reachable commit
   contains reproduced Adobe Help prose or the old wording.
+- **Plain-Rust document session** (#740, branch
+  `refactor/740-rust-document-session`, OpenSpec change `document-session`,
+  archived into `document/document-session`). The document, the selection, and
+  the history live in a `DocumentSession`; the `PictureView` QObject is the
+  adapter that presents what the session reports, and `cargo test` is the
+  second adapter.
+  - **One live session:** the slot is a rule over the live gesture state — a
+    begin of another kind is refused, a repeat begin follows its kind's rule
+    (a transform replaces its own session, a filter or mode preview updates
+    it, a lasso attaches to the magnetic gesture it started), and one
+    `cancel_active_sessions` drops them all.
+  - **Cancel first:** a replacement cancels against the outgoing document,
+    clears every outgoing pointer, preview, and cache, and installs the
+    incoming document, history, and PDF password; history navigation cancels
+    too.
+  - **A change report:** the session returns a `SessionChange` (the effect and
+    the regions); the adapter emits the region blits and at most one
+    `changed`.
+  - **The tool handlers reset:** `sessionCancelled` reaches every registered
+    handler, so a Pen anchor, a Path Selection drag, a Move Alt-clone, or a
+    Type edit cannot commit into a restored document.
+  - **No stale installs:** an open request carries an id, so a result from a
+    superseded request is dropped instead of installing over a newer document.
+  - **Tests:** 23 Rust session tests, 12 Qt cases in `tst_document_session`,
+    and the stale-request guard.
+  - **Follow-up:** the headless display frame is #783.
 - Toolchain: Rust 1.98 (`rust-toolchain.toml`), system Qt **6.11.1**, cxx-qt
   **0.10.0**, wgpu **30.0.1**, lcms2 **6.2.0** (system Little CMS 2.19).
 - **Perspective rebuilt, pending-transform lock** (#750, branch
