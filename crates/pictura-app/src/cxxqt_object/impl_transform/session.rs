@@ -206,8 +206,8 @@ pub(super) fn transform_preview_layer(
 
 /// Whether `path` resolves to a transformable target: a raster pixel layer, or
 /// a channel-less embedded smart object whose source materializes. False for a
-/// group, adjustment layer, Background layer, position-locked layer, or a
-/// zero-area target.
+/// hidden layer, a group, adjustment layer, Background layer, position-locked
+/// layer, or a zero-area target.
 fn can_free_transform(doc: &pictura_core::Document, path: &str) -> bool {
     let Some(layer) = pictura_render::resolve_path(doc, path) else {
         return false;
@@ -241,7 +241,8 @@ fn lift_coverage(rust: &super::super::state::PictureViewRust) -> Option<Vec<u8>>
 }
 
 /// Whether a selection on `path` lifts its pixels for the transform (CS6
-/// transforms the selected pixels, a Background's included).
+/// transforms the selected pixels, a Background's included; a hidden layer's
+/// does not).
 fn lifts_selection(rust: &PictureViewRust, path: &str) -> bool {
     rust.doc.as_ref().is_some_and(|doc| {
         pictura_render::resolve_path(doc, path)
