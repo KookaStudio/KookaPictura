@@ -1,4 +1,4 @@
-use super::super::state::{TransformMode, TransformSession};
+use super::super::state::TransformSession;
 use pictura_core::PsdRect;
 
 /// Screen-pixel tolerance for a scale-handle hit.
@@ -122,19 +122,19 @@ pub(super) fn map_quad(session: &TransformSession) -> [(f64, f64); 4] {
 }
 
 /// Apply the session's live transform to `doc` at `path` with `interpolation`:
-/// the projective op in a projective mode, the affine quad when a shear is set,
-/// else the similarity op re-centred on `orig_rect` (so an integer move keeps
-/// its unmodeled raw channels).
+/// the projective op for a quad-driven session ([`quad_driven`]), the affine
+/// quad when a shear is set, else the similarity op re-centred on `orig_rect`
+/// (so an integer move keeps its unmodeled raw channels).
 pub(super) fn apply_session_transform(
     doc: &mut pictura_core::Document,
     path: &str,
-    mode: TransformMode,
+    projective: bool,
     quad: [(f64, f64); 4],
     params: MapParams,
     orig_rect: PsdRect,
     interpolation: pictura_render::Interpolation,
 ) -> bool {
-    if mode.is_projective() {
+    if projective {
         return pictura_render::transform_layer_quad_with(doc, path, quad, interpolation);
     }
     if params.skew_x != 0.0 || params.skew_y != 0.0 {
@@ -296,15 +296,30 @@ pub(super) fn transform_quad_points(
     out
 }
 
-/// The session's live target quad: the stored projective quad, or the
-/// similarity quad derived from the scalars in `Free` mode.
+/// The session's live target quad: the stored projective quad, or in `Free`
+/// mode the similarity applied to the perspective base or the source rect.
 pub(super) fn session_quad(session: &TransformSession) -> [(f64, f64); 4] {
-    session.quad.unwrap_or_else(|| map_quad(session))
+    if let Some(quad) = session.quad {
+        return quad;
+    }
+    match session.base_quad {
+        Some(base) => {
+            let params = MapParams::of(session);
+            base.map(|p| params.map_point(p))
+        }
+        None => map_quad(session),
+    }
+}
+
+/// Whether the session commits and previews through the projective quad op: a
+/// projective mode, or `Free` with a perspective base.
+pub(super) fn quad_driven(session: &TransformSession) -> bool {
+    session.mode.is_projective() || session.base_quad.is_some()
 }
 
 /// Whether a candidate quad is too degenerate to keep: a non-finite corner,
 /// under 1 px² of area, or three consecutive corners on one line.
-fn quad_is_degenerate(quad: &[(f64, f64); 4]) -> bool {
+pub(super) fn quad_is_degenerate(quad: &[(f64, f64); 4]) -> bool {
     if quad.iter().any(|(x, y)| !x.is_finite() || !y.is_finite()) {
         return true;
     }
@@ -335,26 +350,6 @@ pub(super) fn store_quad(session: &mut TransformSession, quad: [(f64, f64); 4]) 
     }
     session.quad = Some(quad);
     true
-}
-
-/// Perspective: set corner `corner` to the pointer and move the opposite corner
-/// by the negated delta, keeping the quad centre fixed.
-pub(super) fn gesture_perspective(
-    session: &mut TransformSession,
-    corner: i32,
-    x: f64,
-    y: f64,
-) -> bool {
-    if !(0..=3).contains(&corner) {
-        return false;
-    }
-    let start = session.start_quad;
-    let (sx, sy) = start[corner as usize];
-    let mut quad = start;
-    quad[corner as usize] = (x, y);
-    let opp = opposite_handle(corner) as usize;
-    quad[opp] = (start[opp].0 - (x - sx), start[opp].1 - (y - sy));
-    store_quad(session, quad)
 }
 
 /// Solve the homography sending `src[i]` to `dst[i]` and return its nine
@@ -432,7 +427,7 @@ fn gaussian_solve(mut a: [[f64; 8]; 8], mut b: [f64; 8]) -> Option<[f64; 8]> {
 }
 
 /// Source coordinate of handle `h` (4..=7 are edge midpoints).
-fn handle_source_point(rect: PsdRect, h: i32) -> (f64, f64) {
+pub(super) fn handle_source_point(rect: PsdRect, h: i32) -> (f64, f64) {
     let (left, top) = (rect.left as f64, rect.top as f64);
     let (right, bottom) = (rect.right as f64, rect.bottom as f64);
     let (mx, my) = ((left + right) / 2.0, (top + bottom) / 2.0);
@@ -449,7 +444,7 @@ fn handle_source_point(rect: PsdRect, h: i32) -> (f64, f64) {
 }
 
 /// The anchor handle opposite `h` (the pivot a scale keeps fixed).
-fn opposite_handle(h: i32) -> i32 {
+pub(super) fn opposite_handle(h: i32) -> i32 {
     match h {
         0 => 2,
         1 => 3,
@@ -698,6 +693,9 @@ mod tests {
             mode: TransformMode::Free,
             type_layer: false,
             quad: None,
+            base_quad: None,
+            free_perspective: false,
+            perspective_side: None,
             start_quad: source_corners(rect4()),
             pivot: (2.0, 2.0),
             pivot_origin: (2.0, 2.0),
@@ -932,18 +930,6 @@ mod tests {
         s.press_y = 1.0;
         gesture_translate(&mut s, 3.0, 5.0);
         assert!((s.dx - 2.0).abs() < 1e-12 && (s.dy - 4.0).abs() < 1e-12);
-    }
-
-    #[test]
-    fn perspective_mirrors_the_opposite_corner() {
-        let mut s = projective();
-        assert!(gesture_perspective(&mut s, 0, 2.0, 1.0));
-        let q = s.quad.unwrap();
-        assert_eq!(q[0], (2.0, 1.0));
-        assert_eq!(q[2], (2.0, 3.0));
-        let cx = q.iter().map(|p| p.0).sum::<f64>() / 4.0;
-        let cy = q.iter().map(|p| p.1).sum::<f64>() / 4.0;
-        assert!((cx - 2.0).abs() < 1e-9 && (cy - 2.0).abs() < 1e-9);
     }
 
     #[test]

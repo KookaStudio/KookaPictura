@@ -1036,7 +1036,7 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
         && view->history_label(distortBase) == QStringLiteral("Free Transform");
     const bool distortChanged = transform_api::layerRect(*view, path).toString() != beforeDistort;
 
-    // (b) Perspective moves the opposite corner by the negated delta.
+    // (b) Perspective spreads the dragged corner's edge about its midpoint.
     const QRectF pRect = rectOf(view, path);
     const bool perspBegin = view->begin_transform_mode(path, QStringLiteral("perspective"));
     pictura::transform_set_show_pivot(*view, false);
@@ -1051,9 +1051,10 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
     frame.imageView()->clearTransformPreview();
     const bool perspOpposite = perspBefore.size() == 4 && perspAfter.size() == 4
         && std::abs(perspAfter.at(0).x() - (pRect.left() + 5.0)) < 1e-6
-        && std::abs(perspAfter.at(0).y() - (pRect.top() + 4.0)) < 1e-6
-        && std::abs(perspAfter.at(2).x() - (perspBefore.at(2).x() - 5.0)) < 1e-6
-        && std::abs(perspAfter.at(2).y() - (perspBefore.at(2).y() - 4.0)) < 1e-6;
+        && std::abs(perspAfter.at(0).y() - pRect.top()) < 1e-6
+        && std::abs(perspAfter.at(1).x() - (perspBefore.at(1).x() - 5.0)) < 1e-6
+        && std::abs(perspAfter.at(1).y() - perspBefore.at(1).y()) < 1e-6
+        && perspAfter.at(2) == perspBefore.at(2) && perspAfter.at(3) == perspBefore.at(3);
 
     // (c) Skew slides the top edge and leaves the bottom edge fixed.
     const QRectF sRect = rectOf(view, path);

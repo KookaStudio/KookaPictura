@@ -90,6 +90,14 @@ pub struct TransformSession {
     pub(super) type_layer: bool,
     /// Live target quad for a projective mode; `None` in `Free`.
     pub(super) quad: Option<[(f64, f64); 4]>,
+    /// `Free` only: the source-space box a Ctrl+Alt+Shift perspective drag
+    /// left, after which the similarity scalars apply.
+    pub(super) base_quad: Option<[(f64, f64); 4]>,
+    /// Whether the drag in progress is a `Free` Ctrl+Alt+Shift perspective drag.
+    pub(super) free_perspective: bool,
+    /// The perspective drag's readout side: (moved corner, its unmoved
+    /// neighbour, whether the moved edge is the top or bottom edge).
+    pub(super) perspective_side: Option<(usize, usize, bool)>,
     /// Quad captured at begin/press for a projective gesture.
     pub(super) start_quad: [(f64, f64); 4],
     /// The reference point (document space) and its position at begin.

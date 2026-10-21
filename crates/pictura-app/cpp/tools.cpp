@@ -335,6 +335,12 @@ void ToolController::setActiveTool(ToolId id)
     if (active_ == id) {
         return;
     }
+    if (!resolvePendingTransform()) {
+        // Cancel: keep the transform and re-announce the current tool so the
+        // tool strip drops the click.
+        emit activeToolChanged(active_);
+        return;
+    }
     // Drop the outgoing handler's per-tool state (in-progress polygon, warm
     // preview) before the switch, while the old tool is still active.
     if (ToolHandler* old = registry_.forTool(active_)) {
@@ -835,6 +841,12 @@ void ToolController::handlePressed(const QPointF& imagePos, int button, int modi
             if (hit >= 0) {
                 transformDragging_ = true;
                 transformHandle_ = hit;
+                // Free Transform's Ctrl+Alt+Shift corner drag is a Perspective
+                // drag; the session refuses it where it does not apply.
+                if (hit <= 3 && mods.testFlag(Qt::ControlModifier)
+                    && mods.testFlag(Qt::AltModifier) && mods.testFlag(Qt::ShiftModifier)) {
+                    transform_begin_free_perspective(*v);
+                }
                 const ::rust::Vec<double> quad = transform_quad_extents(*v);
                 if (hit <= 3 && canvas_ && canvas_->guidesVisible()
                     && transform_session_mode(*v) == QStringLiteral("distort")
@@ -921,6 +933,7 @@ void ToolController::handleMoved(const QPointF& imagePos)
                 canvas_->setSmartGuides(lines, {});
             }
             updateTransformOverlay(v);
+            updateTransformReadout(v, imagePos);
             emit transformChanged();
         }
         setTransformCursor(imagePos);
@@ -987,6 +1000,7 @@ void ToolController::handleReleased(const QPointF& imagePos)
                 v->transform_release();
                 if (canvas_) {
                     canvas_->clearSmartGuides();
+                    canvas_->clearDragSizeHint();
                     // The released anchor's handles go back to near-pointer.
                     if (transform_warp_active(*v)) {
                         canvas_->setTransformWarp(transform_api::warpOverlay(*v));

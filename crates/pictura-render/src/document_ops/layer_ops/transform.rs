@@ -9,6 +9,7 @@
 
 use pictura_core::{Channel, Document, LayerMask, LockFlags, PsdRect, SourceChannels};
 
+use super::crossed_quad;
 use super::kernel::{self, Interpolation};
 use super::paths::{resolve_path, resolve_path_mut};
 use super::transform_native;
@@ -759,6 +760,9 @@ pub fn transform_layer_with(
 /// `quad[i]` is the document-space target of source corner `i` in TL, TR, BR, BL
 /// order. The homography sending the source rect's corners to `quad` is solved by
 /// an 8×8 linear system and inverted to sample each channel plane and the mask.
+/// A self-intersecting (bowtie) `quad` instead fills its own outline, the two
+/// straight-edged triangles between its crossing edges, as Photoshop's
+/// Perspective does ([`crossed_quad`]).
 /// Refusals (missing path, group, adjustment, Background, position-locked,
 /// zero-area source, no materializable channel-less payload, empty/oversized
 /// result) match [`transform_layer`], plus a non-finite corner, a singular or
@@ -785,6 +789,15 @@ pub fn transform_layer_quad_with(
                 return done;
             }
         }
+    }
+    if crossed_quad::quad_is_crossed(&quad) {
+        return apply_layer_map(
+            doc,
+            path,
+            |rect| crossed_quad::CrossedMap::new(rect, quad),
+            false,
+            interpolation,
+        );
     }
     apply_layer_map(
         doc,

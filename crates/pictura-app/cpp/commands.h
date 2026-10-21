@@ -282,6 +282,9 @@ public:
     // Extra enablement predicate for `id`; combined with `implemented` and the
     // presence of a handler.
     void setEnabledProvider(const QString& id, std::function<bool()> enabled);
+    // A gate over every command: a command it reports blocked is disabled
+    // whatever its own provider says (a pending transform locks the Layer menu).
+    void setBlockedProvider(std::function<bool(const CommandSpec&)> blocked);
     // Checked-state provider for a checkable command.
     void setCheckedProvider(const QString& id, std::function<bool()> checked);
     // Dynamic label for `id`; overrides the static label when set.
@@ -333,6 +336,7 @@ private:
     std::vector<Entry> entries_;
     QHash<QString, std::function<void()>> handlers_;
     QHash<QString, std::function<bool()>> enabledProviders_;
+    std::function<bool(const CommandSpec&)> blockedProvider_;
     QHash<QString, std::function<bool()>> checkedProviders_;
     QHash<QString, std::function<QString()>> labelProviders_;
     QMenuBar* menuBar_ = nullptr;

@@ -38,6 +38,8 @@ set(PICTURA_QT_TESTS
     tst_transform_controls
     tst_transform_skew
     tst_transform_distort
+    tst_transform_perspective
+    tst_transform_lock
     tst_transform_overlay
     tst_transform_warp
     tst_command_tree

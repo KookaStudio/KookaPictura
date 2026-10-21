@@ -934,6 +934,8 @@ void PicturaMainWindow::refresh()
 
     panelRefreshTimer_->start();
     updateStatus();
+    // A session can end without a transformChanged (a document switch).
+    syncTransformLock();
     if (registry_) {
         pictura::ScopedTimer registryTimer("cxx_registry_refresh");
         registry_->refresh();

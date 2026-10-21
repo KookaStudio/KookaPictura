@@ -4,7 +4,7 @@ use super::geometry::{projective_coefficients, store_quad};
 
 /// Map `(x, y)` through `projective_coefficients`' `QTransform`-order matrix:
 /// `x' = (m11·x + m21·y + m31) / w`, `y' = (m12·x + m22·y + m32) / w`.
-fn map_qtransform(c: &[f64; 9], x: f64, y: f64) -> Option<(f64, f64)> {
+pub(super) fn map_qtransform(c: &[f64; 9], x: f64, y: f64) -> Option<(f64, f64)> {
     let w = c[2] * x + c[5] * y + c[8];
     if !w.is_finite() || w.abs() < 1e-12 {
         return None;
@@ -81,6 +81,9 @@ mod tests {
             mode: TransformMode::Distort,
             type_layer: false,
             quad: Some(corners),
+            base_quad: None,
+            free_perspective: false,
+            perspective_side: None,
             start_quad: corners,
             pivot: (50.0, 25.0),
             pivot_origin: (50.0, 25.0),

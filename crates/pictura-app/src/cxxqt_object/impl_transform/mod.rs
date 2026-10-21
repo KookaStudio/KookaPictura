@@ -3,6 +3,7 @@ mod convex;
 mod dispatch;
 mod distort;
 mod geometry;
+mod perspective;
 mod session;
 mod skew;
 mod warp;

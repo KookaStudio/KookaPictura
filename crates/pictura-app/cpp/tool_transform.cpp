@@ -10,6 +10,8 @@
 
 #include <QtCore/QStringList>
 
+#include <cmath>
+
 namespace pictura {
 
 namespace {
@@ -126,6 +128,38 @@ void ToolController::updateTransformOverlay(PictureView* v)
         canvas_->setTransformPreviewProjective(matrix.coefficients, source);
     } else {
         canvas_->setTransformPreview(1.0, 1.0, 0.0, 0.0, 0.0);
+    }
+}
+
+bool ToolController::resolvePendingTransform()
+{
+    if (!transformPending()) {
+        return true;
+    }
+    switch (transformPrompt_ ? transformPrompt_() : TransformDecision::DontApply) {
+    case TransformDecision::Apply:
+        commitFreeTransform();
+        return true;
+    case TransformDecision::DontApply:
+        cancelFreeTransform();
+        return true;
+    case TransformDecision::Cancel:
+        return false;
+    }
+    return false;
+}
+
+void ToolController::updateTransformReadout(PictureView* v, const QPointF& imagePos)
+{
+    if (!canvas_) {
+        return;
+    }
+    const double angle = v ? transform_drag_angle_degrees(*v) : std::nan("");
+    if (std::isfinite(angle)) {
+        canvas_->setDragSizeHint(QStringLiteral("∠: %1°").arg(angle, 0, 'f', 1),
+                                 imagePos);
+    } else {
+        canvas_->clearDragSizeHint();
     }
 }
 

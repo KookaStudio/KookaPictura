@@ -641,26 +641,32 @@ void TransformDistortTest::distortCommandDisabledForGroup()
 
 void TransformDistortTest::projectivePreviewClipsAtTheHorizon()
 {
-    // The source's forward divisor is 1 - 0.02x: positive at x = 0, negative
-    // at x = 100, and zero at the centre, which counts as the front side. The
-    // projected corners span x' in [-100, 0], but the front side also reaches
-    // x' > 0 (destination 50.5 maps back to source 25.12).
+    // The map onto the concave quad (0,0), (300,0), (60,60), (0,300), the
+    // engine's horizon fixture: its forward divisor is 1 - (x + y)/75, so only
+    // the top-left corner is ahead and the far side is the front. (A horizon
+    // whose projected corners cross is a bowtie, filled as an hourglass;
+    // tst_transform_perspective covers that.)
     QImage source(100, 100, QImage::Format_ARGB32_Premultiplied);
     source.fill(Qt::white);
-    const std::array<double, 9> local{1.0, 0.0, -0.02, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
+    const std::array<double, 9> local{-1.0, 0.0, -1.0 / 75.0, 0.0, -1.0,
+                                      -1.0 / 75.0, 0.0, 0.0, 1.0};
     const pictura::WarpedTransformPreview warped = pictura::warpTransformPreview(
         source, QPointF(0.0, 0.0), local, QRectF(0.0, 0.0, 100.0, 100.0),
-        QRectF(-200.0, -200.0, 400.0, 400.0), 1.0);
+        QRectF(-200.0, -200.0, 800.0, 800.0), 1.0);
+    QVERIFY(!warped.crossed);
     QVERIFY(!warped.image.isNull());
     const auto alphaAt = [&warped](const QPointF& destination) {
         const QPoint pixel = (destination - warped.origin).toPoint();
         return warped.image.rect().contains(pixel) ? qAlpha(warped.image.pixel(pixel)) : -1;
     };
-    QCOMPARE(alphaAt(QPointF(0.5, 0.5)), 255);
-    QVERIFY2(alphaAt(QPointF(50.5, 50.5)) == 255,
+    // Destination (100.5, 100.5) maps back to source (59.8, 59.8), front side.
+    QCOMPARE(alphaAt(QPointF(100.5, 100.5)), 255);
+    // Destination (400.5, 100.5) maps back to source (70.5, 17.7): front side,
+    // beyond the projected corners' x range [0, 300].
+    QVERIFY2(alphaAt(QPointF(400.5, 100.5)) == 255,
              "the front side beyond the projected corners is drawn");
-    // Destination (-150, -100) maps back to source (75, 50), on the far side.
-    QVERIFY2(alphaAt(QPointF(-149.5, -99.5)) == 0, "the far side is transparent");
+    // Destination (-150.5, -100.5) maps back to source (34.6, 23.1), far side.
+    QVERIFY2(alphaAt(QPointF(-150.5, -100.5)) == 0, "the far side is transparent");
 
     // An affine map has no horizon and keeps the whole source.
     const std::array<double, 9> identity{1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};

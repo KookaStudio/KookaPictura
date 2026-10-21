@@ -19,6 +19,7 @@ namespace pictura {
 class PictureView;
 
 enum class UnsavedChoice { Save, Discard, Cancel };
+enum class TransformDecision;
 
 // Show `dialog` and block input to `parent`'s top-level window without using a
 // modal window hint, so the window compositor's modal-parent dim never fires.
@@ -56,6 +57,13 @@ UnsavedChoice askUnsaved(QWidget* parent, const QString& documentName);
 // returns the configured choice. Defaults: interactive true, Discard.
 void setUnsavedPromptInteractive(bool interactive);
 void setNonInteractiveUnsavedChoice(UnsavedChoice choice);
+
+// Photoshop's "Apply the transformation?" (Apply / Cancel / Don't Apply), asked
+// before a tool switch leaves a pending transform. Non-interactive (the
+// default on the offscreen platform: headless runs and tests) it shows nothing
+// and returns Don't Apply.
+TransformDecision askApplyTransform(QWidget* parent);
+void setTransformPromptInteractive(bool interactive);
 
 // Name filters shared by the Open/Save/Place/Open As Smart Object dialogs. One
 // filter per format; patterns are space-separated (Qt splits on spaces, so a
