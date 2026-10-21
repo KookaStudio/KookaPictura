@@ -103,7 +103,7 @@ mod tests {
 
     fn layout(text: &str, box_bounds: Option<[f64; 4]>, justify: Justify) -> TextLayout {
         let bundled = face_for("Liberation Sans").expect("bundled face");
-        crate::text_render::layout_type(&bundled, &tool(text, box_bounds, justify), 200, 100)
+        crate::text_render::layout_type(bundled, &tool(text, box_bounds, justify), 200, 100)
             .expect("the layer lays out")
     }
 
@@ -209,15 +209,14 @@ mod tests {
             Justify::JustifyLastLeft,
         );
         top.vertical = true;
-        let top = crate::text_render::layout_type(&bundled, &top, 100, 200).expect("lays out");
+        let top = crate::text_render::layout_type(bundled, &top, 100, 200).expect("lays out");
         let mut bottom = tool(
             "abc",
             Some([0.0, 0.0, 100.0, 200.0]),
             Justify::JustifyLastRight,
         );
         bottom.vertical = true;
-        let bottom =
-            crate::text_render::layout_type(&bundled, &bottom, 100, 200).expect("lays out");
+        let bottom = crate::text_render::layout_type(bundled, &bottom, 100, 200).expect("lays out");
         let y = |layout: &TextLayout| layout.lines[0].glyphs.first().map_or(0.0, |g| g.y);
         assert!(y(&top).abs() < 0.01, "the column is at the top");
         assert!(y(&bottom) > y(&top) + 10.0, "the column is at the bottom");
