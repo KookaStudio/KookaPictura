@@ -666,7 +666,7 @@ impl qobject::PictureView {
             let mut rust = self.as_mut().rust_mut();
             rust.dirty = true;
             rust.content_revision = rust.content_revision.wrapping_add(1);
-            rust.opacity_preview_changed = true;
+            rust.pending_previews.opacity_changed = true;
         }
         changed as i32
     }
@@ -675,8 +675,8 @@ impl qobject::PictureView {
         let value = value.clamp(0, 255) as u8;
         let owned = list_of_strings(paths);
         let refs = as_str_slice(&owned);
-        let pending = self.rust().opacity_preview_changed;
-        self.as_mut().rust_mut().opacity_preview_changed = false;
+        let pending = self.rust().pending_previews.opacity_changed;
+        self.as_mut().rust_mut().pending_previews.opacity_changed = false;
         let mut changed = 0;
         self.as_mut().edit("Opacity", |rust| {
             let Some(doc) = rust.doc.as_mut() else {
@@ -730,7 +730,7 @@ impl qobject::PictureView {
             let mut rust = self.as_mut().rust_mut();
             rust.dirty = true;
             rust.content_revision = rust.content_revision.wrapping_add(1);
-            rust.fill_preview_changed = true;
+            rust.pending_previews.fill_changed = true;
         }
         changed as i32
     }
@@ -739,8 +739,8 @@ impl qobject::PictureView {
         let value = value.clamp(0, 255) as u8;
         let owned = list_of_strings(paths);
         let refs = as_str_slice(&owned);
-        let pending = self.rust().fill_preview_changed;
-        self.as_mut().rust_mut().fill_preview_changed = false;
+        let pending = self.rust().pending_previews.fill_changed;
+        self.as_mut().rust_mut().pending_previews.fill_changed = false;
         let mut changed = 0;
         self.as_mut().edit("Fill Opacity", |rust| {
             let Some(doc) = rust.doc.as_mut() else {

@@ -14,7 +14,7 @@ use super::helpers::TileSet;
 
 /// The live Free Transform gesture mode. `Free` is the existing similarity
 /// transform; the other three edit a document-space target quad.
-#[derive(Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
 pub(super) enum TransformMode {
     #[default]
     Free,
@@ -153,8 +153,10 @@ pub struct PictureViewRust {
     /// The Paths panel row the path calls edit when not on a shape layer.
     pub(super) active_path: super::paths::ActivePath,
     /// The active path captured at a Pen-group press, restored when Edit > Undo
-    /// cancels the live gesture (`paths.rs`). `None` between gestures.
-    pub(super) path_gesture: Option<(super::paths::ActivePath, VectorPath)>,
+    /// cancels the live gesture (`paths.rs`). The flag marks a gesture on a
+    /// shape layer's outline, which cannot be restored and needs a rebuild.
+    /// `None` between gestures.
+    pub(super) path_gesture: Option<(super::paths::ActivePath, VectorPath, bool)>,
     pub(super) dirty: bool,
     /// Bumped whenever the view loads or replaces its document, so a panel can
     /// drop a gesture whose target no longer belongs to the current document.
@@ -215,11 +217,8 @@ pub struct PictureViewRust {
     pub(super) move_prepared_layer: String,
     pub(super) move_preview_cache_hit: bool,
     pub(super) transform_session: Option<TransformSession>,
-    pub(super) opacity_preview_changed: bool,
-    pub(super) fill_preview_changed: bool,
-    /// The history label of the Properties mask Density/Feather control whose
-    /// preview changed the document since its last commit.
-    pub(super) mask_refine_preview: Option<&'static str>,
+    /// The panel previews that are applied but not committed yet.
+    pub(super) pending_previews: super::document_session::PendingPreviews,
     pub(super) content_revision: u64,
     pub(super) gpu_compute: bool,
     pub(super) color_policy: pictura_codec::Policy,
@@ -340,7 +339,7 @@ pub(super) enum PreviewBaseline {
 /// A filter dialog's reduced canvas copy and what it was built from.
 pub(super) struct CanvasProxy {
     /// The document region, the scale's bits and the `content_revision`.
-    pub(super) key: (PsdRect, u64, u64),
+    pub(super) key: (PsdRect, u64, u64, u64),
     pub(super) proxy: pictura_render::FilterProxy,
 }
 
@@ -436,9 +435,7 @@ impl Default for PictureViewRust {
             move_prepared_layer: String::new(),
             move_preview_cache_hit: false,
             transform_session: None,
-            opacity_preview_changed: false,
-            fill_preview_changed: false,
-            mask_refine_preview: None,
+            pending_previews: Default::default(),
             content_revision: 0,
             gpu_compute: true,
             color_policy: pictura_codec::Policy::Preserve,

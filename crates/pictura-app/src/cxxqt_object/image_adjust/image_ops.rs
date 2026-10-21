@@ -76,12 +76,12 @@ fn duplicate_into(
 fn finish(mut view: Pin<&mut PictureView>, doc: Document, label: &str) -> bool {
     {
         let mut rust = view.as_mut().rust_mut();
-        rust.doc = Some(doc);
-        rust.reset_edit_state();
+        rust.replace_document(Some(doc), Default::default(), Default::default(), None);
         rust.select_only_layer("0");
     }
     view.as_mut().edit(label, |_| Edit::Full);
     view.as_mut().changed();
+    view.as_mut().session_cancelled();
     true
 }
 

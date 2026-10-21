@@ -8,6 +8,7 @@ mod clipboard;
 mod clipping;
 mod color_range;
 mod crop_group;
+mod document_session;
 mod edit;
 mod export;
 mod eyedropper_sample;
@@ -126,6 +127,11 @@ pub mod qobject {
         #[qsignal]
         #[cxx_name = "regionBlitted"]
         fn region_blitted(self: Pin<&mut Self>, region: QImage, x: i32, y: i32);
+        /// Emitted after a document replacement or history restore cancelled the
+        /// live tool session; handlers drop their local gesture state.
+        #[qsignal]
+        #[cxx_name = "sessionCancelled"]
+        fn session_cancelled(self: Pin<&mut Self>);
         /// Emitted on the GUI thread when a started document open ends. `status`
         /// is `ok`, a PDF probe status, or `error:<message>`; `warnings` are the
         /// renderer's recoverable problems (PDF/EPS imports).
@@ -251,6 +257,9 @@ pub mod qobject {
         /// The outstanding canvas damage as `"x y w h"`, or empty when clean.
         #[qinvokable]
         fn take_canvas_damage(self: Pin<&mut Self>) -> QString;
+        /// Cancel the active edit session and present its restoration.
+        #[qinvokable]
+        fn cancel_active_session(self: Pin<&mut Self>) -> bool;
         /// Non-consuming revision of the displayed canvas pixels; bumped when the image or pyramid changes.
         #[qinvokable]
         fn canvas_revision(&self) -> u64;

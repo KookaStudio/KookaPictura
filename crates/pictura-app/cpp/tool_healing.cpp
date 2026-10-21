@@ -93,6 +93,13 @@ public:
         }
     }
 
+    void onSessionCancelled(ToolServices& ctx) override
+    {
+        if (PictureView* v = ctx.view()) {
+            healing_cancel(*v);
+        }
+    }
+
 private:
     std::shared_ptr<PaintOptions> paint_;
     std::shared_ptr<HealingGroup> healing_;
@@ -173,6 +180,15 @@ public:
         if (PictureView* v = ctx.view()) {
             healing_cancel(*v);
         }
+    }
+
+    void onSessionCancelled(ToolServices& ctx) override
+    {
+        if (PictureView* v = ctx.view()) {
+            healing_cancel(*v);
+        }
+        hasSource_ = false;
+        hasOffset_ = false;
     }
 
 private:

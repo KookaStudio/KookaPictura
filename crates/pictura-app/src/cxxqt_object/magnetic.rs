@@ -42,21 +42,51 @@ pub mod ffi {
 }
 
 fn magnetic_begin(mut view: Pin<&mut PictureView>, contrast: i32) -> bool {
-    if view.document_depth_bits() == 32 {
-        return false;
-    }
-    let map = {
-        let rust = view.rust();
-        let Some(doc) = rust.doc.as_ref() else {
+    view.as_mut().rust_mut().begin_magnetic(contrast)
+}
+
+impl super::state::PictureViewRust {
+    /// Build and cache the edge field a magnetic lasso traces. False without a
+    /// document, on a 32-bit document, or when another session owns the slot.
+    pub(super) fn begin_magnetic(&mut self, contrast: i32) -> bool {
+        if !self.slot_allows(super::document_session::SessionKind::Lasso) {
             return false;
+        }
+        if self.document_depth_bits() == 32 {
+            return false;
+        }
+        let map = {
+            let rust = &*self;
+            let Some(doc) = rust.doc.as_ref() else {
+                return false;
+            };
+            EdgeMap::from_buffer(
+                &current_buffer(doc, rust.gpu_compute),
+                contrast.clamp(1, 100) as u32,
+            )
         };
-        EdgeMap::from_buffer(
-            &current_buffer(doc, rust.gpu_compute),
-            contrast.clamp(1, 100) as u32,
-        )
-    };
-    view.as_mut().rust_mut().edge_map = Some(map);
-    true
+        self.edge_map = Some(map);
+        true
+    }
+
+    /// The document's bit depth: the retained source depth when the document
+    /// keeps one, else the working depth.
+    pub(super) fn document_depth_bits(&self) -> i32 {
+        let Some(doc) = self.doc.as_ref() else {
+            return 0;
+        };
+        let depth = if doc.retains_source_depth() {
+            doc.source_depth.unwrap_or(doc.depth)
+        } else {
+            doc.depth
+        };
+        match depth {
+            pictura_core::BitDepth::Eight => 8,
+            pictura_core::BitDepth::Sixteen => 16,
+            pictura_core::BitDepth::ThirtyTwo => 32,
+            pictura_core::BitDepth::One => 1,
+        }
+    }
 }
 
 fn magnetic_trace(view: &PictureView, x0: i32, y0: i32, x1: i32, y1: i32, width: i32) -> Vec<i32> {

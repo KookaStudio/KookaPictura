@@ -244,6 +244,17 @@ public:
         }
     }
 
+    void onSessionCancelled(ToolServices& ctx) override
+    {
+        if (PictureView* v = ctx.view()) {
+            v->cancel_lasso();
+        }
+        lassoPolygon_.clear();
+        if (ImageView* canvas = ctx.canvas()) {
+            canvas->clearSelectionPreview();
+        }
+    }
+
 private:
     QPointF last_;
     QPolygonF lassoPolygon_;
@@ -268,6 +279,13 @@ public:
             cancel(ctx);
         }
         ctx_ = nullptr;
+    }
+
+    void onSessionCancelled(ToolServices& ctx) override
+    {
+        if (polygonInProgress_) {
+            cancel(ctx);
+        }
     }
 
     bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override

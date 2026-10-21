@@ -448,39 +448,38 @@ fn path_finish(view: Pin<&mut PictureView>) {
 }
 
 fn path_gesture_begin(mut view: Pin<&mut PictureView>) {
-    let mut rust = view.as_mut().rust_mut();
-    let active = rust.active_path;
-    // The `None` row backs up the Work Path slot: `begin_drawing` replaces it
-    // when a drawing press finds no active path.
-    let backup = rust.doc.as_ref().map(|doc| {
-        let path = match active_in(doc, active) {
-            ActivePath::None | ActivePath::Work => doc.work_path.clone(),
-            ActivePath::Saved(i) => doc.saved_paths[i].path.clone(),
-        };
-        (active, path)
-    });
-    rust.path_gesture = backup;
+    view.as_mut().rust_mut().begin_path_gesture();
+}
+
+impl PictureViewRust {
+    /// Back up the path a gesture is about to edit, so an abort can restore it.
+    /// The `None` row backs up the Work Path slot: `begin_drawing` replaces it
+    /// when a drawing press finds no active path. A gesture on a shape layer's
+    /// outline edits the layer, whose path cannot be restored; the flag marks
+    /// it, and its abort asks for a rebuild instead.
+    pub(super) fn begin_path_gesture(&mut self) {
+        if !self.slot_allows(super::document_session::SessionKind::Path) {
+            return;
+        }
+        let active = self.active_path;
+        let on_layer = self.path_on_layer;
+        let backup = self.doc.as_ref().map(|doc| {
+            let path = match active_in(doc, active) {
+                ActivePath::None | ActivePath::Work => doc.work_path.clone(),
+                ActivePath::Saved(i) => doc.saved_paths[i].path.clone(),
+            };
+            (active, path)
+        });
+        self.path_gesture = backup.map(|(active, path)| (active, path, on_layer));
+    }
 }
 
 fn path_gesture_abort(mut view: Pin<&mut PictureView>) -> bool {
-    let mut rust = view.as_mut().rust_mut();
-    let Some((active, path)) = rust.path_gesture.take() else {
+    let change = view.as_mut().rust_mut().cancel_path_gesture();
+    if !change.changed_display() {
         return false;
-    };
-    {
-        let Some(doc) = rust.doc.as_mut() else {
-            return false;
-        };
-        match active {
-            ActivePath::None | ActivePath::Work => doc.work_path = path,
-            ActivePath::Saved(i) => match doc.saved_paths.get_mut(i) {
-                Some(saved) => saved.path = path,
-                None => return false,
-            },
-        }
     }
-    rust.active_path = active;
-    view.as_mut().changed();
+    view.as_mut().apply_session_change(change);
     true
 }
 

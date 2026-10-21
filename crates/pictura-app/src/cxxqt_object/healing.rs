@@ -105,28 +105,38 @@ pub mod ffi {
 }
 
 fn healing_begin(mut view: Pin<&mut PictureView>, diameter: i32, hardness: i32) -> bool {
-    let begun = {
-        let rust = view.rust();
-        let Some(doc) = rust.doc.as_ref() else {
+    view.as_mut().rust_mut().begin_heal(diameter, hardness)
+}
+
+impl super::state::PictureViewRust {
+    /// Begin a healing gesture on the active layer. False without a document, a
+    /// layer target, or when another session owns the slot.
+    pub(super) fn begin_heal(&mut self, diameter: i32, hardness: i32) -> bool {
+        if !self.slot_allows(super::document_session::SessionKind::Healing) {
             return false;
-        };
-        let Some(path) = rust.layer_target.single() else {
-            return false;
-        };
-        HealStroke::begin(
-            doc,
-            path,
-            diameter.max(1) as u32,
-            hardness.clamp(0, 100) as u8,
-        )
-    };
-    match begun {
-        Ok(stroke) => {
-            let mut rust = view.as_mut().rust_mut();
-            rust.heal_stroke = Some(stroke);
-            true
         }
-        Err(_) => false,
+        let begun = {
+            let rust = &*self;
+            let Some(doc) = rust.doc.as_ref() else {
+                return false;
+            };
+            let Some(path) = rust.layer_target.single() else {
+                return false;
+            };
+            HealStroke::begin(
+                doc,
+                path,
+                diameter.max(1) as u32,
+                hardness.clamp(0, 100) as u8,
+            )
+        };
+        match begun {
+            Ok(stroke) => {
+                self.heal_stroke = Some(stroke);
+                true
+            }
+            Err(_) => false,
+        }
     }
 }
 
@@ -183,9 +193,8 @@ fn healing_commit(
     }
     view.as_mut().edit(label, |_| Edit::Regions {
         rects: vec![outcome.dirty],
-        notify: false,
+        notify: true,
     });
-    view.as_mut().changed();
     true
 }
 
@@ -229,9 +238,8 @@ fn patch_selection(
     };
     view.as_mut().edit("Patch Tool", |_| Edit::Regions {
         rects: vec![dirty],
-        notify: false,
+        notify: true,
     });
-    view.as_mut().changed();
     true
 }
 
@@ -268,9 +276,8 @@ fn content_aware_move(
     };
     view.as_mut().edit("Content-Aware Move", |_| Edit::Regions {
         rects: vec![dirty],
-        notify: false,
+        notify: true,
     });
-    view.as_mut().changed();
     true
 }
 
@@ -303,8 +310,7 @@ fn red_eye(
     };
     view.as_mut().edit("Red Eye Tool", |_| Edit::Regions {
         rects: vec![dirty],
-        notify: false,
+        notify: true,
     });
-    view.as_mut().changed();
     true
 }

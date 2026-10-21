@@ -312,10 +312,7 @@ fn preview_indexed(
     let options = palette_options(palette, colors, dither, amount);
     let previewed = {
         let mut rust = view.as_mut().rust_mut();
-        if rust.mode_preview.is_none() {
-            rust.mode_preview = rust.doc.clone();
-        }
-        let Some(mut converted) = rust.mode_preview.clone() else {
+        let Some(mut converted) = rust.mode_preview_base() else {
             return false;
         };
         let ok = pictura_render::convert_to_indexed(&mut converted, options).is_ok();
@@ -330,11 +327,33 @@ fn preview_indexed(
     previewed
 }
 
+impl super::super::state::PictureViewRust {
+    /// The document a mode preview converts from: the first base, kept so an
+    /// update re-converts the original instead of the last preview.
+    pub(in crate::cxxqt_object) fn mode_preview_base(&mut self) -> Option<pictura_core::Document> {
+        if !self.slot_allows(super::super::document_session::SessionKind::ModePreview) {
+            return None;
+        }
+        if self.mode_preview.is_none() {
+            self.mode_preview = self.doc.clone();
+        }
+        self.mode_preview.clone()
+    }
+
+    /// Drop the live mode preview, restoring the pre-preview document.
+    pub(in crate::cxxqt_object) fn cancel_mode_preview(&mut self) -> bool {
+        let Some(base) = self.mode_preview.take() else {
+            return false;
+        };
+        self.doc = Some(base);
+        true
+    }
+}
+
 fn cancel_mode_preview(mut view: Pin<&mut PictureView>) -> bool {
-    let Some(base) = view.as_mut().rust_mut().mode_preview.take() else {
+    if !view.as_mut().rust_mut().cancel_mode_preview() {
         return false;
-    };
-    view.as_mut().rust_mut().doc = Some(base);
+    }
     view.as_mut().recomposite();
     true
 }

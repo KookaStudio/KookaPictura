@@ -149,17 +149,18 @@ impl ImportSpec {
 
 /// Apply a decoded document to a view on the GUI thread.
 pub(super) fn apply_opened(rust: &mut PictureViewRust, opened: OpenedDocument) {
-    rust.doc = Some(opened.doc);
-    rust.document_generation = rust.document_generation.wrapping_add(1);
-    rust.reset_edit_state();
-    rust.history = opened.history;
-    rust.set_layer_target(opened.target);
+    let previous_path = rust.path.clone();
+    rust.replace_document(
+        Some(opened.doc),
+        opened.history,
+        opened.target,
+        opened.pdf_password,
+    );
     match opened.path {
         OpenedPath::Set(path) => rust.path = path,
-        OpenedPath::Keep => {}
+        OpenedPath::Keep => rust.path = previous_path,
     }
     rust.source_format = opened.source_format;
-    rust.pdf_password = opened.pdf_password;
     rust.dirty = false;
 }
 
@@ -460,6 +461,7 @@ fn finish_on_gui(
                     return;
                 }
             }
+            view.as_mut().session_cancelled();
             view.open_finished(QString::from(status.as_str()), warnings_list(warnings));
         })
         .ok();

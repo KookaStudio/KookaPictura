@@ -988,7 +988,8 @@ fn begin(
         };
         // ponytail: only the Brush, Pencil, and Eraser paint a mask; the other
         // painting tools refuse rather than write the layer's pixels.
-        if rust.stroke.is_some()
+        if !rust.slot_allows(super::document_session::SessionKind::Paint)
+            || rust.stroke.is_some()
             || active_mask_target(rust).is_some()
             || active_pixel_layer(doc, Some(path)).is_none()
             || !active_layer_visible(doc, Some(path))

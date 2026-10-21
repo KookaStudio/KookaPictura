@@ -215,6 +215,10 @@ pub(super) fn apply_op_active_region(
     ignore_selection: bool,
 ) -> Option<Option<pictura_core::PsdRect>> {
     rust.filter_error = None;
+    if !commit && !rust.slot_allows(super::document_session::SessionKind::FilterPreview) {
+        rust.filter_error = Some("another session is live".to_string());
+        return None;
+    }
     if let Some(path) = active_mask_target(rust) {
         return apply_mask_op(rust, &path, op, commit, preview_region);
     }

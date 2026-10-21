@@ -370,6 +370,9 @@ void ToolController::setActiveTool(ToolId id)
         }
         emit transformChanged();
     }
+    if (v) {
+        v->cancel_active_session();
+    }
     if (canvas_) {
         canvas_->clearOverlay();
         canvas_->clearSelectionPreview();
@@ -418,6 +421,11 @@ void ToolController::setViewRotation(double degrees)
 void ToolController::notifyToolSessionChanged()
 {
     emit toolSessionChanged();
+}
+
+void ToolController::onSessionCancelled()
+{
+    registry_.forEach([this](ToolHandler& handler) { handler.onSessionCancelled(*this); });
 }
 
 void ToolController::applyCropOptions(bool classic, bool deletePixels, double ratio, int grid)

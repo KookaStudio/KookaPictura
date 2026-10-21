@@ -114,6 +114,15 @@ public:
         ctx.setDragging(false);
     }
 
+    void onSessionCancelled(ToolServices& ctx) override
+    {
+        if (stroke_) {
+            stroke_->abandon();
+            stroke_.reset();
+        }
+        ctx.setDragging(false);
+    }
+
 private:
     bool aliased_;
     std::optional<paint_api::Stroke> stroke_;

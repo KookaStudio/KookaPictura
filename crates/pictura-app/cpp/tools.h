@@ -194,6 +194,10 @@ public:
     // Undo/Redo command enabled state.
     void notifyToolSessionChanged() override;
 
+    // An in-place document replacement or history restore cancelled the live
+    // session; every handler drops its local press/gesture state.
+    void onSessionCancelled();
+
     // The tool's handler; null for an unimplemented row. The options UI uses
     // this to reach the handler's family options port.
     ToolHandler* handlerFor(ToolId id) const { return registry_.forTool(id); }

@@ -76,7 +76,7 @@ fn edit(
     commit: bool,
     set: impl FnOnce(&mut Document, &str) -> bool,
 ) -> bool {
-    let pending = view.as_mut().rust_mut().mask_refine_preview.take();
+    let pending = view.as_mut().rust_mut().pending_previews.mask_refine.take();
     if let Some(other) = pending.filter(|other| *other != label) {
         view.as_mut().edit(other, |_| Edit::Record);
     }
@@ -89,7 +89,7 @@ fn edit(
         rust.doc.as_mut().is_some_and(|doc| set(doc, &path))
     };
     if !commit && (changed || pending) {
-        view.as_mut().rust_mut().mask_refine_preview = Some(label);
+        view.as_mut().rust_mut().pending_previews.mask_refine = Some(label);
         view.as_mut().preview(|_| Edit::Full);
     } else if commit && (changed || pending) {
         view.as_mut().edit(label, |_| Edit::Full);

@@ -226,6 +226,13 @@ public:
         ctx_ = nullptr;
     }
 
+    void onSessionCancelled(ToolServices&) override
+    {
+        if (active_) {
+            endSession();
+        }
+    }
+
     // Switching documents commits the session into the one it was typed in.
     void onDocumentRefreshed(ToolServices& ctx) override
     {

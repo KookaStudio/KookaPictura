@@ -36,7 +36,7 @@ impl PictureViewRust {
     }
 
     /// Restore through the history in place into the live document, or by
-    /// replacement when there is none. A live stroke is cancelled first; its
+    /// replacement when there is none. A live session is cancelled first; its
     /// pixels were never captured.
     fn restore(
         &mut self,
@@ -48,8 +48,8 @@ impl PictureViewRust {
         ) -> Option<Restored>,
         legacy: impl FnOnce(&mut History) -> Option<Snapshot>,
     ) -> Option<Restored> {
-        let painting = self.stroke.is_some();
-        self.cancel_stroke();
+        let cancelled = self.cancel_active_sessions();
+        let had_session = cancelled.changed_display();
         let rust = &mut *self;
         let restored = match rust.doc.as_mut() {
             Some(doc) => step(
@@ -65,7 +65,7 @@ impl PictureViewRust {
             }),
         }?;
         self.content_revision = self.content_revision.wrapping_add(1);
-        Some(if painting {
+        Some(if had_session {
             Restored::Everywhere
         } else {
             restored
@@ -120,6 +120,7 @@ impl qobject::PictureView {
                 self.as_mut().changed();
             }
         }
+        self.as_mut().session_cancelled();
         true
     }
 
@@ -204,6 +205,7 @@ impl qobject::PictureView {
         };
         let target = self.rust().history.snapshot_target(i as usize);
         let mut rust = self.as_mut().rust_mut();
+        rust.cancel_active_sessions();
         rust.doc = Some(detached_copy(&snapshot.doc));
         rust.selection = snapshot.selection;
         if let Some(mut target) = target {
@@ -216,7 +218,15 @@ impl qobject::PictureView {
         rust.history.set_current_target(&target);
         rust.content_revision = rust.content_revision.wrapping_add(1);
         rust.stroke = None;
+        rust.mask_edit_target = None;
+        rust.active_path = super::paths::ActivePath::Work;
+        rust.path_on_layer = false;
+        rust.ruler = None;
+        rust.canvas_proxy = None;
+        rust.deselected_selection = None;
+        rust.document_generation = rust.document_generation.wrapping_add(1);
         self.as_mut().recomposite();
+        self.as_mut().session_cancelled();
         true
     }
 }

@@ -265,7 +265,7 @@ pub fn eps_import_open(
 
 /// Install a render into the view as an untitled document, or report why not.
 fn finish_rendered(
-    view: Pin<&mut PictureView>,
+    mut view: Pin<&mut PictureView>,
     rendered: Result<Rendered, RasterError>,
     spec: &super::super::open_jobs::ImportSpec,
 ) -> QString {
@@ -278,7 +278,8 @@ fn finish_rendered(
                 &|_, _| {},
             ) {
                 Some(opened) => {
-                    super::super::open_jobs::apply_opened(&mut view.rust_mut(), opened);
+                    super::super::open_jobs::apply_opened(&mut view.as_mut().rust_mut(), opened);
+                    view.as_mut().session_cancelled();
                     ok_text(&rendered.warnings)
                 }
                 None => error_text(&RasterError::Failed(

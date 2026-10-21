@@ -76,6 +76,11 @@ void Stroke::cancel()
     view_->cancel_paint();
 }
 
+void Stroke::abandon()
+{
+    open_ = false;
+}
+
 std::optional<Stroke> beginBrush(PictureView& view, std::uint32_t foreground,
                                  std::uint32_t background, const PaintTip& tip, int opacity,
                                  int flow, const QString& mode, bool aliased, bool autoErase)

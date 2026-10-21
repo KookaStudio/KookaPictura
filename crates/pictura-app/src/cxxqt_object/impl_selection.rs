@@ -616,17 +616,13 @@ impl qobject::PictureView {
     }
 
     pub fn begin_lasso(mut self: Pin<&mut Self>, mode: &QString) -> bool {
-        if self.rust().doc.is_none() {
-            return false;
-        }
-        let mut rust = self.as_mut().rust_mut();
-        rust.pending_lasso_mode = mode.to_string();
-        rust.pending_lasso.clear();
-        true
+        self.as_mut()
+            .rust_mut()
+            .begin_lasso_session(&mode.to_string())
     }
 
     pub fn lasso_add_point(mut self: Pin<&mut Self>, x: i32, y: i32) {
-        self.as_mut().rust_mut().pending_lasso.push((x, y));
+        self.as_mut().rust_mut().add_lasso_point(x, y);
     }
 
     pub fn end_lasso(mut self: Pin<&mut Self>, feather: f64) -> bool {
@@ -745,6 +741,27 @@ impl qobject::PictureView {
             }
         }
         out
+    }
+}
+
+impl super::state::PictureViewRust {
+    /// Start a lasso gesture in `mode`. False without a document or when
+    /// another session owns the slot.
+    pub(super) fn begin_lasso_session(&mut self, mode: &str) -> bool {
+        if self.doc.is_none() {
+            return false;
+        }
+        if !self.slot_allows(super::document_session::SessionKind::Lasso) {
+            return false;
+        }
+        self.pending_lasso_mode = mode.to_string();
+        self.pending_lasso.clear();
+        true
+    }
+
+    /// Add a point to the live lasso.
+    pub(super) fn add_lasso_point(&mut self, x: i32, y: i32) {
+        self.pending_lasso.push((x, y));
     }
 }
 

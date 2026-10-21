@@ -2,6 +2,7 @@
 //! GPU stroke for a large brush, and, when the GPU stroke is not taken, the
 //! reduced-resolution preview replayed exactly at the commit.
 
+use super::super::document_session::SessionKind;
 use super::super::helpers::*;
 use super::super::helpers_composite::display_rgba_bytes;
 use super::super::qobject;
@@ -131,8 +132,26 @@ impl qobject::PictureView {
         cfg: StrokeConfig,
         label: &str,
     ) -> bool {
+        self.as_mut().rust_mut().begin_mask_paint(path, cfg, label)
+    }
+}
+
+impl PictureViewRust {
+    /// Begin a stroke on the raster mask of the layer at `path`: the mask is
+    /// exposed as a mask-sized grayscale document and an ordinary [`Stroke`]
+    /// runs on it, so the mask gains the exact brush behaviour. False without
+    /// a mask, on a zero-sized mask rectangle, or when the stroke is refused.
+    pub(in crate::cxxqt_object) fn begin_mask_paint(
+        &mut self,
+        path: &str,
+        cfg: StrokeConfig,
+        label: &str,
+    ) -> bool {
+        if !self.slot_allows(SessionKind::MaskPaint) {
+            return false;
+        }
         let built = {
-            let rust = self.rust();
+            let rust = &*self;
             if rust.stroke.is_some() || rust.mask_stroke.is_some() {
                 return false;
             }
@@ -163,7 +182,7 @@ impl qobject::PictureView {
             match (
                 preview_level(cfg.diameter as i32, mw, mh),
                 gpu_paint_mode(cfg.mode).filter(|_| cfg.grain == 0 && !cfg.wet_edges),
-                self.rust().gpu_compute,
+                self.gpu_compute,
             ) {
                 (Some(_), Some(mode), true) => {
                     let seed = mask_gpu::mask_rgba_seed(&mask_stroke.document);
@@ -198,10 +217,10 @@ impl qobject::PictureView {
         // models), a large brush previews at a pyramid level like a pixel one.
         let preview = match gpu {
             Some(_) => None,
-            None => mask_preview(self.rust(), path, cfg.sanitized()),
+            None => mask_preview(self, path, cfg.sanitized()),
         };
         let has_gpu = gpu.is_some();
-        let mut rust = self.as_mut().rust_mut();
+        let rust = &mut *self;
         rust.mask_stroke = Some(mask_stroke);
         rust.stroke_label = label.to_string();
         rust.clear_pending_present();
@@ -218,7 +237,9 @@ impl qobject::PictureView {
         }
         true
     }
+}
 
+impl qobject::PictureView {
     /// One dab of a mask stroke: sample the mask-local point on the mask
     /// document, copy the changed region back into the real mask, and present
     /// it. Returns whether a pixel changed.

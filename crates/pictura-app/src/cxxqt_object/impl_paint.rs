@@ -1,3 +1,4 @@
+use super::document_session::SessionKind;
 use super::helpers::*;
 use super::helpers_composite::{patch_composite_region, planes_of, rgba_image};
 use super::qobject;
@@ -378,12 +379,6 @@ impl qobject::PictureView {
     ) -> bool {
         paint_timing::start("stroke (begin -> commit)");
         let _begin = paint_timing::Scope::new("begin_total");
-        {
-            let rust = self.rust();
-            if rust.doc.is_none() || rust.stroke.is_some() || rust.mask_stroke.is_some() {
-                return false;
-            }
-        }
         let cfg = StrokeConfig {
             color: rgba_from_argb(foreground),
             background: rgba_from_argb(background),
@@ -402,18 +397,35 @@ impl qobject::PictureView {
         // The exact stroke sanitizes internally; the preview and the level policy
         // must use the same clamped config so they rasterize the committed tip.
         .sanitized();
+        let label = if aliased { "Pencil" } else { "Brush" };
+        self.as_mut().rust_mut().begin_paint(cfg, label)
+    }
+}
+
+impl PictureViewRust {
+    /// Begin a brush stroke on the active layer, or on the active mask's
+    /// coverage when a mask is the edit target. False without a document, a
+    /// layer target, or when another session owns the slot.
+    pub(super) fn begin_paint(&mut self, cfg: StrokeConfig, label: &str) -> bool {
+        if self.doc.is_none() {
+            return false;
+        }
         // A mask target paints the mask's coverage instead of the layer: the
         // foreground's Rec.601 luma is the painted value, so black hides and
         // white reveals. The stroke runs on a mask-sized grayscale document.
-        let mask_target = active_mask_target(self.rust());
-        if let Some(path) = mask_target {
-            let label = if aliased { "Pencil" } else { "Brush" };
-            return self
-                .as_mut()
-                .begin_mask_paint(&path, mask_stroke_config(cfg), label);
+        // The target is resolved before the slot is taken, so a mask stroke
+        // does not begin a second session inside this one.
+        if let Some(path) = active_mask_target(self) {
+            if !self.slot_allows(SessionKind::MaskPaint) {
+                return false;
+            }
+            return self.begin_mask_paint(&path, mask_stroke_config(cfg), label);
+        }
+        if !self.slot_allows(SessionKind::Paint) {
+            return false;
         }
         let begun = {
-            let rust = self.rust();
+            let rust = &*self;
             let Some(doc) = rust.doc.as_ref() else {
                 return false;
             };
@@ -432,9 +444,9 @@ impl qobject::PictureView {
         };
         match begun {
             Ok(stroke) => {
-                let mut rust = self.as_mut().rust_mut();
+                let rust = &mut *self;
                 rust.stroke = Some(stroke);
-                rust.stroke_label = if aliased { "Pencil" } else { "Brush" }.to_string();
+                rust.stroke_label = label.to_string();
                 // A new stroke opens its own present frame.
                 rust.clear_pending_present();
                 let dims = rust.doc.as_ref().map(|doc| (doc.width, doc.height));
@@ -516,7 +528,9 @@ impl qobject::PictureView {
             Err(_) => false,
         }
     }
+}
 
+impl qobject::PictureView {
     pub fn paint_dab(mut self: Pin<&mut Self>, x: f64, y: f64, pressure: f64) -> bool {
         let _dab = paint_timing::Scope::new("dab_total");
         if self.rust().mask_stroke.is_some() {

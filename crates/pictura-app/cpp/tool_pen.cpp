@@ -128,6 +128,22 @@ public:
         ctx_ = nullptr;
     }
 
+    void onSessionCancelled(ToolServices& ctx) override
+    {
+        if (PictureView* press = pressView_) {
+            path_gesture_abort(*press);
+        }
+        if (PictureView* v = ctx.view()) {
+            path_gesture_end(*v);
+        }
+        reset();
+        overClose_ = false;
+        if (ImageView* canvas = ctx.canvas()) {
+            canvas->clearPathOverlay();
+        }
+        ctx_ = nullptr;
+    }
+
     void onDocumentRefreshed(ToolServices& ctx) override { refreshOverlay(ctx); }
     void onOptionsChanged(ToolServices& ctx) override { refreshOverlay(ctx); }
 

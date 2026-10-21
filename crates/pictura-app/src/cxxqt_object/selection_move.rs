@@ -13,6 +13,9 @@ use super::state::PictureViewRust;
 impl PictureViewRust {
     /// Capture the current selection as the drag origin. False without one.
     pub(super) fn begin_selection_move(&mut self) -> bool {
+        if !self.slot_allows(super::document_session::SessionKind::SelectionMove) {
+            return false;
+        }
         let Some(origin) = self.selection.clone() else {
             return false;
         };

@@ -215,7 +215,7 @@ pub fn pdf_view_options(view: &PictureView) -> QString {
     QString::from(view.rust().pdf_options.as_deref().unwrap_or_default())
 }
 
-pub fn pdf_open(view: Pin<&mut PictureView>, path: &QString, password: &QString) -> QString {
+pub fn pdf_open(mut view: Pin<&mut PictureView>, path: &QString, password: &QString) -> QString {
     let path = path.to_string();
     let typed = password.to_string();
     // Revert passes none: reuse the password the document was opened with.
@@ -228,7 +228,8 @@ pub fn pdf_open(view: Pin<&mut PictureView>, path: &QString, password: &QString)
     let gpu_compute = view.rust().gpu_compute;
     match super::open_jobs::decode_pdf(&path, &password, policy, gpu_compute) {
         super::open_jobs::PdfOpen::Ok(opened) => {
-            super::open_jobs::apply_opened(&mut view.rust_mut(), *opened);
+            super::open_jobs::apply_opened(&mut view.as_mut().rust_mut(), *opened);
+            view.as_mut().session_cancelled();
             QString::from("ok")
         }
         super::open_jobs::PdfOpen::None => QString::from("none"),

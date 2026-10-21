@@ -74,20 +74,23 @@ fn builtin_profile(index: i32) -> Option<pictura_codec::Profile> {
 }
 
 impl qobject::PictureView {
-    pub fn open(self: Pin<&mut Self>, path: &QString) -> bool {
+    pub fn open(mut self: Pin<&mut Self>, path: &QString) -> bool {
         let path = path.to_string();
         let policy = self.rust().color_policy;
         let gpu_compute = self.rust().gpu_compute;
         match super::open_jobs::decode_psd(&path, policy, gpu_compute, &|_, _| {}) {
             Some(opened) => {
-                super::open_jobs::apply_opened(&mut self.rust_mut(), opened);
+                super::open_jobs::apply_opened(&mut self.as_mut().rust_mut(), opened);
+                self.as_mut().session_cancelled();
                 true
             }
             None => {
-                let mut view = self.rust_mut();
-                view.doc = None;
-                view.reset_edit_state();
-                view.path = None;
+                {
+                    let mut view = self.as_mut().rust_mut();
+                    view.replace_document(None, History::default(), Default::default(), None);
+                    view.path = None;
+                }
+                self.as_mut().session_cancelled();
                 false
             }
         }
@@ -99,12 +102,13 @@ impl qobject::PictureView {
     /// mutating on any refusal. A fresh view has no path (the import is
     /// untitled, so Save cannot overwrite the source image); an existing path is
     /// left intact so a Revert reload keeps the document's file association.
-    pub fn open_image(self: Pin<&mut Self>, path: &QString) -> bool {
+    pub fn open_image(mut self: Pin<&mut Self>, path: &QString) -> bool {
         let path = path.to_string();
         let gpu_compute = self.rust().gpu_compute;
         match super::open_jobs::decode_image(&path, gpu_compute, &|_, _| {}) {
             Some(opened) => {
-                super::open_jobs::apply_opened(&mut self.rust_mut(), opened);
+                super::open_jobs::apply_opened(&mut self.as_mut().rust_mut(), opened);
+                self.as_mut().session_cancelled();
                 true
             }
             None => false,
@@ -117,12 +121,13 @@ impl qobject::PictureView {
     /// its layer embedded (the `File > Place` recipe), matching CS6. Records one
     /// "Open As Smart Object" state on success; `false` without mutating when the
     /// file is missing, unreadable, or an unsupported format.
-    pub fn open_as_smart_object(self: Pin<&mut Self>, path: &QString) -> bool {
+    pub fn open_as_smart_object(mut self: Pin<&mut Self>, path: &QString) -> bool {
         let path = path.to_string();
         let gpu_compute = self.rust().gpu_compute;
         match super::open_jobs::decode_smart_object(&path, gpu_compute, &|_, _| {}) {
             Some(opened) => {
-                super::open_jobs::apply_opened(&mut self.rust_mut(), opened);
+                super::open_jobs::apply_opened(&mut self.as_mut().rust_mut(), opened);
+                self.as_mut().session_cancelled();
                 true
             }
             None => false,
@@ -130,7 +135,7 @@ impl qobject::PictureView {
     }
 
     pub fn new_document(
-        self: Pin<&mut Self>,
+        mut self: Pin<&mut Self>,
         width: i32,
         height: i32,
         mode: &QString,
@@ -194,18 +199,19 @@ impl qobject::PictureView {
         let gpu_compute = self.rust().gpu_compute;
         let rendered = current_buffer(&doc, gpu_compute);
         store_composite(&mut doc, &rendered);
-        let mut view = self.rust_mut();
-        view.doc = Some(doc);
-        view.document_generation = view.document_generation.wrapping_add(1);
-        view.reset_edit_state();
-        view.select_only_layer("0");
-        let target = view.layer_target.clone();
-        let view = &mut *view;
-        if let Some(doc) = view.doc.as_mut() {
-            view.history.capture_live(doc, &None, &target, "New");
+        {
+            let mut view = self.as_mut().rust_mut();
+            view.replace_document(Some(doc), History::default(), Default::default(), None);
+            view.select_only_layer("0");
+            let target = view.layer_target.clone();
+            let view = &mut *view;
+            if let Some(doc) = view.doc.as_mut() {
+                view.history.capture_live(doc, &None, &target, "New");
+            }
+            view.path = None;
+            view.dirty = false;
         }
-        view.path = None;
-        view.dirty = false;
+        self.as_mut().session_cancelled();
         true
     }
 
@@ -267,7 +273,7 @@ impl qobject::PictureView {
                 }
             }
         }
-        let mut view = self.rust_mut();
+        let mut view = self.as_mut().rust_mut();
         view.path = Some(path);
         view.dirty = false;
         true
@@ -860,31 +866,6 @@ impl qobject::PictureView {
 }
 
 impl super::PictureViewRust {
-    /// Reset the per-edit transient state shared by `open` and `new_document`:
-    /// drop the selection, history, in-progress stroke, and move-preview drag.
-    /// The caller assigns `doc` (and a fallback `image` when there is none)
-    /// before calling; the fresh image and pyramid are built here.
-    pub(super) fn reset_edit_state(&mut self) {
-        self.selection = None;
-        self.history = History::default();
-        self.stroke = None;
-        self.stroke_base = None;
-        self.stroke_label.clear();
-        self.layer_target.clear();
-        self.isolation = None;
-        self.mask_solo = None;
-        self.mask_overlay = None;
-        self.move_base = None;
-        self.move_layer = None;
-        self.move_x = 0;
-        self.move_y = 0;
-        self.move_opacity = 0;
-        self.transform_session = None;
-        self.link_sets.clear();
-        self.source_format = "psd".to_string();
-        self.reset_pyramid();
-    }
-
     /// The document-space canvas rectangle, or an empty rect without a document.
     pub(super) fn canvas_rect(&self) -> PsdRect {
         let (width, height) = self.doc.as_ref().map_or((0, 0), |d| (d.width, d.height));

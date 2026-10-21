@@ -24,7 +24,12 @@ pub(in crate::cxxqt_object) fn canvas_proxy_buffer(
         return None;
     }
     let path = rust.layer_target.single().map(str::to_string)?;
-    let key = (region, scale.to_bits(), rust.content_revision);
+    let key = (
+        region,
+        scale.to_bits(),
+        rust.content_revision,
+        rust.document_generation,
+    );
     if rust
         .canvas_proxy
         .as_ref()

@@ -2,6 +2,7 @@
 set(PICTURA_QT_TESTS
     tst_smoke
     tst_document_api
+    tst_document_session
     tst_selection_api
     tst_paint_api
     tst_transform_api
