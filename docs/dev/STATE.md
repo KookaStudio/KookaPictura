@@ -12,6 +12,41 @@ Snapshot for resuming after a context break. Update after each milestone.
   contains reproduced Adobe Help prose or the old wording.
 - Toolchain: Rust 1.98 (`rust-toolchain.toml`), system Qt **6.11.1**, cxx-qt
   **0.10.0**, wgpu **30.0.1**, lcms2 **6.2.0** (system Little CMS 2.19).
+- **Perspective rebuilt, pending-transform lock** (#750, branch
+  `fix/750-perspective-transform`, OpenSpec change
+  `perspective-transform-gesture`, archived into `document/free-transform` and
+  `document/transform-reference-point`). No photorust/photocraft source
+  existed, so Perspective was rebuilt from the owner's CS6 screen recording:
+  - **Gesture** (`impl_transform/perspective.rs`): a corner slides along the
+    edge the drag follows most, re-picked on every move, and that edge's other
+    corner slides the other way about its midpoint. Corners may cross into a
+    bowtie. An edge handle slides only its edge. The reference point keeps its
+    bilinear place, and the drag shows a `∠` readout. Editable type is refused
+    and the menu disabled.
+  - **Free Transform shortcut:** Ctrl+Alt+Shift on a corner does the same
+    drag. It stores a source-space `base_quad` after which the similarity
+    applies, so plain drags still scale (in the box's projective frame) and
+    rotate it.
+  - **Crossed quad** (`layer_ops/crossed_quad.rs` plus the CPU preview warp):
+    fills the quad's own outline, two straight triangles meeting at the
+    crossing, instead of the homography's wrap-around.
+  - **Preview fix:** the preview divides by the projective divisor itself,
+    since `QTransform::map` clamps a negative one.
+  - **Lock and prompt (all transforms):** while a modal transform is pending,
+    the Layer menu is gated (`CommandRegistry::setBlockedProvider`, dispatch
+    refused) and the Layers panel is greyed. A tool switch, by click or
+    shortcut, asks "Apply the transformation?" (Apply / Cancel / Don't Apply);
+    headless and the control server answer Don't Apply without a modal.
+  - **Inferred, not oracle-verified:** the readout sign, the base composition,
+    and the pixel layout inside a crossed quad (the recording used a flat
+    layer).
+  - **Ceiling (`ponytail:`):** a mask outside the layer rect takes its default
+    colour on a crossed quad.
+  - **Tests:** `tst_transform_perspective` (14), `tst_transform_lock` (7), Rust
+    gesture/engine units.
+  - **Self-test:** `lpr_free_transform`'s Perspective sub-check now expects the
+    new rule. `core float_screen_bounds` (437) fails locally on its own and is
+    unrelated.
 - **Warp ported from photocraft** (#751, branch `fix/751-warp-algorithm`,
   OpenSpec change `port-photocraft-warp`, archived into
   `document/transform-warp-engine`, `document/transform-session-warp`,
