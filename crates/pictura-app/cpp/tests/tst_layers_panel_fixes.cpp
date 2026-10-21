@@ -7,6 +7,7 @@
 #include "api/layers_api.h"
 #include "api/type_api.h"
 
+#include <QtCore/QAbstractItemModel>
 #include <QtCore/QCoreApplication>
 #include <QtCore/QList>
 #include <QtCore/QMimeData>
@@ -47,6 +48,25 @@ pictura::layers_api::LayerRow rowNamed(pictura::PictureView& view, const QString
         const auto row = pictura::layers_api::rowAt(view, i);
         if (row.name == name) {
             return row;
+        }
+    }
+    return {};
+}
+
+QModelIndex indexForPath(QAbstractItemModel* model, const QString& path,
+                         const QModelIndex& parent = QModelIndex())
+{
+    if (!model) {
+        return {};
+    }
+    for (int row = 0; row < model->rowCount(parent); ++row) {
+        const QModelIndex index = model->index(row, 0, parent);
+        if (index.data(pictura::PathRole).toString() == path) {
+            return index;
+        }
+        const QModelIndex child = indexForPath(model, path, index);
+        if (child.isValid()) {
+            return child;
         }
     }
     return {};
@@ -140,6 +160,7 @@ private slots:
     void dropBelowBackgroundRefused();
     void cannotClipToBackground();
     void moveDownStopsAtBackground();
+    void refreshKeepsCurrentRowOutsideSelection();
 
 private:
     bool setupNest();
@@ -963,6 +984,38 @@ void LayersPanelFixesTest::moveDownStopsAtBackground()
     const int base = view_->history_count();
     QVERIFY2(!view_->move_layer_path(layer, -1), "move down refuses the floor");
     QCOMPARE(view_->history_count(), base);
+}
+
+// The current row can sit outside the selection (Ctrl+arrow in the tree). A
+// refresh must not drag it back onto the selection: the row keeps its cursor
+// and the selection stays where the user put it.
+void LayersPanelFixesTest::refreshKeepsCurrentRowOutsideSelection()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("Current"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(view_ && panel_);
+    panel_->setView(view_);
+    const QString added = view_->add_layer_in(QString());
+    QVERIFY(!added.isEmpty());
+    panel_->refresh();
+    panel_->selectPaths({added}, added);
+
+    auto* tree = panel_->findChild<QTreeView*>();
+    QVERIFY(tree != nullptr);
+    QAbstractItemModel* model = tree->model();
+    QVERIFY(model != nullptr);
+    const QModelIndex other = indexForPath(model, QStringLiteral("0"));
+    QVERIFY(other.isValid());
+    // Move the current row off the selection, as Ctrl+arrow does.
+    tree->selectionModel()->setCurrentIndex(other, QItemSelectionModel::NoUpdate);
+    QCOMPARE(panel_->currentPath(), QStringLiteral("0"));
+    QCOMPARE(panel_->selectedPaths(), QStringList{added});
+
+    panel_->refresh();
+    QCOMPARE(panel_->currentPath(), QStringLiteral("0"));
+    QCOMPARE(panel_->selectedPaths(), QStringList{added});
 }
 
 QTEST_MAIN(LayersPanelFixesTest)

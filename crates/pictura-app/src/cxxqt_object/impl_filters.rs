@@ -3,6 +3,7 @@ use super::helpers::*;
 use super::helpers_composite::*;
 use super::qobject;
 use super::state::{FilterPreview, PictureViewRust, PreviewBaseline};
+use crate::cxxqt_object::edit::Edit;
 #[cfg(test)]
 use crate::layer_target::LayerTarget;
 use core::pin::Pin;
@@ -37,11 +38,14 @@ impl qobject::PictureView {
         if pushed {
             // A masked adjustment is confined to its mask; an unmasked one spans
             // the canvas and falls back to a full recomposite.
-            match region {
-                Some(rect) => self.as_mut().refresh_region(rect),
-                None => self.as_mut().recomposite(),
-            }
-            self.as_mut().record("Adjustment");
+            let outcome = match region {
+                Some(rect) => Edit::Regions {
+                    rects: vec![rect],
+                    notify: false,
+                },
+                None => Edit::Full,
+            };
+            self.as_mut().edit("Adjustment", |_| outcome);
         }
         pushed
     }
@@ -86,12 +90,15 @@ impl qobject::PictureView {
                 .then_some(region)
         };
         if let Some(region) = applied {
-            match region {
-                Some(rect) => self.as_mut().refresh_region(rect),
-                None => self.as_mut().recomposite(),
-            }
             self.as_mut().rust_mut().last_filter = Some((kind.to_string(), Vec::new()));
-            self.as_mut().record("Filter");
+            let outcome = match region {
+                Some(rect) => Edit::Regions {
+                    rects: vec![rect],
+                    notify: false,
+                },
+                None => Edit::Full,
+            };
+            self.as_mut().edit("Filter", |_| outcome);
             return true;
         }
         false
@@ -112,12 +119,15 @@ impl qobject::PictureView {
         let Some(region) = region else {
             return false;
         };
-        match region {
-            Some(rect) => self.as_mut().refresh_region(rect),
-            None => self.as_mut().recomposite(),
-        }
         self.as_mut().rust_mut().last_filter = Some((kind.to_string(), Vec::new()));
-        self.as_mut().record("Filter");
+        let outcome = match region {
+            Some(rect) => Edit::Regions {
+                rects: vec![rect],
+                notify: false,
+            },
+            None => Edit::Full,
+        };
+        self.as_mut().edit("Filter", |_| outcome);
         true
     }
 }

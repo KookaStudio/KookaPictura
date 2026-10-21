@@ -10,6 +10,7 @@
 //! [`PictureView`]: super::qobject::PictureView
 
 use super::qobject::PictureView;
+use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QString, QStringList};
@@ -205,8 +206,9 @@ fn layer_style_pattern_names() -> QStringList {
     names
 }
 
-fn layer_style_commit(view: Pin<&mut PictureView>, label: &QString) {
-    view.record(&label.to_string());
+fn layer_style_commit(mut view: Pin<&mut PictureView>, label: &QString) {
+    let label = label.to_string();
+    view.as_mut().edit(&label, |_| Edit::Record);
 }
 
 fn layer_style_cancel(mut view: Pin<&mut PictureView>) {
@@ -267,13 +269,12 @@ fn layer_style_set_all_visible(mut view: Pin<&mut PictureView>, visible: bool) -
         pictura_render::set_all_effects_visible(doc, visible)
     });
     if changed > 0 {
-        view.as_mut().recomposite();
         let label = if visible {
             "Show All Effects"
         } else {
             "Hide All Effects"
         };
-        view.as_mut().record(label);
+        view.as_mut().edit(label, |_| Edit::Full);
     }
     changed as i32
 }

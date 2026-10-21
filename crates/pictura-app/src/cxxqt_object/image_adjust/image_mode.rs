@@ -9,6 +9,7 @@
 
 use super::super::channels::mode_name;
 use super::super::qobject::PictureView;
+use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -241,8 +242,7 @@ fn commit(mut view: Pin<&mut PictureView>, convert: impl FnOnce(&mut Document) -
         return false;
     }
     refresh_active_layer(view.as_mut());
-    view.as_mut().recomposite();
-    view.as_mut().record(HISTORY_LABEL);
+    view.as_mut().edit(HISTORY_LABEL, |_| Edit::Full);
     true
 }
 

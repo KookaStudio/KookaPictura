@@ -7,6 +7,7 @@ use super::super::helpers_composite::display_rgba_bytes;
 use super::super::qobject;
 use super::super::state::{MaskPreview, MaskStroke, PictureViewRust, PreviewStroke};
 use super::{gpu_paint_mode, mask_gpu, preview_level};
+use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use pictura_core::PsdRect;
@@ -316,8 +317,10 @@ impl qobject::PictureView {
             Some(rect) => {
                 let rect = to_document(rect, ctx.rect);
                 let regions = self.as_mut().rust_mut().take_stroke_regions(rect);
-                self.as_mut().refresh_regions(&regions);
-                self.as_mut().record(label);
+                self.as_mut().edit(label, |_| Edit::Regions {
+                    rects: regions,
+                    notify: false,
+                });
                 true
             }
         }

@@ -8,6 +8,7 @@
 //! [`PictureView`]: super::qobject::PictureView
 
 use super::qobject::PictureView;
+use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -134,8 +135,7 @@ fn perspective_crop_commit_sized(
         true
     };
     if cropped {
-        view.as_mut().recomposite();
-        view.as_mut().record("Perspective Crop");
+        view.as_mut().edit("Perspective Crop", |_| Edit::Full);
     }
     cropped
 }
@@ -164,8 +164,7 @@ fn crop_to(
         // Canvas dimensions changed, so the old selection no longer maps.
         rust.selection = None;
     }
-    view.as_mut().recomposite();
-    view.as_mut().record(&crop_label(label));
+    view.as_mut().edit(&crop_label(label), |_| Edit::Full);
     true
 }
 
@@ -257,8 +256,7 @@ fn straighten_crop(
         true
     };
     if cropped {
-        view.as_mut().recomposite();
-        view.as_mut().record(&crop_label(label));
+        view.as_mut().edit(&crop_label(label), |_| Edit::Full);
     }
     cropped
 }
@@ -334,8 +332,7 @@ fn add_user_slice(mut view: Pin<&mut PictureView>, x: i32, y: i32, width: i32, h
     let Some(index) = added else {
         return -1;
     };
-    view.as_mut().record("Slice");
-    view.as_mut().changed();
+    view.as_mut().edit("Slice", |_| Edit::Meta);
     index as i32
 }
 
@@ -365,8 +362,7 @@ fn set_user_slice(
         None => false,
     };
     if set && commit {
-        view.as_mut().record("Edit Slice");
-        view.as_mut().changed();
+        view.as_mut().edit("Edit Slice", |_| Edit::Meta);
     }
     set
 }
@@ -380,8 +376,7 @@ fn remove_user_slice(mut view: Pin<&mut PictureView>, index: i32) -> bool {
         None => false,
     };
     if removed {
-        view.as_mut().record("Delete Slice");
-        view.as_mut().changed();
+        view.as_mut().edit("Delete Slice", |_| Edit::Meta);
     }
     removed
 }

@@ -6,6 +6,7 @@
 //! [`PictureView`]: super::super::qobject::PictureView
 
 use super::super::qobject::PictureView;
+use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use pictura_core::Document;
@@ -77,7 +78,7 @@ fn edit(
 ) -> bool {
     let pending = view.as_mut().rust_mut().mask_refine_preview.take();
     if let Some(other) = pending.filter(|other| *other != label) {
-        view.as_mut().record(other);
+        view.as_mut().edit(other, |_| Edit::Record);
     }
     let pending = pending == Some(label);
     let changed = {
@@ -89,12 +90,9 @@ fn edit(
     };
     if !commit && (changed || pending) {
         view.as_mut().rust_mut().mask_refine_preview = Some(label);
-    }
-    if changed || (commit && pending) {
-        view.as_mut().recomposite();
-    }
-    if commit && (changed || pending) {
-        view.as_mut().record(label);
+        view.as_mut().preview(|_| Edit::Full);
+    } else if commit && (changed || pending) {
+        view.as_mut().edit(label, |_| Edit::Full);
     }
     changed
 }

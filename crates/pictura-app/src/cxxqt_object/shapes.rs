@@ -17,6 +17,7 @@ use super::helpers::{paint_timing, rgba_from_argb};
 use super::helpers_composite::{aspect_thumbnail_extent, rgba_image};
 use super::paint_tools::fills::{apply, refresh_edit, selection};
 use super::qobject::PictureView;
+use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QString};
@@ -360,8 +361,7 @@ fn shape_add_path(mut view: Pin<&mut PictureView>, spec: &ShapeSpec) -> bool {
     })
     .is_some();
     if added {
-        view.as_mut().record(&label(kind));
-        view.as_mut().changed();
+        view.as_mut().edit(&label(kind), |_| Edit::Meta);
     }
     added
 }
@@ -432,8 +432,7 @@ fn edit_active(
             .is_some_and(|layer| edit(layer, width, height))
     };
     if changed {
-        view.as_mut().recomposite();
-        view.as_mut().record(label);
+        view.as_mut().edit(label, |_| Edit::Full);
     }
     changed
 }
@@ -591,8 +590,7 @@ fn shape_paste_attributes(mut view: Pin<&mut PictureView>, path: &QString) -> bo
         }
     };
     if changed {
-        view.as_mut().recomposite();
-        view.as_mut().record("Paste Shape Attributes");
+        view.as_mut().edit("Paste Shape Attributes", |_| Edit::Full);
     }
     changed
 }
@@ -613,9 +611,7 @@ fn shape_rasterize(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
         }
     };
     if changed {
-        view.as_mut().clear_link_sets();
-        view.as_mut().recomposite();
-        view.as_mut().record("Rasterize Shape");
+        view.as_mut().edit("Rasterize Shape", |_| Edit::Structural);
     }
     changed
 }

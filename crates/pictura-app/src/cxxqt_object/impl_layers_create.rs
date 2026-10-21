@@ -8,6 +8,7 @@
 use super::helpers::{as_str_slice, list_of_strings};
 use super::helpers_composite::selection_to_mask;
 use super::qobject;
+use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QString, QStringList};
@@ -68,9 +69,7 @@ impl qobject::PictureView {
         };
         if !created.is_empty() {
             self.as_mut().rust_mut().select_only_layer(&created);
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record("New Layer");
+            self.as_mut().edit("New Layer", |_| Edit::Structural);
         }
         QString::from(created.as_str())
     }
@@ -105,9 +104,7 @@ impl qobject::PictureView {
         };
         if !created.is_empty() {
             self.as_mut().rust_mut().select_only_layer(&created);
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record("New Group");
+            self.as_mut().edit("New Group", |_| Edit::Structural);
         }
         QString::from(created.as_str())
     }
@@ -150,9 +147,8 @@ impl qobject::PictureView {
         };
         if !created.is_empty() {
             self.as_mut().rust_mut().select_only_layer(&created);
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            self.as_mut().record("Group from Layers");
+            self.as_mut()
+                .edit("Group from Layers", |_| Edit::Structural);
         }
         QString::from(created.as_str())
     }
@@ -199,14 +195,14 @@ impl qobject::PictureView {
         };
         if !created.is_empty() {
             self.as_mut().rust_mut().select_only_layer(&created);
-            self.as_mut().clear_link_sets();
-            self.as_mut().recomposite();
-            let label = if cut {
-                "Layer via Cut"
-            } else {
-                "Layer via Copy"
-            };
-            self.as_mut().record(label);
+            self.as_mut().edit(
+                if cut {
+                    "Layer via Cut"
+                } else {
+                    "Layer via Copy"
+                },
+                |_| Edit::Structural,
+            );
         }
         QString::from(created.as_str())
     }

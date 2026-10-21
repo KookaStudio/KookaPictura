@@ -12,6 +12,7 @@
 use super::helpers::layer_visibility_region;
 use super::helpers_composite::{current_buffer, rgba_frame};
 use super::qobject::PictureView;
+use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -148,9 +149,7 @@ fn copy_layer_from_document(
         return QString::default();
     };
     view.as_mut().rust_mut().select_only_layer(&created);
-    view.as_mut().clear_link_sets();
-    view.as_mut().recomposite();
-    view.as_mut().record("Duplicate Layer");
+    view.as_mut().edit("Duplicate Layer", |_| Edit::Structural);
     QString::from(created.as_str())
 }
 
@@ -216,11 +215,14 @@ fn clear(mut view: Pin<&mut PictureView>, path: &str, label: &str) -> bool {
             .as_ref()
             .and_then(|doc| pictura_render::resolve_path(doc, path))
             .and_then(layer_visibility_region);
-        match region {
-            Some(rect) => view.as_mut().refresh_region(rect),
-            None => view.as_mut().recomposite(),
-        }
-        view.as_mut().record(label);
+        let outcome = match region {
+            Some(rect) => Edit::Regions {
+                rects: vec![rect],
+                notify: false,
+            },
+            None => Edit::Full,
+        };
+        view.as_mut().edit(label, |_| outcome);
     }
     cleared
 }
@@ -294,10 +296,13 @@ fn clipboard_paste(
         .as_ref()
         .and_then(|doc| pictura_render::resolve_path(doc, &created))
         .and_then(layer_visibility_region);
-    match region {
-        Some(rect) => view.as_mut().refresh_region(rect),
-        None => view.as_mut().recomposite(),
-    }
-    view.as_mut().record(label);
+    let outcome = match region {
+        Some(rect) => Edit::Regions {
+            rects: vec![rect],
+            notify: false,
+        },
+        None => Edit::Full,
+    };
+    view.as_mut().edit(label, |_| outcome);
     QString::from(created.as_str())
 }

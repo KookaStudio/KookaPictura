@@ -10,7 +10,7 @@
 use pictura_core::{Document, PsdRect};
 
 use super::transform::{bilinear, solve_homography, PlaneMap, QuadMap};
-use crate::document_ops::{for_each_layer, recompute};
+use crate::document_ops::{for_each_layer, materialize_merged_composite};
 
 /// Largest output side, matching the PSD dimension ceiling.
 const MAX_SIDE: u32 = 30_000;
@@ -95,6 +95,7 @@ pub fn perspective_crop_sized(
         bottom: h as i32,
         right: w as i32,
     };
+    materialize_merged_composite(doc);
 
     for_each_layer(&mut doc.layers, &mut |layer| {
         let rect = layer.rect;
@@ -132,7 +133,6 @@ pub fn perspective_crop_sized(
     doc.source_planes = None;
     doc.width = w;
     doc.height = h;
-    recompute(doc);
     true
 }
 

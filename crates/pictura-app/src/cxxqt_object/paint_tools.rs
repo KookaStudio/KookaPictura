@@ -21,6 +21,7 @@ use super::helpers::{
 };
 use super::qobject::PictureView;
 use super::PictureViewRust;
+use crate::cxxqt_object::edit::Edit;
 use crate::history::BrushSource;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -815,8 +816,7 @@ fn magic_erase_at(
         return false;
     };
     view.as_mut().rust_mut().doc = Some(doc);
-    view.as_mut().recomposite();
-    view.as_mut().record("Magic Eraser");
+    view.as_mut().edit("Magic Eraser", |_| Edit::Full);
     true
 }
 

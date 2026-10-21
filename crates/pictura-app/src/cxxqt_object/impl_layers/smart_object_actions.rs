@@ -6,6 +6,7 @@
 //! [`PictureView`]: super::super::qobject::PictureView
 
 use super::super::qobject::PictureView;
+use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -63,9 +64,7 @@ fn smart_object_reset_transform(mut view: Pin<&mut PictureView>, path: &QString)
         None => false,
     };
     if changed {
-        view.as_mut().clear_link_sets();
-        view.as_mut().recomposite();
-        view.as_mut().record("Reset Transform");
+        view.as_mut().edit("Reset Transform", |_| Edit::Structural);
     }
     changed
 }
@@ -77,13 +76,17 @@ fn layer_can_convert_smart_object_to_layers(view: &PictureView, path: &QString) 
 }
 
 fn smart_object_convert_to_layers(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
-    let changed = match view.as_mut().rust_mut().doc.as_mut() {
-        Some(doc) => pictura_render::convert_smart_object_to_layers(doc, &path.to_string()),
-        None => false,
-    };
-    if changed {
-        let path = path.to_string();
-        let rust = &mut *view.as_mut().rust_mut();
+    let path = path.to_string();
+    let edit = view.as_mut().edit("Convert to Layers", |rust| {
+        let changed = {
+            let Some(doc) = rust.doc.as_mut() else {
+                return Edit::None;
+            };
+            pictura_render::convert_smart_object_to_layers(doc, &path)
+        };
+        if !changed {
+            return Edit::None;
+        }
         if rust
             .doc
             .as_ref()
@@ -91,11 +94,9 @@ fn smart_object_convert_to_layers(mut view: Pin<&mut PictureView>, path: &QStrin
         {
             rust.select_only_layer(&path);
         }
-        view.as_mut().clear_link_sets();
-        view.as_mut().recomposite();
-        view.as_mut().record("Convert to Layers");
-    }
-    changed
+        Edit::Structural
+    });
+    !matches!(edit, Edit::None)
 }
 
 fn layer_can_new_smart_object_via_copy(view: &PictureView, path: &QString) -> bool {
@@ -106,16 +107,18 @@ fn layer_can_new_smart_object_via_copy(view: &PictureView, path: &QString) -> bo
 }
 
 fn smart_object_new_via_copy(mut view: Pin<&mut PictureView>, path: &QString) -> QString {
-    let created = match view.as_mut().rust_mut().doc.as_mut() {
-        Some(doc) => pictura_render::new_smart_object_via_copy(doc, &path.to_string()),
-        None => None,
-    };
-    let Some(created) = created else {
-        return QString::default();
-    };
-    view.as_mut().rust_mut().select_only_layer(&created);
-    view.as_mut().clear_link_sets();
-    view.as_mut().recomposite();
-    view.as_mut().record("New Smart Object via Copy");
+    let path = path.to_string();
+    let mut created = String::new();
+    view.as_mut().edit("New Smart Object via Copy", |rust| {
+        let Some(doc) = rust.doc.as_mut() else {
+            return Edit::None;
+        };
+        let Some(new_path) = pictura_render::new_smart_object_via_copy(doc, &path) else {
+            return Edit::None;
+        };
+        created = new_path;
+        rust.select_only_layer(&created);
+        Edit::Structural
+    });
     QString::from(created.as_str())
 }

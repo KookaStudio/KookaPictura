@@ -735,8 +735,8 @@ fn document_ops_wire_parsed_values_and_reject_invalid_params() {
             data: vec![255, 255].into(),
         },
     ];
-
     pictura_render::flip_document(&mut doc, true);
+    doc.composite = pictura_render::composite_rgba(&doc);
     let plane = 2usize;
     assert_eq!(
         [
@@ -829,7 +829,7 @@ fn move_profile(n: u32) {
     let mut moved = doc.clone();
     let t = std::time::Instant::now();
     let translated = pictura_render::translate_layer(&mut moved, 10, 10);
-    ms("translate_layer(+recompute)", t.elapsed());
+    ms("translate_layer(no composite)", t.elapsed());
     assert!(translated);
 
     let t = std::time::Instant::now();
@@ -870,7 +870,7 @@ fn move_profile(n: u32) {
         println!("move_profile composite_gpu refused: {err}");
     }
 
-    // 4-channel composite, as `recompute` leaves it for the commit path.
+    // 4-channel composite, as the app transaction leaves it for the commit path.
     let t = std::time::Instant::now();
     let _ = buffer_to_image(&moved.composite);
     ms("buffer_to_image", t.elapsed());

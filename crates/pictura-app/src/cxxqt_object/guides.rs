@@ -6,6 +6,7 @@
 //! [`PictureView`]: super::qobject::PictureView
 
 use super::qobject::PictureView;
+use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use pictura_core::{guide_near as nearest_guide, Guide, GuideOrientation};
@@ -55,8 +56,7 @@ fn edit<T>(view: Pin<&mut PictureView>, edit: impl FnOnce(&mut Vec<Guide>) -> T)
 }
 
 fn commit(mut view: Pin<&mut PictureView>, label: &str) {
-    view.as_mut().record(label);
-    view.as_mut().changed();
+    view.as_mut().edit(label, |_| Edit::Meta);
 }
 
 fn guide_count(view: &PictureView) -> i32 {

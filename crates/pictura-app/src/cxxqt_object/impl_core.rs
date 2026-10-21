@@ -1,6 +1,7 @@
 use super::helpers::*;
 use super::helpers_composite::*;
 use super::qobject;
+use crate::cxxqt_object::edit::Edit;
 use crate::history::{History, Snapshot};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -490,8 +491,7 @@ impl qobject::PictureView {
             None => false,
         };
         if changed {
-            self.as_mut().record("File Info");
-            self.changed();
+            self.as_mut().edit("File Info", |_| Edit::Meta);
         }
         changed
     }
@@ -527,8 +527,7 @@ impl qobject::PictureView {
             None => false,
         };
         if changed {
-            self.as_mut().record("Metadata Template");
-            self.changed();
+            self.as_mut().edit("Metadata Template", |_| Edit::Meta);
         }
         changed
     }
@@ -551,8 +550,7 @@ impl qobject::PictureView {
             }
             pictura_codec::assign_document_profile(doc, &target);
         }
-        self.as_mut().recomposite();
-        self.as_mut().record("Assign Profile");
+        self.as_mut().edit("Assign Profile", |_| Edit::Full);
         true
     }
 
@@ -576,8 +574,7 @@ impl qobject::PictureView {
                 return false;
             }
         }
-        self.as_mut().recomposite();
-        self.as_mut().record("Convert to Profile");
+        self.as_mut().edit("Convert to Profile", |_| Edit::Full);
         true
     }
 
@@ -899,6 +896,30 @@ impl super::PictureViewRust {
         }
     }
 
+    /// Rebuild the document composite from the current layer stack and refresh
+    /// the cached display. Emits nothing; the caller owns the signal.
+    pub(super) fn composite_full(&mut self) {
+        let t0 = Instant::now();
+        let t = Instant::now();
+        let rendered = self
+            .doc
+            .as_ref()
+            .map(|doc| current_buffer(doc, self.gpu_compute));
+        paint_timing::record("recomposite_full_composite", t.elapsed());
+        let Some(rendered) = rendered else {
+            return;
+        };
+        {
+            let t = Instant::now();
+            if let Some(doc) = self.doc.as_mut() {
+                store_composite(doc, &rendered);
+            }
+            self.reset_pyramid();
+            paint_timing::record("recomposite_reset_pyramid", t.elapsed());
+        }
+        paint_timing::record("recomposite_total", t0.elapsed());
+    }
+
     /// Rebuild the cached sRGB level-0 frame and the matching premultiplied
     /// display image from the current source, rebuild the pyramid, clear the
     /// damage account, and bump the canvas revision. Every full-display path
@@ -1037,20 +1058,6 @@ impl qobject::PictureView {
         paint_timing::record("record_history_capture", t.elapsed());
     }
 
-    /// As [`record`], but without bumping `content_revision`.
-    ///
-    /// Only for moves of the topmost pixel layer, which leave the composite
-    /// below that layer unchanged, so a cached move-preview base stays valid.
-    pub(super) fn record_move(mut self: Pin<&mut Self>, label: &str) {
-        let mut rust = self.as_mut().rust_mut();
-        let rust = &mut *rust;
-        if let Some(doc) = rust.doc.as_mut() {
-            rust.history
-                .capture_live(doc, &rust.selection, &rust.layer_target, label);
-            rust.dirty = true;
-        }
-    }
-
     pub(super) fn snapshot(&self) -> Option<Snapshot> {
         let rust = self.rust();
         let doc = rust.doc.clone()?;
@@ -1119,50 +1126,9 @@ impl qobject::PictureView {
     /// The full-document path for every mutation that does not report a dirty
     /// rectangle; [`refresh_region`] is the incremental extension point.
     pub(super) fn recomposite(mut self: Pin<&mut Self>) {
-        let t0 = Instant::now();
-        let gpu_compute = self.rust().gpu_compute;
-        let t = Instant::now();
-        let rendered = self
-            .rust()
-            .doc
-            .as_ref()
-            .map(|doc| current_buffer(doc, gpu_compute));
-        paint_timing::record("recomposite_full_composite", t.elapsed());
-        let Some(rendered) = rendered else {
-            self.changed();
-            return;
-        };
-        {
-            let t = Instant::now();
-            let mut rust = self.as_mut().rust_mut();
-            if let Some(doc) = rust.doc.as_mut() {
-                store_composite(doc, &rendered);
-            }
-            rust.reset_pyramid();
-            paint_timing::record("recomposite_reset_pyramid", t.elapsed());
-        }
+        self.as_mut().rust_mut().composite_full();
         let t = Instant::now();
         self.changed();
         paint_timing::record("recomposite_changed(C++)", t.elapsed());
-        paint_timing::record("recomposite_total", t0.elapsed());
-    }
-
-    /// Refresh only `rect`: composite the region, patch the authoritative
-    /// composite, level 0, the damage account and the pyramid, then emit
-    /// [`changed`] so every shell fan-out (title, registry, panels, thumbnail)
-    /// still runs. Falls back to the full recomposite when the clamped region is
-    /// empty.
-    pub(super) fn recomposite_region(mut self: Pin<&mut Self>, rect: PsdRect) {
-        let t0 = Instant::now();
-        let prepared = self.as_mut().rust_mut().refresh_region_buffer(rect);
-        let Some((x0, y0, clipped, srgb)) = prepared else {
-            self.as_mut().recomposite();
-            return;
-        };
-        self.as_mut()
-            .rust_mut()
-            .apply_refreshed_region(x0, y0, clipped, srgb);
-        self.changed();
-        paint_timing::record("recomposite_region_total", t0.elapsed());
     }
 }

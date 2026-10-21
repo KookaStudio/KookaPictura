@@ -631,7 +631,7 @@ fn move_duplicate_records_one_state_and_undo_restores_the_layer_count() {
     let new_path = duplicate_move_target(&mut doc, &mut target).expect("duplicate");
     assert_eq!(history.count(), before, "the drag start records no state");
 
-    // The commit: translate the clone, then the bridge's one `record_move`.
+    // The commit: translate the clone, then the bridge's one move capture.
     assert!(pictura_render::translate_layer_path(
         &mut doc, &new_path, 2, 2
     ));

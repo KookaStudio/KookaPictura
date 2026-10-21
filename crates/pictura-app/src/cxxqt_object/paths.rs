@@ -21,6 +21,7 @@
 
 use super::qobject::PictureView;
 use super::PictureViewRust;
+use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use pictura_core::path::{HandleSide, VectorPath};
@@ -333,8 +334,7 @@ fn path_convert_live_shape(mut view: Pin<&mut PictureView>) -> bool {
 }
 
 fn commit(mut view: Pin<&mut PictureView>, label: &str) {
-    view.as_mut().record(label);
-    view.as_mut().changed();
+    view.as_mut().edit(label, |_| Edit::Meta);
 }
 
 fn index(i: i32) -> Option<usize> {

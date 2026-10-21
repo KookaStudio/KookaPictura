@@ -96,9 +96,63 @@ pub(crate) fn valid_size(width: u32, height: u32) -> Result<(), pictura_ops::Ops
     Ok(())
 }
 
-/// Rebuild the document composite from its (already transformed) layer tree.
-pub(crate) fn recompute(doc: &mut pictura_core::Document) {
-    doc.composite = crate::composite_rgba(doc);
+/// Install a layer-less document's merged composite as a bottom Background.
+///
+/// A geometry operation calls this before mutating so it transforms real
+/// pixels instead of leaving the merged composite stale or blank. Does nothing
+/// when the document already has layers, or when the composite does not match
+/// the document size (there are then no reliable source pixels).
+pub(crate) fn materialize_merged_composite(doc: &mut pictura_core::Document) {
+    if !doc.layers.is_empty()
+        || !doc.merged_composite_present
+        || doc.width == 0
+        || doc.height == 0
+        || doc.composite.width != doc.width
+        || doc.composite.height != doc.height
+    {
+        return;
+    }
+    let plane = doc.width as usize * doc.height as usize;
+    let colors = doc.mode.color_channels() as usize;
+    let planes = doc.composite.channels as usize;
+    if plane == 0 || colors == 0 || colors > planes || doc.composite.data.len() < plane * planes {
+        return;
+    }
+    let mut channels: Vec<pictura_core::Channel> = (0..colors)
+        .map(|c| pictura_core::Channel {
+            id: c as i16,
+            data: doc.composite.data[c * plane..(c + 1) * plane]
+                .to_vec()
+                .into(),
+        })
+        .collect();
+    let alpha = if planes > colors {
+        Some(doc.composite.data[colors * plane..(colors + 1) * plane].to_vec())
+    } else {
+        doc.channels.first().map(|channel| {
+            if channel.data.len() >= plane {
+                channel.data[..plane].to_vec()
+            } else {
+                vec![255; plane]
+            }
+        })
+    };
+    channels.push(pictura_core::Channel {
+        id: -1,
+        data: alpha.unwrap_or_else(|| vec![255; plane]).into(),
+    });
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_core::Layer {
+        name: "Background".to_string(),
+        rect: pictura_core::PsdRect {
+            top: 0,
+            left: 0,
+            bottom: doc.height as i32,
+            right: doc.width as i32,
+        },
+        channels,
+        background: true,
+        ..Default::default()
+    }]);
 }
 
 /// Visit each layer depth-first, groups before their children.
@@ -130,4 +184,152 @@ pub(crate) fn resample_plane(
     pictura_ops::resize(&plane, dw, dh, resample)
         .map(|b| b.data.to_vec())
         .unwrap_or_else(|_| data.to_vec())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pictura_core::{BitDepth, ColorMode, Document, PixelBuffer};
+
+    type GeometryOp = Box<dyn Fn(&mut Document)>;
+
+    fn layered() -> Document {
+        let rgba = vec![200u8; 4 * 4 * 4];
+        let mut doc = Document::from_rgba("base", 4, 4, &rgba);
+        doc.layers[0].background = true;
+        doc.composite = crate::composite_rgba(&doc);
+        doc
+    }
+
+    fn merged_only() -> Document {
+        let n = 4 * 4;
+        let mut data = vec![0u8; n * 4];
+        for i in 0..n {
+            data[i] = (i * 11) as u8;
+            data[n + i] = (i * 7) as u8;
+            data[2 * n + i] = (i * 3) as u8;
+            data[3 * n + i] = (40 + i * 13) as u8;
+        }
+        let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
+        doc.composite = PixelBuffer {
+            width: 4,
+            height: 4,
+            channels: 4,
+            data: data.into(),
+        };
+        doc.merged_composite_present = true;
+        doc
+    }
+
+    #[test]
+    fn a_geometry_op_leaves_the_composite_untouched() {
+        let quad = [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)];
+        let ops: Vec<(&str, GeometryOp)> = vec![
+            (
+                "resize",
+                Box::new(|d| {
+                    resize_document(d, 8, 8, pictura_ops::Resample::Nearest).unwrap();
+                }),
+            ),
+            (
+                "canvas",
+                Box::new(|d| {
+                    resize_canvas_document(d, 6, 6, pictura_ops::Anchor::Center).unwrap();
+                }),
+            ),
+            ("crop", Box::new(|d| assert!(crop_document(d, 1, 1, 2, 2)))),
+            (
+                "crop-grow",
+                Box::new(|d| assert!(crop_document_grow(d, -1, -1, 6, 6))),
+            ),
+            (
+                "delete-cropped",
+                Box::new(|d| {
+                    let _ = delete_cropped_pixels(d);
+                }),
+            ),
+            (
+                "extend-background",
+                Box::new(|d| {
+                    resize_canvas_document(d, 6, 6, pictura_ops::Anchor::Center).unwrap();
+                    let _ = extend_background(d, [0, 0, 0]);
+                }),
+            ),
+            ("rotate", Box::new(|d| rotate_document(d, 1).unwrap())),
+            ("flip", Box::new(|d| flip_document(d, true))),
+            ("translate", Box::new(|d| assert!(translate_layer(d, 1, 1)))),
+            (
+                "rotate-in",
+                Box::new(|d| assert!(rotate_document_in(d, 30.0, (2.0, 2.0)))),
+            ),
+            (
+                "perspective",
+                Box::new(move |d| assert!(perspective_crop(d, quad))),
+            ),
+        ];
+        for (name, op) in ops {
+            let mut doc = layered();
+            let before = doc.composite.clone();
+            op(&mut doc);
+            assert_eq!(doc.composite, before, "{name} must not composite");
+        }
+    }
+
+    #[test]
+    fn materializing_a_loaded_merged_document_uses_its_alpha_channel() {
+        let mut doc = merged_only();
+        let plane = 16;
+        doc.composite = PixelBuffer {
+            width: 4,
+            height: 4,
+            channels: 3,
+            data: doc.composite.data[..3 * plane].to_vec().into(),
+        };
+        doc.channels = vec![pictura_core::Channel {
+            id: 0,
+            data: vec![7u8; plane].into(),
+        }];
+        materialize_merged_composite(&mut doc);
+        let alpha = doc.layers[0]
+            .channels
+            .iter()
+            .find(|c| c.id == -1)
+            .expect("alpha channel");
+        assert_eq!(&alpha.data[..], &[7u8; 16]);
+    }
+
+    #[test]
+    fn a_merged_only_document_keeps_its_pixels_through_geometry() {
+        for name in ["resize", "crop", "rotate", "canvas"] {
+            let mut doc = merged_only();
+            match name {
+                "resize" => {
+                    resize_document(&mut doc, 8, 8, pictura_ops::Resample::Nearest).unwrap()
+                }
+                "crop" => assert!(crop_document(&mut doc, 1, 1, 2, 2)),
+                "rotate" => rotate_document(&mut doc, 1).unwrap(),
+                "canvas" => {
+                    resize_canvas_document(&mut doc, 6, 6, pictura_ops::Anchor::Center).unwrap()
+                }
+                _ => unreachable!(),
+            }
+            assert_eq!(doc.layers.len(), 1, "{name}: materialized Background");
+            let layer = &doc.layers[0];
+            assert!(layer.background, "{name}: Background flag");
+            let alpha = layer
+                .channels
+                .iter()
+                .find(|c| c.id == -1)
+                .unwrap_or_else(|| panic!("{name}: alpha channel"));
+            assert!(
+                alpha.data.iter().any(|&v| v < 255),
+                "{name}: alpha values preserved"
+            );
+            doc.composite = crate::composite_rgba(&doc);
+            assert!(
+                doc.composite.data.iter().any(|&v| v != 0),
+                "{name}: pixels survive"
+            );
+        }
+    }
 }

@@ -8,6 +8,7 @@
 //! [`PictureView`]: super::qobject::PictureView
 
 use super::qobject::PictureView;
+use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -170,8 +171,7 @@ fn edit<T>(view: Pin<&mut PictureView>, edit: impl FnOnce(&mut Annotations) -> T
 }
 
 fn commit(mut view: Pin<&mut PictureView>, label: &str) {
-    view.as_mut().record(label);
-    view.as_mut().changed();
+    view.as_mut().edit(label, |_| Edit::Meta);
 }
 
 fn label(kind: MarkerKind, sampler: &'static str, note: &'static str) -> &'static str {

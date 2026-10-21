@@ -10,6 +10,7 @@
 //! [`PictureView`]: super::qobject::PictureView
 
 use super::qobject::PictureView;
+use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -216,8 +217,8 @@ fn set_layer_smart_filter_visible(
         None => false,
     };
     if changed {
-        view.as_mut().recomposite();
-        view.as_mut().record("Smart Filter Visibility");
+        view.as_mut()
+            .edit("Smart Filter Visibility", |_| Edit::Full);
     }
     changed
 }
@@ -233,8 +234,8 @@ fn set_layer_smart_filters_enabled(
         None => false,
     };
     if changed {
-        view.as_mut().recomposite();
-        view.as_mut().record("Smart Filter Visibility");
+        view.as_mut()
+            .edit("Smart Filter Visibility", |_| Edit::Full);
     }
     changed
 }
@@ -246,9 +247,8 @@ fn convert_for_smart_filters(mut view: Pin<&mut PictureView>, path: &QString) ->
         None => false,
     };
     if changed {
-        view.as_mut().clear_link_sets();
-        view.as_mut().recomposite();
-        view.as_mut().record("Convert for Smart Filters");
+        view.as_mut()
+            .edit("Convert for Smart Filters", |_| Edit::Structural);
     }
     changed
 }
@@ -264,8 +264,7 @@ fn delete_layer_smart_filter(
         None => false,
     };
     if changed {
-        view.as_mut().recomposite();
-        view.as_mut().record("Delete Smart Filter");
+        view.as_mut().edit("Delete Smart Filter", |_| Edit::Full);
     }
     changed
 }
@@ -277,8 +276,7 @@ fn clear_layer_smart_filters(mut view: Pin<&mut PictureView>, layer_path: &QStri
         None => false,
     };
     if changed {
-        view.as_mut().recomposite();
-        view.as_mut().record("Clear Smart Filters");
+        view.as_mut().edit("Clear Smart Filters", |_| Edit::Full);
     }
     changed
 }
@@ -300,8 +298,7 @@ fn reorder_layer_smart_filter(
         None => false,
     };
     if changed {
-        view.as_mut().recomposite();
-        view.as_mut().record("Reorder Smart Filters");
+        view.as_mut().edit("Reorder Smart Filters", |_| Edit::Full);
     }
     changed
 }

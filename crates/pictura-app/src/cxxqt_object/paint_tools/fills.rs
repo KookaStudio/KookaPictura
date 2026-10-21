@@ -13,6 +13,7 @@ use super::super::helpers::{
 use super::super::helpers_composite::{crop_selection, current_buffer};
 use super::super::qobject::PictureView;
 use super::super::PictureViewRust;
+use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -359,8 +360,10 @@ fn fill_mask(
             bottom: dirty.bottom + mask.rect.top,
             right: dirty.right + mask.rect.left,
         };
-        view.as_mut().refresh_region(rect);
-        view.as_mut().record("Fill");
+        view.as_mut().edit("Fill", |_| Edit::Regions {
+            rects: vec![rect],
+            notify: false,
+        });
     }
     changed
 }

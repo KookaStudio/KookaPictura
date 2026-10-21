@@ -1,3 +1,4 @@
+use super::edit::Edit;
 use super::helpers::*;
 use super::helpers_composite::*;
 use super::qobject;
@@ -24,8 +25,7 @@ impl qobject::PictureView {
                 }
                 rust.selection = Some(Selection::all(w, h));
             }
-            self.as_mut().record("Select All");
-            self.changed();
+            self.as_mut().edit("Select All", |_| Edit::Meta);
         }
     }
 
@@ -36,8 +36,7 @@ impl qobject::PictureView {
                 rust.deselected_selection = Some(prev);
             }
         }
-        self.as_mut().record("Deselect");
-        self.changed();
+        self.as_mut().edit("Deselect", |_| Edit::Meta);
     }
 
     /// Restore the last deselected selection. Refuses (no history) without a
@@ -54,8 +53,7 @@ impl qobject::PictureView {
             }
         };
         self.as_mut().rust_mut().selection = Some(restored);
-        self.as_mut().record("Reselect");
-        self.changed();
+        self.as_mut().edit("Reselect", |_| Edit::Meta);
         true
     }
 
@@ -69,8 +67,7 @@ impl qobject::PictureView {
             return false;
         };
         self.as_mut().rust_mut().selection = Some(inverted);
-        self.as_mut().record("Inverse Selection");
-        self.changed();
+        self.as_mut().edit("Inverse Selection", |_| Edit::Meta);
         true
     }
 
@@ -92,8 +89,7 @@ impl qobject::PictureView {
         if !self.as_mut().rust_mut().commit_selection_move() {
             return false;
         }
-        self.as_mut().record("Move Selection");
-        self.changed();
+        self.as_mut().edit("Move Selection", |_| Edit::Meta);
         true
     }
 
@@ -175,11 +171,14 @@ impl qobject::PictureView {
                 rust.selection_move_delta = None;
                 rust.selection = Some(moved_selection);
             }
-            match dirty {
-                Some(rect) => self.as_mut().recomposite_region(rect),
-                None => self.as_mut().recomposite(),
-            }
-            self.as_mut().record("Move Selection");
+            let outcome = match dirty {
+                Some(rect) => Edit::Regions {
+                    rects: vec![rect],
+                    notify: false,
+                },
+                None => Edit::Full,
+            };
+            self.as_mut().edit("Move Selection", |_| outcome);
             return true;
         }
         let active = self.rust().layer_target.single().map(str::to_string);
@@ -230,11 +229,14 @@ impl qobject::PictureView {
                 }
             }
         }
-        match dirty {
-            Some(rect) => self.as_mut().recomposite_region(rect),
-            None => self.as_mut().recomposite(),
-        }
-        self.as_mut().record("Move Selection");
+        let outcome = match dirty {
+            Some(rect) => Edit::Regions {
+                rects: vec![rect],
+                notify: false,
+            },
+            None => Edit::Full,
+        };
+        self.as_mut().edit("Move Selection", |_| outcome);
         true
     }
 
@@ -316,8 +318,7 @@ impl qobject::PictureView {
             return false;
         };
         self.as_mut().rust_mut().selection = Some(modified);
-        self.as_mut().record(label);
-        self.changed();
+        self.as_mut().edit(label, |_| Edit::Meta);
         true
     }
 
@@ -334,8 +335,7 @@ impl qobject::PictureView {
             }
         };
         self.as_mut().rust_mut().selection = Some(grown);
-        self.as_mut().record("Grow Selection");
-        self.changed();
+        self.as_mut().edit("Grow Selection", |_| Edit::Meta);
         true
     }
 
@@ -352,8 +352,7 @@ impl qobject::PictureView {
             }
         };
         self.as_mut().rust_mut().selection = Some(matched);
-        self.as_mut().record("Similar Selection");
-        self.changed();
+        self.as_mut().edit("Similar Selection", |_| Edit::Meta);
         true
     }
 
@@ -375,7 +374,7 @@ impl qobject::PictureView {
             true
         };
         if saved {
-            self.as_mut().record("Save Selection");
+            self.as_mut().edit("Save Selection", |_| Edit::Record);
         }
         saved
     }
@@ -392,8 +391,7 @@ impl qobject::PictureView {
             return false;
         };
         self.as_mut().rust_mut().selection = Some(selection);
-        self.as_mut().record("Load Selection");
-        self.changed();
+        self.as_mut().edit("Load Selection", |_| Edit::Meta);
         true
     }
 
@@ -570,8 +568,7 @@ impl qobject::PictureView {
                 });
             }
         }
-        self.as_mut().record(label);
-        self.changed();
+        self.as_mut().edit(label, |_| Edit::Meta);
         true
     }
 
@@ -710,8 +707,7 @@ impl qobject::PictureView {
             true
         };
         if cropped {
-            self.as_mut().recomposite();
-            self.as_mut().record("Crop");
+            self.as_mut().edit("Crop", |_| Edit::Full);
         }
         cropped
     }
