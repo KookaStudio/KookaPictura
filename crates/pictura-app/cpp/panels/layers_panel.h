@@ -285,6 +285,8 @@ public:
     /// keyboard path matches the panel and menu paths.
     void groupSelection();
     void ungroupSelection();
+    // Duplicate the selected layers; Layer > Duplicate Layer routes here too.
+    void duplicateSelection();
     // Delete the selected layers; Layer > Delete Layer routes here too.
     void deleteSelection();
     // Whether Move Layer Up/Down would change the current row (dry run).
@@ -370,7 +372,6 @@ private:
 
     void addLayerAt(const QString& path);
     void addGroupAt(const QString& path);
-    void duplicateSelection();
     void moveCurrent(int delta);
     bool canMovePath(const QString& path, int delta) const;
 
