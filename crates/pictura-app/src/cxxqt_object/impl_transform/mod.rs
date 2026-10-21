@@ -56,7 +56,8 @@ pub(super) fn duplicate_move_target(
     active: &mut Option<String>,
 ) -> Option<String> {
     let path = active.clone()?;
-    if layer_move_locked(active_pixel_layer(doc, Some(&path))?) {
+    let layer = active_pixel_layer(doc, Some(&path))?;
+    if !layer.visible || layer_move_locked(layer) {
         return None;
     }
     let new_path = pictura_render::duplicate_paths(doc, &[path.as_str()]).pop()?;
