@@ -1,7 +1,5 @@
-use crate::history::History;
 use crate::layer_target::LayerTarget;
 use cxx_qt_lib::QImage;
-use pictura_core::path::VectorPath;
 use pictura_core::{Document, Layer, PixelBuffer, PsdRect};
 use pictura_paint::spacing::DabPlacer;
 use pictura_paint::{HealStroke, Stroke, StrokeSample};
@@ -14,7 +12,7 @@ use super::helpers::TileSet;
 
 /// The live Free Transform gesture mode. `Free` is the existing similarity
 /// transform; the other three edit a document-space target quad.
-#[derive(Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
 pub(super) enum TransformMode {
     #[default]
     Free,
@@ -130,11 +128,9 @@ pub struct TransformSession {
 
 /// Backing Rust state for [`super::qobject::PictureView`].
 pub struct PictureViewRust {
-    pub(super) doc: Option<Document>,
-    pub(super) selection: Option<Selection>,
-    /// CS6 "last deselected" memory: the selection replaced by Deselect or a
-    /// New-mode commit. Restored by `reselect`.
-    pub(super) deselected_selection: Option<Selection>,
+    /// The document, the selection, and the history: the state the document
+    /// session owns.
+    pub(super) session: crate::cxxqt_object::document_session::DocumentSession,
     /// Selection captured at the start of a move-selection drag; `None` when no
     /// drag is active. Restored by `cancel_selection_move`.
     pub(super) selection_move_origin: Option<Selection>,
@@ -142,7 +138,6 @@ pub struct PictureViewRust {
     /// so a pointer move costs no plane allocation. `None` when no drag is
     /// active.
     pub(super) selection_move_delta: Option<(i32, i32)>,
-    pub(super) history: History,
     pub(super) path: Option<String>,
     /// The selected layer paths and the active path. The shared resolver turns
     /// this into the single tool-edit target.
@@ -152,22 +147,12 @@ pub struct PictureViewRust {
     pub(super) path_on_layer: bool,
     /// The Paths panel row the path calls edit when not on a shape layer.
     pub(super) active_path: super::paths::ActivePath,
-    /// The active path captured at a Pen-group press, restored when Edit > Undo
-    /// cancels the live gesture (`paths.rs`). `None` between gestures.
-    pub(super) path_gesture: Option<(super::paths::ActivePath, VectorPath)>,
-    pub(super) dirty: bool,
-    /// Bumped whenever the view loads or replaces its document, so a panel can
-    /// drop a gesture whose target no longer belongs to the current document.
-    pub(super) document_generation: u64,
+    /// What the live path gesture replaced, restored when the gesture is
+    /// cancelled (`paths.rs`). `None` between gestures.
+    pub(super) path_gesture: Option<super::document_session::PathRestore>,
     /// Output format remembered from the import source, used to preselect the
     /// Save As filter: a lowercased extension (`"png"`) or `"psd"` when native.
     pub(super) source_format: String,
-    /// The canonical `.joboptions` text this document was last saved to PDF
-    /// with, so Save on the `.pdf` path reopens the dialog with it.
-    pub(super) pdf_options: Option<String>,
-    /// The password a protected PDF was opened with, kept in memory only so
-    /// Revert can reopen it.
-    pub(super) pdf_password: Option<String>,
     pub(super) interop: Option<crate::gpu::InteropState>,
     pub(super) pending_lasso: Vec<(i32, i32)>,
     pub(super) pending_lasso_mode: String,
@@ -215,12 +200,8 @@ pub struct PictureViewRust {
     pub(super) move_prepared_layer: String,
     pub(super) move_preview_cache_hit: bool,
     pub(super) transform_session: Option<TransformSession>,
-    pub(super) opacity_preview_changed: bool,
-    pub(super) fill_preview_changed: bool,
-    /// The history label of the Properties mask Density/Feather control whose
-    /// preview changed the document since its last commit.
-    pub(super) mask_refine_preview: Option<&'static str>,
-    pub(super) content_revision: u64,
+    /// The panel previews that are applied but not committed yet.
+    pub(super) pending_previews: super::document_session::PendingPreviews,
     pub(super) gpu_compute: bool,
     pub(super) color_policy: pictura_codec::Policy,
     /// Outstanding display damage; the canvas redraws the region `take` reports.
@@ -310,6 +291,9 @@ pub struct PictureViewRust {
     /// Set when a loading tab's open is cancelled; the worker's queued result
     /// is dropped instead of applied (`open_jobs`).
     pub(super) open_cancelled: bool,
+    /// The id of the latest open request. A result from an earlier request is
+    /// stale: it must not install over a newer document (`open_jobs`).
+    pub(super) open_request: u64,
     /// Test seam: hold a started open's completion for this many milliseconds.
     pub(super) open_delay_for_test: u64,
 }
@@ -340,7 +324,7 @@ pub(super) enum PreviewBaseline {
 /// A filter dialog's reduced canvas copy and what it was built from.
 pub(super) struct CanvasProxy {
     /// The document region, the scale's bits and the `content_revision`.
-    pub(super) key: (PsdRect, u64, u64),
+    pub(super) key: (PsdRect, u64, u64, u64),
     pub(super) proxy: pictura_render::FilterProxy,
 }
 
@@ -395,22 +379,15 @@ pub(super) struct MaskStroke {
 impl Default for PictureViewRust {
     fn default() -> Self {
         Self {
-            doc: None,
-            selection: None,
-            deselected_selection: None,
+            session: Default::default(),
             selection_move_origin: None,
             selection_move_delta: None,
-            history: History::default(),
             path: None,
             layer_target: LayerTarget::default(),
             path_on_layer: false,
             active_path: super::paths::ActivePath::Work,
             path_gesture: None,
-            dirty: false,
-            document_generation: 0,
             source_format: "psd".to_string(),
-            pdf_options: None,
-            pdf_password: None,
             interop: None,
             pending_lasso: Vec::new(),
             pending_lasso_mode: String::new(),
@@ -436,10 +413,7 @@ impl Default for PictureViewRust {
             move_prepared_layer: String::new(),
             move_preview_cache_hit: false,
             transform_session: None,
-            opacity_preview_changed: false,
-            fill_preview_changed: false,
-            mask_refine_preview: None,
-            content_revision: 0,
+            pending_previews: Default::default(),
             gpu_compute: true,
             color_policy: pictura_codec::Policy::Preserve,
             damage: CanvasDamage::default(),
@@ -468,6 +442,7 @@ impl Default for PictureViewRust {
             shape_attributes: None,
             recovery_write: None,
             open_cancelled: false,
+            open_request: 0,
             open_delay_for_test: 0,
         }
     }

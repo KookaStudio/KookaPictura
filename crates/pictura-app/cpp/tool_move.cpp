@@ -85,6 +85,19 @@ public:
         pressed_ = false;
     }
 
+    void onSessionCancelled(ToolServices& ctx) override
+    {
+        pressed_ = false;
+        pendingDuplicate_ = false;
+        duplicated_ = false;
+        if (ImageView* canvas = ctx.canvas()) {
+            canvas->clearSmartGuides();
+        }
+        if (PictureView* v = ctx.view()) {
+            v->end_move_preview();
+        }
+    }
+
     // The Move canvas menu: with Auto Select off, every layer with a pixel under
     // the pointer (topmost first) picks that layer; Isolation Mode is always
     // offered.

@@ -14,16 +14,21 @@ mod refine;
 
 impl qobject::PictureView {
     pub fn select_all(mut self: Pin<&mut Self>) {
-        let dims = self.rust().doc.as_ref().map(|d| (d.width, d.height));
+        let dims = self
+            .rust()
+            .session
+            .doc
+            .as_ref()
+            .map(|d| (d.width, d.height));
         if let Some((w, h)) = dims {
             {
                 let mut rust = self.as_mut().rust_mut();
-                if let Some(prev) = rust.selection.take() {
+                if let Some(prev) = rust.session.selection.take() {
                     if prev.data.iter().any(|&v| v > 0) {
-                        rust.deselected_selection = Some(prev);
+                        rust.session.deselected_selection = Some(prev);
                     }
                 }
-                rust.selection = Some(Selection::all(w, h));
+                rust.session.selection = Some(Selection::all(w, h));
             }
             self.as_mut().edit("Select All", |_| Edit::Meta);
         }
@@ -32,8 +37,8 @@ impl qobject::PictureView {
     pub fn deselect(mut self: Pin<&mut Self>) {
         {
             let mut rust = self.as_mut().rust_mut();
-            if let Some(prev) = rust.selection.take() {
-                rust.deselected_selection = Some(prev);
+            if let Some(prev) = rust.session.selection.take() {
+                rust.session.deselected_selection = Some(prev);
             }
         }
         self.as_mut().edit("Deselect", |_| Edit::Meta);
@@ -44,29 +49,34 @@ impl qobject::PictureView {
     pub fn reselect(mut self: Pin<&mut Self>) -> bool {
         let restored = {
             let rust = self.rust();
-            let Some(doc) = rust.doc.as_ref() else {
+            let Some(doc) = rust.session.doc.as_ref() else {
                 return false;
             };
-            match rust.deselected_selection.as_ref() {
+            match rust.session.deselected_selection.as_ref() {
                 Some(sel) if sel.width == doc.width && sel.height == doc.height => sel.clone(),
                 _ => return false,
             }
         };
-        self.as_mut().rust_mut().selection = Some(restored);
+        self.as_mut().rust_mut().session.selection = Some(restored);
         self.as_mut().edit("Reselect", |_| Edit::Meta);
         true
     }
 
     pub fn has_deselected_selection(&self) -> bool {
-        self.rust().deselected_selection.is_some()
+        self.rust().session.deselected_selection.is_some()
     }
 
     pub fn invert_selection(mut self: Pin<&mut Self>) -> bool {
-        let inverted = self.rust().selection.as_ref().map(Selection::invert);
+        let inverted = self
+            .rust()
+            .session
+            .selection
+            .as_ref()
+            .map(Selection::invert);
         let Some(inverted) = inverted else {
             return false;
         };
-        self.as_mut().rust_mut().selection = Some(inverted);
+        self.as_mut().rust_mut().session.selection = Some(inverted);
         self.as_mut().edit("Inverse Selection", |_| Edit::Meta);
         true
     }
@@ -115,7 +125,8 @@ impl qobject::PictureView {
         }
         let editable = {
             let rust = self.rust();
-            rust.doc
+            rust.session
+                .doc
                 .as_ref()
                 .is_some_and(|doc| active_layer_visible(doc, rust.layer_target.single()))
         };
@@ -125,7 +136,7 @@ impl qobject::PictureView {
         if let Some(path) = active_mask_target(self.rust()) {
             let prepared = {
                 let rust = self.rust();
-                let Some(doc) = rust.doc.as_ref() else {
+                let Some(doc) = rust.session.doc.as_ref() else {
                     return false;
                 };
                 let Some(mask) =
@@ -136,7 +147,7 @@ impl qobject::PictureView {
                 let Some(selection) = rust
                     .selection_move_origin
                     .as_ref()
-                    .or(rust.selection.as_ref())
+                    .or(rust.session.selection.as_ref())
                 else {
                     return false;
                 };
@@ -155,7 +166,7 @@ impl qobject::PictureView {
             let (coverage, moved_selection, background, dirty) = prepared;
             let moved = {
                 let mut rust = self.as_mut().rust_mut();
-                let Some(doc) = rust.doc.as_mut() else {
+                let Some(doc) = rust.session.doc.as_mut() else {
                     return false;
                 };
                 pictura_render::move_mask_selection_content(
@@ -169,7 +180,7 @@ impl qobject::PictureView {
                 let mut rust = self.as_mut().rust_mut();
                 rust.selection_move_origin = None;
                 rust.selection_move_delta = None;
-                rust.selection = Some(moved_selection);
+                rust.session.selection = Some(moved_selection);
             }
             let outcome = match dirty {
                 Some(rect) => Edit::Regions {
@@ -185,10 +196,10 @@ impl qobject::PictureView {
         let prepared = {
             let rust = self.rust();
             let (Some(doc), Some(selection)) = (
-                rust.doc.as_ref(),
+                rust.session.doc.as_ref(),
                 rust.selection_move_origin
                     .clone()
-                    .or_else(|| rust.selection.clone()),
+                    .or_else(|| rust.session.selection.clone()),
             ) else {
                 return false;
             };
@@ -208,7 +219,7 @@ impl qobject::PictureView {
         let (path, mask, moved_selection, dirty) = prepared;
         let moved = {
             let mut rust = self.as_mut().rust_mut();
-            let Some(doc) = rust.doc.as_mut() else {
+            let Some(doc) = rust.session.doc.as_mut() else {
                 return false;
             };
             pictura_render::move_selection_content(doc, &path, &mask, dx, dy, duplicate)
@@ -220,7 +231,7 @@ impl qobject::PictureView {
             let mut rust = self.as_mut().rust_mut();
             rust.selection_move_origin = None;
             rust.selection_move_delta = None;
-            rust.selection = Some(moved_selection);
+            rust.session.selection = Some(moved_selection);
             if duplicate {
                 // `layer_via_copy` inserts the copy directly above the source
                 // in the source's own container.
@@ -252,13 +263,13 @@ impl qobject::PictureView {
         }
         let prepared = {
             let rust = self.rust();
-            let Some(doc) = rust.doc.as_ref() else {
+            let Some(doc) = rust.session.doc.as_ref() else {
                 return false;
             };
             let selection = rust
                 .selection_move_origin
                 .as_ref()
-                .or(rust.selection.as_ref());
+                .or(rust.session.selection.as_ref());
             let (Some(selection), Some(path)) = (selection, rust.layer_target.single()) else {
                 return false;
             };
@@ -276,7 +287,7 @@ impl qobject::PictureView {
         rust.move_x = 0;
         rust.move_y = 0;
         rust.move_opacity = opacity;
-        rust.move_prepared_revision = rust.content_revision;
+        rust.move_prepared_revision = rust.session.content_revision;
         // The empty sentinel keeps the whole-layer cache from reusing this base.
         rust.move_prepared_layer = String::new();
         rust.move_preview_cache_hit = false;
@@ -301,7 +312,7 @@ impl qobject::PictureView {
         };
         let modified = {
             let rust = self.rust();
-            let Some(sel) = rust.selection.as_ref() else {
+            let Some(sel) = rust.session.selection.as_ref() else {
                 return false;
             };
             let radius = amount.round();
@@ -317,7 +328,7 @@ impl qobject::PictureView {
         let Some(modified) = modified else {
             return false;
         };
-        self.as_mut().rust_mut().selection = Some(modified);
+        self.as_mut().rust_mut().session.selection = Some(modified);
         self.as_mut().edit(label, |_| Edit::Meta);
         true
     }
@@ -325,7 +336,9 @@ impl qobject::PictureView {
     pub fn grow_selection(mut self: Pin<&mut Self>, tolerance: i32) -> bool {
         let grown = {
             let rust = self.rust();
-            let (Some(doc), Some(sel)) = (rust.doc.as_ref(), rust.selection.as_ref()) else {
+            let (Some(doc), Some(sel)) =
+                (rust.session.doc.as_ref(), rust.session.selection.as_ref())
+            else {
                 return false;
             };
             let tolerance = tolerance.clamp(0, 255) as u8;
@@ -334,7 +347,7 @@ impl qobject::PictureView {
                 Err(_) => return false,
             }
         };
-        self.as_mut().rust_mut().selection = Some(grown);
+        self.as_mut().rust_mut().session.selection = Some(grown);
         self.as_mut().edit("Grow Selection", |_| Edit::Meta);
         true
     }
@@ -342,7 +355,9 @@ impl qobject::PictureView {
     pub fn similar_selection(mut self: Pin<&mut Self>, tolerance: i32) -> bool {
         let matched = {
             let rust = self.rust();
-            let (Some(doc), Some(sel)) = (rust.doc.as_ref(), rust.selection.as_ref()) else {
+            let (Some(doc), Some(sel)) =
+                (rust.session.doc.as_ref(), rust.session.selection.as_ref())
+            else {
                 return false;
             };
             let tolerance = tolerance.clamp(0, 255) as u8;
@@ -351,7 +366,7 @@ impl qobject::PictureView {
                 Err(_) => return false,
             }
         };
-        self.as_mut().rust_mut().selection = Some(matched);
+        self.as_mut().rust_mut().session.selection = Some(matched);
         self.as_mut().edit("Similar Selection", |_| Edit::Meta);
         true
     }
@@ -363,10 +378,10 @@ impl qobject::PictureView {
     pub fn save_selection(mut self: Pin<&mut Self>, _name: &QString) -> bool {
         let saved = {
             let mut rust = self.as_mut().rust_mut();
-            let Some(sel) = rust.selection.clone() else {
+            let Some(sel) = rust.session.selection.clone() else {
                 return false;
             };
-            let Some(doc) = rust.doc.as_mut() else {
+            let Some(doc) = rust.session.doc.as_mut() else {
                 return false;
             };
             let id = doc.channels.iter().map(|c| c.id).max().unwrap_or(0) + 1;
@@ -382,7 +397,7 @@ impl qobject::PictureView {
     pub fn load_selection(mut self: Pin<&mut Self>, name: &QString) -> bool {
         let loaded = {
             let rust = self.rust();
-            let Some(doc) = rust.doc.as_ref() else {
+            let Some(doc) = rust.session.doc.as_ref() else {
                 return false;
             };
             selection_from_named_channel(&doc.channels, doc.width, doc.height, &name.to_string())
@@ -390,7 +405,7 @@ impl qobject::PictureView {
         let Some(selection) = loaded else {
             return false;
         };
-        self.as_mut().rust_mut().selection = Some(selection);
+        self.as_mut().rust_mut().session.selection = Some(selection);
         self.as_mut().edit("Load Selection", |_| Edit::Meta);
         true
     }
@@ -403,7 +418,7 @@ impl qobject::PictureView {
     pub fn load_channel_selection(self: Pin<&mut Self>, row: i32, mask: i32) -> bool {
         let shape = {
             let rust = self.rust();
-            let Some(doc) = rust.doc.as_ref() else {
+            let Some(doc) = rust.session.doc.as_ref() else {
                 return false;
             };
             channel_row_selection(doc, rust.gpu_compute, row, mask as u8)
@@ -416,6 +431,7 @@ impl qobject::PictureView {
 
     pub fn selection_channel_count(&self) -> i32 {
         self.rust()
+            .session
             .doc
             .as_ref()
             .map_or(0, |d| d.channels.len() as i32)
@@ -424,6 +440,7 @@ impl qobject::PictureView {
     /// Every layer row path in panel order (depth-first, topmost-first).
     pub fn select_all_layers(&self) -> QStringList {
         self.rust()
+            .session
             .doc
             .as_ref()
             .map(|doc| {
@@ -445,7 +462,7 @@ impl qobject::PictureView {
     ) -> bool {
         let shape = {
             let rust = self.rust();
-            let Some(doc) = rust.doc.as_ref() else {
+            let Some(doc) = rust.session.doc.as_ref() else {
                 return false;
             };
             if x < 0 || y < 0 {
@@ -475,7 +492,7 @@ impl qobject::PictureView {
         let path = path.to_string();
         let shape = {
             let rust = self.rust();
-            let Some(doc) = rust.doc.as_ref() else {
+            let Some(doc) = rust.session.doc.as_ref() else {
                 return false;
             };
             let Some(layer) = pictura_render::resolve_path(doc, &path) else {
@@ -494,7 +511,7 @@ impl qobject::PictureView {
         let path = path.to_string();
         let shape = {
             let rust = self.rust();
-            let Some(doc) = rust.doc.as_ref() else {
+            let Some(doc) = rust.session.doc.as_ref() else {
                 return false;
             };
             let mask =
@@ -510,11 +527,12 @@ impl qobject::PictureView {
     }
 
     pub fn has_selection(&self) -> bool {
-        self.rust().selection.is_some()
+        self.rust().session.selection.is_some()
     }
 
     pub fn selection_count(&self) -> i32 {
         self.rust()
+            .session
             .selection
             .as_ref()
             .map_or(0, |s| s.data.iter().filter(|&&v| v > 0).count() as i32)
@@ -544,20 +562,20 @@ impl qobject::PictureView {
     ) -> bool {
         {
             let mut rust = self.as_mut().rust_mut();
-            if rust.doc.is_none() {
+            if rust.session.doc.is_none() {
                 return false;
             }
-            let previous = rust.selection.take();
+            let previous = rust.session.selection.take();
             let replaced = matches!(mode, CombineMode::New)
                 && previous
                     .as_ref()
                     .is_some_and(|s| s.data.iter().any(|&v| v > 0));
             if replaced {
-                rust.deselected_selection = previous;
-                rust.selection = Some(shape);
+                rust.session.deselected_selection = previous;
+                rust.session.selection = Some(shape);
             } else {
-                rust.deselected_selection = None;
-                rust.selection = Some(match previous {
+                rust.session.deselected_selection = None;
+                rust.session.selection = Some(match previous {
                     Some(mut base) => {
                         base.combine_with(&shape, mode);
                         base
@@ -583,7 +601,7 @@ impl qobject::PictureView {
     ) -> bool {
         let shape = {
             let rust = self.rust();
-            let Some(doc) = rust.doc.as_ref() else {
+            let Some(doc) = rust.session.doc.as_ref() else {
                 return false;
             };
             feathered(Selection::rect(doc.width, doc.height, x, y, w, h), feather)
@@ -603,7 +621,7 @@ impl qobject::PictureView {
     ) -> bool {
         let shape = {
             let rust = self.rust();
-            let Some(doc) = rust.doc.as_ref() else {
+            let Some(doc) = rust.session.doc.as_ref() else {
                 return false;
             };
             feathered(
@@ -616,23 +634,19 @@ impl qobject::PictureView {
     }
 
     pub fn begin_lasso(mut self: Pin<&mut Self>, mode: &QString) -> bool {
-        if self.rust().doc.is_none() {
-            return false;
-        }
-        let mut rust = self.as_mut().rust_mut();
-        rust.pending_lasso_mode = mode.to_string();
-        rust.pending_lasso.clear();
-        true
+        self.as_mut()
+            .rust_mut()
+            .begin_lasso_session(&mode.to_string())
     }
 
     pub fn lasso_add_point(mut self: Pin<&mut Self>, x: i32, y: i32) {
-        self.as_mut().rust_mut().pending_lasso.push((x, y));
+        self.as_mut().rust_mut().add_lasso_point(x, y);
     }
 
     pub fn end_lasso(mut self: Pin<&mut Self>, feather: f64) -> bool {
         let shape = {
             let rust = self.rust();
-            let Some(doc) = rust.doc.as_ref() else {
+            let Some(doc) = rust.session.doc.as_ref() else {
                 return false;
             };
             if rust.pending_lasso.len() < 3 {
@@ -668,7 +682,7 @@ impl qobject::PictureView {
     ) -> bool {
         let shape = {
             let rust = self.rust();
-            let Some(doc) = rust.doc.as_ref() else {
+            let Some(doc) = rust.session.doc.as_ref() else {
                 return false;
             };
             if x < 0 || y < 0 || x as u32 >= doc.width || y as u32 >= doc.height {
@@ -696,14 +710,14 @@ impl qobject::PictureView {
         }
         let cropped = {
             let mut rust = self.as_mut().rust_mut();
-            let Some(doc) = rust.doc.as_mut() else {
+            let Some(doc) = rust.session.doc.as_mut() else {
                 return false;
             };
             if !pictura_render::crop_document(doc, x, y, w as u32, h as u32) {
                 return false;
             }
             // Canvas dimensions changed, so the old selection no longer maps.
-            rust.selection = None;
+            rust.session.selection = None;
             true
         };
         if cropped {
@@ -732,7 +746,7 @@ impl qobject::PictureView {
     /// records no history.
     pub fn selection_contour_extents(&self) -> Vec<i32> {
         let rust = self.rust();
-        let Some(sel) = rust.selection.as_ref() else {
+        let Some(sel) = rust.session.selection.as_ref() else {
             return Vec::new();
         };
         let loops = pictura_select::contour(sel, 128);
@@ -745,6 +759,27 @@ impl qobject::PictureView {
             }
         }
         out
+    }
+}
+
+impl super::state::PictureViewRust {
+    /// Start a lasso gesture in `mode`. False without a document or when
+    /// another session owns the slot.
+    pub(super) fn begin_lasso_session(&mut self, mode: &str) -> bool {
+        if self.session.doc.is_none() {
+            return false;
+        }
+        if !self.slot_allows(super::document_session::SessionKind::Lasso) {
+            return false;
+        }
+        self.pending_lasso_mode = mode.to_string();
+        self.pending_lasso.clear();
+        true
+    }
+
+    /// Add a point to the live lasso.
+    pub(super) fn add_lasso_point(&mut self, x: i32, y: i32) {
+        self.pending_lasso.push((x, y));
     }
 }
 

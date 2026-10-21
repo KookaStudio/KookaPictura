@@ -61,7 +61,7 @@ pub mod ffi {
 }
 
 fn adjustment_data(view: &PictureView, path: &str) -> Option<AdjustmentData> {
-    let doc = view.rust().doc.as_ref()?;
+    let doc = view.rust().session.doc.as_ref()?;
     pictura_render::resolve_path(doc, path)?.adjustment.clone()
 }
 
@@ -116,6 +116,7 @@ fn edit_adjustment(
     let path = path.to_string();
     let applied = view.as_mut().preview(|rust| {
         let Some(layer) = rust
+            .session
             .doc
             .as_mut()
             .and_then(|doc| pictura_render::resolve_path_mut(doc, &path))

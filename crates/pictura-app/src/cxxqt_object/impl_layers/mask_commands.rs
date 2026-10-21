@@ -102,6 +102,7 @@ fn mask_overlay_toggle(mut view: Pin<&mut PictureView>, path: &QString) -> bool 
     let path = path.to_string();
     let has_mask = view
         .rust()
+        .session
         .doc
         .as_ref()
         .is_some_and(|doc| pictura_render::has_layer_mask(doc, &path));
@@ -136,7 +137,7 @@ fn set_mask_display_options(mut view: Pin<&mut PictureView>, argb: u32, opacity:
 
 fn mask_overlay_image(view: &PictureView, max_side: i32) -> QImage {
     let rust = view.rust();
-    let (Some(doc), Some(path)) = (rust.doc.as_ref(), rust.mask_overlay.as_deref()) else {
+    let (Some(doc), Some(path)) = (rust.session.doc.as_ref(), rust.mask_overlay.as_deref()) else {
         return QImage::default();
     };
     match overlay_rgba(doc, path, rust.mask_display, max_side.max(1) as u32) {

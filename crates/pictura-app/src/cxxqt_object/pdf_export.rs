@@ -128,10 +128,14 @@ fn save_view(
     options: &PdfOptions,
 ) -> Result<(), String> {
     let gpu_compute = view.rust().gpu_compute;
-    let dirty = view.rust().dirty;
+    let dirty = view.rust().session.dirty;
     let bytes = {
         let mut rust = view.as_mut().rust_mut();
-        let doc = rust.doc.as_mut().ok_or("There is no document to save.")?;
+        let doc = rust
+            .session
+            .doc
+            .as_mut()
+            .ok_or("There is no document to save.")?;
         if dirty {
             pictura_render::refresh_native_composite(doc);
         }
@@ -185,8 +189,8 @@ pub fn pdf_save(mut view: Pin<&mut PictureView>, path: &QString, options: &QStri
     }
     let mut rust = view.rust_mut();
     rust.path = Some(path);
-    rust.dirty = false;
-    rust.pdf_options = Some(pdf::write_joboptions(&options, false));
+    rust.session.dirty = false;
+    rust.session.pdf_options = Some(pdf::write_joboptions(&options, false));
     QString::default()
 }
 
@@ -195,6 +199,7 @@ pub fn pdf_save(mut view: Pin<&mut PictureView>, path: &QString, options: &QStri
 pub(super) fn save_with_last_options(view: Pin<&mut PictureView>, path: &QString) -> bool {
     let options = view
         .rust()
+        .session
         .pdf_options
         .clone()
         .unwrap_or_else(|| pdf::write_joboptions(&PdfOptions::default(), false));
@@ -204,6 +209,7 @@ pub(super) fn save_with_last_options(view: Pin<&mut PictureView>, path: &QString
 pub fn pdf_type_fonts(view: &PictureView) -> QString {
     let fonts = view
         .rust()
+        .session
         .doc
         .as_ref()
         .map(pictura_render::pdf_type_fonts)
@@ -212,15 +218,21 @@ pub fn pdf_type_fonts(view: &PictureView) -> QString {
 }
 
 pub fn pdf_view_options(view: &PictureView) -> QString {
-    QString::from(view.rust().pdf_options.as_deref().unwrap_or_default())
+    QString::from(
+        view.rust()
+            .session
+            .pdf_options
+            .as_deref()
+            .unwrap_or_default(),
+    )
 }
 
-pub fn pdf_open(view: Pin<&mut PictureView>, path: &QString, password: &QString) -> QString {
+pub fn pdf_open(mut view: Pin<&mut PictureView>, path: &QString, password: &QString) -> QString {
     let path = path.to_string();
     let typed = password.to_string();
     // Revert passes none: reuse the password the document was opened with.
     let password = if typed.is_empty() {
-        view.rust().pdf_password.clone().unwrap_or_default()
+        view.rust().session.pdf_password.clone().unwrap_or_default()
     } else {
         typed
     };
@@ -228,7 +240,8 @@ pub fn pdf_open(view: Pin<&mut PictureView>, path: &QString, password: &QString)
     let gpu_compute = view.rust().gpu_compute;
     match super::open_jobs::decode_pdf(&path, &password, policy, gpu_compute) {
         super::open_jobs::PdfOpen::Ok(opened) => {
-            super::open_jobs::apply_opened(&mut view.rust_mut(), *opened);
+            super::open_jobs::apply_opened(&mut view.as_mut().rust_mut(), *opened);
+            view.as_mut().session_cancelled();
             QString::from("ok")
         }
         super::open_jobs::PdfOpen::None => QString::from("none"),

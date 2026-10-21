@@ -142,7 +142,8 @@ fn parse_samples(text: &str) -> Vec<ReplaceColorSample> {
 /// Localized Color Clusters to land where the user clicked.
 fn layer_origin(view: &PictureView) -> (i32, i32) {
     let rust = view.rust();
-    rust.doc
+    rust.session
+        .doc
         .as_ref()
         .and_then(|doc| active_pixel_layer(doc, rust.layer_target.single()))
         .map_or((0, 0), |layer| (layer.rect.left, layer.rect.top))
@@ -238,7 +239,7 @@ fn image_replace_color_mask(
     size: i32,
 ) -> QImage {
     let rust = view.rust();
-    let Some(doc) = rust.doc.as_ref() else {
+    let Some(doc) = rust.session.doc.as_ref() else {
         return QImage::default();
     };
     let p = params(

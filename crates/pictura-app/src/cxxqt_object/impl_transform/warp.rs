@@ -284,7 +284,7 @@ pub(super) fn refresh_warp_preview(mut view: Pin<&mut PictureView>) -> bool {
     let gpu_compute = view.rust().gpu_compute;
     let prepared = (|| {
         let rust = view.rust();
-        let doc = rust.doc.as_ref()?;
+        let doc = rust.session.doc.as_ref()?;
         let session = rust.transform_session.as_ref()?;
         let warp = session.warp.as_ref()?;
         let mut clone = doc.clone();

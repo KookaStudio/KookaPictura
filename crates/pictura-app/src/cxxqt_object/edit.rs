@@ -81,13 +81,11 @@ impl PictureViewRust {
         if matches!(edit, Edit::Structural) {
             self.link_sets.clear();
         }
-        if let Some(doc) = self.doc.as_mut() {
-            self.history
-                .capture_live(doc, &self.selection, &self.layer_target, label);
-            self.dirty = true;
-            if bump_revision {
-                self.content_revision = self.content_revision.wrapping_add(1);
-            }
+        let target = self.layer_target.clone();
+        if bump_revision {
+            self.session.record(&target, label);
+        } else {
+            self.session.record_move(&target, label);
         }
         Applied { edit, blit }
     }
@@ -105,7 +103,7 @@ impl PictureViewRust {
             }
             Edit::None | Edit::Meta | Edit::Record => None,
         };
-        self.content_revision = self.content_revision.wrapping_add(1);
+        self.session.content_revision = self.session.content_revision.wrapping_add(1);
         blit
     }
 }
@@ -119,7 +117,7 @@ impl qobject::PictureView {
     ) -> Edit {
         let edit = {
             let mut rust = self.as_mut().rust_mut();
-            if rust.doc.is_none() {
+            if rust.session.doc.is_none() {
                 return Edit::None;
             }
             f(&mut rust)
@@ -147,7 +145,7 @@ impl qobject::PictureView {
     ) -> Edit {
         let edit = {
             let mut rust = self.as_mut().rust_mut();
-            if rust.doc.is_none() {
+            if rust.session.doc.is_none() {
                 return Edit::None;
             }
             f(&mut rust)
@@ -174,7 +172,7 @@ impl qobject::PictureView {
     ) -> Edit {
         let edit = {
             let mut rust = self.as_mut().rust_mut();
-            if rust.doc.is_none() {
+            if rust.session.doc.is_none() {
                 return Edit::None;
             }
             f(&mut rust)
@@ -215,7 +213,7 @@ mod tests {
 
     fn view(doc: Document) -> PictureViewRust {
         PictureViewRust {
-            doc: Some(doc),
+            session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
             ..Default::default()
         }
     }
@@ -226,10 +224,10 @@ mod tests {
         let applied = view.apply_edit("Edit", Edit::Full);
         assert_eq!(applied.edit, Edit::Full);
         assert!(applied.blit.is_none());
-        assert_eq!(view.history.count(), 1);
-        assert!(view.dirty);
-        assert_eq!(view.content_revision, 1);
-        let doc = view.doc.as_ref().expect("document");
+        assert_eq!(view.session.history.count(), 1);
+        assert!(view.session.dirty);
+        assert_eq!(view.session.content_revision, 1);
+        let doc = view.session.doc.as_ref().expect("document");
         assert_eq!(doc.composite, pictura_render::composite_rgba(doc));
     }
 
@@ -245,13 +243,22 @@ mod tests {
     #[test]
     fn an_unchanged_edit_records_nothing() {
         let mut view = view(doc_with_layer());
-        let before = view.doc.as_ref().expect("document").composite.clone();
+        let before = view
+            .session
+            .doc
+            .as_ref()
+            .expect("document")
+            .composite
+            .clone();
         let applied = view.apply_edit("Edit", Edit::None);
         assert_eq!(applied.edit, Edit::None);
-        assert_eq!(view.history.count(), 0);
-        assert!(!view.dirty);
-        assert_eq!(view.content_revision, 0);
-        assert_eq!(view.doc.as_ref().expect("document").composite, before);
+        assert_eq!(view.session.history.count(), 0);
+        assert!(!view.session.dirty);
+        assert_eq!(view.session.content_revision, 0);
+        assert_eq!(
+            view.session.doc.as_ref().expect("document").composite,
+            before
+        );
     }
 
     #[test]
@@ -297,11 +304,20 @@ mod tests {
     #[test]
     fn a_metadata_outcome_notifies_without_compositing() {
         let mut view = view(doc_with_layer());
-        let before = view.doc.as_ref().expect("document").composite.clone();
+        let before = view
+            .session
+            .doc
+            .as_ref()
+            .expect("document")
+            .composite
+            .clone();
         let applied = view.apply_edit("Edit", Edit::Meta);
         assert_eq!(effect_of(&applied.edit), Effect::Notify);
-        assert_eq!(view.history.count(), 1);
-        assert_eq!(view.doc.as_ref().expect("document").composite, before);
+        assert_eq!(view.session.history.count(), 1);
+        assert_eq!(
+            view.session.doc.as_ref().expect("document").composite,
+            before
+        );
     }
 
     #[test]
@@ -309,7 +325,7 @@ mod tests {
         let mut view = view(doc_with_layer());
         let applied = view.apply_edit("Edit", Edit::Record);
         assert_eq!(effect_of(&applied.edit), Effect::Nothing);
-        assert_eq!(view.history.count(), 1);
+        assert_eq!(view.session.history.count(), 1);
     }
 
     #[test]
@@ -319,7 +335,7 @@ mod tests {
         let applied = view.apply_edit("Edit", Edit::Structural);
         assert_eq!(effect_of(&applied.edit), Effect::Rebuild);
         assert!(view.link_sets.is_empty());
-        let doc = view.doc.as_ref().expect("document");
+        let doc = view.session.doc.as_ref().expect("document");
         assert_eq!(doc.composite, pictura_render::composite_rgba(doc));
     }
 
@@ -336,9 +352,9 @@ mod tests {
         let mut view = view(doc_with_layer());
         let applied = view.apply_edit("Edit", Edit::Full);
         assert_eq!(effect_of(&applied.edit), Effect::Rebuild);
-        let doc = view.doc.as_ref().expect("document");
+        let doc = view.session.doc.as_ref().expect("document");
         assert_eq!(doc.composite, pictura_render::composite_rgba(doc));
-        let restored = view.history.jump(0).expect("captured state");
+        let restored = view.session.history.jump(0).expect("captured state");
         assert_eq!(
             restored.doc.composite, doc.composite,
             "history must carry the refreshed composite"
@@ -349,12 +365,12 @@ mod tests {
     fn a_geometry_commit_composites_after_the_engine_op() {
         let mut view = view(doc_with_layer());
         {
-            let doc = view.doc.as_mut().expect("document");
+            let doc = view.session.doc.as_mut().expect("document");
             pictura_render::resize_document(doc, 8, 8, pictura_render::Resample::Nearest)
                 .expect("resize");
         }
         view.apply_edit("Image Size", Edit::Full);
-        let doc = view.doc.as_ref().expect("document");
+        let doc = view.session.doc.as_ref().expect("document");
         assert_eq!(doc.composite, pictura_render::composite_rgba(doc));
     }
 
@@ -362,10 +378,10 @@ mod tests {
     fn a_preview_records_nothing_and_its_commit_records_one() {
         let mut view = view(doc_with_layer());
         view.preview_edit(&Edit::Full);
-        assert_eq!(view.history.count(), 0);
-        assert_eq!(view.content_revision, 1);
+        assert_eq!(view.session.history.count(), 0);
+        assert_eq!(view.session.content_revision, 1);
         view.apply_edit("Edit", Edit::Meta);
-        assert_eq!(view.history.count(), 1);
+        assert_eq!(view.session.history.count(), 1);
     }
 
     #[test]
@@ -373,7 +389,7 @@ mod tests {
         let mut view = view(doc_with_layer());
         let applied = view.apply_edit_move("Move", Edit::Full);
         assert_eq!(effect_of(&applied.edit), Effect::Rebuild);
-        assert_eq!(view.history.count(), 1);
-        assert_eq!(view.content_revision, 0);
+        assert_eq!(view.session.history.count(), 1);
+        assert_eq!(view.session.content_revision, 0);
     }
 }

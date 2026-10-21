@@ -122,9 +122,9 @@ impl Source<'_> {
     fn coverage(&self, view: &PictureView) -> Option<Selection> {
         let rust = view.rust();
         match self {
-            Source::Selection => rust.selection.clone(),
+            Source::Selection => rust.session.selection.clone(),
             Source::Mask(path) => {
-                let doc = rust.doc.as_ref()?;
+                let doc = rust.session.doc.as_ref()?;
                 let mask = pictura_render::resolve_path(doc, path)?.mask.as_ref()?;
                 let (w, h) = (doc.width, doc.height);
                 Some(sample_mask(mask, w, h, w, h))
@@ -137,9 +137,9 @@ impl Source<'_> {
     fn preview_coverage(&self, view: &PictureView, w: u32, h: u32) -> Option<Selection> {
         let rust = view.rust();
         match self {
-            Source::Selection => Some(shrink_selection(rust.selection.as_ref()?, w, h)),
+            Source::Selection => Some(shrink_selection(rust.session.selection.as_ref()?, w, h)),
             Source::Mask(path) => {
-                let doc = rust.doc.as_ref()?;
+                let doc = rust.session.doc.as_ref()?;
                 let mask = pictura_render::resolve_path(doc, path)?.mask.as_ref()?;
                 Some(sample_mask(mask, doc.width, doc.height, w, h))
             }
@@ -209,8 +209,9 @@ fn params(
 
 fn refine_edge_available(view: &PictureView) -> bool {
     let rust = view.rust();
-    rust.doc.is_some()
+    rust.session.doc.is_some()
         && rust
+            .session
             .selection
             .as_ref()
             .is_some_and(|s| s.data.iter().any(|&v| v > 0))
@@ -310,6 +311,7 @@ fn refine_edge_preview(
 
 fn refine_mask_available(view: &PictureView, path: &QString) -> bool {
     view.rust()
+        .session
         .doc
         .as_ref()
         .is_some_and(|doc| pictura_render::has_layer_mask(doc, &path.to_string()))
@@ -347,7 +349,7 @@ fn preview(
     height: &mut i32,
 ) -> Vec<u8> {
     let rust = view.rust();
-    let Some(doc) = rust.doc.as_ref() else {
+    let Some(doc) = rust.session.doc.as_ref() else {
         return Vec::new();
     };
     let image = shrink(
@@ -491,7 +493,7 @@ fn apply(
     // pixels) against the composite before mutating anything.
     let prepared = {
         let rust = view.rust();
-        let Some(doc) = rust.doc.as_ref() else {
+        let Some(doc) = rust.session.doc.as_ref() else {
             return false;
         };
         let image = current_buffer(doc, rust.gpu_compute);
@@ -514,6 +516,7 @@ fn apply(
     let layer = source.layer(&view);
     let source_is_pixel = view
         .rust()
+        .session
         .doc
         .as_ref()
         .is_some_and(|doc| active_pixel_layer(doc, layer.as_deref()).is_some());
@@ -521,7 +524,7 @@ fn apply(
 
     let applied = {
         let mut rust = view.as_mut().rust_mut();
-        let Some(doc) = rust.doc.as_mut() else {
+        let Some(doc) = rust.session.doc.as_mut() else {
             return false;
         };
         match target {
@@ -573,7 +576,7 @@ fn apply(
     {
         let mut rust = view.as_mut().rust_mut();
         if target == OutputTarget::Selection {
-            rust.selection = Some(refined);
+            rust.session.selection = Some(refined);
         }
         if let Some(path) = new_layer_path {
             rust.select_only_layer(&path);

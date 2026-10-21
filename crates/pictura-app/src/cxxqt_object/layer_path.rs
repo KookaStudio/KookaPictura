@@ -31,7 +31,7 @@ pub mod ffi {
 }
 
 fn layer_kind_path(view: &PictureView, path: &QString) -> QString {
-    let Some(doc) = view.rust().doc.as_ref() else {
+    let Some(doc) = view.rust().session.doc.as_ref() else {
         return QString::default();
     };
     let path = path.to_string();
@@ -42,7 +42,7 @@ fn layer_kind_path(view: &PictureView, path: &QString) -> QString {
 }
 
 fn layer_lock_path(view: &PictureView, path: &QString) -> i32 {
-    let Some(doc) = view.rust().doc.as_ref() else {
+    let Some(doc) = view.rust().session.doc.as_ref() else {
         return 0;
     };
     pictura_render::resolve_path(doc, &path.to_string()).map_or(0, |layer| layer.lock.bits() as i32)

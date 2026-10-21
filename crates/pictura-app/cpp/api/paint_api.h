@@ -34,6 +34,9 @@ public:
     bool present();
     bool finish();
     void cancel();
+    /// Close the stroke without calling back into the view (the view already
+    /// cancelled the Rust stroke). The destructor then does nothing.
+    void abandon();
 
 private:
     PictureView* view_ = nullptr;

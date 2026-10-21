@@ -48,7 +48,7 @@ fn any(
     paths: &QStringList,
     test: fn(&pictura_core::Document, &str) -> bool,
 ) -> bool {
-    let Some(doc) = view.rust().doc.as_ref() else {
+    let Some(doc) = view.rust().session.doc.as_ref() else {
         return false;
     };
     list_of_strings(paths).iter().any(|p| test(doc, p))
@@ -82,6 +82,7 @@ fn clipping_toggle(view: Pin<&mut PictureView>, path: &QString) -> bool {
     let path = path.to_string();
     let clipped = view
         .rust()
+        .session
         .doc
         .as_ref()
         .and_then(|doc| pictura_render::resolve_path(doc, &path))

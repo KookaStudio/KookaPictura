@@ -39,7 +39,7 @@ pub mod ffi {
 
 fn recovery_write(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
     recovery_wait(view.as_mut());
-    let Some(doc) = view.rust().doc.clone() else {
+    let Some(doc) = view.rust().session.doc.clone() else {
         return false;
     };
     let path = path.to_string();
@@ -61,7 +61,7 @@ fn recovery_open(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
     }
     let mut rust = view.rust_mut();
     rust.path = None;
-    rust.dirty = true;
+    rust.session.dirty = true;
     true
 }
 

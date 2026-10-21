@@ -101,7 +101,7 @@ impl PictureViewRust {
     pub(crate) fn rebuild_mask_solo_source(&mut self) {
         let path = self.mask_solo.clone();
         let built = path.and_then(|path| {
-            let doc = self.doc.as_ref()?;
+            let doc = self.session.doc.as_ref()?;
             let mask = pictura_render::resolve_path(doc, &path)?.mask.as_ref()?;
             Some(mask_display_plane(mask, doc.width, doc.height))
         });
@@ -138,7 +138,7 @@ impl PictureViewRust {
             self.rebuild_mask_solo_source();
             return;
         }
-        let region = self.doc.as_ref().and_then(|doc| {
+        let region = self.session.doc.as_ref().and_then(|doc| {
             let path = self.mask_solo.as_ref()?;
             let mask = pictura_render::resolve_path(doc, path)?.mask.as_ref()?;
             Some(mask_region_plane(mask, clipped))
@@ -160,7 +160,7 @@ impl PictureViewRust {
     /// document or an active layer carrying a raster mask. A disabled mask still
     /// shows its stored coverage (see [`mask_sample`]).
     pub(crate) fn mask_channel_thumbnail(&self, max_side: u32) -> Option<(Vec<u8>, u32, u32)> {
-        let doc = self.doc.as_ref()?;
+        let doc = self.session.doc.as_ref()?;
         let path = self.layer_target.anchor()?;
         let mask = pictura_render::resolve_path(doc, path)?.mask.as_ref()?;
         let (width, height) = (doc.width, doc.height);

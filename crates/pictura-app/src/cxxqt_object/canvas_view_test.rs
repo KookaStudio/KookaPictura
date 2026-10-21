@@ -118,7 +118,7 @@ fn level0_region_update_matches_a_rebuild() {
     let mut doc = Document::new(600, 400, ColorMode::Rgb, BitDepth::Eight);
     doc.composite = varied_rgba(600, 400, 0);
     let mut rust = PictureViewRust {
-        doc: Some(doc.clone()),
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc.clone()),
         ..Default::default()
     };
     rust.reset_pyramid();
@@ -140,7 +140,7 @@ fn level0_region_update_matches_a_rebuild() {
     };
     let changed = varied_rgba(600, 400, 77);
     blit_region(&mut doc.composite, &changed, rect);
-    rust.doc = Some(doc.clone());
+    rust.session.doc = Some(doc.clone());
     rust.refresh_level0_region(crop_buffer(&changed, rect), rect.left, rect.top);
     rust.update_pyramid(rect);
 
@@ -163,7 +163,7 @@ fn level0_carries_the_document_profile_conversion() {
     );
 
     let mut rust = PictureViewRust {
-        doc: Some(doc),
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
         ..Default::default()
     };
     rust.reset_pyramid();
@@ -179,7 +179,7 @@ fn region_refresh_reuses_the_level0_frame_when_it_matches() {
     let mut doc = Document::new(400, 300, ColorMode::Rgb, BitDepth::Eight);
     doc.composite = varied_rgba(400, 300, 0);
     let mut rust = PictureViewRust {
-        doc: Some(doc.clone()),
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc.clone()),
         ..Default::default()
     };
     rust.reset_pyramid();
@@ -198,7 +198,7 @@ fn region_refresh_reuses_the_level0_frame_when_it_matches() {
     };
     let changed = varied_rgba(400, 300, 9);
     blit_region(&mut doc.composite, &changed, rect);
-    rust.doc = Some(doc.clone());
+    rust.session.doc = Some(doc.clone());
     rust.refresh_level0_region(crop_buffer(&changed, rect), rect.left, rect.top);
 
     let level0 = rust.level0.as_ref().expect("sRGB level-0 frame");
@@ -215,7 +215,7 @@ fn image_after_region_refresh_matches_a_full_recomposite() {
     let mut doc = Document::new(64, 48, ColorMode::Rgb, BitDepth::Eight);
     doc.composite = varied_rgba(64, 48, 1);
     let mut rust = PictureViewRust {
-        doc: Some(doc.clone()),
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc.clone()),
         ..Default::default()
     };
     rust.reset_pyramid();
@@ -231,7 +231,7 @@ fn image_after_region_refresh_matches_a_full_recomposite() {
     };
     let changed = varied_rgba(64, 48, 21);
     blit_region(&mut doc.composite, &changed, rect);
-    rust.doc = Some(doc.clone());
+    rust.session.doc = Some(doc.clone());
     rust.refresh_level0_region(crop_buffer(&changed, rect), rect.left, rect.top);
     rust.damage.mark(rect);
     rust.update_pyramid(rect);
@@ -246,7 +246,8 @@ fn image_after_region_refresh_matches_a_full_recomposite() {
         "damage survives for image()"
     );
 
-    let rebuilt = rebuild_display(&rust.doc, rust.stroke.as_ref(), false).expect("document");
+    let rebuilt =
+        rebuild_display(&rust.session.doc, rust.stroke.as_ref(), false).expect("document");
     let full = premultiplied_display_image(&level0_buffer(&doc));
     assert_eq!(rebuilt, full, "image() equals a full recomposite");
 }
@@ -260,7 +261,7 @@ fn histogram_source_level_is_bounded_and_size_independent() {
         let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
         doc.composite = varied_rgba(w, h, 3);
         let mut rust = PictureViewRust {
-            doc: Some(doc),
+            session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
             ..Default::default()
         };
         rust.reset_pyramid();
@@ -307,7 +308,7 @@ fn mid_stroke_pyramid_matches_a_full_recomposite_of_the_working_document() {
     let rect = stroke.take_dirty().expect("a dab dirties a region");
 
     let mut rust = PictureViewRust {
-        doc: Some(doc),
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
         stroke: Some(stroke),
         ..Default::default()
     };
@@ -315,7 +316,7 @@ fn mid_stroke_pyramid_matches_a_full_recomposite_of_the_working_document() {
     // composited layers, not its stale cached `composite`.
     rust.reset_pyramid();
     {
-        let working = rust.doc.as_ref().unwrap();
+        let working = rust.session.doc.as_ref().unwrap();
         let reference_level0 = level0_composited(working, false);
         let reference = ViewPyramid::rebuild(planes_of(&reference_level0).unwrap());
         assert_pyramids_equal(&rust.pyramid, &reference, &reference_level0);
@@ -323,12 +324,12 @@ fn mid_stroke_pyramid_matches_a_full_recomposite_of_the_working_document() {
 
     // A mid-stroke region refresh keeps the pyramid equal to a full rebuild, so
     // the present path can crop it instead of resampling the full image.
-    let working = rust.doc.as_ref().unwrap();
+    let working = rust.session.doc.as_ref().unwrap();
     let region = pictura_render::composite_region_active(working, rect, false).0;
     let level0 = level0_from_buffer(working, &region);
     rust.refresh_level0_region(level0, rect.left, rect.top);
     rust.update_pyramid(rect);
-    let working = rust.doc.as_ref().unwrap();
+    let working = rust.session.doc.as_ref().unwrap();
     let reference_level0 = level0_composited(working, false);
     let reference = ViewPyramid::rebuild(planes_of(&reference_level0).unwrap());
     assert_pyramids_equal(&rust.pyramid, &reference, &reference_level0);
@@ -381,7 +382,7 @@ fn a_single_region_commit_blit_equals_the_level0_crop() {
     let mut doc = Document::from_rgba("paint", 200, 160, &rgba);
     doc.composite = varied_rgba(200, 160, 9);
     let mut rust = PictureViewRust {
-        doc: Some(doc),
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
         ..Default::default()
     };
     rust.reset_pyramid();
@@ -588,7 +589,7 @@ fn a_level0_crop_outside_the_level_is_null_and_a_partial_one_is_not() {
     let mut doc = Document::new(100, 100, ColorMode::Rgb, BitDepth::Eight);
     doc.composite = varied_rgba(100, 100, 2);
     let mut rust = PictureViewRust {
-        doc: Some(doc),
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
         ..Default::default()
     };
     rust.reset_pyramid();
@@ -619,7 +620,7 @@ fn reset_pyramid_rebuilds_and_clears_damage() {
     let mut doc = Document::new(600, 400, ColorMode::Rgb, BitDepth::Eight);
     doc.composite = first.clone();
     let mut rust = PictureViewRust {
-        doc: Some(doc),
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
         ..Default::default()
     };
     rust.reset_pyramid();
@@ -639,7 +640,7 @@ fn reset_pyramid_rebuilds_and_clears_damage() {
     let second = varied_rgba(600, 400, 31);
     let mut restored = Document::new(600, 400, ColorMode::Rgb, BitDepth::Eight);
     restored.composite = second.clone();
-    rust.doc = Some(restored);
+    rust.session.doc = Some(restored);
     rust.reset_pyramid();
     assert_eq!(rust.damage, CanvasDamage::default(), "reset clears damage");
     assert_pyramids_equal(
@@ -654,7 +655,7 @@ fn display_accessors_report_levels_and_damage() {
     let mut doc = Document::new(1500, 700, ColorMode::Rgb, BitDepth::Eight);
     doc.composite = varied_rgba(1500, 700, 5);
     let mut rust = PictureViewRust {
-        doc: Some(doc),
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
         ..Default::default()
     };
     rust.reset_pyramid();
@@ -812,7 +813,7 @@ fn reset_pyramid_drops_a_live_preview() {
     let mut doc = Document::new(600, 600, ColorMode::Rgb, BitDepth::Eight);
     doc.composite = varied_rgba(600, 600, 1);
     let mut rust = PictureViewRust {
-        doc: Some(doc),
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
         ..Default::default()
     };
     rust.reset_pyramid();

@@ -46,13 +46,17 @@ pub mod ffi {
 }
 
 fn guides(view: &PictureView) -> &[Guide] {
-    view.rust().doc.as_ref().map_or(&[], |doc| &doc.guides)
+    view.rust()
+        .session
+        .doc
+        .as_ref()
+        .map_or(&[], |doc| &doc.guides)
 }
 
 /// Apply `edit` to the document's guides; `None` without a document.
 fn edit<T>(view: Pin<&mut PictureView>, edit: impl FnOnce(&mut Vec<Guide>) -> T) -> Option<T> {
     let mut rust = view.rust_mut();
-    rust.doc.as_mut().map(|doc| edit(&mut doc.guides))
+    rust.session.doc.as_mut().map(|doc| edit(&mut doc.guides))
 }
 
 fn commit(mut view: Pin<&mut PictureView>, label: &str) {

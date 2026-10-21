@@ -142,9 +142,12 @@ fn layer_mask_add_path(mut view: Pin<&mut PictureView>, path: &QString, kind: &Q
     let path = path.to_string();
     let selection = {
         let rust = view.rust();
-        rust.doc
-            .as_ref()
-            .and_then(|doc| rust.selection.as_ref().map(|s| selection_to_mask(s, doc)))
+        rust.session.doc.as_ref().and_then(|doc| {
+            rust.session
+                .selection
+                .as_ref()
+                .map(|s| selection_to_mask(s, doc))
+        })
     };
     let changed = view
         .as_mut()
@@ -269,6 +272,7 @@ fn layer_mask_set_linked_path(view: Pin<&mut PictureView>, path: &QString, linke
 fn layer_mask_present(view: &PictureView) -> bool {
     active_path(view).is_some_and(|path| {
         view.rust()
+            .session
             .doc
             .as_ref()
             .is_some_and(|doc| pictura_render::has_layer_mask(doc, &path))
@@ -277,6 +281,7 @@ fn layer_mask_present(view: &PictureView) -> bool {
 
 fn layer_mask_present_path(view: &PictureView, path: &QString) -> bool {
     view.rust()
+        .session
         .doc
         .as_ref()
         .is_some_and(|doc| pictura_render::has_layer_mask(doc, &path.to_string()))
@@ -284,6 +289,7 @@ fn layer_mask_present_path(view: &PictureView, path: &QString) -> bool {
 
 fn layer_mask_disabled_path(view: &PictureView, path: &QString) -> bool {
     view.rust()
+        .session
         .doc
         .as_ref()
         .is_some_and(|doc| pictura_render::layer_mask_disabled(doc, &path.to_string()))
@@ -297,6 +303,7 @@ fn mask_edit_target_set(mut view: Pin<&mut PictureView>, path: &QString) -> bool
     }
     let resolves = view
         .rust()
+        .session
         .doc
         .as_ref()
         .is_some_and(|doc| pictura_render::has_layer_mask(doc, &path));
@@ -313,6 +320,7 @@ fn mask_edit_target_get(mut view: Pin<&mut PictureView>) -> QString {
     };
     let resolves = view
         .rust()
+        .session
         .doc
         .as_ref()
         .is_some_and(|doc| pictura_render::has_layer_mask(doc, &path));
@@ -331,6 +339,7 @@ fn mask_solo_set(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
     if !path.is_empty() {
         let resolves = view
             .rust()
+            .session
             .doc
             .as_ref()
             .is_some_and(|doc| pictura_render::has_layer_mask(doc, &path));
@@ -355,6 +364,7 @@ fn mask_solo_get(mut view: Pin<&mut PictureView>) -> QString {
     };
     let resolves = view
         .rust()
+        .session
         .doc
         .as_ref()
         .is_some_and(|doc| pictura_render::has_layer_mask(doc, &path));
@@ -370,6 +380,7 @@ fn mask_solo_get(mut view: Pin<&mut PictureView>) -> QString {
 fn layer_mask_linked(view: &PictureView) -> bool {
     active_path(view).is_some_and(|path| {
         view.rust()
+            .session
             .doc
             .as_ref()
             .is_some_and(|doc| pictura_render::layer_mask_linked(doc, &path))

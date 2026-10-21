@@ -166,6 +166,7 @@ fn transform_session_rect(view: &PictureView) -> QString {
 
 fn layer_rect_extents(view: &PictureView, path: &QString) -> Vec<i32> {
     view.rust()
+        .session
         .doc
         .as_ref()
         .and_then(|doc| pictura_render::resolve_path(doc, &path.to_string()))
@@ -182,6 +183,7 @@ fn layer_can_transform_mode(view: &PictureView, path: &QString, mode: &QString) 
 
 fn layer_content_bounds_extents(view: &PictureView, path: &QString) -> Vec<i32> {
     view.rust()
+        .session
         .doc
         .as_ref()
         .and_then(|doc| pictura_render::layer_content_bounds(doc, &path.to_string()))
@@ -192,6 +194,7 @@ fn layer_content_bounds_extents(view: &PictureView, path: &QString) -> Vec<i32> 
 
 fn controls_box_extents(view: &PictureView, path: &QString) -> Vec<i32> {
     view.rust()
+        .session
         .doc
         .as_ref()
         .and_then(|doc| pictura_render::content_rect(doc, &path.to_string()))

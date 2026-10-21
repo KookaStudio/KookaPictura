@@ -89,7 +89,7 @@ pub fn export_image(
     let path = path.to_string();
     let format = format.to_string();
     let rust = view.rust();
-    let Some(doc) = rust.doc.as_ref() else {
+    let Some(doc) = rust.session.doc.as_ref() else {
         return false;
     };
     let buffer = current_buffer(doc, rust.gpu_compute);

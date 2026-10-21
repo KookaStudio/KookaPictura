@@ -50,6 +50,7 @@ pub mod ffi {
 
 fn color_range_available(view: &PictureView) -> bool {
     view.rust()
+        .session
         .doc
         .as_ref()
         .is_some_and(|doc| doc.source_depth.unwrap_or(doc.depth) != BitDepth::ThirtyTwo)
@@ -110,7 +111,7 @@ fn color_range_preview(
         return Vec::new();
     };
     let rust = view.rust();
-    let Some(doc) = rust.doc.as_ref() else {
+    let Some(doc) = rust.session.doc.as_ref() else {
         return Vec::new();
     };
     let buffer = shrink(
@@ -144,7 +145,7 @@ fn color_range_apply(
     };
     let (shape, refine) = {
         let rust = view.rust();
-        let Some(doc) = rust.doc.as_ref() else {
+        let Some(doc) = rust.session.doc.as_ref() else {
             return false;
         };
         let buffer = current_buffer(doc, rust.gpu_compute);
@@ -155,7 +156,7 @@ fn color_range_apply(
             fuzziness.max(0) as u32,
             invert,
         );
-        (shape, rust.selection.is_some())
+        (shape, rust.session.selection.is_some())
     };
     // Run on a live selection, Color Range narrows it to a subset (CS6).
     let mode = if refine {

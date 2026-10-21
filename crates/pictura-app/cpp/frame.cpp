@@ -451,6 +451,11 @@ void PicturaMainWindow::wireCanvas(DocEntry& entry)
 {
     PictureView* view = entry.view;
     connect(view, &PictureView::changed, this, &PicturaMainWindow::refresh);
+    connect(view, &PictureView::sessionCancelled, this, [this]() {
+        if (tools_) {
+            tools_->onSessionCancelled();
+        }
+    });
     trackRecovery(view);
     connect(view, &PictureView::regionBlitted, this,
             [this, canvas = entry.canvas, view](const QImage& region, int x, int y) {

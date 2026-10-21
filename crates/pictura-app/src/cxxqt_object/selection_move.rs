@@ -13,7 +13,10 @@ use super::state::PictureViewRust;
 impl PictureViewRust {
     /// Capture the current selection as the drag origin. False without one.
     pub(super) fn begin_selection_move(&mut self) -> bool {
-        let Some(origin) = self.selection.clone() else {
+        if !self.slot_allows(super::document_session::SessionKind::SelectionMove) {
+            return false;
+        }
+        let Some(origin) = self.session.selection.clone() else {
             return false;
         };
         self.selection_move_origin = Some(origin);
@@ -40,7 +43,7 @@ impl PictureViewRust {
         if delta == (0, 0) {
             return false;
         }
-        self.selection = Some(origin.translate(delta.0, delta.1));
+        self.session.selection = Some(origin.translate(delta.0, delta.1));
         true
     }
 
@@ -54,7 +57,7 @@ impl PictureViewRust {
     /// translated by the drag offset and clipped to the canvas, or a row scan
     /// when no drag is active.
     pub(super) fn selection_bounds(&self) -> Option<PsdRect> {
-        let sel = self.selection.as_ref()?;
+        let sel = self.session.selection.as_ref()?;
         let bounds = sel.bounds()?;
         let Some((dx, dy)) = self.selection_move_delta else {
             return Some(bounds);
@@ -71,7 +74,7 @@ impl PictureViewRust {
 
     /// Selection coverage at a document pixel, read through the drag offset.
     pub(super) fn selection_coverage_at(&self, x: i32, y: i32) -> u8 {
-        let Some(sel) = self.selection.as_ref() else {
+        let Some(sel) = self.session.selection.as_ref() else {
             return 0;
         };
         let (dx, dy) = self.selection_move_delta.unwrap_or((0, 0));
@@ -98,10 +101,9 @@ mod tests {
     }
 
     fn view(selection: Selection) -> PictureViewRust {
-        PictureViewRust {
-            selection: Some(selection),
-            ..Default::default()
-        }
+        let mut view = PictureViewRust::default();
+        view.session.selection = Some(selection);
+        view
     }
 
     #[test]
@@ -110,7 +112,7 @@ mod tests {
         let mut rust = view(origin.clone());
         assert!(rust.begin_selection_move());
         assert!(rust.preview_selection_move(3, 4));
-        assert_eq!(rust.selection.as_ref(), Some(&origin));
+        assert_eq!(rust.session.selection.as_ref(), Some(&origin));
         assert_eq!(rust.selection_move_delta, Some((3, 4)));
     }
 
@@ -132,7 +134,10 @@ mod tests {
         assert!(rust.begin_selection_move());
         assert!(rust.preview_selection_move(3, 4));
         assert!(rust.commit_selection_move());
-        assert_eq!(rust.selection.as_ref(), Some(&origin.translate(3, 4)));
+        assert_eq!(
+            rust.session.selection.as_ref(),
+            Some(&origin.translate(3, 4))
+        );
         assert!(rust.selection_move_origin.is_none());
         assert!(rust.selection_move_delta.is_none());
     }
@@ -143,7 +148,7 @@ mod tests {
         let mut rust = view(origin.clone());
         assert!(rust.begin_selection_move());
         assert!(!rust.commit_selection_move());
-        assert_eq!(rust.selection.as_ref(), Some(&origin));
+        assert_eq!(rust.session.selection.as_ref(), Some(&origin));
         assert!(rust.selection_move_delta.is_none());
     }
 
@@ -154,7 +159,7 @@ mod tests {
         assert!(rust.begin_selection_move());
         assert!(rust.preview_selection_move(-6, 9));
         assert!(rust.cancel_selection_move());
-        assert_eq!(rust.selection.as_ref(), Some(&origin));
+        assert_eq!(rust.session.selection.as_ref(), Some(&origin));
         assert!(rust.selection_move_delta.is_none());
         assert_eq!(rust.selection_coverage_at(5, 5), 255);
     }
@@ -177,7 +182,8 @@ mod tests {
         );
         assert_eq!(
             moved,
-            rust.selection
+            rust.session
+                .selection
                 .as_ref()
                 .expect("plane")
                 .translate(7, -2)

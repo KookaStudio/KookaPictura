@@ -64,12 +64,13 @@ enum MattingOp {
 fn apply_matte(rust: &mut PictureViewRust, op: MattingOp) -> Option<Result<(), MattingError>> {
     let active = rust.layer_target.single().map(str::to_string);
     let mask = {
-        let doc = rust.doc.as_ref()?;
-        rust.selection
+        let doc = rust.session.doc.as_ref()?;
+        rust.session
+            .selection
             .as_ref()
             .map(|selection| selection_to_mask(selection, doc))
     };
-    let doc = rust.doc.as_mut()?;
+    let doc = rust.session.doc.as_mut()?;
     if !active_layer_visible(doc, active.as_deref()) {
         return None;
     }
@@ -118,7 +119,7 @@ fn layer_defringe(view: Pin<&mut PictureView>, width: i32) -> bool {
 
 fn matting_target_ready(view: &PictureView) -> bool {
     let rust = view.rust();
-    let Some(doc) = rust.doc.as_ref() else {
+    let Some(doc) = rust.session.doc.as_ref() else {
         return false;
     };
     let active = rust.layer_target.single();
@@ -183,14 +184,14 @@ mod tests {
         let mut doc = pictura_core::Document::new(4, 1, ColorMode::Rgb, BitDepth::Eight);
         doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         PictureViewRust {
-            doc: Some(doc),
+            session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
             layer_target: LayerTarget::only("0"),
             ..Default::default()
         }
     }
 
     fn red(rust: &PictureViewRust) -> Vec<u8> {
-        rust.doc.as_ref().unwrap().layers[0]
+        rust.session.doc.as_ref().unwrap().layers[0]
             .channels
             .iter()
             .find(|c| c.id == 0)
@@ -209,7 +210,7 @@ mod tests {
         assert!(red(&rust).iter().all(|&v| v > 100), "un-matted");
 
         let mut locked = state(pixel_layer(4, 1, [100, 100, 100], vec![128; 4]));
-        locked.doc.as_mut().unwrap().layers[0].lock =
+        locked.session.doc.as_mut().unwrap().layers[0].lock =
             LockFlags::default().with(LockFlags::PIXELS, true);
         let before = red(&locked);
         assert!(matches!(
@@ -223,7 +224,7 @@ mod tests {
     fn defringe_replaces_the_edge_over_a_semi_transparent_row() {
         // Transparent, semi, semi, transparent; interior colour is index 1.
         let mut rust = state(pixel_layer(4, 1, [10, 10, 10], vec![0, 255, 255, 0]));
-        for c in rust.doc.as_mut().unwrap().layers[0]
+        for c in rust.session.doc.as_mut().unwrap().layers[0]
             .channels
             .iter_mut()
             .filter(|c| c.id == 0)

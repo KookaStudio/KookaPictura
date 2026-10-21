@@ -41,7 +41,8 @@ pub mod ffi {
 
 fn auto_select_layer(view: &PictureView, x: i32, y: i32, group: bool) -> QString {
     let rust = view.rust();
-    rust.doc
+    rust.session
+        .doc
         .as_ref()
         .and_then(|doc| auto_select_path(doc, x, y, group, rust.isolation.as_deref()))
         .map(QString::from)
@@ -50,7 +51,8 @@ fn auto_select_layer(view: &PictureView, x: i32, y: i32, group: bool) -> QString
 
 fn layers_under_layer(view: &PictureView, x: i32, y: i32) -> QStringList {
     let rust = view.rust();
-    rust.doc
+    rust.session
+        .doc
         .as_ref()
         .map(|doc| {
             layers_under_point(doc, x, y, rust.isolation.as_deref())
@@ -63,7 +65,8 @@ fn layers_under_layer(view: &PictureView, x: i32, y: i32) -> QStringList {
 
 fn layer_name_for_path(view: &PictureView, path: &QString) -> QString {
     let rust = view.rust();
-    rust.doc
+    rust.session
+        .doc
         .as_ref()
         .and_then(|doc| pictura_render::resolve_path(doc, &path.to_string()))
         .map(|layer| QString::from(layer.name.as_str()))

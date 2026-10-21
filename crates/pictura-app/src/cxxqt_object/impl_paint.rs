@@ -1,3 +1,4 @@
+use super::document_session::SessionKind;
 use super::helpers::*;
 use super::helpers_composite::{patch_composite_region, planes_of, rgba_image};
 use super::qobject;
@@ -70,7 +71,7 @@ impl PictureViewRust {
         rect: PsdRect,
     ) -> Option<(i32, i32, PsdRect, PixelBuffer)> {
         let painting = self.mask_stroke.is_some();
-        let source: &Document = self.doc.as_ref()?;
+        let source: &Document = self.session.doc.as_ref()?;
         let (x0, y0, w, h) = clamp_region(rect, source.width, source.height)?;
         let gpu_compute = self.gpu_compute;
         let t = Instant::now();
@@ -83,7 +84,7 @@ impl PictureViewRust {
             return None;
         }
         if !painting {
-            if let Some(doc) = self.doc.as_mut() {
+            if let Some(doc) = self.session.doc.as_mut() {
                 let t = Instant::now();
                 patch_composite_region(doc, &buffer, x0, y0);
                 paint_timing::record("rr_patch_composite", t.elapsed());
@@ -105,7 +106,7 @@ impl PictureViewRust {
         if let Some(mut ctx) = self.mask_stroke.take() {
             let dirty = ctx.stroke.dirty();
             ctx.stroke.cancel(&mut ctx.document);
-            if let Some(doc) = self.doc.as_mut() {
+            if let Some(doc) = self.session.doc.as_mut() {
                 pictura_render::write_mask_back(doc, &ctx.path, &ctx.document, None);
             }
             return dirty.map(|rect| PsdRect {
@@ -117,8 +118,8 @@ impl PictureViewRust {
         }
         let stroke = self.stroke.take()?;
         let dirty = stroke.dirty();
-        match (self.stroke_base.take(), self.doc.as_mut()) {
-            (Some(base), _) => self.doc = Some(base),
+        match (self.stroke_base.take(), self.session.doc.as_mut()) {
+            (Some(base), _) => self.session.doc = Some(base),
             (None, Some(doc)) => {
                 stroke.cancel(doc);
                 // The stroke's presents patched the composite; put the
@@ -378,12 +379,6 @@ impl qobject::PictureView {
     ) -> bool {
         paint_timing::start("stroke (begin -> commit)");
         let _begin = paint_timing::Scope::new("begin_total");
-        {
-            let rust = self.rust();
-            if rust.doc.is_none() || rust.stroke.is_some() || rust.mask_stroke.is_some() {
-                return false;
-            }
-        }
         let cfg = StrokeConfig {
             color: rgba_from_argb(foreground),
             background: rgba_from_argb(background),
@@ -402,19 +397,36 @@ impl qobject::PictureView {
         // The exact stroke sanitizes internally; the preview and the level policy
         // must use the same clamped config so they rasterize the committed tip.
         .sanitized();
+        let label = if aliased { "Pencil" } else { "Brush" };
+        self.as_mut().rust_mut().begin_paint(cfg, label)
+    }
+}
+
+impl PictureViewRust {
+    /// Begin a brush stroke on the active layer, or on the active mask's
+    /// coverage when a mask is the edit target. False without a document, a
+    /// layer target, or when another session owns the slot.
+    pub(super) fn begin_paint(&mut self, cfg: StrokeConfig, label: &str) -> bool {
+        if self.session.doc.is_none() {
+            return false;
+        }
         // A mask target paints the mask's coverage instead of the layer: the
         // foreground's Rec.601 luma is the painted value, so black hides and
         // white reveals. The stroke runs on a mask-sized grayscale document.
-        let mask_target = active_mask_target(self.rust());
-        if let Some(path) = mask_target {
-            let label = if aliased { "Pencil" } else { "Brush" };
-            return self
-                .as_mut()
-                .begin_mask_paint(&path, mask_stroke_config(cfg), label);
+        // The target is resolved before the slot is taken, so a mask stroke
+        // does not begin a second session inside this one.
+        if let Some(path) = active_mask_target(self) {
+            if !self.slot_allows(SessionKind::MaskPaint) {
+                return false;
+            }
+            return self.begin_mask_paint(&path, mask_stroke_config(cfg), label);
+        }
+        if !self.slot_allows(SessionKind::Paint) {
+            return false;
         }
         let begun = {
-            let rust = self.rust();
-            let Some(doc) = rust.doc.as_ref() else {
+            let rust = &*self;
+            let Some(doc) = rust.session.doc.as_ref() else {
                 return false;
             };
             let Some(path) = rust.layer_target.single() else {
@@ -432,12 +444,12 @@ impl qobject::PictureView {
         };
         match begun {
             Ok(stroke) => {
-                let mut rust = self.as_mut().rust_mut();
+                let rust = &mut *self;
                 rust.stroke = Some(stroke);
-                rust.stroke_label = if aliased { "Pencil" } else { "Brush" }.to_string();
+                rust.stroke_label = label.to_string();
                 // A new stroke opens its own present frame.
                 rust.clear_pending_present();
-                let dims = rust.doc.as_ref().map(|doc| (doc.width, doc.height));
+                let dims = rust.session.doc.as_ref().map(|doc| (doc.width, doc.height));
                 if let Some((width, height)) = dims {
                     rust.stroke_tiles.reset(width, height);
                 }
@@ -449,6 +461,7 @@ impl qobject::PictureView {
                 // hundred microseconds, while seeding the GPU costs a full-frame
                 // upload (~65 ms at 4000²), so a small brush stays on the CPU path.
                 let level = rust
+                    .session
                     .doc
                     .as_ref()
                     .and_then(|doc| preview_level(cfg.diameter as i32, doc.width, doc.height));
@@ -458,7 +471,7 @@ impl qobject::PictureView {
                 let gpu_mode = gpu_paint_mode(cfg.mode)
                     .filter(|_| !cfg.auto_erase && cfg.grain == 0 && !cfg.wet_edges);
                 if level.is_some() && rust.gpu_compute {
-                    let seeded = match (gpu_mode, rust.stroke.as_ref(), rust.doc.as_ref()) {
+                    let seeded = match (gpu_mode, rust.stroke.as_ref(), rust.session.doc.as_ref()) {
                         (Some(mode), Some(stroke), Some(doc)) if !stroke.transparency_locked() => {
                             let t = Instant::now();
                             let seed = stroke.base_layer_rgba_doc(doc);
@@ -516,7 +529,9 @@ impl qobject::PictureView {
             Err(_) => false,
         }
     }
+}
 
+impl qobject::PictureView {
     pub fn paint_dab(mut self: Pin<&mut Self>, x: f64, y: f64, pressure: f64) -> bool {
         let _dab = paint_timing::Scope::new("dab_total");
         if self.rust().mask_stroke.is_some() {
@@ -532,7 +547,7 @@ impl qobject::PictureView {
             let mut rust = self.as_mut().rust_mut();
             let rust = &mut *rust;
             let t = Instant::now();
-            let painted = match (rust.stroke.as_mut(), rust.doc.as_mut()) {
+            let painted = match (rust.stroke.as_mut(), rust.session.doc.as_mut()) {
                 (Some(stroke), Some(doc)) => stroke.sample(
                     doc,
                     StrokeSample {
@@ -702,7 +717,7 @@ impl qobject::PictureView {
                     continue;
                 };
                 let t = Instant::now();
-                let patched = match (rust.stroke.as_mut(), rust.doc.as_mut()) {
+                let patched = match (rust.stroke.as_mut(), rust.session.doc.as_mut()) {
                     (Some(stroke), Some(doc)) => {
                         stroke.patch_working_layer(doc, rect, plane_stride, &planes)
                     }
@@ -787,7 +802,7 @@ impl qobject::PictureView {
                     let t = Instant::now();
                     let mut rust = self.as_mut().rust_mut();
                     let rust = &mut *rust;
-                    if let Some(doc) = rust.doc.as_mut() {
+                    if let Some(doc) = rust.session.doc.as_mut() {
                         for sample in preview.samples {
                             stroke.sample(doc, sample);
                             if let Some(rect) = stroke.take_dirty() {
@@ -805,7 +820,7 @@ impl qobject::PictureView {
                         // A stroke that changed nothing leaves no history state,
                         // so a Background it layered goes back to a Background.
                         if let Some(base) = base {
-                            self.as_mut().rust_mut().doc = Some(base);
+                            self.as_mut().rust_mut().session.doc = Some(base);
                         }
                         self.as_mut().recomposite();
                         false

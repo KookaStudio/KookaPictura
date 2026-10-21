@@ -17,6 +17,7 @@ impl qobject::PictureView {
     /// Whether `path` resolves to a convertible raster pixel layer. Read-only.
     pub fn layer_can_convert_to_smart_object(&self, path: &QString) -> bool {
         self.rust()
+            .session
             .doc
             .as_ref()
             .is_some_and(|doc| pictura_render::can_convert_to_smart_object(doc, &path.to_string()))
@@ -26,7 +27,7 @@ impl qobject::PictureView {
     /// and attach it, keeping the raster proxy. Records one "Convert to Smart
     /// Object" state on success; false (no state) for an ineligible target.
     pub fn convert_to_smart_object(mut self: Pin<&mut Self>, path: &QString) -> bool {
-        let changed = match self.as_mut().rust_mut().doc.as_mut() {
+        let changed = match self.as_mut().rust_mut().session.doc.as_mut() {
             Some(doc) => pictura_render::convert_to_smart_object(doc, &path.to_string()),
             None => false,
         };
@@ -47,7 +48,10 @@ impl qobject::PictureView {
             .file_stem()
             .map(|stem| stem.to_string_lossy().into_owned())
             .unwrap_or_default();
-        let created = match (std::fs::read(&path), self.as_mut().rust_mut().doc.as_mut()) {
+        let created = match (
+            std::fs::read(&path),
+            self.as_mut().rust_mut().session.doc.as_mut(),
+        ) {
             (Ok(bytes), Some(doc)) => pictura_render::place_smart_object(doc, &name, &bytes),
             _ => None,
         };
@@ -76,7 +80,7 @@ impl qobject::PictureView {
         else {
             return QString::default();
         };
-        let created = match self.as_mut().rust_mut().doc.as_mut() {
+        let created = match self.as_mut().rust_mut().session.doc.as_mut() {
             Some(doc) => {
                 let path =
                     pictura_render::add_raster_layer_from_rgba(doc, &name, width, height, &rgba);
@@ -101,7 +105,7 @@ impl qobject::PictureView {
 
     /// Whether `path` resolves to a replaceable smart-object layer. Read-only.
     pub fn layer_can_replace_smart_object_contents(&self, path: &QString) -> bool {
-        self.rust().doc.as_ref().is_some_and(|doc| {
+        self.rust().session.doc.as_ref().is_some_and(|doc| {
             pictura_render::can_replace_smart_object_contents(doc, &path.to_string())
         })
     }
@@ -136,7 +140,7 @@ impl qobject::PictureView {
     /// parses as a PSD/PSB document, i.e. it can be opened as an in-app editor.
     /// Read-only; mutates nothing.
     pub fn layer_can_edit_smart_object_contents(&self, path: &QString) -> bool {
-        self.rust().doc.as_ref().is_some_and(|doc| {
+        self.rust().session.doc.as_ref().is_some_and(|doc| {
             pictura_render::can_edit_smart_object_contents(doc, &path.to_string())
         })
     }
@@ -156,7 +160,10 @@ impl qobject::PictureView {
             .file_stem()
             .map(|stem| stem.to_string_lossy().into_owned())
             .unwrap_or_default();
-        let changed = match (std::fs::read(&file), self.as_mut().rust_mut().doc.as_mut()) {
+        let changed = match (
+            std::fs::read(&file),
+            self.as_mut().rust_mut().session.doc.as_mut(),
+        ) {
             (Ok(bytes), Some(doc)) => {
                 pictura_render::replace_smart_object_contents(doc, &path.to_string(), &name, &bytes)
             }
@@ -171,6 +178,7 @@ impl qobject::PictureView {
     /// Whether `path` resolves to a rasterizable smart-object layer. Read-only.
     pub fn layer_can_rasterize_smart_object(&self, path: &QString) -> bool {
         self.rust()
+            .session
             .doc
             .as_ref()
             .is_some_and(|doc| pictura_render::can_rasterize_smart_object(doc, &path.to_string()))
@@ -181,7 +189,7 @@ impl qobject::PictureView {
     /// blocks. Records one "Rasterize Smart Object" state on success; false (no
     /// state) for an ineligible target.
     pub fn rasterize_smart_object(mut self: Pin<&mut Self>, path: &QString) -> bool {
-        let changed = match self.as_mut().rust_mut().doc.as_mut() {
+        let changed = match self.as_mut().rust_mut().session.doc.as_mut() {
             Some(doc) => pictura_render::rasterize_smart_object(doc, &path.to_string()),
             None => false,
         };
@@ -197,6 +205,7 @@ impl qobject::PictureView {
     pub fn layer_smart_object_state(&self, path: &QString) -> QString {
         let state = self
             .rust()
+            .session
             .doc
             .as_ref()
             .and_then(|doc| pictura_render::resolve_path(doc, &path.to_string()))
@@ -217,7 +226,7 @@ impl qobject::PictureView {
     /// Whether `path` resolves to a layer carrying a non-empty embedded payload.
     /// Read-only.
     pub fn layer_can_export_smart_object_contents(&self, path: &QString) -> bool {
-        self.rust().doc.as_ref().is_some_and(|doc| {
+        self.rust().session.doc.as_ref().is_some_and(|doc| {
             pictura_render::smart_object_source_bytes(doc, &path.to_string()).is_some()
         })
     }
@@ -229,6 +238,7 @@ impl qobject::PictureView {
     pub fn export_smart_object_contents(&self, path: &QString, dest: &QString) -> bool {
         let Some(bytes) = self
             .rust()
+            .session
             .doc
             .as_ref()
             .and_then(|doc| pictura_render::smart_object_source_bytes(doc, &path.to_string()))

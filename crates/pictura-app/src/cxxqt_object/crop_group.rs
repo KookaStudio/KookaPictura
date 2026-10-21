@@ -124,14 +124,14 @@ fn perspective_crop_commit_sized(
     let corners = [(x0, y0), (x1, y1), (x2, y2), (x3, y3)];
     let cropped = {
         let mut rust = view.as_mut().rust_mut();
-        let Some(doc) = rust.doc.as_mut() else {
+        let Some(doc) = rust.session.doc.as_mut() else {
             return false;
         };
         if !pictura_render::perspective_crop_sized(doc, corners, out_w, out_h) {
             return false;
         }
         // Canvas dimensions changed, so the old selection no longer maps.
-        rust.selection = None;
+        rust.session.selection = None;
         true
     };
     if cropped {
@@ -155,14 +155,14 @@ fn crop_to(
     }
     {
         let mut rust = view.as_mut().rust_mut();
-        let Some(doc) = rust.doc.as_mut() else {
+        let Some(doc) = rust.session.doc.as_mut() else {
             return false;
         };
         if !apply_crop(doc, x, y, width, height, delete_cropped, fill_rgb) {
             return false;
         }
         // Canvas dimensions changed, so the old selection no longer maps.
-        rust.selection = None;
+        rust.session.selection = None;
     }
     view.as_mut().edit(&crop_label(label), |_| Edit::Full);
     true
@@ -234,7 +234,7 @@ fn straighten_crop(
     }
     let cropped = {
         let mut rust = view.as_mut().rust_mut();
-        let Some(doc) = rust.doc.as_mut() else {
+        let Some(doc) = rust.session.doc.as_mut() else {
             return false;
         };
         let pivot = (pivot_x, pivot_y);
@@ -252,7 +252,7 @@ fn straighten_crop(
             return false;
         }
         // Canvas dimensions changed, so the old selection no longer maps.
-        rust.selection = None;
+        rust.session.selection = None;
         true
     };
     if cropped {
@@ -263,6 +263,7 @@ fn straighten_crop(
 
 fn perspective_crop_refusal_reason(view: &PictureView) -> QString {
     view.rust()
+        .session
         .doc
         .as_ref()
         .and_then(pictura_render::perspective_crop_refusal)
@@ -287,7 +288,7 @@ fn composite_bounds(view: &PictureView) -> QString {
             union(&layer.children, acc);
         }
     }
-    let Some(doc) = view.rust().doc.as_ref() else {
+    let Some(doc) = view.rust().session.doc.as_ref() else {
         return QString::default();
     };
     let mut acc: Option<PsdRect> = None;
@@ -299,6 +300,7 @@ fn composite_bounds(view: &PictureView) -> QString {
 
 fn slices(view: &PictureView) -> Vec<pictura_render::Slice> {
     view.rust()
+        .session
         .doc
         .as_ref()
         .map(pictura_render::resolve_slices)
@@ -325,7 +327,7 @@ fn slice_at(view: &PictureView, index: i32) -> Vec<i32> {
 }
 
 fn add_user_slice(mut view: Pin<&mut PictureView>, x: i32, y: i32, width: i32, height: i32) -> i32 {
-    let added = match view.as_mut().rust_mut().doc.as_mut() {
+    let added = match view.as_mut().rust_mut().session.doc.as_mut() {
         Some(doc) => pictura_render::add_slice(doc, rect_of(x, y, width, height)),
         None => None,
     };
@@ -357,7 +359,7 @@ fn set_user_slice(
     let Ok(index) = usize::try_from(index) else {
         return false;
     };
-    let set = match view.as_mut().rust_mut().doc.as_mut() {
+    let set = match view.as_mut().rust_mut().session.doc.as_mut() {
         Some(doc) => pictura_render::set_slice(doc, index, rect_of(x, y, width, height)),
         None => false,
     };
@@ -371,7 +373,7 @@ fn remove_user_slice(mut view: Pin<&mut PictureView>, index: i32) -> bool {
     let Ok(index) = usize::try_from(index) else {
         return false;
     };
-    let removed = match view.as_mut().rust_mut().doc.as_mut() {
+    let removed = match view.as_mut().rust_mut().session.doc.as_mut() {
         Some(doc) => pictura_render::remove_slice(doc, index),
         None => false,
     };

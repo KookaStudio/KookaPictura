@@ -1,0 +1,53 @@
+# Tasks
+
+## 1. Prerequisite and failing tests
+
+- [x] 1.1 Confirm #739 (`edit-transaction`) has landed with its current `Edit::{None, Meta, Record, Regions { rects, notify }, Full, Structural}` and `Effect::{Nothing, Notify, Blit { notify }, Rebuild}`; if it has not, stop and report the dependency. Verify with `rg "enum Edit|enum Effect" crates/pictura-app/src` and the #739 transaction tests.
+- [x] 1.2 Add the `cxxqt_object/document_session` module with `SessionKind`, `PendingPreviews`, `SessionChange`, and `RegionBlit`, split into a Qt-free `session.rs` and a Qt `adapter.rs`; the one-slot rule (`active_session_kind`/`slot_allows`) reads the live gesture fields where they are, and the fields move in phase 2 with the document state; verify `cargo check -p pictura_app` succeeds.
+- [x] 1.3 Add the Phase 1 Rust tests named in `test-plan.md`: `a_second_session_is_refused`, `update_begins_keep_one_session`, `a_transform_on_another_target_replaces_the_session`, `a_transform_mode_switch_replaces_the_session`, `a_failed_transform_begin_leaves_the_layer_unchanged`, `replacing_a_document_cancels_every_session`, `replacement_clears_outgoing_state`, `pdf_password_follows_the_incoming_document`, `reselect_is_unavailable_after_same_size_replacement`, `replacement_installs_incoming_history`, `undo_cancels_every_session`, `redo_cancels_every_session`, `jump_cancels_a_filter_preview`, `snapshot_restore_cancels_the_session`, `cancelling_every_session_restores_state`, `cancelling_records_no_history`, `cancelling_without_a_session_is_a_noop`, `a_region_change_does_not_notify`, `a_region_change_can_also_notify`, `a_notification_only_change_emits_no_blit`, `a_shape_path_abort_requests_a_rebuild`, `a_full_change_requests_a_rebuild`; verify they compile, and record which are red before the change and which are regression guards that already pass.
+- [x] 1.4 Add `cpp/tests/tst_document_session.cpp` (the replacement-entry-point cases are written; the six handler-level cases are phase 2) with `replaceEntryPointsCancelTheSession`, `replacementSignalsMatchTheEntryPoint`, `inPlaceRestoreResetsToolHandlers`, `pathSelectionCancelRestoresShapeLayer`, `switchingToolsCancelsCancellableGestures`, `switchingToolsCommitsCommitOnDeactivate`, `regionBlitDoesNotEmitChanged`, `regionBlitCanAlsoEmitChanged`, `notifyOnlyEmitsChanged`, and `rebuildEmitsChanged`, register it in `CMakeLists.txt`, and verify the suite builds and fails before the change.
+
+## 2. Phase 1 — one live session, cancellation, and in-place reset
+
+- [x] 2.1 Keep the live-gesture fields where they are and add the one-slot rule over them (`active_session_kind`/`slot_allows`); group the pending preview flags into `PendingPreviews`; verify `cargo nextest run -p pictura-app` keeps the existing paint, retouch, path, selection, transform, and filter tests green.
+- [x] 2.2 Route every begin through the slot with per-kind semantics: `begin_paint` resolves the mask/layer target before acquiring the slot (no nested `begin_mask_paint`), healing/selection-move/path repeat begins refuse, `magnetic_begin` creates the gesture and `begin_lasso` attaches to it, filter/mode previews update the live session, and transform same path+mode is a no-op while a mode or target change replaces; restore the pre-trim/pre-lift document on a failed transform begin; verify the begin tests including `a_failed_transform_begin_leaves_the_layer_unchanged`.
+- [x] 2.3 Route every cancel and commit method through `cancel_active`/the slot; the shape-layer path backup restores the layer's outline and the abort asks for a rebuild (`cancel_paint`, `cancel_stroke`, `end_paint`, `cancel_transform`, `commit_transform`, `healing_cancel`, `healing_commit`, `cancel_lasso`, `end_lasso`, `magnetic_end`, `cancel_selection_move`, `commit_selection_move`, `path_gesture_abort`, `path_gesture_end`, `cancel_filter_preview`, `apply_filter_params`, `cancel_mode_preview`, mode commits); wire `tool_path_selection.cpp` to begin a PathGesture at press and abort on Escape/cancel, and snapshot the shape document for shape-layer/path-selection edits; verify the cancel and commit tests.
+- [x] 2.4 Implement `replace_document` on `PictureViewRust`: cancel before install; clear outgoing selection, prior-selection memory, history, pointers, pending previews, ruler, PDF options, and canvas-proxy validity; bump `document_generation`; install the incoming document, its password for a protected PDF Open/Revert (clear for New, Duplicate, or non-PDF), and a caller-built Open/Revert/New/Duplicate history; route `open`, the C++ `revertActive` path via `open`/`open_image`/`pdf_open`, recovery, `new_document`, `open_image`, `open_as_smart_object`, `Duplicate`, and `apply_opened`; verify the replacement tests and `tst_document_session::replaceEntryPointsCancelTheSession`/`replacementSignalsMatchTheEntryPoint`.
+- [x] 2.5 Cancel the active session and clear `PendingPreviews` before `undo`, `redo`, `history_jump`, and `history_restore_snapshot`; force a rebuild when a cancel reported a display change; verify the undo/redo/jump/snapshot tests.
+- [x] 2.6 Add `PictureView::cancel_active_session` and the `session_cancelled` notification; add `ToolHandler::onSessionCancelled()` (default no-op), implement it in Pen, Path Selection, Type, Move, Lasso, and Healing, and have `ToolController` call every registered handler and reset `pressView_`, gesture, polygon, content-move, whole-layer move/Alt-clone, and typing state; connect the signal per view in `PicturaMainWindow::wireCanvas`; emit it unconditionally from every replacement and history restore; verify `tst_document_session::inPlaceRestoreResetsToolHandlers`.
+- [x] 2.7 Keep `ToolController::setActiveTool`'s `onDeactivate` order and its C++ overlay/transform/selection-move cleanup blocks; call `cancel_active_session` after those blocks as the single safety net; verify both `switchingToolsCancelsCancellableGestures` and `switchingToolsCommitsCommitOnDeactivate`, including that `transformDragging_`, `transformHandle_`, and `transformChanged` still reset.
+- [x] 2.8 Implement `SessionChange`/`RegionBlit` adapter mapping for region, region+notify, notification-only, shape-layer rebuild, and rebuild; use #739's `Edit::Regions { notify: true }` for healing/patch/red-eye/batch-property commits; define the dispatch order (apply display, then at most one `changed`); verify the report tests, selftest 363, and `tst_layers_preview_coalescing`.
+- [x] 2.9 Run the Phase 1 gates: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo nextest run --workspace`, `cmake --build build --parallel`, and `ctest --test-dir build -R '^tst_' --output-on-failure`.
+
+### Deferred out of phase 1
+
+- The live-gesture fields stay flat; they move in phase 2 with the document
+  state (design: "The live session is a rule, not a nested type").
+- The shape-layer path backup (a pre-gesture document) is phase 2; an abort on
+  a shape-layer path asks for a rebuild meanwhile.
+- The six handler-level Qt cases of 1.4 are phase 2; the Rust session tests
+  cover the same rules without a QObject.
+
+## 3. Phase 2 — document state and history in a plain-Rust session
+
+- [x] 3.1 Add the `DocumentSession` skeleton with `doc`, `selection`, `history`, and the existing `SessionState` slot; add the headless test `a_session_runs_without_a_qobject`; verify both compile before the call-site move.
+- [x] 3.2 Move `doc`, `selection`, `deselected_selection`, `history`, `dirty`, `content_revision`, `path`, `source_format`, `pdf_options`, `pdf_password`, and `gpu_compute` into `DocumentSession`; update the `PictureViewRust { … }` construction literals; verify `cargo check -p pictura-app` and `cargo nextest run -p pictura-app`.
+- [x] 3.3 Move `active_layer`, `active_path`, `path_on_layer`, `mask_edit_target`, `mask_solo`, `mask_overlay`, `isolation`, `link_sets`, and `ruler` into the session, and move `PendingPreviews` with it; key `canvas_proxy` on `document_generation` as well as `content_revision`; verify the selection, path, mask, and isolation tests.
+- [x] 3.4 Move `replace_document`, `undo`, `redo`, `jump`, `restore_snapshot`, `record`, and `record_move` into the session and make the QObject methods delegate; have `new_document`/`duplicate_into` pass their built history so `replace_document` stays install-only; verify `a_session_runs_without_a_qobject` and the moved history tests.
+- [x] 3.5 Move #739's `Edit`/`Effect`/`edit`/`preview`/`commit_move` transaction into the session and make `PictureView::edit` an adapter; verify the #739 transaction tests and `tst_layers_preview_coalescing`.
+- [x] 3.6 Add the pure stale-async guard test `a_stale_async_install_is_discarded` against the planned generation/request-id check; verify it fails before the guard exists.
+- [x] 3.7 Implement request/generation ids for `open_jobs` and `filter_jobs` installs, cancel an in-flight filter commit on replacement, and verify `a_stale_async_install_is_discarded`; add a Qt open-delay case if the view-level path needs it.
+- [x] 3.8 Move the stroke, healing, selection, transform, path, filter-preview, and mode-preview begin logic into plain-Rust session methods (the QObject methods are adapters); back up a shape-layer path edit with the layer's outline; the stroke code keeps its current files (the file-size budget is met without the split); verify the paint, retouch, pen, path-selection, transform, filter, and image-mode suites.
+- [x] 3.9 Verify `rg "cxx_qt|cxx_qt_lib" crates/pictura-app/src/cxxqt_object/document_session/session.rs` returns nothing (the adapter half is Qt by definition); run the Phase 2 gates and run the Phase 2 gates: fmt, clippy, nextest, `cargo test --workspace --doc`, `cmake --build build --parallel`, and ctest.
+
+## 4. Phase 3 — headless display frame (deferred to #783)
+
+The frame's scenarios are not in this change's spec delta: the work is #783's,
+and it lands after this change is archived.
+
+## 5. Integration and archive
+
+- [x] 5.1 Verify `scripts/check-file-size.sh` passes without a new allowlist entry and that `state.rs` and the migrated files shrank or stayed under their caps.
+- [x] 5.2 Run `python3 scripts/check-test-plan.py`, `openspec validate --all --strict`, and confirm the self-test budget did not grow.
+- [ ] 5.3 Archive with `openspec archive document-session`; verify `openspec validate --all --strict` and `scripts/check-openspec-archived.sh` pass.
+- [ ] 5.4 Run the post-archive full gate: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo nextest run --workspace`, `cargo test --workspace --doc`, `cmake --build build --parallel`, `ctest --test-dir build -R '^tst_' --output-on-failure`, and `bash scripts/verify-full.sh`.

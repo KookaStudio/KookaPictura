@@ -830,6 +830,7 @@ pub(super) fn container_len(doc: &Document, parent: &str) -> Option<usize> {
 /// Select the topmost top-level layer, or clear when the document is empty.
 pub(super) fn select_top_layer(rust: &mut super::state::PictureViewRust) {
     let path = rust
+        .session
         .doc
         .as_ref()
         .and_then(|doc| doc.layers.len().checked_sub(1))

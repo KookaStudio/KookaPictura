@@ -16,13 +16,14 @@ impl qobject::PictureView {
     pub fn add_adjustment(mut self: Pin<&mut Self>, kind: &QString) -> bool {
         let mask = {
             let rust = self.rust();
-            let Some(doc) = rust.doc.as_ref() else {
+            let Some(doc) = rust.session.doc.as_ref() else {
                 return false;
             };
             if !rust.use_default_masks {
                 None
             } else {
-                rust.selection
+                rust.session
+                    .selection
                     .as_ref()
                     .map(|selection| selection_to_mask(selection, doc))
             }
@@ -31,7 +32,7 @@ impl qobject::PictureView {
             return false;
         };
         let region = layer_visibility_region(&layer);
-        let pushed = match self.as_mut().rust_mut().doc.as_mut() {
+        let pushed = match self.as_mut().rust_mut().session.doc.as_mut() {
             Some(doc) => doc.layers.push(layer).is_ok(),
             None => false,
         };
@@ -61,10 +62,11 @@ impl qobject::PictureView {
         }
         let mask = {
             let rust = self.rust();
-            let Some(doc) = rust.doc.as_ref() else {
+            let Some(doc) = rust.session.doc.as_ref() else {
                 return false;
             };
-            rust.selection
+            rust.session
+                .selection
                 .as_ref()
                 .map(|selection| selection_to_mask(selection, doc))
         };
@@ -72,7 +74,7 @@ impl qobject::PictureView {
         let applied = {
             let mut rust = self.as_mut().rust_mut();
             let gpu_compute = rust.gpu_compute;
-            let Some(doc) = rust.doc.as_mut() else {
+            let Some(doc) = rust.session.doc.as_mut() else {
                 return false;
             };
             if !active_layer_visible(doc, active.as_deref()) {
@@ -215,6 +217,10 @@ pub(super) fn apply_op_active_region(
     ignore_selection: bool,
 ) -> Option<Option<pictura_core::PsdRect>> {
     rust.filter_error = None;
+    if !commit && !rust.slot_allows(super::document_session::SessionKind::FilterPreview) {
+        rust.filter_error = Some("another session is live".to_string());
+        return None;
+    }
     if let Some(path) = active_mask_target(rust) {
         return apply_mask_op(rust, &path, op, commit, preview_region);
     }
@@ -224,14 +230,15 @@ pub(super) fn apply_op_active_region(
         if ignore_selection {
             None
         } else {
-            let doc = rust.doc.as_ref()?;
-            rust.selection
+            let doc = rust.session.doc.as_ref()?;
+            rust.session
+                .selection
                 .as_ref()
                 .map(|selection| selection_to_mask(selection, doc))
         }
     };
     let existing = rust.filter_preview.take_if(|p| p.layer_path == path);
-    let Some(doc) = rust.doc.as_mut() else {
+    let Some(doc) = rust.session.doc.as_mut() else {
         rust.filter_error = Some("there is no document".to_string());
         return None;
     };
@@ -316,7 +323,7 @@ pub(super) fn apply_op_active_region(
 /// with `filter_error` set: no document, a hidden or pixel-locked layer, no
 /// single pixel layer, or an open preview on another target.
 pub(super) fn pixel_filter_target(rust: &mut PictureViewRust) -> Option<String> {
-    let Some(doc) = rust.doc.as_ref() else {
+    let Some(doc) = rust.session.doc.as_ref() else {
         rust.filter_error = Some("there is no document".to_string());
         return None;
     };
@@ -493,7 +500,7 @@ fn apply_mask_op(
         .filter(|(p, _)| p == path)
         .map(|(_, coverage)| coverage.clone());
     let (mut mask, selection) = {
-        let doc = rust.doc.as_ref()?;
+        let doc = rust.session.doc.as_ref()?;
         let Some(mut mask) = pictura_render::mask_document(doc, path) else {
             rust.filter_error = Some("the active layer has no mask to filter".to_string());
             return None;
@@ -511,6 +518,7 @@ fn apply_mask_op(
             }
         }
         let selection = rust
+            .session
             .selection
             .as_ref()
             .map(|s| selection_mask_for(s, mask.rect));
@@ -544,7 +552,7 @@ fn apply_mask_op(
         rust.filter_error = Some(error.to_string());
         return None;
     }
-    let doc = rust.doc.as_mut()?;
+    let doc = rust.session.doc.as_mut()?;
     if !pictura_render::write_mask_back(doc, path, &mask.document, None) {
         rust.filter_error = Some("the mask disappeared during the filter".to_string());
         return None;
@@ -564,7 +572,7 @@ pub(super) fn cancel_filter_preview(
     rust: &mut PictureViewRust,
 ) -> Option<Option<pictura_core::PsdRect>> {
     if let Some((path, original)) = rust.mask_filter_preview.take() {
-        let doc = rust.doc.as_mut()?;
+        let doc = rust.session.doc.as_mut()?;
         let mut mask = pictura_render::mask_document(doc, &path)?;
         if let Some(channel) = mask.document.layers[0]
             .channels
@@ -579,7 +587,7 @@ pub(super) fn cancel_filter_preview(
         return Some(Some(mask.rect));
     }
     let preview = rust.filter_preview.take()?;
-    let doc = rust.doc.as_mut()?;
+    let doc = rust.session.doc.as_mut()?;
     let layer = pictura_render::resolve_path_mut(doc, &preview.layer_path)?;
     let restored = preview.baseline.restore(layer);
     Some((!layer_has_effects(layer)).then_some(restored))
@@ -607,7 +615,7 @@ mod tests {
         }
         doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         PictureViewRust {
-            doc: Some(doc),
+            session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
             layer_target: LayerTarget::only("0"),
             gpu_compute: false,
             ..Default::default()
@@ -615,7 +623,7 @@ mod tests {
     }
 
     fn red(rust: &PictureViewRust) -> Vec<u8> {
-        rust.doc.as_ref().unwrap().layers[0]
+        rust.session.doc.as_ref().unwrap().layers[0]
             .channels
             .iter()
             .find(|c| c.id == 0)
@@ -646,7 +654,7 @@ mod tests {
         }
         doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         PictureViewRust {
-            doc: Some(doc),
+            session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
             layer_target: LayerTarget::only("0"),
             gpu_compute: false,
             ..Default::default()
@@ -680,7 +688,7 @@ mod tests {
     #[test]
     fn locked_layer_is_refused() {
         let mut rust = state();
-        rust.doc.as_mut().unwrap().layers[0].lock =
+        rust.session.doc.as_mut().unwrap().layers[0].lock =
             LockFlags::default().with(LockFlags::PIXELS, true);
         let before = red(&rust);
         assert!(apply_filter_active(&mut rust, "gaussian-blur", &[2.0], false).is_none());
@@ -694,7 +702,7 @@ mod tests {
         // An adjustment layer (no pixels) as the sole active target.
         let adj = adjustment_layer("invert", None).expect("adjustment");
         {
-            let _ = rust.doc.as_mut().unwrap().layers.push(adj);
+            let _ = rust.session.doc.as_mut().unwrap().layers.push(adj);
         };
         rust.select_only_layer("1");
         assert!(apply_filter_active(&mut rust, "gaussian-blur", &[2.0], true).is_none());
@@ -705,12 +713,12 @@ mod tests {
     #[test]
     fn preview_on_another_layer_is_refused_and_keeps_baseline() {
         let mut rust = state();
-        let _ = rust
-            .doc
-            .as_mut()
-            .unwrap()
-            .layers
-            .push(pixel_layer("px2", 16, 16, (10, 20, 30)));
+        let _ = rust.session.doc.as_mut().unwrap().layers.push(pixel_layer(
+            "px2",
+            16,
+            16,
+            (10, 20, 30),
+        ));
         let original = red(&rust);
         assert!(apply_filter_active(&mut rust, "gaussian-blur", &[4.0], false).is_some());
         assert!(rust
@@ -836,7 +844,7 @@ mod tests {
     fn section_previews_write_the_live_planes_in_place() {
         let mut rust = big_state();
         let plane = |rust: &PictureViewRust| {
-            rust.doc.as_ref().unwrap().layers[0].channels[0]
+            rust.session.doc.as_ref().unwrap().layers[0].channels[0]
                 .data
                 .as_ptr()
         };
@@ -978,7 +986,7 @@ mod tests {
     }
 
     fn mask_coverage(rust: &PictureViewRust) -> Vec<u8> {
-        rust.doc.as_ref().unwrap().layers[0]
+        rust.session.doc.as_ref().unwrap().layers[0]
             .mask
             .as_ref()
             .unwrap()
@@ -990,7 +998,7 @@ mod tests {
 
     fn step_mask_state() -> PictureViewRust {
         let mut rust = state();
-        let layer = &mut rust.doc.as_mut().unwrap().layers[0];
+        let layer = &mut rust.session.doc.as_mut().unwrap().layers[0];
         layer.mask = Some(pictura_core::LayerMask {
             rect: pictura_core::PsdRect {
                 top: 0,

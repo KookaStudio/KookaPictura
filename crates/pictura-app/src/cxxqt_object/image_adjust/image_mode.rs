@@ -160,7 +160,7 @@ fn bitmap_method(method: i32) -> BitmapMethod {
 
 fn image_mode(view: &PictureView) -> QString {
     let rust = view.rust();
-    let name = rust.doc.as_ref().map_or("", |doc| {
+    let name = rust.session.doc.as_ref().map_or("", |doc| {
         mode_name(pictura_render::document_color_mode(doc))
     });
     QString::from(name)
@@ -169,6 +169,7 @@ fn image_mode(view: &PictureView) -> QString {
 fn image_depth_bits(view: &PictureView) -> i32 {
     match view
         .rust()
+        .session
         .doc
         .as_ref()
         .map(pictura_render::document_bit_depth)
@@ -183,6 +184,7 @@ fn image_depth_bits(view: &PictureView) -> i32 {
 
 fn image_resolution(view: &PictureView) -> QString {
     view.rust()
+        .session
         .doc
         .as_ref()
         .map_or_else(QString::default, |doc| {
@@ -208,6 +210,7 @@ fn image_mode_available(view: &PictureView, mode: &QString) -> bool {
         return false;
     };
     view.rust()
+        .session
         .doc
         .as_ref()
         .is_some_and(|doc| pictura_render::can_convert_mode(doc, mode))
@@ -218,6 +221,7 @@ fn image_depth_available(view: &PictureView, bits: i32) -> bool {
         return false;
     };
     view.rust()
+        .session
         .doc
         .as_ref()
         .is_some_and(|doc| pictura_render::can_convert_depth(doc, out))
@@ -230,9 +234,9 @@ fn commit(mut view: Pin<&mut PictureView>, convert: impl FnOnce(&mut Document) -
     let converted = {
         let mut rust = view.as_mut().rust_mut();
         if let Some(base) = rust.mode_preview.take() {
-            rust.doc = Some(base);
+            rust.session.doc = Some(base);
         }
-        let Some(doc) = rust.doc.as_mut() else {
+        let Some(doc) = rust.session.doc.as_mut() else {
             return false;
         };
         convert(doc)
@@ -248,12 +252,12 @@ fn commit(mut view: Pin<&mut PictureView>, convert: impl FnOnce(&mut Document) -
 
 fn refresh_active_layer(mut view: Pin<&mut PictureView>) {
     let mut rust = view.as_mut().rust_mut();
-    let Some(count) = rust.doc.as_ref().map(|doc| doc.layers.len()) else {
+    let Some(count) = rust.session.doc.as_ref().map(|doc| doc.layers.len()) else {
         return;
     };
     let target = {
         let mut target = rust.layer_target.clone();
-        if let Some(doc) = rust.doc.as_ref() {
+        if let Some(doc) = rust.session.doc.as_ref() {
             target.retain_resolving(doc);
         }
         target
@@ -284,6 +288,7 @@ fn convert_image_depth(view: Pin<&mut PictureView>, bits: i32) -> bool {
 
 fn indexed_exact_available(view: &PictureView) -> bool {
     view.rust()
+        .session
         .doc
         .as_ref()
         .is_some_and(pictura_render::indexed_exact_available)
@@ -312,15 +317,12 @@ fn preview_indexed(
     let options = palette_options(palette, colors, dither, amount);
     let previewed = {
         let mut rust = view.as_mut().rust_mut();
-        if rust.mode_preview.is_none() {
-            rust.mode_preview = rust.doc.clone();
-        }
-        let Some(mut converted) = rust.mode_preview.clone() else {
+        let Some(mut converted) = rust.mode_preview_base() else {
             return false;
         };
         let ok = pictura_render::convert_to_indexed(&mut converted, options).is_ok();
         if ok {
-            rust.doc = Some(converted);
+            rust.session.doc = Some(converted);
         }
         ok
     };
@@ -330,11 +332,33 @@ fn preview_indexed(
     previewed
 }
 
+impl super::super::state::PictureViewRust {
+    /// The document a mode preview converts from: the first base, kept so an
+    /// update re-converts the original instead of the last preview.
+    pub(in crate::cxxqt_object) fn mode_preview_base(&mut self) -> Option<pictura_core::Document> {
+        if !self.slot_allows(super::super::document_session::SessionKind::ModePreview) {
+            return None;
+        }
+        if self.mode_preview.is_none() {
+            self.mode_preview = self.session.doc.clone();
+        }
+        self.mode_preview.clone()
+    }
+
+    /// Drop the live mode preview, restoring the pre-preview document.
+    pub(in crate::cxxqt_object) fn cancel_mode_preview(&mut self) -> bool {
+        let Some(base) = self.mode_preview.take() else {
+            return false;
+        };
+        self.session.doc = Some(base);
+        true
+    }
+}
+
 fn cancel_mode_preview(mut view: Pin<&mut PictureView>) -> bool {
-    let Some(base) = view.as_mut().rust_mut().mode_preview.take() else {
+    if !view.as_mut().rust_mut().cancel_mode_preview() {
         return false;
-    };
-    view.as_mut().rust_mut().doc = Some(base);
+    }
     view.as_mut().recomposite();
     true
 }

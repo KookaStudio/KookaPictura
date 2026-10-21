@@ -63,7 +63,7 @@ impl qobject::PictureView {
             clipping,
             neutral_fill,
         };
-        let created = match self.as_mut().rust_mut().doc.as_mut() {
+        let created = match self.as_mut().rust_mut().session.doc.as_mut() {
             Some(doc) => pictura_render::add_layer_full(doc, &selection_path.to_string(), &spec),
             None => String::new(),
         };
@@ -98,7 +98,7 @@ impl qobject::PictureView {
             opacity: opacity.clamp(0, 255) as u8,
             ..pictura_render::NewLayerSpec::default()
         };
-        let created = match self.as_mut().rust_mut().doc.as_mut() {
+        let created = match self.as_mut().rust_mut().session.doc.as_mut() {
             Some(doc) => pictura_render::add_group_full(doc, &selection_path.to_string(), &spec),
             None => String::new(),
         };
@@ -125,7 +125,7 @@ impl qobject::PictureView {
             return QString::default();
         };
         let owned = list_of_strings(paths);
-        let created = match self.as_mut().rust_mut().doc.as_mut() {
+        let created = match self.as_mut().rust_mut().session.doc.as_mut() {
             Some(doc) => {
                 let refs = as_str_slice(&owned);
                 match pictura_render::group_paths(doc, &refs) {
@@ -175,15 +175,15 @@ impl qobject::PictureView {
         }
         let mask = {
             let rust = self.rust();
-            let Some(doc) = rust.doc.as_ref() else {
+            let Some(doc) = rust.session.doc.as_ref() else {
                 return QString::default();
             };
-            let Some(selection) = rust.selection.as_ref() else {
+            let Some(selection) = rust.session.selection.as_ref() else {
                 return QString::default();
             };
             selection_to_mask(selection, doc)
         };
-        let created = match self.as_mut().rust_mut().doc.as_mut() {
+        let created = match self.as_mut().rust_mut().session.doc.as_mut() {
             Some(doc) => {
                 if cut {
                     pictura_render::layer_via_cut(doc, source_path, &mask)

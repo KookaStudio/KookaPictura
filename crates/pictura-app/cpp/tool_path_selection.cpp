@@ -52,6 +52,7 @@ public:
         // A drag cut short by a tool switch still lands as one state.
         if (PictureView* v = ctx.view(); v && v == pressView_) {
             commitDrag(*v);
+            path_gesture_end(*v);
         }
         reset();
         clearSelection();
@@ -59,6 +60,18 @@ public:
             canvas->clearPathOverlay();
         }
         ctx_ = nullptr;
+    }
+
+    void onSessionCancelled(ToolServices& ctx) override
+    {
+        if (PictureView* v = pressView_) {
+            path_gesture_abort(*v);
+        }
+        reset();
+        clearSelection();
+        if (ImageView* canvas = ctx.canvas()) {
+            canvas->clearPathOverlay();
+        }
     }
 
     // Undo or another tool can renumber or drop subpaths under the selection.
@@ -87,6 +100,7 @@ public:
             return true;
         }
         path_set_layer_target(*v, true);
+        path_gesture_begin(*v);
         pressView_ = v;
         press_ = last_ = imagePos;
         const bool alt = mods.testFlag(Qt::AltModifier);
@@ -165,6 +179,7 @@ public:
     {
         if (PictureView* v = ctx.view(); v && v == pressView_) {
             commitDrag(*v);
+            path_gesture_end(*v);
         }
         reset();
         refreshOverlay(ctx);

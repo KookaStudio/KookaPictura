@@ -20,6 +20,16 @@ public:
     void registerTool(ToolId id, std::unique_ptr<ToolHandler> handler);
     ToolHandler* forTool(ToolId id) const;
 
+    template <typename F>
+    void forEach(F&& f) const
+    {
+        for (const auto& handler : handlers_) {
+            if (handler) {
+                f(*handler);
+            }
+        }
+    }
+
 private:
     std::array<std::unique_ptr<ToolHandler>, kToolCount> handlers_{};
 };

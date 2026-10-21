@@ -54,6 +54,9 @@ public:
     // The frame refreshed (a document edit, undo, or tab switch) with this tool
     // active; re-read any document state the tool mirrors on the canvas.
     virtual void onDocumentRefreshed(ToolServices& ctx) {}
+    // An in-place document replacement or history restore cancelled the live
+    // session. Drop handler-local press/gesture state without committing.
+    virtual void onSessionCancelled(ToolServices& ctx) { (void)ctx; }
     // A tool option changed (e.g. the crop aspect ratio); re-apply it.
     virtual void onOptionsChanged(ToolServices& ctx) {}
 

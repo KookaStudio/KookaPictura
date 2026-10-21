@@ -208,7 +208,7 @@ fn liquify_begin(view: &PictureView) -> bool {
     if active_mask_target(rust).is_some() {
         return false;
     }
-    let Some(doc) = rust.doc.as_ref() else {
+    let Some(doc) = rust.session.doc.as_ref() else {
         return false;
     };
     let Some(layer) = active_pixel_layer(doc, rust.layer_target.single()) else {
@@ -283,7 +283,7 @@ fn liquify_backdrop(mut view: Pin<&mut PictureView>, path: &QString) -> QImage {
     let Some(active) = rust.layer_target.single().map(str::to_string) else {
         return QImage::default();
     };
-    let Some(doc) = rust.doc.as_mut() else {
+    let Some(doc) = rust.session.doc.as_mut() else {
         return QImage::default();
     };
     let Some(frame) = active_pixel_layer(doc, Some(&active)).map(|l| l.rect) else {

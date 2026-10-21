@@ -2,6 +2,7 @@
 //! GPU stroke for a large brush, and, when the GPU stroke is not taken, the
 //! reduced-resolution preview replayed exactly at the commit.
 
+use super::super::document_session::SessionKind;
 use super::super::helpers::*;
 use super::super::helpers_composite::display_rgba_bytes;
 use super::super::qobject;
@@ -31,7 +32,7 @@ fn to_document(rect: PsdRect, origin: PsdRect) -> PsdRect {
 /// layer at `path` starts with, or `None` when its dab fits the raster budget
 /// or the preview level is not built.
 fn mask_preview(rust: &PictureViewRust, path: &str, cfg: StrokeConfig) -> Option<PreviewStroke> {
-    let doc = rust.doc.as_ref()?;
+    let doc = rust.session.doc.as_ref()?;
     let level = preview_level(cfg.diameter as i32, doc.width, doc.height)?;
     let t = Instant::now();
     let mut preview = PreviewStroke::new(level, &rust.pyramid, rust.level0.as_ref()?, cfg)?;
@@ -131,12 +132,30 @@ impl qobject::PictureView {
         cfg: StrokeConfig,
         label: &str,
     ) -> bool {
+        self.as_mut().rust_mut().begin_mask_paint(path, cfg, label)
+    }
+}
+
+impl PictureViewRust {
+    /// Begin a stroke on the raster mask of the layer at `path`: the mask is
+    /// exposed as a mask-sized grayscale document and an ordinary [`Stroke`]
+    /// runs on it, so the mask gains the exact brush behaviour. False without
+    /// a mask, on a zero-sized mask rectangle, or when the stroke is refused.
+    pub(in crate::cxxqt_object) fn begin_mask_paint(
+        &mut self,
+        path: &str,
+        cfg: StrokeConfig,
+        label: &str,
+    ) -> bool {
+        if !self.slot_allows(SessionKind::MaskPaint) {
+            return false;
+        }
         let built = {
-            let rust = self.rust();
+            let rust = &*self;
             if rust.stroke.is_some() || rust.mask_stroke.is_some() {
                 return false;
             }
-            let Some(doc) = rust.doc.as_ref() else {
+            let Some(doc) = rust.session.doc.as_ref() else {
                 return false;
             };
             let Some(mask) = pictura_render::mask_document_coverage(doc, path) else {
@@ -163,7 +182,7 @@ impl qobject::PictureView {
             match (
                 preview_level(cfg.diameter as i32, mw, mh),
                 gpu_paint_mode(cfg.mode).filter(|_| cfg.grain == 0 && !cfg.wet_edges),
-                self.rust().gpu_compute,
+                self.gpu_compute,
             ) {
                 (Some(_), Some(mode), true) => {
                     let seed = mask_gpu::mask_rgba_seed(&mask_stroke.document);
@@ -198,10 +217,10 @@ impl qobject::PictureView {
         // models), a large brush previews at a pyramid level like a pixel one.
         let preview = match gpu {
             Some(_) => None,
-            None => mask_preview(self.rust(), path, cfg.sanitized()),
+            None => mask_preview(self, path, cfg.sanitized()),
         };
         let has_gpu = gpu.is_some();
-        let mut rust = self.as_mut().rust_mut();
+        let rust = &mut *self;
         rust.mask_stroke = Some(mask_stroke);
         rust.stroke_label = label.to_string();
         rust.clear_pending_present();
@@ -212,13 +231,15 @@ impl qobject::PictureView {
             None
         };
         rust.preview = preview;
-        let dims = rust.doc.as_ref().map(|doc| (doc.width, doc.height));
+        let dims = rust.session.doc.as_ref().map(|doc| (doc.width, doc.height));
         if let Some((width, height)) = dims {
             rust.stroke_tiles.reset(width, height);
         }
         true
     }
+}
 
+impl qobject::PictureView {
     /// One dab of a mask stroke: sample the mask-local point on the mask
     /// document, copy the changed region back into the real mask, and present
     /// it. Returns whether a pixel changed.
@@ -253,7 +274,8 @@ impl qobject::PictureView {
         {
             let mut rust = self.as_mut().rust_mut();
             let rust = &mut *rust;
-            let (Some(doc), Some(ctx)) = (rust.doc.as_mut(), rust.mask_stroke.as_ref()) else {
+            let (Some(doc), Some(ctx)) = (rust.session.doc.as_mut(), rust.mask_stroke.as_ref())
+            else {
                 return false;
             };
             pictura_render::write_mask_back(doc, &ctx.path, &ctx.document, Some(dirty));
@@ -304,7 +326,7 @@ impl qobject::PictureView {
                     rust.stroke_tiles.mark(to_document(rect, ctx.rect));
                 }
             }
-            if let (Some(dirty), Some(doc)) = (ctx.stroke.dirty(), rust.doc.as_mut()) {
+            if let (Some(dirty), Some(doc)) = (ctx.stroke.dirty(), rust.session.doc.as_mut()) {
                 pictura_render::write_mask_back(doc, &ctx.path, &ctx.document, Some(dirty));
             }
             paint_timing::record("commit_replay_mask_stroke", t.elapsed());

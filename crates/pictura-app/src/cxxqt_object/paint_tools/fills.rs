@@ -246,7 +246,7 @@ fn bucket_fill_at(
 }
 
 pub(crate) fn selection(rust: &PictureViewRust) -> Option<&[u8]> {
-    rust.selection.as_ref().map(|s| s.data.as_slice())
+    rust.session.selection.as_ref().map(|s| s.data.as_slice())
 }
 
 fn edit_fill(
@@ -305,13 +305,14 @@ fn fill_mask(
 ) -> bool {
     let (mut mask, selection) = {
         let rust = view.rust();
-        let Some(doc) = rust.doc.as_ref() else {
+        let Some(doc) = rust.session.doc.as_ref() else {
             return false;
         };
         let Some(mask) = pictura_render::mask_document(doc, path) else {
             return false;
         };
         let selection = rust
+            .session
             .selection
             .as_ref()
             .map(|s| crop_selection(&s.data, s.width, s.height, mask.rect));
@@ -348,7 +349,7 @@ fn fill_mask(
     };
     let changed = {
         let mut rust = view.as_mut().rust_mut();
-        let Some(doc) = rust.doc.as_mut() else {
+        let Some(doc) = rust.session.doc.as_mut() else {
             return false;
         };
         pictura_render::write_mask_back(doc, path, &mask.document, Some(dirty))
@@ -398,7 +399,7 @@ fn edit_stroke(
     mode: &QString,
     opacity: i32,
 ) -> bool {
-    let Some(selection) = view.rust().selection.as_ref() else {
+    let Some(selection) = view.rust().session.selection.as_ref() else {
         return false;
     };
     let selection = selection.data.clone();
@@ -431,7 +432,8 @@ pub(crate) fn apply(
 ) -> bool {
     let edited = {
         let rust = view.rust();
-        let (Some(doc), Some(path)) = (rust.doc.as_ref(), rust.layer_target.single()) else {
+        let (Some(doc), Some(path)) = (rust.session.doc.as_ref(), rust.layer_target.single())
+        else {
             return false;
         };
         // ponytail: of the fills only Edit > Fill writes a mask (`fill_mask`);
@@ -449,7 +451,7 @@ pub(crate) fn apply(
     let Some((doc, rect)) = edited else {
         return false;
     };
-    view.as_mut().rust_mut().doc = Some(doc);
+    view.as_mut().rust_mut().session.doc = Some(doc);
     refresh_edit(view.as_mut(), Some(rect), "");
     view.as_mut().record(label);
     true
@@ -463,6 +465,7 @@ pub(crate) fn apply(
 pub(crate) fn refresh_edit(mut view: Pin<&mut PictureView>, rect: Option<PsdRect>, own: &str) {
     let styled = view
         .rust()
+        .session
         .doc
         .as_ref()
         .is_none_or(|doc| styled_except(&doc.layers, "", own));

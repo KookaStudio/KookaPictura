@@ -93,6 +93,7 @@ pub mod ffi {
 
 fn vector_mask_present_path(view: &PictureView, path: &QString) -> bool {
     view.rust()
+        .session
         .doc
         .as_ref()
         .is_some_and(|doc| pictura_render::has_vector_mask(doc, &path.to_string()))
@@ -100,6 +101,7 @@ fn vector_mask_present_path(view: &PictureView, path: &QString) -> bool {
 
 fn vector_mask_disabled_path(view: &PictureView, path: &QString) -> bool {
     view.rust()
+        .session
         .doc
         .as_ref()
         .is_some_and(|doc| pictura_render::vector_mask_disabled(doc, &path.to_string()))
@@ -244,6 +246,7 @@ fn vector_mask_rasterize_path(view: Pin<&mut PictureView>, path: &QString) -> bo
 fn vector_mask_present(view: &PictureView) -> bool {
     active_path(view).is_some_and(|path| {
         view.rust()
+            .session
             .doc
             .as_ref()
             .is_some_and(|doc| pictura_render::has_vector_mask(doc, &path))
@@ -253,6 +256,7 @@ fn vector_mask_present(view: &PictureView) -> bool {
 fn vector_mask_linked(view: &PictureView) -> bool {
     active_path(view).is_some_and(|path| {
         view.rust()
+            .session
             .doc
             .as_ref()
             .is_some_and(|doc| pictura_render::vector_mask_linked(doc, &path))
@@ -262,6 +266,7 @@ fn vector_mask_linked(view: &PictureView) -> bool {
 fn vector_mask_disabled(view: &PictureView) -> bool {
     active_path(view).is_some_and(|path| {
         view.rust()
+            .session
             .doc
             .as_ref()
             .is_some_and(|doc| pictura_render::vector_mask_disabled(doc, &path))

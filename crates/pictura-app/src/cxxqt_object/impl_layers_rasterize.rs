@@ -49,10 +49,10 @@ impl qobject::PictureView {
             let mut rust = self.as_mut().rust_mut();
             let rust = &mut *rust;
             let use_mask = rust.use_default_masks;
-            match rust.doc.as_mut() {
+            match rust.session.doc.as_mut() {
                 Some(doc) => {
                     let path = pictura_render::add_solid_fill(doc, "", color);
-                    apply_default_mask(doc, &path, rust.selection.as_ref(), use_mask);
+                    apply_default_mask(doc, &path, rust.session.selection.as_ref(), use_mask);
                     path
                 }
                 None => String::new(),
@@ -72,10 +72,10 @@ impl qobject::PictureView {
             let mut rust = self.as_mut().rust_mut();
             let rust = &mut *rust;
             let use_mask = rust.use_default_masks;
-            match rust.doc.as_mut() {
+            match rust.session.doc.as_mut() {
                 Some(doc) => {
                     let path = pictura_render::add_gradient_fill(doc, "");
-                    apply_default_mask(doc, &path, rust.selection.as_ref(), use_mask);
+                    apply_default_mask(doc, &path, rust.session.selection.as_ref(), use_mask);
                     path
                 }
                 None => String::new(),
@@ -91,6 +91,7 @@ impl qobject::PictureView {
     /// layer.
     pub fn layer_is_fill_content(&self, path: &QString) -> bool {
         self.rust()
+            .session
             .doc
             .as_ref()
             .and_then(|doc| pictura_render::resolve_path(doc, &path.to_string()))
@@ -114,7 +115,7 @@ impl qobject::PictureView {
         if path.is_empty() {
             return false;
         }
-        let (changed, label) = match self.as_mut().rust_mut().doc.as_mut() {
+        let (changed, label) = match self.as_mut().rust_mut().session.doc.as_mut() {
             Some(doc) => {
                 if pictura_render::render_text_layer(doc, &path) {
                     (true, "Rasterize Type")
@@ -136,7 +137,7 @@ impl qobject::PictureView {
     /// "Rasterize All Layers" state only when at least one was rasterized.
     /// Returns how many were rasterized.
     pub fn rasterize_all_layers(mut self: Pin<&mut Self>) -> i32 {
-        let count = match self.as_mut().rust_mut().doc.as_mut() {
+        let count = match self.as_mut().rust_mut().session.doc.as_mut() {
             Some(doc) => pictura_render::rasterize_all_layers(doc),
             None => 0,
         };
@@ -156,7 +157,7 @@ impl qobject::PictureView {
         if path.is_empty() {
             return false;
         }
-        let changed = match self.as_mut().rust_mut().doc.as_mut() {
+        let changed = match self.as_mut().rust_mut().session.doc.as_mut() {
             Some(doc) => {
                 let rendered = pictura_render::resolve_path(doc, &path).and_then(|layer| {
                     let tool = layer.type_tool.as_ref()?;
@@ -194,6 +195,7 @@ impl qobject::PictureView {
     /// Whether the layer at `path` is a type layer. Read-only.
     pub fn layer_is_type(&self, path: &QString) -> bool {
         self.rust()
+            .session
             .doc
             .as_ref()
             .and_then(|doc| pictura_render::resolve_path(doc, &path.to_string()))
@@ -204,7 +206,7 @@ impl qobject::PictureView {
         if path.is_empty() {
             return false;
         }
-        let changed = match self.as_mut().rust_mut().doc.as_mut() {
+        let changed = match self.as_mut().rust_mut().session.doc.as_mut() {
             Some(doc) => pictura_render::rasterize_fill_content(doc, path),
             None => false,
         };

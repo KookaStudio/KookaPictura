@@ -24,14 +24,14 @@ fn striped() -> PictureViewRust {
     let rendered = current_buffer(&doc, false);
     store_composite(&mut doc, &rendered);
     let mut rust = PictureViewRust {
-        doc: Some(doc),
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
         layer_target: LayerTarget::only("0"),
         gpu_compute: false,
         ..Default::default()
     };
     let r = &mut rust;
-    r.history.capture_live(
-        r.doc.as_mut().expect("document"),
+    r.session.history.capture_live(
+        r.session.doc.as_mut().expect("document"),
         &None,
         &r.layer_target,
         "Open",
@@ -40,7 +40,7 @@ fn striped() -> PictureViewRust {
 }
 
 fn red(rust: &PictureViewRust) -> Vec<u8> {
-    rust.doc.as_ref().unwrap().layers[0].channels[0]
+    rust.session.doc.as_ref().unwrap().layers[0].channels[0]
         .data
         .to_vec()
 }
@@ -80,10 +80,10 @@ fn a_background_commit_matches_the_synchronous_one_and_records_its_label() {
     let refresh = finish(&mut rust).expect("committed");
     assert!(matches!(refresh, Landed::Region { .. }));
     assert_eq!(red(&rust), red(&sync));
-    assert_eq!(rust.history.count(), 2);
-    assert_eq!(rust.history.label(1), "Filter: Gaussian Blur");
+    assert_eq!(rust.session.history.count(), 2);
+    assert_eq!(rust.session.history.label(1), "Filter: Gaussian Blur");
     // The composite the commit patched is the one a recomposite stores.
-    let doc = rust.doc.as_ref().unwrap();
+    let doc = rust.session.doc.as_ref().unwrap();
     let mut recomposited = doc.clone();
     store_composite(&mut recomposited, &current_buffer(doc, false));
     assert_eq!(doc.composite.data, recomposited.composite.data);
@@ -134,7 +134,7 @@ fn a_newer_exact_preview_supersedes_an_older_one() {
 #[test]
 fn a_refused_commit_keeps_the_document_and_history() {
     let mut rust = striped();
-    rust.doc.as_mut().unwrap().layers[0].lock =
+    rust.session.doc.as_mut().unwrap().layers[0].lock =
         pictura_core::LockFlags::default().with(pictura_core::LockFlags::PIXELS, true);
     let before = red(&rust);
     assert!(!commit_start(
@@ -146,7 +146,7 @@ fn a_refused_commit_keeps_the_document_and_history() {
     assert!(rust.filter_error.is_some());
     assert!(rust.filter_jobs.commit.is_none());
     assert_eq!(red(&rust), before);
-    assert_eq!(rust.history.count(), 1);
+    assert_eq!(rust.session.history.count(), 1);
 }
 
 #[test]
@@ -159,7 +159,7 @@ fn the_section_render_matches_a_section_preview_and_leaves_the_document() {
     };
     let mut previewed = striped();
     apply_filter_active_region_section(&mut previewed, section);
-    let expected = previewed.doc.as_ref().unwrap().layers[0].channels[0]
+    let expected = previewed.session.doc.as_ref().unwrap().layers[0].channels[0]
         .data
         .to_vec();
 
