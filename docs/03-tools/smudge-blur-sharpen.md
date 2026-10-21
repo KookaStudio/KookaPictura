@@ -6,8 +6,10 @@
 - **New in CS6:** `No` — Blur, Sharpen, and Smudge predate CS6 and are carried forward. The Sharpen tool's `Protect Detail` option is documented in the CS6 Help but its introduction version is not established here (see `## Open questions`).
 - **Depends on:** `ARCH-006` gpu-rendering-pipeline, `ARCH-008` document-model, `ARCH-009` undo-history, `ARCH-004` rust-qt-interop, `07-color-painting/brush-engine.md`, `07-color-painting/brush-dynamics.md`, `03-tools/brush-and-pencil.md`
 
-> All module and widget names below are **design proposals**. No code exists in
-> this repository. Facts not confirmed by a fetched CS6 source are marked
+> All module and widget names below are **design proposals**. The repository
+> contains a working implementation; this file stays the behavioural contract
+> for the feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped
+> and what did not. Facts not confirmed by a fetched CS6 source are marked
 > *(inferred)*.
 
 ## CS6 behavior

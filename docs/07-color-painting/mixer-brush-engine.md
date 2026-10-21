@@ -6,10 +6,12 @@
 - **New in CS6:** `No` — the Mixer Brush arrived in CS5 and its wet/load/mix model is unchanged in CS6; CS6 adds the general brush features (Brush Pose, Brush Projection, 5000 px) to it.
 - **Depends on:** `BRU-001` brush-engine, `BRU-002` brush-dynamics, `BRU-003` bristle-brushes, `BRU-005` airbrush-and-flow, `BRU-006` brush-presets, `ARCH-008` document-model, `ARCH-009` undo-history.
 
-> Module and widget names are **design proposals**. No code exists. Adobe's
-> reservoir/pickup mixing math is closed; this spec gives a **behavioral model**
-> only. Everything not established by the fetched sources is marked **algorithm
-> TBD** or listed under Open questions.
+> Module and widget names are **design proposals**. The repository contains a
+> working implementation; this file stays the behavioural contract for the
+> feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped and what
+> did not. Adobe's reservoir/pickup mixing math is closed; this spec gives a
+> **behavioral model** only. Everything not established by the fetched sources
+> is marked **algorithm TBD** or listed under Open questions.
 
 ## CS6 behavior
 

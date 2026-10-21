@@ -6,7 +6,12 @@
 - **New in CS6:** `No` — the Measurement Log and its workflow are carried from CS5; the CS6 Help documents the Measurement feature under "(Photoshop Extended)" with no functional change called out.
 - **Depends on:** `03-tools/note-and-count.md` (`TOOL-019` Count tool; the Measurement Log is the shared record surface), `03-tools/eyedropper-color-sampler-ruler.md` (Ruler tool / measurement scale), `10-workflow-io/measurement-and-count.md` (record schema, export, persistent measurement data — currently *planned* in `INDEX.md`), `00-overview/cs6-editions-and-constraints.md` (`OVR-002`), `00-overview/feasibility-and-non-goals.md` (`OVR-003`), `01-architecture/document-model.md` (`ARCH-008`), `01-architecture/undo-history.md` (`ARCH-009`).
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository. Behavior is taken from the fetched CS6 Help PDF unless marked *(inferred)*. Per `OVR-003`, exact measurement parity is a non-goal; this spec defines the UI surface and the preservation contract.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Behavior is taken from the fetched CS6 Help PDF unless
+> marked *(inferred)*. Per `OVR-003`, exact measurement parity is a non-goal; this
+> spec defines the UI surface and the preservation contract.
 
 ## CS6 behavior
 

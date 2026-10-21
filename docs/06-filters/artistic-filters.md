@@ -6,7 +6,14 @@
 - **New in CS6:** `No` — the 15 Artistic filters and their options are unchanged from CS5. CS6's new filters (Blur Gallery, Oil Paint, Camera Raw Filter, Adaptive Wide Angle) live elsewhere.
 - **Depends on:** `FILT-001` filters-overview, `LAY-021` smart-filters, `LAY-020` smart-objects, `LAY-010` blend-modes, `IMG-005` bit-depth-and-conversion, `ARCH-006` gpu-rendering-pipeline, `ARCH-009` undo-history, `ARCH-008` document-model, `ARCH-003` performance-targets.
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository. Adobe's kernels are closed: this document targets **behavioral parity only, algorithm TBD**. Control names are taken from Adobe Help; ranges marked *(sourced)* are from the fetched community/Adobe references listed in `## Sources`, and ranges/defaults not published by Adobe are marked *(inferred)* and must be confirmed against a CS6 build.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Adobe's kernels are closed: this document targets
+> **behavioral parity only, algorithm TBD**. Control names are taken from Adobe
+> Help; ranges marked *(sourced)* are from the fetched community/Adobe references
+> listed in `## Sources`, and ranges/defaults not published by Adobe are marked
+> *(inferred)* and must be confirmed against a CS6 build.
 
 ## CS6 behavior
 

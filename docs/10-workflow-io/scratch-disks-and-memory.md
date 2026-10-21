@@ -6,10 +6,13 @@
 - **New in CS6:** `Changed` — CS6 is 64-bit on macOS and Windows and documents "day-to-day imaging tasks at least 10% faster" than 32-bit; the Mercury Graphics Engine exposes GPU settings in Performance and 3D; the History & Cache section gains **Tall and Thin / Default / Big and Flat** preset buttons (CS5/CS6 Help wording); Auto-recover and Save In Background are new (see `UI-010`).
 - **Depends on:** `ARCH-003` performance-targets, `ARCH-009` undo-history, `ARCH-006` gpu-rendering-pipeline, `ARCH-008` document-model, `UI-010` preferences, `11-cross-cutting/crash-recovery-and-autosave.md`, `11-cross-cutting/preference-storage.md`.
 
-> All module, widget, and type names below are **design proposals**. No code
-> exists in this repository. Facts confirmed by the fetched Adobe "peak
-> performance" article or the CS6 Help are stated plainly; secondary/community
-> numbers are marked *(secondary)*; design choices are marked *(inferred)*.
+> All module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the
+> behavioural contract for the feature, and `docs/dev/doc-code-parity-gaps.md`
+> records what shipped and what did not. Facts confirmed by the fetched Adobe
+> "peak performance" article or the CS6 Help are stated plainly;
+> secondary/community numbers are marked *(secondary)*; design choices are
+> marked *(inferred)*.
 
 ## CS6 behavior
 

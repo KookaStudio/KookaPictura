@@ -6,7 +6,13 @@
 - **New in CS6:** `No` — Quick Mask is a long-standing selection-editing mode carried into CS6. CS6 adds no documented Quick Mask behavior change. (CS6's mask-related change was moving *layer-mask* editing from the CS5 Masks panel into the Properties panel — that is `LAY-004`, not Quick Mask.)
 - **Depends on:** `SEL-001` selection-model, `SEL-002` selection-tools-overview, `TOOL-044` quick-mask-tool, `07-color-painting/brush-engine.md`, `05-layers/layer-masks.md` (`LAY-004`), `08-selection/channel-based-masking.md`, `08-selection/save-and-load-selections.md`, `01-architecture/document-model.md` (`ARCH-008`), `01-architecture/undo-history.md` (`ARCH-009`), `02-ui-ux/panels/channels-panel.md`.
 
-> All module, widget, and type names below are **design proposals**. No code exists in this repository. Behavior is taken from the fetched CS6 Help corpus. This spec covers the **selection/masking semantics**; the painter tool UI, brush settings, and overlay compositing details live in `TOOL-044` and are cross-referenced, not repeated.
+> All module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Behavior is taken from the fetched CS6 Help corpus.
+> This spec covers the **selection/masking semantics**; the painter tool UI, brush
+> settings, and overlay compositing details live in `TOOL-044` and are
+> cross-referenced, not repeated.
 
 ## CS6 behavior
 

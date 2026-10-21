@@ -6,9 +6,11 @@
 - **New in CS6:** `Changed` — the adjustment *engine* is unchanged, but the host UI moves: CS5 kept controls and presets inside the Adjustments panel, CS6 adds the new **Properties panel** (controls + a Preset menu), leaving the Adjustments panel as icon buttons only. CS6 also adds the **Color Lookup** adjustment and improves the Levels/Curves/Brightness-Contrast **Auto** button.
 - **Depends on:** `01-architecture/document-model.md` (`ARCH-008`), `01-architecture/undo-history.md` (`ARCH-009`), `01-architecture/color-management.md` (`ARCH-007`), `04-image-ops/image-modes.md` (`IMG-004`), `04-image-ops/bit-depth-and-conversion.md` (`IMG-005`), `05-layers/adjustment-layers.md`, `05-layers/blend-modes.md`, `05-layers/layer-masks.md`, `05-layers/vector-masks-and-clipping-masks.md`, `02-ui-ux/panels/adjustments-panel.md`, `02-ui-ux/panels/properties-panel.md`.
 
-> All module and widget names below are **design proposals**. No code exists in
-> this repository. Facts taken from a fetched source are attributed in
-> `## Sources`; anything else is marked *(inferred)*.
+> All module and widget names below are **design proposals**. The repository
+> contains a working implementation; this file stays the behavioural contract
+> for the feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped
+> and what did not. Facts taken from a fetched source are attributed in `##
+> Sources`; anything else is marked *(inferred)*.
 
 ## CS6 behavior
 

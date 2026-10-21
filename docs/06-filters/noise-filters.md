@@ -6,7 +6,14 @@
 - **New in CS6:** `No` — the Noise submenu is unchanged from CS5. `Reduce Noise` remains primarily a **CPU** function (independent GPU testing; `ARCH-006`).
 - **Depends on:** `FILT-001` filters-overview, `FILT-010` blur-filters (edge-preserving/smoothing kernels), `ARCH-006` gpu-rendering-pipeline, `ARCH-009` undo-history, `ARCH-007` color-management, `IMG-009` 32-bit-hdr, `LAY-004` layer-masks.
 
-> All module, widget, and type names below are **design proposals**. No code exists in this repository. Adobe's exact denoise kernels are closed; parity is **behavioral parity only, algorithm TBD**. The CS6 Help describes each filter's controls and qualitative behavior; algorithm families are drawn from the standard references cited under `## Sources`. Parameter ranges are *(inferred)* where the fetched primary source does not state them.
+> All module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Adobe's exact denoise kernels are closed; parity is
+> **behavioral parity only, algorithm TBD**. The CS6 Help describes each filter's
+> controls and qualitative behavior; algorithm families are drawn from the
+> standard references cited under `## Sources`. Parameter ranges are *(inferred)*
+> where the fetched primary source does not state them.
 
 ## CS6 behavior
 

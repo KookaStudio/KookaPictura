@@ -6,7 +6,14 @@
 - **New in CS6:** `Changed` — the panel UI is carried from CS5, but the CS6 JDI list records **"Reorganized tool presets remain after restart"** and the CS6 SDK adds scripting access to the tool name associated with a tool preset. No new panel controls are documented in the fetched CS6 Help text.
 - **Depends on:** `BRU-006` `07-color-painting/brush-presets.md` (brush vs. tool preset boundary), `10-workflow-io/presets-manager.md` (Preset Manager / library I/O), `02-ui-ux/toolbox-and-options-bar.md` (options bar host), `01-architecture/qt6-ui-design.md` (`ARCH-003`, dock/model-view), `01-architecture/rust-core-design.md` (`ARCH-002`), `03-tools/type-tools.md` (`TOOL-050`, type tool presets).
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository. Behavior is taken from the fetched CS6 Help PDF; anything inferred is marked *(inferred)*. The tool-preset file extension is **`.tpl`** and the library folder is **`Presets/Tools`** (confirmed by CS6-era secondary sources; the CS6 Help PDF itself documents only the Save/Load commands).
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Behavior is taken from the fetched CS6 Help PDF;
+> anything inferred is marked *(inferred)*. The tool-preset file extension is
+> **`.tpl`** and the library folder is **`Presets/Tools`** (confirmed by CS6-era
+> secondary sources; the CS6 Help PDF itself documents only the Save/Load
+> commands).
 
 ## CS6 behavior
 

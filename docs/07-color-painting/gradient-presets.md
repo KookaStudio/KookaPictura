@@ -6,8 +6,10 @@
 - **New in CS6:** `Changed` — the Gradient Editor itself is long-standing; CS6 adds a **Dither** option to the Gradient Overlay and Gradient Stroke layer styles (JDI), ships **new Gradient Map presets** for print toning and split-toning, and keeps the gradient fill layer (Style/Angle/Scale/Reverse/Dither/Align With Layer) from CS5. The post-CS6 **interpolation-method** menu (Classic/Smooth/Perceptual) is *not* part of CS6.
 - **Depends on:** `03-tools/gradient-and-paint-bucket.md` (`TOOL-012`), `05-layers/fill-layers.md`, `05-layers/layer-styles.md`, `04-image-ops/adjustments/gradient-map.md`, `02-ui-ux/panels/color-panel.md`, `01-architecture/document-model.md`, `10-workflow-io/presets-manager.md`, `07-color-painting/color-sweeps-and-modes.md`.
 
-> Module and widget names below are **design proposals**. No code exists in this
-> repository. Facts not confirmed by a fetched CS6/Adobe source are marked
+> Module and widget names below are **design proposals**. The repository
+> contains a working implementation; this file stays the behavioural contract
+> for the feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped
+> and what did not. Facts not confirmed by a fetched CS6/Adobe source are marked
 > *(inferred)*.
 
 ## CS6 behavior

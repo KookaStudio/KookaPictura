@@ -6,10 +6,12 @@
 - **New in CS6:** `No` — the Art History Brush predates CS6 (introduced in Photoshop 6) and is unchanged.
 - **Depends on:** `ARCH-009` undo-history, `ARCH-008` document-model, `ARCH-006` gpu-rendering-pipeline, `03-tools/history-brush.md`, `07-color-painting/brush-engine.md`, `07-color-painting/brush-presets.md`
 
-> Module and widget names are **design proposals**. No code exists. The exact
-> Adobe style kernels are closed; parity is **behavioral parity only, algorithm
-> TBD**. Behavioral facts are from the fetched CS6 Help PDF and the cited
-> secondary CS6/community sources.
+> Module and widget names are **design proposals**. The repository contains a
+> working implementation; this file stays the behavioural contract for the
+> feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped and what
+> did not. The exact Adobe style kernels are closed; parity is **behavioral
+> parity only, algorithm TBD**. Behavioral facts are from the fetched CS6 Help
+> PDF and the cited secondary CS6/community sources.
 
 ## CS6 behavior
 

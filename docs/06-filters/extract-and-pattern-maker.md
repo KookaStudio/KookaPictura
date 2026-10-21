@@ -6,7 +6,13 @@
 - **New in CS6:** `No` / `Changed` — **corrections to the task premise:** (1) **Extract was not removed in CS6**; it (and Pattern Maker) were removed from the **default install in CS4 (2008)** and remained available as **optional plug-ins**. (2) **Pattern Maker is not "CS4-only"** — it existed through CS3 and was removed from the default install in CS4, like Extract. In CS6 the Help documents both as optional downloads: Extract is **Windows-only and not installed**, Pattern Maker is available for **Windows or Mac OS** (requiring **32-bit mode on 64-bit Mac**).
 - **Depends on:** `08-selection/refine-edge.md` (the supported replacement for Extract), `07-color-painting/pattern-presets.md` (pattern-preset model), `01-architecture/file-formats.md`, `02-ui-ux/preferences.md`, `00-overview/feasibility-and-non-goals.md`, `06-filters/filters-overview.md`
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository. Behavior is taken from the fetched CS6 Help PDF unless marked *(inferred)*. This spec is largely a **removal/decision record**; the two plug-ins are optional and their algorithms are closed (**behavioral parity only, algorithm TBD**).
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Behavior is taken from the fetched CS6 Help PDF unless
+> marked *(inferred)*. This spec is largely a **removal/decision record**; the two
+> plug-ins are optional and their algorithms are closed (**behavioral parity only,
+> algorithm TBD**).
 
 ## CS6 behavior
 

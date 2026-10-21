@@ -11,6 +11,11 @@ Full file listing with status. Statuses: `planned` (not written), `stub`,
 > **Version corrections:** artboards (CC 2015) and linked smart objects (CC 2014)
 > are **not CS6**; see `11-cross-cutting/open-questions.md` §A for the full
 > corrected-attribution list.
+>
+> **One file was never written:** `01-architecture/build-and-packaging.md`
+> (`ARCH-014`). The `**Depends on:**` lines that name it point at a spec that
+> does not exist; the gap and its issue are tracked in
+> [`dev/doc-code-parity-gaps.md`](dev/doc-code-parity-gaps.md) (`ARCH-1`, #494).
 
 ## Root
 

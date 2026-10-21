@@ -6,8 +6,10 @@
 - **New in CS6:** `Changed` — CS6 adds the **Color Lookup** adjustment (3DLUT/Abstract/Device Link LUTs), moves adjustment presets from the Adjustments panel into the **Properties** panel, keeps the adjustment icons always visible, and adds **Invert** and **Threshold** mask adjustments in 32-bit documents. CS6 is the last version before the Properties-panel workflow was reworked again in CC.
 - **Depends on:** `01-architecture/document-model.md` (`ARCH-008`), `01-architecture/undo-history.md` (`ARCH-009`), `01-architecture/color-management.md` (`ARCH-007`), `05-layers/blend-modes.md` (`LAY-010`), `05-layers/fill-layers.md` (`LAY-013`), `05-layers/layer-masks.md`, `05-layers/vector-masks-and-clipping-masks.md`, `05-layers/smart-objects.md`, `05-layers/smart-filters.md`, `04-image-ops/adjustments-overview.md`, `04-image-ops/32-bit-hdr.md`.
 
-> Module/crate/widget names are **design proposals**. No code exists in this
-> repository. Per-adjustment algorithms are out of scope here (see the
+> Module/crate/widget names are **design proposals**. The repository contains a
+> working implementation; this file stays the behavioural contract for the
+> feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped and what
+> did not. Per-adjustment algorithms are out of scope here (see the
 > `04-image-ops/adjustments/` specs); this document covers the *layer* semantics.
 > PSD keys are from the Adobe File Formats Specification (via `ARCH-008`).
 

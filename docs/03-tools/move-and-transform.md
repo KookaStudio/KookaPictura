@@ -6,7 +6,10 @@
 - **New in CS6:** `Changed` — CS6 added an **Interpolation** pop-up to the Free Transform options bar (per-operation resampling choice); the Move tool option previously named *Show Bounding Box* surfaces as **Show Transform Controls**.
 - **Depends on:** `ARCH-002` document-model, `ARCH-006` gpu-rendering-pipeline, `ARCH-007` undo-history, `TOOL-002`/`TOOL-003`/`TOOL-004` (selection sources), `08-selection/selection-model.md`, `08-selection/transform-selection.md`, `05-layers/smart-objects.md`.
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not.
 
 ## CS6 behavior
 

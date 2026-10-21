@@ -6,8 +6,10 @@
 - **New in CS6:** `Changed` — CS6 adds hex-field paste with `#`/`0x` prefixes (`#aabbcc`, `0xAABBCC`) and 3-digit shorthand (`#123`), and makes the Color panel resizable. The picker's model set and layout are otherwise long-standing.
 - **Depends on:** `CLR-001` color-models, `ARCH-007` color-management, `01-architecture/gpu-rendering-pipeline.md`, `02-ui-ux/panels/color-panel.md`, `03-tools/eyedropper-color-sampler-ruler.md`, `07-color-painting/swatches-and-libraries.md`, `10-workflow-io/color-settings.md`, `04-image-ops/32-bit-hdr.md`, `00-overview/feasibility-and-non-goals.md`.
 
-> All crate, module, widget, and type names below are **design proposals**. No code
-> exists in this repository. Facts not confirmed by a fetched CS6 source are marked
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Facts not confirmed by a fetched CS6 source are marked
 > *(inferred)*.
 
 ## CS6 behavior

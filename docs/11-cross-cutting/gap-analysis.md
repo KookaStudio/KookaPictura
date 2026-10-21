@@ -84,8 +84,8 @@ CS6 behavior without an `## Open questions` entry.
 - **Adobe cloud / Stock / Bridge / Mini Bridge** — proprietary or Flash-based. (`10-workflow-io/bridge-and-interop.md`)
 - **Adobe plugin binaries (`.8bf`)** — wrong ABI and license-gated. (`AUTO-012`)
 - **Native print parity** — CUPS/Qt6 path proposed; some CS6 print features (DEVMODE/NSPrintInfo, 16-bit data) are explicit non-goals. (`WF-013`)
-- **Post-CS6 features that contaminated the brief** — Camera Raw filter, Shake Reduction, Face-Aware Liquify, Path/Spin Blur, Flame/Tree/Picture Frame, Color Themes panel, live-shape corner editing, linked SO, artboards. All documented as non-parity.
-- **Snap and AppImage packaging** — dropped in favour of **Flatpak + native `.deb`/`.rpm`** (confinement fights GPU/scratch paths; static Qt raises LGPLv3 relinking obligations). (`ARCH-014`)
+- **Post-CS6 features that contaminated the brief** — Shake Reduction, Face-Aware Liquify, Flame/Tree, Color Themes panel, live-shape corner editing, linked SO, artboards. All documented as non-parity. Four of them shipped anyway, by explicit decision and labelled non-parity in the code: the Camera Raw filter (as Pictura Raw), Path Blur, Spin Blur, and Picture Frame.
+- **Snap and AppImage packaging** — **not** dropped. Both ship alongside **Flatpak + native `.deb`/`.rpm`**: Flatpak was chosen for confinement, not as a replacement. (`snap/snapcraft.yaml`, `.github/workflows/snap.yml`, `.github/workflows/appimage.yml`)
 
 ## Risk register
 

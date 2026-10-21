@@ -6,7 +6,14 @@
 - **New in CS6:** `No` — the Sharpen submenu is unchanged from CS5. **Shake Reduction is *not* a CS6 feature**: it was introduced in **Photoshop CC (2013)** and is documented here as an explicit **non-parity / CC-only** entry because the brief requested it. See `## CS6 behavior`.
 - **Depends on:** `FILT-001` filters-overview, `FILT-010` blur-filters (Smart Sharpen's `Remove = Gaussian Blur` and USM share the Gaussian kernel), `LAY-010` blend-modes (Luminosity fade), `ARCH-006` gpu-rendering-pipeline, `ARCH-009` undo-history, `IMG-009` 32-bit-hdr, `LAY-004` layer-masks.
 
-> All module, widget, and type names below are **design proposals**. No code exists in this repository. Adobe's exact sharpening kernels are closed; parity is **behavioral parity only, algorithm TBD**. The CS6 Help describes the controls and qualitative results; algorithm families are drawn from the standard references cited under `## Sources`. Any **Shake Reduction** content is **CC-only** and cannot be CS6-parity.
+> All module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Adobe's exact sharpening kernels are closed; parity is
+> **behavioral parity only, algorithm TBD**. The CS6 Help describes the controls
+> and qualitative results; algorithm families are drawn from the standard
+> references cited under `## Sources`. Any **Shake Reduction** content is
+> **CC-only** and cannot be CS6-parity.
 
 ## CS6 behavior
 

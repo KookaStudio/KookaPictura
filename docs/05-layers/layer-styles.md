@@ -6,9 +6,11 @@
 - **New in CS6:** `Changed` — CS6 adds a **dither** option to Gradient Overlay and Gradient Stroke; **reorders** the effects list to the order in which they are applied (Drop Shadow moved below the other effects); adds **Rasterize Layer Style** as a one-step alternative to `Create Layers`; shows a **Blend If / Blending Options badge** on a layer when advanced blending is customized; and lets you change blend mode/lock/color label for multiple selected layers at once. A community CS6 reference also claims CS6 added **layer styles on groups**, but the CS6 Help says groups are excluded — see `## Open questions`. The effect set and formulas are unchanged from CS5.
 - **Depends on:** `01-architecture/document-model.md` (`ARCH-008`), `01-architecture/undo-history.md` (`ARCH-009`), `01-architecture/gpu-rendering-pipeline.md`, `01-architecture/color-management.md` (`ARCH-007`), `05-layers/blend-modes.md` (`LAY-010`), `05-layers/vector-masks-and-clipping-masks.md`, `05-layers/layer-masks.md`, `07-color-painting/pattern-presets.md`, `07-color-painting/gradient-presets.md`.
 
-> Module/crate/widget names are **design proposals**. No code exists in this
-> repository. The CS6 Help PDF gives effect semantics and control *names* but
-> almost never numeric ranges; PSD field units come from the Adobe File Formats
+> Module/crate/widget names are **design proposals**. The repository contains a
+> working implementation; this file stays the behavioural contract for the
+> feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped and what
+> did not. The CS6 Help PDF gives effect semantics and control *names* but almost
+> never numeric ranges; PSD field units come from the Adobe File Formats
 > Specification. Range/default values that are not in a fetched source are marked
 > *(inferred)* or `not stated`, and flagged in `## Open questions`.
 

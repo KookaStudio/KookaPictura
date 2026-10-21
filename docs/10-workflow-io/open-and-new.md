@@ -6,8 +6,10 @@
 - **New in CS6:** `Changed` — CS6 adds a redesigned video import engine and broadens audio/video import to both Standard and Extended editions. Formats newly marked with an asterisk in the CS6 support list include audio (AAC, AIFF, M2A, M4A, MP2, MP3) and video containers (`.264`/AVC, 3GP/3GPP, F4V, FLV, MPE, MTS, MXF, R3D, TS, VOB). The still-image New/Open dialogs are unchanged from CS5.
 - **Depends on:** `ARCH-011` file-formats, `ARCH-008` document-model, `ARCH-007` color-management, `WF-001` document-lifecycle, `WF-003` save-and-save-as, `LAY-020` smart-objects, `10-workflow-io/camera-raw-workflow.md`.
 
-> All crate, module, widget, and type names below are **design proposals**. No code
-> exists in this repository. CS6 behavior is taken from the fetched CS6 Help PDF
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. CS6 behavior is taken from the fetched CS6 Help PDF
 > unless marked *(inferred)*.
 
 ## CS6 behavior

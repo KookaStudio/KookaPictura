@@ -6,8 +6,10 @@
 - **New in CS6:** `No` — both panels are functionally unchanged. CS6's move of adjustments to the **Properties panel** means the Info panel's before/after readouts and the Histogram's adjustment preview are driven from there rather than from the CS5 Adjustments panel.
 - **Depends on:** `CLR-001` color-models, `ARCH-007` color-management, `ARCH-008` document-model, `01-architecture/performance-targets.md`, `01-architecture/gpu-rendering-pipeline.md`, `02-ui-ux/panels/histogram-panel.md`, `02-ui-ux/panels/info-panel.md`, `03-tools/eyedropper-color-sampler-ruler.md`, `03-tools/note-and-count.md`, `04-image-ops/adjustments-overview.md`, `10-workflow-io/measurement-and-count.md`.
 
-> All crate, module, widget, and type names below are **design proposals**. No code
-> exists in this repository. Facts not confirmed by a fetched CS6 source are marked
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Facts not confirmed by a fetched CS6 source are marked
 > *(inferred)*.
 
 ## CS6 behavior

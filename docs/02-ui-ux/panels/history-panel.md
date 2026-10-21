@@ -6,7 +6,12 @@
 - **New in CS6:** `No` — the History panel is CS5-era; CS6 does not change its model. (The panel is documented alongside the CS6 Help's general undo workflow; the JDI/What's-New list does not flag a History-panel change.)
 - **Depends on:** `ARCH-009` undo-history, `TOOL-033` history-brush, `TOOL-034` art-history-brush, `TOOL-023` eraser-tools (Erase to History), `LAY-011` layer-styles (layer-visibility undo option), `ARCH-008` document-model, `PAN-001` layers-panel, `10-workflow-io/file-info-and-metadata.md` (Edit History Log).
 
-> Crate, module, widget, and type names below are **design proposals**. No code exists in this repository. The history-state engine, memory strategy and undo-record shape are owned by `ARCH-009`; this file specifies the **panel widget** and the user-visible history behaviors.
+> Crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. The history-state engine, memory strategy and
+> undo-record shape are owned by `ARCH-009`; this file specifies the **panel
+> widget** and the user-visible history behaviors.
 
 ## CS6 behavior
 

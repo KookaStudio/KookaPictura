@@ -6,10 +6,12 @@
 - **New in CS6:** `Changed` (inherited) — bristle tips themselves are CS5; in CS6 they gain Brush Pose and Brush Projection and the 5000 px maximum, and their live preview participates in the CS6 pen-tilt preview.
 - **Depends on:** `BRU-001` brush-engine, `BRU-002` brush-dynamics, `BRU-004` mixer-brush-engine, `BRU-005` airbrush-and-flow, `BRU-006` brush-presets, `ARCH-006` gpu-rendering-pipeline.
 
-> Module and widget names are **design proposals**. No code exists. Adobe's
-> bristle simulation is closed; this spec is **behavioral parity only, algorithm
-> TBD**. Facts from the CS6 Help PDF and the cited CS5/CS6 secondary sources;
-> unverified claims are listed under Open questions.
+> Module and widget names are **design proposals**. The repository contains a
+> working implementation; this file stays the behavioural contract for the
+> feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped and what
+> did not. Adobe's bristle simulation is closed; this spec is **behavioral
+> parity only, algorithm TBD**. Facts from the CS6 Help PDF and the cited
+> CS5/CS6 secondary sources; unverified claims are listed under Open questions.
 
 ## CS6 behavior
 

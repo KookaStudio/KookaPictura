@@ -6,8 +6,10 @@
 - **New in CS6:** `Changed` — CS6 adds **Blend Text Colors Using Gamma** (default **1.45**) for blending text layers in a gamma distinct from the document space, exposed under Color Settings → **More Options**. It also affects how CS6 text layers render in earlier Photoshop versions.
 - **Depends on:** `ARCH-007` color-management (engine, transforms, lcms2), `ARCH-008` document-model, `ARCH-009` undo-history, `04-image-ops/color-profiles-and-assignment.md`, `04-image-ops/image-modes.md`, `10-workflow-io/file-info-and-metadata.md`, `10-workflow-io/printing.md`, `02-ui-ux/preferences.md`.
 
-> All module and widget names below are **design proposals**. No code exists in
-> this repository. Statements marked *(secondary)* are from community sources,
+> All module and widget names below are **design proposals**. The repository
+> contains a working implementation; this file stays the behavioural contract
+> for the feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped
+> and what did not. Statements marked *(secondary)* are from community sources,
 > not the CS6 Help PDF.
 
 ## CS6 behavior

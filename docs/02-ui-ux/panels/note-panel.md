@@ -6,7 +6,13 @@
 - **New in CS6:** `No` — the Note tool and Notes panel are carried from CS5. The CS6 Help lists the Note tool in the navigation/notes/measuring tools gallery and its shortcut table with no functional change called out.
 - **Depends on:** `03-tools/note-and-count.md` (`TOOL-018` Note tool — canonical note creation/editing semantics; this spec is the **panel UI**, not a duplicate), `01-architecture/document-model.md` (`ARCH-008`), `01-architecture/undo-history.md` (`ARCH-009`), `01-architecture/qt6-ui-design.md` (`ARCH-003`), `10-workflow-io/file-info-and-metadata.md` (annotation carriage in output formats).
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository. The CS6 Help PDF fetched for this pass documents the Note tool only at gallery/shortcut level; panel specifics are from secondary CS6-era sources and are attributed accordingly. Anything unverified is under Open questions.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. The CS6 Help PDF fetched for this pass documents the
+> Note tool only at gallery/shortcut level; panel specifics are from secondary
+> CS6-era sources and are attributed accordingly. Anything unverified is under
+> Open questions.
 
 ## CS6 behavior
 

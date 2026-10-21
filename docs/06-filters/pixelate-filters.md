@@ -6,7 +6,13 @@
 - **New in CS6:** `No` — the 7 Pixelate filters are unchanged from CS5.
 - **Depends on:** `FILT-001` filters-overview, `LAY-021` smart-filters, `LAY-020` smart-objects, `IMG-005` bit-depth-and-conversion, `ARCH-006` gpu-rendering-pipeline, `ARCH-009` undo-history, `ARCH-008` document-model, `ARCH-003` performance-targets.
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository. Adobe's kernels are closed: **behavioral parity only, algorithm TBD**. Ranges marked *(sourced)* are from the fetched references in `## Sources`; unmarked defaults/ranges are *(inferred)* and must be confirmed against a CS6 build.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Adobe's kernels are closed: **behavioral parity only,
+> algorithm TBD**. Ranges marked *(sourced)* are from the fetched references in
+> `## Sources`; unmarked defaults/ranges are *(inferred)* and must be confirmed
+> against a CS6 build.
 
 ## CS6 behavior
 

@@ -6,8 +6,10 @@
 - **New in CS6:** `No` (the Color Settings model, Adobe ACE engine, ICC v4 profile support, and soft proofing predate CS6; CS6 adds no documented color-management feature over CS5 — inferred, see `## Open questions`)
 - **Depends on:** `ARCH-008` document-model, `ARCH-011` file-formats, `04-image-ops/color-profiles-and-assignment.md`, `04-image-ops/bit-depth-and-conversion.md`, `04-image-ops/image-modes.md`, `10-workflow-io/color-settings.md`, `10-workflow-io/printing.md`
 
-> All module, crate, and widget names below are **design proposals**. No code
-> exists in this repository. Statements marked *(inferred)* are not taken from a
+> All module, crate, and widget names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Statements marked *(inferred)* are not taken from a
 > fetched source and are candidates for `## Open questions`.
 
 ## CS6 behavior

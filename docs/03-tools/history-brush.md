@@ -6,9 +6,12 @@
 - **New in CS6:** `No` — the History Brush, the History panel, and snapshots predate CS6 and are unchanged.
 - **Depends on:** `ARCH-009` undo-history, `ARCH-008` document-model, `ARCH-006` gpu-rendering-pipeline, `02-ui-ux/panels/history-panel.md`, `03-tools/art-history-brush.md`, `07-color-painting/brush-engine.md`
 
-> Module and widget names are **design proposals**. No code exists. Historical
-> storage (tile diffusion) is an inferred design already stated in `ARCH-009`;
-> Adobe does not publish it. Behavioral facts are from the fetched CS6 Help PDF.
+> Module and widget names are **design proposals**. The repository contains a
+> working implementation; this file stays the behavioural contract for the
+> feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped and what
+> did not. Historical storage (tile diffusion) is an inferred design already
+> stated in `ARCH-009`; Adobe does not publish it. Behavioral facts are from the
+> fetched CS6 Help PDF.
 
 ## CS6 behavior
 

@@ -6,7 +6,13 @@
 - **New in CS6:** `Changed` — the Color panel is now **resizable** (CS6 JDI). The slider models, spectrum options, ramp gestures, and alerts are unchanged from CS5.
 - **Depends on:** `CLR-001` color-models, `CLR-002` color-picker, `CLR-003` swatches-and-libraries, `CLR-004` histogram-and-info, `ARCH-003` qt6-ui-design, `ARCH-007` color-management, `ARCH-008` document-model, `03-tools/eyedropper-color-sampler-ruler.md`, `02-ui-ux/preferences.md`.
 
-> This document owns the **Color panel UI surface** only. The color value model, conversions, gamut/web-safe predicates, and picker are specified in `CLR-001` and `CLR-002`; the Info panel gamut flag in `CLR-004`. All crate, module, widget, and type names below are **design proposals**. No code exists in this repository. Facts not confirmed by a fetched CS6 source are marked *(inferred)*.
+> This document owns the **Color panel UI surface** only. The color value model,
+> conversions, gamut/web-safe predicates, and picker are specified in `CLR-001`
+> and `CLR-002`; the Info panel gamut flag in `CLR-004`. All crate, module,
+> widget, and type names below are **design proposals**. The repository contains a
+> working implementation; this file stays the behavioural contract for the
+> feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped and what
+> did not. Facts not confirmed by a fetched CS6 source are marked *(inferred)*.
 
 ## CS6 behavior
 

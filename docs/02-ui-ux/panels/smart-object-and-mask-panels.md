@@ -6,7 +6,13 @@
 - **New in CS6:** `Changed` — the CS5 **Masks panel was retired** and its controls moved into the new **Properties panel** (mask mode; `PAN-006`). Clicking the mask thumbnail in the Layers panel now activates the mask (CS5 used the Masks-panel Pixel Mask button). CS6 also enables **Invert** and **Threshold** for masks in 32-bit/channel images, and adds two new smart-filter-capable filters (**Blur Gallery**, **Oil Paint**). The CS5 Help's "Masks panel (CS6)" wording survives in the CS6 PDF as an artifact (see Open questions).
 - **Depends on:** `PAN-006` `02-ui-ux/panels/properties-panel.md` (the contextual router; **this spec is the mask/smart-object relationship surface, not a second panel**), `PAN-001` `02-ui-ux/panels/layers-panel.md` (mask/smart-filter thumbnails and badges), `LAY-004` `05-layers/layer-masks.md`, `LAY-005` `05-layers/vector-masks-and-clipping-masks.md`, `LAY-020` `05-layers/smart-objects.md`, `LAY-021` `05-layers/smart-filters.md`, `SEL-003` `08-selection/refine-edge.md`, `SEL-005` `08-selection/color-range.md`, `01-architecture/document-model.md` (`ARCH-008`), `01-architecture/undo-history.md` (`ARCH-009`).
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository. Behavior is taken from the fetched CS6 Help PDF unless marked *(inferred)*. The mask and Smart Object **semantics** are owned by `LAY-004`/`LAY-005`/`LAY-020`/`LAY-021`; this file specifies the **UI surfaces and the Properties-panel mask/property relationship**.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Behavior is taken from the fetched CS6 Help PDF unless
+> marked *(inferred)*. The mask and Smart Object **semantics** are owned by
+> `LAY-004`/`LAY-005`/`LAY-020`/`LAY-021`; this file specifies the **UI surfaces
+> and the Properties-panel mask/property relationship**.
 
 ## CS6 behavior
 

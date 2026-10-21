@@ -6,7 +6,12 @@
 - **New in CS6:** `No` — CS6 supports **embedded** Smart Objects only (every `File > Place` embeds the source bytes in the PSD). **Linked** Smart Objects (`Place Linked` / `Convert to Linked`) and **Place Embedded** as a distinct command arrived in **Photoshop CC 2014 (14.2, June 2014)**. The PSD **`lnk2`** key is older (it appears in the spec's PSB 8-byte-length list) and predates user-facing linked objects; **`lnkD`/`lnk3`** are the linked-layer keys. See `## Open questions`.
 - **Depends on:** `ARCH-008` document-model, `ARCH-011` file-formats, `LAY-020` smart-objects, `LAY-021` smart-filters, `10-workflow-io/save-and-save-as.md`, `10-workflow-io/open-and-new.md`
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository. CS6 embedded behavior is from the fetched CS6 Help PDF; linked-object behavior is post-CS6 and marked as such; PSD block facts are from the Adobe file-format specification.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. CS6 embedded behavior is from the fetched CS6 Help
+> PDF; linked-object behavior is post-CS6 and marked as such; PSD block facts are
+> from the Adobe file-format specification.
 
 ## CS6 behavior
 

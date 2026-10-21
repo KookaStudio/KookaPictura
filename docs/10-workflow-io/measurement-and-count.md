@@ -6,8 +6,10 @@
 - **New in CS6:** `No` — the Measurement scale, Measurement Log, Data Points, and Count tool are carried from CS5/CS4. CS6 changes no documented measurement behavior.
 - **Depends on:** `PAN-023` measurement-log-panel (panel UI), `TOOL-018`/`TOOL-019` note-and-count (Count tool semantics, ruler), `03-tools/eyedropper-color-sampler-ruler.md` (Ruler tool), `ARCH-008` document-model, `ARCH-009` undo-history, `07-color-painting/histogram-and-info.md` (histogram data), `WF-010` (DICOM scale import), `09-automation/rust-scripting-replacement.md`.
 
-> All module and widget names below are **design proposals**. No code exists in
-> this repository. Behavior is taken from the CS6 Help PDF unless marked
+> All module and widget names below are **design proposals**. The repository
+> contains a working implementation; this file stays the behavioural contract
+> for the feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped
+> and what did not. Behavior is taken from the CS6 Help PDF unless marked
 > *(inferred)*. Column-label and record formatting beyond the documented data
 > points are behavioral parity only.
 

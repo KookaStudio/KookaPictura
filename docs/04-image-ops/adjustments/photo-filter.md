@@ -6,8 +6,10 @@
 - **New in CS6:** `Changed` — the adjustment is long-standing (introduced in CS2); CS6 moves its UI to the Properties panel. The CS6 Help describes the same preset set and the Density / Preserve Luminosity controls. No new filters are documented in the CS6 "What's New" list.
 - **Depends on:** `ARCH-008` document-model, `ARCH-009` undo-history, `ARCH-006` gpu-rendering-pipeline, `01-architecture/color-management.md`, `04-image-ops/image-modes.md`, `04-image-ops/adjustments-overview.md`, `05-layers/adjustment-layers.md`, `07-color-painting/color-models.md`, `07-color-painting/color-picker.md`, `10-workflow-io/presets-manager.md`.
 
-> All module and widget names below are **design proposals**. No code exists in
-> this repository. Facts not confirmed by a fetched CS6 source are marked
+> All module and widget names below are **design proposals**. The repository
+> contains a working implementation; this file stays the behavioural contract
+> for the feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped
+> and what did not. Facts not confirmed by a fetched CS6 source are marked
 > *(inferred)*.
 
 ## CS6 behavior

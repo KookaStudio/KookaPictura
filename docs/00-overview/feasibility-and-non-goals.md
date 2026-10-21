@@ -71,7 +71,7 @@ is excluded, why, and when it could return.
 |---|---|---|
 | **3D (Extended)** | Closed engine; very large scope; marginal to a Linux 2D editor's core. | A community/optional module; never exact CS6 parity. |
 | **Video / Timeline** (all CS6 editions) | Exact timeline semantics and legacy codec support; video is a large domain adjacent to a raster editor. | A decode/import feature via FFmpeg, without CS6 timeline parity. |
-| **Measurement / counting / DICOM** (Extended) | Niche; DICOM is a separate medical-imaging domain. | Demand plus an open DICOM library (e.g. GDCM) and a parity decision per command. |
+| **Measurement engine / DICOM** (Extended) | Niche; DICOM is a separate medical-imaging domain. The Count tool ships, but the measurement scale, its exporters, and the Measurement Log panel do not. | Demand plus an open DICOM library (e.g. GDCM) and a parity decision per command. |
 | **Printing fidelity** | Adobe's print path and color engine are proprietary; output depends on the OS/driver. | Basic CUPS + ICC printing as a separate feature; exact proofing parity not promised. |
 | **Adobe cloud services** (Creative Cloud, Cloud Documents/PSDC, Behance, Stock, Adobe Fonts/Typekit) | Proprietary, account-bound, privately specified (`PSDC` is explicitly private in the format spec). | Not planned; separate integrations would be independently specified. |
 | **Adobe Camera Raw parity** | Proprietary pipeline and camera support; patents. | Best-effort raw import via open libraries. |

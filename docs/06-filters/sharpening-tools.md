@@ -6,7 +6,12 @@
 - **New in CS6:** `No` — Smart Sharpen and its Basic/Advanced split predate CS6 and are unchanged; **Shake Reduction was introduced in Photoshop CC (2013), after CS6**, and is **not** part of the CS6 parity baseline. This spec is the **deep-dive companion** to `FILT-020` sharpen-filters; shared basics are not duplicated here.
 - **Depends on:** `FILT-020` sharpen-filters (canonical Sharpen/Unsharp Mask/Smart Sharpen spec), `FILT-010` blur-filters (Gaussian kernel for `Remove = Gaussian Blur`), `FILT-001` filters-overview, `ARCH-006` gpu-rendering-pipeline, `ARCH-009` undo-history, `LAY-010` blend-modes (Luminosity), `IMG-009` 32-bit-hdr, `LAY-004` layer-masks.
 
-> All module, widget, and type names below are **design proposals**. No code exists in this repository. Adobe's sharpening and deconvolution kernels are closed; parity is **behavioral parity only, algorithm TBD**. Shake Reduction content is **CC-only** and cannot be CS6 parity.
+> All module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Adobe's sharpening and deconvolution kernels are
+> closed; parity is **behavioral parity only, algorithm TBD**. Shake Reduction
+> content is **CC-only** and cannot be CS6 parity.
 
 ## CS6 behavior
 

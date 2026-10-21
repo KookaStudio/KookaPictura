@@ -6,7 +6,11 @@
 - **New in CS6:** `Changed` — CS6 **streamlined** the panel to four filters (Scene / Meshes / Materials / Lights) and moved most settings into the contextual **Properties panel**; earlier CS5 text labels survive in the CS6 Help PDF (see Open questions).
 - **Depends on:** `TOOL-060` 3d-tools, `OVR-002` cs6-editions-and-constraints, `OVR-003` feasibility-and-non-goals, `ARCH-002` document-model, `ARCH-003` qt6-ui-design, `TOOL-013` layers-panel (texture groups), `TOOL-011` properties-panel.
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository. The CS6 3D engine is closed; algorithmic statements are either sourced to the CS6 Help text or marked **inferred**.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. The CS6 3D engine is closed; algorithmic statements
+> are either sourced to the CS6 Help text or marked **inferred**.
 
 ## CS6 behavior
 

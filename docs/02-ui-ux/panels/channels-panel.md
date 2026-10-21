@@ -6,7 +6,12 @@
 - **New in CS6:** `Changed` — CS6 enabled **Split Channels** for documents with a single layer (so simple transparency can be split). The panel's channel model (color/alpha/spot channels, eye column, thumbnail options, panel menu) is otherwise CS5-era.
 - **Depends on:** `SEL-004` quick-mask, `SEL-012` save-and-load-selections, `SEL-013` channel-based-masking, `IMG-004` image-modes, `IMG-007` duotone, `IMG-008` indexed-color, `CLR-003` swatches-and-libraries (spot color pickers), `LAY-004` layer-masks (masks are stored as alpha channels), `ARCH-008` document-model, `ARCH-009` undo-history, `PAN-004` history-panel, `10-workflow-io/printing.md`.
 
-> Crate, module, widget, and type names below are **design proposals**. No code exists in this repository. Selection semantics and mask/alpha-channel behavior are owned by the `08-selection/` specs; this file specifies the **panel widget** and the channel operations invoked from it.
+> Crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Selection semantics and mask/alpha-channel behavior
+> are owned by the `08-selection/` specs; this file specifies the **panel widget**
+> and the channel operations invoked from it.
 
 ## CS6 behavior
 

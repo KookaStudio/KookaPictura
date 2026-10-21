@@ -6,7 +6,12 @@
 - **New in CS6:** `Yes` — the **Properties panel** is new in CS6. It is a **contextual** dock that shows settings for the current selection: adjustment-layer settings (moved out of the CS5 Adjustments panel), mask settings (the CS5 **Masks panel** was retired and amalgamated here), and the settings of the selected 3D element (Environment / Scene / Camera / Mesh / Material / Light). It also hosts the adjustment **Presets menu** and the `Clip to Layer` control. The old CS5 **Masks** and **Adjustments** panels no longer exist as separate editors.
 - **Depends on:** `LAY-012` adjustment-layers, `LAY-004` layer-masks, `LAY-005` vector-masks-and-clipping-masks, `LAY-013` fill-layers, `LAY-011` layer-styles, `TOOL-061` 3d-panel, `TOOL-052` pen-and-path-tools, `SEL-003` refine-edge, `SEL-005` color-range, `ARCH-003` qt6-ui-design, `ARCH-008` document-model, `ARCH-009` undo-history, `PAN-001` layers-panel, `PAN-005` adjustments-panel.
 
-> Crate, module, widget, and type names below are **design proposals**. No code exists in this repository. This file specifies the **contextual panel widget**; the semantics of each setting are owned by the layer, mask and 3D specs it cross-references.
+> Crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. This file specifies the **contextual panel widget**;
+> the semantics of each setting are owned by the layer, mask and 3D specs it
+> cross-references.
 
 ## CS6 behavior
 

@@ -6,7 +6,11 @@
 - **New in CS6:** `Changed` — CS6 folded object and camera manipulation into the **Move tool** options bar, replaced CS5 Repoussé with **3D Extrusion**, added on-canvas controls, drag-able shadows, and consolidated the scene/camera tools.
 - **Depends on:** `OVR-002` cs6-editions-and-constraints, `OVR-003` feasibility-and-non-goals, `TOOL-061` 3d-panel, `ARCH-002` document-model, `ARCH-003` qt6-ui-design, `ARCH-006` gpu-rendering-pipeline, `01-architecture/file-formats.md`, `05-layers/linked-and-embedded-objects.md`.
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository. CS6 3D is a closed engine; every algorithmic statement is either sourced to the CS6 Help text or marked **inferred**.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. CS6 3D is a closed engine; every algorithmic statement
+> is either sourced to the CS6 Help text or marked **inferred**.
 
 ## CS6 behavior
 

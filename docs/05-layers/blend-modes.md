@@ -6,12 +6,14 @@
 - **New in CS6:** `No` — the 27-mode set and all blend formulas are unchanged from CS5 (Subtract/Divide date from CS5 or earlier, per community sources). CS6's blend-adjacent changes are UI/workflow only: group styles, the layer-style effects reorder, and a Dither option on Gradient Overlay/Stroke. Exact CS5-vs-CS6 mode-set differences are noted in `## Open questions`.
 - **Depends on:** `01-architecture/document-model.md` (`ARCH-008`), `01-architecture/color-management.md` (`ARCH-007`), `01-architecture/gpu-rendering-pipeline.md`, `05-layers/layers-overview.md`, `05-layers/layer-styles.md` (`LAY-011`), `05-layers/adjustment-layers.md` (`LAY-012`), `05-layers/fill-layers.md` (`LAY-013`), `04-image-ops/image-modes.md`.
 
-> All module, crate, and widget names are **design proposals**. No code exists
-> in this repository. Blend math is quoted from the W3C *Compositing and
-> Blending Level 1* specification where that spec defines the mode; Photoshop-only
-> modes are marked *(community-documented)*; anything not sourced is
-> marked *(inferred)*. Adobe's exact integer rounding and 32-bit behavior are
-> closed and are listed in `## Open questions`.
+> All module, crate, and widget names are **design proposals**. The repository
+> contains a working implementation; this file stays the behavioural contract for
+> the feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped and
+> what did not. Blend math is quoted from the W3C *Compositing and Blending Level
+> 1* specification where that spec defines the mode; Photoshop-only modes are
+> marked *(community-documented)*; anything not sourced is marked *(inferred)*.
+> Adobe's exact integer rounding and 32-bit behavior are closed and are listed in
+> `## Open questions`.
 
 ## CS6 behavior
 

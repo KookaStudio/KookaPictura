@@ -6,8 +6,10 @@
 - **New in CS6:** `Changed` — CS6 ships **Camera Raw 7.0** with **Process Version 2012 (PV2012)**: rewritten Basic tone controls (`Highlights`, `Shadows`, `Whites`, `Blacks`), expanded local corrections, camera profiles, and `Snapshots`. The CS6 Help PDF documents the ACR dialog under **Camera Raw** (pages 303–335).
 - **Depends on:** `FILT-100` camera-raw-filter (dialog tabs, parameters, pipeline), `LAY-020` smart-objects, `LAY-021` smart-filters, `ARCH-007` color-management, `ARCH-008` document-model, `ARCH-009` undo-history, `01-architecture/file-formats.md`, `10-workflow-io/file-info-and-metadata.md` (sidecars), `09-automation/batch-processing.md`, `09-automation/actions.md`, `04-image-ops/32-bit-hdr.md`.
 
-> All module and widget names below are **design proposals**. No code exists in
-> this repository. This document owns the **workflow** (where ACR is reached,
+> All module and widget names below are **design proposals**. The repository
+> contains a working implementation; this file stays the behavioural contract
+> for the feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped
+> and what did not. This document owns the **workflow** (where ACR is reached,
 > how settings travel, how files are batched/converted). The ACR **workspace
 > tabs, controls, and pipeline** are owned by `FILT-100` and are referenced,
 > not duplicated.

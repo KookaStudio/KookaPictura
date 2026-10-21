@@ -6,7 +6,11 @@
 - **New in CS6:** `No` — the cross-tool selection options bar and the Select-menu operations carry over from CS5. The CS6 selection *additions* (Color Range Skin Tones / Detect Faces, and mask threshold/invert for layer masks) belong to `SEL-005` and `LAY-004`, not to this shared surface.
 - **Depends on:** `SEL-001` selection-model, `SEL-003` refine-edge, `SEL-004` quick-mask, `SEL-005` color-range, `TOOL-002` marquee, `TOOL-003` lasso, `TOOL-004` quick-selection/magic-wand, `TOOL-044` quick-mask-tool, `03-tools/eyedropper-color-sampler-ruler.md`, `05-layers/layer-masks.md` (`LAY-004`), `01-architecture/qt6-ui-design.md`, `02-ui-ux/keyboard-shortcuts.md`, `02-ui-ux/toolbox-and-options-bar.md`.
 
-> All module, widget, and type names below are **design proposals**. No code exists in this repository. Behavior is taken from the fetched CS6 Help corpus; community-reported values are marked.
+> All module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Behavior is taken from the fetched CS6 Help corpus;
+> community-reported values are marked.
 
 ## CS6 behavior
 

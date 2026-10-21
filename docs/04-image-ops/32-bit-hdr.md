@@ -6,8 +6,10 @@
 - **New in CS6:** `Changed` — CS6 enables **Invert and Threshold adjustments for masks in 32-bit/channel images** and adds **new HDR Pro presets**; the Merge To HDR Pro command and 32-bit working mode themselves date from CS5.
 - **Depends on:** `04-image-ops/bit-depth-and-conversion.md`, `04-image-ops/image-modes.md`, `04-image-ops/adjustments/exposure.md`, `04-image-ops/adjustments/hdr-toning.md`, `04-image-ops/adjustments/levels.md`, `04-image-ops/adjustments/hue-saturation.md`, `06-filters/blur-filters.md`, `01-architecture/file-formats.md` (`ARCH-011`), `01-architecture/color-management.md` (`ARCH-007`), `01-architecture/gpu-rendering-pipeline.md`, `09-automation/batch-processing.md`, `10-workflow-io/file-info-and-metadata.md`.
 
-> All module, crate, and widget names below are **design proposals**. No code
-> exists in this repository. Statements marked *(inferred)* are not taken from a
+> All module, crate, and widget names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Statements marked *(inferred)* are not taken from a
 > fetched source and are candidates for `## Open questions`.
 
 ## CS6 behavior

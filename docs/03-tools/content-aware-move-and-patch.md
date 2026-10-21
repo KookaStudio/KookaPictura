@@ -6,10 +6,13 @@
 - **New in CS6:** `Yes` — **Content-Aware Move** is new in CS6, and the **Patch** tool gained a **Content-Aware** mode in CS6. **Content-Aware Fill** (`Edit > Fill > Content-Aware`) existed since CS5.
 - **Depends on:** `ARCH-008` document-model, `ARCH-009` undo-history, `ARCH-006` gpu-rendering-pipeline, `08-selection/selection-model.md`, `03-tools/healing-brushes.md`, `06-filters/*`
 
-> Module and widget names are **design proposals**. No code exists. CS6 behavior
-> is taken from the fetched CS6 Help PDF and CS6-for-Photographers chapter. The
-> production algorithm is closed; the best public candidate is a PatchMatch-family
-> randomized patch synthesis. Parity is **behavioral parity only, algorithm TBD**.
+> Module and widget names are **design proposals**. The repository contains a
+> working implementation; this file stays the behavioural contract for the
+> feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped and what
+> did not. CS6 behavior is taken from the fetched CS6 Help PDF and
+> CS6-for-Photographers chapter. The production algorithm is closed; the best
+> public candidate is a PatchMatch-family randomized patch synthesis. Parity is
+> **behavioral parity only, algorithm TBD**.
 
 ## CS6 behavior
 

@@ -6,8 +6,10 @@
 - **New in CS6:** `No` — the History panel, snapshots, non-linear history, and the History Brush predate CS6; CS6 carries them forward unchanged.
 - **Depends on:** `ARCH-008` document-model, `ARCH-006` gpu-rendering-pipeline, `02-ui-ux/panels/history-panel.md`, `03-tools/history-brush.md`, `03-tools/art-history-brush.md`, `10-workflow-io/scratch-disks-and-memory.md`, `11-cross-cutting/crash-recovery-and-autosave.md`
 
-> All module and widget names below are **design proposals**. No code exists in
-> this repository. CS6-specific numbers not confirmed by a fetched CS6 source
+> All module and widget names below are **design proposals**. The repository
+> contains a working implementation; this file stays the behavioural contract
+> for the feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped
+> and what did not. CS6-specific numbers not confirmed by a fetched CS6 source
 > are marked *(inferred)*.
 
 ## CS6 behavior

@@ -6,10 +6,12 @@
 - **New in CS6:** `Changed` — Bridge is referenced as Bridge CS5 in the reused Help text; Mini Bridge is present but degraded (the removed Application bar took its launch button, see `AUTO-014`); CS6 adds `File > Open As Smart Object` / linked Smart Objects and restores PDF Presentation as an Automate option; Adobe Stock and Flash panels are **not** CS6 features.
 - **Depends on:** `AUTO-014` mini-bridge, `AUTO-012` plugin-sdk, `AUTO-003` batch-processing, `05-layers/smart-objects.md`, `05-layers/linked-and-embedded-objects.md`, `01-architecture/file-formats.md`, `10-workflow-io/open-and-new.md`, `10-workflow-io/export-formats.md`, `00-overview/feasibility-and-non-goals.md`, `00-overview/licensing-and-provenance.md`.
 
-> All module, widget, and type names below are **design proposals**. No code
-> exists in this repository. Facts confirmed by the fetched CS6 Help reference
-> are stated plainly; secondary/community facts are marked *(secondary)*;
-> inferred design choices are marked *(inferred)*.
+> All module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the
+> behavioural contract for the feature, and `docs/dev/doc-code-parity-gaps.md`
+> records what shipped and what did not. Facts confirmed by the fetched CS6
+> Help reference are stated plainly; secondary/community facts are marked
+> *(secondary)*; inferred design choices are marked *(inferred)*.
 
 ## CS6 behavior
 

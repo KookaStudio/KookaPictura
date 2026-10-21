@@ -6,8 +6,10 @@
 - **New in CS6:** `No` — HDR Toning was introduced in Photoshop CS5 (with HDR Pro). CS6 keeps the command, adds new HDR Pro presets, and keeps the same four tone-mapping methods. The CS6 Properties panel is not involved (HDR Toning is a direct command, not an adjustment layer).
 - **Depends on:** `ARCH-004` rust-qt-interop, `ARCH-008` document-model, `ARCH-009` undo-history, `04-image-ops/32-bit-hdr.md`, `04-image-ops/image-modes.md`, `04-image-ops/bit-depth-and-conversion.md`, `01-architecture/color-management.md`, `05-layers/smart-filters.md`
 
-> All module and widget names below are **design proposals**. No code exists in
-> this repository. Facts not confirmed by a fetched CS6 source are marked
+> All module and widget names below are **design proposals**. The repository
+> contains a working implementation; this file stays the behavioural contract
+> for the feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped
+> and what did not. Facts not confirmed by a fetched CS6 source are marked
 > *(inferred)*.
 
 ## CS6 behavior

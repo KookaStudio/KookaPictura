@@ -6,8 +6,10 @@
 - **New in CS6:** `No` — both tools and the Clone Source panel predate CS6; CS6 carries them forward unchanged. The panel's transform/overlay controls are available to Clone Stamp and Healing Brush alike.
 - **Depends on:** `ARCH-008` document-model, `ARCH-009` undo-history, `ARCH-006` gpu-rendering-pipeline, `07-color-painting/brush-engine.md`, `03-tools/brush-and-pencil.md`, `03-tools/healing-brushes.md`, `02-ui-ux/toolbox-and-options-bar.md`, `02-ui-ux/panels/clone-source-panel.md`, `07-color-painting/pattern-presets.md`
 
-> All crate, module, and widget names below are **design proposals**. No code
-> exists in this repository. Facts taken from the fetched CS6 Help reference PDF
+> All crate, module, and widget names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Facts taken from the fetched CS6 Help reference PDF
 > and CS6-for-Photographers material are marked by source; anything inferred is
 > marked *(inferred)*. The exact Adobe sampling and pattern-tiling code is closed.
 

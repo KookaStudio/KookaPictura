@@ -45,7 +45,8 @@ Full prerequisites, test commands, and packaging notes are in
 
 ## Quick start
 
-1. `File > Open…` a PSD/PSB file, or any PNG, JPEG, GIF, BMP, TIFF, or WebP.
+1. `File > Open…` a PSD/PSB file, or any PNG, JPEG, GIF, BMP, TIFF, WebP, PDF,
+   or EPS file.
 2. Edit with the toolbox and panels: paint, select, crop, add adjustment and
    fill layers, apply filters.
 3. `File > Save` writes PSD/PSB, preserving the file's color mode, bit depth,
@@ -55,24 +56,51 @@ Full prerequisites, test commands, and packaging notes are in
 
 - **PSD/PSB round-trip.** Reads and writes Gray, RGB, CMYK, Lab, Indexed, and
   Bitmap at 8/16/32-bit, with raw, RLE, and ZIP compression, preserving blocks
-  the engine does not model.
-- **Layers.** Groups and nesting, raster and vector masks, 27 blend modes,
-  layer styles and effects, fill and adjustment layers, layer locks, color
-  labels, and layer filtering.
+  the engine does not model. `crates/pictura-codec/src/`.
+- **Layers.** Groups and nesting, raster and vector masks, clipping masks, 27
+  blend modes, layer styles and effects, fill and adjustment layers, shape and
+  type layers, layer locks, color labels, and layer filtering.
+  `crates/pictura-core/src/lib.rs`.
 - **Smart objects.** Embedded smart objects with a bundled, non-destructive
-  editing flow and smart filters.
+  editing flow and smart filters. `crates/pictura-render/src/smart_filter.rs`.
+- **The classic tool surface.** Move; the marquee and lasso families,
+  including the magnetic lasso; magic wand and quick selection; crop and
+  perspective crop; the healing family (spot healing, healing brush, patch,
+  content-aware move, red eye); the erasers; gradient and paint bucket; clone
+  and pattern stamp; the history brushes; blur, sharpen, and smudge; dodge,
+  burn, and sponge; the pen and path tools; the type tools and type masks; the
+  shape tools; the slice tools; rotate view; and the color sampler, ruler,
+  note, and count. `crates/pictura-app/cpp/tool_catalog.cpp`.
+- **Transforms.** Free Transform, plus skew, distort, perspective, and warp.
+  `crates/pictura-render/src/document_ops/layer_ops/transform.rs`.
 - **Pictura Raw.** The built-in raw processor (the equivalent role to Adobe
   Camera Raw, which is an add-on in Photoshop), reached through
-  `Filter > Pictura Raw…`.
-- **Adjustments and filters.** All the usual adjustment families plus the full
-  classic filter set — blur, sharpen, noise, stylize, pixelate, distort,
-  render, and the artistic families.
-- **Selections.** Marquee, ellipse, lasso, magic wand, and quick selection, with
-  save/load to channels, selection-masked edits, and content move.
+  `Filter > Pictura Raw…`, with nine tabs. It applies to an already-decoded
+  image; opening a camera raw file is not implemented yet.
+  `crates/pictura-app/cpp/pictura_raw_dialog.cpp`.
+- **Adjustments.** The classic families, from Levels and Curves to Match
+  Color, with live preview and adjustment-layer variants. Each one that still
+  lacks a control names it in the roadmap. `crates/pictura-adjust/src/`.
+- **Filters.** 110 filters across the classic families — blur, sharpen, noise,
+  stylize, pixelate, distort, render, sketch, texture, artistic, and brush
+  strokes — plus Liquify, Oil Paint, the Blur Gallery, and the Filter Gallery.
+  Three CS6 families have no engine yet — Adaptive Wide Angle, Lens Correction,
+  and Vanishing Point — and the roadmap names them.
+  `crates/pictura-filters/src/`.
+- **Selections.** Marquee, ellipse, lasso, magnetic lasso, magic wand, and
+  quick selection, with Refine Edge, Color Range, the Modify set, save/load to
+  channels, selection-masked edits, and content move.
+  `crates/pictura-select/src/`.
 - **Color management.** ICC profiles, Assign and Convert Profile, and
   configurable handling of an incoming embedded profile.
+  `crates/pictura-color/src/`.
 - **Metadata.** EXIF/IPTC/XMP reading and editing, File Info, and metadata
-  templates.
+  templates. `crates/pictura-codec/src/`.
+- **Export.** PSD, PSB, PNG, JPEG, TIFF, WebP, BMP, GIF, SVG, and Photoshop
+  PDF, plus Save for Web with palette reduction, dithering, and transparency.
+  `crates/pictura-app/cpp/export_as_dialog.cpp`.
+- **Print.** A print dialog over the system print stack, with a "Save as PDF"
+  option. `crates/pictura-app/cpp/print_dialog.cpp`.
 - **Fast.** A Vulkan (wgpu) compute path accelerates compositing and the heavy
   filters, with the CPU as the reference.
 - **Headless and scriptable.** A non-interactive `--headless` mode and an
@@ -114,6 +142,8 @@ Open an issue at
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — provenance, asset, and dependency rules.
 - [`ROADMAP.md`](ROADMAP.md) — shipped, planned, and not planned.
 - [`docs/README.md`](docs/README.md) — how to read the specification corpus.
+- [`docs/dev/doc-code-parity-gaps.md`](docs/dev/doc-code-parity-gaps.md) — what
+  the corpus specifies but the code does not yet implement.
 - [`docs/dev/STATE.md`](docs/dev/STATE.md) — the project resume anchor.
 
 ## License

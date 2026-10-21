@@ -34,7 +34,7 @@ and the shared module.
 | File formats | `file-formats.md` | ARCH-010 | `pictura-codec`, `pictura-io::psd` | open/import dialogs | draft |
 | Plugin/scripting ABI | `plugin-and-scripting-abi.md` | ARCH-011 | `pictura-plugin`, `pictura-script` | plugin manager | draft |
 | Performance targets | `performance-targets.md` | ARCH-013 | `pictura_core::perf` | — | draft |
-| Build/packaging | `build-and-packaging.md` | ARCH-014 | workspace build | Flatpak/AppImage | draft |
+| Build/packaging | `build-and-packaging.md` — never written (#494) | ARCH-014 | workspace build | Flatpak/AppImage | draft |
 
 ## 02-ui-ux
 

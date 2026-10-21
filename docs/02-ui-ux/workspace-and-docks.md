@@ -6,8 +6,10 @@
 - **New in CS6:** `Changed` — the Application bar was removed and the workspace switcher moved into the **Options bar** (top-right, directly above the panel columns); CS6 ships the predefined workspaces `Essentials (Default)`, `New in CS6`, `3D`, `Advanced 3D` (Extended), `Motion`, `Painting`, `Photography` and `Typography`; a darker interface with **four brightness themes** and `Auto-Collapse Iconic Panels` shape dock behavior.
 - **Depends on:** `UI-001` application-frame, `UI-002` menus, `ARCH-003` qt6-ui-design, `01-architecture/document-model.md`
 
-> All module and widget names below are **design proposals**. No code exists in
-> this repository. Facts confirmed by the fetched CS6 Help reference and other
+> All module and widget names below are **design proposals**. The repository
+> contains a working implementation; this file stays the behavioural contract
+> for the feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped
+> and what did not. Facts confirmed by the fetched CS6 Help reference and other
 > CS6-era primary/secondary sources are stated plainly; reconstructed/community
 > facts are marked *(inferred)* or `(to verify)`.
 

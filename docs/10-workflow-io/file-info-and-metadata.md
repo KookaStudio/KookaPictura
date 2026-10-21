@@ -6,10 +6,12 @@
 - **New in CS6:** `No` (the File Info dialog and XMP storage model predate CS6; CS6 changes are cosmetic — e.g. the resizable dialog and the Description field's edit affordances noted in the CS6 "What's new" list are Print-dialog items, not File Info). *(inferred from the CS6 Help corpus; see `## Open questions`.)*
 - **Depends on:** `01-architecture/file-formats.md` (format carriage), `ARCH-008` document-model, `ARCH-009` undo-history, `10-workflow-io/save-and-save-as.md`, `10-workflow-io/document-lifecycle.md`, `06-filters/camera-raw-filter.md` (`FILT-100`, `crs:` XMP), `02-ui-ux/panels/note-panel.md` (annotations), `OVR-004` licensing.
 
-> All module, crate, and widget names below are **design proposals**. No code
-> exists in this repository. Statements marked *(inferred)* or *(secondary)* are
-> not taken from the primary CS6 Help PDF and are candidates for
-> `## Open questions`.
+> All module, crate, and widget names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Statements marked *(inferred)* or *(secondary)* are
+> not taken from the primary CS6 Help PDF and are candidates for `## Open
+> questions`.
 
 > **Source caveat.** The CS6 Help reference PDF contains **no dedicated File
 > Info/metadata chapter**. It documents only (a) the DICOM metadata categories

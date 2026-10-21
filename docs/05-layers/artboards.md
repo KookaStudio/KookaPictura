@@ -6,7 +6,13 @@
 - **New in CS6:** `No` — **correction:** artboards were introduced to Photoshop in **CC 2015 (version 16.0)**, three years after CS6. The Adobe PSD specification itself labels the artboard block **"Artboard Data (Photoshop CC 2015)"**. Illustrator had artboards long before Photoshop; the feature was ported to Photoshop post-CS6, not in CS6.
 - **Depends on:** `ARCH-008` document-model, `LAY-020` smart-objects, `10-workflow-io/export-formats.md`, `10-workflow-io/save-and-save-as.md`
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository. **This file is a post-CS6 extension proposal, not a CS6 parity contract.** Artboard facts are from the Adobe PSD specification (which dates the block to CC 2015) and from community/Adobe support statements; anything else is marked *(inferred)*.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. **This file is a post-CS6 extension proposal, not a
+> CS6 parity contract.** Artboard facts are from the Adobe PSD specification
+> (which dates the block to CC 2015) and from community/Adobe support statements;
+> anything else is marked *(inferred)*.
 
 ## CS6 behavior
 

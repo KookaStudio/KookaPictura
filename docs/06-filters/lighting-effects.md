@@ -6,7 +6,12 @@
 - **New in CS6:** `Yes` — **verified**. CS6 replaced the older Lighting Effects dialog with a new **64-bit "Lighting Effects gallery"** — a dedicated workspace with on-canvas controls and previews. The CS6 What's-New section credits the revamp with better performance and results and highlights the 64-bit gallery's dedicated workspace with its on-canvas controls and live preview. The CS6 Help corpus contains both a **`Add Lighting Effects (CS6)`** topic and a legacy **`Add Lighting Effects (CS5)`** topic; the difference is the workspace/UI, and the revamp is CS6 — **not** CC.
 - **Depends on:** `01-architecture/gpu-rendering-pipeline.md`, `01-architecture/document-model.md`, `01-architecture/undo-history.md`, `05-layers/smart-filters.md`, `07-color-painting/color-models.md`, `04-image-ops/image-modes.md`, `02-ui-ux/panels/channels-panel.md`
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository. Behavior is taken from the fetched CS6 Help PDF unless marked *(inferred)*. Adobe's lighting/reflection model is closed; those parts are **behavioral parity only, algorithm TBD**.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Behavior is taken from the fetched CS6 Help PDF unless
+> marked *(inferred)*. Adobe's lighting/reflection model is closed; those parts
+> are **behavioral parity only, algorithm TBD**.
 
 ## CS6 behavior
 

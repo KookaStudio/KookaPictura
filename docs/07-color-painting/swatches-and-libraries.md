@@ -6,8 +6,10 @@
 - **New in CS6:** `No` — the Swatches panel and Preset Manager are unchanged in function. The HTML/CSS/SVG swatch import shown in the CS6 "What's New" list is explicitly **Creative Cloud only** and is not a CS6 Standard feature.
 - **Depends on:** `CLR-001` color-models, `CLR-002` color-picker, `ARCH-007` color-management, `01-architecture/file-formats.md`, `02-ui-ux/panels/swatches-panel.md`, `10-workflow-io/presets-manager.md`, `10-workflow-io/save-and-save-as.md`, `07-color-painting/color-picker.md`.
 
-> All crate, module, widget, and type names below are **design proposals**. No code
-> exists in this repository. Facts not confirmed by a fetched CS6 source are marked
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Facts not confirmed by a fetched CS6 source are marked
 > *(inferred)*.
 
 ## CS6 behavior

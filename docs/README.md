@@ -1,16 +1,19 @@
 # Kooka Pictura — Photoshop CS6 parity specification
 
-Documentation-only specification for remaking **Adobe Photoshop CS6 (v13, 2012)**
-as a native Linux application using **Rust** (core) and **Qt6** (UI), targeting
-behavioral parity with CS6.
+The behavioural contract for **Adobe Photoshop CS6 (v13, 2012)**, which this
+repository reimplements as a native Linux application using **Rust** (core) and
+**Qt6** (UI), targeting behavioral parity with CS6.
 
-> This repository contains **no code, no build files, and no dependencies.**
-> It is a specification corpus. Every `## Rust module mapping` / `## Qt6
-> component mapping` section is a design proposal, not an implementation.
+> The implementation lives in `crates/`. Every `## Rust module mapping` / `## Qt6
+> component mapping` section is a design proposal rather than a description of
+> the shipped code, and `docs/dev/doc-code-parity-gaps.md` records what shipped
+> and what did not.
 
 ## Scope
 
-- **Parity target:** Photoshop CS6, Standard + Extended editions.
+- **Parity target:** Photoshop CS6, Standard edition, plus the Extended-only
+  features the corpus marks and the project has chosen to build (the Count
+  tool). Edition gating is not implemented (#650).
 - **Platform:** Linux (native), X11 + Wayland.
 - **Stack:** Rust core, Qt6 UI (Widgets and/or QML), GPU compositing.
 - **Out of scope for parity:** OS-specific integration with no Linux equivalent
@@ -28,6 +31,8 @@ behavioral parity with CS6.
 6. [`TRACEABILITY.md`](TRACEABILITY.md) — CS6 feature → spec → Rust module → Qt component.
 7. [`SPEC_TEMPLATE.md`](SPEC_TEMPLATE.md) — the canonical structure every spec follows.
 8. [`GLOSSARY.md`](GLOSSARY.md) — terms and CS6-specific vocabulary.
+9. [`dev/doc-code-parity-gaps.md`](dev/doc-code-parity-gaps.md) — what the corpus
+   specifies but the code does not yet implement, and the issue tracking each gap.
 
 ## Status legend
 

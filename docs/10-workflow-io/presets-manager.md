@@ -6,10 +6,12 @@
 - **New in CS6:** `Changed` — the menu path moves from `Edit > Preset Manager` (CS5) to `Edit > Presets > Preset Manager` (CS6); CS6 adds `Edit > Presets > Migrate Presets` (import CS3+ presets) and `Edit > Presets > Export/Import Presets` (share a setup across workgroup machines). The dialog itself, its display modes, and the `Load`/`Replace`/`Reset`/`Save Set` operations are CS5-equivalent.
 - **Depends on:** `BRU-006` brush-presets, `CLR-003` swatches-and-libraries, `07-color-painting/gradient-presets.md`, `07-color-painting/pattern-presets.md`, `05-layers/layer-styles.md`, `09-automation/actions.md` (`AUTO-001`), `02-ui-ux/panels/tool-presets-panel.md`, `02-ui-ux/preferences.md` (`UI-010`), `01-architecture/file-formats.md`, `11-cross-cutting/preference-storage.md`.
 
-> All crate, module, widget, and type names below are **design proposals**. No
-> code exists in this repository. Facts confirmed by the fetched CS6 Help
-> reference are stated plainly; community/`.psp`-documented facts are marked
-> *(secondary)*; inferred design choices are marked *(inferred)*.
+> All crate, module, widget, and type names below are **design proposals**.
+> The repository contains a working implementation; this file stays the
+> behavioural contract for the feature, and `docs/dev/doc-code-parity-gaps.md`
+> records what shipped and what did not. Facts confirmed by the fetched CS6
+> Help reference are stated plainly; community/`.psp`-documented facts are
+> marked *(secondary)*; inferred design choices are marked *(inferred)*.
 
 ## CS6 behavior
 

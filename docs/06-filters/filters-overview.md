@@ -6,7 +6,13 @@
 - **New in CS6:** `Changed` — CS6 adds **Adaptive Wide Angle**, **Camera Raw Filter**, the **Blur Gallery** (Field Blur, Iris Blur, Tilt-Shift), and **Oil Paint**; reworks **Lighting Effects** as a 64-bit gallery; widens 32-bit filter support; and makes Blur Gallery / (later CC) Liquify Smart-Filter-capable. The Filter Gallery and Smart Filter mechanism themselves are carried over from CS5.
 - **Depends on:** `06-filters/blur-filters.md`, `06-filters/sharpen-filters.md`, `06-filters/noise-filters.md`, `06-filters/blur-gallery.md`, `06-filters/liquify.md`, `06-filters/other-filters.md`, `LAY-021` smart-filters, `LAY-020` smart-objects, `LAY-010` blend-modes, `IMG-005` bit-depth-and-conversion, `ARCH-006` gpu-rendering-pipeline, `ARCH-009` undo-history, `ARCH-011` plugin-and-scripting-abi, `ARCH-003` performance-targets, `02-ui-ux/menus.md`, `02-ui-ux/keyboard-shortcuts.md`.
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository. Adobe's exact filter kernels are closed; this document targets **behavioral parity only, algorithm TBD**. Behavioral facts are from the fetched CS6 Help PDF unless marked *(inferred)*. Per-filter parameter tables live in the family specs; this overview covers the shared plumbing.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Adobe's exact filter kernels are closed; this document
+> targets **behavioral parity only, algorithm TBD**. Behavioral facts are from the
+> fetched CS6 Help PDF unless marked *(inferred)*. Per-filter parameter tables
+> live in the family specs; this overview covers the shared plumbing.
 
 ## CS6 behavior
 

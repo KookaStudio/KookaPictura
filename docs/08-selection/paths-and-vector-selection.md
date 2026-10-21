@@ -6,7 +6,10 @@
 - **New in CS6:** `Changed` — CS6 recalls the **Feather radius** in the Make Selection-from-path dialog (CS6 What's New > Selections), continues the CS5 move of vector-mask controls into the **Properties** panel, and adds vector-curve dragging/90° pixel-grid behaviour (see `TOOL-001`). Path→selection and Make Work Path themselves are unchanged.
 - **Depends on:** `03-tools/pen-and-path-tools.md`, `03-tools/path-selection-tools.md`, `08-selection/selection-model.md`, `05-layers/vector-masks-and-clipping-masks.md`, `05-layers/layer-masks.md`, `01-architecture/file-formats.md`, `10-workflow-io/printing.md`.
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not.
 
 ## CS6 behavior
 

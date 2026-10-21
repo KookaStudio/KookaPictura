@@ -6,8 +6,10 @@
 - **New in CS6:** `No` (technology-selection document)
 - **Depends on:** `ARCH-004` rust-qt-interop, `ARCH-006` gpu-rendering-pipeline, `ARCH-007` undo-history, `ARCH-010` document-model
 
-> All module and crate names below are **design proposals**. No code exists in
-> this repository.
+> All module and crate names below are **design proposals**. The repository
+> contains a working implementation; this file stays the behavioural contract
+> for the feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped
+> and what did not.
 
 ## CS6 behavior
 

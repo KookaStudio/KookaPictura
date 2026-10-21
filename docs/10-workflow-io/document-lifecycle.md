@@ -6,8 +6,10 @@
 - **New in CS6:** `Changed` — CS6 adds **Save in Background** (keep working while a Save completes) and **Automatically Save Recovery Information** (crash auto-recovery, default 10-minute interval). Both live on the File Handling preferences page. CS5 had neither in this form. See `## Open questions` on the exact preference coupling.
 - **Depends on:** `ARCH-008` document-model, `ARCH-011` file-formats, `ARCH-007` color-management, `ARCH-009` undo-history, `02-ui-ux/preferences.md`, `11-cross-cutting/crash-recovery-and-autosave.md`, `WF-002` open-and-new, `WF-003` save-and-save-as, `WF-005` web-export-and-slices.
 
-> All crate, module, widget, and type names below are **design proposals**. No code
-> exists in this repository. CS6 behavior is taken from the fetched CS6 Help PDF
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. CS6 behavior is taken from the fetched CS6 Help PDF
 > unless marked *(inferred)*. Where the Help text is silent (for example the exact
 > dirty-state indicator), that is called out under `## Open questions`.
 

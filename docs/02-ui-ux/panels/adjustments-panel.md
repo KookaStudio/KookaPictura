@@ -6,7 +6,12 @@
 - **New in CS6:** `Changed` — CS6 keeps the adjustment **icons always visible** in the Adjustments panel and moves the **adjustment presets** out of the panel into a **Presets menu in the Properties panel** (presets for Levels, Curves, Exposure, Hue/Saturation, Black & White, Channel Mixer, Selective Color). Clicking an icon still both selects the adjustment and creates an adjustment layer; the actual parameter controls now live in the Properties panel, not the Adjustments panel.
 - **Depends on:** `LAY-012` adjustment-layers, `LAY-013` fill-layers, `ADJ-000` adjustments-overview, the per-adjustment specs under `04-image-ops/adjustments/`, `LAY-010` blend-modes, `ARCH-008` document-model, `ARCH-009` undo-history, `ARCH-003` qt6-ui-design, `PAN-006` properties-panel.
 
-> Crate, module, widget, and type names below are **design proposals**. No code exists in this repository. Adjustment math is owned by `04-image-ops/`; layer semantics are owned by `LAY-012`; this file specifies the **panel widget and the create/animate flow**.
+> Crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Adjustment math is owned by `04-image-ops/`; layer
+> semantics are owned by `LAY-012`; this file specifies the **panel widget and the
+> create/animate flow**.
 
 ## CS6 behavior
 

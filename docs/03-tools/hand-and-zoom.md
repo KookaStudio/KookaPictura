@@ -6,8 +6,10 @@
 - **New in CS6:** `Changed` — both options bars renamed the actual-size button to **100%** and dropped the **Print Size** button; `View > Actual Pixels` became `View > 100%`; and CS6 added high-DPI (Retina-class) viewing: `View > 200%`, `Ctrl`/`Cmd`-double-click the Zoom tool icon for 200%, `Shift+Ctrl`/`Cmd`-double-click to view all open documents at 200%.
 - **Depends on:** `02-ui-ux/application-frame.md`, `02-ui-ux/keyboard-shortcuts.md`, `02-ui-ux/panels/navigator-panel.md`, `02-ui-ux/workspace-and-docks.md`, `01-architecture/qt6-ui-design.md`, `01-architecture/gpu-rendering-pipeline.md`, `01-architecture/rust-qt-interop.md`, `TOOL-043` rotate-view
 
-> All module and widget names below are **design proposals**. No code exists in
-> this repository. Facts not confirmed by a fetched CS6 source are marked
+> All module and widget names below are **design proposals**. The repository
+> contains a working implementation; this file stays the behavioural contract
+> for the feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped
+> and what did not. Facts not confirmed by a fetched CS6 source are marked
 > *(inferred)*.
 
 ## CS6 behavior

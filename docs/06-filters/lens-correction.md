@@ -6,7 +6,12 @@
 - **New in CS6:** `No` / `Unchanged` — profile-based automatic correction was introduced in **CS5** (the CS5 What's-New section lists "Automated lens correction"); the CS6 What's-New section does not itemize the Lens Correction filter. CS6 documents the same **Auto Correction** and **Custom** tabs. Exact CS5→CS6 deltas are unconfirmed — see `## Open questions`.
 - **Depends on:** `06-filters/camera-raw-filter.md` (shared profile/transform model), `01-architecture/color-management.md`, `01-architecture/file-formats.md`, `01-architecture/document-model.md`, `01-architecture/undo-history.md`, `04-image-ops/image-modes.md`, `04-image-ops/bit-depth-and-conversion.md`, `03-tools/crop-tool.md`
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository. Behavior is taken from the fetched CS6 Help PDF unless marked *(inferred)*. The lens-profile math and Adobe's profile format are closed; those parts are **behavioral parity only, algorithm TBD**.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Behavior is taken from the fetched CS6 Help PDF unless
+> marked *(inferred)*. The lens-profile math and Adobe's profile format are
+> closed; those parts are **behavioral parity only, algorithm TBD**.
 
 ## CS6 behavior
 

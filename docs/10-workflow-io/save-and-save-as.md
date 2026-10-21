@@ -6,8 +6,10 @@
 - **New in CS6:** `Changed` — the save format set and option dialogs are substantially the CS5 set; CS6's additions are the background-save and auto-recovery preferences (`WF-001`) and the broadened format-support list. PSD/PSB **Maximize Compatibility** and the PDF export pipeline are unchanged.
 - **Depends on:** `ARCH-011` file-formats, `ARCH-008` document-model, `ARCH-007` color-management, `WF-001` document-lifecycle, `WF-002` open-and-new, `WF-004` export-formats, `WF-005` web-export-and-slices.
 
-> All crate, module, widget, and type names below are **design proposals**. No code
-> exists in this repository. CS6 behavior is taken from the fetched CS6 Help PDF
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. CS6 behavior is taken from the fetched CS6 Help PDF
 > unless marked *(inferred)*. Where option labels are quoted, they are the Help
 > labels.
 

@@ -6,11 +6,14 @@
 - **New in CS6:** `No` — both brushes predate CS6 (Healing Brush since Photoshop 7, Spot Healing Brush with its Content-Aware type since CS5). CS6 behavior is unchanged. The **Diffusion slider** sometimes associated with these tools was added later, in Photoshop CC 2015.1, and is **not** part of CS6; the underlying diffusion-like blending is, however, the heart of the tool.
 - **Depends on:** `ARCH-008` document-model, `ARCH-009` undo-history, `ARCH-006` gpu-rendering-pipeline, `03-tools/clone-stamp-and-pattern-stamp.md`, `03-tools/content-aware-move-and-patch.md`, `07-color-painting/brush-engine.md`, `02-ui-ux/panels/clone-source-panel.md`
 
-> Names below are **design proposals**. No code exists here. The behavioral
-> description is sourced from the fetched CS6 Help PDF and CS6-for-Photographers
-> material; the algorithmic explanation is sourced from an Adobe researcher's
-> paper on the Healing Brush. Adobe does not publish its production solver, so
-> parity is **behavioral parity only, algorithm TBD** in all cases.
+> Names below are **design proposals**. The repository contains a working
+> implementation; this file stays the behavioural contract for the feature, and
+> `docs/dev/doc-code-parity-gaps.md` records what shipped and what did not. The
+> behavioral description is sourced from the fetched CS6 Help PDF and
+> CS6-for-Photographers material; the algorithmic explanation is sourced from an
+> Adobe researcher's paper on the Healing Brush. Adobe does not publish its
+> production solver, so parity is **behavioral parity only, algorithm TBD** in
+> all cases.
 
 ## CS6 behavior
 

@@ -6,8 +6,10 @@
 - **New in CS6:** `No` — the Desaturate command predates CS6 and is carried forward unchanged in the CS6 Help.
 - **Depends on:** `04-image-ops/adjustments-overview.md`, `04-image-ops/adjustments/hue-saturation.md`, `04-image-ops/image-modes.md`, `04-image-ops/bit-depth-and-conversion.md`, `01-architecture/document-model.md` (`ARCH-008`), `01-architecture/undo-history.md` (`ARCH-009`), `05-layers/adjustment-layers.md`.
 
-> All module, crate, and widget names below are **design proposals**. No code
-> exists in this repository. Statements marked *(inferred)* are not taken from a
+> All module, crate, and widget names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Statements marked *(inferred)* are not taken from a
 > fetched source and are candidates for `## Open questions`.
 
 ## CS6 behavior

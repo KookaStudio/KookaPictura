@@ -6,10 +6,12 @@
 - **New in CS6:** `Changed` — the **Airbrush tip** category is new in CS6 (Distortion, Granularity, Spatter Size/Amount); the pre-existing **Airbrush option** (time-based build-up) is unchanged.
 - **Depends on:** `BRU-001` brush-engine, `BRU-002` brush-dynamics, `BRU-003` bristle-brushes, `BRU-004` mixer-brush-engine, `03-tools/brush-and-pencil.md`.
 
-> Module and widget names are **design proposals**. No code exists. Adobe's exact
-> accumulation formula is closed; this spec is **behavioral parity only, algorithm
-> TBD** except where the Help states a rule (notably the opacity/flow
-> relationship).
+> Module and widget names are **design proposals**. The repository contains a
+> working implementation; this file stays the behavioural contract for the
+> feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped and what
+> did not. Adobe's exact accumulation formula is closed; this spec is **behavioral
+> parity only, algorithm TBD** except where the Help states a rule (notably the
+> opacity/flow relationship).
 
 ## CS6 behavior
 

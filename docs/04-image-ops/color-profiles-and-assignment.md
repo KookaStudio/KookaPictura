@@ -6,12 +6,13 @@
 - **New in CS6:** `No` — Assign Profile, Convert to Profile, working spaces, policies, rendering intents, and profile embedding predate CS6. (The underlying engine/model is specified in `ARCH-007`; this file is the document-lifecycle contract.)
 - **Depends on:** `01-architecture/color-management.md` (`ARCH-007`), `01-architecture/file-formats.md` (`ARCH-011`), `01-architecture/document-model.md` (`ARCH-008`), `04-image-ops/image-modes.md`, `04-image-ops/bit-depth-and-conversion.md`, `10-workflow-io/color-settings.md`, `10-workflow-io/save-and-save-as.md`, `10-workflow-io/printing.md`.
 
-> All module, crate, and widget names below are **design proposals**. No code
-> exists in this repository. Statements marked *(inferred)* are not taken from a
-> fetched source and are candidates for `## Open questions`.
->
-> Numeric algorithm details (ICC transforms, rendering intents, BPC) live in
-> `ARCH-007`; this file does not duplicate them.
+> All module, crate, and widget names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Statements marked *(inferred)* are not taken from a
+> fetched source and are candidates for `## Open questions`. Numeric algorithm
+> details (ICC transforms, rendering intents, BPC) live in `ARCH-007`; this file
+> does not duplicate them.
 
 ## CS6 behavior
 
