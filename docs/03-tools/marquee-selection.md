@@ -6,7 +6,10 @@
 - **New in CS6:** `No` — the marquee tools and their options carry over from CS5 unchanged.
 - **Depends on:** `ARCH-002` document-model, `ARCH-007` undo-history, `TOOL-003`/`TOOL-004` (sibling selection tools), `08-selection/selection-model.md`, `08-selection/refine-edge.md`, `01-architecture/performance-targets.md`.
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not.
 
 ## CS6 behavior
 

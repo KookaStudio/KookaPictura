@@ -6,10 +6,12 @@
 - **New in CS6:** `Changed` — CS6 renames the path "Combine" command to `Merge Shape Components` and moves it to the Path Operations drop-down; the layer merge/flatten commands and their shortcuts otherwise predate CS6. `Merge To HDR Pro` is the CS6 name of the HDR merge automation.
 - **Depends on:** `05-layers/layers-overview.md`, `05-layers/layer-groups.md`, `05-layers/layer-masks.md`, `05-layers/vector-masks-and-clipping-masks.md`, `05-layers/smart-objects.md`, `05-layers/layer-styles.md`, `05-layers/blend-modes.md`, `05-layers/adjustment-layers.md`, `05-layers/fill-layers.md`, `05-layers/artboards.md`, `04-image-ops/32-bit-hdr.md`, `ARCH-008` document-model, `ARCH-009` undo-history, `06-filters/lens-correction.md`
 
-> All module and type names below are **design proposals**. No code exists in
-> this repository. Unverified behaviors (result naming, style/vector-mask
-> handling, exact smart-object fate) are marked *(inferred)* or parked under
-> `## Open questions`.
+> All module and type names below are **design proposals**. The repository
+> contains a working implementation; this file stays the behavioural contract
+> for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Unverified behaviors (result naming,
+> style/vector-mask handling, exact smart-object fate) are marked
+> *(inferred)* or parked under `## Open questions`.
 
 ## CS6 behavior
 

@@ -6,9 +6,11 @@
 - **New in CS6:** `Changed` — the CS6 Help documents Align/Distribute, Auto-Align Layers (with `Auto`, `Perspective`, `Cylindrical`, `Spherical`, `Scene Collage`, `Reposition Only`, and `Lens Correction`) and Auto-Blend Layers (`Panorama`, `Stack Images`, `Seamless Tones And Colors`). Auto-Align and Auto-Blend themselves predate CS6 (community sources attribute them to CS4); the exact CS5→CS6 delta for the projection list is not confirmed in this pass.
 - **Depends on:** `05-layers/layers-overview.md`, `05-layers/artboards.md`, `05-layers/layer-masks.md`, `05-layers/blend-modes.md`, `03-tools/move-and-transform.md`, `08-selection/selection-model.md`, `05-layers/merge-and-flatten.md`, `ARCH-008` document-model, `ARCH-009` undo-history, `06-filters/lens-correction.md`
 
-> All module and type names below are **design proposals**. No code exists in
-> this repository. Algorithm notes not backed by the fetched CS6 Help are marked
-> *(inferred)* or *(behavioral parity only)*.
+> All module and type names below are **design proposals**. The repository
+> contains a working implementation; this file stays the behavioural contract
+> for the feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped
+> and what did not. Algorithm notes not backed by the fetched CS6 Help are
+> marked *(inferred)* or *(behavioral parity only)*.
 
 ## CS6 behavior
 

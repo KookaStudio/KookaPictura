@@ -6,7 +6,13 @@
 - **New in CS6:** `Yes` — CS6 rebuilds **Lighting Effects** (render family) and adds **Adaptive Wide Angle**, but the Distort submenu itself is unchanged from CS5. **Lens Correction** gains the **Auto Correction** lens-profile workflow (CS5 had manual correction only).
 - **Depends on:** `04-image-ops/bit-depth-and-conversion.md`, `01-architecture/color-management.md`, `01-architecture/gpu-rendering-pipeline.md`, `01-architecture/document-model.md`, `05-layers/smart-filters.md`, `05-layers/blend-modes.md`, `06-filters/filters-overview.md`, `06-filters/lens-correction.md`, `06-filters/liquify.md`, `06-filters/adaptive-wide-angle.md`
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository. Behavior and numeric ranges are taken from the fetched sources unless marked *(inferred)*. Adobe's exact resampling kernels and noise generators are closed; those are marked **behavioral parity only, algorithm TBD**.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Behavior and numeric ranges are taken from the fetched
+> sources unless marked *(inferred)*. Adobe's exact resampling kernels and noise
+> generators are closed; those are marked **behavioral parity only, algorithm
+> TBD**.
 
 ## CS6 behavior
 

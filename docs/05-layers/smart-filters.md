@@ -6,7 +6,11 @@
 - **New in CS6:** `Changed` — the Smart Filter mechanism is unchanged from CS5, but CS6 adds new smart-capable filters (**Blur Gallery**, **Oil Paint**). **Liquify** is documented as smart-compatible only after a later "Creative Cloud update", not in the shipped CS6 exclusions list (Extract, Liquify, Pattern Maker, Vanishing Point). See `## Open questions`.
 - **Depends on:** `ARCH-008` document-model, `ARCH-006` gpu-rendering-pipeline, `ARCH-009` undo-history, `LAY-020` smart-objects, `LAY-022` layer-comps, `06-filters/filters-overview.md`, `06-filters/blur-gallery.md`, `06-filters/liquify.md`, `02-ui-ux/panels/layers-panel.md`
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository. Behavior is taken from the fetched CS6 Help PDF unless marked *(inferred)*.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Behavior is taken from the fetched CS6 Help PDF unless
+> marked *(inferred)*.
 
 ## CS6 behavior
 

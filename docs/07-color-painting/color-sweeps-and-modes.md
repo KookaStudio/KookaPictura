@@ -6,8 +6,10 @@
 - **New in CS6:** `Changed` — the **Color panel is resizable** (CS6 JDI), the **Adobe Color Picker accepts hexadecimal paste** with `#`/`0x` and shorthand `#123`, and the **HUD color picker** (Hue Strip / Hue Wheel) is available while painting. The foreground/background model itself is unchanged.
 - **Depends on:** `03-tools/eyedropper-color-sampler-ruler.md` (`TOOL-015`), `02-ui-ux/panels/color-panel.md`, `02-ui-ux/panels/swatches-panel.md`, `07-color-painting/color-models.md`, `07-color-painting/gradient-presets.md` (`CLR-010`), `07-color-painting/pattern-presets.md` (`CLR-011`), `01-architecture/color-management.md`.
 
-> Module and widget names below are **design proposals**. No code exists in this
-> repository. Facts not confirmed by a fetched CS6 source are marked *(inferred)*.
+> Module and widget names below are **design proposals**. The repository contains
+> a working implementation; this file stays the behavioural contract for the
+> feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped and what
+> did not. Facts not confirmed by a fetched CS6 source are marked *(inferred)*.
 
 > This file is intentionally short. The full color picker UI is covered by the
 > Eyedropper/color-picker tool spec; this file covers only the *color-sweep*

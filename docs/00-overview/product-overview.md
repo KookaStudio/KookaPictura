@@ -6,12 +6,12 @@
 - **New in CS6:** `N/A` — describes the v13 (CS6) release as a whole.
 - **Depends on:** `README.md`, `GLOSSARY.md`, `INDEX.md`, `SPEC_TEMPLATE.md`, `OVR-002`, `OVR-003`, `OVR-004`, `01-architecture/`.
 
-Kooka Pictura is a **specification corpus**, not a program. It describes how to
-rebuild Adobe Photoshop CS6 (version 13, 2012) as a native Linux application in
-**Rust** (core) and **Qt6** (UI), targeting *behavioral parity* with CS6. This
-repository contains no source code, build manifests, or dependencies; every
-`## Rust module mapping` and `## Qt6 component mapping` section is a design
-proposal.
+Kooka Pictura is a working application **and** the specification it was built
+from. It reimplements Adobe Photoshop CS6 (version 13, 2012) as a native Linux
+application in **Rust** (core) and **Qt6** (UI), targeting *behavioral parity*
+with CS6. The implementation lives in `crates/`; every `## Rust module mapping`
+and `## Qt6 component mapping` section is a design proposal, and
+`docs/dev/doc-code-parity-gaps.md` records what shipped and what did not.
 
 ## CS6 behavior
 
@@ -58,9 +58,11 @@ harness could execute. The corpus is done when:
 4. No spec asserts an unverified fact as fact; unknowns live under
    `## Open questions`.
 
-Program-level "done" for an implementation (outside this repo) is narrower: the
-**Core** editing workflow reaches parity. Extended-only capabilities are
-explicitly out of the first parity target (see `OVR-003`).
+Program-level "done" for the implementation in this repository is narrower: the
+**Core** editing workflow reaches parity. Extended-only capabilities are out of
+the first parity target (see `OVR-003`), with the Count tool as the one that
+ships ahead of that line. The corpus marks the tier; the code does not gate on
+it, and edition gating is still open (#650).
 
 ### How the specs are organized
 
@@ -144,8 +146,8 @@ Qt-linked crate), and the `pictura-app` binary. Names are provisional.
 3. Given a Core-tier feature, its parity criterion is stated as "Given X, doing Y
    produces Z within tolerance T" and is checkable without access to Adobe
    software for the assertion itself.
-4. Given the repository, it contains no source, build files, or Adobe assets;
-   every mapping section is labeled a proposal.
+4. Given the repository, it contains a working implementation and no Adobe
+   assets; every mapping section is labeled a proposal.
 
 ## Sources
 

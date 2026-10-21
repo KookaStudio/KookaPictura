@@ -6,9 +6,11 @@
 - **New in CS6:** `Changed` — CS6 extends 3D/video handling and adds Color Lookup and Properties-panel context; the layer/channel/path core is unchanged from CS5. **Correction (2026-09): artboards are NOT part of CS6** — they were added in CC 2015 and are out of parity scope (`05-layers/artboards.md`).
 - **Depends on:** `ARCH-007` color-management, `ARCH-009` undo-history, `ARCH-011` file-formats, `05-layers/layers-overview.md`, `05-layers/smart-objects.md`, `05-layers/artboards.md`, `05-layers/layer-styles.md`, `10-workflow-io/document-lifecycle.md`
 
-> All module and type names below are **design proposals**. No code exists in
-> this repository. PSD/PSB field facts are taken from the fetched Adobe File
-> Formats Specification; anything else is marked *(inferred)*.
+> All module and type names below are **design proposals**. The repository
+> contains a working implementation; this file stays the behavioural contract
+> for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. PSD/PSB field facts are taken from the fetched
+> Adobe File Formats Specification; anything else is marked *(inferred)*.
 
 ## CS6 behavior
 

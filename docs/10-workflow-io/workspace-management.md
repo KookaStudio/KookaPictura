@@ -6,10 +6,12 @@
 - **New in CS6:** `Changed` — CS6 removes the Application bar and moves the workspace switcher into the dock area (the CS6 Help's generic workspace chapter still prints CS5-era "Application bar" text, see Open questions); the startup reset gesture now also resets custom shortcuts, workspaces, and color settings; workspaces automatically remember their last arrangement until an explicit reset.
 - **Depends on:** `UI-003` workspace-and-docks, `UI-002` menus, `UI-011` keyboard-shortcuts, `UI-010` preferences, `01-architecture/qt6-ui-design.md`, `01-architecture/document-model.md`, `11-cross-cutting/preference-storage.md`, `10-workflow-io/presets-manager.md` (`WF-020`).
 
-> All module, widget, and type names below are **design proposals**. No code
-> exists in this repository. Facts confirmed by the fetched CS6 Help reference
-> are stated plainly; community/`*.psp`-documented facts are marked
-> *(secondary)*; inferred design choices are marked *(inferred)*.
+> All module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the
+> behavioural contract for the feature, and `docs/dev/doc-code-parity-gaps.md`
+> records what shipped and what did not. Facts confirmed by the fetched CS6
+> Help reference are stated plainly; community/`*.psp`-documented facts are
+> marked *(secondary)*; inferred design choices are marked *(inferred)*.
 
 ## CS6 behavior
 

@@ -6,7 +6,14 @@
 - **New in CS6:** `Changed` — CS6 adds **Erodible Tip**, **Airbrush Tip**, and **Brush Pose** controls to the Brush panel, adds **Brush Projection** to Shape Dynamics, and changes Color Dynamics to vary per stroke with an **Apply Per Tip** opt-out. The panel's left-side option-set list and padlocks are otherwise unchanged from CS5.
 - **Depends on:** `BRU-001` brush-engine, `BRU-002` brush-dynamics, `BRU-003` bristle-brushes, `BRU-004` mixer-brush-engine, `BRU-005` airbrush-and-flow, `BRU-006` brush-presets, `ARCH-003` qt6-ui-design, `ARCH-006` gpu-rendering-pipeline, `03-tools/brush-and-pencil.md`.
 
-> This document owns the **Brush panel / Brush Presets panel UI surface**. Brush rendering is `BRU-001`; the dynamics semantics and parameter tables are `BRU-002`; bristle, mixer, airbrush engines are `BRU-003`/`BRU-004`/`BRU-005`; preset storage and `.abr` are `BRU-006`. All crate, module, widget, and type names are **design proposals**. No code exists in this repository. Facts not confirmed by a fetched CS6 source are marked *(inferred)*.
+> This document owns the **Brush panel / Brush Presets panel UI surface**. Brush
+> rendering is `BRU-001`; the dynamics semantics and parameter tables are
+> `BRU-002`; bristle, mixer, airbrush engines are `BRU-003`/`BRU-004`/`BRU-005`;
+> preset storage and `.abr` are `BRU-006`. All crate, module, widget, and type
+> names are **design proposals**. The repository contains a working
+> implementation; this file stays the behavioural contract for the feature, and
+> `docs/dev/doc-code-parity-gaps.md` records what shipped and what did not. Facts
+> not confirmed by a fetched CS6 source are marked *(inferred)*.
 
 ## CS6 behavior
 

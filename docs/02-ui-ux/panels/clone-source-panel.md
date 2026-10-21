@@ -6,7 +6,13 @@
 - **New in CS6:** `No` — the panel and its controls are carried from CS5. CS6 documents it unchanged for Clone Stamp and Healing Brush; the Extended frame-relationship options remain.
 - **Depends on:** `03-tools/clone-stamp-and-pattern-stamp.md` (`TOOL-030` — Clone Stamp/Pattern Stamp tool semantics, sampling model, and the same panel contract; this spec is the **panel UI**), `03-tools/healing-brushes.md` (Healing Brush shares the panel), `02-ui-ux/toolbox-and-options-bar.md`, `01-architecture/document-model.md` (`ARCH-008`), `01-architecture/undo-history.md` (`ARCH-009`), `01-architecture/qt6-ui-design.md` (`ARCH-003`), `01-architecture/gpu-rendering-pipeline.md` (`ARCH-006`).
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository. Behavior is taken from the fetched CS6 Help PDF unless marked *(inferred)*. The panel overlaps `03-tools/clone-stamp-and-pattern-stamp.md`; this spec focuses on the panel's own surface and state.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Behavior is taken from the fetched CS6 Help PDF unless
+> marked *(inferred)*. The panel overlaps
+> `03-tools/clone-stamp-and-pattern-stamp.md`; this spec focuses on the panel's
+> own surface and state.
 
 ## CS6 behavior
 

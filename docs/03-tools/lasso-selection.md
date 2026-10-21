@@ -6,7 +6,10 @@
 - **New in CS6:** `No` — the Lasso, Polygonal Lasso, and Magnetic Lasso tools and their options are unchanged from CS5.
 - **Depends on:** `ARCH-002` document-model, `ARCH-007` undo-history, `TOOL-002`/`TOOL-004` (sibling selection tools), `08-selection/selection-model.md`, `08-selection/refine-edge.md`.
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not.
 
 ## CS6 behavior
 

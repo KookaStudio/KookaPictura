@@ -6,8 +6,10 @@
 - **New in CS6:** `Changed` — CS6 documentation lists enhanced OpenEXR support (multi-part/multi-view, high bit depth) and new audio/video container imports; the core still-image set is unchanged from CS5.
 - **Depends on:** `ARCH-008` document-model, `ARCH-007` color-management, `10-workflow-io/open-and-new.md`, `10-workflow-io/save-and-save-as.md`, `10-workflow-io/export-formats.md`, `10-workflow-io/web-export-and-slices.md`, `10-workflow-io/camera-raw-workflow.md`, `10-workflow-io/file-info-and-metadata.md`
 
-> All crate and module names below are **design proposals**. No code exists in
-> this repository. The CS6 read/write capabilities in the matrix are
+> All crate and module names below are **design proposals**. The repository
+> contains a working implementation; this file stays the behavioural contract
+> for the feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped
+> and what did not. The CS6 read/write capabilities in the matrix are
 > *(inferred)* from each format's nature and the CS6 support list; they are not
 > all confirmed by a parsed CS6 source. See `## Open questions`.
 

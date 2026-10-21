@@ -6,8 +6,10 @@
 - **New in CS6:** `Changed` — the adjustment is long-standing; CS6 moves its UI to the Properties panel and exposes **Channel Mixer presets** through the panel's Preset menu. The CS6 "What's New" list does not announce new mixer features; the CS6 Help cross-references it from Black & White but — see `## Sources` — **the how-to page is missing from the CS6 reference PDF**.
 - **Depends on:** `ARCH-008` document-model, `ARCH-009` undo-history, `ARCH-006` gpu-rendering-pipeline, `01-architecture/color-management.md`, `04-image-ops/image-modes.md`, `04-image-ops/adjustments-overview.md`, `04-image-ops/adjustments/black-white.md`, `05-layers/adjustment-layers.md`, `07-color-painting/color-models.md`, `10-workflow-io/presets-manager.md`.
 
-> All module and widget names below are **design proposals**. No code exists in
-> this repository. Facts not confirmed by a fetched CS6 source are marked
+> All module and widget names below are **design proposals**. The repository
+> contains a working implementation; this file stays the behavioural contract
+> for the feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped
+> and what did not. Facts not confirmed by a fetched CS6 source are marked
 > *(inferred)*.
 
 > **Source caveat.** The official CS6 Help reference PDF fetched for this

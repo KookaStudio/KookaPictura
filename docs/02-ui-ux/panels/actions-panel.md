@@ -6,7 +6,11 @@
 - **New in CS6:** `Changed` — CS6 adds **Allow Tool Recording** (record brush/tool strokes directly; the CS6 Help lists it under "What's new in CS6 > Automation" and "Brushes"). **Conditional actions** are described in the CS6 Help but its links point to "Adding conditional actions | Creative Cloud", so their shipped-CS6 status is ambiguous (see Open questions and `AUTO-001`). The panel, sets, modal controls, and `.atn` files are otherwise CS5-equivalent.
 - **Depends on:** `AUTO-001` `09-automation/actions.md` (canonical action semantics, `.atn` I/O, playback engine), `09-automation/droplets.md` (`AUTO-002`), `09-automation/batch-processing.md` (`AUTO-003`), `09-automation/script-events-and-jsx.md`, `01-architecture/document-model.md` (`ARCH-008`), `01-architecture/undo-history.md` (`ARCH-009`), `01-architecture/qt6-ui-design.md` (`ARCH-003`). This panel spec is the **UI contract**; playback/`.atn` semantics are owned by `AUTO-001`.
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository. Behavior is taken from the fetched CS6 Help PDF unless marked *(inferred)*.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Behavior is taken from the fetched CS6 Help PDF unless
+> marked *(inferred)*.
 
 ## CS6 behavior
 

@@ -6,9 +6,12 @@
 - **New in CS6:** `Yes` (the Mercury Graphics Engine is the CS6 accelerator; see below)
 - **Depends on:** `ARCH-003` qt6-ui-design, `ARCH-004` rust-qt-interop, `ARCH-005` threading-and-concurrency, `05-layers/blend-modes.md`, `07-color-painting/color-models.md`
 
-> All module, crate, and shader names below are **design proposals**. No code
-> exists in this repository. Interop mechanisms marked "target" are not yet
-> verified end to end; see `## Open questions`.
+> All module, crate, and shader names below are **design proposals**. The
+> repository contains a working implementation; this file stays the
+> behavioural contract for the feature, and
+> `docs/dev/doc-code-parity-gaps.md` records what shipped and what did not.
+> Interop mechanisms marked "target" are not yet verified end to end; see `##
+> Open questions`.
 
 ## CS6 behavior
 

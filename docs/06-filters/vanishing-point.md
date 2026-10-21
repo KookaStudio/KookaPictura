@@ -6,7 +6,12 @@
 - **New in CS6:** `No` — unchanged from CS5. The `Measure` tool and DXF/3DS export remain **Photoshop Extended** only; the CS6 Help documents the same dialog and toolset.
 - **Depends on:** `01-architecture/document-model.md`, `01-architecture/undo-history.md`, `01-architecture/gpu-rendering-pipeline.md`, `03-tools/clone-stamp-and-pattern-stamp.md`, `03-tools/healing-brushes.md`, `05-layers/layer-masks.md`, `01-architecture/file-formats.md`, `04-image-ops/image-modes.md`
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository. Behavior is taken from the fetched CS6 Help PDF unless marked *(inferred)*. Adobe's plane solver and retouch heuristics are closed; those parts are **behavioral parity only, algorithm TBD**.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Behavior is taken from the fetched CS6 Help PDF unless
+> marked *(inferred)*. Adobe's plane solver and retouch heuristics are closed;
+> those parts are **behavioral parity only, algorithm TBD**.
 
 ## CS6 behavior
 

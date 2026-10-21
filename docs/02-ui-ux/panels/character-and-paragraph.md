@@ -6,7 +6,12 @@
 - **New in CS6:** `Changed` — the Character and Paragraph panels are carried from CS5, but CS6 adds the **Character Styles** and **Paragraph Styles** panels (`Window > Character Styles`, `Window > Paragraph Styles`), gathers type commands into the new **Type** menu, and moves **Font Preview Size** out of Preferences. The `Type > Panels` submenu opens all four panels. The panels themselves add no new attribute controls.
 - **Depends on:** `03-tools/type-tools.md` (`TOOL-050`/`TOOL-051` — text engine, shaping, anti-aliasing, styles semantics; this panel spec is the **UI contract only**), `02-ui-ux/toolbox-and-options-bar.md` (options bar host), `01-architecture/qt6-ui-design.md` (`ARCH-003`), `01-architecture/document-model.md` (`ARCH-008`, `pictura_core::text`), `01-architecture/undo-history.md` (`ARCH-009`).
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository. Panel controls and ranges are from the fetched CS6 Help PDF unless marked *(secondary)* or *(inferred)*. The text engine/algorithm details are deliberately **not** duplicated here; see `03-tools/type-tools.md`.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Panel controls and ranges are from the fetched CS6
+> Help PDF unless marked *(secondary)* or *(inferred)*. The text engine/algorithm
+> details are deliberately **not** duplicated here; see `03-tools/type-tools.md`.
 
 ## CS6 behavior
 

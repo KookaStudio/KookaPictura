@@ -6,8 +6,10 @@
 - **New in CS6:** `No` — the tool exists in CS6 but was **not** introduced in CS5. Community sources state it shipped in **CS4** (a "Photoshop CS4: Rotate View Tool" video from November 2008 and two tutorials both place its introduction in CS4). The brief for this spec said "new in CS5"; the fetched sources contradict that (see `## Open questions`). CS6 carries it forward unchanged.
 - **Depends on:** `TOOL-042` hand-and-zoom, `01-architecture/gpu-rendering-pipeline.md`, `01-architecture/qt6-ui-design.md`, `02-ui-ux/application-frame.md`, `07-color-painting/brush-engine.md`
 
-> All module and widget names below are **design proposals**. No code exists in
-> this repository. Facts not confirmed by a fetched CS6 source are marked
+> All module and widget names below are **design proposals**. The repository
+> contains a working implementation; this file stays the behavioural contract
+> for the feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped
+> and what did not. Facts not confirmed by a fetched CS6 source are marked
 > *(inferred)*.
 
 ## CS6 behavior

@@ -6,8 +6,10 @@
 - **New in CS6:** `Changed` — the **Application bar was removed** and its functions redistributed: the **Screen Mode button moved to the bottom of the Tools panel**, the **workspace switcher moved to the options bar**, and window-layout options moved to `Window > Arrange`. The Tools panel defaults to a **single column** (double arrow toggles two). The Line and Shape tools became fully vector-based (stroke/fill/dashed via the options bar, plus `Align Edges` / `Constrain Path Dragging`); the retouch group gained **Content-Aware Move** and **Content-Aware Patch**; the Crop tool group gained **Perspective Crop** and a redesigned Crop options bar (Aspect Ratio menu, swap W/H); brush/erodible-tip and static-tip projection additions; maximum brush size raised to 5,000 px; the brush HUD can also change opacity; decimal Feather for Marquee/Lasso/Mask panel; tool presets stay reorganized after restart; new document presets. Flyout grouping mechanism itself is unchanged from CS5.
 - **Depends on:** `UI-001` application-frame, `UI-002` menus, `UI-003` workspace-and-docks, `02-ui-ux/keyboard-shortcuts.md`, `03-tools/*`, `07-color-painting/brush-presets.md`
 
-> All module and widget names below are **design proposals**. No code exists in
-> this repository. Tool names, groups and shortcuts come from the fetched CS6
+> All module and widget names below are **design proposals**. The repository
+> contains a working implementation; this file stays the behavioural contract
+> for the feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped
+> and what did not. Tool names, groups and shortcuts come from the fetched CS6
 > Help reference; secondary facts are cited in `## Sources`. Anything still
 > uncertain is marked *(inferred)* or flagged in `## Open questions`.
 

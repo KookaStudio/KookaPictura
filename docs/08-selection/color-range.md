@@ -6,7 +6,12 @@
 - **New in CS6:** `Changed` — CS6 adds **Skin Tones** selection and **Detect Faces** to the Color Range dialog; Detect Faces is the CS6-only option that makes skin-tone selection more accurate. Saving Skin Tones settings as a preset is marked **Creative Cloud only** in the fetched corpus. Adjustable Shadows/Midtones/Highlights ranges arrive in CC, not CS6. The command itself, Sampled Colors, Fuzziness, Localized Color Clusters, and the selection previews are CS4/CS5-era.
 - **Depends on:** `SEL-001` selection-model, `SEL-002` selection-tools-overview, `SEL-003` refine-edge, `TOOL-004` quick-selection/magic-wand, `TOOL-044` quick-mask-tool, `04-image-ops/color-profiles-and-assignment.md` (`ARCH-007` color-management), `05-layers/layer-masks.md` (`LAY-004`), `01-architecture/document-model.md` (`ARCH-008`), `01-architecture/undo-history.md` (`ARCH-009`), `10-workflow-io/color-settings.md`.
 
-> All module, widget, and type names below are **design proposals**. No code exists in this repository. Behavior is taken from the fetched CS6 Help corpus; the full Select-menu range list and slider ranges are community-reported and marked.
+> All module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Behavior is taken from the fetched CS6 Help corpus;
+> the full Select-menu range list and slider ranges are community-reported and
+> marked.
 
 ## CS6 behavior
 

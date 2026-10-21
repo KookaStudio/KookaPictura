@@ -6,7 +6,10 @@
 - **New in CS6:** `No` — Quick Selection (CS3) and Magic Wand (long-standing) are unchanged in CS6; the shared Refine Edge machinery carries over from CS5.
 - **Depends on:** `ARCH-002` document-model, `ARCH-006` gpu-rendering-pipeline, `ARCH-007` undo-history, `TOOL-002`/`TOOL-003` (sibling selection tools), `08-selection/selection-model.md`, `08-selection/refine-edge.md`, `07-color-painting/brush-engine.md`.
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not.
 
 ## CS6 behavior
 

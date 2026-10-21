@@ -6,11 +6,12 @@
 - **New in CS6:** `Yes` — the CS6 Help's "Layers enhancements" section calls the filtering/search row at the top of the Layers panel new in CS6, listing filtering "based on name, kind, effect, mode, attribute, or color label". The later CC-only filter types (`Smart Object`, `Artboard`) are out of scope for CS6 parity; the **`Selected`** type is shipped by decision as the **isolation-mode** entry point (see below), even though the CS6 Help does not list it.
 - **Depends on:** `05-layers/layers-overview.md`, `05-layers/layer-management-ui.md`, `05-layers/layer-groups.md`, `05-layers/artboards.md`, `05-layers/layer-styles.md`, `05-layers/blend-modes.md`, `02-ui-ux/panels/layers-panel.md`, `ARCH-008` document-model, `ARCH-003` qt6-ui-design
 
-> All module and type names below are **design proposals**. No code exists in
-> this repository. The exact CS6
-> sub-lists (which effects, modes, and attributes appear) are not fully
-> enumerated in the fetched Help and are marked *(inferred)* where reconstructed
-> from later-version community sources.
+> All module and type names below are **design proposals**. The repository
+> contains a working implementation; this file stays the behavioural contract
+> for the feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped
+> and what did not. The exact CS6 sub-lists (which effects, modes, and
+> attributes appear) are not fully enumerated in the fetched Help and are marked
+> *(inferred)* where reconstructed from later-version community sources.
 
 ## CS6 behavior
 

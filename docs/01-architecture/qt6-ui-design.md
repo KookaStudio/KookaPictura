@@ -6,8 +6,10 @@
 - **New in CS6:** `No` (this document covers the UI technology choice, not a CS6 feature)
 - **Depends on:** `ARCH-001` system-architecture, `ARCH-004` rust-qt-interop, `ARCH-006` gpu-rendering-pipeline, `02-ui-ux/application-frame.md`, `02-ui-ux/workspace-and-docks.md`
 
-> All module, crate, and widget names below are **design proposals**. No code
-> exists in this repository.
+> All module, crate, and widget names below are **design proposals**. The
+> repository contains a working implementation; this file stays the
+> behavioural contract for the feature, and
+> `docs/dev/doc-code-parity-gaps.md` records what shipped and what did not.
 
 ## CS6 behavior
 

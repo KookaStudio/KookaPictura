@@ -6,8 +6,10 @@
 - **New in CS6:** `No` (Solid Color, Gradient, and Pattern fill layers predate CS6). CS6 adds a **Dither** option to the Gradient Overlay/style family, and CS6 permits layer styles on groups; the fill-layer controls themselves are unchanged from CS5.
 - **Depends on:** `01-architecture/document-model.md` (`ARCH-008`), `01-architecture/undo-history.md` (`ARCH-009`), `01-architecture/color-management.md` (`ARCH-007`), `05-layers/blend-modes.md` (`LAY-010`), `05-layers/layer-styles.md` (`LAY-011`), `05-layers/adjustment-layers.md` (`LAY-012`), `05-layers/layer-masks.md`, `07-color-painting/gradient-presets.md`, `07-color-painting/pattern-presets.md`, `03-tools/gradient-and-paint-bucket.md`.
 
-> Module/crate/widget names are **design proposals**. No code exists in this
-> repository. Gradient/pattern generation algorithms are owned by the
+> Module/crate/widget names are **design proposals**. The repository contains
+> a working implementation; this file stays the behavioural contract for the
+> feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped and
+> what did not. Gradient/pattern generation algorithms are owned by the
 > `07-color-painting/` specs; this document covers fill layers as *layers* and
 > their difference from layer styles. PSD keys are from the Adobe File Formats
 > Specification (via `ARCH-008`).

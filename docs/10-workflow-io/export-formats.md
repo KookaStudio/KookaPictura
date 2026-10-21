@@ -6,8 +6,10 @@
 - **New in CS6:** `Changed` — CS6's redesigned video engine expands export/import containers and adds DPX and other video export formats; audio/video support moves partly into Standard. The still-image export commands (`Export Layers To Files`, `Data Sets As Files`, `Zoomify`) and the Save As format dialogs are unchanged from CS5.
 - **Depends on:** `ARCH-011` file-formats, `ARCH-008` document-model, `WF-003` save-and-save-as, `WF-005` web-export-and-slices, `09-automation/variables-and-data-driven-graphics.md`, `10-workflow-io/camera-raw-workflow.md`, `02-ui-ux/panels/timeline-panel.md`.
 
-> All crate, module, widget, and type names below are **design proposals**. No code
-> exists in this repository. CS6 behavior is taken from the fetched CS6 Help PDF
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. CS6 behavior is taken from the fetched CS6 Help PDF
 > unless marked *(inferred)*.
 
 ## CS6 behavior

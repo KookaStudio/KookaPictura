@@ -6,7 +6,12 @@
 - **New in CS6:** `Changed` — CS6 shipped **Camera Raw 7.0** with **Process Version 2012** (PV2012): rewritten Basic tone controls (`Highlights`, `Shadows`, `Whites`, `Blacks`), new local corrections (white balance, highlights, shadows, noise, moiré), camera profiles, and the `Snapshots` tab. **Correction:** the title premise is inaccurate — `Filter > Camera Raw Filter` was introduced in **Photoshop CC (v14, 2013)**, not CS6. CS6 exposes ACR only as the raw-file processing engine / open-as-Smart-Object path. See `## Open questions`.
 - **Depends on:** `ARCH-006` gpu-rendering-pipeline, `ARCH-008` document-model, `ARCH-009` undo-history, `01-architecture/color-management.md`, `01-architecture/file-formats.md`, `LAY-020` smart-objects, `LAY-021` smart-filters, `10-workflow-io/camera-raw-workflow.md`, `04-image-ops/32-bit-hdr.md`, `04-image-ops/image-modes.md`, `06-filters/lens-correction.md`
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository. Behavior is taken from the fetched CS6 Help PDF unless marked *(inferred)*. Adobe's ACR implementation is closed; internal algorithm claims are marked **behavioral parity only, algorithm TBD**.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Behavior is taken from the fetched CS6 Help PDF unless
+> marked *(inferred)*. Adobe's ACR implementation is closed; internal algorithm
+> claims are marked **behavioral parity only, algorithm TBD**.
 
 ## CS6 behavior
 

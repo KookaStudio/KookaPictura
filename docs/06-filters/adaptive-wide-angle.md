@@ -6,7 +6,13 @@
 - **New in CS6:** `Yes` — Adaptive Wide Angle is new in CS6, alongside the lens-profile database shared with Lens Correction and Camera Raw. It adds constraint-driven local perspective correction on top of profile-based geometry. CS6 also adds **Full Spherical** correction for 360° panoramas made in CS6.
 - **Depends on:** `FILT-001` filters-overview, `FILT-101` lens-correction (shared lens-profile/EXIF model), `FILT-100` camera-raw-filter (shared distortion model), `ARCH-006` gpu-rendering-pipeline, `ARCH-007` color-management, `ARCH-009` undo-history, `LAY-021` smart-filters, `LAY-020` smart-objects.
 
-> All module, widget, and type names below are **design proposals**. No code exists in this repository. Adobe's projection math and lens-profile format are closed; those parts are **behavioral parity only, algorithm TBD**. Facts come from the fetched CS6 Help PDF, the fetched CS6-era book extract, and the fetched CS6 GPU FAQ mirror unless marked *(inferred)*.
+> All module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Adobe's projection math and lens-profile format are
+> closed; those parts are **behavioral parity only, algorithm TBD**. Facts come
+> from the fetched CS6 Help PDF, the fetched CS6-era book extract, and the fetched
+> CS6 GPU FAQ mirror unless marked *(inferred)*.
 
 ## CS6 behavior
 

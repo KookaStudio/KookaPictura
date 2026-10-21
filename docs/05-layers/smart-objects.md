@@ -6,7 +6,11 @@
 - **New in CS6:** `Changed` — the Smart Object command set is unchanged from CS5, but CS6 adds new smart-filter-capable filters (**Blur Gallery**, **Oil Paint**) and the JDI note that Smart Filter settings are shared across layer comps. Help also states that **Liquify** became Smart-Object-compatible in a later Creative Cloud update, not in the shipped CS6 build. See `## Open questions`.
 - **Depends on:** `ARCH-008` document-model, `ARCH-006` gpu-rendering-pipeline, `ARCH-009` undo-history, `TOOL-001` move-and-transform, `LAY-021` smart-filters, `LAY-022` layer-comps, `LAY-024` linked-and-embedded-objects, `10-workflow-io/open-and-new.md`, `01-architecture/file-formats.md`
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository. Behavior is taken from the fetched CS6 Help PDF unless marked *(inferred)*.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Behavior is taken from the fetched CS6 Help PDF unless
+> marked *(inferred)*.
 
 ## CS6 behavior
 

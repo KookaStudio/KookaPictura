@@ -6,7 +6,12 @@
 - **New in CS6:** `Yes` — the **Lighting Effects gallery** is rebuilt as a 64-bit workspace with on-canvas controls and GPU support; **Scripted Patterns** (`Edit > Fill > Use: Pattern > Scripted Patterns`) is new in CS6. **Flame, Tree, and Picture Frame were added in Photoshop CC 2014.2, not CS6** — see "Post-CS6 render entries". Kooka surfaces Picture Frame as a deliberate addition.
 - **Depends on:** `06-filters/filters-overview.md`, `06-filters/lighting-effects.md`, `06-filters/blur-filters.md`, `06-filters/texture-filters.md`, `05-layers/fill-layers.md`, `07-color-painting/pattern-presets.md`, `01-architecture/gpu-rendering-pipeline.md`, `01-architecture/document-model.md`, `05-layers/smart-filters.md`, `04-image-ops/bit-depth-and-conversion.md`
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository. Behavior is from the fetched CS6 Help unless marked *(inferred)*. Adobe's noise functions, flare model, and lighting shader are closed and marked **behavioral parity only, algorithm TBD**.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Behavior is from the fetched CS6 Help unless marked
+> *(inferred)*. Adobe's noise functions, flare model, and lighting shader are
+> closed and marked **behavioral parity only, algorithm TBD**.
 
 ## CS6 behavior
 

@@ -3,6 +3,10 @@
 - **Status:** living register
 - **Owner:** see `#486`
 - **Source audit:** the 30-agent docs↔code parity audit summarised here; per-gap issues filed in `#488` (`#489`–`#651`)
+- **Re-checked:** `#785` swept the rows this register's readers depend on and
+  corrected five that the tree had moved past; the corrections are listed in
+  §G and the rows that were wrong have been removed.
+- **Rows:** 160 gaps — 5 systemic in §B, 155 per-domain in §C.
 
 This register maps the behavioural contract in `docs/` against the implementation
 in `crates/`. It is the canonical place to see **what is specified but missing,
@@ -44,7 +48,8 @@ and it answers "does a spec exist?", not "is it implemented?".
    crates, and still tag shipped subsystems "(planned)". Tracked in `#495`.
 4. **Stale "no source code" claims.** `00-overview/product-overview.md` and
    `07-color-painting/color-models.md` still assert the repository contains no
-   source code. Tracked in `#496`.
+   source code. Tracked in `#496`; **fixed by `#785`**, which corrected both
+   files and swept the same claim out of the rest of the corpus.
 
 ## B. Systemic gaps (cross-cutting)
 
@@ -67,7 +72,6 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 |---|---|---|---|---|---|
 | ARCH-1 | `01-architecture/build-and-packaging.md` | Spec file never authored (`ARCH-014`); dangling refs | MISSING | `TRACEABILITY.md:37` + 8 refs | #494 |
 | ARCH-2 | `01-architecture/*` | Proposed crate map diverges from the real workspace | DIVERGENT | `Cargo.toml`, `crates/` | #495 |
-| OVR-1 | `00-overview/product-overview.md` | Claims "no source code" | STALE-DOC | `product-overview.md` | #496 |
 | OVR-2 | `11-cross-cutting/cs6-editions-and-constraints.md` | No `Edition` (Standard/Extended) gating | MISSING | no `Edition::` in `crates/` | #650 |
 
 ### 02-ui-ux — application frame and menus
@@ -182,7 +186,6 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | LAY-4 | `align-and-distribute.md` | Auto-Align Layers | MISSING | none found | #582 |
 | LAY-5 | `align-and-distribute.md` | Auto-Blend Layers | MISSING | none found | #583 |
 | LAY-6 | `blend-modes.md` | `Fill With (Mode)-Neutral Color` for new layers | MISSING | none found | #584 |
-| LAY-7 | `layer-masks.md` | Rubylith display options | MISSING | none found | #585 |
 | LAY-8 | `layer-management-ui.md` | Panel Options thumbnail size (Entire Document/Bounds) | PARTIAL | `session.h:25` | #586 |
 | LAY-9 | `export-formats.md` | File ▸ Scripts ▸ Export Layers To Files | MISSING | `command_tree.cpp:69` | #587 |
 | LAY-10 | `layer-management-ui.md` | Shape layer naming `<Tool> N` | DIVERGENT | `shapes.rs:238` | #588 |
@@ -196,7 +199,6 @@ Layer Comps (`LAY-022`) is already tracked by `#265`.
 
 | ID | Spec | Gap | Status | Evidence | Issue |
 |---|---|---|---|---|---|
-| FILT-1 | `lighting-effects.md` | Lighting Effects engine (dialog exists) | MISSING | `filter_commands.cpp:1006`; not in `filter_map/arities.rs` | #592 |
 | FILT-2 | `noise-filters.md` | Reduce Noise (incl. Advanced per-channel) | MISSING | `command_tree.cpp:743` | #593 |
 | FILT-3 | `blur-filters.md` | Radial Blur Blur Center ignored by the kernel | DIVERGENT | `filter_commands.h:23,64`; `blur.rs:107` | #594 |
 | FILT-4 | `sharpen-filters.md` | Smart Sharpen Basic/Advanced split + 32-bpc disable | DIVERGENT | `filter_commands.cpp:735-750` | #595 |
@@ -295,19 +297,26 @@ Raw file open is tracked by `#400`; DNG output by `#402`.
 
 | Doc | Claim | Reality |
 |---|---|---|
-| `openspec/specs/ui/channels-panel/spec.md` | panel is presentational, "SHALL NOT change the canvas" | live channels shipped (`channels-panel-live` unarchived) |
-| `openspec/specs/imaging/artistic-filters/spec.md` | Dry Brush/Fresco range 1–50 | code ships 0–10 (`port-photorust-filters`) |
-| `10-workflow-io/export-formats.md:125` | SVG export "deferred … not offered here" | SVG export ships (`export_as_dialog.cpp:57`) |
-| `00-overview/product-overview.md`, `07-color-painting/color-models.md` | "repository contains no source code" | full workspace + app |
-| `docs/dev/STATE.md` known-risks list | history whole-doc clone, resident GPU buffers deferred | `history-tile-deltas` archived; `gpu/resident.rs` exists |
+| `openspec/specs/ui/channels-panel/spec.md` | the Purpose paragraph calls the panel presentational "because the model has no per-channel visibility" | live channels shipped, and the same spec now carries a "Channel visibility on the canvas" requirement (`spec.md:109`) — the doc contradicts itself |
+| `docs/dev/STATE.md` known-risks list | history whole-doc clone, resident GPU buffers deferred, and eight further stale claims | **fixed by `#785`**: history is copy-on-write with tile diffs, and the resident GPU source buffers landed (`crates/pictura-render/src/gpu/resident.rs`) |
 
 ## E. Confirmed non-goals (absent by design)
 
-3D tools/layers (`TOOL-060`), Artboards (`LAY-023`), Linked/embedded objects
-(`LAY-024`), ExtendScript/E4X and `.8bf`/`.8li` plugin binaries (`AUTO-005`,
-`ARCH-011`), Adobe cloud/Stock/Bridge/Mini-Bridge (`WF-023`), Snap/AppImage
-packaging (`ARCH-014`), Timeline/video. Verified absent, no accidental
-implementation found.
+3D tools/layers (`TOOL-060`), Artboards (`LAY-023`), ExtendScript/E4X and
+`.8bf`/`.8li` plug-in binaries (`AUTO-005`, `ARCH-011`), Adobe
+cloud/Stock/Bridge/Mini-Bridge (`WF-023`), Timeline/video. Verified absent, no
+accidental implementation found.
+
+Two entries this list used to carry are corrected here:
+
+- **Linked/embedded objects** (`LAY-024`) — the *app* has no relink or
+  convert-to-linked surface, but the codec is not blind to the feature: it
+  parses and writes the `lnkD`/`lnk2`/`lnk3` linked records
+  (`crates/pictura-codec/src/smart_object.rs:199`). The relink UI is tracked by
+  `#113`; the records are read, not offered.
+- **Snap and AppImage packaging** — not a non-goal. Both ship alongside
+  Flatpak and the native packages (`snap/snapcraft.yaml`,
+  `.github/workflows/snap.yml`, `.github/workflows/appimage.yml`).
 
 ## F. Existing issues already tracking gaps
 
@@ -335,3 +344,20 @@ Pictura Raw · `#436`/`#437`/`#438` mask/channel click · `#448` slider recompos
   round-trip, which is why full depth/colour-mode fidelity (SYS-2) is broad.
 - Most "missing" secondary controls are already marked in-source with `ponytail:`
   comments naming the ceiling — they are known scope cuts, not regressions.
+- **Corrections from the `#785` sweep.** Five rows in this register were wrong,
+  and have been fixed or removed:
+  - `FILT-1` (Lighting Effects engine, `#592`) — the engine ships
+    (`crates/pictura-filters/src/render/lighting.rs`, mapped at
+    `filter_map.rs:611`, arity at `arities.rs:80`). The row is removed and
+    `#592` can be closed.
+  - `LAY-7` (Rubylith display options, `#585`) — shipped in `#672`
+    (`crates/pictura-app/cpp/mask_display_options_dialog.cpp:20`). The row is
+    removed and `#585` can be closed.
+  - §D's `artistic-filters` row — the spec now says `brush_size 0..=10`; it
+    caught up with the code.
+  - §D's `export-formats.md` row — the spec now lists SVG as a first-class
+    format; it caught up with the code.
+  - §D's "repository contains no source code" row and §E's
+    "linked/embedded objects — verified absent" — both corrected above.
+  - `OVR-1` (the "no source code" claim, `#496`) — the claim is corrected and
+    the issue is closed, so the row is removed.

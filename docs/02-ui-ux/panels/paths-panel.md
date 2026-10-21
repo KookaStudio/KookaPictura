@@ -6,7 +6,12 @@
 - **New in CS6:** `No` — the Paths panel itself is CS5-era. CS6 continues the CS5 model (saved paths, work path, vector-mask path) and adds no panel chrome; path features new to CS6 elsewhere (e.g. `3D > Make Work Path from 3D Layer`, path-aware shape-layer behavior) are referenced, not owned here.
 - **Depends on:** `SEL-014` paths-and-vector-selection, `TOOL-052` pen-and-path-tools, `TOOL-053` path-drawing behavior, `TOOL-054`/`TOOL-055` path-selection-tools, `TOOL-044` quick-mask-tool, `LAY-005` vector-masks-and-clipping-masks, `CLR-003` swatches-and-libraries, `ARCH-008` document-model, `ARCH-009` undo-history, `10-workflow-io/export-formats.md`, `10-workflow-io/printing.md`.
 
-> Crate, module, widget, and type names below are **design proposals**. No code exists in this repository. Path construction/editing semantics are owned by `TOOL-052`/`TOOL-053` and `SEL-014`; this file specifies the **panel widget** and the operations invoked from it.
+> Crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Path construction/editing semantics are owned by
+> `TOOL-052`/`TOOL-053` and `SEL-014`; this file specifies the **panel widget**
+> and the operations invoked from it.
 
 ## CS6 behavior
 

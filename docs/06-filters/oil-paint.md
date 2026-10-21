@@ -6,7 +6,13 @@
 - **New in CS6:** `Yes` — the Oil Paint filter is new in CS6. Later releases moved it to `Filter > Stylize > Oil Paint` and changed the GPU stack (OpenCL 1.1+, macOS Metal); CS6 exposes it directly under `Filter > Oil Paint`.
 - **Depends on:** `FILT-001` filters-overview, `ARCH-006` gpu-rendering-pipeline, `ARCH-007` color-management, `ARCH-009` undo-history, `LAY-021` smart-filters, `LAY-020` smart-objects, `IMG-005` bit-depth-and-conversion.
 
-> All module, widget, and type names below are **design proposals**. No code exists in this repository. Adobe's Oil Paint is a GPU (OpenCL) effect whose shader is closed; the algorithm description is **behavioral parity only, algorithm TBD** and any kernel family named below is *(inferred)* from the documented control behaviour, not from Adobe source.
+> All module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Adobe's Oil Paint is a GPU (OpenCL) effect whose
+> shader is closed; the algorithm description is **behavioral parity only,
+> algorithm TBD** and any kernel family named below is *(inferred)* from the
+> documented control behaviour, not from Adobe source.
 
 ## CS6 behavior
 

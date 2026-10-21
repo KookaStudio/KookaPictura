@@ -6,8 +6,10 @@
 - **New in CS6:** `No` — Duotone mode and the Duotone Options dialog are carried forward from CS5 unchanged in the CS6 Help.
 - **Depends on:** `04-image-ops/image-modes.md`, `04-image-ops/bit-depth-and-conversion.md`, `01-architecture/document-model.md` (`ARCH-008`), `01-architecture/file-formats.md` (`ARCH-011`), `07-color-painting/color-picker.md`, `10-workflow-io/printing.md`, `08-selection/channel-based-masking.md`.
 
-> All module, crate, and widget names below are **design proposals**. No code
-> exists in this repository. Statements marked *(inferred)* are not taken from a
+> All module, crate, and widget names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Statements marked *(inferred)* are not taken from a
 > fetched source and are candidates for `## Open questions`.
 
 ## CS6 behavior

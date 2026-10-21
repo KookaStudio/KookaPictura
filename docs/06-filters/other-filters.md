@@ -6,7 +6,12 @@
 - **New in CS6:** `No` — the Other submenu is unchanged from CS5. (The `Preserve: Squareness/Roundness` option on Maximum/Minimum arrives later, in CC; it is not in CS6.)
 - **Depends on:** `06-filters/filters-overview.md`, `06-filters/blur-filters.md`, `06-filters/sharpen-filters.md`, `06-filters/noise-filters.md`, `06-filters/pixelate-filters.md`, `04-image-ops/bit-depth-and-conversion.md`, `04-image-ops/image-modes.md`, `04-image-ops/adjustments/threshold.md`, `01-architecture/color-management.md`, `01-architecture/document-model.md`, `05-layers/smart-filters.md`, `05-layers/blend-modes.md`
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository. Behavior and ranges are from the fetched sources unless marked *(inferred)*. Adobe's exact kernel rounding and its closed HSB/HSL conversion are marked **behavioral parity only, algorithm TBD**.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Behavior and ranges are from the fetched sources
+> unless marked *(inferred)*. Adobe's exact kernel rounding and its closed HSB/HSL
+> conversion are marked **behavioral parity only, algorithm TBD**.
 
 ## CS6 behavior
 

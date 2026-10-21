@@ -6,10 +6,12 @@
 - **New in CS6:** `Changed` — Brush Pose panel added; Color Dynamics apply once per stroke by default (Apply Per Tip reverts to the older per-dab behavior); Brush Projection added to Shape Dynamics; texture Brightness/Contrast sliders added.
 - **Depends on:** `BRU-001` brush-engine, `BRU-003` bristle-brushes, `BRU-005` airbrush-and-flow, `BRU-006` brush-presets, `ARCH-006` gpu-rendering-pipeline, `ARCH-008` document-model.
 
-> Module and widget names are **design proposals**. No code exists. Adobe's exact
-> curve/Jitter-to-dab mapping is closed; where the Help does not state it, this
-> spec is **behavioral parity only, algorithm TBD** and the unknown is listed in
-> Open questions.
+> Module and widget names are **design proposals**. The repository contains a
+> working implementation; this file stays the behavioural contract for the
+> feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped and what
+> did not. Adobe's exact curve/Jitter-to-dab mapping is closed; where the Help
+> does not state it, this spec is **behavioral parity only, algorithm TBD** and
+> the unknown is listed in Open questions.
 
 ## CS6 behavior
 

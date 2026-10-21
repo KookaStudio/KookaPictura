@@ -6,7 +6,14 @@
 - **New in CS6:** `No` — the panel's readout grid, options dialog, and sampler block are unchanged. CS6 changes are contextual: before/after readouts are now driven by the **Properties panel** (replacing the CS5 Adjustments panel), and the Eyedropper's **Sample** options gained "ignore adjustment layers" and "current layer and below" (`TOOL-015`).
 - **Depends on:** `CLR-001` color-models, `CLR-004` histogram-and-info, `ARCH-003` qt6-ui-design, `ARCH-007` color-management, `ARCH-008` document-model, `03-tools/eyedropper-color-sampler-ruler.md`, `03-tools/note-and-count.md`, `02-ui-ux/preferences.md`.
 
-> This document owns the **Info panel UI surface**. The readout pipeline, samplers' data model, and the Histogram panel are specified together in `CLR-004`; the sampling tools are `TOOL-015` (Eyedropper), `TOOL-016` (Color Sampler), `TOOL-017` (Ruler). All crate, module, widget, and type names are **design proposals**. No code exists in this repository. Facts not confirmed by a fetched CS6 source are marked *(inferred)*.
+> This document owns the **Info panel UI surface**. The readout pipeline,
+> samplers' data model, and the Histogram panel are specified together in
+> `CLR-004`; the sampling tools are `TOOL-015` (Eyedropper), `TOOL-016` (Color
+> Sampler), `TOOL-017` (Ruler). All crate, module, widget, and type names are
+> **design proposals**. The repository contains a working implementation; this
+> file stays the behavioural contract for the feature, and
+> `docs/dev/doc-code-parity-gaps.md` records what shipped and what did not. Facts
+> not confirmed by a fetched CS6 source are marked *(inferred)*.
 
 ## CS6 behavior
 

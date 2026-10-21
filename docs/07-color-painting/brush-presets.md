@@ -6,10 +6,12 @@
 - **New in CS6:** `Changed` — CS6 serializes brush libraries as **ABR version 10 (subversion 1)**; the panel UI and preset vocabulary are otherwise unchanged from CS5.
 - **Depends on:** `BRU-001` brush-engine, `BRU-002` brush-dynamics, `BRU-003` bristle-brushes, `BRU-004` mixer-brush-engine, `10-workflow-io/presets-manager.md`, `10-workflow-io/presets-manager.md`, `ARCH-008` document-model.
 
-> Module and widget names are **design proposals**. No code exists. The ABR
-> format is closed and only partly publicly documented; bold claims about
-> serialization are attributed to the community analysis, not Adobe. Anything
-> unverified is under Open questions.
+> Module and widget names are **design proposals**. The repository contains a
+> working implementation; this file stays the behavioural contract for the
+> feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped and
+> what did not. The ABR format is closed and only partly publicly documented;
+> bold claims about serialization are attributed to the community analysis,
+> not Adobe. Anything unverified is under Open questions.
 
 ## CS6 behavior
 

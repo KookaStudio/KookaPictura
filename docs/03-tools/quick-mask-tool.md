@@ -6,8 +6,10 @@
 - **New in CS6:** `No` — Quick Mask is a long-standing selection-editing mode carried into CS6. CS6 adds no documented Quick Mask behaviour change.
 - **Depends on:** `08-selection/selection-model.md`, `08-selection/quick-mask.md`, `08-selection/save-and-load-selections.md`, `08-selection/channel-based-masking.md`, `07-color-painting/brush-engine.md`, `01-architecture/document-model.md`, `01-architecture/undo-history.md`, `01-architecture/qt6-ui-design.md`, `03-tools/smudge-blur-sharpen.md`
 
-> All module and widget names below are **design proposals**. No code exists in
-> this repository. Facts not confirmed by a fetched CS6 source are marked
+> All module and widget names below are **design proposals**. The repository
+> contains a working implementation; this file stays the behavioural contract
+> for the feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped
+> and what did not. Facts not confirmed by a fetched CS6 source are marked
 > *(inferred)*.
 
 ## CS6 behavior

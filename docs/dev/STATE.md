@@ -5,13 +5,60 @@ Snapshot for resuming after a context break. Update after each milestone.
 ## Where things are
 
 - Repo: `github.com/KookaStudio/KookaPictura`, branch `master`.
-  Docs-only corpus + a working Rust/Qt engine. Licensed GPL-3.0-or-later; the
-  corpus is a documentation-first independent reimplementation, not a formal
-  two-team process (`docs/00-overview/licensing-and-provenance.md`).
+  A working Rust/Qt engine and the documentation-first corpus it was built
+  from. Licensed GPL-3.0-or-later; the corpus is a documentation-first
+  independent reimplementation, not a formal two-team process
+  (`docs/00-overview/licensing-and-provenance.md`).
 - **Provenance history:** the git history was rewritten so no reachable commit
   contains reproduced Adobe Help prose or the old wording.
 - Toolchain: Rust 1.98 (`rust-toolchain.toml`), system Qt **6.11.1**, cxx-qt
   **0.10.0**, wgpu **30.0.1**, lcms2 **6.2.0** (system Little CMS 2.19).
+- **Documentation sweep: the README, the roadmap and the corpus against the
+  shipped code** (#785, branch `docs/785-reconcile-readme-roadmap-corpus`,
+  OpenSpec change `documentation-corpus`, archived into
+  `meta/documentation-corpus`). The roadmap and the README described a project
+  that had not been built yet. The erasers, gradient and paint bucket, clone and
+  pattern stamp, dodge/burn/sponge, blur/sharpen/smudge, the type tools, the
+  healing family, the pen and path tools, the shape tools, magnetic lasso,
+  rotate view, the slice tools, the colour sampler/ruler/note/count tools,
+  perspective crop, Save As and Export, Save for Web, recent files, align and
+  distribute, and clipping masks were all listed as planned; all of them ship.
+  The corpus's own banner said "No code exists in this repository" in 137 spec
+  files, and `docs/README.md` claimed the repository has no code, no build
+  files and no dependencies. What changed:
+  - `ROADMAP.md` is re-cut into Shipped, Open and Not planned. "Open work"
+    groups the gaps in `docs/dev/doc-code-parity-gaps.md` by domain, and
+    every open item links the issue tracking it; the Phase 1/Phase 2/Later
+    framing is gone, because it no longer described anything.
+  - `README.md`'s feature list covers the shipped surface, each bullet citing a
+    path in the tree, and its two over-claims now carry the real counts: 110
+    filters with three CS6 families still without an engine, and the classic
+    adjustment families, each naming the control it still lacks.
+  - The "no code exists" banner is gone from all 137 corpus files; each now
+    says the repository holds the implementation, that the file stays the
+    behavioural contract, and that the gap register records what shipped.
+    `docs/README.md` and `00-overview/product-overview.md` say the same, and
+    `00-overview/feasibility-and-non-goals.md` no longer lists counting as a
+    non-goal, because the Count tool ships.
+  - Five rows of the gap register were wrong and are fixed: `FILT-1` (the
+    Lighting Effects engine ships) and `LAY-7` (rubylith shipped in #672) are
+    removed, two "code ahead of docs" rows are dropped because the specs caught
+    up, and §E's "linked/embedded objects — verified absent" now says the
+    codec parses the linked records.
+  - This file's known-risks list had nine claims the tree had moved past —
+    history cloning the whole document, the Layers panel showing top-level rows
+    only, marching ants, the Filter Gallery, brush presets, the recent-files
+    menu, the Info colour samplers, the OS font picker and the paint-mode list
+    — and they are corrected.
+  - New `scripts/check-doc-claims.py` plus two `scripts/guard.sh` rules fail a
+    corpus file that denies the implementation, an open roadmap item that names
+    no issue, and a cited path that does not exist.
+  - New `AGENTS.md` rule 12 requires a pull request that ships or removes a
+    feature to update `ROADMAP.md` in the same change.
+  Ceiling: the corpus's own `Status: Draft` labels are left alone — they
+  describe the maturity of a spec document, not the state of the code — and the
+  corpus's broken path references and mis-bound `ARCH-0xx` dependency ids are
+  left for a separate sweep.
 - **Perspective rebuilt, pending-transform lock** (#750, branch
   `fix/750-perspective-transform`, OpenSpec change
   `perspective-transform-gesture`, archived into `document/free-transform` and
@@ -5445,62 +5492,102 @@ M6 through M34 are archived; their deltas now live in `openspec/specs/`.
 
 ## Known risks / open items
 
-- Core API is frozen only where noted; adding fields breaks struct literals.
-- PSD descriptor coverage is partial (adjustment layers, layer styles not yet).
+- Core API is frozen only where noted; adding a field to a core struct breaks
+  only the handful of exhaustive struct literals — the ~160 others use
+  `..Default::default()`.
+- PSD descriptor coverage is broad: adjustment layers decode and re-encode
+  (Invert, Posterize, Threshold, Brightness/Contrast, Levels, Hue/Saturation,
+  Exposure, Photo Filter, Vibrance, Shadows/Highlights, Black & White, Gradient
+  Map, Color Balance, Channel Mixer, Curves, Selective Color, Color Lookup, and
+  the Solid/Gradient/Pattern fills), and layer styles decode and re-encode from
+  the layer's `lfx2` descriptor. A key the engine does not model is kept
+  verbatim and re-emitted.
 - GPU is the default compositor and the default filter path, but the CPU
   compositor and `pictura_filters::apply` remain the oracles.
 - A `Dissolve` layer or an unsupported adjustment forces a whole-document CPU
   fallback for that composite.
-- Fifteen filter kernels are GPU-accelerated (the blur/sharpen/High Pass family
-  plus the M28 heavy window/effect set); the stochastic/seeded filters and the
-  warps/distort and render filters fall back to the CPU oracle byte-for-byte.
+- Sixteen filter kernels have GPU implementations (Gaussian Blur, Box Blur,
+  Motion Blur, Radial Blur Zoom, Blur, Blur More, Sharpen, Sharpen More, Unsharp
+  Mask, High Pass, Surface Blur, Maximum, Minimum, Median, Custom 5x5, Oil
+  Paint), but eleven of them — the blur/sharpen/High Pass family plus Maximum,
+  Minimum, Median and Custom — are routed to the CPU on purpose, because the
+  CPU beats the GPU round trip for them. The stochastic/seeded filters and the
+  warps/distort and render filters have no GPU kernel and fall back to the CPU
+  oracle byte-for-byte.
 - The GPU compositor and filter path are host-side bound, not readback-bound: at
   4000² the composite is now dominated by the per-composite source/mask upload
   (~128 + 16 MB) after M33 removed the per-pixel assembly, while the 64 MB
-  readback is ~6 ms (see `docs/dev/canvas-compositing-plan.md` §2.1); resident
-  per-layer buffers (deferred) and zero-copy present (M34) both aim at this.
+  readback is ~7 ms (see `docs/dev/canvas-compositing-plan.md` §2.1). Resident
+  per-layer GPU source buffers have since landed (a stamp-keyed LRU in
+  `crates/pictura-render/src/gpu/resident.rs`); the GPU-resident zero-copy
+  present is still deferred — it was planned as M34, which shipped as composite
+  coherence and cheap undo/redo instead.
 - M35 (`m35-cpp-region-blit`) removed both the per-pixel `QImage::set_pixel_color`
   blit and the 1 MP `REGION_REFRESH_BUDGET` fallback: the planar composite is the
   authoritative canvas, `refresh_region` signals the region, and C++
-  `ImageView::blitRegion` (`QPainter`, `CompositionMode_Source`) paints it. A
+  `ImageView::blitRegion` copies the region rows into the canvas in place (a
+  clamped row copy with `CompositionMode_Source` semantics) rather than
+  painting it with `QPainter`. A
   CPU display pyramid (change `canvas-view-performance`) now caches the full
   composite's halved levels and crops one for the canvas, so a zoomed-out present
   no longer scales the full-resolution document; proxy-level *compositing*
   (composite a proxy of each layer) is still absent, so a composite still runs at
   document resolution for the damaged region.
-- History capture clones the whole document for each state, so large documents
-  pay both RAM (up to 20 states) and latency (~60 ms/state at 4000²); copy-on-write
-  or tile diffs are the deferred fix.
+- History capture is copy-on-write with tile diffs: one materialized state is
+  kept and every other state stores the 64×64 tiles that changed against its
+  predecessor, so retention scales with the edited area rather than with the
+  document (up to 20 states).
 - The GPU path still silently falls back to the CPU on any `GpuError`.
-- `pictura-app` has one `#[ignore]`d interop test.
-- The recent-files menu is rebuilt at startup, so a file opened in-session
-  appears there only after restart.
+- `pictura-app` has 18 `#[ignore]`d tests, all profiling harnesses (4000²/16000²
+  region, dab, visibility, filter-dialog, crop, marquee and undo profiles) that
+  run only with `--ignored --nocapture`.
+- The recent-files submenu is repopulated each time it opens, so a file opened
+  in-session appears in it at once; a file that has since moved or been deleted
+  is dropped from the list.
 - Quick Selection is a wand-union approximation, not a true Photoshop quick
-  selection; crop is destructive (no crop region / no non-destructive re-crop);
-  selection marching ants are not implemented — only a rubber band during drag
-  and the committed bounds are shown.
-- Icon art is a first functional pass; a visual refinement pass can change SVG
-  paths without any code change.
+  selection. Selection marching ants are implemented: the committed contour is
+  drawn as a solid white base under an animated black dashed pen. Crop is not
+  destructive by default — the Crop tool has an interactive region (handles,
+  ratio lock, overlays) and the pixels outside the frame are kept unless
+  `Delete Cropped Pixels` is on, so a crop can be widened again.
+- Icon art is Lucide-derived or hand-authored (195 icons, mapped in
+  `docs/dev/icon-provenance.md`); it is not CS6-pixel-exact, and a visual
+  refinement pass can still change SVG paths without any code change.
 - Cursors render at a single DPR (no per-screen 2×/3× cursor variants yet).
-- The M20 Layers panel shows top-level rows only: group-tree expansion,
-  drag-reorder, layer lock flags, clipping/link/color labels, and a
-  filter/search row are not implemented.
-- Swatch library file I/O, Info color samplers, and Histogram source/cache
-  states are not implemented.
+- The M20 Layers panel is a full tree: groups expand, rows drag-reorder, the
+  lock strip sets the transparency/position/nesting/all locks, the clipping
+  base, the layer and mask links, and the CS6 colour label are shown, and a
+  filter bar filters rows by name, kind, mode, colour, attribute, effect, or the
+  current selection.
+- Swatch library file I/O (`.aco` and library load/save) and the Histogram
+  panel's source selector and cache states (Uncached Refresh, cache-level badge,
+  statistics block) are not implemented; the Info panel's colour samplers are.
 - Painting is limited to 8-bit RGB single raster layers; the coverage scratch is
   a layer-sized buffer (sparse tiles deferred).
-- Only the Normal/Dissolve/Behind/Clear paint modes exist; there is no tablet
-  pressure mapping or brush presets yet.
-- Artistic filters are behavioural-parity models without an Adobe oracle; the
-  Filter Gallery UI, Smart Filters, and depth/mode gating are not implemented.
-- The CS6 chrome is a defensible dark look, not a pixel-exact match (exact CS6
-  colours/metrics are unsourced).
-- Panel contents beyond M20 and workspace presets/icon-collapse docks are not
-  implemented.
-- The M24 panels are structural placeholders with empty states, not features;
-  icon-collapse, workspace presets, and panel-title-bar menus are not
-  implemented.
+- The paint modes are Normal, Dissolve, Behind, Clear and Multiply; there is no
+  tablet pressure mapping (the Stylus Pressure toggle is shown disabled), but
+  brush presets are implemented — the options bar's tip picker carries the
+  default brush set with size, hardness, spacing and dynamics.
+- Artistic filters are behavioural-parity models without an Adobe oracle. The
+  Filter Gallery (category thumbnails plus a stacked, reorderable effect list)
+  and Smart Filters (add, toggle, delete, reorder, and `Convert for Smart
+  Filters`; the engine models the camera-raw filter) are implemented, but the
+  filters have no depth or mode gating.
+- The CS6 chrome is a defensible dark look, not a pixel-exact match: the palette
+  carries explicit CS6 dark swatches and the CS6 accent, but the metrics and the
+  remaining surfaces are approximations.
+- Panel contents are implemented well beyond M20 (Properties, Channels, Paths,
+  History, Navigator, Color, Swatches, Info, Histogram, Notes, Brush, Clone
+  Source, Character, Paragraph, Glyphs, Paragraph Styles), as are the workspace
+  presets and the icon-collapse docks; Gradients, Patterns, Adjustments, Actions
+  and Styles are still empty placeholders.
+- Some M24 panels are still structural placeholders with empty states
+  (Gradients, Patterns, Adjustments, Actions and Styles) while Properties,
+  Channels and Paths carry real content. Icon-collapse, workspace presets and
+  panel-title-bar menus are implemented.
 - Oil Paint is a CPU behavioural model: CS6 requires a supported GPU (closed
-  OpenCL kernel, no CPU fallback), so the result is a deliberate non-parity
-  divergence rather than verified parity.
-- The OS font/filter gallery UI is still absent.
+  OpenCL kernel, no CPU fallback), so the CPU result is a deliberate non-parity
+  divergence rather than verified parity. The engine also carries a four-pass
+  GPU kernel for it; the CPU model remains the oracle.
+- The OS font picker (the type tool's `QFontComboBox`) and the Filter Gallery
+  are both present.

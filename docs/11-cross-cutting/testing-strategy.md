@@ -13,8 +13,10 @@
   build-and-packaging, `11-cross-cutting/crash-recovery-and-autosave.md`,
   `00-overview/licensing-and-provenance.md`.
 
-> No code exists in this repository. Every crate, harness, and tool name below is
-> a **design proposal**. Comparison thresholds marked *(proposed)* are
+> The repository contains a working implementation; this file stays the
+> behavioural contract for the feature, and `docs/dev/doc-code-parity-gaps.md`
+> records what shipped and what did not. Every crate, harness, and tool name
+> below is a **design proposal**. Comparison thresholds marked *(proposed)* are
 > engineering hypotheses to validate, not facts about CS6.
 
 ## CS6 behavior

@@ -6,7 +6,13 @@
 - **New in CS6:** `Yes` — **Oil Paint** (`Filter > Oil Paint`) is new in CS6 and is a GPU/Mercury filter. The other Stylize filters are unchanged from CS5.
 - **Depends on:** `06-filters/filters-overview.md`, `06-filters/oil-paint.md`, `06-filters/blur-filters.md`, `06-filters/sketch-filters.md`, `04-image-ops/bit-depth-and-conversion.md`, `01-architecture/gpu-rendering-pipeline.md`, `01-architecture/document-model.md`, `05-layers/smart-filters.md`, `05-layers/blend-modes.md`
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository. Behavior is from the fetched CS6 Help unless marked *(inferred)*. Adobe's exact edge detector, threshold curve, extrusion renderer, and Oil Paint brush model are closed and are marked **behavioral parity only, algorithm TBD**.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Behavior is from the fetched CS6 Help unless marked
+> *(inferred)*. Adobe's exact edge detector, threshold curve, extrusion renderer,
+> and Oil Paint brush model are closed and are marked **behavioral parity only,
+> algorithm TBD**.
 
 ## CS6 behavior
 

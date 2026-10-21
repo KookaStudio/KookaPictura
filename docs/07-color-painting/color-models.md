@@ -6,8 +6,10 @@
 - **New in CS6:** `No` — the models and the Adobe Color Picker's model set are long-standing. CS6 changes are confined to picker input details (paste `#`/`0x` hex, 3-digit shorthand; resizable Color panel) documented in `CLR-002`.
 - **Depends on:** `ARCH-007` color-management, `ARCH-008` document-model, `04-image-ops/image-modes.md`, `04-image-ops/bit-depth-and-conversion.md`, `04-image-ops/color-profiles-and-assignment.md`, `07-color-painting/color-picker.md`, `07-color-painting/swatches-and-libraries.md`.
 
-> All crate, module, widget, and type names below are **design proposals**. No code
-> exists in this repository. Facts not confirmed by a fetched CS6 source are marked
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Facts not confirmed by a fetched CS6 source are marked
 > *(inferred)*.
 
 ## CS6 behavior

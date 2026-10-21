@@ -6,12 +6,14 @@
 - **New in CS6:** `Changed` — Erodible and Airbrush tip categories, Brush Pose, Brush Projection, per-stroke (rather than per-dab) Color Dynamics by default, texture Brightness/Contrast sliders, and the maximum brush size raised to 5000 px.
 - **Depends on:** `ARCH-006` gpu-rendering-pipeline, `ARCH-008` document-model, `ARCH-009` undo-history, `03-tools/brush-and-pencil.md`, `03-tools/eraser-tools.md`, `07-color-painting/brush-dynamics.md` (`BRU-002`), `07-color-painting/bristle-brushes.md` (`BRU-003`), `07-color-painting/mixer-brush-engine.md` (`BRU-004`), `07-color-painting/airbrush-and-flow.md` (`BRU-005`), `07-color-painting/brush-presets.md` (`BRU-006`).
 
-> Module and widget names are **design proposals**. No code exists. The exact
-> Adobe sampling, compositing, and deformation kernels are closed; where they
-> are not described by the CS6 Help they are marked **behavioral parity only,
-> algorithm TBD**. Behavioral facts below are from the fetched CS6 Help PDF and
-> the cited secondary sources; anything not verified is called out in Open
-> questions rather than asserted.
+> Module and widget names are **design proposals**. The repository contains a
+> working implementation; this file stays the behavioural contract for the
+> feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped and what
+> did not. The exact Adobe sampling, compositing, and deformation kernels are
+> closed; where they are not described by the CS6 Help they are marked
+> **behavioral parity only, algorithm TBD**. Behavioral facts below are from
+> the fetched CS6 Help PDF and the cited secondary sources; anything not
+> verified is called out in Open questions rather than asserted.
 
 ## CS6 behavior
 

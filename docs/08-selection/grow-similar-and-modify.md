@@ -6,7 +6,10 @@
 - **New in CS6:** `Changed` — the Modify commands themselves are unchanged from CS5, but CS6 added **decimal Feather values** for the Marquee and Lasso tools and the mask panels, matching a precision the Feather dialog already had; the Make Selection-from-path dialog also recalls its Feather radius (see `paths-and-vector-selection.md`).
 - **Depends on:** `08-selection/selection-model.md`, `08-selection/selection-tools-overview.md`, `03-tools/quick-selection-and-magic-wand.md` (Magic Wand `Tolerance`), `08-selection/refine-edge.md`, `ARCH-002` document-model, `ARCH-007` undo-history.
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not.
 
 ## CS6 behavior
 

@@ -6,8 +6,10 @@
 - **New in CS6:** `No` — the Match Color command and its dialog are carried forward from CS5 unchanged in the CS6 Help.
 - **Depends on:** `04-image-ops/adjustments-overview.md`, `04-image-ops/adjustments/hue-saturation.md`, `04-image-ops/adjustments/levels.md`, `04-image-ops/image-modes.md`, `08-selection/selection-model.md`, `01-architecture/document-model.md` (`ARCH-008`), `01-architecture/color-management.md` (`ARCH-007`), `01-architecture/undo-history.md` (`ARCH-009`).
 
-> All module, crate, and widget names below are **design proposals**. No code
-> exists in this repository. Statements marked *(inferred)* are not taken from a
+> All module, crate, and widget names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Statements marked *(inferred)* are not taken from a
 > fetched source and are candidates for `## Open questions`.
 
 ## CS6 behavior

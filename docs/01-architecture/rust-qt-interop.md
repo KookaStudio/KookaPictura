@@ -6,9 +6,11 @@
 - **New in CS6:** `No` (technology-selection document)
 - **Depends on:** `ARCH-003` qt6-ui-design, `ARCH-005` threading-and-concurrency, `ARCH-006` gpu-rendering-pipeline
 
-> All crate and module names below are **design proposals**. No code exists in
-> this repository. Versions and maintenance status reflect the sources fetched
-> for this document and must be re-checked before implementation.
+> All crate and module names below are **design proposals**. The repository
+> contains a working implementation; this file stays the behavioural contract
+> for the feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped
+> and what did not. Versions and maintenance status reflect the sources
+> fetched for this document and must be re-checked before implementation.
 
 ## CS6 behavior
 

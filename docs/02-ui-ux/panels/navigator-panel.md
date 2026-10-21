@@ -6,7 +6,13 @@
 - **New in CS6:** `No` — the Navigator panel is functionally unchanged. Zoom behavior changed elsewhere (Animated Zoom and Zoom-clicked-point preferences), not in the panel.
 - **Depends on:** `ARCH-003` qt6-ui-design, `ARCH-006` gpu-rendering-pipeline, `03-tools/hand-and-zoom.md`, `02-ui-ux/preferences.md`, `02-ui-ux/workspace-and-docks.md`.
 
-> This document owns the **Navigator panel UI surface**. Zoom commands, the Zoom tool, and zoom preferences belong to `03-tools/hand-and-zoom.md`; document/view separation belongs to `ARCH-008` document-model. All crate, module, widget, and type names are **design proposals**. No code exists in this repository. Facts not confirmed by a fetched CS6 source are marked *(inferred)*.
+> This document owns the **Navigator panel UI surface**. Zoom commands, the Zoom
+> tool, and zoom preferences belong to `03-tools/hand-and-zoom.md`; document/view
+> separation belongs to `ARCH-008` document-model. All crate, module, widget, and
+> type names are **design proposals**. The repository contains a working
+> implementation; this file stays the behavioural contract for the feature, and
+> `docs/dev/doc-code-parity-gaps.md` records what shipped and what did not. Facts
+> not confirmed by a fetched CS6 source are marked *(inferred)*.
 
 ## CS6 behavior
 

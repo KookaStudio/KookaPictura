@@ -6,7 +6,10 @@
 - **New in CS6:** `Changed` — CS6 continues the CS5 move of mask controls into the **Properties** panel and adds the `Delete Mask` / `Disable/Enable Mask` controls there; the Channels panel, `Apply Image`, and `Calculations` dialogs are otherwise the CS5 behaviour. CS6 What's New lists no new Calculations/Apply Image options.
 - **Depends on:** `08-selection/save-and-load-selections.md` (`SEL-012`), `08-selection/quick-mask.md`, `01-architecture/document-model.md`, `01-architecture/file-formats.md`, `04-image-ops/adjustments-overview.md`, `05-layers/layer-masks.md`, `05-layers/blend-modes.md`.
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not.
 
 ## CS6 behavior
 

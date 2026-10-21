@@ -6,7 +6,11 @@
 - **New in CS6:** `Changed` — layer comps themselves date from Photoshop CS; CS6 restores **Layer Comps to PDF** as a `File > Scripts` option (JDI list). Smart-object/layer-comp integration and bulk update across comps are **post-CS6** (CC 2014). See `## Open questions`.
 - **Depends on:** `ARCH-008` document-model, `ARCH-009` undo-history, `LAY-020` smart-objects, `LAY-021` smart-filters, `02-ui-ux/panels/layers-panel.md`, `09-automation/script-events-and-jsx.md`, `10-workflow-io/export-formats.md`
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository. Behavior is taken from the fetched CS6 Help PDF unless marked *(inferred)*.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Behavior is taken from the fetched CS6 Help PDF unless
+> marked *(inferred)*.
 
 ## CS6 behavior
 

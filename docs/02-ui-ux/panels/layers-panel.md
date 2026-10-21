@@ -6,7 +6,13 @@
 - **New in CS6:** `Changed` — CS6 adds the **filter/search row** at the top of the panel, right-click **color labels**, a **Properties panel** that edits the components selected here, simultaneous lock/blend/color edits across a multiple selection, the **Blend If** badge, an `FX` toggle, correct opacity/blend readout on hidden layers, `00`/`Shift+00` opacity shortcuts, `Tab`/`Shift+Tab` rename navigation, layer-name tooltips, and tool-reflecting shape-layer names. The panel chrome (thumbnail column, eye column, opacity/fill/blend header, bottom button strip, panel menu) is otherwise CS5-era.
 - **Depends on:** `LAY-001` layers-overview, `LAY-002` layer-management-ui, `LAY-003` layer-groups, `LAY-004` layer-masks, `LAY-005` vector-masks-and-clipping-masks, `LAY-010` blend-modes, `LAY-011` layer-styles, `LAY-012` adjustment-layers, `LAY-013` fill-layers, `LAY-020` smart-objects, `LAY-021` smart-filters, `LAY-031` merge-and-flatten, `LAY-032` layer-filtering-and-search, `ARCH-003` qt6-ui-design, `ARCH-008` document-model, `ARCH-009` undo-history, `PAN-006` properties-panel.
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository. This file specifies the **panel widget behavior**; layer semantics (what visibility, locks, blend modes, masks, clipping and merge actually do) are owned by the `05-layers/` specs and are cross-referenced rather than restated.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. This file specifies the **panel widget behavior**;
+> layer semantics (what visibility, locks, blend modes, masks, clipping and merge
+> actually do) are owned by the `05-layers/` specs and are cross-referenced rather
+> than restated.
 
 ## CS6 behavior
 

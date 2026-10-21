@@ -6,7 +6,10 @@
 - **New in CS6:** `Changed` — the transform gesture set is unchanged from CS5, but CS6 added an **Interpolation** pop-up to the Free Transform options bar (see `03-tools/move-and-transform.md`), and the `Snap Vector Tools And Transforms To Pixel Grid` preference now lets a 90° rotation of an even-×-odd-pixel item avoid landing on a half-pixel position. The Free Transform options bar (shared with Transform Selection) is otherwise the CS5 bar.
 - **Depends on:** `08-selection/selection-model.md`, `03-tools/move-and-transform.md` (`TOOL-001`), `ARCH-002` document-model, `ARCH-007` undo-history.
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not.
 
 ## CS6 behavior
 

@@ -6,8 +6,10 @@
 - **New in CS6:** `Changed` — the dialog is named **Save For Web & Devices** and the still-image optimization matrix is the CS5 set. CS6 adds the dark interface and Copy CSS from layers (a **Creative Cloud** feature shown in the Help corpus, **not** CS6) — see `## Open questions`. `Copy CSS from layers` must not be offered as CS6 parity.
 - **Depends on:** `ARCH-011` file-formats, `ARCH-008` document-model, `ARCH-007` color-management, `WF-003` save-and-save-as, `WF-004` export-formats, `03-tools/slice-tools.md`, `02-ui-ux/panels/layers-panel.md`.
 
-> All crate, module, widget, and type names below are **design proposals**. No code
-> exists in this repository. CS6 behavior is taken from the fetched CS6 Help PDF
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. CS6 behavior is taken from the fetched CS6 Help PDF
 > unless marked *(inferred)*.
 
 ## CS6 behavior

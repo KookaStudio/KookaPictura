@@ -6,7 +6,13 @@
 - **New in CS6:** `No` — the Histogram panel is unchanged. The CS6 move of adjustments to the **Properties panel** means the adjustment-preview behavior is driven from there rather than from the CS5 Adjustments panel.
 - **Depends on:** `CLR-004` histogram-and-info, `ARCH-003` qt6-ui-design, `ARCH-006` gpu-rendering-pipeline, `ARCH-008` document-model, `04-image-ops/adjustments-overview.md`, `02-ui-ux/preferences.md`.
 
-> This document owns the **Histogram panel UI surface**. The binning, statistics formulas, cache/pyramid model, and source routing are specified in `CLR-004` (`histogram-and-info.md`); the Info panel is `PAN-013`. All crate, module, widget, and type names are **design proposals**. No code exists in this repository. Facts not confirmed by a fetched CS6 source are marked *(inferred)*.
+> This document owns the **Histogram panel UI surface**. The binning, statistics
+> formulas, cache/pyramid model, and source routing are specified in `CLR-004`
+> (`histogram-and-info.md`); the Info panel is `PAN-013`. All crate, module,
+> widget, and type names are **design proposals**. The repository contains a
+> working implementation; this file stays the behavioural contract for the
+> feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped and what
+> did not. Facts not confirmed by a fetched CS6 source are marked *(inferred)*.
 
 ## CS6 behavior
 

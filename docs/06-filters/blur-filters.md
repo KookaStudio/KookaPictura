@@ -6,7 +6,14 @@
 - **New in CS6:** `Changed` — **Box Blur** and **Shape Blur** are part of the CS6 blur set, and the **Blur Gallery** is new (its on-canvas tools are not this spec). The classic Blur-submenu filters (Average, Blur, Blur More, Gaussian, Lens, Motion, Radial, Smart, Surface) predate CS6 and are unchanged.
 - **Depends on:** `FILT-001` filters-overview, `ARCH-006` gpu-rendering-pipeline, `ARCH-009` undo-history, `LAY-004` layer-masks, `IMG-009` 32-bit-hdr, `ARCH-007` color-management.
 
-> All module, widget, and type names below are **design proposals**. No code exists in this repository. Adobe's exact kernels are closed; parity is **behavioral parity only, algorithm TBD**. The CS6 Help describes each filter's controls and qualitative behavior; algorithm families below are drawn from standard image-processing references (fetched), not from Adobe source. Parameter ranges are *(inferred)* where the fetched primary source does not state them.
+> All module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Adobe's exact kernels are closed; parity is
+> **behavioral parity only, algorithm TBD**. The CS6 Help describes each filter's
+> controls and qualitative behavior; algorithm families below are drawn from
+> standard image-processing references (fetched), not from Adobe source. Parameter
+> ranges are *(inferred)* where the fetched primary source does not state them.
 
 ## CS6 behavior
 

@@ -6,8 +6,10 @@
 - **New in CS6:** `Changed` — the adjustment itself is long-standing, but CS6 moved its UI from the CS5 Adjustments panel to the Properties panel and exposes Hue/Saturation presets through the panel's Preset menu (CS5 surfaced presets as tiles in the Adjustments panel).
 - **Depends on:** `ARCH-008` document-model, `ARCH-009` undo-history, `ARCH-006` gpu-rendering-pipeline, `01-architecture/color-management.md`, `04-image-ops/image-modes.md`, `04-image-ops/adjustments-overview.md`, `05-layers/adjustment-layers.md`, `07-color-painting/color-models.md`, `07-color-painting/color-picker.md`, `10-workflow-io/presets-manager.md`.
 
-> All module and widget names below are **design proposals**. No code exists in
-> this repository. Facts not confirmed by a fetched CS6 source are marked
+> All module and widget names below are **design proposals**. The repository
+> contains a working implementation; this file stays the behavioural contract
+> for the feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped
+> and what did not. Facts not confirmed by a fetched CS6 source are marked
 > *(inferred)*.
 
 ## CS6 behavior

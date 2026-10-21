@@ -6,7 +6,12 @@
 - **New in CS6:** `No` — the Refine Edge dialog with **Smart Radius**, the refinement brushes, the global sliders, and **Decontaminate Colors** shipped in CS5; the CS6 Help documents it as carried forward. CS6's documented *selection* novelties are Color Range Skin Tones / Detect Faces (`SEL-005`). No fetched CS6 source states a behavioral expansion of Refine Edge in CS6 — see Open questions.
 - **Depends on:** `SEL-001` selection-model, `SEL-002` selection-tools-overview, `SEL-005` color-range, `TOOL-002`/`TOOL-003`/`TOOL-004`, `TOOL-044` quick-mask-tool, `05-layers/layer-masks.md` (`LAY-004`), `06-filters/blur-filters.md` (feather-like blur), `01-architecture/document-model.md` (`ARCH-008`), `01-architecture/undo-history.md` (`ARCH-009`), `01-architecture/gpu-rendering-pipeline.md` (`ARCH-006`), `02-ui-ux/panels/properties-panel.md`.
 
-> All module, widget, and type names below are **design proposals**. No code exists in this repository. Behavior is taken from the fetched CS6 Help corpus; the view-mode enumeration, their letter shortcuts, and the Output To list are community-reported and marked as such.
+> All module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Behavior is taken from the fetched CS6 Help corpus;
+> the view-mode enumeration, their letter shortcuts, and the Output To list are
+> community-reported and marked as such.
 
 ## CS6 behavior
 

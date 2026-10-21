@@ -6,7 +6,11 @@
 - **New in CS6:** `No` — the per-pixel coverage-mask model, the four selection modes, anti-aliasing, feathering, marching ants, and alpha-channel round-tripping are all CS5-era and earlier. CS6 adds selection *features* (Color Range Skin Tones/Detect Faces, SEL-005) but does not change the underlying model.
 - **Depends on:** `01-architecture/document-model.md` (`ARCH-008`), `01-architecture/undo-history.md` (`ARCH-009`), `01-architecture/file-formats.md` (`ARCH-011`), `01-architecture/gpu-rendering-pipeline.md` (`ARCH-006`), `03-tools/marquee-selection.md` (`TOOL-002`), `03-tools/lasso-selection.md` (`TOOL-003`), `03-tools/quick-selection-and-magic-wand.md` (`TOOL-004`), `SEL-002`..`SEL-005`, `05-layers/layer-masks.md` (`LAY-004`), `10-workflow-io/document-lifecycle.md`.
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository. Behavior is taken from the fetched CS6 Help corpus; anything inferred or drawn from community sources is marked.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Behavior is taken from the fetched CS6 Help corpus;
+> anything inferred or drawn from community sources is marked.
 
 ## CS6 behavior
 

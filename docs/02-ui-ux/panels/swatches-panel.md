@@ -6,7 +6,14 @@
 - **New in CS6:** `No` — the Swatches panel and Preset Manager are unchanged. The HTML/CSS/SVG swatch import in the CS6 "What's New" list is **Creative Cloud only**.
 - **Depends on:** `CLR-001` color-models, `CLR-002` color-picker, `CLR-003` swatches-and-libraries, `ARCH-003` qt6-ui-design, `ARCH-007` color-management, `10-workflow-io/presets-manager.md`, `02-ui-ux/preferences.md`.
 
-> This document owns the **Swatches panel UI surface**. The library data model, `.aco`/`.ase` codecs, spot-book registry, and load/replace/append semantics are specified in `CLR-003`; the Preset Manager dialog is shared with `10-workflow-io/presets-manager.md`. All crate, module, widget, and type names are **design proposals**. No code exists in this repository. Facts not confirmed by a fetched CS6 source are marked *(inferred)*.
+> This document owns the **Swatches panel UI surface**. The library data model,
+> `.aco`/`.ase` codecs, spot-book registry, and load/replace/append semantics are
+> specified in `CLR-003`; the Preset Manager dialog is shared with
+> `10-workflow-io/presets-manager.md`. All crate, module, widget, and type names
+> are **design proposals**. The repository contains a working implementation; this
+> file stays the behavioural contract for the feature, and
+> `docs/dev/doc-code-parity-gaps.md` records what shipped and what did not. Facts
+> not confirmed by a fetched CS6 source are marked *(inferred)*.
 
 ## CS6 behavior
 

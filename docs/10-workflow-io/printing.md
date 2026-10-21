@@ -6,8 +6,10 @@
 - **New in CS6:** `Changed` — CS6 reworked the Print dialog: it adds an **Edit** button for the **Description** field, lets the **Print dialog and preview window be resized**, allows a **customizable preview background color**, and **reintroduces Print Selected Area** (adjustable in the dialog). The Properties-panel-driven CS5 print flow is replaced by the single CS6 dialog (CS5 behavior is still documented in the same chapter).
 - **Depends on:** `ARCH-007` color-management (proofing/transforms), `ARCH-008` document-model, `ARCH-009` undo-history, `WF-011` color-settings, `05-layers/vector-masks-and-clipping-masks.md` (vector data), `04-image-ops/bit-depth-and-conversion.md`, `OVR-003` feasibility.
 
-> All module and widget names below are **design proposals**. No code exists in
-> this repository. Printing is where Linux parity is hardest; this spec draws
+> All module and widget names below are **design proposals**. The repository
+> contains a working implementation; this file stays the behavioural contract
+> for the feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped
+> and what did not. Printing is where Linux parity is hardest; this spec draws
 > the line explicitly rather than promising driver-level fidelity.
 
 ## CS6 behavior

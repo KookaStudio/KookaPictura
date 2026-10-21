@@ -6,7 +6,12 @@
 - **New in CS6:** `Changed` — the CS5 **Animation panel** was redesigned as a **clip-based Timeline panel** and the video timeline became available in **all** CS6 editions (it was Extended-only in CS5); Video Groups, audio tracks, transitions, and clip speed/duration controls were added. Frame-animation mode was retained.
 - **Depends on:** `OVR-002` cs6-editions-and-constraints, `OVR-003` feasibility-and-non-goals, `ARCH-002` document-model, `ARCH-003` qt6-ui-design, `ARCH-006` gpu-rendering-pipeline, `ARCH-008` undo-history, `TOOL-010` layers-panel, `10-workflow-io/export-formats.md`.
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository. Where the CS6 Help text and the CS6 release positioning disagree, both are reported and the conflict is carried into Open questions.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not. Where the CS6 Help text and the CS6 release
+> positioning disagree, both are reported and the conflict is carried into Open
+> questions.
 
 ## CS6 behavior
 

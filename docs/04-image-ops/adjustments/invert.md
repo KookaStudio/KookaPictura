@@ -6,8 +6,10 @@
 - **New in CS6:** `No` — the Invert adjustment is long-standing. CS6 changed the surrounding plumbing: the CS6 "What's new" list adds "Enable Invert and Threshold adjustments for masks in 32-bit/channel images". The CS6 properties UI is the Properties panel (CS5 used the Adjustments panel).
 - **Depends on:** `ARCH-004` rust-qt-interop, `ARCH-008` document-model, `ARCH-009` undo-history, `04-image-ops/image-modes.md`, `04-image-ops/bit-depth-and-conversion.md`, `05-layers/adjustment-layers.md`, `01-architecture/color-management.md`
 
-> All module and widget names below are **design proposals**. No code exists in
-> this repository. Facts not confirmed by a fetched CS6 source are marked
+> All module and widget names below are **design proposals**. The repository
+> contains a working implementation; this file stays the behavioural contract
+> for the feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped
+> and what did not. Facts not confirmed by a fetched CS6 source are marked
 > *(inferred)*.
 
 ## CS6 behavior

@@ -6,7 +6,10 @@
 - **New in CS6:** `No` — the Save/Load Selection dialogs and channel shortcuts are unchanged from CS5; the CS6 What's New list touches selections only for decimal feather values and the Make Selection feather recall (see `SEL-010` / `SEL-014`).
 - **Depends on:** `08-selection/selection-model.md`, `08-selection/channel-based-masking.md`, `01-architecture/file-formats.md`, `01-architecture/document-model.md`, `ARCH-007` undo-history, `05-layers/layer-masks.md`.
 
-> All crate, module, widget, and type names below are **design proposals**. No code exists in this repository.
+> All crate, module, widget, and type names below are **design proposals**. The
+> repository contains a working implementation; this file stays the behavioural
+> contract for the feature, and `docs/dev/doc-code-parity-gaps.md` records what
+> shipped and what did not.
 
 ## CS6 behavior
 

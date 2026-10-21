@@ -6,8 +6,10 @@
 - **New in CS6:** `No` — the command dates to Photoshop CS (2003). CS6 can apply it as a **Smart Filter** (the Help: "you can apply the Shadow/Highlight and Variations adjustments as Smart Filters"), and its advanced options use the CS6 names **Tonal Width**, **Color Correction**, and **Midtone Contrast** (later CC 2014 renamed them Tone/Color/Midtone).
 - **Depends on:** `ARCH-004` rust-qt-interop, `ARCH-008` document-model, `ARCH-009` undo-history, `05-layers/smart-filters.md`, `05-layers/smart-filters.md`, `04-image-ops/image-modes.md`, `04-image-ops/32-bit-hdr.md`, `01-architecture/color-management.md`
 
-> All module and widget names below are **design proposals**. No code exists in
-> this repository. Facts not confirmed by a fetched CS6 source are marked
+> All module and widget names below are **design proposals**. The repository
+> contains a working implementation; this file stays the behavioural contract
+> for the feature, and `docs/dev/doc-code-parity-gaps.md` records what shipped
+> and what did not. Facts not confirmed by a fetched CS6 source are marked
 > *(inferred)*.
 
 ## CS6 behavior
