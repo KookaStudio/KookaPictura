@@ -394,3 +394,5 @@ QWidget* CanvasSizeDialog::controlForTest(const QString& name) const
 }
 
 } // namespace pictura
+
+#include "moc_canvas_size_dialog.cpp"

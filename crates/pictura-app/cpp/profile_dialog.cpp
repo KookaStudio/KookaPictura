@@ -63,3 +63,5 @@ void ProfileDialog::setChoiceForTest(int index)
 }
 
 } // namespace pictura
+
+#include "moc_profile_dialog.cpp"

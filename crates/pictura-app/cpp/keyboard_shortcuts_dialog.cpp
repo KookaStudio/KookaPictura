@@ -854,3 +854,5 @@ QPushButton* KeyboardShortcutsDialog::buttonForTest(const QString& objectName) c
 QString KeyboardShortcutsDialog::infoTextForTest() const { return infoText_->text(); }
 
 } // namespace pictura
+
+#include "moc_keyboard_shortcuts_dialog.cpp"

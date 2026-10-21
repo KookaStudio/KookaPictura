@@ -241,3 +241,5 @@ void RefineEdgeDialog::refreshPreview()
 }
 
 } // namespace pictura
+
+#include "moc_refine_edge_dialog.cpp"

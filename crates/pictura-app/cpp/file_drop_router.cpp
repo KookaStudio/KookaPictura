@@ -154,3 +154,5 @@ bool FileDropRouter::eventFilter(QObject* watched, QEvent* event)
 }
 
 } // namespace pictura
+
+#include "moc_file_drop_router.cpp"

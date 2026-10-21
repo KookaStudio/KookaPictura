@@ -381,3 +381,5 @@ void LayerFilterBar::setDimensionForTest(const QString& key)
 }
 
 } // namespace pictura
+
+#include "moc_layers_filter_bar.cpp"

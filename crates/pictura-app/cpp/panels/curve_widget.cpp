@@ -389,3 +389,5 @@ void CurveWidget::keyPressEvent(QKeyEvent* event)
 }
 
 } // namespace pictura
+
+#include "moc_curve_widget.cpp"

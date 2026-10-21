@@ -547,3 +547,5 @@ void PreferencesDialog::setGuideAppearance(const QColor& color, bool dashed)
 }
 
 } // namespace pictura
+
+#include "moc_preferences_dialog.cpp"

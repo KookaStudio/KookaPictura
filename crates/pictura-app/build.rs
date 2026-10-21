@@ -27,6 +27,13 @@ fn find_qmake6() -> Option<PathBuf> {
 }
 
 fn main() {
+    // cxx-qt compiles its exported initializer object with a separate cc::Build
+    // that the cc_builder closure does not reach. CXXFLAGS is cc's shared hook;
+    // -fPIC keeps that object linkable into the shared pictura_shell library.
+    if cfg!(unix) && std::env::var_os("CXXFLAGS").is_none() {
+        std::env::set_var("CXXFLAGS", "-fPIC");
+    }
+
     // CMake's cxx_qt_import_crate already exports QMAKE; only fill it in for
     // standalone `cargo build`.
     if std::env::var_os("QMAKE").is_none() {
@@ -102,6 +109,12 @@ fn main() {
             ])
             .cc_builder(|cc| {
                 cc.include("cpp");
+                // The bridge objects end up in the shared pictura_shell library in
+                // development builds; cc does not add -fPIC on its own. MSVC has
+                // no equivalent flag.
+                if !cc.get_compiler().is_like_msvc() {
+                    cc.flag_if_supported("-fPIC");
+                }
                 // GCC 16 warns inside Qt's QChar and the generated
                 // Vec<LayerRow> constructor; both are cxx-qt/Qt glue, not this
                 // project's code.

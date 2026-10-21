@@ -122,7 +122,8 @@ dnf_install() {
 
 # --- package groups -----------------------------------------------------------
 # gcc for the C++ shell; clang + clang-tools-extra give clangd (Serena's C++
-# language server); lld is the fast linker .cargo/config.toml and CMake expect.
+# language server); lld is the fast linker Cargo expects, and CMake prefers mold
+# when the compiler accepts it.
 base_pkgs=(
     gcc-c++ make cmake ninja-build lld
     clang clang-tools-extra clang-devel
@@ -233,7 +234,7 @@ echo
 echo "install-deps-fedora: done (Fedora ${VERSION_ID:-?}, $platform_label)"
 echo
 echo "Next steps:"
-echo "  cmake -S . -B build -G Ninja -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld"
+echo "  cmake -S . -B build -G Ninja"
 echo "  cmake --build build --parallel"
 echo "  bash scripts/verify-fast.sh"
 echo "  ./build/pictura --headless --self-test"

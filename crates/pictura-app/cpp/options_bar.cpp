@@ -1142,3 +1142,5 @@ QWidget* OptionsBar::currentPageForTest() const
 }
 
 } // namespace pictura
+
+#include "moc_options_bar.cpp"

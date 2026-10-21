@@ -699,3 +699,5 @@ bool LiquifyDialog::get(PictureView* view, const QString& documentName,
 }
 
 } // namespace pictura
+
+#include "moc_liquify_dialog.cpp"

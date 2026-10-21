@@ -256,3 +256,5 @@ QWidget* BlackWhiteDialog::controlForTest(const QString& key) const
 }
 
 } // namespace pictura
+
+#include "moc_black_white_dialog.cpp"

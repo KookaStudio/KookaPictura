@@ -31,3 +31,5 @@ BitmapModeDialog::BitmapModeDialog(QWidget* parent) : QDialog(parent)
 int BitmapModeDialog::method() const { return method_->currentData().toInt(); }
 
 } // namespace pictura
+
+#include "moc_bitmap_mode_dialog.cpp"

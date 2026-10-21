@@ -379,3 +379,5 @@ void printOneCopyFromView(QWidget* parent, PictureView* view)
 }
 
 } // namespace pictura
+
+#include "moc_print_dialog.cpp"

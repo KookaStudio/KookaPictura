@@ -579,3 +579,5 @@ bool FilterPreviewDialog::get(PictureView* view, const FilterCommandSpec& spec,
 }
 
 } // namespace pictura
+
+#include "moc_filter_preview_dialog.cpp"

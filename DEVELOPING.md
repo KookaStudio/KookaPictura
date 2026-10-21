@@ -64,7 +64,8 @@ owns the behavior you are changing.
   `qt6-base-private-dev`; the official Qt binaries (and CI's
   `install-qt-action`) already ship them. Configuration fails naming the missing
   package when they are absent.
-- CMake >= 3.24, Ninja, and the `lld` linker.
+- CMake >= 3.24, Ninja, and the `lld` linker (C++ links use `mold` instead when
+  the compiler accepts `-fuse-ld=mold`).
 - Little CMS 2 development headers (`liblcms2-dev`). The C++ binary links
   `-llcms2` because a Rust `staticlib` does not propagate its native link
   dependencies.
@@ -82,7 +83,7 @@ owns the behavior you are changing.
 ## Build and run
 
 ```bash
-cmake -S . -B build -G Ninja -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld
+cmake -S . -B build -G Ninja
 cmake --build build --parallel
 ./build/pictura
 ```
@@ -92,10 +93,19 @@ linked into the C++ `pictura` binary. cxx-qt codegen is driven by
 `crates/pictura-app/build.rs` and `src/cxxqt_object.rs`. The engine crates stay
 Qt-free; only `pictura-app` touches Qt.
 
+Development builds (`BUILD_TESTING` on, the default) compile `pictura_shell` as
+a shared library and the Rust crate with the lighter `app` profile, so the Qt
+Test suites link one small library instead of two static archives. Release and
+packaging builds pass `-DBUILD_TESTING=OFF`, keep the static shell, and are the
+only installable form; `cmake --install` on a development build is not
+supported.
+
 `CMakeLists.txt` lists every `.cpp`/`.h` explicitly, so a new source file must be
-added there. The CMake configure also links `compile_commands.json` into the
-repo root for clangd/Serena C++ navigation; if C++ cross-file references look
-fuzzy, reconfigure.
+added there. Each QObject header's matching `.cpp` ends with
+`#include "moc_<name>.cpp"` so a header edit recompiles that translation unit
+instead of a central moc unit. The CMake configure also links
+`compile_commands.json` into the repo root for clangd/Serena C++ navigation; if
+C++ cross-file references look fuzzy, reconfigure.
 
 ## Architecture and data flow
 
@@ -270,7 +280,7 @@ purpose: `build/`, `compile_commands.json`, the `.serena` index, and cmake
 configure — configure a fresh worktree with:
 
 ```bash
-cmake -S . -B build -G Ninja -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld
+cmake -S . -B build -G Ninja
 cmake --build build --parallel
 ```
 
@@ -296,6 +306,21 @@ The shared `../.target` survives removal; reclaim it like any `target/` with
 `cargo clean` or `cargo sweep`.
 
 ## Speeding up local builds
+
+The C++ build has three automatic fast paths. On ELF platforms, C++ links use
+`mold` when the compiler accepts `-fuse-ld=mold`, then `lld`, then the compiler
+default; macOS and Windows keep the native linker. A build directory that cached
+an explicit `-DCMAKE_EXE_LINKER_FLAGS` needs `-U CMAKE_EXE_LINKER_FLAGS` (or a
+fresh directory) to re-probe; `verify-full.sh` does that for you, so force a
+choice through the `CMAKE_EXE_LINKER_FLAGS` environment variable instead of a
+cached `-D` value. Development builds link `pictura_shell` as a shared library,
+and the Rust app builds with the `app` profile (`opt-level = 2`, line tables);
+release and packaging keep the static shell and `--release`.
+
+CTest suites run four at a time; set `CTEST_PARALLEL_LEVEL` to override it. The
+local build-caching check reuses a user-level FetchContent checkout cache under
+`${XDG_CACHE_HOME:-$HOME/.cache}/kooka-pictura/fetchcontent`, so repeated
+configures do not re-clone cxx-qt-cmake or Corrosion.
 
 `sccache` is optional. When it is on `PATH`, a plain
 `cmake -S . -B build` configures it as the C++ compiler launcher
@@ -355,7 +380,9 @@ is unaffected because worktrees already share `../.target`.
 
 `scripts/verify-fast.sh` skips fmt, clippy, and tests when every changed path is
 `docs/`, `openspec/`, a `*.md`, or under `.serena/`, running only the guard and
-spec validation.
+spec validation. Otherwise its independent script checks run concurrently and
+their logs are reported together. `scripts/verify-full.sh` proves the sccache
+wiring by rebuilding one probe object, not by deleting the build tree.
 
 ## AI-assisted development
 

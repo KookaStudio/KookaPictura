@@ -591,3 +591,5 @@ QString PdfSaveDialog::encryptionLevelText() const
 }
 
 } // namespace pictura
+
+#include "moc_pdf_save_dialog.cpp"

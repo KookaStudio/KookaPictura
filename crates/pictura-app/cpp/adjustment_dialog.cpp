@@ -502,3 +502,5 @@ bool runAdjustmentDialog(QWidget* parent, PictureView* view, const QString& kind
 }
 
 } // namespace pictura
+
+#include "moc_adjustment_dialog.cpp"

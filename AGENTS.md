@@ -45,14 +45,22 @@ bash scripts/test-report.sh                      # nextest + doctests + app self
 bash scripts/verify-fast.sh                      # fmt, clippy, test-report, file-size, guard, openspec
 bash scripts/verify-full.sh                      # CMake build first, then verify-fast
 openspec validate --all --strict                 # openspec 1.13.2
-cmake -S . -B build -G Ninja -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld && cmake --build build --parallel
+cmake -S . -B build -G Ninja && cmake --build build --parallel
 ./build/pictura --headless --self-test [file.psd]
 ```
 
 Toolchain is pinned by `rust-toolchain.toml` (1.98). Qt is the system Qt 6
 (`qmake6 -query QT_VERSION`). Cargo links with `lld` (`.cargo/config.toml`);
-CMake builds with Ninja. `deny.toml` gates licenses and dependencies; CI runs
-`cargo deny check`.
+CMake links C++ with mold when the compiler accepts it, otherwise lld, otherwise
+the compiler default, and builds with Ninja. `deny.toml` gates licenses and
+dependencies; CI runs `cargo deny check`.
+
+Development builds (`BUILD_TESTING` on, the default) build `pictura_shell` as a
+shared library and the Rust crate with the lighter `app` profile. Release and
+packaging builds pass `-DBUILD_TESTING=OFF`, keep the static shell, and are the
+only installable form. CTest runs four suites at a time by default; override
+with `CTEST_PARALLEL_LEVEL`. Each QObject header's matching `.cpp` ends with
+`#include "moc_<name>.cpp"`, so header edits avoid a central moc unit.
 
 Local C++ builds use `sccache` automatically when it is installed. Sharing that
 cache across git worktrees is opt-in: set `KOOKA_SCCACHE_SHARE=1` in the

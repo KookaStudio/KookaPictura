@@ -110,3 +110,5 @@ int IndexedColorDialog::amount() const { return amount_->value(); }
 bool IndexedColorDialog::preview() const { return preview_->isChecked(); }
 
 } // namespace pictura
+
+#include "moc_indexed_color_dialog.cpp"

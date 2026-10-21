@@ -313,3 +313,5 @@ QString commandIdForPath(const QStringList& path)
 }
 
 } // namespace pictura
+
+#include "moc_commands.cpp"

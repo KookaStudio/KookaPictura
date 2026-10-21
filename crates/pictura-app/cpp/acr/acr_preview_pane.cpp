@@ -185,3 +185,5 @@ void AcrPreviewPane::paintEvent(QPaintEvent*)
 }
 
 } // namespace pictura
+
+#include "moc_acr_preview_pane.cpp"

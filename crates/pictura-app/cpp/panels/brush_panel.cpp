@@ -316,3 +316,5 @@ QImage BrushPanel::previewForTest() const
 }
 
 } // namespace pictura
+
+#include "moc_brush_panel.cpp"

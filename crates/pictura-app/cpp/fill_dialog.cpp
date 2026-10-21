@@ -221,3 +221,5 @@ int FillDialog::opacity() const { return opacity_->value(); }
 bool FillDialog::preserveTransparency() const { return preserveTransparency_->isChecked(); }
 
 } // namespace pictura
+
+#include "moc_fill_dialog.cpp"

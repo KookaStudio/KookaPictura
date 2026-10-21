@@ -55,3 +55,5 @@ bool HdrConversionDialog::get(QWidget* parent, HdrConversionSpec* out)
 }
 
 } // namespace pictura
+
+#include "moc_hdr_conversion_dialog.cpp"

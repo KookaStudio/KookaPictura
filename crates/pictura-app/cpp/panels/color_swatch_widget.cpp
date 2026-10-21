@@ -55,3 +55,5 @@ void ColorSwatchWidget::paintEvent(QPaintEvent*)
 }
 
 } // namespace pictura
+
+#include "moc_color_swatch_widget.cpp"

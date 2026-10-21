@@ -131,7 +131,14 @@ file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/qt-test-results)
 
 foreach(test_name IN LISTS PICTURA_QT_TESTS)
     add_executable(${test_name} ${test_name}.cpp)
-    target_link_libraries(${test_name} PRIVATE pictura_shell Qt6::Test pictura_assets)
+    if(PICTURA_SHELL_SHARED)
+        target_link_libraries(${test_name} PRIVATE pictura_shell Qt6::Test)
+    else()
+        target_link_libraries(${test_name} PRIVATE pictura_shell Qt6::Test pictura_assets)
+    endif()
+    # Test debug info only needs line tables; the suites are not debugged through
+    # full variable info, and this keeps the test objects and their links small.
+    target_compile_options(${test_name} PRIVATE "$<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-g1>")
     add_test(NAME ${test_name} COMMAND ${test_name}
         -o ${CMAKE_BINARY_DIR}/qt-test-results/${test_name}.xml,junitxml)
     set_tests_properties(${test_name} PROPERTIES

@@ -63,3 +63,5 @@ bool DefringeDialog::get(int* out, QWidget* parent)
 }
 
 } // namespace pictura
+
+#include "moc_defringe_dialog.cpp"

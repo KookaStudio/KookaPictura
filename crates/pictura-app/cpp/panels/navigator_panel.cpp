@@ -327,3 +327,5 @@ void NavigatorPanel::centerOn(const QPointF& imagePoint)
 }
 
 } // namespace pictura
+
+#include "moc_navigator_panel.cpp"

@@ -858,3 +858,5 @@ void PanelColumn::restorePanelState(const QJsonArray& state)
 }
 
 } // namespace pictura
+
+#include "moc_panel_column.cpp"

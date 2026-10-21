@@ -272,3 +272,5 @@ void GradientNoisePage::showSettings()
 }
 
 } // namespace pictura
+
+#include "moc_gradient_noise_page.cpp"

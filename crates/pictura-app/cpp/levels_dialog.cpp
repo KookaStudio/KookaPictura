@@ -440,3 +440,5 @@ QWidget* LevelsDialog::controlForTest(const QString& key) const
 }
 
 } // namespace pictura
+
+#include "moc_levels_dialog.cpp"

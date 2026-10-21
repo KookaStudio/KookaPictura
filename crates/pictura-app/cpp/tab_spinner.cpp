@@ -125,3 +125,5 @@ TabCloseButton::TabCloseButton(QWidget* parent)
 }
 
 } // namespace pictura
+
+#include "moc_tab_spinner.cpp"

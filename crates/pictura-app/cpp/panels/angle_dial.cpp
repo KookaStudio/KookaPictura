@@ -74,3 +74,5 @@ void AngleDial::aim(const QPointF& pos)
 }
 
 } // namespace pictura
+
+#include "moc_angle_dial.cpp"

@@ -813,3 +813,5 @@ void PanelGroup::setFlyout(bool on)
 }
 
 } // namespace pictura
+
+#include "moc_panel_group.cpp"

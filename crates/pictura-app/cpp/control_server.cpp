@@ -933,3 +933,5 @@ QJsonObject ControlServer::methodLayerThumbnail(const QJsonObject& params)
 }
 
 } // namespace pictura
+
+#include "moc_control_server.cpp"

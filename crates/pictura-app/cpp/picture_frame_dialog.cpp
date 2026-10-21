@@ -277,3 +277,5 @@ bool PictureFrameDialog::get(PictureView* view, const FilterCommandSpec& spec,
 }
 
 } // namespace pictura
+
+#include "moc_picture_frame_dialog.cpp"

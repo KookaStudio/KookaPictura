@@ -337,3 +337,5 @@ void SwatchesPanel::showContextMenu(const QPoint& at)
 }
 
 } // namespace pictura
+
+#include "moc_swatches_panel.cpp"

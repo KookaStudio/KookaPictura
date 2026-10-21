@@ -318,3 +318,5 @@ QWidget* AdjustmentControls::controlForTest(const QString& key) const
 }
 
 } // namespace pictura
+
+#include "moc_adjustment_controls.cpp"

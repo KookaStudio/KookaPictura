@@ -165,3 +165,5 @@ bool ParagraphPanel::editingEnabledForTest() const { return justify_->isEnabled(
 void ParagraphPanel::commitForTest() { apply(); }
 
 } // namespace pictura
+
+#include "moc_paragraph_panel.cpp"

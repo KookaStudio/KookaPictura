@@ -249,3 +249,5 @@ void GlyphsPanel::rebuildGlyphs()
 }
 
 } // namespace pictura
+
+#include "moc_glyphs_panel.cpp"

@@ -714,3 +714,5 @@ void BlurGalleryCanvas::keyPressEvent(QKeyEvent* event)
 }
 
 } // namespace pictura
+
+#include "moc_blur_gallery_canvas.cpp"

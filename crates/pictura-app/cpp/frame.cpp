@@ -1132,3 +1132,5 @@ void PicturaMainWindow::applyBrightness(int level)
 }
 
 } // namespace pictura
+
+#include "moc_frame.cpp"

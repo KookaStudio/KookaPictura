@@ -230,3 +230,5 @@ void FileInfoDialog::setMergeModeForTest(int mode)
 }
 
 } // namespace pictura
+
+#include "moc_file_info_dialog.cpp"

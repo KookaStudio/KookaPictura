@@ -102,3 +102,5 @@ QString AcrHistogram::readoutForTest() const
 }
 
 } // namespace pictura
+
+#include "moc_acr_histogram.cpp"

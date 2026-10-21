@@ -32,6 +32,7 @@ debug = "line-tables-only"
 
 [profile.test.package."*"]
 opt-level = 0
+debug = false
 
 [profile.test.package.pictura-core]
 opt-level = 2

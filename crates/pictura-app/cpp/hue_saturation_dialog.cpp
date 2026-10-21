@@ -179,3 +179,5 @@ QWidget* HueSaturationDialog::controlForTest(const QString& key) const
 }
 
 } // namespace pictura
+
+#include "moc_hue_saturation_dialog.cpp"

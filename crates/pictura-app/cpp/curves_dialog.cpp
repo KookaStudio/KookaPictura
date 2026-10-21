@@ -117,3 +117,5 @@ QWidget* CurvesDialog::controlForTest(const QString& key) const
 }
 
 } // namespace pictura
+
+#include "moc_curves_dialog.cpp"

@@ -179,3 +179,5 @@ void HistoryPanel::createSnapshot()
 }
 
 } // namespace pictura
+
+#include "moc_history_panel.cpp"

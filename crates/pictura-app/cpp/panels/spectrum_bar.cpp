@@ -45,3 +45,5 @@ void SpectrumBar::paintEvent(QPaintEvent*)
 }
 
 } // namespace pictura
+
+#include "moc_spectrum_bar.cpp"

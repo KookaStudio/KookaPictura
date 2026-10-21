@@ -432,3 +432,5 @@ QString ImportPdfDialog::fieldForTest(const QString& name) const
 }
 
 } // namespace pictura
+
+#include "moc_import_pdf_dialog.cpp"

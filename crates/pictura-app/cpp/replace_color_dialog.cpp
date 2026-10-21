@@ -419,3 +419,5 @@ void ReplaceColorDialog::hideEvent(QHideEvent* event)
 }
 
 } // namespace pictura
+
+#include "moc_replace_color_dialog.cpp"

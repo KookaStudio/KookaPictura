@@ -291,3 +291,5 @@ void ToolHintBar::paintEvent(QPaintEvent*)
 }
 
 } // namespace pictura
+
+#include "moc_tool_hint_bar.cpp"

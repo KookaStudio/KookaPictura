@@ -127,3 +127,5 @@ bool NotesPanel::eventFilter(QObject* watched, QEvent* event)
 }
 
 } // namespace pictura
+
+#include "moc_notes_panel.cpp"

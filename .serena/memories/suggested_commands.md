@@ -6,7 +6,7 @@ Run everything from the repo root. Context: `mem:core`.
 
 ```bash
 # C++/Qt app (builds the Rust staticlib through CMake/Corrosion)
-cmake -S . -B build -G Ninja -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld && cmake --build build --parallel
+cmake -S . -B build -G Ninja && cmake --build build --parallel
 
 # Headless self-test (offscreen QPA; implies --self-test when no document is given)
 ./build/pictura --headless --self-test

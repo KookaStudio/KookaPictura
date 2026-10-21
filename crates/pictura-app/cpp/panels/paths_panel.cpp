@@ -413,3 +413,5 @@ bool PathsPanel::eventFilter(QObject* watched, QEvent* event)
 }
 
 } // namespace pictura
+
+#include "moc_paths_panel.cpp"

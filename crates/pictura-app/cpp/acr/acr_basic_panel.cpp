@@ -93,3 +93,5 @@ void AcrBasicPanel::resetBasic()
 }
 
 } // namespace pictura
+
+#include "moc_acr_panels.cpp"

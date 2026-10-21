@@ -630,3 +630,5 @@ GradientSpec GradientEditorDialog::spec() const
 }
 
 } // namespace pictura
+
+#include "moc_gradient_editor_dialog.cpp"
