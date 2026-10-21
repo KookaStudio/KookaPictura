@@ -2,11 +2,12 @@
 #
 # check-local-build-caching.sh - prove the CMake default wires sccache.
 #
-# Default mode: configure the project into throwaway build directories and
-# assert the Ninja LAUNCHER build-rule variable (sccache by default, an explicit
-# override wins, none when sccache is absent). --rebuild mode (with optional
-# --dir <build-dir>): build the pictura target, delete one of its shell object
-# files, rebuild, and assert the second build hits the cache. The three
+# Default mode: configure the project once into a throwaway build directory
+# and assert the Ninja LAUNCHER build-rule variable (sccache by default, none
+# when sccache is absent). --full mode configures the remaining launcher cases
+# as well (an explicit override wins over the default). --rebuild mode (with
+# optional --dir <build-dir>): build the pictura target, delete one of its
+# shell object files, rebuild, and assert the second build hits the cache. The
 # throwaway configures share a user-level FetchContent base so cxx-qt-cmake and
 # Corrosion are fetched once per run and reused later; only the build directory
 # named by --dir is ever built. Never touches the real build/ unless --dir names
@@ -17,10 +18,12 @@ set -euo pipefail
 
 rebuild=0
 rebuild_dir=""
+full=0
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --rebuild) rebuild=1 ;;
         --dir) shift; rebuild_dir="${1:-}" ;;
+        --full) full=1 ;;
         *) echo "check-local-build-caching: unknown argument '$1'" >&2; exit 2 ;;
     esac
     shift
@@ -184,36 +187,46 @@ if [ "$rebuild" -eq 1 ]; then
     exit 0
 fi
 
-# Case 1: default - sccache on PATH, no override -> launcher is sccache.
+# Case 1: the default - sccache on PATH, no override -> launcher is sccache.
+# The default mode configures the project exactly once and asserts the
+# launcher rule of that single configuration: sccache when sccache is on
+# PATH, no launcher at all when it is not. The remaining launcher cases need
+# a configuration of their own and live in the full variant, which CI runs.
+configure "$sandbox/default"
+got="$(launcher "$sandbox/default")"
 if command -v sccache >/dev/null 2>&1; then
-    configure "$sandbox/default"
-    got="$(launcher "$sandbox/default")"
     case "$got" in
         *sccache*) ;;
         *) fail "default case: expected sccache launcher, got '${got}'" ;;
     esac
     echo "check-local-build-caching: default -> sccache OK"
 else
-    echo "check-local-build-caching: default case skipped (sccache not on PATH)"
+    [ -z "$got" ] || fail "default case: expected no launcher, got '${got}'"
+    if grep -q 'SCCACHE_EXECUTABLE-NOTFOUND' "$sandbox/default/build.ninja"; then
+        fail "default case: unresolved launcher command generated"
+    fi
+    echo "check-local-build-caching: default -> no launcher OK"
 fi
 
-# Case 2: an explicit launcher wins over the sccache default.
-configure "$sandbox/override" -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-got="$(launcher "$sandbox/override")"
-case "$got" in
-    *sccache*) fail "override case: default leaked in, got '${got}'" ;;
-    *ccache*) ;;
-    *) fail "override case: explicit launcher not honoured, got '${got}'" ;;
-esac
-echo "check-local-build-caching: override -> ccache OK"
+if [ "$full" -eq 1 ]; then
+    # Case 2: an explicit launcher wins over the sccache default.
+    configure "$sandbox/override" -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+    got="$(launcher "$sandbox/override")"
+    case "$got" in
+        *sccache*) fail "override case: default leaked in, got '${got}'" ;;
+        *ccache*) ;;
+        *) fail "override case: explicit launcher not honoured, got '${got}'" ;;
+    esac
+    echo "check-local-build-caching: override -> ccache OK"
 
-# Case 3: sccache absent -> no launcher and no unresolved launcher command.
-PATH="$(path_without_sccache)" configure "$sandbox/absent"
-got="$(launcher "$sandbox/absent")"
-[ -z "$got" ] || fail "absent case: expected no launcher, got '${got}'"
-if grep -q 'SCCACHE_EXECUTABLE-NOTFOUND' "$sandbox/absent/build.ninja"; then
-    fail "absent case: unresolved launcher command generated"
+    # Case 3: sccache absent -> no launcher and no unresolved launcher command.
+    PATH="$(path_without_sccache)" configure "$sandbox/absent"
+    got="$(launcher "$sandbox/absent")"
+    [ -z "$got" ] || fail "absent case: expected no launcher, got '${got}'"
+    if grep -q 'SCCACHE_EXECUTABLE-NOTFOUND' "$sandbox/absent/build.ninja"; then
+        fail "absent case: unresolved launcher command generated"
+    fi
+    echo "check-local-build-caching: absent -> no launcher OK"
 fi
-echo "check-local-build-caching: absent -> no launcher OK"
 
 echo "check-local-build-caching: OK"

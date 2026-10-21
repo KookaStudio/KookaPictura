@@ -29,6 +29,11 @@ fi
 cmake --build build --parallel
 echo "cmake_build=ok"
 
+echo "== build tree =="
+# The build just ran, so the tree has to match the sources now. A tree that
+# does not would make the self-test and the Qt suites below meaningless.
+bash scripts/check-build-tree.sh
+
 echo "== build cache =="
 bash scripts/check-local-build-caching.sh --rebuild --dir build
 

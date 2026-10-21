@@ -511,7 +511,10 @@ void SavePdfTest::summaryListsSettings()
     }
 }
 
-QTEST_MAIN(SavePdfTest)
+int main(int argc, char *argv[])
+{
+    return pictura::test::shardedMain<SavePdfTest>(argc, argv);
+}
 // pdf_live_text_app
 void SavePdfTest::typeLayerIsLiveText()
 {

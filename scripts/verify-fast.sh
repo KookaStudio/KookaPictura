@@ -63,12 +63,6 @@ fi
 build_lock_install_traps
 build_lock_acquire || exit 1
 
-# The cxx-qt build script tracks QMAKE (rerun-if-env-changed). CMake exports the
-# path it selected; a direct cargo run must export the same value or the script
-# reruns and recompiles pictura_app on every alternation of the two gates.
-# shellcheck source=scripts/qmake-env.sh
-. scripts/qmake-env.sh
-
 echo "== fmt =="
 cargo fmt --all --check
 echo "fmt=ok"
@@ -77,6 +71,12 @@ echo "== clippy =="
 clippy_errors=$(cargo clippy --workspace --all-targets -- -D warnings 2>&1 | grep -cE '^error' || true)
 echo "clippy_errors=$clippy_errors"
 [ "$clippy_errors" -eq 0 ] || { echo "clippy: FAILED"; exit 1; }
+
+echo "== build tree =="
+# The gate runs the tests against ./build, so a tree that predates the sources
+# would test something else. The full gate fails on this; the fast gate only
+# reports it, because it does not own the build tree.
+bash scripts/check-build-tree.sh --warn
 
 echo "== test =="
 bash scripts/test-report.sh never

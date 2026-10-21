@@ -35,7 +35,7 @@ jobs:
       - name: Worktree hook
         run: bash scripts/check-worktree-hook.sh
       - name: Local build caching
-        run: bash scripts/check-local-build-caching.sh
+        run: bash scripts/check-local-build-caching.sh --full
       - name: OpenSpec validation
         run: openspec validate --all --strict
       - name: OpenSpec archive

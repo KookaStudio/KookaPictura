@@ -108,7 +108,10 @@ if(NOT CxxQt_FOUND)
 endif()
 
 # cxx-qt reaches Qt through qmake. Debian/Ubuntu ship qmake6 for Qt 6; the bare
-# `qmake` is Qt 5, so pin the executable explicitly.
+# `qmake` is Qt 5, so look for qmake6 first. The value the build uses is the
+# same in every cargo invocation: no script and no build system exports a
+# QMAKE, so the cxx-qt build script finds qmake on the PATH itself. The
+# lookup here is the early error for a machine without one.
 find_program(QMAKE_EXECUTABLE NAMES qmake6 qmake)
 if(NOT QMAKE_EXECUTABLE)
     message(FATAL_ERROR "qmake not found — install qt6-base-dev")
@@ -118,8 +121,70 @@ cxx_qt_import_crate(
     MANIFEST_PATH crates/pictura-app/Cargo.toml
     CRATES pictura_app
     QT_MODULES Qt::Core Qt::Gui Qt::Widgets
-    QMAKE "${QMAKE_EXECUTABLE}"
 )
+
+# The bridge stamp.
+#
+# The bridge Rust sources define the generated C++ interface. A change to one
+# of them has to rebuild the C++ that includes the generated headers in the
+# same build, but Ninja decides what to compile before the cargo edge has
+# regenerated those headers, so a header rewritten during a build is only seen
+# by the next one. This stamp records the bridge content at configure time --
+# before the build plans -- and the translation units that include a generated
+# header depend on it.
+set(PICTURA_BRIDGE_STAMP "${CMAKE_BINARY_DIR}/pictura_bridge.stamp")
+
+# The bridge sources are the Rust files carrying the cxx-qt bridge macro.
+# Scanning for it keeps this list in step with the build script's own list
+# without duplicating it.
+file(GLOB_RECURSE _pictura_rs_files RELATIVE "${CMAKE_SOURCE_DIR}"
+    "crates/pictura-app/src/*.rs")
+set(_pictura_bridge_files "")
+set(_pictura_bridge_digest "")
+foreach(_file IN LISTS _pictura_rs_files)
+    file(READ "${CMAKE_SOURCE_DIR}/${_file}" _content)
+    string(FIND "${_content}" "cxx_qt::bridge" _bridge_at)
+    if(NOT _bridge_at EQUAL -1)
+        list(APPEND _pictura_bridge_files "${_file}")
+        file(SHA256 "${CMAKE_SOURCE_DIR}/${_file}" _file_digest)
+        string(APPEND _pictura_bridge_digest "${_file_digest} ${_file}\n")
+    endif()
+endforeach()
+string(SHA256 _pictura_bridge_hash "${_pictura_bridge_digest}")
+
+# A change to any Rust source re-runs the configure step, so a file that
+# becomes a bridge is picked up, and so the stamp is refreshed when a bridge
+# changes.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    ${_pictura_rs_files}
+    "crates/pictura-app/src/*.rs"
+    "crates/pictura-app/src/**/*.rs")
+
+# Rewrite the stamp only when the bridge content changed: a re-configure that
+# finds the same bridge must not dirty the whole C++ tree.
+if(EXISTS "${PICTURA_BRIDGE_STAMP}")
+    file(READ "${PICTURA_BRIDGE_STAMP}" _pictura_stamp_text)
+else()
+    set(_pictura_stamp_text "")
+endif()
+if(NOT _pictura_stamp_text STREQUAL _pictura_bridge_hash)
+    file(WRITE "${PICTURA_BRIDGE_STAMP}" "${_pictura_bridge_hash}")
+endif()
+
+# Make every translation unit that includes a generated cxx-qt header depend on
+# the stamp, so a bridge change rebuilds it in the same build.
+function(pictura_depend_on_bridge_stamp)
+    foreach(_source IN LISTS ARGN)
+        if(_source MATCHES "\\.(c|cc|cpp|cxx)$")
+            file(READ "${CMAKE_CURRENT_SOURCE_DIR}/${_source}" _content)
+            string(FIND "${_content}" "pictura_app/src/" _generated_at)
+            if(NOT _generated_at EQUAL -1)
+                set_property(SOURCE "${_source}" APPEND PROPERTY
+                    OBJECT_DEPENDS "${PICTURA_BRIDGE_STAMP}")
+            endif()
+        endif()
+    endforeach()
+endfunction()
 
 # Compile the Qt resource once: the shared shell carries it, and the static
 # configuration links this object library into the executable and each test.
@@ -549,6 +614,10 @@ else()
     add_library(pictura_shell STATIC ${PICTURA_SHELL_SOURCES})
 endif()
 
+# The translation units that include a generated cxx-qt header follow the
+# bridge stamp.
+pictura_depend_on_bridge_stamp(${PICTURA_SHELL_SOURCES})
+
 target_include_directories(pictura_shell PUBLIC
     crates/pictura-app/cpp
 )
@@ -590,7 +659,7 @@ endif()
 
 # The shell is a library so the Qt Test suites under cpp/tests can link the
 # UI without a second main. Only main.cpp and the self-test sources stay here.
-add_executable(pictura
+set(PICTURA_SELF_TEST_SOURCES
     crates/pictura-app/cpp/main.cpp
     crates/pictura-app/cpp/selftest_active_layer.cpp
     crates/pictura-app/cpp/selftest_annotations.cpp
@@ -668,6 +737,8 @@ add_executable(pictura
     crates/pictura-app/cpp/selftest_visibility.h
     crates/pictura-app/cpp/selftest_workspace_input.h
 )
+
+add_executable(pictura ${PICTURA_SELF_TEST_SOURCES})
 # Menu construction is not on a hot path but compiles slowly; a lighter
 # optimization level keeps it off the development critical path.
 if(BUILD_TESTING AND CMAKE_BUILD_TYPE MATCHES "^(Release|RelWithDebInfo)$")
@@ -681,6 +752,9 @@ target_link_libraries(pictura PRIVATE pictura_shell)
 if(NOT PICTURA_SHELL_SHARED)
     target_link_libraries(pictura PRIVATE pictura_assets)
 endif()
+
+# The self-test sources include the generated cxx-qt header too.
+pictura_depend_on_bridge_stamp(${PICTURA_SELF_TEST_SOURCES})
 
 # Windows-only presentation: a GUI-subsystem executable (no console window) with
 # an embedded icon and manifest. A plain `add_executable` never runs Qt's

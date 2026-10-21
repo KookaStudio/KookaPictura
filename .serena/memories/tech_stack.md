@@ -34,9 +34,20 @@ Workspace layout/commands: `mem:core`, `mem:suggested_commands`.
 - CMake links C++ with `mold` when the compiler accepts `-fuse-ld=mold`, then
   `lld`, then the compiler default; macOS and Windows keep the native linker.
   CMake builds with Ninja.
-- Development builds (`BUILD_TESTING` on) use a shared `pictura_shell` and the
-  Cargo `app` profile; release and packaging use `-DBUILD_TESTING=OFF` and the
-  static shell.
+- Development builds (`BUILD_TESTING` on) use a shared `pictura_shell`; release
+  and packaging use `-DBUILD_TESTING=OFF` and the static shell.
+- No script and no build system exports a `QMAKE` of its own, so the value the
+  cxx-qt build script's fingerprint compares does not depend on which tool
+  started the build: a bare Cargo invocation has none and the build script
+  finds qmake on the PATH, the CMake build's cargo invocation gets the path
+  the cxx-qt module chose (`Qt::qmake`). The value has to be a path, because
+  `qt-build-utils` runs qmake with a cleared environment, where a bare name is
+  not found on the PATH. An explicit `QMAKE` in the environment is honoured and
+  reruns the build script.
+- The cxx-qt build script watches only the bridge sources and the hand-written
+  bridge edges; CMake hashes the bridge sources into `build/pictura_bridge.stamp`
+  at configure time, and the translation units that include a generated header
+  depend on it, so a bridge change rebuilds the C++ in the same build.
 
 ## Test/report/spec tooling
 
@@ -44,6 +55,10 @@ Workspace layout/commands: `mem:core`, `mem:suggested_commands`.
   `target/nextest/default/junit.xml`). `cargo test --workspace` is the fallback; **nextest skips
   doctests**, so `cargo test --workspace --doc` is a separate step.
 - `scripts/test-report.sh` + `scripts/report_tests.py` fold JUnit + doctests + the C++ self-test
-  token streams into one report.
+  token streams into one report. The two self-test invocations run concurrently
+  with each other and with the CTest layer, and a registered suite that produced
+  no report fails the run.
+- `scripts/check-build-tree.sh` fails the full gate (and warns in the fast one)
+  when the build tree predates the sources under it.
 - **OpenSpec 1.13.2** for change proposals/specs (minimum 1.7.0 for nested spec paths). Oracles: ImageMagick 7 (`magick`), `psd-tools`.
 - No test framework anywhere (std `#[test]`, hand-rolled C++ self-test, argparse Python CLIs).

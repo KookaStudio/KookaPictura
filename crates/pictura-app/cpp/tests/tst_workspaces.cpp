@@ -1081,6 +1081,9 @@ void WorkspacesTest::switcherVisibleForEveryTool()
     }
 }
 
-QTEST_MAIN(WorkspacesTest)
+int main(int argc, char *argv[])
+{
+    return pictura::test::shardedMain<WorkspacesTest>(argc, argv);
+}
 
 #include "tst_workspaces.moc"

@@ -14,6 +14,7 @@ checks.
 """
 
 import argparse
+import json
 import os
 import re
 import sys
@@ -52,6 +53,53 @@ def sum_counts(suites):
     for counts in suites.values():
         total.add(counts)
     return total
+
+
+def parse_ctest_json(text):
+    """Return [(test_name, expected_report_path)] for the registered tests.
+
+    CTest's ``--show-only=json-v1`` output lists every registered test with
+    the command it runs. A Qt Test suite is registered with a
+    ``-o <path>,junitxml`` argument, so the report it is expected to write is
+    read from that command. A test without that argument reports nothing and
+    is skipped.
+    """
+    data = json.loads(text)
+    tests = []
+    for test in data.get("tests", []):
+        name = test.get("name", "")
+        command = test.get("command") or []
+        report = None
+        for index, argument in enumerate(command):
+            if argument == "-o" and index + 1 < len(command):
+                report = command[index + 1].split(",", 1)[0]
+                break
+        tests.append((name, report))
+    return tests
+
+
+def missing_ctest_reports(text, errors):
+    """Return [(test_name, message)] for the registered suites with no report.
+
+    A suite writes its own JUnit report from inside the test process, so a
+    suite that never started -- a missing executable in a stale build tree, or
+    a crash before the report was written -- leaves no report behind. Such a
+    suite is a failure, not a silently missing line.
+    """
+    try:
+        tests = parse_ctest_json(text)
+    except (ValueError, AttributeError) as exc:
+        errors.append(f"invalid CTest JSON: {exc}")
+        return []
+    missing = []
+    for name, report in tests:
+        if not report:
+            continue
+        if not os.path.exists(report):
+            missing.append(
+                (name, f"the registered suite {name} produced no report ({report})")
+            )
+    return missing
 
 
 def _node_message(node):
@@ -438,10 +486,10 @@ def build_layers(args, errors):
                 )
             failures.extend(selftest_failures)
 
-    if args.qt_junit:
+    if args.qt_junit or args.ctest_json:
         qt_suites = {}
         qt_entries = []
-        for path in args.qt_junit:
+        for path in args.qt_junit or []:
             text = _read(path, errors)
             if text is None:
                 continue
@@ -454,6 +502,14 @@ def build_layers(args, errors):
                 qt_suites.setdefault(suite, Counts()).add(counts)
             qt_entries.extend(entries)
             failures.extend(qt_failures)
+        if args.ctest_json:
+            text = _read(args.ctest_json, errors)
+            if text is not None:
+                for name, message in missing_ctest_reports(text, errors):
+                    counts = qt_suites.setdefault("no report", Counts())
+                    counts.failed += 1
+                    qt_entries.append(("no report", name, "fail", ""))
+                    failures.append((f"no report::{name}", message))
         if qt_suites:
             layers.append(
                 Layer("Qt shell tests (offscreen)", qt_suites, entries=qt_entries)
@@ -502,6 +558,13 @@ def _parse_args(argv):
         help="Qt Test JUnit XML path(s) (accepts several, repeatable)",
     )
     parser.add_argument(
+        "--ctest-json",
+        help=(
+            "CTest --show-only=json-v1 output; a registered suite that wrote "
+            "no report is reported as a failure"
+        ),
+    )
+    parser.add_argument(
         "--color", choices=("auto", "always", "never"), default="auto"
     )
     parser.add_argument("--no-color", action="store_true")
@@ -543,6 +606,19 @@ QT_JUNIT = """<testsuite name="SmokeTest" tests="3" failures="1">
   </testcase>
   <testcase name="cleanupTestCase" classname="SmokeTest" time="0.000"/>
 </testsuite>"""
+
+# Two registered suites: one whose report exists (the path is filled in with
+# this file) and one whose report was never written.
+CTEST_JSON = """{
+  "kind": "ctestInfo",
+  "version": {"major": 1, "minor": 0},
+  "tests": [
+    {"name": "tst_present",
+     "command": ["/bin/tst_present", "-o", "%s,junitxml"]},
+    {"name": "tst_gone",
+     "command": ["/bin/tst_gone", "-o", "/nonexistent/tst_gone.xml,junitxml"]}
+  ]
+}"""
 
 DOCTEST_OK = (
     "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; "
@@ -603,9 +679,19 @@ def run_self_check():
     assert failures[0][0] == "SmokeTest::frameOpensOffscreen", failures
     assert "assertion" in failures[0][1], failures
 
+    errors = []
+    missing = missing_ctest_reports(CTEST_JSON % os.path.abspath(__file__), errors)
+    assert not errors, errors
+    assert [name for name, _ in missing] == ["tst_gone"], missing
+    assert "produced no report" in missing[0][1], missing
+
+    errors = []
+    missing = missing_ctest_reports("not json at all", errors)
+    assert len(errors) == 1, errors
+    assert not missing, missing
+
     counts, failures, seen = parse_doctests(DOCTEST_OK)
     assert seen and counts.passed == 3 and counts.failed == 0, (counts, failures)
-
     counts, failures, seen = parse_doctests(DOCTEST_FAIL)
     assert seen and counts.passed == 2 and counts.failed == 1, counts
     assert len(failures) == 1 and "foo::bar" in failures[0][0], failures

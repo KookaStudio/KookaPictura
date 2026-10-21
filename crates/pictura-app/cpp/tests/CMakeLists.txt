@@ -130,7 +130,26 @@ set(PICTURA_QT_TESTS
 
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/qt-test-results)
 
+# The slow suites are registered in several entries, so the layer's wall time
+# is set by the number of suites and the parallel level rather than by one
+# slow suite. Each entry runs a share of the suite's test functions: the
+# share comes from the PICTURA_TEST_SHARD environment variable, and the
+# functions are distributed over the shares in declaration order.
+#
+# Only suites whose test functions are independent of each other belong here.
+# A suite that shares its window between the test functions keeps one entry:
+# its functions build on each other's state.
+set(PICTURA_QT_TEST_SHARDS
+    tst_floating_workspaces
+    tst_import_pdf
+    tst_save_pdf
+    tst_workspaces
+)
+set(PICTURA_QT_TEST_SHARD_COUNT 4)
+
+set(PICTURA_QT_TEST_SOURCES "")
 foreach(test_name IN LISTS PICTURA_QT_TESTS)
+    list(APPEND PICTURA_QT_TEST_SOURCES ${test_name}.cpp)
     add_executable(${test_name} ${test_name}.cpp)
     if(PICTURA_SHELL_SHARED)
         target_link_libraries(${test_name} PRIVATE pictura_shell Qt6::Test)
@@ -140,10 +159,28 @@ foreach(test_name IN LISTS PICTURA_QT_TESTS)
     # Test debug info only needs line tables; the suites are not debugged through
     # full variable info, and this keeps the test objects and their links small.
     target_compile_options(${test_name} PRIVATE "$<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-g1>")
-    add_test(NAME ${test_name} COMMAND ${test_name}
-        -o ${CMAKE_BINARY_DIR}/qt-test-results/${test_name}.xml,junitxml)
-    set_tests_properties(${test_name} PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
-        TIMEOUT 120
-    )
+
+    if(test_name IN_LIST PICTURA_QT_TEST_SHARDS)
+        math(EXPR _pictura_last_shard "${PICTURA_QT_TEST_SHARD_COUNT} - 1")
+        foreach(_shard RANGE 0 ${_pictura_last_shard})
+            set(_entry "${test_name}_${_shard}")
+            add_test(NAME ${_entry} COMMAND ${test_name}
+                -o ${CMAKE_BINARY_DIR}/qt-test-results/${_entry}.xml,junitxml)
+            set_tests_properties(${_entry} PROPERTIES
+                ENVIRONMENT "QT_QPA_PLATFORM=offscreen;PICTURA_TEST_SHARD=${_shard}/${PICTURA_QT_TEST_SHARD_COUNT}"
+                TIMEOUT 120
+            )
+        endforeach()
+    else()
+        add_test(NAME ${test_name} COMMAND ${test_name}
+            -o ${CMAKE_BINARY_DIR}/qt-test-results/${test_name}.xml,junitxml)
+        set_tests_properties(${test_name} PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+            TIMEOUT 120
+        )
+    endif()
 endforeach()
+
+# The suites include the generated cxx-qt header, so they follow the bridge
+# stamp like the shell does.
+pictura_depend_on_bridge_stamp(${PICTURA_QT_TEST_SOURCES})

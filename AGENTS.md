@@ -56,9 +56,8 @@ the compiler default, and builds with Ninja. `deny.toml` gates licenses and
 dependencies; CI runs `cargo deny check`.
 
 Development builds (`BUILD_TESTING` on, the default) build `pictura_shell` as a
-shared library and the Rust crate with the lighter `app` profile. Release and
-packaging builds pass `-DBUILD_TESTING=OFF`, keep the static shell, and are the
-only installable form. CTest runs four suites at a time by default; override
+shared library. Release and packaging builds pass `-DBUILD_TESTING=OFF`, keep
+the static shell, and are the only installable form. CTest runs four suites at a time by default; override
 with `CTEST_PARALLEL_LEVEL`. Each QObject header's matching `.cpp` ends with
 `#include "moc_<name>.cpp"`, so header edits avoid a central moc unit.
 
@@ -116,6 +115,18 @@ offscreen-compatible. See `DEVELOPING.md` for the self-test token protocol.
 - Rust tests are std `#[test]` only (no framework). Oracle tests self-skip when
   `magick` / `psd-tools` are absent; CI's `oracles` job installs both. Profiling
   and GPU tests are `#[ignore]`d with a reason string (`--ignored --nocapture`).
+- **The report is honest about missing suites.** A CTest-registered suite that
+  produced no JUnit report fails the run and is named: a suite that never
+  started is not a silently missing line. The two application self-test
+  invocations run concurrently with each other and with the Qt Test layer.
+- **The gates check the tree they test.** `scripts/check-build-tree.sh` fails
+  the full gate when `build/pictura` predates a tracked source under
+  `crates/pictura-app` or when a registered suite has no executable, and the
+  fast gate reports the same staleness.
+- **The slow Qt suites are registered in several entries each.** An entry runs a
+  share of the suite's test functions, chosen by `PICTURA_TEST_SHARD`, so the
+  layer's wall time is set by the parallel level and not by one suite. A suite
+  whose test functions share state keeps one entry.
 
 ## Spec workflow (OpenSpec)
 

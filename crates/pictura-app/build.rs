@@ -1,4 +1,6 @@
-use std::path::PathBuf;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use cxx_qt_build::CxxQtBuilder;
 
@@ -26,6 +28,83 @@ fn find_qmake6() -> Option<PathBuf> {
     None
 }
 
+/// The hand-written C++ edges the bridges include.
+///
+/// The `cc` crate emits no change-tracking directive for the sources it
+/// compiles, so without these the build script would not rerun when one of
+/// them changes and the Rust static library would keep a stale object.
+const BRIDGE_EDGES: [&str; 6] = [
+    "cpp/decode_image.h",
+    "cpp/decode_image.cpp",
+    "cpp/render_text.h",
+    "cpp/render_text.cpp",
+    "cpp/encode_image.h",
+    "cpp/encode_image.cpp",
+];
+
+/// The directory the C++ build includes the generated cxx-qt headers from.
+///
+/// `cxx-qt-build` exports them under the directory CMake names, so this is
+/// the tree whose timestamps the C++ build tracks.
+fn exported_header_root() -> Option<PathBuf> {
+    let export = std::env::var_os("CXX_QT_EXPORT_DIR")?;
+    Some(
+        PathBuf::from(export)
+            .join("crates")
+            .join("pictura_app")
+            .join("include"),
+    )
+}
+
+/// Record the content and modification time of every file under `root`.
+fn snapshot_headers(root: &Path) -> HashMap<PathBuf, (SystemTime, Vec<u8>)> {
+    let mut files = HashMap::new();
+    let mut directories = vec![root.to_path_buf()];
+    while let Some(directory) = directories.pop() {
+        let Ok(entries) = std::fs::read_dir(&directory) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                directories.push(path);
+                continue;
+            }
+            let Ok(metadata) = entry.metadata() else {
+                continue;
+            };
+            let Ok(bytes) = std::fs::read(&path) else {
+                continue;
+            };
+            let modified = metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH);
+            files.insert(path, (modified, bytes));
+        }
+    }
+    files
+}
+
+/// Restore the modification time of every file whose content did not change.
+///
+/// `cxx-qt-build` rewrites every generated header with `File::create`, so a
+/// build-script rerun that produces identical headers still moves their
+/// timestamps — and the C++ build reads a timestamp as "the interface
+/// changed", which costs a full rebuild of every consumer.
+fn restore_unchanged_headers(before: &HashMap<PathBuf, (SystemTime, Vec<u8>)>) {
+    for (path, (modified, bytes)) in before {
+        let Ok(current) = std::fs::read(path) else {
+            continue;
+        };
+        if &current != bytes {
+            continue;
+        }
+        let Ok(file) = std::fs::File::open(path) else {
+            continue;
+        };
+        let times = std::fs::FileTimes::new().set_modified(*modified);
+        let _ = file.set_times(times);
+    }
+}
+
 fn main() {
     // cxx-qt compiles its exported initializer object with a separate cc::Build
     // that the cc_builder closure does not reach. CXXFLAGS is cc's shared hook;
@@ -41,6 +120,20 @@ fn main() {
             std::env::set_var("QMAKE", qmake);
         }
     }
+
+    // The hand-written bridge edges are the only C++ files this crate's
+    // generated code depends on; track them explicitly.
+    for edge in BRIDGE_EDGES {
+        println!("cargo::rerun-if-changed={edge}");
+    }
+
+    // The headers the C++ build includes are rewritten by every build-script
+    // run; remember them so a run that changes nothing leaves their
+    // timestamps alone.
+    let exported_before = exported_header_root()
+        .as_deref()
+        .map(snapshot_headers)
+        .unwrap_or_default();
 
     // `cpp/` holds hand-written headers (e.g. `decode_image.h`) included by the
     // cxx bridge, so the generated C++ glue can find them. The `.cpp` files
@@ -128,6 +221,14 @@ fn main() {
                 cc.file("cpp/render_text.cpp");
                 cc.file("cpp/encode_image.cpp");
             })
+            // The default crate include root makes cargo watch the whole crate
+            // directory, so touching any shell source reran this script. Nothing
+            // includes the crate's own headers through that root: the generated
+            // headers are namespaced under the crate name, and the hand-written
+            // bridge headers are found through the cc include path above.
+            .crate_include_root(None)
             .build();
     }
+
+    restore_unchanged_headers(&exported_before);
 }
