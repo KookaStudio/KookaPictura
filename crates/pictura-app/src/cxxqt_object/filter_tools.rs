@@ -384,7 +384,7 @@ fn filter_target_ready(view: Pin<&mut PictureView>) -> bool {
     let Some(doc) = rust.doc.as_ref() else {
         return false;
     };
-    let active = rust.active_layer.as_deref();
+    let active = rust.layer_target.single();
     active_layer_visible(doc, active)
         && active_pixel_layer(doc, active).is_some_and(|layer| !layer_pixel_locked(layer))
 }
@@ -394,7 +394,7 @@ fn filter_target_empty(view: Pin<&mut PictureView>) -> bool {
     let Some(doc) = rust.doc.as_ref() else {
         return false;
     };
-    active_pixel_layer(doc, rust.active_layer.as_deref())
+    active_pixel_layer(doc, rust.layer_target.single())
         .is_some_and(|layer| selected_area_empty(layer, rust.selection.as_ref()))
 }
 
@@ -556,7 +556,7 @@ fn filter_gallery_preview(
     else {
         return QImage::default();
     };
-    let filtered = match (resolve_stack(kinds, params), rust.active_layer.as_deref()) {
+    let filtered = match (resolve_stack(kinds, params), rust.layer_target.single()) {
         (Some(filters), Some(path)) => proxy.render(path, &filters, rust.gpu_compute).ok(),
         _ => None,
     };
@@ -798,7 +798,7 @@ fn filter_proxy_base(mut view: Pin<&mut PictureView>, max_edge: i32) -> QImage {
     }
     let mut rust = view.as_mut().rust_mut();
     let gpu_compute = rust.gpu_compute;
-    let active = rust.active_layer.clone();
+    let active = rust.layer_target.single().map(str::to_string);
     let Some(doc) = rust.doc.as_mut() else {
         return QImage::default();
     };
@@ -834,7 +834,7 @@ fn filter_proxy_layer(
     let Some(doc) = rust.doc.as_ref() else {
         return QImage::default();
     };
-    let Some(active) = rust.active_layer.as_deref() else {
+    let Some(active) = rust.layer_target.single() else {
         return QImage::default();
     };
     let Some(resolved) = active_proxy_layer(doc, Some(active)) else {

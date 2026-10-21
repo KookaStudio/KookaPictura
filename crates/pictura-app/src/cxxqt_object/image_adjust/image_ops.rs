@@ -77,7 +77,7 @@ fn finish(mut view: Pin<&mut PictureView>, doc: Document, label: &str) -> bool {
         let mut rust = view.as_mut().rust_mut();
         rust.doc = Some(doc);
         rust.reset_edit_state();
-        rust.active_layer = Some("0".to_string());
+        rust.select_only_layer("0");
     }
     view.as_mut().recomposite();
     view.as_mut().record(label);

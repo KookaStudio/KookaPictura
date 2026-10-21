@@ -225,7 +225,7 @@ void PicturaMainWindow::wireLayerContentOptions()
 {
     const auto currentAdjustmentPath = [this]() -> QString {
         PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QString path = layerAnchor();
         if (!view || path.isEmpty()) {
             return QString();
         }

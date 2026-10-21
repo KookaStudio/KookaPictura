@@ -62,7 +62,7 @@ fn refinement(
     read: fn(&Document, &str) -> Option<(u8, f64)>,
 ) -> Option<(u8, f64)> {
     let rust = view.rust();
-    read(rust.doc.as_ref()?, rust.active_layer.as_deref()?)
+    read(rust.doc.as_ref()?, rust.layer_target.single()?)
 }
 
 /// Apply `set` to the active layer; recomposite on a change, and on a commit
@@ -82,7 +82,7 @@ fn edit(
     let pending = pending == Some(label);
     let changed = {
         let mut rust = view.as_mut().rust_mut();
-        let Some(path) = rust.active_layer.clone() else {
+        let Some(path) = rust.layer_target.single().map(str::to_string) else {
             return false;
         };
         rust.doc.as_mut().is_some_and(|doc| set(doc, &path))

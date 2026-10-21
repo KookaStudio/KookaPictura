@@ -160,15 +160,20 @@ fn create_document(
     {
         let mut rust = view.as_mut().rust_mut();
         let layers = rust.doc.as_ref().map_or(0, |doc| doc.layers.len());
-        rust.active_layer = (layers > 0).then(|| (layers - 1).to_string());
+        if layers > 0 {
+            rust.select_only_layer(&(layers - 1).to_string());
+        } else {
+            rust.layer_target.clear();
+        }
     }
     view.as_mut().recomposite();
     // The conversions are part of making the document, not edits to undo.
     let mut rust = view.as_mut().rust_mut();
     rust.history = History::default();
+    let target = rust.layer_target.clone();
     let rust = &mut *rust;
     if let Some(doc) = rust.doc.as_mut() {
-        rust.history.capture_live(doc, &None, "New");
+        rust.history.capture_live(doc, &None, &target, "New");
     }
     true
 }

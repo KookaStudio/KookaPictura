@@ -53,6 +53,8 @@ public:
 
     /// Frozen paths of every selected row (empty when nothing is selected).
     QStringList selectedPaths() const;
+    // The document target, even when a filter hides its rows.
+    QStringList targetLayerPaths() const;
 
     /// Whether the current selection can be merged through the
     /// context-sensitive Merge Down / Merge Layers command.
@@ -314,6 +316,13 @@ protected:
 
 private:
     void syncControls();
+    // Write the tree selection into the document target (user intent only).
+    void writeTarget();
+    // Apply the document target to the tree without writing it back.
+    void applyTargetSelection();
+    void setTreeSelection(const QStringList& paths, const QString& current);
+    // The document's selected layer paths, independent of the filter proxy.
+    QStringList targetPaths() const;
     struct PendingPreview {
         QStringList paths;
         QStringList namePaths;
@@ -425,6 +434,7 @@ private:
     PendingPreview gesture_;
     QTimer* previewTimer_ = nullptr;
     bool refreshing_ = false;
+    bool applyingTarget_ = false;
     QMetaObject::Connection viewConnection_;
 
     // Test seam: skip the modal Background-conversion dialog and use this result.

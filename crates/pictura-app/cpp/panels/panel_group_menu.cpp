@@ -363,7 +363,7 @@ void PanelGroup::updateHeaderMenu()
                                    && layers->canMoveCurrent(
                                        id == QLatin1String("moveUp") ? 1 : -1));
             } else if (id == QLatin1String("mergeDown")) {
-                const bool one = layers && layers->selectedPaths().size() == 1;
+                const bool one = layers && layers->targetLayerPaths().size() == 1;
                 action->setText(one ? PanelGroup::tr("Merge Down")
                                     : PanelGroup::tr("Merge Layers"));
                 action->setEnabled(layers && layers->canMergeSelection());

@@ -35,10 +35,10 @@ QString styleCommand(const char* leaf)
 void PicturaMainWindow::wireLayerStyleMenu()
 {
     const auto current = [this]() {
-        return layersPanel_ ? layersPanel_->currentPath() : QString();
+        return layerAnchor();
     };
     const auto selected = [this]() {
-        return layersPanel_ ? layersPanel_->selectedPaths() : QStringList();
+        return selectedLayerPaths();
     };
     const auto wire = [this](const QString& id, std::function<void()> handler,
                              std::function<bool()> enabled) {

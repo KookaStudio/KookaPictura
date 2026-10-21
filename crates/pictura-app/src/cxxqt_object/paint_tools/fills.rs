@@ -428,7 +428,7 @@ pub(crate) fn apply(
 ) -> bool {
     let edited = {
         let rust = view.rust();
-        let (Some(doc), Some(path)) = (rust.doc.as_ref(), rust.active_layer.as_deref()) else {
+        let (Some(doc), Some(path)) = (rust.doc.as_ref(), rust.layer_target.single()) else {
             return false;
         };
         // ponytail: of the fills only Edit > Fill writes a mask (`fill_mask`);

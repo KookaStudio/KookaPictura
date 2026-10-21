@@ -317,7 +317,7 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                     toggleSolo(path);
                     return true;
                 }
-                QStringList targets = selectedPaths();
+                QStringList targets = targetPaths();
                 if (!targets.contains(path)) {
                     targets = QStringList{path};
                 }

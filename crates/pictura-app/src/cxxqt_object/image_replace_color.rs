@@ -143,7 +143,7 @@ fn layer_origin(view: &PictureView) -> (i32, i32) {
     let rust = view.rust();
     rust.doc
         .as_ref()
-        .and_then(|doc| active_pixel_layer(doc, rust.active_layer.as_deref()))
+        .and_then(|doc| active_pixel_layer(doc, rust.layer_target.single()))
         .map_or((0, 0), |layer| (layer.rect.left, layer.rect.top))
 }
 

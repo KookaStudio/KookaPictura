@@ -197,10 +197,11 @@ impl qobject::PictureView {
         view.doc = Some(doc);
         view.document_generation = view.document_generation.wrapping_add(1);
         view.reset_edit_state();
-        view.active_layer = Some("0".to_string());
+        view.select_only_layer("0");
+        let target = view.layer_target.clone();
         let view = &mut *view;
         if let Some(doc) = view.doc.as_mut() {
-            view.history.capture_live(doc, &None, "New");
+            view.history.capture_live(doc, &None, &target, "New");
         }
         view.path = None;
         view.dirty = false;
@@ -775,14 +776,26 @@ impl qobject::PictureView {
     /// no single selection, disabling tool edits until one layer is selected.
     pub fn set_active_layer(mut self: Pin<&mut Self>, path: &QString) {
         let path = path.to_string();
-        self.as_mut().rust_mut().active_layer = (!path.is_empty()).then_some(path);
+        let rust = &mut *self.as_mut().rust_mut();
+        let resolves = |doc: &Document| pictura_render::resolve_path(doc, &path).is_some();
+        if path.is_empty() || !rust.doc.as_ref().is_some_and(resolves) {
+            rust.layer_target.clear();
+        } else {
+            rust.select_only_layer(&path);
+        }
+        let anchor = rust.layer_target.anchor().map(str::to_string);
+        if rust.mask_edit_target.as_deref() != anchor.as_deref() {
+            rust.mask_edit_target = None;
+        }
+        let target = rust.layer_target.clone();
+        rust.history.set_current_target(&target);
     }
 
     /// The panel path of the active layer, or empty when none is active.
     pub fn active_layer_path(&self) -> QString {
         self.rust()
-            .active_layer
-            .as_deref()
+            .layer_target
+            .single()
             .map(QString::from)
             .unwrap_or_default()
     }
@@ -793,7 +806,7 @@ impl qobject::PictureView {
         let rust = self.rust();
         rust.doc
             .as_ref()
-            .is_none_or(|doc| active_layer_visible(doc, rust.active_layer.as_deref()))
+            .is_none_or(|doc| active_layer_visible(doc, rust.layer_target.single()))
     }
 
     /// Record the Layers panel's isolated set: while the Selected filter is on,
@@ -860,7 +873,7 @@ impl super::PictureViewRust {
         self.stroke = None;
         self.stroke_base = None;
         self.stroke_label.clear();
-        self.active_layer = None;
+        self.layer_target.clear();
         self.isolation = None;
         self.mask_solo = None;
         self.mask_overlay = None;
@@ -1016,7 +1029,8 @@ impl qobject::PictureView {
         let mut rust = self.as_mut().rust_mut();
         let rust = &mut *rust;
         if let Some(doc) = rust.doc.as_mut() {
-            rust.history.capture_live(doc, &rust.selection, label);
+            rust.history
+                .capture_live(doc, &rust.selection, &rust.layer_target, label);
             rust.dirty = true;
             rust.content_revision = rust.content_revision.wrapping_add(1);
         }
@@ -1031,7 +1045,8 @@ impl qobject::PictureView {
         let mut rust = self.as_mut().rust_mut();
         let rust = &mut *rust;
         if let Some(doc) = rust.doc.as_mut() {
-            rust.history.capture_live(doc, &rust.selection, label);
+            rust.history
+                .capture_live(doc, &rust.selection, &rust.layer_target, label);
             rust.dirty = true;
         }
     }

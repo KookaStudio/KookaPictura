@@ -148,7 +148,7 @@ impl Source<'_> {
     /// The layer a Layer Mask or new-layer output writes to.
     fn layer(&self, view: &PictureView) -> Option<String> {
         match self {
-            Source::Selection => view.rust().active_layer.clone(),
+            Source::Selection => view.rust().layer_target.anchor().map(str::to_string),
             Source::Mask(path) => Some(path.to_string()),
         }
     }
@@ -575,7 +575,7 @@ fn apply(
             rust.selection = Some(refined);
         }
         if let Some(path) = new_layer_path {
-            rust.active_layer = Some(path);
+            rust.select_only_layer(&path);
         }
     }
     view.as_mut().recomposite();

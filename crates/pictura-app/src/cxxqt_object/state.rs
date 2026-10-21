@@ -1,4 +1,5 @@
 use crate::history::History;
+use crate::layer_target::LayerTarget;
 use cxx_qt_lib::QImage;
 use pictura_core::path::VectorPath;
 use pictura_core::{Document, Layer, PixelBuffer, PsdRect};
@@ -143,9 +144,9 @@ pub struct PictureViewRust {
     pub(super) selection_move_delta: Option<(i32, i32)>,
     pub(super) history: History,
     pub(super) path: Option<String>,
-    /// Panel path of the single active layer, or `None` when the selection is
-    /// empty or multiple. The shared resolver turns this into the edit target.
-    pub(super) active_layer: Option<String>,
+    /// The selected layer paths and the active path. The shared resolver turns
+    /// this into the single tool-edit target.
+    pub(super) layer_target: LayerTarget,
     /// The path calls edit the active shape layer's outline, not the Work
     /// Path (`paths.rs`).
     pub(super) path_on_layer: bool,
@@ -401,7 +402,7 @@ impl Default for PictureViewRust {
             selection_move_delta: None,
             history: History::default(),
             path: None,
-            active_layer: None,
+            layer_target: LayerTarget::default(),
             path_on_layer: false,
             active_path: super::paths::ActivePath::Work,
             path_gesture: None,
@@ -469,5 +470,23 @@ impl Default for PictureViewRust {
             open_cancelled: false,
             open_delay_for_test: 0,
         }
+    }
+}
+
+impl PictureViewRust {
+    /// Replace the target, clearing a mask edit target that named the previous
+    /// active path.
+    pub(super) fn set_layer_target(&mut self, target: crate::layer_target::LayerTarget) {
+        if self.layer_target.anchor() != target.anchor() {
+            self.mask_edit_target = None;
+        }
+        self.layer_target = target;
+    }
+
+    /// Select one layer while keeping the mask-edit invariant.
+    pub(super) fn select_only_layer(&mut self, path: &str) {
+        let mut target = self.layer_target.clone();
+        target.select_only(path);
+        self.set_layer_target(target);
     }
 }

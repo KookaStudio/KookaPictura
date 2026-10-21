@@ -3,6 +3,7 @@
 #include "layers_panel_internal.h"
 #include "percent_field.h"
 
+#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 
 #include <QtCore/QModelIndex>
@@ -17,7 +18,8 @@ QStringList LayersPanel::propertyPaths() const
     if (!model_) {
         return paths;
     }
-    for (const QString& path : selectedPaths()) {
+    const QStringList targets = view_ ? selected_layer_paths(*view_) : QStringList{};
+    for (const QString& path : targets) {
         const QModelIndex index = model_->indexForPath(path);
         if (index.isValid() && !index.data(SyntheticRole).toBool()) {
             paths.push_back(path);
@@ -157,7 +159,7 @@ void LayersPanel::reconcileGestureTarget()
     if (targets.isEmpty()) {
         // An empty selection is the transient model-reset state; a present
         // selection with no real target (a synthetic row) is a real change.
-        if (!selectedPaths().isEmpty()) {
+        if (!targetPaths().isEmpty()) {
             cancelPendingPreview();
         }
         return;

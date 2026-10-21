@@ -1,4 +1,5 @@
 #include "frame_includes.h"
+#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
 #include "api/type_api.h"
 
 #include "design_system_dialog.h"
@@ -229,8 +230,8 @@ void PicturaMainWindow::registerHandlers()
 
     registry_->setHandler(command_ids::EditFreeTransform, [this]() {
         PictureView* view = activeView();
-        const QString path = (layersPanel_ && layersPanel_->selectedPaths().size() == 1)
-                                 ? layersPanel_->currentPath()
+        const QString path = (layersPanel_ && selectedLayerPaths().size() == 1)
+                                 ? layerAnchor()
                                  : QString();
         if (!view) {
             return;
@@ -241,8 +242,8 @@ void PicturaMainWindow::registerHandlers()
     });
     registry_->setEnabledProvider(command_ids::EditFreeTransform, [this]() {
         PictureView* view = activeView();
-        const QString path = (layersPanel_ && layersPanel_->selectedPaths().size() == 1)
-                                 ? layersPanel_->currentPath()
+        const QString path = (layersPanel_ && selectedLayerPaths().size() == 1)
+                                 ? layerAnchor()
                                  : QString();
         return view && view->has_document() && !path.isEmpty()
             && view->layer_can_free_transform(path);
@@ -261,8 +262,8 @@ void PicturaMainWindow::registerHandlers()
         const QString mode = QString::fromLatin1(entry.mode);
         registry_->setHandler(id, [this, mode]() {
             PictureView* view = activeView();
-            const QString path = (layersPanel_ && layersPanel_->selectedPaths().size() == 1)
-                                     ? layersPanel_->currentPath()
+            const QString path = (layersPanel_ && selectedLayerPaths().size() == 1)
+                                     ? layerAnchor()
                                      : QString();
             if (!view) {
                 return;
@@ -273,8 +274,8 @@ void PicturaMainWindow::registerHandlers()
         });
         registry_->setEnabledProvider(id, [this, mode]() {
             PictureView* view = activeView();
-            const QString path = (layersPanel_ && layersPanel_->selectedPaths().size() == 1)
-                                     ? layersPanel_->currentPath()
+            const QString path = (layersPanel_ && selectedLayerPaths().size() == 1)
+                                     ? layerAnchor()
                                      : QString();
             return view && view->has_document() && !path.isEmpty()
                 && layer_can_transform_mode(*view, path, mode);
@@ -283,8 +284,8 @@ void PicturaMainWindow::registerHandlers()
 
     registry_->setHandler(command_ids::EditTransformWarp, [this]() {
         PictureView* view = activeView();
-        const QString path = (layersPanel_ && layersPanel_->selectedPaths().size() == 1)
-                                 ? layersPanel_->currentPath()
+        const QString path = (layersPanel_ && selectedLayerPaths().size() == 1)
+                                 ? layerAnchor()
                                  : QString();
         if (view && tools_ && tools_->beginWarp(path)) {
             refresh();
@@ -292,8 +293,8 @@ void PicturaMainWindow::registerHandlers()
     });
     registry_->setEnabledProvider(command_ids::EditTransformWarp, [this]() {
         PictureView* view = activeView();
-        const QString path = (layersPanel_ && layersPanel_->selectedPaths().size() == 1)
-                                 ? layersPanel_->currentPath()
+        const QString path = (layersPanel_ && selectedLayerPaths().size() == 1)
+                                 ? layerAnchor()
                                  : QString();
         return view && view->has_document() && !path.isEmpty()
             && view->layer_can_free_transform(path);
@@ -361,11 +362,9 @@ void PicturaMainWindow::registerHandlers()
 
     // M37: layer creation and grouping. Layer…/Group… open the modal dialog,
     // whose accept step places the node above the selection; Group from Layers…
-    // wraps the panel selection, and Duplicate Layer acts on every selected
-    // path like the panel's row menu. Group/Ungroup still target the active
-    // document's current layer — the Layers panel's selected row, -1 when none.
-    // ponytail: one current layer; M38's multi-selection upgrades these to
-    // per-selection operations.
+    // wraps the panel selection. Duplicate acts on every selected path like
+    // the panel's row menu; every command reads the Rust layer target, not the
+    // panel's tree current row.
     registry_->setHandler(command_ids::LayerNewLayer, [this]() {
         if (layersPanel_) {
             layersPanel_->openNewLayerDialog();
@@ -414,7 +413,7 @@ void PicturaMainWindow::registerHandlers()
     });
     registry_->setEnabledProvider(command_ids::LayerNewGroupFromLayers, [this]() {
         return activeView() && activeView()->has_document() && layersPanel_
-            && !layersPanel_->selectedPaths().isEmpty();
+            && !selectedLayerPaths().isEmpty();
     });
 
     // Merge and flatten. Merge Down and Merge Layers share one id (design D4):
@@ -422,7 +421,7 @@ void PicturaMainWindow::registerHandlers()
     // label follows the selection.
     registry_->setHandler(command_ids::LayerMergeLayers, [this]() {
         PictureView* view = activeView();
-        const QStringList paths = layersPanel_ ? layersPanel_->selectedPaths() : QStringList{};
+        const QStringList paths = selectedLayerPaths();
         if (!view || paths.isEmpty()) {
             return;
         }
@@ -436,16 +435,16 @@ void PicturaMainWindow::registerHandlers()
     registry_->setEnabledProvider(command_ids::LayerMergeLayers, [this]() {
         PictureView* view = activeView();
         return view && view->has_document() && layersPanel_
-            && view->can_merge_layers(layersPanel_->selectedPaths());
+            && view->can_merge_layers(selectedLayerPaths());
     });
     registry_->setLabelProvider(command_ids::LayerMergeLayers, [this]() {
-        const bool one = layersPanel_ && layersPanel_->selectedPaths().size() == 1;
+        const bool one = layersPanel_ && selectedLayerPaths().size() == 1;
         return one ? QStringLiteral("Merge Down") : QStringLiteral("Merge Layers");
     });
 
     registry_->setHandler(command_ids::LayerMergeVisible, [this]() {
         PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QString path = layerAnchor();
         if (!view || path.isEmpty()) {
             return;
         }
@@ -458,7 +457,7 @@ void PicturaMainWindow::registerHandlers()
     });
     registry_->setEnabledProvider(command_ids::LayerMergeVisible, [this]() {
         PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QString path = layerAnchor();
         if (!view || !view->has_document() || path.isEmpty()) {
             return false;
         }
@@ -468,7 +467,7 @@ void PicturaMainWindow::registerHandlers()
 
     // Create / Release Clipping Mask act on every selected layer.
     const auto clippingPaths = [this]() {
-        return layersPanel_ ? layersPanel_->selectedPaths() : QStringList();
+        return selectedLayerPaths();
     };
     registry_->setHandler(command_ids::LayerCreateClippingMask, [this, clippingPaths]() {
         PictureView* view = activeView();
@@ -493,14 +492,14 @@ void PicturaMainWindow::registerHandlers()
 
     registry_->setHandler(command_ids::LayerMergeClippingMask, [this]() {
         PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QString path = layerAnchor();
         if (view && !path.isEmpty() && view->merge_clipping_mask(path) > 0) {
             refresh();
         }
     });
     registry_->setEnabledProvider(command_ids::LayerMergeClippingMask, [this]() {
         PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QString path = layerAnchor();
         return view && view->has_document() && !path.isEmpty()
             && view->can_merge_clipping_mask(path);
     });
@@ -585,7 +584,7 @@ void PicturaMainWindow::registerHandlers()
     // adjustment/fill layers, and a second Background are refused).
     auto currentLayerKind = [this]() -> QString {
         PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QString path = layerAnchor();
         if (!view || path.isEmpty()) {
             return QString();
         }
@@ -593,7 +592,7 @@ void PicturaMainWindow::registerHandlers()
     };
     registry_->setHandler(command_ids::LayerNewLayerFromBackground, [this]() {
         PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QString path = layerAnchor();
         if (view && !path.isEmpty() && view->layer_from_background(path)) {
             refresh();
         }
@@ -604,14 +603,14 @@ void PicturaMainWindow::registerHandlers()
                                   });
     registry_->setHandler(command_ids::LayerNewBackgroundFromLayer, [this]() {
         PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QString path = layerAnchor();
         if (view && !path.isEmpty() && view->background_from_layer(path)) {
             refresh();
         }
     });
     registry_->setEnabledProvider(command_ids::LayerNewBackgroundFromLayer, [this]() {
         PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QString path = layerAnchor();
         return view && !path.isEmpty() && pictura::can_background_from_layer(*view, path);
     });
 
@@ -619,7 +618,7 @@ void PicturaMainWindow::registerHandlers()
     // (the panel's current row, which the bridge resolves).
     const auto layerVia = [this](bool cut) {
         PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QString path = layerAnchor();
         if (!view || path.isEmpty()) {
             return;
         }
@@ -634,7 +633,7 @@ void PicturaMainWindow::registerHandlers()
     for (const char* id : {command_ids::LayerNewLayerViaCopy, command_ids::LayerNewLayerViaCut}) {
         registry_->setEnabledProvider(id, [this]() {
             return activeView() && activeView()->has_document() && activeView()->has_selection()
-                && layersPanel_ && !layersPanel_->currentPath().isEmpty();
+                && layersPanel_ && !layerAnchor().isEmpty();
         });
     }
 
@@ -643,7 +642,7 @@ void PicturaMainWindow::registerHandlers()
     // and Unlink only touch the transient link sets. None records history.
     registry_->setHandler(command_ids::LayerSelectSimilar, [this]() {
         PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QString path = layerAnchor();
         if (!view || path.isEmpty()) {
             return;
         }
@@ -655,12 +654,12 @@ void PicturaMainWindow::registerHandlers()
     });
     registry_->setEnabledProvider(command_ids::LayerSelectSimilar, [this]() {
         return activeView() && activeView()->has_document() && layersPanel_
-            && !layersPanel_->currentPath().isEmpty();
+            && !layerAnchor().isEmpty();
     });
 
     registry_->setHandler(command_ids::LayerSelectLinked, [this]() {
         PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QString path = layerAnchor();
         if (!view || path.isEmpty()) {
             return;
         }
@@ -672,19 +671,19 @@ void PicturaMainWindow::registerHandlers()
     });
     registry_->setEnabledProvider(command_ids::LayerSelectLinked, [this]() {
         return activeView() && activeView()->has_document() && layersPanel_
-            && !layersPanel_->currentPath().isEmpty();
+            && !layerAnchor().isEmpty();
     });
 
     registry_->setHandler(command_ids::LayerLinkLayers, [this]() {
         PictureView* view = activeView();
-        const QStringList paths = layersPanel_ ? layersPanel_->selectedPaths() : QStringList{};
+        const QStringList paths = selectedLayerPaths();
         if (view && !paths.isEmpty()) {
             view->link_layers(paths, true);
         }
     });
     registry_->setHandler(command_ids::LayerUnlinkLayers, [this]() {
         PictureView* view = activeView();
-        const QStringList paths = layersPanel_ ? layersPanel_->selectedPaths() : QStringList{};
+        const QStringList paths = selectedLayerPaths();
         if (view && !paths.isEmpty()) {
             view->link_layers(paths, false);
         }
@@ -692,7 +691,7 @@ void PicturaMainWindow::registerHandlers()
     for (const char* id : {command_ids::LayerLinkLayers, command_ids::LayerUnlinkLayers}) {
         registry_->setEnabledProvider(id, [this]() {
             return activeView() && activeView()->has_document() && layersPanel_
-                && !layersPanel_->selectedPaths().isEmpty();
+                && !selectedLayerPaths().isEmpty();
         });
     }
 
@@ -709,7 +708,7 @@ void PicturaMainWindow::registerHandlers()
     });
     registry_->setEnabledProvider(command_ids::LayerDeleteLayer, [this]() {
         return activeView() && activeView()->has_document() && layersPanel_
-            && layers_can_delete(*activeView(), layersPanel_->selectedPaths());
+            && layers_can_delete(*activeView(), selectedLayerPaths());
     });
     registry_->setHandler(command_ids::LayerDeleteHiddenLayers, [this]() {
         PictureView* view = activeView();
@@ -722,14 +721,14 @@ void PicturaMainWindow::registerHandlers()
 
     registry_->setHandler(command_ids::LayerHideLayers, [this]() {
         PictureView* view = activeView();
-        const QStringList paths = layersPanel_ ? layersPanel_->selectedPaths() : QStringList{};
+        const QStringList paths = selectedLayerPaths();
         if (view && !paths.isEmpty() && view->hide_layers(paths) > 0) {
             refresh();
         }
     });
     registry_->setEnabledProvider(command_ids::LayerHideLayers, [this]() {
         return activeView() && activeView()->has_document() && layersPanel_
-            && !layersPanel_->selectedPaths().isEmpty();
+            && !selectedLayerPaths().isEmpty();
     });
 
     // Solid-color fill creation. The color is the frame's foreground, which is
@@ -763,7 +762,7 @@ void PicturaMainWindow::registerHandlers()
     // Mask/Layer Style/Video/3D have no handler and stay disabled.
     const auto currentFillPath = [this]() -> QString {
         PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QString path = layerAnchor();
         if (!view || path.isEmpty() || !view->layer_is_fill_content(path)) {
             return QString();
         }
@@ -771,7 +770,7 @@ void PicturaMainWindow::registerHandlers()
     };
     const auto currentTypePath = [this]() -> QString {
         PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QString path = layerAnchor();
         if (!view || path.isEmpty() || !pictura::type_api::isType(*view, path)) {
             return QString();
         }
@@ -836,7 +835,7 @@ void PicturaMainWindow::registerHandlers()
     // already a smart object); a Background is unlocked first.
     const auto currentSmartPath = [this]() -> QString {
         PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QString path = layerAnchor();
         if (!view || path.isEmpty() || !view->layer_can_convert_to_smart_object(path)) {
             return QString();
         }
@@ -872,7 +871,7 @@ void PicturaMainWindow::registerHandlers()
 
     const auto currentRasterizableSmartPath = [this]() -> QString {
         PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QString path = layerAnchor();
         if (!view || path.isEmpty() || !view->layer_can_rasterize_smart_object(path)) {
             return QString();
         }
@@ -895,7 +894,7 @@ void PicturaMainWindow::registerHandlers()
     // Replace Contents needs the current layer to be a replaceable smart object.
     const auto currentReplaceableSmartPath = [this]() -> QString {
         PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QString path = layerAnchor();
         if (!view || path.isEmpty() || !view->layer_can_replace_smart_object_contents(path)) {
             return QString();
         }
@@ -917,7 +916,7 @@ void PicturaMainWindow::registerHandlers()
     // payload. Export only reads the document, so nothing is refreshed.
     const auto currentExportableSmartPath = [this]() -> QString {
         PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QString path = layerAnchor();
         if (!view || path.isEmpty() || !view->layer_can_export_smart_object_contents(path)) {
             return QString();
         }
@@ -939,7 +938,7 @@ void PicturaMainWindow::registerHandlers()
     // so it can open as an ordinary document in an untitled editor tab.
     const auto currentEditableSmartPath = [this]() -> QString {
         PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QString path = layerAnchor();
         if (!view || path.isEmpty() || !view->layer_can_edit_smart_object_contents(path)) {
             return QString();
         }
@@ -963,7 +962,7 @@ void PicturaMainWindow::registerHandlers()
     // camera-raw smart filter on an embedded smart object.
     registry_->setHandler(command_ids::FilterPicturaRaw, [this]() {
         PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QString path = layerAnchor();
         if (!view || path.isEmpty()) {
             return;
         }
@@ -978,7 +977,7 @@ void PicturaMainWindow::registerHandlers()
     });
     registry_->setEnabledProvider(command_ids::FilterPicturaRaw, [this]() {
         PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QString path = layerAnchor();
         return view && view->has_document() && !path.isEmpty()
             && view->layer_can_apply_pictura_raw(path);
     });
@@ -1179,12 +1178,16 @@ bool PicturaMainWindow::beginTransformMode(const QString& path, const QString& m
 
 void PicturaMainWindow::selectLayerPath(const QString& path)
 {
-    if (!layersPanel_ || path.isEmpty()) {
+    PictureView* view = activeView();
+    if (!view || path.isEmpty()) {
         return;
     }
-    layersPanel_->setView(activeView());
-    layersPanel_->refresh();
-    layersPanel_->selectPaths(QStringList{path}, path);
+    select_layer_path(*view, path);
+    if (layersPanel_) {
+        layersPanel_->setView(view);
+        layersPanel_->refresh();
+        layersPanel_->selectPaths(QStringList{path}, path);
+    }
 }
 
 } // namespace pictura

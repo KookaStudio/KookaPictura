@@ -436,22 +436,20 @@ public:
             if (key->key() == Qt::Key_Tab || key->key() == Qt::Key_Backtab) {
                 const bool back = key->key() == Qt::Key_Backtab
                     || (key->modifiers() & Qt::ShiftModifier);
-                const auto* view = qobject_cast<QTreeView*>(parent());
-                bool haveNeighbour = false;
+                auto* view = qobject_cast<QTreeView*>(parent());
+                QModelIndex neighbour;
                 if (view) {
                     const QModelIndex current = view->currentIndex();
-                    haveNeighbour = (back ? view->indexAbove(current)
-                                          : view->indexBelow(current))
-                                        .isValid();
+                    neighbour = back ? view->indexAbove(current) : view->indexBelow(current);
+                    if (neighbour.isValid()) {
+                        view->setCurrentIndex(neighbour);
+                    }
                 }
                 if (auto* editor = qobject_cast<QWidget*>(object)) {
                     emit commitData(editor);
-                    emit closeEditor(editor, haveNeighbour
-                                                 ? (back
-                                                        ? QAbstractItemDelegate::EditPreviousItem
-                                                        : QAbstractItemDelegate::EditNextItem)
-                                                 : QAbstractItemDelegate::NoHint);
+                    emit closeEditor(editor, QAbstractItemDelegate::NoHint);
                 }
+                Q_UNUSED(neighbour);
                 return true;
             }
         }

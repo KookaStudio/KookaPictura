@@ -87,7 +87,7 @@ fn open_image_matches_sync() {
     assert_eq!(opened.doc.height, 1);
     assert!(matches!(opened.path, OpenedPath::Keep));
     assert_eq!(opened.source_format, "webp");
-    assert_eq!(opened.active_layer.as_deref(), Some("0"));
+    assert_eq!(opened.target.single(), Some("0"));
 
     let mut rust = PictureViewRust::default();
     apply_opened(&mut rust, opened);
@@ -132,7 +132,7 @@ fn import_render_matches_sync() {
     assert_eq!(opened.doc.height, 1);
     assert_eq!(opened.doc.layers[0].name, "Layer 1");
     assert!(matches!(opened.path, OpenedPath::Set(None)));
-    assert_eq!(opened.active_layer.as_deref(), Some("0"));
+    assert_eq!(opened.target.single(), Some("0"));
     assert_eq!(opened.source_format, "psd");
 }
 

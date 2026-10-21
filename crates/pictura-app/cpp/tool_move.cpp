@@ -7,6 +7,7 @@
 #include "tools.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/auto_select.cxxqt.h"
 
 #include <QtCore/QDebug>
@@ -130,7 +131,7 @@ public:
         if (moveOptions.autoSelectOn) {
             const QString hit = auto_select_layer(
                 *v, qRound(imagePos.x()), qRound(imagePos.y()), moveOptions.autoSelect == 0);
-            if (!hit.isEmpty() && hit != v->active_layer_path()) {
+            if (!hit.isEmpty() && hit != layer_selection_anchor(*v)) {
                 ctx.selectLayer(hit);
             }
         }
@@ -158,7 +159,7 @@ public:
         rawDelta_ = QPointF();
         ImageView* canvas = ctx.canvas();
         referenceRects_ = canvas && canvas->smartGuidesEnabled()
-            ? smartGuideReferences(*v, v->active_layer_path())
+            ? smartGuideReferences(*v, layer_selection_anchor(*v))
             : QList<QRectF>();
         if (canvas) {
             const bool reuse = warmValid_ && warmView_ == v && v->move_preview_cache_hit();

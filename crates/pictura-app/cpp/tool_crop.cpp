@@ -8,6 +8,7 @@
 #include "tools.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/crop_group.cxxqt.h"
 
 #include <QtCore/QElapsedTimer>
@@ -456,8 +457,9 @@ public:
             // Snap to the whole composite's bounding box, then the active layer.
             // ponytail: composite_bounds stays a string crossing (deferred).
             addRect(composite_bounds(*v).split(QLatin1Char(' '), Qt::SkipEmptyParts));
-            if (!v->active_layer_path().isEmpty()) {
-                addLayerRect(transform_api::layerRect(*v, v->active_layer_path()));
+            const QString anchor = layer_selection_anchor(*v);
+            if (!anchor.isEmpty()) {
+                addLayerRect(transform_api::layerRect(*v, anchor));
             }
         }
         if (grip == BoxGrip::Move) {

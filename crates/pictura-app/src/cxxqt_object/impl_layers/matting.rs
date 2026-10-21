@@ -10,6 +10,8 @@ use super::super::helpers::{active_layer_visible, active_pixel_layer, active_pix
 use super::super::helpers_composite::selection_to_mask;
 use super::super::qobject::PictureView;
 use super::super::state::PictureViewRust;
+#[cfg(test)]
+use crate::layer_target::LayerTarget;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use pictura_core::{layer_pixel_locked, Layer};
@@ -59,7 +61,7 @@ enum MattingOp {
 /// mask. `None` when there is no document or no single editable active layer;
 /// `Some(Err(_))` when the engine refuses the layer.
 fn apply_matte(rust: &mut PictureViewRust, op: MattingOp) -> Option<Result<(), MattingError>> {
-    let active = rust.active_layer.clone();
+    let active = rust.layer_target.single().map(str::to_string);
     let mask = {
         let doc = rust.doc.as_ref()?;
         rust.selection
@@ -119,7 +121,7 @@ fn matting_target_ready(view: &PictureView) -> bool {
     let Some(doc) = rust.doc.as_ref() else {
         return false;
     };
-    let active = rust.active_layer.as_deref();
+    let active = rust.layer_target.single();
     active_layer_visible(doc, active)
         && active_pixel_layer(doc, active)
             .is_some_and(|layer| !layer_pixel_locked(layer) && has_colour(layer))
@@ -182,7 +184,7 @@ mod tests {
         doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         PictureViewRust {
             doc: Some(doc),
-            active_layer: Some("0".to_string()),
+            layer_target: LayerTarget::only("0"),
             ..Default::default()
         }
     }
@@ -239,7 +241,7 @@ mod tests {
     #[test]
     fn no_active_layer_is_refused() {
         let mut rust = state(pixel_layer(4, 1, [100, 100, 100], vec![128; 4]));
-        rust.active_layer = None;
+        rust.layer_target.clear();
         assert!(apply_matte(&mut rust, MattingOp::Remove(MatteBackground::Black)).is_none());
     }
 }

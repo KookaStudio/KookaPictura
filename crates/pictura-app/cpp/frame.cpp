@@ -1,4 +1,5 @@
 #include "frame_includes.h"
+#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
 
 #include "api/document_api.h"
 #include "api/paint_api.h"
@@ -1129,6 +1130,18 @@ void PicturaMainWindow::applyBrightness(int level)
                                                         : Theme::ThemeFamily::Dark;
     Theme::apply(family, brightnessLevel_);
     applyWorkspaceCanvasColor();
+}
+
+QStringList PicturaMainWindow::selectedLayerPaths() const
+{
+    PictureView* view = activeView();
+    return view ? selected_layer_paths(*view) : QStringList{};
+}
+
+QString PicturaMainWindow::layerAnchor() const
+{
+    PictureView* view = activeView();
+    return view ? layer_selection_anchor(*view) : QString();
 }
 
 } // namespace pictura

@@ -20,14 +20,14 @@ void PicturaMainWindow::wireLayerArrangeStamp()
     const auto enableArrange = [this](const char* id, int op) {
         registry_->setHandler(id, [this, op]() {
             PictureView* view = activeView();
-            const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+            const QString path = layerAnchor();
             if (view && !path.isEmpty() && arrange_layer_run(*view, path, op)) {
                 refresh();
             }
         });
         registry_->setEnabledProvider(id, [this, op]() {
             PictureView* view = activeView();
-            const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+            const QString path = layerAnchor();
             return view && view->has_document() && !path.isEmpty()
                 && arrange_layer_can(*view, path, op);
         });
@@ -39,7 +39,7 @@ void PicturaMainWindow::wireLayerArrangeStamp()
 
     registry_->setHandler(command_ids::LayerArrangeReverse, [this]() {
         PictureView* view = activeView();
-        const QStringList paths = layersPanel_ ? layersPanel_->selectedPaths() : QStringList{};
+        const QStringList paths = selectedLayerPaths();
         if (view && paths.size() >= 2 && reverse_layers_run(*view, paths)) {
             refresh();
         }
@@ -47,13 +47,13 @@ void PicturaMainWindow::wireLayerArrangeStamp()
     registry_->setEnabledProvider(command_ids::LayerArrangeReverse, [this]() {
         PictureView* view = activeView();
         return view && view->has_document() && layersPanel_
-            && layersPanel_->selectedPaths().size() >= 2;
+            && selectedLayerPaths().size() >= 2;
     });
 
     // Stamp Visible / Stamp Selected: composite into a new layer, non-destructive.
     const auto currentLayerVisible = [this]() {
         PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QString path = layerAnchor();
         if (!view || !view->has_document() || path.isEmpty()) {
             return false;
         }
@@ -62,7 +62,7 @@ void PicturaMainWindow::wireLayerArrangeStamp()
     };
     registry_->setHandler(command_ids::LayerStampVisible, [this]() {
         PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QString path = layerAnchor();
         if (view && !path.isEmpty() && !stamp_visible_run(*view, path).isEmpty()) {
             refresh();
         }
@@ -73,8 +73,8 @@ void PicturaMainWindow::wireLayerArrangeStamp()
     });
     registry_->setHandler(command_ids::LayerStampSelected, [this]() {
         PictureView* view = activeView();
-        const QStringList paths = layersPanel_ ? layersPanel_->selectedPaths() : QStringList{};
-        const QString active = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QStringList paths = selectedLayerPaths();
+        const QString active = layerAnchor();
         if (view && !paths.isEmpty() && !active.isEmpty()
             && !stamp_selected_run(*view, paths, active).isEmpty()) {
             refresh();
@@ -83,8 +83,8 @@ void PicturaMainWindow::wireLayerArrangeStamp()
     registry_->setEnabledProvider(command_ids::LayerStampSelected, [this]() {
         PictureView* view = activeView();
         return view && view->has_document() && layersPanel_
-            && !layersPanel_->selectedPaths().isEmpty()
-            && !layersPanel_->currentPath().isEmpty();
+            && !selectedLayerPaths().isEmpty()
+            && !layerAnchor().isEmpty();
     });
 
     // Layer > Lock Layers: apply one lock flag to the panel selection, one state.
@@ -101,7 +101,7 @@ void PicturaMainWindow::wireLayerArrangeStamp()
         const QString flag = QString::fromLatin1(entry.flag);
         registry_->setHandler(entry.id, [this, flag]() {
             PictureView* view = activeView();
-            const QStringList paths = layersPanel_ ? layersPanel_->selectedPaths() : QStringList{};
+            const QStringList paths = selectedLayerPaths();
             if (view && !paths.isEmpty() && view->set_layers_lock(paths, flag, true) > 0) {
                 refresh();
             }
@@ -109,7 +109,7 @@ void PicturaMainWindow::wireLayerArrangeStamp()
         registry_->setEnabledProvider(entry.id, [this]() {
             PictureView* view = activeView();
             return view && view->has_document() && layersPanel_
-                && !layersPanel_->selectedPaths().isEmpty();
+                && !selectedLayerPaths().isEmpty();
         });
     }
 
@@ -117,7 +117,7 @@ void PicturaMainWindow::wireLayerArrangeStamp()
     // row itself when it is a group, else its parent group.
     const auto groupPathForCurrent = [this]() -> QString {
         PictureView* view = activeView();
-        const QString current = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QString current = layerAnchor();
         if (!view || current.isEmpty()) {
             return {};
         }
@@ -152,7 +152,7 @@ void PicturaMainWindow::wireShapeLayerActions()
 {
     const auto currentShapePath = [this]() -> QString {
         PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QString path = layerAnchor();
         if (!view || path.isEmpty() || !shape_is_shape(*view, path)) {
             return QString();
         }

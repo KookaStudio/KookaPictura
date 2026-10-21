@@ -1,3 +1,4 @@
+use crate::layer_target::LayerTarget;
 use pictura_core::{Document, PsdRect};
 use pictura_select::Selection;
 
@@ -58,11 +59,14 @@ enum Stored {
 struct Entry {
     label: String,
     stored: Stored,
+    target_before: LayerTarget,
+    target_after: LayerTarget,
 }
 
 struct Named {
     label: String,
     snapshot: Snapshot,
+    target: LayerTarget,
 }
 
 /// The History Brush's source: a state, a named snapshot, or a state the stack
@@ -95,6 +99,7 @@ pub struct History {
     current: Option<Snapshot>,
     brush_source: BrushSource,
     pinned: Option<Snapshot>,
+    current_target: LayerTarget,
 }
 
 const MAX_DEPTH: usize = 20;
@@ -172,18 +177,26 @@ impl History {
     #[cfg(test)]
     pub fn capture(&mut self, snapshot: Snapshot, label: &str) {
         let Snapshot { mut doc, selection } = snapshot;
-        self.capture_live(&mut doc, &selection, label);
+        self.capture_live(&mut doc, &selection, &LayerTarget::default(), label);
     }
 
     /// Capture the live document as the next state: diff it against the
     /// private current state and store the changed tiles, or start a new
     /// segment when the tracked-plane geometry changed. `doc` is left sharing
     /// no plane with the history, so its next write is in place.
-    pub fn capture_live(&mut self, doc: &mut Document, selection: &Option<Selection>, label: &str) {
+    pub fn capture_live(
+        &mut self,
+        doc: &mut Document,
+        selection: &Option<Selection>,
+        target: &LayerTarget,
+        label: &str,
+    ) {
         if matches!(self.brush_source, BrushSource::State(i) if i > self.cursor) {
             self.pin_source();
         }
         self.states.truncate(self.cursor + 1);
+        let target_before = self.current_target.clone();
+        self.current_target = target.clone();
         let fresh_segment = |doc: &mut Document| {
             (
                 Snapshot {
@@ -225,6 +238,8 @@ impl History {
         self.states.push(Entry {
             label: label.to_string(),
             stored,
+            target_before,
+            target_after: target.clone(),
         });
         self.cursor = self.states.len() - 1;
         while self.states.len() > MAX_DEPTH + 1 {
@@ -242,6 +257,7 @@ impl History {
             return None;
         }
         self.step_to(self.cursor - 1, None);
+        self.current_target = self.states[self.cursor].target_after.clone();
         self.current.clone()
     }
 
@@ -250,6 +266,7 @@ impl History {
             return None;
         }
         self.step_to(self.cursor + 1, None);
+        self.current_target = self.states[self.cursor].target_after.clone();
         self.current.clone()
     }
 
@@ -259,8 +276,9 @@ impl History {
         &mut self,
         doc: &mut Document,
         selection: &mut Option<Selection>,
+        target: &mut LayerTarget,
     ) -> Option<Restored> {
-        (self.cursor > 0).then(|| self.restore_live(self.cursor - 1, doc, selection))
+        (self.cursor > 0).then(|| self.restore_live(self.cursor - 1, doc, selection, target))
     }
 
     /// Redo into the live document in place; `None` at the newest state.
@@ -268,9 +286,10 @@ impl History {
         &mut self,
         doc: &mut Document,
         selection: &mut Option<Selection>,
+        target: &mut LayerTarget,
     ) -> Option<Restored> {
         (self.cursor + 1 < self.states.len())
-            .then(|| self.restore_live(self.cursor + 1, doc, selection))
+            .then(|| self.restore_live(self.cursor + 1, doc, selection, target))
     }
 
     /// Jump the live document to state `i` in place; `None` when out of range.
@@ -279,8 +298,9 @@ impl History {
         i: usize,
         doc: &mut Document,
         selection: &mut Option<Selection>,
+        target: &mut LayerTarget,
     ) -> Option<Restored> {
-        (i < self.states.len()).then(|| self.restore_live(i, doc, selection))
+        (i < self.states.len()).then(|| self.restore_live(i, doc, selection, target))
     }
 
     pub fn can_undo(&self) -> bool {
@@ -310,6 +330,8 @@ impl History {
                     doc: hollow(&current.doc),
                     selection: current.selection.clone(),
                 }),
+                target_before: self.current_target.clone(),
+                target_after: self.current_target.clone(),
             }];
             self.cursor = 0;
         } else {
@@ -363,13 +385,15 @@ impl History {
             return None;
         }
         self.step_to(i, None);
+        self.current_target = self.states[self.cursor].target_after.clone();
         self.current.clone()
     }
 
-    pub fn add_snapshot(&mut self, label: &str, snapshot: Snapshot) {
+    pub fn add_snapshot(&mut self, label: &str, snapshot: Snapshot, target: LayerTarget) {
         self.snapshots.push(Named {
             label: label.to_string(),
             snapshot,
+            target,
         });
         while self.snapshots.len() > MAX_SNAPSHOTS {
             match self.brush_source {
@@ -395,6 +419,17 @@ impl History {
         self.snapshots.get(i).map(|s| s.snapshot.clone())
     }
 
+    /// The layer target captured with named snapshot `i`.
+    pub fn snapshot_target(&self, i: usize) -> Option<LayerTarget> {
+        self.snapshots.get(i).map(|s| s.target.clone())
+    }
+
+    /// Keep the history's idea of the live target current when the user moves
+    /// the layer selection without recording a state.
+    pub fn set_current_target(&mut self, target: &LayerTarget) {
+        self.current_target = target.clone();
+    }
+
     /// Move to `target` and bring the live document there: in place when it
     /// agreed with `current` and no anchor was crossed, otherwise as a fresh
     /// private copy.
@@ -403,7 +438,18 @@ impl History {
         target: usize,
         doc: &mut Document,
         selection: &mut Option<Selection>,
+        layer_target: &mut LayerTarget,
     ) -> Restored {
+        let leaving_after = self
+            .states
+            .get(self.cursor)
+            .map(|entry| entry.target_after.clone())
+            .unwrap_or_default();
+        let arriving_after = self
+            .states
+            .get(target)
+            .map(|entry| entry.target_after.clone())
+            .unwrap_or_default();
         let agreed = self
             .current
             .as_ref()
@@ -422,6 +468,12 @@ impl History {
             *doc = private_copy(&mut cur.doc);
         }
         *selection = cur.selection.clone();
+        if *layer_target == leaving_after {
+            *layer_target = arriving_after;
+        } else {
+            layer_target.retain_resolving(doc);
+        }
+        self.current_target = layer_target.clone();
         if before.is_none_or(|b| display_differs(&b, &cur.doc)) {
             damage.everywhere = true;
         }

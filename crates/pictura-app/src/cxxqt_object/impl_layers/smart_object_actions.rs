@@ -82,6 +82,15 @@ fn smart_object_convert_to_layers(mut view: Pin<&mut PictureView>, path: &QStrin
         None => false,
     };
     if changed {
+        let path = path.to_string();
+        let rust = &mut *view.as_mut().rust_mut();
+        if rust
+            .doc
+            .as_ref()
+            .is_some_and(|doc| pictura_render::resolve_path(doc, &path).is_some())
+        {
+            rust.select_only_layer(&path);
+        }
         view.as_mut().clear_link_sets();
         view.as_mut().recomposite();
         view.as_mut().record("Convert to Layers");
@@ -104,6 +113,7 @@ fn smart_object_new_via_copy(mut view: Pin<&mut PictureView>, path: &QString) ->
     let Some(created) = created else {
         return QString::default();
     };
+    view.as_mut().rust_mut().select_only_layer(&created);
     view.as_mut().clear_link_sets();
     view.as_mut().recomposite();
     view.as_mut().record("New Smart Object via Copy");

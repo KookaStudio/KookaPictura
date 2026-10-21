@@ -306,7 +306,7 @@ impl qobject::PictureView {
     ) -> bool {
         let mut path = path.to_string();
         if path.is_empty() {
-            let Some(active) = self.rust().active_layer.clone() else {
+            let Some(active) = self.rust().layer_target.single().map(str::to_string) else {
                 return false;
             };
             path = active;
@@ -661,9 +661,9 @@ impl qobject::PictureView {
         let new_path = {
             let mut guard = self.as_mut().rust_mut();
             let rust = &mut *guard;
-            let (doc, active_layer) = (&mut rust.doc, &mut rust.active_layer);
+            let (doc, layer_target) = (&mut rust.doc, &mut rust.layer_target);
             let doc = doc.as_mut();
-            let duplicate = doc.and_then(|d| duplicate_move_target(d, active_layer));
+            let duplicate = doc.and_then(|d| duplicate_move_target(d, layer_target));
             let Some(new_path) = duplicate else {
                 return false;
             };
@@ -708,7 +708,7 @@ impl qobject::PictureView {
     pub(super) fn move_cache_target(&self) -> Option<String> {
         let rust = self.rust();
         let doc = rust.doc.as_ref()?;
-        let path = rust.active_layer.as_deref()?;
+        let path = rust.layer_target.single()?;
         active_pixel_layer(doc, Some(path))?;
         Some(path.to_string())
     }

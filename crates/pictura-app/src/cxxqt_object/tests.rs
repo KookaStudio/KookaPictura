@@ -3,6 +3,7 @@ use super::helpers_composite::*;
 use super::impl_core::{finalize_import, format_for_path, raster_writer_for_suffix};
 use super::impl_transform::{build_move_preview_base, duplicate_move_target};
 use crate::history::{History, Snapshot};
+use crate::layer_target::LayerTarget;
 use pictura_core::{
     BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LayerBlock, LayerMask,
     LockFlags, PixelBuffer, PsdRect,
@@ -568,12 +569,12 @@ fn duplicate_move_target_duplicates_and_repoints_the_active_layer() {
         pixel_layer("base", 8, 8, (30, 60, 90)),
         pixel_layer("top", 8, 8, (200, 100, 50)),
     ]);
-    let mut active = Some("1".to_string());
-    let new_path = duplicate_move_target(&mut doc, &mut active).expect("duplicate");
+    let mut target = LayerTarget::only("1");
+    let new_path = duplicate_move_target(&mut doc, &mut target).expect("duplicate");
     assert_eq!(new_path, "2");
     assert_eq!(doc.layers.len(), 3, "one layer is added");
     assert_eq!(doc.layers[2].name, "top copy");
-    assert_eq!(active.as_deref(), Some("2"), "the copy becomes active");
+    assert_eq!(target.single(), Some("2"), "the copy becomes active");
 }
 
 #[test]
@@ -583,14 +584,14 @@ fn duplicate_move_target_refuses_hidden_and_locked() {
     let mut doc = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
     doc.layers =
         pictura_core::LayerStack::from_layers(vec![pixel_layer("base", 8, 8, (0, 0, 0)), hidden]);
-    let mut active = Some("1".to_string());
+    let mut target = LayerTarget::only("1");
     let before = doc.clone();
     assert!(
-        duplicate_move_target(&mut doc, &mut active).is_none(),
+        duplicate_move_target(&mut doc, &mut target).is_none(),
         "a hidden target refuses"
     );
     assert_eq!(doc, before, "a hidden target refuses without mutation");
-    assert_eq!(active.as_deref(), Some("1"));
+    assert_eq!(target.single(), Some("1"));
 
     // A position-locked target refuses without mutating the document or the
     // active path, and a group is not a target at all.
@@ -598,17 +599,17 @@ fn duplicate_move_target_refuses_hidden_and_locked() {
     locked.layers =
         pictura_core::LayerStack::from_layers(vec![pixel_layer("base", 8, 8, (0, 0, 0))]);
     locked.layers[0].lock = LockFlags::default().with(LockFlags::POSITION, true);
-    let mut active = Some("0".to_string());
+    let mut target = LayerTarget::only("0");
     let before = locked.clone();
-    assert!(duplicate_move_target(&mut locked, &mut active).is_none());
+    assert!(duplicate_move_target(&mut locked, &mut target).is_none());
     assert_eq!(locked, before, "a locked target refuses without mutation");
-    assert_eq!(active.as_deref(), Some("0"));
+    assert_eq!(target.single(), Some("0"));
 
     let mut group = pixel_layer("group", 8, 8, (0, 0, 0));
     group.is_group = true;
     let mut doc = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = pictura_core::LayerStack::from_layers(vec![group]);
-    assert!(duplicate_move_target(&mut doc, &mut Some("0".to_string())).is_none());
+    assert!(duplicate_move_target(&mut doc, &mut LayerTarget::only("0")).is_none());
 }
 
 #[test]
@@ -626,8 +627,8 @@ fn move_duplicate_records_one_state_and_undo_restores_the_layer_count() {
     );
     let before = history.count();
 
-    let mut active = Some("0".to_string());
-    let new_path = duplicate_move_target(&mut doc, &mut active).expect("duplicate");
+    let mut target = LayerTarget::only("0");
+    let new_path = duplicate_move_target(&mut doc, &mut target).expect("duplicate");
     assert_eq!(history.count(), before, "the drag start records no state");
 
     // The commit: translate the clone, then the bridge's one `record_move`.

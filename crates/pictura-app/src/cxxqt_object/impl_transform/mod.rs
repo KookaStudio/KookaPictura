@@ -10,6 +10,7 @@ mod warp;
 
 use super::helpers::*;
 use super::helpers_composite::*;
+use crate::layer_target::LayerTarget;
 use cxx_qt_lib::QImage;
 use pictura_core::{layer_move_locked, Document};
 
@@ -54,14 +55,14 @@ pub(super) fn build_move_preview_base(doc: &mut Document, path: &str, gpu_comput
 /// Duplicate the active pixel layer, repointing `active` at the copy's path.
 pub(super) fn duplicate_move_target(
     doc: &mut Document,
-    active: &mut Option<String>,
+    target: &mut LayerTarget,
 ) -> Option<String> {
-    let path = active.clone()?;
+    let path = target.single()?.to_string();
     let layer = active_pixel_layer(doc, Some(&path))?;
     if !layer.visible || layer_move_locked(layer) {
         return None;
     }
     let new_path = pictura_render::duplicate_paths(doc, &[path.as_str()]).pop()?;
-    *active = Some(new_path.clone());
+    target.select_only(&new_path);
     Some(new_path)
 }

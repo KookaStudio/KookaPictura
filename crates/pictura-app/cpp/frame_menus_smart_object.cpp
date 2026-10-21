@@ -14,7 +14,7 @@ void PicturaMainWindow::wireAdvancedSmartObjectActions()
     // Reset Transform / Convert to Layers need an embedded PSD/PSB source.
     const auto currentResettableSmartPath = [this]() -> QString {
         PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QString path = layerAnchor();
         if (!view || path.isEmpty() || !layer_can_reset_smart_object_transform(*view, path)) {
             return QString();
         }
@@ -36,7 +36,7 @@ void PicturaMainWindow::wireAdvancedSmartObjectActions()
 
     const auto currentConvertibleToLayersPath = [this]() -> QString {
         PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QString path = layerAnchor();
         if (!view || path.isEmpty() || !layer_can_convert_smart_object_to_layers(*view, path)) {
             return QString();
         }
@@ -60,7 +60,7 @@ void PicturaMainWindow::wireAdvancedSmartObjectActions()
     // copy is selected after it is inserted.
     const auto currentCopyableSmartPath = [this]() -> QString {
         PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QString path = layerAnchor();
         if (!view || path.isEmpty() || !layer_can_new_smart_object_via_copy(*view, path)) {
             return QString();
         }
@@ -148,7 +148,7 @@ void PicturaMainWindow::wireSmartFilterActions()
     // layer, recording one state. Enabled only when the current layer has one.
     const auto currentSmartFilterPath = [this]() -> QString {
         PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QString path = layerAnchor();
         if (!view || path.isEmpty() || layer_smart_filter_count(*view, path) <= 0) {
             return QString();
         }

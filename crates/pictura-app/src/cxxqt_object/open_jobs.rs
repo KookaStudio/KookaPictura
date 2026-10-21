@@ -18,6 +18,7 @@ use super::pdf_export::import::ffi::ImportTarget;
 use super::qobject::PictureView;
 use super::state::PictureViewRust;
 use crate::history::History;
+use crate::layer_target::LayerTarget;
 use core::pin::Pin;
 use cxx_qt::{CxxQtThread, CxxQtType, Threading};
 use cxx_qt_lib::{QString, QStringList};
@@ -105,7 +106,7 @@ pub(super) enum OpenedPath {
 pub(super) struct OpenedDocument {
     pub(super) doc: Document,
     pub(super) history: History,
-    pub(super) active_layer: Option<String>,
+    pub(super) target: LayerTarget,
     pub(super) path: OpenedPath,
     pub(super) source_format: String,
     pub(super) pdf_password: Option<String>,
@@ -152,7 +153,7 @@ pub(super) fn apply_opened(rust: &mut PictureViewRust, opened: OpenedDocument) {
     rust.document_generation = rust.document_generation.wrapping_add(1);
     rust.reset_edit_state();
     rust.history = opened.history;
-    rust.active_layer = opened.active_layer;
+    rust.set_layer_target(opened.target);
     match opened.path {
         OpenedPath::Set(path) => rust.path = path,
         OpenedPath::Keep => {}
@@ -162,9 +163,9 @@ pub(super) fn apply_opened(rust: &mut PictureViewRust, opened: OpenedDocument) {
     rust.dirty = false;
 }
 
-fn history_for(doc: &mut Document, label: &str) -> History {
+fn history_for(doc: &mut Document, target: &LayerTarget, label: &str) -> History {
     let mut history = History::default();
-    history.capture_live(doc, &None, label);
+    history.capture_live(doc, &None, target, label);
     history
 }
 
@@ -183,12 +184,12 @@ pub(super) fn decode_psd(
     let rendered = current_buffer(&doc, gpu);
     store_composite(&mut doc, &rendered);
     progress(90, "Preparing layers");
-    let active_layer = topmost_pixel_layer_index(&doc).map(|i| i.to_string());
-    let history = history_for(&mut doc, "Open");
+    let target = LayerTarget::for_opened(&doc, None);
+    let history = history_for(&mut doc, &target, "Open");
     Some(OpenedDocument {
         doc,
         history,
-        active_layer,
+        target,
         path: OpenedPath::Set(Some(path.to_string())),
         source_format: "psd".to_string(),
         pdf_password: None,
@@ -215,11 +216,12 @@ pub(super) fn decode_image(
     let rendered = current_buffer(&doc, gpu);
     store_composite(&mut doc, &rendered);
     progress(90, "Preparing layers");
-    let history = history_for(&mut doc, "Open");
+    let target = LayerTarget::for_opened(&doc, Some("0".to_string()));
+    let history = history_for(&mut doc, &target, "Open");
     Some(OpenedDocument {
         doc,
         history,
-        active_layer: Some("0".to_string()),
+        target,
         path: OpenedPath::Keep,
         source_format: format_for_path(path),
         pdf_password: None,
@@ -257,11 +259,12 @@ pub(super) fn decode_smart_object(
     let rendered = current_buffer(&doc, gpu);
     store_composite(&mut doc, &rendered);
     progress(90, "Preparing layers");
-    let history = history_for(&mut doc, "Open As Smart Object");
+    let target = LayerTarget::for_opened(&doc, Some("0".to_string()));
+    let history = history_for(&mut doc, &target, "Open As Smart Object");
     Some(OpenedDocument {
         doc,
         history,
-        active_layer: Some("0".to_string()),
+        target,
         path: OpenedPath::Set(None),
         source_format: "psd".to_string(),
         pdf_password: None,
@@ -282,12 +285,12 @@ fn decode_pdf_psd(
     let rendered = current_buffer(&doc, gpu);
     store_composite(&mut doc, &rendered);
     progress(90, "Preparing layers");
-    let active_layer = topmost_pixel_layer_index(&doc).map(|i| i.to_string());
-    let history = history_for(&mut doc, "Open");
+    let target = LayerTarget::for_opened(&doc, None);
+    let history = history_for(&mut doc, &target, "Open");
     Some(OpenedDocument {
         doc,
         history,
-        active_layer,
+        target,
         path: OpenedPath::Set(Some(path.to_string())),
         source_format: "pdf".to_string(),
         pdf_password: (!password.is_empty()).then(|| password.to_string()),
@@ -410,11 +413,12 @@ pub(super) fn imported_document(
     let rendered = current_buffer(&doc, gpu);
     store_composite(&mut doc, &rendered);
     progress(95, "Preparing layers");
-    let history = history_for(&mut doc, "Open");
+    let target = LayerTarget::for_opened(&doc, Some("0".to_string()));
+    let history = history_for(&mut doc, &target, "Open");
     Some(OpenedDocument {
         doc,
         history,
-        active_layer: Some("0".to_string()),
+        target,
         path: OpenedPath::Set(None),
         source_format: "psd".to_string(),
         pdf_password: None,

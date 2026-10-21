@@ -5,7 +5,7 @@
 //!
 //! [`PictureView`]: super::qobject::PictureView
 
-use super::helpers::list_of_strings;
+use super::helpers::{join_path, list_of_strings};
 use super::qobject::PictureView;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -106,27 +106,41 @@ fn arrange_layer_run(mut view: Pin<&mut PictureView>, path: &QString, arrange: i
     let Some(op) = arrange_kind(arrange) else {
         return false;
     };
-    let changed = match view.as_mut().rust_mut().doc.as_mut() {
-        Some(doc) => pictura_render::arrange_path(doc, &path.to_string(), op),
-        None => false,
+    let path = path.to_string();
+    let landed = match view.as_mut().rust_mut().doc.as_mut() {
+        Some(doc) => pictura_render::arrange_path_index(doc, &path, op).map(|index| {
+            let parent = pictura_render::parent_path(&path).unwrap_or("");
+            join_path(parent, index)
+        }),
+        None => None,
     };
-    if changed {
-        finish(view, "Arrange Layer");
-    }
-    changed
+    let Some(landed) = landed else {
+        return false;
+    };
+    view.as_mut().rust_mut().select_only_layer(&landed);
+    finish(view, "Arrange Layer");
+    true
 }
 
 fn reverse_layers_run(mut view: Pin<&mut PictureView>, paths: &QStringList) -> bool {
     let owned = list_of_strings(paths);
     let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
-    let changed = match view.as_mut().rust_mut().doc.as_mut() {
-        Some(doc) => pictura_render::reverse_paths(doc, &refs),
-        None => false,
+    let reversed = match view.as_mut().rust_mut().doc.as_mut() {
+        Some(doc) => pictura_render::reverse_paths_result(doc, &refs),
+        None => None,
     };
-    if changed {
-        finish(view, "Reverse Layers");
+    let Some(reversed) = reversed else {
+        return false;
+    };
+    {
+        let rust = &mut *view.as_mut().rust_mut();
+        let mut target = rust.layer_target.clone();
+        let anchor = target.anchor().map(str::to_string);
+        target.select(reversed, anchor, rust.doc.as_ref());
+        rust.set_layer_target(target);
     }
-    changed
+    finish(view, "Reverse Layers");
+    true
 }
 
 fn stamp_visible_run(mut view: Pin<&mut PictureView>, path: &QString) -> QString {
@@ -156,9 +170,10 @@ fn stamp_selected_run(
     stamp_result(view, created, "Stamp Selected")
 }
 
-fn stamp_result(view: Pin<&mut PictureView>, created: Option<String>, label: &str) -> QString {
+fn stamp_result(mut view: Pin<&mut PictureView>, created: Option<String>, label: &str) -> QString {
     match created {
         Some(path) => {
+            view.as_mut().rust_mut().select_only_layer(&path);
             finish(view, label);
             QString::from(path.as_str())
         }

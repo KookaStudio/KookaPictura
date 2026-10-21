@@ -1,4 +1,5 @@
 #include "frame_includes.h"
+#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
 
 #include "pictura_app/src/cxxqt_object/color_range.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_selection/refine.cxxqt.h"
@@ -121,18 +122,24 @@ void PicturaMainWindow::registerSelectHandlers()
         if (paths.isEmpty()) {
             return;
         }
-        layersPanel_->selectPaths(paths, paths.value(0));
+        set_layer_target(*view, paths, paths.value(0));
+        if (layersPanel_) {
+            layersPanel_->refresh();
+        }
         refresh();
     });
     registry_->setHandler(command_ids::SelectDeselectLayers, [this]() {
-        if (layersPanel_) {
-            layersPanel_->selectPaths(QStringList{}, QString());
+        if (PictureView* view = activeView()) {
+            clear_layer_target(*view);
+            if (layersPanel_) {
+                layersPanel_->refresh();
+            }
             refresh();
         }
     });
     registry_->setHandler(command_ids::SelectSimilarLayers, [this]() {
         PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QString path = layerAnchor();
         if (!view || path.isEmpty()) {
             return;
         }
@@ -140,8 +147,9 @@ void PicturaMainWindow::registerSelectHandlers()
         if (!matched.contains(path)) {
             matched.prepend(path);
         }
+        set_layer_target(*view, matched, path);
         if (layersPanel_) {
-            layersPanel_->selectPaths(matched, path);
+            layersPanel_->refresh();
         }
         refresh();
     });
@@ -177,7 +185,7 @@ void PicturaMainWindow::registerSelectHandlers()
     });
     registry_->setEnabledProvider(command_ids::SelectSimilarLayers, [this]() {
         return activeView() && activeView()->has_document() && layersPanel_
-            && !layersPanel_->currentPath().isEmpty();
+            && !layerAnchor().isEmpty();
     });
 
     // Select > Color Range…: non-modal, so its eyedropper reaches the canvas;

@@ -147,6 +147,7 @@ fn copy_layer_from_document(
     let Some(created) = created else {
         return QString::default();
     };
+    view.as_mut().rust_mut().select_only_layer(&created);
     view.as_mut().clear_link_sets();
     view.as_mut().recomposite();
     view.as_mut().record("Duplicate Layer");
@@ -284,6 +285,7 @@ fn clipboard_paste(
     if let Some(selection) = rust.selection.take() {
         rust.deselected_selection = Some(selection);
     }
+    view.as_mut().rust_mut().select_only_layer(&created);
     view.as_mut().clear_link_sets();
     // The paste only adds a layer, so its bounded rect bounds the composite change.
     let region = view

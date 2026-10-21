@@ -380,7 +380,7 @@ fn jump_restores_state_and_moves_position() {
 fn snapshots_are_capped_and_restorable() {
     let mut history = History::default();
     for i in 0..12u8 {
-        history.add_snapshot(&format!("snap {i}"), snap(i));
+        history.add_snapshot(&format!("snap {i}"), snap(i), LayerTarget::default());
     }
     assert_eq!(history.snapshot_count(), 10);
     // The two oldest snapshots were dropped.
@@ -437,7 +437,7 @@ fn the_brush_source_follows_its_state_and_is_pinned_before_it_is_dropped() {
     );
 
     for i in 0..11u8 {
-        history.add_snapshot("s", snap(100 + i));
+        history.add_snapshot("s", snap(100 + i), LayerTarget::default());
         if i == 0 {
             assert!(history.set_brush_source(BrushSource::Snapshot(0)));
         }
@@ -861,8 +861,9 @@ fn live_restores_match_a_full_snapshot_history() {
         live.composite.data = (0..(w * h * 3) as usize).map(|i| (i % 251) as u8).collect();
         live.layers = pictura_core::LayerStack::from_layers(vec![model_layer("base", w, h, 1)]);
         let mut selection: Option<Selection> = None;
+        let mut target = LayerTarget::default();
         let mut history = History::default();
-        history.capture_live(&mut live, &selection, "Open");
+        history.capture_live(&mut live, &selection, &target, "Open");
         let mut reference = vec![Snapshot {
             doc: live.clone(),
             selection: selection.clone(),
@@ -875,11 +876,11 @@ fn live_restores_match_a_full_snapshot_history() {
             if restore {
                 let before = live.composite.data.clone();
                 let restored = match op {
-                    9 => history.undo_live(&mut live, &mut selection),
-                    10 => history.redo_live(&mut live, &mut selection),
+                    9 => history.undo_live(&mut live, &mut selection, &mut target),
+                    10 => history.redo_live(&mut live, &mut selection, &mut target),
                     11 => {
                         let i = rng.below(reference.len());
-                        history.jump_live(i, &mut live, &mut selection)
+                        history.jump_live(i, &mut live, &mut selection, &mut target)
                     }
                     _ => history.undo().map(|s| {
                         live = s.doc;
@@ -939,7 +940,7 @@ fn live_restores_match_a_full_snapshot_history() {
                     7 => live.layers[0].opacity = rng.next() as u8,
                     _ => selection = Some(Selection::rect(w, h, 2, 3, 1 + rng.below(20) as i32, 4)),
                 }
-                history.capture_live(&mut live, &selection, "Edit");
+                history.capture_live(&mut live, &selection, &target, "Edit");
                 reference.truncate(cursor + 1);
                 reference.push(Snapshot {
                     doc: live.clone(),
@@ -997,15 +998,115 @@ fn undoing_a_reorder_of_equal_layers_reports_the_whole_document() {
         model_layer("b", w, h, 90),
     ]);
     let mut selection: Option<Selection> = None;
+    let mut target = LayerTarget::default();
     let mut history = History::default();
-    history.capture_live(&mut live, &selection, "Open");
+    history.capture_live(&mut live, &selection, &target, "Open");
     let open = live.clone();
 
     assert!(live.layers.move_node(&[0], &[], 2).is_ok());
-    history.capture_live(&mut live, &selection, "Reorder");
+    history.capture_live(&mut live, &selection, &target, "Reorder");
     assert_eq!(history.anchor_count(), 2, "a reorder starts a new segment");
 
-    let restored = history.undo_live(&mut live, &mut selection);
+    let restored = history.undo_live(&mut live, &mut selection, &mut target);
     assert_eq!(restored, Some(Restored::Everywhere));
     assert!(live == open, "undo restores the original order");
+}
+
+fn layered_doc(count: usize) -> Document {
+    let mut doc = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
+    let layers = (0..count)
+        .map(|index| Layer {
+            name: format!("layer {index}"),
+            rect: pictura_core::PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 8,
+                right: 8,
+            },
+            ..Layer::default()
+        })
+        .collect();
+    doc.layers = pictura_core::LayerStack::from_layers(layers);
+    doc
+}
+
+#[test]
+fn undo_restores_layer_target() {
+    let mut live = layered_doc(3);
+    let selection = None;
+    let mut history = History::default();
+    history.capture_live(&mut live, &selection, &LayerTarget::only("1"), "Open");
+    history.capture_live(&mut live, &selection, &LayerTarget::only("0"), "Edit");
+    let mut target = LayerTarget::only("0");
+    let mut no_selection: Option<Selection> = None;
+    history.undo_live(&mut live, &mut no_selection, &mut target);
+    assert_eq!(target, LayerTarget::only("1"));
+}
+
+#[test]
+fn undo_keeps_a_later_selection() {
+    let mut live = layered_doc(3);
+    let selection = None;
+    let mut history = History::default();
+    history.capture_live(&mut live, &selection, &LayerTarget::only("1"), "Open");
+    history.capture_live(&mut live, &selection, &LayerTarget::only("0"), "Edit");
+    let mut target = LayerTarget::only("2");
+    let mut no_selection: Option<Selection> = None;
+    history.undo_live(&mut live, &mut no_selection, &mut target);
+    assert_eq!(target, LayerTarget::only("2"));
+}
+
+#[test]
+fn redo_restores_post_operation_target() {
+    let mut live = layered_doc(3);
+    let selection = None;
+    let mut history = History::default();
+    history.capture_live(&mut live, &selection, &LayerTarget::only("1"), "Open");
+    history.capture_live(&mut live, &selection, &LayerTarget::only("0"), "Edit");
+    let mut target = LayerTarget::only("0");
+    let mut no_selection: Option<Selection> = None;
+    history.undo_live(&mut live, &mut no_selection, &mut target);
+    history.redo_live(&mut live, &mut no_selection, &mut target);
+    assert_eq!(target, LayerTarget::only("0"));
+}
+
+#[test]
+fn jump_restores_target_across_multiple_states() {
+    let mut live = layered_doc(3);
+    let selection = None;
+    let mut history = History::default();
+    history.capture_live(&mut live, &selection, &LayerTarget::only("0"), "Open");
+    history.capture_live(&mut live, &selection, &LayerTarget::only("1"), "Edit 1");
+    history.capture_live(&mut live, &selection, &LayerTarget::only("2"), "Edit 2");
+    let mut target = LayerTarget::only("2");
+    let mut no_selection: Option<Selection> = None;
+    let _ = history.jump_live(0, &mut live, &mut no_selection, &mut target);
+    assert_eq!(target, LayerTarget::only("0"));
+    let _ = history.jump_live(2, &mut live, &mut no_selection, &mut target);
+    assert_eq!(target, LayerTarget::only("2"));
+}
+
+#[test]
+fn named_snapshot_restores_layer_target() {
+    let mut live = layered_doc(3);
+    let selection = None;
+    let mut history = History::default();
+    history.capture_live(&mut live, &selection, &LayerTarget::only("1"), "Open");
+    history.add_snapshot("Named", snap(3), LayerTarget::only("1"));
+    assert_eq!(history.snapshot_target(0), Some(LayerTarget::only("1")));
+}
+
+#[test]
+fn undo_restores_structural_target() {
+    let mut live = layered_doc(3);
+    let selection = None;
+    let mut history = History::default();
+    history.capture_live(&mut live, &selection, &LayerTarget::only("2"), "Open");
+    live.layers =
+        pictura_core::LayerStack::from_layers(live.layers.iter().take(2).cloned().collect());
+    history.capture_live(&mut live, &selection, &LayerTarget::only("1"), "Delete");
+    let mut target = LayerTarget::only("1");
+    let mut no_selection: Option<Selection> = None;
+    history.undo_live(&mut live, &mut no_selection, &mut target);
+    assert_eq!(target, LayerTarget::only("2"));
 }

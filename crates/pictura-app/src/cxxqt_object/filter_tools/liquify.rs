@@ -211,7 +211,7 @@ fn liquify_begin(view: &PictureView) -> bool {
     let Some(doc) = rust.doc.as_ref() else {
         return false;
     };
-    let Some(layer) = active_pixel_layer(doc, rust.active_layer.as_deref()) else {
+    let Some(layer) = active_pixel_layer(doc, rust.layer_target.single()) else {
         return false;
     };
     let (w, h) = (layer.rect.width(), layer.rect.height());
@@ -280,7 +280,7 @@ fn liquify_grid_lines(x0: f64, y0: f64, x1: f64, y1: f64, spacing: f64, step: f6
 fn liquify_backdrop(mut view: Pin<&mut PictureView>, path: &QString) -> QImage {
     let mut rust = view.as_mut().rust_mut();
     let gpu_compute = rust.gpu_compute;
-    let Some(active) = rust.active_layer.clone() else {
+    let Some(active) = rust.layer_target.single().map(str::to_string) else {
         return QImage::default();
     };
     let Some(doc) = rust.doc.as_mut() else {

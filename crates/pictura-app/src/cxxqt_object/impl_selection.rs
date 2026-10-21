@@ -182,7 +182,7 @@ impl qobject::PictureView {
             self.as_mut().record("Move Selection");
             return true;
         }
-        let active = self.rust().active_layer.clone();
+        let active = self.rust().layer_target.single().map(str::to_string);
         let prepared = {
             let rust = self.rust();
             let (Some(doc), Some(selection)) = (
@@ -226,7 +226,7 @@ impl qobject::PictureView {
                 // `layer_via_copy` inserts the copy directly above the source
                 // in the source's own container.
                 if let Some(copy) = layer_above(&path) {
-                    rust.active_layer = Some(copy);
+                    rust.select_only_layer(&copy);
                 }
             }
         }
@@ -257,7 +257,7 @@ impl qobject::PictureView {
                 .selection_move_origin
                 .as_ref()
                 .or(rust.selection.as_ref());
-            let (Some(selection), Some(path)) = (selection, rust.active_layer.as_deref()) else {
+            let (Some(selection), Some(path)) = (selection, rust.layer_target.single()) else {
                 return false;
             };
             if !active_layer_visible(doc, Some(path)) {

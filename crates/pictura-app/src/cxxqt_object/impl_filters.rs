@@ -3,6 +3,8 @@ use super::helpers::*;
 use super::helpers_composite::*;
 use super::qobject;
 use super::state::{FilterPreview, PictureViewRust, PreviewBaseline};
+#[cfg(test)]
+use crate::layer_target::LayerTarget;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -62,7 +64,7 @@ impl qobject::PictureView {
                 .as_ref()
                 .map(|selection| selection_to_mask(selection, doc))
         };
-        let active = self.rust().active_layer.clone();
+        let active = self.rust().layer_target.single().map(str::to_string);
         let applied = {
             let mut rust = self.as_mut().rust_mut();
             let gpu_compute = rust.gpu_compute;
@@ -308,7 +310,7 @@ pub(super) fn pixel_filter_target(rust: &mut PictureViewRust) -> Option<String> 
         rust.filter_error = Some("there is no document".to_string());
         return None;
     };
-    let active = rust.active_layer.as_deref();
+    let active = rust.layer_target.single();
     if !active_layer_visible(doc, active) {
         rust.filter_error = Some("the active layer is hidden".to_string());
         return None;
@@ -596,7 +598,7 @@ mod tests {
         doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         PictureViewRust {
             doc: Some(doc),
-            active_layer: Some("0".to_string()),
+            layer_target: LayerTarget::only("0"),
             gpu_compute: false,
             ..Default::default()
         }
@@ -635,7 +637,7 @@ mod tests {
         doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         PictureViewRust {
             doc: Some(doc),
-            active_layer: Some("0".to_string()),
+            layer_target: LayerTarget::only("0"),
             gpu_compute: false,
             ..Default::default()
         }
@@ -684,7 +686,7 @@ mod tests {
         {
             let _ = rust.doc.as_mut().unwrap().layers.push(adj);
         };
-        rust.active_layer = Some("1".to_string());
+        rust.select_only_layer("1");
         assert!(apply_filter_active(&mut rust, "gaussian-blur", &[2.0], true).is_none());
         assert_eq!(red(&rust), pixel_before, "pixel layer untouched");
         assert!(rust.last_filter.is_none());
@@ -706,7 +708,7 @@ mod tests {
             .as_ref()
             .is_some_and(|p| p.layer_path == "0"));
         // Switching the active layer must not steal layer 0's baseline.
-        rust.active_layer = Some("1".to_string());
+        rust.select_only_layer("1");
         assert!(apply_filter_active(&mut rust, "gaussian-blur", &[4.0], false).is_none());
         assert!(rust
             .filter_preview

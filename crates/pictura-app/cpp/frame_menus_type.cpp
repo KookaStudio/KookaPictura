@@ -13,7 +13,7 @@ void PicturaMainWindow::wireTypeMenu()
     // type, else empty.
     const auto convertible = [this](bool paragraph) -> QString {
         PictureView* view = activeView();
-        const QString path = layersPanel_ ? layersPanel_->currentPath() : QString();
+        const QString path = layerAnchor();
         if (!view || path.isEmpty() || !type_api::isType(*view, path)
             || type_api::isParagraph(*view, path) != paragraph) {
             return QString();

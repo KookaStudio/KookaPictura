@@ -4,6 +4,7 @@
 #include "icons.h"
 #include "theme.h"
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/channels.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
 
@@ -405,7 +406,7 @@ void ChannelsPanel::applyChannelSolo(int row)
         return;
     }
     if (row >= 0 && row == maskRowIndex_) {
-        mask_solo_set(*view_, view_->active_layer_path());
+        mask_solo_set(*view_, layer_selection_anchor(*view_));
     } else {
         mask_solo_set(*view_, QString());
     }

@@ -416,7 +416,7 @@ impl qobject::PictureView {
             let Some(doc) = rust.doc.as_ref() else {
                 return false;
             };
-            let Some(path) = rust.active_layer.as_deref() else {
+            let Some(path) = rust.layer_target.single() else {
                 return false;
             };
             if active_pixel_layer(doc, Some(path)).is_none()
