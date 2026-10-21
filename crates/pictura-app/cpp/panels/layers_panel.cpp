@@ -624,6 +624,16 @@ void LayersPanel::refresh()
     }
 
     applyTargetSelection();
+    // The current row can sit outside the selection (Ctrl+arrow in the tree).
+    // The target's anchor is the current row's counterpart, so projecting the
+    // target would drag the cursor back onto the selection; keep the row the
+    // user put it on.
+    if (!selectedPath.isEmpty() && !targetPaths().contains(selectedPath)) {
+        const QModelIndex index = proxyIndexForPath(selectedPath);
+        if (index.isValid()) {
+            tree_->selectionModel()->setCurrentIndex(index, QItemSelectionModel::NoUpdate);
+        }
+    }
     if (wasEditing) {
         const QModelIndex editIndex = proxyIndexForPath(selectedPath);
         if (editIndex.isValid()) {
