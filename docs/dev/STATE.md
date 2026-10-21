@@ -11,6 +11,33 @@ Snapshot for resuming after a context break. Update after each milestone.
   (`docs/00-overview/licensing-and-provenance.md`).
 - **Provenance history:** the git history was rewritten so no reachable commit
   contains reproduced Adobe Help prose or the old wording.
+- **Justified text renders justified** (#792, branch
+  `fix/792-justify-text-renders-left`, OpenSpec change
+  `2026-10-21-justify-text-renders-left`). A type layer whose paragraph
+  justification was 3 to 6 - Justify Last Left, Justify Last Right, Justify
+  Last Center and Justify All - rendered left-aligned: the renderer collapsed
+  the seven justification values the engine models to three alignments, and
+  nothing spread a line to the column width. The codec, the Paragraph panel
+  and the Paragraph Style dialog already carried all seven, so the panel's own
+  choices did nothing.
+  - The renderer keeps the justification kind. A justified line's word spaces
+    take the leftover width, so the line's advance reaches the column; the
+    paragraph's last line is the one line a justification does not spread, and
+    its variant aligns it.
+  - The column is the paragraph box's width. A point-type layer has no box and
+    so no column: its lines are not spread, and the variant still selects the
+    line's alignment. A line with no word space to spread stays flush left.
+  - The vertical placement follows the same table read as CS6's vertical
+    justification: Justify Last Left is the top, Justify Last Right the
+    bottom, Justify Last Center the centre.
+  - The caret measures the same spread, so it stands between the painted
+    glyphs; converting a justified paragraph to point text drops the spread
+    and anchors the lines as the paragraph's last line was.
+  Ceiling (`ponytail:`): the word-spacing min/desired/max bounds, the letter
+  spacing and the glyph scaling are not applied - the spread divides the
+  leftover width evenly - the spread is computed for left-to-right text, and
+  the Qt `Rasterize Type` path still collapses the justify variants to
+  `Qt::AlignLeft`.
 - **Plain-Rust document session** (#740, branch
   `refactor/740-rust-document-session`, OpenSpec change `document-session`,
   archived into `document/document-session`). The document, the selection, and
