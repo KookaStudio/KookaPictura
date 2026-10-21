@@ -81,17 +81,11 @@ impl PictureViewRust {
         if matches!(edit, Edit::Structural) {
             self.link_sets.clear();
         }
-        if let Some(doc) = self.session.doc.as_mut() {
-            self.session.history.capture_live(
-                doc,
-                &self.session.selection,
-                &self.layer_target,
-                label,
-            );
-            self.session.dirty = true;
-            if bump_revision {
-                self.session.content_revision = self.session.content_revision.wrapping_add(1);
-            }
+        let target = self.layer_target.clone();
+        if bump_revision {
+            self.session.record(&target, label);
+        } else {
+            self.session.record_move(&target, label);
         }
         Applied { edit, blit }
     }

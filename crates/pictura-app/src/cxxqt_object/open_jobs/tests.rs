@@ -141,17 +141,44 @@ fn cancelled_open_result_is_dropped() {
     let (path, _) = white_psd();
     let opened =
         decode_psd(path.to_str().unwrap(), Policy::Preserve, false, &|_, _| {}).expect("decode");
-    let mut rust = PictureViewRust {
-        open_cancelled: true,
-        ..PictureViewRust::default()
-    };
-    assert!(!apply_if_live(&mut rust, Some(opened)));
+    let mut rust = PictureViewRust::default();
+    let request = rust.begin_open_request();
+    rust.open_cancelled = true;
+    assert!(!apply_if_current(&mut rust, request, Some(opened)));
     assert!(rust.session.doc.is_none());
 
     let opened =
         decode_psd(path.to_str().unwrap(), Policy::Preserve, false, &|_, _| {}).expect("decode");
     rust.open_cancelled = false;
-    assert!(apply_if_live(&mut rust, Some(opened)));
+    assert!(apply_if_current(&mut rust, request, Some(opened)));
+    assert!(rust.session.doc.is_some());
+    std::fs::remove_file(path).ok();
+}
+
+#[test]
+fn a_stale_async_install_is_discarded() {
+    let (path, _) = white_psd();
+    let opened =
+        decode_psd(path.to_str().unwrap(), Policy::Preserve, false, &|_, _| {}).expect("decode");
+    let mut rust = PictureViewRust::default();
+    let stale = rust.begin_open_request();
+    // A newer request supersedes the first one.
+    let current = rust.begin_open_request();
+    assert_ne!(stale, current);
+
+    assert!(
+        !apply_if_current(&mut rust, stale, Some(opened)),
+        "the late install is dropped"
+    );
+    assert!(rust.session.doc.is_none(), "the document is unchanged");
+    assert_eq!(rust.session.history.count(), 0);
+
+    let opened =
+        decode_psd(path.to_str().unwrap(), Policy::Preserve, false, &|_, _| {}).expect("decode");
+    assert!(
+        apply_if_current(&mut rust, current, Some(opened)),
+        "the current install lands"
+    );
     assert!(rust.session.doc.is_some());
     std::fs::remove_file(path).ok();
 }

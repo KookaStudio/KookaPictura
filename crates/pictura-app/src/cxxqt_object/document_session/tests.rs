@@ -3,7 +3,7 @@
 
 use super::super::state::PictureViewRust;
 use super::super::state::TransformMode;
-use super::session::{SessionChange, SessionKind};
+use super::session::{DocumentSession, SessionChange, SessionKind};
 use crate::cxxqt_object::impl_filters::{apply_filter_active, cancel_filter_preview};
 use crate::cxxqt_object::tests::pixel_layer;
 use crate::history::History;
@@ -306,6 +306,33 @@ fn a_shape_path_abort_requests_a_rebuild() {
 }
 
 #[test]
+fn a_session_runs_without_a_qobject() {
+    // The session owns the document, the selection, and the history, so it
+    // runs without a QObject: install, record, undo.
+    let mut session = DocumentSession::default();
+    let mut doc = doc();
+    let mut history = History::default();
+    history.capture_live(&mut doc, &None, &LayerTarget::only("0"), "Start");
+    session.install(Some(doc), history, None);
+    assert_eq!(session.history.count(), 1);
+    assert_eq!(session.history.index(), 0);
+
+    let mut target = LayerTarget::only("0");
+    session.record(&target, "Edit");
+    assert_eq!(session.history.count(), 2, "the edit is recorded");
+    assert!(session.dirty);
+
+    let restored = session
+        .restore(&mut target, History::undo_live, History::undo)
+        .expect("the undo restores a state");
+    assert_eq!(session.history.index(), 0, "the undo steps back");
+    assert_eq!(session.history.count(), 2, "the history keeps both states");
+    let _ = restored;
+    assert!(session.doc.is_some(), "the document is still installed");
+    assert!(!session.doc.as_ref().expect("document").layers.is_empty());
+}
+
+#[test]
 fn replacement_clears_outgoing_state() {
     let mut view = view();
     view.session.deselected_selection = Some(Selection::none(8, 8));
@@ -314,8 +341,8 @@ fn replacement_clears_outgoing_state() {
     view.pending_previews.opacity_changed = true;
     view.pending_previews.fill_changed = true;
     view.pending_previews.mask_refine = Some("Mask Feather");
-    view.pdf_options = Some("options".into());
-    view.pdf_password = Some("secret".into());
+    view.session.pdf_options = Some("options".into());
+    view.session.pdf_password = Some("secret".into());
     view.replace_document(
         Some(doc()),
         History::default(),
@@ -331,8 +358,8 @@ fn replacement_clears_outgoing_state() {
     assert!(!view.pending_previews.opacity_changed);
     assert!(!view.pending_previews.fill_changed);
     assert!(view.pending_previews.mask_refine.is_none());
-    assert!(view.pdf_options.is_none());
-    assert!(view.pdf_password.is_none());
+    assert!(view.session.pdf_options.is_none());
+    assert!(view.session.pdf_password.is_none());
     assert_eq!(view.session.document_generation, 1);
 }
 
@@ -431,21 +458,21 @@ fn reselect_is_unavailable_after_same_size_replacement() {
 #[test]
 fn pdf_password_follows_the_incoming_document() {
     let mut view = view();
-    view.pdf_password = Some("old".into());
+    view.session.pdf_password = Some("old".into());
     view.replace_document(
         Some(doc()),
         History::default(),
         LayerTarget::default(),
         Some("incoming".into()),
     );
-    assert_eq!(view.pdf_password.as_deref(), Some("incoming"));
+    assert_eq!(view.session.pdf_password.as_deref(), Some("incoming"));
     view.replace_document(
         Some(doc()),
         History::default(),
         LayerTarget::default(),
         None,
     );
-    assert!(view.pdf_password.is_none());
+    assert!(view.session.pdf_password.is_none());
 }
 
 #[test]

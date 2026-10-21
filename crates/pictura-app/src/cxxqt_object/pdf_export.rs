@@ -190,7 +190,7 @@ pub fn pdf_save(mut view: Pin<&mut PictureView>, path: &QString, options: &QStri
     let mut rust = view.rust_mut();
     rust.path = Some(path);
     rust.session.dirty = false;
-    rust.pdf_options = Some(pdf::write_joboptions(&options, false));
+    rust.session.pdf_options = Some(pdf::write_joboptions(&options, false));
     QString::default()
 }
 
@@ -199,6 +199,7 @@ pub fn pdf_save(mut view: Pin<&mut PictureView>, path: &QString, options: &QStri
 pub(super) fn save_with_last_options(view: Pin<&mut PictureView>, path: &QString) -> bool {
     let options = view
         .rust()
+        .session
         .pdf_options
         .clone()
         .unwrap_or_else(|| pdf::write_joboptions(&PdfOptions::default(), false));
@@ -217,7 +218,13 @@ pub fn pdf_type_fonts(view: &PictureView) -> QString {
 }
 
 pub fn pdf_view_options(view: &PictureView) -> QString {
-    QString::from(view.rust().pdf_options.as_deref().unwrap_or_default())
+    QString::from(
+        view.rust()
+            .session
+            .pdf_options
+            .as_deref()
+            .unwrap_or_default(),
+    )
 }
 
 pub fn pdf_open(mut view: Pin<&mut PictureView>, path: &QString, password: &QString) -> QString {
@@ -225,7 +232,7 @@ pub fn pdf_open(mut view: Pin<&mut PictureView>, path: &QString, password: &QStr
     let typed = password.to_string();
     // Revert passes none: reuse the password the document was opened with.
     let password = if typed.is_empty() {
-        view.rust().pdf_password.clone().unwrap_or_default()
+        view.rust().session.pdf_password.clone().unwrap_or_default()
     } else {
         typed
     };

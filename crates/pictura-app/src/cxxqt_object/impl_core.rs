@@ -1042,17 +1042,8 @@ impl qobject::PictureView {
     pub(super) fn record(mut self: Pin<&mut Self>, label: &str) {
         let t = Instant::now();
         let mut rust = self.as_mut().rust_mut();
-        let rust = &mut *rust;
-        if let Some(doc) = rust.session.doc.as_mut() {
-            rust.session.history.capture_live(
-                doc,
-                &rust.session.selection,
-                &rust.layer_target,
-                label,
-            );
-            rust.session.dirty = true;
-            rust.session.content_revision = rust.session.content_revision.wrapping_add(1);
-        }
+        let target = rust.layer_target.clone();
+        rust.session.record(&target, label);
         paint_timing::record("record_history_capture", t.elapsed());
     }
 

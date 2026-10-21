@@ -434,9 +434,24 @@ fn warnings_list(warnings: Vec<String>) -> QStringList {
     list
 }
 
-/// Apply a result unless the view was cancelled. True when it was applied.
-fn apply_if_live(rust: &mut PictureViewRust, result: Option<OpenedDocument>) -> bool {
-    if rust.open_cancelled {
+impl PictureViewRust {
+    /// Start an open request and return its id. A result from an earlier
+    /// request is stale and must not install.
+    pub(super) fn begin_open_request(&mut self) -> u64 {
+        self.open_cancelled = false;
+        self.open_request = self.open_request.wrapping_add(1);
+        self.open_request
+    }
+}
+
+/// Apply a result unless the view was cancelled or the request is stale. True
+/// when it was applied.
+fn apply_if_current(
+    rust: &mut PictureViewRust,
+    request: u64,
+    result: Option<OpenedDocument>,
+) -> bool {
+    if rust.open_cancelled || request != rust.open_request {
         return false;
     }
     if let Some(opened) = result {
@@ -449,6 +464,7 @@ fn apply_if_live(rust: &mut PictureViewRust, result: Option<OpenedDocument>) -> 
 /// view drops it.
 fn finish_on_gui(
     qt_thread: CxxQtThread<PictureView>,
+    request: u64,
     result: Option<OpenedDocument>,
     status: String,
     warnings: Vec<String>,
@@ -457,7 +473,7 @@ fn finish_on_gui(
         .queue(move |mut view| {
             {
                 let mut rust = view.as_mut().rust_mut();
-                if !apply_if_live(&mut rust, result) {
+                if !apply_if_current(&mut rust, request, result) {
                     return;
                 }
             }
@@ -483,7 +499,7 @@ fn start(
         + Send
         + 'static,
 ) {
-    view.as_mut().rust_mut().open_cancelled = false;
+    let request = view.as_mut().rust_mut().begin_open_request();
     let delay_ms = view.rust().open_delay_for_test;
     let qt_thread = view.as_ref().get_ref().qt_thread();
     let progress_thread = qt_thread.clone();
@@ -500,7 +516,7 @@ fn start(
     std::thread::spawn(move || {
         let (result, status, warnings) = work(&progress);
         delay(delay_ms);
-        finish_on_gui(qt_thread, result, status, warnings);
+        finish_on_gui(qt_thread, request, result, status, warnings);
     });
 }
 
@@ -543,7 +559,7 @@ pub fn open_pdf_start(mut view: Pin<&mut PictureView>, path: &QString, password:
     let password = password.to_string();
     let policy = view.rust().color_policy;
     let gpu = view.rust().gpu_compute;
-    view.as_mut().rust_mut().open_cancelled = false;
+    let request = view.as_mut().rust_mut().begin_open_request();
     let delay_ms = view.rust().open_delay_for_test;
     let qt_thread = view.as_ref().get_ref().qt_thread();
     let detected = qt_thread.clone();
@@ -578,19 +594,25 @@ pub fn open_pdf_start(mut view: Pin<&mut PictureView>, path: &QString, password:
                     "none".to_string()
                 };
                 delay(delay_ms);
-                finish_on_gui(qt_thread, opened, status, Vec::new());
+                finish_on_gui(qt_thread, request, opened, status, Vec::new());
             }
             pictura_codec::pdf::EditingPsd::Absent => {
                 delay(delay_ms);
-                finish_on_gui(qt_thread, None, "none".to_string(), Vec::new());
+                finish_on_gui(qt_thread, request, None, "none".to_string(), Vec::new());
             }
             pictura_codec::pdf::EditingPsd::Locked if password.is_empty() => {
                 delay(delay_ms);
-                finish_on_gui(qt_thread, None, "password".to_string(), Vec::new());
+                finish_on_gui(qt_thread, request, None, "password".to_string(), Vec::new());
             }
             pictura_codec::pdf::EditingPsd::Locked => {
                 delay(delay_ms);
-                finish_on_gui(qt_thread, None, "wrongpassword".to_string(), Vec::new());
+                finish_on_gui(
+                    qt_thread,
+                    request,
+                    None,
+                    "wrongpassword".to_string(),
+                    Vec::new(),
+                );
             }
         }
     });

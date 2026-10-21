@@ -50,21 +50,7 @@ impl PictureViewRust {
     ) -> Option<Restored> {
         let cancelled = self.cancel_active_sessions();
         let had_session = cancelled.changed_display();
-        let rust = &mut *self;
-        let restored = match rust.session.doc.as_mut() {
-            Some(doc) => step(
-                &mut rust.session.history,
-                doc,
-                &mut rust.session.selection,
-                &mut rust.layer_target,
-            ),
-            None => legacy(&mut rust.session.history).map(|snapshot| {
-                rust.session.doc = Some(snapshot.doc);
-                rust.session.selection = snapshot.selection;
-                Restored::Everywhere
-            }),
-        }?;
-        self.session.content_revision = self.session.content_revision.wrapping_add(1);
+        let restored = self.session.restore(&mut self.layer_target, step, legacy)?;
         Some(if had_session {
             Restored::Everywhere
         } else {

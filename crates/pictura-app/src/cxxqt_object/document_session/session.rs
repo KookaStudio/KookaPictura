@@ -8,7 +8,7 @@
 use super::super::edit::Effect;
 use super::super::paths::ActivePath;
 use super::super::state::PictureViewRust;
-use crate::history::History;
+use crate::history::{History, Restored, Snapshot};
 use crate::layer_target::LayerTarget;
 use pictura_core::{Document, PsdRect};
 use pictura_select::Selection;
@@ -62,6 +62,12 @@ pub(in crate::cxxqt_object) struct DocumentSession {
     /// Bumped whenever the view loads or replaces its document, so a panel can
     /// drop a gesture whose target no longer belongs to the current document.
     pub(in crate::cxxqt_object) document_generation: u64,
+    /// The canonical `.joboptions` text this document was last saved to PDF
+    /// with, so Save on the `.pdf` path reopens the dialog with it.
+    pub(in crate::cxxqt_object) pdf_options: Option<String>,
+    /// The password a protected PDF was opened with, kept in memory only so
+    /// Revert can reopen it.
+    pub(in crate::cxxqt_object) pdf_password: Option<String>,
 }
 
 impl DocumentSession {
@@ -72,6 +78,77 @@ impl DocumentSession {
             doc: Some(doc),
             ..Default::default()
         }
+    }
+
+    /// Install a replacement document, its history, and its PDF password.
+    ///
+    /// The document generation is bumped, so a panel can drop a gesture whose
+    /// target no longer belongs to the current document.
+    pub(in crate::cxxqt_object) fn install(
+        &mut self,
+        doc: Option<Document>,
+        history: History,
+        pdf_password: Option<String>,
+    ) {
+        self.doc = doc;
+        self.history = history;
+        self.pdf_password = pdf_password;
+        self.document_generation = self.document_generation.wrapping_add(1);
+        self.dirty = false;
+    }
+
+    /// Capture the live document as a history state under `label`. False
+    /// without a document.
+    pub(in crate::cxxqt_object) fn record(&mut self, target: &LayerTarget, label: &str) -> bool {
+        self.record_with(target, label, true)
+    }
+
+    /// As [`Self::record`] for a move of the topmost pixel layer, which leaves
+    /// the cached move-preview base valid: no content-revision bump.
+    pub(in crate::cxxqt_object) fn record_move(
+        &mut self,
+        target: &LayerTarget,
+        label: &str,
+    ) -> bool {
+        self.record_with(target, label, false)
+    }
+
+    fn record_with(&mut self, target: &LayerTarget, label: &str, bump_revision: bool) -> bool {
+        let Some(doc) = self.doc.as_mut() else {
+            return false;
+        };
+        self.history
+            .capture_live(doc, &self.selection, target, label);
+        self.dirty = true;
+        if bump_revision {
+            self.content_revision = self.content_revision.wrapping_add(1);
+        }
+        true
+    }
+
+    /// Step the history into the live document and selection, and report where
+    /// the picture changed.
+    pub(in crate::cxxqt_object) fn restore(
+        &mut self,
+        target: &mut LayerTarget,
+        step: impl FnOnce(
+            &mut History,
+            &mut Document,
+            &mut Option<Selection>,
+            &mut LayerTarget,
+        ) -> Option<Restored>,
+        legacy: impl FnOnce(&mut History) -> Option<Snapshot>,
+    ) -> Option<Restored> {
+        let restored = match self.doc.as_mut() {
+            Some(doc) => step(&mut self.history, doc, &mut self.selection, target),
+            None => legacy(&mut self.history).map(|snapshot| {
+                self.doc = Some(snapshot.doc);
+                self.selection = snapshot.selection;
+                Restored::Everywhere
+            }),
+        }?;
+        self.content_revision = self.content_revision.wrapping_add(1);
+        Some(restored)
     }
 }
 
@@ -265,12 +342,8 @@ impl PictureViewRust {
     ) {
         self.cancel_active_sessions();
         self.clear_document_scoped_state();
-        self.session.doc = doc;
-        self.session.history = history;
+        self.session.install(doc, history, pdf_password);
         self.layer_target = target;
-        self.pdf_password = pdf_password;
-        self.session.document_generation = self.session.document_generation.wrapping_add(1);
-        self.session.dirty = false;
         self.reset_pyramid();
     }
 
@@ -285,8 +358,8 @@ impl PictureViewRust {
         self.path_on_layer = false;
         self.active_path = ActivePath::Work;
         self.path_gesture = None;
-        self.pdf_options = None;
-        self.pdf_password = None;
+        self.session.pdf_options = None;
+        self.session.pdf_password = None;
         self.pending_lasso.clear();
         self.pending_lasso_mode.clear();
         self.stroke = None;
