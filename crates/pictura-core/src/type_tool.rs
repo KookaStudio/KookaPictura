@@ -40,13 +40,14 @@ impl AntiAlias {
     }
 }
 
-/// Kerning mode; `Manual` is the pair value in 1/1000 em. Metrics is the only
-/// automatic mode: Optical has no groundable PSD key and is a deferred
-/// approximation, so it is not modelled.
+/// Kerning mode; `Manual` is the pair value in 1/1000 em. `Optical` spaces
+/// pairs from their outlines; it has no groundable PSD key, so it saves as
+/// Metrics.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum KerningMode {
     #[default]
     Metrics,
+    Optical,
     Manual(i32),
 }
 

@@ -66,6 +66,11 @@ bool registerFont(const QString& family, ::rust::Slice<const std::uint8_t> bytes
     return ::pictura::type_register_font(family, bytes);
 }
 
+std::uint32_t openTypeFeatures(const QString& family)
+{
+    return ::pictura::type_font_opentype_features(family);
+}
+
 QVector<int> previewRect(const QString& text, const QString& font, const TypeSetting& setting,
                          const CharacterSetting& character, const ParagraphSetting& paragraph)
 {

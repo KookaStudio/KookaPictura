@@ -415,3 +415,13 @@ fn paragraph_box_round_trips() {
     let back = decode_type_tool(&crate::encode_type_tool(&to_point)).expect("decodes");
     assert_eq!(back.box_bounds, None, "re-set as point type drops the box");
 }
+
+#[test]
+fn optical_kerning_survives_authoring_but_saves_as_metrics() {
+    let mut s = spec("AV", false);
+    s.character.kerning = KerningMode::Optical;
+    let tool = author_type_tool(&s, [0.0, 0.0, 10.0, 10.0], None, None);
+    let authored = tool.style.as_ref().expect("style");
+    assert_eq!(authored.character.kerning, KerningMode::Optical);
+    assert_eq!(read_style(&tool).character.kerning, KerningMode::Metrics);
+}

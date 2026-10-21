@@ -6,13 +6,15 @@
 //! positions with pure `f32` arithmetic.
 
 /// One shaped glyph: a font glyph id, its advance, and its x/y offsets, all in
-/// font units.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+/// font units. `scale` sizes the outline against the run's size (1.0 normally;
+/// synthesized small caps draw capitals smaller).
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ShapedGlyph {
     pub id: u16,
     pub advance: f32,
     pub x_offset: f32,
     pub y_offset: f32,
+    pub scale: f32,
 }
 
 impl ShapedGlyph {
@@ -23,7 +25,14 @@ impl ShapedGlyph {
             advance,
             x_offset: 0.0,
             y_offset: 0.0,
+            scale: 1.0,
         }
+    }
+}
+
+impl Default for ShapedGlyph {
+    fn default() -> Self {
+        Self::new(0, 0.0)
     }
 }
 
@@ -69,12 +78,13 @@ pub struct LayoutParams {
 }
 
 /// A glyph positioned in device pixels; `y` is the line baseline adjusted by
-/// the shaper's y-offset.
+/// the shaper's y-offset. `scale` is the shaped glyph's outline scale.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PlacedGlyph {
     pub id: u16,
     pub x: f32,
     pub y: f32,
+    pub scale: f32,
 }
 
 /// One laid-out line: its glyphs, total advance, and baseline.
@@ -123,6 +133,7 @@ pub fn layout_lines(lines: &[Vec<ShapedGlyph>], params: &LayoutParams) -> TextLa
                 id: glyph.id,
                 x: x + device(glyph.x_offset, params),
                 y: baseline - device(glyph.y_offset, params),
+                scale: glyph.scale,
             });
             x += device_advance(glyph, params);
         }

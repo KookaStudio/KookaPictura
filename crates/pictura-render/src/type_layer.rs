@@ -15,11 +15,13 @@
 //! `ascent + descent` cell — no `vert` alternates, rotated Latin, or tate-chu-yoko.
 
 use pictura_core::{
-    AntiAlias, BitDepth, Channel, ColorMode, Document, LayerBlock, LayoutLine, LockFlags,
-    PixelBuffer, PlacedGlyph, PsdRect, RasterRequest, TextLayout, TextStyle, TypeSpec, TypeTool,
+    AntiAlias, BitDepth, Channel, CharacterAttrs, ColorMode, Document, LayerBlock, LayoutLine,
+    LockFlags, PixelBuffer, PlacedGlyph, PsdRect, RasterRequest, TextLayout, TextStyle, TypeSpec,
+    TypeTool,
 };
 
-use crate::text_render::{blit_glyph, layout_type, render_text_buffer, BundledText};
+use crate::text_render::{blit_glyph, glyph_matrix, layout_type, render_text_buffer, BundledText};
+use crate::type_style::{shape_styled, RunStyle};
 
 /// The lines of a `TySh` string: `\r` separates them (`\n` and `\r\n` are
 /// accepted too).
@@ -41,24 +43,21 @@ pub(crate) fn align_factor(justification: u8) -> f32 {
 
 /// Lay out vertical type inside a `width × height` box: column `j` is centred
 /// `leading × (j + ½)` from the right edge, and its characters fall one cell
-/// apart, the column aligned top / bottom / centre by `justification`.
-/// `horizontal_scale` / `vertical_scale` are fractions (1.0 = 100%) scaling the
-/// glyph advances across and down the column, and `baseline_shift` offsets the
-/// column along its axis.
-#[allow(clippy::too_many_arguments)]
+/// apart, the column aligned top / bottom / centre by `justification`. Each
+/// character shapes as `c` styles it (its advance carries the horizontal
+/// scale), the vertical scale stretches the cell, and the baseline shift
+/// offsets the column along its axis.
 pub(crate) fn vertical_layout(
     bundled: &BundledText,
     lines: &[String],
-    font_size: f32,
+    c: &CharacterAttrs,
     justification: u8,
     width: f32,
     height: f32,
     leading: f32,
-    horizontal_scale: f32,
-    vertical_scale: f32,
-    baseline_shift: f32,
 ) -> TextLayout {
-    let cell = (bundled.ascent(font_size) + bundled.descent(font_size)) * vertical_scale;
+    let baseline_shift = c.baseline_shift as f32;
+    let cell = crate::type_paragraph::vertical_cell(bundled, c);
     let factor = align_factor(justification);
     let columns = lines
         .iter()
@@ -70,18 +69,19 @@ pub(crate) fn vertical_layout(
             let glyphs = line
                 .chars()
                 .enumerate()
-                .flat_map(|(k, c)| {
-                    let shaped = bundled.shape_line(&c.to_string(), font_size, 0.0);
-                    let advance: f32 = shaped.iter().map(|g| g.advance * horizontal_scale).sum();
+                .flat_map(|(k, ch)| {
+                    let shaped = shape_styled(bundled, &ch.to_string(), c);
+                    let advance: f32 = shaped.iter().map(|g| g.advance).sum();
                     let mut x = centre - advance / 2.0;
                     let y = top + k as f32 * cell;
                     shaped.into_iter().map(move |g| {
                         let placed = PlacedGlyph {
                             id: g.id,
-                            x: x + g.x_offset * horizontal_scale,
-                            y: y - g.y_offset * vertical_scale,
+                            x: x + g.x_offset,
+                            y: y - g.y_offset,
+                            scale: g.scale,
                         };
-                        x += g.advance * horizontal_scale;
+                        x += g.advance;
                         placed
                     })
                 })
@@ -164,11 +164,24 @@ pub(crate) fn text_box_any(spec: &TypeSpec) -> Option<(f32, f32, f32, f32)> {
             height,
         )
     } else {
+        let run = RunStyle::of(bundled, &spec.character);
+        // Faux Italic leans the ascenders past the last advance.
+        let overhang = ascent * run.skew + run.embolden;
         let width = lines
             .iter()
             .map(|line| crate::type_paragraph::line_advance(bundled, line, &spec.character))
-            .fold(0.0f32, f32::max);
-        let height = (lines.len() - 1) as f32 * leading + ascent + descent;
+            .fold(0.0f32, f32::max)
+            + overhang;
+        // A subscript or an underline can hang below the font's descent.
+        let drop = (spec.character.baseline_shift as f32 - run.rise).max(0.0);
+        let mut below = descent;
+        if drop > 0.0 {
+            below = below.max(drop + bundled.descent(run.size));
+        }
+        if let Some((offset, thickness)) = run.underline {
+            below = below.max(drop + offset + thickness / 2.0);
+        }
+        let height = (lines.len() - 1) as f32 * leading + ascent + below;
         (x - width * factor, y - ascent, width, height)
     };
     Some((left, top, width, height))
@@ -275,37 +288,70 @@ pub fn render_type(spec: &TypeSpec) -> Option<(PsdRect, PixelBuffer)> {
 /// glyph's pen through `spec.matrix` and rasterize its outline mapped the same
 /// way, so scaled or rotated type stays as sharp as unscaled type.
 fn render_mapped(spec: &TypeSpec, rect: PsdRect) -> Option<PixelBuffer> {
-    let (bundled, pens) = type_pens(spec)?;
-    let size = spec.character.size as f32;
+    let (bundled, layout, unmapped) = flat_layout(spec)?;
+    let run = RunStyle::of(bundled, &spec.character);
+    let ascent = bundled.ascent(spec.character.size as f32);
     let color = spec.rgba().map(|c| f64::from(c) / 255.0);
     let m = spec.matrix.map(|v| v as f32);
-    // The pen positions already carry the character H/V scale (layout_type
-    // applies it); compose the same scale into the outline transform so glyphs
-    // stretch with their advances.
-    let h = (spec.character.horizontal_scale / 100.0) as f32;
-    let v = (spec.character.vertical_scale / 100.0) as f32;
-    let m = [m[0] * h, m[1] * h, m[2] * v, m[3] * v];
+    // A point of the untransformed layout (in the frame glyphs paint in) as a
+    // pixel of `rect`.
+    let to_rect = |x: f32, y: f32| {
+        let u = f64::from(unmapped.left) + f64::from(x) - spec.origin.0;
+        let v = f64::from(unmapped.top) + f64::from(y) - spec.origin.1;
+        let (dx, dy) = map(spec, u, v);
+        (
+            (dx - f64::from(rect.left)) as f32,
+            (dy - f64::from(rect.top)) as f32,
+        )
+    };
     let rasterizer = bundled.rasterizer();
     let mut out = PixelBuffer::new(rect.width() as u32, rect.height() as u32, 4);
     let mut painted = false;
-    for (id, pen_u, pen_v) in pens {
-        let (dx, dy) = map(spec, pen_u, pen_v);
-        let (fx, fy) = (
-            (dx - f64::from(rect.left)) as f32,
-            (dy - f64::from(rect.top)) as f32,
-        );
+    for glyph in layout.lines.iter().flat_map(|line| &line.glyphs) {
+        let (fx, fy) = to_rect(glyph.x, glyph.y + ascent);
         let (px, py) = (fx.floor(), fy.floor());
         let request = RasterRequest {
-            glyph: id,
-            px_size: size,
+            glyph: glyph.id,
+            px_size: run.size,
             subpixel_x: fx - px,
             subpixel_y: py - fy,
         };
-        if let Some(mask) = rasterizer.rasterize_mapped(&request, m) {
+        // The pens already carry the character H/V scale (layout_type applies
+        // it); compose the same outline transform so glyphs stretch with them.
+        let outline = compose(m, glyph_matrix(&run, glyph.scale));
+        if let Some(mask) = rasterizer.rasterize_styled(&request, outline, run.embolden) {
             painted |= blit_glyph(&mut out, &mask, px as i32, py as i32, color);
         }
     }
+    if run.decorated() {
+        for line in crate::type_decor::decorations(&run, &layout, spec.vertical, ascent) {
+            painted |= crate::type_decor::fill_mapped(&mut out, line, to_rect, color);
+        }
+    }
     painted.then_some(out)
+}
+
+/// `a · b` for linear parts in the `TySh` order (`xx, xy, yx, yy`).
+fn compose(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
+    [
+        a[0] * b[0] + a[2] * b[1],
+        a[1] * b[0] + a[3] * b[1],
+        a[0] * b[2] + a[2] * b[3],
+        a[1] * b[2] + a[3] * b[3],
+    ]
+}
+
+/// `spec`'s face, its layout in the untransformed box, and that box's rect.
+fn flat_layout(spec: &TypeSpec) -> Option<(&'static BundledText, TextLayout, PsdRect)> {
+    let bundled = crate::fonts::face_for(&spec.character.font_family)?;
+    let flat = TypeSpec {
+        matrix: TypeSpec::IDENTITY,
+        ..spec.clone()
+    };
+    let unmapped = type_placement(&flat)?.rect;
+    let view = render_view(&flat);
+    let layout = layout_type(bundled, &view, unmapped.width(), unmapped.height())?;
+    Some((bundled, layout, unmapped))
 }
 
 /// Glyph ids with their pens `(u, v)`, as [`type_pens`] lays them out.
@@ -315,14 +361,7 @@ pub(crate) type Pens = Vec<(u16, f64, f64)>;
 /// with its pen (baseline start) relative to the origin, before `spec.matrix`.
 /// The pens carry the horizontal scale, kerning, tracking, and alignment.
 pub(crate) fn type_pens(spec: &TypeSpec) -> Option<(&'static BundledText, Pens)> {
-    let bundled = crate::fonts::face_for(&spec.character.font_family)?;
-    let flat = TypeSpec {
-        matrix: TypeSpec::IDENTITY,
-        ..spec.clone()
-    };
-    let unmapped = type_placement(&flat)?.rect;
-    let view = render_view(&flat);
-    let layout = layout_type(bundled, &view, unmapped.width(), unmapped.height())?;
+    let (bundled, layout, unmapped) = flat_layout(spec)?;
     let ascent = bundled.ascent(spec.character.size as f32);
     let pens = layout
         .lines

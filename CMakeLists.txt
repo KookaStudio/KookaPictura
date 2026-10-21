@@ -335,6 +335,7 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/panels/clone_source_panel.cpp
     crates/pictura-app/cpp/panels/adjustment_controls.cpp
     crates/pictura-app/cpp/panels/character_panel.cpp
+    crates/pictura-app/cpp/panels/character_panel_icons.cpp
     crates/pictura-app/cpp/panels/paragraph_panel.cpp
     crates/pictura-app/cpp/panels/paragraph_styles_panel.cpp
     crates/pictura-app/cpp/paragraph_style_dialog.cpp
@@ -514,6 +515,7 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/panels/properties_panel.h
     crates/pictura-app/cpp/panels/channels_panel.h
     crates/pictura-app/cpp/panels/character_panel.h
+    crates/pictura-app/cpp/panels/character_panel_icons.h
     crates/pictura-app/cpp/panels/paragraph_panel.h
     crates/pictura-app/cpp/panels/paragraph_styles_panel.h
     crates/pictura-app/cpp/paragraph_style_dialog.h

@@ -111,7 +111,7 @@ impl Found<'_> {
         }
         let spec = crate::type_layer_spec(layer)?;
         let (face, pens) = crate::type_layer::type_pens(&spec)?;
-        if pens.is_empty() {
+        if pens.is_empty() || crate::type_style::needs_raster(face, &spec.character) {
             return None;
         }
         let font = self.font(face, &spec, &pens)?;
