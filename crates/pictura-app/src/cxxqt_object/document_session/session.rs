@@ -398,6 +398,7 @@ impl PictureViewRust {
         self.move_prepared_layer.clear();
         self.move_preview_cache_hit = false;
         self.transform_session = None;
+        self.last_transform = None;
         self.clear_pending_previews();
         self.edge_map = None;
         self.ruler = None;

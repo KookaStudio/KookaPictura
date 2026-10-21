@@ -389,9 +389,18 @@ public:
     // and shows its overlay; commit/cancel end it. While a session is active
     // normal tool input is suspended and routed to the session.
     bool beginFreeTransform(const QString& path);
-    // Begin a Skew / Distort / Perspective session on `path` (`mode` is
-    // "skew", "distort", or "perspective"), showing the same overlay.
+    // Begin a session on `path`: an empty `mode` is Free Transform, "scale" or
+    // "rotate" is a constrained session, and the rest are Skew / Distort /
+    // Perspective. All show the same overlay.
     bool beginTransformMode(const QString& path, const QString& mode);
+    // Restrict the open similarity session to Scale or Rotate gestures.
+    bool setTransformMode(const QString& mode);
+    // Apply an exact transform op to the open session; `commit` closes it and
+    // records `label` as the history state, otherwise the overlay is refreshed.
+    bool applyTransformOp(const QString& op, bool commit, const QString& label);
+    // Reapply the last committed transform to the open session and commit it as
+    // one "Transform Again" state.
+    bool repeatTransform();
     void commitFreeTransform();
     void cancelFreeTransform();
     bool transformSessionActive() const;

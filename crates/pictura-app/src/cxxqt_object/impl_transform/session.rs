@@ -1,7 +1,7 @@
 use super::super::helpers::*;
 use super::super::helpers_composite::*;
 use super::super::qobject;
-use super::super::state::{PictureViewRust, TransformMode, TransformSession};
+use super::super::state::{PictureViewRust, RepeatTransform, TransformMode, TransformSession};
 use super::geometry::{
     apply_session_transform, quad_driven, rect_center, session_quad, source_corners, MapParams,
 };
@@ -252,6 +252,26 @@ fn lifts_selection(rust: &PictureViewRust, path: &str) -> bool {
     }) && lift_coverage(rust).is_some()
 }
 
+/// The repeatable part of a committed session: the similarity parameters and
+/// the reference point's offset from the source rect's centre. Projective and
+/// Warp sessions are not repeatable through `Transform Again`.
+fn repeatable_transform(session: &TransformSession) -> Option<RepeatTransform> {
+    if session.mode.is_projective() || session.base_quad.is_some() || session.warp.is_some() {
+        return None;
+    }
+    let (cx, cy) = rect_center(session.orig_rect);
+    Some(RepeatTransform {
+        scale_x: session.scale_x,
+        scale_y: session.scale_y,
+        angle: session.angle,
+        skew_x: session.skew_x,
+        skew_y: session.skew_y,
+        dx: session.dx,
+        dy: session.dy,
+        pivot_offset: (session.pivot.0 - cx, session.pivot.1 - cy),
+    })
+}
+
 /// Whether `mode` may begin on `path`: the Free Transform target rules, plus
 /// Distort's and Perspective's refusal for editable type (a lifted selection targets pixels, not
 /// the type layer).
@@ -407,7 +427,7 @@ impl qobject::PictureView {
     /// transform or warp records nothing; an engine refusal records nothing.
     /// The session always clears.
     pub fn commit_transform(mut self: Pin<&mut Self>) -> bool {
-        let Some((path, projective, quad, params, orig_rect, interpolation, warp)) =
+        let Some((path, projective, quad, params, orig_rect, interpolation, warp, history_label)) =
             self.rust().transform_session.as_ref().map(|session| {
                 (
                     session.path.clone(),
@@ -417,11 +437,17 @@ impl qobject::PictureView {
                     session.orig_rect,
                     session.interpolation,
                     session.warp.clone(),
+                    session.history_label.clone(),
                 )
             })
         else {
             return false;
         };
+        let repeat = self
+            .rust()
+            .transform_session
+            .as_ref()
+            .and_then(repeatable_transform);
         let unmoved = || {
             quad.iter()
                 .zip(source_corners(orig_rect).iter())
@@ -474,10 +500,12 @@ impl qobject::PictureView {
             // ponytail: CS6 carries the selection border through the transform;
             // it is dropped here rather than left outlining the old pixels.
             self.as_mut().rust_mut().session.selection = None;
-            self.as_mut().edit("Free Transform", |_| Edit::Structural);
+            self.as_mut().rust_mut().last_transform = repeat;
+            self.as_mut().edit(&history_label, |_| Edit::Structural);
             return true;
         }
         if changed {
+            self.as_mut().rust_mut().last_transform = repeat;
             self.as_mut().clear_link_sets();
             // The transform only moves the layer, so the union of its source rect
             // and its transformed rect bounds the composite change.
@@ -492,7 +520,7 @@ impl qobject::PictureView {
                 Some((after, false)) => self.as_mut().refresh_region(union_rect(orig_rect, after)),
                 _ => self.as_mut().recomposite(),
             }
-            self.as_mut().record("Free Transform");
+            self.as_mut().record(&history_label);
         }
         changed
     }
@@ -893,6 +921,7 @@ impl PictureViewRust {
             warp_drag: None,
             lifted,
             untrimmed,
+            history_label: "Free Transform".to_string(),
         })
     }
 

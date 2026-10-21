@@ -10,12 +10,16 @@ use std::collections::HashMap;
 
 use super::helpers::TileSet;
 
-/// The live Free Transform gesture mode. `Free` is the existing similarity
-/// transform; the other three edit a document-space target quad.
+/// The live Free Transform gesture mode. `Free` is the unconstrained
+/// similarity transform; `Scale` and `Rotate` keep the same similarity state
+/// but restrict which gesture a handle drives; the last three edit a
+/// document-space target quad.
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
 pub(super) enum TransformMode {
     #[default]
     Free,
+    Scale,
+    Rotate,
     Skew,
     Distort,
     Perspective,
@@ -25,6 +29,9 @@ impl TransformMode {
     /// Parse the command mode name, or `None` for an unknown string.
     pub(super) fn parse(name: &str) -> Option<Self> {
         match name {
+            "free" => Some(Self::Free),
+            "scale" => Some(Self::Scale),
+            "rotate" => Some(Self::Rotate),
             "skew" => Some(Self::Skew),
             "distort" => Some(Self::Distort),
             "perspective" => Some(Self::Perspective),
@@ -35,6 +42,8 @@ impl TransformMode {
     pub(super) fn name(self) -> &'static str {
         match self {
             Self::Free => "free",
+            Self::Scale => "scale",
+            Self::Rotate => "rotate",
             Self::Skew => "skew",
             Self::Distort => "distort",
             Self::Perspective => "perspective",
@@ -42,8 +51,24 @@ impl TransformMode {
     }
 
     pub(super) fn is_projective(self) -> bool {
-        self != Self::Free
+        matches!(self, Self::Skew | Self::Distort | Self::Perspective)
     }
+}
+
+/// A committed similarity transform that `Edit > Transform > Again` can
+/// reapply to another target: the scale/rotation/shear, the translation, and
+/// the reference point's offset from the source rect's centre (so a reference
+/// point moved off-centre keeps its relative position).
+#[derive(Clone, Copy)]
+pub(super) struct RepeatTransform {
+    pub(super) scale_x: f64,
+    pub(super) scale_y: f64,
+    pub(super) angle: f64,
+    pub(super) skew_x: f64,
+    pub(super) skew_y: f64,
+    pub(super) dx: f64,
+    pub(super) dy: f64,
+    pub(super) pivot_offset: (f64, f64),
 }
 
 /// What a Warp-mode press grabbed; `start` (the press) and `pts0` (the mesh's
@@ -124,6 +149,10 @@ pub struct TransformSession {
     /// The layer's rect before `trim_to_content` hugged the box to its pixels;
     /// a session dropped without a transform pads the layer back out to it.
     pub(super) untrimmed: Option<PsdRect>,
+    /// The history label a commit records. `Free Transform` for an interactive
+    /// session; an exact command (`Rotate 90° Clockwise`, `Transform Again`, …)
+    /// sets its own before committing immediately.
+    pub(super) history_label: String,
 }
 
 /// Backing Rust state for [`super::qobject::PictureView`].
@@ -200,6 +229,9 @@ pub struct PictureViewRust {
     pub(super) move_prepared_layer: String,
     pub(super) move_preview_cache_hit: bool,
     pub(super) transform_session: Option<TransformSession>,
+    /// The last committed similarity transform, for `Edit > Transform > Again`.
+    /// Projective and Warp commits clear it (they are not repeatable this way).
+    pub(super) last_transform: Option<RepeatTransform>,
     /// The panel previews that are applied but not committed yet.
     pub(super) pending_previews: super::document_session::PendingPreviews,
     pub(super) gpu_compute: bool,
@@ -413,6 +445,7 @@ impl Default for PictureViewRust {
             move_prepared_layer: String::new(),
             move_preview_cache_hit: false,
             transform_session: None,
+            last_transform: None,
             pending_previews: Default::default(),
             gpu_compute: true,
             color_policy: pictura_codec::Policy::Preserve,

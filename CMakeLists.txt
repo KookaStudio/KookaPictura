@@ -353,6 +353,7 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/frame_menus.cpp
     crates/pictura-app/cpp/frame_menus_select.cpp
     crates/pictura-app/cpp/frame_menus_edit.cpp
+    crates/pictura-app/cpp/frame_menus_transform.cpp
     crates/pictura-app/cpp/frame_menus_filter.cpp
     crates/pictura-app/cpp/frame_menus_align.cpp
     crates/pictura-app/cpp/frame_menus_type.cpp

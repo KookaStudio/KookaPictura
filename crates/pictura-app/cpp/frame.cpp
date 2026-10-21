@@ -1100,7 +1100,11 @@ void PicturaMainWindow::updateStatus()
         PictureView* view = activeView();
         if (hasDoc && view && tools_ && tools_->transformSessionActive()) {
             const QString mode = transform_session_mode(*view);
-            if (mode == QStringLiteral("skew")) {
+            if (mode == QStringLiteral("scale")) {
+                action = QStringLiteral("Scale in progress");
+            } else if (mode == QStringLiteral("rotate")) {
+                action = QStringLiteral("Rotate in progress");
+            } else if (mode == QStringLiteral("skew")) {
                 action = QStringLiteral("Skew in progress");
             } else if (mode == QStringLiteral("distort")) {
                 action = QStringLiteral("Distort in progress");
