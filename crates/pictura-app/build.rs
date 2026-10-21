@@ -28,6 +28,23 @@ fn find_qmake6() -> Option<PathBuf> {
     None
 }
 
+/// Make the QMAKE value a path the cxx-qt build script can run.
+///
+/// `qt-build-utils` runs qmake with a cleared environment, so a bare name is
+/// not resolved on the PATH inside it: the value has to be a path. The
+/// repository's default is the bare name, and the CMake build exports the
+/// path it selected.
+fn resolve_qmake() {
+    if let Some(value) = std::env::var_os("QMAKE") {
+        if PathBuf::from(value).is_absolute() {
+            return;
+        }
+    }
+    if let Some(qmake) = find_qmake6() {
+        std::env::set_var("QMAKE", qmake);
+    }
+}
+
 /// The hand-written C++ edges the bridges include.
 ///
 /// The `cc` crate emits no change-tracking directive for the sources it
@@ -113,13 +130,9 @@ fn main() {
         std::env::set_var("CXXFLAGS", "-fPIC");
     }
 
-    // CMake's cxx_qt_import_crate already exports QMAKE; only fill it in for
-    // standalone `cargo build`.
-    if std::env::var_os("QMAKE").is_none() {
-        if let Some(qmake) = find_qmake6() {
-            std::env::set_var("QMAKE", qmake);
-        }
-    }
+    // The QMAKE value is one string for every cargo invocation, and it can be
+    // a name; qt-build-utils needs a path.
+    resolve_qmake();
 
     // The hand-written bridge edges are the only C++ files this crate's
     // generated code depends on; track them explicitly.

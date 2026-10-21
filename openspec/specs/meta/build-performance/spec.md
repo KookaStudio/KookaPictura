@@ -96,9 +96,11 @@ the same `QMAKE` value, so the cxx-qt build script's
 `rerun-if-env-changed=QMAKE` fingerprint does not change between them. The
 value SHALL come from one source of truth that does not depend on which tool
 started the build; the local verification scripts SHALL NOT export a `QMAKE` of
-their own, and the helper script that did SHALL be removed. The value SHALL
-name a qmake that exists, so the cxx-qt build script can locate Qt with it.
-Selecting a genuinely different qmake SHALL still rerun the build script.
+their own, the helper script that did SHALL be removed, and the CMake build
+SHALL NOT export one to the cargo invocation it drives. The value SHALL name
+a qmake the cxx-qt build script can resolve to a path, because it runs qmake
+with a cleared environment. Selecting a genuinely different qmake SHALL still
+rerun the build script.
 
 #### Scenario: alternating gates do not rerun the build script [bp_qmake_stable]
 

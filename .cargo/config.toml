@@ -4,11 +4,12 @@
 rustflags = ["-C", "link-arg=-fuse-ld=lld"]
 
 # One QMAKE value for every cargo invocation. The cxx-qt build script tracks
-# QMAKE (rerun-if-env-changed), and the CMake build exports an absolute path
-# that a bare cargo run does not, so alternating the two gates used to rebuild
-# cxx-qt-lib, cxx-qt and pictura_app for nothing. `force` makes this value win
-# over the path the CMake build exports, so the fingerprint is the same string
-# whoever started the build. The bare name is searched on PATH by the cxx-qt
-# build script; both supported distributions ship qmake6.
+# QMAKE (rerun-if-env-changed), so a value that changes between two cargo
+# invocations rebuilds cxx-qt-lib, cxx-qt and pictura_app for nothing. The
+# local verification scripts export none, so this table is the value a cargo
+# invocation sees unless its environment carries one: the CMake build exports
+# the path it selected, which wins over this default. The bare name is
+# searched on PATH by the cxx-qt build script; both supported distributions
+# ship qmake6.
 [env]
-QMAKE = { value = "qmake6", force = true }
+QMAKE = { value = "qmake6" }

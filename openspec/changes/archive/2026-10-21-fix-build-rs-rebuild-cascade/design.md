@@ -37,14 +37,19 @@ work — window and panel construction, PDF parsing — rather than sleeping, so
 the lever is splitting them, not replacing waits.
 
 The QMAKE spike (task 1.4) came out **go**: with
-`QMAKE = { value = "qmake6", force = true }` in `.cargo/config.toml`, switching
-the environment between a set and an unset `QMAKE` cost 0.0 s instead of
-145 s. Cargo's `[env]` table does reach the build-script fingerprint on
-toolchain 1.98, so the fallback in decision 5 is not needed. The fingerprint
-records `qmake6` in both target directories — the bare Cargo one and the
+`QMAKE = { value = "qmake6" }` in `.cargo/config.toml`, switching the
+environment between a set and an unset `QMAKE` cost 0.0 s instead of 145 s.
+Cargo's `[env]` table does reach the build-script fingerprint on toolchain
+1.98, so the fallback in decision 5 is not needed. The fingerprint records
+`qmake6` in both target directories — the bare Cargo one and the
 `build/cargo/build` one the CMake build drives — and a different value
-(`cargo --config 'env.QMAKE.value="/usr/bin/qmake6"'`) still reruns the
-cxx-qt build script.
+(`QMAKE=/usr/bin/qmake6 cargo build -p pictura_app`) still reruns the cxx-qt
+build script, in 207 s.
+
+The value is a name, and `qt-build-utils` runs qmake with a **cleared
+environment**, where a bare name is not found on the PATH: the cxx-qt build
+script resolves the name to a path before it runs. Without that, the CI
+fails, because its Qt is not in `/usr/bin`.
 
 `scripts/check-build-lock.sh` takes 17.5 s of wall time and 0.9 s of CPU.
 Every second of it is a deliberate sleep: the queue case holds the lock for
@@ -221,7 +226,10 @@ build script reruns.
 The fix is to make the process environment carry the same value in every
 flow. Cargo's `[env]` table in `.cargo/config.toml` is the one mechanism
 that applies to every cargo invocation regardless of who started it, and
-`force = true` makes it win over the path the CMake build exports.
+Nothing else exports a `QMAKE`: the CMake build does not pass one to the
+cargo invocation, so the value does not depend on which tool started the
+build. An explicit `QMAKE` in the environment wins over the default and
+reruns the build script, as it should.
 
 Whether Cargo's `[env]` reaches the fingerprint is **not** a given:
 rust-lang/cargo#10358 reports that `cargo:rerun-if-env-changed` does not
@@ -234,8 +242,9 @@ The value is the bare name `qmake6`, not an absolute path: the fingerprint
 compares strings, and an absolute path differs between machines and between
 a shell that exports one and one that does not. Both supported distributions
 ship `qmake6` (`scripts/install-deps-fedora.sh:133` names the Fedora
-package). `Command::new("qmake6")` searches `PATH`, so the bare name still
-resolves.
+package). The name has to be resolved to a path before qmake runs, because
+`qt-build-utils` clears the environment when it runs qmake, and a cleared
+environment has no PATH to search; the cxx-qt build script does that.
 
 *Alternative considered*: `QMAKE=<absolute path>` from a wrapper script in
 the repository. The path differs per worktree, so the fingerprint would

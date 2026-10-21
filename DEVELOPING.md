@@ -122,12 +122,16 @@ it. The stamp is rewritten only when the bridge content changes, so a
 re-configure does not dirty the whole C++ tree.
 
 Every cargo invocation sees the same `QMAKE`: `.cargo/config.toml` sets
-`QMAKE = { value = "qmake6", force = true }`, and the value reaches the cxx-qt
-build script's fingerprint in the CMake-driven build and in a bare `cargo
-build` alike. The bare name is searched on `PATH`. To use another qmake, set
-it through the command line — `cargo --config
-'env.QMAKE.value="/path/to/qmake"' build` — which reruns the build script, as
-it should.
+`QMAKE = { value = "qmake6" }`, and neither a script nor the CMake build
+exports one of its own, so the value does not depend on which tool started the
+build. The cxx-qt build script resolves the name to a path — `qt-build-utils`
+runs qmake with a cleared environment, where a bare name is not found on the
+PATH. An explicit `QMAKE` in the environment wins over the default and reruns
+the build script, as it should:
+
+```bash
+QMAKE=/path/to/qmake cargo build -p pictura_app
+```
 
 ## Architecture and data flow
 

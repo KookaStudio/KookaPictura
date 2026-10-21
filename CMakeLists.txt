@@ -108,7 +108,11 @@ if(NOT CxxQt_FOUND)
 endif()
 
 # cxx-qt reaches Qt through qmake. Debian/Ubuntu ship qmake6 for Qt 6; the bare
-# `qmake` is Qt 5, so pin the executable explicitly.
+# `qmake` is Qt 5, so look for qmake6 first. The value the build uses is one
+# string for every cargo invocation: `.cargo/config.toml` pins it, and the
+# cxx-qt build script resolves it to a path. Exporting the path found here
+# would give the cargo invocation a different fingerprint than a bare
+# `cargo build`, which is the churn this avoids.
 find_program(QMAKE_EXECUTABLE NAMES qmake6 qmake)
 if(NOT QMAKE_EXECUTABLE)
     message(FATAL_ERROR "qmake not found — install qt6-base-dev")
@@ -118,7 +122,6 @@ cxx_qt_import_crate(
     MANIFEST_PATH crates/pictura-app/Cargo.toml
     CRATES pictura_app
     QT_MODULES Qt::Core Qt::Gui Qt::Widgets
-    QMAKE "${QMAKE_EXECUTABLE}"
 )
 
 # The bridge stamp.
