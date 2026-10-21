@@ -148,3 +148,5 @@ QWidget* PhotoFilterDialog::controlForTest(const QString& key) const
 }
 
 } // namespace pictura
+
+#include "moc_photo_filter_dialog.cpp"

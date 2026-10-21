@@ -270,3 +270,5 @@ QString RasterSizeFields::fieldForTest(const QString& name) const
 }
 
 } // namespace pictura
+
+#include "moc_raster_size_fields.cpp"

@@ -117,3 +117,5 @@ void BrushTipPreview::clampToParent()
 }
 
 } // namespace pictura
+
+#include "moc_brush_tip_preview.cpp"

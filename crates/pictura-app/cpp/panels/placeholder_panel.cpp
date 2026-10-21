@@ -20,3 +20,5 @@ PlaceholderPanel::PlaceholderPanel(const QString& title, const QString& message,
 }
 
 } // namespace pictura
+
+#include "moc_placeholder_panel.cpp"

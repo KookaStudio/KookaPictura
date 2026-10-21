@@ -89,3 +89,5 @@ QWidget* ColorBalanceDialog::controlForTest(const QString& key) const
 }
 
 } // namespace pictura
+
+#include "moc_color_balance_dialog.cpp"

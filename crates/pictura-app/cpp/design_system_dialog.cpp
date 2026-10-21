@@ -396,3 +396,5 @@ void DesignSystemDialog::buildAllPagesForTest()
 }
 
 } // namespace pictura
+
+#include "moc_design_system_dialog.cpp"

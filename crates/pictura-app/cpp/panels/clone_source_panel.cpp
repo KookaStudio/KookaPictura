@@ -269,3 +269,5 @@ void CloneSourcePanel::refresh()
 }
 
 } // namespace pictura
+
+#include "moc_clone_source_panel.cpp"

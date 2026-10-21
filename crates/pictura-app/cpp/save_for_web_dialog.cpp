@@ -598,3 +598,5 @@ bool saveForWebFromView(QWidget* parent, PictureView* view, const QString& docum
 }
 
 } // namespace pictura
+
+#include "moc_save_for_web_dialog.cpp"

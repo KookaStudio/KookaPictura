@@ -171,3 +171,5 @@ bool StrokeDialog::eventFilter(QObject* obj, QEvent* event)
 }
 
 } // namespace pictura
+
+#include "moc_stroke_dialog.cpp"

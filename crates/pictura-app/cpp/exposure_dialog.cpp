@@ -186,3 +186,5 @@ QWidget* ExposureDialog::controlForTest(const QString& key) const
 }
 
 } // namespace pictura
+
+#include "moc_exposure_dialog.cpp"

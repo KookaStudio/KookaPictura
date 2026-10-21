@@ -69,3 +69,5 @@ void ColorSettingsDialog::setPolicyForTest(int index)
 }
 
 } // namespace pictura
+
+#include "moc_color_settings_dialog.cpp"

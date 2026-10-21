@@ -939,3 +939,5 @@ QList<double> FilterParamControls::scaledValues(double scale) const
 }
 
 } // namespace pictura
+
+#include "moc_filter_param_controls.cpp"

@@ -45,3 +45,5 @@ QString DuplicateImageDialog::copyName() const { return name_->text().trimmed();
 bool DuplicateImageDialog::mergedOnly() const { return merged_->isChecked(); }
 
 } // namespace pictura
+
+#include "moc_duplicate_image_dialog.cpp"

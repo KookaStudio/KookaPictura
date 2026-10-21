@@ -190,3 +190,5 @@ QVector<QColor> HistogramPanel::seriesColorsForTest() const
 void HistogramPanel::setChannelIndexForTest(int index) { channel_->setCurrentIndex(index); }
 
 } // namespace pictura
+
+#include "moc_histogram_panel.cpp"

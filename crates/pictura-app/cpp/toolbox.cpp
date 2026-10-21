@@ -1009,3 +1009,5 @@ void Toolbox::cycleGroup(int group, QChar key)
 }
 
 } // namespace pictura
+
+#include "moc_toolbox.cpp"

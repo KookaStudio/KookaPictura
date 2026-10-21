@@ -49,3 +49,5 @@ QWidget* SliderDialog::controlForTest(const QString& key) const
 }
 
 } // namespace pictura
+
+#include "moc_slider_dialog.cpp"

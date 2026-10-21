@@ -801,3 +801,5 @@ void InfoPanel::setMeasurementUnitForTest(int index, const QString& unit)
 }
 
 } // namespace pictura
+
+#include "moc_info_panel.cpp"

@@ -1006,3 +1006,5 @@ bool BlurGalleryDialog::get(PictureView* view, const FilterCommandSpec& spec,
 }
 
 } // namespace pictura
+
+#include "moc_blur_gallery_dialog.cpp"

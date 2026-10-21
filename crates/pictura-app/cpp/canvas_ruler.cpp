@@ -338,3 +338,5 @@ void CanvasRuler::mouseReleaseEvent(QMouseEvent* event)
 }
 
 } // namespace pictura
+
+#include "moc_canvas_ruler.cpp"

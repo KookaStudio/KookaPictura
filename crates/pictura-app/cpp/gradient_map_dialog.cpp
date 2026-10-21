@@ -163,3 +163,5 @@ QWidget* GradientMapDialog::controlForTest(const QString& key) const
 }
 
 } // namespace pictura
+
+#include "moc_gradient_map_dialog.cpp"

@@ -823,3 +823,5 @@ bool quickExportPngFromView(QWidget* parent, PictureView* view)
 }
 
 } // namespace pictura
+
+#include "moc_export_as_dialog.cpp"

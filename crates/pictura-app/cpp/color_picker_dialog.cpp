@@ -1177,3 +1177,5 @@ QColor ColorPickerDialog::getColor(const QColor& initial, QWidget* parent, const
 }
 
 } // namespace pictura
+
+#include "moc_color_picker_dialog.cpp"

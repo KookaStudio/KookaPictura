@@ -227,3 +227,5 @@ bool ParagraphStylesPanel::deleteSelectedStyle()
 }
 
 } // namespace pictura
+
+#include "moc_paragraph_styles_panel.cpp"

@@ -207,3 +207,5 @@ void ColorRangeDialog::refreshPreview()
 }
 
 } // namespace pictura
+
+#include "moc_color_range_dialog.cpp"

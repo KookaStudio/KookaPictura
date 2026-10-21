@@ -466,3 +466,5 @@ bool NumericField::eventFilter(QObject* watched, QEvent* event)
 }
 
 } // namespace pictura
+
+#include "moc_numeric_field.cpp"

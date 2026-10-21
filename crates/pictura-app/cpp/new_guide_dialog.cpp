@@ -56,3 +56,5 @@ void NewGuideDialog::setGuide(bool vertical, double position)
 }
 
 } // namespace pictura
+
+#include "moc_new_guide_dialog.cpp"

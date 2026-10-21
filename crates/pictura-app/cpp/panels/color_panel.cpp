@@ -152,3 +152,5 @@ void ColorPanel::paintSwatch(ColorSwatchWidget* button, const QColor& color, boo
 }
 
 } // namespace pictura
+
+#include "moc_color_panel.cpp"

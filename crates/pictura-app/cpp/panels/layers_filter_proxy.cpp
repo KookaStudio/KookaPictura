@@ -104,3 +104,5 @@ bool LayersFilterProxyModel::filterAcceptsRow(int sourceRow,
 }
 
 } // namespace pictura
+
+#include "moc_layers_filter_proxy.cpp"

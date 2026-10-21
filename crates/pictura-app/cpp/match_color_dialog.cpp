@@ -388,3 +388,5 @@ void MatchColorDialog::reject()
 }
 
 } // namespace pictura
+
+#include "moc_match_color_dialog.cpp"

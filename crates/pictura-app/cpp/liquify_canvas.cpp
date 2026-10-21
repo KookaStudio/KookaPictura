@@ -581,3 +581,5 @@ void LiquifyCanvas::applyPatch(const QList<int>& rect)
 }
 
 } // namespace pictura
+
+#include "moc_liquify_canvas.cpp"

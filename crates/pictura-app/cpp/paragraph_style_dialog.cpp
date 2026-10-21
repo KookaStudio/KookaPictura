@@ -245,3 +245,5 @@ ParagraphSetting ParagraphStyleDialog::paragraphSetting() const
 }
 
 } // namespace pictura
+
+#include "moc_paragraph_style_dialog.cpp"

@@ -804,3 +804,5 @@ FilterGalleryDialog::CommitResult FilterGalleryDialog::commit()
 }
 
 } // namespace pictura
+
+#include "moc_filter_gallery_dialog.cpp"

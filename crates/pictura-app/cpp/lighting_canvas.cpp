@@ -454,3 +454,5 @@ void LightingCanvas::drag(const QPointF& pos)
 }
 
 } // namespace pictura
+
+#include "moc_lighting_canvas.cpp"

@@ -1101,3 +1101,5 @@ bool ToolController::canToolRedo() const
 }
 
 } // namespace pictura
+
+#include "moc_tools.cpp"

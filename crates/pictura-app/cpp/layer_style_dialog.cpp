@@ -452,3 +452,5 @@ QWidget* LayerStyleDialog::angleRow(const QString& key)
 }
 
 } // namespace pictura
+
+#include "moc_layer_style_dialog.cpp"

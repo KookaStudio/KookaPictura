@@ -344,3 +344,5 @@ bool LensFlareDialog::get(PictureView* view, const FilterCommandSpec& spec,
 }
 
 } // namespace pictura
+
+#include "moc_lens_flare_dialog.cpp"

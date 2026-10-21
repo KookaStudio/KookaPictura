@@ -325,3 +325,5 @@ bool HdrToningDialog::get(QWidget* parent, PictureView* view, const QRect& visib
 }
 
 } // namespace pictura
+
+#include "moc_hdr_toning_dialog.cpp"

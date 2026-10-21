@@ -562,3 +562,5 @@ void AcrPanel::addSeparator(QVBoxLayout* column)
 }
 
 } // namespace pictura
+
+#include "moc_acr_controls.cpp"

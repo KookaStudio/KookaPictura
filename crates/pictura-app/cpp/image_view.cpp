@@ -1088,3 +1088,5 @@ void ImageView::clearBrushOutline()
 }
 
 } // namespace pictura
+
+#include "moc_image_view.cpp"

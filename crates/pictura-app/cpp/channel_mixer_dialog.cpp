@@ -124,3 +124,5 @@ QWidget* ChannelMixerDialog::controlForTest(const QString& key) const
 }
 
 } // namespace pictura
+
+#include "moc_channel_mixer_dialog.cpp"

@@ -529,3 +529,5 @@ QWidget* ImageSizeDialog::controlForTest(const QString& name) const
 }
 
 } // namespace pictura
+
+#include "moc_image_size_dialog.cpp"

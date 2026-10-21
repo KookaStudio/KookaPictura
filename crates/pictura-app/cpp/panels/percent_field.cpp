@@ -12,3 +12,5 @@ PercentField::PercentField(const QString& label, QWidget* parent)
 }
 
 } // namespace pictura
+
+#include "moc_percent_field.cpp"

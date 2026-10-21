@@ -258,3 +258,5 @@ bool ReduceNoiseDialog::get(PictureView* view, const FilterCommandSpec& spec,
 }
 
 } // namespace pictura
+
+#include "moc_reduce_noise_dialog.cpp"

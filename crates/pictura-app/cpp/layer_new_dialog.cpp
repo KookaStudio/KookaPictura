@@ -177,3 +177,5 @@ void LayerNewDialog::setModeForTest(const QString& blendKey)
 }
 
 } // namespace pictura
+
+#include "moc_layer_new_dialog.cpp"

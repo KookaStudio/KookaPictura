@@ -222,3 +222,5 @@ bool PdfPresetsDialog::saveSelectedAs(const QString& file)
 }
 
 } // namespace pictura
+
+#include "moc_pdf_presets_dialog.cpp"

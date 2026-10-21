@@ -87,3 +87,5 @@ QString LoadingCard::percentForTest() const
 }
 
 } // namespace pictura
+
+#include "moc_loading_card.cpp"

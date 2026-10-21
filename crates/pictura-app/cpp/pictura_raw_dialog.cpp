@@ -140,3 +140,5 @@ bool PicturaRawDialog::get(QWidget* parent, PictureView* view, const QString& pa
 }
 
 } // namespace pictura
+
+#include "moc_pictura_raw_dialog.cpp"

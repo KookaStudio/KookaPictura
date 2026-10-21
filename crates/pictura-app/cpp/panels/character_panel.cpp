@@ -275,3 +275,5 @@ bool CharacterPanel::editingEnabledForTest() const { return size_->isEnabled(); 
 void CharacterPanel::commitForTest() { apply(); }
 
 } // namespace pictura
+
+#include "moc_character_panel.cpp"

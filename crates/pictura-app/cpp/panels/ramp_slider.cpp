@@ -57,3 +57,5 @@ void RampSlider::paintEvent(QPaintEvent* event)
 }
 
 } // namespace pictura
+
+#include "moc_ramp_slider.cpp"

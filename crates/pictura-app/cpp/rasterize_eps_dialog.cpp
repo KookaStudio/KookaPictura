@@ -55,3 +55,5 @@ QString RasterizeEpsDialog::fieldForTest(const QString& name) const
 }
 
 } // namespace pictura
+
+#include "moc_rasterize_eps_dialog.cpp"

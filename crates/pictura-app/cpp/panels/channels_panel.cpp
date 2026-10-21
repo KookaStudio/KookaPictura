@@ -575,3 +575,5 @@ QColor ChannelsPanel::rowSurfaceForTest(int index) const
 }
 
 } // namespace pictura
+
+#include "moc_channels_panel.cpp"

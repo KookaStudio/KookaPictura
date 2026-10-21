@@ -544,3 +544,5 @@ bool NewDocumentDialog::get(QWidget* parent, const QString& name, const QColor& 
 }
 
 } // namespace pictura
+
+#include "moc_new_document_dialog.cpp"

@@ -761,3 +761,5 @@ QWidget* PropertiesPanel::controlForTest(const QString& key) const
 }
 
 } // namespace pictura
+
+#include "moc_properties_panel.cpp"

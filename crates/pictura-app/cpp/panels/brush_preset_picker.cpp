@@ -453,3 +453,5 @@ bool BrushPresetPicker::eventFilter(QObject* watched, QEvent* event)
 }
 
 } // namespace pictura
+
+#include "moc_brush_preset_picker.cpp"

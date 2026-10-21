@@ -179,3 +179,5 @@ void CanvasScrollBars::syncFromView()
 }
 
 } // namespace pictura
+
+#include "moc_canvas_scrollbars.cpp"

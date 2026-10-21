@@ -83,3 +83,5 @@ void MaskDisplayOptionsDialog::pickColor()
 }
 
 } // namespace pictura
+
+#include "moc_mask_display_options_dialog.cpp"

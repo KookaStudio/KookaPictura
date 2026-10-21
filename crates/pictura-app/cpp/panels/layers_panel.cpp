@@ -1071,3 +1071,5 @@ void LayersPanel::releaseIsolationFor(const QString& path)
 }
 
 } // namespace pictura
+
+#include "moc_layers_panel.cpp"
