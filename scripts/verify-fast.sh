@@ -63,6 +63,12 @@ fi
 build_lock_install_traps
 build_lock_acquire || exit 1
 
+# The cxx-qt build script tracks QMAKE (rerun-if-env-changed). CMake exports the
+# path it selected; a direct cargo run must export the same value or the script
+# reruns and recompiles pictura_app on every alternation of the two gates.
+# shellcheck source=scripts/qmake-env.sh
+. scripts/qmake-env.sh
+
 echo "== fmt =="
 cargo fmt --all --check
 echo "fmt=ok"
@@ -75,40 +81,65 @@ echo "clippy_errors=$clippy_errors"
 echo "== test =="
 bash scripts/test-report.sh never
 
-echo "== file-size =="
-bash scripts/check-file-size.sh
+checks_dir="$(mktemp -d "${TMPDIR:-/tmp}/pictura-verify.XXXXXX")"
+trap 'rm -rf "$checks_dir"; build_lock_release' EXIT
 
-echo "== flatpak sources =="
-python3 scripts/check-flatpak-cargo-sources.py --self-test
-python3 scripts/check-flatpak-cargo-sources.py
+check_names=()
+check_pids=()
 
-echo "== worktree hook =="
-bash scripts/check-worktree-hook.sh
+start_check() { # <name> <command...>
+    local name="$1"; shift
+    check_names+=("$name")
+    ( set +e; "$@" >"$checks_dir/$name.log" 2>&1; printf '%s' "$?" >"$checks_dir/$name.rc" ) &
+    check_pids+=("$!")
+}
 
-echo "== build caching =="
-bash scripts/check-local-build-caching.sh
+flatpak_check() {
+    python3 scripts/check-flatpak-cargo-sources.py --self-test &&
+        python3 scripts/check-flatpak-cargo-sources.py
+}
 
-echo "== build lock =="
-bash scripts/check-build-lock.sh
+archive_check() {
+    bash scripts/check-openspec-archived.sh --self-test &&
+        bash scripts/check-openspec-archived.sh
+}
 
-echo "== selftest budget =="
-bash scripts/check-selftest-budget.sh
+test_plan_check() {
+    python3 scripts/check-test-plan.py --self-test &&
+        python3 scripts/check-test-plan.py
+}
 
-echo "== archive =="
-bash scripts/check-openspec-archived.sh --self-test
-bash scripts/check-openspec-archived.sh
+openspec_check() {
+    openspec validate --all --strict
+}
 
-echo "== icon provenance =="
-python3 scripts/check-icon-provenance.py
+echo "== checks (parallel) =="
+start_check file-size bash scripts/check-file-size.sh
+start_check flatpak flatpak_check
+start_check worktree-hook bash scripts/check-worktree-hook.sh
+start_check build-caching bash scripts/check-local-build-caching.sh
+start_check build-lock bash scripts/check-build-lock.sh
+start_check selftest-budget bash scripts/check-selftest-budget.sh
+start_check archive archive_check
+start_check icon-provenance python3 scripts/check-icon-provenance.py
+start_check guard bash scripts/guard.sh
+start_check test-plan test_plan_check
+start_check openspec openspec_check
 
-echo "== guard =="
-bash scripts/guard.sh
-
-echo "== test plan =="
-python3 scripts/check-test-plan.py --self-test
-python3 scripts/check-test-plan.py
-
-echo "== openspec =="
-openspec validate --all --strict 2>&1 | tail -1
+check_failed=0
+for pid in "${check_pids[@]}"; do
+    wait "$pid" || true
+done
+for name in "${check_names[@]}"; do
+    rc=$(cat "$checks_dir/$name.rc" 2>/dev/null || printf 1)
+    if [ "$rc" -eq 0 ]; then
+        printf '%s=ok\n' "$name"
+    else
+        printf '%s=FAILED (rc=%s)\n' "$name" "$rc"
+        sed 's/^/  /' "$checks_dir/$name.log" || true
+        check_failed=1
+    fi
+done
+[ "$check_failed" -eq 0 ] || { echo "verify-fast: FAILED"; exit 1; }
 
 echo "verify-fast: OK"

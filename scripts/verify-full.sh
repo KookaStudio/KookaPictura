@@ -18,8 +18,13 @@ if [ "${_build_lock_owned:-0}" = "1" ]; then
 fi
 
 echo "== cmake =="
-if [ ! -d build ]; then
-  cmake -S . -B build -G Ninja -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld
+# -U drops linker flags cached by an older configure so the mold/lld probe is
+# not masked by a stale -DCMAKE_EXE_LINKER_FLAGS value. An existing build keeps
+# its generator; a new one defaults to Ninja.
+if [ -f build/CMakeCache.txt ]; then
+  cmake -S . -B build -U CMAKE_EXE_LINKER_FLAGS -U CMAKE_SHARED_LINKER_FLAGS
+else
+  cmake -S . -B build -G Ninja -U CMAKE_EXE_LINKER_FLAGS -U CMAKE_SHARED_LINKER_FLAGS
 fi
 cmake --build build --parallel
 echo "cmake_build=ok"

@@ -79,8 +79,8 @@ jobs:
         run: rustup show active-toolchain
 
       - &apt
-        name: Install lld, ninja, lcms2, Vulkan headers, and the PDF oracle tools
-        run: sudo apt-get update && sudo apt-get install -y lld ninja-build liblcms2-dev libvulkan-dev poppler-utils ghostscript qpdf
+        name: Install lld, mold, ninja, lcms2, Vulkan headers, and the PDF oracle tools
+        run: sudo apt-get update && sudo apt-get install -y lld mold ninja-build liblcms2-dev libvulkan-dev poppler-utils ghostscript qpdf
 
       - &qt
         name: Install Qt
@@ -151,7 +151,7 @@ jobs:
       - *rustcache
 
       - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+        run: cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
 
       - name: Build
         run: cmake --build build --parallel
@@ -163,7 +163,10 @@ jobs:
         run: ./build/pictura --headless --self-test crates/pictura-codec/tests/fixtures/two_layers.psd
 
       - name: CTest
-        run: ctest --test-dir build --output-on-failure
+        run: |
+          level="${CTEST_PARALLEL_LEVEL:-4}"
+          echo "ctest -j $level"
+          ctest --test-dir build --output-on-failure -j "$level"
 
       - name: Qt test report
         if: always()

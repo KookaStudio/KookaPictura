@@ -5,10 +5,13 @@
 # Default mode: configure the project into throwaway build directories and
 # assert the Ninja LAUNCHER build-rule variable (sccache by default, an explicit
 # override wins, none when sccache is absent). --rebuild mode (with optional
-# --dir <build-dir>): build the pictura target, delete its CMake object files,
-# rebuild, and assert the second build hits the cache. Never touches the real
-# build/ unless --dir names it, and restores the repo-root compile_commands.json
-# symlink. Self-skips when cmake or qmake6 is absent.
+# --dir <build-dir>): build the pictura target, delete one of its shell object
+# files, rebuild, and assert the second build hits the cache. The three
+# throwaway configures share a user-level FetchContent base so cxx-qt-cmake and
+# Corrosion are fetched once per run and reused later; only the build directory
+# named by --dir is ever built. Never touches the real build/ unless --dir names
+# it, and restores the repo-root compile_commands.json symlink. Self-skips when
+# cmake or qmake6 is absent.
 
 set -euo pipefail
 
@@ -46,14 +49,57 @@ restore_compile_db() {
 if [ -e "$compile_db" ] || [ -L "$compile_db" ]; then
     cp -a "$compile_db" "$sandbox/compile_db.bak"
 fi
-trap 'restore_compile_db; rm -rf "$sandbox"' EXIT
+
+# One user-level FetchContent base per machine. Worktrees share it, so the
+# dependency sources are cloned once and reused; the check itself only builds in
+# the directory it was asked to inspect. A second concurrent run falls back to
+# its own sandbox base instead of writing the shared one.
+fetchcontent_cache="${XDG_CACHE_HOME:-${HOME:-/tmp}/.cache}/kooka-pictura/fetchcontent"
+fetchcontent_lock="$fetchcontent_cache.lock"
+fetchcontent_base="$fetchcontent_cache"
+lock_owned=0
+mkdir -p "$(dirname "$fetchcontent_cache")"
+
+cleanup() {
+    if [ "$lock_owned" -eq 1 ]; then
+        rm -rf "$fetchcontent_lock"
+    fi
+    restore_compile_db
+    rm -rf "$sandbox"
+}
+trap cleanup EXIT
 
 fail() { echo "check-local-build-caching: FAIL: $*" >&2; exit 1; }
 
+if mkdir "$fetchcontent_lock" 2>/dev/null; then
+    lock_owned=1
+elif [ -r "$fetchcontent_lock/pid" ] \
+    && ! kill -0 "$(cat "$fetchcontent_lock/pid" 2>/dev/null)" 2>/dev/null; then
+    rm -rf "$fetchcontent_lock"
+    if mkdir "$fetchcontent_lock" 2>/dev/null; then
+        lock_owned=1
+    fi
+fi
+if [ "$lock_owned" -eq 1 ]; then
+    printf '%s' "$$" >"$fetchcontent_lock/pid"
+else
+    fetchcontent_base="$sandbox/fetchcontent"
+fi
+
 configure() { # <build-dir> [extra cmake args...]
     local dir="$1"; shift
-    cmake -S "$repo_root" -B "$dir" -G Ninja \
-        -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld "$@" >/dev/null
+    local log="$sandbox/configure.log"
+    if [ -f "$dir/CMakeCache.txt" ]; then
+        if ! cmake -S "$repo_root" -B "$dir" \
+            -DFETCHCONTENT_BASE_DIR="$fetchcontent_base" "$@" >"$log" 2>&1; then
+            cat "$log" >&2
+            return 1
+        fi
+    elif ! cmake -S "$repo_root" -B "$dir" -G Ninja \
+        -DFETCHCONTENT_BASE_DIR="$fetchcontent_base" "$@" >"$log" 2>&1; then
+        cat "$log" >&2
+        return 1
+    fi
 }
 
 launcher() { # <build-dir> -> the Ninja LAUNCHER value, or empty
@@ -116,8 +162,19 @@ if [ "$rebuild" -eq 1 ]; then
     fi
     build_dir "$dir" --target pictura >/dev/null
     hits_before="$(sccache_hits)"
-    find "$dir" -path '*/CMakeFiles/*' \( -name '*.o' -o -name '*.obj' \) -delete
-    build_dir "$dir" --target pictura >/dev/null
+    test_objects_before=$(find "$dir" -path '*/CMakeFiles/tst_*.dir/*' \( -name '*.o' -o -name '*.obj' \) | wc -l | tr -d ' ')
+    probe=""
+    while IFS= read -r obj; do
+        probe="$obj"
+        break
+    done < <(find "$dir" -path '*/CMakeFiles/pictura_shell.dir/*' \( -name '*.o' -o -name '*.obj' \))
+    [ -n "$probe" ] || fail "rebuild: no pictura_shell object found under $dir"
+    rm -f "$probe"
+    build_dir "$dir" --target pictura_shell >/dev/null
+    test_objects_after=$(find "$dir" -path '*/CMakeFiles/tst_*.dir/*' \( -name '*.o' -o -name '*.obj' \) | wc -l | tr -d ' ')
+    if [ "${test_objects_after:-0}" -lt "${test_objects_before:-0}" ]; then
+        fail "rebuild: test objects disappeared (${test_objects_before:-0} -> ${test_objects_after:-0})"
+    fi
     hits_after="$(sccache_hits)"
     if [ "${hits_after:-0}" -le "${hits_before:-0}" ]; then
         fail "rebuild: cache hits did not increase (${hits_before:-0} -> ${hits_after:-0})"
