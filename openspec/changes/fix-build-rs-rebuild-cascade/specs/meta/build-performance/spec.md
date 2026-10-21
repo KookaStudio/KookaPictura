@@ -87,20 +87,6 @@ up, and a build in which nothing changed SHALL NOT recompile the C++.
 - **WHEN** nothing under the bridge sources or the shell sources changed and the project is rebuilt
 - **THEN** no C++ translation unit is recompiled
 
-### Requirement: The clean build overlaps the Rust build with C++ compilation
-
-In a clean development build, the C++ compilation SHALL NOT wait for the Rust
-static library to finish before it starts on the translation units that
-include no generated cxx-qt header. The translation units that include a
-generated header SHALL still wait for the Rust build, because they need the
-regenerated interface. The overlap SHALL be observable as a shorter clean
-build at the same parallelism, and it SHALL NOT change the produced binary.
-
-#### Scenario: the shell compiles while Rust builds [bp_clean_build_overlap]
-
-- **WHEN** the project is built from a clean tree
-- **THEN** the translation units that include no generated header are compiled while the Rust build is still running, and the build finishes no later than it did before
-
 ### Requirement: The heaviest C++ translation units are measured and cheapened
 
 The build system SHALL measure the cost of the heaviest C++ translation units

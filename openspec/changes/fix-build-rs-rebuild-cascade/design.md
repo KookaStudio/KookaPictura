@@ -2,13 +2,14 @@
 
 ## Measurements
 
-The baseline this work started from, on a 16-core Linux box with a warm
-sccache, a warm Cargo target directory and `-j12`. "Edges" is the number of
-Ninja edges the build ran; the steady state is 3.
+The baseline this work started from, and the result this work reached, on a
+16-core Linux box with a warm sccache, a warm Cargo target directory and
+`-j12`. "Edges" is the number of Ninja edges the build ran; the steady state
+is 3.
 
 | Scenario | Before | After |
 |---|---|---|
-| Clean build | 384 s (818 edges) | see the PR body |
+| Clean build | 384 s (818 edges) | 58.5 s (1225 edges) |
 | Leaf `.cpp` touch, first build | 58.0 s (132 edges) | 3.0 s (132 edges) |
 | Leaf `.cpp` touch, second build | 56.0 s (512 edges) | 0.0 s (3 edges) |
 | Non-bridge `.rs` touch, first build | 73.0 s (3 edges) | — |
@@ -16,12 +17,18 @@ Ninja edges the build ran; the steady state is 3.
 | Bridge `.rs` change, first build | 93.0 s (3 edges, **C++ stale**) | 60.0 s (506 edges, C++ rebuilt) |
 | Bridge `.rs` change, second build | 59.0 s (512 edges) | 0.0 s (3 edges) |
 | Cargo build, `QMAKE` switched | 145–154 s | 0.0 s |
-| `ctest -R '^tst_'` at `-j4` | 136 s | see the PR body |
+| `ctest -R '^tst_'` at `-j4` | 136 s | 99.6 s |
+| `ctest -R '^tst_'` at `-j12` | 120.5 s, 3 suites timed out | 53.2 s, no timeouts |
 | `verify-fast.sh` | 511 s | see the PR body |
 
 The two numbers that matter are the second build of a leaf `.cpp` touch
 (56 s of pure waste) and the first build of a bridge change (3 edges, so the
 C++ was compiled against the previous header).
+
+The clean build's 58.5 s is 39 s of cargo edge plus 19.5 s of C++ phase: the
+cargo edge starts first and every shell translation unit waits for it, so
+nothing else runs until it finishes. Of the 1225 edges, 27 ran inside the
+cargo edge's window and none of them was a shell translation unit.
 
 The CTest critical path before the change named one suite:
 `tst_floating_workspaces` at 82.3 s, `tst_workspaces` at 65.1 s and
@@ -33,7 +40,19 @@ The QMAKE spike (task 1.4) came out **go**: with
 `QMAKE = { value = "qmake6", force = true }` in `.cargo/config.toml`, switching
 the environment between a set and an unset `QMAKE` cost 0.0 s instead of
 145 s. Cargo's `[env]` table does reach the build-script fingerprint on
-toolchain 1.98, so the fallback in decision 5 is not needed.
+toolchain 1.98, so the fallback in decision 5 is not needed. The fingerprint
+records `qmake6` in both target directories — the bare Cargo one and the
+`build/cargo/build` one the CMake build drives — and a different value
+(`cargo --config 'env.QMAKE.value="/usr/bin/qmake6"'`) still reruns the
+cxx-qt build script.
+
+`scripts/check-build-lock.sh` takes 17.5 s of wall time and 0.9 s of CPU.
+Every second of it is a deliberate sleep: the queue case holds the lock for
+2 s, the timeout case waits out a 1 s timeout and then waits for its holder,
+the zero-timeout case holds for 2 s, and the reclaim and publication races
+sleep 1 s each while they prove that the waiters serialize. The sleeps are
+the assertions — a shorter hold would prove less — and the check runs in CI
+only, so the time is not on anybody's critical path. It is not changed.
 
 ## Context
 The constraints that shape the approach, all verified against the tree this
@@ -259,9 +278,63 @@ The three slowest Qt Test suites do not use fixed wall-clock sleeps; they
 pump the event loop and do real work — window and panel construction, and
 PDF parsing. The lever that pays is therefore **splitting** them into more
 registered entries so the layer's critical path is not one suite, not
-replacing sleeps with retry helpers. Whether the split pays is measured
-first: if the split does not shorten the CTest wall time, it is not shipped
-and the number is recorded.
+replacing sleeps with retry helpers.
+
+The split is a share of the suite's test functions, chosen by the
+`PICTURA_TEST_SHARD` environment variable (`<index>/<count>`). The suite
+enumerates its own test functions — the private slots without parameters,
+minus the lifecycle hooks and the data functions, which is the rule QTest
+itself uses — and hands the share's names to QTest. A suite registered
+without the variable runs every function, so the suites stay runnable by
+hand.
+
+Only suites whose test functions are independent of each other are split. A
+suite that shares its window between the test functions keeps one entry:
+`tst_tilt_shift` builds on the state the previous function left, and its
+shards failed when they ran apart.
+
+### 10. The clean build does not overlap the Rust build with the C++ one
+
+The clean build is 58.5 s: 39 s of cargo edge, then 19.5 s of C++ phase. The
+cargo edge starts first and every shell translation unit waits for it, so
+nothing else runs until it finishes.
+
+Splitting the shell into a target that waits for the Rust build and a target
+that does not would move the 123 translation units that include no generated
+header — about 55 s of CPU — into the cargo edge's window. The C++ phase
+would shrink by roughly 5 s and the clean build with it: 58.5 s to about
+54 s, 7.7%.
+
+That is not worth shipping. The split needs to know which translation units
+include a generated header, and the answer is transitive: 145 of the 268
+shell translation units reach one through a project header, 18 more than the
+direct include scan finds. Deciding it at configure time needs an
+include-graph walk in CMake, and a translation unit the walk puts on the
+wrong side compiles against a stale generated header in an incremental build
+— the very bug this change exists to remove. The build tree's own dependency
+files answer the question exactly, but only after a build, which is the case
+the split is meant to help.
+
+The measurement is recorded here and the requirement is dropped from the
+delta rather than shipped as a mechanism that can reintroduce the bug it
+fixes.
+
+### 11. The heavy translation units need no split
+
+The heaviest shell translation unit is `frame_keys.cpp` at 0.51 s and the
+heaviest Qt Test translation unit is `tst_brush_tip_preview.cpp` at 0.86 s.
+Neither dominates a 58.5 s build, so neither is split.
+
+The per-suite moc cost is 4.2 s over 129 compilation units, and the 138
+test links cost 0.1 s each — the shared shell already made the links cheap.
+Neither is worth reducing.
+
+Split debug information does not pay either. Compiling one shell translation
+unit cold takes 1.67 s with `-g` and 1.78 s with `-gsplit-dwarf`: the object
+shrinks from 458 KiB to 64 KiB, but the compile is 6.6% slower, the links
+have nothing to gain, and sccache does not cache the separate `.dwo` file.
+The Qt Test targets already compile with `-g1`, which keeps only the line
+tables.
 
 ## Risks / Trade-offs
 
@@ -279,11 +352,12 @@ and the number is recorded.
 - **[The `[env]` spike may fail]** → The fallback (CMake honours
   `$ENV{QMAKE}`) is weaker: it needs a one-time export in the developer's
   shell. The outcome is recorded in this file either way.
-- **[Splitting the shell into two targets]** → A pure move of source lists,
-  but it touches the target that 122 test executables link. The link lines
-  and the suite results are the regression net.
 - **[Two concurrent self-test processes]** → Guarded by the state isolation
   the suites already rely on; the first execution confirms it.
+- **[A sharded suite's functions must be independent]** → A suite that
+  shares state between its test functions keeps one entry. A future function
+  that depends on an earlier one would fail in its shard, loudly, and the
+  suite would go back to one entry.
 
 ## Migration Plan
 

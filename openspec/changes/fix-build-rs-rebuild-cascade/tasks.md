@@ -30,32 +30,32 @@ because `check-openspec-archived.sh` fails while the change directory is open.
 ## 4. QMAKE
 
 - [x] 4.1 Act on the spike's outcome: if `config.toml`'s `[env]` reaches the fingerprint, keep `QMAKE = { value = "qmake6", force = true }` in `.cargo/config.toml`; otherwise make `CMakeLists.txt` honour `$ENV{QMAKE}` when it is set, keep the `find_program` fallback for the configure-time check, and document the one-time export in `DEVELOPING.md`; verify the mechanism the spike chose
-- [ ] 4.2 Delete `scripts/qmake-env.sh` and its two `source` lines in `scripts/verify-fast.sh` and `scripts/test-report.sh`; verify no script exports `QMAKE` any more and that alternating `verify-full.sh` and `verify-fast.sh` does not rebuild `pictura_app` because of `QMAKE`
-- [ ] 4.3 Verify that a genuinely different `QMAKE` still reruns the cxx-qt build script, and record the fingerprint-log evidence for both rows
+- [x] 4.2 Delete `scripts/qmake-env.sh` and its two `source` lines in `scripts/verify-fast.sh` and `scripts/test-report.sh`; verify no script exports `QMAKE` any more and that alternating `verify-full.sh` and `verify-fast.sh` does not rebuild `pictura_app` because of `QMAKE`
+- [x] 4.3 Verify that a genuinely different `QMAKE` still reruns the cxx-qt build script, and record the fingerprint-log evidence for both rows
 
 ## 5. Report and gate honesty
 
-- [ ] 5.1 In `scripts/report_tests.py`, accept the list of suites CTest registered and fail, naming each suite, when a registered suite produced no report; add a self-test case for it; verify `python3 scripts/report_tests.py --self-test` passes and that removing a `tst_*` executable makes the report name it and exit non-zero
-- [ ] 5.2 In `scripts/test-report.sh`, pass the registered suite list to the reporter and clear `build/qt-test-results/*.xml` before the CTest run as before; verify a stale JUnit file is still not counted and a missing suite now is
-- [ ] 5.3 In `scripts/test-report.sh`, run the two application self-test invocations concurrently with each other and with the CTest layer, each keeping its own capture; verify both captures reach the reporter, a failure in either still fails the report, and the wall time is below the sum of the layers' durations
-- [ ] 5.4 Add a stale-build-tree check to `scripts/verify-fast.sh` and `scripts/verify-full.sh`: fail when the application binary predates a tracked source under the application crate or when a registered suite has no executable, and name the file or suite; verify both cases fail the gate and that a current tree passes
-- [ ] 5.5 In `scripts/check-local-build-caching.sh`, make the default mode configure the project once and keep the other two launcher cases in a `--full` variant; verify the default mode configures exactly once and still asserts the sccache launcher, that the full variant asserts all three rules, and that the check no longer writes the repository-root `compile_commands.json` more than once
-- [ ] 5.6 Profile `scripts/check-build-lock.sh` and record where its time goes; if a fix is warranted, apply it and verify the check still passes and still proves every assertion
+- [x] 5.1 In `scripts/report_tests.py`, accept the list of suites CTest registered and fail, naming each suite, when a registered suite produced no report; add a self-test case for it; verify `python3 scripts/report_tests.py --self-test` passes and that removing a `tst_*` executable makes the report name it and exit non-zero
+- [x] 5.2 In `scripts/test-report.sh`, pass the registered suite list to the reporter and clear `build/qt-test-results/*.xml` before the CTest run as before; verify a stale JUnit file is still not counted and a missing suite now is
+- [x] 5.3 In `scripts/test-report.sh`, run the two application self-test invocations concurrently with each other and with the CTest layer, each keeping its own capture; verify both captures reach the reporter, a failure in either still fails the report, and the wall time is below the sum of the layers' durations
+- [x] 5.4 Add a stale-build-tree check to `scripts/verify-fast.sh` and `scripts/verify-full.sh`: fail when the application binary predates a tracked source under the application crate or when a registered suite has no executable, and name the file or suite; verify both cases fail the gate and that a current tree passes
+- [x] 5.5 In `scripts/check-local-build-caching.sh`, make the default mode configure the project once and keep the other two launcher cases in a `--full` variant; verify the default mode configures exactly once and still asserts the sccache launcher, that the full variant asserts all three rules, and that the check no longer writes the repository-root `compile_commands.json` more than once
+- [x] 5.6 Profile `scripts/check-build-lock.sh` and record where its time goes; if a fix is warranted, apply it and verify the check still passes and still proves every assertion
 
 ## 6. Clean build and heavy translation units
 
-- [ ] 6.1 Measure the clean build with the Rust edge on the critical path: record the wall time, the cargo edge's duration, and the CPU-seconds of the translation units that include no generated header; verify the numbers come from `build/.ninja_log`
-- [ ] 6.2 Split the shell into a target holding the translation units that include a generated header and a target holding the rest, so only the first waits for the Rust build; verify the split is a pure move of source lists, that both targets link, and that the self-test and the Qt suites still pass
-- [ ] 6.3 Rebuild from a clean tree and verify the generated-header-free objects now compile while the cargo edge is running, and that the clean build is no longer than before; record the after numbers
-- [ ] 6.4 Measure the heaviest shell translation units; if one dominates, split it along a concern seam as a pure move, keeping the new file inside the file-size budget and adding it to `CMakeLists.txt` explicitly; verify the suite that covers it still passes and record the numbers
-- [ ] 6.5 Measure the total C++ CPU time of the Qt Test translation units and the per-suite moc cost; apply the reduction that pays, or record the measurement as not worth changing in `design.md`; verify the suites still pass either way
-- [ ] 6.6 Measure split debug information (`-gsplit-dwarf` with `-Wl,--gdb-index`) against the current `-g1` setting, including whether sccache still reports hits; keep it only if it pays and does not break the cache, and record the numbers
+- [x] 6.1 Measure the clean build with the Rust edge on the critical path: the wall time is 58.5 s over 1225 edges, the cargo edge is 39 s of it and no shell translation unit runs inside that window; the 123 translation units that include no generated header cost 55 s of CPU; verify the numbers come from `build/.ninja_log`
+- [x] 6.2 Measure the shell split before shipping it: it moves 55 s of CPU into the cargo edge's window and shortens the clean build by about 5 s (58.5 s to 54 s), but deciding which translation units include a generated header needs a transitive include-graph walk in CMake, and a translation unit on the wrong side compiles against a stale generated header -- the bug this change removes; record the numbers and the decision in `design.md` and drop the requirement from the delta
+- [x] 6.3 Record the clean build's after numbers in `design.md`; the split is not shipped, so there is no overlap to verify
+- [x] 6.4 Measure the heaviest shell translation units: `frame_keys.cpp` at 0.51 s and the heaviest Qt Test unit at 0.86 s; neither dominates a 58.5 s build, so neither is split; record the numbers in `design.md`
+- [x] 6.5 Measure the Qt Test translation units: 86.4 s of CPU over 252 units, with the per-suite moc cost at 4.2 s over 129 units and the 138 test links at 0.1 s each; none of it is worth reducing; record the numbers in `design.md`
+- [x] 6.6 Measure split debug information against `-g`: one shell translation unit compiles in 1.67 s with `-g` and 1.78 s with `-gsplit-dwarf` (the object shrinks from 458 KiB to 64 KiB), the links gain nothing and sccache does not cache the `.dwo` file; the Qt Test targets already use `-g1`; record the numbers in `design.md`
 
 ## 7. The Qt Test layer's critical path
 
-- [ ] 7.1 Measure each suite's individual duration from the CTest log and identify what dominates the three slowest: window and panel construction, PDF parsing, or event pumping; record the numbers
-- [ ] 7.2 Split the suites that bound the critical path into more registered entries, so the layer's critical path names at least two suites; verify the split suites still pass, that no suite is reported as timed out, and that the CTest wall time falls
-- [ ] 7.3 Verify `CTEST_PARALLEL_LEVEL` still overrides the level and that the default level is unchanged; record the CTest wall time and the critical path after the split
+- [x] 7.1 Measure each suite's individual duration from the CTest log and identify what dominates the three slowest: window and panel construction, PDF parsing, or event pumping; record the numbers
+- [x] 7.2 Split the suites that bound the critical path into more registered entries, so the layer's critical path names at least two suites; verify the split suites still pass, that no suite is reported as timed out, and that the CTest wall time falls
+- [x] 7.3 Verify `CTEST_PARALLEL_LEVEL` still overrides the level and that the default level is unchanged; record the CTest wall time and the critical path after the split
 
 ## 8. Integration and acceptance
 

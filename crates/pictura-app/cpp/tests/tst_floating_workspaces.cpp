@@ -1386,5 +1386,8 @@ void FloatingWorkspacesTest::startupChildFloatUsesFrameGeometry()
     QVERIFY(floatWindow->geometry().bottom() < window->height());
 }
 
-QTEST_MAIN(FloatingWorkspacesTest)
+int main(int argc, char *argv[])
+{
+    return pictura::test::shardedMain<FloatingWorkspacesTest>(argc, argv);
+}
 #include "tst_floating_workspaces.moc"

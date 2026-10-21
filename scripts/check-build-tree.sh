@@ -73,6 +73,11 @@ for test in data.get("tests", []):
         print(f"{name}\t{executable}\tno executable")
         continue
     source = os.path.join(tests_dir, f"{name}.cpp")
+    if not os.path.exists(source):
+        # A sharded suite is registered as "<name>_<shard>"; its source is the
+        # suite's own file.
+        base = name.rsplit("_", 1)[0] if name[-1:].isdigit() else name
+        source = os.path.join(tests_dir, f"{base}.cpp")
     if os.path.exists(source) and os.path.getmtime(source) > os.path.getmtime(executable):
         print(f"{name}\t{executable}\tolder than {source}")
 PY

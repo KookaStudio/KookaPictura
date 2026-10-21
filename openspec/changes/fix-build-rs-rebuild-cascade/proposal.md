@@ -33,10 +33,8 @@ test a build tree that predates the sources under test.
 - Detect a bridge change before the build decides what to compile, and rebuild
   the C++ that depends on the generated headers in that same build, so no
   second build is needed and the C++ never compiles against a stale header.
-- Overlap the clean build: the 140 shell translation units that include no
-  generated header compile while the Rust static library is still being built.
-- Measure the heaviest C++ translation units and cheapen the ones that
-  dominate, keeping only the changes that measurably pay.
+- Measure the heaviest C++ translation units and the clean build's critical
+  path, and keep only the changes that measurably pay.
 
 **One QMAKE for every cargo invocation**
 
@@ -54,7 +52,9 @@ test a build tree that predates the sources under test.
 - The two app self-test invocations run concurrently with the other layers.
 - The build-caching check configures the project once in its default mode and
   keeps the three-case variant for CI.
-- The three slowest Qt Test suites stop bounding the CTest run.
+- The three slowest Qt Test suites stop bounding the CTest run: they are
+  registered in several entries each, and no suite times out at any
+  parallelism.
 
 **Docs**: `DEVELOPING.md`, `AGENTS.md` and `.serena/memories/tech_stack.md`
 describe a lighter `app` Cargo profile that was measured and rejected in #771
@@ -70,9 +70,9 @@ None. Every behaviour below extends an existing capability.
 
 - `meta/build-performance`: the build script tracks only the bridge sources;
   generated headers keep their timestamp when their content is unchanged; a
-  bridge change rebuilds the C++ in the same build; the clean build overlaps
-  the Rust build with C++ compilation; the heaviest C++ translation units are
-  measured and cheapened; and every cargo invocation sees the same `QMAKE`.
+  bridge change rebuilds the C++ in the same build; the heaviest C++
+  translation units are measured; and every cargo invocation sees the same
+  `QMAKE`.
 - `verification/test-reporting`: a registered suite that produced no report
   fails the run, and the test layers run concurrently.
 - `verification/verification-harness`: the local gates detect a stale build
@@ -86,8 +86,7 @@ None. Every behaviour below extends an existing capability.
 
 - `crates/pictura-app/build.rs` — change tracking and write-if-changed for the
   generated headers.
-- `CMakeLists.txt` — the bridge stamp, the per-source dependency on it, and
-  the clean-build overlap.
+- `CMakeLists.txt` — the bridge stamp and the per-source dependency on it.
 - `.cargo/config.toml`, `scripts/qmake-env.sh` (removed),
   `scripts/verify-fast.sh`, `scripts/test-report.sh`,
   `scripts/report_tests.py`, `scripts/check-local-build-caching.sh`.
