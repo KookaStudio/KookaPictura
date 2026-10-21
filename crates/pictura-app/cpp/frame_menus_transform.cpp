@@ -1,6 +1,7 @@
-// Edit > Transform beyond Free Transform: constrained Scale/Rotate sessions,
-// the exact rotations and flips, and Transform Again. Lifted out of
-// registerHandlers() to keep frame_menus.cpp within its size budget.
+// Edit > Transform: Free Transform, the constrained Scale/Rotate and Skew/
+// Distort/Perspective sessions, the exact rotations and flips, and Transform
+// Again. Lifted out of registerHandlers() to keep frame_menus.cpp within its
+// size budget.
 
 #include "frame_includes.h"
 
@@ -9,9 +10,7 @@ namespace pictura {
 void PicturaMainWindow::wireTransformMenu()
 {
     const auto transformTarget = [this]() {
-        return (layersPanel_ && layersPanel_->selectedPaths().size() == 1)
-                   ? layersPanel_->currentPath()
-                   : QString();
+        return selectedLayerPaths().size() == 1 ? layerAnchor() : QString();
     };
     const auto transformTargetable = [this, transformTarget]() {
         PictureView* view = activeView();
@@ -22,6 +21,44 @@ void PicturaMainWindow::wireTransformMenu()
     const auto modalSession = [this]() {
         return tools_ && tools_->transformPending();
     };
+
+    registry_->setHandler(command_ids::EditFreeTransform, [this, transformTarget]() {
+        if (beginFreeTransform(transformTarget())) {
+            refresh();
+        }
+    });
+    registry_->setEnabledProvider(command_ids::EditFreeTransform, transformTargetable);
+
+    const struct {
+        const char* id;
+        const char* mode;
+    } kProjectiveModes[] = {
+        {command_ids::EditTransformSkew, "skew"},
+        {command_ids::EditTransformDistort, "distort"},
+        {command_ids::EditTransformPerspective, "perspective"},
+    };
+    for (const auto& entry : kProjectiveModes) {
+        const QString id = QString::fromLatin1(entry.id);
+        const QString mode = QString::fromLatin1(entry.mode);
+        registry_->setHandler(id, [this, mode, transformTarget]() {
+            if (beginTransformMode(transformTarget(), mode)) {
+                refresh();
+            }
+        });
+        registry_->setEnabledProvider(id, [this, mode, transformTarget]() {
+            PictureView* view = activeView();
+            const QString path = transformTarget();
+            return view && view->has_document() && !path.isEmpty()
+                && layer_can_transform_mode(*view, path, mode);
+        });
+    }
+
+    registry_->setHandler(command_ids::EditTransformWarp, [this, transformTarget]() {
+        if (tools_ && tools_->beginWarp(transformTarget())) {
+            refresh();
+        }
+    });
+    registry_->setEnabledProvider(command_ids::EditTransformWarp, transformTargetable);
 
     const struct {
         const char* id;
@@ -48,8 +85,13 @@ void PicturaMainWindow::wireTransformMenu()
                 refresh();
             }
         });
-        registry_->setEnabledProvider(
-            id, [transformTargetable, modalSession]() { return modalSession() || transformTargetable(); });
+        registry_->setEnabledProvider(id, [this, mode, transformTargetable, modalSession]() {
+            PictureView* view = activeView();
+            if (view && modalSession()) {
+                return transform_can_set_mode(*view, mode);
+            }
+            return transformTargetable();
+        });
     }
 
     const struct {

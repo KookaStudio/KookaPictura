@@ -27,6 +27,13 @@ command, enabled only when it can act on the active target.
 - **WHEN** the Background layer is current
 - **THEN** those commands are disabled
 
+#### Scenario: Scale and Rotate disable where the switch cannot act [tc_enable_session]
+
+- **WHEN** a Skew, Distort, Perspective, or Warp session is open
+- **THEN** Scale and Rotate are disabled
+- **WHEN** a Free Transform session is open
+- **THEN** they are enabled
+
 ### Requirement: Constrained Scale and Rotate
 
 `Edit > Transform > Scale` SHALL open a session whose handles scale and whose

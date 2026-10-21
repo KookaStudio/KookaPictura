@@ -4,6 +4,7 @@
 |---|---|---|---|
 | `tc_menu` | Open the Edit > Transform submenu | Items in CS6 order with separators after Again, Warp, and the quarter turns; Again shows Shift+Ctrl+T | `tst_transform_commands::menuListsTheTransformCommands` |
 | `tc_enable` | Refresh with a raster layer current, then with the Background current | Group enabled for the raster layer; Scale/Rotate/exact/flip disabled for the Background | `tst_transform_commands::commandsEnableOnATransformableTarget` |
+| `tc_enable_session` | Open a Free session, then a Skew session, then Warp; refresh each time | Scale/Rotate enabled for Free, disabled for Skew and Warp | `tst_transform_commands::constrainedModesDisableWhereTheyCannotSwitch` |
 | `tc_scale` | Dispatch Scale; hover outside the box; drag the top-right handle outward | Outside hover grabs nothing; width grows, height and angle unchanged | `tst_transform_commands::scaleScalesWithoutRotating` |
 | `tc_rotate` | Dispatch Rotate; press a handle; drag a quarter turn about the pivot | Angle is 90°, scale stays 100% | `tst_transform_commands::rotateRotatesWithoutScaling` |
 | `tc_mode_switch` | Begin Free Transform, set a width, dispatch Scale | Session stays open with the same box, mode is `scale` | `tst_transform_commands::choosingAModeMidSessionKeepsTheBox` |

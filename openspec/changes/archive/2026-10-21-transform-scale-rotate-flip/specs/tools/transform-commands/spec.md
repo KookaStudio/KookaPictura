@@ -28,6 +28,13 @@ command, enabled only when it can act on the active target.
 - **WHEN** the Background layer is current
 - **THEN** those commands are disabled
 
+#### Scenario: Scale and Rotate disable where the switch cannot act [tc_enable_session]
+
+- **WHEN** a Skew, Distort, Perspective, or Warp session is open
+- **THEN** Scale and Rotate are disabled
+- **WHEN** a Free Transform session is open
+- **THEN** they are enabled
+
 ### Requirement: Constrained Scale and Rotate
 
 `Edit > Transform > Scale` SHALL open a session whose handles scale and whose
@@ -60,8 +67,8 @@ one history state named for the command.
 
 #### Scenario: Rotate 90° Clockwise swaps the box [tc_rot90]
 
-- **WHEN** Rotate 90° Clockwise is invoked on a 12×9 layer
-- **THEN** the layer's box becomes 9×12 and one `Rotate 90° Clockwise` state is added
+- **WHEN** Rotate 90° Clockwise is invoked on a 12×10 layer
+- **THEN** the layer's box becomes 10×12 and one `Rotate 90° Clockwise` state is added
 
 #### Scenario: Rotate 180° and flips move the content [tc_rot180_flip]
 

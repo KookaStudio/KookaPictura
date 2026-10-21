@@ -50,6 +50,7 @@ private slots:
 
     void menuListsTheTransformCommands();
     void commandsEnableOnATransformableTarget();
+    void constrainedModesDisableWhereTheyCannotSwitch();
     void scaleScalesWithoutRotating();
     void rotateRotatesWithoutScaling();
     void choosingAModeMidSessionKeepsTheBox();
@@ -204,6 +205,36 @@ void TransformCommandsTest::commandsEnableOnATransformableTarget()
     for (const char* id : commands) {
         QVERIFY2(!action(id)->isEnabled(), id);
     }
+}
+
+void TransformCommandsTest::constrainedModesDisableWhereTheyCannotSwitch()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginLayer(frame, {QRect(10, 8, 12, 10)});
+    QVERIFY(!layer.isEmpty());
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(tools);
+
+    // A similarity session accepts the switch.
+    QVERIFY(tools->beginFreeTransform(layer));
+    frame.registry()->refresh();
+    QVERIFY(action(pictura::command_ids::EditTransformScale)->isEnabled());
+    QVERIFY(action(pictura::command_ids::EditTransformRotate)->isEnabled());
+    tools->cancelFreeTransform();
+
+    // A projective session does not.
+    QVERIFY(tools->beginTransformMode(layer, QStringLiteral("skew")));
+    frame.registry()->refresh();
+    QVERIFY(!action(pictura::command_ids::EditTransformScale)->isEnabled());
+    QVERIFY(!action(pictura::command_ids::EditTransformRotate)->isEnabled());
+    tools->cancelFreeTransform();
+
+    // Neither does Warp mode.
+    QVERIFY(tools->beginWarp(layer));
+    frame.registry()->refresh();
+    QVERIFY(!action(pictura::command_ids::EditTransformScale)->isEnabled());
+    QVERIFY(!action(pictura::command_ids::EditTransformRotate)->isEnabled());
+    tools->cancelFreeTransform();
 }
 
 void TransformCommandsTest::scaleScalesWithoutRotating()

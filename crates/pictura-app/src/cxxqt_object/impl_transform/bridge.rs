@@ -110,6 +110,10 @@ pub mod ffi {
         /// Restrict an open similarity session to Scale or Rotate gestures.
         /// False without a session, in a projective mode, or in Warp mode.
         fn transform_set_mode(view: Pin<&mut PictureView>, mode: &QString) -> bool;
+        /// Whether [`transform_set_mode`] would accept `mode` right now; the
+        /// menu uses it so a Scale/Rotate item is disabled where the switch
+        /// cannot act.
+        fn transform_can_set_mode(view: &PictureView, mode: &QString) -> bool;
         /// Apply the last committed similarity transform to the open session.
         /// False without a session or a repeatable last transform.
         fn transform_repeat(view: Pin<&mut PictureView>) -> bool;
@@ -638,6 +642,10 @@ fn transform_apply(mut view: Pin<&mut PictureView>, op: &QString) -> bool {
     true
 }
 
+fn can_set_mode(session: &TransformSession, mode: TransformMode) -> bool {
+    session.warp.is_none() && !session.mode.is_projective() && !mode.is_projective()
+}
+
 fn transform_set_mode(mut view: Pin<&mut PictureView>, mode: &QString) -> bool {
     let Some(mode) = TransformMode::parse(&mode.to_string()) else {
         return false;
@@ -646,11 +654,21 @@ fn transform_set_mode(mut view: Pin<&mut PictureView>, mode: &QString) -> bool {
     let Some(session) = rust.transform_session.as_mut() else {
         return false;
     };
-    if session.warp.is_some() || session.mode.is_projective() || mode.is_projective() {
+    if !can_set_mode(session, mode) {
         return false;
     }
     session.mode = mode;
     true
+}
+
+fn transform_can_set_mode(view: &PictureView, mode: &QString) -> bool {
+    let Some(mode) = TransformMode::parse(&mode.to_string()) else {
+        return false;
+    };
+    view.rust()
+        .transform_session
+        .as_ref()
+        .is_some_and(|session| can_set_mode(session, mode))
 }
 
 fn transform_repeat(mut view: Pin<&mut PictureView>) -> bool {
