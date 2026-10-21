@@ -99,7 +99,7 @@ pub mod ffi {
 const STROKE_TOLERANCE: f64 = 0.25;
 
 fn saved_index(view: &PictureView, i: i32) -> Option<usize> {
-    let count = view.rust().doc.as_ref()?.saved_paths.len();
+    let count = view.rust().session.doc.as_ref()?.saved_paths.len();
     usize::try_from(i).ok().filter(|&i| i < count)
 }
 
@@ -109,6 +109,7 @@ fn commit(mut view: Pin<&mut PictureView>, label: &str) {
 
 fn paths_saved_count(view: &PictureView) -> i32 {
     view.rust()
+        .session
         .doc
         .as_ref()
         .map_or(0, |doc| doc.saved_paths.len() as i32)
@@ -116,12 +117,19 @@ fn paths_saved_count(view: &PictureView) -> i32 {
 
 fn paths_saved_name(view: &PictureView, i: i32) -> QString {
     saved_index(view, i)
-        .and_then(|i| Some(view.rust().doc.as_ref()?.saved_paths[i].name.clone()))
+        .and_then(|i| {
+            Some(
+                view.rust().session.doc.as_ref()?.saved_paths[i]
+                    .name
+                    .clone(),
+            )
+        })
         .map_or_else(QString::default, |name| QString::from(name.as_str()))
 }
 
 fn paths_has_work_path(view: &PictureView) -> bool {
     view.rust()
+        .session
         .doc
         .as_ref()
         .is_some_and(|doc| !doc.work_path.is_empty())
@@ -129,7 +137,7 @@ fn paths_has_work_path(view: &PictureView) -> bool {
 
 fn paths_active(view: &PictureView) -> i32 {
     let rust = view.rust();
-    let Some(doc) = rust.doc.as_ref() else {
+    let Some(doc) = rust.session.doc.as_ref() else {
         return -2;
     };
     match active_in(doc, rust.active_path) {
@@ -151,14 +159,14 @@ fn paths_set_active(mut view: Pin<&mut PictureView>, i: i32) -> bool {
     };
     {
         let mut rust = view.as_mut().rust_mut();
-        if rust.doc.is_none() {
+        if rust.session.doc.is_none() {
             return false;
         }
         rust.path_on_layer = false;
         rust.active_path = active;
         // Switching rows ends any drawing session, so the Pen starts a new
         // component rather than extending the last one.
-        if let Some(doc) = rust.doc.as_mut() {
+        if let Some(doc) = rust.session.doc.as_mut() {
             doc.work_path.finish_editing();
             doc.saved_paths
                 .iter_mut()
@@ -173,7 +181,7 @@ fn paths_set_active(mut view: Pin<&mut PictureView>, i: i32) -> bool {
 const OUTLINE_TOLERANCE: f64 = 1.0;
 
 fn paths_outline(view: &PictureView, i: i32) -> Vec<f64> {
-    let Some(doc) = view.rust().doc.as_ref() else {
+    let Some(doc) = view.rust().session.doc.as_ref() else {
         return Vec::new();
     };
     let target = match i {
@@ -206,6 +214,7 @@ fn next_name(names: &[NamedPath]) -> String {
 fn paths_next_name(view: &PictureView) -> QString {
     let names = view
         .rust()
+        .session
         .doc
         .as_ref()
         .map_or(&[][..], |doc| &doc.saved_paths[..]);
@@ -222,7 +231,7 @@ fn push_saved(
 ) -> i32 {
     let index = {
         let mut rust = view.as_mut().rust_mut();
-        let Some(doc) = rust.doc.as_mut() else {
+        let Some(doc) = rust.session.doc.as_mut() else {
             return -1;
         };
         let name = match name.to_string().trim() {
@@ -248,7 +257,7 @@ fn paths_save_work(mut view: Pin<&mut PictureView>, name: &QString) -> i32 {
     }
     let mut work = {
         let mut rust = view.as_mut().rust_mut();
-        let Some(doc) = rust.doc.as_mut() else {
+        let Some(doc) = rust.session.doc.as_mut() else {
             return -1;
         };
         std::mem::take(&mut doc.work_path)
@@ -264,7 +273,7 @@ fn paths_rename(mut view: Pin<&mut PictureView>, i: i32, name: &QString) -> bool
     };
     {
         let mut rust = view.as_mut().rust_mut();
-        let Some(doc) = rust.doc.as_mut() else {
+        let Some(doc) = rust.session.doc.as_mut() else {
             return false;
         };
         if name.is_empty() || doc.saved_paths[i].name == name {
@@ -282,7 +291,7 @@ fn paths_duplicate(mut view: Pin<&mut PictureView>, i: i32) -> i32 {
     };
     let copy = {
         let mut rust = view.as_mut().rust_mut();
-        let Some(doc) = rust.doc.as_mut() else {
+        let Some(doc) = rust.session.doc.as_mut() else {
             return -1;
         };
         let mut copy = doc.saved_paths[i].clone();
@@ -303,7 +312,7 @@ fn paths_delete(mut view: Pin<&mut PictureView>, i: i32) -> bool {
     }
     {
         let mut rust = view.as_mut().rust_mut();
-        let Some(doc) = rust.doc.as_mut() else {
+        let Some(doc) = rust.session.doc.as_mut() else {
             return false;
         };
         match saved {
@@ -321,7 +330,7 @@ fn paths_delete(mut view: Pin<&mut PictureView>, i: i32) -> bool {
 /// The targeted path's nonzero coverage, or `None` when it encloses nothing.
 fn coverage(view: &PictureView) -> Option<Vec<u8>> {
     let target = path(view)?;
-    let doc = view.rust().doc.as_ref()?;
+    let doc = view.rust().session.doc.as_ref()?;
     let mask = path_coverage(&target, doc.width, doc.height);
     mask.iter().any(|&v| v > 0).then_some(mask)
 }
@@ -427,7 +436,13 @@ fn paths_make_selection(mut view: Pin<&mut PictureView>, feather: f64, mode: &QS
     let Some(mask) = coverage(&view) else {
         return false;
     };
-    let Some((width, height)) = view.rust().doc.as_ref().map(|d| (d.width, d.height)) else {
+    let Some((width, height)) = view
+        .rust()
+        .session
+        .doc
+        .as_ref()
+        .map(|d| (d.width, d.height))
+    else {
         return false;
     };
     let shape = feathered(

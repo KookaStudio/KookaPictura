@@ -32,7 +32,7 @@ fn to_document(rect: PsdRect, origin: PsdRect) -> PsdRect {
 /// layer at `path` starts with, or `None` when its dab fits the raster budget
 /// or the preview level is not built.
 fn mask_preview(rust: &PictureViewRust, path: &str, cfg: StrokeConfig) -> Option<PreviewStroke> {
-    let doc = rust.doc.as_ref()?;
+    let doc = rust.session.doc.as_ref()?;
     let level = preview_level(cfg.diameter as i32, doc.width, doc.height)?;
     let t = Instant::now();
     let mut preview = PreviewStroke::new(level, &rust.pyramid, rust.level0.as_ref()?, cfg)?;
@@ -155,7 +155,7 @@ impl PictureViewRust {
             if rust.stroke.is_some() || rust.mask_stroke.is_some() {
                 return false;
             }
-            let Some(doc) = rust.doc.as_ref() else {
+            let Some(doc) = rust.session.doc.as_ref() else {
                 return false;
             };
             let Some(mask) = pictura_render::mask_document_coverage(doc, path) else {
@@ -231,7 +231,7 @@ impl PictureViewRust {
             None
         };
         rust.preview = preview;
-        let dims = rust.doc.as_ref().map(|doc| (doc.width, doc.height));
+        let dims = rust.session.doc.as_ref().map(|doc| (doc.width, doc.height));
         if let Some((width, height)) = dims {
             rust.stroke_tiles.reset(width, height);
         }
@@ -274,7 +274,8 @@ impl qobject::PictureView {
         {
             let mut rust = self.as_mut().rust_mut();
             let rust = &mut *rust;
-            let (Some(doc), Some(ctx)) = (rust.doc.as_mut(), rust.mask_stroke.as_ref()) else {
+            let (Some(doc), Some(ctx)) = (rust.session.doc.as_mut(), rust.mask_stroke.as_ref())
+            else {
                 return false;
             };
             pictura_render::write_mask_back(doc, &ctx.path, &ctx.document, Some(dirty));
@@ -325,7 +326,7 @@ impl qobject::PictureView {
                     rust.stroke_tiles.mark(to_document(rect, ctx.rect));
                 }
             }
-            if let (Some(dirty), Some(doc)) = (ctx.stroke.dirty(), rust.doc.as_mut()) {
+            if let (Some(dirty), Some(doc)) = (ctx.stroke.dirty(), rust.session.doc.as_mut()) {
                 pictura_render::write_mask_back(doc, &ctx.path, &ctx.document, Some(dirty));
             }
             paint_timing::record("commit_replay_mask_stroke", t.elapsed());

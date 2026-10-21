@@ -17,7 +17,7 @@ impl PictureViewRust {
     /// pyramid without compositing it again — history has just restored those
     /// bytes — and return the blit image with its origin.
     pub(super) fn refresh_from_composite(&mut self, rect: PsdRect) -> Option<(QImage, i32, i32)> {
-        let doc = self.doc.as_ref()?;
+        let doc = self.session.doc.as_ref()?;
         if doc.composite.width != doc.width || doc.composite.height != doc.height {
             return self.refresh_regions(&[rect]);
         }
@@ -51,20 +51,20 @@ impl PictureViewRust {
         let cancelled = self.cancel_active_sessions();
         let had_session = cancelled.changed_display();
         let rust = &mut *self;
-        let restored = match rust.doc.as_mut() {
+        let restored = match rust.session.doc.as_mut() {
             Some(doc) => step(
-                &mut rust.history,
+                &mut rust.session.history,
                 doc,
-                &mut rust.selection,
+                &mut rust.session.selection,
                 &mut rust.layer_target,
             ),
-            None => legacy(&mut rust.history).map(|snapshot| {
-                rust.doc = Some(snapshot.doc);
-                rust.selection = snapshot.selection;
+            None => legacy(&mut rust.session.history).map(|snapshot| {
+                rust.session.doc = Some(snapshot.doc);
+                rust.session.selection = snapshot.selection;
                 Restored::Everywhere
             }),
         }?;
-        self.content_revision = self.content_revision.wrapping_add(1);
+        self.session.content_revision = self.session.content_revision.wrapping_add(1);
         Some(if had_session {
             Restored::Everywhere
         } else {
@@ -75,7 +75,7 @@ impl PictureViewRust {
 
 impl qobject::PictureView {
     pub fn undo(mut self: Pin<&mut Self>) -> bool {
-        if !self.rust().history.can_undo() {
+        if !self.rust().session.history.can_undo() {
             return false;
         }
         let restored = self
@@ -86,7 +86,7 @@ impl qobject::PictureView {
     }
 
     pub fn redo(mut self: Pin<&mut Self>) -> bool {
-        if !self.rust().history.can_redo() {
+        if !self.rust().session.history.can_redo() {
             return false;
         }
         let restored = self
@@ -125,30 +125,30 @@ impl qobject::PictureView {
     }
 
     pub fn can_undo(&self) -> bool {
-        self.rust().history.can_undo()
+        self.rust().session.history.can_undo()
     }
 
     pub fn can_redo(&self) -> bool {
-        self.rust().history.can_redo()
+        self.rust().session.history.can_redo()
     }
 
     pub fn history_depth(&self) -> i32 {
-        self.rust().history.depth() as i32
+        self.rust().session.history.depth() as i32
     }
 
     pub fn history_count(&self) -> i32 {
-        self.rust().history.count() as i32
+        self.rust().session.history.count() as i32
     }
 
     pub fn history_index(&self) -> i32 {
-        self.rust().history.index() as i32
+        self.rust().session.history.index() as i32
     }
 
     pub fn history_label(&self, i: i32) -> QString {
         if i < 0 {
             return QString::default();
         }
-        QString::from(self.rust().history.label(i as usize))
+        QString::from(self.rust().session.history.label(i as usize))
     }
 
     pub fn history_jump(mut self: Pin<&mut Self>, i: i32) -> bool {
@@ -156,7 +156,7 @@ impl qobject::PictureView {
             return false;
         }
         let i = i as usize;
-        if i >= self.rust().history.count() {
+        if i >= self.rust().session.history.count() {
             return false;
         }
         let restored = self.as_mut().rust_mut().restore(
@@ -179,6 +179,7 @@ impl qobject::PictureView {
         let target = self.rust().layer_target.clone();
         self.as_mut()
             .rust_mut()
+            .session
             .history
             .add_snapshot(&label.to_string(), snapshot, target);
         self.changed();
@@ -186,45 +187,45 @@ impl qobject::PictureView {
     }
 
     pub fn history_snapshot_count(&self) -> i32 {
-        self.rust().history.snapshot_count() as i32
+        self.rust().session.history.snapshot_count() as i32
     }
 
     pub fn history_snapshot_label(&self, i: i32) -> QString {
         if i < 0 {
             return QString::default();
         }
-        QString::from(self.rust().history.snapshot_label(i as usize))
+        QString::from(self.rust().session.history.snapshot_label(i as usize))
     }
 
     pub fn history_restore_snapshot(mut self: Pin<&mut Self>, i: i32) -> bool {
         if i < 0 {
             return false;
         }
-        let Some(snapshot) = self.rust().history.snapshot(i as usize) else {
+        let Some(snapshot) = self.rust().session.history.snapshot(i as usize) else {
             return false;
         };
-        let target = self.rust().history.snapshot_target(i as usize);
+        let target = self.rust().session.history.snapshot_target(i as usize);
         let mut rust = self.as_mut().rust_mut();
         rust.cancel_active_sessions();
-        rust.doc = Some(detached_copy(&snapshot.doc));
-        rust.selection = snapshot.selection;
+        rust.session.doc = Some(detached_copy(&snapshot.doc));
+        rust.session.selection = snapshot.selection;
         if let Some(mut target) = target {
-            if let Some(doc) = rust.doc.as_ref() {
+            if let Some(doc) = rust.session.doc.as_ref() {
                 target.retain_resolving(doc);
             }
             rust.set_layer_target(target);
         }
         let target = rust.layer_target.clone();
-        rust.history.set_current_target(&target);
-        rust.content_revision = rust.content_revision.wrapping_add(1);
+        rust.session.history.set_current_target(&target);
+        rust.session.content_revision = rust.session.content_revision.wrapping_add(1);
         rust.stroke = None;
         rust.mask_edit_target = None;
         rust.active_path = super::paths::ActivePath::Work;
         rust.path_on_layer = false;
         rust.ruler = None;
         rust.canvas_proxy = None;
-        rust.deselected_selection = None;
-        rust.document_generation = rust.document_generation.wrapping_add(1);
+        rust.session.deselected_selection = None;
+        rust.session.document_generation = rust.session.document_generation.wrapping_add(1);
         self.as_mut().recomposite();
         self.as_mut().session_cancelled();
         true

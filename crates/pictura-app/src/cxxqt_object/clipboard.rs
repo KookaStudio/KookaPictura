@@ -135,7 +135,7 @@ fn copy_layer_from_document(
     let created = {
         let source = source.rust();
         let mut rust = view.as_mut().rust_mut();
-        match (source.doc.as_ref(), rust.doc.as_mut()) {
+        match (source.session.doc.as_ref(), rust.session.doc.as_mut()) {
             (Some(src), Some(dst)) => pictura_render::copy_path_to_document(
                 src,
                 &path.to_string(),
@@ -156,8 +156,9 @@ fn copy_layer_from_document(
 /// The active selection's coverage plane, when it matches the document.
 fn coverage(view: &PictureView) -> Option<Vec<u8>> {
     let rust = view.rust();
-    let doc = rust.doc.as_ref()?;
-    rust.selection
+    let doc = rust.session.doc.as_ref()?;
+    rust.session
+        .selection
         .as_ref()
         .filter(|s| s.width == doc.width && s.height == doc.height)
         .map(|s| s.data.clone())
@@ -167,7 +168,7 @@ fn coverage(view: &PictureView) -> Option<Vec<u8>> {
 fn copy_of(view: &PictureView, path: &str, merged: bool) -> Option<Clip> {
     let selection = coverage(view);
     let rust = view.rust();
-    let doc = rust.doc.as_ref()?;
+    let doc = rust.session.doc.as_ref()?;
     if merged {
         let composite = rgba_frame(&current_buffer(doc, rust.gpu_compute));
         pictura_render::copy_merged(doc, &composite, selection.as_deref())
@@ -204,13 +205,14 @@ fn clipboard_clear(view: Pin<&mut PictureView>, path: &QString) -> bool {
 
 fn clear(mut view: Pin<&mut PictureView>, path: &str, label: &str) -> bool {
     let selection = coverage(&view);
-    let cleared = match view.as_mut().rust_mut().doc.as_mut() {
+    let cleared = match view.as_mut().rust_mut().session.doc.as_mut() {
         Some(doc) => pictura_render::clear_layer(doc, path, selection.as_deref()),
         None => false,
     };
     if cleared {
         let region = view
             .rust()
+            .session
             .doc
             .as_ref()
             .and_then(|doc| pictura_render::resolve_path(doc, path))
@@ -243,7 +245,13 @@ fn clipboard_paste(
         return QString::default();
     };
     let selection = coverage(&view);
-    let Some((width, height)) = view.rust().doc.as_ref().map(|d| (d.width, d.height)) else {
+    let Some((width, height)) = view
+        .rust()
+        .session
+        .doc
+        .as_ref()
+        .map(|d| (d.width, d.height))
+    else {
         return QString::default();
     };
     let into_bounds = selection
@@ -267,7 +275,7 @@ fn clipboard_paste(
             )
         }
     };
-    let created = match view.as_mut().rust_mut().doc.as_mut() {
+    let created = match view.as_mut().rust_mut().session.doc.as_mut() {
         Some(doc) => pictura_render::paste_clip(
             doc,
             &path.to_string(),
@@ -284,14 +292,15 @@ fn clipboard_paste(
     // CS6 drops the marquee after any paste; Reselect restores it. Into and
     // Outside have already folded it into the layer mask.
     let mut rust = view.as_mut().rust_mut();
-    if let Some(selection) = rust.selection.take() {
-        rust.deselected_selection = Some(selection);
+    if let Some(selection) = rust.session.selection.take() {
+        rust.session.deselected_selection = Some(selection);
     }
     view.as_mut().rust_mut().select_only_layer(&created);
     view.as_mut().clear_link_sets();
     // The paste only adds a layer, so its bounded rect bounds the composite change.
     let region = view
         .rust()
+        .session
         .doc
         .as_ref()
         .and_then(|doc| pictura_render::resolve_path(doc, &created))

@@ -1,4 +1,3 @@
-use crate::history::History;
 use crate::layer_target::LayerTarget;
 use cxx_qt_lib::QImage;
 use pictura_core::path::VectorPath;
@@ -130,11 +129,9 @@ pub struct TransformSession {
 
 /// Backing Rust state for [`super::qobject::PictureView`].
 pub struct PictureViewRust {
-    pub(super) doc: Option<Document>,
-    pub(super) selection: Option<Selection>,
-    /// CS6 "last deselected" memory: the selection replaced by Deselect or a
-    /// New-mode commit. Restored by `reselect`.
-    pub(super) deselected_selection: Option<Selection>,
+    /// The document, the selection, and the history: the state the document
+    /// session owns.
+    pub(super) session: crate::cxxqt_object::document_session::DocumentSession,
     /// Selection captured at the start of a move-selection drag; `None` when no
     /// drag is active. Restored by `cancel_selection_move`.
     pub(super) selection_move_origin: Option<Selection>,
@@ -142,7 +139,6 @@ pub struct PictureViewRust {
     /// so a pointer move costs no plane allocation. `None` when no drag is
     /// active.
     pub(super) selection_move_delta: Option<(i32, i32)>,
-    pub(super) history: History,
     pub(super) path: Option<String>,
     /// The selected layer paths and the active path. The shared resolver turns
     /// this into the single tool-edit target.
@@ -157,10 +153,6 @@ pub struct PictureViewRust {
     /// shape layer's outline, which cannot be restored and needs a rebuild.
     /// `None` between gestures.
     pub(super) path_gesture: Option<(super::paths::ActivePath, VectorPath, bool)>,
-    pub(super) dirty: bool,
-    /// Bumped whenever the view loads or replaces its document, so a panel can
-    /// drop a gesture whose target no longer belongs to the current document.
-    pub(super) document_generation: u64,
     /// Output format remembered from the import source, used to preselect the
     /// Save As filter: a lowercased extension (`"png"`) or `"psd"` when native.
     pub(super) source_format: String,
@@ -219,7 +211,6 @@ pub struct PictureViewRust {
     pub(super) transform_session: Option<TransformSession>,
     /// The panel previews that are applied but not committed yet.
     pub(super) pending_previews: super::document_session::PendingPreviews,
-    pub(super) content_revision: u64,
     pub(super) gpu_compute: bool,
     pub(super) color_policy: pictura_codec::Policy,
     /// Outstanding display damage; the canvas redraws the region `take` reports.
@@ -394,19 +385,14 @@ pub(super) struct MaskStroke {
 impl Default for PictureViewRust {
     fn default() -> Self {
         Self {
-            doc: None,
-            selection: None,
-            deselected_selection: None,
+            session: Default::default(),
             selection_move_origin: None,
             selection_move_delta: None,
-            history: History::default(),
             path: None,
             layer_target: LayerTarget::default(),
             path_on_layer: false,
             active_path: super::paths::ActivePath::Work,
             path_gesture: None,
-            dirty: false,
-            document_generation: 0,
             source_format: "psd".to_string(),
             pdf_options: None,
             pdf_password: None,
@@ -436,7 +422,6 @@ impl Default for PictureViewRust {
             move_preview_cache_hit: false,
             transform_session: None,
             pending_previews: Default::default(),
-            content_revision: 0,
             gpu_compute: true,
             color_policy: pictura_codec::Policy::Preserve,
             damage: CanvasDamage::default(),

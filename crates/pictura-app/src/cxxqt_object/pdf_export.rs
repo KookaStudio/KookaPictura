@@ -128,10 +128,14 @@ fn save_view(
     options: &PdfOptions,
 ) -> Result<(), String> {
     let gpu_compute = view.rust().gpu_compute;
-    let dirty = view.rust().dirty;
+    let dirty = view.rust().session.dirty;
     let bytes = {
         let mut rust = view.as_mut().rust_mut();
-        let doc = rust.doc.as_mut().ok_or("There is no document to save.")?;
+        let doc = rust
+            .session
+            .doc
+            .as_mut()
+            .ok_or("There is no document to save.")?;
         if dirty {
             pictura_render::refresh_native_composite(doc);
         }
@@ -185,7 +189,7 @@ pub fn pdf_save(mut view: Pin<&mut PictureView>, path: &QString, options: &QStri
     }
     let mut rust = view.rust_mut();
     rust.path = Some(path);
-    rust.dirty = false;
+    rust.session.dirty = false;
     rust.pdf_options = Some(pdf::write_joboptions(&options, false));
     QString::default()
 }
@@ -204,6 +208,7 @@ pub(super) fn save_with_last_options(view: Pin<&mut PictureView>, path: &QString
 pub fn pdf_type_fonts(view: &PictureView) -> QString {
     let fonts = view
         .rust()
+        .session
         .doc
         .as_ref()
         .map(pictura_render::pdf_type_fonts)

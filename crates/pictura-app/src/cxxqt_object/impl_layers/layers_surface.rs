@@ -63,7 +63,7 @@ fn set_layers_panel_options(
 }
 
 fn lock_group_layers_run(mut view: Pin<&mut PictureView>, group_path: &QString) -> i32 {
-    let changed = match view.as_mut().rust_mut().doc.as_mut() {
+    let changed = match view.as_mut().rust_mut().session.doc.as_mut() {
         Some(doc) => pictura_render::lock_group_layers(doc, &group_path.to_string()),
         None => 0,
     };
@@ -74,7 +74,7 @@ fn lock_group_layers_run(mut view: Pin<&mut PictureView>, group_path: &QString) 
 }
 
 fn layers_can_delete(view: &PictureView, paths: &QStringList) -> bool {
-    let Some(doc) = view.rust().doc.as_ref() else {
+    let Some(doc) = view.rust().session.doc.as_ref() else {
         return false;
     };
     let owned: Vec<String> = paths.iter().map(ToString::to_string).collect();

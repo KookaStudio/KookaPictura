@@ -63,7 +63,11 @@ pub mod ffi {
 const DEFAULT_PPI: f64 = 72.0;
 
 fn resolution(view: &PictureView) -> Option<Resolution> {
-    view.rust().doc.as_ref().and_then(document_resolution)
+    view.rust()
+        .session
+        .doc
+        .as_ref()
+        .and_then(document_resolution)
 }
 
 fn document_ppi(view: &PictureView) -> f64 {
@@ -97,7 +101,7 @@ fn image_size_apply(
     let wanted = Resolution { ppi, per_cm };
     let (resized, changed) = {
         let mut rust = view.as_mut().rust_mut();
-        let Some(doc) = rust.doc.as_mut() else {
+        let Some(doc) = rust.session.doc.as_mut() else {
             return false;
         };
         let resize = resample.filter(|_| (width as u32, height as u32) != (doc.width, doc.height));
@@ -122,7 +126,7 @@ fn image_size_apply(
     }
     view.as_mut().edit("Image Size", |rust| {
         if resized {
-            rust.selection = None;
+            rust.session.selection = None;
             Edit::Full
         } else {
             Edit::Meta
@@ -146,7 +150,7 @@ fn canvas_size_apply(
     }
     {
         let mut rust = view.as_mut().rust_mut();
-        let Some(doc) = rust.doc.as_mut() else {
+        let Some(doc) = rust.session.doc.as_mut() else {
             return false;
         };
         if (width as u32, height as u32) == (doc.width, doc.height) {
@@ -157,7 +161,7 @@ fn canvas_size_apply(
             return false;
         }
         pictura_render::extend_background(doc, [(fill >> 16) as u8, (fill >> 8) as u8, fill as u8]);
-        rust.selection = None;
+        rust.session.selection = None;
     }
     view.as_mut().edit("Canvas Size", |_| Edit::Full);
     view.as_mut().changed();

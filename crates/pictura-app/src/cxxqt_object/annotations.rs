@@ -161,13 +161,16 @@ pub mod ffi {
 }
 
 fn annotations(view: &PictureView) -> Option<&Annotations> {
-    view.rust().doc.as_ref().map(|doc| &doc.annotations)
+    view.rust().session.doc.as_ref().map(|doc| &doc.annotations)
 }
 
 /// Apply `edit` to the document's annotations; `None` without a document.
 fn edit<T>(view: Pin<&mut PictureView>, edit: impl FnOnce(&mut Annotations) -> T) -> Option<T> {
     let mut rust = view.rust_mut();
-    rust.doc.as_mut().map(|doc| edit(&mut doc.annotations))
+    rust.session
+        .doc
+        .as_mut()
+        .map(|doc| edit(&mut doc.annotations))
 }
 
 fn commit(mut view: Pin<&mut PictureView>, label: &str) {
@@ -331,7 +334,7 @@ fn layer_plane_bytes(layer: &Layer) -> usize {
 /// `[memory, disk]`; empty without a document.
 fn document_size_bytes(view: &PictureView) -> Vec<f64> {
     let rust = view.rust();
-    let Some(doc) = rust.doc.as_ref() else {
+    let Some(doc) = rust.session.doc.as_ref() else {
         return Vec::new();
     };
     let mut memory = doc.composite.data.len();

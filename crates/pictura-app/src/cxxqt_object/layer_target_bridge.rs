@@ -47,12 +47,12 @@ fn set_layer_target(mut view: Pin<&mut PictureView>, paths: &QStringList, anchor
     let anchor = (!anchor.is_empty()).then(|| anchor.to_string());
     let rust = &mut *view.as_mut().rust_mut();
     let mut target = rust.layer_target.clone();
-    target.select(owned, anchor, rust.doc.as_ref());
+    target.select(owned, anchor, rust.session.doc.as_ref());
     if target == rust.layer_target {
         return;
     }
     rust.set_layer_target(target.clone());
-    rust.history.set_current_target(&target);
+    rust.session.history.set_current_target(&target);
 }
 
 fn selected_layer_paths(view: &PictureView) -> QStringList {
@@ -76,7 +76,7 @@ fn select_layer_path(mut view: Pin<&mut PictureView>, path: &QString) {
     let path = path.to_string();
     {
         let rust = &mut *view.as_mut().rust_mut();
-        let doc = rust.doc.as_ref();
+        let doc = rust.session.doc.as_ref();
         rust.layer_target
             .select(std::iter::once(path.clone()), Some(path), doc);
         let anchor = rust.layer_target.anchor().map(str::to_string);
@@ -84,7 +84,7 @@ fn select_layer_path(mut view: Pin<&mut PictureView>, path: &QString) {
             rust.mask_edit_target = None;
         }
         let target = rust.layer_target.clone();
-        rust.history.set_current_target(&target);
+        rust.session.history.set_current_target(&target);
     }
     view.as_mut().changed();
 }
@@ -95,7 +95,7 @@ fn clear_layer_target(mut view: Pin<&mut PictureView>) {
         rust.layer_target.clear();
         rust.mask_edit_target = None;
         let target = rust.layer_target.clone();
-        rust.history.set_current_target(&target);
+        rust.session.history.set_current_target(&target);
     }
     view.as_mut().changed();
 }

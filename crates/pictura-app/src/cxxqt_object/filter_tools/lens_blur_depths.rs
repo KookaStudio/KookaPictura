@@ -92,7 +92,7 @@ pub(in crate::cxxqt_object) fn depth_map(id: u32) -> Option<Arc<DepthMap>> {
 /// unavailable source (a layer with no mask, no active selection), no
 /// document, or a non-pixel active layer.
 pub(super) fn materialize(rust: &PictureViewRust, source: i32) -> Option<DepthMap> {
-    let doc = rust.doc.as_ref()?;
+    let doc = rust.session.doc.as_ref()?;
     let layer = active_pixel_layer(doc, rust.layer_target.single())?;
     let lrect = layer.rect;
     if lrect.width() <= 0 || lrect.height() <= 0 {
@@ -103,7 +103,7 @@ pub(super) fn materialize(rust: &PictureViewRust, source: i32) -> Option<DepthMa
         1 => transparency_plane(layer, lw, lh),
         2 => crop_mask(layer.mask.as_ref()?, lrect, lw, lh),
         3 => {
-            let mask = selection_to_mask(rust.selection.as_ref()?, doc);
+            let mask = selection_to_mask(rust.session.selection.as_ref()?, doc);
             crop_mask(&mask, lrect, lw, lh)
         }
         _ => return None,
@@ -185,7 +185,7 @@ mod tests {
         layer.lock = LockFlags::default();
         doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         PictureViewRust {
-            doc: Some(doc),
+            session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
             layer_target: LayerTarget::only("0"),
             ..Default::default()
         }
@@ -198,7 +198,7 @@ mod tests {
         assert_eq!(map, DepthMap::new(8, 6, vec![255; 48]).unwrap());
 
         let mut alpha = state();
-        let layer = &mut alpha.doc.as_mut().unwrap().layers[0];
+        let layer = &mut alpha.session.doc.as_mut().unwrap().layers[0];
         layer.channels.push(Channel {
             id: -1,
             data: (0..48u8).collect::<Vec<_>>().into(),
@@ -210,7 +210,7 @@ mod tests {
     #[test]
     fn a_layer_mask_is_cropped_to_the_layer_rect() {
         let mut rust = state();
-        let layer = &mut rust.doc.as_mut().unwrap().layers[0];
+        let layer = &mut rust.session.doc.as_mut().unwrap().layers[0];
         layer.mask = Some(LayerMask {
             rect: PsdRect {
                 top: 0,
@@ -243,7 +243,7 @@ mod tests {
     #[test]
     fn a_selection_becomes_the_depth_plane() {
         let mut rust = state();
-        rust.selection = Some(Selection {
+        rust.session.selection = Some(Selection {
             width: 8,
             height: 6,
             data: (0..48u8).map(|i| i * 5).collect(),
@@ -273,7 +273,7 @@ mod tests {
     #[test]
     fn a_commit_re_materializes_the_source_slot() {
         let mut rust = state();
-        let layer = &mut rust.doc.as_mut().unwrap().layers[0];
+        let layer = &mut rust.session.doc.as_mut().unwrap().layers[0];
         layer.channels.push(Channel {
             id: -1,
             data: (0..48u8).collect::<Vec<_>>().into(),

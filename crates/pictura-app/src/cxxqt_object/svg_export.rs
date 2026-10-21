@@ -32,7 +32,7 @@ pub mod ffi {
 
 pub fn svg_from_view(view: &PictureView) -> QString {
     let rust = view.rust();
-    let Some(doc) = rust.doc.as_ref() else {
+    let Some(doc) = rust.session.doc.as_ref() else {
         return QString::default();
     };
     QString::from(svg_for_document(doc, rust.gpu_compute).as_str())

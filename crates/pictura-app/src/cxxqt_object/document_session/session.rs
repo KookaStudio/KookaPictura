@@ -11,6 +11,7 @@ use super::super::state::PictureViewRust;
 use crate::history::History;
 use crate::layer_target::LayerTarget;
 use pictura_core::{Document, PsdRect};
+use pictura_select::Selection;
 
 /// The kind of live session.
 ///
@@ -36,6 +37,42 @@ pub(in crate::cxxqt_object) enum SessionKind {
     FilterPreview,
     /// An image-mode dialog's live preview.
     ModePreview,
+}
+
+/// The document state the session owns: the document itself, the selection,
+/// and the history that records its edits.
+///
+/// The session is the only owner, so a replacement swaps the whole group and
+/// a headless test can drive it without a QObject.
+#[derive(Default)]
+pub(in crate::cxxqt_object) struct DocumentSession {
+    /// The live document, `None` without one.
+    pub(in crate::cxxqt_object) doc: Option<Document>,
+    /// The live selection.
+    pub(in crate::cxxqt_object) selection: Option<Selection>,
+    /// CS6 "last deselected" memory: the selection replaced by Deselect or a
+    /// New-mode commit. Restored by `reselect`.
+    pub(in crate::cxxqt_object) deselected_selection: Option<Selection>,
+    /// The recorded states.
+    pub(in crate::cxxqt_object) history: History,
+    /// Whether the document has unsaved changes.
+    pub(in crate::cxxqt_object) dirty: bool,
+    /// Bumped whenever the document's content changed.
+    pub(in crate::cxxqt_object) content_revision: u64,
+    /// Bumped whenever the view loads or replaces its document, so a panel can
+    /// drop a gesture whose target no longer belongs to the current document.
+    pub(in crate::cxxqt_object) document_generation: u64,
+}
+
+impl DocumentSession {
+    /// A session with `doc` installed and an empty history.
+    #[cfg(test)]
+    pub(in crate::cxxqt_object) fn with_document(doc: Document) -> Self {
+        Self {
+            doc: Some(doc),
+            ..Default::default()
+        }
+    }
 }
 
 /// The panel previews that are applied but not committed yet.
@@ -183,7 +220,7 @@ impl PictureViewRust {
         let mut change = SessionChange::none();
 
         if let Some(base) = self.mode_preview.take() {
-            self.doc = Some(base);
+            self.session.doc = Some(base);
             change = change.merge(SessionChange::rebuild());
         }
 
@@ -228,19 +265,19 @@ impl PictureViewRust {
     ) {
         self.cancel_active_sessions();
         self.clear_document_scoped_state();
-        self.doc = doc;
-        self.history = history;
+        self.session.doc = doc;
+        self.session.history = history;
         self.layer_target = target;
         self.pdf_password = pdf_password;
-        self.document_generation = self.document_generation.wrapping_add(1);
-        self.dirty = false;
+        self.session.document_generation = self.session.document_generation.wrapping_add(1);
+        self.session.dirty = false;
         self.reset_pyramid();
     }
 
     /// Clear every field that names or belongs to the outgoing document.
     pub(in crate::cxxqt_object) fn clear_document_scoped_state(&mut self) {
-        self.selection = None;
-        self.deselected_selection = None;
+        self.session.selection = None;
+        self.session.deselected_selection = None;
         self.selection_move_origin = None;
         self.selection_move_delta = None;
         self.path = None;
@@ -302,12 +339,12 @@ impl PictureViewRust {
             return false;
         };
         if let Some(rect) = session.untrimmed {
-            if let Some(doc) = self.doc.as_mut() {
+            if let Some(doc) = self.session.doc.as_mut() {
                 pictura_render::untrim_to(doc, &session.path, rect);
             }
         }
         if let Some((_, before)) = session.lifted {
-            self.doc = Some(*before);
+            self.session.doc = Some(*before);
             return true;
         }
         false
@@ -324,7 +361,7 @@ impl PictureViewRust {
         if on_layer {
             return SessionChange::rebuild();
         }
-        let Some(doc) = self.doc.as_mut() else {
+        let Some(doc) = self.session.doc.as_mut() else {
             return SessionChange::none();
         };
         match active {

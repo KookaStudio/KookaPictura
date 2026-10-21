@@ -38,7 +38,7 @@ impl qobject::PictureView {
         if owned.is_empty() {
             return false;
         }
-        let Some(doc) = self.rust().doc.as_ref() else {
+        let Some(doc) = self.rust().session.doc.as_ref() else {
             return false;
         };
         let scope = if owned.len() == 1 {
@@ -58,7 +58,7 @@ impl qobject::PictureView {
         if path.is_empty() {
             return false;
         }
-        let Some(doc) = self.rust().doc.as_ref() else {
+        let Some(doc) = self.rust().session.doc.as_ref() else {
             return false;
         };
         pictura_render::can_merge_scope(doc, &pictura_render::MergeScope::ClippingMask(&path))
@@ -90,7 +90,7 @@ impl qobject::PictureView {
     /// Flatten the whole tree into one opaque Background layer. Returns the
     /// number of layers replaced, 0 on refusal.
     pub fn flatten_image(mut self: Pin<&mut Self>) -> i32 {
-        let replaced = match self.as_mut().rust_mut().doc.as_mut() {
+        let replaced = match self.as_mut().rust_mut().session.doc.as_mut() {
             Some(doc) => pictura_render::flatten(doc).map_or(0, |outcome| outcome.replaced),
             None => 0,
         };
@@ -105,7 +105,7 @@ impl qobject::PictureView {
     /// Returns false (no history) when it is not the Background.
     pub fn layer_from_background(mut self: Pin<&mut Self>, path: &QString) -> bool {
         let path = path.to_string();
-        let changed = match self.as_mut().rust_mut().doc.as_mut() {
+        let changed = match self.as_mut().rust_mut().session.doc.as_mut() {
             Some(doc) => pictura_render::layer_from_background(doc, &path),
             None => false,
         };
@@ -133,7 +133,7 @@ impl qobject::PictureView {
         }
         let path = path.to_string();
         let name = name.to_string();
-        let changed = match self.as_mut().rust_mut().doc.as_mut() {
+        let changed = match self.as_mut().rust_mut().session.doc.as_mut() {
             Some(doc) => {
                 if !pictura_render::layer_from_background(doc, &path) {
                     false
@@ -163,7 +163,7 @@ impl qobject::PictureView {
     /// existing Background.
     pub fn background_from_layer(mut self: Pin<&mut Self>, path: &QString) -> bool {
         let path = path.to_string();
-        let changed = match self.as_mut().rust_mut().doc.as_mut() {
+        let changed = match self.as_mut().rust_mut().session.doc.as_mut() {
             Some(doc) => pictura_render::background_from_layer(doc, &path),
             None => false,
         };
@@ -180,7 +180,7 @@ impl qobject::PictureView {
         scope: pictura_render::MergeScope<'_>,
         label: &str,
     ) -> Option<pictura_render::MergeOutcome> {
-        let outcome = match self.as_mut().rust_mut().doc.as_mut() {
+        let outcome = match self.as_mut().rust_mut().session.doc.as_mut() {
             Some(doc) => pictura_render::merge_scope(doc, scope).ok(),
             None => None,
         };

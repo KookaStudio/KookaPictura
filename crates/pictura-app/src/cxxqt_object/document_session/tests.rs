@@ -42,7 +42,7 @@ fn trimmed_layer() -> pictura_core::Layer {
 
 fn view() -> PictureViewRust {
     let mut view = PictureViewRust {
-        doc: Some(doc()),
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc()),
         ..Default::default()
     };
     view.layer_target = LayerTarget::only("0");
@@ -53,7 +53,7 @@ fn view_with_trimmable_layer() -> PictureViewRust {
     let mut doc = doc();
     doc.layers = LayerStack::from_layers(vec![trimmed_layer()]);
     let mut view = PictureViewRust {
-        doc: Some(doc),
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
         ..Default::default()
     };
     view.layer_target = LayerTarget::only("0");
@@ -67,7 +67,7 @@ fn view_with_two_layers() -> PictureViewRust {
         pixel_layer("px2", 8, 8, (0, 255, 0)),
     ]);
     let mut view = PictureViewRust {
-        doc: Some(doc),
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
         ..Default::default()
     };
     view.layer_target = LayerTarget::only("0");
@@ -79,14 +79,18 @@ fn a_second_session_is_refused() {
     let mut view = view();
     assert!(view.begin_heal(20, 50), "the healing gesture starts");
     assert_eq!(view.active_session_kind(), Some(SessionKind::Healing));
-    let history = view.history.count();
+    let history = view.session.history.count();
 
     assert!(
         !view.begin_paint(StrokeConfig::default(), "Brush"),
         "a paint begin is refused while the healing gesture is live"
     );
     assert!(view.stroke.is_none(), "no paint stroke was begun");
-    assert_eq!(view.history.count(), history, "no history state was added");
+    assert_eq!(
+        view.session.history.count(),
+        history,
+        "no history state was added"
+    );
     assert_eq!(
         view.active_session_kind(),
         Some(SessionKind::Healing),
@@ -143,7 +147,11 @@ fn a_transform_on_another_target_replaces_the_session() {
         .prepare_transform("1", TransformMode::Free)
         .expect("the second session");
     assert_eq!(second.path, "1", "the new target replaces the session");
-    assert_eq!(view.history.count(), 0, "no history state was added");
+    assert_eq!(
+        view.session.history.count(),
+        0,
+        "no history state was added"
+    );
     view.transform_session = Some(second);
     assert_eq!(view.active_session_kind(), Some(SessionKind::Transform));
 }
@@ -160,7 +168,11 @@ fn a_transform_mode_switch_replaces_the_session() {
         .prepare_transform("0", TransformMode::Skew)
         .expect("the second session");
     assert_eq!(second.mode, TransformMode::Skew, "the new mode replaces it");
-    assert_eq!(view.history.count(), 0, "no history state was added");
+    assert_eq!(
+        view.session.history.count(),
+        0,
+        "no history state was added"
+    );
     view.transform_session = Some(second);
     assert_eq!(view.active_session_kind(), Some(SessionKind::Transform));
 }
@@ -168,29 +180,29 @@ fn a_transform_mode_switch_replaces_the_session() {
 #[test]
 fn a_failed_transform_begin_leaves_the_layer_unchanged() {
     let mut view = view_with_trimmable_layer();
-    let before = view.doc.as_ref().expect("document").layers[0].rect;
+    let before = view.session.doc.as_ref().expect("document").layers[0].rect;
 
     // A target that cannot be transformed is refused before anything changes.
     assert!(view
         .prepare_transform("missing", TransformMode::Free)
         .is_none());
     assert_eq!(
-        view.doc.as_ref().expect("document").layers[0].rect,
+        view.session.doc.as_ref().expect("document").layers[0].rect,
         before,
         "the layer is unchanged"
     );
     assert!(view.transform_session.is_none());
-    assert_eq!(view.history.count(), 0);
+    assert_eq!(view.session.history.count(), 0);
 
     // A begin that trims the layer and is then refused puts the layer back.
     let session = view
         .prepare_transform("0", TransformMode::Free)
         .expect("the session");
-    let trimmed = view.doc.as_ref().expect("document").layers[0].rect;
+    let trimmed = view.session.doc.as_ref().expect("document").layers[0].rect;
     assert_ne!(trimmed, before, "the begin trimmed the layer");
     view.restore_transform_begin(session);
     assert_eq!(
-        view.doc.as_ref().expect("document").layers[0].rect,
+        view.session.doc.as_ref().expect("document").layers[0].rect,
         before,
         "the refused begin restored the layer"
     );
@@ -205,10 +217,14 @@ fn replacement_installs_incoming_history() {
     assert_eq!(history.count(), 1);
 
     view.replace_document(Some(doc), history, LayerTarget::only("0"), None);
-    assert_eq!(view.history.count(), 1, "the incoming history is installed");
-    assert_eq!(view.history.label(0), "Opened");
     assert_eq!(
-        view.history.index(),
+        view.session.history.count(),
+        1,
+        "the incoming history is installed"
+    );
+    assert_eq!(view.session.history.label(0), "Opened");
+    assert_eq!(
+        view.session.history.index(),
         0,
         "the incoming state is the current one"
     );
@@ -217,14 +233,18 @@ fn replacement_installs_incoming_history() {
 #[test]
 fn undo_cancels_every_session() {
     let mut view = view();
-    let history = view.history.count();
+    let history = view.session.history.count();
     view.mode_preview = Some(doc());
     assert!(view.has_active_session());
 
     let change = view.cancel_active_sessions();
     assert!(change.changed_display());
     assert!(!view.has_active_session(), "the session is gone");
-    assert_eq!(view.history.count(), history, "no history state was added");
+    assert_eq!(
+        view.session.history.count(),
+        history,
+        "no history state was added"
+    );
     assert!(view.mode_preview.is_none());
 }
 
@@ -288,7 +308,7 @@ fn a_shape_path_abort_requests_a_rebuild() {
 #[test]
 fn replacement_clears_outgoing_state() {
     let mut view = view();
-    view.deselected_selection = Some(Selection::none(8, 8));
+    view.session.deselected_selection = Some(Selection::none(8, 8));
     view.mask_edit_target = Some("0".into());
     view.active_path = crate::cxxqt_object::paths::ActivePath::Saved(3);
     view.pending_previews.opacity_changed = true;
@@ -302,7 +322,7 @@ fn replacement_clears_outgoing_state() {
         LayerTarget::default(),
         None,
     );
-    assert!(view.deselected_selection.is_none());
+    assert!(view.session.deselected_selection.is_none());
     assert!(view.mask_edit_target.is_none());
     assert!(matches!(
         view.active_path,
@@ -313,14 +333,14 @@ fn replacement_clears_outgoing_state() {
     assert!(view.pending_previews.mask_refine.is_none());
     assert!(view.pdf_options.is_none());
     assert!(view.pdf_password.is_none());
-    assert_eq!(view.document_generation, 1);
+    assert_eq!(view.session.document_generation, 1);
 }
 
 #[test]
 fn replacing_a_document_cancels_every_session() {
     let mut view = view();
     let stroke = pictura_paint::Stroke::begin_at(
-        view.doc.as_ref().expect("document"),
+        view.session.doc.as_ref().expect("document"),
         "0",
         StrokeConfig {
             diameter: 2,
@@ -360,7 +380,7 @@ fn cancelling_without_a_session_is_a_noop() {
 #[test]
 fn cancelling_every_session_restores_state() {
     let mut view = view();
-    view.selection = Some(Selection::none(8, 8));
+    view.session.selection = Some(Selection::none(8, 8));
     assert!(view.begin_selection_move());
     assert!(view.has_active_session());
     assert!(view.cancel_active_sessions().effect == crate::cxxqt_object::edit::Effect::Nothing);
@@ -372,13 +392,19 @@ fn cancelling_every_session_restores_state() {
 #[test]
 fn a_notification_only_change_emits_no_blit() {
     let mut view = view();
-    view.doc.as_mut().expect("document").work_path = Default::default();
+    view.session.doc.as_mut().expect("document").work_path = Default::default();
     view.path_gesture = Some((
         crate::cxxqt_object::paths::ActivePath::Work,
-        view.doc.as_ref().expect("document").work_path.clone(),
+        view.session
+            .doc
+            .as_ref()
+            .expect("document")
+            .work_path
+            .clone(),
         false,
     ));
-    view.doc
+    view.session
+        .doc
         .as_mut()
         .expect("document")
         .work_path
@@ -391,15 +417,15 @@ fn a_notification_only_change_emits_no_blit() {
 #[test]
 fn reselect_is_unavailable_after_same_size_replacement() {
     let mut view = view();
-    view.deselected_selection = Some(Selection::none(8, 8));
+    view.session.deselected_selection = Some(Selection::none(8, 8));
     view.replace_document(
         Some(doc()),
         History::default(),
         LayerTarget::default(),
         None,
     );
-    assert!(view.deselected_selection.is_none());
-    assert!(view.selection.is_none());
+    assert!(view.session.deselected_selection.is_none());
+    assert!(view.session.selection.is_none());
 }
 
 #[test]
@@ -426,16 +452,16 @@ fn pdf_password_follows_the_incoming_document() {
 fn cancelling_records_no_history() {
     let mut view = view();
     let target = view.layer_target.clone();
-    view.history.capture_live(
-        view.doc.as_mut().expect("document"),
+    view.session.history.capture_live(
+        view.session.doc.as_mut().expect("document"),
         &None,
         &target,
         "Start",
     );
-    let count = view.history.count();
+    let count = view.session.history.count();
     view.mode_preview = Some(doc());
     view.cancel_active_sessions();
-    assert_eq!(view.history.count(), count);
+    assert_eq!(view.session.history.count(), count);
 }
 
 #[test]

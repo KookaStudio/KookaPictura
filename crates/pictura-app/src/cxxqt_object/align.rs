@@ -56,7 +56,7 @@ pub mod ffi {
 /// else the selection's bounding box when `to_selection` and something is
 /// selected, else `None` (align against each other).
 fn target(view: &PictureView, to_selection: bool, align_to: i32) -> Option<PsdRect> {
-    let doc = view.rust().doc.as_ref()?;
+    let doc = view.rust().session.doc.as_ref()?;
     if align_to == 1 {
         return Some(PsdRect {
             top: 0,
@@ -65,12 +65,17 @@ fn target(view: &PictureView, to_selection: bool, align_to: i32) -> Option<PsdRe
             right: doc.width as i32,
         });
     }
-    let selection = view.rust().selection.as_ref().filter(|_| to_selection)?;
+    let selection = view
+        .rust()
+        .session
+        .selection
+        .as_ref()
+        .filter(|_| to_selection)?;
     pictura_render::coverage_bounds(&selection.data, selection.width, selection.height)
 }
 
 fn align_can(view: &PictureView, paths: &QStringList, to_selection: bool, align_to: i32) -> bool {
-    let Some(doc) = view.rust().doc.as_ref() else {
+    let Some(doc) = view.rust().session.doc.as_ref() else {
         return false;
     };
     let owned = list_of_strings(paths);
@@ -79,7 +84,7 @@ fn align_can(view: &PictureView, paths: &QStringList, to_selection: bool, align_
 }
 
 fn distribute_can(view: &PictureView, paths: &QStringList) -> bool {
-    let Some(doc) = view.rust().doc.as_ref() else {
+    let Some(doc) = view.rust().session.doc.as_ref() else {
         return false;
     };
     let owned = list_of_strings(paths);

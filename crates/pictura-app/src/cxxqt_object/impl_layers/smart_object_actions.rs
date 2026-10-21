@@ -53,13 +53,14 @@ pub mod ffi {
 
 fn layer_can_reset_smart_object_transform(view: &PictureView, path: &QString) -> bool {
     view.rust()
+        .session
         .doc
         .as_ref()
         .is_some_and(|doc| pictura_render::can_reset_smart_object_transform(doc, &path.to_string()))
 }
 
 fn smart_object_reset_transform(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
-    let changed = match view.as_mut().rust_mut().doc.as_mut() {
+    let changed = match view.as_mut().rust_mut().session.doc.as_mut() {
         Some(doc) => pictura_render::reset_smart_object_transform(doc, &path.to_string()),
         None => false,
     };
@@ -70,7 +71,7 @@ fn smart_object_reset_transform(mut view: Pin<&mut PictureView>, path: &QString)
 }
 
 fn layer_can_convert_smart_object_to_layers(view: &PictureView, path: &QString) -> bool {
-    view.rust().doc.as_ref().is_some_and(|doc| {
+    view.rust().session.doc.as_ref().is_some_and(|doc| {
         pictura_render::can_convert_smart_object_to_layers(doc, &path.to_string())
     })
 }
@@ -79,7 +80,7 @@ fn smart_object_convert_to_layers(mut view: Pin<&mut PictureView>, path: &QStrin
     let path = path.to_string();
     let edit = view.as_mut().edit("Convert to Layers", |rust| {
         let changed = {
-            let Some(doc) = rust.doc.as_mut() else {
+            let Some(doc) = rust.session.doc.as_mut() else {
                 return Edit::None;
             };
             pictura_render::convert_smart_object_to_layers(doc, &path)
@@ -88,6 +89,7 @@ fn smart_object_convert_to_layers(mut view: Pin<&mut PictureView>, path: &QStrin
             return Edit::None;
         }
         if rust
+            .session
             .doc
             .as_ref()
             .is_some_and(|doc| pictura_render::resolve_path(doc, &path).is_some())
@@ -101,6 +103,7 @@ fn smart_object_convert_to_layers(mut view: Pin<&mut PictureView>, path: &QStrin
 
 fn layer_can_new_smart_object_via_copy(view: &PictureView, path: &QString) -> bool {
     view.rust()
+        .session
         .doc
         .as_ref()
         .is_some_and(|doc| pictura_render::can_new_smart_object_via_copy(doc, &path.to_string()))
@@ -110,7 +113,7 @@ fn smart_object_new_via_copy(mut view: Pin<&mut PictureView>, path: &QString) ->
     let path = path.to_string();
     let mut created = String::new();
     view.as_mut().edit("New Smart Object via Copy", |rust| {
-        let Some(doc) = rust.doc.as_mut() else {
+        let Some(doc) = rust.session.doc.as_mut() else {
             return Edit::None;
         };
         let Some(new_path) = pictura_render::new_smart_object_via_copy(doc, &path) else {

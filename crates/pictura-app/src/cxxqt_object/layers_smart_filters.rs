@@ -169,6 +169,7 @@ fn set_smart_filters_enabled(doc: &mut Document, path: &str, enabled: bool) -> b
 
 fn layer_has_smart_filters(view: &PictureView, layer_path: &QString) -> bool {
     view.rust()
+        .session
         .doc
         .as_ref()
         .is_some_and(|doc| has_smart_filters(doc, &layer_path.to_string()))
@@ -176,6 +177,7 @@ fn layer_has_smart_filters(view: &PictureView, layer_path: &QString) -> bool {
 
 fn layer_smart_filter_count(view: &PictureView, layer_path: &QString) -> i32 {
     view.rust()
+        .session
         .doc
         .as_ref()
         .map_or(0, |doc| smart_filter_count(doc, &layer_path.to_string()))
@@ -184,6 +186,7 @@ fn layer_smart_filter_count(view: &PictureView, layer_path: &QString) -> i32 {
 fn layer_smart_filter_name(view: &PictureView, layer_path: &QString, i: i32) -> QString {
     let name = view
         .rust()
+        .session
         .doc
         .as_ref()
         .map(|doc| smart_filter_name(doc, &layer_path.to_string(), i))
@@ -193,6 +196,7 @@ fn layer_smart_filter_name(view: &PictureView, layer_path: &QString, i: i32) -> 
 
 fn layer_smart_filter_visible(view: &PictureView, layer_path: &QString, i: i32) -> bool {
     view.rust()
+        .session
         .doc
         .as_ref()
         .is_some_and(|doc| smart_filter_visible(doc, &layer_path.to_string(), i))
@@ -200,6 +204,7 @@ fn layer_smart_filter_visible(view: &PictureView, layer_path: &QString, i: i32) 
 
 fn layer_smart_filters_enabled(view: &PictureView, layer_path: &QString) -> bool {
     view.rust()
+        .session
         .doc
         .as_ref()
         .is_some_and(|doc| smart_filters_enabled(doc, &layer_path.to_string()))
@@ -212,7 +217,7 @@ fn set_layer_smart_filter_visible(
     visible: bool,
 ) -> bool {
     let path = layer_path.to_string();
-    let changed = match view.as_mut().rust_mut().doc.as_mut() {
+    let changed = match view.as_mut().rust_mut().session.doc.as_mut() {
         Some(doc) => set_smart_filter_visible(doc, &path, i, visible),
         None => false,
     };
@@ -229,7 +234,7 @@ fn set_layer_smart_filters_enabled(
     enabled: bool,
 ) -> bool {
     let path = layer_path.to_string();
-    let changed = match view.as_mut().rust_mut().doc.as_mut() {
+    let changed = match view.as_mut().rust_mut().session.doc.as_mut() {
         Some(doc) => set_smart_filters_enabled(doc, &path, enabled),
         None => false,
     };
@@ -242,7 +247,7 @@ fn set_layer_smart_filters_enabled(
 
 fn convert_for_smart_filters(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
     let path = path.to_string();
-    let changed = match view.as_mut().rust_mut().doc.as_mut() {
+    let changed = match view.as_mut().rust_mut().session.doc.as_mut() {
         Some(doc) => pictura_render::convert_for_smart_filters(doc, &path),
         None => false,
     };
@@ -259,7 +264,7 @@ fn delete_layer_smart_filter(
     i: i32,
 ) -> bool {
     let path = layer_path.to_string();
-    let changed = match view.as_mut().rust_mut().doc.as_mut() {
+    let changed = match view.as_mut().rust_mut().session.doc.as_mut() {
         Some(doc) => pictura_render::delete_smart_filter(doc, base_path(&path), i.max(0) as usize),
         None => false,
     };
@@ -271,7 +276,7 @@ fn delete_layer_smart_filter(
 
 fn clear_layer_smart_filters(mut view: Pin<&mut PictureView>, layer_path: &QString) -> bool {
     let path = layer_path.to_string();
-    let changed = match view.as_mut().rust_mut().doc.as_mut() {
+    let changed = match view.as_mut().rust_mut().session.doc.as_mut() {
         Some(doc) => pictura_render::clear_smart_filters(doc, base_path(&path)),
         None => false,
     };
@@ -291,7 +296,7 @@ fn reorder_layer_smart_filter(
         return false;
     }
     let path = layer_path.to_string();
-    let changed = match view.as_mut().rust_mut().doc.as_mut() {
+    let changed = match view.as_mut().rust_mut().session.doc.as_mut() {
         Some(doc) => {
             pictura_render::reorder_smart_filters(doc, base_path(&path), from as usize, to as usize)
         }

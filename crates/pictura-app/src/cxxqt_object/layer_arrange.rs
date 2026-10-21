@@ -62,14 +62,14 @@ pub mod ffi {
 }
 
 fn can_move_layer_path(view: &PictureView, path: &QString, delta: i32) -> bool {
-    match view.rust().doc.as_ref() {
+    match view.rust().session.doc.as_ref() {
         Some(doc) => pictura_render::can_move_path(doc, &path.to_string(), delta),
         None => false,
     }
 }
 
 fn can_background_from_layer(view: &PictureView, path: &QString) -> bool {
-    match view.rust().doc.as_ref() {
+    match view.rust().session.doc.as_ref() {
         Some(doc) => pictura_render::can_background_from_layer(doc, &path.to_string()),
         None => false,
     }
@@ -95,7 +95,7 @@ fn arrange_layer_can(view: &PictureView, path: &QString, arrange: i32) -> bool {
     let Some(op) = arrange_kind(arrange) else {
         return false;
     };
-    match view.rust().doc.as_ref() {
+    match view.rust().session.doc.as_ref() {
         Some(doc) => pictura_render::can_arrange_path(doc, &path.to_string(), op),
         None => false,
     }
@@ -106,7 +106,7 @@ fn arrange_layer_run(mut view: Pin<&mut PictureView>, path: &QString, arrange: i
         return false;
     };
     let path = path.to_string();
-    let landed = match view.as_mut().rust_mut().doc.as_mut() {
+    let landed = match view.as_mut().rust_mut().session.doc.as_mut() {
         Some(doc) => pictura_render::arrange_path_index(doc, &path, op).map(|index| {
             let parent = pictura_render::parent_path(&path).unwrap_or("");
             join_path(parent, index)
@@ -124,7 +124,7 @@ fn arrange_layer_run(mut view: Pin<&mut PictureView>, path: &QString, arrange: i
 fn reverse_layers_run(mut view: Pin<&mut PictureView>, paths: &QStringList) -> bool {
     let owned = list_of_strings(paths);
     let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
-    let reversed = match view.as_mut().rust_mut().doc.as_mut() {
+    let reversed = match view.as_mut().rust_mut().session.doc.as_mut() {
         Some(doc) => pictura_render::reverse_paths_result(doc, &refs),
         None => None,
     };
@@ -135,7 +135,7 @@ fn reverse_layers_run(mut view: Pin<&mut PictureView>, paths: &QStringList) -> b
         let rust = &mut *view.as_mut().rust_mut();
         let mut target = rust.layer_target.clone();
         let anchor = target.anchor().map(str::to_string);
-        target.select(reversed, anchor, rust.doc.as_ref());
+        target.select(reversed, anchor, rust.session.doc.as_ref());
         rust.set_layer_target(target);
     }
     finish(view, "Reverse Layers");
@@ -144,7 +144,7 @@ fn reverse_layers_run(mut view: Pin<&mut PictureView>, paths: &QStringList) -> b
 
 fn stamp_visible_run(mut view: Pin<&mut PictureView>, path: &QString) -> QString {
     let active = path.to_string();
-    let created = match view.as_mut().rust_mut().doc.as_mut() {
+    let created = match view.as_mut().rust_mut().session.doc.as_mut() {
         Some(doc) => {
             pictura_render::stamp_scope(doc, pictura_render::StampScope::Visible(&active), &active)
         }
@@ -160,7 +160,7 @@ fn stamp_selected_run(
 ) -> QString {
     let owned = list_of_strings(paths);
     let anchor = active.to_string();
-    let created = match view.as_mut().rust_mut().doc.as_mut() {
+    let created = match view.as_mut().rust_mut().session.doc.as_mut() {
         Some(doc) => {
             pictura_render::stamp_scope(doc, pictura_render::StampScope::Selected(&owned), &anchor)
         }

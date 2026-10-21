@@ -59,7 +59,7 @@ fn duplicate_into(
     merged: bool,
 ) -> bool {
     let rust = source.rust();
-    let Some(src) = rust.doc.as_ref() else {
+    let Some(src) = rust.session.doc.as_ref() else {
         return false;
     };
     let doc = if merged {
@@ -86,7 +86,7 @@ fn finish(mut view: Pin<&mut PictureView>, doc: Document, label: &str) -> bool {
 }
 
 fn trim_image(view: Pin<&mut PictureView>) -> bool {
-    let Some((rgba, width, height, gpu)) = view.rust().doc.as_ref().map(|doc| {
+    let Some((rgba, width, height, gpu)) = view.rust().session.doc.as_ref().map(|doc| {
         let buffer = current_buffer(doc, view.rust().gpu_compute);
         (
             buffer_to_rgba_bytes(&buffer),
@@ -120,7 +120,7 @@ fn trim_image(view: Pin<&mut PictureView>) -> bool {
     if left == 0 && top == 0 && right == width as i32 && bottom == height as i32 {
         return false;
     }
-    let mut cropped = view.rust().doc.as_ref().cloned().unwrap();
+    let mut cropped = view.rust().session.doc.as_ref().cloned().unwrap();
     if !pictura_render::crop_document(
         &mut cropped,
         left,
@@ -139,14 +139,14 @@ fn rotate_document_arbitrary(mut view: Pin<&mut PictureView>, angle_deg: f64) ->
     }
     let rotated = {
         let mut rust = view.as_mut().rust_mut();
-        let Some(doc) = rust.doc.as_mut() else {
+        let Some(doc) = rust.session.doc.as_mut() else {
             return false;
         };
         let pivot = (doc.width as f64 / 2.0, doc.height as f64 / 2.0);
         pictura_render::rotate_document_in(doc, angle_deg, pivot)
     };
     if rotated {
-        view.as_mut().rust_mut().selection = None;
+        view.as_mut().rust_mut().session.selection = None;
         view.as_mut().edit("Rotate", |_| Edit::Full);
     }
     rotated

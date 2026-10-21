@@ -21,6 +21,7 @@ impl qobject::PictureView {
     pub fn select_similar(&self, path: &QString) -> QStringList {
         let path = path.to_string();
         self.rust()
+            .session
             .doc
             .as_ref()
             .map(|doc| pictura_render::select_similar(doc, &path))
@@ -37,7 +38,7 @@ impl qobject::PictureView {
         let Some(&id) = rust.link_sets.get(&path.to_string()) else {
             return QStringList::default();
         };
-        let Some(doc) = rust.doc.as_ref() else {
+        let Some(doc) = rust.session.doc.as_ref() else {
             return QStringList::default();
         };
         pictura_render::flatten_rows(doc)
@@ -69,7 +70,7 @@ impl qobject::PictureView {
     /// Layers" state only when at least one is removed. Returns the number
     /// removed.
     pub fn delete_hidden_layers(mut self: Pin<&mut Self>) -> i32 {
-        let removed = match self.as_mut().rust_mut().doc.as_mut() {
+        let removed = match self.as_mut().rust_mut().session.doc.as_mut() {
             Some(doc) => pictura_render::delete_hidden_layers(doc),
             None => 0,
         };
@@ -77,7 +78,7 @@ impl qobject::PictureView {
             self.as_mut().edit("Delete Hidden Layers", |rust| {
                 let target = {
                     let mut target = rust.layer_target.clone();
-                    if let Some(doc) = rust.doc.as_ref() {
+                    if let Some(doc) = rust.session.doc.as_ref() {
                         target.retain_resolving(doc);
                     }
                     target

@@ -27,8 +27,8 @@ pub(in crate::cxxqt_object) fn canvas_proxy_buffer(
     let key = (
         region,
         scale.to_bits(),
-        rust.content_revision,
-        rust.document_generation,
+        rust.session.content_revision,
+        rust.session.document_generation,
     );
     if rust
         .canvas_proxy
@@ -44,7 +44,7 @@ pub(in crate::cxxqt_object) fn canvas_proxy_buffer(
     let rendered = proxy
         .render(&path, std::slice::from_ref(filter), rust.gpu_compute)
         .ok()?;
-    let doc = rust.doc.as_ref()?;
+    let doc = rust.session.doc.as_ref()?;
     Some(pictura_codec::buffer_to_srgb(doc, &rendered).into_owned())
 }
 
@@ -53,7 +53,7 @@ pub(in crate::cxxqt_object) fn canvas_proxy_buffer(
 pub(in crate::cxxqt_object) fn pre_preview_sources(
     rust: &PictureViewRust,
 ) -> Option<(Document, Option<LayerMask>)> {
-    let mut doc = rust.doc.clone()?;
+    let mut doc = rust.session.doc.clone()?;
     // An open section preview has written into the live layer; the work starts
     // from the pixels before it, as the commit does.
     if let Some(preview) = rust.filter_preview.as_ref() {
@@ -62,7 +62,11 @@ pub(in crate::cxxqt_object) fn pre_preview_sources(
             *layer = original;
         }
     }
-    let mask = rust.selection.as_ref().map(|s| selection_to_mask(s, &doc));
+    let mask = rust
+        .session
+        .selection
+        .as_ref()
+        .map(|s| selection_to_mask(s, &doc));
     Some((doc, mask))
 }
 
@@ -166,7 +170,7 @@ mod tests {
         }
         doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         PictureViewRust {
-            doc: Some(doc),
+            session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
             layer_target: LayerTarget::only("0"),
             gpu_compute: false,
             ..Default::default()
@@ -174,7 +178,7 @@ mod tests {
     }
 
     fn red(rust: &PictureViewRust) -> Vec<u8> {
-        rust.doc.as_ref().unwrap().layers[0].channels[0]
+        rust.session.doc.as_ref().unwrap().layers[0].channels[0]
             .data
             .to_vec()
     }
@@ -205,14 +209,14 @@ mod tests {
         let whole = rect(0, 0, 128, 128);
         let first = canvas_proxy_buffer(&mut rust, &blur, whole, 0.5).expect("proxy");
         // A change the key does not see is not picked up: the copy was reused.
-        rust.doc.as_mut().unwrap().layers[0].channels[0]
+        rust.session.doc.as_mut().unwrap().layers[0].channels[0]
             .data
             .as_mut_slice()
             .fill(0);
         let again = canvas_proxy_buffer(&mut rust, &blur, whole, 0.5).expect("proxy");
         assert_eq!(again.data, first.data);
         // A new document revision rebuilds it.
-        rust.content_revision += 1;
+        rust.session.content_revision += 1;
         let rebuilt = canvas_proxy_buffer(&mut rust, &blur, whole, 0.5).expect("proxy");
         assert_ne!(rebuilt.data, first.data);
     }
@@ -240,7 +244,7 @@ mod tests {
     #[test]
     fn a_mask_target_has_no_proxy() {
         let mut rust = striped();
-        let layer = &mut rust.doc.as_mut().unwrap().layers[0];
+        let layer = &mut rust.session.doc.as_mut().unwrap().layers[0];
         layer.mask = Some(pictura_core::LayerMask {
             rect: rect(0, 0, 128, 128),
             default_color: 255,

@@ -168,13 +168,14 @@ impl qobject::PictureView {
         };
         let before = self
             .rust()
+            .session
             .doc
             .as_ref()
             .and_then(|doc| pictura_render::resolve_path(doc, &path))
             .map(|layer| layer.rect);
         let moved = {
             let mut rust = self.as_mut().rust_mut();
-            let Some(doc) = rust.doc.as_mut() else {
+            let Some(doc) = rust.session.doc.as_mut() else {
                 return false;
             };
             pictura_render::translate_layer_path(doc, &path, dx, dy)
@@ -183,6 +184,7 @@ impl qobject::PictureView {
             let edit = match (
                 before,
                 self.rust()
+                    .session
                     .doc
                     .as_ref()
                     .and_then(|doc| pictura_render::resolve_path(doc, &path))
@@ -208,13 +210,14 @@ impl qobject::PictureView {
         };
         let before = self
             .rust()
+            .session
             .doc
             .as_ref()
             .and_then(|doc| pictura_render::resolve_path(doc, &path))
             .map(|layer| layer.rect);
         let moved = {
             let mut rust = self.as_mut().rust_mut();
-            let Some(doc) = rust.doc.as_mut() else {
+            let Some(doc) = rust.session.doc.as_mut() else {
                 return false;
             };
             pictura_render::translate_layer_path(doc, &path, dx, dy)
@@ -223,6 +226,7 @@ impl qobject::PictureView {
             match (
                 before,
                 self.rust()
+                    .session
                     .doc
                     .as_ref()
                     .and_then(|doc| pictura_render::resolve_path(doc, &path))
@@ -246,13 +250,13 @@ impl qobject::PictureView {
         }
         let resized = {
             let mut rust = self.as_mut().rust_mut();
-            let Some(doc) = rust.doc.as_mut() else {
+            let Some(doc) = rust.session.doc.as_mut() else {
                 return false;
             };
             pictura_render::resize_document(doc, width as u32, height as u32, resample).is_ok()
         };
         if resized {
-            self.as_mut().rust_mut().selection = None;
+            self.as_mut().rust_mut().session.selection = None;
             self.as_mut().edit("Image Size", |_| Edit::Full);
         }
         resized
@@ -272,13 +276,13 @@ impl qobject::PictureView {
         }
         let resized = {
             let mut rust = self.as_mut().rust_mut();
-            let Some(doc) = rust.doc.as_mut() else {
+            let Some(doc) = rust.session.doc.as_mut() else {
                 return false;
             };
             pictura_render::resize_canvas_document(doc, width as u32, height as u32, anchor).is_ok()
         };
         if resized {
-            self.as_mut().rust_mut().selection = None;
+            self.as_mut().rust_mut().session.selection = None;
             self.as_mut().edit("Canvas Size", |_| Edit::Full);
         }
         resized
@@ -290,13 +294,13 @@ impl qobject::PictureView {
         }
         let rotated = {
             let mut rust = self.as_mut().rust_mut();
-            let Some(doc) = rust.doc.as_mut() else {
+            let Some(doc) = rust.session.doc.as_mut() else {
                 return false;
             };
             pictura_render::rotate_document(doc, quarter_turns as u8).is_ok()
         };
         if rotated {
-            self.as_mut().rust_mut().selection = None;
+            self.as_mut().rust_mut().session.selection = None;
             self.as_mut().edit("Rotate", |_| Edit::Full);
         }
         rotated
@@ -305,11 +309,11 @@ impl qobject::PictureView {
     pub fn flip_doc(mut self: Pin<&mut Self>, horizontal: bool) -> bool {
         {
             let mut rust = self.as_mut().rust_mut();
-            let Some(doc) = rust.doc.as_mut() else {
+            let Some(doc) = rust.session.doc.as_mut() else {
                 return false;
             };
             pictura_render::flip_document(doc, horizontal);
-            rust.selection = None;
+            rust.session.selection = None;
         }
         self.as_mut().edit("Flip", |_| Edit::Full);
         true
@@ -332,7 +336,7 @@ impl qobject::PictureView {
         };
         let converted = {
             let mut rust = self.as_mut().rust_mut();
-            let Some(doc) = rust.doc.as_mut() else {
+            let Some(doc) = rust.session.doc.as_mut() else {
                 return false;
             };
             pictura_render::convert_depth_exposure_gamma(
@@ -343,7 +347,7 @@ impl qobject::PictureView {
             .is_ok()
         };
         if converted {
-            self.as_mut().rust_mut().selection = None;
+            self.as_mut().rust_mut().session.selection = None;
             self.as_mut().edit("HDR Conversion", |_| Edit::Full);
         }
         converted

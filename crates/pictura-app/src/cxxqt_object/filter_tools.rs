@@ -385,7 +385,7 @@ fn filter_last_params(view: Pin<&mut PictureView>) -> QList<f64> {
 
 fn filter_target_ready(view: Pin<&mut PictureView>) -> bool {
     let rust = view.rust();
-    let Some(doc) = rust.doc.as_ref() else {
+    let Some(doc) = rust.session.doc.as_ref() else {
         return false;
     };
     let active = rust.layer_target.single();
@@ -395,11 +395,11 @@ fn filter_target_ready(view: Pin<&mut PictureView>) -> bool {
 
 fn filter_target_empty(view: Pin<&mut PictureView>) -> bool {
     let rust = view.rust();
-    let Some(doc) = rust.doc.as_ref() else {
+    let Some(doc) = rust.session.doc.as_ref() else {
         return false;
     };
     active_pixel_layer(doc, rust.layer_target.single())
-        .is_some_and(|layer| selected_area_empty(layer, rust.selection.as_ref()))
+        .is_some_and(|layer| selected_area_empty(layer, rust.session.selection.as_ref()))
 }
 
 /// Whether `layer` has no non-transparent pixel inside `selection` (the
@@ -551,7 +551,7 @@ fn filter_gallery_preview(
     scale: f64,
 ) -> QImage {
     let rust = view.rust();
-    let Some(doc) = rust.doc.as_ref() else {
+    let Some(doc) = rust.session.doc.as_ref() else {
         return QImage::default();
     };
     let region = pictura_core::PsdRect {
@@ -560,7 +560,11 @@ fn filter_gallery_preview(
         bottom: y + h.max(0),
         right: x + w.max(0),
     };
-    let selection = rust.selection.as_ref().map(|s| selection_to_mask(s, doc));
+    let selection = rust
+        .session
+        .selection
+        .as_ref()
+        .map(|s| selection_to_mask(s, doc));
     let Some(proxy) = pictura_render::FilterProxy::new(doc, selection.as_ref(), region, scale)
     else {
         return QImage::default();
@@ -808,7 +812,7 @@ fn filter_proxy_base(mut view: Pin<&mut PictureView>, max_edge: i32) -> QImage {
     let mut rust = view.as_mut().rust_mut();
     let gpu_compute = rust.gpu_compute;
     let active = rust.layer_target.single().map(str::to_string);
-    let Some(doc) = rust.doc.as_mut() else {
+    let Some(doc) = rust.session.doc.as_mut() else {
         return QImage::default();
     };
     let Some(active_path) = active.as_deref() else {
@@ -840,7 +844,7 @@ fn filter_proxy_layer(
         return QImage::default();
     }
     let rust = view.rust();
-    let Some(doc) = rust.doc.as_ref() else {
+    let Some(doc) = rust.session.doc.as_ref() else {
         return QImage::default();
     };
     let Some(active) = rust.layer_target.single() else {

@@ -269,7 +269,7 @@ fn shape_add_layer(mut view: Pin<&mut PictureView>, spec: &ShapeSpec, foreground
             .anchor()
             .map(str::to_string)
             .unwrap_or_default();
-        match rust.doc.as_mut() {
+        match rust.session.doc.as_mut() {
             Some(doc) => pictura_render::add_shape_layer(
                 doc,
                 &above,
@@ -282,7 +282,7 @@ fn shape_add_layer(mut view: Pin<&mut PictureView>, spec: &ShapeSpec, foreground
         }
     };
     let mut reach = None;
-    if let Some(doc) = view.as_mut().rust_mut().doc.as_mut() {
+    if let Some(doc) = view.as_mut().rust_mut().session.doc.as_mut() {
         let (width, height) = (doc.width, doc.height);
         if let Some(layer) = pictura_render::resolve_path_mut(doc, &created) {
             if spec.no_fill {
@@ -423,7 +423,8 @@ fn edit_active(
     let changed = {
         let mut rust = view.as_mut().rust_mut();
         let rust = &mut *rust;
-        let (Some(doc), Some(path)) = (rust.doc.as_mut(), rust.layer_target.single()) else {
+        let (Some(doc), Some(path)) = (rust.session.doc.as_mut(), rust.layer_target.single())
+        else {
             return false;
         };
         let (width, height) = (doc.width, doc.height);
@@ -443,15 +444,16 @@ fn argb(rgb: [u8; 3]) -> f64 {
 
 fn shape_active(view: &PictureView) -> Vec<f64> {
     let rust = view.rust();
-    let Some((doc, layer)) =
-        rust.doc
-            .as_ref()
-            .zip(rust.layer_target.single())
-            .and_then(|(doc, path)| {
-                pictura_render::resolve_path(doc, path)
-                    .filter(|l| pictura_render::is_shape_layer(l))
-                    .map(|l| (doc, l))
-            })
+    let Some((doc, layer)) = rust
+        .session
+        .doc
+        .as_ref()
+        .zip(rust.layer_target.single())
+        .and_then(|(doc, path)| {
+            pictura_render::resolve_path(doc, path)
+                .filter(|l| pictura_render::is_shape_layer(l))
+                .map(|l| (doc, l))
+        })
     else {
         return Vec::new();
     };
@@ -510,6 +512,7 @@ fn shape_resize_active(view: Pin<&mut PictureView>, width: f64, height: f64) -> 
 /// Whether the layer at `path` is a shape layer.
 fn shape_is_shape(view: &PictureView, path: &QString) -> bool {
     view.rust()
+        .session
         .doc
         .as_ref()
         .and_then(|doc| pictura_render::resolve_path(doc, &path.to_string()))
@@ -561,7 +564,8 @@ fn shape_copy_attributes(mut view: Pin<&mut PictureView>, path: &QString) -> boo
     let path = path.to_string();
     let attributes = {
         let rust = view.as_mut().rust_mut();
-        rust.doc
+        rust.session
+            .doc
             .as_ref()
             .and_then(|doc| pictura_render::resolve_path(doc, &path))
             .and_then(pictura_render::copy_shape_attributes)
@@ -583,7 +587,7 @@ fn shape_paste_attributes(mut view: Pin<&mut PictureView>, path: &QString) -> bo
     let path = path.to_string();
     let changed = {
         let mut rust = view.as_mut().rust_mut();
-        match rust.doc.as_mut() {
+        match rust.session.doc.as_mut() {
             Some(doc) => pictura_render::resolve_path_mut(doc, &path)
                 .is_some_and(|layer| pictura_render::paste_shape_attributes(layer, &attributes)),
             None => false,
@@ -605,7 +609,7 @@ fn shape_rasterize(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
     let path = path.to_string();
     let changed = {
         let mut rust = view.as_mut().rust_mut();
-        match rust.doc.as_mut() {
+        match rust.session.doc.as_mut() {
             Some(doc) => pictura_render::rasterize_shape(doc, &path),
             None => false,
         }

@@ -472,6 +472,7 @@ fn type_convert(mut view: Pin<&mut PictureView>, path: &QString, paragraph: bool
     let replaced = view
         .as_mut()
         .rust_mut()
+        .session
         .doc
         .as_mut()
         .is_some_and(|doc| pictura_render::replace_type_layer(doc, &path.to_string(), &spec));
@@ -523,7 +524,7 @@ fn type_commit_layer(
             .anchor()
             .map(str::to_string)
             .unwrap_or_default();
-        let created = match rust.doc.as_mut() {
+        let created = match rust.session.doc.as_mut() {
             Some(doc) => pictura_render::add_type_layer(doc, &above, &spec),
             None => String::new(),
         };
@@ -557,7 +558,7 @@ fn type_commit_mask(
     let spec = spec(text, font, setting, character, paragraph);
     let shape = {
         let rust = view.rust();
-        let Some(doc) = rust.doc.as_ref() else {
+        let Some(doc) = rust.session.doc.as_ref() else {
             return false;
         };
         let Some(data) = pictura_render::type_mask(doc.width, doc.height, &spec) else {
@@ -579,12 +580,13 @@ fn type_commit_mask(
 }
 
 fn layer_spec(view: &PictureView, path: &QString) -> Option<TypeSpec> {
-    let doc = view.rust().doc.as_ref()?;
+    let doc = view.rust().session.doc.as_ref()?;
     pictura_render::type_layer_spec(pictura_render::resolve_path(doc, &path.to_string())?)
 }
 
 fn type_layer_at(view: &PictureView, x: f64, y: f64) -> QString {
     view.rust()
+        .session
         .doc
         .as_ref()
         .and_then(|doc| pictura_render::type_layer_at(doc, x, y))
@@ -655,6 +657,7 @@ fn set_visible(mut view: Pin<&mut PictureView>, path: &QString, visible: bool) -
     let changed = view
         .as_mut()
         .rust_mut()
+        .session
         .doc
         .as_mut()
         .and_then(|doc| pictura_render::resolve_path_mut(doc, &path.to_string()))
@@ -731,9 +734,15 @@ fn type_apply_style(
     name: &QString,
     paragraph: bool,
 ) -> bool {
-    let applied = view.as_mut().rust_mut().doc.as_mut().is_some_and(|doc| {
-        pictura_render::apply_type_style(doc, &path.to_string(), &name.to_string(), paragraph)
-    });
+    let applied = view
+        .as_mut()
+        .rust_mut()
+        .session
+        .doc
+        .as_mut()
+        .is_some_and(|doc| {
+            pictura_render::apply_type_style(doc, &path.to_string(), &name.to_string(), paragraph)
+        });
     if applied {
         view.as_mut().edit("Apply Type Style", |_| Edit::Structural);
         view.as_mut().changed();
@@ -748,7 +757,13 @@ fn commit_style(
     label: &str,
     apply: impl FnOnce(&mut pictura_core::Document) -> bool,
 ) -> bool {
-    let changed = view.as_mut().rust_mut().doc.as_mut().is_some_and(apply);
+    let changed = view
+        .as_mut()
+        .rust_mut()
+        .session
+        .doc
+        .as_mut()
+        .is_some_and(apply);
     if changed {
         view.as_mut().edit(label, |_| Edit::Structural);
         view.as_mut().changed();
@@ -839,9 +854,15 @@ fn type_preview_paragraph_style(
     let name = name.to_string();
     let character = style_character_overrides(font, character);
     let paragraph = paragraph_overrides(&paragraph_attrs(paragraph));
-    let changed = view.as_mut().rust_mut().doc.as_mut().is_some_and(|doc| {
-        crate::history::edit_paragraph_style(doc, &name, character, paragraph).is_ok()
-    });
+    let changed = view
+        .as_mut()
+        .rust_mut()
+        .session
+        .doc
+        .as_mut()
+        .is_some_and(|doc| {
+            crate::history::edit_paragraph_style(doc, &name, character, paragraph).is_ok()
+        });
     if changed {
         view.as_mut().clear_link_sets();
         view.as_mut().recomposite();
@@ -852,6 +873,7 @@ fn type_preview_paragraph_style(
 
 fn type_paragraph_style_count(view: &PictureView) -> i32 {
     view.rust()
+        .session
         .doc
         .as_ref()
         .map_or(0, |doc| doc.text_styles.paragraph_styles.len() as i32)
@@ -862,6 +884,7 @@ fn type_paragraph_style_name(view: &PictureView, index: i32) -> QString {
         return QString::default();
     }
     view.rust()
+        .session
         .doc
         .as_ref()
         .and_then(|doc| doc.text_styles.paragraph_styles.get(index as usize))
@@ -875,7 +898,7 @@ fn resolved_paragraph_style(
     name: &QString,
 ) -> Option<pictura_core::ResolvedStyle> {
     let name = name.to_string();
-    let doc = view.rust().doc.as_ref()?;
+    let doc = view.rust().session.doc.as_ref()?;
     doc.text_styles.paragraph_style(&name).map(|_| {
         doc.text_styles
             .resolve(&StyleOverrides::default(), None, Some(&name))
@@ -918,6 +941,7 @@ fn replace(
         && view
             .as_mut()
             .rust_mut()
+            .session
             .doc
             .as_mut()
             .is_some_and(|doc| pictura_render::replace_type_layer(doc, &path.to_string(), &spec))
@@ -933,6 +957,7 @@ fn set_shown(mut view: Pin<&mut PictureView>, path: &QString) {
     if let Some(layer) = view
         .as_mut()
         .rust_mut()
+        .session
         .doc
         .as_mut()
         .and_then(|doc| pictura_render::resolve_path_mut(doc, &path.to_string()))

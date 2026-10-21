@@ -22,23 +22,24 @@ impl qobject::PictureView {
         let (grouped, selected) = {
             let rust = self.rust();
             (
-                grouped_paths(rust.doc.as_ref(), &refs),
+                grouped_paths(rust.session.doc.as_ref(), &refs),
                 rust.layer_target.selected().to_vec(),
             )
         };
         let mut created = String::new();
         self.as_mut().edit("Group Layers", |rust| {
-            let Some(doc) = rust.doc.as_mut() else {
+            let Some(doc) = rust.session.doc.as_mut() else {
                 return Edit::None;
             };
             let Some(path) = pictura_render::group_paths(doc, &refs) else {
                 return Edit::None;
             };
             created = path.clone();
-            let target_paths = group_target_paths(&grouped, &selected, &path, rust.doc.as_ref());
+            let target_paths =
+                group_target_paths(&grouped, &selected, &path, rust.session.doc.as_ref());
             let target = {
                 let mut target = LayerTarget::default();
-                target.select(target_paths, Some(path.clone()), rust.doc.as_ref());
+                target.select(target_paths, Some(path.clone()), rust.session.doc.as_ref());
                 target
             };
             rust.set_layer_target(target);
@@ -52,7 +53,7 @@ impl qobject::PictureView {
         let refs = as_str_slice(&owned);
         let mut changed = 0;
         self.as_mut().edit("Delete Layers", |rust| {
-            let Some(doc) = rust.doc.as_mut() else {
+            let Some(doc) = rust.session.doc.as_mut() else {
                 return Edit::None;
             };
             let deleted = pictura_render::delete_paths_report(doc, &refs);
@@ -61,6 +62,7 @@ impl qobject::PictureView {
                 return Edit::None;
             }
             let survivor = rust
+                .session
                 .doc
                 .as_ref()
                 .and_then(|doc| survivor_after_delete(doc, &deleted));
@@ -80,7 +82,7 @@ impl qobject::PictureView {
         self.as_mut().edit("Ungroup Layers", |rust| {
             let mut groups: Vec<(String, usize, usize)> = Vec::new();
             let mut survivors: Vec<(String, usize)> = Vec::new();
-            if let Some(doc) = rust.doc.as_ref() {
+            if let Some(doc) = rust.session.doc.as_ref() {
                 for &path in &refs {
                     let Some(layer) = pictura_render::resolve_path(doc, path) else {
                         continue;
@@ -118,7 +120,7 @@ impl qobject::PictureView {
                     }
                 }
             }
-            let Some(doc) = rust.doc.as_mut() else {
+            let Some(doc) = rust.session.doc.as_mut() else {
                 return Edit::None;
             };
             changed = pictura_render::ungroup_paths(doc, &refs);
@@ -127,7 +129,7 @@ impl qobject::PictureView {
             }
             let mut target_paths: Vec<String> = Vec::new();
             let mut anchor = None;
-            if let Some(doc) = rust.doc.as_ref() {
+            if let Some(doc) = rust.session.doc.as_ref() {
                 // Each group splices `children - 1` extra nodes in below it.
                 // Per parent, an original index shifts only by groups below it.
                 let mut expansions: std::collections::HashMap<String, Vec<(usize, usize)>> =
@@ -177,7 +179,7 @@ impl qobject::PictureView {
             let anchor = anchor.or_else(|| target_paths.first().cloned());
             let target = {
                 let mut target = LayerTarget::default();
-                target.select(target_paths, anchor, rust.doc.as_ref());
+                target.select(target_paths, anchor, rust.session.doc.as_ref());
                 target
             };
             rust.set_layer_target(target);
@@ -195,7 +197,7 @@ impl qobject::PictureView {
             if i < 0 {
                 return Edit::None;
             }
-            let Some(doc) = rust.doc.as_mut() else {
+            let Some(doc) = rust.session.doc.as_mut() else {
                 return Edit::None;
             };
             let deleted = pictura_render::delete_paths_report(doc, &[&path]);
@@ -203,6 +205,7 @@ impl qobject::PictureView {
                 return Edit::None;
             }
             let survivor = rust
+                .session
                 .doc
                 .as_ref()
                 .and_then(|doc| survivor_after_delete(doc, &deleted));

@@ -205,11 +205,13 @@ impl qobject::PictureView {
             view.select_only_layer("0");
             let target = view.layer_target.clone();
             let view = &mut *view;
-            if let Some(doc) = view.doc.as_mut() {
-                view.history.capture_live(doc, &None, &target, "New");
+            if let Some(doc) = view.session.doc.as_mut() {
+                view.session
+                    .history
+                    .capture_live(doc, &None, &target, "New");
             }
             view.path = None;
-            view.dirty = false;
+            view.session.dirty = false;
         }
         self.as_mut().session_cancelled();
         true
@@ -221,12 +223,12 @@ impl qobject::PictureView {
         if matches!(suffix.as_str(), "pdf" | "pdp") {
             return super::pdf_export::save_with_last_options(self, &QString::from(path.as_str()));
         }
-        let dirty = self.rust().dirty;
+        let dirty = self.rust().session.dirty;
         match raster_writer_for_suffix(&suffix) {
             None => {
                 let bytes = {
                     let mut rust = self.as_mut().rust_mut();
-                    let Some(doc) = rust.doc.as_mut() else {
+                    let Some(doc) = rust.session.doc.as_mut() else {
                         return false;
                     };
                     if dirty {
@@ -258,7 +260,7 @@ impl qobject::PictureView {
                 let gpu_compute = self.rust().gpu_compute;
                 let (rgba, width, height) = {
                     let mut rust = self.as_mut().rust_mut();
-                    let Some(doc) = rust.doc.as_mut() else {
+                    let Some(doc) = rust.session.doc.as_mut() else {
                         return false;
                     };
                     if dirty {
@@ -275,12 +277,12 @@ impl qobject::PictureView {
         }
         let mut view = self.as_mut().rust_mut();
         view.path = Some(path);
-        view.dirty = false;
+        view.session.dirty = false;
         true
     }
 
     pub fn is_dirty(&self) -> bool {
-        self.rust().dirty
+        self.rust().session.dirty
     }
 
     pub fn file_path(&self) -> QString {
@@ -308,7 +310,7 @@ impl qobject::PictureView {
     }
 
     fn mode_notice(&self) -> QString {
-        let Some(doc) = self.rust().doc.as_ref() else {
+        let Some(doc) = self.rust().session.doc.as_ref() else {
             return QString::default();
         };
         let Some(mode) = doc.source_mode else {
@@ -337,7 +339,7 @@ impl qobject::PictureView {
     }
 
     fn depth_notice(&self) -> QString {
-        let Some(doc) = self.rust().doc.as_ref() else {
+        let Some(doc) = self.rust().session.doc.as_ref() else {
             return QString::default();
         };
         let Some(depth) = doc.source_depth else {
@@ -363,6 +365,7 @@ impl qobject::PictureView {
     fn icc_notice(&self) -> QString {
         let Some(icc) = self
             .rust()
+            .session
             .doc
             .as_ref()
             .and_then(|d| d.source_icc.as_deref())
@@ -376,7 +379,7 @@ impl qobject::PictureView {
     }
 
     pub fn exif_rows(&self) -> QStringList {
-        let Some(doc) = self.rust().doc.as_ref() else {
+        let Some(doc) = self.rust().session.doc.as_ref() else {
             return QStringList::default();
         };
         pictura_codec::read_metadata(doc)
@@ -393,7 +396,7 @@ impl qobject::PictureView {
     }
 
     pub fn iptc_rows(&self) -> QStringList {
-        let Some(doc) = self.rust().doc.as_ref() else {
+        let Some(doc) = self.rust().session.doc.as_ref() else {
             return QStringList::default();
         };
         pictura_codec::read_metadata(doc)
@@ -412,6 +415,7 @@ impl qobject::PictureView {
 
     pub fn xmp_packet(&self) -> QString {
         self.rust()
+            .session
             .doc
             .as_ref()
             .map(|doc| QString::from(pictura_codec::read_metadata(doc).xmp))
@@ -420,7 +424,7 @@ impl qobject::PictureView {
 
     /// The parsed XMP properties as `"Label\tValue"` rows, omitting absent ones.
     pub fn xmp_rows(&self) -> QStringList {
-        let Some(doc) = self.rust().doc.as_ref() else {
+        let Some(doc) = self.rust().session.doc.as_ref() else {
             return QStringList::default();
         };
         let props = pictura_codec::xmp_properties(doc);
@@ -460,7 +464,7 @@ impl qobject::PictureView {
     /// The six editable IPTC core fields as `"record:dataset\tLabel\tValue"`.
     pub fn iptc_edit_fields(&self) -> QStringList {
         const EDITABLE: &[(u8, u8)] = &[(2, 5), (2, 80), (2, 116), (2, 120), (2, 110), (2, 115)];
-        let Some(doc) = self.rust().doc.as_ref() else {
+        let Some(doc) = self.rust().session.doc.as_ref() else {
             return QStringList::default();
         };
         let iptc = pictura_codec::read_metadata(doc).iptc;
@@ -492,7 +496,7 @@ impl qobject::PictureView {
             };
             fields.push((record, dataset, value.to_string()));
         }
-        let changed = match self.as_mut().rust_mut().doc.as_mut() {
+        let changed = match self.as_mut().rust_mut().session.doc.as_mut() {
             Some(doc) => pictura_codec::set_file_info_fields(doc, &fields),
             None => false,
         };
@@ -506,7 +510,7 @@ impl qobject::PictureView {
     /// standalone template. Read-only: no mutation and no history state; false
     /// without a document or on a write error.
     pub fn export_metadata_template(&self, dest: &QString) -> bool {
-        let Some(doc) = self.rust().doc.as_ref() else {
+        let Some(doc) = self.rust().session.doc.as_ref() else {
             return false;
         };
         std::fs::write(dest.to_string(), pictura_codec::export_template(doc)).is_ok()
@@ -528,7 +532,7 @@ impl qobject::PictureView {
             return false;
         };
         let template = pictura_codec::parse_xmp(&text);
-        let changed = match self.as_mut().rust_mut().doc.as_mut() {
+        let changed = match self.as_mut().rust_mut().session.doc.as_mut() {
             Some(doc) => pictura_codec::apply_template(doc, &template, mode),
             None => false,
         };
@@ -548,7 +552,7 @@ impl qobject::PictureView {
         };
         {
             let mut rust = self.as_mut().rust_mut();
-            let Some(doc) = rust.doc.as_mut() else {
+            let Some(doc) = rust.session.doc.as_mut() else {
                 return false;
             };
             if doc.mode != ColorMode::Rgb {
@@ -570,7 +574,7 @@ impl qobject::PictureView {
         };
         {
             let mut rust = self.as_mut().rust_mut();
-            let Some(doc) = rust.doc.as_mut() else {
+            let Some(doc) = rust.session.doc.as_mut() else {
                 return false;
             };
             if doc.mode != ColorMode::Rgb {
@@ -585,7 +589,7 @@ impl qobject::PictureView {
     }
 
     pub fn document_mode(&self) -> QString {
-        match self.rust().doc.as_ref().map(|d| d.mode) {
+        match self.rust().session.doc.as_ref().map(|d| d.mode) {
             Some(ColorMode::Grayscale) => QString::from("grayscale"),
             Some(_) => QString::from("rgb"),
             None => QString::default(),
@@ -593,7 +597,7 @@ impl qobject::PictureView {
     }
 
     pub fn document_depth_bits(&self) -> i32 {
-        let Some(doc) = self.rust().doc.as_ref() else {
+        let Some(doc) = self.rust().session.doc.as_ref() else {
             return 0;
         };
         // The working model is always 8-bit; a retained 16/32-bit source store is
@@ -622,7 +626,7 @@ impl qobject::PictureView {
     }
 
     pub fn has_document(&self) -> bool {
-        self.rust().doc.is_some()
+        self.rust().session.doc.is_some()
     }
 
     /// A premultiplied crop of view-pyramid `level` at document rect
@@ -677,11 +681,12 @@ impl qobject::PictureView {
 
     /// Identity of the loaded document; bumped when the view loads or replaces it.
     pub fn document_generation(&self) -> u64 {
-        self.rust().document_generation
+        self.rust().session.document_generation
     }
 
     pub fn document_width(&self) -> i32 {
         self.rust()
+            .session
             .doc
             .as_ref()
             .map(|d| d.width as i32)
@@ -690,6 +695,7 @@ impl qobject::PictureView {
 
     pub fn document_height(&self) -> i32 {
         self.rust()
+            .session
             .doc
             .as_ref()
             .map(|d| d.height as i32)
@@ -698,7 +704,7 @@ impl qobject::PictureView {
 
     pub fn sample_argb(&self, x: i32, y: i32) -> u32 {
         let rust = self.rust();
-        let Some(doc) = rust.doc.as_ref() else {
+        let Some(doc) = rust.session.doc.as_ref() else {
             return 0;
         };
         // Read the authoritative planar composite directly; never build a full
@@ -781,7 +787,7 @@ impl qobject::PictureView {
         let path = path.to_string();
         let rust = &mut *self.as_mut().rust_mut();
         let resolves = |doc: &Document| pictura_render::resolve_path(doc, &path).is_some();
-        if path.is_empty() || !rust.doc.as_ref().is_some_and(resolves) {
+        if path.is_empty() || !rust.session.doc.as_ref().is_some_and(resolves) {
             rust.layer_target.clear();
         } else {
             rust.select_only_layer(&path);
@@ -791,7 +797,7 @@ impl qobject::PictureView {
             rust.mask_edit_target = None;
         }
         let target = rust.layer_target.clone();
-        rust.history.set_current_target(&target);
+        rust.session.history.set_current_target(&target);
     }
 
     /// The panel path of the active layer, or empty when none is active.
@@ -807,7 +813,8 @@ impl qobject::PictureView {
     /// when there is no single editable active layer (nothing to refuse).
     pub fn active_layer_visible(&self) -> bool {
         let rust = self.rust();
-        rust.doc
+        rust.session
+            .doc
             .as_ref()
             .is_none_or(|doc| active_layer_visible(doc, rust.layer_target.single()))
     }
@@ -868,7 +875,11 @@ impl qobject::PictureView {
 impl super::PictureViewRust {
     /// The document-space canvas rectangle, or an empty rect without a document.
     pub(super) fn canvas_rect(&self) -> PsdRect {
-        let (width, height) = self.doc.as_ref().map_or((0, 0), |d| (d.width, d.height));
+        let (width, height) = self
+            .session
+            .doc
+            .as_ref()
+            .map_or((0, 0), |d| (d.width, d.height));
         PsdRect {
             top: 0,
             left: 0,
@@ -883,6 +894,7 @@ impl super::PictureViewRust {
         let t0 = Instant::now();
         let t = Instant::now();
         let rendered = self
+            .session
             .doc
             .as_ref()
             .map(|doc| current_buffer(doc, self.gpu_compute));
@@ -892,7 +904,7 @@ impl super::PictureViewRust {
         };
         {
             let t = Instant::now();
-            if let Some(doc) = self.doc.as_mut() {
+            if let Some(doc) = self.session.doc.as_mut() {
                 store_composite(doc, &rendered);
             }
             self.reset_pyramid();
@@ -922,10 +934,11 @@ impl super::PictureViewRust {
         let gpu_compute = self.gpu_compute;
         let level0 = match self.stroke {
             Some(_) => self
+                .session
                 .doc
                 .as_ref()
                 .map(|doc| level0_composited(doc, gpu_compute)),
-            None => self.doc.as_ref().map(level0_buffer),
+            None => self.session.doc.as_ref().map(level0_buffer),
         };
         self.level0 = level0;
         self.pyramid = match self.level0.as_ref().and_then(planes_of) {
@@ -951,7 +964,7 @@ impl super::PictureViewRust {
     /// rebuilding the whole frame only when it is absent or a different size.
     pub(super) fn refresh_level0_region(&mut self, region: PixelBuffer, x0: i32, y0: i32) {
         let region = into_rgba_frame(region);
-        let dims = self.doc.as_ref().map(|doc| (doc.width, doc.height));
+        let dims = self.session.doc.as_ref().map(|doc| (doc.width, doc.height));
         let matches = matches!(
             (self.level0.as_ref(), dims),
             (Some(level0), Some((w, h))) if level0.width == w && level0.height == h
@@ -961,7 +974,7 @@ impl super::PictureViewRust {
                 patch_buffer_region(level0, &region, x0, y0);
             }
         } else {
-            self.level0 = self.doc.as_ref().map(level0_buffer);
+            self.level0 = self.session.doc.as_ref().map(level0_buffer);
             self.frame_revision = self.frame_revision.wrapping_add(1);
         }
     }
@@ -1030,21 +1043,25 @@ impl qobject::PictureView {
         let t = Instant::now();
         let mut rust = self.as_mut().rust_mut();
         let rust = &mut *rust;
-        if let Some(doc) = rust.doc.as_mut() {
-            rust.history
-                .capture_live(doc, &rust.selection, &rust.layer_target, label);
-            rust.dirty = true;
-            rust.content_revision = rust.content_revision.wrapping_add(1);
+        if let Some(doc) = rust.session.doc.as_mut() {
+            rust.session.history.capture_live(
+                doc,
+                &rust.session.selection,
+                &rust.layer_target,
+                label,
+            );
+            rust.session.dirty = true;
+            rust.session.content_revision = rust.session.content_revision.wrapping_add(1);
         }
         paint_timing::record("record_history_capture", t.elapsed());
     }
 
     pub(super) fn snapshot(&self) -> Option<Snapshot> {
         let rust = self.rust();
-        let doc = rust.doc.clone()?;
+        let doc = rust.session.doc.clone()?;
         Some(Snapshot {
             doc,
-            selection: rust.selection.clone(),
+            selection: rust.session.selection.clone(),
         })
     }
 

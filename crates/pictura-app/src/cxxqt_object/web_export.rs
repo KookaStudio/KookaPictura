@@ -72,7 +72,7 @@ fn size(rgba: &[u8], width: i32, height: i32) -> Option<(u32, u32)> {
 
 fn web_flattened(view: &PictureView) -> Vec<u8> {
     let rust = view.rust();
-    let Some(doc) = rust.doc.as_ref() else {
+    let Some(doc) = rust.session.doc.as_ref() else {
         return Vec::new();
     };
     let buffer = current_buffer(doc, rust.gpu_compute);
@@ -134,7 +134,7 @@ fn layer_bounds(layer: &Layer, doc_w: u32, doc_h: u32) -> (u32, u32, u32, u32) {
 
 fn layer_flattened(view: &PictureView, index: i32) -> Vec<u8> {
     let rust = view.rust();
-    let Some(doc) = rust.doc.as_ref() else {
+    let Some(doc) = rust.session.doc.as_ref() else {
         return Vec::new();
     };
     layer_flattened_buffer(doc, index as usize, rust.gpu_compute)

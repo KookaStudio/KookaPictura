@@ -98,7 +98,8 @@ impl qobject::PictureView {
         {
             let mut rust = self.as_mut().rust_mut();
             let rust = &mut *rust;
-            let (Some(doc), Some(ctx)) = (rust.doc.as_mut(), rust.mask_stroke.as_ref()) else {
+            let (Some(doc), Some(ctx)) = (rust.session.doc.as_mut(), rust.mask_stroke.as_ref())
+            else {
                 return false;
             };
             pictura_render::write_mask_back(doc, &ctx.path, &ctx.document, Some(dirty));

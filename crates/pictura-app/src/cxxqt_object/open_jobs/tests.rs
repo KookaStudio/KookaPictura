@@ -42,9 +42,9 @@ fn open_psd_matches_sync() {
 
     let mut rust = PictureViewRust::default();
     apply_opened(&mut rust, opened);
-    assert!(rust.doc.is_some());
+    assert!(rust.session.doc.is_some());
     assert_eq!(rust.path.as_deref(), Some(path.to_str().unwrap()));
-    assert!(!rust.dirty);
+    assert!(!rust.session.dirty);
     assert_eq!(rust.source_format, "psd");
     std::fs::remove_file(path).ok();
 }
@@ -91,9 +91,9 @@ fn open_image_matches_sync() {
 
     let mut rust = PictureViewRust::default();
     apply_opened(&mut rust, opened);
-    assert!(rust.doc.is_some());
+    assert!(rust.session.doc.is_some());
     assert_eq!(rust.path, None);
-    assert!(!rust.dirty);
+    assert!(!rust.session.dirty);
     assert_eq!(rust.source_format, "webp");
     std::fs::remove_file(path).ok();
 }
@@ -146,13 +146,13 @@ fn cancelled_open_result_is_dropped() {
         ..PictureViewRust::default()
     };
     assert!(!apply_if_live(&mut rust, Some(opened)));
-    assert!(rust.doc.is_none());
+    assert!(rust.session.doc.is_none());
 
     let opened =
         decode_psd(path.to_str().unwrap(), Policy::Preserve, false, &|_, _| {}).expect("decode");
     rust.open_cancelled = false;
     assert!(apply_if_live(&mut rust, Some(opened)));
-    assert!(rust.doc.is_some());
+    assert!(rust.session.doc.is_some());
     std::fs::remove_file(path).ok();
 }
 

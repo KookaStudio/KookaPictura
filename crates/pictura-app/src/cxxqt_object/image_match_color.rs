@@ -96,8 +96,9 @@ fn selection_plane(view: &PictureView, use_selection: bool) -> Option<Vec<u8>> {
         return None;
     }
     let rust = view.rust();
-    let doc = rust.doc.as_ref()?;
-    rust.selection
+    let doc = rust.session.doc.as_ref()?;
+    rust.session
+        .selection
         .as_ref()
         .filter(|s| s.width == doc.width && s.height == doc.height)
         .map(|s| s.data.clone())
@@ -109,7 +110,7 @@ fn stats_vec(stats: MatchColorStats) -> Vec<f64> {
 
 fn match_color_target_stats(view: &PictureView, use_selection: bool) -> Vec<f64> {
     let rust = view.rust();
-    let Some(doc) = rust.doc.as_ref() else {
+    let Some(doc) = rust.session.doc.as_ref() else {
         return Vec::new();
     };
     // Statistics cover the whole layer being adjusted, never a preview
@@ -128,7 +129,7 @@ fn match_color_target_stats(view: &PictureView, use_selection: bool) -> Vec<f64>
 
 fn match_color_source_stats(source: &PictureView, path: &QString, use_selection: bool) -> Vec<f64> {
     let rust = source.rust();
-    let Some(doc) = rust.doc.as_ref() else {
+    let Some(doc) = rust.session.doc.as_ref() else {
         return Vec::new();
     };
     let image = if path.is_empty() {

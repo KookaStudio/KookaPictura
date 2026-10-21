@@ -271,7 +271,9 @@ fn commit_refresh_profile_4000() {
                 );
                 doc.composite = pictura_render::composite_active(&doc, gpu).0;
                 let mut rust = PictureViewRust {
-                    doc: Some(doc),
+                    session: crate::cxxqt_object::document_session::DocumentSession::with_document(
+                        doc,
+                    ),
                     gpu_compute: gpu,
                     ..Default::default()
                 };
@@ -415,14 +417,14 @@ fn large_document_stroke_profile() {
         pictura_core::LayerStack::from_layers(vec![pixel_layer("Background", w, h, (30, 60, 90))]);
     doc.composite = pictura_render::composite_active(&doc, false).0;
     let mut rust = PictureViewRust {
-        doc: Some(doc),
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
         ..Default::default()
     };
     rust.reset_pyramid();
     let t = Instant::now();
     let r = &mut rust;
-    r.history.capture_live(
-        r.doc.as_mut().expect("document"),
+    r.session.history.capture_live(
+        r.session.doc.as_mut().expect("document"),
         &None,
         &r.layer_target,
         "Open",
@@ -443,7 +445,7 @@ fn large_document_stroke_profile() {
         let t = Instant::now();
         let stroke = rust.stroke.as_mut().expect("stroke");
         stroke.sample(
-            rust.doc.as_mut().expect("document"),
+            rust.session.doc.as_mut().expect("document"),
             StrokeSample {
                 x: 8000.0 + i as f32 * 12.0,
                 y: 8000.0 + i as f32 * 8.0,
@@ -462,7 +464,7 @@ fn large_document_stroke_profile() {
     for round in 0..2 {
         paint_timing::start("large document stroke");
         let t = Instant::now();
-        let stroke = Stroke::begin_at(rust.doc.as_ref().expect("document"), "0", cfg);
+        let stroke = Stroke::begin_at(rust.session.doc.as_ref().expect("document"), "0", cfg);
         rust.stroke = Some(stroke.expect("stroke begins"));
         rust.stroke_tiles.reset(w, h);
         let begin = t.elapsed().as_secs_f64() * 1000.0;
@@ -484,8 +486,8 @@ fn large_document_stroke_profile() {
 
         let t = Instant::now();
         let r = &mut rust;
-        r.history.capture_live(
-            r.doc.as_mut().expect("document"),
+        r.session.history.capture_live(
+            r.session.doc.as_mut().expect("document"),
             &None,
             &r.layer_target,
             "Brush",
@@ -504,10 +506,11 @@ fn large_document_stroke_profile() {
     let t = Instant::now();
     let r = &mut rust;
     let restored = r
+        .session
         .history
         .undo_live(
-            r.doc.as_mut().expect("document"),
-            &mut r.selection,
+            r.session.doc.as_mut().expect("document"),
+            &mut r.session.selection,
             &mut r.layer_target,
         )
         .expect("a stroke to undo");
@@ -553,15 +556,15 @@ fn large_document_filter_profile() {
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
     doc.composite = pictura_render::composite_active(&doc, false).0;
     let mut rust = PictureViewRust {
-        doc: Some(doc),
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
         layer_target: LayerTarget::only("0"),
         gpu_compute: std::env::var_os("PICTURA_PROFILE_GPU").is_some(),
         ..Default::default()
     };
     rust.reset_pyramid();
     let r = &mut rust;
-    r.history.capture_live(
-        r.doc.as_mut().expect("document"),
+    r.session.history.capture_live(
+        r.session.doc.as_mut().expect("document"),
         &None,
         &r.layer_target,
         "Open",
@@ -712,8 +715,8 @@ fn large_document_filter_profile() {
         let refreshed = t.elapsed();
         let t = Instant::now();
         let r = &mut rust;
-        r.history.capture_live(
-            r.doc.as_mut().expect("document"),
+        r.session.history.capture_live(
+            r.session.doc.as_mut().expect("document"),
             &None,
             &r.layer_target,
             "Filter",
@@ -750,15 +753,15 @@ fn radial_blur_commit_profile() {
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
     doc.composite = pictura_render::composite_active(&doc, false).0;
     let mut rust = PictureViewRust {
-        doc: Some(doc),
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
         layer_target: LayerTarget::only("0"),
         gpu_compute: std::env::var_os("PICTURA_PROFILE_GPU").is_some(),
         ..Default::default()
     };
     rust.reset_pyramid();
     let r = &mut rust;
-    r.history.capture_live(
-        r.doc.as_mut().expect("document"),
+    r.session.history.capture_live(
+        r.session.doc.as_mut().expect("document"),
         &None,
         &r.layer_target,
         "Open",
@@ -788,7 +791,7 @@ fn radial_blur_commit_profile() {
             "radial {method:?} 100 Best: worker={:.0}ms land (UI)={:.0}ms history tiles={:.0} MB",
             worker.as_secs_f64() * 1000.0,
             t.elapsed().as_secs_f64() * 1000.0,
-            rust.history.retained_tile_bytes() as f64 / 1e6
+            rust.session.history.retained_tile_bytes() as f64 / 1e6
         );
     }
 }
@@ -807,12 +810,12 @@ fn marquee_selection_profile() {
         pictura_core::LayerStack::from_layers(vec![pixel_layer("Background", w, h, (30, 60, 90))]);
     doc.composite = pictura_render::composite_active(&doc, false).0;
     let mut rust = PictureViewRust {
-        doc: Some(doc),
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
         ..Default::default()
     };
     let r = &mut rust;
-    r.history.capture_live(
-        r.doc.as_mut().expect("document"),
+    r.session.history.capture_live(
+        r.session.doc.as_mut().expect("document"),
         &None,
         &r.layer_target,
         "Open",
@@ -825,21 +828,26 @@ fn marquee_selection_profile() {
         } else {
             Selection::rect(w, h, 1000, 1000, 5000, 3000)
         };
-        r.selection = Some(feathered(shape, 0.0));
+        r.session.selection = Some(feathered(shape, 0.0));
         let build = t.elapsed();
         let t = Instant::now();
-        r.history.capture_live(
-            r.doc.as_mut().expect("document"),
-            &r.selection,
+        r.session.history.capture_live(
+            r.session.doc.as_mut().expect("document"),
+            &r.session.selection,
             &r.layer_target,
             "Rectangular Marquee",
         );
         let record = t.elapsed();
         let t = Instant::now();
-        let loops = pictura_select::contour(r.selection.as_ref().expect("selection"), 128);
+        let loops = pictura_select::contour(r.session.selection.as_ref().expect("selection"), 128);
         let contour = t.elapsed();
         let t = Instant::now();
-        let moved = r.selection.as_ref().expect("selection").translate(37, 21);
+        let moved = r
+            .session
+            .selection
+            .as_ref()
+            .expect("selection")
+            .translate(37, 21);
         let translate = t.elapsed();
         let t = Instant::now();
         let moved_loops = pictura_select::contour(&moved, 128).len();

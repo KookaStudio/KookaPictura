@@ -79,6 +79,7 @@ pub(super) fn mode_name(mode: ColorMode) -> &'static str {
 fn channels_mode(view: &PictureView) -> QString {
     let name = view
         .rust()
+        .session
         .doc
         .as_ref()
         .map_or("", |doc| mode_name(doc.source_mode.unwrap_or(doc.mode)));
@@ -114,7 +115,7 @@ fn channels_alpha_thumbnail(
     *width = 0;
     *height = 0;
     let rust = view.rust();
-    let Some(doc) = rust.doc.as_ref() else {
+    let Some(doc) = rust.session.doc.as_ref() else {
         return Vec::new();
     };
     let Some(channel) = usize::try_from(index)
@@ -135,7 +136,7 @@ fn channels_alpha_thumbnail(
 fn channels_new_alpha(mut view: Pin<&mut PictureView>) -> i32 {
     let index = {
         let mut rust = view.as_mut().rust_mut();
-        let Some(doc) = rust.doc.as_mut() else {
+        let Some(doc) = rust.session.doc.as_mut() else {
             return -1;
         };
         let id = doc.channels.iter().map(|c| c.id).max().unwrap_or(0) + 1;
@@ -152,7 +153,7 @@ fn channels_new_alpha(mut view: Pin<&mut PictureView>) -> i32 {
 fn channels_delete_alpha(mut view: Pin<&mut PictureView>, index: i32) -> bool {
     let removed = {
         let mut rust = view.as_mut().rust_mut();
-        match (rust.doc.as_mut(), usize::try_from(index)) {
+        match (rust.session.doc.as_mut(), usize::try_from(index)) {
             (Some(doc), Ok(i)) if i < doc.channels.len() => {
                 doc.channels.remove(i);
                 true
@@ -172,7 +173,7 @@ fn channels_load_color_selection(view: Pin<&mut PictureView>, row: i32, mask: i3
 
 fn channels_active_mask_name(view: &PictureView) -> QString {
     let rust = view.rust();
-    let (Some(doc), Some(path)) = (rust.doc.as_ref(), rust.layer_target.anchor()) else {
+    let (Some(doc), Some(path)) = (rust.session.doc.as_ref(), rust.layer_target.anchor()) else {
         return QString::default();
     };
     if !pictura_render::has_layer_mask(doc, path) {

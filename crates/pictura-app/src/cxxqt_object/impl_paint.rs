@@ -71,7 +71,7 @@ impl PictureViewRust {
         rect: PsdRect,
     ) -> Option<(i32, i32, PsdRect, PixelBuffer)> {
         let painting = self.mask_stroke.is_some();
-        let source: &Document = self.doc.as_ref()?;
+        let source: &Document = self.session.doc.as_ref()?;
         let (x0, y0, w, h) = clamp_region(rect, source.width, source.height)?;
         let gpu_compute = self.gpu_compute;
         let t = Instant::now();
@@ -84,7 +84,7 @@ impl PictureViewRust {
             return None;
         }
         if !painting {
-            if let Some(doc) = self.doc.as_mut() {
+            if let Some(doc) = self.session.doc.as_mut() {
                 let t = Instant::now();
                 patch_composite_region(doc, &buffer, x0, y0);
                 paint_timing::record("rr_patch_composite", t.elapsed());
@@ -106,7 +106,7 @@ impl PictureViewRust {
         if let Some(mut ctx) = self.mask_stroke.take() {
             let dirty = ctx.stroke.dirty();
             ctx.stroke.cancel(&mut ctx.document);
-            if let Some(doc) = self.doc.as_mut() {
+            if let Some(doc) = self.session.doc.as_mut() {
                 pictura_render::write_mask_back(doc, &ctx.path, &ctx.document, None);
             }
             return dirty.map(|rect| PsdRect {
@@ -118,8 +118,8 @@ impl PictureViewRust {
         }
         let stroke = self.stroke.take()?;
         let dirty = stroke.dirty();
-        match (self.stroke_base.take(), self.doc.as_mut()) {
-            (Some(base), _) => self.doc = Some(base),
+        match (self.stroke_base.take(), self.session.doc.as_mut()) {
+            (Some(base), _) => self.session.doc = Some(base),
             (None, Some(doc)) => {
                 stroke.cancel(doc);
                 // The stroke's presents patched the composite; put the
@@ -407,7 +407,7 @@ impl PictureViewRust {
     /// coverage when a mask is the edit target. False without a document, a
     /// layer target, or when another session owns the slot.
     pub(super) fn begin_paint(&mut self, cfg: StrokeConfig, label: &str) -> bool {
-        if self.doc.is_none() {
+        if self.session.doc.is_none() {
             return false;
         }
         // A mask target paints the mask's coverage instead of the layer: the
@@ -426,7 +426,7 @@ impl PictureViewRust {
         }
         let begun = {
             let rust = &*self;
-            let Some(doc) = rust.doc.as_ref() else {
+            let Some(doc) = rust.session.doc.as_ref() else {
                 return false;
             };
             let Some(path) = rust.layer_target.single() else {
@@ -449,7 +449,7 @@ impl PictureViewRust {
                 rust.stroke_label = label.to_string();
                 // A new stroke opens its own present frame.
                 rust.clear_pending_present();
-                let dims = rust.doc.as_ref().map(|doc| (doc.width, doc.height));
+                let dims = rust.session.doc.as_ref().map(|doc| (doc.width, doc.height));
                 if let Some((width, height)) = dims {
                     rust.stroke_tiles.reset(width, height);
                 }
@@ -461,6 +461,7 @@ impl PictureViewRust {
                 // hundred microseconds, while seeding the GPU costs a full-frame
                 // upload (~65 ms at 4000²), so a small brush stays on the CPU path.
                 let level = rust
+                    .session
                     .doc
                     .as_ref()
                     .and_then(|doc| preview_level(cfg.diameter as i32, doc.width, doc.height));
@@ -470,7 +471,7 @@ impl PictureViewRust {
                 let gpu_mode = gpu_paint_mode(cfg.mode)
                     .filter(|_| !cfg.auto_erase && cfg.grain == 0 && !cfg.wet_edges);
                 if level.is_some() && rust.gpu_compute {
-                    let seeded = match (gpu_mode, rust.stroke.as_ref(), rust.doc.as_ref()) {
+                    let seeded = match (gpu_mode, rust.stroke.as_ref(), rust.session.doc.as_ref()) {
                         (Some(mode), Some(stroke), Some(doc)) if !stroke.transparency_locked() => {
                             let t = Instant::now();
                             let seed = stroke.base_layer_rgba_doc(doc);
@@ -546,7 +547,7 @@ impl qobject::PictureView {
             let mut rust = self.as_mut().rust_mut();
             let rust = &mut *rust;
             let t = Instant::now();
-            let painted = match (rust.stroke.as_mut(), rust.doc.as_mut()) {
+            let painted = match (rust.stroke.as_mut(), rust.session.doc.as_mut()) {
                 (Some(stroke), Some(doc)) => stroke.sample(
                     doc,
                     StrokeSample {
@@ -716,7 +717,7 @@ impl qobject::PictureView {
                     continue;
                 };
                 let t = Instant::now();
-                let patched = match (rust.stroke.as_mut(), rust.doc.as_mut()) {
+                let patched = match (rust.stroke.as_mut(), rust.session.doc.as_mut()) {
                     (Some(stroke), Some(doc)) => {
                         stroke.patch_working_layer(doc, rect, plane_stride, &planes)
                     }
@@ -801,7 +802,7 @@ impl qobject::PictureView {
                     let t = Instant::now();
                     let mut rust = self.as_mut().rust_mut();
                     let rust = &mut *rust;
-                    if let Some(doc) = rust.doc.as_mut() {
+                    if let Some(doc) = rust.session.doc.as_mut() {
                         for sample in preview.samples {
                             stroke.sample(doc, sample);
                             if let Some(rect) = stroke.take_dirty() {
@@ -819,7 +820,7 @@ impl qobject::PictureView {
                         // A stroke that changed nothing leaves no history state,
                         // so a Background it layered goes back to a Background.
                         if let Some(base) = base {
-                            self.as_mut().rust_mut().doc = Some(base);
+                            self.as_mut().rust_mut().session.doc = Some(base);
                         }
                         self.as_mut().recomposite();
                         false

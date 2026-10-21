@@ -21,6 +21,7 @@ impl qobject::PictureView {
     pub fn layer_pictura_raw_settings(&self, path: &QString) -> QString {
         let settings = self
             .rust()
+            .session
             .doc
             .as_ref()
             .and_then(|doc| pictura_render::resolve_path(doc, &path.to_string()))
@@ -43,7 +44,7 @@ impl qobject::PictureView {
     pub fn layer_can_apply_pictura_raw(&self, path: &QString) -> bool {
         let path = path.to_string();
         let rust = self.rust();
-        let Some(doc) = rust.doc.as_ref() else {
+        let Some(doc) = rust.session.doc.as_ref() else {
             return false;
         };
         if path.is_empty() {
@@ -67,7 +68,7 @@ impl qobject::PictureView {
         let path = path.to_string();
         let applied = {
             let mut rust = self.as_mut().rust_mut();
-            let Some(doc) = rust.doc.as_mut() else {
+            let Some(doc) = rust.session.doc.as_mut() else {
                 return false;
             };
             if pictura_render::can_replace_smart_object_contents(doc, &path) {
@@ -93,7 +94,7 @@ impl qobject::PictureView {
     ) -> QImage {
         let settings = pictura_codec::pictura_raw_from_text(&settings_text.to_string());
         let rust = self.rust();
-        let Some(doc) = rust.doc.as_ref() else {
+        let Some(doc) = rust.session.doc.as_ref() else {
             return QImage::default();
         };
         let Some(buffer) =

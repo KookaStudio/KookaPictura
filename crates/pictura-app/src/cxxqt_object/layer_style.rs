@@ -102,7 +102,7 @@ fn with_layer<T>(
     path: &QString,
     f: impl FnOnce(&pictura_core::Layer) -> T,
 ) -> Option<T> {
-    let doc = view.rust().doc.as_ref()?;
+    let doc = view.rust().session.doc.as_ref()?;
     pictura_render::resolve_path(doc, &path.to_string()).map(f)
 }
 
@@ -150,14 +150,17 @@ fn layer_style_set(
     value: f64,
 ) -> bool {
     let (path, key) = (path.to_string(), key.to_string());
-    let changed =
-        view.as_mut().rust_mut().doc.as_mut().is_some_and(|doc| {
-            pictura_render::set_document_layer_style_value(doc, &path, &key, value)
-        });
+    let changed = view
+        .as_mut()
+        .rust_mut()
+        .session
+        .doc
+        .as_mut()
+        .is_some_and(|doc| pictura_render::set_document_layer_style_value(doc, &path, &key, value));
     if changed {
         view.as_mut().recomposite();
         let mut rust = view.as_mut().rust_mut();
-        rust.content_revision = rust.content_revision.wrapping_add(1);
+        rust.session.content_revision = rust.session.content_revision.wrapping_add(1);
     }
     changed
 }
@@ -179,21 +182,27 @@ fn layer_style_set_blend_if(
         channel_ranges: Vec::new(),
     };
     let next = (!range.is_default()).then_some(range);
-    let changed = view.as_mut().rust_mut().doc.as_mut().is_some_and(|doc| {
-        let Some(layer) = pictura_render::resolve_path_mut(doc, &path) else {
-            return false;
-        };
-        if layer.blend_if == next {
-            return false;
-        }
-        layer.blend_if = next;
-        layer.blending_ranges.clear();
-        true
-    });
+    let changed = view
+        .as_mut()
+        .rust_mut()
+        .session
+        .doc
+        .as_mut()
+        .is_some_and(|doc| {
+            let Some(layer) = pictura_render::resolve_path_mut(doc, &path) else {
+                return false;
+            };
+            if layer.blend_if == next {
+                return false;
+            }
+            layer.blend_if = next;
+            layer.blending_ranges.clear();
+            true
+        });
     if changed {
         view.as_mut().recomposite();
         let mut rust = view.as_mut().rust_mut();
-        rust.content_revision = rust.content_revision.wrapping_add(1);
+        rust.session.content_revision = rust.session.content_revision.wrapping_add(1);
     }
     changed
 }
@@ -259,15 +268,22 @@ fn layer_style_scale(view: Pin<&mut PictureView>, paths: &QStringList, percent: 
 
 fn layer_style_any_visible(view: &PictureView, visible: bool) -> bool {
     view.rust()
+        .session
         .doc
         .as_ref()
         .is_some_and(|doc| pictura_render::any_effects_visible(doc, visible))
 }
 
 fn layer_style_set_all_visible(mut view: Pin<&mut PictureView>, visible: bool) -> i32 {
-    let changed = view.as_mut().rust_mut().doc.as_mut().map_or(0, |doc| {
-        pictura_render::set_all_effects_visible(doc, visible)
-    });
+    let changed = view
+        .as_mut()
+        .rust_mut()
+        .session
+        .doc
+        .as_mut()
+        .map_or(0, |doc| {
+            pictura_render::set_all_effects_visible(doc, visible)
+        });
     if changed > 0 {
         let label = if visible {
             "Show All Effects"

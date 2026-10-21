@@ -527,7 +527,7 @@ fn begin_history_brush(
     begin(view, "History Brush", |doc, path, view| {
         // ponytail: the source layer is matched by panel path (layers carry no
         // stable id), so a reordered stack paints from whatever now sits there.
-        let past = view.history.brush_source_doc()?;
+        let past = view.session.history.brush_source_doc()?;
         let source = StampSource::new(layer_surface(&past.doc, path)?, (0, 0));
         Stroke::begin_source(doc, path, cfg, source).ok()
     })
@@ -551,9 +551,9 @@ fn begin_art_history_brush(
             area: area.clamp(0, 500) as u32,
             tolerance: tolerance.clamp(0, 100) as u8,
             // A new seed per history state: strokes differ, a stroke replays.
-            seed: view.history.index() as u64 ^ 0xA27_4157,
+            seed: view.session.history.index() as u64 ^ 0xA27_4157,
         };
-        let past = view.history.brush_source_doc()?;
+        let past = view.session.history.brush_source_doc()?;
         Stroke::begin_art_history(doc, path, cfg, layer_surface(&past.doc, path)?, options).ok()
     })
 }
@@ -603,7 +603,7 @@ fn begin_eraser(
         // ponytail: the source layer is matched by panel path, as for the
         // History Brush.
         let history = if to_history {
-            let past = view.history.brush_source_doc()?;
+            let past = view.session.history.brush_source_doc()?;
             Some(StampSource::new(layer_surface(&past.doc, path)?, (0, 0)))
         } else {
             None
@@ -637,14 +637,15 @@ fn begin_background_eraser(
     // first; `stroke_base` keeps the original for a cancel or a refusal.
     let layered = {
         let rust = view.rust();
-        rust.doc
+        rust.session
+            .doc
             .as_ref()
             .zip(rust.layer_target.single())
             .and_then(|(doc, path)| unlocked_background(doc, path))
     };
     if let Some(layered) = layered {
         let mut rust = view.as_mut().rust_mut();
-        rust.stroke_base = rust.doc.replace(layered);
+        rust.stroke_base = rust.session.doc.replace(layered);
     }
     let begun = begin(view.as_mut(), "Background Eraser", |doc, path, _| {
         Stroke::begin_kind(doc, path, cfg, StrokeKind::BackgroundErase(options)).ok()
@@ -652,7 +653,7 @@ fn begin_background_eraser(
     if !begun {
         let mut rust = view.as_mut().rust_mut();
         if let Some(base) = rust.stroke_base.take() {
-            rust.doc = Some(base);
+            rust.session.doc = Some(base);
         }
     }
     begun
@@ -769,7 +770,8 @@ fn magic_erase_at(
 ) -> bool {
     let erased = {
         let rust = view.rust();
-        let (Some(doc), Some(path)) = (rust.doc.as_ref(), rust.layer_target.single()) else {
+        let (Some(doc), Some(path)) = (rust.session.doc.as_ref(), rust.layer_target.single())
+        else {
             return false;
         };
         if rust.stroke.is_some()
@@ -815,7 +817,7 @@ fn magic_erase_at(
     let Some(doc) = erased else {
         return false;
     };
-    view.as_mut().rust_mut().doc = Some(doc);
+    view.as_mut().rust_mut().session.doc = Some(doc);
     view.as_mut().edit("Magic Eraser", |_| Edit::Full);
     true
 }
@@ -860,7 +862,7 @@ fn stamp_pattern_side() -> i32 {
 }
 
 fn history_brush_source_state(view: &PictureView) -> i32 {
-    match view.rust().history.brush_source() {
+    match view.rust().session.history.brush_source() {
         BrushSource::Oldest => 0,
         BrushSource::State(i) => i as i32,
         _ => -1,
@@ -868,7 +870,7 @@ fn history_brush_source_state(view: &PictureView) -> i32 {
 }
 
 fn history_brush_source_snapshot(view: &PictureView) -> i32 {
-    match view.rust().history.brush_source() {
+    match view.rust().session.history.brush_source() {
         BrushSource::Snapshot(i) => i as i32,
         _ => -1,
     }
@@ -883,7 +885,11 @@ fn set_history_brush_source(mut view: Pin<&mut PictureView>, snapshot: bool, ind
     } else {
         BrushSource::State(index)
     };
-    view.as_mut().rust_mut().history.set_brush_source(source)
+    view.as_mut()
+        .rust_mut()
+        .session
+        .history
+        .set_brush_source(source)
 }
 
 fn stamp_config(tip: &PaintTip, opacity: i32, flow: i32, mode: &QString) -> StrokeConfig {
@@ -983,7 +989,8 @@ fn begin(
 ) -> bool {
     let stroke = {
         let rust = view.rust();
-        let (Some(doc), Some(path)) = (rust.doc.as_ref(), rust.layer_target.single()) else {
+        let (Some(doc), Some(path)) = (rust.session.doc.as_ref(), rust.layer_target.single())
+        else {
             return false;
         };
         // ponytail: only the Brush, Pencil, and Eraser paint a mask; the other
@@ -1012,7 +1019,7 @@ fn begin(
     // `begin_paint` does, so the color-replacement and mixer commits decompose
     // into dirty tiles rather than the whole bounding box.
     rust.clear_pending_present();
-    let dims = rust.doc.as_ref().map(|doc| (doc.width, doc.height));
+    let dims = rust.session.doc.as_ref().map(|doc| (doc.width, doc.height));
     if let Some((width, height)) = dims {
         rust.stroke_tiles.reset(width, height);
     }

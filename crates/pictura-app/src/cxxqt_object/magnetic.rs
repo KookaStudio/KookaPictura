@@ -57,7 +57,7 @@ impl super::state::PictureViewRust {
         }
         let map = {
             let rust = &*self;
-            let Some(doc) = rust.doc.as_ref() else {
+            let Some(doc) = rust.session.doc.as_ref() else {
                 return false;
             };
             EdgeMap::from_buffer(
@@ -72,7 +72,7 @@ impl super::state::PictureViewRust {
     /// The document's bit depth: the retained source depth when the document
     /// keeps one, else the working depth.
     pub(super) fn document_depth_bits(&self) -> i32 {
-        let Some(doc) = self.doc.as_ref() else {
+        let Some(doc) = self.session.doc.as_ref() else {
             return 0;
         };
         let depth = if doc.retains_source_depth() {

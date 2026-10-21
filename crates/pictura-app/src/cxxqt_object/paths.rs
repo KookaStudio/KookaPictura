@@ -61,7 +61,7 @@ fn active_path_mut(doc: &mut Document, active: ActivePath) -> Option<&mut Vector
 pub(super) fn begin_drawing(mut view: Pin<&mut PictureView>) {
     let mut rust = view.as_mut().rust_mut();
     let active = rust.active_path;
-    let Some(doc) = rust.doc.as_mut() else {
+    let Some(doc) = rust.session.doc.as_mut() else {
         return;
     };
     if active_in(doc, active) == ActivePath::None {
@@ -226,13 +226,13 @@ pub mod ffi {
 /// the active layer is a shape layer; the Work Path otherwise.
 fn layer_target(rust: &PictureViewRust) -> Option<String> {
     let path = rust.layer_target.single().filter(|_| rust.path_on_layer)?;
-    let layer = pictura_render::resolve_path(rust.doc.as_ref()?, path)?;
+    let layer = pictura_render::resolve_path(rust.session.doc.as_ref()?, path)?;
     pictura_render::is_shape_layer(layer).then(|| path.to_string())
 }
 
 pub(super) fn path(view: &PictureView) -> Option<VectorPath> {
     let rust = view.rust();
-    let doc = rust.doc.as_ref()?;
+    let doc = rust.session.doc.as_ref()?;
     let Some(target) = layer_target(rust) else {
         return Some(match active_in(doc, rust.active_path) {
             ActivePath::None => VectorPath::default(),
@@ -269,6 +269,7 @@ fn edit_target<T>(
         let mut rust = view.rust_mut();
         let active = rust.active_path;
         return rust
+            .session
             .doc
             .as_mut()
             .and_then(|doc| active_path_mut(doc, active))
@@ -280,7 +281,7 @@ fn edit_target<T>(
     if after != before {
         {
             let mut rust = view.as_mut().rust_mut();
-            let doc = rust.doc.as_mut()?;
+            let doc = rust.session.doc.as_mut()?;
             let (width, height) = (doc.width, doc.height);
             let layer = pictura_render::resolve_path_mut(doc, &target)?;
             pictura_render::set_layer_shape_paths(layer, &after.subpaths, width, height);
@@ -301,7 +302,7 @@ fn path_set_layer_target(mut view: Pin<&mut PictureView>, on: bool) {
 fn path_target_is_live_shape(view: &PictureView) -> bool {
     let rust = view.rust();
     layer_target(rust)
-        .and_then(|target| pictura_render::resolve_path(rust.doc.as_ref()?, &target))
+        .and_then(|target| pictura_render::resolve_path(rust.session.doc.as_ref()?, &target))
         .and_then(pictura_render::layer_live_shape)
         .is_some()
 }
@@ -313,7 +314,7 @@ fn path_layer_target(view: &PictureView) -> bool {
 fn path_target_name(view: &PictureView) -> String {
     let rust = view.rust();
     layer_target(rust)
-        .and_then(|target| pictura_render::resolve_path(rust.doc.as_ref()?, &target))
+        .and_then(|target| pictura_render::resolve_path(rust.session.doc.as_ref()?, &target))
         .map_or_else(String::new, |layer| layer.name.clone())
 }
 
@@ -328,7 +329,7 @@ fn path_convert_live_shape(mut view: Pin<&mut PictureView>) -> bool {
     let mut rust = view.as_mut().rust_mut();
     let target = layer_target(&rust);
     target
-        .and_then(|target| pictura_render::resolve_path_mut(rust.doc.as_mut()?, &target))
+        .and_then(|target| pictura_render::resolve_path_mut(rust.session.doc.as_mut()?, &target))
         .map(|layer| pictura_render::set_layer_live_shape(layer, None))
         .is_some()
 }
@@ -463,7 +464,7 @@ impl PictureViewRust {
         }
         let active = self.active_path;
         let on_layer = self.path_on_layer;
-        let backup = self.doc.as_ref().map(|doc| {
+        let backup = self.session.doc.as_ref().map(|doc| {
             let path = match active_in(doc, active) {
                 ActivePath::None | ActivePath::Work => doc.work_path.clone(),
                 ActivePath::Saved(i) => doc.saved_paths[i].path.clone(),

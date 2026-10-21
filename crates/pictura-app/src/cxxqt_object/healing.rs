@@ -117,7 +117,7 @@ impl super::state::PictureViewRust {
         }
         let begun = {
             let rust = &*self;
-            let Some(doc) = rust.doc.as_ref() else {
+            let Some(doc) = rust.session.doc.as_ref() else {
                 return false;
             };
             let Some(path) = rust.layer_target.single() else {
@@ -171,7 +171,7 @@ fn healing_commit(
             return false;
         };
         let mut rust = view.as_mut().rust_mut();
-        let Some(doc) = rust.doc.as_mut() else {
+        let Some(doc) = rust.session.doc.as_mut() else {
             return false;
         };
         match stroke.commit(doc, heal_mode, source, transfer) {
@@ -189,7 +189,7 @@ fn healing_commit(
     };
     {
         let mut rust = view.as_mut().rust_mut();
-        rust.doc = Some(outcome.document);
+        rust.session.doc = Some(outcome.document);
     }
     view.as_mut().edit(label, |_| Edit::Regions {
         rects: vec![outcome.dirty],
@@ -225,8 +225,8 @@ fn patch_selection(
         let mut rust = view.as_mut().rust_mut();
         let rust = &mut *rust;
         let (Some(doc), Some(selection), Some(path)) = (
-            rust.doc.as_mut(),
-            rust.selection.as_ref(),
+            rust.session.doc.as_mut(),
+            rust.session.selection.as_ref(),
             rust.layer_target.single(),
         ) else {
             return false;
@@ -260,8 +260,8 @@ fn content_aware_move(
         let mut rust = view.as_mut().rust_mut();
         let rust = &mut *rust;
         let (Some(doc), Some(selection), Some(path)) = (
-            rust.doc.as_mut(),
-            rust.selection.as_mut(),
+            rust.session.doc.as_mut(),
+            rust.session.selection.as_mut(),
             rust.layer_target.single(),
         ) else {
             return false;
@@ -299,7 +299,8 @@ fn red_eye(
     let dirty = {
         let mut rust = view.as_mut().rust_mut();
         let rust = &mut *rust;
-        let (Some(doc), Some(path)) = (rust.doc.as_mut(), rust.layer_target.single()) else {
+        let (Some(doc), Some(path)) = (rust.session.doc.as_mut(), rust.layer_target.single())
+        else {
             return false;
         };
         let (pupil, darken) = (pupil.clamp(0, 100) as u32, darken.clamp(0, 100) as u32);

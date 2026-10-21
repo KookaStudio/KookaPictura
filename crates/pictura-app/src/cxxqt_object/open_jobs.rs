@@ -161,7 +161,7 @@ pub(super) fn apply_opened(rust: &mut PictureViewRust, opened: OpenedDocument) {
         OpenedPath::Keep => rust.path = previous_path,
     }
     rust.source_format = opened.source_format;
-    rust.dirty = false;
+    rust.session.dirty = false;
 }
 
 fn history_for(doc: &mut Document, target: &LayerTarget, label: &str) -> History {

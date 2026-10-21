@@ -341,7 +341,7 @@ pub(in crate::cxxqt_object) fn commit_start(
     };
     // The live layer goes back to its pre-preview pixels; the worker filters
     // the same pixels and its document replaces this one on finish.
-    if let (Some(preview), Some(live)) = (rust.filter_preview.take(), rust.doc.as_mut()) {
+    if let (Some(preview), Some(live)) = (rust.filter_preview.take(), rust.session.doc.as_mut()) {
         if let Some(layer) = pictura_render::resolve_path_mut(live, &preview.layer_path) {
             preview.baseline.restore(layer);
         }
@@ -359,9 +359,9 @@ pub(in crate::cxxqt_object) fn commit_start(
         }) if matches(&request) => Source::Pending(handle),
         _ => Source::Filter,
     };
-    let selection = rust.selection.clone();
+    let selection = rust.session.selection.clone();
     let target = rust.layer_target.clone();
-    let history = std::mem::take(&mut rust.history);
+    let history = std::mem::take(&mut rust.session.history);
     let gpu = rust.gpu_compute;
     let handle = std::thread::spawn(move || {
         commit(
@@ -556,7 +556,7 @@ pub(in crate::cxxqt_object) fn commit_finish(rust: &mut PictureViewRust) -> Resu
         rust.filter_error = Some("the filter stopped unexpectedly; history was reset".to_string());
         return Err(());
     };
-    rust.history = committed.history;
+    rust.session.history = committed.history;
     let refresh = match committed.outcome {
         Ok(refresh) => refresh,
         Err(error) => {
@@ -564,9 +564,9 @@ pub(in crate::cxxqt_object) fn commit_finish(rust: &mut PictureViewRust) -> Resu
             return Err(());
         }
     };
-    rust.doc = Some(committed.doc);
-    rust.dirty = true;
-    rust.content_revision = rust.content_revision.wrapping_add(1);
+    rust.session.doc = Some(committed.doc);
+    rust.session.dirty = true;
+    rust.session.content_revision = rust.session.content_revision.wrapping_add(1);
     if job.last_filter.is_some() {
         rust.last_filter = job.last_filter;
     }
