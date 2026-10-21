@@ -53,6 +53,9 @@ struct WarpedTransformPreview {
     QImage image;
     QPointF origin;
     double scale = 1.0;
+    // The target quad crosses itself: an empty image means nothing is visible,
+    // not a reason to fall back to Qt's projective draw (which fills outside).
+    bool crossed = false;
 };
 
 // The central document canvas: paints a QImage under a pan/zoom transform over

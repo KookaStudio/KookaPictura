@@ -7,6 +7,7 @@ mod align;
 mod clipboard;
 mod clipping;
 mod create;
+mod crossed_quad;
 mod kernel;
 mod layer_masks;
 mod layer_style;

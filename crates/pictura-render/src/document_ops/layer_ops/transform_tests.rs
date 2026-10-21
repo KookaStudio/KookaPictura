@@ -757,3 +757,31 @@ fn interpolated_refusal_is_bit_identical() {
     ));
     assert_eq!(doc, before);
 }
+
+#[test]
+fn crossed_quad_fills_an_hourglass() {
+    // The top corners have swapped sides: the side edges cross at (50, 37.5).
+    let mut doc = doc_with(pixel_layer(100, 100));
+    let quad = [(80.0, 0.0), (20.0, 0.0), (100.0, 100.0), (0.0, 100.0)];
+    assert!(transform_layer_quad(&mut doc, "0", quad));
+    let layer = resolve_path(&doc, "0").unwrap();
+    assert_eq!(
+        (
+            layer.rect.left,
+            layer.rect.top,
+            layer.rect.right,
+            layer.rect.bottom
+        ),
+        (0, 0, 100, 100)
+    );
+    let alpha = &layer.channels.iter().find(|c| c.id == -1).unwrap().data;
+    let at = |x: usize, y: usize| alpha[y * 100 + x];
+    // Inside the upper and lower triangles.
+    assert_eq!(at(50, 10), 255);
+    assert_eq!(at(50, 80), 255);
+    // Outside the hourglass, where a homography would draw.
+    assert_eq!(at(5, 5), 0);
+    assert_eq!(at(95, 5), 0);
+    assert_eq!(at(5, 50), 0);
+    assert_eq!(at(95, 50), 0);
+}

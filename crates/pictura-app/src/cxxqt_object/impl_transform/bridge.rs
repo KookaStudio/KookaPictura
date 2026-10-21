@@ -8,9 +8,10 @@
 use super::super::qobject::PictureView;
 use super::super::state::{TransformMode, TransformSession};
 use super::geometry::{
-    hit_test_quad, projective_coefficients, quad_anchors, session_quad, set_pivot, source_corners,
-    store_quad, MapParams,
+    hit_test_quad, projective_coefficients, quad_anchors, quad_driven, session_quad, set_pivot,
+    source_corners, store_quad, MapParams,
 };
+use super::perspective::drag_angle_degrees;
 use super::session::can_begin_mode;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -40,8 +41,8 @@ pub mod ffi {
         /// empty when the path does not resolve to a layer.
         fn layer_rect_extents(view: &PictureView, path: &QString) -> Vec<i32>;
         /// Whether a transform in `mode` ("skew", "distort", "perspective", or
-        /// empty/"free") may begin on `path`, including Distort's editable-type
-        /// refusal.
+        /// empty/"free") may begin on `path`, including Distort's and
+        /// Perspective's editable-type refusal.
         fn layer_can_transform_mode(view: &PictureView, path: &QString, mode: &QString) -> bool;
         /// The layer at `path`'s ink box (the box round its non-transparent
         /// pixels, as Align computes it) as flat `[left, top, right, bottom]`;
@@ -95,6 +96,13 @@ pub mod ffi {
         fn transform_skew_h_degrees(view: &PictureView) -> f64;
         fn transform_skew_v_degrees(view: &PictureView) -> f64;
         fn transform_interpolation_id(view: &PictureView) -> QString;
+        /// Turn the `Free` corner drag just pressed into a Ctrl+Alt+Shift
+        /// perspective drag. False (the drag stays a scale) outside a `Free`
+        /// corner drag, in Warp mode, or on editable type.
+        fn transform_begin_free_perspective(view: Pin<&mut PictureView>) -> bool;
+        /// The live Perspective drag's readout angle in degrees; NaN without
+        /// one.
+        fn transform_drag_angle_degrees(view: &PictureView) -> f64;
     }
 }
 
@@ -230,7 +238,7 @@ fn transform_preview_matrix_extents(view: &PictureView) -> Vec<f64> {
     if session.warp.is_some() {
         return vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0];
     }
-    let coeffs = if session.mode.is_projective() {
+    let coeffs = if quad_driven(session) {
         projective_coefficients(source_corners(session.orig_rect), session_quad(session))
     } else {
         let params = MapParams::of(session);
@@ -251,7 +259,7 @@ fn transform_preview_local_matrix_extents(view: &PictureView) -> Vec<f64> {
     if session.warp.is_some() {
         return vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0];
     }
-    if !session.mode.is_projective() {
+    if !quad_driven(session) {
         return Vec::new();
     }
     if rust.move_layer.is_none() {
@@ -526,4 +534,32 @@ fn shear_quad_about(
         *corner = (px + x + th * y, py + tv * x + y);
     }
     store_quad(session, out)
+}
+
+fn transform_begin_free_perspective(mut view: Pin<&mut PictureView>) -> bool {
+    let mut rust = view.as_mut().rust_mut();
+    let Some(session) = rust.transform_session.as_mut() else {
+        return false;
+    };
+    if session.mode != TransformMode::Free
+        || !session.dragging
+        || !(0..=3).contains(&session.handle)
+        || session.warp.is_some()
+        || session.type_layer
+    {
+        return false;
+    }
+    session
+        .base_quad
+        .get_or_insert(source_corners(session.orig_rect));
+    session.free_perspective = true;
+    true
+}
+
+fn transform_drag_angle_degrees(view: &PictureView) -> f64 {
+    view.rust()
+        .transform_session
+        .as_ref()
+        .and_then(drag_angle_degrees)
+        .unwrap_or(f64::NAN)
 }

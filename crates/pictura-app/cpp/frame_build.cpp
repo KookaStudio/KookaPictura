@@ -741,6 +741,7 @@ void PicturaMainWindow::buildStatusBar()
     });
     if (tools_) {
         connect(tools_, &ToolController::transformChanged, this, [this]() { updateStatus(); });
+        installTransformLock();
     }
     updateToolHint();
 }

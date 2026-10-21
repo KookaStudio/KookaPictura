@@ -1,0 +1,272 @@
+// A pending transform locks layer edits and guards tool switches (#750): while
+// a modal Free Transform / Transform submenu session is uncommitted, every
+// Layer menu command is disabled (and refuses dispatch), the Layers panel is
+// greyed, and a tool switch, by click or keyboard shortcut, asks "Apply the
+// transformation?": Apply commits, Don't Apply cancels, Cancel stays.
+
+#include <QtTest/QtTest>
+
+#include "commands.h"
+#include "dialogs.h"
+#include "frame.h"
+#include "panels/layers_panel.h"
+#include "selftest_paint_fixture.h"
+#include "toolbox.h"
+#include "tools.h"
+
+#include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
+
+#include "qt_test_support.h"
+
+#include <QtGui/QAction>
+
+namespace {
+
+using paint_fixture::Fixture;
+
+QImage seed()
+{
+    QImage image(100, 80, QImage::Format_RGB32);
+    image.fill(Qt::white);
+    return image;
+}
+
+// Drag the box from inside (off the centred reference point) by (5, 3): an
+// uncommitted, non-identity move.
+bool nudge(pictura::PictureView* view)
+{
+    if (view->transform_press(15.0, 12.0, 1.0, false, false) != 9) {
+        return false;
+    }
+    const bool moved = view->transform_move(20.0, 15.0, 1.0, false, false);
+    view->transform_release();
+    return moved;
+}
+
+QAction* action(pictura::PicturaMainWindow& frame, const char* id)
+{
+    frame.registry()->refresh();
+    return frame.registry()->action(QString::fromLatin1(id));
+}
+
+} // namespace
+
+class TransformLockTest : public QObject {
+    Q_OBJECT
+
+private slots:
+    void initTestCase();
+    void cleanup();
+
+    void layerMenuIsLockedWhilePending();
+    void layersPanelIsGreyedWhilePending();
+    void applyCommitsAndSwitches();
+    void dontApplyCancelsAndSwitches();
+    void cancelKeepsTheTransform();
+    void toolShortcutAsksToo();
+    void noPromptWithoutAPendingTransform();
+
+private:
+    QString beginLayer(Fixture& fixture);
+    // Answer the next prompts with `decision`, counting how often it is asked.
+    void answer(Fixture& fixture, pictura::TransformDecision decision);
+
+    pictura::test::ScopedStateHome stateHome_;
+    std::unique_ptr<pictura::PicturaMainWindow> window_;
+    int asked_ = 0;
+};
+
+void TransformLockTest::initTestCase()
+{
+    QVERIFY(stateHome_.isValid());
+    window_ = pictura::test::makeMainWindow();
+    QVERIFY(window_ != nullptr);
+}
+
+void TransformLockTest::cleanup()
+{
+    if (window_) {
+        if (auto* tools = window_->findChild<pictura::ToolController*>()) {
+            tools->setTransformDecisionPrompt(
+                [this]() { return pictura::askApplyTransform(window_.get()); });
+            tools->cancelFreeTransform();
+        }
+        window_->setActiveTool(pictura::ToolId::Move);
+        while (window_->activeDocumentIndex() >= 0) {
+            window_->closeDocument(window_->activeDocumentIndex(), false);
+        }
+    }
+    asked_ = 0;
+}
+
+QString TransformLockTest::beginLayer(Fixture& fixture)
+{
+    pictura::PictureView* view = fixture.view;
+    const int added = view->add_layer(0);
+    if (added <= 0) {
+        return QString();
+    }
+    const QString layer = QString::number(added);
+    fixture.frame.selectLayerPath(layer);
+    if (!view->select_rect(10, 8, 30, 22, QStringLiteral("new"), 0.0)
+        || !pictura::edit_fill(*view, qRgba(0, 0, 0, 255), -1, QStringLiteral("normal"), 100,
+                               false)) {
+        return QString();
+    }
+    view->deselect();
+    return layer;
+}
+
+void TransformLockTest::answer(Fixture& fixture, pictura::TransformDecision decision)
+{
+    fixture.tools->setTransformDecisionPrompt([this, decision]() {
+        ++asked_;
+        return decision;
+    });
+}
+
+void TransformLockTest::layerMenuIsLockedWhilePending()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_lock_menu"));
+    QVERIFY(f.ok());
+    const QString layer = beginLayer(f);
+    QVERIFY(!layer.isEmpty());
+    const char* ids[] = {pictura::command_ids::LayerNewLayer,
+                         pictura::command_ids::LayerDeleteLayer,
+                         pictura::command_ids::LayerHideLayers,
+                         pictura::command_ids::LayerArrangeBackward};
+    QVERIFY(action(frame, pictura::command_ids::LayerNewLayer)->isEnabled());
+
+    QVERIFY(f.tools->beginFreeTransform(layer));
+    QVERIFY(frame.layersLockedForTest());
+    for (const char* id : ids) {
+        QAction* a = action(frame, id);
+        QVERIFY2(a && !a->isEnabled(), id);
+    }
+    const int layers = f.view->layer_count();
+    QVERIFY(!frame.registry()->dispatch(QString::fromLatin1(pictura::command_ids::LayerNewLayer)));
+    QCOMPARE(f.view->layer_count(), layers);
+    // Other menus are unaffected.
+    QVERIFY(action(frame, pictura::command_ids::EditTransformPerspective) != nullptr);
+
+    f.tools->commitFreeTransform();
+    QVERIFY(!frame.layersLockedForTest());
+    QVERIFY(action(frame, pictura::command_ids::LayerNewLayer)->isEnabled());
+}
+
+void TransformLockTest::layersPanelIsGreyedWhilePending()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_lock_panel"));
+    QVERIFY(f.ok());
+    const QString layer = beginLayer(f);
+    QVERIFY(!layer.isEmpty());
+    QVERIFY(frame.layersPanelForTest() != nullptr);
+    QVERIFY(frame.layersPanelForTest()->isEnabled());
+
+    QVERIFY(f.tools->beginTransformMode(layer, QStringLiteral("perspective")));
+    QVERIFY(!frame.layersPanelForTest()->isEnabled());
+    f.tools->cancelFreeTransform();
+    QVERIFY(frame.layersPanelForTest()->isEnabled());
+}
+
+void TransformLockTest::applyCommitsAndSwitches()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_lock_apply"));
+    QVERIFY(f.ok());
+    const QString layer = beginLayer(f);
+    QVERIFY(!layer.isEmpty());
+    QVERIFY(f.tools->beginFreeTransform(layer));
+    QVERIFY(nudge(f.view));
+    answer(f, pictura::TransformDecision::Apply);
+    const int base = f.view->history_index();
+
+    frame.setActiveTool(pictura::ToolId::Brush);
+    QCOMPARE(asked_, 1);
+    QCOMPARE(frame.activeTool(), pictura::ToolId::Brush);
+    QVERIFY(!f.view->transform_session_active());
+    QVERIFY(f.committedOnce(base, "Free Transform"));
+    QVERIFY(!frame.layersLockedForTest());
+}
+
+void TransformLockTest::dontApplyCancelsAndSwitches()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_lock_dont"));
+    QVERIFY(f.ok());
+    const QString layer = beginLayer(f);
+    QVERIFY(!layer.isEmpty());
+    QVERIFY(f.tools->beginFreeTransform(layer));
+    QVERIFY(nudge(f.view));
+    answer(f, pictura::TransformDecision::DontApply);
+    const int base = f.view->history_index();
+
+    frame.setActiveTool(pictura::ToolId::Gradient);
+    QCOMPARE(asked_, 1);
+    QCOMPARE(frame.activeTool(), pictura::ToolId::Gradient);
+    QVERIFY(!f.view->transform_session_active());
+    QCOMPARE(f.view->history_index(), base);
+}
+
+void TransformLockTest::cancelKeepsTheTransform()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_lock_cancel"));
+    QVERIFY(f.ok());
+    const QString layer = beginLayer(f);
+    QVERIFY(!layer.isEmpty());
+    const pictura::ToolId before = frame.activeTool();
+    QVERIFY(f.tools->beginFreeTransform(layer));
+    answer(f, pictura::TransformDecision::Cancel);
+    QSignalSpy announced(f.tools, &pictura::ToolController::activeToolChanged);
+
+    frame.setActiveTool(pictura::ToolId::Brush);
+    QCOMPARE(asked_, 1);
+    QCOMPARE(frame.activeTool(), before);
+    QVERIFY(f.view->transform_session_active());
+    QVERIFY(frame.layersLockedForTest());
+    // The tool strip is told to drop the click (re-announcing the old tool).
+    QCOMPARE(announced.count(), 1);
+}
+
+void TransformLockTest::toolShortcutAsksToo()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_lock_shortcut"));
+    QVERIFY(f.ok());
+    const QString layer = beginLayer(f);
+    QVERIFY(!layer.isEmpty());
+    auto* toolbox = frame.findChild<pictura::Toolbox*>();
+    QVERIFY(toolbox != nullptr);
+    QVERIFY(f.tools->beginFreeTransform(layer));
+    answer(f, pictura::TransformDecision::Cancel);
+
+    QVERIFY(toolbox->handleToolKey(QChar(u'B'), false));
+    QCOMPARE(asked_, 1);
+    QVERIFY(f.view->transform_session_active());
+
+    answer(f, pictura::TransformDecision::DontApply);
+    QVERIFY(toolbox->handleToolKey(QChar(u'B'), false));
+    QCOMPARE(asked_, 2);
+    QVERIFY(!f.view->transform_session_active());
+    QCOMPARE(frame.activeTool(), pictura::ToolId::Brush);
+}
+
+void TransformLockTest::noPromptWithoutAPendingTransform()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_lock_idle"));
+    QVERIFY(f.ok());
+    QVERIFY(!beginLayer(f).isEmpty());
+    answer(f, pictura::TransformDecision::Cancel);
+    frame.setActiveTool(pictura::ToolId::Brush);
+    QCOMPARE(asked_, 0);
+    QCOMPARE(frame.activeTool(), pictura::ToolId::Brush);
+    QVERIFY(!frame.layersLockedForTest());
+}
+
+QTEST_MAIN(TransformLockTest)
+#include "tst_transform_lock.moc"

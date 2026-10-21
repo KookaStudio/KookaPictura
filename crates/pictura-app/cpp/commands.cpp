@@ -68,6 +68,11 @@ void CommandRegistry::setEnabledProvider(const QString& id, std::function<bool()
     enabledProviders_.insert(id, std::move(enabled));
 }
 
+void CommandRegistry::setBlockedProvider(std::function<bool(const CommandSpec&)> blocked)
+{
+    blockedProvider_ = std::move(blocked);
+}
+
 void CommandRegistry::setCheckedProvider(const QString& id, std::function<bool()> checked)
 {
     checkedProviders_.insert(id, std::move(checked));
@@ -213,6 +218,9 @@ void CommandRegistry::refresh()
         if (enabledProviders_.contains(spec.id)) {
             enabled = enabled && enabledProviders_[spec.id]();
         }
+        if (enabled && blockedProvider_ && blockedProvider_(spec)) {
+            enabled = false;
+        }
         entry.action->setEnabled(enabled);
 
         if (spec.checkable) {
@@ -231,6 +239,13 @@ bool CommandRegistry::dispatch(const QString& id)
     auto it = handlers_.find(id);
     if (it == handlers_.end()) {
         return false;
+    }
+    if (blockedProvider_) {
+        for (const Entry& entry : entries_) {
+            if (entry.spec.id == id && blockedProvider_(entry.spec)) {
+                return false;
+            }
+        }
     }
     it.value()();
     return true;

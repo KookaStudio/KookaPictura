@@ -204,6 +204,9 @@ public:
     QColor foregroundColor() const { return foreground_; }
     bool hasPendingCrop() const;
     bool commitCrop();
+    // A pending transform locks the Layer menu and greys the Layers panel.
+    bool layersLockedForTest() const { return transformLocked_; }
+    LayersPanel* layersPanelForTest() const { return layersPanel_; }
 
     int brightnessLevel() const { return brightnessLevel_; }
     void setBrightnessLevel(int level);
@@ -718,6 +721,11 @@ private:
     QList<int> resizeStartSizes_;
     CommandRegistry* registry_ = nullptr;
     LayersPanel* layersPanel_ = nullptr;
+    // A pending (uncommitted, modal) transform: the Layer menu and Layers panel
+    // are locked and a tool switch asks "Apply the transformation?".
+    void installTransformLock();
+    void syncTransformLock();
+    bool transformLocked_ = false;
     // The pasteboard colour menu, created lazily and popped up non-modally.
     QMenu* backgroundMenu_ = nullptr;
     HistoryPanel* historyPanel_ = nullptr;

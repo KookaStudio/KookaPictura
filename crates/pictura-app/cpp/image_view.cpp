@@ -618,7 +618,7 @@ void ImageView::paintEvent(QPaintEvent*)
                                          QSizeF(transformWarped_.image.size())
                                              / transformWarped_.scale),
                                   transformWarped_.image);
-            } else {
+            } else if (!transformWarped_.crossed) {
                 painter.setTransform(transformProjective_, true);
                 painter.drawImage(QPointF(0.0, 0.0), moveLayer_);
             }

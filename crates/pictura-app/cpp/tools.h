@@ -177,6 +177,10 @@ bool activePixelLocked(PictureView* view);
 
 // Routes canvas pointer events to the active tool. Implemented tools dispatch
 // through the handler registry; the legacy switch covers the rest.
+// The answer to "Apply the transformation?" when a tool switch leaves a pending
+// transform: commit it, stay in it (no switch), or drop it.
+enum class TransformDecision { Apply, Cancel, DontApply };
+
 class ToolController : public QObject, public ToolServices {
     Q_OBJECT
 
@@ -391,6 +395,16 @@ public:
     // mid-gesture as an auto-managed, per-drag-commit session), not a modal
     // Ctrl+T one.
     bool transformControlsSession() const { return transformControls_; }
+    // A modal transform (Free Transform, Transform submenu, Warp) is open and
+    // not yet committed: the Layer menu and Layers panel are locked, and a
+    // tool switch asks first. The Move tool's controls box is never pending.
+    bool transformPending() const { return transformSessionActive() && !transformControls_; }
+    // Asked when a tool switch would leave a pending transform; unset (or
+    // headless) behaves as Don't Apply.
+    void setTransformDecisionPrompt(std::function<TransformDecision()> prompt)
+    {
+        transformPrompt_ = std::move(prompt);
+    }
     // The box is shown but no session runs: it is drawn from the layer's
     // content bounds and the layer is untouched until a handle is grabbed.
     bool transformControlsIdleForTest() const { return controlsIdle_; }
@@ -498,6 +512,13 @@ private:
     void updateSamplingRing(const QPointF& imagePos);
     void updateTransformOverlay(PictureView* v);
     void setTransformCursor(const QPointF& imagePos);
+    // The Perspective drag's angle readout beside the pointer; cleared when
+    // the drag has none.
+    void updateTransformReadout(PictureView* v, const QPointF& imagePos);
+    // Settle a pending transform before a tool switch: Apply commits, Don't
+    // Apply cancels, Cancel keeps it; false means stay on the current tool.
+    bool resolvePendingTransform();
+    std::function<TransformDecision()> transformPrompt_;
     // Shared begin: resolve the view, start `mode` (empty = Free), then set up
     // the overlay and pan policy. `controls` marks the Move tool's auto-managed
     // box, which the user-command take-over must not cancel.

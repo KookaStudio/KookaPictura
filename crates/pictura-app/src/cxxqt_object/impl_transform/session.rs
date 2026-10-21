@@ -3,7 +3,7 @@ use super::super::helpers_composite::*;
 use super::super::qobject;
 use super::super::state::{PictureViewRust, TransformMode, TransformSession};
 use super::geometry::{
-    apply_session_transform, rect_center, session_quad, source_corners, MapParams,
+    apply_session_transform, quad_driven, rect_center, session_quad, source_corners, MapParams,
 };
 use super::{build_move_preview_base, duplicate_move_target};
 use core::pin::Pin;
@@ -248,7 +248,7 @@ fn lifts_selection(rust: &PictureViewRust, path: &str) -> bool {
 }
 
 /// Whether `mode` may begin on `path`: the Free Transform target rules, plus
-/// Distort's refusal for editable type (a lifted selection targets pixels, not
+/// Distort's and Perspective's refusal for editable type (a lifted selection targets pixels, not
 /// the type layer).
 pub(super) fn can_begin_mode(rust: &PictureViewRust, path: &str, mode: TransformMode) -> bool {
     let lift = lifts_selection(rust, path);
@@ -258,7 +258,7 @@ pub(super) fn can_begin_mode(rust: &PictureViewRust, path: &str, mode: Transform
     if !lift && !can_free_transform(doc, path) {
         return false;
     }
-    !(mode == TransformMode::Distort
+    !(matches!(mode, TransformMode::Distort | TransformMode::Perspective)
         && !lift
         && pictura_render::resolve_path(doc, path).is_some_and(|layer| layer.is_type()))
 }
@@ -390,6 +390,9 @@ impl qobject::PictureView {
             mode,
             type_layer,
             quad: mode.is_projective().then_some(corners),
+            base_quad: None,
+            free_perspective: false,
+            perspective_side: None,
             start_quad: corners,
             pivot: center,
             pivot_origin: center,
@@ -460,11 +463,11 @@ impl qobject::PictureView {
     /// transform or warp records nothing; an engine refusal records nothing.
     /// The session always clears.
     pub fn commit_transform(mut self: Pin<&mut Self>) -> bool {
-        let Some((path, mode, quad, params, orig_rect, interpolation, warp)) =
+        let Some((path, projective, quad, params, orig_rect, interpolation, warp)) =
             self.rust().transform_session.as_ref().map(|session| {
                 (
                     session.path.clone(),
-                    session.mode,
+                    quad_driven(session),
                     session_quad(session),
                     MapParams::of(session),
                     session.orig_rect,
@@ -482,7 +485,7 @@ impl qobject::PictureView {
         };
         let identity = match &warp {
             Some(warp) => warp.is_identity() && unmoved(),
-            None if mode.is_projective() => unmoved(),
+            None if projective => unmoved(),
             None => params.is_identity(),
         };
         if identity {
@@ -493,9 +496,15 @@ impl qobject::PictureView {
             (Some(doc), Some(warp)) => {
                 pictura_render::transform_layer_warp(doc, &path, warp, Some(quad), interpolation)
             }
-            (Some(doc), None) => {
-                apply_session_transform(doc, &path, mode, quad, params, orig_rect, interpolation)
-            }
+            (Some(doc), None) => apply_session_transform(
+                doc,
+                &path,
+                projective,
+                quad,
+                params,
+                orig_rect,
+                interpolation,
+            ),
             (None, _) => false,
         };
         let lifted = self

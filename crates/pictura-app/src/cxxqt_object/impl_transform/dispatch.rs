@@ -3,9 +3,10 @@ use super::super::qobject;
 use super::super::state::TransformMode;
 use super::distort::gesture_distort;
 use super::geometry::{
-    gesture_perspective, gesture_rotate, gesture_scale, gesture_translate, hit_test_quad,
-    pivot_drag, pivot_hit, session_quad, MOVE_HANDLE, PIVOT_HANDLE, ROTATE_HANDLE,
+    gesture_rotate, gesture_scale, gesture_translate, hit_test_quad, pivot_drag, pivot_hit,
+    session_quad, MOVE_HANDLE, PIVOT_HANDLE, ROTATE_HANDLE,
 };
+use super::perspective::{gesture_perspective, gesture_scale_base};
 use super::skew::gesture_skew;
 use super::warp::{refresh_warp_preview, warp_hit_test, warp_move, warp_press};
 use core::pin::Pin;
@@ -63,6 +64,8 @@ impl qobject::PictureView {
             ];
             session.start_quad = start_quad;
             session.start_pivot = session.pivot;
+            session.free_perspective = false;
+            session.perspective_side = None;
         }
         hit
     }
@@ -120,6 +123,9 @@ impl qobject::PictureView {
             TransformMode::Distort => gesture_distort(session, handle, x, y),
             TransformMode::Perspective => gesture_perspective(session, handle, x, y),
             TransformMode::Skew => gesture_skew(session, handle, x, y, alt),
+            TransformMode::Free if session.free_perspective => {
+                gesture_perspective(session, handle, x, y)
+            }
             TransformMode::Free => match handle {
                 MOVE_HANDLE => {
                     gesture_translate(session, x, y);
@@ -129,6 +135,7 @@ impl qobject::PictureView {
                     gesture_rotate(session, x, y, shift);
                     true
                 }
+                0..=7 if session.base_quad.is_some() => gesture_scale_base(session, x, y, shift),
                 h @ 0..=7 => {
                     session.handle = h;
                     gesture_scale(session, x, y, shift)
@@ -147,6 +154,8 @@ impl qobject::PictureView {
         session.dragging = false;
         session.handle = -1;
         session.warp_drag = None;
+        session.free_perspective = false;
+        session.perspective_side = None;
         true
     }
 }

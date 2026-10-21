@@ -292,6 +292,7 @@ int main(int argc, char* argv[])
         // No modal may be reachable from a control request.
         pictura::setUnsavedPromptInteractive(false);
         pictura::setNonInteractiveUnsavedChoice(pictura::UnsavedChoice::Discard);
+        pictura::setTransformPromptInteractive(false);
         pictura::ControlServer controlServer(&frame, controlSocket);
         if (!controlServer.listen()) {
             std::fprintf(stderr, "pictura control: FAIL: cannot listen on %s\n",

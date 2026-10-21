@@ -2,6 +2,7 @@
 
 #include "api/document_api.h"
 #include "image_view.h"
+#include "tools.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/export.cxxqt.h"
@@ -36,6 +37,8 @@ namespace {
 
 bool g_interactive = true;
 UnsavedChoice g_nonInteractiveChoice = UnsavedChoice::Discard;
+// Unset: interactive unless the platform is offscreen.
+int g_transformInteractive = -1;
 
 // A single pixel/background layer is the only shape a flat raster format can
 // hold without losing the document's structure.
@@ -159,6 +162,37 @@ UnsavedChoice askUnsaved(QWidget* parent, const QString& documentName)
         return UnsavedChoice::Cancel;
     }
     return UnsavedChoice::Discard;
+}
+
+void setTransformPromptInteractive(bool interactive)
+{
+    g_transformInteractive = interactive ? 1 : 0;
+}
+
+TransformDecision askApplyTransform(QWidget* parent)
+{
+    const bool interactive = g_transformInteractive < 0
+        ? QGuiApplication::platformName() != QLatin1String("offscreen")
+        : g_transformInteractive == 1;
+    if (!interactive) {
+        return TransformDecision::DontApply;
+    }
+    QMessageBox box(QMessageBox::Warning, QStringLiteral("Kooka Pictura"),
+                    QStringLiteral("Apply the transformation?"), QMessageBox::NoButton, parent);
+    QPushButton* apply = box.addButton(QStringLiteral("Apply"), QMessageBox::AcceptRole);
+    QPushButton* cancel = box.addButton(QStringLiteral("Cancel"), QMessageBox::RejectRole);
+    box.addButton(QStringLiteral("Don't Apply"), QMessageBox::DestructiveRole);
+    box.setDefaultButton(apply);
+    box.setEscapeButton(cancel);
+    box.exec();
+    const QAbstractButton* clicked = box.clickedButton();
+    if (clicked == apply) {
+        return TransformDecision::Apply;
+    }
+    if (clicked == cancel || !clicked) {
+        return TransformDecision::Cancel;
+    }
+    return TransformDecision::DontApply;
 }
 
 const QStringList& saveFileFilters()
