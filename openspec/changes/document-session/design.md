@@ -51,14 +51,16 @@ invent a second transaction or silently change those variant names.
 
 ## Decisions
 
-### Staged ownership: SessionState, then DocumentSession, then ViewFrame
+### Staged ownership: the session, then the frame
 
-Phase 1 adds a `SessionState` slot to `PictureViewRust` and keeps `doc`,
-`selection`, and `history` where they are. `replace_document` and the history
-methods live on `PictureViewRust` in phase 1. Phase 2 moves those fields and the
-slot into `DocumentSession`; phase 3 moves the display caches into `ViewFrame`.
-This keeps every phase green and avoids a half-moved `DocumentSession` that
-cannot implement `replace_document` or `undo`.
+The session came first: `DocumentSession` owns the document, the selection, the
+history, and the PDF options, and the history and edit transactions live on it.
+The display caches move into a `ViewFrame` afterwards, in #783; that work is
+out of this change's scope, so its scenarios are not in the spec delta.
+
+The staging kept every step green: the slot and the cancel path landed before
+the fields moved, so no half-moved `DocumentSession` could not implement
+`replace_document` or `undo`.
 
 ### One enum, with explicit update and composed begins
 
@@ -272,6 +274,12 @@ The backend choice affects `doc.composite`, which the session owns. It moves as
 a render option in phase 2. Passing it to every call would be noisy; leaving it
 in the adapter would let session tests depend on adapter state.
 
+### The frame is #783's design
+
+The next two sections describe the display frame, which #783 carries. They are
+kept here because the session hands the frame its pixels; the frame itself is
+not part of this change.
+
 ### Preview state stays in the stroke session; the frame paints it
 
 `PreviewStroke` holds samples that the commit must replay, so it belongs to the
@@ -367,16 +375,16 @@ Files stay under the 800-LOC preference. The stroke code is split into
 ## Migration Plan
 
 1. **Phase 0** — land #739 with its current `Edit`/`Effect` contract.
-2. **Phase 1** — `SessionState` + `ActiveSession` + `cancel_active`,
-   `replace_document`, and history cancel-first; pending-preview/cache/generation
-   clearing; C++ `onSessionCancelled` hook; begin/commit routing; stale-state and
+2. **Phase 1** — the live-session slot, `cancel_active`, `replace_document`, and
+   history cancel-first; pending-preview/cache/generation clearing; the C++
+   `onSessionCancelled` hook; begin routing through the slot; stale-state and
    Reselect regressions.
-3. **Phase 2** — move document state, pending previews, `gpu_compute`, and the
-   transaction into `DocumentSession`; rename access sites; add async guards;
-   add headless session tests.
-4. **Phase 3** — extract `ViewFrame`; move display caches and the PixelBuffer
-   presentation; keep `QImage` conversion and signals in the adapter; move the
-   canvas tests.
+3. **Phase 2** — move the document state, the pending previews, and the
+   transaction into `DocumentSession`; rename the access sites; add the open
+   request id; add the headless session tests.
+4. **Phase 3 (#783)** — extract `ViewFrame`; move the display caches and the
+   PixelBuffer presentation; keep the `QImage` conversion and the signals in
+   the adapter; move the canvas tests.
 
 Each phase is independently green and revertible. No persisted state, format, or
 compatibility shim is involved. Rollback is a commit revert.

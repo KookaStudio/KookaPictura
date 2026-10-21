@@ -455,23 +455,34 @@ fn path_gesture_begin(mut view: Pin<&mut PictureView>) {
 impl PictureViewRust {
     /// Back up the path a gesture is about to edit, so an abort can restore it.
     /// The `None` row backs up the Work Path slot: `begin_drawing` replaces it
-    /// when a drawing press finds no active path. A gesture on a shape layer's
-    /// outline edits the layer, whose path cannot be restored; the flag marks
-    /// it, and its abort asks for a rebuild instead.
+    /// when a drawing press finds no active path. A shape layer's outline lives
+    /// in the layer, so it is backed up there.
     pub(super) fn begin_path_gesture(&mut self) {
         if !self.slot_allows(super::document_session::SessionKind::Path) {
             return;
         }
+        if let Some(target) = layer_target(self) {
+            let backup = self.session.doc.as_ref().and_then(|doc| {
+                let (width, height) = (doc.width, doc.height);
+                pictura_render::resolve_path(doc, &target)
+                    .and_then(|layer| pictura_render::layer_shape_paths(layer, width, height))
+                    .map(|subpaths| super::document_session::PathRestore::Layer {
+                        target,
+                        subpaths,
+                    })
+            });
+            self.path_gesture = backup;
+            return;
+        }
         let active = self.active_path;
-        let on_layer = self.path_on_layer;
         let backup = self.session.doc.as_ref().map(|doc| {
             let path = match active_in(doc, active) {
                 ActivePath::None | ActivePath::Work => doc.work_path.clone(),
                 ActivePath::Saved(i) => doc.saved_paths[i].path.clone(),
             };
-            (active, path)
+            super::document_session::PathRestore::WorkOrSaved { active, path }
         });
-        self.path_gesture = backup.map(|(active, path)| (active, path, on_layer));
+        self.path_gesture = backup;
     }
 }
 

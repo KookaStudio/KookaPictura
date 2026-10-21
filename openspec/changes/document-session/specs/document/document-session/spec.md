@@ -231,35 +231,14 @@ An empty region list with `Blit` emits no blit.
 - **WHEN** a mode preview is cancelled and the pre-preview document is restored
 - **THEN** the report requests a full rebuild, the adapter rebuilds from the restored composite, and a full change notification is emitted
 
-### Requirement: The session and display frame are headless
+### Requirement: The document session is headless
 
-The document session and the display frame SHALL be constructible and drivable
-without the Qt object. A Rust test MUST be able to begin a session, cancel it,
-replace the document, navigate history, and apply a display change without a
-QObject, and the resulting document, selection, history, damage, and pixels
-SHALL be observable.
+The document session SHALL be constructible and drivable without the Qt object.
+A Rust test MUST be able to begin a session, cancel it, replace the document,
+and navigate history without a QObject, and the resulting document, selection,
+and history SHALL be observable.
 
 #### Scenario: The session runs without Qt [ds_headless_session]
 
 - **WHEN** a test constructs a session, replaces its document with a known history, and undoes within that incoming history
 - **THEN** every step completes without a QObject and the document, selection, and history match the expected values
-
-#### Scenario: A region frame update equals a full rebuild [ds_headless_frame]
-
-- **WHEN** a bounded region is applied to the headless display frame and compared with a frame rebuilt from the same composite
-- **THEN** the level-0 frame and every pyramid level are byte-identical
-
-#### Scenario: Damage matches the reported region [ds_headless_damage]
-
-- **WHEN** a bounded change is applied to the headless display frame
-- **THEN** the damage account reports exactly the clipped changed rectangle and no more
-
-#### Scenario: The solo mask frame rebuilds headlessly [ds_headless_mask_solo]
-
-- **WHEN** a mask is set as the solo display source and the headless frame is rebuilt
-- **THEN** the mask plane and its pyramid are produced without Qt and match the mask's stored coverage
-
-#### Scenario: A rebuild reports what the session must invalidate [ds_headless_rebuild_invalidations]
-
-- **WHEN** a display frame rebuild happens while a preview, GPU stroke, pending present, or soloed mask is live
-- **THEN** the rebuild outcome reports the invalidated preview/present state and any missing solo-mask target so the adapter can clear it

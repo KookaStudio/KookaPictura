@@ -1,6 +1,5 @@
 use crate::layer_target::LayerTarget;
 use cxx_qt_lib::QImage;
-use pictura_core::path::VectorPath;
 use pictura_core::{Document, Layer, PixelBuffer, PsdRect};
 use pictura_paint::spacing::DabPlacer;
 use pictura_paint::{HealStroke, Stroke, StrokeSample};
@@ -148,11 +147,9 @@ pub struct PictureViewRust {
     pub(super) path_on_layer: bool,
     /// The Paths panel row the path calls edit when not on a shape layer.
     pub(super) active_path: super::paths::ActivePath,
-    /// The active path captured at a Pen-group press, restored when Edit > Undo
-    /// cancels the live gesture (`paths.rs`). The flag marks a gesture on a
-    /// shape layer's outline, which cannot be restored and needs a rebuild.
-    /// `None` between gestures.
-    pub(super) path_gesture: Option<(super::paths::ActivePath, VectorPath, bool)>,
+    /// What the live path gesture replaced, restored when the gesture is
+    /// cancelled (`paths.rs`). `None` between gestures.
+    pub(super) path_gesture: Option<super::document_session::PathRestore>,
     /// Output format remembered from the import source, used to preselect the
     /// Save As filter: a lowercased extension (`"png"`) or `"psd"` when native.
     pub(super) source_format: String,

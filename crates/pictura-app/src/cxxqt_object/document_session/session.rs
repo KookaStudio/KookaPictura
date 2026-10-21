@@ -10,6 +10,7 @@ use super::super::paths::ActivePath;
 use super::super::state::PictureViewRust;
 use crate::history::{History, Restored, Snapshot};
 use crate::layer_target::LayerTarget;
+use pictura_core::path::{Subpath, VectorPath};
 use pictura_core::{Document, PsdRect};
 use pictura_select::Selection;
 
@@ -150,6 +151,20 @@ impl DocumentSession {
         self.content_revision = self.content_revision.wrapping_add(1);
         Some(restored)
     }
+}
+
+/// What a path gesture replaced, so an abort can put it back.
+pub(in crate::cxxqt_object) enum PathRestore {
+    /// The Work or Saved path the gesture edited.
+    WorkOrSaved {
+        active: ActivePath,
+        path: VectorPath,
+    },
+    /// A shape layer's outline, which lives in the layer.
+    Layer {
+        target: String,
+        subpaths: Vec<Subpath>,
+    },
 }
 
 /// The panel previews that are applied but not committed yet.
@@ -423,28 +438,38 @@ impl PictureViewRust {
         false
     }
 
-    /// Restore the Work/Saved path a Pen gesture replaced.
+    /// Restore the path a Pen or Path Selection gesture replaced.
     ///
-    /// A gesture on a shape layer's outline cannot be restored (the layer holds
-    /// the path), so it asks for a rebuild instead.
+    /// A Work or Saved path changes no pixel, so the abort notifies. A shape
+    /// layer's outline lives in the layer: restoring it changes the composite,
+    /// so the abort asks for a rebuild.
     pub(in crate::cxxqt_object) fn cancel_path_gesture(&mut self) -> SessionChange {
-        let Some((active, path, on_layer)) = self.path_gesture.take() else {
+        let Some(restore) = self.path_gesture.take() else {
             return SessionChange::none();
         };
-        if on_layer {
-            return SessionChange::rebuild();
-        }
         let Some(doc) = self.session.doc.as_mut() else {
             return SessionChange::none();
         };
-        match active {
-            ActivePath::None | ActivePath::Work => doc.work_path = path,
-            ActivePath::Saved(i) => match doc.saved_paths.get_mut(i) {
-                Some(saved) => saved.path = path,
-                None => return SessionChange::none(),
-            },
+        match restore {
+            PathRestore::WorkOrSaved { active, path } => {
+                match active {
+                    ActivePath::None | ActivePath::Work => doc.work_path = path,
+                    ActivePath::Saved(i) => match doc.saved_paths.get_mut(i) {
+                        Some(saved) => saved.path = path,
+                        None => return SessionChange::none(),
+                    },
+                }
+                self.active_path = active;
+                SessionChange::notify()
+            }
+            PathRestore::Layer { target, subpaths } => {
+                let (width, height) = (doc.width, doc.height);
+                let Some(layer) = pictura_render::resolve_path_mut(doc, &target) else {
+                    return SessionChange::rebuild();
+                };
+                pictura_render::set_layer_shape_paths(layer, &subpaths, width, height);
+                SessionChange::rebuild()
+            }
         }
-        self.active_path = active;
-        SessionChange::notify()
     }
 }

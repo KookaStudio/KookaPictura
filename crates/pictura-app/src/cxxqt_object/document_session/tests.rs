@@ -289,11 +289,13 @@ fn snapshot_restore_cancels_the_session() {
 #[test]
 fn a_shape_path_abort_requests_a_rebuild() {
     let mut view = view();
-    // A gesture on a shape layer's outline edits the layer, whose path cannot
-    // be restored: the abort asks for a rebuild instead of a notification.
-    view.path_on_layer = true;
-    view.begin_path_gesture();
-    assert!(view.path_gesture.is_some(), "the gesture is live");
+    // A gesture on a shape layer's outline edits the layer, whose pixels
+    // change: the abort restores the outline and asks for a rebuild.
+    view.path_gesture = Some(crate::cxxqt_object::document_session::PathRestore::Layer {
+        target: "0".into(),
+        subpaths: Vec::new(),
+    });
+    assert!(view.has_active_session(), "the gesture is live");
 
     let change = view.cancel_active_sessions();
     assert_eq!(
@@ -303,6 +305,8 @@ fn a_shape_path_abort_requests_a_rebuild() {
     );
     assert!(change.changed_display());
     assert!(view.path_gesture.is_none());
+    let layer = &view.session.doc.as_ref().expect("document").layers[0];
+    assert!(layer.vector_mask.is_some(), "the layer's outline is back");
 }
 
 #[test]
@@ -420,16 +424,18 @@ fn cancelling_every_session_restores_state() {
 fn a_notification_only_change_emits_no_blit() {
     let mut view = view();
     view.session.doc.as_mut().expect("document").work_path = Default::default();
-    view.path_gesture = Some((
-        crate::cxxqt_object::paths::ActivePath::Work,
-        view.session
-            .doc
-            .as_ref()
-            .expect("document")
-            .work_path
-            .clone(),
-        false,
-    ));
+    view.path_gesture = Some(
+        crate::cxxqt_object::document_session::PathRestore::WorkOrSaved {
+            active: crate::cxxqt_object::paths::ActivePath::Work,
+            path: view
+                .session
+                .doc
+                .as_ref()
+                .expect("document")
+                .work_path
+                .clone(),
+        },
+    );
     view.session
         .doc
         .as_mut()

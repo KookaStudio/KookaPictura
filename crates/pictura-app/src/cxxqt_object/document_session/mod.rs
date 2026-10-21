@@ -9,4 +9,4 @@ mod session;
 #[cfg(test)]
 mod tests;
 
-pub(super) use session::{DocumentSession, PendingPreviews, SessionKind};
+pub(super) use session::{DocumentSession, PathRestore, PendingPreviews, SessionKind};

@@ -1,20 +1,58 @@
-// The document-session boundary: cancellation reports and the replacement
-// entry-point signal policy.
+// The document-session boundary: cancellation reports, the replacement
+// entry-point signal policy, and the tool handlers that drop their gesture
+// state when a session is cancelled.
 
 #include <QtTest/QtTest>
 
+#include "selftest_paint_fixture.h"
+
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/healing.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/paths.cxxqt.h"
+
+#include "qt_test_support.h"
+
+namespace {
+
+using paint_fixture::Fixture;
+
+QImage whiteSeed(int w, int h)
+{
+    QImage seed(w, h, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    return seed;
+}
+
+} // namespace
 
 class DocumentSessionTest : public QObject {
     Q_OBJECT
 
 private slots:
+    void initTestCase();
     void regionBlitDoesNotEmitChanged();
+    void regionBlitCanAlsoEmitChanged();
+    void notifyOnlyEmitsChanged();
     void rebuildEmitsChanged();
     void replaceEntryPointsCancelTheSession();
     void replacementSignalsMatchTheEntryPoint();
+    void inPlaceRestoreResetsToolHandlers();
+    void pathSelectionCancelRestoresShapeLayer();
+    void switchingToolsCancelsCancellableGestures();
+    void switchingToolsCommitsCommitOnDeactivate();
+
+private:
+    pictura::test::ScopedStateHome stateHome_;
+    std::unique_ptr<pictura::PicturaMainWindow> window_;
 };
+
+void DocumentSessionTest::initTestCase()
+{
+    QVERIFY(stateHome_.isValid());
+    window_ = pictura::test::makeMainWindow();
+    QVERIFY(window_ != nullptr);
+}
 
 void DocumentSessionTest::regionBlitDoesNotEmitChanged()
 {
@@ -28,6 +66,35 @@ void DocumentSessionTest::regionBlitDoesNotEmitChanged()
     QVERIFY(view.cancel_active_session());
     QVERIFY2(blits.count() >= 1, "cancel blits the stroke region");
     QCOMPARE(changes.count(), 0);
+}
+
+void DocumentSessionTest::regionBlitCanAlsoEmitChanged()
+{
+    // A healing commit changes a region and notifies: the blit and exactly one
+    // `changed` reach the shell.
+    pictura::PictureView view;
+    QVERIFY(view.new_document(64, 64, QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    QSignalSpy blits(&view, &pictura::PictureView::regionBlitted);
+    QSignalSpy changes(&view, &pictura::PictureView::changed);
+    QVERIFY(pictura::healing_begin(view, 20, 50));
+    QVERIFY(pictura::healing_dab(view, 16.0, 16.0));
+    QVERIFY(pictura::healing_commit(view, 0, false, 0, 0, false));
+    QVERIFY2(blits.count() >= 1, "the commit blits the healed region");
+    QCOMPARE(changes.count(), 1);
+}
+
+void DocumentSessionTest::notifyOnlyEmitsChanged()
+{
+    // A Work Path gesture changes no pixel: the abort notifies without a
+    // region blit.
+    pictura::PictureView view;
+    QVERIFY(view.new_document(64, 64, QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    QSignalSpy blits(&view, &pictura::PictureView::regionBlitted);
+    QSignalSpy changes(&view, &pictura::PictureView::changed);
+    pictura::path_gesture_begin(view);
+    QVERIFY(pictura::path_gesture_abort(view));
+    QCOMPARE(blits.count(), 0);
+    QCOMPARE(changes.count(), 1);
 }
 
 void DocumentSessionTest::rebuildEmitsChanged()
@@ -56,6 +123,90 @@ void DocumentSessionTest::replacementSignalsMatchTheEntryPoint()
     QVERIFY(view.new_document(64, 64, QStringLiteral("rgb"), 8, QStringLiteral("white")));
     QCOMPARE(changes.count(), 0);
     QCOMPARE(blits.count(), 0);
+}
+
+void DocumentSessionTest::inPlaceRestoreResetsToolHandlers()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, whiteSeed(100, 100), QStringLiteral("pictura_session_handlers"));
+    QVERIFY2(f.ok(), "the fixture");
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&frame));
+    frame.activateWindow();
+    QCoreApplication::processEvents();
+
+    // A committed stroke, then a second one undone mid-gesture: the handler
+    // drops its press state, and the release that follows commits nothing into
+    // the restored document.
+    frame.setActiveTool(pictura::ToolId::Brush);
+    const int base = f.view->history_index();
+    f.canvas->mousePressed(QPointF(20, 20), Qt::LeftButton, int(Qt::NoModifier));
+    f.canvas->mouseMoved(QPointF(30, 30));
+    f.canvas->mouseReleased(QPointF(30, 30));
+    QVERIFY2(f.committedOnce(base, "Brush"), "the first stroke commits");
+
+    f.canvas->mousePressed(QPointF(40, 40), Qt::LeftButton, int(Qt::NoModifier));
+    f.canvas->mouseMoved(QPointF(50, 50));
+    QVERIFY(f.view->undo());
+    const int restored = f.view->history_index();
+    f.canvas->mouseReleased(QPointF(50, 50));
+    QCOMPARE(f.view->history_index(), restored);
+}
+
+void DocumentSessionTest::pathSelectionCancelRestoresShapeLayer()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, whiteSeed(100, 100), QStringLiteral("pictura_session_shape"));
+    QVERIFY2(f.ok(), "the fixture");
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&frame));
+    frame.activateWindow();
+    QCoreApplication::processEvents();
+
+    // A path gesture on the Work Path, then an abort: the path is back and
+    // the document is unchanged.
+    const int base = f.view->history_index();
+    pictura::path_gesture_begin(*f.view);
+    QVERIFY(pictura::path_gesture_abort(*f.view));
+    QCOMPARE(f.view->history_index(), base);
+}
+
+void DocumentSessionTest::switchingToolsCancelsCancellableGestures()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, whiteSeed(100, 100), QStringLiteral("pictura_session_switch"));
+    QVERIFY2(f.ok(), "the fixture");
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&frame));
+    frame.activateWindow();
+    QCoreApplication::processEvents();
+
+    // A healing gesture, then a tool switch: the gesture is cancelled and
+    // records nothing.
+    const int base = f.view->history_index();
+    QVERIFY(pictura::healing_begin(*f.view, 20, 50));
+    QVERIFY(pictura::healing_dab(*f.view, 16.0, 16.0));
+    frame.setActiveTool(pictura::ToolId::Move);
+    QCOMPARE(f.view->history_index(), base);
+}
+
+void DocumentSessionTest::switchingToolsCommitsCommitOnDeactivate()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, whiteSeed(100, 100), QStringLiteral("pictura_session_commit"));
+    QVERIFY2(f.ok(), "the fixture");
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&frame));
+    frame.activateWindow();
+    QCoreApplication::processEvents();
+
+    // A brush stroke, then a tool switch: the stroke commits as one state.
+    frame.setActiveTool(pictura::ToolId::Brush);
+    const int base = f.view->history_index();
+    f.canvas->mousePressed(QPointF(20, 20), Qt::LeftButton, int(Qt::NoModifier));
+    f.canvas->mouseMoved(QPointF(30, 30));
+    frame.setActiveTool(pictura::ToolId::Move);
+    QVERIFY2(f.committedOnce(base, "Brush"), "the switch commits the stroke");
 }
 
 QTEST_MAIN(DocumentSessionTest)
