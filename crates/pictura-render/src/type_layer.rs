@@ -16,8 +16,8 @@
 
 use pictura_core::{
     AntiAlias, BitDepth, Channel, CharacterAttrs, ColorMode, Document, LayerBlock, LayoutLine,
-    LockFlags, PixelBuffer, PlacedGlyph, PsdRect, RasterRequest, TextLayout, TextStyle, TypeSpec,
-    TypeTool,
+    LockFlags, PixelBuffer, PlacedGlyph, PsdRect, RasterRequest, TextAlign, TextLayout, TextStyle,
+    TypeSpec, TypeTool,
 };
 
 use crate::text_render::{blit_glyph, glyph_matrix, layout_type, render_text_buffer, BundledText};
@@ -32,13 +32,10 @@ pub(crate) fn type_lines(text: &str) -> Vec<String> {
         .collect()
 }
 
-/// 0 left / top, 1 right / bottom, 2 centre, as a fraction of the slack.
+/// 0 left / top, 1 right / bottom, 2 centre, as a fraction of the slack: the
+/// alignment the paragraph justification byte selects.
 pub(crate) fn align_factor(justification: u8) -> f32 {
-    match justification {
-        1 => 1.0,
-        2 => 0.5,
-        _ => 0.0,
-    }
+    TextAlign::from_justification(justification).factor()
 }
 
 /// Lay out vertical type inside a `width × height` box: column `j` is centred
