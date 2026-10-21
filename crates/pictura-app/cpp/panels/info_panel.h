@@ -82,6 +82,8 @@ private:
     void applyUnit(Readout* readout, MeasureUnit unit);
     void setBitDepth(Readout* readout, int bits);
     void refreshColorBlock(Readout* readout, const QColor& color);
+    void refresh(bool full);
+    void refreshDocumentRows(int width, int height);
     void rebuildTopRight();
     void refreshToolLabel();
     QString blockText(const Readout* readout) const;

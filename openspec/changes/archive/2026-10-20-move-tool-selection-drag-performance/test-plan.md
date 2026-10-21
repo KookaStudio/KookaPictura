@@ -1,0 +1,18 @@
+# Test plan
+
+| Scenario | Steps | Expected | Coverage |
+|---|---|---|---|
+| `mdp_bounds_row_scan` | Build a 200×160 plane with a 40×30 rectangle inset by empty rows and columns; compare `Selection::bounds()` with a per-pixel reference scan | Both report `left=20, top=10, right=60, bottom=40` | `pictura-select::bounds_matches_a_full_scan_with_padding` |
+| `mdp_bounds_translated` | Put a selection in a `PictureViewRust`, begin a move, preview `(7, -5)`; read the reported bounds | Bounds equal the origin's bounds shifted by `(7, -5)` | `pictura-app::selection_bounds_follow_the_drag_offset` |
+| `mdp_bounds_clipped` | Translate a selection that touches the right and bottom edges by `(10, 10)`; compare `bounds()` with a per-pixel scan of the translated plane | Both clip at the canvas edge | `pictura-select::translated_bounds_clip_at_the_canvas` |
+| `mdp_drag_keeps_origin` | Begin a move on a known plane, preview `(3, 4)`; inspect the stored plane and offset | Plane bytes equal the origin's and the offset is `(3, 4)` | `pictura-app::preview_keeps_the_origin_plane` |
+| `mdp_drag_coverage` | Preview `(3, 4)`, hit-test a point inside the moved selection and one just outside it | Coverage equals the translated plane's at the same points | `pictura-app::coverage_follows_the_drag_offset` |
+| `mdp_drag_commit` | Preview `(3, 4)`, commit; compare the plane with `origin.translate(3, 4)` and check the state count | Plane is the translated origin; one state is recorded | `pictura-app::commit_materialises_the_translated_plane` |
+| `mdp_mask_move_equal` | Fixed-seed random 64×64 mask and coverage; run the bounded move and the full-plane reference with offsets `(5, -3)`, `(-9, 11)`, and `(0, 7)`, duplicate on and off | Every resulting byte is identical | `pictura-render::bounded_mask_move_equals_the_full_plane_move` |
+| `mdp_mask_move_outside` | 32×32 mask, coverage over the middle quarter, move by `(4, 4)`; diff the mask before and after | Only pixels inside the source ∪ destination rectangles changed | `pictura-render::bounded_mask_move_leaves_outside_pixels_untouched` |
+| `dd_content_move_region` | Content-move a selection on a 64×64 layer through the regional commit; compare every pixel outside the union of source and destination bounds | Outside pixels are unchanged | `pictura-app::content_move_region_keeps_outside_pixels` |
+| `dd_content_move_equal` | Same commit; compare `doc.composite` with `current_buffer` on the committed document | Byte-identical | `pictura-app::content_move_region_equals_a_full_recomposite` |
+| `mdp_info_no_stat` | Open a 16×16 PNG from a temp dir, remove the file, move the cursor over the canvas; read the Doc line | Doc line keeps the size shown on open | `tst_info_panel::cursorMoveDoesNotRestatTheDocument` |
+| Drag stays within budget | Run `cargo test -p pictura-render --profile dev --test selection_move_perf -- --ignored --nocapture` on the measured 4000²/2000² case | Bounds and preview together stay far below the 16 ms move budget on the reference machine | manual: timing harness; a wall-clock assertion would be flaky on shared CI |
+| Release stays within budget | Same harness plus the region path: compare the pre/post `move_mask_selection_content` and `crop_selection` medians | Mask move and crop drop by at least 5× in the dev profile | manual: the full release needs the Qt app; the harness times the engine pieces and the region equivalence is covered by `dd_content_move_*` |
+| Move and mask behaviour is unchanged | Run the existing suites | All pass | `tst_selection_move::dragOffsetsTheContourAndReleaseRetraces`, `tst_selection_move::cancelDropsTheOffset`, `tst_mask_edit::*` |

@@ -129,6 +129,10 @@ pub struct PictureViewRust {
     /// Selection captured at the start of a move-selection drag; `None` when no
     /// drag is active. Restored by `cancel_selection_move`.
     pub(super) selection_move_origin: Option<Selection>,
+    /// The drag's offset from the origin, stored instead of a translated plane
+    /// so a pointer move costs no plane allocation. `None` when no drag is
+    /// active.
+    pub(super) selection_move_delta: Option<(i32, i32)>,
     pub(super) history: History,
     pub(super) path: Option<String>,
     /// Panel path of the single active layer, or `None` when the selection is
@@ -386,6 +390,7 @@ impl Default for PictureViewRust {
             selection: None,
             deselected_selection: None,
             selection_move_origin: None,
+            selection_move_delta: None,
             history: History::default(),
             path: None,
             active_layer: None,

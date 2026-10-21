@@ -157,13 +157,25 @@ pub fn clear_layer(doc: &mut Document, path: &str, selection: Option<&[u8]>) -> 
     }
     let rect = layer.rect;
     let src_w = rect.width().max(0) as usize;
-    let coverage_at = |x: i32, y: i32| match selection {
-        None => 255,
-        Some(_) if x < 0 || y < 0 || x >= doc_w as i32 || y >= doc_h as i32 => 0,
-        Some(coverage) => coverage
-            .get(y as usize * doc_w as usize + x as usize)
-            .copied()
-            .unwrap_or(0),
+    let src_h = rect.height().max(0) as usize;
+    if src_w == 0 || src_h == 0 {
+        return false;
+    }
+    // Columns of the layer that the selection can reach; the clear is bounded
+    // to them so a small selection on a canvas-sized layer stays cheap.
+    let (col0, col1) = match selection {
+        None => (0, src_w),
+        Some(coverage) => {
+            let Some(bounds) = coverage_bounds(coverage, doc_w, doc_h) else {
+                return false;
+            };
+            let x0 = rect.left.max(bounds.left).max(0);
+            let x1 = rect.right.min(bounds.right).min(doc_w as i32);
+            if x1 <= x0 {
+                return false;
+            }
+            ((x0 - rect.left) as usize, (x1 - rect.left) as usize)
+        }
     };
     let mut changed = false;
     for channel in layer.channels.iter_mut() {
@@ -177,20 +189,43 @@ pub fn clear_layer(doc: &mut Document, path: &str, selection: Option<&[u8]>) -> 
         if !erase {
             continue;
         }
-        for (i, value) in channel.data.iter_mut().enumerate() {
-            let x = rect.left + (i % src_w.max(1)) as i32;
-            let y = rect.top + (i / src_w.max(1)) as i32;
-            let cov = coverage_at(x, y);
-            if cov == 0 {
+        for row in 0..src_h {
+            let y = rect.top + row as i32;
+            if selection.is_some() && (y < 0 || y >= doc_h as i32) {
                 continue;
             }
-            let next = if has_alpha {
-                scale(*value, 255 - cov)
-            } else {
-                *value + scale(255 - *value, cov)
+            let start = row * src_w + col0;
+            let pixels = &mut channel.data[start..start + (col1 - col0)];
+            let coverage = selection.map(|coverage| {
+                let base = y as usize * doc_w as usize + (rect.left + col0 as i32) as usize;
+                &coverage[base..base + (col1 - col0)]
+            });
+            let clear = |value: u8, cov: u8| {
+                if has_alpha {
+                    scale(value, 255 - cov)
+                } else {
+                    value + scale(255 - value, cov)
+                }
             };
-            changed |= next != *value;
-            *value = next;
+            match coverage {
+                None => {
+                    for value in pixels.iter_mut() {
+                        let next = clear(*value, 255);
+                        changed |= next != *value;
+                        *value = next;
+                    }
+                }
+                Some(coverage) => {
+                    for (value, &cov) in pixels.iter_mut().zip(coverage) {
+                        if cov == 0 {
+                            continue;
+                        }
+                        let next = clear(*value, cov);
+                        changed |= next != *value;
+                        *value = next;
+                    }
+                }
+            }
         }
     }
     changed

@@ -1131,4 +1131,23 @@ impl qobject::PictureView {
         paint_timing::record("recomposite_changed(C++)", t.elapsed());
         paint_timing::record("recomposite_total", t0.elapsed());
     }
+
+    /// Refresh only `rect`: composite the region, patch the authoritative
+    /// composite, level 0, the damage account and the pyramid, then emit
+    /// [`changed`] so every shell fan-out (title, registry, panels, thumbnail)
+    /// still runs. Falls back to the full recomposite when the clamped region is
+    /// empty.
+    pub(super) fn recomposite_region(mut self: Pin<&mut Self>, rect: PsdRect) {
+        let t0 = Instant::now();
+        let prepared = self.as_mut().rust_mut().refresh_region_buffer(rect);
+        let Some((x0, y0, clipped, srgb)) = prepared else {
+            self.as_mut().recomposite();
+            return;
+        };
+        self.as_mut()
+            .rust_mut()
+            .apply_refreshed_region(x0, y0, clipped, srgb);
+        self.changed();
+        paint_timing::record("recomposite_region_total", t0.elapsed());
+    }
 }

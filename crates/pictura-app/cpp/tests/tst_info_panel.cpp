@@ -1,6 +1,9 @@
 #include <QtTest/QtTest>
 
+#include <QtCore/QFile>
 #include <QtCore/QPointF>
+#include <QtCore/QTemporaryDir>
+#include <QtGui/QImage>
 #include <QtGui/QScreen>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QLabel>
@@ -31,6 +34,7 @@ private slots:
     void rulerModeSwapsTopRightBlock();
     void offCanvasBlanksColorReadouts();
     void docLineIsPresent();
+    void cursorMoveDoesNotRestatTheDocument();
     void toolRowDescribesActiveTool();
     void toolHintsOnePerLineCapitalisedReducedFont();
     void menuOpensBesideItsButton();
@@ -238,6 +242,31 @@ void InfoPanelTest::docLineIsPresent()
     QVERIFY2(panel_->docTextForTest().startsWith(QStringLiteral("Doc: ")), "doc line present");
     // A 16x16 RGB document holds an 8-plane footprint = 2048 bytes = 2.0K.
     QVERIFY2(panel_->docTextForTest().contains(QStringLiteral("2.0K")), "memory footprint");
+}
+
+// #754: a pointer move must not restat the document file. Removing the file
+// after opening makes a per-move stat observable: the disk size would fall to
+// zero and the line would change.
+void InfoPanelTest::cursorMoveDoesNotRestatTheDocument()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("restat.png"));
+    QImage image(16, 16, QImage::Format_RGB32);
+    image.fill(Qt::white);
+    QVERIFY(image.save(path));
+    QVERIFY(window_->openDocumentAtPath(path));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::InfoPanel*>(QStringLiteral("infoPanel"));
+    QVERIFY2(view_ && panel_, "open fixture");
+    panel_->setView(view_);
+    panel_->setCursorPosition(QPointF(2, 2));
+    const QString before = panel_->docTextForTest();
+    QVERIFY2(before.startsWith(QStringLiteral("Doc: ")), "doc line present");
+
+    QVERIFY(QFile::remove(path));
+    panel_->setCursorPosition(QPointF(4, 4));
+    QCOMPARE(panel_->docTextForTest(), before);
 }
 
 void InfoPanelTest::toolRowDescribesActiveTool()

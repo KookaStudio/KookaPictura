@@ -557,7 +557,9 @@ void InfoPanel::setView(PictureView* view)
 void InfoPanel::setCursorPosition(const QPointF& imagePos)
 {
     cursor_ = imagePos;
-    refresh();
+    // A pointer move refreshes only the cursor-dependent readouts; the document
+    // size line and the sampler list wait for a document or selection change.
+    refresh(false);
 }
 
 void InfoPanel::setRulerMode(bool on)
@@ -596,7 +598,9 @@ void InfoPanel::refreshToolLabel()
     toolLabel_->setText(lines.join(QLatin1Char('\n')));
 }
 
-void InfoPanel::refresh()
+void InfoPanel::refresh() { refresh(true); }
+
+void InfoPanel::refresh(bool full)
 {
     if (!view_ || !view_->has_document()) {
         setValues(topLeft_, {});
@@ -654,6 +658,13 @@ void InfoPanel::refresh()
         }
     }
 
+    if (full) {
+        refreshDocumentRows(width, height);
+    }
+}
+
+void InfoPanel::refreshDocumentRows(int width, int height)
+{
     const ::rust::Vec<double> bytes = document_size_bytes(*view_);
     if (bytes.size() == 2) {
         docLabel_->setText(tr("Doc: %1/%2").arg(formatBytes(bytes[0]), formatBytes(bytes[1])));
@@ -684,7 +695,6 @@ void InfoPanel::refresh()
     samplersLabel_->setText(samplers.join(QLatin1Char('\n')));
     samplersLabel_->setVisible(!samplers.isEmpty());
 }
-
 QString InfoPanel::samplerTextForTest() const { return samplersLabel_->text(); }
 
 QString InfoPanel::colorBlockTextForTest(int index) const

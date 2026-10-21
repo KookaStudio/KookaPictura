@@ -485,6 +485,79 @@ fn layer_opacity_region_refresh_equals_a_full_recomposite() {
     );
 }
 
+/// A rectangular selection plane on a `w × h` document.
+fn rect_selection(w: u32, h: u32, x0: u32, y0: u32, x1: u32, y1: u32) -> pictura_select::Selection {
+    let mut selection = pictura_select::Selection::none(w, h);
+    for y in y0..y1 {
+        let row = y as usize * w as usize;
+        selection.data[row + x0 as usize..row + x1 as usize].fill(255);
+    }
+    selection
+}
+
+/// Commit a content move through the regional path, returning the document, the
+/// composite before the move, and the refreshed dirty rectangle.
+fn content_move_region_fixture() -> (Document, PixelBuffer, PsdRect) {
+    let base: Vec<u8> = (0..64 * 64 * 4)
+        .map(|i| if i % 4 == 3 { 255 } else { (i % 251) as u8 })
+        .collect();
+    let mut doc = Document::from_rgba("base", 64, 64, &base);
+    let top: Vec<u8> = (0..64 * 64 * 4)
+        .map(|i| if i % 4 == 3 { 255 } else { (i * 7 % 251) as u8 })
+        .collect();
+    let path = pictura_render::add_raster_layer_from_rgba(&mut doc, "top", 64, 64, &top);
+    assert!(!path.is_empty());
+    doc.composite = current_buffer(&doc, false);
+    let before = doc.composite.clone();
+
+    let selection = rect_selection(64, 64, 12, 10, 40, 36);
+    let mask = selection_to_mask(&selection, &doc);
+    let (dx, dy) = (9, 6);
+    assert!(pictura_render::move_selection_content(
+        &mut doc, &path, &mask, dx, dy, false
+    ));
+    let dirty = super::impl_selection::move_dirty_rect(&selection, dx, dy).expect("dirty rect");
+    let buffer = pictura_render::composite_region_active(&doc, dirty, false).0;
+    patch_composite_region(&mut doc, &buffer, dirty.left, dirty.top);
+    (doc, before, dirty)
+}
+
+#[test]
+fn content_move_region_equals_a_full_recomposite() {
+    let (doc, _, dirty) = content_move_region_fixture();
+    let full = current_buffer(&doc, false);
+    assert_eq!(
+        doc.composite.data, full.data,
+        "a content move region refresh equals a full recomposite"
+    );
+    assert!(dirty.right > dirty.left && dirty.bottom > dirty.top);
+}
+
+#[test]
+fn content_move_region_keeps_outside_pixels() {
+    let (doc, before, dirty) = content_move_region_fixture();
+    let plane = doc.composite.pixel_count();
+    for y in 0..doc.height {
+        for x in 0..doc.width {
+            if (x as i32) >= dirty.left
+                && (x as i32) < dirty.right
+                && (y as i32) >= dirty.top
+                && (y as i32) < dirty.bottom
+            {
+                continue;
+            }
+            let i = y as usize * doc.width as usize + x as usize;
+            for c in 0..4 {
+                assert_eq!(
+                    doc.composite.data[c * plane + i],
+                    before.data[c * plane + i],
+                    "pixel ({x}, {y}) channel {c} outside the move changed"
+                );
+            }
+        }
+    }
+}
+
 #[test]
 fn layer_move_region_refresh_equals_a_full_recomposite() {
     let base = vec![90u8; 64 * 64 * 4];
