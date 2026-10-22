@@ -1409,7 +1409,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   across the three working planes and writes the filtered plane back to channel
   `0`. An unlocked layer's transparency is filtered with the same kernel (a
   transparency lock keeps alpha and skips clear pixels); `apply_filter_region`
-  plus `preview_apron` bound a preview to the visible section, and the dialog
+  plus `filter.preview_apron()` bound a preview to the visible section, and the dialog
   thumbnail shows that section at the canvas zoom. Every app dialog is presented
   through `runDialog` (`dialogs.{h,cpp}`) —
   non-modal with a parent input blocker and its own event loop, so KWin's

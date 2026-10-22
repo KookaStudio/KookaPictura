@@ -1,6 +1,6 @@
 use super::*;
 use pictura_core::{BlendMode, Channel, ColorLabel, LockFlags, PsdRect};
-use pictura_filters::{IrisShape, NoiseDistribution};
+use pictura_filters::{FilterKind, IrisShape, NoiseDistribution};
 
 fn rect(top: i32, left: i32, bottom: i32, right: i32) -> PsdRect {
     PsdRect {
@@ -470,7 +470,7 @@ fn cpu_preferred_kernels_skip_the_gpu() {
         Filter::Median { radius: 2 },
         Filter::Maximum { radius: 2 },
     ] {
-        assert!(cpu_outruns_gpu(&filter));
+        assert!(filter.cpu_outruns_gpu());
         let mut gpu = varied_layer(40, 30);
         let mut cpu = gpu.clone();
         apply_filter(&mut gpu, &filter, None, true).unwrap();
@@ -479,8 +479,8 @@ fn cpu_preferred_kernels_skip_the_gpu() {
     }
 }
 
-/// One of every kind [`pictura_filters::filters_alpha`] names, at settings
-/// that visibly move a 24×24 picture.
+/// One of every kind [`pictura_filters::Filter::moves_alpha`] names, at
+/// settings that visibly move a 24×24 picture.
 fn moving_kernels() -> Vec<Filter> {
     use pictura_filters::{
         BlurNoise, BlurPath, BlurPin, BokehParams, DisplaceFit, DisplaceMap, FrameOptions,
@@ -696,13 +696,31 @@ fn moving_kernels() -> Vec<Filter> {
     ]
 }
 
+/// The fixture holds exactly the kinds the moving-alpha fact selects.
+#[test]
+fn moving_kernel_fixture_matches_the_moving_set() {
+    let fixture = moving_kernels();
+    let names: std::collections::BTreeSet<&str> =
+        fixture.iter().map(|filter| filter.kind().name()).collect();
+    let expected: std::collections::BTreeSet<&str> = FilterKind::ALL
+        .iter()
+        .filter(|kind| kind.moves_alpha())
+        .map(|kind| kind.name())
+        .collect();
+    assert_eq!(
+        names, expected,
+        "the fixture must hold exactly the moving-alpha variants"
+    );
+    assert_eq!(fixture.len(), names.len(), "the fixture repeats a variant");
+}
+
 /// An unlocked layer folds its alpha into the working buffer, so every moving
 /// kernel's run over a flat 255 plane must map it back to 255 — otherwise an
 /// opaque layer would gain transparency it never had.
 #[test]
 fn moving_kernels_map_opaque_to_opaque() {
     for filter in moving_kernels() {
-        assert!(pictura_filters::filters_alpha(&filter), "{filter:?}");
+        assert!(filter.moves_alpha(), "{filter:?}");
         let mut buf = PixelBuffer::new(24, 24, 4);
         buf.data.as_mut_slice().fill(255);
         pictura_filters::apply(&filter, &mut buf).unwrap();
@@ -762,6 +780,45 @@ fn offset_moves_the_layer_edge_and_fills_what_it_exposes_opaque() {
 }
 
 #[test]
+fn offset_in_transparent_mode_exposes_clear_pixels() {
+    let mut layer = half_clear(step_layer(16, 16, 255));
+    let filter = Filter::Offset {
+        horizontal: 4,
+        vertical: 0,
+        wrap: false,
+        background: [10, 20, 30],
+        transparent: true,
+    };
+    apply_filter(&mut layer, &filter, None, false).unwrap();
+    let alpha = chan(&layer, -1);
+    let red = chan(&layer, 0);
+    for x in 0..4 {
+        assert_eq!(alpha[x], 0, "exposed pixel {x} must be clear");
+        assert_eq!(red[x], 10, "exposed pixel {x} takes the background colour");
+    }
+    assert_eq!(alpha[4], 255, "the moved opaque half stays opaque");
+    assert_eq!(red[4], 40, "the moved half keeps its colour");
+}
+
+#[test]
+fn picture_frame_adds_opacity_over_a_clear_pixel() {
+    let mut layer = step_layer(64, 64, 0);
+    apply_filter(
+        &mut layer,
+        &Filter::PictureFrame {
+            options: pictura_filters::FrameOptions::default(),
+        },
+        None,
+        false,
+    )
+    .unwrap();
+    assert!(
+        chan(&layer, -1).iter().any(|&alpha| alpha > 0),
+        "the composited frame must add opacity over clear pixels"
+    );
+}
+
+#[test]
 fn lens_blur_apron_covers_its_radius() {
     let filter = Filter::LensBlur {
         depth: None,
@@ -780,7 +837,7 @@ fn lens_blur_apron_covers_its_radius() {
         seed: 1,
     };
     assert_eq!(
-        preview_apron(&filter),
+        filter.preview_apron(),
         40,
         "the apron covers the largest CoC"
     );
@@ -794,14 +851,14 @@ fn hdr_toning_apron_covers_its_blur_support() {
         gamma: 1.0,
         ..Default::default()
     });
-    assert_eq!(preview_apron(&filter), 120, "apron must be 3 * sigma");
+    assert_eq!(filter.preview_apron(), 120, "apron must be 3 * sigma");
 
     let viewport = rect(16, 160, 48, 352);
     let base = varied_layer(w, h);
     let mut whole = base.clone();
     apply_filter(&mut whole, &filter, None, false).unwrap();
 
-    let apron = preview_apron(&filter);
+    let apron = filter.preview_apron();
     let expanded = rect(
         viewport.top - apron,
         viewport.left - apron,

@@ -2,7 +2,7 @@
 //! parameters against the ranges the filter specs fix, run the filter on an
 //! interleaved copy under the variant's seed, and write the colour planes
 //! back — plus the alpha plane for a moving kernel (see
-//! [`crate::filters_alpha`]) on a four-channel buffer.
+//! [`Filter::moves_alpha`]) on a four-channel buffer.
 
 use std::ops::RangeInclusive;
 
@@ -14,8 +14,7 @@ use super::{
     stylize, texture, with_seed,
 };
 use crate::{
-    filters_alpha, Filter, FilterError, LightDirection, NoiseDistribution, PolarKind, ShearFill,
-    TextureOptions,
+    Filter, FilterError, LightDirection, NoiseDistribution, PolarKind, ShearFill, TextureOptions,
 };
 
 type Run = Box<dyn FnOnce(&mut Pixmap)>;
@@ -30,7 +29,7 @@ pub(crate) fn apply(filter: &Filter, buf: &mut PixelBuffer) -> Option<Result<(),
     let mut pixmap = Pixmap::from_planar(buf);
     with_seed(seed, || run(&mut pixmap));
     pixmap.write_colour(buf);
-    if buf.channels == 4 && filters_alpha(filter) {
+    if buf.channels == 4 && filter.moves_alpha() {
         pixmap.write_alpha(buf);
     }
     Some(Ok(()))
@@ -90,8 +89,8 @@ fn rgb(c: [u8; 3]) -> Rgba8 {
     Rgba8::rgb(c)
 }
 
-/// The seed and the run for a ported variant, `Some(Err)` for parameters out
-/// of range, `None` for a variant photorust does not run.
+/// The seed and the run for a ported variant; `None` for a variant the native
+/// engine owns, `Some(Err)` for parameters out of range.
 #[allow(clippy::too_many_lines)]
 fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
     // Each arm validates, then boxes the photorust call with its arguments
@@ -287,72 +286,7 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
                 distort::wave(p, generators, wl, amp, sc, kind, !repeat_edge, wave_seed)
             })
         }),
-        _ => return plan_strokes(filter),
-    };
-    Some(plan)
-}
 
-fn check_wave(
-    generators: u32,
-    wavelength: (f64, f64),
-    amplitude: (f64, f64),
-    scale: (f64, f64),
-) -> Result<(), FilterError> {
-    check("wave generators", generators, 1..=999)?;
-    check_f("wave wavelength", wavelength.0, 1.0..=998.0)?;
-    check_f("wave amplitude", amplitude.0, 1.0..=998.0)?;
-    check_f(
-        "wave wavelength max",
-        wavelength.1,
-        wavelength.0 + 1.0..=999.0,
-    )?;
-    check_f("wave amplitude max", amplitude.1, amplitude.0 + 1.0..=999.0)?;
-    check_f("wave scale", scale.0, 1.0..=100.0)?;
-    check_f("wave scale", scale.1, 1.0..=100.0)
-}
-
-/// Shear's control-point curve: at least two finite `(position, offset)`
-/// points, both in `-1..=1`, with `position` strictly increasing top to
-/// bottom.
-fn check_shear_curve(curve: &[(f64, f64)]) -> Result<(), FilterError> {
-    if curve.len() < 2 {
-        return Err(FilterError::InvalidParams(format!(
-            "shear curve needs at least two points, got {}",
-            curve.len()
-        )));
-    }
-    for (i, &(position, offset)) in curve.iter().enumerate() {
-        if !position.is_finite() || !offset.is_finite() {
-            return Err(FilterError::InvalidParams(format!(
-                "shear curve point {i} must be finite"
-            )));
-        }
-        if !(-1.0..=1.0).contains(&position) || !(-1.0..=1.0).contains(&offset) {
-            return Err(FilterError::InvalidParams(format!(
-                "shear curve point {i} must have position and offset within -1.0..=1.0"
-            )));
-        }
-        if i > 0 && position <= curve[i - 1].0 {
-            return Err(FilterError::InvalidParams(format!(
-                "shear curve position must strictly increase at point {i}"
-            )));
-        }
-    }
-    Ok(())
-}
-
-fn unseeded(f: impl FnOnce(&mut Pixmap) + 'static) -> (u64, Run) {
-    (0, Box::new(f))
-}
-
-fn seeded(seed: u64, f: impl FnOnce(&mut Pixmap) + 'static) -> (u64, Run) {
-    (seed, Box::new(f))
-}
-
-/// Artistic and Brush Strokes.
-#[allow(clippy::too_many_lines)]
-fn plan_strokes(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
-    let plan = match *filter {
         Filter::ColoredPencil {
             pencil_width,
             stroke_pressure,
@@ -690,21 +624,7 @@ fn plan_strokes(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
                     brush_strokes::sumi_e(p, u(stroke_width), u(stroke_pressure), u(contrast))
                 })
             }),
-        _ => return plan_sketch(filter),
-    };
-    Some(plan)
-}
 
-fn check_brush(size: u8, detail: u8, texture: u8) -> Result<(), FilterError> {
-    check("brush size", size, 0..=10)?;
-    check("brush detail", detail, 0..=10)?;
-    check("brush texture", texture, 1..=3)
-}
-
-/// Sketch and Texture.
-#[allow(clippy::too_many_lines)]
-fn plan_sketch(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
-    let plan = match *filter {
         Filter::BasRelief {
             detail,
             smoothness,
@@ -1054,9 +974,110 @@ fn plan_sketch(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
                 )
             })
         }),
-        _ => return None,
+        Filter::GaussianBlur { .. }
+        | Filter::BoxBlur { .. }
+        | Filter::ShapeBlur { .. }
+        | Filter::MotionBlur { .. }
+        | Filter::RadialBlur { .. }
+        | Filter::Blur
+        | Filter::BlurMore
+        | Filter::SmartBlur { .. }
+        | Filter::LensBlur { .. }
+        | Filter::FieldBlur { .. }
+        | Filter::IrisBlur { .. }
+        | Filter::TiltShift { .. }
+        | Filter::PathBlur { .. }
+        | Filter::SpinBlur { .. }
+        | Filter::BlurGallery { .. }
+        | Filter::Sharpen
+        | Filter::SharpenMore
+        | Filter::UnsharpMask { .. }
+        | Filter::Median { .. }
+        | Filter::Despeckle
+        | Filter::ReduceNoise(..)
+        | Filter::Maximum { .. }
+        | Filter::Minimum { .. }
+        | Filter::Offset { .. }
+        | Filter::HighPass { .. }
+        | Filter::Custom { .. }
+        | Filter::Solarize
+        | Filter::Liquify { .. }
+        | Filter::OceanRipple { .. }
+        | Filter::Glass { .. }
+        | Filter::DiffuseGlow { .. }
+        | Filter::Clouds { .. }
+        | Filter::DifferenceClouds { .. }
+        | Filter::Fibers { .. }
+        | Filter::LensFlare { .. }
+        | Filter::Lighting { .. }
+        | Filter::OilPaint { .. }
+        | Filter::SmartSharpen { .. }
+        | Filter::HdrToning(..) => return None,
     };
     Some(plan)
+}
+
+fn check_wave(
+    generators: u32,
+    wavelength: (f64, f64),
+    amplitude: (f64, f64),
+    scale: (f64, f64),
+) -> Result<(), FilterError> {
+    check("wave generators", generators, 1..=999)?;
+    check_f("wave wavelength", wavelength.0, 1.0..=998.0)?;
+    check_f("wave amplitude", amplitude.0, 1.0..=998.0)?;
+    check_f(
+        "wave wavelength max",
+        wavelength.1,
+        wavelength.0 + 1.0..=999.0,
+    )?;
+    check_f("wave amplitude max", amplitude.1, amplitude.0 + 1.0..=999.0)?;
+    check_f("wave scale", scale.0, 1.0..=100.0)?;
+    check_f("wave scale", scale.1, 1.0..=100.0)
+}
+
+/// Shear's control-point curve: at least two finite `(position, offset)`
+/// points, both in `-1..=1`, with `position` strictly increasing top to
+/// bottom.
+fn check_shear_curve(curve: &[(f64, f64)]) -> Result<(), FilterError> {
+    if curve.len() < 2 {
+        return Err(FilterError::InvalidParams(format!(
+            "shear curve needs at least two points, got {}",
+            curve.len()
+        )));
+    }
+    for (i, &(position, offset)) in curve.iter().enumerate() {
+        if !position.is_finite() || !offset.is_finite() {
+            return Err(FilterError::InvalidParams(format!(
+                "shear curve point {i} must be finite"
+            )));
+        }
+        if !(-1.0..=1.0).contains(&position) || !(-1.0..=1.0).contains(&offset) {
+            return Err(FilterError::InvalidParams(format!(
+                "shear curve point {i} must have position and offset within -1.0..=1.0"
+            )));
+        }
+        if i > 0 && position <= curve[i - 1].0 {
+            return Err(FilterError::InvalidParams(format!(
+                "shear curve position must strictly increase at point {i}"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn unseeded(f: impl FnOnce(&mut Pixmap) + 'static) -> (u64, Run) {
+    (0, Box::new(f))
+}
+
+fn seeded(seed: u64, f: impl FnOnce(&mut Pixmap) + 'static) -> (u64, Run) {
+    (seed, Box::new(f))
+}
+
+fn check_brush(size: u8, detail: u8, texture: u8) -> Result<(), FilterError> {
+    check("brush size", size, 0..=10)?;
+    check("brush detail", detail, 0..=10)?;
+    check("brush texture", texture, 1..=3)
 }
 
 #[cfg(test)]

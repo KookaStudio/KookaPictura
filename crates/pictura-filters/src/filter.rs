@@ -1,5 +1,8 @@
 mod apply;
+mod props;
 mod types;
+mod variants;
 
 pub use apply::apply;
-pub use types::{filters_alpha, Filter};
+pub use types::Filter;
+pub use variants::{FilterEngine, FilterKind};

@@ -57,7 +57,7 @@ Semantics:
 `apply_filter_region(layer, filter, mask, gpu_enabled, region)` applies the same
 filter over a document rect clamped to the layer rect, leaving every pixel
 outside it unchanged; a neighborhood filter reads up to its support outside the
-rect, where the source is clamped. `preview_apron(filter)` returns a conservative
+rect, where the source is clamped. `filter.preview_apron()` returns a conservative
 support margin. A filter-dialog preview passes the visible viewport rect expanded
 by that apron, so dragging a control costs at most a viewport while the visible
 area stays exact; OK still filters the whole layer.

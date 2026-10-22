@@ -1,5 +1,7 @@
 //! The `Filter` -> ImageMagick mapping table and its coverage test.
 
+use pictura_filters::FilterKind;
+
 /// One row of the `Filter` -> ImageMagick mapping table. `im` is the equivalent
 /// operator (documentation; the actual invocation lives with each test) or
 /// `None` when there is no faithful equivalent.
@@ -8,6 +10,15 @@ struct Mapping {
     im: Option<&'static str>,
     tolerance: u8,
     note: &'static str,
+}
+
+const fn none(filter: &'static str, note: &'static str) -> Mapping {
+    Mapping {
+        filter,
+        im: None,
+        tolerance: 0,
+        note,
+    }
 }
 
 const MAPPING: &[Mapping] = &[
@@ -450,140 +461,287 @@ const MAPPING: &[Mapping] = &[
                variable blur: no ImageMagick operator. Guarded by the single-effect parity, \
                combine, no-op and determinism unit tests",
     },
-];
-
-/// Filters the table marks as having no faithful ImageMagick equivalent.
-const NO_EQUIVALENT: [&str; 40] = [
-    "MotionBlur",
-    "RadialBlur",
-    "Average",
-    "SurfaceBlur",
-    "SmartBlur",
-    "SharpenEdges",
-    "AddNoise",
-    "Despeckle",
-    "HighPass",
-    "Emboss",
-    "FindEdges",
-    "Crystallize",
-    "Facet",
-    "Fragment",
-    "Mezzotint",
-    "Pointillize",
-    "ColorHalftone",
-    "Twirl",
-    "Pinch",
-    "Spherize",
-    "Ripple",
-    "Wave",
-    "PolarCoordinates",
-    "Shear",
-    "ZigZag",
-    "OceanRipple",
-    "DustAndScratches",
-    "ReduceNoise",
-    "Extrude",
-    "Tiles",
-    "TraceContour",
-    "Wind",
-    "SmartSharpen",
-    "LensBlur",
-    "FieldBlur",
-    "IrisBlur",
-    "TiltShift",
-    "PathBlur",
-    "SpinBlur",
-    "BlurGallery",
+    none(
+        "Diffuse",
+        "ImageMagick -spread displaces pixels rather than applying Pictura's mode-dependent \
+         diffusion; guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "GlowingEdges",
+        "ImageMagick -edge is a different detector and has no glow width, brightness or \
+         smoothness controls; guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "Liquify",
+        "ImageMagick has no mesh-warp operator; guarded by the liquify tests",
+    ),
+    none(
+        "Glass",
+        "no ImageMagick texture-refraction operator with Pictura's surface smoothing and \
+         scaling; guarded by the glass tests",
+    ),
+    none(
+        "DiffuseGlow",
+        "no ImageMagick glow-and-grain composite with the dialog's graininess, glow and clear \
+         amounts; guarded by the diffuse-glow tests",
+    ),
+    none(
+        "Clouds",
+        "no ImageMagick operator reproduces the seeded fractal cloud field and its starker \
+         threshold; guarded by the seed and determinism tests",
+    ),
+    none(
+        "DifferenceClouds",
+        "no ImageMagick operator reproduces the seeded difference-cloud field; guarded by the \
+         seed and determinism tests",
+    ),
+    none(
+        "Fibers",
+        "no ImageMagick operator reproduces the seeded fiber field and its variance/strength \
+         controls; guarded by the seed and determinism tests",
+    ),
+    none(
+        "PictureFrame",
+        "no ImageMagick decorative-frame compositor; guarded by the picture-frame tests",
+    ),
+    none(
+        "LensFlare",
+        "no ImageMagick lens-flare compositor with Pictura's lens presets; guarded by the \
+         lens-flare tests",
+    ),
+    none(
+        "Lighting",
+        "no ImageMagick lighting-effects renderer over an editable light rig; guarded by the \
+         lighting tests",
+    ),
+    none(
+        "Cutout",
+        "no ImageMagick cutout operator with levels, edge simplicity and edge fidelity; guarded \
+         by the ported contract and scenario tests",
+    ),
+    none(
+        "FilmGrain",
+        "ImageMagick +noise adds grain but has no film-grain highlight and intensity model; \
+         guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "NeonGlow",
+        "no ImageMagick neon-glow operator; guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "PosterEdges",
+        "no ImageMagick poster-edges operator; guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "PaintDaubs",
+        "no ImageMagick paint-daubs operator; guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "PaletteKnife",
+        "no ImageMagick palette-knife operator; guarded by the ported contract and scenario \
+         tests",
+    ),
+    none(
+        "PlasticWrap",
+        "no ImageMagick plastic-wrap renderer; guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "Sponge",
+        "no ImageMagick sponge renderer; guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "ColoredPencil",
+        "no ImageMagick colored-pencil renderer; guarded by the ported contract and scenario \
+         tests",
+    ),
+    none(
+        "DryBrush",
+        "no ImageMagick dry-brush operator; guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "Fresco",
+        "no ImageMagick fresco renderer; guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "RoughPastels",
+        "no ImageMagick rough-pastels renderer; guarded by the ported contract and scenario \
+         tests",
+    ),
+    none(
+        "SmudgeStick",
+        "no ImageMagick smudge-stick operator; guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "Underpainting",
+        "no ImageMagick underpainting renderer; guarded by the ported contract and scenario \
+         tests",
+    ),
+    none(
+        "Watercolor",
+        "no ImageMagick watercolor renderer; guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "AccentedEdges",
+        "no ImageMagick accents/edge operator with the dialog's width, brightness and \
+         smoothness; guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "AngledStrokes",
+        "no ImageMagick directional-stroke operator; guarded by the ported contract and \
+         scenario tests",
+    ),
+    none(
+        "Crosshatch",
+        "no ImageMagick crosshatch operator; guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "DarkStrokes",
+        "no ImageMagick dark-strokes operator; guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "InkOutlines",
+        "no ImageMagick ink-outlines operator; guarded by the ported contract and scenario \
+         tests",
+    ),
+    none(
+        "Spatter",
+        "no ImageMagick spatter operator; guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "SprayedStrokes",
+        "no ImageMagick sprayed-strokes operator; guarded by the ported contract and scenario \
+         tests",
+    ),
+    none(
+        "SumiE",
+        "no ImageMagick sumi-e operator; guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "BasRelief",
+        "ImageMagick -emboss is a fixed diagonal kernel with no detail, smoothness or light \
+         control; guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "ChalkCharcoal",
+        "no ImageMagick chalk-and-charcoal renderer; guarded by the ported contract and scenario \
+         tests",
+    ),
+    none(
+        "Charcoal",
+        "no ImageMagick charcoal renderer; guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "Chrome",
+        "no ImageMagick chrome renderer; guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "ConteCrayon",
+        "no ImageMagick conte-crayon renderer; guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "GraphicPen",
+        "no ImageMagick graphic-pen operator; guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "HalftonePattern",
+        "no ImageMagick halftone-pattern operator with size, contrast and pattern controls; \
+         guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "NotePaper",
+        "no ImageMagick note-paper renderer; guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "Photocopy",
+        "no ImageMagick photocopy operator; guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "Plaster",
+        "no ImageMagick plaster renderer; guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "Reticulation",
+        "no ImageMagick reticulation renderer; guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "Stamp",
+        "no ImageMagick stamp renderer; guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "TornEdges",
+        "no ImageMagick torn-edges operator; guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "WaterPaper",
+        "no ImageMagick water-paper renderer; guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "Craquelure",
+        "no ImageMagick crackle renderer; guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "Grain",
+        "ImageMagick +noise is not the seeded grain-type model; guarded by the ported contract \
+         and scenario tests",
+    ),
+    none(
+        "MosaicTiles",
+        "no ImageMagick mosaic-tile renderer with grout and lighten controls; guarded by the \
+         ported contract and scenario tests",
+    ),
+    none(
+        "Patchwork",
+        "no ImageMagick patchwork renderer; guarded by the ported contract and scenario tests",
+    ),
+    none(
+        "StainedGlass",
+        "no ImageMagick stained-glass renderer; guarded by the ported contract and scenario \
+         tests",
+    ),
+    none(
+        "Texturizer",
+        "no ImageMagick texturizer with the dialog's surface, relief and light controls; guarded \
+         by the ported contract and scenario tests",
+    ),
+    none(
+        "OilPaint",
+        "no ImageMagick oil-paint brush-kernel renderer; guarded by the oil-paint tests",
+    ),
+    none(
+        "HdrToning",
+        "no ImageMagick HDR tone-mapping operator with Pictura's local adaptation; guarded by \
+         the HDR toning tests",
+    ),
 ];
 
 #[test]
-fn mapping_marks_no_equivalent_operators() {
-    assert_eq!(MAPPING.len(), 56, "one mapping row per Filter variant");
-    // Exactly one row per `Filter` variant, no duplicates, full enum coverage.
-    let all: [&str; 56] = [
-        "GaussianBlur",
-        "BoxBlur",
-        "ShapeBlur",
-        "MotionBlur",
-        "RadialBlur",
-        "Average",
-        "Blur",
-        "BlurMore",
-        "SurfaceBlur",
-        "SmartBlur",
-        "Sharpen",
-        "SharpenMore",
-        "SharpenEdges",
-        "UnsharpMask",
-        "AddNoise",
-        "Median",
-        "Despeckle",
-        "ReduceNoise",
-        "Maximum",
-        "Minimum",
-        "Offset",
-        "HighPass",
-        "Custom",
-        "Emboss",
-        "FindEdges",
-        "Solarize",
-        "Mosaic",
-        "Crystallize",
-        "Facet",
-        "Fragment",
-        "Mezzotint",
-        "Pointillize",
-        "ColorHalftone",
-        "Twirl",
-        "Pinch",
-        "Spherize",
-        "Ripple",
-        "Wave",
-        "PolarCoordinates",
-        "Shear",
-        "Displace",
-        "ZigZag",
-        "OceanRipple",
-        "DustAndScratches",
-        "Extrude",
-        "Tiles",
-        "TraceContour",
-        "Wind",
-        "SmartSharpen",
-        "LensBlur",
-        "FieldBlur",
-        "IrisBlur",
-        "TiltShift",
-        "PathBlur",
-        "SpinBlur",
-        "BlurGallery",
-    ];
-    let mut mapped: Vec<&str> = MAPPING.iter().map(|m| m.filter).collect();
-    mapped.sort_unstable();
-    let mut expected_all = all.to_vec();
-    expected_all.sort_unstable();
-    assert_eq!(mapped, expected_all, "every Filter variant needs one row");
+fn mapping_table_holds_one_row_per_variant() {
+    let rows: Vec<&str> = MAPPING.iter().map(|mapping| mapping.filter).collect();
+    let unique: std::collections::BTreeSet<&str> = rows.iter().copied().collect();
+    assert_eq!(unique.len(), rows.len(), "a mapping row is repeated");
+    let expected: std::collections::BTreeSet<&str> =
+        FilterKind::ALL.iter().map(|kind| kind.name()).collect();
+    assert_eq!(unique, expected, "every Filter variant needs one row");
+}
 
-    let none: Vec<&str> = MAPPING
-        .iter()
-        .filter(|m| m.im.is_none())
-        .map(|m| m.filter)
-        .collect();
-    let mut expected = NO_EQUIVALENT.to_vec();
-    expected.sort_unstable();
-    let mut none = none;
-    none.sort_unstable();
-    assert_eq!(none, expected);
-    for m in MAPPING {
-        assert!(!m.note.is_empty(), "{}: empty note", m.filter);
-        if m.im.is_none() {
-            assert_eq!(
-                m.tolerance, 0,
+#[test]
+fn every_mapping_row_states_an_oracle_or_states_none() {
+    for mapping in MAPPING {
+        assert!(!mapping.note.is_empty(), "{}: empty note", mapping.filter);
+        match mapping.im {
+            Some(operator) => {
+                assert!(!operator.is_empty(), "{}: empty oracle", mapping.filter);
+                assert!(
+                    mapping.tolerance <= 8,
+                    "{}: tolerance out of range",
+                    mapping.filter
+                );
+            }
+            None => assert_eq!(
+                mapping.tolerance, 0,
                 "{}: no equivalent must not set tolerance",
-                m.filter
-            );
-        } else {
-            assert!(m.tolerance <= 8, "{}: tolerance out of range", m.filter);
+                mapping.filter
+            ),
         }
     }
 }

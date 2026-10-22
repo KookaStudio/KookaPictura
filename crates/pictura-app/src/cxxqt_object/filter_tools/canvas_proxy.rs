@@ -90,7 +90,7 @@ pub(in crate::cxxqt_object) fn section_buffer(
         bottom: source.height as i32,
         right: source.width as i32,
     };
-    let apron = pictura_render::preview_apron(filter);
+    let apron = filter.preview_apron();
     let region = clamp(
         PsdRect {
             top: section.top - apron,
