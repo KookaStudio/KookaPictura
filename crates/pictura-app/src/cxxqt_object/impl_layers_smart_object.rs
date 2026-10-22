@@ -27,14 +27,19 @@ impl qobject::PictureView {
     /// and attach it, keeping the raster proxy. Records one "Convert to Smart
     /// Object" state on success; false (no state) for an ineligible target.
     pub fn convert_to_smart_object(mut self: Pin<&mut Self>, path: &QString) -> bool {
-        let changed = match self.as_mut().rust_mut().session.doc.as_mut() {
-            Some(doc) => pictura_render::convert_to_smart_object(doc, &path.to_string()),
-            None => false,
-        };
-        if changed {
-            self.as_mut()
-                .edit("Convert to Smart Object", |_| Edit::Structural);
-        }
+        let path = path.to_string();
+        let mut changed = false;
+        self.as_mut().edit("Convert to Smart Object", |rust| {
+            let Some(doc) = rust.session.doc.as_mut() else {
+                return Edit::None;
+            };
+            changed = pictura_render::convert_to_smart_object(doc, &path);
+            if changed {
+                Edit::Structural
+            } else {
+                Edit::None
+            }
+        });
         changed
     }
 
@@ -48,18 +53,19 @@ impl qobject::PictureView {
             .file_stem()
             .map(|stem| stem.to_string_lossy().into_owned())
             .unwrap_or_default();
-        let created = match (
-            std::fs::read(&path),
-            self.as_mut().rust_mut().session.doc.as_mut(),
-        ) {
-            (Ok(bytes), Some(doc)) => pictura_render::place_smart_object(doc, &name, &bytes),
-            _ => None,
-        };
-        let Some(created) = created else {
-            return QString::default();
-        };
-        self.as_mut().rust_mut().select_only_layer(&created);
-        self.as_mut().edit("Place", |_| Edit::Structural);
+        let bytes = std::fs::read(&path).ok();
+        let mut created = String::new();
+        self.as_mut().edit("Place", |rust| {
+            let (Some(bytes), Some(doc)) = (bytes.as_deref(), rust.session.doc.as_mut()) else {
+                return Edit::None;
+            };
+            let Some(path) = pictura_render::place_smart_object(doc, &name, bytes) else {
+                return Edit::None;
+            };
+            created = path;
+            rust.select_only_layer(&created);
+            Edit::Structural
+        });
         QString::from(created.as_str())
     }
 
@@ -80,26 +86,26 @@ impl qobject::PictureView {
         else {
             return QString::default();
         };
-        let created = match self.as_mut().rust_mut().session.doc.as_mut() {
-            Some(doc) => {
-                let path =
-                    pictura_render::add_raster_layer_from_rgba(doc, &name, width, height, &rgba);
-                if path.is_empty() {
-                    return QString::default();
-                }
-                if !pictura_render::convert_to_smart_object(doc, &path) {
-                    // A refusal must leave the document unchanged: undo the
-                    // append. `add_raster_layer_from_rgba` pushes exactly one
-                    // top-level layer and a failed conversion adds none.
-                    let _ = doc.layers.pop();
-                    return QString::default();
-                }
-                path
+        let mut created = String::new();
+        self.as_mut().edit("Place", |rust| {
+            let Some(doc) = rust.session.doc.as_mut() else {
+                return Edit::None;
+            };
+            let path = pictura_render::add_raster_layer_from_rgba(doc, &name, width, height, &rgba);
+            if path.is_empty() {
+                return Edit::None;
             }
-            None => return QString::default(),
-        };
-        self.as_mut().rust_mut().select_only_layer(&created);
-        self.as_mut().edit("Place", |_| Edit::Structural);
+            if !pictura_render::convert_to_smart_object(doc, &path) {
+                // A refusal must leave the document unchanged: undo the
+                // append. `add_raster_layer_from_rgba` pushes exactly one
+                // top-level layer and a failed conversion adds none.
+                let _ = doc.layers.pop();
+                return Edit::None;
+            }
+            created = path;
+            rust.select_only_layer(&created);
+            Edit::Structural
+        });
         QString::from(created.as_str())
     }
 
@@ -160,18 +166,20 @@ impl qobject::PictureView {
             .file_stem()
             .map(|stem| stem.to_string_lossy().into_owned())
             .unwrap_or_default();
-        let changed = match (
-            std::fs::read(&file),
-            self.as_mut().rust_mut().session.doc.as_mut(),
-        ) {
-            (Ok(bytes), Some(doc)) => {
-                pictura_render::replace_smart_object_contents(doc, &path.to_string(), &name, &bytes)
+        let bytes = std::fs::read(&file).ok();
+        let mut changed = false;
+        self.as_mut().edit(label, |rust| {
+            let (Some(bytes), Some(doc)) = (bytes.as_deref(), rust.session.doc.as_mut()) else {
+                return Edit::None;
+            };
+            changed =
+                pictura_render::replace_smart_object_contents(doc, &path.to_string(), &name, bytes);
+            if changed {
+                Edit::Structural
+            } else {
+                Edit::None
             }
-            _ => false,
-        };
-        if changed {
-            self.as_mut().edit(label, |_| Edit::Structural);
-        }
+        });
         changed
     }
 
@@ -189,14 +197,19 @@ impl qobject::PictureView {
     /// blocks. Records one "Rasterize Smart Object" state on success; false (no
     /// state) for an ineligible target.
     pub fn rasterize_smart_object(mut self: Pin<&mut Self>, path: &QString) -> bool {
-        let changed = match self.as_mut().rust_mut().session.doc.as_mut() {
-            Some(doc) => pictura_render::rasterize_smart_object(doc, &path.to_string()),
-            None => false,
-        };
-        if changed {
-            self.as_mut()
-                .edit("Rasterize Smart Object", |_| Edit::Structural);
-        }
+        let path = path.to_string();
+        let mut changed = false;
+        self.as_mut().edit("Rasterize Smart Object", |rust| {
+            let Some(doc) = rust.session.doc.as_mut() else {
+                return Edit::None;
+            };
+            changed = pictura_render::rasterize_smart_object(doc, &path);
+            if changed {
+                Edit::Structural
+            } else {
+                Edit::None
+            }
+        });
         changed
     }
 

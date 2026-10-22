@@ -421,22 +421,22 @@ fn edit_active(
     label: &str,
     edit: impl FnOnce(&mut Layer, u32, u32) -> bool,
 ) -> bool {
-    let changed = {
-        let mut rust = view.as_mut().rust_mut();
-        let rust = &mut *rust;
+    let edit = view.as_mut().edit(label, |rust| {
         let (Some(doc), Some(path)) = (rust.session.doc.as_mut(), rust.layer_target.single())
         else {
-            return false;
+            return Edit::None;
         };
         let (width, height) = (doc.width, doc.height);
-        pictura_render::resolve_path_mut(doc, path)
+        let changed = pictura_render::resolve_path_mut(doc, path)
             .filter(|layer| pictura_render::is_shape_layer(layer))
-            .is_some_and(|layer| edit(layer, width, height))
-    };
-    if changed {
-        view.as_mut().edit(label, |_| Edit::Full);
-    }
-    changed
+            .is_some_and(|layer| edit(layer, width, height));
+        if changed {
+            Edit::Full
+        } else {
+            Edit::None
+        }
+    });
+    !matches!(edit, Edit::None)
 }
 
 fn argb(rgb: [u8; 3]) -> f64 {
@@ -586,17 +586,19 @@ fn shape_paste_attributes(mut view: Pin<&mut PictureView>, path: &QString) -> bo
         return false;
     };
     let path = path.to_string();
-    let changed = {
-        let mut rust = view.as_mut().rust_mut();
-        match rust.session.doc.as_mut() {
-            Some(doc) => pictura_render::resolve_path_mut(doc, &path)
-                .is_some_and(|layer| pictura_render::paste_shape_attributes(layer, &attributes)),
-            None => false,
+    let mut changed = false;
+    view.as_mut().edit("Paste Shape Attributes", |rust| {
+        let Some(doc) = rust.session.doc.as_mut() else {
+            return Edit::None;
+        };
+        changed = pictura_render::resolve_path_mut(doc, &path)
+            .is_some_and(|layer| pictura_render::paste_shape_attributes(layer, &attributes));
+        if changed {
+            Edit::Full
+        } else {
+            Edit::None
         }
-    };
-    if changed {
-        view.as_mut().edit("Paste Shape Attributes", |_| Edit::Full);
-    }
+    });
     changed
 }
 
@@ -608,15 +610,17 @@ fn shape_can_paste_attributes(view: &PictureView) -> bool {
 /// changed.
 fn shape_rasterize(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
     let path = path.to_string();
-    let changed = {
-        let mut rust = view.as_mut().rust_mut();
-        match rust.session.doc.as_mut() {
-            Some(doc) => pictura_render::rasterize_shape(doc, &path),
-            None => false,
+    let mut changed = false;
+    view.as_mut().edit("Rasterize Shape", |rust| {
+        let Some(doc) = rust.session.doc.as_mut() else {
+            return Edit::None;
+        };
+        changed = pictura_render::rasterize_shape(doc, &path);
+        if changed {
+            Edit::Structural
+        } else {
+            Edit::None
         }
-    };
-    if changed {
-        view.as_mut().edit("Rasterize Shape", |_| Edit::Structural);
-    }
+    });
     changed
 }

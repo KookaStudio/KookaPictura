@@ -19,13 +19,13 @@ namespace pictura {
 void PicturaMainWindow::registerSelectHandlers()
 {
     registry_->setHandler(command_ids::SelectReselect, [this]() {
-        if (PictureView* view = activeView(); view && view->reselect()) {
-            refresh();
+        if (PictureView* view = activeView()) {
+            view->reselect();
         }
     });
     registry_->setHandler(command_ids::SelectInverse, [this]() {
-        if (PictureView* view = activeView(); view && view->invert_selection()) {
-            refresh();
+        if (PictureView* view = activeView()) {
+            view->invert_selection();
         }
     });
     const auto modifyOp = [this](const char* op, const QString& title, double initial, double min,
@@ -41,9 +41,7 @@ void PicturaMainWindow::registerSelectHandlers()
         if (!ok) {
             return;
         }
-        if (view->modify_selection(QString::fromLatin1(op), amount)) {
-            refresh();
-        }
+        view->modify_selection(QString::fromLatin1(op), amount);
     };
     registry_->setHandler(command_ids::SelectModifyBorder, [modifyOp]() {
         modifyOp("border", tr("Border Selection"), 1, 1, 200, false);
@@ -64,16 +62,16 @@ void PicturaMainWindow::registerSelectHandlers()
         PictureView* view = activeView();
         const SelectionOptions* selection = tools_ ? tools_->optionsFor<SelectionOptions>(ToolId::MagicWand) : nullptr;
         const int tolerance = selection ? selection->tolerance() : 0;
-        if (view && view->grow_selection(tolerance)) {
-            refresh();
+        if (view) {
+            view->grow_selection(tolerance);
         }
     });
     registry_->setHandler(command_ids::SelectSimilar, [this]() {
         PictureView* view = activeView();
         const SelectionOptions* selection = tools_ ? tools_->optionsFor<SelectionOptions>(ToolId::MagicWand) : nullptr;
         const int tolerance = selection ? selection->tolerance() : 0;
-        if (view && view->similar_selection(tolerance)) {
-            refresh();
+        if (view) {
+            view->similar_selection(tolerance);
         }
     });
     registry_->setHandler(command_ids::SelectSave, [this]() {
@@ -88,9 +86,7 @@ void PicturaMainWindow::registerSelectHandlers()
         if (!ok || name.trimmed().isEmpty()) {
             return;
         }
-        if (view->save_selection(name)) {
-            refresh();
-        }
+        view->save_selection(name);
     });
     registry_->setHandler(command_ids::SelectLoad, [this]() {
         PictureView* view = activeView();
@@ -108,9 +104,7 @@ void PicturaMainWindow::registerSelectHandlers()
         if (!ok || name.isEmpty()) {
             return;
         }
-        if (view->load_selection(name)) {
-            refresh();
-        }
+        view->load_selection(name);
     });
 
     registry_->setHandler(command_ids::SelectAllLayers, [this]() {
@@ -207,10 +201,9 @@ void PicturaMainWindow::registerSelectHandlers()
         dialog->setAttribute(Qt::WA_DeleteOnClose);
         colorRangeDialog_ = dialog;
         connect(dialog, &QDialog::finished, this, [this, dialog, view](int result) {
-            if (result == QDialog::Accepted && activeView() == view
-                && color_range_apply(*view, dialog->range(), dialog->sampledColor().rgb() & 0xffffffu,
-                                     dialog->fuzziness(), dialog->inverted())) {
-                refresh();
+            if (result == QDialog::Accepted && activeView() == view) {
+                color_range_apply(*view, dialog->range(), dialog->sampledColor().rgb() & 0xffffffu,
+                                  dialog->fuzziness(), dialog->inverted());
             }
         });
         dialog->show();
@@ -232,12 +225,11 @@ void PicturaMainWindow::registerSelectHandlers()
         }
         auto* dialog = new RefineEdgeDialog(view, this);
         dialog->setAttribute(Qt::WA_DeleteOnClose);
-        if (runDialog(*dialog, this) == QDialog::Accepted && activeView() == view
-            && refine_edge_apply(*view, dialog->smartRadius(), dialog->radius(),
-                                 dialog->smooth(), dialog->feather(), dialog->contrast(),
-                                 dialog->shiftEdge(), dialog->decontaminate(), dialog->amount(),
-                                 dialog->outputTo())) {
-            refresh();
+        if (runDialog(*dialog, this) == QDialog::Accepted && activeView() == view) {
+            refine_edge_apply(*view, dialog->smartRadius(), dialog->radius(),
+                              dialog->smooth(), dialog->feather(), dialog->contrast(),
+                              dialog->shiftEdge(), dialog->decontaminate(), dialog->amount(),
+                              dialog->outputTo());
         }
     };
     registry_->setHandler(refineEdge, openRefineEdge);

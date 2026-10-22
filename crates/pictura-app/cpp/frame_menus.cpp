@@ -165,7 +165,6 @@ void PicturaMainWindow::registerHandlers()
         if (!created.isEmpty()) {
             beginFreeTransform(created);
             selectLayerPath(created);
-            refresh();
         }
     });
 
@@ -262,28 +261,28 @@ void PicturaMainWindow::registerHandlers()
     wireTransformMenu();
 
     registry_->setHandler(command_ids::ImageRotate90Cw, [this]() {
-        if (PictureView* view = activeView(); view && view->rotate_doc(1)) {
-            refresh();
+        if (PictureView* view = activeView(); view) {
+            view->rotate_doc(1);
         }
     });
     registry_->setHandler(command_ids::ImageRotate90Ccw, [this]() {
-        if (PictureView* view = activeView(); view && view->rotate_doc(3)) {
-            refresh();
+        if (PictureView* view = activeView(); view) {
+            view->rotate_doc(3);
         }
     });
     registry_->setHandler(command_ids::ImageRotate180, [this]() {
-        if (PictureView* view = activeView(); view && view->rotate_doc(2)) {
-            refresh();
+        if (PictureView* view = activeView(); view) {
+            view->rotate_doc(2);
         }
     });
     registry_->setHandler(command_ids::ImageFlipHorizontal, [this]() {
-        if (PictureView* view = activeView(); view && view->flip_doc(true)) {
-            refresh();
+        if (PictureView* view = activeView(); view) {
+            view->flip_doc(true);
         }
     });
     registry_->setHandler(command_ids::ImageFlipVertical, [this]() {
-        if (PictureView* view = activeView(); view && view->flip_doc(false)) {
-            refresh();
+        if (PictureView* view = activeView(); view) {
+            view->flip_doc(false);
         }
     });
     for (const char* id : {command_ids::ImageRotate90Cw, command_ids::ImageRotate90Ccw,
@@ -329,37 +328,31 @@ void PicturaMainWindow::registerHandlers()
     registry_->setHandler(command_ids::LayerNewLayer, [this]() {
         if (layersPanel_) {
             layersPanel_->openNewLayerDialog();
-            refresh();
         }
     });
     registry_->setHandler(command_ids::LayerNewGroup, [this]() {
         if (layersPanel_) {
             layersPanel_->openNewGroupDialog();
-            refresh();
         }
     });
     registry_->setHandler(command_ids::LayerNewGroupFromLayers, [this]() {
         if (layersPanel_) {
             layersPanel_->openGroupFromLayersDialog();
-            refresh();
         }
     });
     registry_->setHandler(command_ids::LayerDuplicateLayer, [this]() {
         if (layersPanel_) {
             layersPanel_->duplicateSelection();
-            refresh();
         }
     });
     registry_->setHandler(command_ids::LayerGroupLayers, [this]() {
         if (layersPanel_) {
             layersPanel_->groupSelection();
-            refresh();
         }
     });
     registry_->setHandler(command_ids::LayerUngroupLayers, [this]() {
         if (layersPanel_) {
             layersPanel_->ungroupSelection();
-            refresh();
         }
     });
     for (const char* id : {command_ids::LayerNewLayer, command_ids::LayerNewGroup,
@@ -390,7 +383,6 @@ void PicturaMainWindow::registerHandlers()
         if (!merged.isEmpty()) {
             layersPanel_->refresh();
             layersPanel_->selectPaths(QStringList{merged}, merged);
-            refresh();
         }
     });
     registry_->setEnabledProvider(command_ids::LayerMergeLayers, [this]() {
@@ -413,7 +405,6 @@ void PicturaMainWindow::registerHandlers()
         if (!merged.isEmpty()) {
             layersPanel_->refresh();
             layersPanel_->selectPaths(QStringList{merged}, merged);
-            refresh();
         }
     });
     registry_->setEnabledProvider(command_ids::LayerMergeVisible, [this]() {
@@ -432,8 +423,8 @@ void PicturaMainWindow::registerHandlers()
     };
     registry_->setHandler(command_ids::LayerCreateClippingMask, [this, clippingPaths]() {
         PictureView* view = activeView();
-        if (view && clipping_create(*view, clippingPaths()) > 0) {
-            refresh();
+        if (view) {
+            clipping_create(*view, clippingPaths());
         }
     });
     registry_->setEnabledProvider(command_ids::LayerCreateClippingMask, [this, clippingPaths]() {
@@ -442,8 +433,8 @@ void PicturaMainWindow::registerHandlers()
     });
     registry_->setHandler(command_ids::LayerReleaseClippingMask, [this, clippingPaths]() {
         PictureView* view = activeView();
-        if (view && clipping_release(*view, clippingPaths()) > 0) {
-            refresh();
+        if (view) {
+            clipping_release(*view, clippingPaths());
         }
     });
     registry_->setEnabledProvider(command_ids::LayerReleaseClippingMask, [this, clippingPaths]() {
@@ -454,8 +445,8 @@ void PicturaMainWindow::registerHandlers()
     registry_->setHandler(command_ids::LayerMergeClippingMask, [this]() {
         PictureView* view = activeView();
         const QString path = layerAnchor();
-        if (view && !path.isEmpty() && view->merge_clipping_mask(path) > 0) {
-            refresh();
+        if (view && !path.isEmpty()) {
+            view->merge_clipping_mask(path);
         }
     });
     registry_->setEnabledProvider(command_ids::LayerMergeClippingMask, [this]() {
@@ -468,8 +459,8 @@ void PicturaMainWindow::registerHandlers()
     // Layer Mask authoring; the bridge acts on the active layer.
     const auto addLayerMask = [this](const QString& kind) {
         PictureView* view = activeView();
-        if (view && layer_mask_add(*view, kind)) {
-            refresh();
+        if (view) {
+            layer_mask_add(*view, kind);
         }
     };
     const auto enableWhenNoMask = [this](const char* id) {
@@ -511,8 +502,8 @@ void PicturaMainWindow::registerHandlers()
     const auto simpleMaskAction = [this, enableWhenMask](const char* id, auto action) {
         registry_->setHandler(id, [this, action]() {
             PictureView* view = activeView();
-            if (view && action(*view)) {
-                refresh();
+            if (view) {
+                action(*view);
             }
         });
         enableWhenMask(id);
@@ -532,8 +523,8 @@ void PicturaMainWindow::registerHandlers()
 
     registry_->setHandler(command_ids::LayerFlattenImage, [this]() {
         PictureView* view = activeView();
-        if (view && view->flatten_image() > 0) {
-            refresh();
+        if (view) {
+            view->flatten_image();
         }
     });
     registry_->setEnabledProvider(command_ids::LayerFlattenImage,
@@ -554,8 +545,8 @@ void PicturaMainWindow::registerHandlers()
     registry_->setHandler(command_ids::LayerNewLayerFromBackground, [this]() {
         PictureView* view = activeView();
         const QString path = layerAnchor();
-        if (view && !path.isEmpty() && view->layer_from_background(path)) {
-            refresh();
+        if (view && !path.isEmpty()) {
+            view->layer_from_background(path);
         }
     });
     registry_->setEnabledProvider(command_ids::LayerNewLayerFromBackground,
@@ -565,8 +556,8 @@ void PicturaMainWindow::registerHandlers()
     registry_->setHandler(command_ids::LayerNewBackgroundFromLayer, [this]() {
         PictureView* view = activeView();
         const QString path = layerAnchor();
-        if (view && !path.isEmpty() && view->background_from_layer(path)) {
-            refresh();
+        if (view && !path.isEmpty()) {
+            view->background_from_layer(path);
         }
     });
     registry_->setEnabledProvider(command_ids::LayerNewBackgroundFromLayer, [this]() {
@@ -583,11 +574,7 @@ void PicturaMainWindow::registerHandlers()
         if (!view || path.isEmpty()) {
             return;
         }
-        const QString created =
-            cut ? view->layer_via_cut(path) : view->layer_via_copy(path);
-        if (!created.isEmpty()) {
-            refresh();
-        }
+        cut ? view->layer_via_cut(path) : view->layer_via_copy(path);
     };
     registry_->setHandler(command_ids::LayerNewLayerViaCopy, [layerVia]() { layerVia(false); });
     registry_->setHandler(command_ids::LayerNewLayerViaCut, [layerVia]() { layerVia(true); });
@@ -664,7 +651,6 @@ void PicturaMainWindow::registerHandlers()
     registry_->setHandler(command_ids::LayerDeleteLayer, [this]() {
         if (layersPanel_) {
             layersPanel_->deleteSelection();
-            refresh();
         }
     });
     registry_->setEnabledProvider(command_ids::LayerDeleteLayer, [this]() {
@@ -673,8 +659,8 @@ void PicturaMainWindow::registerHandlers()
     });
     registry_->setHandler(command_ids::LayerDeleteHiddenLayers, [this]() {
         PictureView* view = activeView();
-        if (view && view->delete_hidden_layers() > 0) {
-            refresh();
+        if (view) {
+            view->delete_hidden_layers();
         }
     });
     registry_->setEnabledProvider(command_ids::LayerDeleteHiddenLayers,
@@ -683,8 +669,8 @@ void PicturaMainWindow::registerHandlers()
     registry_->setHandler(command_ids::LayerHideLayers, [this]() {
         PictureView* view = activeView();
         const QStringList paths = selectedLayerPaths();
-        if (view && !paths.isEmpty() && view->hide_layers(paths) > 0) {
-            refresh();
+        if (view && !paths.isEmpty()) {
+            view->hide_layers(paths);
         }
     });
     registry_->setEnabledProvider(command_ids::LayerHideLayers, [this]() {
@@ -699,9 +685,7 @@ void PicturaMainWindow::registerHandlers()
             return;
         }
         const QColor fg = foregroundColor();
-        if (!view->add_solid_fill(fg.rgba()).isEmpty()) {
-            refresh();
-        }
+        view->add_solid_fill(fg.rgba());
     });
     registry_->setEnabledProvider(command_ids::LayerNewFillSolidColor,
                                   [this]() { return activeView() && activeView()->has_document(); });
@@ -709,8 +693,8 @@ void PicturaMainWindow::registerHandlers()
     // Gradient fill creation: a fixed black-to-white Linear fill at angle 0.
     registry_->setHandler(command_ids::LayerNewFillGradient, [this]() {
         PictureView* view = activeView();
-        if (view && !view->add_gradient_fill().isEmpty()) {
-            refresh();
+        if (view) {
+            view->add_gradient_fill();
         }
     });
     registry_->setEnabledProvider(command_ids::LayerNewFillGradient,
@@ -738,8 +722,8 @@ void PicturaMainWindow::registerHandlers()
     registry_->setHandler(command_ids::LayerRasterizeFillContent, [this, currentFillPath]() {
         if (PictureView* view = activeView()) {
             const QString path = currentFillPath();
-            if (!path.isEmpty() && view->rasterize_fill_content(path)) {
-                refresh();
+            if (!path.isEmpty()) {
+                view->rasterize_fill_content(path);
             }
         }
     });
@@ -748,8 +732,8 @@ void PicturaMainWindow::registerHandlers()
     registry_->setHandler(command_ids::LayerRasterizeLayer, [this, currentFillPath]() {
         if (PictureView* view = activeView()) {
             const QString path = currentFillPath();
-            if (!path.isEmpty() && view->rasterize_layer(path)) {
-                refresh();
+            if (!path.isEmpty()) {
+                view->rasterize_layer(path);
             }
         }
     });
@@ -758,8 +742,8 @@ void PicturaMainWindow::registerHandlers()
     registry_->setHandler(command_ids::LayerRasterizeType, [this, currentTypePath]() {
         if (PictureView* view = activeView()) {
             const QString path = currentTypePath();
-            if (!path.isEmpty() && pictura::type_api::rasterize(*view, path)) {
-                refresh();
+            if (!path.isEmpty()) {
+                pictura::type_api::rasterize(*view, path);
             }
         }
     });
@@ -767,8 +751,8 @@ void PicturaMainWindow::registerHandlers()
                                   [currentTypePath]() { return !currentTypePath().isEmpty(); });
     registry_->setHandler(command_ids::LayerRasterizeAllLayers, [this]() {
         PictureView* view = activeView();
-        if (view && view->rasterize_all_layers() > 0) {
-            refresh();
+        if (view) {
+            view->rasterize_all_layers();
         }
     });
     registry_->setEnabledProvider(command_ids::LayerRasterizeAllLayers, [this]() {
@@ -803,8 +787,8 @@ void PicturaMainWindow::registerHandlers()
     registry_->setHandler(command_ids::LayerSmartObjectConvertTo, [this, currentSmartPath]() {
         if (PictureView* view = activeView()) {
             const QString path = currentSmartPath();
-            if (!path.isEmpty() && view->convert_to_smart_object(path)) {
-                refresh();
+            if (!path.isEmpty()) {
+                view->convert_to_smart_object(path);
             }
         }
     });
@@ -817,9 +801,8 @@ void PicturaMainWindow::registerHandlers()
                           [this, currentSmartPath]() {
                               if (PictureView* view = activeView()) {
                                   const QString path = currentSmartPath();
-                                  if (!path.isEmpty()
-                                      && convert_for_smart_filters(*view, path)) {
-                                      refresh();
+                                  if (!path.isEmpty()) {
+                                      convert_for_smart_filters(*view, path);
                                   }
                               }
                           });
@@ -840,8 +823,8 @@ void PicturaMainWindow::registerHandlers()
                           [this, currentRasterizableSmartPath]() {
                               if (PictureView* view = activeView()) {
                                   const QString path = currentRasterizableSmartPath();
-                                  if (!path.isEmpty() && view->rasterize_smart_object(path)) {
-                                      refresh();
+                                  if (!path.isEmpty()) {
+                                      view->rasterize_smart_object(path);
                                   }
                               }
                           });

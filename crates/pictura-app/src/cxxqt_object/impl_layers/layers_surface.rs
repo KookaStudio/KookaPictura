@@ -63,13 +63,19 @@ fn set_layers_panel_options(
 }
 
 fn lock_group_layers_run(mut view: Pin<&mut PictureView>, group_path: &QString) -> i32 {
-    let changed = match view.as_mut().rust_mut().session.doc.as_mut() {
-        Some(doc) => pictura_render::lock_group_layers(doc, &group_path.to_string()),
-        None => 0,
-    };
-    if changed > 0 {
-        view.as_mut().edit("Lock Group Layers", |_| Edit::Full);
-    }
+    let path = group_path.to_string();
+    let mut changed = 0;
+    view.as_mut().edit("Lock Group Layers", |rust| {
+        let Some(doc) = rust.session.doc.as_mut() else {
+            return Edit::None;
+        };
+        changed = pictura_render::lock_group_layers(doc, &path);
+        if changed == 0 {
+            Edit::None
+        } else {
+            Edit::Full
+        }
+    });
     changed as i32
 }
 

@@ -31,17 +31,15 @@ void PicturaMainWindow::wireImageMenu()
         if (!bounds.valid) {
             return;
         }
-        if (view->crop(bounds.x, bounds.y, bounds.width, bounds.height)) {
-            refresh();
-        }
+        view->crop(bounds.x, bounds.y, bounds.width, bounds.height);
     });
     registry_->setEnabledProvider(command_ids::ImageCrop,
                                   [this]() { return activeView() && activeView()->has_document(); });
 
     registry_->setHandler(command_ids::ImageTrim, [this]() {
         PictureView* view = activeView();
-        if (view && trim_image(*view)) {
-            refresh();
+        if (view) {
+            trim_image(*view);
         }
     });
     registry_->setHandler(command_ids::ImageDuplicate, [this]() {
@@ -82,10 +80,9 @@ void PicturaMainWindow::wireImageMenu()
             return;
         }
         ImageSizeDialog dialog(view, this);
-        if (runDialog(dialog, this) == QDialog::Accepted
-            && image_size_apply(*view, dialog.resampleKind(), dialog.resultWidth(),
-                                dialog.resultHeight(), dialog.resultPpi(), dialog.resultPerCm())) {
-            refresh();
+        if (runDialog(dialog, this) == QDialog::Accepted) {
+            image_size_apply(*view, dialog.resampleKind(), dialog.resultWidth(),
+                             dialog.resultHeight(), dialog.resultPpi(), dialog.resultPerCm());
         }
     });
 
@@ -99,10 +96,9 @@ void PicturaMainWindow::wireImageMenu()
             return;
         }
         CanvasSizeDialog dialog(view, tools_->foreground(), tools_->background(), this);
-        if (runDialog(dialog, this) == QDialog::Accepted
-            && canvas_size_apply(*view, dialog.anchorName(), dialog.resultWidth(),
-                                 dialog.resultHeight(), dialog.extensionColor().rgb() & 0xffffffu)) {
-            refresh();
+        if (runDialog(dialog, this) == QDialog::Accepted) {
+            canvas_size_apply(*view, dialog.anchorName(), dialog.resultWidth(),
+                              dialog.resultHeight(), dialog.extensionColor().rgb() & 0xffffffu);
         }
     });
 
@@ -115,11 +111,8 @@ void PicturaMainWindow::wireImageMenu()
         const double angle = QInputDialog::getDouble(this, tr("Rotate Image"),
                                                      tr("Angle (degrees):"), 0.0, -359.99, 359.99, 2,
                                                      &ok);
-        if (!ok || angle == 0.0) {
-            return;
-        }
-        if (rotate_document_arbitrary(*view, angle)) {
-            refresh();
+        if (ok && angle != 0.0) {
+            rotate_document_arbitrary(*view, angle);
         }
     });
     registry_->setEnabledProvider(command_ids::ImageRotateArbitrary, imageEnabled);

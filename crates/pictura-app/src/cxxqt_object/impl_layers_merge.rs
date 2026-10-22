@@ -90,14 +90,18 @@ impl qobject::PictureView {
     /// Flatten the whole tree into one opaque Background layer. Returns the
     /// number of layers replaced, 0 on refusal.
     pub fn flatten_image(mut self: Pin<&mut Self>) -> i32 {
-        let replaced = match self.as_mut().rust_mut().session.doc.as_mut() {
-            Some(doc) => pictura_render::flatten(doc).map_or(0, |outcome| outcome.replaced),
-            None => 0,
-        };
-        if replaced > 0 {
-            self.as_mut().rust_mut().select_only_layer("0");
-            self.as_mut().edit("Flatten Image", |_| Edit::Structural);
-        }
+        let mut replaced = 0;
+        self.as_mut().edit("Flatten Image", |rust| {
+            let Some(doc) = rust.session.doc.as_mut() else {
+                return Edit::None;
+            };
+            replaced = pictura_render::flatten(doc).map_or(0, |outcome| outcome.replaced);
+            if replaced == 0 {
+                return Edit::None;
+            }
+            rust.select_only_layer("0");
+            Edit::Structural
+        });
         replaced as i32
     }
 
@@ -105,15 +109,18 @@ impl qobject::PictureView {
     /// Returns false (no history) when it is not the Background.
     pub fn layer_from_background(mut self: Pin<&mut Self>, path: &QString) -> bool {
         let path = path.to_string();
-        let changed = match self.as_mut().rust_mut().session.doc.as_mut() {
-            Some(doc) => pictura_render::layer_from_background(doc, &path),
-            None => false,
-        };
-        if changed {
-            self.as_mut().rust_mut().select_only_layer(&path);
-            self.as_mut()
-                .edit("Layer from Background", |_| Edit::Structural);
-        }
+        let mut changed = false;
+        self.as_mut().edit("Layer from Background", |rust| {
+            let Some(doc) = rust.session.doc.as_mut() else {
+                return Edit::None;
+            };
+            changed = pictura_render::layer_from_background(doc, &path);
+            if !changed {
+                return Edit::None;
+            }
+            rust.select_only_layer(&path);
+            Edit::Structural
+        });
         changed
     }
 
@@ -133,27 +140,24 @@ impl qobject::PictureView {
         }
         let path = path.to_string();
         let name = name.to_string();
-        let changed = match self.as_mut().rust_mut().session.doc.as_mut() {
-            Some(doc) => {
-                if !pictura_render::layer_from_background(doc, &path) {
-                    false
-                } else {
-                    if let Some(layer) = pictura_render::resolve_path_mut(doc, &path) {
-                        if !name.is_empty() {
-                            layer.name = name;
-                        }
-                        layer.color = ColorLabel::from_byte(color as u8);
-                    }
-                    true
-                }
+        let mut changed = false;
+        self.as_mut().edit("Layer from Background", |rust| {
+            let Some(doc) = rust.session.doc.as_mut() else {
+                return Edit::None;
+            };
+            if !pictura_render::layer_from_background(doc, &path) {
+                return Edit::None;
             }
-            None => false,
-        };
-        if changed {
-            self.as_mut().rust_mut().select_only_layer(&path);
-            self.as_mut()
-                .edit("Layer from Background", |_| Edit::Structural);
-        }
+            if let Some(layer) = pictura_render::resolve_path_mut(doc, &path) {
+                if !name.is_empty() {
+                    layer.name = name.clone();
+                }
+                layer.color = ColorLabel::from_byte(color as u8);
+            }
+            changed = true;
+            rust.select_only_layer(&path);
+            Edit::Structural
+        });
         changed
     }
 
@@ -163,15 +167,18 @@ impl qobject::PictureView {
     /// existing Background.
     pub fn background_from_layer(mut self: Pin<&mut Self>, path: &QString) -> bool {
         let path = path.to_string();
-        let changed = match self.as_mut().rust_mut().session.doc.as_mut() {
-            Some(doc) => pictura_render::background_from_layer(doc, &path),
-            None => false,
-        };
-        if changed {
-            self.as_mut().rust_mut().select_only_layer("0");
-            self.as_mut()
-                .edit("Background From Layer", |_| Edit::Structural);
-        }
+        let mut changed = false;
+        self.as_mut().edit("Background From Layer", |rust| {
+            let Some(doc) = rust.session.doc.as_mut() else {
+                return Edit::None;
+            };
+            changed = pictura_render::background_from_layer(doc, &path);
+            if !changed {
+                return Edit::None;
+            }
+            rust.select_only_layer("0");
+            Edit::Structural
+        });
         changed
     }
 
@@ -180,20 +187,23 @@ impl qobject::PictureView {
         scope: pictura_render::MergeScope<'_>,
         label: &str,
     ) -> Option<pictura_render::MergeOutcome> {
-        let outcome = match self.as_mut().rust_mut().session.doc.as_mut() {
-            Some(doc) => pictura_render::merge_scope(doc, scope).ok(),
-            None => None,
-        };
-        let merged = outcome
-            .as_ref()
-            .filter(|outcome| outcome.replaced > 0)
-            .map(|outcome| outcome.path.clone());
-        if let Some(path) = merged {
-            self.as_mut().rust_mut().select_only_layer(&path);
-            self.as_mut().edit(label, |_| Edit::Structural);
-            outcome
-        } else {
-            None
-        }
+        let mut result = None;
+        self.as_mut().edit(label, |rust| {
+            let Some(doc) = rust.session.doc.as_mut() else {
+                return Edit::None;
+            };
+            let outcome = pictura_render::merge_scope(doc, scope).ok();
+            let Some(path) = outcome
+                .as_ref()
+                .filter(|outcome| outcome.replaced > 0)
+                .map(|outcome| outcome.path.clone())
+            else {
+                return Edit::None;
+            };
+            result = outcome;
+            rust.select_only_layer(&path);
+            Edit::Structural
+        });
+        result
     }
 }
