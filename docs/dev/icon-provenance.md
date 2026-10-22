@@ -15,10 +15,10 @@ not edit by hand; change the JSON and regenerate.
   vendored files carry no baked colour. Internal shading uses alpha
   gradients / `stroke-opacity`.
 
-## Summary (195 icons)
+## Summary (214 icons)
 
-- Lucide-derived: **114**
-- Custom (Lucide-style): **68**
+- Lucide-derived: **128**
+- Custom (Lucide-style): **73**
 - Note / deferred: **3**
 - Out of scope (3D tools, file unchanged): **10**
 
@@ -229,3 +229,22 @@ hand-authored assets, or the note for deferred entries.
 
 `assets/cursors/` (77 SVGs) is unchanged by this change; a follow-up
 issue covers moving it to a Lucide-style or CC0 cursor set.
+| `adjustments.solid-color` | lucide:circle-dot | good |  |
+| `adjustments.gradient` | custom (base: tool.gradient) | custom | 4:3 rectangle with an alpha-gradient fill (same source as tool.gradient) |
+| `adjustments.pattern` | lucide:grid-3x3 | approximate |  |
+| `adjustments.brightness-contrast` | custom (base: contrast) | custom | contrast circle with sun rays in the top-right |
+| `adjustments.levels` | lucide:chart-column | good |  |
+| `adjustments.curves` | lucide:chart-spline | good |  |
+| `adjustments.exposure` | lucide:sun-moon | good |  |
+| `adjustments.vibrance` | custom | custom | three wavy arcs radiating from the centre |
+| `adjustments.hue-saturation` | lucide:palette | good |  |
+| `adjustments.color-balance` | custom | custom | three overlapping circles |
+| `adjustments.black-white` | lucide:contrast | exact |  |
+| `adjustments.photo-filter` | lucide:camera | good |  |
+| `adjustments.channel-mixer` | lucide:sliders-horizontal | good |  |
+| `adjustments.color-lookup` | lucide:box | good |  |
+| `adjustments.invert` | lucide:image-minus | good |  |
+| `adjustments.posterize` | lucide:rows-4 | good |  |
+| `adjustments.threshold` | lucide:square-split-horizontal | good |  |
+| `adjustments.gradient-map` | custom (base: tool.gradient) | custom | gradient rectangle, mirrored horizontally |
+| `adjustments.selective-color` | lucide:pipette | good |  |
