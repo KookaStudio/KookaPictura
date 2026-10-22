@@ -3,6 +3,7 @@
 #include "api/selection_api.h"
 #include "icons.h"
 #include "pictura_debug_timing.h"
+#include "selection_geometry.h"
 
 #include <QtCore/QDebug>
 #include <QtCore/QRect>
@@ -209,6 +210,14 @@ void ImageView::setSelectionPreview(const QList<QPolygonF>& loops, bool closed, 
     selectionPreviewSolid_ = solid;
     updateAntsTimer();
     update();
+}
+
+void ImageView::setSelectionShapePreview(const QList<QPolygonF>& loops)
+{
+    // The committed outline is traced from the canvas-clipped mask, so it
+    // closes along the border; the live shape is clipped the same way, and the
+    // dash phase keeps animating through setSelectionPreview.
+    setSelectionPreview(clipSelectionShapeToCanvas(loops, docSize_), true, false);
 }
 
 void ImageView::setSelectionPreviewOrigin(const QPointF& imagePos)
@@ -758,8 +767,9 @@ void ImageView::paintEvent(QPaintEvent*)
         // Marching ants: a solid white base under an animated black dashed pen,
         // so the edge reads against both light and dark pixels. Width 0 = a
         // cosmetic 1-px line independent of the pan/zoom transform.
-        // ponytail: a dragged outline past the canvas edge is cut off rather
-        // than closed along it; the release retrace draws the clipped mask.
+        // ponytail: the move-selection drag's offset outline is cut off at the
+        // canvas edge rather than closed along it; closing it would change the
+        // capability's "Offset ants during a move-selection drag" requirement.
         painter.save();
         painter.translate(selectionContourOffset_);
         painter.setBrush(Qt::NoBrush);

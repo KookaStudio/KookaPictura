@@ -158,9 +158,9 @@ private:
             // Preview the actual ellipse, not its bounding rectangle.
             QPainterPath path;
             path.addEllipse(QRectF(rect));
-            canvas->setSelectionPreview({path.toFillPolygon()});
+            canvas->setSelectionShapePreview({path.toFillPolygon()});
         } else {
-            canvas->setSelectionPreview({QPolygonF(QRectF(rect))});
+            canvas->setSelectionShapePreview({QPolygonF(QRectF(rect))});
         }
         canvas->setDragSizeHint(
             QStringLiteral("%1 x %2").arg(rect.width()).arg(rect.height()), imagePos);
@@ -201,7 +201,7 @@ public:
         lassoPolygon_.clear();
         lassoPolygon_ << imagePos;
         if (ImageView* canvas = ctx.canvas()) {
-            canvas->setSelectionPreview({lassoPolygon_});
+            canvas->setSelectionShapePreview({lassoPolygon_});
         }
         return true;
     }
@@ -218,7 +218,7 @@ public:
         v->lasso_add_point(qRound(imagePos.x()), qRound(imagePos.y()));
         lassoPolygon_ << imagePos;
         if (ImageView* canvas = ctx.canvas()) {
-            canvas->setSelectionPreview({lassoPolygon_});
+            canvas->setSelectionShapePreview({lassoPolygon_});
         }
     }
 
