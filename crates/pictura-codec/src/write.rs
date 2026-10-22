@@ -1035,14 +1035,7 @@ fn write_container(doc: &Document, psb: bool) -> Result<Vec<u8>, PsdError> {
     if doc.composite.data.len() != color_channels * plane {
         return Err(PsdError::Invalid("composite data length mismatch".into()));
     }
-    for channel in &doc.channels {
-        if channel.data.len() != plane {
-            return Err(PsdError::Invalid(format!(
-                "document channel {} data length mismatch",
-                channel.id
-            )));
-        }
-    }
+    crate::write_bitmap::validate_extra_channels(doc, bitmap_mode)?;
 
     let mut out = Vec::with_capacity(26 + 12 + 2 + doc.composite.data.len());
     out.extend_from_slice(&SIGNATURE.to_be_bytes());
@@ -1120,18 +1113,10 @@ fn write_container(doc: &Document, psb: bool) -> Result<Vec<u8>, PsdError> {
             .to_bytes()
     });
     let flat_composite = flat_source.as_ref().map(|(_, _, planes)| planes);
-    let mut planes: Vec<Cow<[u8]>> = Vec::with_capacity(channels);
-    if bitmap_mode {
-        // The retained depth-1 store holds the raw packed plane (row stride
-        // `ceil(width / 8)`), not a `width * height` plane, so `native_plane`
-        // does not apply; borrow it directly at the output depth 1.
-        let retained = doc
-            .source_planes
-            .as_ref()
-            .and_then(|store| store.samples.as_u8())
-            .expect("writes_bitmap checked the packed plane");
-        planes.push(Cow::Borrowed(retained));
+    let planes: Vec<Cow<[u8]>> = if bitmap_mode {
+        crate::write_bitmap::bitmap_planes(doc)?
     } else {
+        let mut planes = Vec::with_capacity(channels);
         for c in 0..out_color_channels {
             let current = if let Some(lab) = &lab_composite {
                 &lab[c * plane..(c + 1) * plane]
@@ -1152,18 +1137,25 @@ fn write_container(doc: &Document, psb: bool) -> Result<Vec<u8>, PsdError> {
                 depth,
             )?);
         }
-    }
-    for (i, channel) in doc.channels.iter().enumerate() {
-        planes.push(native_plane(
-            // A CMYK output stores four color planes before the extras, so the
-            // retained extras offset is the output color count, not the working 3.
-            composite_retained(doc, depth, out_color_channels + i).as_ref(),
-            &channel.data,
-            width,
-            height,
-            depth,
-        )?);
-    }
+        if crate::write_bitmap::is_bitmap_source(doc) {
+            for expanded in crate::write_bitmap::fallback_extra_planes(doc)? {
+                planes.push(Cow::Owned(expanded));
+            }
+        } else {
+            for (i, channel) in doc.channels.iter().enumerate() {
+                planes.push(native_plane(
+                    // A CMYK output stores four color planes before the extras,
+                    // so the retained extras offset is the output color count.
+                    composite_retained(doc, depth, out_color_channels + i).as_ref(),
+                    &channel.data,
+                    width,
+                    height,
+                    depth,
+                )?);
+            }
+        }
+        planes
+    };
     let planes: Vec<&[u8]> = planes.iter().map(Cow::as_ref).collect();
     match doc.composite_compression {
         Compression::Rle => out.extend_from_slice(&encode_scanlines(

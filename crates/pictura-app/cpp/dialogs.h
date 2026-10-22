@@ -106,6 +106,11 @@ QString defaultSuffixForFilter(int filterIndex);
 // Lowercase a known image extension (Qt rewrites it to the filter's uppercase
 // pattern when the type changes); leave anything else untouched.
 QString lowercasedImageSuffix(const QString& path);
+// Save As: a single-format filter owns the extension, so a typed suffix that
+// disagrees is replaced with `defaultSuffixForFilter(chosenFilter)`. The All
+// Formats entry keeps a typed suffix and appends `defaultSuffixForFilter(
+// fallbackFilter)` only when the name has none.
+QString pathForSaveFilter(const QString& path, int chosenFilter, int fallbackFilter);
 
 // Qt (non-native) save/open dialogs whose "File type" combo is non-editable and
 // supports rolling prefix type-ahead. Return the chosen path (empty = cancel)

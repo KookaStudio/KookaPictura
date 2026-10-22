@@ -74,6 +74,11 @@ QString RecoveryStore::rootPath()
     return QFileInfo(sessionFilePath()).absolutePath() + QStringLiteral("/recovery");
 }
 
+QString RecoveryStore::quarantineRoot()
+{
+    return rootPath() + QStringLiteral("/quarantine");
+}
+
 bool RecoveryStore::open()
 {
     if (isOpen()) {
@@ -140,9 +145,10 @@ QList<OrphanSession> RecoveryStore::orphans(const QString& exceptDir)
     QList<OrphanSession> out;
     const QDir root(rootPath());
     const QString except = QFileInfo(exceptDir).absoluteFilePath();
+    const QString quarantine = QFileInfo(quarantineRoot()).absoluteFilePath();
     for (const QFileInfo& entry : root.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot)) {
         const QString dir = entry.absoluteFilePath();
-        if (dir == except) {
+        if (dir == except || dir == quarantine) {
             continue;
         }
         // Taking the lock proves the owner is gone; release it straight away so
@@ -166,10 +172,59 @@ QList<OrphanSession> RecoveryStore::orphans(const QString& exceptDir)
 
 void RecoveryStore::discard(const QString& dir)
 {
-    if (QFileInfo(dir).absolutePath() != QFileInfo(rootPath()).absoluteFilePath()) {
+    const QString absolute = QFileInfo(dir).absoluteFilePath();
+    if (QFileInfo(dir).absolutePath() != QFileInfo(rootPath()).absoluteFilePath()
+        || absolute == QFileInfo(quarantineRoot()).absoluteFilePath()) {
         return;
     }
     QDir(dir).removeRecursively();
+}
+
+bool RecoveryStore::quarantine(const QString& sessionDir, const RecoverableDocument& doc)
+{
+    const QString root = QFileInfo(rootPath()).absoluteFilePath();
+    const QString session = QFileInfo(sessionDir).absoluteFilePath();
+    if (QFileInfo(session).absolutePath() != root
+        || QFileInfo(doc.snapshot).absolutePath() != session) {
+        return false;
+    }
+    const QString manifest = session + QLatin1Char('/')
+                             + QFileInfo(doc.snapshot).completeBaseName()
+                             + QStringLiteral(".json");
+    if (!QFileInfo::exists(manifest)) {
+        return false;
+    }
+    const QString destDir = quarantineRoot() + QLatin1Char('/') + QFileInfo(session).fileName();
+    if (!QFileInfo(destDir).absoluteFilePath().startsWith(
+            QFileInfo(quarantineRoot()).absoluteFilePath() + QLatin1Char('/'))) {
+        return false;
+    }
+    if (!QDir().mkpath(destDir)) {
+        return false;
+    }
+    const QString snapshotDest = destDir + QLatin1Char('/') + QFileInfo(doc.snapshot).fileName();
+    const QString manifestDest = destDir + QLatin1Char('/') + QFileInfo(manifest).fileName();
+    // A crash after an earlier copy but before the originals were removed
+    // leaves a stale quarantine copy; the originals are still intact here, so
+    // replacing the stale copy is safe and lets the retry proceed.
+    QFile::remove(snapshotDest);
+    QFile::remove(manifestDest);
+    if (!QFile::copy(doc.snapshot, snapshotDest)) {
+        return false;
+    }
+    if (!QFile::copy(manifest, manifestDest)) {
+        QFile::remove(snapshotDest);
+        return false;
+    }
+    // Drop the manifest first: if that fails, both originals are intact. A
+    // failed snapshot removal leaves the quarantine copy as the survivor.
+    if (!QFile::remove(manifest)) {
+        QFile::remove(snapshotDest);
+        QFile::remove(manifestDest);
+        return false;
+    }
+    QFile::remove(doc.snapshot);
+    return true;
 }
 
 QString recoveredDocumentName(const QString& name)

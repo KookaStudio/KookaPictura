@@ -74,6 +74,7 @@ private slots:
     void cleanShutdownRemovesTheSession();
     void liveSessionsAreNotOrphans();
     void recoverReopensAnOrphanedDocument();
+    void partialRecoveryQuarantinesFailedDocument();
     void fileHandlingPreferenceTogglesAutosave();
 };
 
@@ -215,6 +216,57 @@ void RecoveryTest::recoverReopensAnOrphanedDocument()
     QCOMPARE(view->document_height(), 48);
     QVERIFY2(pictura::paths_has_work_path(*view), "the Work Path survives recovery");
     QVERIFY2(!QFileInfo::exists(crashed), "the orphaned session is discarded");
+    QCOMPARE(snapshots(after->recoverySessionDirForTest()).size(), 1);
+    after->shutdownRecovery();
+}
+
+void RecoveryTest::partialRecoveryQuarantinesFailedDocument()
+{
+    pictura::test::ScopedStateHome stateHome;
+    QVERIFY(stateHome.isValid());
+    QString crashed;
+    QString failedSnapshot;
+    {
+        auto before = pictura::test::makeMainWindow();
+        before->enableRecovery();
+        for (int i = 0; i < 2; ++i) {
+            QVERIFY(before->newDocument(QString(), 64, 48, QStringLiteral("rgb"), 8,
+                                        QStringLiteral("white")));
+            drawTriangle(*before->activeView());
+        }
+        before->autosaveRecovery();
+        waitForWrites(*before);
+        crashed = fakeCrashedSession(before->recoverySessionDirForTest());
+    }
+
+    const QList<pictura::OrphanSession> orphans = pictura::RecoveryStore::orphans(QString());
+    QCOMPARE(orphans.size(), 1);
+    QCOMPARE(orphans.first().documents.size(), 2);
+    failedSnapshot = orphans.first().documents.at(1).snapshot;
+    {
+        QFile file(failedSnapshot);
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        file.write("not a psd");
+    }
+
+    auto after = pictura::test::makeMainWindow();
+    after->enableRecovery();
+    QCOMPARE(after->recoverOrphans(), 1);
+    QCOMPARE(after->documentCount(), 1);
+
+    const QString quarantine = pictura::RecoveryStore::quarantineRoot() + QLatin1Char('/')
+                               + QFileInfo(crashed).fileName();
+    const QString snapshotDest =
+        quarantine + QLatin1Char('/') + QFileInfo(failedSnapshot).fileName();
+    const QString manifestDest = quarantine + QLatin1Char('/')
+                                 + QFileInfo(failedSnapshot).completeBaseName()
+                                 + QStringLiteral(".json");
+    QVERIFY2(QFileInfo::exists(snapshotDest), "the failed snapshot is quarantined");
+    QVERIFY2(QFileInfo::exists(manifestDest), "its manifest is quarantined");
+    QVERIFY2(!QFileInfo::exists(crashed), "the orphaned session is discarded");
+    QVERIFY2(pictura::RecoveryStore::orphans(QString()).isEmpty(),
+             "the quarantine directory is not an orphan session");
+    QVERIFY2(QFileInfo::exists(snapshotDest), "a later scan does not delete the quarantine");
     QCOMPARE(snapshots(after->recoverySessionDirForTest()).size(), 1);
     after->shutdownRecovery();
 }

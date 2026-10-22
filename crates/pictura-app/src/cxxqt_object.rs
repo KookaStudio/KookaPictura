@@ -151,7 +151,7 @@ pub mod qobject {
         /// Try to load a PSD through `pictura-codec`. Returns `false` and falls back to a generated test image when the file is missing or unsupported.
         #[qinvokable]
         fn open(self: Pin<&mut Self>, path: &QString) -> bool;
-        /// `File > Open` for a common raster image: decode `path` into an untitled RGB/8-bit document; `false` without mutating on any refusal.
+        /// `File > Open` for a common raster image: decode `path` into an RGB/8-bit document recording that path; `false` without mutating on any refusal.
         #[qinvokable]
         fn open_image(self: Pin<&mut Self>, path: &QString) -> bool;
         /// `File > Open As Smart Object…`: open `path` as a new untitled document holding that PSD/PSB source as an embedded smart object; one state.

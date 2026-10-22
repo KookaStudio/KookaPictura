@@ -55,6 +55,7 @@ class PrintTest : public QObject {
 private slots:
     void initTestCase();
     void previewAndOrientation();
+    void printSettingsPersistPageSetup();
     void saveAsPdf();
     void menuCommands();
 
@@ -101,6 +102,35 @@ void PrintTest::previewAndOrientation()
     // Cancel keeps the old defaults.
     dialog.reject();
     QVERIFY(!pictura::lastPrintSettings().landscape);
+}
+
+void PrintTest::printSettingsPersistPageSetup()
+{
+    pictura::lastPrintSettings() = {};
+    pictura::PrintDialog dialog(picture());
+    auto* setup = child<QPushButton>(dialog, "printPageSetup");
+    auto* size = child<QLabel>(dialog, "printPageSize");
+    QVERIFY(setup && size);
+    QVERIFY2(setup->isEnabled(), "page setup is available for Save as PDF");
+    dialog.setPageSetupProvider([](QPrinter& printer) {
+        printer.setPageSize(QPageSize(QPageSize::A4));
+        printer.setPaperSource(QPrinter::Cassette);
+        return true;
+    });
+    setup->click();
+
+    QCOMPARE(size->text(), QStringLiteral("8.27 in x 11.7 in"));
+    const pictura::PrintSettings chosen = dialog.settings();
+    QCOMPARE(int(chosen.pageSize.id()), int(QPageSize::A4));
+    QCOMPARE(int(chosen.paperSource), int(QPrinter::Cassette));
+
+    QPrinter printer;
+    pictura::configurePrinter(printer, chosen, QString());
+    QCOMPARE(int(printer.pageLayout().pageSize().id()), int(QPageSize::A4));
+
+    child<QPushButton>(dialog, "printDone")->click();
+    QCOMPARE(int(pictura::lastPrintSettings().pageSize.id()), int(QPageSize::A4));
+    QCOMPARE(int(pictura::lastPrintSettings().paperSource), int(QPrinter::Cassette));
 }
 
 void PrintTest::saveAsPdf()

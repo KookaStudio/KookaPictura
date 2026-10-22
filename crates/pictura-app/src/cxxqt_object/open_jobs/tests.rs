@@ -82,17 +82,21 @@ fn open_image_matches_sync() {
     let path = temp_path("webp");
     std::fs::write(&path, &webp).expect("write fixture");
 
+    let expected = path.to_str().unwrap().to_string();
     let opened = decode_image(path.to_str().unwrap(), false, &|_, _| {}).expect("decode");
     assert_eq!(opened.doc.width, 2);
     assert_eq!(opened.doc.height, 1);
-    assert!(matches!(opened.path, OpenedPath::Keep));
+    assert!(
+        matches!(&opened.path, OpenedPath::Set(Some(p)) if p == &expected),
+        "a raster open records its path"
+    );
     assert_eq!(opened.source_format, "webp");
     assert_eq!(opened.target.single(), Some("0"));
 
     let mut rust = PictureViewRust::default();
     apply_opened(&mut rust, opened);
     assert!(rust.session.doc.is_some());
-    assert_eq!(rust.path, None);
+    assert_eq!(rust.path.as_deref(), Some(expected.as_str()));
     assert!(!rust.session.dirty);
     assert_eq!(rust.source_format, "webp");
     std::fs::remove_file(path).ok();

@@ -469,9 +469,9 @@ private:
         // canvas host to it.
         QWidget* page = nullptr;
         QString path;
-        // Display name for a path-less import (Open Image / Open As Smart
-        // Object); preferred over the generated Untitled-N name. The tab title
-        // uses it while `path` stays empty so Save cannot overwrite the source.
+        // Display name for a path-less import (Open As Smart Object, PDF/EPS
+        // import); preferred over the generated Untitled-N name while `path`
+        // stays empty.
         QString displayName;
         // The path Open Recent should remember for a path-less import.
         QString recentPath;

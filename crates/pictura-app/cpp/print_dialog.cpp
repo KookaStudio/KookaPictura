@@ -5,6 +5,7 @@
 
 #include <QtGui/QPainter>
 #include <QtGui/QStandardItemModel>
+#include <QtPrintSupport/QPageSetupDialog>
 #include <QtPrintSupport/QPrintDialog>
 #include <QtPrintSupport/QPrinter>
 #include <QtPrintSupport/QPrinterInfo>
@@ -55,15 +56,30 @@ PrintSettings& lastPrintSettings()
     return settings;
 }
 
+static QPageSize destinationPageSize(const QString& printerName)
+{
+    if (printerName.isEmpty()) {
+        return QPageSize(QPageSize::Letter);
+    }
+    const QPageSize size = QPrinterInfo::printerInfo(printerName).defaultPageSize();
+    return size.isValid() ? size : QPageSize(QPageSize::Letter);
+}
+
 void configurePrinter(QPrinter& printer, const PrintSettings& settings, const QString& pdfPath)
 {
     if (settings.printer.isEmpty()) {
         printer.setOutputFormat(QPrinter::PdfFormat);
         printer.setOutputFileName(pdfPath);
-        printer.setPageSize(QPageSize(QPageSize::Letter));
+        printer.setPageSize(settings.pageSize.isValid()
+                                ? settings.pageSize
+                                : QPageSize(QPageSize::Letter));
     } else {
         printer.setPrinterName(settings.printer);
+        if (settings.pageSize.isValid()) {
+            printer.setPageSize(settings.pageSize);
+        }
     }
+    printer.setPaperSource(settings.paperSource);
     printer.setCopyCount(settings.copies);
     printer.setPageOrientation(settings.landscape ? QPageLayout::Landscape
                                                   : QPageLayout::Portrait);
@@ -143,6 +159,7 @@ PrintDialog::PrintDialog(const QImage& image, QWidget* parent)
     copiesRow->addWidget(copies_);
     copiesRow->addSpacing(12);
     printSettings_ = new QPushButton(QStringLiteral("Print Settings…"), setup);
+    printSettings_->setObjectName(QStringLiteral("printPageSetup"));
     copiesRow->addWidget(printSettings_);
     copiesRow->addStretch();
     setupLayout->addLayout(copiesRow);
@@ -221,20 +238,38 @@ PrintDialog::PrintDialog(const QImage& image, QWidget* parent)
         return QFileDialog::getSaveFileName(this, QStringLiteral("Save Print Output As"),
                                             QString(), QStringLiteral("PDF Document (*.pdf)"));
     };
+    pageSetup_ = [this](QPrinter& printer) {
+        if (printer.outputFormat() == QPrinter::PdfFormat) {
+            QPageSetupDialog dialog(&printer, this);
+            return dialog.exec() == QDialog::Accepted;
+        }
+        QPrintDialog dialog(&printer, this);
+        return dialog.exec() == QDialog::Accepted;
+    };
     const PrintSettings& last = lastPrintSettings();
     populatePrinters();
     printer_->setCurrentIndex(qMax(0, printer_->findData(last.printer)));
     copies_->setValue(last.copies);
     (last.landscape ? landscape_ : portrait_)->setChecked(true);
+    chosenPageSize_ = last.pageSize;
+    paperSource_ = last.paperSource;
 
-    connect(printer_, &QComboBox::currentIndexChanged, this, [this]() {
-        printSettings_->setEnabled(!printer_->currentData().toString().isEmpty());
-        updatePreview();
-    });
+    connect(printer_, &QComboBox::currentIndexChanged, this, [this]() { updatePreview(); });
     connect(printSettings_, &QPushButton::clicked, this, [this]() {
+        if (!pageSetup_) {
+            return;
+        }
         QPrinter printer;
         configurePrinter(printer, settings(), QString());
-        QPrintDialog(&printer, this).exec();
+        if (!pageSetup_(printer)) {
+            return;
+        }
+        const QPageSize size = printer.pageLayout().pageSize();
+        if (size.isValid()) {
+            chosenPageSize_ = size;
+        }
+        paperSource_ = printer.paperSource();
+        updatePreview();
     });
     connect(portrait_, &QPushButton::toggled, this, [this]() { updatePreview(); });
     connect(paperWhite_, &QCheckBox::toggled, this, [this]() { updatePreview(); });
@@ -245,7 +280,6 @@ PrintDialog::PrintDialog(const QImage& image, QWidget* parent)
         accept();
     });
     connect(printButton, &QPushButton::clicked, this, &PrintDialog::print);
-    printSettings_->setEnabled(!printer_->currentData().toString().isEmpty());
     updatePreview();
 }
 
@@ -260,7 +294,8 @@ void PrintDialog::populatePrinters()
 
 PrintSettings PrintDialog::settings() const
 {
-    return {printer_->currentData().toString(), copies_->value(), landscape_->isChecked()};
+    return {printer_->currentData().toString(), copies_->value(), landscape_->isChecked(),
+            chosenPageSize_, paperSource_};
 }
 
 void PrintDialog::setPdfPathProvider(std::function<QString()> provider)
@@ -268,11 +303,16 @@ void PrintDialog::setPdfPathProvider(std::function<QString()> provider)
     pdfPath_ = std::move(provider);
 }
 
+void PrintDialog::setPageSetupProvider(std::function<bool(QPrinter&)> provider)
+{
+    pageSetup_ = std::move(provider);
+}
+
 QSizeF PrintDialog::paperInches() const
 {
-    const QString name = printer_->currentData().toString();
-    const QPageSize size = name.isEmpty() ? QPageSize(QPageSize::Letter)
-                                          : QPrinterInfo::printerInfo(name).defaultPageSize();
+    const QPageSize size = chosenPageSize_.isValid()
+                               ? chosenPageSize_
+                               : destinationPageSize(printer_->currentData().toString());
     const QSizeF inches = size.size(QPageSize::Inch);
     return inches.isEmpty() ? QSizeF(8.5, 11.0) : inches;
 }

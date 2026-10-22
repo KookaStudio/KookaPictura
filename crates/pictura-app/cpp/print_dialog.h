@@ -1,6 +1,8 @@
 #pragma once
 
 #include <QtGui/QImage>
+#include <QtGui/QPageSize>
+#include <QtPrintSupport/QPrinter>
 #include <QtWidgets/QDialog>
 
 #include <functional>
@@ -23,6 +25,9 @@ struct PrintSettings {
     QString printer;
     int copies = 1;
     bool landscape = false;
+    // An invalid QPageSize means the destination's default paper.
+    QPageSize pageSize;
+    QPrinter::PaperSource paperSource = QPrinter::Auto;
 };
 PrintSettings& lastPrintSettings();
 
@@ -50,6 +55,8 @@ public:
     PrintSettings settings() const;
     // Where Save as PDF writes; defaults to a file dialog (tests replace it).
     void setPdfPathProvider(std::function<QString()> provider);
+    // The page-setup dialog; tests replace it to pick a size without a printer.
+    void setPageSetupProvider(std::function<bool(QPrinter&)> provider);
     QImage pagePreviewForTest() const { return preview_; }
 
 private:
@@ -62,6 +69,9 @@ private:
     QImage image_;
     QImage preview_;
     std::function<QString()> pdfPath_;
+    std::function<bool(QPrinter&)> pageSetup_;
+    QPageSize chosenPageSize_;
+    QPrinter::PaperSource paperSource_ = QPrinter::Auto;
     QComboBox* printer_ = nullptr;
     QSpinBox* copies_ = nullptr;
     QPushButton* printSettings_ = nullptr;

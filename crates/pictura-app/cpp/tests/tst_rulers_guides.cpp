@@ -14,6 +14,7 @@
 
 #include "pictura_app/src/cxxqt_object/guides.cxxqt.h"
 
+#include <QtCore/QTemporaryDir>
 #include <QtGui/QMouseEvent>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QRadioButton>
@@ -98,6 +99,7 @@ private slots:
     void initTestCase();
     void rulerScale();
     void rulersToggle();
+    void togglesDuringLoadingDoNotCrash();
     void dragGuideFromRuler();
     void moveAndDeleteGuide();
     void lockedGuides();
@@ -182,6 +184,61 @@ void RulersGuidesTest::rulersToggle()
     rulers->trigger();
     QVERIFY(!host->horizontalRuler()->isVisible());
     QVERIFY(!pictura::loadSession().rulersVisible);
+}
+
+void RulersGuidesTest::togglesDuringLoadingDoNotCrash()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString psd = dir.filePath(QStringLiteral("loading.psd"));
+    QVERIFY(window_->newDocument(QStringLiteral("Loading"), 64, 48, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    QVERIFY(window_->saveActiveAs(psd));
+    QVERIFY(window_->closeDocument(0, false));
+
+    window_->setOpenDelayForTest(250);
+    QVERIFY(window_->startOpenPath(psd) != 0);
+    QCOMPARE(window_->documentCount(), 1);
+    QVERIFY2(window_->isLoadingDocument(0), "the tab is loading");
+
+    QAction* rulers = action(*window_, pictura::command_ids::ViewRulers);
+    QAction* guides = action(*window_, pictura::command_ids::ViewShowGuides);
+    QVERIFY(rulers && guides);
+    {
+        // Restore the suite's starting state on every exit path: the toggles
+        // below flip both flags, and later tests assume rulers off, guides on.
+        struct RestoreToggles {
+            QAction* rulers;
+            QAction* guides;
+            ~RestoreToggles()
+            {
+                rulers->trigger();
+                guides->trigger();
+            }
+        } restore{rulers, guides};
+        rulers->trigger();
+        guides->trigger();
+
+        window_->waitForOpensForTest();
+        window_->setOpenDelayForTest(0);
+        QVERIFY(!window_->isLoadingDocument(0));
+
+        pictura::ImageView* canvas = window_->canvasAt(0);
+        QVERIFY(canvas);
+        QVERIFY2(!canvas->guidesVisible(), "the guide toggle reached the completed canvas");
+        pictura::CanvasScrollBars* host = nullptr;
+        for (auto* candidate : window_->findChildren<pictura::CanvasScrollBars*>()) {
+            if (candidate->view() == canvas) {
+                host = candidate;
+            }
+        }
+        QVERIFY(host);
+        QVERIFY2(host->horizontalRuler()->isVisibleTo(window_.get()),
+                 "the ruler toggle reached the completed canvas");
+    }
+    while (window_->documentCount() > 0) {
+        QVERIFY(window_->closeDocument(0, false));
+    }
 }
 
 void RulersGuidesTest::dragGuideFromRuler()

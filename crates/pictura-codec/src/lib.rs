@@ -46,6 +46,7 @@ pub mod pdf;
 mod pictura_raw;
 mod png;
 mod probe;
+mod raster_metadata;
 mod read;
 mod smart_filter;
 mod smart_object;
@@ -111,6 +112,7 @@ pub use live_shape::{
 pub use pictura_color::{Policy, Profile};
 pub use png::{encode_base64 as encode_png_base64, encode_rgba as encode_png_rgba};
 pub use probe::{probe_image, ImageBudget, ImageFormat, ImageProbe, ImportError, LimitKind};
+pub use raster_metadata::{embed_raster_metadata, raster_metadata, RasterMetadata};
 pub use read::{read_psd, read_psd_with, read_psd_within};
 pub use smart_filter::{
     clear_smart_filters, delete_smart_filter, reorder_smart_filters, set_camera_raw_option,
