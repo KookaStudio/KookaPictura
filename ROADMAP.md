@@ -120,6 +120,8 @@ Deeper technical status for PSD/PSB lives in
       shortcut (#523, #586)
 - [ ] Shape layer naming `<Tool> N` (#588)
 - [ ] Export Layers To Files (#587)
+- [ ] Merge Down's result appearance when the target's blend mode or opacity is
+      non-default (#813)
 
 ## Tools
 
