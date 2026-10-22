@@ -8,7 +8,9 @@
 #include "selection_geometry.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/layer_path.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/paint_tools.cxxqt.h"
 
 #include <QtCore/QPointF>
 #include <QtCore/QRect>
@@ -187,11 +189,45 @@ void ToolController::updateBrushOutline(const QPointF& imagePos)
     if (!canvas_) {
         return;
     }
-    if (isBrushTool(active_)) {
-        canvas_->setBrushOutline(paint_->size(), imagePos);
-    } else {
+    if (!isBrushTool(active_)) {
         canvas_->clearBrushOutline();
+        return;
     }
+    if (active_ == ToolId::Eraser && eraserBlockMode()) {
+        // The Block's cursor is a square of the size the block erases.
+        canvas_->setBlockOutline(eraser_block_side_doc_px(canvas_->zoom()), imagePos);
+        return;
+    }
+    canvas_->setBrushOutline(paint_->size(), imagePos);
+}
+
+void ToolController::refreshBrushOutline()
+{
+    if (!canvas_ || !isBrushTool(active_)) {
+        return;
+    }
+    const QPoint local = canvas_->mapFromGlobal(QCursor::pos());
+    if (canvas_->rect().contains(local)) {
+        updateBrushOutline(canvas_->widgetToImage(QPointF(local)));
+        return;
+    }
+    // The pointer is not over the canvas, so the outline is either gone or
+    // left where it was: re-apply it there, or leave the canvas alone.
+    if (canvas_->hasBrushOutline()) {
+        updateBrushOutline(canvas_->brushOutlineImagePos());
+    }
+}
+
+bool ToolController::eraserBlockMode() const
+{
+    const EraserGroup* group = optionsFor<EraserGroup>(ToolId::Eraser);
+    if (!group || group->get().mode != 2) {
+        return false;
+    }
+    // A mask erase paints the mask's coverage with the brush tip, so the
+    // Block's square is not in effect there and the ring stays a circle.
+    PictureView* v = view();
+    return !v || mask_edit_target_get(*v).isEmpty();
 }
 
 } // namespace pictura

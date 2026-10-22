@@ -6,6 +6,104 @@
     "style": "viewBox 0 0 24 24, fill=none, stroke=currentColor, stroke-width=2, round caps/joins; tinted at render time. Custom icons keep their named Lucide base at its original size and position; small added symbols use stroke-width=1."
   },
   "entries": {
+    "adjustments.black-white": {
+      "kind": "lucide",
+      "slug": "contrast",
+      "match": "exact"
+    },
+    "adjustments.brightness-contrast": {
+      "kind": "custom",
+      "match": "custom",
+      "note": "contrast circle with the rays in the top-right",
+      "base": "contrast"
+    },
+    "adjustments.channel-mixer": {
+      "kind": "lucide",
+      "slug": "sliders-horizontal",
+      "match": "good"
+    },
+    "adjustments.color-balance": {
+      "kind": "custom",
+      "match": "custom",
+      "note": "three overlapping circles"
+    },
+    "adjustments.color-lookup": {
+      "kind": "lucide",
+      "slug": "box",
+      "match": "good"
+    },
+    "adjustments.curves": {
+      "kind": "lucide",
+      "slug": "chart-spline",
+      "match": "good"
+    },
+    "adjustments.exposure": {
+      "kind": "lucide",
+      "slug": "sun-moon",
+      "match": "good"
+    },
+    "adjustments.gradient": {
+      "kind": "custom",
+      "match": "custom",
+      "note": "4:3 rectangle with an alpha-gradient fill (same source as tool.gradient)",
+      "base": "tool.gradient"
+    },
+    "adjustments.gradient-map": {
+      "kind": "custom",
+      "match": "custom",
+      "note": "gradient rectangle, mirrored horizontally (derived from tool.gradient)",
+      "base": "tool.gradient"
+    },
+    "adjustments.hue-saturation": {
+      "kind": "lucide",
+      "slug": "palette",
+      "match": "good"
+    },
+    "adjustments.invert": {
+      "kind": "lucide",
+      "slug": "image-minus",
+      "match": "good"
+    },
+    "adjustments.levels": {
+      "kind": "lucide",
+      "slug": "chart-column",
+      "match": "good"
+    },
+    "adjustments.pattern": {
+      "kind": "lucide",
+      "slug": "grid-3x3",
+      "match": "approximate"
+    },
+    "adjustments.photo-filter": {
+      "kind": "lucide",
+      "slug": "camera",
+      "match": "good"
+    },
+    "adjustments.posterize": {
+      "kind": "lucide",
+      "slug": "rows-4",
+      "match": "good"
+    },
+    "adjustments.selective-color": {
+      "kind": "lucide",
+      "slug": "pipette",
+      "match": "good"
+    },
+    "adjustments.solid-color": {
+      "kind": "lucide",
+      "slug": "circle-dot",
+      "match": "good"
+    },
+    "adjustments.threshold": {
+      "kind": "lucide",
+      "slug": "square-split-horizontal",
+      "match": "good"
+    },
+    "adjustments.vibrance": {
+      "kind": "custom",
+      "match": "custom",
+      "note": "three wavy arcs radiating from the centre"
+    },
     "chevron.down": {
       "kind": "lucide",
       "slug": "chevron-down",
@@ -15,6 +113,11 @@
       "kind": "lucide",
       "slug": "chevron-up",
       "match": "exact"
+    },
+    "count.newGroup": {
+      "kind": "lucide",
+      "slug": "folder-plus",
+      "match": "good"
     },
     "crop.apply": {
       "kind": "lucide",
@@ -75,11 +178,6 @@
     "crop.swap": {
       "kind": "lucide",
       "slug": "arrow-left-right",
-      "match": "good"
-    },
-    "count.newGroup": {
-      "kind": "lucide",
-      "slug": "folder-plus",
       "match": "good"
     },
     "edit.redo": {
@@ -365,11 +463,6 @@
       "slug": "link-2",
       "match": "exact"
     },
-    "layers.unlink2": {
-      "kind": "lucide",
-      "slug": "unlink-2",
-      "match": "exact"
-    },
     "layers.lockAll": {
       "kind": "lucide",
       "slug": "lock-keyhole",
@@ -414,6 +507,28 @@
       "kind": "lucide",
       "slug": "search",
       "match": "exact"
+    },
+    "layers.unlink2": {
+      "kind": "lucide",
+      "slug": "unlink-2",
+      "match": "exact"
+    },
+    "link.discord": {
+      "kind": "brand",
+      "slug": "discord",
+      "match": "brand",
+      "note": "simple-icons v15, CC0-1.0; a filled brand mark"
+    },
+    "link.github": {
+      "kind": "brand",
+      "slug": "github",
+      "match": "brand",
+      "note": "simple-icons v15, CC0-1.0; a filled brand mark"
+    },
+    "options.warp": {
+      "kind": "custom",
+      "match": "custom",
+      "note": "Free Transform warp-mode toggle; a warped 3x3 grid, drawn on the 24x24 Lucide grid"
     },
     "panel.close": {
       "kind": "lucide",
@@ -508,6 +623,16 @@
     "select.mode.subtract": {
       "kind": "lucide",
       "slug": "squares-subtract",
+      "match": "good"
+    },
+    "theme.moon": {
+      "kind": "lucide",
+      "slug": "moon",
+      "match": "good"
+    },
+    "theme.sun": {
+      "kind": "lucide",
+      "slug": "sun",
       "match": "good"
     },
     "tool.addanchorpoint": {
@@ -1028,33 +1153,6 @@
       "kind": "lucide",
       "slug": "wrench",
       "match": "good"
-    },
-    "options.warp": {
-      "kind": "custom",
-      "match": "custom",
-      "note": "Free Transform warp-mode toggle; a warped 3x3 grid, drawn on the 24x24 Lucide grid"
-    },
-    "theme.sun": {
-      "kind": "lucide",
-      "slug": "sun",
-      "match": "good"
-    },
-    "theme.moon": {
-      "kind": "lucide",
-      "slug": "moon",
-      "match": "good"
-    },
-    "link.github": {
-      "kind": "brand",
-      "slug": "github",
-      "match": "brand",
-      "note": "simple-icons v15, CC0-1.0; a filled brand mark"
-    },
-    "link.discord": {
-      "kind": "brand",
-      "slug": "discord",
-      "match": "brand",
-      "note": "simple-icons v15, CC0-1.0; a filled brand mark"
     }
   }
 }

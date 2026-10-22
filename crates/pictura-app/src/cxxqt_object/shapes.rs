@@ -27,7 +27,7 @@ use pictura_core::path::{Subpath, VectorPath};
 use pictura_core::shape::{self, Arrowheads, ShapeKind, ShapeOptions, CUSTOM_SHAPE_NAMES};
 use pictura_core::{Layer, PsdRect};
 use pictura_paint::bucket::{self, BucketPaint};
-use pictura_paint::PaintMode;
+use pictura_paint::{Alpha, PaintMode};
 
 #[cxx_qt::bridge]
 pub mod ffi {
@@ -384,6 +384,7 @@ fn shape_fill_pixels(view: Pin<&mut PictureView>, spec: &ShapeSpec, foreground: 
             PaintMode::Normal,
             1.0,
             selection(rust),
+            Alpha::Blend,
         )
     });
     paint_timing::report();

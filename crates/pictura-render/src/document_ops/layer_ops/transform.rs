@@ -12,6 +12,7 @@ use pictura_core::{Channel, Document, LayerMask, LockFlags, PsdRect, SourceChann
 use super::crossed_quad;
 use super::kernel::{self, Interpolation};
 use super::paths::{resolve_path, resolve_path_mut};
+use super::shape_layer::{is_shape_layer, map_shape_layer, shape_layer_rect};
 use super::transform_native;
 
 pub(super) use super::kernel::bilinear;
@@ -684,6 +685,13 @@ where
     write_layer(doc, path, &prepared, out, pure_translate)
 }
 
+/// A shape layer's outline box: its transforms map the path about this box,
+/// not about the canvas-sized rect of its fill. `None` for another layer.
+pub(super) fn shape_rect(doc: &Document, path: &str) -> Option<PsdRect> {
+    let layer = resolve_path(doc, path).filter(|l| is_shape_layer(l))?;
+    shape_layer_rect(layer, doc.width, doc.height)
+}
+
 /// Apply a similarity transform to the layer at `path`.
 ///
 /// On success every channel plane (and the mask, when present) is resampled into
@@ -702,7 +710,8 @@ where
 /// Bilinear resampling (use [`transform_layer_with`] to choose the method);
 /// skew and perspective go through [`transform_layer_quad`]. A type layer is
 /// re-set as type instead (`type_layer::transform_type_layer`), staying sharp
-/// and editable.
+/// and editable; a shape layer maps its outline about the outline's box
+/// (`map_shape_layer`), staying vector.
 pub fn transform_layer(doc: &mut Document, path: &str, transform: LayerTransform) -> bool {
     transform_layer_with(doc, path, transform, Interpolation::Bilinear)
 }
@@ -719,6 +728,12 @@ pub fn transform_layer_with(
         return false;
     }
     let (sin, cos) = transform.angle_radians.sin_cos();
+    if let Some(rect) = shape_rect(doc, path) {
+        let map = Map::new(rect, transform, cos, sin);
+        let pure = transform.scale_x == 1.0 && transform.scale_y == 1.0 && sin == 0.0 && cos == 1.0;
+        let translate = pure.then_some((transform.dx, transform.dy));
+        return map_shape_layer(doc, path, translate, |x, y| map.forward(x, y));
+    }
     if let Some(rect) = resolve_path(doc, path)
         .filter(|l| l.is_type())
         .map(|l| l.rect)
@@ -780,6 +795,12 @@ pub fn transform_layer_quad_with(
     quad: [(f64, f64); 4],
     interpolation: Interpolation,
 ) -> bool {
+    if let Some(rect) = shape_rect(doc, path) {
+        let Some(map) = solve_homography(source_corners(rect), quad) else {
+            return false;
+        };
+        return map_shape_layer(doc, path, None, |x, y| map.forward(x, y));
+    }
     if let Some(rect) = resolve_path(doc, path)
         .filter(|l| l.is_type())
         .map(|l| l.rect)

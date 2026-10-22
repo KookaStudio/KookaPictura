@@ -155,10 +155,16 @@ public:
 
     // Brush-size ring drawn in image space under the pan/zoom transform. The
     // diameter is in image pixels, so a zoomed canvas scales the ring for free.
+    // The Eraser's Block mode draws a square of the same size instead, so the
+    // two share one outline.
     void setBrushOutline(double diameter, const QPointF& imagePos);
+    void setBlockOutline(double side, const QPointF& imagePos);
     void clearBrushOutline();
-    bool hasBrushOutlineForTest() const { return brushOutlineActive_; }
+    bool hasBrushOutline() const { return brushOutlineActive_; }
+    // Where the outline is drawn, in image space.
+    QPointF brushOutlineImagePos() const { return brushOutlineImagePos_; }
     double brushOutlineDiameterForTest() const { return brushOutlineDiameter_; }
+    bool brushOutlineIsSquareForTest() const { return brushOutlineSquare_; }
     // Device-pixel ring diameter for the current zoom (what a render shows).
     double brushOutlineScreenDiameterForTest() const
     {
@@ -300,6 +306,16 @@ public:
     const transform_api::WarpOverlay& transformWarpForTest() const { return transformWarp_; }
     QPointF transformPivotForTest() const { return transformPivot_; }
     bool transformPivotVisibleForTest() const { return transformPivotVisible_; }
+    // The document-space map the moving layer is drawn under.
+    QTransform transformLayerMapForTest() const
+    {
+        if (!transformProjectiveActive_) {
+            return transformPreviewMatrix();
+        }
+        return QTransform::fromTranslate(-moveLayerPos_.x(), -moveLayerPos_.y())
+            * transformProjective_
+            * QTransform::fromTranslate(moveLayerPos_.x(), moveLayerPos_.y());
+    }
     void clearTransformPreview();
     bool transformPreviewActive() const { return transformActive_; }
 
@@ -477,6 +493,10 @@ public:
         QList<QLineF> baselines;
         QPolygonF box;
         bool overflow = false;
+        // 1 on-path, 2 area: the box is the path outline, with no handles.
+        int pathKind = 0;
+        bool hasOverflowPoint = false;
+        QPointF overflowPoint;
         // Over a dark image the caret, guides, and placement point draw white,
         // as CS6's do, else black.
         bool lightInk = false;
@@ -499,6 +519,9 @@ public:
     QList<QLineF> typeOverlayBaselinesForTest() const { return typeOverlay_.baselines; }
     QPolygonF typeOverlayBoxForTest() const { return typeOverlay_.box; }
     bool typeOverlayOverflowForTest() const { return typeOverlay_.overflow; }
+    QPointF typeOverlayOverflowPointForTest() const { return typeOverlay_.overflowPoint; }
+    bool typeOverlayHasOverflowPointForTest() const { return typeOverlay_.hasOverflowPoint; }
+    int typeOverlayPathKindForTest() const { return typeOverlay_.pathKind; }
     bool typeOverlayLightInkForTest() const { return typeOverlay_.lightInk; }
     QPointF typeOverlayPivotForTest() const { return typeOverlay_.pivot; }
 
@@ -589,6 +612,9 @@ protected:
     void leaveEvent(QEvent* event) override;
 
 private:
+    // The one brush outline: a circle for the brush tools, a square for the
+    // Eraser's Block mode.
+    void setBrushOutlineShape(double diameter, const QPointF& imagePos, bool square);
     void paintCropGroupOverlays(QPainter& painter);
     // The Free Transform reference point marker (image_view_overlays.cpp).
     void paintTransformPivot(QPainter& painter);
@@ -763,6 +789,7 @@ private:
     bool dragSizeActive_ = false;
 
     bool brushOutlineActive_ = false;
+    bool brushOutlineSquare_ = false;
     double brushOutlineDiameter_ = 0.0;
     QPointF brushOutlineImagePos_;
 

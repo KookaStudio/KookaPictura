@@ -1,9 +1,9 @@
 //! Vector-mask coverage for the compositor.
 //!
 //! The mask path is document-relative, so sampling happens in document pixels,
-//! through the mask's per-row crossing index ([`VectorMask::inside`]).
-//! `ponytail:` hard 0/255 coverage, no antialiasing; add it when curved masks
-//! need smoother edges.
+//! through the mask's antialiased per-row coverage ([`VectorMask::coverage`]):
+//! an edge pixel shows the share of it the path covers, so a slanted or curved
+//! shape edge is smooth rather than stair-stepped.
 
 use pictura_core::{PsdRect, VectorMask};
 
@@ -19,8 +19,7 @@ pub(crate) fn coverage(mask: Option<&VectorMask>, clip: PsdRect, x: i32, y: i32)
     }
     // D4: union only. Every closed subpath contributes edges to one fill; if
     // any declares non-zero, the whole path is sampled non-zero.
-    let inside = mask.inside(x, y, clip);
-    let c = if inside { 255 } else { 0 };
+    let c = mask.coverage(x, y, clip);
     if mask.invert {
         255 - c
     } else {

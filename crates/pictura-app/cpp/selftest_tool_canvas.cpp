@@ -57,7 +57,7 @@ int pictura::runToolCanvasChecks(pictura::PicturaMainWindow& frame)
         canvas->setBrushOutline(24.0, QPointF(8.0, 8.0));
         tools->refreshCursor();
         const bool blank = canvas->cursor().shape() == Qt::BlankCursor;
-        const bool outline = canvas->hasBrushOutlineForTest();
+        const bool outline = canvas->hasBrushOutline();
         frame.setActiveTool(ToolId::Move);
         tools->refreshCursor();
         const bool restored = canvas->cursor().shape() != Qt::BlankCursor;

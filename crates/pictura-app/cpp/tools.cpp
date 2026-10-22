@@ -247,6 +247,9 @@ ToolController::ToolController(QObject* parent)
         emit eyedropperOptionsChanged();
     };
     mixer->changed = [this]() { emit mixerReservoirChanged(mixer_->get().reservoir); };
+    // The Eraser's Block mode draws a square cursor instead of the brush-size
+    // circle, so a Mode change re-applies the outline.
+    eraser->changed = [this]() { refreshBrushOutline(); };
 
     registry_.registerTool(ToolId::Hand, makeHandToolHandler());
     registry_.registerTool(ToolId::RotateView, makeRotateViewToolHandler());
@@ -316,15 +319,7 @@ ToolController::ToolController(QObject* parent)
     }
     // A size change from the options bar or `[`/`]` moves the hover ring at
     // once. Query the pointer so a stale position is never reused after leave.
-    connect(this, &ToolController::brushSizeChanged, this, [this](int size) {
-        if (!canvas_ || !isBrushTool(active_)) {
-            return;
-        }
-        const QPoint local = canvas_->mapFromGlobal(QCursor::pos());
-        if (canvas_->rect().contains(local)) {
-            canvas_->setBrushOutline(size, canvas_->widgetToImage(QPointF(local)));
-        }
-    });
+    connect(this, &ToolController::brushSizeChanged, this, [this](int) { refreshBrushOutline(); });
 }
 
 void ToolController::setActiveTool(ToolId id)
@@ -618,6 +613,9 @@ void ToolController::bindCanvas(ImageView* canvas)
             &ToolController::commitFreeTransform);
     connect(canvas_, &ImageView::transformCancelRequested, this,
             &ToolController::cancelFreeTransform);
+    // The Eraser's Block cursor is sized in document pixels, so a zoom change
+    // resizes it.
+    connect(canvas_, &ImageView::zoomChanged, this, [this](double) { refreshBrushOutline(); });
     applyToolPolicy();
     updateCanvasBackdrop();
     if (ToolHandler* h = registry_.forTool(active_)) {

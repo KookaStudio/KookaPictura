@@ -33,6 +33,9 @@ struct LayerType {
 
 bool isType(const PictureView& view, const QString& path);
 QString layerAt(const PictureView& view, double x, double y);
+/// The path under `(x, y)`: kind, closed, start, segment count, then eight
+/// numbers per cubic segment; empty when no path is hit.
+QVector<double> pathAt(const PictureView& view, double x, double y, double tolerance);
 QString layerText(const PictureView& view, const QString& path);
 QString layerFont(const PictureView& view, const QString& path);
 TypeSetting layerSetting(const PictureView& view, const QString& path);
@@ -62,6 +65,10 @@ QVector<double> baselines(const QString& text, const QString& font, const TypeSe
 /// Whether paragraph type has text past its box (the `+` on its handle).
 bool overflows(const QString& text, const QString& font, const TypeSetting& setting,
                const CharacterSetting& character, const ParagraphSetting& paragraph);
+/// The overflow `+` point for on-path type, `[x, y]`; empty otherwise.
+QVector<double> pathOverflowPoint(const QString& text, const QString& font,
+                                  const TypeSetting& setting, const CharacterSetting& character,
+                                  const ParagraphSetting& paragraph);
 
 /// `text`'s box in its own frame (left, top, right, bottom; before the matrix).
 QVector<double> localBounds(const QString& text, const QString& font, const TypeSetting& setting,

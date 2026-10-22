@@ -18,7 +18,10 @@ use pictura_core::warp::{Warp, WarpStyle};
 use pictura_core::{Channel, Document, LayerMask, PsdRect, Sample, Samples, SourceChannels};
 
 use super::kernel::Interpolation;
-use super::transform::{prepare_layer, solve_homography, write_layer, LayerOutput, PlaneMap};
+use super::shape_layer::map_shape_layer;
+use super::transform::{
+    prepare_layer, shape_rect, solve_homography, write_layer, LayerOutput, PlaneMap,
+};
 use super::warp_raster::{triangulate, warp_planes, Planes, Triangles};
 
 fn rect_of(d: (i32, i32, i32, i32)) -> PsdRect {
@@ -203,7 +206,8 @@ fn warp_store(
 /// Refuses (leaving `doc` bit-identical) for every case `transform_layer`
 /// refuses, for an identity or malformed warp with no box change, a singular
 /// `quad`, a mask that cannot follow the pixels, and when the warped box is
-/// degenerate, out of range, or too large. `pure_translate` is always false: a
+/// degenerate, out of range, or too large. A shape layer warps its outline's
+/// points instead of resampling (`map_shape_layer`). `pure_translate` is always false: a
 /// warp drops an unmodeled raw channel stream.
 pub fn transform_layer_warp(
     doc: &mut Document,
@@ -228,12 +232,17 @@ pub fn transform_layer_warp(
         },
         None => None,
     };
-    let Some(prepared) = prepare_layer(doc, path) else {
-        return false;
-    };
     let project = |(x, y): (f64, f64)| match &frame {
         Some(h) => h.forward(x, y).unwrap_or((f64::NAN, f64::NAN)),
         None => (x, y),
+    };
+    if shape_rect(doc, path).is_some() {
+        return map_shape_layer(doc, path, None, |x, y| {
+            Some(project(map_beyond_box(warp, x, y)))
+        });
+    }
+    let Some(prepared) = prepare_layer(doc, path) else {
+        return false;
     };
     let f = |x: f64, y: f64| project(warp.map(x, y));
     let Some(t) = triangulate(prepared.rect, &f) else {

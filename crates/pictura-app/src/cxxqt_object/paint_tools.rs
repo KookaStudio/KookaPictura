@@ -189,7 +189,9 @@ pub mod ffi {
 
         /// Begin an Eraser stroke. `mode` 0 Brush / 1 Pencil / 2 Block;
         /// `background` (`0xAARRGGBB`) is what the Background or a
-        /// transparency-locked layer is erased to. With `to_history` it paints
+        /// transparency-locked layer is erased to. `zoom` is the canvas zoom
+        /// (screen pixels per document pixel): the Block mode's side is a
+        /// screen-space size, so it needs it. With `to_history` it paints
         /// the brush source state back (Erase To History). False as for
         /// `begin_clone_stamp`, or with `to_history` when the source state has
         /// no pixel layer at the active path.
@@ -201,7 +203,12 @@ pub mod ffi {
             opacity: i32,
             flow: i32,
             to_history: bool,
+            zoom: f64,
         ) -> bool;
+
+        /// The Block eraser's side in document pixels at `zoom`, so the
+        /// canvas draws the cursor at the size the block erases.
+        fn eraser_block_side_doc_px(zoom: f64) -> u32;
 
         /// Begin a Brush (or, `aliased`, Pencil) stroke painting `foreground`
         /// (`0xAARRGGBB`) with `tip` and its dynamics. `mode` is a Brush mode
@@ -577,6 +584,7 @@ fn begin_eraser(
     opacity: i32,
     flow: i32,
     to_history: bool,
+    zoom: f64,
 ) -> bool {
     let cfg = StrokeConfig {
         background: rgba_from_argb(background),
@@ -608,8 +616,14 @@ fn begin_eraser(
         } else {
             None
         };
-        begin_erase(doc, path, cfg, mode, history).ok()
+        begin_erase(doc, path, cfg, mode, history, zoom).ok()
     })
+}
+
+/// The Block eraser's side in document pixels at `zoom`, so the canvas draws
+/// the cursor at the size the block erases.
+fn eraser_block_side_doc_px(zoom: f64) -> u32 {
+    pictura_paint::eraser::block_side_doc_px(zoom)
 }
 
 fn begin_background_eraser(

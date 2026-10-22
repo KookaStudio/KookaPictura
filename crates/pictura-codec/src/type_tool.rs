@@ -60,6 +60,7 @@ pub(crate) fn decode_type_tool(data: &[u8]) -> Option<TypeTool> {
         style,
         vertical: is_vertical(&text_value),
         box_bounds,
+        path: None,
     })
 }
 

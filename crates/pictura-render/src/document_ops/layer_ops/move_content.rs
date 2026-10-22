@@ -292,11 +292,14 @@ pub fn trim_to_content(doc: &mut Document, path: &str) -> bool {
 
 /// The rect a transform box on the layer at `path` hugs: what
 /// [`trim_to_content`] would trim it to, else its rect. Changes nothing, so the
-/// Move tool's controls box can show it without touching the layer. `None` when
-/// the path does not resolve or the layer has no visible pixels (no box, as in
-/// CS6).
+/// Move tool's controls box can show it without touching the layer; a shape
+/// layer's is its outline box. `None` when the path does not resolve or the
+/// layer has no visible pixels (no box, as in CS6).
 pub fn content_rect(doc: &Document, path: &str) -> Option<PsdRect> {
     let layer = resolve_path(doc, path)?;
+    if super::shape_layer::is_shape_layer(layer) {
+        return super::shape_layer::shape_layer_rect(layer, doc.width, doc.height);
+    }
     if let Some(bounds) = trim_bounds(layer) {
         return Some(bounds);
     }

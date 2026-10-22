@@ -128,8 +128,10 @@ fn read_container(bytes: &[u8], policy: Policy) -> Result<Document, PsdError> {
     // ponytail: this is a read snapshot. In-session resize/crop/orientation do
     // not re-derive it; the raw block stays authoritative and a reload re-derives.
     crate::vector_mask::resolve_vector_masks(&mut layers, width, height);
-    // Derive the type-tool view from the preserved `TySh` blocks.
+    // Derive the type-tool view from the preserved `TySh` blocks, then apply
+    // the document-level `Txt2` text-frame paths to those layers.
     crate::type_tool::resolve_type_tools(&mut layers);
+    crate::type_path::resolve_text_paths(&mut layers, &layer_section_extra, is_psb);
 
     // "Maximize Compatibility" off: a layered file may end after the layer
     // section with no merged composite. A file with no layers at all and no

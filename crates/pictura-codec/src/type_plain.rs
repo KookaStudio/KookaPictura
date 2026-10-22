@@ -89,6 +89,7 @@ mod tests {
             style: None,
             vertical: false,
             box_bounds: None,
+            path: None,
         }
     }
 

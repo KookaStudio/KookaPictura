@@ -1,5 +1,6 @@
 #include "frame_includes.h"
 
+#include "api/layers_api.h"
 #include "color_picker_dialog.h"
 #include "fonts.h"
 #include "panels/brush_preset_picker.h"
@@ -16,11 +17,54 @@
 
 namespace pictura {
 
+namespace {
+
+// The display name of an adjustment kind, matching the layer name the bridge
+// assigns when it creates the layer (see `adjustment_layer` in helpers.rs).
+QString adjustmentDisplayName(const QString& kind)
+{
+    struct Map {
+        const char* kind;
+        const char* name;
+    };
+    static const Map kNames[] = {
+        {"brightness-contrast", "Brightness/Contrast"},
+        {"levels", "Levels"},
+        {"curves", "Curves"},
+        {"exposure", "Exposure"},
+        {"vibrance", "Vibrance"},
+        {"hue-saturation", "Hue/Saturation"},
+        {"color-balance", "Color Balance"},
+        {"black-white", "Black & White"},
+        {"photo-filter", "Photo Filter"},
+        {"channel-mixer", "Channel Mixer"},
+        {"color-lookup", "Color Lookup"},
+        {"invert", "Invert"},
+        {"posterize", "Posterize"},
+        {"threshold", "Threshold"},
+        {"gradient-map", "Gradient Map"},
+        {"selective-color", "Selective Color"},
+    };
+    for (const Map& entry : kNames) {
+        if (kind == QLatin1String(entry.kind)) {
+            return QString::fromLatin1(entry.name);
+        }
+    }
+    return kind;
+}
+
+} // namespace
+
+QColor PicturaMainWindow::foregroundColor() const
+{
+    return colorState_ ? colorState_->foreground() : QColor(Qt::black);
+}
+
 void PicturaMainWindow::buildPanels(const SessionState& state)
 {
     colorState_ = new ColorState(this);
 
-    layersPanel_ = new LayersPanel(this);
+    layersPanel_ = new LayersPanel(colorState_, this);
     layersPanel_->setObjectName(QStringLiteral("layersPanel"));
 
     historyPanel_ = new HistoryPanel(this);
@@ -74,8 +118,50 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
     connect(propertiesPanel_, &PropertiesPanel::depthRequested, this,
             &PicturaMainWindow::convertImageDepth);
 
-    adjustmentsPanel_ = new PlaceholderPanel(QStringLiteral("Adjustments"), QString(), this);
+    adjustmentsPanel_ = new AdjustmentsPanel(this);
     adjustmentsPanel_->setObjectName(QStringLiteral("adjustmentsPanel"));
+    // The grid is a launcher: an adjustment icon creates the layer through the
+    // panel-menu path (which does not select), then the panel selects the new
+    // layer so the Properties panel opens its controls.
+    connect(adjustmentsPanel_, &AdjustmentsPanel::adjustmentRequested, this,
+            [this](const QString& kind) {
+        if (!layersPanel_) {
+            return;
+        }
+        PictureView* view = activeView();
+        if (!view) {
+            return;
+        }
+        const int before = pictura::layers_api::rowCount(*view);
+        layersPanel_->performPanelMenuAction(QStringLiteral("adjustment:") + kind);
+        if (pictura::layers_api::rowCount(*view) <= before) {
+            return;
+        }
+        const QString expected = adjustmentDisplayName(kind);
+        // Rows are topmost-first; the new layer is topmost, so the first match
+        // is the layer just created.
+        for (int i = 0; i < pictura::layers_api::rowCount(*view); ++i) {
+            const pictura::layers_api::LayerRow row = pictura::layers_api::rowAt(*view, i);
+            if (row.hasAdjustment && row.name == expected) {
+                layersPanel_->selectPaths({row.path}, row.path);
+                break;
+            }
+        }
+    });
+    // Fill icons reuse the Layer > New Fill Layer commands; Pattern stays inert
+    // (its menu row has no handler).
+    connect(adjustmentsPanel_, &AdjustmentsPanel::fillRequested, this,
+            [this](const QString& type) {
+        if (type == QLatin1String("pattern") || !registry_) {
+            return;
+        }
+        const char* id = type == QLatin1String("solid-color")
+            ? command_ids::LayerNewFillSolidColor
+            : command_ids::LayerNewFillGradient;
+        if (QAction* action = registry_->action(QString::fromLatin1(id))) {
+            action->trigger();
+        }
+    });
 
     channelsPanel_ = new ChannelsPanel(this);
     channelsPanel_->setObjectName(QStringLiteral("channelsPanel"));
@@ -322,6 +408,9 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
                 &ToolController::setForeground);
         connect(colorState_, &ColorState::backgroundChanged, tools_,
                 &ToolController::setBackground);
+        // The tool hint carries the foreground colour, so it follows it.
+        connect(colorState_, &ColorState::foregroundChanged, this,
+                [this](const QColor&) { updateToolHint(); });
         // A tool or preset that changes a colour (e.g. a brush preset) reaches
         // the controller, not ColorState; mirror it back so the toolbox swatch
         // and the Color panel follow.
@@ -581,11 +670,9 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
         connect(notesPanel_, &NotesPanel::noteRequested, tools_, &ToolController::setCurrentNote);
     }
     connect(tools_, &ToolController::foregroundSampled, this, [this](const QColor& color) {
-        foreground_ = color;
         if (colorState_) {
             colorState_->setForeground(color);
         }
-        updateToolHint();
     });
 
     // Canvas context-menu requests: the shared widget menus the controller
@@ -753,8 +840,9 @@ void PicturaMainWindow::updateToolHint()
     }
     QString fallback = tools_ ? QString::fromLatin1(toolInfo(tools_->activeTool()).hint)
                               : QStringLiteral("Ready");
-    if (foreground_.isValid()) {
-        fallback += QStringLiteral("  ·  Foreground %1").arg(foreground_.name());
+    const QColor foreground = foregroundColor();
+    if (foreground.isValid()) {
+        fallback += QStringLiteral("  ·  Foreground %1").arg(foreground.name());
     }
     QList<ToolHint> hints;
     if (tools_) {

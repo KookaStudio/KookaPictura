@@ -402,7 +402,9 @@ impl qobject::PictureView {
                                 .and_then(|mask| mask_thumbnail_image(mask, thumb))
                                 .unwrap_or_default()
                         };
-                        let vector_mask_thumbnail = if thumb == 0 {
+                        // CS6 draws a shape layer as one thumbnail: its outline
+                        // is the shape thumbnail, not a second vector-mask slot.
+                        let vector_mask_thumbnail = if thumb == 0 || shape {
                             QImage::default()
                         } else {
                             layer
