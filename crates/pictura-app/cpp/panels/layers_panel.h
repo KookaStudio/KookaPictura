@@ -330,6 +330,15 @@ private:
     // Apply the document target to the tree without writing it back.
     void applyTargetSelection();
     void setTreeSelection(const QStringList& paths, const QString& current);
+    // Remember the target the panel last saw, and project a refresh's target
+    // (moving the current row only when the target itself moved).
+    void rememberTarget();
+    void projectTarget(const QString& selectedPath, bool wasEditing);
+    void writeCurrentAnchor();
+    QSet<QString> expandedPaths() const;
+    void setExpandedPaths(const QSet<QString>& paths);
+    void expandPath(const QString& path);
+    void collapsePath(const QString& path);
     // The document's selected layer paths, independent of the filter proxy.
     QStringList targetPaths() const;
     struct PendingPreview {
@@ -396,7 +405,7 @@ private:
     void toggleSolo(const QString& path);
     void restoreSolo();
     void clearSolo();
-    QStringList soloPaths(const QString& path, const QHash<QString, bool>& snapshot) const;
+    void endMaskSoloView();
     void setActiveThumb(const QString& path, int thumb);
     // Synthesize a left-click with `mods` on `path`'s mask thumbnail.
     bool clickMaskThumbWithModifiersForTest(const QString& path, Qt::KeyboardModifiers mods);
@@ -424,7 +433,9 @@ private:
     // disabled until its operation exists.
     QList<QToolButton*> stripButtons_;
     std::function<bool(QDialog&)> dialogDriver_;
-    QSet<QString> expandedPaths_;
+    QStringList rememberedTarget_;
+    QString rememberedAnchor_;
+    quint64 rememberedGeneration_ = 0;
     // Panel-local active edit target per row path: 0 image, 1 mask, 2 vector.
     QHash<QString, int> activeThumbByPath_;
     // Whether the view's mask edit target was set at the last sync.
@@ -438,9 +449,6 @@ private:
     bool expandNewEffects_ = true;
     bool addCopyOnDuplicate_ = true;
     bool useDefaultMasksOnFill_ = true;
-    bool soloActive_ = false;
-    QString soloPath_;
-    QHash<QString, bool> soloSnapshot_;
     bool syncing_ = false;
     PendingPreview pendingPreview_;
     PendingPreview gesture_;

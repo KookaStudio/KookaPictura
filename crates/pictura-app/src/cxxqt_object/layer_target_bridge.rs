@@ -39,6 +39,25 @@ pub mod ffi {
 
         /// Clear the target and notify the panel (Select > Deselect Layers).
         fn clear_layer_target(view: Pin<&mut PictureView>);
+
+        /// Snapshot every layer's visibility and show only `path` and its
+        /// ancestors (and a group's visible descendants) as one undo step.
+        fn solo_set(view: Pin<&mut PictureView>, path: &QString);
+
+        /// Restore the visibility snapshot and drop it as one undo step.
+        fn solo_restore(view: Pin<&mut PictureView>);
+
+        /// Drop the solo snapshot without touching visibility.
+        fn solo_clear(view: Pin<&mut PictureView>);
+
+        /// Whether this document has a solo snapshot.
+        fn solo_active(view: &PictureView) -> bool;
+
+        /// Replace this document's expanded group paths.
+        fn expansion_set(view: Pin<&mut PictureView>, paths: &QStringList);
+
+        /// This document's expanded group paths.
+        fn expansion_paths(view: &PictureView) -> QStringList;
     }
 }
 
@@ -98,4 +117,114 @@ fn clear_layer_target(mut view: Pin<&mut PictureView>) {
         rust.session.history.set_current_target(&target);
     }
     view.as_mut().changed();
+}
+
+fn solo_set(mut view: Pin<&mut PictureView>, path: &QString) {
+    let path = path.to_string();
+    let (snapshot, paths) = {
+        let rust = view.rust();
+        let Some(doc) = rust.session.doc.as_ref() else {
+            return;
+        };
+        if pictura_render::resolve_path(doc, &path).is_none() {
+            return;
+        }
+        let snapshot: std::collections::HashMap<String, bool> = pictura_render::flatten_rows(doc)
+            .into_iter()
+            .map(|(candidate, _)| {
+                let visible = pictura_render::resolve_path(doc, &candidate)
+                    .is_some_and(|layer| layer.visible);
+                (candidate, visible)
+            })
+            .collect();
+        if snapshot.is_empty() {
+            return;
+        }
+        let paths = solo_paths(doc, &path, &snapshot);
+        (snapshot, paths)
+    };
+    {
+        let rust = &mut *view.as_mut().rust_mut();
+        rust.solo_snapshot = Some(snapshot);
+    }
+    let paths: QStringList = paths.into_iter().map(QString::from).collect();
+    view.as_mut()
+        .apply_visibility(&paths, &QString::from("Solo Visibility"));
+}
+
+fn solo_restore(mut view: Pin<&mut PictureView>) {
+    let visible: Option<Vec<String>> = {
+        let rust = view.rust();
+        rust.solo_snapshot.as_ref().map(|snapshot| {
+            snapshot
+                .iter()
+                .filter(|(_, visible)| **visible)
+                .map(|(path, _)| path.clone())
+                .collect()
+        })
+    };
+    let Some(visible) = visible else {
+        return;
+    };
+    {
+        let rust = &mut *view.as_mut().rust_mut();
+        rust.solo_snapshot = None;
+    }
+    let visible: QStringList = visible.into_iter().map(QString::from).collect();
+    view.as_mut()
+        .apply_visibility(&visible, &QString::from("Restore Visibility"));
+}
+
+fn solo_clear(mut view: Pin<&mut PictureView>) {
+    let rust = &mut *view.as_mut().rust_mut();
+    rust.solo_snapshot = None;
+}
+
+fn solo_active(view: &PictureView) -> bool {
+    view.rust().solo_snapshot.is_some()
+}
+
+fn expansion_set(mut view: Pin<&mut PictureView>, paths: &QStringList) {
+    let mut seen = std::collections::HashSet::new();
+    let paths: Vec<String> = paths
+        .iter()
+        .map(ToString::to_string)
+        .filter(|path| seen.insert(path.clone()))
+        .collect();
+    let rust = &mut *view.as_mut().rust_mut();
+    rust.expanded_groups = paths;
+}
+
+fn expansion_paths(view: &PictureView) -> QStringList {
+    view.rust()
+        .expanded_groups
+        .iter()
+        .map(|path| QString::from(path.as_str()))
+        .collect()
+}
+
+/// The layer, its ancestors, and a group's descendants that were visible in
+/// the snapshot.
+fn solo_paths(
+    doc: &pictura_core::Document,
+    path: &str,
+    snapshot: &std::collections::HashMap<String, bool>,
+) -> Vec<String> {
+    let mut result = vec![path.to_string()];
+    let mut current = path;
+    while let Some(parent) = pictura_render::parent_path(current) {
+        result.push(parent.to_string());
+        current = parent;
+    }
+    if pictura_render::resolve_path(doc, path).is_some_and(|layer| layer.is_group) {
+        let prefix = format!("{path}/");
+        for (candidate, _) in pictura_render::flatten_rows(doc) {
+            if candidate.starts_with(&prefix) && snapshot.get(&candidate).copied().unwrap_or(false)
+            {
+                result.push(candidate);
+            }
+        }
+    }
+    result.dedup();
+    result
 }

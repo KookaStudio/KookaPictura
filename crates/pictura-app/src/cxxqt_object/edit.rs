@@ -80,6 +80,7 @@ impl PictureViewRust {
         };
         if matches!(edit, Edit::Structural) {
             self.link_sets.clear();
+            self.solo_snapshot = None;
         }
         let target = self.layer_target.clone();
         if bump_revision {

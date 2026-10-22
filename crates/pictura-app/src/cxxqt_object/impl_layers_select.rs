@@ -10,42 +10,79 @@ use std::collections::HashMap;
 use super::edit::Edit;
 use super::helpers::*;
 use super::qobject;
+use crate::layer_target::LayerTarget;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QString, QStringList};
 
 impl qobject::PictureView {
-    /// Select every layer matching the layer at `path`: same node class,
-    /// adjustment kind, and blend mode. Returns the matched paths in panel
-    /// order. No history and no recomposite.
-    pub fn select_similar(&self, path: &QString) -> QStringList {
+    /// Select the layer and every layer matching it: same node class,
+    /// adjustment kind, and blend mode. Sets the document target (the layer the
+    /// command ran on stays active) and notifies the view. No history and no
+    /// recomposite.
+    pub fn select_similar(mut self: Pin<&mut Self>, path: &QString) -> QStringList {
         let path = path.to_string();
-        self.rust()
-            .session
-            .doc
-            .as_ref()
-            .map(|doc| pictura_render::select_similar(doc, &path))
-            .unwrap_or_default()
-            .into_iter()
-            .map(QString::from)
-            .collect()
+        let (matched, target) = {
+            let rust = self.rust();
+            let Some(doc) = rust.session.doc.as_ref() else {
+                return QStringList::default();
+            };
+            if pictura_render::resolve_path(doc, &path).is_none() {
+                return QStringList::default();
+            }
+            // The engine matcher excludes the reference; the target adds it
+            // back so the command's own layer stays selected and active.
+            let matched = pictura_render::select_similar(doc, &path);
+            let mut selected = matched.clone();
+            if !selected.contains(&path) {
+                selected.insert(0, path.clone());
+            }
+            let mut target = LayerTarget::default();
+            target.select(selected, Some(path.clone()), Some(doc));
+            (matched, target)
+        };
+        {
+            let rust = &mut *self.as_mut().rust_mut();
+            rust.set_layer_target(target.clone());
+            rust.session.history.set_current_target(&target);
+        }
+        self.as_mut().changed();
+        matched.into_iter().map(QString::from).collect()
     }
 
     /// Every member of the link set containing `path`, in panel order; empty
-    /// when the layer is unlinked. No history and no recomposite.
-    pub fn select_linked(&self, path: &QString) -> QStringList {
-        let rust = self.rust();
-        let Some(&id) = rust.link_sets.get(&path.to_string()) else {
-            return QStringList::default();
+    /// when the layer is unlinked. A linked layer's set becomes the target
+    /// with `path` active; an unlinked layer leaves the target unchanged. No
+    /// history and no recomposite.
+    pub fn select_linked(mut self: Pin<&mut Self>, path: &QString) -> QStringList {
+        let path = path.to_string();
+        let (members, target) = {
+            let rust = self.rust();
+            let Some(&id) = rust.link_sets.get(&path) else {
+                return QStringList::default();
+            };
+            let Some(doc) = rust.session.doc.as_ref() else {
+                return QStringList::default();
+            };
+            if pictura_render::resolve_path(doc, &path).is_none() {
+                return QStringList::default();
+            }
+            let members: Vec<String> = pictura_render::flatten_rows(doc)
+                .into_iter()
+                .filter(|(candidate, _)| rust.link_sets.get(candidate) == Some(&id))
+                .map(|(candidate, _)| candidate)
+                .collect();
+            let mut target = LayerTarget::default();
+            target.select(members.clone(), Some(path.clone()), Some(doc));
+            (members, target)
         };
-        let Some(doc) = rust.session.doc.as_ref() else {
-            return QStringList::default();
-        };
-        pictura_render::flatten_rows(doc)
-            .into_iter()
-            .filter(|(candidate, _)| rust.link_sets.get(candidate) == Some(&id))
-            .map(|(candidate, _)| QString::from(candidate))
-            .collect()
+        {
+            let rust = &mut *self.as_mut().rust_mut();
+            rust.set_layer_target(target.clone());
+            rust.session.history.set_current_target(&target);
+        }
+        self.as_mut().changed();
+        members.into_iter().map(QString::from).collect()
     }
 
     /// Link (`on`) or unlink the listed layers. Returns the number of listed

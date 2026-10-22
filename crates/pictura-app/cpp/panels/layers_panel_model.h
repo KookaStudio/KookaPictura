@@ -543,16 +543,6 @@ public:
         return createIndex(node->rowInParent, 0, node);
     }
 
-    /// Every node's path and visibility, for the solo snapshot.
-    QHash<QString, bool> visibilityByPath() const
-    {
-        QHash<QString, bool> result;
-        for (auto it = byPath_.cbegin(); it != byPath_.cend(); ++it) {
-            result.insert(it.key(), it.value()->row.visible);
-        }
-        return result;
-    }
-
     QStringList paths() const { return byPath_.keys(); }
 
 private:

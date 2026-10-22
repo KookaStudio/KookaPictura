@@ -320,6 +320,8 @@ impl PictureViewRust {
         self.session.pdf_options = None;
         self.session.pdf_password = None;
         self.isolation = None;
+        self.solo_snapshot = None;
+        self.expanded_groups.clear();
         self.move_base = None;
         self.move_layer = None;
         self.move_x = 0;

@@ -362,8 +362,7 @@ void PicturaMainWindow::registerHandlers()
                                       [this]() { return activeView() && activeView()->has_document(); });
     }
     registry_->setEnabledProvider(command_ids::LayerDuplicateLayer, [this]() {
-        return activeView() && activeView()->has_document() && layersPanel_
-            && !layersPanel_->selectedPaths().isEmpty();
+        return activeView() && activeView()->has_document() && !selectedLayerPaths().isEmpty();
     });
     registry_->setEnabledProvider(command_ids::LayerNewGroupFromLayers, [this]() {
         return activeView() && activeView()->has_document() && layersPanel_
@@ -382,7 +381,7 @@ void PicturaMainWindow::registerHandlers()
         const QString merged = view->merge_layers(paths);
         if (!merged.isEmpty()) {
             layersPanel_->refresh();
-            layersPanel_->selectPaths(QStringList{merged}, merged);
+            refresh();
         }
     });
     registry_->setEnabledProvider(command_ids::LayerMergeLayers, [this]() {
@@ -404,7 +403,7 @@ void PicturaMainWindow::registerHandlers()
         const QString merged = view->merge_visible(path);
         if (!merged.isEmpty()) {
             layersPanel_->refresh();
-            layersPanel_->selectPaths(QStringList{merged}, merged);
+            refresh();
         }
     });
     registry_->setEnabledProvider(command_ids::LayerMergeVisible, [this]() {
@@ -585,18 +584,18 @@ void PicturaMainWindow::registerHandlers()
         });
     }
 
-    // Select Similar/Linked and Link/Unlink. A Select command pushes the matched
-    // paths back into the panel so the result becomes the panel selection; Link
-    // and Unlink only touch the transient link sets. None records history.
+    // Select Similar/Linked and Link/Unlink. The engine sets the target and
+    // notifies the view; Link and Unlink only touch the transient link sets.
+    // None records history.
     registry_->setHandler(command_ids::LayerSelectSimilar, [this]() {
         PictureView* view = activeView();
         const QString path = layerAnchor();
         if (!view || path.isEmpty()) {
             return;
         }
-        const QStringList matched = view->select_similar(path);
+        view->select_similar(path);
         if (layersPanel_) {
-            layersPanel_->selectPaths(matched, path);
+            layersPanel_->refresh();
         }
         refresh();
     });
@@ -611,9 +610,9 @@ void PicturaMainWindow::registerHandlers()
         if (!view || path.isEmpty()) {
             return;
         }
-        const QStringList linked = view->select_linked(path);
+        view->select_linked(path);
         if (layersPanel_) {
-            layersPanel_->selectPaths(linked, path);
+            layersPanel_->refresh();
         }
         refresh();
     });
@@ -1100,9 +1099,7 @@ void PicturaMainWindow::selectLayerPath(const QString& path)
     }
     select_layer_path(*view, path);
     if (layersPanel_) {
-        layersPanel_->setView(view);
         layersPanel_->refresh();
-        layersPanel_->selectPaths(QStringList{path}, path);
     }
 }
 

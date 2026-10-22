@@ -483,3 +483,50 @@ fn ungrouping_a_non_bottom_group_with_a_nested_background_is_refused() {
     assert_eq!(ungroup_paths(&mut d, &["1"]), 0);
     assert_eq!(d, before);
 }
+
+#[test]
+fn duplicate_paths_returns_new_paths() {
+    let mut group = group("Group 1");
+    let _ = group.children.push(layer("child", false));
+    let mut d = doc(vec![layer("bottom", false), group]);
+
+    let created = duplicate_paths(&mut d, &["0", "1"]);
+    assert_eq!(created, vec!["3".to_string(), "1".to_string()]);
+    let names: Vec<&str> = d.layers.iter().map(|layer| layer.name.as_str()).collect();
+    assert_eq!(names, ["bottom", "bottom copy", "Group 1", "Group 1 copy"]);
+    assert_eq!(d.layers[3].children.len(), 1, "deep copy");
+}
+
+#[test]
+fn duplicate_paths_reports_every_copy_at_its_final_path() {
+    let mut d = doc(vec![layer("bottom", false), layer("top", false)]);
+
+    let created = duplicate_paths(&mut d, &["0", "1"]);
+    assert_eq!(created, vec!["3".to_string(), "1".to_string()]);
+    assert_eq!(resolve_path(&d, "3").unwrap().name, "top copy");
+    assert_eq!(resolve_path(&d, "1").unwrap().name, "bottom copy");
+}
+
+#[test]
+fn duplicate_paths_shifts_a_nested_copy_with_its_ancestor() {
+    let mut group = group("Group 1");
+    let _ = group.children.push(layer("child", false));
+    let mut d = doc(vec![layer("bottom", false), group]);
+
+    let created = duplicate_paths(&mut d, &["0", "1/0"]);
+    assert_eq!(created, vec!["2/1".to_string(), "1".to_string()]);
+    assert_eq!(resolve_path(&d, "2/1").unwrap().name, "child copy");
+    assert_eq!(resolve_path(&d, "1").unwrap().name, "bottom copy");
+}
+
+#[test]
+fn duplicate_paths_copies_a_source_a_later_copy_would_hide() {
+    let mut group = group("Group 1");
+    let _ = group.children.push(layer("child", false));
+    let mut d = doc(vec![layer("bottom", false), layer("middle", false), group]);
+
+    let created = duplicate_paths(&mut d, &["1", "2/0"]);
+    assert_eq!(created, vec!["3/1".to_string(), "2".to_string()]);
+    assert_eq!(resolve_path(&d, "3/1").unwrap().name, "child copy");
+    assert_eq!(resolve_path(&d, "2").unwrap().name, "middle copy");
+}

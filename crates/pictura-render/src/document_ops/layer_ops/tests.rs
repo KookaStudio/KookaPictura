@@ -711,19 +711,6 @@ fn can_delete_paths_agrees_with_a_real_delete() {
 }
 
 #[test]
-fn duplicate_paths_returns_new_paths() {
-    let mut group = empty_group("Group 1");
-    let _ = group.children.push(pixel_layer("child", 4, 4, 1));
-    let mut doc = doc_with(vec![pixel_layer("bottom", 4, 4, 0), group]);
-
-    let created = duplicate_paths(&mut doc, &["0", "1"]);
-    assert_eq!(created, vec!["2".to_string(), "1".to_string()]);
-    let names: Vec<&str> = doc.layers.iter().map(|layer| layer.name.as_str()).collect();
-    assert_eq!(names, ["bottom", "bottom copy", "Group 1", "Group 1 copy"]);
-    assert_eq!(doc.layers[3].children.len(), 1, "deep copy");
-}
-
-#[test]
 fn add_layer_in_inside_group_and_on_top() {
     let mut group = empty_group("Group 1");
     let _ = group.children.push(pixel_layer("child", 4, 4, 1));

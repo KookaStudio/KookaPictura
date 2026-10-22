@@ -275,29 +275,55 @@ fn match_key(layer: &Layer) -> (u8, [u8; 4], BlendMode) {
 
 pub fn duplicate_paths(doc: &mut Document, paths: &[&str]) -> Vec<String> {
     let selected = selected_paths(doc, paths, true);
-    let mut created = Vec::new();
-    for (segments, path) in selected {
-        let Some(source) = resolve_path(doc, &path) else {
-            continue;
-        };
-        let mut copy = source.clone();
-        copy.name = format!("{} copy", copy.name);
-        if copy.background {
-            release_background(&mut copy);
-        }
+    let wanted: std::collections::HashSet<&str> =
+        selected.iter().map(|(_, path)| path.as_str()).collect();
+    // Panel order (topmost-first) keeps every not-yet-copied source's parent
+    // and index valid: an insert never moves a source below it.
+    let ordered: Vec<(Vec<usize>, String)> = flatten_rows(doc)
+        .into_iter()
+        .filter(|(path, _)| wanted.contains(path.as_str()))
+        .filter_map(|(path, _)| parse_path(&path).map(|segments| (segments, path)))
+        .collect();
+    // Resolve and clone every source before the first insert, so an earlier
+    // copy cannot hide a source that comes later.
+    let sources: Vec<(Vec<usize>, Layer)> = ordered
+        .into_iter()
+        .filter_map(|(segments, path)| {
+            let mut copy = resolve_path(doc, &path)?.clone();
+            copy.name = format!("{} copy", copy.name);
+            if copy.background {
+                release_background(&mut copy);
+            }
+            Some((segments, copy))
+        })
+        .collect();
+    let mut created: Vec<Vec<usize>> = Vec::new();
+    for (segments, copy) in sources {
         let Some((&index, parent)) = segments.split_last() else {
             continue;
         };
         if doc.layers.insert(parent, index + 1, copy).is_err() {
             continue;
         }
+        let at = index + 1;
+        // Replay this insert against the copies already made: a copy shifts
+        // when the insert lands in its container at or below it, and its
+        // ancestor segment shifts when the insert lands below that ancestor.
+        for path in &mut created {
+            if path.len() > parent.len() && path.starts_with(parent) && at <= path[parent.len()] {
+                path[parent.len()] += 1;
+            }
+        }
         let mut new_segments = segments;
         if let Some(last) = new_segments.last_mut() {
-            *last = index + 1;
+            *last = at;
         }
-        created.push(format_segments(&new_segments));
+        created.push(new_segments);
     }
     created
+        .iter()
+        .map(|segments| format_segments(segments))
+        .collect()
 }
 
 pub fn group_paths(doc: &mut Document, paths: &[&str]) -> Option<String> {

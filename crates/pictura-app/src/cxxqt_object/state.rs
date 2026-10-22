@@ -46,6 +46,11 @@ pub struct PictureViewRust {
     /// The isolated set while the Layers panel's Selected filter is on: the
     /// panel paths Auto-Select may pick. `None` leaves Auto-Select unscoped.
     pub(super) isolation: Option<Vec<String>>,
+    /// Every layer path's own visibility when the current solo began. The
+    /// snapshot belongs to this document and is dropped by a structural edit.
+    pub(super) solo_snapshot: Option<HashMap<String, bool>>,
+    /// The expanded group paths, per document.
+    pub(super) expanded_groups: Vec<String>,
     pub(super) move_base: Option<QImage>,
     pub(super) move_layer: Option<QImage>,
     pub(super) move_x: i32,
@@ -145,6 +150,8 @@ impl Default for PictureViewRust {
             mask_display: (0xFFFF_0000, 50),
             mask_overlay_revision: 0,
             isolation: None,
+            solo_snapshot: None,
+            expanded_groups: Vec::new(),
             move_base: None,
             move_layer: None,
             move_x: 0,

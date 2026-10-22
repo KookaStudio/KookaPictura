@@ -679,3 +679,110 @@ fn a_region_change_can_also_notify() {
         crate::cxxqt_object::edit::Effect::Blit { notify: true }
     );
 }
+
+fn group_layer(name: &str, children: Vec<pictura_core::Layer>) -> pictura_core::Layer {
+    let mut group = pixel_layer(name, 8, 8, (0, 0, 0));
+    group.is_group = true;
+    group.children = LayerStack::from_layers(children);
+    group
+}
+
+fn view_with_group() -> PictureViewRust {
+    let mut doc = doc();
+    doc.layers = LayerStack::from_layers(vec![group_layer(
+        "Group",
+        vec![
+            pixel_layer("child-a", 8, 8, (255, 0, 0)),
+            pixel_layer("child-b", 8, 8, (0, 255, 0)),
+        ],
+    )]);
+    let mut view = PictureViewRust {
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
+        ..Default::default()
+    };
+    view.layer_target = LayerTarget::only("0");
+    view
+}
+
+#[test]
+fn duplicate_target_names_every_copy() {
+    let mut view = view_with_two_layers();
+    let created = {
+        let doc = view.session.doc.as_mut().expect("document");
+        pictura_render::duplicate_paths(doc, &["0", "1"])
+    };
+    let target = view.duplicate_target(&created);
+    assert_eq!(target.selected(), ["3".to_string(), "1".to_string()]);
+    assert_eq!(target.anchor(), Some("1"));
+    let doc = view.session.doc.as_ref().expect("document");
+    for path in target.selected() {
+        let layer = pictura_render::resolve_path(doc, path).expect("copy resolves");
+        assert!(layer.name.ends_with(" copy"), "{} is {}", path, layer.name);
+    }
+}
+
+#[test]
+fn merge_target_selects_the_result() {
+    let mut view = view_with_two_layers();
+    let outcome = {
+        let doc = view.session.doc.as_mut().expect("document");
+        pictura_render::merge_scope(doc, pictura_render::MergeScope::Down("1")).expect("merge")
+    };
+    let target = view.merge_target(&outcome.path);
+    assert_eq!(target.selected(), std::slice::from_ref(&outcome.path));
+    assert_eq!(target.anchor(), Some(outcome.path.as_str()));
+
+    let mut view = view_with_two_layers();
+    let outcome = {
+        let doc = view.session.doc.as_mut().expect("document");
+        pictura_render::merge_scope(doc, pictura_render::MergeScope::Visible("1"))
+            .expect("merge visible")
+    };
+    let target = view.merge_target(&outcome.path);
+    assert_eq!(target.selected(), std::slice::from_ref(&outcome.path));
+    assert_eq!(target.anchor(), Some(outcome.path.as_str()));
+}
+
+#[test]
+fn group_target_selects_the_group() {
+    let mut view = view_with_two_layers();
+    let selected = vec!["0".to_string(), "1".to_string()];
+    let grouped = selected.clone();
+    let path = {
+        let doc = view.session.doc.as_mut().expect("document");
+        pictura_render::group_paths(doc, &["0", "1"]).expect("group")
+    };
+    let target = view.group_target(&grouped, &selected, &path);
+    assert_eq!(target.selected(), std::slice::from_ref(&path));
+    assert_eq!(target.anchor(), Some(path.as_str()));
+}
+
+#[test]
+fn ungroup_target_selects_the_children() {
+    let mut view = view_with_group();
+    let groups = vec![(String::new(), 0usize, 2usize)];
+    let survivors: Vec<(String, usize)> = Vec::new();
+    let changed = {
+        let doc = view.session.doc.as_mut().expect("document");
+        pictura_render::ungroup_paths(doc, &["0"])
+    };
+    assert_eq!(changed, 1);
+    let target = view.ungroup_target(&groups, &survivors);
+    assert_eq!(target.selected(), ["0".to_string(), "1".to_string()]);
+    assert_eq!(target.anchor(), Some("0"));
+}
+
+#[test]
+fn document_scoped_state_is_cleared_with_the_document() {
+    let mut view = view();
+    view.solo_snapshot = Some(std::collections::HashMap::from([("0".to_string(), true)]));
+    view.expanded_groups = vec!["0".to_string()];
+    view.replace_document(
+        Some(doc()),
+        History::default(),
+        LayerTarget::only("0"),
+        None,
+    );
+    assert!(view.solo_snapshot.is_none());
+    assert!(view.expanded_groups.is_empty());
+}

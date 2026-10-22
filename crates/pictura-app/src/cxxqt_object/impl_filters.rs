@@ -33,8 +33,17 @@ impl qobject::PictureView {
             return false;
         };
         let region = layer_visibility_region(&layer);
+        let mut created = String::new();
         let pushed = match self.as_mut().rust_mut().session.doc.as_mut() {
-            Some(doc) => doc.layers.push(layer).is_ok(),
+            Some(doc) => {
+                let index = doc.layers.len();
+                if doc.layers.push(layer).is_ok() {
+                    created = index.to_string();
+                    true
+                } else {
+                    false
+                }
+            }
             None => false,
         };
         if pushed {
@@ -47,7 +56,13 @@ impl qobject::PictureView {
                 },
                 None => Edit::Full,
             };
-            self.as_mut().edit("Adjustment", |_| outcome);
+            self.as_mut().edit("Adjustment", |rust| {
+                rust.select_only_layer(&created);
+                // A recomposite is not a structural edit, so clear the solo
+                // snapshot explicitly.
+                rust.solo_snapshot = None;
+                outcome
+            });
         }
         pushed
     }

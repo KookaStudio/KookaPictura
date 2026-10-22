@@ -137,11 +137,7 @@ void PicturaMainWindow::registerSelectHandlers()
         if (!view || path.isEmpty()) {
             return;
         }
-        QStringList matched = view->select_similar(path);
-        if (!matched.contains(path)) {
-            matched.prepend(path);
-        }
-        set_layer_target(*view, matched, path);
+        view->select_similar(path);
         if (layersPanel_) {
             layersPanel_->refresh();
         }

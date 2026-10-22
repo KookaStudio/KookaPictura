@@ -72,7 +72,7 @@ void LayersPanel::addGroupAt(const QString& path)
     clearSolo();
     const QString created = view_->add_group_in(path);
     if (!created.isEmpty()) {
-        expandedPaths_.insert(created);
+        expandPath(created);
         refresh();
     }
 }
@@ -108,7 +108,7 @@ void LayersPanel::openNewGroupDialog()
     const QString created =
         view_->new_group_dialog(layer_selection_anchor(*view_), spec.name, spec.color, spec.blend, spec.opacity);
     if (!created.isEmpty()) {
-        expandedPaths_.insert(created);
+        expandPath(created);
         refresh();
     }
 }
@@ -130,7 +130,7 @@ void LayersPanel::openGroupFromLayersDialog()
     const QString created = view_->group_from_layers_dialog(paths, spec.name, spec.color, spec.blend,
                                                             spec.opacity);
     if (!created.isEmpty()) {
-        expandedPaths_.insert(created);
+        expandPath(created);
         refresh();
     }
 }
@@ -148,7 +148,6 @@ void LayersPanel::duplicateSelection()
     const QStringList created = view_->duplicate_layers(paths);
     if (!created.isEmpty()) {
         refresh();
-        selectPath(created.last());
     }
 }
 
@@ -192,7 +191,7 @@ void LayersPanel::groupSelection()
     clearSolo();
     const QString created = view_->group_layers(paths);
     if (!created.isEmpty()) {
-        expandedPaths_.insert(created);
+        expandPath(created);
         refresh();
     }
 }
@@ -242,72 +241,41 @@ void LayersPanel::toggleSolo(const QString& path)
     if (path.isEmpty() || !view_) {
         return;
     }
-    if (soloActive_) {
+    if (solo_active(*view_)) {
         restoreSolo();
         return;
     }
-    const QHash<QString, bool> snapshot = model_->visibilityByPath();
-    if (snapshot.isEmpty()) {
-        return;
-    }
-    soloSnapshot_ = snapshot;
-    soloActive_ = true;
-    soloPath_ = path;
-    view_->apply_visibility(soloPaths(path, snapshot), QStringLiteral("Solo Visibility"));
+    solo_set(*view_, path);
 }
 
 void LayersPanel::restoreSolo()
 {
-    if (!view_) {
-        clearSolo();
-        return;
+    if (view_) {
+        solo_restore(*view_);
     }
-    QStringList visible;
-    for (auto it = soloSnapshot_.cbegin(); it != soloSnapshot_.cend(); ++it) {
-        if (it.value()) {
-            visible.push_back(it.key());
-        }
-    }
-    clearSolo();
-    view_->apply_visibility(visible, QStringLiteral("Restore Visibility"));
 }
 
 void LayersPanel::clearSolo()
 {
     // End any mask solo view too: every shared reset (add/duplicate/group/
-    // ungroup/delete, document switch) restores the composite.
+    // ungroup/delete) restores the composite.
+    endMaskSoloView();
     if (view_) {
-        mask_solo_set(*view_, QString());
-        const QString overlay = mask_overlay_path(*view_);
-        if (!overlay.isEmpty()) {
-            mask_overlay_toggle(*view_, overlay);
-            emit maskDisplayChanged();
-        }
+        solo_clear(*view_);
     }
-    soloActive_ = false;
-    soloPath_.clear();
-    soloSnapshot_.clear();
 }
 
-QStringList LayersPanel::soloPaths(const QString& path, const QHash<QString, bool>& snapshot) const
+void LayersPanel::endMaskSoloView()
 {
-    QStringList result{path};
-    int slash = path.lastIndexOf(QLatin1Char('/'));
-    while (slash > 0) {
-        const QString ancestor = path.left(slash);
-        result.push_back(ancestor);
-        slash = ancestor.lastIndexOf(QLatin1Char('/'));
+    if (!view_) {
+        return;
     }
-    if (model_->indexForPath(path).data(KindRole).toString() == QLatin1String("group")) {
-        const QString prefix = path + QLatin1Char('/');
-        for (auto it = snapshot.cbegin(); it != snapshot.cend(); ++it) {
-            if (it.value() && it.key().startsWith(prefix)) {
-                result.push_back(it.key());
-            }
-        }
+    mask_solo_set(*view_, QString());
+    const QString overlay = mask_overlay_path(*view_);
+    if (!overlay.isEmpty()) {
+        mask_overlay_toggle(*view_, overlay);
+        emit maskDisplayChanged();
     }
-    result.removeDuplicates();
-    return result;
 }
 
 void LayersPanel::openBackgroundConversion(const QString& path)
@@ -330,7 +298,6 @@ void LayersPanel::openBackgroundConversion(const QString& path)
     }
     if (view_->convert_background(path, spec.name, spec.color)) {
         refresh();
-        selectPath(path);
     }
 }
 

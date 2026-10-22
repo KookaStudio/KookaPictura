@@ -189,10 +189,12 @@ impl qobject::PictureView {
     ) -> Option<pictura_render::MergeOutcome> {
         let mut result = None;
         self.as_mut().edit(label, |rust| {
-            let Some(doc) = rust.session.doc.as_mut() else {
-                return Edit::None;
+            let outcome = {
+                let Some(doc) = rust.session.doc.as_mut() else {
+                    return Edit::None;
+                };
+                pictura_render::merge_scope(doc, scope).ok()
             };
-            let outcome = pictura_render::merge_scope(doc, scope).ok();
             let Some(path) = outcome
                 .as_ref()
                 .filter(|outcome| outcome.replaced > 0)
@@ -201,7 +203,8 @@ impl qobject::PictureView {
                 return Edit::None;
             };
             result = outcome;
-            rust.select_only_layer(&path);
+            let target = rust.merge_target(&path);
+            rust.set_layer_target(target);
             Edit::Structural
         });
         result

@@ -250,6 +250,9 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             if (!differs || view->layer_visible(0)) {
                 ST_FAIL(13, "visibility toggle did not change output");
             }
+            // The adjustment created above is the target under the creation
+            // rule; the filter must edit the topmost pixel layer.
+            view->set_active_layer(QStringLiteral("1"));
 
             // M6-C: a filter must confine its change to the active selection.
             // The topmost pixel layer is the bottom-right blue quadrant; wand

@@ -7,6 +7,7 @@ use super::super::helpers::{
 };
 use super::super::qobject;
 use crate::cxxqt_object::edit::Edit;
+use crate::cxxqt_object::state::PictureViewRust;
 use crate::layer_target::LayerTarget;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -28,20 +29,16 @@ impl qobject::PictureView {
         };
         let mut created = String::new();
         self.as_mut().edit("Group Layers", |rust| {
-            let Some(doc) = rust.session.doc.as_mut() else {
-                return Edit::None;
-            };
-            let Some(path) = pictura_render::group_paths(doc, &refs) else {
+            let Some(path) = ({
+                let Some(doc) = rust.session.doc.as_mut() else {
+                    return Edit::None;
+                };
+                pictura_render::group_paths(doc, &refs)
+            }) else {
                 return Edit::None;
             };
             created = path.clone();
-            let target_paths =
-                group_target_paths(&grouped, &selected, &path, rust.session.doc.as_ref());
-            let target = {
-                let mut target = LayerTarget::default();
-                target.select(target_paths, Some(path.clone()), rust.session.doc.as_ref());
-                target
-            };
+            let target = rust.group_target(&grouped, &selected, &path);
             rust.set_layer_target(target);
             Edit::Structural
         });
@@ -120,68 +117,16 @@ impl qobject::PictureView {
                     }
                 }
             }
-            let Some(doc) = rust.session.doc.as_mut() else {
-                return Edit::None;
-            };
-            changed = pictura_render::ungroup_paths(doc, &refs);
+            {
+                let Some(doc) = rust.session.doc.as_mut() else {
+                    return Edit::None;
+                };
+                changed = pictura_render::ungroup_paths(doc, &refs);
+            }
             if changed == 0 {
                 return Edit::None;
             }
-            let mut target_paths: Vec<String> = Vec::new();
-            let mut anchor = None;
-            if let Some(doc) = rust.session.doc.as_ref() {
-                // Each group splices `children - 1` extra nodes in below it.
-                // Per parent, an original index shifts only by groups below it.
-                let mut expansions: std::collections::HashMap<String, Vec<(usize, usize)>> =
-                    std::collections::HashMap::new();
-                for (parent, index, count) in &groups {
-                    expansions
-                        .entry(parent.clone())
-                        .or_default()
-                        .push((*index, *count));
-                }
-                let shifted = |parent: &str, index: usize| {
-                    index
-                        + expansions.get(parent).map_or(0, |items| {
-                            items
-                                .iter()
-                                .filter(|(at, _)| *at < index)
-                                .map(|(_, count)| count.saturating_sub(1))
-                                .sum()
-                        })
-                };
-                for (parent, index, count) in &groups {
-                    let at = shifted(parent, *index);
-                    for offset in 0..*count {
-                        target_paths.push(join_path(parent, at + offset));
-                    }
-                }
-                for (parent, index) in &survivors {
-                    let path = join_path(parent, shifted(parent, *index));
-                    if pictura_render::resolve_path(doc, &path).is_some() {
-                        target_paths.push(path);
-                    }
-                }
-                let group_paths: Vec<String> = groups
-                    .iter()
-                    .map(|(parent, index, _)| join_path(parent, *index))
-                    .collect();
-                anchor = topmost_path(group_paths.iter().map(String::as_str)).and_then(|path| {
-                    let parent = pictura_render::parent_path(path).unwrap_or("");
-                    let index = path
-                        .rsplit('/')
-                        .next()
-                        .and_then(|segment| segment.parse::<usize>().ok())?;
-                    Some(join_path(parent, shifted(parent, index)))
-                });
-            }
-            target_paths.dedup();
-            let anchor = anchor.or_else(|| target_paths.first().cloned());
-            let target = {
-                let mut target = LayerTarget::default();
-                target.select(target_paths, anchor, rust.session.doc.as_ref());
-                target
-            };
+            let target = rust.ungroup_target(&groups, &survivors);
             rust.set_layer_target(target);
             Edit::Structural
         });
@@ -216,6 +161,108 @@ impl qobject::PictureView {
             Edit::Structural
         });
         matches!(removed, Edit::Structural)
+    }
+}
+
+impl PictureViewRust {
+    /// The target a duplicate leaves: every copy, with one of them active.
+    pub(in crate::cxxqt_object) fn duplicate_target(&self, created: &[String]) -> LayerTarget {
+        let mut target = LayerTarget::default();
+        target.select(
+            created.iter().cloned(),
+            created.last().cloned(),
+            self.session.doc.as_ref(),
+        );
+        target
+    }
+
+    /// The target a merge leaves: the merged result.
+    pub(in crate::cxxqt_object) fn merge_target(&self, path: &str) -> LayerTarget {
+        let mut target = LayerTarget::default();
+        target.select(
+            std::iter::once(path.to_string()),
+            Some(path.to_string()),
+            self.session.doc.as_ref(),
+        );
+        target
+    }
+
+    /// The target a group leaves: the new group plus the selection it did not
+    /// swallow, remapped to the operation's paths.
+    pub(in crate::cxxqt_object) fn group_target(
+        &self,
+        grouped: &[String],
+        selected: &[String],
+        group_path: &str,
+    ) -> LayerTarget {
+        let paths = group_target_paths(grouped, selected, group_path, self.session.doc.as_ref());
+        let mut target = LayerTarget::default();
+        target.select(
+            paths,
+            Some(group_path.to_string()),
+            self.session.doc.as_ref(),
+        );
+        target
+    }
+
+    /// The target an ungroup leaves: every spliced child and the surviving
+    /// selection, anchored on the topmost group's first child.
+    pub(in crate::cxxqt_object) fn ungroup_target(
+        &self,
+        groups: &[(String, usize, usize)],
+        survivors: &[(String, usize)],
+    ) -> LayerTarget {
+        let doc = self.session.doc.as_ref();
+        let mut target_paths: Vec<String> = Vec::new();
+        // Each group splices `children - 1` extra nodes in below it. Per
+        // parent, an original index shifts only by groups below it.
+        let mut expansions: std::collections::HashMap<String, Vec<(usize, usize)>> =
+            std::collections::HashMap::new();
+        for (parent, index, count) in groups {
+            expansions
+                .entry(parent.clone())
+                .or_default()
+                .push((*index, *count));
+        }
+        let shifted = |parent: &str, index: usize| {
+            index
+                + expansions.get(parent).map_or(0, |items| {
+                    items
+                        .iter()
+                        .filter(|(at, _)| *at < index)
+                        .map(|(_, count)| count.saturating_sub(1))
+                        .sum()
+                })
+        };
+        for (parent, index, count) in groups {
+            let at = shifted(parent, *index);
+            for offset in 0..*count {
+                target_paths.push(join_path(parent, at + offset));
+            }
+        }
+        for (parent, index) in survivors {
+            let path = join_path(parent, shifted(parent, *index));
+            if doc.is_some_and(|doc| pictura_render::resolve_path(doc, &path).is_some()) {
+                target_paths.push(path);
+            }
+        }
+        let group_paths: Vec<String> = groups
+            .iter()
+            .map(|(parent, index, _)| join_path(parent, *index))
+            .collect();
+        let anchor = topmost_path(group_paths.iter().map(String::as_str)).and_then(|path| {
+            let parent = pictura_render::parent_path(path).unwrap_or("");
+            let index = path
+                .rsplit('/')
+                .next()
+                .and_then(|segment| segment.parse::<usize>().ok())?;
+            Some(join_path(parent, shifted(parent, index)))
+        });
+        target_paths.dedup();
+        let anchor = anchor.or_else(|| target_paths.first().cloned());
+        let mut target = LayerTarget::default();
+        target.select(target_paths, anchor, doc);
+        target
     }
 }
 

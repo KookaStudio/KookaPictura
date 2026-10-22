@@ -575,14 +575,15 @@ pub mod qobject {
         #[qinvokable]
         fn layer_via_cut(self: Pin<&mut Self>, path: &QString) -> QString;
 
-        /// Every layer matching `path`'s node class, adjustment kind, and blend
-        /// mode, in panel order. A view operation: no history.
+        /// The layer and every layer matching its node class, adjustment kind,
+        /// and blend mode. Sets the document target and notifies the view.
         #[qinvokable]
-        fn select_similar(&self, path: &QString) -> QStringList;
+        fn select_similar(self: Pin<&mut Self>, path: &QString) -> QStringList;
 
         /// Every member of the link set containing `path`; empty when unlinked.
+        /// A linked set becomes the target; an unlinked layer leaves it alone.
         #[qinvokable]
-        fn select_linked(&self, path: &QString) -> QStringList;
+        fn select_linked(self: Pin<&mut Self>, path: &QString) -> QStringList;
 
         /// Link (`on`) or unlink the listed layers, joining every set they touch.
         #[qinvokable]
