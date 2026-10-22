@@ -12,8 +12,10 @@ along the axis from the press to the release — Linear, Radial, Angle,
 Reflected, or Diamond — extending the ramp's end colours past both ends, inside
 the selection when there is one, at Opacity in the chosen Mode, recording
 exactly one "Gradient" history state. Reverse SHALL swap the ramp's ends;
-Transparency off SHALL ignore the ramp's own alpha; Shift SHALL snap the axis
-to 45° steps. A click without a drag SHALL draw nothing, a transparency-locked
+Transparency off SHALL ignore the ramp's own alpha; Transparency on SHALL make
+the ramp's alpha the alpha of the pixels it draws, in the Normal mode, so that
+the ramp's transparent end is transparent; Shift SHALL snap the axis to 45°
+steps. A click without a drag SHALL draw nothing, a transparency-locked
 layer SHALL keep every pixel's alpha, and a layer whose pixels are locked SHALL
 be refused.
 
@@ -31,3 +33,15 @@ be refused.
 
 - **WHEN** a Radial gradient is dragged inside a selection of the left half
 - **THEN** the centre is black and the right half is unchanged
+
+#### Scenario: The ramp's alpha reaches the pixels [gt_ramp_alpha]
+
+- **WHEN** a gradient whose far stop is transparent is dragged across a layer
+  in the Normal mode with Transparency on
+- **THEN** the pixels at the transparent end hold zero alpha and the pixels at
+  the opaque end hold full alpha
+
+#### Scenario: Transparency off ignores the ramp's alpha [gt_ramp_alpha_off]
+
+- **WHEN** the same gradient is dragged with Transparency off
+- **THEN** every drawn pixel holds full alpha

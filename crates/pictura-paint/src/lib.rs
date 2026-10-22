@@ -4,6 +4,7 @@ pub mod art_history;
 pub mod bucket;
 pub mod eraser;
 mod fill;
+mod fill_native;
 pub mod focus;
 pub mod gradient;
 pub mod healing;
@@ -140,6 +141,7 @@ impl Default for StrokeConfig {
     }
 }
 
+pub use fill::Alpha;
 pub use healing::HealStroke;
 pub use stroke::{paint_stroke, PaintError, Stroke, StrokeKind, StrokeOutcome};
 pub use tip::{tip_coverage, wet_edge};

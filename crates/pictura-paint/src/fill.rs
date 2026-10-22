@@ -6,31 +6,96 @@ use crate::replace::grow;
 use crate::stroke::{blend_pixel, layer_at_mut, parse_layer_path, union_rect};
 use crate::{PaintMode, Rgba};
 use pictura_core::{
-    layer_pixel_locked, layer_transparency_locked, BitDepth, ColorMode, Document, PsdRect,
+    layer_pixel_locked, layer_transparency_locked, BitDepth, ColorMode, Document, PsdRect, Sample,
 };
 use rayon::prelude::*;
+
+/// The blend of one pixel: the destination's colour and alpha, the source
+/// colour, the coverage, and the dissolve roll. `None` when the blend leaves
+/// the pixel alone.
+pub(crate) type Blend<T> = fn(PaintMode, (T, T, T, T), &Rgba, f32, f32) -> Option<(T, T, T, T)>;
+
+/// What the fill does with the pixels' transparency.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Alpha {
+    /// The source over the backdrop: the backdrop's alpha survives, which is
+    /// what a brush-mode blend does.
+    Blend,
+    /// The destination's alpha survives unchanged, and the pixels the
+    /// destination holds empty are left alone rather than filled.
+    Keep,
+    /// The source colour's alpha becomes the pixel's alpha.
+    Replace,
+}
+
+/// One row of the target's colour planes: three for an RGB layer, one for a
+/// Grayscale layer, and the transparency plane when the layer has one.
+pub(crate) enum Row<'a, T> {
+    Rgb {
+        r: &'a mut [T],
+        g: &'a mut [T],
+        b: &'a mut [T],
+        a: Option<&'a mut [T]>,
+    },
+    Gray {
+        y: &'a mut [T],
+        a: Option<&'a mut [T]>,
+    },
+}
 
 /// Fill the pixel layer at `path`. `source` is asked, per document pixel, for
 /// the colour to lay and its coverage (0.0–1.0); `None` leaves the pixel
 /// alone. `selection` is a document-sized coverage mask (0–255, row-major);
-/// without one the whole layer is filled. A transparency lock keeps every
-/// pixel's alpha. Returns the document rectangle changed, or `None` when
+/// without one the whole layer is filled. `alpha` says what the fill does
+/// with the pixels' transparency; a transparency lock overrides it and keeps
+/// every pixel's alpha. Returns the document rectangle changed, or `None` when
 /// nothing changed or the layer cannot be filled: a group, an adjustment,
 /// locked pixels, or Clear under a transparency lock.
 ///
 /// Rows run on every core: `source` sees each pixel once, in no fixed order,
 /// so it must not depend on the pixels it was asked about before.
-// ponytail: 8-bit RGB only, within the layer's own rectangle.
+///
+/// The layer's pixels live in its retained native store when the document has
+/// one the compositor reads; the fill writes that copy and keeps the 8-bit
+/// channels as its narrowing. Otherwise the 8-bit channels are the pixels.
 pub(crate) fn fill_layer(
     doc: &mut Document,
     path: &str,
     mode: PaintMode,
     selection: Option<&[u8]>,
+    alpha: Alpha,
     source: impl Fn(i32, i32) -> Option<(Rgba, f32)> + Sync,
 ) -> Option<PsdRect> {
-    if doc.depth != BitDepth::Eight || doc.mode != ColorMode::Rgb {
+    // The working model is 8-bit; a document the writer accepts always is.
+    if doc.depth != BitDepth::Eight {
         return None;
     }
+    // A Grayscale document's layer carries one colour plane, an RGB one three.
+    let gray = doc.mode == ColorMode::Grayscale;
+    match crate::fill_native::native_plan(doc, path, gray) {
+        crate::fill_native::NativePlan::Store(depth) => {
+            return crate::fill_native::fill_native(
+                doc, path, depth, mode, selection, alpha, gray, source,
+            );
+        }
+        // The store owns some of the colour planes: a fill of the 8-bit
+        // channels would reach only the planes the store does not own.
+        crate::fill_native::NativePlan::Refused => return None,
+        crate::fill_native::NativePlan::Copy => {}
+    }
+    fill_eight_bit(doc, path, mode, selection, alpha, gray, source)
+}
+
+/// Fill the layer's 8-bit channels.
+fn fill_eight_bit(
+    doc: &mut Document,
+    path: &str,
+    mode: PaintMode,
+    selection: Option<&[u8]>,
+    alpha: Alpha,
+    gray: bool,
+    source: impl Fn(i32, i32) -> Option<(Rgba, f32)> + Sync,
+) -> Option<PsdRect> {
     let canvas = (doc.width as i32, doc.height as i32);
     if selection.is_some_and(|s| s.len() < (canvas.0 * canvas.1) as usize) {
         return None;
@@ -43,14 +108,12 @@ pub(crate) fn fill_layer(
     if keep_alpha && mode == PaintMode::Clear {
         return None;
     }
+    // A transparency lock is the user's instruction about the layer's
+    // transparency, so it outranks the caller's policy.
+    let policy = if keep_alpha { Alpha::Keep } else { alpha };
     let rect = layer.rect;
     let w = rect.width().max(0);
     let n = (w * rect.height().max(0)) as usize;
-    let (y0, y1) = (rect.top.max(0), rect.bottom.min(canvas.1));
-    let (x0, x1) = (rect.left.max(0), rect.right.min(canvas.0));
-    if y1 <= y0 || x1 <= x0 {
-        return None;
-    }
     // The R, G, B and alpha planes, each a whole layer long; a missing colour
     // plane refuses the fill, a missing alpha is an opaque layer.
     let mut planes: [Option<&mut [u8]>; 4] = [None, None, None, None];
@@ -66,26 +129,90 @@ pub(crate) fn fill_layer(
             planes[k] = Some(c.data.as_mut_slice());
         }
     }
-    let [Some(r), Some(g), Some(b), alpha] = planes else {
+    let [r, g, b, a] = planes;
+    let (r, g, b) = if gray {
+        let r = r?;
+        (r, None, None)
+    } else {
+        let (Some(r), Some(g), Some(b)) = (r, g, b) else {
+            return None;
+        };
+        (r, Some(g), Some(b))
+    };
+    fill_planes(
+        r,
+        g,
+        b,
+        a,
+        rect,
+        canvas,
+        mode,
+        selection,
+        policy,
+        gray,
+        &source,
+        blend_pixel,
+    )
+}
+
+/// Lay the source down over the target's planes, in the given brush mode,
+/// inside the selection, and report the rectangle changed.
+///
+/// The planes are the target's own samples, so the same pass fills an 8-bit
+/// layer and a layer whose pixels live in a native store; `blend` is the
+/// brush-mode blend at the planes' own width. `alpha` says what happens to
+/// each pixel's transparency: the blend's own, the destination's (`Keep`),
+/// or the source colour's (`Replace`).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn fill_planes<T: Sample + PartialEq + Send + Sync>(
+    r: &mut [T],
+    g: Option<&mut [T]>,
+    b: Option<&mut [T]>,
+    a: Option<&mut [T]>,
+    rect: PsdRect,
+    canvas: (i32, i32),
+    mode: PaintMode,
+    selection: Option<&[u8]>,
+    alpha: Alpha,
+    gray: bool,
+    source: &(impl Fn(i32, i32) -> Option<(Rgba, f32)> + Sync),
+    blend: Blend<T>,
+) -> Option<PsdRect> {
+    let w = rect.width().max(0) as usize;
+    let (y0, y1) = (rect.top.max(0), rect.bottom.min(canvas.1));
+    let (x0, x1) = (rect.left.max(0), rect.right.min(canvas.0));
+    if y1 <= y0 || x1 <= x0 {
         return None;
-    };
+    }
+    let has_alpha = a.is_some();
+    let opaque = T::from_unit(1.0);
     let row = |ly: i32| {
-        let a = (ly * w) as usize;
-        a..a + w as usize
+        let at = (ly * w as i32) as usize;
+        at..at + w
     };
-    // Only the layer rows on the canvas are cut into the row tasks.
+    // Only the layer rows on the canvas are cut into the row tasks. Every
+    // plane is cut on the same span: a layer that hangs off the canvas has
+    // its rows before the canvas in the plane, not before the first row.
     let span = row(y0 - rect.top).start..row(y1 - 1 - rect.top).end;
-    let w_us = w as usize;
-    let rows = r[span.clone()]
-        .chunks_mut(w_us)
-        .zip(g[span.clone()].chunks_mut(w_us))
-        .zip(b[span.clone()].chunks_mut(w_us))
-        .zip(rows_of(alpha.map(|a| &mut a[span]), w_us))
-        .enumerate()
-        .map(|(k, (((r, g), b), a))| (y0 + k as i32, r, g, b, a))
-        .collect::<Vec<_>>();
+    let alpha_plane = a.map(|a| &mut a[span.clone()]);
+    let rows: Vec<(i32, Row<T>)> = match (g, b) {
+        (Some(g), Some(b)) => r[span.clone()]
+            .chunks_mut(w)
+            .zip(g[span.clone()].chunks_mut(w))
+            .zip(b[span.clone()].chunks_mut(w))
+            .zip(rows_of(alpha_plane, w))
+            .enumerate()
+            .map(|(k, (((r, g), b), a))| (y0 + k as i32, Row::Rgb { r, g, b, a }))
+            .collect(),
+        _ => r[span.clone()]
+            .chunks_mut(w)
+            .zip(rows_of(alpha_plane, w))
+            .enumerate()
+            .map(|(k, (r, a))| (y0 + k as i32, Row::Gray { y: r, a }))
+            .collect(),
+    };
     rows.into_par_iter()
-        .filter_map(|(y, r, g, b, mut a)| {
+        .filter_map(|(y, mut row)| {
             let mut dirty = None;
             for x in x0..x1 {
                 let selected = selection.map_or(255, |s| s[(y * canvas.0 + x) as usize]);
@@ -96,7 +223,18 @@ pub(crate) fn fill_layer(
                     continue;
                 };
                 let mut strength = cover.clamp(0.0, 1.0) * selected as f32 / 255.0;
-                let mut color = color;
+                // A Grayscale layer takes the colour's luma.
+                let mut color = if gray {
+                    let v = pictura_core::rec601_luma(color.r, color.g, color.b);
+                    Rgba {
+                        r: v,
+                        g: v,
+                        b: v,
+                        a: color.a,
+                    }
+                } else {
+                    color
+                };
                 if mode == PaintMode::Dissolve {
                     // A see-through colour dissolves into fewer pixels, not fainter ones.
                     strength *= color.a as f32 / 255.0;
@@ -106,26 +244,52 @@ pub(crate) fn fill_layer(
                     continue;
                 }
                 let i = (x - rect.left) as usize;
-                let dst = (r[i], g[i], b[i], a.as_ref().map_or(255, |a| a[i]));
-                if keep_alpha && dst.3 == 0 {
+                let (dst, dst_alpha) = match &row {
+                    Row::Rgb { r, g, b, a } => (
+                        (r[i], g[i], b[i], a.as_ref().map_or(opaque, |a| a[i])),
+                        a.as_ref().map_or(opaque, |a| a[i]),
+                    ),
+                    Row::Gray { y, a } => (
+                        (y[i], y[i], y[i], a.as_ref().map_or(opaque, |a| a[i])),
+                        a.as_ref().map_or(opaque, |a| a[i]),
+                    ),
+                };
+                if alpha == Alpha::Keep && dst_alpha.to_unit() == 0.0 {
                     continue;
                 }
-                let Some(out) = blend_pixel(mode, dst, &color, strength, pixel_noise(x, y)) else {
+                let Some(out) = blend(mode, dst, &color, strength, pixel_noise(x, y)) else {
                     continue;
                 };
-                let out_alpha = if keep_alpha || a.is_none() {
-                    dst.3
-                } else {
-                    out.3
+                let out_alpha = match alpha {
+                    // The destination's own alpha, untouched.
+                    Alpha::Keep => dst_alpha,
+                    // The source colour's alpha, as it is: the fill's opacity
+                    // scales the colour, not the ramp's transparency.
+                    Alpha::Replace => T::from_unit(f64::from(color.a) / 255.0),
+                    // Whatever the blend decided. A layer without a
+                    // transparency plane has no alpha to change, so the
+                    // blend's alpha is dropped and the pixel is unchanged.
+                    Alpha::Blend if has_alpha => out.3,
+                    Alpha::Blend => dst_alpha,
                 };
                 if (out.0, out.1, out.2, out_alpha) == dst {
                     continue;
                 }
-                r[i] = out.0;
-                g[i] = out.1;
-                b[i] = out.2;
-                if let Some(a) = a.as_deref_mut() {
-                    a[i] = out_alpha;
+                match &mut row {
+                    Row::Rgb { r, g, b, a } => {
+                        r[i] = out.0;
+                        g[i] = out.1;
+                        b[i] = out.2;
+                        if let Some(a) = a.as_deref_mut() {
+                            a[i] = out_alpha;
+                        }
+                    }
+                    Row::Gray { y, a } => {
+                        y[i] = out.0;
+                        if let Some(a) = a.as_deref_mut() {
+                            a[i] = out_alpha;
+                        }
+                    }
                 }
                 dirty = Some(grow(dirty, x, y));
             }
@@ -135,7 +299,7 @@ pub(crate) fn fill_layer(
 }
 
 /// `plane` cut into rows of `w`, or endless `None`s for an absent plane.
-fn rows_of(plane: Option<&mut [u8]>, w: usize) -> impl Iterator<Item = Option<&mut [u8]>> {
+fn rows_of<T>(plane: Option<&mut [T]>, w: usize) -> impl Iterator<Item = Option<&mut [T]>> {
     let mut rows = plane.map(|p| p.chunks_mut(w));
     std::iter::from_fn(move || {
         Some(match rows.as_mut() {
@@ -243,7 +407,9 @@ pub(crate) mod tests {
     }
 
     fn flood(doc: &mut Document, mode: PaintMode, selection: Option<&[u8]>) -> Option<PsdRect> {
-        fill_layer(doc, "0", mode, selection, |_, _| Some((RED, 1.0)))
+        fill_layer(doc, "0", mode, selection, Alpha::Blend, |_, _| {
+            Some((RED, 1.0))
+        })
     }
 
     #[test]
@@ -281,10 +447,17 @@ pub(crate) mod tests {
         // The layer sits at (3, 0) and hangs off the 8 px canvas.
         let mut d = doc_at((8, 2), (3, 0), [255; 4], false);
         let asked = std::sync::Mutex::new(Vec::new());
-        let dirty = fill_layer(&mut d, "0", PaintMode::Normal, None, |x, y| {
-            asked.lock().unwrap().push((x, y));
-            (x == 5).then_some((RED, 1.0))
-        })
+        let dirty = fill_layer(
+            &mut d,
+            "0",
+            PaintMode::Normal,
+            None,
+            Alpha::Blend,
+            |x, y| {
+                asked.lock().unwrap().push((x, y));
+                (x == 5).then_some((RED, 1.0))
+            },
+        )
         .expect("filled");
         let asked = asked.into_inner().unwrap();
         assert_eq!((dirty.left, dirty.right), (5, 6));
@@ -305,6 +478,75 @@ pub(crate) mod tests {
             "an empty pixel gained colour"
         );
         assert!(flood(&mut d, PaintMode::Clear, None).is_none());
+    }
+
+    #[test]
+    fn a_keep_policy_keeps_the_destination_alpha() {
+        // An opaque pixel, a half transparent one and an empty one.
+        let mut d = doc(3, 1, [255; 4]);
+        d.layers[0].channels[3].data[1] = 128;
+        d.layers[0].channels[3].data[2] = 0;
+        fill_layer(&mut d, "0", PaintMode::Normal, None, Alpha::Keep, |_, _| {
+            Some((RED, 1.0))
+        })
+        .expect("filled");
+        assert_eq!(
+            pixel(&d, 0, 0),
+            [220, 0, 0, 255],
+            "the opaque pixel took the colour"
+        );
+        assert_eq!(
+            pixel(&d, 1, 0),
+            [220, 0, 0, 128],
+            "the half transparent pixel kept its alpha"
+        );
+        assert_eq!(
+            pixel(&d, 2, 0),
+            [255, 255, 255, 0],
+            "the empty pixel was filled"
+        );
+    }
+
+    #[test]
+    fn a_replace_policy_takes_the_sources_alpha() {
+        let mut d = doc(2, 1, [255; 4]);
+        let see_through = Rgba {
+            r: 220,
+            g: 0,
+            b: 0,
+            a: 0,
+        };
+        fill_layer(
+            &mut d,
+            "0",
+            PaintMode::Normal,
+            None,
+            Alpha::Replace,
+            |_, _| Some((see_through, 1.0)),
+        )
+        .expect("filled");
+        assert_eq!(pixel(&d, 0, 0)[3], 0, "the source's alpha is the pixel's");
+    }
+
+    #[test]
+    fn a_transparency_lock_outranks_the_policy() {
+        let mut d = doc(2, 1, [255; 4]);
+        lock(&mut d, LockFlags::TRANSPARENCY);
+        let see_through = Rgba {
+            r: 220,
+            g: 0,
+            b: 0,
+            a: 0,
+        };
+        fill_layer(
+            &mut d,
+            "0",
+            PaintMode::Normal,
+            None,
+            Alpha::Replace,
+            |_, _| Some((see_through, 1.0)),
+        );
+        assert_eq!(pixel(&d, 0, 0)[3], 255, "the lock kept the alpha");
     }
 
     #[test]
@@ -345,9 +587,14 @@ pub(crate) mod tests {
         let run = || {
             let mut d = doc(64, 64, [255; 4]);
             let see_through = Rgba { a: 128, ..RED };
-            fill_layer(&mut d, "0", PaintMode::Dissolve, None, |_, _| {
-                Some((see_through, 0.5))
-            });
+            fill_layer(
+                &mut d,
+                "0",
+                PaintMode::Dissolve,
+                None,
+                Alpha::Blend,
+                |_, _| Some((see_through, 0.5)),
+            );
             d
         };
         let d = run();
@@ -360,6 +607,101 @@ pub(crate) mod tests {
         // Half strength of a half-opaque colour: about a quarter of 4096.
         assert!((800..1250).contains(&painted), "{painted} pixels");
         assert_eq!(layer_rgba(&run().layers[0]), layer_rgba(&d.layers[0]));
+    }
+
+    /// A Grayscale document's layer carries one colour plane.
+    pub(crate) fn gray_doc(w: i32, h: i32, rgba: [u8; 4]) -> Document {
+        let mut doc = Document::new(w as u32, h as u32, ColorMode::Grayscale, BitDepth::Eight);
+        doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: h,
+                right: w,
+            },
+            channels: vec![
+                Channel {
+                    id: 0,
+                    data: vec![rgba[0]; (w * h) as usize].into(),
+                },
+                Channel {
+                    id: -1,
+                    data: vec![rgba[3]; (w * h) as usize].into(),
+                },
+            ],
+            ..Default::default()
+        }]);
+        doc
+    }
+
+    #[test]
+    fn a_gray_layer_takes_the_colours_luma() {
+        let mut d = gray_doc(2, 1, [255, 255, 255, 255]);
+        flood(&mut d, PaintMode::Normal, None);
+        // 0.299 * 220 = 65.78, the Rec. 601 luma of #DC0000.
+        assert_eq!(d.layers[0].channels[0].data.as_slice(), &[66, 66]);
+        let alpha = d.layers[0]
+            .channels
+            .iter()
+            .find(|c| c.id == -1)
+            .expect("an alpha channel");
+        assert_eq!(alpha.data.as_slice(), &[255, 255]);
+    }
+
+    #[test]
+    fn an_rgb_layer_keeps_the_colours_channels() {
+        let mut d = doc(2, 1, [255; 4]);
+        flood(&mut d, PaintMode::Normal, None);
+        assert_eq!(d.layers[0].channels[0].data.as_slice(), &[220, 220]);
+        assert_eq!(d.layers[0].channels[1].data.as_slice(), &[0, 0]);
+        assert_eq!(d.layers[0].channels[2].data.as_slice(), &[0, 0]);
+    }
+
+    #[test]
+    fn a_layer_above_the_canvas_fills_the_rows_on_the_canvas() {
+        // A layer that hangs above the canvas: its first rows are off-canvas,
+        // and every plane has to be cut on the same span.
+        let mut d = doc_at((4, 4), (0, -2), [255, 255, 255, 255], false);
+        for (i, byte) in d.layers[0].channels[3]
+            .data
+            .as_mut_slice()
+            .iter_mut()
+            .enumerate()
+        {
+            *byte = (i * 10) as u8;
+        }
+        fill_layer(
+            &mut d,
+            "0",
+            PaintMode::Normal,
+            None,
+            Alpha::Blend,
+            |_, _| Some((RED, 1.0)),
+        );
+        // The canvas rows are the layer's last two rows, and their alpha took
+        // the fill; the rows above the canvas are untouched.
+        let alpha = d.layers[0].channels[3].data.as_slice();
+        assert_eq!(&alpha[8..12], &[255; 4]);
+        assert_eq!(&alpha[0..8], &[0, 10, 20, 30, 40, 50, 60, 70]);
+    }
+
+    #[test]
+    fn an_eight_bit_fill_is_byte_identical() {
+        // A Normal fill of #DC0000 at full coverage over a white layer, with
+        // the selection at half strength on the second pixel.
+        let mut d = doc(2, 1, [255; 4]);
+        fill_layer(
+            &mut d,
+            "0",
+            PaintMode::Normal,
+            Some(&[255, 128]),
+            Alpha::Blend,
+            |_, _| Some((RED, 1.0)),
+        );
+        assert_eq!(d.layers[0].channels[0].data.as_slice(), &[220, 237]);
+        assert_eq!(d.layers[0].channels[1].data.as_slice(), &[0, 127]);
+        assert_eq!(d.layers[0].channels[2].data.as_slice(), &[0, 127]);
+        assert_eq!(d.layers[0].channels[3].data.as_slice(), &[255, 255]);
     }
 
     #[test]

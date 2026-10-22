@@ -2,7 +2,9 @@
 
 ## Purpose
 A sample-typed pixel buffer that retains source-depth samples and converts between depths under the documented rules.
+
 ## Requirements
+
 ### Requirement: PixelBuffer is sample-typed with an 8-bit default
 
 The engine's planar image buffer SHALL be generic over its sample type with `u8`
@@ -74,8 +76,10 @@ depth 16 and `clamp(trunc(sample * 256), 0, 255)` at depth 32. Widening SHALL be
 For an unedited 16/32-bit document the write path SHALL encode the retained
 typed samples back to the same bytes the read path decoded (byte-identical for
 big-endian `u16` and IEEE-754 big-endian `f32`), so the existing source-depth
-round-trip and its `psd-tools` oracle are unchanged. An edited plane SHALL
-continue to be widened from its 8-bit bytes as before.
+round-trip and its `psd-tools` oracle are unchanged. A plane edited in the
+8-bit working copy SHALL continue to be widened from its 8-bit bytes as before;
+a plane edited in the retained native store SHALL be re-encoded at the source
+depth from the store's own samples.
 
 #### Scenario: Encode inverts decode
 
@@ -87,3 +91,9 @@ continue to be widened from its 8-bit bytes as before.
 - **WHEN** the existing depth and color-mode oracles run after this change
 - **THEN** they pass with no golden change
 
+#### Scenario: A natively edited plane is re-encoded at the source depth
+
+- **WHEN** a depth-16 document's layer is edited in its retained native store
+  and saved
+- **THEN** the written layer plane holds the store's samples and not the 8-bit
+  widening of the layer's 8-bit channels

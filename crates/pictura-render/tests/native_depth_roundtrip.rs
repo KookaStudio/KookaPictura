@@ -7,6 +7,8 @@ use std::path::PathBuf;
 use pictura_adjust::{apply_native, Adjustment, LevelsParams};
 use pictura_codec::{read_psd, write_psd};
 use pictura_core::{BitDepth, ColorMode, Document, Samples};
+use pictura_paint::bucket::{fill, BucketPaint};
+use pictura_paint::{Alpha, PaintMode, Rgba};
 use pictura_render::{
     refresh_native_composite, transform_layer, transform_layer_quad, LayerTransform,
 };
@@ -198,4 +200,61 @@ fn moved_scaled_and_projected_layers_keep_native_samples() {
     assert_layer_round_trips_native(|d| assert!(transform_layer(d, "0", translate)));
     assert_layer_round_trips_native(|d| assert!(transform_layer(d, "0", scale)));
     assert_layer_round_trips_native(|d| assert!(transform_layer_quad(d, "0", quad)));
+}
+
+/// A depth-16 fill writes the layer's native store, and the saved file keeps
+/// the native samples: the re-read layer's store holds the fill, not the 8-bit
+/// widening of the working copy.
+#[test]
+fn a_depth16_fill_survives_a_psd_round_trip() {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../pictura-codec/tests/fixtures/rgb16_layered.psd");
+    let bytes = std::fs::read(&path).unwrap();
+    let mut doc = read_psd(&bytes).unwrap();
+    assert_eq!(doc.source_depth, Some(BitDepth::Sixteen));
+
+    // Fill the layer with a solid colour.
+    let mask = vec![255u8; (doc.width * doc.height) as usize];
+    let dirty = fill(
+        &mut doc,
+        "0",
+        &mask,
+        BucketPaint::Foreground(Rgba {
+            r: 220,
+            g: 0,
+            b: 0,
+            a: 255,
+        }),
+        PaintMode::Normal,
+        1.0,
+        None,
+        Alpha::Blend,
+    );
+    assert!(dirty.is_some(), "the fill changed the layer");
+
+    // The save path the app takes: the native composite is recomposited from
+    // the layers before the file is written.
+    assert!(
+        refresh_native_composite(&mut doc),
+        "the native composite is refreshed"
+    );
+
+    let out = write_psd(&doc).expect("save the filled document");
+    let back = read_psd(&out).expect("re-read the filled document");
+    let store = back.layers[0]
+        .source_channels
+        .as_ref()
+        .expect("the layer kept its native store");
+    let (_, samples) = store
+        .planes
+        .iter()
+        .find(|(id, _)| *id == 0)
+        .expect("the red plane");
+    let Samples::U16(values) = samples else {
+        panic!("depth-16 read retains u16 samples")
+    };
+    assert!(
+        values.iter().all(|&v| v == 220 * 257),
+        "the re-read samples are the fill: {values:?}"
+    );
 }
