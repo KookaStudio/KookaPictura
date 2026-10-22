@@ -77,7 +77,8 @@ surfaces **Scratch Sizes** and **Efficiency**.
   the GPU), `Normal` (default), and `Advanced` (more features; best for 3D).
   Mode changes take effect only after a restart *(per the article; a CS6 Help
   note calls out a restart for some settings)*.
-- `Help > System Info` reports the video card and its VRAM.
+- `Help > System Info` reports the video card and environment; VRAM is
+  `Unavailable` because the wgpu API does not expose it.
 - GPU-accelerated features in CS6 include Liquify, Adaptive Wide Angle, Oil
   Paint, Warp/Puppet Warp, the Blur Gallery (requires OpenCL 1.1 per
   `ARCH-003`), Lighting Effects, and 3D.
@@ -123,7 +124,7 @@ they persist until Photoshop closes cleanly and are a common cause of a
 | Scratch Disks | Checkbox list + order | — | Up to 4 volumes; reorder with arrows. |
 | GPU Settings / Enable OpenGL Drawing | Checkbox | — | Detected card shown; restart to apply. |
 | GPU Advanced Settings | Sub-dialog | — | Basic / Normal / Advanced. |
-| `Help > System Info` | Dialog | — | Video card + VRAM. |
+| `Help > System Info` | Dialog | — | Environment and video card; VRAM `Unavailable`. |
 | Status bar / Info panel | Readout | — | Scratch Sizes and Efficiency. |
 | `Edit > Purge` | Submenu | — | All / Undo / Clipboard / Histories / Camera Raw. |
 | History panel — `Clear History` | Menu | `Alt`/`Option`-click | Purge states without changing pixels. |
@@ -242,7 +243,7 @@ Crossing types: `Bytes`, `ScratchVolume { path, free, kind }`, `Efficiency`,
 | `ScratchDiskListWidget` | `QListView`+buttons | Ordered multi-volume list; up/down reorder; free-space display. |
 | `GpuSettingsWidget` | `QGroupBox` | Detected card, Enable OpenGL, Advanced Settings, restart hint. |
 | `HistoryCachePresetButtons` | `QButtonGroup` | Tall and Thin / Default / Big and Flat → set Level+Tile. |
-| `SystemInfoDialog` | `QDialog` | Video card, VRAM, RAM, scratch info (`Help > System Info`). |
+| `SystemInfoDialog` | `QDialog` | Environment, video card, RAM, and process usage (`Help > System Info`); scratch readouts stay with #636. |
 | `StatusBarReadout` | `QStatusBar` widget | Scratch Sizes (used/available) and Efficiency %. |
 | `PurgeMenu` | `QMenu` | All / Undo / Clipboard / Histories / Camera Raw. |
 | `MemoryEstimateLabel` | `QLabel` | Live estimate as the slider moves. |

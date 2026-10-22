@@ -11,6 +11,20 @@ Snapshot for resuming after a context break. Update after each milestone.
   (`docs/00-overview/licensing-and-provenance.md`).
 - **Provenance history:** the git history was rewritten so no reachable commit
   contains reproduced Adobe Help prose or the old wording.
+- **System Info and Submit Issue** (#815, branch
+  `feat/815-system-info-panel`, OpenSpec change `system-info-panel`, archived
+  into `ui/system-info`). `Help > System Info` opens a modeless snapshot report
+  with Copy: Pictura version/build, Qt, OS/kernel/architecture, desktop/session,
+  CPU model/cores/clock, RAM/swap/system CPU, the process's RAM/CPU, the wgpu
+  adapter's name/type/backend/driver, and each display's model/resolution/size/
+  DPI/refresh. `Help > Submit Issue` sits below it, copies the report, and opens
+  the repository's new-issue page prefilled with it; a failed browser launch
+  names the clipboard fallback. Linux `/proc` supplies the CPU/memory/process
+  rows; other platforms show `Unavailable`. The report excludes the hostname,
+  user name, monitor serials, network addresses, environment-variable dumps,
+  and document paths. VRAM, GPU clock, desktop build version, and monitor type stay
+  `Unavailable` (no portable API). Tests: `tst_system_info` plus a Rust
+  `gpu_adapter_info_never_panics`; opening the real browser is a manual check.
 - **Plain-Rust document session** (#740, branch
   `refactor/740-rust-document-session`, OpenSpec change `document-session`,
   archived into `document/document-session`). The document, the selection, and

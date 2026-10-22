@@ -38,6 +38,7 @@ Adobe tooling has used numeric error codes in some products (installation, activ
 | Progress dialog | Modeless | `Esc` | Cancel path must abort cleanly. |
 | Status bar / Info | Readout | — | Non-fatal status (scratch sizes, efficiency). |
 | `Help > System Info` | Dialog | — | Environment context for support. |
+| `Help > Submit Issue` | Menu | — | App extension: opens a prefilled issue with the System Info report. |
 | Script error console (proposed, `ARCH-011`) | Panel | — | Script/plug-in tracebacks. |
 | "Report / Copy details" (proposed) | Dialog action | — | Crash/defect reporting; opt-in (`XC-003`). |
 

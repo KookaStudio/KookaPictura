@@ -81,7 +81,7 @@ and failure dialogs. There is no user-facing "architecture" panel.
 | `Edit > Preferences > 3D` | Preferences page | — | VRAM allocation slider for the 3D engine. |
 | `Edit > Purge` | Menu | — | Frees Undo / Clipboard / Histories memory on demand. |
 | Status bar | Status readout | — | SCRATCH SIZES and EFFICIENCY. |
-| `Help > System Info` | Dialog | — | Reports detected GPU and VRAM. |
+| `Help > System Info` | Dialog | — | Reports the environment and detected GPU; VRAM is `Unavailable` because wgpu does not expose it. |
 | Launch-time GPU warning | Modal dialog | — | Shown once when the GPU Sniffer fails. |
 
 ## Parameters & ranges
