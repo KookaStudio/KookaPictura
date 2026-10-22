@@ -35,9 +35,11 @@ Snapshot for resuming after a context break. Update after each milestone.
     and anchors the lines as the paragraph's last line was.
   Ceiling (`ponytail:`): the word-spacing min/desired/max bounds, the letter
   spacing and the glyph scaling are not applied - the spread divides the
-  leftover width evenly - the spread is computed for left-to-right text, and
-  the Qt `Rasterize Type` path still collapses the justify variants to
-  `Qt::AlignLeft`.
+  leftover width evenly - the spread is computed for left-to-right text, a
+  line with no word space is never spread, and the Qt `Rasterize Type` path
+  still collapses the justify variants to `Qt::AlignLeft`. A point-type
+  layer's lines follow the variant's alignment, so a layer that already
+  carried Justify Last Right is now right-aligned.
 - **Plain-Rust document session** (#740, branch
   `refactor/740-rust-document-session`, OpenSpec change `document-session`,
   archived into `document/document-session`). The document, the selection, and
