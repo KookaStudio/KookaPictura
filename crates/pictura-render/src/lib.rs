@@ -192,10 +192,12 @@ pub use type_caret::{type_baselines, type_caret_stops};
 mod type_paragraph;
 pub use type_paragraph::{type_overflows, type_to_paragraph, type_to_point};
 mod type_layer;
+mod type_path;
 pub use type_layer::{
     add_type_layer, apply_type_style, render_type, replace_type_layer, type_layer_at,
     type_layer_spec, type_mask, type_placement, TypePlacement,
 };
+pub use type_path::{overflow_point as type_path_overflow_point, path_hit_at, PathHit};
 
 pub use pictura_ops::{Anchor, Resample};
 

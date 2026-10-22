@@ -42,8 +42,8 @@ pub use text_render::{
 pub use type_tool::{
     AntiAlias, CharacterAttrs, CharacterOverrides, CharacterStyle, Composer, Justify, KerningMode,
     Leading, ParagraphAttrs, ParagraphOverrides, ParagraphStyle, ResolvedStyle, StyleError,
-    StyleOverrides, TextStyle, TextStyleSheet, TypeSpec, TypeTool, BASIC_PARAGRAPH,
-    DEFAULT_LANGUAGE,
+    StyleOverrides, TextPath, TextPathKind, TextStyle, TextStyleSheet, TypeSpec, TypeTool,
+    BASIC_PARAGRAPH, DEFAULT_LANGUAGE,
 };
 pub use vector::{VectorFillRule, VectorMask, VectorSubpath};
 

@@ -56,6 +56,7 @@ pub fn author_type_tool(
         style: None,
         vertical: spec.vertical,
         box_bounds: spec.box_bounds,
+        path: spec.path.clone(),
     };
     if let Some(decoded) = decode_type_tool(&crate::encode_type_tool(&tool)) {
         tool.fonts = decoded.fonts;

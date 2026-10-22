@@ -8,6 +8,8 @@
 
 #include "type_frame.h"
 
+#include <QtCore/QStringList>
+
 #include <QtCore/QLineF>
 #include <QtCore/QtMath>
 
@@ -15,6 +17,41 @@
 #include <cmath>
 
 namespace pictura {
+
+QString typePathPointString(const QVector<double>& hit)
+{
+    QStringList segments;
+    const int count = hit.size() >= 4 ? int(hit.at(3)) : 0;
+    for (int i = 0; i < count; ++i) {
+        const int base = 4 + i * 8;
+        if (base + 7 >= hit.size()) {
+            break;
+        }
+        QStringList values;
+        for (int j = 0; j < 8; ++j) {
+            values << QString::number(hit.at(base + j), 'g', 17);
+        }
+        segments << values.join(QLatin1Char(' '));
+    }
+    return segments.join(QLatin1Char(';'));
+}
+
+QPolygonF typePathPolygon(const QString& points)
+{
+    QPolygonF polygon;
+    const QStringList segments = points.split(QLatin1Char(';'), Qt::SkipEmptyParts);
+    for (int i = 0; i < segments.size(); ++i) {
+        const QStringList values = segments.at(i).split(QLatin1Char(' '), Qt::SkipEmptyParts);
+        if (values.size() != 8) {
+            continue;
+        }
+        if (i == 0) {
+            polygon << QPointF(values.at(0).toDouble(), values.at(1).toDouble());
+        }
+        polygon << QPointF(values.at(6).toDouble(), values.at(7).toDouble());
+    }
+    return polygon;
+}
 
 namespace {
 

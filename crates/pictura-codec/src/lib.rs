@@ -50,6 +50,7 @@ mod smart_filter;
 mod smart_object;
 mod smart_writer;
 mod svg;
+mod type_path;
 mod type_plain;
 mod type_shape;
 mod type_tool;

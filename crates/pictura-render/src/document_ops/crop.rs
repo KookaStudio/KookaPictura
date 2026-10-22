@@ -163,6 +163,13 @@ pub(crate) fn offset_layer(layer: &mut Layer, dx: i32, dy: i32) {
     if let Some(mask) = &mut layer.mask {
         mask.rect = offset_rect(mask.rect, dx, dy);
     }
+    if let Some(tool) = layer.type_tool.as_mut() {
+        if let Some(path) = tool.path.as_mut() {
+            path.subpath.translate(f64::from(dx), f64::from(dy));
+        }
+        tool.transform[4] += f64::from(dx);
+        tool.transform[5] += f64::from(dy);
+    }
 }
 
 /// Shift the topmost pixel layer's bounds by `(dx, dy)`.
