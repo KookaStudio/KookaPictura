@@ -30,7 +30,7 @@ Deeper technical status for PSD/PSB lives in
 | Filters | Shipped — 110 filters across the classic families; three CS6 families have no engine |
 | Colour and painting | Shipped — ICC profiles, Assign Profile, Convert to Profile, colour settings, the brush engine |
 | Camera raw files | Open — there is no raw container reader and no demosaic |
-| Panels | 17 of 22 populated; Actions, Adjustments, Gradients, Patterns and Styles are placeholders |
+| Panels | 18 of 22 populated; Actions, Gradients, Patterns and Styles are placeholders |
 | Automation | The local control server ships; Actions, batch, scripting and plug-ins are open |
 | HDR tone mapping | One of four methods |
 | Layer comps, preset manager, stack modes, Blend-If UI | Open |
@@ -341,7 +341,8 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       `crates/pictura-app/cpp/frame_workspaces.cpp`.
 - [x] **The toolbox, the options bar, and the keyboard-shortcuts editor.**
       `crates/pictura-app/cpp/toolbox.cpp`.
-- [ ] The Adjustments panel icon grid (#509)
+- [x] The Adjustments panel icon grid (#509)
+- [ ] Refine the Adjustments panel icon artwork (#819)
 - [ ] The Measurement Log panel and the measurement engine (#510)
 - [ ] The Tool Presets panel and `.tpl` libraries (#511)
 - [ ] The Styles panel and `.asl` presets (#512)

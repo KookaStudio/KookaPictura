@@ -74,6 +74,7 @@ set(PICTURA_QT_TESTS
     tst_swatches_panel
     tst_color_picker
     tst_properties_panel
+    tst_adjustments_panel
     tst_channels_panel
     tst_paths_panel
     tst_icon_assets

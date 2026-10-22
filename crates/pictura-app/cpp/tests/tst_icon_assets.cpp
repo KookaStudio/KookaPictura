@@ -16,6 +16,7 @@ private slots:
     void panelGlyphsResolve();
     void pathGlyphsResolve();
     void infoGlyphsResolve();
+    void adjustmentsGlyphsResolve();
     void unknownIdIsNull();
     void explicitColour();
     void disabledDiffers();
@@ -64,6 +65,37 @@ void IconAssetsTest::infoGlyphsResolve()
         QStringLiteral("info.crosshair"),
         QStringLiteral("info.bounds"),
         QStringLiteral("info.protractor"),
+    };
+    for (const QString& id : ids) {
+        const QIcon icon = pictura::icon(id);
+        QVERIFY2(!icon.isNull(), qPrintable(id + QStringLiteral(" resolves")));
+        QVERIFY2(!icon.pixmap(16, 16).isNull(),
+                 qPrintable(id + QStringLiteral(" renders at 16px")));
+    }
+}
+
+void IconAssetsTest::adjustmentsGlyphsResolve()
+{
+    const QStringList ids = {
+        QStringLiteral("adjustments.solid-color"),
+        QStringLiteral("adjustments.gradient"),
+        QStringLiteral("adjustments.pattern"),
+        QStringLiteral("adjustments.brightness-contrast"),
+        QStringLiteral("adjustments.levels"),
+        QStringLiteral("adjustments.curves"),
+        QStringLiteral("adjustments.exposure"),
+        QStringLiteral("adjustments.vibrance"),
+        QStringLiteral("adjustments.hue-saturation"),
+        QStringLiteral("adjustments.color-balance"),
+        QStringLiteral("adjustments.black-white"),
+        QStringLiteral("adjustments.photo-filter"),
+        QStringLiteral("adjustments.channel-mixer"),
+        QStringLiteral("adjustments.color-lookup"),
+        QStringLiteral("adjustments.invert"),
+        QStringLiteral("adjustments.posterize"),
+        QStringLiteral("adjustments.threshold"),
+        QStringLiteral("adjustments.gradient-map"),
+        QStringLiteral("adjustments.selective-color"),
     };
     for (const QString& id : ids) {
         const QIcon icon = pictura::icon(id);

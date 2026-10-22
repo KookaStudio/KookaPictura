@@ -13,6 +13,25 @@
     <file>ui/select-chevron-light.svg</file>
     <file>ui/select-chevron-disabled.svg</file>
     <file>icons/app.png</file>
+    <file>icons/adjustments.solid-color.svg</file>
+    <file>icons/adjustments.gradient.svg</file>
+    <file>icons/adjustments.pattern.svg</file>
+    <file>icons/adjustments.brightness-contrast.svg</file>
+    <file>icons/adjustments.levels.svg</file>
+    <file>icons/adjustments.curves.svg</file>
+    <file>icons/adjustments.exposure.svg</file>
+    <file>icons/adjustments.vibrance.svg</file>
+    <file>icons/adjustments.hue-saturation.svg</file>
+    <file>icons/adjustments.color-balance.svg</file>
+    <file>icons/adjustments.black-white.svg</file>
+    <file>icons/adjustments.photo-filter.svg</file>
+    <file>icons/adjustments.channel-mixer.svg</file>
+    <file>icons/adjustments.color-lookup.svg</file>
+    <file>icons/adjustments.invert.svg</file>
+    <file>icons/adjustments.posterize.svg</file>
+    <file>icons/adjustments.threshold.svg</file>
+    <file>icons/adjustments.gradient-map.svg</file>
+    <file>icons/adjustments.selective-color.svg</file>
     <file>icons/chevron.down.svg</file>
     <file>icons/chevron.up.svg</file>
     <file>icons/edit.redo.svg</file>

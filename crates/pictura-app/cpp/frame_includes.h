@@ -41,6 +41,7 @@
 #include "panels/panel_column.h"
 #include "panels/panel_group.h"
 #include "panels/placeholder_panel.h"
+#include "panels/adjustments_panel.h"
 #include "panels/properties_panel.h"
 #include "panels/swatches_panel.h"
 #include "preferences_dialog.h"
