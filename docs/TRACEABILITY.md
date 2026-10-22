@@ -47,6 +47,7 @@ and the shared module.
 | Preferences | `preferences.md` | UI-010 | `pictura_app::prefs` | `QDialog`, `QSettings` | draft |
 | Keyboard shortcuts | `keyboard-shortcuts.md` | UI-011 | `pictura_app::keymap` | `QShortcut` | draft |
 | Accessibility | `accessibility.md` | UI-012 | — | `QAccessible`, AT-SPI2 | draft |
+| Search bar (non-parity) | `search-bar.md` | UI-013 | — | `QFrame` overlay, `QListWidget` | spec'd |
 | Panels (20 files) | `panels/*.md` | PAN-001…026 | panel models | `QDockWidget` + `QAbstractItemModel` | draft |
 
 ## 03-tools

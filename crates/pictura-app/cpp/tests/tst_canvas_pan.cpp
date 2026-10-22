@@ -50,6 +50,8 @@ private slots:
     void freePanConstrainsFittingImage();
     void freePanReclampsResizedDocument();
     void freePanCollapsesScrollbar();
+    void scrollbarRangeFollowsThePanRange();
+    void scrollbarHandleMovesAgainstTheContent();
     void freePanCommandAppliesToCanvas();
     void offsetRangeSnapsToWorkspace();
     void workspaceSnapPinsFittingImage();
@@ -276,6 +278,128 @@ void CanvasPanTest::freePanCollapsesScrollbar()
     view->setFreePan(true);
     QCOMPARE(bars.horizontalBarForTest()->maximum(), freeMaxX);
     QCOMPARE(bars.verticalBarForTest()->maximum(), freeMaxY);
+}
+
+void CanvasPanTest::scrollbarRangeFollowsThePanRange()
+{
+    pictura::CanvasScrollBars bars;
+    auto* view = new pictura::ImageView(&bars);
+    bars.setView(view);
+    bars.resize(600, 500);
+    bars.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&bars));
+    view->resize(400, 300);
+    QImage seed(1000, 800, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    view->setImage(seed);
+    // The initial view fits the document, so the zoom is set explicitly to
+    // make it overflow the canvas.
+    view->setZoom(1.0, QPointF(view->width() / 2.0, view->height() / 2.0));
+    QCoreApplication::processEvents();
+
+    QScrollBar* hbar = bars.horizontalBarForTest();
+    QScrollBar* vbar = bars.verticalBarForTest();
+    const double zoom = view->zoom();
+    const pictura::OffsetRange range = pictura::offsetRangeFor(
+        QSizeF(view->documentSize()), zoom, QSizeF(view->size()), view->freePan(),
+        pictura::kCanvasRevealMarginPx, view->snapToWorkspace());
+
+    // The bar's range is the pan range, so every position the canvas can be
+    // panned to has a handle position.
+    QCOMPARE(hbar->maximum(), int(std::lround(range.maxX - range.minX)));
+    QCOMPARE(vbar->maximum(), int(std::lround(range.maxY - range.minY)));
+    QVERIFY2(hbar->isVisible() && vbar->isVisible(),
+             "the bars show a document that overflows the viewport");
+
+    // The bar's ends are the pan range's ends: the start of the document at the
+    // bar's minimum, its end at the bar's maximum.
+    hbar->setValue(hbar->minimum());
+    QVERIFY2(std::abs(view->offset().x() - range.maxX) < 1.0,
+             "the bar's minimum shows the start of the document");
+    vbar->setValue(vbar->minimum());
+    QVERIFY2(std::abs(view->offset().y() - range.maxY) < 1.0,
+             "the vertical bar's minimum shows the top of the document");
+    hbar->setValue(hbar->maximum());
+    QVERIFY2(std::abs(view->offset().x() - range.minX) < 1.0,
+             "the bar's maximum shows the end of the document");
+    vbar->setValue(vbar->maximum());
+    QVERIFY2(std::abs(view->offset().y() - range.minY) < 1.0,
+             "the vertical bar's maximum shows the bottom of the document");
+
+    // A hand pan moves the handle one pixel per pixel.
+    view->panBy(QPointF(30.0, 20.0));
+    QCOMPARE(hbar->value(), int(std::lround(range.maxX - view->offset().x())));
+    QCOMPARE(vbar->value(), int(std::lround(range.maxY - view->offset().y())));
+
+    // The canvas can be panned into the reveal margin and the handle follows
+    // there: it reaches the end exactly when the canvas reaches the pannable
+    // limit, and it never rests at the end while the canvas can still move.
+    view->panBy(QPointF(-5000.0, -5000.0));
+    QVERIFY2(std::abs(view->offset().x() - range.minX) < 1.0,
+             "the canvas is panned to the pan range's end");
+    QCOMPARE(hbar->value(), hbar->maximum());
+    QCOMPARE(vbar->value(), vbar->maximum());
+    hbar->setValue(hbar->maximum() - 30);
+    QVERIFY2(std::abs(view->offset().x() - (range.minX + 30.0)) < 1.0,
+             "the bar leaves the margin with the canvas");
+
+    // A document that fits keeps the bars visible and their pan range.
+    view->replaceDocument(QSize(100, 80));
+    QCoreApplication::processEvents();
+    const pictura::OffsetRange fit = pictura::offsetRangeFor(
+        QSizeF(view->documentSize()), zoom, QSizeF(view->size()), view->freePan(),
+        pictura::kCanvasRevealMarginPx, view->snapToWorkspace());
+    QCOMPARE(hbar->maximum(), int(std::lround(fit.maxX - fit.minX)));
+    QVERIFY2(hbar->isVisible() && vbar->isVisible(),
+             "the bars stay visible when the document fits");
+    QVERIFY2(hbar->maximum() > 0, "free pan offers a pan range");
+    const QPointF before = view->offset();
+    view->panBy(QPointF(20.0, 10.0));
+    QVERIFY2(view->offset() != before, "the canvas is still pannable when the document fits");
+
+    // Free Pan off collapses the fitting axis to a point, and back on re-derives
+    // the range.
+    view->setFreePan(false);
+    QCoreApplication::processEvents();
+    QCOMPARE(hbar->maximum(), 0);
+    QCOMPARE(hbar->value(), 0);
+    QCOMPARE(vbar->maximum(), 0);
+    QCOMPARE(vbar->value(), 0);
+    view->setFreePan(true);
+    QCoreApplication::processEvents();
+    QCOMPARE(hbar->maximum(), int(std::lround(fit.maxX - fit.minX)));
+}
+
+void CanvasPanTest::scrollbarHandleMovesAgainstTheContent()
+{
+    pictura::CanvasScrollBars bars;
+    auto* view = new pictura::ImageView(&bars);
+    bars.setView(view);
+    bars.resize(600, 500);
+    bars.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&bars));
+    view->resize(400, 300);
+    QImage seed(1000, 800, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    view->setImage(seed);
+    view->setZoom(1.0, QPointF(view->width() / 2.0, view->height() / 2.0));
+    QCoreApplication::processEvents();
+
+    QScrollBar* hbar = bars.horizontalBarForTest();
+    QScrollBar* vbar = bars.verticalBarForTest();
+    QVERIFY2(hbar->maximum() > 0 && vbar->maximum() > 0,
+             "the bars offer a travel range");
+
+    // Raising the handle lowers the offset: the content travels against it.
+    hbar->setValue(hbar->minimum());
+    const double x0 = view->offset().x();
+    hbar->setValue(hbar->minimum() + 20);
+    QVERIFY2(view->offset().x() < x0, "the horizontal handle moves against the content");
+
+    vbar->setValue(vbar->minimum());
+    const double y0 = view->offset().y();
+    vbar->setValue(vbar->minimum() + 20);
+    QVERIFY2(view->offset().y() < y0, "the vertical handle moves against the content");
 }
 
 void CanvasPanTest::freePanCommandAppliesToCanvas()

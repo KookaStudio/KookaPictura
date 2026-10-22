@@ -120,6 +120,8 @@ Deeper technical status for PSD/PSB lives in
       shortcut (#523, #586)
 - [ ] Shape layer naming `<Tool> N` (#588)
 - [ ] Export Layers To Files (#587)
+- [ ] Merge Down's result appearance when the target's blend mode or opacity is
+      non-default (#813)
 
 ## Tools
 
@@ -392,6 +394,10 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       commands. `crates/pictura-app/cpp/commands.cpp`.
 - [x] **Preferences** — General, Interface, Performance, Units and Guides.
       `crates/pictura-app/cpp/preferences_dialog.cpp`.
+- [x] **Help ▸ Search** (`Shift+Space`) — finds any command, tool, panel,
+      Preferences page or key panel control by name, shows where it lives, and
+      runs or reveals it. Not a CS6 feature; added by owner decision.
+      `crates/pictura-app/cpp/search_bar.cpp`.
 - [x] **Help ▸ System Info and Submit Issue** — a snapshot environment report
       with Copy, and a prefilled GitHub issue carrying the same report.
       `crates/pictura-app/cpp/system_info.cpp`.

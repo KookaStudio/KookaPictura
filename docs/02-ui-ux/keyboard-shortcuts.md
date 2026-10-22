@@ -875,6 +875,7 @@ dedicated `Help` key. (Verified against the CS6 Help function-key table.)
 | `Animation (Timeline) panel menu > Enable Timeline Shortcut Keys` | Panel pref | — | Gates the Timeline keymap. |
 | Context menus | Context menu | right-click / Control-click | Alternate access when a shortcut is unknown. |
 | `Type > Font Preview Size` | Menu | — | Moved from Preferences in CS6. |
+| `Help > Search…` | Menu (app extension, not CS6) | `Shift+Space` | Search bar over every entry point; rebindable like any command. Text fields and type edits keep the key. See `search-bar.md` (`UI-013`). |
 
 ## Parameters & ranges
 

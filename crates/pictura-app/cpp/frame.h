@@ -30,6 +30,7 @@ class QResizeEvent;
 class QShortcut;
 class QShowEvent;
 class QSplitter;
+class QStatusBar;
 class QTabWidget;
 class QTemporaryDir;
 class QTimer;
@@ -71,6 +72,8 @@ class PlaceholderPanel;
 class AdjustmentsPanel;
 class PreferencesDialog;
 class PropertiesPanel;
+class SearchBar;
+struct SearchEntry;
 class SystemInfoDialog;
 class SwatchesPanel;
 class Toolbox;
@@ -82,6 +85,13 @@ struct SessionState;
 // path needs it (headless implies self-test), so a normal launch starts on the
 // empty workspace with the document commands disabled.
 bool launchCreatesScratchDocument(bool selfTest, bool codecLoaded);
+
+// A Window > Panels (or Type > Panels) command and the panel it toggles.
+struct PanelToggle {
+    const char* command;
+    const char* panel;
+};
+const QList<PanelToggle>& panelToggles();
 
 // Factory panel-column layouts for the built-in workspaces (design D6). The
 // name is matched exactly; an unknown name returns an empty array.
@@ -873,6 +883,20 @@ private:
     void rebuildToolShortcuts();
     void showKeyboardShortcuts();
     QList<QShortcut*> toolKeyShortcuts_;
+    // frame_search.cpp: Help > Search (Shift+Space), the overlay it opens, and
+    // the status-bar hint that names its binding.
+    void registerSearchHandlers();
+    void openSearch();
+    void runSearchEntry(const SearchEntry& entry);
+    void revealSearchEntry(const SearchEntry& entry);
+    // Show a panel wherever its column lives; the panel, or null when unknown.
+    QWidget* showPanelForSearch(const QString& objectName);
+    // A curated control's widget, after bringing its tool page or panel up.
+    QWidget* searchControlWidget(const SearchEntry& entry);
+    void buildSearchHint(QStatusBar* bar);
+    void updateSearchHint();
+    SearchBar* searchBar_ = nullptr;
+    ToolHintBar* searchHint_ = nullptr;
     bool rulersVisible_ = false;
     RulerUnit rulerUnit_ = RulerUnit::Inches;
     bool traditionalPoints_ = false;

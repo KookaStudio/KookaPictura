@@ -293,6 +293,13 @@ offscreen-compatible.
   translation unit, take the next free exit code, and register the file in
   `CMakeLists.txt`. Never grow `selftest.cpp`; keep within its
   `scripts/file-size-allowlist.txt` ceiling.
+- **Keep Help > Search complete.** The Shift+Space search bar rebuilds its
+  index from the live app each time it opens, so new menu commands, tools
+  (`kToolTable`), and panels with a Window > Panels toggle (`panelToggles()`)
+  are found automatically. A new Preferences page goes in the list in
+  `buildSearchIndex()` (`search_index.cpp`), and a panel or options-bar control
+  worth finding goes in `searchControls()` (`search_controls.cpp`). See
+  `docs/02-ui-ux/search-bar.md`.
 - **Change `docs/`.** A docs change fails `scripts/guard.sh` unless the commit
   carries `TASK-ALLOWS-DOCS` (or you run with `TASK_ALLOWS_DOCS=1`).
 

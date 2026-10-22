@@ -48,7 +48,8 @@ Full prerequisites, test commands, and packaging notes are in
 1. `File > Open…` a PSD/PSB file, or any PNG, JPEG, GIF, BMP, TIFF, WebP, PDF,
    or EPS file.
 2. Edit with the toolbox and panels: paint, select, crop, add adjustment and
-   fill layers, apply filters.
+   fill layers, apply filters. Can't find a command? Press `Shift+Space`, type
+   its name, and press Enter to run it or Alt+Enter to see where it lives.
 3. `File > Save` writes PSD/PSB, preserving the file's color mode, bit depth,
    layers, effects, smart objects, metadata, and profiles.
 
@@ -103,6 +104,10 @@ Full prerequisites, test commands, and packaging notes are in
   option. `crates/pictura-app/cpp/print_dialog.cpp`.
 - **Fast.** A Vulkan (wgpu) compute path accelerates compositing and the heavy
   filters, with the CPU as the reference.
+- **Search everything.** `Shift+Space` (Help > Search) finds any command, tool,
+  panel, Preferences page, or key panel control by name, shows where it lives
+  (`Edit > Transform > Warp`), and runs or reveals it. Not a CS6 feature.
+  `crates/pictura-app/cpp/search_bar.cpp`.
 - **Headless and scriptable.** A non-interactive `--headless` mode and an
   optional local control server for automated editing.
 

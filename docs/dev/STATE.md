@@ -11,6 +11,24 @@ Snapshot for resuming after a context break. Update after each milestone.
   (`docs/00-overview/licensing-and-provenance.md`).
 - **Provenance history:** the git history was rewritten so no reachable commit
   contains reproduced Adobe Help prose or the old wording.
+- **Help > Search on Shift+Space** (#788, branch `feat/788-searchbar`,
+  OpenSpec change `ui-search-bar`, archived into `ui/search-bar`). Not a CS6
+  feature; added by owner decision and labelled non-parity.
+  - **A registry command:** `help.search` is bound to `Shift+Space`, so the
+    Keyboard Shortcuts editor rebinds it and `list_commands` sees it. Text
+    fields and type edits keep the key through `ShortcutOverride`, and the
+    window's Space pan ignores a Space pressed with Shift.
+  - **The index** (`search_index.cpp`, widget-free): every command (live
+    label and enabled state), each panel once, the real Preferences pages,
+    every tool, and the curated control table in `search_controls.cpp`.
+    Matching ANDs the query words; results rank by exact label, prefix, word
+    prefix, substring, then path or keyword matches, with runnable entries
+    first. The index is rebuilt every time the bar opens.
+  - **The overlay** (`search_bar.cpp`) is an in-window `QFrame`, not a popup.
+    Enter or a click runs a result; Alt+Enter opens the menu chain or outlines
+    the panel, control or toolbox slot (`flashWidget`). Greyed rows do not run.
+    The status bar carries a `Search` keycap that follows the binding.
+  - **Tests:** 20 Qt cases in `tst_search_bar`.
 - **System Info and Submit Issue** (#815, branch
   `feat/815-system-info-panel`, OpenSpec change `system-info-panel`, archived
   into `ui/system-info`). `Help > System Info` opens a modeless snapshot report
@@ -713,6 +731,19 @@ Snapshot for resuming after a context break. Update after each milestone.
   Rulers (a real page; double-click a ruler) picks the unit and point size.
   Ceilings: no snapping or Alt-flip; Smart
   Guides/Grid/Slices prefs are shown disabled.
+- **Workspace scrollbars** (#823, branch `fix/823-workspace-scrollbars-inverted`,
+  OpenSpec change `fix-workspace-scrollbar-direction`, archived into
+  `document/canvas-scrollbars`): the bars project the canvas's **pan range** —
+  the same range that clamps the pan, so the handle reaches every position the
+  canvas can be dragged to, the reveal margin included — and the handle travels
+  *against* the content: a bar's value is the distance from the range's
+  maximum, so the bar's minimum shows the start of the document and its maximum
+  its end, and raising the value lowers the canvas offset (`ox = maxX - value`).
+  The canvas offset keeps its meaning for the pan, the zoom, the rulers and the
+  Navigator. The reveal margin is pannable, so the bar's ends park the canvas
+  partly off the workspace — the same limits the hand tool has. Ceilings: the
+  margin takes a large share of the handle's travel when the document barely
+  overflows the viewport.
 - **In flight:** the large-image PR above. Open PRs are docs-only — #191 (README AI
   disclosure, real screenshot, `CLAUDE.md`, developer guide) and #135 (Fedora 43
   build instructions). The Paragraph Styles panel + Edit/Image menu commands
