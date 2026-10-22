@@ -1,0 +1,16 @@
+# Test plan
+
+| Scenario | Steps | Expected | Coverage |
+|---|---|---|---|
+| Each method converts a 32-bit document | Open a native 32-bit RGB fixture, convert to 8 and 16 bits once per method, and compare the output samples with the identity conversion | Every method succeeds, the depth/store fields follow the conversion contract, and the output differs from the identity where the method requires it | `pictura-render::hdr_conversion_methods_convert` |
+| Highlight Compression keeps midtones and maps white | Run the operator on samples `0.5` and `4.0` | `0.5` is unchanged; `4.0` is finite, below `1.0`, and above `0.9` | `pictura-adjust::highlight_compression_keeps_midtones_and_maps_white` |
+| Equalize Histogram keeps a uniform input finite | Run Equalize Histogram on a uniform plane | Every output sample is finite and equals the input | `pictura-adjust::equalize_histogram_keeps_uniform_input_finite` |
+| Local Adaptation leaves alpha untouched | Convert a 32-bit store that carries an alpha plane with Local Adaptation | Alpha samples are bit-identical; colour samples change | `pictura-render::local_adaptation_leaves_alpha_untouched` |
+| Extra planes are copied for every method | Convert a store with an alpha/extra plane once per method | The extra plane is copied untoned for every method | `pictura-render::hdr_conversion_copies_extra_planes` |
+| An edited document converts its current composite | Edit a 32-bit document, then convert without an intervening native refresh | The converted pixels reflect the edit, not the stale open-time store | `pictura-render::edited_document_converts_current_composite` |
+| Bad method parameters are refused | Call the conversion with an out-of-range and a non-finite Local Adaptation parameter | The call returns an error and the document is unchanged | `pictura-render::hdr_conversion_refuses_bad_parameters`, `pictura-adjust::bad_local_adaptation_parameters_are_refused` |
+| The bit-depth commands require a 32-bit document | Trigger `Image > Mode > 16 Bits/Channel` on an 8-bit document | No HDR Conversion dialog opens and one `Convert Mode` state is recorded | `tst_hdr_conversion::non32BitConvertsWithoutDialog` |
+| The dialog exposes the four methods and gates their fields | Open the dialog on a 32-bit document and cycle the Method combo through all four entries | Local Adaptation shows nine numeric controls; Exposure and Gamma shows two; Equalize Histogram and Highlight Compression show none | `tst_hdr_conversion::methodComboGatesFields` |
+| The dialog defaults to Local Adaptation | Open the dialog on a 32-bit document | The Method is Local Adaptation and its controls match the HDR Toning `Default` preset values | `tst_hdr_conversion::defaultsToLocalAdaptation` |
+| The dialog converts a 32-bit document | Choose a method that differs observably from Exposure & Gamma, accept the dialog, and inspect the pixels, depth, and history | The pixels reflect the selected method, the requested depth is reported, and exactly one `HDR Conversion` state exists | `tst_hdr_conversion::acceptConvertsWithSelectedMethod` |
+| A failed conversion does not record history | Force a bridge refusal through the test seam and accept the dialog | No history state is added and the document is unchanged | `tst_hdr_conversion::failedConversionRecordsNoHistory` |
