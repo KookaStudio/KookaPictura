@@ -7,7 +7,7 @@
 use pictura_core::{layer_move_locked, Document, Layer, PsdRect};
 
 use super::canvas::{extend_channel, offset_rect, rebase_source_planes};
-use super::{for_each_layer, materialize_merged_composite, resolve_path_mut};
+use super::{for_each_layer, map_shape_layer, materialize_merged_composite, resolve_path_mut};
 
 /// Crop the document to the clamped `width`×`height` rect at `(x, y)`.
 ///
@@ -235,12 +235,17 @@ pub fn translate_layer_index(doc: &mut Document, index: usize, dx: i32, dy: i32)
 }
 
 /// Shift the layer at `path`'s bounds by `(dx, dy)` without recompositing; the
-/// caller refreshes the dirty region. Returns false for an unresolved path, a
-/// group/adjustment, or a position-locked layer.
+/// caller refreshes the dirty region. A shape layer moves its outline instead.
+/// Returns false for an unresolved path, a group/adjustment, or a
+/// position-locked layer.
 pub fn translate_layer_path(doc: &mut Document, path: &str, dx: i32, dy: i32) -> bool {
     let Some(layer) = resolve_path_mut(doc, path) else {
         return false;
     };
+    if crate::is_shape_layer(layer) {
+        let (fx, fy) = (f64::from(dx), f64::from(dy));
+        return map_shape_layer(doc, path, Some((fx, fy)), |x, y| Some((x + fx, y + fy)));
+    }
     if layer.is_group || layer.adjustment.is_some() {
         return false;
     }

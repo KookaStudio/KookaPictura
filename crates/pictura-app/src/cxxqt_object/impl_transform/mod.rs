@@ -52,13 +52,21 @@ pub(super) fn build_move_preview_base(doc: &mut Document, path: &str, gpu_comput
     }
 }
 
-/// Duplicate the active pixel layer, repointing `active` at the copy's path.
+/// The layer at `path` the Move tool drags: a pixel layer, or a shape layer,
+/// whose outline moves.
+pub(super) fn movable_layer<'a>(doc: &'a Document, path: &str) -> Option<&'a pictura_core::Layer> {
+    active_pixel_layer(doc, Some(path)).or_else(|| {
+        pictura_render::resolve_path(doc, path).filter(|l| pictura_render::is_shape_layer(l))
+    })
+}
+
+/// Duplicate the active movable layer, repointing `active` at the copy's path.
 pub(super) fn duplicate_move_target(
     doc: &mut Document,
     target: &mut LayerTarget,
 ) -> Option<String> {
     let path = target.single()?.to_string();
-    let layer = active_pixel_layer(doc, Some(&path))?;
+    let layer = movable_layer(doc, &path)?;
     if !layer.visible || layer_move_locked(layer) {
         return None;
     }

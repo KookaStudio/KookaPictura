@@ -300,6 +300,16 @@ public:
     const transform_api::WarpOverlay& transformWarpForTest() const { return transformWarp_; }
     QPointF transformPivotForTest() const { return transformPivot_; }
     bool transformPivotVisibleForTest() const { return transformPivotVisible_; }
+    // The document-space map the moving layer is drawn under.
+    QTransform transformLayerMapForTest() const
+    {
+        if (!transformProjectiveActive_) {
+            return transformPreviewMatrix();
+        }
+        return QTransform::fromTranslate(-moveLayerPos_.x(), -moveLayerPos_.y())
+            * transformProjective_
+            * QTransform::fromTranslate(moveLayerPos_.x(), moveLayerPos_.y());
+    }
     void clearTransformPreview();
     bool transformPreviewActive() const { return transformActive_; }
 

@@ -21,7 +21,6 @@ pub use crop::{
     translate_layer_active, translate_layer_index, translate_layer_path, translate_layer_rect,
 };
 pub use depth::convert_depth_exposure_gamma;
-pub(crate) use layer_ops::insert_node;
 pub use layer_ops::{
     add_gradient_fill, add_group, add_group_full, add_group_in, add_layer, add_layer_full,
     add_layer_in, add_layer_mask, add_layer_mask_converting_background, add_raster_layer_from_rgba,
@@ -57,7 +56,7 @@ pub use layer_ops::{
     set_layer_mask_linked, set_layer_shape_paths, set_layer_style_value, set_lock_paths,
     set_opacity_paths, set_shape_fill, set_shape_stroke, set_vector_mask_density,
     set_vector_mask_enabled, set_vector_mask_feather, set_vector_mask_linked, set_visible_paths,
-    shape_bounds, shape_coverage, shape_fill, shape_fill_color, shape_stroke,
+    shape_bounds, shape_coverage, shape_fill, shape_fill_color, shape_layer_rect, shape_stroke,
     smart_object_source_bytes, stamp_scope, sync_vector_mask_block, transform_layer,
     transform_layer_quad, transform_layer_quad_with, transform_layer_warp, transform_layer_with,
     trim_to_content, ungroup_layer, ungroup_paths, untrim_to, vector_mask_disabled,
@@ -67,6 +66,7 @@ pub use layer_ops::{
     VectorMaskKind, MASK_FLAG_LINKED, VECTOR_MASK_FLAG_DISABLED, VECTOR_MASK_FLAG_INVERT,
     VECTOR_MASK_FLAG_NOT_LINKED,
 };
+pub(crate) use layer_ops::{insert_node, map_shape_layer};
 pub use matting::{defringe, remove_matte, MatteBackground, MattingError};
 pub use mode::{
     can_convert_depth, can_convert_mode, convert_bit_depth, convert_mode, convert_to_bitmap,
