@@ -167,15 +167,15 @@ pub use document_ops::{
     set_layer_style_value, set_lock_paths, set_opacity_paths, set_shape_fill, set_shape_stroke,
     set_slice, set_vector_mask_density, set_vector_mask_enabled, set_vector_mask_feather,
     set_vector_mask_linked, set_visible_paths, shape_bounds, shape_coverage, shape_fill,
-    shape_fill_color, shape_stroke, smart_object_source_bytes, stamp_scope, transform_layer,
-    transform_layer_quad, transform_layer_quad_with, transform_layer_warp, transform_layer_with,
-    translate_layer, translate_layer_active, translate_layer_index, translate_layer_path,
-    translate_layer_rect, trim_to_content, ungroup_layer, ungroup_paths, untrim_to,
-    vector_mask_disabled, vector_mask_linked, vector_mask_refinement, write_mask_back, AlignEdge,
-    Arrange, BitmapMethod, Clip, Interpolation, LayerMaskKind, LayerStyle, LayerTransform,
-    MaskDocument, MatteBackground, MattingError, MergeError, MergeOutcome, MergeScope,
-    NewLayerSpec, PasteMode, ShapeAttributes, ShapeStroke, Slice, StampScope, VectorMaskKind,
-    MASK_FLAG_LINKED, VECTOR_MASK_FLAG_DISABLED, VECTOR_MASK_FLAG_INVERT,
+    shape_fill_color, shape_layer_rect, shape_stroke, smart_object_source_bytes, stamp_scope,
+    transform_layer, transform_layer_quad, transform_layer_quad_with, transform_layer_warp,
+    transform_layer_with, translate_layer, translate_layer_active, translate_layer_index,
+    translate_layer_path, translate_layer_rect, trim_to_content, ungroup_layer, ungroup_paths,
+    untrim_to, vector_mask_disabled, vector_mask_linked, vector_mask_refinement, write_mask_back,
+    AlignEdge, Arrange, BitmapMethod, Clip, Interpolation, LayerMaskKind, LayerStyle,
+    LayerTransform, MaskDocument, MatteBackground, MattingError, MergeError, MergeOutcome,
+    MergeScope, NewLayerSpec, PasteMode, ShapeAttributes, ShapeStroke, Slice, StampScope,
+    VectorMaskKind, MASK_FLAG_LINKED, VECTOR_MASK_FLAG_DISABLED, VECTOR_MASK_FLAG_INVERT,
     VECTOR_MASK_FLAG_NOT_LINKED,
 };
 
@@ -189,13 +189,16 @@ mod pdf_text;
 pub use pdf_text::{pdf_live_type, pdf_type_fonts, LiveType};
 mod type_caret;
 pub use type_caret::{type_baselines, type_caret_stops};
+mod type_justify;
 mod type_paragraph;
 pub use type_paragraph::{type_overflows, type_to_paragraph, type_to_point};
 mod type_layer;
+mod type_path;
 pub use type_layer::{
     add_type_layer, apply_type_style, render_type, replace_type_layer, type_layer_at,
     type_layer_spec, type_mask, type_placement, TypePlacement,
 };
+pub use type_path::{overflow_point as type_path_overflow_point, path_hit_at, PathHit};
 
 pub use pictura_ops::{Anchor, Resample};
 

@@ -96,7 +96,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 
 | ID | Spec | Gap | Status | Evidence | Issue |
 |---|---|---|---|---|---|
-| PAN-1 | `panels/adjustments-panel.md` | Adjustments panel icon grid | MISSING | `frame_build.cpp:57` | #509 |
+| PAN-1 | `panels/adjustments-panel.md` | Adjustments panel icon grid (creation shipped; mode/depth gating and fill-layer presets remain) | PARTIAL | `panels/adjustments_panel.cpp` | #509 |
 | PAN-2 | `panels/measurement-log-panel.md` | Measurement Log panel + measurement engine | MISSING | `command_tree.cpp:962` | #510 |
 | PAN-3 | `panels/tool-presets-panel.md` | Tool Presets panel + `.tpl` libraries | MISSING | `command_tree.cpp:982` | #511 |
 | PAN-4 | `layer-styles.md` | Styles panel + `.asl` presets | MISSING | `frame_build.cpp:79` | #512 |
@@ -132,7 +132,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | TOOL-14 | `healing-brushes.md` | Healing Mode/Source/Sample, Sample All Layers, depth/mode handling | PARTIAL | `options_bar.cpp:694-741`; `tool_healing.cpp:165` | #538 |
 | TOOL-15 | `history-brush.md` | Merged/composite source + Edit ▸ Fill ▸ History | PARTIAL | `paint_tools.rs:524-527` | #539 |
 | TOOL-16 | `mixer-brush.md` | Sample All Layers, Load Solid Colors Only, keyboard shortcuts | MISSING | `options_bar_paint.cpp:310`; `tool_mixerbrush.cpp:39-41` | #540 |
-| TOOL-17 | `type-tools.md` | Type-on-path (#683), warp text (#684), gamma blend and missing-font handling (#685); paragraph type landed in #682 (greedy wrap, resize-only box handles) | PARTIAL | `type_paragraph.rs`; `command_tree.cpp:595-617` | #541 |
+| TOOL-17 | `type-tools.md` | Warp text (#684), gamma blend and missing-font handling (#685); type-on-path and area type landed in #683 (area type clips a bounding-box layout), paragraph type in #682 (greedy wrap, resize-only box handles) | PARTIAL | `type_path.rs`; `command_tree.cpp:595-617` | #541 |
 | TOOL-18 | `path-selection-tools.md` | Path operations/align/arrange, constrain path dragging, Target Path toggle, segment/marquee multi-select | MISSING | `tool_path_selection.cpp:13-14` | #542 |
 | TOOL-19 | `slice-tools.md` | Slice options bar/style/modifiers, Divide/Combine/Duplicate, Slice Options dialog, slices-from-guides | MISSING | `tool_slice.cpp:65-102` | #543 |
 | TOOL-20 | `crop-tool.md` | Crop resampling by W×H×resolution, non-destructive crop/Reveal All, crop shield settings | PARTIAL | `options_bar_crop.cpp:244-375` | #544 |

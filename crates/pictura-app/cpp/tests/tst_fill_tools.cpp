@@ -15,6 +15,7 @@
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QToolButton>
 
+#include "pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
 
 #include "qt_test_support.h"
@@ -53,7 +54,15 @@ private slots:
     void gradientTool();
     void paintBucketTool();
     void fillCommand();
+    void fillCommandPreservesTransparency();
+    void fillCommandPreservesTransparencyAtDepth16();
+    void fillCommandOnADepth16Document();
+    void fillCommandOnAGrayDocument();
     void strokeCommand();
+    void strokeCommandBandStopsAtTheSelection();
+    void strokeCommandOnADepth16Document();
+    void paintBucketOnADepth16Document();
+    void gradientOnADepth16Document();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -294,6 +303,90 @@ void FillToolsTest::fillCommand()
     QCOMPARE(f.view->sample_argb(0, 0), QColor(215, 215, 215).rgba());
 }
 
+void FillToolsTest::fillCommandPreservesTransparency()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    // A white square on a transparent field.
+    QImage seed(16, 16, QImage::Format_ARGB32);
+    seed.fill(Qt::transparent);
+    {
+        QPainter painter(&seed);
+        painter.fillRect(4, 4, 8, 8, QColor(255, 255, 255, 255));
+    }
+    Fixture f(frame, seed, QStringLiteral("pictura_fill_preserve"));
+    QVERIFY2(f.ok(), "fill fixture");
+
+    const QColor foreground(10, 20, 30);
+    const int base = f.view->history_index();
+    QVERIFY(pictura::edit_fill(*f.view, foreground.rgba(), -1, QStringLiteral("normal"), 100, true));
+    QVERIFY2(f.committedOnce(base, "Fill"), "one fill state");
+    // The already-opaque pixels took the colour; the transparent ones did not.
+    QCOMPARE(f.view->sample_argb(8, 8), foreground.rgba());
+    QCOMPARE(qAlpha(f.view->sample_argb(1, 1)), 0);
+}
+
+void FillToolsTest::fillCommandPreservesTransparencyAtDepth16()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    // An opaque square, a half transparent one and an empty field.
+    QImage seed(16, 16, QImage::Format_ARGB32);
+    seed.fill(Qt::transparent);
+    {
+        QPainter painter(&seed);
+        painter.fillRect(2, 2, 4, 4, QColor(255, 255, 255, 255));
+        painter.fillRect(8, 8, 4, 4, QColor(255, 255, 255, 128));
+    }
+    Fixture f(frame, seed, QStringLiteral("pictura_fill_preserve_depth16"));
+    QVERIFY2(f.ok(), "fill fixture");
+    QVERIFY(pictura::convert_image_depth(*f.view, 16));
+    QCOMPARE(pictura::image_depth_bits(*f.view), 16);
+
+    const QColor foreground(10, 20, 30);
+    const int base = f.view->history_index();
+    QVERIFY(pictura::edit_fill(*f.view, foreground.rgba(), -1, QStringLiteral("normal"), 100, true));
+    QVERIFY2(f.committedOnce(base, "Fill"), "one fill state");
+    // The opaque pixel took the colour; the half transparent one took the
+    // colour and kept its alpha; the empty one was left alone.
+    QCOMPARE(f.view->sample_argb(3, 3), foreground.rgba());
+    QCOMPARE(qAlpha(f.view->sample_argb(9, 9)), 128);
+    QCOMPARE(qAlpha(f.view->sample_argb(1, 1)), 0);
+}
+
+void FillToolsTest::fillCommandOnADepth16Document()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(16, 16, QImage::Format_RGB32);
+    seed.fill(QColor(0, 128, 0));
+    Fixture f(frame, seed, QStringLiteral("pictura_fill_depth16"));
+    QVERIFY2(f.ok(), "fill fixture");
+    QVERIFY(pictura::convert_image_depth(*f.view, 16));
+    QCOMPARE(pictura::image_depth_bits(*f.view), 16);
+
+    const QColor foreground(10, 20, 30);
+    const int base = f.view->history_index();
+    QVERIFY(pictura::edit_fill(*f.view, foreground.rgba(), -1, QStringLiteral("normal"), 100, false));
+    QVERIFY2(f.committedOnce(base, "Fill"), "one fill state");
+    QCOMPARE(f.view->sample_argb(8, 8), foreground.rgba());
+}
+
+void FillToolsTest::fillCommandOnAGrayDocument()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(16, 16, QImage::Format_RGB32);
+    seed.fill(QColor(0, 128, 0));
+    Fixture f(frame, seed, QStringLiteral("pictura_fill_gray"));
+    QVERIFY2(f.ok(), "fill fixture");
+    QVERIFY(pictura::convert_image_mode(*f.view, QStringLiteral("grayscale")));
+    QCOMPARE(pictura::image_mode(*f.view), QStringLiteral("grayscale"));
+
+    const QColor foreground(220, 0, 0);
+    const int base = f.view->history_index();
+    QVERIFY(pictura::edit_fill(*f.view, foreground.rgba(), -1, QStringLiteral("normal"), 100, false));
+    QVERIFY2(f.committedOnce(base, "Fill"), "one fill state");
+    // 0.299 * 220 = 65.78, the Rec. 601 luma of #DC0000.
+    QCOMPARE(qRed(f.view->sample_argb(8, 8)), 66);
+}
+
 void FillToolsTest::strokeCommand()
 {
     pictura::PicturaMainWindow& frame = *window_;
@@ -322,6 +415,83 @@ void FillToolsTest::strokeCommand()
     QCOMPARE(f.view->sample_argb(6, 12), red.rgba());
     QCOMPARE(f.view->sample_argb(12, 12), QColor(Qt::white).rgba());
     QCOMPARE(f.view->sample_argb(0, 0), QColor(Qt::white).rgba());
+}
+
+void FillToolsTest::strokeCommandBandStopsAtTheSelection()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(24, 24, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_stroke_band"));
+    QVERIFY2(f.ok(), "stroke fixture");
+
+    // A 10×10 selection with room to its right, stroked 2 px Outside in red.
+    QVERIFY(f.view->select_rect(7, 7, 10, 10, QStringLiteral("new"), 0.0));
+    const QColor red(220, 0, 0);
+    const int base = f.view->history_index();
+    QVERIFY(pictura::edit_stroke(*f.view, red.rgba(), 2, 2, QStringLiteral("normal"), 100));
+    QVERIFY2(f.committedOnce(base, "Stroke"), "one stroke state");
+    // The band rings the selection; the pixels beyond it keep the layer's
+    // own colour, all the way to the canvas's edge.
+    QCOMPARE(f.view->sample_argb(5, 12), red.rgba());
+    QCOMPARE(f.view->sample_argb(17, 12), red.rgba());
+    QCOMPARE(f.view->sample_argb(19, 12), QColor(Qt::white).rgba());
+    QCOMPARE(f.view->sample_argb(23, 12), QColor(Qt::white).rgba());
+    QCOMPARE(f.view->sample_argb(23, 23), QColor(Qt::white).rgba());
+}
+
+void FillToolsTest::strokeCommandOnADepth16Document()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(24, 24, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_stroke_depth16"));
+    QVERIFY2(f.ok(), "stroke fixture");
+    QVERIFY(pictura::convert_image_depth(*f.view, 16));
+    QCOMPARE(pictura::image_depth_bits(*f.view), 16);
+
+    QVERIFY(f.view->select_rect(7, 7, 10, 10, QStringLiteral("new"), 0.0));
+    const QColor red(220, 0, 0);
+    const int base = f.view->history_index();
+    QVERIFY(pictura::edit_stroke(*f.view, red.rgba(), 2, 2, QStringLiteral("normal"), 100));
+    QVERIFY2(f.committedOnce(base, "Stroke"), "one stroke state");
+    QCOMPARE(f.view->sample_argb(6, 12), red.rgba());
+}
+
+void FillToolsTest::paintBucketOnADepth16Document()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(40, 40, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_bucket_depth16"));
+    QVERIFY2(f.ok(), "paint bucket fixture");
+    QVERIFY(pictura::convert_image_depth(*f.view, 16));
+    QCOMPARE(pictura::image_depth_bits(*f.view), 16);
+
+    frame.setActiveTool(pictura::ToolId::PaintBucket);
+    const Colors colors(f.tools, QColor(Qt::blue), Qt::white);
+    const int base = f.view->history_index();
+    f.drag({QPointF(1, 1)});
+    QVERIFY2(f.committedOnce(base, "Paint Bucket"), "one paint bucket state");
+    QCOMPARE(f.view->sample_argb(1, 1), QColor(Qt::blue).rgba());
+}
+
+void FillToolsTest::gradientOnADepth16Document()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(24, 24, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_gradient_depth16"));
+    QVERIFY2(f.ok(), "gradient fixture");
+    QVERIFY(pictura::convert_image_depth(*f.view, 16));
+    QCOMPARE(pictura::image_depth_bits(*f.view), 16);
+
+    frame.setActiveTool(pictura::ToolId::Gradient);
+    const Colors colors(f.tools, Qt::black, Qt::white);
+    const int base = f.view->history_index();
+    f.drag({QPointF(0, 0), QPointF(20, 0)});
+    QVERIFY2(f.committedOnce(base, "Gradient"), "one gradient state");
+    QCOMPARE(f.view->sample_argb(0, 0), QColor(Qt::black).rgba());
 }
 
 QTEST_MAIN(FillToolsTest)

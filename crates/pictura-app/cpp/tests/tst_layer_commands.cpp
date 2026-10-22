@@ -10,9 +10,11 @@
 #include <QtCore/QCoreApplication>
 #include <QtCore/QStringList>
 #include <QtGui/QAction>
+#include <QtGui/QColor>
 
 #include "commands.h"
 #include "frame.h"
+#include "panels/color_panel.h"
 #include "panels/layers_panel.h"
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 
@@ -41,6 +43,7 @@ private slots:
     void duplicateNestedLayer();
     void duplicateMultiSelection();
     void duplicateWithoutSelection();
+    void solidFillCommandUsesForeground();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -164,6 +167,30 @@ void LayerCommandsTest::duplicateWithoutSelection()
     QVERIFY(registry->dispatch(id));
     QCOMPARE(pictura::layers_api::rowCount(*view), rowsBefore);
     QCOMPARE(view->history_count(), historyBefore);
+}
+
+// The Layer menu's Solid Color... fills with the current foreground colour,
+// the same colour the Layers-panel fill menu uses.
+void LayerCommandsTest::solidFillCommandUsesForeground()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("SolidFill"), 32, 32, QStringLiteral("rgb"), 8,
+                               QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    auto* colors = frame.findChild<pictura::ColorState*>();
+    pictura::CommandRegistry* registry = frame.registry();
+    QVERIFY(view != nullptr && colors != nullptr && registry != nullptr);
+    // Set the colour last: the frame swaps the pair when the edit target
+    // changes, so the state is checked again right before the command runs.
+    colors->setForeground(QColor(0x22, 0x66, 0xcc));
+    QVERIFY2(colors->foreground() == QColor(0x22, 0x66, 0xcc), "the foreground holds");
+
+    const QString id = QString::fromLatin1(pictura::command_ids::LayerNewFillSolidColor);
+    QVERIFY(registry->action(id) != nullptr);
+    registry->refresh();
+    QVERIFY2(registry->action(id)->isEnabled(), "enabled with a document open");
+    QVERIFY(registry->dispatch(id));
+    QCOMPARE(view->sample_argb(0, 0), 0xff2266ccu);
 }
 
 QTEST_MAIN(LayerCommandsTest)

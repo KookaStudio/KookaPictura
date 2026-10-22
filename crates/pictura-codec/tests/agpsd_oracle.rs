@@ -445,3 +445,120 @@ fn ag_psd_reads_color_lookup_fixture() {
 const CUBE_IDENTITY: &[u8] = b"TITLE \"Identity\"\nLUT_3D_SIZE 2\n\
 0.0 0.0 0.0\n1.0 0.0 0.0\n0.0 1.0 0.0\n1.0 1.0 0.0\n\
 0.0 0.0 1.0\n1.0 0.0 1.0\n0.0 1.0 1.0\n1.0 1.0 1.0\n";
+
+const TEXT_PATH_SCRIPT: &str = r#"
+const fs = require('fs');
+const ag = require('ag-psd');
+const psd = ag.readPsd(fs.readFileSync(process.argv[1]), {
+  skipLayerImageData: true,
+  skipCompositeImageData: true,
+});
+const lines = [];
+(function walk(layers) {
+  for (const layer of layers || []) {
+    const p = layer.text && layer.text.textPath;
+    if (p) {
+      lines.push([p.data.type, p.bezierCurve.controlPoints.length, p.data.textRange[0]].join(' '));
+    }
+    walk(layer.children);
+  }
+})(psd.children);
+console.log(lines.join('\n'));
+"#;
+
+#[test]
+fn ag_psd_reads_authored_text_path() {
+    use pictura_core::path::{PathPoint, Subpath};
+    use pictura_core::{
+        BitDepth, Channel, ColorMode, Document, Layer, LayerBlock, PsdRect, TextPath, TextPathKind,
+        TypeSpec,
+    };
+
+    if !node_ag_psd_available() {
+        eprintln!(
+            "skipping ag-psd check: node + ag-psd not available (run `npm i ag-psd`, or set NODE_PATH)"
+        );
+        return;
+    }
+
+    let path = TextPath {
+        kind: TextPathKind::OnPath,
+        subpath: Subpath {
+            points: vec![
+                PathPoint {
+                    anchor: (10.0, 50.0),
+                    in_handle: None,
+                    out_handle: None,
+                    smooth: false,
+                },
+                PathPoint {
+                    anchor: (150.0, 50.0),
+                    in_handle: None,
+                    out_handle: None,
+                    smooth: false,
+                },
+            ],
+            closed: false,
+        },
+        start: 20.0,
+    };
+    let mut spec = TypeSpec::new("Path", "Liberation Sans", 20.0);
+    spec.path = Some(path);
+    let tool = pictura_codec::author_type_tool(&spec, [0.0, -20.0, 60.0, 10.0], None, None);
+    let rect = PsdRect {
+        top: 20,
+        left: 10,
+        bottom: 70,
+        right: 150,
+    };
+    let mut doc = Document::new(160, 80, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers
+        .push(Layer {
+            name: "Path".into(),
+            rect,
+            channels: [0, 1, 2, -1]
+                .into_iter()
+                .map(|id| Channel {
+                    id,
+                    data: vec![0; 140 * 50].into(),
+                })
+                .collect(),
+            extra_blocks: vec![LayerBlock {
+                key: *b"TySh",
+                data: pictura_codec::encode_type_tool(&tool),
+            }],
+            type_tool: Some(tool),
+            ..Default::default()
+        })
+        .expect("push the type layer");
+    let bytes = pictura_codec::write_psd(&doc).expect("writes");
+    let fixture =
+        std::env::temp_dir().join(format!("pictura-text-path-{}.psd", std::process::id()));
+    std::fs::write(&fixture, bytes).expect("write fixture");
+    let out = Command::new("node")
+        .args([
+            "-e",
+            TEXT_PATH_SCRIPT,
+            fixture.to_str().expect("utf-8 fixture path"),
+        ])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .expect("run node");
+    let _ = std::fs::remove_file(&fixture);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        out.status.success(),
+        "ag-psd read failed:\n{stdout}\n{stderr}"
+    );
+    let lines: Vec<&str> = stdout.lines().filter(|l| !l.trim().is_empty()).collect();
+    assert_eq!(lines.len(), 1, "one text path layer:\n{stdout}");
+    let fields: Vec<&str> = lines[0].split_whitespace().collect();
+    assert_eq!(fields[0], "2", "on-path type: {stdout}");
+    assert_eq!(fields[1], "8", "one cubic segment: {stdout}");
+    let start: f64 = fields[2].parse().expect("start fraction");
+    assert!(
+        (start - 20.0 / 140.0).abs() < 0.001,
+        "start fraction: {stdout}"
+    );
+}

@@ -16,6 +16,8 @@
 #include <QtCore/QPointF>
 #include <QtCore/QRect>
 #include <QtCore/QStringList>
+#include <QtGui/QAction>
+#include <QtGui/QColor>
 #include <QtGui/QDragEnterEvent>
 #include <QtGui/QDragMoveEvent>
 #include <QtGui/QDropEvent>
@@ -24,10 +26,12 @@
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QLayout>
 #include <QtWidgets/QLineEdit>
+#include <QtWidgets/QMenu>
 #include <QtWidgets/QToolButton>
 #include <QtWidgets/QTreeView>
 
 #include "frame.h"
+#include "panels/color_panel.h"
 #include "panels/layers_panel.h"
 #include "panels/layers_panel_internal.h"
 #include "panels/percent_field.h"
@@ -131,6 +135,23 @@ bool actionStripIsCentred(const QList<QRect>& rects, int panelWidth)
                <= 1;
 }
 
+// Trigger the panel's New Fill / Adjustment > Solid Color... entry. False when
+// the panel has no strip button or no such entry.
+bool triggerSolidFill(pictura::LayersPanel& panel)
+{
+    auto* button = panel.findChild<QToolButton*>(QStringLiteral("layersStripFillAdjustment"));
+    if (!button || !button->menu()) {
+        return false;
+    }
+    for (QAction* action : button->menu()->actions()) {
+        if (action->text() == QStringLiteral("Solid Color…")) {
+            action->trigger();
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace
 
 class LayersPanelFixesTest : public QObject {
@@ -161,6 +182,8 @@ private slots:
     void cannotClipToBackground();
     void moveDownStopsAtBackground();
     void refreshKeepsCurrentRowOutsideSelection();
+    void solidFillUsesForeground();
+    void solidFillUsesForegroundNotBackground();
 
 private:
     bool setupNest();
@@ -1016,6 +1039,49 @@ void LayersPanelFixesTest::refreshKeepsCurrentRowOutsideSelection()
     panel_->refresh();
     QCOMPARE(panel_->currentPath(), QStringLiteral("0"));
     QCOMPARE(panel_->selectedPaths(), QStringList{added});
+}
+
+// The panel's Solid Color... entry fills with the current foreground colour,
+// not a hard-coded black.
+void LayersPanelFixesTest::solidFillUsesForeground()
+{
+    QVERIFY2(setupNest(), "solid fill fixture");
+    auto* colors = window_->findChild<pictura::ColorState*>();
+    QVERIFY(colors != nullptr);
+    // The frame rebinds the panels through a debounced timer, so bind the view
+    // here rather than rely on the document having been opened.
+    panel_->setView(view_);
+    panel_->refresh();
+
+    const int rowsBefore = pictura::layers_api::rowCount(*view_);
+    // Set the colour last: the frame swaps the pair when the edit target
+    // changes, so the state is checked again right before the action runs.
+    colors->setForeground(QColor(0x22, 0x66, 0xcc));
+    QVERIFY2(colors->foreground() == QColor(0x22, 0x66, 0xcc), "the foreground holds");
+
+    QVERIFY2(triggerSolidFill(*panel_), "the Solid Color entry is offered");
+    QCOMPARE(pictura::layers_api::rowCount(*view_), rowsBefore + 1);
+    QCOMPARE(view_->sample_argb(0, 0), 0xff2266ccu);
+}
+
+// The fill takes the foreground, not the background: with the default pair the
+// fill is the foreground's black and not the background's white.
+void LayersPanelFixesTest::solidFillUsesForegroundNotBackground()
+{
+    QVERIFY2(setupNest(), "solid fill fixture");
+    auto* colors = window_->findChild<pictura::ColorState*>();
+    QVERIFY(colors != nullptr);
+    // The frame rebinds the panels through a debounced timer, so bind the view
+    // here rather than rely on the document having been opened.
+    panel_->setView(view_);
+    panel_->refresh();
+
+    colors->setForeground(QColor(0, 0, 0));
+    colors->setBackground(QColor(255, 255, 255));
+    QVERIFY2(colors->foreground() == QColor(0, 0, 0), "the foreground holds");
+
+    QVERIFY2(triggerSolidFill(*panel_), "the Solid Color entry is offered");
+    QCOMPARE(view_->sample_argb(0, 0), 0xff000000u);
 }
 
 QTEST_MAIN(LayersPanelFixesTest)

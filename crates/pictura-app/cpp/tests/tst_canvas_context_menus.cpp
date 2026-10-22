@@ -360,7 +360,7 @@ void CanvasContextMenusTest::brushPickerKeepsBrushHover()
     QVERIFY(picker != nullptr);
     // With the picker open the canvas still resolves hover to the brush ring.
     f.canvas->mouseMoved(QPointF(12, 12));
-    QVERIFY(f.canvas->hasBrushOutlineForTest());
+    QVERIFY(f.canvas->hasBrushOutline());
     picker->hide();
 }
 

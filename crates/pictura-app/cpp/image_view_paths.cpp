@@ -4,6 +4,10 @@
 
 #include "image_view.h"
 
+#include "path_overlay.h"
+
+#include "pictura_app/src/cxxqt_object.cxxqt.h"
+
 #include <QtGui/QPainter>
 
 namespace pictura {
@@ -12,6 +16,15 @@ void ImageView::setPathOverlay(const PathOverlay& overlay)
 {
     pathOverlay_ = overlay;
     update();
+}
+
+void showWorkPathOverlay(ImageView& canvas, PictureView* view)
+{
+    if (!view || !view->has_document()) {
+        canvas.clearPathOverlay();
+        return;
+    }
+    canvas.setPathOverlay(workPathOverlay(*view, -1));
 }
 
 void ImageView::clearPathOverlay()

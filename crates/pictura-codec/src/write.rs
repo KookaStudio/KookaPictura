@@ -1069,7 +1069,9 @@ fn write_container(doc: &Document, psb: bool) -> Result<Vec<u8>, PsdError> {
     // preserved trailing bytes stay untouched, so an existing file is unchanged.
     // A PSD-sourced document written as a PSB re-frames preserved big-key blocks
     // to u64 lengths so psd-tools can parse them.
-    let mut extra = reframe_document_extra(&doc.layer_section_extra, doc.is_psb, psb);
+    let extra =
+        crate::type_path::encode_text_paths(&doc.layers, &doc.layer_section_extra, doc.is_psb);
+    let mut extra = reframe_document_extra(&extra, doc.is_psb, psb);
     let authoring = crate::smart_writer::collect_authoring(&doc.layers);
     if !authoring.is_empty() {
         extra.extend_from_slice(&crate::smart_writer::author_lnk2_bytes(&authoring, psb));

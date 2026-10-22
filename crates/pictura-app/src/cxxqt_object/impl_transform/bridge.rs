@@ -72,7 +72,8 @@ pub mod ffi {
         fn transform_preview_matrix_extents(view: &PictureView) -> Vec<f64>;
         /// The nine preview-map coefficients in `QTransform` constructor
         /// order, expressed in the moving image's own coordinates (origin at
-        /// the image's top-left); empty without a projective session.
+        /// the image's top-left), for a similarity or projective session;
+        /// empty without a session or a moving image.
         fn transform_preview_local_matrix_extents(view: &PictureView) -> Vec<f64>;
         /// Move the reference point to document-space `(x, y)`, leaving the
         /// rendered quad unchanged.
@@ -280,13 +281,29 @@ fn transform_preview_local_matrix_extents(view: &PictureView) -> Vec<f64> {
     if session.warp.is_some() {
         return vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0];
     }
-    if !quad_driven(session) {
-        return Vec::new();
-    }
     if rust.move_layer.is_none() {
         return Vec::new();
     }
     let (x, y) = (f64::from(rust.move_x), f64::from(rust.move_y));
+    if !quad_driven(session) {
+        // The similarity map conjugated into the image's own coordinates:
+        // `q_local = A·(p_local + o) + t − o` for the image origin `o`.
+        let doc = transform_preview_matrix_extents(view);
+        let [xx, xy, _, yx, yy, _, dx, dy, _] = doc[..] else {
+            return Vec::new();
+        };
+        return vec![
+            xx,
+            xy,
+            0.0,
+            yx,
+            yy,
+            0.0,
+            xx * x + yx * y + dx - x,
+            xy * x + yy * y + dy - y,
+            1.0,
+        ];
+    }
     let rect = session.orig_rect;
     let source = [
         (f64::from(rect.left) - x, f64::from(rect.top) - y),

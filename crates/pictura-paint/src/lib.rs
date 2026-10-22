@@ -4,6 +4,7 @@ pub mod art_history;
 pub mod bucket;
 pub mod eraser;
 mod fill;
+mod fill_native;
 pub mod focus;
 pub mod gradient;
 pub mod healing;
@@ -55,7 +56,9 @@ pub struct StrokeConfig {
     pub mode: PaintMode,
     pub aliased: bool,
     /// A hard square tip `diameter` wide (the Eraser's Block mode); roundness,
-    /// angle, hardness, and aliasing do not apply.
+    /// angle, hardness, and aliasing do not apply. The square covers exactly
+    /// `diameter` pixels along each axis, whatever the dab's position in its
+    /// pixel.
     pub square: bool,
     /// Scattering and Shape Dynamics, per step: `count` dabs (1–16), each
     /// offset up to `scatter` % of the diameter in both axes, shrunk by up to
@@ -138,6 +141,7 @@ impl Default for StrokeConfig {
     }
 }
 
+pub use fill::Alpha;
 pub use healing::HealStroke;
 pub use stroke::{paint_stroke, PaintError, Stroke, StrokeKind, StrokeOutcome};
 pub use tip::{tip_coverage, wet_edge};

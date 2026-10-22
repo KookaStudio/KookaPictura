@@ -137,6 +137,15 @@ impl Samples {
 pub trait Sample: Copy {
     fn to_unit(self) -> f64;
     fn from_unit(v: f64) -> Self;
+
+    /// The store's samples as a mutable slice, when the store holds samples of
+    /// this width; `None` for a store of another width.
+    ///
+    /// A tool that edits a store holds one plane per channel at once, so it
+    /// needs the typed view; the default refuses rather than guessing.
+    fn as_slice_mut(_store: &mut Samples) -> Option<&mut [Self]> {
+        None
+    }
 }
 
 impl Sample for u8 {
@@ -147,6 +156,13 @@ impl Sample for u8 {
     fn from_unit(v: f64) -> Self {
         (v.clamp(0.0, 1.0) * 255.0).round() as u8
     }
+
+    fn as_slice_mut(store: &mut Samples) -> Option<&mut [u8]> {
+        match store {
+            Samples::U8(v) => Some(v.as_mut_slice()),
+            _ => None,
+        }
+    }
 }
 
 impl Sample for u16 {
@@ -156,6 +172,13 @@ impl Sample for u16 {
 
     fn from_unit(v: f64) -> Self {
         (v.clamp(0.0, 1.0) * 65535.0).round() as u16
+    }
+
+    fn as_slice_mut(store: &mut Samples) -> Option<&mut [u16]> {
+        match store {
+            Samples::U16(v) => Some(v.as_mut_slice()),
+            _ => None,
+        }
     }
 }
 
@@ -171,6 +194,13 @@ impl Sample for f32 {
 
     fn from_unit(v: f64) -> Self {
         v as f32
+    }
+
+    fn as_slice_mut(store: &mut Samples) -> Option<&mut [f32]> {
+        match store {
+            Samples::F32(v) => Some(v.as_mut_slice()),
+            _ => None,
+        }
     }
 }
 

@@ -3,6 +3,7 @@
 #include "api/layers_api.h"
 #include "dialogs.h"
 
+#include "color_panel.h"
 #include "layer_new_dialog.h"
 #include "layer_style_dialog.h"
 #include "layers_filter_bar.h"
@@ -118,8 +119,9 @@ QPixmap labelSwatch(int label)
     return swatch;
 }
 
-LayersPanel::LayersPanel(QWidget* parent)
+LayersPanel::LayersPanel(ColorState* colors, QWidget* parent)
     : QWidget(parent)
+    , colors_(colors)
 {
     QWidget* body = this;
     auto* layout = new QVBoxLayout(body);
@@ -299,13 +301,14 @@ LayersPanel::LayersPanel(QWidget* parent)
     addButton->setPopupMode(QToolButton::InstantPopup);
     addButton->setToolTip(tr("New Fill / Adjustment Layer"));
     auto* menu = new QMenu(addButton);
-    // ponytail: opaque black; the toolbox foreground swatch is C++-only and not
-    // yet plumbed to the bridge. Swap in the live color when it is.
+    // CS6 fills with the current foreground colour, read when the command runs.
     QAction* solidFill = menu->addAction(tr("Solid Color…"));
     connect(solidFill, &QAction::triggered, this, [this] {
-        if (view_) {
-            view_->add_solid_fill(0xff000000u);
+        if (!view_) {
+            return;
         }
+        const QColor fg = colors_ ? colors_->foreground() : QColor(Qt::black);
+        view_->add_solid_fill(fg.rgba());
     });
     QAction* gradientFill = menu->addAction(tr("Gradient…"));
     connect(gradientFill, &QAction::triggered, this, [this] {

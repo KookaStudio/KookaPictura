@@ -113,7 +113,6 @@ fn one_layer_channel_psd(compression: u16, encoded: &[u8]) -> Vec<u8> {
     out.extend_from_slice(&[1, 2, 3]); // 1x1 RGB composite
     out
 }
-
 #[test]
 fn parse_hand_constructed_raw_rgb() {
     let mut p = header(1, 3, 2, 2, 3);
@@ -1031,6 +1030,7 @@ fn synthetic_tysh() -> Vec<u8> {
         style: None,
         vertical: false,
         box_bounds: None,
+        path: None,
     })
 }
 

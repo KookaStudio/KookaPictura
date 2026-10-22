@@ -689,12 +689,31 @@ fn merge_paragraph(attrs: &mut ParagraphAttrs, over: &ParagraphOverrides) {
     );
 }
 
+/// How a type layer follows its path: along the outline, or filling the
+/// interior of a closed one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TextPathKind {
+    #[default]
+    OnPath,
+    Area,
+}
+
+/// A type layer's path in document pixels. `start` is the arc length from the
+/// subpath's first anchor where on-path text begins; area type ignores it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TextPath {
+    pub kind: TextPathKind,
+    pub subpath: crate::path::Subpath,
+    pub start: f64,
+}
+
 /// Decoded type-tool framing. `transform` is `xx, xy, yx, yy, tx, ty`;
 /// `bounds` is `left, top, right, bottom`. `vertical` is the text
 /// descriptor's `Ornt` (`Vrtc`): the Vertical Type tool's columns.
 /// `box_bounds` is paragraph type's box (EngineData `BoxBounds`: left, top,
 /// right, bottom relative to the origin, before the transform's linear part);
-/// `None` for point type.
+/// `None` for point type. `path` is the layer's on-path/area geometry, read
+/// from the document's `Txt2` text-frame data rather than `TySh`.
 #[derive(Debug, Clone)]
 pub struct TypeTool {
     pub transform: [f64; 6],
@@ -706,6 +725,7 @@ pub struct TypeTool {
     pub style: Option<TextStyle>,
     pub vertical: bool,
     pub box_bounds: Option<[f64; 4]>,
+    pub path: Option<TextPath>,
 }
 
 /// Effective text style of a type layer's first style run, with the
@@ -742,7 +762,8 @@ impl TextStyle {
 /// identity for new type. `box_bounds` makes it paragraph type: the box the
 /// text wraps to, left, top, right, bottom relative to the origin before
 /// `matrix` (a dragged box has its top-left at the origin); `None` is point
-/// type.
+/// type. `path` makes it on-path type (`origin` at the start point) or area
+/// type (`origin` at the path's bounding-box top-left, `box_bounds` that box).
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypeSpec {
     pub text: String,
@@ -750,6 +771,7 @@ pub struct TypeSpec {
     pub origin: (f64, f64),
     pub matrix: [f64; 4],
     pub box_bounds: Option<[f64; 4]>,
+    pub path: Option<TextPath>,
     pub character: CharacterAttrs,
     pub paragraph: ParagraphAttrs,
     /// The named styles this run applies, in memory only (a style definition is
@@ -773,6 +795,7 @@ impl TypeSpec {
             origin: (0.0, 0.0),
             matrix: Self::IDENTITY,
             box_bounds: None,
+            path: None,
             character: CharacterAttrs {
                 font_family: font.into(),
                 size,
@@ -808,10 +831,9 @@ impl PartialEq for TypeTool {
             && self.vertical == other.vertical
             && self.box_bounds.map(|b| b.map(f64::to_bits))
                 == other.box_bounds.map(|b| b.map(f64::to_bits))
+            && self.path == other.path
     }
 }
-
-impl Eq for TypeTool {}
 
 #[cfg(test)]
 mod tests {

@@ -106,9 +106,11 @@ pub use properties::{
 pub use rasterize::{
     is_fill_content_layer, rasterize_all_layers, rasterize_fill_content, rasterize_shape,
 };
+pub(crate) use shape_layer::map_shape_layer;
 pub use shape_layer::{
     add_shape_layer, has_forced_locks, is_shape_layer, layer_live_shape, layer_shape_paths,
     set_layer_live_shape, set_layer_shape_paths, shape_coverage, shape_fill_color,
+    shape_layer_rect,
 };
 pub use shape_style::{
     copy_shape_attributes, paste_shape_attributes, resize_shape, set_shape_fill, set_shape_stroke,

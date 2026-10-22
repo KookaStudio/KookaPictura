@@ -89,6 +89,132 @@ impl Subpath {
         }
         out
     }
+
+    /// Move every anchor and handle by `(dx, dy)`.
+    pub fn translate(&mut self, dx: f64, dy: f64) {
+        for point in &mut self.points {
+            translate_point(point, dx, dy);
+        }
+    }
+
+    /// Apply the affine `[xx, xy, yx, yy, tx, ty]` to every anchor and handle.
+    pub fn transform(&mut self, a: [f64; 6]) {
+        for point in &mut self.points {
+            for p in [
+                Some(&mut point.anchor),
+                point.in_handle.as_mut(),
+                point.out_handle.as_mut(),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                let (x, y) = *p;
+                *p = (a[0] * x + a[2] * y + a[4], a[1] * x + a[3] * y + a[5]);
+            }
+        }
+    }
+
+    /// The polyline with its cumulative arc lengths, for type-on-path layout
+    /// and picking.
+    pub fn flattened(&self, tolerance: f64) -> FlattenedSubpath {
+        let points = self.flatten(tolerance);
+        let mut cumulative = Vec::with_capacity(points.len());
+        let mut total = 0.0;
+        for (i, &point) in points.iter().enumerate() {
+            if i > 0 {
+                total += (point.0 - points[i - 1].0).hypot(point.1 - points[i - 1].1);
+            }
+            cumulative.push(total);
+        }
+        FlattenedSubpath {
+            points,
+            cumulative,
+            closed: self.closed,
+            total,
+        }
+    }
+}
+
+/// A subpath flattened to a polyline with cumulative arc lengths.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FlattenedSubpath {
+    pub points: Vec<(f64, f64)>,
+    /// Arc length at each point; the last value is the total length.
+    pub cumulative: Vec<f64>,
+    pub closed: bool,
+    pub total: f64,
+}
+
+impl FlattenedSubpath {
+    /// The point and unit tangent at `arc`: clamped on an open subpath, wrapped
+    /// once on a closed one. `None` when the subpath has no length.
+    pub fn point_at(&self, arc: f64) -> Option<((f64, f64), (f64, f64))> {
+        if self.points.len() < 2 || self.total <= 0.0 {
+            return None;
+        }
+        let arc = if self.closed {
+            arc.rem_euclid(self.total)
+        } else {
+            arc.clamp(0.0, self.total)
+        };
+        let mut index = match self
+            .cumulative
+            .binary_search_by(|value| value.partial_cmp(&arc).unwrap_or(std::cmp::Ordering::Equal))
+        {
+            Ok(i) => i,
+            Err(i) => i.saturating_sub(1),
+        };
+        if index + 1 >= self.points.len() {
+            index = self.points.len() - 2;
+        }
+        let start = self.cumulative[index];
+        let length = self.cumulative[index + 1] - start;
+        let t = if length > 0.0 {
+            ((arc - start) / length).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        let a = self.points[index];
+        let b = self.points[index + 1];
+        let position = lerp(a, b, t);
+        let tangent = if length > 0.0 {
+            ((b.0 - a.0) / length, (b.1 - a.1) / length)
+        } else {
+            (1.0, 0.0)
+        };
+        Some((position, tangent))
+    }
+
+    /// The nearest arc length to `(x, y)` and its distance. `None` without a
+    /// segment.
+    pub fn nearest(&self, x: f64, y: f64) -> Option<(f64, f64)> {
+        if self.points.len() < 2 {
+            return None;
+        }
+        let mut best: Option<(f64, f64)> = None;
+        for i in 0..self.points.len() - 1 {
+            let a = self.points[i];
+            let b = self.points[i + 1];
+            let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+            let length2 = dx * dx + dy * dy;
+            let length = length2.sqrt();
+            let t = if length2 > 0.0 {
+                (((x - a.0) * dx + (y - a.1) * dy) / length2).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            let distance = (x - (a.0 + dx * t)).hypot(y - (a.1 + dy * t));
+            if best.is_none_or(|(_, d)| distance < d) {
+                best = Some((self.cumulative[i] + length * t, distance));
+            }
+        }
+        best
+    }
+
+    /// Even-odd containment inside a closed subpath.
+    pub fn contains(&self, x: f64, y: f64) -> bool {
+        self.closed && point_in_polygon(&self.points, (x, y))
+    }
 }
 
 /// A path of one or more subpaths. `editing` is the subpath the Pen extends

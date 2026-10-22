@@ -87,6 +87,12 @@ impl BundledText {
         self.ttf.glyph_index(c).map_or(0, |g| g.0)
     }
 
+    /// The face's space glyph, when it has one: the glyph a word space
+    /// shapes to, and the one a justified line widens.
+    pub(crate) fn space_glyph(&self) -> Option<u16> {
+        self.ttf.glyph_index(' ').map(|g| g.0)
+    }
+
     /// Shape one line into glyph ids and **device-pixel** advances. Lay the
     /// result out with `LayoutParams.units_per_em == font_size`.
     ///
@@ -379,12 +385,15 @@ pub(crate) fn render_text_buffer(
 /// and the left / centre / right alignment.
 ///
 /// Paragraph type (`box_bounds`) wraps to its box and aligns across its
-/// width; lines past the box are not laid out (see `type_paragraph`).
+/// width; lines past the box are not laid out (see `type_paragraph`). A
+/// justified paragraph spreads its word spaces to the box's width, except for
+/// the paragraph's last line, which its justification aligns (see
+/// `type_justify`).
 ///
 /// ponytail: paragraph indents, space before/after, hanging punctuation,
-/// hyphenation, word/letter/glyph spacing, the composer, and the full
-/// justification variants 3-6 are authored to the engine data but not laid out;
-/// render them when a paragraph-layout engine exists.
+/// hyphenation, word/letter/glyph spacing, and the composer are authored to
+/// the engine data but not laid out; render them when a paragraph-layout
+/// engine exists.
 pub(crate) fn layout_type(
     bundled: &BundledText,
     type_tool: &TypeTool,
@@ -395,6 +404,7 @@ pub(crate) fn layout_type(
     let c = &style.character;
     let font_size = c.size as f32;
     let leading = crate::type_layer::leading_px(font_size, c.leading);
+    let justify = style.paragraph.justify;
     let lines = crate::type_paragraph::visual_lines(
         bundled,
         &type_tool.text,
@@ -402,7 +412,7 @@ pub(crate) fn layout_type(
         type_tool.box_bounds,
         c,
     )
-    .rendered();
+    .rendered_paragraphs();
     let (width, height) = match type_tool.box_bounds {
         Some(b) => ((b[2] - b[0]) as f32, (b[3] - b[1]) as f32),
         None => (width as f32, height as f32),
@@ -410,18 +420,32 @@ pub(crate) fn layout_type(
     let layout = if type_tool.vertical {
         crate::type_layer::vertical_layout(
             bundled,
-            &lines,
+            &lines
+                .iter()
+                .map(|(text, _)| text.clone())
+                .collect::<Vec<_>>(),
             c,
-            style.paragraph.justify.index(),
+            justify.index(),
             width,
             height,
             leading,
         )
     } else {
-        let shaped: Vec<Vec<ShapedGlyph>> = lines
+        let mut shaped: Vec<Vec<ShapedGlyph>> = lines
             .iter()
-            .map(|line| shape_styled(bundled, line, c))
+            .map(|(line, _)| shape_styled(bundled, line, c))
             .collect();
+        // A justified line's word spaces take the leftover width, so the
+        // line's advance reaches the column and the layout shifts it by zero.
+        let spread = crate::type_justify::spread_lines(
+            bundled,
+            &lines,
+            &mut shaped,
+            justify,
+            width,
+            tracking(c) * font_size / 1000.0,
+        );
+        let align = TextAlign::from_justification(justify.index());
         let mut layout = layout_lines(
             &shaped,
             &LayoutParams {
@@ -429,10 +453,13 @@ pub(crate) fn layout_type(
                 units_per_em: font_size,
                 tracking: tracking(c),
                 leading,
-                align: TextAlign::from_justification(style.paragraph.justify.index()),
+                align,
                 wrap_width: Some(width),
             },
         );
+        // A line that could not be spread stays flush left: the layout
+        // shifted it by the paragraph's last line's alignment.
+        crate::type_justify::flush_left(&mut layout, &lines, &spread, justify, width);
         // Baseline shift and super/subscript move the run off its baseline
         // (positive is up).
         let rise = RunStyle::of(bundled, c).rise;
@@ -658,6 +685,7 @@ mod tests {
                 style,
                 vertical: false,
                 box_bounds: None,
+                path: None,
             }),
             ..Default::default()
         }

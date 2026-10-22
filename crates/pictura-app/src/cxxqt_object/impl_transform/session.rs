@@ -5,7 +5,7 @@ use super::super::state::{PictureViewRust, RepeatTransform, TransformMode, Trans
 use super::geometry::{
     apply_session_transform, quad_driven, rect_center, session_quad, source_corners, MapParams,
 };
-use super::{build_move_preview_base, duplicate_move_target};
+use super::{build_move_preview_base, duplicate_move_target, movable_layer};
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -205,14 +205,21 @@ pub(super) fn transform_preview_layer(
     Some(image)
 }
 
-/// Whether `path` resolves to a transformable target: a raster pixel layer, or
-/// a channel-less embedded smart object whose source materializes. False for a
+/// Whether `path` resolves to a transformable target: a raster pixel layer, a
+/// shape layer with an outline of some area, or a channel-less embedded smart
+/// object whose source materializes. False for a
 /// hidden layer, a group, adjustment layer, Background layer, position-locked
 /// layer, or a zero-area target.
 fn can_free_transform(doc: &pictura_core::Document, path: &str) -> bool {
     let Some(layer) = pictura_render::resolve_path(doc, path) else {
         return false;
     };
+    if pictura_render::is_shape_layer(layer) {
+        return layer.visible
+            && !layer.lock.contains(LockFlags::POSITION)
+            && pictura_render::shape_layer_rect(layer, doc.width, doc.height)
+                .is_some_and(|rect| rect.width() > 0 && rect.height() > 0);
+    }
     if !layer.visible
         || layer.is_group
         || layer.adjustment.is_some()
@@ -675,13 +682,13 @@ impl qobject::PictureView {
         self.rust().move_preview_cache_hit
     }
 
-    /// The active pixel layer's path, or `None` without a document or a single
-    /// active raster layer.
+    /// The active movable layer's path (a raster or shape layer), or `None`
+    /// without a document or a single such layer.
     pub(super) fn move_cache_target(&self) -> Option<String> {
         let rust = self.rust();
         let doc = rust.session.doc.as_ref()?;
         let path = rust.layer_target.single()?;
-        active_pixel_layer(doc, Some(path))?;
+        movable_layer(doc, path)?;
         Some(path.to_string())
     }
 
@@ -692,7 +699,16 @@ impl qobject::PictureView {
         // The move commit deliberately does not bump `content_revision` for this
         // reason; keying on the layer rect here would throw the base away on
         // every drag and force a full region recomposite on the next press.
-        rust.move_base.is_some()
+        // A shape's moving image is rendered at its outline, which a move
+        // shifts without changing the layer rect, so it is never reused.
+        let shape = rust
+            .session
+            .doc
+            .as_ref()
+            .and_then(|doc| pictura_render::resolve_path(doc, path))
+            .is_some_and(pictura_render::is_shape_layer);
+        !shape
+            && rust.move_base.is_some()
             && rust.move_prepared_revision == rust.session.content_revision
             && rust.move_prepared_layer == path
     }
@@ -709,11 +725,17 @@ impl qobject::PictureView {
         let Some(layer) = pictura_render::resolve_path(doc, &path) else {
             return false;
         };
-        let Some(layer_image) = layer_image(layer) else {
+        let opacity = layer.opacity as i32;
+        // A shape layer has no pixels of its own: its fill cut to the outline
+        // is rendered.
+        let moving = if pictura_render::is_shape_layer(layer) {
+            rendered_layer_image(doc, &path, gpu_compute)
+        } else {
+            layer_image(layer).map(|image| (image, layer.rect.left, layer.rect.top))
+        };
+        let Some((layer_image, x, y)) = moving else {
             return false;
         };
-        let rect = layer.rect;
-        let (x, y, opacity) = (rect.left, rect.top, layer.opacity as i32);
         let base = build_move_preview_base(doc, &path, gpu_compute);
         rust.move_base = Some(base);
         rust.move_layer = Some(layer_image);
@@ -864,12 +886,14 @@ impl PictureViewRust {
             }
             lifted = Some((std::mem::replace(&mut path, floating), before));
         }
-        let rect = self
-            .session
-            .doc
-            .as_ref()
-            .and_then(|doc| pictura_render::resolve_path(doc, &path))
-            .map(|layer| layer.rect);
+        // A shape layer's box is its outline's; its own rect is the canvas.
+        let rect = self.session.doc.as_ref().and_then(|doc| {
+            let layer = pictura_render::resolve_path(doc, &path)?;
+            Some(
+                pictura_render::shape_layer_rect(layer, doc.width, doc.height)
+                    .unwrap_or(layer.rect),
+            )
+        });
         let Some(orig_rect) = rect else {
             // A refused begin leaves the layer as it was.
             if let Some(rect) = untrimmed {
@@ -978,5 +1002,22 @@ mod tests {
             })
         });
         assert!(filled, "the shape's fill is in the preview layer");
+    }
+
+    #[test]
+    fn a_shape_layer_is_a_transform_target_unless_position_locked() {
+        let mut doc = Document::new(40, 30, ColorMode::Rgb, BitDepth::Eight);
+        let outline = outline_in_box(
+            ShapeOptions::new(ShapeKind::Rectangle, 0.0, 3),
+            (4.0, 4.0, 24.0, 20.0),
+        )
+        .expect("outline");
+        let path =
+            pictura_render::add_shape_layer(&mut doc, "", [0, 0, 0, 255], "Shape", &outline, None);
+        assert!(can_free_transform(&doc, &path));
+        pictura_render::resolve_path_mut(&mut doc, &path)
+            .expect("shape")
+            .lock = LockFlags::default().with(LockFlags::POSITION, true);
+        assert!(!can_free_transform(&doc, &path));
     }
 }

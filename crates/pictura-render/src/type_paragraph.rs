@@ -38,11 +38,25 @@ impl Lines {
     /// The visible lines as the render sets them: a soft-wrapped line drops
     /// its trailing spaces, so alignment sits on its ink.
     pub(crate) fn rendered(&self) -> Vec<String> {
+        self.rendered_paragraphs()
+            .into_iter()
+            .map(|(text, _)| text)
+            .collect()
+    }
+
+    /// The visible lines as the render sets them, each with the flag that
+    /// marks the last line of its paragraph. The paragraph structure comes
+    /// from the whole text, so a paragraph the overflow cuts short has no
+    /// visible last line and its last visible line still spreads.
+    pub(crate) fn rendered_paragraphs(&self) -> Vec<(String, bool)> {
         self.lines[..self.visible]
             .iter()
-            .map(|line| match line.soft {
-                true => line.text.trim_end().to_owned(),
-                false => line.text.clone(),
+            .map(|line| {
+                let text = match line.soft {
+                    true => line.text.trim_end().to_owned(),
+                    false => line.text.clone(),
+                };
+                (text, !line.soft)
             })
             .collect()
     }
@@ -177,6 +191,13 @@ pub(crate) fn visual_lines(
 /// Whether paragraph type has text past its box (the `+` on the box handle).
 /// False for point type, a missing face, or a non-positive size.
 pub fn type_overflows(spec: &TypeSpec) -> bool {
+    if spec
+        .path
+        .as_ref()
+        .is_some_and(|path| path.kind == pictura_core::TextPathKind::OnPath)
+    {
+        return crate::type_path::layout_path(spec).is_some_and(|layout| layout.overflow);
+    }
     let Some(bundled) = face_for(&spec.character.font_family) else {
         return false;
     };
@@ -196,7 +217,7 @@ pub fn type_overflows(spec: &TypeSpec) -> bool {
 /// `Type > Convert To Paragraph Text`: point type boxed at its own text
 /// bounds, so no glyph moves. `None` for paragraph type or blank text.
 pub fn type_to_paragraph(spec: &TypeSpec) -> Option<TypeSpec> {
-    if spec.box_bounds.is_some() {
+    if spec.path.is_some() || spec.box_bounds.is_some() {
         return None;
     }
     let bounds = type_placement(spec)?.bounds;
@@ -210,6 +231,9 @@ pub fn type_to_paragraph(spec: &TypeSpec) -> Option<TypeSpec> {
 /// overflow is dropped, as CS6 does; the origin moves to where point type
 /// sets the same first line. `None` for point type or a missing face.
 pub fn type_to_point(spec: &TypeSpec) -> Option<TypeSpec> {
+    if spec.path.is_some() {
+        return None;
+    }
     let b = spec.box_bounds?;
     let bundled = face_for(&spec.character.font_family)?;
     let c = &spec.character;
@@ -333,6 +357,25 @@ mod tests {
         );
         let all = inked_rows(&tall);
         assert!(*all.last().unwrap() > 3 * 24, "four lines render");
+    }
+
+    #[test]
+    fn a_justified_paragraph_loses_its_spread_when_converted() {
+        let bundled = face_for("Liberation Sans").unwrap();
+        let mut s = boxed("aa bb cc", 200.0, 200.0);
+        s.paragraph.justify = pictura_core::Justify::JustifyLastRight;
+        let point = type_to_point(&s).expect("converts");
+        assert!(point.box_bounds.is_none());
+        // The lines set at their natural widths, right-aligned, so the first
+        // line ends where the paragraph's spread first line ended: at the
+        // box's right edge.
+        let natural = line_advance(bundled, "aa bb cc", &s.character);
+        assert!(natural < 200.0, "the line is not spread");
+        assert!(
+            (point.origin.0 - (s.origin.0 + 200.0)).abs() < 0.01,
+            "{} is not the box's right edge",
+            point.origin.0
+        );
     }
 
     #[test]

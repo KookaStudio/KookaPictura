@@ -418,6 +418,7 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/panels/info_panel.cpp
     crates/pictura-app/cpp/panels/notes_panel.cpp
     crates/pictura-app/cpp/panels/histogram_panel.cpp
+    crates/pictura-app/cpp/panels/adjustments_panel.cpp
     crates/pictura-app/cpp/panels/placeholder_panel.cpp
     crates/pictura-app/cpp/panels/properties_panel.cpp
     crates/pictura-app/cpp/panels/channels_panel.cpp

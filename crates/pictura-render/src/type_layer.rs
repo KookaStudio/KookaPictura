@@ -16,8 +16,8 @@
 
 use pictura_core::{
     AntiAlias, BitDepth, Channel, CharacterAttrs, ColorMode, Document, LayerBlock, LayoutLine,
-    LockFlags, PixelBuffer, PlacedGlyph, PsdRect, RasterRequest, TextLayout, TextStyle, TypeSpec,
-    TypeTool,
+    LockFlags, PixelBuffer, PlacedGlyph, PsdRect, RasterRequest, TextAlign, TextLayout, TextStyle,
+    TypeSpec, TypeTool,
 };
 
 use crate::text_render::{blit_glyph, glyph_matrix, layout_type, render_text_buffer, BundledText};
@@ -32,13 +32,10 @@ pub(crate) fn type_lines(text: &str) -> Vec<String> {
         .collect()
 }
 
-/// 0 left / top, 1 right / bottom, 2 centre, as a fraction of the slack.
+/// 0 left / top, 1 right / bottom, 2 centre, as a fraction of the slack: the
+/// alignment the paragraph justification byte selects.
 pub(crate) fn align_factor(justification: u8) -> f32 {
-    match justification {
-        1 => 1.0,
-        2 => 0.5,
-        _ => 0.0,
-    }
+    TextAlign::from_justification(justification).factor()
 }
 
 /// Lay out vertical type inside a `width × height` box: column `j` is centred
@@ -211,6 +208,9 @@ pub(crate) fn map(spec: &TypeSpec, u: f64, v: f64) -> (f64, f64) {
 /// about the origin. `None` for empty text, a non-positive size, or a missing
 /// face.
 pub fn type_placement(spec: &TypeSpec) -> Option<TypePlacement> {
+    if spec.path.is_some() {
+        return crate::type_path::placement(spec);
+    }
     let (left, top, width, height) = text_box(spec)?;
     let (x, y) = (spec.origin.0 as f32, spec.origin.1 as f32);
     let bounds = [
@@ -243,7 +243,7 @@ pub fn type_placement(spec: &TypeSpec) -> Option<TypePlacement> {
 }
 
 /// The unauthored view the renderer needs: `spec`'s style without descriptors.
-fn render_view(spec: &TypeSpec) -> TypeTool {
+pub(crate) fn render_view(spec: &TypeSpec) -> TypeTool {
     TypeTool {
         transform: [1.0, 0.0, 0.0, 1.0, spec.origin.0, spec.origin.1],
         text: spec.text.clone(),
@@ -260,6 +260,7 @@ fn render_view(spec: &TypeSpec) -> TypeTool {
         }),
         vertical: spec.vertical,
         box_bounds: spec.box_bounds,
+        path: spec.path.clone(),
     }
 }
 
@@ -268,7 +269,12 @@ fn render_view(spec: &TypeSpec) -> TypeTool {
 pub fn render_type(spec: &TypeSpec) -> Option<(PsdRect, PixelBuffer)> {
     let placement = type_placement(spec)?;
     let rect = placement.rect;
-    let mut buffer = if spec.matrix == TypeSpec::IDENTITY {
+    let mut buffer = if let Some(path) = spec.path.as_ref() {
+        match path.kind {
+            pictura_core::TextPathKind::OnPath => crate::type_path::render_path(spec, rect)?,
+            pictura_core::TextPathKind::Area => crate::type_path::render_area(spec, rect)?,
+        }
+    } else if spec.matrix == TypeSpec::IDENTITY {
         render_text_buffer(&render_view(spec), rect.width(), rect.height())?
     } else {
         render_mapped(spec, rect)?
@@ -526,6 +532,7 @@ pub fn type_layer_spec(layer: &pictura_core::Layer) -> Option<TypeSpec> {
             tool.transform[3],
         ],
         box_bounds: tool.box_bounds,
+        path: tool.path.clone(),
         character,
         paragraph: style.paragraph.clone(),
         applied_character_style: layer.applied_character_style.clone(),
@@ -533,8 +540,13 @@ pub fn type_layer_spec(layer: &pictura_core::Layer) -> Option<TypeSpec> {
         overrides: layer.type_overrides.clone(),
     };
     if let Some(placed) = type_placement(&spec) {
-        spec.origin.0 += f64::from(layer.rect.left - placed.rect.left);
-        spec.origin.1 += f64::from(layer.rect.top - placed.rect.top);
+        let dx = f64::from(layer.rect.left - placed.rect.left);
+        let dy = f64::from(layer.rect.top - placed.rect.top);
+        spec.origin.0 += dx;
+        spec.origin.1 += dy;
+        if let Some(path) = spec.path.as_mut() {
+            path.subpath.translate(dx, dy);
+        }
     }
     Some(spec)
 }
@@ -663,15 +675,40 @@ pub fn transform_type_layer(doc: &mut Document, path: &str, a: [f64; 6]) -> Opti
         return Some(false);
     }
     let mut spec = type_layer_spec(layer)?;
-    let [xx, xy, yx, yy] = spec.matrix;
-    spec.matrix = [
-        a[0] * xx + a[2] * xy,
-        a[1] * xx + a[3] * xy,
-        a[0] * yx + a[2] * yy,
-        a[1] * yx + a[3] * yy,
-    ];
     let (ox, oy) = spec.origin;
     spec.origin = (a[0] * ox + a[2] * oy + a[4], a[1] * ox + a[3] * oy + a[5]);
+    if let Some(text_path) = spec.path.as_mut() {
+        // Path text transforms its path geometry; the tangent layout follows
+        // the transformed curve. Uniform scale also scales the type size and
+        // the arc-length start, so the text keeps its place on the path.
+        let scale = (a[0] * a[3] - a[1] * a[2]).abs().sqrt();
+        text_path.subpath.transform(a);
+        text_path.start *= scale;
+        spec.character.size *= scale;
+        spec.box_bounds = if text_path.kind == pictura_core::TextPathKind::Area {
+            let points = text_path.subpath.flattened(0.25).points;
+            let first = *points.first()?;
+            let (mut left, mut top, mut right, mut bottom) = (first.0, first.1, first.0, first.1);
+            for &(x, y) in &points {
+                left = left.min(x);
+                top = top.min(y);
+                right = right.max(x);
+                bottom = bottom.max(y);
+            }
+            spec.origin = (left, top);
+            Some([0.0, 0.0, right - left, bottom - top])
+        } else {
+            None
+        };
+    } else {
+        let [xx, xy, yx, yy] = spec.matrix;
+        spec.matrix = [
+            a[0] * xx + a[2] * xy,
+            a[1] * xx + a[3] * xy,
+            a[0] * yx + a[2] * yy,
+            a[1] * yx + a[3] * yy,
+        ];
+    }
     Some(replace_type_layer(doc, path, &spec))
 }
 

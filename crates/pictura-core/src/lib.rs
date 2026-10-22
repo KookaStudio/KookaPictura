@@ -42,8 +42,8 @@ pub use text_render::{
 pub use type_tool::{
     AntiAlias, CharacterAttrs, CharacterOverrides, CharacterStyle, Composer, Justify, KerningMode,
     Leading, ParagraphAttrs, ParagraphOverrides, ParagraphStyle, ResolvedStyle, StyleError,
-    StyleOverrides, TextStyle, TextStyleSheet, TypeSpec, TypeTool, BASIC_PARAGRAPH,
-    DEFAULT_LANGUAGE,
+    StyleOverrides, TextPath, TextPathKind, TextStyle, TextStyleSheet, TypeSpec, TypeTool,
+    BASIC_PARAGRAPH, DEFAULT_LANGUAGE,
 };
 pub use vector::{VectorFillRule, VectorMask, VectorSubpath};
 
@@ -73,6 +73,16 @@ impl ColorMode {
             ColorMode::Multichannel => 0,
         }
     }
+}
+
+/// Rec. 601 luma of an 8-bit colour: the gray value it reads as.
+///
+/// The gray axis of the working space. A Grayscale document's fill takes a
+/// colour's luma, and a Grayscale gradient's ramp lies on this axis.
+pub fn rec601_luma(r: u8, g: u8, b: u8) -> u8 {
+    (0.299 * f64::from(r) + 0.587 * f64::from(g) + 0.114 * f64::from(b))
+        .round()
+        .clamp(0.0, 255.0) as u8
 }
 
 /// Bits per channel.
@@ -356,6 +366,33 @@ impl Document {
             .as_ref()
             .is_some_and(|store| store.depth != BitDepth::Eight)
             || retains_source_depth(&self.layers)
+    }
+
+    /// The retained native plane for `layer`'s channel `id`, when the
+    /// document's native store is authoritative for that channel: the document
+    /// records a source depth of 16 or 32 bits, records no converted colour
+    /// mode, and the layer's retained store matches the layer's rectangle and
+    /// the document's source depth. `None` otherwise, so the caller reads the
+    /// layer's 8-bit channel instead.
+    ///
+    /// This is the rule the compositor applies, per channel: a store that
+    /// carries a layer's colour planes but no transparency plane still owns
+    /// the colour. A tool that edits a layer's pixels must write the same copy
+    /// the compositor reads, or its edit never reaches the display.
+    pub fn authoritative_plane<'a>(&self, layer: &'a Layer, id: i16) -> Option<&'a Samples> {
+        let depth = self.source_depth?;
+        if !matches!(depth, BitDepth::Sixteen | BitDepth::ThirtyTwo) {
+            return None;
+        }
+        if self.source_mode.is_some() {
+            return None;
+        }
+        let store = layer.source_channels.as_ref()?;
+        if store.rect != layer.rect || store.depth != depth {
+            return None;
+        }
+        let (_, samples) = store.planes.iter().find(|(cid, _)| *cid == id)?;
+        Some(samples)
     }
 }
 

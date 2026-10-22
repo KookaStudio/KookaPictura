@@ -11,6 +11,7 @@ use pictura_core::TypeSpec;
 use crate::fonts::face_for;
 use crate::type_layer::{align_factor, flat_rect, leading_px, map, text_box_any};
 use crate::type_paragraph::{line_advance, vertical_cell, visual_lines};
+use crate::type_style::shape_styled;
 
 /// One laid-out line's caret segments, one per character boundary (its end
 /// included), mapped to document pixels.
@@ -42,6 +43,7 @@ fn caret_lines(spec: &TypeSpec) -> Option<(Vec<CaretLine>, f64)> {
     let leading = leading_px(size, c.leading);
     let cell = vertical_cell(bundled, c);
     let factor = align_factor(spec.justification());
+    let justify = spec.paragraph.justify;
     let (ox, oy) = spec.origin;
     let at = |a: (f32, f32), b: (f32, f32)| {
         let rel = |p: (f32, f32)| map(spec, f64::from(rl + p.0) - ox, f64::from(rt + p.1) - oy);
@@ -65,17 +67,48 @@ fn caret_lines(spec: &TypeSpec) -> Option<(Vec<CaretLine>, f64)> {
                     })
                     .collect()
             } else {
-                let advance =
-                    |n: usize| line_advance(bundled, &chars[..n].iter().collect::<String>(), c);
+                let prefix = |n: usize| chars[..n].iter().collect::<String>();
+                let advance = |n: usize| line_advance(bundled, &prefix(n), c);
                 let ink = match line.soft {
                     true => line.text.trim_end().chars().count(),
                     false => chars.len(),
                 };
-                let shift = (aw - advance(ink)) * factor;
+                // A justified line is spread: its word spaces take the
+                // leftover width and the line fills the column. A line that
+                // cannot be spread stays flush left.
+                let trimmed = prefix(ink);
+                let ink_advance = advance(ink);
+                let spread = spec.box_bounds.is_some()
+                    && crate::type_justify::spreads(justify)
+                    && (line.soft || crate::type_justify::spreads_last(justify));
+                let extra = if spread {
+                    let shaped = shape_styled(bundled, &trimmed, c);
+                    crate::type_justify::space_extra(
+                        bundled,
+                        &trimmed,
+                        crate::type_justify::shaped_spaces(bundled, &shaped),
+                        ink_advance,
+                        aw,
+                    )
+                    .unwrap_or(0.0)
+                } else {
+                    0.0
+                };
+                // A spread line fills the column, and a line in a justified
+                // paragraph that could not be spread stays flush left; the
+                // paragraph's last line, or a plainly aligned one, takes the
+                // alignment.
+                let flush = crate::type_justify::spreads(justify) && line.soft && extra <= 0.0;
+                let shift = if extra > 0.0 || flush {
+                    0.0
+                } else {
+                    (aw - ink_advance) * factor
+                };
                 let baseline = ascent + i as f32 * leading;
                 (0..=chars.len())
                     .map(|k| {
-                        let x = shift + advance(k);
+                        let spaces = crate::type_justify::spaces(&prefix(k.min(ink)));
+                        let x = shift + advance(k) + spaces as f32 * extra;
                         at((x, baseline - ascent), (x, baseline + descent))
                     })
                     .collect()
@@ -104,6 +137,13 @@ fn caret_lines(spec: &TypeSpec) -> Option<(Vec<CaretLine>, f64)> {
 /// above the boundary's cell. A soft wrap's boundary stands at the start of the
 /// next line. Empty for a non-positive size or missing face.
 pub fn type_caret_stops(spec: &TypeSpec) -> Vec<[f64; 4]> {
+    if spec
+        .path
+        .as_ref()
+        .is_some_and(|path| path.kind == pictura_core::TextPathKind::OnPath)
+    {
+        return crate::type_path::caret_stops(spec);
+    }
     let Some((lines, _)) = caret_lines(spec) else {
         return Vec::new();
     };
@@ -128,6 +168,13 @@ pub fn type_caret_stops(spec: &TypeSpec) -> Vec<[f64; 4]> {
 /// last: the baseline for horizontal type, the column's centre axis for
 /// vertical type. Empty for blank text, a non-positive size, or a missing face.
 pub fn type_baselines(spec: &TypeSpec) -> Vec<[f64; 4]> {
+    if spec
+        .path
+        .as_ref()
+        .is_some_and(|path| path.kind == pictura_core::TextPathKind::OnPath)
+    {
+        return crate::type_path::baselines(spec);
+    }
     let Some((lines, t)) = caret_lines(spec) else {
         return Vec::new();
     };
@@ -184,6 +231,22 @@ mod tests {
         turned.matrix = [0.0, 1.0, -1.0, 0.0];
         let t = type_caret_stops(&turned);
         assert!((t[0][1] - t[0][3]).abs() < 0.01 && t[2][1] > t[0][1]);
+    }
+
+    #[test]
+    fn the_caret_stands_where_the_spread_glyphs_are() {
+        // A justified paragraph spreads its last line too, so the caret's
+        // last stop stands at the box's right edge.
+        let mut s = spec("aa bb cc", false, 6);
+        s.box_bounds = Some([0.0, 0.0, 200.0, 200.0]);
+        let stops = type_caret_stops(&s);
+        let last = stops.last().expect("stops");
+        let right = s.origin.0 + 200.0;
+        assert!(
+            (last[0] - right).abs() < 0.5,
+            "{} is not the box's right edge {right}",
+            last[0]
+        );
     }
 
     #[test]

@@ -12,4 +12,8 @@ class PictureView;
 // Defined in tool_pen.cpp.
 ImageView::PathOverlay workPathOverlay(const PictureView& v, int pointsOf);
 
+// Draw the Work Path on `canvas` while a non-Path tool is active, or clear it
+// when `view` has no document. Used by the Type tools, which set type on it.
+void showWorkPathOverlay(ImageView& canvas, PictureView* view);
+
 } // namespace pictura

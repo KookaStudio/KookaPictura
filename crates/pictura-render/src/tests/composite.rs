@@ -684,6 +684,7 @@ fn type_layer(style: Option<TextStyle>) -> Layer {
             style,
             vertical: false,
             box_bounds: None,
+            path: None,
         }),
         ..Default::default()
     }
