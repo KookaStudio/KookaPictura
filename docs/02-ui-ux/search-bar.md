@@ -48,8 +48,10 @@ None. CS6 has no search over its menus, tools, or panels.
 Greyed rows are entries that cannot run right now: either the command is not
 implemented yet, or it is disabled in the current state (for example Warp with
 no document open). Enter and a click do nothing on a greyed row; Alt+Enter
-still reveals it, so the search also teaches where a feature will live. The
-row's tooltip says which case applies.
+still opens its menus, so the search also teaches where a feature will live.
+Qt never highlights a disabled menu item, so the greyed item itself is not
+highlighted, and the reveal does not enable it (Enter in the open menu would
+then run it). The row's tooltip says which case applies.
 
 Matching ignores case, and every word you type must match. `transform warp`
 finds `Edit > Transform > Warp` but not `Type > Warp Text`. A word can match the
@@ -85,7 +87,7 @@ menu item still works.
 
 | Control | Type | Default | Range / options | Notes |
 |---|---|---|---|---|
-| Query | Text | empty | any text | Split on spaces; every word must match. |
+| Query | Text | empty | any text | Split on whitespace; every word must match. |
 | Results shown | Count | up to 50 | 0–50 | At most 10 rows visible; the list scrolls. |
 | Search shortcut | Key binding | `Shift+Space` | any free binding, or none | Edit > Keyboard Shortcuts. |
 
@@ -98,15 +100,17 @@ holds about 650 entries and builds in well under a frame. Its sources:
 | Kind | Source | Path shown | Runs when |
 |---|---|---|---|
 | Command | Every command in the command registry (`CommandRegistry::describe()`), with its live label | Its menu path, e.g. `Edit > Transform > Warp` | Implemented and enabled |
-| Panel | The Window > Panels toggles (`panelToggles()`), one entry per panel; the Window menu path wins over Type > Panels | `Window > Panels > Layers` | Always (shows the panel) |
+| Panel | The Window > Panels toggles (`panelToggles()`), one entry per panel; the Window menu path wins over Type > Panels. A panel with no toggle (the placeholder Styles panel) is found only as its greyed menu command | `Window > Panels > Layers` | Always (shows the panel) |
 | Preferences page | The dialog's real pages | `Edit > Preferences > Units & Rulers` | Always (opens the page) |
 | Tool | The tool catalogue (`allToolIds()` / `toolInfo()`) | `Tools > Magic Wand` | The tool is implemented |
 | Panel control | The curated table `searchControls()` | `Layers panel > Blend Mode`, `Options bar > Brush > Flow` | Always |
 
-Mnemonic `&` marks and trailing ellipses are stripped from names. `Help >
+Mnemonic `&` marks (a doubled `&&` stays one `&`), an inline tab shortcut, and
+trailing ellipses are stripped from names. `Help >
 Search…` itself is left out.
 
-**Matching and ranking.** The query is lower-cased and split on spaces. An
+**Matching and ranking.** The query is lower-cased and split on whitespace
+(spaces, tabs, newlines). An
 entry matches when each word occurs as a substring of its name, of a path step,
 or of a keyword. Matches are ranked in tiers:
 
@@ -128,7 +132,8 @@ panel. It then focuses the control: a drop-down opens, and a number field
 selects its text.
 
 **Reveal.** For a command, the menu bar opens the top-level menu and then each
-submenu in turn, ending with the item active. For a tool, panel, or control,
+submenu in turn, ending with the item active; a disabled item opens its
+menus without a highlight. For a tool, panel, or control,
 a 2 px accent outline pulses over it for about a second.
 
 ## Rust module mapping
@@ -192,7 +197,11 @@ None for CS6 parity (non-parity feature). The behavioral contract is the
 - Shift+Space opens the bar with the field focused; it reopens after Escape.
 - `warp` lists `Edit > Transform > Warp` first; Enter starts a Warp session.
 - Alt+Enter on Warp opens Edit > Transform with Warp active.
-- A stub row is greyed and Enter on it runs nothing.
+- A stub row is greyed and Enter on it runs nothing; Alt+Enter opens its menus.
+- Enter shows a panel, opens a Preferences page, or brings up and focuses a
+  control; Alt+Enter outlines a tool slot, panel, or control without running it.
+- Up and Down stop at the first and last rows; losing focus to a widget other
+  than a popup closes the bar.
 - Every curated control resolves to a live widget.
 
 ## Sources

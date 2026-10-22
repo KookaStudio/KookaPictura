@@ -28,7 +28,7 @@ Snapshot for resuming after a context break. Update after each milestone.
     Enter or a click runs a result; Alt+Enter opens the menu chain or outlines
     the panel, control or toolbox slot (`flashWidget`). Greyed rows do not run.
     The status bar carries a `Search` keycap that follows the binding.
-  - **Tests:** 14 Qt cases in `tst_search_bar`.
+  - **Tests:** 20 Qt cases in `tst_search_bar`.
 - **Justified text renders justified** (#792, branch
   `fix/792-justify-text-renders-left`, OpenSpec change
   `2026-10-21-justify-text-renders-left`). A type layer whose paragraph
