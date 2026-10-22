@@ -114,13 +114,16 @@ Why this shape:
   - No `--headless` → normal visible window (manual, human-observable testing).
   - With `--headless` → offscreen, screenshots still work, no display required.
   - `--state-home` isolates the XDG session store (like `--self-test` does).
-  - The resolved socket path is printed to stderr: `pictura control: <path>`.
+  - The resolved socket path is printed to stderr: `pictura control: <path>`,
+    followed by the session token file: `pictura control token: <path>.token`.
 - **MCP frontend:** `pictura-mcp`.
   - Env: `PICTURA_CONTROL_SOCKET` (override), `PICTURA_BIN` (default
     `./build/pictura`), `PICTURA_ARGS` (default `--headless`).
   - On first tool call: if the socket exists → attach (do not kill on exit);
     else spawn `${PICTURA_BIN} --control --control-socket <path> ${PICTURA_ARGS}`,
-    poll for the socket with a timeout, and kill the child on MCP shutdown.
+    poll for the socket and a non-empty `<path>.token` with a timeout, and
+    kill the child on MCP shutdown. Either way, read the token from
+    `<path>.token` before the first request.
   - A `pictura_session` tool (optional v1) exposes `attach`/`launch`/`close`
     explicitly; auto-behaviour is the default.
 
@@ -142,7 +145,15 @@ Why this shape:
 
 - Transport: `QLocalServer` (`QLocalServer::UserAccessOption`), one JSON object
   **per line**.
-- Requests: `{"id": <int>, "method": "<string>", "params": { ... }}`.
+- Requests: `{"id": <int>, "method": "<string>", "params": { ... }, "token": "<hex>"}`.
+- `token` is the session token (64 hex digits) the server writes when it
+  starts listening to `<socket>.token`, beside the socket (in the temp dir on
+  Windows, where the socket is a named pipe). The file is created fresh and
+  owner-only (0600), and removed on shutdown; a new server writes a new token.
+  A well-formed request with no token, or with a wrong one, is answered
+  `unauthorized` with its `id` and is not dispatched. A malformed line is still
+  `bad_request`. The in-process `dispatch()` used by the self-test and Qt tests
+  needs no token.
 - Success: `{"id": <int>, "ok": true, "result": { ... }}`.
 - Failure: `{"id": <int>, "ok": false, "error": {"code": "<enum>", "message": "<text>"}}`.
 - JSON is serialized **compact** (`QJsonDocument::Compact`) so a message never
@@ -156,6 +167,7 @@ Why this shape:
 | Code | Meaning |
 |---|---|
 | `bad_request` | unparseable line, missing `method`, wrong param type |
+| `unauthorized` | missing or wrong session `token` |
 | `unknown_method` | method not in the catalog |
 | `invalid_param` | value out of range / unknown enum |
 | `no_document` | a document-requiring method with no active document |
@@ -167,10 +179,10 @@ Why this shape:
 ### 4.3 Request examples
 
 ```json
-{"id":1,"method":"status","params":{}}
+{"id":1,"method":"status","params":{},"token":"<contents of <socket>.token>"}
 {"id":1,"ok":true,"result":{"documents":1,"active":0,"active_tool":"Marquee","documents_info":[{"index":0,"name":"two_layers.psd","path":"...","width":8,"height":8,"mode":"rgb","depth":8,"dirty":false,"layers":2,"selection_px":0,"zoom":1.0}],"backend":"gpu","gpu_available":true,"brightness":1,"screen_mode":"standard","panels":[...] }}
 
-{"id":2,"method":"screenshot","params":{"scope":"canvas","max_dim":1024}}
+{"id":2,"method":"screenshot","params":{"scope":"canvas","max_dim":1024},"token":"…"}
 {"id":2,"ok":true,"result":{"mime":"image/png","base64":"iVBORw0K...","width":8,"height":8,"source_width":8,"source_height":8}}
 ```
 
@@ -332,13 +344,21 @@ coordinate spaces for `pointer`.
 - **Local only:** Unix-domain socket under `$XDG_RUNTIME_DIR` (or a user-chosen
   path) created with `QLocalServer::UserAccessOption` (0600). No TCP listener.
 - **No eval:** there is no "run code" tool. Actions are a fixed typed surface.
+- **Session token (#844):** every request must carry the token from the
+  owner-only `<socket>.token` file. On POSIX the server unlinks whatever entry
+  is at that name and creates the file with `O_CREAT | O_EXCL | O_NOFOLLOW`, so
+  a planted symlink is never followed. The comparison is constant-time. A
+  same-user process that can reach the socket but not read the file gets no
+  `document open/save` oracle; one that can read the user's files can read the
+  token too, so the token does not stop a process with that access, which
+  could reach those files directly anyway.
 - **Same file access as the app:** `document open/save` can read/write anywhere
   the invoking user can. Document this clearly; a future `--control-root`
   allowlist is the hardening path if agents get untrusted.
 - **Opt-in:** the server exists only with `--control`. No effect on normal runs
   or `--self-test`.
-- **No secrets:** the socket path is the only identifier; nothing is logged that
-  the app would not already log.
+- **No secrets in logs:** stderr names the socket and token-file paths, never the
+  token itself; nothing is logged that the app would not already log.
 
 ---
 
