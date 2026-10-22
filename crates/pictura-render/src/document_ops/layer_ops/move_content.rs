@@ -408,9 +408,10 @@ pub fn move_selection_content(
         }
     }
     if !duplicate {
-        // ponytail: merge_down composites with Normal blending, so a non-Normal
-        // source may not land exactly; composite with the source's blend if it
-        // ever matters.
+        // The cut copy is a `Normal` layer and this merge composites it as one;
+        // the original's blend mode reaches the backdrop through the merged
+        // node, so giving the cut copy that blend would apply it twice. The
+        // merged node also inherits the original's opacity — see #813.
         let _ = merge_scope(doc, MergeScope::Down(&new_path));
     }
     true

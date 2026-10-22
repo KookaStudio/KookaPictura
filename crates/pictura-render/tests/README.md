@@ -94,6 +94,39 @@ The scenes are pure functions of pixel coordinates, so generation is
 deterministic; `check` is exercised by `imagemagick_fixtures_reproduce` in
 `oracle.rs`.
 
+# Merge Down oracle
+
+`tests/merge_oracle.rs` diffs `pictura_render::merge_scope` (Merge Down)
+against the same ImageMagick references. The merge composites the source and
+the target through the document compositor, so the **source's own blend mode**
+governs the result, and the merged pixels must match ImageMagick's operator
+for that mode.
+
+- `merge_down_matches_committed_imagemagick_fixture` — the `alpha` scene
+  merged with a `Normal` source, against the committed `alpha_Normal.rgba`.
+- `merge_down_matches_imagemagick_for_every_supported_mode` — the `solid` and
+  `ramp` scenes merged with a source carrying each of the 19 modes
+  ImageMagick implements with the same formula, against the committed
+  `<scene>_<Mode>.rgba` references, at the same per-mode tolerances the
+  compositing oracle uses (0, except Vivid Light at 1). The eight modes with
+  no usable ImageMagick operator stay covered by the hand-computed W3C unit
+  tests in `pictura-render`.
+- `merge_down_bakes_the_sources_blend_into_the_pixels` — the contract, with
+  hand-computed pixels: a `Multiply` source of `(120, 130, 140)` over a
+  `Screen` target of `(40, 60, 80)` merges to `(19, 31, 44)`, and the merged
+  node keeps the *target's* blend mode and opacity. The source's blend mode is
+  baked into the pixels, not carried onto the result. The target's blend is
+  `Screen` so the assertion cannot pass by accident: a merged node that
+  hardcoded `Normal` would fail it.
+- `merge_down_matches_live_imagemagick` — regenerates the reference with a
+  running `magick` (the `alpha` scene's source-over and the `ramp` scene's
+  `Multiply`) and self-skips when `magick` is not on `PATH`.
+
+The `alpha` scene is `Normal`-only here for the same reason it is in the
+compositing oracle: ImageMagick's blend operators do not reproduce the W3C
+source-over mix for a partial-alpha source, so the blend modes are checked
+against the fully opaque `solid` and `ramp` scenes.
+
 # Knockout psd-tools oracle
 
 `tests/knockout_oracle.rs` diffs `pictura_render::composite_rgba` against
