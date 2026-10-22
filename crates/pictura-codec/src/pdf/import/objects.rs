@@ -10,7 +10,7 @@
 use std::cell::Cell;
 use std::collections::HashMap;
 
-use crate::budget::{read_bounded, TOTAL_ALLOCATIONS};
+use crate::budget::read_bounded;
 use crate::probe::ImageBudget;
 
 /// The deepest array/dictionary nesting the lexer follows.
@@ -134,7 +134,7 @@ impl PdfObjects {
             generations,
             trailer,
             stream_limit: budget.max_alloc_bytes,
-            inflate_budget: Cell::new(budget.max_alloc_bytes.saturating_mul(TOTAL_ALLOCATIONS)),
+            inflate_budget: Cell::new(budget.max_document_bytes),
         };
         file.expand_object_streams();
         (!file.objects.is_empty()).then_some(file)

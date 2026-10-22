@@ -987,6 +987,7 @@ dependencies = [
  "pictura-testkit",
  "sha2",
  "thiserror 2.0.20",
+ "windows-sys",
 ]
 
 [[package]]

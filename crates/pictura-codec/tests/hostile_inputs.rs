@@ -244,11 +244,38 @@ fn a_psb_header_past_the_budget_is_refused_before_allocating() {
 fn a_composite_over_the_document_total_is_refused() {
     // 56 channels of 30000² is 50 GB of planes, each within the per-plane
     // cap; the RLE count table alone was 3.4 MB of claimed rows (#844 M3).
+    // The document limit is pinned: the default follows the host's memory.
     let header = Header {
         channels: 56,
         ..Header::rgb(30_000, 30_000)
     };
-    refused_cheaply(&psd(&header, &[], Some(&[0, 1])));
+    let budget = ImageBudget {
+        max_document_bytes: 16 << 30,
+        ..ImageBudget::default()
+    };
+    let bytes = psd(&header, &[], Some(&[0, 1]));
+    let (result, peak) = peak_of(|| read_psd_within(&bytes, Policy::Convert, budget));
+    assert!(result.is_err(), "a hostile file was accepted");
+    assert!(peak < 4 * MIB, "refusal still requested {peak} bytes");
+}
+
+#[test]
+fn a_document_over_its_limit_is_refused_and_the_default_keeps_a_plane() {
+    // `max_document_bytes` alone refuses a 16 MiB plane (one 4096² gray
+    // channel) under an 8 MiB limit, and the host-derived default never
+    // drops below one 2 GiB plane.
+    let header = Header {
+        channels: 1,
+        mode: 1,
+        ..Header::rgb(4096, 4096)
+    };
+    let bytes = psd(&header, &raw_layers(0, 1), Some(&[0, 1]));
+    let tight = ImageBudget {
+        max_document_bytes: 8 * MIB as u64,
+        ..ImageBudget::default()
+    };
+    assert!(read_psd_within(&bytes, Policy::Convert, tight).is_err());
+    assert!(ImageBudget::default().max_document_bytes >= 2 << 30);
 }
 
 fn huge_layer(channel: (i16, Vec<u8>)) -> LayerSpec {
@@ -334,6 +361,7 @@ fn layer_planes_count_against_the_document_total() {
     let budget = ImageBudget {
         max_dimension: 30_000,
         max_alloc_bytes: 64 * 1024,
+        max_document_bytes: 8 * 64 * 1024,
     };
     let over = psd(&Header::rgb(4, 4), &raw_layers(8, 200), None);
     assert!(read_psd_within(&over, Policy::Convert, budget).is_err());
@@ -488,6 +516,7 @@ fn mutated_psds_never_panic_or_overallocate() {
     let budget = ImageBudget {
         max_dimension: 30_000,
         max_alloc_bytes: MIB as u64,
+        max_document_bytes: 8 * MIB as u64,
     };
     fuzz("psd", &psd_seeds(), 3000, 64 * MIB, |bytes| {
         let _ = read_psd_within(bytes, Policy::Convert, budget);
@@ -516,6 +545,7 @@ fn mutated_pdfs_never_panic_or_overallocate() {
     let budget = ImageBudget {
         max_dimension: 30_000,
         max_alloc_bytes: MIB as u64,
+        max_document_bytes: 8 * MIB as u64,
     };
     fuzz("pdf", &seeds, 1500, 64 * MIB, |bytes| {
         if let EditingPsd::Psd(psd) = editing_psd(bytes, "pw") {

@@ -160,6 +160,7 @@ fn overflowing_allocation_estimate_is_refused_not_panicking() {
     let budget = ImageBudget {
         max_dimension: u32::MAX,
         max_alloc_bytes: u64::MAX,
+        ..ImageBudget::default()
     };
     let err = probe_image(&png(u32::MAX, u32::MAX, 8), budget).unwrap_err();
     assert_eq!(err.limit_exceeded(), Some(LimitKind::Allocation));

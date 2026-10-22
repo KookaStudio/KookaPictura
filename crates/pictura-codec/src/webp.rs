@@ -147,11 +147,13 @@ mod tests {
         let small_dimension = ImageBudget {
             max_dimension: 4,
             max_alloc_bytes: u64::MAX,
+            ..ImageBudget::default()
         };
         assert!(decode_webp(&webp, small_dimension).is_none());
         let small_alloc = ImageBudget {
             max_dimension: 30_000,
             max_alloc_bytes: 4,
+            ..ImageBudget::default()
         };
         assert!(decode_webp(&webp, small_alloc).is_none());
     }

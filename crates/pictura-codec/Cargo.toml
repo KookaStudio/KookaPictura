@@ -24,9 +24,14 @@ sha2 = "0.10"
 # names (#844 M7); already in Cargo.lock as a transitive dependency.
 getrandom = "0.4"
 
-# setrlimit for the Ghostscript child (#844 H7); already in Cargo.lock.
+# setrlimit for the Ghostscript child (#844 H7) and the macOS available-memory
+# query for the document budget; already in Cargo.lock.
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+# GlobalMemoryStatusEx for the document budget; already in Cargo.lock.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_SystemInformation"] }
 
 [dev-dependencies]
 pictura-render = { path = "../pictura-render" }
