@@ -221,6 +221,7 @@
     <file>cursors/cursor.pinAdd.svg</file>
     <file>cursors/cursor.rotate.svg</file>
     <file>cursors/cursor.straighten.svg</file>
+    <file>cursors/cursor.typeOnPath.svg</file>
     <file>cursors/cursor.workspace.svg</file>
     <file>cursors/tool.addanchorpoint.svg</file>
     <file>cursors/tool.arthistorybrush.svg</file>

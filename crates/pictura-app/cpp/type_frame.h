@@ -1,12 +1,21 @@
 #pragma once
 
 #include <QtCore/QPointF>
+#include <QtCore/QString>
+#include <QtCore/QVector>
 #include <QtGui/QPolygonF>
 
 #include <array>
 #include <optional>
 
 namespace pictura {
+
+// The path a `type_api::pathAt` hit carries: kind, closed, start, segment count,
+// then eight numbers per cubic segment. `typePathPointString` encodes those
+// segments as eight space-separated numbers each, `;` between segments;
+// `typePathPolygon` rebuilds the outline for the overlay.
+QString typePathPointString(const QVector<double>& hit);
+QPolygonF typePathPolygon(const QString& points);
 
 // The transform frame a Type session edits: where the text sits (`origin`),
 // its linear transform (`matrix`, `xx, xy, yx, yy` as `TySh` orders it:
@@ -21,6 +30,13 @@ public:
     QPointF origin;
     std::array<double, 4> matrix{1.0, 0.0, 0.0, 1.0};
     bool paragraph = false;
+    // 0 none, 1 on-path, 2 area. A path session has no box gestures; area type
+    // shows the closed path instead of a rectangle.
+    int pathKind = 0;
+    bool pathClosed = false;
+    double pathStart = 0.0;
+    QString pathPoints;
+    QPolygonF pathPolygon;
     std::array<double, 4> box{0.0, 0.0, 0.0, 0.0};
     // Point type's text bounds while Ctrl shows its box.
     std::optional<std::array<double, 4>> pointBox;

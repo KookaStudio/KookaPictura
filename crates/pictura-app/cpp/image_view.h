@@ -487,6 +487,10 @@ public:
         QList<QLineF> baselines;
         QPolygonF box;
         bool overflow = false;
+        // 1 on-path, 2 area: the box is the path outline, with no handles.
+        int pathKind = 0;
+        bool hasOverflowPoint = false;
+        QPointF overflowPoint;
         // Over a dark image the caret, guides, and placement point draw white,
         // as CS6's do, else black.
         bool lightInk = false;
@@ -509,6 +513,9 @@ public:
     QList<QLineF> typeOverlayBaselinesForTest() const { return typeOverlay_.baselines; }
     QPolygonF typeOverlayBoxForTest() const { return typeOverlay_.box; }
     bool typeOverlayOverflowForTest() const { return typeOverlay_.overflow; }
+    QPointF typeOverlayOverflowPointForTest() const { return typeOverlay_.overflowPoint; }
+    bool typeOverlayHasOverflowPointForTest() const { return typeOverlay_.hasOverflowPoint; }
+    int typeOverlayPathKindForTest() const { return typeOverlay_.pathKind; }
     bool typeOverlayLightInkForTest() const { return typeOverlay_.lightInk; }
     QPointF typeOverlayPivotForTest() const { return typeOverlay_.pivot; }
 

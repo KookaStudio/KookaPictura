@@ -104,6 +104,13 @@ fn caret_lines(spec: &TypeSpec) -> Option<(Vec<CaretLine>, f64)> {
 /// above the boundary's cell. A soft wrap's boundary stands at the start of the
 /// next line. Empty for a non-positive size or missing face.
 pub fn type_caret_stops(spec: &TypeSpec) -> Vec<[f64; 4]> {
+    if spec
+        .path
+        .as_ref()
+        .is_some_and(|path| path.kind == pictura_core::TextPathKind::OnPath)
+    {
+        return crate::type_path::caret_stops(spec);
+    }
     let Some((lines, _)) = caret_lines(spec) else {
         return Vec::new();
     };
@@ -128,6 +135,13 @@ pub fn type_caret_stops(spec: &TypeSpec) -> Vec<[f64; 4]> {
 /// last: the baseline for horizontal type, the column's centre axis for
 /// vertical type. Empty for blank text, a non-positive size, or a missing face.
 pub fn type_baselines(spec: &TypeSpec) -> Vec<[f64; 4]> {
+    if spec
+        .path
+        .as_ref()
+        .is_some_and(|path| path.kind == pictura_core::TextPathKind::OnPath)
+    {
+        return crate::type_path::baselines(spec);
+    }
     let Some((lines, t)) = caret_lines(spec) else {
         return Vec::new();
     };

@@ -177,6 +177,13 @@ pub(crate) fn visual_lines(
 /// Whether paragraph type has text past its box (the `+` on the box handle).
 /// False for point type, a missing face, or a non-positive size.
 pub fn type_overflows(spec: &TypeSpec) -> bool {
+    if spec
+        .path
+        .as_ref()
+        .is_some_and(|path| path.kind == pictura_core::TextPathKind::OnPath)
+    {
+        return crate::type_path::layout_path(spec).is_some_and(|layout| layout.overflow);
+    }
     let Some(bundled) = face_for(&spec.character.font_family) else {
         return false;
     };
@@ -196,7 +203,7 @@ pub fn type_overflows(spec: &TypeSpec) -> bool {
 /// `Type > Convert To Paragraph Text`: point type boxed at its own text
 /// bounds, so no glyph moves. `None` for paragraph type or blank text.
 pub fn type_to_paragraph(spec: &TypeSpec) -> Option<TypeSpec> {
-    if spec.box_bounds.is_some() {
+    if spec.path.is_some() || spec.box_bounds.is_some() {
         return None;
     }
     let bounds = type_placement(spec)?.bounds;
@@ -210,6 +217,9 @@ pub fn type_to_paragraph(spec: &TypeSpec) -> Option<TypeSpec> {
 /// overflow is dropped, as CS6 does; the origin moves to where point type
 /// sets the same first line. `None` for point type or a missing face.
 pub fn type_to_point(spec: &TypeSpec) -> Option<TypeSpec> {
+    if spec.path.is_some() {
+        return None;
+    }
     let b = spec.box_bounds?;
     let bundled = face_for(&spec.character.font_family)?;
     let c = &spec.character;

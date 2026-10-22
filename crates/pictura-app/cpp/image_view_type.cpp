@@ -112,7 +112,15 @@ void ImageView::paintTypeOverlay(QPainter& painter)
         const QPointF p = toDevice.map(o.placement);
         painter.fillRect(QRectF(p.x() - 1.5, p.y() - 1.5, 3.0, 3.0), ink);
     }
-    if (o.box.size() >= 4) {
+    if (o.hasOverflowPoint || (o.pathKind == 2 && o.overflow && !o.box.isEmpty())) {
+        const QPointF c = o.hasOverflowPoint
+            ? toDevice.map(o.overflowPoint)
+            : toDevice.map(o.box.boundingRect().bottomRight());
+        painter.setPen(QPen(QColor(200, 0, 0), 0));
+        painter.drawLine(QPointF(c.x() - 2.0, c.y()), QPointF(c.x() + 2.0, c.y()));
+        painter.drawLine(QPointF(c.x(), c.y() - 2.0), QPointF(c.x(), c.y() + 2.0));
+    }
+    if (o.box.size() >= 4 && o.pathKind == 0) {
         const QPolygonF box = toDevice.map(o.box);
         painter.setPen(QPen(Qt::black, 0, Qt::SolidLine));
         painter.setBrush(Qt::white);

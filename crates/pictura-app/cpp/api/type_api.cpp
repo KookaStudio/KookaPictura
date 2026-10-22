@@ -14,6 +14,17 @@ QString layerAt(const PictureView& view, double x, double y)
     return ::pictura::type_layer_at(view, x, y);
 }
 
+QVector<double> pathAt(const PictureView& view, double x, double y, double tolerance)
+{
+    const ::rust::Vec<double> values = ::pictura::type_path_at(view, x, y, tolerance);
+    QVector<double> out;
+    out.reserve(int(values.size()));
+    for (const double value : values) {
+        out.append(value);
+    }
+    return out;
+}
+
 QString layerText(const PictureView& view, const QString& path)
 {
     return ::pictura::type_layer_text(view, path);
@@ -114,6 +125,19 @@ bool overflows(const QString& text, const QString& font, const TypeSetting& sett
                const CharacterSetting& character, const ParagraphSetting& paragraph)
 {
     return ::pictura::type_overflows(text, font, setting, character, paragraph);
+}
+
+QVector<double> pathOverflowPoint(const QString& text, const QString& font,
+                                  const TypeSetting& setting, const CharacterSetting& character,
+                                  const ParagraphSetting& paragraph)
+{
+    const ::rust::Vec<double> point
+        = ::pictura::type_path_overflow_point(text, font, setting, character, paragraph);
+    QVector<double> out;
+    for (const double value : point) {
+        out.append(value);
+    }
+    return out;
 }
 
 QVector<double> localBounds(const QString& text, const QString& font, const TypeSetting& setting,

@@ -658,6 +658,7 @@ mod tests {
                 style,
                 vertical: false,
                 box_bounds: None,
+                path: None,
             }),
             ..Default::default()
         }

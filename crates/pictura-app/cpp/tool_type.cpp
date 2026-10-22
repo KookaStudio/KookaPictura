@@ -29,6 +29,7 @@
 #include "icons.h"
 #include "image_view.h"
 #include "paragraph_text_size_dialog.h"
+#include "path_overlay.h"
 #include "smart_guides.h"
 #include "text_input.h"
 #include "tools.h"
@@ -44,6 +45,8 @@
 #include <QtCore/QObject>
 #include <QtCore/QtMath>
 #include <QtCore/QPointer>
+#include <QtCore/QStringList>
+#include <QtCore/QVector>
 #include <QtGui/QClipboard>
 #include <QtGui/QGuiApplication>
 #include <QtGui/QKeyEvent>
@@ -70,10 +73,12 @@ bool commitKey(const QKeyEvent& key)
 // go quiet, as CS6's do while there is a text cursor, and Ctrl+A / C / X / V
 // work on the text. Other Ctrl/Meta chords still reach their shortcuts.
 // The pointer zones `pointerCursorKind` reports (-1 is the text's I-beam).
+constexpr int kCursorArrow = 0;
 constexpr int kCursorMove = 1;
 constexpr int kCursorHandle = 2;
 constexpr int kCursorRotate = 3;
 constexpr int kCursorPivot = 4;
+constexpr int kCursorTypeOnPath = 5;
 
 bool sessionKey(const QKeyEvent& key)
 {
@@ -158,7 +163,7 @@ double distanceToSegment(const QPointF& p, const QLineF& line)
 // The three settings a Type session edits: where the text sits, its character
 // attributes, and its paragraph attributes.
 struct TypeEdit {
-    TypeSetting placement;
+    TypeSetting placement{};
     CharacterSetting character;
     ParagraphSetting paragraph;
 };
@@ -217,12 +222,16 @@ public:
         ctx_ = &ctx;
         layerPath_.clear();
         loadLayerOptions();
+        if (ImageView* canvas = ctx.canvas()) { showWorkPathOverlay(*canvas, ctx.view()); }
     }
 
     void onDeactivate(ToolServices& ctx) override
     {
         ctx_ = &ctx;
         commitText();
+        if (ImageView* canvas = ctx.canvas()) {
+            canvas->clearPathOverlay();
+        }
         ctx_ = nullptr;
     }
 
@@ -243,6 +252,7 @@ public:
         if (!active_) {
             loadLayerOptions();
         }
+        if (ImageView* canvas = ctx.canvas()) { showWorkPathOverlay(*canvas, ctx.view()); }
     }
 
     // While typing, the bar restyles the text being typed. Otherwise a change
@@ -313,9 +323,9 @@ public:
                 refreshOverlay();
                 return true;
             }
-            // Away from the text: a drag moves it, a plain click commits
-            // (decided on release).
-            if (v == view_) {
+            // Away from path text: a plain click commits. Away from other
+            // type: a drag moves it, a plain click commits (decided on release).
+            if (v == view_ && frame_.pathKind == 0) {
                 movePending_ = true;
                 moveStart_ = imagePos;
                 moveOrigin_ = frame_.origin;
@@ -333,8 +343,12 @@ public:
             altClick_ = true;
             return true;
         }
-        beginSession(ctx, *v, imagePos, mods, hit);
-        boxDrag_ = editPath_.isEmpty();
+        QVector<double> path;
+        if (hit.isEmpty() && !mods.testFlag(Qt::AltModifier)) {
+            path = pictura::type_api::pathAt(*v, imagePos.x(), imagePos.y(), 4.0 / zoom());
+        }
+        beginSession(ctx, *v, imagePos, mods, hit, path);
+        boxDrag_ = editPath_.isEmpty() && frame_.pathKind == 0;
         return true;
     }
 
@@ -514,6 +528,14 @@ public:
                      QCursor& out) const override
     {
         switch (pointerCursorKind(ctx, imagePos, mods)) {
+        case kCursorArrow:
+            out = QCursor(Qt::ArrowCursor);
+            return true;
+        case kCursorTypeOnPath: {
+            const QCursor c = cursor(QStringLiteral("cursor.typeOnPath"), 10, 9);
+            out = c.pixmap().isNull() ? QCursor(Qt::IBeamCursor) : c;
+            return true;
+        }
         case kCursorMove: {
             const ToolInfo& info = toolInfo(ToolId::Move);
             const QCursor c = cursor(toolCursorId(ToolId::Move, Qt::NoModifier), info.hotspotX,
@@ -547,14 +569,25 @@ public:
 
     // The zone a press at `imagePos` would act on: the text (-1, the I-beam),
     // a move, a box handle, the rotate band, or the reference point.
-    int pointerCursorKind(const ToolServices&, const QPointF& imagePos,
+    int pointerCursorKind(const ToolServices& ctx, const QPointF& imagePos,
                           Qt::KeyboardModifiers) const override
     {
         if (!active_) {
+            PictureView* v = ctx.view();
+            if (v && v->has_document()
+                && pictura::type_api::layerAt(*v, imagePos.x(), imagePos.y()).isEmpty()
+                && !pictura::type_api::pathAt(*v, imagePos.x(), imagePos.y(), 4.0 / zoom())
+                        .isEmpty()) {
+                return kCursorTypeOnPath;
+            }
             return -1;
         }
         if (movingText_) {
             return kCursorMove;
+        }
+        if (frame_.pathKind != 0) {
+            const bool onText = hitsText(imagePos) || insideBox(imagePos);
+            return onText || selecting_ ? -1 : kCursorArrow;
         }
         switch (frame_.gesture()) {
         case TypeFrame::Gesture::Resize:
@@ -602,7 +635,8 @@ private:
     // Open a session at `pos`: new type, or the type layer `hit` reopened in
     // its own orientation, box, and settings.
     void beginSession(ToolServices& ctx, PictureView& v, const QPointF& pos,
-                      Qt::KeyboardModifiers mods, const QString& hit)
+                      Qt::KeyboardModifiers mods, const QString& hit,
+                      const QVector<double>& path = QVector<double>())
     {
         active_ = true;
         view_ = &v;
@@ -622,6 +656,17 @@ private:
             frame_.matrix = {s.xx, s.xy, s.yx, s.yy};
             frame_.paragraph = s.boxed;
             frame_.box = {s.box_left, s.box_top, s.box_right, s.box_bottom};
+            frame_.pathKind = s.path_kind;
+            frame_.pathClosed = s.path_closed;
+            frame_.pathStart = s.path_start;
+            frame_.pathPoints = s.path_points;
+            frame_.pathPolygon = typePathPolygon(s.path_points);
+            if (frame_.pathKind == 2) {
+                frame_.paragraph = true;
+                const QRectF box = frame_.pathPolygon.boundingRect();
+                frame_.origin = box.topLeft();
+                frame_.box = {0.0, 0.0, box.width(), box.height()};
+            }
             TypeOptions o = type_->get();
             const QString family = familyForFontName(pictura::type_api::layerFont(v, hit));
             if (!family.isEmpty()) {
@@ -632,6 +677,9 @@ private:
             o.color = QColor::fromRgba(c.color);
             o.antialias = c.anti_alias;
             type_->set(o);
+        }
+        if (frame_.pathKind == 0 && !path.isEmpty()) {
+            applyPathHit(path);
         }
         filter_ = std::make_unique<TypeKeyFilter>(
             [this]() { return ctx_ && ctx_->canvas() ? ctx_->canvas()->window() : nullptr; },
@@ -646,8 +694,32 @@ private:
         }
     }
 
+    void applyPathHit(const QVector<double>& hit)
+    {
+        if (hit.size() < 4) {
+            return;
+        }
+        frame_.pathKind = int(hit.at(0));
+        frame_.pathClosed = hit.at(1) != 0.0;
+        frame_.pathStart = hit.at(2);
+        frame_.pathPoints = typePathPointString(hit);
+        frame_.pathPolygon = typePathPolygon(frame_.pathPoints);
+        if (frame_.pathKind == 2) {
+            frame_.paragraph = true;
+            const QRectF box = frame_.pathPolygon.boundingRect();
+            frame_.origin = box.topLeft();
+            frame_.box = {0.0, 0.0, box.width(), box.height()};
+        } else {
+            frame_.paragraph = false;
+            frame_.box = {0.0, 0.0, 0.0, 0.0};
+        }
+    }
+
     bool insideBox(const QPointF& pos) const
     {
+        if (frame_.pathKind == 2) {
+            return frame_.pathPolygon.containsPoint(pos, Qt::OddEvenFill);
+        }
         return frame_.paragraph && frame_.polygon().containsPoint(pos, Qt::OddEvenFill);
     }
 
@@ -655,6 +727,9 @@ private:
     // handle, or the rotate band.
     bool beginFrameGesture(const QPointF& pos, Qt::KeyboardModifiers mods)
     {
+        if (frame_.pathKind != 0) {
+            return false;
+        }
         setCtrlBox(mods.testFlag(Qt::ControlModifier));
         if (!frame_.frameBox()) {
             return false;
@@ -680,7 +755,8 @@ private:
     // one); the box is the text's own bounds in its frame.
     void setCtrlBox(bool held)
     {
-        if (held == ctrlHeld_ || frame_.gesture() != TypeFrame::Gesture::None) {
+        if (frame_.pathKind != 0 || held == ctrlHeld_
+            || frame_.gesture() != TypeFrame::Gesture::None) {
             return;
         }
         ctrlHeld_ = held;
@@ -961,6 +1037,10 @@ private:
         edit.placement.box_top = frame_.box[1];
         edit.placement.box_right = frame_.box[2];
         edit.placement.box_bottom = frame_.box[3];
+        edit.placement.path_kind = frame_.pathKind;
+        edit.placement.path_closed = frame_.pathClosed;
+        edit.placement.path_start = frame_.pathStart;
+        edit.placement.path_points = frame_.pathPoints;
         return edit;
     }
 
@@ -981,6 +1061,7 @@ private:
         ImageView::TypeOverlay overlay;
         overlay.active = true;
         overlay.mask = mask_;
+        overlay.pathKind = frame_.pathKind;
         overlay.canvas = QSize(view_->document_width(), view_->document_height());
         const QString& text = edit_.text();
         const QString family = type_->get().family;
@@ -1024,7 +1105,7 @@ private:
         }
         overlay.selection = selectionShapes();
         overlay.lightInk = darkUnder(overlay.caret);
-        overlay.hasPlacement = !frame_.paragraph;
+        overlay.hasPlacement = !frame_.paragraph && frame_.pathKind == 0;
         overlay.placement = frame_.origin;
         const QVector<double> lines = pictura::type_api::baselines(
             text, family, edit.placement, edit.character, edit.paragraph);
@@ -1039,14 +1120,22 @@ private:
                 frame_.pointBox = std::array<double, 4>{b[0], b[1], b[2], b[3]};
             }
         }
-        overlay.box = frame_.polygon();
-        if (!overlay.box.isEmpty()) {
+        overlay.box = frame_.pathKind == 2 ? frame_.pathPolygon : frame_.polygon();
+        if (!overlay.box.isEmpty() && frame_.pathKind == 0) {
             overlay.hasPivot = true;
             overlay.pivot = frame_.pivotPoint();
         }
-        if (frame_.paragraph) {
+        if (frame_.paragraph || frame_.pathKind == 1) {
             overlay.overflow = pictura::type_api::overflows(text, family, edit.placement,
                                                             edit.character, edit.paragraph);
+        }
+        if (frame_.pathKind == 1) {
+            const QVector<double> point = pictura::type_api::pathOverflowPoint(
+                text, family, edit.placement, edit.character, edit.paragraph);
+            if (point.size() == 2) {
+                overlay.hasOverflowPoint = true;
+                overlay.overflowPoint = QPointF(point[0], point[1]);
+            }
         }
         canvas->setTypeOverlay(overlay);
     }

@@ -163,8 +163,8 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       (#539)
 - [ ] Mixer Brush Sample All Layers, Load Solid Colors Only, and keyboard
       shortcuts (#540)
-- [ ] Type on path (#683), warp text (#684), and gamma blend and missing-font
-      handling (#685) (#541)
+- [x] Type on path and area type (#683)
+- [ ] Warp text (#684) and gamma blend and missing-font handling (#685) (#541)
 - [ ] Path operations, align and arrange, constrained path dragging, the Target
       Path toggle, and segment and marquee multi-select (#542)
 - [ ] Slice style and modifiers, Divide, Combine, Duplicate, the Slice Options

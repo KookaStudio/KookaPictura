@@ -20,7 +20,10 @@ use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
-use pictura_core::{CharacterAttrs, ParagraphAttrs, StyleOverrides, TypeSpec};
+use pictura_core::path::PathPoint;
+use pictura_core::{
+    CharacterAttrs, ParagraphAttrs, StyleOverrides, TextPath, TextPathKind, TypeSpec,
+};
 use pictura_select::Selection;
 
 #[cxx_qt::bridge]
@@ -47,6 +50,12 @@ pub mod ffi {
         box_top: f64,
         box_right: f64,
         box_bottom: f64,
+        /// 0 none, 1 on-path, 2 area. `path_points` holds the cubic segments as
+        /// eight space-separated numbers each, segments separated by `;`.
+        path_kind: i32,
+        path_closed: bool,
+        path_start: f64,
+        path_points: QString,
     }
 
     /// The character attribute set as the bridge carries it: enums as `i32`
@@ -138,7 +147,6 @@ pub mod ffi {
 
     #[namespace = "pictura"]
     extern "Rust" {
-        /// The rect `text` occupies as `[left, top, width, height]` in document pixels; empty when nothing would render.
         fn type_preview_rect(
             text: &QString,
             font: &QString,
@@ -225,6 +233,17 @@ pub mod ffi {
 
         /// The topmost visible type layer under `(x, y)`; empty when none.
         fn type_layer_at(view: &PictureView, x: f64, y: f64) -> QString;
+        /// The path under `(x, y)`: `[kind, closed, start, segment_count,
+        /// x0, y0, c1x, c1y, c2x, c2y, x1, y1, ...]`; empty when none.
+        fn type_path_at(view: &PictureView, x: f64, y: f64, tolerance: f64) -> Vec<f64>;
+        /// The overflow `+` point for on-path type, `[x, y]`; empty otherwise.
+        fn type_path_overflow_point(
+            text: &QString,
+            font: &QString,
+            setting: &TypeSetting,
+            character: &CharacterSetting,
+            paragraph: &ParagraphSetting,
+        ) -> Vec<f64>;
 
         /// The text of the type layer at `path`, lines separated by `\r`; empty for a non-type layer.
         fn type_layer_text(view: &PictureView, path: &QString) -> QString;
@@ -388,10 +407,114 @@ fn spec(
         placement.box_right,
         placement.box_bottom,
     ]);
+    if let Some(path) = path_from_setting(placement) {
+        if path.kind == TextPathKind::Area {
+            let flattened = path.subpath.flattened(0.25);
+            if let Some(&(first_x, first_y)) = flattened.points.first() {
+                let (mut left, mut top, mut right, mut bottom) =
+                    (first_x, first_y, first_x, first_y);
+                for &(x, y) in &flattened.points {
+                    left = left.min(x);
+                    top = top.min(y);
+                    right = right.max(x);
+                    bottom = bottom.max(y);
+                }
+                spec.origin = (left, top);
+                spec.box_bounds = Some([0.0, 0.0, right - left, bottom - top]);
+            }
+        } else {
+            let flattened = path.subpath.flattened(0.25);
+            if let Some((point, _)) = flattened.point_at(path.start) {
+                spec.origin = point;
+            }
+        }
+        spec.path = Some(path);
+    }
     spec.character = character_attrs(character);
     spec.character.font_family = font.to_string();
     spec.paragraph = paragraph_attrs(paragraph);
     spec
+}
+
+fn path_from_setting(setting: &TypeSetting) -> Option<TextPath> {
+    let kind = match setting.path_kind {
+        1 => TextPathKind::OnPath,
+        2 => TextPathKind::Area,
+        _ => return None,
+    };
+    let segments: Vec<[(f64, f64); 4]> = setting
+        .path_points
+        .to_string()
+        .split(';')
+        .filter(|part| !part.trim().is_empty())
+        .filter_map(|part| {
+            let values: Vec<f64> = part
+                .split_whitespace()
+                .filter_map(|value| value.parse().ok())
+                .collect();
+            (values.len() == 8).then(|| {
+                [
+                    (values[0], values[1]),
+                    (values[2], values[3]),
+                    (values[4], values[5]),
+                    (values[6], values[7]),
+                ]
+            })
+        })
+        .collect();
+    if segments.is_empty() {
+        return None;
+    }
+    let mut points = Vec::with_capacity(segments.len() + usize::from(!setting.path_closed));
+    for (index, segment) in segments.iter().enumerate() {
+        let in_handle = if index == 0 {
+            setting
+                .path_closed
+                .then(|| segments.last().map(|last| last[2]))
+                .flatten()
+        } else {
+            Some(segments[index - 1][2])
+        };
+        points.push(PathPoint {
+            anchor: segment[0],
+            in_handle,
+            out_handle: Some(segment[1]),
+            smooth: true,
+        });
+    }
+    if !setting.path_closed {
+        if let Some(last) = segments.last() {
+            points.push(PathPoint {
+                anchor: last[3],
+                in_handle: Some(last[2]),
+                out_handle: None,
+                smooth: false,
+            });
+        }
+    }
+    Some(TextPath {
+        kind,
+        subpath: pictura_core::path::Subpath {
+            points,
+            closed: setting.path_closed,
+        },
+        start: setting.path_start,
+    })
+}
+
+fn path_points(path: &TextPath) -> QString {
+    let mut parts = Vec::new();
+    for index in 0..path.subpath.segment_count() {
+        let Some(segment) = path.subpath.segment(index) else {
+            continue;
+        };
+        let values: Vec<String> = segment
+            .iter()
+            .flat_map(|(x, y)| [format!("{x}"), format!("{y}")])
+            .collect();
+        parts.push(values.join(" "));
+    }
+    QString::from(parts.join(";").as_str())
 }
 
 fn type_preview_rect(
@@ -606,6 +729,38 @@ fn type_layer_text(view: &PictureView, path: &QString) -> QString {
     layer_spec(view, path).map_or_else(QString::default, |s| QString::from(s.text.as_str()))
 }
 
+fn type_path_at(view: &PictureView, x: f64, y: f64, tolerance: f64) -> Vec<f64> {
+    let Some(doc) = view.rust().session.doc.as_ref() else {
+        return Vec::new();
+    };
+    let Some(hit) = pictura_render::path_hit_at(doc, x, y, tolerance) else {
+        return Vec::new();
+    };
+    let points = hit.control_points();
+    let mut out = vec![
+        match hit.kind {
+            TextPathKind::OnPath => 1.0,
+            TextPathKind::Area => 2.0,
+        },
+        if hit.subpath.closed { 1.0 } else { 0.0 },
+        hit.start,
+        (points.len() / 8) as f64,
+    ];
+    out.extend(points);
+    out
+}
+
+fn type_path_overflow_point(
+    text: &QString,
+    font: &QString,
+    setting: &TypeSetting,
+    character: &CharacterSetting,
+    paragraph: &ParagraphSetting,
+) -> Vec<f64> {
+    pictura_render::type_path_overflow_point(&spec(text, font, setting, character, paragraph))
+        .map_or_else(Vec::new, |(x, y)| vec![x, y])
+}
+
 fn type_layer_font(view: &PictureView, path: &QString) -> QString {
     layer_spec(view, path).map_or_else(QString::default, |s| {
         QString::from(s.character.font_family.as_str())
@@ -627,6 +782,16 @@ fn placement_setting(spec: &TypeSpec) -> TypeSetting {
         box_top: b[1],
         box_right: b[2],
         box_bottom: b[3],
+        path_kind: spec.path.as_ref().map_or(0, |path| match path.kind {
+            TextPathKind::OnPath => 1,
+            TextPathKind::Area => 2,
+        }),
+        path_closed: spec.path.as_ref().is_some_and(|path| path.subpath.closed),
+        path_start: spec.path.as_ref().map_or(0.0, |path| path.start),
+        path_points: spec
+            .path
+            .as_ref()
+            .map_or_else(QString::default, path_points),
     }
 }
 
@@ -645,6 +810,10 @@ fn type_layer_setting(view: &PictureView, path: &QString) -> TypeSetting {
             box_top: 0.0,
             box_right: 0.0,
             box_bottom: 0.0,
+            path_kind: 0,
+            path_closed: false,
+            path_start: 0.0,
+            path_points: QString::default(),
         },
         |spec| placement_setting(&spec),
     )

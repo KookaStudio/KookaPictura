@@ -453,6 +453,7 @@ fn rasterize_all_layers_rasterizes_a_type_layer() {
                 }),
                 vertical: false,
                 box_bounds: None,
+                path: None,
             }),
             ..Default::default()
         });
