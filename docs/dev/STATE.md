@@ -11,6 +11,45 @@ Snapshot for resuming after a context break. Update after each milestone.
   (`docs/00-overview/licensing-and-provenance.md`).
 - **Provenance history:** the git history was rewritten so no reachable commit
   contains reproduced Adobe Help prose or the old wording.
+- **Warp Text** (#684, branch `feat/684-warp-text`, OpenSpec change
+  `warp-text`, archived into `tools/warp-text`). `Type > Warp Text…` and the
+  type tools' options-bar Warp button open a window-modal dialog: Style (None
+  and the fifteen presets), Horizontal/Vertical, Bend, and H/V Distortion
+  (−100…+100 %).
+  - **Preview, Cancel, OK.** Every change previews on the canvas with no
+    history state. The first preview stashes the layer, and Cancel puts that
+    copy back, so an opened layer's own pixels survive. OK records one "Warp
+    Text" state.
+  - **Rendering** (`pictura-render/src/type_warp.rs`): glyph outlines are
+    flattened and mapped through `TextWarp::over(text box)`, then the layer
+    matrix, then filled with zeno. Edges stay as sharp as unwarped type, and
+    the layer rect bounds the warped ink.
+  - **Live warp.** `TypeSetting` carries the warp, and `TypeFrame::load` /
+    `store` now own the frame↔setting copy. Retyping, panel edits, styles,
+    point/paragraph conversion, and Free Transform keep it.
+  - **PSD.** `decode_type_warp` reads the `TySh` warp descriptor, and the
+    author writes it.
+  - **Refusals.** Faux Bold, fonts with no `glyf`/`CFF `/`CFF2` table, and
+    on-path or area type are refused with a non-blocking warning.
+  - **Layers panel.** A warped row's T card stands on a bent baseline.
+  - **Placeholder text** (OpenSpec change `type-placeholder-text`, archived
+    into `tools/type-placeholder-text`; Photoshop CC behaviour, not CS6). A new
+    Horizontal or Vertical Type session, from a click or a dragged box, starts
+    with "Lorem Ipsum Pictura" selected. Typing replaces it, and committing it
+    untouched keeps it. Type Mask and reopened layers start as before.
+    `Edit > Preferences > Type` is now a real page whose Fill New Type Layers
+    With Placeholder Text checkbox (on by default, saved in the session) turns
+    it off. The Warp Text button has its own `options.warpText` icon, and
+    `options.warp.svg`, which was never listed in `pictura.qrc`, is now
+    bundled.
+  - **Character panel on new type** (change `character-panel-new-text`).
+    While new text is being set, the Character panel edits that session (a
+    `TextSession` override the preview and the commit share), so toggles
+    preview at once. Before, it edited the previously selected layer, if any.
+  Ceiling (`ponytail:`): the caret, the selection highlight, and the box stay
+  unwarped while a warped layer is edited. The outlines are rebuilt on every
+  render. CS6's refusal of path type is unconfirmed. Tests: `tst_warp_text`
+  (15 cases) and Rust `type_warp`, codec, and core units.
 - **Help > Search on Shift+Space** (#788, branch `feat/788-searchbar`,
   OpenSpec change `ui-search-bar`, archived into `ui/search-bar`). Not a CS6
   feature; added by owner decision and labelled non-parity.
