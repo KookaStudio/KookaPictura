@@ -1273,9 +1273,12 @@ Snapshot for resuming after a context break. Update after each milestone.
 - **Filter menu wiring and dialogs** (change `filter-menu-ui`, issue #82, ported
   from photorust): the CS6 `Filter` menu is live. `cxxqt_object/filter_map.rs`
   exposes `pub(super) filter_from_kind_params(kind, &[f64])` (empty slice = the
-  documented defaults; a wrong-length slice is refused), with `filter_from_kind`
-  delegating to it; its `FILTER_ARITIES` table recognises the parameterless
-  kernels too, including `Blur`, `Blur More`, and `Oil Paint`. `PictureView`
+  documented defaults; a wrong-length fixed list is refused, and variable-list
+  kinds accept only their documented shapes), with `filter_from_kind`
+  delegating to it; its filter parameter descriptor (`filter_map/descriptor/`)
+  records every kind, including the parameterless `Blur` and `Blur More` and
+  the parameterised `Oil Paint`, and
+  `cpp/filter_commands.cpp` builds its rows from it. `PictureView`
   gains `apply_filter_params`, `filter_preview`, `filter_preview_cancel`,
   `filter_last_kind`/`filter_last_params`, and `filter_target_ready`. Preview
   filters a snapshot of the active layer and never records history; cancel
