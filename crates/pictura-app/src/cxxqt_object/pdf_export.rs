@@ -91,36 +91,6 @@ fn text(options: &PdfOptions) -> QString {
     QString::from(pdf::write_joboptions(options, false).as_str())
 }
 
-/// 32 bytes of OS-seeded randomness for the file ID and encryption salts:
-/// std's `RandomState` keys come from the OS, so no new dependency.
-fn os_entropy() -> [u8; 32] {
-    use std::hash::{BuildHasher, Hasher};
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or_default();
-    let mut seed = [0u8; 32];
-    for (i, chunk) in seed.chunks_mut(8).enumerate() {
-        let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
-        hasher.write_u128(nanos);
-        hasher.write_usize(i);
-        chunk.copy_from_slice(&hasher.finish().to_le_bytes());
-    }
-    seed
-}
-
-fn write_atomically(path: &str, bytes: &[u8]) -> bool {
-    let tmp = format!("{path}.tmp");
-    if std::fs::write(&tmp, bytes).is_err() {
-        return false;
-    }
-    if std::fs::rename(&tmp, path).is_err() {
-        let _ = std::fs::remove_file(&tmp);
-        return false;
-    }
-    true
-}
-
 /// Encode the view's document as a Photoshop PDF at `path` with `options`.
 fn save_view(
     mut view: Pin<&mut PictureView>,
@@ -163,7 +133,7 @@ fn save_view(
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_secs() as i64)
                 .unwrap_or_default(),
-            entropy: os_entropy(),
+            entropy: pictura_codec::os_random(),
             title: std::path::Path::new(path)
                 .file_stem()
                 .map(|s| s.to_string_lossy().into_owned())
@@ -172,7 +142,7 @@ fn save_view(
         };
         pdf::write_pdf(&save_doc, &composite, options, &env).map_err(|e| e.to_string())?
     };
-    if !write_atomically(path, &bytes) {
+    if super::safe_io::write_atomically(path, &bytes, false).is_err() {
         return Err(format!("Could not write {path}."));
     }
     Ok(())

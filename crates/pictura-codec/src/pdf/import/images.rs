@@ -4,6 +4,10 @@
 use std::collections::{HashMap, HashSet};
 
 use super::objects::{write_object, Dict, Object, PdfObjects};
+use super::{MAX_IMAGES, MAX_PAGES};
+
+/// The deepest page-tree or Form XObject nesting followed.
+const MAX_TREE_DEPTH: u32 = 64;
 
 /// One image XObject: the page it was first found on (1-based), its object
 /// number, and its pixel size.
@@ -17,6 +21,7 @@ pub struct PdfImage {
 
 /// The distinct image XObjects of every page, in page order, including those
 /// inside Form XObjects. Inline images and images in patterns are not listed.
+/// At most [`MAX_PAGES`] pages are searched and [`MAX_IMAGES`] images listed.
 /// `None` when the file cannot be read or is encrypted.
 pub(crate) fn list_images(file: &PdfObjects) -> Option<Vec<PdfImage>> {
     if file.encrypted() {
@@ -30,10 +35,14 @@ pub(crate) fn list_images(file: &PdfObjects) -> Option<Vec<PdfImage>> {
         None,
         &mut pages,
         &mut HashSet::new(),
+        0,
     );
     let mut seen = HashSet::new();
     let mut out = Vec::new();
     for (index, resources) in pages.iter().enumerate() {
+        if out.len() >= MAX_IMAGES {
+            break;
+        }
         let mut forms = HashSet::new();
         collect_images(
             file,
@@ -42,8 +51,10 @@ pub(crate) fn list_images(file: &PdfObjects) -> Option<Vec<PdfImage>> {
             &mut seen,
             &mut forms,
             &mut out,
+            0,
         );
     }
+    out.truncate(MAX_IMAGES);
     Some(out)
 }
 
@@ -54,7 +65,11 @@ fn collect_pages(
     inherited: Option<&Object>,
     pages: &mut Vec<Option<Object>>,
     visited: &mut HashSet<u32>,
+    depth: u32,
 ) {
+    if depth > MAX_TREE_DEPTH || pages.len() >= MAX_PAGES {
+        return;
+    }
     if let Object::Ref(num) = node {
         if !visited.insert(*num) {
             return;
@@ -67,7 +82,7 @@ fn collect_pages(
     match dict.get("Kids").map(|k| file.resolve(k)) {
         Some(Object::Array(kids)) => {
             for kid in kids {
-                collect_pages(file, kid, resources, pages, visited);
+                collect_pages(file, kid, resources, pages, visited, depth + 1);
             }
         }
         _ => pages.push(resources.cloned()),
@@ -81,7 +96,11 @@ fn collect_images(
     seen: &mut HashSet<u32>,
     forms: &mut HashSet<u32>,
     out: &mut Vec<PdfImage>,
+    depth: u32,
 ) {
+    if depth > MAX_TREE_DEPTH {
+        return;
+    }
     let Some(resources) = file.resolve_dict(resources) else {
         return;
     };
@@ -101,7 +120,7 @@ fn collect_images(
                 dict.get(key)
                     .map(|v| file.resolve(v))
                     .and_then(Object::as_int)
-                    .filter(|v| *v > 0)
+                    .filter(|v| *v > 0 && *v <= i64::from(u32::MAX))
             };
             if let (Some(width), Some(height)) = (size("Width"), size("Height")) {
                 if seen.insert(*num) {
@@ -117,14 +136,15 @@ fn collect_images(
             // A form without its own resources uses the page's.
             let fallback = Object::Dict(resources.clone());
             let inner = dict.get("Resources").unwrap_or(&fallback);
-            collect_images(file, Some(inner), page, seen, forms, out);
+            collect_images(file, Some(inner), page, seen, forms, out, depth + 1);
         }
     }
 }
 
 /// A one-page PDF whose MediaBox is the image's pixel size and whose content
 /// draws image object `object` over the whole page, with every object it
-/// references copied along. `None` when `object` is not an image.
+/// references copied along. `None` when `object` is not an image or its size
+/// is not positive.
 pub(crate) fn wrap_image(file: &PdfObjects, object: u32) -> Option<Vec<u8>> {
     let Some(Object::Stream(dict, _)) = file.get(object) else {
         return None;
@@ -137,6 +157,9 @@ pub(crate) fn wrap_image(file: &PdfObjects, object: u32) -> Option<Vec<u8>> {
         .get("Height")
         .map(|v| file.resolve(v))
         .and_then(Object::as_int)?;
+    if width <= 0 || height <= 0 {
+        return None;
+    }
 
     // 1 catalog, 2 pages, 3 page, 4 content; copies are renumbered from 5.
     let mut renumber: HashMap<u32, u32> = HashMap::new();

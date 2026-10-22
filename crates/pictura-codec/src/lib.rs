@@ -19,6 +19,7 @@
 //!   never a panic.
 
 mod advanced_blending;
+mod budget;
 mod color_mode;
 mod common;
 mod crs_xmp;
@@ -110,7 +111,7 @@ pub use live_shape::{
 pub use pictura_color::{Policy, Profile};
 pub use png::{encode_base64 as encode_png_base64, encode_rgba as encode_png_rgba};
 pub use probe::{probe_image, ImageBudget, ImageFormat, ImageProbe, ImportError, LimitKind};
-pub use read::{read_psd, read_psd_with};
+pub use read::{read_psd, read_psd_with, read_psd_within};
 pub use smart_filter::{
     clear_smart_filters, delete_smart_filter, reorder_smart_filters, set_camera_raw_option,
     set_smart_filter_enabled, set_smart_filters_enabled,
@@ -136,6 +137,15 @@ pub use xmp::{parse_xmp, patch_xmp, patch_xmp_values, to_xmp_packet, XmpField, X
 
 /// Read a Pictura Raw filter's `Fltr` options from a
 /// [`pictura_core::SmartFilter::options`] byte buffer.
+/// `N` bytes from the operating system's random source, for encryption salts,
+/// file identifiers, and unguessable scratch names.
+pub fn os_random<const N: usize>() -> [u8; N] {
+    let mut bytes = [0u8; N];
+    // Every supported OS has a random source; there is nothing to fall back to.
+    getrandom::fill(&mut bytes).expect("the operating system's random source");
+    bytes
+}
+
 pub fn camera_raw_options(options: &[u8]) -> Result<DescValue, PsdError> {
     let mut reader = common::Reader::new(options);
     descriptor::read_descriptor(&mut reader)

@@ -20,6 +20,13 @@ image-webp = "0.2"
 md-5 = "0.10"
 aes = "0.8"
 sha2 = "0.10"
+# The operating system's random source for PDF salts, file IDs, and scratch
+# names (#844 M7); already in Cargo.lock as a transitive dependency.
+getrandom = "0.4"
+
+# setrlimit for the Ghostscript child (#844 H7); already in Cargo.lock.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [dev-dependencies]
 pictura-render = { path = "../pictura-render" }

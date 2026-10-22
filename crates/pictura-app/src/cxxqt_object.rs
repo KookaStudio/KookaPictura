@@ -46,6 +46,7 @@ mod paint_tools;
 mod path_list;
 mod paths;
 mod pdf_export;
+mod safe_io;
 mod selection_move;
 mod shapes;
 mod state;

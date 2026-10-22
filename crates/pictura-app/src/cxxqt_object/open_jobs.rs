@@ -208,7 +208,7 @@ pub(super) fn decode_image(
         .map(|stem| stem.to_string_lossy().into_owned())
         .unwrap_or_default();
     progress(5, "Reading file");
-    let bytes = std::fs::read(path).ok()?;
+    let bytes = super::safe_io::read_capped(path, super::safe_io::import_file_limit())?;
     progress(25, "Decoding");
     let (rgba, width, height) = decode_import(&bytes)?;
     progress(70, "Compositing");

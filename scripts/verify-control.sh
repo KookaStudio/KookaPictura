@@ -42,9 +42,10 @@ trap cleanup EXIT
     "$FIXTURE" >"$log" 2>&1 &
 pid=$!
 
-# Wait for the socket (bounded); fail loudly with the app log otherwise.
+# Wait for the socket and its session token (bounded); fail loudly with the
+# app log otherwise.
 for _ in $(seq 1 100); do
-    [ -S "$sock" ] && break
+    [ -S "$sock" ] && [ -s "$sock.token" ] && break
     if ! kill -0 "$pid" 2>/dev/null; then
         echo "verify-control: app exited before listening:" >&2
         cat "$log" >&2
@@ -52,7 +53,7 @@ for _ in $(seq 1 100); do
     fi
     sleep 0.1
 done
-if [ ! -S "$sock" ]; then
+if [ ! -S "$sock" ] || [ ! -s "$sock.token" ]; then
     echo "verify-control: socket never appeared:" >&2
     cat "$log" >&2
     exit 1
@@ -65,6 +66,8 @@ import socket
 import sys
 
 sock_path = sys.argv[1]
+with open(sock_path + ".token") as token_file:
+    token = token_file.read().strip()
 conn = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 conn.settimeout(20.0)
 conn.connect(sock_path)
@@ -80,7 +83,8 @@ def fail(message):
 def call(method, **params):
     global next_id
     next_id += 1
-    stream.write((json.dumps({"id": next_id, "method": method, "params": params}) + "\n").encode())
+    request = {"id": next_id, "method": method, "params": params, "token": token}
+    stream.write((json.dumps(request) + "\n").encode())
     stream.flush()
     line = stream.readline()
     if not line:

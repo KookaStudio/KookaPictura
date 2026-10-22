@@ -82,7 +82,9 @@ impl qobject::PictureView {
             .map(|stem| stem.to_string_lossy().into_owned())
             .unwrap_or_default();
         let Some((rgba, width, height)) =
-            std::fs::read(&file).ok().as_deref().and_then(decode_import)
+            super::safe_io::read_capped(&file, super::safe_io::import_file_limit())
+                .as_deref()
+                .and_then(decode_import)
         else {
             return QString::default();
         };
