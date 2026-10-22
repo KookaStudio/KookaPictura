@@ -408,8 +408,8 @@ fn layered_bitmap_falls_back_to_rgb() {
 
 #[test]
 fn bitmap_with_a_document_channel_falls_back_to_rgb() {
-    // An extra channel makes the flat predicate false, so the document writes
-    // the working RGB rather than one 1-bit channel.
+    // An expanded (non-packed) extra channel makes the flat predicate false, so
+    // the document writes the working RGB rather than one 1-bit channel.
     let p = flat_psd(1, 0, 1, 8, 2, &[&[0xAA, 0xF0]]);
     let mut doc = read_psd(&p).unwrap();
     doc.channels.push(Channel {
@@ -426,6 +426,61 @@ fn bitmap_with_a_document_channel_falls_back_to_rgb() {
     let back = read_psd(&out).unwrap();
     assert_eq!(back.mode, ColorMode::Rgb);
     assert_eq!(back.source_mode, None);
+}
+
+#[test]
+fn bitmap_with_extra_channel_roundtrips() {
+    // A packed extra channel rides the depth-1 Bitmap write-back verbatim. The
+    // two-channel source also checks that the read store's trailing channel is
+    // not mistaken for the packed color plane.
+    let p = flat_psd(1, 0, 2, 8, 2, &[&[0xAA, 0xF0], &[0xF0, 0xAA]]);
+    let doc = read_psd(&p).unwrap();
+    assert_eq!(doc.channels.len(), 1);
+    assert_eq!(doc.channels[0].data.as_slice(), &[0xF0, 0xAA]);
+
+    let out = write_psd(&doc).unwrap();
+    assert_eq!(
+        u16::from_be_bytes(out[12..14].try_into().unwrap()),
+        2,
+        "the output keeps the color channel and the extra"
+    );
+    assert_eq!(
+        u16::from_be_bytes(out[22..24].try_into().unwrap()),
+        1,
+        "the output stays depth 1"
+    );
+    assert_eq!(
+        u16::from_be_bytes(out[24..26].try_into().unwrap()),
+        0,
+        "the output stays Bitmap"
+    );
+    let back = read_psd(&out).unwrap();
+    assert_eq!(back.channels.len(), 1);
+    assert_eq!(back.channels[0].data.as_slice(), &[0xF0, 0xAA]);
+}
+
+#[test]
+fn bitmap_extra_channel_survives_rgb_fallback() {
+    // An edit refuses the Bitmap write-back; the packed extra expands to 8-bit.
+    let p = flat_psd(1, 0, 2, 8, 2, &[&[0xAA, 0xF0], &[0xF0, 0xAA]]);
+    let mut doc = read_psd(&p).unwrap();
+    doc.composite.data[0] ^= 1;
+
+    let out = write_psd(&doc).unwrap();
+    assert_eq!(
+        u16::from_be_bytes(out[22..24].try_into().unwrap()),
+        8,
+        "the fallback writes depth 8"
+    );
+    assert_eq!(
+        u16::from_be_bytes(out[24..26].try_into().unwrap()),
+        3,
+        "the fallback writes RGB"
+    );
+    let back = read_psd(&out).unwrap();
+    let expected = crate::color_mode::bitmap_rows_to_rgb(&[0xF0, 0xAA], 8, 2);
+    assert_eq!(back.channels.len(), 1);
+    assert_eq!(back.channels[0].data.as_slice(), &expected[..16]);
 }
 
 #[test]

@@ -99,9 +99,8 @@ impl qobject::PictureView {
     /// `File > Open` for a raster image: read `path`, probe and decode it with
     /// Qt, and replace the view with an RGB/8-bit document holding the decoded
     /// pixels. Records one "Open" state and marks it unmodified; `false` without
-    /// mutating on any refusal. A fresh view has no path (the import is
-    /// untitled, so Save cannot overwrite the source image); an existing path is
-    /// left intact so a Revert reload keeps the document's file association.
+    /// mutating on any refusal. The opened file becomes the document's current
+    /// path, so Save writes it in place and Revert can reload it.
     pub fn open_image(mut self: Pin<&mut Self>, path: &QString) -> bool {
         let path = path.to_string();
         let gpu_compute = self.rust().gpu_compute;
@@ -253,7 +252,7 @@ impl qobject::PictureView {
             }
             Some(format) => {
                 let gpu_compute = self.rust().gpu_compute;
-                let (rgba, width, height) = {
+                let (rgba, width, height, metadata) = {
                     let mut rust = self.as_mut().rust_mut();
                     let Some(doc) = rust.session.doc.as_mut() else {
                         return false;
@@ -263,9 +262,17 @@ impl qobject::PictureView {
                     }
                     let buffer = current_buffer(doc, gpu_compute);
                     let srgb = pictura_codec::buffer_to_srgb(doc, &buffer);
-                    (buffer_to_rgba_bytes(&srgb), srgb.width, srgb.height)
+                    let metadata = pictura_codec::raster_metadata(doc);
+                    (
+                        buffer_to_rgba_bytes(&srgb),
+                        srgb.width,
+                        srgb.height,
+                        metadata,
+                    )
                 };
-                if !super::export::encode_raster(&rgba, width, height, &path, format, 90, 100) {
+                if !super::export::write_raster_with_metadata(
+                    &rgba, width, height, &path, format, &metadata,
+                ) {
                     return false;
                 }
             }

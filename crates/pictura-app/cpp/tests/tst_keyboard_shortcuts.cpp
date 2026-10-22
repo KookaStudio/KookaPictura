@@ -383,7 +383,14 @@ void KeyboardShortcutsTest::workspaceKeysMatchTheWindow()
             continue;
         }
         const QKeyCombination combo = key[0];
-        const QChar letter(int(combo.key()));
+        const int keyCode = int(combo.key());
+        if (keyCode < 0 || keyCode > 0xffff) {
+            // Tab, function keys, and other non-character keys cannot be tool
+            // letters; QChar only accepts BMP code points.
+            ++checked;
+            continue;
+        }
+        const QChar letter(keyCode);
         const bool toolKey = key.count() == 1 && letters.contains(letter)
                           && (combo.keyboardModifiers() == Qt::NoModifier
                               || combo.keyboardModifiers() == Qt::ShiftModifier);

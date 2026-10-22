@@ -66,6 +66,11 @@ void PicturaMainWindow::prepareCanvasGuides(const DocEntry& entry)
 void PicturaMainWindow::applyGuideViewState()
 {
     for (const DocEntry& entry : docs_) {
+        // A document still loading has no canvas yet; setupCanvas() calls
+        // prepareCanvasGuides() with the current state when it completes.
+        if (!entry.canvasHost || !entry.canvas) {
+            continue;
+        }
         entry.canvasHost->setRulersVisible(rulersVisible_);
         entry.canvasHost->setRulerUnit(rulerUnit_, traditionalPoints_);
         entry.canvas->setGuidesVisible(guidesVisible_);

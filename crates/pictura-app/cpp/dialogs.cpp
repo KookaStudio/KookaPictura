@@ -324,6 +324,25 @@ QString lowercasedImageSuffix(const QString& path)
     return base + suffix.toLower();
 }
 
+QString pathForSaveFilter(const QString& path, int chosenFilter, int fallbackFilter)
+{
+    const QStringList& filters = saveFileFilters();
+    const int allFormats = filters.size() - 1;
+    if (chosenFilter == allFormats && !QFileInfo(path).suffix().isEmpty()) {
+        return lowercasedImageSuffix(path);
+    }
+    const int effective =
+        chosenFilter >= 0 && chosenFilter < filters.size() ? chosenFilter : fallbackFilter;
+    const QString suffix = chosenFilter == allFormats
+                               ? defaultSuffixForFilter(fallbackFilter)
+                               : defaultSuffixForFilter(effective);
+    const QFileInfo info(path);
+    const QString name = info.suffix().isEmpty() ? info.fileName() : info.completeBaseName();
+    const QString dir = info.path() == QStringLiteral(".") ? QString() : info.path();
+    const QString joined = dir.isEmpty() ? name : dir + QLatin1Char('/') + name;
+    return lowercasedImageSuffix(joined + suffix);
+}
+
 namespace {
 
 QStringList g_dialogRecentPaths;
