@@ -7,6 +7,7 @@
 //! re-encode framing-only (EngineData stays opaque inside those bytes). A
 //! malformed block leaves the view unset rather than failing the document.
 
+use pictura_core::warp::{TextWarp, WarpStyle};
 use pictura_core::{AntiAlias, LayerStack, TextStyle, TypeTool};
 
 use crate::common::Reader;
@@ -62,6 +63,52 @@ pub(crate) fn decode_type_tool(data: &[u8]) -> Option<TypeTool> {
         box_bounds,
         path: None,
     })
+}
+
+/// `Type > Warp Text`'s settings from a `TySh` warp descriptor. A style type
+/// cannot render (`warpCustom`, an unknown one) or a missing or malformed
+/// descriptor reads as no warp; the bytes themselves stay on the tool.
+pub fn decode_type_warp(warp_desc: &[u8]) -> TextWarp {
+    let Ok(DescValue::Object { items, .. }) =
+        descriptor::read_descriptor(&mut Reader::new(warp_desc))
+    else {
+        return TextWarp::default();
+    };
+    let style = match get_object_item(&items, b"warpStyle") {
+        Some(DescValue::Enum { value, .. }) => std::str::from_utf8(value)
+            .ok()
+            .and_then(WarpStyle::parse)
+            .filter(|style| style.is_preset()),
+        _ => None,
+    };
+    let Some(style) = style else {
+        return TextWarp::default();
+    };
+    // CS6 keeps every value within ±100 %; a file outside that range or not
+    // finite is clamped (non-finite reads as 0) before it reaches geometry.
+    let number = |key: &[u8]| {
+        let v = match get_object_item(&items, key) {
+            Some(DescValue::Double(v)) => *v,
+            Some(DescValue::UnitFloat { value, .. }) => *value,
+            Some(DescValue::Long(v)) => f64::from(*v),
+            _ => 0.0,
+        };
+        if v.is_finite() {
+            v.clamp(-100.0, 100.0)
+        } else {
+            0.0
+        }
+    };
+    TextWarp {
+        style,
+        bend: number(b"warpValue"),
+        h_distort: number(b"warpPerspective"),
+        v_distort: number(b"warpPerspectiveOther"),
+        vertical: matches!(
+            get_object_item(&items, b"warpRotate"),
+            Some(DescValue::Enum { value, .. }) if value == b"Vrtc"
+        ),
+    }
 }
 
 /// The text descriptor's `Ornt` enum is `Vrtc` for vertical type.
@@ -375,5 +422,47 @@ mod tests {
         resolve_type_tools(&mut layers);
         assert!(layers[0].type_tool.is_none(), "view stays unset");
         assert!(layers[0].is_type(), "kind detection stays presence-only");
+    }
+
+    fn warp_desc(style: &str, bend: f64, rotate: &str) -> Vec<u8> {
+        let enumerated = |kind: &[u8], value: &str| DescValue::Enum {
+            kind: kind.to_vec(),
+            value: value.as_bytes().to_vec(),
+        };
+        write_descriptor(&DescValue::Object {
+            name: String::new(),
+            class_id: b"warp".to_vec(),
+            items: vec![
+                (b"warpStyle".to_vec(), enumerated(b"warpStyle", style)),
+                (b"warpValue".to_vec(), DescValue::Double(bend)),
+                (b"warpPerspective".to_vec(), DescValue::Double(0.0)),
+                (b"warpPerspectiveOther".to_vec(), DescValue::Double(0.0)),
+                (b"warpRotate".to_vec(), enumerated(b"Ornt", rotate)),
+            ],
+        })
+    }
+
+    #[test]
+    fn decodes_the_warp_descriptor() {
+        assert_eq!(
+            decode_type_warp(&warp_desc("warpArc", 50.0, "Hrzn")),
+            TextWarp {
+                style: WarpStyle::Arc,
+                bend: 50.0,
+                ..TextWarp::default()
+            }
+        );
+        assert_eq!(
+            decode_type_warp(&warp_desc("warpCustom", 50.0, "Vrtc")),
+            TextWarp::default()
+        );
+        assert_eq!(decode_type_warp(&empty_desc()), TextWarp::default());
+        let wild = decode_type_warp(&warp_desc("warpArc", 1e308, "Hrzn"));
+        assert_eq!(wild.bend, 100.0, "clamped to CS6's range");
+        assert_eq!(
+            decode_type_warp(&warp_desc("warpArc", f64::NAN, "Hrzn")).bend,
+            0.0
+        );
+        assert_eq!(decode_type_warp(&[]), TextWarp::default());
     }
 }

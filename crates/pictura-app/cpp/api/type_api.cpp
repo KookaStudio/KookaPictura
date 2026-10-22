@@ -272,4 +272,43 @@ bool commitEdit(PictureView& view, const QString& path, const QString& text, con
     return ::pictura::type_commit_edit(view, path, text, font, setting, character, paragraph);
 }
 
+WarpSetting layerWarp(const PictureView& view, const QString& path)
+{
+    const TypeSetting s = ::pictura::type_layer_setting(view, path);
+    return {s.warp_style, s.warp_bend, s.warp_h, s.warp_v, s.warp_vertical};
+}
+
+WarpRefusal warpRefusal(const PictureView& view, const QString& path)
+{
+    switch (::pictura::type_warp_refusal(view, path)) {
+    case 0:
+        return WarpRefusal::None;
+    case 1:
+        return WarpRefusal::OnPath;
+    case 2:
+        return WarpRefusal::FauxBold;
+    case 3:
+        return WarpRefusal::NoOutlines;
+    default:
+        return WarpRefusal::NotType;
+    }
+}
+
+bool previewWarp(PictureView& view, const QString& path, const WarpSetting& warp)
+{
+    return ::pictura::type_warp_preview(view, path, warp.style, warp.bend, warp.horizontal,
+                                        warp.vertical, warp.verticalOrientation);
+}
+
+bool cancelWarp(PictureView& view)
+{
+    return ::pictura::type_warp_cancel(view);
+}
+
+bool commitWarp(PictureView& view, const QString& path, const WarpSetting& warp)
+{
+    return ::pictura::type_warp_commit(view, path, warp.style, warp.bend, warp.horizontal,
+                                       warp.vertical, warp.verticalOrientation);
+}
+
 } // namespace pictura::type_api

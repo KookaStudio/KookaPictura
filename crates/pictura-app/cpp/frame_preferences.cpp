@@ -19,6 +19,8 @@ void PicturaMainWindow::registerPreferenceHandlers()
                           [this]() { showPreferences(PreferencesDialog::kUnits); });
     registry_->setHandler(command_ids::EditPreferencesGuides,
                           [this]() { showPreferences(PreferencesDialog::kGuides); });
+    registry_->setHandler(command_ids::EditPreferencesType,
+                          [this]() { showPreferences(PreferencesDialog::kType); });
 }
 
 void PicturaMainWindow::showPreferences(const QString& page)
@@ -32,6 +34,7 @@ void PicturaMainWindow::showPreferences(const QString& page)
         preferencesDialog_->setThemeFamily(themeFamily_);
         preferencesDialog_->setGpuCompute(gpuCompute_);
         preferencesDialog_->setGpuComputeEnabled(gpuAvailable_);
+        preferencesDialog_->setTypePlaceholderText(!tools_ || tools_->typePlaceholderText());
         connectRecoveryPreferences(preferencesDialog_);
         connectGuidePreferences(preferencesDialog_);
         connect(preferencesDialog_, &PreferencesDialog::useShiftKeyForToolSwitchChanged,
@@ -55,6 +58,13 @@ void PicturaMainWindow::showPreferences(const QString& page)
                 [this](int family) { setThemeFamily(family); });
         connect(preferencesDialog_, &PreferencesDialog::gpuComputeChanged, this,
                 &PicturaMainWindow::applyGpuComputePreference);
+        connect(preferencesDialog_, &PreferencesDialog::typePlaceholderTextChanged, this,
+                [this](bool on) {
+                    if (tools_) {
+                        tools_->setTypePlaceholderText(on);
+                    }
+                    saveSession();
+                });
     }
     preferencesDialog_->openOn(page);
 }

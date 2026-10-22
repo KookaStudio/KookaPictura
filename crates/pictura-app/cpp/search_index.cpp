@@ -105,7 +105,8 @@ QList<SearchEntry> buildSearchIndex(const CommandRegistry& registry)
     }
     const QStringList pages = {PreferencesDialog::kGeneral,     PreferencesDialog::kInterface,
                                PreferencesDialog::kFileHandling, PreferencesDialog::kPerformance,
-                               PreferencesDialog::kUnits,       PreferencesDialog::kGuides};
+                               PreferencesDialog::kUnits,       PreferencesDialog::kGuides,
+                               PreferencesDialog::kType};
     const QString search = QString::fromLatin1(command_ids::HelpSearch);
 
     QList<SearchEntry> entries;

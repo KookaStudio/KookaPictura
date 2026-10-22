@@ -211,6 +211,9 @@ pub fn type_placement(spec: &TypeSpec) -> Option<TypePlacement> {
     if spec.path.is_some() {
         return crate::type_path::placement(spec);
     }
+    if crate::type_warp::is_warped(spec) {
+        return crate::type_warp::placement(spec);
+    }
     let (left, top, width, height) = text_box(spec)?;
     let (x, y) = (spec.origin.0 as f32, spec.origin.1 as f32);
     let bounds = [
@@ -274,6 +277,8 @@ pub fn render_type(spec: &TypeSpec) -> Option<(PsdRect, PixelBuffer)> {
             pictura_core::TextPathKind::OnPath => crate::type_path::render_path(spec, rect)?,
             pictura_core::TextPathKind::Area => crate::type_path::render_area(spec, rect)?,
         }
+    } else if crate::type_warp::is_warped(spec) {
+        crate::type_warp::render(spec, rect)?
     } else if spec.matrix == TypeSpec::IDENTITY {
         render_text_buffer(&render_view(spec), rect.width(), rect.height())?
     } else {
@@ -347,11 +352,13 @@ fn compose(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
     ]
 }
 
-/// `spec`'s face, its layout in the untransformed box, and that box's rect.
-fn flat_layout(spec: &TypeSpec) -> Option<(&'static BundledText, TextLayout, PsdRect)> {
+/// `spec`'s face, its layout in the untransformed, unwarped box, and that
+/// box's rect.
+pub(crate) fn flat_layout(spec: &TypeSpec) -> Option<(&'static BundledText, TextLayout, PsdRect)> {
     let bundled = crate::fonts::face_for(&spec.character.font_family)?;
     let flat = TypeSpec {
         matrix: TypeSpec::IDENTITY,
+        warp: pictura_core::warp::TextWarp::default(),
         ..spec.clone()
     };
     let unmapped = type_placement(&flat)?.rect;
@@ -538,6 +545,7 @@ pub fn type_layer_spec(layer: &pictura_core::Layer) -> Option<TypeSpec> {
         applied_character_style: layer.applied_character_style.clone(),
         applied_paragraph_style: layer.applied_paragraph_style.clone(),
         overrides: layer.type_overrides.clone(),
+        warp: pictura_codec::decode_type_warp(&tool.warp_desc),
     };
     if let Some(placed) = type_placement(&spec) {
         let dx = f64::from(layer.rect.left - placed.rect.left);
@@ -556,8 +564,8 @@ pub fn type_layer_spec(layer: &pictura_core::Layer) -> Option<TypeSpec> {
 /// follows the new text; a renamed layer keeps its name. False (unchanged) for
 /// a missing or non-type layer, blank text, or a document that is not 8-bit RGB.
 ///
-/// ponytail: an opened layer's own `TySh` (several runs, warp, paragraph type)
-/// is replaced by the single-run authored one.
+/// ponytail: an opened layer's own `TySh` (several runs, paragraph type) is
+/// replaced by the single-run authored one; its warp is carried by `spec`.
 pub fn replace_type_layer(doc: &mut Document, path: &str, spec: &TypeSpec) -> bool {
     if !rgb8(doc) {
         return false;

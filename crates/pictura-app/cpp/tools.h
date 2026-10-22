@@ -24,6 +24,7 @@
 #include <algorithm>
 #include <array>
 #include <functional>
+#include <memory>
 #include <utility>
 
 class QMenu;
@@ -245,6 +246,10 @@ public:
     CropBoxSession* cropBoxSession() const;
     PerspectiveCropSession* perspectiveCropSession() const;
     TextSession* textSession() const;
+    // Edit > Preferences > Type: new type starts with selected placeholder
+    // text. Shared with the type tools, read when a session opens.
+    void setTypePlaceholderText(bool on) { *typePlaceholder_ = on; }
+    bool typePlaceholderText() const { return *typePlaceholder_; }
 
     // The Rotate View tool's canvas rotation in degrees clockwise.
     double viewRotation() const;
@@ -567,6 +572,7 @@ private:
     CloneSourceOptions* clone_ = nullptr;
     MoveGroup* move_ = nullptr;
     TypeGroup* type_ = nullptr;
+    std::shared_ptr<bool> typePlaceholder_ = std::make_shared<bool>(true);
     MixerGroup* mixer_ = nullptr;
     EyedropperGroup* eyedropper_ = nullptr;
     PenGroup* pen_ = nullptr;

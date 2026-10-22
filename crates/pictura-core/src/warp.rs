@@ -609,3 +609,42 @@ impl Warp {
         )
     }
 }
+
+/// A type layer's warp: the `TySh` warp descriptor without a box. The box is
+/// the text's own, known only once the text is laid out ([`TextWarp::over`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct TextWarp {
+    /// `None` or a preset; type carries no custom mesh.
+    pub style: WarpStyle,
+    /// Bend in percent (-100..100).
+    pub bend: f64,
+    pub h_distort: f64,
+    pub v_distort: f64,
+    /// Warp along the vertical axis.
+    pub vertical: bool,
+}
+
+impl TextWarp {
+    /// The warp over `bounds` (`[x0, y0, x1, y1]`).
+    pub fn over(&self, bounds: [f64; 4]) -> Warp {
+        let style = if self.style.is_preset() {
+            self.style
+        } else {
+            WarpStyle::None
+        };
+        Warp {
+            style,
+            bend: self.bend,
+            h_distort: self.h_distort,
+            v_distort: self.v_distort,
+            vertical: self.vertical,
+            ..Warp::none(bounds)
+        }
+    }
+
+    /// Whether the warp leaves every box unchanged: no preset, or a preset at
+    /// zero bend and distortion.
+    pub fn is_identity(&self) -> bool {
+        self.over([0.0, 0.0, 1.0, 1.0]).is_identity()
+    }
+}

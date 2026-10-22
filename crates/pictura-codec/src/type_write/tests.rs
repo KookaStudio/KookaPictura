@@ -425,3 +425,37 @@ fn optical_kerning_survives_authoring_but_saves_as_metrics() {
     assert_eq!(authored.character.kerning, KerningMode::Optical);
     assert_eq!(read_style(&tool).character.kerning, KerningMode::Metrics);
 }
+
+#[test]
+fn authors_the_warp_descriptor() {
+    let mut warped = spec("Hi", false);
+    warped.warp = TextWarp {
+        style: WarpStyle::Fish,
+        bend: 40.0,
+        h_distort: -10.0,
+        v_distort: 25.0,
+        vertical: true,
+    };
+    let tool = author_type_tool(&warped, [0.0, -30.0, 40.0, 8.0], None, None);
+    let DescValue::Object { items, .. } =
+        read_descriptor(&mut crate::common::Reader::new(&tool.warp_desc)).expect("reads")
+    else {
+        panic!("warp descriptor is an object");
+    };
+    let item = |k: &[u8]| get_object_item(&items, k).cloned();
+    assert_eq!(
+        item(b"warpStyle"),
+        Some(enumerated("warpStyle", "warpFish"))
+    );
+    assert_eq!(item(b"warpValue"), Some(DescValue::Double(40.0)));
+    assert_eq!(item(b"warpPerspective"), Some(DescValue::Double(-10.0)));
+    assert_eq!(item(b"warpPerspectiveOther"), Some(DescValue::Double(25.0)));
+    assert_eq!(item(b"warpRotate"), Some(enumerated("Ornt", "Vrtc")));
+    assert_eq!(crate::decode_type_warp(&tool.warp_desc), warped.warp);
+
+    let plain = author_type_tool(&spec("Hi", false), [0.0, -30.0, 40.0, 8.0], None, None);
+    assert_eq!(
+        crate::decode_type_warp(&plain.warp_desc),
+        TextWarp::default()
+    );
+}

@@ -537,6 +537,7 @@ private:
     // Distribute, and the Move tool's buttons, over the selected layers.
     void wireAlignMenu();
     void wireTypeMenu();
+    void wireWarpText();
     // frame_menus_layer_style.cpp: Layer > Layer Style, the Layer Style dialog
     // and the style commands over the Layers panel's selection.
     void wireLayerStyleMenu();

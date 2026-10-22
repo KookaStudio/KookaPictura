@@ -11,12 +11,59 @@
 #include <QtCore/QStringList>
 
 #include <QtCore/QLineF>
+#include <QtCore/QRectF>
 #include <QtCore/QtMath>
 
 #include <algorithm>
 #include <cmath>
 
 namespace pictura {
+
+void TypeFrame::load(const TypeSetting& s)
+{
+    origin = QPointF(s.x, s.y);
+    matrix = {s.xx, s.xy, s.yx, s.yy};
+    paragraph = s.boxed;
+    box = {s.box_left, s.box_top, s.box_right, s.box_bottom};
+    pathKind = s.path_kind;
+    pathClosed = s.path_closed;
+    pathStart = s.path_start;
+    pathPoints = s.path_points;
+    pathPolygon = typePathPolygon(s.path_points);
+    if (pathKind == 2) {
+        paragraph = true;
+        const QRectF bounds = pathPolygon.boundingRect();
+        origin = bounds.topLeft();
+        box = {0.0, 0.0, bounds.width(), bounds.height()};
+    }
+    warpStyle = s.warp_style;
+    warpValues = {s.warp_bend, s.warp_h, s.warp_v};
+    warpVertical = s.warp_vertical;
+}
+
+void TypeFrame::store(TypeSetting& s) const
+{
+    s.x = origin.x();
+    s.y = origin.y();
+    s.xx = matrix[0];
+    s.xy = matrix[1];
+    s.yx = matrix[2];
+    s.yy = matrix[3];
+    s.boxed = paragraph;
+    s.box_left = box[0];
+    s.box_top = box[1];
+    s.box_right = box[2];
+    s.box_bottom = box[3];
+    s.path_kind = pathKind;
+    s.path_closed = pathClosed;
+    s.path_start = pathStart;
+    s.path_points = pathPoints;
+    s.warp_style = warpStyle;
+    s.warp_bend = warpValues[0];
+    s.warp_h = warpValues[1];
+    s.warp_v = warpValues[2];
+    s.warp_vertical = warpVertical;
+}
 
 QString typePathPointString(const QVector<double>& hit)
 {

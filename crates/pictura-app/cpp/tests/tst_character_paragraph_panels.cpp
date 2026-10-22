@@ -90,6 +90,7 @@ private slots:
     void initTestCase();
     void characterPanelReflectsAndEdits();
     void characterDefaultsWithoutType();
+    void characterPanelEditsNewText();
     void styleButtonAppliesToggle();
     void capsButtonsAreExclusive();
     void positionButtonsAreExclusive();
@@ -219,6 +220,54 @@ void CharacterParagraphPanelsTest::characterDefaultsWithoutType()
     const int base = f.view->history_index();
     panel->commitForTest();
     QCOMPARE(f.view->history_index(), base);
+}
+
+// While new type is being set (no layer yet), the panel edits that text: a
+// style toggle previews at once and lands on the new layer, not on the layer
+// selected before.
+void CharacterParagraphPanelsTest::characterPanelEditsNewText()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_char_new_text"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    const QString old = makeTypeLayer(f);
+    QVERIFY2(!old.isEmpty(), "a type layer");
+
+    frame.setActiveTool(pictura::ToolId::HorizontalType);
+    f.drag({QPointF(20, 130)});
+    QVERIFY(f.tools->textSession() && f.tools->textSession()->textActive());
+    auto* panel = frame.findChild<pictura::CharacterPanel*>();
+    QVERIFY(panel);
+    panel->setView(f.view);
+    panel->refresh();
+    QVERIFY(panel->editingEnabledForTest());
+    QVERIFY(!panel->styleButtonForTest(0)->isChecked());
+
+    const QImage plain = f.canvas->typeOverlayImageForTest();
+    QVERIFY2(!plain.isNull(), "the placeholder previews");
+    panel->styleButtonForTest(0)->click();
+    const QImage bold = f.canvas->typeOverlayImageForTest();
+    QVERIFY2(bold != plain, "Faux Bold previews at once");
+    panel->underlineForTest()->click();
+    QVERIFY2(f.canvas->typeOverlayImageForTest() != bold, "Underline previews at once");
+
+    QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
+    QString added;
+    for (int i = 0; i < f.view->layer_count(); ++i) {
+        const QString path = QString::number(i);
+        if (path != old && pictura::type_api::isType(*f.view, path)) {
+            added = path;
+        }
+    }
+    QVERIFY2(!added.isEmpty(), "the new text is committed");
+    const pictura::CharacterSetting committed
+        = pictura::type_api::layerCharacterSetting(*f.view, added);
+    QVERIFY(committed.faux_bold);
+    QVERIFY(committed.underline);
+    const pictura::CharacterSetting untouched
+        = pictura::type_api::layerCharacterSetting(*f.view, old);
+    QVERIFY2(!untouched.faux_bold && !untouched.underline, "the old layer is unchanged");
 }
 
 void CharacterParagraphPanelsTest::paragraphPanelReflectsAndEdits()

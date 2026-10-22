@@ -217,7 +217,8 @@ void addDefaultCommands(CommandRegistry& registry) {
     registry.add(command_ids::EditPreferencesGuides, {"Edit", "Preferences", "Guides, Grid, & Slices"},
                  QStringLiteral("Guides, Grid, & Slices"), QKeySequence(), true);
     leaf(registry, {"Edit", "Preferences", "Plug-ins"}, QStringLiteral("Plug-ins"));
-    leaf(registry, {"Edit", "Preferences", "Type"}, QStringLiteral("Type"));
+    registry.add(command_ids::EditPreferencesType, {"Edit", "Preferences", "Type"},
+                 QStringLiteral("Type"), QKeySequence(), true);
     leaf(registry, {"Edit", "Preferences", "3D"}, QStringLiteral("3D"));
 
     // Image

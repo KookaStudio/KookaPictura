@@ -31,10 +31,10 @@
 #include "paragraph_text_size_dialog.h"
 #include "path_overlay.h"
 #include "smart_guides.h"
-#include "text_input.h"
 #include "tools.h"
 #include "type_fonts.h"
 #include "type_frame.h"
+#include "type_key_filter.h"
 #include "type_text_edit.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
@@ -56,22 +56,14 @@
 #include <array>
 #include <functional>
 #include <memory>
+#include <optional>
 
 namespace pictura {
 
 namespace {
 
-bool commitKey(const QKeyEvent& key)
-{
-    const bool enter = key.key() == Qt::Key_Return || key.key() == Qt::Key_Enter;
-    return enter
-        && (key.modifiers().testFlag(Qt::ControlModifier)
-            || key.modifiers().testFlag(Qt::KeypadModifier));
-}
+const QString kPlaceholderText = QStringLiteral("Lorem Ipsum Pictura");
 
-// The keys a typing session takes: the window's single-letter tool shortcuts
-// go quiet, as CS6's do while there is a text cursor, and Ctrl+A / C / X / V
-// work on the text. Other Ctrl/Meta chords still reach their shortcuts.
 // The pointer zones `pointerCursorKind` reports (-1 is the text's I-beam).
 constexpr int kCursorArrow = 0;
 constexpr int kCursorMove = 1;
@@ -79,42 +71,6 @@ constexpr int kCursorHandle = 2;
 constexpr int kCursorRotate = 3;
 constexpr int kCursorPivot = 4;
 constexpr int kCursorTypeOnPath = 5;
-
-bool sessionKey(const QKeyEvent& key)
-{
-    if (commitKey(key)) {
-        return true;
-    }
-    if (key.modifiers() & Qt::MetaModifier) {
-        return false;
-    }
-    const bool ctrl = key.modifiers() & Qt::ControlModifier;
-    switch (key.key()) {
-    case Qt::Key_Return:
-    case Qt::Key_Enter:
-    case Qt::Key_Escape:
-    case Qt::Key_Backspace:
-    case Qt::Key_Delete:
-    case Qt::Key_Left:
-    case Qt::Key_Right:
-    case Qt::Key_Up:
-    case Qt::Key_Down:
-    case Qt::Key_Home:
-    case Qt::Key_End:
-        return true;
-    case Qt::Key_A:
-    case Qt::Key_C:
-    case Qt::Key_X:
-    case Qt::Key_V:
-        if (ctrl) {
-            return true;
-        }
-        break;
-    default:
-        break;
-    }
-    return !ctrl && !key.text().isEmpty() && key.text().at(0).isPrint();
-}
 
 // The ink box of a rendered preview: the box round its non-transparent pixels
 // inside `rect`, or `rect` itself when the buffer is missing or fully blank.
@@ -168,51 +124,14 @@ struct TypeEdit {
     ParagraphSetting paragraph;
 };
 
-// Routes the window's key events to the session while it is open: an
-// application filter, because the shortcut map consults the focus widget,
-// which need not be the canvas. Text fields keep their keys.
-class TypeKeyFilter : public QObject {
-public:
-    TypeKeyFilter(std::function<QWidget*()> window, std::function<void(const QKeyEvent&)> key)
-        : window_(std::move(window))
-        , key_(std::move(key))
-    {
-    }
-
-protected:
-    bool eventFilter(QObject* watched, QEvent* event) override
-    {
-        if (event->type() != QEvent::ShortcutOverride && event->type() != QEvent::KeyPress) {
-            return false;
-        }
-        auto* widget = qobject_cast<QWidget*>(watched);
-        QWidget* window = window_();
-        if (!widget || !window || widget->window() != window || isTextInput(widget)) {
-            return false;
-        }
-        auto* key = static_cast<QKeyEvent*>(event);
-        if (!sessionKey(*key)) {
-            return false;
-        }
-        if (event->type() == QEvent::ShortcutOverride) {
-            event->accept();
-        } else {
-            key_(*key);
-        }
-        return true;
-    }
-
-private:
-    std::function<QWidget*()> window_;
-    std::function<void(const QKeyEvent&)> key_;
-};
-
 class TypeToolHandler : public ToolHandler, public TextSession {
 public:
-    TypeToolHandler(ToolId id, std::shared_ptr<TypeGroup> type)
+    TypeToolHandler(ToolId id, std::shared_ptr<TypeGroup> type,
+                    std::shared_ptr<const bool> placeholder)
         : toolVertical_(id == ToolId::VerticalType || id == ToolId::VerticalTypeMask)
         , mask_(id == ToolId::HorizontalTypeMask || id == ToolId::VerticalTypeMask)
         , type_(std::move(type))
+        , placeholder_(std::move(placeholder))
     {
         addOptions(type_.get());
     }
@@ -621,6 +540,34 @@ public:
         }
     }
 
+    bool newTextCharacter(CharacterSetting& character, QString& family) const override
+    {
+        if (!active_ || !editPath_.isEmpty() || mask_) {
+            return false;
+        }
+        character = currentSetting().character;
+        family = type_->get().family;
+        return true;
+    }
+
+    // The options bar's fields (family, size, colour, anti-aliasing) stay in
+    // the shared TypeOptions; the rest rides on the session.
+    bool setNewTextCharacter(const CharacterSetting& character, const QString& family) override
+    {
+        if (!active_ || !editPath_.isEmpty() || mask_) {
+            return false;
+        }
+        character_ = character;
+        TypeOptions o = type_->get();
+        o.family = family.isEmpty() ? o.family : family;
+        o.size = character.size;
+        o.color = QColor::fromRgba(character.color);
+        o.antialias = character.anti_alias;
+        type_->set(o);
+        refreshOverlay();
+        return true;
+    }
+
     bool insertText(const QString& text) override
     {
         if (!active_) {
@@ -642,7 +589,16 @@ private:
         view_ = &v;
         frame_ = TypeFrame();
         frame_.origin = pos;
-        edit_.reset(QString(), 0);
+        character_.reset();
+        // New type starts with its placeholder selected, so typing replaces
+        // it (Photoshop CC, not CS6); the mask tools make selections, not
+        // layers, and start empty.
+        if (!mask_ && placeholder_ && *placeholder_) {
+            edit_.reset(kPlaceholderText, 0);
+            edit_.selectAll();
+        } else {
+            edit_.reset(QString(), 0);
+        }
         vertical_ = toolVertical_;
         mode_ = ctx.resolveSelectionMode(mods, v.has_selection());
         if (!hit.isEmpty() && pictura::type_api::beginEdit(v, hit)) {
@@ -651,22 +607,8 @@ private:
             const TypeSetting s = pictura::type_api::layerSetting(v, hit);
             const CharacterSetting c = pictura::type_api::layerCharacterSetting(v, hit);
             const ParagraphSetting p = pictura::type_api::layerParagraphSetting(v, hit);
-            frame_.origin = QPointF(s.x, s.y);
             vertical_ = s.vertical;
-            frame_.matrix = {s.xx, s.xy, s.yx, s.yy};
-            frame_.paragraph = s.boxed;
-            frame_.box = {s.box_left, s.box_top, s.box_right, s.box_bottom};
-            frame_.pathKind = s.path_kind;
-            frame_.pathClosed = s.path_closed;
-            frame_.pathStart = s.path_start;
-            frame_.pathPoints = s.path_points;
-            frame_.pathPolygon = typePathPolygon(s.path_points);
-            if (frame_.pathKind == 2) {
-                frame_.paragraph = true;
-                const QRectF box = frame_.pathPolygon.boundingRect();
-                frame_.origin = box.topLeft();
-                frame_.box = {0.0, 0.0, box.width(), box.height()};
-            }
+            frame_.load(s);
             TypeOptions o = type_->get();
             const QString family = familyForFontName(pictura::type_api::layerFont(v, hit));
             if (!family.isEmpty()) {
@@ -987,6 +929,7 @@ private:
         active_ = false;
         view_ = nullptr;
         editPath_.clear();
+        character_.reset();
         edit_.reset(QString(), 0);
         stops_.clear();
         selecting_ = false;
@@ -1013,7 +956,7 @@ private:
     {
         const TypeOptions o = type_->get();
         TypeEdit edit;
-        edit.character = pictura::type_api::defaultCharacterSetting();
+        edit.character = character_ ? *character_ : pictura::type_api::defaultCharacterSetting();
         edit.paragraph = pictura::type_api::defaultParagraphSetting();
         // A reopened layer keeps its full attribute set; the bar overrides only
         // the fields it exposes.
@@ -1026,21 +969,7 @@ private:
         edit.character.anti_alias = o.antialias;
         edit.paragraph.justify = o.justification;
         edit.placement.vertical = vertical_;
-        edit.placement.x = frame_.origin.x();
-        edit.placement.y = frame_.origin.y();
-        edit.placement.xx = frame_.matrix[0];
-        edit.placement.xy = frame_.matrix[1];
-        edit.placement.yx = frame_.matrix[2];
-        edit.placement.yy = frame_.matrix[3];
-        edit.placement.boxed = frame_.paragraph;
-        edit.placement.box_left = frame_.box[0];
-        edit.placement.box_top = frame_.box[1];
-        edit.placement.box_right = frame_.box[2];
-        edit.placement.box_bottom = frame_.box[3];
-        edit.placement.path_kind = frame_.pathKind;
-        edit.placement.path_closed = frame_.pathClosed;
-        edit.placement.path_start = frame_.pathStart;
-        edit.placement.path_points = frame_.pathPoints;
+        frame_.store(edit.placement);
         return edit;
     }
 
@@ -1184,16 +1113,20 @@ private:
     // a bar change applies only what changed.
     QString layerPath_;
     TypeOptions known_;
+    // The Character panel's attributes for new type; unset until it edits them.
+    std::optional<CharacterSetting> character_;
     bool syncing_ = false;
     std::unique_ptr<TypeKeyFilter> filter_;
     std::shared_ptr<TypeGroup> type_;
+    std::shared_ptr<const bool> placeholder_;
 };
 
 } // namespace
 
-std::unique_ptr<ToolHandler> makeTypeToolHandler(ToolId id, std::shared_ptr<TypeGroup> type)
+std::unique_ptr<ToolHandler> makeTypeToolHandler(ToolId id, std::shared_ptr<TypeGroup> type,
+                                                 std::shared_ptr<const bool> placeholder)
 {
-    return std::make_unique<TypeToolHandler>(id, std::move(type));
+    return std::make_unique<TypeToolHandler>(id, std::move(type), std::move(placeholder));
 }
 
 } // namespace pictura

@@ -139,6 +139,7 @@ void PicturaMainWindow::saveSession()
     state.colorPolicy = colorPolicy_;
     state.toolsColumns = toolbox_ ? toolbox_->columns() : 1;
     state.useShiftKeyForToolSwitch = useShiftKeyForToolSwitch_;
+    state.typePlaceholderText = tools_ ? tools_->typePlaceholderText() : true;
     state.shortcuts.clear();
     const QHash<QString, QList<QKeySequence>> overrides = registry_->shortcutOverrides();
     for (auto it = overrides.cbegin(); it != overrides.cend(); ++it) {

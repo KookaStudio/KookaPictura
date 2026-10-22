@@ -60,6 +60,10 @@ impl BundledText {
         &self.ttf
     }
 
+    pub(crate) fn swash(&self) -> FontRef<'static> {
+        self.swash
+    }
+
     pub(crate) fn shaper(&self) -> &rustybuzz::Face<'static> {
         &self.face
     }

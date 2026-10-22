@@ -9,6 +9,7 @@
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
 #include "api/type_api.h"
+#include "tool_sessions.h"
 
 #include <QtCore/QEvent>
 #include <QtCore/QLocale>
@@ -560,14 +561,26 @@ void CharacterPanel::syncCombos()
     }
 }
 
+void CharacterPanel::setTextSession(std::function<TextSession*()> session)
+{
+    session_ = std::move(session);
+}
+
 void CharacterPanel::refresh()
 {
-    const bool type = hasTypeLayer();
-    const QString path = type ? layer_selection_anchor(*view_) : QString();
-    shown_ = type ? pictura::type_api::layerCharacterSetting(*view_, path)
-                  : pictura::type_api::defaultCharacterSetting();
-    const QString family = type ? familyForFontName(pictura::type_api::layerFont(*view_, path))
-                                : QString();
+    CharacterSetting live = pictura::type_api::defaultCharacterSetting();
+    QString liveFamily;
+    TextSession* session = session_ ? session_() : nullptr;
+    const bool newText = session && session->newTextCharacter(live, liveFamily);
+    const bool type = newText || hasTypeLayer();
+    const QString path = type && !newText ? layer_selection_anchor(*view_) : QString();
+    shown_ = newText ? live
+             : type  ? pictura::type_api::layerCharacterSetting(*view_, path)
+                     : pictura::type_api::defaultCharacterSetting();
+    const QString family
+        = newText ? liveFamily
+        : type    ? familyForFontName(pictura::type_api::layerFont(*view_, path))
+                  : QString();
     std::uint32_t features = 0;
     if (type) {
         // The query must see the host face, not the bundled fallback.
@@ -606,6 +619,17 @@ void CharacterPanel::refresh()
 
 void CharacterPanel::apply()
 {
+    CharacterSetting live = pictura::type_api::defaultCharacterSetting();
+    QString liveFamily;
+    if (TextSession* session = session_ ? session_() : nullptr;
+        session && session->newTextCharacter(live, liveFamily)) {
+        copyPanelFields(shown_, live);
+        live.color = color_.rgba();
+        const QString family = family_->currentFont().family();
+        registerTypeFont(family);
+        session->setNewTextCharacter(live, family);
+        return;
+    }
     if (!hasTypeLayer()) {
         return;
     }

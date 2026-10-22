@@ -549,6 +549,13 @@ void OptionsBar::setRefineEdgeEnabled(bool enabled)
     }
 }
 
+void OptionsBar::setWarpTextEnabled(bool enabled)
+{
+    for (QToolButton* button : warpTextButtons_) {
+        button->setEnabled(enabled);
+    }
+}
+
 void OptionsBar::addMagneticFields(QHBoxLayout* layout, QWidget* page)
 {
     auto* width = new NumericField(QStringLiteral("Width"),

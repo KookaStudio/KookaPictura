@@ -533,6 +533,7 @@ void LayersPanel::refresh()
             row.documentWidth = snap.documentWidth;
             row.documentHeight = snap.documentHeight;
             row.shape = source.shape;
+            row.warped = source.warped;
             row.smartObject = source.smartObject;
             row.hasStyle = source.hasStyle;
             row.hasBlendIf = source.hasBlendIf;

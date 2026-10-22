@@ -98,6 +98,18 @@ QByteArray paragraphFingerprint(const pictura::ParagraphSetting& p)
     return bytes;
 }
 
+// These checks cover a session that starts empty: the CS6 behaviour, and the
+// one with Edit > Preferences > Type's placeholder fill off.
+struct PlaceholderOff {
+    pictura::ToolController* tools;
+    explicit PlaceholderOff(pictura::ToolController* t)
+        : tools(t)
+    {
+        tools->setTypePlaceholderText(false);
+    }
+    ~PlaceholderOff() { tools->setTypePlaceholderText(true); }
+};
+
 } // namespace
 
 class TypeToolsTest : public QObject {
@@ -176,6 +188,7 @@ void TypeToolsTest::horizontalTypeTool()
     // the window's letter shortcuts (B for the Brush) go quiet.
     const int layers = f.view->layer_count();
     const int base = f.view->history_index();
+    const PlaceholderOff empty(f.tools);
     f.drag({QPointF(20, 60)});
     QVERIFY(f.tools->textSession() && f.tools->textSession()->textActive());
     QVERIFY(f.canvas->typeOverlayActiveForTest());
@@ -1012,6 +1025,7 @@ void TypeToolsTest::caretPlacementAndBaseline()
     frame.setActiveTool(pictura::ToolId::HorizontalType);
 
     // Empty text: the caret and the placement point at the click, no guide.
+    const PlaceholderOff empty(f.tools);
     f.drag({QPointF(20, 60)});
     QVERIFY(f.canvas->typeOverlayHasPlacementForTest());
     QCOMPARE(f.canvas->typeOverlayPlacementForTest(), QPointF(20, 60));
@@ -1042,6 +1056,7 @@ void TypeToolsTest::caretContrastsWithTheImage()
         QVERIFY2(f.ok(), "type fixture");
         showFrame();
         frame.setActiveTool(pictura::ToolId::HorizontalType);
+        const PlaceholderOff empty(f.tools);
         f.drag({QPointF(20, 60)});
         QVERIFY(f.canvas->typeOverlayActiveForTest());
         QCOMPARE(f.canvas->typeOverlayLightInkForTest(), dark);

@@ -780,6 +780,8 @@ pub struct TypeSpec {
     pub applied_paragraph_style: Option<String>,
     /// The run's manual formatting, which outranks both applied styles.
     pub overrides: StyleOverrides,
+    /// `Type > Warp Text`, over the untransformed text box.
+    pub warp: crate::warp::TextWarp,
 }
 
 impl TypeSpec {
@@ -805,6 +807,7 @@ impl TypeSpec {
             applied_character_style: None,
             applied_paragraph_style: None,
             overrides: StyleOverrides::default(),
+            warp: crate::warp::TextWarp::default(),
         }
     }
 

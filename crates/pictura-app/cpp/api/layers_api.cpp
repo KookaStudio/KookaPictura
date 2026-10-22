@@ -2,6 +2,7 @@
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/type_tools/warp.cxxqt.h"
 
 #include <rust/cxx.h>
 
@@ -62,7 +63,9 @@ Snapshot snapshot(PictureView& view, int thumbSize, bool entireDocument)
     const ::rust::Vec<::pictura::LayerRow> rows = view.layers_snapshot(thumbSize, entireDocument);
     snap.rows.reserve(static_cast<int>(rows.size()));
     for (const ::pictura::LayerRow& row : rows) {
-        snap.rows.append(convert(row));
+        LayerRow out = convert(row);
+        out.warped = ::pictura::type_layer_is_warped(view, row.path);
+        snap.rows.append(out);
     }
     return snap;
 }

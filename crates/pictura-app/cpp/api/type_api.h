@@ -9,6 +9,7 @@
 #include <cstdint>
 
 #include "pictura_app/src/cxxqt_object/type_tools.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/type_tools/warp.cxxqt.h"
 
 namespace pictura {
 class PictureView;
@@ -116,5 +117,28 @@ void cancelEdit(PictureView& view, const QString& path);
 bool commitEdit(PictureView& view, const QString& path, const QString& text, const QString& font,
                 const TypeSetting& setting, const CharacterSetting& character,
                 const ParagraphSetting& paragraph);
+
+/// `Type > Warp Text`: `style` is a `WarpStyle` id (`arc`, `arcLower`, ...),
+/// empty for none; the values are percentages.
+struct WarpSetting {
+    QString style;
+    double bend = 0.0;
+    double horizontal = 0.0;
+    double vertical = 0.0;
+    bool verticalOrientation = false;
+};
+
+/// Why Warp Text refuses a layer.
+enum class WarpRefusal { None, OnPath, FauxBold, NoOutlines, NotType };
+
+WarpSetting layerWarp(const PictureView& view, const QString& path);
+WarpRefusal warpRefusal(const PictureView& view, const QString& path);
+/// Re-set the layer with `warp` and record nothing; the first preview stashes
+/// the layer for `cancelWarp`.
+bool previewWarp(PictureView& view, const QString& path, const WarpSetting& warp);
+/// Put back the layer the first preview stashed; false when none was.
+bool cancelWarp(PictureView& view);
+/// Re-set the layer with `warp` and record one "Warp Text" state.
+bool commitWarp(PictureView& view, const QString& path, const WarpSetting& warp);
 
 } // namespace pictura::type_api

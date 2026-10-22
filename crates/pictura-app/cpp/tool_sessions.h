@@ -6,6 +6,8 @@
 
 namespace pictura {
 
+struct CharacterSetting;
+
 // Session-command ports a tool handler may implement alongside ToolHandler.
 // `ToolController` resolves one typed (`cropCommitSession`, `cropBoxSession`,
 // `perspectiveCropSession`, `textSession`) with `dynamic_cast`, so RTTI must
@@ -54,6 +56,11 @@ public:
     virtual bool cancelText() = 0;
     virtual bool textActive() const = 0;
     virtual bool insertText(const QString& text) = 0;
+    // New (not reopened) type's character attributes and font family, which
+    // the Character panel edits while no layer exists yet; false outside such
+    // a session. Setting them previews at once.
+    virtual bool newTextCharacter(CharacterSetting& character, QString& family) const = 0;
+    virtual bool setNewTextCharacter(const CharacterSetting& character, const QString& family) = 0;
 };
 
 } // namespace pictura

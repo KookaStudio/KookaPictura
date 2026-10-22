@@ -18,6 +18,8 @@ class QToolButton;
 
 namespace pictura {
 
+class TextSession;
+
 class NumericField;
 class PictureView;
 
@@ -39,6 +41,9 @@ public:
     explicit CharacterPanel(QWidget* parent = nullptr);
 
     void setView(PictureView* view);
+    // The open type session, if any: while new type is being set the panel
+    // edits that session instead of the selected layer.
+    void setTextSession(std::function<TextSession*()> session);
     void refresh();
 
     // The dense form's natural minimum width would raise the panel column's
@@ -90,6 +95,7 @@ private:
     void updateColorIcon();
 
     PictureView* view_ = nullptr;
+    std::function<TextSession*()> session_;
     // The attributes the controls show; edits land here, then `apply` writes
     // them to the layer.
     CharacterSetting shown_{};

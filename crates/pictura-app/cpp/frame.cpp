@@ -134,6 +134,7 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
     buildPanels(state);
     buildTools(state.toolsColumns, state.useShiftKeyForToolSwitch, state.toolOptions);
     if (tools_) {
+        tools_->setTypePlaceholderText(state.typePlaceholderText);
         tools_->applyCropOptions(state.cropClassicMode, state.cropDeletePixels, state.cropRatio,
                                  state.cropGridOverlay);
     }

@@ -166,7 +166,8 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [ ] Mixer Brush Sample All Layers, Load Solid Colors Only, and keyboard
       shortcuts (#540)
 - [x] Type on path and area type (#683)
-- [ ] Warp text (#684) and gamma blend and missing-font handling (#685) (#541)
+- [x] Warp text (#684)
+- [ ] Gamma blend and missing-font handling (#685) (#541)
 - [ ] Path operations, align and arrange, constrained path dragging, the Target
       Path toggle, and segment and marquee multi-select (#542)
 - [ ] Slice style and modifiers, Divide, Combine, Duplicate, the Slice Options
@@ -407,8 +408,7 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [ ] Window ▸ Arrange: Float, Tile, Cascade, Match and New Window (#500)
 - [ ] Menu customization: Edit ▸ Menus, Show All Menu Items, and the
       enablement matrix (#501)
-- [ ] The Type menu: warp text, convert point and paragraph, work path, convert
-      to shape, and spellcheck (#502)
+- [ ] The Type menu: work path, convert to shape, and spellcheck (#502)
 - [ ] The View menu stubs: Proof Setup and Colors, Gamut Warning, Snap To, Lock
       Slices, Extras, Pixel Aspect Ratio, and 32-bit Preview Options (#503)
 - [ ] The File menu stubs: Open As, Import, Export, Automate, Scripts, and

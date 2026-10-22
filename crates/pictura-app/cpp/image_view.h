@@ -513,6 +513,7 @@ public:
     void clearTypeOverlay();
     bool typeOverlayActiveForTest() const { return typeOverlay_.active; }
     bool typeOverlayHasTextForTest() const { return !typeOverlay_.image.isNull(); }
+    QImage typeOverlayImageForTest() const { return typeOverlay_.image; }
     int typeOverlaySelectionForTest() const { return int(typeOverlay_.selection.size()); }
     QLineF typeOverlayCaretForTest() const { return typeOverlay_.caret; }
     bool typeCaretShownForTest() const { return typeCaretShown_; }

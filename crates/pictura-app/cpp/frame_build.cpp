@@ -611,6 +611,15 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
         registry_->dispatch(
             commandIdForPath({QStringLiteral("Select"), QStringLiteral("Refine Edge…")}));
     });
+    // While new type is being set the Character panel edits that session.
+    characterPanel_->setTextSession(
+        [this]() { return tools_ ? tools_->textSession() : nullptr; });
+    connect(tools_, &ToolController::textEditingChanged, characterPanel_,
+            &CharacterPanel::refresh);
+    connect(optionsBar_, &OptionsBar::warpTextRequested, this, [this]() {
+        registry_->dispatch(
+            commandIdForPath({QStringLiteral("Type"), QStringLiteral("Warp Text…")}));
+    });
     brushPanel_->setController(tools_);
     cloneSourcePanel_->setController(tools_);
     glyphsPanel_->setController(tools_);

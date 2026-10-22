@@ -124,6 +124,9 @@ pub struct PictureViewRust {
     pub(super) open_request: u64,
     /// Test seam: hold a started open's completion for this many milliseconds.
     pub(super) open_delay_for_test: u64,
+    /// The Warp Text dialog's layer path and that layer as it was before the
+    /// dialog's first preview, which Cancel puts back.
+    pub(super) warp_text_original: Option<(String, pictura_core::Layer)>,
 }
 
 impl Default for PictureViewRust {
@@ -174,6 +177,7 @@ impl Default for PictureViewRust {
             open_cancelled: false,
             open_request: 0,
             open_delay_for_test: 0,
+            warp_text_original: None,
         }
     }
 }

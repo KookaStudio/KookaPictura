@@ -40,6 +40,9 @@ public:
     // Enable the selection tools' `Select and Mask…` buttons (the frame decides
     // from Refine Edge's availability, matching the menu row).
     void setRefineEdgeEnabled(bool enabled);
+    // Enable the type tools' Warp Text buttons (the frame decides: the current
+    // layer is a type layer).
+    void setWarpTextEnabled(bool enabled);
     // The right-aligned workspace switcher: shows the active workspace and opens
     // the `Window > Workspace` menu.
     void setWorkspaceMenu(QMenu* menu);
@@ -55,6 +58,8 @@ signals:
     void distributeRequested(int edge);
     // A selection tool's `Select and Mask…` button (opens Refine Edge).
     void refineEdgeRequested();
+    // A type tool's Warp Text button (opens Type > Warp Text…).
+    void warpTextRequested();
 
 public:
     // Self-test hook: the controller the size field is wired to.
@@ -201,6 +206,8 @@ private:
     std::vector<QToolButton*> distributeButtons_;
     // The selection tools' `Select and Mask…` buttons, enabled together.
     std::vector<QToolButton*> refineEdgeButtons_;
+    // The type tools' Warp Text buttons, enabled together.
+    std::vector<QToolButton*> warpTextButtons_;
     // The Crop tool's user aspect-ratio presets (label, width:height pair).
     std::vector<std::pair<QString, QPointF>> cropPresets_;
     NumericField* cropWidthField_ = nullptr;

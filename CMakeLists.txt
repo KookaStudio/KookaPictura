@@ -458,9 +458,13 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/shape_dialogs.cpp
     crates/pictura-app/cpp/paragraph_text_size_dialog.cpp
     crates/pictura-app/cpp/type_frame.cpp
+    crates/pictura-app/cpp/warp_text_dialog.cpp
+    crates/pictura-app/cpp/warp_text_dialog.h
+    crates/pictura-app/cpp/warp_styles.h
     crates/pictura-app/cpp/screen_mode_message.cpp
     crates/pictura-app/cpp/screen_mode_message.h
     crates/pictura-app/cpp/tool_type.cpp
+    crates/pictura-app/cpp/type_key_filter.cpp
     crates/pictura-app/cpp/type_fonts.cpp
     crates/pictura-app/cpp/type_text_edit.cpp
     crates/pictura-app/cpp/tool_wand.cpp

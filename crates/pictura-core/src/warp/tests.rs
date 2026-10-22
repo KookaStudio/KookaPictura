@@ -607,3 +607,26 @@ fn preset_fits_closely_as_mesh() {
         );
     }
 }
+
+#[test]
+fn text_warp_identity_and_box() {
+    assert!(TextWarp::default().is_identity());
+    let zero = TextWarp {
+        style: WarpStyle::Arc,
+        ..TextWarp::default()
+    };
+    assert!(zero.is_identity());
+    let custom = TextWarp {
+        style: WarpStyle::Custom,
+        bend: 50.0,
+        ..TextWarp::default()
+    };
+    assert!(custom.is_identity(), "type carries no custom mesh");
+    let arc = TextWarp {
+        style: WarpStyle::Arc,
+        bend: 50.0,
+        ..TextWarp::default()
+    };
+    assert!(!arc.is_identity());
+    assert_eq!(arc.over(B), Warp::preset(WarpStyle::Arc, 50.0, B));
+}

@@ -3,6 +3,7 @@
 #include "layers_panel_model.h"
 
 #include <QtGui/QFontMetrics>
+#include <QtGui/QPainterPath>
 #include <QtGui/QTransform>
 #include <QtGui/qrgb.h>
 
@@ -556,8 +557,19 @@ public:
                 painter->setRenderHint(QPainter::Antialiasing, true);
                 painter->setPen(QPen(QColor(0x20, 0x20, 0x20), qMax(1.5, thumb / 12.0)));
                 painter->drawLine(t.topLeft(), t.topRight());
+                // A warped layer's T stands on a bent baseline, as CS6 marks
+                // Warp Text.
+                const bool warped = index.data(LayerRowWarpedRole).toBool();
+                const double foot = warped ? t.top() + t.height() * 0.6 : t.bottom();
                 painter->drawLine(QPointF(t.center().x(), t.top()),
-                                  QPointF(t.center().x(), t.bottom()));
+                                  QPointF(t.center().x(), foot));
+                if (warped) {
+                    QPainterPath arc(t.bottomLeft());
+                    arc.quadTo(QPointF(t.center().x(), t.top() + t.height() * 0.55),
+                               t.bottomRight());
+                    painter->setBrush(Qt::NoBrush);
+                    painter->drawPath(arc);
+                }
                 painter->restore();
             } else {
                 painter->drawTiledPixmap(shaped, checkerTile());

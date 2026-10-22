@@ -98,6 +98,7 @@ struct LayerRowNode {
     bool linked = false;
     bool placed = false;
     bool shape = false;
+    bool warped = false;
     bool smartObject = false;
     bool hasStyle = false;
     QStringList styleEffects;
@@ -155,6 +156,7 @@ enum LayerRole {
     DocumentWidthRole,
     DocumentHeightRole,
     LayerRowShapeRole,
+    LayerRowWarpedRole,
     SyntheticRole,
     MaskDisabledRole,
     MaskLinkedRole,
@@ -324,6 +326,8 @@ public:
             return row.placed;
         case LayerRowShapeRole:
             return row.shape;
+        case LayerRowWarpedRole:
+            return row.warped;
         case DocumentWidthRole:
             return row.documentWidth;
         case DocumentHeightRole:

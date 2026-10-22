@@ -8,6 +8,8 @@
 #include <array>
 #include <optional>
 
+#include "pictura_app/src/cxxqt_object/type_tools.cxxqt.h"
+
 namespace pictura {
 
 // The path a `type_api::pathAt` hit carries: kind, closed, start, segment count,
@@ -40,6 +42,17 @@ public:
     std::array<double, 4> box{0.0, 0.0, 0.0, 0.0};
     // Point type's text bounds while Ctrl shows its box.
     std::optional<std::array<double, 4>> pointBox;
+    // `Type > Warp Text`, carried through the session unchanged: the style id
+    // (empty for none) and bend, horizontal and vertical distortion.
+    QString warpStyle;
+    std::array<double, 3> warpValues{0.0, 0.0, 0.0};
+    bool warpVertical = false;
+
+    // Take the placement a layer reopens with (area type's box is its path's
+    // bounds); write the frame back into a setting. Orientation is not part
+    // of the frame.
+    void load(const TypeSetting& s);
+    void store(TypeSetting& s) const;
 
     // The box the handles sit on: the paragraph box, else the Ctrl box; none.
     const std::array<double, 4>* frameBox() const;

@@ -69,6 +69,8 @@ set(PICTURA_QT_TESTS
     tst_tool_options_persistence
     tst_character_paragraph_panels
     tst_paragraph_styles_panel
+    tst_warp_text
+    tst_type_placeholder
     tst_shared_widgets
     tst_info_panel
     tst_system_info

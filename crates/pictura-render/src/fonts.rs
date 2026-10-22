@@ -76,6 +76,21 @@ pub fn opentype_features(name: &str) -> u32 {
     face_for(name).map_or(0, crate::type_style::opentype_support)
 }
 
+/// Whether the face for `name` has outline glyphs (`glyf`, `CFF ` or `CFF2`),
+/// which Warp Text, Create Work Path, and Convert to Shape need; a bitmap-only
+/// face has none. False when no face resolves.
+pub fn font_has_outlines(name: &str) -> bool {
+    face_for(name).is_some_and(face_has_outlines)
+}
+
+pub(crate) fn face_has_outlines(face: &BundledText) -> bool {
+    let raw = face.ttf().raw_face();
+    [b"glyf", b"CFF ", b"CFF2"].iter().any(|tag| {
+        raw.table(rustybuzz::ttf_parser::Tag::from_bytes(tag))
+            .is_some()
+    })
+}
+
 /// A registered family's PostScript name, which `TySh` should carry.
 pub fn font_postscript_name(name: &str) -> Option<String> {
     lookup(name).map(|r| r.postscript.clone())

@@ -3440,9 +3440,9 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             && prefs->pagesForTest()
                    == QStringList({QStringLiteral("General"), QStringLiteral("Interface"),
                                    QStringLiteral("File Handling"),
-                                   QStringLiteral("Performance"),
-                                   QStringLiteral("Units & Rulers"),
-                                   QStringLiteral("Guides, Grid, & Slices")});
+                                   QStringLiteral("Performance"), QStringLiteral("Units & Rulers"),
+                                   QStringLiteral("Guides, Grid, & Slices"),
+                                   QStringLiteral("Type")});
         prefsOpen = openedGeneral && openedInterface;
         if (prefs) {
             auto* prefsToolbox = frame.findChild<pictura::Toolbox*>(QStringLiteral("toolsPanel"));
