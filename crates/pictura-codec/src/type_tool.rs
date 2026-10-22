@@ -84,11 +84,20 @@ pub fn decode_type_warp(warp_desc: &[u8]) -> TextWarp {
     let Some(style) = style else {
         return TextWarp::default();
     };
-    let number = |key: &[u8]| match get_object_item(&items, key) {
-        Some(DescValue::Double(v)) => *v,
-        Some(DescValue::UnitFloat { value, .. }) => *value,
-        Some(DescValue::Long(v)) => f64::from(*v),
-        _ => 0.0,
+    // CS6 keeps every value within ±100 %; a file outside that range or not
+    // finite is clamped (non-finite reads as 0) before it reaches geometry.
+    let number = |key: &[u8]| {
+        let v = match get_object_item(&items, key) {
+            Some(DescValue::Double(v)) => *v,
+            Some(DescValue::UnitFloat { value, .. }) => *value,
+            Some(DescValue::Long(v)) => f64::from(*v),
+            _ => 0.0,
+        };
+        if v.is_finite() {
+            v.clamp(-100.0, 100.0)
+        } else {
+            0.0
+        }
     };
     TextWarp {
         style,
@@ -448,6 +457,12 @@ mod tests {
             TextWarp::default()
         );
         assert_eq!(decode_type_warp(&empty_desc()), TextWarp::default());
+        let wild = decode_type_warp(&warp_desc("warpArc", 1e308, "Hrzn"));
+        assert_eq!(wild.bend, 100.0, "clamped to CS6's range");
+        assert_eq!(
+            decode_type_warp(&warp_desc("warpArc", f64::NAN, "Hrzn")).bend,
+            0.0
+        );
         assert_eq!(decode_type_warp(&[]), TextWarp::default());
     }
 }

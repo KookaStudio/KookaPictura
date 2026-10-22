@@ -80,12 +80,14 @@ pub fn opentype_features(name: &str) -> u32 {
 /// which Warp Text, Create Work Path, and Convert to Shape need; a bitmap-only
 /// face has none. False when no face resolves.
 pub fn font_has_outlines(name: &str) -> bool {
-    face_for(name).is_some_and(|face| {
-        let raw = face.ttf().raw_face();
-        [b"glyf", b"CFF ", b"CFF2"].iter().any(|tag| {
-            raw.table(rustybuzz::ttf_parser::Tag::from_bytes(tag))
-                .is_some()
-        })
+    face_for(name).is_some_and(face_has_outlines)
+}
+
+pub(crate) fn face_has_outlines(face: &BundledText) -> bool {
+    let raw = face.ttf().raw_face();
+    [b"glyf", b"CFF ", b"CFF2"].iter().any(|tag| {
+        raw.table(rustybuzz::ttf_parser::Tag::from_bytes(tag))
+            .is_some()
     })
 }
 

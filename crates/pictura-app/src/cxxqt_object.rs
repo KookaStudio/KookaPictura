@@ -51,7 +51,6 @@ mod shapes;
 mod state;
 mod svg_export;
 mod type_tools;
-mod type_warp;
 mod web_export;
 pub use state::PictureViewRust;
 #[cfg(test)]
@@ -107,8 +106,6 @@ pub mod qobject {
         linked: bool,
         placed: bool,
         shape: bool,
-        /// A type layer carrying a `Type > Warp Text` warp.
-        warped: bool,
         smart_object: bool,
         has_style: bool,
         /// Active effect names joined by `\n`; the adapter splits them back.

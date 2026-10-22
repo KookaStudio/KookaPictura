@@ -16,7 +16,7 @@ use pictura_core::{PixelBuffer, PsdRect, TypeSpec};
 use swash::scale::ScaleContext;
 use swash::zeno::{Command, Mask, Point, Vector, Verb};
 
-use crate::text_render::glyph_matrix;
+use crate::text_render::{glyph_matrix, BundledText};
 use crate::type_layer::{flat_layout, map, type_placement, TypePlacement};
 use crate::type_style::RunStyle;
 
@@ -32,11 +32,16 @@ pub enum WarpRefusal {
 
 /// Whether Warp Text may warp `spec`, and if not, why.
 pub fn type_warp_refusal(spec: &TypeSpec) -> Option<WarpRefusal> {
+    refusal_with(spec, crate::fonts::face_for(&spec.character.font_family))
+}
+
+/// [`type_warp_refusal`] against an already resolved `face`.
+fn refusal_with(spec: &TypeSpec, face: Option<&BundledText>) -> Option<WarpRefusal> {
     if spec.path.is_some() {
         Some(WarpRefusal::OnPath)
     } else if spec.character.faux_bold {
         Some(WarpRefusal::FauxBold)
-    } else if !crate::fonts::font_has_outlines(&spec.character.font_family) {
+    } else if !face.is_some_and(crate::fonts::face_has_outlines) {
         Some(WarpRefusal::NoOutlines)
     } else {
         None
@@ -228,7 +233,7 @@ fn flatten(
 /// Warped type's placement: the rect bounds the warped ink, and `bounds` stays
 /// the unwarped box (the frame the caret and the transform box use).
 pub(crate) fn placement(spec: &TypeSpec) -> Option<TypePlacement> {
-    let bounds = type_placement(&unwarped(spec))?.bounds;
+    let flat = type_placement(&unwarped(spec))?;
     let geometry = geometry(spec)?;
     let mut lo = (f64::MAX, f64::MAX);
     let mut hi = (f64::MIN, f64::MIN);
@@ -236,7 +241,13 @@ pub(crate) fn placement(spec: &TypeSpec) -> Option<TypePlacement> {
         lo = (lo.0.min(x), lo.1.min(y));
         hi = (hi.0.max(x), hi.1.max(y));
     }
-    if lo.0 > hi.0 || !(lo.0.is_finite() && lo.1.is_finite() && hi.0.is_finite()) {
+    if ![lo.0, lo.1, hi.0, hi.1].iter().all(|v| v.is_finite()) || lo.0 > hi.0 || lo.1 > hi.1 {
+        return None;
+    }
+    // A preset at ±100 % moves the box by about its own size; anything far
+    // past that is corrupt input, refused before a plane is allocated for it.
+    let span = f64::from(flat.rect.width().max(flat.rect.height()));
+    if (hi.0 - lo.0).max(hi.1 - lo.1) > 4.0 * span + 64.0 {
         return None;
     }
     let rect = PsdRect {
@@ -245,7 +256,10 @@ pub(crate) fn placement(spec: &TypeSpec) -> Option<TypePlacement> {
         bottom: hi.1.ceil() as i32 + 1,
         right: hi.0.ceil() as i32 + 1,
     };
-    Some(TypePlacement { rect, bounds })
+    Some(TypePlacement {
+        rect,
+        bounds: flat.bounds,
+    })
 }
 
 /// Fill `contours` (document pixels) into a `rect`-sized coverage plane.

@@ -244,13 +244,43 @@ fn refusals() {
         assert_eq!(type_warp_refusal(&on_path), Some(WarpRefusal::OnPath));
     }
 
+    // A face built here, never registered: the process-wide registry keys
+    // faces by PostScript name too, so a registered copy would replace
+    // Liberation Sans for every test sharing this process.
     assert!(crate::fonts::font_has_outlines("Liberation Sans"));
-    assert!(crate::register_font(
-        "Warp Text Bitmap Only",
-        without_outlines(LIBERATION)
-    ));
-    assert!(!crate::fonts::font_has_outlines("Warp Text Bitmap Only"));
-    let mut bitmap = spec("Bitmap");
-    bitmap.character.font_family = "Warp Text Bitmap Only".into();
-    assert_eq!(type_warp_refusal(&bitmap), Some(WarpRefusal::NoOutlines));
+    let stripped =
+        BundledText::from_bytes(Box::leak(without_outlines(LIBERATION).into_boxed_slice()))
+            .expect("parses without outlines");
+    assert!(!crate::fonts::face_has_outlines(&stripped));
+    assert_eq!(
+        refusal_with(&spec("Bitmap"), Some(&stripped)),
+        Some(WarpRefusal::NoOutlines)
+    );
+}
+
+#[test]
+fn hostile_warp_values_stay_bounded() {
+    let hundred = warped(WarpStyle::Arc, 100.0, 100.0, -100.0, false);
+    for (bend, h, v) in [
+        (1e308, f64::NAN, -1e308),
+        (f64::INFINITY, 1e9, f64::NEG_INFINITY),
+    ] {
+        let wild = warped(WarpStyle::Arc, bend, h, v, false);
+        let flat = type_placement(&unwarped(&wild)).expect("places").rect;
+        if let Some(placed) = placement(&wild) {
+            let span = flat.width().max(flat.height());
+            assert!(
+                placed.rect.width().max(placed.rect.height()) <= 4 * span + 66,
+                "{:?} vs {:?}",
+                placed.rect,
+                flat
+            );
+        }
+    }
+    // Out-of-range values act as the ±100 % they clamp to.
+    let clamped = warped(WarpStyle::Arc, 1e308, 1e308, -1e308, false);
+    assert_eq!(
+        placement(&clamped).map(|p| p.rect),
+        placement(&hundred).map(|p| p.rect)
+    );
 }

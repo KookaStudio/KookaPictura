@@ -384,6 +384,7 @@ pub mod ffi {
 use ffi::{CharacterSetting, ParagraphSetting, TypeSetting};
 
 mod attrs;
+mod warp;
 
 use attrs::{
     character_attrs, character_setting, edited_overrides, paragraph_attrs, paragraph_overrides,
@@ -441,7 +442,7 @@ fn spec(
     spec.character = character_attrs(character);
     spec.character.font_family = font.to_string();
     spec.paragraph = paragraph_attrs(paragraph);
-    spec.warp = super::type_warp::text_warp(placement);
+    spec.warp = warp::text_warp(placement);
     spec
 }
 

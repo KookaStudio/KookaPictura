@@ -444,9 +444,6 @@ impl qobject::PictureView {
                             linked: link_sets.contains_key(&path),
                             placed: is_placed_smart_object(layer),
                             shape,
-                            warped: layer.type_tool.as_ref().is_some_and(|tool| {
-                                !pictura_codec::decode_type_warp(&tool.warp_desc).is_identity()
-                            }),
                             smart_object: layer.smart_object.is_some(),
                             has_style: pictura_render::has_layer_style(layer),
                             style_effects,
@@ -481,7 +478,6 @@ impl qobject::PictureView {
                         linked: false,
                         placed: false,
                         shape: false,
-                        warped: false,
                         smart_object: false,
                         has_style: false,
                         style_effects: QString::default(),

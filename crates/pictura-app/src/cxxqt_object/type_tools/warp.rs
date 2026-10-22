@@ -4,11 +4,11 @@
 //! that copy back, so an opened layer's own pixels survive a cancelled
 //! dialog. Commit records one "Warp Text" state over the pre-dialog state.
 //!
-//! [`PictureView`]: super::qobject::PictureView
+//! [`PictureView`]: crate::cxxqt_object::qobject::PictureView
 
-use super::qobject::PictureView;
-use super::type_tools::{ffi::TypeSetting, layer_spec};
+use super::{ffi::TypeSetting, layer_spec};
 use crate::cxxqt_object::edit::Edit;
+use crate::cxxqt_object::qobject::PictureView;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -28,6 +28,9 @@ pub mod ffi {
 
     #[namespace = "pictura"]
     extern "Rust" {
+        /// Whether the layer at `path` is type carrying a `Type > Warp Text` warp (the Layers panel's warped row).
+        fn type_layer_is_warped(view: &PictureView, path: &QString) -> bool;
+
         /// Whether Warp Text may warp the type layer at `path`: 0 yes, 1 type on a path, 2 Faux Bold, 3 a font without outlines, -1 not a type layer.
         fn type_warp_refusal(view: &PictureView, path: &QString) -> i32;
 
@@ -80,6 +83,16 @@ fn warp_of(style: &QString, bend: f64, h: f64, v: f64, vertical: bool) -> TextWa
         },
         None => TextWarp::default(),
     }
+}
+
+fn type_layer_is_warped(view: &PictureView, path: &QString) -> bool {
+    view.rust()
+        .session
+        .doc
+        .as_ref()
+        .and_then(|doc| pictura_render::resolve_path(doc, &path.to_string()))
+        .and_then(|layer| layer.type_tool.as_ref())
+        .is_some_and(|tool| !pictura_codec::decode_type_warp(&tool.warp_desc).is_identity())
 }
 
 fn type_warp_refusal(view: &PictureView, path: &QString) -> i32 {
