@@ -153,5 +153,5 @@ fn encode_webp_rgba(rgba: &[u8], width: u32, height: u32, path: &str, scale: i32
     else {
         return false;
     };
-    super::safe_io::write_atomically(path, &bytes, false).is_ok()
+    super::helpers::safe_io::write_atomically(path, &bytes, false).is_ok()
 }

@@ -142,7 +142,7 @@ fn save_view(
         };
         pdf::write_pdf(&save_doc, &composite, options, &env).map_err(|e| e.to_string())?
     };
-    if super::safe_io::write_atomically(path, &bytes, false).is_err() {
+    if super::helpers::safe_io::write_atomically(path, &bytes, false).is_err() {
         return Err(format!("Could not write {path}."));
     }
     Ok(())

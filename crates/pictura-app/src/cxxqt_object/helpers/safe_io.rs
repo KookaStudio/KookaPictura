@@ -10,7 +10,11 @@ use std::path::Path;
 /// Write `bytes` to `path` atomically: a new temp file in the same directory
 /// (synced first when `sync`), renamed into place. The temp file is removed
 /// on any failure.
-pub(super) fn write_atomically(path: &str, bytes: &[u8], sync: bool) -> std::io::Result<()> {
+pub(in crate::cxxqt_object) fn write_atomically(
+    path: &str,
+    bytes: &[u8],
+    sync: bool,
+) -> std::io::Result<()> {
     let tmp = format!(
         "{path}.{:016x}.tmp",
         u64::from_le_bytes(pictura_codec::os_random())
@@ -37,7 +41,7 @@ pub(super) fn write_atomically(path: &str, bytes: &[u8], sync: bool) -> std::io:
 
 /// The bytes of `path`, or `None` when it cannot be read or holds more than
 /// `limit` bytes.
-pub(super) fn read_capped(path: impl AsRef<Path>, limit: u64) -> Option<Vec<u8>> {
+pub(in crate::cxxqt_object) fn read_capped(path: impl AsRef<Path>, limit: u64) -> Option<Vec<u8>> {
     let file = std::fs::File::open(path).ok()?;
     if file.metadata().ok()?.len() > limit {
         return None;
@@ -51,7 +55,7 @@ pub(super) fn read_capped(path: impl AsRef<Path>, limit: u64) -> Option<Vec<u8>>
 
 /// The largest raster file an import reads: no compressed image larger than
 /// its own decoded budget is plausible.
-pub(super) fn import_file_limit() -> u64 {
+pub(in crate::cxxqt_object) fn import_file_limit() -> u64 {
     pictura_codec::ImageBudget::default().max_alloc_bytes
 }
 

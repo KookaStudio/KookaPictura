@@ -81,11 +81,12 @@ impl qobject::PictureView {
             .file_stem()
             .map(|stem| stem.to_string_lossy().into_owned())
             .unwrap_or_default();
-        let Some((rgba, width, height)) =
-            super::safe_io::read_capped(&file, super::safe_io::import_file_limit())
-                .as_deref()
-                .and_then(decode_import)
-        else {
+        let Some((rgba, width, height)) = super::helpers::safe_io::read_capped(
+            &file,
+            super::helpers::safe_io::import_file_limit(),
+        )
+        .as_deref()
+        .and_then(decode_import) else {
             return QString::default();
         };
         let mut created = String::new();

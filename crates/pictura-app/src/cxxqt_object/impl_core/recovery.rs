@@ -71,7 +71,7 @@ fn write_snapshot(mut doc: Document, path: &str) -> std::io::Result<()> {
     pictura_render::refresh_native_composite(&mut doc);
     let bytes = pictura_codec::write_psd(&pictura_render::save_view(&doc))
         .map_err(|e| std::io::Error::other(e.to_string()))?;
-    super::super::safe_io::write_atomically(path, &bytes, true)
+    super::super::helpers::safe_io::write_atomically(path, &bytes, true)
 }
 
 #[cfg(test)]

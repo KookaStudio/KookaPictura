@@ -247,7 +247,7 @@ impl qobject::PictureView {
                     };
                     bytes
                 };
-                if super::safe_io::write_atomically(&path, &bytes, false).is_err() {
+                if super::helpers::safe_io::write_atomically(&path, &bytes, false).is_err() {
                     return false;
                 }
             }
