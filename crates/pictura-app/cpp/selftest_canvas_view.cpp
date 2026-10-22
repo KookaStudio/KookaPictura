@@ -221,7 +221,7 @@ int pictura::runCanvasViewChecks(pictura::PicturaMainWindow& frame)
     const int widthNarrow = measuredRingWidth(ringCanvas, imageCentre, ringImageSize);
     ringCanvas->setBrushOutline(80.0, imageCentre);
     const int widthWide = measuredRingWidth(ringCanvas, imageCentre, ringImageSize);
-    const bool sizeTracked = ringCanvas->hasBrushOutlineForTest()
+    const bool sizeTracked = ringCanvas->hasBrushOutline()
                              && std::abs(widthNarrow - 40) <= 2
                              && std::abs(widthWide - 80) <= 2;
     ST_BEGIN("canvas_brush_outline_size");

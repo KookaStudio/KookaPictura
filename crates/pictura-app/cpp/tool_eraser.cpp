@@ -9,6 +9,7 @@
 #include "tool_handler.h"
 
 #include "api/paint_api.h"
+#include "image_view.h"
 #include "paint_tip.h"
 
 #include "tools.h"
@@ -112,8 +113,11 @@ protected:
     bool begin(ToolServices& ctx, PictureView& v, bool toHistory) override
     {
         const EraserOptions o = eraser_->get();
+        // The Block mode's side is a screen-space size, so the stroke needs
+        // the canvas zoom.
+        const double zoom = ctx.canvas() ? ctx.canvas()->zoom() : 1.0;
         return begin_eraser(v, ctx.background().rgba(), paintTip(*paint_), o.mode, paint_->opacity(),
-                            paint_->flow(), toHistory);
+                            paint_->flow(), toHistory, zoom);
     }
 
 private:

@@ -1796,8 +1796,10 @@ Snapshot for resuming after a context break. Update after each milestone.
   stroke that erases an ordinary layer to transparency (Clear: coverage ×
   Opacity multiplies alpha down) and paints the background colour on the
   Background, an alpha-less layer, or a transparency-locked layer; Mode is
-  Brush / Pencil / Block (a hard 16 px square at full strength,
-  `StrokeConfig::square`); Erase to History, or Alt at the press, paints the
+  Brush / Pencil / Block (a hard square of 16 *screen* pixels at full strength,
+  so its document side is round(16 / zoom) and never under one pixel,
+  `StrokeConfig::square`); Erase to History,
+  or Alt at the press, paints the
   History Brush source back. `pictura_paint::art_history` scatters strokes over
   the Area per dab, coloured from the source at their start, running along the
   source's edges for the Style's length / wander / curl (CS6's ten style
@@ -1809,11 +1811,12 @@ Snapshot for resuming after a context break. Update after each milestone.
   `tool_stamps.cpp`; bars in `options_bar_stamp.cpp` (Eraser: tip, Mode,
   Opacity / Flow greyed for Block, Erase to History; Art History: tip, greyed
   Normal Mode, Opacity, Style, Area 50 px, Tolerance 0 %). Both join the size
-  ring and `[` / `]`; Alt on the Eraser keeps the paint cursor. Self-test codes
+  ring and `[` / `]`; the Eraser's Block mode draws a square cursor of the
+  block's own size instead, resized with the zoom; Alt on the Eraser keeps the
+  paint cursor. Self-test codes
   547, 548; `shift_plain` (117) asserts Shift+Y and E and probes the G group,
   `keys_shown` (116) now probes the E group, and guard 98 probes the Background
-  Eraser. Ceilings (`ponytail:`): Block is 16 document (not screen) pixels and
-  its ring shows the brush size; the Art History Brush paints only as the
+  Eraser. Ceilings (`ponytail:`): the Art History Brush paints only as the
   pointer moves, with Normal mode only; Tolerance defaults to 0 % (the spec's
   unverified 100 % would paint almost nowhere); both match the source layer by
   panel path.

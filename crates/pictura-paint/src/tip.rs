@@ -70,10 +70,14 @@ impl TipParams {
     /// Tip alpha in 0..=1 at layer-local offset (dx, dy) from a dab center.
     pub fn coverage(&self, dx: f32, dy: f32) -> f32 {
         // A square tip (the Eraser's Block mode) is axis-aligned and ignores
-        // rotation and hardness.
+        // rotation and hardness. The span is half-open, so the tip covers
+        // exactly its diameter whatever the dab's position in its pixel.
+        // ponytail: the covered ink is within half a document pixel of the
+        // dab; at 1600 % zoom and above the block is one document pixel, so
+        // the cursor can straddle the erased pixel's edge.
         if self.square {
             let half = self.radius;
-            return if dx.abs() <= half && dy.abs() <= half {
+            return if dx >= -half && dx < half && dy >= -half && dy < half {
                 1.0
             } else {
                 0.0
