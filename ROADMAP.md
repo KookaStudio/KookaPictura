@@ -391,6 +391,10 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       commands. `crates/pictura-app/cpp/commands.cpp`.
 - [x] **Preferences** — General, Interface, Performance, Units and Guides.
       `crates/pictura-app/cpp/preferences_dialog.cpp`.
+- [x] **Help ▸ Search** (`Shift+Space`) — finds any command, tool, panel,
+      Preferences page or key panel control by name, shows where it lives, and
+      runs or reveals it. Not a CS6 feature; added by owner decision.
+      `crates/pictura-app/cpp/search_bar.cpp`.
 - [ ] Status bar readouts and the status-bar options popup (#497)
 - [ ] The active layer name in the title bar (#498)
 - [ ] `Ctrl+Tab` and `Shift+Ctrl+Tab` document cycling (#499)

@@ -194,6 +194,10 @@ LayersPanel::LayersPanel(QWidget* parent)
     lockNesting_->setVisible(false);
     lockAll_ = makeLock(QStringLiteral("layers.lockAll"), tr("Lock All"),
                         QStringLiteral("all"));
+    lockTransparency_->setObjectName(QStringLiteral("layersLockTransparency"));
+    lockPixels_->setObjectName(QStringLiteral("layersLockPixels"));
+    lockPosition_->setObjectName(QStringLiteral("layersLockPosition"));
+    lockAll_->setObjectName(QStringLiteral("layersLockAll"));
     locks->addStretch(1);
     fill_ = new PercentField(tr("Fill"), body);
     fill_->setObjectName(QStringLiteral("layersFillField"));

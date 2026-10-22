@@ -44,7 +44,9 @@ void PicturaMainWindow::keyPressEvent(QKeyEvent* event)
     if (hintBar_) {
         hintBar_->setPressedKey(hintKeyLabel(event));
     }
-    if (!event->isAutoRepeat() && event->key() == Qt::Key_Space) {
+    // Shift+Space is Help > Search's key; when unbound it must not start a pan.
+    if (!event->isAutoRepeat() && event->key() == Qt::Key_Space
+        && !event->modifiers().testFlag(Qt::ShiftModifier)) {
         ImageView* canvas = imageView();
         // A modal transform keeps Space; the Move tool's controls box (on by
         // default) is passive and pans like the bare canvas.

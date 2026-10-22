@@ -1004,6 +1004,9 @@ void addDefaultCommands(CommandRegistry& registry) {
                              QStringLiteral("Options"), QKeySequence(), true, true});
 
     // Help
+    registry.add(command_ids::HelpSearch, {"Help", "Search…"}, QStringLiteral("Search…"),
+                 QKeySequence(QStringLiteral("Shift+Space")), true);
+    registry.addSeparator({"Help"});
     leaf(registry, {"Help", "Kooka Pictura Help"}, QStringLiteral("Kooka Pictura Help"),
          QStringLiteral("F1"));
     leaf(registry, {"Help", "Online Support"}, QStringLiteral("Online Support"));

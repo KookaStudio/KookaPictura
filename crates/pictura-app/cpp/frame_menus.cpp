@@ -13,6 +13,37 @@
 
 namespace pictura {
 
+const QList<PanelToggle>& panelToggles()
+{
+    static const QList<PanelToggle> toggles = {
+        {command_ids::WindowPanelsLayers, "layersPanel"},
+        {command_ids::WindowPanelsNavigator, "navigatorPanel"},
+        {command_ids::WindowPanelsHistory, "historyPanel"},
+        {command_ids::WindowPanelsColor, "colorPanel"},
+        {command_ids::WindowPanelsSwatches, "swatchesPanel"},
+        {command_ids::WindowPanelsInfo, "infoPanel"},
+        {command_ids::WindowPanelsHistogram, "histogramPanel"},
+        {command_ids::WindowPanelsGradients, "gradientsPanel"},
+        {command_ids::WindowPanelsPatterns, "patternsPanel"},
+        {command_ids::WindowPanelsNotes, "notesPanel"},
+        {command_ids::WindowPanelsProperties, "propertiesPanel"},
+        {command_ids::WindowPanelsAdjustments, "adjustmentsPanel"},
+        {command_ids::WindowPanelsChannels, "channelsPanel"},
+        {command_ids::WindowPanelsPaths, "pathsPanel"},
+        {command_ids::WindowPanelsActions, "actionsPanel"},
+        {command_ids::WindowPanelsBrush, "brushPanel"},
+        {command_ids::WindowPanelsCloneSource, "cloneSourcePanel"},
+        {command_ids::WindowPanelsCharacter, "characterPanel"},
+        {command_ids::WindowPanelsParagraph, "paragraphPanel"},
+        {command_ids::WindowPanelsGlyphs, "glyphsPanel"},
+        {command_ids::WindowPanelsParagraphStyles, "paragraphStylesPanel"},
+        {command_ids::TypePanelsCharacter, "characterPanel"},
+        {command_ids::TypePanelsParagraph, "paragraphPanel"},
+        {command_ids::TypePanelsParagraphStyles, "paragraphStylesPanel"},
+    };
+    return toggles;
+}
+
 void PicturaMainWindow::buildMenus()
 {
     registry_->buildMenuBar(menuBar());
@@ -1014,41 +1045,12 @@ void PicturaMainWindow::registerHandlers()
     registerPreferenceHandlers();
     registerShortcutHandlers();
     registerGuideHandlers();
+    registerSearchHandlers();
 
     // Every other panel is a content widget hosted by the PanelColumn; the
     // Window > Panels toggles drive and reflect the column's registry rather
     // than a dock's visibility.
-    struct PanelToggle {
-        const char* command;
-        const char* panel;
-    };
-    static const PanelToggle kPanelToggles[] = {
-        {command_ids::WindowPanelsLayers, "layersPanel"},
-        {command_ids::WindowPanelsNavigator, "navigatorPanel"},
-        {command_ids::WindowPanelsHistory, "historyPanel"},
-        {command_ids::WindowPanelsColor, "colorPanel"},
-        {command_ids::WindowPanelsSwatches, "swatchesPanel"},
-        {command_ids::WindowPanelsInfo, "infoPanel"},
-        {command_ids::WindowPanelsHistogram, "histogramPanel"},
-        {command_ids::WindowPanelsGradients, "gradientsPanel"},
-        {command_ids::WindowPanelsPatterns, "patternsPanel"},
-        {command_ids::WindowPanelsNotes, "notesPanel"},
-        {command_ids::WindowPanelsProperties, "propertiesPanel"},
-        {command_ids::WindowPanelsAdjustments, "adjustmentsPanel"},
-        {command_ids::WindowPanelsChannels, "channelsPanel"},
-        {command_ids::WindowPanelsPaths, "pathsPanel"},
-        {command_ids::WindowPanelsActions, "actionsPanel"},
-        {command_ids::WindowPanelsBrush, "brushPanel"},
-        {command_ids::WindowPanelsCloneSource, "cloneSourcePanel"},
-        {command_ids::WindowPanelsCharacter, "characterPanel"},
-        {command_ids::WindowPanelsParagraph, "paragraphPanel"},
-        {command_ids::WindowPanelsGlyphs, "glyphsPanel"},
-        {command_ids::WindowPanelsParagraphStyles, "paragraphStylesPanel"},
-        {command_ids::TypePanelsCharacter, "characterPanel"},
-        {command_ids::TypePanelsParagraph, "paragraphPanel"},
-        {command_ids::TypePanelsParagraphStyles, "paragraphStylesPanel"},
-    };
-    for (const PanelToggle& toggle : kPanelToggles) {
+    for (const PanelToggle& toggle : panelToggles()) {
         const QString command = QString::fromLatin1(toggle.command);
         const QString panel = QString::fromLatin1(toggle.panel);
         registry_->setHandler(command, [this, command, panel]() {

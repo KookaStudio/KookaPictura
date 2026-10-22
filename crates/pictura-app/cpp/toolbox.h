@@ -84,6 +84,8 @@ public:
     QList<QToolButton*> slotButtons() const { return slotButtons_; }
     // The group id of each slot in `slotButtons()` order.
     QList<int> slotGroupsForTest() const { return slotGroups_; }
+    // The slot button of a tool group, or null when the group has none.
+    QToolButton* slotButton(int group) const { return slotButtonByGroup_.value(group); }
 
     // Base slot/icon metrics (96 DPI) scaled by a logical DPI. Exposed so the
     // Qt Test can assert the no-double-scale rule without a second screen.
