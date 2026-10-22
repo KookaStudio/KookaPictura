@@ -28,8 +28,8 @@ use pictura_core::{BlendMode, Document, Layer};
 use crate::composite::{blend_parts, desc_item, mask_alpha, Canvas};
 
 use super::{
-    bool_or, clamp_finite, clip_rect, content_matte, decode_color, effect_blend_mode, num_clamped,
-    num_or, pad_rect, rect_empty, MAX_ALTITUDE, MAX_DEPTH, MAX_OPACITY, MAX_SIZE,
+    blur_support, bool_or, clamp_finite, clip_rect, content_matte, decode_color, effect_blend_mode,
+    num_clamped, num_or, pad_rect, rect_empty, MAX_ALTITUDE, MAX_DEPTH, MAX_OPACITY, MAX_SIZE,
 };
 
 /// Bevel style (`bvlS`, typeID `BESl`).
@@ -178,15 +178,6 @@ pub fn decode_bevel_emboss(layer: &Layer) -> Option<BevelEmboss> {
             opacity: num_clamped(ebbl, b"sdwO", 75.0, 0.0, MAX_OPACITY)?,
         },
     })
-}
-
-/// The blur reach of a Gaussian radius: `ceil(3·sigma)`.
-fn blur_support(size: f64) -> i64 {
-    if size > 0.0 {
-        (3.0 * pictura_filters::kernel::sigma_from_radius(size)).ceil() as i64
-    } else {
-        0
-    }
 }
 
 /// How much the technique rounds the chamfer: Smooth rounds it by a third of

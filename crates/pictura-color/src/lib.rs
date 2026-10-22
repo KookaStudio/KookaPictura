@@ -263,11 +263,11 @@ fn romm_tone_curve() -> ToneCurve {
     ToneCurve::new_tabulated(&table)
 }
 
-/// Convert interleaved 8- or 16-bit samples between two profiles.
+/// Convert interleaved 8-, 16-, or 32-bit float samples between two profiles.
 ///
 /// `channels` is 1 (gray), 3 (RGB) or 4 (RGBA); RGBA alpha is copied through
 /// unchanged. Output keeps the input's channel count and bit depth. 16-bit
-/// samples are native-endian.
+/// samples are native-endian, as are 32-bit float samples.
 #[allow(clippy::too_many_arguments)]
 pub fn convert(
     src: &Profile,
@@ -422,10 +422,13 @@ fn formats(channels: u8, bits: u8) -> Result<(PixelFormat, PixelFormat), ColorEr
     let format = match (channels, bits) {
         (1, 8) => PixelFormat::GRAY_8,
         (1, 16) => PixelFormat::GRAY_16,
+        (1, 32) => PixelFormat::GRAY_FLT,
         (3, 8) => PixelFormat::RGB_8,
         (3, 16) => PixelFormat::RGB_16,
+        (3, 32) => PixelFormat::RGB_FLT,
         (4, 8) => PixelFormat::RGBA_8,
         (4, 16) => PixelFormat::RGBA_16,
+        (4, 32) => PixelFormat::RGBA_FLT,
         (c, b) => return Err(ColorError::Unsupported(format!("{c} channels at {b} bits"))),
     };
     Ok((format, format))
@@ -520,6 +523,142 @@ mod tests {
         for (a, b) in want.iter().zip(&got) {
             assert!((*a as i32 - *b as i32).abs() <= 1, "{a} vs {b}");
         }
+    }
+
+    #[test]
+    fn identity_rgb32() {
+        let srgb = Profile::srgb();
+        let pixels = [
+            [0.0f32, 0.0, 0.0],
+            [1.0, 1.0, 1.0],
+            [0.25, 0.5, 0.75],
+            [0.1, 0.9, 0.5],
+        ];
+        let img: Vec<u8> = pixels
+            .iter()
+            .flatten()
+            .flat_map(|v| v.to_ne_bytes())
+            .collect();
+        let out = convert(
+            &srgb,
+            &srgb,
+            &img,
+            4,
+            1,
+            3,
+            32,
+            Intent::RelativeColorimetric,
+            false,
+        )
+        .unwrap();
+        assert_eq!(out.len(), img.len());
+        let got: Vec<f32> = out
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|c| f32::from_ne_bytes(*c))
+            .collect();
+        let want: Vec<f32> = pixels.iter().flatten().copied().collect();
+        for (a, b) in want.iter().zip(&got) {
+            assert!((a - b).abs() <= 0.001, "32-bit identity moved {a} to {b}");
+        }
+
+        // Gray and RGBA float buffers use the same pixel formats.
+        let gray_profile = Profile::gray_gamma22();
+        let gray = [0.0f32, 1.0, 0.25, 0.75];
+        let img: Vec<u8> = gray.iter().flat_map(|v| v.to_ne_bytes()).collect();
+        let out = convert(
+            &gray_profile,
+            &gray_profile,
+            &img,
+            4,
+            1,
+            1,
+            32,
+            Intent::RelativeColorimetric,
+            false,
+        )
+        .unwrap();
+        assert_eq!(out.len(), img.len());
+        for (a, b) in gray.iter().zip(
+            out.as_chunks::<4>()
+                .0
+                .iter()
+                .map(|c| f32::from_ne_bytes(*c)),
+        ) {
+            assert!((a - b).abs() <= 0.001, "gray identity moved {a} to {b}");
+        }
+
+        let alpha = [0.0f32, 1.0, 0.5, 0.25];
+        let mut img = Vec::new();
+        for (pixel, a) in pixels.iter().zip(alpha) {
+            for value in pixel {
+                img.extend_from_slice(&value.to_ne_bytes());
+            }
+            img.extend_from_slice(&a.to_ne_bytes());
+        }
+        let out = convert(
+            &srgb,
+            &srgb,
+            &img,
+            4,
+            1,
+            4,
+            32,
+            Intent::RelativeColorimetric,
+            false,
+        )
+        .unwrap();
+        assert_eq!(out.len(), img.len());
+        for (i, rgba) in out.as_chunks::<16>().0.iter().enumerate() {
+            for (ch, (a, b)) in pixels[i]
+                .iter()
+                .zip(
+                    rgba[..12]
+                        .as_chunks::<4>()
+                        .0
+                        .iter()
+                        .map(|c| f32::from_ne_bytes(*c)),
+                )
+                .enumerate()
+            {
+                assert!(
+                    (a - b).abs() <= 0.001,
+                    "RGBA identity moved {ch}: {a} to {b}"
+                );
+            }
+            let got_alpha = f32::from_ne_bytes(rgba[12..].try_into().unwrap());
+            assert!((alpha[i] - got_alpha).abs() <= f32::EPSILON, "alpha copied");
+        }
+    }
+
+    #[test]
+    fn unsupported_format_is_rejected() {
+        let srgb = Profile::srgb();
+        let two = convert(
+            &srgb,
+            &srgb,
+            &[0u8; 8],
+            2,
+            1,
+            2,
+            8,
+            Intent::RelativeColorimetric,
+            false,
+        );
+        assert!(matches!(two, Err(ColorError::Unsupported(_))));
+        let twelve = convert(
+            &srgb,
+            &srgb,
+            &[0u8; 4],
+            1,
+            1,
+            1,
+            12,
+            Intent::RelativeColorimetric,
+            false,
+        );
+        assert!(matches!(twelve, Err(ColorError::Unsupported(_))));
     }
 
     #[test]

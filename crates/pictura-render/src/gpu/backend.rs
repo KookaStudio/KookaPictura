@@ -510,6 +510,7 @@ impl Gpu {
             if matches!(layer.blend, BlendMode::PassThrough)
                 && layer.opacity == 255
                 && layer.mask.is_none()
+                && layer.vector_mask.is_none()
             {
                 for child in &layer.children {
                     self.composite_layer(canvas, child, doc);
@@ -543,6 +544,7 @@ impl Gpu {
                 // The shader ignores `src` in the adjustment branch; the mask
                 // buffer stands in for it rather than aliasing the read-write
                 // canvas binding.
+                // Adjustments have no Fill in CS6; scale by opacity only.
                 self.dispatch(
                     canvas,
                     &mask,
@@ -550,7 +552,7 @@ impl Gpu {
                     PACKED_SRC,
                     layer.blend,
                     layer.opacity,
-                    layer.fill,
+                    255,
                     adj,
                 );
             }

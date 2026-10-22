@@ -34,6 +34,7 @@ mod exif;
 mod ghostscript;
 mod guide_resources;
 mod icc;
+mod icc_convert;
 mod image_resources;
 mod iptc;
 mod live_shape;

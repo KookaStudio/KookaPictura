@@ -35,6 +35,7 @@ mod composite_clipping;
 mod composite_knockout;
 mod composite_rows;
 mod mask_refine;
+mod smart_source;
 mod view_pyramid;
 pub(crate) use composite::{channel, mask_alpha, render_smart_source, sample};
 pub use composite::{
