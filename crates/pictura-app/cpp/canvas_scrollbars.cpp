@@ -59,7 +59,7 @@ CanvasScrollBars::CanvasScrollBars(QWidget* parent)
         const OffsetRange range = offsetRangeFor(
             QSizeF(view_->documentSize()), view_->zoom(), QSizeF(view_->size()), view_->freePan(),
             kCanvasRevealMarginPx, view_->snapToWorkspace());
-        view_->setOffset(QPointF(range.minX + value, view_->offset().y()));
+        view_->setOffset(QPointF(range.maxX - value, view_->offset().y()));
     });
     connect(vbar_, &QScrollBar::valueChanged, this, [this](int value) {
         if (syncing_ || !view_) {
@@ -68,7 +68,7 @@ CanvasScrollBars::CanvasScrollBars(QWidget* parent)
         const OffsetRange range = offsetRangeFor(
             QSizeF(view_->documentSize()), view_->zoom(), QSizeF(view_->size()), view_->freePan(),
             kCanvasRevealMarginPx, view_->snapToWorkspace());
-        view_->setOffset(QPointF(view_->offset().x(), range.minY + value));
+        view_->setOffset(QPointF(view_->offset().x(), range.maxY - value));
     });
 }
 
@@ -168,11 +168,11 @@ void CanvasScrollBars::syncFromView()
         hbar_->setRange(0, rangeX);
         hbar_->setPageStep(std::max(1, view_->width()));
         hbar_->setSingleStep(std::max(1, view_->width() / 10));
-        hbar_->setValue(int(std::lround(view_->offset().x() - range.minX)));
+        hbar_->setValue(int(std::lround(range.maxX - view_->offset().x())));
         vbar_->setRange(0, rangeY);
         vbar_->setPageStep(std::max(1, view_->height()));
         vbar_->setSingleStep(std::max(1, view_->height() / 10));
-        vbar_->setValue(int(std::lround(view_->offset().y() - range.minY)));
+        vbar_->setValue(int(std::lround(range.maxY - view_->offset().y())));
     }
 
     syncing_ = false;

@@ -15,10 +15,11 @@ enum class RulerUnit;
 class ImageView;
 
 // Thin host around an ImageView adding horizontal/vertical workspace
-// scrollbars and the two rulers (View > Rulers). The bars are a pure projection
-// of the canvas offset and zoom; ImageView::offset() stays the single source of
-// truth and dragging a bar calls ImageView::setOffset, which clamps through the
-// shared reveal range.
+// scrollbars and the two rulers (View > Rulers). The bars project the canvas's
+// pan range, so every position the canvas can be panned to — including the
+// reveal margin — has a handle position, and the handle travels against the
+// content. ImageView::offset() stays the single source of truth: dragging a bar
+// calls ImageView::setOffset, which clamps through the shared reveal range.
 class CanvasScrollBars : public QWidget {
     Q_OBJECT
 
