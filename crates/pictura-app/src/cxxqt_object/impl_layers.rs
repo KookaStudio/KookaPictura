@@ -2,7 +2,6 @@ use super::edit::Edit;
 use super::helpers::*;
 use super::helpers_composite::*;
 use super::qobject;
-use crate::layer_target::LayerTarget;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QString, QStringList};
@@ -811,28 +810,26 @@ impl qobject::PictureView {
         let refs = as_str_slice(&owned);
         let mut created: Vec<String> = Vec::new();
         self.as_mut().edit("Duplicate Layer", |rust| {
-            let Some(doc) = rust.session.doc.as_mut() else {
-                return Edit::None;
-            };
-            created = pictura_render::duplicate_paths(doc, &refs);
-            if !add_copy {
-                for path in &created {
-                    if let Some(layer) = pictura_render::resolve_path_mut(doc, path) {
-                        if let Some(stripped) = layer.name.strip_suffix(" copy") {
-                            layer.name = stripped.to_string();
+            created = {
+                let Some(doc) = rust.session.doc.as_mut() else {
+                    return Edit::None;
+                };
+                let created = pictura_render::duplicate_paths(doc, &refs);
+                if !add_copy {
+                    for path in &created {
+                        if let Some(layer) = pictura_render::resolve_path_mut(doc, path) {
+                            if let Some(stripped) = layer.name.strip_suffix(" copy") {
+                                layer.name = stripped.to_string();
+                            }
                         }
                     }
                 }
-            }
+                created
+            };
             if created.is_empty() {
                 return Edit::None;
             }
-            let anchor = created.last().cloned();
-            let target = {
-                let mut target = LayerTarget::default();
-                target.select(created.clone(), anchor, rust.session.doc.as_ref());
-                target
-            };
+            let target = rust.duplicate_target(&created);
             rust.set_layer_target(target);
             Edit::Structural
         });

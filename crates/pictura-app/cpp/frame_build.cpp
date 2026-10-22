@@ -1,6 +1,5 @@
 #include "frame_includes.h"
 
-#include "api/layers_api.h"
 #include "color_picker_dialog.h"
 #include "fonts.h"
 #include "panels/brush_preset_picker.h"
@@ -16,44 +15,6 @@
 #include <QtWidgets/QStackedWidget>
 
 namespace pictura {
-
-namespace {
-
-// The display name of an adjustment kind, matching the layer name the bridge
-// assigns when it creates the layer (see `adjustment_layer` in helpers.rs).
-QString adjustmentDisplayName(const QString& kind)
-{
-    struct Map {
-        const char* kind;
-        const char* name;
-    };
-    static const Map kNames[] = {
-        {"brightness-contrast", "Brightness/Contrast"},
-        {"levels", "Levels"},
-        {"curves", "Curves"},
-        {"exposure", "Exposure"},
-        {"vibrance", "Vibrance"},
-        {"hue-saturation", "Hue/Saturation"},
-        {"color-balance", "Color Balance"},
-        {"black-white", "Black & White"},
-        {"photo-filter", "Photo Filter"},
-        {"channel-mixer", "Channel Mixer"},
-        {"color-lookup", "Color Lookup"},
-        {"invert", "Invert"},
-        {"posterize", "Posterize"},
-        {"threshold", "Threshold"},
-        {"gradient-map", "Gradient Map"},
-        {"selective-color", "Selective Color"},
-    };
-    for (const Map& entry : kNames) {
-        if (kind == QLatin1String(entry.kind)) {
-            return QString::fromLatin1(entry.name);
-        }
-    }
-    return kind;
-}
-
-} // namespace
 
 QColor PicturaMainWindow::foregroundColor() const
 {
@@ -121,32 +82,14 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
     adjustmentsPanel_ = new AdjustmentsPanel(this);
     adjustmentsPanel_->setObjectName(QStringLiteral("adjustmentsPanel"));
     // The grid is a launcher: an adjustment icon creates the layer through the
-    // panel-menu path (which does not select), then the panel selects the new
-    // layer so the Properties panel opens its controls.
+    // panel-menu path, and the engine selects the created layer so the
+    // Properties panel opens its controls.
     connect(adjustmentsPanel_, &AdjustmentsPanel::adjustmentRequested, this,
             [this](const QString& kind) {
-        if (!layersPanel_) {
+        if (!layersPanel_ || !activeView()) {
             return;
         }
-        PictureView* view = activeView();
-        if (!view) {
-            return;
-        }
-        const int before = pictura::layers_api::rowCount(*view);
         layersPanel_->performPanelMenuAction(QStringLiteral("adjustment:") + kind);
-        if (pictura::layers_api::rowCount(*view) <= before) {
-            return;
-        }
-        const QString expected = adjustmentDisplayName(kind);
-        // Rows are topmost-first; the new layer is topmost, so the first match
-        // is the layer just created.
-        for (int i = 0; i < pictura::layers_api::rowCount(*view); ++i) {
-            const pictura::layers_api::LayerRow row = pictura::layers_api::rowAt(*view, i);
-            if (row.hasAdjustment && row.name == expected) {
-                layersPanel_->selectPaths({row.path}, row.path);
-                break;
-            }
-        }
     });
     // Fill icons reuse the Layer > New Fill Layer commands; Pattern stays inert
     // (its menu row has no handler).

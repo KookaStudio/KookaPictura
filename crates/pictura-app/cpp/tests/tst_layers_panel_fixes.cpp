@@ -38,6 +38,7 @@
 #include "selftest_paint_fixture.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/clipping.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/shapes.cxxqt.h"
@@ -182,6 +183,8 @@ private slots:
     void cannotClipToBackground();
     void moveDownStopsAtBackground();
     void refreshKeepsCurrentRowOutsideSelection();
+    void soloBelongsToItsDocument();
+    void expansionDoesNotCarryAcrossDocuments();
     void solidFillUsesForeground();
     void solidFillUsesForegroundNotBackground();
 
@@ -1020,25 +1023,114 @@ void LayersPanelFixesTest::refreshKeepsCurrentRowOutsideSelection()
     panel_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
     QVERIFY(view_ && panel_);
     panel_->setView(view_);
-    const QString added = view_->add_layer_in(QString());
-    QVERIFY(!added.isEmpty());
+    QVERIFY(!view_->add_layer_in(QString()).isEmpty());
+    QVERIFY(!view_->add_layer_in(QString()).isEmpty());
     panel_->refresh();
-    panel_->selectPaths({added}, added);
+    const QString first = pictura::layers_api::rowAt(*view_, 0).path;
+    const QString second = pictura::layers_api::rowAt(*view_, 1).path;
+    const QString bottom = pictura::layers_api::rowAt(*view_, 2).path;
+    const QStringList paths{first, second};
+    panel_->selectPaths(paths, second);
 
     auto* tree = panel_->findChild<QTreeView*>();
     QVERIFY(tree != nullptr);
     QAbstractItemModel* model = tree->model();
     QVERIFY(model != nullptr);
-    const QModelIndex other = indexForPath(model, QStringLiteral("0"));
+    const QModelIndex other = indexForPath(model, bottom);
     QVERIFY(other.isValid());
+    QVERIFY(!paths.contains(bottom));
     // Move the current row off the selection, as Ctrl+arrow does.
     tree->selectionModel()->setCurrentIndex(other, QItemSelectionModel::NoUpdate);
-    QCOMPARE(panel_->currentPath(), QStringLiteral("0"));
-    QCOMPARE(panel_->selectedPaths(), QStringList{added});
+    QCOMPARE(panel_->currentPath(), bottom);
+    QCOMPARE(panel_->selectedPaths(), paths);
+    QCOMPARE(pictura::layer_selection_anchor(*view_), second);
 
     panel_->refresh();
-    QCOMPARE(panel_->currentPath(), QStringLiteral("0"));
-    QCOMPARE(panel_->selectedPaths(), QStringList{added});
+    QCOMPARE(panel_->currentPath(), bottom);
+    QCOMPARE(panel_->selectedPaths(), paths);
+    QCOMPARE(pictura::layer_selection_anchor(*view_), second);
+}
+
+void LayersPanelFixesTest::soloBelongsToItsDocument()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("SoloA"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(view_ && panel_);
+    QVERIFY(!view_->add_layer_in(QString()).isEmpty());
+    QVERIFY(!view_->add_layer_in(QString()).isEmpty());
+    panel_->setView(view_);
+    panel_->refresh();
+    const int first = window_->activeDocumentIndex();
+    const QString soloPath = pictura::layers_api::rowAt(*view_, 0).path;
+    const QString hiddenPath = pictura::layers_api::rowAt(*view_, 1).path;
+    panel_->toggleSoloForTest(soloPath);
+    panel_->refresh();
+    QVERIFY(!pictura::layers_api::rowForPath(*view_, hiddenPath).visible);
+
+    QVERIFY(window_->newDocument(QStringLiteral("SoloB"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    panel_->setView(window_->activeView());
+    panel_->refresh();
+
+    window_->setActiveDocumentIndex(first);
+    QCoreApplication::processEvents();
+    view_ = window_->activeView();
+    QVERIFY(view_ != nullptr);
+    panel_->setView(view_);
+    panel_->refresh();
+    QVERIFY2(!pictura::layers_api::rowForPath(*view_, hiddenPath).visible,
+             "the first document is still soloed");
+    panel_->toggleSoloForTest(soloPath);
+    panel_->refresh();
+    QVERIFY2(pictura::layers_api::rowForPath(*view_, hiddenPath).visible,
+             "the snapshot survived the switch");
+}
+
+void LayersPanelFixesTest::expansionDoesNotCarryAcrossDocuments()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("ExpandA"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(view_ && panel_);
+    const QString group = view_->add_group_in(QString());
+    const QString child = view_->add_layer_in(group);
+    QVERIFY(!group.isEmpty() && !child.isEmpty());
+    panel_->setView(view_);
+    panel_->refresh();
+    panel_->expandForTest(group);
+    QCoreApplication::processEvents();
+    const int first = window_->activeDocumentIndex();
+    QVERIFY(panel_->visiblePathsForTest().contains(child));
+
+    QVERIFY(window_->newDocument(QStringLiteral("ExpandB"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::PictureView* other = window_->activeView();
+    QVERIFY(other != nullptr);
+    const QString otherGroup = other->add_group_in(QString());
+    const QString otherChild = other->add_layer_in(otherGroup);
+    QVERIFY(!otherGroup.isEmpty() && !otherChild.isEmpty());
+    // Creating the child leaves it as the target, and projecting a nested
+    // target must reveal its group. Move the target to a root layer first so
+    // this checks only whether the first document's expansion leaked.
+    const QString otherRoot =
+        pictura::layers_api::rowAt(*other, pictura::layers_api::rowCount(*other) - 1).path;
+    pictura::set_layer_target(*other, {otherRoot}, otherRoot);
+    panel_->setView(other);
+    panel_->refresh();
+    QVERIFY2(!panel_->visiblePathsForTest().contains(otherChild),
+             "the other document's group starts collapsed");
+
+    window_->setActiveDocumentIndex(first);
+    QCoreApplication::processEvents();
+    view_ = window_->activeView();
+    QVERIFY(view_ != nullptr);
+    panel_->setView(view_);
+    panel_->refresh();
+    QVERIFY2(panel_->visiblePathsForTest().contains(child),
+             "the first document's expansion is restored");
 }
 
 // The panel's Solid Color... entry fills with the current foreground colour,

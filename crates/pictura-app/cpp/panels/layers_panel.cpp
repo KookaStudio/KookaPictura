@@ -360,7 +360,7 @@ LayersPanel::LayersPanel(ColorState* colors, QWidget* parent)
 
     connect(tree_->selectionModel(), &QItemSelectionModel::currentChanged, this,
             [this](const QModelIndex&, const QModelIndex&) {
-                writeTarget();
+                writeCurrentAnchor();
                 syncControls();
                 syncMaskSolo();
             });
@@ -372,11 +372,11 @@ LayersPanel::LayersPanel(ColorState* colors, QWidget* parent)
     connect(tree_, &QTreeView::expanded, this, [this](const QModelIndex& index) {
         const QString path = pathForProxyIndex(index);
         if (!path.isEmpty()) {
-            expandedPaths_.insert(path);
+            expandPath(path);
         }
     });
     connect(tree_, &QTreeView::collapsed, this, [this](const QModelIndex& index) {
-        expandedPaths_.remove(pathForProxyIndex(index));
+        collapsePath(pathForProxyIndex(index));
     });
     connect(filterBar_, &LayerFilterBar::filterChanged, this, &LayersPanel::applyFilter);
     connect(blend_, &QComboBox::currentIndexChanged, this, [this](int index) {
@@ -454,15 +454,21 @@ void LayersPanel::setView(PictureView* view)
     if (viewConnection_) {
         QObject::disconnect(viewConnection_);
     }
-    // A different view means a document switch: solo paths and the filter are
-    // transient, so both reset. A replacement inside the same view bumps the
-    // document generation, which also ends the gesture.
+    // A different view means a document switch: the mask solo view and the
+    // filter are transient, so both reset. The layer solo snapshot belongs to
+    // the outgoing document and stays in its Rust state. A replacement inside
+    // the same view bumps the document generation, which also ends the gesture.
     if (view_ != view
         || (gesture_.valid && (!view || view->document_generation() != gesture_.generation))) {
         cancelPendingPreview();
     }
+    if (view_ != view
+        || (view_ && view && view->document_generation() != rememberedGeneration_)) {
+        rememberedTarget_.clear();
+        rememberedAnchor_.clear();
+    }
     if (view_ != view) {
-        clearSolo();
+        endMaskSoloView();
         activeThumbByPath_.clear();
         isolatedPaths_.clear();
         const LayerFilter defaultFilter{true};
@@ -477,6 +483,7 @@ void LayersPanel::setView(PictureView* view)
         disconnect(viewConnection_);
     }
     view_ = view;
+    rememberedGeneration_ = view ? view->document_generation() : 0;
     model_->setView(view);
     tree_->setDragSource(view);
     if (view_) {
@@ -598,7 +605,7 @@ void LayersPanel::refresh()
     }
     // Capture each expanded group's name chain before the model reset, so a
     // group whose index path shifts is re-found by name and kept expanded.
-    const QSet<QString> previousExpansion = expandedPaths_;
+    const QSet<QString> previousExpansion = expandedPaths();
     QHash<QString, QString> previousNames;
     for (const QString& path : previousExpansion) {
         previousNames.insert(path, model_->namePathForPath(path));
@@ -626,31 +633,12 @@ void LayersPanel::refresh()
             tree_->expand(index);
         }
     }
-    expandedPaths_ = live;
+    setExpandedPaths(live);
     if (proxy_->filter().enabled && proxy_->hasActiveCriteria()) {
         expandMatchingGroups();
     }
 
-    applyTargetSelection();
-    // The current row can sit outside the selection (Ctrl+arrow in the tree).
-    // The target's anchor is the current row's counterpart, so projecting the
-    // target would drag the cursor back onto the selection; keep the row the
-    // user put it on.
-    if (!selectedPath.isEmpty() && !targetPaths().contains(selectedPath)) {
-        const QModelIndex index = proxyIndexForPath(selectedPath);
-        if (index.isValid()) {
-            tree_->selectionModel()->setCurrentIndex(index, QItemSelectionModel::NoUpdate);
-        }
-    }
-    if (wasEditing) {
-        const QModelIndex editIndex = proxyIndexForPath(selectedPath);
-        if (editIndex.isValid()) {
-            // The selection model's own move keeps the multi-selection; the
-            // view's would clear it for a single row.
-            tree_->selectionModel()->setCurrentIndex(editIndex, QItemSelectionModel::NoUpdate);
-            tree_->edit(editIndex);
-        }
-    }
+    projectTarget(selectedPath, wasEditing);
     reconcileGestureTarget();
     syncControls();
     applyingTarget_ = wasApplying;
@@ -699,6 +687,7 @@ void LayersPanel::selectPaths(const QStringList& paths, const QString& current)
         return;
     }
     set_layer_target(*view_, paths, current);
+    rememberTarget();
     const bool wasApplying = applyingTarget_;
     applyingTarget_ = true;
     setTreeSelection(paths, current);
@@ -767,37 +756,6 @@ QStringList LayersPanel::targetPaths() const
 QStringList LayersPanel::targetLayerPaths() const
 {
     return targetPaths();
-}
-
-void LayersPanel::writeTarget()
-{
-    if (!view_ || applyingTarget_ || syncing_) {
-        return;
-    }
-    const QString current = currentPath();
-    if (current.contains(QStringLiteral("/@sf"))) {
-        return;
-    }
-    QStringList paths = selectedPaths();
-    if (paths.isEmpty()) {
-        set_layer_target(*view_, {}, {});
-        return;
-    }
-    const QString anchor = paths.contains(current) ? current : paths.first();
-    set_layer_target(*view_, paths, anchor);
-}
-
-void LayersPanel::applyTargetSelection()
-{
-    if (!view_ || !model_ || !tree_) {
-        return;
-    }
-    const bool wasApplying = applyingTarget_;
-    applyingTarget_ = true;
-    const QStringList target = selected_layer_paths(*view_);
-    const QString anchor = layer_selection_anchor(*view_);
-    setTreeSelection(target, anchor);
-    applyingTarget_ = wasApplying;
 }
 
 bool LayersPanel::canMergeSelection() const
@@ -1073,7 +1031,7 @@ void LayersPanel::applyFilter(const LayerFilter& filter)
     if (effective.enabled && proxy_->hasActiveCriteria()) {
         expandMatchingGroups();
     } else {
-        for (const QString& path : expandedPaths_) {
+        for (const QString& path : expandedPaths()) {
             const QModelIndex index = proxyIndexForPath(path);
             if (index.isValid()) {
                 tree_->expand(index);

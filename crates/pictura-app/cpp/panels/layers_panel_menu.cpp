@@ -515,7 +515,6 @@ bool LayersPanel::performRowAction(const QString& id, const QString& path)
     } else if (id == QLatin1String("convertToSmartObject")) {
         if (view_ && view_->convert_to_smart_object(path)) {
             refresh();
-            selectPath(path);
         }
     } else if (id == QLatin1String("editContents")) {
         emit smartObjectContentsRequested(QStringLiteral("edit"), path);
@@ -536,7 +535,6 @@ bool LayersPanel::performRowAction(const QString& id, const QString& path)
             const QString copy = smart_object_new_via_copy(*view_, path);
             if (!copy.isEmpty()) {
                 refresh();
-                selectPath(copy);
             }
         }
     } else if (id == QLatin1String("blendingOptions")) {
@@ -633,10 +631,10 @@ bool LayersPanel::performPanelMenuAction(const QString& actionId)
         }
     } else if (actionId == QLatin1String("selectLinked")) {
         if (view_) {
-            const QString path = view_ ? layer_selection_anchor(*view_) : QString();
-            const QStringList linked = path.isEmpty() ? QStringList() : view_->select_linked(path);
-            if (!linked.isEmpty()) {
-                selectPaths(linked, path);
+            const QString path = layer_selection_anchor(*view_);
+            if (!path.isEmpty()) {
+                view_->select_linked(path);
+                refresh();
             }
         }
     } else if (actionId == QLatin1String("moveUp")) {
@@ -662,7 +660,6 @@ bool LayersPanel::performPanelMenuAction(const QString& actionId)
             }
             if (!merged.isEmpty()) {
                 refresh();
-                selectPaths(QStringList{merged}, merged);
             }
         }
     } else if (actionId == QLatin1String("flatten")) {
@@ -672,8 +669,8 @@ bool LayersPanel::performPanelMenuAction(const QString& actionId)
     } else if (actionId == QLatin1String("panelOptions")) {
         openPanelOptions();
     } else if (actionId.startsWith(QLatin1String("adjustment:"))) {
-        if (view_) {
-            view_->add_adjustment(actionId.mid(QLatin1String("adjustment:").size()));
+        if (view_ && view_->add_adjustment(actionId.mid(QLatin1String("adjustment:").size()))) {
+            refresh();
         }
     } else {
         return false;

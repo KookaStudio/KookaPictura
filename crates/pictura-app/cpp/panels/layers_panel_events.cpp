@@ -284,7 +284,6 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                 if (view_->convert_background(path, view_->next_layer_name(QStringLiteral("Layer")),
                                               0)) {
                     refresh();
-                    selectPath(path);
                 }
                 return true;
             }

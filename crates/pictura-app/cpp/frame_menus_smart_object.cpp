@@ -77,9 +77,7 @@ void PicturaMainWindow::wireAdvancedSmartObjectActions()
                               if (copy.isEmpty()) {
                                   return;
                               }
-                              if (layersPanel_) {
-                                  layersPanel_->selectPaths({copy}, copy);
-                              }
+                              refresh();
                           });
     registry_->setEnabledProvider(command_ids::LayerSmartObjectNewViaCopy,
                                   [currentCopyableSmartPath]() {

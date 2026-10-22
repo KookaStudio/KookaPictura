@@ -385,6 +385,7 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/frame_canvas.cpp
     crates/pictura-app/cpp/frame_canvas.h
     crates/pictura-app/cpp/panels/layers_panel.cpp
+    crates/pictura-app/cpp/panels/layers_panel_target.cpp
     crates/pictura-app/cpp/panels/layers_panel_preview.cpp
     crates/pictura-app/cpp/panels/layers_panel_events.cpp
     crates/pictura-app/cpp/panels/paths_panel.cpp

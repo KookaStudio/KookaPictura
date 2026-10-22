@@ -17,6 +17,7 @@
 #include "panels/color_panel.h"
 #include "panels/layers_panel.h"
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
 
 #include "qt_test_support.h"
 
@@ -143,6 +144,20 @@ void LayerCommandsTest::duplicateMultiSelection()
     QVERIFY(topRow >= 0 && topCopyRow >= 0 && secondRow >= 0 && secondCopyRow >= 0);
     QCOMPARE(topCopyRow, topRow - 1);
     QCOMPARE(secondCopyRow, secondRow - 1);
+
+    const QString topCopyPath = pictura::layers_api::rowAt(*view, topCopyRow).path;
+    const QString secondCopyPath = pictura::layers_api::rowAt(*view, secondCopyRow).path;
+    const QStringList target = pictura::selected_layer_paths(*view);
+    QCOMPARE(target.size(), 2);
+    QVERIFY2(target.contains(topCopyPath), "the top copy is targeted");
+    QVERIFY2(target.contains(secondCopyPath), "the second copy is targeted");
+    const QString anchor = pictura::layer_selection_anchor(*view);
+    QVERIFY2(anchor == topCopyPath || anchor == secondCopyPath,
+             "one copy is the active path");
+    const QStringList shown = layers->selectedPaths();
+    QCOMPARE(shown.size(), 2);
+    QVERIFY2(shown.contains(topCopyPath), "the panel shows the top copy");
+    QVERIFY2(shown.contains(secondCopyPath), "the panel shows the second copy");
 }
 
 void LayerCommandsTest::duplicateWithoutSelection()

@@ -7,6 +7,7 @@
 #include "frame.h"
 #include "panels/layers_panel.h"
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
 
 #include "qt_test_support.h"
 
@@ -272,6 +273,9 @@ void SmartObjectActionsTest::newViaCopyAddsIndependentLayer()
     QCOMPARE(view->history_count(), before + 1);
     QCOMPARE(pictura::layers_api::rowCount(*view), layersBefore + 1);
     QVERIFY2(!view->layer_smart_object_state(path).isEmpty(), "original keeps its source");
+    const QString copy = pictura::layers_api::rowAt(*view, 0).path;
+    QCOMPARE(pictura::selected_layer_paths(*view), QStringList{copy});
+    QCOMPARE(pictura::layer_selection_anchor(*view), copy);
 }
 
 // A Background is a convertible target: the row menu and the command offer

@@ -4,13 +4,17 @@
 #include <QtTest/QtTest>
 #include "api/layers_api.h"
 
+#include <QtCore/QAbstractItemModel>
 #include <QtCore/QCoreApplication>
+#include <QtCore/QItemSelectionModel>
 #include <QtCore/QStringList>
 #include <QtWidgets/QApplication>
+#include <QtWidgets/QTreeView>
 
 #include "commands.h"
 #include "frame.h"
 #include "panels/layers_panel.h"
+#include "panels/properties_panel.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
@@ -96,6 +100,11 @@ private slots:
     void invalidActivePathClearsTarget();
     void documentSwitchRestoresTarget();
     void newDocumentSelectsFirstLayer();
+    void refreshDoesNotRewriteTheTarget();
+    void currentRowFollowsTheTarget();
+    void selectSimilarKeepsActiveSelected();
+    void selectLinkedSelectsMembers();
+    void documentSwitchCurrentRow();
 
 private:
     bool newDoc(const QString& name, int layers);
@@ -271,16 +280,30 @@ void LayerTargetTest::repeatedRefreshKeepsTarget()
 // lpr_filter_target
 void LayerTargetTest::filterHidingTargetKeepsIt()
 {
-    QVERIFY(newDoc(QStringLiteral("FilterTarget"), 2));
-    select({QStringLiteral("1")}, QStringLiteral("1"));
-    panel_->setFilterKindForTest({QStringLiteral("adjustment")}, true);
+    QVERIFY(newDoc(QStringLiteral("FilterTarget"), 3));
+    QVERIFY(view_->add_adjustment(QStringLiteral("invert")));
+    panel_->refresh();
+    const QString target = pictura::layers_api::rowAt(*view_, 0).path;
+    select({target}, target);
+    panel_->setFilterKindForTest({QStringLiteral("pixel")}, true);
     QCoreApplication::processEvents();
-    QCOMPARE(pictura::selected_layer_paths(*view_), QStringList{QStringLiteral("1")});
-    QCOMPARE(pictura::layer_selection_anchor(*view_), QStringLiteral("1"));
+    QCOMPARE(pictura::selected_layer_paths(*view_), QStringList{target});
+    QCOMPARE(pictura::layer_selection_anchor(*view_), target);
+
+    // Ctrl+arrow onto a displayed row must not rewrite the hidden target with
+    // the rows the filter leaves visible.
+    auto* tree = panel_->findChild<QTreeView*>();
+    QVERIFY(tree != nullptr);
+    const QModelIndex shown = tree->model()->index(0, 0);
+    QVERIFY(shown.isValid());
+    tree->selectionModel()->setCurrentIndex(shown, QItemSelectionModel::NoUpdate);
+    QCOMPARE(pictura::selected_layer_paths(*view_), QStringList{target});
+    QCOMPARE(pictura::layer_selection_anchor(*view_), target);
+
     panel_->setFilterKindForTest(QStringList{}, false);
     QCoreApplication::processEvents();
     panel_->refresh();
-    QCOMPARE(panel_->selectedPaths(), QStringList{QStringLiteral("1")});
+    QCOMPARE(panel_->selectedPaths(), QStringList{target});
 }
 
 // lpr_filter_command
@@ -608,6 +631,105 @@ void LayerTargetTest::newDocumentSelectsFirstLayer()
     QVERIFY(newDoc(QStringLiteral("New"), 1));
     QCOMPARE(pictura::selected_layer_paths(*view_), QStringList{QStringLiteral("0")});
     QCOMPARE(pictura::layer_selection_anchor(*view_), QStringLiteral("0"));
+}
+
+void LayerTargetTest::refreshDoesNotRewriteTheTarget()
+{
+    QVERIFY(newDoc(QStringLiteral("NoRewrite"), 2));
+    select({QStringLiteral("0"), QStringLiteral("1")}, QStringLiteral("1"));
+    const QStringList created = view_->duplicate_layers(
+        {QStringLiteral("0"), QStringLiteral("1")});
+    QCOMPARE(created.size(), 2);
+    panel_->refresh();
+    const QStringList target = pictura::selected_layer_paths(*view_);
+    QCOMPARE(target.size(), 2);
+    QVERIFY(target.contains(created[0]));
+    QVERIFY(target.contains(created[1]));
+    const QString anchor = pictura::layer_selection_anchor(*view_);
+    panel_->refresh();
+    QCOMPARE(pictura::selected_layer_paths(*view_), target);
+    QCOMPARE(pictura::layer_selection_anchor(*view_), anchor);
+}
+
+void LayerTargetTest::currentRowFollowsTheTarget()
+{
+    QVERIFY(newDoc(QStringLiteral("CurrentRow"), 2));
+    select({QStringLiteral("0")}, QStringLiteral("0"));
+    const QStringList created = view_->duplicate_layers({QStringLiteral("0")});
+    QCOMPARE(created.size(), 1);
+    const QString copy = created.first();
+    panel_->refresh();
+    QCoreApplication::processEvents();
+    QCOMPARE(panel_->currentPath(), copy);
+
+    auto* properties =
+        window_->findChild<pictura::PropertiesPanel*>(QStringLiteral("propertiesPanel"));
+    QVERIFY(properties != nullptr);
+    QCOMPARE(properties->pathForTest(), copy);
+}
+
+void LayerTargetTest::selectSimilarKeepsActiveSelected()
+{
+    QVERIFY(newDoc(QStringLiteral("SelectSimilar"), 3));
+    select({QStringLiteral("1")}, QStringLiteral("1"));
+    const QStringList matched = view_->select_similar(QStringLiteral("1"));
+    QVERIFY(!matched.contains(QStringLiteral("1")));
+    QVERIFY(matched.size() >= 1);
+    QStringList expected = matched;
+    expected.prepend(QStringLiteral("1"));
+    QCOMPARE(pictura::selected_layer_paths(*view_), expected);
+    QCOMPARE(pictura::layer_selection_anchor(*view_), QStringLiteral("1"));
+    panel_->refresh();
+    const QStringList shown = panel_->selectedPaths();
+    QCOMPARE(shown.size(), expected.size());
+    for (const QString& path : expected) {
+        QVERIFY(shown.contains(path));
+    }
+    QCOMPARE(panel_->currentPath(), QStringLiteral("1"));
+}
+
+void LayerTargetTest::selectLinkedSelectsMembers()
+{
+    QVERIFY(newDoc(QStringLiteral("SelectLinked"), 3));
+    QCOMPARE(view_->link_layers({QStringLiteral("0"), QStringLiteral("2")}, true), 2);
+    select({QStringLiteral("0")}, QStringLiteral("0"));
+    const QStringList linked = view_->select_linked(QStringLiteral("0"));
+    QCOMPARE(linked.size(), 2);
+    QCOMPARE(pictura::selected_layer_paths(*view_), linked);
+    QCOMPARE(pictura::layer_selection_anchor(*view_), QStringLiteral("0"));
+
+    select({QStringLiteral("1")}, QStringLiteral("1"));
+    const QStringList before = pictura::selected_layer_paths(*view_);
+    QVERIFY(view_->select_linked(QStringLiteral("1")).isEmpty());
+    QCOMPARE(pictura::selected_layer_paths(*view_), before);
+    QCOMPARE(pictura::layer_selection_anchor(*view_), QStringLiteral("1"));
+}
+
+void LayerTargetTest::documentSwitchCurrentRow()
+{
+    QVERIFY(newDoc(QStringLiteral("SwitchA"), 3));
+    select({QStringLiteral("1")}, QStringLiteral("1"));
+    const int first = window_->activeDocumentIndex();
+
+    QVERIFY(newDoc(QStringLiteral("SwitchB"), 2));
+    select({QStringLiteral("0")}, QStringLiteral("0"));
+    const int second = window_->activeDocumentIndex();
+
+    window_->setActiveDocumentIndex(first);
+    QCoreApplication::processEvents();
+    view_ = window_->activeView();
+    QVERIFY(view_ != nullptr);
+    panel_->setView(view_);
+    panel_->refresh();
+    QCOMPARE(panel_->currentPath(), QStringLiteral("1"));
+
+    window_->setActiveDocumentIndex(second);
+    QCoreApplication::processEvents();
+    view_ = window_->activeView();
+    QVERIFY(view_ != nullptr);
+    panel_->setView(view_);
+    panel_->refresh();
+    QCOMPARE(panel_->currentPath(), QStringLiteral("0"));
 }
 
 QTEST_MAIN(LayerTargetTest)
