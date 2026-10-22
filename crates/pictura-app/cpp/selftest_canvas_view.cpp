@@ -156,13 +156,13 @@ int pictura::runCanvasViewChecks(pictura::PicturaMainWindow& frame)
     const int target = (hbar->minimum() + hbar->maximum()) / 2;
     hbar->setValue(target);
     const bool roundTrip = std::abs(canvas->offset().x()
-                                    - (range.minX + double(hbar->value())))
+                                    - (range.maxX - double(hbar->value())))
                            < 0.75;
     canvas->panBy(QPointF(40.0, 0.0));
     const pictura::OffsetRange afterRange =
         pictura::offsetRangeFor(bigImage, canvas->zoom(), QSizeF(canvas->size()));
     const bool follows =
-        std::abs(hbar->value() - int(std::lround(canvas->offset().x() - afterRange.minX))) <= 1;
+        std::abs(hbar->value() - int(std::lround(afterRange.maxX - canvas->offset().x()))) <= 1;
     ST_BEGIN("canvas_scrollbar_roundtrip");
     ST_PASS("canvas_scrollbar_roundtrip shown=%d roundtrip=%d follows=%d value=%d",
             shown ? 1 : 0, roundTrip ? 1 : 0, follows ? 1 : 0, hbar->value());

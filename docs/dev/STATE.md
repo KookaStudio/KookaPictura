@@ -670,6 +670,19 @@ Snapshot for resuming after a context break. Update after each milestone.
   Rulers (a real page; double-click a ruler) picks the unit and point size.
   Ceilings: no snapping or Alt-flip; Smart
   Guides/Grid/Slices prefs are shown disabled.
+- **Workspace scrollbars** (#823, branch `fix/823-workspace-scrollbars-inverted`,
+  OpenSpec change `fix-workspace-scrollbar-direction`, archived into
+  `document/canvas-scrollbars`): the bars project the canvas's **pan range** —
+  the same range that clamps the pan, so the handle reaches every position the
+  canvas can be dragged to, the reveal margin included — and the handle travels
+  *against* the content: a bar's value is the distance from the range's
+  maximum, so the bar's minimum shows the start of the document and its maximum
+  its end, and raising the value lowers the canvas offset (`ox = maxX - value`).
+  The canvas offset keeps its meaning for the pan, the zoom, the rulers and the
+  Navigator. The reveal margin is pannable, so the bar's ends park the canvas
+  partly off the workspace — the same limits the hand tool has. Ceilings: the
+  margin takes a large share of the handle's travel when the document barely
+  overflows the viewport.
 - **In flight:** the large-image PR above. Open PRs are docs-only — #191 (README AI
   disclosure, real screenshot, `CLAUDE.md`, developer guide) and #135 (Fedora 43
   build instructions). The Paragraph Styles panel + Edit/Image menu commands
