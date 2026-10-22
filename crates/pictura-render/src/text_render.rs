@@ -437,25 +437,14 @@ pub(crate) fn layout_type(
             .collect();
         // A justified line's word spaces take the leftover width, so the
         // line's advance reaches the column and the layout shifts it by zero.
-        let mut spread = vec![false; shaped.len()];
-        if type_tool.box_bounds.is_some() && crate::type_justify::spreads(justify) {
-            for (i, ((line, last), glyphs)) in lines.iter().zip(shaped.iter_mut()).enumerate() {
-                if *last && !crate::type_justify::spreads_last(justify) {
-                    continue;
-                }
-                let advance: f32 = glyphs.iter().map(|g| g.advance).sum::<f32>()
-                    + tracking(c) * font_size / 1000.0 * glyphs.len() as f32;
-                let Some(extra) = crate::type_justify::space_extra(bundled, line, advance, width)
-                else {
-                    continue;
-                };
-                let Some(space) = bundled.space_glyph() else {
-                    continue;
-                };
-                crate::type_justify::spread(glyphs, space, extra);
-                spread[i] = true;
-            }
-        }
+        let spread = crate::type_justify::spread_lines(
+            bundled,
+            &lines,
+            &mut shaped,
+            justify,
+            width,
+            tracking(c) * font_size / 1000.0,
+        );
         let align = TextAlign::from_justification(justify.index());
         let mut layout = layout_lines(
             &shaped,
@@ -470,21 +459,7 @@ pub(crate) fn layout_type(
         );
         // A line that could not be spread stays flush left: the layout
         // shifted it by the paragraph's last line's alignment.
-        let flush_left: Vec<bool> = lines
-            .iter()
-            .zip(spread.iter())
-            .map(|((_, last), was_spread)| {
-                !*last && !*was_spread && crate::type_justify::spreads(justify)
-            })
-            .collect();
-        for (line, flush) in layout.lines.iter_mut().zip(flush_left.iter()) {
-            if *flush {
-                let shift = -(width - line.advance) * align.factor();
-                for glyph in &mut line.glyphs {
-                    glyph.x += shift;
-                }
-            }
-        }
+        crate::type_justify::flush_left(&mut layout, &lines, &spread, justify, width);
         // Baseline shift and super/subscript move the run off its baseline
         // (positive is up).
         let rise = RunStyle::of(bundled, c).rise;

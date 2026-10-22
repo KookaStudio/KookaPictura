@@ -6,7 +6,7 @@
 //! min/desired/max bounds, the letter spacing and the glyph scaling are
 //! authored to the engine data but not laid out (#518).
 
-use pictura_core::{Justify, ShapedGlyph};
+use pictura_core::{Justify, ShapedGlyph, TextAlign, TextLayout};
 
 use crate::text_render::BundledText;
 
@@ -31,19 +31,30 @@ pub(crate) fn spaces(line: &str) -> usize {
     line.chars().filter(|c| *c == ' ').count()
 }
 
+/// The number of space glyphs in a shaped run.
+pub(crate) fn shaped_spaces(bundled: &BundledText, glyphs: &[ShapedGlyph]) -> usize {
+    let Some(space) = bundled.space_glyph() else {
+        return 0;
+    };
+    glyphs.iter().filter(|g| g.id == space).count()
+}
+
 /// The extra width each word space of a line takes when the line is spread to
 /// `column`: the leftover width over the line's word spaces. `None` when the
-/// line is not spread: no word space, no leftover width, or a face without a
-/// space glyph.
+/// line is not spread: no word space, no leftover width, a face without a
+/// space glyph, or a face whose space glyph another character shares - then
+/// the shaped run's spaces and the line's spaces disagree, and the renderer
+/// and the caret would drift apart.
 pub(crate) fn space_extra(
     bundled: &BundledText,
     line: &str,
+    shaped: usize,
     advance: f32,
     column: f32,
 ) -> Option<f32> {
     bundled.space_glyph()?;
     let spaces = spaces(line);
-    if spaces == 0 {
+    if spaces == 0 || spaces != shaped {
         return None;
     }
     let leftover = column - advance;
@@ -54,10 +65,78 @@ pub(crate) fn space_extra(
 }
 
 /// Widen the line's space glyphs by `extra` each.
-pub(crate) fn spread(glyphs: &mut [ShapedGlyph], space: u16, extra: f32) {
+fn widen_spaces(glyphs: &mut [ShapedGlyph], space: u16, extra: f32) {
     for glyph in glyphs {
         if glyph.id == space {
             glyph.advance += extra;
+        }
+    }
+}
+
+/// Spread the lines the justification spreads: each one's word spaces take the
+/// leftover width, so the line's advance reaches the column and the layout
+/// shifts it by zero. `lines` carries each line's text and whether it ends
+/// its paragraph; `tracking` is the per-glyph tracking step. Returns the
+/// lines that were spread.
+pub(crate) fn spread_lines(
+    bundled: &BundledText,
+    lines: &[(String, bool)],
+    shaped: &mut [Vec<ShapedGlyph>],
+    justify: Justify,
+    column: f32,
+    tracking: f32,
+) -> Vec<bool> {
+    let mut spread = vec![false; shaped.len()];
+    if !spreads(justify) {
+        return spread;
+    }
+    let Some(space) = bundled.space_glyph() else {
+        return spread;
+    };
+    for (i, ((line, last), glyphs)) in lines.iter().zip(shaped.iter_mut()).enumerate() {
+        if *last && !spreads_last(justify) {
+            continue;
+        }
+        let advance: f32 =
+            glyphs.iter().map(|g| g.advance).sum::<f32>() + tracking * glyphs.len() as f32;
+        let Some(extra) = space_extra(
+            bundled,
+            line,
+            shaped_spaces(bundled, glyphs),
+            advance,
+            column,
+        ) else {
+            continue;
+        };
+        widen_spaces(glyphs, space, extra);
+        spread[i] = true;
+    }
+    spread
+}
+
+/// Shift the lines a justification could not spread back to flush left: the
+/// layout shifted them by the paragraph's last line's alignment, and a line
+/// with no word space to spread stays where it was set.
+pub(crate) fn flush_left(
+    layout: &mut TextLayout,
+    lines: &[(String, bool)],
+    spread: &[bool],
+    justify: Justify,
+    column: f32,
+) {
+    if !spreads(justify) {
+        return;
+    }
+    let align = TextAlign::from_justification(justify.index());
+    for (line, ((_, last), was_spread)) in
+        layout.lines.iter_mut().zip(lines.iter().zip(spread.iter()))
+    {
+        if *last || *was_spread {
+            continue;
+        }
+        let shift = -(column - line.advance) * align.factor();
+        for glyph in &mut line.glyphs {
+            glyph.x += shift;
         }
     }
 }
@@ -180,22 +259,58 @@ mod tests {
             first_x(&layout.lines[0]).abs() < 0.01,
             "the line with no word space is flush left"
         );
+        // The paragraph's last line takes the variant's alignment, not the
+        // flush left of a line that could not be spread.
+        let last = &layout.lines[layout.lines.len() - 1];
+        assert!(first_x(last) > 0.0, "the last line is right-aligned");
     }
 
     #[test]
     fn a_point_type_layer_has_no_column() {
-        let all = layout("aa\rbb", None, Justify::JustifyAll);
+        let all = layout("aa\rb", None, Justify::JustifyAll);
         assert_eq!(all.lines.len(), 2);
         for line in &all.lines {
             assert!(line.advance < COLUMN, "the line is not spread");
             assert!(first_x(line).abs() < 0.01, "the line keeps the alignment");
         }
-        let right = layout("aa\rbb", None, Justify::JustifyLastRight);
+        let right = layout("aa\rb", None, Justify::JustifyLastRight);
         for line in &right.lines {
             assert!(line.advance < COLUMN, "the line is not spread");
             assert!(
                 first_x(line) > COLUMN - line.advance - 0.01,
                 "the line keeps the variant's alignment"
+            );
+        }
+        // The two lines have different widths, so they sit at different
+        // offsets inside the column.
+        assert!(first_x(&right.lines[1]) > first_x(&right.lines[0]));
+    }
+
+    #[test]
+    fn the_caret_stands_where_the_spread_glyphs_are_on_a_wrapped_line() {
+        let bundled = face_for("Liberation Sans").expect("bundled face");
+        let tool = tool(TEXT, Some(boxed()), Justify::JustifyLastRight);
+        let layout = crate::text_render::layout_type(bundled, &tool, 200, 100).expect("lays out");
+        let mut spec = pictura_core::TypeSpec::new(TEXT, "Liberation Sans", 20.0);
+        spec.origin = (0.0, 0.0);
+        spec.box_bounds = Some([0.0, 0.0, f64::from(COLUMN), 200.0]);
+        spec.paragraph.justify = Justify::JustifyLastRight;
+        let stops = crate::type_caret_stops(&spec);
+        // The wrapped line is the one a justification spreads, so its caret
+        // stops stand at the spread glyphs' pens.
+        let line = &layout.lines[0];
+        assert!(
+            line.advance > 0.0 && (line.advance - COLUMN).abs() < 0.01,
+            "the line spreads"
+        );
+        // The caret re-shapes each prefix, so it misses the kerning across a
+        // prefix boundary: a fraction of a pixel, not a word's width.
+        for (glyph, stop) in line.glyphs.iter().zip(stops.iter()) {
+            assert!(
+                (f64::from(glyph.x) - stop[0]).abs() < 1.0,
+                "the caret at {} is not the glyph at {}",
+                stop[0],
+                glyph.x
             );
         }
     }

@@ -11,6 +11,7 @@ use pictura_core::TypeSpec;
 use crate::fonts::face_for;
 use crate::type_layer::{align_factor, flat_rect, leading_px, map, text_box_any};
 use crate::type_paragraph::{line_advance, vertical_cell, visual_lines};
+use crate::type_style::shape_styled;
 
 /// One laid-out line's caret segments, one per character boundary (its end
 /// included), mapped to document pixels.
@@ -79,18 +80,26 @@ fn caret_lines(spec: &TypeSpec) -> Option<(Vec<CaretLine>, f64)> {
                 let ink_advance = advance(ink);
                 let spread = spec.box_bounds.is_some()
                     && crate::type_justify::spreads(justify)
-                    && (!line.soft || crate::type_justify::spreads_last(justify));
+                    && (line.soft || crate::type_justify::spreads_last(justify));
                 let extra = if spread {
-                    crate::type_justify::space_extra(bundled, &trimmed, ink_advance, aw)
-                        .unwrap_or(0.0)
+                    let shaped = shape_styled(bundled, &trimmed, c);
+                    crate::type_justify::space_extra(
+                        bundled,
+                        &trimmed,
+                        crate::type_justify::shaped_spaces(bundled, &shaped),
+                        ink_advance,
+                        aw,
+                    )
+                    .unwrap_or(0.0)
                 } else {
                     0.0
                 };
-                // A spread line fills the column, and a line that cannot be
-                // spread stays flush left; the paragraph's last line, or a
-                // plainly aligned one, takes the alignment.
-                let no_shift = extra > 0.0 || (crate::type_justify::spreads(justify) && line.soft);
-                let shift = if no_shift {
+                // A spread line fills the column, and a line in a justified
+                // paragraph that could not be spread stays flush left; the
+                // paragraph's last line, or a plainly aligned one, takes the
+                // alignment.
+                let flush = crate::type_justify::spreads(justify) && line.soft && extra <= 0.0;
+                let shift = if extra > 0.0 || flush {
                     0.0
                 } else {
                     (aw - ink_advance) * factor

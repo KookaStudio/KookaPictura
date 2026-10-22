@@ -2,7 +2,9 @@
 
 ## Purpose
 Rasterizes type layers with the bundled pure-Rust glyph rasterizer, including Rasterize Layer/All and a dedicated command.
+
 ## Requirements
+
 ### Requirement: A bundled-font, pure-Rust glyph rasterizer
 
 `pictura-render` SHALL bundle one permissively-licensed font and implement
@@ -117,6 +119,9 @@ of the layer's text and style and, when it yields a non-empty raster, replace
 the layer's channels with it, drop `TySh`, clear the type tool, and record one
 `Rasterize Type` state. When the Qt render is empty it SHALL fall back to the
 bundled backend. A non-type layer SHALL still be refused without mutation.
+The Qt render SHALL align the text by the justification bytes 0, 1 and 2; the
+bytes 3 to 6 SHALL render left-aligned, because the Qt text layout cannot
+justify a paragraph's last line to the right or centre it.
 
 #### Scenario: A type layer rasterizes through Qt
 
@@ -166,4 +171,3 @@ library that nothing uses. The backend SHALL remain free of any C dependency.
 
 - **WHEN** the existing shape, raster, render, kerning, and subpixel tests run
 - **THEN** they pass with the same assertions
-
