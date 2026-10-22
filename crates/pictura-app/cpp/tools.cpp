@@ -358,8 +358,6 @@ void ToolController::setActiveTool(ToolId id)
     }
     if (v && v->transform_session_active()) {
         v->cancel_transform();
-        transformDragging_ = false;
-        transformHandle_ = -1;
         if (canvas_) {
             canvas_->clearTransformPreview();
         }
@@ -582,6 +580,7 @@ void ToolController::emitSelectionCommitted() { emit selectionCommitted(); }
 void ToolController::bindCanvas(ImageView* canvas)
 {
     if (canvas_ == canvas) {
+        boundView_ = view();
         // The canvas pointer is unchanged, but the active layer's visibility or
         // identity may have changed under it; re-assert the cursor without
         // waiting for the next mouse move.
@@ -600,6 +599,7 @@ void ToolController::bindCanvas(ImageView* canvas)
     }
     unbindCanvas();
     canvas_ = canvas;
+    boundView_ = view();
     // The current note belongs to the previous document.
     setCurrentNote(-1);
     if (!canvas_) {
@@ -709,8 +709,10 @@ void ToolController::unbindCanvas()
     if (canvas_->transformPreviewActive()) {
         canvas_->clearTransformPreview();
     }
-    transformDragging_ = false;
-    transformHandle_ = -1;
+    if (boundView_ && boundView_->transform_session_active()) {
+        boundView_->cancel_transform();
+    }
+    boundView_ = nullptr;
     guideDrag_ = -1;
     guideHover_ = false;
     canvas_->clearOverlay();
@@ -726,6 +728,13 @@ void ToolController::unbindCanvas()
     dragCommitted_ = false;
     cancelSelectionMove();
     cursorOverSelection_ = false;
+}
+
+void ToolController::forgetView(PictureView* view)
+{
+    if (boundView_ == view) {
+        boundView_ = nullptr;
+    }
 }
 
 void ToolController::setCanvasActivationHandler(std::function<void(ImageView*)> handler)
@@ -845,8 +854,6 @@ void ToolController::handlePressed(const QPointF& imagePos, int button, int modi
             }
         } else {
             if (hit >= 0) {
-                transformDragging_ = true;
-                transformHandle_ = hit;
                 // Free Transform's Ctrl+Alt+Shift corner drag is a Perspective
                 // drag; the session refuses it where it does not apply.
                 if (hit <= 3 && mods.testFlag(Qt::ControlModifier)
@@ -910,7 +917,8 @@ void ToolController::handleMoved(const QPointF& imagePos)
     if (transformSessionActive()) {
         PictureView* v = view();
         const Qt::KeyboardModifiers mods = QGuiApplication::queryKeyboardModifiers();
-        if (transformDragging_ && v && canvas_) {
+        if (v && canvas_ && v->transform_drag_handle() >= 0) {
+            const int dragHandle = v->transform_drag_handle();
             QPointF pointer = imagePos;
             GuideSnap snap;
             if (transformGuideSnap_) {
@@ -928,8 +936,8 @@ void ToolController::handleMoved(const QPointF& imagePos)
                 const ::rust::Vec<double> quad = transform_quad_extents(*v);
                 QList<SmartGuideLine> lines;
                 if (quad.size() >= 8) {
-                    const double x = quad[2 * transformHandle_];
-                    const double y = quad[2 * transformHandle_ + 1];
+                    const double x = quad[2 * dragHandle];
+                    const double y = quad[2 * dragHandle + 1];
                     for (const ImageView::GuideLine& guide : snap.lines) {
                         if (std::abs((guide.vertical ? x : y) - guide.position) < 1e-6) {
                             lines.append({guide.vertical, guide.position});
@@ -997,31 +1005,27 @@ void ToolController::handleReleased(const QPointF& imagePos)
         return;
     }
     if (transformSessionActive()) {
-        if (transformDragging_) {
-            transformDragging_ = false;
-            transformHandle_ = -1;
+        PictureView* v = view();
+        if (v && v->transform_drag_handle() >= 0) {
             transformGuideSnap_ = false;
-            PictureView* v = view();
-            if (v) {
-                v->transform_release();
+            v->transform_release();
+            if (canvas_) {
+                canvas_->clearSmartGuides();
+                canvas_->clearDragSizeHint();
+                // The released anchor's handles go back to near-pointer.
+                if (transform_warp_active(*v)) {
+                    canvas_->setTransformWarp(transform_api::warpOverlay(*v));
+                }
+            }
+            if (transformControls_) {
+                // The controls box applies each gesture on release and stays
+                // on the resulting layer.
+                transformControls_ = false;
+                v->commit_transform();
                 if (canvas_) {
-                    canvas_->clearSmartGuides();
-                    canvas_->clearDragSizeHint();
-                    // The released anchor's handles go back to near-pointer.
-                    if (transform_warp_active(*v)) {
-                        canvas_->setTransformWarp(transform_api::warpOverlay(*v));
-                    }
+                    canvas_->clearTransformPreview();
                 }
-                if (transformControls_) {
-                    // The controls box applies each gesture on release and stays
-                    // on the resulting layer.
-                    transformControls_ = false;
-                    v->commit_transform();
-                    if (canvas_) {
-                        canvas_->clearTransformPreview();
-                    }
-                    syncTransformControls();
-                }
+                syncTransformControls();
             }
         }
         return;

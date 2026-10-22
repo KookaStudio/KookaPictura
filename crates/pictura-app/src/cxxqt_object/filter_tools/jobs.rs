@@ -341,7 +341,10 @@ pub(in crate::cxxqt_object) fn commit_start(
     };
     // The live layer goes back to its pre-preview pixels; the worker filters
     // the same pixels and its document replaces this one on finish.
-    if let (Some(preview), Some(live)) = (rust.filter_preview.take(), rust.session.doc.as_mut()) {
+    if let (Some(preview), Some(live)) = (
+        rust.session.live.take_filter_preview(),
+        rust.session.doc.as_mut(),
+    ) {
         if let Some(layer) = pictura_render::resolve_path_mut(live, &preview.layer_path) {
             preview.baseline.restore(layer);
         }

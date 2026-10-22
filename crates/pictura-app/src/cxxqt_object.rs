@@ -1109,6 +1109,9 @@ pub mod qobject {
         fn transform_dx(&self) -> f64;
         #[qinvokable]
         fn transform_dy(&self) -> f64;
+        /// The handle the live transform drag grabbed; -1 when no drag is live.
+        #[qinvokable]
+        fn transform_drag_handle(&self) -> i32;
         #[qinvokable]
         fn undo(self: Pin<&mut Self>) -> bool;
         #[qinvokable]

@@ -3,10 +3,11 @@
 //! reduced-resolution preview replayed exactly at the commit.
 
 use super::super::document_session::SessionKind;
+use super::super::document_session::{MaskPreview, MaskStroke, PreviewStroke, StrokeSession};
 use super::super::helpers::*;
 use super::super::helpers_composite::display_rgba_bytes;
 use super::super::qobject;
-use super::super::state::{MaskPreview, MaskStroke, PictureViewRust, PreviewStroke};
+use super::super::state::PictureViewRust;
 use super::{gpu_paint_mode, mask_gpu, preview_level};
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
@@ -152,7 +153,7 @@ impl PictureViewRust {
         }
         let built = {
             let rust = &*self;
-            if rust.stroke.is_some() || rust.mask_stroke.is_some() {
+            if rust.session.live.stroke().is_some() || rust.session.live.mask_stroke().is_some() {
                 return false;
             }
             let Some(doc) = rust.session.doc.as_ref() else {
@@ -221,19 +222,25 @@ impl PictureViewRust {
         };
         let has_gpu = gpu.is_some();
         let rust = &mut *self;
-        rust.mask_stroke = Some(mask_stroke);
-        rust.stroke_label = label.to_string();
-        rust.clear_pending_present();
-        rust.gpu_stroke = gpu;
-        rust.gpu_placer = if has_gpu {
-            Some(DabPlacer::new(cfg.spacing, cfg.diameter as f32))
-        } else {
-            None
+        // The mask stroke's own session takes the slot: the stroke, its
+        // backend, and the present state it accumulates travel together.
+        let session = StrokeSession {
+            mask_stroke: Some(mask_stroke),
+            stroke_label: label.to_string(),
+            gpu_stroke: gpu,
+            gpu_placer: if has_gpu {
+                Some(DabPlacer::new(cfg.spacing, cfg.diameter as f32))
+            } else {
+                None
+            },
+            preview,
+            ..Default::default()
         };
-        rust.preview = preview;
+        rust.session.live.set_stroke_session(session);
+        rust.clear_pending_present();
         let dims = rust.session.doc.as_ref().map(|doc| (doc.width, doc.height));
         if let Some((width, height)) = dims {
-            rust.stroke_tiles.reset(width, height);
+            rust.session.live.reset_stroke_tiles(width, height);
         }
         true
     }
@@ -244,18 +251,18 @@ impl qobject::PictureView {
     /// document, copy the changed region back into the real mask, and present
     /// it. Returns whether a pixel changed.
     pub(super) fn mask_dab(mut self: Pin<&mut Self>, x: f64, y: f64, pressure: f64) -> bool {
-        if self.rust().gpu_stroke.is_some() {
+        if self.rust().session.live.gpu_stroke().is_some() {
             return self.as_mut().mask_gpu_dab(x, y, pressure);
         }
         // A previewed mask stroke previews like a pixel one; the exact mask
         // stroke runs at the commit.
-        if self.rust().preview.is_some() {
+        if self.rust().session.live.preview().is_some() {
             return self.as_mut().preview_dab(x, y, pressure);
         }
         let (dirty, rect) = {
             let mut rust = self.as_mut().rust_mut();
             let rust = &mut *rust;
-            let Some(ctx) = rust.mask_stroke.as_mut() else {
+            let Some(ctx) = rust.session.live.mask_stroke_mut() else {
                 return false;
             };
             let sample = StrokeSample {
@@ -274,7 +281,8 @@ impl qobject::PictureView {
         {
             let mut rust = self.as_mut().rust_mut();
             let rust = &mut *rust;
-            let (Some(doc), Some(ctx)) = (rust.session.doc.as_mut(), rust.mask_stroke.as_ref())
+            let (Some(doc), Some(ctx)) =
+                (rust.session.doc.as_mut(), rust.session.live.mask_stroke())
             else {
                 return false;
             };
@@ -304,6 +312,7 @@ impl qobject::PictureView {
         mut ctx: MaskStroke,
         preview: Option<PreviewStroke>,
         label: &str,
+        mut tiles: TileSet,
     ) -> bool {
         if let Some(preview) = preview {
             let t = Instant::now();
@@ -323,7 +332,9 @@ impl qobject::PictureView {
                 };
                 ctx.stroke.sample(&mut ctx.document, local);
                 if let Some(rect) = ctx.stroke.take_dirty() {
-                    rust.stroke_tiles.mark(to_document(rect, ctx.rect));
+                    // The paint session left the slot before this replay, so
+                    // mark the tiles it was taken with, not the slot's.
+                    tiles.mark(to_document(rect, ctx.rect));
                 }
             }
             if let (Some(dirty), Some(doc)) = (ctx.stroke.dirty(), rust.session.doc.as_mut()) {
@@ -338,7 +349,7 @@ impl qobject::PictureView {
             }
             Some(rect) => {
                 let rect = to_document(rect, ctx.rect);
-                let regions = self.as_mut().rust_mut().take_stroke_regions(rect);
+                let regions = tiles.regions(rect);
                 self.as_mut().edit(label, |_| Edit::Regions {
                     rects: regions,
                     notify: false,

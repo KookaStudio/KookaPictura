@@ -273,6 +273,9 @@ public:
 
     void bindCanvas(ImageView* canvas);
     void unbindCanvas();
+    // Forget a view that is about to be destroyed, so unbinding its canvas
+    // never reads a freed pointer.
+    void forgetView(PictureView* view);
     ImageView* canvas() const override { return canvas_; }
 
     // Route a canvas right-click to the active tool's context menu. `canvas` is
@@ -547,6 +550,9 @@ private:
 
     ToolRegistry registry_;
     ImageView* canvas_ = nullptr;
+    // The view that owns `canvas_`. A tab switch makes `view()` the incoming
+    // one before `unbindCanvas` runs, so the outgoing owner is remembered.
+    PictureView* boundView_ = nullptr;
     std::function<PictureView*()> viewProvider_;
     std::function<void(ImageView*)> canvasActivationHandler_;
     ToolId active_ = ToolId::Move;
@@ -587,8 +593,6 @@ private:
     // private to that handler.
     QPointF selectionMoveAnchor_;
 
-    bool transformDragging_ = false;
-    int transformHandle_ = -1;
     // A Distort corner's press point and start corner, for guide snapping.
     QPointF transformPressPos_;
     QPointF transformStartCorner_;

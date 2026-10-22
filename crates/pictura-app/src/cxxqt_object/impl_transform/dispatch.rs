@@ -1,6 +1,6 @@
+use super::super::document_session::{TransformMode, TransformSession};
 use super::super::helpers::*;
 use super::super::qobject;
-use super::super::state::{TransformMode, TransformSession};
 use super::distort::gesture_distort;
 use super::geometry::{
     gesture_rotate, gesture_scale, gesture_translate, hit_test_quad, pivot_drag, pivot_hit,
@@ -38,7 +38,7 @@ impl qobject::PictureView {
     ) -> i32 {
         let (hit, start_quad) = {
             let rust = self.rust();
-            match rust.transform_session.as_ref() {
+            match rust.session.live.transform() {
                 Some(session) if session.warp.is_some() => {
                     let hit = warp_hit_test(session, x, y, zoom);
                     (hit, session_quad(session))
@@ -59,7 +59,7 @@ impl qobject::PictureView {
             return -1;
         }
         let mut rust = self.as_mut().rust_mut();
-        if let Some(session) = rust.transform_session.as_mut() {
+        if let Some(session) = rust.session.live.transform_mut() {
             if session.warp.is_some() && warp_press(session, x, y, zoom) < 0 {
                 return -1;
             }
@@ -84,7 +84,7 @@ impl qobject::PictureView {
 
     /// Hover hit-test for cursor selection; no session is mutated.
     pub fn transform_hit_test(&self, x: f64, y: f64, zoom: f64) -> i32 {
-        match self.rust().transform_session.as_ref() {
+        match self.rust().session.live.transform() {
             Some(session) if session.warp.is_some() => warp_hit_test(session, x, y, zoom),
             Some(session) => {
                 if pivot_hit(session, x, y, zoom) {
@@ -113,7 +113,7 @@ impl qobject::PictureView {
             return false;
         }
         let mut rust = self.as_mut().rust_mut();
-        let Some(session) = rust.transform_session.as_mut() else {
+        let Some(session) = rust.session.live.transform_mut() else {
             return false;
         };
         if !session.dragging {
@@ -182,7 +182,7 @@ impl qobject::PictureView {
     /// End the active drag. The session stays open until commit/cancel.
     pub fn transform_release(mut self: Pin<&mut Self>) -> bool {
         let mut rust = self.as_mut().rust_mut();
-        let Some(session) = rust.transform_session.as_mut() else {
+        let Some(session) = rust.session.live.transform_mut() else {
             return false;
         };
         session.dragging = false;

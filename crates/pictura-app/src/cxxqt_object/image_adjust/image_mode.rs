@@ -233,7 +233,7 @@ fn image_depth_available(view: &PictureView, bits: i32) -> bool {
 fn commit(mut view: Pin<&mut PictureView>, convert: impl FnOnce(&mut Document) -> bool) -> bool {
     let converted = {
         let mut rust = view.as_mut().rust_mut();
-        if let Some(base) = rust.mode_preview.take() {
+        if let Some(base) = rust.session.live.take_mode_preview() {
             rust.session.doc = Some(base);
         }
         let Some(doc) = rust.session.doc.as_mut() else {
@@ -339,15 +339,17 @@ impl super::super::state::PictureViewRust {
         if !self.slot_allows(super::super::document_session::SessionKind::ModePreview) {
             return None;
         }
-        if self.mode_preview.is_none() {
-            self.mode_preview = self.session.doc.clone();
+        if self.session.live.mode_preview().is_none() {
+            if let Some(base) = self.session.doc.clone() {
+                self.session.live.set_mode_preview(base);
+            }
         }
-        self.mode_preview.clone()
+        self.session.live.mode_preview().cloned()
     }
 
     /// Drop the live mode preview, restoring the pre-preview document.
     pub(in crate::cxxqt_object) fn cancel_mode_preview(&mut self) -> bool {
-        let Some(base) = self.mode_preview.take() else {
+        let Some(base) = self.session.live.take_mode_preview() else {
             return false;
         };
         self.session.doc = Some(base);

@@ -1,8 +1,8 @@
-use super::document_session::SessionKind;
+use super::document_session::{PreviewStroke, SessionKind, StrokeSession};
 use super::helpers::*;
 use super::helpers_composite::{patch_composite_region, planes_of, rgba_image};
 use super::qobject;
-use super::state::{PictureViewRust, PreviewStroke};
+use super::state::PictureViewRust;
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -22,14 +22,15 @@ impl PictureViewRust {
     /// region to present now — the dab that opens a frame — and `None` means it
     /// accumulates until [`Self::take_pending_present`].
     pub(super) fn queue_present(&mut self, rect: PsdRect) -> Option<PsdRect> {
-        if self.present_flush_due {
-            self.pending_present = Some(match self.pending_present.take() {
+        if self.session.live.present_flush_due() {
+            let pending = self.session.live.take_pending_present();
+            self.session.live.set_pending_present(Some(match pending {
                 Some(pending) => union_rect(pending, rect),
                 None => rect,
-            });
+            }));
             None
         } else {
-            self.present_flush_due = true;
+            self.session.live.set_present_flush_due(true);
             Some(rect)
         }
     }
@@ -37,23 +38,26 @@ impl PictureViewRust {
     /// Clear the frame and hand back the region accumulated since the last
     /// present, if any.
     pub(super) fn take_pending_present(&mut self) -> Option<PsdRect> {
-        self.present_flush_due = false;
-        self.pending_present.take()
+        self.session.live.set_present_flush_due(false);
+        self.session.live.take_pending_present()
     }
 
     /// Drop a pending present: the stroke start, the commit refresh and the
     /// cancel restore all supersede whatever it would have shown.
     pub(super) fn clear_pending_present(&mut self) {
-        self.pending_present = None;
-        self.present_flush_due = false;
+        self.session.live.set_pending_present(None);
+        self.session.live.set_present_flush_due(false);
     }
 
     /// The stroke's dirty tiles as disjoint document rectangles, falling back to
     /// `union` when the tiles were never marked (a path that bypasses
     /// `take_dirty`) or are not worth decomposing.
+    #[cfg(test)]
     pub(super) fn take_stroke_regions(&mut self, union: PsdRect) -> Vec<PsdRect> {
-        let tiles = std::mem::take(&mut self.stroke_tiles);
-        tiles.regions(union)
+        match self.session.live.take_stroke_tiles() {
+            Some(tiles) => tiles.regions(union),
+            None => vec![union],
+        }
     }
 
     /// Composite `rect` of the current source (the active stroke's working
@@ -70,7 +74,7 @@ impl PictureViewRust {
         &mut self,
         rect: PsdRect,
     ) -> Option<(i32, i32, PsdRect, PixelBuffer)> {
-        let painting = self.mask_stroke.is_some();
+        let painting = self.session.live.mask_stroke().is_some();
         let source: &Document = self.session.doc.as_ref()?;
         let (x0, y0, w, h) = clamp_region(rect, source.width, source.height)?;
         let gpu_compute = self.gpu_compute;
@@ -103,7 +107,15 @@ impl PictureViewRust {
     /// whole pre-stroke document when the stroke changed its structure), and
     /// return the document rectangle it had painted.
     pub(super) fn cancel_stroke(&mut self) -> Option<PsdRect> {
-        if let Some(mut ctx) = self.mask_stroke.take() {
+        let session = self.session.live.take_stroke_session()?;
+        self.cancel_stroke_session(session)
+    }
+
+    /// Abandon a paint session, putting back the pixels it changed (or the
+    /// whole pre-stroke document when the stroke changed its structure), and
+    /// return the document rectangle it had painted.
+    pub(super) fn cancel_stroke_session(&mut self, session: StrokeSession) -> Option<PsdRect> {
+        if let Some(mut ctx) = session.mask_stroke {
             let dirty = ctx.stroke.dirty();
             ctx.stroke.cancel(&mut ctx.document);
             if let Some(doc) = self.session.doc.as_mut() {
@@ -116,9 +128,9 @@ impl PictureViewRust {
                 right: rect.right + ctx.rect.left,
             });
         }
-        let stroke = self.stroke.take()?;
+        let stroke = session.stroke?;
         let dirty = stroke.dirty();
-        match (self.stroke_base.take(), self.session.doc.as_mut()) {
+        match (session.stroke_base, self.session.doc.as_mut()) {
             (Some(base), _) => self.session.doc = Some(base),
             (None, Some(doc)) => {
                 stroke.cancel(doc);
@@ -445,17 +457,20 @@ impl PictureViewRust {
         match begun {
             Ok(stroke) => {
                 let rust = &mut *self;
-                rust.stroke = Some(stroke);
-                rust.stroke_label = label.to_string();
+                // The stroke's own session takes the slot: the payload and the
+                // present state it accumulates travel together.
+                let session = StrokeSession {
+                    stroke: Some(stroke),
+                    stroke_label: label.to_string(),
+                    ..Default::default()
+                };
+                rust.session.live.set_stroke_session(session);
                 // A new stroke opens its own present frame.
                 rust.clear_pending_present();
                 let dims = rust.session.doc.as_ref().map(|doc| (doc.width, doc.height));
                 if let Some((width, height)) = dims {
-                    rust.stroke_tiles.reset(width, height);
+                    rust.session.live.reset_stroke_tiles(width, height);
                 }
-                rust.gpu_stroke = None;
-                rust.gpu_placer = None;
-                rust.preview = None;
                 // GPU first, but only where the CPU has a ceiling to beat: a dab
                 // over the raster budget. Below it the exact CPU raster is a few
                 // hundred microseconds, while seeding the GPU costs a full-frame
@@ -471,7 +486,11 @@ impl PictureViewRust {
                 let gpu_mode = gpu_paint_mode(cfg.mode)
                     .filter(|_| !cfg.auto_erase && cfg.grain == 0 && !cfg.wet_edges);
                 if level.is_some() && rust.gpu_compute {
-                    let seeded = match (gpu_mode, rust.stroke.as_ref(), rust.session.doc.as_ref()) {
+                    let seeded = match (
+                        gpu_mode,
+                        rust.session.live.stroke(),
+                        rust.session.doc.as_ref(),
+                    ) {
                         (Some(mode), Some(stroke), Some(doc)) if !stroke.transparency_locked() => {
                             let t = Instant::now();
                             let seed = stroke.base_layer_rgba_doc(doc);
@@ -507,21 +526,26 @@ impl PictureViewRust {
                         _ => None,
                     };
                     if let Some(gpu) = seeded {
-                        rust.gpu_stroke = Some(gpu);
-                        rust.gpu_placer = Some(DabPlacer::new(cfg.spacing, cfg.diameter as f32));
+                        rust.session.live.set_gpu_stroke(gpu);
+                        rust.session
+                            .live
+                            .set_gpu_placer(DabPlacer::new(cfg.spacing, cfg.diameter as f32));
                     }
                 }
                 // The reduced-level preview is the fallback when the GPU path is
                 // not taken; the exact stroke below still runs, replayed from the
                 // log when the stroke commits.
-                if rust.gpu_stroke.is_none() {
+                if rust.session.live.gpu_stroke().is_none() {
                     let t = Instant::now();
-                    rust.preview = match (level, rust.level0.as_ref()) {
+                    let preview = match (level, rust.level0.as_ref()) {
                         (Some(level), Some(level0)) => {
                             PreviewStroke::new(level, &rust.pyramid, level0, cfg)
                         }
                         _ => None,
                     };
+                    if let Some(preview) = preview {
+                        rust.session.live.set_preview(preview);
+                    }
                     paint_timing::record("preview_new (snapshot)", t.elapsed());
                 }
                 true
@@ -534,20 +558,20 @@ impl PictureViewRust {
 impl qobject::PictureView {
     pub fn paint_dab(mut self: Pin<&mut Self>, x: f64, y: f64, pressure: f64) -> bool {
         let _dab = paint_timing::Scope::new("dab_total");
-        if self.rust().mask_stroke.is_some() {
+        if self.rust().session.live.mask_stroke().is_some() {
             return self.as_mut().mask_dab(x, y, pressure);
         }
-        if self.rust().gpu_stroke.is_some() {
+        if self.rust().session.live.gpu_stroke().is_some() {
             return self.as_mut().gpu_dab(x, y, pressure);
         }
-        if self.rust().preview.is_some() {
+        if self.rust().session.live.preview().is_some() {
             return self.as_mut().preview_dab(x, y, pressure);
         }
         let dirty = {
             let mut rust = self.as_mut().rust_mut();
             let rust = &mut *rust;
             let t = Instant::now();
-            let painted = match (rust.stroke.as_mut(), rust.session.doc.as_mut()) {
+            let painted = match (rust.session.live.stroke_mut(), rust.session.doc.as_mut()) {
                 (Some(stroke), Some(doc)) => stroke.sample(
                     doc,
                     StrokeSample {
@@ -562,9 +586,9 @@ impl qobject::PictureView {
             if !painted {
                 return false;
             }
-            let dirty = rust.stroke.as_mut().and_then(Stroke::take_dirty);
+            let dirty = rust.session.live.stroke_mut().and_then(Stroke::take_dirty);
             if let Some(rect) = dirty {
-                rust.stroke_tiles.mark(rect);
+                rust.session.live.mark_stroke_tile(rect);
             }
             dirty
         };
@@ -592,7 +616,7 @@ impl qobject::PictureView {
     /// calls it directly.
     pub fn flush_present(mut self: Pin<&mut Self>) -> bool {
         let _flush = paint_timing::Scope::new("flush_present_total");
-        let previewing = self.rust().preview.is_some();
+        let previewing = self.rust().session.live.preview().is_some();
         let pending = {
             let mut rust = self.as_mut().rust_mut();
             rust.take_pending_present()
@@ -622,7 +646,7 @@ impl qobject::PictureView {
         };
         let opens_frame = {
             let mut rust = self.as_mut().rust_mut();
-            let Some(preview) = rust.preview.as_mut() else {
+            let Some(preview) = rust.session.live.preview_mut() else {
                 return false;
             };
             preview.samples.push(sample);
@@ -667,7 +691,7 @@ impl qobject::PictureView {
     fn preview_present(mut self: Pin<&mut Self>) -> Option<(cxx_qt_lib::QImage, i32, i32)> {
         let mut rust = self.as_mut().rust_mut();
         let (rgba, rect, level, scale) = {
-            let preview = rust.preview.as_ref()?;
+            let preview = rust.session.live.preview()?;
             let rect = preview.extent?;
             let rgba = preview_blend(preview, rect);
             (rgba, rect, preview.level, preview.scale as i32)
@@ -699,13 +723,13 @@ impl qobject::PictureView {
         {
             let mut rust = self.as_mut().rust_mut();
             let rust = &mut *rust;
-            let Some(placer) = rust.gpu_placer.as_mut() else {
+            let Some(placer) = rust.session.live.gpu_placer_mut() else {
                 return false;
             };
             placer.feed(sample.x, sample.y, &mut dabs);
             for (cx, cy) in dabs {
                 let dab = {
-                    let Some(gpu) = rust.gpu_stroke.as_mut() else {
+                    let Some(gpu) = rust.session.live.gpu_stroke_mut() else {
                         break;
                     };
                     let t = Instant::now();
@@ -717,7 +741,7 @@ impl qobject::PictureView {
                     continue;
                 };
                 let t = Instant::now();
-                let patched = match (rust.stroke.as_mut(), rust.session.doc.as_mut()) {
+                let patched = match (rust.session.live.stroke_mut(), rust.session.doc.as_mut()) {
                     (Some(stroke), Some(doc)) => {
                         stroke.patch_working_layer(doc, rect, plane_stride, &planes)
                     }
@@ -727,7 +751,7 @@ impl qobject::PictureView {
                 if !patched {
                     continue;
                 }
-                rust.stroke_tiles.mark(rect);
+                rust.session.live.mark_stroke_tile(rect);
                 changed = Some(changed.map_or(rect, |u| union_rect(u, rect)));
             }
         }
@@ -758,34 +782,44 @@ impl qobject::PictureView {
     /// this unambiguously.
     pub fn preview_present_level(&self) -> i32 {
         let rust = self.rust();
-        if rust.gpu_stroke.is_some() {
+        if rust.session.live.gpu_stroke().is_some() {
             return -1;
         }
-        rust.preview
-            .as_ref()
+        rust.session
+            .live
+            .preview()
             .map_or(0, |preview| preview.level as i32)
     }
 
     pub fn end_paint(mut self: Pin<&mut Self>) -> bool {
         let t0 = Instant::now();
-        let (stroke, mask_stroke, label, preview, base, pending) = {
+        let (session, pending) = {
             let mut rust = self.as_mut().rust_mut();
             // Every region a live stroke presented already reached the
             // composite; the commit presents the one still pending.
             let pending = rust.take_pending_present();
-            rust.gpu_stroke = None;
-            rust.gpu_placer = None;
-            (
-                rust.stroke.take(),
-                rust.mask_stroke.take(),
-                rust.stroke_label.clone(),
-                rust.preview.take(),
-                rust.stroke_base.take(),
-                pending,
-            )
+            // The commit takes the whole paint session: the stroke, its
+            // backend, and the present state it accumulated.
+            (rust.session.live.take_stroke_session(), pending)
         };
+        let Some(session) = session else {
+            paint_timing::record("end_paint_total", t0.elapsed());
+            paint_timing::report();
+            return false;
+        };
+        let StrokeSession {
+            stroke,
+            mask_stroke,
+            preview,
+            stroke_label,
+            stroke_base,
+            mut stroke_tiles,
+            ..
+        } = session;
         if let Some(ctx) = mask_stroke {
-            let ok = self.as_mut().end_mask_paint(ctx, preview, &label);
+            let ok = self
+                .as_mut()
+                .end_mask_paint(ctx, preview, &stroke_label, stroke_tiles);
             paint_timing::record("end_paint_total", t0.elapsed());
             paint_timing::report();
             return ok;
@@ -806,7 +840,7 @@ impl qobject::PictureView {
                         for sample in preview.samples {
                             stroke.sample(doc, sample);
                             if let Some(rect) = stroke.take_dirty() {
-                                rust.stroke_tiles.mark(rect);
+                                stroke_tiles.mark(rect);
                             }
                         }
                     }
@@ -819,7 +853,7 @@ impl qobject::PictureView {
                     None => {
                         // A stroke that changed nothing leaves no history state,
                         // so a Background it layered goes back to a Background.
-                        if let Some(base) = base {
+                        if let Some(base) = stroke_base {
                             self.as_mut().rust_mut().session.doc = Some(base);
                         }
                         self.as_mut().recomposite();
@@ -830,20 +864,19 @@ impl qobject::PictureView {
                         // refresh its dirty tiles. Decomposing them into
                         // disjoint rectangles keeps a diagonal stroke from
                         // recompositing its whole bounding box; the collapse in
-                        // `take_stroke_regions` falls back to the union when the
+                        // `TileSet::regions` falls back to the union when the
                         // tiles are not worth splitting. Patching level 0 and
                         // rebuilding from it is also what overwrites the preview
                         // level, so the canvas returns to the zoom-selected one.
                         // Any other stroke presented as it went, so only the
                         // region still pending is left.
                         let regions = if previewed {
-                            self.as_mut().rust_mut().take_stroke_regions(rect)
+                            stroke_tiles.regions(rect)
                         } else {
-                            self.as_mut().rust_mut().stroke_tiles = Default::default();
                             pending.into_iter().collect()
                         };
                         let t = Instant::now();
-                        self.as_mut().edit(&label, |_| Edit::Regions {
+                        self.as_mut().edit(&stroke_label, |_| Edit::Regions {
                             rects: regions,
                             notify: false,
                         });
@@ -871,10 +904,8 @@ impl qobject::PictureView {
             rust.clear_pending_present();
             // The restore below refreshes the stroke's extent from level 0,
             // which rebuilds the stored levels and so drops the preview too.
-            rust.preview = None;
-            rust.gpu_stroke = None;
-            rust.gpu_placer = None;
-            rust.stroke_tiles = Default::default();
+            // Taking the paint session drops its preview, its GPU stroke and
+            // its dirty tiles with it.
             rust.cancel_stroke()
         };
         match dirty {
@@ -896,7 +927,8 @@ impl qobject::PictureView {
     }
 
     pub fn is_painting(&self) -> bool {
-        self.rust().stroke.is_some() || self.rust().mask_stroke.is_some()
+        self.rust().session.live.stroke().is_some()
+            || self.rust().session.live.mask_stroke().is_some()
     }
 }
 

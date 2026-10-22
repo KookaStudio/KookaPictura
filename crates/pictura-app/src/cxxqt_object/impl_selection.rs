@@ -145,8 +145,9 @@ impl qobject::PictureView {
                     return false;
                 };
                 let Some(selection) = rust
-                    .selection_move_origin
-                    .as_ref()
+                    .session
+                    .live
+                    .selection_move_origin()
                     .or(rust.session.selection.as_ref())
                 else {
                     return false;
@@ -178,8 +179,7 @@ impl qobject::PictureView {
             }
             {
                 let mut rust = self.as_mut().rust_mut();
-                rust.selection_move_origin = None;
-                rust.selection_move_delta = None;
+                rust.session.live.take_selection_move();
                 rust.session.selection = Some(moved_selection);
             }
             let outcome = match dirty {
@@ -197,8 +197,10 @@ impl qobject::PictureView {
             let rust = self.rust();
             let (Some(doc), Some(selection)) = (
                 rust.session.doc.as_ref(),
-                rust.selection_move_origin
-                    .clone()
+                rust.session
+                    .live
+                    .selection_move_origin()
+                    .cloned()
                     .or_else(|| rust.session.selection.clone()),
             ) else {
                 return false;
@@ -229,8 +231,7 @@ impl qobject::PictureView {
         }
         {
             let mut rust = self.as_mut().rust_mut();
-            rust.selection_move_origin = None;
-            rust.selection_move_delta = None;
+            rust.session.live.take_selection_move();
             rust.session.selection = Some(moved_selection);
             if duplicate {
                 // `layer_via_copy` inserts the copy directly above the source
@@ -267,8 +268,9 @@ impl qobject::PictureView {
                 return false;
             };
             let selection = rust
-                .selection_move_origin
-                .as_ref()
+                .session
+                .live
+                .selection_move_origin()
                 .or(rust.session.selection.as_ref());
             let (Some(selection), Some(path)) = (selection, rust.layer_target.single()) else {
                 return false;
@@ -649,28 +651,24 @@ impl qobject::PictureView {
             let Some(doc) = rust.session.doc.as_ref() else {
                 return false;
             };
-            if rust.pending_lasso.len() < 3 {
+            let points = rust.session.live.lasso_points().unwrap_or_default();
+            if points.len() < 3 {
                 return false;
             }
-            feathered(
-                Selection::polygon(doc.width, doc.height, &rust.pending_lasso),
-                feather,
-            )
+            feathered(Selection::polygon(doc.width, doc.height, points), feather)
         };
-        let mode = combine_mode_from(&self.rust().pending_lasso_mode);
+        let mode = combine_mode_from(self.rust().session.live.lasso_mode().unwrap_or_default());
         if !self.as_mut().apply_selection(shape, mode) {
             return false;
         }
         let mut rust = self.as_mut().rust_mut();
-        rust.pending_lasso.clear();
-        rust.pending_lasso_mode.clear();
+        rust.session.live.take_selection_gesture();
         true
     }
 
     pub fn cancel_lasso(mut self: Pin<&mut Self>) {
         let mut rust = self.as_mut().rust_mut();
-        rust.pending_lasso.clear();
-        rust.pending_lasso_mode.clear();
+        rust.session.live.take_selection_gesture();
     }
 
     pub fn quick_select(
@@ -772,14 +770,27 @@ impl super::state::PictureViewRust {
         if !self.slot_allows(super::document_session::SessionKind::Lasso) {
             return false;
         }
-        self.pending_lasso_mode = mode.to_string();
-        self.pending_lasso.clear();
+        match self.session.live.selection_gesture_mut() {
+            Some(gesture) => {
+                gesture.mode = mode.to_string();
+                gesture.points.clear();
+            }
+            None => {
+                let gesture = super::document_session::SelectionGesture {
+                    mode: mode.to_string(),
+                    ..Default::default()
+                };
+                self.session.live.set_selection_gesture(gesture);
+            }
+        }
         true
     }
 
     /// Add a point to the live lasso.
     pub(super) fn add_lasso_point(&mut self, x: i32, y: i32) {
-        self.pending_lasso.push((x, y));
+        if let Some(points) = self.session.live.lasso_points_mut() {
+            points.push((x, y));
+        }
     }
 }
 

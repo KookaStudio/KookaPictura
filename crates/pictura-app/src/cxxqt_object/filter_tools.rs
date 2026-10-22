@@ -856,8 +856,9 @@ fn filter_proxy_layer(
     // An open preview has already re-filtered the live layer; the proxy must
     // start from its pre-preview snapshot so the two never compound.
     let original = rust
-        .filter_preview
-        .as_ref()
+        .session
+        .live
+        .filter_preview()
         .filter(|p| p.layer_path.as_str() == active)
         .map(|p| p.baseline.original(resolved));
     let layer = original.as_deref().unwrap_or(resolved);

@@ -8,6 +8,7 @@
 
 use pictura_core::PsdRect;
 
+use super::document_session::SelectionMoveState;
 use super::state::PictureViewRust;
 
 impl PictureViewRust {
@@ -19,27 +20,33 @@ impl PictureViewRust {
         let Some(origin) = self.session.selection.clone() else {
             return false;
         };
-        self.selection_move_origin = Some(origin);
-        self.selection_move_delta = Some((0, 0));
+        let state = SelectionMoveState {
+            origin: Some(origin),
+            delta: Some((0, 0)),
+        };
+        self.session.live.set_selection_move(state);
         true
     }
 
     /// Record the drag offset. False when no drag is active.
     pub(super) fn preview_selection_move(&mut self, dx: i32, dy: i32) -> bool {
-        if self.selection_move_origin.is_none() {
+        if self.session.live.selection_move_origin().is_none() {
             return false;
         }
-        self.selection_move_delta = Some((dx, dy));
+        self.session.live.set_selection_move_delta((dx, dy));
         true
     }
 
     /// Build the translated plane once and drop the drag. False when no drag is
     /// active or the offset is zero, in which case the origin stays in place.
     pub(super) fn commit_selection_move(&mut self) -> bool {
-        let Some(origin) = self.selection_move_origin.take() else {
+        let Some(state) = self.session.live.take_selection_move() else {
             return false;
         };
-        let delta = self.selection_move_delta.take().unwrap_or((0, 0));
+        let Some(origin) = state.origin else {
+            return false;
+        };
+        let delta = state.delta.unwrap_or((0, 0));
         if delta == (0, 0) {
             return false;
         }
@@ -49,8 +56,10 @@ impl PictureViewRust {
 
     /// Drop the drag without touching the plane. False when no drag is active.
     pub(super) fn cancel_selection_move(&mut self) -> bool {
-        self.selection_move_delta = None;
-        self.selection_move_origin.take().is_some()
+        self.session
+            .live
+            .take_selection_move()
+            .is_some_and(|state| state.origin.is_some())
     }
 
     /// The selection's bounding box as it looks now: the origin's bounds
@@ -59,7 +68,7 @@ impl PictureViewRust {
     pub(super) fn selection_bounds(&self) -> Option<PsdRect> {
         let sel = self.session.selection.as_ref()?;
         let bounds = sel.bounds()?;
-        let Some((dx, dy)) = self.selection_move_delta else {
+        let Some(&(dx, dy)) = self.session.live.selection_move_delta() else {
             return Some(bounds);
         };
         let (w, h) = (sel.width as i32, sel.height as i32);
@@ -77,7 +86,12 @@ impl PictureViewRust {
         let Some(sel) = self.session.selection.as_ref() else {
             return 0;
         };
-        let (dx, dy) = self.selection_move_delta.unwrap_or((0, 0));
+        let (dx, dy) = self
+            .session
+            .live
+            .selection_move_delta()
+            .copied()
+            .unwrap_or((0, 0));
         let (x, y) = (x - dx, y - dy);
         if x < 0 || y < 0 || x >= sel.width as i32 || y >= sel.height as i32 {
             return 0;
@@ -113,7 +127,7 @@ mod tests {
         assert!(rust.begin_selection_move());
         assert!(rust.preview_selection_move(3, 4));
         assert_eq!(rust.session.selection.as_ref(), Some(&origin));
-        assert_eq!(rust.selection_move_delta, Some((3, 4)));
+        assert_eq!(rust.session.live.selection_move_delta(), Some(&(3, 4)));
     }
 
     #[test]
@@ -138,8 +152,8 @@ mod tests {
             rust.session.selection.as_ref(),
             Some(&origin.translate(3, 4))
         );
-        assert!(rust.selection_move_origin.is_none());
-        assert!(rust.selection_move_delta.is_none());
+        assert!(rust.session.live.selection_move_origin().is_none());
+        assert!(rust.session.live.selection_move_delta().is_none());
     }
 
     #[test]
@@ -149,7 +163,7 @@ mod tests {
         assert!(rust.begin_selection_move());
         assert!(!rust.commit_selection_move());
         assert_eq!(rust.session.selection.as_ref(), Some(&origin));
-        assert!(rust.selection_move_delta.is_none());
+        assert!(rust.session.live.selection_move_delta().is_none());
     }
 
     #[test]
@@ -160,7 +174,7 @@ mod tests {
         assert!(rust.preview_selection_move(-6, 9));
         assert!(rust.cancel_selection_move());
         assert_eq!(rust.session.selection.as_ref(), Some(&origin));
-        assert!(rust.selection_move_delta.is_none());
+        assert!(rust.session.live.selection_move_delta().is_none());
         assert_eq!(rust.selection_coverage_at(5, 5), 255);
     }
 
