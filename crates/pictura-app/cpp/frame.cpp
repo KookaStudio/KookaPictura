@@ -673,6 +673,9 @@ void PicturaMainWindow::removeDocument(int index)
         openWired_.remove(entry.view);
         pdfProbes_.remove(entry.view);
         entry.view->cancel_transform();
+        if (tools_) {
+            tools_->forgetView(entry.view);
+        }
     }
     openSourcePaths_.remove(entry.token);
     openWarnings_.remove(entry.token);

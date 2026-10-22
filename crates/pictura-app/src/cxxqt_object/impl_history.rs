@@ -204,7 +204,6 @@ impl qobject::PictureView {
         let target = rust.layer_target.clone();
         rust.session.history.set_current_target(&target);
         rust.session.content_revision = rust.session.content_revision.wrapping_add(1);
-        rust.stroke = None;
         rust.mask_edit_target = None;
         rust.active_path = super::paths::ActivePath::Work;
         rust.path_on_layer = false;

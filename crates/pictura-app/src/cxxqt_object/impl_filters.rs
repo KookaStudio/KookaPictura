@@ -1,8 +1,9 @@
+use super::document_session::{FilterPreview, PreviewBaseline};
 use super::filter_map::filter_from_kind_params;
 use super::helpers::*;
 use super::helpers_composite::*;
 use super::qobject;
-use super::state::{FilterPreview, PictureViewRust, PreviewBaseline};
+use super::state::PictureViewRust;
 use crate::cxxqt_object::edit::Edit;
 #[cfg(test)]
 use crate::layer_target::LayerTarget;
@@ -237,7 +238,16 @@ pub(super) fn apply_op_active_region(
                 .map(|selection| selection_to_mask(selection, doc))
         }
     };
-    let existing = rust.filter_preview.take_if(|p| p.layer_path == path);
+    let same_target = rust
+        .session
+        .live
+        .filter_preview()
+        .is_some_and(|p| p.layer_path == path);
+    let existing = if same_target {
+        rust.session.live.take_filter_preview()
+    } else {
+        None
+    };
     let Some(doc) = rust.session.doc.as_mut() else {
         rust.filter_error = Some("there is no document".to_string());
         return None;
@@ -312,10 +322,13 @@ pub(super) fn apply_op_active_region(
         rust.filter_error = Some(error.to_string());
         return None;
     }
-    rust.filter_preview = baseline.map(|baseline| FilterPreview {
-        layer_path: path,
-        baseline,
-    });
+    match baseline {
+        Some(baseline) => rust.session.live.set_filter_preview(FilterPreview {
+            layer_path: path,
+            baseline,
+        }),
+        None => rust.session.live.clear_filter_preview(),
+    }
     Some(region_out)
 }
 
@@ -351,14 +364,15 @@ pub(super) fn pixel_filter_target(rust: &mut PictureViewRust) -> Option<String> 
     // A preview for another layer must not be silently abandoned: refuse so its
     // baseline stays intact until it is cancelled or committed.
     if rust
-        .filter_preview
-        .as_ref()
+        .session
+        .live
+        .filter_preview()
         .is_some_and(|p| p.layer_path != path)
     {
         rust.filter_error = Some("another layer has an open preview; cancel it first".to_string());
         return None;
     }
-    if rust.mask_filter_preview.is_some() {
+    if rust.session.live.mask_filter_preview().is_some() {
         rust.filter_error = Some("a mask preview is open; cancel it first".to_string());
         return None;
     }
@@ -485,19 +499,21 @@ fn apply_mask_op(
     _preview_region: Option<pictura_core::PsdRect>,
 ) -> Option<Option<pictura_core::PsdRect>> {
     // A preview for another target must not be silently abandoned.
-    if rust.filter_preview.is_some()
+    if rust.session.live.filter_preview().is_some()
         || rust
-            .mask_filter_preview
-            .as_ref()
+            .session
+            .live
+            .mask_filter_preview()
             .is_some_and(|(p, _)| p != path)
     {
         rust.filter_error = Some("another layer has an open preview; cancel it first".to_string());
         return None;
     }
     let baseline = rust
-        .mask_filter_preview
-        .as_ref()
-        .filter(|(p, _)| p == path)
+        .session
+        .live
+        .mask_filter_preview()
+        .filter(|(p, _)| p.as_str() == path)
         .map(|(_, coverage)| coverage.clone());
     let (mut mask, selection) = {
         let doc = rust.session.doc.as_ref()?;
@@ -558,10 +574,12 @@ fn apply_mask_op(
         return None;
     }
     if commit {
-        rust.mask_filter_preview = None;
+        rust.session.live.clear_mask_filter_preview();
     } else {
         let original = baseline.or(snapshot).expect("a preview has a baseline");
-        rust.mask_filter_preview = Some((path.to_string(), original));
+        rust.session
+            .live
+            .set_mask_filter_preview(path.to_string(), original);
     }
     Some(Some(mask.rect))
 }
@@ -571,26 +589,40 @@ fn apply_mask_op(
 pub(super) fn cancel_filter_preview(
     rust: &mut PictureViewRust,
 ) -> Option<Option<pictura_core::PsdRect>> {
-    if let Some((path, original)) = rust.mask_filter_preview.take() {
-        let doc = rust.session.doc.as_mut()?;
-        let mut mask = pictura_render::mask_document(doc, &path)?;
-        if let Some(channel) = mask.document.layers[0]
-            .channels
-            .iter_mut()
-            .find(|c| c.id == 0)
-        {
-            if channel.data.len() == original.len() {
-                channel.data = original.into();
+    let session = rust.session.live.take_filter_preview_session()?;
+    cancel_filter_preview_session(rust, session)
+}
+
+/// Discard a filter preview session, restoring the pre-preview pixels
+/// bit-identically. Returns the region to refresh, or `None` when the preview
+/// had nothing to restore.
+pub(super) fn cancel_filter_preview_session(
+    rust: &mut PictureViewRust,
+    session: super::document_session::FilterPreviewSession,
+) -> Option<Option<pictura_core::PsdRect>> {
+    match session {
+        super::document_session::FilterPreviewSession::Mask { path, original } => {
+            let doc = rust.session.doc.as_mut()?;
+            let mut mask = pictura_render::mask_document(doc, &path)?;
+            if let Some(channel) = mask.document.layers[0]
+                .channels
+                .iter_mut()
+                .find(|c| c.id == 0)
+            {
+                if channel.data.len() == original.len() {
+                    channel.data = original.into();
+                }
             }
+            pictura_render::write_mask_back(doc, &path, &mask.document, None);
+            Some(Some(mask.rect))
         }
-        pictura_render::write_mask_back(doc, &path, &mask.document, None);
-        return Some(Some(mask.rect));
+        super::document_session::FilterPreviewSession::Layer(preview) => {
+            let doc = rust.session.doc.as_mut()?;
+            let layer = pictura_render::resolve_path_mut(doc, &preview.layer_path)?;
+            let restored = preview.baseline.restore(layer);
+            Some((!layer_has_effects(layer)).then_some(restored))
+        }
     }
-    let preview = rust.filter_preview.take()?;
-    let doc = rust.session.doc.as_mut()?;
-    let layer = pictura_render::resolve_path_mut(doc, &preview.layer_path)?;
-    let restored = preview.baseline.restore(layer);
-    Some((!layer_has_effects(layer)).then_some(restored))
 }
 
 #[cfg(test)]
@@ -668,7 +700,7 @@ mod tests {
         assert!(apply_filter_active(&mut rust, "gaussian-blur", &[1.0, 2.0], false).is_none());
         assert!(apply_filter_active(&mut rust, "bogus", &[], false).is_none());
         assert_eq!(red(&rust), before, "refusal must not mutate the layer");
-        assert!(rust.filter_preview.is_none());
+        assert!(rust.session.live.filter_preview().is_none());
         assert!(rust.last_filter.is_none());
         assert!(
             rust.filter_error.as_deref().is_some_and(|e| !e.is_empty()),
@@ -722,15 +754,17 @@ mod tests {
         let original = red(&rust);
         assert!(apply_filter_active(&mut rust, "gaussian-blur", &[4.0], false).is_some());
         assert!(rust
-            .filter_preview
-            .as_ref()
+            .session
+            .live
+            .filter_preview()
             .is_some_and(|p| p.layer_path == "0"));
         // Switching the active layer must not steal layer 0's baseline.
         rust.select_only_layer("1");
         assert!(apply_filter_active(&mut rust, "gaussian-blur", &[4.0], false).is_none());
         assert!(rust
-            .filter_preview
-            .as_ref()
+            .session
+            .live
+            .filter_preview()
             .is_some_and(|p| p.layer_path == "0"));
         assert!(cancel_filter_preview(&mut rust).is_some());
         assert_eq!(red(&rust), original, "layer 0 baseline restored");
@@ -741,7 +775,10 @@ mod tests {
         let mut rust = state();
         let original = red(&rust);
         assert!(apply_filter_active(&mut rust, "gaussian-blur", &[2.0], false).is_some());
-        assert!(rust.filter_preview.is_some(), "preview state established");
+        assert!(
+            rust.session.live.filter_preview().is_some(),
+            "preview state established"
+        );
         assert!(rust.last_filter.is_none(), "preview commits nothing");
         let after_two = red(&rust);
         // A second, different radius must equal filtering the original once.
@@ -763,7 +800,7 @@ mod tests {
         let region = cancel_filter_preview(&mut rust).expect("preview open");
         assert!(region.is_some());
         assert_eq!(red(&rust), original, "cancel is bit-identical");
-        assert!(rust.filter_preview.is_none());
+        assert!(rust.session.live.filter_preview().is_none());
         assert!(rust.last_filter.is_none());
     }
 
@@ -772,7 +809,10 @@ mod tests {
         let mut rust = state();
         apply_filter_active(&mut rust, "gaussian-blur", &[3.0], false).expect("preview");
         assert!(apply_filter_active(&mut rust, "gaussian-blur", &[3.0], true).is_some());
-        assert!(rust.filter_preview.is_none(), "commit closes the preview");
+        assert!(
+            rust.session.live.filter_preview().is_none(),
+            "commit closes the preview"
+        );
         assert_eq!(
             rust.last_filter,
             Some(("gaussian-blur".to_string(), vec![3.0]))
@@ -1034,7 +1074,10 @@ mod tests {
             preview.is_some(),
             "the mask rectangle is the refresh region"
         );
-        assert!(rust.mask_filter_preview.is_some(), "a baseline is kept");
+        assert!(
+            rust.session.live.mask_filter_preview().is_some(),
+            "a baseline is kept"
+        );
         let softened = mask_coverage(&rust);
         assert_ne!(softened, original, "the blur changed the edge");
         assert!(
@@ -1049,10 +1092,10 @@ mod tests {
             original,
             "cancel restores bit-identically"
         );
-        assert!(rust.mask_filter_preview.is_none());
+        assert!(rust.session.live.mask_filter_preview().is_none());
 
         apply_filter_active(&mut rust, "gaussian-blur", &[2.0], true).expect("mask commit");
-        assert!(rust.mask_filter_preview.is_none());
+        assert!(rust.session.live.mask_filter_preview().is_none());
         assert_ne!(mask_coverage(&rust), original, "the commit keeps the blur");
         assert_eq!(red(&rust), layer_red, "the layer's pixels are untouched");
     }

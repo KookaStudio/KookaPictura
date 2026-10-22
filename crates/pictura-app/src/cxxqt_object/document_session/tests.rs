@@ -2,8 +2,9 @@
 //! the replacement of the document.
 
 use super::super::state::PictureViewRust;
-use super::super::state::TransformMode;
-use super::session::{DocumentSession, SessionChange, SessionKind};
+use super::active::SessionKind;
+use super::session::{DocumentSession, SessionChange};
+use super::transform::TransformMode;
 use crate::cxxqt_object::impl_filters::{apply_filter_active, cancel_filter_preview};
 use crate::cxxqt_object::tests::pixel_layer;
 use crate::history::History;
@@ -85,7 +86,10 @@ fn a_second_session_is_refused() {
         !view.begin_paint(StrokeConfig::default(), "Brush"),
         "a paint begin is refused while the healing gesture is live"
     );
-    assert!(view.stroke.is_none(), "no paint stroke was begun");
+    assert!(
+        view.session.live.stroke().is_none(),
+        "no paint stroke was begun"
+    );
     assert_eq!(
         view.session.history.count(),
         history,
@@ -106,7 +110,10 @@ fn update_begins_keep_one_session() {
     assert!(apply_filter_active(&mut view, "gaussian-blur", &[2.0], false).is_some());
     assert!(apply_filter_active(&mut view, "gaussian-blur", &[6.0], false).is_some());
     assert_eq!(view.active_session_kind(), Some(SessionKind::FilterPreview));
-    assert!(view.filter_preview.is_some(), "one filter preview is live");
+    assert!(
+        view.session.live.filter_preview().is_some(),
+        "one filter preview is live"
+    );
 
     // A mode preview takes the slot only when no other session is live.
     assert!(
@@ -127,10 +134,17 @@ fn update_begins_keep_one_session() {
     assert!(view.begin_magnetic(50), "the magnetic gesture starts");
     assert_eq!(view.active_session_kind(), Some(SessionKind::Lasso));
     assert!(view.begin_lasso_session("new"), "the lasso attaches to it");
-    assert!(view.edge_map.is_some(), "the magnetic field is still live");
+    assert!(
+        view.session.live.edge_map().is_some(),
+        "the magnetic field is still live"
+    );
     view.add_lasso_point(1, 1);
     view.add_lasso_point(6, 1);
-    assert_eq!(view.pending_lasso.len(), 2, "the lasso points are attached");
+    assert_eq!(
+        view.session.live.lasso_points().map(|points| points.len()),
+        Some(2),
+        "the lasso points are attached"
+    );
     assert_eq!(view.active_session_kind(), Some(SessionKind::Lasso));
 }
 
@@ -140,7 +154,7 @@ fn a_transform_on_another_target_replaces_the_session() {
     let first = view
         .prepare_transform("0", TransformMode::Free)
         .expect("the first session");
-    view.transform_session = Some(first);
+    view.session.live.set_transform(first);
     assert_eq!(view.active_session_kind(), Some(SessionKind::Transform));
 
     let second = view
@@ -152,7 +166,7 @@ fn a_transform_on_another_target_replaces_the_session() {
         0,
         "no history state was added"
     );
-    view.transform_session = Some(second);
+    view.session.live.set_transform(second);
     assert_eq!(view.active_session_kind(), Some(SessionKind::Transform));
 }
 
@@ -162,7 +176,7 @@ fn a_transform_mode_switch_replaces_the_session() {
     let first = view
         .prepare_transform("0", TransformMode::Free)
         .expect("the first session");
-    view.transform_session = Some(first);
+    view.session.live.set_transform(first);
 
     let second = view
         .prepare_transform("0", TransformMode::Skew)
@@ -173,7 +187,7 @@ fn a_transform_mode_switch_replaces_the_session() {
         0,
         "no history state was added"
     );
-    view.transform_session = Some(second);
+    view.session.live.set_transform(second);
     assert_eq!(view.active_session_kind(), Some(SessionKind::Transform));
 }
 
@@ -191,7 +205,7 @@ fn a_failed_transform_begin_leaves_the_layer_unchanged() {
         before,
         "the layer is unchanged"
     );
-    assert!(view.transform_session.is_none());
+    assert!(view.session.live.transform().is_none());
     assert_eq!(view.session.history.count(), 0);
 
     // A begin that trims the layer and is then refused puts the layer back.
@@ -206,6 +220,109 @@ fn a_failed_transform_begin_leaves_the_layer_unchanged() {
         before,
         "the refused begin restored the layer"
     );
+}
+
+#[test]
+fn the_slot_names_the_live_session_kind() {
+    let mut view = view_with_two_layers();
+    let first = view
+        .prepare_transform("0", TransformMode::Free)
+        .expect("the first session");
+    view.session.live.set_transform(first);
+
+    assert_eq!(
+        view.active_session_kind(),
+        Some(SessionKind::Transform),
+        "the slot names the live session"
+    );
+    // Every other kind's state is absent: the slot holds one session.
+    assert!(view.session.live.stroke().is_none(), "no paint stroke");
+    assert!(view.session.live.mask_stroke().is_none(), "no mask stroke");
+    assert!(
+        view.session.live.heal_stroke().is_none(),
+        "no healing gesture"
+    );
+    assert!(
+        view.session.live.selection_gesture().is_none(),
+        "no lasso gesture"
+    );
+    assert!(
+        view.session.live.selection_move_origin().is_none(),
+        "no selection move"
+    );
+    assert!(view.session.live.path().is_none(), "no path gesture");
+    assert!(
+        view.session.live.filter_preview().is_none(),
+        "no filter preview"
+    );
+    assert!(
+        view.session.live.mode_preview().is_none(),
+        "no mode preview"
+    );
+}
+
+#[test]
+fn only_the_live_sessions_state_exists() {
+    let mut view = view();
+    assert!(apply_filter_active(&mut view, "gaussian-blur", &[2.0], false).is_some());
+    assert_eq!(
+        view.active_session_kind(),
+        Some(SessionKind::FilterPreview),
+        "the slot names the filter preview"
+    );
+    assert!(
+        view.session.live.filter_preview().is_some(),
+        "the layer preview is live"
+    );
+    assert!(
+        view.session.live.mask_filter_preview().is_none(),
+        "no mask preview is live beside it"
+    );
+
+    let change = view.cancel_active_sessions();
+    assert!(
+        change.changed_display(),
+        "the cancel restores the pre-preview pixels"
+    );
+    assert!(
+        view.session.live.filter_preview().is_none(),
+        "the preview is discarded"
+    );
+    assert!(!view.has_active_session(), "the session is gone");
+}
+
+#[test]
+fn a_filter_commit_leaves_a_live_transform() {
+    let mut view = view();
+    let session = view
+        .prepare_transform("0", TransformMode::Free)
+        .expect("the transform");
+    view.session.live.set_transform(session);
+
+    assert!(apply_filter_active(&mut view, "gaussian-blur", &[2.0], true).is_some());
+    assert_eq!(
+        view.active_session_kind(),
+        Some(SessionKind::Transform),
+        "the filter commit does not take the slot"
+    );
+    assert!(view.session.live.transform().is_some());
+}
+
+#[test]
+fn cancelling_a_stroke_leaves_another_session_live() {
+    let mut view = view();
+    view.session.live.set_mode_preview(doc());
+
+    assert!(
+        view.cancel_stroke().is_none(),
+        "there is no paint session to cancel"
+    );
+    assert_eq!(
+        view.active_session_kind(),
+        Some(SessionKind::ModePreview),
+        "the other session still owns the slot"
+    );
+    assert!(view.session.live.mode_preview().is_some());
 }
 
 #[test]
@@ -234,7 +351,7 @@ fn replacement_installs_incoming_history() {
 fn undo_cancels_every_session() {
     let mut view = view();
     let history = view.session.history.count();
-    view.mode_preview = Some(doc());
+    view.session.live.set_mode_preview(doc());
     assert!(view.has_active_session());
 
     let change = view.cancel_active_sessions();
@@ -245,45 +362,51 @@ fn undo_cancels_every_session() {
         history,
         "no history state was added"
     );
-    assert!(view.mode_preview.is_none());
+    assert!(view.session.live.mode_preview().is_none());
 }
 
 #[test]
 fn redo_cancels_every_session() {
     let mut view = view();
-    view.filter_preview = None;
-    view.mode_preview = Some(doc());
+    view.session.live.clear_filter_preview();
+    view.session.live.set_mode_preview(doc());
     assert!(view.has_active_session());
 
     let change = view.cancel_active_sessions();
     assert!(change.changed_display());
     assert!(!view.has_active_session());
-    assert!(view.mode_preview.is_none());
+    assert!(view.session.live.mode_preview().is_none());
 }
 
 #[test]
 fn jump_cancels_a_filter_preview() {
     let mut view = view();
     assert!(apply_filter_active(&mut view, "gaussian-blur", &[3.0], false).is_some());
-    assert!(view.filter_preview.is_some(), "the preview is open");
+    assert!(
+        view.session.live.filter_preview().is_some(),
+        "the preview is open"
+    );
     assert_eq!(view.active_session_kind(), Some(SessionKind::FilterPreview));
 
     let change = view.cancel_active_sessions();
     assert!(change.changed_display());
-    assert!(view.filter_preview.is_none(), "the preview is discarded");
+    assert!(
+        view.session.live.filter_preview().is_none(),
+        "the preview is discarded"
+    );
     assert!(!view.has_active_session());
 }
 
 #[test]
 fn snapshot_restore_cancels_the_session() {
     let mut view = view();
-    view.mode_preview = Some(doc());
+    view.session.live.set_mode_preview(doc());
     assert!(view.has_active_session());
 
     let change = view.cancel_active_sessions();
     assert!(change.changed_display());
     assert!(!view.has_active_session());
-    assert!(view.mode_preview.is_none());
+    assert!(view.session.live.mode_preview().is_none());
 }
 
 #[test]
@@ -291,10 +414,12 @@ fn a_shape_path_abort_requests_a_rebuild() {
     let mut view = view();
     // A gesture on a shape layer's outline edits the layer, whose pixels
     // change: the abort restores the outline and asks for a rebuild.
-    view.path_gesture = Some(crate::cxxqt_object::document_session::PathRestore::Layer {
-        target: "0".into(),
-        subpaths: Vec::new(),
-    });
+    view.session
+        .live
+        .set_path(crate::cxxqt_object::document_session::PathRestore::Layer {
+            target: "0".into(),
+            subpaths: Vec::new(),
+        });
     assert!(view.has_active_session(), "the gesture is live");
 
     let change = view.cancel_active_sessions();
@@ -304,7 +429,7 @@ fn a_shape_path_abort_requests_a_rebuild() {
         "a shape-layer path abort asks for a rebuild"
     );
     assert!(change.changed_display());
-    assert!(view.path_gesture.is_none());
+    assert!(!view.has_active_session(), "the gesture is gone");
     let layer = &view.session.doc.as_ref().expect("document").layers[0];
     assert!(layer.vector_mask.is_some(), "the layer's outline is back");
 }
@@ -341,7 +466,23 @@ fn replacement_clears_outgoing_state() {
     let mut view = view();
     view.session.deselected_selection = Some(Selection::none(8, 8));
     view.mask_edit_target = Some("0".into());
-    view.active_path = crate::cxxqt_object::paths::ActivePath::Saved(3);
+    view.mask_solo = Some("0".into());
+    view.mask_overlay = Some("0".into());
+    view.isolation = Some(vec!["0".into()]);
+    view.ruler = Some(pictura_core::Ruler {
+        a: (0.0, 0.0),
+        b: (1.0, 1.0),
+    });
+    view.session
+        .doc
+        .as_mut()
+        .expect("document")
+        .saved_paths
+        .push(pictura_core::path::NamedPath {
+            name: "Saved".into(),
+            path: Default::default(),
+        });
+    view.active_path = crate::cxxqt_object::paths::ActivePath::Saved(0);
     view.pending_previews.opacity_changed = true;
     view.pending_previews.fill_changed = true;
     view.pending_previews.mask_refine = Some("Mask Feather");
@@ -355,6 +496,10 @@ fn replacement_clears_outgoing_state() {
     );
     assert!(view.session.deselected_selection.is_none());
     assert!(view.mask_edit_target.is_none());
+    assert!(view.mask_solo.is_none());
+    assert!(view.mask_overlay.is_none());
+    assert!(view.isolation.is_none());
+    assert!(view.ruler.is_none());
     assert!(matches!(
         view.active_path,
         crate::cxxqt_object::paths::ActivePath::Work
@@ -379,7 +524,11 @@ fn replacing_a_document_cancels_every_session() {
         },
     )
     .expect("stroke");
-    view.stroke = Some(stroke);
+    let session = crate::cxxqt_object::document_session::StrokeSession {
+        stroke: Some(stroke),
+        ..Default::default()
+    };
+    view.session.live.set_stroke_session(session);
     view.replace_document(
         Some(doc()),
         History::default(),
@@ -387,15 +536,15 @@ fn replacing_a_document_cancels_every_session() {
         None,
     );
     assert!(!view.has_active_session());
-    assert!(view.stroke.is_none());
+    assert!(view.session.live.stroke().is_none());
 }
 
 #[test]
 fn a_full_change_requests_a_rebuild() {
     let mut view = view();
-    view.mode_preview = Some(doc());
+    view.session.live.set_mode_preview(doc());
     let change = view.cancel_active_sessions();
-    assert!(view.mode_preview.is_none());
+    assert!(view.session.live.mode_preview().is_none());
     assert_eq!(change.effect, crate::cxxqt_object::edit::Effect::Rebuild);
     assert!(change.changed_display());
 }
@@ -416,15 +565,15 @@ fn cancelling_every_session_restores_state() {
     assert!(view.has_active_session());
     assert!(view.cancel_active_sessions().effect == crate::cxxqt_object::edit::Effect::Nothing);
     assert!(!view.has_active_session());
-    assert!(view.selection_move_origin.is_none());
-    assert!(view.selection_move_delta.is_none());
+    assert!(view.session.live.selection_move_origin().is_none());
+    assert!(view.session.live.selection_move_delta().is_none());
 }
 
 #[test]
 fn a_notification_only_change_emits_no_blit() {
     let mut view = view();
     view.session.doc.as_mut().expect("document").work_path = Default::default();
-    view.path_gesture = Some(
+    view.session.live.set_path(
         crate::cxxqt_object::document_session::PathRestore::WorkOrSaved {
             active: crate::cxxqt_object::paths::ActivePath::Work,
             path: view
@@ -444,7 +593,7 @@ fn a_notification_only_change_emits_no_blit() {
         .finish_editing();
     let change = view.cancel_active_sessions();
     assert_eq!(change.effect, crate::cxxqt_object::edit::Effect::Notify);
-    assert!(view.path_gesture.is_none());
+    assert!(!view.has_active_session(), "the gesture is gone");
 }
 
 #[test]
@@ -492,7 +641,7 @@ fn cancelling_records_no_history() {
         "Start",
     );
     let count = view.session.history.count();
-    view.mode_preview = Some(doc());
+    view.session.live.set_mode_preview(doc());
     view.cancel_active_sessions();
     assert_eq!(view.session.history.count(), count);
 }

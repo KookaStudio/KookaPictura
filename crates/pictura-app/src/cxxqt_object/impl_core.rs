@@ -934,18 +934,18 @@ impl super::PictureViewRust {
     pub(super) fn reset_pyramid(&mut self) {
         self.damage = pictura_render::CanvasDamage::default();
         // A full rebuild supersedes any reduced-level or GPU stroke present.
-        self.preview = None;
-        self.gpu_stroke = None;
-        self.gpu_placer = None;
-        self.pending_present = None;
-        self.present_flush_due = false;
-        self.stroke_tiles = Default::default();
+        self.session.live.clear_preview();
+        self.session.live.clear_gpu_stroke();
+        self.session.live.clear_gpu_placer();
+        self.session.live.set_pending_present(None);
+        self.session.live.set_present_flush_due(false);
+        self.session.live.clear_stroke_tiles();
         // While a stroke is live the document's `composite` is stale (paint
         // writes the layer channels in place), so composite it rather than
         // reading the cached frame; otherwise the level-0 frame is the
         // document's own composite. Keeps a stray mid-stroke full rebuild correct.
         let gpu_compute = self.gpu_compute;
-        let level0 = match self.stroke {
+        let level0 = match self.session.live.stroke() {
             Some(_) => self
                 .session
                 .doc

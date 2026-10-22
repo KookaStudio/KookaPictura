@@ -1,7 +1,8 @@
+use super::super::document_session::{RepeatTransform, TransformMode, TransformSession};
 use super::super::helpers::*;
 use super::super::helpers_composite::*;
 use super::super::qobject;
-use super::super::state::{PictureViewRust, RepeatTransform, TransformMode, TransformSession};
+use super::super::state::PictureViewRust;
 use super::geometry::{
     apply_session_transform, quad_driven, rect_center, session_quad, source_corners, MapParams,
 };
@@ -349,7 +350,7 @@ impl qobject::PictureView {
         }
         {
             let rust = self.rust();
-            if let Some(session) = rust.transform_session.as_ref() {
+            if let Some(session) = rust.session.live.transform() {
                 // A lifted session's target is its source; the floating layer's
                 // path is an implementation detail that may name a sibling.
                 let target = session.lifted.as_ref().map_or(&session.path, |(s, _)| s);
@@ -362,8 +363,9 @@ impl qobject::PictureView {
         // so the display has to follow the swap.
         let was_lifted = self
             .rust()
-            .transform_session
-            .as_ref()
+            .session
+            .live
+            .transform()
             .is_some_and(|session| session.lifted.is_some());
         let Some(session) = self.as_mut().rust_mut().prepare_transform(&path, mode) else {
             return false;
@@ -372,7 +374,7 @@ impl qobject::PictureView {
             self.as_mut().rust_mut().restore_transform_begin(session);
             return false;
         }
-        self.as_mut().rust_mut().transform_session = Some(session);
+        self.as_mut().rust_mut().session.live.set_transform(session);
         if was_lifted {
             self.as_mut().recomposite();
         }
@@ -412,7 +414,7 @@ impl qobject::PictureView {
     /// layer's untrimmed extent (the Move tool's controls box opens on every
     /// selected layer, and a trimmed layer would clip later filters).
     fn drop_transform_session(mut self: Pin<&mut Self>) {
-        let session = self.as_mut().rust_mut().transform_session.take();
+        let session = self.as_mut().rust_mut().session.live.take_transform();
         if let Some((path, rect)) = session
             .as_ref()
             .and_then(|s| s.untrimmed.map(|rect| (s.path.clone(), rect)))
@@ -435,7 +437,7 @@ impl qobject::PictureView {
     /// The session always clears.
     pub fn commit_transform(mut self: Pin<&mut Self>) -> bool {
         let Some((path, projective, quad, params, orig_rect, interpolation, warp, history_label)) =
-            self.rust().transform_session.as_ref().map(|session| {
+            self.rust().session.live.transform().map(|session| {
                 (
                     session.path.clone(),
                     quad_driven(session),
@@ -452,8 +454,9 @@ impl qobject::PictureView {
         };
         let repeat = self
             .rust()
-            .transform_session
-            .as_ref()
+            .session
+            .live
+            .transform()
             .and_then(repeatable_transform);
         let unmoved = || {
             quad.iter()
@@ -487,8 +490,9 @@ impl qobject::PictureView {
         let lifted = self
             .as_mut()
             .rust_mut()
-            .transform_session
-            .take()
+            .session
+            .live
+            .take_transform()
             .and_then(|session| session.lifted);
         if let Some((_, before)) = lifted {
             let merged = changed
@@ -534,48 +538,64 @@ impl qobject::PictureView {
 
     /// Whether a Free Transform session is active.
     pub fn transform_session_active(&self) -> bool {
-        self.rust().transform_session.is_some()
+        self.rust().session.live.transform().is_some()
+    }
+
+    /// The handle the live transform drag grabbed, or -1 when no drag is live.
+    pub fn transform_drag_handle(&self) -> i32 {
+        self.rust()
+            .session
+            .live
+            .transform()
+            .filter(|session| session.dragging)
+            .map_or(-1, |session| session.handle)
     }
     pub fn transform_session_path(&self) -> QString {
         self.rust()
-            .transform_session
-            .as_ref()
+            .session
+            .live
+            .transform()
             .map(|session| QString::from(session.path.as_str()))
             .unwrap_or_default()
     }
 
     pub fn transform_scale_x(&self) -> f64 {
         self.rust()
-            .transform_session
-            .as_ref()
+            .session
+            .live
+            .transform()
             .map_or(1.0, |session| session.scale_x)
     }
 
     pub fn transform_scale_y(&self) -> f64 {
         self.rust()
-            .transform_session
-            .as_ref()
+            .session
+            .live
+            .transform()
             .map_or(1.0, |session| session.scale_y)
     }
 
     pub fn transform_angle(&self) -> f64 {
         self.rust()
-            .transform_session
-            .as_ref()
+            .session
+            .live
+            .transform()
             .map_or(0.0, |session| session.angle)
     }
 
     pub fn transform_dx(&self) -> f64 {
         self.rust()
-            .transform_session
-            .as_ref()
+            .session
+            .live
+            .transform()
             .map_or(0.0, |session| session.dx)
     }
 
     pub fn transform_dy(&self) -> f64 {
         self.rust()
-            .transform_session
-            .as_ref()
+            .session
+            .live
+            .transform()
             .map_or(0.0, |session| session.dy)
     }
 }
@@ -852,7 +872,7 @@ impl PictureViewRust {
         }
         // The outgoing session goes first: its trim and its floating layer go
         // back, so the new session starts from the same document.
-        let outgoing = self.transform_session.take();
+        let outgoing = self.session.live.take_transform();
         if let Some(session) = &outgoing {
             if let Some(rect) = session.untrimmed {
                 if let Some(doc) = self.session.doc.as_mut() {

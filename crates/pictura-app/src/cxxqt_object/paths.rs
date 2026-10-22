@@ -471,7 +471,10 @@ impl PictureViewRust {
                         subpaths,
                     })
             });
-            self.path_gesture = backup;
+            match backup {
+                Some(backup) => self.session.live.set_path(backup),
+                None => self.session.live.clear_path(),
+            }
             return;
         }
         let active = self.active_path;
@@ -482,7 +485,10 @@ impl PictureViewRust {
             };
             super::document_session::PathRestore::WorkOrSaved { active, path }
         });
-        self.path_gesture = backup;
+        match backup {
+            Some(backup) => self.session.live.set_path(backup),
+            None => self.session.live.clear_path(),
+        }
     }
 }
 
@@ -496,7 +502,7 @@ fn path_gesture_abort(mut view: Pin<&mut PictureView>) -> bool {
 }
 
 fn path_gesture_end(mut view: Pin<&mut PictureView>) {
-    view.as_mut().rust_mut().path_gesture = None;
+    view.as_mut().rust_mut().session.live.clear_path();
 }
 
 fn path_resume(view: Pin<&mut PictureView>, sp: i32, pt: i32) -> bool {

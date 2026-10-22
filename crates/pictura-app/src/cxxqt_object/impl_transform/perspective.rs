@@ -9,7 +9,7 @@
 //! - an edge handle slides only its own edge along itself;
 //! - the reference point keeps its bilinear place in the box.
 
-use super::super::state::TransformSession;
+use super::super::document_session::TransformSession;
 use super::distort::map_qtransform;
 use super::geometry::{
     handle_source_point, opposite_handle, projective_coefficients, quad_is_degenerate,
@@ -274,7 +274,7 @@ pub(super) fn drag_angle_degrees(session: &TransformSession) -> Option<f64> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::state::{TransformMode, TransformSession};
+    use super::super::super::document_session::{TransformMode, TransformSession};
     use super::super::geometry::{session_quad, source_corners};
     use super::*;
     use pictura_core::PsdRect;
