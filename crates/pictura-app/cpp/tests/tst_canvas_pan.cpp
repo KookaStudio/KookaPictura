@@ -87,7 +87,7 @@ void CanvasPanTest::panHidesTheBrushRing()
     f.canvas->fitOnScreen();
     f.canvas->setBrushOutline(80.0, QPointF(80, 80));
     QCoreApplication::processEvents();
-    QVERIFY(f.canvas->hasBrushOutlineForTest());
+    QVERIFY(f.canvas->hasBrushOutline());
 
     const QPointF center = f.canvas->imageToWidget(QPointF(80, 80));
     const double radius = f.canvas->brushOutlineScreenDiameterForTest() / 2.0;

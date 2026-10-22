@@ -216,14 +216,14 @@ void MaskEditTest::canvasToolsWriteCoverage()
     QVERIFY(pictura::mask_edit_target_set(*view, path));
 
     // The Eraser paints the background colour: white reveals again.
-    QVERIFY(pictura::begin_eraser(*view, 0xffffffffu, tip, 0, 100, 100, false));
+    QVERIFY(pictura::begin_eraser(*view, 0xffffffffu, tip, 0, 100, 100, false, 1.0));
     QVERIFY(view->paint_dab(16.0, 16.0, 1.0));
     QVERIFY(view->end_paint());
     QCOMPARE(view->history_label(base + 1), QStringLiteral("Eraser"));
     QCOMPARE(view->sample_argb(16, 16), fill);
 
     // Erase To History has no mask source and is refused.
-    QVERIFY2(!pictura::begin_eraser(*view, 0xffffffffu, tip, 0, 100, 100, true),
+    QVERIFY2(!pictura::begin_eraser(*view, 0xffffffffu, tip, 0, 100, 100, true, 1.0),
              "erase to history refuses a mask target");
     QCOMPARE(view->history_count(), base + 2);
 

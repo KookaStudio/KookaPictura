@@ -522,6 +522,11 @@ private:
     void handleModifiers(int modifiers);
     void handleReleased(const QPointF& imagePos);
     void updateBrushOutline(const QPointF& imagePos);
+    // Re-apply the brush outline at the live pointer, for the changes that
+    // leave it stale: the Eraser's Mode, the canvas zoom, the brush size.
+    void refreshBrushOutline();
+    // The Eraser's Mode is Block, whose tip is a square of a screen-space size.
+    bool eraserBlockMode() const;
     void updateSamplingRing(const QPointF& imagePos);
     void updateTransformOverlay(PictureView* v);
     void setTransformCursor(const QPointF& imagePos);

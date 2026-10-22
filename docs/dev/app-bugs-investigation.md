@@ -603,7 +603,7 @@ dragging (`tools.cpp:761-764`).
 
 **Specs/tests.** Add a `brush-tools` requirement (outline tracks size and zoom),
 amend `tool-framework` cursor hints and clarify `svg-cursors`. New self-test
-hook `hasBrushOutlineForTest`.
+hook `hasBrushOutline`.
 
 ## 18. Keep at least one display inch of the canvas visible
 
