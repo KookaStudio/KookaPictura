@@ -327,8 +327,9 @@ pub fn add_solid_fill(doc: &mut Document, selection_path: &str, rgba: [u8; 4]) -
         clipping: false,
         visible: true,
         mask: None,
-        // ponytail: SoCo descriptor is RGB-only, alpha is dropped (app callers
-        // pass 0xFF); thread alpha through if a non-opaque fill is ever needed.
+        // ponytail: SoCo descriptor is RGB-only, so the alpha byte is dropped
+        // and the fill is opaque; thread it through if a non-opaque fill is
+        // ever needed.
         adjustment: Some(crate::encode_solid_color_fill([rgba[0], rgba[1], rgba[2]])),
         channels: Vec::new(),
         children: pictura_core::LayerStack::default(),

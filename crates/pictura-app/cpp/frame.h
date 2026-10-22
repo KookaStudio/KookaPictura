@@ -202,7 +202,7 @@ public:
     // Tool test hooks.
     ToolId activeTool() const;
     void setActiveTool(ToolId id);
-    QColor foregroundColor() const { return foreground_; }
+    QColor foregroundColor() const;
     bool hasPendingCrop() const;
     bool commitCrop();
     // A pending transform locks the Layer menu and greys the Layers panel.
@@ -797,7 +797,6 @@ private:
     // document fits the viewport is pinned to the centre, panning is refused,
     // and the workspace scrollbars hide. Default off. Persisted.
     bool snapCanvasToWorkspace_ = false;
-    QColor foreground_;
     QSet<QString> panelNames_;
     QStringList recent_;
     // Actions refreshRecentMenu added (file rows, separator, Clear); the

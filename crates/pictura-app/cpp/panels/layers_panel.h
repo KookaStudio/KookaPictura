@@ -27,6 +27,7 @@ class QTreeView;
 
 namespace pictura {
 
+class ColorState;
 class LayerFilterBar;
 class LayerRowDelegate;
 struct LayerFilter;
@@ -40,7 +41,7 @@ class LayersPanel : public QWidget {
     Q_OBJECT
 
 public:
-    explicit LayersPanel(QWidget* parent = nullptr);
+    explicit LayersPanel(ColorState* colors = nullptr, QWidget* parent = nullptr);
 
     void setView(PictureView* view);
     void refresh();
@@ -400,6 +401,9 @@ private:
     bool clickMaskThumbWithModifiersForTest(const QString& path, Qt::KeyboardModifiers mods);
 
     PictureView* view_ = nullptr;
+    // The app's shared foreground/background colours; null when the panel was
+    // built without them, in which case a fill falls back to black.
+    ColorState* colors_ = nullptr;
     LayersModel* model_ = nullptr;
     LayersFilterProxyModel* proxy_ = nullptr;
     LayerFilterBar* filterBar_ = nullptr;

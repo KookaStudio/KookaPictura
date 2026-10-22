@@ -55,11 +55,16 @@ QString adjustmentDisplayName(const QString& kind)
 
 } // namespace
 
+QColor PicturaMainWindow::foregroundColor() const
+{
+    return colorState_ ? colorState_->foreground() : QColor(Qt::black);
+}
+
 void PicturaMainWindow::buildPanels(const SessionState& state)
 {
     colorState_ = new ColorState(this);
 
-    layersPanel_ = new LayersPanel(this);
+    layersPanel_ = new LayersPanel(colorState_, this);
     layersPanel_->setObjectName(QStringLiteral("layersPanel"));
 
     historyPanel_ = new HistoryPanel(this);
@@ -403,6 +408,9 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
                 &ToolController::setForeground);
         connect(colorState_, &ColorState::backgroundChanged, tools_,
                 &ToolController::setBackground);
+        // The tool hint carries the foreground colour, so it follows it.
+        connect(colorState_, &ColorState::foregroundChanged, this,
+                [this](const QColor&) { updateToolHint(); });
         // A tool or preset that changes a colour (e.g. a brush preset) reaches
         // the controller, not ColorState; mirror it back so the toolbox swatch
         // and the Color panel follow.
@@ -662,11 +670,9 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
         connect(notesPanel_, &NotesPanel::noteRequested, tools_, &ToolController::setCurrentNote);
     }
     connect(tools_, &ToolController::foregroundSampled, this, [this](const QColor& color) {
-        foreground_ = color;
         if (colorState_) {
             colorState_->setForeground(color);
         }
-        updateToolHint();
     });
 
     // Canvas context-menu requests: the shared widget menus the controller
@@ -834,8 +840,9 @@ void PicturaMainWindow::updateToolHint()
     }
     QString fallback = tools_ ? QString::fromLatin1(toolInfo(tools_->activeTool()).hint)
                               : QStringLiteral("Ready");
-    if (foreground_.isValid()) {
-        fallback += QStringLiteral("  ·  Foreground %1").arg(foreground_.name());
+    const QColor foreground = foregroundColor();
+    if (foreground.isValid()) {
+        fallback += QStringLiteral("  ·  Foreground %1").arg(foreground.name());
     }
     QList<ToolHint> hints;
     if (tools_) {

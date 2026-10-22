@@ -661,16 +661,14 @@ void PicturaMainWindow::registerHandlers()
             && !selectedLayerPaths().isEmpty();
     });
 
-    // Solid-color fill creation. The color is the frame's foreground, which is
-    // not yet plumbed from the toolbox swatch, so it resolves to opaque black.
+    // Solid-color fill creation in the current foreground colour.
     registry_->setHandler(command_ids::LayerNewFillSolidColor, [this]() {
         PictureView* view = activeView();
         if (!view) {
             return;
         }
         const QColor fg = foregroundColor();
-        const unsigned int argb = fg.isValid() ? fg.rgba() : 0xff000000u;
-        if (!view->add_solid_fill(argb).isEmpty()) {
+        if (!view->add_solid_fill(fg.rgba()).isEmpty()) {
             refresh();
         }
     });
