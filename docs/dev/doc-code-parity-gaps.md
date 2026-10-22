@@ -6,7 +6,7 @@
 - **Re-checked:** `#785` swept the rows this register's readers depend on and
   corrected five that the tree had moved past; the corrections are listed in
   §G and the rows that were wrong have been removed.
-- **Rows:** 160 gaps — 5 systemic in §B, 155 per-domain in §C.
+- **Rows:** 161 gaps — 5 systemic in §B, 156 per-domain in §C.
 
 This register maps the behavioural contract in `docs/` against the implementation
 in `crates/`. It is the canonical place to see **what is specified but missing,
@@ -192,6 +192,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | LAY-11 | `blend-modes.md` | 32-bit/Lab blend-mode menu gating | MISSING | `blend.rs` offers all | #589 |
 | LAY-12 | `layer-management-ui.md` | `Ctrl+J` duplicate-group semantics | DIVERGENT | `command_tree.cpp:312` | #590 |
 | LAY-13 | `smart-objects.md` | Extended Stack Modes | MISSING | no `StackMode`/`reduce_stack` | #591 |
+| LAY-14 | `merge-and-flatten.md` | Merge Down result appearance: the merged node inherits the target's blend mode and opacity, so a target with non-default settings renders the merged result differently from the pre-merge canvas; the pair also composites against a transparent backdrop, so where the target is non-`Normal` or not opaque the source's blend sees the target's unblended colour | UNRESOLVED | `merge.rs:195`; `merge.rs:202-203`; `merge.rs:422-424` | #813 |
 
 Layer Comps (`LAY-022`) is already tracked by `#265`.
 
