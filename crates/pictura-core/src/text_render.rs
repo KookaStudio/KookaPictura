@@ -46,18 +46,25 @@ pub enum TextAlign {
 }
 
 impl TextAlign {
-    /// PSD paragraph justification: 0 left, 1 right, 2 center.
+    /// The alignment the EngineData paragraph justification byte selects: 0
+    /// left, 1 right, 2 center, 3 (Justify Last Left) left, 4 (Justify Last
+    /// Right) right, 5 (Justify Last Center) center, 6 (Justify All) left -
+    /// every line of a justified-all paragraph is spread, so its alignment
+    /// never shows. A byte of 7 or above names no modelled justification and
+    /// falls back to left.
     pub fn from_justification(byte: u8) -> TextAlign {
         match byte {
-            1 => TextAlign::Right,
-            2 => TextAlign::Center,
-            // ponytail: justification variants (3..=255) map to Left; widen
-            // when a fixture needs the extra modes.
+            1 | 4 => TextAlign::Right,
+            2 | 5 => TextAlign::Center,
+            // 0 left, 3 (Justify Last Left), 6 (Justify All), and the bytes
+            // that name no modelled justification.
             _ => TextAlign::Left,
         }
     }
 
-    fn factor(self) -> f32 {
+    /// The share of the leftover width a line shifts by: 0 left, 0.5 center,
+    /// 1 right.
+    pub fn factor(self) -> f32 {
         match self {
             TextAlign::Left => 0.0,
             TextAlign::Center => 0.5,
@@ -344,9 +351,17 @@ mod tests {
         assert_eq!(TextAlign::from_justification(0), TextAlign::Left);
         assert_eq!(TextAlign::from_justification(1), TextAlign::Right);
         assert_eq!(TextAlign::from_justification(2), TextAlign::Center);
-        for byte in 3u8..=255 {
+        for byte in 7u8..=255 {
             assert_eq!(TextAlign::from_justification(byte), TextAlign::Left);
         }
+    }
+
+    #[test]
+    fn a_justify_variant_maps_to_its_last_line_alignment() {
+        assert_eq!(TextAlign::from_justification(3), TextAlign::Left);
+        assert_eq!(TextAlign::from_justification(4), TextAlign::Right);
+        assert_eq!(TextAlign::from_justification(5), TextAlign::Center);
+        assert_eq!(TextAlign::from_justification(6), TextAlign::Left);
     }
 
     #[test]

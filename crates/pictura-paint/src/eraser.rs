@@ -9,7 +9,8 @@
 //! * **Erase To History** paints the History Brush's source state back instead.
 //!
 //! Mode picks the tip: `Brush` is the Brush's soft tip, `Pencil` its hard
-//! aliased one, and `Block` a fixed hard square at full strength.
+//! aliased one, and `Block` a hard square of 16 *screen* pixels at full
+//! strength.
 //!
 //! The other two erase *by colour*, and always to transparency:
 //!
@@ -37,9 +38,26 @@ use crate::stroke::{layer_at, layer_at_mut, parse_layer_path};
 use crate::{tip_coverage, PaintError, PaintMode, Rgba, Stroke, StrokeConfig};
 use pictura_core::{layer_transparency_locked, Channel, Document, Layer, PsdRect};
 
-/// The Block eraser's side, in document pixels.
-// ponytail: CS6's Block is a fixed 16 *screen* pixels; ours ignores the zoom.
-pub const BLOCK_SIZE: u32 = 16;
+/// The Block eraser's side, in *screen* pixels. CS6's Block is a fixed
+/// screen-space square, so its document side is this divided by the zoom.
+pub const BLOCK_SCREEN_PX: f32 = 16.0;
+
+/// The largest Block side in document pixels: the `StrokeConfig` diameter cap.
+const MAX_BLOCK_SIDE: u32 = 5000;
+
+/// The Block eraser's side in document pixels at `zoom` (screen pixels per
+/// document pixel), so the block covers the same number of screen pixels at
+/// every zoom. Never below one document pixel, the finest an erase can be. A
+/// non-finite or non-positive zoom is taken as 1.0.
+pub fn block_side_doc_px(zoom: f64) -> u32 {
+    let zoom = if zoom.is_finite() && zoom > 0.0 {
+        zoom
+    } else {
+        1.0
+    };
+    let side = (BLOCK_SCREEN_PX as f64 / zoom).round();
+    side.clamp(1.0, MAX_BLOCK_SIDE as f64) as u32
+}
 
 /// The Eraser's Mode menu.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -73,13 +91,16 @@ pub fn erases_to_background(layer: &Layer) -> bool {
 /// Begin an Eraser stroke on the layer at `path`. `cfg` carries the tip,
 /// Opacity, Flow, and the background colour (`cfg.background`); its `color`
 /// and `mode` are replaced. With `history`, the stroke paints that source back
-/// (Erase To History) instead of erasing.
+/// (Erase To History) instead of erasing. `zoom` is the canvas zoom (screen
+/// pixels per document pixel); the Block mode's side is a screen-space size,
+/// so it needs it.
 pub fn begin_erase(
     doc: &Document,
     path: &str,
     cfg: StrokeConfig,
     mode: EraserMode,
     history: Option<StampSource>,
+    zoom: f64,
 ) -> Result<Stroke, PaintError> {
     let target = parse_layer_path(path)
         .and_then(|indices| layer_at(doc, &indices))
@@ -93,7 +114,7 @@ pub fn begin_erase(
         EraserMode::Pencil => cfg.aliased = true,
         EraserMode::Block => {
             cfg = StrokeConfig {
-                diameter: BLOCK_SIZE,
+                diameter: block_side_doc_px(zoom),
                 square: true,
                 opacity: 100,
                 flow: 100,
@@ -101,6 +122,11 @@ pub fn begin_erase(
                 // partly opaque; Block always clears fully.
                 grain: 0,
                 wet_edges: false,
+                // The shape dynamics would scatter the square, shrink it, or
+                // stamp it several times; Block is one square of one size.
+                scatter: 0,
+                count: 1,
+                size_jitter: 0,
                 ..cfg
             }
         }
@@ -415,7 +441,7 @@ mod tests {
             background: TEAL,
             ..StrokeConfig::default()
         };
-        let mut stroke = begin_erase(doc, "0", cfg, mode, history).expect("begin");
+        let mut stroke = begin_erase(doc, "0", cfg, mode, history, 1.0).expect("begin");
         let mut out = doc.clone();
         for x in [8.0, 16.0, 24.0] {
             stroke.sample(
@@ -433,6 +459,15 @@ mod tests {
 
     fn pixel(doc: &Document, x: i32, y: i32) -> [u8; 4] {
         layer_rgba(&doc.layers[0]).get(x, y)
+    }
+
+    /// The layer's pixels the stroke cleared.
+    fn erased_pixels(doc: &Document) -> usize {
+        let layer = layer_rgba(&doc.layers[0]);
+        (0..layer.height)
+            .flat_map(|y| (0..layer.width).map(move |x| (x, y)))
+            .filter(|&(x, y)| layer.get(x, y)[3] == 0)
+            .count()
     }
 
     #[test]
@@ -463,7 +498,7 @@ mod tests {
             ..StrokeConfig::default()
         };
         let mut out = doc(false);
-        let mut stroke = begin_erase(&out, "0", cfg, EraserMode::Brush, None).unwrap();
+        let mut stroke = begin_erase(&out, "0", cfg, EraserMode::Brush, None, 1.0).unwrap();
         stroke.sample(
             &mut out,
             StrokeSample {
@@ -488,7 +523,7 @@ mod tests {
             ..StrokeConfig::default()
         };
         let mut out = doc(false);
-        let mut stroke = begin_erase(&out, "0", cfg, EraserMode::Block, None).unwrap();
+        let mut stroke = begin_erase(&out, "0", cfg, EraserMode::Block, None, 1.0).unwrap();
         stroke.sample(
             &mut out,
             StrokeSample {
@@ -502,6 +537,111 @@ mod tests {
         assert_eq!(pixel(&out, 13, 3)[3], 0);
         assert_eq!(pixel(&out, 20, 10)[3], 0);
         assert_eq!(pixel(&out, 11, 10)[3], 255);
+
+        // A half-pixel dab covers the same square: it is exactly 16 px wide,
+        // not one wider on the far side.
+        let mut out = doc(false);
+        let mut stroke = begin_erase(&out, "0", cfg, EraserMode::Block, None, 1.0).unwrap();
+        stroke.sample(
+            &mut out,
+            StrokeSample {
+                x: 20.5,
+                y: 10.5,
+                pressure: 1.0,
+            },
+        );
+        stroke.finish().unwrap();
+        assert_eq!(pixel(&out, 13, 3)[3], 0, "the square's corner");
+        assert_eq!(pixel(&out, 27, 17)[3], 0, "the square's far corner");
+        assert_eq!(pixel(&out, 28, 10)[3], 255, "the square is 16 px wide");
+        assert_eq!(pixel(&out, 20, 18)[3], 255, "the square is 16 px tall");
+        assert_eq!(erased_pixels(&out), 16 * 16, "exactly one square");
+    }
+
+    #[test]
+    fn the_block_square_scales_with_the_zoom() {
+        // The Block is 16 screen pixels wide, so its document side is
+        // 16 / zoom.
+        assert_eq!(block_side_doc_px(1.0), 16);
+        assert_eq!(block_side_doc_px(4.0), 4);
+        assert_eq!(block_side_doc_px(0.25), 64);
+        assert_eq!(block_side_doc_px(32.0), 1, "a document pixel is the floor");
+        assert_eq!(block_side_doc_px(0.0), 16, "a bad zoom is 100 %");
+        assert_eq!(block_side_doc_px(f64::NAN), 16, "a bad zoom is 100 %");
+
+        // At 400 % the block is 4 document pixels a side, so it covers 16 of
+        // them whatever the dab's position in its pixel.
+        let mut out = doc(false);
+        let mut stroke = begin_erase(
+            &out,
+            "0",
+            StrokeConfig::default(),
+            EraserMode::Block,
+            None,
+            4.0,
+        )
+        .unwrap();
+        stroke.sample(
+            &mut out,
+            StrokeSample {
+                x: 20.5,
+                y: 10.5,
+                pressure: 1.0,
+            },
+        );
+        stroke.finish().unwrap();
+        assert_eq!(erased_pixels(&out), 4 * 4, "4 document px a side at 400 %");
+
+        // At 3200 % the block is one document pixel, so it covers one: the
+        // inclusive boundary would have covered two.
+        let mut out = doc(false);
+        let mut stroke = begin_erase(
+            &out,
+            "0",
+            StrokeConfig::default(),
+            EraserMode::Block,
+            None,
+            32.0,
+        )
+        .unwrap();
+        stroke.sample(
+            &mut out,
+            StrokeSample {
+                x: 20.5,
+                y: 10.5,
+                pressure: 1.0,
+            },
+        );
+        stroke.finish().unwrap();
+        assert_eq!(erased_pixels(&out), 1, "one document px at 3200 %");
+
+        // The brush preset's shape dynamics do not apply: the Block is one
+        // square of one size.
+        let mut out = doc(false);
+        let mut stroke = begin_erase(
+            &out,
+            "0",
+            StrokeConfig {
+                scatter: 120,
+                count: 3,
+                size_jitter: 60,
+                ..StrokeConfig::default()
+            },
+            EraserMode::Block,
+            None,
+            1.0,
+        )
+        .unwrap();
+        stroke.sample(
+            &mut out,
+            StrokeSample {
+                x: 20.5,
+                y: 10.5,
+                pressure: 1.0,
+            },
+        );
+        stroke.finish().unwrap();
+        assert_eq!(erased_pixels(&out), 16 * 16, "the dynamics do not apply");
     }
 
     #[test]

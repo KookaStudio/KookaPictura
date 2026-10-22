@@ -68,6 +68,7 @@ class OptionsBar;
 class PanelColumn;
 class PictureView;
 class PlaceholderPanel;
+class AdjustmentsPanel;
 class PreferencesDialog;
 class PropertiesPanel;
 class SystemInfoDialog;
@@ -202,7 +203,7 @@ public:
     // Tool test hooks.
     ToolId activeTool() const;
     void setActiveTool(ToolId id);
-    QColor foregroundColor() const { return foreground_; }
+    QColor foregroundColor() const;
     bool hasPendingCrop() const;
     bool commitCrop();
     // A pending transform locks the Layer menu and greys the Layers panel.
@@ -763,7 +764,7 @@ private:
     GlyphsPanel* glyphsPanel_ = nullptr;
     ParagraphStylesPanel* paragraphStylesPanel_ = nullptr;
     PropertiesPanel* propertiesPanel_ = nullptr;
-    PlaceholderPanel* adjustmentsPanel_ = nullptr;
+    AdjustmentsPanel* adjustmentsPanel_ = nullptr;
     ChannelsPanel* channelsPanel_ = nullptr;
     PathsPanel* pathsPanel_ = nullptr;
     PlaceholderPanel* actionsPanel_ = nullptr;
@@ -803,7 +804,6 @@ private:
     // document fits the viewport is pinned to the centre, panning is refused,
     // and the workspace scrollbars hide. Default off. Persisted.
     bool snapCanvasToWorkspace_ = false;
-    QColor foreground_;
     QSet<QString> panelNames_;
     QStringList recent_;
     // Actions refreshRecentMenu added (file rows, separator, Clear); the

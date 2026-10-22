@@ -1,0 +1,14 @@
+# Test plan
+
+| Scenario | Steps | Expected | Coverage |
+|---|---|---|---|
+| `live_outline_clipped` | Drag each closed selection shape (rectangular marquee, elliptical marquee, freehand lasso, magnetic lasso, patch region trace, the content-aware-move tool shares the handler) from inside a 64x64 canvas past its edge | The live outline runs to the border, turns the corner there, and follows the border | `tst_selection_preview::marqueePastTheEdgeClosesAlongTheBorder`, `tst_selection_preview::ellipticalMarqueePastTheEdgeClosesAlongTheBorder`, `tst_selection_preview::lassoPastTheEdgeClosesAlongTheBorder`, `tst_selection_preview::magneticLassoPastTheEdgeClosesAlongTheBorder`, `tst_selection_preview::regionTracePastTheEdgeClosesAlongTheBorder`, `tst_selection_preview::clipToCanvasClosesAlongTheBorder` |
+| `live_outline_matches_committed` | Drag a marquee from (50,50) to (100,100) on a 64x64 canvas and release it in New mode with no prior selection | The unit-lattice edge set of the live outline before the release equals the edge set of the committed outline after it | `tst_selection_preview::liveOutlineMatchesTheCommittedOne` |
+| `live_outline_inside` | Drag a selection shape wholly inside the canvas | The live outline is the dragged shape, with no border segment added | `tst_selection_preview::clipToCanvasLeavesInnerShapesAlone` |
+| `live_outline_outside` | Drag a selection shape wholly outside the canvas | No live outline is drawn | `tst_selection_preview::clipToCanvasDropsOuterShapes` |
+| `live_outline_open_band` | Drag the polygonal lasso's band past the canvas edge | The band stops at the border and gains no closing edge along it | `tst_selection_preview::polygonalBandStaysOpenAtTheBorder` |
+| `live_outline_combine_mode` | Drag a marquee past the canvas edge while the tool's combine mode is Add, with an existing selection elsewhere | The live outline shows the dragged shape, not the combination with the existing selection | `tst_selection_preview::combineModeShowsTheNewShape` |
+| `live_outline_self_overlapping` | Drag a lasso so that its trace overlaps itself and crosses the canvas edge | The live outline is the boundary of the region it encloses, closed along the border, with no vertex outside the canvas | `tst_selection_preview::clipToCanvasClosesASelfOverlappingShape` |
+| a trace that encloses nothing | Drag a stroke out past the canvas edge and back | The band stays, cropped at the border, instead of vanishing | `tst_selection_preview::clipToCanvasKeepsATraceThatEnclosesNothing` |
+| `live_outline_other_unclipped` | Drag the zoom tool's marquee past the canvas edge | Its rubber band is drawn unclipped | `tst_selection_preview::zoomMarqueeStaysUnclipped` |
+| degenerate loop | Set a selection preview whose loop has a single point, as the freehand and magnetic lasso previews do on their first frame | The preview keeps its point and does not disappear | `tst_selection_preview::clipToCanvasKeepsDegenerateLoops` |

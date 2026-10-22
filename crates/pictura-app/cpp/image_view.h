@@ -155,10 +155,16 @@ public:
 
     // Brush-size ring drawn in image space under the pan/zoom transform. The
     // diameter is in image pixels, so a zoomed canvas scales the ring for free.
+    // The Eraser's Block mode draws a square of the same size instead, so the
+    // two share one outline.
     void setBrushOutline(double diameter, const QPointF& imagePos);
+    void setBlockOutline(double side, const QPointF& imagePos);
     void clearBrushOutline();
-    bool hasBrushOutlineForTest() const { return brushOutlineActive_; }
+    bool hasBrushOutline() const { return brushOutlineActive_; }
+    // Where the outline is drawn, in image space.
+    QPointF brushOutlineImagePos() const { return brushOutlineImagePos_; }
     double brushOutlineDiameterForTest() const { return brushOutlineDiameter_; }
+    bool brushOutlineIsSquareForTest() const { return brushOutlineSquare_; }
     // Device-pixel ring diameter for the current zoom (what a render shows).
     double brushOutlineScreenDiameterForTest() const
     {
@@ -248,6 +254,8 @@ public:
     // `closed` is false the loops are drawn as open polylines (the Polygonal
     // Lasso rubber band must not show a phantom closing edge).
     void setSelectionPreview(const QList<QPolygonF>& loops, bool closed = true, bool solid = false);
+    // Live selection shape: the rubber band, closed and clipped to the canvas.
+    void setSelectionShapePreview(const QList<QPolygonF>& loops);
     void clearSelectionPreview();
     // A click-driven lasso's origin: a small hollow square, fixed on screen,
     // marking the point the outline closes to. Cleared with the preview.
@@ -264,6 +272,7 @@ public:
     {
         return previewContours_.isEmpty() ? 0 : previewContours_.first().size();
     }
+    const QList<QPolygonF>& selectionPreviewContours() const { return previewContours_; }
 
     // Move-tool live preview: draw a cached base plus the moved layer at a live
     // image-space offset, so the drag never composites the document.
@@ -606,6 +615,9 @@ protected:
     void leaveEvent(QEvent* event) override;
 
 private:
+    // The one brush outline: a circle for the brush tools, a square for the
+    // Eraser's Block mode.
+    void setBrushOutlineShape(double diameter, const QPointF& imagePos, bool square);
     void paintCropGroupOverlays(QPainter& painter);
     // The Free Transform reference point marker (image_view_overlays.cpp).
     void paintTransformPivot(QPainter& painter);
@@ -780,6 +792,7 @@ private:
     bool dragSizeActive_ = false;
 
     bool brushOutlineActive_ = false;
+    bool brushOutlineSquare_ = false;
     double brushOutlineDiameter_ = 0.0;
     QPointF brushOutlineImagePos_;
 

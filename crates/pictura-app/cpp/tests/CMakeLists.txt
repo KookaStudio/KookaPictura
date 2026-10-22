@@ -49,6 +49,7 @@ set(PICTURA_QT_TESTS
     tst_merge_commands
     tst_layer_commands
     tst_fill_tools
+    tst_eraser_tools
     tst_retouch_tools
     tst_pen_tools
     tst_path_selection_tools
@@ -75,6 +76,7 @@ set(PICTURA_QT_TESTS
     tst_swatches_panel
     tst_color_picker
     tst_properties_panel
+    tst_adjustments_panel
     tst_channels_panel
     tst_paths_panel
     tst_icon_assets
@@ -120,6 +122,7 @@ set(PICTURA_QT_TESTS
     tst_panels_parity
     tst_selection_alt
     tst_selection_move
+    tst_selection_preview
     tst_nested_layer_target
     tst_screen_modes
     tst_dialog_chrome

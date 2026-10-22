@@ -25,6 +25,35 @@ Snapshot for resuming after a context break. Update after each milestone.
   and document paths. VRAM, GPU clock, desktop build version, and monitor type stay
   `Unavailable` (no portable API). Tests: `tst_system_info` plus a Rust
   `gpu_adapter_info_never_panics`; opening the real browser is a manual check.
+- **Justified text renders justified** (#792, branch
+  `fix/792-justify-text-renders-left`, OpenSpec change
+  `2026-10-21-justify-text-renders-left`). A type layer whose paragraph
+  justification was 3 to 6 - Justify Last Left, Justify Last Right, Justify
+  Last Center and Justify All - rendered left-aligned: the renderer collapsed
+  the seven justification values the engine models to three alignments, and
+  nothing spread a line to the column width. The codec, the Paragraph panel
+  and the Paragraph Style dialog already carried all seven, so the panel's own
+  choices did nothing.
+  - The renderer keeps the justification kind. A justified line's word spaces
+    take the leftover width, so the line's advance reaches the column; the
+    paragraph's last line is the one line a justification does not spread, and
+    its variant aligns it.
+  - The column is the paragraph box's width. A point-type layer has no box and
+    so no column: its lines are not spread, and the variant still selects the
+    line's alignment. A line with no word space to spread stays flush left.
+  - The vertical placement follows the same table read as CS6's vertical
+    justification: Justify Last Left is the top, Justify Last Right the
+    bottom, Justify Last Center the centre.
+  - The caret measures the same spread, so it stands between the painted
+    glyphs; converting a justified paragraph to point text drops the spread
+    and anchors the lines as the paragraph's last line was.
+  Ceiling (`ponytail:`): the word-spacing min/desired/max bounds, the letter
+  spacing and the glyph scaling are not applied - the spread divides the
+  leftover width evenly - the spread is computed for left-to-right text, a
+  line with no word space is never spread, and the Qt `Rasterize Type` path
+  still collapses the justify variants to `Qt::AlignLeft`. A point-type
+  layer's lines follow the variant's alignment, so a layer that already
+  carried Justify Last Right is now right-aligned.
 - **Plain-Rust document session** (#740, branch
   `refactor/740-rust-document-session`, OpenSpec change `document-session`,
   archived into `document/document-session`). The document, the selection, and
@@ -1829,8 +1858,10 @@ Snapshot for resuming after a context break. Update after each milestone.
   stroke that erases an ordinary layer to transparency (Clear: coverage ×
   Opacity multiplies alpha down) and paints the background colour on the
   Background, an alpha-less layer, or a transparency-locked layer; Mode is
-  Brush / Pencil / Block (a hard 16 px square at full strength,
-  `StrokeConfig::square`); Erase to History, or Alt at the press, paints the
+  Brush / Pencil / Block (a hard square of 16 *screen* pixels at full strength,
+  so its document side is round(16 / zoom) and never under one pixel,
+  `StrokeConfig::square`); Erase to History,
+  or Alt at the press, paints the
   History Brush source back. `pictura_paint::art_history` scatters strokes over
   the Area per dab, coloured from the source at their start, running along the
   source's edges for the Style's length / wander / curl (CS6's ten style
@@ -1842,11 +1873,12 @@ Snapshot for resuming after a context break. Update after each milestone.
   `tool_stamps.cpp`; bars in `options_bar_stamp.cpp` (Eraser: tip, Mode,
   Opacity / Flow greyed for Block, Erase to History; Art History: tip, greyed
   Normal Mode, Opacity, Style, Area 50 px, Tolerance 0 %). Both join the size
-  ring and `[` / `]`; Alt on the Eraser keeps the paint cursor. Self-test codes
+  ring and `[` / `]`; the Eraser's Block mode draws a square cursor of the
+  block's own size instead, resized with the zoom; Alt on the Eraser keeps the
+  paint cursor. Self-test codes
   547, 548; `shift_plain` (117) asserts Shift+Y and E and probes the G group,
   `keys_shown` (116) now probes the E group, and guard 98 probes the Background
-  Eraser. Ceilings (`ponytail:`): Block is 16 document (not screen) pixels and
-  its ring shows the brush size; the Art History Brush paints only as the
+  Eraser. Ceilings (`ponytail:`): the Art History Brush paints only as the
   pointer moves, with Normal mode only; Tolerance defaults to 0 % (the spec's
   unverified 100 % would paint almost nowhere); both match the source layer by
   panel path.

@@ -3,6 +3,7 @@
 #include "api/selection_api.h"
 #include "icons.h"
 #include "pictura_debug_timing.h"
+#include "selection_geometry.h"
 
 #include <QtCore/QDebug>
 #include <QtCore/QRect>
@@ -209,6 +210,14 @@ void ImageView::setSelectionPreview(const QList<QPolygonF>& loops, bool closed, 
     selectionPreviewSolid_ = solid;
     updateAntsTimer();
     update();
+}
+
+void ImageView::setSelectionShapePreview(const QList<QPolygonF>& loops)
+{
+    // The committed outline is traced from the canvas-clipped mask, so it
+    // closes along the border; the live shape is clipped the same way, and the
+    // dash phase keeps animating through setSelectionPreview.
+    setSelectionPreview(clipSelectionShapeToCanvas(loops, docSize_), true, false);
 }
 
 void ImageView::setSelectionPreviewOrigin(const QPointF& imagePos)
@@ -726,12 +735,23 @@ void ImageView::paintEvent(QPaintEvent*)
         // A white ring one image px outside the black one keeps the outline
         // legible on both light and dark documents. Drawn with the full-widget
         // clip, not the document clip, so the ring stays visible past the edge.
+        // The Eraser's Block mode draws a square of the same size instead, with
+        // a one-screen-pixel halo, so it stays tight at any zoom.
         const double radius = brushOutlineDiameter_ / 2.0;
+        const double halo = brushOutlineSquare_ ? 1.0 / zoom_ : 1.0;
+        const QPointF centre = brushOutlineImagePos_;
+        const auto outline = [&painter, centre, square = brushOutlineSquare_](double r) {
+            if (square) {
+                painter.drawRect(QRectF(centre.x() - r, centre.y() - r, 2.0 * r, 2.0 * r));
+            } else {
+                painter.drawEllipse(centre, r, r);
+            }
+        };
         painter.setBrush(Qt::NoBrush);
         painter.setPen(QPen(Qt::white, 0));
-        painter.drawEllipse(brushOutlineImagePos_, radius + 1.0, radius + 1.0);
+        outline(radius + halo);
         painter.setPen(QPen(Qt::black, 0));
-        painter.drawEllipse(brushOutlineImagePos_, radius, radius);
+        outline(radius);
     }
 
     painter.save();
@@ -747,8 +767,9 @@ void ImageView::paintEvent(QPaintEvent*)
         // Marching ants: a solid white base under an animated black dashed pen,
         // so the edge reads against both light and dark pixels. Width 0 = a
         // cosmetic 1-px line independent of the pan/zoom transform.
-        // ponytail: a dragged outline past the canvas edge is cut off rather
-        // than closed along it; the release retrace draws the clipped mask.
+        // ponytail: the move-selection drag's offset outline is cut off at the
+        // canvas edge rather than closed along it; closing it would change the
+        // capability's "Offset ants during a move-selection drag" requirement.
         painter.save();
         painter.translate(selectionContourOffset_);
         painter.setBrush(Qt::NoBrush);
@@ -1068,11 +1089,22 @@ void ImageView::hideEvent(QHideEvent* event)
 
 void ImageView::setBrushOutline(double diameter, const QPointF& imagePos)
 {
+    setBrushOutlineShape(diameter, imagePos, false);
+}
+
+void ImageView::setBlockOutline(double side, const QPointF& imagePos)
+{
+    setBrushOutlineShape(side, imagePos, true);
+}
+
+void ImageView::setBrushOutlineShape(double diameter, const QPointF& imagePos, bool square)
+{
     if (diameter <= 0.0) {
         clearBrushOutline();
         return;
     }
     brushOutlineActive_ = true;
+    brushOutlineSquare_ = square;
     brushOutlineDiameter_ = diameter;
     brushOutlineImagePos_ = imagePos;
     update();

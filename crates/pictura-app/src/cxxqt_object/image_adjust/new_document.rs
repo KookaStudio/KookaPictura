@@ -80,10 +80,7 @@ fn plan(mode: &str, bits: i32) -> Option<(&'static str, Option<ColorMode>, Optio
 /// Fill the base layer's colour planes with `rgb` (its luminance on Gray).
 fn fill_layer(doc: &mut Document, rgb: [u8; 3]) {
     let gray = doc.mode == ColorMode::Grayscale;
-    let luma = {
-        let [r, g, b] = rgb.map(f64::from);
-        (0.299 * r + 0.587 * g + 0.114 * b).round() as u8
-    };
+    let luma = pictura_core::rec601_luma(rgb[0], rgb[1], rgb[2]);
     for layer in &mut doc.layers {
         for channel in &mut layer.channels {
             let value = match channel.id {

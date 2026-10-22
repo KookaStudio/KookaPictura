@@ -189,6 +189,7 @@ mod pdf_text;
 pub use pdf_text::{pdf_live_type, pdf_type_fonts, LiveType};
 mod type_caret;
 pub use type_caret::{type_baselines, type_caret_stops};
+mod type_justify;
 mod type_paragraph;
 pub use type_paragraph::{type_overflows, type_to_paragraph, type_to_point};
 mod type_layer;

@@ -12,7 +12,7 @@
 //! (<https://github.com/perfecto25/photorust>), extended with the pattern
 //! fill. Behavioural parity only.
 
-use crate::fill::fill_layer;
+use crate::fill::{fill_layer, Alpha};
 use crate::healing::RgbaImage;
 use crate::{PaintMode, Rgba};
 use pictura_core::{Document, PsdRect};
@@ -77,10 +77,12 @@ pub fn flood(
 
 /// Fill the pixel layer at `path` with `paint` through a document-sized
 /// coverage `mask` (0–255, row-major over `doc.width`) at `opacity` (0.0–1.0)
-/// in `mode`, inside `selection` (another such mask) when there is one. A
-/// transparency lock keeps transparent pixels empty. Returns the document
-/// rectangle changed; `None` when nothing changed or the layer cannot be
-/// filled.
+/// in `mode`, inside `selection` (another such mask) when there is one. The
+/// `alpha` policy says what the fill does with the pixels' transparency; a
+/// transparency lock overrides it and keeps every pixel's alpha. Returns the
+/// document rectangle changed; `None` when nothing changed or the layer cannot
+/// be filled.
+#[allow(clippy::too_many_arguments)]
 pub fn fill(
     doc: &mut Document,
     path: &str,
@@ -89,6 +91,7 @@ pub fn fill(
     mode: PaintMode,
     opacity: f32,
     selection: Option<&[u8]>,
+    alpha: Alpha,
 ) -> Option<PsdRect> {
     let opacity = opacity.clamp(0.0, 1.0);
     let width = doc.width as i32;
@@ -96,7 +99,7 @@ pub fn fill(
     if opacity <= 0.0 || empty_tile || mask.len() < (width * doc.height as i32) as usize {
         return None;
     }
-    fill_layer(doc, path, mode, selection, |x, y| {
+    fill_layer(doc, path, mode, selection, alpha, |x, y| {
         let cover = mask[(y * width + x) as usize];
         if cover == 0 {
             return None;
@@ -165,6 +168,7 @@ pub fn stroke_selection(
         mode,
         opacity,
         None,
+        Alpha::Blend,
     )
 }
 
@@ -176,23 +180,28 @@ pub enum StrokeAlign {
     Center,
 }
 
-/// A separable 3×3 max filter of radius `r` (0 returns the mask unchanged).
+/// A separable max filter of radius `r` (0 returns the mask unchanged).
+///
+/// The horizontal pass reads the mask and writes a buffer of its own: a
+/// filter that read and wrote the same buffer would feed each pixel the value
+/// the previous one had just written, and the filter would cascade along the
+/// row instead of spreading `r` px from the shape.
 fn dilate(mask: &[u8], w: i32, h: i32, r: i32) -> Vec<u8> {
     if r <= 0 {
         return mask.to_vec();
     }
-    let mut out = mask.to_vec();
+    let mut out = vec![0u8; mask.len()];
     for y in 0..h {
         for x in 0..w {
             let mut m = 0u8;
             for k in -r..=r {
                 let nx = (x + k).clamp(0, w - 1);
-                m = m.max(out[(y * w + nx) as usize]);
+                m = m.max(mask[(y * w + nx) as usize]);
             }
             out[(y * w + x) as usize] = m;
         }
     }
-    let mut out2 = out.clone();
+    let mut out2 = vec![0u8; mask.len()];
     for y in 0..h {
         for x in 0..w {
             let mut m = 0u8;
@@ -206,23 +215,26 @@ fn dilate(mask: &[u8], w: i32, h: i32, r: i32) -> Vec<u8> {
     out2
 }
 
-/// A separable 3×3 min filter of radius `r` (0 returns the mask unchanged).
+/// A separable min filter of radius `r` (0 returns the mask unchanged).
+///
+/// The horizontal pass reads the mask and writes a buffer of its own, as
+/// [`dilate`]'s does.
 fn erode(mask: &[u8], w: i32, h: i32, r: i32) -> Vec<u8> {
     if r <= 0 {
         return mask.to_vec();
     }
-    let mut out = mask.to_vec();
+    let mut out = vec![0u8; mask.len()];
     for y in 0..h {
         for x in 0..w {
             let mut m = 255u8;
             for k in -r..=r {
                 let nx = (x + k).clamp(0, w - 1);
-                m = m.min(out[(y * w + nx) as usize]);
+                m = m.min(mask[(y * w + nx) as usize]);
             }
             out[(y * w + x) as usize] = m;
         }
     }
-    let mut out2 = out.clone();
+    let mut out2 = vec![0u8; mask.len()];
     for y in 0..h {
         for x in 0..w {
             let mut m = 255u8;
@@ -263,7 +275,89 @@ mod tests {
     fn bucket(d: &mut Document, seed: (i32, i32), tolerance: u8, contiguous: bool) {
         let mask = flood(&layer_surface(d, "0").unwrap(), seed, tolerance, contiguous).unwrap();
         let red = BucketPaint::Foreground(RED);
-        fill(d, "0", &mask, red, PaintMode::Normal, 1.0, None);
+        fill(
+            d,
+            "0",
+            &mask,
+            red,
+            PaintMode::Normal,
+            1.0,
+            None,
+            Alpha::Blend,
+        );
+    }
+
+    /// A `w × h` document whose selection covers the rectangle at `(left, top)`.
+    fn selected(w: i32, h: i32, left: i32, top: i32, sw: i32, sh: i32) -> (Document, Vec<u8>) {
+        let d = doc(w, h, WHITE);
+        let mut selection = vec![0u8; (w * h) as usize];
+        for y in top..top + sh {
+            for x in left..left + sw {
+                selection[(y * w + x) as usize] = 255;
+            }
+        }
+        (d, selection)
+    }
+
+    #[test]
+    fn the_outside_band_stops_at_the_selections_edge() {
+        // An 8×1 row: the selection covers the middle four pixels.
+        let (mut d, selection) = selected(8, 1, 2, 0, 4, 1);
+        stroke_selection(
+            &mut d,
+            "0",
+            &selection,
+            RED,
+            1,
+            StrokeAlign::Outside,
+            PaintMode::Normal,
+            1.0,
+        )
+        .expect("outside stroke");
+        assert_eq!(pixel(&d, 1, 0), [220, 0, 0, 255], "the band's left arm");
+        assert_eq!(pixel(&d, 6, 0), [220, 0, 0, 255], "the band's right arm");
+        assert_eq!(pixel(&d, 7, 0), WHITE, "the band reached past the edge");
+    }
+
+    #[test]
+    fn the_inside_band_stops_at_the_selections_edge() {
+        let (mut d, selection) = selected(8, 1, 2, 0, 4, 1);
+        stroke_selection(
+            &mut d,
+            "0",
+            &selection,
+            RED,
+            1,
+            StrokeAlign::Inside,
+            PaintMode::Normal,
+            1.0,
+        )
+        .expect("inside stroke");
+        assert_eq!(pixel(&d, 2, 0), [220, 0, 0, 255], "the band's left arm");
+        assert_eq!(pixel(&d, 5, 0), [220, 0, 0, 255], "the band's right arm");
+        assert_eq!(pixel(&d, 3, 0), WHITE, "the band covered the interior");
+        assert_eq!(pixel(&d, 6, 0), WHITE, "the band reached past the edge");
+    }
+
+    #[test]
+    fn the_band_does_not_reach_the_canvas_edge() {
+        // A 10×10 selection with room to its right on a 24×24 canvas.
+        let (mut d, selection) = selected(24, 24, 7, 7, 10, 10);
+        stroke_selection(
+            &mut d,
+            "0",
+            &selection,
+            RED,
+            2,
+            StrokeAlign::Outside,
+            PaintMode::Normal,
+            1.0,
+        )
+        .expect("outside stroke");
+        assert_eq!(pixel(&d, 5, 12), [220, 0, 0, 255], "the band's left arm");
+        assert_eq!(pixel(&d, 17, 12), [220, 0, 0, 255], "the band's right arm");
+        assert_eq!(pixel(&d, 19, 12), WHITE, "the band reached past the edge");
+        assert_eq!(pixel(&d, 23, 23), WHITE, "the band reached the corner");
     }
 
     #[test]
@@ -342,15 +436,36 @@ mod tests {
             PaintMode::Normal,
             0.5,
             None,
+            Alpha::Blend,
         )
         .expect("filled");
         assert_eq!((dirty.left, dirty.right), (0, 2));
         assert!((pixel(&d, 0, 0)[0] as i32 - 128).abs() <= 1);
         assert!((pixel(&d, 1, 0)[0] as i32 - 191).abs() <= 1);
         assert_eq!(pixel(&d, 2, 0), WHITE);
-        assert!(fill(&mut d, "0", &[255; 4], black, PaintMode::Normal, 0.0, None).is_none());
+        assert!(fill(
+            &mut d,
+            "0",
+            &[255; 4],
+            black,
+            PaintMode::Normal,
+            0.0,
+            None,
+            Alpha::Blend
+        )
+        .is_none());
         assert!(
-            fill(&mut d, "0", &[255; 3], black, PaintMode::Normal, 1.0, None).is_none(),
+            fill(
+                &mut d,
+                "0",
+                &[255; 3],
+                black,
+                PaintMode::Normal,
+                1.0,
+                None,
+                Alpha::Blend
+            )
+            .is_none(),
             "a short mask was read"
         );
     }
@@ -363,7 +478,17 @@ mod tests {
         }
         lock(&mut d, LockFlags::TRANSPARENCY);
         let red = BucketPaint::Foreground(RED);
-        fill(&mut d, "0", &[255; 400], red, PaintMode::Normal, 1.0, None).expect("filled");
+        fill(
+            &mut d,
+            "0",
+            &[255; 400],
+            red,
+            PaintMode::Normal,
+            1.0,
+            None,
+            Alpha::Blend,
+        )
+        .expect("filled");
         assert_eq!(pixel(&d, 10, 5), [220, 0, 0, 255]);
         assert_eq!(pixel(&d, 10, 15)[3], 0, "an empty pixel gained coverage");
     }
@@ -385,6 +510,7 @@ mod tests {
             PaintMode::Normal,
             1.0,
             Some(&selection),
+            Alpha::Blend,
         )
         .expect("filled");
         assert_eq!(pixel(&d, 0, 0)[0], 10);
@@ -398,7 +524,17 @@ mod tests {
             data: Vec::new(),
         };
         let paint = BucketPaint::Pattern(&empty);
-        assert!(fill(&mut d, "0", &[255; 12], paint, PaintMode::Normal, 1.0, None).is_none());
+        assert!(fill(
+            &mut d,
+            "0",
+            &[255; 12],
+            paint,
+            PaintMode::Normal,
+            1.0,
+            None,
+            Alpha::Blend
+        )
+        .is_none());
     }
 
     #[test]
