@@ -96,7 +96,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 
 | ID | Spec | Gap | Status | Evidence | Issue |
 |---|---|---|---|---|---|
-| PAN-1 | `panels/adjustments-panel.md` | Adjustments panel icon grid | MISSING | `frame_build.cpp:57` | #509 |
+| PAN-1 | `panels/adjustments-panel.md` | Adjustments panel icon grid (creation shipped; mode/depth gating and fill-layer presets remain) | PARTIAL | `panels/adjustments_panel.cpp` | #509 |
 | PAN-2 | `panels/measurement-log-panel.md` | Measurement Log panel + measurement engine | MISSING | `command_tree.cpp:962` | #510 |
 | PAN-3 | `panels/tool-presets-panel.md` | Tool Presets panel + `.tpl` libraries | MISSING | `command_tree.cpp:982` | #511 |
 | PAN-4 | `layer-styles.md` | Styles panel + `.asl` presets | MISSING | `frame_build.cpp:79` | #512 |
