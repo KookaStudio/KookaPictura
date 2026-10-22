@@ -187,7 +187,8 @@ QList<SearchEntry> buildSearchIndex(const CommandRegistry& registry)
 
 QList<SearchHit> searchIndex(const QList<SearchEntry>& entries, const QString& query, int limit)
 {
-    const QStringList words = query.toLower().split(QLatin1Char(' '), Qt::SkipEmptyParts);
+    static const QRegularExpression whitespace(QStringLiteral("\\s+"));
+    const QStringList words = query.toLower().split(whitespace, Qt::SkipEmptyParts);
     if (words.isEmpty()) {
         return {};
     }

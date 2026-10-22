@@ -55,17 +55,26 @@ start the canvas Space pan, and a Space pressed with Shift SHALL NOT start it.
 
 ### Requirement: Searchable index
 
-The index SHALL contain every registry command, every tool, every panel, every
-real Preferences page, and every row of the curated control table. Each entry
-SHALL carry its location as a path, with the leaf last. A command's path SHALL
-be its menu path; a panel SHALL appear once; and every curated control SHALL
-name a live widget in the window.
+The index SHALL contain every registry command except `help.search` itself,
+every tool, every panel that has a Window > Panels toggle, every real
+Preferences page, and every row of the curated control table. A panel without
+a toggle, such as the placeholder Styles panel, SHALL be found through its menu
+command only. Each entry SHALL carry its location as a path, with the leaf
+last, and its labels SHALL drop mnemonic ampersands, an inline shortcut, and
+trailing ellipses. A command's path SHALL be its menu path; a panel SHALL
+appear once; and every curated control SHALL name a live widget in the window.
 
 #### Scenario: Every source is indexed [sb_sources]
 
 - **WHEN** the index is built
 - **THEN** it holds a command, a tool, a panel, a preference page, and a control entry
 - **AND** no panel appears twice
+- **AND** `help.search` is not indexed
+
+#### Scenario: Labels are cleaned [sb_labels]
+
+- **WHEN** a label carries a mnemonic `&`, a doubled `&&`, an inline tab shortcut, or one or more trailing ellipses
+- **THEN** the indexed label drops the mnemonic, keeps one literal `&`, and drops the shortcut and every trailing ellipsis
 
 #### Scenario: Curated controls resolve [sb_controls]
 
@@ -86,6 +95,11 @@ paths.
 - **WHEN** the user types `warp`
 - **THEN** the first result is `Edit > Transform > Warp`
 
+#### Scenario: Any whitespace separates words [sb_whitespace]
+
+- **WHEN** the query's words are separated by a tab or a newline
+- **THEN** they match as separate words
+
 #### Scenario: Words combine and rank [sb_rank]
 
 - **WHEN** the user types two words that occur only together in one entry's path
@@ -99,8 +113,10 @@ tool becomes active, a panel is shown, a preference page opens, and a control
 is brought up and focused. Alt+Enter SHALL reveal the result: a command's menu
 chain opens on its item, and a tool, panel, or control is outlined in place.
 Stub and disabled entries SHALL be listed greyed; Enter and a click SHALL do
-nothing on them, and Alt+Enter SHALL still reveal them. The bar SHALL close
-after a run or a reveal.
+nothing on them, and Alt+Enter SHALL still open their menu chain. A disabled
+menu item cannot be made active, so it SHALL NOT be highlighted, and reveal
+SHALL NOT enable it. Up and Down SHALL move the selection one row, stopping at
+the first and last rows. The bar SHALL close after a run or a reveal.
 
 #### Scenario: Enter runs the selected entry [sb_run]
 
@@ -108,17 +124,43 @@ after a run or a reveal.
 - **THEN** a Warp transform session starts
 - **AND** the search bar closes
 
+#### Scenario: Panels, preferences and controls run [sb_run_targets]
+
+- **WHEN** the user presses Enter on a hidden panel's entry
+- **THEN** the panel is shown and outlined
+- **WHEN** the user presses Enter on a Preferences page's entry
+- **THEN** Preferences opens on that page
+- **WHEN** the user presses Enter on a drop-down control's entry
+- **THEN** the drop-down's list opens
+- **WHEN** the user presses Enter on an options-bar control's entry
+- **THEN** the control's tool becomes active and its field takes the focus with its text selected
+
 #### Scenario: A stub does not run [sb_stub]
 
 - **WHEN** the selected result is a stub command
 - **THEN** its row is greyed
 - **AND** Enter leaves the bar open and runs nothing
+- **WHEN** the user presses Alt+Enter on it
+- **THEN** the bar closes and the stub's menu chain opens
 
 #### Scenario: Alt+Enter reveals the menu chain [sb_reveal]
 
 - **WHEN** the user selects `Edit > Transform > Warp` and presses Alt+Enter
 - **THEN** the Edit menu and its Transform submenu open
 - **AND** Warp is the Transform submenu's active item
+
+#### Scenario: Alt+Enter outlines a tool, panel or control [sb_reveal_place]
+
+- **WHEN** the user presses Alt+Enter on a tool, a panel, or a control entry
+- **THEN** the toolbox slot, the panel, or the control is outlined
+- **AND** the active tool is unchanged and a drop-down's list stays closed
+
+#### Scenario: Up and Down move the selection [sb_navigate]
+
+- **WHEN** the result list has several rows and the user presses Up on the first row
+- **THEN** the first row stays selected
+- **WHEN** the user presses Down past the last row
+- **THEN** the last row stays selected
 
 ### Requirement: Dismissal
 
@@ -133,6 +175,13 @@ query field loses focus to anything other than a popup.
 - **THEN** the bar closes
 - **WHEN** the bar was closed with Escape and the user presses Shift+Space again
 - **THEN** the bar opens again
+
+#### Scenario: Losing focus closes the bar [sb_focus]
+
+- **WHEN** the query field loses focus to a popup
+- **THEN** the bar stays open
+- **WHEN** the query field loses focus to another widget
+- **THEN** the bar closes
 
 ### Requirement: Look and placement
 

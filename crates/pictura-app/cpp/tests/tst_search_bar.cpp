@@ -5,22 +5,29 @@
 
 #include <QtTest/QtTest>
 
+#include <algorithm>
+
 #include <QtGui/QAction>
 #include <QtGui/QKeyEvent>
+#include <QtWidgets/QAbstractItemView>
 #include <QtWidgets/QApplication>
+#include <QtWidgets/QComboBox>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QListWidget>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QMenuBar>
 #include <QtWidgets/QStatusBar>
+#include <QtWidgets/QToolButton>
 
 #include "commands.h"
 #include "frame.h"
 #include "image_view.h"
+#include "preferences_dialog.h"
 #include "search_bar.h"
 #include "search_index.h"
 #include "selftest_paint_fixture.h"
 #include "tool_hint_bar.h"
+#include "toolbox.h"
 #include "tools.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
@@ -61,6 +68,43 @@ void closePopups()
     }
 }
 
+// Make the result row holding the entry `kind`/`id` current.
+bool selectEntry(pictura::SearchBar* searchBar, pictura::SearchEntry::Kind kind, const QString& id)
+{
+    for (int row = 0; searchBar && row < searchBar->results()->count(); ++row) {
+        const pictura::SearchEntry* e = searchBar->entryAt(row);
+        if (e && e->kind == kind && e->id == id) {
+            searchBar->results()->setCurrentRow(row);
+            return true;
+        }
+    }
+    return false;
+}
+
+// Whether a reveal outline (`flashWidget`) sits over `target`.
+bool flashedOver(QWidget* target)
+{
+    if (!target) {
+        return false;
+    }
+    QWidget* window = target->window();
+    const QRect want =
+        QRect(target->mapTo(window, QPoint(0, 0)), target->size()).adjusted(-2, -2, 2, 2);
+    const QList<QWidget*> flashes = window->findChildren<QWidget*>(QStringLiteral("searchFlash"));
+    return std::any_of(flashes.cbegin(), flashes.cend(),
+                       [&want](const QWidget* flash) { return flash->geometry() == want; });
+}
+
+bool insideNamed(QWidget* widget, const QString& name)
+{
+    for (; widget; widget = widget->parentWidget()) {
+        if (widget->objectName() == name) {
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace
 
 class SearchBarTest : public QObject {
@@ -78,9 +122,14 @@ private slots:
     void warpFindsTransformWarp();
     void rankingOrder();
     void enterRuns();
+    void enterRunsPanelPreferenceControl();
     void stubIsNotRunnable();
     void altEnterRevealsMenu();
+    void altEnterOutlinesInPlace();
+    void upDownMovesAndClamps();
+    void cleanLabelsAndWhitespace();
     void dismissal();
+    void focusLossCloses();
     void reopensAfterEscape();
     void rebindUpdatesHint();
 
@@ -116,6 +165,10 @@ void SearchBarTest::cleanup()
         window_->closeDocument(window_->activeDocumentIndex(), false);
     }
     window_->setActiveTool(pictura::ToolId::Move);
+    qDeleteAll(window_->findChildren<QWidget*>(QStringLiteral("searchFlash")));
+    if (pictura::PreferencesDialog* prefs = window_->preferencesDialog()) {
+        prefs->close();
+    }
 }
 
 pictura::SearchBar* SearchBarTest::openBar(const QString& query)
@@ -355,6 +408,61 @@ void SearchBarTest::enterRuns()
     QCOMPARE(window_->activeTool(), pictura::ToolId::MagicWand);
 }
 
+void SearchBarTest::enterRunsPanelPreferenceControl()
+{
+    using Kind = pictura::SearchEntry::Kind;
+    QVERIFY(openTransformableDocument());
+    pictura::CommandRegistry* registry = window_->registry();
+
+    const QString layers = QStringLiteral("layersPanel");
+    QAction* layersToggle =
+        registry->action(QString::fromLatin1(pictura::command_ids::WindowPanelsLayers));
+    QVERIFY(layersToggle);
+    registry->refresh();
+    if (layersToggle->isChecked()) {
+        layersToggle->trigger();
+    }
+    registry->refresh();
+    QVERIFY2(!layersToggle->isChecked(), "the Layers panel starts hidden");
+    pictura::SearchBar* searchBar = openBar(QStringLiteral("layers"));
+    QVERIFY(selectEntry(searchBar, Kind::Panel, layers));
+    QTest::keyClick(searchBar->input(), Qt::Key_Return);
+    QVERIFY(!searchBar->isVisible());
+    registry->refresh();
+    QVERIFY2(layersToggle->isChecked(), "Enter shows the panel");
+    QVERIFY2(flashedOver(window_->findChild<QWidget*>(layers)), "the shown panel is outlined");
+
+    searchBar = openBar(QStringLiteral("general"));
+    QVERIFY(selectEntry(searchBar, Kind::Preference, pictura::PreferencesDialog::kGeneral));
+    QTest::keyClick(searchBar->input(), Qt::Key_Return);
+    pictura::PreferencesDialog* prefs = window_->preferencesDialog();
+    QVERIFY2(prefs && prefs->isVisible(), "Enter opens Preferences");
+    QCOMPARE(prefs->currentPageForTest(), pictura::PreferencesDialog::kGeneral);
+    prefs->close();
+    window_->activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(window_.get()));
+
+    // A drop-down control opens its list.
+    auto* blend = window_->findChild<QComboBox*>(QStringLiteral("layersBlendCombo"));
+    QVERIFY(blend);
+    searchBar = openBar(QStringLiteral("blend mode"));
+    QVERIFY(selectEntry(searchBar, Kind::Control, QStringLiteral("layersBlendCombo")));
+    QTest::keyClick(searchBar->input(), Qt::Key_Return);
+    QTRY_VERIFY2(blend->view()->isVisible(), "Enter opens the Blend Mode list");
+    QVERIFY(flashedOver(blend));
+    closePopups();
+
+    // An options-bar control activates its tool, and its number field takes the focus.
+    searchBar = openBar(QStringLiteral("flow"));
+    QVERIFY(selectEntry(searchBar, Kind::Control, QStringLiteral("optionsBrushFlow")));
+    QTest::keyClick(searchBar->input(), Qt::Key_Return);
+    QCOMPARE(window_->activeTool(), pictura::ToolId::Brush);
+    auto* field = qobject_cast<QLineEdit*>(QApplication::focusWidget());
+    QVERIFY2(field && insideNamed(field, QStringLiteral("optionsBrushFlow")),
+             "the Flow field has the focus");
+    QCOMPARE(field->selectedText(), field->text());
+}
+
 void SearchBarTest::stubIsNotRunnable()
 {
     pictura::SearchBar* searchBar = openBar(QStringLiteral("zoomify"));
@@ -370,6 +478,19 @@ void SearchBarTest::stubIsNotRunnable()
     QTest::mouseClick(searchBar->results()->viewport(), Qt::LeftButton, Qt::NoModifier,
                       row.center());
     QVERIFY2(searchBar->isVisible(), "a click on a stub runs nothing");
+
+    // Alt+Enter still opens the chain. QMenu does not activate a disabled
+    // action, so the stub item itself is not highlighted.
+    QAction* zoomify = window_->registry()->action(searchBar->entryAt(0)->command);
+    QVERIFY(zoomify);
+    QMenu* exportMenu = owningMenu(zoomify);
+    QVERIFY(exportMenu);
+    QMenu* file = owningMenu(exportMenu->menuAction());
+    QVERIFY(file);
+    QTest::keyClick(searchBar->input(), Qt::Key_Return, Qt::AltModifier);
+    QVERIFY(!searchBar->isVisible());
+    QTRY_VERIFY(file->isVisible());
+    QTRY_VERIFY(exportMenu->isVisible());
 }
 
 void SearchBarTest::altEnterRevealsMenu()
@@ -390,6 +511,74 @@ void SearchBarTest::altEnterRevealsMenu()
     QVERIFY2(!window_->activeView()->transform_session_active(), "reveal runs nothing");
 }
 
+void SearchBarTest::altEnterOutlinesInPlace()
+{
+    using Kind = pictura::SearchEntry::Kind;
+    QVERIFY(openTransformableDocument());
+
+    pictura::SearchBar* searchBar = openBar(QStringLiteral("magic wand"));
+    QVERIFY(selectEntry(searchBar, Kind::Tool, pictura::toolIdName(pictura::ToolId::MagicWand)));
+    QTest::keyClick(searchBar->input(), Qt::Key_Return, Qt::AltModifier);
+    QVERIFY(!searchBar->isVisible());
+    QCOMPARE(window_->activeTool(), pictura::ToolId::Move);
+    auto* toolbox = window_->findChild<pictura::Toolbox*>();
+    QVERIFY(toolbox);
+    QVERIFY2(flashedOver(toolbox->slotButton(pictura::toolInfo(pictura::ToolId::MagicWand).group)),
+             "the toolbox slot is outlined");
+
+    searchBar = openBar(QStringLiteral("layers"));
+    QVERIFY(selectEntry(searchBar, Kind::Panel, QStringLiteral("layersPanel")));
+    QTest::keyClick(searchBar->input(), Qt::Key_Return, Qt::AltModifier);
+    QVERIFY2(flashedOver(window_->findChild<QWidget*>(QStringLiteral("layersPanel"))),
+             "the panel is outlined");
+
+    auto* blend = window_->findChild<QComboBox*>(QStringLiteral("layersBlendCombo"));
+    QVERIFY(blend);
+    searchBar = openBar(QStringLiteral("blend mode"));
+    QVERIFY(selectEntry(searchBar, Kind::Control, QStringLiteral("layersBlendCombo")));
+    QTest::keyClick(searchBar->input(), Qt::Key_Return, Qt::AltModifier);
+    QVERIFY2(flashedOver(blend), "the control is outlined");
+    QVERIFY2(!blend->view()->isVisible(), "reveal does not open the list");
+}
+
+void SearchBarTest::upDownMovesAndClamps()
+{
+    pictura::SearchBar* searchBar = openBar(QStringLiteral("layer"));
+    QVERIFY(searchBar);
+    const int count = searchBar->results()->count();
+    QVERIFY(count > 2);
+    QCOMPARE(searchBar->results()->currentRow(), 0);
+    QTest::keyClick(searchBar->input(), Qt::Key_Up);
+    QCOMPARE(searchBar->results()->currentRow(), 0);
+    QTest::keyClick(searchBar->input(), Qt::Key_Down);
+    QCOMPARE(searchBar->results()->currentRow(), 1);
+    QTest::keyClick(searchBar->input(), Qt::Key_Up);
+    QCOMPARE(searchBar->results()->currentRow(), 0);
+    for (int i = 0; i <= count; ++i) {
+        QTest::keyClick(searchBar->input(), Qt::Key_Down);
+    }
+    QCOMPARE(searchBar->results()->currentRow(), count - 1);
+    QVERIFY(searchBar->isVisible());
+}
+
+void SearchBarTest::cleanLabelsAndWhitespace()
+{
+    QCOMPARE(pictura::cleanSearchLabel(QStringLiteral("&File")), QStringLiteral("File"));
+    QCOMPARE(pictura::cleanSearchLabel(QStringLiteral("R&&D")), QStringLiteral("R&D"));
+    QCOMPARE(pictura::cleanSearchLabel(QStringLiteral("Fish & Chips")),
+             QStringLiteral("Fish & Chips"));
+    QCOMPARE(pictura::cleanSearchLabel(QStringLiteral("Liquify\u2026\u2026")),
+             QStringLiteral("Liquify"));
+    QCOMPARE(pictura::cleanSearchLabel(QStringLiteral("Save &As...\tCtrl+Shift+S")),
+             QStringLiteral("Save As"));
+
+    const QList<pictura::SearchEntry> entries = index();
+    const QList<pictura::SearchHit> hits =
+        pictura::searchIndex(entries, QStringLiteral("transform\twarp\n"));
+    QVERIFY(!hits.isEmpty());
+    QCOMPARE(entries.at(hits.first().index).id, kWarp);
+}
+
 void SearchBarTest::dismissal()
 {
     pictura::SearchBar* searchBar = openBar();
@@ -401,6 +590,21 @@ void SearchBarTest::dismissal()
     QVERIFY(searchBar->isVisible());
     QTest::mouseClick(window_->statusBar(), Qt::LeftButton, Qt::NoModifier, QPoint(4, 4));
     QVERIFY2(!searchBar->isVisible(), "a press outside closes");
+}
+
+void SearchBarTest::focusLossCloses()
+{
+    pictura::SearchBar* searchBar = openBar();
+    QVERIFY(searchBar && searchBar->isVisible());
+    QFocusEvent toPopup(QEvent::FocusOut, Qt::PopupFocusReason);
+    QApplication::sendEvent(searchBar->input(), &toPopup);
+    QVERIFY2(searchBar->isVisible(), "focus lost to a popup keeps the bar");
+
+    auto* field = new QLineEdit(window_->statusBar());
+    field->show();
+    field->setFocus(Qt::OtherFocusReason);
+    QTRY_VERIFY2(!searchBar->isVisible(), "focus lost to another widget closes the bar");
+    delete field;
 }
 
 // Shift+Space, Escape, Shift+Space with nothing focused beforehand: closing must

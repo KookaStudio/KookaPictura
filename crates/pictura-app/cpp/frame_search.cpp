@@ -29,7 +29,9 @@ bool toolForName(const QString& name, ToolId* out)
 }
 
 // Open the menu bar on `leaf`: its top-level menu, then each submenu, ending
-// with the item active.
+// with the item active. QMenu::setActiveAction ignores a disabled action, so a
+// stub or disabled leaf opens its chain without a highlight; enabling it to
+// highlight would let Enter in the open menu run it.
 void revealMenuChain(QMenuBar* bar, QAction* leaf)
 {
     QList<QAction*> chain;
