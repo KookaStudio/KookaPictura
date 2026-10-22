@@ -9,21 +9,14 @@ use crate::composite::{composite_layers, to_u8, Canvas};
 use crate::composite_rows::{blend_into_row, for_each_row};
 
 /// The layer's native sample for channel `id` at layer-pixel index `li`, in the
-/// unit `f32` domain, when the document is a high-depth Grayscale/RGB read
-/// (`source_depth` set, `source_mode` unset) and this layer retains a store
-/// matching its rect and that depth. `None` otherwise, so the caller keeps the
-/// 8-bit channel path. A converted mode (Lab/CMYK) is excluded because its
-/// store holds source-mode planes, not working RGB.
+/// unit `f32` domain, when the document's native store is authoritative for
+/// that channel (`Document::authoritative_plane`): a high-depth
+/// Grayscale/RGB read (`source_depth` set, `source_mode` unset) and this layer
+/// retains a store matching its rect and that depth. `None` otherwise, so the
+/// caller keeps the 8-bit channel path. A converted mode (Lab/CMYK) is
+/// excluded because its store holds source-mode planes, not working RGB.
 pub(crate) fn native_unit(layer: &Layer, doc: &Document, id: i16, li: usize) -> Option<f32> {
-    let depth = doc.source_depth?;
-    if doc.source_mode.is_some() {
-        return None;
-    }
-    let store = layer.source_channels.as_ref()?;
-    if store.rect != layer.rect || store.depth != depth {
-        return None;
-    }
-    let (_, samples) = store.planes.iter().find(|(cid, _)| *cid == id)?;
+    let samples = doc.authoritative_plane(layer, id)?;
     sample_unit(samples, li)
 }
 

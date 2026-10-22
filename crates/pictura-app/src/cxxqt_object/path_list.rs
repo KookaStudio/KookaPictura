@@ -24,7 +24,7 @@ use pictura_core::shape::path_coverage;
 use pictura_core::PsdRect;
 use pictura_paint::bucket::{self, BucketPaint};
 use pictura_paint::spacing::SpacingMode;
-use pictura_paint::{paint_stroke, PaintMode, StrokeConfig, StrokeSample};
+use pictura_paint::{paint_stroke, Alpha, PaintMode, StrokeConfig, StrokeSample};
 use pictura_select::Selection;
 
 #[cxx_qt::bridge]
@@ -349,6 +349,7 @@ fn paths_fill(mut view: Pin<&mut PictureView>, foreground: u32) -> bool {
             PaintMode::Normal,
             1.0,
             selection(rust),
+            Alpha::Blend,
         )
     });
     if filled {

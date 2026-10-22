@@ -1,0 +1,28 @@
+# Test plan — Fill a layer in the document's own colour mode and bit depth
+
+| Scenario | Steps | Expected | Coverage |
+|---|---|---|---|
+| `fe_gray_luma` | Build a one-plane Grayscale layer; fill it with `#DC0000` | The single plane holds 66, the Rec. 601 luma of the colour | `pictura-paint::a_gray_layer_takes_the_colours_luma` |
+| `fe_rgb_channels` | Build an RGB layer; fill it with `#DC0000` | The red, green and blue planes hold 220, 0 and 0 | `pictura-paint::an_rgb_layer_keeps_the_colours_channels` |
+| `fe_gray_ramp` | Draw a Gradient between black and white across a Grayscale layer | The drawn pixels are gray and the ramp's mid point is the luma of the end colours' midpoint | `pictura-paint::a_gray_ramp_lies_on_the_gray_axis` |
+| `fe_converted_8bit` | Fill a document whose source mode is CMYK | The working RGB planes take the colour and the retained CMYK planes are untouched | `pictura-paint::a_converted_mode_document_fills_the_eight_bit_path` |
+| `fe_native_store` | Fill a depth-16 document whose layer retains native samples | The store holds the colour at 16 bits and the 8-bit channels hold its narrowing | `pictura-paint::a_depth16_fill_writes_the_native_store` |
+| `fe_depth32` | Fill a depth-32 document whose layer retains native samples | The store holds the colour at 32 bits and the 8-bit channels hold its narrowing | `pictura-paint::a_depth32_fill_writes_the_native_store`, `pictura-paint::a_depth32_fill_blends_at_the_stores_depth` |
+| `fe_native_depth` | Fill a depth-16 document's layer at half opacity over a backdrop that is not 8-bit-aligned | The store's sample differs from the 8-bit widening of the 8-bit fill's result | `pictura-paint::a_depth16_fill_blends_at_the_stores_depth` |
+| `fe_modes` | Fill a depth-16 document's layer in each brush mode over a half-transparent backdrop | The store's colour is within one 8-bit step of the 8-bit path's colour | `pictura-paint::a_native_blend_matches_the_eight_bit_modes` |
+| `fe_mirror` | Fill a depth-16 document's layer | The 8-bit colour channels equal the narrowing of the store's planes | `pictura-paint::the_depth16_mirror_is_the_stores_narrowing` |
+| `fe_no_alpha_plane` | Fill a depth-16 document whose layer retains native colour samples but no transparency plane | The colour comes from the store, the transparency from the 8-bit channel, and the fill is recorded | `pictura-paint::a_store_without_a_transparency_plane_still_fills` |
+| `fe_fallback` | Fill a depth-16 document whose layer retains a store that does not match the layer's rectangle | The layer's 8-bit channels take the colour | `pictura-paint::a_mismatched_store_falls_back_to_the_eight_bit_path` |
+| `fe_round_trip` | Fill a depth-16 document, save it and read it back | The re-read layer's retained samples are the filled ones, not the 8-bit widening | `pictura-render::a_depth16_fill_survives_a_psd_round_trip` |
+| `fe_8bit_unchanged` | Fill an 8-bit RGB layer and compare every pixel with the pre-change result; fill a layer that hangs above the canvas | The bytes are identical, the layer's rows above the canvas are untouched, and the existing fill suite still passes | `pictura-paint::an_eight_bit_fill_is_byte_identical`, `pictura-paint::a_layer_above_the_canvas_fills_the_rows_on_the_canvas`, `pictura-paint::a_fill_covers_the_layer_and_reports_what_changed` |
+| `fe_consumers` | Click the Paint Bucket and drag the Gradient on a 16-bit document | The filled pixels take the colour and the ramp in the layer's native store, and the canvas shows them | `tst_fill_tools::paintBucketOnADepth16Document`, `tst_fill_tools::gradientOnADepth16Document` |
+| `fe_refused` | Fill a layer whose pixels are locked | No pixel changes and no changed rectangle is reported | `pictura-paint::locked_pixels_a_group_and_other_modes_are_refused`, `pictura-paint::a_native_fill_refuses_a_locked_layer` |
+| Fill the selection | Fill a layer through a selection | The selected pixels take the colour and one undo restores the layer | `pictura-paint::the_selection_confines_and_scales_the_fill` |
+| Preserve Transparency confines the fill | Fill a layer that has transparent pixels with Preserve Transparency on | Only the already-opaque pixels are filled | `tst_fill_tools::fillCommandPreservesTransparency` |
+| `em_fill_depth16` | Open a 16-bit document and run Edit > Fill | The layer's pixels take the colour on the canvas and one `Fill` state is recorded | `tst_fill_tools::fillCommandOnADepth16Document` |
+| `em_fill_gray` | Open a Grayscale document and run Edit > Fill | The layer's pixels take the colour's luma and one `Fill` state is recorded | `tst_fill_tools::fillCommandOnAGrayDocument` |
+| Stroke outside the selection | Stroke a rectangular selection 2 px Outside | The pixels just outside the selection take the colour and the interior is untouched | `tst_fill_tools::strokeCommand` |
+| `em_stroke_depth16` | Open a 16-bit document and run Edit > Stroke | The band takes the colour on the canvas and one `Stroke` state is recorded | `tst_fill_tools::strokeCommandOnADepth16Document` |
+| Encode inverts decode | Decode a native sample image and re-encode it | The bytes are identical to the input at depth 16 and depth 32 | `pictura-core::encode_inverts_decode_byte_exactly` |
+| The depth oracle is unchanged | Run the depth and colour-mode oracles | They pass with no golden change | `pictura-codec::sixteen_bit_cmyk_and_lab_save_back_in_source_mode_and_depth` |
+| A natively edited plane is re-encoded at the source depth | Edit a depth-16 document's layer in its retained native store and save it | The written layer plane holds the store's samples, not the 8-bit widening of the layer's 8-bit channels | `pictura-render::a_depth16_fill_survives_a_psd_round_trip` |

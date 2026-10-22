@@ -24,7 +24,7 @@ use pictura_paint::gradient::{self, GradientOptions, GradientStyle, PRESET_NAMES
 use pictura_paint::healing::RgbaImage;
 use pictura_paint::pattern;
 use pictura_paint::stamp::{layer_surface, surface_from_composite};
-use pictura_paint::{PaintMode, Rgba};
+use pictura_paint::{Alpha, PaintMode, Rgba};
 
 #[cxx_qt::bridge]
 pub mod ffi {
@@ -241,7 +241,16 @@ fn bucket_fill_at(
         } else {
             flood
         };
-        bucket::fill(doc, path, &mask, paint, mode, opacity, selection(rust))
+        bucket::fill(
+            doc,
+            path,
+            &mask,
+            paint,
+            mode,
+            opacity,
+            selection(rust),
+            Alpha::Blend,
+        )
     })
 }
 
@@ -276,19 +285,24 @@ fn edit_fill(
     };
     apply(view, "Fill", |doc, path, rust| {
         let (width, height) = (doc.width as i32, doc.height as i32);
-        // A whole-layer fill is a document-sized mask of full coverage; Preserve
-        // Transparency narrows it to the pixels the layer already has.
-        let mask = if preserve_transparency {
-            let surface = layer_surface(doc, path)?;
-            surface
-                .data
-                .iter()
-                .map(|px| if px[3] > 0 { 255 } else { 0 })
-                .collect::<Vec<u8>>()
+        // Preserve Transparency is the engine's own policy: it keeps every
+        // filled pixel's alpha and leaves the layer's empty pixels alone.
+        let alpha = if preserve_transparency {
+            Alpha::Keep
         } else {
-            vec![255u8; (width * height) as usize]
+            Alpha::Blend
         };
-        bucket::fill(doc, path, &mask, paint, mode, opacity, selection(rust))
+        let mask = vec![255u8; (width * height) as usize];
+        bucket::fill(
+            doc,
+            path,
+            &mask,
+            paint,
+            mode,
+            opacity,
+            selection(rust),
+            alpha,
+        )
     })
 }
 
@@ -344,6 +358,7 @@ fn fill_mask(
         mode,
         opacity,
         selection.as_deref(),
+        Alpha::Blend,
     ) else {
         return false;
     };

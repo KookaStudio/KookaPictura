@@ -15,10 +15,10 @@
 //! interpolation space, the dither, and the preset stops are photorust's, not
 //! Adobe's.
 
-use crate::fill::{fill_layer, pixel_noise};
+use crate::fill::{fill_layer, pixel_noise, Alpha};
 use crate::healing::RgbaImage;
 use crate::{PaintMode, Rgba};
-use pictura_core::{Document, PsdRect};
+use pictura_core::{ColorMode, Document, PsdRect};
 use std::borrow::Cow;
 
 /// The five styles, in options-bar order.
@@ -136,6 +136,28 @@ impl Gradient {
         )
     }
 
+    /// The ramp with every stop's colour reduced to its Rec. 601 luma, so a
+    /// Grayscale document's ramp lies on the gray axis.
+    pub fn grayed(&self) -> Gradient {
+        Gradient::new(
+            self.stops
+                .iter()
+                .map(|s| {
+                    let v = pictura_core::rec601_luma(s.color.r, s.color.g, s.color.b);
+                    GradientStop::new(
+                        s.position,
+                        Rgba {
+                            r: v,
+                            g: v,
+                            b: v,
+                            a: s.color.a,
+                        },
+                    )
+                })
+                .collect(),
+        )
+    }
+
     /// The ramp as a horizontal strip, for the options bar's sample and the
     /// preset menu.
     pub fn preview(&self, width: i32, height: i32) -> RgbaImage {
@@ -211,12 +233,28 @@ pub fn draw(
     if length < 1e-3 || opacity <= 0.0 {
         return None;
     }
-    let ramp = if options.reverse {
+    let reversed = if options.reverse {
         Cow::Owned(gradient.reversed())
     } else {
         Cow::Borrowed(gradient)
     };
-    fill_layer(doc, path, options.mode, selection, |x, y| {
+    // A Grayscale document's ramp lies on the gray axis: the stops' luma is
+    // interpolated, not the luma of the interpolated colour.
+    let ramp = if doc.mode == ColorMode::Grayscale {
+        Cow::Owned(reversed.grayed())
+    } else {
+        reversed
+    };
+    // A Gradient is a fill, not a brush: with Transparency on, the ramp's own
+    // alpha is the alpha of the pixels it draws, so the ramp's transparent end
+    // is transparent. In the other modes the blend governs the alpha, as in
+    // Photoshop.
+    let alpha = if options.transparency && options.mode == PaintMode::Normal {
+        Alpha::Replace
+    } else {
+        Alpha::Blend
+    };
+    fill_layer(doc, path, options.mode, selection, alpha, |x, y| {
         // The pixel's own coordinate, not its centre: a drag from one pixel to
         // another puts the exact ends of the ramp on exactly those pixels.
         let t = position_at(options.style, (x as f32, y as f32), start, axis, length);
@@ -403,11 +441,69 @@ pub fn preset(index: usize, foreground: Rgba, background: Rgba) -> Option<Gradie
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::fill::tests::{doc, lock, pixel};
+    use crate::fill::tests::{doc, gray_doc, lock, pixel};
+    use crate::fill_native::tests::depth16_doc;
+    use pictura_core::Channel;
     use pictura_core::LockFlags;
 
     const BLACK_PX: [u8; 4] = [0, 0, 0, 255];
     const WHITE_PX: [u8; 4] = [255; 4];
+
+    #[test]
+    fn a_gray_ramp_lies_on_the_gray_axis() {
+        // A Grayscale document's ramp lies on the gray axis: red's luma is
+        // 76 and blue's 29.
+        let red = Rgba {
+            r: 255,
+            g: 0,
+            b: 0,
+            a: 255,
+        };
+        let blue = Rgba {
+            r: 0,
+            g: 0,
+            b: 255,
+            a: 255,
+        };
+        let gray = Gradient::two_stop(red, blue).grayed();
+        assert_eq!(
+            gray.stops[0].color,
+            Rgba {
+                r: 76,
+                g: 76,
+                b: 76,
+                a: 255
+            }
+        );
+        assert_eq!(
+            gray.stops[1].color,
+            Rgba {
+                r: 29,
+                g: 29,
+                b: 29,
+                a: 255
+            }
+        );
+        // And the drawn ramp is gray, from the luma of the foreground to the
+        // luma of the background.
+        let mut doc = gray_doc(3, 1, [255, 255, 255, 255]);
+        let options = GradientOptions {
+            style: GradientStyle::Linear,
+            ..GradientOptions::default()
+        };
+        let drawn = draw(
+            &mut doc,
+            "0",
+            &Gradient::two_stop(red, blue),
+            &options,
+            (0.0, 0.0),
+            (2.0, 0.0),
+            None,
+        );
+        assert!(drawn.is_some(), "the gradient drew");
+        let plane = doc.layers[0].channels[0].data.as_slice();
+        assert_eq!(plane, &[76, 53, 29]);
+    }
 
     fn black_white() -> Gradient {
         Gradient::two_stop(BLACK, WHITE)
@@ -527,6 +623,52 @@ mod tests {
         let mid = g.sample(0.5);
         assert_eq!((mid.r, mid.g, mid.b), (255, 140, 0));
         assert!((mid.a as i32 - 128).abs() <= 2, "opacity {}", mid.a);
+    }
+
+    #[test]
+    fn the_ramps_alpha_reaches_the_pixels() {
+        // An opaque layer: the ramp's transparent end must make its pixels
+        // transparent, which a source-over blend cannot do.
+        let red = rgb(255, 0, 0);
+        let g = Gradient::two_stop(red, Rgba { a: 0, ..red });
+        let mut d = doc(32, 4, [255; 4]);
+        draw(
+            &mut d,
+            "0",
+            &g,
+            &GradientOptions::default(),
+            (0.0, 2.0),
+            (31.0, 2.0),
+            None,
+        );
+        assert_eq!(pixel(&d, 0, 2)[3], 255, "the ramp's opaque end");
+        assert_eq!(pixel(&d, 31, 2)[3], 0, "the ramp's transparent end");
+    }
+
+    #[test]
+    fn the_ramps_alpha_reaches_the_pixels_at_depth_16() {
+        // The same ramp on a 16-bit document: the retained store's
+        // transparency plane takes the ramp's alpha.
+        let mut d = depth16_doc(32, 4, vec![0; 128], vec![0; 128], vec![0; 128]);
+        d.layers[0].channels.push(Channel {
+            id: -1,
+            data: vec![255; 128].into(),
+        });
+        let red = rgb(255, 0, 0);
+        let g = Gradient::two_stop(red, Rgba { a: 0, ..red });
+        draw(
+            &mut d,
+            "0",
+            &g,
+            &GradientOptions::default(),
+            (0.0, 2.0),
+            (31.0, 2.0),
+            None,
+        );
+        // The plane is 32 px wide: the ramp's ends are (0, 2) and (31, 2).
+        let alpha = &d.layers[0].channels[3].data;
+        assert_eq!(alpha[2 * 32], 255, "the ramp's opaque end");
+        assert_eq!(alpha[2 * 32 + 31], 0, "the ramp's transparent end");
     }
 
     #[test]

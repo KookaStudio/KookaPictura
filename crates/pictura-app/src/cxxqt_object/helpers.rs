@@ -256,9 +256,7 @@ pub(super) fn active_mask_target(rust: &super::state::PictureViewRust) -> Option
 /// The Rec.601 luma a mask paints for a colour; Adobe's mask conversion is
 /// closed, so this is the approximation `pictura-adjust` uses.
 pub(super) fn luma_u8(color: Rgba) -> u8 {
-    (0.299 * color.r as f32 + 0.587 * color.g as f32 + 0.114 * color.b as f32)
-        .round()
-        .clamp(0.0, 255.0) as u8
+    pictura_core::rec601_luma(color.r, color.g, color.b)
 }
 /// `cfg` for a stroke on a mask: the foreground and background paint their
 /// luma, so black hides and white reveals.

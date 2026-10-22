@@ -1,0 +1,23 @@
+# Test plan — Keep the stroke band at the selection's edge, and the fill's transparency
+
+| Scenario | Steps | Expected | Coverage |
+|---|---|---|---|
+| `fe_alpha_keep` | Fill a layer whose pixels are half transparent with the `Keep` policy | The pixels keep their alpha and the layer's empty pixels are not filled | `pictura-paint::a_keep_policy_keeps_the_destination_alpha` |
+| `fe_alpha_replace` | Fill a layer with the `Replace` policy and a source colour whose alpha is zero | The pixels it reaches hold zero alpha | `pictura-paint::a_replace_policy_takes_the_sources_alpha` |
+| `fe_alpha_lock` | Fill a transparency-locked layer with the `Replace` policy | The layer's pixels keep their alpha and its empty pixels are not filled | `pictura-paint::a_transparency_lock_outranks_the_policy` |
+| The policy at depth 16 | Fill a 16-bit document's layer with the `Keep` and the `Replace` policy | The retained store's transparency plane takes the same treatment the 8-bit one does | `pictura-paint::a_keep_policy_keeps_the_destination_alpha_at_depth_16`, `pictura-paint::a_replace_policy_takes_the_sources_alpha_at_depth_16` |
+| `gt_ramp_alpha` | Drag a gradient whose far stop is transparent across a layer in the Normal mode with Transparency on | The pixels at the transparent end hold zero alpha, the pixels at the opaque end hold full alpha | `pictura-paint::the_ramps_alpha_reaches_the_pixels` |
+| `gt_ramp_alpha_off` | Drag the same gradient with Transparency off | Every drawn pixel holds full alpha | `pictura-paint::transparency_off_draws_the_ramp_solid` |
+| The ramp's alpha at depth 16 | Drag the same gradient across a 16-bit document's layer | The retained store's transparency plane holds the ramp's alpha | `pictura-paint::the_ramps_alpha_reaches_the_pixels_at_depth_16` |
+| Preserve Transparency confines the fill | Fill a layer that has a half transparent pixel and an empty one with Preserve Transparency on | The half transparent pixel keeps its alpha, the empty one is not filled, and the opaque one takes the colour | `pictura-paint::a_keep_policy_keeps_the_destination_alpha`, `tst_fill_tools::fillCommandPreservesTransparency`, `tst_fill_tools::fillCommandPreservesTransparencyAtDepth16` |
+| `em_stroke_band` | Stroke a rectangular selection 2 px Outside on a canvas with room to its right | The pixels beyond the 2 px band keep the layer's own colour | `pictura-paint::the_outside_band_stops_at_the_selections_edge`, `pictura-paint::the_band_does_not_reach_the_canvas_edge`, `tst_fill_tools::strokeCommandBandStopsAtTheSelection` |
+| Stroke outside the selection | Stroke a rectangular selection 2 px Outside | The pixels just outside the selection take the colour and the selection interior is untouched | `pictura-paint::a_selection_stroke_bands_the_edge_where_asked`, `tst_fill_tools::strokeCommand` |
+| The Inside band stops too | Stroke a rectangular selection 2 px Inside | The band does not reach past the selection's edge | `pictura-paint::the_inside_band_stops_at_the_selections_edge` |
+| Fill the selection | Fill a layer through a selection | The selected pixels take the colour and one undo restores the layer | `pictura-paint::the_selection_confines_and_scales_the_fill` |
+| `em_fill_depth16` | Open a 16-bit document and run Edit > Fill | The layer's pixels take the colour on the canvas and one `Fill` state is recorded | `tst_fill_tools::fillCommandOnADepth16Document` |
+| `em_fill_gray` | Open a Grayscale document and run Edit > Fill | The layer's pixels take the colour's luma and one `Fill` state is recorded | `tst_fill_tools::fillCommandOnAGrayDocument` |
+| `em_stroke_depth16` | Open a 16-bit document and run Edit > Stroke | The band takes the colour on the canvas and one `Stroke` state is recorded | `tst_fill_tools::strokeCommandOnADepth16Document` |
+| The 8-bit bytes do not move | Fill an 8-bit layer with the source-over and compare every pixel with the pre-change result | The bytes are identical | `pictura-paint::an_eight_bit_fill_is_byte_identical` |
+| The stroke in the app | Stroke a selection with room to its right and look at the canvas | Only the band is drawn, and one `Stroke` state is recorded | `tst_fill_tools::strokeCommandBandStopsAtTheSelection` |
+| The gradient in the app | Drag a transparent gradient on a 16-bit document | The ramp's transparent end is see-through on the canvas | `tst_fill_tools::gradientOnADepth16Document` |
+| The manual pass | Re-run the #791 manual plan on an 8-bit and a 16-bit document | The band stays at the edge, Preserve Transparency keeps the alpha, and the transparent gradient cuts through | manual: the canvas and the History panel are what the reviewer reads, and the automated cases cover the pixels |
