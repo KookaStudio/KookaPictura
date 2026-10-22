@@ -72,6 +72,9 @@ pub struct CoverageRows {
     /// other subpaths; see [`VectorMask::ident`].
     ident: u64,
     rows: OnceLock<Rows>,
+    /// The antialiased coverage [`VectorMask::coverage`] samples, built on its
+    /// first query like `rows`.
+    smooth: OnceLock<SmoothRows>,
 }
 
 impl Default for CoverageRows {
@@ -79,6 +82,7 @@ impl Default for CoverageRows {
         Self {
             ident: crate::fresh_stamp(),
             rows: OnceLock::new(),
+            smooth: OnceLock::new(),
         }
     }
 }
@@ -186,7 +190,209 @@ impl Rows {
     }
 }
 
+/// Sample lines per pixel row for [`VectorMask::coverage`]. Along each line the
+/// covered length is exact, so a near-vertical edge is as smooth as the
+/// line count lets a near-horizontal one be.
+const SAMPLE_LINES: i32 = 16;
+
+/// One pixel row's antialiased coverage, in sample lines (`0..=SAMPLE_LINES`):
+/// a step function of whole-pixel coverage plus the partial pixels at the
+/// edges, so a lookup is two binary searches.
+#[derive(Clone, Default)]
+struct SmoothRow {
+    /// `(x, level)`: from pixel `x` up to the next entry, each pixel is
+    /// covered by `level` whole sample lines.
+    steps: Vec<(i32, f32)>,
+    /// `(x, extra)`: the partly covered length of pixel `x`, summed over the
+    /// sample lines; sorted by `x`, one entry per pixel.
+    partial: Vec<(i32, f32)>,
+}
+
+impl SmoothRow {
+    /// The row's coverage from `edges`, each `[ax, ay, bx, by]` in 1/256 px.
+    fn build(edges: &[[f64; 4]], non_zero: bool, y: i32) -> SmoothRow {
+        let mut deltas: Vec<(i32, f32)> = Vec::new();
+        let mut partial: Vec<(i32, f32)> = Vec::new();
+        let mut crossings: Vec<(f64, i8)> = Vec::new();
+        // Interval ends in whole pixels, bounded so a crafted path cannot
+        // overflow the cast.
+        let pixel = |v: f64| (v / 256.0).clamp(-1.0e9, 1.0e9);
+        for line in 0..SAMPLE_LINES {
+            let cy = (f64::from(y) + (f64::from(line) + 0.5) / f64::from(SAMPLE_LINES)) * 256.0;
+            crossings.clear();
+            for &[ax, ay, bx, by] in edges {
+                if (ay < cy) != (by < cy) {
+                    let dir: i8 = if by > ay { 1 } else { -1 };
+                    crossings.push((ax + (cy - ay) * (bx - ax) / (by - ay), dir));
+                }
+            }
+            crossings.sort_by(|a, b| a.0.total_cmp(&b.0));
+            let (mut winding, mut count) = (0i32, 0usize);
+            for i in 0..crossings.len() {
+                winding += i32::from(crossings[i].1);
+                count += 1;
+                let inside = if non_zero {
+                    winding != 0
+                } else {
+                    count % 2 == 1
+                };
+                let Some(next) = crossings.get(i + 1) else {
+                    break;
+                };
+                if !inside {
+                    continue;
+                }
+                let (a, b) = (pixel(crossings[i].0), pixel(next.0));
+                if b <= a {
+                    continue;
+                }
+                let (ia, ib) = (a.floor(), b.floor());
+                if ia == ib {
+                    partial.push((ia as i32, (b - a) as f32));
+                    continue;
+                }
+                partial.push((ia as i32, (ia + 1.0 - a) as f32));
+                if ib > ia + 1.0 {
+                    deltas.push((ia as i32 + 1, 1.0));
+                    deltas.push((ib as i32, -1.0));
+                }
+                if b > ib {
+                    partial.push((ib as i32, (b - ib) as f32));
+                }
+            }
+        }
+        deltas.sort_by_key(|d| d.0);
+        let mut steps: Vec<(i32, f32)> = Vec::new();
+        let mut level = 0.0f32;
+        for (x, d) in deltas {
+            level += d;
+            match steps.last_mut() {
+                Some(last) if last.0 == x => last.1 = level,
+                _ => steps.push((x, level)),
+            }
+        }
+        partial.sort_by_key(|p| p.0);
+        let mut merged: Vec<(i32, f32)> = Vec::new();
+        for (x, v) in partial {
+            match merged.last_mut() {
+                Some(last) if last.0 == x => last.1 += v,
+                _ => merged.push((x, v)),
+            }
+        }
+        SmoothRow {
+            steps,
+            partial: merged,
+        }
+    }
+
+    /// Pixel `x`'s coverage in sample lines.
+    fn level(&self, x: i32) -> f32 {
+        let i = self.steps.partition_point(|s| s.0 <= x);
+        let whole = if i == 0 { 0.0 } else { self.steps[i - 1].1 };
+        let part = self
+            .partial
+            .binary_search_by_key(&x, |p| p.0)
+            .map_or(0.0, |j| self.partial[j].1);
+        whole + part
+    }
+}
+
+/// [`SmoothRow`]s over the first query's clip; a row outside it is built on
+/// demand from `edges`, so the clip bounds the cache, not correctness.
+#[derive(Clone)]
+struct SmoothRows {
+    top: i32,
+    /// The pixel rows any edge can touch, `[first, end)`.
+    span: (i32, i32),
+    non_zero: bool,
+    /// Every closed subpath's edges, `[ax, ay, bx, by]` in 1/256 px.
+    edges: Vec<[f64; 4]>,
+    rows: Vec<SmoothRow>,
+}
+
+impl SmoothRows {
+    fn build(subpaths: &[VectorSubpath], clip: PsdRect) -> SmoothRows {
+        let closed: Vec<&VectorSubpath> = subpaths
+            .iter()
+            .filter(|s| s.closed && s.points.len() >= 3)
+            .collect();
+        let non_zero = closed
+            .iter()
+            .any(|s| s.fill_rule == VectorFillRule::NonZero);
+        let mut edges = Vec::new();
+        let (mut top, mut bottom) = (f64::MAX, f64::MIN);
+        for s in &closed {
+            for i in 0..s.points.len() {
+                let [ax, ay] = s.points[i].map(f64::from);
+                let [bx, by] = s.points[(i + 1) % s.points.len()].map(f64::from);
+                top = top.min(ay);
+                bottom = bottom.max(ay);
+                if ay != by {
+                    edges.push([ax, ay, bx, by]);
+                }
+            }
+        }
+        let span = if edges.is_empty() {
+            (0, 0)
+        } else {
+            (
+                (top / 256.0).floor().max(f64::from(i32::MIN)) as i32,
+                (bottom / 256.0).ceil().min(f64::from(i32::MAX)) as i32,
+            )
+        };
+        let lo = span.0.max(clip.top.saturating_sub(1));
+        let hi = span.1.min(clip.bottom.saturating_add(1));
+        let rows = (lo..hi.max(lo))
+            .map(|y| SmoothRow::build(&Self::edges_near(&edges, y), non_zero, y))
+            .collect();
+        SmoothRows {
+            top: lo,
+            span,
+            non_zero,
+            edges,
+            rows,
+        }
+    }
+
+    /// The edges that reach into pixel row `y`.
+    fn edges_near(edges: &[[f64; 4]], y: i32) -> Vec<[f64; 4]> {
+        let (top, bottom) = (f64::from(y) * 256.0, f64::from(y + 1) * 256.0);
+        edges
+            .iter()
+            .filter(|e| e[1].min(e[3]) < bottom && e[1].max(e[3]) > top)
+            .copied()
+            .collect()
+    }
+
+    fn level(&self, x: i32, y: i32) -> f32 {
+        if y < self.span.0 || y >= self.span.1 {
+            return 0.0;
+        }
+        match usize::try_from(i64::from(y) - i64::from(self.top))
+            .ok()
+            .and_then(|i| self.rows.get(i))
+        {
+            Some(row) => row.level(x),
+            None => SmoothRow::build(&Self::edges_near(&self.edges, y), self.non_zero, y).level(x),
+        }
+    }
+}
+
 impl VectorMask {
+    /// The antialiased coverage (0–255) of pixel `(x, y)` by the mask's closed
+    /// subpaths, under the same fill rule as [`VectorMask::inside`]: the share
+    /// of the pixel the path covers, measured along [`SAMPLE_LINES`] lines.
+    /// Ignores `invert` and `disabled`; `clip` bounds the cached rows as it
+    /// does for `inside`.
+    pub fn coverage(&self, x: i32, y: i32, clip: PsdRect) -> u8 {
+        let rows = self
+            .rows
+            .smooth
+            .get_or_init(|| SmoothRows::build(&self.subpaths, clip));
+        let share = rows.level(x, y) / SAMPLE_LINES as f32;
+        (share * 255.0).round().clamp(0.0, 255.0) as u8
+    }
+
     /// The feather radius in pixels.
     pub fn feather(&self) -> f64 {
         f64::from_bits(self.feather_bits)
@@ -357,5 +563,45 @@ mod tests {
             mask.inside(1, 10, narrow),
             "row 10 is outside the cache but inside the path"
         );
+    }
+
+    #[test]
+    fn coverage_is_exact_on_whole_pixels_and_partial_on_a_slanted_edge() {
+        // A 2×2 square at (1, 1): whole pixels are 0 or 255.
+        let square = rectangle(vec![[256, 256], [768, 256], [768, 768], [256, 768]]);
+        assert_eq!(square.coverage(1, 1, clip(4)), 255);
+        assert_eq!(square.coverage(2, 2, clip(4)), 255);
+        assert_eq!(square.coverage(0, 1, clip(4)), 0);
+        assert_eq!(square.coverage(3, 3, clip(4)), 0);
+
+        // Half a pixel wide: x from 1.5 to 3.
+        let half = rectangle(vec![[384, 0], [768, 0], [768, 1024], [384, 1024]]);
+        assert_eq!(half.coverage(1, 2, clip(4)), 128);
+        assert_eq!(half.coverage(2, 2, clip(4)), 255);
+
+        // The triangle below the diagonal y = x covers half of each pixel the
+        // diagonal crosses, and all of those under it.
+        let triangle = rectangle(vec![[0, 0], [2048, 2048], [0, 2048]]);
+        assert_eq!(triangle.coverage(3, 3, clip(8)), 128);
+        assert_eq!(triangle.coverage(2, 5, clip(8)), 255);
+        assert_eq!(triangle.coverage(5, 2, clip(8)), 0);
+        // A row outside the cached clip answers the same.
+        let fresh = rectangle(vec![[0, 0], [2048, 2048], [0, 2048]]);
+        assert_eq!(fresh.coverage(0, 0, clip(2)), 128);
+        assert_eq!(fresh.coverage(6, 6, clip(2)), 128);
+    }
+
+    #[test]
+    fn smooth_coverage_bounds_its_rows_to_the_clip() {
+        let mask = rectangle(vec![
+            [0, i32::MIN],
+            [512, i32::MIN],
+            [512, i32::MAX],
+            [0, i32::MAX],
+        ]);
+        assert_eq!(mask.coverage(1, 100, clip(256)), 255);
+        let rows = mask.rows.smooth.get().expect("the query built the rows");
+        assert_eq!(rows.rows.len(), 258, "the clip plus one row each side");
+        assert_eq!(mask.coverage(1, 100_000, clip(256)), 255, "an uncached row");
     }
 }
