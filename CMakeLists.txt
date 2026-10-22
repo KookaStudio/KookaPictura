@@ -351,6 +351,9 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/frame_session.cpp
     crates/pictura-app/cpp/frame_shortcuts.cpp
     crates/pictura-app/cpp/frame_menus.cpp
+    crates/pictura-app/cpp/frame_system_info.cpp
+    crates/pictura-app/cpp/system_info.cpp
+    crates/pictura-app/cpp/system_info_dialog.cpp
     crates/pictura-app/cpp/frame_menus_select.cpp
     crates/pictura-app/cpp/frame_menus_edit.cpp
     crates/pictura-app/cpp/frame_menus_transform.cpp
@@ -558,6 +561,8 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/svg_icon_engine.h
     crates/pictura-app/cpp/file_drop_router.h
     crates/pictura-app/cpp/frame.h
+    crates/pictura-app/cpp/system_info.h
+    crates/pictura-app/cpp/system_info_dialog.h
     crates/pictura-app/cpp/panels/layers_panel.h
     crates/pictura-app/cpp/panels/layers_panel_model.h
     crates/pictura-app/cpp/panels/layers_filter_proxy.h
@@ -623,6 +628,10 @@ pictura_depend_on_bridge_stamp(${PICTURA_SHELL_SOURCES})
 
 target_include_directories(pictura_shell PUBLIC
     crates/pictura-app/cpp
+)
+target_compile_definitions(pictura_shell PUBLIC
+    PICTURA_VERSION="${PROJECT_VERSION}"
+    PICTURA_BUILD_TYPE="$<CONFIG>"
 )
 # In the shared configuration pictura_app and the resource object are private to
 # the library, so the generated cxx-qt headers have to be republished for the

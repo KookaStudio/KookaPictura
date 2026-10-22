@@ -1012,7 +1012,10 @@ void addDefaultCommands(CommandRegistry& registry) {
          QStringLiteral("Product Improvement Program"));
     registry.addSeparator({"Help"});
     leaf(registry, {"Help", "About Plug-in"}, QStringLiteral("About Plug-in"));
-    leaf(registry, {"Help", "System Info"}, QStringLiteral("System Info"));
+    registry.add(command_ids::HelpSystemInfo, {"Help", "System Info"},
+                 QStringLiteral("System Info"), QKeySequence(), true);
+    registry.add(command_ids::HelpSubmitIssue, {"Help", "Submit Issue"},
+                 QStringLiteral("Submit Issue"), QKeySequence(), true);
     registry.addSeparator({"Help"});
     registry.add(command_ids::HelpAbout, {"Help", "About Kooka Pictura"},
                  QStringLiteral("About Kooka Pictura"), QKeySequence(), true);

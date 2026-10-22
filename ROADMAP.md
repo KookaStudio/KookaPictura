@@ -387,10 +387,13 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 
 ## Application frame, menus and preferences
 
-- [x] **The application frame** and its ten top-level menus, with 411 live
+- [x] **The application frame** and its ten top-level menus, with 413 live
       commands. `crates/pictura-app/cpp/commands.cpp`.
 - [x] **Preferences** — General, Interface, Performance, Units and Guides.
       `crates/pictura-app/cpp/preferences_dialog.cpp`.
+- [x] **Help ▸ System Info and Submit Issue** — a snapshot environment report
+      with Copy, and a prefilled GitHub issue carrying the same report.
+      `crates/pictura-app/cpp/system_info.cpp`.
 - [ ] Status bar readouts and the status-bar options popup (#497)
 - [ ] The active layer name in the title bar (#498)
 - [ ] `Ctrl+Tab` and `Shift+Ctrl+Tab` document cycling (#499)

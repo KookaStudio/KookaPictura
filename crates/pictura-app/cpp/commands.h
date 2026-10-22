@@ -242,6 +242,8 @@ inline constexpr char WindowWorkspaceKeyboardShortcuts[] = "window.workspace.key
 inline constexpr char TypePanelsCharacter[] = "type.panels.character";
 inline constexpr char TypePanelsParagraph[] = "type.panels.paragraph";
 inline constexpr char TypePanelsParagraphStyles[] = "type.panels.paragraphStyles";
+inline constexpr char HelpSystemInfo[] = "help.system.info";
+inline constexpr char HelpSubmitIssue[] = "help.submit.issue";
 inline constexpr char HelpAbout[] = "help.about";
 inline constexpr char HelpDeveloperDesignSystem[] = "help.developer.designSystem";
 } // namespace command_ids

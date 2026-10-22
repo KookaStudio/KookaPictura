@@ -154,7 +154,7 @@ impl StrokeResources {
 /// Keeps the wgpu objects that own the raw device alive for the process.
 pub(super) struct Devices {
     _instance: wgpu::Instance,
-    _adapter: wgpu::Adapter,
+    adapter: wgpu::Adapter,
     pub(super) device: wgpu::Device,
     pub(super) queue: wgpu::Queue,
     resources: OnceLock<ComputeResources>,
@@ -172,6 +172,10 @@ pub(super) struct Devices {
 }
 
 impl Devices {
+    pub(super) fn adapter_info(&self) -> wgpu::AdapterInfo {
+        self.adapter.get_info()
+    }
+
     fn resources(&'static self) -> &'static ComputeResources {
         self.resources
             .get_or_init(|| ComputeResources::new(&self.device))
@@ -231,7 +235,7 @@ async fn request_device() -> Option<Devices> {
     });
     Some(Devices {
         _instance: instance,
-        _adapter: adapter,
+        adapter,
         device,
         queue,
         resources: OnceLock::new(),

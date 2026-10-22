@@ -1177,6 +1177,10 @@ pub mod qobject {
         /// Whether a usable GPU adapter exists (cached capability probe).
         #[qinvokable]
         fn gpu_available(&self) -> bool;
+        /// GPU adapter fields: name, device type, backend, driver, driver info.
+        /// Empty when no usable adapter exists.
+        #[qinvokable]
+        fn gpu_adapter_info(&self) -> QStringList;
         /// Active backend label: `"GPU"`, `"CPU"`, or `"CPU (no GPU)"`.
         #[qinvokable]
         fn active_backend(&self) -> QString;

@@ -70,6 +70,7 @@ class PictureView;
 class PlaceholderPanel;
 class PreferencesDialog;
 class PropertiesPanel;
+class SystemInfoDialog;
 class SwatchesPanel;
 class Toolbox;
 class ToolHintBar;
@@ -403,6 +404,11 @@ public:
     // Help > Developer > Design System…: the in-app storybook over the real
     // widgets (modeless; the single instance is reused).
     void showDesignSystemDialog();
+    // Help > System Info: collect a snapshot and show/refresh the report.
+    void showSystemInfo();
+    // Help > Submit Issue: copy the report and open the repository's new-issue
+    // page prefilled with it.
+    void submitIssue();
     // The top-right menu-bar chrome: the theme toggle and the GitHub / Discord
     // links.
     void installMenuCornerButtons();
@@ -772,6 +778,7 @@ private:
     QList<QAction*> workspaceMenuActions_;
     PreferencesDialog* preferencesDialog_ = nullptr;
     QPointer<DesignSystemDialog> designSystemDialog_;
+    QPointer<SystemInfoDialog> systemInfoDialog_;
     ToolController* tools_ = nullptr;
     OptionsBar* optionsBar_ = nullptr;
     Toolbox* toolbox_ = nullptr;
