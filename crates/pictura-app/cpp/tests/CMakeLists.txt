@@ -126,6 +126,7 @@ set(PICTURA_QT_TESTS
     tst_screen_modes
     tst_dialog_chrome
     tst_keyboard_shortcuts
+    tst_search_bar
     tst_native_menu_bar
     tst_loading_tab
     tst_pictura_raw

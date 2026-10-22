@@ -11,6 +11,24 @@ Snapshot for resuming after a context break. Update after each milestone.
   (`docs/00-overview/licensing-and-provenance.md`).
 - **Provenance history:** the git history was rewritten so no reachable commit
   contains reproduced Adobe Help prose or the old wording.
+- **Help > Search on Shift+Space** (#788, branch `feat/788-searchbar`,
+  OpenSpec change `ui-search-bar`, archived into `ui/search-bar`). Not a CS6
+  feature; added by owner decision and labelled non-parity.
+  - **A registry command:** `help.search` is bound to `Shift+Space`, so the
+    Keyboard Shortcuts editor rebinds it and `list_commands` sees it. Text
+    fields and type edits keep the key through `ShortcutOverride`, and the
+    window's Space pan ignores a Space pressed with Shift.
+  - **The index** (`search_index.cpp`, widget-free): every command (live
+    label and enabled state), each panel once, the real Preferences pages,
+    every tool, and the curated control table in `search_controls.cpp`.
+    Matching ANDs the query words; results rank by exact label, prefix, word
+    prefix, substring, then path or keyword matches, with runnable entries
+    first. The index is rebuilt every time the bar opens.
+  - **The overlay** (`search_bar.cpp`) is an in-window `QFrame`, not a popup.
+    Enter or a click runs a result; Alt+Enter opens the menu chain or outlines
+    the panel, control or toolbox slot (`flashWidget`). Greyed rows do not run.
+    The status bar carries a `Search` keycap that follows the binding.
+  - **Tests:** 20 Qt cases in `tst_search_bar`.
 - **Justified text renders justified** (#792, branch
   `fix/792-justify-text-renders-left`, OpenSpec change
   `2026-10-21-justify-text-renders-left`). A type layer whose paragraph

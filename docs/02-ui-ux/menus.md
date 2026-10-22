@@ -383,6 +383,15 @@ CS6 reworked the 3D engine; each command below is named in the CS6 Help
 > (foundations, shell, controls, patterns) with a live brightness preview. It is
 > a Kooka Pictura developer affordance, deliberately outside the CS6 Help menu.
 
+> **App extension (not CS6).** *Help ▸ Search…* (`Shift+Space`, rebindable in
+> Edit ▸ Keyboard Shortcuts) opens a search bar over the canvas. Typing lists
+> every matching command, tool, panel, Preferences page and key panel control,
+> each with its location (`Edit > Transform > Warp`) and shortcut. Enter runs
+> the result; Alt+Enter reveals where it lives. Stub and disabled entries are
+> listed greyed and do not run. The key types a space in a text field or a type
+> edit, and bare `Space` still pans. Added by owner decision (#788); CS6 has no
+> command search. Full behavior: `search-bar.md` (`UI-013`).
+
 ### Panel-context and canvas-context menus
 
 - **Tool icon in options bar:** right-click → `Reset Tool` / `Reset All Tools` ✓.

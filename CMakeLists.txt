@@ -350,6 +350,10 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/frame_columns.cpp
     crates/pictura-app/cpp/frame_session.cpp
     crates/pictura-app/cpp/frame_shortcuts.cpp
+    crates/pictura-app/cpp/frame_search.cpp
+    crates/pictura-app/cpp/search_bar.cpp
+    crates/pictura-app/cpp/search_controls.cpp
+    crates/pictura-app/cpp/search_index.cpp
     crates/pictura-app/cpp/frame_menus.cpp
     crates/pictura-app/cpp/frame_menus_select.cpp
     crates/pictura-app/cpp/frame_menus_edit.cpp
@@ -599,6 +603,8 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/toolbox.h
     crates/pictura-app/cpp/options_bar.h
     crates/pictura-app/cpp/tool_hint_bar.h
+    crates/pictura-app/cpp/search_bar.h
+    crates/pictura-app/cpp/search_index.h
     crates/pictura-app/cpp/new_document_dialog.h
     crates/pictura-app/cpp/layer_new_dialog.h
     crates/pictura-app/cpp/dialog_chrome.h

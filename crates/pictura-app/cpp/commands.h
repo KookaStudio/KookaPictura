@@ -242,6 +242,8 @@ inline constexpr char WindowWorkspaceKeyboardShortcuts[] = "window.workspace.key
 inline constexpr char TypePanelsCharacter[] = "type.panels.character";
 inline constexpr char TypePanelsParagraph[] = "type.panels.paragraph";
 inline constexpr char TypePanelsParagraphStyles[] = "type.panels.paragraphStyles";
+// Not a CS6 command: the Shift+Space UI search (#788), post-CS6 by owner decision.
+inline constexpr char HelpSearch[] = "help.search";
 inline constexpr char HelpAbout[] = "help.about";
 inline constexpr char HelpDeveloperDesignSystem[] = "help.developer.designSystem";
 } // namespace command_ids
@@ -330,6 +332,10 @@ public:
     // Snapshot of the command table (separators excluded) with each command's
     // implemented/enabled/checked state.
     QList<CommandInfo> describe() const;
+
+Q_SIGNALS:
+    // A command's bindings changed through setShortcuts().
+    void shortcutsChanged(const QString& id);
 
 private:
     bool hasHandler(const QString& id) const;

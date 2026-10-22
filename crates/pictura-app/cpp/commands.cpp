@@ -119,6 +119,7 @@ void CommandRegistry::setShortcuts(const QString& id, const QList<QKeySequence>&
             if (entry.action) {
                 entry.action->setShortcuts(shortcuts);
             }
+            Q_EMIT shortcutsChanged(id);
             return;
         }
     }

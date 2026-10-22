@@ -668,6 +668,7 @@ QWidget* OptionsBar::buildPaintPage(ToolId id)
 
     layout->addWidget(new QLabel(QStringLiteral("Mode"), page));
     auto* combo = new QComboBox(page);
+    combo->setObjectName(QStringLiteral("optionsBrushMode"));
     combo->addItem(QStringLiteral("Normal"), QStringLiteral("normal"));
     combo->addItem(QStringLiteral("Dissolve"), QStringLiteral("dissolve"));
     combo->addItem(QStringLiteral("Behind"), QStringLiteral("behind"));

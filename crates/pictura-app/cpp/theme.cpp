@@ -337,6 +337,15 @@ QWidget#panelFloat { background: ${surface}; border: ${border-width-panel}px sol
 /* The Brush Preset picker: a non-grabbing in-window overlay, styled like a
    floating panel so it reads as a popup. */
 QWidget#brushPresetPicker { background: ${surface}; border: ${border-width-panel}px solid ${border}; }
+/* Help > Search (Shift+Space): the same floating-panel look; the result list
+   sits flush on it, and a row that cannot run is greyed. */
+QFrame#searchBar { background: ${surface}; border: ${border-width-panel}px solid ${border}; }
+QListWidget#searchResults { background: ${surface}; border: 0; }
+QListWidget#searchResults::item { padding: 3px 6px; }
+QListWidget#searchResults::item:disabled { color: ${content-disabled}; }
+QLabel#searchEmpty, QLabel#searchFooter { color: ${content-disabled}; }
+/* The reveal outline: a short accent pulse over the found widget. */
+QWidget#searchFlash { background: transparent; border: 2px solid ${accent}; }
 /* Frameless dialog chrome (dialog_chrome.cpp): a header-shade title strip and
    a 1 px outline drawn over the dialog's edge. */
 QWidget#dialogTitleBar { background: ${surface-header}; border: 0; border-bottom: 1px solid ${border-header}; }

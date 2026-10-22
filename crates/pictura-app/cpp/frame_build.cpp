@@ -819,6 +819,9 @@ void PicturaMainWindow::buildStatusBar()
     hintSeparator_ = makeSeparator();
     bar->addWidget(hintSeparator_);
     bar->addWidget(hintBar_);
+    // Right-aligned: the Help > Search keycap, following its live binding.
+    buildSearchHint(bar);
+    searchHint_->setFixedHeight(kStatusItemHeight);
 
     connect(zoomField_, &NumericField::valueCommitted, this, [this](double percent) {
         if (ImageView* canvas = imageView()) {
