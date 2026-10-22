@@ -855,6 +855,19 @@ impl qobject::PictureView {
         pictura_render::gpu_available()
     }
 
+    pub fn gpu_adapter_info(&self) -> QStringList {
+        let Some(info) = pictura_render::gpu_adapter_info() else {
+            return QStringList::default();
+        };
+        let mut fields = QStringList::default();
+        fields.append(QString::from(info.name.as_str()));
+        fields.append(QString::from(info.device_type.as_str()));
+        fields.append(QString::from(info.backend.as_str()));
+        fields.append(QString::from(info.driver.as_str()));
+        fields.append(QString::from(info.driver_info.as_str()));
+        fields
+    }
+
     pub fn active_backend(&self) -> QString {
         if !pictura_render::gpu_available() {
             QString::from("CPU (no GPU)")

@@ -375,7 +375,10 @@ CS6 reworked the 3D engine; each command below is named in the CS6 Help
 - Full Product Family Help ✓
 - Adobe Product Improvement Program *(unverified)*
 - About Plug-in ▸ ✓
-- System Info *(unverified)*
+- System Info — CS6's menu entry is unverified; Kooka Pictura ships it as a
+  snapshot environment report with a Copy button.
+- Submit Issue — app extension (not CS6): opens the repository's new-issue
+  page with the System Info report prefilled and copied to the clipboard.
 - About Photoshop / About Photoshop Extended ✓
 
 > **App extension (not CS6).** *Help ▸ Developer ▸ Design System…* opens the
@@ -633,9 +636,10 @@ non-browser fetches.
   Resolve with a CS6 `Filter` menu capture.
 - **`Type > OpenType`** — whether CS6 exposes OpenType options as a Type submenu
   or only in the Character panel menu. Resolve with a CS6 capture.
-- **Help menu tail** (`Adobe Product Improvement Program`, `System Info`) —
-  listed by tertiary sources, not the fetched CS6 Help. Resolve with a CS6
-  `Help` menu capture.
+- **Help menu tail** (`Adobe Product Improvement Program`) — listed by
+  tertiary sources, not the fetched CS6 Help. `System Info` is shipped as the
+  environment report described above; `Submit Issue` is an app extension.
+  Resolve the remaining tail with a CS6 `Help` menu capture.
 - **Mac application-menu contents.** The CS6 keyboard-shortcut sheet shows the
   `Photoshop` menu carrying `Preferences…`, `Hide Photoshop` (`Cmd+H`),
   `Hide Others` (`Opt+Cmd+H`), and `Quit Photoshop` (`Cmd+Q`); `Services` and

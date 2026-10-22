@@ -35,9 +35,12 @@ Whether the exact same program shipped in every CS6 application, and its precise
 
 ### Diagnostics and performance
 
-- CS6 has no documented end-user diagnostic log file comparable to a modern structured log. Troubleshooting is via the preferences file, `Help > System Info` (GPU/VRAM report), and the status bar.
+- CS6 has no documented end-user diagnostic log file comparable to a modern structured log. Troubleshooting is via the preferences file, `Help > System Info` (environment report), and the status bar.
 - **Status bar** exposes `SCRATCH SIZES` and `EFFICIENCY` — Efficiency is the percentage of time computing rather than paging, and sustained values below ~95% indicate scratch-disk paging (`ARCH-001`). This is a live performance diagnostic.
-- **`Help > System Info`** reports the detected GPU and VRAM.
+- **`Help > System Info`** reports the environment and detected GPU. VRAM is
+  `Unavailable` because wgpu does not expose it.
+- **`Help > Submit Issue`** (app extension) copies the report to the clipboard
+  and opens the repository's new-issue page prefilled with it.
 - **GPU Sniffer** probes the GPU at launch and disables GPU features on failure (`ARCH-001`), producing a launch-time warning dialog.
 - Adobe's crash reporter uploads crash data; the exact CS6 mechanism and consent text are *(unverified)*.
 
@@ -47,7 +50,8 @@ Whether the exact same program shipped in every CS6 application, and its precise
 |---|---|---|---|
 | `Edit > Preferences > General > History Log` | Preference | — | Off / on; Metadata / Text File / Both; Sessions/Concise/Detailed. |
 | `File > Help > Adobe Product Improvement Program` | Menu | — | APIP opt-in/out (CS6-era). |
-| `Help > System Info` | Dialog | — | GPU/VRAM and environment report. |
+| `Help > System Info` | Dialog | — | Environment and GPU report. |
+| `Help > Submit Issue` | Menu | — | App extension: opens a prefilled issue with the System Info report. |
 | Status bar | Readout | — | `SCRATCH SIZES`, `EFFICIENCY`. |
 | Launch GPU warning | Modal | — | One-time GPU-sniffer failure notice. |
 | Crash/recovery prompt | Dialog | — | Offer recovery after a crash (`crash-recovery-and-autosave.md`). |
@@ -160,7 +164,7 @@ consented events → local spool (bounded) → HTTPS batch → endpoint (never c
 
 - `QLoggingCategory` + `Q_DECLARE_LOGGING_CATEGORY` — Qt-side categories (e.g. `kookapictura.ui`, `kookapictura.bridge`); category rules via `QT_LOGGING_RULES`/`qtlogging.ini`.
 - `qInstallMessageHandler` — forward `QtMsgType` to the Rust sink; consider `qFormatLogMessage`/`qSetMessagePattern` for console.
-- `SystemInfoDialog` — GPU/VRAM/session report (`Help > System Info`).
+- `SystemInfoDialog` — environment/GPU/session report (`Help > System Info`).
 - `DiagnosticsPanel` / `DiagnosticsController` (`QObject`, cxx-qt) — live performance/GPU readouts.
 - `CrashDialog` — shows the crash record and the "report" choice.
 - `TelemetryConsentDialog` + `PrivacyPreferencesPage` — opt-in, payload viewer, reset ID, endpoint disclosure.
@@ -203,7 +207,7 @@ Widgets (not QML) are proposed for these dialogs, matching the CS6 native-dialog
 7. Given telemetry consented, the queued payload contains only the documented fields; a test asserts no path/filename/document-content field can be serialized.
 8. Given telemetry is turned off, the spool is deleted and no further requests occur; given `KOOKA_PICTURA_NO_TELEMETRY=1`, no requests occur even if the UI toggle is on.
 9. Given a Flatpak build with no `--share=network`, telemetry is disabled and the app still runs.
-10. Given `Help > System Info`, the dialog reports the detected GPU and VRAM and the GPU Sniffer outcome; the Diagnostics panel reports frame time and tile-cache hit rate consistent with `ARCH-001`.
+10. Given `Help > System Info`, the dialog reports the environment and detected GPU (VRAM is `Unavailable`); the Diagnostics panel reports frame time and tile-cache hit rate consistent with `ARCH-001`.
 11. Given the History Log is enabled, it produces no application-log entries and vice versa.
 
 ## Sources

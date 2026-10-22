@@ -245,6 +245,29 @@ pub fn gpu_available() -> bool {
     devices().is_ok() && gpu_composite_verified()
 }
 
+/// A read-only summary of the adapter the compositor would use.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuAdapterInfo {
+    pub name: String,
+    pub device_type: String,
+    pub backend: String,
+    pub driver: String,
+    pub driver_info: String,
+}
+
+/// The cached compositor adapter's summary, or `None` when no usable adapter
+/// exists. Never panics.
+pub fn gpu_adapter_info() -> Option<GpuAdapterInfo> {
+    let info = devices().ok()?.adapter_info();
+    Some(GpuAdapterInfo {
+        name: info.name,
+        device_type: format!("{:?}", info.device_type),
+        backend: format!("{:?}", info.backend),
+        driver: info.driver,
+        driver_info: info.driver_info,
+    })
+}
+
 /// Whether the device's compute compositor reproduces the CPU oracle.
 ///
 /// Some drivers (observed on Mesa's Honeykrisp for the Apple M1) accept the
@@ -655,6 +678,15 @@ mod tests {
         doc.layers[1].channels[1].data.as_mut_slice()[200] ^= 0xFF;
         stamp_all(&mut doc);
         check(&doc, "restamped edit");
+    }
+
+    #[test]
+    fn gpu_adapter_info_never_panics() {
+        if let Some(info) = super::gpu_adapter_info() {
+            assert!(!info.name.is_empty(), "adapter name");
+            assert!(!info.device_type.is_empty(), "device type");
+            assert!(!info.backend.is_empty(), "backend");
+        }
     }
 
     #[test]

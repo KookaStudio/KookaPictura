@@ -1070,6 +1070,9 @@ void PicturaMainWindow::registerHandlers()
         });
     }
 
+    registry_->setHandler(command_ids::HelpSystemInfo, [this]() { showSystemInfo(); });
+    registry_->setHandler(command_ids::HelpSubmitIssue, [this]() { submitIssue(); });
+
     registry_->setHandler(command_ids::HelpAbout, [this]() {
         QMessageBox::about(
             this, tr("About Kooka Pictura"),

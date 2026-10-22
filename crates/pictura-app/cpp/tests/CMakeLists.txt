@@ -70,6 +70,7 @@ set(PICTURA_QT_TESTS
     tst_paragraph_styles_panel
     tst_shared_widgets
     tst_info_panel
+    tst_system_info
     tst_histogram_panel
     tst_tool_hint_bar
     tst_swatches_panel

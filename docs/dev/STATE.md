@@ -29,6 +29,20 @@ Snapshot for resuming after a context break. Update after each milestone.
     the panel, control or toolbox slot (`flashWidget`). Greyed rows do not run.
     The status bar carries a `Search` keycap that follows the binding.
   - **Tests:** 20 Qt cases in `tst_search_bar`.
+- **System Info and Submit Issue** (#815, branch
+  `feat/815-system-info-panel`, OpenSpec change `system-info-panel`, archived
+  into `ui/system-info`). `Help > System Info` opens a modeless snapshot report
+  with Copy: Pictura version/build, Qt, OS/kernel/architecture, desktop/session,
+  CPU model/cores/clock, RAM/swap/system CPU, the process's RAM/CPU, the wgpu
+  adapter's name/type/backend/driver, and each display's model/resolution/size/
+  DPI/refresh. `Help > Submit Issue` sits below it, copies the report, and opens
+  the repository's new-issue page prefilled with it; a failed browser launch
+  names the clipboard fallback. Linux `/proc` supplies the CPU/memory/process
+  rows; other platforms show `Unavailable`. The report excludes the hostname,
+  user name, monitor serials, network addresses, environment-variable dumps,
+  and document paths. VRAM, GPU clock, desktop build version, and monitor type stay
+  `Unavailable` (no portable API). Tests: `tst_system_info` plus a Rust
+  `gpu_adapter_info_never_panics`; opening the real browser is a manual check.
 - **Justified text renders justified** (#792, branch
   `fix/792-justify-text-renders-left`, OpenSpec change
   `2026-10-21-justify-text-renders-left`). A type layer whose paragraph

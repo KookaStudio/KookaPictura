@@ -244,6 +244,8 @@ inline constexpr char TypePanelsParagraph[] = "type.panels.paragraph";
 inline constexpr char TypePanelsParagraphStyles[] = "type.panels.paragraphStyles";
 // Not a CS6 command: the Shift+Space UI search (#788), post-CS6 by owner decision.
 inline constexpr char HelpSearch[] = "help.search";
+inline constexpr char HelpSystemInfo[] = "help.system.info";
+inline constexpr char HelpSubmitIssue[] = "help.submit.issue";
 inline constexpr char HelpAbout[] = "help.about";
 inline constexpr char HelpDeveloperDesignSystem[] = "help.developer.designSystem";
 } // namespace command_ids

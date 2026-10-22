@@ -104,8 +104,8 @@ pub use layer_effects::{
 
 pub mod gpu;
 pub use gpu::{
-    composite_active, composite_gpu, composite_gpu_or_cpu, composite_region_active, gpu_available,
-    Backend, GpuError,
+    composite_active, composite_gpu, composite_gpu_or_cpu, composite_region_active,
+    gpu_adapter_info, gpu_available, Backend, GpuAdapterInfo, GpuError,
 };
 
 mod filter;
