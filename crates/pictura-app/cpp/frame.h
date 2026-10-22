@@ -68,6 +68,7 @@ class OptionsBar;
 class PanelColumn;
 class PictureView;
 class PlaceholderPanel;
+class AdjustmentsPanel;
 class PreferencesDialog;
 class PropertiesPanel;
 class SwatchesPanel;
@@ -757,7 +758,7 @@ private:
     GlyphsPanel* glyphsPanel_ = nullptr;
     ParagraphStylesPanel* paragraphStylesPanel_ = nullptr;
     PropertiesPanel* propertiesPanel_ = nullptr;
-    PlaceholderPanel* adjustmentsPanel_ = nullptr;
+    AdjustmentsPanel* adjustmentsPanel_ = nullptr;
     ChannelsPanel* channelsPanel_ = nullptr;
     PathsPanel* pathsPanel_ = nullptr;
     PlaceholderPanel* actionsPanel_ = nullptr;
