@@ -376,22 +376,10 @@ impl qobject::PictureView {
     // ponytail: names map positionally to `Alpha N` = channels[N-1]; add a
     // `Channel.name` field only if PSD round-tripping of names is required.
     pub fn save_selection(mut self: Pin<&mut Self>, _name: &QString) -> bool {
-        let saved = {
-            let mut rust = self.as_mut().rust_mut();
-            let Some(sel) = rust.session.selection.clone() else {
-                return false;
-            };
-            let Some(doc) = rust.session.doc.as_mut() else {
-                return false;
-            };
-            let id = doc.channels.iter().map(|c| c.id).max().unwrap_or(0) + 1;
-            doc.channels.push(sel.to_channel(id));
-            true
-        };
-        if saved {
-            self.as_mut().edit("Save Selection", |_| Edit::Record);
-        }
-        saved
+        matches!(
+            self.as_mut().edit("Save Selection", save_selection_channel),
+            Edit::Meta
+        )
     }
 
     pub fn load_selection(mut self: Pin<&mut Self>, name: &QString) -> bool {
@@ -762,6 +750,20 @@ impl qobject::PictureView {
     }
 }
 
+/// Append the live selection's coverage as a document alpha channel, as one
+/// metadata transaction outcome.
+fn save_selection_channel(rust: &mut super::state::PictureViewRust) -> Edit {
+    let Some(selection) = rust.session.selection.clone() else {
+        return Edit::None;
+    };
+    let Some(doc) = rust.session.doc.as_mut() else {
+        return Edit::None;
+    };
+    let id = doc.channels.iter().map(|c| c.id).max().unwrap_or(0) + 1;
+    doc.channels.push(selection.to_channel(id));
+    Edit::Meta
+}
+
 impl super::state::PictureViewRust {
     /// Start a lasso gesture in `mode`. False without a document or when
     /// another session owns the slot.
@@ -978,7 +980,46 @@ fn channel_row_selection(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cxxqt_object::document_session::DocumentSession;
+    use crate::cxxqt_object::edit::{effect_of, Effect};
+    use crate::cxxqt_object::state::PictureViewRust;
     use pictura_core::BitDepth;
+
+    #[test]
+    fn save_selection_notifies() {
+        let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
+        doc.composite = pictura_core::PixelBuffer {
+            width: 4,
+            height: 4,
+            channels: 4,
+            data: vec![0u8; 4 * 4 * 4].into(),
+        };
+        let mut rust = PictureViewRust {
+            session: DocumentSession::with_document(doc),
+            ..Default::default()
+        };
+        rust.session.selection = Some(Selection::all(4, 4));
+        let before = rust
+            .session
+            .doc
+            .as_ref()
+            .expect("document")
+            .composite
+            .clone();
+        let outcome = save_selection_channel(&mut rust);
+        let applied = rust.apply_edit("Save Selection", outcome);
+        assert_eq!(applied.edit, Edit::Meta);
+        assert_eq!(effect_of(&applied.edit), Effect::Notify);
+        assert_eq!(rust.session.history.count(), 1);
+        assert_eq!(
+            rust.session.doc.as_ref().expect("document").channels.len(),
+            1
+        );
+        assert_eq!(
+            rust.session.doc.as_ref().expect("document").composite,
+            before
+        );
+    }
 
     fn channel(id: i16, len: usize) -> Channel {
         Channel {

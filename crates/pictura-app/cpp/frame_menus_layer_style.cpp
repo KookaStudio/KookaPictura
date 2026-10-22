@@ -82,8 +82,8 @@ void PicturaMainWindow::wireLayerStyleMenu()
         styleCommand("Paste Layer Style"),
         [this, selected]() {
             PictureView* view = activeView();
-            if (view && layer_style_paste(*view, selected()) > 0) {
-                refresh();
+            if (view) {
+                layer_style_paste(*view, selected());
             }
         },
         [this, selected]() {
@@ -107,8 +107,8 @@ void PicturaMainWindow::wireLayerStyleMenu()
         styleCommand("Clear Layer Style"),
         [this, selected]() {
             PictureView* view = activeView();
-            if (view && layer_style_clear(*view, selected()) > 0) {
-                refresh();
+            if (view) {
+                layer_style_clear(*view, selected());
             }
         },
         anyStyled);
@@ -119,8 +119,8 @@ void PicturaMainWindow::wireLayerStyleMenu()
             bool ok = false;
             const int percent = QInputDialog::getInt(this, tr("Scale Layer Effects"),
                                                      tr("Scale (%):"), 100, 1, 1000, 1, &ok);
-            if (view && ok && layer_style_scale(*view, selected(), percent) > 0) {
-                refresh();
+            if (view && ok) {
+                layer_style_scale(*view, selected(), percent);
             }
         },
         anyStyled);
@@ -129,8 +129,8 @@ void PicturaMainWindow::wireLayerStyleMenu()
             styleCommand(visible ? "Show All Effects" : "Hide All Effects"),
             [this, visible]() {
                 PictureView* view = activeView();
-                if (view && layer_style_set_all_visible(*view, visible) > 0) {
-                    refresh();
+                if (view) {
+                    layer_style_set_all_visible(*view, visible);
                 }
             },
             [this, visible]() {

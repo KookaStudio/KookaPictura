@@ -134,36 +134,38 @@ fn channels_alpha_thumbnail(
 }
 
 fn channels_new_alpha(mut view: Pin<&mut PictureView>) -> i32 {
-    let index = {
-        let mut rust = view.as_mut().rust_mut();
+    let mut index = -1;
+    view.as_mut().edit("New Channel", |rust| {
         let Some(doc) = rust.session.doc.as_mut() else {
-            return -1;
+            return Edit::None;
         };
         let id = doc.channels.iter().map(|c| c.id).max().unwrap_or(0) + 1;
         doc.channels.push(Channel {
             id,
             data: vec![0u8; doc.width as usize * doc.height as usize].into(),
         });
-        doc.channels.len() as i32 - 1
-    };
-    view.as_mut().edit("New Channel", |_| Edit::Record);
+        index = doc.channels.len() as i32 - 1;
+        Edit::Meta
+    });
     index
 }
 
 fn channels_delete_alpha(mut view: Pin<&mut PictureView>, index: i32) -> bool {
-    let removed = {
-        let mut rust = view.as_mut().rust_mut();
-        match (rust.session.doc.as_mut(), usize::try_from(index)) {
-            (Some(doc), Ok(i)) if i < doc.channels.len() => {
-                doc.channels.remove(i);
-                true
-            }
-            _ => false,
+    let mut removed = false;
+    view.as_mut().edit("Delete Channel", |rust| {
+        let Some(doc) = rust.session.doc.as_mut() else {
+            return Edit::None;
+        };
+        let Ok(i) = usize::try_from(index) else {
+            return Edit::None;
+        };
+        if i >= doc.channels.len() {
+            return Edit::None;
         }
-    };
-    if removed {
-        view.as_mut().edit("Delete Channel", |_| Edit::Record);
-    }
+        doc.channels.remove(i);
+        removed = true;
+        Edit::Meta
+    });
     removed
 }
 

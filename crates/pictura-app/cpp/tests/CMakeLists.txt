@@ -10,6 +10,7 @@ set(PICTURA_QT_TESTS
     tst_design_system
     tst_design_system_dialog
     tst_edit_clipboard
+    tst_edit_refresh
     tst_mask_edit
     tst_layers_mask_commands
     tst_last_layer

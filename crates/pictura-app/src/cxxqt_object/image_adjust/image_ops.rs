@@ -80,7 +80,6 @@ fn finish(mut view: Pin<&mut PictureView>, doc: Document, label: &str) -> bool {
         rust.select_only_layer("0");
     }
     view.as_mut().edit(label, |_| Edit::Full);
-    view.as_mut().changed();
     view.as_mut().session_cancelled();
     true
 }

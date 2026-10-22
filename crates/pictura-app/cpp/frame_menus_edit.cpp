@@ -369,7 +369,6 @@ bool PicturaMainWindow::handleDeleteKey()
     }
     if (layersPanel_) {
         layersPanel_->deleteSelection();
-        refresh();
         return true;
     }
     return false;
@@ -394,7 +393,6 @@ bool PicturaMainWindow::copyLayerFromDocument(const void* source, const QString&
     if (created.isEmpty()) {
         return false;
     }
-    refresh();
     selectLayerPath(created);
     return true;
 }
@@ -424,8 +422,18 @@ void PicturaMainWindow::wireEditHistory()
             return QStringLiteral("Undo");
         }
         PictureView* view = activeView();
-        return view && !history_api::canUndo(*view) ? QStringLiteral("Redo")
-                                                    : QStringLiteral("Undo");
+        if (!view) {
+            return QStringLiteral("Undo");
+        }
+        if (history_api::canUndo(*view)) {
+            const int index = history_api::index(*view);
+            return QStringLiteral("Undo %1").arg(history_api::label(*view, index));
+        }
+        if (history_api::canRedo(*view)) {
+            const int index = history_api::index(*view) + 1;
+            return QStringLiteral("Redo %1").arg(history_api::label(*view, index));
+        }
+        return QStringLiteral("Undo");
     });
 
     registry_->setHandler(command_ids::EditRedo, [this]() {

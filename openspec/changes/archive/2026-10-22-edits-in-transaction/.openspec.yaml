@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-10-22
+goal: Make the edit transaction own the mutation, its history and its
+  presentation, so a committed edit refreshes the frame exactly once.

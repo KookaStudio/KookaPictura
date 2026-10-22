@@ -85,16 +85,13 @@ fn apply_matte(rust: &mut PictureViewRust, op: MattingOp) -> Option<Result<(), M
 }
 
 fn run(mut view: Pin<&mut PictureView>, op: MattingOp, label: &str) -> bool {
-    let outcome = {
-        let mut rust = view.as_mut().rust_mut();
-        apply_matte(&mut rust, op)
-    };
-    if matches!(outcome, Some(Ok(()))) {
-        view.as_mut().edit(label, |_| Edit::Full);
-        true
-    } else {
-        false
-    }
+    let edit = view
+        .as_mut()
+        .edit(label, |rust| match apply_matte(rust, op) {
+            Some(Ok(())) => Edit::Full,
+            _ => Edit::None,
+        });
+    matches!(edit, Edit::Full)
 }
 
 fn layer_remove_black_matte(view: Pin<&mut PictureView>) -> bool {

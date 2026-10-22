@@ -24,8 +24,8 @@ void PicturaMainWindow::wireAdvancedSmartObjectActions()
                           [this, currentResettableSmartPath]() {
                               if (PictureView* view = activeView()) {
                                   const QString path = currentResettableSmartPath();
-                                  if (!path.isEmpty() && smart_object_reset_transform(*view, path)) {
-                                      refresh();
+                                  if (!path.isEmpty()) {
+                                      smart_object_reset_transform(*view, path);
                                   }
                               }
                           });
@@ -46,8 +46,8 @@ void PicturaMainWindow::wireAdvancedSmartObjectActions()
                           [this, currentConvertibleToLayersPath]() {
                               if (PictureView* view = activeView()) {
                                   const QString path = currentConvertibleToLayersPath();
-                                  if (!path.isEmpty() && smart_object_convert_to_layers(*view, path)) {
-                                      refresh();
+                                  if (!path.isEmpty()) {
+                                      smart_object_convert_to_layers(*view, path);
                                   }
                               }
                           });
@@ -77,7 +77,6 @@ void PicturaMainWindow::wireAdvancedSmartObjectActions()
                               if (copy.isEmpty()) {
                                   return;
                               }
-                              refresh();
                               if (layersPanel_) {
                                   layersPanel_->selectPaths({copy}, copy);
                               }
@@ -101,7 +100,6 @@ bool PicturaMainWindow::replaceSmartObjectContents(const QString& layerPath)
     if (file.isEmpty() || !view->replace_smart_object_contents(layerPath, file)) {
         return false;
     }
-    refresh();
     return true;
 }
 
@@ -157,8 +155,8 @@ void PicturaMainWindow::wireSmartFilterActions()
     registry_->setHandler(command_ids::LayerSmartFiltersClear, [this, currentSmartFilterPath]() {
         if (PictureView* view = activeView()) {
             const QString path = currentSmartFilterPath();
-            if (!path.isEmpty() && clear_layer_smart_filters(*view, path)) {
-                refresh();
+            if (!path.isEmpty()) {
+                clear_layer_smart_filters(*view, path);
             }
         }
     });

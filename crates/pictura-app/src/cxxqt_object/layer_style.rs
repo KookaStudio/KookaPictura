@@ -275,23 +275,23 @@ fn layer_style_any_visible(view: &PictureView, visible: bool) -> bool {
 }
 
 fn layer_style_set_all_visible(mut view: Pin<&mut PictureView>, visible: bool) -> i32 {
-    let changed = view
-        .as_mut()
-        .rust_mut()
-        .session
-        .doc
-        .as_mut()
-        .map_or(0, |doc| {
-            pictura_render::set_all_effects_visible(doc, visible)
-        });
-    if changed > 0 {
-        let label = if visible {
-            "Show All Effects"
-        } else {
-            "Hide All Effects"
+    let label = if visible {
+        "Show All Effects"
+    } else {
+        "Hide All Effects"
+    };
+    let mut changed = 0;
+    view.as_mut().edit(label, |rust| {
+        let Some(doc) = rust.session.doc.as_mut() else {
+            return Edit::None;
         };
-        view.as_mut().edit(label, |_| Edit::Full);
-    }
+        changed = pictura_render::set_all_effects_visible(doc, visible);
+        if changed > 0 {
+            Edit::Full
+        } else {
+            Edit::None
+        }
+    });
     changed as i32
 }
 
