@@ -198,6 +198,7 @@ fn main() {
                 "src/cxxqt_object/pdf_export/import.rs",
                 "src/cxxqt_object/shapes.rs",
                 "src/cxxqt_object/type_tools.rs",
+                "src/cxxqt_object/type_warp.rs",
                 "src/cxxqt_object/svg_export.rs",
                 "src/cxxqt_object/web_export.rs",
             ])

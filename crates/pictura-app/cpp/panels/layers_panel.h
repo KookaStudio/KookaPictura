@@ -212,6 +212,7 @@ public:
     bool shiftClickVectorMaskThumbnailForTest(const QString& path);
     bool rowPlacedForTest(const QString& path) const;
     bool rowShapeForTest(const QString& path) const;
+    bool rowWarpedForTest(const QString& path) const;
     bool rowSmartObjectForTest(const QString& path) const;
     // Alt-click the line under `path`'s row, as a user would.
     void altClickBelowRowForTest(const QString& path);

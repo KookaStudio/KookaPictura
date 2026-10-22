@@ -39,6 +39,7 @@ struct LayerRow {
     bool linked = false;
     bool placed = false;
     bool shape = false;
+    bool warped = false;
     bool smartObject = false;
     bool hasStyle = false;
     QStringList styleEffects;

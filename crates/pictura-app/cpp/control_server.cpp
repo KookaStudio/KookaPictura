@@ -74,6 +74,7 @@ bool isModalCommand(const QString& id)
         QString::fromLatin1(command_ids::EditPreferencesPerformance),
         QString::fromLatin1(command_ids::EditPreferencesUnits),
         QString::fromLatin1(command_ids::EditPreferencesGuides),
+        QString::fromLatin1(command_ids::EditPreferencesType),
         QString::fromLatin1(command_ids::ViewNewGuide),
         // Entering full screen can show the CS6 advisory (a modal message box).
         QString::fromLatin1(command_ids::ViewScreenModeFullWithMenuBar),

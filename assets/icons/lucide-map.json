@@ -530,6 +530,11 @@
       "match": "custom",
       "note": "Free Transform warp-mode toggle; a warped 3x3 grid, drawn on the 24x24 Lucide grid"
     },
+    "options.warpText": {
+      "kind": "custom",
+      "match": "custom",
+      "note": "Type tools' Warp Text button; a T standing on an arc, drawn on the 24x24 Lucide grid"
+    },
     "panel.close": {
       "kind": "lucide",
       "slug": "x",

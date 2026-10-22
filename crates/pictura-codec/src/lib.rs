@@ -121,7 +121,7 @@ pub use svg::{
     rounded_rect_element, subpath_data, text_element, SvgContent, SvgNode, SvgOptions,
 };
 pub use type_plain::type_is_plain;
-pub use type_tool::encode_type_tool;
+pub use type_tool::{decode_type_warp, encode_type_tool};
 pub use type_write::author_type_tool;
 pub use vector_mask::{
     decode_vector_mask, decode_vector_mask_paths, encode_vector_mask, encode_vector_mask_view,

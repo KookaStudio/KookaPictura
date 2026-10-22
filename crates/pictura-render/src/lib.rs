@@ -184,7 +184,9 @@ mod type_decor;
 mod type_style;
 pub use text_render::{materialize_text_rgba, render_text_layer, BundledRasterizer, BundledText};
 mod fonts;
-pub use fonts::{font_family, font_postscript_name, opentype_features, register_font};
+pub use fonts::{
+    font_family, font_has_outlines, font_postscript_name, opentype_features, register_font,
+};
 mod pdf_text;
 pub use pdf_text::{pdf_live_type, pdf_type_fonts, LiveType};
 mod type_caret;
@@ -194,11 +196,13 @@ mod type_paragraph;
 pub use type_paragraph::{type_overflows, type_to_paragraph, type_to_point};
 mod type_layer;
 mod type_path;
+mod type_warp;
 pub use type_layer::{
     add_type_layer, apply_type_style, render_type, replace_type_layer, type_layer_at,
     type_layer_spec, type_mask, type_placement, TypePlacement,
 };
 pub use type_path::{overflow_point as type_path_overflow_point, path_hit_at, PathHit};
+pub use type_warp::{type_warp_refusal, WarpRefusal};
 
 pub use pictura_ops::{Anchor, Resample};
 

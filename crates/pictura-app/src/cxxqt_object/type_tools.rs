@@ -35,7 +35,10 @@ pub mod ffi {
     /// orientation. Placement rides separately from the character and paragraph
     /// attribute sets. `boxed` makes it paragraph type, wrapping to the box
     /// `box_left, box_top, box_right, box_bottom` relative to `(x, y)` before
-    /// the linear part (a dragged box has its top-left at `(x, y)`).
+    /// the linear part (a dragged box has its top-left at `(x, y)`). The
+    /// `warp_*` fields are `Type > Warp Text`: `warp_style` a
+    /// `WarpStyle::id` (empty or `none` for no warp), the bend and the
+    /// horizontal / vertical distortions in percent.
     #[namespace = "pictura"]
     struct TypeSetting {
         vertical: bool,
@@ -56,6 +59,11 @@ pub mod ffi {
         path_closed: bool,
         path_start: f64,
         path_points: QString,
+        warp_style: QString,
+        warp_bend: f64,
+        warp_h: f64,
+        warp_v: f64,
+        warp_vertical: bool,
     }
 
     /// The character attribute set as the bridge carries it: enums as `i32`
@@ -433,6 +441,7 @@ fn spec(
     spec.character = character_attrs(character);
     spec.character.font_family = font.to_string();
     spec.paragraph = paragraph_attrs(paragraph);
+    spec.warp = super::type_warp::text_warp(placement);
     spec
 }
 
@@ -711,7 +720,7 @@ fn type_commit_mask(
         .apply_selection_labeled(shape, combine_mode_from(&mode.to_string()), label)
 }
 
-fn layer_spec(view: &PictureView, path: &QString) -> Option<TypeSpec> {
+pub(super) fn layer_spec(view: &PictureView, path: &QString) -> Option<TypeSpec> {
     let doc = view.rust().session.doc.as_ref()?;
     pictura_render::type_layer_spec(pictura_render::resolve_path(doc, &path.to_string())?)
 }
@@ -792,6 +801,15 @@ fn placement_setting(spec: &TypeSpec) -> TypeSetting {
             .path
             .as_ref()
             .map_or_else(QString::default, path_points),
+        warp_style: QString::from(if spec.warp.style.is_preset() {
+            spec.warp.style.id()
+        } else {
+            ""
+        }),
+        warp_bend: spec.warp.bend,
+        warp_h: spec.warp.h_distort,
+        warp_v: spec.warp.v_distort,
+        warp_vertical: spec.warp.vertical,
     }
 }
 
@@ -814,6 +832,11 @@ fn type_layer_setting(view: &PictureView, path: &QString) -> TypeSetting {
             path_closed: false,
             path_start: 0.0,
             path_points: QString::default(),
+            warp_style: QString::default(),
+            warp_bend: 0.0,
+            warp_h: 0.0,
+            warp_v: 0.0,
+            warp_vertical: false,
         },
         |spec| placement_setting(&spec),
     )

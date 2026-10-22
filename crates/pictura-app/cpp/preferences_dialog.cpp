@@ -28,6 +28,7 @@ const QString PreferencesDialog::kFileHandling = QStringLiteral("File Handling")
 const QString PreferencesDialog::kPerformance = QStringLiteral("Performance");
 const QString PreferencesDialog::kUnits = QStringLiteral("Units & Rulers");
 const QString PreferencesDialog::kGuides = QStringLiteral("Guides, Grid, & Slices");
+const QString PreferencesDialog::kType = QStringLiteral("Type");
 
 namespace {
 
@@ -108,7 +109,7 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     stack_->setObjectName(QStringLiteral("preferencesStack"));
     layout->addWidget(stack_, 1);
 
-    realPages_ = {kGeneral, kInterface, kFileHandling, kPerformance, kUnits, kGuides};
+    realPages_ = {kGeneral, kInterface, kFileHandling, kPerformance, kUnits, kGuides, kType};
 
     // General: the app's real theme brightness is the only General setting.
     auto* generalPage = new QWidget(this);
@@ -178,6 +179,16 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     stack_->addWidget(buildUnitsPage());
     stack_->addWidget(buildGuidesPage());
 
+    // Type: only the placeholder fill, a Photoshop CC option (not CS6).
+    auto* typePage = new QWidget(this);
+    typePage->setObjectName(QStringLiteral("preferencesTypePage"));
+    auto* typeLayout = new QVBoxLayout(typePage);
+    makeCheckbox(QStringLiteral("fillPlaceholderText"),
+                 tr("Fill New Type Layers With Placeholder Text"), typePage)
+        ->setChecked(true);
+    typeLayout->addStretch(1);
+    stack_->addWidget(typePage);
+
     // List rows carry their pane name in Qt::UserRole: the CS6 pane order does
     // not match the stack's real-page order, so the row maps by name.
     for (const char* name : kPaneNames) {
@@ -221,6 +232,8 @@ QCheckBox* PreferencesDialog::makeCheckbox(const QString& key, const QString& la
             emit autoShowHiddenChanged(on);
         } else if (key == QStringLiteral("useGpuCompute")) {
             emit gpuComputeChanged(on);
+        } else if (key == QStringLiteral("fillPlaceholderText")) {
+            emit typePlaceholderTextChanged(on);
         } else if (key == QStringLiteral("autoSaveRecovery")) {
             autoSaveMinutes_->setEnabled(on);
             emit autoSaveRecoveryChanged(on, autoSaveMinutes_->currentData().toInt());
@@ -267,6 +280,13 @@ void PreferencesDialog::setThemeFamily(int family)
         if (index >= 0) {
             themeFamily_->setCurrentIndex(index);
         }
+    }
+}
+
+void PreferencesDialog::setTypePlaceholderText(bool on)
+{
+    if (QCheckBox* box = checkbox(QStringLiteral("fillPlaceholderText"))) {
+        box->setChecked(on);
     }
 }
 

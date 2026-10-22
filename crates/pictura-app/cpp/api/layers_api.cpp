@@ -40,6 +40,7 @@ LayerRow convert(const ::pictura::LayerRow& row)
     out.linked = row.linked;
     out.placed = row.placed;
     out.shape = row.shape;
+    out.warped = row.warped;
     out.smartObject = row.smart_object;
     out.hasStyle = row.has_style;
     out.styleEffects = splitEffects(row.style_effects);

@@ -8,8 +8,8 @@
 //! the run lengths must add up to the string, the run must name a font in the
 //! font set — or it falls back to the pixels. `/Rendered` carries only the
 //! shape (point or paragraph box, [`crate::type_shape`]); its line cache is
-//! left for Photoshop to rebuild. Not written: warping (the warp descriptor
-//! says none) and kinsoku / mojikumi sets (empty). Ported from photorust's `core/src/psd/text_write.rs`.
+//! left for Photoshop to rebuild. The warp descriptor carries
+//! `TypeSpec::warp`. Not written: kinsoku / mojikumi sets (empty). Ported from photorust's `core/src/psd/text_write.rs`.
 //!
 //! When the layer already has a text descriptor, its EngineData is parsed and
 //! the modelled keys of the single style run, paragraph sheet, and text are
@@ -17,6 +17,7 @@
 //! style run collapses to the single modelled run (`ponytail:` ceiling named
 //! below). With no parseable block, the from-scratch skeleton is emitted.
 
+use pictura_core::warp::{TextWarp, WarpStyle};
 use pictura_core::{Composer, KerningMode, Leading, TypeSpec, TypeTool};
 
 use crate::descriptor::{get_object_item, write_descriptor, DescValue};
@@ -51,7 +52,7 @@ pub fn author_type_tool(
         // box; photorust writes zeros. Settle against a CS6-authored corpus.
         bounds: bounds.map(|v| v.round() as i32),
         text_desc: text_descriptor(spec, bounds, existing, font_name),
-        warp_desc: warp_descriptor(),
+        warp_desc: warp_descriptor(&spec.warp),
         fonts: Vec::new(),
         style: None,
         vertical: spec.vertical,
@@ -147,15 +148,28 @@ fn text_descriptor(
     ))
 }
 
-fn warp_descriptor() -> Vec<u8> {
+/// `Type > Warp Text`'s descriptor. A style type cannot carry (custom) is
+/// written as none.
+fn warp_descriptor(warp: &TextWarp) -> Vec<u8> {
+    let style = if warp.style.is_preset() {
+        warp.style
+    } else {
+        WarpStyle::None
+    };
     write_descriptor(&object(
         "warp",
         vec![
-            (key("warpStyle"), enumerated("warpStyle", "warpNone")),
-            (key("warpValue"), DescValue::Double(0.0)),
-            (key("warpPerspective"), DescValue::Double(0.0)),
-            (key("warpPerspectiveOther"), DescValue::Double(0.0)),
-            (key("warpRotate"), enumerated("Ornt", "Hrzn")),
+            (key("warpStyle"), enumerated("warpStyle", style.psd_name())),
+            (key("warpValue"), DescValue::Double(warp.bend)),
+            (key("warpPerspective"), DescValue::Double(warp.h_distort)),
+            (
+                key("warpPerspectiveOther"),
+                DescValue::Double(warp.v_distort),
+            ),
+            (
+                key("warpRotate"),
+                enumerated("Ornt", if warp.vertical { "Vrtc" } else { "Hrzn" }),
+            ),
         ],
     ))
 }

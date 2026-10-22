@@ -9,6 +9,7 @@
 #include "icons.h"
 #include "image_view.h"
 #include "panels/numeric_field.h"
+#include "warp_styles.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h"
@@ -43,22 +44,6 @@ const InterpolationEntry kInterpolations[] = {
     {"Bicubic Smoother", "bicubic-smoother"},
     {"Bicubic Sharper", "bicubic-sharper"},
     {"Bicubic Automatic", "bicubic-automatic"},
-};
-
-// The Warp style menu, in CS6 order: display name and the bridge id
-// (`pictura_core::warp::WarpStyle::id`; keep the two lists in step).
-struct WarpStyleEntry {
-    const char* name;
-    const char* id;
-};
-
-const WarpStyleEntry kWarpStyles[] = {
-    {"None", "none"},           {"Custom", "custom"},        {"Arc", "arc"},
-    {"Arc Lower", "arcLower"},  {"Arc Upper", "arcUpper"},   {"Arch", "arch"},
-    {"Bulge", "bulge"},         {"Shell Lower", "shellLower"}, {"Shell Upper", "shellUpper"},
-    {"Flag", "flag"},           {"Wave", "wave"},            {"Fish", "fish"},
-    {"Rise", "rise"},           {"Fisheye", "fisheye"},      {"Inflate", "inflate"},
-    {"Squeeze", "squeeze"},     {"Twist", "twist"},
 };
 
 // The Free Transform fields Warp mode hides.

@@ -105,7 +105,7 @@ QIcon typeSwatchIcon(const QColor& color)
 // colour swatch, the Character / Paragraph panels toggle, then Cancel and
 // Commit while text is being typed. The four tools share one TypeOptions, so
 // each page re-reads it when shown.
-// ponytail: no font style or Warp Text.
+// ponytail: no font style.
 QWidget* OptionsBar::buildTypePage(ToolId id)
 {
     auto* page = new QWidget(stack_);
@@ -179,6 +179,17 @@ QWidget* OptionsBar::buildTypePage(ToolId id)
     color->setAutoRaise(true);
     color->setIconSize(QSize(16, 16));
     layout->addWidget(color);
+
+    // Type > Warp Text… for the current type layer; the frame enables it.
+    auto* warp = new QToolButton(page);
+    warp->setObjectName(QStringLiteral("optionsWarpText"));
+    warp->setIcon(icon(QStringLiteral("options.warpText")));
+    warp->setToolTip(QStringLiteral("Create warped text"));
+    warp->setAutoRaise(true);
+    warp->setEnabled(false);
+    layout->addWidget(warp);
+    connect(warp, &QToolButton::clicked, this, &OptionsBar::warpTextRequested);
+    warpTextButtons_.push_back(warp);
 
     // CS6's Toggle the Character and Paragraph panels.
     auto* panels = new QToolButton(page);

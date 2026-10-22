@@ -19,8 +19,8 @@ class ColorSwatchWidget;
 class NumericField;
 
 // The M41 CS6 Preferences dialog: a left pane list plus a QStackedWidget.
-// General, Interface, File Handling, Performance, Units & Rulers, and Guides,
-// Grid, & Slices are real pages; the other CS6 panes are listed but disabled. Modeless so it never blocks the headless
+// General, Interface, File Handling, Performance, Units & Rulers, Guides,
+// Grid, & Slices, and Type are real pages; the other CS6 panes are listed but disabled. Modeless so it never blocks the headless
 // self-test.
 class PreferencesDialog : public QDialog {
     Q_OBJECT
@@ -32,6 +32,7 @@ public:
     static const QString kPerformance;
     static const QString kUnits;
     static const QString kGuides;
+    static const QString kType;
 
     explicit PreferencesDialog(QWidget* parent = nullptr);
 
@@ -53,6 +54,8 @@ public:
     // (72.27) rather than PostScript (72) points per inch.
     void setRulerUnit(int unit);
     void setTraditionalPoints(bool on);
+    // Type: Fill New Type Layers With Placeholder Text (not CS6; Photoshop CC).
+    void setTypePlaceholderText(bool on);
 
     // Test hooks.
     QStringList pagesForTest() const;
@@ -71,6 +74,7 @@ signals:
     void guideAppearanceChanged(const QColor& color, bool dashed);
     void rulerUnitChanged(int unit);
     void traditionalPointsChanged(bool on);
+    void typePlaceholderTextChanged(bool on);
 
 private:
     void showPage(const QString& page);

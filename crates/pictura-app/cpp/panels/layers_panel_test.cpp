@@ -1227,6 +1227,11 @@ bool LayersPanel::rowShapeForTest(const QString& path) const
     return model_ && model_->indexForPath(path).data(LayerRowShapeRole).toBool();
 }
 
+bool LayersPanel::rowWarpedForTest(const QString& path) const
+{
+    return model_ && model_->indexForPath(path).data(LayerRowWarpedRole).toBool();
+}
+
 bool LayersPanel::rowSmartObjectForTest(const QString& path) const
 {
     return model_ && model_->indexForPath(path).data(SmartObjectRole).toBool();

@@ -143,7 +143,8 @@ std::unique_ptr<ToolHandler> makePathSelectionToolHandler(ToolId id,
                                                           std::shared_ptr<PenGroup> pen);
 std::unique_ptr<ToolHandler> makeShapeToolHandler(ToolId id, std::shared_ptr<ShapeGroup> shape);
 std::unique_ptr<ToolHandler> makeRotateViewToolHandler();
-std::unique_ptr<ToolHandler> makeTypeToolHandler(ToolId id, std::shared_ptr<TypeGroup> type);
+std::unique_ptr<ToolHandler> makeTypeToolHandler(ToolId id, std::shared_ptr<TypeGroup> type,
+                                                 std::shared_ptr<const bool> placeholder);
 
 ToolController::ToolController(QObject* parent)
     : QObject(parent)
@@ -315,7 +316,7 @@ ToolController::ToolController(QObject* parent)
     }
     for (ToolId id : {ToolId::HorizontalType, ToolId::VerticalType, ToolId::HorizontalTypeMask,
                       ToolId::VerticalTypeMask}) {
-        registry_.registerTool(id, makeTypeToolHandler(id, type));
+        registry_.registerTool(id, makeTypeToolHandler(id, type, typePlaceholder_));
     }
     // A size change from the options bar or `[`/`]` moves the hover ring at
     // once. Query the pointer so a stale position is never reused after leave.

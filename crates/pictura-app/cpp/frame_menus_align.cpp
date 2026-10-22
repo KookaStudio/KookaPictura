@@ -6,6 +6,8 @@
 #include "pictura_app/src/cxxqt_object/align.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_selection/refine.cxxqt.h"
 
+#include "api/type_api.h"
+
 namespace pictura {
 
 namespace {
@@ -83,6 +85,8 @@ void PicturaMainWindow::updateAlignControls()
     // The selection tools' Select and Mask button mirrors the Refine Edge
     // command's enablement, so a click is never a silent no-op.
     optionsBar_->setRefineEdgeEnabled(view && refine_edge_available(*view));
+    const QString layer = layerAnchor();
+    optionsBar_->setWarpTextEnabled(view && !layer.isEmpty() && type_api::isType(*view, layer));
 }
 
 } // namespace pictura
