@@ -261,7 +261,7 @@ pub(super) fn apply_op_active_region(
     // Expand the visible rect by the support of every filter still to run, so
     // the viewport is exact after the whole stack; the renderer clamps it to
     // the layer. A point operation needs no apron.
-    let mut apron: i32 = filters.iter().map(pictura_render::preview_apron).sum();
+    let mut apron: i32 = filters.iter().map(|filter| filter.preview_apron()).sum();
     let section = preview_region
         .filter(|_| !commit)
         .map(|visible| clamp_to(expand(visible, apron), lrect));
@@ -299,7 +299,7 @@ pub(super) fn apply_op_active_region(
                 if applied.is_err() {
                     break;
                 }
-                apron -= pictura_render::preview_apron(filter);
+                apron -= filter.preview_apron();
             }
             applied
         }

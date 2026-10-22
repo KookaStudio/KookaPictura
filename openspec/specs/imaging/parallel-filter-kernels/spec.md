@@ -48,5 +48,5 @@ such kernel maps a flat opaque plane to itself.
 
 #### Scenario: Every moving kernel maps opaque to opaque
 
-- **WHEN** each kernel that `filter_preserves_opacity` rejects runs over a flat 255 grey plane
+- **WHEN** each filter whose alpha fact is that its kernel moves runs over a flat 255 grey plane
 - **THEN** the plane comes back flat 255

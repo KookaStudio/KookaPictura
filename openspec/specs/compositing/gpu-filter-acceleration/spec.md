@@ -78,9 +78,10 @@ Filter application SHALL use the GPU by default when the M26 `gpuCompute`
 preference is enabled and a usable adapter exists, consistent with the default-on
 compositing requirement. When `gpuCompute` is disabled the system MUST force the
 CPU implementation for every filter. A layer filter SHALL run on the CPU, even
-with the GPU enabled, for the kernels whose row-parallel CPU path outruns the
-GPU round trip: Gaussian Blur, Blur, Blur More, Sharpen, Sharpen More, Unsharp
-Mask, High Pass, Maximum, Minimum, Median and Custom. Its result is then
+with the GPU enabled, for the filters whose row-parallel CPU path outruns the
+GPU round trip; which filters those are is decided by the filter type's own
+fact (see `imaging/filter-engine-facts`) and is not enumerated by this
+requirement. Its result is then
 byte-identical to `pictura_filters::apply`. `apply_filter_active` itself still
 uses the GPU whenever a kernel exists.
 

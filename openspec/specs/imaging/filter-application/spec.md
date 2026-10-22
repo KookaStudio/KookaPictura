@@ -84,7 +84,7 @@ For each local pixel `(lx, ly)`, the coverage SHALL be the mask value at documen
 
 ### Requirement: Alpha and layer metadata preservation
 
-On a layer that is not transparency-locked, `apply_filter` SHALL filter the transparency channel (`id == -1`) only for a kernel that moves, spreads, or ranks samples independently of their value (the blurs — Smart Blur in Normal mode only — the sharpens, Median, Despeckle, Maximum, Minimum, Dust & Scratches, Offset, Mosaic, Crystallize, Fragment, the geometric Distort filters, and Liquify), or that composites over the picture (Picture Frame), by running that kernel over the alpha plane, so the layer edge moves with the colour or the composited border adds opacity. Every other filter MUST leave the transparency channel bit-identical. Offset without wrap SHALL fill the area it exposes on the transparency channel per its undefined-area mode: fully opaque (255) for CS6's "Set to Background", fully clear (0) for CS6's "Set to Transparent". `apply_filter` MUST NOT change `layer.rect`, `layer.mask`, `layer.opacity`, or `layer.blend`.
+On a layer that is not transparency-locked, `apply_filter` SHALL filter the transparency channel (`id == -1`) only for a filter whose kernel moves, spreads, or ranks samples independently of their value, or that composites over the picture (Picture Frame), by running that kernel over the alpha plane, so the layer edge moves with the colour or the composited border adds opacity. Smart Blur moves the alpha plane in Normal mode only. Which filters move the alpha plane is decided by the filter type's own alpha fact (see `imaging/filter-engine-facts`) and is not enumerated by this requirement. Every other filter MUST leave the transparency channel bit-identical. Offset without wrap SHALL fill the area it exposes on the transparency channel per its undefined-area mode: fully opaque (255) for CS6's "Set to Background", fully clear (0) for CS6's "Set to Transparent". `apply_filter` MUST NOT change `layer.rect`, `layer.mask`, `layer.opacity`, or `layer.blend`.
 
 #### Scenario: Transparency is bit-identical
 
@@ -108,7 +108,7 @@ On a layer that is not transparency-locked, `apply_filter` SHALL filter the tran
 
 #### Scenario: Every moving kernel moves a soft layer edge
 
-- **WHEN** any kernel on the moving list runs on an unlocked layer whose alpha is a soft-edged disc with a stray speck
+- **WHEN** any filter whose alpha fact is that its kernel moves runs on an unlocked layer whose alpha is a soft-edged disc with a stray speck
 - **THEN** the channel with id `-1` differs from the input
 
 #### Scenario: Picture Frame may add opacity
@@ -179,7 +179,7 @@ pre-filter value.
 
 ### Requirement: Region-bounded filter application
 
-`pictura-render` SHALL expose `apply_filter_region`, which applies a filter over a document rectangle clamped to the layer rect and leaves every pixel outside that rectangle unchanged. A neighborhood filter reads up to its support outside the rectangle, where the source is clamped as if the rectangle were the whole layer. `preview_apron` SHALL return a conservative support margin per filter so a viewport preview expanded by it is exact across the visible area.
+`pictura-render` SHALL expose `apply_filter_region`, which applies a filter over a document rectangle clamped to the layer rect and leaves every pixel outside that rectangle unchanged. A neighborhood filter reads up to its support outside the rectangle, where the source is clamped as if the rectangle were the whole layer. The filter crate's own apron fact (`Filter::preview_apron()`, see `imaging/filter-engine-facts`) SHALL return a conservative support margin per filter so a viewport preview expanded by it is exact across the visible area.
 
 #### Scenario: Only the region changes
 
@@ -188,7 +188,7 @@ pre-filter value.
 
 #### Scenario: The region interior matches a full apply
 
-- **WHEN** the same filter is applied over the whole layer and over a region expanded by `preview_apron`
+- **WHEN** the same filter is applied over the whole layer and over a region expanded by the filter's apron
 - **THEN** pixels at least one apron inside the region match the full apply
 
 ### Requirement: Ported photorust filter engine

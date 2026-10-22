@@ -5,17 +5,22 @@ use crate::{
     FilterError,
 };
 
-use super::Filter;
+use super::{Filter, FilterEngine};
 
 /// Apply `filter` in place (planar 8-bit; channels 3 or 4). On a four-channel
 /// buffer the kernel itself decides the alpha plane: moving kernels (see
-/// [`crate::filters_alpha`]) process it, every other kernel leaves it
+/// [`Filter::moves_alpha`]) process it, every other kernel leaves it
 /// bit-identical.
 pub fn apply(filter: &Filter, buf: &mut PixelBuffer) -> Result<(), FilterError> {
     validate(buf)?;
-    if let Some(result) = crate::photorust::dispatch::apply(filter, buf) {
-        return result;
+    match filter.engine() {
+        FilterEngine::Native => apply_native(filter, buf),
+        FilterEngine::Ported => crate::photorust::dispatch::apply(filter, buf)
+            .unwrap_or_else(|| Err(FilterError::Unsupported(format!("{filter:?}")))),
     }
+}
+
+fn apply_native(filter: &Filter, buf: &mut PixelBuffer) -> Result<(), FilterError> {
     match filter {
         Filter::GaussianBlur { radius } => blur::gaussian(buf, *radius),
         Filter::BoxBlur { radius } => blur::r#box(buf, *radius),
@@ -220,7 +225,78 @@ pub fn apply(filter: &Filter, buf: &mut PixelBuffer) -> Result<(), FilterError> 
             *highlight,
         ),
         Filter::HdrToning(params) => hdr_toning::hdr_toning(buf, params),
-        // The photorust engine took every other variant above.
-        _ => Err(FilterError::Unsupported(format!("{filter:?}"))),
+        Filter::Average
+        | Filter::SurfaceBlur { .. }
+        | Filter::SharpenEdges
+        | Filter::AddNoise { .. }
+        | Filter::Emboss { .. }
+        | Filter::FindEdges
+        | Filter::Diffuse { .. }
+        | Filter::GlowingEdges { .. }
+        | Filter::Mosaic { .. }
+        | Filter::Crystallize { .. }
+        | Filter::Facet
+        | Filter::Fragment
+        | Filter::Mezzotint { .. }
+        | Filter::Pointillize { .. }
+        | Filter::ColorHalftone { .. }
+        | Filter::Twirl { .. }
+        | Filter::Pinch { .. }
+        | Filter::Spherize { .. }
+        | Filter::Ripple { .. }
+        | Filter::Wave { .. }
+        | Filter::PolarCoordinates { .. }
+        | Filter::Shear { .. }
+        | Filter::Displace { .. }
+        | Filter::ZigZag { .. }
+        | Filter::PictureFrame { .. }
+        | Filter::Cutout { .. }
+        | Filter::FilmGrain { .. }
+        | Filter::NeonGlow { .. }
+        | Filter::PosterEdges { .. }
+        | Filter::PaintDaubs { .. }
+        | Filter::PaletteKnife { .. }
+        | Filter::PlasticWrap { .. }
+        | Filter::Sponge { .. }
+        | Filter::ColoredPencil { .. }
+        | Filter::DryBrush { .. }
+        | Filter::Fresco { .. }
+        | Filter::RoughPastels { .. }
+        | Filter::SmudgeStick { .. }
+        | Filter::Underpainting { .. }
+        | Filter::Watercolor { .. }
+        | Filter::AccentedEdges { .. }
+        | Filter::AngledStrokes { .. }
+        | Filter::Crosshatch { .. }
+        | Filter::DarkStrokes { .. }
+        | Filter::InkOutlines { .. }
+        | Filter::Spatter { .. }
+        | Filter::SprayedStrokes { .. }
+        | Filter::SumiE { .. }
+        | Filter::BasRelief { .. }
+        | Filter::ChalkCharcoal { .. }
+        | Filter::Charcoal { .. }
+        | Filter::Chrome { .. }
+        | Filter::ConteCrayon { .. }
+        | Filter::GraphicPen { .. }
+        | Filter::HalftonePattern { .. }
+        | Filter::NotePaper { .. }
+        | Filter::Photocopy { .. }
+        | Filter::Plaster { .. }
+        | Filter::Reticulation { .. }
+        | Filter::Stamp { .. }
+        | Filter::TornEdges { .. }
+        | Filter::WaterPaper { .. }
+        | Filter::Craquelure { .. }
+        | Filter::Grain { .. }
+        | Filter::MosaicTiles { .. }
+        | Filter::Patchwork { .. }
+        | Filter::StainedGlass { .. }
+        | Filter::Texturizer { .. }
+        | Filter::DustAndScratches { .. }
+        | Filter::Extrude { .. }
+        | Filter::Tiles { .. }
+        | Filter::TraceContour { .. }
+        | Filter::Wind { .. } => Err(FilterError::Unsupported(format!("{filter:?}"))),
     }
 }

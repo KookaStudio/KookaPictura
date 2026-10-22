@@ -4,7 +4,7 @@
 use pictura_core::PixelBuffer;
 use pictura_filters::{
     apply, BlurNoise, BlurNoiseKind, BlurPath, BlurPin, BokehParams, ChannelDetail, DepthMap,
-    Filter, IrisPin, IrisShape, NoiseDistribution, PathMotion, Quality, RadialMethod,
+    Filter, FilterKind, IrisPin, IrisShape, NoiseDistribution, PathMotion, Quality, RadialMethod,
     ReduceNoiseParams, SmartBlurMode, SpinPin, SpinStrobe, TiltPin,
 };
 
@@ -503,6 +503,142 @@ fn path_blur_paths() -> Vec<BlurPath> {
             end_speed: 4.0,
         },
     ]
+}
+
+/// Whether a variant's row-parallel kernel has a recorded digest. Every
+/// variant is named so a new one cannot be added without a decision.
+#[allow(clippy::match_like_matches_macro)]
+fn digest_decision(kind: FilterKind) -> bool {
+    match kind {
+        FilterKind::BlurGallery
+        | FilterKind::BoxBlur
+        | FilterKind::Custom
+        | FilterKind::FieldBlur
+        | FilterKind::GaussianBlur
+        | FilterKind::HighPass
+        | FilterKind::IrisBlur
+        | FilterKind::LensBlur
+        | FilterKind::Maximum
+        | FilterKind::Median
+        | FilterKind::Minimum
+        | FilterKind::MotionBlur
+        | FilterKind::PathBlur
+        | FilterKind::RadialBlur
+        | FilterKind::ReduceNoise
+        | FilterKind::ShapeBlur
+        | FilterKind::SmartBlur
+        | FilterKind::SpinBlur
+        | FilterKind::TiltShift
+        | FilterKind::UnsharpMask => true,
+        FilterKind::Average
+        | FilterKind::Blur
+        | FilterKind::BlurMore
+        | FilterKind::SurfaceBlur
+        | FilterKind::Sharpen
+        | FilterKind::SharpenMore
+        | FilterKind::SharpenEdges
+        | FilterKind::AddNoise
+        | FilterKind::Despeckle
+        | FilterKind::Offset
+        | FilterKind::Emboss
+        | FilterKind::FindEdges
+        | FilterKind::Solarize
+        | FilterKind::Diffuse
+        | FilterKind::GlowingEdges
+        | FilterKind::Mosaic
+        | FilterKind::Crystallize
+        | FilterKind::Facet
+        | FilterKind::Fragment
+        | FilterKind::Mezzotint
+        | FilterKind::Pointillize
+        | FilterKind::ColorHalftone
+        | FilterKind::Twirl
+        | FilterKind::Pinch
+        | FilterKind::Spherize
+        | FilterKind::Ripple
+        | FilterKind::Wave
+        | FilterKind::PolarCoordinates
+        | FilterKind::Shear
+        | FilterKind::Displace
+        | FilterKind::Liquify
+        | FilterKind::ZigZag
+        | FilterKind::OceanRipple
+        | FilterKind::Glass
+        | FilterKind::DiffuseGlow
+        | FilterKind::Clouds
+        | FilterKind::DifferenceClouds
+        | FilterKind::Fibers
+        | FilterKind::PictureFrame
+        | FilterKind::LensFlare
+        | FilterKind::Lighting
+        | FilterKind::Cutout
+        | FilterKind::FilmGrain
+        | FilterKind::NeonGlow
+        | FilterKind::PosterEdges
+        | FilterKind::PaintDaubs
+        | FilterKind::PaletteKnife
+        | FilterKind::PlasticWrap
+        | FilterKind::Sponge
+        | FilterKind::ColoredPencil
+        | FilterKind::DryBrush
+        | FilterKind::Fresco
+        | FilterKind::RoughPastels
+        | FilterKind::SmudgeStick
+        | FilterKind::Underpainting
+        | FilterKind::Watercolor
+        | FilterKind::AccentedEdges
+        | FilterKind::AngledStrokes
+        | FilterKind::Crosshatch
+        | FilterKind::DarkStrokes
+        | FilterKind::InkOutlines
+        | FilterKind::Spatter
+        | FilterKind::SprayedStrokes
+        | FilterKind::SumiE
+        | FilterKind::BasRelief
+        | FilterKind::ChalkCharcoal
+        | FilterKind::Charcoal
+        | FilterKind::Chrome
+        | FilterKind::ConteCrayon
+        | FilterKind::GraphicPen
+        | FilterKind::HalftonePattern
+        | FilterKind::NotePaper
+        | FilterKind::Photocopy
+        | FilterKind::Plaster
+        | FilterKind::Reticulation
+        | FilterKind::Stamp
+        | FilterKind::TornEdges
+        | FilterKind::WaterPaper
+        | FilterKind::Craquelure
+        | FilterKind::Grain
+        | FilterKind::MosaicTiles
+        | FilterKind::Patchwork
+        | FilterKind::StainedGlass
+        | FilterKind::Texturizer
+        | FilterKind::OilPaint
+        | FilterKind::DustAndScratches
+        | FilterKind::Extrude
+        | FilterKind::Tiles
+        | FilterKind::TraceContour
+        | FilterKind::Wind
+        | FilterKind::SmartSharpen
+        | FilterKind::HdrToning => false,
+    }
+}
+
+#[test]
+fn every_variant_has_a_digest_decision() {
+    let recorded: std::collections::BTreeSet<&str> = kernels()
+        .iter()
+        .map(|(_, filter)| filter.kind().name())
+        .collect();
+    for &kind in FilterKind::ALL {
+        assert_eq!(
+            digest_decision(kind),
+            recorded.contains(kind.name()),
+            "{}: digest decision disagrees with the recorded kernels",
+            kind.name()
+        );
+    }
 }
 
 #[test]

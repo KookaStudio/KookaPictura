@@ -9,7 +9,7 @@ use pictura_adjust::Adjustment;
 use pictura_core::{
     layer_pixel_locked, layer_transparency_locked, Layer, LayerMask, PixelBuffer, PsdRect,
 };
-use pictura_filters::{BlurPath, Filter, FilterError, PathMotion};
+use pictura_filters::{Filter, FilterError};
 use rayon::prelude::*;
 
 use crate::channel;
@@ -66,30 +66,6 @@ pub fn apply_adjustment_region(
 enum Op<'a> {
     Filter(&'a Filter, bool),
     Adjustment(&'a Adjustment),
-}
-
-/// Kernels whose row-parallel CPU path beats the GPU round trip, so a layer
-/// filter skips the GPU for them. Measured at 8192² on an integrated AMD 780M
-/// (#152): uploading and reading back cost about what the CPU takes for the
-/// whole kernel (Gaussian radius 4: GPU 0.91 s, CPU 0.46 s; Median radius 10:
-/// GPU 11.2 s, CPU 3.4 s). Box, Motion and Surface Blur and Oil Paint stay on
-/// the GPU, which still wins there.
-/// ponytail: one machine's crossover; re-measure on a discrete GPU.
-pub(crate) fn cpu_outruns_gpu(filter: &Filter) -> bool {
-    matches!(
-        filter,
-        Filter::GaussianBlur { .. }
-            | Filter::Blur
-            | Filter::BlurMore
-            | Filter::Sharpen
-            | Filter::SharpenMore
-            | Filter::UnsharpMask { .. }
-            | Filter::HighPass { .. }
-            | Filter::Maximum { .. }
-            | Filter::Minimum { .. }
-            | Filter::Median { .. }
-            | Filter::Custom { .. }
-    )
 }
 
 fn apply_op_region(
@@ -194,7 +170,7 @@ fn apply_op_region(
     let orig = (mask.is_some() || alpha_locked).then(|| buf.clone());
     match op {
         Op::Filter(filter, gpu_enabled) => {
-            let gpu = gpu_enabled && !cpu_outruns_gpu(filter);
+            let gpu = gpu_enabled && !filter.cpu_outruns_gpu();
             crate::gpu_filter::apply_filter_active(filter, &mut buf, gpu)?;
         }
         Op::Adjustment(adjustment) => pictura_adjust::apply(adjustment, &mut buf)
@@ -309,78 +285,6 @@ fn intersect_rect(a: PsdRect, b: PsdRect) -> PsdRect {
         bottom: a.bottom.min(b.bottom),
         right: a.right.min(b.right),
     }
-}
-
-/// The longest trail any path's end speeds reach at the motion's Speed.
-fn path_reach(paths: &[BlurPath], motion: &PathMotion) -> f64 {
-    paths
-        .iter()
-        .map(|path| path.start_speed.max(path.end_speed) * motion.speed / 100.0)
-        .fold(0.0, f64::max)
-}
-
-/// A conservative document-pixel margin a preview must keep around a viewport
-/// so a neighborhood filter's result is exact across the visible area.
-pub fn preview_apron(filter: &Filter) -> i32 {
-    let radius = match filter {
-        Filter::GaussianBlur { radius }
-        | Filter::UnsharpMask { radius, .. }
-        | Filter::HighPass { radius } => radius.ceil(),
-        // Smart Sharpen iterates a halo reaching 2.4·radius (3σ at
-        // σ = 0.8·radius); later iterations reach further but weigh less.
-        Filter::SmartSharpen { radius, .. } => (3.0 * radius).ceil(),
-        Filter::HdrToning(p) => (3.0 * p.radius).ceil(),
-        // One more pixel for the edge test against the 4-neighbours.
-        Filter::SmartBlur { radius, .. } => radius.ceil() + 1.0,
-        Filter::BoxBlur { radius }
-        | Filter::ShapeBlur { radius, .. }
-        | Filter::SurfaceBlur { radius, .. }
-        | Filter::LensBlur { radius, .. }
-        | Filter::Median { radius }
-        | Filter::Maximum { radius }
-        | Filter::Minimum { radius } => f64::from(*radius),
-        Filter::MotionBlur { distance, .. } => f64::from(*distance),
-        Filter::FieldBlur { pins, .. } => pins.iter().map(|pin| pin.blur).fold(0.0, f64::max),
-        Filter::IrisBlur { pins, .. } => pins.iter().map(|pin| pin.blur).fold(0.0, f64::max),
-        // A full distortion smears across twice the local radius.
-        Filter::TiltShift { pins, .. } => pins
-            .iter()
-            .map(|pin| pin.blur * (1.0 + pin.distortion.abs() / 100.0))
-            .fold(0.0, f64::max),
-        // A trail reaches its length along the streamline.
-        Filter::PathBlur { paths, motion, .. } => path_reach(paths, motion),
-        // A spin's reach is its ellipse, sized as a fraction of the buffer
-        // this margin cannot see; take the widest.
-        Filter::SpinBlur { .. } => 512.0,
-        Filter::BlurGallery { spin, .. } if !spin.is_empty() => 512.0,
-        Filter::BlurGallery {
-            field,
-            iris,
-            tilt,
-            path,
-            motion,
-            ..
-        } => field
-            .iter()
-            .map(|pin| pin.blur)
-            .chain(iris.iter().map(|pin| pin.blur))
-            .chain(
-                tilt.iter()
-                    .map(|pin| pin.blur * (1.0 + pin.distortion.abs() / 100.0)),
-            )
-            .fold(0.0, f64::max)
-            .max(path_reach(path, motion)),
-        Filter::RadialBlur { amount, .. } => *amount,
-        Filter::Offset {
-            horizontal,
-            vertical,
-            ..
-        } => f64::from(horizontal.abs().max(vertical.abs())),
-        // Distort, render, texture, and cell filters can scatter or displace
-        // widely; keep a generous margin.
-        _ => 128.0,
-    };
-    (radius.ceil() as i32).clamp(8, 512)
 }
 
 fn channel_mut(layer: &mut Layer, id: i16) -> Option<&mut [u8]> {

@@ -30,8 +30,8 @@
 //! same byte helpers as [`crate::gpu`]; one invocation owns a whole word, so
 //! the read-modify-write of a shared word never races. A 4-channel buffer
 //! uploads its alpha plane as a fourth plane only when the kernel filters alpha
-//! (see [`pictura_filters::filters_alpha`]); otherwise alpha is never uploaded
-//! and never written back, so the buffer keeps it bit-for-bit.
+//! (see [`pictura_filters::Filter::moves_alpha`]); otherwise alpha is never
+//! uploaded and never written back, so the buffer keeps it bit-for-bit.
 //!
 //! This module reuses the compositor's cached [`crate::gpu::shared_device`]
 //! rather than opening a second Vulkan device, so filters and compositing share
@@ -113,7 +113,7 @@ fn apply_filter_gpu(filter: &Filter, buf: &mut PixelBuffer) -> Option<()> {
     }
     // A moving kernel takes the fourth plane through the shader; a value
     // kernel runs colour only and the buffer's alpha is left untouched.
-    let planes = if buf.channels == 4 && pictura_filters::filters_alpha(filter) {
+    let planes = if buf.channels == 4 && filter.moves_alpha() {
         4
     } else {
         3

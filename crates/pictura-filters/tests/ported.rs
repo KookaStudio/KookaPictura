@@ -1,8 +1,11 @@
 //! The shared filter contract for every variant `apply` routes to the ported
 //! photorust engine (#221, #222): it runs on RGB and RGBA, leaves alpha alone
-//! for value kernels and filters it for moving ones (see `filters_alpha`), is
-//! deterministic, rejects an out-of-range parameter without writing a sample,
-//! survives tiny images, and re-rolls with its seed where it takes one.
+//! for value kernels and filters it for moving ones (see
+//! [`pictura_filters::Filter::moves_alpha`]), is deterministic, rejects an
+//! out-of-range parameter without writing a sample, survives tiny images, and
+//! re-rolls with its seed where it takes one.
+
+use std::sync::Arc;
 
 use pictura_core::PixelBuffer;
 use pictura_filters::*;
@@ -941,6 +944,36 @@ fn cases() -> Vec<Case> {
             }),
         ),
         case(
+            "Displace",
+            Filter::Displace {
+                map: Arc::new(
+                    DisplaceMap::new(2, 2, vec![0, 255, 255, 0], vec![255, 0, 0, 255]).unwrap(),
+                ),
+                horizontal_scale: 10.0,
+                vertical_scale: 10.0,
+                fit: DisplaceFit::StretchToFit,
+                wrap: false,
+            },
+            Some(Filter::Displace {
+                map: Arc::new(DisplaceMap::neutral()),
+                horizontal_scale: 1000.0,
+                vertical_scale: 10.0,
+                fit: DisplaceFit::StretchToFit,
+                wrap: false,
+            }),
+        ),
+        case(
+            "Shear",
+            Filter::Shear {
+                curve: vec![(-1.0, -0.5), (0.0, 0.0), (1.0, 0.5)],
+                fill: ShearFill::WrapAround,
+            },
+            Some(Filter::Shear {
+                curve: vec![(0.0, 0.0)],
+                fill: ShearFill::WrapAround,
+            }),
+        ),
+        case(
             "PictureFrame",
             Filter::PictureFrame {
                 options: FrameOptions::default(),
@@ -956,6 +989,22 @@ fn cases() -> Vec<Case> {
 }
 
 #[test]
+fn ported_cases_cover_every_ported_variant() {
+    let cases = cases();
+    let covered: std::collections::BTreeSet<&str> = cases.iter().map(|case| case.name).collect();
+    let expected: std::collections::BTreeSet<&str> = FilterKind::ALL
+        .iter()
+        .filter(|kind| kind.engine() == FilterEngine::Ported)
+        .map(|kind| kind.name())
+        .collect();
+    assert_eq!(
+        covered, expected,
+        "every ported variant needs one contract case"
+    );
+    assert_eq!(cases.len(), covered.len(), "a ported case is repeated");
+}
+
+#[test]
 fn every_ported_filter_runs_and_decides_alpha_per_its_kernel() {
     for c in cases() {
         let before = picture(4);
@@ -966,7 +1015,7 @@ fn every_ported_filter_runs_and_decides_alpha_per_its_kernel() {
         // over the fourth plane, but on smooth data (no outliers, no edges) the
         // kernel can be a no-op there and leave the same bytes — layer-level
         // tests in pictura-render pin the filtering behaviour itself.
-        if !filters_alpha(&c.valid) {
+        if !c.valid.moves_alpha() {
             assert_eq!(
                 b.data[3 * n..],
                 before.data[3 * n..],
