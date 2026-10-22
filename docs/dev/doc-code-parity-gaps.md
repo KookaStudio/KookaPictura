@@ -56,7 +56,7 @@ and it answers "does a spec exist?", not "is it implemented?".
 | ID | Gap | Evidence | Issue |
 |---|---|---|---|
 | SYS-1 | Preset/library codecs + Preset Manager (`.aco/.ase/.grd/.abr/.pat/.csh/.asl/.tpl/.csf`) — no `pictura-presets` crate exists | no `crates/pictura-presets`; `swatches_panel.h:71` | #489 |
-| SYS-2 | Global bit-depth / colour-mode availability gating — every "unavailable at 16/32-bpc, Bitmap, Indexed, CMYK/Lab" rule is unenforced | `filter_tools.rs:424` checks arity only; no `Edition`/depth gate | #490 |
+| SYS-2 | Global bit-depth / colour-mode availability gating — every "unavailable at 16/32-bpc, Bitmap, Indexed, CMYK/Lab" rule is unenforced | `filter_tools.rs` (`filter_kind_supported`) checks arity only; no `Edition`/depth gate | #490 |
 | SYS-3 | `Edit > Fade` (post-filter opacity + blend mode) is an inert leaf | `command_tree.cpp:96`, no handler | #491 |
 | SYS-4 | Brush dynamics option sets (texture, dual brush, colour dynamics, transfer, pose, padlocks) | `brush_panel.cpp:115-152` all disabled | #492 |
 | SYS-5 | Sampled / bristle / erodible / airbrush tips + Define Brush Preset | `tip.rs` round/elliptical only | #493 |
@@ -201,10 +201,9 @@ Layer Comps (`LAY-022`) is already tracked by `#265`.
 | ID | Spec | Gap | Status | Evidence | Issue |
 |---|---|---|---|---|---|
 | FILT-2 | `noise-filters.md` | Reduce Noise (incl. Advanced per-channel) | MISSING | `command_tree.cpp:743` | #593 |
-| FILT-3 | `blur-filters.md` | Radial Blur Blur Center ignored by the kernel | DIVERGENT | `filter_commands.h:23,64`; `blur.rs:107` | #594 |
-| FILT-4 | `sharpen-filters.md` | Smart Sharpen Basic/Advanced split + 32-bpc disable | DIVERGENT | `filter_commands.cpp:735-750` | #595 |
+| FILT-4 | `sharpen-filters.md` | Smart Sharpen Basic/Advanced split + 32-bpc disable | DIVERGENT | `filter_map/descriptor/render.rs` (Smart Sharpen row) | #595 |
 | FILT-5 | `stylize-filters.md` | 8 Stylize filters missing from the Filter Gallery category | DIVERGENT | `filter_gallery_dialog.cpp:118` | #596 |
-| FILT-6 | `artistic-filters.md` | Colored Pencil document-background paper wiring | PARTIAL | `filter_map.rs:592-595` | #597 |
+| FILT-6 | `artistic-filters.md` | Colored Pencil document-background paper wiring | PARTIAL | `filter_map/mapping.rs` (Colored Pencil arm) | #597 |
 
 Lens Correction (`#347`), Vanishing Point (`#349`), Adaptive Wide Angle (`#346`),
 De-Interlace (`#344`), NTSC Colors (`#345`), Embed/Read Watermark (`#350`/`#351`)
@@ -349,7 +348,8 @@ Pictura Raw · `#436`/`#437`/`#438` mask/channel click · `#448` slider recompos
   and have been fixed or removed:
   - `FILT-1` (Lighting Effects engine, `#592`) — the engine ships
     (`crates/pictura-filters/src/render/lighting.rs`, mapped at
-    `filter_map.rs:611`, arity at `arities.rs:80`). The row is removed and
+    `filter_map/mapping.rs` (Lighting Effects arm), descriptor at
+    `filter_map/descriptor/render.rs`). The row is removed and
     `#592` can be closed.
   - `LAY-7` (Rubylith display options, `#585`) — shipped in `#672`
     (`crates/pictura-app/cpp/mask_display_options_dialog.cpp:20`). The row is

@@ -5,8 +5,8 @@
 //!
 //! [`PictureView`]: super::super::qobject::PictureView
 
+use super::super::document_session::{TransformMode, TransformSession};
 use super::super::qobject::PictureView;
-use super::super::state::{TransformMode, TransformSession};
 use super::geometry::{
     hit_test_quad, projective_coefficients, quad_anchors, quad_driven, rect_center, session_quad,
     set_pivot, source_corners, store_quad, MapParams,
@@ -163,16 +163,18 @@ fn derived_readouts(session: &TransformSession) -> (f64, f64, f64, f64, f64) {
 
 fn transform_session_mode(view: &PictureView) -> QString {
     view.rust()
-        .transform_session
-        .as_ref()
+        .session
+        .live
+        .transform()
         .map(|session| QString::from(session.mode.name()))
         .unwrap_or_default()
 }
 
 fn transform_session_rect(view: &PictureView) -> QString {
     view.rust()
-        .transform_session
-        .as_ref()
+        .session
+        .live
+        .transform()
         .map(|session| {
             let rect = session.orig_rect;
             QString::from(format!(
@@ -241,7 +243,7 @@ fn controls_box_hit_test(
 }
 
 fn transform_quad_extents(view: &PictureView) -> Vec<f64> {
-    let Some(session) = view.rust().transform_session.as_ref() else {
+    let Some(session) = view.rust().session.live.transform() else {
         return Vec::new();
     };
     let quad = super::warp::warp_corners(session).unwrap_or_else(|| session_quad(session));
@@ -254,7 +256,7 @@ fn transform_quad_extents(view: &PictureView) -> Vec<f64> {
 }
 
 fn transform_preview_matrix_extents(view: &PictureView) -> Vec<f64> {
-    let Some(session) = view.rust().transform_session.as_ref() else {
+    let Some(session) = view.rust().session.live.transform() else {
         return Vec::new();
     };
     if session.warp.is_some() {
@@ -275,7 +277,7 @@ fn transform_preview_matrix_extents(view: &PictureView) -> Vec<f64> {
 
 fn transform_preview_local_matrix_extents(view: &PictureView) -> Vec<f64> {
     let rust = view.rust();
-    let Some(session) = rust.transform_session.as_ref() else {
+    let Some(session) = rust.session.live.transform() else {
         return Vec::new();
     };
     if session.warp.is_some() {
@@ -320,7 +322,7 @@ fn transform_set_pivot(mut view: Pin<&mut PictureView>, x: f64, y: f64) -> bool 
         return false;
     }
     let mut rust = view.as_mut().rust_mut();
-    let Some(session) = rust.transform_session.as_mut() else {
+    let Some(session) = rust.session.live.transform_mut() else {
         return false;
     };
     set_pivot(session, x, y);
@@ -332,7 +334,7 @@ fn transform_set_pivot_preset(mut view: Pin<&mut PictureView>, anchor: i32) -> b
         return false;
     }
     let mut rust = view.as_mut().rust_mut();
-    let Some(session) = rust.transform_session.as_mut() else {
+    let Some(session) = rust.session.live.transform_mut() else {
         return false;
     };
     let point = quad_anchors(&session_quad(session))[anchor as usize];
@@ -341,7 +343,7 @@ fn transform_set_pivot_preset(mut view: Pin<&mut PictureView>, anchor: i32) -> b
 }
 
 fn transform_set_show_pivot(mut view: Pin<&mut PictureView>, on: bool) {
-    if let Some(session) = view.as_mut().rust_mut().transform_session.as_mut() {
+    if let Some(session) = view.as_mut().rust_mut().session.live.transform_mut() {
         session.show_pivot = on;
     }
 }
@@ -359,7 +361,7 @@ fn set_scale_axis(mut view: Pin<&mut PictureView>, pct: f64, link: bool, horizon
         return false;
     }
     let mut rust = view.as_mut().rust_mut();
-    let Some(session) = rust.transform_session.as_mut() else {
+    let Some(session) = rust.session.live.transform_mut() else {
         return false;
     };
     if session.mode.is_projective() {
@@ -388,7 +390,7 @@ fn transform_set_angle(mut view: Pin<&mut PictureView>, degrees: f64) -> bool {
         return false;
     }
     let mut rust = view.as_mut().rust_mut();
-    let Some(session) = rust.transform_session.as_mut() else {
+    let Some(session) = rust.session.live.transform_mut() else {
         return false;
     };
     if session.mode.is_projective() {
@@ -405,7 +407,7 @@ fn transform_set_skew(mut view: Pin<&mut PictureView>, h_degrees: f64, v_degrees
         return false;
     }
     let mut rust = view.as_mut().rust_mut();
-    let Some(session) = rust.transform_session.as_mut() else {
+    let Some(session) = rust.session.live.transform_mut() else {
         return false;
     };
     if session.mode.is_projective() {
@@ -428,7 +430,7 @@ fn transform_set_interpolation(mut view: Pin<&mut PictureView>, id: &QString) ->
         return false;
     };
     let mut rust = view.as_mut().rust_mut();
-    let Some(session) = rust.transform_session.as_mut() else {
+    let Some(session) = rust.session.live.transform_mut() else {
         return false;
     };
     session.interpolation = interpolation;
@@ -437,15 +439,17 @@ fn transform_set_interpolation(mut view: Pin<&mut PictureView>, id: &QString) ->
 
 fn transform_pivot_x(view: &PictureView) -> f64 {
     view.rust()
-        .transform_session
-        .as_ref()
+        .session
+        .live
+        .transform()
         .map_or(0.0, |s| s.pivot.0)
 }
 
 fn transform_pivot_y(view: &PictureView) -> f64 {
     view.rust()
-        .transform_session
-        .as_ref()
+        .session
+        .live
+        .transform()
         .map_or(0.0, |s| s.pivot.1)
 }
 
@@ -453,29 +457,32 @@ fn transform_pivot_y(view: &PictureView) -> f64 {
 /// the relative-positioning display.
 fn transform_pivot_origin_x(view: &PictureView) -> f64 {
     view.rust()
-        .transform_session
-        .as_ref()
+        .session
+        .live
+        .transform()
         .map_or(0.0, |s| s.pivot_origin.0)
 }
 
 fn transform_pivot_origin_y(view: &PictureView) -> f64 {
     view.rust()
-        .transform_session
-        .as_ref()
+        .session
+        .live
+        .transform()
         .map_or(0.0, |s| s.pivot_origin.1)
 }
 
 fn transform_show_pivot(view: &PictureView) -> bool {
     view.rust()
-        .transform_session
-        .as_ref()
+        .session
+        .live
+        .transform()
         .is_some_and(|s| s.show_pivot)
 }
 
 /// The horizontal scale as a percentage of the source rect: the stored scalar
 /// in `Free`, the live quad's top edge in a projective mode.
 fn transform_width_pct(view: &PictureView) -> f64 {
-    let Some(session) = view.rust().transform_session.as_ref() else {
+    let Some(session) = view.rust().session.live.transform() else {
         return 100.0;
     };
     if session.mode.is_projective() {
@@ -486,7 +493,7 @@ fn transform_width_pct(view: &PictureView) -> f64 {
 }
 
 fn transform_height_pct(view: &PictureView) -> f64 {
-    let Some(session) = view.rust().transform_session.as_ref() else {
+    let Some(session) = view.rust().session.live.transform() else {
         return 100.0;
     };
     if session.mode.is_projective() {
@@ -497,7 +504,7 @@ fn transform_height_pct(view: &PictureView) -> f64 {
 }
 
 fn transform_angle_degrees(view: &PictureView) -> f64 {
-    let Some(session) = view.rust().transform_session.as_ref() else {
+    let Some(session) = view.rust().session.live.transform() else {
         return 0.0;
     };
     if session.mode.is_projective() {
@@ -508,7 +515,7 @@ fn transform_angle_degrees(view: &PictureView) -> f64 {
 }
 
 fn transform_skew_h_degrees(view: &PictureView) -> f64 {
-    let Some(session) = view.rust().transform_session.as_ref() else {
+    let Some(session) = view.rust().session.live.transform() else {
         return 0.0;
     };
     if session.mode.is_projective() {
@@ -519,7 +526,7 @@ fn transform_skew_h_degrees(view: &PictureView) -> f64 {
 }
 
 fn transform_skew_v_degrees(view: &PictureView) -> f64 {
-    let Some(session) = view.rust().transform_session.as_ref() else {
+    let Some(session) = view.rust().session.live.transform() else {
         return 0.0;
     };
     if session.mode.is_projective() {
@@ -531,8 +538,9 @@ fn transform_skew_v_degrees(view: &PictureView) -> f64 {
 
 fn transform_interpolation_id(view: &PictureView) -> QString {
     view.rust()
-        .transform_session
-        .as_ref()
+        .session
+        .live
+        .transform()
         .map(|s| QString::from(s.interpolation.id()))
         .unwrap_or_else(|| QString::from(Interpolation::Bicubic.id()))
 }
@@ -576,7 +584,7 @@ fn shear_quad_about(
 
 fn transform_begin_free_perspective(mut view: Pin<&mut PictureView>) -> bool {
     let mut rust = view.as_mut().rust_mut();
-    let Some(session) = rust.transform_session.as_mut() else {
+    let Some(session) = rust.session.live.transform_mut() else {
         return false;
     };
     if session.mode != TransformMode::Free
@@ -596,8 +604,9 @@ fn transform_begin_free_perspective(mut view: Pin<&mut PictureView>) -> bool {
 
 fn transform_drag_angle_degrees(view: &PictureView) -> f64 {
     view.rust()
-        .transform_session
-        .as_ref()
+        .session
+        .live
+        .transform()
         .and_then(drag_angle_degrees)
         .unwrap_or(f64::NAN)
 }
@@ -630,7 +639,7 @@ fn transform_apply(mut view: Pin<&mut PictureView>, op: &QString) -> bool {
         return false;
     };
     let mut rust = view.as_mut().rust_mut();
-    let Some(session) = rust.transform_session.as_mut() else {
+    let Some(session) = rust.session.live.transform_mut() else {
         return false;
     };
     // Warp keeps the mesh in source space; the box's similarity frame still
@@ -668,7 +677,7 @@ fn transform_set_mode(mut view: Pin<&mut PictureView>, mode: &QString) -> bool {
         return false;
     };
     let mut rust = view.as_mut().rust_mut();
-    let Some(session) = rust.transform_session.as_mut() else {
+    let Some(session) = rust.session.live.transform_mut() else {
         return false;
     };
     if !can_set_mode(session, mode) {
@@ -683,8 +692,9 @@ fn transform_can_set_mode(view: &PictureView, mode: &QString) -> bool {
         return false;
     };
     view.rust()
-        .transform_session
-        .as_ref()
+        .session
+        .live
+        .transform()
         .is_some_and(|session| can_set_mode(session, mode))
 }
 
@@ -693,7 +703,7 @@ fn transform_repeat(mut view: Pin<&mut PictureView>) -> bool {
         return false;
     };
     let mut rust = view.as_mut().rust_mut();
-    let Some(session) = rust.transform_session.as_mut() else {
+    let Some(session) = rust.session.live.transform_mut() else {
         return false;
     };
     if session.warp.is_some() || session.mode.is_projective() {
@@ -717,7 +727,7 @@ fn transform_has_repeat(view: &PictureView) -> bool {
 }
 
 fn transform_set_history_label(mut view: Pin<&mut PictureView>, label: &QString) {
-    if let Some(session) = view.as_mut().rust_mut().transform_session.as_mut() {
+    if let Some(session) = view.as_mut().rust_mut().session.live.transform_mut() {
         session.history_label = label.to_string();
     }
 }

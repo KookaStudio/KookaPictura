@@ -21,8 +21,8 @@ void PicturaMainWindow::wireLayerArrangeStamp()
         registry_->setHandler(id, [this, op]() {
             PictureView* view = activeView();
             const QString path = layerAnchor();
-            if (view && !path.isEmpty() && arrange_layer_run(*view, path, op)) {
-                refresh();
+            if (view && !path.isEmpty()) {
+                arrange_layer_run(*view, path, op);
             }
         });
         registry_->setEnabledProvider(id, [this, op]() {
@@ -40,8 +40,8 @@ void PicturaMainWindow::wireLayerArrangeStamp()
     registry_->setHandler(command_ids::LayerArrangeReverse, [this]() {
         PictureView* view = activeView();
         const QStringList paths = selectedLayerPaths();
-        if (view && paths.size() >= 2 && reverse_layers_run(*view, paths)) {
-            refresh();
+        if (view && paths.size() >= 2) {
+            reverse_layers_run(*view, paths);
         }
     });
     registry_->setEnabledProvider(command_ids::LayerArrangeReverse, [this]() {
@@ -63,8 +63,8 @@ void PicturaMainWindow::wireLayerArrangeStamp()
     registry_->setHandler(command_ids::LayerStampVisible, [this]() {
         PictureView* view = activeView();
         const QString path = layerAnchor();
-        if (view && !path.isEmpty() && !stamp_visible_run(*view, path).isEmpty()) {
-            refresh();
+        if (view && !path.isEmpty()) {
+            stamp_visible_run(*view, path);
         }
     });
     registry_->setEnabledProvider(command_ids::LayerStampVisible, [this, currentLayerVisible]() {
@@ -75,9 +75,8 @@ void PicturaMainWindow::wireLayerArrangeStamp()
         PictureView* view = activeView();
         const QStringList paths = selectedLayerPaths();
         const QString active = layerAnchor();
-        if (view && !paths.isEmpty() && !active.isEmpty()
-            && !stamp_selected_run(*view, paths, active).isEmpty()) {
-            refresh();
+        if (view && !paths.isEmpty() && !active.isEmpty()) {
+            stamp_selected_run(*view, paths, active);
         }
     });
     registry_->setEnabledProvider(command_ids::LayerStampSelected, [this]() {
@@ -102,8 +101,8 @@ void PicturaMainWindow::wireLayerArrangeStamp()
         registry_->setHandler(entry.id, [this, flag]() {
             PictureView* view = activeView();
             const QStringList paths = selectedLayerPaths();
-            if (view && !paths.isEmpty() && view->set_layers_lock(paths, flag, true) > 0) {
-                refresh();
+            if (view && !paths.isEmpty()) {
+                view->set_layers_lock(paths, flag, true);
             }
         });
         registry_->setEnabledProvider(entry.id, [this]() {
@@ -137,8 +136,8 @@ void PicturaMainWindow::wireLayerArrangeStamp()
     registry_->setHandler(command_ids::LayerLockAllInGroup, [this, groupPathForCurrent]() {
         PictureView* view = activeView();
         const QString group = groupPathForCurrent();
-        if (view && !group.isEmpty() && lock_group_layers_run(*view, group) > 0) {
-            refresh();
+        if (view && !group.isEmpty()) {
+            lock_group_layers_run(*view, group);
         }
     });
     registry_->setEnabledProvider(command_ids::LayerLockAllInGroup,
@@ -162,8 +161,8 @@ void PicturaMainWindow::wireShapeLayerActions()
         PictureView* view = activeView();
         if (view) {
             const QString path = currentShapePath();
-            if (!path.isEmpty() && shape_rasterize(*view, path)) {
-                refresh();
+            if (!path.isEmpty()) {
+                shape_rasterize(*view, path);
             }
         }
     });
@@ -184,8 +183,8 @@ void PicturaMainWindow::wireShapeLayerActions()
         PictureView* view = activeView();
         if (view) {
             const QString path = currentShapePath();
-            if (!path.isEmpty() && shape_paste_attributes(*view, path)) {
-                refresh();
+            if (!path.isEmpty()) {
+                shape_paste_attributes(*view, path);
             }
         }
     });
@@ -215,8 +214,8 @@ void PicturaMainWindow::wireVectorMaskActions()
     };
     const auto addVectorMask = [this](const QString& kind) {
         PictureView* view = activeView();
-        if (view && vector_mask_add(*view, kind)) {
-            refresh();
+        if (view) {
+            vector_mask_add(*view, kind);
         }
     };
     registry_->setHandler(command_ids::LayerVectorMaskRevealAll,
@@ -236,8 +235,8 @@ void PicturaMainWindow::wireVectorMaskActions()
     const auto simpleVectorAction = [this, whenVectorMask](const char* id, auto action) {
         registry_->setHandler(id, [this, action]() {
             PictureView* view = activeView();
-            if (view && action(*view)) {
-                refresh();
+            if (view) {
+                action(*view);
             }
         });
         whenVectorMask(id);

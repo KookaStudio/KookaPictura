@@ -453,7 +453,7 @@ pub(crate) fn apply(
         };
         // ponytail: of the fills only Edit > Fill writes a mask (`fill_mask`);
         // the rest refuse a mask target rather than write the layer's pixels.
-        if rust.stroke.is_some()
+        if rust.session.live.stroke().is_some()
             || active_mask_target(rust).is_some()
             || active_pixel_layer(doc, Some(path)).is_none()
             || !active_layer_visible(doc, Some(path))

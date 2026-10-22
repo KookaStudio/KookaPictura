@@ -132,7 +132,7 @@ impl super::state::PictureViewRust {
         };
         match begun {
             Ok(stroke) => {
-                self.heal_stroke = Some(stroke);
+                self.session.live.set_heal_stroke(stroke);
                 true
             }
             Err(_) => false,
@@ -142,7 +142,7 @@ impl super::state::PictureViewRust {
 
 fn healing_dab(mut view: Pin<&mut PictureView>, x: f64, y: f64) -> bool {
     let mut rust = view.as_mut().rust_mut();
-    let Some(stroke) = rust.heal_stroke.as_mut() else {
+    let Some(stroke) = rust.session.live.heal_stroke_mut() else {
         return false;
     };
     // A dab only grows the mask; the pixels change on commit.
@@ -166,7 +166,7 @@ fn healing_commit(
     };
     let heal_mode = HealMode::from_i32(mode).unwrap_or_default();
     let outcome = {
-        let stroke = view.as_mut().rust_mut().heal_stroke.take();
+        let stroke = view.as_mut().rust_mut().session.live.take_heal_stroke();
         let Some(stroke) = stroke else {
             return false;
         };
@@ -199,11 +199,11 @@ fn healing_commit(
 }
 
 fn healing_cancel(mut view: Pin<&mut PictureView>) {
-    view.as_mut().rust_mut().heal_stroke = None;
+    view.as_mut().rust_mut().session.live.clear_heal_stroke();
 }
 
 fn healing_active(view: &PictureView) -> bool {
-    view.rust().heal_stroke.is_some()
+    view.rust().session.live.heal_stroke().is_some()
 }
 
 fn patch_selection(

@@ -169,13 +169,12 @@ pub(super) fn as_str_slice(owned: &[String]) -> Vec<&str> {
 }
 /// Map a filter `kind` to its [`pictura_filters::Filter`] with the documented default parameters, or `None` for an unknown kind.
 pub(super) fn filter_from_kind(kind: &str) -> Option<pictura_filters::Filter> {
-    let mut filter = super::filter_map::filter_from_kind_params(kind, &[])?;
-    // A parameterless apply is a commit: Lens Blur never commits its
-    // preview-only Faster path.
-    if let pictura_filters::Filter::LensBlur { faster, .. } = &mut filter {
-        *faster = false;
-    }
-    Some(filter)
+    // A parameterless apply is a commit: build the descriptor's opening
+    // values and run the commit normalization (Lens Blur's Faster path never
+    // commits).
+    let defaults = super::filter_map::descriptor::descriptor(kind)?.defaults();
+    let params = super::filter_map::commit_params(kind, &defaults);
+    super::filter_map::filter_from_kind_params(kind, &params)
 }
 /// Map an image-size resample `kind` to [`pictura_render::Resample`], or
 /// `None` unknown.

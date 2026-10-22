@@ -13,8 +13,8 @@
 //!
 //! [`PictureView`]: super::super::qobject::PictureView
 
+use super::super::document_session::{TransformSession, WarpDrag};
 use super::super::qobject::PictureView;
-use super::super::state::{TransformSession, WarpDrag};
 use super::geometry::{projective_coefficients, session_quad, source_corners};
 use super::session::transform_preview_layer;
 use core::pin::Pin;
@@ -285,7 +285,7 @@ pub(super) fn refresh_warp_preview(mut view: Pin<&mut PictureView>) -> bool {
     let prepared = (|| {
         let rust = view.rust();
         let doc = rust.session.doc.as_ref()?;
-        let session = rust.transform_session.as_ref()?;
+        let session = rust.session.live.transform()?;
         let warp = session.warp.as_ref()?;
         let mut clone = doc.clone();
         // An identity (or refused) warp previews the untouched layer.
@@ -316,7 +316,7 @@ fn edit_warp(
 ) -> bool {
     let changed = {
         let mut rust = view.as_mut().rust_mut();
-        match rust.transform_session.as_mut() {
+        match rust.session.live.transform_mut() {
             Some(session) if session.warp.is_some() => edit(session),
             _ => return false,
         }
@@ -327,7 +327,7 @@ fn edit_warp(
 fn transform_enter_warp(mut view: Pin<&mut PictureView>) -> bool {
     {
         let mut rust = view.as_mut().rust_mut();
-        let Some(session) = rust.transform_session.as_mut() else {
+        let Some(session) = rust.session.live.transform_mut() else {
             return false;
         };
         if session.warp.is_some() {
@@ -348,7 +348,7 @@ fn transform_enter_warp(mut view: Pin<&mut PictureView>) -> bool {
 fn transform_leave_warp(mut view: Pin<&mut PictureView>) -> bool {
     let path = {
         let mut rust = view.as_mut().rust_mut();
-        let Some(session) = rust.transform_session.as_mut() else {
+        let Some(session) = rust.session.live.transform_mut() else {
             return false;
         };
         if session.warp.take().is_none() {
@@ -364,8 +364,9 @@ fn transform_leave_warp(mut view: Pin<&mut PictureView>) -> bool {
 
 fn transform_warp_active(view: &PictureView) -> bool {
     view.rust()
-        .transform_session
-        .as_ref()
+        .session
+        .live
+        .transform()
         .is_some_and(|s| s.warp.is_some())
 }
 
@@ -424,7 +425,7 @@ fn transform_set_warp_vertical(view: Pin<&mut PictureView>, vertical: bool) -> b
 }
 
 fn warp_of(view: &PictureView) -> Option<&Warp> {
-    view.rust().transform_session.as_ref()?.warp.as_ref()
+    view.rust().session.live.transform()?.warp.as_ref()
 }
 
 fn transform_warp_style_id(view: &PictureView) -> QString {
@@ -466,7 +467,7 @@ fn push_curve(
 
 /// The session's warp as a one-patch-or-more mesh and its frame.
 fn warp_mesh(view: &PictureView) -> Option<(BezierMesh, Frame)> {
-    let session = view.rust().transform_session.as_ref()?;
+    let session = view.rust().session.live.transform()?;
     Some((session.warp.as_ref()?.to_mesh(1, 1), Frame::of(session)?))
 }
 
@@ -502,7 +503,7 @@ fn transform_warp_guide_lines(view: &PictureView) -> Vec<f64> {
 }
 
 fn transform_warp_points(view: &PictureView) -> Vec<f64> {
-    let Some(session) = view.rust().transform_session.as_ref() else {
+    let Some(session) = view.rust().session.live.transform() else {
         return Vec::new();
     };
     let Some(m) = session

@@ -40,7 +40,7 @@ impl qobject::PictureView {
     pub(super) fn mask_gpu_dab(mut self: Pin<&mut Self>, x: f64, y: f64, pressure: f64) -> bool {
         let (lx, ly) = {
             let rust = self.rust();
-            let Some(ctx) = rust.mask_stroke.as_ref() else {
+            let Some(ctx) = rust.session.live.mask_stroke() else {
                 return false;
             };
             (x - ctx.rect.left as f64, y - ctx.rect.top as f64)
@@ -55,13 +55,13 @@ impl qobject::PictureView {
         {
             let mut rust = self.as_mut().rust_mut();
             let rust = &mut *rust;
-            let Some(placer) = rust.gpu_placer.as_mut() else {
+            let Some(placer) = rust.session.live.gpu_placer_mut() else {
                 return false;
             };
             placer.feed(sample.x, sample.y, &mut dabs);
             for (cx, cy) in dabs {
                 let dab = {
-                    let Some(gpu) = rust.gpu_stroke.as_mut() else {
+                    let Some(gpu) = rust.session.live.gpu_stroke_mut() else {
                         break;
                     };
                     gpu.dab(cx, cy).ok().flatten()
@@ -69,7 +69,7 @@ impl qobject::PictureView {
                 let Some((rect, stride, planes)) = dab else {
                     continue;
                 };
-                let patched = match rust.mask_stroke.as_mut() {
+                let patched = match rust.session.live.mask_stroke_mut() {
                     Some(ctx) => {
                         ctx.stroke
                             .patch_working_layer(&mut ctx.document, rect, stride, &planes)
@@ -87,7 +87,7 @@ impl qobject::PictureView {
         let (dirty, rect) = {
             let mut rust = self.as_mut().rust_mut();
             let rust = &mut *rust;
-            let Some(ctx) = rust.mask_stroke.as_mut() else {
+            let Some(ctx) = rust.session.live.mask_stroke_mut() else {
                 return false;
             };
             (ctx.stroke.take_dirty(), ctx.rect)
@@ -98,7 +98,8 @@ impl qobject::PictureView {
         {
             let mut rust = self.as_mut().rust_mut();
             let rust = &mut *rust;
-            let (Some(doc), Some(ctx)) = (rust.session.doc.as_mut(), rust.mask_stroke.as_ref())
+            let (Some(doc), Some(ctx)) =
+                (rust.session.doc.as_mut(), rust.session.live.mask_stroke())
             else {
                 return false;
             };

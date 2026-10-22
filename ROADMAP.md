@@ -272,12 +272,12 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [x] **110 filters** across the Artistic, Blur, Blur Gallery, Brush Strokes,
       Distort, Noise, Pixelate, Render, Sharpen, Sketch, Stylize, Texture and
       Other families. `crates/pictura-filters/src/`,
-      `crates/pictura-app/src/cxxqt_object/filter_map/arities.rs`.
+      `crates/pictura-app/src/cxxqt_object/filter_map/descriptor/`.
 - [x] **Liquify, Oil Paint, the Blur Gallery, and the Filter Gallery.**
       `crates/pictura-app/cpp/filter_gallery_dialog.cpp`,
       `crates/pictura-app/cpp/blur_gallery_dialog.cpp`.
 - [ ] Reduce Noise, including the Advanced per-channel view (#593)
-- [ ] The Radial Blur Blur Center, which the kernel ignores (#594)
+- [x] The Radial Blur Blur Center, honored by the kernel (#594)
 - [ ] The Smart Sharpen Basic and Advanced split, and the 32-bpc disable (#595)
 - [ ] The eight Stylize filters missing from the Filter Gallery category (#596)
 - [ ] Colored Pencil document-background paper wiring (#597)

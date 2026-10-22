@@ -145,8 +145,9 @@ impl qobject::PictureView {
                     return false;
                 };
                 let Some(selection) = rust
-                    .selection_move_origin
-                    .as_ref()
+                    .session
+                    .live
+                    .selection_move_origin()
                     .or(rust.session.selection.as_ref())
                 else {
                     return false;
@@ -178,8 +179,7 @@ impl qobject::PictureView {
             }
             {
                 let mut rust = self.as_mut().rust_mut();
-                rust.selection_move_origin = None;
-                rust.selection_move_delta = None;
+                rust.session.live.take_selection_move();
                 rust.session.selection = Some(moved_selection);
             }
             let outcome = match dirty {
@@ -197,8 +197,10 @@ impl qobject::PictureView {
             let rust = self.rust();
             let (Some(doc), Some(selection)) = (
                 rust.session.doc.as_ref(),
-                rust.selection_move_origin
-                    .clone()
+                rust.session
+                    .live
+                    .selection_move_origin()
+                    .cloned()
                     .or_else(|| rust.session.selection.clone()),
             ) else {
                 return false;
@@ -229,8 +231,7 @@ impl qobject::PictureView {
         }
         {
             let mut rust = self.as_mut().rust_mut();
-            rust.selection_move_origin = None;
-            rust.selection_move_delta = None;
+            rust.session.live.take_selection_move();
             rust.session.selection = Some(moved_selection);
             if duplicate {
                 // `layer_via_copy` inserts the copy directly above the source
@@ -267,8 +268,9 @@ impl qobject::PictureView {
                 return false;
             };
             let selection = rust
-                .selection_move_origin
-                .as_ref()
+                .session
+                .live
+                .selection_move_origin()
                 .or(rust.session.selection.as_ref());
             let (Some(selection), Some(path)) = (selection, rust.layer_target.single()) else {
                 return false;
@@ -376,22 +378,10 @@ impl qobject::PictureView {
     // ponytail: names map positionally to `Alpha N` = channels[N-1]; add a
     // `Channel.name` field only if PSD round-tripping of names is required.
     pub fn save_selection(mut self: Pin<&mut Self>, _name: &QString) -> bool {
-        let saved = {
-            let mut rust = self.as_mut().rust_mut();
-            let Some(sel) = rust.session.selection.clone() else {
-                return false;
-            };
-            let Some(doc) = rust.session.doc.as_mut() else {
-                return false;
-            };
-            let id = doc.channels.iter().map(|c| c.id).max().unwrap_or(0) + 1;
-            doc.channels.push(sel.to_channel(id));
-            true
-        };
-        if saved {
-            self.as_mut().edit("Save Selection", |_| Edit::Record);
-        }
-        saved
+        matches!(
+            self.as_mut().edit("Save Selection", save_selection_channel),
+            Edit::Meta
+        )
     }
 
     pub fn load_selection(mut self: Pin<&mut Self>, name: &QString) -> bool {
@@ -649,28 +639,24 @@ impl qobject::PictureView {
             let Some(doc) = rust.session.doc.as_ref() else {
                 return false;
             };
-            if rust.pending_lasso.len() < 3 {
+            let points = rust.session.live.lasso_points().unwrap_or_default();
+            if points.len() < 3 {
                 return false;
             }
-            feathered(
-                Selection::polygon(doc.width, doc.height, &rust.pending_lasso),
-                feather,
-            )
+            feathered(Selection::polygon(doc.width, doc.height, points), feather)
         };
-        let mode = combine_mode_from(&self.rust().pending_lasso_mode);
+        let mode = combine_mode_from(self.rust().session.live.lasso_mode().unwrap_or_default());
         if !self.as_mut().apply_selection(shape, mode) {
             return false;
         }
         let mut rust = self.as_mut().rust_mut();
-        rust.pending_lasso.clear();
-        rust.pending_lasso_mode.clear();
+        rust.session.live.take_selection_gesture();
         true
     }
 
     pub fn cancel_lasso(mut self: Pin<&mut Self>) {
         let mut rust = self.as_mut().rust_mut();
-        rust.pending_lasso.clear();
-        rust.pending_lasso_mode.clear();
+        rust.session.live.take_selection_gesture();
     }
 
     pub fn quick_select(
@@ -762,6 +748,20 @@ impl qobject::PictureView {
     }
 }
 
+/// Append the live selection's coverage as a document alpha channel, as one
+/// metadata transaction outcome.
+fn save_selection_channel(rust: &mut super::state::PictureViewRust) -> Edit {
+    let Some(selection) = rust.session.selection.clone() else {
+        return Edit::None;
+    };
+    let Some(doc) = rust.session.doc.as_mut() else {
+        return Edit::None;
+    };
+    let id = doc.channels.iter().map(|c| c.id).max().unwrap_or(0) + 1;
+    doc.channels.push(selection.to_channel(id));
+    Edit::Meta
+}
+
 impl super::state::PictureViewRust {
     /// Start a lasso gesture in `mode`. False without a document or when
     /// another session owns the slot.
@@ -772,14 +772,27 @@ impl super::state::PictureViewRust {
         if !self.slot_allows(super::document_session::SessionKind::Lasso) {
             return false;
         }
-        self.pending_lasso_mode = mode.to_string();
-        self.pending_lasso.clear();
+        match self.session.live.selection_gesture_mut() {
+            Some(gesture) => {
+                gesture.mode = mode.to_string();
+                gesture.points.clear();
+            }
+            None => {
+                let gesture = super::document_session::SelectionGesture {
+                    mode: mode.to_string(),
+                    ..Default::default()
+                };
+                self.session.live.set_selection_gesture(gesture);
+            }
+        }
         true
     }
 
     /// Add a point to the live lasso.
     pub(super) fn add_lasso_point(&mut self, x: i32, y: i32) {
-        self.pending_lasso.push((x, y));
+        if let Some(points) = self.session.live.lasso_points_mut() {
+            points.push((x, y));
+        }
     }
 }
 
@@ -978,7 +991,46 @@ fn channel_row_selection(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cxxqt_object::document_session::DocumentSession;
+    use crate::cxxqt_object::edit::{effect_of, Effect};
+    use crate::cxxqt_object::state::PictureViewRust;
     use pictura_core::BitDepth;
+
+    #[test]
+    fn save_selection_notifies() {
+        let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
+        doc.composite = pictura_core::PixelBuffer {
+            width: 4,
+            height: 4,
+            channels: 4,
+            data: vec![0u8; 4 * 4 * 4].into(),
+        };
+        let mut rust = PictureViewRust {
+            session: DocumentSession::with_document(doc),
+            ..Default::default()
+        };
+        rust.session.selection = Some(Selection::all(4, 4));
+        let before = rust
+            .session
+            .doc
+            .as_ref()
+            .expect("document")
+            .composite
+            .clone();
+        let outcome = save_selection_channel(&mut rust);
+        let applied = rust.apply_edit("Save Selection", outcome);
+        assert_eq!(applied.edit, Edit::Meta);
+        assert_eq!(effect_of(&applied.edit), Effect::Notify);
+        assert_eq!(rust.session.history.count(), 1);
+        assert_eq!(
+            rust.session.doc.as_ref().expect("document").channels.len(),
+            1
+        );
+        assert_eq!(
+            rust.session.doc.as_ref().expect("document").composite,
+            before
+        );
+    }
 
     fn channel(id: i16, len: usize) -> Channel {
         Channel {

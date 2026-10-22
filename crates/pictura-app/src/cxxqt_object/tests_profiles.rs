@@ -285,7 +285,7 @@ fn commit_refresh_profile_4000() {
                     bottom: side,
                     right: side,
                 };
-                rust.stroke_tiles.mark(union);
+                rust.session.live.mark_stroke_tile(union);
                 let regions = rust.take_stroke_regions(union);
 
                 paint_timing::start("commit refresh profile");
@@ -443,7 +443,7 @@ fn large_document_stroke_profile() {
     };
     let dab = |rust: &mut PictureViewRust, i: u32| -> f64 {
         let t = Instant::now();
-        let stroke = rust.stroke.as_mut().expect("stroke");
+        let stroke = rust.session.live.stroke_mut().expect("stroke");
         stroke.sample(
             rust.session.doc.as_mut().expect("document"),
             StrokeSample {
@@ -453,7 +453,7 @@ fn large_document_stroke_profile() {
             },
         );
         if let Some(rect) = stroke.take_dirty() {
-            rust.stroke_tiles.mark(rect);
+            rust.session.live.mark_stroke_tile(rect);
             if let Some((x0, y0, clipped, srgb)) = rust.refresh_region_buffer(rect) {
                 rust.apply_refreshed_region(x0, y0, clipped, srgb);
             }
@@ -465,8 +465,12 @@ fn large_document_stroke_profile() {
         paint_timing::start("large document stroke");
         let t = Instant::now();
         let stroke = Stroke::begin_at(rust.session.doc.as_ref().expect("document"), "0", cfg);
-        rust.stroke = Some(stroke.expect("stroke begins"));
-        rust.stroke_tiles.reset(w, h);
+        let session = crate::cxxqt_object::document_session::StrokeSession {
+            stroke: Some(stroke.expect("stroke begins")),
+            ..Default::default()
+        };
+        rust.session.live.set_stroke_session(session);
+        rust.session.live.reset_stroke_tiles(w, h);
         let begin = t.elapsed().as_secs_f64() * 1000.0;
         let first = dab(&mut rust, 0);
         let rest: Vec<f64> = (1..120).map(|i| dab(&mut rust, i)).collect();
@@ -475,8 +479,11 @@ fn large_document_stroke_profile() {
 
         let t = Instant::now();
         let dirty = rust
+            .session
+            .live
+            .take_stroke_session()
+            .expect("stroke session")
             .stroke
-            .take()
             .expect("stroke")
             .finish()
             .expect("painted");

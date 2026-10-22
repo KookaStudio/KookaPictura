@@ -7,6 +7,7 @@
 
 use super::helpers_composite::selection_to_mask;
 use super::qobject;
+use crate::cxxqt_object::document_session::DocumentSession;
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -45,22 +46,20 @@ impl qobject::PictureView {
             rgba as u8,
             (rgba >> 24) as u8,
         ];
-        let created = {
-            let mut rust = self.as_mut().rust_mut();
-            let rust = &mut *rust;
-            let use_mask = rust.use_default_masks;
-            match rust.session.doc.as_mut() {
-                Some(doc) => {
-                    let path = pictura_render::add_solid_fill(doc, "", color);
-                    apply_default_mask(doc, &path, rust.session.selection.as_ref(), use_mask);
-                    path
-                }
-                None => String::new(),
+        let use_mask = self.rust().use_default_masks;
+        let mut created = String::new();
+        self.as_mut().edit("Color Fill", |rust| {
+            let DocumentSession { doc, selection, .. } = &mut rust.session;
+            let Some(doc) = doc.as_mut() else {
+                return Edit::None;
+            };
+            created = pictura_render::add_solid_fill(doc, "", color);
+            apply_default_mask(doc, &created, selection.as_ref(), use_mask);
+            if created.is_empty() {
+                return Edit::None;
             }
-        };
-        if !created.is_empty() {
-            self.as_mut().edit("Color Fill", |_| Edit::Structural);
-        }
+            Edit::Structural
+        });
         QString::from(created.as_str())
     }
 
@@ -68,22 +67,20 @@ impl qobject::PictureView {
     /// stack. Records one "Gradient Fill" state on success. Returns the new
     /// path, or empty without a document.
     pub fn add_gradient_fill(mut self: Pin<&mut Self>) -> QString {
-        let created = {
-            let mut rust = self.as_mut().rust_mut();
-            let rust = &mut *rust;
-            let use_mask = rust.use_default_masks;
-            match rust.session.doc.as_mut() {
-                Some(doc) => {
-                    let path = pictura_render::add_gradient_fill(doc, "");
-                    apply_default_mask(doc, &path, rust.session.selection.as_ref(), use_mask);
-                    path
-                }
-                None => String::new(),
+        let use_mask = self.rust().use_default_masks;
+        let mut created = String::new();
+        self.as_mut().edit("Gradient Fill", |rust| {
+            let DocumentSession { doc, selection, .. } = &mut rust.session;
+            let Some(doc) = doc.as_mut() else {
+                return Edit::None;
+            };
+            created = pictura_render::add_gradient_fill(doc, "");
+            apply_default_mask(doc, &created, selection.as_ref(), use_mask);
+            if created.is_empty() {
+                return Edit::None;
             }
-        };
-        if !created.is_empty() {
-            self.as_mut().edit("Gradient Fill", |_| Edit::Structural);
-        }
+            Edit::Structural
+        });
         QString::from(created.as_str())
     }
 
@@ -115,21 +112,31 @@ impl qobject::PictureView {
         if path.is_empty() {
             return false;
         }
-        let (changed, label) = match self.as_mut().rust_mut().session.doc.as_mut() {
-            Some(doc) => {
-                if pictura_render::render_text_layer(doc, &path) {
-                    (true, "Rasterize Type")
-                } else if pictura_render::rasterize_fill_content(doc, &path) {
-                    (true, "Rasterize Layer")
-                } else {
-                    (false, "Rasterize Layer")
-                }
-            }
-            None => (false, "Rasterize Layer"),
+        let is_type = self
+            .rust()
+            .session
+            .doc
+            .as_ref()
+            .and_then(|doc| pictura_render::resolve_path(doc, &path))
+            .is_some_and(pictura_core::Layer::is_type);
+        let label = if is_type {
+            "Rasterize Type"
+        } else {
+            "Rasterize Layer"
         };
-        if changed {
-            self.as_mut().edit(label, |_| Edit::Structural);
-        }
+        let mut changed = false;
+        self.as_mut().edit(label, |rust| {
+            let Some(doc) = rust.session.doc.as_mut() else {
+                return Edit::None;
+            };
+            changed = pictura_render::render_text_layer(doc, &path)
+                || pictura_render::rasterize_fill_content(doc, &path);
+            if changed {
+                Edit::Structural
+            } else {
+                Edit::None
+            }
+        });
         changed
     }
 
@@ -137,14 +144,18 @@ impl qobject::PictureView {
     /// "Rasterize All Layers" state only when at least one was rasterized.
     /// Returns how many were rasterized.
     pub fn rasterize_all_layers(mut self: Pin<&mut Self>) -> i32 {
-        let count = match self.as_mut().rust_mut().session.doc.as_mut() {
-            Some(doc) => pictura_render::rasterize_all_layers(doc),
-            None => 0,
-        };
-        if count > 0 {
-            self.as_mut()
-                .edit("Rasterize All Layers", |_| Edit::Structural);
-        }
+        let mut count = 0;
+        self.as_mut().edit("Rasterize All Layers", |rust| {
+            let Some(doc) = rust.session.doc.as_mut() else {
+                return Edit::None;
+            };
+            count = pictura_render::rasterize_all_layers(doc);
+            if count == 0 {
+                Edit::None
+            } else {
+                Edit::Structural
+            }
+        });
         count as i32
     }
 
@@ -157,38 +168,41 @@ impl qobject::PictureView {
         if path.is_empty() {
             return false;
         }
-        let changed = match self.as_mut().rust_mut().session.doc.as_mut() {
-            Some(doc) => {
-                let rendered = pictura_render::resolve_path(doc, &path).and_then(|layer| {
-                    let tool = layer.type_tool.as_ref()?;
-                    let style = tool.style.as_ref()?;
-                    let family = style.font.as_deref().unwrap_or("sans-serif");
-                    let fill = style.rgba();
-                    Some(super::qobject::render_text_rgba(
-                        family,
-                        style.character.size,
-                        &tool.text,
-                        i32::from(style.paragraph.justify.index()),
-                        fill[0],
-                        fill[1],
-                        fill[2],
-                        fill[3],
-                        layer.rect.width(),
-                        layer.rect.height(),
-                    ))
-                });
-                match rendered {
-                    Some(rgba) if !rgba.is_empty() => {
-                        pictura_render::materialize_text_rgba(doc, &path, &rgba)
-                    }
-                    _ => pictura_render::render_text_layer(doc, &path),
+        let mut changed = false;
+        self.as_mut().edit("Rasterize Type", |rust| {
+            let Some(doc) = rust.session.doc.as_mut() else {
+                return Edit::None;
+            };
+            let rendered = pictura_render::resolve_path(doc, &path).and_then(|layer| {
+                let tool = layer.type_tool.as_ref()?;
+                let style = tool.style.as_ref()?;
+                let family = style.font.as_deref().unwrap_or("sans-serif");
+                let fill = style.rgba();
+                Some(super::qobject::render_text_rgba(
+                    family,
+                    style.character.size,
+                    &tool.text,
+                    i32::from(style.paragraph.justify.index()),
+                    fill[0],
+                    fill[1],
+                    fill[2],
+                    fill[3],
+                    layer.rect.width(),
+                    layer.rect.height(),
+                ))
+            });
+            changed = match rendered {
+                Some(rgba) if !rgba.is_empty() => {
+                    pictura_render::materialize_text_rgba(doc, &path, &rgba)
                 }
+                _ => pictura_render::render_text_layer(doc, &path),
+            };
+            if changed {
+                Edit::Structural
+            } else {
+                Edit::None
             }
-            None => false,
-        };
-        if changed {
-            self.as_mut().edit("Rasterize Type", |_| Edit::Structural);
-        }
+        });
         changed
     }
 
@@ -206,13 +220,19 @@ impl qobject::PictureView {
         if path.is_empty() {
             return false;
         }
-        let changed = match self.as_mut().rust_mut().session.doc.as_mut() {
-            Some(doc) => pictura_render::rasterize_fill_content(doc, path),
-            None => false,
-        };
-        if changed {
-            self.as_mut().edit(label, |_| Edit::Structural);
-        }
+        let path = path.to_string();
+        let mut changed = false;
+        self.as_mut().edit(label, |rust| {
+            let Some(doc) = rust.session.doc.as_mut() else {
+                return Edit::None;
+            };
+            changed = pictura_render::rasterize_fill_content(doc, &path);
+            if changed {
+                Edit::Structural
+            } else {
+                Edit::None
+            }
+        });
         changed
     }
 }

@@ -1,158 +1,14 @@
 use crate::layer_target::LayerTarget;
 use cxx_qt_lib::QImage;
-use pictura_core::{Document, Layer, PixelBuffer, PsdRect};
-use pictura_paint::spacing::DabPlacer;
-use pictura_paint::{HealStroke, Stroke, StrokeSample};
-use pictura_render::gpu::GpuStroke;
+use pictura_core::{PixelBuffer, PsdRect};
 use pictura_render::{CanvasDamage, ViewPyramid};
-use pictura_select::Selection;
 use std::collections::HashMap;
 
-use super::helpers::TileSet;
-
-/// The live Free Transform gesture mode. `Free` is the unconstrained
-/// similarity transform; `Scale` and `Rotate` keep the same similarity state
-/// but restrict which gesture a handle drives; the last three edit a
-/// document-space target quad.
-#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
-pub(super) enum TransformMode {
-    #[default]
-    Free,
-    Scale,
-    Rotate,
-    Skew,
-    Distort,
-    Perspective,
-}
-
-impl TransformMode {
-    /// Parse the command mode name, or `None` for an unknown string.
-    pub(super) fn parse(name: &str) -> Option<Self> {
-        match name {
-            "free" => Some(Self::Free),
-            "scale" => Some(Self::Scale),
-            "rotate" => Some(Self::Rotate),
-            "skew" => Some(Self::Skew),
-            "distort" => Some(Self::Distort),
-            "perspective" => Some(Self::Perspective),
-            _ => None,
-        }
-    }
-
-    pub(super) fn name(self) -> &'static str {
-        match self {
-            Self::Free => "free",
-            Self::Scale => "scale",
-            Self::Rotate => "rotate",
-            Self::Skew => "skew",
-            Self::Distort => "distort",
-            Self::Perspective => "perspective",
-        }
-    }
-
-    pub(super) fn is_projective(self) -> bool {
-        matches!(self, Self::Skew | Self::Distort | Self::Perspective)
-    }
-}
-
-/// A committed similarity transform that `Edit > Transform > Again` can
-/// reapply to another target: the scale/rotation/shear, the translation, and
-/// the reference point's offset from the source rect's centre (so a reference
-/// point moved off-centre keeps its relative position).
-#[derive(Clone, Copy)]
-pub(super) struct RepeatTransform {
-    pub(super) scale_x: f64,
-    pub(super) scale_y: f64,
-    pub(super) angle: f64,
-    pub(super) skew_x: f64,
-    pub(super) skew_y: f64,
-    pub(super) dx: f64,
-    pub(super) dy: f64,
-    pub(super) pivot_offset: (f64, f64),
-}
-
-/// What a Warp-mode press grabbed; `start` (the press) and `pts0` (the mesh's
-/// control grid at the press) are in source space.
-pub enum WarpDrag {
-    /// An anchor or handle: it follows the pointer (an anchor takes its handles
-    /// along).
-    Point {
-        index: usize,
-        start: [f64; 2],
-        pts0: Vec<[f64; 2]>,
-    },
-    /// Anywhere else on the grid: the surface under the pointer follows it.
-    Surface {
-        s: f64,
-        t: f64,
-        start: [f64; 2],
-        pts0: Vec<[f64; 2]>,
-    },
-}
-
-/// The live Free Transform session: the target path, the source rect, the
-/// current similarity transform about its reference point, and the drag state.
-pub struct TransformSession {
-    pub(super) path: String,
-    pub(super) orig_rect: PsdRect,
-    pub(super) scale_x: f64,
-    pub(super) scale_y: f64,
-    pub(super) angle: f64,
-    pub(super) dx: f64,
-    pub(super) dy: f64,
-    /// Active handle: 0..=7 scale, 8 rotate, 9 move, 10 pivot, -1 none.
-    pub(super) handle: i32,
-    pub(super) press_x: f64,
-    pub(super) press_y: f64,
-    /// `[scale_x, scale_y, angle, dx, dy]` captured at press.
-    pub(super) start: [f64; 5],
-    pub(super) dragging: bool,
-    /// Gesture mode; `Free` uses the similarity scalars.
-    pub(super) mode: TransformMode,
-    /// Whether the target is an editable type layer: Skew keeps it a
-    /// parallelogram so the text stays type.
-    pub(super) type_layer: bool,
-    /// Live target quad for a projective mode; `None` in `Free`.
-    pub(super) quad: Option<[(f64, f64); 4]>,
-    /// `Free` only: the source-space box a Ctrl+Alt+Shift perspective drag
-    /// left, after which the similarity scalars apply.
-    pub(super) base_quad: Option<[(f64, f64); 4]>,
-    /// Whether the drag in progress is a `Free` Ctrl+Alt+Shift perspective drag.
-    pub(super) free_perspective: bool,
-    /// The perspective drag's readout side: (moved corner, its unmoved
-    /// neighbour, whether the moved edge is the top or bottom edge).
-    pub(super) perspective_side: Option<(usize, usize, bool)>,
-    /// Quad captured at begin/press for a projective gesture.
-    pub(super) start_quad: [(f64, f64); 4],
-    /// The reference point (document space) and its position at begin.
-    pub(super) pivot: (f64, f64),
-    pub(super) pivot_origin: (f64, f64),
-    /// The reference point captured at press; a Distort drag carries it with
-    /// the quad from this anchor.
-    pub(super) start_pivot: (f64, f64),
-    /// Whether the canvas draws the reference point.
-    pub(super) show_pivot: bool,
-    /// Horizontal/vertical skew in radians.
-    pub(super) skew_x: f64,
-    pub(super) skew_y: f64,
-    /// The session's resample method.
-    pub(super) interpolation: pictura_render::Interpolation,
-    /// Warp mode: the warp over `orig_rect`, in source space; the box's quad
-    /// stays its projective frame, applied after it on display and commit.
-    pub(super) warp: Option<pictura_core::warp::Warp>,
-    /// The Warp-mode drag in progress.
-    pub(super) warp_drag: Option<WarpDrag>,
-    /// For a selection's pixels lifted onto `path` (a floating layer above the
-    /// source): the source path and the document before the lift, which a
-    /// cancel restores.
-    pub(super) lifted: Option<(String, Box<Document>)>,
-    /// The layer's rect before `trim_to_content` hugged the box to its pixels;
-    /// a session dropped without a transform pads the layer back out to it.
-    pub(super) untrimmed: Option<PsdRect>,
-    /// The history label a commit records. `Free Transform` for an interactive
-    /// session; an exact command (`Rotate 90° Clockwise`, `Transform Again`, …)
-    /// sets its own before committing immediately.
-    pub(super) history_label: String,
+/// A filter dialog's reduced canvas copy and what it was built from.
+pub(super) struct CanvasProxy {
+    /// The document region, the scale's bits and the `content_revision`.
+    pub(super) key: (PsdRect, u64, u64, u64),
+    pub(super) proxy: pictura_render::FilterProxy,
 }
 
 /// Backing Rust state for [`super::qobject::PictureView`].
@@ -160,13 +16,6 @@ pub struct PictureViewRust {
     /// The document, the selection, and the history: the state the document
     /// session owns.
     pub(super) session: crate::cxxqt_object::document_session::DocumentSession,
-    /// Selection captured at the start of a move-selection drag; `None` when no
-    /// drag is active. Restored by `cancel_selection_move`.
-    pub(super) selection_move_origin: Option<Selection>,
-    /// The drag's offset from the origin, stored instead of a translated plane
-    /// so a pointer move costs no plane allocation. `None` when no drag is
-    /// active.
-    pub(super) selection_move_delta: Option<(i32, i32)>,
     pub(super) path: Option<String>,
     /// The selected layer paths and the active path. The shared resolver turns
     /// this into the single tool-edit target.
@@ -176,20 +25,10 @@ pub struct PictureViewRust {
     pub(super) path_on_layer: bool,
     /// The Paths panel row the path calls edit when not on a shape layer.
     pub(super) active_path: super::paths::ActivePath,
-    /// What the live path gesture replaced, restored when the gesture is
-    /// cancelled (`paths.rs`). `None` between gestures.
-    pub(super) path_gesture: Option<super::document_session::PathRestore>,
     /// Output format remembered from the import source, used to preselect the
     /// Save As filter: a lowercased extension (`"png"`) or `"psd"` when native.
     pub(super) source_format: String,
     pub(super) interop: Option<crate::gpu::InteropState>,
-    pub(super) pending_lasso: Vec<(i32, i32)>,
-    pub(super) pending_lasso_mode: String,
-    pub(super) stroke: Option<Stroke>,
-    pub(super) stroke_label: String,
-    /// A live brush stroke painting a layer mask's coverage instead of the
-    /// layer's pixels; `Some` only while the mask edit target is active.
-    pub(super) mask_stroke: Option<MaskStroke>,
     /// The layer whose raster mask is the edit target, so the brush, fill, and
     /// filters write its coverage; `None` edits the layer's pixels.
     pub(super) mask_edit_target: Option<String>,
@@ -207,17 +46,6 @@ pub struct PictureViewRust {
     /// The isolated set while the Layers panel's Selected filter is on: the
     /// panel paths Auto-Select may pick. `None` leaves Auto-Select unscoped.
     pub(super) isolation: Option<Vec<String>>,
-    /// Dabs received since the last in-stroke present, waiting for `flush_present`.
-    pub(super) pending_present: Option<PsdRect>,
-    /// The stroke's dirty area as document-space tiles, rebuilt per dab and
-    /// decomposed into disjoint rectangles at commit.
-    pub(super) stroke_tiles: TileSet,
-    /// True from the present that opens a frame until its flush runs, so the
-    /// frame's later dabs accumulate instead of presenting again.
-    pub(super) present_flush_due: bool,
-    /// The live healing gesture (Spot Healing Brush / Healing Brush): a
-    /// coverage mask accumulated over a layer, healed on release.
-    pub(super) heal_stroke: Option<HealStroke>,
     pub(super) move_base: Option<QImage>,
     pub(super) move_layer: Option<QImage>,
     pub(super) move_x: i32,
@@ -228,10 +56,9 @@ pub struct PictureViewRust {
     /// when no whole-layer preview is prepared.
     pub(super) move_prepared_layer: String,
     pub(super) move_preview_cache_hit: bool,
-    pub(super) transform_session: Option<TransformSession>,
     /// The last committed similarity transform, for `Edit > Transform > Again`.
     /// Projective and Warp commits clear it (they are not repeatable this way).
-    pub(super) last_transform: Option<RepeatTransform>,
+    pub(super) last_transform: Option<super::document_session::RepeatTransform>,
     /// The panel previews that are applied but not committed yet.
     pub(super) pending_previews: super::document_session::PendingPreviews,
     pub(super) gpu_compute: bool,
@@ -248,10 +75,6 @@ pub struct PictureViewRust {
     /// the shell as a `region_blitted`. A shell whose copy of the frame carries
     /// this revision needs no full image on `changed`.
     pub(super) frame_revision: u64,
-    /// The document before a stroke that had to change its structure to begin
-    /// (the Background Eraser layering a Background); cancelling restores it,
-    /// since the stroke's saved tiles cannot undo a structural change.
-    pub(super) stroke_base: Option<Document>,
     /// The halved-level view of the composite, fed by `recomposite` and
     /// `refresh_region`.
     pub(super) pyramid: ViewPyramid,
@@ -268,39 +91,12 @@ pub struct PictureViewRust {
     pub(super) mask_level0: Option<PixelBuffer>,
     pub(super) mask_pyramid: ViewPyramid,
     pub(super) link_sets: HashMap<String, u32>,
-    /// Magnetic Lasso edge field, live for one gesture (`magnetic_begin` to
-    /// `magnetic_end`): one `f32` per pixel, too costly to rebuild per move.
-    pub(super) edge_map: Option<pictura_select::EdgeMap>,
     /// The Ruler tool's measuring line: view state, never saved or undone.
     pub(super) ruler: Option<pictura_core::Ruler>,
-    /// The reduced-resolution stroke presented while a large brush is down;
-    /// `None` whenever the dab fits the raster budget.
-    pub(super) preview: Option<PreviewStroke>,
-    /// The full-resolution GPU stroke presented while the button is down;
-    /// `None` when the GPU is off or the paint mode is not modelled. Each dab
-    /// patches the exact working document, so the commit needs no replay and the
-    /// committed pixels equal the GPU stroke (within ±1 LSB of the CPU oracle).
-    pub(super) gpu_stroke: Option<GpuStroke>,
-    /// The GPU present's dab placer, so its dabs space exactly as the CPU
-    /// stroke's do.
-    pub(super) gpu_placer: Option<DabPlacer>,
-    /// Pre-filter pixels for an open filter-dialog preview, so each parameter
-    /// change re-filters the original rather than compounding on the last
-    /// preview. `None` when no dialog is open.
-    pub(super) filter_preview: Option<FilterPreview>,
-    /// Pre-filter mask coverage for an open filter-dialog preview on a mask,
-    /// with the target path, so each parameter change re-filters the original.
-    /// `None` when no mask preview is open.
-    pub(super) mask_filter_preview: Option<(String, Vec<u8>)>,
-    /// The reduced copy a zoomed-out filter dialog previews on, kept between
-    /// parameter changes (`filter_tools::filter_canvas_proxy`). `None` when no
-    /// dialog holds one.
+    /// The filter dialog's reduced copy of the canvas.
     pub(super) canvas_proxy: Option<CanvasProxy>,
     /// Filter work running on worker threads (`filter_tools::jobs`).
     pub(super) filter_jobs: super::filter_tools::jobs::FilterJobs,
-    /// The document before an open Indexed Color dialog's live preview, so each
-    /// option change converts the original. `None` when no preview is shown.
-    pub(super) mode_preview: Option<pictura_core::Document>,
     /// The last committed filter's kind and slot values, for Last Filter and
     /// Last Filter Settings.
     pub(super) last_filter: Option<(String, Vec<f64>)>,
@@ -333,112 +129,22 @@ pub struct PictureViewRust {
     pub(super) warp_text_original: Option<(String, pictura_core::Layer)>,
 }
 
-/// The pre-filter pixels backing a live filter preview.
-pub(super) struct FilterPreview {
-    /// Panel path of the layer being previewed.
-    pub(super) layer_path: String,
-    /// What the preview overwrote.
-    pub(super) baseline: PreviewBaseline,
-}
-
-/// What a filter preview overwrote, so the next one starts from the original.
-pub(super) enum PreviewBaseline {
-    /// The whole layer, before a whole-layer preview (sharing its planes).
-    Layer(Box<Layer>),
-    /// The pixels of `rect` (inside the layer) in each layer-sized channel,
-    /// before a section preview, which writes nothing outside it. A copy of
-    /// the section alone, so the live planes are written in place and never
-    /// copied whole.
-    Section {
-        layer_rect: PsdRect,
-        rect: PsdRect,
-        planes: Vec<(i16, Vec<u8>)>,
-    },
-}
-
-/// A filter dialog's reduced canvas copy and what it was built from.
-pub(super) struct CanvasProxy {
-    /// The document region, the scale's bits and the `content_revision`.
-    pub(super) key: (PsdRect, u64, u64, u64),
-    pub(super) proxy: pictura_render::FilterProxy,
-}
-
-/// A large-brush stroke shown at a view-pyramid level instead of rasterized at
-/// full resolution.
-///
-/// `snapshot` is the level's bytes as they were at stroke start — the pre-stroke
-/// pixels the blend always starts from — so `coverage` can be applied to the
-/// whole extent on every present without compounding. `samples` is the exact
-/// input the commit replays through a real [`Stroke`] on the full-resolution
-/// document, which is what keeps the committed pixels byte-identical to a
-/// stroke that never previewed.
-pub(super) struct PreviewStroke {
-    pub(super) level: u32,
-    pub(super) scale: u32,
-    pub(super) width: u32,
-    pub(super) height: u32,
-    pub(super) snapshot: Vec<u8>,
-    pub(super) coverage: Vec<u8>,
-    pub(super) extent: Option<pictura_core::PsdRect>,
-    pub(super) samples: Vec<StrokeSample>,
-    /// The stroke's configuration, so the preview rasterizes the same tip,
-    /// flow and opacity the exact stroke will.
-    pub(super) cfg: pictura_paint::StrokeConfig,
-    /// Set when the stroke paints a layer mask: the coverage then moves the
-    /// composite between the mask's extremes instead of laying down colour.
-    pub(super) mask: Option<MaskPreview>,
-}
-
-/// What a previewed mask stroke blends between, on the reduced-document grid
-/// (which can be a pixel short of the preview level's): the mask's coverage at
-/// stroke start, and the composite with the mask hiding and revealing
-/// everywhere, as premultiplied sRGB RGBA like the pyramid levels.
-pub(super) struct MaskPreview {
-    pub(super) width: u32,
-    pub(super) height: u32,
-    pub(super) coverage: Vec<u8>,
-    pub(super) hidden: Vec<u8>,
-    pub(super) revealed: Vec<u8>,
-}
-
-/// A live brush stroke painting a layer mask's coverage: the mask exposed as a
-/// grayscale document (`document`), its document-space rectangle (`rect`), and
-/// the exact [`Stroke`] running on it.
-pub(super) struct MaskStroke {
-    pub(super) path: String,
-    pub(super) rect: pictura_core::PsdRect,
-    pub(super) document: Document,
-    pub(super) stroke: Stroke,
-}
-
 impl Default for PictureViewRust {
     fn default() -> Self {
         Self {
             session: Default::default(),
-            selection_move_origin: None,
-            selection_move_delta: None,
             path: None,
             layer_target: LayerTarget::default(),
             path_on_layer: false,
             active_path: super::paths::ActivePath::Work,
-            path_gesture: None,
             source_format: "psd".to_string(),
             interop: None,
-            pending_lasso: Vec::new(),
-            pending_lasso_mode: String::new(),
-            stroke: None,
-            stroke_label: String::new(),
-            mask_stroke: None,
             mask_edit_target: None,
             mask_solo: None,
             mask_overlay: None,
             mask_display: (0xFFFF_0000, 50),
             mask_overlay_revision: 0,
             isolation: None,
-            pending_present: None,
-            stroke_tiles: TileSet::default(),
-            present_flush_due: false,
-            heal_stroke: None,
             move_base: None,
             move_layer: None,
             move_x: 0,
@@ -447,7 +153,6 @@ impl Default for PictureViewRust {
             move_prepared_revision: 0,
             move_prepared_layer: String::new(),
             move_preview_cache_hit: false,
-            transform_session: None,
             last_transform: None,
             pending_previews: Default::default(),
             gpu_compute: true,
@@ -455,22 +160,14 @@ impl Default for PictureViewRust {
             damage: CanvasDamage::default(),
             canvas_revision: 0,
             frame_revision: 0,
-            stroke_base: None,
             pyramid: ViewPyramid::default(),
             level0: None,
             mask_level0: None,
             mask_pyramid: ViewPyramid::default(),
             link_sets: HashMap::new(),
-            edge_map: None,
             ruler: None,
-            preview: None,
-            gpu_stroke: None,
-            gpu_placer: None,
-            filter_preview: None,
-            mask_filter_preview: None,
             canvas_proxy: None,
             filter_jobs: Default::default(),
-            mode_preview: None,
             last_filter: None,
             filter_error: None,
             add_copy: true,

@@ -68,32 +68,29 @@ bool runFilterDialog(PictureView* view, const FilterCommandSpec& spec,
                      QList<double>* out, QString* kind, QWidget* parent)
 {
     *kind = spec.kind;
-    if (spec.kind == QStringLiteral("lens-flare")) {
+    switch (spec.dialog) {
+    case FilterDialogKind::LensFlare:
         return LensFlareDialog::get(view, spec, initial, out, parent);
-    }
-    if (spec.kind == QStringLiteral("lighting-effects")) {
+    case FilterDialogKind::LightingEffects:
         return LightingEffectsDialog::get(view, spec, initial, out, parent);
-    }
-    if (spec.kind == QStringLiteral("picture-frame")) {
+    case FilterDialogKind::PictureFrame:
         return PictureFrameDialog::get(view, spec, initial, out, parent);
-    }
-    if (spec.kind == QStringLiteral("reduce-noise")) {
+    case FilterDialogKind::ReduceNoise:
         return ReduceNoiseDialog::get(view, spec, initial, out, parent);
-    }
-    if (spec.kind == QStringLiteral("field-blur") || spec.kind == QStringLiteral("iris-blur")
-        || spec.kind == QStringLiteral("tilt-shift") || spec.kind == QStringLiteral("path-blur")
-        || spec.kind == QStringLiteral("spin-blur") || spec.kind == QStringLiteral("blur-gallery")) {
+    case FilterDialogKind::BlurGallery:
         return BlurGalleryDialog::get(view, spec, initial, out, kind, parent);
-    }
-    if (spec.kind == QStringLiteral("liquify")) {
+    case FilterDialogKind::Liquify: {
         const auto* frame = qobject_cast<PicturaMainWindow*>(parent);
         const QString name = frame ? frame->activeDocumentName() : QString();
         return LiquifyDialog::get(view, name, initial, out, parent);
     }
+    case FilterDialogKind::Shared:
+        break;
+    }
     if (!FilterPreviewDialog::get(view, spec, previewView, initial, out, parent)) {
         return false;
     }
-    return spec.kind != QStringLiteral("displace") || chooseDisplacementMap(out, parent);
+    return !spec.mapAfterOk || chooseDisplacementMap(out, parent);
 }
 
 // Photoshop refuses a blur with nothing under it — an empty layer, or a
@@ -176,9 +173,6 @@ void PicturaMainWindow::applyFilterCommand(const FilterCommandSpec& spec)
 void PicturaMainWindow::wireFilterMenu()
 {
     for (const FilterCommandSpec& spec : filterCommands()) {
-        if (!filter_kind_supported(spec.kind)) {
-            continue; // a row with no Rust mapping stays a disabled stub
-        }
         const QString id = commandIdForPath(spec.path);
         registry_->setImplemented(id, true);
         const FilterCommandSpec captured = spec;

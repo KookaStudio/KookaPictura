@@ -1,35 +1,42 @@
-use super::arities::FILTER_ARITIES;
 use super::gallery::GALLERY_TAIL;
 use super::*;
 use pictura_core::shape::CUSTOM_SHAPE_NAMES;
 use pictura_filters::{
-    BlurNoise, BlurNoiseKind, BlurPath, BlurPin, BokehParams, ChannelDetail, DisplaceFit,
-    GlassTexture, IrisPin, IrisShape, LightType, NoiseDistribution, PathMotion, Quality,
-    RadialMethod, ReduceNoiseParams, SharpenRemove, SmartBlurMode, SpinPin, SpinStrobe,
-    TextureChannel, TiltPin, WaveType, WindMethod, MAX_FIELD_PINS, MAX_PATH_POINTS,
+    BlurNoise, BlurNoiseKind, BlurPath, BlurPin, BokehParams, ChannelDetail, DisplaceFit, Filter,
+    FrameOptions, GlassTexture, IrisPin, IrisShape, LightType, NoiseDistribution, PathMotion,
+    Quality, RadialMethod, ReduceNoiseParams, SharpenRemove, ShearFill, SmartBlurMode, SpinPin,
+    SpinStrobe, TextureChannel, TiltPin, TonalFade, WaveType, WindMethod, MAX_FIELD_PINS,
+    MAX_PATH_POINTS,
 };
+
+fn slots(kind: &str) -> usize {
+    super::descriptor::arity(kind).unwrap_or_else(|| panic!("{kind} has no descriptor"))
+}
 
 #[test]
 fn every_kind_defaults_from_empty_and_rejects_wrong_arity() {
-    for (kind, n) in FILTER_ARITIES {
+    for descriptor in super::descriptor::all() {
+        let kind = descriptor.kind;
+        let n = descriptor.slots();
         assert!(
             filter_from_kind_params(kind, &[]).is_some(),
             "{kind} must default from an empty slot list"
         );
-        let slots = vec![0.0f64; *n];
+        let defaults = descriptor.defaults();
+        assert_eq!(defaults.len(), n, "{kind}'s defaults must cover every slot");
         assert!(
-            filter_from_kind_params(kind, &slots).is_some(),
-            "{kind} must accept exactly {n} slots"
+            filter_from_kind_params(kind, &defaults).is_some(),
+            "{kind} must accept its descriptor defaults"
         );
-        let mut too_many = slots.clone();
+        let mut too_many = defaults.clone();
         too_many.push(0.0);
         assert!(
             filter_from_kind_params(kind, &too_many).is_none(),
             "{kind} must refuse {} slots",
             n + 1
         );
-        if *n > 1 {
-            let mut too_few = slots.clone();
+        if n > 1 {
+            let mut too_few = defaults;
             too_few.pop();
             assert!(
                 filter_from_kind_params(kind, &too_few).is_none(),
@@ -468,7 +475,7 @@ fn lens_blur_defaults_and_refuses_a_missing_depth_map() {
     assert_eq!(seed, 1);
 
     // A real source whose id names no kept map is refused...
-    let mut params = vec![0.0; LENS_BLUR_SLOTS];
+    let mut params = vec![0.0; slots("lens-blur")];
     params[1] = 1.0;
     assert!(filter_from_kind_params("lens-blur", &params).is_none());
     // ...and a registered map resolves, with the accurate commit flag.
@@ -506,7 +513,7 @@ fn field_blur_defaults_and_accepts_a_variable_pin_list() {
         "an empty list is one centred pin with the default effects"
     );
     assert_eq!(
-        filter_from_kind_params("field-blur", &[0.0; FIELD_BLUR_SLOTS]),
+        filter_from_kind_params("field-blur", &vec![0.0; slots("field-blur")]),
         Some(Filter::FieldBlur {
             pins: default_pin,
             bokeh: BokehParams {
@@ -530,7 +537,7 @@ fn field_blur_defaults_and_accepts_a_variable_pin_list() {
     );
 
     // One pin with the whole effects tail set.
-    let mut one = vec![0.0; FIELD_BLUR_SLOTS];
+    let mut one = vec![0.0; slots("field-blur")];
     one[..17].copy_from_slice(&[
         1.0, 0.25, 0.75, 12.0, // pin
         1.0, 30.0, 50.0, 40.0, 200.0, // bokeh
@@ -623,7 +630,7 @@ fn iris_blur_defaults_and_accepts_a_variable_pin_list() {
     assert_eq!(pins, vec![IrisPin::default()]);
     assert_eq!(bokeh, BokehParams::default());
     assert_eq!(noise, BlurNoise::default());
-    let (pins, bokeh, _) = iris(&[0.0; IRIS_BLUR_SLOTS]).unwrap();
+    let (pins, bokeh, _) = iris(&vec![0.0; slots("iris-blur")]).unwrap();
     assert_eq!(
         pins,
         vec![IrisPin::default()],
@@ -690,7 +697,7 @@ fn tilt_shift_defaults_and_accepts_a_variable_pin_list() {
     assert_eq!(pins, vec![TiltPin::default()]);
     assert_eq!(bokeh, BokehParams::default());
     assert_eq!(noise, BlurNoise::default());
-    let (pins, _, _) = tilt(&[0.0; TILT_SHIFT_SLOTS]).unwrap();
+    let (pins, _, _) = tilt(&vec![0.0; slots("tilt-shift")]).unwrap();
     assert_eq!(
         pins,
         vec![TiltPin::default()],
@@ -782,7 +789,7 @@ fn blur_gallery_combines_each_effects_records() {
         (default_field.clone(), 0, 0)
     );
     assert_eq!(bokeh, BokehParams::default());
-    let (field, iris, tilt, _, _) = gallery(&[0.0; BLUR_GALLERY_SLOTS]).unwrap();
+    let (field, iris, tilt, _, _) = gallery(&vec![0.0; slots("blur-gallery")]).unwrap();
     assert_eq!((field, iris.len(), tilt.len()), (default_field, 0, 0));
 
     // No Field pins, one iris, two bands, then the tail.
@@ -847,7 +854,7 @@ fn path_blur_defaults_and_accepts_variable_paths() {
     assert_eq!(paths, vec![default_path.clone()]);
     assert_eq!(motion, PathMotion::default());
     assert_eq!(noise, BlurNoise::default());
-    let (paths, _, _) = path_blur(&[0.0; PATH_BLUR_SLOTS]).unwrap();
+    let (paths, _, _) = path_blur(&vec![0.0; slots("path-blur")]).unwrap();
     assert_eq!(
         paths,
         vec![default_path],
@@ -927,8 +934,8 @@ fn blur_gallery_carries_the_path_section() {
         }
         other => panic!("blur-gallery mapped to {other:?}"),
     }
-    assert_eq!(BLUR_GALLERY_SLOTS, 62);
-    assert_eq!(PATH_BLUR_SLOTS, 27);
+    assert_eq!(slots("blur-gallery"), 62);
+    assert_eq!(slots("path-blur"), 27);
 }
 
 /// One spin record: `(x, y, radius x, radius y, angle, feather, blur angle,
@@ -960,12 +967,12 @@ fn spin_blur_defaults_and_accepts_spins() {
         Some(other) => panic!("spin-blur mapped to {other:?}"),
         None => None,
     };
-    assert_eq!(SPIN_BLUR_SLOTS, 26);
+    assert_eq!(slots("spin-blur"), 26);
     let (spins, strobe, noise) = spin_blur(&[]).unwrap();
     assert_eq!(spins, vec![SpinPin::default()]);
     assert_eq!(strobe, SpinStrobe::default());
     assert_eq!(noise, BlurNoise::default());
-    let (spins, _, _) = spin_blur(&[0.0; SPIN_BLUR_SLOTS]).unwrap();
+    let (spins, _, _) = spin_blur(&vec![0.0; slots("spin-blur")]).unwrap();
     assert_eq!(spins, vec![SpinPin::default()]);
 
     // Two spins, a custom strobe, the tail.
@@ -1028,7 +1035,7 @@ fn blur_gallery_reads_the_spin_section() {
         other => panic!("blur-gallery mapped to {other:?}"),
     }
     // The all-defaults list needs the spin count 0 too.
-    let mut defaults = vec![0.0; BLUR_GALLERY_SLOTS];
+    let mut defaults = vec![0.0; slots("blur-gallery")];
     match filter_from_kind_params("blur-gallery", &defaults) {
         Some(Filter::BlurGallery { field, spin, .. }) => {
             assert_eq!(field.len(), 1);

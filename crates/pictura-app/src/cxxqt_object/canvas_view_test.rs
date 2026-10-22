@@ -247,7 +247,7 @@ fn image_after_region_refresh_matches_a_full_recomposite() {
     );
 
     let rebuilt =
-        rebuild_display(&rust.session.doc, rust.stroke.as_ref(), false).expect("document");
+        rebuild_display(&rust.session.doc, rust.session.live.stroke(), false).expect("document");
     let full = premultiplied_display_image(&level0_buffer(&doc));
     assert_eq!(rebuilt, full, "image() equals a full recomposite");
 }
@@ -307,11 +307,15 @@ fn mid_stroke_pyramid_matches_a_full_recomposite_of_the_working_document() {
     ));
     let rect = stroke.take_dirty().expect("a dab dirties a region");
 
-    let mut rust = PictureViewRust {
-        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
+    let session = crate::cxxqt_object::document_session::StrokeSession {
         stroke: Some(stroke),
         ..Default::default()
     };
+    let mut rust = PictureViewRust {
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
+        ..Default::default()
+    };
+    rust.session.live.set_stroke_session(session);
     // A full rebuild while a stroke is live must use the painted document's
     // composited layers, not its stale cached `composite`.
     rust.reset_pyramid();
@@ -719,6 +723,11 @@ fn present_accumulates_until_flush_and_the_stroke_lifecycle_supersedes_it() {
         right,
     };
     let mut rust = PictureViewRust::default();
+    // The present frame belongs to the live paint session, so the test opens
+    // one the way a stroke begin does.
+    rust.session
+        .live
+        .set_stroke_session(super::document_session::StrokeSession::default());
 
     let first = rect(0, 8);
     let second = rect(12, 20);
@@ -751,8 +760,8 @@ fn present_accumulates_until_flush_and_the_stroke_lifecycle_supersedes_it() {
 /// document sizes the threshold targets they stay small enough to be free.
 #[test]
 fn the_preview_snapshots_the_stored_level_and_stays_small() {
+    use super::document_session::PreviewStroke;
     use super::impl_paint::preview_snapshot_bytes;
-    use super::state::PreviewStroke;
 
     // The two document sizes the threshold was tuned against, and the levels
     // `preview_level` picks for them.
@@ -808,7 +817,7 @@ fn the_preview_snapshots_the_stored_level_and_stays_small() {
 /// also drop a live preview so a stale snapshot cannot resurrect over it.
 #[test]
 fn reset_pyramid_drops_a_live_preview() {
-    use super::state::PreviewStroke;
+    use super::document_session::{PreviewStroke, StrokeSession};
 
     let mut doc = Document::new(600, 600, ColorMode::Rgb, BitDepth::Eight);
     doc.composite = varied_rgba(600, 600, 1);
@@ -818,13 +827,24 @@ fn reset_pyramid_drops_a_live_preview() {
     };
     rust.reset_pyramid();
     let level0 = rust.level0.as_ref().expect("level-0 frame");
-    rust.preview = PreviewStroke::new(
+    let preview = PreviewStroke::new(
         1,
         &rust.pyramid,
         level0,
         pictura_paint::StrokeConfig::default(),
     );
-    assert!(rust.preview.is_some(), "level 1 exists on a 600 square");
+    let session = StrokeSession {
+        preview,
+        ..Default::default()
+    };
+    rust.session.live.set_stroke_session(session);
+    assert!(
+        rust.session.live.preview().is_some(),
+        "level 1 exists on a 600 square"
+    );
     rust.reset_pyramid();
-    assert!(rust.preview.is_none(), "a full rebuild drops the preview");
+    assert!(
+        rust.session.live.preview().is_none(),
+        "a full rebuild drops the preview"
+    );
 }

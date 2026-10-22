@@ -1,4 +1,4 @@
-use super::super::state::TransformSession;
+use super::super::document_session::TransformSession;
 use pictura_core::PsdRect;
 
 /// Screen-pixel tolerance for a scale-handle hit.
@@ -653,7 +653,7 @@ fn point_segment_dist2(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::state::TransformMode;
+    use super::super::super::document_session::TransformMode;
     use super::super::convex::quad_is_convex;
     use super::super::distort::gesture_distort;
     use super::*;

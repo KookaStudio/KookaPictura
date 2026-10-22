@@ -241,6 +241,29 @@ mod tests {
     }
 
     #[test]
+    fn a_refused_mutation_records_nothing() {
+        let mut view = view(doc_with_layer());
+        let before = view
+            .session
+            .doc
+            .as_ref()
+            .expect("document")
+            .composite
+            .clone();
+        let outcome = Edit::None;
+        let applied = view.apply_edit("Refused", outcome);
+        assert_eq!(applied.edit, Edit::None);
+        assert_eq!(effect_of(&applied.edit), Effect::Nothing);
+        assert_eq!(view.session.history.count(), 0);
+        assert!(!view.session.dirty);
+        assert_eq!(view.session.content_revision, 0);
+        assert_eq!(
+            view.session.doc.as_ref().expect("document").composite,
+            before
+        );
+    }
+
+    #[test]
     fn an_unchanged_edit_records_nothing() {
         let mut view = view(doc_with_layer());
         let before = view

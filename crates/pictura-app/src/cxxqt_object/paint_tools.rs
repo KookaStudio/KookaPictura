@@ -407,8 +407,9 @@ fn begin_mixer_brush(
 
 fn mixer_reservoir(view: &PictureView) -> u32 {
     view.rust()
-        .stroke
-        .as_ref()
+        .session
+        .live
+        .stroke()
         .and_then(Stroke::mixer_reservoir)
         .map_or(0, |c| {
             (c.a as u32) << 24 | (c.r as u32) << 16 | (c.g as u32) << 8 | c.b as u32
@@ -657,20 +658,29 @@ fn begin_background_eraser(
             .zip(rust.layer_target.single())
             .and_then(|(doc, path)| unlocked_background(doc, path))
     };
+    let mut base = None;
     if let Some(layered) = layered {
         let mut rust = view.as_mut().rust_mut();
-        rust.stroke_base = rust.session.doc.replace(layered);
+        base = rust.session.doc.replace(layered);
     }
     let begun = begin(view.as_mut(), "Background Eraser", |doc, path, _| {
         Stroke::begin_kind(doc, path, cfg, StrokeKind::BackgroundErase(options)).ok()
     });
     if !begun {
         let mut rust = view.as_mut().rust_mut();
-        if let Some(base) = rust.stroke_base.take() {
+        if let Some(base) = base {
             rust.session.doc = Some(base);
         }
+        return false;
     }
-    begun
+    // The stroke is live, so the pre-stroke document belongs to its session: a
+    // cancel or a refused commit puts the Background back.
+    let mut rust = view.as_mut().rust_mut();
+    match base {
+        Some(base) => rust.session.live.set_stroke_base(base),
+        None => rust.session.live.clear_stroke_base(),
+    }
+    true
 }
 
 fn begin_focus(
@@ -788,7 +798,7 @@ fn magic_erase_at(
         else {
             return false;
         };
-        if rust.stroke.is_some()
+        if rust.session.live.stroke().is_some()
             || active_mask_target(rust).is_some()
             || x < 0
             || y < 0
@@ -1010,7 +1020,7 @@ fn begin(
         // ponytail: only the Brush, Pencil, and Eraser paint a mask; the other
         // painting tools refuse rather than write the layer's pixels.
         if !rust.slot_allows(super::document_session::SessionKind::Paint)
-            || rust.stroke.is_some()
+            || rust.session.live.stroke().is_some()
             || active_mask_target(rust).is_some()
             || active_pixel_layer(doc, Some(path)).is_none()
             || !active_layer_visible(doc, Some(path))
@@ -1027,18 +1037,19 @@ fn begin(
         return false;
     };
     let mut rust = view.as_mut().rust_mut();
-    rust.stroke = Some(stroke);
-    rust.stroke_label = label.to_string();
+    let session = super::document_session::StrokeSession {
+        stroke: Some(stroke),
+        stroke_label: label.to_string(),
+        ..Default::default()
+    };
+    rust.session.live.set_stroke_session(session);
     // A new stroke opens its own present frame and tile set, exactly as
     // `begin_paint` does, so the color-replacement and mixer commits decompose
     // into dirty tiles rather than the whole bounding box.
     rust.clear_pending_present();
     let dims = rust.session.doc.as_ref().map(|doc| (doc.width, doc.height));
     if let Some((width, height)) = dims {
-        rust.stroke_tiles.reset(width, height);
+        rust.session.live.reset_stroke_tiles(width, height);
     }
-    rust.preview = None;
-    rust.gpu_stroke = None;
-    rust.gpu_placer = None;
     true
 }

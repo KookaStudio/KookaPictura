@@ -707,8 +707,7 @@ impl qobject::PictureView {
                     rects: vec![rect],
                     notify: true,
                 },
-                Some(None) => Edit::Record,
-                None => Edit::Full,
+                _ => Edit::Full,
             }
         });
         changed as i32
@@ -771,8 +770,7 @@ impl qobject::PictureView {
                     rects: vec![rect],
                     notify: true,
                 },
-                Some(None) => Edit::Record,
-                None => Edit::Full,
+                _ => Edit::Full,
             }
         });
         changed as i32
@@ -1005,8 +1003,7 @@ impl qobject::PictureView {
                     rects: vec![rect],
                     notify: true,
                 },
-                Some(None) => Edit::Meta,
-                None => Edit::Full,
+                _ => Edit::Full,
             }
         });
         paint_timing::report();

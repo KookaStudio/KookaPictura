@@ -57,17 +57,16 @@ void PicturaMainWindow::wireAlignMenu()
 void PicturaMainWindow::alignSelectedLayers(int edge, bool toSelection, int alignTo)
 {
     PictureView* view = activeView();
-    if (view && layersPanel_
-        && align_apply(*view, selectedLayerPaths(), edge, toSelection, alignTo) > 0) {
-        refresh();
+    if (view && layersPanel_) {
+        align_apply(*view, selectedLayerPaths(), edge, toSelection, alignTo);
     }
 }
 
 void PicturaMainWindow::distributeSelectedLayers(int edge)
 {
     PictureView* view = activeView();
-    if (view && layersPanel_ && distribute_apply(*view, selectedLayerPaths(), edge) > 0) {
-        refresh();
+    if (view && layersPanel_) {
+        distribute_apply(*view, selectedLayerPaths(), edge);
     }
 }
 

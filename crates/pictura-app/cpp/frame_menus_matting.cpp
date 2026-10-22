@@ -19,16 +19,16 @@ void PicturaMainWindow::wireMattingActions()
 
     registry_->setHandler(command_ids::LayerMattingRemoveBlack, [this]() {
         PictureView* view = activeView();
-        if (view && layer_remove_black_matte(*view)) {
-            refresh();
+        if (view) {
+            layer_remove_black_matte(*view);
         }
     });
     registry_->setEnabledProvider(command_ids::LayerMattingRemoveBlack, ready);
 
     registry_->setHandler(command_ids::LayerMattingRemoveWhite, [this]() {
         PictureView* view = activeView();
-        if (view && layer_remove_white_matte(*view)) {
-            refresh();
+        if (view) {
+            layer_remove_white_matte(*view);
         }
     });
     registry_->setEnabledProvider(command_ids::LayerMattingRemoveWhite, ready);
@@ -39,8 +39,8 @@ void PicturaMainWindow::wireMattingActions()
             return;
         }
         int width = 1;
-        if (DefringeDialog::get(&width, this) && layer_defringe(*view, width)) {
-            refresh();
+        if (DefringeDialog::get(&width, this)) {
+            layer_defringe(*view, width);
         }
     });
     registry_->setEnabledProvider(command_ids::LayerMattingDefringe, ready);

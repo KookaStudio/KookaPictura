@@ -946,7 +946,6 @@ fn type_apply_style(
         });
     if applied {
         view.as_mut().edit("Apply Type Style", |_| Edit::Structural);
-        view.as_mut().changed();
     }
     applied
 }
@@ -967,7 +966,6 @@ fn commit_style(
         .is_some_and(apply);
     if changed {
         view.as_mut().edit(label, |_| Edit::Structural);
-        view.as_mut().changed();
     }
     changed
 }
@@ -1150,7 +1148,6 @@ fn replace(
 
 fn commit_edit(mut view: Pin<&mut PictureView>) {
     view.as_mut().edit("Edit Type Layer", |_| Edit::Structural);
-    view.as_mut().changed();
 }
 
 /// Show the layer at `path` again after `type_edit_begin` hid it; no composite.

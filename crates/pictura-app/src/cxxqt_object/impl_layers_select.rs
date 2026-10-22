@@ -70,26 +70,28 @@ impl qobject::PictureView {
     /// Layers" state only when at least one is removed. Returns the number
     /// removed.
     pub fn delete_hidden_layers(mut self: Pin<&mut Self>) -> i32 {
-        let removed = match self.as_mut().rust_mut().session.doc.as_mut() {
-            Some(doc) => pictura_render::delete_hidden_layers(doc),
-            None => 0,
-        };
-        if removed > 0 {
-            self.as_mut().edit("Delete Hidden Layers", |rust| {
-                let target = {
-                    let mut target = rust.layer_target.clone();
-                    if let Some(doc) = rust.session.doc.as_ref() {
-                        target.retain_resolving(doc);
-                    }
-                    target
-                };
-                rust.set_layer_target(target);
-                if rust.layer_target.is_empty() {
-                    select_top_layer(rust);
+        let mut removed = 0;
+        self.as_mut().edit("Delete Hidden Layers", |rust| {
+            let Some(doc) = rust.session.doc.as_mut() else {
+                return Edit::None;
+            };
+            removed = pictura_render::delete_hidden_layers(doc);
+            if removed == 0 {
+                return Edit::None;
+            }
+            let target = {
+                let mut target = rust.layer_target.clone();
+                if let Some(doc) = rust.session.doc.as_ref() {
+                    target.retain_resolving(doc);
                 }
-                Edit::Structural
-            });
-        }
+                target
+            };
+            rust.set_layer_target(target);
+            if rust.layer_target.is_empty() {
+                select_top_layer(rust);
+            }
+            Edit::Structural
+        });
         removed as i32
     }
 

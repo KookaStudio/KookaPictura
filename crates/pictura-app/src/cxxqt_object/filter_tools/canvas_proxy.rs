@@ -56,7 +56,7 @@ pub(in crate::cxxqt_object) fn pre_preview_sources(
     let mut doc = rust.session.doc.clone()?;
     // An open section preview has written into the live layer; the work starts
     // from the pixels before it, as the commit does.
-    if let Some(preview) = rust.filter_preview.as_ref() {
+    if let Some(preview) = rust.session.live.filter_preview() {
         if let Some(layer) = pictura_render::resolve_path_mut(&mut doc, &preview.layer_path) {
             let original = preview.baseline.original(layer).into_owned();
             *layer = original;

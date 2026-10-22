@@ -117,11 +117,14 @@ Snapshot for resuming after a context break. Update after each milestone.
   the history live in a `DocumentSession`; the `PictureView` QObject is the
   adapter that presents what the session reports, and `cargo test` is the
   second adapter.
-  - **One live session:** the slot is a rule over the live gesture state — a
-    begin of another kind is refused, a repeat begin follows its kind's rule
-    (a transform replaces its own session, a filter or mode preview updates
-    it, a lasso attaches to the magnetic gesture it started), and one
-    `cancel_active_sessions` drops them all.
+  - **One live session:** the live session is one owned `ActiveSession` value
+    in the `DocumentSession`, with a variant per kind — a begin of another kind
+    is refused, a repeat begin follows its kind's rule (a transform replaces
+    its own session, a filter or mode preview updates it, a lasso attaches to
+    the magnetic gesture it started), and one `cancel_active_sessions` drops
+    the live variant.
+  - **No C++ copy:** the tool controller reads the transform drag handle from
+    the session over the bridge instead of keeping its own drag state.
   - **Cancel first:** a replacement cancels against the outgoing document,
     clears every outgoing pointer, preview, and cache, and installs the
     incoming document, history, and PDF password; history navigation cancels
@@ -134,7 +137,7 @@ Snapshot for resuming after a context break. Update after each milestone.
     Type edit cannot commit into a restored document.
   - **No stale installs:** an open request carries an id, so a result from a
     superseded request is dropped instead of installing over a newer document.
-  - **Tests:** 23 Rust session tests, 12 Qt cases in `tst_document_session`,
+  - **Tests:** 27 Rust session tests, 12 Qt cases in `tst_document_session`,
     and the stale-request guard.
   - **Follow-up:** the headless display frame is #783.
 - Toolchain: Rust 1.98 (`rust-toolchain.toml`), system Qt **6.11.1**, cxx-qt
@@ -1386,9 +1389,12 @@ Snapshot for resuming after a context break. Update after each milestone.
 - **Filter menu wiring and dialogs** (change `filter-menu-ui`, issue #82, ported
   from photorust): the CS6 `Filter` menu is live. `cxxqt_object/filter_map.rs`
   exposes `pub(super) filter_from_kind_params(kind, &[f64])` (empty slice = the
-  documented defaults; a wrong-length slice is refused), with `filter_from_kind`
-  delegating to it; its `FILTER_ARITIES` table recognises the parameterless
-  kernels too, including `Blur`, `Blur More`, and `Oil Paint`. `PictureView`
+  documented defaults; a wrong-length fixed list is refused, and variable-list
+  kinds accept only their documented shapes), with `filter_from_kind`
+  delegating to it; its filter parameter descriptor (`filter_map/descriptor/`)
+  records every kind, including the parameterless `Blur` and `Blur More` and
+  the parameterised `Oil Paint`, and
+  `cpp/filter_commands.cpp` builds its rows from it. `PictureView`
   gains `apply_filter_params`, `filter_preview`, `filter_preview_cancel`,
   `filter_last_kind`/`filter_last_params`, and `filter_target_ready`. Preview
   filters a snapshot of the active layer and never records history; cancel

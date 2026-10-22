@@ -103,8 +103,6 @@ bool ToolController::beginTransformImpl(const QString& path, const QString& mode
     if (!ok) {
         return false;
     }
-    transformDragging_ = false;
-    transformHandle_ = -1;
     transformGuideSnap_ = false;
     if (canvas_) {
         canvas_->beginTransformPreview(v->move_preview_base(), v->move_preview_layer(),
@@ -209,8 +207,9 @@ void ToolController::setTransformCursor(const QPointF& imagePos)
         return;
     }
     // A drag keeps the cursor of the handle it grabbed, wherever the pointer goes.
-    const int hit = transformDragging_
-        ? transformHandle_
+    const int dragged = v->transform_drag_handle();
+    const int hit = dragged >= 0
+        ? dragged
         : v->transform_hit_test(imagePos.x(), imagePos.y(), canvas_->zoom());
     setHandleCursor(hit, imagePos, quadCentre(transform_api::quad(*v), imagePos));
 }
@@ -234,9 +233,12 @@ void ToolController::setHandleCursor(int hit, const QPointF& imagePos, const QPo
     case 7:
         canvas_->setCursor(Qt::SizeHorCursor);
         break;
-    case 9:
-        canvas_->setCursor(transformDragging_ ? Qt::ClosedHandCursor : Qt::OpenHandCursor);
+    case 9: {
+        PictureView* v = view();
+        canvas_->setCursor(v && v->transform_drag_handle() >= 0 ? Qt::ClosedHandCursor
+                                                                : Qt::OpenHandCursor);
         break;
+    }
     case kPivotHandle:
         canvas_->setCursor(Qt::SizeAllCursor);
         break;
@@ -259,8 +261,6 @@ void ToolController::commitFreeTransform()
     }
     transformControls_ = false;
     v->commit_transform();
-    transformDragging_ = false;
-    transformHandle_ = -1;
     transformGuideSnap_ = false;
     if (canvas_) {
         canvas_->clearTransformPreview();
@@ -278,8 +278,6 @@ void ToolController::cancelFreeTransform()
     }
     transformControls_ = false;
     v->cancel_transform();
-    transformDragging_ = false;
-    transformHandle_ = -1;
     transformGuideSnap_ = false;
     if (canvas_) {
         canvas_->clearTransformPreview();
@@ -479,8 +477,6 @@ bool ToolController::enterTransformWarp()
     if (!v || !transform_enter_warp(*v)) {
         return false;
     }
-    transformDragging_ = false;
-    transformHandle_ = -1;
     updateTransformOverlay(v);
     emit transformChanged();
     return true;
@@ -492,8 +488,6 @@ bool ToolController::leaveTransformWarp()
     if (!v || !transform_leave_warp(*v)) {
         return false;
     }
-    transformDragging_ = false;
-    transformHandle_ = -1;
     if (canvas_) {
         canvas_->updateTransformPreviewLayer(v->move_preview_layer(),
                                              QPointF(v->move_preview_x(), v->move_preview_y()));

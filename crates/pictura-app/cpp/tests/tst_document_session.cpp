@@ -35,6 +35,8 @@ private slots:
     void regionBlitCanAlsoEmitChanged();
     void notifyOnlyEmitsChanged();
     void rebuildEmitsChanged();
+    void theTransformDragHandleComesFromTheSession();
+    void undoAndRedoCancelTheTransformSession();
     void replaceEntryPointsCancelTheSession();
     void replacementSignalsMatchTheEntryPoint();
     void inPlaceRestoreResetsToolHandlers();
@@ -105,6 +107,44 @@ void DocumentSessionTest::rebuildEmitsChanged()
     QSignalSpy changes(&view, &pictura::PictureView::changed);
     QVERIFY(view.cancel_active_session());
     QCOMPARE(changes.count(), 1);
+}
+
+void DocumentSessionTest::theTransformDragHandleComesFromTheSession()
+{
+    pictura::PictureView view;
+    QVERIFY(view.new_document(64, 64, QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    QVERIFY(view.begin_free_transform(QStringLiteral("0")));
+    QCOMPARE(view.transform_drag_handle(), -1);
+
+    const int hit = view.transform_press(0.0, 0.0, 1.0, false, false);
+    QVERIFY(hit >= 0);
+    QCOMPARE(view.transform_drag_handle(), hit);
+
+    QVERIFY(view.transform_release());
+    QCOMPARE(view.transform_drag_handle(), -1);
+}
+
+void DocumentSessionTest::undoAndRedoCancelTheTransformSession()
+{
+    pictura::PictureView view;
+    QVERIFY(view.new_document(64, 64, QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    QVERIFY(view.begin_paint(0xFFFF0000u, 0xFFFFFFFFu, 16, 100, 100, 0, 100, 100, 25,
+                             QStringLiteral("normal"), false, false));
+    QVERIFY(view.paint_dab(16.0, 16.0, 1.0));
+    QVERIFY(view.end_paint());
+    const int base = view.history_index();
+
+    QVERIFY(view.begin_free_transform(QStringLiteral("0")));
+    QVERIFY(view.transform_session_active());
+    QVERIFY(view.undo());
+    QVERIFY(!view.transform_session_active());
+    QCOMPARE(view.history_index(), base - 1);
+
+    QVERIFY(view.begin_free_transform(QStringLiteral("0")));
+    QVERIFY(view.transform_session_active());
+    QVERIFY(view.redo());
+    QVERIFY(!view.transform_session_active());
+    QCOMPARE(view.history_index(), base);
 }
 
 void DocumentSessionTest::replaceEntryPointsCancelTheSession()

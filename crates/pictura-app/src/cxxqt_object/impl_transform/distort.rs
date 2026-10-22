@@ -1,4 +1,4 @@
-use super::super::state::TransformSession;
+use super::super::document_session::TransformSession;
 use super::convex::keep_convex;
 use super::geometry::{projective_coefficients, store_quad};
 
@@ -48,7 +48,7 @@ pub(super) fn gesture_distort(session: &mut TransformSession, corner: i32, x: f6
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::state::{TransformMode, TransformSession};
+    use super::super::super::document_session::{TransformMode, TransformSession};
     use super::super::convex::quad_is_convex;
     use super::super::geometry::source_corners;
     use super::*;

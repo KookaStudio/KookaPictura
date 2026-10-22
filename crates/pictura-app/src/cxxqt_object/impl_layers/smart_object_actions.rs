@@ -60,13 +60,19 @@ fn layer_can_reset_smart_object_transform(view: &PictureView, path: &QString) ->
 }
 
 fn smart_object_reset_transform(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
-    let changed = match view.as_mut().rust_mut().session.doc.as_mut() {
-        Some(doc) => pictura_render::reset_smart_object_transform(doc, &path.to_string()),
-        None => false,
-    };
-    if changed {
-        view.as_mut().edit("Reset Transform", |_| Edit::Structural);
-    }
+    let path = path.to_string();
+    let mut changed = false;
+    view.as_mut().edit("Reset Transform", |rust| {
+        let Some(doc) = rust.session.doc.as_mut() else {
+            return Edit::None;
+        };
+        changed = pictura_render::reset_smart_object_transform(doc, &path);
+        if changed {
+            Edit::Structural
+        } else {
+            Edit::None
+        }
+    });
     changed
 }
 

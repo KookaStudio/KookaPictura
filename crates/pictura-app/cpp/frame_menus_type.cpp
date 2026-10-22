@@ -52,8 +52,8 @@ void PicturaMainWindow::wireTypeMenu()
         registry_->setHandler(id, [this, convertible, toParagraph]() {
             PictureView* view = activeView();
             const QString path = convertible(!toParagraph);
-            if (view && !path.isEmpty() && type_api::convert(*view, path, toParagraph)) {
-                refresh();
+            if (view && !path.isEmpty()) {
+                type_api::convert(*view, path, toParagraph);
             }
         });
         registry_->setEnabledProvider(id, [convertible, toParagraph]() {

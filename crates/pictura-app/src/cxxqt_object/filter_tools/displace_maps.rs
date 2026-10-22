@@ -11,10 +11,6 @@ use pictura_filters::DisplaceMap;
 
 use super::super::helpers_composite::current_buffer;
 
-/// Horizontal Scale, Vertical Scale, Displacement Map, Undefined Areas, and
-/// the map id.
-pub(in crate::cxxqt_object) const DISPLACE_SLOTS: usize = 5;
-
 /// ponytail: the eight most recent maps stay in memory for the process; a
 /// Last Filter that names an older one is refused, and none survive a restart.
 const KEPT: usize = 8;

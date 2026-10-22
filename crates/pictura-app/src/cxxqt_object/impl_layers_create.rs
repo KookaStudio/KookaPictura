@@ -63,14 +63,18 @@ impl qobject::PictureView {
             clipping,
             neutral_fill,
         };
-        let created = match self.as_mut().rust_mut().session.doc.as_mut() {
-            Some(doc) => pictura_render::add_layer_full(doc, &selection_path.to_string(), &spec),
-            None => String::new(),
-        };
-        if !created.is_empty() {
-            self.as_mut().rust_mut().select_only_layer(&created);
-            self.as_mut().edit("New Layer", |_| Edit::Structural);
-        }
+        let mut created = String::new();
+        self.as_mut().edit("New Layer", |rust| {
+            let Some(doc) = rust.session.doc.as_mut() else {
+                return Edit::None;
+            };
+            created = pictura_render::add_layer_full(doc, &selection_path.to_string(), &spec);
+            if created.is_empty() {
+                return Edit::None;
+            }
+            rust.select_only_layer(&created);
+            Edit::Structural
+        });
         QString::from(created.as_str())
     }
 
@@ -98,14 +102,18 @@ impl qobject::PictureView {
             opacity: opacity.clamp(0, 255) as u8,
             ..pictura_render::NewLayerSpec::default()
         };
-        let created = match self.as_mut().rust_mut().session.doc.as_mut() {
-            Some(doc) => pictura_render::add_group_full(doc, &selection_path.to_string(), &spec),
-            None => String::new(),
-        };
-        if !created.is_empty() {
-            self.as_mut().rust_mut().select_only_layer(&created);
-            self.as_mut().edit("New Group", |_| Edit::Structural);
-        }
+        let mut created = String::new();
+        self.as_mut().edit("New Group", |rust| {
+            let Some(doc) = rust.session.doc.as_mut() else {
+                return Edit::None;
+            };
+            created = pictura_render::add_group_full(doc, &selection_path.to_string(), &spec);
+            if created.is_empty() {
+                return Edit::None;
+            }
+            rust.select_only_layer(&created);
+            Edit::Structural
+        });
         QString::from(created.as_str())
     }
 
@@ -125,31 +133,27 @@ impl qobject::PictureView {
             return QString::default();
         };
         let owned = list_of_strings(paths);
-        let created = match self.as_mut().rust_mut().session.doc.as_mut() {
-            Some(doc) => {
-                let refs = as_str_slice(&owned);
-                match pictura_render::group_paths(doc, &refs) {
-                    Some(path) => {
-                        if let Some(group) = pictura_render::resolve_path_mut(doc, &path) {
-                            if !name.is_empty() {
-                                group.name = name.to_string();
-                            }
-                            group.color = decode_color(color);
-                            group.blend = blend;
-                            group.opacity = opacity.clamp(0, 255) as u8;
-                        }
-                        path
-                    }
-                    None => String::new(),
+        let mut created = String::new();
+        self.as_mut().edit("Group from Layers", |rust| {
+            let Some(doc) = rust.session.doc.as_mut() else {
+                return Edit::None;
+            };
+            let refs = as_str_slice(&owned);
+            let Some(path) = pictura_render::group_paths(doc, &refs) else {
+                return Edit::None;
+            };
+            if let Some(group) = pictura_render::resolve_path_mut(doc, &path) {
+                if !name.is_empty() {
+                    group.name = name.to_string();
                 }
+                group.color = decode_color(color);
+                group.blend = blend;
+                group.opacity = opacity.clamp(0, 255) as u8;
             }
-            None => String::new(),
-        };
-        if !created.is_empty() {
-            self.as_mut().rust_mut().select_only_layer(&created);
-            self.as_mut()
-                .edit("Group from Layers", |_| Edit::Structural);
-        }
+            created = path;
+            rust.select_only_layer(&created);
+            Edit::Structural
+        });
         QString::from(created.as_str())
     }
 
@@ -183,27 +187,29 @@ impl qobject::PictureView {
             };
             selection_to_mask(selection, doc)
         };
-        let created = match self.as_mut().rust_mut().session.doc.as_mut() {
-            Some(doc) => {
-                if cut {
+        let mut created = String::new();
+        self.as_mut().edit(
+            if cut {
+                "Layer via Cut"
+            } else {
+                "Layer via Copy"
+            },
+            |rust| {
+                let Some(doc) = rust.session.doc.as_mut() else {
+                    return Edit::None;
+                };
+                created = if cut {
                     pictura_render::layer_via_cut(doc, source_path, &mask)
                 } else {
                     pictura_render::layer_via_copy(doc, source_path, &mask)
+                };
+                if created.is_empty() {
+                    return Edit::None;
                 }
-            }
-            None => String::new(),
-        };
-        if !created.is_empty() {
-            self.as_mut().rust_mut().select_only_layer(&created);
-            self.as_mut().edit(
-                if cut {
-                    "Layer via Cut"
-                } else {
-                    "Layer via Copy"
-                },
-                |_| Edit::Structural,
-            );
-        }
+                rust.select_only_layer(&created);
+                Edit::Structural
+            },
+        );
         QString::from(created.as_str())
     }
 }

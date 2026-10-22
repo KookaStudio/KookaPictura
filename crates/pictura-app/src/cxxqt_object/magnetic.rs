@@ -65,7 +65,12 @@ impl super::state::PictureViewRust {
                 contrast.clamp(1, 100) as u32,
             )
         };
-        self.edge_map = Some(map);
+        self.session
+            .live
+            .set_selection_gesture(super::document_session::SelectionGesture {
+                edge_map: Some(map),
+                ..Default::default()
+            });
         true
     }
 
@@ -91,7 +96,7 @@ impl super::state::PictureViewRust {
 
 fn magnetic_trace(view: &PictureView, x0: i32, y0: i32, x1: i32, y1: i32, width: i32) -> Vec<i32> {
     let width = width.clamp(1, 256) as u32;
-    let path = match view.rust().edge_map.as_ref() {
+    let path = match view.rust().session.live.edge_map() {
         Some(map) => map.trace((x0, y0), (x1, y1), width),
         // An empty 0×0 field has no in-bounds pixel, so it always answers with
         // the straight segment.
@@ -105,5 +110,5 @@ fn magnetic_trace(view: &PictureView, x0: i32, y0: i32, x1: i32, y1: i32, width:
 }
 
 fn magnetic_end(mut view: Pin<&mut PictureView>) {
-    view.as_mut().rust_mut().edge_map = None;
+    view.as_mut().rust_mut().session.live.clear_edge_map();
 }

@@ -164,6 +164,5 @@ fn canvas_size_apply(
         rust.session.selection = None;
     }
     view.as_mut().edit("Canvas Size", |_| Edit::Full);
-    view.as_mut().changed();
     true
 }

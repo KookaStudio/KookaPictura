@@ -8,37 +8,12 @@
 use super::super::edit::Effect;
 use super::super::paths::ActivePath;
 use super::super::state::PictureViewRust;
+use super::active::{ActiveSession, PathRestore, SessionKind};
+use super::transform::TransformSession;
 use crate::history::{History, Restored, Snapshot};
 use crate::layer_target::LayerTarget;
-use pictura_core::path::{Subpath, VectorPath};
 use pictura_core::{Document, PsdRect};
 use pictura_select::Selection;
-
-/// The kind of live session.
-///
-/// The slot holds one session at a time. A begin of another kind is refused; a
-/// repeat begin of the same kind follows that kind's own rule.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(in crate::cxxqt_object) enum SessionKind {
-    /// A brush or pencil stroke on a layer.
-    Paint,
-    /// A stroke on a layer mask's coverage.
-    MaskPaint,
-    /// A spot-healing or healing-brush gesture.
-    Healing,
-    /// A selection drag.
-    SelectionMove,
-    /// A Free Transform gesture.
-    Transform,
-    /// A Pen or Path Selection gesture on a path.
-    Path,
-    /// A lasso gesture, magnetic or not.
-    Lasso,
-    /// A filter dialog's live preview.
-    FilterPreview,
-    /// An image-mode dialog's live preview.
-    ModePreview,
-}
 
 /// The document state the session owns: the document itself, the selection,
 /// and the history that records its edits.
@@ -63,6 +38,9 @@ pub(in crate::cxxqt_object) struct DocumentSession {
     /// Bumped whenever the view loads or replaces its document, so a panel can
     /// drop a gesture whose target no longer belongs to the current document.
     pub(in crate::cxxqt_object) document_generation: u64,
+    /// The document's one live edit session: the slot that owns every
+    /// in-progress gesture, so two sessions cannot exist at once.
+    pub(in crate::cxxqt_object) live: ActiveSession,
     /// The canonical `.joboptions` text this document was last saved to PDF
     /// with, so Save on the `.pdf` path reopens the dialog with it.
     pub(in crate::cxxqt_object) pdf_options: Option<String>,
@@ -153,20 +131,6 @@ impl DocumentSession {
     }
 }
 
-/// What a path gesture replaced, so an abort can put it back.
-pub(in crate::cxxqt_object) enum PathRestore {
-    /// The Work or Saved path the gesture edited.
-    WorkOrSaved {
-        active: ActivePath,
-        path: VectorPath,
-    },
-    /// A shape layer's outline, which lives in the layer.
-    Layer {
-        target: String,
-        subpaths: Vec<Subpath>,
-    },
-}
-
 /// The panel previews that are applied but not committed yet.
 #[derive(Default)]
 pub(in crate::cxxqt_object) struct PendingPreviews {
@@ -251,29 +215,9 @@ impl SessionChange {
 }
 
 impl PictureViewRust {
-    /// The kind of live session, inferred from the live gesture state.
+    /// The kind of live session, read from the slot.
     pub(in crate::cxxqt_object) fn active_session_kind(&self) -> Option<SessionKind> {
-        if self.stroke.is_some() {
-            Some(SessionKind::Paint)
-        } else if self.mask_stroke.is_some() {
-            Some(SessionKind::MaskPaint)
-        } else if self.heal_stroke.is_some() {
-            Some(SessionKind::Healing)
-        } else if self.selection_move_origin.is_some() {
-            Some(SessionKind::SelectionMove)
-        } else if self.transform_session.is_some() {
-            Some(SessionKind::Transform)
-        } else if self.path_gesture.is_some() {
-            Some(SessionKind::Path)
-        } else if self.edge_map.is_some() || !self.pending_lasso.is_empty() {
-            Some(SessionKind::Lasso)
-        } else if self.filter_preview.is_some() || self.mask_filter_preview.is_some() {
-            Some(SessionKind::FilterPreview)
-        } else if self.mode_preview.is_some() {
-            Some(SessionKind::ModePreview)
-        } else {
-            None
-        }
+        self.session.live.kind()
     }
 
     /// Whether any live gesture owns the document.
@@ -289,21 +233,15 @@ impl PictureViewRust {
     /// to the magnetic gesture it started. A healing, selection-move, path, or
     /// paint begin is refused.
     pub(in crate::cxxqt_object) fn slot_allows(&self, kind: SessionKind) -> bool {
-        match self.active_session_kind() {
-            None => true,
-            Some(current) if current == kind => matches!(
-                kind,
-                SessionKind::Transform
-                    | SessionKind::Lasso
-                    | SessionKind::FilterPreview
-                    | SessionKind::ModePreview
-            ),
-            Some(_) => false,
-        }
+        self.session.live.allows(kind)
     }
 
-    /// Cancel every live gesture against the current document without recording
+    /// Cancel the live session against the current document without recording
     /// history. The returned change is what the adapter must present.
+    ///
+    /// The slot holds one session, so the cancel matches it: the mode preview's
+    /// whole-document restore no longer has to run before the in-place
+    /// cancels, because only one of them can be live.
     pub(in crate::cxxqt_object) fn cancel_active_sessions(&mut self) -> SessionChange {
         if !self.has_active_session() {
             self.clear_pending_previews();
@@ -311,36 +249,41 @@ impl PictureViewRust {
         }
         let mut change = SessionChange::none();
 
-        if let Some(base) = self.mode_preview.take() {
-            self.session.doc = Some(base);
-            change = change.merge(SessionChange::rebuild());
+        match std::mem::replace(&mut self.session.live, ActiveSession::Idle) {
+            ActiveSession::Idle => {}
+            ActiveSession::ModePreview(base) => {
+                self.session.doc = Some(*base);
+                change = change.merge(SessionChange::rebuild());
+            }
+            ActiveSession::FilterPreview(preview) => {
+                if let Some(restored) =
+                    super::super::impl_filters::cancel_filter_preview_session(self, *preview)
+                {
+                    change = change.merge(match restored {
+                        Some(rect) => SessionChange::blit(rect),
+                        None => SessionChange::rebuild(),
+                    });
+                }
+            }
+            ActiveSession::Stroke(session) => {
+                change = change.merge(match self.cancel_stroke_session(*session) {
+                    Some(rect) => SessionChange::blit(rect),
+                    None => SessionChange::rebuild(),
+                });
+            }
+            ActiveSession::Transform(session) => {
+                if self.cancel_transform_session(*session) {
+                    change = change.merge(SessionChange::rebuild());
+                }
+            }
+            ActiveSession::Path(restore) => {
+                change = change.merge(self.cancel_path_gesture_restore(*restore));
+            }
+            ActiveSession::Heal(_) => {}
+            ActiveSession::Selection(_) => {}
+            ActiveSession::SelectionMove(_) => {}
         }
 
-        if let Some(restored) = super::super::impl_filters::cancel_filter_preview(self) {
-            change = change.merge(match restored {
-                Some(rect) => SessionChange::blit(rect),
-                None => SessionChange::rebuild(),
-            });
-        }
-
-        if self.stroke.is_some() || self.mask_stroke.is_some() {
-            change = change.merge(match self.cancel_stroke() {
-                Some(rect) => SessionChange::blit(rect),
-                None => SessionChange::rebuild(),
-            });
-        }
-
-        if self.cancel_transform_state() {
-            change = change.merge(SessionChange::rebuild());
-        }
-
-        change = change.merge(self.cancel_path_gesture());
-
-        self.heal_stroke = None;
-        self.pending_lasso.clear();
-        self.pending_lasso_mode.clear();
-        self.edge_map = None;
-        self.cancel_selection_move();
         self.clear_pending_previews();
         change
     }
@@ -366,29 +309,17 @@ impl PictureViewRust {
     pub(in crate::cxxqt_object) fn clear_document_scoped_state(&mut self) {
         self.session.selection = None;
         self.session.deselected_selection = None;
-        self.selection_move_origin = None;
-        self.selection_move_delta = None;
+        self.session.live = ActiveSession::Idle;
         self.path = None;
-        self.layer_target.clear();
-        self.path_on_layer = false;
-        self.active_path = ActivePath::Work;
-        self.path_gesture = None;
-        self.session.pdf_options = None;
-        self.session.pdf_password = None;
-        self.pending_lasso.clear();
-        self.pending_lasso_mode.clear();
-        self.stroke = None;
-        self.stroke_label.clear();
-        self.stroke_base = None;
-        self.mask_stroke = None;
         self.mask_edit_target = None;
         self.mask_solo = None;
         self.mask_overlay = None;
+        self.layer_target.clear();
+        self.path_on_layer = false;
+        self.active_path = super::super::paths::ActivePath::Work;
+        self.session.pdf_options = None;
+        self.session.pdf_password = None;
         self.isolation = None;
-        self.pending_present = None;
-        self.stroke_tiles = Default::default();
-        self.present_flush_due = false;
-        self.heal_stroke = None;
         self.move_base = None;
         self.move_layer = None;
         self.move_x = 0;
@@ -397,18 +328,10 @@ impl PictureViewRust {
         self.move_prepared_revision = 0;
         self.move_prepared_layer.clear();
         self.move_preview_cache_hit = false;
-        self.transform_session = None;
         self.last_transform = None;
         self.clear_pending_previews();
-        self.edge_map = None;
         self.ruler = None;
-        self.preview = None;
-        self.gpu_stroke = None;
-        self.gpu_placer = None;
-        self.filter_preview = None;
-        self.mask_filter_preview = None;
         self.canvas_proxy = None;
-        self.mode_preview = None;
         self.link_sets.clear();
         self.source_format = "psd".to_string();
         self.filter_error = None;
@@ -423,10 +346,7 @@ impl PictureViewRust {
 
     /// Restore the pre-lift document or the pre-trim layer extent. Returns
     /// whether the document changed and needs a rebuild.
-    fn cancel_transform_state(&mut self) -> bool {
-        let Some(session) = self.transform_session.take() else {
-            return false;
-        };
+    fn cancel_transform_session(&mut self, session: TransformSession) -> bool {
         if let Some(rect) = session.untrimmed {
             if let Some(doc) = self.session.doc.as_mut() {
                 pictura_render::untrim_to(doc, &session.path, rect);
@@ -444,10 +364,10 @@ impl PictureViewRust {
     /// A Work or Saved path changes no pixel, so the abort notifies. A shape
     /// layer's outline lives in the layer: restoring it changes the composite,
     /// so the abort asks for a rebuild.
-    pub(in crate::cxxqt_object) fn cancel_path_gesture(&mut self) -> SessionChange {
-        let Some(restore) = self.path_gesture.take() else {
-            return SessionChange::none();
-        };
+    pub(in crate::cxxqt_object) fn cancel_path_gesture_restore(
+        &mut self,
+        restore: PathRestore,
+    ) -> SessionChange {
         let Some(doc) = self.session.doc.as_mut() else {
             return SessionChange::none();
         };
@@ -472,5 +392,14 @@ impl PictureViewRust {
                 SessionChange::rebuild()
             }
         }
+    }
+
+    /// Restore the path a Pen or Path Selection gesture replaced, taking the
+    /// gesture out of the slot first.
+    pub(in crate::cxxqt_object) fn cancel_path_gesture(&mut self) -> SessionChange {
+        let Some(restore) = self.session.live.take_path() else {
+            return SessionChange::none();
+        };
+        self.cancel_path_gesture_restore(restore)
     }
 }

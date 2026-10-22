@@ -86,9 +86,17 @@ fn arrange_kind(arrange: i32) -> Option<pictura_render::Arrange> {
     }
 }
 
-/// Clear link sets, recomposite, and record one history state.
-fn finish(mut view: Pin<&mut PictureView>, label: &str) {
-    view.as_mut().edit(label, |_| Edit::Structural);
+/// The path an arrange lands on, or `None` when the engine refuses it.
+fn arrange_landed(
+    rust: &mut super::state::PictureViewRust,
+    path: &str,
+    op: pictura_render::Arrange,
+) -> Option<String> {
+    let doc = rust.session.doc.as_mut()?;
+    pictura_render::arrange_path_index(doc, path, op).map(|index| {
+        let parent = pictura_render::parent_path(path).unwrap_or("");
+        join_path(parent, index)
+    })
 }
 
 fn arrange_layer_can(view: &PictureView, path: &QString, arrange: i32) -> bool {
@@ -106,51 +114,52 @@ fn arrange_layer_run(mut view: Pin<&mut PictureView>, path: &QString, arrange: i
         return false;
     };
     let path = path.to_string();
-    let landed = match view.as_mut().rust_mut().session.doc.as_mut() {
-        Some(doc) => pictura_render::arrange_path_index(doc, &path, op).map(|index| {
-            let parent = pictura_render::parent_path(&path).unwrap_or("");
-            join_path(parent, index)
-        }),
-        None => None,
-    };
-    let Some(landed) = landed else {
-        return false;
-    };
-    view.as_mut().rust_mut().select_only_layer(&landed);
-    finish(view, "Arrange Layer");
-    true
+    let edit = view.as_mut().edit("Arrange Layer", |rust| {
+        let Some(landed) = arrange_landed(rust, &path, op) else {
+            return Edit::None;
+        };
+        rust.select_only_layer(&landed);
+        Edit::Structural
+    });
+    !matches!(edit, Edit::None)
 }
 
 fn reverse_layers_run(mut view: Pin<&mut PictureView>, paths: &QStringList) -> bool {
     let owned = list_of_strings(paths);
     let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
-    let reversed = match view.as_mut().rust_mut().session.doc.as_mut() {
-        Some(doc) => pictura_render::reverse_paths_result(doc, &refs),
-        None => None,
-    };
-    let Some(reversed) = reversed else {
-        return false;
-    };
-    {
-        let rust = &mut *view.as_mut().rust_mut();
+    let edit = view.as_mut().edit("Reverse Layers", |rust| {
+        let Some(reversed) = (match rust.session.doc.as_mut() {
+            Some(doc) => pictura_render::reverse_paths_result(doc, &refs),
+            None => None,
+        }) else {
+            return Edit::None;
+        };
         let mut target = rust.layer_target.clone();
         let anchor = target.anchor().map(str::to_string);
         target.select(reversed, anchor, rust.session.doc.as_ref());
         rust.set_layer_target(target);
-    }
-    finish(view, "Reverse Layers");
-    true
+        Edit::Structural
+    });
+    !matches!(edit, Edit::None)
 }
 
 fn stamp_visible_run(mut view: Pin<&mut PictureView>, path: &QString) -> QString {
     let active = path.to_string();
-    let created = match view.as_mut().rust_mut().session.doc.as_mut() {
-        Some(doc) => {
+    let mut created = String::new();
+    view.as_mut().edit("Stamp Visible", |rust| {
+        let Some(doc) = rust.session.doc.as_mut() else {
+            return Edit::None;
+        };
+        let Some(path) =
             pictura_render::stamp_scope(doc, pictura_render::StampScope::Visible(&active), &active)
-        }
-        None => None,
-    };
-    stamp_result(view, created, "Stamp Visible")
+        else {
+            return Edit::None;
+        };
+        created = path;
+        rust.select_only_layer(&created);
+        Edit::Structural
+    });
+    QString::from(created.as_str())
 }
 
 fn stamp_selected_run(
@@ -160,22 +169,73 @@ fn stamp_selected_run(
 ) -> QString {
     let owned = list_of_strings(paths);
     let anchor = active.to_string();
-    let created = match view.as_mut().rust_mut().session.doc.as_mut() {
-        Some(doc) => {
+    let mut created = String::new();
+    view.as_mut().edit("Stamp Selected", |rust| {
+        let Some(doc) = rust.session.doc.as_mut() else {
+            return Edit::None;
+        };
+        let Some(path) =
             pictura_render::stamp_scope(doc, pictura_render::StampScope::Selected(&owned), &anchor)
-        }
-        None => None,
-    };
-    stamp_result(view, created, "Stamp Selected")
+        else {
+            return Edit::None;
+        };
+        created = path;
+        rust.select_only_layer(&created);
+        Edit::Structural
+    });
+    QString::from(created.as_str())
 }
 
-fn stamp_result(mut view: Pin<&mut PictureView>, created: Option<String>, label: &str) -> QString {
-    match created {
-        Some(path) => {
-            view.as_mut().rust_mut().select_only_layer(&path);
-            finish(view, label);
-            QString::from(path.as_str())
-        }
-        None => QString::default(),
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cxxqt_object::document_session::DocumentSession;
+    use crate::cxxqt_object::edit::{effect_of, Effect};
+    use crate::cxxqt_object::state::PictureViewRust;
+    use pictura_core::{BitDepth, ColorMode, Document, LayerStack};
+
+    fn doc_with_layers() -> Document {
+        let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
+        doc.layers = LayerStack::from_layers(vec![
+            crate::cxxqt_object::tests::pixel_layer("bottom", 4, 4, (255, 0, 0)),
+            crate::cxxqt_object::tests::pixel_layer("top", 4, 4, (0, 255, 0)),
+        ]);
+        doc
+    }
+
+    #[test]
+    fn a_refused_layer_command_commits_nothing() {
+        let mut rust = PictureViewRust {
+            session: DocumentSession::with_document(doc_with_layers()),
+            ..Default::default()
+        };
+        let before: Vec<String> = rust
+            .session
+            .doc
+            .as_ref()
+            .expect("document")
+            .layers
+            .iter()
+            .map(|layer| layer.name.clone())
+            .collect();
+        assert_eq!(
+            arrange_landed(&mut rust, "missing", pictura_render::Arrange::Front),
+            None
+        );
+        let applied = rust.apply_edit("Arrange Layer", Edit::None);
+        assert_eq!(applied.edit, Edit::None);
+        assert_eq!(effect_of(&applied.edit), Effect::Nothing);
+        assert_eq!(rust.session.history.count(), 0);
+        assert_eq!(rust.session.content_revision, 0);
+        let after: Vec<String> = rust
+            .session
+            .doc
+            .as_ref()
+            .expect("document")
+            .layers
+            .iter()
+            .map(|layer| layer.name.clone())
+            .collect();
+        assert_eq!(after, before);
     }
 }
