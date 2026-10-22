@@ -40,8 +40,18 @@ public:
     static constexpr int kMaxThumbnailDim = 1024;
     static constexpr int kMaxScreenshotDim = 4096;
 
+    // Listen on the socket and write a fresh session token to tokenPath(),
+    // readable by the owner only. Fails, listening on nothing, when either
+    // cannot be created.
     bool listen();
     QString socketPath() const { return socketPath_; }
+
+    // Every socket request must carry this session token as its `token`
+    // member, so another process of the same user that can reach the socket
+    // but cannot read the owner-only token file gets no file read/write
+    // oracle (#844 M5). `dispatch()` is in-process and needs none.
+    QString tokenPath() const;
+    QByteArray token() const { return token_; }
 
     // Dispatch one method call; returns the full {ok,result} or {ok,error}
     // wrapper. Also drives the in-process self-test block.
@@ -81,11 +91,15 @@ private:
     QJsonObject methodKey(const QJsonObject& params);
 
     void handleLine(QLocalSocket* socket, const QByteArray& line);
+    bool writeTokenFile();
+    bool authorized(const QJsonObject& request) const;
     void writeLine(QLocalSocket* socket, const QJsonObject& response);
 
     PicturaMainWindow* frame_;
     QLocalServer* server_ = nullptr;
     QString socketPath_;
+    QByteArray token_;
+    bool tokenWritten_ = false;
     QHash<QLocalSocket*, QByteArray> buffers_;
     // Tracked unsaved-prompt policy, mirrored from the global set in dialogs.cpp.
     bool unsavedInteractive_ = false;

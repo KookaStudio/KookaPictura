@@ -3,10 +3,30 @@
 //! `gs` runs as a child process, never linked, with `-dSAFER` and file reads
 //! limited to the input. `PICTURA_GHOSTSCRIPT` names the executable; otherwise
 //! `gs` is looked up on `PATH`.
+//!
+//! The input is untrusted and Ghostscript is a full PostScript interpreter, so
+//! each run is bounded (#844): it is killed after [`RUN_TIMEOUT`], on Unix it
+//! runs under address-space, CPU, and file-size rlimits, its text output is
+//! capped, and a release older than [`MIN_VERSION`] is refused.
 
+use std::io::Read as _;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::time::{Duration, Instant};
+
+/// How long one Ghostscript run may take before it is killed.
+pub(crate) const RUN_TIMEOUT: Duration = Duration::from_secs(300);
+/// The oldest Ghostscript accepted: 9.55 is the first release with the
+/// rewritten `-dSAFER` file-permission model plus the CVE-2021-3781 fix.
+pub(crate) const MIN_VERSION: (u32, u32) = (9, 55);
+/// The most stdout or stderr text kept from one run.
+const MAX_TEXT_OUTPUT: u64 = 16 << 20;
+/// The most bytes one rendered page file may hold when it is read back.
+const MAX_RASTER_FILE: u64 = 4 << 30;
+/// The address space one Ghostscript process may map (Unix `RLIMIT_AS`).
+#[cfg(unix)]
+const MAX_ADDRESS_SPACE: u64 = 8 << 30;
 
 /// Why a PDF or EPS could not be rasterized.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -53,10 +73,29 @@ impl Ghostscript {
                 .find(|candidate| candidate.is_file())
                 .ok_or(RasterError::NoGhostscript)?,
         };
-        if exe.is_file() {
-            Ok(Ghostscript { exe })
-        } else {
-            Err(RasterError::NoGhostscript)
+        if !exe.is_file() {
+            return Err(RasterError::NoGhostscript);
+        }
+        let found = Ghostscript { exe };
+        found.check_version()?;
+        Ok(found)
+    }
+
+    /// Refuse a Ghostscript older than [`MIN_VERSION`] (or one that cannot
+    /// report its version).
+    fn check_version(&self) -> Result<(), RasterError> {
+        let mut command = Command::new(&self.exe);
+        command.arg("--version");
+        let output = run_bounded(command, Duration::from_secs(30))?;
+        let text = String::from_utf8_lossy(&output.stdout);
+        match parse_version(&text) {
+            Some(found) if found >= MIN_VERSION => Ok(()),
+            _ => Err(RasterError::Failed(format!(
+                "Ghostscript {} is too old; {}.{} or later is required",
+                text.trim(),
+                MIN_VERSION.0,
+                MIN_VERSION.1
+            ))),
         }
     }
 
@@ -68,10 +107,21 @@ impl Ghostscript {
         password: Option<&str>,
         args: &[String],
     ) -> Result<Run, RasterError> {
+        self.run_within(input, password, args, RUN_TIMEOUT)
+    }
+
+    fn run_within(
+        &self,
+        input: &Path,
+        password: Option<&str>,
+        args: &[String],
+        timeout: Duration,
+    ) -> Result<Run, RasterError> {
         // Holds the password argument file until Ghostscript has exited.
         let scratch = ScratchDir::new()?;
-        let mut command = self.command(input, password, args, &scratch)?;
-        let output = command.output().map_err(|_| RasterError::NoGhostscript)?;
+        let (input, args) = permitted_input(input, args, &scratch)?;
+        let command = self.command(&input, password, &args, &scratch)?;
+        let output = run_bounded(command, timeout)?;
         let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
         let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
         let all = format!("{stdout}\n{stderr}");
@@ -130,6 +180,134 @@ impl Ghostscript {
         command.args(args);
         Ok(command)
     }
+}
+
+/// The finished output of one bounded child process.
+struct Output {
+    status: ExitStatus,
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+}
+
+/// Run `command` with its output captured (each stream capped at
+/// [`MAX_TEXT_OUTPUT`]), under the Unix resource limits, killing it after
+/// `timeout`. A command that cannot start is `NoGhostscript`.
+fn run_bounded(mut command: Command, timeout: Duration) -> Result<Output, RasterError> {
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    limit_resources(&mut command, timeout);
+    let mut child = command.spawn().map_err(|_| RasterError::NoGhostscript)?;
+    let stdout = drain(child.stdout.take());
+    let stderr = drain(child.stderr.take());
+    let status = wait_until(&mut child, Instant::now() + timeout);
+    let (stdout, stderr) = (
+        stdout.join().unwrap_or_default(),
+        stderr.join().unwrap_or_default(),
+    );
+    match status {
+        Some(status) => Ok(Output {
+            status,
+            stdout,
+            stderr,
+        }),
+        None => Err(RasterError::Failed(format!(
+            "Ghostscript did not finish within {} seconds",
+            timeout.as_secs()
+        ))),
+    }
+}
+
+/// Read a child's stream on its own thread: the first [`MAX_TEXT_OUTPUT`]
+/// bytes are kept and the rest discarded, so the child never blocks on a full
+/// pipe.
+fn drain(stream: Option<impl std::io::Read + Send + 'static>) -> std::thread::JoinHandle<Vec<u8>> {
+    std::thread::spawn(move || {
+        let mut kept = Vec::new();
+        if let Some(mut stream) = stream {
+            let _ = (&mut stream).take(MAX_TEXT_OUTPUT).read_to_end(&mut kept);
+            let _ = std::io::copy(&mut stream, &mut std::io::sink());
+        }
+        kept
+    })
+}
+
+/// Wait for `child` until `deadline`, then kill it: its exit status, or
+/// `None` when it was killed.
+fn wait_until(child: &mut Child, deadline: Instant) -> Option<ExitStatus> {
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return Some(status),
+            Ok(None) if Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return None;
+            }
+        }
+    }
+}
+
+/// Bound the child's memory, CPU time, and file writes (Unix rlimits); a
+/// limit the parent cannot set is left as it is.
+#[cfg(unix)]
+fn limit_resources(command: &mut Command, timeout: Duration) {
+    use std::os::unix::process::CommandExt as _;
+    let limits = [
+        (libc::RLIMIT_AS, MAX_ADDRESS_SPACE),
+        (libc::RLIMIT_CPU, timeout.as_secs().max(1)),
+        (libc::RLIMIT_FSIZE, MAX_RASTER_FILE),
+    ];
+    // SAFETY: the hook runs between fork and exec, so it must not allocate or
+    // lock; it only calls `setrlimit`, which is async-signal-safe, on a
+    // stack array.
+    unsafe {
+        command.pre_exec(move || {
+            for (resource, limit) in limits {
+                let value = libc::rlimit {
+                    rlim_cur: limit as libc::rlim_t,
+                    rlim_max: limit as libc::rlim_t,
+                };
+                libc::setrlimit(resource, &value);
+            }
+            Ok(())
+        });
+    }
+}
+
+#[cfg(not(unix))]
+fn limit_resources(_command: &mut Command, _timeout: Duration) {}
+
+/// `major.minor` from `gs --version` output such as `10.06.0`.
+fn parse_version(text: &str) -> Option<(u32, u32)> {
+    let mut parts = text.trim().split('.');
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next()?.parse().ok()?;
+    Some((major, minor))
+}
+
+/// The input path and arguments Ghostscript is given. `--permit-file-read`
+/// takes a list split on the platform's path-list separator, so an input
+/// whose path holds one would be permitted as several partial paths; such an
+/// input is copied into `scratch` first and the arguments point at the copy.
+fn permitted_input(
+    input: &Path,
+    args: &[String],
+    scratch: &ScratchDir,
+) -> Result<(PathBuf, Vec<String>), RasterError> {
+    let separator = if cfg!(windows) { ';' } else { ':' };
+    let shown = input.display().to_string();
+    if !shown.contains(separator) {
+        return Ok((input.to_path_buf(), args.to_vec()));
+    }
+    let copy = scratch.path("input");
+    std::fs::copy(input, &copy).map_err(|e| RasterError::Failed(e.to_string()))?;
+    let renamed = copy.display().to_string();
+    let args = args.iter().map(|a| a.replace(&shown, &renamed)).collect();
+    Ok((copy, args))
 }
 
 /// `-sPDFPassword=…` as one quoted argument-file line. Ghostscript's `@file`
@@ -245,22 +423,18 @@ impl Drop for ScratchDir {
     }
 }
 
-/// 64 unpredictable bits: std's `RandomState` keys are seeded from the OS
-/// random source (the `os_entropy` pattern of the PDF writer's bridge).
+/// 64 bits from the operating system's random source.
 fn random_u64() -> u64 {
-    use std::hash::{BuildHasher, Hasher};
-    let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or_default();
-    hasher.write_u128(nanos);
-    hasher.finish()
+    u64::from_le_bytes(crate::os_random())
 }
 
-/// Read a `pngalpha` page Ghostscript wrote.
+/// Read a `pngalpha` page Ghostscript wrote, refusing a file over
+/// [`MAX_RASTER_FILE`].
 pub(crate) fn read_png(path: &Path) -> Result<Raster, RasterError> {
-    let bytes = std::fs::read(path).map_err(|e| RasterError::Failed(e.to_string()))?;
+    let failed = |e: std::io::Error| RasterError::Failed(e.to_string());
+    let file = std::fs::File::open(path).map_err(failed)?;
+    let bytes = crate::budget::read_bounded(file, MAX_RASTER_FILE)
+        .ok_or_else(|| RasterError::Failed("Ghostscript output too large".into()))?;
     crate::png::decode_rgba(&bytes)
         .ok_or_else(|| RasterError::Failed("unreadable Ghostscript output".into()))
 }
@@ -317,6 +491,88 @@ mod tests {
             found.run(input, None, &[]).err(),
             Some(RasterError::NoGhostscript)
         );
+    }
+
+    /// An executable shell script in `scratch` standing in for `gs`.
+    #[cfg(unix)]
+    fn fake_gs(scratch: &ScratchDir, body: &str) -> Ghostscript {
+        use std::os::unix::fs::PermissionsExt;
+        let exe = scratch.path("gs");
+        std::fs::write(&exe, format!("#!/bin/sh\n{body}\n")).unwrap();
+        std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o700)).unwrap();
+        Ghostscript { exe }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_run_that_never_ends_is_killed() {
+        // An infinite PostScript loop blocked a worker forever (#844 H7).
+        let scratch = ScratchDir::new().unwrap();
+        let gs = fake_gs(&scratch, "exec sleep 60");
+        let started = Instant::now();
+        let result = gs.run_within(
+            Path::new("/x/in.pdf"),
+            None,
+            &[],
+            Duration::from_millis(200),
+        );
+        assert!(
+            matches!(&result, Err(RasterError::Failed(m)) if m.contains("did not finish")),
+            "{:?}",
+            result.err()
+        );
+        assert!(started.elapsed() < Duration::from_secs(20));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn runaway_output_is_capped() {
+        let scratch = ScratchDir::new().unwrap();
+        let gs = fake_gs(&scratch, "head -c 40000000 /dev/zero");
+        let run = gs.run_within(Path::new("/x/in.pdf"), None, &[], RUN_TIMEOUT);
+        let run = run.unwrap_or_else(|e| panic!("{e}"));
+        assert!(run.output.len() as u64 <= 2 * MAX_TEXT_OUTPUT + 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_child_runs_under_resource_limits() {
+        let scratch = ScratchDir::new().unwrap();
+        // 4 GiB in 512-byte blocks and 8 GiB in KiB are both 8388608.
+        let gs = fake_gs(&scratch, "ulimit -f; ulimit -v");
+        let run = gs.run_within(Path::new("/x/in.pdf"), None, &[], RUN_TIMEOUT);
+        let output = run.unwrap_or_else(|e| panic!("{e}")).output;
+        assert_eq!(output.matches("8388608").count(), 2, "{output}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_old_ghostscript_is_refused() {
+        let scratch = ScratchDir::new().unwrap();
+        let old = fake_gs(&scratch, "echo 9.26");
+        assert!(
+            matches!(old.check_version(), Err(RasterError::Failed(m)) if m.contains("too old"))
+        );
+        let current = fake_gs(&scratch, "echo 10.06.0");
+        assert_eq!(current.check_version(), Ok(()));
+        assert_eq!(parse_version("9.55.0\n"), Some((9, 55)));
+        assert_eq!(parse_version("junk"), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_path_holding_the_list_separator_is_read_through_a_copy() {
+        let scratch = ScratchDir::new().unwrap();
+        let input = scratch.path("a:b.pdf");
+        std::fs::write(&input, b"%PDF-1.7").unwrap();
+        let args = vec![format!("-sInputFile={}", input.display())];
+        let (permitted, args) = permitted_input(&input, &args, &scratch).unwrap();
+        assert!(!permitted.display().to_string().contains(':'));
+        assert_eq!(std::fs::read(&permitted).unwrap(), b"%PDF-1.7");
+        assert_eq!(args, vec![format!("-sInputFile={}", permitted.display())]);
+        let plain = scratch.path("plain.pdf");
+        let (kept, _) = permitted_input(&plain, &[], &scratch).unwrap();
+        assert_eq!(kept, plain);
     }
 
     #[test]

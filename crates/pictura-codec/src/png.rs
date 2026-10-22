@@ -44,7 +44,10 @@ pub fn encode_rgba(rgba: &[u8], width: u32, height: u32) -> Option<Vec<u8>> {
 }
 
 /// Decode an 8-bit RGBA, non-interlaced PNG into a [`Raster`]. `None` for any
-/// other shape or a damaged file.
+/// other shape, a damaged file, or a size over the default [`ImageBudget`]
+/// (Ghostscript's output is sized by the document it rendered).
+///
+/// [`ImageBudget`]: crate::ImageBudget
 pub fn decode_rgba(png: &[u8]) -> Option<crate::Raster> {
     if !png.starts_with(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]) {
         return None;
@@ -70,12 +73,18 @@ pub fn decode_rgba(png: &[u8]) -> Option<crate::Raster> {
         }
         at += 12 + len;
     }
+    if width == 0 || height == 0 || !crate::budget::rgba_within_budget(width, height) {
+        return None;
+    }
     let stride = width as usize * 4;
+    let filtered = (stride + 1) * height as usize;
+    // Inflate no more than the filtered rows the header implies.
     let mut raw = Vec::new();
     flate2::read::ZlibDecoder::new(idat.as_slice())
+        .take(filtered as u64)
         .read_to_end(&mut raw)
         .ok()?;
-    if width == 0 || height == 0 || raw.len() < (stride + 1) * height as usize {
+    if raw.len() < filtered {
         return None;
     }
     let mut rgba = vec![0u8; stride * height as usize];
@@ -335,5 +344,87 @@ mod tests {
             at += 12 + len;
         }
         Vec::new()
+    }
+
+    /// A PNG of `ihdr` (13 bytes) and one `IDAT` holding `idat`, no CRCs
+    /// (the decoder does not check them).
+    fn png_with(ihdr: [u8; 13], idat: &[u8]) -> Vec<u8> {
+        let mut png = vec![0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
+        for (kind, data) in [(&b"IHDR"[..], &ihdr[..]), (b"IDAT", idat), (b"IEND", &[])] {
+            png.extend_from_slice(&(data.len() as u32).to_be_bytes());
+            png.extend_from_slice(kind);
+            png.extend_from_slice(data);
+            png.extend_from_slice(&[0; 4]);
+        }
+        png
+    }
+
+    fn ihdr(width: u32, height: u32) -> [u8; 13] {
+        let mut ihdr = [0u8; 13];
+        ihdr[..4].copy_from_slice(&width.to_be_bytes());
+        ihdr[4..8].copy_from_slice(&height.to_be_bytes());
+        ihdr[8..].copy_from_slice(&[8, 6, 0, 0, 0]);
+        ihdr
+    }
+
+    #[test]
+    fn a_header_over_the_budget_is_refused_before_inflating() {
+        // `u32::MAX` square overflowed `stride * height` (#844 M4).
+        let idat = {
+            let mut enc = ZlibEncoder::new(Vec::new(), Compression::fast());
+            enc.write_all(&[0u8; 64]).unwrap();
+            enc.finish().unwrap()
+        };
+        assert_eq!(
+            decode_rgba(&png_with(ihdr(u32::MAX, u32::MAX), &idat)),
+            None
+        );
+        assert_eq!(decode_rgba(&png_with(ihdr(40_000, 1), &idat)), None);
+    }
+
+    #[test]
+    fn inflation_stops_at_the_rows_the_header_implies() {
+        // 1×1 needs 5 filtered bytes; a stream of 1 MiB more is never read out.
+        let mut enc = ZlibEncoder::new(Vec::new(), Compression::fast());
+        enc.write_all(&[0, 9, 8, 7, 6]).unwrap();
+        enc.write_all(&vec![0u8; 1 << 20]).unwrap();
+        let png = png_with(ihdr(1, 1), &enc.finish().unwrap());
+        let raster = decode_rgba(&png).expect("decodes");
+        assert_eq!(raster.rgba, vec![9, 8, 7, 6]);
+    }
+
+    #[test]
+    fn mutated_pngs_never_panic() {
+        // Fixed-seed xorshift over a valid file: bytes flipped, words set to
+        // boundary values, and the file truncated (#844 fuzz smoke test).
+        let rgba: Vec<u8> = (0..16 * 9 * 4).map(|i| (i * 13) as u8).collect();
+        let seed = encode_rgba(&rgba, 16, 9).expect("encodes");
+        let mut state = 0x0844_u64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state as usize
+        };
+        for _ in 0..3000 {
+            let mut png = seed.clone();
+            for _ in 0..1 + next() % 6 {
+                let at = next() % png.len();
+                match next() % 3 {
+                    0 => png[at] ^= 1 << (next() % 8),
+                    1 => {
+                        let end = (at + 4).min(png.len());
+                        png[at..end].fill(0xff);
+                    }
+                    _ => png.truncate(at.max(1)),
+                }
+            }
+            if let Some(raster) = decode_rgba(&png) {
+                assert_eq!(
+                    raster.rgba.len(),
+                    raster.width as usize * raster.height as usize * 4
+                );
+            }
+        }
     }
 }

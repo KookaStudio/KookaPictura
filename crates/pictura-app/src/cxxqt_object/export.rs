@@ -153,13 +153,5 @@ fn encode_webp_rgba(rgba: &[u8], width: u32, height: u32, path: &str, scale: i32
     else {
         return false;
     };
-    let tmp = format!("{path}.tmp");
-    if std::fs::write(&tmp, &bytes).is_err() {
-        return false;
-    }
-    if std::fs::rename(&tmp, path).is_err() {
-        let _ = std::fs::remove_file(&tmp);
-        return false;
-    }
-    true
+    super::helpers::safe_io::write_atomically(path, &bytes, false).is_ok()
 }

@@ -8,7 +8,9 @@
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonParseError>
+#include <QtCore/QFile>
 #include <QtCore/QProcessEnvironment>
+#include <QtCore/QRandomGenerator>
 #include <QtCore/QSet>
 #include <QtCore/QStandardPaths>
 #include <QtGui/QAction>
@@ -22,6 +24,7 @@
 
 #include <cmath>
 #ifndef _WIN32
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #endif
@@ -287,12 +290,78 @@ bool ControlServer::listen()
         server_ = nullptr;
         return false;
     }
+    if (!writeTokenFile()) {
+        shutdown();
+        return false;
+    }
     connect(server_, &QLocalServer::newConnection, this, &ControlServer::onNewConnection);
     return true;
 }
 
+QString ControlServer::tokenPath() const
+{
+#ifdef _WIN32
+    // A named pipe has no directory; the token lives in the user's temp dir.
+    return QDir::tempPath() + QStringLiteral("/") + socketPath_ + QStringLiteral(".token");
+#else
+    return socketPath_ + QStringLiteral(".token");
+#endif
+}
+
+bool ControlServer::writeTokenFile()
+{
+    quint32 words[8];
+    QRandomGenerator::system()->fillRange(words);
+    token_ = QByteArray(reinterpret_cast<const char*>(words), sizeof(words)).toHex();
+    const QString path = tokenPath();
+#ifndef _WIN32
+    const QByteArray native = path.toLocal8Bit();
+    // Replace a stale token (or anything else planted at the name) by removing
+    // the entry itself, then create the file fresh and owner-only; O_EXCL and
+    // O_NOFOLLOW refuse a symlink raced into place.
+    struct stat existing{};
+    if (::lstat(native.constData(), &existing) == 0) {
+        if (S_ISDIR(existing.st_mode) || ::unlink(native.constData()) != 0) {
+            return false;
+        }
+    }
+    const int fd =
+        ::open(native.constData(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
+    if (fd < 0) {
+        return false;
+    }
+    const bool written = ::write(fd, token_.constData(), size_t(token_.size())) == token_.size();
+    ::close(fd);
+#else
+    QFile file(path);
+    const bool written = file.open(QIODevice::WriteOnly | QIODevice::Truncate)
+                         && file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner)
+                         && file.write(token_) == token_.size();
+#endif
+    tokenWritten_ = true;
+    return written;
+}
+
+bool ControlServer::authorized(const QJsonObject& request) const
+{
+    const QByteArray offered = request.value(QStringLiteral("token")).toString().toLatin1();
+    if (token_.isEmpty() || offered.size() != token_.size()) {
+        return false;
+    }
+    // Constant-time: the comparison does not stop at the first wrong byte.
+    unsigned char difference = 0;
+    for (qsizetype i = 0; i < token_.size(); ++i) {
+        difference |= static_cast<unsigned char>(offered[i] ^ token_[i]);
+    }
+    return difference == 0;
+}
+
 void ControlServer::shutdown()
 {
+    if (tokenWritten_) {
+        QFile::remove(tokenPath());
+        tokenWritten_ = false;
+    }
     if (server_) {
         server_->close();
         delete server_;
@@ -411,6 +480,15 @@ void ControlServer::handleLine(QLocalSocket* socket, const QByteArray& line)
         QJsonObject response = error(QStringLiteral("bad_request"),
                                      QStringLiteral("id, method, and params have invalid types"));
         if (hasId && idValid) {
+            response.insert(QStringLiteral("id"), id);
+        }
+        writeLine(socket, response);
+        return;
+    }
+    if (!authorized(request)) {
+        QJsonObject response = error(QStringLiteral("unauthorized"),
+                                     QStringLiteral("missing or wrong session token"));
+        if (hasId) {
             response.insert(QStringLiteral("id"), id);
         }
         writeLine(socket, response);

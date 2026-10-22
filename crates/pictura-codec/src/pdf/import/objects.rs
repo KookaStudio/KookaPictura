@@ -7,8 +7,18 @@
 //! images are copied, not decoded. An encrypted file stays encrypted until
 //! `decrypt` opens it with a password (#627).
 
+use std::cell::Cell;
 use std::collections::HashMap;
-use std::io::Read as _;
+
+use crate::budget::read_bounded;
+use crate::probe::ImageBudget;
+
+/// The deepest array/dictionary nesting the lexer follows.
+pub(crate) const MAX_NESTING: u32 = 256;
+/// The widest PNG-predictor row (`/Columns`, in bytes here) a stream may declare.
+const MAX_PREDICTOR_COLUMNS: usize = 1 << 24;
+/// The most components (`/Colors`) a predictor row may declare (PDF caps 32).
+const MAX_PREDICTOR_COLORS: usize = 32;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Object {
@@ -71,6 +81,10 @@ pub(crate) struct PdfObjects {
     /// Each object's generation number, which its decryption key includes.
     generations: HashMap<u32, u16>,
     pub trailer: Dict,
+    /// The most bytes one stream may inflate to.
+    pub(crate) stream_limit: u64,
+    /// Inflated bytes the whole file may still produce.
+    pub(crate) inflate_budget: Cell<u64>,
 }
 
 /// What `PdfObjects::decrypt` did.
@@ -91,7 +105,7 @@ impl PdfObjects {
         let mut at = 0;
         while at < bytes.len() {
             if let Some((num, generation, end)) = object_header(bytes, at) {
-                let mut lexer = Lexer { bytes, at: end };
+                let mut lexer = Lexer::new(bytes, end);
                 if let Some(object) = lexer.object_body() {
                     if let Object::Stream(dict, _) = &object {
                         if dict.get("Type").is_some_and(|t| t.is_name("XRef")) {
@@ -105,10 +119,7 @@ impl PdfObjects {
                 }
             }
             if bytes[at..].starts_with(b"trailer") {
-                let mut lexer = Lexer {
-                    bytes,
-                    at: at + b"trailer".len(),
-                };
+                let mut lexer = Lexer::new(bytes, at + b"trailer".len());
                 if let Some(Object::Dict(dict)) = lexer.value() {
                     merge_trailer(&mut trailer, &dict);
                     at = lexer.at;
@@ -117,10 +128,13 @@ impl PdfObjects {
             }
             at += 1;
         }
+        let budget = ImageBudget::default();
         let mut file = PdfObjects {
             objects,
             generations,
             trailer,
+            stream_limit: budget.max_alloc_bytes,
+            inflate_budget: Cell::new(budget.max_document_bytes),
         };
         file.expand_object_streams();
         (!file.objects.is_empty()).then_some(file)
@@ -172,6 +186,15 @@ impl PdfObjects {
             }
         };
         let (streams, strings) = (method("StmF"), method("StrF"));
+        let length = int("Length").map_or(if v >= 4 { 16 } else { 5 }, |bits| {
+            usize::try_from(bits / 8).unwrap_or(0)
+        });
+        let r = int("R").unwrap_or(0);
+        // AESV2 is AES-128 only: a shorter /Length would make a key AES cannot
+        // take. Revisions 5 and 6 always use their own 32-byte key.
+        if r < 5 && (streams == Method::Aes || strings == Method::Aes) && length != 16 {
+            return Unlock::Unsupported;
+        }
         let id = match self.trailer.get("ID").map(|i| self.resolve(i)) {
             Some(Object::Array(items)) => match items.first().map(|i| self.resolve(i)) {
                 Some(Object::Str(s)) => s.clone(),
@@ -180,8 +203,8 @@ impl PdfObjects {
             _ => Vec::new(),
         };
         let standard = Standard {
-            r: int("R").unwrap_or(0),
-            length: int("Length").map_or(if v >= 4 { 16 } else { 5 }, |bits| bits as usize / 8),
+            r,
+            length,
             o: bytes("O"),
             u: bytes("U"),
             oe: bytes("OE"),
@@ -261,30 +284,36 @@ impl PdfObjects {
             let Some(data) = decode_stream(self, &dict, &data) else {
                 continue;
             };
-            let count = dict.get("N").and_then(Object::as_int).unwrap_or(0).max(0) as usize;
+            // Every entry is at least `0 0 ` in the stream, so /N beyond a
+            // quarter of its length is a lie; it never sizes an allocation.
+            let count = dict.get("N").and_then(Object::as_int).unwrap_or(0).max(0);
+            let count = usize::try_from(count)
+                .unwrap_or(usize::MAX)
+                .min(data.len() / 4);
             let first = dict
                 .get("First")
                 .and_then(Object::as_int)
-                .unwrap_or(0)
-                .max(0) as usize;
-            let mut header = Lexer {
-                bytes: &data,
-                at: 0,
-            };
+                .and_then(|f| usize::try_from(f).ok())
+                .unwrap_or(0);
+            let mut header = Lexer::new(&data, 0);
             let mut entries = Vec::with_capacity(count);
             for _ in 0..count {
                 match (header.value(), header.value()) {
                     (Some(Object::Int(num)), Some(Object::Int(offset))) => {
-                        entries.push((num as u32, offset as usize))
+                        let (Ok(num), Ok(offset)) = (u32::try_from(num), usize::try_from(offset))
+                        else {
+                            continue;
+                        };
+                        entries.push((num, offset))
                     }
                     _ => break,
                 }
             }
             for (num, offset) in entries {
-                let mut lexer = Lexer {
-                    bytes: &data,
-                    at: first + offset,
+                let Some(at) = first.checked_add(offset).filter(|&at| at <= data.len()) else {
+                    continue;
                 };
+                let mut lexer = Lexer::new(&data, at);
                 if let Some(object) = lexer.value() {
                     // A direct definition elsewhere (an incremental update)
                     // takes precedence over the compressed one.
@@ -317,7 +346,8 @@ fn merge_trailer(trailer: &mut Dict, from: &Dict) {
 }
 
 /// Unfilter a stream: no filter or `FlateDecode` (with a PNG predictor);
-/// anything else is `None`.
+/// anything else is `None`. A stream that inflates past the file's per-stream
+/// limit or its remaining inflate budget is `None` too (#844).
 pub(crate) fn decode_stream(file: &PdfObjects, dict: &Dict, data: &[u8]) -> Option<Vec<u8>> {
     let filter = dict.get("Filter").map(|f| file.resolve(f));
     let flate = match filter {
@@ -330,9 +360,11 @@ pub(crate) fn decode_stream(file: &PdfObjects, dict: &Dict, data: &[u8]) -> Opti
     if !flate {
         return Some(data.to_vec());
     }
-    let mut out = Vec::new();
     // Truncated streams are common; keep what inflated.
-    let _ = flate2::read::ZlibDecoder::new(data).read_to_end(&mut out);
+    let limit = file.stream_limit.min(file.inflate_budget.get());
+    let out = read_bounded(flate2::read::ZlibDecoder::new(data), limit)?;
+    file.inflate_budget
+        .set(file.inflate_budget.get() - out.len() as u64);
     let parms = file.resolve_dict(dict.get("DecodeParms"));
     let predictor = parms
         .and_then(|p| p.get("Predictor"))
@@ -345,18 +377,20 @@ pub(crate) fn decode_stream(file: &PdfObjects, dict: &Dict, data: &[u8]) -> Opti
             .unwrap_or(default)
             .max(1) as usize
     };
+    let columns = parm("Columns", 1);
+    if columns > MAX_PREDICTOR_COLUMNS {
+        return None;
+    }
     if predictor == 2 {
-        return Some(undo_tiff_predictor(
-            out,
-            parm("Columns", 1),
-            parm("Colors", 1),
-            parm("BitsPerComponent", 8),
-        ));
+        let colors = parm("Colors", 1);
+        if colors > MAX_PREDICTOR_COLORS {
+            return None;
+        }
+        return undo_tiff_predictor(out, columns, colors, parm("BitsPerComponent", 8));
     }
     if predictor < 10 {
         return Some(out);
     }
-    let columns = parm("Columns", 1);
     let mut rows = Vec::with_capacity(out.len());
     let mut prior = vec![0u8; columns];
     for line in out.chunks(columns + 1) {
@@ -396,14 +430,23 @@ pub(crate) fn decode_stream(file: &PdfObjects, dict: &Dict, data: &[u8]) -> Opti
 }
 
 /// Undo TIFF predictor 2 (horizontal differencing per component) on 8- or
-/// 16-bit samples; other depths are returned as they are.
-fn undo_tiff_predictor(mut data: Vec<u8>, columns: usize, colors: usize, bits: usize) -> Vec<u8> {
+/// 16-bit samples; other depths are returned as they are. `None` when the row
+/// size overflows or is empty.
+pub(crate) fn undo_tiff_predictor(
+    mut data: Vec<u8>,
+    columns: usize,
+    colors: usize,
+    bits: usize,
+) -> Option<Vec<u8>> {
     let bytes = match bits {
         8 => 1,
         16 => 2,
-        _ => return data,
+        _ => return Some(data),
     };
-    let row = columns * colors * bytes;
+    let row = columns
+        .checked_mul(colors)?
+        .checked_mul(bytes)
+        .filter(|&row| row > 0)?;
     for line in data.chunks_mut(row) {
         if line.len() < row {
             break;
@@ -419,7 +462,7 @@ fn undo_tiff_predictor(mut data: Vec<u8>, columns: usize, colors: usize, bits: u
             }
         }
     }
-    data
+    Some(data)
 }
 
 /// `N G obj` starting exactly at `at` (after a delimiter): the object and
@@ -477,9 +520,25 @@ fn is_delimiter(b: u8) -> bool {
 struct Lexer<'a> {
     bytes: &'a [u8],
     at: usize,
+    /// Open arrays and dictionaries around the value being read.
+    depth: u32,
 }
 
-impl Lexer<'_> {
+impl<'a> Lexer<'a> {
+    fn new(bytes: &'a [u8], at: usize) -> Self {
+        Lexer {
+            bytes,
+            at,
+            depth: 0,
+        }
+    }
+
+    /// Enter one array or dictionary, or `None` past [`MAX_NESTING`].
+    fn descend(&mut self) -> Option<()> {
+        self.depth += 1;
+        (self.depth <= MAX_NESTING).then_some(())
+    }
+
     fn skip_space(&mut self) {
         while let Some(&b) = self.bytes.get(self.at) {
             if is_space(b) {
@@ -537,10 +596,7 @@ impl Lexer<'_> {
         let end = declared
             .filter(|n| {
                 let end = start + n;
-                let mut probe = Lexer {
-                    bytes: self.bytes,
-                    at: end,
-                };
+                let mut probe = Lexer::new(self.bytes, end);
                 probe.skip_space();
                 end <= self.bytes.len() && self.bytes[probe.at..].starts_with(b"endstream")
             })
@@ -579,11 +635,13 @@ impl Lexer<'_> {
             b'(' => self.literal_string(),
             b'<' if self.bytes.get(self.at + 1) == Some(&b'<') => {
                 self.at += 2;
+                self.descend()?;
                 let mut dict = Dict::default();
                 loop {
                     self.skip_space();
                     if self.bytes[self.at..].starts_with(b">>") {
                         self.at += 2;
+                        self.depth -= 1;
                         return Some(Object::Dict(dict));
                     }
                     let Object::Name(key) = self.value()? else {
@@ -620,11 +678,13 @@ impl Lexer<'_> {
             }
             b'[' => {
                 self.at += 1;
+                self.descend()?;
                 let mut items = Vec::new();
                 loop {
                     self.skip_space();
                     if self.bytes.get(self.at) == Some(&b']') {
                         self.at += 1;
+                        self.depth -= 1;
                         return Some(Object::Array(items));
                     }
                     items.push(self.value()?);

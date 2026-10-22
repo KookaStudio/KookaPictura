@@ -60,12 +60,16 @@ QJsonObject responseObject(const QByteArray& line, bool* parsed)
     return *parsed ? document.object() : QJsonObject();
 }
 
+// The session token of the server under test, sent with every request.
+QString sessionToken;
+
 QJsonObject request(QLocalSocket& socket, int id, const QString& method, const QJsonObject& params,
                     bool* parsed)
 {
     const QJsonObject body{{QStringLiteral("id"), id},
                            {QStringLiteral("method"), method},
-                           {QStringLiteral("params"), params}};
+                           {QStringLiteral("params"), params},
+                           {QStringLiteral("token"), sessionToken}};
     const QByteArray line =
         QJsonDocument(body).toJson(QJsonDocument::Compact) + QByteArrayLiteral("\n");
     return responseObject(transact(socket, line, false), parsed);
@@ -98,6 +102,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
     if (!dir.isValid() || !server.listen()) {
         return pictura::selfTest().fail(463, "control server listen");
     }
+    sessionToken = QString::fromLatin1(server.token());
     ST_PASS("socket=%s", qPrintable(socketPath));
 
     QLocalSocket socket;

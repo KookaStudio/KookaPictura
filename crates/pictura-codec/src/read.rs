@@ -1,12 +1,23 @@
-use flate2::read::{DeflateDecoder, ZlibDecoder};
 use pictura_color::Policy;
 use pictura_core::*;
-use std::io::Read;
 
+use crate::budget::DecodeBudget;
 use crate::common::*;
 use crate::depth::{depth_bits, planar_len, row_bytes, undo_prediction};
 use crate::error::PsdError;
 use crate::mask_params;
+use crate::probe::ImageBudget;
+
+mod decode;
+
+pub(crate) use decode::decode_channel_data;
+#[cfg(test)]
+pub(crate) use decode::decode_rle_channel;
+use decode::{inflate, read_channel_data, read_rle};
+
+/// The deepest group nesting a file may declare. CS6 nests groups ten deep;
+/// the cap keeps the recursive compositor and `Drop` off the stack limit.
+pub(crate) const MAX_GROUP_DEPTH: usize = 64;
 
 /// Fallback for an Indexed document's palette; unreachable because
 /// `palette_from` errors on a malformed Indexed palette before conversion.
@@ -25,13 +36,28 @@ pub fn read_psd(bytes: &[u8]) -> Result<Document, PsdError> {
 /// the layer tree (bottom-first, matching PSD on-disk z-order), applying an
 /// incoming-profile `policy` to an RGB document's embedded non-sRGB profile.
 pub fn read_psd_with(bytes: &[u8], policy: Policy) -> Result<Document, PsdError> {
-    let mut doc = read_container(bytes, policy)?;
+    read_psd_within(bytes, policy, ImageBudget::default())
+}
+
+/// [`read_psd_with`] under an explicit allocation `budget`: no plane larger
+/// than `budget.max_alloc_bytes` is allocated, and a document claiming more
+/// than a fixed multiple of it in all is refused before decoding (#844).
+pub fn read_psd_within(
+    bytes: &[u8],
+    policy: Policy,
+    budget: ImageBudget,
+) -> Result<Document, PsdError> {
+    let mut doc = read_container(bytes, policy, &mut DecodeBudget::new(budget))?;
     crate::path_resources::resolve_paths(&mut doc);
     crate::guide_resources::resolve_guides(&mut doc);
     Ok(doc)
 }
 
-fn read_container(bytes: &[u8], policy: Policy) -> Result<Document, PsdError> {
+fn read_container(
+    bytes: &[u8],
+    policy: Policy,
+    budget: &mut DecodeBudget,
+) -> Result<Document, PsdError> {
     let mut r = Reader::new(bytes);
     let sig = r.u32()?;
     if sig != SIGNATURE {
@@ -109,6 +135,17 @@ fn read_container(bytes: &[u8], policy: Policy) -> Result<Document, PsdError> {
             ))
         || (depth == 1 && mode == ColorMode::Bitmap);
     let source_depth = depth_bits(depth);
+    // The composite's planes (or the blank one a layered file without a merged
+    // image gets) are charged before any section is read.
+    for _ in 0..channels {
+        charge_plane(
+            budget,
+            "composite plane",
+            width as usize,
+            height as usize,
+            depth,
+        )?;
+    }
 
     // Color mode data section: 4-byte length + opaque bytes, kept verbatim.
     // An Indexed palette is interpreted and consumed (see `normalize`).
@@ -120,7 +157,7 @@ fn read_container(bytes: &[u8], policy: Policy) -> Result<Document, PsdError> {
     let image_resources = r.take(resources_len)?.to_vec();
     // Layer and mask information section: 4-byte length (8 in PSB).
     let (mut layers, global_layer_mask, layer_section_extra, layer_compression) =
-        read_layer_section(&mut r, is_psb, color_count, depth, retain_planes)?;
+        read_layer_section(&mut r, is_psb, color_count, depth, retain_planes, budget)?;
     // Derive the smart-object view from the preserved bytes; a malformed
     // descriptor or linked-layer record degrades to Unresolved (design D5).
     crate::smart_object::resolve_smart_objects(&mut layers, &layer_section_extra, is_psb);
@@ -401,100 +438,6 @@ fn split_planes(
     ))
 }
 
-/// Inflate a ZIP channel payload. The reference writes a zlib-framed stream; some
-/// third-party writers emit raw deflate, so fall back to that if zlib framing
-/// is absent. The decode is bounded to `expected` bytes so a crafted stream
-/// cannot expand without limit; output shorter or longer than `expected` is
-/// rejected with a typed error. This is a deliberate divergence from psd-tools,
-/// which catches an over-long stream and substitutes a black channel with a
-/// warning.
-fn inflate(payload: &[u8], expected: usize) -> Result<Vec<u8>, PsdError> {
-    // `+1` so an over-long stream is detected rather than silently truncated.
-    let limit = expected.saturating_add(1) as u64;
-    let mut out = Vec::new();
-    if ZlibDecoder::new(payload)
-        .take(limit)
-        .read_to_end(&mut out)
-        .is_err()
-    {
-        out.clear();
-        if DeflateDecoder::new(payload)
-            .take(limit)
-            .read_to_end(&mut out)
-            .is_err()
-        {
-            return Err(PsdError::Unsupported("ZIP channel data".into()));
-        }
-    }
-    match out.len().cmp(&expected) {
-        std::cmp::Ordering::Less => Err(PsdError::Invalid("ZIP payload too short".into())),
-        std::cmp::Ordering::Greater => Err(PsdError::Invalid("ZIP payload too long".into())),
-        std::cmp::Ordering::Equal => Ok(out),
-    }
-}
-
-fn read_rle(
-    r: &mut Reader,
-    channels: usize,
-    row_bytes: usize,
-    height: usize,
-    is_psb: bool,
-) -> Result<Vec<u8>, PsdError> {
-    let rows = channels
-        .checked_mul(height)
-        .ok_or_else(|| PsdError::Invalid("image dimensions overflow".into()))?;
-    // Scanline byte-count table: 2-byte entries in PSD, 4-byte in PSB.
-    let mut counts = Vec::with_capacity(rows);
-    for _ in 0..rows {
-        counts.push(read_rle_count(r, is_psb)?);
-    }
-
-    let mut out = vec![0u8; planar_len(channels, row_bytes, height)?];
-    let plane = row_bytes * height;
-    for (i, &count) in counts.iter().enumerate() {
-        let packed = r.take(count)?;
-        let channel = i / height;
-        let row = i % height;
-        let start = channel * plane + row * row_bytes;
-        decode_packbits(packed, &mut out[start..start + row_bytes])?;
-    }
-    Ok(out)
-}
-
-/// Decode one PackBits scanline into `dst` (exactly `dst.len()` bytes).
-fn decode_packbits(src: &[u8], dst: &mut [u8]) -> Result<(), PsdError> {
-    let mut si = 0usize;
-    let mut di = 0usize;
-    while di < dst.len() {
-        let control = *src
-            .get(si)
-            .ok_or_else(|| PsdError::Invalid("RLE underrun".into()))? as i8;
-        si += 1;
-        if control >= 0 {
-            let count = control as usize + 1;
-            if si + count > src.len() || di + count > dst.len() {
-                return Err(PsdError::Invalid("RLE literal overrun".into()));
-            }
-            dst[di..di + count].copy_from_slice(&src[si..si + count]);
-            si += count;
-            di += count;
-        } else if control != -128 {
-            let count = (1 - control as i32) as usize; // -1 => 2, -127 => 128
-            let value = *src
-                .get(si)
-                .ok_or_else(|| PsdError::Invalid("RLE underrun".into()))?;
-            si += 1;
-            if di + count > dst.len() {
-                return Err(PsdError::Invalid("RLE repeat overrun".into()));
-            }
-            dst[di..di + count].fill(value);
-            di += count;
-        }
-        // control == -128 is a no-op.
-    }
-    Ok(())
-}
-
 // ---------------------------------------------------------------------------
 // Layer and mask information section — reading
 // ---------------------------------------------------------------------------
@@ -520,6 +463,7 @@ fn read_layer_section(
     color_channels: usize,
     depth: u16,
     retain: bool,
+    budget: &mut DecodeBudget,
 ) -> Result<LayerSection, PsdError> {
     let section_len = if is_psb {
         r.u64()? as usize
@@ -553,7 +497,7 @@ fn read_layer_section(
             return Err(PsdError::Invalid("layer info exceeds layer section".into()));
         }
         (layers, layer_compression) =
-            read_layer_info(r, is_psb, info_end, color_channels, depth, retain)?;
+            read_layer_info(r, is_psb, info_end, color_channels, depth, retain, budget)?;
         r.pos = info_end;
     }
 
@@ -583,6 +527,7 @@ fn read_layer_info(
     color_channels: usize,
     depth: u16,
     retain: bool,
+    budget: &mut DecodeBudget,
 ) -> Result<(LayerStack, Option<Compression>), PsdError> {
     let count = r.i16()?;
     let n = count.unsigned_abs() as usize;
@@ -622,6 +567,7 @@ fn read_layer_info(
                 let (data, native) = if depth == 8 {
                     (r.take(len)?.to_vec(), None)
                 } else {
+                    charge_channel(budget, len, layer_w, layer_h, depth)?;
                     let (plane, _, native) =
                         read_channel_data(r, len, layer_w, layer_h, is_psb, depth)?;
                     let mut stream = Vec::with_capacity(2 + plane.len());
@@ -644,6 +590,7 @@ fn read_layer_info(
             } else {
                 (layer_w, layer_h)
             };
+            charge_channel(budget, len, w, h, depth)?;
             let (data, code, native) = read_channel_data(r, len, w, h, is_psb, depth)?;
             if retain {
                 if let Some(native) = native {
@@ -697,9 +644,43 @@ fn read_layer_info(
         return Err(PsdError::Invalid("layer records exceed layer info".into()));
     }
     r.pos = info_end;
-    let mut layers = build_tree(raws);
+    let mut layers = build_tree(raws)?;
     derive_background(&mut layers);
     Ok((layers, layer_compression))
+}
+
+/// Charge the allocations one `width` × `height` plane costs while it decodes
+/// at `depth`: the native plane plus its 8-bit narrowing, or a depth-1 plane
+/// expanded through one three-plane RGB allocation and then copied.
+fn charge_plane(
+    budget: &mut DecodeBudget,
+    what: &str,
+    width: usize,
+    height: usize,
+    depth: u16,
+) -> Result<(), PsdError> {
+    match depth {
+        1 => budget.charge(what, &[width, height, 3])?,
+        16 | 32 => budget.charge(what, &[width, height, depth as usize / 8])?,
+        _ => 0,
+    };
+    budget.charge(what, &[width, height])?;
+    Ok(())
+}
+
+/// Charge one layer channel's decoded plane before it is allocated. An empty
+/// channel (`declared_len == 0`) decodes to nothing and costs nothing.
+fn charge_channel(
+    budget: &mut DecodeBudget,
+    declared_len: usize,
+    width: usize,
+    height: usize,
+    depth: u16,
+) -> Result<(), PsdError> {
+    if declared_len != 0 {
+        charge_plane(budget, "layer channel", width, height, depth)?;
+    }
+    Ok(())
 }
 
 /// PSD has no background bit: the bottom top-level, non-group layer named
@@ -977,195 +958,34 @@ fn parse_luni(data: &[u8]) -> Option<String> {
     )
 }
 
-fn read_rle_count(r: &mut Reader, is_psb: bool) -> Result<usize, PsdError> {
-    Ok(if is_psb {
-        r.u32()? as usize
-    } else {
-        r.u16()? as usize
-    })
-}
-
-/// A decoded layer channel: 8-bit plane, compression word, optional native samples.
-type ChannelRead = (Vec<u8>, u16, Option<Samples>);
-
-/// Read one layer channel's image data. `declared_len` includes the 2-byte
-/// compression header. A depth-1 channel is bit-packed and expanded to an 8-bit
-/// plane; a 16/32-bit channel is decoded at the document depth and narrowed, so
-/// the layer path matches the composite. Returns the 8-bit plane, the
-/// compression word, and at 16/32 the pre-narrow native plane for retention.
-fn read_channel_data(
-    r: &mut Reader,
-    declared_len: usize,
-    width: usize,
-    height: usize,
-    is_psb: bool,
-    depth: u16,
-) -> Result<ChannelRead, PsdError> {
-    if declared_len == 0 {
-        return Ok((Vec::new(), COMPRESSION_RAW, None));
-    }
-    if declared_len < 2 {
-        return Err(PsdError::Invalid(format!(
-            "layer channel length {declared_len}"
-        )));
-    }
-    let compression = r.u16()?;
-    let payload = r.take(declared_len - 2)?;
-    match depth {
-        1 => Ok((
-            decode_bitmap_channel(compression, payload, width, height, is_psb)?,
-            compression,
-            None,
-        )),
-        8 => Ok((
-            decode_channel_data(compression, payload, width, height, is_psb)?,
-            compression,
-            None,
-        )),
-        _ => {
-            let (data, native) =
-                decode_depth_channel(compression, payload, width, height, is_psb, depth)?;
-            Ok((data, compression, Some(native)))
-        }
-    }
-}
-
-/// Decode a 16/32-bit layer channel: it is decoded at the document depth (raw,
-/// RLE, or ZIP/ZIP-with-prediction) and returned both narrowed to an 8-bit
-/// `width * height` plane and as its native pre-narrow samples, mirroring the
-/// composite path so layer and composite agree.
-fn decode_depth_channel(
-    compression: u16,
-    payload: &[u8],
-    width: usize,
-    height: usize,
-    is_psb: bool,
-    depth: u16,
-) -> Result<(Vec<u8>, Samples), PsdError> {
-    let stride = row_bytes(width, depth);
-    let plane = stride
-        .checked_mul(height)
-        .ok_or_else(|| PsdError::Invalid("channel size overflow".into()))?;
-    let raw = match compression {
-        COMPRESSION_RAW => {
-            if payload.len() < plane {
-                return Err(PsdError::Invalid("raw channel too short".into()));
-            }
-            payload[..plane].to_vec()
-        }
-        COMPRESSION_RLE => decode_rle_channel(payload, stride, height, is_psb)?,
-        COMPRESSION_ZIP | COMPRESSION_ZIP_PREDICTION => {
-            let mut data = inflate(payload, plane)?;
-            if compression == COMPRESSION_ZIP_PREDICTION {
-                undo_prediction(&mut data, width, height, depth);
-            }
-            data
-        }
-        c => return Err(PsdError::Unsupported(format!("channel compression {c}"))),
-    };
-    let samples = Samples::from_bytes(&raw, depth_bits(depth).expect("16/32-bit channel"));
-    let narrowed = samples.narrow_to_u8();
-    Ok((narrowed, samples))
-}
-
-/// Decode a depth-1 layer channel to an 8-bit `width * height` plane. Raw and RLE
-/// rows are `ceil(width / 8)` bytes, MSB-first; ZIP is unsupported (as for the
-/// composite at depth 1). The bit is expanded through the same
-/// [`crate::color_mode::bitmap_rows_to_rgb`] helper the composite uses.
-fn decode_bitmap_channel(
-    compression: u16,
-    payload: &[u8],
-    width: usize,
-    height: usize,
-    is_psb: bool,
-) -> Result<Vec<u8>, PsdError> {
-    let row_bytes = row_bytes(width, 1);
-    let plane = row_bytes
-        .checked_mul(height)
-        .ok_or_else(|| PsdError::Invalid("channel size overflow".into()))?;
-    let packed = match compression {
-        COMPRESSION_RAW => {
-            if payload.len() < plane {
-                return Err(PsdError::Invalid("raw channel too short".into()));
-            }
-            payload[..plane].to_vec()
-        }
-        COMPRESSION_RLE => decode_rle_channel(payload, row_bytes, height, is_psb)?,
-        COMPRESSION_ZIP | COMPRESSION_ZIP_PREDICTION => {
-            return Err(PsdError::Unsupported("ZIP compression at depth 1".into()))
-        }
-        c => return Err(PsdError::Unsupported(format!("channel compression {c}"))),
-    };
-    let rgb = crate::color_mode::bitmap_rows_to_rgb(&packed, width, height);
-    Ok(rgb[..width * height].to_vec())
-}
-
-pub(crate) fn decode_rle_channel(
-    payload: &[u8],
-    width: usize,
-    height: usize,
-    is_psb: bool,
-) -> Result<Vec<u8>, PsdError> {
-    let mut pr = Reader::new(payload);
-    let mut counts = Vec::with_capacity(height);
-    for _ in 0..height {
-        counts.push(read_rle_count(&mut pr, is_psb)?);
-    }
-    let mut out = vec![0u8; width * height];
-    for (row, &count) in counts.iter().enumerate() {
-        let packed = pr.take(count)?;
-        decode_packbits(packed, &mut out[row * width..(row + 1) * width])?;
-    }
-    Ok(out)
-}
-
-/// Decode one 8-bit channel plane from its compression byte and payload. Shared
-/// by layer channel data (via [`read_channel_data`]) and the document Patterns
-/// resource, whose `VirtualMemoryArray` channels carry the same encodings.
-/// `is_psb` selects the RLE scanline-count width (u32 in a PSB, u16 otherwise);
-/// pattern channel counts are always u16 (version 1).
-pub(crate) fn decode_channel_data(
-    compression: u16,
-    payload: &[u8],
-    width: usize,
-    height: usize,
-    is_psb: bool,
-) -> Result<Vec<u8>, PsdError> {
-    let pixels = width
-        .checked_mul(height)
-        .ok_or_else(|| PsdError::Invalid("channel size overflow".into()))?;
-    match compression {
-        COMPRESSION_RAW => {
-            if payload.len() < pixels {
-                return Err(PsdError::Invalid("raw channel too short".into()));
-            }
-            Ok(payload[..pixels].to_vec())
-        }
-        COMPRESSION_RLE => decode_rle_channel(payload, width, height, is_psb),
-        COMPRESSION_ZIP | COMPRESSION_ZIP_PREDICTION => {
-            let mut data = inflate(payload, pixels)?;
-            if compression == COMPRESSION_ZIP_PREDICTION {
-                undo_prediction(&mut data, width, height, 8);
-            }
-            Ok(data)
-        }
-        c => Err(PsdError::Unsupported(format!("channel compression {c}"))),
-    }
-}
-
 /// Assemble the bottom-first layer tree from flat records. Section dividers
-/// (`'lsct'` type 3) open a group; folder records (types 1/2) close it.
-fn build_tree(raws: Vec<RawLayer>) -> LayerStack {
+/// (`'lsct'` type 3) open a group; folder records (types 1/2) close it. Nesting
+/// deeper than [`MAX_GROUP_DEPTH`] is refused.
+fn build_tree(raws: Vec<RawLayer>) -> Result<LayerStack, PsdError> {
     let mut stack: Vec<Vec<Layer>> = vec![Vec::new()];
     for raw in raws {
         match raw.section {
-            Some(SECTION_DIVIDER) => stack.push(Vec::new()),
+            Some(SECTION_DIVIDER) => {
+                if stack.len() > MAX_GROUP_DEPTH {
+                    return Err(PsdError::Unsupported(format!(
+                        "layer groups nested deeper than {MAX_GROUP_DEPTH}"
+                    )));
+                }
+                stack.push(Vec::new());
+            }
             Some(SECTION_OPEN_FOLDER) | Some(SECTION_CLOSED_FOLDER) => {
                 let mut group = raw.layer;
                 group.is_group = true;
                 group.channels = Vec::new();
                 group.mask = None;
-                group.children = LayerStack::from_layers(stack.pop().unwrap_or_default());
+                // A folder with no open divider closes an empty group; the
+                // root level is never popped.
+                let children = if stack.len() > 1 {
+                    stack.pop().unwrap_or_default()
+                } else {
+                    Vec::new()
+                };
+                group.children = LayerStack::from_layers(children);
                 stack.last_mut().unwrap().push(group);
             }
             _ => stack.last_mut().unwrap().push(raw.layer),
@@ -1177,7 +997,7 @@ fn build_tree(raws: Vec<RawLayer>) -> LayerStack {
         let contents = stack.pop().unwrap();
         stack.last_mut().unwrap().extend(contents);
     }
-    LayerStack::from_layers(stack.pop().unwrap())
+    Ok(LayerStack::from_layers(stack.pop().unwrap()))
 }
 
 #[cfg(test)]

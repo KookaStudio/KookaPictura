@@ -572,12 +572,14 @@ pub struct PsdRect {
 }
 
 impl PsdRect {
+    /// Saturating, so a hostile rect spanning the whole `i32` range reads as
+    /// huge (and is refused by the decode budget) rather than overflowing.
     pub fn width(&self) -> i32 {
-        self.right - self.left
+        self.right.saturating_sub(self.left)
     }
 
     pub fn height(&self) -> i32 {
-        self.bottom - self.top
+        self.bottom.saturating_sub(self.top)
     }
 }
 

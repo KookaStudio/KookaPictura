@@ -4,6 +4,9 @@ use pictura_core::{
 };
 use pictura_paint::{PaintMode, Rgba};
 use pictura_select::CombineMode;
+
+pub(super) mod safe_io;
+
 /// Build an adjustment layer for `kind`, or `None` for an unknown kind.
 ///
 /// Most defaults are chosen so a freshly added layer visibly changes the

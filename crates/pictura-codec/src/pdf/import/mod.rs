@@ -2,6 +2,8 @@
 //! and page renders through Ghostscript (design D2, D3), and Images mode over
 //! a minimal object reader (D4).
 
+#[cfg(test)]
+mod hostile_tests;
 mod images;
 pub(crate) mod objects;
 #[cfg(test)]
@@ -11,7 +13,14 @@ use std::path::Path;
 
 pub use images::PdfImage;
 
+use crate::budget::rgba_within_budget as within_budget;
 use crate::ghostscript::{png_args, read_png, Ghostscript, Raster, RasterError, ScratchDir};
+use crate::probe::ImageBudget;
+
+/// The most pages the Import PDF dialog lists, probes, and thumbnails.
+pub const MAX_PAGES: usize = 500;
+/// The most image XObjects Images mode lists.
+pub const MAX_IMAGES: usize = 500;
 
 /// A rectangle in PDF points.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -146,7 +155,7 @@ pub struct Rendered {
 
 const PAGE_INFO: &str = "/F InputFile (r) file def F runpdfbegin \
 (PAGES ) print pdfpagecount == flush \
-1 1 pdfpagecount { dup pdfgetpage (PAGE ) print exch ==only \
+1 1 pdfpagecount dup 500 gt { pop 500 } if { dup pdfgetpage (PAGE ) print exch ==only \
 [/MediaBox /CropBox /BleedBox /TrimBox /ArtBox /Rotate] \
 { 2 copy known { ( ) print dup ==only ( ) print 2 copy get ==only } if pop } forall \
 pop () = flush } for runpdfend";
@@ -165,7 +174,8 @@ pub fn page_info(
         PAGE_INFO.to_string(),
     ];
     let run = gs.run(path, password, &args)?;
-    let pages = parse_page_info(&run.output);
+    let mut pages = parse_page_info(&run.output);
+    pages.truncate(MAX_PAGES);
     if pages.is_empty() {
         return Err(RasterError::Failed("no pages".into()));
     }
@@ -313,6 +323,11 @@ pub fn render_area(
     if width == 0 || height == 0 || area.width() <= 0.0 || area.height() <= 0.0 {
         return Err(RasterError::Failed("empty page area".into()));
     }
+    if !within_budget(width, height) {
+        return Err(RasterError::Failed(
+            "page size over the image budget".into(),
+        ));
+    }
     let rx = 72.0 * f64::from(width) / area.width();
     let ry = 72.0 * f64::from(height) / area.height();
     let scratch = ScratchDir::new()?;
@@ -332,8 +347,8 @@ pub fn render_area(
     })
 }
 
-/// Render every page so the longest page side is `longest` pixels; smaller
-/// pages keep their relative size.
+/// Render every page (at most [`MAX_PAGES`]) so the longest page side is
+/// `longest` pixels; smaller pages keep their relative size.
 pub fn render_thumbnails(
     gs: &Ghostscript,
     path: &Path,
@@ -341,6 +356,7 @@ pub fn render_thumbnails(
     pages: &[PageInfo],
     longest: u32,
 ) -> Result<Vec<Raster>, RasterError> {
+    let pages = &pages[..pages.len().min(MAX_PAGES)];
     let side = pages
         .iter()
         .map(|p| {
@@ -351,15 +367,20 @@ pub fn render_thumbnails(
     let res = 72.0 * f64::from(longest) / side;
     let scratch = ScratchDir::new()?;
     let pattern = scratch.path("p%d.png");
-    gs.run(path, password, &png_args(res, res, true, &pattern, path))?;
+    let mut args = vec![format!("-dLastPage={}", pages.len())];
+    args.extend(png_args(res, res, true, &pattern, path));
+    gs.run(path, password, &args)?;
     (1..=pages.len())
         .map(|i| read_png(&scratch.path(&format!("p{i}.png"))))
         .collect()
 }
 
 /// `w` × `h` pixels of `src` starting at (`left`, `top`); outside is
-/// transparent.
+/// transparent. A size over the [`ImageBudget`] yields an empty raster.
 pub(crate) fn crop_raster(src: &Raster, left: i64, top: i64, w: u32, h: u32) -> Raster {
+    if !within_budget(w, h) {
+        return Raster::default();
+    }
     let mut rgba = vec![0u8; w as usize * h as usize * 4];
     for y in 0..h as i64 {
         let sy = top + y;
@@ -383,6 +404,19 @@ pub(crate) fn crop_raster(src: &Raster, left: i64, top: i64, w: u32, h: u32) -> 
     }
 }
 
+/// The factor (at most 1) that brings a `width` × `height` RGBA render inside
+/// the default [`ImageBudget`]: an image dictionary's declared size is the
+/// file's to choose.
+pub(crate) fn budget_scale(width: u32, height: u32) -> f64 {
+    let budget = ImageBudget::default();
+    let side = f64::from(width.max(height).max(1));
+    let by_side = f64::from(budget.max_dimension) / side;
+    let pixels = f64::from(width.max(1)) * f64::from(height.max(1));
+    let by_area = (budget.max_alloc_bytes as f64 / 4.0 / pixels).sqrt();
+    // A whisker under the bound, so Ghostscript's rounding up stays inside it.
+    (by_side.min(by_area) * 0.999).min(1.0)
+}
+
 /// The image XObjects of one PDF (Images mode).
 pub struct PdfImages {
     objects: objects::PdfObjects,
@@ -397,8 +431,8 @@ impl PdfImages {
         Some(PdfImages { objects, images })
     }
 
-    /// Render image `index` at its own pixel size; `longest` scales it down
-    /// for a thumbnail.
+    /// Render image `index` at its own pixel size, scaled down to fit the
+    /// [`ImageBudget`]; `longest` scales it down for a thumbnail.
     pub fn render(
         &self,
         gs: &Ghostscript,
@@ -416,7 +450,8 @@ impl PdfImages {
         std::fs::write(&input, wrapped).map_err(|e| RasterError::Failed(e.to_string()))?;
         let out = scratch.path("image.png");
         let side = image.width.max(image.height);
-        let res = longest.map_or(72.0, |l| 72.0 * f64::from(l.min(side)) / f64::from(side));
+        let res = longest.map_or(72.0, |l| 72.0 * f64::from(l.min(side)) / f64::from(side))
+            * budget_scale(image.width, image.height);
         let run = gs.run(&input, None, &png_args(res, res, false, &out, &input))?;
         let raster = read_png(&out)?;
         Ok(Rendered {

@@ -301,6 +301,8 @@ int main(int argc, char* argv[])
             return 153;
         }
         std::fprintf(stderr, "pictura control: %s\n", qPrintable(controlServer.socketPath()));
+        std::fprintf(stderr, "pictura control token: %s\n",
+                     qPrintable(controlServer.tokenPath()));
         std::fflush(stderr);
         QObject::connect(&app, &QApplication::aboutToQuit, &controlServer,
                          &pictura::ControlServer::shutdown);

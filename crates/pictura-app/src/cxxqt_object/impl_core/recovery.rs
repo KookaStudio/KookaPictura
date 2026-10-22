@@ -11,7 +11,6 @@ use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
 use pictura_core::Document;
-use std::io::Write;
 
 #[cxx_qt::bridge]
 pub mod ffi {
@@ -72,16 +71,7 @@ fn write_snapshot(mut doc: Document, path: &str) -> std::io::Result<()> {
     pictura_render::refresh_native_composite(&mut doc);
     let bytes = pictura_codec::write_psd(&pictura_render::save_view(&doc))
         .map_err(|e| std::io::Error::other(e.to_string()))?;
-    let tmp = format!("{path}.tmp");
-    let written = std::fs::File::create(&tmp).and_then(|mut file| {
-        file.write_all(&bytes)?;
-        file.sync_all()
-    });
-    if let Err(e) = written.and_then(|()| std::fs::rename(&tmp, path)) {
-        let _ = std::fs::remove_file(&tmp);
-        return Err(e);
-    }
-    Ok(())
+    super::super::helpers::safe_io::write_atomically(path, &bytes, true)
 }
 
 #[cfg(test)]

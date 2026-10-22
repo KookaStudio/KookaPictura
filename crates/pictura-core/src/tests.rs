@@ -438,3 +438,21 @@ fn a_cloned_document_shares_its_planes_until_a_write_forks_them() {
     );
     assert_eq!(doc.layers[0].channels[1].data[0], untouched_before);
 }
+
+#[test]
+fn psd_rect_extent_saturates_instead_of_overflowing() {
+    let rect = PsdRect {
+        top: i32::MIN,
+        left: i32::MIN,
+        bottom: i32::MAX,
+        right: i32::MAX,
+    };
+    assert_eq!((rect.width(), rect.height()), (i32::MAX, i32::MAX));
+    let inverted = PsdRect {
+        top: i32::MAX,
+        left: i32::MAX,
+        bottom: i32::MIN,
+        right: i32::MIN,
+    };
+    assert_eq!(inverted.width(), i32::MIN);
+}

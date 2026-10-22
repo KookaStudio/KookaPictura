@@ -4,9 +4,13 @@
 //! decrypting a password-protected one first. Any other PDF goes through
 //! `import` (#627).
 
-use std::io::Read as _;
+use std::collections::HashSet;
 
 use super::import::objects::{decode_stream, Dict, Object, PdfObjects, Unlock};
+use crate::probe::ImageBudget;
+
+/// The widest or tallest composite a rebuilt PSD header can carry (version 1).
+const MAX_EDITING_DIMENSION: i64 = 30_000;
 
 /// What a PDF's editing data opens as.
 #[derive(Debug, PartialEq, Eq)]
@@ -41,12 +45,20 @@ pub fn editing_psd(pdf: &[u8], password: &str) -> EditingPsd {
         .map_or(EditingPsd::Absent, EditingPsd::Psd)
 }
 
-/// The first leaf page's `/PieceInfo /<owner> /Private` dictionary.
+/// The first leaf page's `/PieceInfo /<owner> /Private` dictionary. A page
+/// tree that loops back on itself has no first leaf.
 fn private_data<'a>(file: &'a PdfObjects, owner: &str) -> Option<&'a Dict> {
     let catalog = file.resolve_dict(file.trailer.get("Root"))?;
     let mut node = file.resolve_dict(catalog.get("Pages"))?;
+    let mut visited = HashSet::new();
     while let Some(Object::Array(kids)) = node.get("Kids").map(|k| file.resolve(k)) {
-        node = file.resolve_dict(kids.first())?;
+        let kid = kids.first()?;
+        if let Object::Ref(num) = kid {
+            if !visited.insert(*num) {
+                return None;
+            }
+        }
+        node = file.resolve_dict(Some(kid))?;
     }
     file.resolve_dict(
         file.resolve_dict(file.resolve_dict(node.get("PieceInfo"))?.get(owner))?
@@ -92,11 +104,20 @@ pub fn embedded_psd(pdf: &[u8]) -> Option<Vec<u8>> {
         .ok()?;
     let start = find(pdf, b"stream\n", dict_end)? + b"stream\n".len();
     let data = pdf.get(start..start.checked_add(length)?)?;
+    let psd = inflate_payload(data, ImageBudget::default().max_alloc_bytes)?;
+    psd.starts_with(b"8BPS").then_some(psd)
+}
+
+/// Inflate an embedded PSD payload, or `None` past `limit` bytes or on a
+/// damaged stream.
+fn inflate_payload(data: &[u8], limit: u64) -> Option<Vec<u8>> {
+    use std::io::Read as _;
     let mut psd = Vec::new();
     flate2::read::ZlibDecoder::new(data)
+        .take(limit.saturating_add(1))
         .read_to_end(&mut psd)
         .ok()?;
-    psd.starts_with(b"8BPS").then_some(psd)
+    (psd.len() as u64 <= limit).then_some(psd)
 }
 
 /// A PSD rebuilt from the editing data Photoshop stores in a PDF saved with
@@ -143,13 +164,17 @@ fn photoshop_psd_in(file: &PdfObjects) -> Option<Vec<u8>> {
             .and_then(Object::as_int)
     };
     let (width, height, depth) = (int("Width")?, int("Height")?, int("BitsPerComponent")?);
-    if !(depth == 8 || depth == 16) || width <= 0 || height <= 0 {
+    if !(depth == 8 || depth == 16)
+        || !(1..=MAX_EDITING_DIMENSION).contains(&width)
+        || !(1..=MAX_EDITING_DIMENSION).contains(&height)
+    {
         return None;
     }
     let (channels, mode) = composite_mode(file, composite_dict.get("ColorSpace")?)?;
     let bytes = depth as usize / 8;
-    let plane = width as usize * height as usize * bytes;
-    if composite.len() < plane * channels {
+    let pixels = width as usize * height as usize;
+    let plane = pixels.checked_mul(bytes)?;
+    if composite.len() < plane.checked_mul(channels)? {
         return None;
     }
 
@@ -182,6 +207,11 @@ fn photoshop_psd_in(file: &PdfObjects) -> Option<Vec<u8>> {
         layer_info.push(0);
     }
 
+    // Every length below must fit its PSD field; a larger one is refused,
+    // never truncated into a different file.
+    let section = 4 + layer_info.len() + 4 + global_mask.len() + tagged.len();
+    u32::try_from(section).ok()?;
+    u32::try_from(resources.len()).ok()?;
     let u16b = |v: usize| (v as u16).to_be_bytes();
     let u32b = |v: usize| (v as u32).to_be_bytes();
     let mut psd = b"8BPS".to_vec();
@@ -195,7 +225,6 @@ fn photoshop_psd_in(file: &PdfObjects) -> Option<Vec<u8>> {
     psd.extend_from_slice(&u32b(0));
     psd.extend_from_slice(&u32b(resources.len()));
     psd.extend_from_slice(&resources);
-    let section = 4 + layer_info.len() + 4 + global_mask.len() + tagged.len();
     psd.extend_from_slice(&u32b(section));
     psd.extend_from_slice(&u32b(layer_info.len()));
     psd.extend_from_slice(&layer_info);
@@ -204,7 +233,6 @@ fn photoshop_psd_in(file: &PdfObjects) -> Option<Vec<u8>> {
     psd.extend_from_slice(&tagged);
     // Raw planar image data from the interleaved composite.
     psd.extend_from_slice(&u16b(0));
-    let pixels = width as usize * height as usize;
     // PSD stores CMYK as ink-inverted values; PDF DeviceCMYK is ink amount.
     let invert = mode == 4;
     for c in 0..channels {
@@ -243,5 +271,78 @@ fn composite_mode(file: &PdfObjects, space: &Object) -> Option<(usize, usize)> {
             _ => None,
         },
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn zlib(data: &[u8]) -> Vec<u8> {
+        use std::io::Write as _;
+        let mut enc = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::fast());
+        enc.write_all(data).unwrap();
+        enc.finish().unwrap()
+    }
+
+    #[test]
+    fn an_embedded_payload_past_the_limit_is_refused() {
+        let payload = zlib(&[0u8; 4096]);
+        assert_eq!(inflate_payload(&payload, 4096).map(|p| p.len()), Some(4096));
+        assert_eq!(inflate_payload(&payload, 4095), None);
+    }
+
+    /// A one-page PDF whose page `PieceInfo /AdobePhotoshop /Private` holds
+    /// the three editing streams, the composite with `composite` as its dict.
+    fn photoshop_pdf(composite: &str, pages: &str) -> Vec<u8> {
+        let mut pdf = b"%PDF-1.7\n".to_vec();
+        let objects = [
+            "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
+            pages.to_string(),
+            "<< /Type /Page /Parent 2 0 R /PieceInfo << /AdobePhotoshop << /Private 4 0 R >> >> >>"
+                .to_string(),
+            "<< /ImageResources 5 0 R /StandardImageFileData 6 0 R /CompositeImage 7 0 R >>"
+                .to_string(),
+        ];
+        for (i, body) in objects.iter().enumerate() {
+            pdf.extend_from_slice(format!("{} 0 obj\n{body}\nendobj\n", i + 1).as_bytes());
+        }
+        for (num, dict, data) in [
+            (5, "<< /Length 0 >>", &b""[..]),
+            (6, "<< /Length 0 >>", &b""[..]),
+            (7, composite, &[0u8; 6][..]),
+        ] {
+            pdf.extend_from_slice(format!("{num} 0 obj\n{dict}\nstream\n").as_bytes());
+            pdf.extend_from_slice(data);
+            pdf.extend_from_slice(b"\nendstream\nendobj\n");
+        }
+        pdf.extend_from_slice(b"trailer\n<< /Root 1 0 R >>\n%%EOF\n");
+        pdf
+    }
+
+    #[test]
+    fn an_overflowing_composite_size_is_refused() {
+        // Width 2^62 + 1 wrapped `width * height * bytes` past the 6-byte
+        // composite before the dimension cap (#844 H4).
+        let pdf = photoshop_pdf(
+            "<< /Length 6 /Width 4611686018427387905 /Height 2 /BitsPerComponent 8 /ColorSpace /DeviceGray >>",
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        );
+        assert_eq!(photoshop_psd(&pdf), None);
+        let fits = photoshop_pdf(
+            "<< /Length 6 /Width 3 /Height 2 /BitsPerComponent 8 /ColorSpace /DeviceGray >>",
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        );
+        assert!(photoshop_psd(&fits).is_some_and(|psd| psd.starts_with(b"8BPS")));
+    }
+
+    #[test]
+    fn a_self_referential_page_tree_ends() {
+        // `/Kids [2 0 R]` on the Pages node itself looped forever (#844 H6).
+        let pdf = photoshop_pdf(
+            "<< /Length 6 /Width 3 /Height 2 /BitsPerComponent 8 /ColorSpace /DeviceGray >>",
+            "<< /Type /Pages /Kids [2 0 R] /Count 1 >>",
+        );
+        assert_eq!(photoshop_psd(&pdf), None);
     }
 }

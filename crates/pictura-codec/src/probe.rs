@@ -38,10 +38,15 @@ pub struct ImageBudget {
     pub max_dimension: u32,
     /// Maximum `width * height * 4` decoded allocation, in bytes.
     pub max_alloc_bytes: u64,
+    /// Maximum bytes one document's decoded planes may claim in all. The
+    /// default is three quarters of the memory available when it is read,
+    /// never less than one `max_alloc_bytes` allocation (#844).
+    pub max_document_bytes: u64,
 }
 
 impl Default for ImageBudget {
     fn default() -> Self {
+        const MAX_ALLOC_BYTES: u64 = 2 * 1024 * 1024 * 1024;
         Self {
             max_dimension: 30_000,
             // 2 GiB admits a 16000²-class RGBA import (the canvas target):
@@ -49,7 +54,11 @@ impl Default for ImageBudget {
             // 30 000 px dimension cap remains the outer limit. The Qt decode edge
             // raises QImageReader's separate 256 MB allocation limit to match
             // (see crates/pictura-app/cpp/decode_image.cpp).
-            max_alloc_bytes: 2 * 1024 * 1024 * 1024,
+            max_alloc_bytes: MAX_ALLOC_BYTES,
+            max_document_bytes: crate::budget::document_bytes(
+                crate::budget::available_memory(),
+                MAX_ALLOC_BYTES,
+            ),
         }
     }
 }

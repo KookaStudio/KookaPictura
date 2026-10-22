@@ -68,14 +68,20 @@ PdfImportProbe PdfImportProbe::parse(const QString& text)
 
 QVector<QImage> unpackThumbnails(const QByteArray& packed)
 {
+    // A side past this is no thumbnail; it also keeps `w * h * 4` and the
+    // int-typed QImage arguments far from overflow (#844 M8).
+    constexpr quint32 kMaxSide = 30000;
     QVector<QImage> out;
     qsizetype at = 0;
-    while (at + 8 <= packed.size()) {
+    while (packed.size() - at >= 8) {
         const quint32 w = qFromLittleEndian<quint32>(packed.constData() + at);
         const quint32 h = qFromLittleEndian<quint32>(packed.constData() + at + 4);
-        const qsizetype bytes = qsizetype(w) * h * 4;
         at += 8;
-        if (w == 0 || h == 0 || at + bytes > packed.size()) {
+        if (w == 0 || h == 0 || w > kMaxSide || h > kMaxSide) {
+            break;
+        }
+        const qint64 bytes = qint64(w) * qint64(h) * 4;
+        if (bytes > packed.size() - at) {
             break;
         }
         QImage image(reinterpret_cast<const uchar*>(packed.constData() + at), int(w), int(h),

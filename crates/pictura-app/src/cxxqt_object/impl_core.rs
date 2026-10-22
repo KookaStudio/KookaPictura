@@ -247,12 +247,7 @@ impl qobject::PictureView {
                     };
                     bytes
                 };
-                let tmp = format!("{path}.tmp");
-                if std::fs::write(&tmp, &bytes).is_err() {
-                    return false;
-                }
-                if std::fs::rename(&tmp, &path).is_err() {
-                    let _ = std::fs::remove_file(&tmp);
+                if super::helpers::safe_io::write_atomically(&path, &bytes, false).is_err() {
                     return false;
                 }
             }

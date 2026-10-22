@@ -103,8 +103,12 @@ fn aes_encrypt(key: &[u8], iv: [u8; 16], data: &[u8]) -> Vec<u8> {
     out
 }
 
-/// AES-CBC decryption over whole blocks of `data` (no padding removed).
+/// AES-CBC decryption over whole blocks of `data` (no padding removed). A key
+/// that is neither 16 nor 32 bytes (a malformed file's) decrypts to nothing.
 fn aes_cbc_decrypt(key: &[u8], iv: &[u8; 16], data: &[u8]) -> Vec<u8> {
+    if !matches!(key.len(), 16 | 32) {
+        return Vec::new();
+    }
     let mut out = Vec::with_capacity(data.len());
     let mut chain = *iv;
     for chunk in data.as_chunks::<16>().0 {
@@ -548,6 +552,13 @@ fn with_crypt_filter(dict: Dict, method: &str, length: i64, encrypt_metadata: bo
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_aes_key_of_the_wrong_length_decrypts_to_nothing() {
+        // A 40-bit AESV2 file key yields a 10-byte object key (#844 H5).
+        assert!(aes_cbc_decrypt(&[7; 10], &[0; 16], &[0; 32]).is_empty());
+        assert_eq!(aes_cbc_decrypt(&[7; 16], &[0; 16], &[0; 32]).len(), 32);
+    }
 
     #[test]
     fn rc4_matches_the_published_vector() {

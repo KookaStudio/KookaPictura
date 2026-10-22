@@ -59,11 +59,14 @@ class Client:
         self.conn.connect(path)
         self.stream = self.conn.makefile("rwb")
         self.next_id = 0
+        with open(path + ".token") as token_file:
+            self.token = token_file.read().strip()
 
     def call(self, method, **params):
         """Return (result, seconds); raise on an error response."""
         self.next_id += 1
-        line = json.dumps({"id": self.next_id, "method": method, "params": params}) + "\n"
+        request = {"id": self.next_id, "method": method, "params": params, "token": self.token}
+        line = json.dumps(request) + "\n"
         start = time.perf_counter()
         self.stream.write(line.encode())
         self.stream.flush()
@@ -210,7 +213,8 @@ def main():
             stdout=log, stderr=subprocess.STDOUT, env=env)
     try:
         for _ in range(300):
-            if os.path.exists(sock):
+            token = sock + ".token"
+            if os.path.exists(sock) and os.path.exists(token) and os.path.getsize(token) > 0:
                 break
             if app.poll() is not None:
                 sys.exit(f"profile-tools: app exited before listening; see {log_path}")
