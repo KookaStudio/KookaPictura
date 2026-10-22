@@ -49,7 +49,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   Ceiling (`ponytail:`): the caret, the selection highlight, and the box stay
   unwarped while a warped layer is edited. The outlines are rebuilt on every
   render. CS6's refusal of path type is unconfirmed. Tests: `tst_warp_text`
-  (15 cases) and Rust `type_warp`, codec, and core units.
+  (16 cases) and Rust `type_warp`, codec, and core units.
 - **Help > Search on Shift+Space** (#788, branch `feat/788-searchbar`,
   OpenSpec change `ui-search-bar`, archived into `ui/search-bar`). Not a CS6
   feature; added by owner decision and labelled non-parity.
