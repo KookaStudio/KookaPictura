@@ -83,6 +83,9 @@ private slots:
     void artisticDialogDefaults();
     void underpaintingStaysInOneColumn();
     void smartSharpenStacksInOneWideColumn();
+    void rowsComeFromTheRustDescriptor();
+    void everyRowOpensOnItsDefaults();
+    void eachKindOpensTheDialogItsDescriptorNames();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -800,6 +803,143 @@ void FilterMenuTest::smartSharpenStacksInOneWideColumn()
     QVERIFY(accurate != nullptr);
     QVERIFY(accurate->mapTo(&dialog, QPoint(0, 0)).y() > lastY);
     dialog.reject();
+}
+
+namespace {
+
+const pictura::FilterDescriptorRow* descriptorFor(
+    const rust::Vec<pictura::FilterDescriptorRow>& rows, const QString& kind)
+{
+    for (const pictura::FilterDescriptorRow& row : rows) {
+        if (row.kind == kind) {
+            return &row;
+        }
+    }
+    return nullptr;
+}
+
+pictura::FilterDialogKind dialogForKind(const QString& kind)
+{
+    if (kind == QStringLiteral("lens-flare")) {
+        return pictura::FilterDialogKind::LensFlare;
+    }
+    if (kind == QStringLiteral("lighting-effects")) {
+        return pictura::FilterDialogKind::LightingEffects;
+    }
+    if (kind == QStringLiteral("picture-frame")) {
+        return pictura::FilterDialogKind::PictureFrame;
+    }
+    if (kind == QStringLiteral("reduce-noise")) {
+        return pictura::FilterDialogKind::ReduceNoise;
+    }
+    if (kind == QStringLiteral("field-blur") || kind == QStringLiteral("iris-blur")
+        || kind == QStringLiteral("tilt-shift") || kind == QStringLiteral("path-blur")
+        || kind == QStringLiteral("spin-blur") || kind == QStringLiteral("blur-gallery")) {
+        return pictura::FilterDialogKind::BlurGallery;
+    }
+    if (kind == QStringLiteral("liquify")) {
+        return pictura::FilterDialogKind::Liquify;
+    }
+    return pictura::FilterDialogKind::Shared;
+}
+
+} // namespace
+
+void FilterMenuTest::rowsComeFromTheRustDescriptor()
+{
+    const rust::Vec<pictura::FilterDescriptorRow> rows = pictura::filter_descriptors();
+    for (const pictura::FilterCommandSpec& spec : pictura::filterCommands()) {
+        const pictura::FilterDescriptorRow* row = descriptorFor(rows, spec.kind);
+        QVERIFY2(row != nullptr, qPrintable(spec.kind));
+        QVERIFY2(row->menu, qPrintable(spec.kind));
+        QCOMPARE(spec.path, row->path);
+        QCOMPARE(spec.label, row->label);
+        QCOMPARE(static_cast<int>(spec.dialog), row->dialog);
+        QCOMPARE(spec.mapAfterOk, row->map_after_ok);
+        QCOMPARE(spec.previewPane, row->preview_pane);
+        QCOMPARE(spec.stacked, row->stacked);
+        QCOMPARE(spec.previewBelow, row->preview_below);
+        QCOMPARE(spec.livePreview, row->live_preview);
+        QCOMPARE(static_cast<int>(spec.params.size()), static_cast<int>(row->params.size()));
+        for (int i = 0; i < spec.params.size(); ++i) {
+            const pictura::FilterParamSpec& param = spec.params.at(i);
+            const pictura::FilterParamRow& source = row->params[static_cast<size_t>(i)];
+            QCOMPARE(static_cast<int>(param.control), source.control);
+            QCOMPARE(param.label, source.label);
+            QCOMPARE(param.minimum, source.minimum);
+            QCOMPARE(param.maximum, source.maximum);
+            QCOMPARE(param.value, source.value);
+            QCOMPARE(param.slotCount, source.slot_count);
+            QCOMPARE(param.decimals, source.decimals);
+            QCOMPARE(param.suffix, source.suffix);
+            QCOMPARE(param.choices, source.choices);
+            QCOMPARE(param.initial, source.initial);
+        }
+    }
+
+    const pictura::FilterDescriptorRow* gallery = descriptorFor(rows, QStringLiteral("blur-gallery"));
+    QVERIFY(gallery != nullptr);
+    QVERIFY(!gallery->menu);
+    QVERIFY(pictura::filterCommandForKind(QStringLiteral("blur-gallery")) != nullptr);
+    for (const pictura::FilterCommandSpec& spec : pictura::filterCommands()) {
+        QVERIFY2(spec.kind != QStringLiteral("blur-gallery"), "blur-gallery must not be a menu row");
+    }
+}
+
+void FilterMenuTest::everyRowOpensOnItsDefaults()
+{
+    const rust::Vec<pictura::FilterDescriptorRow> rows = pictura::filter_descriptors();
+    for (const pictura::FilterCommandSpec& spec : pictura::filterCommands()) {
+        if (spec.dialog != pictura::FilterDialogKind::Shared || spec.params.isEmpty()) {
+            continue;
+        }
+        const pictura::FilterDescriptorRow* row = descriptorFor(rows, spec.kind);
+        QVERIFY2(row != nullptr, qPrintable(spec.kind));
+        QList<double> expected;
+        for (const pictura::FilterParamRow& param : row->params) {
+            if (!param.initial.isEmpty()) {
+                for (double value : param.initial) {
+                    expected.append(value);
+                }
+            } else {
+                for (int i = 0; i < param.slot_count; ++i) {
+                    expected.append(param.value);
+                }
+            }
+        }
+        pictura::FilterPreviewDialog dialog(window_->activeView(), spec);
+        QCOMPARE(dialog.values(), expected);
+    }
+}
+
+void FilterMenuTest::eachKindOpensTheDialogItsDescriptorNames()
+{
+    for (const pictura::FilterCommandSpec& spec : pictura::filterCommands()) {
+        QCOMPARE(static_cast<int>(spec.dialog),
+                 static_cast<int>(dialogForKind(spec.kind)));
+    }
+    const pictura::FilterCommandSpec* displace =
+        pictura::filterCommandForPath({QStringLiteral("Filter"), QStringLiteral("Distort"),
+                                       QStringLiteral("Displace")});
+    QVERIFY(displace != nullptr);
+    QVERIFY(displace->mapAfterOk);
+    const pictura::FilterCommandSpec* gallery =
+        pictura::filterCommandForKind(QStringLiteral("blur-gallery"));
+    QVERIFY(gallery != nullptr);
+    QCOMPARE(gallery->dialog, pictura::FilterDialogKind::BlurGallery);
+
+    bool opened = false;
+    QTimer::singleShot(0, [&] {
+        auto* dialog = activeFilterDialog();
+        if (!dialog) {
+            return;
+        }
+        opened = true;
+        dialog->reject();
+    });
+    QVERIFY(window_->registry()->dispatch(
+        filterId(QStringLiteral("Blur"), QStringLiteral("Gaussian Blur"))));
+    QVERIFY(opened);
 }
 
 QTEST_MAIN(FilterMenuTest)

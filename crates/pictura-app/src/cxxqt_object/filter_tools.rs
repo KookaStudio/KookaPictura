@@ -55,6 +55,36 @@ pub mod ffi {
     }
 
     #[namespace = "pictura"]
+    struct FilterParamRow {
+        control: i32,
+        label: QString,
+        minimum: f64,
+        maximum: f64,
+        value: f64,
+        slot_count: i32,
+        decimals: i32,
+        suffix: QString,
+        choices: QStringList,
+        initial: QList_f64,
+    }
+
+    #[namespace = "pictura"]
+    struct FilterDescriptorRow {
+        kind: QString,
+        path: QStringList,
+        menu: bool,
+        label: QString,
+        params: Vec<FilterParamRow>,
+        whole_layer: bool,
+        dialog: i32,
+        map_after_ok: bool,
+        preview_pane: bool,
+        stacked: bool,
+        preview_below: bool,
+        live_preview: bool,
+    }
+
+    #[namespace = "pictura"]
     extern "Rust" {
         /// Commit a filter `kind` with an ordered `params` slot list. When a
         /// preview is open the layer already holds the result, so only one
@@ -116,6 +146,9 @@ pub mod ffi {
         /// The number of parameter slots `kind` expects, or -1 for an unknown
         /// kind.
         fn filter_param_arity(kind: &QString) -> i32;
+
+        /// The filter parameter descriptors, in the C++ table's order.
+        fn filter_descriptors() -> Vec<FilterDescriptorRow>;
 
         /// Whether a Picture Frame frame number draws lines that the Number of
         /// Lines control sets the density of; CS6 greys the control out for the
@@ -287,8 +320,8 @@ fn filter_preview(mut view: Pin<&mut PictureView>, kind: &QString, params: &QLis
 /// Filters that resolve pixel position or a global statistic against the whole
 /// layer, so a cropped section preview would not match the commit: Diffuse
 /// hashes the pixel's absolute coordinates, Lighting resolves its light span
-/// against the crop, HDR Toning computes a global pivot, Lens Flare places
-/// and sizes itself as a fraction of the buffer, Shear shifts each row by
+/// against the crop, Lens Flare places and sizes itself as a fraction of the
+/// buffer, Shear shifts each row by
 /// a fraction of the buffer's half-width, Displace stretches or tiles its
 /// map from the buffer's corner, Lens Blur's depth map and Liquify's mesh
 /// align to the layer's rectangle, Picture Frame sizes and insets itself as a
@@ -296,24 +329,7 @@ fn filter_preview(mut view: Pin<&mut PictureView>, kind: &QString, params: &QLis
 /// Tilt-Shift, Path Blur, and Spin Blur) places its pins, paths, and spins as
 /// fractions of the buffer.
 pub(crate) fn filter_preview_needs_whole_layer(kind: &str) -> bool {
-    matches!(
-        kind,
-        "diffuse"
-            | "lighting-effects"
-            | "hdr-toning"
-            | "lens-flare"
-            | "shear"
-            | "displace"
-            | "lens-blur"
-            | "field-blur"
-            | "iris-blur"
-            | "tilt-shift"
-            | "path-blur"
-            | "spin-blur"
-            | "blur-gallery"
-            | "liquify"
-            | "picture-frame"
-    )
+    super::filter_map::descriptor::descriptor(kind).is_some_and(|descriptor| descriptor.whole_layer)
 }
 
 fn filter_preview_section(
@@ -428,6 +444,57 @@ fn selected_area_empty(layer: &Layer, selection: Option<&pictura_select::Selecti
 
 fn filter_kind_supported(kind: &QString) -> bool {
     super::filter_map::filter_param_arity(&kind.to_string()).is_some()
+}
+
+fn filter_descriptors() -> Vec<ffi::FilterDescriptorRow> {
+    super::filter_map::descriptor::all()
+        .map(|descriptor| {
+            let params = descriptor
+                .params
+                .iter()
+                .map(|param| {
+                    let mut choices = QStringList::default();
+                    for choice in param.choices {
+                        choices.append(QString::from(*choice));
+                    }
+                    let mut initial = QList::<f64>::default();
+                    for value in param.initial {
+                        initial.append(*value);
+                    }
+                    ffi::FilterParamRow {
+                        control: param.control as i32,
+                        label: QString::from(param.label),
+                        minimum: param.minimum,
+                        maximum: param.maximum,
+                        value: param.value,
+                        slot_count: param.slots() as i32,
+                        decimals: param.decimals,
+                        suffix: QString::from(param.suffix),
+                        choices,
+                        initial,
+                    }
+                })
+                .collect();
+            let mut path = QStringList::default();
+            for part in descriptor.path {
+                path.append(QString::from(*part));
+            }
+            ffi::FilterDescriptorRow {
+                kind: QString::from(descriptor.kind),
+                path,
+                menu: descriptor.menu,
+                label: QString::from(descriptor.label),
+                params,
+                whole_layer: descriptor.whole_layer,
+                dialog: descriptor.dialog as i32,
+                map_after_ok: descriptor.map_after_ok,
+                preview_pane: descriptor.preview_pane,
+                stacked: descriptor.stacked,
+                preview_below: descriptor.preview_below,
+                live_preview: descriptor.live_preview,
+            }
+        })
+        .collect()
 }
 
 fn filter_param_arity(kind: &QString) -> i32 {

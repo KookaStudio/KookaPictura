@@ -28,12 +28,23 @@ enum class FilterControl {
     Shape,      // one slot, a Custom Shape index picked from a grid (Shape Blur)
 };
 
+// The dialog that edits a kind. Values mirror Rust's `DialogKind`.
+enum class FilterDialogKind {
+    Shared,          // the shared parameter dialog
+    LensFlare,
+    LightingEffects,
+    PictureFrame,
+    ReduceNoise,
+    BlurGallery,
+    Liquify,
+};
+
 // The most control points a Shear curve carries. Lock-step with
 // `pictura_filters::SHEAR_MAX_POINTS`; the curve box edits the points and the
 // filter is the same points, so the two never disagree.
 constexpr int kShearMaxPoints = 8;
 
-// Custom's grid is 5x5. Lock-step with `CUSTOM_SLOTS` in filter_map.rs.
+// Custom's grid is 5x5. Lock-step with the descriptor's Matrix control.
 constexpr int kMatrixSide = 5;
 constexpr int kMatrixCells = kMatrixSide * kMatrixSide;
 
@@ -45,6 +56,8 @@ struct FilterParamSpec {
     double minimum = 0.0;
     double maximum = 100.0;
     double value = 0.0;
+    // The number of engine slots this control contributes.
+    int slotCount = 1;
     int decimals = 0;
     QString suffix;
     QStringList choices;
@@ -57,10 +70,13 @@ struct FilterParamSpec {
 // One implemented Filter-menu leaf: its menu path, the `kind` the bridge maps,
 // and the ordered parameters its dialog edits.
 struct FilterCommandSpec {
-    QStringList path; // {"Filter", [<family>], <leaf label>}
+    QStringList path; // {"Filter", [<family>], <leaf label>}; blur-gallery is {"Filter", "Blur Gallery"}
     QString label;
     QString kind;
     QList<FilterParamSpec> params;
+    FilterDialogKind dialog = FilterDialogKind::Shared;
+    // Displace chooses its map after the dialog's OK, not in the dialog.
+    bool mapAfterOk = false;
     bool previewPane = true; // Radial Blur uses a Blur Center instead
     // One wide column under the preview instead of spilling into a second
     // input column; checkboxes trail the column.
@@ -73,7 +89,7 @@ struct FilterCommandSpec {
     bool livePreview = true;
 };
 
-// Every Filter-menu leaf that has an engine kernel, in menu order.
+// Every Filter-menu leaf that has an engine kernel, in table order.
 const QList<FilterCommandSpec>& filterCommands();
 
 // The definition for a Filter-menu leaf path, or nullptr when the leaf has no
