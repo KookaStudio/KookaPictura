@@ -177,6 +177,7 @@ mod tests {
             }),
             vertical: false,
             box_bounds,
+            path: None,
         }
     }
 
