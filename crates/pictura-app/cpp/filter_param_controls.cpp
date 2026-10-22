@@ -37,24 +37,6 @@ namespace pictura {
 
 namespace {
 
-int slotCount(FilterControl control)
-{
-    switch (control) {
-    case FilterControl::Color:
-        return 3;
-    case FilterControl::Placement:
-        return 2;
-    case FilterControl::BlurCenter:
-        return 2;
-    case FilterControl::ShearCurve:
-        return 1 + 2 * kShearMaxPoints;
-    case FilterControl::Matrix:
-        return kMatrixCells;
-    default:
-        return 1;
-    }
-}
-
 // A slider whose value is a distance in document pixels.
 bool measuresPixels(const FilterParamSpec& spec)
 {
@@ -857,7 +839,7 @@ void FilterParamControls::setValues(const QList<double>& initial)
             }
             break;
         }
-        slot += slotCount(control.spec.control);
+        slot += control.spec.slotCount;
     }
 }
 
@@ -911,7 +893,7 @@ QList<double> FilterParamControls::values() const
             }
             continue;
         }
-        const int n = slotCount(control.spec.control);
+        const int n = control.spec.slotCount;
         for (int s = 0; s < n; ++s) {
             result.append(controlValue(control, s));
         }
@@ -933,7 +915,7 @@ QList<double> FilterParamControls::scaledValues(double scale) const
             }
             result[slot] = qBound(spec.minimum, value, spec.maximum);
         }
-        slot += slotCount(spec.control);
+        slot += spec.slotCount;
     }
     return result;
 }

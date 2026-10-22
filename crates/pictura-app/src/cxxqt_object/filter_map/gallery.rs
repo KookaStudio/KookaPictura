@@ -3,8 +3,8 @@
 //! six motion slots; Spin Blur's records are followed by its three strobe
 //! slots), then the shared 13-slot effects tail (bokeh
 //! enabled/light/color/range, noise
-//! enabled/amount/size/roughness/color/highlights/kind/seed). The arity
-//! table's canonical list is one pin plus the tail; its all-defaults form
+//! enabled/amount/size/roughness/color/highlights/kind/seed). The descriptor's
+//! canonical list is one pin plus the tail; its all-defaults form
 //! (count 0) and an empty list both mean one default pin.
 
 use super::choices::BLUR_NOISE_KINDS;
@@ -17,41 +17,23 @@ use pictura_filters::{
 pub(in crate::cxxqt_object) const GALLERY_TAIL: usize = 13;
 /// Field Blur's pin record: `(x, y, blur)`.
 const FIELD_PIN_SLOTS: usize = 3;
-pub(in crate::cxxqt_object) const FIELD_BLUR_SLOTS: usize = 1 + FIELD_PIN_SLOTS + GALLERY_TAIL;
 /// Iris Blur's pin record: `(x, y, radius x, radius y, angle, squareness,
 /// feather, blur)`.
 const IRIS_PIN_SLOTS: usize = 8;
-pub(in crate::cxxqt_object) const IRIS_BLUR_SLOTS: usize = 1 + IRIS_PIN_SLOTS + GALLERY_TAIL;
 /// Tilt-Shift's pin record: `(x, y, angle, focus above, focus below, fade
 /// above, fade below, distortion, symmetric, blur)`.
 const TILT_PIN_SLOTS: usize = 10;
-pub(in crate::cxxqt_object) const TILT_SHIFT_SLOTS: usize = 1 + TILT_PIN_SLOTS + GALLERY_TAIL;
 /// Path Blur's canonical path record: `(point count, (x, y)×2, start speed,
 /// end speed)`.
 const PATH_RECORD_SLOTS: usize = 1 + 2 * 2 + 2;
 /// Path Blur's motion section: `(speed, taper, centered, rear sync, strobe
 /// strength, strobe flashes)`.
 const PATH_MOTION_SLOTS: usize = 6;
-pub(in crate::cxxqt_object) const PATH_BLUR_SLOTS: usize =
-    1 + PATH_RECORD_SLOTS + PATH_MOTION_SLOTS + GALLERY_TAIL;
 /// Spin Blur's record: `(x, y, radius x, radius y, angle, feather, blur
 /// angle, pivot x, pivot y)`.
 const SPIN_PIN_SLOTS: usize = 9;
 /// Spin Blur's strobe section: `(strength, flashes, duration)`.
 const SPIN_STROBE_SLOTS: usize = 3;
-pub(in crate::cxxqt_object) const SPIN_BLUR_SLOTS: usize =
-    1 + SPIN_PIN_SLOTS + SPIN_STROBE_SLOTS + GALLERY_TAIL;
-/// The combined kind's canonical list: one record of each effect, the motion
-/// section, the flash duration, and the tail.
-pub(in crate::cxxqt_object) const BLUR_GALLERY_SLOTS: usize = 5
-    + FIELD_PIN_SLOTS
-    + IRIS_PIN_SLOTS
-    + TILT_PIN_SLOTS
-    + PATH_RECORD_SLOTS
-    + SPIN_PIN_SLOTS
-    + PATH_MOTION_SLOTS
-    + 1
-    + GALLERY_TAIL;
 
 const FIELD_DEFAULT_PIN: BlurPin = BlurPin {
     x: 0.5,
@@ -113,17 +95,35 @@ fn read_spin(s: &[f64]) -> SpinPin {
 }
 
 pub(super) fn field_blur(params: &[f64]) -> Option<Filter> {
-    let (pins, bokeh, noise) = gallery(params, FIELD_PIN_SLOTS, FIELD_DEFAULT_PIN, read_field)?;
+    let (pins, bokeh, noise) = gallery(
+        "field-blur",
+        params,
+        FIELD_PIN_SLOTS,
+        FIELD_DEFAULT_PIN,
+        read_field,
+    )?;
     Some(Filter::FieldBlur { pins, bokeh, noise })
 }
 
 pub(super) fn iris_blur(params: &[f64]) -> Option<Filter> {
-    let (pins, bokeh, noise) = gallery(params, IRIS_PIN_SLOTS, IrisPin::default(), read_iris)?;
+    let (pins, bokeh, noise) = gallery(
+        "iris-blur",
+        params,
+        IRIS_PIN_SLOTS,
+        IrisPin::default(),
+        read_iris,
+    )?;
     Some(Filter::IrisBlur { pins, bokeh, noise })
 }
 
 pub(super) fn tilt_shift(params: &[f64]) -> Option<Filter> {
-    let (pins, bokeh, noise) = gallery(params, TILT_PIN_SLOTS, TiltPin::default(), read_tilt)?;
+    let (pins, bokeh, noise) = gallery(
+        "tilt-shift",
+        params,
+        TILT_PIN_SLOTS,
+        TiltPin::default(),
+        read_tilt,
+    )?;
     Some(Filter::TiltShift { pins, bokeh, noise })
 }
 
@@ -148,7 +148,8 @@ pub(super) fn path_blur(params: &[f64]) -> Option<Filter> {
             noise: BlurNoise::default(),
         });
     }
-    let canonical = params.len() == PATH_BLUR_SLOTS && params[0] == 0.0;
+    let canonical =
+        params.len() == super::descriptor::arity("path-blur").unwrap_or(0) && params[0] == 0.0;
     let (paths, at) = if canonical {
         (vec![default_path()], 1 + PATH_RECORD_SLOTS)
     } else {
@@ -205,7 +206,7 @@ fn read_motion(params: &[f64], at: usize) -> PathMotion {
         centered: flag(params, at + 2, d.centered),
         rear_sync: flag(params, at + 3, d.rear_sync),
         strobe_strength: f(params, at + 4, d.strobe_strength),
-        strobe_flashes: u32v(params, at + 5, d.strobe_flashes),
+        strobe_flashes: u32v(params, at + 5, f64::from(d.strobe_flashes)),
     }
 }
 
@@ -219,7 +220,8 @@ pub(super) fn spin_blur(params: &[f64]) -> Option<Filter> {
             noise: BlurNoise::default(),
         });
     }
-    let canonical = params.len() == SPIN_BLUR_SLOTS && params[0] == 0.0;
+    let canonical =
+        params.len() == super::descriptor::arity("spin-blur").unwrap_or(0) && params[0] == 0.0;
     let (spins, at) = if canonical {
         (vec![SpinPin::default()], 1 + SPIN_PIN_SLOTS)
     } else {
@@ -232,7 +234,7 @@ pub(super) fn spin_blur(params: &[f64]) -> Option<Filter> {
     let d = SpinStrobe::default();
     let strobe = SpinStrobe {
         strength: f(params, at, d.strength),
-        flashes: u32v(params, at + 1, d.flashes),
+        flashes: u32v(params, at + 1, f64::from(d.flashes)),
         duration: f(params, at + 2, d.duration),
     };
     let (_, noise) = effects(params, at + SPIN_STROBE_SLOTS);
@@ -249,6 +251,7 @@ pub(super) fn spin_blur(params: &[f64]) -> Option<Filter> {
 /// the motion section's strobe strength and flashes. An empty list and the
 /// canonical all-defaults list (every count 0) map to one default Field pin.
 pub(super) fn blur_gallery(params: &[f64]) -> Option<Filter> {
+    let total = super::descriptor::arity("blur-gallery").unwrap_or(0);
     let canonical_counts = [
         0,
         1 + FIELD_PIN_SLOTS,
@@ -257,10 +260,9 @@ pub(super) fn blur_gallery(params: &[f64]) -> Option<Filter> {
         4 + FIELD_PIN_SLOTS + IRIS_PIN_SLOTS + TILT_PIN_SLOTS + PATH_RECORD_SLOTS,
     ];
     let defaults = params.is_empty()
-        || (params.len() == BLUR_GALLERY_SLOTS
-            && canonical_counts.iter().all(|&i| params[i] == 0.0));
+        || (params.len() == total && canonical_counts.iter().all(|&i| params[i] == 0.0));
     if defaults {
-        let (bokeh, noise) = effects(params, BLUR_GALLERY_SLOTS - GALLERY_TAIL);
+        let (bokeh, noise) = effects(params, total - GALLERY_TAIL);
         return Some(Filter::BlurGallery {
             field: vec![FIELD_DEFAULT_PIN],
             iris: Vec::new(),
@@ -327,6 +329,7 @@ fn section<P>(
 /// Split a gallery slot list into its pins and effects; `None` for a list
 /// whose length does not match its count, or more pins than the cap.
 fn gallery<P>(
+    kind: &str,
     params: &[f64],
     stride: usize,
     default_pin: P,
@@ -339,11 +342,11 @@ fn gallery<P>(
             BlurNoise::default(),
         ));
     }
-    let count = u32v(params, 0, 1) as usize;
+    let count = u32v(params, 0, 1.0) as usize;
     if count > MAX_FIELD_PINS {
         return None;
     }
-    let canonical = params.len() == 1 + stride + GALLERY_TAIL && count == 0;
+    let canonical = params.len() == super::descriptor::arity(kind).unwrap_or(0) && count == 0;
     let tail = if canonical {
         1 + stride
     } else {
@@ -363,7 +366,7 @@ fn gallery<P>(
 
 /// The shared 13-slot effects tail starting at `tail`.
 fn effects(params: &[f64], tail: usize) -> (BokehParams, BlurNoise) {
-    let (low, high) = (u8v(params, tail + 3, 40), u8v(params, tail + 4, 118));
+    let (low, high) = (u8v(params, tail + 3, 40.0), u8v(params, tail + 4, 118.0));
     let bokeh = BokehParams {
         enabled: flag(params, tail, true),
         light_bokeh: f(params, tail + 1, 14.0),
@@ -382,7 +385,7 @@ fn effects(params: &[f64], tail: usize) -> (BokehParams, BlurNoise) {
         color: f(params, tail + 9, 0.0),
         highlights: f(params, tail + 10, 0.0),
         kind: pick(&BLUR_NOISE_KINDS, params, tail + 11, 0),
-        seed: u64v(params, tail + 12, 1),
+        seed: u64v(params, tail + 12, 1.0),
     };
     (bokeh, noise)
 }
