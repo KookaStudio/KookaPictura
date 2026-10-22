@@ -254,6 +254,8 @@ public:
     // `closed` is false the loops are drawn as open polylines (the Polygonal
     // Lasso rubber band must not show a phantom closing edge).
     void setSelectionPreview(const QList<QPolygonF>& loops, bool closed = true, bool solid = false);
+    // Live selection shape: the rubber band, closed and clipped to the canvas.
+    void setSelectionShapePreview(const QList<QPolygonF>& loops);
     void clearSelectionPreview();
     // A click-driven lasso's origin: a small hollow square, fixed on screen,
     // marking the point the outline closes to. Cleared with the preview.
@@ -270,6 +272,7 @@ public:
     {
         return previewContours_.isEmpty() ? 0 : previewContours_.first().size();
     }
+    const QList<QPolygonF>& selectionPreviewContours() const { return previewContours_; }
 
     // Move-tool live preview: draw a cached base plus the moved layer at a live
     // image-space offset, so the drag never composites the document.

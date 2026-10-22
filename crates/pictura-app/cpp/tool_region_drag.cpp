@@ -32,7 +32,7 @@ bool RegionDragToolHandler::onPress(ToolServices& ctx, const QPointF& imagePos,
         trace_.clear();
         trace_ << imagePos;
         if (ImageView* canvas = ctx.canvas()) {
-            canvas->setSelectionPreview({trace_});
+            canvas->setSelectionShapePreview({trace_});
         }
     }
     ctx.setDragging(true);
@@ -63,7 +63,7 @@ void RegionDragToolHandler::onMove(ToolServices& ctx, const QPointF& imagePos, Q
     }
     trace_ << imagePos;
     if (canvas) {
-        canvas->setSelectionPreview({trace_});
+        canvas->setSelectionShapePreview({trace_});
     }
 }
 

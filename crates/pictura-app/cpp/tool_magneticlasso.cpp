@@ -254,7 +254,7 @@ private:
         }
         // Closed: the straight connector back to the origin previews the edge
         // closing will add, as CS6 shows it.
-        canvas->setSelectionPreview({outline});
+        canvas->setSelectionShapePreview({outline});
         if (!path_.isEmpty()) {
             canvas->setSelectionPreviewOrigin(QPointF(path_.first()));
         }
