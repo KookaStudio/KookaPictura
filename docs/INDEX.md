@@ -65,6 +65,7 @@ Full file listing with status. Statuses: `planned` (not written), `stub`,
 | `preferences.md` | All preference pages and settings | planned |
 | `keyboard-shortcuts.md` | Full CS6 shortcut map | planned |
 | `accessibility.md` | Keyboard nav, screen reader, high contrast | planned |
+| `search-bar.md` | Help > Search (Shift+Space): find, run, or reveal any entry point (non-parity) | spec'd |
 | `panels/layers-panel.md` | | planned |
 | `panels/channels-panel.md` | | planned |
 | `panels/paths-panel.md` | | planned |
