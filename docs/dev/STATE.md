@@ -320,6 +320,25 @@ Snapshot for resuming after a context break. Update after each milestone.
   caret line blinks on a 1.5 s cycle (`ImageView::kTypeCaretBlinkMs`, reset
   on every overlay set). Point type marks its origin with a placement square
   and draws a guide along each visible line's baseline (`type_baselines`).
+- **Type on a path and area type** (#683, branch
+  `feat/683-type-on-a-path`, OpenSpec change `type-on-path`, archived into
+  `tools/type-on-path`). `TypeSpec` / `TypeTool` carry `path` (`TextPath`:
+  one `Subpath`, `OnPath` or `Area`, and the click's arc-length start).
+  `pictura_render::type_path` lays on-path glyphs by arc length, rotates their
+  outlines by the tangent, wraps a closed path once, and reports overflow at
+  the path end; area type reuses the paragraph layout in the path's bounding
+  box and clips its alpha to the closed interior. The Type tools hit the Work
+  Path and saved paths (`type_path_at`), start at the click, show the path as
+  the baseline guide, and draw the overflow `+`. The Work Path stays visible
+  with the Type tools, hovering its edge shows the type-on-path cursor, and
+  Move / Free Transform carry the stored path and scale the type. Path type
+  round-trips through
+  the document-level `Txt2` `ResourceDict.TextFrameSet` (one entry per text
+  layer, `Type` 2 on-path / `Type` 1 area), read by
+  `pictura_codec::type_path`; the `ag-psd` oracle reads the authored structure.
+  Ceilings (`ponytail:`): one subpath per session, hard line breaks become
+  spaces, area type clips a bounding-box layout rather than reflowing each line
+  to the shape, and there is no start-marker drag or side flip.
 - **Additional brush presets and the pen-tip preview** (#731, branch
   `feat/731-paintbrush-types-pen-tip`, OpenSpec changes
   `paintbrush-types-pen-tip` (archived into `ui/brush-preset-picker` and
@@ -2006,7 +2025,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   glyph outline through it (`BundledRasterizer::rasterize_mapped`), so the text
   stays sharp and editable. Qt Test suite `tst_type_tools`. Guard 98 now probes Path Selection and `shift_plain` (117)
   presses A as the unimplemented key. Ceilings (`ponytail:`): a variable font's
-  named instance renders as its default instance; point type only (no paragraph / on-path / Warp Text); no input-method composition; a reopened layer is
+  named instance renders as its default instance; Warp Text is still absent, on-path type handles one subpath, and area type clips a bounding-box layout; no input-method composition; a reopened layer is
   retyped in one style, its own `TySh` replaced by the authored one, and its
   Layers row shows it hidden while retyped; vertical type is upright
   on a fixed cell; no font style, colour swatch, or Crisp / Strong / Smooth;
