@@ -421,6 +421,7 @@ public:
         onMove(ctx, imagePos, mods);
         grip_ = BoxGrip::None;
         drawingNew_ = false;
+        show(ctx);
         // A click that drew no box puts the default box back.
         if (box_.width() < 1.0 || box_.height() < 1.0) {
             reset(ctx);
@@ -821,6 +822,7 @@ private:
             canvas->setCropRotating(false);
             canvas->clearDragSizeHint();
         }
+        show(ctx);
     }
 
     void activateForStraighten(ToolServices& ctx)
@@ -883,8 +885,21 @@ private:
             && std::abs(a.angle - b.angle) < 1e-6;
     }
 
+    // Auto Center Preview (Modern only): once a gesture settles, pan the view
+    // so the box sits mid-viewport.
+    void centerPreview(ToolServices& ctx)
+    {
+        if (crop_->classicMode() || !crop_->settings().autoCenterPreview || box_.isNull()) {
+            return;
+        }
+        if (ImageView* canvas = ctx.canvas()) {
+            canvas->centerOnImageRect(box_);
+        }
+    }
+
     void recordState(ToolServices& ctx)
     {
+        centerPreview(ctx);
         const CropState state{box_, crop_->angle(), contentOffset_};
         if (cursor_ >= 0 && cursor_ < int(history_.size()) && sameState(history_[cursor_], state)) {
             return;
@@ -932,6 +947,17 @@ private:
                 canvas->setCropBox(box_);
                 canvas->setCropPreview(state_ == State::Preview);
                 canvas->setCropOverlay(crop_->gridOverlay());
+                const CropSettings& cs = crop_->settings();
+                ImageView::CropShield shield;
+                shield.enabled = cs.shieldEnabled;
+                shield.showOutside = crop_->classicMode() || cs.showCroppedArea;
+                if (cs.shieldCustomColor) {
+                    shield.color = cs.shieldColor;
+                }
+                shield.opacity = cs.shieldOpacity;
+                shield.autoAdjust = cs.autoAdjustOpacity;
+                shield.dragging = grip_ != BoxGrip::None || rotating_;
+                canvas->setCropShield(shield);
             }
         }
     }

@@ -133,6 +133,8 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [x] Lasso, polygonal lasso and magnetic lasso
 - [x] Magic wand and quick selection
 - [x] Crop, perspective crop, slice and slice select
+- [x] Crop Settings menu: Classic mode, shield colour and opacity, Show Cropped
+      Area, Auto Center Preview (#104)
 - [x] Eyedropper, colour sampler, ruler, note and count
 - [x] Spot healing, healing brush, patch, content-aware move and red eye
 - [x] Brush, pencil, colour replacement and mixer brush

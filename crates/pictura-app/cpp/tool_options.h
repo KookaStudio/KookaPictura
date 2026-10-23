@@ -715,6 +715,20 @@ private:
 // The Crop and Perspective Crop tools' options. `angle` has its own
 // notification (the straighten preview) and `straightenMode` its own (the
 // spirit-level arming); every other field shares `optionsChanged`.
+// The Crop tool's Settings menu (everything but Classic mode, which keeps its
+// own session key). Show Cropped Area and Auto Center Preview are Modern-mode
+// features: they read as off while Classic mode is on, and leaving Classic
+// turns both on.
+struct CropSettings {
+    bool showCroppedArea = true;
+    bool autoCenterPreview = true;
+    bool shieldEnabled = true;
+    bool shieldCustomColor = false;  // false = Match Canvas
+    QColor shieldColor{Qt::black};
+    int shieldOpacity = 75;          // percent
+    bool autoAdjustOpacity = true;
+};
+
 class CropOptions : public ToolOptions {
 public:
     double ratio() const { return ratio_; }
@@ -763,9 +777,29 @@ public:
             return;
         }
         classicMode_ = on;
+        if (!on) {
+            settings_.showCroppedArea = true;
+            settings_.autoCenterPreview = true;
+        }
         if (optionsChanged) {
             optionsChanged();
         }
+    }
+
+    const CropSettings& settings() const { return settings_; }
+    void setSettings(CropSettings settings)
+    {
+        settings.shieldOpacity = std::clamp(settings.shieldOpacity, 0, 100);
+        settings_ = settings;
+        if (optionsChanged) {
+            optionsChanged();
+        }
+    }
+    // Restore without notifying (startup).
+    void applySettings(CropSettings settings)
+    {
+        settings.shieldOpacity = std::clamp(settings.shieldOpacity, 0, 100);
+        settings_ = settings;
     }
 
     // The guide overlays, in grid-menu order; the index is gridOverlay().
@@ -828,6 +862,7 @@ private:
     double angle_ = 0.0;
     QPointF pivot_;
     bool classicMode_ = true;
+    CropSettings settings_;
     int gridOverlay_ = 0;
     bool straightenMode_ = false;
 };

@@ -76,6 +76,11 @@ void PicturaMainWindow::keyPressEvent(QKeyEvent* event)
         && tools_->handleFinishPath()) {
         return;
     }
+    if (!event->isAutoRepeat() && tools_ && event->modifiers() == Qt::NoModifier
+        && tools_->handleCropSettingsKey(event->key())) {
+        event->accept();
+        return;
+    }
     if (dispatchCommandKey(event)) {
         return;
     }

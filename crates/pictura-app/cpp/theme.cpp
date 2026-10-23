@@ -504,6 +504,9 @@ QLabel#brushTipPreview { background: ${surface-input}; }
 QLabel#replaceColorMaskPreview { background: ${surface-canvas}; border: 1px solid ${border-input}; }
 QListWidget#galleryEffects::indicator { width: 0; height: 0; }
 QMenu#toolFlyoutMenu::item { padding: 3px 18px 3px 24px; }
+QMenu#optionsCropSettingsMenu { padding: 3px 0; }
+QMenu#optionsCropSettingsMenu::item { padding: 3px 18px 3px 24px; }
+QWidget#optionsCropShieldPanel { background: transparent; }
 QLabel#dialogTitle, QLabel#sectionTitle { font-weight: 700; }
 QLabel#sectionTabLabel { font-weight: 700; padding: 3px 0; }
 )");

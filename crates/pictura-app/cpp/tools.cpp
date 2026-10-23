@@ -1059,6 +1059,24 @@ bool ToolController::handleFinishPath()
     return false;
 }
 
+bool ToolController::handleCropSettingsKey(int key)
+{
+    if (active_ != ToolId::Crop || !crop_) {
+        return false;
+    }
+    if (key == Qt::Key_P) {
+        crop_->setClassicMode(!crop_->classicMode());
+        return true;
+    }
+    if (key == Qt::Key_H && !crop_->classicMode()) {
+        CropSettings settings = crop_->settings();
+        settings.showCroppedArea = !settings.showCroppedArea;
+        crop_->setSettings(settings);
+        return true;
+    }
+    return false;
+}
+
 bool ToolController::handleEscape()
 {
     if (ToolHandler* h = registry_.forTool(active_)) {

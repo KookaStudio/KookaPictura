@@ -11,13 +11,17 @@
 
 #include <QtCore/QPointF>
 #include <QtCore/QSignalBlocker>
+#include <QtCore/QRegularExpression>
 #include <QtCore/QVariant>
 #include <QtGui/QActionGroup>
 #include <QtGui/QIcon>
+#include <QtGui/QRegularExpressionValidator>
 #include <QtGui/QStandardItemModel>
 #include <QtWidgets/QCheckBox>
+#include <QtWidgets/QColorDialog>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QFrame>
+#include <QtWidgets/QGridLayout>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QInputDialog>
 #include <QtWidgets/QLabel>
@@ -28,6 +32,7 @@
 #include <QtWidgets/QWidgetAction>
 
 #include <cmath>
+#include <functional>
 
 namespace pictura {
 
@@ -47,6 +52,145 @@ void addComboHeader(QComboBox* combo, const QString& text)
             item->setFlags(Qt::NoItemFlags);
         }
     }
+}
+
+// The Settings menu. `P` / `H` are shown as the action's shortcut column; the
+// keys themselves are taken by ToolController::handleCropSettingsKey, so the
+// actions carry no QKeySequence (a second registration would fire twice).
+void buildCropSettingsMenu(QMenu* menu, ToolController* controller, CropOptions* crop)
+{
+    menu->setObjectName(QStringLiteral("optionsCropSettingsMenu"));
+    const auto toggle = [menu](const char* name, const QString& text) {
+        QAction* action = menu->addAction(text);
+        action->setObjectName(QLatin1String(name));
+        action->setCheckable(true);
+        return action;
+    };
+    QAction* classic = toggle("cropClassicMode", QStringLiteral("Use Classic Mode\tP"));
+    classic->setToolTip(QStringLiteral(
+        "Classic: dragging inside moves the crop box. Modern: it moves the content"));
+    QAction* showArea = toggle("cropShowArea", QStringLiteral("Show Cropped Area\tH"));
+    QAction* autoCenter = toggle("cropAutoCenter", QStringLiteral("Auto Center Preview"));
+    menu->addSeparator();
+    QAction* shield = toggle("cropShieldEnabled", QStringLiteral("Enable Crop Shield"));
+
+    auto* panel = new QWidget(menu);
+    panel->setObjectName(QStringLiteral("optionsCropShieldPanel"));
+    auto* grid = new QGridLayout(panel);
+    grid->setContentsMargins(26, 2, 12, 4);
+    grid->setHorizontalSpacing(6);
+    grid->setVerticalSpacing(4);
+    auto* colorLabel = new QLabel(QStringLiteral("Color:"), panel);
+    auto* color = new QComboBox(panel);
+    color->setObjectName(QStringLiteral("cropShieldColor"));
+    color->addItems({QStringLiteral("Match Canvas"), QStringLiteral("Custom")});
+    auto* swatch = new QToolButton(panel);
+    swatch->setObjectName(QStringLiteral("cropShieldSwatch"));
+    swatch->setFixedSize(18, 18);
+    auto* opacityLabel = new QLabel(QStringLiteral("Opacity:"), panel);
+    auto* opacity = new QComboBox(panel);
+    opacity->setObjectName(QStringLiteral("cropShieldOpacity"));
+    opacity->setEditable(true);
+    opacity->addItems({QStringLiteral("100%"), QStringLiteral("75%"), QStringLiteral("50%"),
+                       QStringLiteral("25%"), QStringLiteral("0%")});
+    opacity->setValidator(new QRegularExpressionValidator(
+        QRegularExpression(QStringLiteral("\\d{1,3}%?")), opacity));
+    opacity->setInsertPolicy(QComboBox::NoInsert);
+    auto* autoAdjust = new QCheckBox(QStringLiteral("Auto Adjust Opacity"), panel);
+    autoAdjust->setObjectName(QStringLiteral("cropShieldAutoAdjust"));
+    grid->addWidget(colorLabel, 0, 0, Qt::AlignRight);
+    grid->addWidget(color, 0, 1);
+    grid->addWidget(swatch, 0, 2);
+    grid->addWidget(opacityLabel, 1, 0, Qt::AlignRight);
+    grid->addWidget(opacity, 1, 1);
+    grid->addWidget(autoAdjust, 2, 0, 1, 3);
+    auto* panelAction = new QWidgetAction(menu);
+    panelAction->setDefaultWidget(panel);
+    menu->addAction(panelAction);
+
+    const auto edit = [crop](const std::function<void(CropSettings&)>& change) {
+        CropSettings settings = crop->settings();
+        change(settings);
+        crop->setSettings(settings);
+    };
+    const auto pickColor = [crop, edit, panel]() {
+        const QColor picked =
+            QColorDialog::getColor(crop->settings().shieldColor, panel, QStringLiteral("Crop Shield Color"));
+        if (picked.isValid()) {
+            edit([&picked](CropSettings& s) {
+                s.shieldCustomColor = true;
+                s.shieldColor = picked;
+            });
+        }
+    };
+
+    const auto sync = [=]() {
+        const CropSettings& s = crop->settings();
+        const bool modern = !crop->classicMode();
+        for (QObject* o : {static_cast<QObject*>(classic), static_cast<QObject*>(showArea),
+                           static_cast<QObject*>(autoCenter), static_cast<QObject*>(shield),
+                           static_cast<QObject*>(color), static_cast<QObject*>(opacity),
+                           static_cast<QObject*>(autoAdjust)}) {
+            o->blockSignals(true);
+        }
+        classic->setChecked(crop->classicMode());
+        showArea->setChecked(modern && s.showCroppedArea);
+        showArea->setEnabled(modern);
+        autoCenter->setChecked(modern && s.autoCenterPreview);
+        autoCenter->setEnabled(modern);
+        shield->setChecked(s.shieldEnabled);
+        color->setCurrentIndex(s.shieldCustomColor ? 1 : 0);
+        opacity->setCurrentText(QStringLiteral("%1%").arg(s.shieldOpacity));
+        autoAdjust->setChecked(s.autoAdjustOpacity);
+        panel->setEnabled(s.shieldEnabled);
+        swatch->setEnabled(s.shieldCustomColor);
+        swatch->setStyleSheet(
+            QStringLiteral("background: %1; border: 1px solid #888;")
+                .arg(s.shieldCustomColor ? s.shieldColor.name() : QStringLiteral("transparent")));
+        for (QObject* o : {static_cast<QObject*>(classic), static_cast<QObject*>(showArea),
+                           static_cast<QObject*>(autoCenter), static_cast<QObject*>(shield),
+                           static_cast<QObject*>(color), static_cast<QObject*>(opacity),
+                           static_cast<QObject*>(autoAdjust)}) {
+            o->blockSignals(false);
+        }
+    };
+    sync();
+    QObject::connect(controller, &ToolController::cropOptionsChanged, menu, sync);
+
+    QObject::connect(classic, &QAction::toggled, menu, [crop](bool on) { crop->setClassicMode(on); });
+    QObject::connect(showArea, &QAction::toggled, menu, [edit](bool on) {
+        edit([on](CropSettings& s) { s.showCroppedArea = on; });
+    });
+    QObject::connect(autoCenter, &QAction::toggled, menu, [edit](bool on) {
+        edit([on](CropSettings& s) { s.autoCenterPreview = on; });
+    });
+    QObject::connect(shield, &QAction::toggled, menu, [edit](bool on) {
+        edit([on](CropSettings& s) { s.shieldEnabled = on; });
+    });
+    QObject::connect(color, &QComboBox::activated, menu, [edit, pickColor, sync](int index) {
+        if (index == 1) {
+            pickColor();
+        } else {
+            edit([](CropSettings& s) { s.shieldCustomColor = false; });
+        }
+        sync();
+    });
+    QObject::connect(swatch, &QToolButton::clicked, menu, pickColor);
+    const auto commitOpacity = [opacity, edit, sync]() {
+        QString text = opacity->currentText();
+        text.remove(QLatin1Char('%'));
+        bool ok = false;
+        const int value = text.toInt(&ok);
+        if (ok) {
+            edit([value](CropSettings& s) { s.shieldOpacity = value; });
+        }
+        sync();
+    };
+    QObject::connect(opacity, &QComboBox::activated, menu, commitOpacity);
+    QObject::connect(opacity->lineEdit(), &QLineEdit::editingFinished, menu, commitOpacity);
+    QObject::connect(autoAdjust, &QCheckBox::toggled, menu, [edit](bool on) {
+        edit([on](CropSettings& s) { s.autoAdjustOpacity = on; });
+    });
 }
 
 } // namespace
@@ -227,61 +371,12 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
         orient->setEnabled(false);
     }
     layout->addWidget(gridButton);
-    // Settings (cog) menu: Classic (default) vs Modern crop drag semantics, the
-    // shield controls, and display toggles.
+    // Settings (cog) menu: Classic mode, Show Cropped Area, Auto Center Preview
+    // and the crop shield.
     auto* cogButton = menuIcon(QStringLiteral("optionsCropCog"), QStringLiteral("crop.cog"),
                                QStringLiteral("Crop settings"));
-    {
-        QMenu* menu = cogButton->menu();
-        QAction* classic = menu->addAction(QStringLiteral("Use Classic Mode"));
-        classic->setCheckable(true);
-        classic->setChecked(controller_ ? crop_->classicMode() : true);
-        classic->setShortcut(QKeySequence(QStringLiteral("P")));
-        classic->setShortcutVisibleInContextMenu(true);
-        classic->setToolTip(QStringLiteral(
-            "Classic: dragging inside moves the crop box. Modern: it moves the content"));
-        connect(classic, &QAction::toggled, this, [this](bool on) {
-            if (controller_) {
-                crop_->setClassicMode(on);
-            }
-        });
-        QAction* showArea = menu->addAction(QStringLiteral("Show Cropped Area"));
-        showArea->setCheckable(true);
-        showArea->setChecked(true);
-        showArea->setShortcut(QKeySequence(QStringLiteral("H")));
-        showArea->setShortcutVisibleInContextMenu(true);
-        QAction* autoCenter = menu->addAction(QStringLiteral("Auto Center Preview"));
-        autoCenter->setCheckable(true);
-        autoCenter->setChecked(true);
-        menu->addSeparator();
-        QAction* shield = menu->addAction(QStringLiteral("Enable Crop Shield"));
-        shield->setCheckable(true);
-        shield->setChecked(true);
-        const auto comboRow = [menu](const QString& label, const QStringList& values,
-                                     int current) {
-            auto* widget = new QWidget(menu);
-            auto* row = new QHBoxLayout(widget);
-            row->setContentsMargins(20, 2, 6, 2);
-            row->addWidget(new QLabel(label, widget));
-            auto* combo = new QComboBox(widget);
-            combo->addItems(values);
-            combo->setCurrentIndex(current);
-            row->addWidget(combo);
-            auto* action = new QWidgetAction(menu);
-            action->setDefaultWidget(widget);
-            menu->addAction(action);
-        };
-        comboRow(QStringLiteral("Color:"),
-                 {QStringLiteral("Match Canvas"), QStringLiteral("Black"), QStringLiteral("White"),
-                  QStringLiteral("Custom")},
-                 0);
-        comboRow(QStringLiteral("Opacity:"),
-                 {QStringLiteral("25%"), QStringLiteral("50%"), QStringLiteral("75%"),
-                  QStringLiteral("100%")},
-                 2);
-        QAction* autoOpacity = menu->addAction(QStringLiteral("Auto Adjust Opacity"));
-        autoOpacity->setCheckable(true);
-        autoOpacity->setChecked(true);
+    if (controller_) {
+        buildCropSettingsMenu(cogButton->menu(), controller_, crop_);
     }
     layout->addWidget(cogButton);
     layout->addWidget(separator());

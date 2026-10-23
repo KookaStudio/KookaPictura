@@ -343,6 +343,22 @@ public:
     // The active crop guide overlay: 0 Rule of Thirds, 1 Grid, 2 Diagonal,
     // 3 Triangle, 4 Golden Ratio, 5 Golden Spiral. Drawn only on an active box.
     void setCropOverlay(int overlay);
+    // How the area outside the box is drawn. `color` is the shield tint (an
+    // invalid colour matches the canvas); `showOutside` off hides the outside
+    // area entirely; `dragging` thins the shield under Auto Adjust Opacity.
+    struct CropShield {
+        bool enabled = true;
+        bool showOutside = true;
+        QColor color;
+        int opacity = 75;
+        bool autoAdjust = true;
+        bool dragging = false;
+    };
+    void setCropShield(const CropShield& shield);
+    // The alpha (0-255) the shield paints with; test hook for the dim level.
+    int cropShieldAlpha() const;
+    // Pan so the image-space `area` is centred in the viewport.
+    void centerOnImageRect(const QRectF& area);
     int cropOverlayForTest() const { return cropOverlay_; }
     // The Modern crop content offset (image space): the composite is drawn
     // shifted by this while the crop box overlay stays fixed, so an inside drag
@@ -673,6 +689,7 @@ private:
     bool cropPreview_ = false;
     bool cropRotating_ = false;
     int cropOverlay_ = 0;
+    CropShield cropShield_;
     QPointF cropContentOffset_;
     double cropStraighten_ = 0.0;
     QPointF cropStraightenPivot_;

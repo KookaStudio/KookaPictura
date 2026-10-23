@@ -294,6 +294,37 @@ void ImageView::setCropOverlay(int overlay)
     update();
 }
 
+void ImageView::setCropShield(const CropShield& shield)
+{
+    cropShield_ = shield;
+    update();
+}
+
+// Auto Adjust Opacity: the shield eases off while the box is being dragged so
+// the content under it stays readable.
+int ImageView::cropShieldAlpha() const
+{
+    if (!cropShield_.showOutside) {
+        return 255;
+    }
+    if (!cropShield_.enabled) {
+        return 0;
+    }
+    double opacity = cropShield_.opacity / 100.0;
+    if (cropShield_.autoAdjust && cropShield_.dragging) {
+        opacity *= 0.5;
+    }
+    return int(std::lround(opacity * 255.0));
+}
+
+void ImageView::centerOnImageRect(const QRectF& area)
+{
+    if (area.isNull() || docSize_.isEmpty()) {
+        return;
+    }
+    panBy(QRectF(this->rect()).center() - imageToWidget(area.center()));
+}
+
 void ImageView::setCropContentOffset(const QPointF& offset)
 {
     if (cropContentOffset_ == offset) {
@@ -519,8 +550,12 @@ void ImageView::paintCropGroupOverlays(QPainter& painter)
         shield.addRect(canvas);
         shield.addRect(box);
         painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(0, 0, 0, 150));
-        painter.drawPath(shield);
+        if (const int alpha = cropShieldAlpha(); alpha > 0) {
+            QColor tint = cropShield_.color.isValid() ? cropShield_.color : canvasColor_;
+            tint.setAlpha(alpha);
+            painter.setBrush(tint);
+            painter.drawPath(shield);
+        }
         painter.setBrush(Qt::NoBrush);
         // The active guide overlay, chosen from the options-bar menu; the
         // preview box the tool starts with shows its handles but no guides, and

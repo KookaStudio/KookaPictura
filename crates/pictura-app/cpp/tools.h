@@ -391,6 +391,9 @@ public:
     // `handleDeletePoint` drops the selected point (Delete).
     bool handleFinishPath();
     bool handleEscape();
+    // The Crop tool's Settings menu keys: `P` toggles Classic mode and `H`
+    // Show Cropped Area (Modern only). True when the key was taken.
+    bool handleCropSettingsKey(int key);
     bool handleDeletePoint();
 
     // Free Transform session. `beginFreeTransform` starts a session on `path`
