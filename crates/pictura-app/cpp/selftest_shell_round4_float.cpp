@@ -72,8 +72,13 @@ QString revealedPanel(pictura::PanelColumn* column, pictura::PanelGroup* group)
     if (group->isCollapsedToIcons()) {
         group->setCollapsedToIcons(false);
     }
-    return group->visiblePanels().isEmpty() ? QString()
-                                            : group->visiblePanels().first()->objectName();
+    const QString panel = group->visiblePanels().isEmpty()
+                              ? QString()
+                              : group->visiblePanels().first()->objectName();
+    if (!panel.isEmpty()) {
+        column->ensureGroupVisibleForTest(panel);
+    }
+    return panel;
 }
 
 void closeFloats(pictura::PanelColumn* column)
@@ -213,6 +218,7 @@ int pictura::runShellRound4FloatCheck(pictura::PicturaMainWindow& frame)
             if (floated) {
                 const int beforeWidth = floatWindow->width();
                 const int beforeHeight = floatWindow->height();
+                const int beforeToolboxHeight = toolbox->sizeHint().height();
                 QToolButton* toggle = tools->panelColumnToggleForTest();
                 if (toggle) {
                     toggle->click();
@@ -222,8 +228,11 @@ int pictura::runShellRound4FloatCheck(pictura::PicturaMainWindow& frame)
                 const int afterHeight = floatWindow->height();
                 grew = toolbox->columns() == 2 && afterWidth > beforeWidth;
                 matches = afterWidth == tools->minimumWidth();
-                fitsHeight = afterHeight < beforeHeight
-                             && afterHeight <= tools->minimumSizeHint().height() + 8;
+                // A short screen caps the overlay height in both modes, so
+                // check that the grid itself got shorter and the overlay fits
+                // the column's current hint.
+                fitsHeight = toolbox->sizeHint().height() < beforeToolboxHeight
+                             && afterHeight <= tools->sizeHint().height() + 8;
                 if (toggle) {
                     toggle->click();
                     pumpFloat(6);
@@ -793,8 +802,7 @@ int pictura::runShellRound4FloatCheck(pictura::PicturaMainWindow& frame)
                     const QRect own(source->mapToGlobal(QPoint(0, 0)), source->size());
                     const QRect ownBar = source->tabBarGlobalRect();
                     const int ownTop = qMax(own.top(), ownBar.bottom());
-                    const QPoint ownBody(own.center().x(),
-                                         ownTop + (own.bottom() - ownTop) / 2);
+                    const QPoint ownBody(own.center().x(), ownTop + 8);
                     const bool beganOwn = primary->beginGroupDragForTest(s);
                     primary->dragToForTest(ownBody);
                     ownBoundary = beganOwn && primary->dropIndicatorVisibleForTest()
@@ -901,9 +909,21 @@ int pictura::runShellRound4FloatCheck(pictura::PicturaMainWindow& frame)
                 pumpFloat(4);
                 if (!source->visiblePanels().isEmpty() && source->visiblePanels().first()) {
                     const QString panel = source->visiblePanels().first()->objectName();
+                    const QString targetPanel = target->visiblePanels().isEmpty()
+                                                    ? QString()
+                                                    : target->visiblePanels().first()->objectName();
                     const int floatsBefore = primary->floatCountForTest();
-                    const QPoint a = target->tabBarGlobalRect().center();
+                    // The groups can be taller than the column viewport; reveal
+                    // the source to start the drag, then scroll to the target
+                    // before resolving the drop point.
+                    primary->ensureGroupVisibleForTest(panel);
+                    pumpFloat(4);
                     began = primary->beginGroupDragForTest(panel);
+                    if (!targetPanel.isEmpty()) {
+                        primary->ensureGroupVisibleForTest(targetPanel);
+                        pumpFloat(4);
+                    }
+                    const QPoint a = target->tabBarGlobalRect().center();
                     primary->dragToForTest(a);
                     inside = primary->floatCountForTest() == floatsBefore
                              && (primary->outlineIndicatorVisibleForTest()
