@@ -227,6 +227,37 @@ def group() -> PSDImage:
     return psd
 
 
+def pass_through_vector_mask() -> PSDImage:
+    """RGB, a blue Backdrop plus a Pass Through group whose red child is cut by
+    an inverted group vector mask over ``(0,0)-(6,6)``.
+
+    The group is visible only outside the rectangle: the fixture exercises the
+    pass-through fast path falling back to isolation when a vector mask is
+    present. Without that fallback the child paints the whole canvas red.
+    """
+    psd = PSDImage.new("RGB", (WIDTH, HEIGHT), color=(0, 0, 255))
+    psd.create_pixel_layer(
+        Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 255, 255)),
+        name="Backdrop",
+        left=0,
+        top=0,
+    )
+    child = psd.create_pixel_layer(
+        Image.new("RGBA", (WIDTH, HEIGHT), (255, 0, 0, 255)),
+        name="Inner Red",
+        left=0,
+        top=0,
+    )
+    group = psd.create_group([child], name="Group A")
+    group._record.tagged_blocks[Tag.VECTOR_MASK_SETTING1] = TaggedBlock(
+        key=Tag.VECTOR_MASK_SETTING1,
+        data=VectorMaskSetting(
+            version=3, flags=0x01, path=_closed_rect_path(0, 0, 6, 6)
+        ),
+    )
+    return psd
+
+
 def knockout() -> PSDImage:
     """RGB, a red Background, an intermediate green layer, and a half-fill blue
     layer carrying `knko = Deep` (2) that punches the green through.
@@ -2064,6 +2095,7 @@ FIXTURES = {
     "icc_profile.psd": icc_profile,
     "metadata.psd": metadata,
     "group.psd": group,
+    "pass_through_vector_mask.psd": pass_through_vector_mask,
     "masked.psd": masked,
     "gray.psd": gray,
     "indexed.psd": indexed,
