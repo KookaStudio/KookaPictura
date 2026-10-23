@@ -3,20 +3,22 @@
 //! The engine works in sRGB; a file whose pixels are in another ICC space must
 //! be converted on load. This pass runs after the mode/depth `normalize`, finds
 //! the profile resource, and converts the composite and every layer's color
-//! channels with lcms2 (`pictura-color`). It then removes the stale profile from
-//! the preserved resources so a save is not mis-tagged.
+//! channels with lcms2 (`pictura-color`), including the retained native-depth
+//! planes. It then removes the stale profile from the preserved resources so a
+//! save is not mis-tagged.
 //!
 //! ponytail: "is sRGB" is the profile's `Description` containing "srgb" (lcms2
 //! has no profile compare); a differently-named sRGB profile is converted within
 //! a rounding LSB. Rendering intent is fixed at relative-colorimetric.
 
 use pictura_color::{convert, ByteTransform, Intent, Policy, Profile};
-use pictura_core::{ColorMode, Document, Layer, LayerStack, PixelBuffer};
+use pictura_core::{ColorMode, Document, PixelBuffer};
 
 use std::borrow::Cow;
 use std::cell::RefCell;
 
 use crate::common::{MODE_CMYK, MODE_GRAYSCALE, MODE_LAB, MODE_RGB};
+use crate::icc_convert::{convert_layers, convert_native_document};
 use crate::image_resources::{
     decode_image_resources_with_len, encode_image_resources, frame_image_resource, ImageResource,
     ICC_PROFILE,
@@ -55,6 +57,7 @@ pub(crate) fn apply_icc(doc: Document) -> Document {
     let mut doc = doc;
     doc.composite = composite;
     convert_layers(&mut doc.layers, &src, &dst);
+    convert_native_document(&mut doc, &src, &dst);
     doc.source_icc = Some(profile_bytes);
     let section = rebuild_resources(&doc, resources, consumed, None);
     doc.image_resources = section;
@@ -128,35 +131,6 @@ fn convert_buffer(buf: &PixelBuffer, src: &Profile, dst: &Profile) -> Option<Pix
     Some(out)
 }
 
-/// Convert a layer's RGB color channels in place, selected by channel id `0..3`
-/// rather than by storage order. A layer missing a color channel is unchanged.
-fn convert_layer(layer: &mut Layer, src: &Profile, dst: &Profile) {
-    let mut slots = Vec::with_capacity(3);
-    let mut planes = Vec::with_capacity(3);
-    for id in 0..3i16 {
-        let Some((slot, channel)) = layer.channels.iter().enumerate().find(|(_, c)| c.id == id)
-        else {
-            return;
-        };
-        slots.push(slot);
-        planes.push(channel.data.to_vec());
-    }
-    if let Some(converted) = convert_planes(&planes, src, dst) {
-        for (slot, plane) in slots.into_iter().zip(converted) {
-            layer.channels[slot].data = plane.into();
-        }
-    }
-}
-
-/// Convert every layer in `layers` and, recursively, every descendant of a
-/// group, so a nested pixel layer is not left in the old profile.
-fn convert_layers(layers: &mut LayerStack, src: &Profile, dst: &Profile) {
-    for layer in layers {
-        convert_layer(layer, src, dst);
-        convert_layers(&mut layer.children, src, dst);
-    }
-}
-
 /// Rebuild an image-resource section: every parsed block except 1039 (with an
 /// optional freshly framed 1039 appended), followed by the unparsed tail the
 /// decoder did not consume, byte-for-byte.
@@ -220,7 +194,11 @@ fn output_data_space(mode_code: u16) -> Option<[u8; 4]> {
 
 /// Interleave 1 or 3 equal-length planes, convert, and split back. The planes
 /// are treated as a `N x 1` image; the lcms2 transform is per-pixel.
-fn convert_planes(planes: &[Vec<u8>], src: &Profile, dst: &Profile) -> Option<Vec<Vec<u8>>> {
+pub(super) fn convert_planes(
+    planes: &[Vec<u8>],
+    src: &Profile,
+    dst: &Profile,
+) -> Option<Vec<Vec<u8>>> {
     let channels = planes.len();
     if channels != 1 && channels != 3 {
         return None;
@@ -299,6 +277,7 @@ pub fn convert_document(doc: &mut Document, dst: &Profile) -> bool {
         doc.composite = composite;
     }
     convert_layers(&mut doc.layers, &src, dst);
+    convert_native_document(doc, &src, dst);
     assign_document_profile(doc, dst);
     true
 }
@@ -386,7 +365,7 @@ fn convert_planes_with(transform: &ByteTransform, buf: &PixelBuffer, n: usize) -
 mod tests {
     use super::*;
     use crate::image_resources::decode_image_resources;
-    use pictura_core::{BitDepth, Channel, ColorMode, PsdRect};
+    use pictura_core::{BitDepth, Channel, ColorMode, Layer, PsdRect};
 
     /// One `8BIM` resource block with an empty Pascal name.
     fn block(id: u16, data: &[u8]) -> Vec<u8> {

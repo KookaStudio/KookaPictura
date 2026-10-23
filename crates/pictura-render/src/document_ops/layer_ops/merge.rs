@@ -161,6 +161,7 @@ pub fn flatten(doc: &mut Document) -> Result<MergeOutcome, MergeError> {
         rect,
         BlendMode::Normal,
         255,
+        false,
         channels,
     );
     result.background = true;
@@ -192,15 +193,30 @@ fn merge_down(doc: &mut Document, path: &str) -> Result<MergeOutcome, MergeError
     }
 
     // Result inherits the lower (replacement-position) layer's attributes.
-    let inputs = vec![lower.clone(), upper.clone()];
+    // A clipped target must not become its own base in the scratch: clear both
+    // flags so the pair composites as ordinary layers, and let the real base
+    // (which stays below the result) apply its coverage once.
+    // ponytail: the scratch omits the real base, so a non-Normal target's blend
+    // is not applied against it. Whole-document equality is exact for a Normal
+    // target; baking the whole run with its base is the upgrade.
+    let name = lower.name.clone();
+    let (blend, opacity, clipping) = (lower.blend, lower.opacity, lower.clipping);
+    let mut lower = lower.clone();
+    let mut upper = upper.clone();
+    if clipping {
+        lower.clipping = false;
+        upper.clipping = false;
+    }
+    let inputs = vec![lower, upper];
     bake_inputs(
         doc,
         &inputs,
         &[lower_segments.clone(), upper_segments],
         &lower_segments,
-        lower.name.clone(),
-        lower.blend,
-        lower.opacity,
+        name,
+        blend,
+        opacity,
+        clipping,
     )
 }
 
@@ -251,6 +267,7 @@ fn merge_selected(doc: &mut Document, paths: &[String]) -> Result<MergeOutcome, 
         name,
         BlendMode::Normal,
         255,
+        false,
     )
 }
 
@@ -307,6 +324,7 @@ fn merge_visible(doc: &mut Document, active: &str) -> Result<MergeOutcome, Merge
         name,
         blend,
         opacity,
+        false,
     )
 }
 
@@ -327,10 +345,9 @@ fn merge_clipping_mask(doc: &mut Document, path: &str) -> Result<MergeOutcome, M
     for at in base_index + 1..top {
         let mut p = parent.clone();
         p.push(at);
-        let mut clipped = resolve_path(doc, &format_segments(&p))
+        let clipped = resolve_path(doc, &format_segments(&p))
             .ok_or(MergeError::NotClippable)?
             .clone();
-        fold_clipping(&base, &mut clipped);
         inputs.push(clipped);
     }
 
@@ -349,6 +366,7 @@ fn merge_clipping_mask(doc: &mut Document, path: &str) -> Result<MergeOutcome, M
         base.name,
         base.blend,
         base.opacity,
+        false,
     )
 }
 
@@ -410,6 +428,7 @@ fn clipping_plan(doc: &Document, path: &str) -> Option<ClippingPlan> {
 
 // --- shared machinery -------------------------------------------------------
 
+#[allow(clippy::too_many_arguments)]
 fn bake_inputs(
     doc: &mut Document,
     inputs: &[Layer],
@@ -418,6 +437,7 @@ fn bake_inputs(
     name: String,
     blend: BlendMode,
     opacity: u8,
+    clipping: bool,
 ) -> Result<MergeOutcome, MergeError> {
     let mut scratch = Document::new(doc.width, doc.height, doc.mode, doc.depth);
     scratch.layers = pictura_core::LayerStack::from_layers(inputs.to_vec());
@@ -433,7 +453,7 @@ fn bake_inputs(
             right: 0,
         });
     let channels = bake(&buffer, rect);
-    let node = pixel_result(name, rect, blend, opacity, channels);
+    let node = pixel_result(name, rect, blend, opacity, clipping, channels);
 
     let path = splice_result(doc, remove, anchor, node).ok_or(MergeError::InvalidTarget)?;
     Ok(MergeOutcome {
@@ -555,6 +575,7 @@ fn pixel_result(
     rect: PsdRect,
     blend: BlendMode,
     opacity: u8,
+    clipping: bool,
     channels: Vec<Channel>,
 ) -> Layer {
     Layer {
@@ -565,7 +586,7 @@ fn pixel_result(
         fill: 255,
         lock: LockFlags::default(),
         color: ColorLabel::None,
-        clipping: false,
+        clipping,
         visible: true,
         mask: None,
         adjustment: None,
@@ -620,50 +641,6 @@ fn opaque_white_layer(width: u32, height: u32) -> Layer {
         is_group: false,
         background: false,
         ..Default::default()
-    }
-}
-
-/// Mask a clipped sibling by the base's alpha (intersection). The compositor
-/// does not render the `clipping` flag yet; this merge-local fold is the
-/// documented gap.
-//
-// ponytail: compositor has no clipping pass; delete this fold when it does.
-fn fold_clipping(base: &Layer, sibling: &mut Layer) {
-    let bw = base.rect.width();
-    let bh = base.rect.height();
-    let sw = sibling.rect.width();
-    let sh = sibling.rect.height();
-    if sw <= 0 || sh <= 0 {
-        return;
-    }
-    let base_alpha = crate::channel(base, -1);
-    let alpha_index = match sibling.channels.iter().position(|c| c.id == -1) {
-        Some(index) => index,
-        None => {
-            sibling.channels.push(Channel {
-                id: -1,
-                data: vec![255; (sw * sh) as usize].into(),
-            });
-            sibling.channels.len() - 1
-        }
-    };
-    for y in 0..sh {
-        for x in 0..sw {
-            let bx = sibling.rect.left + x - base.rect.left;
-            let by = sibling.rect.top + y - base.rect.top;
-            let base_a = if bx >= 0 && by >= 0 && bx < bw && by < bh {
-                base_alpha
-                    .and_then(|data| data.get(by as usize * bw as usize + bx as usize))
-                    .copied()
-                    .unwrap_or(255)
-            } else {
-                0
-            };
-            let index = (y * sw + x) as usize;
-            let current = sibling.channels[alpha_index].data[index];
-            sibling.channels[alpha_index].data[index] =
-                ((current as u32 * base_a as u32) / 255) as u8;
-        }
     }
 }
 

@@ -34,8 +34,8 @@ clipping group into its raster base layer. The base layer MUST be a raster
 (non-adjustment, non-fill-content) layer; when the base is not raster the
 command SHALL be disabled and MUST refuse without changing the document. The
 collapsed result SHALL occupy the base layer's position and SHALL have the
-clipped layers' coverage applied into its alpha, and the command SHALL
-recomposite and record exactly one undo state.
+clipped layers' coverage applied into its alpha, exactly once, and the command
+SHALL recomposite and record exactly one undo state.
 
 #### Scenario: A clipping group collapses into its base
 
@@ -50,6 +50,13 @@ recomposite and record exactly one undo state.
   Clipping Mask runs
 - **THEN** the command is disabled, the document is unchanged, and no history
   state is added
+
+#### Scenario: The base coverage is applied once [merge_clipping_mask_applies_coverage_once]
+
+- **WHEN** a raster base with partial alpha has a clipped sibling and `Merge
+  Clipping Mask` runs
+- **THEN** the merged pixels MUST equal the pre-merge composite, with the base's
+  coverage applied exactly once rather than squared
 
 ### Requirement: Flatten Image
 
@@ -661,16 +668,19 @@ document unchanged and MUST NOT add a history state.
 
 The command SHALL composite the inputs in stacking order through the document
 compositor over the union of their content rectangles, apply each input's mask
-into the resulting alpha, and replace the inputs with one pixel node. Clipping
-coverage is folded into the base alpha only by `Merge Clipping Mask`; the
-compositor has no clipping pass yet, so Merge Down / Merge Layers / Merge
-Visible share that documented gap rather than diverging. For Merge Down the
-result SHALL inherit the lower layer's name, blend mode, and opacity
-*(inferred)*. For Merge Layers the result SHALL occupy the topmost selected
-layer's position and its blend mode and opacity SHALL be reset to `Normal` and
-`255` *(inferred)*. Sibling order and parent-group references SHALL be repaired
-so the result sits where the inputs were removed. Every merge SHALL recomposite
-and record exactly one undo state.
+into the resulting alpha, and replace the inputs with one pixel node. When Merge
+Down's target is itself clipped, the result SHALL keep the target's `clipping`
+flag and SHALL NOT apply the target's own clipping coverage while baking, so the
+real base applies its coverage exactly once when the document recomposites and
+the layers above remain in the clipping run. When the target is itself the
+clipping base, the result SHALL be unclipped and the clipped source SHALL be
+baked with the base's coverage. Merge Layers and Merge Visible SHALL keep their
+existing clip-aware scratch composite. For Merge Down the result SHALL inherit
+the lower layer's name, blend mode, and opacity *(inferred)*. For Merge Layers
+the result SHALL occupy the topmost selected layer's position and its blend mode
+and opacity SHALL be reset to `Normal` and `255` *(inferred)*. Sibling order and
+parent-group references SHALL be repaired so the result sits where the inputs
+were removed. Every merge SHALL recomposite and record exactly one undo state.
 
 The Layers panel merge entry SHALL follow the same label and enablement rules as
 the Layer-menu command: `Merge Down` with one selected layer, `Merge Layers` with
@@ -762,6 +772,16 @@ two or more, and disabled when the current selection cannot merge.
 - **WHEN** a merge completes and the user undoes it
 - **THEN** the exact pre-merge layer tree, kinds, names, masks, and pixels are
   restored
+
+#### Scenario: Merge Down inside a clipping run preserves the clip [merge_clipped_layer_preserves_clip]
+
+- **WHEN** Merge Down runs on a clipped layer whose lower layer is also clipped
+  to a common raster base, and separately on a clipped layer whose lower layer
+  is that base
+- **THEN** the whole-document composite MUST be unchanged over the sampled
+  region, no pixels outside the base's coverage become visible, the result keeps
+  its target's `clipping` flag in the first case and is unclipped when the target
+  is the base, and every clipped layer above remains in the clipping run
 
 ### Requirement: Adjustment and fill layers as merge sources
 

@@ -88,6 +88,68 @@ fn adjustment_layer_mask_and_opacity_gate() {
 }
 
 #[test]
+fn adjustment_ignores_fill() {
+    let base = || {
+        solid(
+            "base",
+            full(1, 1),
+            (100, 100, 100),
+            255,
+            BlendMode::Normal,
+            255,
+        )
+    };
+    for fill in [0, 128, 255] {
+        let mut adj = adjustment_layer("invert", *b"nvrt", Vec::new(), 255, None);
+        adj.fill = fill;
+        let scene = doc(1, 1, vec![base(), adj]);
+        let out = composite_rgba(&scene);
+        assert_eq!(rgb(&out, 0, 0), [155, 155, 155], "fill {fill} is ignored");
+        let gpu = composite_gpu_or_cpu(&scene);
+        for (i, (a, b)) in out.data.iter().zip(gpu.data.iter()).enumerate() {
+            assert!(
+                (*a as i16 - *b as i16).abs() <= 1,
+                "GPU parity at sample {i}: {a} vs {b}"
+            );
+        }
+    }
+
+    // Opacity still gates the adjustment; Fill stays inert.
+    let mut half = adjustment_layer("invert", *b"nvrt", Vec::new(), 128, None);
+    half.fill = 0;
+    let out = composite_rgba(&doc(1, 1, vec![base(), half]));
+    let got = rgb(&out, 0, 0)[0] as i16;
+    assert!(
+        (got - 128).abs() <= 1,
+        "opacity 128 lands near 128, got {got}"
+    );
+
+    let mut zero = adjustment_layer("invert", *b"nvrt", Vec::new(), 0, None);
+    zero.fill = 0;
+    let out = composite_rgba(&doc(1, 1, vec![base(), zero]));
+    assert_eq!(rgb(&out, 0, 0), [100, 100, 100], "opacity 0 is inert");
+}
+
+#[test]
+fn fill_layer_keeps_fill() {
+    let mut fill = adjustment_layer(
+        "fill",
+        *b"SoCo",
+        crate::encode_solid_color_fill([255, 0, 0]).data,
+        255,
+        None,
+    );
+    fill.rect = full(1, 1);
+    fill.fill = 128;
+    let out = composite_rgba(&doc(1, 1, vec![fill]));
+    assert_eq!(
+        px(&out, 0, 0),
+        [255, 0, 0, 128],
+        "fill content still honours Fill"
+    );
+}
+
+#[test]
 fn unknown_adjustment_key_is_noop() {
     let base = solid(
         "base",

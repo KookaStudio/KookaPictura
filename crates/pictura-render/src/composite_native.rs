@@ -108,13 +108,20 @@ pub(crate) fn composite_adjustment(
     if n == 0 {
         return;
     }
+    // CS6 exposes no Fill for adjustments: a stored value must not gate the
+    // transformed backdrop. Generative fill content returned above keeps its
+    // Fill. The proxy lets both the native and 8-bit gates read fill 255.
+    let gated = Layer {
+        fill: 255,
+        ..layer.clone()
+    };
     // A document read at 16/32 applies the adjustment to the f32 accumulator
     // at native precision. An adjustment outside `apply_native`'s set falls
     // back to the 8-bit path below.
     if doc.source_depth.is_some() {
         match apply_native_rgb(canvas, adjustment) {
             Ok(adjusted) => {
-                gate_adjusted(canvas, layer, doc, &adjusted);
+                gate_adjusted(canvas, &gated, doc, &adjusted);
                 return;
             }
             Err(AdjustError::Unsupported(_)) => {}
@@ -158,7 +165,7 @@ pub(crate) fn composite_adjustment(
                 row,
                 cover.as_deref_mut(),
                 ox,
-                layer,
+                &gated,
                 doc,
                 x,
                 y,
