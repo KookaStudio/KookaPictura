@@ -99,8 +99,10 @@ QVBoxLayout* addMenuPanel(QMenu* menu, const QString& name)
 constexpr int kRowInset = 12;
 
 // The grid menu: plain items picked by clicking, like CS6's: the overlays (each
-// with its icon), the show modes, and the cycle keys. The button shows the
-// selected overlay's icon. The O key itself is taken by the tool controller.
+// with its icon), the show modes, and the cycle commands. The button shows the
+// selected overlay's icon. The O / Shift+O keys themselves are taken by
+// ToolController::handleCropKey, so the menu shows them as text only: a real
+// action shortcut would collide with the tool-letter shortcut.
 void buildCropGridMenu(QMenu* menu, QToolButton* button, ToolController* controller,
                        CropOptions* crop)
 {
@@ -116,20 +118,37 @@ void buildCropGridMenu(QMenu* menu, QToolButton* button, ToolController* control
         });
     }
     menu->addSeparator();
-    menu->addAction(QStringLiteral("Auto Show Overlay"));
-    menu->addAction(QStringLiteral("Always Show Overlay"));
-    menu->addAction(QStringLiteral("Never Show Overlay"));
+    const QStringList shows = {QStringLiteral("Auto Show Overlay"),
+                               QStringLiteral("Always Show Overlay"),
+                               QStringLiteral("Never Show Overlay")};
+    for (int mode = 0; mode < shows.size(); ++mode) {
+        QAction* action = menu->addAction(shows[mode]);
+        QObject::connect(action, &QAction::triggered, menu, [crop, mode]() {
+            if (crop) {
+                CropSettings settings = crop->settings();
+                settings.overlayShow = mode;
+                crop->setSettings(settings);
+            }
+        });
+    }
     menu->addSeparator();
-    QAction* cycle = menu->addAction(QStringLiteral("Cycle Overlay"));
-    cycle->setShortcut(QKeySequence(QStringLiteral("O")));
-    cycle->setShortcutVisibleInContextMenu(true);
-    QAction* orient = menu->addAction(QStringLiteral("Cycle Orientation"));
-    orient->setShortcut(QKeySequence(QStringLiteral("Shift+O")));
-    orient->setShortcutVisibleInContextMenu(true);
-    orient->setEnabled(false);
+    QAction* cycle = menu->addAction(QStringLiteral("Cycle Overlay\tO"));
+    QObject::connect(cycle, &QAction::triggered, menu, [crop]() {
+        if (crop) {
+            crop->cycleOverlay();
+        }
+    });
+    QAction* orient = menu->addAction(QStringLiteral("Cycle Orientation\tShift+O"));
+    QObject::connect(orient, &QAction::triggered, menu, [crop]() {
+        if (crop) {
+            crop->cycleOverlayOrientation();
+        }
+    });
 
-    const auto sync = [button, crop]() {
-        button->setIcon(icon(CropOptions::overlayIcon(crop ? crop->gridOverlay() : 0)));
+    const auto sync = [button, crop, orient]() {
+        const int overlay = crop ? crop->gridOverlay() : 0;
+        button->setIcon(icon(CropOptions::overlayIcon(overlay)));
+        orient->setEnabled(crop && CropOptions::overlayHasOrientation(overlay));
     };
     sync();
     if (controller) {

@@ -371,7 +371,7 @@ void CropOptionsTest::cropOptionsPersist()
     QCOMPARE(saved.cropRatio, 1.5);
 
     // Restore the defaults so the sibling tests are unaffected.
-    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(true);
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(false);
     tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setGridOverlay(0);
     tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setDeletePixels(true);
     tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setRatio(0.0);

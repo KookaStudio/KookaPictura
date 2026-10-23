@@ -139,7 +139,7 @@ SessionState loadSession()
     state.guideColor = obj.value(QStringLiteral("guideColor")).toString(state.guideColor);
     state.pdfOptions = obj.value(QStringLiteral("pdfOptions")).toString();
     state.guideDashed = obj.value(QStringLiteral("guideDashed")).toBool(false);
-    state.cropClassicMode = obj.value(QStringLiteral("cropClassicMode")).toBool(true);
+    state.cropClassicMode = obj.value(QStringLiteral("cropClassicMode")).toBool(false);
     state.cropDeletePixels = obj.value(QStringLiteral("cropDeletePixels")).toBool(true);
     state.cropRatio = obj.value(QStringLiteral("cropRatio")).toDouble(0.0);
     state.cropGridOverlay = obj.value(QStringLiteral("cropGridOverlay")).toInt(0);

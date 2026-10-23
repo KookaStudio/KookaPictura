@@ -76,8 +76,11 @@ void PicturaMainWindow::keyPressEvent(QKeyEvent* event)
         && tools_->handleFinishPath()) {
         return;
     }
-    if (!event->isAutoRepeat() && tools_ && event->modifiers() == Qt::NoModifier
-        && tools_->handleCropSettingsKey(event->key())) {
+    // The tool letters are window shortcuts and normally take P / H / O first
+    // (see rebuildToolShortcuts); this covers a letter with no tool shortcut.
+    if (!event->isAutoRepeat() && tools_
+        && (event->modifiers() & ~Qt::ShiftModifier) == Qt::NoModifier
+        && tools_->handleCropKey(event->key(), event->modifiers() & Qt::ShiftModifier)) {
         event->accept();
         return;
     }

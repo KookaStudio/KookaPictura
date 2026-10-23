@@ -1008,9 +1008,13 @@ private:
                 canvas->setCropContentOffset(contentOffset_);
                 canvas->setCropBox(box_);
                 canvas->setCropPreview(state_ == State::Preview);
-                canvas->setCropOverlay(crop_->gridOverlay());
                 canvas->setCropBoxRotates(crop_->classicMode());
                 const CropSettings& cs = crop_->settings();
+                const bool dragging = grip_ != BoxGrip::None || rotating_;
+                // Auto shows the guides only while the box is being adjusted.
+                const bool guides = cs.overlayShow == CropSettings::AlwaysShow
+                    || (cs.overlayShow == CropSettings::AutoShow && dragging);
+                canvas->setCropOverlay(guides ? crop_->gridOverlay() : -1, cs.overlayOrientation);
                 ImageView::CropShield shield;
                 shield.enabled = cs.shieldEnabled;
                 shield.showOutside = crop_->classicMode() || cs.showCroppedArea;
@@ -1019,7 +1023,7 @@ private:
                 }
                 shield.opacity = cs.shieldOpacity;
                 shield.autoAdjust = cs.autoAdjustOpacity;
-                shield.dragging = grip_ != BoxGrip::None || rotating_;
+                shield.dragging = dragging;
                 canvas->setCropShield(shield);
             }
         }

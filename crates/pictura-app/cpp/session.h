@@ -61,7 +61,7 @@ struct SessionState {
     QString pdfOptions;
     bool guideDashed = false;
     // Crop options bar, persisted across restarts.
-    bool cropClassicMode = true;     // Classic (default) vs Modern drag semantics
+    bool cropClassicMode = false;    // Classic vs Modern (default) drag semantics
     bool cropDeletePixels = true;    // discard pixels outside the crop
     double cropRatio = 0.0;          // locked aspect ratio, 0 = unconstrained
     int cropGridOverlay = 0;         // 0 Rule of Thirds, 1 Grid, ...

@@ -1085,19 +1085,28 @@ bool ToolController::handleFinishPath()
     return false;
 }
 
-bool ToolController::handleCropSettingsKey(int key)
+bool ToolController::handleCropKey(int key, bool shift)
 {
     if (active_ != ToolId::Crop || !crop_) {
+        return false;
+    }
+    if (key == Qt::Key_O) {
+        shift ? crop_->cycleOverlayOrientation() : crop_->cycleOverlay();
+        return true;
+    }
+    if (shift) {
         return false;
     }
     if (key == Qt::Key_P) {
         crop_->setClassicMode(!crop_->classicMode());
         return true;
     }
-    if (key == Qt::Key_H && !crop_->classicMode()) {
-        CropSettings settings = crop_->settings();
-        settings.showCroppedArea = !settings.showCroppedArea;
-        crop_->setSettings(settings);
+    if (key == Qt::Key_H) {
+        if (!crop_->classicMode()) {
+            CropSettings settings = crop_->settings();
+            settings.showCroppedArea = !settings.showCroppedArea;
+            crop_->setSettings(settings);
+        }
         return true;
     }
     return false;

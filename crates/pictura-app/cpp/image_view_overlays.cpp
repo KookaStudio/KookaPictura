@@ -285,12 +285,13 @@ void ImageView::setCropRotating(bool rotating)
     update();
 }
 
-void ImageView::setCropOverlay(int overlay)
+void ImageView::setCropOverlay(int overlay, int orientation)
 {
-    if (cropOverlay_ == overlay) {
+    if (cropOverlay_ == overlay && cropOverlayOrientation_ == orientation) {
         return;
     }
     cropOverlay_ = overlay;
+    cropOverlayOrientation_ = orientation;
     update();
 }
 
@@ -589,9 +590,16 @@ void ImageView::paintCropGroupOverlays(QPainter& painter)
         if (cropRotating_) {
             painter.setPen(QPen(QColor(255, 255, 255, 110), 1));
             drawCropRotateGrid(painter, box);
-        } else if (!cropPreview_) {
+        } else if (!cropPreview_ && cropOverlay_ >= 0) {
+            painter.save();
+            const QPointF c = box.center();
+            painter.translate(c);
+            painter.scale((cropOverlayOrientation_ & 1) ? -1.0 : 1.0,
+                          (cropOverlayOrientation_ & 2) ? -1.0 : 1.0);
+            painter.translate(-c);
             painter.setPen(QPen(QColor(255, 255, 255, 90), 1));
             drawCropGuides(painter, box, cropOverlay_);
+            painter.restore();
         }
         // CS6 handles sit inside the outline: L-bracket corners and thin edge
         // bars, drawn white over a dark shadow so they read on any content.

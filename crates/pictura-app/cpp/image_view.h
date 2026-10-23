@@ -341,8 +341,11 @@ public:
     bool cropRotatingForTest() const { return cropRotating_; }
     double cropStraightenForTest() const { return cropStraighten_; }
     // The active crop guide overlay: 0 Rule of Thirds, 1 Grid, 2 Diagonal,
-    // 3 Triangle, 4 Golden Ratio, 5 Golden Spiral. Drawn only on an active box.
-    void setCropOverlay(int overlay);
+    // 3 Triangle, 4 Golden Ratio, 5 Golden Spiral; -1 hides it (the show
+    // mode). `orientation` mirrors it: bit 0 left-right, bit 1 top-bottom.
+    // Drawn only on an active box.
+    void setCropOverlay(int overlay, int orientation = 0);
+    int cropOverlayOrientationForTest() const { return cropOverlayOrientation_; }
     // How the area outside the box is drawn. `color` is the shield tint (an
     // invalid colour matches the canvas); `showOutside` off hides the outside
     // area entirely; `dragging` thins the shield under Auto Adjust Opacity.
@@ -692,6 +695,7 @@ private:
     bool cropPreview_ = false;
     bool cropRotating_ = false;
     int cropOverlay_ = 0;
+    int cropOverlayOrientation_ = 0;
     CropShield cropShield_;
     bool cropBoxRotates_ = false;
     QPointF cropContentOffset_;

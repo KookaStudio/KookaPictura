@@ -131,6 +131,8 @@ template <typename F> void fields(CropSettings& o, F&& f)
     f("shieldColor", o.shieldColor);
     f("shieldOpacity", o.shieldOpacity);
     f("autoAdjustOpacity", o.autoAdjustOpacity);
+    f("overlayShow", o.overlayShow);
+    f("overlayOrientation", o.overlayOrientation);
 }
 
 template <typename F> void fields(HealingOptions& o, F&& f)
@@ -431,7 +433,7 @@ void applyToolOptionsJson(ToolController& tools, const QJsonObject& json)
     });
     const QJsonValue crop = json.value(QStringLiteral("crop"));
     if (CropOptions* c = tools.optionsFor<CropOptions>(ToolId::Crop); c && crop.isObject()) {
-        c->applySettings(read(crop.toObject(), c->settings()));
+        c->setSettings(read(crop.toObject(), c->settings()));
     }
     const QJsonValue brush = json.value(QStringLiteral("brush"));
     if (PaintOptions* paint = tools.optionsFor<PaintOptions>(ToolId::Brush); paint && brush.isObject()) {
