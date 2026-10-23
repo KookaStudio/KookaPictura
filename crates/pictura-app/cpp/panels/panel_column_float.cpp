@@ -366,7 +366,12 @@ PanelFloat* PanelColumn::floatColumn(const QPoint& globalTopLeft)
     floatWindow->setContent(this);
     if (toolsContent_) {
         // The floating tools column is not resizable and hugs its content: the
-        // tool grid width and the minimum height the content needs.
+        // tool grid width and the minimum height the content needs. The docked
+        // scroll area otherwise pins the toolbox to the viewport height, so the
+        // overlay lets the toolbox take its own hint while it floats.
+        if (toolsScroll_) {
+            toolsScroll_->setWidgetResizable(false);
+        }
         floatWindow->setMinimumWidth(0);
         floatWindow->setResizable(false);
     } else {
@@ -416,6 +421,9 @@ void PanelColumn::destroyColumnFloat()
     }
     PanelFloat* floatWindow = columnFloat_;
     columnFloat_ = nullptr;
+    if (toolsScroll_) {
+        toolsScroll_->setWidgetResizable(true);
+    }
     floatWindow->hide();
     floatWindow->deleteLater();
 }

@@ -74,6 +74,8 @@ public:
     // M44: make the first visible panel current (a stored layout used to leave
     // the last visible panel active after `setPanelVisible` walked the tabs).
     void setCurrentToFirstVisible();
+    // Re-apply the theme scale to the tab bar and icon controls.
+    void applyUiScale();
 
     // M47 D10: a group hosted in a floating overlay shows a rightmost close
     // control; docked and flyout hosts hide it.

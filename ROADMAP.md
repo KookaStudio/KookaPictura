@@ -399,6 +399,12 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       commands. `crates/pictura-app/cpp/commands.cpp`.
 - [x] **Preferences** — General, Interface, Performance, Units and Guides.
       `crates/pictura-app/cpp/preferences_dialog.cpp`.
+- [x] **Live UI size** — Window ▸ UI Size row (minus, readout, plus, reset) and
+      an Interface ▸ UI Size control, 75–200 % in 10 % steps, applied without a
+      restart and persisted. `Ctrl+Alt++`, `Ctrl+Alt+-`, and `Ctrl+Alt+0` step
+      or reset it; the tools column scrolls so the frame stays resizable at
+      every scale. Not CS6's four-step restart-only setting; added by owner
+      decision (#798). `crates/pictura-app/cpp/theme.cpp`.
 - [x] **Help ▸ Search** (`Shift+Space`) — finds any command, tool, panel,
       Preferences page or key panel control by name, shows where it lives, and
       runs or reveals it. Not a CS6 feature; added by owner decision.

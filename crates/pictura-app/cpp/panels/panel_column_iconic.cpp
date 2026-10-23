@@ -74,7 +74,7 @@ void PanelColumn::setRailMode(bool iconic)
         // neighbour drag can widen it), not a fixed-width strip.
         setMaximumWidth(QWIDGETSIZE_MAX);
         setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
-        setPreferredWidth(kIconStripMinWidth);
+        setPreferredWidth(Theme::scaled(kIconStripMinWidth));
     } else {
         closeIconFlyout();
         iconStrip_->setVisible(false);
@@ -110,7 +110,7 @@ void PanelColumn::updateColumnToggle()
             icon(two ? QStringLiteral("panel.columnsOne") : QStringLiteral("panel.columnsTwo"));
         if (!target.isNull()) {
             columnToggle_->setIcon(target);
-            columnToggle_->setIconSize(QSize(16, 16));
+            columnToggle_->setIconSize(QSize(Theme::scaled(16), Theme::scaled(16)));
             columnToggle_->setText(QString());
         } else {
             columnToggle_->setIcon(QIcon());
@@ -126,7 +126,7 @@ void PanelColumn::updateColumnToggle()
                                         : QStringLiteral("panel.columnsTwo"));
     if (!target.isNull()) {
         columnToggle_->setIcon(target);
-        columnToggle_->setIconSize(QSize(16, 16));
+        columnToggle_->setIconSize(QSize(Theme::scaled(16), Theme::scaled(16)));
         columnToggle_->setText(QString());
     } else {
         columnToggle_->setIcon(QIcon());
@@ -228,7 +228,7 @@ QWidget* PanelColumn::makeGroupGrip(PanelGroup* group)
     grip->setProperty("groupObjectName", group ? group->objectName() : QString());
     grip->setAlignment(Qt::AlignCenter);
     grip->setText(QStringLiteral("\u2022\u2022\u2022"));
-    grip->setFixedHeight(kCompactGripHeight);
+    grip->setFixedHeight(Theme::scaled(kCompactGripHeight));
     grip->setCursor(Qt::SizeAllCursor);
     grip->setToolTip(tr("Drag to move this panel group"));
     grip->setAttribute(Qt::WA_StyledBackground, true);
@@ -246,8 +246,8 @@ void PanelColumn::updateIconStripLabels()
     // M44: show the label as soon as the row has room beyond the icon button and
     // elide its text to that room, instead of hiding it until the full title
     // fits (the M42/M43 `>= 120 px` gate).
-    const int available = iconStrip_->width() - kIconButtonSize - 10;
-    const bool show = available >= kIconLabelMinWidth;
+    const int available = iconStrip_->width() - Theme::scaled(kIconButtonSize) - 10;
+    const bool show = available >= Theme::scaled(kIconLabelMinWidth);
     QFontMetrics metrics(font());
     for (QLabel* label : stripLabels_) {
         if (!label) {
@@ -269,7 +269,7 @@ QToolButton* PanelColumn::makeIconButton(QWidget* parent, const QString& objectN
     button->setObjectName(QStringLiteral("panelIcon_") + objectName);
     if (!icon.isNull()) {
         button->setIcon(icon);
-        button->setIconSize(QSize(kIconPixmapSize, kIconPixmapSize));
+        button->setIconSize(QSize(Theme::scaled(kIconPixmapSize), Theme::scaled(kIconPixmapSize)));
     } else {
         button->setText(title.left(1));
     }
@@ -277,7 +277,7 @@ QToolButton* PanelColumn::makeIconButton(QWidget* parent, const QString& objectN
     button->setAutoRaise(true);
     button->setCheckable(true);
     button->setChecked(activeIconName_ == objectName);
-    button->setFixedSize(kIconButtonSize, kIconButtonSize);
+    button->setFixedSize(Theme::scaled(kIconButtonSize), Theme::scaled(kIconButtonSize));
     button->installEventFilter(this);
     connect(button, &QToolButton::clicked, this, [this, objectName, button]() {
         openIconFlyout(objectName, button->mapToGlobal(QPoint(button->width(), 0)));
@@ -351,8 +351,8 @@ void PanelColumn::openIconFlyout(const QString& objectName, const QPoint& global
             QRect(button->mapToGlobal(QPoint(0, 0)), button->size());
     } else {
         flyoutAnchorRect_ =
-            QRect(globalPos - QPoint(kIconButtonSize, 0),
-                  QSize(kIconButtonSize, kIconButtonSize));
+            QRect(globalPos - QPoint(Theme::scaled(kIconButtonSize), 0),
+                  QSize(Theme::scaled(kIconButtonSize), Theme::scaled(kIconButtonSize)));
     }
     // A collapsed group's icon row is not the panel content the flyout shows;
     // remember the state and expand it only after it is in the flyout, so the

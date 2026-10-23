@@ -351,6 +351,7 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/frame_pdf.cpp
     crates/pictura-app/cpp/frame_import.cpp
     crates/pictura-app/cpp/frame_chrome.cpp
+    crates/pictura-app/cpp/frame_ui_scale.cpp
     crates/pictura-app/cpp/frame_columns.cpp
     crates/pictura-app/cpp/frame_session.cpp
     crates/pictura-app/cpp/frame_shortcuts.cpp

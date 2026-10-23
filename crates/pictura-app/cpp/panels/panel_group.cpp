@@ -2,6 +2,7 @@
 
 #include "fonts.h"
 #include "icons.h"
+#include "theme.h"
 
 #include <QtCore/QEvent>
 #include <QtGui/QContextMenuEvent>
@@ -179,6 +180,7 @@ PanelGroup::PanelGroup(QWidget* parent)
     iconRowOuterLayout->addWidget(iconRowInner);
     iconRow_->setVisible(false);
     layout->addWidget(iconRow_);
+    applyUiScale();
 }
 
 void PanelGroup::addPanel(QWidget* panel, const QString& title, const QIcon& icon)
@@ -494,6 +496,48 @@ void PanelGroup::setMinimized(bool minimized)
     applyMinimize();
 }
 
+void PanelGroup::applyUiScale()
+{
+    const int header = Theme::scaled(kHeaderButtonSize);
+    if (floatToggle_) {
+        floatToggle_->setFixedSize(header, header);
+        floatToggle_->setIconSize(QSize(Theme::scaled(16), Theme::scaled(16)));
+    }
+    if (floatCloseButton_) {
+        floatCloseButton_->setFixedSize(header, header);
+        floatCloseButton_->setIconSize(QSize(Theme::scaled(14), Theme::scaled(14)));
+    }
+    if (headerGrip_) {
+        headerGrip_->setFixedWidth(Theme::scaled(kHeaderGripWidth));
+        headerGrip_->setFixedHeight(header);
+    }
+    if (flyoutCloseButton_) {
+        flyoutCloseButton_->setFixedSize(header, header);
+        flyoutCloseButton_->setIconSize(QSize(Theme::scaled(14), Theme::scaled(14)));
+    }
+    if (headerButton_) {
+        headerButton_->setFixedSize(header, header);
+        headerButton_->setIconSize(QSize(Theme::scaled(13), Theme::scaled(13)));
+    }
+    if (headerCorner_ && headerCorner_->layout()) {
+        headerCorner_->layout()->setContentsMargins(0, 0, Theme::scaled(kHeaderCornerRightMargin),
+                                                   0);
+    }
+    if (iconRow_) {
+        for (QLabel* grip : iconRow_->findChildren<QLabel*>(QStringLiteral("panelIconGroupGrip"))) {
+            grip->setFixedHeight(Theme::scaled(kIconGripHeight));
+        }
+    }
+    if (tabs_ && tabs_->tabBar()) {
+        applyTabBarFont(tabs_->tabBar());
+    }
+    if (collapsedToIcons_) {
+        rebuildIconRow();
+    }
+    updateFloatToggle();
+    updateHeaderBand();
+}
+
 void PanelGroup::applyMinimize()
 {
     if (minimized_) {
@@ -552,7 +596,7 @@ void PanelGroup::updateFloatToggle()
                                                 : QStringLiteral("panel.columnsTwo"));
     if (!target.isNull()) {
         floatToggle_->setIcon(target);
-        floatToggle_->setIconSize(QSize(16, 16));
+        floatToggle_->setIconSize(QSize(Theme::scaled(16), Theme::scaled(16)));
         floatToggle_->setText(QString());
     } else {
         floatToggle_->setIcon(QIcon());
@@ -612,13 +656,13 @@ QToolButton* PanelGroup::makeIconButton(const QIcon& icon, const QString& title,
     button->setObjectName(QStringLiteral("panelGroupIcon_") + objectName);
     if (!icon.isNull()) {
         button->setIcon(icon);
-        button->setIconSize(QSize(kIconPixmapSize, kIconPixmapSize));
+        button->setIconSize(QSize(Theme::scaled(kIconPixmapSize), Theme::scaled(kIconPixmapSize)));
     } else {
         button->setText(title.left(1));
     }
     button->setToolTip(title);
     button->setAutoRaise(true);
-    button->setFixedSize(kIconButtonSize, kIconButtonSize);
+    button->setFixedSize(Theme::scaled(kIconButtonSize), Theme::scaled(kIconButtonSize));
     connect(button, &QToolButton::clicked, this, [this, objectName, button]() {
         emit panelActivated(objectName, button->mapToGlobal(QPoint(button->width(), 0)));
     });

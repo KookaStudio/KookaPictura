@@ -564,20 +564,20 @@ void addDefaultCommands(CommandRegistry& registry) {
     registry.add(command_ids::LayerLockAllInGroup, {"Layer", "Lock All Layers In Group…"},
                  QStringLiteral("Lock All Layers In Group…"), QKeySequence(), true);
     registry.addSeparator({"Layer"});
-    registry.add(command_ids::LayerMergeLayers, {"Layer", "Merge Layers"},
+    registry.add(command_ids::LayerMergeLayers, {"Layer", "Merge", "Merge Layers"},
                  QStringLiteral("Merge Layers"), QKeySequence(QStringLiteral("Ctrl+E")), true);
-    registry.add(command_ids::LayerMergeVisible, {"Layer", "Merge Visible"},
+    registry.add(command_ids::LayerMergeVisible, {"Layer", "Merge", "Merge Visible"},
                  QStringLiteral("Merge Visible"), QKeySequence(QStringLiteral("Shift+Ctrl+E")),
                  true);
-    registry.add(command_ids::LayerStampVisible, {"Layer", "Stamp Visible"},
+    registry.add(command_ids::LayerStampVisible, {"Layer", "Merge", "Stamp Visible"},
                  QStringLiteral("Stamp Visible"),
                  QKeySequence(QStringLiteral("Ctrl+Alt+Shift+E")), true);
-    registry.add(command_ids::LayerStampSelected, {"Layer", "Stamp Selected"},
+    registry.add(command_ids::LayerStampSelected, {"Layer", "Merge", "Stamp Selected"},
                  QStringLiteral("Stamp Selected"), QKeySequence(QStringLiteral("Ctrl+Alt+E")),
                  true);
-    registry.add(command_ids::LayerFlattenImage, {"Layer", "Flatten Image"},
+    registry.add(command_ids::LayerFlattenImage, {"Layer", "Merge", "Flatten Image"},
                  QStringLiteral("Flatten Image"), QKeySequence(), true);
-    registry.add(command_ids::LayerMergeClippingMask, {"Layer", "Merge Clipping Mask"},
+    registry.add(command_ids::LayerMergeClippingMask, {"Layer", "Merge", "Merge Clipping Mask"},
                  QStringLiteral("Merge Clipping Mask"), QKeySequence(), true);
     registry.addSeparator({"Layer"});
     registry.add(command_ids::LayerMattingDefringe, {"Layer", "Matting", "Defringe…"},
@@ -1005,6 +1005,19 @@ void addDefaultCommands(CommandRegistry& registry) {
     registry.addSeparator({"Window"});
     registry.add(CommandSpec{command_ids::ViewOptions, {"Window", "Options"},
                              QStringLiteral("Options"), QKeySequence(), true, true});
+    registry.addSeparator({"Window"});
+    // Owner-requested live UI scale, post-CS6 (CS6 only has four font sizes).
+    registry.add(CommandSpec{command_ids::WindowUiSize, {"Window", "UI Size"},
+                             QStringLiteral("UI Size: 100%"), QKeySequence(), true, false});
+    registry.add(CommandSpec{command_ids::WindowUiEnlarge, {"Window", "Enlarge UI Size"},
+                             QStringLiteral("Enlarge UI Size"),
+                             QKeySequence(QStringLiteral("Ctrl+Alt++")), true, false});
+    registry.add(CommandSpec{command_ids::WindowUiDecrease, {"Window", "Decrease UI Size"},
+                             QStringLiteral("Decrease UI Size"),
+                             QKeySequence(QStringLiteral("Ctrl+Alt+-")), true, false});
+    registry.add(CommandSpec{command_ids::WindowUiReset, {"Window", "Reset UI Size"},
+                             QStringLiteral("Reset UI Size"),
+                             QKeySequence(QStringLiteral("Ctrl+Alt+0")), true, false});
 
     // Help
     registry.add(command_ids::HelpSearch, {"Help", "Search…"}, QStringLiteral("Search…"),

@@ -20,6 +20,7 @@ struct SessionState {
                                      // mismatch discards the layout on restore
     int brightnessLevel = 1;         // Theme level
     int themeFamily = 0;             // Theme family: 0 dark / 1 light
+    int uiScalePercent = 100;        // Theme UI scale, normalized on restore
     bool gpuCompute = true;          // GPU compositing preference
     int colorPolicy = 0;             // incoming RGB profile policy (0 Preserve)
     // Color Settings > More Options: Blend Text Colors Using Gamma (1.00–2.20).
@@ -87,7 +88,7 @@ struct SessionState {
     // tool name -> letter (empty: none).
     QMap<QString, QStringList> shortcuts;
     QMap<QString, QString> toolShortcuts;
-    int schemaVersion = 10;
+    int schemaVersion = 11;
     QStringList recent;
     QByteArray windowGeometry;       // QMainWindow::saveGeometry(), empty = default
     bool windowMaximized = false;    // restored as Qt::WindowMaximized on launch

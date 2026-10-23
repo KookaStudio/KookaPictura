@@ -796,7 +796,7 @@ void CommandTreeTest::layerMenuGroupsAndDelete()
         QStringLiteral("Smart Filter"),              QStringLiteral("Layer Content Options…"),
         QStringLiteral("Release Clipping Mask"),     QStringLiteral("Rasterize"),
         QStringLiteral("New Layer-based Slice"),     QStringLiteral("Lock All Layers In Group…"),
-        QStringLiteral("Merge Clipping Mask")};
+        QStringLiteral("Merge")};
     QCOMPARE(groupEnds, expectedEnds);
 
     pictura::PictureView* view = window_->activeView();
