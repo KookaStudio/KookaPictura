@@ -9,7 +9,57 @@ use super::super::helpers_composite::selection_to_mask;
 use super::super::state::{CanvasProxy, PictureViewRust};
 #[cfg(test)]
 use crate::layer_target::LayerTarget;
+use cxx_qt_lib::{QList, QString, QStringList};
 use pictura_core::{Document, LayerMask, PixelBuffer, PsdRect};
+
+/// Resolve a stack: each kind takes the next `arity` slots of `params`.
+pub(in crate::cxxqt_object) fn resolve_stack(
+    kinds: &QStringList,
+    params: &[f64],
+) -> Option<Vec<pictura_filters::Filter>> {
+    let mut at = 0;
+    let mut filters = Vec::new();
+    for kind in &QList::<QString>::from(kinds) {
+        let kind = kind.to_string();
+        let arity = crate::cxxqt_object::filter_map::filter_param_arity(&kind)?;
+        let slots = params.get(at..at + arity)?;
+        filters.push(crate::cxxqt_object::filter_map::filter_from_kind_params(
+            &kind, slots,
+        )?);
+        at += arity;
+    }
+    (at == params.len()).then_some(filters)
+}
+
+/// A gallery stack's parameters with each kind's pixel-distance slots scaled for
+/// a copy at `scale`; an unknown or malformed stack is returned unchanged so
+/// `resolve_stack` can report it.
+pub(in crate::cxxqt_object) fn scaled_stack_params(
+    kinds: &QStringList,
+    params: &QList<f64>,
+    scale: f64,
+) -> Vec<f64> {
+    let params: Vec<f64> = params.into_iter().copied().collect();
+    let mut scaled = Vec::with_capacity(params.len());
+    let mut at = 0;
+    for kind in &QList::<QString>::from(kinds) {
+        let kind = kind.to_string();
+        let Some(arity) = crate::cxxqt_object::filter_map::filter_param_arity(&kind) else {
+            return params;
+        };
+        let Some(slots) = params.get(at..at + arity) else {
+            return params;
+        };
+        scaled.extend(
+            crate::cxxqt_object::filter_map::descriptor::scale_pixel_params(&kind, slots, scale),
+        );
+        at += arity;
+    }
+    if at != params.len() {
+        return params;
+    }
+    scaled
+}
 
 /// [`super::ffi::filter_canvas_proxy`]'s render as straight sRGB, building or
 /// reusing the cached reduced copy. `None` for a mask target, no active

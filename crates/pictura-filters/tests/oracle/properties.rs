@@ -105,6 +105,7 @@ fn stylize_no_equivalent_filters_properties() {
             horizontal: 3,
             vertical: 2,
             wrap: false,
+            repeat: false,
             background: [10, 20, 30],
             transparent: false,
         },

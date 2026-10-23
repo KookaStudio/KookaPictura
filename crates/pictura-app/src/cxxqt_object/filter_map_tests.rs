@@ -377,6 +377,21 @@ fn adaptive_wide_angle_reads_its_slots_and_refuses_an_unkept_set() {
 }
 
 #[test]
+fn offset_default_is_identity() {
+    assert_eq!(
+        filter_from_kind_params("offset", &[]),
+        Some(Filter::Offset {
+            horizontal: 0,
+            vertical: 0,
+            wrap: true,
+            repeat: false,
+            background: [0, 0, 0],
+            transparent: false,
+        })
+    );
+}
+
+#[test]
 fn custom_reads_its_grid_row_by_row_then_scale_and_offset() {
     let mut identity = [[0.0; 5]; 5];
     identity[2][2] = 1.0;

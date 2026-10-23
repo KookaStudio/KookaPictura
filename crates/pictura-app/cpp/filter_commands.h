@@ -66,6 +66,8 @@ struct FilterParamSpec {
     // Defaults for multi-slot controls (Color: r,g,b; Placement: x,y;
     // Matrix: its cells).
     QList<double> initial;
+    // The value is a distance in document pixels, so a reduced proxy scales it.
+    bool measuresPixels = false;
 };
 
 // One implemented Filter-menu leaf: its menu path, the `kind` the bridge maps,

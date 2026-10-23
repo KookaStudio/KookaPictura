@@ -19,7 +19,7 @@ use super::impl_filters::{
 };
 use super::qobject::PictureView;
 use crate::cxxqt_object::edit::Edit;
-pub(super) use canvas_proxy::canvas_proxy_buffer;
+pub(super) use canvas_proxy::{canvas_proxy_buffer, resolve_stack, scaled_stack_params};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QByteArray, QImage, QList, QString, QStringList};
@@ -67,6 +67,7 @@ pub mod ffi {
         suffix: QString,
         choices: QStringList,
         initial: QList_f64,
+        measures_pixels: bool,
     }
 
     #[namespace = "pictura"]
@@ -203,14 +204,16 @@ pub mod ffi {
         ) -> QImage;
 
         /// `kind` with `params` applied to a `width`×`height` straight-alpha
-        /// RGBA8888 image, for a gallery thumbnail. A null image when the
-        /// filter is refused.
+        /// RGBA8888 image, for a gallery thumbnail. `scale` is the image's
+        /// document-to-thumbnail scale; pixel-distance parameters are scaled by
+        /// it. A null image when the filter is refused.
         fn filter_thumbnail(
             rgba: &QByteArray,
             width: i32,
             height: i32,
             kind: &QString,
             params: &QList_f64,
+            scale: f64,
         ) -> QImage;
 
         /// A proxy of the document with the active layer hidden, scaled to
@@ -316,6 +319,11 @@ fn filter_preview(mut view: Pin<&mut PictureView>, kind: &QString, params: &QLis
         apply_filter_active(&mut rust, &kind_s, &params_v, false)
     };
     let Some(region) = region else {
+        {
+            let mut rust = view.as_mut().rust_mut();
+            let _ = cancel_filter_preview(&mut rust);
+        }
+        view.as_mut().recomposite();
         return false;
     };
     match region {
@@ -333,9 +341,11 @@ fn filter_preview(mut view: Pin<&mut PictureView>, kind: &QString, params: &QLis
 /// a fraction of the buffer's half-width, Displace stretches or tiles its
 /// map from the buffer's corner, Lens Blur's depth map and Liquify's mesh
 /// align to the layer's rectangle, Picture Frame sizes and insets itself as a
-/// fraction of the buffer, and the Blur Gallery (Field Blur, Iris Blur,
-/// Tilt-Shift, Path Blur, and Spin Blur) places its pins, paths, and spins as
-/// fractions of the buffer.
+/// fraction of the buffer, Radial Blur normalizes its centre to the buffer,
+/// Clouds, Difference Clouds and Fibers generate a field from the buffer
+/// dimensions, and the Blur Gallery (Field Blur, Iris Blur, Tilt-Shift, Path
+/// Blur, and Spin Blur) places its pins, paths, and spins as fractions of the
+/// buffer.
 pub(crate) fn filter_preview_needs_whole_layer(kind: &str) -> bool {
     super::filter_map::descriptor::descriptor(kind).is_some_and(|descriptor| descriptor.whole_layer)
 }
@@ -363,6 +373,11 @@ fn filter_preview_section(
         apply_filter_active_region(&mut rust, &kind_s, &params_v, false, section)
     };
     let Some(region) = region else {
+        {
+            let mut rust = view.as_mut().rust_mut();
+            let _ = cancel_filter_preview(&mut rust);
+        }
+        view.as_mut().recomposite();
         return false;
     };
     match region {
@@ -480,6 +495,7 @@ fn filter_descriptors() -> Vec<ffi::FilterDescriptorRow> {
                         suffix: QString::from(param.suffix),
                         choices,
                         initial,
+                        measures_pixels: param.pixel_distance,
                     }
                 })
                 .collect();
@@ -527,21 +543,6 @@ fn filter_last_error(view: Pin<&mut PictureView>) -> QString {
 // layer through the same snapshot/preview/commit core as a single filter, and
 // render one filter onto a small image for a gallery thumbnail.
 
-/// Resolve a stack: each kind takes the next `arity` slots of `params`.
-fn resolve_stack(kinds: &QStringList, params: &QList<f64>) -> Option<Vec<pictura_filters::Filter>> {
-    let params: Vec<f64> = params.into_iter().copied().collect();
-    let mut at = 0;
-    let mut filters = Vec::new();
-    for kind in &QList::<QString>::from(kinds) {
-        let kind = kind.to_string();
-        let arity = super::filter_map::filter_param_arity(&kind)?;
-        let slots = params.get(at..at + arity)?;
-        filters.push(filter_from_kind_params(&kind, slots)?);
-        at += arity;
-    }
-    (at == params.len()).then_some(filters)
-}
-
 fn run_stack(
     mut view: Pin<&mut PictureView>,
     kinds: &QStringList,
@@ -549,7 +550,8 @@ fn run_stack(
     commit: bool,
     section: Option<pictura_core::PsdRect>,
 ) -> bool {
-    let Some(filters) = resolve_stack(kinds, params) else {
+    let params_v: Vec<f64> = params.into_iter().copied().collect();
+    let Some(filters) = resolve_stack(kinds, &params_v) else {
         view.as_mut().rust_mut().filter_error =
             Some("the gallery stack has an unknown filter or wrong parameters".to_string());
         return false;
@@ -586,7 +588,7 @@ fn run_stack(
 }
 
 fn filter_stack_preview(
-    view: Pin<&mut PictureView>,
+    mut view: Pin<&mut PictureView>,
     kinds: &QStringList,
     params: &QList<f64>,
     x: i32,
@@ -603,7 +605,21 @@ fn filter_stack_preview(
     let positional = QList::<QString>::from(kinds)
         .iter()
         .any(|k| filter_preview_needs_whole_layer(&k.to_string()));
-    run_stack(view, kinds, params, false, (!positional).then_some(visible))
+    let shown = run_stack(
+        view.as_mut(),
+        kinds,
+        params,
+        false,
+        (!positional).then_some(visible),
+    );
+    if !shown {
+        {
+            let mut rust = view.as_mut().rust_mut();
+            let _ = cancel_filter_preview(&mut rust);
+        }
+        view.as_mut().recomposite();
+    }
+    shown
 }
 
 fn apply_filter_stack(
@@ -644,7 +660,8 @@ fn filter_gallery_preview(
     else {
         return QImage::default();
     };
-    let filtered = match (resolve_stack(kinds, params), rust.layer_target.single()) {
+    let scaled = scaled_stack_params(kinds, params, scale);
+    let filtered = match (resolve_stack(kinds, &scaled), rust.layer_target.single()) {
         (Some(filters), Some(path)) => proxy.render(path, &filters, rust.gpu_compute).ok(),
         _ => None,
     };
@@ -659,8 +676,11 @@ fn filter_thumbnail(
     height: i32,
     kind: &QString,
     params: &QList<f64>,
+    scale: f64,
 ) -> QImage {
     let params: Vec<f64> = params.into_iter().copied().collect();
+    let params =
+        super::filter_map::descriptor::scale_pixel_params(&kind.to_string(), &params, scale);
     let (Ok(w), Ok(h)) = (u32::try_from(width), u32::try_from(height)) else {
         return QImage::default();
     };
@@ -1053,7 +1073,11 @@ mod tests {
         for v in [4.0, 4.0, 2.0, 25.0, 3.0, 0.0] {
             params.append(v);
         }
-        let stack = resolve_stack(&kinds, &params).expect("stack resolves");
+        let resolve = |params: &QList<f64>| {
+            let params: Vec<f64> = params.into_iter().copied().collect();
+            resolve_stack(&kinds, &params)
+        };
+        let stack = resolve(&params).expect("stack resolves");
         assert_eq!(stack.len(), 2);
         assert_eq!(
             stack[1],
@@ -1065,10 +1089,10 @@ mod tests {
         );
         // One slot short, or one over, is refused rather than misread.
         params.remove(5);
-        assert!(resolve_stack(&kinds, &params).is_none());
+        assert!(resolve(&params).is_none());
         params.append(0.0);
         params.append(0.0);
-        assert!(resolve_stack(&kinds, &params).is_none());
+        assert!(resolve(&params).is_none());
     }
 
     #[test]

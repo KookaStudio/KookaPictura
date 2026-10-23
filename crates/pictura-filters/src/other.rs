@@ -27,7 +27,8 @@ pub fn minimum(buf: &mut PixelBuffer, radius: u32) -> Result<(), FilterError> {
 }
 
 /// Translate the color planes by `(horizontal, vertical)`; positive moves the
-/// image right/down. `wrap` cycles, otherwise the exposed area takes
+/// image right/down. `repeat` clamps to the nearest edge sample and takes
+/// precedence over `wrap`; otherwise `wrap` cycles, or the exposed area takes
 /// `background` on the colour planes and, on alpha, 255 (CS6's "Set to
 /// Background") or 0 when `transparent` ("Set to Transparent").
 pub fn offset(
@@ -35,6 +36,7 @@ pub fn offset(
     horizontal: i32,
     vertical: i32,
     wrap: bool,
+    repeat: bool,
     background: [u8; 3],
     transparent: bool,
 ) -> Result<(), FilterError> {
@@ -58,7 +60,11 @@ pub fn offset(
             for x in 0..w {
                 let sx = x as i64 - horizontal as i64;
                 let sy = y as i64 - vertical as i64;
-                let value = if wrap {
+                let value = if repeat {
+                    let rx = clamp_index(sx as isize, w);
+                    let ry = clamp_index(sy as isize, h);
+                    src[ry * w + rx]
+                } else if wrap {
                     let wx = sx.rem_euclid(w as i64) as usize;
                     let wy = sy.rem_euclid(h as i64) as usize;
                     src[wy * w + wx]
@@ -314,13 +320,13 @@ mod tests {
     fn offset_wraps_and_fills_background_with_known_values() {
         let base = gray3(3, 1, &[1, 2, 3]);
         let mut wrapped = base.clone();
-        offset(&mut wrapped, 1, 0, true, [9, 9, 9], false).unwrap();
+        offset(&mut wrapped, 1, 0, true, false, [9, 9, 9], false).unwrap();
         assert_eq!(px3(&wrapped, 0, 0), [3, 3, 3]);
         assert_eq!(px3(&wrapped, 1, 0), [1, 1, 1]);
         assert_eq!(px3(&wrapped, 2, 0), [2, 2, 2]);
 
         let mut filled = base.clone();
-        offset(&mut filled, 1, 0, false, [7, 8, 9], false).unwrap();
+        offset(&mut filled, 1, 0, false, false, [7, 8, 9], false).unwrap();
         assert_eq!(
             px3(&filled, 0, 0),
             [7, 8, 9],
@@ -334,35 +340,54 @@ mod tests {
     fn offset_vertical_shift_and_zero_is_noop() {
         let base = gray3(1, 3, &[1, 2, 3]);
         let mut wrapped = base.clone();
-        offset(&mut wrapped, 0, 1, true, [0, 0, 0], false).unwrap();
+        offset(&mut wrapped, 0, 1, true, false, [0, 0, 0], false).unwrap();
         assert_eq!(px3(&wrapped, 0, 0), [3, 3, 3]);
         assert_eq!(px3(&wrapped, 0, 1), [1, 1, 1]);
         assert_eq!(px3(&wrapped, 0, 2), [2, 2, 2]);
 
         let mut noop = base.clone();
-        offset(&mut noop, 0, 0, false, [0, 0, 0], false).unwrap();
+        offset(&mut noop, 0, 0, false, false, [0, 0, 0], false).unwrap();
         assert_eq!(noop, base);
+        let mut repeat_noop = base.clone();
+        offset(&mut repeat_noop, 0, 0, false, true, [0, 0, 0], false).unwrap();
+        assert_eq!(repeat_noop, base);
 
         // Wrap moves the alpha plane with the colour; no-wrap fills what it
         // exposes opaque (Set to Background) or clear (Set to Transparent).
         let alpha_base = buf4(2, 1, &[[1, 2, 3, 10], [4, 5, 6, 20]]);
         let n = alpha_base.pixel_count();
         let mut shifted = alpha_base.clone();
-        offset(&mut shifted, 1, 0, true, [0, 0, 0], false).unwrap();
+        offset(&mut shifted, 1, 0, true, false, [0, 0, 0], false).unwrap();
         assert_eq!(&shifted.data[3 * n..], &[20, 10]);
 
         let mut filled = alpha_base.clone();
-        offset(&mut filled, 1, 0, false, [9, 9, 9], false).unwrap();
+        offset(&mut filled, 1, 0, false, false, [9, 9, 9], false).unwrap();
         assert_eq!(&filled.data[3 * n..], &[255, 10]);
 
         let mut cleared = alpha_base.clone();
-        offset(&mut cleared, 1, 0, false, [9, 9, 9], true).unwrap();
+        offset(&mut cleared, 1, 0, false, false, [9, 9, 9], true).unwrap();
         assert_eq!(&cleared.data[3 * n..], &[0, 10]);
         assert_eq!(
             px3(&cleared, 0, 0),
             [9, 9, 9],
             "colour still takes the background"
         );
+    }
+
+    #[test]
+    fn offset_repeat_edge_pixels_clamps() {
+        let base = gray3(4, 1, &[10, 20, 30, 40]);
+        let mut repeated = base.clone();
+        offset(&mut repeated, 2, 0, false, true, [0, 0, 0], false).unwrap();
+        assert_eq!(px3(&repeated, 0, 0), [10, 10, 10]);
+        assert_eq!(px3(&repeated, 1, 0), [10, 10, 10]);
+        assert_eq!(px3(&repeated, 2, 0), [10, 10, 10]);
+        assert_eq!(px3(&repeated, 3, 0), [20, 20, 20]);
+
+        // Repeat wins over wrap.
+        let mut both = base.clone();
+        offset(&mut both, 2, 0, true, true, [0, 0, 0], false).unwrap();
+        assert_eq!(both, repeated);
     }
 
     #[test]
@@ -438,9 +463,9 @@ mod tests {
             assert!(minimum(&mut b, radius).is_ok());
         }
         let mut a = base.clone();
-        assert!(offset(&mut a, 5, -3, true, [0, 0, 0], false).is_ok());
+        assert!(offset(&mut a, 5, -3, true, false, [0, 0, 0], false).is_ok());
         let mut b = base.clone();
-        assert!(offset(&mut b, 5, -3, false, [1, 2, 3], true).is_ok());
+        assert!(offset(&mut b, 5, -3, false, false, [1, 2, 3], true).is_ok());
         let mut c = base.clone();
         assert!(high_pass(&mut c, 1.0).is_ok());
         let mut d = base.clone();
