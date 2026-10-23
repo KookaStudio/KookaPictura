@@ -170,6 +170,7 @@ pub enum Filter {
     },
     FindEdges,
     Solarize,
+    NtscColors,
     Diffuse {
         mode: DiffuseMode,
     },

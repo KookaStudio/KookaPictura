@@ -114,7 +114,7 @@ fn engine_defaults_agree_with_the_descriptor() {
 #[test]
 fn descriptor_covers_every_mapping_arm() {
     let descriptors: Vec<&FilterDescriptor> = all().collect();
-    assert_eq!(descriptors.len(), 112, "the mapping has 112 kinds");
+    assert_eq!(descriptors.len(), 113, "the mapping has 113 kinds");
     let mut kinds: Vec<&str> = descriptors
         .iter()
         .map(|descriptor| descriptor.kind)

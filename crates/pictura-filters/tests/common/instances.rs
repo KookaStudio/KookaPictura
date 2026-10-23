@@ -177,6 +177,7 @@ pub fn all() -> Vec<Filter> {
         },
         Filter::FindEdges,
         Filter::Solarize,
+        Filter::NtscColors,
         Filter::Diffuse {
             mode: DiffuseMode::Normal,
         },

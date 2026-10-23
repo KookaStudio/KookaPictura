@@ -10,6 +10,7 @@ mod distort;
 mod paint;
 mod render;
 mod stylize;
+mod video;
 
 use pictura_filters::SHEAR_MAX_POINTS;
 
@@ -111,6 +112,7 @@ static TABLE: &[&[FilterDescriptor]] = &[
     distort::ROWS,
     render::ROWS,
     stylize::ROWS,
+    video::ROWS,
 ];
 
 pub(crate) fn all() -> impl Iterator<Item = &'static FilterDescriptor> {

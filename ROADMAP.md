@@ -287,7 +287,8 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [ ] Adaptive Wide Angle Auto and lens profiles, Panorama, Smart Filter
       re-edit (#891)
 - [ ] Lens Correction (#347) and Vanishing Point (#349)
-- [ ] De-Interlace (#344) and NTSC Colors (#345)
+- [x] NTSC Colors (#345)
+- [ ] De-Interlace (#344)
 - [ ] Embed and Read Watermark (#350, #351)
 - [ ] Edit ▸ Fade, the post-filter opacity and blend mode (#491)
 

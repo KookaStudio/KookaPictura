@@ -61,6 +61,7 @@ impl FilterKind {
             | FilterKind::Emboss
             | FilterKind::FindEdges
             | FilterKind::Solarize
+            | FilterKind::NtscColors
             | FilterKind::Diffuse
             | FilterKind::GlowingEdges
             | FilterKind::Facet
@@ -168,6 +169,7 @@ impl FilterKind {
             | FilterKind::Emboss
             | FilterKind::FindEdges
             | FilterKind::Solarize
+            | FilterKind::NtscColors
             | FilterKind::Diffuse
             | FilterKind::GlowingEdges
             | FilterKind::Mosaic
@@ -340,6 +342,7 @@ impl Filter {
             | Filter::Emboss { .. }
             | Filter::FindEdges
             | Filter::Solarize
+            | Filter::NtscColors
             | Filter::Diffuse { .. }
             | Filter::GlowingEdges { .. }
             | Filter::Mosaic { .. }

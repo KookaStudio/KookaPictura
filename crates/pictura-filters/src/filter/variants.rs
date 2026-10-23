@@ -82,6 +82,7 @@ filter_variants! {
     Emboss: Filter::Emboss { .. } => Ported,
     FindEdges: Filter::FindEdges => Ported,
     Solarize: Filter::Solarize => Native,
+    NtscColors: Filter::NtscColors => Native,
     Diffuse: Filter::Diffuse { .. } => Ported,
     GlowingEdges: Filter::GlowingEdges { .. } => Ported,
     Mosaic: Filter::Mosaic { .. } => Ported,

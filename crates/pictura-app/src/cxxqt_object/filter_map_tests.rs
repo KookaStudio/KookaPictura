@@ -1125,3 +1125,25 @@ fn picture_frame_defaults_and_overrides_every_slot() {
         })
     );
 }
+
+#[test]
+fn ntsc_colors_is_a_parameterless_kind() {
+    assert_eq!(
+        filter_from_kind_params("ntsc-colors", &[]),
+        Some(Filter::NtscColors)
+    );
+    assert!(filter_from_kind_params("ntsc-colors", &[0.0]).is_none());
+}
+
+#[test]
+fn ntsc_colors_is_in_the_descriptor() {
+    let descriptor = super::descriptor::descriptor("ntsc-colors").expect("ntsc-colors descriptor");
+    assert_eq!(
+        descriptor.path,
+        &["Filter", "Video", "NTSC Colors"][..],
+        "menu path"
+    );
+    assert!(descriptor.menu, "must be a menu row");
+    assert_eq!(descriptor.label, "NTSC Colors");
+    assert_eq!(descriptor.slots(), 0, "NTSC Colors has no controls");
+}
