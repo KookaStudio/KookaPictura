@@ -504,8 +504,8 @@ QLabel#brushTipPreview { background: ${surface-input}; }
 QLabel#replaceColorMaskPreview { background: ${surface-canvas}; border: 1px solid ${border-input}; }
 QListWidget#galleryEffects::indicator { width: 0; height: 0; }
 QMenu#toolFlyoutMenu::item { padding: 3px 18px 3px 24px; }
-/* The icon-less Settings items start their text where the guide-overlay menu's icon items do. */
-QMenu#optionsCropSettingsMenu::item { padding: 4px 22px 4px 27px; }
+QMenu#optionsCropSettingsMenu { padding: 3px 0; }
+QMenu#optionsCropSettingsMenu::item { padding: 3px 18px 3px 24px; }
 QWidget#optionsCropShieldPanel { background: transparent; }
 QLabel#dialogTitle, QLabel#sectionTitle { font-weight: 700; }
 QLabel#sectionTabLabel { font-weight: 700; padding: 3px 0; }

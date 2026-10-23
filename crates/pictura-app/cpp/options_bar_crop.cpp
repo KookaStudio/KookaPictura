@@ -37,8 +37,6 @@ namespace pictura {
 
 namespace {
 
-// Where menu item text starts in the Crop menus (see QMenu::item in theme.cpp).
-constexpr int kCropMenuTextIndent = 42;
 constexpr double kResolutionMode = -100.0;
 constexpr double kNewPreset = -1.0;
 constexpr double kDeletePreset = -2.0;
@@ -55,53 +53,65 @@ void addComboHeader(QComboBox* combo, const QString& text)
     }
 }
 
-// The Settings menu is built like the guide-overlay menu: checkable menu
-// actions with the same native check marks and padding (see theme.cpp), the
-// `P` / `H` letters in the shortcut column, and the shield's Color and Opacity
-// as widget rows indented to the item text. The keys themselves are taken by
+// The Settings menu is one panel of real checkboxes, like CS6's: the P / H
+// letters sit in the right-hand column, and the shield controls are indented
+// under Enable Crop Shield. The keys themselves are taken by
 // ToolController::handleCropSettingsKey.
 void buildCropSettingsMenu(QMenu* menu, ToolController* controller, CropOptions* crop)
 {
     menu->setObjectName(QStringLiteral("optionsCropSettingsMenu"));
-    const auto toggle = [menu](const char* name, const QString& text) {
-        QAction* action = menu->addAction(text);
-        action->setObjectName(QLatin1String(name));
-        action->setCheckable(true);
-        return action;
+    auto* panel = new QWidget(menu);
+    panel->setObjectName(QStringLiteral("optionsCropSettingsPanel"));
+    auto* column = new QVBoxLayout(panel);
+    column->setContentsMargins(0, 4, 0, 6);
+    column->setSpacing(0);
+
+    const auto checkRow = [panel, column](const char* name, const QString& text,
+                                          const QString& keyHint, int indent) {
+        auto* box = new QCheckBox(text, panel);
+        box->setObjectName(QLatin1String(name));
+        box->setStyleSheet(QStringLiteral("QCheckBox { padding: 4px 14px 4px %1px; }").arg(indent));
+        if (!keyHint.isEmpty()) {
+            auto* inside = new QHBoxLayout(box);
+            inside->setContentsMargins(0, 0, 14, 0);
+            inside->addStretch(1);
+            auto* hint = new QLabel(keyHint, box);
+            hint->setAttribute(Qt::WA_TransparentForMouseEvents);
+            inside->addWidget(hint);
+        }
+        column->addWidget(box);
+        return box;
     };
-    QAction* classic = toggle("cropClassicMode", QStringLiteral("Use Classic Mode\tP"));
+    QCheckBox* classic = checkRow("cropClassicMode", QStringLiteral("Use Classic Mode"),
+                                  QStringLiteral("P"), 12);
     classic->setToolTip(QStringLiteral(
         "Classic: dragging inside moves the crop box. Modern: it moves the content"));
-    QAction* showArea = toggle("cropShowArea", QStringLiteral("Show Cropped Area\tH"));
-    QAction* autoCenter = toggle("cropAutoCenter", QStringLiteral("Auto Center Preview"));
-    menu->addSeparator();
-    QAction* shield = toggle("cropShieldEnabled", QStringLiteral("Enable Crop Shield"));
+    QCheckBox* showArea =
+        checkRow("cropShowArea", QStringLiteral("Show Cropped Area"), QStringLiteral("H"), 12);
+    QCheckBox* autoCenter =
+        checkRow("cropAutoCenter", QStringLiteral("Auto Center Preview"), QString(), 12);
+    auto* rule = new QFrame(panel);
+    rule->setObjectName(QStringLiteral("optionsToolSeparator"));
+    rule->setFrameShape(QFrame::HLine);
+    rule->setFixedHeight(1);
+    column->addSpacing(4);
+    column->addWidget(rule);
+    column->addSpacing(4);
+    QCheckBox* shield =
+        checkRow("cropShieldEnabled", QStringLiteral("Enable Crop Shield"), QString(), 12);
 
-    const auto widgetRow = [menu](QWidget* row) {
-        auto* action = new QWidgetAction(menu);
-        action->setDefaultWidget(row);
-        menu->addAction(action);
-    };
-    auto* colorRow = new QWidget(menu);
-    colorRow->setObjectName(QStringLiteral("optionsCropShieldPanel"));
-    auto* colorLayout = new QHBoxLayout(colorRow);
-    colorLayout->setContentsMargins(kCropMenuTextIndent, 4, 16, 4);
-    colorLayout->setSpacing(6);
-    colorLayout->addWidget(new QLabel(QStringLiteral("Color:"), colorRow));
-    auto* color = new QComboBox(colorRow);
+    auto* shieldBody = new QWidget(panel);
+    shieldBody->setObjectName(QStringLiteral("optionsCropShieldPanel"));
+    auto* grid = new QGridLayout(shieldBody);
+    grid->setContentsMargins(14, 2, 14, 2);
+    grid->setHorizontalSpacing(6);
+    grid->setVerticalSpacing(6);
+    auto* color = new QComboBox(shieldBody);
     color->setObjectName(QStringLiteral("cropShieldColor"));
     color->addItems({QStringLiteral("Match Canvas"), QStringLiteral("Custom")});
-    colorLayout->addWidget(color, 1);
-    auto* swatch = new QToolButton(colorRow);
+    auto* swatch = new QToolButton(shieldBody);
     swatch->setObjectName(QStringLiteral("cropShieldSwatch"));
     swatch->setFixedSize(20, 20);
-    colorLayout->addWidget(swatch);
-    widgetRow(colorRow);
-
-    auto* opacityRow = new QWidget(menu);
-    opacityRow->setObjectName(QStringLiteral("optionsCropShieldPanel"));
-    auto* opacityLayout = new QHBoxLayout(opacityRow);
-    opacityLayout->setContentsMargins(kCropMenuTextIndent, 4, 16, 4);
     NumericFieldConfig opacityConfig;
     opacityConfig.minimum = 0.0;
     opacityConfig.maximum = 100.0;
@@ -109,10 +119,21 @@ void buildCropSettingsMenu(QMenu* menu, ToolController* controller, CropOptions*
     opacityConfig.popup = true;
     opacityConfig.objectName = QStringLiteral("cropShieldOpacity");
     opacityConfig.namePrefix = QStringLiteral("cropShieldOpacity");
-    auto* opacity = new NumericField(QStringLiteral("Opacity:"), opacityConfig, opacityRow);
-    opacityLayout->addWidget(opacity);
-    widgetRow(opacityRow);
-    QAction* autoAdjust = toggle("cropShieldAutoAdjust", QStringLiteral("Auto Adjust Opacity"));
+    auto* opacity = new NumericField(QStringLiteral("Opacity:"), opacityConfig, shieldBody);
+    opacity->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    auto* colorLabel = new QLabel(QStringLiteral("Color:"), shieldBody);
+    colorLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    grid->addWidget(colorLabel, 0, 0);
+    grid->addWidget(color, 0, 1);
+    grid->addWidget(swatch, 0, 2);
+    grid->addWidget(opacity, 1, 0, 1, 3);
+    column->addWidget(shieldBody);
+    QCheckBox* autoAdjust =
+        checkRow("cropShieldAutoAdjust", QStringLiteral("Auto Adjust Opacity"), QString(), 34);
+
+    auto* panelAction = new QWidgetAction(menu);
+    panelAction->setDefaultWidget(panel);
+    menu->addAction(panelAction);
 
     const auto edit = [crop](const std::function<void(CropSettings&)>& change) {
         CropSettings settings = crop->settings();
@@ -149,9 +170,8 @@ void buildCropSettingsMenu(QMenu* menu, ToolController* controller, CropOptions*
         color->setCurrentIndex(s.shieldCustomColor ? 1 : 0);
         opacity->setValue(s.shieldOpacity);
         autoAdjust->setChecked(s.autoAdjustOpacity);
+        shieldBody->setEnabled(s.shieldEnabled);
         autoAdjust->setEnabled(s.shieldEnabled);
-        colorRow->setEnabled(s.shieldEnabled);
-        opacityRow->setEnabled(s.shieldEnabled);
         swatch->setEnabled(s.shieldEnabled && s.shieldCustomColor);
         swatch->setStyleSheet(
             QStringLiteral("background: %1; border: 1px solid #888;")
@@ -163,14 +183,14 @@ void buildCropSettingsMenu(QMenu* menu, ToolController* controller, CropOptions*
     sync();
     QObject::connect(controller, &ToolController::cropOptionsChanged, menu, sync);
 
-    QObject::connect(classic, &QAction::toggled, menu, [crop](bool on) { crop->setClassicMode(on); });
-    QObject::connect(showArea, &QAction::toggled, menu, [edit](bool on) {
+    QObject::connect(classic, &QCheckBox::toggled, menu, [crop](bool on) { crop->setClassicMode(on); });
+    QObject::connect(showArea, &QCheckBox::toggled, menu, [edit](bool on) {
         edit([on](CropSettings& s) { s.showCroppedArea = on; });
     });
-    QObject::connect(autoCenter, &QAction::toggled, menu, [edit](bool on) {
+    QObject::connect(autoCenter, &QCheckBox::toggled, menu, [edit](bool on) {
         edit([on](CropSettings& s) { s.autoCenterPreview = on; });
     });
-    QObject::connect(shield, &QAction::toggled, menu, [edit](bool on) {
+    QObject::connect(shield, &QCheckBox::toggled, menu, [edit](bool on) {
         edit([on](CropSettings& s) { s.shieldEnabled = on; });
     });
     QObject::connect(color, &QComboBox::activated, menu, [edit, pickColor, sync](int index) {
@@ -185,7 +205,7 @@ void buildCropSettingsMenu(QMenu* menu, ToolController* controller, CropOptions*
     QObject::connect(opacity, &NumericField::valueChanged, menu, [edit](double value) {
         edit([value](CropSettings& s) { s.shieldOpacity = int(std::lround(value)); });
     });
-    QObject::connect(autoAdjust, &QAction::toggled, menu, [edit](bool on) {
+    QObject::connect(autoAdjust, &QCheckBox::toggled, menu, [edit](bool on) {
         edit([on](CropSettings& s) { s.autoAdjustOpacity = on; });
     });
 }

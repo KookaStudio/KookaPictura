@@ -17,6 +17,8 @@
 
 #include <QtGui/QKeyEvent>
 #include <QtWidgets/QApplication>
+#include <QtWidgets/QCheckBox>
+#include <QtWidgets/QLabel>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QToolButton>
@@ -106,7 +108,7 @@ void CropSettingsTest::menuListsItsItems()
     QVERIFY(menu);
     for (const char* name : {"cropClassicMode", "cropShowArea", "cropAutoCenter",
                              "cropShieldEnabled", "cropShieldAutoAdjust"}) {
-        QVERIFY2(menu->findChild<QAction*>(QLatin1String(name)), name);
+        QVERIFY2(menu->findChild<QCheckBox*>(QLatin1String(name)), name);
     }
     QVERIFY(menu->findChild<QComboBox*>(QStringLiteral("cropShieldColor")));
     auto* opacity = menu->findChild<pictura::NumericField*>(QStringLiteral("cropShieldOpacity"));
@@ -114,18 +116,21 @@ void CropSettingsTest::menuListsItsItems()
     QCOMPARE(opacity->value(), 75.0);
     // Opacity is the shared slider field: its arrow opens the tracking popup.
     QVERIFY(opacity->findChild<QToolButton*>(QStringLiteral("cropShieldOpacityArrow")));
-    QVERIFY(menu->findChild<QAction*>(QStringLiteral("cropClassicMode"))->text().endsWith(
-        QLatin1String("\tP")));
-    QVERIFY(menu->findChild<QAction*>(QStringLiteral("cropShowArea"))->text().endsWith(
-        QLatin1String("\tH")));
+    bool sawP = false;
+    bool sawH = false;
+    for (QLabel* label : menu->findChildren<QLabel*>()) {
+        sawP |= label->text() == QLatin1String("P");
+        sawH |= label->text() == QLatin1String("H");
+    }
+    QVERIFY(sawP && sawH);
 }
 
 void CropSettingsTest::classicModeGatesTheModernItems()
 {
     QMenu* menu = cogMenu();
     QVERIFY(menu);
-    auto* show = menu->findChild<QAction*>(QStringLiteral("cropShowArea"));
-    auto* center = menu->findChild<QAction*>(QStringLiteral("cropAutoCenter"));
+    auto* show = menu->findChild<QCheckBox*>(QStringLiteral("cropShowArea"));
+    auto* center = menu->findChild<QCheckBox*>(QStringLiteral("cropAutoCenter"));
     QVERIFY(crop_->classicMode());
     QVERIFY(!show->isEnabled() && !show->isChecked());
     QVERIFY(!center->isEnabled() && !center->isChecked());
