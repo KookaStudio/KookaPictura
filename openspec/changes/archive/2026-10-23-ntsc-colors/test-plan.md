@@ -1,0 +1,15 @@
+# Test Plan — ntsc-colors
+
+One row per scenario in `specs/imaging/video-filters/spec.md`. Rows name a test this change creates unless marked `(existing)`.
+
+| Scenario | Steps | Expected result | Coverage |
+|---|---|---|---|
+| `ntsc_clamp` | Run `clamp_to_ntsc_gamut` on fully saturated red, green, magenta and cyan, and compare each result with its input | Chroma magnitude is at most `0.5` and lower than the input; luma is unchanged; the `(I, Q)` direction is preserved | `pictura-color::saturated_primary_chroma_is_clamped`, `pictura-color::clamp_preserves_luma_and_hue`, `pictura-filters::ntsc_colors_desaturates_a_saturated_pixel` |
+| `ntsc_in_gamut` | Run the clamp on a neutral grey and on a muted colour whose chroma magnitude is below `0.5`, then apply the filter to an 8-bit buffer of the same colours | The helper returns the input and the buffer's colour planes are bit-identical | `pictura-color::in_gamut_colour_is_unchanged`, `pictura-filters::ntsc_colors_leaves_in_gamut_pixels_alone` |
+| `ntsc_alpha` | Apply the filter to a 4-channel buffer with a non-uniform alpha plane | The alpha plane equals the input bit for bit | `pictura-filters::ntsc_colors_preserves_alpha` |
+| `ntsc_invalid` | Apply the filter to a 2-channel buffer, an empty buffer, and a buffer whose data length disagrees with its dimensions | Each call returns a `FilterError` without panicking and leaves the buffer unmodified | `pictura-filters::ntsc_colors_refuses_malformed_buffers` |
+| `ntsc_command` | Dispatch `Filter ▸ Video ▸ NTSC Colors` on a document with an unlocked pixel layer; watch for a dialog and read the history | No dialog opens, the pixels change, and one history state labelled `Filter: NTSC Colors` is recorded | `tst_filter_menu::ntscColorsIsAParameterlessMenuEntry` |
+| `ntsc_mapping` | Map `ntsc-colors` with an empty slot list and with one value | The empty list yields `Filter::NtscColors`; the one-value list yields no filter | `pictura-app::ntsc_colors_is_a_parameterless_kind`, `pictura-app::ntsc_colors_is_in_the_descriptor` |
+| `ntsc_disabled` | Clear the active layer, refresh the menu, read the NTSC Colors action, then restore the layer | The action is disabled while no editable pixel layer is active | `tst_filter_menu::ntscColorsIsAParameterlessMenuEntry` |
+| Existing parity guards | Run the exhaustive kind tests after adding the variant | The new variant has an instance, a digest decision and an oracle-mapping row | `pictura-filters::each_variant_is_applied_by_the_engine_its_property_names` (existing), `pictura-filters::every_variant_has_a_digest_decision` (existing), `pictura-filters::mapping_table_holds_one_row_per_variant` (existing) |
+| Visual check against a CS6 screenshot | Apply NTSC Colors to a saturated test image and compare the dulling of reds and greens with Photoshop CS6 | Same direction (saturation reduced, hue kept), no exact pixel match claimed | manual: Adobe's kernel is closed and no oracle exists; the spec records the YIQ approximation instead of parity |

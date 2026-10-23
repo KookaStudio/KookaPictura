@@ -205,6 +205,11 @@ const MAPPING: &[Mapping] = &[
         tolerance: 0,
         note: "same fixed 50% inversion curve (v >= 128 -> 255 - v); measured max delta 0",
     },
+    none(
+        "NtscColors",
+        "no ImageMagick NTSC gamut-clamp operator; the YIQ approximation is pinned by the \
+         pictura-color and video kernel tests",
+    ),
     Mapping {
         filter: "Mosaic",
         im: Some("-filter box -resize {W/n}x{H/n}! -filter point -resize WxH!  (n = cell_size)"),

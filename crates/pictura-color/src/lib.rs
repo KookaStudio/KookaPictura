@@ -13,6 +13,8 @@ use lcms2::{
     PixelFormat, Profile as LcmsProfile, ToneCurve, Transform,
 };
 
+pub mod ntsc;
+
 /// Rendering intent (ICC).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Intent {

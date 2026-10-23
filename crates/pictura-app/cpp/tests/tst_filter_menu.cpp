@@ -56,6 +56,7 @@ private slots:
     void lastFilterDisabledBeforeFirstCommit();
     void implementedEntriesAreEnabled();
     void stubEntriesStayDisabled();
+    void ntscColorsIsAParameterlessMenuEntry();
     void blurGallerySubmenuListsTheGallery();
     void dialogCollectsParameterSlots();
     void radialBlurHasNoThumbnail();
@@ -152,6 +153,38 @@ void FilterMenuTest::stubEntriesStayDisabled()
         }
     }
     QVERIFY(sawStub);
+}
+
+void FilterMenuTest::ntscColorsIsAParameterlessMenuEntry()
+{
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(view != nullptr);
+    pictura::CommandRegistry* registry = window_->registry();
+    QVERIFY(registry != nullptr);
+    registry->refresh();
+
+    const QString id = filterId(QStringLiteral("Video"), QStringLiteral("NTSC Colors"));
+    QAction* action = registry->action(id);
+    QVERIFY(action != nullptr);
+    QVERIFY(action->isEnabled());
+    QCOMPARE(action->text(), QStringLiteral("NTSC Colors"));
+
+    const int before = view->history_count();
+    QVERIFY(registry->dispatch(id));
+    QCOMPARE(view->history_count(), before + 1);
+    QCOMPARE(view->history_label(view->history_index()), QStringLiteral("Filter: NTSC Colors"));
+
+    const QString previous = view->active_layer_path();
+    view->set_active_layer(QString());
+    registry->refresh();
+    action = registry->action(id);
+    QVERIFY(action != nullptr);
+    QVERIFY(!action->isEnabled());
+    view->set_active_layer(previous);
+    registry->refresh();
+    action = registry->action(id);
+    QVERIFY(action != nullptr);
+    QVERIFY(action->isEnabled());
 }
 
 void FilterMenuTest::blurGallerySubmenuListsTheGallery()

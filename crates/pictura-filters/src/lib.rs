@@ -25,6 +25,7 @@ mod photorust;
 pub mod render;
 pub mod sharpen;
 mod stylize;
+mod video;
 
 pub use blur::field::{
     BlurNoise, BlurNoiseKind, BlurPin, BokehParams, MAX_FIELD_PINS, MAX_FIELD_RADIUS,

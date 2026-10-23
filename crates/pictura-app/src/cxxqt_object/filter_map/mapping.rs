@@ -284,6 +284,10 @@ pub(crate) fn filter_from_kind_params(kind: &str, params: &[f64]) -> Option<Filt
             arity!(params, slots);
             Filter::Solarize
         }
+        "ntsc-colors" => {
+            arity!(params, slots);
+            Filter::NtscColors
+        }
         "diffuse" => {
             arity!(params, slots);
             Filter::Diffuse {
