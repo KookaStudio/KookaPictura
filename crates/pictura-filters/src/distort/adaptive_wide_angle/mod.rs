@@ -80,8 +80,9 @@ impl Default for AwaParams {
         Self {
             correction: AwaCorrection::Fisheye,
             scale: 1.0,
-            focal_length: 15.31,
-            crop_factor: 2.83,
+            // A normal lens (43.27 mm equivalent) at CS6's opening crop.
+            focal_length: 75.91,
+            crop_factor: 0.57,
             offset: [0.0; 2],
             constraints: Arc::default(),
         }

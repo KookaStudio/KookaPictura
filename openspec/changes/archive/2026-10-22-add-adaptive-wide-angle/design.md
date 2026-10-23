@@ -79,11 +79,11 @@ Wide-Angle Images", SIGGRAPH 2009).
   the parameters, the constraints and the solved warp. Every edit re-solves.
 - **Defaults.** Fisheye, Scale 100 %. With EXIF `FocalLength` the focal length
   is prefilled and Crop Factor is `FocalLengthIn35mmFilm / FocalLength`
-  (1.0 when missing); a focal length past 15.31 mm is shown at 15.31 with the
-  crop factor raised to keep the product. Without EXIF the product is a
-  normal lens (43.27 mm): 15.31 mm × 2.83. As Shot is enabled only with EXIF.
-  Ranges: Scale 50–150 %, Focal Length 1.00–15.31 mm, Crop Factor
-  0.20–10.00 (read off CS6 captures; unverified). Full Spherical is disabled
+  (1.0 when missing). Without EXIF the product is a normal lens (43.27 mm):
+  75.91 mm × 0.57. As Shot is enabled only with EXIF. Ranges (read off CS6
+  captures): Scale 50–150 %, Crop Factor 0.10–10.00, and Focal Length so that
+  Focal Length × Crop Factor stays within 2.31–69.20 mm — 4.05–121.41 mm at
+  crop 0.57, 23.1–692.04 at 0.10; the field re-ranges as Crop Factor changes. Full Spherical is disabled
   unless the layer is 2:1; Focal Length and Crop Factor are disabled in it.
 - **Gating.** The menu row also needs an 8-bit RGB or Grayscale document.
 - **Dialog.** Tool column (Constraint C, Polygon Y, Move M, Hand H, Zoom Z),

@@ -76,6 +76,7 @@ QWidget* sliderRow(QWidget* parent, const QString& label, QAbstractSpinBox* box,
     top->addWidget(box);
     top->addWidget(new QLabel(unit, row));
     auto* slider = new JumpSlider(Qt::Horizontal, row);
+    slider->setObjectName(box->objectName() + QStringLiteral("Slider"));
     slider->setRange(static_cast<int>(std::lround(minimum * scale)),
                      static_cast<int>(std::lround(maximum * scale)));
     layout->addLayout(top);
@@ -238,21 +239,28 @@ AdaptiveWideAngleDialog::AdaptiveWideAngleDialog(PictureView* view, const QStrin
     focal_ = new QDoubleSpinBox(lensBox);
     focal_->setObjectName(QStringLiteral("awaFocal"));
     focal_->setDecimals(2);
-    focal_->setRange(1.0, 15.31);
-    focal_->setValue(15.31);
     focal_->setToolTip(QStringLiteral("Focal Length: the lens's focal length."));
     crop_ = new QDoubleSpinBox(lensBox);
     crop_->setObjectName(QStringLiteral("awaCrop"));
     crop_->setDecimals(2);
-    crop_->setRange(0.2, 10.0);
-    crop_->setValue(2.83);
+    crop_->setRange(0.1, 10.0);
     crop_->setToolTip(QStringLiteral("Crop Factor: the sensor's crop factor."));
     lensLayout->addWidget(sliderRow(lensBox, QStringLiteral("Scale"), scale_, 50, 150, 1.0,
                                     QStringLiteral("%")));
-    lensLayout->addWidget(sliderRow(lensBox, QStringLiteral("Focal Length"), focal_, 1.0, 15.31,
+    // The session opens with the EXIF lens or the default; Focal Length's
+    // range follows Crop Factor.
+    const ::rust::Vec<double> opening = ready_ ? awa_lens_settings() : ::rust::Vec<double>();
+    if (opening.size() == 2) {
+        crop_->setValue(opening[1]);
+    }
+    lensLayout->addWidget(sliderRow(lensBox, QStringLiteral("Focal Length"), focal_, 0.0, 1.0,
                                     100.0, QStringLiteral("mm")));
+    updateFocalRange();
+    if (opening.size() == 2) {
+        focal_->setValue(opening[0]);
+    }
     lensLayout->addWidget(
-        sliderRow(lensBox, QStringLiteral("Crop Factor"), crop_, 0.2, 10.0, 100.0, QString()));
+        sliderRow(lensBox, QStringLiteral("Crop Factor"), crop_, 0.1, 10.0, 100.0, QString()));
     asShot_ = new QCheckBox(QStringLiteral("As Shot"), lensBox);
     asShot_->setObjectName(QStringLiteral("awaAsShot"));
     asShot_->setToolTip(QStringLiteral("As Shot: use the lens information the image carries."));
@@ -264,17 +272,12 @@ AdaptiveWideAngleDialog::AdaptiveWideAngleDialog(PictureView* view, const QStrin
         }
     }
     asShot_->setEnabled(exifLens_.size() == 2);
-    if (exifLens_.size() == 2) {
-        QSignalBlocker blockFocal(focal_);
-        QSignalBlocker blockCrop(crop_);
-        focal_->setValue(exifLens_.at(0));
-        crop_->setValue(exifLens_.at(1));
-        asShot_->setChecked(true);
-    }
+    asShot_->setChecked(exifLens_.size() == 2);
     connect(asShot_, &QCheckBox::toggled, this, &AdaptiveWideAngleDialog::asShotToggled);
     connect(correction_, &QComboBox::currentIndexChanged, this,
             &AdaptiveWideAngleDialog::correctionChanged);
     connect(scale_, &QSpinBox::valueChanged, this, &AdaptiveWideAngleDialog::pushLens);
+    connect(crop_, &QDoubleSpinBox::valueChanged, this, &AdaptiveWideAngleDialog::updateFocalRange);
     for (QDoubleSpinBox* box : {focal_, crop_}) {
         connect(box, &QDoubleSpinBox::valueChanged, this, [this] {
             if (asShot_->isChecked() && exifLens_.size() == 2 &&
@@ -343,8 +346,9 @@ bool AdaptiveWideAngleDialog::load(const QList<double>& values)
         const QSignalBlocker e(asShot_);
         correction_->setCurrentIndex(std::clamp(static_cast<int>(std::lround(values.at(0))), 0, 2));
         scale_->setValue(static_cast<int>(std::lround(values.at(1))));
-        focal_->setValue(values.at(2));
         crop_->setValue(values.at(3));
+        updateFocalRange();
+        focal_->setValue(values.at(2));
         asShot_->setChecked(exifLens_.size() == 2 && focal_->value() == exifLens_.at(0) &&
                             crop_->value() == exifLens_.at(1));
     }
@@ -392,13 +396,33 @@ void AdaptiveWideAngleDialog::pushLens()
     canvas_->refreshAll();
 }
 
+void AdaptiveWideAngleDialog::updateFocalRange()
+{
+    const ::rust::Vec<double> range = awa_focal_range(crop_->value());
+    if (range.size() != 2) {
+        return;
+    }
+    {
+        // A value past the new range is clamped; the crop edit pushes it.
+        const QSignalBlocker block(focal_);
+        focal_->setRange(range[0], range[1]);
+    }
+    if (auto* slider = findChild<QSlider*>(QStringLiteral("awaFocalSlider"))) {
+        const QSignalBlocker block(slider);
+        slider->setRange(static_cast<int>(std::lround(range[0] * 100.0)),
+                         static_cast<int>(std::lround(range[1] * 100.0)));
+        slider->setValue(static_cast<int>(std::lround(focal_->value() * 100.0)));
+    }
+}
+
 void AdaptiveWideAngleDialog::asShotToggled(bool on)
 {
     if (on && exifLens_.size() == 2) {
         const QSignalBlocker a(focal_);
         const QSignalBlocker b(crop_);
-        focal_->setValue(exifLens_.at(0));
         crop_->setValue(exifLens_.at(1));
+        updateFocalRange();
+        focal_->setValue(exifLens_.at(0));
         pushLens();
     }
 }

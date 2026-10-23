@@ -64,6 +64,8 @@ protected:
 
 private:
     void pushLens();
+    // Re-range Focal Length (field and slider) for the current Crop Factor.
+    void updateFocalRange();
     void asShotToggled(bool on);
     void correctionChanged();
     void updateZoomLabel();

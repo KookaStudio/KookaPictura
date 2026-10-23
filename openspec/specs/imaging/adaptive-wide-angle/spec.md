@@ -105,8 +105,10 @@ document is 8-bit RGB or Grayscale, and SHALL open a workspace over the active
 layer titled `Adaptive Wide Angle (<document> @ <zoom>%)`. It SHALL offer the
 Constraint (C), Polygon Constraint (Y), Move (M), Hand (H) and Zoom (Z)
 tools; Correction (Fisheye, Perspective, Full Spherical; Full Spherical only
-for a 2:1 layer), Scale (50–150 %, 100), Focal Length (1.00–15.31 mm), Crop
-Factor (0.20–10.00) and As Shot; Preview (on), Show Constraints (on) and Show
+for a 2:1 layer), Scale (50–150 %, 100), Focal Length, Crop Factor
+(0.10–10.00) and As Shot; Focal Length's range SHALL follow Crop Factor so
+their product stays within 2.31–69.20 mm (4.05–121.41 mm at crop 0.57, which
+the workspace opens at without EXIF); Preview (on), Show Constraints (on) and Show
 Mesh (off); a Detail view; and Camera Model and Lens Model lines. EXIF Focal
 Length SHALL prefill Focal Length and Crop Factor and enable As Shot, which is
 otherwise disabled. Constraints SHALL be drawn cyan when unfixed, yellow when
@@ -128,17 +130,18 @@ settings and constraints.
   on an image with no EXIF
 - **THEN** the title reads `Adaptive Wide Angle (<name> @ 100%)`, Correction
   lists Fisheye, Perspective and Full Spherical, Scale reads 100 within
-  50–150, Focal Length is within 1.00–15.31, Crop Factor within 0.20–10.00,
+  50–150,
   As Shot is disabled, Preview and Show Constraints are on, Show Mesh is off,
-  and the camera line reads `--`
+  and the camera line reads `--`; Crop Factor reads 0.57 within 0.10–10.00
+  and Focal Length 75.91 within 4.05–121.41, and Crop Factor 0.10 re-ranges
+  Focal Length to 23.1–692.04
 
 #### Scenario: EXIF prefills the lens [awa_exif]
 
 - **WHEN** `tst_adaptive_wide_angle::exifPrefillsLens` opens the workspace
   on a document whose EXIF gives a 50 mm focal length, Make and Model
-- **THEN** Focal Length reads 15.31 and Crop Factor 3.27 (the field's top,
-  keeping the 50 mm product), As Shot is enabled and checked, and the camera
-  line names the make and model
+- **THEN** Focal Length reads 50.00 and Crop Factor 1.00, As Shot is enabled
+  and checked, and the camera line names the make and model
 
 #### Scenario: Full Spherical needs a 2:1 layer [awa_spherical_gate]
 

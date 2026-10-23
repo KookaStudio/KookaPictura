@@ -53,6 +53,12 @@ pub mod ffi {
         /// dialog's ranges; empty when the image has no focal length.
         fn awa_exif_lens() -> Vec<f64>;
 
+        /// The session's `[focal length, crop factor]`.
+        fn awa_lens_settings() -> Vec<f64>;
+
+        /// The Focal Length field's `[minimum, maximum]` at `crop`.
+        fn awa_focal_range(crop: f64) -> Vec<f64>;
+
         /// EXIF Make and Model, or empty.
         fn awa_camera_model() -> QString;
 
@@ -124,9 +130,18 @@ pub mod ffi {
     }
 }
 
-/// The focal-length field's range, in millimetres.
-const FOCAL_RANGE: (f64, f64) = (1.0, 15.31);
-const CROP_RANGE: (f64, f64) = (0.2, 10.0);
+/// Focal Length × Crop Factor (the 35 mm equivalent) stays in this range, so
+/// the Focal Length field's own range follows Crop Factor, as CS6's does:
+/// 4.05–121.41 mm at the opening crop of 0.57, 23.1–692.0 at 0.10. Read off
+/// CS6 captures.
+const EQUIVALENT_RANGE: (f64, f64) = (4.05 * 0.57, 121.41 * 0.57);
+pub(in crate::cxxqt_object) const CROP_RANGE: (f64, f64) = (0.1, 10.0);
+
+/// The Focal Length field's range at `crop`.
+pub(in crate::cxxqt_object) fn focal_range(crop: f64) -> (f64, f64) {
+    let crop = crop.clamp(CROP_RANGE.0, CROP_RANGE.1);
+    (EQUIVALENT_RANGE.0 / crop, EQUIVALENT_RANGE.1 / crop)
+}
 
 /// ponytail: the eight most recent constraint sets stay in memory for the
 /// process; a Last Filter that names an older one is refused.
@@ -188,8 +203,8 @@ fn correction_index(c: AwaCorrection) -> f64 {
 }
 
 /// The dialog's Focal Length and Crop Factor for EXIF FocalLength and
-/// FocalLengthIn35mmFilm: a focal length past the field's range is shown at
-/// its top with the crop factor raised to keep the 35 mm equivalent.
+/// FocalLengthIn35mmFilm (crop 1 without it); an equivalent past the range
+/// is clamped to it.
 fn lens_from_exif(exif: &Exif) -> Option<[f64; 2]> {
     let focal = exif.get(0x920a)?.as_f64().filter(|f| *f > 0.0)?;
     let equivalent = exif
@@ -197,10 +212,10 @@ fn lens_from_exif(exif: &Exif) -> Option<[f64; 2]> {
         .and_then(|v| v.as_f64())
         .filter(|f| *f > 0.0)
         .unwrap_or(focal);
-    let shown = focal.clamp(FOCAL_RANGE.0, FOCAL_RANGE.1);
-    let crop = (equivalent / shown).clamp(CROP_RANGE.0, CROP_RANGE.1);
     let round = |v: f64| (v * 100.0).round() / 100.0;
-    Some([round(shown), round(crop)])
+    let crop = round((equivalent / focal).clamp(CROP_RANGE.0, CROP_RANGE.1));
+    let (low, high) = focal_range(crop);
+    Some([round(focal.clamp(low, high)), crop])
 }
 
 fn exif_text(exif: &Exif, tags: &[u16]) -> String {
@@ -331,6 +346,17 @@ fn awa_begin(view: &PictureView) -> bool {
 
 fn awa_geometry() -> Vec<i32> {
     with_session(Vec::new(), |s| vec![s.w as i32, s.h as i32])
+}
+
+fn awa_lens_settings() -> Vec<f64> {
+    with_session(Vec::new(), |s| {
+        vec![s.params.focal_length, s.params.crop_factor]
+    })
+}
+
+fn awa_focal_range(crop: f64) -> Vec<f64> {
+    let (low, high) = focal_range(crop);
+    vec![low, high]
 }
 
 fn awa_exif_lens() -> Vec<f64> {
@@ -655,9 +681,15 @@ mod tests {
     fn exif_prefills_the_lens() {
         let e = exif(10, 15);
         assert_eq!(lens_from_exif(&e), Some([10.0, 1.5]));
+        // The field's range follows the crop factor.
+        let (low, high) = focal_range(0.57);
+        assert!((low - 4.05).abs() < 1e-9 && (high - 121.41).abs() < 1e-9);
+        assert!((focal_range(0.1).1 - 692.037).abs() < 1e-9);
         assert_eq!(exif_text(&e, &[0x010f, 0x0110]), "ACME Co X10");
-        // A 24 mm full-frame lens is shown at the field's top, crop raised.
-        assert_eq!(lens_from_exif(&exif(24, 24)), Some([15.31, 1.57]));
+        // A full-frame 50 mm lens shows as it is; a 200 mm one is past the
+        // range and clamped to its top.
+        assert_eq!(lens_from_exif(&exif(50, 50)), Some([50.0, 1.0]));
+        assert_eq!(lens_from_exif(&exif(200, 200)), Some([69.2, 1.0]));
         assert_eq!(lens_from_exif(&Exif::default()), None);
     }
 

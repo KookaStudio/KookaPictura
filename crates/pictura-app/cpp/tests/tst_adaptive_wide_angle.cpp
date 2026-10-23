@@ -12,6 +12,7 @@
 #include <QtWidgets/QDoubleSpinBox>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QMenu>
+#include <QtWidgets/QSlider>
 #include <QtWidgets/QSpinBox>
 
 #include "awa_canvas.h"
@@ -198,13 +199,22 @@ void AdaptiveWideAngleTest::opensWithControls()
     QCOMPARE(scale->value(), 100);
     QCOMPARE(scale->minimum(), 50);
     QCOMPARE(scale->maximum(), 150);
+    // No EXIF: a normal lens at CS6's opening crop, 4.05–121.41 mm.
     auto* focal = dialog->findChild<QDoubleSpinBox*>(QStringLiteral("awaFocal"));
-    QCOMPARE(focal->minimum(), 1.0);
-    QCOMPARE(focal->maximum(), 15.31);
-    QVERIFY(focal->value() >= 1.0 && focal->value() <= 15.31);
     auto* crop = dialog->findChild<QDoubleSpinBox*>(QStringLiteral("awaCrop"));
-    QCOMPARE(crop->minimum(), 0.2);
+    QCOMPARE(crop->value(), 0.57);
+    QCOMPARE(crop->minimum(), 0.1);
     QCOMPARE(crop->maximum(), 10.0);
+    QCOMPARE(focal->value(), 75.91);
+    QCOMPARE(focal->minimum(), 4.05);
+    QCOMPARE(focal->maximum(), 121.41);
+    // Focal Length's range follows Crop Factor, slider included.
+    crop->setValue(0.1);
+    QVERIFY(std::abs(focal->minimum() - 23.085) <= 0.006);
+    QCOMPARE(focal->maximum(), 692.04);
+    QCOMPARE(dialog->findChild<QSlider*>(QStringLiteral("awaFocalSlider"))->maximum(), 69204);
+    focal->setValue(694.29);
+    QCOMPARE(focal->value(), 692.04);
     QVERIFY(!dialog->findChild<QCheckBox*>(QStringLiteral("awaAsShot"))->isEnabled());
     QVERIFY(dialog->findChild<QCheckBox*>(QStringLiteral("awaPreview"))->isChecked());
     QVERIFY(dialog->findChild<QCheckBox*>(QStringLiteral("awaShowConstraints"))->isChecked());
@@ -225,10 +235,9 @@ void AdaptiveWideAngleTest::exifPrefillsLens()
     {
         auto dialog = showDialog(QStringLiteral("metadata.psd"));
         QVERIFY(dialog && dialog->ready());
-        // 50 mm is past the field: shown at 15.31 with the crop factor
-        // raised to keep the product (50 / 15.31).
-        QCOMPARE(dialog->findChild<QDoubleSpinBox*>(QStringLiteral("awaFocal"))->value(), 15.31);
-        QCOMPARE(dialog->findChild<QDoubleSpinBox*>(QStringLiteral("awaCrop"))->value(), 3.27);
+        // FocalLength 50 mm with no 35 mm value: crop 1.
+        QCOMPARE(dialog->findChild<QDoubleSpinBox*>(QStringLiteral("awaFocal"))->value(), 50.0);
+        QCOMPARE(dialog->findChild<QDoubleSpinBox*>(QStringLiteral("awaCrop"))->value(), 1.0);
         auto* asShot = dialog->findChild<QCheckBox*>(QStringLiteral("awaAsShot"));
         QVERIFY(asShot->isEnabled() && asShot->isChecked());
         const QString camera = dialog->findChild<QLabel*>(QStringLiteral("awaCamera"))->text();

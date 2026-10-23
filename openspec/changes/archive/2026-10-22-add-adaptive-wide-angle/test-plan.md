@@ -14,8 +14,8 @@
 | `awa_polygon` | Add a four-corner polygon on a fisheye layer | Each edge within 1 px of its chord | `pictura-filters::a_polygon_straightens_its_edges` |
 | `awa_invalid` | Add a zero-length line | Reported invalid; output equals the unconstrained output | `pictura-filters::an_invalid_constraint_changes_nothing` |
 | `awa_menu` | Open an 8-bit RGB document, then convert a new one to 16 Bits/Channel | Enabled, then disabled | `tst_adaptive_wide_angle::menuFollowsDepth` |
-| `awa_controls` | Open the workspace on an image without EXIF | Title, Correction items, ranges, As Shot disabled, view toggles, `--` camera line | `tst_adaptive_wide_angle::opensWithControls` |
-| `awa_exif` | Open on `metadata.psd` (EXIF 50 mm, Make, Model) | 15.31, 3.27, As Shot enabled and checked, camera line names the camera | `tst_adaptive_wide_angle::exifPrefillsLens` |
+| `awa_controls` | Open the workspace on an image without EXIF | Title, Correction items; crop 0.57 in 0.10–10.00, focal 75.91 in 4.05–121.41, crop 0.10 → 23.1–692.04; As Shot disabled, view toggles, `--` camera line | `tst_adaptive_wide_angle::opensWithControls` |
+| `awa_exif` | Open on `metadata.psd` (EXIF 50 mm, Make, Model) | 50.00, 1.00, As Shot enabled and checked, camera line names the camera | `tst_adaptive_wide_angle::exifPrefillsLens` |
 | `awa_spherical_gate` | Open on a 3:2 layer, then a 2:1 layer | Full Spherical disabled, then enabled | `tst_adaptive_wide_angle::fullSphericalNeedsTwoToOne` |
 | `awa_draw_line` | Drag with Constraint, then Shift-drag mostly horizontally | Two constraints: cyan unfixed, yellow horizontal; preview changed | `tst_adaptive_wide_angle::dragDrawsConstraints` |
 | `awa_context_menu` | Pick Vertical, Arbitrary, Delete from a constraint's menu | Magenta, green, removed | `tst_adaptive_wide_angle::contextMenuOrientsAndDeletes` |
