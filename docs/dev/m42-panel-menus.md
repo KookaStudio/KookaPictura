@@ -202,20 +202,31 @@ panel has undo/redo; the documented step commands map to the existing
 ## Actions
 
 Source: CS6 Help "Actions panel overview" / actions panel menu. The Actions
-panel is a placeholder in M42; every entry is disabled.
+panel and engine shipped in `#301`; the panel group asks the `ActionsPanel` to
+fill this table on `aboutToShow`, so enablement and checks are dynamic.
 
 | Entry | Status |
 |---|---|
-| Button Mode | `[disabled]`, `[toggle]` |
-| New Action… / New Set… | `[disabled]` |
-| Duplicate / Delete / Play | `[disabled]` |
-| Start Recording / Record Again… | `[disabled]` |
-| Insert Menu Item… / Insert Stop… / Insert Path | `[disabled]` |
-| Action Options… / Playback Options… | `[disabled]` |
-| Allow Tool Recording | `[disabled]`, `[toggle]` |
-| Clear All Actions / Reset Actions | `[disabled]` |
-| Load Actions… / Replace Actions… / Save Actions… | `[disabled]` |
-| (installed sets) | `[disabled]` |
+| Button Mode | `[impl]`, `[toggle]` |
+| New Action… / New Set… | `[impl]` |
+| Duplicate / Delete / Play | `[impl]` |
+| Start Recording (Stop Recording while recording) / Record Again… | `[impl]` |
+| Insert Menu Item… / Insert Stop… | `[impl]` |
+| Insert Conditional… | `[impl]` — **Kooka extension**, not CS6 |
+| Insert Path | `[impl]` |
+| Action Options… / Set Options… | `[impl]`, contextual on selection |
+| Playback Options… | `[impl]` |
+| Allow Tool Recording | `[impl]`, `[toggle]`, off by default |
+| Clear All Actions / Reset Actions | `[impl]` |
+| Load Actions… / Replace Actions… / Save Actions… | `[impl]` |
+| Installed `.atn` sets | `[impl]` — appended rows from `Presets/Actions` |
+| Close / Close Tab Group | `[impl]` — appended by the panel group, exactly once each |
+
+Live `.atn` and `Actions Palette.psp` I/O is owned by `09-automation/actions.md`;
+the menu does not duplicate its format rules. Load, Replace, Reset, and Save are
+disabled while recording or playing; Play is disabled while recording; Start
+Recording is disabled while playing; editing rows require the selection named in
+`docs/02-ui-ux/panels/actions-panel.md`.
 
 ## Adjustments
 
