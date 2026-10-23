@@ -97,9 +97,9 @@ behaviors are marked inferred and tracked under `## Open questions`.
 | Crop rotation | Angle | 0° | Continuous; `Shift` constrains to 15° | `Ctrl` prevents box shrink |
 | Overlay | Enum | Rule of Thirds | Rule of Thirds, Grid, Golden Ratio, Diagonal, Triangle, Golden Spiral | Exact catalog version-dependent |
 | Overlay show mode | Enum | Auto | Always / Auto / Never | |
-| Use Classic mode | Bool | Off | — | Pre-CS6 behavior |
-| Auto-center preview | Bool | Off | — | Centers preview on canvas |
-| Show Cropped Area | Bool | Off | — | Shows retained outside area |
+| Use Classic mode | Bool | Off | — | Pre-CS6 behavior; key `P` |
+| Auto-center preview | Bool | On | — | Centers preview on canvas (Modern mode) |
+| Show Cropped Area | Bool | On | — | Shows retained outside area (Modern mode); key `H` |
 | Enable crop shield | Bool | On | — | Tint over cropped region |
 | Shield color / opacity | Color / percent | — | 0–100% | |
 | Auto Adjust Opacity | Bool | — | — | Reduces opacity while editing |
