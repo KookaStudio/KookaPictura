@@ -47,6 +47,7 @@ impl FilterKind {
             | FilterKind::Shear
             | FilterKind::Displace
             | FilterKind::Liquify
+            | FilterKind::AdaptiveWideAngle
             | FilterKind::ZigZag
             | FilterKind::OceanRipple
             | FilterKind::Glass
@@ -185,6 +186,7 @@ impl FilterKind {
             | FilterKind::Shear
             | FilterKind::Displace
             | FilterKind::Liquify
+            | FilterKind::AdaptiveWideAngle
             | FilterKind::ZigZag
             | FilterKind::OceanRipple
             | FilterKind::Glass
@@ -356,6 +358,7 @@ impl Filter {
             | Filter::Shear { .. }
             | Filter::Displace { .. }
             | Filter::Liquify { .. }
+            | Filter::AdaptiveWideAngle { .. }
             | Filter::ZigZag { .. }
             | Filter::OceanRipple { .. }
             | Filter::Glass { .. }

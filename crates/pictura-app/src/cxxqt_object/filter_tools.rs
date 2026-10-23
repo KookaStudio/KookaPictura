@@ -25,6 +25,7 @@ use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QByteArray, QImage, QList, QString, QStringList};
 use pictura_core::{layer_pixel_locked, Document, Layer, PixelBuffer};
 
+pub(super) mod adaptive_wide_angle;
 mod canvas_proxy;
 pub(super) mod displace_maps;
 pub(super) mod jobs;

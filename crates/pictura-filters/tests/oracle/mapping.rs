@@ -476,6 +476,11 @@ const MAPPING: &[Mapping] = &[
         "ImageMagick has no mesh-warp operator; guarded by the liquify tests",
     ),
     none(
+        "AdaptiveWideAngle",
+        "ImageMagick has no constraint-solved projection; guarded by the adaptive_wide_angle \
+         tests",
+    ),
+    none(
         "Glass",
         "no ImageMagick texture-refraction operator with Pictura's surface smoothing and \
          scaling; guarded by the glass tests",

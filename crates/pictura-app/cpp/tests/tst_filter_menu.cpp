@@ -840,6 +840,9 @@ pictura::FilterDialogKind dialogForKind(const QString& kind)
     if (kind == QStringLiteral("liquify")) {
         return pictura::FilterDialogKind::Liquify;
     }
+    if (kind == QStringLiteral("adaptive-wide-angle")) {
+        return pictura::FilterDialogKind::AdaptiveWideAngle;
+    }
     return pictura::FilterDialogKind::Shared;
 }
 

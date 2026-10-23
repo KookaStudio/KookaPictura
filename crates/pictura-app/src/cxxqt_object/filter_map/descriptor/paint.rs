@@ -23,6 +23,31 @@ pub(super) const ROWS: &[FilterDescriptor] = &[
         live_preview: true,
     },
 
+    // Correction, Scale %, Focal Length, Crop Factor, Offset X/Y (fractions
+    // of the layer), and the kept constraint set's id.
+    FilterDescriptor {
+        kind: "adaptive-wide-angle",
+        path: &["Filter", "Adaptive Wide Angle…"],
+        menu: true,
+        label: "Adaptive Wide Angle…",
+        params: &[
+            FilterParam { control: FilterControl::Hidden, label: "", minimum: 0.0, maximum: 2.0, value: 0.0, decimals: 0, suffix: "", choices: &[], initial: &[] },
+            FilterParam { control: FilterControl::Hidden, label: "", minimum: 50.0, maximum: 150.0, value: 100.0, decimals: 0, suffix: "", choices: &[], initial: &[] },
+            FilterParam { control: FilterControl::Hidden, label: "", minimum: 1.0, maximum: 15.31, value: 15.31, decimals: 2, suffix: "", choices: &[], initial: &[] },
+            FilterParam { control: FilterControl::Hidden, label: "", minimum: 0.2, maximum: 10.0, value: 2.83, decimals: 2, suffix: "", choices: &[], initial: &[] },
+            FilterParam { control: FilterControl::Hidden, label: "", minimum: -1.0, maximum: 1.0, value: 0.0, decimals: 4, suffix: "", choices: &[], initial: &[] },
+            FilterParam { control: FilterControl::Hidden, label: "", minimum: -1.0, maximum: 1.0, value: 0.0, decimals: 4, suffix: "", choices: &[], initial: &[] },
+            FilterParam { control: FilterControl::Hidden, label: "", minimum: 0.0, maximum: 4e9, value: 0.0, decimals: 0, suffix: "", choices: &[], initial: &[] },
+        ],
+        whole_layer: true,
+        dialog: DialogKind::AdaptiveWideAngle,
+        map_after_ok: false,
+        preview_pane: true,
+        stacked: false,
+        preview_below: false,
+        live_preview: true,
+    },
+
     FilterDescriptor {
         kind: "oil-paint",
         path: &["Filter", "Oil Paint…"],

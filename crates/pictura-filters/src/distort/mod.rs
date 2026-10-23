@@ -2,6 +2,7 @@
 //! Glass and Ocean Ripple — which Kooka runs itself. The rest of the family is the photorust engine's
 //! (`crate::photorust::distort`).
 
+pub mod adaptive_wide_angle;
 mod diffuse_glow;
 mod glass;
 pub mod liquify;

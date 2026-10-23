@@ -2,6 +2,7 @@
 //! filter. The descriptor supplies the kind's canonical arity and opening
 //! defaults; the variable-list decoders keep their own record grammar.
 
+use super::super::filter_tools::adaptive_wide_angle::{awa_constraints, awa_correction};
 use super::super::filter_tools::displace_maps::displace_map;
 use super::super::filter_tools::lens_blur_depths::depth_map as lens_blur_depth_map;
 use super::super::filter_tools::liquify::liquify_mesh;
@@ -13,7 +14,7 @@ use super::{
 };
 use pictura_core::shape::CUSTOM_SHAPE_NAMES;
 use pictura_filters::{
-    ChannelDetail, Filter, FrameOptions, ReduceNoiseParams, ShearFill, TextureOptions,
+    AwaParams, ChannelDetail, Filter, FrameOptions, ReduceNoiseParams, ShearFill, TextureOptions,
     SHEAR_MAX_POINTS,
 };
 
@@ -469,6 +470,19 @@ pub(crate) fn filter_from_kind_params(kind: &str, params: &[f64]) -> Option<Filt
             arity!(params, slots);
             Filter::Liquify {
                 mesh: liquify_mesh(u32v(params, 0, defaults[0]))?,
+            }
+        }
+        "adaptive-wide-angle" => {
+            arity!(params, slots);
+            Filter::AdaptiveWideAngle {
+                params: AwaParams {
+                    correction: awa_correction(f(params, 0, defaults[0])),
+                    scale: f(params, 1, defaults[1]).clamp(50.0, 150.0) / 100.0,
+                    focal_length: f(params, 2, defaults[2]).clamp(1.0, 15.31),
+                    crop_factor: f(params, 3, defaults[3]).clamp(0.2, 10.0),
+                    offset: [f(params, 4, defaults[4]), f(params, 5, defaults[5])],
+                    constraints: awa_constraints(u32v(params, 6, defaults[6]))?,
+                },
             }
         }
         "zigzag" => {

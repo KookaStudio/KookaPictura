@@ -690,6 +690,16 @@ fn moving_kernels() -> Vec<Filter> {
         Filter::Liquify {
             mesh: std::sync::Arc::new(mesh),
         },
+        // A long lens at 150 % covers the frame, so opaque stays opaque.
+        Filter::AdaptiveWideAngle {
+            params: pictura_filters::AwaParams {
+                correction: pictura_filters::AwaCorrection::Perspective,
+                scale: 1.5,
+                focal_length: 15.31,
+                crop_factor: 10.0,
+                ..Default::default()
+            },
+        },
         Filter::PictureFrame {
             options: FrameOptions::default(),
         },
