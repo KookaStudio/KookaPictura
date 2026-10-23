@@ -2,8 +2,10 @@
 #include <QtTest/QSignalSpy>
 
 #include <QtCore/QCoreApplication>
+#include <QtGui/QIcon>
 #include <QtGui/QImage>
 #include <QtGui/QPalette>
+#include <QtGui/QPixmap>
 #include <QtWidgets/QApplication>
 
 #include <array>
@@ -107,6 +109,7 @@ private slots:
     void tokensClampTheLevel();
     void stylesheetSubstitutesEveryToken();
     void stylesheetDeclaresPrimitives();
+    void menuPopupChrome();
     void loadingBannerRuleIsGone();
     void primitivesCarryTheirContract();
     void paletteMatchesTokens();
@@ -230,6 +233,8 @@ void DesignSystemTest::stylesheetDeclaresPrimitives()
         "QTabBar#documentTabBar::tab",
         "QMenu::item:selected",
         "QMenu::item:disabled",
+        "QMenu::icon",
+        "QMenu::indicator",
         "QMenu::separator",
         "QPushButton#colorSwatch",
         "QLineEdit QToolButton",
@@ -248,6 +253,42 @@ void DesignSystemTest::stylesheetDeclaresPrimitives()
     for (const char* selector : selectors) {
         QVERIFY2(qss.contains(QLatin1String(selector)), selector);
     }
+}
+
+// Menu popups cut their corners and inset icons so the left edge is not cramped.
+void DesignSystemTest::menuPopupChrome()
+{
+    QMenu menu;
+    QPixmap swatch(16, 16);
+    swatch.fill(Qt::red);
+    QAction* first = menu.addAction(QIcon(swatch), QStringLiteral("With icon"));
+    QVERIFY(first != nullptr);
+    menu.addAction(QStringLiteral("No icon"));
+    menu.setActiveAction(first);
+    menu.ensurePolished();
+    menu.show();
+    QCoreApplication::processEvents();
+    const QImage image = menu.grab().toImage().convertToFormat(QImage::Format_ARGB32);
+    menu.hide();
+
+    QVERIFY2(!image.isNull(), "menu rendered");
+    QVERIFY2(image.pixelColor(0, 0).alpha() < 255,
+             "the rounded outline leaves the corner transparent");
+    const QColor selection =
+        tokenColor(Theme::kDefaultLevel, QStringLiteral("selection"));
+    QVERIFY2(image.pixelColor(1, 1) != selection && image.pixelColor(2, 2) != selection,
+             "the inset keeps the selected row out of the rounded corner");
+
+    int leftmost = image.width();
+    for (int y = 0; y < image.height(); ++y) {
+        for (int x = 0; x < image.width(); ++x) {
+            const QColor pixel = image.pixelColor(x, y);
+            if (pixel.red() > 200 && pixel.green() < 80 && pixel.blue() < 80) {
+                leftmost = qMin(leftmost, x);
+            }
+        }
+    }
+    QVERIFY2(leftmost >= Theme::scaled(8), qPrintable(QString::number(leftmost)));
 }
 
 // The synchronous loading banner is gone; the loading tab and its spinner are

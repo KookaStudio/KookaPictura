@@ -5287,17 +5287,42 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                                                    QPoint(target->tabInsertionX(end - 1), 0))
                                                    .x()
                                              : 0;
-                    panelColumnColumn->beginTabDragForTest(src);
+                    const bool began = panelColumnColumn->beginTabDragForTest(src);
                     panelColumnColumn->dragToForTest(p);
                     const QRect g = panelColumnColumn->dropIndicatorGlobalGeometryForTest();
-                    panelFixRightmost = panelColumnColumn->dropIndicatorVisibleForTest() && g.isValid()
-                                   && qAbs(g.center().x() - p.x()) <= 8
-                                   && g.center().x() >= lastLeft
-                                   && g.center().x() > firstLeft;
+                    const bool indicatorOk = panelColumnColumn->dropIndicatorVisibleForTest()
+                                             && g.isValid() && qAbs(g.center().x() - p.x()) <= 8
+                                             && g.center().x() >= lastLeft
+                                             && g.center().x() > firstLeft;
                     panelColumnColumn->dropForTest(p);
                     panelFixPump(4);
-                    panelFixRightmost = panelFixRightmost && target->indexOfPanel(src) == end
+                    const int placed = target->indexOfPanel(src);
+                    panelFixRightmost = indicatorOk && placed == end
                                    && panelColumnColumn->groupForPanel(src) == target;
+                    if (!panelFixRightmost) {
+                        qWarning("rightmost: began=%d targetVis=%d colVis=%d frameW=%d barW=%d visible=%d valid=%d center=%d p=%d last=%d first=%d placed=%d end=%d group=%d src=%s",
+                                 began ? 1 : 0, target->isVisible() ? 1 : 0,
+                                 panelColumnColumn->isVisible() ? 1 : 0, frame.width(),
+                                 bar ? bar->width() : -1,
+                                 panelColumnColumn->dropIndicatorVisibleForTest() ? 1 : 0,
+                                 g.isValid() ? 1 : 0, g.center().x(), p.x(), lastLeft, firstLeft,
+                                 placed, end,
+                                 panelColumnColumn->groupForPanel(src) == target ? 1 : 0,
+                                 qPrintable(src));
+                        qWarning("rightmost geom: column=%d,%d %dx%d pLocal=%d,%d barGlobal=%d,%d %dx%d srcGroup=%s over=%s",
+                                 panelColumnColumn->x(), panelColumnColumn->y(),
+                                 panelColumnColumn->width(), panelColumnColumn->height(),
+                                 panelColumnColumn->mapFromGlobal(p).x(),
+                                 panelColumnColumn->mapFromGlobal(p).y(),
+                                 target->tabBarGlobalRect().x(), target->tabBarGlobalRect().y(),
+                                 target->tabBarGlobalRect().width(), target->tabBarGlobalRect().height(),
+                                 qPrintable(panelColumnColumn->groupForPanel(src)
+                                                ? panelColumnColumn->groupForPanel(src)->objectName()
+                                                : QString()),
+                                 qPrintable(frame.columnAtGlobal(p)
+                                                ? frame.columnAtGlobal(p)->objectName()
+                                                : QString()));
+                    }
                 }
             }
             ST_BEGIN("indicator_rightmost_tab_rightmost");

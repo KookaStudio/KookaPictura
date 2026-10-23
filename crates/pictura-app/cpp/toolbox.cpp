@@ -45,7 +45,7 @@ constexpr int kFlyoutDelayMs = 300;
 // device-pixel-ratio transform itself, so we scale only by logical DPI.
 qreal slotDpiScale(qreal logicalDpi)
 {
-    return std::clamp(logicalDpi / 96.0, 1.0, 4.0);
+    return std::clamp(logicalDpi / 96.0, 1.0, 4.0) * Theme::uiScale();
 }
 
 // A slot button: the base tool button plus the CS6 interactions the stock
@@ -576,6 +576,11 @@ void Toolbox::setActiveScreenMode(int mode)
     if (action && !action->icon().isNull()) {
         screenMode_->setIcon(action->icon());
     }
+}
+
+void Toolbox::applyUiScale()
+{
+    applyMetrics();
 }
 
 void Toolbox::applyMetrics()

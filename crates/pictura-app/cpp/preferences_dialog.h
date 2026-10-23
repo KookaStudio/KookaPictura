@@ -44,6 +44,8 @@ public:
     void setAutoShowHidden(bool on);
     void setBrightnessLevel(int level);
     void setThemeFamily(int family);
+    void setUiScalePercent(int percent);
+    int uiScalePercentForTest() const;
     void setGpuCompute(bool on);
     void setGpuComputeEnabled(bool on);
     // File Handling: Automatically Save Recovery Information Every `minutes`.
@@ -69,6 +71,7 @@ signals:
     void autoShowHiddenChanged(bool on);
     void brightnessLevelChanged(int level);
     void themeFamilyChanged(int family);
+    void uiScalePercentChanged(int percent);
     void gpuComputeChanged(bool on);
     void autoSaveRecoveryChanged(bool on, int minutes);
     void guideAppearanceChanged(const QColor& color, bool dashed);
@@ -90,6 +93,7 @@ private:
     QHash<QString, QCheckBox*> checkboxes_;
     NumericField* brightness_ = nullptr;
     QComboBox* themeFamily_ = nullptr;
+    QComboBox* uiScale_ = nullptr;
     QComboBox* autoSaveMinutes_ = nullptr;
     QComboBox* guideColor_ = nullptr;
     QComboBox* guideStyle_ = nullptr;
