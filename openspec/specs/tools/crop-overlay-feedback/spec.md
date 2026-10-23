@@ -3,7 +3,6 @@
 ## Purpose
 The crop overlay's rotate grid and the angle readout shown while straightening.
 
-
 ## Requirements
 
 ### Requirement: Rotate grid and angle readout
@@ -26,10 +25,13 @@ the rotation is released, cancelled, or the tool is deactivated.
 
 ### Requirement: Overlay menu icons
 
-Each guide overlay in the Crop options bar's grid menu (Rule of Thirds, Grid,
-Diagonal, Triangle, Golden Ratio, Golden Spiral) SHALL carry its own icon
-depicting that overlay, and the menu button SHALL show the icon of the selected
-overlay.
+The Crop options bar's grid menu SHALL list plain items picked by clicking
+them, with no checkboxes or check marks, each icon inset clear of the menu
+edge. Each guide overlay (Rule of Thirds, Grid, Diagonal, Triangle, Golden
+Ratio, Golden Spiral) SHALL carry its own icon depicting that overlay, followed
+by Auto, Always and Never Show Overlay, and Cycle Overlay `O` and Cycle
+Orientation `Shift+O` with their keys in the right-hand column. The menu button
+SHALL show the icon of the selected overlay.
 
 #### Scenario: The button follows the selection
 
