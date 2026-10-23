@@ -370,8 +370,8 @@ void DocumentSessionTest::revertUnavailableWhenUntitled()
     QVERIFY(!frame.revertActive());
     frame.closeDocument(frame.activeDocumentIndex(), false);
 
-    // A raster import records its source path only on the tab. It stays an
-    // untitled document, so Revert must remain unavailable.
+    // A raster import records its source path as the document path, so it can
+    // be reloaded in place by Revert.
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const QString png = dir.filePath(QStringLiteral("import.png"));
@@ -381,8 +381,9 @@ void DocumentSessionTest::revertUnavailableWhenUntitled()
     QVERIFY(frame.openImagePath(png));
     frame.registry()->refresh();
     revert = frame.registry()->action(QString::fromLatin1(pictura::command_ids::FileRevert));
-    QVERIFY(revert && !revert->isEnabled());
-    QVERIFY(!frame.revertActive());
+    QVERIFY(revert && revert->isEnabled());
+    QVERIFY(frame.revertActive());
+    QVERIFY(!frame.activeView()->is_dirty());
     frame.closeDocument(frame.activeDocumentIndex(), false);
 }
 

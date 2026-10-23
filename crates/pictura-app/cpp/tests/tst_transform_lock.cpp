@@ -250,6 +250,7 @@ void TransformLockTest::maskFillIsRefusedWhilePending()
     const QString layer = beginLayer(f);
     QVERIFY(!layer.isEmpty());
     QVERIFY(pictura::layer_mask_add_path(*f.view, layer, QStringLiteral("reveal-all")));
+    QVERIFY(pictura::mask_edit_target_set(*f.view, QString()));
     QVERIFY(f.tools->beginFreeTransform(layer));
     QVERIFY(nudge(f.view));
     QVERIFY(pictura::mask_edit_target_set(*f.view, layer));

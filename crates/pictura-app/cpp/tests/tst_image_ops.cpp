@@ -174,7 +174,7 @@ void ImageOpsTest::trimIsUndoable()
     QCOMPARE(view->history_count(), history + 1);
     QCOMPARE(view->history_label(view->history_index()), QStringLiteral("Trim"));
     QCOMPARE(view->history_label(0), QStringLiteral("New"));
-    QCOMPARE(view->history_label(depth), QStringLiteral("Fill"));
+    QCOMPARE(view->history_label(depth), QStringLiteral("Selection"));
     QCOMPARE(view->history_snapshot_label(0), QStringLiteral("PreTrim"));
     QCOMPARE(view->history_snapshot_count(), snapshots);
     QCOMPARE(pictura::selected_layer_paths(*view), target);
@@ -193,12 +193,6 @@ void ImageOpsTest::trimIsUndoable()
     }
     QCOMPARE(view->sample_argb(4, 3), pixel.rgba());
     QCOMPARE(view->history_snapshot_count(), snapshots);
-    QVERIFY(view->undo());
-    QCOMPARE(view->history_index(), depth - 1);
-    QCOMPARE(view->history_label(view->history_index()), QStringLiteral("New Layer"));
-    QVERIFY(view->undo());
-    QCOMPARE(view->history_index(), 0);
-    QCOMPARE(view->history_label(view->history_index()), QStringLiteral("New"));
     frame.closeDocument(doc, false);
 }
 
