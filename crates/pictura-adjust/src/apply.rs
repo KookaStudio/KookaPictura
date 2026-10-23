@@ -27,12 +27,10 @@ pub fn apply_with_coverage(
     coverage: Option<&[u8]>,
 ) -> Result<(), AdjustError> {
     let n = validate(buf)?;
-    if let Some(coverage) = coverage {
-        if coverage.len() < n {
-            return Err(AdjustError::InvalidParams(
-                "selection coverage is shorter than the buffer".into(),
-            ));
-        }
+    if coverage.is_some_and(|coverage| coverage.len() < n) {
+        return Err(AdjustError::InvalidParams(
+            "selection coverage is shorter than the buffer".into(),
+        ));
     }
     match adjustment {
         Adjustment::Levels(p) => levels(p, buf, n),
