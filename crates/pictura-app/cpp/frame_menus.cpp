@@ -113,14 +113,10 @@ bool PicturaMainWindow::saveAsWithDialog()
     if (path.isEmpty()) {
         return false;
     }
+    // The chosen filter owns the extension; All Formats keeps a typed suffix.
     const int chosen = filters.indexOf(selected);
-    // The trailing "All Formats" entry names no single format, so it falls back
-    // to the document's smart default for the appended extension.
-    int filterIndex = chosen >= 0 && chosen < filters.size() - 1 ? chosen : sourceIndex;
-    path = lowercasedImageSuffix(path);
-    if (QFileInfo(path).suffix().isEmpty()) {
-        path += defaultSuffixForFilter(filterIndex);
-    }
+    const int filterIndex = chosen >= 0 ? chosen : sourceIndex;
+    path = pathForSaveFilter(path, filterIndex, sourceIndex);
     if (isPdfPath(path)) {
         return savePdfWithDialog(path);
     }
@@ -194,7 +190,8 @@ void PicturaMainWindow::registerHandlers()
                           [this]() { quickExportPngFromView(this, activeView()); });
     registry_->setHandler(command_ids::FileRevert, [this]() {
         const int index = activeDocumentIndex();
-        if (index < 0 || documentPath(index).isEmpty()) {
+        PictureView* view = activeView();
+        if (index < 0 || !view || document_api::filePath(*view).isEmpty()) {
             return;
         }
         if (isDocumentDirty(index)) {
@@ -240,8 +237,12 @@ void PicturaMainWindow::registerHandlers()
                            command_ids::FileInfo}) {
         registry_->setEnabledProvider(id, hasDocument);
     }
-    registry_->setEnabledProvider(command_ids::FileRevert,
-                                  [this]() { return !activeFilePath().isEmpty(); });
+    registry_->setEnabledProvider(command_ids::FileRevert, [this]() {
+        PictureView* view = activeView();
+        // A raster/smart-object import keeps the source path only on the tab;
+        // its document path stays empty (Save must still ask where to write).
+        return view && !document_api::filePath(*view).isEmpty();
+    });
 
     wireEditHistory();
 

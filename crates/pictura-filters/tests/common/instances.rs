@@ -241,6 +241,9 @@ pub fn all() -> Vec<Filter> {
         Filter::Liquify {
             mesh: Arc::new(LiquifyMesh::new(24, 24)),
         },
+        Filter::AdaptiveWideAngle {
+            params: AwaParams::default(),
+        },
         Filter::ZigZag {
             amount: 20.0,
             ridges: 5,

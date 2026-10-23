@@ -4,6 +4,9 @@ use pictura_core::{LayerBlock, VectorFillRule, VectorMask, VectorSubpath};
 const VECTOR_MASK_FIXTURE: &[u8] =
     include_bytes!("../../../pictura-codec/tests/fixtures/vector_mask.psd");
 
+const PASS_THROUGH_VECTOR_MASK_FIXTURE: &[u8] =
+    include_bytes!("../../../pictura-codec/tests/fixtures/pass_through_vector_mask.psd");
+
 fn vector_mask_doc() -> Document {
     pictura_codec::read_psd(VECTOR_MASK_FIXTURE).expect("vector_mask.psd parses")
 }
@@ -36,6 +39,43 @@ fn fixture_decodes_vector_masks() {
         .expect("Shape Inverted layer");
     let mask = inverted.vector_mask.as_ref().expect("inverted vector mask");
     assert!(mask.invert, "invert flag comes from flags bit 0");
+}
+
+#[test]
+fn pass_through_group_vector_mask_fixture() {
+    let d = pictura_codec::read_psd(PASS_THROUGH_VECTOR_MASK_FIXTURE)
+        .expect("pass_through_vector_mask.psd parses");
+    let group = d
+        .layers
+        .iter()
+        .find(|layer| layer.name == "Group A")
+        .expect("Group A");
+    assert!(group.is_group, "Group A is a group");
+    assert_eq!(group.blend, BlendMode::PassThrough);
+    let mask = group.vector_mask.as_ref().expect("group vector mask");
+    assert!(mask.invert && mask.has_fill(), "inverted filled mask");
+
+    let out = composite_rgba(&d);
+    for y in 0..6 {
+        for x in 0..6 {
+            assert_eq!(
+                rgb(&out, x, y),
+                [0, 0, 255],
+                "inside the inverted mask at {x},{y}"
+            );
+        }
+    }
+    assert_eq!(rgb(&out, 6, 0), [255, 0, 0], "right of the mask");
+    assert_eq!(rgb(&out, 0, 6), [255, 0, 0], "below the mask");
+    assert_eq!(rgb(&out, 7, 7), [255, 0, 0], "corner outside the mask");
+
+    let gpu = composite_gpu_or_cpu(&d);
+    for (i, (a, b)) in gpu.data.iter().zip(out.data.iter()).enumerate() {
+        assert!(
+            (*a as i16 - *b as i16).abs() <= 1,
+            "GPU parity at sample {i}: {a} vs {b}"
+        );
+    }
 }
 
 #[test]

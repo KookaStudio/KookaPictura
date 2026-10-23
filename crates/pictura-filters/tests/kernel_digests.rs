@@ -561,6 +561,7 @@ fn digest_decision(kind: FilterKind) -> bool {
         | FilterKind::Shear
         | FilterKind::Displace
         | FilterKind::Liquify
+        | FilterKind::AdaptiveWideAngle
         | FilterKind::ZigZag
         | FilterKind::OceanRipple
         | FilterKind::Glass

@@ -158,6 +158,7 @@ fn main() {
                 "src/cxxqt_object/guides.rs",
                 "src/cxxqt_object/filter_tools/jobs.rs",
                 "src/cxxqt_object/filter_tools/liquify.rs",
+                "src/cxxqt_object/filter_tools/adaptive_wide_angle.rs",
                 "src/cxxqt_object/healing.rs",
                 "src/cxxqt_object/image_adjust.rs",
                 "src/cxxqt_object/impl_selection/bridge.rs",
@@ -199,6 +200,7 @@ fn main() {
                 "src/cxxqt_object/shapes.rs",
                 "src/cxxqt_object/type_tools.rs",
                 "src/cxxqt_object/type_tools/warp.rs",
+                "src/cxxqt_object/type_tools/fonts.rs",
                 "src/cxxqt_object/svg_export.rs",
                 "src/cxxqt_object/web_export.rs",
             ])

@@ -90,16 +90,18 @@ pub mod ffi {
 
         /// Hold a started open's completion for `ms` milliseconds (test seam).
         fn open_set_delay(view: Pin<&mut PictureView>, ms: u64);
+
+        /// `File > Revert`: reload `path` in place, preserving history and
+        /// named snapshots and appending one `Revert` state; `false` without
+        /// mutating on any decode failure.
+        fn revert(view: Pin<&mut PictureView>, path: &QString) -> bool;
     }
 }
 
 /// What an open does to the view's file path.
 pub(super) enum OpenedPath {
-    /// Assign this path (a PSD/PDF open, or a path-less import).
+    /// Assign this path (a document open, or a path-less import).
     Set(Option<String>),
-    /// Leave the existing path alone (a raster reload keeps its file
-    /// association, so Revert can reload it again).
-    Keep,
 }
 
 /// A decoded document and the view fields that belong with it.
@@ -149,19 +151,21 @@ impl ImportSpec {
 
 /// Apply a decoded document to a view on the GUI thread.
 pub(super) fn apply_opened(rust: &mut PictureViewRust, opened: OpenedDocument) {
-    let previous_path = rust.path.clone();
     rust.replace_document(
         Some(opened.doc),
         opened.history,
         opened.target,
         opened.pdf_password,
     );
-    match opened.path {
-        OpenedPath::Set(path) => rust.path = path,
-        OpenedPath::Keep => rust.path = previous_path,
-    }
+    let OpenedPath::Set(path) = opened.path;
+    rust.path = path;
     rust.source_format = opened.source_format;
-    rust.session.dirty = false;
+    rust.session.mark_saved();
+}
+
+/// `File > Revert`: the synchronous in-place reload.
+fn revert(view: Pin<&mut PictureView>, path: &QString) -> bool {
+    view.revert(path)
 }
 
 fn history_for(doc: &mut Document, target: &LayerTarget, label: &str) -> History {
@@ -224,10 +228,34 @@ pub(super) fn decode_image(
         doc,
         history,
         target,
-        path: OpenedPath::Keep,
+        path: OpenedPath::Set(Some(path.to_string())),
         source_format: format_for_path(path),
         pdf_password: None,
     })
+}
+
+/// Decode `path` for an in-place Revert without touching the view. A PDF uses
+/// the stored password; a missing, corrupt, or unreadable file returns `None`.
+pub(super) fn decode_for_revert(
+    path: &str,
+    pdf_password: Option<&str>,
+    policy: Policy,
+    gpu: bool,
+) -> Option<OpenedDocument> {
+    // Match the old C++ routing by the file's own extension: a path without a
+    // known extension stays a raster import, not the PSD default used by Save.
+    let suffix = Path::new(path)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(str::to_ascii_lowercase);
+    match suffix.as_deref() {
+        Some("psd" | "psb") => decode_psd(path, policy, gpu, &|_, _| {}),
+        Some("pdf" | "pdp") => match decode_pdf(path, pdf_password.unwrap_or(""), policy, gpu) {
+            PdfOpen::Ok(opened) => Some(*opened),
+            PdfOpen::None | PdfOpen::Password | PdfOpen::WrongPassword => None,
+        },
+        _ => decode_image(path, gpu, &|_, _| {}),
+    }
 }
 
 /// Read and embed `path` as a smart-object document.

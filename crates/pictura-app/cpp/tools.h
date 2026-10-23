@@ -416,6 +416,9 @@ public:
     // mid-gesture as an auto-managed, per-drag-commit session), not a modal
     // Ctrl+T one.
     bool transformControlsSession() const { return transformControls_; }
+    // Begin the Move tool's controls-box session directly (the entry point a
+    // handle press would take).
+    bool beginControlsGestureForTest(PictureView* v) { return beginControlsGesture(v); }
     // A modal transform (Free Transform, Transform submenu, Warp) is open and
     // not yet committed: the Layer menu and Layers panel are locked, and a
     // tool switch asks first. The Move tool's controls box is never pending.

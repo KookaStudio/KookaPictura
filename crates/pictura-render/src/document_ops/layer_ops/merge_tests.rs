@@ -495,6 +495,82 @@ fn clipping_mask_folds_base_alpha_into_siblings() {
 }
 
 #[test]
+fn merge_clipped_layer_preserves_clip() {
+    // Base coverage is the left half.
+    let mut base = solid("base", rect(4, 4), 100, 100, 100, 255);
+    let base_alpha = base
+        .channels
+        .iter_mut()
+        .find(|channel| channel.id == -1)
+        .expect("base alpha");
+    for y in 0..4 {
+        for x in 0..4 {
+            base_alpha.data[y * 4 + x] = if x < 2 { 255 } else { 0 };
+        }
+    }
+    let mut lower = solid("lower", rect(4, 4), 255, 0, 0, 255);
+    lower.clipping = true;
+    let mut upper = solid("upper", rect(4, 4), 0, 0, 255, 128);
+    upper.clipping = true;
+    let mut top = solid("top", rect(4, 4), 0, 200, 0, 200);
+    top.clipping = true;
+    let mut d = doc_with(4, 4, vec![base, lower, upper, top]);
+    let before = crate::composite_rgba(&d);
+
+    let outcome = merge_scope(&mut d, MergeScope::Down("2")).unwrap();
+    assert_eq!(outcome.replaced, 2);
+    assert!(
+        d.layers[1].clipping,
+        "a clipped target's result stays in the run"
+    );
+    assert!(
+        d.layers[2].clipping,
+        "a clipped layer above stays in the run"
+    );
+    assert_eq!(
+        crate::composite_rgba(&d).data,
+        before.data,
+        "merging inside the run leaves the document composite unchanged"
+    );
+
+    // Merging a clipped layer into its base bakes the clip and stays unclipped.
+    let mut base = solid("base", rect(4, 4), 100, 100, 100, 255);
+    let base_alpha = base
+        .channels
+        .iter_mut()
+        .find(|channel| channel.id == -1)
+        .expect("base alpha");
+    for y in 0..4 {
+        for x in 0..4 {
+            base_alpha.data[y * 4 + x] = if x < 2 { 255 } else { 0 };
+        }
+    }
+    let mut clipped = solid("clipped", rect(4, 4), 200, 50, 0, 255);
+    clipped.clipping = true;
+    let mut d = doc_with(4, 4, vec![base, clipped]);
+    let before = crate::composite_rgba(&d);
+    merge_scope(&mut d, MergeScope::Down("1")).unwrap();
+    assert!(!d.layers[0].clipping, "the base's result is unclipped");
+    assert_eq!(crate::composite_rgba(&d).data, before.data);
+}
+
+#[test]
+fn merge_clipping_mask_applies_coverage_once() {
+    let base = solid("base", rect(4, 4), 100, 100, 100, 128);
+    let mut clipped = solid("clipped", rect(4, 4), 200, 50, 0, 255);
+    clipped.clipping = true;
+    let mut d = doc_with(4, 4, vec![base, clipped]);
+    let before = crate::composite_rgba(&d);
+
+    merge_scope(&mut d, MergeScope::ClippingMask("1")).unwrap();
+    assert_eq!(
+        crate::composite_rgba(&d).data,
+        before.data,
+        "the base coverage is applied once, not squared"
+    );
+}
+
+#[test]
 fn clipping_mask_refuses_non_raster_base() {
     let mut doc = doc_with(
         4,

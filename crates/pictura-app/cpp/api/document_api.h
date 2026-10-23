@@ -19,6 +19,7 @@ struct CanvasSize {
 };
 
 bool open(PictureView& view, const QString& path);
+bool revert(PictureView& view, const QString& path);
 bool openImage(PictureView& view, const QString& path);
 bool openAsSmartObject(PictureView& view, const QString& path);
 bool newDocument(PictureView& view, int width, int height, const QString& mode, int depth,

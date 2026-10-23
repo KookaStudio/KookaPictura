@@ -279,6 +279,10 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/blur_gallery_spin.cpp
     crates/pictura-app/cpp/lighting_rig.cpp
     crates/pictura-app/cpp/lighting_rig.h
+    crates/pictura-app/cpp/awa_canvas.cpp
+    crates/pictura-app/cpp/awa_canvas.h
+    crates/pictura-app/cpp/awa_dialog.cpp
+    crates/pictura-app/cpp/awa_dialog.h
     crates/pictura-app/cpp/liquify_canvas.cpp
     crates/pictura-app/cpp/liquify_canvas.h
     crates/pictura-app/cpp/liquify_dialog.cpp

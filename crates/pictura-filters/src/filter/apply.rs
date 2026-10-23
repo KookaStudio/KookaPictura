@@ -26,6 +26,9 @@ fn apply_native(filter: &Filter, buf: &mut PixelBuffer) -> Result<(), FilterErro
         Filter::BoxBlur { radius } => blur::r#box(buf, *radius),
         Filter::ShapeBlur { shape, radius } => blur::shape(buf, *shape, *radius),
         Filter::Liquify { mesh } => distort::liquify::liquify(buf, mesh),
+        Filter::AdaptiveWideAngle { params } => {
+            distort::adaptive_wide_angle::adaptive_wide_angle(buf, params)
+        }
         Filter::SmartBlur {
             radius,
             threshold,

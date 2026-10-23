@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use crate::{
-    BlurNoise, BlurPath, BlurPin, BokehParams, BrushType, ContourEdge, DepthMap, DiffuseMode,
-    DisplaceFit, DisplaceMap, ExtrudeType, FrameOptions, GlassTexture, GrainType, HalftoneType,
-    HdrToningParams, IrisPin, IrisShape, LensType, LightDirection, Lighting, LiquifyMesh,
-    MezzotintType, NoiseDistribution, PathMotion, PolarKind, Quality, RadialMethod,
+    AwaParams, BlurNoise, BlurPath, BlurPin, BokehParams, BrushType, ContourEdge, DepthMap,
+    DiffuseMode, DisplaceFit, DisplaceMap, ExtrudeType, FrameOptions, GlassTexture, GrainType,
+    HalftoneType, HdrToningParams, IrisPin, IrisShape, LensType, LightDirection, Lighting,
+    LiquifyMesh, MezzotintType, NoiseDistribution, PathMotion, PolarKind, Quality, RadialMethod,
     ReduceNoiseParams, RippleSize, SharpenRemove, ShearFill, SmartBlurMode, SpherizeMode, SpinPin,
     SpinStrobe, StrokeDirection, TextureOptions, TileFill, TiltPin, TonalFade, WaveType,
     WindMethod, ZigZagStyle,
@@ -241,6 +241,10 @@ pub enum Filter {
     /// The Liquify dialog's mesh, stretched to fit a layer of another size.
     Liquify {
         mesh: Arc<LiquifyMesh>,
+    },
+    /// The Adaptive Wide Angle workspace's correction and constraints.
+    AdaptiveWideAngle {
+        params: AwaParams,
     },
     ZigZag {
         amount: f64,

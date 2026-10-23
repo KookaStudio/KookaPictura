@@ -2,7 +2,9 @@
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/type_tools.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/type_tools/warp.cxxqt.h"
+#include "type_fonts.h"
 
 #include <rust/cxx.h>
 
@@ -65,6 +67,8 @@ Snapshot snapshot(PictureView& view, int thumbSize, bool entireDocument)
     for (const ::pictura::LayerRow& row : rows) {
         LayerRow out = convert(row);
         out.warped = ::pictura::type_layer_is_warped(view, row.path);
+        out.missingFont = row.kind == QLatin1String("type")
+            && !fontIsInstalled(::pictura::type_layer_font(view, row.path));
         snap.rows.append(out);
     }
     return snap;

@@ -36,6 +36,7 @@ are authored by `pictura-codec`'s own writer via the
 | `icc_profile.psd` | RGB | 8x8 | `Base` pixel layer plus an embedded Adobe-RGB ICC profile (id 1039); `psd_icc_rgb.icc` is the profile, synthesized by `cargo run -p pictura-color --example dump_adobe_rgb` |
 | `metadata.psd` | RGB | 8x8 | `Base` pixel layer plus a real EXIF IFD (id 1058), an IPTC-IIM stream (id 1028), and an XMP packet (id 1060); decoded and checked against `exiftool` |
 | `group.psd` | RGB | 8x8 | group `Group A` containing `Inner Green`, `Inner Yellow` |
+| `pass_through_vector_mask.psd` | RGB | 8x8 | blue `Backdrop` plus a Pass Through `Group A` containing `Inner Red`, with an inverted group vector mask over `(0,0)-(6,6)` |
 | `masked.psd` | RGB | 8x8 | `Masked` with a raster layer mask |
 | `gray.psd` | Grayscale | 8x8 | `Gray` |
 | `adjustment.psd` | RGB | 8x8 | `Base` pixel layer + adjustment layers `Invert`, `Posterize`, `Threshold`, `BrightnessContrast`, `Levels`, `PhotoFilter` |
@@ -84,6 +85,12 @@ is a `ByteElement`, authored through
 survives; `read_psd` decodes it as `Knockout::Deep`, and
 `crates/pictura-render/tests/knockout_oracle.rs` uses it to diff the CPU
 compositor against psd-tools' own compositor.
+
+`pass_through_vector_mask.psd` is authored by the `pass_through_vector_mask()`
+builder. The group keeps psd-tools' default `pass` blend and carries a
+`vmsk` on the group record; the mask is inverted over `(0,0)-(6,6)`, so the
+group shows only on the right and bottom strips. It is the fixture for the
+pass-through fallback to isolation when a group has a vector mask.
 
 `knockout_group.psd` is authored by the `knockout_group()` builder: the same
 channel-stripped red `Background`, then a `create_group` folder containing

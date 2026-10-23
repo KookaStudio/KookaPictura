@@ -1,6 +1,7 @@
 # Qt Test suites for the C++ shell. Explicit list, no globbing (repo convention).
 set(PICTURA_QT_TESTS
     tst_smoke
+    tst_open_save
     tst_document_api
     tst_document_session
     tst_selection_api
@@ -72,6 +73,7 @@ set(PICTURA_QT_TESTS
     tst_paragraph_styles_panel
     tst_warp_text
     tst_type_placeholder
+    tst_text_gamma_fonts
     tst_shared_widgets
     tst_info_panel
     tst_system_info
@@ -102,6 +104,7 @@ set(PICTURA_QT_TESTS
     tst_path_blur
     tst_spin_blur
     tst_liquify_dialog
+    tst_adaptive_wide_angle
     tst_layer_style
     tst_color_range
     tst_refine_edge

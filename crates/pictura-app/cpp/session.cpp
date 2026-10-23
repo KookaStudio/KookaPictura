@@ -104,6 +104,8 @@ SessionState loadSession()
     state.gpuCompute = obj.value(QStringLiteral("gpuCompute")).toBool(true);
     const int colorPolicy = obj.value(QStringLiteral("colorPolicy")).toInt(0);
     state.colorPolicy = (colorPolicy == 1 || colorPolicy == 2) ? colorPolicy : 0;
+    state.textGammaEnabled = obj.value(QStringLiteral("textGammaEnabled")).toBool(true);
+    state.textGamma = qBound(1.0, obj.value(QStringLiteral("textGamma")).toDouble(1.45), 2.2);
     state.layersThumbSize = obj.value(QStringLiteral("layersThumbSize")).toInt(2);
     state.layersThumbContents = obj.value(QStringLiteral("layersThumbContents")).toInt(0);
     state.layersExpandNewEffects =
@@ -222,6 +224,8 @@ bool saveSession(const SessionState& state)
     obj.insert(QStringLiteral("uiScalePercent"), state.uiScalePercent);
     obj.insert(QStringLiteral("gpuCompute"), state.gpuCompute);
     obj.insert(QStringLiteral("colorPolicy"), state.colorPolicy);
+    obj.insert(QStringLiteral("textGammaEnabled"), state.textGammaEnabled);
+    obj.insert(QStringLiteral("textGamma"), state.textGamma);
     obj.insert(QStringLiteral("layersThumbSize"), state.layersThumbSize);
     obj.insert(QStringLiteral("layersThumbContents"), state.layersThumbContents);
     obj.insert(QStringLiteral("layersExpandNewEffects"), state.layersExpandNewEffects);

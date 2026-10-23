@@ -60,7 +60,7 @@ fn recovery_open(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
     }
     let mut rust = view.rust_mut();
     rust.path = None;
-    rust.session.dirty = true;
+    rust.session.mark_unsaved();
     true
 }
 

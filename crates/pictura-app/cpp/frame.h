@@ -473,9 +473,9 @@ private:
         // canvas host to it.
         QWidget* page = nullptr;
         QString path;
-        // Display name for a path-less import (Open Image / Open As Smart
-        // Object); preferred over the generated Untitled-N name. The tab title
-        // uses it while `path` stays empty so Save cannot overwrite the source.
+        // Display name for a path-less import (Open As Smart Object, PDF/EPS
+        // import); preferred over the generated Untitled-N name while `path`
+        // stays empty.
         QString displayName;
         // The path Open Recent should remember for a path-less import.
         QString recentPath;
@@ -544,6 +544,9 @@ private:
     void wireAlignMenu();
     void wireTypeMenu();
     void wireWarpText();
+    void wireReplaceMissingFonts();
+    void alertMissingFonts(PictureView* view);
+    void applyTextGamma(bool enabled, double gamma);
     // frame_menus_layer_style.cpp: Layer > Layer Style, the Layer Style dialog
     // and the style commands over the Layers panel's selection.
     void wireLayerStyleMenu();
@@ -837,6 +840,8 @@ private:
     QToolButton* themeCornerButton_ = nullptr;
     bool gpuCompute_ = true;
     int colorPolicy_ = 0;
+    bool textGammaEnabled_ = true;
+    double textGamma_ = 1.45;
     bool gpuAvailable_ = true;
     bool useShiftKeyForToolSwitch_ = true;
     ScreenMode screenMode_ = ScreenMode::Standard;

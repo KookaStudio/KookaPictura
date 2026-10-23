@@ -2,7 +2,9 @@
 
 ## Purpose
 Planar source-over compositing of the bottom-to-top stack with opacity, masks, and isolated or pass-through group semantics.
+
 ## Requirements
+
 ### Requirement: Composited output format
 
 The compositor SHALL return a `PixelBuffer` with four planar channels (R, G, B, A), 8-bit, at the document's width and height, in straight (unpremultiplied) alpha.
@@ -94,7 +96,11 @@ A group whose blend mode is not `PassThrough`, or a `PassThrough` group with opa
 
 ### Requirement: Pass-through group semantics
 
-A `PassThrough` group with opacity 255 and no mask SHALL composite its children directly onto the running backdrop so that child blend modes observe content outside the group.
+A `PassThrough` group with opacity 255 and neither a raster nor a vector mask
+SHALL composite its children directly onto the running backdrop so that child
+blend modes observe content outside the group. A `PassThrough` group carrying
+any mask SHALL be composited as an isolated group so the mask can gate the
+group's result.
 
 #### Scenario: Pass-through equals the flattened stack
 
@@ -105,6 +111,11 @@ A `PassThrough` group with opacity 255 and no mask SHALL composite its children 
 
 - **WHEN** a `PassThrough` group has opacity other than 255, or a mask
 - **THEN** it MUST be composited as an isolated group with the group blend mode treated as `Normal`
+
+#### Scenario: A Pass Through group with a vector mask is isolated [lc_pass_through_vector_mask]
+
+- **WHEN** a `PassThrough` group with opacity 255 carries an enabled vector mask
+- **THEN** it MUST be composited as an isolated group with the group blend mode treated as `Normal`, and the group result MUST be multiplied by the vector-mask coverage on both the CPU and the GPU
 
 ### Requirement: Off-canvas layers are clipped
 
@@ -122,15 +133,17 @@ The compositor SHALL clip every layer to the intersection of its `PsdRect` (in c
 
 ### Requirement: Layer fill opacity folds into effective source alpha
 
-Each layer's `fill` (0..=255) SHALL multiply the effective source alpha, in
-addition to its `opacity`, in both the CPU oracle and the GPU compositor: a
-sample's effective alpha SHALL be `opacity/255 × fill/255` (with the raster mask
-and clipping folded in as before). When `fill == 255` the composite MUST be
-byte-identical to the layer's contribution without a fill factor, so existing
-documents are unchanged. When `fill != 255` the GPU result MUST remain within
-the existing ±1 LSB CPU parity. A group's `fill` SHALL have no effect on
-compositing (CS6 exposes no group Fill), but the stored value SHALL round-trip
-through PSD.
+Each raster or fill-content layer's `fill` (0..=255) SHALL multiply the effective
+source alpha, in addition to its `opacity`, in both the CPU oracle and the GPU
+compositor: a sample's effective alpha SHALL be `opacity/255 × fill/255` (with
+the raster mask and clipping folded in as before). An adjustment layer's stored
+`fill` SHALL NOT affect compositing: an adjustment transforms the backdrop at
+its opacity alone, because CS6 exposes no Fill control for adjustments. When
+`fill == 255` the composite MUST be byte-identical to the layer's contribution
+without a fill factor, so existing documents are unchanged. When `fill != 255`
+the GPU result MUST remain within the existing ±1 LSB CPU parity. A group's
+`fill` SHALL have no effect on compositing (CS6 exposes no group Fill), but the
+stored value SHALL round-trip through PSD.
 
 #### Scenario: Default fill is byte-identical
 
@@ -156,6 +169,11 @@ through PSD.
 
 - **WHEN** a group carries a non-default fill value
 - **THEN** the group composites as if its fill were 255, while the stored value survives a PSD round-trip
+
+#### Scenario: An adjustment layer ignores Fill [lc_adjustment_ignores_fill]
+
+- **WHEN** an Invert adjustment layer with a non-default stored fill is composited at opacity 255, 128, and 0, at fill 0, 50, and 100 percent
+- **THEN** the backdrop is inverted at the layer's opacity alone, with no fill factor, and opacity 0 leaves the backdrop unchanged
 
 ### Requirement: Vector mask coverage multiplies source alpha
 
@@ -348,4 +366,3 @@ first correct pixel SHALL complete in under one second on the reference run.
 
 - **WHEN** the eye toggle runs on the ≈4000² reference document
 - **THEN** the first correct pixel is shown in under one second
-

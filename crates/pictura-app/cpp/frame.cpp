@@ -120,6 +120,7 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
     setFileDialogRecentPaths(recent_);
     gpuCompute_ = state.gpuCompute;
     colorPolicy_ = state.colorPolicy;
+    applyTextGamma(state.textGammaEnabled, state.textGamma);
     useShiftKeyForToolSwitch_ = state.useShiftKeyForToolSwitch;
     applyShortcutOverrides(state);
     autoSaveRecovery_ = state.autoSaveRecovery;
@@ -612,15 +613,16 @@ bool PicturaMainWindow::revertActive()
 {
     const int index = activeDocumentIndex();
     PictureView* view = viewAt(index);
-    const QString path = documentPath(index);
-    if (!view || path.isEmpty()) {
+    if (!view) {
         return false;
     }
-    // Reload in place: a raster path re-imports through the Qt edge, a PSD/PSB
-    // path through the native reader, a PDF from its embedded PSD.
-    const bool reloaded = isPdfPath(path) ? pdf_open(*view, path, QString()) == QStringLiteral("ok")
-                          : isNativeDocumentPath(path) ? document_api::open(*view, path)
-                                                       : document_api::openImage(*view, path);
+    const QString path = document_api::filePath(*view);
+    if (path.isEmpty()) {
+        return false;
+    }
+    // Reload in place through the Rust edge: decode first, preserve history and
+    // file identity, then append one undoable Revert state.
+    const bool reloaded = document_api::revert(*view, path);
     if (!reloaded) {
         return false;
     }
@@ -796,10 +798,12 @@ void PicturaMainWindow::showProfileCommand(bool convert)
 void PicturaMainWindow::showColorSettings()
 {
     ColorSettingsDialog dialog(colorPolicy_, this);
+    dialog.setTextGamma(textGammaEnabled_, textGamma_);
     if (runDialog(dialog, this) != QDialog::Accepted) {
         return;
     }
     colorPolicy_ = dialog.policyCode();
+    applyTextGamma(dialog.textGammaEnabled(), dialog.textGamma());
     for (const DocEntry& entry : docs_) {
         if (entry.view) {
             entry.view->set_color_policy(colorPolicy_);

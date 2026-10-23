@@ -230,6 +230,28 @@ fn fill_below_255_scales_contribution() {
 }
 
 #[test]
+fn fill_combines_with_opacity_and_mask() {
+    let mut layer = solid("top", full(2, 1), (10, 20, 30), 255, BlendMode::Normal, 255);
+    layer.opacity = 200;
+    layer.fill = 128;
+    layer.mask = Some(LayerMask {
+        rect: full(2, 1),
+        default_color: 0,
+        disabled: false,
+        flags: 0,
+        data: Some(vec![255, 0].into()),
+        ..Default::default()
+    });
+    let out = composite_rgba(&doc(2, 1, vec![layer]));
+    assert_eq!(
+        px(&out, 0, 0),
+        [10, 20, 30, 100],
+        "opacity x fill x mask on the revealed pixel"
+    );
+    assert_eq!(px(&out, 1, 0), [0, 0, 0, 0], "masked-off pixel is empty");
+}
+
+#[test]
 fn masked_layer_zeroes_masked_alpha() {
     let lw = 1u32;
     let mut top = solid(
@@ -398,6 +420,72 @@ fn pass_through_group_with_opacity_falls_back_to_isolated() {
         )],
     );
     assert_eq!(px(&composite_rgba(&d), 0, 0), [255, 0, 0, 128]);
+}
+
+#[test]
+fn pass_through_group_vector_mask() {
+    use pictura_core::{VectorFillRule, VectorMask, VectorSubpath};
+    // The mask covers the left half of a 4x4 canvas.
+    let mask = || VectorMask {
+        subpaths: vec![VectorSubpath {
+            closed: true,
+            operation: 1,
+            fill_rule: VectorFillRule::EvenOdd,
+            points: vec![[0, 0], [512, 0], [512, 1024], [0, 1024]],
+        }],
+        ..Default::default()
+    };
+    let scene = |blend| {
+        let mut g = group(
+            "group",
+            blend,
+            255,
+            None,
+            vec![solid(
+                "child",
+                full(4, 4),
+                (255, 0, 0),
+                255,
+                BlendMode::Normal,
+                255,
+            )],
+        );
+        g.vector_mask = Some(mask());
+        doc(
+            4,
+            4,
+            vec![
+                solid(
+                    "backdrop",
+                    full(4, 4),
+                    (0, 0, 255),
+                    255,
+                    BlendMode::Normal,
+                    255,
+                ),
+                g,
+            ],
+        )
+    };
+    let pass = composite_rgba(&scene(BlendMode::PassThrough));
+    let isolated = composite_rgba(&scene(BlendMode::Normal));
+    assert_eq!(
+        pass.data, isolated.data,
+        "a vector mask falls back to the isolated path"
+    );
+    for x in 0..2 {
+        assert_eq!(rgb(&pass, x, 0), [255, 0, 0], "masked-in column {x}");
+    }
+    for x in 2..4 {
+        assert_eq!(rgb(&pass, x, 0), [0, 0, 255], "masked-out column {x}");
+    }
+    let gpu = composite_gpu_or_cpu(&scene(BlendMode::PassThrough));
+    for (i, (a, b)) in gpu.data.iter().zip(pass.data.iter()).enumerate() {
+        assert!(
+            (*a as i16 - *b as i16).abs() <= 1,
+            "GPU parity at sample {i}: {a} vs {b}"
+        );
+    }
 }
 
 #[test]

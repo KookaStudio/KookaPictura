@@ -23,6 +23,9 @@ struct SessionState {
     int uiScalePercent = 100;        // Theme UI scale, normalized on restore
     bool gpuCompute = true;          // GPU compositing preference
     int colorPolicy = 0;             // incoming RGB profile policy (0 Preserve)
+    // Color Settings > More Options: Blend Text Colors Using Gamma (1.00–2.20).
+    bool textGammaEnabled = true;
+    double textGamma = 1.45;
     int layersThumbSize = 2;         // 0 None / 1 Small / 2 Medium / 3 Large
     int layersThumbContents = 0;     // 0 Entire Document / 1 Layer Bounds
     bool layersExpandNewEffects = true;

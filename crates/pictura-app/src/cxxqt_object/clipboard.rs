@@ -188,6 +188,9 @@ fn clipboard_copy(view: Pin<&mut PictureView>, path: &QString, merged: bool) -> 
 }
 
 fn clipboard_cut(view: Pin<&mut PictureView>, path: &QString) -> bool {
+    if view.rust().modal_transform_blocks_edit() {
+        return false;
+    }
     let path = path.to_string();
     let Some(clip) = copy_of(&view, &path, false) else {
         return false;
@@ -200,6 +203,9 @@ fn clipboard_cut(view: Pin<&mut PictureView>, path: &QString) -> bool {
 }
 
 fn clipboard_clear(view: Pin<&mut PictureView>, path: &QString) -> bool {
+    if view.rust().modal_transform_blocks_edit() {
+        return false;
+    }
     clear(view, &path.to_string(), "Clear")
 }
 
@@ -236,6 +242,9 @@ fn clipboard_paste(
     centre_x: f64,
     centre_y: f64,
 ) -> QString {
+    if view.rust().modal_transform_blocks_edit() {
+        return QString::default();
+    }
     let (mode, label) = match kind {
         PasteKind::Into => (PasteMode::Into, "Paste Into"),
         PasteKind::Outside => (PasteMode::Outside, "Paste Outside"),

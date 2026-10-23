@@ -84,19 +84,19 @@ fn finish(mut view: Pin<&mut PictureView>, doc: Document, label: &str) -> bool {
     true
 }
 
-fn trim_image(view: Pin<&mut PictureView>) -> bool {
-    let Some((rgba, width, height, gpu)) = view.rust().session.doc.as_ref().map(|doc| {
+fn trim_image(mut view: Pin<&mut PictureView>) -> bool {
+    {
+        let rust = view.rust();
+        if rust.has_active_session() || rust.pending_previews.any() {
+            return false;
+        }
+    }
+    let Some((rgba, width, height)) = view.rust().session.doc.as_ref().map(|doc| {
         let buffer = current_buffer(doc, view.rust().gpu_compute);
-        (
-            buffer_to_rgba_bytes(&buffer),
-            doc.width,
-            doc.height,
-            view.rust().gpu_compute,
-        )
+        (buffer_to_rgba_bytes(&buffer), doc.width, doc.height)
     }) else {
         return false;
     };
-    let _ = gpu;
     // The content is wherever the composite has coverage; the layer rects are
     // the whole canvas even when the pixels are transparent.
     let mut left = width as i32;
@@ -119,20 +119,43 @@ fn trim_image(view: Pin<&mut PictureView>) -> bool {
     if left == 0 && top == 0 && right == width as i32 && bottom == height as i32 {
         return false;
     }
-    let mut cropped = view.rust().session.doc.as_ref().cloned().unwrap();
-    if !pictura_render::crop_document(
-        &mut cropped,
-        left,
-        top,
-        (right - left) as u32,
-        (bottom - top) as u32,
-    ) {
-        return false;
+    let top_path = {
+        let rust = view.rust();
+        let Some(doc) = rust.session.doc.as_ref() else {
+            return false;
+        };
+        let mut target = rust.layer_target.clone();
+        target.retain_resolving(doc);
+        target
+            .is_empty()
+            .then(|| doc.layers.len().saturating_sub(1).to_string())
+    };
+    if let Some(top_path) = top_path {
+        view.as_mut().rust_mut().select_only_layer(&top_path);
     }
-    finish(view, cropped, "Trim")
+    let edited = view.as_mut().edit("Trim", |rust| {
+        let Some(doc) = rust.session.doc.as_mut() else {
+            return Edit::None;
+        };
+        if !pictura_render::crop_document(
+            doc,
+            left,
+            top,
+            (right - left) as u32,
+            (bottom - top) as u32,
+        ) {
+            return Edit::None;
+        }
+        rust.session.selection = None;
+        Edit::Full
+    });
+    !matches!(edited, Edit::None)
 }
 
 fn rotate_document_arbitrary(mut view: Pin<&mut PictureView>, angle_deg: f64) -> bool {
+    if view.rust().modal_transform_blocks_edit() {
+        return false;
+    }
     if !angle_deg.is_finite() || angle_deg == 0.0 || !(-359.99..=359.99).contains(&angle_deg) {
         return false;
     }

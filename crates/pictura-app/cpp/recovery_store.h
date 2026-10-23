@@ -57,6 +57,11 @@ public:
     // running; each lists the documents whose snapshot and manifest both exist.
     static QList<OrphanSession> orphans(const QString& exceptDir);
     static void discard(const QString& dir);
+    // Keep a document that could not be recovered under
+    // `<root>/quarantine/<session>/`, outside the orphan scan. Copies both
+    // files first and removes the originals only after both copies succeed.
+    static bool quarantine(const QString& sessionDir, const RecoverableDocument& doc);
+    static QString quarantineRoot();
 
 private:
     QString dir_;

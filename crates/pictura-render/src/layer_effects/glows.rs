@@ -4,9 +4,9 @@ use pictura_core::{BlendMode, Document, Layer};
 use crate::composite::{blend_parts, desc_item, mask_alpha, Canvas};
 
 use super::{
-    blur_matte, bool_or, clamp_finite, clip_rect, content_matte, decode_color, dilate_matte,
-    effect_blend_mode, erode_matte, noise_factor, num_clamped, pad_rect, rect_empty, GlowTechnique,
-    MAX_CHOKE, MAX_OPACITY, MAX_SIZE, MAX_SPREAD,
+    blur_matte, blur_support, bool_or, clamp_finite, clip_rect, content_matte, decode_color,
+    dilate_matte, effect_blend_mode, erode_matte, noise_factor, num_clamped, pad_rect, rect_empty,
+    spread_dilate, GlowTechnique, MAX_CHOKE, MAX_OPACITY, MAX_SIZE, MAX_SPREAD,
 };
 
 /// The typed outer glow decoded from a layer's `lfx2` block.
@@ -203,15 +203,11 @@ pub(super) fn composite_outer_glow(
     // Clamp again: a hand-built `OuterGlow` may not have gone through decode.
     let spread = clamp_finite(glow.spread, MAX_SPREAD) as f64;
     let size = clamp_finite(glow.size, MAX_SIZE) as f64;
-    let dilate_radius = (spread / 100.0 * size).round() as i64;
-    let blur_support = if size > 0.0 {
-        (3.0 * pictura_filters::kernel::sigma_from_radius(size)).ceil() as i64
-    } else {
-        0
-    };
+    let dilate_radius = spread_dilate(spread, size);
+    let blur_pad = blur_support(size);
     // Content can only be non-zero inside `source`; dilate and blur spread it by
     // at most `reach`, so the matte is built and processed over `padded` only.
-    let padded = pad_rect(source, dilate_radius + blur_support, w, h);
+    let padded = pad_rect(source, dilate_radius + blur_pad, w, h);
     if rect_empty(padded) {
         return;
     }
@@ -292,14 +288,10 @@ pub(super) fn composite_inner_glow(
         return;
     }
     let erode_radius = (choke / 100.0 * size).round() as i64;
-    let blur_support = if size > 0.0 {
-        (3.0 * pictura_filters::kernel::sigma_from_radius(size)).ceil() as i64
-    } else {
-        0
-    };
+    let blur_pad = blur_support(size);
     // Content can only be non-zero inside `source`; erode and blur spread the
     // matte by at most `reach`, so it is built and processed over `padded` only.
-    let padded = pad_rect(source, erode_radius + blur_support, w, h);
+    let padded = pad_rect(source, erode_radius + blur_pad, w, h);
     if rect_empty(padded) {
         return;
     }

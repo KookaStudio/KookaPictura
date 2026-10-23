@@ -138,6 +138,8 @@ void PicturaMainWindow::saveSession()
     state.uiScalePercent = uiScalePercent_;
     state.gpuCompute = gpuCompute_;
     state.colorPolicy = colorPolicy_;
+    state.textGammaEnabled = textGammaEnabled_;
+    state.textGamma = textGamma_;
     state.toolsColumns = toolbox_ ? toolbox_->columns() : 1;
     state.useShiftKeyForToolSwitch = useShiftKeyForToolSwitch_;
     state.typePlaceholderText = tools_ ? tools_->typePlaceholderText() : true;

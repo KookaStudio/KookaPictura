@@ -5,6 +5,8 @@
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/annotations.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/export.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h"
 
 #include <QtCore/QEvent>
 #include <QtCore/QPair>
@@ -453,9 +455,13 @@ void InfoPanel::refreshColorBlock(Readout* readout, const QColor& color)
         setValues(readout, {QString::number(total)});
         break;
     }
-    case ColorReadout::Opacity:
-        setValues(readout, {QString::number(qRound(color.alpha() / 255.0 * 100.0))});
+    case ColorReadout::Opacity: {
+        const int opacity = view_ ? active_layer_opacity(*view_) : -1;
+        setValues(readout, opacity >= 0
+                               ? QStringList{QString::number(qRound(opacity / 255.0 * 100.0))}
+                               : QStringList{});
         break;
+    }
     }
 }
 
@@ -475,19 +481,21 @@ QString InfoPanel::formatChannel(int value, int bits) const
 
 QString InfoPanel::formatMeasure(double value, MeasureUnit unit, double percentBase) const
 {
+    const double ppi = view_ ? document_ppi(*view_) : 72.0;
+    const double resolution = ppi > 0.0 ? ppi : 72.0;
     switch (unit) {
     case MeasureUnit::Pixels:
         return QString::number(qRound(value));
     case MeasureUnit::Inches:
-        return QString::number(value / 72.0, 'f', 2);
+        return QString::number(value / resolution, 'f', 2);
     case MeasureUnit::Centimeters:
-        return QString::number(value / 72.0 * 2.54, 'f', 2);
+        return QString::number(value / resolution * 2.54, 'f', 2);
     case MeasureUnit::Millimeters:
-        return QString::number(value / 72.0 * 25.4, 'f', 2);
+        return QString::number(value / resolution * 25.4, 'f', 2);
     case MeasureUnit::Points:
-        return QString::number(value / 72.0 * 72.0, 'f', 2);
+        return QString::number(value / resolution * 72.0, 'f', 2);
     case MeasureUnit::Picas:
-        return QString::number(value / 72.0 * 6.0, 'f', 2);
+        return QString::number(value / resolution * 6.0, 'f', 2);
     case MeasureUnit::Percent:
         return percentBase > 0.0 ? QString::number(value / percentBase * 100.0, 'f', 2)
                                  : QString();

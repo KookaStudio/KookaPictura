@@ -612,6 +612,27 @@ public:
                     painter->drawPixmap(corner, soBadge);
                 }
             }
+            // A type layer whose font is not installed carries a warning
+            // triangle on the card's top-right corner, as CS6 flags it.
+            if (index.data(LayerRowMissingFontRole).toBool()) {
+                const double side = qMax(8, thumb / 2);
+                const QRectF corner(box.right() - side + 2, box.top() - 1, side, side);
+                QPainterPath triangle(QPointF(corner.center().x(), corner.top()));
+                triangle.lineTo(corner.bottomRight());
+                triangle.lineTo(corner.bottomLeft());
+                triangle.closeSubpath();
+                painter->save();
+                painter->setRenderHint(QPainter::Antialiasing, true);
+                painter->setPen(QPen(QColor(0x20, 0x20, 0x20), 1));
+                painter->setBrush(QColor(0xf5, 0xc5, 0x18));
+                painter->drawPath(triangle);
+                const double x = corner.center().x();
+                painter->setPen(QPen(QColor(0x20, 0x20, 0x20), qMax(1.0, side / 8.0)));
+                painter->drawLine(QPointF(x, corner.top() + side * 0.35),
+                                  QPointF(x, corner.top() + side * 0.65));
+                painter->drawPoint(QPointF(x, corner.top() + side * 0.8));
+                painter->restore();
+            }
         }
         // Thumbnails run left-to-right from the image thumb: [image][chain][mask]
         // [chain][vector]. The chain glyph is always drawn (link-2 when the mask

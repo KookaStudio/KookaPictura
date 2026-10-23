@@ -9,6 +9,7 @@
 #include "api/document_api.h"
 #include "pictura_app/src/cxxqt_object/impl_core/recovery.cxxqt.h"
 
+#include <QtCore/QFile>
 #include <QtCore/QLocale>
 #include <QtWidgets/QMessageBox>
 
@@ -130,14 +131,26 @@ int PicturaMainWindow::recoverOrphans()
     const QString own = recovery_ ? recovery_->sessionDir() : QString();
     int recovered = 0;
     QStringList failed;
+    struct RecoveredDocument {
+        QString session;
+        QString snapshot;
+        QString manifest;
+        PictureView* view = nullptr;
+    };
+    QList<RecoveredDocument> orphanCopies;
+    QSet<QString> keep;
     const QList<OrphanSession> orphans = RecoveryStore::orphans(own);
     for (const OrphanSession& session : orphans) {
+        bool quarantineFailed = false;
         for (const RecoverableDocument& doc : session.documents) {
             auto* view = new PictureView(this);
             view->set_color_policy(colorPolicy_);
             if (!recovery_open(*view, doc.snapshot)) {
                 delete view;
                 failed.append(doc.name);
+                if (!RecoveryStore::quarantine(session.dir, doc)) {
+                    quarantineFailed = true;
+                }
                 continue;
             }
             const int index = addDocument(view, QString());
@@ -145,16 +158,46 @@ int PicturaMainWindow::recoverOrphans()
             updateTabTitle(index);
             updateWindowTitle();
             ++recovered;
+            orphanCopies.append(
+                {session.dir, doc.snapshot,
+                 session.dir + QLatin1Char('/')
+                     + QFileInfo(doc.snapshot).completeBaseName() + QStringLiteral(".json"),
+                 view});
+        }
+        if (quarantineFailed) {
+            // The failed snapshot could not be moved out; keep the whole session
+            // so neither it nor the recovered copies are lost.
+            keep.insert(session.dir);
         }
     }
     // Snapshot the recovered documents into this session before the orphaned
     // copies go, so a second crash before the first tick still has them.
     autosaveRecovery();
+    QSet<PictureView*> snapshotted;
     for (const DocEntry& entry : docs_) {
-        recovery_wait(*entry.view);
+        if (recovery_wait(*entry.view)) {
+            snapshotted.insert(entry.view);
+        }
+    }
+    // A snapshot that was never started (autosave off) or did not land must not
+    // cost the only copy: keep its session.
+    for (const RecoveredDocument& doc : orphanCopies) {
+        if (!snapshotted.contains(doc.view) || !recoverySnapshots_.contains(doc.view)) {
+            keep.insert(doc.session);
+        }
+    }
+    const auto kept = [&keep](const QString& dir) { return keep.contains(dir); };
+    for (const RecoveredDocument& doc : orphanCopies) {
+        if (kept(doc.session)) {
+            continue;
+        }
+        QFile::remove(doc.snapshot);
+        QFile::remove(doc.manifest);
     }
     for (const OrphanSession& session : orphans) {
-        RecoveryStore::discard(session.dir);
+        if (!kept(session.dir)) {
+            RecoveryStore::discard(session.dir);
+        }
     }
     if (!failed.isEmpty()) {
         statusBar()->showMessage(tr("Could not recover: %1").arg(failed.join(QStringLiteral(", "))));

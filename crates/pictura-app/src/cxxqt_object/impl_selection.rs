@@ -691,6 +691,9 @@ impl qobject::PictureView {
     }
 
     pub fn crop(mut self: Pin<&mut Self>, x: i32, y: i32, w: i32, h: i32) -> bool {
+        if self.rust().modal_transform_blocks_edit() {
+            return false;
+        }
         if w < 1 || h < 1 {
             return false;
         }

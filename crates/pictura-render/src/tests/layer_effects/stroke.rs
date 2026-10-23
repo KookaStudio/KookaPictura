@@ -120,6 +120,12 @@ fn spec_stroke(spec: &StrokeSpec) -> Layer {
     stroke_layer(Some(spec_block(spec)))
 }
 
+pub(super) fn stroke_layer_at_opacity(opacity: u8) -> Layer {
+    let mut layer = spec_stroke(&StrokeSpec::default());
+    layer.opacity = opacity;
+    layer
+}
+
 fn compose_stroke(stroked: Layer) -> PixelBuffer {
     let backdrop = solid(
         "Backdrop",

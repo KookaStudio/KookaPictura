@@ -103,6 +103,8 @@ bool ToolController::beginTransformImpl(const QString& path, const QString& mode
     if (!ok) {
         return false;
     }
+    transform_set_controls(*v, controls);
+    transformControls_ = controls;
     transformGuideSnap_ = false;
     if (canvas_) {
         canvas_->beginTransformPreview(v->move_preview_base(), v->move_preview_layer(),

@@ -40,6 +40,7 @@ struct LayerRow {
     bool placed = false;
     bool shape = false;
     bool warped = false;
+    bool missingFont = false;  // a type layer whose font is not installed
     bool smartObject = false;
     bool hasStyle = false;
     QStringList styleEffects;

@@ -14,6 +14,7 @@
 #include "panels/info_panel.h"
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/annotations.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h"
 
 #include "qt_test_support.h"
 
@@ -29,6 +30,8 @@ private slots:
     void colorMenuHasCs6Entries();
     void bitDepthScalesRgb();
     void measurementUnitReformatsPosition();
+    void physicalUnitsUseDocumentPpi();
+    void opacityReadoutUsesLayerOpacity();
     void unitInheritanceAndNoSizeMenu();
     void selectionDrivesSizeAndBlanksWithoutOne();
     void rulerModeSwapsTopRightBlock();
@@ -114,6 +117,9 @@ void InfoPanelTest::colorBlockReadsRgbAndSwitchesModes()
 void InfoPanelTest::colorMenuModes()
 {
     openDocument(QStringLiteral("ColorMenu"));
+    const int layer = view_->add_layer(0);
+    QVERIFY(layer >= 0);
+    view_->set_active_layer(QString::number(layer));
     panel_->setCursorPosition(QPointF(2, 2));
 
     panel_->setColorModeForTest(0, QStringLiteral("Proof Color"));
@@ -177,6 +183,38 @@ void InfoPanelTest::measurementUnitReformatsPosition()
 
     panel_->setMeasurementUnitForTest(0, QStringLiteral("Pixels"));
     QCOMPARE(panel_->positionTextForTest(), QStringLiteral("2, 2"));
+}
+
+void InfoPanelTest::physicalUnitsUseDocumentPpi()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("Ppi"), 600, 600, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::InfoPanel*>(QStringLiteral("infoPanel"));
+    QVERIFY(view_ && panel_);
+    QVERIFY(pictura::image_size_apply(*view_, QString(), 600, 600, 300.0, false));
+    panel_->setView(view_);
+    panel_->setCursorPosition(QPointF(300, 300));
+    panel_->setMeasurementUnitForTest(0, QStringLiteral("Inches"));
+    QCOMPARE(panel_->positionTextForTest(), QStringLiteral("1.00, 1.00"));
+}
+
+void InfoPanelTest::opacityReadoutUsesLayerOpacity()
+{
+    openDocument(QStringLiteral("Opacity"));
+    QVERIFY2(view_->background_from_layer(QStringLiteral("0")),
+             "the fixture starts with a real Background");
+    const int layer = view_->add_layer(0);
+    QVERIFY(layer >= 0);
+    view_->set_active_layer(QString::number(layer));
+    QVERIFY(view_->set_layer_opacity(layer, 128));
+    panel_->setCursorPosition(QPointF(2, 2));
+    panel_->setColorModeForTest(0, QStringLiteral("Opacity"));
+    QCOMPARE(panel_->colorBlockTextForTest(0), QStringLiteral("Op : 50"));
+
+    view_->set_active_layer(QStringLiteral("0"));
+    panel_->refresh();
+    QCOMPARE(panel_->colorBlockTextForTest(0), QStringLiteral("Op : "));
 }
 
 void InfoPanelTest::unitInheritanceAndNoSizeMenu()

@@ -190,6 +190,12 @@ impl qobject::PictureView {
         let Some(snapshot) = self.rust().session.history.snapshot(i as usize) else {
             return false;
         };
+        let label = self
+            .rust()
+            .session
+            .history
+            .snapshot_label(i as usize)
+            .to_string();
         let target = self.rust().session.history.snapshot_target(i as usize);
         let mut rust = self.as_mut().rust_mut();
         rust.cancel_active_sessions();
@@ -202,8 +208,7 @@ impl qobject::PictureView {
             rust.set_layer_target(target);
         }
         let target = rust.layer_target.clone();
-        rust.session.history.set_current_target(&target);
-        rust.session.content_revision = rust.session.content_revision.wrapping_add(1);
+        rust.session.record(&target, &label);
         rust.mask_edit_target = None;
         rust.active_path = super::paths::ActivePath::Work;
         rust.path_on_layer = false;

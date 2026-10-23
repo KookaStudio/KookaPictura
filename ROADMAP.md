@@ -167,7 +167,8 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       shortcuts (#540)
 - [x] Type on path and area type (#683)
 - [x] Warp text (#684)
-- [ ] Gamma blend and missing-font handling (#685) (#541)
+- [x] Gamma blend and missing-font handling (#685)
+- [ ] Missing Glyph Protection (#887)
 - [ ] Path operations, align and arrange, constrained path dragging, the Target
       Path toggle, and segment and marquee multi-select (#542)
 - [ ] Slice style and modifiers, Divide, Combine, Duplicate, the Slice Options
@@ -281,8 +282,11 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [ ] The Smart Sharpen Basic and Advanced split, and the 32-bpc disable (#595)
 - [ ] The eight Stylize filters missing from the Filter Gallery category (#596)
 - [ ] Colored Pencil document-background paper wiring (#597)
-- [ ] Adaptive Wide Angle (#346), Lens Correction (#347) and Vanishing Point
-      (#349)
+- [x] Adaptive Wide Angle (#346): Fisheye, Perspective and Full Spherical,
+      line and polygon constraints, EXIF focal-length prefill
+- [ ] Adaptive Wide Angle Auto and lens profiles, Panorama, Smart Filter
+      re-edit (#891)
+- [ ] Lens Correction (#347) and Vanishing Point (#349)
 - [ ] De-Interlace (#344) and NTSC Colors (#345)
 - [ ] Embed and Read Watermark (#350, #351)
 - [ ] Edit ▸ Fade, the post-filter opacity and blend mode (#491)

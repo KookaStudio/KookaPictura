@@ -50,6 +50,9 @@ pub mod ffi {
         /// The output format remembered from the import source (`"psd"` when native).
         fn output_format(view: &PictureView) -> QString;
 
+        /// The active layer's opacity (0-255), or -1 for the Background or none.
+        fn active_layer_opacity(view: &PictureView) -> i32;
+
         /// Flatten the document composite and write it to `path` through the Qt encode edge. Never changes the document, its path, dirty flag, or history; false without writing on refusal.
         fn export_image(
             view: &PictureView,
@@ -77,6 +80,20 @@ pub fn webp_encode(rgba: &[u8], width: i32, height: i32) -> Vec<u8> {
 
 pub fn output_format(view: &PictureView) -> QString {
     QString::from(view.rust().source_format.as_str())
+}
+
+pub fn active_layer_opacity(view: &PictureView) -> i32 {
+    let rust = view.rust();
+    let Some(doc) = rust.session.doc.as_ref() else {
+        return -1;
+    };
+    let Some(path) = rust.layer_target.anchor() else {
+        return -1;
+    };
+    match pictura_render::resolve_path(doc, path) {
+        Some(layer) if !layer.background => layer.opacity as i32,
+        _ => -1,
+    }
 }
 
 pub fn export_image(
@@ -131,6 +148,42 @@ pub(super) fn encode_raster(
             scale,
         )
     }
+}
+
+/// Encode a raster to a temporary path, inject the document metadata into
+/// JPEG/TIFF, and rename over `path`. A failed encode or injection removes the
+/// temporary and leaves the previous file untouched.
+pub(super) fn write_raster_with_metadata(
+    rgba: &[u8],
+    width: u32,
+    height: u32,
+    path: &str,
+    format: &str,
+    metadata: &pictura_codec::RasterMetadata,
+) -> bool {
+    let tmp = format!("{path}.tmp-metadata");
+    if !encode_raster(rgba, width, height, &tmp, format, 90, 100) {
+        let _ = std::fs::remove_file(&tmp);
+        return false;
+    }
+    if inject_and_rename(&tmp, path, format, metadata).is_err() {
+        let _ = std::fs::remove_file(&tmp);
+        return false;
+    }
+    true
+}
+
+fn inject_and_rename(
+    tmp: &str,
+    path: &str,
+    format: &str,
+    metadata: &pictura_codec::RasterMetadata,
+) -> std::io::Result<()> {
+    let bytes = std::fs::read(tmp)?;
+    let bytes = pictura_codec::embed_raster_metadata(&bytes, format, metadata)
+        .map_err(|_| std::io::Error::other("metadata injection"))?;
+    std::fs::write(tmp, bytes)?;
+    std::fs::rename(tmp, path)
 }
 
 /// Rescale through the boundary (so the percent-scale contract matches the Qt

@@ -723,3 +723,209 @@ fn depth32_converted_to_16_writes_a_16bit_file() {
         "the fixture's 1.5 sample clamps at 16-bit"
     );
 }
+
+// --- Convert to Profile at native depth ------------------------------------
+
+#[test]
+fn read_conversion_reaches_native_composite() {
+    use crate::icc::apply_icc;
+    use crate::image_resources::{encode_image_resources, frame_image_resource, ICC_PROFILE};
+
+    let profile = Profile::adobe_rgb().to_icc();
+    let mut doc = Document::new(2, 1, ColorMode::Rgb, BitDepth::Eight);
+    doc.source_depth = Some(BitDepth::Sixteen);
+    doc.source_planes = Some(SourcePlanes {
+        depth: BitDepth::Sixteen,
+        width: 2,
+        height: 1,
+        samples: Samples::U16(vec![10000, 60000, 10000, 60000, 10000, 60000]),
+    });
+    doc.composite.data = vec![0, 255, 0, 255, 0, 255].into();
+    doc.image_resources =
+        encode_image_resources(&[frame_image_resource(ICC_PROFILE, "", &profile)]);
+    let before = doc.source_planes.clone();
+
+    let out = apply_icc(doc);
+    assert_ne!(
+        out.source_planes, before,
+        "the retained native composite is converted on read"
+    );
+    assert_eq!(out.source_icc.as_deref(), Some(profile.as_slice()));
+}
+
+#[test]
+fn profile_conversion_preserves_native_samples() {
+    use std::collections::HashSet;
+
+    // A 256x256 16-bit ramp has 65,536 source levels.
+    let (w, h) = (256u32, 256u32);
+    let n = (w * h) as usize;
+    let ramp = be16(
+        &(0..n)
+            .map(|i| (i as u32 * 65535 / (n as u32 - 1)) as u16)
+            .collect::<Vec<_>>(),
+    );
+    let p = flat_psd(16, 3, 3, w, h, &[&ramp, &ramp, &ramp]);
+    let mut doc = read_psd(&p).unwrap();
+    assert!(convert_document(&mut doc, &Profile::adobe_rgb()));
+
+    let store = doc.source_planes.as_ref().expect("native store");
+    let Samples::U16(values) = &store.samples else {
+        panic!("the store stays 16-bit");
+    };
+    let levels: HashSet<u16> = values.iter().take(n).copied().collect();
+    assert!(
+        levels.len() > 256,
+        "16-bit conversion kept only {} levels",
+        levels.len()
+    );
+
+    // The 8-bit working copy is the narrowed native result, so the writer
+    // re-emits the native store rather than widening the 8-bit copy.
+    let narrow = store.samples.slice(0..n).unwrap().narrow_to_u8();
+    assert_eq!(&doc.composite.data[..n], &narrow[..]);
+
+    let saved = write_psd(&doc).unwrap();
+    let back = read_psd(&saved).unwrap();
+    assert_eq!(back.source_depth, Some(BitDepth::Sixteen));
+    let back_store = back.source_planes.expect("saved store");
+    let Samples::U16(back_values) = &back_store.samples else {
+        panic!("the saved file stays 16-bit");
+    };
+    assert!(
+        back_values
+            .iter()
+            .take(n)
+            .copied()
+            .collect::<HashSet<_>>()
+            .len()
+            > 256,
+        "the saved file keeps more than 256 levels"
+    );
+
+    // Layer color planes convert too; alpha and mask planes do not move.
+    let r = be16(&[0]);
+    let g = be16(&[65535]);
+    let b = be16(&[0]);
+    let alpha = be16(&[65535]);
+    let mask = be16(&[32768]);
+    let layer_channels = [
+        (0i16, r.as_slice()),
+        (1, g.as_slice()),
+        (2, b.as_slice()),
+        (-1, alpha.as_slice()),
+        (-2, mask.as_slice()),
+    ];
+    let p = layered_psd_depth(16, 3, 3, &[&r, &g, &b], &layer_channels);
+    let mut doc = read_psd(&p).unwrap();
+    assert!(convert_document(&mut doc, &Profile::adobe_rgb()));
+    let layer = &doc.layers[0];
+    let planes = &layer.source_channels.as_ref().expect("layer store").planes;
+    let plane = |id: i16| {
+        planes
+            .iter()
+            .find(|(cid, _)| *cid == id)
+            .map(|(_, samples)| samples.clone())
+            .expect("plane")
+    };
+    assert_ne!(plane(0), Samples::U16(vec![0]), "red is converted");
+    assert_eq!(plane(-1), Samples::U16(vec![65535]), "alpha is untouched");
+    assert_eq!(plane(-2), Samples::U16(vec![32768]), "mask is untouched");
+    let narrow = plane(0).narrow_to_u8();
+    let working = layer
+        .channels
+        .iter()
+        .find(|c| c.id == 0)
+        .expect("working red");
+    assert_eq!(&working.data[..], &narrow[..], "working plane is synced");
+}
+
+#[test]
+fn profile_conversion_does_not_clamp_32bit() {
+    // Pixel 0 carries an out-of-range red; pixel 1 is sRGB green, whose
+    // conversion to Adobe RGB moves it into the red and blue planes.
+    let r = be32(&[1.5, 0.0]);
+    let g = be32(&[0.0, 1.0]);
+    let b = be32(&[0.0, 0.0]);
+    let p = flat_psd(32, 3, 3, 2, 1, &[&r, &g, &b]);
+    let mut doc = read_psd(&p).unwrap();
+    assert!(convert_document(&mut doc, &Profile::adobe_rgb()));
+    let store = doc.source_planes.as_ref().expect("native store");
+    let Samples::F32(converted) = &store.samples else {
+        panic!("the store stays 32-bit");
+    };
+    assert!(
+        converted[0] > 1.0,
+        "an out-of-range sample is not clamped: {}",
+        converted[0]
+    );
+    assert!(
+        converted[3] > 0.2,
+        "green is converted into the red plane: {}",
+        converted[3]
+    );
+    let saved = write_psd(&doc).unwrap();
+    let back = read_psd(&saved).unwrap();
+    assert_eq!(back.source_depth, Some(BitDepth::ThirtyTwo));
+    let back_store = back.source_planes.expect("saved store");
+    let Samples::F32(back_samples) = &back_store.samples else {
+        panic!("the saved file stays 32-bit");
+    };
+    assert_eq!(
+        back_samples[0], 1.5,
+        "the saved file re-emits the native sample"
+    );
+
+    // Alpha and mask planes of a 32-bit layer are byte-for-byte unchanged.
+    let cr = be32(&[1.5]);
+    let cg = be32(&[1.0]);
+    let cb = be32(&[0.0]);
+    let alpha = be32(&[1.0]);
+    let mask = be32(&[0.5]);
+    let layer_channels = [
+        (0i16, cr.as_slice()),
+        (1, cg.as_slice()),
+        (2, cb.as_slice()),
+        (-1, alpha.as_slice()),
+        (-2, mask.as_slice()),
+    ];
+    let p = layered_psd_depth(32, 3, 3, &[&cr, &cg, &cb], &layer_channels);
+    let mut doc = read_psd(&p).unwrap();
+    assert!(convert_document(&mut doc, &Profile::adobe_rgb()));
+    let planes = &doc.layers[0]
+        .source_channels
+        .as_ref()
+        .expect("layer store")
+        .planes;
+    let plane = |id: i16| {
+        planes
+            .iter()
+            .find(|(cid, _)| *cid == id)
+            .map(|(_, samples)| samples.clone())
+            .expect("plane")
+    };
+    assert_eq!(plane(0), Samples::F32(vec![1.5]), "out-of-range restored");
+    let Samples::F32(blue) = plane(2) else {
+        panic!("the layer stays 32-bit");
+    };
+    assert!(blue[0] > 0.01, "layer color is converted: {}", blue[0]);
+    assert_eq!(plane(-1), Samples::F32(vec![1.0]), "alpha is untouched");
+    assert_eq!(plane(-2), Samples::F32(vec![0.5]), "mask is untouched");
+}
+
+#[test]
+fn profile_conversion_leaves_partial_native_layer_unchanged() {
+    let r = be16(&[0]);
+    let g = be16(&[65535]);
+    let b = be16(&[0]);
+    let layer_channels = [(0i16, r.as_slice()), (1, g.as_slice()), (2, b.as_slice())];
+    let p = layered_psd_depth(16, 3, 3, &[&r, &g, &b], &layer_channels);
+    let mut doc = read_psd(&p).unwrap();
+    doc.layers[0].channels.retain(|channel| channel.id != 2);
+    let before = doc.layers[0].source_channels.clone();
+    assert!(convert_document(&mut doc, &Profile::adobe_rgb()));
+    assert_eq!(
+        doc.layers[0].source_channels, before,
+        "a layer with no working blue plane keeps its native store"
+    );
+}

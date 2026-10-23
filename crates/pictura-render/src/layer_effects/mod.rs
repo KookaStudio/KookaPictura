@@ -92,7 +92,7 @@
 
 use pictura_adjust::Adjustment;
 use pictura_codec::DescValue;
-use pictura_core::{BlendMode, Document, Layer, PixelBuffer};
+use pictura_core::{BlendMode, Document, Layer, PixelBuffer, PsdRect};
 
 use crate::composite::{channel, Canvas};
 
@@ -361,9 +361,10 @@ fn master_switch_on(data: &[u8]) -> bool {
 /// The document-space box `(left, top, right, bottom)` a non-group layer's
 /// effects can paint, or `None` when it cannot be bounded (content with no
 /// box of its own: a fill without a vector mask, an inverted mask). The
-/// outward reach is the drop shadow's distance plus size and the outer glow's,
-/// stroke's, and bevel's size (plus soften), with two pixels to spare; the
-/// inner effects and the overlays stay inside the content.
+/// outward reach is the drop shadow's distance plus its spread and blur
+/// support, the outer glow's spread and blur support, and the stroke's and
+/// bevel's size (plus soften), with two pixels to spare; the inner effects and
+/// the overlays stay inside the content.
 pub(crate) fn effects_reach(layer: &Layer) -> Option<(i32, i32, i32, i32)> {
     let rect = (
         layer.rect.left,
@@ -406,10 +407,12 @@ pub(crate) fn effects_reach(layer: &Layer) -> Option<(i32, i32, i32, i32)> {
     let effects = decode_layer_effects(layer);
     let mut reach = 0.0f32;
     if let Some(shadow) = effects.drop_shadow {
-        reach = reach.max(shadow.distance.abs() + shadow.size);
+        reach = reach.max(
+            shadow.distance.abs() + spread_pad(shadow.spread as f64, shadow.size as f64) as f32,
+        );
     }
     if let Some(glow) = effects.outer_glow {
-        reach = reach.max(glow.size);
+        reach = reach.max(spread_pad(glow.spread as f64, glow.size as f64) as f32);
     }
     if let Some(stroke) = effects.stroke {
         reach = reach.max(stroke.size as f32);
@@ -581,16 +584,60 @@ fn content_matte(layer: &Layer, doc: &Document, region: (i32, i32, i32, i32)) ->
             }
         }
         None => {
-            // No `-1` channel: the content path treats the layer as opaque, and so
-            // does the matte (a channel-less smart source is covered here too).
-            for y in iy0..iy1 {
-                for x in ix0..ix1 {
-                    matte[at(x, y)] = 1.0;
+            if !smart_source_matte(layer, region, &mut matte) {
+                // No `-1` channel and no readable source: the content path treats
+                // the layer as opaque, and so does the matte.
+                for y in iy0..iy1 {
+                    for x in ix0..ix1 {
+                        matte[at(x, y)] = 1.0;
+                    }
                 }
             }
         }
     }
     matte
+}
+
+/// Fill `matte` from an embedded smart object's rendered alpha over `region`.
+/// `false` when the layer has no renderable embedded source, so the caller
+/// keeps the opaque-rectangle fallback.
+fn smart_source_matte(layer: &Layer, region: (i32, i32, i32, i32), matte: &mut [f32]) -> bool {
+    // ponytail: the embedded source is decoded once per effect; cache the
+    // rendered alpha if a profile shows it.
+    let Some(so) = layer.smart_object.as_ref() else {
+        return false;
+    };
+    let (x0, y0, x1, y1) = region;
+    let rw = (x1 - x0) as usize;
+    let ix0 = layer.rect.left.max(x0);
+    let iy0 = layer.rect.top.max(y0);
+    let ix1 = layer.rect.right.min(x1);
+    let iy1 = layer.rect.bottom.min(y1);
+    if ix1 <= ix0 || iy1 <= iy0 {
+        return false;
+    }
+    let sub = PsdRect {
+        top: iy0,
+        left: ix0,
+        bottom: iy1,
+        right: ix1,
+    };
+    let Some(source) = crate::composite::render_smart_source(so, layer.rect, sub) else {
+        return false;
+    };
+    let sw = (ix1 - ix0) as usize;
+    let sh = (iy1 - iy0) as usize;
+    if source.channels != 4 || source.data.len() < sw * sh * 4 {
+        return false;
+    }
+    let alpha = &source.data[3 * sw * sh..];
+    for y in iy0..iy1 {
+        for x in ix0..ix1 {
+            let si = (y - iy0) as usize * sw + (x - ix0) as usize;
+            matte[(y - y0) as usize * rw + (x - x0) as usize] = alpha[si] as f32 / 255.0;
+        }
+    }
+    true
 }
 
 /// The layer rect clamped to the canvas as `(x0, y0, x1, y1)`; empty when the
@@ -617,6 +664,25 @@ fn pad_rect(r: (i32, i32, i32, i32), pad: i64, w: i32, h: i32) -> (i32, i32, i32
         (r.2 + pad).min(w),
         (r.3 + pad).min(h),
     )
+}
+
+/// The Spread dilation a drop shadow or glow applies before its blur.
+pub(super) fn spread_dilate(spread: f64, size: f64) -> i64 {
+    (spread / 100.0 * size).round() as i64
+}
+
+/// The pixels a Gaussian blur of `size` can spread past its source.
+pub(super) fn blur_support(size: f64) -> i64 {
+    if size > 0.0 {
+        (3.0 * pictura_filters::kernel::sigma_from_radius(size)).ceil() as i64
+    } else {
+        0
+    }
+}
+
+/// The full padding a spread-and-blur matte needs beyond its source.
+pub(super) fn spread_pad(spread: f64, size: f64) -> i64 {
+    spread_dilate(spread, size) + blur_support(size)
 }
 
 /// Grayscale dilation (max filter) of radius `r`, separable over the box

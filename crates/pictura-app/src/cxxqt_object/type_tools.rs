@@ -384,6 +384,7 @@ pub mod ffi {
 use ffi::{CharacterSetting, ParagraphSetting, TypeSetting};
 
 mod attrs;
+mod fonts;
 mod warp;
 
 use attrs::{

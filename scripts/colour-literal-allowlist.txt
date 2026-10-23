@@ -11,6 +11,9 @@ crates/pictura-app/cpp/acr/acr_basic_panel.cpp  QColor(0xdd, 0xdd, 0xdd)  # data
 crates/pictura-app/cpp/acr/acr_hsl_panel.cpp  QColor(0x33, 0x33, 0x33)  # data (luminance ramp stop)
 crates/pictura-app/cpp/acr/acr_hsl_panel.cpp  QColor(0xdd, 0xdd, 0xdd)  # data (luminance ramp stop)
 crates/pictura-app/cpp/acr/acr_lens_panel.cpp  QColor(0x33, 0x33, 0x33)  # data (neutral ramp stop)
+crates/pictura-app/cpp/awa_canvas.cpp  QColor(0xa8, 0xa8, 0xa8)  # data: CS6 workspace ground
+crates/pictura-app/cpp/awa_canvas.cpp  QColor(0xcc, 0xcc, 0xcc)  # data: transparency checkerboard
+crates/pictura-app/cpp/awa_canvas.cpp  QColor(128, 128, 128)  # data: Show Mesh line colour
 crates/pictura-app/cpp/blur_gallery_canvas.cpp  QColor(0xf0, 0xf0, 0xf0)  # data
 crates/pictura-app/cpp/blur_gallery_canvas.cpp  QColor(0xf4, 0xf4, 0xf4)  # data
 crates/pictura-app/cpp/blur_gallery_canvas.cpp  QColor(255, 255, 255)  # data

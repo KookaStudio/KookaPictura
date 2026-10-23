@@ -209,6 +209,7 @@ void PicturaMainWindow::finishLoadingDocument(int index)
     refresh();
     panelRefreshTimer_->stop();
     refreshPanels();
+    alertMissingFonts(entry.view);
     finishOpen(entry.token, OpenOutcome::Opened);
 }
 
@@ -485,7 +486,7 @@ quint64 PicturaMainWindow::startOpenImagePath(const QString& path)
     auto* view = new PictureView(this);
     beginOpenCursor();
     cursorTokens_.insert(token);
-    beginLoadingDocument(view, QString(), QFileInfo(path).fileName(), token, path,
+    beginLoadingDocument(view, path, QFileInfo(path).fileName(), token, path,
                          OpenKind::Raster);
     open_image_start(*view, path);
     return token;

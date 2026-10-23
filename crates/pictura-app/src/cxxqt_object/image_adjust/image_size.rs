@@ -86,6 +86,9 @@ fn image_size_apply(
     ppi: f64,
     per_cm: bool,
 ) -> bool {
+    if view.rust().modal_transform_blocks_edit() {
+        return false;
+    }
     let resample = resample.to_string();
     let resample = if resample.is_empty() {
         None
@@ -142,6 +145,9 @@ fn canvas_size_apply(
     height: i32,
     fill: u32,
 ) -> bool {
+    if view.rust().modal_transform_blocks_edit() {
+        return false;
+    }
     let Some(anchor) = parse_anchor(&anchor.to_string()) else {
         return false;
     };

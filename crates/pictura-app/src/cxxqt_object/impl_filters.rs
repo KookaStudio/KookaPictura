@@ -15,6 +15,9 @@ use rayon::prelude::*;
 
 impl qobject::PictureView {
     pub fn add_adjustment(mut self: Pin<&mut Self>, kind: &QString) -> bool {
+        if self.rust().modal_transform_blocks_edit() {
+            return false;
+        }
         let mask = {
             let rust = self.rust();
             let Some(doc) = rust.session.doc.as_ref() else {
@@ -68,6 +71,9 @@ impl qobject::PictureView {
     }
 
     pub fn apply_filter(mut self: Pin<&mut Self>, kind: &QString) -> bool {
+        if self.rust().modal_transform_blocks_edit() {
+            return false;
+        }
         let Some(filter) = filter_from_kind(&kind.to_string()) else {
             return false;
         };
@@ -130,6 +136,9 @@ impl qobject::PictureView {
         kind: &str,
         filter: pictura_filters::Filter,
     ) -> bool {
+        if self.rust().modal_transform_blocks_edit() {
+            return false;
+        }
         let region = {
             let mut rust = self.as_mut().rust_mut();
             apply_mask_op(&mut rust, path, &ActiveOp::Filter(filter), true, None)
@@ -233,6 +242,10 @@ pub(super) fn apply_op_active_region(
     ignore_selection: bool,
 ) -> Option<Option<pictura_core::PsdRect>> {
     rust.filter_error = None;
+    if rust.modal_transform_blocks_edit() {
+        rust.filter_error = Some("a transform is pending".to_string());
+        return None;
+    }
     if !commit && !rust.slot_allows(super::document_session::SessionKind::FilterPreview) {
         rust.filter_error = Some("another session is live".to_string());
         return None;

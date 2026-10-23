@@ -37,6 +37,7 @@ enum class FilterDialogKind {
     ReduceNoise,
     BlurGallery,
     Liquify,
+    AdaptiveWideAngle,
 };
 
 // The most control points a Shear curve carries. Lock-step with

@@ -1002,6 +1002,7 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
         | Filter::Custom { .. }
         | Filter::Solarize
         | Filter::Liquify { .. }
+        | Filter::AdaptiveWideAngle { .. }
         | Filter::OceanRipple { .. }
         | Filter::Glass { .. }
         | Filter::DiffuseGlow { .. }

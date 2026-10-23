@@ -1,8 +1,13 @@
 #include "color_settings_dialog.h"
 
+#include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QDialogButtonBox>
+#include <QtWidgets/QDoubleSpinBox>
+#include <QtWidgets/QGroupBox>
+#include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
+#include <QtWidgets/QPushButton>
 #include <QtWidgets/QVBoxLayout>
 
 namespace pictura {
@@ -31,13 +36,39 @@ ColorSettingsDialog::ColorSettingsDialog(int currentPolicy, QWidget* parent) : Q
     const int index = combo_->findData(currentPolicy);
     combo_->setCurrentIndex(index >= 0 ? index : combo_->findData(kPreserve));
 
+    advanced_ = new QGroupBox(tr("Advanced Controls"), this);
+    advanced_->setObjectName(QStringLiteral("colorSettingsAdvanced"));
+    blendTextGamma_ = new QCheckBox(tr("Blend Text Colors Using Gamma:"), advanced_);
+    blendTextGamma_->setObjectName(QStringLiteral("colorSettingsBlendTextGamma"));
+    textGammaValue_ = new QDoubleSpinBox(advanced_);
+    textGammaValue_->setObjectName(QStringLiteral("colorSettingsTextGamma"));
+    textGammaValue_->setRange(1.0, 2.2);
+    textGammaValue_->setDecimals(2);
+    textGammaValue_->setSingleStep(0.01);
+    connect(blendTextGamma_, &QCheckBox::toggled, textGammaValue_, &QWidget::setEnabled);
+    auto* gammaRow = new QHBoxLayout(advanced_);
+    gammaRow->addWidget(blendTextGamma_);
+    gammaRow->addWidget(textGammaValue_);
+    gammaRow->addStretch();
+    setTextGamma(true, 1.45);
+    advanced_->hide();
+
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    moreOptions_ = buttons->addButton(tr("More Options"), QDialogButtonBox::ActionRole);
+    moreOptions_->setObjectName(QStringLiteral("colorSettingsMoreOptions"));
+    connect(moreOptions_, &QPushButton::clicked, this, [this]() {
+        const bool show = advanced_->isHidden();
+        advanced_->setVisible(show);
+        moreOptions_->setText(show ? tr("Fewer Options") : tr("More Options"));
+        adjustSize();
+    });
     connect(buttons, &QDialogButtonBox::accepted, this, &ColorSettingsDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &ColorSettingsDialog::reject);
 
     auto* outer = new QVBoxLayout(this);
     outer->addWidget(workingSpace_);
     outer->addWidget(combo_);
+    outer->addWidget(advanced_);
     outer->addWidget(buttons);
     combo_->setFocus();
 }
@@ -45,6 +76,23 @@ ColorSettingsDialog::ColorSettingsDialog(int currentPolicy, QWidget* parent) : Q
 int ColorSettingsDialog::policyCode() const
 {
     return combo_->currentData().toInt();
+}
+
+void ColorSettingsDialog::setTextGamma(bool enabled, double gamma)
+{
+    blendTextGamma_->setChecked(enabled);
+    textGammaValue_->setValue(gamma);
+    textGammaValue_->setEnabled(enabled);
+}
+
+bool ColorSettingsDialog::textGammaEnabled() const
+{
+    return blendTextGamma_->isChecked();
+}
+
+double ColorSettingsDialog::textGamma() const
+{
+    return textGammaValue_->value();
 }
 
 QStringList ColorSettingsDialog::policyChoicesForTest() const

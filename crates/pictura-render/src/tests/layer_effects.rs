@@ -236,6 +236,18 @@ fn left_strip_changed(buf: &PixelBuffer) -> u32 {
     n
 }
 
+/// Total darkening of the strip left of the content, for effect-intensity
+/// comparisons where a changed-pixel count cannot see an alpha difference.
+fn left_strip_darkness(buf: &PixelBuffer) -> u32 {
+    let mut sum = 0;
+    for y in 0..buf.height {
+        for x in 0..3 {
+            sum += 255 - rgb(buf, x, y)[0] as u32;
+        }
+    }
+    sum
+}
+
 // --- Decoder ---------------------------------------------------------------
 
 #[test]
@@ -978,3 +990,163 @@ mod bevel;
 mod legacy;
 
 mod blend_mode;
+
+// --- Effect geometry -------------------------------------------------------
+
+#[test]
+fn effects_reach_includes_spread() {
+    let mut layer = solid(
+        "Shadowed",
+        rect(30, 30, 34, 34),
+        (255, 0, 0),
+        255,
+        BlendMode::Normal,
+        255,
+    );
+    layer.extra_blocks = vec![spec_block(&ShadowSpec {
+        distance: 0.0,
+        size: 10.0,
+        spread: 100.0,
+        opacity: 100.0,
+        ..Default::default()
+    })];
+    let backdrop = solid(
+        "Backdrop",
+        full(80, 80),
+        (255, 255, 255),
+        255,
+        BlendMode::Normal,
+        255,
+    );
+    let d = doc(80, 80, vec![backdrop, layer]);
+    // 14..18 is inside the spread dilation (20 px) but outside the blur-only
+    // reach (12 px) the pre-fix reach used.
+    let full = composite_rgba(&d);
+    let region = crate::composite::composite_rgba_region(&d, 14, 30, 4, 4);
+    assert!(
+        rgb(&region, 3, 1)[0] < 255,
+        "the sampled region sees the spread shadow"
+    );
+    for y in 0..4 {
+        for x in 0..4 {
+            assert_eq!(
+                px(&region, x, y),
+                px(&full, 14 + x, 30 + y),
+                "region pixel ({x},{y})"
+            );
+        }
+    }
+}
+
+fn transparent_corner_payload() -> Vec<u8> {
+    let mut d = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
+    let mut source = solid(
+        "source",
+        full(4, 4),
+        (200, 50, 0),
+        255,
+        BlendMode::Normal,
+        255,
+    );
+    let alpha = source
+        .channels
+        .iter_mut()
+        .find(|c| c.id == -1)
+        .expect("source alpha");
+    for y in 0..4usize {
+        for x in 0..4usize {
+            if (x == 0 || x == 3) && (y == 0 || y == 3) {
+                alpha.data[y * 4 + x] = 0;
+            }
+        }
+    }
+    d.layers = pictura_core::LayerStack::from_layers(vec![source]);
+    let bytes = pictura_codec::write_psd(&d).expect("payload writes");
+    let section_len = u32::from_be_bytes(bytes[34..38].try_into().unwrap()) as usize;
+    bytes[..38 + section_len].to_vec()
+}
+
+#[test]
+fn placed_smart_object_effect_matte() {
+    let mut layer = Layer {
+        name: "Placed".into(),
+        rect: rect(3, 3, 7, 7),
+        channels: Vec::new(),
+        smart_object: Some(pictura_core::SmartObject {
+            filename: "placed.psd".into(),
+            kind: pictura_core::SmartObjectKind::Embedded,
+            payload: Some(transparent_corner_payload()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    layer.extra_blocks = vec![spec_block(&ShadowSpec {
+        distance: 0.0,
+        size: 0.0,
+        opacity: 100.0,
+        ..Default::default()
+    })];
+    let out = compose(layer);
+    assert_eq!(
+        rgb(&out, 3, 3),
+        [255, 255, 255],
+        "a transparent corner casts no shadow"
+    );
+    assert_eq!(
+        rgb(&out, 4, 4),
+        [200, 50, 0],
+        "the opaque source still composites"
+    );
+}
+
+// --- Opacity ---------------------------------------------------------------
+
+#[test]
+fn layer_opacity_scales_effects() {
+    // Above-content: the stroke outside the content vanishes with the layer.
+    let zero = compose(stroke::stroke_layer_at_opacity(0));
+    for y in 0..9 {
+        for x in 0..9 {
+            assert_eq!(rgb(&zero, x, y), [255, 255, 255], "at {x},{y}");
+        }
+    }
+
+    let full = compose(stroke::stroke_layer_at_opacity(255));
+    let half = compose(stroke::stroke_layer_at_opacity(128));
+    assert!(
+        rgb(&full, 3, 5)[0] < rgb(&half, 3, 5)[0],
+        "the stroke scales with layer opacity"
+    );
+    assert!(
+        rgb(&half, 3, 5)[0] < 255,
+        "a half-opacity stroke still paints"
+    );
+
+    // Below-content: a drop shadow vanishes and scales the same way.
+    let shadow = |opacity: u8| {
+        let mut layer = spec_shadow(&ShadowSpec {
+            angle: 0.0,
+            distance: 2.0,
+            ..Default::default()
+        });
+        layer.opacity = opacity;
+        layer
+    };
+    let zero = compose(shadow(0));
+    for y in 0..9 {
+        for x in 0..9 {
+            assert_eq!(rgb(&zero, x, y), [255, 255, 255], "shadow at {x},{y}");
+        }
+    }
+
+    let full = compose(shadow(255));
+    let half = compose(shadow(128));
+    assert!(
+        left_strip_darkness(&full) > left_strip_darkness(&half),
+        "the shadow scales with layer opacity"
+    );
+    assert!(
+        left_strip_darkness(&half) > 0,
+        "a half-opacity shadow paints"
+    );
+}

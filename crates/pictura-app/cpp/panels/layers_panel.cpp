@@ -541,6 +541,7 @@ void LayersPanel::refresh()
             row.documentHeight = snap.documentHeight;
             row.shape = source.shape;
             row.warped = source.warped;
+            row.missingFont = source.missingFont;
             row.smartObject = source.smartObject;
             row.hasStyle = source.hasStyle;
             row.hasBlendIf = source.hasBlendIf;
@@ -1088,6 +1089,11 @@ void LayersPanel::releaseIsolationFor(const QString& path)
     if (proxy_) {
         applyFilter(proxy_->filter());
     }
+}
+
+bool LayersPanel::rowMissingFontForTest(const QString& path) const
+{
+    return model_ && model_->indexForPath(path).data(LayerRowMissingFontRole).toBool();
 }
 
 } // namespace pictura
