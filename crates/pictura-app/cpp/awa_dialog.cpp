@@ -4,6 +4,7 @@
 #include "icons.h"
 #include "panels/jump_slider.h"
 
+#include <QtCore/QDebug>
 #include <QtCore/QEvent>
 #include <QtCore/QSignalBlocker>
 #include <QtGui/QGuiApplication>
@@ -221,10 +222,9 @@ AdaptiveWideAngleDialog::AdaptiveWideAngleDialog(PictureView* view, const QStrin
     correction_->addItems(
         {QStringLiteral("Fisheye"), QStringLiteral("Perspective"), QStringLiteral("Full Spherical")});
     correction_->setToolTip(QStringLiteral("Correction: the projection the image was taken with."));
-    const ::rust::Vec<int32_t> dims = ready_ ? awa_geometry() : ::rust::Vec<int32_t>();
-    const bool twoToOne = dims.size() == 2 && std::abs(dims[0] - 2 * dims[1]) <= 1;
     if (auto* model = qobject_cast<QStandardItemModel*>(correction_->model())) {
-        model->item(2)->setEnabled(twoToOne); // Full Spherical needs a 2:1 panorama
+        // Full Spherical needs a 2:1 panorama.
+        model->item(2)->setEnabled(ready_ && awa_full_spherical_allowed());
     }
     auto* correctionRow = new QHBoxLayout;
     correctionRow->addWidget(new QLabel(QStringLiteral("Correction:"), lensBox));
@@ -356,10 +356,7 @@ bool AdaptiveWideAngleDialog::load(const QList<double>& values)
     if (!awa_load(::rust::Slice<const double>(flat.data(), flat.size()))) {
         return false;
     }
-    const bool spherical = correction_->currentIndex() == 2;
-    focal_->setEnabled(!spherical);
-    crop_->setEnabled(!spherical);
-    canvas_->refreshAll();
+    correctionChanged();
     return true;
 }
 
@@ -477,8 +474,12 @@ bool AdaptiveWideAngleDialog::get(PictureView* view, const QString& documentName
     if (!dialog.ready()) {
         return false;
     }
-    if (!initial.isEmpty()) {
-        dialog.load(initial);
+    // Settings that no longer apply (a constraint set no longer kept, Full
+    // Spherical on a layer that is not 2:1) refuse rather than open on
+    // defaults OK would then commit.
+    if (!initial.isEmpty() && !dialog.load(initial)) {
+        qWarning().noquote() << "Adaptive Wide Angle: the last settings no longer apply";
+        return false;
     }
     if (runDialog(dialog, parent) != QDialog::Accepted || dialog.committed().size() != 7) {
         return false;

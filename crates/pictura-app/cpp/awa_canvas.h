@@ -87,7 +87,6 @@ public:
     const QImage& previewImage() const { return view_; }
 
     std::function<void()> zoomChanged;
-    std::function<void()> offsetChanged;
     // The display point under the pointer, for the Detail view.
     std::function<void(const QPointF& display)> hoverMoved;
 

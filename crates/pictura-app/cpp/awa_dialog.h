@@ -42,7 +42,8 @@ public:
 
     // Whether the session opened over the active layer.
     bool ready() const { return ready_; }
-    // Restore committed slots (Last Filter Settings).
+    // Restore committed slots (Last Filter Settings). False, leaving the
+    // session as it was, when they no longer apply to this layer.
     bool load(const QList<double>& values);
 
     int tool() const;

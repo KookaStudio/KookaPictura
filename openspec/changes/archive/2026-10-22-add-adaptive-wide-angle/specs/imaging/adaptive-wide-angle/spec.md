@@ -15,7 +15,8 @@ Crop Factor ÷ 43.27 × the layer diagonal, and Scale and an offset applied
 about the layer centre. Fisheye and Perspective SHALL map through a
 stereographic projection with unit magnification at the centre, Fisheye
 clipped at 90° off-axis; Full Spherical with no constraints SHALL leave the
-layer unchanged. Output pixels no source covers SHALL be transparent, or white
+layer unchanged, and Full Spherical on a layer that is not 2:1 SHALL be
+refused. Output pixels no source covers SHALL be transparent, or white
 when the buffer has no alpha plane. The result SHALL be deterministic.
 
 #### Scenario: A short fisheye collapses to a disc [awa_fisheye_disc]
@@ -38,6 +39,12 @@ when the buffer has no alpha plane. The result SHALL be deterministic.
 - **WHEN** `adaptive_wide_angle::tests::full_spherical_is_identity_without_constraints`
   applies Full Spherical at Scale 100 % with no constraints to a 2:1 layer
 - **THEN** every sample is unchanged
+
+#### Scenario: Full Spherical is refused off 2:1 [awa_spherical_refused]
+
+- **WHEN** `adaptive_wide_angle::tests::full_spherical_is_refused_off_two_to_one`
+  applies Full Spherical to a 3:2 layer
+- **THEN** the filter returns an error and the layer is unchanged
 
 #### Scenario: Scale shrinks the result about the centre [awa_scale]
 
@@ -116,7 +123,10 @@ horizontal, magenta when vertical, green when fixed, red when invalid. Edits
 SHALL preview in the workspace without changing the document. Cancel SHALL
 leave the document and history untouched; OK SHALL commit one filter history
 state, and Last Filter Settings SHALL reopen the workspace with the committed
-settings and constraints.
+settings and constraints. Every path, Last Filter and Last Filter Settings
+included, SHALL refuse a document that is not 8-bit RGB or Grayscale and Full
+Spherical on a layer that is not 2:1; Last Filter Settings naming a
+constraint set no longer kept SHALL be refused rather than open on defaults.
 
 #### Scenario: The menu row follows the document depth [awa_menu]
 
@@ -213,3 +223,25 @@ settings and constraints.
 - **WHEN** `tst_adaptive_wide_angle::detailFollowsPointer` moves the
   pointer over two different parts of the preview
 - **THEN** the Detail view's picture differs between them
+
+#### Scenario: Last Filter refuses Full Spherical off 2:1 [awa_last_aspect]
+
+- **WHEN** `tst_adaptive_wide_angle::lastFilterRefusesFullSphericalOffTwoToOne`
+  commits Full Spherical on a 2:1 picture, makes the canvas 3:2, then runs
+  Last Filter Settings and Last Filter
+- **THEN** no workspace opens, no state is recorded, the pixels are
+  unchanged, and the refusal names 2:1
+
+#### Scenario: Last Filter refuses a document that is not 8-bit [awa_last_depth]
+
+- **WHEN** `tst_adaptive_wide_angle::lastFilterRefusesOffEightBit` commits
+  the filter, converts the document to 16 Bits/Channel, then runs Last Filter
+  Settings and Last Filter
+- **THEN** no workspace opens, no state is recorded, and the refusal names
+  8-bit
+
+#### Scenario: Last Filter Settings refuses a constraint set no longer kept [awa_unkept_set]
+
+- **WHEN** `tst_adaptive_wide_angle::lastSettingsRefusesAnUnkeptSet` opens
+  the workspace with slots naming a constraint set that is not kept
+- **THEN** it is refused and no workspace opens

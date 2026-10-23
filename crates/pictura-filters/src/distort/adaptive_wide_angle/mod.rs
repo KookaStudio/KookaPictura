@@ -527,10 +527,22 @@ fn edge(a: [f64; 2], b: [f64; 2], p: [f64; 2]) -> f64 {
     (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0])
 }
 
+/// Whether a `w`×`h` layer is the 2:1 panorama Full Spherical needs (within
+/// a pixel).
+pub fn awa_two_to_one(w: u32, h: u32) -> bool {
+    (i64::from(w) - 2 * i64::from(h)).abs() <= 1
+}
+
 /// Apply `params` to `buf` (three or four planes). Pixels no source covers
-/// turn transparent, or white when there is no alpha plane.
+/// turn transparent, or white when there is no alpha plane. Full Spherical
+/// on a layer that is not 2:1 is refused, whichever path asks for it.
 pub fn adaptive_wide_angle(buf: &mut PixelBuffer, params: &AwaParams) -> Result<(), FilterError> {
     validate(buf)?;
+    if params.correction == AwaCorrection::FullSpherical && !awa_two_to_one(buf.width, buf.height) {
+        return Err(FilterError::InvalidParams(
+            "Full Spherical needs a 2:1 panorama".into(),
+        ));
+    }
     let warp = AwaWarp::solve(params, buf.width, buf.height);
     let source = AwaSource::from_buffer(buf);
     render::commit(&warp, &source, buf);

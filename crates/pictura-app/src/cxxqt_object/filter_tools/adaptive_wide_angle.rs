@@ -14,9 +14,9 @@ use std::sync::{Arc, Mutex};
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QImageFormat, QString};
 use pictura_codec::Exif;
-use pictura_core::{BitDepth, ColorMode};
+use pictura_core::{BitDepth, ColorMode, Document};
 use pictura_filters::{
-    AwaConstraint, AwaCorrection, AwaOrientation, AwaParams, AwaSource, AwaWarp,
+    awa_two_to_one, AwaConstraint, AwaCorrection, AwaOrientation, AwaParams, AwaSource, AwaWarp,
 };
 
 use super::super::helpers::{active_mask_target, active_pixel_layer};
@@ -42,8 +42,9 @@ pub mod ffi {
         /// Grayscale.
         fn awa_document_supported(view: &PictureView) -> bool;
 
-        /// Open a session over the active layer. False when there is no
-        /// unmasked pixel layer with colour data.
+        /// Open a session over the active layer. False when the document is
+        /// not one the filter takes or there is no unmasked pixel layer with
+        /// colour data.
         fn awa_begin(view: &PictureView) -> bool;
 
         /// The session's layer size, `[width, height]`; empty with no session.
@@ -52,6 +53,10 @@ pub mod ffi {
         /// The lens EXIF gives, `[focal length, crop factor]` in the
         /// dialog's ranges; empty when the image has no focal length.
         fn awa_exif_lens() -> Vec<f64>;
+
+        /// Whether the session's layer is the 2:1 panorama Full Spherical
+        /// needs.
+        fn awa_full_spherical_allowed() -> bool;
 
         /// The session's `[focal length, crop factor]`.
         fn awa_lens_settings() -> Vec<f64>;
@@ -121,7 +126,8 @@ pub mod ffi {
         fn awa_mesh_lines(preview: bool) -> Vec<f64>;
 
         /// Restore committed slots (Last Filter Settings): the lens, offset
-        /// and constraints. False when the constraint set is no longer kept.
+        /// and constraints. False when the constraint set is no longer kept
+        /// or the slots ask for Full Spherical on a layer that is not 2:1.
         fn awa_load(values: &[f64]) -> bool;
 
         /// End the session. With `keep`, keep the constraints and return the
@@ -283,11 +289,24 @@ fn orientation_of(code: i32) -> AwaOrientation {
     }
 }
 
+fn document_supported(doc: &Document) -> bool {
+    doc.source_depth.unwrap_or(doc.depth) == BitDepth::Eight
+        && matches!(doc.mode, ColorMode::Rgb | ColorMode::Grayscale)
+}
+
 fn awa_document_supported(view: &PictureView) -> bool {
-    view.rust().session.doc.as_ref().is_some_and(|doc| {
-        doc.source_depth.unwrap_or(doc.depth) == BitDepth::Eight
-            && matches!(doc.mode, ColorMode::Rgb | ColorMode::Grayscale)
-    })
+    view.rust()
+        .session
+        .doc
+        .as_ref()
+        .is_some_and(document_supported)
+}
+
+/// Why `kind` may not commit on `doc`: Adaptive Wide Angle takes 8-bit RGB
+/// and Grayscale only, whichever path (Last Filter included) asks for it.
+pub(in crate::cxxqt_object) fn awa_refusal(kind: &str, doc: Option<&Document>) -> Option<String> {
+    (kind == "adaptive-wide-angle" && !doc.is_some_and(document_supported))
+        .then(|| "Adaptive Wide Angle needs an 8-bit RGB or Grayscale document".to_string())
 }
 
 fn awa_begin(view: &PictureView) -> bool {
@@ -295,7 +314,7 @@ fn awa_begin(view: &PictureView) -> bool {
     if active_mask_target(rust).is_some() {
         return false;
     }
-    let Some(doc) = rust.session.doc.as_ref() else {
+    let Some(doc) = rust.session.doc.as_ref().filter(|d| document_supported(d)) else {
         return false;
     };
     let Some(layer) = active_pixel_layer(doc, rust.layer_target.single()) else {
@@ -346,6 +365,10 @@ fn awa_begin(view: &PictureView) -> bool {
 
 fn awa_geometry() -> Vec<i32> {
     with_session(Vec::new(), |s| vec![s.w as i32, s.h as i32])
+}
+
+fn awa_full_spherical_allowed() -> bool {
+    with_session(false, |s| awa_two_to_one(s.w as u32, s.h as u32))
 }
 
 fn awa_lens_settings() -> Vec<f64> {
@@ -606,9 +629,13 @@ fn awa_load(values: &[f64]) -> bool {
     let Some(constraints) = awa_constraints(*id as u32) else {
         return false;
     };
+    let correction = awa_correction(*correction);
     with_session(false, |s| {
+        if correction == AwaCorrection::FullSpherical && !awa_two_to_one(s.w as u32, s.h as u32) {
+            return false;
+        }
         s.params = AwaParams {
-            correction: awa_correction(*correction),
+            correction,
             scale: scale / 100.0,
             focal_length: *focal,
             crop_factor: *crop,
@@ -691,6 +718,21 @@ mod tests {
         assert_eq!(lens_from_exif(&exif(50, 50)), Some([50.0, 1.0]));
         assert_eq!(lens_from_exif(&exif(200, 200)), Some([69.2, 1.0]));
         assert_eq!(lens_from_exif(&Exif::default()), None);
+    }
+
+    #[test]
+    fn commits_are_refused_off_eight_bit_rgb_and_gray() {
+        let rgb8 = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
+        let gray8 = Document::new(4, 4, ColorMode::Grayscale, BitDepth::Eight);
+        let rgb16 = Document::new(4, 4, ColorMode::Rgb, BitDepth::Sixteen);
+        let cmyk8 = Document::new(4, 4, ColorMode::Cmyk, BitDepth::Eight);
+        let kind = "adaptive-wide-angle";
+        assert!(awa_refusal(kind, Some(&rgb8)).is_none());
+        assert!(awa_refusal(kind, Some(&gray8)).is_none());
+        assert!(awa_refusal(kind, Some(&rgb16)).is_some());
+        assert!(awa_refusal(kind, Some(&cmyk8)).is_some());
+        assert!(awa_refusal(kind, None).is_some());
+        assert!(awa_refusal("liquify", Some(&rgb16)).is_none());
     }
 
     #[test]

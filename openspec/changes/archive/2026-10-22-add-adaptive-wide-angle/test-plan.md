@@ -5,6 +5,7 @@
 | `awa_fisheye_disc` | Apply Fisheye 11.74 mm, crop 0.20, Scale 50 % to an opaque layer | An opaque disc of radius ≈ F about the centre; transparent outside | `pictura-filters::short_fisheye_leaves_a_disc` |
 | `awa_perspective_corners` | Apply Perspective at a short focal length, Scale 150 % | Corners clear, edge midpoints covered, centre colour within 2 | `pictura-filters::perspective_pulls_corners_in` |
 | `awa_spherical_identity` | Apply Full Spherical, Scale 100 %, no constraints, to a 2:1 layer | Every sample unchanged | `pictura-filters::full_spherical_is_identity_without_constraints` |
+| `awa_spherical_refused` | Apply Full Spherical to a 3:2 layer | An error; the layer is unchanged | `pictura-filters::full_spherical_is_refused_off_two_to_one` |
 | `awa_scale` | Apply Full Spherical at Scale 50 % | About a quarter of the layer stays opaque, centred | `pictura-filters::scale_shrinks_about_the_centre` |
 | `awa_background_fill` | Apply a blank-leaving correction to a three-plane buffer | Blank pixels are white | `pictura-filters::blank_areas_are_white_without_alpha` |
 | `awa_deterministic` | Apply the same constrained parameters twice | Byte-identical outputs | `pictura-filters::constrained_runs_are_deterministic` |
@@ -27,6 +28,9 @@
 | `awa_commit` | Draw and Cancel; draw and OK | Cancel changes nothing; OK adds one `adaptive-wide-angle` state and changes pixels | `tst_adaptive_wide_angle::cancelAndOk` |
 | `awa_last_settings` | Commit Perspective, 120, one constraint; reopen with the slots | Perspective, 120, one constraint | `tst_adaptive_wide_angle::lastSettingsRestoresConstraints` |
 | `awa_detail` | Hover two parts of the preview | The Detail picture differs | `tst_adaptive_wide_angle::detailFollowsPointer` |
+| `awa_last_aspect` | Commit Full Spherical on 2:1, Canvas Size to 3:2, run Last Filter Settings and Last Filter | No dialog, no state, pixels unchanged, refusal names 2:1 | `tst_adaptive_wide_angle::lastFilterRefusesFullSphericalOffTwoToOne` |
+| `awa_last_depth` | Commit, convert to 16 Bits/Channel, run Last Filter Settings and Last Filter | No dialog, no state, refusal names 8-bit | `tst_adaptive_wide_angle::lastFilterRefusesOffEightBit`, `pictura-app::commits_are_refused_off_eight_bit_rgb_and_gray` |
+| `awa_unkept_set` | Open with slots naming a set no longer kept | Refused; no dialog | `tst_adaptive_wide_angle::lastSettingsRefusesAnUnkeptSet` |
 | Visual match to CS6 | Correct the same fisheye and wide-angle photos in CS6 and Pictura with matching settings and constraints | Comparable straightening and blank-area shapes | manual: no CS6 oracle; the projection and solver are approximations of a closed algorithm |
 | Interactive feel | Draw, drag handles and move sliders on a 24 MP photo | Re-solve and preview stay responsive | manual: responsiveness on real hardware is not observable offscreen |
 | Constraint colours on screen | Draw unfixed, horizontal, vertical, fixed constraints | Cyan, yellow, magenta, green read clearly over the image | manual: the suite checks each constraint's state, not how the colours read |

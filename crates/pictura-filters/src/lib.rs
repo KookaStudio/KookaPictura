@@ -36,7 +36,7 @@ pub use blur::spin::{SpinPin, SpinStrobe, MAX_SPIN_ANGLE};
 pub use blur::tilt::{TiltPin, MAX_TILT_EXTENT};
 pub use blur::SmartBlurMode;
 pub use distort::adaptive_wide_angle::{
-    AwaConstraint, AwaCorrection, AwaOrientation, AwaParams, AwaSource, AwaWarp,
+    awa_two_to_one, AwaConstraint, AwaCorrection, AwaOrientation, AwaParams, AwaSource, AwaWarp,
 };
 pub use distort::liquify::{
     LiquifyBrush, LiquifyMesh, LiquifySource, LiquifyTool, LIQUIFY_MAX_BRUSH,

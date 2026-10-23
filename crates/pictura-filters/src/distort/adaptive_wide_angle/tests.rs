@@ -138,6 +138,20 @@ fn full_spherical_is_identity_without_constraints() {
 }
 
 #[test]
+fn full_spherical_is_refused_off_two_to_one() {
+    let source = layer(60, 40, 4);
+    let mut buf = source.clone();
+    let p = params(AwaCorrection::FullSpherical, 10.0, 1.0, 1.0);
+    assert!(adaptive_wide_angle(&mut buf, &p).is_err());
+    assert_eq!(
+        &buf.data[..],
+        &source.data[..],
+        "a refusal leaves the layer"
+    );
+    assert!(awa_two_to_one(64, 32) && awa_two_to_one(65, 32) && !awa_two_to_one(60, 40));
+}
+
+#[test]
 fn scale_shrinks_about_the_centre() {
     let mut buf = layer(64, 32, 4);
     adaptive_wide_angle(

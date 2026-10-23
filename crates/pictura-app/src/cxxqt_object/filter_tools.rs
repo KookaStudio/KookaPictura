@@ -278,6 +278,13 @@ fn apply_filter_params(
     params: &QList<f64>,
 ) -> bool {
     let kind_s = kind.to_string();
+    if let Some(reason) =
+        adaptive_wide_angle::awa_refusal(&kind_s, view.rust().session.doc.as_ref())
+    {
+        eprintln!("pictura: filter '{kind_s}' refused: {reason}");
+        view.as_mut().rust_mut().filter_error = Some(reason);
+        return false;
+    }
     let params_v: Vec<f64> = params.into_iter().copied().collect();
     let params_v = super::filter_map::commit_params(&kind_s, &params_v);
     let params_v = lens_blur_depths::commit_slots(&kind_s, view.rust(), &params_v);

@@ -614,8 +614,6 @@ void AwaCanvas::mouseReleaseEvent(QMouseEvent* event)
             select(index);
         }
         update();
-    } else if (drag == Drag::Move && offsetChanged) {
-        offsetChanged();
     }
     updateCursor();
 }

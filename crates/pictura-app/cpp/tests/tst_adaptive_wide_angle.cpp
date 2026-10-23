@@ -24,6 +24,7 @@
 #include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/filter_tools/adaptive_wide_angle.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h"
 
 #include "qt_test_support.h"
 
@@ -121,6 +122,9 @@ private slots:
     void detailFollowsPointer();
     void cancelAndOk();
     void lastSettingsRestoresConstraints();
+    void lastSettingsRefusesAnUnkeptSet();
+    void lastFilterRefusesFullSphericalOffTwoToOne();
+    void lastFilterRefusesOffEightBit();
 
 private:
     // Show a dialog over the active document, exposed.
@@ -481,6 +485,99 @@ void AdaptiveWideAngleTest::lastSettingsRestoresConstraints()
     QCOMPARE(scale, 120);
     QCOMPARE(constraints, 1);
     QCOMPARE(view->history_count(), history);
+}
+
+void AdaptiveWideAngleTest::lastSettingsRefusesAnUnkeptSet()
+{
+    // Id 4e9 names no kept constraint set: refuse rather than open on
+    // defaults that OK would commit.
+    QList<double> out;
+    QVERIFY(!AdaptiveWideAngleDialog::get(window_->activeView(), QStringLiteral("lens.png"),
+                                          {0, 100, 75.91, 0.57, 0, 0, 4e9}, &out, nullptr));
+    QVERIFY(out.isEmpty());
+    QVERIFY(openAwaDialog() == nullptr);
+}
+
+// Opens a picture, commits Adaptive Wide Angle on it through the menu with
+// `correction`, and returns the view.
+static pictura::PictureView* commitOn(pictura::PicturaMainWindow& window, const QString& path,
+                                      int correction)
+{
+    if (!window.openDocumentAtPath(path)) {
+        return nullptr;
+    }
+    QTimer::singleShot(0, [correction] {
+        if (AdaptiveWideAngleDialog* dialog = openAwaDialog()) {
+            dialog->findChild<QComboBox*>(QStringLiteral("awaCorrection"))->setCurrentIndex(correction);
+            dialog->accept();
+        }
+    });
+    window.registry()->dispatch(
+        pictura::commandIdForPath({QStringLiteral("Filter"), QStringLiteral("Adaptive Wide Angle…")}));
+    return window.activeView();
+}
+
+void AdaptiveWideAngleTest::lastFilterRefusesFullSphericalOffTwoToOne()
+{
+    QImage pano(200, 100, QImage::Format_RGB32);
+    for (int y = 0; y < 100; ++y) {
+        for (int x = 0; x < 200; ++x) {
+            pano.setPixelColor(x, y, QColor(x, y * 2, ((x + y) / 8) % 2 ? 220 : 40));
+        }
+    }
+    const QString path = dir_.filePath(QStringLiteral("pano-crop.png"));
+    QVERIFY(pano.save(path));
+    pictura::PictureView* view = commitOn(*window_, path, 2);
+    QVERIFY(view);
+    QCOMPARE(filter_last_kind(*view), QStringLiteral("adaptive-wide-angle"));
+    QCOMPARE(filter_last_params(*view).value(0), 2.0);
+    // Now 3:2: Full Spherical no longer applies on any path.
+    QVERIFY(pictura::canvas_size_apply(*view, QStringLiteral("center"), 200, 133, 0xffffffu));
+    const int history = view->history_count();
+    const QImage document = view->image();
+    bool opened = false;
+    QTimer::singleShot(0, [&opened] {
+        if (AdaptiveWideAngleDialog* dialog = openAwaDialog()) {
+            opened = true;
+            dialog->accept();
+        }
+    });
+    window_->registry()->dispatch(
+        QString::fromLatin1(pictura::command_ids::FilterLastFilterSettings));
+    QVERIFY(!opened);
+    window_->registry()->dispatch(QString::fromLatin1(pictura::command_ids::FilterLastFilter));
+    QCOMPARE(view->history_count(), history);
+    QCOMPARE(view->image(), document);
+    QVERIFY(filter_last_error(*view).contains(QStringLiteral("2:1")));
+    QVERIFY(window_->closeActiveDocument(false));
+}
+
+void AdaptiveWideAngleTest::lastFilterRefusesOffEightBit()
+{
+    QImage picture(60, 40, QImage::Format_RGB32);
+    picture.fill(QColor(120, 160, 200));
+    const QString path = dir_.filePath(QStringLiteral("deep.png"));
+    QVERIFY(picture.save(path));
+    pictura::PictureView* view = commitOn(*window_, path, 0);
+    QVERIFY(view);
+    QCOMPARE(filter_last_kind(*view), QStringLiteral("adaptive-wide-angle"));
+    QVERIFY(window_->registry()->dispatch(QString::fromLatin1(pictura::command_ids::ImageMode16Bits)));
+    QCOMPARE(pictura::image_depth_bits(*view), 16);
+    const int history = view->history_count();
+    bool opened = false;
+    QTimer::singleShot(0, [&opened] {
+        if (AdaptiveWideAngleDialog* dialog = openAwaDialog()) {
+            opened = true;
+            dialog->accept();
+        }
+    });
+    window_->registry()->dispatch(
+        QString::fromLatin1(pictura::command_ids::FilterLastFilterSettings));
+    QVERIFY(!opened);
+    window_->registry()->dispatch(QString::fromLatin1(pictura::command_ids::FilterLastFilter));
+    QCOMPARE(view->history_count(), history);
+    QVERIFY(filter_last_error(*view).contains(QStringLiteral("8-bit")));
+    QVERIFY(window_->closeActiveDocument(false));
 }
 
 QTEST_MAIN(AdaptiveWideAngleTest)
