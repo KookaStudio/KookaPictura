@@ -153,6 +153,7 @@ fn offset_wrap_matches_imagemagick() {
             horizontal: 3,
             vertical: 2,
             wrap: true,
+            repeat: false,
             background: [0, 0, 0],
             transparent: false,
         },

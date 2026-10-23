@@ -148,6 +148,7 @@ fn filters() -> Vec<(&'static str, Filter)> {
                 horizontal: 40,
                 vertical: 40,
                 wrap: true,
+                repeat: false,
                 background: [0, 0, 0],
                 transparent: false,
             },

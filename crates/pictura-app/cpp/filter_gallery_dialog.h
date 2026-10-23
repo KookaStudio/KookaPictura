@@ -128,6 +128,7 @@ private:
     QTimer* previewTimer_ = nullptr;
     QImage thumbnailSample_;
     QByteArray thumbnailRgba_;
+    double thumbnailScale_ = 1.0;
     int nextThumbnail_ = 0;
 };
 

@@ -185,7 +185,7 @@ void LightingEffectsDialogTest::slotsRoundTripTheRig()
     QCOMPARE(pictura::filter_param_arity(QStringLiteral("lighting-effects")),
              pictura::kLightingRigSlots + pictura::kLightingLightSlots);
     QVERIFY(!pictura::filter_thumbnail(QByteArray(4 * 4 * 4, char(128)), 4, 4,
-                              QStringLiteral("lighting-effects"), rigSlots)
+                              QStringLiteral("lighting-effects"), rigSlots, 1.0)
                  .isNull());
 }
 

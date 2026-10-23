@@ -297,7 +297,7 @@ void LensFlareDialog::valuesChanged(bool canvas)
     // shows the same picture the commit will.
     if (!proxy_.isNull()) {
         const QImage flared =
-            filter_thumbnail(proxyRgba_, proxy_.width(), proxy_.height(), spec_.kind, current);
+            filter_thumbnail(proxyRgba_, proxy_.width(), proxy_.height(), spec_.kind, current, 1.0);
         pad_->setImage(flared.isNull() ? proxy_ : flared);
     }
     if (!canvas || !shownOnce_ || !preview_->isChecked() || !view_ || !view_->has_document()) {

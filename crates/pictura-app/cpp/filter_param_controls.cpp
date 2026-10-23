@@ -37,14 +37,6 @@ namespace pictura {
 
 namespace {
 
-// A slider whose value is a distance in document pixels.
-bool measuresPixels(const FilterParamSpec& spec)
-{
-    const QString unit = spec.suffix.trimmed();
-    return spec.control == FilterControl::Slider
-           && (unit.startsWith(QStringLiteral("pixels")) || unit == QStringLiteral("px"));
-}
-
 // A value box only needs room for five digits and a decimal (with a sign); a
 // wider box would just waste the row.
 int compactSpinWidth(const QWidget* widget)
@@ -908,7 +900,7 @@ QList<double> FilterParamControls::scaledValues(double scale) const
     int slot = 0;
     for (const Control& control : controls_) {
         const FilterParamSpec& spec = control.spec;
-        if (measuresPixels(spec) && slot < result.size()) {
+        if (spec.measuresPixels && slot < result.size()) {
             double value = result.at(slot) * scale;
             if (spec.decimals == 0) {
                 value = std::round(value);
