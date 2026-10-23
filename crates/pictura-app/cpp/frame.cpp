@@ -66,10 +66,7 @@ bool launchCreatesScratchDocument(bool selfTest, bool codecLoaded)
     return selfTest && !codecLoaded;
 }
 
-bool saveActiveInProgress()
-{
-    return saveActiveOrigin;
-}
+bool saveActiveInProgress() { return saveActiveOrigin; }
 
 PicturaMainWindow::PicturaMainWindow(QWidget* parent)
     : QMainWindow(parent)

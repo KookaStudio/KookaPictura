@@ -474,7 +474,7 @@ pub(super) static ROWS: &[CommandSpec] = &[
     CommandSpec { id: "filter.texture.stained.glass", path: &["Filter", "Texture", "Stained Glass"], label: "Stained Glass", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "filter.texture.texturizer", path: &["Filter", "Texture", "Texturizer"], label: "Texturizer", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "filter.video.de.interlace", path: &["Filter", "Video", "De-Interlace"], label: "De-Interlace", shortcut: "", implemented: false, checkable: false },
-    CommandSpec { id: "filter.video.ntsc.colors", path: &["Filter", "Video", "NTSC Colors"], label: "NTSC Colors", shortcut: "", implemented: false, checkable: false },
+    CommandSpec { id: "filter.video.ntsc.colors", path: &["Filter", "Video", "NTSC Colors"], label: "NTSC Colors", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "filter.other.custom", path: &["Filter", "Other", "Custom"], label: "Custom", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "filter.other.high.pass", path: &["Filter", "Other", "High Pass"], label: "High Pass", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "filter.other.maximum", path: &["Filter", "Other", "Maximum"], label: "Maximum", shortcut: "", implemented: true, checkable: false },

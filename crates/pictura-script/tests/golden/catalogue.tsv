@@ -469,7 +469,7 @@ filter.texture.patchwork	Filter/Texture/Patchwork	Patchwork		1	0
 filter.texture.stained.glass	Filter/Texture/Stained Glass	Stained Glass		1	0
 filter.texture.texturizer	Filter/Texture/Texturizer	Texturizer		1	0
 filter.video.de.interlace	Filter/Video/De-Interlace	De-Interlace		0	0
-filter.video.ntsc.colors	Filter/Video/NTSC Colors	NTSC Colors		0	0
+filter.video.ntsc.colors	Filter/Video/NTSC Colors	NTSC Colors		1	0
 filter.other.custom	Filter/Other/Custom	Custom		1	0
 filter.other.high.pass	Filter/Other/High Pass	High Pass		1	0
 filter.other.maximum	Filter/Other/Maximum	Maximum		1	0
