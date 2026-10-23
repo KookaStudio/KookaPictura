@@ -25,6 +25,13 @@ namespace {
 // The canvas property recording the view `frame_revision` its image came from.
 constexpr const char* kFrameKey = "picturaFrameRevision";
 
+// Save may route through Save As; only the origin command records the step.
+thread_local bool saveActiveOrigin = false;
+
+struct SaveActiveOrigin {
+    SaveActiveOrigin() { saveActiveOrigin = true; }
+    ~SaveActiveOrigin() { saveActiveOrigin = false; }
+};
 // The document pane keeps a minimum width even with no document open, so the
 // widget columns can never absorb the whole workspace (and the splitter keeps a
 // grabbable handle on each side of it). ponytail: chosen, not a sourced CS6
@@ -57,6 +64,11 @@ QString modeLabel(const QString& mode)
 bool launchCreatesScratchDocument(bool selfTest, bool codecLoaded)
 {
     return selfTest && !codecLoaded;
+}
+
+bool saveActiveInProgress()
+{
+    return saveActiveOrigin;
 }
 
 PicturaMainWindow::PicturaMainWindow(QWidget* parent)
@@ -131,6 +143,11 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
         gpuAvailable_ = probe.gpu_available();
     }
     registerHandlers();
+    const auto saveToRecordedPath = [this](const CommandParams& params) {
+        return saveActiveAs(params.values.value(QStringLiteral("in")).toString());
+    };
+    registry_->setExecutor(command_ids::FileSave, saveToRecordedPath);
+    registry_->setExecutor(command_ids::FileSaveAs, saveToRecordedPath);
     buildMenus();
     buildPanels(state);
     buildTools(state.toolsColumns, state.useShiftKeyForToolSwitch, state.toolOptions);
@@ -552,6 +569,11 @@ bool PicturaMainWindow::editSmartObjectContents(const QString& layerPath)
 
 bool PicturaMainWindow::saveActive()
 {
+    SaveActiveOrigin origin;
+    const auto record = [this] {
+        registry_->recordCommand(command_ids::FileSave,
+            CommandParams{QJsonObject{{QStringLiteral("in"), activeFilePath()}}});
+    };
     const int index = activeDocumentIndex();
     if (index < 0) {
         return false;
@@ -569,17 +591,31 @@ bool PicturaMainWindow::saveActive()
         refresh();
         updateTabTitle(index);
         updateWindowTitle();
+        // The editor tab has no file path of its own; the step would replay an
+        // empty save target, so a smart-object commit records nothing here.
         return true;
     }
     QString path = docs_.at(index).path;
     if (!path.isEmpty() && isPdfPath(path)) {
-        return savePdfWithDialog(path);
+        const bool saved = savePdfWithDialog(path);
+        if (saved) {
+            record();
+        }
+        return saved;
     }
     if (path.isEmpty()
         || savePathNeedsFormatDialog(path, view, isNativeDocumentPath(path))) {
-        return saveAsWithDialog();
+        const bool saved = saveAsWithDialog();
+        if (saved) {
+            record();
+        }
+        return saved;
     }
-    return saveActiveAs(path);
+    const bool saved = saveActiveAs(path);
+    if (saved) {
+        record();
+    }
+    return saved;
 }
 
 bool PicturaMainWindow::saveActiveAs(const QString& path)
@@ -594,6 +630,11 @@ bool PicturaMainWindow::saveActiveAs(const QString& path)
     updateTabTitle(index);
     rememberRecent(path);
     updateWindowTitle();
+    if (!saveActiveOrigin) {
+        registry_->recordCommand(command_ids::FileSaveAs,
+            CommandParams{QJsonObject{{QStringLiteral("as"), path.section(QLatin1Char('.'), -1).toUpper()},
+                                      {QStringLiteral("in"), path}}});
+    }
     return true;
 }
 
@@ -1067,7 +1108,6 @@ void PicturaMainWindow::closeEvent(QCloseEvent* event)
     saveSession();
     QMainWindow::closeEvent(event);
 }
-
 void PicturaMainWindow::updateStatus()
 {
     // One owner for footer visibility: an empty workspace shows none of it.
@@ -1139,7 +1179,6 @@ void PicturaMainWindow::updateStatus()
         statusOptionsButton_->setVisible(hasDoc);
     }
 }
-
 void PicturaMainWindow::applyBrightness(int level)
 {
     brightnessLevel_ = Theme::clampLevel(level);
@@ -1148,19 +1187,15 @@ void PicturaMainWindow::applyBrightness(int level)
     Theme::apply(family, brightnessLevel_);
     applyWorkspaceCanvasColor();
 }
-
 QStringList PicturaMainWindow::selectedLayerPaths() const
 {
     PictureView* view = activeView();
     return view ? selected_layer_paths(*view) : QStringList{};
 }
-
 QString PicturaMainWindow::layerAnchor() const
 {
     PictureView* view = activeView();
     return view ? layer_selection_anchor(*view) : QString();
 }
-
 } // namespace pictura
-
 #include "moc_frame.cpp"

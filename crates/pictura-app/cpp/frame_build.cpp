@@ -1,12 +1,20 @@
 #include "frame_includes.h"
 
+#include "api/document_api.h"
 #include "color_picker_dialog.h"
 #include "fonts.h"
+#include "panels/actions_engine_bridge.h"
+#include "panels/actions_panel.h"
+#include "pictura_app/src/cxxqt_object/actions_engine.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/paint_tools.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/path_list.cxxqt.h"
 #include "panels/brush_preset_picker.h"
 #include "panels/numeric_field.h"
 #include "text_input.h"
 
+#include <QtCore/QDebug>
 #include <QtCore/QEvent>
+#include <QtCore/QJsonDocument>
 #include <QtCore/QTimer>
 #include <QtGui/QFont>
 #include <QtGui/QMouseEvent>
@@ -121,8 +129,82 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
     pathsPanel_ = new PathsPanel(this);
     pathsPanel_->setObjectName(QStringLiteral("pathsPanel"));
 
-    actionsPanel_ = new PlaceholderPanel(QStringLiteral("Actions"), QString(), this);
+    actionsPanel_ = new ActionsPanel(this);
     actionsPanel_->setObjectName(QStringLiteral("actionsPanel"));
+    actionsEngine_ = new ActionsEngineBridge(new ActionsEngine(this), this);
+    set_active_actions_engine(actionsEngine_);
+    actionsPanel_->setEngine(actionsEngine_);
+    const bool libraryLoaded = actionsEngine_->loadLibrary();
+    const QString libraryError = actionsEngine_->lastError();
+    if (!libraryLoaded || !libraryError.isEmpty()) {
+        const QString message =
+            libraryError.isEmpty()
+            ? tr("The Actions library could not be loaded.")
+            : tr("The Actions library could not be loaded: %1").arg(libraryError);
+        qWarning().noquote() << message;
+        statusBar()->showMessage(message, 10000);
+    }
+    connect(qApp, &QCoreApplication::aboutToQuit, this, [this] {
+        if (actionsEngine_) {
+            actionsEngine_->saveLibrary();
+        }
+    });
+    actionsPanel_->setRegistry(registry_);
+    actionsPanel_->setPathSelectionProvider([this]() -> QString {
+        if (!pathsPanel_ || !pathsPanel_->listForTest()) {
+            return QString();
+        }
+        QListWidgetItem* item = pathsPanel_->listForTest()->currentItem();
+        return item ? item->text() : QString();
+    });
+    actionsPanel_->setStopHandler([this](const QString& message, bool allowContinue) {
+        QMessageBox box(QMessageBox::Information, tr("Stop"), message, QMessageBox::NoButton, this);
+        QPushButton* proceed =
+            box.addButton(allowContinue ? tr("Continue") : tr("OK"), QMessageBox::AcceptRole);
+        box.addButton(tr("Cancel"), QMessageBox::RejectRole);
+        box.setDefaultButton(proceed);
+        runDialog(box, this);
+        return box.clickedButton() == proceed;
+    });
+    actionsPanel_->setToolStepExecutor([this](const QJsonObject& payload) {
+        PictureView* view = activeView();
+        if (!view || !view->has_document()) {
+            return false;
+        }
+        const QString json =
+            QString::fromUtf8(QJsonDocument(payload).toJson(QJsonDocument::Compact));
+        return pictura::replay_tool_stroke(*view, json);
+    });
+    actionsPanel_->setDocumentFactsProvider([this]() {
+        ActionsPanel::DocumentFacts facts;
+        PictureView* view = activeView();
+        if (!view || !view->has_document()) {
+            return facts;
+        }
+        facts.present = true;
+        facts.square = view->document_width() == view->document_height();
+        facts.mode = document_api::documentMode(*view);
+        facts.hasSelection = view->has_selection();
+        return facts;
+    });
+    actionsPanel_->setPathStepExecutor([this](const QString& name) {
+        PictureView* view = activeView();
+        if (!view || !view->has_document()) {
+            return false;
+        }
+        const int count = paths_saved_count(*view);
+        for (int i = 0; i < count; ++i) {
+            if (paths_saved_name(*view, i) == name) {
+                return paths_set_active(*view, i);
+            }
+        }
+        return false;
+    });
+    connect(actionsPanel_, &ActionsPanel::errorOccurred, this, [this](const QString& message) {
+        statusBar()->showMessage(message, 8000);
+    });
+    connect(actionsPanel_, &ActionsPanel::functionKeyWarning, this,
+            [this](const QString& message) { statusBar()->showMessage(message, 8000); });
 
     // `Styles` takes the former Gradients/Patterns tab slot in the default set.
     stylesPanel_ = new PlaceholderPanel(QStringLiteral("Styles"), QString(), this);
@@ -219,7 +301,10 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
     auto* actionsGroup = new PanelGroup(this);
     addPanel(actionsGroup, actionsPanel_, tr("Actions"),
              QString::fromLatin1(command_ids::WindowPanelsActions));
+    actionsGroup->setPanelMenuHook(QStringLiteral("actionsPanel"),
+                                   [this](QMenu* menu) { actionsPanel_->updatePanelMenu(menu); });
     panelColumn_->addGroup(actionsGroup);
+    actionsPanel_->applySessionState(state);
 
     // Kept registered and Window-menu reachable, but out of the default groups.
     auto* overflowGroup = new PanelGroup(this);

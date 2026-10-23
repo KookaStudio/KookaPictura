@@ -49,6 +49,7 @@ set(PICTURA_QT_TESTS
     tst_transform_warp
     tst_transform_commands
     tst_command_tree
+    tst_command_bus
     tst_merge_commands
     tst_layer_commands
     tst_fill_tools
@@ -83,6 +84,7 @@ set(PICTURA_QT_TESTS
     tst_color_picker
     tst_properties_panel
     tst_adjustments_panel
+    tst_actions_panel
     tst_channels_panel
     tst_paths_panel
     tst_icon_assets

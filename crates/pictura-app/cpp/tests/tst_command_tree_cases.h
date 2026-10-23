@@ -1,0 +1,161 @@
+#pragma once
+
+#include <QtCore/QFile>
+#include <QtCore/QHash>
+#include <QtCore/QSet>
+#include <QtGui/QAction>
+#include <QtTest/QtTest>
+#include <QtWidgets/QMenu>
+#include <QtWidgets/QMenuBar>
+
+#include <functional>
+
+#include "commands.h"
+#include "frame.h"
+#include "pictura_app/src/cxxqt_object/command_catalogue.cxxqt.h"
+
+namespace pictura::test {
+
+inline void crMenuCatalogue(pictura::PicturaMainWindow& window)
+{
+    const ::rust::Vec<pictura::CommandSpecRow> rows = pictura::command_catalogue();
+    const QList<pictura::CommandInfo> infos = window.registry()->describe();
+    QHash<QString, pictura::CommandInfo> byId;
+    for (const pictura::CommandInfo& info : infos) {
+        byId.insert(info.id, info);
+    }
+
+    int catalogueCommands = 0;
+    for (const pictura::CommandSpecRow& row : rows) {
+        if (row.id.isEmpty()) {
+            continue;
+        }
+        ++catalogueCommands;
+        QVERIFY2(byId.contains(row.id), qPrintable(row.id));
+        const pictura::CommandInfo info = byId.value(row.id);
+        QCOMPARE(info.path, row.path);
+        QCOMPARE(info.label, row.label);
+    }
+    QCOMPARE(infos.size(), catalogueCommands);
+
+    QSet<QString> menuIds;
+    std::function<void(QMenu*)> visit = [&](QMenu* menu) {
+        for (QAction* action : menu->actions()) {
+            if (QMenu* submenu = action->menu()) {
+                visit(submenu);
+            } else if (!action->data().toString().isEmpty()) {
+                menuIds.insert(action->data().toString());
+            }
+        }
+    };
+    for (QAction* action : window.menuBar()->actions()) {
+        if (QMenu* menu = action->menu()) {
+            visit(menu);
+        }
+    }
+    for (const pictura::CommandSpecRow& row : rows) {
+        if (!row.id.isEmpty()) {
+            QVERIFY2(menuIds.contains(row.id), qPrintable(row.id));
+        }
+    }
+    QVERIFY(window.registry()->action(QString::fromLatin1(pictura::command_ids::FileNew))
+            != nullptr);
+}
+
+inline void crIdentifiersStable(pictura::PicturaMainWindow& window)
+{
+    pictura::CommandRegistry* registry = window.registry();
+    QAction* action = registry->action(QString::fromLatin1(pictura::command_ids::SelectAll));
+    QVERIFY(action != nullptr);
+    const QString originalText = action->text();
+    const QList<QKeySequence> originalShortcuts =
+        registry->shortcuts(QString::fromLatin1(pictura::command_ids::SelectAll));
+
+    action->setText(QStringLiteral("Renamed Select All"));
+    registry->setShortcuts(QString::fromLatin1(pictura::command_ids::SelectAll),
+                           {QKeySequence(QStringLiteral("Ctrl+Alt+F12"))});
+    QVERIFY(registry->dispatch(QString::fromLatin1(pictura::command_ids::SelectAll)));
+    QVERIFY(window.activeView()->has_selection());
+
+    registry->setShortcuts(QString::fromLatin1(pictura::command_ids::SelectAll),
+                           originalShortcuts);
+    action->setText(originalText);
+    window.activeView()->deselect();
+}
+
+inline void crRustOnly()
+{
+    QVERIFY(QFINDTESTDATA("../../../../crates/pictura-app/cpp/command_tree.cpp").isEmpty());
+
+    const QString commandsHeader =
+        QFINDTESTDATA("../../../../crates/pictura-app/cpp/commands.h");
+    QVERIFY(!commandsHeader.isEmpty());
+    QFile header(commandsHeader);
+    QVERIFY(header.open(QIODevice::ReadOnly));
+    const QByteArray text = header.readAll();
+    QVERIFY(!text.contains("namespace command_ids"));
+    QVERIFY(text.contains("#include \"command_ids.h\""));
+    QVERIFY(!QFINDTESTDATA("../../../../crates/pictura-app/cpp/command_ids.h").isEmpty());
+}
+
+inline void crListCommands(pictura::PicturaMainWindow& window)
+{
+    window.registry()->refresh();
+    const QList<pictura::CommandInfo> infos = window.registry()->describe();
+    QCOMPARE(infos.size(), 589);
+    QHash<QString, pictura::CommandInfo> byId;
+    for (const pictura::CommandInfo& info : infos) {
+        byId.insert(info.id, info);
+    }
+
+    int index = 0;
+    for (const pictura::CommandSpecRow& row : pictura::command_catalogue()) {
+        if (row.id.isEmpty()) {
+            continue;
+        }
+        QVERIFY(index < infos.size());
+        const pictura::CommandInfo info = infos.at(index);
+        ++index;
+        QCOMPARE(info.id, row.id);
+        QCOMPARE(info.path, row.path);
+        QCOMPARE(info.label, row.label);
+    }
+    QCOMPARE(index, 589);
+    QCOMPARE(index, infos.size());
+
+    const pictura::CommandInfo fileNew =
+        byId.value(QString::fromLatin1(pictura::command_ids::FileNew));
+    QCOMPARE(fileNew.path, (QStringList{QStringLiteral("File"), QStringLiteral("New…")}));
+    QCOMPARE(fileNew.label, QStringLiteral("New…"));
+    QVERIFY(fileNew.implemented);
+    QVERIFY(fileNew.enabled);
+
+    const pictura::CommandInfo imageSize =
+        byId.value(pictura::commandIdForPath(
+            {QStringLiteral("Image"), QStringLiteral("Image Size…")}));
+    QVERIFY(imageSize.implemented);
+    QVERIFY(imageSize.enabled);
+
+    const pictura::CommandInfo gaussian = byId.value(pictura::commandIdForPath(
+        {QStringLiteral("Filter"), QStringLiteral("Blur"), QStringLiteral("Gaussian Blur")}));
+    QVERIFY(gaussian.implemented);
+    QVERIFY(gaussian.enabled);
+
+    const pictura::CommandInfo extract = byId.value(pictura::commandIdForPath(
+        {QStringLiteral("Filter"), QStringLiteral("Extract…")}));
+    QVERIFY(!extract.implemented);
+
+    const pictura::CommandInfo rgbMode =
+        byId.value(QString::fromLatin1(pictura::command_ids::ImageModeRgb));
+    QVERIFY(rgbMode.checked);
+    const pictura::CommandInfo eightBits =
+        byId.value(QString::fromLatin1(pictura::command_ids::ImageMode8Bits));
+    QVERIFY(eightBits.checked);
+
+    const pictura::CommandInfo hideLayers =
+        byId.value(QString::fromLatin1(pictura::command_ids::LayerHideLayers));
+    QCOMPARE(hideLayers.path,
+             (QStringList{QStringLiteral("Layer"), QStringLiteral("Hide Layers")}));
+}
+
+} // namespace pictura::test

@@ -5,6 +5,8 @@
 
 #include "frame_includes.h"
 
+#include "pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h"
+
 namespace pictura {
 
 void PicturaMainWindow::wireTransformMenu()
@@ -109,7 +111,7 @@ void PicturaMainWindow::wireTransformMenu()
         const QString id = QString::fromLatin1(entry.id);
         const QString op = QString::fromLatin1(entry.op);
         const QString label = QString::fromUtf8(entry.label);
-        registry_->setHandler(id, [this, op, label, transformTarget]() {
+        registry_->setHandler(id, [this, id, op, label, transformTarget]() {
             PictureView* view = activeView();
             if (!view) {
                 return;
@@ -126,9 +128,44 @@ void PicturaMainWindow::wireTransformMenu()
                 return;
             }
             refresh();
+            if (!open) {
+                CommandParams command;
+                if (op.startsWith(QStringLiteral("rotate"))) {
+                    const int angle = op == QLatin1String("rotate180") ? 180
+                                    : op == QLatin1String("rotate90cw") ? 90
+                                                                        : -90;
+                    command.values.insert(QStringLiteral("angle"), angle);
+                } else {
+                    command.values.insert(
+                        QStringLiteral("axis"),
+                        op == QLatin1String("flipHorizontal") ? QStringLiteral("horizontal")
+                                                              : QStringLiteral("vertical"));
+                }
+                registry_->recordCommand(id, command);
+            }
         });
         registry_->setEnabledProvider(
             id, [transformTargetable, modalSession]() { return modalSession() || transformTargetable(); });
+        registry_->setExecutor(id, [this, op, label, transformTarget](const CommandParams&) {
+            PictureView* view = activeView();
+            const QString path = transformTarget();
+            if (!view || !view->has_document() || path.isEmpty()) {
+                return false;
+            }
+            if (!view->begin_free_transform(path)) {
+                return false;
+            }
+            if (!transform_apply(*view, op)) {
+                view->cancel_transform();
+                return false;
+            }
+            transform_set_history_label(*view, label);
+            const bool applied = view->commit_transform();
+            if (applied) {
+                refresh();
+            }
+            return applied;
+        });
     }
 
     registry_->setHandler(command_ids::EditTransformAgain, [this, transformTarget]() {
