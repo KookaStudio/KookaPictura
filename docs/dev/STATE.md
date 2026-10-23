@@ -11,6 +11,28 @@ Snapshot for resuming after a context break. Update after each milestone.
   (`docs/00-overview/licensing-and-provenance.md`).
 - **Provenance history:** the git history was rewritten so no reachable commit
   contains reproduced Adobe Help prose or the old wording.
+- **Text gamma and missing fonts** (#685, branch
+  `feat/685-text-gamma-missing-fonts`, OpenSpec change
+  `text-gamma-missing-fonts`, archived into `compositing/text-gamma-blend`,
+  `tools/missing-fonts`, and `color/color-settings`).
+  - **Blend Text Colors Using Gamma** is on at 1.45 by default. A type layer's
+    coverage × opacity × Fill goes through `1 − (1 − a)^(γ / 2.2)` in
+    `blend_into_row` before the mask applies (`pictura-render/src/text_gamma.rs`).
+    The setting is process-wide, not stored on the document; Color Settings >
+    More Options edits it and saves it in the session. Rasterize Type bakes the
+    curve into the layer's alpha. While it is on, the GPU compositor hands type
+    layers back to the CPU.
+  - **Missing fonts.** A font counts as missing when it is not the bundled
+    Liberation Sans and Qt has no installed family for it (`fontIsInstalled` in
+    `type_fonts.cpp`). Opening a document with missing fonts raises one
+    non-blocking `missingFontsAlert`. The Layers row draws a warning triangle on
+    the T card. `Type > Replace All Missing Fonts` re-sets those layers in
+    Liberation Sans as one state (`missing_fonts.rs`).
+  Ceiling (`ponytail:`): the curve does not depend on colour, so light type on
+  a dark backdrop also thins, and it is not verified against CS6. The
+  installed-font check is cached for the process. Missing Glyph Protection is
+  #887. Tests: `tst_text_gamma_fonts` (9 cases), the Rust `text_gamma` units,
+  and the `text_gamma_off` binary.
 - **Warp Text** (#684, branch `feat/684-warp-text`, OpenSpec change
   `warp-text`, archived into `tools/warp-text`). `Type > Warp Text…` and the
   type tools' options-bar Warp button open a window-modal dialog: Style (None

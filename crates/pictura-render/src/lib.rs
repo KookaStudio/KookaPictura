@@ -187,6 +187,10 @@ mod fonts;
 pub use fonts::{
     font_family, font_has_outlines, font_postscript_name, opentype_features, register_font,
 };
+mod missing_fonts;
+pub use missing_fonts::{replace_type_fonts, REPLACEMENT_FONT};
+mod text_gamma;
+pub use text_gamma::{set_text_gamma, text_gamma, text_gamma_alpha, DEFAULT_TEXT_GAMMA};
 mod pdf_text;
 pub use pdf_text::{pdf_live_type, pdf_type_fonts, LiveType};
 mod type_caret;
@@ -199,7 +203,7 @@ mod type_path;
 mod type_warp;
 pub use type_layer::{
     add_type_layer, apply_type_style, render_type, replace_type_layer, type_layer_at,
-    type_layer_spec, type_mask, type_placement, TypePlacement,
+    type_layer_spec, type_layers_editable, type_mask, type_placement, TypePlacement,
 };
 pub use type_path::{overflow_point as type_path_overflow_point, path_hit_at, PathHit};
 pub use type_warp::{type_warp_refusal, WarpRefusal};

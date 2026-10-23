@@ -448,6 +448,11 @@ fn rgb8(doc: &Document) -> bool {
     doc.mode == ColorMode::Rgb && doc.depth == BitDepth::Eight
 }
 
+/// Whether type layers in `doc` can be set or re-set: only 8-bit RGB.
+pub fn type_layers_editable(doc: &Document) -> bool {
+    rgb8(doc)
+}
+
 /// Commit `spec` as a type layer above `selection_path` (the [`insert_node`]
 /// rule): rendered pixels, an authored `TySh`, and CS6's type locks
 /// (transparency and pixels). Returns the new path; empty when nothing renders

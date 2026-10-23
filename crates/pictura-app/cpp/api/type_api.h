@@ -2,6 +2,7 @@
 
 #include <QtCore/QByteArray>
 #include <QtCore/QString>
+#include <QtCore/QStringList>
 #include <QtCore/QVector>
 
 #include <rust/cxx.h>
@@ -140,5 +141,17 @@ bool previewWarp(PictureView& view, const QString& path, const WarpSetting& warp
 bool cancelWarp(PictureView& view);
 /// Re-set the layer with `warp` and record one "Warp Text" state.
 bool commitWarp(PictureView& view, const QString& path, const WarpSetting& warp);
+
+/// Blend Text Colors Using Gamma, for every document (`gamma` 1.00–2.20).
+void setTextGamma(bool enabled, double gamma);
+/// Recomposite `view` after the text gamma changed; no history.
+void refreshTextGamma(PictureView& view);
+/// Every type layer's font name, each once.
+QStringList documentFonts(const PictureView& view);
+/// Whether the document's type layers can be re-set (8-bit RGB only).
+bool layersEditable(const PictureView& view);
+/// Re-set every type layer using one of `missing` in the default font as one
+/// "Replace All Missing Fonts" state; the number of layers changed.
+int replaceFonts(PictureView& view, const QStringList& missing);
 
 } // namespace pictura::type_api

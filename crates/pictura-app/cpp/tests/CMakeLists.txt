@@ -72,6 +72,7 @@ set(PICTURA_QT_TESTS
     tst_paragraph_styles_panel
     tst_warp_text
     tst_type_placeholder
+    tst_text_gamma_fonts
     tst_shared_widgets
     tst_info_panel
     tst_system_info

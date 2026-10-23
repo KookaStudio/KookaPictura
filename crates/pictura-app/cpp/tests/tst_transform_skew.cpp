@@ -3,6 +3,8 @@
 
 #include <QtTest/QtTest>
 
+#include <QtCore/QScopeGuard>
+
 #include "api/transform_api.h"
 #include "api/type_api.h"
 #include "frame.h"
@@ -826,6 +828,11 @@ void TransformSkewTest::typeKeepsTheLayerColor()
     QVERIFY(QTest::qWaitForWindowExposed(&frame));
     QTest::qWait(50);
 
+    // The solid-pixel probe below reads the composite; Blend Text Colors Using
+    // Gamma thins this small type's edges past it, and the check is about the
+    // preview's colour, not the text gamma.
+    pictura::type_api::setTextGamma(false, 1.45);
+    const auto restoreGamma = qScopeGuard([] { pictura::type_api::setTextGamma(true, 1.45); });
     QImage seed(200, 160, QImage::Format_RGB32);
     seed.fill(Qt::white);
     paint_fixture::Fixture f(frame, seed, QStringLiteral("pictura_skew_type"));

@@ -167,7 +167,8 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       shortcuts (#540)
 - [x] Type on path and area type (#683)
 - [x] Warp text (#684)
-- [ ] Gamma blend and missing-font handling (#685) (#541)
+- [x] Gamma blend and missing-font handling (#685)
+- [ ] Missing Glyph Protection (#887)
 - [ ] Path operations, align and arrange, constrained path dragging, the Target
       Path toggle, and segment and marquee multi-select (#542)
 - [ ] Slice style and modifiers, Divide, Combine, Duplicate, the Slice Options

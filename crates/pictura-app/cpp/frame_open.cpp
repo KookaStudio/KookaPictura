@@ -209,6 +209,7 @@ void PicturaMainWindow::finishLoadingDocument(int index)
     refresh();
     panelRefreshTimer_->stop();
     refreshPanels();
+    alertMissingFonts(entry.view);
     finishOpen(entry.token, OpenOutcome::Opened);
 }
 

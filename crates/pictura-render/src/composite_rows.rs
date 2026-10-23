@@ -104,16 +104,15 @@ pub(crate) fn blend_into_row(
         }
         _ => 1.0,
     };
-    blend_parts_row(
-        row,
-        cover,
-        ox,
-        x,
-        y,
-        cs,
-        src_a * opacity * fill * mask * gate,
-        layer.blend,
-    );
+    let mut content = src_a * opacity * fill;
+    if let Some(curve) = layer
+        .type_tool
+        .as_ref()
+        .and_then(|_| crate::text_gamma::current_curve())
+    {
+        content = curve.apply(content);
+    }
+    blend_parts_row(row, cover, ox, x, y, cs, content * mask * gate, layer.blend);
 }
 
 /// Composite an opacity-weighted source sample over the backdrop at
