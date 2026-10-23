@@ -181,6 +181,8 @@ bool activePixelLocked(PictureView* view);
 // The answer to "Apply the transformation?" when a tool switch leaves a pending
 // transform: commit it, stay in it (no switch), or drop it.
 enum class TransformDecision { Apply, Cancel, DontApply };
+// The answer to "Crop the image?" when a tool switch leaves a pending crop.
+enum class CropDecision { Crop, Cancel, DontCrop };
 
 class ToolController : public QObject, public ToolServices {
     Q_OBJECT
@@ -425,6 +427,12 @@ public:
     // A modal transform (Free Transform, Transform submenu, Warp) is open and
     // not yet committed: the Layer menu and Layers panel are locked, and a
     // tool switch asks first. The Move tool's controls box is never pending.
+    // Asked when a tool switch would leave a pending crop; unset (or headless)
+    // behaves as Don't Crop.
+    void setCropDecisionPrompt(std::function<CropDecision()> prompt)
+    {
+        cropPrompt_ = std::move(prompt);
+    }
     bool transformPending() const { return transformSessionActive() && !transformControls_; }
     // Asked when a tool switch would leave a pending transform; unset (or
     // headless) behaves as Don't Apply.
@@ -551,6 +559,10 @@ private:
     // Apply cancels, Cancel keeps it; false means stay on the current tool.
     bool resolvePendingTransform();
     std::function<TransformDecision()> transformPrompt_;
+    // Settle a pending Crop / Perspective Crop before a tool switch: Crop
+    // commits, Don't Crop drops it, Cancel stays; false means stay.
+    bool resolvePendingCrop();
+    std::function<CropDecision()> cropPrompt_;
     // Shared begin: resolve the view, start `mode` (empty = Free), then set up
     // the overlay and pan policy. `controls` marks the Move tool's auto-managed
     // box, which the user-command take-over must not cancel.

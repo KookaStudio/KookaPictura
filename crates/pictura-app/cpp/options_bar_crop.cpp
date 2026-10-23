@@ -352,6 +352,7 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
         QStringLiteral("Crop guide overlay"));
     {
         QMenu* menu = gridButton->menu();
+        menu->setObjectName(QStringLiteral("optionsCropGridMenu"));
         auto* group = new QActionGroup(menu);
         group->setExclusive(true);
         const QStringList& overlays = CropOptions::overlayNames();
@@ -674,6 +675,12 @@ QWidget* OptionsBar::buildPerspectiveCropPage(ToolId id)
     layout->addWidget(showGrid);
     layout->addWidget(separator());
 
+    auto* reset = new QToolButton(page);
+    reset->setObjectName(QStringLiteral("optionsPerspectiveReset"));
+    reset->setIcon(icon(QStringLiteral("edit.undo")));
+    reset->setIconSize(QSize(18, 18));
+    reset->setToolTip(QStringLiteral("Reset the perspective crop"));
+    layout->addWidget(reset);
     auto* cancel = new QToolButton(page);
     cancel->setObjectName(QStringLiteral("optionsPerspectiveCancel"));
     cancel->setIcon(icon(QStringLiteral("crop.cancel")));
@@ -730,12 +737,21 @@ QWidget* OptionsBar::buildPerspectiveCropPage(ToolId id)
                 perspective->setPerspectiveShowGrid(on);
             }
         });
+        connect(reset, &QToolButton::clicked, this, [this, width, height, pushOutput]() {
+            width->setBlank(true);
+            height->setBlank(true);
+            pushOutput();
+            if (PerspectiveCropSession* perspective = perspectiveCrop()) {
+                perspective->resetPerspectiveQuad();
+            }
+        });
         connect(cancel, &QToolButton::clicked, this, [this]() { controller_->handleEscape(); });
         connect(apply, &QToolButton::clicked, this, [this]() {
             if (CropCommitSession* session = cropCommit()) {
                 session->commitCrop();
             }
         });
+        perspectiveReset_ = reset;
         perspectiveApply_ = apply;
         perspectiveCancel_ = cancel;
         syncPerspectiveButtons();
@@ -748,11 +764,12 @@ QWidget* OptionsBar::buildPerspectiveCropPage(ToolId id)
 
 void OptionsBar::syncPerspectiveButtons()
 {
-    if (!perspectiveApply_ || !perspectiveCancel_) {
+    if (!perspectiveApply_ || !perspectiveCancel_ || !perspectiveReset_) {
         return;
     }
     PerspectiveCropSession* perspective = perspectiveCrop();
     const bool on = perspective && perspective->perspectiveQuadComplete();
+    perspectiveReset_->setVisible(on);
     perspectiveApply_->setVisible(on);
     perspectiveCancel_->setVisible(on);
 }

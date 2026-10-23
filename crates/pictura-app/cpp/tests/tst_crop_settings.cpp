@@ -37,6 +37,8 @@ private slots:
     void rotationGestureTurnsTheBoxWithThePointer();
     void classicDragMovesTheBox();
     void keysToggleClassicAndShowArea();
+    void toolSwitchAsksToCrop();
+    void perspectiveSwitchAsksToCrop();
     void hidingTheOutsideIsOpaque();
     void shieldCanBeTurnedOff();
     void opacitySetsTheAlpha();
@@ -208,6 +210,61 @@ void CropSettingsTest::keysToggleClassicAndShowArea()
     QVERIFY(crop_->settings().showCroppedArea);
     QCOMPARE(tools_->activeTool(), pictura::ToolId::Crop);
     window_->setActiveTool(pictura::ToolId::Move);
+}
+
+void CropSettingsTest::toolSwitchAsksToCrop()
+{
+    openDocument(100);
+    crop_->setClassicMode(true);
+    drag(QPointF(50, 50), QPointF(10, 10));
+    QVERIFY(tools_->hasPendingCrop());
+
+    // Cancel keeps the crop and the tool.
+    tools_->setCropDecisionPrompt([]() { return pictura::CropDecision::Cancel; });
+    window_->setActiveTool(pictura::ToolId::Move);
+    QCOMPARE(window_->activeTool(), pictura::ToolId::Crop);
+    QVERIFY(tools_->hasPendingCrop());
+
+    // Don't Crop leaves without cropping.
+    tools_->setCropDecisionPrompt([]() { return pictura::CropDecision::DontCrop; });
+    window_->setActiveTool(pictura::ToolId::Move);
+    QCOMPARE(window_->activeTool(), pictura::ToolId::Move);
+    QCOMPARE(canvas_->documentSize(), QSize(100, 100));
+
+    // Crop commits the box first.
+    window_->setActiveTool(pictura::ToolId::Crop);
+    drag(QPointF(50, 50), QPointF(10, 10));
+    tools_->setCropDecisionPrompt([]() { return pictura::CropDecision::Crop; });
+    window_->setActiveTool(pictura::ToolId::Move);
+    QCOMPARE(window_->activeTool(), pictura::ToolId::Move);
+    QCOMPARE(canvas_->documentSize(), QSize(40, 40));
+
+    // A default box is not a pending crop, so nothing is asked.
+    int asked = 0;
+    tools_->setCropDecisionPrompt([&asked]() {
+        ++asked;
+        return pictura::CropDecision::Cancel;
+    });
+    window_->setActiveTool(pictura::ToolId::Crop);
+    window_->setActiveTool(pictura::ToolId::Move);
+    QCOMPARE(asked, 0);
+    tools_->setCropDecisionPrompt([]() { return pictura::CropDecision::DontCrop; });
+}
+
+void CropSettingsTest::perspectiveSwitchAsksToCrop()
+{
+    openDocument(120);
+    window_->setActiveTool(pictura::ToolId::PerspectiveCrop);
+    for (const QPointF& p : {QPointF(30, 30), QPointF(90, 30), QPointF(90, 90), QPointF(30, 90)}) {
+        canvas_->mousePressed(p, Qt::LeftButton, int(Qt::NoModifier));
+        canvas_->mouseReleased(p);
+    }
+    tools_->setCropDecisionPrompt([]() { return pictura::CropDecision::Cancel; });
+    window_->setActiveTool(pictura::ToolId::Move);
+    QCOMPARE(window_->activeTool(), pictura::ToolId::PerspectiveCrop);
+    tools_->setCropDecisionPrompt([]() { return pictura::CropDecision::DontCrop; });
+    window_->setActiveTool(pictura::ToolId::Move);
+    QCOMPARE(window_->activeTool(), pictura::ToolId::Move);
 }
 
 void CropSettingsTest::hidingTheOutsideIsOpaque()

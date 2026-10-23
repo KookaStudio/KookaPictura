@@ -20,6 +20,7 @@ class PictureView;
 
 enum class UnsavedChoice { Save, Discard, Cancel };
 enum class TransformDecision;
+enum class CropDecision;
 
 // Show `dialog` and block input to `parent`'s top-level window without using a
 // modal window hint, so the window compositor's modal-parent dim never fires.
@@ -64,6 +65,12 @@ void setNonInteractiveUnsavedChoice(UnsavedChoice choice);
 // and returns Don't Apply.
 TransformDecision askApplyTransform(QWidget* parent);
 void setTransformPromptInteractive(bool interactive);
+
+// "Crop the image?" (Crop / Cancel / Don't Crop), asked before a tool switch
+// leaves a pending crop. Non-interactive it shows nothing and returns Don't
+// Crop, which is also the default on the offscreen platform.
+CropDecision askCropImage(QWidget* parent);
+void setCropPromptInteractive(bool interactive);
 
 // Name filters shared by the Open/Save/Place/Open As Smart Object dialogs. One
 // filter per format; patterns are space-separated (Qt splits on spaces, so a

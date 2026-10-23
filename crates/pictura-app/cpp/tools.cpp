@@ -331,6 +331,10 @@ void ToolController::setActiveTool(ToolId id)
     if (active_ == id) {
         return;
     }
+    if (!resolvePendingCrop()) {
+        emit activeToolChanged(active_);
+        return;
+    }
     if (!resolvePendingTransform()) {
         // Cancel: keep the transform and re-announce the current tool so the
         // tool strip drops the click.
@@ -373,6 +377,28 @@ void ToolController::setActiveTool(ToolId id)
     }
     applyToolPolicy();
     emit activeToolChanged(id);
+}
+
+bool ToolController::resolvePendingCrop()
+{
+    const PerspectiveCropSession* perspective = perspectiveCropSession();
+    const bool pending = active_ == ToolId::Crop
+        ? hasPendingCrop()
+        : active_ == ToolId::PerspectiveCrop && perspective && perspective->perspectiveQuadComplete();
+    if (!pending) {
+        return true;
+    }
+    switch (cropPrompt_ ? cropPrompt_() : CropDecision::DontCrop) {
+    case CropDecision::Crop: {
+        CropCommitSession* session = cropCommitSession();
+        return session && session->commitCrop();
+    }
+    case CropDecision::DontCrop:
+        return true;
+    case CropDecision::Cancel:
+        return false;
+    }
+    return false;
 }
 
 CropCommitSession* ToolController::cropCommitSession() const

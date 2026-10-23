@@ -44,6 +44,7 @@ void PicturaMainWindow::installTransformLock()
         return transformLocked_ && locksDocumentEdit(spec);
     });
     tools_->setTransformDecisionPrompt([this]() { return askApplyTransform(this); });
+    tools_->setCropDecisionPrompt([this]() { return askCropImage(this); });
     connect(tools_, &ToolController::transformChanged, this, [this]() { syncTransformLock(); });
 }
 
