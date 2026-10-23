@@ -39,6 +39,7 @@ bool g_interactive = true;
 UnsavedChoice g_nonInteractiveChoice = UnsavedChoice::Discard;
 // Unset: interactive unless the platform is offscreen.
 int g_transformInteractive = -1;
+int g_cropInteractive = -1;
 
 // A single pixel/background layer is the only shape a flat raster format can
 // hold without losing the document's structure.
@@ -193,6 +194,37 @@ TransformDecision askApplyTransform(QWidget* parent)
         return TransformDecision::Cancel;
     }
     return TransformDecision::DontApply;
+}
+
+void setCropPromptInteractive(bool interactive)
+{
+    g_cropInteractive = interactive ? 1 : 0;
+}
+
+CropDecision askCropImage(QWidget* parent)
+{
+    const bool interactive = g_cropInteractive < 0
+        ? QGuiApplication::platformName() != QLatin1String("offscreen")
+        : g_cropInteractive == 1;
+    if (!interactive) {
+        return CropDecision::DontCrop;
+    }
+    QMessageBox box(QMessageBox::Warning, QStringLiteral("Kooka Pictura"),
+                    QStringLiteral("Crop the image?"), QMessageBox::NoButton, parent);
+    QPushButton* crop = box.addButton(QStringLiteral("Crop"), QMessageBox::AcceptRole);
+    QPushButton* cancel = box.addButton(QStringLiteral("Cancel"), QMessageBox::RejectRole);
+    box.addButton(QStringLiteral("Don't Crop"), QMessageBox::DestructiveRole);
+    box.setDefaultButton(crop);
+    box.setEscapeButton(cancel);
+    box.exec();
+    const QAbstractButton* clicked = box.clickedButton();
+    if (clicked == crop) {
+        return CropDecision::Crop;
+    }
+    if (clicked == cancel || !clicked) {
+        return CropDecision::Cancel;
+    }
+    return CropDecision::DontCrop;
 }
 
 const QStringList& saveFileFilters()

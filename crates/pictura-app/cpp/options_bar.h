@@ -214,6 +214,7 @@ private:
     NumericField* cropHeightField_ = nullptr;
     // The Perspective Crop Apply/Cancel buttons (visible only when the quad is
     // complete).
+    QToolButton* perspectiveReset_ = nullptr;
     QToolButton* perspectiveApply_ = nullptr;
     QToolButton* perspectiveCancel_ = nullptr;
     // True while the `W x H x Resolution` entry drives the W/H fields as pixels.

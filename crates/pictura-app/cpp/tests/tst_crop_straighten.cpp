@@ -31,6 +31,7 @@ private slots:
     void ctrlPressDrawsALineWithoutAKeyEvent();
     void ctrlReleaseMidLineFinishesIt();
     void secondLineAddsToTheAngle();
+    void classicSecondLineIsAbsolute();
 
 private:
     // A left-to-right reference line at `degrees` from the horizontal.
@@ -252,7 +253,7 @@ void CropStraightenTest::ctrlReleaseMidLineFinishesIt()
     frame.closeDocument(doc, false);
 }
 
-// A second line levels what is on screen: its angle adds to the session's.
+// Modern: a second line levels what is on screen, so its angle adds to the session's.
 void CropStraightenTest::secondLineAddsToTheAngle()
 {
     pictura::PicturaMainWindow& frame = *window_;
@@ -265,7 +266,7 @@ void CropStraightenTest::secondLineAddsToTheAngle()
     auto* crop = tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop);
     const int doc = frame.activeDocumentIndex();
 
-    crop->setClassicMode(true);
+    crop->setClassicMode(false);
     frame.setActiveTool(pictura::ToolId::Crop);
     crop->setStraightenMode(true);
     drawLine(canvas, 5.0, Qt::NoModifier);
@@ -278,6 +279,32 @@ void CropStraightenTest::secondLineAddsToTheAngle()
     // The box only ever shrinks to fit.
     const QRect second = tools->pendingCropRect();
     QVERIFY(second.width() <= first.width() && second.height() <= first.height());
+
+    frame.setActiveTool(pictura::ToolId::Move);
+    frame.closeDocument(doc, false);
+}
+
+// Classic: the line is drawn on the fixed image, so the box levels absolutely.
+void CropStraightenTest::classicSecondLineIsAbsolute()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("StraightenAbsolute"), 120, 80,
+                              QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    pictura::ImageView* canvas = frame.imageView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(canvas);
+    QVERIFY(tools);
+    auto* crop = tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop);
+    const int doc = frame.activeDocumentIndex();
+
+    crop->setClassicMode(true);
+    frame.setActiveTool(pictura::ToolId::Crop);
+    crop->setStraightenMode(true);
+    drawLine(canvas, 5.0, Qt::NoModifier);
+    QVERIFY(std::abs(crop->angle() + 5.0) < 0.1);
+    crop->setStraightenMode(true);
+    drawLine(canvas, 3.0, Qt::NoModifier);
+    QVERIFY2(std::abs(crop->angle() + 3.0) < 0.1, qPrintable(QString::number(crop->angle())));
 
     frame.setActiveTool(pictura::ToolId::Move);
     frame.closeDocument(doc, false);

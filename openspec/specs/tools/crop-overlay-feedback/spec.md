@@ -3,7 +3,6 @@
 ## Purpose
 The crop overlay's rotate grid and the angle readout shown while straightening.
 
-
 ## Requirements
 
 ### Requirement: Rotate grid and angle readout
@@ -26,12 +25,35 @@ the rotation is released, cancelled, or the tool is deactivated.
 
 ### Requirement: Overlay menu icons
 
-Each guide overlay in the Crop options bar's grid menu (Rule of Thirds, Grid,
-Diagonal, Triangle, Golden Ratio, Golden Spiral) SHALL carry its own icon
-depicting that overlay, and the menu button SHALL show the icon of the selected
-overlay.
+The Crop options bar's grid menu SHALL list plain items picked by clicking
+them, with no checkboxes or check marks, each icon inset clear of the menu
+edge. Each guide overlay (Rule of Thirds, Grid, Diagonal, Triangle, Golden
+Ratio, Golden Spiral) SHALL carry its own icon depicting that overlay, followed
+by Auto, Always and Never Show Overlay, and Cycle Overlay `O` and Cycle
+Orientation `Shift+O` with their keys in the right-hand column. The menu button
+SHALL show the icon of the selected overlay.
 
 #### Scenario: The button follows the selection
 
 - **WHEN** an overlay is chosen in the grid menu
 - **THEN** the menu entry shows that overlay's icon and the menu button shows the same icon
+
+### Requirement: Overlay show mode and cycle commands
+
+The grid menu's Auto, Always and Never Show Overlay SHALL set when the guide
+overlay is drawn on the crop box. Auto, the default, SHALL draw it only while
+the box is being adjusted. Always SHALL draw it whenever the box is shown, and
+Never SHALL not draw it. Cycle Overlay and `O` SHALL step to the next overlay,
+wrapping. Cycle Orientation and `Shift+O` SHALL step the orientation of the
+Triangle and Golden Spiral overlays, and the menu entry SHALL be enabled only
+for them.
+
+#### Scenario: Show modes gate the guides [cof_show_mode]
+
+- **WHEN** the show mode is Auto, then Always, then Never, and the box is at rest and then dragged
+- **THEN** Auto draws the guides only during the drag, Always draws them at rest, and Never draws them during a drag neither
+
+#### Scenario: O and Shift+O cycle the overlay [cof_cycle_keys]
+
+- **WHEN** the Crop tool is active and `O`, then `Shift+O` on Triangle, is typed into the window
+- **THEN** the overlay steps to the next one, the Triangle orientation steps once, and the active tool stays Crop

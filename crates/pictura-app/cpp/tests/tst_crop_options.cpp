@@ -300,8 +300,9 @@ void CropOptionsTest::historyNamesTheOverlay()
     crop->setGridOverlay(before);
 }
 
-// Every overlay in the grid menu has its icon, and the menu button shows the
-// selected overlay's icon.
+// Every overlay in the grid menu is a plain item with its icon, picked by
+// clicking it (no check marks), and the menu button shows the selected
+// overlay's icon however the overlay changes.
 void CropOptionsTest::overlayMenuShowsIcons()
 {
     pictura::PicturaMainWindow& frame = *window_;
@@ -319,6 +320,9 @@ void CropOptionsTest::overlayMenuShowsIcons()
     QVERIFY(button && button->menu());
 
     const auto image = [](const QIcon& i) { return i.pixmap(QSize(18, 18)).toImage(); };
+    for (QAction* a : button->menu()->actions()) {
+        QVERIFY2(!a->isCheckable(), qPrintable(a->text()));
+    }
     const QStringList& names = pictura::CropOptions::overlayNames();
     QList<QImage> seen;
     for (int i = 0; i < names.size(); ++i) {
@@ -337,6 +341,8 @@ void CropOptionsTest::overlayMenuShowsIcons()
         QCOMPARE(crop->gridOverlay(), i);
         QCOMPARE(image(button->icon()), art);
     }
+    crop->setGridOverlay(1);
+    QCOMPARE(image(button->icon()), seen.value(1));
 
     crop->setGridOverlay(before);
     frame.setActiveTool(pictura::ToolId::Move);
@@ -365,7 +371,7 @@ void CropOptionsTest::cropOptionsPersist()
     QCOMPARE(saved.cropRatio, 1.5);
 
     // Restore the defaults so the sibling tests are unaffected.
-    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(true);
+    tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setClassicMode(false);
     tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setGridOverlay(0);
     tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setDeletePixels(true);
     tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop)->setRatio(0.0);

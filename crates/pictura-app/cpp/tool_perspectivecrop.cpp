@@ -171,6 +171,8 @@ public:
         }
     }
 
+    void resetPerspectiveQuad() override { onEscape(); }
+
     // Escape discards the staged quad.
     bool onEscape() override
     {

@@ -19,6 +19,7 @@ set(PICTURA_QT_TESTS
     tst_image_rotate
     tst_crop_straighten
     tst_crop_shield
+    tst_crop_settings
     tst_crop_grip
     tst_crop_snap
     tst_crop_session

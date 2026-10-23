@@ -715,6 +715,24 @@ private:
 // The Crop and Perspective Crop tools' options. `angle` has its own
 // notification (the straighten preview) and `straightenMode` its own (the
 // spirit-level arming); every other field shares `optionsChanged`.
+// The Crop tool's Settings menu (everything but Classic mode, which keeps its
+// own session key). Show Cropped Area and Auto Center Preview are Modern-mode
+// features: they read as off while Classic mode is on, and leaving Classic
+// turns both on. The grid menu's overlay show mode and orientation live here
+// too, so they persist with the rest.
+struct CropSettings {
+    enum OverlayShow { AutoShow = 0, AlwaysShow = 1, NeverShow = 2 };
+    bool showCroppedArea = true;
+    bool autoCenterPreview = true;
+    bool shieldEnabled = true;
+    bool shieldCustomColor = false;  // false = Match Canvas
+    QColor shieldColor{Qt::black};
+    int shieldOpacity = 75;          // percent
+    bool autoAdjustOpacity = true;
+    int overlayShow = AutoShow;
+    int overlayOrientation = 0;  // 0-3: bit 0 mirrors left-right, bit 1 top-bottom
+};
+
 class CropOptions : public ToolOptions {
 public:
     double ratio() const { return ratio_; }
@@ -763,6 +781,22 @@ public:
             return;
         }
         classicMode_ = on;
+        if (!on) {
+            settings_.showCroppedArea = true;
+            settings_.autoCenterPreview = true;
+        }
+        if (optionsChanged) {
+            optionsChanged();
+        }
+    }
+
+    const CropSettings& settings() const { return settings_; }
+    void setSettings(CropSettings settings)
+    {
+        settings.shieldOpacity = std::clamp(settings.shieldOpacity, 0, 100);
+        settings.overlayShow = std::clamp(settings.overlayShow, 0, 2);
+        settings.overlayOrientation = std::clamp(settings.overlayOrientation, 0, 3);
+        settings_ = settings;
         if (optionsChanged) {
             optionsChanged();
         }
@@ -788,6 +822,9 @@ public:
         return ids.value(index, ids.first());
     }
 
+    // Triangle and Golden Spiral are the overlays Shift+O turns.
+    static bool overlayHasOrientation(int index) { return index == 3 || index == 5; }
+
     int gridOverlay() const { return gridOverlay_; }
     void setGridOverlay(int index)
     {
@@ -798,6 +835,19 @@ public:
         if (optionsChanged) {
             optionsChanged();
         }
+    }
+
+    // `O`: the next overlay, wrapping.
+    void cycleOverlay() { setGridOverlay((gridOverlay_ + 1) % int(overlayNames().size())); }
+    // `Shift+O`: the next orientation of a Triangle or Golden Spiral overlay.
+    void cycleOverlayOrientation()
+    {
+        if (!overlayHasOrientation(gridOverlay_)) {
+            return;
+        }
+        CropSettings next = settings_;
+        next.overlayOrientation = (next.overlayOrientation + 1) % 4;
+        setSettings(next);
     }
 
     bool straightenMode() const { return straightenMode_; }
@@ -827,7 +877,8 @@ private:
     bool deletePixels_ = true;
     double angle_ = 0.0;
     QPointF pivot_;
-    bool classicMode_ = true;
+    bool classicMode_ = false;
+    CropSettings settings_;
     int gridOverlay_ = 0;
     bool straightenMode_ = false;
 };
