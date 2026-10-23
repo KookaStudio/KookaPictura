@@ -11,8 +11,12 @@ const REPLACEMENT_STYLE: &str = "Regular";
 
 /// Re-set every type layer, in every group, whose font is one of `missing`, in
 /// [`REPLACEMENT_FONT`], keeping its text and other attributes. Returns how
-/// many layers were re-set; records no history.
+/// many layers were re-set; records no history. A document type cannot be
+/// re-set in (see [`crate::type_layers_editable`]) changes nothing.
 pub fn replace_type_fonts(doc: &mut Document, missing: &[&str]) -> usize {
+    if !crate::type_layers_editable(doc) {
+        return 0;
+    }
     fn walk(layers: &[Layer], prefix: &str, missing: &[&str], out: &mut Vec<String>) {
         for (i, layer) in layers.iter().enumerate() {
             let path = if prefix.is_empty() {
@@ -38,11 +42,14 @@ pub fn replace_type_fonts(doc: &mut Document, missing: &[&str]) -> usize {
             };
             spec.character.font_family = REPLACEMENT_FONT.to_string();
             spec.character.font_style = REPLACEMENT_STYLE.to_string();
-            // A manual font override would win over the character set when a
-            // style re-resolves the run, so it follows the replacement.
+            // A manual family or style override would win over the character
+            // set when a style re-resolves the run, so each follows the
+            // replacement.
             let overrides = &mut spec.overrides.character;
             if overrides.font_family.is_some() {
                 overrides.font_family = Some(REPLACEMENT_FONT.to_string());
+            }
+            if overrides.font_style.is_some() {
                 overrides.font_style = Some(REPLACEMENT_STYLE.to_string());
             }
             crate::replace_type_layer(doc, path, &spec)
@@ -64,6 +71,37 @@ mod tests {
     fn font_and_text(doc: &Document, path: &str) -> (String, String) {
         let spec = crate::type_layer_spec(crate::resolve_path(doc, path).unwrap()).unwrap();
         (spec.character.font_family, spec.text)
+    }
+
+    #[test]
+    fn a_style_override_follows_the_replacement() {
+        let mut doc = Document::new(240, 120, ColorMode::Rgb, BitDepth::Eight);
+        let path = add(&mut doc, "Bold", "NoSuchFontPictura");
+        let mut spec = crate::type_layer_spec(crate::resolve_path(&doc, &path).unwrap()).unwrap();
+        spec.overrides.character.font_style = Some("Bold".into());
+        assert!(crate::replace_type_layer(&mut doc, &path, &spec));
+
+        assert_eq!(replace_type_fonts(&mut doc, &["NoSuchFontPictura"]), 1);
+        let replaced = crate::resolve_path(&doc, &path).unwrap();
+        let spec = crate::type_layer_spec(replaced).unwrap();
+        assert_eq!(spec.character.font_style, REPLACEMENT_STYLE);
+        let overrides = &replaced.type_overrides.character;
+        assert_eq!(overrides.font_style.as_deref(), Some(REPLACEMENT_STYLE));
+        assert_eq!(
+            overrides.font_family, None,
+            "no family override is invented"
+        );
+    }
+
+    #[test]
+    fn a_document_type_cannot_be_set_in_is_unchanged() {
+        let mut doc = Document::new(240, 120, ColorMode::Rgb, BitDepth::Eight);
+        add(&mut doc, "Gray", "NoSuchFontPictura");
+        doc.mode = pictura_core::ColorMode::Grayscale;
+        let before = doc.clone();
+        assert!(!crate::type_layers_editable(&doc));
+        assert_eq!(replace_type_fonts(&mut doc, &["NoSuchFontPictura"]), 0);
+        assert_eq!(doc, before);
     }
 
     #[test]

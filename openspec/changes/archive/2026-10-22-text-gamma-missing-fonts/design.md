@@ -38,10 +38,17 @@ type with the default.
 
 - **Saving and exporting** read the CPU composite, so the merged image carries
   the curve.
-- **Rasterize Type** funnels through `materialize_text_rgba`, which applies the
-  curve to the alpha it stores. Opacity stays a layer attribute, so a
-  rasterized layer below 100 % opacity differs slightly from the live layer
-  (`ponytail:`).
+- **Rasterize Type** funnels through `materialize_text_rgba`. Live type curves
+  coverage × opacity × Fill, so it stores `curve(a·k) / k` for the layer's
+  `k` = opacity × Fill; composited at that opacity, the raster matches the live
+  layer. A later opacity change scales the baked alpha linearly, as it does for
+  any pixel layer.
+- **Per-pixel cost.** The compositor reads a 4096-step table (linearly
+  interpolated) instead of calling `powf`; one table per gamma at the dialog's
+  0.01 resolution is built on first use and kept.
+- **Modes.** Type is only re-set in 8-bit RGB (`type_layers_editable`), so
+  Replace All Missing Fonts is disabled elsewhere and the open-time alert says
+  to convert first.
 - **GPU.** The compute shader has no curve. While the gamma is on, a type
   layer makes the GPU compositor return `UnsupportedText` and the caller falls
   back to the CPU, as it already does for channel-less type.

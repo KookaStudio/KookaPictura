@@ -271,12 +271,12 @@ pub(crate) fn bundled() -> Option<&'static BundledText> {
 
 /// Replace the layer at `path`'s `0/1/2/-1` channels from a packed straight-alpha
 /// RGBA buffer of the layer-rect size, drop `TySh`, and clear the type tool.
-/// The alpha passes through the text gamma curve, so the now-raster layer
-/// composites as the type did.
-/// ponytail: the curve sees coverage alone here, while live type curves
-/// coverage × opacity, so a rasterized layer under 100 % opacity is slightly
-/// darker than it was live. Returns false without mutating for a missing layer, a non-positive rect, or a
-/// buffer that is not `width * height * 4` bytes.
+/// The alpha bakes the text gamma curve: live type curves coverage × opacity ×
+/// Fill, so each sample stores `curve(a·k) / k` for the layer's `k` = opacity ×
+/// Fill, and the raster composites at that opacity as the type did. A later
+/// opacity change then scales the baked alpha linearly, as for any pixel layer.
+/// Returns false without mutating for a missing layer, a non-positive rect, or
+/// a buffer that is not `width * height * 4` bytes.
 pub fn materialize_text_rgba(doc: &mut Document, path: &str, rgba: &[u8]) -> bool {
     let Some(layer) = crate::resolve_path(doc, path) else {
         return false;
@@ -300,13 +300,20 @@ pub fn materialize_text_rgba(doc: &mut Document, path: &str, rgba: &[u8]) -> boo
     let mut g = Vec::with_capacity(plane);
     let mut b = Vec::with_capacity(plane);
     let mut a = Vec::with_capacity(plane);
+    let k = f32::from(layer.opacity) / 255.0 * f32::from(layer.fill) / 255.0;
+    let baked: [u8; 256] = std::array::from_fn(|v| {
+        let coverage = v as f32 / 255.0;
+        match crate::text_gamma::current_curve() {
+            Some(curve) if k > 0.0 => crate::composite::to_u8(curve.apply(coverage * k) / k),
+            Some(curve) => crate::composite::to_u8(curve.apply(coverage)),
+            None => v as u8,
+        }
+    });
     for px in rgba.as_chunks::<4>().0 {
         r.push(px[0]);
         g.push(px[1]);
         b.push(px[2]);
-        a.push(crate::composite::to_u8(
-            crate::text_gamma::current_text_alpha(f32::from(px[3]) / 255.0),
-        ));
+        a.push(baked[usize::from(px[3])]);
     }
     layer.channels = vec![
         Channel {
@@ -965,7 +972,32 @@ mod tests {
                 i as f32 / 255.0,
                 crate::text_gamma::DEFAULT_TEXT_GAMMA,
             );
-            assert_eq!(stored, crate::composite::to_u8(curved), "alpha {i}");
+            let expected = i32::from(crate::composite::to_u8(curved));
+            assert!(
+                (i32::from(stored) - expected).abs() <= 1,
+                "alpha {i}: {stored}"
+            );
+        }
+    }
+
+    #[test]
+    fn rasterized_type_composites_as_live_type() {
+        for opacity in [255u8, 128] {
+            let mut layer = type_layer(Some(style()));
+            layer.opacity = opacity;
+            layer.fill = 255;
+            let live = doc_with(layer);
+            let mut raster = live.clone();
+            assert!(render_text_layer(&mut raster, "0"));
+            let (live, raster) = (crate::composite_rgba(&live), crate::composite_rgba(&raster));
+            let plane = 200 * 80;
+            let worst = live.data[3 * plane..]
+                .iter()
+                .zip(&raster.data[3 * plane..])
+                .map(|(&l, &r)| (i32::from(l) - i32::from(r)).abs())
+                .max()
+                .unwrap();
+            assert!(worst <= 2, "opacity {opacity}: alpha differs by {worst}");
         }
     }
 

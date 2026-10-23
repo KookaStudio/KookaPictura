@@ -6,6 +6,7 @@
 
 #include "api/document_api.h"
 #include "api/type_api.h"
+#include "pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h"
 #include "color_settings_dialog.h"
 #include "commands.h"
 #include "panels/layers_panel.h"
@@ -90,6 +91,7 @@ private slots:
     void cleanup();
     void colorSettingsDefaults();
     void colorSettingsAppliesGamma();
+    void colorSettingsAppliesValue();
     void gammaSessionRoundTrip();
     void detectsMissingFonts();
     void openAlertsMissingFonts();
@@ -97,10 +99,14 @@ private slots:
     void layersRowMarksMissingFont();
     void replaceAllMissingFonts();
     void replaceDisabledWithoutMissingFonts();
+    void replaceDisabledOutsideRgb8();
 
 private:
-    // Accept Color Settings with Blend Text Colors Using Gamma `enabled`.
-    void runColorSettings(bool enabled);
+    // Accept Color Settings with Blend Text Colors Using Gamma `enabled` and,
+    // when positive, the gamma `value`.
+    void runColorSettings(bool enabled, double value = 0.0);
+    // Open Color Settings, read its text gamma controls, and cancel.
+    QPair<bool, double> readColorSettings();
     // Save `f` as a PSD, open it, close it again, and return how many
     // missing-font alerts the open raised; -1 when it could not.
     int openAsPsd(Fixture& f, const QString& name);
@@ -126,18 +132,36 @@ void TextGammaFontsTest::cleanup()
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
 }
 
-void TextGammaFontsTest::runColorSettings(bool enabled)
+void TextGammaFontsTest::runColorSettings(bool enabled, double value)
 {
-    QTimer::singleShot(0, window_.get(), [this, enabled]() {
+    QTimer::singleShot(0, window_.get(), [this, enabled, value]() {
         auto* dialog = window_->findChild<pictura::ColorSettingsDialog*>();
         QVERIFY(dialog);
         dialog->findChild<QCheckBox*>(QStringLiteral("colorSettingsBlendTextGamma"))
             ->setChecked(enabled);
+        if (value > 0.0) {
+            dialog->findChild<QDoubleSpinBox*>(QStringLiteral("colorSettingsTextGamma"))
+                ->setValue(value);
+        }
         dialog->accept();
     });
     window_->registry()->refresh();
     QVERIFY(window_->registry()->dispatch(
         QString::fromLatin1(pictura::command_ids::EditColorSettings)));
+}
+
+QPair<bool, double> TextGammaFontsTest::readColorSettings()
+{
+    QPair<bool, double> shown{false, 0.0};
+    QTimer::singleShot(0, window_.get(), [this, &shown]() {
+        auto* dialog = window_->findChild<pictura::ColorSettingsDialog*>();
+        QVERIFY(dialog);
+        shown = {dialog->textGammaEnabled(), dialog->textGamma()};
+        dialog->reject();
+    });
+    window_->registry()->refresh();
+    window_->registry()->dispatch(QString::fromLatin1(pictura::command_ids::EditColorSettings));
+    return shown;
 }
 
 int TextGammaFontsTest::openAsPsd(Fixture& f, const QString& name)
@@ -187,9 +211,28 @@ void TextGammaFontsTest::colorSettingsAppliesGamma()
     QVERIFY2(off < on, "with the gamma off the type's edges are darker");
     QCOMPARE(f.view->history_index(), base);
     QVERIFY(!pictura::loadSession().textGammaEnabled);
+    QCOMPARE(readColorSettings(), qMakePair(false, 1.45));
+    QCOMPARE(ink(f), off);
     runColorSettings(true);
     QCOMPARE(ink(f), on);
     QVERIFY(pictura::loadSession().textGammaEnabled);
+}
+
+void TextGammaFontsTest::colorSettingsAppliesValue()
+{
+    Fixture f(*window_, seed(), QStringLiteral("pictura_text_gamma_value"));
+    QVERIFY2(f.ok(), "gamma fixture");
+    addType(f, QStringLiteral("Gamma"), kBundled);
+    const qint64 at145 = ink(f);
+    const int base = f.view->history_index();
+    runColorSettings(true, 1.8);
+    const qint64 at180 = ink(f);
+    QVERIFY2(at180 < at145, "a gamma nearer 2.2 thins the type less");
+    QCOMPARE(f.view->history_index(), base);
+    QCOMPARE(pictura::loadSession().textGamma, 1.8);
+    QCOMPARE(readColorSettings(), qMakePair(true, 1.8));
+    runColorSettings(true, 1.45);
+    QCOMPARE(ink(f), at145);
 }
 
 void TextGammaFontsTest::gammaSessionRoundTrip()
@@ -273,9 +316,12 @@ void TextGammaFontsTest::replaceAllMissingFonts()
     QCOMPARE(pictura::type_api::layerFont(*f.view, first), kBundled);
     QCOMPARE(pictura::type_api::layerFont(*f.view, second), kBundled);
     QCOMPARE(pictura::type_api::layerText(*f.view, first), QStringLiteral("One"));
+    QCOMPARE(pictura::type_api::layerText(*f.view, second), QStringLiteral("Two"));
     QTRY_VERIFY(!window_->layersPanelForTest()->rowMissingFontForTest(first));
+    QVERIFY(!window_->layersPanelForTest()->rowMissingFontForTest(second));
     QVERIFY(f.view->undo());
     QCOMPARE(pictura::type_api::layerFont(*f.view, first), kMissing);
+    QCOMPARE(pictura::type_api::layerFont(*f.view, second), kMissing);
 }
 
 void TextGammaFontsTest::replaceDisabledWithoutMissingFonts()
@@ -285,6 +331,20 @@ void TextGammaFontsTest::replaceDisabledWithoutMissingFonts()
     addType(f, QStringLiteral("Here"), kBundled);
     window_->registry()->refresh();
     QVERIFY(!window_->registry()->action(replaceCommand())->isEnabled());
+}
+
+void TextGammaFontsTest::replaceDisabledOutsideRgb8()
+{
+    Fixture f(*window_, seed(), QStringLiteral("pictura_missing_gray"));
+    QVERIFY2(f.ok(), "missing-font fixture");
+    const QString path = addType(f, QStringLiteral("Gray"), kMissing);
+    QVERIFY(pictura::convert_image_mode(*f.view, QStringLiteral("grayscale")));
+    QVERIFY2(pictura::type_api::isType(*f.view, path), "conversion keeps the type layer");
+    QVERIFY(!pictura::type_api::layersEditable(*f.view));
+    window_->registry()->refresh();
+    QVERIFY(!window_->registry()->action(replaceCommand())->isEnabled());
+    QCOMPARE(pictura::type_api::replaceFonts(*f.view, {kMissing}), 0);
+    QCOMPARE(pictura::type_api::layerFont(*f.view, path), kMissing);
 }
 
 QTEST_MAIN(TextGammaFontsTest)

@@ -113,6 +113,11 @@ without recording a history state. On Cancel nothing SHALL change.
 - **WHEN** a document holds a type layer, the checkbox is cleared in Color Settings, and the dialog is accepted
 - **THEN** the canvas composite of the type layer changes, the history count does not, and reopening the dialog shows the checkbox cleared
 
+#### Scenario: OK applies a gamma value [cs_text_gamma_value]
+
+- **WHEN** a document holds a type layer and the gamma value is set to 1.80 in Color Settings and accepted
+- **THEN** the type's edges darken relative to 1.45, the history count does not change, the stored value is 1.80, and reopening the dialog shows 1.80
+
 #### Scenario: The setting survives a restart [cs_text_gamma_persist]
 
 - **WHEN** the gamma is set to off at 1.80 and the session is saved and reloaded

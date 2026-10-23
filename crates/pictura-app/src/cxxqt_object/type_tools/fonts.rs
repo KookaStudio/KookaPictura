@@ -29,6 +29,9 @@ pub mod ffi {
         /// Recomposite the view after the text gamma changed. No history.
         fn type_text_gamma_refresh(view: Pin<&mut PictureView>);
 
+        /// Whether the document's type layers can be re-set: only in an 8-bit RGB document.
+        fn type_layers_editable(view: &PictureView) -> bool;
+
         /// Re-set every type layer whose font is one of `missing` (one name per line) in the default font, recording one "Replace All Missing Fonts" state. Returns how many layers changed; 0 records nothing.
         fn type_replace_fonts(view: Pin<&mut PictureView>, missing: &QString) -> i32;
     }
@@ -42,6 +45,14 @@ fn type_text_gamma_refresh(view: Pin<&mut PictureView>) {
     if view.as_ref().rust().session.doc.is_some() {
         view.recomposite();
     }
+}
+
+fn type_layers_editable(view: &PictureView) -> bool {
+    view.rust()
+        .session
+        .doc
+        .as_ref()
+        .is_some_and(pictura_render::type_layers_editable)
 }
 
 fn type_replace_fonts(view: Pin<&mut PictureView>, missing: &QString) -> i32 {

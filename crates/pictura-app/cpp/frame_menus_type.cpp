@@ -128,7 +128,12 @@ void PicturaMainWindow::wireReplaceMissingFonts()
     const QString id = commandIdForPath(
         {QStringLiteral("Type"), QStringLiteral("Replace All Missing Fonts")});
     registry_->setImplemented(id, true);
-    registry_->setEnabledProvider(id, [missing]() { return !missing().isEmpty(); });
+    // Type is only re-set in 8-bit RGB, so elsewhere the command stays off and
+    // the open-time alert says why.
+    registry_->setEnabledProvider(id, [this, missing]() {
+        PictureView* view = activeView();
+        return view && type_api::layersEditable(*view) && !missing().isEmpty();
+    });
     registry_->setHandler(id, [this, missing]() {
         PictureView* view = activeView();
         const QStringList names = missing();
@@ -144,12 +149,15 @@ void PicturaMainWindow::alertMissingFonts(PictureView* view)
     if (missing.isEmpty()) {
         return;
     }
+    const QString remedy = type_api::layersEditable(*view)
+        ? tr("Type > Replace All Missing Fonts sets them in the default font.")
+        : tr("Type can only be re-set in an 8-bit RGB document, so convert it to 8-bit RGB "
+             "before replacing them.");
     auto* box = new QMessageBox(
         QMessageBox::Warning, tr("Missing Fonts"),
         tr("This document's type layers use fonts that are not installed. They keep their "
-           "current pixels until edited, and Type > Replace All Missing Fonts sets them in "
-           "the default font.\n\n%1")
-            .arg(missing.join(QLatin1Char('\n'))),
+           "current pixels until edited. %1\n\n%2")
+            .arg(remedy, missing.join(QLatin1Char('\n'))),
         QMessageBox::Ok, this);
     box->setObjectName(QStringLiteral("missingFontsAlert"));
     box->setAttribute(Qt::WA_DeleteOnClose);

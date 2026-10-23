@@ -39,18 +39,32 @@ using a missing font.
 
 `Type > Replace All Missing Fonts` SHALL re-set every type layer whose font is
 missing, in every group, in Liberation Sans Regular, keeping its text and
-other attributes, and SHALL record one "Replace All Missing Fonts" state. The
-command SHALL be disabled when the active document has no missing font.
+other attributes, and SHALL record one "Replace All Missing Fonts" state. A
+manual font-family or font-style override SHALL follow the replacement. The
+command SHALL be disabled when the active document has no missing font, and
+when it is not 8-bit RGB, the only mode type is re-set in; there the open-time
+alert SHALL say to convert the document first, and a replacement SHALL change
+nothing.
 
 #### Scenario: The engine replaces only the named fonts [mf_replace_engine]
 
 - **WHEN** `replace_type_fonts` runs with one missing name over a document holding a grouped layer in that font and a layer in another font
 - **THEN** it returns 1, the grouped layer reports Liberation Sans with its text unchanged, and the other layer is unchanged
 
+#### Scenario: A style override follows the replacement [mf_style_override]
+
+- **WHEN** a layer in a missing font carries a manual Bold style override and its fonts are replaced
+- **THEN** its style and its style override are Regular, and no family override is added
+
 #### Scenario: The command records one state [mf_replace_command]
 
 - **WHEN** Replace All Missing Fonts is dispatched on a document with two type layers in an unknown font
-- **THEN** both layers report Liberation Sans, their rows lose the mark, one "Replace All Missing Fonts" state was added, and undo restores the unknown font
+- **THEN** both layers report Liberation Sans, both rows lose the mark, one "Replace All Missing Fonts" state was added, and undo restores the unknown font on both
+
+#### Scenario: Outside 8-bit RGB nothing is replaced [mf_replace_not_rgb8]
+
+- **WHEN** a document holding type in an unknown font is converted to Grayscale
+- **THEN** the type layer remains, Replace All Missing Fonts is disabled, and a replacement changes nothing
 
 #### Scenario: The command is disabled without missing fonts [mf_replace_disabled]
 

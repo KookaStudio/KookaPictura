@@ -203,7 +203,7 @@ mod type_path;
 mod type_warp;
 pub use type_layer::{
     add_type_layer, apply_type_style, render_type, replace_type_layer, type_layer_at,
-    type_layer_spec, type_mask, type_placement, TypePlacement,
+    type_layer_spec, type_layers_editable, type_mask, type_placement, TypePlacement,
 };
 pub use type_path::{overflow_point as type_path_overflow_point, path_hit_at, PathHit};
 pub use type_warp::{type_warp_refusal, WarpRefusal};

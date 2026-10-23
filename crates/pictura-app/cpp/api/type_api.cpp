@@ -328,6 +328,11 @@ QStringList documentFonts(const PictureView& view)
     return ::pictura::pdf_type_fonts(view).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
 }
 
+bool layersEditable(const PictureView& view)
+{
+    return ::pictura::type_layers_editable(view);
+}
+
 int replaceFonts(PictureView& view, const QStringList& missing)
 {
     return ::pictura::type_replace_fonts(view, missing.join(QLatin1Char('\n')));
