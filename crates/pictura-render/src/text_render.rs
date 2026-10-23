@@ -271,7 +271,11 @@ pub(crate) fn bundled() -> Option<&'static BundledText> {
 
 /// Replace the layer at `path`'s `0/1/2/-1` channels from a packed straight-alpha
 /// RGBA buffer of the layer-rect size, drop `TySh`, and clear the type tool.
-/// Returns false without mutating for a missing layer, a non-positive rect, or a
+/// The alpha passes through the text gamma curve, so the now-raster layer
+/// composites as the type did.
+/// ponytail: the curve sees coverage alone here, while live type curves
+/// coverage × opacity, so a rasterized layer under 100 % opacity is slightly
+/// darker than it was live. Returns false without mutating for a missing layer, a non-positive rect, or a
 /// buffer that is not `width * height * 4` bytes.
 pub fn materialize_text_rgba(doc: &mut Document, path: &str, rgba: &[u8]) -> bool {
     let Some(layer) = crate::resolve_path(doc, path) else {
@@ -300,7 +304,9 @@ pub fn materialize_text_rgba(doc: &mut Document, path: &str, rgba: &[u8]) -> boo
         r.push(px[0]);
         g.push(px[1]);
         b.push(px[2]);
-        a.push(px[3]);
+        a.push(crate::composite::to_u8(
+            crate::text_gamma::current_text_alpha(f32::from(px[3]) / 255.0),
+        ));
     }
     layer.channels = vec![
         Channel {
@@ -937,7 +943,30 @@ mod tests {
         assert_eq!(crate::channel(layer, 0).unwrap()[0], 10);
         assert_eq!(crate::channel(layer, 1).unwrap()[0], 20);
         assert_eq!(crate::channel(layer, 2).unwrap()[0], 30);
-        assert_eq!(crate::channel(layer, -1).unwrap()[0], 40);
+        assert_eq!(
+            crate::channel(layer, -1).unwrap()[0],
+            27,
+            "alpha 40 through the curve"
+        );
+    }
+
+    #[test]
+    fn materialize_bakes_the_curve() {
+        let mut doc = doc_with(type_layer(Some(style())));
+        let n = 200 * 80;
+        let mut rgba = vec![0u8; n * 4];
+        for (i, px) in rgba.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+            px[3] = (i % 256) as u8;
+        }
+        assert!(materialize_text_rgba(&mut doc, "0", &rgba));
+        let alpha = crate::channel(crate::resolve_path(&doc, "0").unwrap(), -1).unwrap();
+        for (i, &stored) in alpha.iter().enumerate().take(256) {
+            let curved = crate::text_gamma::text_gamma_alpha(
+                i as f32 / 255.0,
+                crate::text_gamma::DEFAULT_TEXT_GAMMA,
+            );
+            assert_eq!(stored, crate::composite::to_u8(curved), "alpha {i}");
+        }
     }
 
     #[test]

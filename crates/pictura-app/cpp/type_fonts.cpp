@@ -8,6 +8,7 @@
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "api/type_api.h"
 
+#include <QtCore/QHash>
 #include <QtCore/QList>
 #include <QtCore/QSet>
 #include <QtCore/QtEndian>
@@ -139,6 +140,53 @@ QString familyForFontName(const QString& name)
         }
     }
     return name;
+}
+
+bool fontIsInstalled(const QString& name)
+{
+    // ponytail: cached for the process; a font installed while Pictura runs
+    // stays missing until a restart.
+    static QHash<QString, bool> cache;
+    if (name.isEmpty()) {
+        return true;
+    }
+    const auto hit = cache.constFind(name);
+    if (hit != cache.constEnd()) {
+        return *hit;
+    }
+    const auto spaceless = [](QString family) {
+        return family.remove(QLatin1Char(' ')).toLower();
+    };
+    // The stem as written and without a vendor suffix: a family may itself end
+    // in "ps" or "mt".
+    QStringList stems{spaceless(name.section(QLatin1Char('-'), 0, 0))};
+    for (const char* suffix : {"psmt", "mt", "ps"}) {
+        if (stems.first().size() > 3 && stems.first().endsWith(QLatin1String(suffix))) {
+            stems << stems.first().chopped(int(qstrlen(suffix)));
+            break;
+        }
+    }
+    bool installed = stems.contains(QStringLiteral("liberationsans"))
+        || QFontDatabase::hasFamily(name);
+    for (const QString& family : installed ? QStringList() : QFontDatabase::families()) {
+        if (stems.contains(spaceless(family))) {
+            installed = true;
+            break;
+        }
+    }
+    cache.insert(name, installed);
+    return installed;
+}
+
+QStringList missingFonts(const QStringList& names)
+{
+    QStringList out;
+    for (const QString& name : names) {
+        if (!fontIsInstalled(name) && !out.contains(name)) {
+            out << name;
+        }
+    }
+    return out;
 }
 
 } // namespace pictura

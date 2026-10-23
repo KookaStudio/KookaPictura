@@ -187,6 +187,10 @@ mod fonts;
 pub use fonts::{
     font_family, font_has_outlines, font_postscript_name, opentype_features, register_font,
 };
+mod missing_fonts;
+pub use missing_fonts::{replace_type_fonts, REPLACEMENT_FONT};
+mod text_gamma;
+pub use text_gamma::{set_text_gamma, text_gamma, text_gamma_alpha, DEFAULT_TEXT_GAMMA};
 mod pdf_text;
 pub use pdf_text::{pdf_live_type, pdf_type_fonts, LiveType};
 mod type_caret;

@@ -1,6 +1,8 @@
 #include "api/type_api.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/pdf_export.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/type_tools/fonts.cxxqt.h"
 
 namespace pictura::type_api {
 
@@ -309,6 +311,26 @@ bool commitWarp(PictureView& view, const QString& path, const WarpSetting& warp)
 {
     return ::pictura::type_warp_commit(view, path, warp.style, warp.bend, warp.horizontal,
                                        warp.vertical, warp.verticalOrientation);
+}
+
+void setTextGamma(bool enabled, double gamma)
+{
+    ::pictura::type_set_text_gamma(enabled, gamma);
+}
+
+void refreshTextGamma(PictureView& view)
+{
+    ::pictura::type_text_gamma_refresh(view);
+}
+
+QStringList documentFonts(const PictureView& view)
+{
+    return ::pictura::pdf_type_fonts(view).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+}
+
+int replaceFonts(PictureView& view, const QStringList& missing)
+{
+    return ::pictura::type_replace_fonts(view, missing.join(QLatin1Char('\n')));
 }
 
 } // namespace pictura::type_api

@@ -624,6 +624,8 @@ void addDefaultCommands(CommandRegistry& registry) {
     leaf(registry, {"Type", "Language Options", "East Asian features"},
          QStringLiteral("East Asian features"));
     leaf(registry, {"Type", "Update All Text Layers"}, QStringLiteral("Update All Text Layers"));
+    leaf(registry, {"Type", "Replace All Missing Fonts"},
+         QStringLiteral("Replace All Missing Fonts"));
     leaf(registry, {"Type", "Check Spelling…"}, QStringLiteral("Check Spelling…"));
     leaf(registry, {"Type", "Find And Replace Text…"}, QStringLiteral("Find And Replace Text…"));
     leaf(registry, {"Type", "Paste Lorem Ipsum"}, QStringLiteral("Paste Lorem Ipsum"));

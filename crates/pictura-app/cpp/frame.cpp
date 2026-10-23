@@ -116,6 +116,7 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
     setFileDialogRecentPaths(recent_);
     gpuCompute_ = state.gpuCompute;
     colorPolicy_ = state.colorPolicy;
+    applyTextGamma(state.textGammaEnabled, state.textGamma);
     useShiftKeyForToolSwitch_ = state.useShiftKeyForToolSwitch;
     applyShortcutOverrides(state);
     autoSaveRecovery_ = state.autoSaveRecovery;
@@ -784,10 +785,12 @@ void PicturaMainWindow::showProfileCommand(bool convert)
 void PicturaMainWindow::showColorSettings()
 {
     ColorSettingsDialog dialog(colorPolicy_, this);
+    dialog.setTextGamma(textGammaEnabled_, textGamma_);
     if (runDialog(dialog, this) != QDialog::Accepted) {
         return;
     }
     colorPolicy_ = dialog.policyCode();
+    applyTextGamma(dialog.textGammaEnabled(), dialog.textGamma());
     for (const DocEntry& entry : docs_) {
         if (entry.view) {
             entry.view->set_color_policy(colorPolicy_);

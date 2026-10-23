@@ -538,6 +538,9 @@ private:
     void wireAlignMenu();
     void wireTypeMenu();
     void wireWarpText();
+    void wireReplaceMissingFonts();
+    void alertMissingFonts(PictureView* view);
+    void applyTextGamma(bool enabled, double gamma);
     // frame_menus_layer_style.cpp: Layer > Layer Style, the Layer Style dialog
     // and the style commands over the Layers panel's selection.
     void wireLayerStyleMenu();
@@ -826,6 +829,8 @@ private:
     QToolButton* themeCornerButton_ = nullptr;
     bool gpuCompute_ = true;
     int colorPolicy_ = 0;
+    bool textGammaEnabled_ = true;
+    double textGamma_ = 1.45;
     bool gpuAvailable_ = true;
     bool useShiftKeyForToolSwitch_ = true;
     ScreenMode screenMode_ = ScreenMode::Standard;
