@@ -266,7 +266,7 @@ fn edit_fill(
     opacity: i32,
     preserve_transparency: bool,
 ) -> bool {
-    if view.rust().modal_transform_blocks_edit() {
+    if view.rust().modal_transform_blocks_fill() {
         return false;
     }
     let tile = match usize::try_from(pattern) {
@@ -417,6 +417,9 @@ fn edit_stroke(
     mode: &QString,
     opacity: i32,
 ) -> bool {
+    if view.rust().modal_transform_blocks_fill() {
+        return false;
+    }
     let Some(selection) = view.rust().session.selection.as_ref() else {
         return false;
     };

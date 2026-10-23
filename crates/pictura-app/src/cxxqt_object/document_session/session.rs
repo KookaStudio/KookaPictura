@@ -272,6 +272,12 @@ impl PictureViewRust {
             && !self.transform_controls
     }
 
+    /// Fill and Stroke refuse any pending transform, lifted or not, matching
+    /// the Edit menu lock. The Move tool's controls box is not a transform.
+    pub(in crate::cxxqt_object) fn modal_transform_blocks_fill(&self) -> bool {
+        self.session.live.transform().is_some() && !self.transform_controls
+    }
+
     /// Whether a begin of `kind` may take the session slot.
     ///
     /// The slot holds one session. A begin of another kind is refused. A repeat
