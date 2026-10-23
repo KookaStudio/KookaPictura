@@ -414,8 +414,6 @@ void AwaCanvas::paintEvent(QPaintEvent*)
     if (!view_.isNull()) {
         painter.drawImage(QPointF(0, 0), view_);
     }
-    painter.setPen(QPen(QColor(0x40, 0x40, 0x40), 1.0));
-    painter.drawRect(target.adjusted(-0.5, -0.5, 0.5, 0.5));
 
     painter.save();
     painter.translate(offset_);
@@ -758,7 +756,7 @@ void AwaDetail::paintEvent(QPaintEvent*)
     if (!image_.isNull()) {
         painter.drawImage(QPointF(0, 0), image_);
     }
-    painter.setPen(QColor(0x80, 0x80, 0x80));
+    painter.setPen(palette().color(QPalette::Mid));
     painter.drawRect(rect().adjusted(0, 0, -1, -1));
 }
 
