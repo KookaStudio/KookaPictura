@@ -898,8 +898,10 @@ int pictura::runShellRound4FloatCheck(pictura::PicturaMainWindow& frame)
                 }
             }
             if (groups.size() >= 2) {
-                pictura::PanelGroup* source = groups.at(1);
-                pictura::PanelGroup* target = groups.at(0);
+                // The first group can be taller than the column viewport; the
+                // last two groups keep both tab bars reachable for the drag.
+                pictura::PanelGroup* target = groups.at(groups.size() - 2);
+                pictura::PanelGroup* source = groups.last();
                 for (pictura::PanelGroup* group : {source, target}) {
                     if (group->visiblePanels().isEmpty() && !group->panels().isEmpty()
                         && group->panels().first()) {
@@ -923,7 +925,10 @@ int pictura::runShellRound4FloatCheck(pictura::PicturaMainWindow& frame)
                         primary->ensureGroupVisibleForTest(targetPanel);
                         pumpFloat(4);
                     }
-                    const QPoint a = target->tabBarGlobalRect().center();
+                    const QRect targetRect(target->mapToGlobal(QPoint(0, 0)), target->size());
+                    const QRect targetBar = target->tabBarGlobalRect();
+                    const int targetTop = qMax(targetRect.top(), targetBar.bottom());
+                    const QPoint a(targetRect.center().x(), targetTop + 8);
                     primary->dragToForTest(a);
                     inside = primary->floatCountForTest() == floatsBefore
                              && (primary->outlineIndicatorVisibleForTest()
