@@ -33,6 +33,9 @@ pub(in crate::cxxqt_object) struct DocumentSession {
     pub(in crate::cxxqt_object) history: History,
     /// Whether the document has unsaved changes.
     pub(in crate::cxxqt_object) dirty: bool,
+    /// The history identity that was current at the last successful save, open,
+    /// install, or Revert. `None` means the document has no saved point.
+    pub(in crate::cxxqt_object) saved_id: Option<u64>,
     /// Bumped whenever the document's content changed.
     pub(in crate::cxxqt_object) content_revision: u64,
     /// Bumped whenever the view loads or replaces its document, so a panel can
@@ -73,7 +76,8 @@ impl DocumentSession {
         self.history = history;
         self.pdf_password = pdf_password;
         self.document_generation = self.document_generation.wrapping_add(1);
-        self.dirty = false;
+        self.saved_id = self.history.current_id();
+        self.refresh_dirty();
     }
 
     /// Capture the live document as a history state under `label`. False
@@ -105,6 +109,28 @@ impl DocumentSession {
         true
     }
 
+    /// Record the current history state as the saved one and clear `dirty`.
+    pub(in crate::cxxqt_object) fn mark_saved(&mut self) {
+        self.saved_id = self.history.current_id();
+        self.dirty = false;
+    }
+
+    /// Forget the saved point and mark the document modified, so a recovered
+    /// untitled document cannot become clean by undoing back to its start.
+    pub(in crate::cxxqt_object) fn mark_unsaved(&mut self) {
+        self.saved_id = None;
+        self.dirty = true;
+    }
+
+    /// Derive `dirty` from the saved identity after history navigation.
+    fn refresh_dirty(&mut self) {
+        self.dirty = match (self.doc.as_ref(), self.saved_id) {
+            (None, _) => false,
+            (Some(_), Some(saved)) => self.history.current_id() != Some(saved),
+            (Some(_), None) => true,
+        };
+    }
+
     /// Step the history into the live document and selection, and report where
     /// the picture changed.
     pub(in crate::cxxqt_object) fn restore(
@@ -126,6 +152,7 @@ impl DocumentSession {
                 Restored::Everywhere
             }),
         }?;
+        self.refresh_dirty();
         self.content_revision = self.content_revision.wrapping_add(1);
         Some(restored)
     }
@@ -141,6 +168,13 @@ pub(in crate::cxxqt_object) struct PendingPreviews {
     /// The history label of the mask Density/Feather control whose preview
     /// changed the document.
     pub(in crate::cxxqt_object) mask_refine: Option<&'static str>,
+}
+
+impl PendingPreviews {
+    /// Whether any uncommitted panel preview has changed the document.
+    pub(in crate::cxxqt_object) fn any(&self) -> bool {
+        self.opacity_changed || self.fill_changed || self.mask_refine.is_some()
+    }
 }
 
 /// A straight-sRGB region the adapter must blit. `None` means the adapter
@@ -223,6 +257,25 @@ impl PictureViewRust {
     /// Whether any live gesture owns the document.
     pub(in crate::cxxqt_object) fn has_active_session(&self) -> bool {
         self.active_session_kind().is_some()
+    }
+
+    /// Whether a **lifted** transform is pending. A non-lifted transform can
+    /// accept a document edit: the edit lands in the layer and the transform
+    /// commit keeps it. A lifted selection restores its pre-lift snapshot on
+    /// cancel/commit, so an edit made under it would be discarded. The Move
+    /// tool's controls box commits per gesture and never locks.
+    pub(in crate::cxxqt_object) fn modal_transform_blocks_edit(&self) -> bool {
+        self.session
+            .live
+            .transform()
+            .is_some_and(|session| session.lifted.is_some())
+            && !self.transform_controls
+    }
+
+    /// Fill and Stroke refuse any pending transform, lifted or not, matching
+    /// the Edit menu lock. The Move tool's controls box is not a transform.
+    pub(in crate::cxxqt_object) fn modal_transform_blocks_fill(&self) -> bool {
+        self.session.live.transform().is_some() && !self.transform_controls
     }
 
     /// Whether a begin of `kind` may take the session slot.
@@ -331,6 +384,7 @@ impl PictureViewRust {
         self.move_prepared_layer.clear();
         self.move_preview_cache_hit = false;
         self.last_transform = None;
+        self.transform_controls = false;
         self.clear_pending_previews();
         self.ruler = None;
         self.canvas_proxy = None;

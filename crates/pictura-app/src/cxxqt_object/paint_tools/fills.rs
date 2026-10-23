@@ -266,6 +266,9 @@ fn edit_fill(
     opacity: i32,
     preserve_transparency: bool,
 ) -> bool {
+    if view.rust().modal_transform_blocks_fill() {
+        return false;
+    }
     let tile = match usize::try_from(pattern) {
         Ok(index) => match pattern::tile(index) {
             Some(tile) => Some(tile),
@@ -414,6 +417,9 @@ fn edit_stroke(
     mode: &QString,
     opacity: i32,
 ) -> bool {
+    if view.rust().modal_transform_blocks_fill() {
+        return false;
+    }
     let Some(selection) = view.rust().session.selection.as_ref() else {
         return false;
     };
@@ -454,6 +460,7 @@ pub(crate) fn apply(
         // ponytail: of the fills only Edit > Fill writes a mask (`fill_mask`);
         // the rest refuse a mask target rather than write the layer's pixels.
         if rust.session.live.stroke().is_some()
+            || rust.modal_transform_blocks_edit()
             || active_mask_target(rust).is_some()
             || active_pixel_layer(doc, Some(path)).is_none()
             || !active_layer_visible(doc, Some(path))

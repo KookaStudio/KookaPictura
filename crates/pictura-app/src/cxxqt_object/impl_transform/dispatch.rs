@@ -275,6 +275,9 @@ impl qobject::PictureView {
 
 impl qobject::PictureView {
     pub fn resize_image(mut self: Pin<&mut Self>, kind: &QString, width: i32, height: i32) -> bool {
+        if self.rust().modal_transform_blocks_edit() {
+            return false;
+        }
         let Some(resample) = parse_resample(&kind.to_string()) else {
             return false;
         };
@@ -301,6 +304,9 @@ impl qobject::PictureView {
         width: i32,
         height: i32,
     ) -> bool {
+        if self.rust().modal_transform_blocks_edit() {
+            return false;
+        }
         let Some(anchor) = parse_anchor(&anchor.to_string()) else {
             return false;
         };
@@ -322,6 +328,9 @@ impl qobject::PictureView {
     }
 
     pub fn rotate_doc(mut self: Pin<&mut Self>, quarter_turns: i32) -> bool {
+        if self.rust().modal_transform_blocks_edit() {
+            return false;
+        }
         if !(1..=3).contains(&quarter_turns) {
             return false;
         }
@@ -340,6 +349,9 @@ impl qobject::PictureView {
     }
 
     pub fn flip_doc(mut self: Pin<&mut Self>, horizontal: bool) -> bool {
+        if self.rust().modal_transform_blocks_edit() {
+            return false;
+        }
         {
             let mut rust = self.as_mut().rust_mut();
             let Some(doc) = rust.session.doc.as_mut() else {
@@ -362,6 +374,9 @@ impl qobject::PictureView {
         exposure_ev: f64,
         gamma: f64,
     ) -> bool {
+        if self.rust().modal_transform_blocks_edit() {
+            return false;
+        }
         let out = match bits {
             16 => pictura_core::BitDepth::Sixteen,
             8 => pictura_core::BitDepth::Eight,

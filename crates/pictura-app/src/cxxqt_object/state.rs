@@ -64,6 +64,9 @@ pub struct PictureViewRust {
     /// The last committed similarity transform, for `Edit > Transform > Again`.
     /// Projective and Warp commits clear it (they are not repeatable this way).
     pub(super) last_transform: Option<super::document_session::RepeatTransform>,
+    /// Whether the live transform belongs to the Move tool's per-gesture
+    /// controls box. Such a session is never modal and does not lock edits.
+    pub(super) transform_controls: bool,
     /// The panel previews that are applied but not committed yet.
     pub(super) pending_previews: super::document_session::PendingPreviews,
     pub(super) gpu_compute: bool,
@@ -161,6 +164,7 @@ impl Default for PictureViewRust {
             move_prepared_layer: String::new(),
             move_preview_cache_hit: false,
             last_transform: None,
+            transform_controls: false,
             pending_previews: Default::default(),
             gpu_compute: true,
             color_policy: pictura_codec::Policy::Preserve,

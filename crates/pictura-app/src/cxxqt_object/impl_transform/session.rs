@@ -341,6 +341,7 @@ impl qobject::PictureView {
         {
             return false;
         }
+        self.as_mut().rust_mut().transform_controls = false;
         let mut path = path.to_string();
         if path.is_empty() {
             let Some(active) = self.rust().layer_target.single().map(str::to_string) else {

@@ -11,10 +11,14 @@
 #include "pictura_app/src/cxxqt_object/image_adjust/image_ops.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/image_adjust/new_document.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
 
 #include "qt_test_support.h"
 
+#include <rust/cxx.h>
+
+#include <QtCore/QStringList>
 #include <QtCore/QTemporaryDir>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
@@ -28,6 +32,8 @@ private slots:
     void initTestCase();
     void duplicateDocument();
     void trimDocument();
+    void trimIsUndoable();
+    void trimRefusesALiveSession();
     void imageSizeResamplesAndSetsResolution();
     void imageSizePhysicalUnitsUseInches();
     void imageSizeEstimatesTheStoredMode();
@@ -88,15 +94,133 @@ void ImageOpsTest::trimDocument()
                                false));
     view->deselect();
 
+    const int before = view->history_count();
     QVERIFY(pictura::trim_image(*view));
-    QCOMPARE(view->history_count(), 1);
-    QCOMPARE(view->history_label(0), QStringLiteral("Trim"));
+    QCOMPARE(view->history_count(), before + 1);
+    QCOMPARE(view->history_label(view->history_index()), QStringLiteral("Trim"));
     QCOMPARE(view->document_width(), 5);
     QCOMPARE(view->document_height(), 4);
     QCOMPARE(view->sample_argb(0, 0), QColor(200, 0, 0).rgba());
+    QVERIFY(view->can_undo());
 
     // A second trim has nothing to remove.
+    const bool dirty = view->is_dirty();
+    const QStringList target = pictura::selected_layer_paths(*view);
+    const int trimmed = view->history_count();
     QVERIFY(!pictura::trim_image(*view));
+    QCOMPARE(view->history_count(), trimmed);
+    QCOMPARE(view->is_dirty(), dirty);
+    QCOMPARE(pictura::selected_layer_paths(*view), target);
+    QVERIFY(!view->has_selection());
+
+    // An empty composite has nothing to trim either.
+    QVERIFY(frame.newDocument(QStringLiteral("Empty"), 8, 8, QStringLiteral("rgb"), 8,
+                              QStringLiteral("transparent")));
+    pictura::PictureView* empty = frame.activeView();
+    QVERIFY(empty);
+    const int emptyHistory = empty->history_count();
+    QVERIFY(!pictura::trim_image(*empty));
+    QCOMPARE(empty->history_count(), emptyHistory);
+    QVERIFY(!empty->is_dirty());
+
+    // Without a layer target, Trim picks the top layer.
+    QVERIFY(frame.newDocument(QStringLiteral("Target"), 8, 8, QStringLiteral("rgb"), 8,
+                              QStringLiteral("transparent")));
+    pictura::PictureView* untargeted = frame.activeView();
+    QVERIFY(untargeted);
+    QVERIFY(untargeted->add_layer(0) >= 0);
+    QVERIFY(untargeted->select_rect(1, 1, 2, 2, QStringLiteral("new"), 0.0));
+    QVERIFY(pictura::edit_fill(*untargeted, QColor(200, 0, 0).rgba(), -1,
+                               QStringLiteral("normal"), 100, false));
+    untargeted->deselect();
+    pictura::clear_layer_target(*untargeted);
+    QVERIFY(pictura::trim_image(*untargeted));
+    QCOMPARE(pictura::selected_layer_paths(*untargeted),
+             QStringList{QString::number(untargeted->layer_count() - 1)});
+    frame.closeDocument(frame.activeDocumentIndex(), false);
+    frame.closeDocument(frame.activeDocumentIndex(), false);
+    frame.closeDocument(doc, false);
+}
+
+void ImageOpsTest::trimIsUndoable()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("UndoTrim"), 24, 24, QStringLiteral("rgb"), 8,
+                              QStringLiteral("transparent")));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY(view);
+    const int doc = frame.activeDocumentIndex();
+
+    const int added = view->add_layer(0);
+    QVERIFY(added >= 0);
+    const QString top = QString::number(added);
+    frame.selectLayerPath(top);
+    QVERIFY(view->select_rect(3, 2, 5, 4, QStringLiteral("new"), 0.0));
+    QVERIFY(pictura::edit_fill(*view, QColor(200, 0, 0).rgba(), -1, QStringLiteral("normal"), 100,
+                               false));
+    view->deselect();
+    QVERIFY(view->select_rect(4, 3, 3, 2, QStringLiteral("new"), 0.0));
+    QVERIFY(view->history_add_snapshot(QStringLiteral("PreTrim")));
+    pictura::set_layer_target(*view, QStringList{QStringLiteral("0"), top}, top);
+    const QStringList target = pictura::selected_layer_paths(*view);
+    QCOMPARE(int(target.size()), 2);
+    const int history = view->history_count();
+    const int snapshots = view->history_snapshot_count();
+    const int depth = view->history_index();
+    const QColor pixel = QColor::fromRgba(view->sample_argb(4, 3));
+    const ::rust::Vec<int32_t> bounds = view->selection_bounds_extents();
+
+    QVERIFY(pictura::trim_image(*view));
+    QCOMPARE(view->history_count(), history + 1);
+    QCOMPARE(view->history_label(view->history_index()), QStringLiteral("Trim"));
+    QCOMPARE(view->history_label(0), QStringLiteral("New"));
+    QCOMPARE(view->history_label(depth), QStringLiteral("Selection"));
+    QCOMPARE(view->history_snapshot_label(0), QStringLiteral("PreTrim"));
+    QCOMPARE(view->history_snapshot_count(), snapshots);
+    QCOMPARE(pictura::selected_layer_paths(*view), target);
+    QVERIFY(view->can_undo());
+    QVERIFY(!view->has_selection());
+
+    QVERIFY(view->undo());
+    QCOMPARE(view->history_count(), history + 1);
+    QCOMPARE(view->history_index(), depth);
+    QCOMPARE(pictura::selected_layer_paths(*view), target);
+    QVERIFY(view->has_selection());
+    const ::rust::Vec<int32_t> restored = view->selection_bounds_extents();
+    QCOMPARE(int(restored.size()), int(bounds.size()));
+    for (size_t i = 0; i < bounds.size(); ++i) {
+        QCOMPARE(restored[i], bounds[i]);
+    }
+    QCOMPARE(view->sample_argb(4, 3), pixel.rgba());
+    QCOMPARE(view->history_snapshot_count(), snapshots);
+    frame.closeDocument(doc, false);
+}
+
+// A live session owns the document, so Trim refuses without recording.
+void ImageOpsTest::trimRefusesALiveSession()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("TrimLive"), 24, 24, QStringLiteral("rgb"), 8,
+                              QStringLiteral("transparent")));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY(view);
+    const int doc = frame.activeDocumentIndex();
+
+    QVERIFY(view->select_rect(3, 2, 5, 4, QStringLiteral("new"), 0.0));
+    QVERIFY(pictura::edit_fill(*view, QColor(200, 0, 0).rgba(), -1, QStringLiteral("normal"), 100,
+                               false));
+    view->deselect();
+    const int history = view->history_count();
+    const bool dirty = view->is_dirty();
+
+    QVERIFY(view->begin_paint(0xFFFF0000u, 0xFFFFFFFFu, 16, 100, 100, 0, 100, 100, 25,
+                              QStringLiteral("normal"), false, false));
+    QVERIFY(view->paint_dab(8.0, 8.0, 1.0));
+    QVERIFY(!pictura::trim_image(*view));
+    QCOMPARE(view->history_count(), history);
+    QCOMPARE(view->is_dirty(), dirty);
+    QVERIFY(view->is_painting());
+    view->cancel_paint();
     frame.closeDocument(doc, false);
 }
 

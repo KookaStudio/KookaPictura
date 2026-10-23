@@ -15,6 +15,8 @@
 #include "tools.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/clipboard.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
 
 #include "qt_test_support.h"
@@ -61,6 +63,8 @@ private slots:
 
     void layerMenuIsLockedWhilePending();
     void layersPanelIsGreyedWhilePending();
+    void documentEditsDuringPendingTransform();
+    void maskFillIsRefusedWhilePending();
     void applyCommitsAndSwitches();
     void dontApplyCancelsAndSwitches();
     void cancelKeepsTheTransform();
@@ -138,6 +142,8 @@ void TransformLockTest::layerMenuIsLockedWhilePending()
                          pictura::command_ids::LayerHideLayers,
                          pictura::command_ids::LayerArrangeBackward};
     QVERIFY(action(frame, pictura::command_ids::LayerNewLayer)->isEnabled());
+    QVERIFY(f.view->select_rect(10, 8, 10, 10, QStringLiteral("new"), 0.0));
+    QVERIFY(action(frame, pictura::command_ids::EditFill)->isEnabled());
 
     QVERIFY(f.tools->beginFreeTransform(layer));
     QVERIFY(frame.layersLockedForTest());
@@ -145,6 +151,8 @@ void TransformLockTest::layerMenuIsLockedWhilePending()
         QAction* a = action(frame, id);
         QVERIFY2(a && !a->isEnabled(), id);
     }
+    QVERIFY(!action(frame, pictura::command_ids::EditFill)->isEnabled());
+    QVERIFY(action(frame, pictura::command_ids::EditTransformPerspective)->isEnabled());
     const int layers = f.view->layer_count();
     QVERIFY(!frame.registry()->dispatch(QString::fromLatin1(pictura::command_ids::LayerNewLayer)));
     QCOMPARE(f.view->layer_count(), layers);
@@ -170,6 +178,90 @@ void TransformLockTest::layersPanelIsGreyedWhilePending()
     QVERIFY(!frame.layersPanelForTest()->isEnabled());
     f.tools->cancelFreeTransform();
     QVERIFY(frame.layersPanelForTest()->isEnabled());
+}
+
+void TransformLockTest::documentEditsDuringPendingTransform()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_lock_edits"));
+    QVERIFY(f.ok());
+    const QString layer = beginLayer(f);
+    QVERIFY(!layer.isEmpty());
+    QVERIFY(pictura::clipboard_copy(*f.view, layer, false));
+    QVERIFY(f.view->apply_filter(QStringLiteral("add-noise")));
+    QVERIFY(f.view->select_rect(10, 8, 30, 22, QStringLiteral("new"), 0.0));
+    QVERIFY(action(frame, pictura::command_ids::ImageRotate180)->isEnabled());
+    QVERIFY(action(frame, pictura::command_ids::FilterLastFilter)->isEnabled());
+    QVERIFY(f.tools->beginFreeTransform(layer));
+    QVERIFY(nudge(f.view));
+    const int base = f.view->history_index();
+    const auto pendingPixel = f.view->sample_argb(20, 20);
+
+    QVERIFY(!action(frame, pictura::command_ids::EditFill)->isEnabled());
+    QVERIFY(!action(frame, pictura::command_ids::EditStroke)->isEnabled());
+    QVERIFY(!action(frame, pictura::command_ids::EditAssignProfile)->isEnabled());
+    QVERIFY(!action(frame, pictura::command_ids::EditConvertProfile)->isEnabled());
+    QVERIFY(!action(frame, pictura::command_ids::ImageRotate180)->isEnabled());
+    QVERIFY(!action(frame, pictura::command_ids::FilterLastFilter)->isEnabled());
+    QVERIFY(!frame.registry()->dispatch(QString::fromLatin1(pictura::command_ids::EditFill)));
+    QVERIFY(!pictura::edit_fill(*f.view, qRgba(0, 0, 0, 255), -1, QStringLiteral("normal"), 100,
+                               false));
+    QVERIFY(!pictura::edit_stroke(*f.view, qRgba(0, 0, 0, 255), 2, 1,
+                                  QStringLiteral("normal"), 100));
+    QVERIFY(!f.view->assign_profile(0));
+    QVERIFY(!f.view->convert_profile(0));
+
+    QVERIFY(!pictura::clipboard_cut(*f.view, layer));
+    QVERIFY(!pictura::clipboard_clear(*f.view, layer));
+    QVERIFY(pictura::clipboard_paste(*f.view, layer, pictura::PasteKind::Plain, 0.0, 0.0)
+                .isEmpty());
+    QVERIFY(!f.view->apply_filter(QStringLiteral("add-noise")));
+    QVERIFY(!f.view->add_adjustment(QStringLiteral("invert")));
+    QVERIFY(!f.view->resize_image(QStringLiteral("bicubic"), 10, 10));
+    QCOMPARE(f.view->history_index(), base);
+    QCOMPARE(f.view->sample_argb(20, 20), pendingPixel);
+    QVERIFY(f.view->transform_session_active());
+
+    f.tools->commitFreeTransform();
+    QVERIFY(f.committedOnce(base, "Free Transform"));
+    QVERIFY(action(frame, pictura::command_ids::EditFill)->isEnabled());
+    frame.selectLayerPath(layer);
+    QVERIFY(pictura::edit_fill(*f.view, qRgba(0, 0, 0, 255), -1, QStringLiteral("normal"), 100,
+                               false));
+    QVERIFY(f.view->apply_filter(QStringLiteral("add-noise")));
+
+    // The Move tool's per-gesture controls box is not a modal lock.
+    frame.setActiveTool(pictura::ToolId::Move);
+    QVERIFY(f.tools->beginControlsGestureForTest(f.view));
+    QVERIFY(f.tools->transformControlsSession());
+    QVERIFY(action(frame, pictura::command_ids::EditFill)->isEnabled());
+    QVERIFY(action(frame, pictura::command_ids::FilterLastFilter)->isEnabled());
+    QVERIFY(pictura::edit_fill(*f.view, qRgba(0, 0, 0, 255), -1, QStringLiteral("normal"), 100,
+                               false));
+    QVERIFY(f.tools->transformControlsSession());
+    f.tools->cancelFreeTransform();
+}
+
+void TransformLockTest::maskFillIsRefusedWhilePending()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_lock_mask"));
+    QVERIFY(f.ok());
+    const QString layer = beginLayer(f);
+    QVERIFY(!layer.isEmpty());
+    QVERIFY(pictura::layer_mask_add_path(*f.view, layer, QStringLiteral("reveal-all")));
+    QVERIFY(pictura::mask_edit_target_set(*f.view, QString()));
+    QVERIFY(f.tools->beginFreeTransform(layer));
+    QVERIFY(nudge(f.view));
+    QVERIFY(pictura::mask_edit_target_set(*f.view, layer));
+    const int base = f.view->history_index();
+
+    QVERIFY(!pictura::edit_fill(*f.view, qRgba(0, 0, 0, 255), -1, QStringLiteral("normal"), 100,
+                               false));
+    QCOMPARE(f.view->history_index(), base);
+
+    QVERIFY(pictura::mask_edit_target_set(*f.view, QString()));
+    f.tools->cancelFreeTransform();
 }
 
 void TransformLockTest::applyCommitsAndSwitches()

@@ -329,6 +329,10 @@ pub(in crate::cxxqt_object) fn commit_start(
     last_filter: Option<(String, Vec<f64>)>,
 ) -> bool {
     rust.filter_error = None;
+    if rust.modal_transform_blocks_edit() {
+        rust.filter_error = Some("a transform is pending".to_string());
+        return false;
+    }
     if rust.filter_jobs.commit.is_some() {
         rust.filter_error = Some("a filter is already being applied".to_string());
         return false;
@@ -462,6 +466,9 @@ fn commit_filters(
     label: String,
     last_filter: Option<(String, Vec<f64>)>,
 ) -> bool {
+    if view.rust().modal_transform_blocks_edit() {
+        return false;
+    }
     if active_mask_target(view.rust()).is_none() {
         let mut rust = view.as_mut().rust_mut();
         return commit_start(&mut rust, filters, label, last_filter);

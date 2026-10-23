@@ -218,6 +218,7 @@ private slots:
     void genericPdfShowsDialog();
     void picturaPdfSkipsDialog();
     void protectedPicturaPdfKeepsLayers();
+    void wrongPasswordRevertKeepsTheDocument();
     void permissionsOnlyPdfOpensWithoutPrompt();
     void pdfRecognizedBySignature();
     void cancelOpensNothing();
@@ -345,6 +346,53 @@ void ImportPdfTest::protectedPicturaPdfKeepsLayers()
     QVERIFY(window->revertActive());
     QCOMPARE(window->activeView()->layer_count(), 2);
     QCOMPARE(seen.prompts, 2);
+}
+
+// pdf_encrypted_revert_failure
+void ImportPdfTest::wrongPasswordRevertKeepsTheDocument()
+{
+    test::ScopedStateHome stateHome;
+    QTemporaryDir dir;
+    auto window = test::makeMainWindow();
+    const QString path =
+        saveLayeredPdf(window.get(), dir, QStringLiteral("kooka"), QStringLiteral("owner"));
+    QVERIFY(!path.isEmpty());
+    Seen seen;
+    window->setImportDialogDriverForTest(
+        driver(window.get(), &seen, {}, {}, {QStringLiteral("kooka")}));
+    QVERIFY(window->openDocumentAtPath(path));
+    QCOMPARE(seen.prompts, 1);
+    PictureView* view = window->activeView();
+    QVERIFY(view);
+
+    // Change the file's password without changing the document's stored one.
+    window->setPdfDialogDriverForTest([=](QDialog& dialog) {
+        if (auto* save = qobject_cast<PdfSaveDialog*>(&dialog)) {
+            save->setFieldForTest(QStringLiteral("openPassword"), QStringLiteral("other"));
+            save->setFieldForTest(QStringLiteral("permissionsPassword"), QStringLiteral("owner"));
+        }
+        return true;
+    });
+    QVERIFY(window->savePdfWithDialog(path));
+    QVERIFY(!view->is_dirty());
+    QVERIFY(view->select_rect(2, 2, 4, 4, QStringLiteral("new"), 0.0));
+
+    const int layers = view->layer_count();
+    const int history = view->history_count();
+    const int historyIndex = view->history_index();
+    const bool dirty = view->is_dirty();
+    const QString filePath = view->file_path();
+    const QColor before = pixel(view, 5, 5);
+
+    QVERIFY(!window->revertActive());
+    QCOMPARE(view->layer_count(), layers);
+    QCOMPARE(view->history_count(), history);
+    QCOMPARE(view->history_index(), historyIndex);
+    QCOMPARE(view->is_dirty(), dirty);
+    QCOMPARE(view->file_path(), filePath);
+    QCOMPARE(pixel(view, 5, 5), before);
+    QVERIFY(view->has_selection());
+    QCOMPARE(seen.prompts, 1);
 }
 
 // pdf_permissions_only_layers

@@ -64,6 +64,9 @@ impl qobject::PictureView {
         path: &QString,
         settings_text: &QString,
     ) -> bool {
+        if self.rust().modal_transform_blocks_edit() {
+            return false;
+        }
         let settings = pictura_codec::pictura_raw_from_text(&settings_text.to_string());
         let path = path.to_string();
         let applied = {

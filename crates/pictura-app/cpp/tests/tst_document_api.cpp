@@ -78,6 +78,7 @@ void DocumentApiTest::saveAndReopenRoundTrip()
     QCOMPARE(document_api::pyramidSize(opened, 0).width, 64);
     QCOMPARE(document_api::pyramidSize(opened, 0).height, 32);
     QCOMPARE(document_api::filePath(opened), path);
+    QVERIFY(!document_api::isDirty(opened));
 }
 
 void DocumentApiTest::undoRedoThroughTheAdapter()
