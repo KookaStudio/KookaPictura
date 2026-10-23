@@ -16,6 +16,53 @@ namespace pictura {
 
 void PicturaMainWindow::wireLayerArrangeStamp()
 {
+    registry_->setExecutor(command_ids::LayerDuplicateLayer, [this](const CommandParams&) {
+        PictureView* view = activeView();
+        if (!view || !view->has_document()) {
+            return false;
+        }
+        QStringList paths = layersPanel_ ? layersPanel_->targetLayerPaths() : QStringList();
+        if (paths.isEmpty()) {
+            const QString active = view->active_layer_path();
+            if (!active.isEmpty()) {
+                paths << active;
+            }
+        }
+        if (paths.isEmpty()) {
+            return false;
+        }
+        const int before = view->layer_count();
+        view->duplicate_layers(paths);
+        const bool applied = view->layer_count() > before;
+        if (applied) {
+            refresh();
+        }
+        return applied;
+    });
+    registry_->setExecutor(command_ids::LayerFlattenImage, [this](const CommandParams&) {
+        PictureView* view = activeView();
+        if (!view || !view->has_document()) {
+            return false;
+        }
+        const bool applied = view->flatten_image() > 0;
+        if (applied) {
+            refresh();
+        }
+        return applied;
+    });
+    registry_->setExecutor(command_ids::LayerHideLayers, [this](const CommandParams&) {
+        PictureView* view = activeView();
+        const QStringList paths = selectedLayerPaths();
+        if (!view || paths.isEmpty()) {
+            return false;
+        }
+        const bool applied = view->hide_layers(paths) > 0;
+        if (applied) {
+            refresh();
+        }
+        return applied;
+    });
+
     // Layer > Arrange and Reverse: within-container ordering of the selection.
     const auto enableArrange = [this](const char* id, int op) {
         registry_->setHandler(id, [this, op]() {

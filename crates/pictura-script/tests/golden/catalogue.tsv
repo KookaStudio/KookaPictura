@@ -1,0 +1,589 @@
+file.new	File/New…	New…	Ctrl+N	1	0
+file.open	File/Open...	Open...	Ctrl+O	1	0
+file.openAs	File/Open As…	Open As…	Ctrl+Alt+Shift+O	1	0
+file.openAsSmartObject	File/Open As Smart Object…	Open As Smart Object…		1	0
+file.open.recent.no.recent.files	File/Open Recent/No Recent Files	No Recent Files		0	0
+file.close	File/Close	Close	Ctrl+W	1	0
+file.closeAll	File/Close All	Close All	Ctrl+Alt+W	1	0
+file.save	File/Save	Save	Ctrl+S	1	0
+file.saveAs	File/Save As…	Save As…	Shift+Ctrl+S	1	0
+file.exportAs	File/Export As…	Export As…	Ctrl+Alt+Shift+E	1	0
+file.quickExportPng	File/Quick Export as PNG	Quick Export as PNG		1	0
+file.check.in	File/Check In…	Check In…		0	0
+file.saveForWeb	File/Save for Web & Devices…	Save for Web & Devices…	Ctrl+Alt+Shift+S	1	0
+file.revert	File/Revert…	Revert…	F12	1	0
+file.place	File/Place…	Place…		1	0
+file.import.variable.data.sets	File/Import/Variable Data Sets	Variable Data Sets		0	0
+file.import.wia.support	File/Import/WIA Support	WIA Support		0	0
+file.export.data.sets.as.files	File/Export/Data Sets As Files…	Data Sets As Files…		0	0
+file.export.render.video	File/Export/Render Video…	Render Video…		0	0
+file.export.zoomify	File/Export/Zoomify…	Zoomify…		0	0
+file.automate.batch	File/Automate/Batch…	Batch…		0	0
+file.automate.conditional.mode.change	File/Automate/Conditional Mode Change…	Conditional Mode Change…		0	0
+file.automate.contact.sheet.ii	File/Automate/Contact Sheet II	Contact Sheet II		0	0
+file.automate.create.droplet	File/Automate/Create Droplet…	Create Droplet…		0	0
+file.automate.crop.and.straighten.photos	File/Automate/Crop And Straighten Photos	Crop And Straighten Photos		0	0
+file.automate.merge.to.hdr.pro	File/Automate/Merge To HDR Pro…	Merge To HDR Pro…		0	0
+file.automate.pdf.presentation	File/Automate/PDF Presentation	PDF Presentation		0	0
+file.automate.photomerge	File/Automate/Photomerge…	Photomerge…		0	0
+file.automate.picture.package	File/Automate/Picture Package	Picture Package		0	0
+file.scripts.export.layers.to.files	File/Scripts/Export Layers to Files	Export Layers to Files		0	0
+file.scripts.image.processor	File/Scripts/Image Processor	Image Processor		0	0
+file.scripts.layer.comps.to.files	File/Scripts/Layer Comps to Files	Layer Comps to Files		0	0
+file.scripts.load.files.into.stack	File/Scripts/Load Files into Stack	Load Files into Stack		0	0
+file.scripts.script.events.manager	File/Scripts/Script Events Manager	Script Events Manager		0	0
+file.scripts.statistics	File/Scripts/Statistics	Statistics		0	0
+file.fileInfo	File/File Info…	File Info…	Ctrl+Alt+Shift+I	1	0
+file.print	File/Print…	Print…	Ctrl+P	0	0
+file.print.one.copy	File/Print One Copy	Print One Copy	Ctrl+Alt+Shift+P	0	0
+file.exit	File/Exit	Exit	Ctrl+Q	1	0
+edit.undo	Edit/Undo	Undo	Ctrl+Z	1	0
+edit.redo	Edit/Redo	Redo	Ctrl+Y	1	0
+edit.stepForward	Edit/Step Forward	Step Forward	Ctrl+Shift+Z	1	0
+edit.stepBackward	Edit/Step Backward	Step Backward	Ctrl+Alt+Z	1	0
+edit.fade	Edit/Fade…	Fade…	Shift+Ctrl+F	0	0
+edit.cut	Edit/Cut	Cut	Ctrl+X	1	0
+edit.copy	Edit/Copy	Copy	Ctrl+C	1	0
+edit.copyMerged	Edit/Copy Merged	Copy Merged	Shift+Ctrl+C	1	0
+edit.paste	Edit/Paste	Paste	Ctrl+V	1	0
+edit.pasteSpecial.pasteInPlace	Edit/Paste Special/Paste in Place	Paste in Place		1	0
+edit.pasteSpecial.pasteInto	Edit/Paste Special/Paste Into	Paste Into	Shift+Ctrl+V	1	0
+edit.pasteSpecial.pasteOutside	Edit/Paste Special/Paste Outside	Paste Outside		1	0
+edit.clear	Edit/Clear	Clear		1	0
+edit.check.spelling	Edit/Check Spelling…	Check Spelling…		0	0
+edit.find.and.replace.text	Edit/Find And Replace Text…	Find And Replace Text…		0	0
+edit.fill	Edit/Fill…	Fill…	Shift+F5	1	0
+edit.stroke	Edit/Stroke…	Stroke…		1	0
+edit.seam.aware.scale	Edit/Seam-Aware Scale	Seam-Aware Scale	Alt+Shift+Ctrl+C	0	0
+edit.puppet.warp	Edit/Puppet Warp	Puppet Warp		0	0
+edit.freeTransform	Edit/Free Transform	Free Transform	Ctrl+T	1	0
+edit.transform.again	Edit/Transform/Again	Again	Shift+Ctrl+T	1	0
+edit.transform.scale	Edit/Transform/Scale	Scale		1	0
+edit.transform.rotate	Edit/Transform/Rotate	Rotate		1	0
+edit.transform.skew	Edit/Transform/Skew	Skew		1	0
+edit.transform.distort	Edit/Transform/Distort	Distort		1	0
+edit.transform.perspective	Edit/Transform/Perspective	Perspective		1	0
+edit.transform.warp	Edit/Transform/Warp	Warp		1	0
+edit.transform.rotate180	Edit/Transform/Rotate 180°	Rotate 180°		1	0
+edit.transform.rotate90cw	Edit/Transform/Rotate 90° Clockwise	Rotate 90° Clockwise		1	0
+edit.transform.rotate90ccw	Edit/Transform/Rotate 90° Counter Clockwise	Rotate 90° Counter Clockwise		1	0
+edit.transform.flipHorizontal	Edit/Transform/Flip Horizontal	Flip Horizontal		1	0
+edit.transform.flipVertical	Edit/Transform/Flip Vertical	Flip Vertical		1	0
+edit.transform.path.again	Edit/Transform Path/Again	Again		0	0
+edit.transform.path.scale	Edit/Transform Path/Scale	Scale		0	0
+edit.transform.path.rotate	Edit/Transform Path/Rotate	Rotate		0	0
+edit.transform.path.skew	Edit/Transform Path/Skew	Skew		0	0
+edit.transform.path.distort	Edit/Transform Path/Distort	Distort		0	0
+edit.transform.path.perspective	Edit/Transform Path/Perspective	Perspective		0	0
+edit.transform.path.warp	Edit/Transform Path/Warp	Warp		0	0
+edit.transform.points.again	Edit/Transform Points/Again	Again		0	0
+edit.define.brush.preset	Edit/Define Brush Preset…	Define Brush Preset…		0	0
+edit.define.pattern	Edit/Define Pattern…	Define Pattern…		0	0
+edit.define.custom.shape	Edit/Define Custom Shape…	Define Custom Shape…		0	0
+edit.purge.undo	Edit/Purge/Undo	Undo		1	0
+edit.purge.histories	Edit/Purge/Histories	Histories		1	0
+edit.purge.clipboard	Edit/Purge/Clipboard	Clipboard		1	0
+edit.purge.video.cache	Edit/Purge/Video Cache	Video Cache		0	0
+edit.purge.all	Edit/Purge/All	All		1	0
+edit.pdfPresets	Edit/Adobe PDF Presets…	Adobe PDF Presets…		1	0
+edit.presets.preset.manager	Edit/Presets/Preset Manager…	Preset Manager…		0	0
+edit.presets.migrate.presets	Edit/Presets/Migrate Presets…	Migrate Presets…		0	0
+edit.presets.export.presets	Edit/Presets/Export Presets…	Export Presets…		0	0
+edit.presets.import.presets	Edit/Presets/Import Presets…	Import Presets…		0	0
+edit.colorSettings	Edit/Color Settings…	Color Settings…	Shift+Ctrl+K	1	0
+edit.assignProfile	Edit/Assign Profile…	Assign Profile…		1	0
+edit.convertProfile	Edit/Convert to Profile…	Convert to Profile…		1	0
+edit.keyboardShortcuts	Edit/Keyboard Shortcuts…	Keyboard Shortcuts…	Alt+Shift+Ctrl+K	1	0
+edit.menus	Edit/Menus…	Menus…		0	0
+edit.preferences.general	Edit/Preferences/General	General	Ctrl+K	1	0
+edit.preferences.interface	Edit/Preferences/Interface	Interface		1	0
+edit.preferences.file.handling	Edit/Preferences/File Handling	File Handling		0	0
+edit.preferences.performance	Edit/Preferences/Performance	Performance		1	0
+edit.preferences.cursors	Edit/Preferences/Cursors	Cursors		0	0
+edit.preferences.transparency..gamut	Edit/Preferences/Transparency & Gamut	Transparency & Gamut		0	0
+edit.preferences.unitsRulers	Edit/Preferences/Units & Rulers	Units & Rulers		1	0
+edit.preferences.guidesGridSlices	Edit/Preferences/Guides, Grid, & Slices	Guides, Grid, & Slices		1	0
+edit.preferences.plug.ins	Edit/Preferences/Plug-ins	Plug-ins		0	0
+edit.preferences.type	Edit/Preferences/Type	Type		1	0
+edit.preferences.3d	Edit/Preferences/3D	3D		0	0
+image.mode.bitmap	Image/Mode/Bitmap	Bitmap		1	1
+image.mode.grayscale	Image/Mode/Grayscale	Grayscale		1	1
+image.mode.duotone	Image/Mode/Duotone	Duotone		0	0
+image.mode.indexed.color	Image/Mode/Indexed Color	Indexed Color		1	1
+image.mode.rgb.color	Image/Mode/RGB Color	RGB Color		1	1
+image.mode.cmyk.color	Image/Mode/CMYK Color	CMYK Color		1	1
+image.mode.lab.color	Image/Mode/Lab Color	Lab Color		1	1
+image.mode.multichannel	Image/Mode/Multichannel	Multichannel		0	0
+image.mode.8.bits	Image/Mode/8 Bits/Channel	8 Bits/Channel		1	1
+image.mode.16.bits	Image/Mode/16 Bits/Channel	16 Bits/Channel		1	1
+image.mode.32.bits	Image/Mode/32 Bits/Channel	32 Bits/Channel		1	1
+image.mode.color.table	Image/Mode/Color Table	Color Table		0	0
+image.adjustments.brightnesscontrast	Image/Adjustments/Brightness/Contrast	Brightness/Contrast		0	0
+image.adjustments.levels	Image/Adjustments/Levels	Levels	Ctrl+L	0	0
+image.adjustments.curves	Image/Adjustments/Curves	Curves	Ctrl+M	0	0
+image.adjustments.exposure	Image/Adjustments/Exposure	Exposure		0	0
+image.adjustments.vibrance	Image/Adjustments/Vibrance	Vibrance		0	0
+image.adjustments.huesaturation	Image/Adjustments/Hue/Saturation	Hue/Saturation	Ctrl+U	0	0
+image.adjustments.color.balance	Image/Adjustments/Color Balance	Color Balance	Ctrl+B	0	0
+image.adjustments.black..white	Image/Adjustments/Black & White	Black & White	Alt+Shift+Ctrl+B	0	0
+image.adjustments.photo.filter	Image/Adjustments/Photo Filter	Photo Filter		0	0
+image.adjustments.channel.mixer	Image/Adjustments/Channel Mixer	Channel Mixer		0	0
+image.adjustments.color.lookup	Image/Adjustments/Color Lookup	Color Lookup		0	0
+image.adjustments.invert	Image/Adjustments/Invert	Invert	Ctrl+I	0	0
+image.adjustments.posterize	Image/Adjustments/Posterize	Posterize		0	0
+image.adjustments.threshold	Image/Adjustments/Threshold	Threshold		0	0
+image.adjustments.gradient.map	Image/Adjustments/Gradient Map	Gradient Map		0	0
+image.adjustments.selective.color	Image/Adjustments/Selective Color	Selective Color		0	0
+image.adjustments.shadowshighlights	Image/Adjustments/Shadows/Highlights	Shadows/Highlights		0	0
+image.adjustments.hdr.toning	Image/Adjustments/HDR Toning	HDR Toning		0	0
+image.adjustments.desaturate	Image/Adjustments/Desaturate	Desaturate	Shift+Ctrl+U	0	0
+image.adjustments.match.color	Image/Adjustments/Match Color	Match Color		0	0
+image.adjustments.replace.color	Image/Adjustments/Replace Color	Replace Color		0	0
+image.adjustments.equalize	Image/Adjustments/Equalize	Equalize		0	0
+image.auto.tone	Image/Auto Tone	Auto Tone	Shift+Ctrl+L	0	0
+image.auto.contrast	Image/Auto Contrast	Auto Contrast	Alt+Shift+Ctrl+L	0	0
+image.auto.color	Image/Auto Color	Auto Color	Shift+Ctrl+B	0	0
+image.image.size	Image/Image Size…	Image Size…	Ctrl+Alt+I	0	0
+image.canvas.size	Image/Canvas Size…	Canvas Size…	Ctrl+Alt+C	0	0
+image.rotate180	Image/Image Rotation/180°	180°		1	0
+image.rotate90cw	Image/Image Rotation/90° CW	90° CW		1	0
+image.rotate90ccw	Image/Image Rotation/90° CCW	90° CCW		1	0
+image.rotate.arbitrary	Image/Image Rotation/Arbitrary…	Arbitrary…		1	0
+image.flipHorizontal	Image/Image Rotation/Flip Canvas Horizontal	Flip Canvas Horizontal		1	0
+image.flipVertical	Image/Image Rotation/Flip Canvas Vertical	Flip Canvas Vertical		1	0
+image.crop	Image/Crop	Crop		1	0
+image.trim	Image/Trim…	Trim…		1	0
+image.duplicate	Image/Duplicate…	Duplicate…		1	0
+image.variables.define	Image/Variables/Define…	Define…		0	0
+image.variables.data.sets	Image/Variables/Data Sets…	Data Sets…		0	0
+image.apply.data.set	Image/Apply Data Set…	Apply Data Set…		0	0
+image.trap	Image/Trap…	Trap…		0	0
+image.apply.image	Image/Apply Image…	Apply Image…		0	0
+image.calculations	Image/Calculations…	Calculations…		0	0
+layer.new.layer	Layer/New/Layer	Layer	Shift+Ctrl+N	1	0
+layer.new.layerFromBackground	Layer/New/Layer from Background…	Layer from Background…		1	0
+layer.new.group	Layer/New/Group…	Group…		1	0
+layer.new.groupFromLayers	Layer/New/Group from Layers…	Group from Layers…		1	0
+layer.new.layerViaCopy	Layer/New/Layer via Copy	Layer via Copy	Ctrl+J	1	0
+layer.new.layerViaCut	Layer/New/Layer via Cut	Layer via Cut	Shift+Ctrl+J	1	0
+layer.new.backgroundFromLayer	Layer/New/Background From Layer	Background From Layer		1	0
+layer.duplicate.layer	Layer/Duplicate Layer…	Duplicate Layer…		1	0
+layer.delete.layer	Layer/Delete Layer	Delete Layer		1	0
+layer.delete.hiddenLayers	Layer/Delete Hidden Layers	Delete Hidden Layers		1	0
+layer.layer.style.blending.options	Layer/Layer Style/Blending Options…	Blending Options…		0	0
+layer.layer.style.drop.shadow	Layer/Layer Style/Drop Shadow…	Drop Shadow…		0	0
+layer.layer.style.inner.shadow	Layer/Layer Style/Inner Shadow…	Inner Shadow…		0	0
+layer.layer.style.outer.glow	Layer/Layer Style/Outer Glow…	Outer Glow…		0	0
+layer.layer.style.inner.glow	Layer/Layer Style/Inner Glow…	Inner Glow…		0	0
+layer.layer.style.bevel..emboss	Layer/Layer Style/Bevel & Emboss…	Bevel & Emboss…		0	0
+layer.layer.style.satin	Layer/Layer Style/Satin…	Satin…		0	0
+layer.layer.style.color.overlay	Layer/Layer Style/Color Overlay…	Color Overlay…		0	0
+layer.layer.style.gradient.overlay	Layer/Layer Style/Gradient Overlay…	Gradient Overlay…		0	0
+layer.layer.style.pattern.overlay	Layer/Layer Style/Pattern Overlay…	Pattern Overlay…		0	0
+layer.layer.style.stroke	Layer/Layer Style/Stroke…	Stroke…		0	0
+layer.layer.style.copy.layer.style	Layer/Layer Style/Copy Layer Style	Copy Layer Style		0	0
+layer.layer.style.paste.layer.style	Layer/Layer Style/Paste Layer Style	Paste Layer Style		0	0
+layer.layer.style.clear.layer.style	Layer/Layer Style/Clear Layer Style	Clear Layer Style		0	0
+layer.layer.style.global.light	Layer/Layer Style/Global Light…	Global Light…		0	0
+layer.layer.style.create.layers	Layer/Layer Style/Create Layers	Create Layers		0	0
+layer.layer.style.scale.effects	Layer/Layer Style/Scale Effects	Scale Effects		0	0
+layer.layer.style.hide.all.effects	Layer/Layer Style/Hide All Effects	Hide All Effects		0	0
+layer.layer.style.show.all.effects	Layer/Layer Style/Show All Effects	Show All Effects		0	0
+layer.smart.filter.disable.filter.mask	Layer/Smart Filter/Disable Filter Mask	Disable Filter Mask		0	0
+layer.smart.filter.delete.filter.mask	Layer/Smart Filter/Delete Filter Mask	Delete Filter Mask		0	0
+layer.smartFilters.clear	Layer/Smart Filter/Clear Smart Filters	Clear Smart Filters		1	0
+layer.new.fill.solidColor	Layer/New Fill Layer/Solid Color…	Solid Color…		1	0
+layer.new.fill.gradient	Layer/New Fill Layer/Gradient…	Gradient…		1	0
+layer.new.fill.layer.pattern	Layer/New Fill Layer/Pattern…	Pattern…		0	0
+layer.new.adjustment.layer.brightnesscontrast	Layer/New Adjustment Layer/Brightness/Contrast	Brightness/Contrast		0	0
+layer.new.adjustment.layer.levels	Layer/New Adjustment Layer/Levels	Levels		0	0
+layer.new.adjustment.layer.curves	Layer/New Adjustment Layer/Curves	Curves		0	0
+layer.new.adjustment.layer.exposure	Layer/New Adjustment Layer/Exposure	Exposure		0	0
+layer.new.adjustment.layer.vibrance	Layer/New Adjustment Layer/Vibrance	Vibrance		0	0
+layer.new.adjustment.layer.huesaturation	Layer/New Adjustment Layer/Hue/Saturation	Hue/Saturation		0	0
+layer.new.adjustment.layer.color.balance	Layer/New Adjustment Layer/Color Balance	Color Balance		0	0
+layer.new.adjustment.layer.black..white	Layer/New Adjustment Layer/Black & White	Black & White		0	0
+layer.new.adjustment.layer.photo.filter	Layer/New Adjustment Layer/Photo Filter	Photo Filter		0	0
+layer.new.adjustment.layer.channel.mixer	Layer/New Adjustment Layer/Channel Mixer	Channel Mixer		0	0
+layer.new.adjustment.layer.color.lookup	Layer/New Adjustment Layer/Color Lookup	Color Lookup		0	0
+layer.new.adjustment.layer.invert	Layer/New Adjustment Layer/Invert	Invert		0	0
+layer.new.adjustment.layer.posterize	Layer/New Adjustment Layer/Posterize	Posterize		0	0
+layer.new.adjustment.layer.threshold	Layer/New Adjustment Layer/Threshold	Threshold		0	0
+layer.new.adjustment.layer.gradient.map	Layer/New Adjustment Layer/Gradient Map	Gradient Map		0	0
+layer.new.adjustment.layer.selective.color	Layer/New Adjustment Layer/Selective Color	Selective Color		0	0
+layer.contentOptions	Layer/Layer Content Options…	Layer Content Options…		1	0
+layer.mask.revealAll	Layer/Layer Mask/Reveal All	Reveal All		1	0
+layer.mask.hideAll	Layer/Layer Mask/Hide All	Hide All		1	0
+layer.mask.revealSelection	Layer/Layer Mask/Reveal Selection	Reveal Selection		1	0
+layer.mask.hideSelection	Layer/Layer Mask/Hide Selection	Hide Selection		1	0
+layer.mask.fromTransparency	Layer/Layer Mask/From Transparency	From Transparency		1	0
+layer.mask.delete	Layer/Layer Mask/Delete	Delete		1	0
+layer.mask.apply	Layer/Layer Mask/Apply	Apply		1	0
+layer.mask.enable	Layer/Layer Mask/Enable	Enable		1	0
+layer.mask.disable	Layer/Layer Mask/Disable	Disable		1	0
+layer.mask.link	Layer/Layer Mask/Link	Link		1	0
+layer.mask.unlink	Layer/Layer Mask/Unlink	Unlink		1	0
+layer.vectorMask.revealAll	Layer/Vector Mask/Reveal All	Reveal All		1	0
+layer.vectorMask.hideAll	Layer/Vector Mask/Hide All	Hide All		1	0
+layer.vectorMask.currentPath	Layer/Vector Mask/Current Path	Current Path		1	0
+layer.vectorMask.delete	Layer/Vector Mask/Delete	Delete		1	0
+layer.vectorMask.enable	Layer/Vector Mask/Enable	Enable		1	0
+layer.vectorMask.disable	Layer/Vector Mask/Disable	Disable		1	0
+layer.vectorMask.link	Layer/Vector Mask/Link	Link		1	0
+layer.vectorMask.unlink	Layer/Vector Mask/Unlink	Unlink		1	0
+layer.create.clipping.mask	Layer/Create Clipping Mask	Create Clipping Mask	Ctrl+Alt+G	1	0
+layer.release.clipping.mask	Layer/Release Clipping Mask	Release Clipping Mask		1	0
+layer.smartObject.convertTo	Layer/Smart Objects/Convert to Smart Object	Convert to Smart Object		1	0
+layer.smartObject.newViaCopy	Layer/Smart Objects/New Smart Object via Copy	New Smart Object via Copy		1	0
+layer.smartObject.editContents	Layer/Smart Objects/Edit Contents	Edit Contents		1	0
+layer.smartObject.exportContents	Layer/Smart Objects/Export Contents…	Export Contents…		1	0
+layer.smartObject.replaceContents	Layer/Smart Objects/Replace Contents…	Replace Contents…		1	0
+layer.smartObject.resetTransform	Layer/Smart Objects/Reset Transform	Reset Transform		1	0
+layer.smartObject.convertToLayers	Layer/Smart Objects/Convert to Layers	Convert to Layers		1	0
+layer.smart.objects.rasterize	Layer/Smart Objects/Rasterize	Rasterize		0	0
+layer.smart.objects.stack.mode	Layer/Smart Objects/Stack Mode	Stack Mode		0	0
+layer.video.layers.new.blank.video.layer	Layer/Video Layers/New Blank Video Layer	New Blank Video Layer		0	0
+layer.video.layers.new.video.layer.from.file	Layer/Video Layers/New Video Layer From File	New Video Layer From File		0	0
+layer.video.layers.replace.footage	Layer/Video Layers/Replace Footage	Replace Footage		0	0
+layer.video.layers.interpret.footage	Layer/Video Layers/Interpret Footage	Interpret Footage		0	0
+layer.rasterize.type	Layer/Rasterize/Type	Type		1	0
+layer.rasterize.shape	Layer/Rasterize/Shape	Shape		1	0
+layer.rasterize.vectorMask	Layer/Rasterize/Vector Mask	Vector Mask		1	0
+layer.rasterize.smartObject	Layer/Rasterize/Smart Object	Smart Object		1	0
+layer.rasterize.fillContent	Layer/Rasterize/Fill Content	Fill Content		1	0
+layer.rasterize.layer	Layer/Rasterize/Layer	Layer		1	0
+layer.rasterize.allLayers	Layer/Rasterize/All Layers	All Layers		1	0
+layer.rasterize.layer.style	Layer/Rasterize/Layer Style	Layer Style		0	0
+layer.rasterize.video	Layer/Rasterize/Video	Video		0	0
+layer.rasterize.3d	Layer/Rasterize/3D	3D		0	0
+layer.copyShapeAttributes	Layer/Copy Shape Attributes	Copy Shape Attributes		1	0
+layer.pasteShapeAttributes	Layer/Paste Shape Attributes	Paste Shape Attributes		1	0
+layer.new.layer.based.slice	Layer/New Layer-based Slice	New Layer-based Slice		0	0
+layer.group.layers	Layer/Group Layers	Group Layers	Ctrl+G	1	0
+layer.ungroup.layers	Layer/Ungroup Layers	Ungroup Layers	Shift+Ctrl+G	1	0
+layer.hide.layers	Layer/Hide Layers	Hide Layers		1	0
+layer.select.similar	Layer/Select Similar Layers	Select Similar Layers		1	0
+layer.link.layers	Layer/Link Layers	Link Layers		1	0
+layer.unlink.layers	Layer/Unlink Layers	Unlink Layers		1	0
+layer.select.linked	Layer/Select Linked Layers	Select Linked Layers		1	0
+layer.arrange.front	Layer/Arrange/Bring to Front	Bring to Front	Shift+Ctrl+]	1	0
+layer.arrange.forward	Layer/Arrange/Bring Forward	Bring Forward	Ctrl+]	1	0
+layer.arrange.backward	Layer/Arrange/Send Backward	Send Backward	Ctrl+[	1	0
+layer.arrange.back	Layer/Arrange/Send to Back	Send to Back	Shift+Ctrl+[	1	0
+layer.arrange.reverse	Layer/Arrange/Reverse	Reverse		1	0
+layer.align.top	Layer/Align/Top	Top		0	0
+layer.align.vertical.center	Layer/Align/Vertical Center	Vertical Center		0	0
+layer.align.bottom	Layer/Align/Bottom	Bottom		0	0
+layer.align.left	Layer/Align/Left	Left		0	0
+layer.align.horizontal.center	Layer/Align/Horizontal Center	Horizontal Center		0	0
+layer.align.right	Layer/Align/Right	Right		0	0
+layer.align.layers.to.selection.top	Layer/Align Layers To Selection/Top	Top		0	0
+layer.align.layers.to.selection.vertical.center	Layer/Align Layers To Selection/Vertical Center	Vertical Center		0	0
+layer.align.layers.to.selection.bottom	Layer/Align Layers To Selection/Bottom	Bottom		0	0
+layer.align.layers.to.selection.left	Layer/Align Layers To Selection/Left	Left		0	0
+layer.align.layers.to.selection.horizontal.center	Layer/Align Layers To Selection/Horizontal Center	Horizontal Center		0	0
+layer.align.layers.to.selection.right	Layer/Align Layers To Selection/Right	Right		0	0
+layer.distribute.top	Layer/Distribute/Top	Top		0	0
+layer.distribute.vertical.center	Layer/Distribute/Vertical Center	Vertical Center		0	0
+layer.distribute.bottom	Layer/Distribute/Bottom	Bottom		0	0
+layer.distribute.left	Layer/Distribute/Left	Left		0	0
+layer.distribute.horizontal.center	Layer/Distribute/Horizontal Center	Horizontal Center		0	0
+layer.distribute.right	Layer/Distribute/Right	Right		0	0
+layer.lock.layers.all	Layer/Lock Layers/All	All		1	0
+layer.lock.layers.transparency	Layer/Lock Layers/Transparency	Transparency		1	0
+layer.lock.layers.image	Layer/Lock Layers/Image	Image		1	0
+layer.lock.layers.position	Layer/Lock Layers/Position	Position		1	0
+layer.lock.allInGroup	Layer/Lock All Layers In Group…	Lock All Layers In Group…		1	0
+layer.merge.layers	Layer/Merge Layers	Merge Layers	Ctrl+E	1	0
+layer.merge.visible	Layer/Merge Visible	Merge Visible	Shift+Ctrl+E	1	0
+layer.stamp.visible	Layer/Stamp Visible	Stamp Visible	Ctrl+Alt+Shift+E	1	0
+layer.stamp.selected	Layer/Stamp Selected	Stamp Selected	Ctrl+Alt+E	1	0
+layer.flatten.image	Layer/Flatten Image	Flatten Image		1	0
+layer.merge.clippingMask	Layer/Merge Clipping Mask	Merge Clipping Mask		1	0
+layer.matting.defringe	Layer/Matting/Defringe…	Defringe…		1	0
+layer.matting.removeBlack	Layer/Matting/Remove Black Matte	Remove Black Matte		1	0
+layer.matting.removeWhite	Layer/Matting/Remove White Matte	Remove White Matte		1	0
+type.panels.character	Type/Panels/Character	Character		1	1
+type.panels.paragraph	Type/Panels/Paragraph	Paragraph		1	1
+type.panels.character.styles	Type/Panels/Character Styles	Character Styles		0	0
+type.panels.paragraphStyles	Type/Panels/Paragraph Styles	Paragraph Styles		1	1
+type.anti.alias.none	Type/Anti-Alias/None	None		0	0
+type.anti.alias.sharp	Type/Anti-Alias/Sharp	Sharp		0	0
+type.anti.alias.crisp	Type/Anti-Alias/Crisp	Crisp		0	0
+type.anti.alias.strong	Type/Anti-Alias/Strong	Strong		0	0
+type.anti.alias.smooth	Type/Anti-Alias/Smooth	Smooth		0	0
+type.orientation.horizontal	Type/Orientation/Horizontal	Horizontal		0	0
+type.orientation.vertical	Type/Orientation/Vertical	Vertical		0	0
+type.convert.to.point.text	Type/Convert To Point Text	Convert To Point Text		0	0
+type.convert.to.paragraph.text	Type/Convert To Paragraph Text	Convert To Paragraph Text		0	0
+type.warp.text	Type/Warp Text…	Warp Text…		0	0
+type.rasterize.type.layer	Type/Rasterize Type Layer	Rasterize Type Layer		0	0
+type.create.work.path	Type/Create Work Path	Create Work Path		0	0
+type.convert.to.shape	Type/Convert to Shape	Convert to Shape		0	0
+type.font.preview.size.none	Type/Font Preview Size/None	None		0	0
+type.font.preview.size.small	Type/Font Preview Size/Small	Small		0	0
+type.font.preview.size.medium	Type/Font Preview Size/Medium	Medium		0	0
+type.font.preview.size.large	Type/Font Preview Size/Large	Large		0	0
+type.font.preview.size.extra.large	Type/Font Preview Size/Extra Large	Extra Large		0	0
+type.font.preview.size.huge	Type/Font Preview Size/Huge	Huge		0	0
+type.language.options.middle.eastern.features	Type/Language Options/Middle Eastern features	Middle Eastern features		0	0
+type.language.options.east.asian.features	Type/Language Options/East Asian features	East Asian features		0	0
+type.update.all.text.layers	Type/Update All Text Layers	Update All Text Layers		0	0
+type.replace.all.missing.fonts	Type/Replace All Missing Fonts	Replace All Missing Fonts		0	0
+type.check.spelling	Type/Check Spelling…	Check Spelling…		0	0
+type.find.and.replace.text	Type/Find And Replace Text…	Find And Replace Text…		0	0
+type.paste.lorem.ipsum	Type/Paste Lorem Ipsum	Paste Lorem Ipsum		0	0
+type.load.default.type.styles	Type/Load Default Type Styles	Load Default Type Styles		0	0
+type.save.default.type.styles	Type/Save Default Type Styles	Save Default Type Styles		0	0
+type.extrude.to.3d	Type/Extrude to 3D	Extrude to 3D		0	0
+select.all	Select/All	All	Ctrl+A	1	0
+select.deselect	Select/Deselect	Deselect	Ctrl+D	1	0
+select.reselect	Select/Reselect	Reselect	Shift+Ctrl+D	1	0
+select.inverse	Select/Inverse	Inverse	Shift+Ctrl+I	1	0
+select.allLayers	Select/All Layers	All Layers	Ctrl+Alt+A	1	0
+select.deselectLayers	Select/Deselect Layers	Deselect Layers		1	0
+select.similarLayers	Select/Similar Layers	Similar Layers		1	0
+select.color.range	Select/Color Range…	Color Range…		0	0
+select.refine.edge	Select/Refine Edge…	Refine Edge…	Ctrl+Alt+R	0	0
+select.modify.border	Select/Modify/Border…	Border…		1	0
+select.modify.smooth	Select/Modify/Smooth…	Smooth…		1	0
+select.modify.expand	Select/Modify/Expand…	Expand…		1	0
+select.modify.contract	Select/Modify/Contract…	Contract…		1	0
+select.modify.feather	Select/Modify/Feather…	Feather…	Shift+F6	1	0
+select.grow	Select/Grow	Grow		1	0
+select.similar	Select/Similar	Similar		1	0
+select.transform.selection	Select/Transform Selection	Transform Selection		0	0
+select.save	Select/Save Selection…	Save Selection…		1	0
+select.load	Select/Load Selection…	Load Selection…		1	0
+filter.last	Filter/Last Filter	Last Filter	Ctrl+F	1	0
+filter.lastSettings	Filter/Last Filter Settings…	Last Filter Settings…	Ctrl+Alt+F	1	0
+filter.convertForSmartFilters	Filter/Convert for Smart Filters	Convert for Smart Filters		1	0
+filter.filter.gallery	Filter/Filter Gallery…	Filter Gallery…		1	0
+filter.adaptive.wide.angle	Filter/Adaptive Wide Angle…	Adaptive Wide Angle…		1	0
+filter.picturaRaw	Filter/Pictura Raw…	Pictura Raw…		1	0
+filter.lens.correction	Filter/Lens Correction…	Lens Correction…		0	0
+filter.liquify	Filter/Liquify…	Liquify…	Shift+Ctrl+X	1	0
+filter.oil.paint	Filter/Oil Paint…	Oil Paint…		1	0
+filter.vanishing.point	Filter/Vanishing Point…	Vanishing Point…	Alt+Ctrl+V	0	0
+filter.artistic.colored.pencil	Filter/Artistic/Colored Pencil	Colored Pencil		1	0
+filter.artistic.cutout	Filter/Artistic/Cutout	Cutout		1	0
+filter.artistic.dry.brush	Filter/Artistic/Dry Brush	Dry Brush		1	0
+filter.artistic.film.grain	Filter/Artistic/Film Grain	Film Grain		1	0
+filter.artistic.fresco	Filter/Artistic/Fresco	Fresco		1	0
+filter.artistic.neon.glow	Filter/Artistic/Neon Glow	Neon Glow		1	0
+filter.artistic.paint.daubs	Filter/Artistic/Paint Daubs	Paint Daubs		1	0
+filter.artistic.palette.knife	Filter/Artistic/Palette Knife	Palette Knife		1	0
+filter.artistic.plastic.wrap	Filter/Artistic/Plastic Wrap	Plastic Wrap		1	0
+filter.artistic.poster.edges	Filter/Artistic/Poster Edges	Poster Edges		1	0
+filter.artistic.rough.pastels	Filter/Artistic/Rough Pastels	Rough Pastels		1	0
+filter.artistic.smudge.stick	Filter/Artistic/Smudge Stick	Smudge Stick		1	0
+filter.artistic.sponge	Filter/Artistic/Sponge	Sponge		1	0
+filter.artistic.underpainting	Filter/Artistic/Underpainting	Underpainting		1	0
+filter.artistic.watercolor	Filter/Artistic/Watercolor	Watercolor		1	0
+filter.blur.gaussian.blur	Filter/Blur/Gaussian Blur	Gaussian Blur		1	0
+filter.blur.motion.blur	Filter/Blur/Motion Blur	Motion Blur		1	0
+filter.blur.radial.blur	Filter/Blur/Radial Blur	Radial Blur		1	0
+filter.blur.box.blur	Filter/Blur/Box Blur	Box Blur		1	0
+filter.blur.shape.blur	Filter/Blur/Shape Blur	Shape Blur		1	0
+filter.blur.surface.blur	Filter/Blur/Surface Blur	Surface Blur		1	0
+filter.blur.lens.blur	Filter/Blur/Lens Blur	Lens Blur		1	0
+filter.blur.smart.blur	Filter/Blur/Smart Blur	Smart Blur		1	0
+filter.blur.average	Filter/Blur/Average	Average		1	0
+filter.blur.blur	Filter/Blur/Blur	Blur		1	0
+filter.blur.blur.more	Filter/Blur/Blur More	Blur More		1	0
+filter.blur.gallery.field.blur	Filter/Blur Gallery/Field Blur	Field Blur		1	0
+filter.blur.gallery.iris.blur	Filter/Blur Gallery/Iris Blur	Iris Blur		1	0
+filter.blur.gallery.tilt.shift	Filter/Blur Gallery/Tilt-Shift	Tilt-Shift		1	0
+filter.blur.gallery.path.blur	Filter/Blur Gallery/Path Blur	Path Blur		1	0
+filter.blur.gallery.spin.blur	Filter/Blur Gallery/Spin Blur	Spin Blur		1	0
+filter.brush.strokes.accented.edges	Filter/Brush Strokes/Accented Edges	Accented Edges		1	0
+filter.brush.strokes.angled.strokes	Filter/Brush Strokes/Angled Strokes	Angled Strokes		1	0
+filter.brush.strokes.crosshatch	Filter/Brush Strokes/Crosshatch	Crosshatch		1	0
+filter.brush.strokes.dark.strokes	Filter/Brush Strokes/Dark Strokes	Dark Strokes		1	0
+filter.brush.strokes.ink.outlines	Filter/Brush Strokes/Ink Outlines	Ink Outlines		1	0
+filter.brush.strokes.spatter	Filter/Brush Strokes/Spatter	Spatter		1	0
+filter.brush.strokes.sprayed.strokes	Filter/Brush Strokes/Sprayed Strokes	Sprayed Strokes		1	0
+filter.brush.strokes.sumi.e	Filter/Brush Strokes/Sumi-e	Sumi-e		1	0
+filter.distort.displace	Filter/Distort/Displace	Displace		1	0
+filter.distort.glass	Filter/Distort/Glass	Glass		1	0
+filter.distort.ocean.ripple	Filter/Distort/Ocean Ripple	Ocean Ripple		1	0
+filter.distort.diffuse.glow	Filter/Distort/Diffuse Glow	Diffuse Glow		1	0
+filter.distort.pinch	Filter/Distort/Pinch	Pinch		1	0
+filter.distort.polar.coordinates	Filter/Distort/Polar Coordinates	Polar Coordinates		1	0
+filter.distort.ripple	Filter/Distort/Ripple	Ripple		1	0
+filter.distort.shear	Filter/Distort/Shear	Shear		1	0
+filter.distort.spherize	Filter/Distort/Spherize	Spherize		1	0
+filter.distort.twirl	Filter/Distort/Twirl	Twirl		1	0
+filter.distort.wave	Filter/Distort/Wave	Wave		1	0
+filter.distort.zigzag	Filter/Distort/ZigZag	ZigZag		1	0
+filter.noise.add.noise	Filter/Noise/Add Noise	Add Noise		1	0
+filter.noise.despeckle	Filter/Noise/Despeckle	Despeckle		1	0
+filter.noise.dust..scratches	Filter/Noise/Dust & Scratches	Dust & Scratches		1	0
+filter.noise.median	Filter/Noise/Median	Median		1	0
+filter.noise.reduce.noise	Filter/Noise/Reduce Noise	Reduce Noise		1	0
+filter.pixelate.color.halftone	Filter/Pixelate/Color Halftone	Color Halftone		1	0
+filter.pixelate.crystallize	Filter/Pixelate/Crystallize	Crystallize		1	0
+filter.pixelate.facet	Filter/Pixelate/Facet	Facet		1	0
+filter.pixelate.fragment	Filter/Pixelate/Fragment	Fragment		1	0
+filter.pixelate.mezzotint	Filter/Pixelate/Mezzotint	Mezzotint		1	0
+filter.pixelate.mosaic	Filter/Pixelate/Mosaic	Mosaic		1	0
+filter.pixelate.pointillize	Filter/Pixelate/Pointillize	Pointillize		1	0
+filter.render.clouds	Filter/Render/Clouds	Clouds		1	0
+filter.render.difference.clouds	Filter/Render/Difference Clouds	Difference Clouds		1	0
+filter.render.fibers	Filter/Render/Fibers	Fibers		1	0
+filter.render.lens.flare	Filter/Render/Lens Flare	Lens Flare		1	0
+filter.render.lighting.effects	Filter/Render/Lighting Effects	Lighting Effects		1	0
+filter.render.picture.frame	Filter/Render/Picture Frame	Picture Frame		1	0
+filter.sharpen.smart.sharpen	Filter/Sharpen/Smart Sharpen	Smart Sharpen		1	0
+filter.sharpen.unsharp.mask	Filter/Sharpen/Unsharp Mask	Unsharp Mask		1	0
+filter.sharpen.sharpen	Filter/Sharpen/Sharpen	Sharpen		1	0
+filter.sharpen.sharpen.edges	Filter/Sharpen/Sharpen Edges	Sharpen Edges		1	0
+filter.sharpen.sharpen.more	Filter/Sharpen/Sharpen More	Sharpen More		1	0
+filter.sketch.bas.relief	Filter/Sketch/Bas Relief	Bas Relief		1	0
+filter.sketch.chalk..charcoal	Filter/Sketch/Chalk & Charcoal	Chalk & Charcoal		1	0
+filter.sketch.charcoal	Filter/Sketch/Charcoal	Charcoal		1	0
+filter.sketch.chrome	Filter/Sketch/Chrome	Chrome		1	0
+filter.sketch.conté.crayon	Filter/Sketch/Conté Crayon	Conté Crayon		1	0
+filter.sketch.graphic.pen	Filter/Sketch/Graphic Pen	Graphic Pen		1	0
+filter.sketch.halftone.pattern	Filter/Sketch/Halftone Pattern	Halftone Pattern		1	0
+filter.sketch.note.paper	Filter/Sketch/Note Paper	Note Paper		1	0
+filter.sketch.photocopy	Filter/Sketch/Photocopy	Photocopy		1	0
+filter.sketch.plaster	Filter/Sketch/Plaster	Plaster		1	0
+filter.sketch.reticulation	Filter/Sketch/Reticulation	Reticulation		1	0
+filter.sketch.stamp	Filter/Sketch/Stamp	Stamp		1	0
+filter.sketch.torn.edges	Filter/Sketch/Torn Edges	Torn Edges		1	0
+filter.sketch.water.paper	Filter/Sketch/Water Paper	Water Paper		1	0
+filter.stylize.diffuse	Filter/Stylize/Diffuse	Diffuse		1	0
+filter.stylize.emboss	Filter/Stylize/Emboss	Emboss		1	0
+filter.stylize.extrude	Filter/Stylize/Extrude	Extrude		1	0
+filter.stylize.find.edges	Filter/Stylize/Find Edges	Find Edges		1	0
+filter.stylize.glowing.edges	Filter/Stylize/Glowing Edges	Glowing Edges		1	0
+filter.stylize.solarize	Filter/Stylize/Solarize	Solarize		1	0
+filter.stylize.tiles	Filter/Stylize/Tiles	Tiles		1	0
+filter.stylize.trace.contour	Filter/Stylize/Trace Contour	Trace Contour		1	0
+filter.stylize.wind	Filter/Stylize/Wind	Wind		1	0
+filter.texture.craquelure	Filter/Texture/Craquelure	Craquelure		1	0
+filter.texture.grain	Filter/Texture/Grain	Grain		1	0
+filter.texture.mosaic.tiles	Filter/Texture/Mosaic Tiles	Mosaic Tiles		1	0
+filter.texture.patchwork	Filter/Texture/Patchwork	Patchwork		1	0
+filter.texture.stained.glass	Filter/Texture/Stained Glass	Stained Glass		1	0
+filter.texture.texturizer	Filter/Texture/Texturizer	Texturizer		1	0
+filter.video.de.interlace	Filter/Video/De-Interlace	De-Interlace		0	0
+filter.video.ntsc.colors	Filter/Video/NTSC Colors	NTSC Colors		1	0
+filter.other.custom	Filter/Other/Custom	Custom		1	0
+filter.other.high.pass	Filter/Other/High Pass	High Pass		1	0
+filter.other.maximum	Filter/Other/Maximum	Maximum		1	0
+filter.other.minimum	Filter/Other/Minimum	Minimum		1	0
+filter.other.offset	Filter/Other/Offset	Offset		1	0
+filter.digimarc.embed.watermark	Filter/Digimarc/Embed Watermark	Embed Watermark		0	0
+filter.digimarc.read.watermark	Filter/Digimarc/Read Watermark	Read Watermark		0	0
+filter.extract	Filter/Extract…	Extract…		0	0
+filter.pattern.maker	Filter/Pattern Maker…	Pattern Maker…		0	0
+filter.browse.filters.online	Filter/Browse Filters Online…	Browse Filters Online…		0	0
+view.proof.setup.working.cmyk	View/Proof Setup/Working CMYK	Working CMYK		0	0
+view.proof.setup.working.gray	View/Proof Setup/Working Gray	Working Gray		0	0
+view.proof.setup.custom	View/Proof Setup/Custom	Custom		0	0
+view.proof.setup.color.blindness.protanopia.type	View/Proof Setup/Color Blindness/Protanopia-type	Protanopia-type		0	0
+view.proof.setup.color.blindness.deuteranopia.type	View/Proof Setup/Color Blindness/Deuteranopia-type	Deuteranopia-type		0	0
+view.proof.colors	View/Proof Colors	Proof Colors	Ctrl+Y	0	0
+view.gamut.warning	View/Gamut Warning	Gamut Warning	Shift+Ctrl+Y	0	0
+view.zoomIn	View/Zoom In	Zoom In	Ctrl++	1	0
+view.zoomOut	View/Zoom Out	Zoom Out	Ctrl+-	1	0
+view.fitOnScreen	View/Fit On Screen	Fit On Screen	Ctrl+0	1	0
+view.actualPixels	View/100%	100%	Ctrl+1	1	0
+view.200	View/200%	200%		0	0
+view.print.size	View/Print Size	Print Size		0	0
+view.freePan	View/Free Pan	Free Pan		1	1
+view.snapCanvasToWorkspace	View/Snap Canvas To Workspace	Snap Canvas To Workspace		1	1
+view.screenMode.standard	View/Screen Mode/Standard Screen Mode	Standard Screen Mode		1	1
+view.screenMode.fullWithMenuBar	View/Screen Mode/Full Screen Mode With Menu Bar	Full Screen Mode With Menu Bar		1	1
+view.screenMode.full	View/Screen Mode/Full Screen Mode	Full Screen Mode		1	1
+view.rulers	View/Rulers	Rulers	Ctrl+R	1	1
+view.snap	View/Snap	Snap	Shift+Ctrl+;	0	0
+view.snap.to.guides	View/Snap To/Guides	Guides		0	0
+view.snap.to.grid	View/Snap To/Grid	Grid		0	0
+view.snap.to.layers	View/Snap To/Layers	Layers		0	0
+view.snap.to.slices	View/Snap To/Slices	Slices		0	0
+view.snap.to.document.bounds	View/Snap To/Document Bounds	Document Bounds		0	0
+view.snap.to.all	View/Snap To/All	All		0	0
+view.snap.to.none	View/Snap To/None	None		0	0
+view.lockGuides	View/Lock Guides	Lock Guides	Alt+Ctrl+;	1	1
+view.clearGuides	View/Clear Guides	Clear Guides		1	0
+view.newGuide	View/New Guide…	New Guide…		1	0
+view.lock.slices	View/Lock Slices	Lock Slices		0	0
+view.show.selectionEdges	View/Show/Selection Edges	Selection Edges		1	1
+view.show.target.path	View/Show/Target Path	Target Path		0	0
+view.show.layer.edges	View/Show/Layer Edges	Layer Edges		0	0
+view.show.3d.axis	View/Show/3D Axis	3D Axis		0	0
+view.show.guides	View/Show/Guides	Guides	Ctrl+;	1	1
+view.show.grid	View/Show/Grid	Grid		0	0
+view.show.count	View/Show/Count	Count		0	0
+view.show.smartGuides	View/Show/Smart Guides	Smart Guides	Ctrl+Shift+;	1	1
+view.show.slices	View/Show/Slices	Slices		0	0
+view.show.notes	View/Show/Notes	Notes		0	0
+view.show.pixel.grid	View/Show/Pixel Grid	Pixel Grid		0	0
+view.show.all	View/Show/All	All		0	0
+view.show.none	View/Show/None	None		0	0
+view.extras	View/Extras	Extras	Ctrl+H	0	0
+view.align	View/Align	Align		0	0
+view.align.to	View/Align To	Align To		0	0
+view.toolHints	View/Tool Hints	Tool Hints		1	1
+window.arrange.cascade	Window/Arrange/Cascade	Cascade		0	0
+window.arrange.tile	Window/Arrange/Tile	Tile		0	0
+window.arrange.consolidate.all.to.tabs	Window/Arrange/Consolidate All to Tabs	Consolidate All to Tabs		0	0
+window.arrange.float.in.window	Window/Arrange/Float in Window	Float in Window		0	0
+window.arrange.float.all.in.windows	Window/Arrange/Float All in Windows	Float All in Windows		0	0
+window.arrange.match.zoom	Window/Arrange/Match Zoom	Match Zoom		0	0
+window.arrange.match.location	Window/Arrange/Match Location	Match Location		0	0
+window.arrange.match.all	Window/Arrange/Match All	Match All		0	0
+window.arrange.new.window.for.file	Window/Arrange/New Window For [file]	New Window For [file]		0	0
+window.workspace.essentials	Window/Workspace/Essentials	Essentials		1	1
+window.workspace.painting	Window/Workspace/Painting	Painting		1	1
+window.workspace.photography	Window/Workspace/Photography	Photography		1	1
+window.workspace.typography	Window/Workspace/Typography	Typography		1	1
+window.workspace.new	Window/Workspace/New Workspace…	New Workspace…		1	0
+window.workspace.delete	Window/Workspace/Delete Workspace…	Delete Workspace…		1	0
+window.workspace.reset	Window/Workspace/Reset [Workspace]	Reset [Workspace]		1	0
+window.workspace.keyboardShortcuts	Window/Workspace/Keyboard Shortcuts & Menus…	Keyboard Shortcuts & Menus…		1	0
+window.panels.3d	Window/Panels/3D	3D		0	0
+window.panels.actions	Window/Panels/Actions	Actions	F9	1	1
+window.panels.adjustments	Window/Panels/Adjustments	Adjustments		1	1
+window.panels.animation	Window/Panels/Animation	Animation		0	0
+window.panels.brushes	Window/Panels/Brush	Brush	F5	1	1
+window.panels.brush.presets	Window/Panels/Brush Presets	Brush Presets		0	0
+window.panels.channels	Window/Panels/Channels	Channels		1	1
+window.panels.character	Window/Panels/Character	Character		1	1
+window.panels.character.styles	Window/Panels/Character Styles	Character Styles		0	0
+window.panels.cloneSource	Window/Panels/Clone Source	Clone Source		1	1
+window.panels.color	Window/Panels/Color	Color		1	1
+window.panels.glyphs	Window/Panels/Glyphs	Glyphs		1	1
+window.panels.gradients	Window/Panels/Gradients	Gradients		1	1
+window.panels.histogram	Window/Panels/Histogram	Histogram		1	1
+window.panels.history	Window/Panels/History	History		1	1
+window.panels.info	Window/Panels/Info	Info		1	1
+window.panels.layer.comps	Window/Panels/Layer Comps	Layer Comps		0	0
+window.panels.layers	Window/Panels/Layers	Layers		1	1
+window.panels.measurement.log	Window/Panels/Measurement Log	Measurement Log		0	0
+window.panels.navigator	Window/Panels/Navigator	Navigator		1	1
+window.panels.notes	Window/Panels/Notes	Notes		1	1
+window.panels.paragraph	Window/Panels/Paragraph	Paragraph		1	1
+window.panels.paragraphStyles	Window/Panels/Paragraph Styles	Paragraph Styles		1	1
+window.panels.paths	Window/Panels/Paths	Paths		1	1
+window.panels.patterns	Window/Panels/Patterns	Patterns		1	1
+window.panels.properties	Window/Panels/Properties	Properties		1	1
+window.panels.styles	Window/Panels/Styles	Styles		0	0
+window.panels.swatches	Window/Panels/Swatches	Swatches		1	1
+window.panels.timeline	Window/Panels/Timeline	Timeline		0	0
+window.panels.tool.presets	Window/Panels/Tool Presets	Tool Presets		0	0
+window.panels.tools	Window/Panels/Tools	Tools		1	1
+view.options	Window/Options	Options		1	1
+help.search	Help/Search…	Search…	Shift+Space	1	0
+help.kooka.pictura.help	Help/Kooka Pictura Help	Kooka Pictura Help	F1	0	0
+help.online.support	Help/Online Support	Online Support		0	0
+help.full.product.family.help	Help/Full Product Family Help	Full Product Family Help		0	0
+help.product.improvement.program	Help/Product Improvement Program	Product Improvement Program		0	0
+help.about.plug.in	Help/About Plug-in	About Plug-in		0	0
+help.system.info	Help/System Info	System Info		1	0
+help.submit.issue	Help/Submit Issue	Submit Issue		1	0
+help.about	Help/About Kooka Pictura	About Kooka Pictura		1	0
+help.developer.designSystem	Help/Developer/Design System...	Design System...		1	0

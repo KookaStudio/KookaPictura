@@ -2,6 +2,7 @@
 
 #include <QtCore/QDebug>
 #include <QtCore/QFileInfo>
+#include <QtCore/QJsonArray>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QStatusBar>
 
@@ -138,6 +139,49 @@ bool commitFilter(QWidget* parent, PictureView* view, ImageView* canvas, const Q
     return applied;
 }
 
+CommandParams filterParams(const QString& kind, const QList<double>& values)
+{
+    QJsonArray params;
+    for (const double value : values) {
+        params.append(value);
+    }
+    CommandParams command;
+    command.values.insert(QStringLiteral("kind"), kind);
+    command.values.insert(QStringLiteral("params"), params);
+    if (kind == QLatin1String("gaussian-blur") && !values.isEmpty()) {
+        command.values.insert(QStringLiteral("radius"), values.first());
+    }
+    return command;
+}
+
+QList<double> filterValues(const CommandParams& params)
+{
+    QList<double> values;
+    for (const QJsonValue& value : params.values.value(QStringLiteral("params")).toArray()) {
+        values.append(value.toDouble());
+    }
+    return values;
+}
+
+CommandParams galleryParams(const FilterGalleryDialog& dialog)
+{
+    QJsonArray kinds;
+    QJsonArray params;
+    for (const FilterGalleryDialog::Effect& effect : dialog.effects()) {
+        if (!effect.visible) {
+            continue;
+        }
+        kinds.append(effect.kind);
+        for (const double value : effect.values) {
+            params.append(value);
+        }
+    }
+    CommandParams command;
+    command.values.insert(QStringLiteral("kinds"), kinds);
+    command.values.insert(QStringLiteral("params"), params);
+    return command;
+}
+
 } // namespace
 
 void PicturaMainWindow::reportFilterRefusal(PictureView* view)
@@ -159,6 +203,8 @@ void PicturaMainWindow::applyFilterCommand(const FilterCommandSpec& spec)
         // Nothing to edit: apply the engine defaults directly.
         if (commitFilter(this, view, imageView(), spec.kind, QList<double>())) {
             refresh();
+            registry_->recordCommand(commandIdForPath(spec.path),
+                                     filterParams(spec.kind, QList<double>()));
         } else {
             reportFilterRefusal(view);
         }
@@ -172,6 +218,7 @@ void PicturaMainWindow::applyFilterCommand(const FilterCommandSpec& spec)
                         this)) {
         if (commitFilter(this, view, imageView(), kind, values)) {
             refresh();
+            registry_->recordCommand(commandIdForPath(spec.path), filterParams(kind, values));
         } else {
             reportFilterRefusal(view);
         }
@@ -185,6 +232,19 @@ void PicturaMainWindow::wireFilterMenu()
         registry_->setImplemented(id, true);
         const FilterCommandSpec captured = spec;
         registry_->setHandler(id, [this, captured]() { applyFilterCommand(captured); });
+        registry_->setExecutor(id, [this](const CommandParams& params) {
+            PictureView* view = activeView();
+            const QString kind = params.values.value(QStringLiteral("kind")).toString();
+            if (!view || !filter_target_ready(*view) || kind.isEmpty()
+                || !filter_kind_supported(kind)) {
+                return false;
+            }
+            const bool applied = apply_filter_params(*view, kind, filterValues(params));
+            if (applied) {
+                refresh();
+            }
+            return applied;
+        });
         // CS6 marks every dialog-opening entry with an ellipsis; a parameterless
         // entry applies straight away and stays bare.
         registry_->setLabelProvider(id, [captured]() {
@@ -206,7 +266,7 @@ void PicturaMainWindow::wireFilterMenu()
     const QString gallery =
         commandIdForPath({QStringLiteral("Filter"), QStringLiteral("Filter Gallery…")});
     registry_->setImplemented(gallery, true);
-    registry_->setHandler(gallery, [this]() {
+    registry_->setHandler(gallery, [this, gallery]() {
         PictureView* view = activeView();
         if (!view || !filter_target_ready(*view)) {
             return;
@@ -218,6 +278,7 @@ void PicturaMainWindow::wireFilterMenu()
         switch (dialog.commit()) {
         case FilterGalleryDialog::CommitResult::Applied:
             refresh();
+            registry_->recordCommand(gallery, galleryParams(dialog));
             break;
         case FilterGalleryDialog::CommitResult::Refused:
             reportFilterRefusal(view);
@@ -229,6 +290,25 @@ void PicturaMainWindow::wireFilterMenu()
     registry_->setEnabledProvider(gallery, [this]() {
         PictureView* view = activeView();
         return view && filter_target_ready(*view);
+    });
+    registry_->setExecutor(gallery, [this](const CommandParams& params) {
+        PictureView* view = activeView();
+        if (!view || !filter_target_ready(*view)) {
+            return false;
+        }
+        QStringList kinds;
+        for (const QJsonValue& value :
+             params.values.value(QStringLiteral("kinds")).toArray()) {
+            kinds.append(value.toString());
+        }
+        if (kinds.isEmpty()) {
+            return false;
+        }
+        const bool applied = apply_filter_stack(*view, kinds, filterValues(params));
+        if (applied) {
+            refresh();
+        }
+        return applied;
     });
 
     // Filter > Last Filter: re-apply the last committed filter with no dialog.
@@ -243,6 +323,9 @@ void PicturaMainWindow::wireFilterMenu()
         }
         if (commitFilter(this, view, imageView(), filter_last_kind(*view), filter_last_params(*view))) {
             refresh();
+            registry_->recordCommand(command_ids::FilterLastFilter,
+                                     filterParams(filter_last_kind(*view),
+                                                  filter_last_params(*view)));
         } else {
             reportFilterRefusal(view);
         }
@@ -257,6 +340,24 @@ void PicturaMainWindow::wireFilterMenu()
             view ? filterCommandForKind(filter_last_kind(*view)) : nullptr;
         return spec ? spec->label : QStringLiteral("Last Filter");
     });
+    registry_->setExecutor(command_ids::FilterLastFilter,
+                           [this](const CommandParams& params) {
+                               PictureView* view = activeView();
+                               if (!view || !filter_target_ready(*view)) {
+                                   return false;
+                               }
+                               const QString kind =
+                                   params.values.value(QStringLiteral("kind")).toString();
+                               if (kind.isEmpty() || !filter_kind_supported(kind)) {
+                                   return false;
+                               }
+                               const bool applied =
+                                   apply_filter_params(*view, kind, filterValues(params));
+                               if (applied) {
+                                   refresh();
+                               }
+                               return applied;
+                           });
 
     // Filter > Last Filter Settings: reopen the last filter's dialog prefilled.
     registry_->setHandler(command_ids::FilterLastFilterSettings, [this]() {
@@ -274,6 +375,8 @@ void PicturaMainWindow::wireFilterMenu()
                             &values, &kind, this)) {
             if (commitFilter(this, view, imageView(), kind, values)) {
                 refresh();
+                registry_->recordCommand(command_ids::FilterLastFilterSettings,
+                                         filterParams(kind, values));
             } else {
                 reportFilterRefusal(view);
             }
@@ -287,6 +390,22 @@ void PicturaMainWindow::wireFilterMenu()
         const FilterCommandSpec* spec = filterCommandForKind(filter_last_kind(*view));
         return spec && !spec->params.isEmpty();
     });
+    registry_->setExecutor(command_ids::FilterLastFilterSettings,
+                           [this](const CommandParams& params) {
+                               PictureView* view = activeView();
+                               const QString kind =
+                                   params.values.value(QStringLiteral("kind")).toString();
+                               if (!view || kind.isEmpty() || !filter_target_ready(*view)
+                                   || !filter_kind_supported(kind)) {
+                                   return false;
+                               }
+                               const bool applied =
+                                   apply_filter_params(*view, kind, filterValues(params));
+                               if (applied) {
+                                   refresh();
+                               }
+                               return applied;
+                           });
 }
 
 } // namespace pictura

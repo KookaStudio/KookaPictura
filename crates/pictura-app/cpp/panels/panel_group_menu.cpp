@@ -1,5 +1,6 @@
 #include "panel_group.h"
 
+#include "actions_panel.h"
 #include "history_panel.h"
 #include "layers_panel.h"
 
@@ -35,6 +36,10 @@ MenuRow dis(const QString& label, bool separatorBefore = false)
 MenuRow chk(const QString& label, bool separatorBefore = false)
 {
     return {label, QString(), true, false, separatorBefore, 0};
+}
+MenuRow chkAction(const QString& label, const QString& action, bool separatorBefore = false)
+{
+    return {label, action, true, false, separatorBefore, 0};
 }
 MenuRow imp(const QString& label, const QString& action, bool separatorBefore = false)
 {
@@ -199,25 +204,32 @@ const QList<MenuRow>& rowsForPanel(const QString& panel)
          }},
         {QStringLiteral("actionsPanel"),
          {
-             chk(QStringLiteral("Button Mode")),
-             dis(QStringLiteral("New Action…"), true),
-             dis(QStringLiteral("New Set…")),
-             dis(QStringLiteral("Duplicate"), true),
-             dis(QStringLiteral("Delete")),
-             dis(QStringLiteral("Play")),
-             dis(QStringLiteral("Start Recording"), true),
-             dis(QStringLiteral("Record Again…")),
-             dis(QStringLiteral("Insert Menu Item…"), true),
-             dis(QStringLiteral("Insert Stop…")),
-             dis(QStringLiteral("Insert Path")),
-             dis(QStringLiteral("Action Options…"), true),
-             dis(QStringLiteral("Playback Options…")),
-             chk(QStringLiteral("Allow Tool Recording"), true),
-             dis(QStringLiteral("Clear All Actions"), true),
-             dis(QStringLiteral("Reset Actions")),
-             dis(QStringLiteral("Load Actions…"), true),
-             dis(QStringLiteral("Replace Actions…")),
-             dis(QStringLiteral("Save Actions…")),
+             chkAction(QStringLiteral("Button Mode"),
+                       QStringLiteral("actions.buttonMode"), false),
+             imp(QStringLiteral("New Action…"), QStringLiteral("actions.newAction"), true),
+             imp(QStringLiteral("New Set…"), QStringLiteral("actions.newSet")),
+             imp(QStringLiteral("Duplicate"), QStringLiteral("actions.duplicate")),
+             imp(QStringLiteral("Delete"), QStringLiteral("actions.delete")),
+             imp(QStringLiteral("Play"), QStringLiteral("actions.play")),
+             imp(QStringLiteral("Start Recording"), QStringLiteral("actions.toggleRecording"),
+                 true),
+             imp(QStringLiteral("Record Again…"), QStringLiteral("actions.recordAgain")),
+             imp(QStringLiteral("Insert Menu Item…"), QStringLiteral("actions.insertMenuItem"),
+                 true),
+             imp(QStringLiteral("Insert Stop…"), QStringLiteral("actions.insertStop")),
+             imp(QStringLiteral("Insert Conditional…"),
+                 QStringLiteral("actions.insertConditional")),
+             imp(QStringLiteral("Insert Path"), QStringLiteral("actions.insertPath")),
+             imp(QStringLiteral("Action Options…"), QStringLiteral("actions.options"), true),
+             imp(QStringLiteral("Playback Options…"),
+                 QStringLiteral("actions.playbackOptions")),
+             chkAction(QStringLiteral("Allow Tool Recording"),
+                       QStringLiteral("actions.allowToolRecording")),
+             imp(QStringLiteral("Clear All Actions"), QStringLiteral("actions.clear"), true),
+             imp(QStringLiteral("Reset Actions"), QStringLiteral("actions.reset")),
+             imp(QStringLiteral("Load Actions…"), QStringLiteral("actions.load")),
+             imp(QStringLiteral("Replace Actions…"), QStringLiteral("actions.replace")),
+             imp(QStringLiteral("Save Actions…"), QStringLiteral("actions.save")),
              dis(QStringLiteral("(installed sets)"), true),
          }},
         {QStringLiteral("adjustmentsPanel"),
@@ -283,6 +295,9 @@ void populatePanelMenu(QMenu* menu, const QString& panelName,
             if (!row.action.isEmpty()) {
                 action->setData(row.action);
             }
+            if (row.label == QStringLiteral("(installed sets)")) {
+                action->setData(QStringLiteral("actions.installedPlaceholder"));
+            }
             if (row.action.isEmpty()) {
                 action->setEnabled(false);
                 action->setToolTip(
@@ -321,9 +336,11 @@ void populatePanelMenu(QMenu* menu, const QString& panelName,
     if (dispatch) {
         menu->addSeparator();
         QAction* closePanel = menu->addAction(PanelGroup::tr("Close"));
+        closePanel->setData(QStringLiteral("close"));
         QObject::connect(closePanel, &QAction::triggered, menu,
                          [dispatch]() { dispatch(QStringLiteral("close")); });
         QAction* closeGroup = menu->addAction(PanelGroup::tr("Close Tab Group"));
+        closeGroup->setData(QStringLiteral("closeGroup"));
         QObject::connect(closeGroup, &QAction::triggered, menu,
                          [dispatch]() { dispatch(QStringLiteral("closeGroup")); });
     }
@@ -354,7 +371,7 @@ void PanelGroup::updateHeaderMenu()
     headerMenu_ = new QMenu(headerButton_);
     populatePanelMenu(headerMenu_, panel,
                       [this](const QString& id) { runPanelMenuAction(id); });
-    QObject::connect(headerMenu_, &QMenu::aboutToShow, headerMenu_, [this] {
+    QObject::connect(headerMenu_, &QMenu::aboutToShow, headerMenu_, [this, panel] {
         auto* layers = qobject_cast<LayersPanel*>(tabs_->currentWidget());
         for (QAction* action : headerMenu_->findChildren<QAction*>()) {
             const QString id = action->data().toString();
@@ -368,6 +385,11 @@ void PanelGroup::updateHeaderMenu()
                                     : PanelGroup::tr("Merge Layers"));
                 action->setEnabled(layers && layers->canMergeSelection());
             }
+        }
+        if (panelMenuHooks_.contains(panel)) {
+            panelMenuHooks_.value(panel)(headerMenu_);
+        } else if (auto* actions = qobject_cast<ActionsPanel*>(tabs_->currentWidget())) {
+            actions->updatePanelMenu(headerMenu_);
         }
     });
     headerButton_->setMenu(headerMenu_);
@@ -395,6 +417,10 @@ void PanelGroup::runPanelMenuAction(const QString& actionId)
     }
     if (auto* history = qobject_cast<HistoryPanel*>(panel)) {
         history->performPanelMenuAction(actionId);
+        return;
+    }
+    if (auto* actions = qobject_cast<ActionsPanel*>(panel)) {
+        actions->performPanelMenuAction(actionId);
         return;
     }
     // The Adjustments panel is a placeholder with no view handle; its

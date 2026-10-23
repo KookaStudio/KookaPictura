@@ -18,6 +18,8 @@
 //! - Anything outside the supported subset returns [`PsdError::Unsupported`],
 //!   never a panic.
 
+pub mod action_descriptor;
+pub mod action_file;
 mod advanced_blending;
 mod budget;
 mod color_mode;

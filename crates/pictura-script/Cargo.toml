@@ -1,0 +1,17 @@
+[package]
+name = "pictura-script"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dev-dependencies]
+serde_json = "1"
+
+[dependencies]
+pictura-codec = { path = "../pictura-codec" }
+thiserror.workspace = true
+# Versioned app-native `TEXT` payloads and command parameters (tool strokes,
+# conditionals, per-command JSON).
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

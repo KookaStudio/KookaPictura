@@ -16,6 +16,8 @@
 #include <QtWidgets/QToolButton>
 #include <QtWidgets/QVBoxLayout>
 
+#include <utility>
+
 namespace pictura {
 
 namespace {
@@ -344,6 +346,15 @@ void PanelGroup::setCurrentToFirstVisible()
             tabs_->setCurrentIndex(i);
             return;
         }
+    }
+}
+
+void PanelGroup::setPanelMenuHook(const QString& panelName, PanelMenuHook hook)
+{
+    if (hook) {
+        panelMenuHooks_.insert(panelName, std::move(hook));
+    } else {
+        panelMenuHooks_.remove(panelName);
     }
 }
 

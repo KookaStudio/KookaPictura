@@ -117,7 +117,15 @@ bool PicturaMainWindow::saveAsWithDialog()
     const int filterIndex = chosen >= 0 ? chosen : sourceIndex;
     path = pathForSaveFilter(path, filterIndex, sourceIndex);
     if (isPdfPath(path)) {
-        return savePdfWithDialog(path);
+        const bool saved = savePdfWithDialog(path);
+        if (saved && !saveActiveInProgress()) {
+            registry_->recordCommand(
+                command_ids::FileSaveAs,
+                CommandParams{QJsonObject{
+                    {QStringLiteral("as"), path.section(QLatin1Char('.'), -1).toUpper()},
+                    {QStringLiteral("in"), path}}});
+        }
+        return saved;
     }
     if (saveAsNeedsFeatureWarning(path, view)) {
         const auto choice = QMessageBox::warning(
@@ -261,30 +269,66 @@ void PicturaMainWindow::registerHandlers()
 
     wireTransformMenu();
 
-    registry_->setHandler(command_ids::ImageRotate90Cw, [this]() {
-        if (PictureView* view = activeView(); view) {
-            view->rotate_doc(1);
+    const auto recordRotation = [this](const char* id, int angle) {
+        CommandParams command;
+        command.values.insert(QStringLiteral("angle"), angle);
+        registry_->recordCommand(QLatin1String(id), command);
+    };
+    const auto recordFlip = [this](const char* id, const char* axis) {
+        CommandParams command;
+        command.values.insert(QStringLiteral("axis"), QString::fromLatin1(axis));
+        registry_->recordCommand(QLatin1String(id), command);
+    };
+
+    registry_->setHandler(command_ids::ImageRotate90Cw, [this, recordRotation]() {
+        PictureView* view = activeView();
+        if (view && view->has_document() && view->rotate_doc(1)) {
+            recordRotation(command_ids::ImageRotate90Cw, 90);
         }
     });
-    registry_->setHandler(command_ids::ImageRotate90Ccw, [this]() {
-        if (PictureView* view = activeView(); view) {
-            view->rotate_doc(3);
+    registry_->setExecutor(command_ids::ImageRotate90Cw, [this](const CommandParams&) {
+        PictureView* view = activeView();
+        return view && view->has_document() && view->rotate_doc(1);
+    });
+    registry_->setHandler(command_ids::ImageRotate90Ccw, [this, recordRotation]() {
+        PictureView* view = activeView();
+        if (view && view->has_document() && view->rotate_doc(3)) {
+            recordRotation(command_ids::ImageRotate90Ccw, -90);
         }
     });
-    registry_->setHandler(command_ids::ImageRotate180, [this]() {
-        if (PictureView* view = activeView(); view) {
-            view->rotate_doc(2);
+    registry_->setExecutor(command_ids::ImageRotate90Ccw, [this](const CommandParams&) {
+        PictureView* view = activeView();
+        return view && view->has_document() && view->rotate_doc(3);
+    });
+    registry_->setHandler(command_ids::ImageRotate180, [this, recordRotation]() {
+        PictureView* view = activeView();
+        if (view && view->has_document() && view->rotate_doc(2)) {
+            recordRotation(command_ids::ImageRotate180, 180);
         }
     });
-    registry_->setHandler(command_ids::ImageFlipHorizontal, [this]() {
-        if (PictureView* view = activeView(); view) {
-            view->flip_doc(true);
+    registry_->setExecutor(command_ids::ImageRotate180, [this](const CommandParams&) {
+        PictureView* view = activeView();
+        return view && view->has_document() && view->rotate_doc(2);
+    });
+    registry_->setHandler(command_ids::ImageFlipHorizontal, [this, recordFlip]() {
+        PictureView* view = activeView();
+        if (view && view->has_document() && view->flip_doc(true)) {
+            recordFlip(command_ids::ImageFlipHorizontal, "horizontal");
         }
     });
-    registry_->setHandler(command_ids::ImageFlipVertical, [this]() {
-        if (PictureView* view = activeView(); view) {
-            view->flip_doc(false);
+    registry_->setExecutor(command_ids::ImageFlipHorizontal, [this](const CommandParams&) {
+        PictureView* view = activeView();
+        return view && view->has_document() && view->flip_doc(true);
+    });
+    registry_->setHandler(command_ids::ImageFlipVertical, [this, recordFlip]() {
+        PictureView* view = activeView();
+        if (view && view->has_document() && view->flip_doc(false)) {
+            recordFlip(command_ids::ImageFlipVertical, "vertical");
         }
+    });
+    registry_->setExecutor(command_ids::ImageFlipVertical, [this](const CommandParams&) {
+        PictureView* view = activeView();
+        return view && view->has_document() && view->flip_doc(false);
     });
     for (const char* id : {command_ids::ImageRotate90Cw, command_ids::ImageRotate90Ccw,
                            command_ids::ImageRotate180, command_ids::ImageFlipHorizontal,
@@ -342,8 +386,14 @@ void PicturaMainWindow::registerHandlers()
         }
     });
     registry_->setHandler(command_ids::LayerDuplicateLayer, [this]() {
-        if (layersPanel_) {
-            layersPanel_->duplicateSelection();
+        PictureView* view = activeView();
+        if (!layersPanel_ || !view) {
+            return;
+        }
+        const int before = view->layer_count();
+        layersPanel_->duplicateSelection();
+        if (view->layer_count() > before) {
+            registry_->recordCommand(command_ids::LayerDuplicateLayer, CommandParams{});
         }
     });
     registry_->setHandler(command_ids::LayerGroupLayers, [this]() {
@@ -523,8 +573,8 @@ void PicturaMainWindow::registerHandlers()
 
     registry_->setHandler(command_ids::LayerFlattenImage, [this]() {
         PictureView* view = activeView();
-        if (view) {
-            view->flatten_image();
+        if (view && view->has_document() && view->flatten_image() > 0) {
+            registry_->recordCommand(command_ids::LayerFlattenImage, CommandParams{});
         }
     });
     registry_->setEnabledProvider(command_ids::LayerFlattenImage,
@@ -669,8 +719,8 @@ void PicturaMainWindow::registerHandlers()
     registry_->setHandler(command_ids::LayerHideLayers, [this]() {
         PictureView* view = activeView();
         const QStringList paths = selectedLayerPaths();
-        if (view && !paths.isEmpty()) {
-            view->hide_layers(paths);
+        if (view && !paths.isEmpty() && view->hide_layers(paths) > 0) {
+            registry_->recordCommand(command_ids::LayerHideLayers, CommandParams{});
         }
     });
     registry_->setEnabledProvider(command_ids::LayerHideLayers, [this]() {

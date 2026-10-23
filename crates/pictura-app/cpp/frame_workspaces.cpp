@@ -57,7 +57,8 @@ QJsonArray workspacePresets(const QString& name)
         columns.append(presetColumn(
             iconic, 0, kIconicWidth,
             QJsonArray{presetGroup({QStringLiteral("historyPanel")}),
-                       presetGroup({QStringLiteral("propertiesPanel")})}));
+                       presetGroup({QStringLiteral("propertiesPanel")}),
+                       presetGroup({QStringLiteral("actionsPanel")}, {})}));
         columns.append(presetColumn(
             normal, 1, PanelColumn::kDefaultNormalWidth,
             QJsonArray{
