@@ -102,7 +102,7 @@ transformed, warped, resized, oriented, canvas-resized, or cropped layer now
 keeps a re-anchored or resampled native store so its channel is not re-widened
 (`native-depth-edit-preserve`; unmodeled spot/extra raw streams, merge/flatten,
 and a true working-depth model stay open). The CS6 Exposure & Gamma 32→16/8 HDR
-Conversion now ships (`hdr-conversion`: the retained `f32` composite is tone-mapped and quantized to a real 16/8 store); the other three HDR methods stay open (closed kernels) |
+Conversion now ships (`hdr-conversion`, `hdr-conversion-methods`: the retained `f32` composite is tone-mapped by any of the four CS6 methods and quantized to a real 16/8 store); the three closed kernels are inferred approximations, and the Local Adaptation Toning Curve/Corner stays open |
 | G5 | Image resources are parsed; an embedded non-sRGB ICC profile is honoured per an incoming-profile policy (Preserve default / Convert / Off); EXIF/IPTC decode, XMP parse + edit with IIM sync, XMP template export/apply with three merge modes, a File Info dialog, IPTC core-field editing, user Assign/Convert Profile commands, and Color Settings ship; sidecars remain open | `read.rs` `read_psd_with` keep, `write.rs` re-emit; `image_resources.rs` parses; `icc.rs` converts/assigns/policy; `metadata.rs`/`exif.rs`/`iptc.rs`/`xmp.rs` decode, edit, template | Wide-gamut files render correctly and are not force-converted; metadata readable/editable/templatable; profiles assignable/convertible/policy-driven |
 | G6 | Unknown additional-layer-info keys (effects `lfx2`/`lrFX`, smart objects, text, vector masks, gradient/pattern fills, blend-if, knockout) | `read.rs` `_ => {}`, `write.rs` subset | Shipped: effects, fills, vector masks, adjustment descriptors, and smart objects decode and render (P2.5/P3); text is modeled (`TypeTool` view, `tysh-model-roundtrip`); knockout is typed and round-trips (`knko-blend-if-model`) and now punches through the CPU compositor at the document root, inside pass-through groups, and inside isolated groups (against the group's own backdrop), independently diffed against psd-tools' own compositor (`knockout-composite`, `knockout-groups`, `knockout-isolated-groups`, `knockout-oracle`, inferred mechanism); Blend If/blending-ranges gate the CPU compositor (`blend-if-render`, GPU declines a non-default layer); other unmodeled keys stay opaque (P2) |
 | G7 | `-3` real-user-mask channel, mask params, blend ranges, global layer mask | `read.rs`, `write.rs` | Closed (opaque → partly modeled): captured and re-emitted verbatim on open→save (P2); blending-ranges now also parse into a typed `BlendIf` view (`knko-blend-if-model`) and gate the CPU compositor (`blend-if-render`); knockout punch-through is now applied at the document root (`knockout-composite`) and inside a pass-through group (`knockout-groups`), nested-shallow/clipping targets still open |
@@ -318,11 +318,12 @@ composite (`native-depth-save`), and a moved/transformed/warped/resized/oriented
 canvas-edited layer keeps a re-anchored or resampled native store
 (`native-depth-edit-preserve`; unmodeled raw streams, merge/flatten, and a true
 working-depth model stay open).
-A real 32-bit HDR tone map now ships as the CS6 Exposure & Gamma 32→16/8
-conversion (`hdr-conversion`): `Image > Mode > 16/8 Bits/Channel` tone-maps the
-retained `f32` composite into a 16- or 8-bit store, so the other three HDR
-methods (Local Adaptation, Equalize Histogram, Highlight Compression — closed
-kernels) and per-layer tone mapping remain open, along with
+A real 32-bit HDR tone map now ships as the CS6 HDR Conversion 32→16/8 path
+(`hdr-conversion`, `hdr-conversion-methods`): `Image > Mode > 16/8 Bits/Channel`
+tone-maps the retained `f32` composite with Local Adaptation, Equalize Histogram,
+Exposure and Gamma, or Highlight Compression into a 16- or 8-bit store. The three
+closed kernels are inferred approximations, so per-layer tone mapping and the
+Local Adaptation Toning Curve/Corner remain open, along with
 Multichannel/Duotone (no
 natural RGB mapping / needs the spot-ink spec), and text (`TySh`).
 Color-mode

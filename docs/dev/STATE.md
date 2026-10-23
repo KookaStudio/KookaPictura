@@ -3313,10 +3313,10 @@ Snapshot for resuming after a context break. Update after each milestone.
   and clears every layer's 32-bit store; the app adds the
   `Image > Mode > 16/8 Bits/Channel` commands (real ids, gated on
   `document_depth_bits() == 32`, which now reports the retained source depth)
-  and a two-field Exposure/Gamma `HdrConversionDialog` plus a `convert_depth`
-  bridge. Ceilings: only Exposure & Gamma is grounded (the Method combo and
-  Local Adaptation/Equalize Histogram/Highlight Compression have closed
-  kernels); the ranges beyond Exposure 0 / Gamma 1.0 are inferred; an
+  and the first `HdrConversionDialog` (Exposure/Gamma) plus a `convert_depth`
+  bridge. Ceilings: only Exposure & Gamma has a fixed formula (Local
+  Adaptation/Equalize Histogram/Highlight Compression have closed kernels); the
+  ranges beyond Exposure 0 / Gamma 1.0 are inferred; an
   already-edited 32-bit document was clamped to `[0, 1]` by `emit_native`, so
   only a clean open tone-maps values above white; 32-bit Lab/CMYK are refused;
   layered documents tone-map the merged composite and drop per-layer native
@@ -3325,6 +3325,19 @@ Snapshot for resuming after a context break. Update after each milestone.
   merge/flatten/via-copy/rasterize, and a true working-depth model stay open;
   retained samples cost
   2×/4× while open and the write path clones each retained plane.
+- **HDR Conversion tone methods** (issue #557, change
+  `hdr-conversion-methods`): the 32→16/8 conversion now offers all four CS6
+  methods through `pictura_adjust::hdr_toning::{tone_map, HdrToneMap}`:
+  Exposure & Gamma, Equalize Histogram, Highlight Compression, and an f32
+  Local Adaptation. `convert_depth` uses the retained `f32` store only while
+  its 8-bit narrowing matches the composite (the open path keeps the file's
+  merged composite, so a clean open counts as current), so an edited document
+  converts its current pixels; a layered document is flattened to one
+  Background built from the tone-mapped composite, so the app's recomposite
+  cannot resurrect the old layers. The dialog exposes the four methods and
+  shares the nine Local Adaptation numeric rows with HDR Toning. The closed
+  kernels are inferred approximations; the Local Adaptation Toning Curve/Corner
+  remains a recorded ceiling.
 - **Native-store edit preservation** (roadmap P4/G4, open change
   `native-depth-edit-preserve`): the destructive geometry ops now keep a
   layer's retained native samples instead of widening them on save. Move/
