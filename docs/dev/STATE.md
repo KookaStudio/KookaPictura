@@ -11,6 +11,31 @@ Snapshot for resuming after a context break. Update after each milestone.
   (`docs/00-overview/licensing-and-provenance.md`).
 - **Provenance history:** the git history was rewritten so no reachable commit
   contains reproduced Adobe Help prose or the old wording.
+- **Adaptive Wide Angle** (#346, branch `feat/346-adaptive-wide-angle`,
+  OpenSpec change `add-adaptive-wide-angle`, archived into
+  `imaging/adaptive-wide-angle`). `Filter ▸ Adaptive Wide Angle…` opens a
+  full-canvas workspace for 8-bit RGB and Grayscale documents.
+  - **Engine** (`pictura-filters/src/distort/adaptive_wide_angle/`). A lens
+    model (Fisheye equidistant, Perspective rectilinear, Full Spherical
+    equirectangular; focal length in pixels = mm × crop ÷ 43.27 × diagonal)
+    feeds a stereographic base projection with unit centre magnification,
+    fisheye clipped per pixel at 90°. Constraints follow Carroll et al.
+    (SIGGRAPH 2009): each line traces a great circle, and a 48-cell mesh is
+    solved by least squares (similarity energy, line straightness,
+    Horizontal / Vertical / fixed angle, gnomonic polygon interiors) with
+    Jacobi-preconditioned CG. A fine triangle mesh renders the commit and the
+    dialog view.
+  - **App.** `filter_tools/adaptive_wide_angle.rs` holds the session and
+    kept constraint sets; the `adaptive-wide-angle` kind is seven slots
+    (Correction, Scale, Focal, Crop, Offset X/Y, set id). `AwaCanvas` and
+    `AdaptiveWideAngleDialog` give Constraint / Polygon / Move / Hand / Zoom,
+    the right-click orientation menu, Detail, Preview / Show Constraints /
+    Show Mesh, and EXIF prefill (a focal length past 15.31 mm raises the crop
+    factor instead).
+  Ceiling (`ponytail:`): no Auto / lens profiles, Panorama, Smart Filter
+  re-edit or rotation handles (#891); ranges are read off CS6 captures and
+  the solver is not verified against CS6. Tests: 12 Rust engine units,
+  bridge and mapping units, and `tst_adaptive_wide_angle` (14 cases).
 - **Text gamma and missing fonts** (#685, branch
   `feat/685-text-gamma-missing-fonts`, OpenSpec change
   `text-gamma-missing-fonts`, archived into `compositing/text-gamma-blend`,
