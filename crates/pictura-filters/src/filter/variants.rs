@@ -100,6 +100,7 @@ filter_variants! {
     Shear: Filter::Shear { .. } => Ported,
     Displace: Filter::Displace { .. } => Ported,
     Liquify: Filter::Liquify { .. } => Native,
+    AdaptiveWideAngle: Filter::AdaptiveWideAngle { .. } => Native,
     ZigZag: Filter::ZigZag { .. } => Ported,
     OceanRipple: Filter::OceanRipple { .. } => Native,
     Glass: Filter::Glass { .. } => Native,

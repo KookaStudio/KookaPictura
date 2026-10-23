@@ -204,8 +204,9 @@ Layer Comps (`LAY-022`) is already tracked by `#265`.
 | FILT-4 | `sharpen-filters.md` | Smart Sharpen Basic/Advanced split + 32-bpc disable | DIVERGENT | `filter_map/descriptor/render.rs` (Smart Sharpen row) | #595 |
 | FILT-5 | `stylize-filters.md` | 8 Stylize filters missing from the Filter Gallery category | DIVERGENT | `filter_gallery_dialog.cpp:118` | #596 |
 | FILT-6 | `artistic-filters.md` | Colored Pencil document-background paper wiring | PARTIAL | `filter_map/mapping.rs` (Colored Pencil arm) | #597 |
+| FILT-7 | `adaptive-wide-angle.md` | Adaptive Wide Angle Auto / lens profiles, Panorama, Smart Filter re-edit, rotation handles | PARTIAL | `pictura-filters/src/distort/adaptive_wide_angle/`, `awa_dialog.cpp` | #891 |
 
-Lens Correction (`#347`), Vanishing Point (`#349`), Adaptive Wide Angle (`#346`),
+Lens Correction (`#347`), Vanishing Point (`#349`),
 De-Interlace (`#344`), NTSC Colors (`#345`), Embed/Read Watermark (`#350`/`#351`)
 are already tracked.
 

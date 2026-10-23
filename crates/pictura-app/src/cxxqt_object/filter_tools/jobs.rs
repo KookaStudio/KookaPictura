@@ -492,6 +492,12 @@ fn filter_commit_start(
     label: &QString,
 ) -> bool {
     let kind = kind.to_string();
+    if let Some(reason) =
+        super::adaptive_wide_angle::awa_refusal(&kind, view.rust().session.doc.as_ref())
+    {
+        view.as_mut().rust_mut().filter_error = Some(reason);
+        return false;
+    }
     let params: Vec<f64> = params.into_iter().copied().collect();
     let params = super::super::filter_map::commit_params(&kind, &params);
     let params = super::lens_blur_depths::commit_slots(&kind, view.rust(), &params);

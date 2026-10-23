@@ -43,6 +43,7 @@ pub(crate) enum DialogKind {
     ReduceNoise = 4,
     BlurGallery = 5,
     Liquify = 6,
+    AdaptiveWideAngle = 7,
 }
 
 pub(crate) struct FilterParam {

@@ -354,6 +354,29 @@ fn liquify_names_a_kept_mesh_and_refuses_one_it_no_longer_has() {
 }
 
 #[test]
+fn adaptive_wide_angle_reads_its_slots_and_refuses_an_unkept_set() {
+    let Some(Filter::AdaptiveWideAngle { params }) = filter_from_kind_params(
+        "adaptive-wide-angle",
+        &[1.0, 120.0, 10.0, 1.5, 0.1, -0.2, 0.0],
+    ) else {
+        panic!("adaptive-wide-angle did not map");
+    };
+    assert_eq!(
+        params.correction,
+        pictura_filters::AwaCorrection::Perspective
+    );
+    assert_eq!(
+        (params.scale, params.focal_length, params.crop_factor),
+        (1.2, 10.0, 1.5)
+    );
+    assert_eq!(params.offset, [0.1, -0.2]);
+    assert!(params.constraints.is_empty());
+    assert!(filter_from_kind_params("adaptive-wide-angle", &[]).is_some());
+    let unkept = [0.0, 100.0, 10.0, 1.0, 0.0, 0.0, 4e9];
+    assert!(filter_from_kind_params("adaptive-wide-angle", &unkept).is_none());
+}
+
+#[test]
 fn custom_reads_its_grid_row_by_row_then_scale_and_offset() {
     let mut identity = [[0.0; 5]; 5];
     identity[2][2] = 1.0;

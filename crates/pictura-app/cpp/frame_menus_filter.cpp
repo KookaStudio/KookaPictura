@@ -5,6 +5,7 @@
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QStatusBar>
 
+#include "awa_dialog.h"
 #include "blur_gallery_dialog.h"
 #include "filter_commands.h"
 #include "filter_commit.h"
@@ -17,6 +18,7 @@
 #include "reduce_noise_dialog.h"
 
 #include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/filter_tools/adaptive_wide_angle.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/filter_tools/jobs.cxxqt.h"
 
 namespace pictura {
@@ -58,8 +60,9 @@ bool chooseDisplacementMap(QList<double>* values, QWidget* parent)
     return true;
 }
 
-// Lens Flare's parameters are one struct, Lighting Effects' a list of lights
-// and Liquify's a mesh, each edited on its own dialog; every other filter edits
+// Lens Flare's parameters are one struct, Lighting Effects' a list of lights,
+// Liquify's a mesh and Adaptive Wide Angle's a constraint set, each edited on
+// its own dialog; every other filter edits
 // independent slots on the shared one.
 // `*kind` is the kind to commit: the spec's, except that the Blur Gallery
 // commits whichever of its effects the user switched on.
@@ -83,6 +86,11 @@ bool runFilterDialog(PictureView* view, const FilterCommandSpec& spec,
         const auto* frame = qobject_cast<PicturaMainWindow*>(parent);
         const QString name = frame ? frame->activeDocumentName() : QString();
         return LiquifyDialog::get(view, name, initial, out, parent);
+    }
+    case FilterDialogKind::AdaptiveWideAngle: {
+        const auto* frame = qobject_cast<PicturaMainWindow*>(parent);
+        const QString name = frame ? frame->activeDocumentName() : QString();
+        return AdaptiveWideAngleDialog::get(view, name, initial, out, parent);
     }
     case FilterDialogKind::Shared:
         break;
@@ -183,9 +191,13 @@ void PicturaMainWindow::wireFilterMenu()
             return captured.params.isEmpty() ? captured.label
                                              : captured.label + QStringLiteral("…");
         });
-        registry_->setEnabledProvider(id, [this]() {
+        // Adaptive Wide Angle takes 8-bit RGB and Grayscale only, as CS6's
+        // 16- and 32-bpc filter lists leave it out.
+        const bool eightBitOnly = spec.dialog == FilterDialogKind::AdaptiveWideAngle;
+        registry_->setEnabledProvider(id, [this, eightBitOnly]() {
             PictureView* view = activeView();
-            return view && filter_target_ready(*view);
+            return view && filter_target_ready(*view) &&
+                   (!eightBitOnly || awa_document_supported(*view));
         });
     }
 
