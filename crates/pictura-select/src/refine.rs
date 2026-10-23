@@ -233,9 +233,9 @@ fn boundary_distance(sel: &Selection) -> Vec<u32> {
             dist[i] = d;
         }
     }
-    // Convert chamfer units (max 4 per diagonal) to pixels (max 1.41): /4.
+    // Convert chamfer units (orthogonal 3, diagonal 4) to pixels: / 3.
     dist.iter()
-        .map(|&d| if d == u32::MAX { u32::MAX } else { d / 4 })
+        .map(|&d| if d == u32::MAX { u32::MAX } else { d / 3 })
         .collect()
 }
 
@@ -576,6 +576,14 @@ mod tests {
             }
         }
         s
+    }
+
+    #[test]
+    fn refine_distance_is_pixels() {
+        let mask = rect(16, 16, 2, 2, 14, 14);
+        let dist = boundary_distance(&mask);
+        assert_eq!(dist[8 * 16 + 3], 1, "one column from the edge is 1 px");
+        assert_eq!(dist[8 * 16 + 6], 4, "four columns from the edge is 4 px");
     }
 
     #[test]

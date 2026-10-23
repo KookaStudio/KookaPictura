@@ -10,6 +10,7 @@
 #include "tools.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/layer_path.cxxqt.h"
 
 namespace pictura {
@@ -119,7 +120,7 @@ QJsonObject ControlServer::methodSelection(const QJsonObject& params)
     } else if (op == QStringLiteral("lasso_end")) {
         applied = view->end_lasso(feather);
     } else if (op == QStringLiteral("quick")) {
-        applied = view->quick_select(x, y, tolerance, mode);
+        applied = pictura::quick_select(*view, x, y, tolerance, mode);
     } else if (op == QStringLiteral("wand")) {
         applied = view->magic_wand(x, y, tolerance, contiguous, mode);
     } else {

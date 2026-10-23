@@ -491,7 +491,10 @@ impl PictureViewRust {
                         rust.session.live.stroke(),
                         rust.session.doc.as_ref(),
                     ) {
-                        (Some(mode), Some(stroke), Some(doc)) if !stroke.transparency_locked() => {
+                        (Some(mode), Some(stroke), Some(doc))
+                            if !stroke.transparency_locked()
+                                && !(cfg.mode == PaintMode::Clear && !stroke.has_alpha_plane()) =>
+                        {
                             let t = Instant::now();
                             let seed = stroke.base_layer_rgba_doc(doc);
                             let (w, h) = (doc.width, doc.height);

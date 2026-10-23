@@ -89,8 +89,12 @@ impl DabRaster<'_> {
                 }
                 band.applied[at] = v;
                 let i = ly * w + lx as usize;
-                self.stencil
-                    .composite(&mut band.planes, at, i, rng.as_deref_mut(), v);
+                if !self
+                    .stencil
+                    .composite(&mut band.planes, at, i, rng.as_deref_mut(), v)
+                {
+                    continue;
+                }
                 first.get_or_insert(lx);
                 last = lx;
             }
@@ -162,16 +166,25 @@ pub(super) fn write_band(
     at: usize,
     mode: PaintMode,
     rgba: (u8, u8, u8, u8),
-) {
+) -> bool {
     let (r, g, b, a) = rgba;
-    if !matches!(mode, PaintMode::Clear) {
+    let write_rgb = !matches!(mode, PaintMode::Clear) || planes[3].is_some();
+    let mut changed = false;
+    if write_rgb {
         for (k, v) in [(0, r), (1, g), (2, b)] {
             if let Some(p) = planes[k].as_deref_mut() {
-                p[at] = v;
+                if p[at] != v {
+                    p[at] = v;
+                    changed = true;
+                }
             }
         }
     }
     if let Some(p) = planes[3].as_deref_mut() {
-        p[at] = a;
+        if p[at] != a {
+            p[at] = a;
+            changed = true;
+        }
     }
+    changed
 }

@@ -123,16 +123,42 @@ impl MixerBrush {
         let deposit_alpha = flow * (1.0 - wet * 0.5);
 
         let mut dirty = None;
+        let opacity = cfg.opacity as f32 / 100.0;
+        let source = Rgba {
+            r: deposit[0],
+            g: deposit[1],
+            b: deposit[2],
+            a: deposit[3],
+        };
         for y in region.top..region.bottom {
             for x in region.left..region.right {
-                let weight = (tip(x, y) * deposit_alpha).clamp(0.0, 1.0);
+                let weight = (tip(x, y) * deposit_alpha * opacity).clamp(0.0, 1.0);
                 let existing = img.get(x, y);
                 if weight <= 0.0 || (self.preserve_alpha && existing[3] == 0) {
                     continue;
                 }
-                let mut mixed = lerp(existing, deposit, weight);
+                let roll = if cfg.mode == crate::PaintMode::Dissolve {
+                    let hash =
+                        (x as u32).wrapping_mul(73_856_093) ^ (y as u32).wrapping_mul(19_349_663);
+                    hash as f32 / u32::MAX as f32
+                } else {
+                    0.0
+                };
+                let Some((r, g, b, a)) = crate::stroke::blend_pixel(
+                    cfg.mode,
+                    (existing[0], existing[1], existing[2], existing[3]),
+                    &source,
+                    weight,
+                    roll,
+                ) else {
+                    continue;
+                };
+                let mut mixed = [r, g, b, a];
                 if self.preserve_alpha {
                     mixed[3] = existing[3];
+                }
+                if mixed == existing {
+                    continue;
                 }
                 img.set(x, y, mixed);
                 dirty = Some(grow(dirty, x, y));
@@ -324,5 +350,41 @@ mod tests {
             carried.g > carried.r,
             "the reservoir kept its own paint: {carried:?}"
         );
+    }
+
+    #[test]
+    fn mixer_applies_mode_opacity() {
+        let base = [200, 100, 50, 255];
+        let deposit = [100, 200, 250, 255];
+        let product = |s: u8, d: u8| ((s as u32 * d as u32) / 255) as u8;
+
+        let mut img = image(32, 32, |_, _| base);
+        let mut m = MixerBrush::new(opts(0.0, 1.0, 0.0), rgba(deposit), false);
+        let mut cfg = brush();
+        cfg.mode = crate::PaintMode::Multiply;
+        cfg.opacity = 100;
+        m.dab(&mut img, &cfg, 16.0, 16.0);
+        let full = img.get(16, 16);
+        for c in 0..3 {
+            let expected = product(deposit[c], base[c]);
+            assert!(
+                (full[c] as i32 - expected as i32).abs() <= 1,
+                "Multiply channel {c}: {full:?} vs {expected}"
+            );
+        }
+        assert_eq!(full[3], 255);
+
+        let mut img = image(32, 32, |_, _| base);
+        let mut m = MixerBrush::new(opts(0.0, 1.0, 0.0), rgba(deposit), false);
+        cfg.opacity = 50;
+        m.dab(&mut img, &cfg, 16.0, 16.0);
+        let half = img.get(16, 16);
+        for c in 0..3 {
+            let expected = ((full[c] as u32 + base[c] as u32) / 2) as u8;
+            assert!(
+                (half[c] as i32 - expected as i32).abs() <= 1,
+                "Opacity 50 channel {c}: {half:?} vs {expected}"
+            );
+        }
     }
 }

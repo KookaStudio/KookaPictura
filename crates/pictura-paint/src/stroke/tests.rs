@@ -92,6 +92,20 @@ fn red() -> Rgba {
     }
 }
 
+/// A hard, fully flowing stroke in `mode` at `opacity`.
+fn mode_cfg(mode: PaintMode, opacity: u8) -> StrokeConfig {
+    StrokeConfig {
+        color: red(),
+        diameter: 12,
+        hardness: 100,
+        spacing: SpacingMode::Fixed(10),
+        opacity,
+        flow: 100,
+        mode,
+        ..StrokeConfig::default()
+    }
+}
+
 #[test]
 fn take_dirty_reports_each_dab_not_the_stroke_union() {
     let mut doc = layer_doc(128, 32, BASE);
@@ -415,6 +429,48 @@ fn clear_drives_opaque_alpha_to_zero() {
 }
 
 #[test]
+fn clear_zeroes_rgb() {
+    let mut doc = layer_doc(64, 32, BASE);
+    let cfg = mode_cfg(PaintMode::Clear, 100);
+    paint(&mut doc, &cfg, &[sample(5.0, 16.0), sample(55.0, 16.0)]).expect("clear");
+    let i = 16 * 64 + 30;
+    assert_eq!(chan(&doc, -1, i), 0);
+    assert_eq!(
+        (chan(&doc, 0, i), chan(&doc, 1, i), chan(&doc, 2, i)),
+        (0, 0, 0)
+    );
+}
+
+#[test]
+fn clear_keeps_rgb_below_full() {
+    let mut doc = layer_doc(64, 32, BASE);
+    let cfg = mode_cfg(PaintMode::Clear, 50);
+    paint(&mut doc, &cfg, &[sample(5.0, 16.0), sample(55.0, 16.0)]).expect("clear");
+    let i = 16 * 64 + 30;
+    let a = chan(&doc, -1, i);
+    assert!(a > 0 && a < 255, "alpha {a} should stay partial");
+    assert_eq!(
+        (chan(&doc, 0, i), chan(&doc, 1, i), chan(&doc, 2, i)),
+        (BASE.0, BASE.1, BASE.2)
+    );
+}
+
+#[test]
+fn noop_stroke_adds_no_history() {
+    let mut doc = layer_doc(32, 16, BASE);
+    let behind = mode_cfg(PaintMode::Behind, 100);
+    assert!(paint(&mut doc, &behind, &[sample(8.0, 8.0)]).is_none());
+
+    let zero = mode_cfg(PaintMode::Normal, 0);
+    assert!(paint(&mut doc, &zero, &[sample(8.0, 8.0)]).is_none());
+
+    let mut no_alpha = layer_doc(32, 16, BASE);
+    no_alpha.layers[0].channels.retain(|c| c.id != -1);
+    let clear = mode_cfg(PaintMode::Clear, 100);
+    assert!(paint(&mut no_alpha, &clear, &[sample(8.0, 8.0)]).is_none());
+}
+
+#[test]
 fn behind_leaves_opaque_rgb_unchanged() {
     let mut doc = layer_doc(64, 32, BASE);
     let cfg = StrokeConfig {
@@ -427,7 +483,10 @@ fn behind_leaves_opaque_rgb_unchanged() {
         mode: PaintMode::Behind,
         ..StrokeConfig::default()
     };
-    paint(&mut doc, &cfg, &[sample(5.0, 16.0), sample(55.0, 16.0)]).expect("behind");
+    assert!(
+        paint(&mut doc, &cfg, &[sample(5.0, 16.0), sample(55.0, 16.0)]).is_none(),
+        "a Behind stroke over opaque pixels changes nothing"
+    );
     let i = 16 * 64 + 30;
     assert_eq!(
         (chan(&doc, 0, i), chan(&doc, 1, i), chan(&doc, 2, i)),

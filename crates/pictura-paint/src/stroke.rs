@@ -653,6 +653,12 @@ impl Stroke {
         self.locked
     }
 
+    /// Whether the target layer stores an alpha plane; Clear on a layer without
+    /// one is a no-op on both the CPU and GPU paths.
+    pub fn has_alpha_plane(&self) -> bool {
+        self.ch[3].is_some()
+    }
+
     /// Write a GPU dab's region into the working document, clipped to the
     /// layer's own rect. `planes` holds four byte planes (R, G, B, A); plane `k`
     /// starts at `k * plane_stride` and pixel `(row, col)` sits at
@@ -697,9 +703,11 @@ impl Stroke {
                 dst[k] = Some(c.data.as_mut_slice());
             }
         }
+        let mut changed: Option<PsdRect> = None;
         for (row, ly) in (top..bottom).enumerate() {
             let src = (first_row + row) * bw + runner;
             let d = ly as usize * lw as usize + left as usize;
+            let mut row_changed = false;
             for (k, plane) in dst.iter_mut().enumerate() {
                 let Some(plane) = plane.as_deref_mut() else {
                     continue;
@@ -708,12 +716,32 @@ impl Stroke {
                     continue;
                 };
                 if let (Some(slot), Some(chunk)) = (plane.get_mut(d..d + run), bytes.get(..run)) {
-                    slot.copy_from_slice(chunk);
+                    if slot[..] != chunk[..] {
+                        slot.copy_from_slice(chunk);
+                        row_changed = true;
+                    }
                 }
             }
+            if row_changed {
+                let row_box = PsdRect {
+                    top: ly,
+                    left,
+                    bottom: ly + 1,
+                    right,
+                };
+                changed = Some(changed.map_or(row_box, |c| union_rect(c, row_box)));
+            }
         }
-        Self::grow_dirty(&mut self.dirty, &mut self.dab_dirty, left, top);
-        Self::grow_dirty(&mut self.dirty, &mut self.dab_dirty, right - 1, bottom - 1);
+        let Some(rect) = changed else {
+            return false;
+        };
+        Self::grow_dirty(&mut self.dirty, &mut self.dab_dirty, rect.left, rect.top);
+        Self::grow_dirty(
+            &mut self.dirty,
+            &mut self.dab_dirty,
+            rect.right - 1,
+            rect.bottom - 1,
+        );
         self.painted = true;
         true
     }
@@ -730,10 +758,15 @@ impl Stroke {
     }
 
     fn apply_per_dab(&mut self, doc: &mut Document, dabs: &[(f32, f32)]) -> bool {
+        let cfg = self.cfg;
+        // The composite engines keep their own alpha, but a layer without an
+        // alpha plane cannot store Clear: match the regular raster's no-op.
+        if cfg.mode == PaintMode::Clear && self.ch[3].is_none() {
+            return false;
+        }
         let Some(per) = self.per_dab.as_mut() else {
             return false;
         };
-        let cfg = self.cfg;
         let mut changed = None;
         for &(x, y) in dabs {
             let dirty = match &mut per.engine {
@@ -770,13 +803,25 @@ impl Stroke {
             rect.bottom - 1,
         );
         let w = per.pixels.width;
+        let mut written: Option<PsdRect> = None;
         for y in rect.top..rect.bottom {
             for x in rect.left..rect.right {
                 let i = (y * w + x) as usize;
                 let [r, g, b, a] = per.pixels.data[i];
-                write_pixel(layer, ch, i, PaintMode::Normal, (r, g, b, a));
+                if write_pixel(layer, ch, i, PaintMode::Normal, (r, g, b, a)) {
+                    let pixel = PsdRect {
+                        top: y,
+                        left: x,
+                        bottom: y + 1,
+                        right: x + 1,
+                    };
+                    written = Some(written.map_or(pixel, |c| union_rect(c, pixel)));
+                }
             }
         }
+        let Some(rect) = written else {
+            return false;
+        };
         Self::grow_dirty(&mut self.dirty, &mut self.dab_dirty, rect.left, rect.top);
         Self::grow_dirty(
             &mut self.dirty,
@@ -916,7 +961,7 @@ impl Stencil<'_> {
         i: usize,
         rng: Option<&mut u64>,
         coverage: u8,
-    ) {
+    ) -> bool {
         let cov = coverage as f32 / 255.0;
         let a = (cov * self.cfg.opacity as f32 / 100.0).clamp(0.0, 1.0);
         let plane = |k: usize, missing: u8| {
@@ -937,7 +982,7 @@ impl Stencil<'_> {
                 let (x, y) = ((i % w) as i32, (i / w) as i32);
                 match source.at(self.rect.left + x, self.rect.top + y) {
                     Some(color) => color,
-                    None => return,
+                    None => return false,
                 }
             }
         };
@@ -947,18 +992,18 @@ impl Stencil<'_> {
             _ => 0.0,
         };
         let Some((r, g, b, alpha)) = blend_pixel(mode, (dr, dg, db, da), &s, a, roll) else {
-            return;
+            return false;
         };
         // A transparency lock preserves each pixel's alpha: fully transparent
         // pixels stay untouched, everything else keeps its pre-stroke alpha.
         // (Clear/auto-erase are refused for the whole stroke in `begin_at`.)
         if self.locked {
             if da == 0 {
-                return;
+                return false;
             }
-            write_band(planes, at, mode, (r, g, b, da));
+            write_band(planes, at, mode, (r, g, b, da))
         } else {
-            write_band(planes, at, mode, (r, g, b, alpha));
+            write_band(planes, at, mode, (r, g, b, alpha))
         }
     }
 }
@@ -975,82 +1020,6 @@ pub fn paint_stroke(
         stroke.sample(doc, s);
     }
     stroke.finish()
-}
-
-/// `s` laid at strength `a` (0.0–1.0) over the straight pixel `dst` in `mode`,
-/// or `None` when the pixel is left alone. `roll` (0.0–1.0) decides whether a
-/// Dissolve pixel is painted.
-pub(crate) fn blend_pixel(
-    mode: PaintMode,
-    dst: (u8, u8, u8, u8),
-    s: &Rgba,
-    a: f32,
-    roll: f32,
-) -> Option<(u8, u8, u8, u8)> {
-    let (dr, dg, db, da) = dst;
-    match mode {
-        PaintMode::Normal => Some(normal_pixel(dr, dg, db, da, s, a)),
-        PaintMode::Multiply => {
-            // W3C separable blending: the product shows in proportion to the
-            // backdrop's alpha, so a transparent pixel takes the plain colour.
-            let da_f = da as f32 / 255.0;
-            let m = |src: u8, dst: u8| {
-                let src = src as f32;
-                to_u8((1.0 - da_f) * src + da_f * src * dst as f32 / 255.0)
-            };
-            let product = Rgba {
-                r: m(s.r, dr),
-                g: m(s.g, dg),
-                b: m(s.b, db),
-                a: s.a,
-            };
-            Some(normal_pixel(dr, dg, db, da, &product, a))
-        }
-        PaintMode::Dissolve => (roll < a).then_some((s.r, s.g, s.b, s.a)),
-        PaintMode::Behind => (da != 255).then(|| behind_pixel(dr, dg, db, da, s, a)),
-        PaintMode::Clear => {
-            let out_a = (da as f32 / 255.0) * (1.0 - a);
-            Some((dr, dg, db, to_u8(out_a * 255.0)))
-        }
-    }
-}
-
-fn normal_pixel(dr: u8, dg: u8, db: u8, da: u8, s: &Rgba, a: f32) -> (u8, u8, u8, u8) {
-    let sa = s.a as f32 / 255.0;
-    let da_f = da as f32 / 255.0;
-    let src_a = sa * a;
-    let out_a = src_a + da_f * (1.0 - src_a);
-    if out_a <= 0.0 {
-        return (0, 0, 0, 0);
-    }
-    let mix = |src: u8, dst: u8| {
-        ((src as f32 * src_a + dst as f32 * da_f * (1.0 - src_a)) / out_a).round() as u8
-    };
-    (
-        mix(s.r, dr),
-        mix(s.g, dg),
-        mix(s.b, db),
-        to_u8(out_a * 255.0),
-    )
-}
-
-fn behind_pixel(dr: u8, dg: u8, db: u8, da: u8, s: &Rgba, a: f32) -> (u8, u8, u8, u8) {
-    let sa = s.a as f32 / 255.0;
-    let da_f = da as f32 / 255.0;
-    let src_a = sa * a;
-    let out_a = da_f + src_a * (1.0 - da_f);
-    if out_a <= 0.0 {
-        return (0, 0, 0, 0);
-    }
-    let mix = |src: u8, dst: u8| {
-        ((dst as f32 * da_f + src as f32 * src_a * (1.0 - da_f)) / out_a).round() as u8
-    };
-    (
-        mix(s.r, dr),
-        mix(s.g, dg),
-        mix(s.b, db),
-        to_u8(out_a * 255.0),
-    )
 }
 
 pub(crate) fn union_rect(a: PsdRect, b: PsdRect) -> PsdRect {
@@ -1075,10 +1044,6 @@ pub(crate) fn layer_rgba(layer: &Layer) -> RgbaImage {
             })
             .collect(),
     }
-}
-
-fn to_u8(v: f32) -> u8 {
-    v.round().clamp(0.0, 255.0) as u8
 }
 
 /// Positions of the R, G, B and alpha planes in a layer's channel list, or
@@ -1123,18 +1088,26 @@ fn write_pixel(
     i: usize,
     mode: PaintMode,
     rgba: (u8, u8, u8, u8),
-) {
+) -> bool {
     let (r, g, b, a) = rgba;
+    let mut changed = false;
     if !matches!(mode, PaintMode::Clear) {
         for (k, v) in [(ch[0], r), (ch[1], g), (ch[2], b)] {
             if let Some(k) = k {
-                layer.channels[k].data[i] = v;
+                if layer.channels[k].data[i] != v {
+                    layer.channels[k].data[i] = v;
+                    changed = true;
+                }
             }
         }
     }
     if let Some(k) = ch[3] {
-        layer.channels[k].data[i] = a;
+        if layer.channels[k].data[i] != a {
+            layer.channels[k].data[i] = a;
+            changed = true;
+        }
     }
+    changed
 }
 
 #[cfg(test)]
@@ -1178,6 +1151,9 @@ pub(crate) fn parse_layer_path(path: &str) -> Option<Vec<usize>> {
         .collect()
 }
 
+mod blend;
 mod raster;
 #[cfg(test)]
 mod tests;
+
+pub(crate) use blend::blend_pixel;

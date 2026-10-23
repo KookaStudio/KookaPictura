@@ -207,6 +207,31 @@ fn params(
     }
 }
 
+fn preview_scale(doc_w: u32, doc_h: u32, image_w: u32, image_h: u32) -> f64 {
+    if doc_w == 0 || doc_h == 0 {
+        return 1.0;
+    }
+    (image_w as f64 / doc_w as f64).max(image_h as f64 / doc_h as f64)
+}
+
+/// Radius, Smooth, and Feather are pixel distances; scale them to the proxy so
+/// the preview shows the edge width the commit will apply.
+fn scale_preview_params(p: EngineParams, factor: f64) -> EngineParams {
+    let scale = |v: u32| {
+        if v == 0 {
+            0
+        } else {
+            ((v as f64 * factor).round() as u32).max(1)
+        }
+    };
+    EngineParams {
+        radius: scale(p.radius),
+        smooth: scale(p.smooth),
+        feather: scale(p.feather),
+        ..p
+    }
+}
+
 fn refine_edge_available(view: &PictureView) -> bool {
     let rust = view.rust();
     rust.session.doc.is_some()
@@ -359,6 +384,10 @@ fn preview(
     let Some(mask) = source.preview_coverage(view, image.width, image.height) else {
         return Vec::new();
     };
+    let p = scale_preview_params(
+        p,
+        preview_scale(doc.width, doc.height, image.width, image.height),
+    );
     match refine(&mask, &image, &p.settings()) {
         Ok(refined) => {
             *width = refined.width as i32;
@@ -658,5 +687,31 @@ mod tests {
         assert_eq!(p.smooth, 200);
         assert_eq!(p.shift_edge, -100);
         assert!(p.smart_radius);
+    }
+
+    #[test]
+    fn preview_params_scale_with_the_proxy() {
+        let p = EngineParams {
+            smart_radius: false,
+            radius: 10,
+            smooth: 8,
+            feather: 6,
+            contrast: 40,
+            shift_edge: -20,
+        };
+        let half = scale_preview_params(p, 0.5);
+        assert_eq!(half.radius, 5);
+        assert_eq!(half.smooth, 4);
+        assert_eq!(half.feather, 3);
+        assert_eq!(half.contrast, 40);
+        assert_eq!(half.shift_edge, -20);
+
+        let tiny = scale_preview_params(p, 0.055);
+        assert_eq!(tiny.radius, 1);
+        assert_eq!(tiny.smooth, 1);
+        assert_eq!(tiny.feather, 1);
+
+        assert!((preview_scale(4000, 3000, 220, 165) - 0.055).abs() < 1e-12);
+        assert_eq!(preview_scale(0, 0, 10, 10), 1.0);
     }
 }

@@ -17,6 +17,7 @@
 
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonObject>
+#include <QtGui/QPainter>
 
 #include "qt_test_support.h"
 
@@ -37,6 +38,17 @@ QImage texturedSeed(int w, int h)
             seed.setPixel(x, y, qRgb((x * 7) % 256, (y * 5) % 256, (x + y) % 256));
         }
     }
+    return seed;
+}
+
+// A seed with two disjoint red patches for Quick Selection.
+QImage quickSelectionSeed()
+{
+    QImage seed(64, 40, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    QPainter painter(&seed);
+    painter.fillRect(8, 10, 8, 16, Qt::red);
+    painter.fillRect(40, 10, 8, 16, Qt::red);
     return seed;
 }
 
@@ -96,6 +108,8 @@ private slots:
     void aLayerStyleRecompositesTheDocument();
     void toolOptionsPatchAndReadBack();
     void pointerDownMoveUpPaints();
+    void quickSelectionOneStatePerStroke();
+    void quickSelectionCancelRestores();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -290,6 +304,50 @@ void ToolCommitTest::pointerDownMoveUpPaints()
     QVERIFY(pointer(QStringLiteral("move"), 110.0));
     QVERIFY(!f.view->is_painting());
     QCOMPARE(f.view->history_count(), afterClick);
+}
+
+void ToolCommitTest::quickSelectionOneStatePerStroke()
+{
+    Fixture f(*window_, quickSelectionSeed(), QStringLiteral("pictura_quick_selection"));
+    QVERIFY2(f.ok(), "quick selection fixture");
+    auto* selection =
+        f.tools->optionsFor<pictura::SelectionOptions>(pictura::ToolId::QuickSelection);
+    QVERIFY(selection);
+    selection->setCombineMode(pictura::SelectionMode::New);
+    f.tools->setActiveTool(pictura::ToolId::QuickSelection);
+    const int base = f.view->history_count();
+
+    f.drag({QPointF(10, 10), QPointF(44, 10)});
+
+    QVERIFY2(f.view->selection_coverage(10, 10) > 0, "first region selected");
+    QVERIFY2(f.view->selection_coverage(44, 10) > 0, "second region selected");
+    QCOMPARE(f.view->selection_coverage(30, 30), 0);
+    QCOMPARE(f.view->history_count(), base + 1);
+    QCOMPARE(f.view->history_label(f.view->history_index()), QStringLiteral("Selection"));
+    QCOMPARE(selection->combineMode(), pictura::SelectionMode::Add);
+}
+
+void ToolCommitTest::quickSelectionCancelRestores()
+{
+    Fixture f(*window_, quickSelectionSeed(), QStringLiteral("pictura_quick_selection_cancel"));
+    QVERIFY2(f.ok(), "quick selection cancel fixture");
+    auto* selection =
+        f.tools->optionsFor<pictura::SelectionOptions>(pictura::ToolId::QuickSelection);
+    QVERIFY(selection);
+    selection->setCombineMode(pictura::SelectionMode::New);
+    f.tools->setActiveTool(pictura::ToolId::QuickSelection);
+    QVERIFY(f.view->select_rect(0, 0, 6, 6, QStringLiteral("new"), 0.0));
+    const int base = f.view->history_count();
+    const int before = f.view->selection_coverage(2, 2);
+
+    f.canvas->mousePressed(QPointF(10, 10), Qt::LeftButton, 0);
+    f.canvas->mouseMoved(QPointF(12, 10));
+    QVERIFY(f.tools->handleEscape());
+    f.canvas->mouseReleased(QPointF(12, 10));
+
+    QCOMPARE(f.view->history_count(), base);
+    QCOMPARE(f.view->selection_coverage(2, 2), before);
+    QCOMPARE(f.view->selection_coverage(10, 10), 0);
 }
 
 QTEST_MAIN(ToolCommitTest)

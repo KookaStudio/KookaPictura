@@ -54,7 +54,8 @@ public:
             pictura::ScopedTimer beginTimer("cxx_begin_mixer_brush (call)");
             stroke_.emplace(*v, [&] {
                 return begin_mixer_brush(*v, mixer_->get().reservoir.rgba(), paintTip(*paint_),
-                                         o.wet, o.load, o.mix, o.flow);
+                                         o.wet, o.load, o.mix, o.flow, paint_->opacity(),
+                                         paint_->mode());
             });
         }
         if (!stroke_->open()) {
