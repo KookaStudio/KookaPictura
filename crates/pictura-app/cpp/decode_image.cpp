@@ -47,7 +47,10 @@ bool withinBudget(qint64 width, qint64 height)
         return {};
     }
     const QImage decoded = reader.read();
-    if (decoded.isNull() || !withinBudget(decoded.width(), decoded.height())) {
+    // A truncated file can still yield a partial image (missing rows filled
+    // transparent); reject the reader's error instead of installing it.
+    if (decoded.isNull() || reader.error() != QImageReader::UnknownError
+        || !withinBudget(decoded.width(), decoded.height())) {
         return {};
     }
     const QImage rgba = decoded.convertToFormat(QImage::Format_RGBA8888);

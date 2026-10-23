@@ -184,7 +184,8 @@ void PicturaMainWindow::registerEditHandlers()
     // Transparency drive one "Fill" state.
     registry_->setHandler(command_ids::EditFill, [this, currentPath]() {
         PictureView* view = activeView();
-        if (!view || !view->has_document() || !tools_ || currentPath().isEmpty()) {
+        if (!view || !view->has_document() || !tools_ || currentPath().isEmpty()
+            || tools_->transformPending()) {
             return;
         }
         FillDialog dialog(tools_->foreground(), tools_->background(), this);
@@ -207,7 +208,7 @@ void PicturaMainWindow::registerEditHandlers()
     registry_->setHandler(command_ids::EditStroke, [this, currentPath]() {
         PictureView* view = activeView();
         if (!view || !view->has_document() || !view->has_selection()
-            || currentPath().isEmpty()) {
+            || currentPath().isEmpty() || (tools_ && tools_->transformPending())) {
             return;
         }
         StrokeDialog dialog(tools_ ? tools_->foreground() : QColor(Qt::black), this);

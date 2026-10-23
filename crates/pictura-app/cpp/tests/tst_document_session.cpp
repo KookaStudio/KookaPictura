@@ -3,6 +3,7 @@
 // state when a session is cancelled.
 
 #include <QtTest/QtTest>
+#include <QtCore/QByteArray>
 #include <QtCore/QFile>
 #include <QtCore/QStringList>
 #include <QtCore/QTemporaryDir>
@@ -51,6 +52,7 @@ private slots:
     void replacementSignalsMatchTheEntryPoint();
     void historyNavigationMarksDirty();
     void failedRevertKeepsDocument();
+    void partiallyTruncatedRasterRevertKeepsDocument();
     void revertIsUndoable();
     void revertUnavailableWhenUntitled();
     void snapshotRestoreMovesCursor();
@@ -261,6 +263,47 @@ void DocumentSessionTest::failedRevertKeepsDocument()
     QVERIFY(view->has_selection());
     QVERIFY(view->is_painting());
     view->cancel_paint();
+    frame.closeDocument(frame.activeDocumentIndex(), false);
+}
+
+void DocumentSessionTest::partiallyTruncatedRasterRevertKeepsDocument()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("revert-fail.png"));
+    QVERIFY(frame.newDocument(QStringLiteral("RevertRaster"), 64, 32, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY(view);
+    QVERIFY(frame.saveActiveAs(path));
+    QVERIFY(view->rotate_doc(1));
+    QVERIFY(view->select_rect(4, 4, 8, 8, QStringLiteral("new"), 0.0));
+    const int width = view->document_width();
+    const int height = view->document_height();
+    const int history = view->history_count();
+    const bool dirty = view->is_dirty();
+    const QColor pixel = QColor::fromRgba(view->sample_argb(0, 0));
+
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    const QByteArray bytes = file.readAll();
+    file.close();
+    QVERIFY(bytes.size() > 16);
+    QFile cut(path);
+    QVERIFY(cut.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    cut.write(bytes.left(bytes.size() * 2 / 3));
+    cut.close();
+
+    QVERIFY(!frame.revertActive());
+    QCOMPARE(view->document_width(), width);
+    QCOMPARE(view->document_height(), height);
+    QCOMPARE(view->history_count(), history);
+    QCOMPARE(view->is_dirty(), dirty);
+    QCOMPARE(QColor::fromRgba(view->sample_argb(0, 0)), pixel);
+    QCOMPARE(view->file_path(), path);
+    QVERIFY(view->has_selection());
+    QCOMPARE(view->layer_count(), 1);
     frame.closeDocument(frame.activeDocumentIndex(), false);
 }
 

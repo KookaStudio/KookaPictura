@@ -16,6 +16,7 @@
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/clipboard.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
 
 #include "qt_test_support.h"
@@ -63,6 +64,7 @@ private slots:
     void layerMenuIsLockedWhilePending();
     void layersPanelIsGreyedWhilePending();
     void documentEditsDuringPendingTransform();
+    void maskFillIsRefusedWhilePending();
     void applyCommitsAndSwitches();
     void dontApplyCancelsAndSwitches();
     void cancelKeepsTheTransform();
@@ -237,6 +239,27 @@ void TransformLockTest::documentEditsDuringPendingTransform()
     QVERIFY(pictura::edit_fill(*f.view, qRgba(0, 0, 0, 255), -1, QStringLiteral("normal"), 100,
                                false));
     QVERIFY(f.tools->transformControlsSession());
+    f.tools->cancelFreeTransform();
+}
+
+void TransformLockTest::maskFillIsRefusedWhilePending()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_lock_mask"));
+    QVERIFY(f.ok());
+    const QString layer = beginLayer(f);
+    QVERIFY(!layer.isEmpty());
+    QVERIFY(pictura::layer_mask_add_path(*f.view, layer, QStringLiteral("reveal-all")));
+    QVERIFY(f.tools->beginFreeTransform(layer));
+    QVERIFY(nudge(f.view));
+    QVERIFY(pictura::mask_edit_target_set(*f.view, layer));
+    const int base = f.view->history_index();
+
+    QVERIFY(!pictura::edit_fill(*f.view, qRgba(0, 0, 0, 255), -1, QStringLiteral("normal"), 100,
+                               false));
+    QCOMPARE(f.view->history_index(), base);
+
+    QVERIFY(pictura::mask_edit_target_set(*f.view, QString()));
     f.tools->cancelFreeTransform();
 }
 

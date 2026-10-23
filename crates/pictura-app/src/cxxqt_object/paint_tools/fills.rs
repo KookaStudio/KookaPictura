@@ -266,6 +266,9 @@ fn edit_fill(
     opacity: i32,
     preserve_transparency: bool,
 ) -> bool {
+    if view.rust().modal_transform_blocks_edit() {
+        return false;
+    }
     let tile = match usize::try_from(pattern) {
         Ok(index) => match pattern::tile(index) {
             Some(tile) => Some(tile),
