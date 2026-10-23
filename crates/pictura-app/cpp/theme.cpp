@@ -505,9 +505,9 @@ QLabel#replaceColorMaskPreview { background: ${surface-canvas}; border: 1px soli
 QListWidget#galleryEffects::indicator { width: 0; height: 0; }
 QMenu#toolFlyoutMenu::item { padding: 3px 18px 3px 24px; }
 QMenu#optionsCropSettingsMenu, QMenu#optionsCropGridMenu { padding: 4px 0; }
-QMenu#optionsCropGridMenu::item { padding: 4px 16px 4px 12px; }
-QMenu#optionsCropGridMenu::icon { padding-left: 4px; }
-QMenu#optionsCropGridMenu::separator { margin: 4px 0; }
+QMenu#optionsCropSettingsMenu::item, QMenu#optionsCropGridMenu::item { padding: 4px 16px 4px 12px; }
+QMenu#optionsCropSettingsMenu::icon, QMenu#optionsCropGridMenu::icon { padding-left: 4px; }
+QMenu#optionsCropSettingsMenu::separator, QMenu#optionsCropGridMenu::separator { margin: 4px 0; }
 QWidget#optionsCropShieldPanel { background: transparent; }
 QLabel#dialogTitle, QLabel#sectionTitle { font-weight: 700; }
 QLabel#sectionTabLabel { font-weight: 700; padding: 3px 0; }
