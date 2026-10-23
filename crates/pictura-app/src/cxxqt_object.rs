@@ -15,6 +15,7 @@ mod eyedropper_sample;
 mod filter_map;
 mod filter_tools;
 mod guides;
+mod hdr_conversion;
 mod healing;
 mod helpers;
 mod helpers_composite;
@@ -76,7 +77,6 @@ pub mod qobject {
         include!("decode_image.h");
         /// Decode `data` with Qt to tightly packed RGBA8888 and report the decoded size; empty with zero dimensions when Qt cannot read it.
         fn decode_image_rgba(data: &[u8], width: &mut i32, height: &mut i32) -> Vec<u8>;
-
         include!("render_text.h");
         /// Render `text` with the system `family` font to packed RGBA8888 of the given size.
         fn render_text_rgba(family: &str, pixel_size: f64, text: &str, justify: i32, r: u8, g: u8, b: u8, a: u8, width: i32, height: i32) -> Vec<u8>;

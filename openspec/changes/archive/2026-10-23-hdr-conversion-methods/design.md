@@ -34,7 +34,7 @@ Alternative considered: duplicate the struct and ranges in `pictura-adjust` and 
 
 ### D2: One method enum, thin wrappers at the document layer
 
-`HdrToneMap` carries the method and its parameters. `convert_depth(doc, out, method)` is the new entry point; `convert_depth_exposure_gamma` remains as a wrapper that constructs `HdrToneMap::ExposureGamma`, so the existing tests and any engine caller keep their contract. The gate, quantization, store rebuild, and `drop_layer_source` stay in one function.
+`HdrToneMap` carries the method and its parameters. `convert_depth(doc, out, method)` is the new entry point; `convert_depth_exposure_gamma` remains as a wrapper that constructs `HdrToneMap::ExposureGamma`, so the existing tests and any engine caller keep their contract. The gate, quantization, store rebuild, and `drop_layer_source` stay in one function. A layered document is flattened to one Background built from the tone-mapped composite: the app recomposites after the conversion, and a preserved layer tree would resurrect the pre-conversion pixels. The converted Background keeps the 16-bit store's native color planes, so a save does not widen them.
 
 ### D3: Only the nine numeric rows are shared
 
@@ -58,7 +58,7 @@ Each function carries a comment naming the approximation. The spec scenarios ass
 
 ### D7: Current-source freshness
 
-The retained store is a clean-open snapshot; ordinary edits update the composite, and the store is refreshed only on save, PDF export, or recovery. `convert_depth` therefore uses the retained `f32` store only while it is current, and the current composite otherwise. The app marks the store stale on any document edit and clears the mark when `refresh_native_composite` runs. This is the same signal the preview/Info work uses.
+The retained store is a clean-open snapshot; ordinary edits update the composite, and the store is refreshed only on save, PDF export, or recovery. `convert_depth` therefore uses the retained `f32` store only while it is current, and the current composite otherwise. The signal is the store's 8-bit narrowing compared with `doc.composite`: a match means the store still describes the document, a mismatch means an edit recomposited it. The open path must not overwrite that merged composite with the display recomposite, or a clean 32-bit open would be misread as edited and lose its values above white; the open decode keeps the file's merged composite and lets the display path recomposite layered documents.
 
 Alternative considered: always use the retained store (current behaviour). Rejected because an edit-then-convert would tone-map pre-edit pixels.
 

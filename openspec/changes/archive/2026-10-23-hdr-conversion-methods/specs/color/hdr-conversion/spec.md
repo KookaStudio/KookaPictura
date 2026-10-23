@@ -38,7 +38,10 @@ pre-edit pixels.
   Local Adaptation surface.
 
 The call SHALL return an error without mutating `doc` for an out-of-range
-parameter, a non-finite value, or a method the document gate refuses.
+parameter, a non-finite value, or a method the document gate refuses. On
+success, a layered document SHALL be flattened to one Background built from the
+tone-mapped composite, because the application recomposites after the conversion
+and a preserved layer tree would restore the pre-conversion pixels.
 
 #### Scenario: Each method converts a 32-bit document
 
@@ -46,6 +49,12 @@ parameter, a non-finite value, or a method the document gate refuses.
   one of the four methods
 - **THEN** the call succeeds, the depth/store fields follow the conversion
   contract, and the output pixels reflect that method rather than the identity
+
+#### Scenario: A converted layered document is flattened
+
+- **WHEN** a layered 32-bit document is converted and the application
+  recomposites
+- **THEN** the document has one Background layer carrying the tone-mapped pixels
 
 #### Scenario: Highlight Compression keeps midtones and maps white
 

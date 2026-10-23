@@ -3,6 +3,7 @@
 | Scenario | Steps | Expected | Coverage |
 |---|---|---|---|
 | Each method converts a 32-bit document | Open a native 32-bit RGB fixture, convert to 8 and 16 bits once per method, and compare the output samples with the identity conversion | Every method succeeds, the depth/store fields follow the conversion contract, and the output differs from the identity where the method requires it | `pictura-render::hdr_conversion_methods_convert` |
+| A converted layered document is flattened | Convert a 32-bit document that has a layer, then recomposite | One Background layer carries the tone-mapped pixels | `tst_hdr_conversion::acceptConvertsWithSelectedMethod` |
 | Highlight Compression keeps midtones and maps white | Run the operator on samples `0.5` and `4.0` | `0.5` is unchanged; `4.0` is finite, below `1.0`, and above `0.9` | `pictura-adjust::highlight_compression_keeps_midtones_and_maps_white` |
 | Equalize Histogram keeps a uniform input finite | Run Equalize Histogram on a uniform plane | Every output sample is finite and equals the input | `pictura-adjust::equalize_histogram_keeps_uniform_input_finite` |
 | Local Adaptation leaves alpha untouched | Convert a 32-bit store that carries an alpha plane with Local Adaptation | Alpha samples are bit-identical; colour samples change | `pictura-render::local_adaptation_leaves_alpha_untouched` |

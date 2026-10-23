@@ -31,6 +31,7 @@ set(PICTURA_QT_TESTS
     tst_initial_view
     tst_new_document
     tst_image_mode
+    tst_hdr_conversion
     tst_layers_panel
     tst_layer_target
     tst_layers_panel_fixes

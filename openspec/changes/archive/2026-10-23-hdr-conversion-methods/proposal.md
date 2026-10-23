@@ -10,6 +10,7 @@ The 32-bit to 16/8-bit HDR Conversion path implements only Exposure & Gamma. CS6
 - Extend `pictura_render::convert_depth` to take the selected method while keeping the existing exposure/gamma entry point for callers that use it.
 - Expose the four methods in the HDR Conversion dialog, with per-method parameter pages. Local Adaptation reuses the nine numeric controls already implemented for `Image > Adjustments > HDR Toning` through a shared numeric-control widget; the HDR Toning preset menu and preview stay in that dialog. The Local Adaptation Toning Curve/Corner is a recorded ceiling, not part of this change.
 - Use the current composite when the retained 32-bit store is stale after an edit, so a conversion never tone-maps pre-edit pixels.
+- Flatten a converted layered document to one Background built from the tone-mapped composite; the app recomposites after the conversion and a preserved layer tree would restore the pre-conversion pixels.
 - Keep the conversion gate, quantization, retained-store rebuild, and layer-store clearing unchanged.
 - Record the new methods as behavioral parity with inferred kernels: the CS6 kernels are closed, and only the Exposure & Gamma formula is fixed by the specification.
 

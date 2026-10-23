@@ -314,6 +314,7 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/photo_filter_dialog.cpp
     crates/pictura-app/cpp/slider_dialog.cpp
     crates/pictura-app/cpp/hdr_toning_dialog.cpp
+    crates/pictura-app/cpp/hdr_toning_controls.cpp
     crates/pictura-app/cpp/print_dialog.cpp
     crates/pictura-app/cpp/pdf_save_dialog.cpp
     crates/pictura-app/cpp/pdf_presets_dialog.cpp
@@ -534,6 +535,7 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/profile_dialog.h
     crates/pictura-app/cpp/hdr_conversion_dialog.h
     crates/pictura-app/cpp/hdr_toning_dialog.h
+    crates/pictura-app/cpp/hdr_toning_controls.h
     crates/pictura-app/cpp/black_white_dialog.h
     crates/pictura-app/cpp/channel_mixer_dialog.h
     crates/pictura-app/cpp/color_balance_dialog.h

@@ -1,7 +1,7 @@
 #include "hdr_toning_dialog.h"
 
 #include "dialogs.h"
-#include "panels/jump_slider.h"
+#include "hdr_toning_controls.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
@@ -12,15 +12,10 @@
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QDialogButtonBox>
-#include <QtWidgets/QDoubleSpinBox>
-#include <QtWidgets/QGroupBox>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
-#include <QtWidgets/QSlider>
-#include <QtWidgets/QSpinBox>
 #include <QtWidgets/QVBoxLayout>
 
-#include <cmath>
 #include <iterator>
 
 namespace pictura {
@@ -74,6 +69,14 @@ QHBoxLayout* labeledRow(const QString& text, QWidget* control)
     return row;
 }
 
+HdrToningControls::Values presetValues(const Preset& p)
+{
+    return HdrToningControls::Values{
+        p.radius, p.strength, p.gamma, p.exposure, p.detail,
+        p.shadow, p.highlight, p.vibrance, p.saturation,
+    };
+}
+
 } // namespace
 
 HdrToningDialog::HdrToningDialog(PictureView* view, const QRect& visible, QWidget* parent)
@@ -103,90 +106,10 @@ HdrToningDialog::HdrToningDialog(PictureView* view, const QRect& visible, QWidge
     method->setEnabled(false);
     left->addLayout(labeledRow(QStringLiteral("Method:"), method));
 
-    // An int slider + spin row; `spin` reports the value and drives `edited`.
-    const auto makeIntRow = [this](const QString& label, const QString& name, int min, int max,
-                                   int def, QSpinBox*& spin) -> QHBoxLayout* {
-        auto* row = new QHBoxLayout;
-        auto* caption = new QLabel(label);
-        caption->setFixedWidth(70);
-        caption->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        row->addWidget(caption);
-        auto* slider = new JumpSlider(Qt::Horizontal);
-        slider->setRange(min, max);
-        slider->setValue(def);
-        row->addWidget(slider, 1);
-        spin = new QSpinBox;
-        spin->setObjectName(name);
-        spin->setRange(min, max);
-        spin->setValue(def);
-        spin->setFixedWidth(70);
-        row->addWidget(spin);
-        connect(slider, &QSlider::valueChanged, spin, &QSpinBox::setValue);
-        connect(spin, qOverload<int>(&QSpinBox::valueChanged), slider, &QSlider::setValue);
-        connect(spin, qOverload<int>(&QSpinBox::valueChanged), this, [this] { edited(); });
-        return row;
-    };
-
-    const auto makeDoubleRow = [this](const QString& label, const QString& name, double min,
-                                      double max, double def, double step,
-                                      QDoubleSpinBox*& spin) -> QHBoxLayout* {
-        auto* row = new QHBoxLayout;
-        auto* caption = new QLabel(label);
-        caption->setFixedWidth(70);
-        caption->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        row->addWidget(caption);
-        auto* slider = new JumpSlider(Qt::Horizontal);
-        const int scale = int(std::lround(1.0 / step));
-        slider->setRange(int(std::lround(min * scale)), int(std::lround(max * scale)));
-        slider->setValue(int(std::lround(def * scale)));
-        row->addWidget(slider, 1);
-        spin = new QDoubleSpinBox;
-        spin->setObjectName(name);
-        spin->setRange(min, max);
-        spin->setValue(def);
-        spin->setSingleStep(step);
-        spin->setDecimals(2);
-        spin->setFixedWidth(70);
-        row->addWidget(spin);
-        connect(slider, &QSlider::valueChanged, this,
-                [spin, step](int v) { spin->setValue(step * v); });
-        connect(spin, qOverload<double>(&QDoubleSpinBox::valueChanged), slider,
-                [slider, scale](double v) { slider->setValue(int(std::lround(v * scale))); });
-        connect(spin, qOverload<double>(&QDoubleSpinBox::valueChanged), this,
-                [this] { edited(); });
-        return row;
-    };
-
-    auto* edge = new QGroupBox(QStringLiteral("Edge Glow"));
-    auto* edgeLayout = new QVBoxLayout(edge);
-    edgeLayout->addLayout(makeIntRow(QStringLiteral("Radius:"), QStringLiteral("hdrRadius"), 1, 500,
-                                     187, radius_));
-    edgeLayout->addLayout(makeDoubleRow(QStringLiteral("Strength:"), QStringLiteral("hdrStrength"),
-                                        0.01, 4.0, 4.0, 0.01, strength_));
-    left->addWidget(edge);
-
-    auto* tone = new QGroupBox(QStringLiteral("Tone and Detail"));
-    auto* toneLayout = new QVBoxLayout(tone);
-    toneLayout->addLayout(makeDoubleRow(QStringLiteral("Gamma:"), QStringLiteral("hdrGamma"), 0.01,
-                                        9.99, 0.99, 0.01, gamma_));
-    toneLayout->addLayout(makeDoubleRow(QStringLiteral("Exposure:"), QStringLiteral("hdrExposure"),
-                                        -5.0, 5.0, 0.0, 0.01, exposure_));
-    toneLayout->addLayout(makeIntRow(QStringLiteral("Detail:"), QStringLiteral("hdrDetail"), -100,
-                                     300, 30, detail_));
-    left->addWidget(tone);
-
-    auto* advanced = new QGroupBox(QStringLiteral("Advanced"));
-    auto* advancedLayout = new QVBoxLayout(advanced);
-    advancedLayout->addLayout(
-        makeIntRow(QStringLiteral("Shadow:"), QStringLiteral("hdrShadow"), -100, 100, 0, shadow_));
-    advancedLayout->addLayout(makeIntRow(QStringLiteral("Highlight:"),
-                                         QStringLiteral("hdrHighlight"), -100, 100, 0, highlight_));
-    advancedLayout->addLayout(makeIntRow(QStringLiteral("Vibrance:"), QStringLiteral("hdrVibrance"),
-                                         -100, 100, 0, vibrance_));
-    advancedLayout->addLayout(makeIntRow(QStringLiteral("Saturation:"),
-                                         QStringLiteral("hdrSaturation"), -100, 100, 20,
-                                         saturation_));
-    left->addWidget(advanced);
+    controls_ = new HdrToningControls(this);
+    controls_->setValues(presetValues(kPresets[0]));
+    connect(controls_, &HdrToningControls::edited, this, &HdrToningDialog::edited);
+    left->addWidget(controls_);
     left->addStretch();
     outer->addLayout(left, 1);
 
@@ -239,16 +162,7 @@ void HdrToningDialog::loadPreset(int index)
         return;
     }
     loading_ = true;
-    const Preset& p = kPresets[index];
-    radius_->setValue(p.radius);
-    strength_->setValue(p.strength);
-    gamma_->setValue(p.gamma);
-    exposure_->setValue(p.exposure);
-    detail_->setValue(p.detail);
-    shadow_->setValue(p.shadow);
-    highlight_->setValue(p.highlight);
-    vibrance_->setValue(p.vibrance);
-    saturation_->setValue(p.saturation);
+    controls_->setValues(presetValues(kPresets[index]));
     loading_ = false;
     if (preview_->isChecked()) {
         preview();
@@ -274,11 +188,12 @@ void HdrToningDialog::preview()
     if (!view_) {
         return;
     }
+    const auto values = controls_->values();
     const bool ok =
-        hdr_toning_preview(*view_, radius_->value(), strength_->value(), gamma_->value(),
-                           exposure_->value(), detail_->value(), shadow_->value(),
-                           highlight_->value(), vibrance_->value(), saturation_->value(),
-                           visible_.x(), visible_.y(), visible_.width(), visible_.height());
+        hdr_toning_preview(*view_, values.radius, values.strength, values.gamma, values.exposure,
+                           values.detail, values.shadow, values.highlight, values.vibrance,
+                           values.saturation, visible_.x(), visible_.y(), visible_.width(),
+                           visible_.height());
     previewing_ = ok || previewing_;
 }
 
@@ -293,11 +208,11 @@ void HdrToningDialog::cancelPreview()
 void HdrToningDialog::accept()
 {
     settle_->stop();
+    const auto values = controls_->values();
     if (view_
-        && hdr_toning_apply(*view_, radius_->value(), strength_->value(), gamma_->value(),
-                            exposure_->value(), detail_->value(), shadow_->value(),
-                            highlight_->value(), vibrance_->value(), saturation_->value(),
-                            QStringLiteral("HDR Toning"))) {
+        && hdr_toning_apply(*view_, values.radius, values.strength, values.gamma, values.exposure,
+                            values.detail, values.shadow, values.highlight, values.vibrance,
+                            values.saturation, QStringLiteral("HDR Toning"))) {
         previewing_ = false;
         QDialog::accept();
         return;

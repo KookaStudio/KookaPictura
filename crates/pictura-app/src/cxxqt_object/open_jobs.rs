@@ -174,6 +174,19 @@ fn history_for(doc: &mut Document, target: &LayerTarget, label: &str) -> History
     history
 }
 
+/// Cache the displayed composite after a decode, unless the file retained
+/// native samples and a merged composite. A retained store is the conversion
+/// source and keeps values above white; leaving the file's merged composite
+/// (the store's 8-bit narrowing) in place lets `convert_depth` see that store
+/// as current. A file without a merged composite still recomposites here.
+fn store_opened_composite(doc: &mut Document, gpu: bool) {
+    if doc.source_planes.is_some() && doc.merged_composite_present {
+        return;
+    }
+    let rendered = current_buffer(doc, gpu);
+    store_composite(doc, &rendered);
+}
+
 /// Read and decode a PSD/PSB. `None` when the file is missing or unsupported.
 pub(super) fn decode_psd(
     path: &str,
@@ -186,8 +199,7 @@ pub(super) fn decode_psd(
     progress(25, "Decoding");
     let mut doc = pictura_codec::read_psd_with(&bytes, policy).ok()?;
     progress(65, "Compositing");
-    let rendered = current_buffer(&doc, gpu);
-    store_composite(&mut doc, &rendered);
+    store_opened_composite(&mut doc, gpu);
     progress(90, "Preparing layers");
     let target = LayerTarget::for_opened(&doc, None);
     let history = history_for(&mut doc, &target, "Open");
@@ -219,8 +231,7 @@ pub(super) fn decode_image(
     progress(70, "Compositing");
     let mut doc = Document::from_rgba(&name, width, height, &rgba);
     finalize_import(&mut doc, &rgba);
-    let rendered = current_buffer(&doc, gpu);
-    store_composite(&mut doc, &rendered);
+    store_opened_composite(&mut doc, gpu);
     progress(90, "Preparing layers");
     let target = LayerTarget::for_opened(&doc, Some("0".to_string()));
     let history = history_for(&mut doc, &target, "Open");
@@ -286,8 +297,7 @@ pub(super) fn decode_smart_object(
         }
     };
     progress(70, "Compositing");
-    let rendered = current_buffer(&doc, gpu);
-    store_composite(&mut doc, &rendered);
+    store_opened_composite(&mut doc, gpu);
     progress(90, "Preparing layers");
     let target = LayerTarget::for_opened(&doc, Some("0".to_string()));
     let history = history_for(&mut doc, &target, "Open As Smart Object");
@@ -312,8 +322,7 @@ fn decode_pdf_psd(
     progress(35, "Decoding");
     let mut doc = pictura_codec::read_psd_with(psd, policy).ok()?;
     progress(65, "Compositing");
-    let rendered = current_buffer(&doc, gpu);
-    store_composite(&mut doc, &rendered);
+    store_opened_composite(&mut doc, gpu);
     progress(90, "Preparing layers");
     let target = LayerTarget::for_opened(&doc, None);
     let history = history_for(&mut doc, &target, "Open");
@@ -440,8 +449,7 @@ pub(super) fn imported_document(
         pictura_render::convert_bit_depth(&mut doc, BitDepth::Sixteen).ok()?;
     }
     progress(90, "Compositing");
-    let rendered = current_buffer(&doc, gpu);
-    store_composite(&mut doc, &rendered);
+    store_opened_composite(&mut doc, gpu);
     progress(95, "Preparing layers");
     let target = LayerTarget::for_opened(&doc, Some("0".to_string()));
     let history = history_for(&mut doc, &target, "Open");
