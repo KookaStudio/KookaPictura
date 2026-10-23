@@ -355,6 +355,9 @@ public:
         bool dragging = false;
     };
     void setCropShield(const CropShield& shield);
+    // Classic mode: the straighten angle turns the box over the fixed image
+    // instead of turning the content behind a fixed box.
+    void setCropBoxRotates(bool rotates);
     // The alpha (0-255) the shield paints with; test hook for the dim level.
     int cropShieldAlpha() const;
     // Pan so the image-space `area` is centred in the viewport.
@@ -690,6 +693,7 @@ private:
     bool cropRotating_ = false;
     int cropOverlay_ = 0;
     CropShield cropShield_;
+    bool cropBoxRotates_ = false;
     QPointF cropContentOffset_;
     double cropStraighten_ = 0.0;
     QPointF cropStraightenPivot_;

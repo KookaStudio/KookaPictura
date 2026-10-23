@@ -6,6 +6,7 @@
 
 #include "frame.h"
 #include "image_view.h"
+#include "panels/numeric_field.h"
 #include "session.h"
 #include "tool_options_json.h"
 #include "tools.h"
@@ -18,6 +19,7 @@
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
+#include <QtWidgets/QLabel>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QToolButton>
 
@@ -31,6 +33,8 @@ private slots:
     void init();
     void menuListsItsItems();
     void classicModeGatesTheModernItems();
+    void boxesTurnOverTheFixedImageInClassic();
+    void rotationGestureTurnsTheBoxWithThePointer();
     void classicDragMovesTheBox();
     void keysToggleClassicAndShowArea();
     void hidingTheOutsideIsOpaque();
@@ -101,26 +105,30 @@ void CropSettingsTest::menuListsItsItems()
     QMenu* menu = cogMenu();
     QVERIFY(menu);
     for (const char* name : {"cropClassicMode", "cropShowArea", "cropAutoCenter",
-                             "cropShieldEnabled"}) {
-        QVERIFY2(menu->findChild<QAction*>(QLatin1String(name)), name);
+                             "cropShieldEnabled", "cropShieldAutoAdjust"}) {
+        QVERIFY2(menu->findChild<QCheckBox*>(QLatin1String(name)), name);
     }
     QVERIFY(menu->findChild<QComboBox*>(QStringLiteral("cropShieldColor")));
-    QVERIFY(menu->findChild<QComboBox*>(QStringLiteral("cropShieldOpacity")));
-    QVERIFY(menu->findChild<QCheckBox*>(QStringLiteral("cropShieldAutoAdjust")));
-    QVERIFY(menu->findChild<QAction*>(QStringLiteral("cropClassicMode"))->text().endsWith(
-        QLatin1String("\tP")));
-    QVERIFY(menu->findChild<QAction*>(QStringLiteral("cropShowArea"))->text().endsWith(
-        QLatin1String("\tH")));
-    auto* opacity = menu->findChild<QComboBox*>(QStringLiteral("cropShieldOpacity"));
-    QCOMPARE(opacity->currentText(), QStringLiteral("75%"));
+    auto* opacity = menu->findChild<pictura::NumericField*>(QStringLiteral("cropShieldOpacity"));
+    QVERIFY(opacity);
+    QCOMPARE(opacity->value(), 75.0);
+    // Opacity is the shared slider field: its arrow opens the tracking popup.
+    QVERIFY(opacity->findChild<QToolButton*>(QStringLiteral("cropShieldOpacityArrow")));
+    bool sawP = false;
+    bool sawH = false;
+    for (QLabel* label : menu->findChildren<QLabel*>()) {
+        sawP |= label->text() == QLatin1String("P");
+        sawH |= label->text() == QLatin1String("H");
+    }
+    QVERIFY(sawP && sawH);
 }
 
 void CropSettingsTest::classicModeGatesTheModernItems()
 {
     QMenu* menu = cogMenu();
     QVERIFY(menu);
-    auto* show = menu->findChild<QAction*>(QStringLiteral("cropShowArea"));
-    auto* center = menu->findChild<QAction*>(QStringLiteral("cropAutoCenter"));
+    auto* show = menu->findChild<QCheckBox*>(QStringLiteral("cropShowArea"));
+    auto* center = menu->findChild<QCheckBox*>(QStringLiteral("cropAutoCenter"));
     QVERIFY(crop_->classicMode());
     QVERIFY(!show->isEnabled() && !show->isChecked());
     QVERIFY(!center->isEnabled() && !center->isChecked());
@@ -131,6 +139,45 @@ void CropSettingsTest::classicModeGatesTheModernItems()
 
     crop_->setClassicMode(true);
     QVERIFY(!show->isEnabled() && !show->isChecked());
+}
+
+void CropSettingsTest::boxesTurnOverTheFixedImageInClassic()
+{
+    openDocument(200);
+    crop_->setClassicMode(true);
+    drag(QPointF(100, 100), QPointF(80, 20));
+    QCOMPARE(tools_->pendingCropRect(), QRect(80, 20, 20, 80));
+    // A quarter turn: the 20 x 80 box shows as 80 x 20 about its centre (90, 60).
+    crop_->setAngle(90.0);
+    QCOMPARE(canvas_->cropStraightenForTest(), 90.0);
+    // Dragging the turned box on screen moves it along the screen axes: 10 px
+    // down is 10 px along the model's -x.
+    drag(QPointF(110, 60), QPointF(110, 70));
+    QCOMPARE(tools_->pendingCropRect(), QRect(70, 20, 20, 80));
+    crop_->setAngle(0.0);
+    window_->setActiveTool(pictura::ToolId::Move);
+}
+
+void CropSettingsTest::rotationGestureTurnsTheBoxWithThePointer()
+{
+    openDocument(200);
+    crop_->setClassicMode(true);
+    drag(QPointF(120, 120), QPointF(80, 80));  // a 40 x 40 box centred on (100, 100)
+    // Grab outside the right edge and sweep a quarter turn clockwise on screen:
+    // the box turns clockwise, which is -90 degrees of content in the model.
+    canvas_->mousePressed(QPointF(130, 100), Qt::LeftButton, int(Qt::NoModifier));
+    canvas_->mouseMoved(QPointF(100, 130));
+    QCOMPARE(crop_->angle(), -90.0);
+    canvas_->mouseReleased(QPointF(100, 130));
+    // Modern turns the content with the pointer instead.
+    crop_->setAngle(0.0);
+    crop_->setClassicMode(false);
+    canvas_->mousePressed(QPointF(130, 100), Qt::LeftButton, int(Qt::NoModifier));
+    canvas_->mouseMoved(QPointF(100, 130));
+    QCOMPARE(crop_->angle(), 90.0);
+    canvas_->mouseReleased(QPointF(100, 130));
+    crop_->setAngle(0.0);
+    window_->setActiveTool(pictura::ToolId::Move);
 }
 
 void CropSettingsTest::classicDragMovesTheBox()

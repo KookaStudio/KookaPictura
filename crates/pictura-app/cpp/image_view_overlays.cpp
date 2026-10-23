@@ -294,6 +294,15 @@ void ImageView::setCropOverlay(int overlay)
     update();
 }
 
+void ImageView::setCropBoxRotates(bool rotates)
+{
+    if (cropBoxRotates_ == rotates) {
+        return;
+    }
+    cropBoxRotates_ = rotates;
+    update();
+}
+
 void ImageView::setCropShield(const CropShield& shield)
 {
     cropShield_ = shield;
@@ -378,7 +387,7 @@ QRectF ImageView::cropCanvasImageRect() const
         return image;
     }
     QRectF canvas = image;
-    if (cropStraighten_ != 0.0 && !cropBox_.isNull()) {
+    if (cropStraighten_ != 0.0 && !cropBox_.isNull() && !cropBoxRotates_) {
         const double rad = cropStraighten_ * M_PI / 180.0;
         const double c = std::cos(rad);
         const double s = std::sin(rad);
@@ -546,9 +555,24 @@ void ImageView::paintCropGroupOverlays(QPainter& painter)
         // straighten the canvas is the rotated composite's bounding box.
         const QRectF canvasDoc = cropCanvasImageRect();
         const QRectF canvas(toWidget(canvasDoc.topLeft()), toWidget(canvasDoc.bottomRight()));
+        // Classic turns the box about the pivot over the fixed image.
+        QTransform boxTurn;
+        if (cropBoxRotates_ && cropStraighten_ != 0.0) {
+            const QPointF pivot = toWidget(cropStraightenPivot_);
+            boxTurn.translate(pivot.x(), pivot.y());
+            boxTurn.rotate(-cropStraighten_);
+            boxTurn.translate(-pivot.x(), -pivot.y());
+        }
         QPainterPath shield;
         shield.addRect(canvas);
-        shield.addRect(box);
+        if (boxTurn.isIdentity()) {
+            shield.addRect(box);
+        } else {
+            QPainterPath turned;
+            turned.addPolygon(boxTurn.map(QPolygonF(box)));
+            turned.closeSubpath();
+            shield = QPainterPath(shield).subtracted(turned);
+        }
         painter.setPen(Qt::NoPen);
         if (const int alpha = cropShieldAlpha(); alpha > 0) {
             QColor tint = cropShield_.color.isValid() ? cropShield_.color : canvasColor_;
@@ -557,6 +581,8 @@ void ImageView::paintCropGroupOverlays(QPainter& painter)
             painter.drawPath(shield);
         }
         painter.setBrush(Qt::NoBrush);
+        painter.save();
+        painter.setTransform(boxTurn, true);
         // The active guide overlay, chosen from the options-bar menu; the
         // preview box the tool starts with shows its handles but no guides, and
         // a rotation shows the dense rotate grid instead.
@@ -599,6 +625,7 @@ void ImageView::paintCropGroupOverlays(QPainter& painter)
         painter.setBrush(Qt::NoBrush);
         painter.setPen(QPen(QColor(255, 255, 255, 220), 1));
         painter.drawRect(box);
+        painter.restore();
     }
 
     // The straighten line tool's live horizon: a plain ruled line from press to

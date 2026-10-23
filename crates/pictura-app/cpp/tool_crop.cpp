@@ -16,6 +16,7 @@
 #include <QtCore/QRect>
 #include <QtCore/QStringList>
 #include <QtGui/QAction>
+#include <QtGui/QTransform>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QMenu>
 
@@ -185,7 +186,7 @@ public:
         }
     }
 
-    bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    bool onPress(ToolServices& ctx, const QPointF& displayPos, Qt::KeyboardModifiers mods) override
     {
         PictureView* v = ctx.view();
         if (!v || !v->has_document()) {
@@ -196,11 +197,15 @@ public:
             // A straighten drag from none/preview activates a box first so the
             // pivot exists and the rotation can preview.
             activateForStraighten(ctx);
+            settlePivot(ctx);
             straightenDragging_ = true;
-            straightenStart_ = imagePos;
-            straightenBase_ = crop_->angle();
+            straightenStart_ = displayPos;
+            // Classic levels the box against the line on the fixed image; Modern
+            // adds to the angle the content already carries.
+            straightenBase_ = crop_->classicMode() ? 0.0 : crop_->angle();
             return true;
         }
+        const QPointF imagePos = modelPos(displayPos);
         grip_ = boxGripAt(box_, imagePos, zoom(ctx), kCropRotateMarginPx);
         drawingNew_ = false;
 
@@ -220,7 +225,7 @@ public:
             }
             clock_.restart();
             if (grip_ == BoxGrip::None && cropRotateZone(box_, imagePos, zoom(ctx))) {
-                startRotation(ctx, imagePos);
+                startRotation(ctx, displayPos);
                 return true;
             }
             // Far outside the box the cursor is the default arrow and a press
@@ -253,7 +258,7 @@ public:
                 state_ = State::Active;
                 show(ctx);
                 notifyStateChanged(ctx);
-                startRotation(ctx, imagePos);
+                startRotation(ctx, displayPos);
                 return true;
             }
             // Far outside a preview nothing happens; there is no active crop yet
@@ -286,34 +291,40 @@ public:
         return true;
     }
 
-    void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    void onMove(ToolServices& ctx, const QPointF& displayPos, Qt::KeyboardModifiers mods) override
     {
         if (straightenDragging_) {
             if (ImageView* canvas = ctx.canvas()) {
-                canvas->setCropStraightenLine(QLineF(straightenStart_, imagePos));
+                canvas->setCropStraightenLine(QLineF(straightenStart_, displayPos));
                 // The image holds still under the line, as CS6 does; the readout
                 // shows the rotation the release will apply.
-                if (std::hypot(imagePos.x() - straightenStart_.x(),
-                               imagePos.y() - straightenStart_.y()) > 1.0) {
+                if (std::hypot(displayPos.x() - straightenStart_.x(),
+                               displayPos.y() - straightenStart_.y()) > 1.0) {
                     canvas->setDragSizeHint(
-                        angleReadout(straightenBase_ + straightenAngle(straightenStart_, imagePos)),
-                        imagePos);
+                        angleReadout(straightenBase_
+                                     + straightenAngle(straightenStart_, displayPos)),
+                        displayPos);
                 }
             }
             return;
         }
         if (rotating_) {
-            const QPointF c = box_.center();
-            double angle = startAngle_
-                + std::atan2(imagePos.y() - c.y(), imagePos.x() - c.x()) * 180.0 / M_PI
-                - pressAngle_ * 180.0 / M_PI;
+            // Classic turns the box over the fixed image, so the pointer's sweep
+            // around the box as drawn is the box's rotation; the model angle is
+            // the content's, the opposite way.
+            const QPointF c = rotationCentre();
+            const double sweep =
+                (std::atan2(displayPos.y() - c.y(), displayPos.x() - c.x()) - pressAngle_)
+                * 180.0 / M_PI;
+            double angle = startAngle_ + (crop_->classicMode() ? -sweep : sweep);
             if (mods.testFlag(Qt::ShiftModifier)) {
                 angle = std::round(angle / 15.0) * 15.0;
             }
             crop_->setAngle(angle);
-            showRotation(ctx, imagePos);
+            showRotation(ctx, displayPos);
             return;
         }
+        const QPointF imagePos = modelPos(displayPos);
         if (state_ == State::Preview) {
             if (!previewPress_) {
                 return;  // Hover: the cursor is resolved by hoverCursor().
@@ -381,17 +392,17 @@ public:
         show(ctx);
     }
 
-    void onRelease(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    void onRelease(ToolServices& ctx, const QPointF& displayPos, Qt::KeyboardModifiers mods) override
     {
         if (straightenDragging_) {
             straightenDragging_ = false;
-            const double dx = imagePos.x() - straightenStart_.x();
-            const double dy = imagePos.y() - straightenStart_.y();
+            const double dx = displayPos.x() - straightenStart_.x();
+            const double dy = displayPos.y() - straightenStart_.y();
             if (std::hypot(dx, dy) > 1.0) {
                 // The drawn line becomes level (or plumb): rotate the content by
                 // the negative of its inclination, then shrink the box inside
                 // the rotated image so the commit has no empty corners.
-                crop_->setAngle(straightenBase_ + straightenAngle(straightenStart_, imagePos));
+                crop_->setAngle(straightenBase_ + straightenAngle(straightenStart_, displayPos));
                 box_ = fitBoxInRotated(effectiveBox(), QRectF(canvas_), crop_->angle(),
                                        crop_->pivot())
                            .translated(contentOffset_);
@@ -418,7 +429,7 @@ public:
         if (grip_ == BoxGrip::None) {
             return;
         }
-        onMove(ctx, imagePos, mods);
+        onMove(ctx, displayPos, mods);
         grip_ = BoxGrip::None;
         drawingNew_ = false;
         show(ctx);
@@ -434,6 +445,9 @@ public:
     // edges within a screen-pixel threshold.
     void snapBox(ToolServices& ctx, QRectF& box, BoxGrip grip)
     {
+        if (crop_->classicMode() && crop_->angle() != 0.0) {
+            return;  // the canvas edges are not axis-aligned with a turned box
+        }
         const double tol = 6.0 / std::max(zoom(ctx), 1e-6);
         std::vector<double> xs = {0.0, double(canvas_.width())};
         std::vector<double> ys = {0.0, double(canvas_.height())};
@@ -742,10 +756,11 @@ private:
     // The cursor zone under `p`: a captured drag keeps its cursor; otherwise a
     // handle wins, then the box body, then the rotate ring, then new-crop. A
     // preview's inside is the new-crop crosshair and its outside the rotate.
-    CursorState cursorStateAt(const ToolServices& ctx, const QPointF& p,
+    CursorState cursorStateAt(const ToolServices& ctx, const QPointF& displayPos,
                               Qt::KeyboardModifiers mods) const
     {
         (void)mods;
+        const QPointF p = modelPos(displayPos);
         if (!active_) {
             return {};
         }
@@ -796,17 +811,64 @@ private:
     void startRotation(ToolServices& ctx, const QPointF& imagePos)
     {
         rotating_ = true;
+        settlePivot(ctx);
         startAngle_ = crop_->angle();
-        const QPointF c = box_.center();
+        const QPointF c = rotationCentre();
         pressAngle_ = std::atan2(imagePos.y() - c.y(), imagePos.x() - c.x());
         showRotation(ctx, imagePos);
+    }
+
+    // Classic shows the box turned by -angle about the pivot over a fixed
+    // image; these map between that picture (display) and the model, where the
+    // content turns by +angle behind an axis-aligned box.
+    QPointF turnedAboutPivot(const QPointF& p, double degrees) const
+    {
+        QTransform t;
+        t.translate(crop_->pivot().x(), crop_->pivot().y());
+        t.rotate(degrees);
+        t.translate(-crop_->pivot().x(), -crop_->pivot().y());
+        return t.map(p);
+    }
+
+    QPointF modelPos(const QPointF& displayPos) const
+    {
+        if (!crop_->classicMode() || crop_->angle() == 0.0) {
+            return displayPos;
+        }
+        return turnedAboutPivot(displayPos, crop_->angle());
+    }
+
+    QPointF rotationCentre() const
+    {
+        if (!crop_->classicMode() || crop_->angle() == 0.0) {
+            return box_.center();
+        }
+        return turnedAboutPivot(box_.center(), -crop_->angle());
+    }
+
+    // Before a gesture sets a new angle (which moves the pivot to the box
+    // centre), re-seat an already turned Classic box on its on-screen centre so
+    // the pivot move does not make it jump.
+    void settlePivot(ToolServices& ctx)
+    {
+        if (!crop_->classicMode() || crop_->angle() == 0.0 || box_.isNull()) {
+            return;
+        }
+        const QPointF centre = rotationCentre();
+        box_.moveCenter(centre);
+        crop_->setPivot(centre);
+        if (ImageView* canvas = ctx.canvas()) {
+            canvas->setCropStraighten(crop_->angle(), centre);
+        }
+        show(ctx);
     }
 
     void showRotation(ToolServices& ctx, const QPointF& imagePos)
     {
         if (ImageView* canvas = ctx.canvas()) {
             canvas->setCropRotating(true);
-            canvas->setDragSizeHint(angleReadout(crop_->angle()), imagePos);
+            canvas->setDragSizeHint(
+                angleReadout(crop_->classicMode() ? -crop_->angle() : crop_->angle()), imagePos);
         }
     }
 
@@ -947,6 +1009,7 @@ private:
                 canvas->setCropBox(box_);
                 canvas->setCropPreview(state_ == State::Preview);
                 canvas->setCropOverlay(crop_->gridOverlay());
+                canvas->setCropBoxRotates(crop_->classicMode());
                 const CropSettings& cs = crop_->settings();
                 ImageView::CropShield shield;
                 shield.enabled = cs.shieldEnabled;
