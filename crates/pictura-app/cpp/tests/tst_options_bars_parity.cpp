@@ -9,6 +9,7 @@
 #include "image_view.h"
 #include "options_bar.h"
 #include "panels/layers_panel.h"
+#include "panels/numeric_field.h"
 #include "selftest_paint_fixture.h"
 #include "tools.h"
 
@@ -36,6 +37,8 @@ private slots:
     void moveControlsAndAlignToCanvas();
     void moveAutoSelectPicksTheTopmostLayer();
     void eraserBarMatchesTheBrush();
+    void pencilAutoEraseDoesNotLeakToBrush();
+    void mixerExposesModeOpacity();
     void eyedropperSampleSize();
     void eyedropperSampleScope();
     void eyedropperSamplingRing();
@@ -199,6 +202,60 @@ void OptionsBarsParityTest::moveAutoSelectPicksTheTopmostLayer()
     canvas->mousePressed(QPointF(10, 8), Qt::LeftButton, 0);
     canvas->mouseReleased(QPointF(10, 8));
     QCOMPARE(view->active_layer_path(), QStringLiteral("0"));
+}
+
+void OptionsBarsParityTest::pencilAutoEraseDoesNotLeakToBrush()
+{
+    QImage seed(40, 40, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    seed.setPixel(16, 16, qRgb(255, 0, 0));
+    paint_fixture::Fixture f(*window_, seed, QStringLiteral("pictura_auto_erase"));
+    QVERIFY(f.ok());
+    paint_fixture::BrushState brush(f.tools);
+
+    auto* pencil = f.tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Pencil);
+    QVERIFY(pencil);
+    pencil->setAutoErase(true);
+    f.tools->setForeground(QColor(255, 0, 0));
+    f.tools->setBackground(QColor(0, 0, 255));
+    f.tools->setActiveTool(pictura::ToolId::Brush);
+    const int base = f.view->history_count();
+
+    f.drag({QPointF(16, 16), QPointF(26, 16)});
+
+    QCOMPARE(f.view->sample_argb(16, 16), 0xFFFF0000u);
+    QCOMPARE(f.view->sample_argb(26, 16), 0xFFFF0000u);
+    QCOMPARE(f.view->history_count(), base + 1);
+    QCOMPARE(f.view->history_label(f.view->history_index()), QStringLiteral("Brush"));
+    pencil->setAutoErase(false);
+}
+
+void OptionsBarsParityTest::mixerExposesModeOpacity()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("Mixer"), 40, 40, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    window_->setActiveTool(pictura::ToolId::MixerBrush);
+    auto* bar = window_->findChild<pictura::OptionsBar*>(QStringLiteral("optionsBar"));
+    auto* tools = window_->findChild<pictura::ToolController*>();
+    QVERIFY(bar && tools);
+    QWidget* page = bar->pageForTest(pictura::ToolId::MixerBrush);
+    QVERIFY(page);
+    auto* mode = page->findChild<QComboBox*>(QStringLiteral("optionsMixerMode"));
+    auto* opacity =
+        page->findChild<pictura::NumericField*>(QStringLiteral("optionsMixerOpacity"));
+    QVERIFY(mode && opacity);
+    auto* paint = tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::MixerBrush);
+    QVERIFY(paint);
+
+    mode->setCurrentIndex(4);
+    QCOMPARE(paint->mode(), QStringLiteral("multiply"));
+    QCOMPARE(mode->currentText(), QStringLiteral("Multiply"));
+
+    paint->setOpacity(50);
+    QCOMPARE(opacity->value(), 50.0);
+
+    paint->setMode(QStringLiteral("normal"));
+    paint->setOpacity(100);
 }
 
 void OptionsBarsParityTest::eraserBarMatchesTheBrush()

@@ -18,6 +18,8 @@ pub(super) enum Edit {
     None,
     /// Metadata or the selection changed: capture and notify, no compositing.
     Meta,
+    /// The selection changed without a history state: notify, no compositing.
+    SelectionPreview,
     /// A preview already presented the change: capture without a new signal.
     Record,
     /// Pixels changed inside these document rectangles.
@@ -41,7 +43,7 @@ pub(super) enum Effect {
 pub(super) fn effect_of(edit: &Edit) -> Effect {
     match edit {
         Edit::None => Effect::Nothing,
-        Edit::Meta => Effect::Notify,
+        Edit::Meta | Edit::SelectionPreview => Effect::Notify,
         Edit::Record => Effect::Nothing,
         Edit::Regions { notify, .. } => Effect::Blit { notify: *notify },
         Edit::Full | Edit::Structural => Effect::Rebuild,
@@ -76,14 +78,16 @@ impl PictureViewRust {
                 self.composite_full();
                 None
             }
-            Edit::None | Edit::Meta | Edit::Record => None,
+            Edit::None | Edit::Meta | Edit::Record | Edit::SelectionPreview => None,
         };
         if matches!(edit, Edit::Structural) {
             self.link_sets.clear();
             self.solo_snapshot = None;
         }
         let target = self.layer_target.clone();
-        if bump_revision {
+        if matches!(edit, Edit::SelectionPreview) {
+            self.session.content_revision = self.session.content_revision.wrapping_add(1);
+        } else if bump_revision {
             self.session.record(&target, label);
         } else {
             self.session.record_move(&target, label);
@@ -102,7 +106,7 @@ impl PictureViewRust {
                 self.composite_full();
                 None
             }
-            Edit::None | Edit::Meta | Edit::Record => None,
+            Edit::None | Edit::Meta | Edit::Record | Edit::SelectionPreview => None,
         };
         self.session.content_revision = self.session.content_revision.wrapping_add(1);
         blit
@@ -342,6 +346,16 @@ mod tests {
             view.session.doc.as_ref().expect("document").composite,
             before
         );
+    }
+
+    #[test]
+    fn a_selection_preview_notifies_without_capturing_history() {
+        let mut view = view(doc_with_layer());
+        let applied = view.apply_edit("Selection", Edit::SelectionPreview);
+        assert_eq!(effect_of(&applied.edit), Effect::Notify);
+        assert_eq!(view.session.history.count(), 0);
+        assert!(!view.session.dirty);
+        assert_eq!(view.session.content_revision, 1);
     }
 
     #[test]

@@ -531,8 +531,14 @@ fn cs_dab(@builtin(global_invocation_id) gid: vec3<u32>) {
         nw = put_byte(nw, 24u, u8_round(oaa));
         layer[i] = nw;
     } else if (mode == 1u) {
-        let out_a = (f32(byte_at(w, 24u)) / 255.0) * (1.0 - a) * 255.0;
-        layer[i] = put_byte(w, 24u, u8_round(out_a));
+        if (a >= 1.0) {
+            // Full-coverage Clear zeroes RGB as well as coverage, matching
+            // `blend_pixel`'s Clear branch.
+            layer[i] = 0u;
+        } else {
+            let out_a = (f32(byte_at(w, 24u)) / 255.0) * (1.0 - a) * 255.0;
+            layer[i] = put_byte(w, 24u, u8_round(out_a));
+        }
     }
 }
 "#;

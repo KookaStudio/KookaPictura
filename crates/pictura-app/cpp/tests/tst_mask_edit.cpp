@@ -65,6 +65,7 @@ private slots:
     void maskEditTarget();
     void paintAndFillWriteCoverage();
     void canvasToolsWriteCoverage();
+    void healingRefusesMaskTarget();
     void colorsFollowTheEditTarget();
     void resetColorsFollowTheEditTarget();
     void moveSelectionOnMaskMovesCoverage();
@@ -237,6 +238,29 @@ void MaskEditTest::canvasToolsWriteCoverage()
     QCOMPARE(view->history_count(), base + 2);
 
     frame.closeDocument(doc, false);
+}
+
+void MaskEditTest::healingRefusesMaskTarget()
+{
+    paint_fixture::Fixture f(*window_, maskMoveSeed(),
+                             QStringLiteral("pictura_healing_mask_target"));
+    QVERIFY(f.ok());
+    QString layer;
+    QVERIFY(setUpMaskedLayer(f, layer));
+    QVERIFY2(pictura::mask_edit_target_set(*f.view, layer), "target the mask");
+
+    f.tools->setActiveTool(pictura::ToolId::SpotHealingBrush);
+    const int base = f.view->history_count();
+    const quint32 revealed = f.view->sample_argb(8, 8);
+    const quint32 hidden = f.view->sample_argb(16, 8);
+    QSignalSpy refused(f.tools, &pictura::ToolController::pixelEditRefused);
+
+    f.drag({QPointF(8, 8)});
+
+    QCOMPARE(refused.count(), 1);
+    QCOMPARE(f.view->history_count(), base);
+    QCOMPARE(f.view->sample_argb(8, 8), revealed);
+    QCOMPARE(f.view->sample_argb(16, 8), hidden);
 }
 
 void MaskEditTest::colorsFollowTheEditTarget()

@@ -53,7 +53,7 @@
 #include "toolbox.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
-
+#include "pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h"
 #include "interop.h"
 #include "selftest.h"
 #include "selftest_control.h"
@@ -756,7 +756,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                 toolView->deselect();
             }
             const bool quickOk =
-                toolView && toolView->quick_select(4, 4, 32, QStringLiteral("new"));
+                toolView && pictura::quick_select(*toolView, 4, 4, 32, QStringLiteral("new"));
             const bool quickSelected = toolView && toolView->has_selection();
             const int quickPx = toolView ? toolView->selection_count() : -1;
             ST_BEGIN("quick_select");

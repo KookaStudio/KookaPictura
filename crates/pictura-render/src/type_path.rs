@@ -117,6 +117,7 @@ pub(crate) fn layout_path(spec: &TypeSpec) -> Option<PathLayout> {
     };
     let text = path_text(spec);
     let shaped = shape_styled(bundled, &text, &spec.character);
+    let rise = f64::from(RunStyle::of(bundled, &spec.character).rise);
     let track = tracking(&spec.character) as f64 * f64::from(size) / 1000.0;
     let mut pen = 0.0;
     let mut glyphs = Vec::with_capacity(shaped.len());
@@ -133,10 +134,11 @@ pub(crate) fn layout_path(spec: &TypeSpec) -> Option<PathLayout> {
         if spec.vertical {
             angle -= std::f64::consts::FRAC_PI_2;
         }
+        let normal = (-tangent.1, tangent.0);
         glyphs.push(PathGlyph {
             id: glyph.id,
-            x: position.0,
-            y: position.1,
+            x: position.0 - normal.0 * rise,
+            y: position.1 - normal.1 * rise,
             angle,
             scale: glyph.scale,
             advance,
@@ -347,6 +349,7 @@ pub(crate) fn caret_stops(spec: &TypeSpec) -> Vec<[f64; 4]> {
     let chars: Vec<char> = path_text(spec).chars().collect();
     let ascent = f64::from(bundled.ascent(size));
     let descent = f64::from(bundled.descent(size));
+    let rise = f64::from(RunStyle::of(bundled, &spec.character).rise);
     let mut stops = Vec::new();
     for k in 0..=chars.len() {
         let advance = if k == 0 {
@@ -367,11 +370,12 @@ pub(crate) fn caret_stops(spec: &TypeSpec) -> Vec<[f64; 4]> {
             continue;
         };
         let normal = (-tangent.1, tangent.0);
+        let origin = (position.0 - normal.0 * rise, position.1 - normal.1 * rise);
         let stop = [
-            position.0 - normal.0 * ascent,
-            position.1 - normal.1 * ascent,
-            position.0 + normal.0 * descent,
-            position.1 + normal.1 * descent,
+            origin.0 - normal.0 * ascent,
+            origin.1 - normal.1 * ascent,
+            origin.0 + normal.0 * descent,
+            origin.1 + normal.1 * descent,
         ];
         let repeat = chars.get(k).map_or(1, |c| c.len_utf16());
         for _ in 0..repeat {
@@ -661,5 +665,32 @@ mod tests {
         assert!((stops[0][0] - 0.0).abs() < 1.0);
         assert!(stops[1][0] > stops[0][0]);
         assert!((stops[0][0] - stops[0][2]).abs() < 1e-6);
+    }
+
+    #[test]
+    fn type_on_path_applies_baseline_shift() {
+        let base = spec("ab", open_path(), 0.0, TextPathKind::OnPath);
+        let mut raised = base.clone();
+        raised.character.baseline_shift = 20.0;
+
+        let a = layout_path(&base).expect("base layout");
+        let b = layout_path(&raised).expect("raised layout");
+        assert!(!a.glyphs.is_empty() && !b.glyphs.is_empty());
+        assert!((a.glyphs[0].y - b.glyphs[0].y - 20.0).abs() < 0.5);
+
+        let ca = caret_stops(&base);
+        let cb = caret_stops(&raised);
+        assert!((ca[0][1] - cb[0][1] - 20.0).abs() < 0.5);
+
+        // Vertical type turns the glyph, but the shift stays along the path
+        // normal (CS6 moves type on/off the path), so the offset is the same.
+        let mut vertical = raised.clone();
+        vertical.vertical = true;
+        let v = layout_path(&vertical).expect("vertical layout");
+        assert!((a.glyphs[0].y - v.glyphs[0].y - 20.0).abs() < 0.5);
+
+        let pa = placement(&base).expect("base placement");
+        let pb = placement(&raised).expect("raised placement");
+        assert!((pa.bounds[1] - pb.bounds[1] - 20.0).abs() < 1.0);
     }
 }

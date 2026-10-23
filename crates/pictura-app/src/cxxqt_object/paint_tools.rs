@@ -100,7 +100,8 @@ pub mod ffi {
 
         /// Begin a Mixer Brush stroke with `reservoir` (`0xAARRGGBB`; alpha 0
         /// is a clean brush) on the brush. `wet`, `load`, `mix`, and `flow` are
-        /// 0–100 %. False as for `begin_color_replacement`.
+        /// 0–100 %. `opacity` caps the deposit and `mode` is a Brush mode
+        /// (`"normal"`, …). False as for `begin_color_replacement`.
         fn begin_mixer_brush(
             view: Pin<&mut PictureView>,
             reservoir: u32,
@@ -109,6 +110,8 @@ pub mod ffi {
             load: i32,
             mix: i32,
             flow: i32,
+            opacity: i32,
+            mode: &QString,
         ) -> bool;
 
         /// The paint on the brush of the active Mixer Brush stroke
@@ -388,6 +391,8 @@ fn begin_mixer_brush(
     load: i32,
     mix: i32,
     flow: i32,
+    opacity: i32,
+    mode: &QString,
 ) -> bool {
     let unit = |v: i32| v.clamp(0, 100) as f32 / 100.0;
     let kind = StrokeKind::Mixer {
@@ -399,7 +404,11 @@ fn begin_mixer_brush(
         },
         reservoir: rgba_from_argb(reservoir),
     };
-    let cfg = tip_config(tip);
+    let cfg = StrokeConfig {
+        opacity: opacity.clamp(0, 100) as u8,
+        mode: paint_mode_from(&mode.to_string()),
+        ..tip_config(tip)
+    };
     begin(view, "Mixer Brush Tool", |doc, path, _| {
         Stroke::begin_kind(doc, path, cfg, kind).ok()
     })

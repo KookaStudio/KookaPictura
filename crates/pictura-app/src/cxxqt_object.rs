@@ -866,16 +866,6 @@ pub mod qobject {
         #[qinvokable]
         fn cancel_lasso(self: Pin<&mut Self>);
 
-        /// Flood-select around `(x, y)` within `tolerance` and combine per `mode`.
-        #[qinvokable]
-        fn quick_select(
-            self: Pin<&mut Self>,
-            x: i32,
-            y: i32,
-            tolerance: i32,
-            mode: &QString,
-        ) -> bool;
-
         /// Crop to the `w`×`h` rect at `(x, y)`, clear the selection, recomposite.
         #[qinvokable]
         fn crop(self: Pin<&mut Self>, x: i32, y: i32, w: i32, h: i32) -> bool;

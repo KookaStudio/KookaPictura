@@ -382,6 +382,41 @@ QWidget* OptionsBar::buildMixerBrushPage(ToolId id)
         followWet(p.wet);
     });
 
+    NumericField* opacity = new NumericField(
+        QStringLiteral("Opacity"),
+        numericConfig(0, 100, 1, 0, QStringLiteral("%"), true,
+                      QStringLiteral("optionsMixerOpacity")),
+        page);
+    opacity->setValue(controller_ ? paint_->opacity() : 100);
+    layout->addWidget(opacity);
+
+    auto* mode = addCombo(layout, page, QStringLiteral("Mode:"),
+                          QStringLiteral("optionsMixerMode"),
+                          {"Normal", "Dissolve", "Behind", "Clear", "Multiply"});
+    const auto syncPaint = [this, opacity, mode]() {
+        if (!controller_) {
+            return;
+        }
+        opacity->setValue(paint_->opacity());
+        const QString current = paint_->mode();
+        for (int i = 0; i < mode->count(); ++i) {
+            if (mode->itemText(i).toLower() == current) {
+                const QSignalBlocker block(mode);
+                mode->setCurrentIndex(i);
+                break;
+            }
+        }
+    };
+    if (controller_) {
+        syncPaint();
+        connect(opacity, &NumericField::valueChanged, this,
+                [this](double v) { paint_->setOpacity(qRound(v)); });
+        connect(mode, &QComboBox::currentIndexChanged, this, [this, mode](int) {
+            paint_->setMode(mode->currentText().toLower());
+        });
+        connect(controller_, &ToolController::paintSettingsChanged, this, syncPaint);
+    }
+
     if (controller_) {
         load->setIcon(reservoirIcon(mixer_->get().reservoir));
         connect(controller_, &ToolController::mixerReservoirChanged, load,
