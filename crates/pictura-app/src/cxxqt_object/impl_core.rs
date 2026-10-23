@@ -96,6 +96,58 @@ impl qobject::PictureView {
         }
     }
 
+    /// `File > Revert`: reload `path` into the existing document identity.
+    /// The file is decoded before anything changes, so a failure leaves the
+    /// document, its live session, and its history untouched. On success the
+    /// path, PDF password/options, source format, history, and named snapshots
+    /// are preserved, the reloaded document is installed in place, and one
+    /// undoable `Revert` state is appended and marked saved.
+    pub fn revert(mut self: Pin<&mut Self>, path: &QString) -> bool {
+        let path = path.to_string();
+        let (existing_path, pdf_password, pdf_options, source_format, policy, gpu_compute) = {
+            let rust = self.rust();
+            (
+                rust.path.clone(),
+                rust.session.pdf_password.clone(),
+                rust.session.pdf_options.clone(),
+                rust.source_format.clone(),
+                rust.color_policy,
+                rust.gpu_compute,
+            )
+        };
+        if existing_path.is_none() {
+            return false;
+        }
+        let Some(opened) = super::open_jobs::decode_for_revert(
+            &path,
+            pdf_password.as_deref(),
+            policy,
+            gpu_compute,
+        ) else {
+            return false;
+        };
+        let super::open_jobs::OpenedDocument { doc, target, .. } = opened;
+        {
+            let mut rust = self.as_mut().rust_mut();
+            rust.cancel_active_sessions();
+            rust.clear_document_scoped_state();
+            rust.path = Some(path);
+            rust.session.pdf_password = pdf_password;
+            rust.session.pdf_options = pdf_options;
+            rust.source_format = source_format;
+            rust.session.doc = Some(doc);
+            rust.layer_target = target;
+            let target = rust.layer_target.clone();
+            rust.session.record(&target, "Revert");
+            rust.session.mark_saved();
+            rust.session.document_generation = rust.session.document_generation.wrapping_add(1);
+            rust.reset_pyramid();
+        }
+        self.as_mut().recomposite();
+        self.as_mut().session_cancelled();
+        true
+    }
+
     /// `File > Open` for a raster image: read `path`, probe and decode it with
     /// Qt, and replace the view with an RGB/8-bit document holding the decoded
     /// pixels. Records one "Open" state and marks it unmodified; `false` without
@@ -210,7 +262,7 @@ impl qobject::PictureView {
                     .capture_live(doc, &None, &target, "New");
             }
             view.path = None;
-            view.session.dirty = false;
+            view.session.mark_saved();
         }
         self.as_mut().session_cancelled();
         true
@@ -279,7 +331,7 @@ impl qobject::PictureView {
         }
         let mut view = self.as_mut().rust_mut();
         view.path = Some(path);
-        view.session.dirty = false;
+        view.session.mark_saved();
         true
     }
 
@@ -549,6 +601,9 @@ impl qobject::PictureView {
     /// records one "Assign Profile" state; false without a document or on a bad
     /// index.
     pub fn assign_profile(mut self: Pin<&mut Self>, profile_index: i32) -> bool {
+        if self.rust().modal_transform_blocks_edit() {
+            return false;
+        }
         let Some(target) = builtin_profile(profile_index) else {
             return false;
         };
@@ -571,6 +626,9 @@ impl qobject::PictureView {
     /// and records one "Convert to Profile" state; false without a document, on
     /// a bad index, or when the current profile cannot be parsed.
     pub fn convert_profile(mut self: Pin<&mut Self>, profile_index: i32) -> bool {
+        if self.rust().modal_transform_blocks_edit() {
+            return false;
+        }
         let Some(dst) = builtin_profile(profile_index) else {
             return false;
         };

@@ -601,15 +601,16 @@ bool PicturaMainWindow::revertActive()
 {
     const int index = activeDocumentIndex();
     PictureView* view = viewAt(index);
-    const QString path = documentPath(index);
-    if (!view || path.isEmpty()) {
+    if (!view) {
         return false;
     }
-    // Reload in place: a raster path re-imports through the Qt edge, a PSD/PSB
-    // path through the native reader, a PDF from its embedded PSD.
-    const bool reloaded = isPdfPath(path) ? pdf_open(*view, path, QString()) == QStringLiteral("ok")
-                          : isNativeDocumentPath(path) ? document_api::open(*view, path)
-                                                       : document_api::openImage(*view, path);
+    const QString path = document_api::filePath(*view);
+    if (path.isEmpty()) {
+        return false;
+    }
+    // Reload in place through the Rust edge: decode first, preserve history and
+    // file identity, then append one undoable Revert state.
+    const bool reloaded = document_api::revert(*view, path);
     if (!reloaded) {
         return false;
     }

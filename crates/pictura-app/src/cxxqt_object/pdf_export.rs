@@ -159,7 +159,7 @@ pub fn pdf_save(mut view: Pin<&mut PictureView>, path: &QString, options: &QStri
     }
     let mut rust = view.rust_mut();
     rust.path = Some(path);
-    rust.session.dirty = false;
+    rust.session.mark_saved();
     rust.session.pdf_options = Some(pdf::write_joboptions(&options, false));
     QString::default()
 }

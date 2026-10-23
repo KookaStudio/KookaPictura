@@ -786,3 +786,57 @@ fn document_scoped_state_is_cleared_with_the_document() {
     assert!(view.solo_snapshot.is_none());
     assert!(view.expanded_groups.is_empty());
 }
+
+#[test]
+fn returning_to_the_saved_state_clears_dirty() {
+    let mut view = view();
+    let mut target = view.layer_target.clone();
+    assert!(view.session.record(&target, "First"));
+    view.session.mark_saved();
+    assert!(!view.session.dirty);
+
+    assert!(view.session.record(&target, "Second"));
+    assert!(view.session.dirty);
+    assert!(view
+        .session
+        .restore(&mut target, History::undo_live, History::undo)
+        .is_some());
+    assert!(!view.session.dirty, "undo lands on the saved state");
+    assert!(view
+        .session
+        .restore(&mut target, History::redo_live, History::redo)
+        .is_some());
+    assert!(view.session.dirty, "redo leaves the saved state");
+}
+
+#[test]
+fn a_dropped_saved_state_stays_dirty() {
+    let mut view = view();
+    let mut target = view.layer_target.clone();
+    assert!(view.session.record(&target, "Saved"));
+    view.session.mark_saved();
+    for i in 0..21 {
+        assert!(view.session.record(&target, &format!("Edit {i}")));
+    }
+    assert!(view.session.dirty);
+    assert_ne!(view.session.saved_id, view.session.history.current_id());
+
+    while view.session.history.can_undo() {
+        assert!(view
+            .session
+            .restore(&mut target, History::undo_live, History::undo)
+            .is_some());
+        assert!(view.session.dirty, "the saved state is no longer retained");
+    }
+}
+
+#[test]
+fn purging_history_keeps_a_clean_document_clean() {
+    let mut view = view();
+    let target = view.layer_target.clone();
+    assert!(view.session.record(&target, "Saved"));
+    view.session.mark_saved();
+    view.session.history.purge_states();
+    assert_eq!(view.session.history.current_id(), view.session.saved_id);
+    assert!(!view.session.dirty);
+}

@@ -552,13 +552,13 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
                 && !saveAsNeedsFeatureWarning(psdPath, view) && importedFlatWarn;
 
             // Revert must reload a raster-recorded document in place (keeping the
-            // recorded path in sync) instead of failing silently through the
-            // PSD-only reader.
+            // recorded path and source format) instead of failing silently
+            // through the PSD-only reader.
             if (view) {
                 view->add_adjustment(QStringLiteral("invert"));
             }
             const bool reverted = frame.revertActive() && view && !view->is_dirty()
-                && output_format(*view) == QStringLiteral("png")
+                && output_format(*view) == QStringLiteral("psd")
                 && view->file_path() == pngPath;
 
             // A .psb path forces a version-2 PSB container ("8BPS" + version 2).

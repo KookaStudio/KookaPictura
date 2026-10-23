@@ -81,6 +81,9 @@ pub mod ffi {
         /// Move the reference point to the live quad's anchor `0..=8`.
         fn transform_set_pivot_preset(view: Pin<&mut PictureView>, anchor: i32) -> bool;
         fn transform_set_show_pivot(view: Pin<&mut PictureView>, on: bool);
+        /// Mark whether the live transform belongs to the Move tool's controls
+        /// box; such a session is per-gesture and never locks.
+        fn transform_set_controls(view: Pin<&mut PictureView>, controls: bool);
         fn transform_set_width(view: Pin<&mut PictureView>, pct: f64, link: bool) -> bool;
         fn transform_set_height(view: Pin<&mut PictureView>, pct: f64, link: bool) -> bool;
         fn transform_set_angle(view: Pin<&mut PictureView>, degrees: f64) -> bool;
@@ -346,6 +349,10 @@ fn transform_set_show_pivot(mut view: Pin<&mut PictureView>, on: bool) {
     if let Some(session) = view.as_mut().rust_mut().session.live.transform_mut() {
         session.show_pivot = on;
     }
+}
+
+fn transform_set_controls(mut view: Pin<&mut PictureView>, controls: bool) {
+    view.as_mut().rust_mut().transform_controls = controls;
 }
 
 fn transform_set_width(view: Pin<&mut PictureView>, pct: f64, link: bool) -> bool {

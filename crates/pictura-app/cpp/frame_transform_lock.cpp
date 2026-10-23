@@ -1,13 +1,39 @@
 // While a transform is pending (a modal Free Transform, Transform submenu, or
-// Warp session not yet committed), Photoshop refuses layer edits and asks
-// before a tool switch drops the transform (#750): every Layer menu command is
-// disabled, the Layers panel is greyed, and switching tools asks "Apply the
-// transformation?". The Move tool's controls box commits each gesture on
-// release, so it never locks.
+// Warp session not yet committed), Photoshop refuses document edits and asks
+// before a tool switch drops the transform (#750, #853): the Layer, Image, and
+// Filter menus, the Edit pixel commands, and the Layers panel are locked, and
+// switching tools asks "Apply the transformation?". The Move tool's controls
+// box commits each gesture on release, so it never locks.
 
 #include "frame_includes.h"
 
 namespace pictura {
+
+namespace {
+
+bool locksDocumentEdit(const CommandSpec& spec)
+{
+    if (spec.path.isEmpty()) {
+        return false;
+    }
+    const QString& top = spec.path.first();
+    if (top == QLatin1String("Layer") || top == QLatin1String("Image")
+        || top == QLatin1String("Filter")) {
+        return true;
+    }
+    return spec.id == QLatin1String(command_ids::EditAssignProfile)
+        || spec.id == QLatin1String(command_ids::EditConvertProfile)
+        || spec.id == QLatin1String(command_ids::EditCut)
+        || spec.id == QLatin1String(command_ids::EditPaste)
+        || spec.id == QLatin1String(command_ids::EditPasteInPlace)
+        || spec.id == QLatin1String(command_ids::EditPasteInto)
+        || spec.id == QLatin1String(command_ids::EditPasteOutside)
+        || spec.id == QLatin1String(command_ids::EditClear)
+        || spec.id == QLatin1String(command_ids::EditFill)
+        || spec.id == QLatin1String(command_ids::EditStroke);
+}
+
+} // namespace
 
 void PicturaMainWindow::installTransformLock()
 {
@@ -15,8 +41,7 @@ void PicturaMainWindow::installTransformLock()
         return;
     }
     registry_->setBlockedProvider([this](const CommandSpec& spec) {
-        return transformLocked_ && !spec.path.isEmpty()
-            && spec.path.first() == QLatin1String("Layer");
+        return transformLocked_ && locksDocumentEdit(spec);
     });
     tools_->setTransformDecisionPrompt([this]() { return askApplyTransform(this); });
     connect(tools_, &ToolController::transformChanged, this, [this]() { syncTransformLock(); });

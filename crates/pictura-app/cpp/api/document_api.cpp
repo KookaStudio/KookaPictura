@@ -1,6 +1,7 @@
 #include "api/document_api.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/open_jobs.cxxqt.h"
 
 #include <rust/cxx.h>
 
@@ -9,6 +10,11 @@ namespace pictura::document_api {
 bool open(PictureView& view, const QString& path)
 {
     return view.open(path);
+}
+
+bool revert(PictureView& view, const QString& path)
+{
+    return pictura::revert(view, path);
 }
 
 bool openImage(PictureView& view, const QString& path)

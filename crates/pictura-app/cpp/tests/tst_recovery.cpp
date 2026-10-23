@@ -215,6 +215,11 @@ void RecoveryTest::recoverReopensAnOrphanedDocument()
     QCOMPARE(view->document_width(), 64);
     QCOMPARE(view->document_height(), 48);
     QVERIFY2(pictura::paths_has_work_path(*view), "the Work Path survives recovery");
+    view->select_all();
+    QVERIFY(view->can_undo());
+    QVERIFY(view->undo());
+    QVERIFY2(after->isDocumentDirty(0),
+             "undo back to the recovered start cannot make it clean");
     QVERIFY2(!QFileInfo::exists(crashed), "the orphaned session is discarded");
     QCOMPARE(snapshots(after->recoverySessionDirForTest()).size(), 1);
     after->shutdownRecovery();

@@ -57,6 +57,9 @@ enum Stored {
 }
 
 struct Entry {
+    /// Never reused while the state is retained, so a saved identity cannot
+    /// accidentally match a different state after a drop or truncation.
+    id: u64,
     label: String,
     stored: Stored,
     /// The live target before the operation that created this state.
@@ -105,6 +108,7 @@ pub enum BrushSource {
 #[derive(Default)]
 pub struct History {
     states: Vec<Entry>,
+    next_id: u64,
     cursor: usize,
     snapshots: Vec<Named>,
     current: Option<Snapshot>,
@@ -246,7 +250,10 @@ impl History {
                 }
             },
         };
+        let id = self.next_id;
+        self.next_id = self.next_id.wrapping_add(1);
         self.states.push(Entry {
+            id,
             label: label.to_string(),
             stored,
             target_before,
@@ -337,7 +344,9 @@ impl History {
     pub fn purge_states(&mut self) {
         if let Some(current) = self.current.as_ref() {
             let label = self.label(self.cursor).to_string();
+            let id = self.states.get(self.cursor).map_or(0, |entry| entry.id);
             self.states = vec![Entry {
+                id,
                 label,
                 stored: Stored::Hollow(Snapshot {
                     doc: hollow(&current.doc),
@@ -385,6 +394,11 @@ impl History {
     /// Position of the current state, in `0..count()`.
     pub fn index(&self) -> usize {
         self.cursor
+    }
+
+    /// Identity of the state at the cursor, or `None` without states.
+    pub fn current_id(&self) -> Option<u64> {
+        self.states.get(self.cursor).map(|entry| entry.id)
     }
 
     /// Label of state `i`, or `""` when out of range.

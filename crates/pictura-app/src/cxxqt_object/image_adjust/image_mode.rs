@@ -231,6 +231,9 @@ fn image_depth_available(view: &PictureView, bits: i32) -> bool {
 /// one state. A flattening conversion leaves at most a Background, so the
 /// active layer is re-pointed at it (or cleared for a flat Bitmap).
 fn commit(mut view: Pin<&mut PictureView>, convert: impl FnOnce(&mut Document) -> bool) -> bool {
+    if view.rust().modal_transform_blocks_edit() {
+        return false;
+    }
     let converted = {
         let mut rust = view.as_mut().rust_mut();
         if let Some(base) = rust.session.live.take_mode_preview() {
