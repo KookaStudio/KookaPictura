@@ -5,6 +5,7 @@
 #include "bitmap_mode_dialog.h"
 #include "indexed_color_dialog.h"
 #include "pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/hdr_conversion.cxxqt.h"
 
 namespace pictura {
 
@@ -140,7 +141,10 @@ void PicturaMainWindow::convertImageDepth(int bits)
     if (image_depth_bits(*view) == 32) {
         HdrConversionSpec spec;
         if (HdrConversionDialog::get(this, &spec)) {
-            view->convert_depth(bits, spec.exposure_ev, spec.gamma);
+            convert_depth_method(*view, bits, int(spec.method), spec.exposure_ev, spec.gamma,
+                                 spec.radius, spec.strength, spec.local_gamma,
+                                 spec.local_exposure, spec.detail, spec.shadow, spec.highlight,
+                                 spec.vibrance, spec.saturation);
         }
         return;
     }

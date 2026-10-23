@@ -395,7 +395,18 @@ impl qobject::PictureView {
             .is_ok()
         };
         if converted {
-            self.as_mut().rust_mut().session.selection = None;
+            {
+                let mut rust = self.as_mut().rust_mut();
+                rust.session.selection = None;
+                if rust
+                    .session
+                    .doc
+                    .as_ref()
+                    .is_some_and(|doc| !doc.layers.is_empty())
+                {
+                    rust.select_only_layer("0");
+                }
+            }
             self.as_mut().edit("HDR Conversion", |_| Edit::Full);
         }
         converted

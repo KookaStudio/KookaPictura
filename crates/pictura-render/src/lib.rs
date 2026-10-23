@@ -50,8 +50,8 @@ pub use composite_native::{composite_native, refresh_native_composite};
 pub use pictura_adjust::{
     match_color_stats, replace_color_mask, replace_color_result, replace_color_shift_for,
     Adjustment, AutoKind, ExposureGamma, GradientFillParams, GradientKind, GradientMapParams,
-    GradientStop, MatchColorParams, MatchColorStats, OpacityStop, PatternFillParams,
-    ReplaceColorParams, ReplaceColorSample,
+    GradientStop, HdrToneMap, LocalAdaptationParams, MatchColorParams, MatchColorStats,
+    OpacityStop, PatternFillParams, ReplaceColorParams, ReplaceColorSample,
 };
 
 mod color_balance;
@@ -137,7 +137,7 @@ pub use document_ops::{
     can_merge_scope, can_merge_target, can_move_path, can_move_path_to,
     can_new_smart_object_via_copy, can_rasterize_smart_object, can_release_clipping_mask,
     can_replace_smart_object_contents, can_reset_smart_object_transform, clear_layer,
-    clear_layer_style, clear_smart_filters, content_rect, convert_bit_depth,
+    clear_layer_style, clear_smart_filters, content_rect, convert_bit_depth, convert_depth,
     convert_depth_exposure_gamma, convert_for_smart_filters, convert_mode,
     convert_smart_object_to_layers, convert_to_bitmap, convert_to_indexed, convert_to_smart_object,
     copy_layer, copy_layer_style, copy_merged, copy_path_to_document, copy_shape_attributes,

@@ -26,7 +26,7 @@ mod types;
 mod tests;
 
 pub use apply::apply;
-pub use hdr_toning::{exposure_gamma, ExposureGamma};
+pub use hdr_toning::{exposure_gamma, tone_map, ExposureGamma, HdrToneMap, LocalAdaptationParams};
 pub use lut::parse_cube;
 pub use match_color::{match_color_stats, MatchColorParams, MatchColorStats};
 pub use native::apply_native;

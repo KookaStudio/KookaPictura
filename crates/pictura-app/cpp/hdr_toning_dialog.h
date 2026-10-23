@@ -5,19 +5,17 @@
 
 class QCheckBox;
 class QComboBox;
-class QDoubleSpinBox;
-class QSpinBox;
 class QTimer;
 
 namespace pictura {
 
+class HdrToningControls;
 class PictureView;
 
 // Image > Adjustments > HDR Toning (Local Adaptation). A preset combo loads the
-// 17 CS6 presets into nine sliders; any edit drops it back to Custom. The
-// Preview checkbox shows the result on the canvas while the dialog is open, OK
-// applies one "HDR Toning" state, Cancel restores the layer exactly. Ported from
-// photorust's HdrToningDialog.
+// 17 CS6 presets into the shared nine-control widget; any edit drops it back to
+// Custom. The Preview checkbox shows the result on the canvas while the dialog
+// is open, OK applies one "HDR Toning" state, Cancel restores the layer exactly.
 class HdrToningDialog : public QDialog {
     Q_OBJECT
 
@@ -49,15 +47,7 @@ private:
     QTimer* settle_ = nullptr;
 
     QComboBox* preset_ = nullptr;
-    QSpinBox* radius_ = nullptr;
-    QDoubleSpinBox* strength_ = nullptr;
-    QDoubleSpinBox* gamma_ = nullptr;
-    QDoubleSpinBox* exposure_ = nullptr;
-    QSpinBox* detail_ = nullptr;
-    QSpinBox* shadow_ = nullptr;
-    QSpinBox* highlight_ = nullptr;
-    QSpinBox* vibrance_ = nullptr;
-    QSpinBox* saturation_ = nullptr;
+    HdrToningControls* controls_ = nullptr;
     QCheckBox* preview_ = nullptr;
 };
 

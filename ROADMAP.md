@@ -32,7 +32,7 @@ Deeper technical status for PSD/PSB lives in
 | Camera raw files | Open — there is no raw container reader and no demosaic |
 | Panels | 18 of 22 populated; Actions, Gradients, Patterns and Styles are placeholders |
 | Automation | The local control server ships; Actions, batch, scripting and plug-ins are open |
-| HDR tone mapping | One of four methods |
+| HDR tone mapping | Shipped — all four conversion methods; the Local Adaptation Toning Curve/Corner is open |
 | Layer comps, preset manager, stack modes, Blend-If UI | Open |
 
 ## Files, formats and metadata
@@ -233,8 +233,9 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       conversion (#554)
 - [ ] The Color Table, and Indexed transparency and Forced palette (#555)
 - [ ] Bitmap Halftone Screen and Custom Pattern (#556)
-- [ ] The remaining HDR Conversion tone methods (#557), and Merge To HDR Pro
-      (#558)
+- [x] The HDR Conversion tone methods (#557)
+- [ ] Merge To HDR Pro (#558)
+- [ ] The Local Adaptation Toning Curve and Corner option (follow-up to #557)
 - [ ] The Auto Color Correction Options dialog (#559)
 - [ ] Levels eyedroppers and the Alt-drag clipping preview (#560)
 - [ ] The Curves secondary UI: on-image, pencil and smooth, sliders and
