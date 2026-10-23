@@ -30,8 +30,8 @@ Snapshot for resuming after a context break. Update after each milestone.
     (Correction, Scale, Focal, Crop, Offset X/Y, set id). `AwaCanvas` and
     `AdaptiveWideAngleDialog` give Constraint / Polygon / Move / Hand / Zoom,
     the right-click orientation menu, Detail, Preview / Show Constraints /
-    Show Mesh, and EXIF prefill (a focal length past 15.31 mm raises the crop
-    factor instead).
+    Show Mesh, and EXIF prefill. Focal Length's range follows Crop Factor
+    (product 2.31–69.20 mm: 4.05–121.41 at the opening crop of 0.57).
   Ceiling (`ponytail:`): no Auto / lens profiles, Panorama, Smart Filter
   re-edit or rotation handles (#891); ranges are read off CS6 captures and
   the solver is not verified against CS6. Tests: 12 Rust engine units,
