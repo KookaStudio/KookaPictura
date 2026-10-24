@@ -164,6 +164,7 @@ fn main() {
                 "src/cxxqt_object/filter_tools/liquify.rs",
                 "src/cxxqt_object/filter_tools/adaptive_wide_angle.rs",
                 "src/cxxqt_object/filter_tools/vanishing_point.rs",
+                "src/cxxqt_object/filter_tools/vanishing_point_retouch.rs",
                 "src/cxxqt_object/healing.rs",
                 "src/cxxqt_object/image_adjust.rs",
                 "src/cxxqt_object/impl_selection/bridge.rs",

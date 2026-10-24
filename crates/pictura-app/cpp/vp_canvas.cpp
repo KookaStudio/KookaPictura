@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "pictura_app/src/cxxqt_object/filter_tools/vanishing_point.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/filter_tools/vanishing_point_retouch.cxxqt.h"
 
 namespace pictura {
 
@@ -47,20 +48,45 @@ VpCanvas::VpCanvas(QWidget* parent) : QWidget(parent)
     updateCursor();
 }
 
-void VpCanvas::reload(const QImage& backdrop)
+void VpCanvas::reload()
 {
-    backdrop_ = backdrop;
     const ::rust::Vec<int32_t> dims = vp_geometry();
     if (dims.size() == 2) {
         docWidth_ = dims[0];
         docHeight_ = dims[1];
     }
+    view_ = QImage(std::max(docWidth_, 1), std::max(docHeight_, 1), QImage::Format_RGBA8888);
+    view_.fill(Qt::white);
     placed_ = width() > 0 && height() > 0;
-    refreshPlanes();
+    refreshAll();
     fitInView();
 }
 
-void VpCanvas::refreshPlanes()
+void VpCanvas::syncView()
+{
+    const ::rust::Vec<int32_t> dirty = vp_view_dirty();
+    if (dirty.size() != 4 || view_.isNull()) {
+        return;
+    }
+    const QImage patch = vp_view(dirty[0], dirty[1], dirty[2], dirty[3]);
+    if (patch.isNull()) {
+        return;
+    }
+    QPainter painter(&view_);
+    painter.setCompositionMode(QPainter::CompositionMode_Source);
+    // The session clips the rect to the document.
+    painter.drawImage(QPointF(std::max(dirty[0], 0), std::max(dirty[1], 0)), patch);
+}
+
+void VpCanvas::changed()
+{
+    refreshAll();
+    if (planesChanged) {
+        planesChanged();
+    }
+}
+
+void VpCanvas::refreshAll()
 {
     planes_.clear();
     const int count = vp_plane_count();
@@ -76,6 +102,10 @@ void VpCanvas::refreshPlanes()
         planes_.append(plane);
     }
     active_ = vp_active();
+    floatOutline_ = pointsFrom(vp_float_outline());
+    marqueeOutline_ = pointsFrom(vp_marquee_outline());
+    floatCorners_ = pointsFrom(vp_float_corners());
+    syncView();
     update();
 }
 
@@ -153,8 +183,8 @@ void VpCanvas::paintEvent(QPaintEvent*)
     }
     const QRectF target(toWidget(QPointF(0, 0)), QSizeF(docWidth_ * zoom_, docHeight_ * zoom_));
     painter.setRenderHint(QPainter::SmoothPixmapTransform, zoom_ < 1.0);
-    if (!backdrop_.isNull()) {
-        painter.drawImage(target, backdrop_);
+    if (!view_.isNull()) {
+        painter.drawImage(target, view_);
     }
     if (!showEdges_) {
         return;
@@ -172,6 +202,20 @@ void VpCanvas::paintEvent(QPaintEvent*)
             polygon << toWidget(p);
         }
         return polygon;
+    };
+    // Selections: a black-and-white dash, as the canvas's marching ants.
+    auto dashed = [&](const QList<QPointF>& outline) {
+        if (outline.size() < 2) {
+            return;
+        }
+        const QPolygonF line = widgetPolygon(outline);
+        painter.setBrush(Qt::NoBrush);
+        painter.setPen(pen(Qt::white, 1.0));
+        painter.drawPolyline(line);
+        QPen dash = pen(Qt::black, 1.0);
+        dash.setDashPattern({4.0, 4.0});
+        painter.setPen(dash);
+        painter.drawPolyline(line);
     };
     for (int i = 0; i < planes_.size(); ++i) {
         const Plane& plane = planes_.at(i);
@@ -211,6 +255,9 @@ void VpCanvas::paintEvent(QPaintEvent*)
         }
     }
 
+    dashed(marqueeOutline_);
+    dashed(floatOutline_);
+
     painter.setRenderHint(QPainter::Antialiasing, false);
     auto node = [&painter](const QPointF& at) {
         painter.setPen(QPen(Qt::black, 1.0));
@@ -227,6 +274,11 @@ void VpCanvas::paintEvent(QPaintEvent*)
     }
     for (const QPointF& p : pending_) {
         node(toWidget(p));
+    }
+    if (mode_ == Mode::Transform) {
+        for (const QPointF& p : floatCorners_) {
+            node(toWidget(p));
+        }
     }
 }
 
@@ -252,10 +304,7 @@ bool VpCanvas::beginPlaneGesture(const QPointF& pos, Qt::KeyboardModifiers modif
             return false;
         }
         vp_set_active(-1);
-        refreshPlanes();
-        if (planesChanged) {
-            planesChanged();
-        }
+        changed();
         return false;
     }
     const int plane = hit[0];
@@ -264,18 +313,12 @@ bool VpCanvas::beginPlaneGesture(const QPointF& pos, Qt::KeyboardModifiers modif
     // Ctrl on an edge node tears off; Ctrl elsewhere walks overlapping planes.
     if (ctrl && part != 1) {
         vp_cycle(doc.x(), doc.y());
-        refreshPlanes();
-        if (planesChanged) {
-            planesChanged();
-        }
+        changed();
         return false;
     }
     const int mode = ctrl ? 1 : (alt && part == 1 ? 2 : 0);
     const bool started = vp_drag_begin(plane, part, nodeIndex, mode, doc.x(), doc.y());
-    refreshPlanes();
-    if (planesChanged) {
-        planesChanged();
-    }
+    changed();
     return started;
 }
 
@@ -290,15 +333,42 @@ void VpCanvas::addCorner(const QPointF& document)
         }
         pending_.clear();
         vp_create(::rust::Slice<const double>(flat.data(), flat.size()));
-        refreshPlanes();
-        if (planesChanged) {
-            planesChanged();
-        }
+        changed();
         if (planeCreated) {
             planeCreated();
         }
     }
     update();
+}
+
+bool VpCanvas::beginToolGesture(Mode mode, const QPointF& doc, Qt::KeyboardModifiers modifiers)
+{
+    const bool alt = modifiers & Qt::AltModifier;
+    const bool ctrl = modifiers & Qt::ControlModifier;
+    switch (mode) {
+    case Mode::Marquee:
+        return vp_marquee_press(doc.x(), doc.y(), alt, ctrl);
+    case Mode::Transform:
+        return vp_transform_press(doc.x(), doc.y(), kHit / zoom_);
+    case Mode::Stamp:
+        if (alt) {
+            if (!vp_stamp_source(doc.x(), doc.y()) && notice) {
+                notice(tr("Alt-click inside a plane to set the source."));
+            }
+            return false;
+        }
+        if (!vp_has_stamp_source()) {
+            if (notice) {
+                notice(tr("Alt-click inside a plane to set the source first."));
+            }
+            return false;
+        }
+        return vp_stroke_press(false, doc.x(), doc.y());
+    case Mode::Brush:
+        return vp_stroke_press(true, doc.x(), doc.y());
+    default:
+        return false;
+    }
 }
 
 void VpCanvas::mousePressEvent(QMouseEvent* event)
@@ -316,6 +386,7 @@ void VpCanvas::mousePressEvent(QMouseEvent* event)
     if (event->button() != Qt::LeftButton) {
         return;
     }
+    const QPointF doc = toDocument(pos);
     switch (mode) {
     case Mode::Zoom:
         zoomAbout(zoom_ * ((event->modifiers() & Qt::AltModifier) ? 0.5 : 2.0), pos);
@@ -328,7 +399,6 @@ void VpCanvas::mousePressEvent(QMouseEvent* event)
     case Mode::CreatePlane: {
         // Existing nodes still drag while no corner is pending.
         if (pending_.isEmpty()) {
-            const QPointF doc = toDocument(pos);
             const ::rust::Vec<int32_t> hit = vp_hit(doc.x(), doc.y(), kHit / zoom_);
             if (hit.size() == 3 && hit[1] != 2) {
                 if (beginPlaneGesture(pos, event->modifiers())) {
@@ -337,12 +407,40 @@ void VpCanvas::mousePressEvent(QMouseEvent* event)
                 return;
             }
         }
-        addCorner(toDocument(pos));
+        addCorner(doc);
         return;
     }
+    case Mode::Eyedropper: {
+        const ::rust::Vec<int32_t> rgb = vp_sample(doc.x(), doc.y());
+        if (rgb.size() == 3 && colourPicked) {
+            colourPicked(QColor(rgb[0], rgb[1], rgb[2]));
+        }
+        return;
+    }
+    case Mode::Marquee:
+    case Mode::Transform:
+    case Mode::Stamp:
+    case Mode::Brush:
+        if (beginToolGesture(mode, doc, event->modifiers())) {
+            drag_ = Drag::Tool;
+            dragMode_ = mode;
+        }
+        changed();
+        return;
     case Mode::Hand:
         return;
     }
+}
+
+void VpCanvas::mouseDoubleClickEvent(QMouseEvent* event)
+{
+    if (effectiveMode() == Mode::Marquee && event->button() == Qt::LeftButton) {
+        const QPointF doc = toDocument(event->position());
+        vp_select_plane(doc.x(), doc.y());
+        changed();
+        return;
+    }
+    mousePressEvent(event);
 }
 
 void VpCanvas::mouseMoveEvent(QMouseEvent* event)
@@ -350,20 +448,31 @@ void VpCanvas::mouseMoveEvent(QMouseEvent* event)
     const QPointF pos = event->position();
     hover_ = pos;
     hovering_ = true;
+    const QPointF doc = toDocument(pos);
+    const bool shift = event->modifiers() & Qt::ShiftModifier;
     switch (drag_) {
     case Drag::Pan:
         offset_ = panOffset_ + (pos - pressWidget_);
         viewChanged();
         return;
-    case Drag::Plane: {
-        const QPointF doc = toDocument(pos);
+    case Drag::Plane:
         vp_drag_to(doc.x(), doc.y());
-        refreshPlanes();
-        if (planesChanged) {
-            planesChanged();
-        }
+        changed();
         return;
-    }
+    case Drag::Tool:
+        switch (dragMode_) {
+        case Mode::Marquee:
+            vp_marquee_drag(doc.x(), doc.y(), shift);
+            break;
+        case Mode::Transform:
+            vp_transform_drag(doc.x(), doc.y(), shift);
+            break;
+        default:
+            vp_stroke_drag(doc.x(), doc.y());
+            break;
+        }
+        changed();
+        return;
     case Drag::None:
         if (!pending_.isEmpty()) {
             update();
@@ -376,10 +485,10 @@ void VpCanvas::mouseReleaseEvent(QMouseEvent*)
 {
     if (drag_ == Drag::Plane) {
         vp_drag_end();
-        refreshPlanes();
-        if (planesChanged) {
-            planesChanged();
-        }
+        changed();
+    } else if (drag_ == Drag::Tool) {
+        vp_gesture_release();
+        changed();
     }
     drag_ = Drag::None;
     updateCursor();
@@ -424,10 +533,7 @@ void VpCanvas::keyPressEvent(QKeyEvent* event)
         [[fallthrough]];
     case Qt::Key_Delete:
         if (vp_delete_active()) {
-            refreshPlanes();
-            if (planesChanged) {
-                planesChanged();
-            }
+            changed();
         }
         return;
     case Qt::Key_Escape:
@@ -477,8 +583,15 @@ void VpCanvas::updateCursor()
     case Mode::EditPlane:
         setCursor(Qt::ArrowCursor);
         break;
+    case Mode::Transform:
+        setCursor(Qt::SizeAllCursor);
+        break;
     case Mode::Zoom:
     case Mode::CreatePlane:
+    case Mode::Marquee:
+    case Mode::Stamp:
+    case Mode::Brush:
+    case Mode::Eyedropper:
         setCursor(Qt::CrossCursor);
         break;
     }

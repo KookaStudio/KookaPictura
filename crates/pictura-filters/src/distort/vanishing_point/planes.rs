@@ -121,18 +121,28 @@ impl VpPlanes {
         }
     }
 
+    /// A related plane's parent and the parent edge it hinges on.
+    pub(super) fn hinge_of(&self, i: usize) -> Option<(usize, usize)> {
+        match self.shapes[i] {
+            Shape::Child { parent, edge, .. } => Some((parent, edge)),
+            Shape::Root { .. } => None,
+        }
+    }
+
     pub fn has_children(&self, i: usize) -> bool {
         (0..self.len()).any(|j| self.parent(j) == Some(i))
     }
 
-    fn root_of(&self, mut i: usize) -> usize {
+    /// The plane a family grows from.
+    pub(super) fn root_of(&self, mut i: usize) -> usize {
         while let Some(p) = self.parent(i) {
             i = p;
         }
         i
     }
 
-    fn unit(&self, i: usize) -> f64 {
+    /// The 3D length of one metric unit in `i`'s family.
+    pub(super) fn unit(&self, i: usize) -> f64 {
         match self.shapes[self.root_of(i)] {
             Shape::Root { unit, .. } => unit,
             Shape::Child { .. } => unreachable!("a root has no parent"),

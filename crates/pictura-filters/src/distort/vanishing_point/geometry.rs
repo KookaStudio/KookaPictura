@@ -145,6 +145,19 @@ impl Frame {
         ])
     }
 
+    /// The components of the in-plane direction `d` on the (possibly
+    /// oblique) axes.
+    pub fn components(&self, d: V3) -> Option<P2> {
+        let (a11, a12, a22) = (
+            self.eu.dot(self.eu),
+            self.eu.dot(self.ev),
+            self.ev.dot(self.ev),
+        );
+        let (b1, b2) = (self.eu.dot(d), self.ev.dot(d));
+        let det = a11 * a22 - a12 * a12;
+        (det.abs() > 1e-12).then(|| ((b1 * a22 - b2 * a12) / det, (a11 * b2 - a12 * b1) / det))
+    }
+
     /// The plane coordinates image point `p` looks at, if the ray meets the
     /// plane in front of the camera.
     pub fn coords_at(&self, camera: &Camera, p: P2) -> Option<P2> {
@@ -157,19 +170,7 @@ impl Frame {
         if lambda.is_nan() || lambda <= 0.0 {
             return None;
         }
-        let d = r.scale(lambda).sub(self.origin);
-        // Least squares on the (possibly oblique) axes.
-        let (a11, a12, a22) = (
-            self.eu.dot(self.eu),
-            self.eu.dot(self.ev),
-            self.ev.dot(self.ev),
-        );
-        let (b1, b2) = (self.eu.dot(d), self.ev.dot(d));
-        let det = a11 * a22 - a12 * a12;
-        if det.abs() < 1e-12 {
-            return None;
-        }
-        Some(((b1 * a22 - b2 * a12) / det, (a11 * b2 - a12 * b1) / det))
+        self.components(r.scale(lambda).sub(self.origin))
     }
 }
 
@@ -300,7 +301,6 @@ pub fn hinge_span(parent: &Frame, edge: usize) -> (f64, f64) {
 /// distance away from it. The frame's `s` axis runs along the edge in the
 /// parent's own coordinate, so grid lines continue across the hinge.
 pub fn hinge(parent: &Frame, edge: usize, angle: f64, side: f64, span: [f64; 4]) -> Option<Frame> {
-    let [u0, u1, v0, v1] = parent.rect;
     let (lo, hi) = hinge_span(parent, edge);
     let rect = [
         lo + span[0] * (hi - lo),
@@ -308,6 +308,23 @@ pub fn hinge(parent: &Frame, edge: usize, angle: f64, side: f64, span: [f64; 4])
         span[2],
         span[3],
     ];
+    let (along, origin, out) = hinge_axes(parent, edge)?;
+    let (s, c) = angle.to_radians().sin_cos();
+    let d = out.scale(c).add(parent.n.scale(s * side)).unit()?;
+    Some(Frame {
+        origin,
+        eu: along,
+        ev: d,
+        n: along.cross(d).unit()?,
+        rect,
+    })
+}
+
+/// Edge `edge` of `parent` as a hinge: the direction along it, the point
+/// where its own coordinate is zero, and the in-plane direction pointing out
+/// of the parent across it.
+pub fn hinge_axes(parent: &Frame, edge: usize) -> Option<(V3, V3, V3)> {
+    let [u0, u1, v0, v1] = parent.rect;
     let (along, origin) = match edge {
         0 => (parent.eu, parent.origin.add(parent.ev.scale(v0))),
         1 => (parent.ev, parent.origin.add(parent.eu.scale(u1))),
@@ -319,15 +336,7 @@ pub fn hinge(parent: &Frame, edge: usize, angle: f64, side: f64, span: [f64; 4])
     if out.dot(centre.sub(origin)) > 0.0 {
         out = out.scale(-1.0);
     }
-    let (s, c) = angle.to_radians().sin_cos();
-    let d = out.scale(c).add(parent.n.scale(s * side)).unit()?;
-    Some(Frame {
-        origin,
-        eu: along,
-        ev: d,
-        n: along.cross(d).unit()?,
-        rect,
-    })
+    Some((along, origin, out))
 }
 
 /// The depth `t` along `dir` from `from` whose image lies nearest `p`

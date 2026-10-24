@@ -220,6 +220,9 @@ public:
     ToolId activeTool() const;
     void setActiveTool(ToolId id);
     QColor foregroundColor() const;
+    // Before a paste: take another application's newer clipboard image
+    // (the Vanishing Point dialog pastes too).
+    void importSystemClipboard();
     bool hasPendingCrop() const;
     bool commitCrop();
     // A pending transform locks the Layer menu and greys the Layers panel.
@@ -599,7 +602,6 @@ private:
     void distributeSelectedLayers(int edge);
     void updateAlignControls();
     void exportClipboard();
-    void importSystemClipboard();
     void applyPanelSession(const SessionState& state);
     // Rebuild the widget columns from a workspace-shaped spec, moving panels
     // between groups and restoring floating groups/columns. Shared by session
