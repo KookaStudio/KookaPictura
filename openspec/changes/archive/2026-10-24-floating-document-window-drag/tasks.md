@@ -14,7 +14,7 @@ Every "Verify" names the check that the final build and test run must pass.
 - [x] 2.2 In the frame, give `startWindowDockDrag` the carried window (the two `application/x-qt-mainwindowdrag-*` keys), skip `exec` once the button is up, and dock a recorded drop after `exec` returns (`applyPendingDock`). Verify `ctrlDragDocksAtDrop` and `tearOutDragDocksOnStrip`.
 - [x] 2.3 In `tearOutFilter`, start the carried drag for a top-level float that moves by window drag, with the header centre as the grab offset. Verify `tearOutUnderWayland`, `tearOutFloats`, and `tearOutLastTab`.
 - [x] 2.4 Replace `tabStripGlobalRect()` with `dockZoneGlobalRect()` and `dockIndexAt()`, add the `documentDockIndicator` line (`updateDockIndicator`, `hideDockIndicator`) and its theme rule, and drive it from `windowDropFilter` (including `DragLeave`), the hand drag, and the release. Verify `dockIndicatorBetweenTabs`, `dockIndicatorWithoutTabs`, `dockDropWithoutTabs`, `dockIndicatorHidesOnLeave`, `handDragShowsIndicator`, `dockZoneInactiveTiledOrOff`, `fileDropOnStripOpensFile`, and `tst_document_arrange::prefDisablesDocking`.
-- [ ] 2.5 Verify `openspec validate --all --strict`, `bash scripts/check-file-size.sh`, `bash scripts/guard.sh`, and the full Qt Test layer.
+- [x] 2.5 Verify `openspec validate --all --strict`, `bash scripts/check-file-size.sh`, `bash scripts/guard.sh`, and the full Qt Test layer.
 
 ## 3. Docs
 
