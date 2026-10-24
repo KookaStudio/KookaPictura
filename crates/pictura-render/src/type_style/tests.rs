@@ -1,11 +1,17 @@
 use std::sync::OnceLock;
 
-use pictura_core::{CharacterAttrs, KerningMode, PixelBuffer, TypeSpec};
+use pictura_core::{
+    BitDepth, CharacterAttrs, ColorMode, Document, KerningMode, PixelBuffer, TypeSpec,
+};
 
 use super::*;
 use crate::type_paragraph::line_advance;
 
 const SIZE: f64 = 48.0;
+const NOTO_FALLBACK: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../assets/fonts/NotoSans-Regular.ttf"
+));
 
 fn liberation() -> &'static BundledText {
     crate::text_render::bundled().expect("bundled font parses")
@@ -140,6 +146,17 @@ fn support_mask_follows_the_feature_list() {
         1 << 0 | 1 << 4 | 1 << 6 | 1 << 7,
         "liga, salt, ordn, frac"
     );
+}
+
+#[test]
+fn tsume_compresses_a_full_width_advance() {
+    let c = CharacterAttrs {
+        size: 40.0,
+        tsume: 50.0,
+        ..attrs()
+    };
+    assert!((tsume_advance(40.0, '漢', &c) - 30.0).abs() < 1e-4);
+    assert_eq!(tsume_advance(40.0, 'A', &c), 40.0);
 }
 
 #[test]
@@ -310,4 +327,139 @@ fn caret_last_stop_meets_the_styled_advance() {
     let (first, last) = (stops.first().unwrap(), stops.last().unwrap());
     let advance = width(liberation(), "Type", &spec.character);
     assert!(((last[0] - first[0]) as f32 - advance).abs() < 1e-3);
+}
+
+fn register_fallback() {
+    assert!(crate::fonts::register_font(
+        "Fallback Noto",
+        "",
+        NOTO_FALLBACK.to_vec()
+    ));
+}
+
+fn shaped_fallback(text: &str, protection: bool) -> Vec<ShapedGlyph> {
+    let _guard = crate::fonts::FALLBACK_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    crate::fonts::set_missing_glyph_protection(protection);
+    register_fallback();
+    let active = crate::fonts::face_for("Liberation Sans", "").expect("active");
+    let faces = crate::fonts::faces_in_order(active);
+    let out = shape_styled_faces(&faces, text, &attrs(), rustybuzz::Direction::LeftToRight);
+    crate::fonts::set_missing_glyph_protection(true);
+    out
+}
+
+#[test]
+fn fallback_single_character_uses_covering_face() {
+    let glyphs = shaped_fallback("A\u{370}", true);
+    assert!(
+        glyphs.iter().any(|g| g.face != 0),
+        "the uncovered glyph falls back"
+    );
+    assert!(
+        glyphs.iter().any(|g| g.face == 0),
+        "the covered glyph stays active"
+    );
+}
+
+#[test]
+fn fallback_off_uses_active_face() {
+    let glyphs = shaped_fallback("A\u{370}", false);
+    assert!(glyphs.iter().all(|g| g.face == 0));
+}
+
+#[test]
+fn fallback_prefers_active_face() {
+    let glyphs = shaped_fallback("A", true);
+    assert!(glyphs.iter().all(|g| g.face == 0));
+}
+
+#[test]
+fn fallback_without_cover_keeps_active_face() {
+    let glyphs = shaped_fallback("\u{10FFFF}", true);
+    assert!(glyphs.iter().all(|g| g.face == 0));
+}
+
+#[test]
+fn fallback_rtl_run_keeps_visual_order() {
+    let _guard = crate::fonts::FALLBACK_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    register_fallback();
+    let active = crate::fonts::face_for("Liberation Sans", "").expect("active");
+    let faces = crate::fonts::faces_in_order(active);
+    let logical = "\u{5D0}\u{5D1}\u{370}";
+    let glyphs = shape_styled_faces(&faces, logical, &attrs(), rustybuzz::Direction::RightToLeft);
+    let fallback = glyphs.first().expect("glyphs");
+    assert_ne!(
+        fallback.face, 0,
+        "the uncovered last character paints first"
+    );
+    assert!(glyphs.iter().skip(1).all(|g| g.face == 0));
+}
+
+#[test]
+fn small_caps_pieces_keep_source_clusters() {
+    assert!(!has_feature(liberation(), b"smcp"));
+    let c = CharacterAttrs {
+        small_caps: true,
+        ..attrs()
+    };
+    let glyphs = shape_one_dir(liberation(), "aB", &c, rustybuzz::Direction::LeftToRight);
+    assert_eq!(glyphs.len(), 2);
+    assert_eq!(glyphs[0].cluster, 0);
+    assert_eq!(
+        glyphs[1].cluster, 1,
+        "the second piece keeps its source offset"
+    );
+}
+
+#[test]
+fn fallback_run_uses_second_face_advance() {
+    let _guard = crate::fonts::FALLBACK_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    register_fallback();
+    let active = crate::fonts::face_for("Liberation Sans", "").expect("active");
+    let faces = crate::fonts::faces_in_order(active);
+    let mixed = shape_styled_faces(
+        &faces,
+        "A\u{370}",
+        &attrs(),
+        rustybuzz::Direction::LeftToRight,
+    );
+    let fallback = mixed.iter().find(|g| g.face != 0).expect("fallback glyph");
+    let face = faces[fallback.face as usize];
+    let alone = shape_styled_faces(
+        &[face],
+        "\u{370}",
+        &attrs(),
+        rustybuzz::Direction::LeftToRight,
+    );
+    assert!((fallback.advance - alone[0].advance).abs() < 0.01);
+}
+
+#[test]
+fn re_rendering_keeps_every_type_layer_live() {
+    let mut doc = Document::new(300, 200, ColorMode::Rgb, BitDepth::Eight);
+    let one = TypeSpec::new("One", "Liberation Sans", 32.0);
+    let two = TypeSpec::new("Two", "Liberation Sans", 32.0);
+    crate::add_type_layer(&mut doc, "", &one);
+    crate::add_type_layer(&mut doc, "", &two);
+    let texts: Vec<String> = doc
+        .layers
+        .iter()
+        .filter_map(crate::type_layer_spec)
+        .map(|s| s.text)
+        .collect();
+    assert_eq!(crate::re_render_type_layers(&mut doc), 2);
+    assert!(doc.layers.iter().all(|layer| layer.type_tool.is_some()));
+    let after: Vec<String> = doc
+        .layers
+        .iter()
+        .filter_map(crate::type_layer_spec)
+        .map(|s| s.text)
+        .collect();
+    assert_eq!(after, texts);
 }

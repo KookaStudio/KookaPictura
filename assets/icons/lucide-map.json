@@ -1210,6 +1210,11 @@
       "kind": "lucide",
       "slug": "wrench",
       "match": "good"
+    },
+    "window.panels.characterStyles": {
+      "kind": "lucide",
+      "slug": "a-large-small",
+      "match": "approximate"
     }
   }
 }

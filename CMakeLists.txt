@@ -436,8 +436,10 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/panels/adjustment_controls.cpp
     crates/pictura-app/cpp/panels/character_panel.cpp
     crates/pictura-app/cpp/panels/character_panel_icons.cpp
+    crates/pictura-app/cpp/panels/character_styles_panel.cpp
     crates/pictura-app/cpp/panels/paragraph_panel.cpp
     crates/pictura-app/cpp/panels/paragraph_styles_panel.cpp
+    crates/pictura-app/cpp/justification_dialog.cpp
     crates/pictura-app/cpp/paragraph_style_dialog.cpp
     crates/pictura-app/cpp/paragraph_style_dialog_pages.cpp
     crates/pictura-app/cpp/font_combo.cpp
@@ -633,8 +635,10 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/panels/channels_panel.h
     crates/pictura-app/cpp/panels/character_panel.h
     crates/pictura-app/cpp/panels/character_panel_icons.h
+    crates/pictura-app/cpp/panels/character_styles_panel.h
     crates/pictura-app/cpp/panels/paragraph_panel.h
     crates/pictura-app/cpp/panels/paragraph_styles_panel.h
+    crates/pictura-app/cpp/justification_dialog.h
     crates/pictura-app/cpp/paragraph_style_dialog.h
     crates/pictura-app/cpp/panels/panel_group.h
     crates/pictura-app/cpp/panels/panel_column.h

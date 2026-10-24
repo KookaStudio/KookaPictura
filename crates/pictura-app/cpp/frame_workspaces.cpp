@@ -106,6 +106,7 @@ QJsonArray workspacePresets(const QString& name)
                 presetGroup({QStringLiteral("characterPanel"),
                              QStringLiteral("paragraphPanel")}),
                 presetGroup({QStringLiteral("paragraphStylesPanel"),
+                             QStringLiteral("characterStylesPanel"),
                              QStringLiteral("glyphsPanel")}),
                 presetGroup({QStringLiteral("layersPanel"), QStringLiteral("channelsPanel"),
                              QStringLiteral("pathsPanel")})}));
@@ -142,7 +143,8 @@ PanelColumn* PicturaMainWindow::restoreLegacyDefaultForTest()
                         {}),
             presetGroup({QStringLiteral("characterPanel"), QStringLiteral("paragraphPanel"),
                          QStringLiteral("glyphsPanel"),
-                         QStringLiteral("paragraphStylesPanel")},
+                         QStringLiteral("paragraphStylesPanel"),
+                         QStringLiteral("characterStylesPanel")},
                         {})});
     regroupAndApply(QJsonArray{column});
     return panelColumn_;

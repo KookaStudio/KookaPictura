@@ -14,7 +14,9 @@
 #include <QtCore/QEvent>
 #include <QtCore/QLocale>
 #include <QtCore/QSignalBlocker>
+#include <QtGui/QAction>
 #include <QtGui/QFont>
+#include <QtGui/QFontDatabase>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPainter>
 #include <QtGui/QPixmap>
@@ -24,6 +26,7 @@
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QLineEdit>
+#include <QtWidgets/QMenu>
 #include <QtWidgets/QToolButton>
 #include <QtWidgets/QVBoxLayout>
 
@@ -86,6 +89,23 @@ QStringList sizePresets()
     return out;
 }
 
+QStringList languagePresets()
+{
+    return {QStringLiteral("English: USA"), QStringLiteral("English: UK"),
+            QStringLiteral("French"),        QStringLiteral("German"),
+            QStringLiteral("German: 2006 Reform"),
+            QStringLiteral("Spanish"),       QStringLiteral("Italian"),
+            QStringLiteral("Portuguese: Brazil"),
+            QStringLiteral("Dutch"),         QStringLiteral("Swedish"),
+            QStringLiteral("Danish"),        QStringLiteral("Norwegian"),
+            QStringLiteral("Finnish"),       QStringLiteral("Polish"),
+            QStringLiteral("Czech"),         QStringLiteral("Russian"),
+            QStringLiteral("Japanese"),      QStringLiteral("Chinese: Simplified"),
+            QStringLiteral("Chinese: Traditional"),
+            QStringLiteral("Korean"),        QStringLiteral("Arabic"),
+            QStringLiteral("Hebrew")};
+}
+
 QStringList spacingPresets()
 {
     QStringList out;
@@ -99,6 +119,10 @@ QStringList spacingPresets()
 // the panel does not show (language, oldstyle, ornaments, …) as `to` has it.
 void copyPanelFields(const CharacterSetting& from, CharacterSetting& to)
 {
+    to.font_style = from.font_style;
+    to.language = from.language;
+    to.tsume = from.tsume;
+    to.fractional_widths = from.fractional_widths;
     to.size = from.size;
     to.leading_mode = from.leading_mode;
     to.leading_value = from.leading_value;
@@ -145,6 +169,41 @@ bool* openTypeFlag(CharacterSetting& c, int index)
     return flags[index];
 }
 
+const char* const kStyleActionIds[] = {
+    "character.fauxBold",   "character.fauxItalic", "character.allCaps",
+    "character.smallCaps",  "character.superscript", "character.subscript",
+    "character.underline",  "character.strikethrough"};
+const char* const kOpenTypeActionIds[] = {
+    "character.standardLigatures",      "character.contextualAlternates",
+    "character.discretionaryLigatures", "character.swash",
+    "character.stylisticAlternates",    "character.titlingAlternates",
+    "character.ordinals",               "character.fractions"};
+
+QAction* findMenuAction(QMenu* menu, const QString& id)
+{
+    for (QAction* action : menu->actions()) {
+        if (action->data().toString() == id) {
+            return action;
+        }
+        if (QMenu* submenu = action->menu()) {
+            if (QAction* found = findMenuAction(submenu, id)) {
+                return found;
+            }
+        }
+    }
+    return nullptr;
+}
+
+QAction* findSubmenuAction(QMenu* menu, const QString& text)
+{
+    for (QAction* action : menu->actions()) {
+        if (action->menu() && action->text() == text) {
+            return action;
+        }
+    }
+    return nullptr;
+}
+
 const char* const kStyleNames[] = {"FauxBold",  "FauxItalic", "AllCaps",   "SmallCaps",
                                    "Superscript", "Subscript", "Underline", "Strikethrough"};
 const char* const kOpenTypeNames[] = {"StandardLigatures",   "ContextualAlternates",
@@ -177,7 +236,18 @@ CharacterPanel::CharacterPanel(QWidget* parent)
     family_->setObjectName(QStringLiteral("characterFamily"));
     family_->setToolTip(tr("Set the font family"));
     useFastFontPreviews(family_);
-    layout->addWidget(family_);
+    style_ = new QComboBox(this);
+    style_->setObjectName(QStringLiteral("characterStyle"));
+    style_->setToolTip(tr("Set the font style"));
+    auto* familyRow = new QHBoxLayout();
+    familyRow->addWidget(family_, 2);
+    familyRow->addWidget(style_, 1);
+    layout->addLayout(familyRow);
+    language_ = new QComboBox(this);
+    language_->setObjectName(QStringLiteral("characterLanguage"));
+    language_->setToolTip(tr("Set the spelling language"));
+    language_->addItems(languagePresets());
+    layout->addWidget(language_);
 
     size_ = {nullptr, nullptr, 1.0, 1.0, 1296.0,
              [this](const QString& text) {
@@ -295,6 +365,19 @@ CharacterPanel::CharacterPanel(QWidget* parent)
                                tr("Horizontally scale"), 1.0, 1000.0, QStringLiteral("%"));
     baselineShift_ = numeric(QStringLiteral("characterBaselineShift"),
                              tr("Set the baseline shift"), -1000.0, 1000.0, tr(" px"));
+    {
+        NumericFieldConfig config;
+        config.minimum = 0.0;
+        config.maximum = 100.0;
+        config.decimals = 0;
+        config.suffix = QStringLiteral("%");
+        config.namePrefix = QStringLiteral("characterTsume");
+        config.objectName = QStringLiteral("characterTsume");
+        tsume_ = new NumericField(tr("Tsume:"), config, this);
+        tsume_->setToolTip(tr("Set the character-side spacing"));
+        tsume_->setVisible(showAsianOptions_);
+        layout->addWidget(tsume_);
+    }
 
     colorButton_ = new QToolButton(this);
     colorButton_->setObjectName(QStringLiteral("characterColor"));
@@ -361,7 +444,35 @@ CharacterPanel::CharacterPanel(QWidget* parent)
 
     updateIcons();
 
-    connect(family_, &QFontComboBox::currentFontChanged, this, &CharacterPanel::apply);
+    connect(family_, &QFontComboBox::currentFontChanged, this, [this](const QFont& font) {
+        const QString family = font.family();
+        const QSignalBlocker block(style_);
+        style_->clear();
+        style_->addItems(QFontDatabase::styles(family));
+        int index = style_->findText(shown_.font_style, Qt::MatchFixedString);
+        if (index < 0) {
+            index = style_->findText(QStringLiteral("Regular"), Qt::MatchFixedString);
+        }
+        style_->setCurrentIndex(index < 0 ? 0 : index);
+        shown_.font_style = style_->currentText();
+        registerTypeFont(family, shown_.font_style);
+        apply();
+    });
+    connect(style_, &QComboBox::currentTextChanged, this, [this](const QString& style) {
+        if (style == shown_.font_style) {
+            return;
+        }
+        shown_.font_style = style;
+        registerTypeFont(family_->currentFont().family(), style);
+        apply();
+    });
+    connect(language_, &QComboBox::currentTextChanged, this, [this](const QString& language) {
+        if (language == shown_.language) {
+            return;
+        }
+        shown_.language = language;
+        apply();
+    });
     connect(antiAlias_, &QComboBox::currentIndexChanged, this, [this](int index) {
         shown_.anti_alias = index;
         apply();
@@ -375,6 +486,10 @@ CharacterPanel::CharacterPanel(QWidget* parent)
     commitNumeric(verticalScale_, &CharacterSetting::vertical_scale);
     commitNumeric(horizontalScale_, &CharacterSetting::horizontal_scale);
     commitNumeric(baselineShift_, &CharacterSetting::baseline_shift);
+    connect(tsume_, &NumericField::valueCommitted, this, [this](double value) {
+        shown_.tsume = value;
+        apply();
+    });
     for (int i = 0; i < 8; ++i) {
         connect(styles_[i], &QToolButton::toggled, this, [this, i](bool on) {
             *styleFlag(shown_, i) = on;
@@ -546,6 +661,101 @@ void CharacterPanel::setView(PictureView* view)
     refresh();
 }
 
+void CharacterPanel::setShowAsianOptions(bool on)
+{
+    if (showAsianOptions_ == on) {
+        return;
+    }
+    showAsianOptions_ = on;
+    refresh();
+}
+
+void CharacterPanel::updatePanelMenu(QMenu* menu)
+{
+    const bool type = hasTypeLayer();
+    const bool editable = type || (session_ && session_());
+    const auto sync = [menu](const char* id, bool checked, bool enabled) {
+        QAction* action = findMenuAction(menu, QString::fromLatin1(id));
+        if (!action) {
+            return;
+        }
+        const QSignalBlocker block(action);
+        if (action->isCheckable()) {
+            action->setChecked(checked);
+        }
+        action->setEnabled(enabled);
+    };
+    for (int i = 0; i < 8; ++i) {
+        sync(kStyleActionIds[i], styles_[i]->isChecked(), styles_[i]->isEnabled());
+        sync(kOpenTypeActionIds[i], openType_[i]->isChecked(), openType_[i]->isEnabled());
+    }
+    sync("character.fractionalWidths", shown_.fractional_widths, editable);
+    sync("character.systemLayout", !shown_.fractional_widths, editable);
+    sync("character.reset", false, type);
+    if (QAction* openType = findSubmenuAction(menu, QStringLiteral("OpenType"))) {
+        bool any = false;
+        for (QToolButton* button : openType_) {
+            any = any || button->isEnabled();
+        }
+        openType->setEnabled(any);
+    }
+}
+
+void CharacterPanel::performPanelMenuAction(const QString& actionId)
+{
+    for (int i = 0; i < 8; ++i) {
+        if (actionId == QLatin1String(kStyleActionIds[i])) {
+            styles_[i]->click();
+            refresh();
+            return;
+        }
+        if (actionId == QLatin1String(kOpenTypeActionIds[i])) {
+            openType_[i]->click();
+            refresh();
+            return;
+        }
+    }
+    if (actionId == QLatin1String("character.fractionalWidths")) {
+        shown_.fractional_widths = !shown_.fractional_widths;
+        apply();
+        refresh();
+        return;
+    }
+    if (actionId == QLatin1String("character.systemLayout")) {
+        if (!shown_.fractional_widths) {
+            return;
+        }
+        shown_.fractional_widths = false;
+        apply();
+        refresh();
+        return;
+    }
+    if (actionId == QLatin1String("character.reset")) {
+        resetCharacter();
+    }
+}
+
+void CharacterPanel::resetCharacter()
+{
+    if (!hasTypeLayer()) {
+        return;
+    }
+    const QString path = layer_selection_anchor(*view_);
+    const pictura::type_api::LayerType layer = pictura::type_api::readLayer(*view_, path);
+    CharacterSetting character = layer.character;
+    const CharacterSetting defaults = pictura::type_api::defaultCharacterSetting();
+    copyPanelFields(defaults, character);
+    // The model default has no size or style; keep the text legible.
+    character.size = layer.character.size;
+    character.font_style = layer.character.font_style;
+    // ponytail: Reset Character keeps the layer's family; CS6 also resets it.
+    const QString family = familyForFontName(layer.font);
+    registerTypeFont(family, character.font_style);
+    pictura::type_api::updateLayer(*view_, path, layer.text, family, layer.setting, character,
+                                   layer.paragraph);
+    refresh();
+}
+
 QSize CharacterPanel::minimumSizeHint() const
 {
     return QSize(0, QWidget::minimumSizeHint().height());
@@ -584,18 +794,37 @@ void CharacterPanel::refresh()
     std::uint32_t features = 0;
     if (type) {
         // The query must see the host face, not the bundled fallback.
-        registerTypeFont(family);
-        features = pictura::type_api::openTypeFeatures(family);
+        registerTypeFont(family, shown_.font_style);
+        features = pictura::type_api::openTypeFeatures(family, shown_.font_style);
     }
 
     if (!family.isEmpty()) {
         const QSignalBlocker block(family_);
         family_->setCurrentFont(QFont(family));
+        const QSignalBlocker blockStyle(style_);
+        style_->clear();
+        style_->addItems(QFontDatabase::styles(family));
+        int index = style_->findText(shown_.font_style, Qt::MatchFixedString);
+        if (index < 0) {
+            index = style_->findText(QStringLiteral("Regular"), Qt::MatchFixedString);
+        }
+        style_->setCurrentIndex(index < 0 ? 0 : index);
+    }
+    {
+        const QSignalBlocker block(language_);
+        int index = language_->findText(shown_.language, Qt::MatchFixedString);
+        if (index < 0) {
+            language_->addItem(shown_.language);
+            index = language_->count() - 1;
+        }
+        language_->setCurrentIndex(index);
     }
     syncCombos();
     verticalScale_->setValue(shown_.vertical_scale);
     horizontalScale_->setValue(shown_.horizontal_scale);
     baselineShift_->setValue(shown_.baseline_shift);
+    tsume_->setValue(shown_.tsume);
+    tsume_->setVisible(showAsianOptions_);
     {
         const QSignalBlocker block(antiAlias_);
         antiAlias_->setCurrentIndex(shown_.anti_alias);
@@ -610,9 +839,10 @@ void CharacterPanel::refresh()
         openType_[i]->setChecked(*openTypeFlag(shown_, i));
         openType_[i]->setEnabled(type && (features >> i & 1u));
     }
-    for (QWidget* widget : QList<QWidget*>{family_, size_.combo, leading_.combo, kerning_.combo,
-                                           tracking_.combo, verticalScale_, horizontalScale_,
-                                           baselineShift_, antiAlias_, colorButton_}) {
+    for (QWidget* widget : QList<QWidget*>{family_, style_, language_, size_.combo,
+                                           leading_.combo, kerning_.combo, tracking_.combo,
+                                           verticalScale_, horizontalScale_, baselineShift_, tsume_,
+                                           antiAlias_, colorButton_}) {
         widget->setEnabled(type);
     }
 }
@@ -626,7 +856,7 @@ void CharacterPanel::apply()
         copyPanelFields(shown_, live);
         live.color = color_.rgba();
         const QString family = family_->currentFont().family();
-        registerTypeFont(family);
+        registerTypeFont(family, shown_.font_style);
         session->setNewTextCharacter(live, family);
         return;
     }
@@ -640,7 +870,7 @@ void CharacterPanel::apply()
     c.color = color_.rgba();
 
     const QString family = family_->currentFont().family();
-    registerTypeFont(family);
+    registerTypeFont(family, shown_.font_style);
     pictura::type_api::updateLayer(*view_, path, layer.text, family, layer.setting, c,
                                    layer.paragraph);
 }

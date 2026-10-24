@@ -25,7 +25,8 @@ namespace pictura {
 ParagraphStyleDialog::ParagraphStyleDialog(const QString& name, const QString& family,
                                            const CharacterSetting& character,
                                            const ParagraphSetting& paragraph,
-                                           bool previewAvailable, QWidget* parent)
+                                           bool previewAvailable, QWidget* parent,
+                                           bool characterOnly)
     : QDialog(parent)
     , character_(character)
     , paragraph_(paragraph)
@@ -33,7 +34,7 @@ ParagraphStyleDialog::ParagraphStyleDialog(const QString& name, const QString& f
     , color_(QColor::fromRgba(character.color))
     , previewAvailable_(previewAvailable)
 {
-    setWindowTitle(tr("Paragraph Style Options"));
+    setWindowTitle(characterOnly ? tr("Character Style Options") : tr("Paragraph Style Options"));
 
     auto* root = new QVBoxLayout(this);
     auto* body = new QHBoxLayout();
@@ -79,10 +80,12 @@ ParagraphStyleDialog::ParagraphStyleDialog(const QString& name, const QString& f
     addPage(tr("Basic Character Formats"), buildBasicCharacterPage());
     addPage(tr("Advanced Character Formats"), buildAdvancedCharacterPage());
     addPage(tr("OpenType Features"), buildOpenTypePage());
-    addPage(tr("Indents and Spacing"), buildIndentsPage());
-    addPage(tr("Composition"), buildCompositionPage());
-    addPage(tr("Justification"), buildJustificationPage());
-    addPage(tr("Hyphenation"), buildHyphenationPage());
+    if (!characterOnly) {
+        addPage(tr("Indents and Spacing"), buildIndentsPage());
+        addPage(tr("Composition"), buildCompositionPage());
+        addPage(tr("Justification"), buildJustificationPage());
+        addPage(tr("Hyphenation"), buildHyphenationPage());
+    }
 
     connect(pageList_, &QListWidget::currentRowChanged, this, [this](int row) {
         pages_->setCurrentIndex(row);
@@ -189,6 +192,8 @@ CharacterSetting ParagraphStyleDialog::characterSetting() const
     c.horizontal_scale = hScale_->value();
     c.vertical_scale = vScale_->value();
     c.baseline_shift = baselineShift_->value();
+    c.tsume = tsume_->value();
+    c.fractional_widths = fractionalWidths_->isChecked();
     c.color = color_.rgba();
     c.all_caps = caseBox_->currentData().toInt() == 1;
     c.small_caps = caseBox_->currentData().toInt() == 2;

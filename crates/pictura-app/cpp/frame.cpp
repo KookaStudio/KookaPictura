@@ -3,6 +3,7 @@
 
 #include "api/document_api.h"
 #include "api/selection_api.h"
+#include "api/type_api.h"
 #include "file_drop_router.h"
 #include "panels/numeric_field.h"
 #include "pictura_debug_timing.h"
@@ -14,7 +15,6 @@
 #include <QtWidgets/QTabBar>
 
 namespace pictura {
-
 namespace {
 
 // Save may route through Save As; only the origin command records the step.
@@ -100,6 +100,9 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
     gpuCompute_ = state.gpuCompute;
     colorPolicy_ = state.colorPolicy;
     applyTextGamma(state.textGammaEnabled, state.textGamma);
+    typeShowAsianOptions_ = state.typeShowAsianOptions; typeMiddleEastern_ = state.typeMiddleEastern;
+    typeMissingGlyphProtection_ = state.typeMissingGlyphProtection;
+    pictura::type_api::setMissingGlyphProtection(typeMissingGlyphProtection_);
     useShiftKeyForToolSwitch_ = state.useShiftKeyForToolSwitch;
     openDocumentsAsTabs_ = state.openDocumentsAsTabs;
     floatingDocumentDocking_ = state.enableFloatingDocumentDocking;
@@ -108,8 +111,7 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
     autoSaveRecovery_ = state.autoSaveRecovery;
     autoSaveMinutes_ = state.autoSaveMinutes;
     loadGuideSession(state);
-    // The family drives the theme chrome built below, so resolve it before the
-    // menu bar (and its theme toggle icon) is built.
+    // The family drives the theme chrome built below, so resolve it before the menu bar (and its theme toggle icon) is built.
     themeFamily_ = state.themeFamily == 1 ? 1 : 0;
     // Probe the adapter once so the toggle can be offered without a document.
     {

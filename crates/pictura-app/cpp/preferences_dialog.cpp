@@ -187,10 +187,17 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     stack_->addWidget(buildUnitsPage());
     stack_->addWidget(buildGuidesPage());
 
-    // Type: only the placeholder fill, a Photoshop CC option (not CS6).
+    // Type: the CS6 type options and glyph protection, plus the Photoshop CC
+    // placeholder fill.
     auto* typePage = new QWidget(this);
     typePage->setObjectName(QStringLiteral("preferencesTypePage"));
     auto* typeLayout = new QVBoxLayout(typePage);
+    makeCheckbox(QStringLiteral("showAsianTextOptions"),
+                 tr("Show Asian Text Options"), typePage);
+    makeCheckbox(QStringLiteral("middleEastern"), tr("Middle Eastern"), typePage);
+    makeCheckbox(QStringLiteral("missingGlyphProtection"),
+                 tr("Enable Missing Glyph Protection"), typePage)
+        ->setChecked(true);
     makeCheckbox(QStringLiteral("fillPlaceholderText"),
                  tr("Fill New Type Layers With Placeholder Text"), typePage)
         ->setChecked(true);
@@ -248,6 +255,12 @@ QCheckBox* PreferencesDialog::makeCheckbox(const QString& key, const QString& la
             emit gpuComputeChanged(on);
         } else if (key == QStringLiteral("fillPlaceholderText")) {
             emit typePlaceholderTextChanged(on);
+        } else if (key == QStringLiteral("showAsianTextOptions")) {
+            emit typeShowAsianOptionsChanged(on);
+        } else if (key == QStringLiteral("middleEastern")) {
+            emit typeMiddleEasternChanged(on);
+        } else if (key == QStringLiteral("missingGlyphProtection")) {
+            emit typeMissingGlyphProtectionChanged(on);
         } else if (key == QStringLiteral("autoSaveRecovery")) {
             autoSaveMinutes_->setEnabled(on);
             emit autoSaveRecoveryChanged(on, autoSaveMinutes_->currentData().toInt());
@@ -321,6 +334,30 @@ void PreferencesDialog::setThemeFamily(int family)
 void PreferencesDialog::setTypePlaceholderText(bool on)
 {
     if (QCheckBox* box = checkbox(QStringLiteral("fillPlaceholderText"))) {
+        box->setChecked(on);
+    }
+}
+
+void PreferencesDialog::setTypeShowAsianOptions(bool on)
+{
+    if (QCheckBox* box = checkbox(QStringLiteral("showAsianTextOptions"))) {
+        const QSignalBlocker block(box);
+        box->setChecked(on);
+    }
+}
+
+void PreferencesDialog::setTypeMiddleEastern(bool on)
+{
+    if (QCheckBox* box = checkbox(QStringLiteral("middleEastern"))) {
+        const QSignalBlocker block(box);
+        box->setChecked(on);
+    }
+}
+
+void PreferencesDialog::setTypeMissingGlyphProtection(bool on)
+{
+    if (QCheckBox* box = checkbox(QStringLiteral("missingGlyphProtection"))) {
+        const QSignalBlocker block(box);
         box->setChecked(on);
     }
 }

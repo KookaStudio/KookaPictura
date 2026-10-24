@@ -138,6 +138,7 @@ private slots:
     void caretContrastsWithTheImage();
     void typeLayerRowHasNoLockBadge();
     void dragOutsideMovesTheText();
+    void missingGlyphFallbackRegisters();
 
 private:
     void showFrame();
@@ -632,7 +633,7 @@ void TypeToolsTest::barRestylesTheSelectedLayer()
     // Family: the layer is re-set in that face — monospace i's are wider —
     // and records it, keeping the size.
     const QString mono = QFontInfo(QFontDatabase::systemFont(QFontDatabase::FixedFont)).family();
-    QVERIFY2(!pictura::typeFontBytes(mono).isEmpty(), "Qt hands over the face");
+    QVERIFY2(!pictura::typeFontBytes(mono, QString()).isEmpty(), "Qt hands over the face");
     o.family = mono;
     f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(o);
     QVERIFY2(f.committedOnce(base + 1, "Edit Type Layer"), "family restyles the layer");
@@ -1139,6 +1140,38 @@ void TypeToolsTest::dragOutsideMovesTheText()
     const QRect moved = layerRect(f, typeLayer(f));
     QCOMPARE(moved.topLeft() - unmoved.topLeft(), QPoint(30, 20));
     QCOMPARE(moved.size(), unmoved.size());
+}
+
+void TypeToolsTest::missingGlyphFallbackRegisters()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_type_glyph_fallback"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    pictura::registerTypeFallbacks();
+
+    pictura::TypeSetting setting{};
+    setting.x = 30.0;
+    setting.y = 120.0;
+    setting.xx = 1.0;
+    setting.yy = 1.0;
+    pictura::CharacterSetting character = pictura::type_api::defaultCharacterSetting();
+    character.size = 48.0;
+    const QString text = QStringLiteral("A") + QChar(0x0370);
+    const QString path = pictura::type_api::commitLayer(
+        *f.view, text, QStringLiteral("Liberation Sans"), setting, character,
+        pictura::type_api::defaultParagraphSetting());
+    QVERIFY2(!path.isEmpty(), "the type layer commits");
+    f.frame.refresh();
+    const QImage on = f.canvas->image();
+
+    pictura::type_api::setMissingGlyphProtection(false);
+    pictura::type_api::refreshMissingGlyphProtection(*f.view);
+    f.frame.refresh();
+    const QImage off = f.canvas->image();
+    pictura::type_api::setMissingGlyphProtection(true);
+    pictura::type_api::refreshMissingGlyphProtection(*f.view);
+    QVERIFY2(on != off, "the covering face changes the uncovered glyph");
 }
 
 QTEST_MAIN(TypeToolsTest)

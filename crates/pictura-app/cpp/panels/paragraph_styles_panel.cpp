@@ -153,7 +153,7 @@ bool ParagraphStylesPanel::createStyle()
     }
 
     const QString family = dialog.family();
-    registerTypeFont(family);
+    registerTypeFont(family, dialog.characterSetting().font_style);
     const bool created = pictura::type_api::createParagraphStyle(*view_, dialog.styleName(), family,
                                                      dialog.characterSetting(),
                                                      dialog.paragraphSetting());
@@ -192,7 +192,7 @@ bool ParagraphStylesPanel::editStyle(int row)
     }
 
     const QString newFamily = dialog.family();
-    registerTypeFont(newFamily);
+    registerTypeFont(newFamily, dialog.characterSetting().font_style);
     // The bridge edits by current name; a rename deletes and recreates.
     const QString newName = dialog.styleName();
     if (newName == name) {

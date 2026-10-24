@@ -186,7 +186,8 @@ mod type_style;
 pub use text_render::{materialize_text_rgba, render_text_layer, BundledRasterizer, BundledText};
 mod fonts;
 pub use fonts::{
-    font_family, font_has_outlines, font_postscript_name, opentype_features, register_font,
+    font_family, font_has_outlines, font_postscript_name, missing_glyph_protection,
+    opentype_features, register_font, set_missing_glyph_protection,
 };
 mod missing_fonts;
 pub use missing_fonts::{replace_type_fonts, REPLACEMENT_FONT};
@@ -203,8 +204,8 @@ mod type_layer;
 mod type_path;
 mod type_warp;
 pub use type_layer::{
-    add_type_layer, apply_type_style, render_type, replace_type_layer, type_layer_at,
-    type_layer_spec, type_layers_editable, type_mask, type_placement, TypePlacement,
+    add_type_layer, apply_type_style, re_render_type_layers, render_type, replace_type_layer,
+    type_layer_at, type_layer_spec, type_layers_editable, type_mask, type_placement, TypePlacement,
 };
 pub use type_path::{overflow_point as type_path_overflow_point, path_hit_at, PathHit};
 pub use type_warp::{type_warp_refusal, WarpRefusal};
