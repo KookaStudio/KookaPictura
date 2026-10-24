@@ -28,18 +28,18 @@ UTF-16BE when they begin with the `\xfe\xff` byte-order mark, applying the
 
 `read_psd` SHALL fill `TypeTool.fonts` with the embedded source's font-set names
 and `TypeTool.style` with the first style run's effective character attributes —
-font name, font style, size, leading including its auto flag, tracking, kerning
-mode and value, horizontal scale, vertical scale, baseline shift, anti-aliasing
-method, fill colour, and the character toggles — resolved against the
-paragraph/style defaults when a run omits a field. It SHALL expose the first
+font name, font style, size, language, leading including its auto flag, tracking,
+kerning mode and value, horizontal scale, vertical scale, baseline shift, tsume,
+anti-aliasing method, fill colour, and the character toggles — resolved against
+the paragraph/style defaults when a run omits a field. It SHALL expose the first
 paragraph run's effective paragraph attributes — alignment, justification,
-word/letter spacing and glyph scaling, indents, space before/after, hanging
-punctuation, hyphenation, and composer — resolved the same way. The
+direction, word/letter spacing and glyph scaling, indents, space before/after,
+hanging punctuation, hyphenation, and composer — resolved the same way. The
 anti-aliasing method SHALL come from the text descriptor's `AntA` enum when it is
 present, falling back to the EngineData `/AntiAlias` flag. When the `Txt `
 descriptor has no EngineData, or the EngineData cannot be parsed, the style SHALL
-be `None`, the font list empty, and the document read SHALL still succeed with
-the `Txt ` string and raw descriptor bytes preserved.
+be `None`, the font list empty, and the document read SHALL still succeed with the
+`Txt ` string and raw descriptor bytes preserved.
 
 #### Scenario: A real text layer exposes its font and size
 
@@ -75,3 +75,18 @@ the `Txt ` string and raw descriptor bytes preserved.
 
 - **WHEN** the `EngineData` value is not parseable
 - **THEN** `TypeTool.style` is `None` and the layer still reads with its text and raw `TySh` bytes
+
+#### Scenario: Language resolves to the sheet default
+
+- **WHEN** the first style run omits `/Language` and the style sheet sets it to `German`
+- **THEN** `TypeTool.style` reports language `German`
+
+#### Scenario: Tsume, language, and direction decode
+
+- **WHEN** the first style run carries `/Tsume` 60 and `/Language` `French`, and the shape carries `WritingDirection` 1
+- **THEN** the decoded style reports tsume 60, language `French`, and direction RTL
+
+#### Scenario: A missing tsume or direction takes the default
+
+- **WHEN** the first style run omits tsume and the shape omits its writing direction
+- **THEN** the decoded style reports tsume 0 and direction LTR
