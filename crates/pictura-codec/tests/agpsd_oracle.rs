@@ -115,8 +115,12 @@ const lines = [];
     const a = layer.adjustment;
     if (a && a.type === 'curves') {
       const parts = [];
-      for (const name of ['rgb', 'red', 'green', 'blue']) {
-        const c = a[name] || [];
+      // ag-psd <= 32 exposes rgb/red/green/blue; 33 replaced them with a
+      // channels array that omits absent channels.
+      const channels = Array.isArray(a.channels)
+        ? [a.channels[0] || [], a.channels[1] || [], a.channels[2] || [], a.channels[3] || []]
+        : [a.rgb || [], a.red || [], a.green || [], a.blue || []];
+      for (const c of channels) {
         parts.push(c.length);
         for (const p of c) parts.push(p.output, p.input);
       }
