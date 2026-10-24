@@ -18,5 +18,5 @@ Every "Verify" names the check that the final build and test run must pass.
 
 ## 3. Docs
 
-- [ ] 3.1 Rewrite parity row UI-14 in `docs/dev/doc-code-parity-gaps.md` as the remaining Wayland divergence (a plain header drag doesn't dock there). Verify the row count in the header still matches the table.
-- [ ] 3.2 Update the document windows entry in `docs/dev/STATE.md`. Verify `bash scripts/guard.sh` passes with `TASK-ALLOWS-DOCS` in the commit.
+- [x] 3.1 Rewrite parity row UI-14 in `docs/dev/doc-code-parity-gaps.md` as the remaining Wayland divergence (a plain header drag doesn't dock there). Verify the row count in the header still matches the table.
+- [x] 3.2 Update the document windows entry in `docs/dev/STATE.md`. Verify `bash scripts/guard.sh` passes with `TASK-ALLOWS-DOCS` in the commit.
