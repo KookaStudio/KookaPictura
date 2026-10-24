@@ -675,6 +675,10 @@ private:
     int addTabWindow(DocWindow* window);
     // Make `window` the active one through its host.
     void activateDocWindow(DocWindow* window);
+    // Ctrl+Tab / Shift+Ctrl+Tab: step the active window `step` places along
+    // `windows_`, wrapping; nothing with fewer than two windows.
+    void wireDocumentCycling();
+    void cycleDocumentWindow(int step);
     // The active window changed: settle loading entries and transform
     // sessions of the other documents, then refresh.
     void onActiveWindowChanged();

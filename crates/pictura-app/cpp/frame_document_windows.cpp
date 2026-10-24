@@ -63,6 +63,29 @@ void PicturaMainWindow::activateDocWindow(DocWindow* window)
     }
 }
 
+void PicturaMainWindow::wireDocumentCycling()
+{
+    // Window-context frame shortcuts, not catalogue commands: CS6 has no menu
+    // item for them, and unlike application shortcuts they stay quiet while a
+    // dialog is the active window. The shortcut map matches before the tab
+    // widget's own Ctrl+Tab handling sees the key.
+    auto* next = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Tab), this);
+    connect(next, &QShortcut::activated, this, [this]() { cycleDocumentWindow(1); });
+    // X11's Shift+Ctrl+Backtab falls back to this sequence in the shortcut map.
+    auto* previous = new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Tab), this);
+    connect(previous, &QShortcut::activated, this, [this]() { cycleDocumentWindow(-1); });
+}
+
+void PicturaMainWindow::cycleDocumentWindow(int step)
+{
+    const int count = int(windows_.size());
+    const int current = int(windows_.indexOf(activeWindow_));
+    if (count < 2 || current < 0) {
+        return;
+    }
+    activateDocWindow(windows_.at(((current + step) % count + count) % count));
+}
+
 void PicturaMainWindow::onActiveWindowChanged()
 {
     // A loading entry whose window is not active must not steal the activation

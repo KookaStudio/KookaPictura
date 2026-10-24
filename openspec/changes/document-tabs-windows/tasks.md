@@ -20,8 +20,8 @@ tests before its code.
 
 ## 3. Ctrl+Tab cycling (#499)
 
-- [ ] 3.1 Create `tst_document_windows.cpp` with a fresh window per test function and add it to `PICTURA_QT_TESTS` in `crates/pictura-app/cpp/tests/CMakeLists.txt`. Write `openAddsTab`, `switchingTabsChangesCanvas`, `commandsTargetActiveDocument`, `noDocumentsDisablesCommands`, `closeDirtyCancelKeepsTab`, `ctrlTabCyclesTabs`, `ctrlTabWraps`, `ctrlTabLeavesPanels`, `ctrlTabFromTextField`, `ctrlTabBlockedByModal`, `ctrlTabSingleWindowNoop`, `ctrlTabTypeSessionMatchesTabSwitch`, and `cycleSequencesAreReserved`.
-- [ ] 3.2 Add `frame_document_windows.cpp` (registered in the root `CMakeLists.txt`) with the frame-level `Ctrl+Tab` / `Ctrl+Shift+Tab` `WindowShortcut`s stepping `windows_`. Add both sequences to `workspaceKeys()`. Verify the tests above and `tst_keyboard_shortcuts`.
+- [x] 3.1 Create `tst_document_windows.cpp` with a fresh window per test function and add it to `PICTURA_QT_TESTS` in `crates/pictura-app/cpp/tests/CMakeLists.txt`. Write `openAddsTab`, `switchingTabsChangesCanvas`, `commandsTargetActiveDocument`, `noDocumentsDisablesCommands`, `closeDirtyCancelKeepsTab`, `ctrlTabCyclesTabs`, `ctrlTabWraps`, `ctrlTabLeavesPanels`, `ctrlTabFromTextField`, `ctrlTabBlockedByModal`, `ctrlTabSingleWindowNoop`, `ctrlTabTypeSessionMatchesTabSwitch`, and `cycleSequencesAreReserved`.
+- [x] 3.2 Add `frame_document_windows.cpp` (registered in the root `CMakeLists.txt`) with the frame-level `Ctrl+Tab` / `Ctrl+Shift+Tab` `WindowShortcut`s stepping `windows_`. Add both sequences to `workspaceKeys()`. Verify the tests above and `tst_keyboard_shortcuts`.
 
 ## 4. Float primitive, tear-out/dock, and context menus (#317)
 
