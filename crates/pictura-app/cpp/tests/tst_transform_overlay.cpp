@@ -24,6 +24,7 @@ private slots:
     void cleanup();
 
     void controlsBoxDrawsPastTheDocumentEdge();
+    void freeTransformClearsTheBrushRing();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -90,6 +91,59 @@ void TransformOverlayTest::controlsBoxDrawsPastTheDocumentEdge()
     const QColor insidePixel(shot.pixel(inside.toPoint()));
     QCOMPARE(outsidePixel, insidePixel);
     QVERIFY(outsidePixel.red() > 200 && outsidePixel.green() > 200 && outsidePixel.blue() > 200);
+}
+
+void TransformOverlayTest::freeTransformClearsTheBrushRing()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("RingClear"), 160, 160, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    pictura::ImageView* canvas = frame.imageView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(view && canvas && tools);
+    const int added = view->add_layer(0);
+    QVERIFY(added > 0);
+    const QString layer = QString::number(added);
+    frame.selectLayerPath(layer);
+    QVERIFY(view->select_rect(10, 10, 20, 20, QStringLiteral("new"), 0.0));
+    QVERIFY(pictura::edit_fill(*view, qRgba(0, 0, 0, 255), -1, QStringLiteral("normal"), 100,
+                               false));
+    view->deselect();
+
+    frame.setActiveTool(pictura::ToolId::Brush);
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&frame));
+    QCoreApplication::processEvents();
+    canvas->fitOnScreen();
+    canvas->setBrushOutline(80.0, QPointF(80.0, 80.0));
+    QCoreApplication::processEvents();
+    QVERIFY(canvas->hasBrushOutline());
+
+    // A patch on the ring, clear of the box border and the reference point.
+    const QPointF centre = canvas->imageToWidget(QPointF(80.0, 80.0));
+    const double radius = canvas->brushOutlineScreenDiameterForTest() / 2.0;
+    const QPoint ring = QPointF(centre.x() + radius, centre.y()).toPoint();
+    const QRect ringPatch(ring - QPoint(4, 4), QSize(9, 9));
+    const QImage withRing = canvas->grab().toImage();
+
+    QVERIFY(frame.beginFreeTransform(layer));
+    QCoreApplication::processEvents();
+    QVERIFY2(!canvas->hasBrushOutline(), "Free Transform clears the brush ring");
+    const QImage firstFrame = canvas->grab().toImage();
+    QVERIFY2(firstFrame.copy(ringPatch) != withRing.copy(ringPatch),
+             "the first transform frame repaints the ring");
+
+    canvas->setZoom(2.0, centre);
+    QCoreApplication::processEvents();
+    QVERIFY2(!canvas->hasBrushOutline(), "a zoom during the session keeps the ring hidden");
+
+    tools->cancelFreeTransform();
+    QCoreApplication::processEvents();
+    QVERIFY(!canvas->hasBrushOutline());
+    canvas->mouseMoved(QPointF(80.0, 80.0));
+    QCoreApplication::processEvents();
+    QVERIFY2(canvas->hasBrushOutline(), "the ring returns on the next hover");
 }
 
 QTEST_MAIN(TransformOverlayTest)

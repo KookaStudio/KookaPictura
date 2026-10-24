@@ -281,6 +281,9 @@ void ImageView::endMovePreview()
 void ImageView::beginTransformPreview(const QImage& base, const QImage& layer,
                                       const QPointF& layerPos, double opacity)
 {
+    // A transform session is modal: the paint hover that owns the ring is
+    // suspended, so the ring must go with the first transform frame.
+    clearBrushOutline();
     moveBase_ = base;
     moveLayer_ = layer;
     moveLayerPos_ = layerPos;
