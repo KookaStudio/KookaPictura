@@ -25,6 +25,52 @@ pub const IPTC_NAA: u16 = 1028;
 /// The ResolutionInfo resource id.
 pub const RESOLUTION_INFO: u16 = 1005;
 
+/// The project's Vanishing Point planes resource id, in Photoshop's plug-in
+/// range. A block counts as ours only with [`VANISHING_POINT_NAME`] too, so
+/// another plug-in's block at this id is left alone.
+// ponytail: CS6's own plane block is undocumented; this one is project-owned
+// and Photoshop does not read it.
+pub const VANISHING_POINT: u16 = 4900;
+/// The Pascal name that marks the planes resource.
+pub const VANISHING_POINT_NAME: &str = "Kooka Vanishing Point";
+
+fn is_vanishing_point(resource: &ImageResource) -> bool {
+    resource.id == VANISHING_POINT && resource.name == VANISHING_POINT_NAME
+}
+
+/// The data of the document's planes resource, if it has one.
+pub fn vanishing_point_data(document: &Document) -> Option<Vec<u8>> {
+    decode_image_resources(document)
+        .into_iter()
+        .find(is_vanishing_point)
+        .map(|r| r.data)
+}
+
+/// Replace the document's planes resource with `data`, append one, or with
+/// `None` remove it. Every other block and any unparsed trailing bytes are
+/// kept as they were.
+pub fn set_vanishing_point_data(document: &mut Document, data: Option<&[u8]>) {
+    let (mut resources, consumed) = decode_image_resources_with_len(document);
+    let at = resources.iter().position(is_vanishing_point);
+    match (at, data) {
+        (Some(i), Some(data)) => {
+            resources[i] = frame_image_resource(VANISHING_POINT, VANISHING_POINT_NAME, data)
+        }
+        (Some(i), None) => {
+            resources.remove(i);
+        }
+        (None, Some(data)) => resources.push(frame_image_resource(
+            VANISHING_POINT,
+            VANISHING_POINT_NAME,
+            data,
+        )),
+        (None, None) => return,
+    }
+    let mut section = encode_image_resources(&resources);
+    section.extend_from_slice(&document.image_resources[consumed..]);
+    document.image_resources = section;
+}
+
 /// The document's horizontal resolution from its ResolutionInfo resource.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Resolution {
@@ -370,5 +416,37 @@ mod tests {
         assert_eq!(decoded.len(), 1);
         assert_eq!(decoded[0].name, "n".repeat(255));
         assert_eq!(decoded[0].data, b"x");
+    }
+
+    #[test]
+    fn the_planes_resource_is_replaced_in_place_and_others_are_kept() {
+        let other = resource(b"8BIM", VANISHING_POINT, "Another Plug-in", b"theirs");
+        let xmp = resource(b"8BIM", XMP_METADATA, "", b"<x/>");
+        let tail = b"MXYZ unparsed".to_vec();
+        let mut section = [other.clone(), xmp.clone()].concat();
+        section.extend_from_slice(&tail);
+        let mut doc = document_with(section.clone());
+        assert_eq!(
+            vanishing_point_data(&doc),
+            None,
+            "another plug-in's block is not ours"
+        );
+        set_vanishing_point_data(&mut doc, None);
+        assert_eq!(
+            doc.image_resources, section,
+            "removing nothing changes nothing"
+        );
+        set_vanishing_point_data(&mut doc, Some(b"one"));
+        assert_eq!(vanishing_point_data(&doc).as_deref(), Some(&b"one"[..]));
+        set_vanishing_point_data(&mut doc, Some(b"second"));
+        let ours = resource(b"8BIM", VANISHING_POINT, VANISHING_POINT_NAME, b"second");
+        let mut expected = [other.clone(), xmp.clone(), ours].concat();
+        expected.extend_from_slice(&tail);
+        assert_eq!(
+            doc.image_resources, expected,
+            "replaced where it was, the rest verbatim"
+        );
+        set_vanishing_point_data(&mut doc, None);
+        assert_eq!(doc.image_resources, section);
     }
 }

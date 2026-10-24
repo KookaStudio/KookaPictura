@@ -112,6 +112,7 @@ set(PICTURA_QT_TESTS
     tst_adaptive_wide_angle
     tst_vanishing_point
     tst_vanishing_point_retouch
+    tst_vanishing_point_files
     tst_layer_style
     tst_color_range
     tst_refine_edge

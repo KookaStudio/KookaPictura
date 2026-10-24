@@ -1,6 +1,7 @@
 //! TIFF metadata: merge the document's EXIF IFD0 (and Exif sub-IFD), IPTC-IIM,
-//! and XMP into a fresh IFD0 at the end of the file. The original bytes stay in
-//! place, so Qt's strip offsets and any other data remain valid.
+//! XMP and Photoshop resource block into a fresh IFD0 at the end of the file,
+//! and read the resource block back. The original bytes stay in place, so
+//! Qt's strip offsets and any other data remain valid.
 
 use std::borrow::Cow;
 
@@ -12,6 +13,7 @@ const TAG_EXIF_IFD: u16 = 0x8769;
 const TAG_XMP: u16 = 700;
 const TAG_IPTC: u16 = 33723;
 const TAG_EXIF_POINTER: u16 = 34665;
+const TAG_PHOTOSHOP: u16 = 34377;
 
 /// Tags whose value is an offset into the TIFF/EXIF block they came from. The
 /// destination keeps its own copies, so an offset carried over from the
@@ -291,7 +293,12 @@ pub(super) fn embed(bytes: &[u8], metadata: &RasterMetadata) -> Result<Vec<u8>, 
 
     let mut entries: Vec<OutEntry> = destination_entries
         .iter()
-        .filter(|entry| !matches!(entry.tag, TAG_XMP | TAG_IPTC | TAG_EXIF_POINTER))
+        .filter(|entry| {
+            !matches!(
+                entry.tag,
+                TAG_XMP | TAG_IPTC | TAG_EXIF_POINTER | TAG_PHOTOSHOP
+            )
+        })
         .map(|entry| OutEntry {
             tag: entry.tag,
             typ: entry.typ,
@@ -329,6 +336,15 @@ pub(super) fn embed(bytes: &[u8], metadata: &RasterMetadata) -> Result<Vec<u8>, 
             data: Some(xmp.clone()),
         });
     }
+    if let Some(block) = metadata.photoshop_block() {
+        entries.push(OutEntry {
+            tag: TAG_PHOTOSHOP,
+            typ: 7,
+            count: block.len() as u32,
+            inline: None,
+            data: Some(block),
+        });
+    }
     if let Some(offset) = exif_ifd_offset {
         entries.push(OutEntry {
             tag: TAG_EXIF_POINTER,
@@ -342,6 +358,19 @@ pub(super) fn embed(bytes: &[u8], metadata: &RasterMetadata) -> Result<Vec<u8>, 
     let ifd0_offset = write_ifd(&mut out, entries, destination_order)?;
     destination_order.put_u32(&mut out[4..8], ifd0_offset);
     Ok(out)
+}
+
+/// IFD0's Photoshop resource block; `None` for a file that is not a TIFF or
+/// has none.
+pub(super) fn photoshop_block(bytes: &[u8]) -> Option<Vec<u8>> {
+    let (order, offset) = parse_header(bytes).ok()?;
+    let entry = read_ifd(bytes, order, offset)
+        .ok()?
+        .into_iter()
+        .find(|entry| entry.tag == TAG_PHOTOSHOP && matches!(entry.typ, 1 | 7))?;
+    entry_data(bytes, order, &entry)
+        .ok()
+        .map(|data| data.into_owned())
 }
 
 #[cfg(test)]
@@ -384,6 +413,7 @@ mod tests {
             exif: Some(exif_blob()),
             iptc: Some(b"iptc".to_vec()),
             xmp: Some(b"<x:xmpmeta/>".to_vec()),
+            vanishing_point: None,
         };
         let out = embed(&minimal_tiff(), &metadata).expect("embed");
         let (order, offset) = parse_header(&out).expect("header");
@@ -394,5 +424,25 @@ mod tests {
         assert!(find(&out, b"Canon\0"), "Make survives");
         assert!(find(&out, b"<x:xmpmeta/>"), "XMP survives");
         assert!(find(&out, b"iptc"), "IPTC survives");
+    }
+
+    #[test]
+    fn the_photoshop_block_round_trips() {
+        assert_eq!(photoshop_block(&minimal_tiff()), None);
+        let metadata = RasterMetadata {
+            vanishing_point: Some(b"planes".to_vec()),
+            ..RasterMetadata::default()
+        };
+        let once = embed(&minimal_tiff(), &metadata).expect("embed");
+        assert_eq!(photoshop_block(&once), metadata.photoshop_block());
+        let twice = embed(&once, &metadata).expect("re-embed");
+        let (order, offset) = parse_header(&twice).expect("header");
+        let entries = read_ifd(&twice, order, offset).expect("IFD0");
+        assert_eq!(
+            entries.iter().filter(|e| e.tag == TAG_PHOTOSHOP).count(),
+            1,
+            "a re-save replaces the block"
+        );
+        assert_eq!(photoshop_block(&twice), metadata.photoshop_block());
     }
 }

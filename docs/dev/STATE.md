@@ -96,12 +96,25 @@ Snapshot for resuming after a context break. Update after each milestone.
       lines. The preview recomposes dirty rects (`view.rs`).
     - **App.** `vanishing_point_retouch.rs` is the bridge, and
       `VpOptionsBar` holds the per-tool options.
-  Ceiling (`ponytail:`): planes are not saved in files (#918); the preview
+  - **Planes in files** (#918, OpenSpec change `add-vanishing-point-files`,
+    archived into `codec/vanishing-point-resource`). `VpPlanes::to_bytes` /
+    `from_bytes` (`persist.rs`) store the planes as drawn, and decoding
+    re-solves them. They live in a project-owned `8BIM` resource, id 4900,
+    named `Kooka Vanishing Point`. PSD, PSB, the recovery snapshot, and the
+    JPEG (APP13) and TIFF (tag 34377) Photoshop block carry it. JPEG and
+    TIFF opens now read that block back, less any ICC profile. The session
+    field stays the live copy, because history snapshots document metadata:
+    saves write it out, and installing a document reads it
+    (`filter_tools/vanishing_point_file.rs`). A plane-only OK marks the
+    document modified, with no history state.
+  Ceiling (`ponytail:`): CS6's own plane block is undocumented, so Photoshop
+  neither reads these planes nor do CS6-authored planes load; the preview
   ignores the layer's blend mode and the selection; Heal applies on drop or
   stroke end; the rendered grid's colour and the Grid Size, Diameter and
   Feather ranges are not confirmed against CS6. Tests: 32 Rust engine units,
-  the mapping and gate units, `tst_vanishing_point` (16 cases) and
-  `tst_vanishing_point_retouch` (6 cases).
+  the mapping and gate units, `tst_vanishing_point` (16 cases),
+  `tst_vanishing_point_retouch` (6 cases) and `tst_vanishing_point_files`
+  (2 cases).
 - **Actions panel, engine, and command bus** (OpenSpec change `actions-bundle`;
   issues #301, #616, and #273). `Window > Panels > Actions` (F9) is a real
   content `QWidget` (`actionsPanel`) hosted by a `PanelGroup`, hidden in the

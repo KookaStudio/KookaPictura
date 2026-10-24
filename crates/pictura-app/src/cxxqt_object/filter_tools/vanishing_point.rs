@@ -105,7 +105,8 @@ pub mod ffi {
         fn vp_redo() -> bool;
 
         /// End the session. With `keep` any floating selection is dropped,
-        /// the document keeps the planes, and when pixels changed or
+        /// the document keeps the planes (marked modified when they changed,
+        /// so a save writes them), and when pixels changed or
         /// `render_grids` is on the edit is kept and its id returned for the
         /// `vanishing-point` slot; otherwise 0.
         fn vp_finish(view: Pin<&mut PictureView>, keep: bool, render_grids: bool) -> i32;
@@ -440,7 +441,18 @@ fn vp_finish(mut view: Pin<&mut PictureView>, keep: bool, render_grids: bool) ->
             Vec::new()
         },
     };
-    view.as_mut().rust_mut().session.vanishing_planes = Some(planes.clone());
+    let mut rust = view.as_mut().rust_mut();
+    let session = &mut rust.session;
+    let changed = match &session.vanishing_planes {
+        Some(kept) => kept != &planes,
+        None => !planes.is_empty(),
+    };
+    // No history state records the planes, so the change has no saved point
+    // to step back to: the document stays modified until it is saved.
+    if changed {
+        session.mark_unsaved();
+    }
+    session.vanishing_planes = Some(planes.clone());
     if edit.is_empty() {
         0
     } else {

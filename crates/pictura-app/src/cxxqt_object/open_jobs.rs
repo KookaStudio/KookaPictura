@@ -13,7 +13,7 @@
 
 use super::helpers::decode_import;
 use super::helpers_composite::{current_buffer, store_composite};
-use super::impl_core::{finalize_import, format_for_path};
+use super::impl_core::format_for_path;
 use super::pdf_export::import::ffi::ImportTarget;
 use super::qobject::PictureView;
 use super::state::PictureViewRust;
@@ -24,7 +24,7 @@ use cxx_qt::{CxxQtThread, CxxQtType, Threading};
 use cxx_qt_lib::{QString, QStringList};
 use pictura_codec::pdf::import::{self as pdf_import, PdfImages, PdfRect, Rendered};
 use pictura_codec::{eps, Ghostscript, Policy, Raster, RasterError, Resolution};
-use pictura_core::{BitDepth, ColorMode, Document};
+use pictura_core::{BitDepth, ColorMode, Document, Layer, LockFlags};
 use std::path::Path;
 use std::time::Duration;
 
@@ -213,6 +213,30 @@ pub(super) fn decode_psd(
     })
 }
 
+/// Finish an imported raster document. When every decoded pixel is opaque the
+/// single `from_rgba` layer becomes the locked `Background` and its redundant
+/// alpha channel is dropped; otherwise the regular alpha layer named from the
+/// file stem is left untouched.
+pub(super) fn finalize_import(doc: &mut Document, rgba: &[u8]) {
+    if !rgba.as_chunks::<4>().0.iter().all(|px| px[3] == 255) {
+        return;
+    }
+    if let Some(layer) = doc.layers.last_mut() {
+        make_background(layer);
+    }
+}
+
+/// Turn the opaque `layer` into the locked `Background`, dropping its
+/// redundant alpha channel.
+pub(super) fn make_background(layer: &mut Layer) {
+    layer.name = "Background".to_string();
+    layer.background = true;
+    layer.lock = LockFlags::default()
+        .with(LockFlags::TRANSPARENCY, true)
+        .with(LockFlags::POSITION, true);
+    layer.channels.retain(|channel| channel.id != -1);
+}
+
 /// Read and decode a raster through the shared import path.
 pub(super) fn decode_image(
     path: &str,
@@ -231,6 +255,9 @@ pub(super) fn decode_image(
     progress(70, "Compositing");
     let mut doc = Document::from_rgba(&name, width, height, &rgba);
     finalize_import(&mut doc, &rgba);
+    if let Some(section) = pictura_codec::raster_image_resources(&bytes) {
+        doc.image_resources = section;
+    }
     store_opened_composite(&mut doc, gpu);
     progress(90, "Preparing layers");
     let target = LayerTarget::for_opened(&doc, Some("0".to_string()));

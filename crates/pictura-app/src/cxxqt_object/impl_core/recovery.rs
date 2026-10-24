@@ -6,6 +6,7 @@
 //!
 //! [`PictureView`]: super::super::qobject::PictureView
 
+use super::super::filter_tools::store_planes;
 use super::super::qobject::PictureView;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -38,9 +39,12 @@ pub mod ffi {
 
 fn recovery_write(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
     recovery_wait(view.as_mut());
-    let Some(doc) = view.rust().session.doc.clone() else {
+    let session = &view.rust().session;
+    let Some(mut doc) = session.doc.clone() else {
         return false;
     };
+    let planes = store_planes(session.vanishing_planes.as_ref(), &doc);
+    pictura_codec::set_vanishing_point_data(&mut doc, planes.as_deref());
     let path = path.to_string();
     let handle = std::thread::spawn(move || write_snapshot(doc, &path).is_ok());
     view.rust_mut().recovery_write = Some(handle);

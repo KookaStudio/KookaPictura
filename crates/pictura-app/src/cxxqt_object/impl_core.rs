@@ -1,3 +1,4 @@
+use super::filter_tools::store_planes;
 use super::helpers::*;
 use super::helpers_composite::*;
 use super::qobject;
@@ -14,30 +15,6 @@ use std::time::Instant;
 
 mod display;
 mod recovery;
-
-/// Finish an imported raster document. When every decoded pixel is opaque the
-/// single `from_rgba` layer becomes the locked `Background` and its redundant
-/// alpha channel is dropped; otherwise the regular alpha layer named from the
-/// file stem is left untouched.
-pub(super) fn finalize_import(doc: &mut Document, rgba: &[u8]) {
-    if !rgba.as_chunks::<4>().0.iter().all(|px| px[3] == 255) {
-        return;
-    }
-    if let Some(layer) = doc.layers.last_mut() {
-        make_background(layer);
-    }
-}
-
-/// Turn the opaque `layer` into the locked `Background`, dropping its
-/// redundant alpha channel.
-pub(super) fn make_background(layer: &mut Layer) {
-    layer.name = "Background".to_string();
-    layer.background = true;
-    layer.lock = LockFlags::default()
-        .with(LockFlags::TRANSPARENCY, true)
-        .with(LockFlags::POSITION, true);
-    layer.channels.retain(|channel| channel.id != -1);
-}
 
 /// The output format remembered for `path`: its lowercased extension, or
 /// `"psd"` when it has none.
@@ -279,15 +256,18 @@ impl qobject::PictureView {
             None => {
                 let bytes = {
                     let mut rust = self.as_mut().rust_mut();
-                    let Some(doc) = rust.session.doc.as_mut() else {
+                    let session = &mut rust.session;
+                    let Some(doc) = session.doc.as_mut() else {
                         return false;
                     };
+                    let planes = store_planes(session.vanishing_planes.as_ref(), doc);
                     if dirty {
                         pictura_render::refresh_native_composite(doc);
                     }
                     // A `.psb` path forces a version-2 PSB container; every other
                     // native suffix (including an unknown one) writes a PSD.
-                    let doc = pictura_render::save_view(doc);
+                    let mut doc = pictura_render::save_view(doc);
+                    pictura_codec::set_vanishing_point_data(doc.to_mut(), planes.as_deref());
                     let written = if suffix == "psb" {
                         pictura_codec::write_psb(&doc)
                     } else {
@@ -306,7 +286,8 @@ impl qobject::PictureView {
                 let gpu_compute = self.rust().gpu_compute;
                 let (rgba, width, height, metadata) = {
                     let mut rust = self.as_mut().rust_mut();
-                    let Some(doc) = rust.session.doc.as_mut() else {
+                    let session = &mut rust.session;
+                    let Some(doc) = session.doc.as_mut() else {
                         return false;
                     };
                     if dirty {
@@ -314,7 +295,8 @@ impl qobject::PictureView {
                     }
                     let buffer = current_buffer(doc, gpu_compute);
                     let srgb = pictura_codec::buffer_to_srgb(doc, &buffer);
-                    let metadata = pictura_codec::raster_metadata(doc);
+                    let mut metadata = pictura_codec::raster_metadata(doc);
+                    metadata.vanishing_point = store_planes(session.vanishing_planes.as_ref(), doc);
                     (
                         buffer_to_rgba_bytes(&srgb),
                         srgb.width,
