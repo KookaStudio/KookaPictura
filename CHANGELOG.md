@@ -1,5 +1,48 @@
 # Changelog
 
+## [0.3.0](https://github.com/KookaStudio/KookaPictura/compare/v0.2.0...v0.3.0) (2026-10-24)
+
+
+### Features
+
+* **actions:** Actions panel, action engine and command bus ([#301](https://github.com/KookaStudio/KookaPictura/issues/301)) ([#916](https://github.com/KookaStudio/KookaPictura/issues/916)) ([6194e01](https://github.com/KookaStudio/KookaPictura/commit/6194e0176f43cad1e07a529d062346718461b842))
+* Adaptive Wide Angle ([#346](https://github.com/KookaStudio/KookaPictura/issues/346)) ([#892](https://github.com/KookaStudio/KookaPictura/issues/892)) ([2e7fc3a](https://github.com/KookaStudio/KookaPictura/commit/2e7fc3a7ff847c7745e8a70b66c25fd7717f7de1))
+* add NTSC Colors gamut clamp ([#345](https://github.com/KookaStudio/KookaPictura/issues/345)) ([#907](https://github.com/KookaStudio/KookaPictura/issues/907)) ([c191077](https://github.com/KookaStudio/KookaPictura/commit/c191077fe489560795aba38e6420620ed546dcdb))
+* add System Info panel and Submit Issue ([#815](https://github.com/KookaStudio/KookaPictura/issues/815)) ([#836](https://github.com/KookaStudio/KookaPictura/issues/836)) ([526832f](https://github.com/KookaStudio/KookaPictura/commit/526832f87374efeb8ac1c7bf5df161ceba6ea425))
+* add the Crop tool Settings menu ([#104](https://github.com/KookaStudio/KookaPictura/issues/104)) ([#910](https://github.com/KookaStudio/KookaPictura/issues/910)) ([8fc1400](https://github.com/KookaStudio/KookaPictura/commit/8fc1400362e7fd8fbae1625a7cdac736c7a50093))
+* add the Shift+Space Help &gt; Search bar ([#788](https://github.com/KookaStudio/KookaPictura/issues/788)) ([#818](https://github.com/KookaStudio/KookaPictura/issues/818)) ([db1b766](https://github.com/KookaStudio/KookaPictura/commit/db1b766222491204f442047c8361505538288305))
+* Blend Text Colors Using Gamma and missing-font handling ([#685](https://github.com/KookaStudio/KookaPictura/issues/685)) ([#890](https://github.com/KookaStudio/KookaPictura/issues/890)) ([e7f1b58](https://github.com/KookaStudio/KookaPictura/commit/e7f1b58cc2be992fe8cc2ae6f049472e2debd974))
+* **filters:** add NTSC Colors gamut clamp ([#345](https://github.com/KookaStudio/KookaPictura/issues/345)) ([c191077](https://github.com/KookaStudio/KookaPictura/commit/c191077fe489560795aba38e6420620ed546dcdb))
+* **image:** complete HDR Conversion tone methods ([#557](https://github.com/KookaStudio/KookaPictura/issues/557)) ([#909](https://github.com/KookaStudio/KookaPictura/issues/909)) ([5123131](https://github.com/KookaStudio/KookaPictura/commit/5123131ebd39a9476534414f6b551f7728b014f1))
+* **panels:** implement the Adjustments panel icon grid ([#509](https://github.com/KookaStudio/KookaPictura/issues/509)) ([#820](https://github.com/KookaStudio/KookaPictura/issues/820)) ([a74226c](https://github.com/KookaStudio/KookaPictura/commit/a74226cba18829c5d95ee694f04a09fcd1ee3273))
+* **tools:** wire Edit &gt; Transform Scale/Rotate/Again and flips ([#529](https://github.com/KookaStudio/KookaPictura/issues/529)) ([#786](https://github.com/KookaStudio/KookaPictura/issues/786)) ([f0e0ed1](https://github.com/KookaStudio/KookaPictura/commit/f0e0ed1190beff3f181370efc996099f82f80d4c))
+* type on a path and area type ([#683](https://github.com/KookaStudio/KookaPictura/issues/683)) ([#817](https://github.com/KookaStudio/KookaPictura/issues/817)) ([d21422b](https://github.com/KookaStudio/KookaPictura/commit/d21422b542c74d7765327b627984d7662440b602))
+* Vanishing Point planes and Render Grids ([#349](https://github.com/KookaStudio/KookaPictura/issues/349)) ([#919](https://github.com/KookaStudio/KookaPictura/issues/919)) ([d0619e2](https://github.com/KookaStudio/KookaPictura/commit/d0619e20221f4d49c4eda6d6f1c147de4727452c))
+* Vanishing Point retouch tools ([#349](https://github.com/KookaStudio/KookaPictura/issues/349)) ([#920](https://github.com/KookaStudio/KookaPictura/issues/920)) ([942b814](https://github.com/KookaStudio/KookaPictura/commit/942b814999b8aba06b3f47b154c88f31615e983b))
+* Warp Text dialog and warp styles ([#684](https://github.com/KookaStudio/KookaPictura/issues/684)) ([#843](https://github.com/KookaStudio/KookaPictura/issues/843)) ([af4cc85](https://github.com/KookaStudio/KookaPictura/commit/af4cc85002ef916c957b8aead78f54cba65012da))
+
+
+### Bug Fixes
+
+* **app:** app IO, frame, panel and print bugs ([#845](https://github.com/KookaStudio/KookaPictura/issues/845), [#871](https://github.com/KookaStudio/KookaPictura/issues/871)-[#876](https://github.com/KookaStudio/KookaPictura/issues/876)) ([b984586](https://github.com/KookaStudio/KookaPictura/commit/b984586b66a041164507b1c723e7a4b1cb66723d))
+* **app:** app IO, frame, panel and print bugs ([#871](https://github.com/KookaStudio/KookaPictura/issues/871)) ([#888](https://github.com/KookaStudio/KookaPictura/issues/888)) ([b984586](https://github.com/KookaStudio/KookaPictura/commit/b984586b66a041164507b1c723e7a4b1cb66723d))
+* apply OpenType, style, and kerning options to type layers ([#780](https://github.com/KookaStudio/KookaPictura/issues/780)) ([#787](https://github.com/KookaStudio/KookaPictura/issues/787)) ([dfc5ae1](https://github.com/KookaStudio/KookaPictura/commit/dfc5ae1fca88de359cfda8a101a3719fbba74be0))
+* **app:** session history, Revert, Trim and transform guards ([#854](https://github.com/KookaStudio/KookaPictura/issues/854)) ([#899](https://github.com/KookaStudio/KookaPictura/issues/899)) ([3cf2947](https://github.com/KookaStudio/KookaPictura/commit/3cf294785fcd2995235d0a5d6f8d354bbd4ca18c))
+* **app:** the workspace scrollbars run in the opposite direction ([#823](https://github.com/KookaStudio/KookaPictura/issues/823)) ([#837](https://github.com/KookaStudio/KookaPictura/issues/837)) ([e6dda7c](https://github.com/KookaStudio/KookaPictura/commit/e6dda7c9b8d374bbec89f7c29768a3e149464dba))
+* **app:** the workspace scrollbars run in the opposite direction ([#823](https://github.com/KookaStudio/KookaPictura/issues/823)) TASK-ALLOWS-DOCS ([e6dda7c](https://github.com/KookaStudio/KookaPictura/commit/e6dda7c9b8d374bbec89f7c29768a3e149464dba))
+* **filters:** filter and adjustment parity bundle ([#855](https://github.com/KookaStudio/KookaPictura/issues/855)) ([#906](https://github.com/KookaStudio/KookaPictura/issues/906)) ([51aac5b](https://github.com/KookaStudio/KookaPictura/commit/51aac5bf365bd6768e24303668f7a47b327e3707))
+* harden untrusted document parsers and native edges ([#844](https://github.com/KookaStudio/KookaPictura/issues/844)) ([#885](https://github.com/KookaStudio/KookaPictura/issues/885)) ([c2ab1e1](https://github.com/KookaStudio/KookaPictura/commit/c2ab1e1c2b55527a34dbb94bbb7b064566418e0a))
+* **layers:** fill Solid Color layers with the foreground colour ([#793](https://github.com/KookaStudio/KookaPictura/issues/793)) ([#824](https://github.com/KookaStudio/KookaPictura/issues/824)) ([124bb0d](https://github.com/KookaStudio/KookaPictura/commit/124bb0d587274d92e3999a7fba21eaad4bb2d1b0))
+* move and transform shape layers as smooth vectors ([#734](https://github.com/KookaStudio/KookaPictura/issues/734)) ([#816](https://github.com/KookaStudio/KookaPictura/issues/816)) ([5a861d8](https://github.com/KookaStudio/KookaPictura/commit/5a861d80d22dd42e87668c88fd83eecfd52a0388))
+* **paint:** fill at any depth and mode ([#791](https://github.com/KookaStudio/KookaPictura/issues/791)) ([#825](https://github.com/KookaStudio/KookaPictura/issues/825)) ([8ac6abb](https://github.com/KookaStudio/KookaPictura/commit/8ac6abb1f75fb060ad529165af0e321637f9ba77))
+* **paint:** the Block-mode eraser ignores the zoom level ([#794](https://github.com/KookaStudio/KookaPictura/issues/794)) ([#821](https://github.com/KookaStudio/KookaPictura/issues/821)) ([915c633](https://github.com/KookaStudio/KookaPictura/commit/915c633e2a557844009369f658fd6f9339fda85a))
+* **render:** compositor, layer and native colour bugs ([#846](https://github.com/KookaStudio/KookaPictura/issues/846)) ([#889](https://github.com/KookaStudio/KookaPictura/issues/889)) ([41992f7](https://github.com/KookaStudio/KookaPictura/commit/41992f7e0b5db141f8021336f66bd52630b3da5e))
+* **select:** close the live selection outline along the canvas edge ([#796](https://github.com/KookaStudio/KookaPictura/issues/796)) ([#831](https://github.com/KookaStudio/KookaPictura/issues/831)) ([848bcd9](https://github.com/KookaStudio/KookaPictura/commit/848bcd982e621438c6b84e013bdb3002dbf945fd))
+* **shapes:** move and transform shape layers as smooth vectors ([#734](https://github.com/KookaStudio/KookaPictura/issues/734)) ([5a861d8](https://github.com/KookaStudio/KookaPictura/commit/5a861d80d22dd42e87668c88fd83eecfd52a0388))
+* **tools:** paint, selection and type tool bugs ([#863](https://github.com/KookaStudio/KookaPictura/issues/863)) ([#908](https://github.com/KookaStudio/KookaPictura/issues/908)) ([2f623a1](https://github.com/KookaStudio/KookaPictura/commit/2f623a18a140513ee4eb9855747354418e3c5306))
+* **type:** apply OpenType, style, and kerning options to type layers ([#780](https://github.com/KookaStudio/KookaPictura/issues/780)) ([dfc5ae1](https://github.com/KookaStudio/KookaPictura/commit/dfc5ae1fca88de359cfda8a101a3719fbba74be0))
+* **type:** justify a paragraph's lines to the column ([#792](https://github.com/KookaStudio/KookaPictura/issues/792)) ([#814](https://github.com/KookaStudio/KookaPictura/issues/814)) ([a88f495](https://github.com/KookaStudio/KookaPictura/commit/a88f49588be3a5c473632a61413b62a2e0994218))
+
 ## [0.2.0](https://github.com/KookaStudio/KookaPictura/compare/v0.1.0...v0.2.0) (2026-10-21)
 
 
