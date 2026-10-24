@@ -386,6 +386,11 @@ void DocumentFloatTest::cleanup()
         window_->setActiveTool(ToolId::Move);
         window_->cancelAllOpens();
         closeAll();
+        // A synthetic drag that ended without a drop leaves Qt's drag manager
+        // targeting a widget of this frame; a leave clears it before the frame
+        // goes, or the next test's drag events reach the freed widget.
+        QDragLeaveEvent leave;
+        QCoreApplication::sendEvent(window_.get(), &leave);
     }
     window_.reset();
     PanelFloat::setForceChildOverlayForTest(false);
