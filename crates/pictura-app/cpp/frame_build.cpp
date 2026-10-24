@@ -219,14 +219,18 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
 
     characterPanel_ = new CharacterPanel(this);
     characterPanel_->setObjectName(QStringLiteral("characterPanel"));
+    characterPanel_->setShowAsianOptions(state.typeShowAsianOptions);
     paragraphPanel_ = new ParagraphPanel(this);
     paragraphPanel_->setObjectName(QStringLiteral("paragraphPanel"));
+    paragraphPanel_->setMiddleEastern(state.typeMiddleEastern);
 
     glyphsPanel_ = new GlyphsPanel(this);
     glyphsPanel_->setObjectName(QStringLiteral("glyphsPanel"));
 
     paragraphStylesPanel_ = new ParagraphStylesPanel(this);
     paragraphStylesPanel_->setObjectName(QStringLiteral("paragraphStylesPanel"));
+    characterStylesPanel_ = new CharacterStylesPanel(this);
+    characterStylesPanel_->setObjectName(QStringLiteral("characterStylesPanel"));
 
     // Content widgets, not docks: the PanelColumn hosts them. Registering the
     // objectNames keeps the Window menu and the duplicate-name guard working.
@@ -252,6 +256,7 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
     registerPanel(paragraphPanel_, Qt::RightDockWidgetArea);
     registerPanel(glyphsPanel_, Qt::RightDockWidgetArea);
     registerPanel(paragraphStylesPanel_, Qt::RightDockWidgetArea);
+    registerPanel(characterStylesPanel_, Qt::RightDockWidgetArea);
 
     // CS6 Essentials groups and order. The tab text is the panel title and the
     // tab icon reuses the panel's `window.panels.<name>` asset.
@@ -328,12 +333,18 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
     auto* typeGroup = new PanelGroup(this);
     addPanel(typeGroup, characterPanel_, tr("Character"),
              QString::fromLatin1(command_ids::WindowPanelsCharacter));
+    typeGroup->setPanelMenuHook(QStringLiteral("characterPanel"),
+                                [this](QMenu* menu) { characterPanel_->updatePanelMenu(menu); });
     addPanel(typeGroup, paragraphPanel_, tr("Paragraph"),
              QString::fromLatin1(command_ids::WindowPanelsParagraph));
+    typeGroup->setPanelMenuHook(QStringLiteral("paragraphPanel"),
+                                [this](QMenu* menu) { paragraphPanel_->updatePanelMenu(menu); });
     addPanel(typeGroup, glyphsPanel_, tr("Glyphs"),
              QString::fromLatin1(command_ids::WindowPanelsGlyphs));
     addPanel(typeGroup, paragraphStylesPanel_, tr("Paragraph Styles"),
              QString::fromLatin1(command_ids::WindowPanelsParagraph));
+    addPanel(typeGroup, characterStylesPanel_, tr("Character Styles"),
+             QString::fromLatin1(command_ids::WindowPanelsCharacterStyles));
     panelColumn_->addGroup(typeGroup);
 
     // Default visibility matches the pre-M41 layout: Color/Swatches/Styles,
@@ -351,6 +362,7 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
     panelColumn_->showPanel(QStringLiteral("characterPanel"), false);
     panelColumn_->showPanel(QStringLiteral("paragraphPanel"), false);
     panelColumn_->showPanel(QStringLiteral("paragraphStylesPanel"), false);
+    panelColumn_->showPanel(QStringLiteral("characterStylesPanel"), false);
 
     // The Layers row menu's Edit / Replace / Export Contents actions run through
     // the frame, so this is wired here where the panel exists (registerHandlers
@@ -397,6 +409,9 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
         }
         if (paragraphStylesPanel_) {
             paragraphStylesPanel_->refresh();
+        }
+        if (characterStylesPanel_) {
+            characterStylesPanel_->refresh();
         }
     });
 }

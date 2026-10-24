@@ -17,7 +17,8 @@ fn doubles(values: &[f64]) -> EngineValue {
 
 /// The `/Rendered` value for point type (`None`) or a paragraph box (left,
 /// top, right, bottom relative to the origin).
-pub(crate) fn rendered(box_bounds: Option<[f64; 4]>) -> EngineValue {
+pub(crate) fn rendered(box_bounds: Option<[f64; 4]>, direction: i32) -> EngineValue {
+    let direction = EngineValue::Int(i64::from(direction));
     let shape_type = i64::from(box_bounds.is_some());
     let mut photoshop = vec![("ShapeType", EngineValue::Int(shape_type))];
     match box_bounds {
@@ -39,7 +40,7 @@ pub(crate) fn rendered(box_bounds: Option<[f64; 4]>) -> EngineValue {
         (
             "Lines",
             dict(vec![
-                ("WritingDirection", EngineValue::Int(0)),
+                ("WritingDirection", direction.clone()),
                 ("Children", EngineValue::List(Vec::new())),
             ]),
         ),
@@ -50,7 +51,7 @@ pub(crate) fn rendered(box_bounds: Option<[f64; 4]>) -> EngineValue {
         (
             "Shapes",
             dict(vec![
-                ("WritingDirection", EngineValue::Int(0)),
+                ("WritingDirection", direction),
                 ("Children", EngineValue::List(vec![child])),
             ]),
         ),

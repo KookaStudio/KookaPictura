@@ -18,6 +18,7 @@ private slots:
     void infoGlyphsResolve();
     void adjustmentsGlyphsResolve();
     void actionsGlyphsResolve();
+    void characterStylesGlyphResolves();
     void unknownIdIsNull();
     void explicitColour();
     void disabledDiffers();
@@ -121,6 +122,13 @@ void IconAssetsTest::adjustmentsGlyphsResolve()
         QVERIFY2(!icon.pixmap(16, 16).isNull(),
                  qPrintable(id + QStringLiteral(" renders at 16px")));
     }
+}
+
+void IconAssetsTest::characterStylesGlyphResolves()
+{
+    const QIcon icon = pictura::icon(QStringLiteral("window.panels.characterStyles"));
+    QVERIFY(!icon.isNull());
+    QVERIFY(!icon.pixmap(16, 16).isNull());
 }
 
 void IconAssetsTest::unknownIdIsNull()

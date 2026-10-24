@@ -2,6 +2,7 @@
 // frame.cpp / frame_menus.cpp to keep them within their size budgets.
 
 #include "frame_includes.h"
+#include "api/type_api.h"
 
 namespace pictura {
 
@@ -38,6 +39,9 @@ void PicturaMainWindow::showPreferences(const QString& page)
         preferencesDialog_->setGpuCompute(gpuCompute_);
         preferencesDialog_->setGpuComputeEnabled(gpuAvailable_);
         preferencesDialog_->setTypePlaceholderText(!tools_ || tools_->typePlaceholderText());
+        preferencesDialog_->setTypeShowAsianOptions(typeShowAsianOptions_);
+        preferencesDialog_->setTypeMiddleEastern(typeMiddleEastern_);
+        preferencesDialog_->setTypeMissingGlyphProtection(typeMissingGlyphProtection_);
         connectRecoveryPreferences(preferencesDialog_);
         connectGuidePreferences(preferencesDialog_);
         connect(preferencesDialog_, &PreferencesDialog::useShiftKeyForToolSwitchChanged,
@@ -80,6 +84,33 @@ void PicturaMainWindow::showPreferences(const QString& page)
                 [this](bool on) {
                     if (tools_) {
                         tools_->setTypePlaceholderText(on);
+                    }
+                    saveSession();
+                });
+        connect(preferencesDialog_, &PreferencesDialog::typeShowAsianOptionsChanged, this,
+                [this](bool on) {
+                    typeShowAsianOptions_ = on;
+                    if (characterPanel_) {
+                        characterPanel_->setShowAsianOptions(on);
+                    }
+                    saveSession();
+                });
+        connect(preferencesDialog_, &PreferencesDialog::typeMiddleEasternChanged, this,
+                [this](bool on) {
+                    typeMiddleEastern_ = on;
+                    if (paragraphPanel_) {
+                        paragraphPanel_->setMiddleEastern(on);
+                    }
+                    saveSession();
+                });
+        connect(preferencesDialog_, &PreferencesDialog::typeMissingGlyphProtectionChanged, this,
+                [this](bool on) {
+                    typeMissingGlyphProtection_ = on;
+                    pictura::type_api::setMissingGlyphProtection(on);
+                    for (const DocEntry& entry : docs_) {
+                        if (entry.view) {
+                            pictura::type_api::refreshMissingGlyphProtection(*entry.view);
+                        }
                     }
                     saveSession();
                 });

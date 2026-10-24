@@ -1,8 +1,10 @@
 #include "panel_group.h"
 
 #include "actions_panel.h"
+#include "character_panel.h"
 #include "history_panel.h"
 #include "layers_panel.h"
+#include "paragraph_panel.h"
 
 #include <QtCore/QHash>
 #include <QtGui/QAction>
@@ -52,6 +54,12 @@ MenuRow sub(const QString& label, bool separatorBefore = false)
 MenuRow kid(const QString& label, const QString& action = QString())
 {
     return {label, action, false, false, false, 1};
+}
+MenuRow chkKid(const QString& label, const QString& action)
+{
+    MenuRow row = chkAction(label, action);
+    row.depth = 1;
+    return row;
 }
 
 const QList<MenuRow>& rowsForPanel(const QString& panel)
@@ -231,6 +239,57 @@ const QList<MenuRow>& rowsForPanel(const QString& panel)
              imp(QStringLiteral("Replace Actions…"), QStringLiteral("actions.replace")),
              imp(QStringLiteral("Save Actions…"), QStringLiteral("actions.save")),
              dis(QStringLiteral("(installed sets)"), true),
+         }},
+        {QStringLiteral("characterPanel"),
+         {
+             sub(QStringLiteral("Change Text Orientation")),
+             kid(QStringLiteral("Standard Vertical Roman Alignment")),
+             sub(QStringLiteral("OpenType")),
+             chkKid(QStringLiteral("Standard Ligatures"),
+                    QStringLiteral("character.standardLigatures")),
+             chkKid(QStringLiteral("Contextual Alternates"),
+                    QStringLiteral("character.contextualAlternates")),
+             chkKid(QStringLiteral("Discretionary Ligatures"),
+                    QStringLiteral("character.discretionaryLigatures")),
+             chkKid(QStringLiteral("Swash"), QStringLiteral("character.swash")),
+             chkKid(QStringLiteral("Stylistic Alternates"),
+                    QStringLiteral("character.stylisticAlternates")),
+             chkKid(QStringLiteral("Titling Alternates"),
+                    QStringLiteral("character.titlingAlternates")),
+             chkKid(QStringLiteral("Ordinals"), QStringLiteral("character.ordinals")),
+             chkKid(QStringLiteral("Fractions"), QStringLiteral("character.fractions")),
+             chkAction(QStringLiteral("Faux Bold"), QStringLiteral("character.fauxBold")),
+             chkAction(QStringLiteral("Faux Italic"), QStringLiteral("character.fauxItalic")),
+             chkAction(QStringLiteral("All Caps"), QStringLiteral("character.allCaps")),
+             chkAction(QStringLiteral("Small Caps"), QStringLiteral("character.smallCaps")),
+             chkAction(QStringLiteral("Superscript"), QStringLiteral("character.superscript")),
+             chkAction(QStringLiteral("Subscript"), QStringLiteral("character.subscript")),
+             chkAction(QStringLiteral("Underline"), QStringLiteral("character.underline"), true),
+             chkAction(QStringLiteral("Strikethrough"), QStringLiteral("character.strikethrough")),
+             chkAction(QStringLiteral("Fractional Widths"),
+                       QStringLiteral("character.fractionalWidths"), true),
+             chkAction(QStringLiteral("System Layout"), QStringLiteral("character.systemLayout")),
+             dis(QStringLiteral("No Break"), true),
+             sub(QStringLiteral("Middle Eastern Features"), true),
+             imp(QStringLiteral("Reset Character"), QStringLiteral("character.reset"), true),
+         }},
+        {QStringLiteral("paragraphPanel"),
+         {
+             chkAction(QStringLiteral("Roman Hanging Punctuation"),
+                       QStringLiteral("paragraph.hanging")),
+             imp(QStringLiteral("Justification…"), QStringLiteral("paragraph.justification"),
+                 true),
+             dis(QStringLiteral("Hyphenation…")),
+             chk(QStringLiteral("Latin and East Asian Layout"), true),
+             chk(QStringLiteral("World-Ready Layout")),
+             chk(QStringLiteral("Default Features"), true),
+             chk(QStringLiteral("East Asian Features")),
+             chk(QStringLiteral("Middle Eastern Features")),
+             chkAction(QStringLiteral("Single-line Composer"),
+                       QStringLiteral("paragraph.singleLineComposer"), true),
+             chkAction(QStringLiteral("Every-line Composer"),
+                       QStringLiteral("paragraph.everyLineComposer")),
+             imp(QStringLiteral("Reset Paragraph"), QStringLiteral("paragraph.reset"), true),
          }},
         {QStringLiteral("adjustmentsPanel"),
          {
@@ -421,6 +480,14 @@ void PanelGroup::runPanelMenuAction(const QString& actionId)
     }
     if (auto* actions = qobject_cast<ActionsPanel*>(panel)) {
         actions->performPanelMenuAction(actionId);
+        return;
+    }
+    if (auto* character = qobject_cast<CharacterPanel*>(panel)) {
+        character->performPanelMenuAction(actionId);
+        return;
+    }
+    if (auto* paragraph = qobject_cast<ParagraphPanel*>(panel)) {
+        paragraph->performPanelMenuAction(actionId);
         return;
     }
     // The Adjustments panel is a placeholder with no view handle; its

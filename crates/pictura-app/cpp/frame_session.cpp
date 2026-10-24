@@ -3,6 +3,7 @@
 #include "panels/actions_panel.h"
 
 #include "pictura_debug_timing.h"
+#include "type_fonts.h"
 
 #include <QtGui/QGuiApplication>
 #include <QtGui/QScreen>
@@ -29,6 +30,7 @@ void PicturaMainWindow::setPanelsHidden(bool hidden)
 void PicturaMainWindow::retargetDock()
 {
     pictura::ScopedTimer dockTimer("cxx_retargetDock (all panels)");
+    registerTypeFallbacks();
     PictureView* view = activeView();
     ImageView* canvas = canvasAt(activeDocumentIndex());
 
@@ -73,6 +75,10 @@ void PicturaMainWindow::retargetDock()
     if (paragraphStylesPanel_) {
         paragraphStylesPanel_->setView(view);
         paragraphStylesPanel_->refresh();
+    }
+    if (characterStylesPanel_) {
+        characterStylesPanel_->setView(view);
+        characterStylesPanel_->refresh();
     }
     if (notesPanel_) {
         notesPanel_->setView(view);
@@ -146,6 +152,9 @@ void PicturaMainWindow::saveSession()
     state.enableFloatingDocumentDocking = floatingDocumentDocking_;
     state.zoomResizesWindows = zoomResizesWindows_;
     state.typePlaceholderText = tools_ ? tools_->typePlaceholderText() : true;
+    state.typeShowAsianOptions = typeShowAsianOptions_;
+    state.typeMiddleEastern = typeMiddleEastern_;
+    state.typeMissingGlyphProtection = typeMissingGlyphProtection_;
     state.shortcuts.clear();
     const QHash<QString, QList<QKeySequence>> overrides = registry_->shortcutOverrides();
     const QSet<QString> shadowed =

@@ -1,5 +1,7 @@
 #include "paragraph_panel.h"
 
+#include "dialogs.h"
+#include "justification_dialog.h"
 #include "type_fonts.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
@@ -7,11 +9,15 @@
 #include "api/type_api.h"
 
 #include <QtCore/QSignalBlocker>
+#include <QtGui/QAction>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QDoubleSpinBox>
 #include <QtWidgets/QFormLayout>
 #include <QtWidgets/QGroupBox>
+#include <QtWidgets/QHBoxLayout>
+#include <QtWidgets/QMenu>
+#include <QtWidgets/QToolButton>
 #include <QtWidgets/QVBoxLayout>
 
 namespace pictura {
@@ -26,6 +32,21 @@ QDoubleSpinBox* spin(QWidget* parent, const QString& name, double lo, double hi,
     box->setDecimals(decimals);
     box->setKeyboardTracking(false);
     return box;
+}
+
+QAction* findMenuAction(QMenu* menu, const QString& id)
+{
+    for (QAction* action : menu->actions()) {
+        if (action->data().toString() == id) {
+            return action;
+        }
+        if (QMenu* submenu = action->menu()) {
+            if (QAction* found = findMenuAction(submenu, id)) {
+                return found;
+            }
+        }
+    }
+    return nullptr;
 }
 
 } // namespace
@@ -64,6 +85,24 @@ ParagraphPanel::ParagraphPanel(QWidget* parent)
     composer_->setObjectName(QStringLiteral("paragraphComposer"));
     composer_->addItems({tr("Single-line"), tr("Every-line")});
     form->addRow(tr("Composer"), composer_);
+    auto* direction = new QWidget(paragraphs);
+    form_ = form;
+    direction_ = direction;
+    auto* directionRow = new QHBoxLayout(direction);
+    directionRow->setContentsMargins(0, 0, 0, 0);
+    ltr_ = new QToolButton(direction);
+    ltr_->setObjectName(QStringLiteral("paragraphDirectionLtr"));
+    ltr_->setText(tr("LTR"));
+    ltr_->setCheckable(true);
+    ltr_->setToolTip(tr("Left-to-right paragraph direction"));
+    rtl_ = new QToolButton(direction);
+    rtl_->setObjectName(QStringLiteral("paragraphDirectionRtl"));
+    rtl_->setText(tr("RTL"));
+    rtl_->setCheckable(true);
+    rtl_->setToolTip(tr("Right-to-left paragraph direction"));
+    directionRow->addWidget(ltr_);
+    directionRow->addWidget(rtl_);
+    form->addRow(tr("Direction"), direction);
     layout->addWidget(paragraphs);
     layout->addStretch(1);
 
@@ -79,6 +118,16 @@ ParagraphPanel::ParagraphPanel(QWidget* parent)
     connect(composer_, &QComboBox::currentIndexChanged, this, &ParagraphPanel::apply);
     connect(hanging_, &QCheckBox::toggled, this, &ParagraphPanel::apply);
     connect(hyphenate_, &QCheckBox::toggled, this, &ParagraphPanel::apply);
+    connect(ltr_, &QToolButton::clicked, this, [this] {
+        ltr_->setChecked(true);
+        rtl_->setChecked(false);
+        apply();
+    });
+    connect(rtl_, &QToolButton::clicked, this, [this] {
+        rtl_->setChecked(true);
+        ltr_->setChecked(false);
+        apply();
+    });
 
     refresh();
 }
@@ -95,6 +144,15 @@ bool ParagraphPanel::hasTypeLayer() const
 void ParagraphPanel::setView(PictureView* view)
 {
     view_ = view;
+    refresh();
+}
+
+void ParagraphPanel::setMiddleEastern(bool on)
+{
+    if (middleEastern_ == on) {
+        return;
+    }
+    middleEastern_ = on;
     refresh();
 }
 
@@ -119,6 +177,8 @@ void ParagraphPanel::refresh()
     const QSignalBlocker blockHanging(hanging_);
     const QSignalBlocker blockHyphenate(hyphenate_);
     const QSignalBlocker blockComposer(composer_);
+    const QSignalBlocker blockLtr(ltr_);
+    const QSignalBlocker blockRtl(rtl_);
 
     justify_->setCurrentIndex(qBound(0, p.justify, 6));
     startIndent_->setValue(p.start_indent);
@@ -129,10 +189,15 @@ void ParagraphPanel::refresh()
     hanging_->setChecked(p.hanging);
     hyphenate_->setChecked(p.hyphenate);
     composer_->setCurrentIndex(p.composer == 1 ? 1 : 0);
+    ltr_->setChecked(p.direction == 0);
+    rtl_->setChecked(p.direction == 1);
+    if (form_ && direction_) {
+        form_->setRowVisible(direction_, middleEastern_);
+    }
 
     for (QWidget* widget : QList<QWidget*>{justify_, startIndent_, endIndent_, firstLineIndent_,
                                            spaceBefore_, spaceAfter_, hanging_, hyphenate_,
-                                           composer_}) {
+                                           composer_, ltr_, rtl_}) {
         widget->setEnabled(type);
     }
 }
@@ -154,11 +219,108 @@ void ParagraphPanel::apply()
     p.hanging = hanging_->isChecked();
     p.hyphenate = hyphenate_->isChecked();
     p.composer = composer_->currentIndex() == 1 ? 1 : 0;
+    if (middleEastern_) {
+        p.direction = rtl_->isChecked() ? 1 : 0;
+    }
 
     const QString family = familyForFontName(layer.font);
-    registerTypeFont(family);
+    registerTypeFont(family, layer.character.font_style);
     pictura::type_api::updateLayer(*view_, path, layer.text, family, layer.setting,
                                    layer.character, p);
+}
+
+void ParagraphPanel::updatePanelMenu(QMenu* menu)
+{
+    const bool type = hasTypeLayer();
+    const auto sync = [menu](const char* id, bool checked, bool enabled) {
+        QAction* action = findMenuAction(menu, QString::fromLatin1(id));
+        if (!action) {
+            return;
+        }
+        const QSignalBlocker block(action);
+        if (action->isCheckable()) {
+            action->setChecked(checked);
+        }
+        action->setEnabled(enabled);
+    };
+    sync("paragraph.hanging", hanging_->isChecked(), type);
+    sync("paragraph.singleLineComposer", composer_->currentIndex() == 0, type);
+    sync("paragraph.everyLineComposer", composer_->currentIndex() == 1, type);
+    sync("paragraph.justification", false, type);
+    sync("paragraph.reset", false, type);
+    // The disabled layout/feature rows still show CS6's default choices.
+    for (QAction* action : menu->actions()) {
+        if (action->text() == QStringLiteral("Latin and East Asian Layout")
+            || action->text() == QStringLiteral("Default Features")) {
+            const QSignalBlocker block(action);
+            action->setChecked(true);
+        }
+    }
+}
+
+void ParagraphPanel::performPanelMenuAction(const QString& actionId)
+{
+    if (actionId == QLatin1String("paragraph.hanging")) {
+        hanging_->setChecked(!hanging_->isChecked());
+        return;
+    }
+    if (actionId == QLatin1String("paragraph.justification")) {
+        openJustification();
+        return;
+    }
+    if (actionId == QLatin1String("paragraph.singleLineComposer")) {
+        if (composer_->currentIndex() != 0) {
+            composer_->setCurrentIndex(0);
+        }
+        return;
+    }
+    if (actionId == QLatin1String("paragraph.everyLineComposer")) {
+        if (composer_->currentIndex() != 1) {
+            composer_->setCurrentIndex(1);
+        }
+        return;
+    }
+    if (actionId == QLatin1String("paragraph.reset")) {
+        resetParagraph();
+    }
+}
+
+void ParagraphPanel::resetParagraph()
+{
+    if (!hasTypeLayer()) {
+        return;
+    }
+    const QString path = layer_selection_anchor(*view_);
+    const pictura::type_api::LayerType layer = pictura::type_api::readLayer(*view_, path);
+    const ParagraphSetting defaults = pictura::type_api::defaultParagraphSetting();
+    const QString family = familyForFontName(layer.font);
+    registerTypeFont(family, layer.character.font_style);
+    pictura::type_api::updateLayer(*view_, path, layer.text, family, layer.setting,
+                                   layer.character, defaults);
+    refresh();
+}
+
+void ParagraphPanel::openJustification()
+{
+    if (!hasTypeLayer()) {
+        return;
+    }
+    const QString path = layer_selection_anchor(*view_);
+    const pictura::type_api::LayerType layer = pictura::type_api::readLayer(*view_, path);
+    JustificationDialog dialog(layer.paragraph, this);
+    if (runDialog(dialog, this) != QDialog::Accepted) {
+        return;
+    }
+    const ParagraphSetting p = dialog.setting();
+    const QString family = familyForFontName(layer.font);
+    registerTypeFont(family, layer.character.font_style);
+    pictura::type_api::updateLayer(*view_, path, layer.text, family, layer.setting,
+                                   layer.character, p);
+}
+
+bool ParagraphPanel::directionVisibleForTest() const
+{
+    return ltr_->isVisibleTo(this);
 }
 
 bool ParagraphPanel::editingEnabledForTest() const { return justify_->isEnabled(); }

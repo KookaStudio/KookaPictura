@@ -7,7 +7,7 @@ use super::ffi::{CharacterSetting, ParagraphSetting};
 use cxx_qt_lib::QString;
 use pictura_core::{
     AntiAlias, CharacterAttrs, CharacterOverrides, Composer, Justify, KerningMode, Leading,
-    ParagraphAttrs, ParagraphOverrides, StyleOverrides, TypeSpec,
+    ParagraphAttrs, ParagraphOverrides, StyleOverrides, TextDirection, TypeSpec,
 };
 
 fn rgba_color(color: u32) -> [f64; 4] {
@@ -38,6 +38,7 @@ pub(super) fn character_attrs(setting: &CharacterSetting) -> CharacterAttrs {
         horizontal_scale: setting.horizontal_scale,
         vertical_scale: setting.vertical_scale,
         baseline_shift: setting.baseline_shift,
+        tsume: setting.tsume,
         anti_alias: AntiAlias::from_index(setting.anti_alias),
         fill_color: rgba_color(setting.color),
         all_caps: setting.all_caps,
@@ -68,6 +69,7 @@ pub(super) fn character_attrs(setting: &CharacterSetting) -> CharacterAttrs {
 pub(super) fn paragraph_attrs(setting: &ParagraphSetting) -> ParagraphAttrs {
     ParagraphAttrs {
         justify: Justify::from_index(setting.justify.clamp(0, 6) as u8).unwrap_or_default(),
+        direction: TextDirection::from_index(setting.direction),
         word_spacing: [
             setting.word_spacing_min,
             setting.word_spacing_desired,
@@ -131,6 +133,7 @@ pub(super) fn character_setting(attrs: &CharacterAttrs) -> CharacterSetting {
         horizontal_scale: attrs.horizontal_scale,
         vertical_scale: attrs.vertical_scale,
         baseline_shift: attrs.baseline_shift,
+        tsume: attrs.tsume,
         anti_alias: attrs.anti_alias.index(),
         color: u32::from_be_bytes([a, r, g, b]),
         all_caps: attrs.all_caps,
@@ -176,9 +179,7 @@ pub(super) fn paragraph_setting(attrs: &ParagraphAttrs) -> ParagraphSetting {
         space_after: attrs.space_after,
         hanging: attrs.hanging,
         hyphenate: attrs.hyphenate,
-        // Kept on the bridge struct so the generated C++ header is unchanged;
-        // the model no longer carries a paragraph direction.
-        direction: 0,
+        direction: attrs.direction.index(),
         composer: match attrs.composer {
             Composer::SingleLine => 0,
             Composer::EveryLine => 1,
@@ -204,6 +205,7 @@ fn character_overrides(attrs: &CharacterAttrs) -> CharacterOverrides {
         horizontal_scale: Some(attrs.horizontal_scale),
         vertical_scale: Some(attrs.vertical_scale),
         baseline_shift: Some(attrs.baseline_shift),
+        tsume: Some(attrs.tsume),
         anti_alias: Some(attrs.anti_alias),
         fill_color: Some(attrs.fill_color),
         all_caps: Some(attrs.all_caps),
@@ -233,6 +235,7 @@ fn character_overrides(attrs: &CharacterAttrs) -> CharacterOverrides {
 pub(super) fn paragraph_overrides(attrs: &ParagraphAttrs) -> ParagraphOverrides {
     ParagraphOverrides {
         justify: Some(attrs.justify),
+        direction: Some(attrs.direction),
         word_spacing: Some(attrs.word_spacing),
         letter_spacing: Some(attrs.letter_spacing),
         glyph_spacing: Some(attrs.glyph_spacing),
@@ -301,6 +304,7 @@ pub(super) fn edited_overrides(previous: &TypeSpec, next: &TypeSpec) -> StyleOve
         &before.baseline_shift,
         &after.baseline_shift,
     );
+    changed(&mut c.tsume, &before.tsume, &after.tsume);
     changed(&mut c.anti_alias, &before.anti_alias, &after.anti_alias);
     changed(&mut c.fill_color, &before.fill_color, &after.fill_color);
     changed(&mut c.all_caps, &before.all_caps, &after.all_caps);
@@ -360,6 +364,7 @@ pub(super) fn edited_overrides(previous: &TypeSpec, next: &TypeSpec) -> StyleOve
     let (before, after) = (&previous.paragraph, &next.paragraph);
     let p = &mut overrides.paragraph;
     changed(&mut p.justify, &before.justify, &after.justify);
+    changed(&mut p.direction, &before.direction, &after.direction);
     changed(
         &mut p.word_spacing,
         &before.word_spacing,
@@ -449,6 +454,7 @@ mod tests {
             horizontal_scale: 120.0,
             vertical_scale: 80.0,
             baseline_shift: 3.0,
+            tsume: 40.0,
             anti_alias: 3,
             color: 0x80ff_4020,
             all_caps: true,
@@ -490,8 +496,18 @@ mod tests {
             (b.kerning_value, b.tracking, b.anti_alias, b.color)
         );
         assert_eq!(
-            (a.horizontal_scale, a.vertical_scale, a.baseline_shift),
-            (b.horizontal_scale, b.vertical_scale, b.baseline_shift)
+            (
+                a.horizontal_scale,
+                a.vertical_scale,
+                a.baseline_shift,
+                a.tsume
+            ),
+            (
+                b.horizontal_scale,
+                b.vertical_scale,
+                b.baseline_shift,
+                b.tsume
+            )
         );
         let toggles = |s: &CharacterSetting| {
             [
@@ -530,5 +546,30 @@ mod tests {
         let attrs = character_attrs(&setting);
         assert_eq!(attrs.kerning, KerningMode::Optical);
         assert_eq!(character_setting(&attrs).kerning_mode, 1);
+    }
+
+    #[test]
+    fn tsume_and_direction_cross_the_bridge() {
+        let setting = non_default_setting();
+        let attrs = character_attrs(&setting);
+        assert_eq!(attrs.tsume, 40.0);
+        assert_eq!(character_setting(&attrs).tsume, 40.0);
+
+        let mut paragraph = paragraph_setting(&ParagraphAttrs::default());
+        paragraph.direction = 1;
+        let attrs = paragraph_attrs(&paragraph);
+        assert_eq!(attrs.direction, TextDirection::Rtl);
+        assert_eq!(paragraph_setting(&attrs).direction, 1);
+    }
+
+    #[test]
+    fn a_tsume_or_direction_edit_becomes_a_manual_override() {
+        let previous = pictura_core::TypeSpec::new("Aa", "Liberation Sans", 20.0);
+        let mut next = previous.clone();
+        next.character.tsume = 40.0;
+        next.paragraph.direction = TextDirection::Rtl;
+        let overrides = edited_overrides(&previous, &next);
+        assert_eq!(overrides.character.tsume, Some(40.0));
+        assert_eq!(overrides.paragraph.direction, Some(TextDirection::Rtl));
     }
 }

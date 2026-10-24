@@ -211,6 +211,7 @@ WindowPanelsCharacter	window.panels.character
 WindowPanelsParagraph	window.panels.paragraph
 WindowPanelsGlyphs	window.panels.glyphs
 WindowPanelsParagraphStyles	window.panels.paragraphStyles
+WindowPanelsCharacterStyles	window.panels.characterStyles
 WindowWorkspaceEssentials	window.workspace.essentials
 WindowWorkspacePainting	window.workspace.painting
 WindowWorkspacePhotography	window.workspace.photography
@@ -222,6 +223,7 @@ WindowWorkspaceKeyboardShortcuts	window.workspace.keyboardShortcuts
 TypePanelsCharacter	type.panels.character
 TypePanelsParagraph	type.panels.paragraph
 TypePanelsParagraphStyles	type.panels.paragraphStyles
+TypePanelsCharacterStyles	type.panels.characterStyles
 HelpSearch	help.search
 HelpSystemInfo	help.system.info
 HelpSubmitIssue	help.submit.issue

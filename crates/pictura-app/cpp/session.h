@@ -42,6 +42,10 @@ struct SessionState {
     bool zoomResizesWindows = false;
     // Edit > Preferences > Type: new type starts with selected placeholder text.
     bool typePlaceholderText = true;
+    // Edit > Preferences > Type: the CS6 type options and glyph protection.
+    bool typeShowAsianOptions = false;
+    bool typeMiddleEastern = false;
+    bool typeMissingGlyphProtection = true;
     bool confirmLiveShapeToPath = true;  // off after "Don't show again"
     bool confirmDeleteVectorMask = true;  // off after "Don't show again"
     bool showFullScreenMessage = true;   // off after "Don't show again"

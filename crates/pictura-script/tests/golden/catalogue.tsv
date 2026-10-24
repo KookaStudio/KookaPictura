@@ -305,7 +305,7 @@ layer.matting.removeBlack	Layer/Matting/Remove Black Matte	Remove Black Matte		1
 layer.matting.removeWhite	Layer/Matting/Remove White Matte	Remove White Matte		1	0
 type.panels.character	Type/Panels/Character	Character		1	1
 type.panels.paragraph	Type/Panels/Paragraph	Paragraph		1	1
-type.panels.character.styles	Type/Panels/Character Styles	Character Styles		0	0
+type.panels.characterStyles	Type/Panels/Character Styles	Character Styles		1	1
 type.panels.paragraphStyles	Type/Panels/Paragraph Styles	Paragraph Styles		1	1
 type.anti.alias.none	Type/Anti-Alias/None	None		0	0
 type.anti.alias.sharp	Type/Anti-Alias/Sharp	Sharp		0	0
@@ -553,7 +553,7 @@ window.panels.brushes	Window/Panels/Brush	Brush	F5	1	1
 window.panels.brush.presets	Window/Panels/Brush Presets	Brush Presets		0	0
 window.panels.channels	Window/Panels/Channels	Channels		1	1
 window.panels.character	Window/Panels/Character	Character		1	1
-window.panels.character.styles	Window/Panels/Character Styles	Character Styles		0	0
+window.panels.characterStyles	Window/Panels/Character Styles	Character Styles		1	1
 window.panels.cloneSource	Window/Panels/Clone Source	Clone Source		1	1
 window.panels.color	Window/Panels/Color	Color		1	1
 window.panels.glyphs	Window/Panels/Glyphs	Glyphs		1	1

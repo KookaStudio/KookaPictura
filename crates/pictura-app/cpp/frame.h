@@ -65,6 +65,7 @@ class CharacterPanel;
 class ParagraphPanel;
 class GlyphsPanel;
 class ParagraphStylesPanel;
+class CharacterStylesPanel;
 class BrushTipPreview;
 class ImageView;
 class InfoPanel;
@@ -977,6 +978,7 @@ private:
     ParagraphPanel* paragraphPanel_ = nullptr;
     GlyphsPanel* glyphsPanel_ = nullptr;
     ParagraphStylesPanel* paragraphStylesPanel_ = nullptr;
+    CharacterStylesPanel* characterStylesPanel_ = nullptr;
     PropertiesPanel* propertiesPanel_ = nullptr;
     AdjustmentsPanel* adjustmentsPanel_ = nullptr;
     ChannelsPanel* channelsPanel_ = nullptr;
@@ -1032,6 +1034,9 @@ private:
     int colorPolicy_ = 0;
     bool textGammaEnabled_ = true;
     double textGamma_ = 1.45;
+    bool typeShowAsianOptions_ = false;
+    bool typeMiddleEastern_ = false;
+    bool typeMissingGlyphProtection_ = true;
     bool gpuAvailable_ = true;
     bool useShiftKeyForToolSwitch_ = true;
     bool openDocumentsAsTabs_ = true;

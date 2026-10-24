@@ -60,6 +60,10 @@ public:
     void setTraditionalPoints(bool on);
     // Type: Fill New Type Layers With Placeholder Text (not CS6; Photoshop CC).
     void setTypePlaceholderText(bool on);
+    // Type: Show Asian Text Options, Middle Eastern, Missing Glyph Protection.
+    void setTypeShowAsianOptions(bool on);
+    void setTypeMiddleEastern(bool on);
+    void setTypeMissingGlyphProtection(bool on);
 
     // Test hooks.
     QStringList pagesForTest() const;
@@ -82,6 +86,9 @@ signals:
     void rulerUnitChanged(int unit);
     void traditionalPointsChanged(bool on);
     void typePlaceholderTextChanged(bool on);
+    void typeShowAsianOptionsChanged(bool on);
+    void typeMiddleEasternChanged(bool on);
+    void typeMissingGlyphProtectionChanged(bool on);
 
 private:
     void showPage(const QString& page);

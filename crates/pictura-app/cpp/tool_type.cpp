@@ -210,7 +210,7 @@ public:
         if (now.justification != was.justification) {
             p.justify = now.justification;
         }
-        registerTypeFont(family);
+        registerTypeFont(family, c.font_style);
         pictura::type_api::updateLayer(*v, layerPath_, pictura::type_api::layerText(*v, layerPath_), family, s, c, p);
     }
 
@@ -390,7 +390,7 @@ public:
         const SelectionMode mode = mode_;
         const TypeEdit edit = currentSetting();
         const QString family = type_->get().family;
-        registerTypeFont(family);
+        registerTypeFont(family, edit.character.font_style);
         endSession();
         if (!v) {
             return true;
@@ -994,7 +994,7 @@ private:
         overlay.canvas = QSize(view_->document_width(), view_->document_height());
         const QString& text = edit_.text();
         const QString family = type_->get().family;
-        registerTypeFont(family);
+        registerTypeFont(family, edit.character.font_style);
         stops_.clear();
         const QVector<double> stops = pictura::type_api::caretStops(
             text, family, edit.placement, edit.character, edit.paragraph);

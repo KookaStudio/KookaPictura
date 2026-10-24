@@ -34,6 +34,15 @@ pub mod ffi {
 
         /// Re-set every type layer whose font is one of `missing` (one name per line) in the default font, recording one "Replace All Missing Fonts" state. Returns how many layers changed; 0 records nothing.
         fn type_replace_fonts(view: Pin<&mut PictureView>, missing: &QString) -> i32;
+
+        /// Turn Missing Glyph Protection on or off for every document.
+        fn type_set_missing_glyph_protection(on: bool);
+
+        /// Whether Missing Glyph Protection is on.
+        fn type_missing_glyph_protection() -> bool;
+
+        /// Recomposite the view after the glyph-protection setting changed. No history.
+        fn type_missing_glyph_protection_refresh(view: Pin<&mut PictureView>);
     }
 }
 
@@ -74,4 +83,27 @@ fn type_replace_fonts(view: Pin<&mut PictureView>, missing: &QString) -> i32 {
         }
     });
     i32::try_from(replaced).unwrap_or(i32::MAX)
+}
+
+fn type_set_missing_glyph_protection(on: bool) {
+    pictura_render::set_missing_glyph_protection(on);
+}
+
+fn type_missing_glyph_protection() -> bool {
+    pictura_render::missing_glyph_protection()
+}
+
+fn type_missing_glyph_protection_refresh(mut view: Pin<&mut PictureView>) {
+    let changed = {
+        let mut rust = view.as_mut().rust_mut();
+        let Some(doc) = rust.session.doc.as_mut() else {
+            return;
+        };
+        pictura_render::re_render_type_layers(doc)
+    };
+    view.as_mut().clear_link_sets();
+    view.as_mut().recomposite();
+    if changed > 0 {
+        view.as_mut().changed();
+    }
 }

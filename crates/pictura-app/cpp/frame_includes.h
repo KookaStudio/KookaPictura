@@ -39,6 +39,7 @@
 #include "panels/navigator_panel.h"
 #include "panels/notes_panel.h"
 #include "panels/paragraph_styles_panel.h"
+#include "panels/character_styles_panel.h"
 #include "panels/paths_panel.h"
 #include "panels/panel_column.h"
 #include "panels/panel_group.h"

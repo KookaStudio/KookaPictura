@@ -2,11 +2,12 @@
 //! lines, how much each word space takes when a line is spread to the column,
 //! and the widening of a shaped line's space glyphs.
 //!
-//! ponytail: the spread divides the leftover width evenly; the word-spacing
-//! min/desired/max bounds, the letter spacing and the glyph scaling are
-//! authored to the engine data but not laid out (#518).
+//! The spread fills the leftover width in CS6's order: word spaces first, then
+//! letter spacing, then glyph scaling, clamping each step to its Minimum and
+//! Maximum. Desired values apply to every line; Minimum and Maximum bound only
+//! the lines justification spreads.
 
-use pictura_core::{Justify, ShapedGlyph, TextAlign, TextLayout};
+use pictura_core::{Justify, ParagraphAttrs, ShapedGlyph, TextAlign, TextLayout};
 
 use crate::text_render::BundledText;
 
@@ -78,6 +79,7 @@ fn widen_spaces(glyphs: &mut [ShapedGlyph], space: u16, extra: f32) {
 /// shifts it by zero. `lines` carries each line's text and whether it ends
 /// its paragraph; `tracking` is the per-glyph tracking step. Returns the
 /// lines that were spread.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn spread_lines(
     bundled: &BundledText,
     lines: &[(String, bool)],
@@ -85,7 +87,34 @@ pub(crate) fn spread_lines(
     justify: Justify,
     column: f32,
     tracking: f32,
+    paragraph: &ParagraphAttrs,
+    font_size: f32,
 ) -> Vec<bool> {
+    let word = |i: usize| paragraph.word_spacing[i] as f32;
+    let letter = |i: usize| paragraph.letter_spacing[i] as f32 * font_size;
+    let glyph = |i: usize| paragraph.glyph_spacing[i] as f32;
+    let desired_word = word(1).clamp(word(0), word(2));
+    let desired_letter = letter(1).clamp(letter(0), letter(2));
+    let desired_glyph = glyph(1).clamp(glyph(0), glyph(2));
+
+    // Desired values apply to every line, spread or not.
+    for glyphs in shaped.iter_mut() {
+        if let Some(space) = bundled.space_glyph() {
+            for glyph in glyphs.iter_mut().filter(|g| g.id == space) {
+                glyph.advance *= desired_word;
+            }
+        }
+        for glyph in glyphs.iter_mut() {
+            glyph.advance += desired_letter;
+        }
+        if (desired_glyph - 1.0).abs() > 1e-6 {
+            for glyph in glyphs.iter_mut() {
+                glyph.advance *= desired_glyph;
+                glyph.x_scale *= desired_glyph;
+            }
+        }
+    }
+
     let mut spread = vec![false; shaped.len()];
     if !spreads(justify) {
         return spread;
@@ -97,19 +126,59 @@ pub(crate) fn spread_lines(
         if *last && !spreads_last(justify) {
             continue;
         }
+        let space_count = shaped_spaces(bundled, glyphs);
+        if space_count == 0 || space_count != spaces(line) {
+            continue;
+        }
+        let normal_space = glyphs
+            .iter()
+            .find(|g| g.id == space)
+            .map_or(0.0, |g| g.advance / desired_word.max(1e-6));
         let advance: f32 =
             glyphs.iter().map(|g| g.advance).sum::<f32>() + tracking * glyphs.len() as f32;
-        let Some(extra) = space_extra(
-            bundled,
-            line,
-            shaped_spaces(bundled, glyphs),
-            advance,
-            column,
-        ) else {
+        let mut leftover = column - advance;
+        if leftover <= 0.0 {
             continue;
-        };
-        widen_spaces(glyphs, space, extra);
-        spread[i] = true;
+        }
+
+        // 1. Word spaces, clamped to the Maximum.
+        let word_cap = (word(2) - desired_word).max(0.0) * normal_space * space_count as f32;
+        let take = leftover.min(word_cap);
+        if take > 0.0 {
+            widen_spaces(glyphs, space, take / space_count as f32);
+            leftover -= take;
+        }
+
+        // 2. Letter spacing, clamped to the Maximum.
+        let letter_cap = (letter(2) - desired_letter).max(0.0) * glyphs.len() as f32;
+        let take = leftover.min(letter_cap);
+        if take > 0.0 && !glyphs.is_empty() {
+            let each = take / glyphs.len() as f32;
+            for glyph in glyphs.iter_mut() {
+                glyph.advance += each;
+            }
+            leftover -= take;
+        }
+
+        // 3. Glyph scaling, solved to consume the remainder and clamped.
+        if leftover > 0.0 && desired_glyph > 0.0 {
+            let current: f32 = glyphs.iter().map(|g| g.advance).sum();
+            if current > 0.0 {
+                let factor = ((current + leftover) / current)
+                    .min(glyph(2) / desired_glyph)
+                    .max(1.0);
+                if factor > 1.0 {
+                    for glyph in glyphs.iter_mut() {
+                        glyph.advance *= factor;
+                        glyph.x_scale *= factor;
+                    }
+                }
+            }
+        }
+
+        let final_advance: f32 =
+            glyphs.iter().map(|g| g.advance).sum::<f32>() + tracking * glyphs.len() as f32;
+        spread[i] = (column - final_advance).abs() <= 0.01;
     }
     spread
 }
@@ -171,6 +240,7 @@ mod tests {
                 },
                 paragraph: ParagraphAttrs {
                     justify,
+                    word_spacing: [0.8, 1.0, 100.0],
                     ..ParagraphAttrs::default()
                 },
                 ..TextStyle::default()
@@ -182,7 +252,7 @@ mod tests {
     }
 
     fn layout(text: &str, box_bounds: Option<[f64; 4]>, justify: Justify) -> TextLayout {
-        let bundled = face_for("Liberation Sans").expect("bundled face");
+        let bundled = face_for("Liberation Sans", "").expect("bundled face");
         crate::text_render::layout_type(bundled, &tool(text, box_bounds, justify), 200, 100)
             .expect("the layer lays out")
     }
@@ -289,13 +359,14 @@ mod tests {
 
     #[test]
     fn the_caret_stands_where_the_spread_glyphs_are_on_a_wrapped_line() {
-        let bundled = face_for("Liberation Sans").expect("bundled face");
+        let bundled = face_for("Liberation Sans", "").expect("bundled face");
         let tool = tool(TEXT, Some(boxed()), Justify::JustifyLastRight);
         let layout = crate::text_render::layout_type(bundled, &tool, 200, 100).expect("lays out");
         let mut spec = pictura_core::TypeSpec::new(TEXT, "Liberation Sans", 20.0);
         spec.origin = (0.0, 0.0);
         spec.box_bounds = Some([0.0, 0.0, f64::from(COLUMN), 200.0]);
         spec.paragraph.justify = Justify::JustifyLastRight;
+        spec.paragraph.word_spacing = [0.8, 1.0, 10.0];
         let stops = crate::type_caret_stops(&spec);
         // The wrapped line is the one a justification spreads, so its caret
         // stops stand at the spread glyphs' pens.
@@ -318,7 +389,7 @@ mod tests {
 
     #[test]
     fn a_justify_variant_places_a_vertical_column() {
-        let bundled = face_for("Liberation Sans").expect("bundled face");
+        let bundled = face_for("Liberation Sans", "").expect("bundled face");
         let mut top = tool(
             "abc",
             Some([0.0, 0.0, 100.0, 200.0]),
@@ -336,5 +407,86 @@ mod tests {
         let y = |layout: &TextLayout| layout.lines[0].glyphs.first().map_or(0.0, |g| g.y);
         assert!(y(&top).abs() < 0.01, "the column is at the top");
         assert!(y(&bottom) > y(&top) + 10.0, "the column is at the bottom");
+    }
+
+    fn layout_with(paragraph: ParagraphAttrs) -> TextLayout {
+        let bundled = face_for("Liberation Sans", "").expect("bundled face");
+        let mut tool = tool(TEXT, Some(boxed()), paragraph.justify);
+        tool.style.as_mut().unwrap().paragraph = paragraph;
+        crate::text_render::layout_type(bundled, &tool, 200, 100).expect("lays out")
+    }
+
+    #[test]
+    fn word_spacing_absorbs_the_leftover() {
+        let layout = layout_with(ParagraphAttrs {
+            justify: Justify::JustifyLastLeft,
+            word_spacing: [1.0, 1.0, 10.0],
+            ..ParagraphAttrs::default()
+        });
+        let first = &layout.lines[0];
+        assert!((first.advance - COLUMN).abs() < 0.01, "the line fills");
+        assert!(
+            first.glyphs.iter().all(|g| (g.x_scale - 1.0).abs() < 1e-6),
+            "glyph scaling stays at Desired"
+        );
+        let space = face_for("Liberation Sans", "")
+            .expect("bundled face")
+            .space_glyph()
+            .expect("space glyph");
+        assert!(
+            first.glyphs.iter().any(|g| g.id == space),
+            "the line has word spaces"
+        );
+    }
+
+    #[test]
+    fn letter_spacing_takes_excess() {
+        let layout = layout_with(ParagraphAttrs {
+            justify: Justify::JustifyLastLeft,
+            word_spacing: [1.0, 1.0, 1.0],
+            letter_spacing: [0.0, 0.0, 0.5],
+            glyph_spacing: [1.0, 1.0, 1.0],
+            ..ParagraphAttrs::default()
+        });
+        let first = &layout.lines[0];
+        assert!(
+            (first.advance - COLUMN).abs() < 0.01,
+            "letter spacing fills"
+        );
+        assert!(first.glyphs.iter().all(|g| (g.x_scale - 1.0).abs() < 1e-6));
+        let plain = layout_with(ParagraphAttrs {
+            justify: Justify::JustifyLastLeft,
+            word_spacing: [1.0, 1.0, 1.0],
+            letter_spacing: [0.0, 0.0, 0.0],
+            glyph_spacing: [1.0, 1.0, 1.0],
+            ..ParagraphAttrs::default()
+        });
+        assert!(first.advance > plain.lines[0].advance);
+    }
+
+    #[test]
+    fn bounds_clamp_and_leave_ragged() {
+        let layout = layout_with(ParagraphAttrs {
+            justify: Justify::JustifyLastLeft,
+            word_spacing: [1.0, 1.0, 1.0],
+            letter_spacing: [0.0, 0.0, 0.0],
+            glyph_spacing: [1.0, 1.0, 1.0],
+            ..ParagraphAttrs::default()
+        });
+        assert!(
+            layout.lines[0].advance < COLUMN - 0.01,
+            "no growth is allowed"
+        );
+    }
+
+    #[test]
+    fn auto_leading_uses_paragraph_value() {
+        let layout = layout_with(ParagraphAttrs {
+            auto_leading: 130.0,
+            ..ParagraphAttrs::default()
+        });
+        assert!(layout.lines.len() >= 2);
+        let gap = layout.lines[1].baseline - layout.lines[0].baseline;
+        assert!((gap - 26.0).abs() < 0.01, "20px at 130% is 26px: {gap}");
     }
 }
