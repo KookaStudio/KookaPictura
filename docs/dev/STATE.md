@@ -35,11 +35,26 @@ Snapshot for resuming after a context break. Update after each milestone.
     `VpCanvas` give Edit Plane, Create Plane, Hand and Zoom, Show Edges,
     Render Grids To Photoshop, Grid Size and Angle. The 8-bit gate is shared
     with Adaptive Wide Angle (`filter_tools/depth_gate.rs`).
-  Ceiling (`ponytail:`): no Marquee, Stamp, Brush, Transform, Eyedropper or
-  Paste yet (#349); planes are not saved in files (#918); the rendered grid's
-  colour and the Grid Size range are not confirmed against CS6. Tests: 17
-  Rust engine units, the mapping and gate units, and `tst_vanishing_point`
-  (16 cases).
+  - **Retouch tools** (OpenSpec change `add-vanishing-point-retouch`). Each
+    family has one flat editing space (`space.rs`): the root's metric, with
+    related planes unfolded about their hinges. The session holds a working
+    copy of the layer (`canvas.rs`), and the dialog's undo swaps pixel steps.
+    - **Floating selections** (`float.rs`): Paste (Ctrl+V), the Marquee
+      (rect, square, whole plane, Alt-drag copy, Destination / Source move,
+      Ctrl-drag fill) and Transform (scale, rotate, move, Flip, Flop).
+    - **Strokes** (`stroke.rs`): Stamp and Brush dabs sized in flat space,
+      with Diameter, Hardness, Opacity and Heal. Heal (`heal.rs`) is Off,
+      Luminance, or On as a Poisson blend.
+    - **Commit.** `VpEdit` carries the changed-pixel patch beside the grid
+      lines. The preview recomposes dirty rects (`view.rs`).
+    - **App.** `vanishing_point_retouch.rs` is the bridge, and
+      `VpOptionsBar` holds the per-tool options.
+  Ceiling (`ponytail:`): planes are not saved in files (#918); the preview
+  ignores the layer's blend mode and the selection; Heal applies on drop or
+  stroke end; the rendered grid's colour and the Grid Size, Diameter and
+  Feather ranges are not confirmed against CS6. Tests: 32 Rust engine units,
+  the mapping and gate units, `tst_vanishing_point` (16 cases) and
+  `tst_vanishing_point_retouch` (6 cases).
 - **Actions panel, engine, and command bus** (OpenSpec change `actions-bundle`;
   issues #301, #616, and #273). `Window > Panels > Actions` (F9) is a real
   content `QWidget` (`actionsPanel`) hosted by a `PanelGroup`, hidden in the
