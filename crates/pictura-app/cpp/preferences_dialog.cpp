@@ -111,7 +111,7 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
 
     realPages_ = {kGeneral, kInterface, kFileHandling, kPerformance, kUnits, kGuides, kType};
 
-    // General: the app's real theme brightness is the only General setting.
+    // General: the app's theme brightness and family, and Zoom Resizes Windows.
     auto* generalPage = new QWidget(this);
     generalPage->setObjectName(QStringLiteral("preferencesGeneralPage"));
     auto* generalForm = new QFormLayout(generalPage);
@@ -129,6 +129,8 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     themeFamily_->addItem(tr("Dark"), 0);
     themeFamily_->addItem(tr("Light"), 1);
     generalForm->addRow(tr("Theme"), themeFamily_);
+    makeCheckbox(QStringLiteral("zoomResizesWindows"), tr("Zoom Resizes Windows"),
+                 generalPage);
     stack_->addWidget(generalPage);
 
     auto* interfacePage = new QWidget(this);
@@ -236,6 +238,8 @@ QCheckBox* PreferencesDialog::makeCheckbox(const QString& key, const QString& la
             emit openDocumentsAsTabsChanged(on);
         } else if (key == QStringLiteral("enableFloatingDocumentDocking")) {
             emit floatingDocumentDockingChanged(on);
+        } else if (key == QStringLiteral("zoomResizesWindows")) {
+            emit zoomResizesWindowsChanged(on);
         } else if (key == QStringLiteral("autoCollapseIconic")) {
             emit autoCollapseIconicChanged(on);
         } else if (key == QStringLiteral("autoShowHidden")) {
@@ -274,6 +278,13 @@ void PreferencesDialog::setOpenDocumentsAsTabs(bool on)
 void PreferencesDialog::setFloatingDocumentDocking(bool on)
 {
     if (QCheckBox* box = checkbox(QStringLiteral("enableFloatingDocumentDocking"))) {
+        box->setChecked(on);
+    }
+}
+
+void PreferencesDialog::setZoomResizesWindows(bool on)
+{
+    if (QCheckBox* box = checkbox(QStringLiteral("zoomResizesWindows"))) {
         box->setChecked(on);
     }
 }

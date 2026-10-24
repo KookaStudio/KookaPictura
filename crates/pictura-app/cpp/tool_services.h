@@ -73,6 +73,11 @@ struct ToolServices {
     virtual void requestZoomMenu(const QPoint& globalPos) = 0;
     virtual void requestBrushPicker(const QPoint& globalPos) = 0;
     virtual void requestIsolationMode() = 0;
+
+    // The Zoom tool changed the canvas zoom by `factor`: the frame applies the
+    // same factor to every other document window when `allWindows`, and fits a
+    // floating window to the zoomed image when `resizeToFit`.
+    virtual void notifyToolZoom(double factor, bool allWindows, bool resizeToFit) = 0;
 };
 
 } // namespace pictura

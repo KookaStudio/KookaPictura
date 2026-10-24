@@ -330,6 +330,10 @@ public:
         emit brushPickerRequested(globalPos);
     }
     void requestIsolationMode() override { emit isolationModeRequested(); }
+    void notifyToolZoom(double factor, bool allWindows, bool resizeToFit) override
+    {
+        emit toolZoomed(factor, allWindows, resizeToFit);
+    }
     // The options bar's Clear for the active Color Sampler, Note, or Ruler tool.
     bool clearAnnotations();
 
@@ -529,6 +533,8 @@ signals:
     void zoomMenuRequested(const QPoint& globalPos);
     void brushPickerRequested(const QPoint& globalPos);
     void isolationModeRequested();
+    // The Zoom tool zoomed the bound canvas by `factor` (notifyToolZoom).
+    void toolZoomed(double factor, bool allWindows, bool resizeToFit);
 
 private:
     void applyToolPolicy();

@@ -58,10 +58,10 @@ tests before its code.
 
 ## 9. Multi-window Hand and Zoom options
 
-- [ ] 9.1 Create `tst_document_navigate.cpp` and register it like 3.1. Write `scrollAllWindows`, `shiftScrollsAllWindows`, `plainDragScrollsOneWindow`, `zoomAllWindows`, `shiftClickZoomsAllWindows`, `resizeWindowsToFit`, `zoomResizesWindowsPref`, and `handZoomOptionsPersist`.
-- [ ] 9.2 Add `options_bar_navigate.cpp` (in `CMakeLists.txt`) with Hand and Zoom pages holding the three checkboxes, their `ToolOptions` fields and persistence, and the `Zoom Resizes Windows` General preference (`SessionState`, missing key reads off). Verify `handZoomOptionsPersist` and `tst_options_bars_parity`.
-- [ ] 9.3 Fan out Hand pans (with a re-entrancy guard) and Zoom-tool factors to the other windows when the option is on or `Shift` is held. Verify `scrollAllWindows`, `shiftScrollsAllWindows`, `plainDragScrollsOneWindow`, `zoomAllWindows`, and `shiftClickZoomsAllWindows`.
-- [ ] 9.4 Resize an active floating window to fit after a Zoom-tool zoom, and after a View zoom when `Zoom Resizes Windows` is on, clamped to the document area. Verify `resizeWindowsToFit` and `zoomResizesWindowsPref`.
+- [x] 9.1 Create `tst_document_navigate.cpp` and register it like 3.1. Write `scrollAllWindows`, `shiftScrollsAllWindows`, `plainDragScrollsOneWindow`, `zoomAllWindows`, `shiftClickZoomsAllWindows`, `resizeWindowsToFit`, `zoomResizesWindowsPref`, and `handZoomOptionsPersist`.
+- [x] 9.2 Add `options_bar_navigate.cpp` (in `CMakeLists.txt`) with Hand and Zoom pages holding the three checkboxes, their `ToolOptions` fields and persistence, and the `Zoom Resizes Windows` General preference (`SessionState`, missing key reads off). Verify `handZoomOptionsPersist` and `tst_options_bars_parity`.
+- [x] 9.3 Fan out Hand pans (with a re-entrancy guard) and Zoom-tool factors to the other windows when the option is on or `Shift` is held. Verify `scrollAllWindows`, `shiftScrollsAllWindows`, `plainDragScrollsOneWindow`, `zoomAllWindows`, and `shiftClickZoomsAllWindows`.
+- [x] 9.4 Resize an active floating window to fit after a Zoom-tool zoom, and after a View zoom when `Zoom Resizes Windows` is on, clamped to the document area. Verify `resizeWindowsToFit` and `zoomResizesWindowsPref`.
 
 ## 10. Roadmap and docs
 

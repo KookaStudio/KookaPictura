@@ -317,6 +317,9 @@ public:
     // Document Window Docking (a float dropped on the tab strip docks).
     bool openDocumentsAsTabs() const { return openDocumentsAsTabs_; }
     bool floatingDocumentDocking() const { return floatingDocumentDocking_; }
+    // Preferences > General: Zoom Resizes Windows (View > Zoom In / Out fit a
+    // floating window to the zoomed image).
+    bool zoomResizesWindows() const { return zoomResizesWindows_; }
     bool newDocument(const QString& name, int width, int height, const QString& mode,
                      int depth, const QString& background);
     // Start an open and return its token; completion arrives on
@@ -804,6 +807,16 @@ private:
     void cascadeWindows();
     void tileWindows();
     void matchWindows(bool zoom, bool location);
+    // The Hand and Zoom tools' multi-window options. A Hand drag on `source`
+    // pans every other visible window by `delta` under Scroll All Windows or
+    // Shift; a Zoom tool zoom applies `factor` to every other window when
+    // `allWindows` and fits a floating active window when `resizeToFit`.
+    void scrollOtherWindows(const ImageView* source, const QPointF& delta,
+                            Qt::KeyboardModifiers mods);
+    void onToolZoomed(double factor, bool allWindows, bool resizeToFit);
+    // Resize a floating `window` so its canvas shows the whole zoomed image,
+    // kept inside the document area; other hosts keep their size.
+    void resizeWindowToFit(DocWindow* window);
     // Ctrl+Tab / Shift+Ctrl+Tab: step the active window `step` places along
     // `windows_`, wrapping; nothing with fewer than two windows.
     void wireDocumentCycling();
@@ -979,6 +992,10 @@ private:
     bool useShiftKeyForToolSwitch_ = true;
     bool openDocumentsAsTabs_ = true;
     bool floatingDocumentDocking_ = true;
+    bool zoomResizesWindows_ = false;
+    // Set while a Hand pan is fanned out to the other windows, so the fan-out
+    // never echoes.
+    bool scrollingAllWindows_ = false;
     ScreenMode screenMode_ = ScreenMode::Standard;
     int canvasColorIndex_ = 0;
     bool panelsHidden_ = false;

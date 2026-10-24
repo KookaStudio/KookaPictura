@@ -9,14 +9,24 @@
 
 #include <algorithm>
 #include <memory>
+#include <utility>
 
 namespace pictura {
 
 namespace {
 
 // The Hand tool pans through ImageView's pan-enabled mode; no pointer hook is
-// needed here.
+// needed here. The frame reads Scroll All Windows when it fans a pan out.
 class HandToolHandler : public ToolHandler {
+public:
+    explicit HandToolHandler(std::shared_ptr<HandGroup> hand)
+        : hand_(std::move(hand))
+    {
+        addOptions(hand_.get());
+    }
+
+private:
+    std::shared_ptr<HandGroup> hand_;
 };
 
 // A drag shorter than this many device pixels in both axes is a click, not a
@@ -25,6 +35,12 @@ constexpr double kClickSlopPx = 4.0;
 
 class ZoomToolHandler : public ToolHandler {
 public:
+    explicit ZoomToolHandler(std::shared_ptr<ZoomGroup> zoom)
+        : zoom_(std::move(zoom))
+    {
+        addOptions(zoom_.get());
+    }
+
     bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
     {
         ImageView* canvas = ctx.canvas();
@@ -38,6 +54,9 @@ public:
         // Ctrl or Alt switches to zoom-out; the step is deferred to release so
         // a drag can draw a marquee instead.
         out_ = mods.testFlag(Qt::ControlModifier) || mods.testFlag(Qt::AltModifier);
+        // Shift is free on the Zoom tool: it zooms every window, as Zoom All
+        // Windows does.
+        allWindows_ = mods.testFlag(Qt::ShiftModifier);
         ctx.setDragging(true);
         ctx.setDragCommitted(false);
         return true;
@@ -76,18 +95,25 @@ public:
         }
         canvas->clearSelectionPreview();
 
-        const double screenW = marquee_.width() * canvas->zoom();
-        const double screenH = marquee_.height() * canvas->zoom();
+        const double before = canvas->zoom();
+        const double screenW = marquee_.width() * before;
+        const double screenH = marquee_.height() * before;
         if (screenW >= kClickSlopPx || screenH >= kClickSlopPx) {
             zoomToMarquee(*canvas);
-            return;
+        } else {
+            // A plain click (no drag) keeps the in/out step: zoom-in stays
+            // anchored on the clicked image point, zoom-out steps at the canvas
+            // centre.
+            const QPointF anchor = out_
+                ? QPointF(canvas->width() / 2.0, canvas->height() / 2.0)
+                : canvas->imageToWidget(anchor_);
+            canvas->setZoom(before * (out_ ? 1.0 / 1.2 : 1.2), anchor);
         }
-        // A plain click (no drag) keeps the in/out step: zoom-in stays anchored
-        // on the clicked image point, zoom-out steps at the canvas centre.
-        const QPointF anchor = out_
-            ? QPointF(canvas->width() / 2.0, canvas->height() / 2.0)
-            : canvas->imageToWidget(anchor_);
-        canvas->setZoom(canvas->zoom() * (out_ ? 1.0 / 1.2 : 1.2), anchor);
+        if (before > 0.0) {
+            const ZoomOptions& options = zoom_->get();
+            ctx.notifyToolZoom(canvas->zoom() / before, allWindows_ || options.zoomAll,
+                               options.resizeToFit);
+        }
     }
 
     void onDeactivate(ToolServices& ctx) override
@@ -126,18 +152,20 @@ private:
     QPointF last_;
     QRectF marquee_;
     bool out_ = false;
+    bool allWindows_ = false;
+    std::shared_ptr<ZoomGroup> zoom_;
 };
 
 } // namespace
 
-std::unique_ptr<ToolHandler> makeHandToolHandler()
+std::unique_ptr<ToolHandler> makeHandToolHandler(std::shared_ptr<HandGroup> hand)
 {
-    return std::make_unique<HandToolHandler>();
+    return std::make_unique<HandToolHandler>(std::move(hand));
 }
 
-std::unique_ptr<ToolHandler> makeZoomToolHandler()
+std::unique_ptr<ToolHandler> makeZoomToolHandler(std::shared_ptr<ZoomGroup> zoom)
 {
-    return std::make_unique<ZoomToolHandler>();
+    return std::make_unique<ZoomToolHandler>(std::move(zoom));
 }
 
 } // namespace pictura

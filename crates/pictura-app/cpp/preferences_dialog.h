@@ -42,6 +42,8 @@ public:
     void setShiftKeyForToolSwitch(bool on);
     void setOpenDocumentsAsTabs(bool on);
     void setFloatingDocumentDocking(bool on);
+    // General: Zoom Resizes Windows.
+    void setZoomResizesWindows(bool on);
     void setAutoCollapseIconic(bool on);
     void setAutoShowHidden(bool on);
     void setBrightnessLevel(int level);
@@ -69,6 +71,7 @@ signals:
     void useShiftKeyForToolSwitchChanged(bool on);
     void openDocumentsAsTabsChanged(bool on);
     void floatingDocumentDockingChanged(bool on);
+    void zoomResizesWindowsChanged(bool on);
     void autoCollapseIconicChanged(bool on);
     void autoShowHiddenChanged(bool on);
     void brightnessLevelChanged(int level);

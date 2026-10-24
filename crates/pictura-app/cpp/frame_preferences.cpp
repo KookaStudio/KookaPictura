@@ -30,6 +30,7 @@ void PicturaMainWindow::showPreferences(const QString& page)
         preferencesDialog_->setShiftKeyForToolSwitch(useShiftKeyForToolSwitch_);
         preferencesDialog_->setOpenDocumentsAsTabs(openDocumentsAsTabs_);
         preferencesDialog_->setFloatingDocumentDocking(floatingDocumentDocking_);
+        preferencesDialog_->setZoomResizesWindows(zoomResizesWindows_);
         preferencesDialog_->setAutoCollapseIconic(panelColumn_->autoCollapseIconic());
         preferencesDialog_->setAutoShowHidden(panelColumn_->autoShowHidden());
         preferencesDialog_->setBrightnessLevel(brightnessLevel_);
@@ -55,6 +56,11 @@ void PicturaMainWindow::showPreferences(const QString& page)
         connect(preferencesDialog_, &PreferencesDialog::floatingDocumentDockingChanged, this,
                 [this](bool on) {
                     floatingDocumentDocking_ = on;
+                    saveSession();
+                });
+        connect(preferencesDialog_, &PreferencesDialog::zoomResizesWindowsChanged, this,
+                [this](bool on) {
+                    zoomResizesWindows_ = on;
                     saveSession();
                 });
         connect(preferencesDialog_, &PreferencesDialog::autoCollapseIconicChanged, this,

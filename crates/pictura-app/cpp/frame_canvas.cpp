@@ -88,6 +88,11 @@ void PicturaMainWindow::wireCanvas(DocWindow& window)
             infoPanel_->setCursorPosition(p);
         }
     });
+    // Scroll All Windows: a Hand drag pans the other visible windows too.
+    connect(window.canvas, &ImageView::handPanned, this,
+            [this, canvas = window.canvas](const QPointF& delta, Qt::KeyboardModifiers mods) {
+                scrollOtherWindows(canvas, delta, mods);
+            });
     // The active tool's canvas context menu (or the pasteboard colour menu).
     connect(window.canvas, &ImageView::contextMenuRequested, this,
             [this, canvas = window.canvas](const QPoint& globalPos) {

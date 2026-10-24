@@ -103,6 +103,7 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
     useShiftKeyForToolSwitch_ = state.useShiftKeyForToolSwitch;
     openDocumentsAsTabs_ = state.openDocumentsAsTabs;
     floatingDocumentDocking_ = state.enableFloatingDocumentDocking;
+    zoomResizesWindows_ = state.zoomResizesWindows;
     applyShortcutOverrides(state);
     autoSaveRecovery_ = state.autoSaveRecovery;
     autoSaveMinutes_ = state.autoSaveMinutes;

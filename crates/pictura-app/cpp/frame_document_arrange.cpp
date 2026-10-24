@@ -1,8 +1,11 @@
 // Window > Arrange: floating and consolidating document windows, Cascade,
-// Tile, the Match commands, and New Window For. The ids are referenced as
-// literals, so the generated command id header stays unchanged.
+// Tile, the Match commands, and New Window For; and the Hand and Zoom tools'
+// multi-window options. The ids are referenced as literals, so the generated
+// command id header stays unchanged.
 
 #include "frame_includes.h"
+
+#include <QtCore/QtMath>
 
 namespace pictura {
 
@@ -158,6 +161,74 @@ void PicturaMainWindow::matchWindows(bool zoom, bool location)
             canvas->centerOnImageRect(QRectF(target - QPointF(0.5, 0.5), QSizeF(1.0, 1.0)));
         }
     }
+}
+
+void PicturaMainWindow::scrollOtherWindows(const ImageView* source, const QPointF& delta,
+                                           Qt::KeyboardModifiers mods)
+{
+    if (scrollingAllWindows_) {
+        return;
+    }
+    const HandGroup* hand = tools_ ? tools_->optionsFor<HandGroup>(ToolId::Hand) : nullptr;
+    if (!mods.testFlag(Qt::ShiftModifier) && !(hand && hand->get().scrollAll)) {
+        return;
+    }
+    scrollingAllWindows_ = true;
+    for (DocWindow* window : windows_) {
+        ImageView* canvas = window->canvas;
+        if (canvas && canvas != source && canvas->isVisible() && !window->doc->loading) {
+            canvas->panBy(delta);
+        }
+    }
+    scrollingAllWindows_ = false;
+}
+
+void PicturaMainWindow::onToolZoomed(double factor, bool allWindows, bool resizeToFit)
+{
+    DocWindow* zoomed = windowOfCanvas(tools_ ? tools_->canvas() : nullptr);
+    if (!zoomed) {
+        return;
+    }
+    if (allWindows) {
+        for (DocWindow* window : windows_) {
+            ImageView* canvas = window->canvas;
+            if (window == zoomed || !canvas || window->doc->loading
+                || canvas->documentSize().isEmpty()) {
+                continue;
+            }
+            canvas->setZoom(canvas->zoom() * factor, QRectF(canvas->rect()).center());
+        }
+    }
+    if (resizeToFit) {
+        resizeWindowToFit(zoomed);
+    }
+}
+
+void PicturaMainWindow::resizeWindowToFit(DocWindow* window)
+{
+    if (!window || window->kind != DocWindow::Host::Float || !window->floating
+        || !window->canvas) {
+        return;
+    }
+    ImageView* canvas = window->canvas;
+    const QSize document = canvas->documentSize();
+    const QRect area = documentAreaGlobalRect();
+    if (document.isEmpty() || area.isEmpty()) {
+        return;
+    }
+    QRect geometry = window->floating->globalGeometry();
+    // The header, scroll bars, and border around the canvas keep their size.
+    const QSize chrome = geometry.size() - canvas->size();
+    const QSize image(qCeil(document.width() * canvas->zoom()),
+                      qCeil(document.height() * canvas->zoom()));
+    geometry.setSize((image + chrome).boundedTo(area.size()));
+    if (geometry.right() > area.right()) {
+        geometry.moveRight(area.right());
+    }
+    if (geometry.bottom() > area.bottom()) {
+        geometry.moveBottom(area.bottom());
+    }
+    window->floating->setGlobalGeometry(clampFloatGeometry(geometry));
 }
 
 } // namespace pictura

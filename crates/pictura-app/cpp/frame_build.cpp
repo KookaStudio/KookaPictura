@@ -722,6 +722,7 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
             toolbox_->zoomMenu()->popup(pos);
         }
     });
+    connect(tools_, &ToolController::toolZoomed, this, &PicturaMainWindow::onToolZoomed);
     connect(tools_, &ToolController::brushPickerRequested, this, [this](const QPoint& pos) {
         if (optionsBar_) {
             optionsBar_->brushPicker()->popUpAt(pos);

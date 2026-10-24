@@ -977,11 +977,17 @@ void PicturaMainWindow::registerHandlers()
     registry_->setHandler(command_ids::ViewZoomIn, [this]() {
         if (ImageView* canvas = imageView()) {
             canvas->zoomIn();
+            if (zoomResizesWindows_) {
+                resizeWindowToFit(windowOfCanvas(canvas));
+            }
         }
     });
     registry_->setHandler(command_ids::ViewZoomOut, [this]() {
         if (ImageView* canvas = imageView()) {
             canvas->zoomOut();
+            if (zoomResizesWindows_) {
+                resizeWindowToFit(windowOfCanvas(canvas));
+            }
         }
     });
     registry_->setHandler(command_ids::ViewFitOnScreen, [this]() {

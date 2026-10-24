@@ -37,6 +37,9 @@ struct SessionState {
     // them loads both on.
     bool openDocumentsAsTabs = true;
     bool enableFloatingDocumentDocking = true;
+    // General: Zoom Resizes Windows (View zoom fits a floating window). A store
+    // written before it loads off.
+    bool zoomResizesWindows = false;
     // Edit > Preferences > Type: new type starts with selected placeholder text.
     bool typePlaceholderText = true;
     bool confirmLiveShapeToPath = true;  // off after "Don't show again"

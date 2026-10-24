@@ -144,6 +144,7 @@ set(PICTURA_QT_TESTS
     tst_document_windows
     tst_document_float
     tst_document_arrange
+    tst_document_navigate
     tst_pictura_raw
     tst_acr_settings
     tst_acr_dialog

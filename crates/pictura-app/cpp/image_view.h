@@ -610,6 +610,9 @@ signals:
     // The pan or zoom changed by any path (pan, zoom, fit, 100%, resize, the
     // Navigator proxy). The workspace scrollbars project this into their ranges.
     void viewChanged();
+    // A Hand drag (the Hand tool or the Space form) panned the canvas by
+    // `delta`, with `mods` held; the frame fans it out for Scroll All Windows.
+    void handPanned(const QPointF& delta, Qt::KeyboardModifiers mods);
     void mousePressed(const QPointF& imagePos, int button, int modifiers);
     void mouseMoved(const QPointF& imagePos);
     void mouseReleased(const QPointF& imagePos);
