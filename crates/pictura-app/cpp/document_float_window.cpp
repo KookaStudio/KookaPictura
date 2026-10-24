@@ -40,45 +40,6 @@ QRect floatBounds(const QWidget* floating)
     return screen ? screen->availableGeometry() : QRect();
 }
 
-// The header title: the label elided to the title's own width, then the
-// modified marker, which elision never drops.
-class DocumentFloatTitle : public QLabel {
-public:
-    explicit DocumentFloatTitle(QWidget* parent)
-        : QLabel(parent)
-    {
-        setObjectName(QStringLiteral("documentFloatTitle"));
-        setAttribute(Qt::WA_TransparentForMouseEvents, true);
-        setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-    }
-
-    void setFullText(const QString& label, const QString& marker)
-    {
-        label_ = label;
-        marker_ = marker;
-        setToolTip(label);
-        elide();
-    }
-
-protected:
-    void resizeEvent(QResizeEvent* event) override
-    {
-        QLabel::resizeEvent(event);
-        elide();
-    }
-
-private:
-    void elide()
-    {
-        const QFontMetrics metrics(font());
-        const int available = qMax(0, width() - metrics.horizontalAdvance(marker_));
-        setText(metrics.elidedText(label_, Qt::ElideRight, available) + marker_);
-    }
-
-    QString label_;
-    QString marker_;
-};
-
 // The header: press activates the window and starts a drag, a right-click asks
 // for the header menu.
 class DocumentFloatHeader : public QWidget {
@@ -191,6 +152,35 @@ private:
 
 } // namespace
 
+DocumentWindowTitle::DocumentWindowTitle(QWidget* parent)
+    : QLabel(parent)
+{
+    setObjectName(QStringLiteral("documentFloatTitle"));
+    setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+}
+
+void DocumentWindowTitle::setFullText(const QString& label, bool dirty)
+{
+    label_ = label;
+    marker_ = dirty ? QStringLiteral(" *") : QString();
+    setToolTip(label);
+    elide();
+}
+
+void DocumentWindowTitle::resizeEvent(QResizeEvent* event)
+{
+    QLabel::resizeEvent(event);
+    elide();
+}
+
+void DocumentWindowTitle::elide()
+{
+    const QFontMetrics metrics(font());
+    const int available = qMax(0, width() - metrics.horizontalAdvance(marker_));
+    setText(metrics.elidedText(label_, Qt::ElideRight, available) + marker_);
+}
+
 DocumentFloatWindow::DocumentFloatWindow(QWidget* frame)
     : QWidget(frame)
 {
@@ -211,7 +201,7 @@ DocumentFloatWindow::DocumentFloatWindow(QWidget* frame)
     auto* headerLayout = new QHBoxLayout(header_);
     headerLayout->setContentsMargins(8, 0, 4, 0);
     headerLayout->setSpacing(4);
-    title_ = new DocumentFloatTitle(header_);
+    title_ = new DocumentWindowTitle(header_);
     headerLayout->addWidget(title_, 1);
     auto* close = new TabCloseButton(header_);
     close->setObjectName(QStringLiteral("documentFloatClose"));
@@ -249,15 +239,12 @@ void DocumentFloatWindow::setPage(QWidget* page)
 
 void DocumentFloatWindow::setLabel(const QString& label, bool dirty)
 {
-    label_ = label;
-    dirty_ = dirty;
-    static_cast<DocumentFloatTitle*>(title_)->setFullText(label,
-                                                          dirty ? QStringLiteral(" *") : QString());
+    title_->setFullText(label, dirty);
 }
 
 QString DocumentFloatWindow::headerText() const
 {
-    return dirty_ ? label_ + QStringLiteral(" *") : label_;
+    return title_->fullText();
 }
 
 QAbstractButton* DocumentFloatWindow::closeButton() const

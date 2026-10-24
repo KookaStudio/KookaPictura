@@ -534,7 +534,7 @@ pub(super) static ROWS: &[CommandSpec] = &[
     CommandSpec { id: "view.align.to", path: &["View", "Align To"], label: "Align To", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "view.toolHints", path: &["View", "Tool Hints"], label: "Tool Hints", shortcut: "", implemented: true, checkable: true },
     CommandSpec { id: "window.arrange.cascade", path: &["Window", "Arrange", "Cascade"], label: "Cascade", shortcut: "", implemented: true, checkable: false },
-    CommandSpec { id: "window.arrange.tile", path: &["Window", "Arrange", "Tile"], label: "Tile", shortcut: "", implemented: false, checkable: false },
+    CommandSpec { id: "window.arrange.tile", path: &["Window", "Arrange", "Tile"], label: "Tile", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "window.arrange.consolidate.all.to.tabs", path: &["Window", "Arrange", "Consolidate All to Tabs"], label: "Consolidate All to Tabs", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "window.arrange.float.in.window", path: &["Window", "Arrange", "Float in Window"], label: "Float in Window", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "window.arrange.float.all.in.windows", path: &["Window", "Arrange", "Float All in Windows"], label: "Float All in Windows", shortcut: "", implemented: true, checkable: false },

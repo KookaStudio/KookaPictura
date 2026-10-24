@@ -1,5 +1,5 @@
-// Window > Arrange: floating and consolidating document windows, Cascade, and
-// the Match commands. The ids are referenced as literals, so the generated
+// Window > Arrange: floating and consolidating document windows, Cascade,
+// Tile, and the Match commands. The ids are referenced as literals, so the generated
 // command id header stays unchanged.
 
 #include "frame_includes.h"
@@ -9,6 +9,7 @@ namespace pictura {
 namespace {
 
 const QString kArrangeCascade = QStringLiteral("window.arrange.cascade");
+const QString kArrangeTile = QStringLiteral("window.arrange.tile");
 const QString kArrangeConsolidate = QStringLiteral("window.arrange.consolidate.all.to.tabs");
 const QString kArrangeFloat = QStringLiteral("window.arrange.float.in.window");
 const QString kArrangeFloatAll = QStringLiteral("window.arrange.float.all.in.windows");
@@ -37,6 +38,8 @@ void PicturaMainWindow::wireWindowArrange()
     registry_->setEnabledProvider(kArrangeConsolidate, hasDocuments);
     registry_->setHandler(kArrangeCascade, [this]() { cascadeWindows(); });
     registry_->setEnabledProvider(kArrangeCascade, hasDocuments);
+    registry_->setHandler(kArrangeTile, [this]() { tileWindows(); });
+    registry_->setEnabledProvider(kArrangeTile, [this]() { return windows_.size() > 1; });
 
     const auto canMatch = [this]() {
         return windows_.size() > 1 && activeWindow_ && activeWindow_->canvas;
@@ -94,6 +97,18 @@ void PicturaMainWindow::cascadeWindows()
     // Later windows overlap earlier ones, and the active window ends on top.
     for (DocumentFloatWindow* floating : placed) {
         raiseDocumentFloat(floating);
+    }
+    activateDocWindow(active);
+}
+
+void PicturaMainWindow::tileWindows()
+{
+    DocWindow* active = activeWindow_;
+    const QList<DocWindow*> windows = windows_;
+    // In cycle order, so the grid fills as Ctrl+Tab steps. A loading document
+    // keeps its tab and joins the tiles once it is ready.
+    for (DocWindow* window : windows) {
+        tileWindow(window, false);
     }
     activateDocWindow(active);
 }

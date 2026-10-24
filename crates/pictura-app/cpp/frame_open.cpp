@@ -137,7 +137,9 @@ void PicturaMainWindow::beginLoadingDocument(PictureView* view, const QString& p
     docs_.append(entry);
     const int index = docs_.size() - 1;
     const int tab = addTabWindow(window);
-    if (tabs_->count() == 1) {
+    // While tiled the strip is hidden, so the active pane keeps the activation
+    // until the document is ready and joins the tiles.
+    if (tabs_->count() == 1 && !tileHost_) {
         activateDocWindow(window);
     }
     auto* spinner = new TabSpinner(tabs_->tabBar());

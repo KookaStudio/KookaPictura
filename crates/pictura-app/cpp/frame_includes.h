@@ -6,6 +6,7 @@
 #include "commands.h"
 #include "dialogs.h"
 #include "document_float_window.h"
+#include "document_tile_host.h"
 #include "duplicate_image_dialog.h"
 #include "canvas_scrollbars.h"
 #include "color_settings_dialog.h"

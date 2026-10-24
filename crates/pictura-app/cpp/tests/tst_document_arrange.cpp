@@ -1,6 +1,6 @@
 // Window > Arrange (#500) and the document window preferences (#317): Float in
-// Window, Float All in Windows, Consolidate All to Tabs, Cascade, the Match
-// commands, Open Documents As Tabs, Enable Floating Document Window Docking,
+// Window, Float All in Windows, Consolidate All to Tabs, Cascade, Tile, the
+// Match commands, Open Documents As Tabs, Enable Floating Document Window Docking,
 // and crash recovery reopening as tabs. Each test function builds its own
 // frame; floats are hosted in the frame, so their geometry is the frame's.
 
@@ -15,12 +15,14 @@
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QStackedWidget>
 #include <QtWidgets/QTabBar>
+#include <QtWidgets/QTabWidget>
 
 #include "api/document_api.h"
 #include "command_ids.h"
 #include "commands.h"
 #include "dialogs.h"
 #include "document_float_window.h"
+#include "document_tile_host.h"
 #include "frame.h"
 #include "image_view.h"
 #include "panels/panel_column.h"
@@ -41,6 +43,7 @@ const QString kFloatInWindow = QStringLiteral("window.arrange.float.in.window");
 const QString kFloatAll = QStringLiteral("window.arrange.float.all.in.windows");
 const QString kConsolidate = QStringLiteral("window.arrange.consolidate.all.to.tabs");
 const QString kCascade = QStringLiteral("window.arrange.cascade");
+const QString kTile = QStringLiteral("window.arrange.tile");
 const QString kMatchZoom = QStringLiteral("window.arrange.match.zoom");
 const QString kMatchLocation = QStringLiteral("window.arrange.match.location");
 const QString kMatchAll = QStringLiteral("window.arrange.match.all");
@@ -150,6 +153,12 @@ private slots:
     void matchZoom();
     void matchLocation();
     void matchAll();
+    void tileFourInGrid();
+    void tileTakesInFloats();
+    void openWhileTiledAddsPane();
+    void openWhileTiledPrefOffAddsPane();
+    void closingPanesRetiles();
+    void consolidateEndsTiling();
 
     void prefOpensFloating();
     void prefFloatsOpenedFileAfterLoad();
@@ -165,6 +174,10 @@ private:
     bool enabled(const QString& id);
     QTabBar* tabBar() const;
     QStackedWidget* documentArea() const;
+    QTabWidget* documentTabs() const;
+    // The tile host shows `count` panes, one per document, and no document
+    // floats or is a tab; otherwise the empty string names what differs.
+    QString tiledMismatch(int count) const;
     PreferencesDialog* interfacePreferences();
     void closeAll();
 
@@ -203,6 +216,35 @@ QTabBar* DocumentArrangeTest::tabBar() const
 QStackedWidget* DocumentArrangeTest::documentArea() const
 {
     return window_->findChild<QStackedWidget*>(QStringLiteral("documentArea"));
+}
+
+QTabWidget* DocumentArrangeTest::documentTabs() const
+{
+    return window_->findChild<QTabWidget*>(QStringLiteral("documentTabs"));
+}
+
+QString DocumentArrangeTest::tiledMismatch(int count) const
+{
+    DocumentTileHost* host = window_->tileHostForTest();
+    if (!host) {
+        return QStringLiteral("no tile host");
+    }
+    if (host->paneCount() != count) {
+        return QStringLiteral("%1 panes, expected %2").arg(host->paneCount()).arg(count);
+    }
+    if (documentArea()->currentWidget() != host) {
+        return QStringLiteral("the document area does not show the tile host");
+    }
+    for (int i = 0; i < count; ++i) {
+        if (!window_->tilePaneForTest(i) || window_->floatWindowForTest(i)
+            || window_->tabOfDocumentForTest(i) != -1) {
+            return QStringLiteral("document %1 is not a tile pane").arg(i);
+        }
+    }
+    if (tabBar()->count() != 0) {
+        return QStringLiteral("the tab strip holds %1 tabs").arg(tabBar()->count());
+    }
+    return QString();
 }
 
 PreferencesDialog* DocumentArrangeTest::interfacePreferences()
@@ -416,6 +458,133 @@ void DocumentArrangeTest::matchAll()
     QVERIFY(trigger(kMatchAll));
     QCOMPARE(other->zoom(), 5.0);
     QVERIFY2(centreError(other, fraction) <= 1.0, "the other centre matches");
+}
+
+void DocumentArrangeTest::tileFourInGrid()
+{
+    QVERIFY(newDoc(QStringLiteral("A")));
+    QVERIFY2(!enabled(kTile), "Tile needs two windows");
+    QVERIFY(newDoc(QStringLiteral("B")));
+    QVERIFY(newDoc(QStringLiteral("C")));
+    QVERIFY(newDoc(QStringLiteral("D")));
+
+    QVERIFY(trigger(kTile));
+    QVERIFY2(tiledMismatch(4).isEmpty(), qPrintable(tiledMismatch(4)));
+    DocumentTileHost* host = window_->tileHostForTest();
+    QCOMPARE(host->columnCount(), 2);
+    QVERIFY(!tabBar()->isVisible());
+    QCOMPARE(window_->activeDocumentIndex(), 3);
+
+    // The panes fill the area in cycle order, row by row.
+    QTRY_COMPARE(host->size(), documentArea()->size());
+    const QList<DocumentTilePane*> panes = host->panes();
+    for (int i = 0; i < 4; ++i) {
+        QCOMPARE(panes.at(i), window_->tilePaneForTest(i));
+        QCOMPARE(panes.at(i)->headerText(), window_->documentWindowLabelForTest(i));
+    }
+    QTRY_VERIFY(panes.at(1)->x() > panes.at(0)->x());
+    QCOMPARE(panes.at(1)->y(), panes.at(0)->y());
+    QVERIFY(panes.at(2)->y() > panes.at(0)->y());
+    QCOMPARE(panes.at(2)->x(), panes.at(0)->x());
+    QCOMPARE(panes.at(3)->x(), panes.at(1)->x());
+    QCOMPARE(panes.at(3)->y(), panes.at(2)->y());
+    QCOMPARE(panes.at(0)->pos(), QPoint(0, 0));
+    QVERIFY(host->width() - (panes.at(3)->geometry().right() + 1) <= 2);
+    QVERIFY(host->height() - (panes.at(3)->geometry().bottom() + 1) <= 2);
+
+    // A press on a pane's header activates its window.
+    QTest::mouseClick(panes.at(0)->header(), Qt::LeftButton);
+    QCOMPARE(window_->activeDocumentIndex(), 0);
+    QCOMPARE(window_->imageView(), window_->canvasAt(0));
+}
+
+void DocumentArrangeTest::tileTakesInFloats()
+{
+    QVERIFY(newDoc(QStringLiteral("Tabbed")));
+    QVERIFY(newDoc(QStringLiteral("Floating")));
+    QVERIFY(window_->floatDocumentForTest(1));
+    QCOMPARE(window_->activeDocumentIndex(), 1);
+
+    QVERIFY(trigger(kTile));
+    QVERIFY2(tiledMismatch(2).isEmpty(), qPrintable(tiledMismatch(2)));
+    QCOMPARE(window_->activeDocumentIndex(), 1);
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QVERIFY(window_->findChildren<DocumentFloatWindow*>().isEmpty());
+}
+
+void DocumentArrangeTest::openWhileTiledAddsPane()
+{
+    QVERIFY(newDoc(QStringLiteral("One")));
+    QVERIFY(newDoc(QStringLiteral("Two")));
+    QVERIFY(trigger(kTile));
+    QVERIFY(window_->openDocumentsAsTabs());
+
+    QVERIFY(newDoc(QStringLiteral("Three")));
+    QVERIFY2(tiledMismatch(3).isEmpty(), qPrintable(tiledMismatch(3)));
+    QCOMPARE(window_->activeDocumentIndex(), 2);
+    QCOMPARE(window_->imageView(), window_->canvasAt(2));
+    QCOMPARE(window_->tileHostForTest()->panes().last(), window_->tilePaneForTest(2));
+}
+
+void DocumentArrangeTest::openWhileTiledPrefOffAddsPane()
+{
+    QVERIFY(newDoc(QStringLiteral("One")));
+    QVERIFY(newDoc(QStringLiteral("Two")));
+    QVERIFY(trigger(kTile));
+    PreferencesDialog* prefs = interfacePreferences();
+    QVERIFY(prefs != nullptr);
+    QVERIFY(prefs->setCheckboxForTest(kTabsPref, false));
+    QVERIFY(!window_->openDocumentsAsTabs());
+
+    QVERIFY(newDoc(QStringLiteral("Three")));
+    QVERIFY2(tiledMismatch(3).isEmpty(), qPrintable(tiledMismatch(3)));
+    QCOMPARE(window_->activeDocumentIndex(), 2);
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QVERIFY(window_->findChildren<DocumentFloatWindow*>().isEmpty());
+}
+
+void DocumentArrangeTest::closingPanesRetiles()
+{
+    QVERIFY(newDoc(QStringLiteral("First")));
+    QVERIFY(newDoc(QStringLiteral("Second")));
+    QVERIFY(trigger(kTile));
+    QVERIFY2(tiledMismatch(2).isEmpty(), qPrintable(tiledMismatch(2)));
+
+    QTest::mouseClick(window_->tilePaneForTest(0)->closeButton(), Qt::LeftButton);
+    QTRY_COMPARE(window_->documentCount(), 1);
+    QVERIFY2(tiledMismatch(1).isEmpty(), qPrintable(tiledMismatch(1)));
+    DocumentTileHost* host = window_->tileHostForTest();
+    DocumentTilePane* remaining = window_->tilePaneForTest(0);
+    QTRY_COMPARE(remaining->geometry(), host->rect());
+    QCOMPARE(host->columnCount(), 1);
+
+    QTest::mouseClick(remaining->closeButton(), Qt::LeftButton);
+    QTRY_COMPARE(window_->documentCount(), 0);
+    QVERIFY(window_->tileHostForTest() == nullptr);
+    QCOMPARE(documentArea()->currentWidget(), static_cast<QWidget*>(documentTabs()));
+    QVERIFY(documentTabs()->isVisible());
+    QVERIFY(window_->workspaceOpenArmed());
+}
+
+void DocumentArrangeTest::consolidateEndsTiling()
+{
+    QVERIFY(newDoc(QStringLiteral("One")));
+    QVERIFY(newDoc(QStringLiteral("Two")));
+    QVERIFY(newDoc(QStringLiteral("Three")));
+    QVERIFY(trigger(kTile));
+    window_->setActiveDocumentIndex(1);
+    QCOMPARE(window_->activeDocumentIndex(), 1);
+
+    QVERIFY(trigger(kConsolidate));
+    QVERIFY(window_->tileHostForTest() == nullptr);
+    QCOMPARE(documentArea()->currentWidget(), static_cast<QWidget*>(documentTabs()));
+    QVERIFY(tabBar()->isVisible());
+    QCOMPARE(tabBar()->count(), 3);
+    for (int i = 0; i < 3; ++i) {
+        QVERIFY(window_->tilePaneForTest(i) == nullptr);
+        QVERIFY(window_->tabOfDocumentForTest(i) >= 0);
+    }
+    QCOMPARE(window_->activeDocumentIndex(), 1);
 }
 
 void DocumentArrangeTest::prefOpensFloating()

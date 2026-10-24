@@ -12,6 +12,7 @@ namespace pictura {
 class BrushTipPreview;
 class CanvasScrollBars;
 class DocumentFloatWindow;
+class DocumentTilePane;
 class ImageView;
 class LoadingCard;
 class PictureView;
@@ -64,6 +65,8 @@ struct DocWindow {
     Host kind = Host::Tab;
     // The floating document window holding `page` while `kind` is Float.
     DocumentFloatWindow* floating = nullptr;
+    // The tile pane holding `page` while `kind` is Tile.
+    DocumentTilePane* tile = nullptr;
 };
 
 // The document's name: its display name, file name, or `Untitled-N`.

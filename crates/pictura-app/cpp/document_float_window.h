@@ -3,16 +3,37 @@
 #include <QtCore/QPoint>
 #include <QtCore/QRect>
 #include <QtCore/QString>
+#include <QtWidgets/QLabel>
 #include <QtWidgets/QWidget>
 
 #include <functional>
 
 class QAbstractButton;
-class QLabel;
 class QToolButton;
 class QVBoxLayout;
 
 namespace pictura {
+
+// A document window header's title, shared by the floating window and the tile
+// pane: the label elided to the title's own width, then the modified marker,
+// which elision never drops. The tooltip holds the full label.
+class DocumentWindowTitle : public QLabel {
+public:
+    explicit DocumentWindowTitle(QWidget* parent);
+
+    void setFullText(const QString& label, bool dirty);
+    // The unelided text: the label and, while modified, the marker.
+    QString fullText() const { return label_ + marker_; }
+
+protected:
+    void resizeEvent(QResizeEvent* event) override;
+
+private:
+    void elide();
+
+    QString label_;
+    QString marker_;
+};
 
 // A floating document window: a header (label, modified marker, close
 // control) over one document window's page, with a corner resize grip. Its
@@ -67,14 +88,12 @@ protected:
 
 private:
     QWidget* header_ = nullptr;
-    QLabel* title_ = nullptr;
+    DocumentWindowTitle* title_ = nullptr;
     QToolButton* close_ = nullptr;
     QWidget* body_ = nullptr;
     QVBoxLayout* bodyLayout_ = nullptr;
     QWidget* page_ = nullptr;
     QWidget* grip_ = nullptr;
-    QString label_;
-    bool dirty_ = false;
     bool dragging_ = false;
     bool dragMoved_ = false;
     QPoint dragStart_;

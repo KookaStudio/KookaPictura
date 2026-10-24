@@ -47,8 +47,8 @@ tests before its code.
 
 ## 7. Tile
 
-- [ ] 7.1 Write `tileFourInGrid`, `tileTakesInFloats`, `openWhileTiledAddsPane`, `openWhileTiledPrefOffAddsPane`, `closingPanesRetiles`, and `consolidateEndsTiling`.
-- [ ] 7.2 Add `document_tile_host.{h,cpp}` (in `CMakeLists.txt`, with its moc include): pane header plus canvas host in a `ceil(sqrt n)` grid, inside `documentArea_`. Route new ready documents into the tile host while tiled, whatever the tabs preference, and end tiling when the last pane closes. Flip `window.arrange.tile` (catalogue, golden row, count, `NON_RECORDABLE`). Verify the five tests and `cargo nextest run -p pictura-script`.
+- [x] 7.1 Write `tileFourInGrid`, `tileTakesInFloats`, `openWhileTiledAddsPane`, `openWhileTiledPrefOffAddsPane`, `closingPanesRetiles`, and `consolidateEndsTiling`.
+- [x] 7.2 Add `document_tile_host.{h,cpp}` (in `CMakeLists.txt`, with its moc include): pane header plus canvas host in a `ceil(sqrt n)` grid, inside `documentArea_`. Route new ready documents into the tile host while tiled, whatever the tabs preference, and end tiling when the last pane closes. Flip `window.arrange.tile` (catalogue, golden row, count, `NON_RECORDABLE`). Verify the five tests and `cargo nextest run -p pictura-script`.
 
 ## 8. New Window For [file]
 

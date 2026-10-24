@@ -51,6 +51,8 @@ class ColorState;
 class CanvasScrollBars;
 class DesignSystemDialog;
 class DocumentFloatWindow;
+class DocumentTileHost;
+class DocumentTilePane;
 class FileDropRouter;
 class LoadingCard;
 class HistogramPanel;
@@ -425,6 +427,10 @@ public:
     bool dockDocumentForTest(int index, int tab);
     int tabOfDocumentForTest(int index) const;
     QString documentWindowLabelForTest(int index) const;
+    // The tile host while Tile lasts (null otherwise), and document `index`'s
+    // first window's tile pane (null unless it is tiled).
+    DocumentTileHost* tileHostForTest() const { return tileHost_; }
+    DocumentTilePane* tilePaneForTest(int index) const;
     // The tab or header context menu last opened, while it is open.
     QMenu* documentMenuForTest() const;
     bool closeDocument(int index, bool interactive);
@@ -697,10 +703,10 @@ private:
     DocWindow* windowOfCanvas(const ImageView* canvas) const;
     // Register `window` as the last tab and return its tab index.
     int addTabWindow(DocWindow* window);
-    // Host a ready window the tab strip holds as Open Documents As Tabs says:
-    // it floats while the preference is off, activated as `floatWindow` does.
-    // The one place that picks a new ready window's host, so a tile layout's
-    // routing belongs here.
+    // Host a ready window the tab strip holds: a tile pane while Tile lasts,
+    // otherwise as Open Documents As Tabs says (it floats while the preference
+    // is off), activated as `floatWindow` / `tileWindow` do. The one place
+    // that picks a new ready window's host.
     void hostReadyWindow(DocWindow* window, bool activate);
     // Make `window` the active one through its host.
     void activateDocWindow(DocWindow* window);
@@ -715,9 +721,16 @@ private:
     // window that already floats.
     bool floatWindow(DocWindow* window, const QRect& globalGeometry = QRect(),
                      bool activate = true);
-    // Move a floating window into the tab strip at `index` (out of range: the
-    // end) and activate it.
+    // Move a floating window or tile pane into the tab strip at `index` (out
+    // of range: the end) and activate it.
     bool dockWindow(DocWindow* window, int index);
+    // Move `window` into a tile pane after the others, starting the tile
+    // layout if none is active, and activate it unless `activate` is off and
+    // it was not active. Refuses a loading document or a window already tiled.
+    bool tileWindow(DocWindow* window, bool activate = true);
+    // Take a tiled window's page out of its pane; the last pane leaving ends
+    // the tile layout and the document area shows the tab strip again.
+    void untileWindow(DocWindow* window);
     // Close `window` under the tab close rules: the last window of its
     // document closes the document (prompting when modified); another window
     // closes without a prompt.
@@ -741,8 +754,9 @@ private:
     // Present every window whose document's frame revision moved.
     void presentWindows();
     // The screen modes: in a full-screen mode only the active window shows,
-    // and an active float's page fills the document area without its header;
-    // Standard shows every float again where it was.
+    // and an active float's page fills the document area without its header,
+    // as an active tile pane does; Standard shows every float and pane again
+    // where it was.
     void syncScreenModeWindows();
     // frame_document_menus.cpp: the tab and header context menus, the tab
     // strip's tear-out, and the menus' actions.
@@ -765,6 +779,7 @@ private:
     QRect cascadeGeometry(int slot) const;
     void floatAllWindows();
     void cascadeWindows();
+    void tileWindows();
     void matchWindows(bool zoom, bool location);
     // Ctrl+Tab / Shift+Ctrl+Tab: step the active window `step` places along
     // `windows_`, wrapping; nothing with fewer than two windows.
@@ -818,6 +833,8 @@ private:
     QTabWidget* tabs_ = nullptr;
     // The splitter's stretch pane: the stack that holds the document hosts.
     QStackedWidget* documentArea_ = nullptr;
+    // The document area's tile layout while Tile lasts; null otherwise.
+    DocumentTileHost* tileHost_ = nullptr;
     // Set while a window moves between hosts, so the strip's own current-tab
     // changes do not take the activation; the move settles it.
     bool movingHost_ = false;

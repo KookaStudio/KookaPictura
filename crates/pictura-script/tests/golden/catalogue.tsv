@@ -529,7 +529,7 @@ view.align	View/Align	Align		0	0
 view.align.to	View/Align To	Align To		0	0
 view.toolHints	View/Tool Hints	Tool Hints		1	1
 window.arrange.cascade	Window/Arrange/Cascade	Cascade		1	0
-window.arrange.tile	Window/Arrange/Tile	Tile		0	0
+window.arrange.tile	Window/Arrange/Tile	Tile		1	0
 window.arrange.consolidate.all.to.tabs	Window/Arrange/Consolidate All to Tabs	Consolidate All to Tabs		1	0
 window.arrange.float.in.window	Window/Arrange/Float in Window	Float in Window		1	0
 window.arrange.float.all.in.windows	Window/Arrange/Float All in Windows	Float All in Windows		1	0

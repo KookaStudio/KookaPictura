@@ -256,7 +256,7 @@ static NON_RECORDABLE: &[&str] = &[
     "window.workspace.essentials", "window.workspace.painting", "window.workspace.photography",
     "window.workspace.typography", "window.workspace.new", "window.workspace.delete",
     "window.workspace.reset", "window.workspace.keyboardShortcuts",
-    "window.arrange.cascade", "window.arrange.consolidate.all.to.tabs",
+    "window.arrange.cascade", "window.arrange.tile", "window.arrange.consolidate.all.to.tabs",
     "window.arrange.float.in.window", "window.arrange.float.all.in.windows",
     "window.arrange.match.zoom", "window.arrange.match.location", "window.arrange.match.all",
     "window.panels.actions", "window.panels.adjustments", "window.panels.brushes",

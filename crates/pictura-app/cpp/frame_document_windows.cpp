@@ -1,6 +1,7 @@
 // The document window registry: which window shows which document, where it
-// is hosted, and which one is active; moving windows between the tab strip and
-// floating windows, closing them, presenting them, and the screen modes.
+// is hosted, and which one is active; moving windows between the tab strip,
+// floating windows, and tile panes, closing them, presenting them, and the
+// screen modes.
 
 #include "frame_includes.h"
 
@@ -61,6 +62,12 @@ int PicturaMainWindow::addTabWindow(DocWindow* window)
 
 void PicturaMainWindow::hostReadyWindow(DocWindow* window, bool activate)
 {
+    // Tile is a layout the user chose: while it lasts, a new window joins it
+    // whatever Open Documents As Tabs says.
+    if (tileHost_) {
+        tileWindow(window, activate);
+        return;
+    }
     if (!openDocumentsAsTabs_ && window->kind == DocWindow::Host::Tab) {
         floatWindow(window, QRect(), activate);
     }
@@ -93,6 +100,10 @@ void PicturaMainWindow::activateDocWindow(DocWindow* window)
             if (stripFollows) {
                 return;
             }
+        }
+    } else if (window->kind == DocWindow::Host::Tile) {
+        if (qobject_cast<DocumentFloatWindow*>(QApplication::activeWindow())) {
+            activateWindow();
         }
     } else if (DocumentFloatWindow* floating = window->floating) {
         if (floating->isVisible()) {
@@ -251,6 +262,7 @@ bool PicturaMainWindow::floatWindow(DocWindow* window, const QRect& globalGeomet
         tabs_->removeTab(tab);
     }
     movingHost_ = false;
+    untileWindow(window);
     // Floats follow the tabs in the cycle order, in the order they floated.
     windows_.removeOne(window);
     windows_.append(window);
@@ -313,6 +325,7 @@ bool PicturaMainWindow::dockWindow(DocWindow* window, int index)
     // The tab windows lead `windows_` in their visual order.
     windows_.removeOne(window);
     windows_.insert(at, window);
+    untileWindow(window);
     window->kind = DocWindow::Host::Tab;
     window->floating = nullptr;
     if (window->page->parentWidget() == documentArea_) {
@@ -334,6 +347,91 @@ bool PicturaMainWindow::dockWindow(DocWindow* window, int index)
     }
     refresh();
     return true;
+}
+
+bool PicturaMainWindow::tileWindow(DocWindow* window, bool activate)
+{
+    if (!window || !windows_.contains(window) || window->doc->loading
+        || window->kind == DocWindow::Host::Tile || !window->page) {
+        return false;
+    }
+    const bool wasActive = activeWindow_ == window;
+    if (!tileHost_) {
+        tileHost_ = new DocumentTileHost(documentArea_);
+        documentArea_->addWidget(tileHost_);
+    }
+    movingHost_ = true;
+    const int tab = tabOf(window);
+    if (tab >= 0) {
+        tabs_->removeTab(tab);
+    }
+    movingHost_ = false;
+    if (DocumentFloatWindow* floating = window->floating) {
+        // A full-screen mode may have lent the float's page to the area.
+        if (window->page->parentWidget() == documentArea_) {
+            documentArea_->removeWidget(window->page);
+        }
+        floating->hide();
+        floating->deleteLater();
+        window->floating = nullptr;
+    }
+    // Panes follow the tabs in the cycle order, in the order they were tiled,
+    // which is also their order in the grid.
+    windows_.removeOne(window);
+    windows_.append(window);
+    window->kind = DocWindow::Host::Tile;
+    DocumentTilePane* pane = tileHost_->addPane(window->page);
+    window->tile = pane;
+    pane->onActivated = [this, window, pane]() {
+        if (windows_.contains(window) && window->tile == pane) {
+            activateDocWindow(window);
+        }
+    };
+    pane->onCloseRequested = [this, window, pane]() {
+        QTimer::singleShot(0, this, [this, window, guard = QPointer<DocumentTilePane>(pane)] {
+            if (guard && windows_.contains(window) && window->tile == guard) {
+                closeWindow(window, true);
+            }
+        });
+    };
+    pane->onContextMenu = [this, window, pane](const QPoint& globalPos) {
+        if (windows_.contains(window) && window->tile == pane) {
+            showHeaderMenu(window, globalPos);
+        }
+    };
+    if (screenMode_ == ScreenMode::Standard) {
+        documentArea_->setCurrentWidget(tileHost_);
+    }
+    updateTabTitle(indexOfDoc(window->doc));
+    if (activate || wasActive) {
+        activateDocWindow(window);
+    }
+    if (screenMode_ != ScreenMode::Standard) {
+        syncScreenModeWindows();
+    }
+    refresh();
+    return true;
+}
+
+void PicturaMainWindow::untileWindow(DocWindow* window)
+{
+    DocumentTilePane* pane = window->tile;
+    if (!pane || !tileHost_) {
+        return;
+    }
+    window->tile = nullptr;
+    tileHost_->removePane(pane);
+    if (tileHost_->paneCount() > 0) {
+        return;
+    }
+    DocumentTileHost* host = tileHost_;
+    tileHost_ = nullptr;
+    if (documentArea_->currentWidget() == host) {
+        documentArea_->setCurrentWidget(tabs_);
+    }
+    documentArea_->removeWidget(host);
+    host->hide();
+    host->deleteLater();
 }
 
 void PicturaMainWindow::onFloatDragReleased(DocWindow* window, const QPoint& globalPos)
@@ -390,6 +488,7 @@ void PicturaMainWindow::detachWindows(const QList<DocWindow*>& windows)
         if (tab >= 0) {
             tabs_->removeTab(tab);
         }
+        untileWindow(window);
         if (activeWindow_ == window) {
             activeWindow_ = nullptr;
         }
@@ -465,6 +564,11 @@ void PicturaMainWindow::syncScreenModeWindows()
                            ? activeWindow_
                            : nullptr;
     for (DocWindow* window : windows_) {
+        if (DocumentTilePane* pane = window->tile) {
+            // The grid gives the one pane left visible the whole host.
+            pane->setVisible(!full || window == activeWindow_);
+            pane->setHeaderVisible(!full);
+        }
         DocumentFloatWindow* floating = window->floating;
         if (!floating || !window->page) {
             continue;
@@ -484,7 +588,7 @@ void PicturaMainWindow::syncScreenModeWindows()
         floating->setVisible(!full);
     }
     if (!shown) {
-        documentArea_->setCurrentWidget(tabs_);
+        documentArea_->setCurrentWidget(tileHost_ ? static_cast<QWidget*>(tileHost_) : tabs_);
     }
 }
 
@@ -499,6 +603,14 @@ DocumentFloatWindow* PicturaMainWindow::floatWindowForTest(int index) const
         }
     }
     return nullptr;
+}
+
+DocumentTilePane* PicturaMainWindow::tilePaneForTest(int index) const
+{
+    if (index < 0 || index >= docs_.size() || docs_.at(index)->windows.isEmpty()) {
+        return nullptr;
+    }
+    return docs_.at(index)->windows.first()->tile;
 }
 
 bool PicturaMainWindow::floatDocumentForTest(int index)

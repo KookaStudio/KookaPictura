@@ -397,7 +397,9 @@ int PicturaMainWindow::addDocument(PictureView* view, const QString& path, bool 
     addTabWindow(window);
     installCloseButton(window);
     activateDocWindow(window);
-    if (!asTab) {
+    // A tile layout takes in even a window asked for as a tab, which would
+    // otherwise sit in the hidden strip.
+    if (!asTab || tileHost_) {
         hostReadyWindow(window, true);
     }
     if (!path.isEmpty()) {
@@ -1017,6 +1019,9 @@ void PicturaMainWindow::updateTabTitle(int index)
         const QString label = fullLabel(window);
         if (window->floating) {
             window->floating->setLabel(label, dirty);
+        }
+        if (window->tile) {
+            window->tile->setLabel(label, dirty);
         }
         const int tab = tabOf(window);
         if (tab >= 0) {
