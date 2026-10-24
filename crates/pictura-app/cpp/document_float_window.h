@@ -14,6 +14,10 @@ class QVBoxLayout;
 
 namespace pictura {
 
+// The MIME type of a floating window's Ctrl+drag: it carries the document
+// window to the tab strip.
+inline constexpr char kDocumentWindowMimeType[] = "application/x-pictura-document-window";
+
 // A document window header's title, shared by the floating window and the tile
 // pane: the label elided to the title's own width, then the modified marker,
 // which elision never drops. The tooltip holds the full label.
@@ -36,11 +40,11 @@ private:
 };
 
 // A floating document window: a header (label, modified marker, close
-// control) over one document window's page, with a corner resize grip. Its
-// hosting follows `PanelFloat::overlayUsesTopLevel()`: a frameless `Qt::Tool`
-// top-level window parented to the frame, or, where the compositor owns
-// top-level placement (Wayland), a child overlay of the frame. The frame owns
-// the document state; the float only reports what the user does to it.
+// control) over one document window's page, with a corner resize grip. It is a
+// frameless `Qt::Tool` top-level window parented to (so transient for) the
+// frame; `PanelFloat::setForceChildOverlayForTest` makes it a child overlay of
+// the frame instead, for the offscreen geometry tests. The frame owns the
+// document state; the float only reports what the user does to it.
 class DocumentFloatWindow : public QWidget {
     Q_OBJECT
 
@@ -68,10 +72,24 @@ public:
     // A header drag: `beginDrag` keeps the pointer's offset into the float,
     // `dragTo` moves the float under the pointer, and `endDrag` reports the
     // release when the pointer moved. The tab strip's tear-out drives the same
-    // three calls.
+    // three calls. Past the drag threshold, `dragTo` first offers the move to
+    // the window system (`startSystemMove`).
     void beginDrag(const QPoint& globalPos);
     void dragTo(const QPoint& globalPos);
     void endDrag(const QPoint& globalPos);
+
+    // True where a header drag hands a top-level float's move to the window
+    // system: on Wayland, where a client can't place its own top-level window,
+    // or while the test override is on. X11 has a system move too, but it
+    // keeps the motion and release from the client, so there the float moves
+    // by hand and a release over the tab strip can dock it.
+    static bool movesBySystem();
+    static void setSystemMoveForTest(bool on);
+    // Hand the drag in progress to the window system's interactive move. True
+    // when it took the move; the float then ends its own drag, since no motion
+    // or release will reach it. False when `movesBySystem()` is off, the float
+    // is a child overlay, or the platform refuses (offscreen always does).
+    bool startSystemMove();
 
     // The window was activated or its header pressed.
     std::function<void()> onActivated;
@@ -79,6 +97,11 @@ public:
     std::function<void(const QPoint& globalPos)> onContextMenu;
     // A header drag that moved ended at `globalPos`.
     std::function<void(const QPoint& globalPos)> onDragReleased;
+    // A Ctrl+drag on the header passed the drag threshold: carry the window
+    // as drag-and-drop.
+    std::function<void()> onDockDragRequested;
+    // The header was double-clicked.
+    std::function<void()> onDockRequested;
 
 protected:
     bool event(QEvent* event) override;

@@ -1,14 +1,35 @@
-// The document tab's and the floating window header's context menus, and
-// tearing a tab out of the strip into a floating window.
+// The document tab's and the floating window header's context menus, tearing
+// a tab out of the strip into a floating window, and docking a floating window
+// by drag-and-drop.
 
 #include "frame_includes.h"
 
+#include <QtCore/QMimeData>
 #include <QtCore/QUrl>
 #include <QtGui/QDesktopServices>
+#include <QtGui/QDrag>
+#include <QtGui/QDragEnterEvent>
+#include <QtGui/QDragMoveEvent>
+#include <QtGui/QDropEvent>
 #include <QtGui/QMouseEvent>
+#include <QtGui/QPixmap>
 #include <QtWidgets/QApplication>
 
 namespace pictura {
+
+namespace {
+
+// A dock drag's payload: the window's address, compared with the registry and
+// never dereferenced until a lookup vouches for it.
+std::unique_ptr<QMimeData> windowDockMime(const DocWindow* window)
+{
+    auto mime = std::make_unique<QMimeData>();
+    mime->setData(kDocumentWindowMimeType,
+                  QByteArray::number(quint64(reinterpret_cast<quintptr>(window))));
+    return mime;
+}
+
+} // namespace
 
 void PicturaMainWindow::wireDocumentMenus()
 {
@@ -171,6 +192,11 @@ bool PicturaMainWindow::tearOutFilter(QEvent* event)
         if (floatWindow(window, geometry)) {
             tearFloat_ = window->floating;
             tearFloat_->beginDrag(globalPos);
+            // Where the window system moves top-level windows (Wayland), it
+            // takes the rest of the drag, or the float stays where it landed.
+            if (tearFloat_->startSystemMove()) {
+                tearFloat_ = nullptr;
+            }
         }
         return true;
     }
@@ -187,6 +213,77 @@ bool PicturaMainWindow::tearOutFilter(QEvent* event)
     default:
         return false;
     }
+}
+
+DocWindow* PicturaMainWindow::windowOfDockMime(const QMimeData* mime) const
+{
+    if (!mime || !mime->hasFormat(kDocumentWindowMimeType)) {
+        return nullptr;
+    }
+    const quint64 address = mime->data(kDocumentWindowMimeType).toULongLong();
+    for (DocWindow* window : windows_) {
+        if (quint64(reinterpret_cast<quintptr>(window)) == address) {
+            return window;
+        }
+    }
+    return nullptr;
+}
+
+void PicturaMainWindow::startWindowDockDrag(DocWindow* window)
+{
+    if (!windows_.contains(window) || !window->floating) {
+        return;
+    }
+    if (windowDockDragForTest_) {
+        windowDockDragForTest_(windowDockMime(window));
+        return;
+    }
+    const QPixmap preview = window->floating->header()->grab();
+    // A drop that docks the window deletes its float, so the drag runs from
+    // its own event-loop turn, not under the header's mouse handler.
+    QTimer::singleShot(0, this, [this, window, preview]() {
+        if (!windows_.contains(window) || window->kind != DocWindow::Host::Float) {
+            return;
+        }
+        auto* drag = new QDrag(this);
+        drag->setMimeData(windowDockMime(window).release());
+        drag->setPixmap(preview);
+        drag->exec(Qt::MoveAction);
+    });
+}
+
+bool PicturaMainWindow::windowDropFilter(QObject* watched, QEvent* event)
+{
+    const QEvent::Type type = event->type();
+    if (type != QEvent::DragEnter && type != QEvent::DragMove && type != QEvent::Drop) {
+        return false;
+    }
+    auto* drop = static_cast<QDropEvent*>(event);
+    if (!drop->mimeData() || !drop->mimeData()->hasFormat(kDocumentWindowMimeType)) {
+        return false;
+    }
+    DocWindow* window = windowOfDockMime(drop->mimeData());
+    const bool dockable = floatingDocumentDocking_ && window
+                          && window->kind == DocWindow::Host::Float && tabs_->isVisible();
+    const QPoint globalPos =
+        static_cast<QWidget*>(watched)->mapToGlobal(drop->position().toPoint());
+    // The tab widget takes the drag in on entry, so its moves keep arriving
+    // until the pointer reaches the strip's band.
+    const bool overStrip = type == QEvent::DragEnter || tabStripGlobalRect().contains(globalPos);
+    if (!dockable || !overStrip) {
+        drop->ignore();
+        return true;
+    }
+    if (type == QEvent::Drop) {
+        QTabBar* bar = tabs_->tabBar();
+        if (!dockWindow(window, bar->tabAt(bar->mapFromGlobal(globalPos)))) {
+            drop->ignore();
+            return true;
+        }
+    }
+    drop->setDropAction(Qt::MoveAction);
+    drop->accept();
+    return true;
 }
 
 void PicturaMainWindow::consolidateAllToTabs(DocWindow* target)

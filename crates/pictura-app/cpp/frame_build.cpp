@@ -923,6 +923,10 @@ bool PicturaMainWindow::eventFilter(QObject* watched, QEvent* event)
     if (tabs_ && watched == tabs_->tabBar() && tearOutFilter(event)) {
         return true;
     }
+    if (tabs_ && (watched == tabs_->tabBar() || watched == tabs_)
+        && windowDropFilter(watched, event)) {
+        return true;
+    }
     // A press on a canvas activates its window, before the tool sees it.
     if (event->type() == QEvent::MouseButtonPress) {
         if (DocWindow* window = windowOfCanvas(qobject_cast<ImageView*>(watched));

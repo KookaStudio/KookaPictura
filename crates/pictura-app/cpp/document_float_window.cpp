@@ -12,6 +12,7 @@
 #include <QtGui/QPainter>
 #include <QtGui/QResizeEvent>
 #include <QtGui/QScreen>
+#include <QtGui/QWindow>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
@@ -24,6 +25,8 @@ namespace {
 constexpr int kGripSize = 14;
 constexpr int kMinWidth = 160;
 constexpr int kMinHeight = 120;
+
+bool gSystemMoveForTest = false;
 
 // The bounds a float may be moved or grown in: the frame's rect for a child
 // overlay, the screen's available area for a top-level window.
@@ -40,8 +43,9 @@ QRect floatBounds(const QWidget* floating)
     return screen ? screen->availableGeometry() : QRect();
 }
 
-// The header: press activates the window and starts a drag, a right-click asks
-// for the header menu.
+// The header: press activates the window and starts a drag (with Ctrl, a
+// dock drag), a double-click asks to dock, a right-click asks for the header
+// menu.
 class DocumentFloatHeader : public QWidget {
 public:
     explicit DocumentFloatHeader(DocumentFloatWindow* floating)
@@ -58,16 +62,33 @@ protected:
         if (floating_->onActivated) {
             floating_->onActivated();
         }
+        dockDragArmed_ = false;
         if (event->button() == Qt::LeftButton) {
-            floating_->beginDrag(event->globalPosition().toPoint());
+            if (event->modifiers() & Qt::ControlModifier) {
+                dockDragArmed_ = true;
+                dockDragStart_ = event->globalPosition().toPoint();
+            } else {
+                floating_->beginDrag(event->globalPosition().toPoint());
+            }
         }
         event->accept();
     }
 
     void mouseMoveEvent(QMouseEvent* event) override
     {
-        if (event->buttons() & Qt::LeftButton) {
-            floating_->dragTo(event->globalPosition().toPoint());
+        if (!(event->buttons() & Qt::LeftButton)) {
+            event->accept();
+            return;
+        }
+        const QPoint globalPos = event->globalPosition().toPoint();
+        if (!dockDragArmed_) {
+            floating_->dragTo(globalPos);
+        } else if ((globalPos - dockDragStart_).manhattanLength()
+                   >= QApplication::startDragDistance()) {
+            dockDragArmed_ = false;
+            if (floating_->onDockDragRequested) {
+                floating_->onDockDragRequested();
+            }
         }
         event->accept();
     }
@@ -75,7 +96,18 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override
     {
         if (event->button() == Qt::LeftButton) {
+            dockDragArmed_ = false;
             floating_->endDrag(event->globalPosition().toPoint());
+        }
+        event->accept();
+    }
+
+    void mouseDoubleClickEvent(QMouseEvent* event) override
+    {
+        // The frame docks the float, which hides it and deletes it later, so
+        // nothing here touches it afterwards.
+        if (event->button() == Qt::LeftButton && floating_->onDockRequested) {
+            floating_->onDockRequested();
         }
         event->accept();
     }
@@ -90,6 +122,8 @@ protected:
 
 private:
     DocumentFloatWindow* floating_;
+    bool dockDragArmed_ = false;
+    QPoint dockDragStart_;
 };
 
 // A bottom-right grip that grows or shrinks the float within its bounds,
@@ -185,10 +219,10 @@ DocumentFloatWindow::DocumentFloatWindow(QWidget* frame)
     : QWidget(frame)
 {
     setObjectName(QStringLiteral("documentFloatWindow"));
-    if (PanelFloat::overlayUsesTopLevel()) {
-        setWindowFlags(Qt::Tool | Qt::FramelessWindowHint);
-    } else {
+    if (PanelFloat::childOverlayForcedForTest()) {
         setWindowFlags(Qt::Widget);
+    } else {
+        setWindowFlags(Qt::Tool | Qt::FramelessWindowHint);
     }
     setAttribute(Qt::WA_StyledBackground, true);
     setMinimumSize(kMinWidth, kMinHeight);
@@ -287,6 +321,9 @@ void DocumentFloatWindow::dragTo(const QPoint& globalPos)
         && (globalPos - dragStart_).manhattanLength() < QApplication::startDragDistance()) {
         return;
     }
+    if (!dragMoved_ && startSystemMove()) {
+        return;
+    }
     dragMoved_ = true;
     const QPoint topLeft = globalPos - grabOffset_;
     if (isWindow() || !parentWidget()) {
@@ -311,6 +348,32 @@ void DocumentFloatWindow::endDrag(const QPoint& globalPos)
         onDragReleased(globalPos);
     }
     dragMoved_ = false;
+}
+
+bool DocumentFloatWindow::movesBySystem()
+{
+    return gSystemMoveForTest
+           || QGuiApplication::platformName().contains(QStringLiteral("wayland"),
+                                                       Qt::CaseInsensitive);
+}
+
+void DocumentFloatWindow::setSystemMoveForTest(bool on)
+{
+    gSystemMoveForTest = on;
+}
+
+bool DocumentFloatWindow::startSystemMove()
+{
+    if (!isWindow() || !movesBySystem()) {
+        return false;
+    }
+    QWindow* handle = windowHandle();
+    if (!handle || !handle->startSystemMove()) {
+        return false;
+    }
+    dragging_ = false;
+    dragMoved_ = false;
+    return true;
 }
 
 bool DocumentFloatWindow::event(QEvent* event)

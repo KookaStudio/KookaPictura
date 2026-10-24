@@ -433,7 +433,8 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [x] `Ctrl+Tab` and `Shift+Ctrl+Tab` document cycling (#499)
 - [x] Window ▸ Arrange: Float, Tile, Cascade, Match and New Window (#500)
 - [x] Document tab tear-out into floating windows, docking a floating window
-      back by its header, and the tab and header context menus (#317)
+      back by its header (drop, Ctrl+drag, or double-click), top-level
+      floating windows on Wayland, and the tab and header context menus (#317)
 - [x] The full document label in the tab tooltip (#917)
 - [ ] The open-document list at the bottom of the Window menu (#923)
 - [ ] Menu customization: Edit ▸ Menus, Show All Menu Items, and the

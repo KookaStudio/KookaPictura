@@ -315,6 +315,18 @@ bool PicturaMainWindow::floatWindow(DocWindow* window, const QRect& globalGeomet
     floating->onDragReleased = [this, window](const QPoint& globalPos) {
         onFloatDragReleased(window, globalPos);
     };
+    floating->onDockDragRequested = [this, window, floating]() {
+        if (windows_.contains(window) && window->floating == floating) {
+            startWindowDockDrag(window);
+        }
+    };
+    // A double-click is an explicit dock, like Consolidate, so it ignores the
+    // docking preference.
+    floating->onDockRequested = [this, window, floating]() {
+        if (windows_.contains(window) && window->floating == floating) {
+            dockWindow(window, -1);
+        }
+    };
     floating->setGlobalGeometry(
         clampFloatGeometry(globalGeometry.isEmpty() ? defaultFloatGeometry() : globalGeometry));
     floating->show();
@@ -458,20 +470,21 @@ void PicturaMainWindow::untileWindow(DocWindow* window)
     host->deleteLater();
 }
 
+QRect PicturaMainWindow::tabStripGlobalRect() const
+{
+    return QRect(tabs_->mapToGlobal(QPoint(0, 0)),
+                 QSize(tabs_->width(),
+                       qMax(tabs_->tabBar()->height(), DocumentFloatWindow::kHeaderHeight)));
+}
+
 void PicturaMainWindow::onFloatDragReleased(DocWindow* window, const QPoint& globalPos)
 {
     if (!floatingDocumentDocking_ || !windows_.contains(window)
-        || window->kind != DocWindow::Host::Float || !tabs_->isVisible()) {
+        || window->kind != DocWindow::Host::Float || !tabs_->isVisible()
+        || !tabStripGlobalRect().contains(globalPos)) {
         return;
     }
-    // The strip is the tab bar's band at the top of the tab widget; it keeps a
-    // header's height while the bar has no tabs.
     QTabBar* bar = tabs_->tabBar();
-    const QRect strip(tabs_->mapToGlobal(QPoint(0, 0)),
-                      QSize(tabs_->width(), qMax(bar->height(), DocumentFloatWindow::kHeaderHeight)));
-    if (!strip.contains(globalPos)) {
-        return;
-    }
     dockWindow(window, bar->tabAt(bar->mapFromGlobal(globalPos)));
 }
 
