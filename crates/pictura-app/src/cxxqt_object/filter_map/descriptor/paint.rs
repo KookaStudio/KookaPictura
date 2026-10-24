@@ -55,7 +55,7 @@ pub(super) const ROWS: &[FilterDescriptor] = &[
         menu: true,
         label: "Vanishing Point…",
         params: &[
-            FilterParam { control: FilterControl::Hidden, label: "", minimum: 0.0, maximum: 4e9, value: 0.0, decimals: 0, suffix: "", choices: &[], initial: &[] },
+            FilterParam { control: FilterControl::Hidden, label: "", minimum: 0.0, maximum: 4e9, value: 0.0, decimals: 0, suffix: "", pixel_distance: false, choices: &[], initial: &[] },
         ],
         whole_layer: true,
         dialog: DialogKind::VanishingPoint,

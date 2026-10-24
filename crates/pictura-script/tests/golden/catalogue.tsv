@@ -364,7 +364,7 @@ filter.picturaRaw	Filter/Pictura Raw…	Pictura Raw…		1	0
 filter.lens.correction	Filter/Lens Correction…	Lens Correction…		0	0
 filter.liquify	Filter/Liquify…	Liquify…	Shift+Ctrl+X	1	0
 filter.oil.paint	Filter/Oil Paint…	Oil Paint…		1	0
-filter.vanishing.point	Filter/Vanishing Point…	Vanishing Point…	Alt+Ctrl+V	0	0
+filter.vanishing.point	Filter/Vanishing Point…	Vanishing Point…	Alt+Ctrl+V	1	0
 filter.artistic.colored.pencil	Filter/Artistic/Colored Pencil	Colored Pencil		1	0
 filter.artistic.cutout	Filter/Artistic/Cutout	Cutout		1	0
 filter.artistic.dry.brush	Filter/Artistic/Dry Brush	Dry Brush		1	0
