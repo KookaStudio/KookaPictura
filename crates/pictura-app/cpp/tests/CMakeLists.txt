@@ -106,6 +106,7 @@ set(PICTURA_QT_TESTS
     tst_spin_blur
     tst_liquify_dialog
     tst_adaptive_wide_angle
+    tst_vanishing_point
     tst_layer_style
     tst_color_range
     tst_refine_edge

@@ -23,14 +23,18 @@ pub(super) use canvas_proxy::canvas_proxy_buffer;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QByteArray, QImage, QList, QString, QStringList};
+use depth_gate::filter_eight_bit_document;
+pub(super) use depth_gate::{document_supported, eight_bit_refusal};
 use pictura_core::{layer_pixel_locked, Document, Layer, PixelBuffer};
 
 pub(super) mod adaptive_wide_angle;
 mod canvas_proxy;
+mod depth_gate;
 pub(super) mod displace_maps;
 pub(super) mod jobs;
 pub(super) mod lens_blur_depths;
 pub(super) mod liquify;
+pub(super) mod vanishing_point;
 
 #[cxx_qt::bridge]
 pub mod ffi {
@@ -135,6 +139,10 @@ pub mod ffi {
         /// Whether the active layer can take a destructive filter (an unlocked
         /// normal pixel layer in an open document).
         fn filter_target_ready(view: Pin<&mut PictureView>) -> bool;
+
+        /// Whether the document is one Adaptive Wide Angle and Vanishing
+        /// Point take: 8-bit RGB or Grayscale.
+        fn filter_eight_bit_document(view: &PictureView) -> bool;
 
         /// Whether the active pixel layer has nothing to filter: no opaque
         /// pixel at all, or none inside the selection. False when there is no
@@ -278,9 +286,7 @@ fn apply_filter_params(
     params: &QList<f64>,
 ) -> bool {
     let kind_s = kind.to_string();
-    if let Some(reason) =
-        adaptive_wide_angle::awa_refusal(&kind_s, view.rust().session.doc.as_ref())
-    {
+    if let Some(reason) = eight_bit_refusal(&kind_s, view.rust().session.doc.as_ref()) {
         eprintln!("pictura: filter '{kind_s}' refused: {reason}");
         view.as_mut().rust_mut().filter_error = Some(reason);
         return false;

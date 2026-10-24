@@ -481,6 +481,10 @@ const MAPPING: &[Mapping] = &[
         "ImageMagick has no mesh-warp operator; guarded by the liquify tests",
     ),
     none(
+        "VanishingPoint",
+        "ImageMagick has no perspective-plane grid; guarded by the vanishing_point tests",
+    ),
+    none(
         "AdaptiveWideAngle",
         "ImageMagick has no constraint-solved projection; guarded by the adaptive_wide_angle \
          tests",

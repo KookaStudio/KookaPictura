@@ -245,6 +245,9 @@ pub fn all() -> Vec<Filter> {
         Filter::AdaptiveWideAngle {
             params: AwaParams::default(),
         },
+        Filter::VanishingPoint {
+            edit: Arc::new(VpEdit::default()),
+        },
         Filter::ZigZag {
             amount: 20.0,
             ridges: 5,

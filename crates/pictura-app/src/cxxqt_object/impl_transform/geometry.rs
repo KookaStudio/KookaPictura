@@ -359,71 +359,10 @@ pub(super) fn projective_coefficients(
     src: [(f64, f64); 4],
     dst: [(f64, f64); 4],
 ) -> Option<[f64; 9]> {
-    for (x, y) in src.iter().chain(dst.iter()) {
-        if !x.is_finite() || !y.is_finite() {
-            return None;
-        }
-    }
-    let mut a = [[0.0f64; 8]; 8];
-    let mut b = [0.0f64; 8];
-    for i in 0..4 {
-        let (x, y) = src[i];
-        let (u, v) = dst[i];
-        a[2 * i] = [x, y, 1.0, 0.0, 0.0, 0.0, -x * u, -y * u];
-        b[2 * i] = u;
-        a[2 * i + 1] = [0.0, 0.0, 0.0, x, y, 1.0, -x * v, -y * v];
-        b[2 * i + 1] = v;
-    }
-    let s = gaussian_solve(a, b)?;
-    let h = [s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7], 1.0];
+    let h = pictura_core::Homography::from_quads(src, dst)?.0;
     // QTransform maps x'=(m11·x+m21·y+m31)/w and y'=(m12·x+m22·y+m32)/w with
     // w=m13·x+m23·y+m33, hence the transposed placement of the homography.
     Some([h[0], h[3], h[6], h[1], h[4], h[7], h[2], h[5], h[8]])
-}
-
-/// Solve the 8×8 linear system by Gaussian elimination with partial pivoting.
-// ponytail: a local copy of the engine's solver (`pictura-render` is frozen for
-// this change). Expose the engine helper if a second caller ever appears.
-fn gaussian_solve(mut a: [[f64; 8]; 8], mut b: [f64; 8]) -> Option<[f64; 8]> {
-    const PIVOT_EPSILON: f64 = 1e-12;
-    for col in 0..8 {
-        let mut pivot = col;
-        let mut best = a[col][col].abs();
-        for (offset, row) in a[(col + 1)..].iter().enumerate() {
-            let v = row[col].abs();
-            if v > best {
-                best = v;
-                pivot = col + 1 + offset;
-            }
-        }
-        if !best.is_finite() || best < PIVOT_EPSILON {
-            return None;
-        }
-        a.swap(col, pivot);
-        b.swap(col, pivot);
-        let prow = a[col];
-        let p = prow[col];
-        for row in (col + 1)..8 {
-            let factor = a[row][col] / p;
-            if factor == 0.0 {
-                continue;
-            }
-            for k in col..8 {
-                a[row][k] -= factor * prow[k];
-            }
-            b[row] -= factor * b[col];
-        }
-    }
-    let mut x = [0.0f64; 8];
-    for i in (0..8).rev() {
-        let row = a[i];
-        let mut s = b[i];
-        for k in (i + 1)..8 {
-            s -= row[k] * x[k];
-        }
-        x[i] = s / row[i];
-    }
-    x.iter().all(|v| v.is_finite()).then_some(x)
 }
 
 /// Source coordinate of handle `h` (4..=7 are edge midpoints).

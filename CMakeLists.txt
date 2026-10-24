@@ -283,6 +283,10 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/awa_canvas.h
     crates/pictura-app/cpp/awa_dialog.cpp
     crates/pictura-app/cpp/awa_dialog.h
+    crates/pictura-app/cpp/vp_canvas.cpp
+    crates/pictura-app/cpp/vp_canvas.h
+    crates/pictura-app/cpp/vp_dialog.cpp
+    crates/pictura-app/cpp/vp_dialog.h
     crates/pictura-app/cpp/liquify_canvas.cpp
     crates/pictura-app/cpp/liquify_canvas.h
     crates/pictura-app/cpp/liquify_dialog.cpp

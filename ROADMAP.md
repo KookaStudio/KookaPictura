@@ -289,7 +289,12 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       line and polygon constraints, EXIF focal-length prefill
 - [ ] Adaptive Wide Angle Auto and lens profiles, Panorama, Smart Filter
       re-edit (#891)
-- [ ] Lens Correction (#347) and Vanishing Point (#349)
+- [ ] Lens Correction (#347)
+- [x] Vanishing Point planes (#349): Create and Edit Plane, validity colours,
+      Grid Size, related planes torn off at 90° with Angle, Render Grids
+- [ ] Vanishing Point Marquee, Stamp, Brush, Transform, Eyedropper and Paste
+      (#349)
+- [ ] Vanishing Point planes saved in PSD, TIFF and JPEG (#918)
 - [x] NTSC Colors (#345)
 - [ ] De-Interlace (#344)
 - [ ] Embed and Read Watermark (#350, #351)
