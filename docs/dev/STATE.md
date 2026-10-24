@@ -230,6 +230,39 @@ Snapshot for resuming after a context break. Update after each milestone.
   unwarped while a warped layer is edited. The outlines are rebuilt on every
   render. CS6's refusal of path type is unconfirmed. Tests: `tst_warp_text`
   (16 cases) and Rust `type_warp`, codec, and core units.
+- **Type panels and glyph protection bundle** (#517/#518/#519/#887, branch
+  `feat/517-type-panel-bundle`, OpenSpec change
+  `type-panels-glyph-protection`, archived as
+  `2026-10-24-type-panels-glyph-protection`, synced into
+  `ui/character-paragraph-panels`, `ui/character-styles-panel`,
+  `ui/type-preferences`, `tools/missing-glyph-protection`, and the type
+  layout/render capabilities).
+  - **Character panel** gains the font-style picker backed by a style-keyed face
+    registry, the Language list, Set Tsume behind Show Asian Text Options, and
+    the Fractional Widths panel-menu toggle. Faux Bold/Italic and Underline were
+    already present.
+  - **Paragraph panel** gains the Justification dialog (word/letter/glyph
+    min/desired/max plus auto leading), bounded justification in CS6's
+    word→letter→glyph order, the LTR/RTL direction control behind Middle
+    Eastern, bidi shaping, mirrored line placement and RTL caret order.
+  - **Character Styles panel** lists/applies/creates/deletes styles, opens the
+    three-page Character Style Options dialog with live Preview, and renames
+    applied styles through the bridge; Window/Type menu entries and a bundled
+    icon are registered.
+  - **Missing Glyph Protection** (Type preferences, on by default) shapes and
+    paints an uncovered character in the first registered covering face, with
+    the same advances for wrapping, caret stops, path/warp rendering, and the
+    layer ink width. PDF live text refuses a fallback layer and rasterizes it.
+  - **Preferences** for the two engines and glyph protection are process-wide,
+    saved in the session store, and re-render open documents.
+  Ceiling (`ponytail:`): mixed-direction caret mapping and justification caret
+  stops for letter/glyph spread are not derived from glyph clusters; the
+  fallback candidate list is process-wide rather than rebuilt per document;
+  fallback ink height still uses the active face's metrics; PDF registers by
+  family only. Tests: Rust core/codec/app/render suites, the Rust script
+  catalogue, `tst_character_paragraph_panels` (27), `tst_character_styles_panel`
+  (12), `tst_type_preferences`, `tst_type_tools` fallback, CTest 161/161, and
+  the 472-check self-test.
 - **Help > Search on Shift+Space** (#788, branch `feat/788-searchbar`,
   OpenSpec change `ui-search-bar`, archived into `ui/search-bar`). Not a CS6
   feature; added by owner decision and labelled non-parity.

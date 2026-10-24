@@ -172,7 +172,7 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [x] Type on path and area type (#683)
 - [x] Warp text (#684)
 - [x] Gamma blend and missing-font handling (#685)
-- [ ] Missing Glyph Protection (#887)
+- [x] Missing Glyph Protection (#887)
 - [ ] Path operations, align and arrange, constrained path dragging, the Target
       Path toggle, and segment and marquee multi-select (#542)
 - [ ] Slice style and modifiers, Divide, Combine, Duplicate, the Slice Options
@@ -373,10 +373,10 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       the 16/32-bit bins (#515)
 - [ ] Info panel sampler persistence, the sample-size readout, marquee and
       transform readouts, before/after, and the gamut exclamation (#516)
-- [ ] Character panel faux bold and italic, language, tsume, underline, and
-      fractional widths (#517)
-- [ ] The Paragraph Justification dialog and RTL direction (#518)
-- [ ] The Character Styles panel (#519)
+- [x] Character panel font style, language, tsume, underline, fractional widths,
+      faux bold, and italic (#517)
+- [x] The Paragraph Justification dialog and RTL direction (#518)
+- [x] The Character Styles panel (#519)
 - [ ] Navigator proxy colour, Ctrl-drag proxy positioning, zoom buttons, and
       typed zoom (#520)
 - [ ] Make Work Path, clipping-path designation, and the panel-options

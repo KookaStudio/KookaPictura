@@ -6,7 +6,7 @@
 - **Re-checked:** `#785` swept the rows this register's readers depend on and
   corrected five that the tree had moved past; the corrections are listed in
   §G and the rows that were wrong have been removed.
-- **Rows:** 165 gaps — 5 systemic in §B, 160 per-domain in §C.
+- **Rows:** 161 gaps — 5 systemic in §B, 156 per-domain in §C.
 
 This register maps the behavioural contract in `docs/` against the implementation
 in `crates/`. It is the canonical place to see **what is specified but missing,
@@ -105,9 +105,6 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | PAN-6 | `panels/history-panel.md` | History Options, Clear History/purge, New Document from state | MISSING | `panel_group_menu.cpp:195-198` | #514 |
 | PAN-7 | `panels/histogram-panel.md` | View modes, statistics, source menu, cache/refresh, 16/32-bit bins | PARTIAL | `histogram_panel.cpp:79-142` | #515 |
 | PAN-8 | `panels/info-panel.md` | Sampler persistence, sample-size readout, marquee/transform readouts, before/after, gamut exclamation | PARTIAL | `info_panel.cpp:623-685` | #516 |
-| PAN-9 | `panels/character-and-paragraph.md` | Character panel missing controls (faux bold/italic, language, tsume, underline, fractional widths) | PARTIAL | `character_panel.cpp:65-132` | #517 |
-| PAN-10 | `panels/character-and-paragraph.md` | Paragraph Justification dialog + RTL direction | MISSING | `paragraph_panel.h:33-40` | #518 |
-| PAN-11 | `panels/character-and-paragraph.md` | Character Styles panel | MISSING | no `character_styles_panel.*`; engine API at `type_tools.rs:632` | #519 |
 | PAN-12 | `panels/navigator-panel.md` | Proxy colour, Ctrl-drag proxy positioning, zoom buttons, typed zoom | MISSING | `navigator_panel.cpp:138-159` | #520 |
 | PAN-13 | `panels/paths-panel.md` | Make Work Path, clipping-path designation, Panel Options thumbnail size | MISSING | `paths_panel.h:24-25` | #521 |
 | PAN-14 | `panels/note-panel.md` | Notes Author/Colour options + PSD/PDF/TIFF annotation round-trip | MISSING | `options_bar.cpp:593`; `annotations.rs:10` | #522 |
@@ -133,7 +130,6 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | TOOL-14 | `healing-brushes.md` | Healing Mode/Source/Sample, Sample All Layers, depth/mode handling | PARTIAL | `options_bar.cpp:694-741`; `tool_healing.cpp:165` | #538 |
 | TOOL-15 | `history-brush.md` | Merged/composite source + Edit ▸ Fill ▸ History | PARTIAL | `paint_tools.rs:524-527` | #539 |
 | TOOL-16 | `mixer-brush.md` | Sample All Layers, Load Solid Colors Only, keyboard shortcuts | MISSING | `options_bar_paint.cpp:310`; `tool_mixerbrush.cpp:39-41` | #540 |
-| TOOL-17 | `type-tools.md` | Missing Glyph Protection (#887); gamma blend and missing-font handling landed in #685 (an approximated colour-independent curve, Replace All substitutes Liberation Sans); warp text landed in #684 (outline-warped presets, the caret stays unwarped while editing), type-on-path and area type landed in #683 (area type clips a bounding-box layout), paragraph type in #682 (greedy wrap, resize-only box handles) | PARTIAL | `type_path.rs`; `text_gamma.rs`; `missing_fonts.rs`; `crates/pictura-script/src/command_catalogue/entries.rs` | #541 |
 | TOOL-18 | `path-selection-tools.md` | Path operations/align/arrange, constrain path dragging, Target Path toggle, segment/marquee multi-select | MISSING | `tool_path_selection.cpp:13-14` | #542 |
 | TOOL-19 | `slice-tools.md` | Slice options bar/style/modifiers, Divide/Combine/Duplicate, Slice Options dialog, slices-from-guides | MISSING | `tool_slice.cpp:65-102` | #543 |
 | TOOL-20 | `crop-tool.md` | Crop resampling by W×H×resolution, non-destructive crop/Reveal All, crop shield settings | PARTIAL | `options_bar_crop.cpp:244-375` | #544 |
