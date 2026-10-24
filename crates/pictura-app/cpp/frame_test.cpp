@@ -169,6 +169,15 @@ bool PicturaMainWindow::dropBoundaryForTest(const QString& panelName, const QStr
     return dropped && landed && landed != original && landed->titleCountForTest() == 1;
 }
 
+void PicturaMainWindow::setDocumentNameForTest(int index, const QString& name)
+{
+    if (index < 0 || index >= docs_.size()) {
+        return;
+    }
+    docs_[index].displayName = name;
+    updateTabTitle(index);
+}
+
 bool PicturaMainWindow::reorderDocumentsForTest()
 {
     if (!tabs_ || !tabs_->tabBar()) {

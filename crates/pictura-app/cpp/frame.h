@@ -290,6 +290,8 @@ public:
     QString documentPath(int index) const;
     QString documentName(int index) const;
     QString documentTabTextForTest(int index) const;
+    // Give document `index` a display name, as a typed New or Duplicate name does.
+    void setDocumentNameForTest(int index, const QString& name);
     bool isDocumentDirty(int index) const;
     QString activeFilePath() const;
     QString activeDocumentName() const;

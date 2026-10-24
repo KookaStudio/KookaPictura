@@ -1059,6 +1059,7 @@ void PicturaMainWindow::updateTabTitle(int index)
             }
         }
     }
+    const QString label = title;
     // Keep the close button (or loading spinner) inside the tab: elide the text
     // rather than letting the tab grow past the bar. The dirty star survives.
     const QFontMetrics metrics(tabs_->tabBar()->font());
@@ -1070,7 +1071,7 @@ void PicturaMainWindow::updateTabTitle(int index)
         title += QStringLiteral(" *");
     }
     tabs_->setTabText(index, title);
-    tabs_->setTabToolTip(index, docs_.at(index).path.isEmpty() ? title : docs_.at(index).path);
+    tabs_->setTabToolTip(index, label);
 }
 
 void PicturaMainWindow::updateWindowTitle()
