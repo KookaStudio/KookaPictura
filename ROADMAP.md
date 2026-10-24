@@ -295,7 +295,8 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [x] Vanishing Point Marquee, Stamp, Brush, Transform, Eyedropper and Paste
       (#349): floating selections in perspective with Feather, Opacity and
       Heal, cloning and painting that foreshorten with the planes
-- [ ] Vanishing Point planes saved in PSD, TIFF and JPEG (#918)
+- [x] Vanishing Point planes saved in PSD, PSB, TIFF and JPEG (#918), in a
+      project-owned image resource; reopening restores them
 - [x] NTSC Colors (#345)
 - [ ] De-Interlace (#344)
 - [ ] Embed and Read Watermark (#350, #351)
