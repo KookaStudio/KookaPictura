@@ -11,6 +11,37 @@ Snapshot for resuming after a context break. Update after each milestone.
   (`docs/00-overview/licensing-and-provenance.md`).
 - **Provenance history:** the git history was rewritten so no reachable commit
   contains reproduced Adobe Help prose or the old wording.
+- **Document tabs and windows** (#317, #499, #500, #917, branch
+  `feat/317-document-tabs-windows`, OpenSpec change `document-tabs-windows`;
+  capabilities `document/document-tabs` and `document/document-windows`). A
+  document is split from the windows that show it.
+  - **Registry.** `DocEntry` holds the document and its `DocWindow`s
+    (`document_window.{h,cpp}`); `windows_` and `activeWindow_` in the frame
+    drive the active document. Each window is hosted as a tab, a floating
+    window (`document_float_window.{h,cpp}`), or a tile pane
+    (`document_tile_host.{h,cpp}`). Document-wide pushes go through
+    `forEachCanvas` (`frame_canvas.cpp`).
+  - **Tabs and floats.** `Ctrl+Tab` / `Shift+Ctrl+Tab` cycle every window. A
+    tab dragged off the strip floats; a float's header dropped on the strip
+    docks it. Tab and header context menus (`frame_document_menus.cpp`). The
+    tab tooltip is the full unelided label (#917). Menu, tool and frame keys
+    reach a top-level float; full-screen modes show only the active window.
+  - **Arrange** (`frame_document_arrange.cpp`). Float in Window, Float All,
+    Consolidate All to Tabs, Cascade, Tile, Match Zoom/Location/All, and New
+    Window For (a second `ImageView` on the same document, labelled `:N`).
+    Nine catalogue entries flipped to implemented.
+  - **Preferences and tools.** Interface gains Open Documents As Tabs and
+    Enable Floating Document Window Docking; General gains Zoom Resizes
+    Windows. Hand and Zoom get options-bar pages (`options_bar_navigate.cpp`)
+    with Scroll All Windows, Zoom All Windows and Resize Windows To Fit;
+    `Shift` gives the all-windows form.
+  Ceiling: on Wayland a float is an in-frame overlay (UI-14); the float and
+  tile layout is not saved, and recovery reopens as tabs (UI-15); `Match All` +
+  `Shift` is approximated by the `Shift` forms of Scroll/Zoom All (TOOL-29);
+  no CS6 split-group docking, Tile variants, or Window-menu document list.
+  Tests: `tst_document_windows` (25), `tst_document_float` (21),
+  `tst_document_arrange` (30), `tst_document_navigate` (9), and two
+  `tst_loading_tab` tooltip cases.
 - **Vanishing Point planes** (#349, branch `feat/349-vanishing-point`,
   OpenSpec change `add-vanishing-point-planes`, archived into
   `imaging/vanishing-point`). `Filter ▸ Vanishing Point…` (Alt+Ctrl+V)
