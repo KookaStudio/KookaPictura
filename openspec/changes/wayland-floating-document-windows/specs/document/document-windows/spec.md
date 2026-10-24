@@ -16,10 +16,11 @@ leave the application frame. Such a drag SHALL NOT dock, because the
 application learns neither the pointer's path nor the release. When the
 compositor refuses the interactive move, the header drag SHALL move the window
 by hand and a release over the tab strip SHALL dock it, as on other platforms.
-A tab torn out on Wayland SHALL request the compositor's interactive move for
-the new floating window while the button is still down. When the compositor
-refuses, the window SHALL float where the compositor places it. Either way the
-torn-out window SHALL float and become active.
+A tab torn out on Wayland SHALL float where the compositor places the new
+window, without asking for an interactive move: the press belongs to the tab
+strip, and a move requested before the new window is mapped can lose it. The
+torn-out window SHALL float, stay visible, and become active; a header drag
+moves it from there.
 
 On every platform, dragging a floating window's header with Ctrl held SHALL
 start a drag-and-drop that carries the window. Dropping it on the tab strip
@@ -59,9 +60,8 @@ activate it, whether or not docking is enabled.
 
 #### Scenario: Tear out on Wayland [dtw_wayland_tear_out]
 - **WHEN** the platform is Wayland and the user drags a tab well below the strip
-- **THEN** the document floats in a top-level window that is active, moved by
-  the compositor when it accepts the interactive move and otherwise placed by
-  the compositor
+- **THEN** the document floats in a visible top-level window that is active and
+  placed by the compositor, and no interactive move is requested for it
 
 #### Scenario: Ctrl+drag docks at the drop position [dtw_ctrl_drag_docks]
 - **WHEN** two documents are tabbed, a third floats, and the user Ctrl+drags the

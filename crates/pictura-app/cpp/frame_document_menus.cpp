@@ -189,14 +189,14 @@ bool PicturaMainWindow::tearOutFilter(QEvent* event)
         QRect geometry = defaultFloatGeometry();
         geometry.moveTopLeft(globalPos
                              - QPoint(geometry.width() / 2, DocumentFloatWindow::kHeaderHeight / 2));
-        if (floatWindow(window, geometry)) {
+        // Where the window system places and moves top-level windows
+        // (Wayland), the float stays where the compositor maps it: a system
+        // move asked for before the new surface is mapped can lose the window
+        // (KWin), and the press it would continue belongs to the tab strip.
+        if (floatWindow(window, geometry)
+            && !(window->floating->isWindow() && DocumentFloatWindow::movesBySystem())) {
             tearFloat_ = window->floating;
             tearFloat_->beginDrag(globalPos);
-            // Where the window system moves top-level windows (Wayland), it
-            // takes the rest of the drag, or the float stays where it landed.
-            if (tearFloat_->startSystemMove()) {
-                tearFloat_ = nullptr;
-            }
         }
         return true;
     }

@@ -139,18 +139,18 @@ payload.
 
 ### W8. Tear-out on Wayland
 
-After the tear-out floats the window and calls `beginDrag`, it calls
-`startSystemMove()` on the new float right away, while the button is still
-down. If the compositor takes the move, the tear-out releases the float. If it
-refuses, the hand drag continues. On Wayland that hand drag can't move the
-top-level, so the float stays where the compositor placed it, under or near the
-frame. The tear-out still creates and activates the float either way.
+On Wayland the tear-out floats the window and stops there: it neither continues
+the drag by hand (the client can't move a top-level) nor calls
+`startSystemMove()`. A system move asked for right after `show()`, before the
+compositor has mapped the surface and with a press serial that belongs to the
+tab strip, made the torn-out window vanish on KWin during smoke testing. The
+float appears where the compositor places it and is active; a header drag moves
+it from there. X11 keeps the hand drag that continues the tear-out.
 
 ## Risks / Trade-offs
 
-- [The compositor refuses a system move whose button press was on another
-  surface (the tear-out)] → The float still appears and is active. The user
-  moves it by its header.
+- [A tear-out on Wayland can't follow the pointer] → The float appears where the
+  compositor places it and is active; the user moves it by its header.
 - [A Wayland user expects a plain header drag over the strip to dock] → The
   parity register (UI-14) records it. Ctrl+drag and double-click dock.
 - [`QDrag::exec` started from a timer instead of a mouse handler] → The button

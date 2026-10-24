@@ -439,6 +439,7 @@ void DocumentFloatTest::tearOutUnderWayland()
 
     QTRY_VERIFY(window_->floatWindowForTest(1) != nullptr);
     QVERIFY(window_->floatWindowForTest(1)->isWindow());
+    QVERIFY(window_->floatWindowForTest(1)->isVisible());
     QCOMPARE(window_->tabOfDocumentForTest(0), 0);
     QCOMPARE(bar->count(), 1);
     QCOMPARE(window_->activeDocumentIndex(), 1);
