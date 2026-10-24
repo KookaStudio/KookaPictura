@@ -117,11 +117,12 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
     channelsPanel_ = new ChannelsPanel(this);
     channelsPanel_->setObjectName(QStringLiteral("channelsPanel"));
     // Channel visibility follows the active document; the panel resets it on a
-    // document switch, so applying it to every canvas keeps them in step.
+    // document switch, so applying it to every window's canvas keeps them in
+    // step.
     connect(channelsPanel_, &ChannelsPanel::channelMaskChanged, this, [this](int mask) {
-        for (int i = 0; i < documentCount(); ++i) {
-            if (ImageView* canvas = canvasAt(i)) {
-                canvas->setChannelMask(mask);
+        for (const DocWindow* window : windows_) {
+            if (window->canvas) {
+                window->canvas->setChannelMask(mask);
             }
         }
     });
@@ -721,6 +722,7 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
             toolbox_->zoomMenu()->popup(pos);
         }
     });
+    connect(tools_, &ToolController::toolZoomed, this, &PicturaMainWindow::onToolZoomed);
     connect(tools_, &ToolController::brushPickerRequested, this, [this](const QPoint& pos) {
         if (optionsBar_) {
             optionsBar_->brushPicker()->popUpAt(pos);
@@ -731,14 +733,8 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
             layersPanel_->enterIsolation();
         }
     });
-    tools_->setCanvasActivationHandler([this](ImageView* canvas) {
-        for (int i = 0; i < docs_.size(); ++i) {
-            if (docs_.at(i).canvas == canvas) {
-                setActiveDocumentIndex(i);
-                break;
-            }
-        }
-    });
+    tools_->setCanvasActivationHandler(
+        [this](ImageView* canvas) { activateDocWindow(windowOfCanvas(canvas)); });
 
     if (optionsBar_) {
         optionsBar_->showTool(tools_->activeTool());
@@ -913,8 +909,9 @@ void PicturaMainWindow::updateToolHint()
 
 void PicturaMainWindow::installWorkspaceOpenGesture()
 {
-    // The blank pane is the tab widget's internal stacked widget, so both are
-    // filtered.
+    // The blank pane is the tab widget's internal stacked widget, so it, the
+    // tab widget, and the document area holding them are filtered.
+    documentArea_->installEventFilter(this);
     tabs_->installEventFilter(this);
     if (auto* workspace = tabs_->findChild<QStackedWidget*>()) {
         workspace->installEventFilter(this);
@@ -923,6 +920,20 @@ void PicturaMainWindow::installWorkspaceOpenGesture()
 
 bool PicturaMainWindow::eventFilter(QObject* watched, QEvent* event)
 {
+    if (tabs_ && watched == tabs_->tabBar() && tearOutFilter(event)) {
+        return true;
+    }
+    if (tabs_ && (watched == tabs_->tabBar() || watched == tabs_)
+        && windowDropFilter(watched, event)) {
+        return true;
+    }
+    // A press on a canvas activates its window, before the tool sees it.
+    if (event->type() == QEvent::MouseButtonPress) {
+        if (DocWindow* window = windowOfCanvas(qobject_cast<ImageView*>(watched));
+            window && window != activeWindow_) {
+            activateDocWindow(window);
+        }
+    }
     // The empty workspace (no documents open) accepts a left double-click as
     // "Open": the tab widget and its blank stacked page are the only widgets
     // there.
@@ -937,18 +948,19 @@ bool PicturaMainWindow::eventFilter(QObject* watched, QEvent* event)
     if (tabs_ && watched == tabs_->tabBar() && event->type() == QEvent::MouseButtonRelease) {
         auto* mouse = static_cast<QMouseEvent*>(event);
         if (mouse->button() == Qt::MiddleButton) {
-            const int index = tabs_->tabBar()->tabAt(mouse->position().toPoint());
-            if (index >= 0) {
-                const bool loading = isLoadingDocument(index);
-                const QPointer<PictureView> guard(viewAt(index));
-                QTimer::singleShot(0, this, [this, guard, loading] {
+            DocWindow* window =
+                windowAtTab(tabs_->tabBar()->tabAt(mouse->position().toPoint()));
+            if (window) {
+                const bool loading = window->doc->loading;
+                const QPointer<PictureView> guard(window->doc->view);
+                QTimer::singleShot(0, this, [this, window, guard, loading] {
                     if (!guard) {
                         return;
                     }
                     if (loading) {
                         cancelOpenForView(guard.data());
-                    } else {
-                        closeDocument(indexOfView(guard.data()), true);
+                    } else if (windows_.contains(window) && window->doc->view == guard) {
+                        closeWindow(window, true);
                     }
                 });
                 return true;

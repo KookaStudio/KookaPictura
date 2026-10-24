@@ -37,6 +37,7 @@ namespace {
 
 bool g_interactive = true;
 UnsavedChoice g_nonInteractiveChoice = UnsavedChoice::Discard;
+int g_nonInteractivePrompts = 0;
 // Unset: interactive unless the platform is offscreen.
 int g_transformInteractive = -1;
 int g_cropInteractive = -1;
@@ -121,6 +122,11 @@ void setNonInteractiveUnsavedChoice(UnsavedChoice choice)
     g_nonInteractiveChoice = choice;
 }
 
+int nonInteractiveUnsavedPromptCount()
+{
+    return g_nonInteractivePrompts;
+}
+
 QImage documentPreviewImage(PictureView* view, int minEdge)
 {
     if (!view || !view->has_document()) {
@@ -143,6 +149,7 @@ QImage documentPreviewImage(PictureView* view, int minEdge)
 UnsavedChoice askUnsaved(QWidget* parent, const QString& documentName)
 {
     if (!g_interactive) {
+        ++g_nonInteractivePrompts;
         return g_nonInteractiveChoice;
     }
 

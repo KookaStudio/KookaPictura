@@ -1,5 +1,6 @@
 // The rubylith overlay: the Layers panel toggles it and sets its display
-// options on the view; the frame draws it on the active canvas.
+// options on the view; the frame draws it on each window of the active
+// document.
 
 #include "frame_includes.h"
 

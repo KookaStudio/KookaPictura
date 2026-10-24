@@ -169,6 +169,15 @@ bool PicturaMainWindow::dropBoundaryForTest(const QString& panelName, const QStr
     return dropped && landed && landed != original && landed->titleCountForTest() == 1;
 }
 
+void PicturaMainWindow::setDocumentNameForTest(int index, const QString& name)
+{
+    if (index < 0 || index >= docs_.size()) {
+        return;
+    }
+    docs_[index]->displayName = name;
+    updateTabTitle(index);
+}
+
 bool PicturaMainWindow::reorderDocumentsForTest()
 {
     if (!tabs_ || !tabs_->tabBar()) {
@@ -178,19 +187,28 @@ bool PicturaMainWindow::reorderDocumentsForTest()
                 QStringLiteral("white"));
     newDocument(QStringLiteral("ReorderB"), 4, 3, QStringLiteral("rgb"), 8,
                 QStringLiteral("white"));
-    const int from = docs_.size() - 2;
-    const int to = docs_.size() - 1;
-    if (from < 0) {
+    const int docA = docs_.size() - 2;
+    const int docB = docs_.size() - 1;
+    if (docA < 0) {
         return false;
     }
-    PictureView* a = viewAt(from);
-    PictureView* b = viewAt(to);
-    const QString nameA = documentName(from);
+    PictureView* a = viewAt(docA);
+    PictureView* b = viewAt(docB);
+    const int from = tabOf(docs_.at(docA)->windows.value(0));
+    const int to = tabOf(docs_.at(docB)->windows.value(0));
+    if (from < 0 || to < 0) {
+        return false;
+    }
+    const QString nameA = documentName(docA);
     const bool activeBefore = viewAt(activeDocumentIndex()) == b;
     tabs_->tabBar()->moveTab(from, to);
     QCoreApplication::processEvents();
-    return activeBefore && a && b && viewAt(from) == b && viewAt(to) == a
-           && documentName(to) == nameA && viewAt(activeDocumentIndex()) == b;
+    const DocWindow* atFrom = windowAtTab(from);
+    const DocWindow* atTo = windowAtTab(to);
+    return activeBefore && a && b && atFrom && atTo && atFrom->doc->view == b
+           && atTo->doc->view == a && windows_.at(from) == atFrom && windows_.at(to) == atTo
+           && viewAt(docA) == a && documentName(docA) == nameA
+           && viewAt(activeDocumentIndex()) == b;
 }
 
 } // namespace pictura

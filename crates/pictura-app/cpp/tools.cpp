@@ -81,8 +81,8 @@ GuideSnap snapDistortCornerToGuides(const QPointF& p,
 // Concrete handlers live in their own translation units; ToolController owns
 // only the registry. The factories take the family option groups the handlers
 // own (shared within a family) and read directly.
-std::unique_ptr<ToolHandler> makeHandToolHandler();
-std::unique_ptr<ToolHandler> makeZoomToolHandler();
+std::unique_ptr<ToolHandler> makeHandToolHandler(std::shared_ptr<HandGroup> hand);
+std::unique_ptr<ToolHandler> makeZoomToolHandler(std::shared_ptr<ZoomGroup> zoom);
 std::unique_ptr<ToolHandler> makeEyedropperToolHandler(std::shared_ptr<EyedropperGroup> options);
 std::unique_ptr<ToolHandler> makeBrushToolHandler(bool aliased, std::shared_ptr<PaintOptions> paint);
 std::unique_ptr<ToolHandler> makeMagicWandToolHandler(std::shared_ptr<SelectionOptions> selection);
@@ -174,6 +174,8 @@ ToolController::ToolController(QObject* parent)
     auto artHistory = std::make_shared<ArtHistoryGroup>();
     auto gradient = std::make_shared<GradientGroup>();
     auto bucket = std::make_shared<BucketGroup>();
+    auto hand = std::make_shared<HandGroup>();
+    auto zoom = std::make_shared<ZoomGroup>();
     std::array<std::shared_ptr<RetouchGroup>, 3> retouch{
         std::make_shared<RetouchGroup>(), std::make_shared<RetouchGroup>(),
         std::make_shared<RetouchGroup>()};
@@ -252,9 +254,9 @@ ToolController::ToolController(QObject* parent)
     // circle, so a Mode change re-applies the outline.
     eraser->changed = [this]() { refreshBrushOutline(); };
 
-    registry_.registerTool(ToolId::Hand, makeHandToolHandler());
+    registry_.registerTool(ToolId::Hand, makeHandToolHandler(hand));
     registry_.registerTool(ToolId::RotateView, makeRotateViewToolHandler());
-    registry_.registerTool(ToolId::Zoom, makeZoomToolHandler());
+    registry_.registerTool(ToolId::Zoom, makeZoomToolHandler(zoom));
     registry_.registerTool(ToolId::Eyedropper, makeEyedropperToolHandler(eyedropper));
     registry_.registerTool(ToolId::Brush, makeBrushToolHandler(false, paint));
     registry_.registerTool(ToolId::Pencil, makeBrushToolHandler(true, paint));
@@ -721,6 +723,9 @@ void ToolController::unbindCanvas()
         return;
     }
     disconnect(canvas_, nullptr, this, nullptr);
+    // A floating or tiled canvas stays visible once it is no longer active; it
+    // must not keep the blank cursor a brush ring stood in for.
+    canvas_->unsetCursor();
     // Let the active handler release anything tied to this canvas (an
     // in-progress polygon, the warm Move preview) before it goes away.
     if (ToolHandler* h = registry_.forTool(active_)) {

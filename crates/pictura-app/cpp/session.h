@@ -32,6 +32,14 @@ struct SessionState {
     bool layersUseDefaultMasksOnFill = true;  // fill/adjustment takes selection mask
     int toolsColumns = 1;            // 1 or 2; out-of-range loads the default
     bool useShiftKeyForToolSwitch = true;
+    // Interface: Open Documents As Tabs, and Enable Floating Document Window
+    // Docking (a float dropped on the tab strip docks). A store written before
+    // them loads both on.
+    bool openDocumentsAsTabs = true;
+    bool enableFloatingDocumentDocking = true;
+    // General: Zoom Resizes Windows (View zoom fits a floating window). A store
+    // written before it loads off.
+    bool zoomResizesWindows = false;
     // Edit > Preferences > Type: new type starts with selected placeholder text.
     bool typePlaceholderText = true;
     bool confirmLiveShapeToPath = true;  // off after "Don't show again"

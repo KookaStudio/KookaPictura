@@ -155,9 +155,11 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       and the Transform Path and Transform Points submenus (#530)
 - [ ] Magnetic Pen (#531), and Merge Shape Components — path boolean
       operations (#532)
-- [ ] Hand and Zoom options: Scrubby and animated zoom, Resize Windows, Zoom
-      All, Scroll All and Match (#533), plus Bird's Eye View and Flick Panning
-      (#534)
+- [x] Hand and Zoom multi-window options: Scroll All Windows, Zoom All
+      Windows, Resize Windows To Fit, and the Zoom Resizes Windows preference
+      (#500)
+- [ ] Hand and Zoom options: Scrubby and animated zoom (#533), plus Bird's Eye
+      View and Flick Panning (#534)
 - [ ] Ruler protractor and Straighten from the ruler (#535); eyedropper
       modifiers and Shift-click sampler (#536)
 - [ ] Clone Source overlay controls (#537)
@@ -429,8 +431,13 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       `crates/pictura-app/cpp/system_info.cpp`.
 - [ ] Status bar readouts and the status-bar options popup (#497)
 - [ ] The active layer name in the title bar (#498)
-- [ ] `Ctrl+Tab` and `Shift+Ctrl+Tab` document cycling (#499)
-- [ ] Window ▸ Arrange: Float, Tile, Cascade, Match and New Window (#500)
+- [x] `Ctrl+Tab` and `Shift+Ctrl+Tab` document cycling (#499)
+- [x] Window ▸ Arrange: Float, Tile, Cascade, Match and New Window (#500)
+- [x] Document tab tear-out into floating windows, docking a floating window
+      back by its header (drop, Ctrl+drag, or double-click), top-level
+      floating windows on Wayland, and the tab and header context menus (#317)
+- [x] The full document label in the tab tooltip (#917)
+- [ ] The open-document list at the bottom of the Window menu (#923)
 - [ ] Menu customization: Edit ▸ Menus, Show All Menu Items, and the
       enablement matrix (#501)
 - [ ] The Type menu: work path, convert to shape, and spellcheck (#502)

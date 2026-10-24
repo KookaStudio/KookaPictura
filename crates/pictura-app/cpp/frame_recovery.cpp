@@ -42,8 +42,8 @@ void PicturaMainWindow::setAutoSaveRecovery(bool on, int minutes)
         return;
     }
     autosaveTimer_->stop();
-    for (const DocEntry& entry : docs_) {
-        dropRecoverySnapshot(entry.view);
+    for (const DocEntry* entry : docs_) {
+        dropRecoverySnapshot(entry->view);
     }
 }
 
@@ -70,7 +70,7 @@ void PicturaMainWindow::autosaveRecovery()
         return;
     }
     for (int i = 0; i < docs_.size(); ++i) {
-        PictureView* view = docs_.at(i).view;
+        PictureView* view = docs_.at(i)->view;
         if (!document_api::isDirty(*view)) {
             dropRecoverySnapshot(view);
             continue;
@@ -80,7 +80,7 @@ void PicturaMainWindow::autosaveRecovery()
             continue;
         }
         const int id = recoveryIds_.value(view);
-        if (!recovery_->writeManifest(id, documentName(i), docs_.at(i).path)) {
+        if (!recovery_->writeManifest(id, documentName(i), docs_.at(i)->path)) {
             continue;
         }
         if (recovery_write(*view, recovery_->snapshotPath(id))) {
@@ -153,8 +153,9 @@ int PicturaMainWindow::recoverOrphans()
                 }
                 continue;
             }
-            const int index = addDocument(view, QString());
-            docs_[index].displayName = recoveredDocumentName(doc.name);
+            // Recovery reopens as tabs whatever Open Documents As Tabs says.
+            const int index = addDocument(view, QString(), true);
+            docs_[index]->displayName = recoveredDocumentName(doc.name);
             updateTabTitle(index);
             updateWindowTitle();
             ++recovered;
@@ -174,9 +175,9 @@ int PicturaMainWindow::recoverOrphans()
     // copies go, so a second crash before the first tick still has them.
     autosaveRecovery();
     QSet<PictureView*> snapshotted;
-    for (const DocEntry& entry : docs_) {
-        if (recovery_wait(*entry.view)) {
-            snapshotted.insert(entry.view);
+    for (const DocEntry* entry : docs_) {
+        if (recovery_wait(*entry->view)) {
+            snapshotted.insert(entry->view);
         }
     }
     // A snapshot that was never started (autosave off) or did not land must not

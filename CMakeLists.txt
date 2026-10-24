@@ -353,6 +353,15 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/svg_icon_engine.cpp
     crates/pictura-app/cpp/file_drop_router.cpp
     crates/pictura-app/cpp/frame.cpp
+    crates/pictura-app/cpp/document_window.cpp
+    crates/pictura-app/cpp/document_window.h
+    crates/pictura-app/cpp/document_float_window.cpp
+    crates/pictura-app/cpp/document_float_window.h
+    crates/pictura-app/cpp/document_tile_host.cpp
+    crates/pictura-app/cpp/document_tile_host.h
+    crates/pictura-app/cpp/frame_document_windows.cpp
+    crates/pictura-app/cpp/frame_document_menus.cpp
+    crates/pictura-app/cpp/frame_document_arrange.cpp
     crates/pictura-app/cpp/frame_open.cpp
     crates/pictura-app/cpp/frame_pdf.cpp
     crates/pictura-app/cpp/frame_import.cpp
@@ -519,6 +528,7 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/options_bar_move.cpp
     crates/pictura-app/cpp/options_bar_transform.cpp
     crates/pictura-app/cpp/options_bar_eyedropper.cpp
+    crates/pictura-app/cpp/options_bar_navigate.cpp
     crates/pictura-app/cpp/options_bar_rotate.cpp
     crates/pictura-app/cpp/options_bar_type.cpp
     crates/pictura-app/cpp/tool_hint_bar.cpp

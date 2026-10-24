@@ -528,15 +528,15 @@ view.extras	View/Extras	Extras	Ctrl+H	0	0
 view.align	View/Align	Align		0	0
 view.align.to	View/Align To	Align To		0	0
 view.toolHints	View/Tool Hints	Tool Hints		1	1
-window.arrange.cascade	Window/Arrange/Cascade	Cascade		0	0
-window.arrange.tile	Window/Arrange/Tile	Tile		0	0
-window.arrange.consolidate.all.to.tabs	Window/Arrange/Consolidate All to Tabs	Consolidate All to Tabs		0	0
-window.arrange.float.in.window	Window/Arrange/Float in Window	Float in Window		0	0
-window.arrange.float.all.in.windows	Window/Arrange/Float All in Windows	Float All in Windows		0	0
-window.arrange.match.zoom	Window/Arrange/Match Zoom	Match Zoom		0	0
-window.arrange.match.location	Window/Arrange/Match Location	Match Location		0	0
-window.arrange.match.all	Window/Arrange/Match All	Match All		0	0
-window.arrange.new.window.for.file	Window/Arrange/New Window For [file]	New Window For [file]		0	0
+window.arrange.cascade	Window/Arrange/Cascade	Cascade		1	0
+window.arrange.tile	Window/Arrange/Tile	Tile		1	0
+window.arrange.consolidate.all.to.tabs	Window/Arrange/Consolidate All to Tabs	Consolidate All to Tabs		1	0
+window.arrange.float.in.window	Window/Arrange/Float in Window	Float in Window		1	0
+window.arrange.float.all.in.windows	Window/Arrange/Float All in Windows	Float All in Windows		1	0
+window.arrange.match.zoom	Window/Arrange/Match Zoom	Match Zoom		1	0
+window.arrange.match.location	Window/Arrange/Match Location	Match Location		1	0
+window.arrange.match.all	Window/Arrange/Match All	Match All		1	0
+window.arrange.new.window.for.file	Window/Arrange/New Window For [file]	New Window For [file]		1	0
 window.workspace.essentials	Window/Workspace/Essentials	Essentials		1	1
 window.workspace.painting	Window/Workspace/Painting	Painting		1	1
 window.workspace.photography	Window/Workspace/Photography	Photography		1	1
