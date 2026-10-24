@@ -12,6 +12,7 @@ mod editor;
 mod float;
 mod geometry;
 mod heal;
+mod persist;
 mod planes;
 mod render;
 mod space;

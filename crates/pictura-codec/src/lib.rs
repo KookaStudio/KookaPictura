@@ -91,8 +91,9 @@ pub use ghostscript::{sniff_vector, Ghostscript, Raster, RasterError, VectorKind
 pub use icc::{assign_document_profile, buffer_to_srgb, convert_document, profile_description};
 pub use image_resources::{
     decode_image_resources, document_resolution, encode_image_resources, frame_image_resource,
-    set_document_resolution, ImageResource, Resolution, EXIF_DATA_1, EXIF_DATA_3, ICC_PROFILE,
-    IPTC_NAA, RESOLUTION_INFO, XMP_METADATA,
+    set_document_resolution, set_vanishing_point_data, vanishing_point_data, ImageResource,
+    Resolution, EXIF_DATA_1, EXIF_DATA_3, ICC_PROFILE, IPTC_NAA, RESOLUTION_INFO, VANISHING_POINT,
+    VANISHING_POINT_NAME, XMP_METADATA,
 };
 pub use iptc::{encode_iptc, iptc_field_name, parse_iptc, Iptc};
 pub use metadata::{
@@ -115,7 +116,9 @@ pub use live_shape::{
 pub use pictura_color::{Policy, Profile};
 pub use png::{encode_base64 as encode_png_base64, encode_rgba as encode_png_rgba};
 pub use probe::{probe_image, ImageBudget, ImageFormat, ImageProbe, ImportError, LimitKind};
-pub use raster_metadata::{embed_raster_metadata, raster_metadata, RasterMetadata};
+pub use raster_metadata::{
+    embed_raster_metadata, raster_image_resources, raster_metadata, RasterMetadata,
+};
 pub use read::{read_psd, read_psd_with, read_psd_within};
 pub use smart_filter::{
     clear_smart_filters, delete_smart_filter, reorder_smart_filters, set_camera_raw_option,

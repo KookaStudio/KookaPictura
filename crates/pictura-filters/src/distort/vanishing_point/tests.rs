@@ -445,3 +445,55 @@ fn a_slid_related_plane_stays_on_its_hinge() {
         assert!(line_miss(p1, p2, c) < 1e-6, "{c:?} left the hinge");
     }
 }
+
+#[test]
+fn planes_round_trip_through_bytes() {
+    let (q, _, _) = tilted();
+    let mut planes = VpPlanes::new(W, H);
+    planes.add(q);
+    planes.set_grid(0, 40.0);
+    let child = planes.tear_off(0, 1).expect("tears off");
+    assert!(planes.set_angle(child, 60.0));
+    planes.extend(child, (700.0, 250.0));
+    planes.add([(10.0, 10.0), (20.0, 300.0), (30.0, 10.0), (40.0, 300.0)]);
+    let back = VpPlanes::from_bytes(&planes.to_bytes()).expect("decodes");
+    assert_eq!(back, planes);
+    assert_eq!(back.validity(2), VpValidity::Aspect);
+    let empty = VpPlanes::new(5, 7);
+    assert_eq!(VpPlanes::from_bytes(&empty.to_bytes()), Some(empty));
+}
+
+#[test]
+fn malformed_plane_bytes_are_refused() {
+    let mut planes = VpPlanes::new(W, H);
+    planes.add(square_on());
+    planes.tear_off(0, 1).expect("tears off");
+    let good = planes.to_bytes();
+    assert!(VpPlanes::from_bytes(&good).is_some());
+    for cut in [0, 1, 13, good.len() - 1] {
+        assert!(VpPlanes::from_bytes(&good[..cut]).is_none(), "cut at {cut}");
+    }
+    let mut longer = good.clone();
+    longer.push(0);
+    assert!(VpPlanes::from_bytes(&longer).is_none(), "trailing bytes");
+    let mut version = good.clone();
+    version[1] = 2;
+    assert!(VpPlanes::from_bytes(&version).is_none(), "another version");
+    let root = 14;
+    let child = root + 1 + 12 * 8;
+    let mut kind = good.clone();
+    kind[root] = 7;
+    assert!(VpPlanes::from_bytes(&kind).is_none(), "an unknown kind");
+    let mut nan = good.clone();
+    nan[root + 1..root + 9].copy_from_slice(&f64::NAN.to_be_bytes());
+    assert!(VpPlanes::from_bytes(&nan).is_none(), "a NaN corner");
+    let mut parent = good.clone();
+    parent[child + 1..child + 5].copy_from_slice(&1u32.to_be_bytes());
+    assert!(
+        VpPlanes::from_bytes(&parent).is_none(),
+        "a parent after its child"
+    );
+    let mut edge = good;
+    edge[child + 5] = 4;
+    assert!(VpPlanes::from_bytes(&edge).is_none(), "a fifth edge");
+}

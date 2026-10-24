@@ -1,7 +1,8 @@
 use super::helpers::*;
 use super::helpers_composite::*;
-use super::impl_core::{finalize_import, format_for_path, raster_writer_for_suffix};
+use super::impl_core::{format_for_path, raster_writer_for_suffix};
 use super::impl_transform::{build_move_preview_base, duplicate_move_target};
+use super::open_jobs::finalize_import;
 use crate::history::{History, Snapshot};
 use crate::layer_target::LayerTarget;
 use pictura_core::{
