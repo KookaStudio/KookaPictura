@@ -205,8 +205,10 @@ Layer Comps (`LAY-022`) is already tracked by `#265`.
 | FILT-5 | `stylize-filters.md` | 8 Stylize filters missing from the Filter Gallery category | DIVERGENT | `filter_gallery_dialog.cpp:118` | #596 |
 | FILT-6 | `artistic-filters.md` | Colored Pencil document-background paper wiring | PARTIAL | `filter_map/mapping.rs` (Colored Pencil arm) | #597 |
 | FILT-7 | `adaptive-wide-angle.md` | Adaptive Wide Angle Auto / lens profiles, Panorama, Smart Filter re-edit, rotation handles | PARTIAL | `pictura-filters/src/distort/adaptive_wide_angle/`, `awa_dialog.cpp` | #891 |
+| FILT-8 | `vanishing-point.md` | Vanishing Point Marquee (Feather / Opacity / Heal / Move Mode), Stamp, Brush, Transform, Eyedropper and Paste | MISSING | `vp_dialog.cpp` (tool column) | #349 |
+| FILT-9 | `vanishing-point.md` | Vanishing Point planes saved in PSD / TIFF / JPEG | MISSING | `document_session/session.rs` (`vanishing_planes`) | #918 |
 
-Lens Correction (`#347`), Vanishing Point (`#349`),
+Lens Correction (`#347`),
 De-Interlace (`#344`), NTSC Colors (`#345`), Embed/Read Watermark (`#350`/`#351`)
 are already tracked.
 
