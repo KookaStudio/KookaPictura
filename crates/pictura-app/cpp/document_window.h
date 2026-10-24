@@ -11,12 +11,16 @@ namespace pictura {
 
 class BrushTipPreview;
 class CanvasScrollBars;
+class DocumentFloatWindow;
 class ImageView;
 class LoadingCard;
 class PictureView;
 struct DocWindow;
 
 enum class OpenKind { Psd, Raster, SmartObject, Pdf, PdfPage, Eps };
+
+// The canvas property recording the view `frame_revision` its image came from.
+inline constexpr const char* kFrameRevisionKey = "picturaFrameRevision";
 
 // One open document. The windows that show it hold the per-viewport state.
 struct DocEntry {
@@ -58,6 +62,8 @@ struct DocWindow {
     // The empty-workspace progress card while loading; null once filled.
     QPointer<LoadingCard> card;
     Host kind = Host::Tab;
+    // The floating document window holding `page` while `kind` is Float.
+    DocumentFloatWindow* floating = nullptr;
 };
 
 // The document's name: its display name, file name, or `Untitled-N`.

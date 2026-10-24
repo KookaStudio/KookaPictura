@@ -918,6 +918,16 @@ void PicturaMainWindow::installWorkspaceOpenGesture()
 
 bool PicturaMainWindow::eventFilter(QObject* watched, QEvent* event)
 {
+    if (tabs_ && watched == tabs_->tabBar() && tearOutFilter(event)) {
+        return true;
+    }
+    // A press on a canvas activates its window, before the tool sees it.
+    if (event->type() == QEvent::MouseButtonPress) {
+        if (DocWindow* window = windowOfCanvas(qobject_cast<ImageView*>(watched));
+            window && window != activeWindow_) {
+            activateDocWindow(window);
+        }
+    }
     // The empty workspace (no documents open) accepts a left double-click as
     // "Open": the tab widget and its blank stacked page are the only widgets
     // there.
@@ -932,19 +942,19 @@ bool PicturaMainWindow::eventFilter(QObject* watched, QEvent* event)
     if (tabs_ && watched == tabs_->tabBar() && event->type() == QEvent::MouseButtonRelease) {
         auto* mouse = static_cast<QMouseEvent*>(event);
         if (mouse->button() == Qt::MiddleButton) {
-            const DocWindow* window =
+            DocWindow* window =
                 windowAtTab(tabs_->tabBar()->tabAt(mouse->position().toPoint()));
             if (window) {
                 const bool loading = window->doc->loading;
                 const QPointer<PictureView> guard(window->doc->view);
-                QTimer::singleShot(0, this, [this, guard, loading] {
+                QTimer::singleShot(0, this, [this, window, guard, loading] {
                     if (!guard) {
                         return;
                     }
                     if (loading) {
                         cancelOpenForView(guard.data());
-                    } else {
-                        closeDocument(indexOfView(guard.data()), true);
+                    } else if (windows_.contains(window) && window->doc->view == guard) {
+                        closeWindow(window, true);
                     }
                 });
                 return true;

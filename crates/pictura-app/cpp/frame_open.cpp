@@ -167,10 +167,10 @@ void PicturaMainWindow::installCloseButton(DocWindow* window)
     auto* close = new TabCloseButton(tabs_->tabBar());
     tabs_->tabBar()->setTabButton(tab, QTabBar::RightSide, close);
     connect(close, &TabCloseButton::closeRequested, this,
-            [this, guard = QPointer<PictureView>(window->doc->view)] {
-                QTimer::singleShot(0, this, [this, guard] {
-                    if (guard) {
-                        closeDocument(indexOfView(guard.data()), true);
+            [this, window, guard = QPointer<PictureView>(window->doc->view)] {
+                QTimer::singleShot(0, this, [this, window, guard] {
+                    if (guard && windows_.contains(window) && window->doc->view == guard) {
+                        closeWindow(window, true);
                     }
                 });
             });

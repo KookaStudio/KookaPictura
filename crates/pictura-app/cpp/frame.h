@@ -37,6 +37,7 @@ class QTabWidget;
 class QTemporaryDir;
 class QTimer;
 class QToolButton;
+class QUrl;
 class QWidget;
 
 namespace pictura {
@@ -49,6 +50,7 @@ class ChannelsPanel;
 class ColorState;
 class CanvasScrollBars;
 class DesignSystemDialog;
+class DocumentFloatWindow;
 class FileDropRouter;
 class LoadingCard;
 class HistogramPanel;
@@ -403,6 +405,23 @@ public:
     {
         pdfViewer_ = std::move(viewer);
     }
+    // Test seam: catch Reveal in File Manager's folder URL instead of opening
+    // the desktop file manager.
+    void setUrlOpenerForTest(std::function<void(const QUrl&)> opener)
+    {
+        urlOpener_ = std::move(opener);
+    }
+    // Document window test hooks (frame_document_windows.cpp), by document
+    // index and acting on the document's first window: its floating window
+    // (null unless it floats), float or dock it as the menus do, its tab index
+    // (-1 unless tabbed), and its full label.
+    DocumentFloatWindow* floatWindowForTest(int index) const;
+    bool floatDocumentForTest(int index);
+    bool dockDocumentForTest(int index, int tab);
+    int tabOfDocumentForTest(int index) const;
+    QString documentWindowLabelForTest(int index) const;
+    // The tab or header context menu last opened, while it is open.
+    QMenu* documentMenuForTest() const;
     bool closeDocument(int index, bool interactive);
     // The recent-files list, most recent first; setting it persists it.
     const QStringList& recentFiles() const { return recent_; }
@@ -675,6 +694,55 @@ private:
     int addTabWindow(DocWindow* window);
     // Make `window` the active one through its host.
     void activateDocWindow(DocWindow* window);
+    // True while the tab strip's current tab decides the active window: no
+    // window is active, or the active one is a tab.
+    bool stripOwnsActivation() const;
+    void onTabCurrentChanged(int tab);
+    void onTabBarClicked(int tab);
+    // Move `window` into a floating document window, at `globalGeometry` (an
+    // empty rect places it in the document area), and activate it. Refuses a
+    // loading document or a window that already floats.
+    bool floatWindow(DocWindow* window, const QRect& globalGeometry = QRect());
+    // Move a floating window into the tab strip at `index` (out of range: the
+    // end) and activate it.
+    bool dockWindow(DocWindow* window, int index);
+    // Close `window` under the tab close rules: the last window of its
+    // document closes the document (prompting when modified); another window
+    // closes without a prompt.
+    bool closeWindow(DocWindow* window, bool interactive = true);
+    // Take `windows` out of the registry and their hosts, handing the active
+    // window to the strip's current tab or another window when it leaves.
+    void detachWindows(const QList<DocWindow*>& windows);
+    // Delete a detached window's widgets (its page, canvas host, and float).
+    void destroyWindowWidgets(DocWindow* window);
+    // The document area in global coordinates, and `geometry` moved and
+    // shrunk so the window's header lies inside it.
+    QRect documentAreaGlobalRect() const;
+    QRect clampFloatGeometry(const QRect& geometry) const;
+    // A float's size and place when nothing gives one: 60% of the document
+    // area, centred on it.
+    QRect defaultFloatGeometry() const;
+    // Keep a child-hosted float under the floating panel overlays.
+    void raiseDocumentFloat(DocumentFloatWindow* floating);
+    // A float's header drag ended: dock it when released over the tab strip.
+    void onFloatDragReleased(DocWindow* window, const QPoint& globalPos);
+    // Present every window whose document's frame revision moved.
+    void presentWindows();
+    // The screen modes: in a full-screen mode only the active window shows,
+    // and an active float's page fills the document area without its header;
+    // Standard shows every float again where it was.
+    void syncScreenModeWindows();
+    // frame_document_menus.cpp: the tab and header context menus, the tab
+    // strip's tear-out, and the menus' actions.
+    void wireDocumentMenus();
+    void showTabMenu(const QPoint& barPos);
+    void showHeaderMenu(DocWindow* window, const QPoint& globalPos);
+    bool tearOutFilter(QEvent* event);
+    // Dock every floating window, then activate `target` (null: keep the
+    // active window).
+    void consolidateAllToTabs(DocWindow* target);
+    void closeOtherWindows(DocWindow* keep);
+    void revealInFileManager(const DocWindow* window);
     // Ctrl+Tab / Shift+Ctrl+Tab: step the active window `step` places along
     // `windows_`, wrapping; nothing with fewer than two windows.
     void wireDocumentCycling();
@@ -727,6 +795,16 @@ private:
     QTabWidget* tabs_ = nullptr;
     // The splitter's stretch pane: the stack that holds the document hosts.
     QStackedWidget* documentArea_ = nullptr;
+    // Set while a window moves between hosts, so the strip's own current-tab
+    // changes do not take the activation; the move settles it.
+    bool movingHost_ = false;
+    // A tab strip press that may become a tear-out, and the float a tear-out
+    // handed the drag to.
+    DocWindow* tearWindow_ = nullptr;
+    QPoint tearPressPos_;
+    QPointer<DocumentFloatWindow> tearFloat_;
+    bool tearSynthesizing_ = false;
+    QPointer<QMenu> documentMenu_;
     // Disconnected in the destructor: the focusChanged handler must not run
     // while the window's children are being torn down.
     QMetaObject::Connection spacePanFocusConn_;
@@ -917,6 +995,7 @@ private:
     std::function<bool(QDialog&)> pdfDialogDriver_;
     std::function<bool(QDialog&)> importDialogDriver_;
     std::function<void(const QString&)> pdfViewer_;
+    std::function<void(const QUrl&)> urlOpener_;
 };
 
 } // namespace pictura

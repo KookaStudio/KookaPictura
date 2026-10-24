@@ -20,9 +20,6 @@ namespace pictura {
 
 namespace {
 
-// The canvas property recording the view `frame_revision` its image came from.
-constexpr const char* kFrameKey = "picturaFrameRevision";
-
 // Save may route through Save As; only the origin command records the step.
 thread_local bool saveActiveOrigin = false;
 
@@ -183,15 +180,16 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
     connect(centerSplitter_, &QSplitter::splitterMoved, this,
             [this](int pos, int index) { onCenterSplitterMoved(pos, index); });
 
-    connect(tabs_, &QTabWidget::currentChanged, this, [this](int tab) {
-        activeWindow_ = windowAtTab(tab);
-        onActiveWindowChanged();
-    });
+    connect(tabs_, &QTabWidget::currentChanged, this,
+            [this](int tab) { onTabCurrentChanged(tab); });
+    connect(tabs_->tabBar(), &QTabBar::tabBarClicked, this,
+            [this](int tab) { onTabBarClicked(tab); });
     auto* hidePanels = new QShortcut(QKeySequence(Qt::Key_Tab), this);
     connect(hidePanels, &QShortcut::activated, this, [this]() { togglePanelsHidden(); });
     auto* hidePanelsBack = new QShortcut(QKeySequence(Qt::SHIFT | Qt::Key_Tab), this);
     connect(hidePanelsBack, &QShortcut::activated, this, [this]() { togglePanelsHidden(); });
     wireDocumentCycling();
+    wireDocumentMenus();
     auto* brightnessDown = new QShortcut(QKeySequence(Qt::SHIFT | Qt::Key_F1), this);
     connect(brightnessDown, &QShortcut::activated, this,
             [this]() { setBrightnessLevel(brightnessLevel_ - 1); });
@@ -416,13 +414,15 @@ void PicturaMainWindow::setupCanvas(DocWindow& window)
     window.tip->move(BrushTipPreview::kMargin, BrushTipPreview::kMargin);
     window.host = new CanvasScrollBars(this);
     window.host->setView(window.canvas);
+    // A press on the canvas activates its window (see eventFilter).
+    window.canvas->installEventFilter(this);
     if (fileDropRouter_) {
         window.canvas->setAcceptDrops(true);
         window.canvas->installEventFilter(fileDropRouter_);
     }
     if (view->has_document()) {
         window.canvas->setDocument(QSize(view->document_width(), view->document_height()));
-        window.canvas->setProperty(kFrameKey, quint64(pictura::frame_revision(*view)));
+        window.canvas->setProperty(kFrameRevisionKey, quint64(pictura::frame_revision(*view)));
     } else {
         window.canvas->replaceImage(view->image());
     }
@@ -682,18 +682,7 @@ void PicturaMainWindow::removeDocument(int index)
             editSessions_.removeAt(i);
         }
     }
-    for (DocWindow* window : entry->windows) {
-        const int tab = tabOf(window);
-        windows_.removeOne(window);
-        if (tab >= 0) {
-            tabs_->removeTab(tab);
-        }
-        // removeTab moves the current tab and so activeWindow_ off a tab
-        // window; a window outside the strip is cleared here.
-        if (activeWindow_ == window) {
-            activeWindow_ = nullptr;
-        }
-    }
+    detachWindows(entry->windows);
     forgetRecovery(entry->view);
     if (entry->view) {
         openWired_.remove(entry->view);
@@ -706,19 +695,7 @@ void PicturaMainWindow::removeDocument(int index)
     openSourcePaths_.remove(entry->token);
     openWarnings_.remove(entry->token);
     for (DocWindow* window : entry->windows) {
-        if (window->canvas) {
-            window->canvas->clearTransformPreview();
-        }
-        // A ready window's page is its canvas host; a loading window's page is
-        // the placeholder. Deleting the page deletes the host (and the canvas)
-        // it owns.
-        if (window->page && window->page != window->host) {
-            delete window->page;
-        } else if (window->host) {
-            delete window->host;
-        } else if (window->canvas) {
-            delete window->canvas;
-        }
+        destroyWindowWidgets(window);
     }
     qDeleteAll(entry->windows);
     delete entry->view;
@@ -886,6 +863,7 @@ void PicturaMainWindow::setScreenMode(ScreenMode mode)
         setCanvasColor(Qt::black);
         break;
     }
+    syncScreenModeWindows();
     registry_->refresh();
     if (toolbox_) {
         toolbox_->setActiveScreenMode(static_cast<int>(mode));
@@ -950,24 +928,14 @@ void PicturaMainWindow::refresh()
     // but hide the empty tab strip. This is the single writer of the pane's
     // visibility so every document-set change routes here.
     if (tabs_) {
-        tabs_->setVisible(true);
+        // A full-screen float's page may hold the document area instead.
+        tabs_->setVisible(documentArea_->currentWidget() == tabs_);
         if (tabs_->tabBar()) {
             tabs_->tabBar()->setVisible(!docs_.isEmpty());
         }
     }
 
-    // A document canvas holds no image: it crops the view pyramid, so a
-    // rebuilt frame only invalidates its crops. A `changed` that rebuilt no
-    // frame (a bounded undo, a rename, a slice) leaves it alone.
-    const quint64 frame = view ? quint64(pictura::frame_revision(*view)) : 0;
-    if (view && canvas && !(view->has_document() && canvas->property(kFrameKey) == QVariant(frame))) {
-        canvas->setProperty(kFrameKey, frame);
-        if (view->has_document()) {
-            canvas->replaceDocument(QSize(view->document_width(), view->document_height()));
-        } else {
-            canvas->setImage(view->image());
-        }
-    }
+    presentWindows();
     if (tools_) {
         tools_->bindCanvas(canvas);
     }
@@ -1040,13 +1008,15 @@ void PicturaMainWindow::updateTabTitle(int index)
     const QFontMetrics metrics(tabs_->tabBar()->font());
     const bool dirty = !doc->loading && isDocumentDirty(index);
     for (const DocWindow* window : doc->windows) {
-        const int tab = tabOf(window);
-        if (tab < 0) {
-            continue;
-        }
         const QString label = fullLabel(window);
-        tabs_->setTabText(tab, documentTabText(label, dirty, metrics));
-        tabs_->setTabToolTip(tab, label);
+        if (window->floating) {
+            window->floating->setLabel(label, dirty);
+        }
+        const int tab = tabOf(window);
+        if (tab >= 0) {
+            tabs_->setTabText(tab, documentTabText(label, dirty, metrics));
+            tabs_->setTabToolTip(tab, label);
+        }
     }
 }
 

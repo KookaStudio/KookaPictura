@@ -1,21 +1,29 @@
 // Document windows (#317): the active window is the command target, tabs
-// open and close documents, and Ctrl+Tab / Shift+Ctrl+Tab cycle every
-// document window (#499). Each test function builds its own frame.
+// open and close documents, Ctrl+Tab / Shift+Ctrl+Tab cycle every document
+// window (#499), and the tab context menu acts on the clicked tab. Each test
+// function builds its own frame; floats are hosted in the frame.
 
 #include <QtTest/QtTest>
 
+#include <QtCore/QFileInfo>
+#include <QtCore/QTemporaryDir>
+#include <QtCore/QUrl>
+#include <QtGui/QContextMenuEvent>
 #include <QtGui/QShortcut>
 #include <QtWidgets/QAbstractButton>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QLineEdit>
+#include <QtWidgets/QMenu>
 #include <QtWidgets/QTabBar>
 
+#include "api/document_api.h"
 #include "api/type_api.h"
 #include "command_ids.h"
 #include "commands.h"
 #include "dialogs.h"
+#include "document_float_window.h"
 #include "frame.h"
 #include "image_view.h"
 #include "keyboard_shortcuts_dialog.h"
@@ -47,6 +55,40 @@ QAction* invertAction(const PicturaMainWindow& window)
         {QStringLiteral("Image"), QStringLiteral("Adjustments"), QStringLiteral("Invert")}));
 }
 
+bool writePsd(const QString& path)
+{
+    PictureView view;
+    return document_api::newDocument(view, 4, 4, QStringLiteral("rgb"), 8,
+                                     QStringLiteral("white"))
+        && document_api::save(view, path);
+}
+
+QStringList menuEntries(const QMenu* menu)
+{
+    QStringList entries;
+    for (const QAction* action : menu->actions()) {
+        entries << (action->isSeparator() ? QStringLiteral("-") : action->text());
+    }
+    return entries;
+}
+
+QAction* menuAction(const QMenu* menu, const QString& text)
+{
+    for (QAction* action : menu->actions()) {
+        if (action->text() == text) {
+            return action;
+        }
+    }
+    return nullptr;
+}
+
+// Press a floating window's header without moving: it activates the window.
+void clickHeader(DocumentFloatWindow* floating)
+{
+    QWidget* header = floating->header();
+    QTest::mouseClick(header, Qt::LeftButton, Qt::NoModifier, QPoint(8, header->height() / 2));
+}
+
 } // namespace
 
 class DocumentWindowsTest : public QObject {
@@ -70,11 +112,24 @@ private slots:
     void ctrlTabSingleWindowNoop();
     void ctrlTabTypeSessionMatchesTabSwitch();
     void cycleSequencesAreReserved();
+    void floatingWindowBecomesTarget();
+    void floatActivatedDuringLoadKeepsFocus();
+    void ctrlTabReachesFloat();
+    void tabMenuEntries();
+    void tabMenuActsOnClickedTab();
+    void closeOthersDisabledWhenAlone();
+    void closeOthersKeepsClicked();
+    void revealDisabledWithoutPath();
+    void revealOpensContainingFolder();
+    void moveDisabledForLoadingTab();
+    void consolidateAllToHere();
 
 private:
     bool newDoc(const QString& name, int width, int height);
     QTabBar* tabBar() const;
     void closeAll();
+    // Open the context menu of tab `tab` and return it; the caller closes it.
+    QMenu* tabMenu(int tab);
     // Start a type edit in the first of two documents, switch to the second
     // with Ctrl+Tab or a tab click, and record the first document's state.
     void typeSessionAfterSwitch(bool viaShortcut, TypeSnapshot& out);
@@ -94,6 +149,18 @@ QTabBar* DocumentWindowsTest::tabBar() const
     return window_->findChild<QTabBar*>(QStringLiteral("documentTabBar"));
 }
 
+QMenu* DocumentWindowsTest::tabMenu(int tab)
+{
+    QTabBar* bar = tabBar();
+    if (!bar) {
+        return nullptr;
+    }
+    const QPoint local = bar->tabRect(tab).center();
+    QContextMenuEvent event(QContextMenuEvent::Mouse, local, bar->mapToGlobal(local));
+    QApplication::sendEvent(bar, &event);
+    return window_->documentMenuForTest();
+}
+
 void DocumentWindowsTest::closeAll()
 {
     while (window_->documentCount() > 0) {
@@ -110,6 +177,7 @@ void DocumentWindowsTest::initTestCase()
 void DocumentWindowsTest::init()
 {
     setNonInteractiveUnsavedChoice(UnsavedChoice::Discard);
+    PanelFloat::setForceChildOverlayForTest(true);
     window_ = pictura::test::makeMainWindow();
     QVERIFY(window_ != nullptr);
     window_->resize(1100, 700);
@@ -121,11 +189,15 @@ void DocumentWindowsTest::init()
 void DocumentWindowsTest::cleanup()
 {
     if (window_) {
+        if (QMenu* menu = window_->documentMenuForTest()) {
+            menu->close();
+        }
         window_->setActiveTool(ToolId::Move);
         window_->cancelAllOpens();
         closeAll();
     }
     window_.reset();
+    PanelFloat::setForceChildOverlayForTest(false);
     setNonInteractiveUnsavedChoice(UnsavedChoice::Discard);
 }
 
@@ -417,6 +489,212 @@ void DocumentWindowsTest::cycleSequencesAreReserved()
         }
     }
     QCOMPARE(bound, 2);
+}
+
+void DocumentWindowsTest::floatingWindowBecomesTarget()
+{
+    QVERIFY(newDoc(QStringLiteral("Tabbed"), 64, 48));
+    QVERIFY(newDoc(QStringLiteral("Floating"), 32, 24));
+    QVERIFY(window_->floatDocumentForTest(1));
+    window_->setActiveDocumentIndex(0);
+    QCOMPARE(window_->activeDocumentIndex(), 0);
+    DocumentFloatWindow* floating = window_->floatWindowForTest(1);
+    QVERIFY(floating != nullptr);
+
+    clickHeader(floating);
+    QCOMPARE(window_->activeDocumentIndex(), 1);
+    QCOMPARE(window_->activeView(), window_->viewAt(1));
+    QCOMPARE(window_->imageView(), window_->canvasAt(1));
+    QVERIFY(floating->isAncestorOf(window_->imageView()));
+    auto* size = window_->findChild<QLabel*>(QStringLiteral("statusSizeLabel"));
+    QVERIFY(size != nullptr);
+    QVERIFY2(size->text() == QStringLiteral("32 px x 24 px (72 ppi)")
+                 || size->text() == QStringLiteral("W 32  H 24"),
+             qPrintable(size->text()));
+
+    // Menu commands follow: Invert changes only the floating document.
+    PictureView* tabbed = window_->viewAt(0);
+    const int tabbedHistory = tabbed->history_index();
+    window_->registry()->refresh();
+    invertAction(*window_)->trigger();
+    QCOMPARE(tabbed->history_index(), tabbedHistory);
+    QCOMPARE(QColor(window_->viewAt(1)->composite_argb(4, 4)), QColor(0, 0, 0));
+}
+
+void DocumentWindowsTest::floatActivatedDuringLoadKeepsFocus()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("held.psd"));
+    QVERIFY(writePsd(path));
+    QVERIFY(newDoc(QStringLiteral("Floating"), 32, 32));
+    QVERIFY(window_->floatDocumentForTest(0));
+    DocumentFloatWindow* floating = window_->floatWindowForTest(0);
+    QVERIFY(floating != nullptr);
+
+    window_->setOpenDelayForTest(300);
+    window_->startOpenPath(path);
+    QTRY_VERIFY(window_->isLoadingDocument(1));
+    clickHeader(floating);
+    QCOMPARE(window_->activeDocumentIndex(), 0);
+
+    QTRY_VERIFY(!window_->isLoadingDocument(1));
+    QVERIFY(window_->viewAt(1)->has_document());
+    QCOMPARE(window_->activeDocumentIndex(), 0);
+    QCOMPARE(window_->imageView(), window_->canvasAt(0));
+}
+
+void DocumentWindowsTest::ctrlTabReachesFloat()
+{
+    QVERIFY(newDoc(QStringLiteral("Tabbed"), 16, 16));
+    QVERIFY(newDoc(QStringLiteral("Floating"), 16, 16));
+    QVERIFY(window_->floatDocumentForTest(1));
+    window_->setActiveDocumentIndex(0);
+    QCOMPARE(window_->activeDocumentIndex(), 0);
+
+    QTest::keyClick(window_->imageView(), Qt::Key_Tab, Qt::ControlModifier);
+    QCOMPARE(window_->activeDocumentIndex(), 1);
+    QVERIFY(window_->floatWindowForTest(1)->isAncestorOf(window_->imageView()));
+    QTest::keyClick(window_->imageView(), Qt::Key_Tab, Qt::ControlModifier);
+    QCOMPARE(window_->activeDocumentIndex(), 0);
+}
+
+void DocumentWindowsTest::tabMenuEntries()
+{
+    QVERIFY(newDoc(QStringLiteral("Menu"), 16, 16));
+    QMenu* menu = tabMenu(0);
+    QVERIFY(menu != nullptr);
+    QCOMPARE(menuEntries(menu),
+             QStringList({QStringLiteral("Consolidate All to Here"), QStringLiteral("Close"),
+                          QStringLiteral("Close All"), QStringLiteral("Close Others"),
+                          QStringLiteral("Move to New Window"), QStringLiteral("-"),
+                          QStringLiteral("New Document…"), QStringLiteral("Open Document…"),
+                          QStringLiteral("-"), QStringLiteral("Reveal in File Manager")}));
+    menu->close();
+}
+
+void DocumentWindowsTest::tabMenuActsOnClickedTab()
+{
+    QVERIFY(newDoc(QStringLiteral("First"), 16, 16));
+    QVERIFY(newDoc(QStringLiteral("Second"), 16, 16));
+    QCOMPARE(window_->activeDocumentIndex(), 1);
+    QMenu* menu = tabMenu(0);
+    QVERIFY(menu != nullptr);
+    QAction* move = menuAction(menu, QStringLiteral("Move to New Window"));
+    QVERIFY(move && move->isEnabled());
+    menu->close();
+    move->trigger();
+
+    QVERIFY(window_->floatWindowForTest(0) != nullptr);
+    QCOMPARE(window_->tabOfDocumentForTest(0), -1);
+    QVERIFY(window_->floatWindowForTest(1) == nullptr);
+    QCOMPARE(window_->tabOfDocumentForTest(1), 0);
+}
+
+void DocumentWindowsTest::closeOthersDisabledWhenAlone()
+{
+    QVERIFY(newDoc(QStringLiteral("Alone"), 16, 16));
+    QMenu* menu = tabMenu(0);
+    QVERIFY(menu != nullptr);
+    QAction* others = menuAction(menu, QStringLiteral("Close Others"));
+    QVERIFY(others != nullptr);
+    QVERIFY(!others->isEnabled());
+    menu->close();
+}
+
+void DocumentWindowsTest::closeOthersKeepsClicked()
+{
+    QVERIFY(newDoc(QStringLiteral("One"), 16, 16));
+    QVERIFY(newDoc(QStringLiteral("Two"), 16, 16));
+    QVERIFY(newDoc(QStringLiteral("Three"), 16, 16));
+    PictureView* kept = window_->viewAt(1);
+    QMenu* menu = tabMenu(1);
+    QVERIFY(menu != nullptr);
+    QAction* others = menuAction(menu, QStringLiteral("Close Others"));
+    QVERIFY(others && others->isEnabled());
+    menu->close();
+    others->trigger();
+
+    QCOMPARE(window_->documentCount(), 1);
+    QCOMPARE(window_->viewAt(0), kept);
+    QCOMPARE(tabBar()->count(), 1);
+}
+
+void DocumentWindowsTest::revealDisabledWithoutPath()
+{
+    QVERIFY(newDoc(QStringLiteral("Untitled"), 16, 16));
+    QMenu* menu = tabMenu(0);
+    QVERIFY(menu != nullptr);
+    QAction* reveal = menuAction(menu, QStringLiteral("Reveal in File Manager"));
+    QVERIFY(reveal != nullptr);
+    QVERIFY(!reveal->isEnabled());
+    menu->close();
+}
+
+void DocumentWindowsTest::revealOpensContainingFolder()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("reveal.psd"));
+    QVERIFY(writePsd(path));
+    QVERIFY(window_->openPath(path));
+    QList<QUrl> opened;
+    window_->setUrlOpenerForTest([&opened](const QUrl& url) { opened << url; });
+
+    QMenu* menu = tabMenu(0);
+    QVERIFY(menu != nullptr);
+    QAction* reveal = menuAction(menu, QStringLiteral("Reveal in File Manager"));
+    QVERIFY(reveal && reveal->isEnabled());
+    menu->close();
+    reveal->trigger();
+    window_->setUrlOpenerForTest({});
+
+    QCOMPARE(opened.size(), 1);
+    QCOMPARE(opened.first(), QUrl::fromLocalFile(QFileInfo(path).absolutePath()));
+}
+
+void DocumentWindowsTest::moveDisabledForLoadingTab()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("loading.psd"));
+    QVERIFY(writePsd(path));
+    window_->setOpenDelayForTest(500);
+    window_->startOpenPath(path);
+    QTRY_VERIFY(window_->isLoadingDocument(0));
+
+    QMenu* menu = tabMenu(0);
+    QVERIFY(menu != nullptr);
+    QAction* move = menuAction(menu, QStringLiteral("Move to New Window"));
+    QVERIFY(move != nullptr);
+    QVERIFY(!move->isEnabled());
+    menu->close();
+    QVERIFY(!window_->floatDocumentForTest(0));
+}
+
+void DocumentWindowsTest::consolidateAllToHere()
+{
+    QVERIFY(newDoc(QStringLiteral("FloatA"), 16, 16));
+    QVERIFY(newDoc(QStringLiteral("FloatB"), 16, 16));
+    QVERIFY(newDoc(QStringLiteral("Tabbed"), 16, 16));
+    QVERIFY(window_->floatDocumentForTest(0));
+    QVERIFY(window_->floatDocumentForTest(1));
+    QCOMPARE(tabBar()->count(), 1);
+    QCOMPARE(window_->activeDocumentIndex(), 1);
+
+    QMenu* menu = tabMenu(0);
+    QVERIFY(menu != nullptr);
+    QAction* consolidate = menuAction(menu, QStringLiteral("Consolidate All to Here"));
+    QVERIFY(consolidate && consolidate->isEnabled());
+    menu->close();
+    consolidate->trigger();
+
+    QCOMPARE(tabBar()->count(), 3);
+    for (int i = 0; i < 3; ++i) {
+        QVERIFY(window_->floatWindowForTest(i) == nullptr);
+        QVERIFY(window_->tabOfDocumentForTest(i) >= 0);
+    }
+    QCOMPARE(window_->activeDocumentIndex(), 2);
 }
 
 int main(int argc, char* argv[])

@@ -142,6 +142,7 @@ set(PICTURA_QT_TESTS
     tst_native_menu_bar
     tst_loading_tab
     tst_document_windows
+    tst_document_float
     tst_pictura_raw
     tst_acr_settings
     tst_acr_dialog

@@ -217,7 +217,7 @@ void PicturaMainWindow::registerHandlers()
         }
         revertActive();
     });
-    registry_->setHandler(command_ids::FileClose, [this]() { closeActiveDocument(true); });
+    registry_->setHandler(command_ids::FileClose, [this]() { closeWindow(activeWindow_, true); });
     registry_->setHandler(command_ids::FileCloseAll, [this]() {
         for (int i = docs_.size() - 1; i >= 0; --i) {
             if (!closeDocument(i, true)) {
