@@ -28,11 +28,18 @@ Snapshot for resuming after a context break. Update after each milestone.
     reach a top-level float; full-screen modes show only the active window.
   - **Wayland floats** (OpenSpec change `wayland-floating-document-windows`).
     A float is a frameless `Qt::Tool` top-level transient for the frame on
-    every platform (in-frame only under `PanelFloat`'s test hook). On Wayland
-    a header drag or tear-out calls `QWindow::startSystemMove()`; X11 keeps
-    the hand drag so drop-to-dock works. Ctrl+drag on a header carries the
-    window as `application/x-pictura-document-window` drag-and-drop that the
-    strip docks (`windowDropFilter`); a header double-click docks at the end.
+    every platform (in-frame only under `PanelFloat`'s test hook). Ctrl+drag
+    on a header carries the window as `application/x-pictura-document-window`
+    drag-and-drop that the strip docks (`windowDropFilter`); a header
+    double-click docks at the end.
+  - **Window drag and dock line** (OpenSpec change
+    `floating-document-window-drag`). On Wayland a plain header drag and a
+    tear-out start that drag with the `application/x-qt-mainwindowdrag-*`
+    keys, so QtWayland attaches the float (`xdg_toplevel_drag_v1`) and the
+    compositor moves it with the pointer; X11 keeps the hand drag. The dock
+    zone is the strip's band, or the band a tab bar would take when no tab
+    is left; a `#2a7fff` `documentDockIndicator` line shows where a drag
+    docks. A drop records the dock and applies it after `QDrag::exec`.
   - **Arrange** (`frame_document_arrange.cpp`). Float in Window, Float All,
     Consolidate All to Tabs, Cascade, Tile, Match Zoom/Location/All, and New
     Window For (a second `ImageView` on the same document, labelled `:N`).
@@ -42,12 +49,13 @@ Snapshot for resuming after a context break. Update after each milestone.
     Windows. Hand and Zoom get options-bar pages (`options_bar_navigate.cpp`)
     with Scroll All Windows, Zoom All Windows and Resize Windows To Fit;
     `Shift` gives the all-windows form.
-  Ceiling: on Wayland a plain header drag can't dock and Cascade positions
-  are the compositor's (UI-14); the float and
+  Ceiling: on Wayland a compositor without `xdg_toplevel_drag_v1` leaves a
+  dragged float in place until the drop, and Cascade positions are the
+  compositor's (UI-14); the float and
   tile layout is not saved, and recovery reopens as tabs (UI-15); `Match All` +
   `Shift` is approximated by the `Shift` forms of Scroll/Zoom All (TOOL-29);
   no CS6 split-group docking, Tile variants, or Window-menu document list.
-  Tests: `tst_document_windows` (25), `tst_document_float` (29),
+  Tests: `tst_document_windows` (25), `tst_document_float` (37),
   `tst_document_arrange` (30), `tst_document_navigate` (9), and two
   `tst_loading_tab` tooltip cases.
 - **Vanishing Point planes** (#349, branch `feat/349-vanishing-point`,
