@@ -132,6 +132,7 @@ fn apply_native(filter: &Filter, buf: &mut PixelBuffer) -> Result<(), FilterErro
             horizontal,
             vertical,
             wrap,
+            repeat,
             background,
             transparent,
         } => other::offset(
@@ -139,6 +140,7 @@ fn apply_native(filter: &Filter, buf: &mut PixelBuffer) -> Result<(), FilterErro
             *horizontal,
             *vertical,
             *wrap,
+            *repeat,
             *background,
             *transparent,
         ),

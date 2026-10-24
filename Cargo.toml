@@ -11,6 +11,7 @@ members = [
     "crates/pictura-select",
     "crates/pictura-render",
     "crates/pictura-testkit",
+    "crates/pictura-script",
     "crates/pictura-app",
 ]
 

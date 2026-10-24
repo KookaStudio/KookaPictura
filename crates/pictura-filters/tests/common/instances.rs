@@ -157,6 +157,7 @@ pub fn all() -> Vec<Filter> {
             horizontal: 5,
             vertical: -3,
             wrap: false,
+            repeat: false,
             background: [0; 3],
             transparent: false,
         },

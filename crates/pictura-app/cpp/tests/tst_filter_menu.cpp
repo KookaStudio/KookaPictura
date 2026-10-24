@@ -78,6 +78,9 @@ private slots:
     void sliderDragDefersPreviewUntilRelease();
     void zoomedOutPreviewDrawsAReducedCopy();
     void pixelParametersScaleWithTheCopy();
+    void scalesUnsuffixedPixelParams();
+    void oilPaintShineRange();
+    void refusedPreviewRestoresCanvas();
     void numericFieldIsCompactAndSliderAlignsLeft();
     void dialogEntriesEndWithEllipsis();
     void colorParameterIsASwatch();
@@ -700,8 +703,93 @@ void FilterMenuTest::pixelParametersScaleWithTheCopy()
     QCOMPARE(scaled(QStringLiteral("Noise"), QStringLiteral("Median"), 0.1), QList<double>({1.0}));
     QCOMPARE(scaled(QStringLiteral("Other"), QStringLiteral("Maximum"), 0.5),
              QList<double>({1.0}));
-    const QList<double> offset = scaled(QStringLiteral("Other"), QStringLiteral("Offset"), 0.5);
+    const pictura::FilterCommandSpec* offsetSpec =
+        pictura::filterCommandForPath({QStringLiteral("Filter"), QStringLiteral("Other"),
+                                       QStringLiteral("Offset")});
+    QWidget offsetParent;
+    pictura::FilterParamControls offsetControls(offsetSpec->params, &offsetParent);
+    QList<double> offsetValues = offsetControls.values();
+    offsetValues[0] = 4.0;
+    offsetValues[1] = 4.0;
+    offsetControls.setValues(offsetValues);
+    const QList<double> offset = offsetControls.scaledValues(0.5);
     QCOMPARE(offset.mid(0, 2), QList<double>({2.0, 2.0}));
+}
+
+void FilterMenuTest::scalesUnsuffixedPixelParams()
+{
+    const auto scaled = [](const char* kind, double scale) {
+        const pictura::FilterCommandSpec* spec =
+            pictura::filterCommandForKind(QString::fromLatin1(kind));
+        if (!spec) {
+            return QList<double>();
+        }
+        QWidget parent;
+        pictura::FilterParamControls controls(spec->params, &parent);
+        return controls.scaledValues(scale);
+    };
+    QCOMPARE(scaled("smart-blur", 0.5).value(0), 1.5);
+    QCOMPARE(scaled("mosaic", 0.5).value(0), 5.0);
+    QCOMPARE(scaled("crystallize", 0.5).value(0), 5.0);
+    QCOMPARE(scaled("pointillize", 0.5).value(0), 3.0);
+    QCOMPARE(scaled("color-halftone", 0.5).value(0), 4.0);
+    QCOMPARE(scaled("mosaic-tiles", 0.5).mid(0, 2), QList<double>({6.0, 2.0}));
+}
+
+void FilterMenuTest::oilPaintShineRange()
+{
+    const pictura::FilterCommandSpec* spec =
+        pictura::filterCommandForKind(QStringLiteral("oil-paint"));
+    QVERIFY(spec != nullptr);
+    QCOMPARE(spec->params.size(), 6);
+    const pictura::FilterParamSpec& shine = spec->params.at(5);
+    QCOMPARE(shine.label, QStringLiteral("Shine:"));
+    QCOMPARE(shine.minimum, 0.0);
+    QCOMPARE(shine.maximum, 10.0);
+    QCOMPARE(shine.value, 5.5);
+    QWidget parent;
+    pictura::FilterParamControls controls(spec->params, &parent);
+    QList<double> values = controls.values();
+    values[5] = 10.0;
+    controls.setValues(values);
+    QCOMPARE(controls.values().at(5), 10.0);
+}
+
+void FilterMenuTest::refusedPreviewRestoresCanvas()
+{
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(view != nullptr);
+    // A textured picture, so Wave changes the preview.
+    QVERIFY(apply_filter_params(*view, QStringLiteral("clouds"), {}));
+    const QImage before = view->image();
+    bool refused = false;
+    QTimer::singleShot(0, [&] {
+        auto* dialog = activeFilterDialog();
+        if (!dialog) {
+            return;
+        }
+        if (!QTest::qWaitFor([&] { return view->image() != before; }, 3000)) {
+            dialog->reject();
+            return;
+        }
+        const QList<QDoubleSpinBox*> spins = dialog->findChildren<QDoubleSpinBox*>();
+        if (spins.size() < 3) {
+            dialog->reject();
+            return;
+        }
+        // Wavelength Max below Min+1 makes the Wave kernel refuse.
+        spins[2]->setValue(spins[1]->value());
+        if (!QTest::qWaitFor([&] { return view->image() == before; }, 3000)) {
+            dialog->reject();
+            return;
+        }
+        refused = true;
+        dialog->reject();
+    });
+    QVERIFY(window_->registry()->dispatch(
+        filterId(QStringLiteral("Distort"), QStringLiteral("Wave"))));
+    QVERIFY(refused);
+    QCOMPARE(view->image(), before);
 }
 
 void FilterMenuTest::numericFieldIsCompactAndSliderAlignsLeft()
@@ -913,6 +1001,7 @@ void FilterMenuTest::rowsComeFromTheRustDescriptor()
             QCOMPARE(param.suffix, source.suffix);
             QCOMPARE(param.choices, source.choices);
             QCOMPARE(param.initial, source.initial);
+            QCOMPARE(param.measuresPixels, source.measures_pixels);
         }
     }
 

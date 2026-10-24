@@ -220,7 +220,6 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/control_server.cpp
     crates/pictura-app/cpp/control_server_actions.cpp
     crates/pictura-app/cpp/control_server_input.cpp
-    crates/pictura-app/cpp/command_tree.cpp
     crates/pictura-app/cpp/theme.cpp
     crates/pictura-app/cpp/fonts.cpp
     crates/pictura-app/cpp/recovery_store.cpp
@@ -413,6 +412,13 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/panels/spectrum_bar.cpp
     crates/pictura-app/cpp/panels/curve_widget.cpp
     crates/pictura-app/cpp/panels/history_panel.cpp
+    crates/pictura-app/cpp/panels/actions_panel.cpp
+    crates/pictura-app/cpp/panels/actions_tree_model.cpp
+    crates/pictura-app/cpp/panels/actions_button_view.cpp
+    crates/pictura-app/cpp/panels/actions_dialogs.cpp
+    crates/pictura-app/cpp/panels/actions_panel_playback.cpp
+    crates/pictura-app/cpp/panels/actions_engine_bridge.cpp
+    crates/pictura-app/cpp/panels/actions_panel_menu.cpp
     crates/pictura-app/cpp/panels/brush_panel.cpp
     crates/pictura-app/cpp/panels/brush_preset_picker.cpp
     crates/pictura-app/cpp/panels/clone_source_panel.cpp
@@ -523,6 +529,7 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/design_system_dialog_pages.cpp
     crates/pictura-app/cpp/design_system_dialog.h
     crates/pictura-app/cpp/commands.h
+    crates/pictura-app/cpp/command_ids.h
     crates/pictura-app/cpp/control_server.h
     crates/pictura-app/cpp/theme.h
     crates/pictura-app/cpp/fonts.h
@@ -596,6 +603,13 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/panels/spectrum_bar.h
     crates/pictura-app/cpp/panels/curve_widget.h
     crates/pictura-app/cpp/panels/history_panel.h
+    crates/pictura-app/cpp/panels/actions_panel.h
+    crates/pictura-app/cpp/panels/actions_tree_model.h
+    crates/pictura-app/cpp/panels/actions_button_view.h
+    crates/pictura-app/cpp/panels/actions_dialogs.h
+    crates/pictura-app/cpp/panels/actions_panel_internal.h
+    crates/pictura-app/cpp/panels/actions_engine_bridge.h
+    crates/pictura-app/cpp/panels/actions_tool_recording_bridge.h
     crates/pictura-app/cpp/panels/navigator_panel.h
     crates/pictura-app/cpp/panels/color_panel.h
     crates/pictura-app/cpp/panels/swatches_panel.h
@@ -777,8 +791,7 @@ add_executable(pictura ${PICTURA_SELF_TEST_SOURCES})
 # optimization level keeps it off the development critical path.
 if(BUILD_TESTING AND CMAKE_BUILD_TYPE MATCHES "^(Release|RelWithDebInfo)$")
     set_source_files_properties(
-        crates/pictura-app/cpp/command_tree.cpp
-        crates/pictura-app/cpp/filter_commands.cpp
+            crates/pictura-app/cpp/filter_commands.cpp
         PROPERTIES COMPILE_OPTIONS "$<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-O1>")
 endif()
 

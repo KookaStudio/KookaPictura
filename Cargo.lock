@@ -1053,6 +1053,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "pictura-script"
+version = "0.2.0"
+dependencies = [
+ "pictura-codec",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "pictura-select"
 version = "0.2.0"
 dependencies = [
@@ -1079,6 +1089,7 @@ dependencies = [
  "pictura-ops",
  "pictura-paint",
  "pictura-render",
+ "pictura-script",
  "pictura-select",
  "pollster",
  "rayon",

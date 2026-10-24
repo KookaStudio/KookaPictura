@@ -33,13 +33,15 @@ fn find_qmake6() -> Option<PathBuf> {
 /// The `cc` crate emits no change-tracking directive for the sources it
 /// compiles, so without these the build script would not rerun when one of
 /// them changes and the Rust static library would keep a stale object.
-const BRIDGE_EDGES: [&str; 6] = [
+const BRIDGE_EDGES: [&str; 8] = [
     "cpp/decode_image.h",
     "cpp/decode_image.cpp",
     "cpp/render_text.h",
     "cpp/render_text.cpp",
     "cpp/encode_image.h",
     "cpp/encode_image.cpp",
+    "cpp/panels/actions_tool_recording_bridge.h",
+    "cpp/panels/actions_tool_recording_bridge.cpp",
 ];
 
 /// The directory the C++ build includes the generated cxx-qt headers from.
@@ -144,11 +146,13 @@ fn main() {
             .files([
                 "src/cxxqt_object.rs",
                 "src/decode_bridge.rs",
+                "src/cxxqt_object/actions_engine.rs",
                 "src/cxxqt_object/adjustment_edit.rs",
                 "src/cxxqt_object/align.rs",
                 "src/cxxqt_object/annotations.rs",
                 "src/cxxqt_object/channels.rs",
                 "src/cxxqt_object/clipping.rs",
+                "src/cxxqt_object/command_catalogue.rs",
                 "src/cxxqt_object/color_range.rs",
                 "src/cxxqt_object/clipboard.rs",
                 "src/cxxqt_object/crop_group.rs",
@@ -175,6 +179,7 @@ fn main() {
                 "src/cxxqt_object/impl_core/recovery.rs",
                 "src/cxxqt_object/image_replace_color.rs",
                 "src/cxxqt_object/image_match_color.rs",
+                "src/cxxqt_object/impl_paint/tool_recording.rs",
                 "src/cxxqt_object/layer_style.rs",
                 "src/cxxqt_object/layer_target_bridge.rs",
                 "src/cxxqt_object/layer_path.rs",
@@ -225,6 +230,10 @@ fn main() {
                 cc.file("cpp/decode_image.cpp");
                 cc.file("cpp/render_text.cpp");
                 cc.file("cpp/encode_image.cpp");
+                // This one is not in CMake's shell sources: it must be in the
+                // Rust static library so `cargo test -p pictura-app` resolves
+                // the same tool-recording hooks the Qt executable uses.
+                cc.file("cpp/panels/actions_tool_recording_bridge.cpp");
             })
             // The default crate include root makes cargo watch the whole crate
             // directory, so touching any shell source reran this script. Nothing

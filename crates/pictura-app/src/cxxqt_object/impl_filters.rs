@@ -593,6 +593,9 @@ fn apply_mask_op(
         }
     };
     if let Err(error) = result {
+        // A failed preview restores the previous mask coverage; a failed commit
+        // must not leave a previous successful mask preview live.
+        let _ = cancel_filter_preview(rust);
         rust.filter_error = Some(error.to_string());
         return None;
     }
@@ -931,6 +934,15 @@ mod tests {
         cancel_filter_preview(&mut rust).expect("preview open");
         assert_eq!(plane(&rust), before);
         assert_eq!(red(&rust), red(&big_state()));
+    }
+
+    #[test]
+    fn section_preview_escalates_radial_clouds_fibers() {
+        use super::super::filter_tools::filter_preview_needs_whole_layer;
+
+        for kind in ["radial-blur", "clouds", "difference-clouds", "fibers"] {
+            assert!(filter_preview_needs_whole_layer(kind), "{kind}");
+        }
     }
 
     #[test]

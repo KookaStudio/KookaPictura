@@ -58,6 +58,9 @@ pub(crate) struct FilterParam {
     pub suffix: &'static str,
     pub choices: &'static [&'static str],
     pub initial: &'static [f64],
+    /// The value is a distance in document pixels, so a reduced proxy scales
+    /// it by the proxy's scale before filtering.
+    pub pixel_distance: bool,
 }
 
 impl FilterParam {
@@ -122,6 +125,36 @@ pub(crate) fn all() -> impl Iterator<Item = &'static FilterDescriptor> {
 
 pub(crate) fn descriptor(kind: &str) -> Option<&'static FilterDescriptor> {
     all().find(|descriptor| descriptor.kind == kind)
+}
+
+/// The opening values with every pixel-distance control scaled for a copy at
+/// `scale`, rounded on an integer control and clamped to its range. An empty
+/// `params` starts from the descriptor defaults; an unknown kind or a
+/// non-positive scale returns the values unchanged.
+pub(crate) fn scale_pixel_params(kind: &str, params: &[f64], scale: f64) -> Vec<f64> {
+    let Some(descriptor) = descriptor(kind) else {
+        return params.to_vec();
+    };
+    let mut out = if params.is_empty() {
+        descriptor.defaults()
+    } else {
+        params.to_vec()
+    };
+    if !scale.is_finite() || scale <= 0.0 {
+        return out;
+    }
+    let mut slot = 0;
+    for param in descriptor.params {
+        if param.pixel_distance && slot < out.len() {
+            let mut value = out[slot] * scale;
+            if param.decimals == 0 {
+                value = value.round();
+            }
+            out[slot] = value.clamp(param.minimum, param.maximum);
+        }
+        slot += param.slots();
+    }
+    out
 }
 
 pub(crate) fn arity(kind: &str) -> Option<usize> {

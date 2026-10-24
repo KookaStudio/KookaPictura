@@ -16,7 +16,22 @@ use crate::types::{AdjustError, Adjustment};
 
 /// Apply `adjustment` in place to a planar 8-bit buffer (alpha untouched).
 pub fn apply(adjustment: &Adjustment, buf: &mut PixelBuffer) -> Result<(), AdjustError> {
+    apply_with_coverage(adjustment, buf, None)
+}
+
+/// As [`apply`], with an optional one-byte-per-pixel selection coverage used by
+/// the Auto histograms. Other adjustments ignore it.
+pub fn apply_with_coverage(
+    adjustment: &Adjustment,
+    buf: &mut PixelBuffer,
+    coverage: Option<&[u8]>,
+) -> Result<(), AdjustError> {
     let n = validate(buf)?;
+    if coverage.is_some_and(|coverage| coverage.len() < n) {
+        return Err(AdjustError::InvalidParams(
+            "selection coverage is shorter than the buffer".into(),
+        ));
+    }
     match adjustment {
         Adjustment::Levels(p) => levels(p, buf, n),
         Adjustment::Curves(p) => curves(p, buf, n),
@@ -30,7 +45,7 @@ pub fn apply(adjustment: &Adjustment, buf: &mut PixelBuffer) -> Result<(), Adjus
         Adjustment::ShadowsHighlights(p) => shadows_highlights(p, buf, n),
         Adjustment::ColorBalance(p) => color_balance(p, buf, n),
         Adjustment::SelectiveColor(p) => selective_color(p, buf, n),
-        Adjustment::Auto(kind) => auto(*kind, buf, n),
+        Adjustment::Auto(kind) => auto(*kind, buf, n, coverage),
         Adjustment::Invert => {
             map_float(buf, n, |v| 255 - v);
             Ok(())

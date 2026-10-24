@@ -24,6 +24,7 @@ FilterParamSpec paramFromRow(const FilterParamRow& row)
         param.choiceValues.append(static_cast<double>(i));
     }
     param.initial = row.initial;
+    param.measuresPixels = row.measures_pixels;
     return param;
 }
 

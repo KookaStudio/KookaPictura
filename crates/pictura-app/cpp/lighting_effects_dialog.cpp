@@ -684,7 +684,7 @@ void LightingEffectsDialog::render()
         return;
     }
     const QImage lit =
-        filter_thumbnail(proxyRgba_, proxy_.width(), proxy_.height(), spec_.kind, values());
+        filter_thumbnail(proxyRgba_, proxy_.width(), proxy_.height(), spec_.kind, values(), 1.0);
     canvas_->setImage(lit.isNull() ? proxy_ : lit);
 }
 

@@ -7,16 +7,25 @@ use crate::types::{AdjustError, AutoKind};
 // Auto corrections
 // ---------------------------------------------------------------------------
 
-pub(crate) fn auto(kind: AutoKind, buf: &mut PixelBuffer, n: usize) -> Result<(), AdjustError> {
+pub(crate) fn auto(
+    kind: AutoKind,
+    buf: &mut PixelBuffer,
+    n: usize,
+    coverage: Option<&[u8]>,
+) -> Result<(), AdjustError> {
     match kind {
-        AutoKind::Tone => auto_per_channel(buf, n, 0.001),
-        AutoKind::Contrast => auto_joint(buf, n, 0.005),
+        AutoKind::Tone => auto_per_channel(buf, n, 0.001, coverage),
+        AutoKind::Contrast => auto_joint(buf, n, 0.005, coverage),
         AutoKind::Color => {
-            auto_per_channel(buf, n, 0.005);
-            snap_neutral_midtones(buf, n);
+            auto_per_channel(buf, n, 0.005, coverage);
+            snap_neutral_midtones(buf, n, coverage);
         }
     }
     Ok(())
+}
+
+fn selected(coverage: Option<&[u8]>, i: usize) -> bool {
+    coverage.is_none_or(|coverage| coverage.get(i).is_some_and(|&v| v > 0))
 }
 
 /// First/last histogram bin that keeps `clip` of the population out.
@@ -55,14 +64,23 @@ pub(crate) fn stretch_lut(lo: u8, hi: u8) -> [u8; 256] {
     lut
 }
 
-pub(crate) fn auto_per_channel(buf: &mut PixelBuffer, n: usize, clip: f64) {
+pub(crate) fn auto_per_channel(
+    buf: &mut PixelBuffer,
+    n: usize,
+    clip: f64,
+    coverage: Option<&[u8]>,
+) {
     let (r, g, b) = planes_mut(buf, n);
     for plane in [r, g, b] {
         let mut hist = [0u64; 256];
-        for &v in plane.iter() {
-            hist[v as usize] += 1;
+        let mut total = 0u64;
+        for (i, &v) in plane.iter().enumerate() {
+            if selected(coverage, i) {
+                hist[v as usize] += 1;
+                total += 1;
+            }
         }
-        if let Some((lo, hi)) = percentile_bounds(&hist, n as u64, clip) {
+        if let Some((lo, hi)) = percentile_bounds(&hist, total, clip) {
             if lo < hi {
                 let lut = stretch_lut(lo, hi);
                 for v in plane.iter_mut() {
@@ -73,15 +91,19 @@ pub(crate) fn auto_per_channel(buf: &mut PixelBuffer, n: usize, clip: f64) {
     }
 }
 
-pub(crate) fn auto_joint(buf: &mut PixelBuffer, n: usize, clip: f64) {
+pub(crate) fn auto_joint(buf: &mut PixelBuffer, n: usize, clip: f64, coverage: Option<&[u8]>) {
     let (r, g, b) = planes_mut(buf, n);
     let mut hist = [0u64; 256];
+    let mut total = 0u64;
     for plane in [&*r, &*g, &*b] {
-        for &v in plane.iter() {
-            hist[v as usize] += 1;
+        for (i, &v) in plane.iter().enumerate() {
+            if selected(coverage, i) {
+                hist[v as usize] += 1;
+                total += 1;
+            }
         }
     }
-    if let Some((lo, hi)) = percentile_bounds(&hist, (n * 3) as u64, clip) {
+    if let Some((lo, hi)) = percentile_bounds(&hist, total, clip) {
         if lo < hi {
             let lut = stretch_lut(lo, hi);
             for plane in [r, g, b] {
@@ -95,11 +117,14 @@ pub(crate) fn auto_joint(buf: &mut PixelBuffer, n: usize, clip: f64) {
 
 /// Approximation of "Find Dark & Light + Snap Neutral Midtones": per-channel
 /// gamma brings the average near-neutral midtone to the shared mean.
-pub(crate) fn snap_neutral_midtones(buf: &mut PixelBuffer, n: usize) {
+pub(crate) fn snap_neutral_midtones(buf: &mut PixelBuffer, n: usize, coverage: Option<&[u8]>) {
     let (r, g, b) = planes_mut(buf, n);
     let mut sums = [0.0f64; 3];
     let mut count = 0u64;
-    for ((rv, gv), bv) in r.iter().zip(g.iter()).zip(b.iter()) {
+    for (i, ((rv, gv), bv)) in r.iter().zip(g.iter()).zip(b.iter()).enumerate() {
+        if !selected(coverage, i) {
+            continue;
+        }
         let y = luma(*rv as f64, *gv as f64, *bv as f64);
         if (64.0..=192.0).contains(&y) {
             sums[0] += *rv as f64;

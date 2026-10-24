@@ -199,7 +199,35 @@ void PicturaMainWindow::registerEditHandlers()
         if (edit_fill(*view, uint32_t(argb), patternIndex, dialog.blendMode(),
                       dialog.opacity(), dialog.preserveTransparency())) {
             refresh();
+            CommandParams command;
+            command.values.insert(QStringLiteral("contents"),
+                                  pattern ? QStringLiteral("pattern") : QStringLiteral("color"));
+            command.values.insert(QStringLiteral("color"),
+                                  static_cast<double>(uint32_t(argb)));
+            command.values.insert(QStringLiteral("pattern"), patternIndex);
+            command.values.insert(QStringLiteral("mode"), dialog.blendMode());
+            command.values.insert(QStringLiteral("opacity"), dialog.opacity());
+            command.values.insert(QStringLiteral("preserveTransparency"),
+                                  dialog.preserveTransparency());
+            registry_->recordCommand(command_ids::EditFill, command);
         }
+    });
+    registry_->setExecutor(command_ids::EditFill, [this](const CommandParams& params) {
+        PictureView* view = activeView();
+        const QString path = layerAnchor();
+        if (!view || !view->has_document() || path.isEmpty()) {
+            return false;
+        }
+        const bool applied = edit_fill(
+            *view, uint32_t(params.values.value(QStringLiteral("color")).toDouble()),
+            params.values.value(QStringLiteral("pattern")).toInt(-1),
+            params.values.value(QStringLiteral("mode")).toString(QStringLiteral("normal")),
+            params.values.value(QStringLiteral("opacity")).toInt(100),
+            params.values.value(QStringLiteral("preserveTransparency")).toBool());
+        if (applied) {
+            refresh();
+        }
+        return applied;
     });
 
     // Edit > Stroke… outlines the active selection on the active pixel layer

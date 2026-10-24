@@ -39,6 +39,8 @@ class QWidget;
 
 namespace pictura {
 
+class ActionsEngineBridge;
+class ActionsPanel;
 class CommandRegistry;
 class ColorPanel;
 class ChannelsPanel;
@@ -85,6 +87,10 @@ struct SessionState;
 // path needs it (headless implies self-test), so a normal launch starts on the
 // empty workspace with the document commands disabled.
 bool launchCreatesScratchDocument(bool selfTest, bool codecLoaded);
+
+// True while saveActive() is routing through Save As, so the nested Save As
+// records only the origin Save step.
+bool saveActiveInProgress();
 
 // A Window > Panels (or Type > Panels) command and the panel it toggles.
 struct PanelToggle {
@@ -781,7 +787,8 @@ private:
     AdjustmentsPanel* adjustmentsPanel_ = nullptr;
     ChannelsPanel* channelsPanel_ = nullptr;
     PathsPanel* pathsPanel_ = nullptr;
-    PlaceholderPanel* actionsPanel_ = nullptr;
+    ActionsPanel* actionsPanel_ = nullptr;
+    ActionsEngineBridge* actionsEngine_ = nullptr;
     PlaceholderPanel* stylesPanel_ = nullptr;
     PanelColumn* panelColumn_ = nullptr;
     // Named workspaces and the active workspace, independent of the session

@@ -150,6 +150,9 @@ pub enum Filter {
         horizontal: i32,
         vertical: i32,
         wrap: bool,
+        /// Read past an edge from the nearest edge sample when true; takes
+        /// precedence over `wrap`.
+        repeat: bool,
         background: [u8; 3],
         /// CS6's "Set to Transparent" for the undefined area (vs "Set to
         /// Background", which paints `background` opaque).

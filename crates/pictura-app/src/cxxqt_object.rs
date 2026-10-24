@@ -1,5 +1,6 @@
 //! The cxx-qt bridge: a Rust `QObject` that owns the image shown by the shell.
 #![allow(clippy::too_many_arguments)] // brush parameter lists mirror the C++ API
+mod actions_engine;
 mod adjustment_edit;
 mod align;
 mod annotations;
@@ -7,6 +8,7 @@ mod channels;
 mod clipboard;
 mod clipping;
 mod color_range;
+mod command_catalogue;
 mod crop_group;
 mod document_session;
 mod edit;
@@ -64,6 +66,8 @@ mod tests_auto_select;
 mod tests_impl;
 #[cfg(test)]
 mod tests_profiles;
+#[cfg(test)]
+mod tool_recording_tests;
 #[cxx_qt::bridge]
 pub mod qobject {
     #[rustfmt::skip]
@@ -173,19 +177,15 @@ pub mod qobject {
         /// Whether the document has unsaved changes (false when none).
         #[qinvokable]
         fn is_dirty(&self) -> bool;
-
         /// Path the document was last opened from or saved to; empty when untitled.
         #[qinvokable]
         fn file_path(&self) -> QString;
-
         /// Set the panel's active layer path; an empty path disables tool edits.
         #[qinvokable]
         fn set_active_layer(self: Pin<&mut Self>, path: &QString);
-
         /// The active layer's panel path, or empty when none is active.
         #[qinvokable]
         fn active_layer_path(&self) -> QString;
-
         /// Whether the single active layer a tool edit may target is visible.
         #[qinvokable]
         fn active_layer_visible(&self) -> bool;

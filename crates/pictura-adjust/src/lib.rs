@@ -25,7 +25,7 @@ mod types;
 #[cfg(test)]
 mod tests;
 
-pub use apply::apply;
+pub use apply::{apply, apply_with_coverage};
 pub use hdr_toning::{exposure_gamma, tone_map, ExposureGamma, HdrToneMap, LocalAdaptationParams};
 pub use lut::parse_cube;
 pub use match_color::{match_color_stats, MatchColorParams, MatchColorStats};

@@ -442,6 +442,7 @@ fn moving_kernels_keep_an_opaque_layer_opaque() {
             horizontal: 2000,
             vertical: 2000,
             wrap: false,
+            repeat: false,
             background: [0; 3],
             transparent: false,
         },
@@ -580,6 +581,7 @@ fn moving_kernels() -> Vec<Filter> {
             horizontal: 5,
             vertical: -3,
             wrap: false,
+            repeat: false,
             background: [0; 3],
             transparent: false,
         },
@@ -785,6 +787,7 @@ fn offset_moves_the_layer_edge_and_fills_what_it_exposes_opaque() {
         horizontal: 4,
         vertical: 0,
         wrap: false,
+        repeat: false,
         background: [0; 3],
         transparent: false,
     };
@@ -802,6 +805,7 @@ fn offset_in_transparent_mode_exposes_clear_pixels() {
         horizontal: 4,
         vertical: 0,
         wrap: false,
+        repeat: false,
         background: [10, 20, 30],
         transparent: true,
     };
@@ -925,6 +929,52 @@ fn an_adjustment_changes_colour_inside_the_region_and_never_alpha() {
         "inside the region inverts"
     );
     assert_eq!(after[w - 1], colour_before[w - 1], "outside it does not");
+}
+
+#[test]
+fn auto_tone_uses_selection_histogram() {
+    let w = 100usize;
+    let mut layer = step_layer(w as i32, 1, 255);
+    for ch in layer.channels.iter_mut().filter(|c| c.id >= 0) {
+        for x in 0..w {
+            ch.data[x] = if x < w / 2 {
+                (10 + x * 50 / (w / 2 - 1)) as u8
+            } else {
+                (200 + (x - w / 2) * 50 / (w / 2 - 1)) as u8
+            };
+        }
+    }
+    let mask = LayerMask {
+        rect: rect(0, 0, 1, w as i32),
+        default_color: 0,
+        data: Some(
+            (0..w)
+                .map(|x| if x < w / 2 { 255u8 } else { 0 })
+                .collect::<Vec<_>>()
+                .into(),
+        ),
+        ..Default::default()
+    };
+    let right_before: Vec<u8> = chan(&layer, 0)[w / 2..].to_vec();
+    apply_adjustment_region(
+        &mut layer,
+        &Adjustment::Auto(pictura_adjust::AutoKind::Tone),
+        Some(&mask),
+        rect(0, 0, 1, w as i32),
+    )
+    .unwrap();
+    let out = chan(&layer, 0);
+    assert!(
+        out[0] <= 10,
+        "selected dark end did not stretch: {}",
+        out[0]
+    );
+    assert!(
+        out[w / 2 - 1] >= 245,
+        "selected light end did not stretch: {}",
+        out[w / 2 - 1]
+    );
+    assert_eq!(&out[w / 2..], &right_before[..], "unselected ramp changed");
 }
 
 #[test]

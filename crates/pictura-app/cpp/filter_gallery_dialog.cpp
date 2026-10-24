@@ -194,6 +194,10 @@ FilterGalleryDialog::FilterGalleryDialog(PictureView* view, QWidget* parent)
         // Sampled once, from a reduced copy; every filter's thumbnail renders
         // from the same bytes.
         const QSize doc = documentSize();
+        thumbnailScale_ = doc.isEmpty()
+                              ? 1.0
+                              : std::max(double(kThumbnailSize.width()) / doc.width(),
+                                         double(kThumbnailSize.height()) / doc.height());
         const double scale =
             std::min(1.0, double(kThumbnailSourceSide) / std::max(1, std::min(doc.width(), doc.height())));
         thumbnailSample_ = thumbnailSample(
@@ -766,7 +770,7 @@ void FilterGalleryDialog::renderNextThumbnail()
     QToolButton* thumb = thumbnails_.at(nextThumbnail_++);
     const QImage filtered =
         filter_thumbnail(thumbnailRgba_, thumbnailSample_.width(), thumbnailSample_.height(),
-                         thumb->property("kind").toString(), QList<double>());
+                         thumb->property("kind").toString(), QList<double>(), thumbnailScale_);
     thumb->setIcon(QPixmap::fromImage(filtered.isNull() ? thumbnailSample_ : filtered));
     QTimer::singleShot(0, this, &FilterGalleryDialog::renderNextThumbnail);
 }

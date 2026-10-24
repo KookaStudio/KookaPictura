@@ -15,7 +15,9 @@ use super::super::helpers::{active_mask_target, clamp_region, layer_has_effects}
 use super::super::helpers_composite::{
     current_buffer, patch_composite_region, premultiplied_display_image, store_composite,
 };
-use super::super::impl_filters::{apply_op_active_region, pixel_filter_target, ActiveOp};
+use super::super::impl_filters::{
+    apply_op_active_region, cancel_filter_preview, pixel_filter_target, ActiveOp,
+};
 use super::super::qobject::PictureView;
 use super::super::state::PictureViewRust;
 use super::canvas_proxy::{pre_preview_sources, section_buffer};
@@ -498,6 +500,27 @@ fn filter_commit_start(
     params: &QList<f64>,
     label: &QString,
 ) -> bool {
+    let started = filter_commit_start_inner(view.as_mut(), kind, params, label);
+    refuse_commit(view, started)
+}
+
+fn refuse_commit(mut view: Pin<&mut PictureView>, started: bool) -> bool {
+    if !started {
+        {
+            let mut rust = view.as_mut().rust_mut();
+            let _ = cancel_filter_preview(&mut rust);
+        }
+        view.as_mut().recomposite();
+    }
+    started
+}
+
+fn filter_commit_start_inner(
+    mut view: Pin<&mut PictureView>,
+    kind: &QString,
+    params: &QList<f64>,
+    label: &QString,
+) -> bool {
     let kind = kind.to_string();
     if let Some(reason) = super::eight_bit_refusal(&kind, view.rust().session.doc.as_ref()) {
         view.as_mut().rust_mut().filter_error = Some(reason);
@@ -521,7 +544,18 @@ fn filter_stack_commit_start(
     params: &QList<f64>,
     label: &QString,
 ) -> bool {
-    match resolve_stack(kinds, params) {
+    let started = filter_stack_commit_start_inner(view.as_mut(), kinds, params, label);
+    refuse_commit(view, started)
+}
+
+fn filter_stack_commit_start_inner(
+    mut view: Pin<&mut PictureView>,
+    kinds: &QStringList,
+    params: &QList<f64>,
+    label: &QString,
+) -> bool {
+    let params: Vec<f64> = params.into_iter().copied().collect();
+    match resolve_stack(kinds, &params) {
         Some(filters) if !filters.is_empty() => {
             commit_filters(view, filters, label.to_string(), None)
         }
@@ -608,7 +642,10 @@ fn filter_commit_finish(mut view: Pin<&mut PictureView>) -> bool {
         commit_finish(&mut rust)
     };
     match landed {
-        Err(()) => return false,
+        Err(()) => {
+            view.as_mut().recomposite();
+            return false;
+        }
         Ok(Landed::Region { x0, y0 }) => {
             // A document canvas re-crops the pyramid on any blit and never
             // reads the image, so a pixel stands for the region rather than a

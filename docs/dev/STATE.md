@@ -40,6 +40,48 @@ Snapshot for resuming after a context break. Update after each milestone.
   colour and the Grid Size range are not confirmed against CS6. Tests: 17
   Rust engine units, the mapping and gate units, and `tst_vanishing_point`
   (16 cases).
+- **Actions panel, engine, and command bus** (OpenSpec change `actions-bundle`;
+  issues #301, #616, and #273). `Window > Panels > Actions` (F9) is a real
+  content `QWidget` (`actionsPanel`) hosted by a `PanelGroup`, hidden in the
+  default Essentials workspace and present in Photography. It has the
+  three-column set/action/step tree (check, modal, name), Button mode, the six
+  button bottom toolbar (Stop, Record, Play, New Set, New Action, Delete), the
+  full panel menu with dynamic enablement, and the New Action / Action Options
+  (including target set) / Set Options / Playback Options / Insert Stop / Insert
+  Menu Item / Insert Path / Insert Conditional dialogs.
+  - **Engine** (`crates/pictura-script`: `command_catalogue`, `command`,
+    `action`, `atn`, `library`, `recorder`, `player`, `error`). The catalogue is
+    the single source for the menu tree and the generated `command_ids.h`; the
+    C++ command bus gains executors, context handlers, a recording sink, and
+    `executeRecorded`, with `command_tree.cpp` removed. Recording, playback
+    (accelerated / step-by-step / pause), single-step and whole-set playback,
+    function keys, modal rules, and per-command history live here.
+  - **Codec** (`pictura-codec/src/action_descriptor.rs`, `action_file.rs`):
+    exact big-endian version-16 `.atn` (one set, no magic, counted UTF-16BE
+    names, byte-string event/display ids, `hasDescriptor` 0/-1, descriptor with
+    no prefix, `Idnt`/`indx` class prefix, `ObAr`/`UnFl`/`Pth `) and
+    `Actions Palette.psp` (version 16, set count then sets). Writes are atomic;
+    unknown event ids and trailing bytes are preserved, unknown descriptor
+    types fail closed.
+  - **Default set and persistence.** `Default Actions` is compiled in (Duplicate
+    Layer, Flatten Image, Grayscale, Resize to 1000 px) and no Adobe preset
+    ships. The library is `Actions Palette.psp` in the app state directory,
+    written on a debounced change and at shutdown through `QSaveFile`; panel
+    state is additive session-schema-10 keys stored by name path, sibling
+    ordinal, and step index.
+  - **Extensions, not parity.** Insert Conditional is a Kooka extension (Adobe
+    documents it for CC, not CS6) with document-is-square / document-mode /
+    document-has-selection conditions. Tool strokes, conditional steps, and
+    Insert Path use bounded, versioned app-native `TEXT` events and are not
+    Adobe-interoperable. Brush/Pencil strokes replay; native tool-specific and
+    mask strokes are refused with a named diagnostic until their replay paths
+    land. Whole-set Play (included actions in library order) is
+    an app decision; playback stops on the first error with no
+    continue-after-error path.
+  - Tests: `tst_command_tree`, `tst_command_bus`, `tst_actions_panel`,
+    `pictura-script` engine units, and `pictura-codec` `.atn`/`.psp` units.
+    Docs: `docs/02-ui-ux/panels/actions-panel.md`,
+    `docs/09-automation/actions.md`; icons `actions.*`.
 - **Adaptive Wide Angle** (#346, branch `feat/346-adaptive-wide-angle`,
   OpenSpec change `add-adaptive-wide-angle`, archived into
   `imaging/adaptive-wide-angle`). `Filter ▸ Adaptive Wide Angle…` opens a
@@ -5806,7 +5848,7 @@ M6 through M34 are archived; their deltas now live in `openspec/specs/`.
   destructive by default — the Crop tool has an interactive region (handles,
   ratio lock, overlays) and the pixels outside the frame are kept unless
   `Delete Cropped Pixels` is on, so a crop can be widened again.
-- Icon art is Lucide-derived or hand-authored (195 icons, mapped in
+- Icon art is Lucide-derived or hand-authored (233 icons, mapped in
   `docs/dev/icon-provenance.md`); it is not CS6-pixel-exact, and a visual
   refinement pass can still change SVG paths without any code change.
 - Cursors render at a single DPR (no per-screen 2×/3× cursor variants yet).
@@ -5834,13 +5876,13 @@ M6 through M34 are archived; their deltas now live in `openspec/specs/`.
   remaining surfaces are approximations.
 - Panel contents are implemented well beyond M20 (Properties, Channels, Paths,
   History, Navigator, Color, Swatches, Info, Histogram, Notes, Brush, Clone
-  Source, Character, Paragraph, Glyphs, Paragraph Styles), as are the workspace
-  presets and the icon-collapse docks; Gradients, Patterns, Adjustments, Actions
-  and Styles are still empty placeholders.
+  Source, Character, Paragraph, Glyphs, Paragraph Styles, Actions), as are the
+  workspace presets and the icon-collapse docks; Gradients, Patterns and Styles
+  are still empty placeholders.
 - Some M24 panels are still structural placeholders with empty states
-  (Gradients, Patterns, Adjustments, Actions and Styles) while Properties,
-  Channels and Paths carry real content. Icon-collapse, workspace presets and
-  panel-title-bar menus are implemented.
+  (Gradients, Patterns and Styles) while Properties, Channels, Paths,
+  Adjustments and Actions carry real content. Icon-collapse, workspace presets
+  and panel-title-bar menus are implemented.
 - Oil Paint is a CPU behavioural model: CS6 requires a supported GPU (closed
   OpenCL kernel, no CPU fallback), so the CPU result is a deliberate non-parity
   divergence rather than verified parity. The engine also carries a four-pass

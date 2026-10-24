@@ -243,12 +243,14 @@ pub(crate) fn filter_from_kind_params(kind: &str, params: &[f64]) -> Option<Filt
         }
         "offset" => {
             arity!(params, slots);
+            let repeat = flag(params, 3, defaults[3] >= 0.5);
             Filter::Offset {
                 horizontal: i32v(params, 0, defaults[0]),
                 vertical: i32v(params, 1, defaults[1]),
-                wrap: flag(params, 2, defaults[2] >= 0.5),
-                background: rgb(params, 3, [defaults[3], defaults[4], defaults[5]]),
-                transparent: flag(params, 6, defaults[6] >= 0.5),
+                wrap: flag(params, 2, defaults[2] >= 0.5) && !repeat,
+                repeat,
+                background: rgb(params, 4, [defaults[4], defaults[5], defaults[6]]),
+                transparent: flag(params, 7, defaults[7] >= 0.5),
             }
         }
         "high-pass" => {
