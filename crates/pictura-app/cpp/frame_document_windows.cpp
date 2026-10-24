@@ -229,7 +229,8 @@ void PicturaMainWindow::raiseDocumentFloat(DocumentFloatWindow* floating)
     }
 }
 
-bool PicturaMainWindow::floatWindow(DocWindow* window, const QRect& globalGeometry)
+bool PicturaMainWindow::floatWindow(DocWindow* window, const QRect& globalGeometry,
+                                    bool activate)
 {
     if (!window || !windows_.contains(window) || window->doc->loading
         || window->kind == DocWindow::Host::Float || !window->page) {
@@ -275,7 +276,15 @@ bool PicturaMainWindow::floatWindow(DocWindow* window, const QRect& globalGeomet
         clampFloatGeometry(globalGeometry.isEmpty() ? defaultFloatGeometry() : globalGeometry));
     floating->show();
     updateTabTitle(indexOfDoc(window->doc));
-    activateDocWindow(window);
+    if (activate || wasActive) {
+        activateDocWindow(window);
+    } else {
+        // A float that opens behind the active one stays under it.
+        raiseDocumentFloat(floating);
+        if (!stripOwnsActivation() && activeWindow_->floating) {
+            raiseDocumentFloat(activeWindow_->floating);
+        }
+    }
     if (screenMode_ != ScreenMode::Standard) {
         syncScreenModeWindows();
     }

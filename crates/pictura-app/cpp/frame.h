@@ -700,9 +700,11 @@ private:
     void onTabCurrentChanged(int tab);
     void onTabBarClicked(int tab);
     // Move `window` into a floating document window, at `globalGeometry` (an
-    // empty rect places it in the document area), and activate it. Refuses a
-    // loading document or a window that already floats.
-    bool floatWindow(DocWindow* window, const QRect& globalGeometry = QRect());
+    // empty rect places it in the document area), and activate it unless
+    // `activate` is off and it was not active. Refuses a loading document or a
+    // window that already floats.
+    bool floatWindow(DocWindow* window, const QRect& globalGeometry = QRect(),
+                     bool activate = true);
     // Move a floating window into the tab strip at `index` (out of range: the
     // end) and activate it.
     bool dockWindow(DocWindow* window, int index);
@@ -743,6 +745,17 @@ private:
     void consolidateAllToTabs(DocWindow* target);
     void closeOtherWindows(DocWindow* keep);
     void revealInFileManager(const DocWindow* window);
+    // frame_document_arrange.cpp: the Window > Arrange commands. Cascade
+    // places window `slot` (in cycle order) stepped from the document area's
+    // top-left, restarting there when a header would leave the area; Float All
+    // places newly floated windows the same way. The Match commands copy the
+    // active canvas's zoom and/or centre (as document fractions) to every other
+    // window.
+    void wireWindowArrange();
+    QRect cascadeGeometry(int slot) const;
+    void floatAllWindows();
+    void cascadeWindows();
+    void matchWindows(bool zoom, bool location);
     // Ctrl+Tab / Shift+Ctrl+Tab: step the active window `step` places along
     // `windows_`, wrapping; nothing with fewer than two windows.
     void wireDocumentCycling();

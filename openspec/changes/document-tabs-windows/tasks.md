@@ -36,9 +36,9 @@ tests before its code.
 
 ## 5. Arrange: float, consolidate, cascade, match (#500)
 
-- [ ] 5.1 Create `tst_document_arrange.cpp` and register it like 3.1. Write `arrangeFloatInWindow`, `arrangeFloatAllThenConsolidate`, `arrangeDisabledWithoutDocuments`, `cascadeStepsWindows`, `cascadeKeepsHeadersReachable`, `matchZoom`, `matchLocation`, and `matchAll`.
-- [ ] 5.2 Wire the handlers and enabled-providers for Float in Window, Float All in Windows, Consolidate All to Tabs, Cascade, and Match Zoom/Location/All. Flip those seven catalogue entries to `implemented: true`, update their rows in `crates/pictura-script/tests/golden/catalogue.tsv` and the implemented count in `crates/pictura-script/tests/catalogue.rs`, and add them to `NON_RECORDABLE` in `crates/pictura-script/src/command.rs`. Verify the tests above, `cargo nextest run -p pictura-script`, and `tst_command_tree`.
-- [ ] 5.3 Implement Match Location with `ImageView::widgetToImage` and `centerOnImageRect`. Verify `matchLocation` and `matchAll`.
+- [x] 5.1 Create `tst_document_arrange.cpp` and register it like 3.1. Write `arrangeFloatInWindow`, `arrangeFloatAllThenConsolidate`, `arrangeDisabledWithoutDocuments`, `cascadeStepsWindows`, `cascadeKeepsHeadersReachable`, `matchZoom`, `matchLocation`, and `matchAll`.
+- [x] 5.2 Wire the handlers and enabled-providers for Float in Window, Float All in Windows, Consolidate All to Tabs, Cascade, and Match Zoom/Location/All. Flip those seven catalogue entries to `implemented: true`, update their rows in `crates/pictura-script/tests/golden/catalogue.tsv` and the implemented count in `crates/pictura-script/tests/catalogue.rs`, and add them to `NON_RECORDABLE` in `crates/pictura-script/src/command.rs`. Verify the tests above, `cargo nextest run -p pictura-script`, and `tst_command_tree`.
+- [x] 5.3 Implement Match Location with `ImageView::widgetToImage` and `centerOnImageRect`. Verify `matchLocation` and `matchAll`.
 
 ## 6. Interface preferences
 

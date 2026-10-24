@@ -357,6 +357,7 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/document_float_window.h
     crates/pictura-app/cpp/frame_document_windows.cpp
     crates/pictura-app/cpp/frame_document_menus.cpp
+    crates/pictura-app/cpp/frame_document_arrange.cpp
     crates/pictura-app/cpp/frame_open.cpp
     crates/pictura-app/cpp/frame_pdf.cpp
     crates/pictura-app/cpp/frame_import.cpp

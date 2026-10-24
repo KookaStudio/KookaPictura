@@ -190,6 +190,7 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
     connect(hidePanelsBack, &QShortcut::activated, this, [this]() { togglePanelsHidden(); });
     wireDocumentCycling();
     wireDocumentMenus();
+    wireWindowArrange();
     auto* brightnessDown = new QShortcut(QKeySequence(Qt::SHIFT | Qt::Key_F1), this);
     connect(brightnessDown, &QShortcut::activated, this,
             [this]() { setBrightnessLevel(brightnessLevel_ - 1); });
