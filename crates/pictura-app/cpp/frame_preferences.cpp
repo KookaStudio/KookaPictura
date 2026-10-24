@@ -107,9 +107,9 @@ void PicturaMainWindow::showPreferences(const QString& page)
                 [this](bool on) {
                     typeMissingGlyphProtection_ = on;
                     pictura::type_api::setMissingGlyphProtection(on);
-                    for (const DocEntry& entry : docs_) {
-                        if (entry.view) {
-                            pictura::type_api::refreshMissingGlyphProtection(*entry.view);
+                    for (const DocEntry* entry : docs_) {
+                        if (entry && entry->view) {
+                            pictura::type_api::refreshMissingGlyphProtection(*entry->view);
                         }
                     }
                     saveSession();
