@@ -45,6 +45,9 @@ struct DocEntry {
     QPointer<PictureView> previousActiveView;
     // In ordinal order: window i is labelled `:i+1` from the second on.
     QList<DocWindow*> windows;
+    // The window of this document that was active last; activating the
+    // document by index returns to it. Null until one is active.
+    DocWindow* lastActive = nullptr;
 };
 
 // One viewport onto a document: its canvas, scroll bars, and the host it

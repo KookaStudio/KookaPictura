@@ -52,9 +52,9 @@ tests before its code.
 
 ## 8. New Window For [file]
 
-- [ ] 8.1 Write `newWindowSharesDocument`, `newWindowFollowsPreference`, `newWindowHasOwnViewport`, `newWindowLabelFollowsActive`, `newWindowOrdinalsRenumber`, `statusZoomFollowsActiveWindow`, `closingExtraWindowDoesNotPrompt`, `fileCloseClosesActiveWindow`, and `closeAllPromptsOncePerDocument` in `tst_document_arrange`.
-- [ ] 8.2 Make `setupCanvas` / `wireCanvas` per-window and make the frame-setting loops iterate windows. Classify every `.canvas`, `canvasAt()`, and `imageView()` site in `frame*.cpp` as document-wide or active-window, and route the document-wide ones through `forEachCanvas`. Verify `newWindowSharesDocument` (paint, filter, mask overlay).
-- [ ] 8.3 Implement the command (a new window on a fresh `ImageView` bound to the document, hosted as a tab, float, or tile pane per the preference and tile state), the `:N` label ordinal, and the `setLabelProvider` menu label. Flip `window.arrange.new.window.for.file` (catalogue, golden row, count, `NON_RECORDABLE`). Verify the remaining 8.1 tests and `cargo nextest run -p pictura-script`.
+- [x] 8.1 Write `newWindowSharesDocument`, `newWindowFollowsPreference`, `newWindowHasOwnViewport`, `newWindowLabelFollowsActive`, `newWindowOrdinalsRenumber`, `statusZoomFollowsActiveWindow`, `closingExtraWindowDoesNotPrompt`, `fileCloseClosesActiveWindow`, and `closeAllPromptsOncePerDocument` in `tst_document_arrange`.
+- [x] 8.2 Make `setupCanvas` / `wireCanvas` per-window and make the frame-setting loops iterate windows. Classify every `.canvas`, `canvasAt()`, and `imageView()` site in `frame*.cpp` as document-wide or active-window, and route the document-wide ones through `forEachCanvas`. Verify `newWindowSharesDocument` (paint, filter, mask overlay).
+- [x] 8.3 Implement the command (a new window on a fresh `ImageView` bound to the document, hosted as a tab, float, or tile pane per the preference and tile state), the `:N` label ordinal, and the `setLabelProvider` menu label. Flip `window.arrange.new.window.for.file` (catalogue, golden row, count, `NON_RECORDABLE`). Verify the remaining 8.1 tests and `cargo nextest run -p pictura-script`.
 
 ## 9. Multi-window Hand and Zoom options
 

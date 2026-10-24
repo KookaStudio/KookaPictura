@@ -433,6 +433,16 @@ public:
     DocumentTilePane* tilePaneForTest(int index) const;
     // The tab or header context menu last opened, while it is open.
     QMenu* documentMenuForTest() const;
+    // Window `ordinal` of document `index`, counting its windows in label
+    // order from 0: how many windows the document has, the window's canvas,
+    // full label, tab index (-1 unless tabbed), and floating window (null
+    // unless it floats); activate it.
+    int windowCountForTest(int index) const;
+    ImageView* windowCanvasForTest(int index, int ordinal) const;
+    QString windowLabelForTest(int index, int ordinal) const;
+    int windowTabForTest(int index, int ordinal) const;
+    DocumentFloatWindow* windowFloatForTest(int index, int ordinal) const;
+    void activateWindowForTest(int index, int ordinal);
     bool closeDocument(int index, bool interactive);
     // The recent-files list, most recent first; setting it persists it.
     const QStringList& recentFiles() const { return recent_; }
@@ -676,8 +686,17 @@ private:
     void beginLoadingDocument(PictureView* view, const QString& path,
                               const QString& displayName, quint64 token,
                               const QString& recentPath, OpenKind kind);
+    // frame_canvas.cpp: a window's canvas and scroll bars, and their
+    // connections; a ready document's view connections, made once.
     void setupCanvas(DocWindow& window);
     void wireCanvas(DocWindow& window);
+    void wireDocument(DocEntry& doc);
+    // Run `fn` on the canvas of each of `doc`'s windows: the document-wide
+    // pushes (pixels, overlays, guides) reach every window, active or not.
+    void forEachCanvas(const DocEntry& doc, const std::function<void(ImageView*)>& fn) const;
+    // The active document's canvases, the active window's first; empty with
+    // no document. A filter dialog previews on all of them.
+    QList<ImageView*> activeDocumentCanvases() const;
     void installCloseButton(DocWindow* window);
     void finishLoadingDocument(int index);
     void restorePreviousTab(PictureView* view);
@@ -710,6 +729,10 @@ private:
     void hostReadyWindow(DocWindow* window, bool activate);
     // Make `window` the active one through its host.
     void activateDocWindow(DocWindow* window);
+    // Window > Arrange > New Window For: another window of `doc` on a fresh
+    // canvas, hosted as a new ready window is, and activated. Refuses a
+    // loading document.
+    bool addDocumentWindow(DocEntry* doc);
     // True while the tab strip's current tab decides the active window: no
     // window is active, or the active one is a tab.
     bool stripOwnsActivation() const;
@@ -999,6 +1022,9 @@ private:
     void registerGuideHandlers();
     void loadGuideSession(const SessionState& state);
     void prepareCanvasGuides(const DocWindow& window);
+    // Give the active document's other windows its guides; the tools keep the
+    // active canvas's guides.
+    void syncSiblingGuides();
     void applyGuideViewState();
     void connectGuidePreferences(PreferencesDialog* dialog);
     // Units & Rulers: from the preferences page or a ruler's context menu.

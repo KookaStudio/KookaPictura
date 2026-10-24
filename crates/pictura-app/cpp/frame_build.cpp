@@ -117,11 +117,12 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
     channelsPanel_ = new ChannelsPanel(this);
     channelsPanel_->setObjectName(QStringLiteral("channelsPanel"));
     // Channel visibility follows the active document; the panel resets it on a
-    // document switch, so applying it to every canvas keeps them in step.
+    // document switch, so applying it to every window's canvas keeps them in
+    // step.
     connect(channelsPanel_, &ChannelsPanel::channelMaskChanged, this, [this](int mask) {
-        for (int i = 0; i < documentCount(); ++i) {
-            if (ImageView* canvas = canvasAt(i)) {
-                canvas->setChannelMask(mask);
+        for (const DocWindow* window : windows_) {
+            if (window->canvas) {
+                window->canvas->setChannelMask(mask);
             }
         }
     });

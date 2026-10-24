@@ -12,6 +12,7 @@
 #include <QtCore/QLineF>
 #include <QtCore/QTemporaryDir>
 #include <QtGui/QMouseEvent>
+#include <QtWidgets/QAbstractButton>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QStackedWidget>
 #include <QtWidgets/QTabBar>
@@ -25,6 +26,7 @@
 #include "document_tile_host.h"
 #include "frame.h"
 #include "image_view.h"
+#include "panels/numeric_field.h"
 #include "panels/panel_column.h"
 #include "preferences_dialog.h"
 #include "recovery_store.h"
@@ -32,6 +34,9 @@
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_core/recovery.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_history/display.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_layers/mask_commands.cxxqt.h"
 
 #include "qt_test_support.h"
 
@@ -47,6 +52,7 @@ const QString kTile = QStringLiteral("window.arrange.tile");
 const QString kMatchZoom = QStringLiteral("window.arrange.match.zoom");
 const QString kMatchLocation = QStringLiteral("window.arrange.match.location");
 const QString kMatchAll = QStringLiteral("window.arrange.match.all");
+const QString kNewWindow = QStringLiteral("window.arrange.new.window.for.file");
 
 const QStringList kArrangeIds = {
     QStringLiteral("window.arrange.cascade"),
@@ -135,6 +141,21 @@ void fakeCrashedSession(const QString& from)
     }
 }
 
+// Why the two canvases of one document do not show its current frame, or the
+// empty string when both do.
+QString sharedFrameMismatch(PictureView* view, const ImageView* first, const ImageView* second)
+{
+    const QVariant frame(quint64(pictura::frame_revision(*view)));
+    if (first->property("picturaFrameRevision") != frame
+        || second->property("picturaFrameRevision") != frame) {
+        return QStringLiteral("a canvas missed the document's frame");
+    }
+    if (first->image() != second->image()) {
+        return QStringLiteral("the canvases show different pictures");
+    }
+    return QString();
+}
+
 } // namespace
 
 class DocumentArrangeTest : public QObject {
@@ -166,6 +187,15 @@ private slots:
     void prefsPersist();
     void prefsDefaultOn();
     void recoveryReopensAsTabs();
+    void newWindowSharesDocument();
+    void newWindowFollowsPreference();
+    void newWindowHasOwnViewport();
+    void newWindowLabelFollowsActive();
+    void newWindowOrdinalsRenumber();
+    void statusZoomFollowsActiveWindow();
+    void closingExtraWindowDoesNotPrompt();
+    void fileCloseClosesActiveWindow();
+    void closeAllPromptsOncePerDocument();
 
 private:
     bool newDoc(const QString& name, int width = 32, int height = 32);
@@ -179,6 +209,8 @@ private:
     // floats or is a tab; otherwise the empty string names what differs.
     QString tiledMismatch(int count) const;
     PreferencesDialog* interfacePreferences();
+    // Click the tab close control of window `ordinal` of document `index`.
+    bool clickWindowTabClose(int index, int ordinal);
     void closeAll();
 
     pictura::test::ScopedStateHome stateHome_;
@@ -187,8 +219,13 @@ private:
 
 bool DocumentArrangeTest::newDoc(const QString& name, int width, int height)
 {
-    return window_->newDocument(name, width, height, QStringLiteral("rgb"), 8,
-                                QStringLiteral("white"));
+    if (!window_->newDocument(name, width, height, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white"))) {
+        return false;
+    }
+    // newDocument keeps the generated Untitled-N name; the labels use `name`.
+    window_->setDocumentNameForTest(window_->documentCount() - 1, name);
+    return true;
 }
 
 bool DocumentArrangeTest::enabled(const QString& id)
@@ -252,6 +289,19 @@ PreferencesDialog* DocumentArrangeTest::interfacePreferences()
     window_->registry()->dispatch(QString::fromLatin1(command_ids::EditPreferencesInterface));
     QCoreApplication::processEvents();
     return window_->preferencesDialog();
+}
+
+bool DocumentArrangeTest::clickWindowTabClose(int index, int ordinal)
+{
+    const int tab = window_->windowTabForTest(index, ordinal);
+    auto* close = tab >= 0 ? qobject_cast<QAbstractButton*>(
+                                 tabBar()->tabButton(tab, QTabBar::RightSide))
+                           : nullptr;
+    if (!close) {
+        return false;
+    }
+    QTest::mouseClick(close, Qt::LeftButton);
+    return true;
 }
 
 void DocumentArrangeTest::closeAll()
@@ -724,6 +774,237 @@ void DocumentArrangeTest::recoveryReopensAsTabs()
     QVERIFY(after->floatWindowForTest(0) == nullptr);
     QCOMPARE(after->tabOfDocumentForTest(0), 0);
     after->shutdownRecovery();
+}
+
+// dtw_new_window
+void DocumentArrangeTest::newWindowSharesDocument()
+{
+    QVERIFY(newDoc(QStringLiteral("a.png"), 64, 48));
+    QVERIFY(trigger(kNewWindow));
+    QCOMPARE(window_->documentCount(), 1);
+    QCOMPARE(window_->windowCountForTest(0), 2);
+    ImageView* first = window_->windowCanvasForTest(0, 0);
+    ImageView* second = window_->windowCanvasForTest(0, 1);
+    QVERIFY(first && second && first != second);
+    QCOMPARE(window_->imageView(), second);
+    QVERIFY2(window_->windowLabelForTest(0, 1).startsWith(QStringLiteral("a.png:2 ")),
+             qPrintable(window_->windowLabelForTest(0, 1)));
+    QVERIFY(window_->windowLabelForTest(0, 0).startsWith(QStringLiteral("a.png ")));
+    PictureView* view = window_->viewAt(0);
+    QVERIFY(view != nullptr);
+
+    // Paint in the new window.
+    window_->setActiveTool(ToolId::Brush);
+    int history = view->history_count();
+    second->mousePressed(QPointF(12, 12), int(Qt::LeftButton), 0);
+    second->mouseMoved(QPointF(30, 20));
+    second->mouseMoved(QPointF(48, 30));
+    second->mouseReleased(QPointF(48, 30));
+    QCoreApplication::processEvents();
+    QVERIFY2(view->history_count() > history, "the stroke landed");
+    window_->refresh();
+    QVERIFY2(sharedFrameMismatch(view, first, second).isEmpty(),
+             qPrintable(sharedFrameMismatch(view, first, second)));
+    const QImage painted = first->image();
+
+    // A filter, then one undo.
+    history = view->history_count();
+    QVERIFY(trigger(QStringLiteral("filter.blur.blur")));
+    QTRY_VERIFY(view->history_count() > history);
+    window_->refresh();
+    QVERIFY2(sharedFrameMismatch(view, first, second).isEmpty(),
+             qPrintable(sharedFrameMismatch(view, first, second)));
+    QVERIFY(first->image() != painted);
+    QVERIFY(window_->registry()->dispatch(QString::fromLatin1(command_ids::EditUndo)));
+    QCoreApplication::processEvents();
+    window_->refresh();
+    QVERIFY2(sharedFrameMismatch(view, first, second).isEmpty(),
+             qPrintable(sharedFrameMismatch(view, first, second)));
+    QCOMPARE(first->image(), painted);
+    QCOMPARE(second->image(), painted);
+
+    // The mask overlay shows in both windows.
+    const QString layer = view->add_solid_fill(0xff2244aau);
+    QVERIFY(!layer.isEmpty());
+    QVERIFY(pictura::layer_mask_add_path(*view, layer, QStringLiteral("hide-all")));
+    QVERIFY(pictura::mask_overlay_toggle(*view, layer));
+    window_->refresh();
+    QVERIFY2(!second->maskOverlayForTest().isNull(), "the active window draws the overlay");
+    QVERIFY2(!first->maskOverlayForTest().isNull(), "the other window draws the overlay");
+    QCOMPARE(first->maskOverlayForTest(), second->maskOverlayForTest());
+}
+
+// dtw_new_window_host
+void DocumentArrangeTest::newWindowFollowsPreference()
+{
+    QVERIFY(newDoc(QStringLiteral("Doc")));
+    QVERIFY(trigger(kNewWindow));
+    QCOMPARE(window_->windowCountForTest(0), 2);
+    QVERIFY(window_->windowTabForTest(0, 1) >= 0);
+    QVERIFY(window_->windowFloatForTest(0, 1) == nullptr);
+    QCOMPARE(tabBar()->count(), 2);
+    QCOMPARE(window_->imageView(), window_->windowCanvasForTest(0, 1));
+
+    PreferencesDialog* prefs = interfacePreferences();
+    QVERIFY(prefs != nullptr);
+    QVERIFY(prefs->setCheckboxForTest(kTabsPref, false));
+    QVERIFY(trigger(kNewWindow));
+    QCOMPARE(window_->windowCountForTest(0), 3);
+    QVERIFY(window_->windowFloatForTest(0, 2) != nullptr);
+    QCOMPARE(window_->windowTabForTest(0, 2), -1);
+    QCOMPARE(tabBar()->count(), 2);
+    QCOMPARE(window_->imageView(), window_->windowCanvasForTest(0, 2));
+}
+
+// dtw_new_window_viewport
+void DocumentArrangeTest::newWindowHasOwnViewport()
+{
+    QVERIFY(newDoc(QStringLiteral("Doc"), 400, 300));
+    QVERIFY(trigger(kNewWindow));
+    QCoreApplication::processEvents();
+    ImageView* first = window_->windowCanvasForTest(0, 0);
+    ImageView* second = window_->windowCanvasForTest(0, 1);
+    QVERIFY(first && second && first != second);
+    first->setZoom(0.5, widgetCentre(first));
+    const double before = first->zoom();
+
+    second->setZoom(2.0, widgetCentre(second));
+    QCOMPARE(second->zoom(), 2.0);
+    QCOMPARE(first->zoom(), before);
+}
+
+// dtw_new_window_label
+void DocumentArrangeTest::newWindowLabelFollowsActive()
+{
+    QVERIFY(newDoc(QStringLiteral("a.png")));
+    QVERIFY(newDoc(QStringLiteral("b.png")));
+    QCOMPARE(window_->activeDocumentIndex(), 1);
+    QVERIFY(enabled(kNewWindow));
+    QCOMPARE(window_->registry()->action(kNewWindow)->text(),
+             QStringLiteral("New Window For b.png"));
+
+    window_->setActiveDocumentIndex(0);
+    QVERIFY(enabled(kNewWindow));
+    QCOMPARE(window_->registry()->action(kNewWindow)->text(),
+             QStringLiteral("New Window For a.png"));
+}
+
+// dtw_new_window_renumber
+void DocumentArrangeTest::newWindowOrdinalsRenumber()
+{
+    QVERIFY(newDoc(QStringLiteral("Doc")));
+    QVERIFY(trigger(kNewWindow));
+    QVERIFY(trigger(kNewWindow));
+    QCOMPARE(window_->windowCountForTest(0), 3);
+    QVERIFY(window_->windowLabelForTest(0, 0).startsWith(QStringLiteral("Doc @")));
+    QVERIFY(window_->windowLabelForTest(0, 1).startsWith(QStringLiteral("Doc:2 @")));
+    QVERIFY(window_->windowLabelForTest(0, 2).startsWith(QStringLiteral("Doc:3 @")));
+    ImageView* third = window_->windowCanvasForTest(0, 2);
+
+    QVERIFY(clickWindowTabClose(0, 1));
+    QTRY_COMPARE(window_->windowCountForTest(0), 2);
+    QCOMPARE(window_->documentCount(), 1);
+    QCOMPARE(window_->windowCanvasForTest(0, 1), third);
+    QVERIFY(window_->windowLabelForTest(0, 0).startsWith(QStringLiteral("Doc @")));
+    QVERIFY2(window_->windowLabelForTest(0, 1).startsWith(QStringLiteral("Doc:2 @")),
+             qPrintable(window_->windowLabelForTest(0, 1)));
+    const int tab = window_->windowTabForTest(0, 1);
+    QVERIFY(tab >= 0);
+    QVERIFY(tabBar()->tabText(tab).startsWith(QStringLiteral("Doc:2")));
+}
+
+// dtw_status_zoom
+void DocumentArrangeTest::statusZoomFollowsActiveWindow()
+{
+    QVERIFY(newDoc(QStringLiteral("Doc"), 400, 300));
+    QVERIFY(trigger(kNewWindow));
+    QCoreApplication::processEvents();
+    ImageView* first = window_->windowCanvasForTest(0, 0);
+    ImageView* second = window_->windowCanvasForTest(0, 1);
+    QVERIFY(first && second);
+    first->setZoom(0.5, widgetCentre(first));
+    second->setZoom(2.0, widgetCentre(second));
+    auto* zoom = window_->findChild<NumericField*>(QStringLiteral("statusZoomField"));
+    QVERIFY(zoom != nullptr);
+
+    window_->activateWindowForTest(0, 0);
+    QCOMPARE(window_->imageView(), first);
+    QCOMPARE(zoom->value(), 50.0);
+    window_->activateWindowForTest(0, 1);
+    QCOMPARE(window_->imageView(), second);
+    QCOMPARE(zoom->value(), 200.0);
+
+    // Coming back to the document returns to the window that was active last.
+    QVERIFY(newDoc(QStringLiteral("Other"), 400, 300));
+    QCOMPARE(window_->activeDocumentIndex(), 1);
+    window_->setActiveDocumentIndex(0);
+    QCOMPARE(window_->imageView(), second);
+    QCOMPARE(zoom->value(), 200.0);
+}
+
+// dtw_close_extra_window
+void DocumentArrangeTest::closingExtraWindowDoesNotPrompt()
+{
+    QVERIFY(newDoc(QStringLiteral("Dirty"), 16, 16));
+    window_->registry()->refresh();
+    invertAction(*window_)->trigger();
+    QVERIFY(window_->isDocumentDirty(0));
+    QVERIFY(trigger(kNewWindow));
+    QCOMPARE(window_->windowCountForTest(0), 2);
+
+    setNonInteractiveUnsavedChoice(UnsavedChoice::Cancel);
+    const int prompts = nonInteractiveUnsavedPromptCount();
+    QVERIFY(clickWindowTabClose(0, 1));
+    QTRY_COMPARE(window_->windowCountForTest(0), 1);
+    QCOMPARE(nonInteractiveUnsavedPromptCount(), prompts);
+    QCOMPARE(window_->documentCount(), 1);
+    QVERIFY(window_->isDocumentDirty(0));
+    QVERIFY(window_->imageView() != nullptr);
+}
+
+// dtw_file_close_window
+void DocumentArrangeTest::fileCloseClosesActiveWindow()
+{
+    QVERIFY(newDoc(QStringLiteral("Dirty"), 16, 16));
+    window_->registry()->refresh();
+    invertAction(*window_)->trigger();
+    QVERIFY(window_->isDocumentDirty(0));
+    QVERIFY(trigger(kNewWindow));
+    ImageView* second = window_->windowCanvasForTest(0, 1);
+    window_->activateWindowForTest(0, 0);
+    QCOMPARE(window_->imageView(), window_->windowCanvasForTest(0, 0));
+
+    setNonInteractiveUnsavedChoice(UnsavedChoice::Cancel);
+    const int prompts = nonInteractiveUnsavedPromptCount();
+    QVERIFY(window_->registry()->dispatch(QString::fromLatin1(command_ids::FileClose)));
+    QCoreApplication::processEvents();
+    QCOMPARE(nonInteractiveUnsavedPromptCount(), prompts);
+    QCOMPARE(window_->documentCount(), 1);
+    QCOMPARE(window_->windowCountForTest(0), 1);
+    QCOMPARE(window_->windowCanvasForTest(0, 0), second);
+    QCOMPARE(window_->imageView(), second);
+    QVERIFY(window_->isDocumentDirty(0));
+    QVERIFY(window_->windowLabelForTest(0, 0).startsWith(QStringLiteral("Dirty @")));
+}
+
+// dtw_close_all_prompts
+void DocumentArrangeTest::closeAllPromptsOncePerDocument()
+{
+    QVERIFY(newDoc(QStringLiteral("Dirty"), 16, 16));
+    window_->registry()->refresh();
+    invertAction(*window_)->trigger();
+    QVERIFY(window_->isDocumentDirty(0));
+    QVERIFY(trigger(kNewWindow));
+    QVERIFY(trigger(kFloatInWindow));
+    QVERIFY(window_->windowTabForTest(0, 0) >= 0);
+    QVERIFY(window_->windowFloatForTest(0, 1) != nullptr);
+
+    setNonInteractiveUnsavedChoice(UnsavedChoice::Discard);
+    const int prompts = nonInteractiveUnsavedPromptCount();
+    QVERIFY(window_->registry()->dispatch(QString::fromLatin1(command_ids::FileCloseAll)));
+    QCoreApplication::processEvents();
+    QCOMPARE(nonInteractiveUnsavedPromptCount() - prompts, 1);
+    QCOMPARE(window_->documentCount(), 0);
 }
 
 int main(int argc, char* argv[])

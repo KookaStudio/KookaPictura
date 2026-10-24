@@ -1,6 +1,6 @@
 // Window > Arrange: floating and consolidating document windows, Cascade,
-// Tile, and the Match commands. The ids are referenced as literals, so the generated
-// command id header stays unchanged.
+// Tile, the Match commands, and New Window For. The ids are referenced as
+// literals, so the generated command id header stays unchanged.
 
 #include "frame_includes.h"
 
@@ -16,6 +16,7 @@ const QString kArrangeFloatAll = QStringLiteral("window.arrange.float.all.in.win
 const QString kArrangeMatchZoom = QStringLiteral("window.arrange.match.zoom");
 const QString kArrangeMatchLocation = QStringLiteral("window.arrange.match.location");
 const QString kArrangeMatchAll = QStringLiteral("window.arrange.match.all");
+const QString kArrangeNewWindow = QStringLiteral("window.arrange.new.window.for.file");
 
 // A cascaded window takes this share of the document area, and each one sits
 // a header plus this gap below and right of the previous one.
@@ -50,6 +51,24 @@ void PicturaMainWindow::wireWindowArrange()
     registry_->setEnabledProvider(kArrangeMatchLocation, canMatch);
     registry_->setHandler(kArrangeMatchAll, [this]() { matchWindows(true, true); });
     registry_->setEnabledProvider(kArrangeMatchAll, canMatch);
+
+    registry_->setHandler(kArrangeNewWindow, [this]() {
+        if (activeWindow_) {
+            addDocumentWindow(activeWindow_->doc);
+        }
+    });
+    registry_->setEnabledProvider(kArrangeNewWindow, [this]() {
+        return activeWindow_ && !activeWindow_->doc->loading;
+    });
+    // CS6 names the active document in the entry; `&` stays literal.
+    registry_->setLabelProvider(kArrangeNewWindow, [this]() {
+        const QString label = tr("New Window For");
+        if (!activeWindow_) {
+            return label;
+        }
+        QString name = documentDisplayName(*activeWindow_->doc);
+        return label + QLatin1Char(' ') + name.replace(QLatin1Char('&'), QStringLiteral("&&"));
+    });
 }
 
 QRect PicturaMainWindow::cascadeGeometry(int slot) const

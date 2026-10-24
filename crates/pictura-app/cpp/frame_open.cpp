@@ -202,6 +202,7 @@ void PicturaMainWindow::finishLoadingDocument(int index)
             window->host->show();
         }
     }
+    wireDocument(entry);
     wireCanvas(*window);
     installCloseButton(window);
     if (!entry.recentPath.isEmpty()) {

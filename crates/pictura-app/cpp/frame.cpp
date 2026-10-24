@@ -2,14 +2,11 @@
 #include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
 
 #include "api/document_api.h"
-#include "api/paint_api.h"
 #include "api/selection_api.h"
 #include "file_drop_router.h"
-#include "frame_canvas.h"
 #include "panels/numeric_field.h"
 #include "pictura_debug_timing.h"
 #include "screen_mode_message.h"
-#include "pictura_app/src/cxxqt_object/impl_history/display.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/pdf_export.cxxqt.h"
 
 #include <QtCore/QTemporaryDir>
@@ -303,6 +300,8 @@ void PicturaMainWindow::setActiveDocumentIndex(int index)
     const DocEntry* doc = docs_.at(index);
     if (activeWindow_ && activeWindow_->doc == doc) {
         activateDocWindow(activeWindow_);
+    } else if (doc->lastActive) {
+        activateDocWindow(doc->lastActive);
     } else if (!doc->windows.isEmpty()) {
         activateDocWindow(doc->windows.first());
     }
@@ -324,6 +323,9 @@ ImageView* PicturaMainWindow::canvasAt(int index) const
     const DocEntry* doc = docs_.at(index);
     if (activeWindow_ && activeWindow_->doc == doc) {
         return activeWindow_->canvas;
+    }
+    if (doc->lastActive) {
+        return doc->lastActive->canvas;
     }
     return doc->windows.isEmpty() ? nullptr : doc->windows.first()->canvas;
 }
@@ -390,6 +392,7 @@ int PicturaMainWindow::addDocument(PictureView* view, const QString& path, bool 
     entry->windows.append(window);
     setupCanvas(*window);
     window->page = window->host;
+    wireDocument(*entry);
     wireCanvas(*window);
 
     docs_.append(entry);
@@ -409,97 +412,6 @@ int PicturaMainWindow::addDocument(PictureView* view, const QString& path, bool 
     panelRefreshTimer_->stop();
     refreshPanels();
     return index;
-}
-
-// Create the canvas for `window` and show its document's current image (or the
-// view's fallback image). A loading window's canvas host is added to its
-// placeholder page by `finishLoadingDocument`.
-void PicturaMainWindow::setupCanvas(DocWindow& window)
-{
-    PictureView* view = window.doc->view;
-    window.canvas = new ImageView(this);
-    window.tip = new BrushTipPreview(window.canvas);
-    window.tip->move(BrushTipPreview::kMargin, BrushTipPreview::kMargin);
-    window.host = new CanvasScrollBars(this);
-    window.host->setView(window.canvas);
-    // A press on the canvas activates its window (see eventFilter).
-    window.canvas->installEventFilter(this);
-    if (fileDropRouter_) {
-        window.canvas->setAcceptDrops(true);
-        window.canvas->installEventFilter(fileDropRouter_);
-    }
-    if (view->has_document()) {
-        window.canvas->setDocument(QSize(view->document_width(), view->document_height()));
-        window.canvas->setProperty(kFrameRevisionKey, quint64(pictura::frame_revision(*view)));
-    } else {
-        window.canvas->replaceImage(view->image());
-    }
-    window.canvas->setCanvasColor(canvasColorForIndex(canvasColorIndex_));
-    window.canvas->setFreePan(freePan_);
-    window.canvas->setSnapToWorkspace(snapCanvasToWorkspace_);
-    prepareCanvasGuides(window);
-
-    // Present from the view pyramid: the canvas crops a level instead of
-    // scaling the full-resolution image (see frame_canvas.cpp).
-    wireCanvasLevelProvider(view, window.canvas);
-}
-
-// Connect a ready window's document view and canvas to the frame.
-void PicturaMainWindow::wireCanvas(DocWindow& window)
-{
-    PictureView* view = window.doc->view;
-    connect(view, &PictureView::changed, this, &PicturaMainWindow::refresh);
-    connect(view, &PictureView::sessionCancelled, this, [this]() {
-        if (tools_) {
-            tools_->onSessionCancelled();
-        }
-    });
-    trackRecovery(view);
-    connect(view, &PictureView::regionBlitted, this,
-            [this, canvas = window.canvas, view](const QImage& region, int x, int y) {
-                pictura::ScopedTimer blitSlotTimer("cxx_regionBlitted_slot");
-                if (canvas) {
-                    canvas->blitRegion(region, x, y);
-                }
-                // The cheapest sync only: restart the same 120 ms panel timer the
-                // `changed` path uses, and never call image()/replaceImage(), so
-                // the region path cannot refresh panels faster than a full
-                // recomposite.
-                panelRefreshTimer_->start();
-                // A region update can change the active layer's visibility
-                // without a `changed` emission; keep the tool cursor in sync.
-                if (tools_) {
-                    tools_->refreshCursor();
-                }
-                // Mid-stroke, skip the command-registry and title fan-out on
-                // every dab (Krita's "unnecessary objects per event"). Releasing
-                // the stroke emits `changed`, whose refresh() runs them once.
-                if (view && view->is_painting()) {
-                    // A present arms its own flush: the next event-loop turn
-                    // folds every dab that arrived since into one region, so the
-                    // composite and the present track the frame rate, not the
-                    // input rate.
-                    paint_api::presentDeferred(*view);
-                    return;
-                }
-                updateTabTitle(activeDocumentIndex());
-                updateWindowTitle();
-                if (registry_) {
-                    registry_->refresh();
-                }
-            });
-    connect(window.canvas, &ImageView::zoomChanged, this,
-            &PicturaMainWindow::onCanvasZoomChanged);
-    connect(window.canvas, &ImageView::mouseMoved, this, [this](const QPointF& p) {
-        if (infoPanel_) {
-            infoPanel_->setCursorPosition(p);
-        }
-    });
-    // The active tool's canvas context menu (or the pasteboard colour menu).
-    connect(window.canvas, &ImageView::contextMenuRequested, this,
-            [this, canvas = window.canvas](const QPoint& globalPos) {
-                showCanvasContextMenu(canvas, globalPos);
-            });
 }
 
 bool PicturaMainWindow::newDocument(const QString& name, int width, int height,
@@ -948,7 +860,11 @@ void PicturaMainWindow::refresh()
         tools_->bindCanvas(canvas);
     }
     syncBrushTipPreview();
-    syncMaskOverlay(view, canvas);
+    if (activeWindow_) {
+        forEachCanvas(*activeWindow_->doc,
+                      [this, view](ImageView* each) { syncMaskOverlay(view, each); });
+    }
+    syncSiblingGuides();
 
     panelRefreshTimer_->start();
     updateStatus();
@@ -967,14 +883,16 @@ void PicturaMainWindow::refresh()
 void PicturaMainWindow::refreshSelectionOverlay()
 {
     PictureView* view = activeView();
-    ImageView* canvas = imageView();
-    if (!view || !canvas) {
+    if (!view || !activeWindow_) {
         return;
     }
     if (view->has_selection()) {
-        canvas->setSelectionContour(selection_api::contour(*view));
+        const selection_api::SelectionContour contour = selection_api::contour(*view);
+        forEachCanvas(*activeWindow_->doc,
+                      [&contour](ImageView* canvas) { canvas->setSelectionContour(contour); });
     } else {
-        canvas->clearSelectionContour();
+        forEachCanvas(*activeWindow_->doc,
+                      [](ImageView* canvas) { canvas->clearSelectionContour(); });
     }
 }
 

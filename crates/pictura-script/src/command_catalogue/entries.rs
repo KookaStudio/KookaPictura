@@ -541,7 +541,7 @@ pub(super) static ROWS: &[CommandSpec] = &[
     CommandSpec { id: "window.arrange.match.zoom", path: &["Window", "Arrange", "Match Zoom"], label: "Match Zoom", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "window.arrange.match.location", path: &["Window", "Arrange", "Match Location"], label: "Match Location", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "window.arrange.match.all", path: &["Window", "Arrange", "Match All"], label: "Match All", shortcut: "", implemented: true, checkable: false },
-    CommandSpec { id: "window.arrange.new.window.for.file", path: &["Window", "Arrange", "New Window For [file]"], label: "New Window For [file]", shortcut: "", implemented: false, checkable: false },
+    CommandSpec { id: "window.arrange.new.window.for.file", path: &["Window", "Arrange", "New Window For [file]"], label: "New Window For [file]", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "window.workspace.essentials", path: &["Window", "Workspace", "Essentials"], label: "Essentials", shortcut: "", implemented: true, checkable: true },
     CommandSpec { id: "window.workspace.painting", path: &["Window", "Workspace", "Painting"], label: "Painting", shortcut: "", implemented: true, checkable: true },
     CommandSpec { id: "window.workspace.photography", path: &["Window", "Workspace", "Photography"], label: "Photography", shortcut: "", implemented: true, checkable: true },

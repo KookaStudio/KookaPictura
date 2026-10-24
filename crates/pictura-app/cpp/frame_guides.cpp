@@ -63,6 +63,28 @@ void PicturaMainWindow::prepareCanvasGuides(const DocWindow& window)
             });
 }
 
+void PicturaMainWindow::syncSiblingGuides()
+{
+    if (!activeWindow_ || activeWindow_->doc->windows.size() < 2) {
+        return;
+    }
+    PictureView* view = activeWindow_->doc->view;
+    QList<ImageView::GuideLine> lines;
+    const int count = view && view->has_document() ? guide_count(*view) : 0;
+    for (int i = 0; i < count; ++i) {
+        const ::rust::Vec<double> guide = guide_at(*view, i);
+        if (guide.size() == 2) {
+            lines.append({guide[0] != 0.0, guide[1]});
+        }
+    }
+    ImageView* active = activeWindow_->canvas;
+    forEachCanvas(*activeWindow_->doc, [active, &lines](ImageView* canvas) {
+        if (canvas != active) {
+            canvas->setGuides(lines);
+        }
+    });
+}
+
 void PicturaMainWindow::applyGuideViewState()
 {
     for (const DocWindow* window : windows_) {

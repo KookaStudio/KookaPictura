@@ -1,7 +1,7 @@
 // The document window registry: which window shows which document, where it
-// is hosted, and which one is active; moving windows between the tab strip,
-// floating windows, and tile panes, closing them, presenting them, and the
-// screen modes.
+// is hosted, and which one is active; opening another window of a document,
+// moving windows between the tab strip, floating windows, and tile panes,
+// closing them, presenting them, and the screen modes.
 
 #include "frame_includes.h"
 
@@ -169,8 +169,34 @@ void PicturaMainWindow::cycleDocumentWindow(int step)
     activateDocWindow(windows_.at(((current + step) % count + count) % count));
 }
 
+bool PicturaMainWindow::addDocumentWindow(DocEntry* doc)
+{
+    if (!doc || !docs_.contains(doc) || doc->loading || !doc->view) {
+        return false;
+    }
+    auto* window = new DocWindow;
+    window->doc = doc;
+    // The new window takes the next ordinal, so it is labelled `:N`.
+    doc->windows.append(window);
+    setupCanvas(*window);
+    window->page = window->host;
+    wireCanvas(*window);
+    addTabWindow(window);
+    installCloseButton(window);
+    activateDocWindow(window);
+    hostReadyWindow(window, true);
+    updateTabTitle(indexOfDoc(doc));
+    refresh();
+    panelRefreshTimer_->stop();
+    refreshPanels();
+    return true;
+}
+
 void PicturaMainWindow::onActiveWindowChanged()
 {
+    if (activeWindow_) {
+        activeWindow_->doc->lastActive = activeWindow_;
+    }
     if (screenMode_ != ScreenMode::Standard) {
         syncScreenModeWindows();
     }
@@ -184,13 +210,11 @@ void PicturaMainWindow::onActiveWindowChanged()
         }
     }
     PictureView* active = activeView();
-    for (int i = 0; i < docs_.size(); ++i) {
-        PictureView* view = viewAt(i);
+    for (const DocEntry* doc : docs_) {
+        PictureView* view = doc->view;
         if (view && view != active && view->transform_session_active()) {
             view->cancel_transform();
-            if (ImageView* canvas = canvasAt(i)) {
-                canvas->clearTransformPreview();
-            }
+            forEachCanvas(*doc, [](ImageView* canvas) { canvas->clearTransformPreview(); });
         }
     }
     refresh();
@@ -480,6 +504,9 @@ void PicturaMainWindow::detachWindows(const QList<DocWindow*>& windows)
         if (tearWindow_ == window) {
             tearWindow_ = nullptr;
         }
+        if (window->doc->lastActive == window) {
+            window->doc->lastActive = nullptr;
+        }
     }
     for (DocWindow* window : windows) {
         // Removing the active tab hands the activation to the strip's new
@@ -506,6 +533,11 @@ void PicturaMainWindow::destroyWindowWidgets(DocWindow* window)
 {
     if (window->canvas) {
         window->canvas->clearTransformPreview();
+        // A closed active float or pane hands the activation over without a
+        // refresh, so the tools may still hold this canvas.
+        if (tools_ && tools_->canvas() == window->canvas) {
+            tools_->bindCanvas(nullptr);
+        }
     }
     // A ready window's page is its canvas host; a loading window's page is the
     // placeholder. Deleting the page deletes the host (and the canvas) it owns.
@@ -537,7 +569,7 @@ void PicturaMainWindow::presentWindows()
             continue;
         }
         if (!view->has_document()) {
-            if (window == activeWindow_) {
+            if (activeWindow_ && window->doc == activeWindow_->doc) {
                 canvas->setImage(view->image());
             }
             continue;
@@ -631,6 +663,52 @@ int PicturaMainWindow::tabOfDocumentForTest(int index) const
         return -1;
     }
     return tabOf(docs_.at(index)->windows.first());
+}
+
+namespace {
+
+// Window `ordinal` of document `index`, or null.
+DocWindow* documentWindowAt(const QList<DocEntry*>& docs, int index, int ordinal)
+{
+    if (index < 0 || index >= docs.size() || ordinal < 0
+        || ordinal >= docs.at(index)->windows.size()) {
+        return nullptr;
+    }
+    return docs.at(index)->windows.at(ordinal);
+}
+
+} // namespace
+
+int PicturaMainWindow::windowCountForTest(int index) const
+{
+    return index >= 0 && index < docs_.size() ? int(docs_.at(index)->windows.size()) : 0;
+}
+
+ImageView* PicturaMainWindow::windowCanvasForTest(int index, int ordinal) const
+{
+    const DocWindow* window = documentWindowAt(docs_, index, ordinal);
+    return window ? window->canvas : nullptr;
+}
+
+QString PicturaMainWindow::windowLabelForTest(int index, int ordinal) const
+{
+    return fullLabel(documentWindowAt(docs_, index, ordinal));
+}
+
+int PicturaMainWindow::windowTabForTest(int index, int ordinal) const
+{
+    return tabOf(documentWindowAt(docs_, index, ordinal));
+}
+
+DocumentFloatWindow* PicturaMainWindow::windowFloatForTest(int index, int ordinal) const
+{
+    const DocWindow* window = documentWindowAt(docs_, index, ordinal);
+    return window ? window->floating : nullptr;
+}
+
+void PicturaMainWindow::activateWindowForTest(int index, int ordinal)
+{
+    activateDocWindow(documentWindowAt(docs_, index, ordinal));
 }
 
 QString PicturaMainWindow::documentWindowLabelForTest(int index) const

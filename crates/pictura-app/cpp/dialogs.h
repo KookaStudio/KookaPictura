@@ -58,6 +58,9 @@ UnsavedChoice askUnsaved(QWidget* parent, const QString& documentName);
 // returns the configured choice. Defaults: interactive true, Discard.
 void setUnsavedPromptInteractive(bool interactive);
 void setNonInteractiveUnsavedChoice(UnsavedChoice choice);
+// How many times askUnsaved has answered without a dialog, so a test can count
+// the prompts an operation raises.
+int nonInteractiveUnsavedPromptCount();
 
 // Photoshop's "Apply the transformation?" (Apply / Cancel / Don't Apply), asked
 // before a tool switch leaves a pending transform. Non-interactive (the

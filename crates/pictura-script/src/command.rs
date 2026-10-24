@@ -259,6 +259,7 @@ static NON_RECORDABLE: &[&str] = &[
     "window.arrange.cascade", "window.arrange.tile", "window.arrange.consolidate.all.to.tabs",
     "window.arrange.float.in.window", "window.arrange.float.all.in.windows",
     "window.arrange.match.zoom", "window.arrange.match.location", "window.arrange.match.all",
+    "window.arrange.new.window.for.file",
     "window.panels.actions", "window.panels.adjustments", "window.panels.brushes",
     "window.panels.channels", "window.panels.character", "window.panels.cloneSource",
     "window.panels.color", "window.panels.glyphs", "window.panels.gradients",
