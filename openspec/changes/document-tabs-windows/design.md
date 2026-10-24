@@ -313,14 +313,27 @@ New sources keep `frame.cpp` under its cap:
 - `document_window.{h,cpp}`: the `DocWindow` struct and the label builder
 - `document_float_window.{h,cpp}`
 - `document_tile_host.{h,cpp}`
-- `frame_document_windows.cpp`: Arrange, the menus, cycling, and tear-out
+- `frame_document_windows.cpp`: the window registry, hosting, New Window For,
+  moving windows between tab, float, and tile, closing, presenting, cycling,
+  and the screen modes
+- `frame_document_menus.cpp`: the tab and float-header context menus and
+  tab tear-out
+- `frame_document_arrange.cpp`: `Window > Arrange` (Float, Consolidate,
+  Cascade, Tile, Match, New Window For) and the multi-window Hand and Zoom
+  fan-out
+- `options_bar_navigate.cpp`: the Hand and Zoom options-bar pages
 
-All of them are listed explicitly in the root `CMakeLists.txt`. A QObject's
-`.cpp` ends with `#include "moc_<name>.cpp"`. `frame.cpp` loses its tab-title
-code to `document_window.cpp`. The three Qt Test suites are added to
-`PICTURA_QT_TESTS` in `crates/pictura-app/cpp/tests/CMakeLists.txt`; a suite
-goes into `PICTURA_QT_TEST_SHARDS` (with `shardedMain`) only if it turns out
-slow, which its per-test window allows.
+`frame_canvas.cpp` makes `setupCanvas` / `wireCanvas` per-window, adds
+`wireDocument` for the once-per-document view connections and the
+`forEachCanvas` pushes, and reports Hand pans for Scroll All;
+`tool_hand_zoom.cpp` reports Zoom-tool factors. All new sources are listed
+explicitly in the root `CMakeLists.txt`. A QObject's `.cpp` ends with
+`#include "moc_<name>.cpp"`. `frame.cpp` loses its tab-title code to
+`document_window.cpp`. The four Qt Test suites (`tst_document_windows`,
+`tst_document_float`, `tst_document_arrange`, `tst_document_navigate`) are
+added to `PICTURA_QT_TESTS` in `crates/pictura-app/cpp/tests/CMakeLists.txt`;
+a suite goes into `PICTURA_QT_TEST_SHARDS` (with `shardedMain`) only if it
+turns out slow, which its per-test window allows.
 
 ## Risks / Trade-offs
 

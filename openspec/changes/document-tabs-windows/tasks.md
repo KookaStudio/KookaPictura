@@ -65,8 +65,8 @@ tests before its code.
 
 ## 10. Roadmap and docs
 
-- [ ] 10.1 In `ROADMAP.md` (repository root, no docs marker needed), tick the `Ctrl+Tab` (#499) and `Window ▸ Arrange` (#500) items and add ticked items for tab tear-out and the tab/header menus (#317) and the full-label tooltip (#917). Verify `bash scripts/guard.sh` rule 13.
-- [ ] 10.2 In one `docs:` commit carrying `TASK-ALLOWS-DOCS`: remove the closed rows UI-3 and UI-4 from `docs/dev/doc-code-parity-gaps.md` and update its row count; add `DIVERGENT` rows for the Wayland in-frame float (`application-frame.md:241`, `:297`) and for the unsaved float layout (`application-frame.md:221`, `:285`, `:337`), and a `STALE-DOC` row for the "Enable Floating Document Window" label (`preferences.md:108`, `application-frame.md:71`); record the milestone in `docs/dev/STATE.md`. Verify `GUARD_BASE=master bash scripts/guard.sh`.
+- [x] 10.1 In `ROADMAP.md` (repository root, no docs marker needed), tick the `Ctrl+Tab` (#499) and `Window ▸ Arrange` (#500) items and add ticked items for tab tear-out and the tab/header menus (#317) and the full-label tooltip (#917). Verify `bash scripts/guard.sh` rule 13.
+- [x] 10.2 In one `docs:` commit carrying `TASK-ALLOWS-DOCS`: remove the closed rows UI-3 and UI-4 from `docs/dev/doc-code-parity-gaps.md` and update its row count; add `DIVERGENT` rows for the Wayland in-frame float (`application-frame.md:241`, `:297`) and for the unsaved float layout (`application-frame.md:221`, `:285`, `:337`), and a `STALE-DOC` row for the "Enable Floating Document Window" label (`preferences.md:108`, `application-frame.md:71`); record the milestone in `docs/dev/STATE.md`. Verify `GUARD_BASE=master bash scripts/guard.sh`.
 
 ## 11. Integration
 
