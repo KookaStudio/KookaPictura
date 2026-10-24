@@ -7,14 +7,14 @@ use super::planes::Part;
 use super::{vanishing_point, DragMode, VpEdit, VpEditor, VpPlanes, VpValidity};
 use crate::{apply, Filter};
 
-const W: u32 = 800;
-const H: u32 = 600;
+pub(super) const W: u32 = 800;
+pub(super) const H: u32 = 600;
 
 fn close(a: P2, b: P2, tol: f64) -> bool {
     (a.0 - b.0).abs() <= tol && (a.1 - b.1).abs() <= tol
 }
 
-fn square_on() -> [P2; 4] {
+pub(super) fn square_on() -> [P2; 4] {
     [
         (200.0, 100.0),
         (600.0, 100.0),
@@ -25,7 +25,7 @@ fn square_on() -> [P2; 4] {
 
 /// The camera every synthetic view uses: principal point at the document
 /// centre, a slightly wide lens.
-fn camera() -> Camera {
+pub(super) fn camera() -> Camera {
     Camera {
         centre: (W as f64 / 2.0, H as f64 / 2.0),
         half: (W as f64).hypot(H as f64) / 2.0,
@@ -35,7 +35,7 @@ fn camera() -> Camera {
 
 /// A 3D rectangle turned 35° about the vertical and tilted 20°, so both its
 /// edge pairs converge, and its image through [`camera`].
-fn tilted() -> ([P2; 4], V3, V3) {
+pub(super) fn tilted() -> ([P2; 4], V3, V3) {
     let (a, b) = (35f64.to_radians(), 20f64.to_radians());
     let eu = v3(a.cos(), 0.0, a.sin());
     let ev = v3(-a.sin() * b.sin(), b.cos(), a.cos() * b.sin());
@@ -53,12 +53,12 @@ fn tilted() -> ([P2; 4], V3, V3) {
 }
 
 /// Where the image line through `a` and `b` passes nearest `p`.
-fn line_miss(a: P2, b: P2, p: P2) -> f64 {
+pub(super) fn line_miss(a: P2, b: P2, p: P2) -> f64 {
     let (dx, dy) = (b.0 - a.0, b.1 - a.1);
     ((p.0 - a.0) * dy - (p.1 - a.1) * dx).abs() / dx.hypot(dy)
 }
 
-fn planes_with(q: [P2; 4]) -> VpPlanes {
+pub(super) fn planes_with(q: [P2; 4]) -> VpPlanes {
     let mut planes = VpPlanes::new(W, H);
     planes.add(q);
     planes
@@ -178,7 +178,7 @@ fn resizing_an_edge_leaves_the_grid_on_the_surface() {
     }
 }
 
-fn torn(planes: &mut VpPlanes, from: usize, edge: usize) -> usize {
+pub(super) fn torn(planes: &mut VpPlanes, from: usize, edge: usize) -> usize {
     let child = planes
         .tear_off(from, edge)
         .expect("a valid plane tears off");
@@ -317,6 +317,7 @@ fn removing_a_plane_removes_its_related_planes() {
 fn render_grids_draws_black_lines_into_the_layer() {
     let planes = planes_with(square_on());
     let edit = VpEdit {
+        patch: None,
         lines: planes.rendered_grid(-150.0, -50.0),
     };
     // A 500×500 layer whose origin is at document (150, 50).
@@ -355,6 +356,7 @@ fn an_empty_edit_changes_nothing_and_runs_are_deterministic() {
     assert_eq!(buf, original);
     let edit = Filter::VanishingPoint {
         edit: Arc::new(VpEdit {
+            patch: None,
             lines: vec![[(1.5, 2.0), (30.0, 27.25)], [(16.0, 0.0), (16.0, 32.0)]],
         }),
     };

@@ -35,6 +35,7 @@ pub(super) mod jobs;
 pub(super) mod lens_blur_depths;
 pub(super) mod liquify;
 pub(super) mod vanishing_point;
+mod vanishing_point_retouch;
 
 #[cxx_qt::bridge]
 pub mod ffi {

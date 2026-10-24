@@ -1,7 +1,9 @@
 #include "vp_dialog.h"
 #include "dialogs.h"
+#include "frame.h"
 #include "icons.h"
 #include "vp_canvas.h"
+#include "vp_options.h"
 
 #include <QtCore/QDebug>
 #include <QtCore/QSignalBlocker>
@@ -20,15 +22,17 @@
 #include <QtWidgets/QVBoxLayout>
 
 #include <cmath>
+#include <functional>
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/filter_tools/vanishing_point.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/filter_tools/vanishing_point_retouch.cxxqt.h"
 
 namespace pictura {
 
 namespace {
 
-struct ToolInfo {
+struct VpToolInfo {
     VanishingPointDialog::Tool tool;
     const char* icon;
     const char* name;
@@ -36,7 +40,7 @@ struct ToolInfo {
     Qt::Key key;
 };
 
-const ToolInfo kTools[] = {
+const VpToolInfo kTools[] = {
     {VanishingPointDialog::EditPlane, "tool.pathselection", "Edit Plane Tool",
      "Select a plane, drag its corners to reshape it, its edge nodes to resize it, or its inside "
      "to move it. Ctrl-drag an edge node for a related plane.",
@@ -44,6 +48,19 @@ const ToolInfo kTools[] = {
     {VanishingPointDialog::CreatePlane, "tool.createplane", "Create Plane Tool",
      "Click four corners to define a plane. Ctrl-drag an edge node to tear off a related plane.",
      Qt::Key_C},
+    {VanishingPointDialog::Marquee, "tool.marquee", "Marquee Tool",
+     "Drag a selection in perspective; double-click to select a plane. Alt-drag to move a copy, "
+     "Ctrl-drag to fill it from under the pointer.",
+     Qt::Key_M},
+    {VanishingPointDialog::Stamp, "tool.clonestamp", "Stamp Tool",
+     "Alt-click to set the source, then paint to clone it in perspective.", Qt::Key_S},
+    {VanishingPointDialog::Brush, "tool.brush", "Brush Tool",
+     "Paint with Brush Color in perspective.", Qt::Key_B},
+    {VanishingPointDialog::Transform, "tool.objectscale", "Transform Tool",
+     "Drag a corner to scale (Shift keeps the aspect), just past one to rotate, inside to move.",
+     Qt::Key_T},
+    {VanishingPointDialog::Eyedropper, "tool.eyedropper", "Eyedropper Tool",
+     "Click to pick Brush Color from the preview.", Qt::Key_I},
     {VanishingPointDialog::Hand, "tool.hand", "Hand Tool", "Drag to move the view.", Qt::Key_H},
     {VanishingPointDialog::Zoom, "tool.zoom", "Zoom Tool",
      "Click to zoom in; Alt-click to zoom out. Hold X to zoom temporarily.", Qt::Key_Z},
@@ -57,6 +74,10 @@ VanishingPointDialog::VanishingPointDialog(PictureView* view, const QString& doc
 {
     setObjectName(QStringLiteral("vpDialog"));
     ready_ = view_ && vp_begin(*view_);
+    options_ = new VpOptionsBar(this);
+    if (auto* frame = qobject_cast<PicturaMainWindow*>(parent)) {
+        options_->setColour(frame->foregroundColor());
+    }
 
     // The menu button and the tool options.
     auto* menuButton = new QToolButton(this);
@@ -79,22 +100,6 @@ VanishingPointDialog::VanishingPointDialog(PictureView* view, const QString& doc
     renderGrids_->setCheckable(true);
     menuButton->setMenu(menu);
 
-    gridSize_ = new QSpinBox(this);
-    gridSize_->setObjectName(QStringLiteral("vpGridSize"));
-    // ponytail: CS6's Grid Size range is not confirmed; 1–1000 is assumed.
-    gridSize_->setRange(1, 1000);
-    gridSize_->setValue(100);
-    gridSize_->setToolTip(QStringLiteral("Grid Size: the spacing of the active plane's grid."));
-    angle_ = new QSpinBox(this);
-    angle_->setObjectName(QStringLiteral("vpAngle"));
-    angle_->setRange(0, 360);
-    angle_->setSuffix(QStringLiteral("°"));
-    angle_->setToolTip(QStringLiteral("Angle: a related plane's angle to the plane it tore off."));
-    auto* gridLabel = new QLabel(QStringLiteral("Grid Size:"), this);
-    gridLabel->setBuddy(gridSize_);
-    auto* angleLabel = new QLabel(QStringLiteral("Angle:"), this);
-    angleLabel->setBuddy(angle_);
-
     auto* ok = new QPushButton(QStringLiteral("OK"), this);
     ok->setDefault(true);
     auto* cancel = new QPushButton(QStringLiteral("Cancel"), this);
@@ -104,12 +109,7 @@ VanishingPointDialog::VanishingPointDialog(PictureView* view, const QString& doc
     auto* options = new QHBoxLayout;
     options->addWidget(menuButton);
     options->addSpacing(8);
-    options->addWidget(gridLabel);
-    options->addWidget(gridSize_);
-    options->addSpacing(8);
-    options->addWidget(angleLabel);
-    options->addWidget(angle_);
-    options->addStretch(1);
+    options->addWidget(options_, 1);
     options->addWidget(ok);
     options->addWidget(cancel);
 
@@ -121,7 +121,7 @@ VanishingPointDialog::VanishingPointDialog(PictureView* view, const QString& doc
     tools_->setExclusive(true);
     auto* column = new QVBoxLayout;
     column->setSpacing(2);
-    for (const ToolInfo& info : kTools) {
+    for (const VpToolInfo& info : kTools) {
         if (info.tool == Hand) {
             column->addSpacing(6); // CS6 rules the column before the view tools
         }
@@ -142,14 +142,8 @@ VanishingPointDialog::VanishingPointDialog(PictureView* view, const QString& doc
 
     canvas_ = new VpCanvas(this);
     connect(tools_, &QButtonGroup::idToggled, this, [this](int id, bool on) {
-        if (!on) {
-            return;
-        }
-        canvas_->setMode(static_cast<VpCanvas::Mode>(id));
-        for (const ToolInfo& info : kTools) {
-            if (info.tool == id) {
-                help_->setText(QString::fromLatin1(info.help));
-            }
+        if (on) {
+            toolChanged(id);
         }
     });
     connect(showEdges_, &QAction::toggled, canvas_, &VpCanvas::setShowEdges);
@@ -182,41 +176,61 @@ VanishingPointDialog::VanishingPointDialog(PictureView* view, const QString& doc
     outer->addWidget(help_);
     outer->addLayout(body, 1);
 
-    // The dialog's own undo and redo of plane edits.
-    auto* undo = new QShortcut(QKeySequence::Undo, this);
-    connect(undo, &QShortcut::activated, this, [this] {
+    // The dialog's own undo and redo, pixels included.
+    auto shortcut = [this](const QKeySequence& keys, std::function<void()> run) {
+        auto* s = new QShortcut(keys, this);
+        connect(s, &QShortcut::activated, this, std::move(run));
+    };
+    shortcut(QKeySequence::Undo, [this] {
         if (vp_undo()) {
-            canvas_->refreshPlanes();
+            canvas_->refreshAll();
             syncOptions();
         }
     });
-    auto* redo = new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Z), this);
-    connect(redo, &QShortcut::activated, this, [this] {
+    shortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Z), [this] {
         if (vp_redo()) {
-            canvas_->refreshPlanes();
+            canvas_->refreshAll();
             syncOptions();
         }
     });
-
-    connect(gridSize_, &QSpinBox::valueChanged, this, [this](int value) {
-        vp_set_grid_size(value);
-        canvas_->refreshPlanes();
+    shortcut(QKeySequence(Qt::CTRL | Qt::Key_V), [this] { paste(); });
+    shortcut(QKeySequence(Qt::CTRL | Qt::Key_D), [this] {
+        vp_deselect();
+        canvas_->refreshAll();
     });
-    connect(angle_, &QSpinBox::valueChanged, this, [this](int value) {
-        if (vp_set_angle(value)) {
-            canvas_->refreshPlanes();
+    shortcut(QKeySequence(Qt::CTRL | Qt::Key_T), [this] {
+        if (vp_has_float()) {
+            selectTool(Transform);
         }
     });
+    shortcut(QKeySequence(Qt::Key_BracketLeft), [this] { options_->stepDiameter(tool(), -1); });
+    shortcut(QKeySequence(Qt::Key_BracketRight), [this] { options_->stepDiameter(tool(), 1); });
+
+    connect(options_->gridSize(), &QSpinBox::valueChanged, this, [this](int value) {
+        vp_set_grid_size(value);
+        canvas_->refreshAll();
+    });
+    connect(options_->angle(), &QSpinBox::valueChanged, this, [this](int value) {
+        if (vp_set_angle(value)) {
+            canvas_->refreshAll();
+        }
+    });
+    options_->mirrored = [this](bool horizontal) {
+        vp_mirror(horizontal);
+        canvas_->refreshAll();
+    };
     canvas_->planesChanged = [this] { syncOptions(); };
     canvas_->planeCreated = [this] { selectTool(EditPlane); };
     canvas_->zoomChanged = [this] { updateZoomLabel(); };
+    canvas_->colourPicked = [this](const QColor& c) { options_->setColour(c); };
+    canvas_->notice = [this](const QString& text) { help_->setText(text); };
 
     selectTool(ready_ && vp_plane_count() > 0 ? EditPlane : CreatePlane);
     if (const QScreen* screen = parent ? parent->screen() : QGuiApplication::primaryScreen()) {
         resize(screen->availableGeometry().size() * 0.85);
     }
     if (ready_) {
-        canvas_->reload(vp_backdrop(*view_));
+        canvas_->reload();
     }
     syncOptions();
     updateZoomLabel();
@@ -233,7 +247,7 @@ bool VanishingPointDialog::load(const QList<double>& values)
         return false;
     }
     renderGrids_->setChecked(true);
-    canvas_->refreshPlanes();
+    canvas_->refreshAll();
     syncOptions();
     selectTool(EditPlane);
     return true;
@@ -251,20 +265,60 @@ void VanishingPointDialog::selectTool(int tool)
     }
 }
 
+void VanishingPointDialog::toolChanged(int tool)
+{
+    // A floating selection drops when a tool other than Marquee or
+    // Transform takes over.
+    if (tool != Marquee && tool != Transform && vp_drop_float()) {
+        canvas_->refreshAll();
+    }
+    canvas_->setMode(static_cast<VpCanvas::Mode>(tool));
+    options_->showFor(tool);
+    for (const VpToolInfo& info : kTools) {
+        if (info.tool == tool) {
+            help_->setText(QString::fromLatin1(info.help));
+        }
+    }
+}
+
+bool VanishingPointDialog::paste()
+{
+    if (!ready_) {
+        return false;
+    }
+    if (auto* frame = qobject_cast<PicturaMainWindow*>(parentWidget())) {
+        frame->importSystemClipboard();
+    }
+    switch (vp_paste_clipboard()) {
+    case 0:
+        selectTool(Marquee);
+        canvas_->refreshAll();
+        return true;
+    case 1:
+        help_->setText(QStringLiteral("Create a plane before pasting."));
+        return false;
+    default:
+        help_->setText(QStringLiteral("There is nothing on the clipboard to paste."));
+        return false;
+    }
+}
+
 void VanishingPointDialog::syncOptions()
 {
     const bool active = ready_ && vp_active() >= 0;
+    QSpinBox* gridSize = options_->gridSize();
+    QSpinBox* angle = options_->angle();
     {
-        const QSignalBlocker block(gridSize_);
-        gridSize_->setValue(static_cast<int>(std::lround(vp_grid_size())));
+        const QSignalBlocker block(gridSize);
+        gridSize->setValue(static_cast<int>(std::lround(vp_grid_size())));
     }
-    gridSize_->setEnabled(active);
+    gridSize->setEnabled(active);
     {
-        const QSignalBlocker block(angle_);
-        angle_->setValue(static_cast<int>(std::lround(vp_angle())));
+        const QSignalBlocker block(angle);
+        angle->setValue(static_cast<int>(std::lround(vp_angle())));
     }
     // A root plane has no angle, and a plane with related planes keeps its own.
-    angle_->setEnabled(active && vp_angle_editable());
+    angle->setEnabled(active && vp_angle_editable());
 }
 
 void VanishingPointDialog::updateZoomLabel()

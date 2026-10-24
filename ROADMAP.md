@@ -292,8 +292,9 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [ ] Lens Correction (#347)
 - [x] Vanishing Point planes (#349): Create and Edit Plane, validity colours,
       Grid Size, related planes torn off at 90° with Angle, Render Grids
-- [ ] Vanishing Point Marquee, Stamp, Brush, Transform, Eyedropper and Paste
-      (#349)
+- [x] Vanishing Point Marquee, Stamp, Brush, Transform, Eyedropper and Paste
+      (#349): floating selections in perspective with Feather, Opacity and
+      Heal, cloning and painting that foreshorten with the planes
 - [ ] Vanishing Point planes saved in PSD, TIFF and JPEG (#918)
 - [x] NTSC Colors (#345)
 - [ ] De-Interlace (#344)
