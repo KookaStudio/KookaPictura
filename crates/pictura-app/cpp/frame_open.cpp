@@ -39,7 +39,7 @@ quint64 PicturaMainWindow::nextOpenToken()
 int PicturaMainWindow::indexOfView(PictureView* view) const
 {
     for (int i = 0; i < docs_.size(); ++i) {
-        if (docs_.at(i).view == view) {
+        if (docs_.at(i)->view == view) {
             return i;
         }
     }
@@ -96,33 +96,36 @@ void PicturaMainWindow::beginLoadingDocument(PictureView* view, const QString& p
     open_set_delay(*view, quint64(openDelayForTest_));
     wireOpenSignals(view);
 
-    DocEntry entry;
-    entry.view = view;
-    entry.path = path;
-    entry.displayName = displayName;
-    entry.recentPath = recentPath;
-    entry.token = token;
-    entry.kind = kind;
-    entry.loading = true;
-    entry.previousActiveView = activeView();
-    entry.page = new QWidget(this);
-    entry.page->setObjectName(QStringLiteral("documentLoadingPage"));
-    entry.page->setAutoFillBackground(true);
-    QPalette palette = entry.page->palette();
+    auto* entry = new DocEntry;
+    entry->view = view;
+    entry->path = path;
+    entry->displayName = displayName;
+    entry->recentPath = recentPath;
+    entry->token = token;
+    entry->kind = kind;
+    entry->loading = true;
+    entry->previousActiveView = activeView();
+    auto* window = new DocWindow;
+    window->doc = entry;
+    entry->windows.append(window);
+    window->page = new QWidget(this);
+    window->page->setObjectName(QStringLiteral("documentLoadingPage"));
+    window->page->setAutoFillBackground(true);
+    QPalette palette = window->page->palette();
     palette.setColor(QPalette::Window, canvasColorForIndex(canvasColorIndex_));
-    entry.page->setPalette(palette);
-    auto* stack = new QStackedLayout(entry.page);
-    auto* cardPage = new QWidget(entry.page);
+    window->page->setPalette(palette);
+    auto* stack = new QStackedLayout(window->page);
+    auto* cardPage = new QWidget(window->page);
     auto* cardLayout = new QVBoxLayout(cardPage);
     cardLayout->setContentsMargins(0, 0, 0, 0);
     cardLayout->setSpacing(0);
     cardLayout->addStretch();
     const QString name = displayName.isEmpty() ? QFileInfo(path).fileName() : displayName;
-    entry.loadingCard = new LoadingCard(name, cardPage);
-    cardLayout->addWidget(entry.loadingCard, 0, Qt::AlignHCenter);
+    window->card = new LoadingCard(name, cardPage);
+    cardLayout->addWidget(window->card, 0, Qt::AlignHCenter);
     cardLayout->addStretch();
     stack->addWidget(cardPage);
-    connect(entry.loadingCard, &LoadingCard::cancelRequested, this,
+    connect(window->card, &LoadingCard::cancelRequested, this,
             [this, guard = QPointer<PictureView>(view)] {
                 QTimer::singleShot(0, this, [this, guard] {
                     if (guard) {
@@ -133,13 +136,13 @@ void PicturaMainWindow::beginLoadingDocument(PictureView* view, const QString& p
 
     docs_.append(entry);
     const int index = docs_.size() - 1;
-    tabs_->addTab(entry.page, documentName(index));
+    const int tab = addTabWindow(window);
     if (tabs_->count() == 1) {
-        tabs_->setCurrentIndex(index);
+        activateDocWindow(window);
     }
     auto* spinner = new TabSpinner(tabs_->tabBar());
     spinner->setOpeningName(displayName.isEmpty() ? QFileInfo(path).fileName() : displayName);
-    tabs_->tabBar()->setTabButton(index, QTabBar::RightSide, spinner);
+    tabs_->tabBar()->setTabButton(tab, QTabBar::RightSide, spinner);
     // The spinner is deleted with the tab; cancel on the next event-loop turn
     // so its own mouse handler has returned.
     connect(spinner, &TabSpinner::cancelRequested, this, [this, guard = QPointer<PictureView>(view)] {
@@ -155,12 +158,16 @@ void PicturaMainWindow::beginLoadingDocument(PictureView* view, const QString& p
     refreshPanels();
 }
 
-void PicturaMainWindow::installCloseButton(int index, PictureView* view)
+void PicturaMainWindow::installCloseButton(DocWindow* window)
 {
+    const int tab = tabOf(window);
+    if (tab < 0) {
+        return;
+    }
     auto* close = new TabCloseButton(tabs_->tabBar());
-    tabs_->tabBar()->setTabButton(index, QTabBar::RightSide, close);
+    tabs_->tabBar()->setTabButton(tab, QTabBar::RightSide, close);
     connect(close, &TabCloseButton::closeRequested, this,
-            [this, guard = QPointer<PictureView>(view)] {
+            [this, guard = QPointer<PictureView>(window->doc->view)] {
                 QTimer::singleShot(0, this, [this, guard] {
                     if (guard) {
                         closeDocument(indexOfView(guard.data()), true);
@@ -171,28 +178,30 @@ void PicturaMainWindow::installCloseButton(int index, PictureView* view)
 
 void PicturaMainWindow::finishLoadingDocument(int index)
 {
-    if (index < 0 || index >= docs_.size() || !docs_.at(index).loading) {
+    if (index < 0 || index >= docs_.size() || !docs_.at(index)->loading) {
         return;
     }
-    DocEntry& entry = docs_[index];
+    DocEntry& entry = *docs_[index];
     entry.loading = false;
-    if (entry.loadingCard) {
-        entry.loadingCard->hide();
-        entry.loadingCard->deleteLater();
-        entry.loadingCard = nullptr;
+    // A loading document has exactly one window: its loading tab.
+    DocWindow* window = entry.windows.first();
+    if (window->card) {
+        window->card->hide();
+        window->card->deleteLater();
+        window->card = nullptr;
     }
-    setupCanvas(entry);
-    if (entry.page && entry.page != entry.canvasHost) {
-        if (auto* stack = qobject_cast<QStackedLayout*>(entry.page->layout())) {
-            stack->addWidget(entry.canvasHost);
-            stack->setCurrentWidget(entry.canvasHost);
+    setupCanvas(*window);
+    if (window->page && window->page != window->host) {
+        if (auto* stack = qobject_cast<QStackedLayout*>(window->page->layout())) {
+            stack->addWidget(window->host);
+            stack->setCurrentWidget(window->host);
         } else {
-            entry.canvasHost->setParent(entry.page);
-            entry.canvasHost->show();
+            window->host->setParent(window->page);
+            window->host->show();
         }
     }
-    wireCanvas(entry);
-    installCloseButton(index, entry.view);
+    wireCanvas(*window);
+    installCloseButton(window);
     if (!entry.recentPath.isEmpty()) {
         rememberRecent(entry.recentPath);
     }
@@ -203,7 +212,7 @@ void PicturaMainWindow::finishLoadingDocument(int index)
     updateTabTitle(index);
     if (!entry.userMovedAway) {
         suppressTabTracking_ = true;
-        tabs_->setCurrentIndex(index);
+        activateDocWindow(window);
         suppressTabTracking_ = false;
     }
     refresh();
@@ -223,7 +232,7 @@ void PicturaMainWindow::restorePreviousTab(PictureView* view)
         return;
     }
     suppressTabTracking_ = true;
-    tabs_->setCurrentIndex(index);
+    setActiveDocumentIndex(index);
     suppressTabTracking_ = false;
 }
 
@@ -232,7 +241,7 @@ void PicturaMainWindow::cancelOpen(int index)
     if (index < 0 || index >= docs_.size()) {
         return;
     }
-    const DocEntry entry = docs_.at(index);
+    const DocEntry entry = *docs_.at(index);
     if (!entry.loading) {
         return;
     }
@@ -308,10 +317,14 @@ void PicturaMainWindow::onOpenDetected(PictureView* view)
 void PicturaMainWindow::onOpenProgress(PictureView* view, int percent, const QString& phase)
 {
     const int index = indexOfView(view);
-    if (index < 0 || !docs_.at(index).loading || !docs_.at(index).loadingCard) {
+    if (index < 0 || !docs_.at(index)->loading) {
         return;
     }
-    docs_.at(index).loadingCard->setProgress(percent, phase);
+    const DocWindow* window = docs_.at(index)->windows.value(0);
+    if (!window || !window->card) {
+        return;
+    }
+    window->card->setProgress(percent, phase);
 }
 
 void PicturaMainWindow::reportOpenFailure(int index, const QString& status)
@@ -319,7 +332,7 @@ void PicturaMainWindow::reportOpenFailure(int index, const QString& status)
     if (index < 0 || index >= docs_.size()) {
         return;
     }
-    const DocEntry& entry = docs_.at(index);
+    const DocEntry& entry = *docs_.at(index);
     const QString message =
         status.startsWith(QStringLiteral("error:")) ? status.mid(6) : status;
     switch (entry.kind) {
@@ -364,7 +377,7 @@ void PicturaMainWindow::handlePdfProbeFinished(PictureView* view, const PdfProbe
     }
     // A probe that found no editing data or needs a password has no tab.
     PictureView* previous =
-        index >= 0 ? docs_.at(index).previousActiveView.data() : nullptr;
+        index >= 0 ? docs_.at(index)->previousActiveView.data() : nullptr;
     if (index >= 0) {
         suppressTabTracking_ = true;
         removeDocument(index);
@@ -421,10 +434,10 @@ void PicturaMainWindow::onOpenFinished(PictureView* view, const QString& status,
     }
 
     const int index = indexOfView(view);
-    if (index < 0 || !docs_.at(index).loading) {
+    if (index < 0 || !docs_.at(index)->loading) {
         return;
     }
-    const DocEntry entry = docs_.at(index);
+    const DocEntry entry = *docs_.at(index);
     if (status == QStringLiteral("ok")) {
         openWarnings_.insert(entry.token, warnings);
         finishLoadingDocument(index);
@@ -436,7 +449,7 @@ void PicturaMainWindow::onOpenFinished(PictureView* view, const QString& status,
             return;
         }
         const int current = indexOfView(guard.data());
-        if (current < 0 || !docs_.at(current).loading) {
+        if (current < 0 || !docs_.at(current)->loading) {
             return;
         }
         reportOpenFailure(current, status);
@@ -451,7 +464,7 @@ void PicturaMainWindow::onOpenFinished(PictureView* view, const QString& status,
 void PicturaMainWindow::cancelAllOpens()
 {
     for (int i = docs_.size() - 1; i >= 0; --i) {
-        if (docs_.at(i).loading) {
+        if (docs_.at(i)->loading) {
             cancelOpen(i);
         }
     }

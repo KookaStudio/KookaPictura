@@ -15,6 +15,7 @@
 #include <functional>
 
 #include "canvas_ruler.h"
+#include "document_window.h"
 #include "panels/panel_column.h"
 #include "recovery_store.h"
 #include "tools.h"
@@ -30,6 +31,7 @@ class QResizeEvent;
 class QShortcut;
 class QShowEvent;
 class QSplitter;
+class QStackedWidget;
 class QStatusBar;
 class QTabWidget;
 class QTemporaryDir;
@@ -120,8 +122,8 @@ public:
     ImageView* imageView() const;       // active canvas, or nullptr with no document
     PictureView* activeView() const;    // active document, or nullptr
     // Creates two documents and drags the last tab before its neighbour through
-    // the real tab bar; returns whether docs_, viewAt and the active view stayed
-    // aligned with the new visual order.
+    // the real tab bar; returns whether the tab windows followed the new visual
+    // order while each document kept its index and the active view stayed.
     bool reorderDocumentsForTest();
     QStringList topLevelMenuTitles() const;
     bool registerPanel(QWidget* panel, Qt::DockWidgetArea area);
@@ -465,38 +467,6 @@ private:
     void showCanvasBackgroundMenu(const QPoint& globalPos);
     // Leave isolation mode if active; true when it was. Escape routes here.
     bool releaseIsolation();
-    enum class OpenKind { Psd, Raster, SmartObject, Pdf, PdfPage, Eps };
-
-    struct DocEntry {
-        PictureView* view = nullptr;
-        ImageView* canvas = nullptr;
-        BrushTipPreview* tipPreview = nullptr;
-        CanvasScrollBars* canvasHost = nullptr;
-        // The tab page. A ready document's page is its canvas host; a loading
-        // document's page is a placeholder until finishLoadingDocument adds the
-        // canvas host to it.
-        QWidget* page = nullptr;
-        QString path;
-        // Display name for a path-less import (Open As Smart Object, PDF/EPS
-        // import); preferred over the generated Untitled-N name while `path`
-        // stays empty.
-        QString displayName;
-        // The path Open Recent should remember for a path-less import.
-        QString recentPath;
-        int untitledNumber = 0;
-        bool loading = false;
-        quint64 token = 0;
-        OpenKind kind = OpenKind::Psd;
-        // The user selected another tab while this one loaded; do not steal the
-        // activation when it finishes.
-        bool userMovedAway = false;
-        // The document that was active when this open started; a failure or
-        // cancel restores it. Guarded because the user may close it mid-load.
-        QPointer<PictureView> previousActiveView;
-        // The empty-workspace progress card while loading; null once filled.
-        QPointer<LoadingCard> loadingCard;
-    };
-
     // A PDF probe that has no tab yet. `token` is the open the caller waits on;
     // `password` is the one already accepted, if any.
     struct PdfProbe {
@@ -676,9 +646,9 @@ private:
     void beginLoadingDocument(PictureView* view, const QString& path,
                               const QString& displayName, quint64 token,
                               const QString& recentPath, OpenKind kind);
-    void setupCanvas(DocEntry& entry);
-    void wireCanvas(DocEntry& entry);
-    void installCloseButton(int index, PictureView* view);
+    void setupCanvas(DocWindow& window);
+    void wireCanvas(DocWindow& window);
+    void installCloseButton(DocWindow* window);
     void finishLoadingDocument(int index);
     void restorePreviousTab(PictureView* view);
     void cancelOpen(int index);
@@ -696,6 +666,18 @@ private:
     void finishOpen(quint64 token, OpenOutcome outcome, const QString& error = QString());
     OpenOutcome waitForOpen(quint64 token);
     int indexOfView(PictureView* view) const;
+    // frame_document_windows.cpp: the document window registry.
+    int indexOfDoc(const DocEntry* doc) const;
+    DocWindow* windowAtTab(int tab) const;
+    int tabOf(const DocWindow* window) const;
+    DocWindow* windowOfCanvas(const ImageView* canvas) const;
+    // Register `window` as the last tab and return its tab index.
+    int addTabWindow(DocWindow* window);
+    // Make `window` the active one through its host.
+    void activateDocWindow(DocWindow* window);
+    // The active window changed: settle loading entries and transform
+    // sessions of the other documents, then refresh.
+    void onActiveWindowChanged();
     void reportOpenFailure(int index, const QString& status);
     void openRecent(const QString& path);
     void applyBrightness(int level);
@@ -709,7 +691,13 @@ private:
     void togglePanelsHidden();
     void setPanelColumnsVisible(bool visible);
 
-    QList<DocEntry> docs_;
+    // The open documents, in open order; the public index API indexes them.
+    QList<DocEntry*> docs_;
+    // Every document window in cycle order: the tab windows in their visual
+    // order first, then the windows of the other hosts.
+    QList<DocWindow*> windows_;
+    // The window the commands and tools target; null with no document.
+    DocWindow* activeWindow_ = nullptr;
     QList<SmartObjectEditSession> editSessions_;
     // PDF probes that have no tab yet, keyed by their temporary view.
     QHash<PictureView*, PdfProbe> pdfProbes_;
@@ -733,6 +721,8 @@ private:
     // the programmatic switch as a user selection.
     bool suppressTabTracking_ = false;
     QTabWidget* tabs_ = nullptr;
+    // The splitter's stretch pane: the stack that holds the document hosts.
+    QStackedWidget* documentArea_ = nullptr;
     // Disconnected in the destructor: the focusChanged handler must not run
     // while the window's children are being torn down.
     QMetaObject::Connection spacePanFocusConn_;
@@ -884,7 +874,7 @@ private:
     // persisted in the session.
     void registerGuideHandlers();
     void loadGuideSession(const SessionState& state);
-    void prepareCanvasGuides(const DocEntry& entry);
+    void prepareCanvasGuides(const DocWindow& window);
     void applyGuideViewState();
     void connectGuidePreferences(PreferencesDialog* dialog);
     // Units & Rulers: from the preferences page or a ruler's context menu.

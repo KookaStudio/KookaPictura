@@ -407,9 +407,9 @@ bool PicturaMainWindow::copyLayerFromDocument(const void* source, const QString&
 {
     PictureView* target = activeView();
     PictureView* from = nullptr;
-    for (const DocEntry& entry : docs_) {
-        if (entry.view == source) {
-            from = entry.view;
+    for (const DocEntry* entry : docs_) {
+        if (entry->view == source) {
+            from = entry->view;
         }
     }
     // The bridge holds the source shared and the target exclusive, so the two

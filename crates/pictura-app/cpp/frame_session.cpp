@@ -112,9 +112,9 @@ void PicturaMainWindow::refreshPanels()
 void PicturaMainWindow::applyGpuComputePreference(bool on)
 {
     gpuCompute_ = on;
-    for (const DocEntry& entry : docs_) {
-        if (entry.view) {
-            entry.view->set_gpu_compute(on);
+    for (const DocEntry* entry : docs_) {
+        if (entry->view) {
+            entry->view->set_gpu_compute(on);
         }
     }
     saveSession();
@@ -250,21 +250,18 @@ void PicturaMainWindow::restoreSessionWindowGeometry(const SessionState& state)
 void PicturaMainWindow::onCanvasZoomChanged()
 {
     updateStatus();
-    auto* canvas = qobject_cast<ImageView*>(sender());
-    for (int i = 0; i < docs_.size(); ++i) {
-        if (docs_.at(i).canvas == canvas) {
-            updateTabTitle(i);
-            return;
-        }
+    if (const DocWindow* window = windowOfCanvas(qobject_cast<ImageView*>(sender()))) {
+        updateTabTitle(indexOfDoc(window->doc));
     }
 }
 
 QString PicturaMainWindow::documentTabTextForTest(int index) const
 {
-    if (!tabs_ || index < 0 || index >= tabs_->count()) {
+    if (index < 0 || index >= docs_.size() || docs_.at(index)->windows.isEmpty()) {
         return QString();
     }
-    return tabs_->tabText(index);
+    const int tab = tabOf(docs_.at(index)->windows.first());
+    return tab >= 0 ? tabs_->tabText(tab) : QString();
 }
 
 bool PicturaMainWindow::restoreStoredLayout(const QByteArray& layout, int revision)

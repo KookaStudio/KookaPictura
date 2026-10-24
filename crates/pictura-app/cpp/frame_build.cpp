@@ -731,14 +731,8 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
             layersPanel_->enterIsolation();
         }
     });
-    tools_->setCanvasActivationHandler([this](ImageView* canvas) {
-        for (int i = 0; i < docs_.size(); ++i) {
-            if (docs_.at(i).canvas == canvas) {
-                setActiveDocumentIndex(i);
-                break;
-            }
-        }
-    });
+    tools_->setCanvasActivationHandler(
+        [this](ImageView* canvas) { activateDocWindow(windowOfCanvas(canvas)); });
 
     if (optionsBar_) {
         optionsBar_->showTool(tools_->activeTool());
@@ -913,8 +907,9 @@ void PicturaMainWindow::updateToolHint()
 
 void PicturaMainWindow::installWorkspaceOpenGesture()
 {
-    // The blank pane is the tab widget's internal stacked widget, so both are
-    // filtered.
+    // The blank pane is the tab widget's internal stacked widget, so it, the
+    // tab widget, and the document area holding them are filtered.
+    documentArea_->installEventFilter(this);
     tabs_->installEventFilter(this);
     if (auto* workspace = tabs_->findChild<QStackedWidget*>()) {
         workspace->installEventFilter(this);
@@ -937,10 +932,11 @@ bool PicturaMainWindow::eventFilter(QObject* watched, QEvent* event)
     if (tabs_ && watched == tabs_->tabBar() && event->type() == QEvent::MouseButtonRelease) {
         auto* mouse = static_cast<QMouseEvent*>(event);
         if (mouse->button() == Qt::MiddleButton) {
-            const int index = tabs_->tabBar()->tabAt(mouse->position().toPoint());
-            if (index >= 0) {
-                const bool loading = isLoadingDocument(index);
-                const QPointer<PictureView> guard(viewAt(index));
+            const DocWindow* window =
+                windowAtTab(tabs_->tabBar()->tabAt(mouse->position().toPoint()));
+            if (window) {
+                const bool loading = window->doc->loading;
+                const QPointer<PictureView> guard(window->doc->view);
                 QTimer::singleShot(0, this, [this, guard, loading] {
                     if (!guard) {
                         return;

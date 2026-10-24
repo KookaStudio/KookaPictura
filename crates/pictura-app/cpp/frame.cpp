@@ -9,11 +9,9 @@
 #include "panels/numeric_field.h"
 #include "pictura_debug_timing.h"
 #include "screen_mode_message.h"
-#include "pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_history/display.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/pdf_export.cxxqt.h"
 
-#include <QtCore/QHash>
 #include <QtCore/QTemporaryDir>
 #include <QtGui/QFontMetrics>
 #include <QtWidgets/QTabBar>
@@ -38,27 +36,6 @@ struct SaveActiveOrigin {
 // metric.
 constexpr int kWorkspaceMinWidth = 160;
 
-// A document tab's title is elided to this text width so the close button (or
-// the loading spinner) always has room inside the tab. The full title stays in
-// the tab tooltip.
-constexpr int kDocumentTabMaxTextWidth = 200;
-
-// The tab title's mode label for an `image_mode()` key.
-QString modeLabel(const QString& mode)
-{
-    static const QHash<QString, QString> labels = {
-        {QStringLiteral("bitmap"), QStringLiteral("Bitmap")},
-        {QStringLiteral("grayscale"), QStringLiteral("Grayscale")},
-        {QStringLiteral("duotone"), QStringLiteral("Duotone")},
-        {QStringLiteral("indexed"), QStringLiteral("Index")},
-        {QStringLiteral("rgb"), QStringLiteral("RGB")},
-        {QStringLiteral("cmyk"), QStringLiteral("CMYK")},
-        {QStringLiteral("lab"), QStringLiteral("Lab")},
-        {QStringLiteral("multichannel"), QStringLiteral("Multichannel")},
-    };
-    return labels.value(mode, mode.toUpper());
-}
-
 } // namespace
 
 bool launchCreatesScratchDocument(bool selfTest, bool codecLoaded)
@@ -81,21 +58,24 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
     tabs_->tabBar()->setElideMode(Qt::ElideRight);
     // Middle-click on a loading tab cancels it; normal tabs are untouched.
     tabs_->tabBar()->installEventFilter(this);
-    // docs_ is indexed in lockstep with the tab order (activeDocumentIndex,
-    // viewAt, removeDocument), so a dragged tab must move its DocEntry too.
-    // QTabBar::tabMoved(from, to) mirrors QList::move(from, to), and Qt keeps
-    // the current tab current across the move.
+    // The tab windows lead windows_ in visual order, so a dragged tab moves
+    // its window there; documents keep their index. QTabBar::tabMoved(from,
+    // to) mirrors QList::move(from, to), and Qt keeps the current tab current.
     connect(tabs_->tabBar(), &QTabBar::tabMoved, this, [this](int from, int to) {
-        if (from >= 0 && from < docs_.size() && to >= 0 && to < docs_.size()) {
-            docs_.move(from, to);
+        if (from >= 0 && from < tabs_->count() && to >= 0 && to < tabs_->count()
+            && tabs_->count() <= windows_.size()) {
+            windows_.move(from, to);
         }
     });
     tabs_->setDocumentMode(true);
     buildDocumentTabs();
     // The document area and the panel columns share the central widget through
     // a splitter; the columns are the only host for the panels. M43: the
-    // splitter is an ordered set of left columns, the document tabs, then right
-    // columns, with the tabs keeping the stretch.
+    // splitter is an ordered set of left columns, the document area, then right
+    // columns, with the document area keeping the stretch.
+    documentArea_ = new QStackedWidget(this);
+    documentArea_->setObjectName(QStringLiteral("documentArea"));
+    documentArea_->addWidget(tabs_);
     panelColumn_ = new PanelColumn(this);
     // The splitter itself is the central widget, so drop-target geometry keeps
     // its existing meaning. It reserves the 3 px band on each side; 0-width
@@ -104,9 +84,9 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
     centerSplitter_->setObjectName(QStringLiteral("centerSplitter"));
     centerSplitter_->setHandleWidth(0);
     centerSplitter_->setContentsMargins(kWorkspaceFrameWidth, 0, kWorkspaceFrameWidth, 0);
-    centerSplitter_->addWidget(tabs_);
+    centerSplitter_->addWidget(documentArea_);
     centerSplitter_->addWidget(panelColumn_);
-    tabs_->setMinimumWidth(kWorkspaceMinWidth);
+    documentArea_->setMinimumWidth(kWorkspaceMinWidth);
     centerSplitter_->setStretchFactor(0, 1);
     centerSplitter_->setStretchFactor(1, 0);
     centerSplitter_->setChildrenCollapsible(false);
@@ -203,30 +183,9 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
     connect(centerSplitter_, &QSplitter::splitterMoved, this,
             [this](int pos, int index) { onCenterSplitterMoved(pos, index); });
 
-    connect(tabs_, &QTabWidget::currentChanged, this, [this](int) {
-        // A loading entry whose tab is not current must not steal the
-        // activation when it finishes. The frame's own switches are suppressed.
-        if (!suppressTabTracking_) {
-            const int current = tabs_->currentIndex();
-            for (int i = 0; i < docs_.size(); ++i) {
-                if (docs_.at(i).loading && i != current) {
-                    docs_[i].userMovedAway = true;
-                }
-            }
-        }
-        PictureView* active = activeView();
-        for (int i = 0; i < docs_.size(); ++i) {
-            PictureView* view = viewAt(i);
-            if (view && view != active && view->transform_session_active()) {
-                view->cancel_transform();
-                if (ImageView* canvas = canvasAt(i)) {
-                    canvas->clearTransformPreview();
-                }
-            }
-        }
-        refresh();
-        panelRefreshTimer_->stop();
-        refreshPanels();
+    connect(tabs_, &QTabWidget::currentChanged, this, [this](int tab) {
+        activeWindow_ = windowAtTab(tab);
+        onActiveWindowChanged();
     });
     auto* hidePanels = new QShortcut(QKeySequence(Qt::Key_Tab), this);
     connect(hidePanels, &QShortcut::activated, this, [this]() { togglePanelsHidden(); });
@@ -262,6 +221,17 @@ PicturaMainWindow::~PicturaMainWindow()
         delete session.temp;
     }
     editSessions_.clear();
+    // The registry is plain data; stop the tab signals from reaching it while
+    // the child widgets are torn down.
+    QObject::disconnect(tabs_, nullptr, this, nullptr);
+    QObject::disconnect(tabs_->tabBar(), nullptr, this, nullptr);
+    activeWindow_ = nullptr;
+    windows_.clear();
+    for (DocEntry* doc : docs_) {
+        qDeleteAll(doc->windows);
+    }
+    qDeleteAll(docs_);
+    docs_.clear();
 }
 
 QStringList PicturaMainWindow::topLevelMenuTitles() const
@@ -320,16 +290,19 @@ PictureView* PicturaMainWindow::activeView() const
 
 int PicturaMainWindow::activeDocumentIndex() const
 {
-    if (!tabs_ || tabs_->count() == 0 || docs_.isEmpty()) {
-        return -1;
-    }
-    return tabs_->currentIndex();
+    return activeWindow_ ? indexOfDoc(activeWindow_->doc) : -1;
 }
 
 void PicturaMainWindow::setActiveDocumentIndex(int index)
 {
-    if (tabs_ && index >= 0 && index < tabs_->count()) {
-        tabs_->setCurrentIndex(index);
+    if (index < 0 || index >= docs_.size()) {
+        return;
+    }
+    const DocEntry* doc = docs_.at(index);
+    if (activeWindow_ && activeWindow_->doc == doc) {
+        activateDocWindow(activeWindow_);
+    } else if (!doc->windows.isEmpty()) {
+        activateDocWindow(doc->windows.first());
     }
 }
 
@@ -338,7 +311,7 @@ PictureView* PicturaMainWindow::viewAt(int index) const
     if (index < 0 || index >= docs_.size()) {
         return nullptr;
     }
-    return docs_.at(index).view;
+    return docs_.at(index)->view;
 }
 
 ImageView* PicturaMainWindow::canvasAt(int index) const
@@ -346,7 +319,11 @@ ImageView* PicturaMainWindow::canvasAt(int index) const
     if (index < 0 || index >= docs_.size()) {
         return nullptr;
     }
-    return docs_.at(index).canvas;
+    const DocEntry* doc = docs_.at(index);
+    if (activeWindow_ && activeWindow_->doc == doc) {
+        return activeWindow_->canvas;
+    }
+    return doc->windows.isEmpty() ? nullptr : doc->windows.first()->canvas;
 }
 
 QString PicturaMainWindow::documentPath(int index) const
@@ -354,7 +331,7 @@ QString PicturaMainWindow::documentPath(int index) const
     if (index < 0 || index >= docs_.size()) {
         return QString();
     }
-    return docs_.at(index).path;
+    return docs_.at(index)->path;
 }
 
 QString PicturaMainWindow::documentName(int index) const
@@ -362,14 +339,7 @@ QString PicturaMainWindow::documentName(int index) const
     if (index < 0 || index >= docs_.size()) {
         return QStringLiteral("Untitled");
     }
-    const DocEntry& entry = docs_.at(index);
-    if (!entry.displayName.isEmpty()) {
-        return entry.displayName;
-    }
-    if (!entry.path.isEmpty()) {
-        return QFileInfo(entry.path).fileName();
-    }
-    return QStringLiteral("Untitled-%1").arg(entry.untitledNumber);
+    return documentDisplayName(*docs_.at(index));
 }
 
 bool PicturaMainWindow::isDocumentDirty(int index) const
@@ -406,22 +376,25 @@ int PicturaMainWindow::addDocument(PictureView* view, const QString& path)
         view->set_color_policy(colorPolicy_);
     }
     gpuAvailable_ = view->gpu_available();
-    DocEntry entry;
-    entry.view = view;
+    auto* entry = new DocEntry;
+    entry->view = view;
     if (path.isEmpty()) {
-        entry.untitledNumber = ++untitledCounter_;
+        entry->untitledNumber = ++untitledCounter_;
     } else {
-        entry.path = path;
+        entry->path = path;
     }
-    setupCanvas(entry);
-    entry.page = entry.canvasHost;
-    wireCanvas(entry);
+    auto* window = new DocWindow;
+    window->doc = entry;
+    entry->windows.append(window);
+    setupCanvas(*window);
+    window->page = window->host;
+    wireCanvas(*window);
 
     docs_.append(entry);
     const int index = docs_.size() - 1;
-    tabs_->addTab(entry.page, documentName(index));
-    installCloseButton(index, view);
-    tabs_->setCurrentIndex(index);
+    addTabWindow(window);
+    installCloseButton(window);
+    activateDocWindow(window);
     if (!path.isEmpty()) {
         rememberRecent(path);
     }
@@ -431,41 +404,41 @@ int PicturaMainWindow::addDocument(PictureView* view, const QString& path)
     return index;
 }
 
-// Create the canvas for `entry` and show its current document (or the view's
-// fallback image). A loading entry's canvas host is added to its placeholder
-// page by `finishLoadingDocument`.
-void PicturaMainWindow::setupCanvas(DocEntry& entry)
+// Create the canvas for `window` and show its document's current image (or the
+// view's fallback image). A loading window's canvas host is added to its
+// placeholder page by `finishLoadingDocument`.
+void PicturaMainWindow::setupCanvas(DocWindow& window)
 {
-    PictureView* view = entry.view;
-    entry.canvas = new ImageView(this);
-    entry.tipPreview = new BrushTipPreview(entry.canvas);
-    entry.tipPreview->move(BrushTipPreview::kMargin, BrushTipPreview::kMargin);
-    entry.canvasHost = new CanvasScrollBars(this);
-    entry.canvasHost->setView(entry.canvas);
+    PictureView* view = window.doc->view;
+    window.canvas = new ImageView(this);
+    window.tip = new BrushTipPreview(window.canvas);
+    window.tip->move(BrushTipPreview::kMargin, BrushTipPreview::kMargin);
+    window.host = new CanvasScrollBars(this);
+    window.host->setView(window.canvas);
     if (fileDropRouter_) {
-        entry.canvas->setAcceptDrops(true);
-        entry.canvas->installEventFilter(fileDropRouter_);
+        window.canvas->setAcceptDrops(true);
+        window.canvas->installEventFilter(fileDropRouter_);
     }
     if (view->has_document()) {
-        entry.canvas->setDocument(QSize(view->document_width(), view->document_height()));
-        entry.canvas->setProperty(kFrameKey, quint64(pictura::frame_revision(*view)));
+        window.canvas->setDocument(QSize(view->document_width(), view->document_height()));
+        window.canvas->setProperty(kFrameKey, quint64(pictura::frame_revision(*view)));
     } else {
-        entry.canvas->replaceImage(view->image());
+        window.canvas->replaceImage(view->image());
     }
-    entry.canvas->setCanvasColor(canvasColorForIndex(canvasColorIndex_));
-    entry.canvas->setFreePan(freePan_);
-    entry.canvas->setSnapToWorkspace(snapCanvasToWorkspace_);
-    prepareCanvasGuides(entry);
+    window.canvas->setCanvasColor(canvasColorForIndex(canvasColorIndex_));
+    window.canvas->setFreePan(freePan_);
+    window.canvas->setSnapToWorkspace(snapCanvasToWorkspace_);
+    prepareCanvasGuides(window);
 
     // Present from the view pyramid: the canvas crops a level instead of
     // scaling the full-resolution image (see frame_canvas.cpp).
-    wireCanvasLevelProvider(view, entry.canvas);
+    wireCanvasLevelProvider(view, window.canvas);
 }
 
-// Connect a ready document's view and canvas to the frame.
-void PicturaMainWindow::wireCanvas(DocEntry& entry)
+// Connect a ready window's document view and canvas to the frame.
+void PicturaMainWindow::wireCanvas(DocWindow& window)
 {
-    PictureView* view = entry.view;
+    PictureView* view = window.doc->view;
     connect(view, &PictureView::changed, this, &PicturaMainWindow::refresh);
     connect(view, &PictureView::sessionCancelled, this, [this]() {
         if (tools_) {
@@ -474,7 +447,7 @@ void PicturaMainWindow::wireCanvas(DocEntry& entry)
     });
     trackRecovery(view);
     connect(view, &PictureView::regionBlitted, this,
-            [this, canvas = entry.canvas, view](const QImage& region, int x, int y) {
+            [this, canvas = window.canvas, view](const QImage& region, int x, int y) {
                 pictura::ScopedTimer blitSlotTimer("cxx_regionBlitted_slot");
                 if (canvas) {
                     canvas->blitRegion(region, x, y);
@@ -506,16 +479,16 @@ void PicturaMainWindow::wireCanvas(DocEntry& entry)
                     registry_->refresh();
                 }
             });
-    connect(entry.canvas, &ImageView::zoomChanged, this,
+    connect(window.canvas, &ImageView::zoomChanged, this,
             &PicturaMainWindow::onCanvasZoomChanged);
-    connect(entry.canvas, &ImageView::mouseMoved, this, [this](const QPointF& p) {
+    connect(window.canvas, &ImageView::mouseMoved, this, [this](const QPointF& p) {
         if (infoPanel_) {
             infoPanel_->setCursorPosition(p);
         }
     });
     // The active tool's canvas context menu (or the pasteboard colour menu).
-    connect(entry.canvas, &ImageView::contextMenuRequested, this,
-            [this, canvas = entry.canvas](const QPoint& globalPos) {
+    connect(window.canvas, &ImageView::contextMenuRequested, this,
+            [this, canvas = window.canvas](const QPoint& globalPos) {
                 showCanvasContextMenu(canvas, globalPos);
             });
 }
@@ -592,7 +565,7 @@ bool PicturaMainWindow::saveActive()
         // empty save target, so a smart-object commit records nothing here.
         return true;
     }
-    QString path = docs_.at(index).path;
+    QString path = docs_.at(index)->path;
     if (!path.isEmpty() && isPdfPath(path)) {
         const bool saved = savePdfWithDialog(path);
         if (saved) {
@@ -622,7 +595,7 @@ bool PicturaMainWindow::saveActiveAs(const QString& path)
     if (!view || path.isEmpty() || !document_api::save(*view, path)) {
         return false;
     }
-    docs_[index].path = path;
+    docs_[index]->path = path;
     dropRecoverySnapshot(view);
     updateTabTitle(index);
     rememberRecent(path);
@@ -663,7 +636,7 @@ bool PicturaMainWindow::closeDocument(int index, bool interactive)
         return false;
     }
     // Closing a loading tab cancels its open; there is no document to save.
-    if (docs_.at(index).loading) {
+    if (docs_.at(index)->loading) {
         cancelOpen(index);
         return true;
     }
@@ -695,44 +668,60 @@ void PicturaMainWindow::removeDocument(int index)
     if (index < 0 || index >= docs_.size()) {
         return;
     }
-    const DocEntry entry = docs_.takeAt(index);
+    DocEntry* entry = docs_.takeAt(index);
     // Replace Color is non-modal and holds the raw view; cancel it before the
     // view is deleted, or its preview teardown would touch freed memory.
-    if (replaceColorDialog_ && replaceColorDialog_->view() == entry.view) {
+    if (replaceColorDialog_ && replaceColorDialog_->view() == entry->view) {
         replaceColorDialog_->reject();
     }
     for (int i = editSessions_.size() - 1; i >= 0; --i) {
         const SmartObjectEditSession& session = editSessions_.at(i);
-        if (session.editor == entry.view || session.origin == entry.view) {
+        if (session.editor == entry->view || session.origin == entry->view) {
             delete session.temp;
             editSessions_.removeAt(i);
         }
     }
-    tabs_->removeTab(index);
-    forgetRecovery(entry.view);
-    if (entry.view) {
-        openWired_.remove(entry.view);
-        pdfProbes_.remove(entry.view);
-        entry.view->cancel_transform();
-        if (tools_) {
-            tools_->forgetView(entry.view);
+    for (DocWindow* window : entry->windows) {
+        const int tab = tabOf(window);
+        windows_.removeOne(window);
+        if (tab >= 0) {
+            tabs_->removeTab(tab);
+        }
+        // removeTab moves the current tab and so activeWindow_ off a tab
+        // window; a window outside the strip is cleared here.
+        if (activeWindow_ == window) {
+            activeWindow_ = nullptr;
         }
     }
-    openSourcePaths_.remove(entry.token);
-    openWarnings_.remove(entry.token);
-    if (entry.canvas) {
-        entry.canvas->clearTransformPreview();
+    forgetRecovery(entry->view);
+    if (entry->view) {
+        openWired_.remove(entry->view);
+        pdfProbes_.remove(entry->view);
+        entry->view->cancel_transform();
+        if (tools_) {
+            tools_->forgetView(entry->view);
+        }
     }
-    // A ready entry's page is its canvas host; a loading entry's page is the
-    // placeholder. Deleting the page deletes the host (and the canvas) it owns.
-    if (entry.page && entry.page != entry.canvasHost) {
-        delete entry.page;
-    } else if (entry.canvasHost) {
-        delete entry.canvasHost;
-    } else if (entry.canvas) {
-        delete entry.canvas;
+    openSourcePaths_.remove(entry->token);
+    openWarnings_.remove(entry->token);
+    for (DocWindow* window : entry->windows) {
+        if (window->canvas) {
+            window->canvas->clearTransformPreview();
+        }
+        // A ready window's page is its canvas host; a loading window's page is
+        // the placeholder. Deleting the page deletes the host (and the canvas)
+        // it owns.
+        if (window->page && window->page != window->host) {
+            delete window->page;
+        } else if (window->host) {
+            delete window->host;
+        } else if (window->canvas) {
+            delete window->canvas;
+        }
     }
-    delete entry.view;
+    qDeleteAll(entry->windows);
+    delete entry->view;
+    delete entry;
     refresh();
     panelRefreshTimer_->stop();
     refreshPanels();
@@ -756,7 +745,7 @@ void PicturaMainWindow::showNewDocumentDialog()
     const int index = addDocument(view, QString());
     // A name the user typed replaces the generated Untitled-n.
     if (index >= 0 && spec.name.trimmed() != documentName(index) && !spec.name.trimmed().isEmpty()) {
-        docs_[index].displayName = spec.name.trimmed();
+        docs_[index]->displayName = spec.name.trimmed();
         updateTabTitle(index);
     }
 }
@@ -830,9 +819,9 @@ void PicturaMainWindow::showColorSettings()
     }
     colorPolicy_ = dialog.policyCode();
     applyTextGamma(dialog.textGammaEnabled(), dialog.textGamma());
-    for (const DocEntry& entry : docs_) {
-        if (entry.view) {
-            entry.view->set_color_policy(colorPolicy_);
+    for (const DocEntry* entry : docs_) {
+        if (entry->view) {
+            entry->view->set_color_policy(colorPolicy_);
         }
     }
     saveSession();
@@ -858,9 +847,9 @@ void PicturaMainWindow::setScreenMode(ScreenMode mode)
     const ScreenMode previous = screenMode_;
     screenMode_ = mode;
     auto setCanvasColor = [this](const QColor& color) {
-        for (const DocEntry& entry : docs_) {
-            if (entry.canvas) {
-                entry.canvas->setCanvasColor(color);
+        for (const DocWindow* window : windows_) {
+            if (window->canvas) {
+                window->canvas->setCanvasColor(color);
             }
         }
     };
@@ -1014,20 +1003,19 @@ void PicturaMainWindow::refreshSelectionOverlay()
 
 void PicturaMainWindow::syncBrushTipPreview()
 {
-    const int active = activeDocumentIndex();
     const PaintOptions* paint =
         tools_ ? tools_->optionsFor<PaintOptions>(ToolId::Brush) : nullptr;
     const bool paintTool = tools_
         && (tools_->activeTool() == ToolId::Brush || tools_->activeTool() == ToolId::Pencil);
     const bool penTip = paint && paint->penTip();
-    for (int i = 0; i < docs_.size(); ++i) {
-        BrushTipPreview* preview = docs_.at(i).tipPreview;
+    for (const DocWindow* window : windows_) {
+        BrushTipPreview* preview = window->tip;
         if (!preview) {
             continue;
         }
-        ImageView* canvas = docs_.at(i).canvas;
-        const bool show =
-            i == active && paintTool && penTip && canvas && canvas->hasDocument();
+        ImageView* canvas = window->canvas;
+        const bool show = window == activeWindow_ && paintTool && penTip && canvas
+                          && canvas->hasDocument();
         preview->setVisible(show);
         if (show) {
             preview->raise();
@@ -1037,7 +1025,7 @@ void PicturaMainWindow::syncBrushTipPreview()
 
 bool PicturaMainWindow::isLoadingDocument(int index) const
 {
-    return index >= 0 && index < docs_.size() && docs_.at(index).loading;
+    return index >= 0 && index < docs_.size() && docs_.at(index)->loading;
 }
 
 void PicturaMainWindow::updateTabTitle(int index)
@@ -1045,33 +1033,20 @@ void PicturaMainWindow::updateTabTitle(int index)
     if (!tabs_ || index < 0 || index >= docs_.size()) {
         return;
     }
-    const bool loading = docs_.at(index).loading;
-    QString title = documentName(index);
-    if (!loading) {
-        if (ImageView* canvas = canvasAt(index)) {
-            title += QStringLiteral(" @ %1%").arg(qRound(canvas->zoom() * 100.0));
-        }
-        if (PictureView* view = viewAt(index); view && view->has_document()) {
-            const QString mode = modeLabel(image_mode(*view));
-            const int bits = image_depth_bits(*view);
-            if (!mode.isEmpty() && bits > 0) {
-                title += QStringLiteral(" (%1/%2)").arg(mode).arg(bits);
-            }
-        }
-    }
-    const QString label = title;
+    const DocEntry* doc = docs_.at(index);
     // Keep the close button (or loading spinner) inside the tab: elide the text
     // rather than letting the tab grow past the bar. The dirty star survives.
     const QFontMetrics metrics(tabs_->tabBar()->font());
-    const bool dirty = !loading && isDocumentDirty(index);
-    const int starWidth = dirty ? metrics.horizontalAdvance(QStringLiteral(" *")) : 0;
-    const int textWidth = qMax(0, kDocumentTabMaxTextWidth - starWidth);
-    title = metrics.elidedText(title, Qt::ElideRight, textWidth);
-    if (dirty) {
-        title += QStringLiteral(" *");
+    const bool dirty = !doc->loading && isDocumentDirty(index);
+    for (const DocWindow* window : doc->windows) {
+        const int tab = tabOf(window);
+        if (tab < 0) {
+            continue;
+        }
+        const QString label = fullLabel(window);
+        tabs_->setTabText(tab, documentTabText(label, dirty, metrics));
+        tabs_->setTabToolTip(tab, label);
     }
-    tabs_->setTabText(index, title);
-    tabs_->setTabToolTip(index, label);
 }
 
 void PicturaMainWindow::updateWindowTitle()

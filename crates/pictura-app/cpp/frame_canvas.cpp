@@ -65,9 +65,9 @@ void PicturaMainWindow::cycleCanvasColor(bool forward)
 {
     canvasColorIndex_ =
         (canvasColorIndex_ + (forward ? 1 : -1) + kCanvasColorCount) % kCanvasColorCount;
-    for (const DocEntry& entry : docs_) {
-        if (entry.canvas) {
-            entry.canvas->setCanvasColor(canvasColorForIndex(canvasColorIndex_));
+    for (const DocWindow* window : windows_) {
+        if (window->canvas) {
+            window->canvas->setCanvasColor(canvasColorForIndex(canvasColorIndex_));
         }
     }
 }
@@ -80,9 +80,9 @@ QMenu* PicturaMainWindow::canvasBackgroundMenu()
         connect(action, &QAction::triggered, this, [this, i]() {
             canvasColorIndex_ = i;
             const QColor chosen = canvasColorForIndex(i);
-            for (const DocEntry& entry : docs_) {
-                if (entry.canvas) {
-                    entry.canvas->setCanvasColor(chosen);
+            for (const DocWindow* window : windows_) {
+                if (window->canvas) {
+                    window->canvas->setCanvasColor(chosen);
                 }
             }
         });
@@ -104,9 +104,9 @@ void PicturaMainWindow::applyWorkspaceCanvasColor()
         return;
     }
     const QColor color = canvasColorForIndex(canvasColorIndex_);
-    for (const DocEntry& entry : docs_) {
-        if (entry.canvas) {
-            entry.canvas->setCanvasColor(color);
+    for (const DocWindow* window : windows_) {
+        if (window->canvas) {
+            window->canvas->setCanvasColor(color);
         }
     }
 }

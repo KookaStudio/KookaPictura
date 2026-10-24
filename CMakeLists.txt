@@ -351,6 +351,9 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/svg_icon_engine.cpp
     crates/pictura-app/cpp/file_drop_router.cpp
     crates/pictura-app/cpp/frame.cpp
+    crates/pictura-app/cpp/document_window.cpp
+    crates/pictura-app/cpp/document_window.h
+    crates/pictura-app/cpp/frame_document_windows.cpp
     crates/pictura-app/cpp/frame_open.cpp
     crates/pictura-app/cpp/frame_pdf.cpp
     crates/pictura-app/cpp/frame_import.cpp

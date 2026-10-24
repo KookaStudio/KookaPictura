@@ -31,25 +31,25 @@ void PicturaMainWindow::loadGuideSession(const SessionState& state)
     guideDashed_ = state.guideDashed;
 }
 
-void PicturaMainWindow::prepareCanvasGuides(const DocEntry& entry)
+void PicturaMainWindow::prepareCanvasGuides(const DocWindow& window)
 {
-    entry.canvasHost->setRulersVisible(rulersVisible_);
-    entry.canvasHost->setRulerUnit(rulerUnit_, traditionalPoints_);
-    entry.canvasHost->setPpiProvider([view = QPointer<PictureView>(entry.view)]() {
+    window.host->setRulersVisible(rulersVisible_);
+    window.host->setRulerUnit(rulerUnit_, traditionalPoints_);
+    window.host->setPpiProvider([view = QPointer<PictureView>(window.doc->view)]() {
         return view && view->has_document() ? document_ppi(*view) : 72.0;
     });
-    entry.canvas->setGuidesVisible(guidesVisible_);
-    entry.canvas->setSmartGuidesEnabled(smartGuidesVisible_);
-    entry.canvas->setGuideAppearance(guideColor_, guideDashed_);
-    connect(entry.canvasHost, &CanvasScrollBars::rulerUnitChosen, this,
+    window.canvas->setGuidesVisible(guidesVisible_);
+    window.canvas->setSmartGuidesEnabled(smartGuidesVisible_);
+    window.canvas->setGuideAppearance(guideColor_, guideDashed_);
+    connect(window.host, &CanvasScrollBars::rulerUnitChosen, this,
             &PicturaMainWindow::setRulerUnit);
-    connect(entry.canvasHost, &CanvasScrollBars::rulerPreferencesRequested, this,
+    connect(window.host, &CanvasScrollBars::rulerPreferencesRequested, this,
             [this]() { showPreferences(PreferencesDialog::kUnits); });
     if (tools_) {
         tools_->setGuidesLocked(guidesLocked_);
     }
-    connect(entry.canvasHost, &CanvasScrollBars::guideDropped, this,
-            [this, view = QPointer<PictureView>(entry.view)](bool vertical, double position) {
+    connect(window.host, &CanvasScrollBars::guideDropped, this,
+            [this, view = QPointer<PictureView>(window.doc->view)](bool vertical, double position) {
                 if (!view) {
                     return;
                 }
@@ -65,17 +65,17 @@ void PicturaMainWindow::prepareCanvasGuides(const DocEntry& entry)
 
 void PicturaMainWindow::applyGuideViewState()
 {
-    for (const DocEntry& entry : docs_) {
+    for (const DocWindow* window : windows_) {
         // A document still loading has no canvas yet; setupCanvas() calls
         // prepareCanvasGuides() with the current state when it completes.
-        if (!entry.canvasHost || !entry.canvas) {
+        if (!window->host || !window->canvas) {
             continue;
         }
-        entry.canvasHost->setRulersVisible(rulersVisible_);
-        entry.canvasHost->setRulerUnit(rulerUnit_, traditionalPoints_);
-        entry.canvas->setGuidesVisible(guidesVisible_);
-        entry.canvas->setSmartGuidesEnabled(smartGuidesVisible_);
-        entry.canvas->setGuideAppearance(guideColor_, guideDashed_);
+        window->host->setRulersVisible(rulersVisible_);
+        window->host->setRulerUnit(rulerUnit_, traditionalPoints_);
+        window->canvas->setGuidesVisible(guidesVisible_);
+        window->canvas->setSmartGuidesEnabled(smartGuidesVisible_);
+        window->canvas->setGuideAppearance(guideColor_, guideDashed_);
     }
     if (tools_) {
         tools_->setGuidesLocked(guidesLocked_);

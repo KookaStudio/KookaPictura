@@ -1028,9 +1028,9 @@ void PicturaMainWindow::registerHandlers()
 
     registry_->setHandler(command_ids::ViewFreePan, [this]() {
         freePan_ = !freePan_;
-        for (const DocEntry& entry : docs_) {
-            if (entry.canvas) {
-                entry.canvas->setFreePan(freePan_);
+        for (const DocWindow* window : windows_) {
+            if (window->canvas) {
+                window->canvas->setFreePan(freePan_);
             }
         }
         saveSession();
@@ -1040,9 +1040,9 @@ void PicturaMainWindow::registerHandlers()
 
     registry_->setHandler(command_ids::ViewSnapCanvasToWorkspace, [this]() {
         snapCanvasToWorkspace_ = !snapCanvasToWorkspace_;
-        for (const DocEntry& entry : docs_) {
-            if (entry.canvas) {
-                entry.canvas->setSnapToWorkspace(snapCanvasToWorkspace_);
+        for (const DocWindow* window : windows_) {
+            if (window->canvas) {
+                window->canvas->setSnapToWorkspace(snapCanvasToWorkspace_);
             }
         }
         saveSession();

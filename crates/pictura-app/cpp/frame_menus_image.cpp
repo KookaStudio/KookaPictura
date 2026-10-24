@@ -60,7 +60,7 @@ void PicturaMainWindow::wireImageMenu()
         }
         const int index = addDocument(target, QString());
         if (index >= 0) {
-            docs_[index].displayName = dialog.copyName();
+            docs_[index]->displayName = dialog.copyName();
             updateTabTitle(index);
         }
     });
