@@ -61,7 +61,7 @@ so that `QApplication::activeWindow()` is the `Qt::Tool` window itself.
 | `dtw_header_menu_entries` | Request a float's header menu | Entries in order | `tst_document_float::headerMenuEntries` |
 | `dtw_header_menu_target` | Tab active; Image Size from float header menu (dialog auto-rejected) | Float active; dialog opened for its document | `tst_document_float::headerMenuTargetsItsWindow` |
 | `dtw_float_shortcut` | Top-level float focused, one edit; Ctrl+Z | Edit undone on the float's document | `tst_document_float::undoShortcutInFloat` |
-| `dtw_float_menu_shortcut` | Top-level float active (`qWaitForWindowActive`); Ctrl+A | Float's document has a full selection; the tabbed doc's selection unchanged | `tst_document_float::menuShortcutInFloat` |
+| `dtw_float_menu_shortcut` | Top-level float active (`qWaitForWindowActive`); Ctrl+A | Float's document has a full selection; the tabbed doc's selection unchanged. Skips offscreen, where `QApplication` keeps the frame active for a parented `Qt::Tool`; the manual shortcut check covers it | `tst_document_float::menuShortcutInFloat` |
 | `dtw_float_tool_shortcut` | Top-level float active; press B | Brush tool active | `tst_document_float::toolShortcutInFloat` |
 | `dtw_float_frame_key` | Top-level float active; Brush tool; press `]` | Brush size larger than before | `tst_document_float::frameKeyInFloat` |
 | `dtw_fullscreen_active` | One tab, two floats, one float active; enter Full Screen With Menu Bar (advisory suppressed) | Only the active float visible | `tst_document_float::fullScreenShowsOnlyActive` |

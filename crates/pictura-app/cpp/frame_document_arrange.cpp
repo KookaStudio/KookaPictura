@@ -218,10 +218,13 @@ void PicturaMainWindow::resizeWindowToFit(DocWindow* window)
     }
     QRect geometry = window->floating->globalGeometry();
     // The header, scroll bars, and border around the canvas keep their size.
-    const QSize chrome = geometry.size() - canvas->size();
+    // Size hints rather than live sizes: a float's layout can lag its
+    // geometry, and a canvas never shrinks below its minimum size.
+    const QSize minimum = window->floating->minimumSizeHint();
+    const QSize chrome = (minimum - canvas->minimumSize()).expandedTo(QSize(0, 0));
     const QSize image(qCeil(document.width() * canvas->zoom()),
                       qCeil(document.height() * canvas->zoom()));
-    geometry.setSize((image + chrome).boundedTo(area.size()));
+    geometry.setSize((image + chrome).expandedTo(minimum).boundedTo(area.size()));
     if (geometry.right() > area.right()) {
         geometry.moveRight(area.right());
     }

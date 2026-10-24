@@ -165,6 +165,9 @@ file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/qt-test-results)
 # A suite that shares its window between the test functions keeps one entry:
 # its functions build on each other's state.
 set(PICTURA_QT_TEST_SHARDS
+    tst_document_arrange
+    tst_document_float
+    tst_document_windows
     tst_floating_workspaces
     tst_import_pdf
     tst_save_pdf

@@ -619,6 +619,9 @@ void PicturaMainWindow::removeDocument(int index)
         destroyWindowWidgets(window);
     }
     qDeleteAll(entry->windows);
+    // A floating or tiled window leaves no tab change to retarget the panels,
+    // and a panel refresh mid-retarget would read the view about to be freed.
+    retargetDock();
     delete entry->view;
     delete entry;
     refresh();
