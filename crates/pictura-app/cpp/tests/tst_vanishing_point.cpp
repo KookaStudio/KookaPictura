@@ -10,6 +10,7 @@
 
 #include <cmath>
 #include <functional>
+#include <memory>
 
 #include "commands.h"
 #include "filter_commands.h"
@@ -171,15 +172,26 @@ std::unique_ptr<VanishingPointDialog> VanishingPointTest::showDialog()
 bool VanishingPointTest::runCommand(const QString& id,
                                     const std::function<void(VanishingPointDialog*)>& body)
 {
-    bool opened = false;
-    QTimer::singleShot(0, [&] {
+    // A refused command never spins a modal loop, so the timer can fire after
+    // this returns: it owns copies of everything it touches.
+    auto opened = std::make_shared<bool>(false);
+    auto timer = new QTimer(window_.get());
+    timer->setSingleShot(true);
+    connect(timer, &QTimer::timeout, timer, [opened, body, timer] {
         if (VanishingPointDialog* dialog = openVpDialog()) {
-            opened = true;
+            *opened = true;
             body(dialog);
         }
+        timer->deleteLater();
     });
+    timer->start(0);
     window_->registry()->dispatch(id);
-    return opened;
+    // Drop a timer the refused path left armed, so it cannot act on a dialog
+    // a later test opens.
+    if (!*opened) {
+        delete timer;
+    }
+    return *opened;
 }
 
 void VanishingPointTest::menuFollowsDepth()
