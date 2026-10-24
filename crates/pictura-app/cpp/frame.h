@@ -13,8 +13,10 @@
 #include <QtWidgets/QMainWindow>
 
 #include <functional>
+#include <memory>
 
 #include "canvas_ruler.h"
+#include "document_window.h"
 #include "panels/panel_column.h"
 #include "recovery_store.h"
 #include "tools.h"
@@ -26,15 +28,18 @@ class QDockWidget;
 class QFrame;
 class QLabel;
 class QListWidget;
+class QMimeData;
 class QResizeEvent;
 class QShortcut;
 class QShowEvent;
 class QSplitter;
+class QStackedWidget;
 class QStatusBar;
 class QTabWidget;
 class QTemporaryDir;
 class QTimer;
 class QToolButton;
+class QUrl;
 class QWidget;
 
 namespace pictura {
@@ -47,6 +52,9 @@ class ChannelsPanel;
 class ColorState;
 class CanvasScrollBars;
 class DesignSystemDialog;
+class DocumentFloatWindow;
+class DocumentTileHost;
+class DocumentTilePane;
 class FileDropRouter;
 class LoadingCard;
 class HistogramPanel;
@@ -57,6 +65,7 @@ class CharacterPanel;
 class ParagraphPanel;
 class GlyphsPanel;
 class ParagraphStylesPanel;
+class CharacterStylesPanel;
 class BrushTipPreview;
 class ImageView;
 class InfoPanel;
@@ -120,8 +129,8 @@ public:
     ImageView* imageView() const;       // active canvas, or nullptr with no document
     PictureView* activeView() const;    // active document, or nullptr
     // Creates two documents and drags the last tab before its neighbour through
-    // the real tab bar; returns whether docs_, viewAt and the active view stayed
-    // aligned with the new visual order.
+    // the real tab bar; returns whether the tab windows followed the new visual
+    // order while each document kept its index and the active view stayed.
     bool reorderDocumentsForTest();
     QStringList topLevelMenuTitles() const;
     bool registerPanel(QWidget* panel, Qt::DockWidgetArea area);
@@ -297,6 +306,8 @@ public:
     QString documentPath(int index) const;
     QString documentName(int index) const;
     QString documentTabTextForTest(int index) const;
+    // Give document `index` a display name, as a typed New or Duplicate name does.
+    void setDocumentNameForTest(int index, const QString& name);
     bool isDocumentDirty(int index) const;
     QString activeFilePath() const;
     QString activeDocumentName() const;
@@ -309,8 +320,16 @@ public:
     // an error for it.
     enum class OpenOutcome { Opened, Cancelled, Failed };
 
-    // Takes ownership of `view` and adds it as a document tab.
-    int addDocument(PictureView* view, const QString& path);
+    // Takes ownership of `view` and adds it as a document window: a tab, or a
+    // floating window while Open Documents As Tabs is off unless `asTab`.
+    int addDocument(PictureView* view, const QString& path, bool asTab = false);
+    // Preferences > Interface: Open Documents As Tabs, and Enable Floating
+    // Document Window Docking (a float dropped on the tab strip docks).
+    bool openDocumentsAsTabs() const { return openDocumentsAsTabs_; }
+    bool floatingDocumentDocking() const { return floatingDocumentDocking_; }
+    // Preferences > General: Zoom Resizes Windows (View > Zoom In / Out fit a
+    // floating window to the zoomed image).
+    bool zoomResizesWindows() const { return zoomResizesWindows_; }
     bool newDocument(const QString& name, int width, int height, const QString& mode,
                      int depth, const QString& background);
     // Start an open and return its token; completion arrives on
@@ -406,6 +425,44 @@ public:
     {
         pdfViewer_ = std::move(viewer);
     }
+    // Test seam: catch Reveal in File Manager's folder URL instead of opening
+    // the desktop file manager.
+    void setUrlOpenerForTest(std::function<void(const QUrl&)> opener)
+    {
+        urlOpener_ = std::move(opener);
+    }
+    // Document window test hooks (frame_document_windows.cpp), by document
+    // index and acting on the document's first window: its floating window
+    // (null unless it floats), float or dock it as the menus do, its tab index
+    // (-1 unless tabbed), and its full label.
+    DocumentFloatWindow* floatWindowForTest(int index) const;
+    bool floatDocumentForTest(int index);
+    bool dockDocumentForTest(int index, int tab);
+    int tabOfDocumentForTest(int index) const;
+    QString documentWindowLabelForTest(int index) const;
+    // The tile host while Tile lasts (null otherwise), and document `index`'s
+    // first window's tile pane (null unless it is tiled).
+    DocumentTileHost* tileHostForTest() const { return tileHost_; }
+    DocumentTilePane* tilePaneForTest(int index) const;
+    // The tab or header context menu last opened, while it is open.
+    QMenu* documentMenuForTest() const;
+    // Window `ordinal` of document `index`, counting its windows in label
+    // order from 0: how many windows the document has, the window's canvas,
+    // full label, tab index (-1 unless tabbed), and floating window (null
+    // unless it floats); activate it.
+    int windowCountForTest(int index) const;
+    ImageView* windowCanvasForTest(int index, int ordinal) const;
+    QString windowLabelForTest(int index, int ordinal) const;
+    int windowTabForTest(int index, int ordinal) const;
+    DocumentFloatWindow* windowFloatForTest(int index, int ordinal) const;
+    void activateWindowForTest(int index, int ordinal);
+    // While set, a floating window's dock drag (Ctrl+drag, or the carried
+    // window drag) hands its drag data to `hook` instead of running the
+    // blocking `QDrag::exec`.
+    void setWindowDockDragForTest(std::function<void(std::unique_ptr<QMimeData>)> hook)
+    {
+        windowDockDragForTest_ = std::move(hook);
+    }
     bool closeDocument(int index, bool interactive);
     // The recent-files list, most recent first; setting it persists it.
     const QStringList& recentFiles() const { return recent_; }
@@ -470,38 +527,6 @@ private:
     void showCanvasBackgroundMenu(const QPoint& globalPos);
     // Leave isolation mode if active; true when it was. Escape routes here.
     bool releaseIsolation();
-    enum class OpenKind { Psd, Raster, SmartObject, Pdf, PdfPage, Eps };
-
-    struct DocEntry {
-        PictureView* view = nullptr;
-        ImageView* canvas = nullptr;
-        BrushTipPreview* tipPreview = nullptr;
-        CanvasScrollBars* canvasHost = nullptr;
-        // The tab page. A ready document's page is its canvas host; a loading
-        // document's page is a placeholder until finishLoadingDocument adds the
-        // canvas host to it.
-        QWidget* page = nullptr;
-        QString path;
-        // Display name for a path-less import (Open As Smart Object, PDF/EPS
-        // import); preferred over the generated Untitled-N name while `path`
-        // stays empty.
-        QString displayName;
-        // The path Open Recent should remember for a path-less import.
-        QString recentPath;
-        int untitledNumber = 0;
-        bool loading = false;
-        quint64 token = 0;
-        OpenKind kind = OpenKind::Psd;
-        // The user selected another tab while this one loaded; do not steal the
-        // activation when it finishes.
-        bool userMovedAway = false;
-        // The document that was active when this open started; a failure or
-        // cancel restores it. Guarded because the user may close it mid-load.
-        QPointer<PictureView> previousActiveView;
-        // The empty-workspace progress card while loading; null once filled.
-        QPointer<LoadingCard> loadingCard;
-    };
-
     // A PDF probe that has no tab yet. `token` is the open the caller waits on;
     // `password` is the one already accepted, if any.
     struct PdfProbe {
@@ -682,9 +707,18 @@ private:
     void beginLoadingDocument(PictureView* view, const QString& path,
                               const QString& displayName, quint64 token,
                               const QString& recentPath, OpenKind kind);
-    void setupCanvas(DocEntry& entry);
-    void wireCanvas(DocEntry& entry);
-    void installCloseButton(int index, PictureView* view);
+    // frame_canvas.cpp: a window's canvas and scroll bars, and their
+    // connections; a ready document's view connections, made once.
+    void setupCanvas(DocWindow& window);
+    void wireCanvas(DocWindow& window);
+    void wireDocument(DocEntry& doc);
+    // Run `fn` on the canvas of each of `doc`'s windows: the document-wide
+    // pushes (pixels, overlays, guides) reach every window, active or not.
+    void forEachCanvas(const DocEntry& doc, const std::function<void(ImageView*)>& fn) const;
+    // The active document's canvases, the active window's first; empty with
+    // no document. A filter dialog previews on all of them.
+    QList<ImageView*> activeDocumentCanvases() const;
+    void installCloseButton(DocWindow* window);
     void finishLoadingDocument(int index);
     void restorePreviousTab(PictureView* view);
     void cancelOpen(int index);
@@ -702,6 +736,137 @@ private:
     void finishOpen(quint64 token, OpenOutcome outcome, const QString& error = QString());
     OpenOutcome waitForOpen(quint64 token);
     int indexOfView(PictureView* view) const;
+    // frame_document_windows.cpp: the document window registry.
+    int indexOfDoc(const DocEntry* doc) const;
+    DocWindow* windowAtTab(int tab) const;
+    int tabOf(const DocWindow* window) const;
+    DocWindow* windowOfCanvas(const ImageView* canvas) const;
+    // Register `window` as the last tab and return its tab index.
+    int addTabWindow(DocWindow* window);
+    // Host a ready window the tab strip holds: a tile pane while Tile lasts,
+    // otherwise as Open Documents As Tabs says (it floats while the preference
+    // is off), activated as `floatWindow` / `tileWindow` do. The one place
+    // that picks a new ready window's host.
+    void hostReadyWindow(DocWindow* window, bool activate);
+    // Make `window` the active one through its host.
+    void activateDocWindow(DocWindow* window);
+    // Window > Arrange > New Window For: another window of `doc` on a fresh
+    // canvas, hosted as a new ready window is, and activated. Refuses a
+    // loading document.
+    bool addDocumentWindow(DocEntry* doc);
+    // True while the tab strip's current tab decides the active window: no
+    // window is active, or the active one is a tab.
+    bool stripOwnsActivation() const;
+    void onTabCurrentChanged(int tab);
+    void onTabBarClicked(int tab);
+    // Move `window` into a floating document window, at `globalGeometry` (an
+    // empty rect places it in the document area), and activate it unless
+    // `activate` is off and it was not active. Refuses a loading document or a
+    // window that already floats.
+    bool floatWindow(DocWindow* window, const QRect& globalGeometry = QRect(),
+                     bool activate = true);
+    // Move a floating window or tile pane into the tab strip at `index` (out
+    // of range: the end) and activate it.
+    bool dockWindow(DocWindow* window, int index);
+    // Move `window` into a tile pane after the others, starting the tile
+    // layout if none is active, and activate it unless `activate` is off and
+    // it was not active. Refuses a loading document or a window already tiled.
+    bool tileWindow(DocWindow* window, bool activate = true);
+    // Take a tiled window's page out of its pane; the last pane leaving ends
+    // the tile layout and the document area shows the tab strip again.
+    void untileWindow(DocWindow* window);
+    // Close `window` under the tab close rules: the last window of its
+    // document closes the document (prompting when modified); another window
+    // closes without a prompt.
+    bool closeWindow(DocWindow* window, bool interactive = true);
+    // Take `windows` out of the registry and their hosts, handing the active
+    // window to the strip's current tab or another window when it leaves.
+    void detachWindows(const QList<DocWindow*>& windows);
+    // Delete a detached window's widgets (its page, canvas host, and float).
+    void destroyWindowWidgets(DocWindow* window);
+    // The document area in global coordinates, and `geometry` moved and
+    // shrunk so the window's header lies inside it.
+    QRect documentAreaGlobalRect() const;
+    QRect clampFloatGeometry(const QRect& geometry) const;
+    // A float's size and place when nothing gives one: 60% of the document
+    // area, centred on it.
+    QRect defaultFloatGeometry() const;
+    // Keep a child-hosted float under the floating panel overlays.
+    void raiseDocumentFloat(DocumentFloatWindow* floating);
+    // The dock zone in global coordinates: the band along the top of the tab
+    // widget, as high as the tab bar while it shows tabs and otherwise as high
+    // as a tab bar would be, a header high at least. Empty while docking is
+    // off, while tiled, or while the tab widget is not the document area's
+    // page.
+    QRect dockZoneGlobalRect() const;
+    // The tab index a dock at `globalPos` inserts at; -1 for the end.
+    int dockIndexAt(const QPoint& globalPos) const;
+    // A float's header drag ended: dock it when released over the dock zone.
+    void onFloatDragReleased(DocWindow* window, const QPoint& globalPos);
+    // Present every window whose document's frame revision moved.
+    void presentWindows();
+    // The screen modes: in a full-screen mode only the active window shows,
+    // and an active float's page fills the document area without its header,
+    // as an active tile pane does; Standard shows every float and pane again
+    // where it was.
+    void syncScreenModeWindows();
+    // frame_document_menus.cpp: the tab and header context menus, the tab
+    // strip's tear-out, and the menus' actions.
+    void wireDocumentMenus();
+    void showTabMenu(const QPoint& barPos);
+    void showHeaderMenu(DocWindow* window, const QPoint& globalPos);
+    bool tearOutFilter(QEvent* event);
+    // A floating window's dock drag: carry `window` as drag-and-drop under the
+    // private document-window MIME type. With `carryWindow` the drag also names
+    // the float's top-level, held at `grabOffset`, so the compositor moves it
+    // with the pointer (Wayland). The strip filter docks it where it is
+    // dropped on the dock zone and claims no other drag, so file and layer
+    // drops pass on to `FileDropRouter`.
+    void startWindowDockDrag(DocWindow* window, bool carryWindow = false,
+                             const QPoint& grabOffset = QPoint());
+    DocWindow* windowOfDockMime(const QMimeData* mime) const;
+    bool windowDropFilter(QObject* watched, QEvent* event);
+    // The dock line: shown for a dock drag at `globalPos` while it is in the
+    // dock zone (vertical at the insertion point between tabs, horizontal
+    // along the band without tabs), hidden outside. Whether it shows.
+    bool updateDockIndicator(const QPoint& globalPos);
+    void hideDockIndicator();
+    // Dock the window a drop recorded, once no platform drag is running.
+    void applyPendingDock();
+    // Dock every floating window, then activate `target` (null: keep the
+    // active window).
+    void consolidateAllToTabs(DocWindow* target);
+    void closeOtherWindows(DocWindow* keep);
+    void revealInFileManager(const DocWindow* window);
+    // frame_document_arrange.cpp: the Window > Arrange commands. Cascade
+    // places window `slot` (in cycle order) stepped from the document area's
+    // top-left, restarting there when a header would leave the area; Float All
+    // places newly floated windows the same way. The Match commands copy the
+    // active canvas's zoom and/or centre (as document fractions) to every other
+    // window.
+    void wireWindowArrange();
+    QRect cascadeGeometry(int slot) const;
+    void floatAllWindows();
+    void cascadeWindows();
+    void tileWindows();
+    void matchWindows(bool zoom, bool location);
+    // The Hand and Zoom tools' multi-window options. A Hand drag on `source`
+    // pans every other visible window by `delta` under Scroll All Windows or
+    // Shift; a Zoom tool zoom applies `factor` to every other window when
+    // `allWindows` and fits a floating active window when `resizeToFit`.
+    void scrollOtherWindows(const ImageView* source, const QPointF& delta,
+                            Qt::KeyboardModifiers mods);
+    void onToolZoomed(double factor, bool allWindows, bool resizeToFit);
+    // Resize a floating `window` so its canvas shows the whole zoomed image,
+    // kept inside the document area; other hosts keep their size.
+    void resizeWindowToFit(DocWindow* window);
+    // Ctrl+Tab / Shift+Ctrl+Tab: step the active window `step` places along
+    // `windows_`, wrapping; nothing with fewer than two windows.
+    void wireDocumentCycling();
+    void cycleDocumentWindow(int step);
+    // The active window changed: settle loading entries and transform
+    // sessions of the other documents, then refresh.
+    void onActiveWindowChanged();
     void reportOpenFailure(int index, const QString& status);
     void openRecent(const QString& path);
     void applyBrightness(int level);
@@ -719,7 +884,13 @@ private:
     void togglePanelsHidden();
     void setPanelColumnsVisible(bool visible);
 
-    QList<DocEntry> docs_;
+    // The open documents, in open order; the public index API indexes them.
+    QList<DocEntry*> docs_;
+    // Every document window in cycle order: the tab windows in their visual
+    // order first, then the windows of the other hosts.
+    QList<DocWindow*> windows_;
+    // The window the commands and tools target; null with no document.
+    DocWindow* activeWindow_ = nullptr;
     QList<SmartObjectEditSession> editSessions_;
     // PDF probes that have no tab yet, keyed by their temporary view.
     QHash<PictureView*, PdfProbe> pdfProbes_;
@@ -743,6 +914,28 @@ private:
     // the programmatic switch as a user selection.
     bool suppressTabTracking_ = false;
     QTabWidget* tabs_ = nullptr;
+    // The splitter's stretch pane: the stack that holds the document hosts.
+    QStackedWidget* documentArea_ = nullptr;
+    // The document area's tile layout while Tile lasts; null otherwise.
+    DocumentTileHost* tileHost_ = nullptr;
+    // Set while a window moves between hosts, so the strip's own current-tab
+    // changes do not take the activation; the move settles it.
+    bool movingHost_ = false;
+    // A tab strip press that may become a tear-out, and the float a tear-out
+    // handed the drag to.
+    DocWindow* tearWindow_ = nullptr;
+    QPoint tearPressPos_;
+    QPointer<DocumentFloatWindow> tearFloat_;
+    bool tearSynthesizing_ = false;
+    std::function<void(std::unique_ptr<QMimeData>)> windowDockDragForTest_;
+    // The frame's dock line, made on first use.
+    QWidget* dockIndicator_ = nullptr;
+    // A drop on the dock zone, docked once the drag that carries the window
+    // has finished: the float must outlive a running platform drag.
+    DocWindow* pendingDockWindow_ = nullptr;
+    int pendingDockIndex_ = -1;
+    bool windowDockDragRunning_ = false;
+    QPointer<QMenu> documentMenu_;
     // Disconnected in the destructor: the focusChanged handler must not run
     // while the window's children are being torn down.
     QMetaObject::Connection spacePanFocusConn_;
@@ -795,6 +988,7 @@ private:
     ParagraphPanel* paragraphPanel_ = nullptr;
     GlyphsPanel* glyphsPanel_ = nullptr;
     ParagraphStylesPanel* paragraphStylesPanel_ = nullptr;
+    CharacterStylesPanel* characterStylesPanel_ = nullptr;
     PropertiesPanel* propertiesPanel_ = nullptr;
     AdjustmentsPanel* adjustmentsPanel_ = nullptr;
     ChannelsPanel* channelsPanel_ = nullptr;
@@ -851,8 +1045,17 @@ private:
     int colorPolicy_ = 0;
     bool textGammaEnabled_ = true;
     double textGamma_ = 1.45;
+    bool typeShowAsianOptions_ = false;
+    bool typeMiddleEastern_ = false;
+    bool typeMissingGlyphProtection_ = true;
     bool gpuAvailable_ = true;
     bool useShiftKeyForToolSwitch_ = true;
+    bool openDocumentsAsTabs_ = true;
+    bool floatingDocumentDocking_ = true;
+    bool zoomResizesWindows_ = false;
+    // Set while a Hand pan is fanned out to the other windows, so the fan-out
+    // never echoes.
+    bool scrollingAllWindows_ = false;
     ScreenMode screenMode_ = ScreenMode::Standard;
     int canvasColorIndex_ = 0;
     bool panelsHidden_ = false;
@@ -895,7 +1098,10 @@ private:
     // persisted in the session.
     void registerGuideHandlers();
     void loadGuideSession(const SessionState& state);
-    void prepareCanvasGuides(const DocEntry& entry);
+    void prepareCanvasGuides(const DocWindow& window);
+    // Give the active document's other windows its guides; the tools keep the
+    // active canvas's guides.
+    void syncSiblingGuides();
     void applyGuideViewState();
     void connectGuidePreferences(PreferencesDialog* dialog);
     // Units & Rulers: from the preferences page or a ruler's context menu.
@@ -934,6 +1140,7 @@ private:
     std::function<bool(QDialog&)> pdfDialogDriver_;
     std::function<bool(QDialog&)> importDialogDriver_;
     std::function<void(const QString&)> pdfViewer_;
+    std::function<void(const QUrl&)> urlOpener_;
 };
 
 } // namespace pictura

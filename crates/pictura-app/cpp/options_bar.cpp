@@ -102,6 +102,8 @@ OptionsBar::OptionsBar(ToolController* controller, QWidget* parent)
         pen_ = controller_->optionsFor<PenGroup>(ToolId::Pen);
         shape_ = controller_->optionsFor<ShapeGroup>(ToolId::Rectangle);
         type_ = controller_->optionsFor<TypeGroup>(ToolId::HorizontalType);
+        hand_ = controller_->optionsFor<HandGroup>(ToolId::Hand);
+        zoom_ = controller_->optionsFor<ZoomGroup>(ToolId::Zoom);
     }
 
     stack_ = new QStackedWidget(this);
@@ -261,6 +263,10 @@ QWidget* OptionsBar::buildPageBody(ToolId id)
         return buildPenPage(id);
     case ToolId::RotateView:
         return buildRotateViewPage(id);
+    case ToolId::Hand:
+        return buildHandPage(id);
+    case ToolId::Zoom:
+        return buildZoomPage(id);
     case ToolId::Move:
         return buildMovePage(id);
     case ToolId::Rectangle:

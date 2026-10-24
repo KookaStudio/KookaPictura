@@ -80,8 +80,6 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 |---|---|---|---|---|---|
 | UI-1 | `application-frame.md` | Status bar readouts + status-bar options popup | MISSING | `frame.cpp:514` | #497 |
 | UI-2 | `application-frame.md` | Active layer name in the title bar | MISSING | `frame.cpp:1006` | #498 |
-| UI-3 | `application-frame.md` | `Ctrl+Tab` / `Shift+Ctrl+Tab` document cycling | MISSING | `frame.cpp:224` | #499 |
-| UI-4 | `application-frame.md` | Window ▸ Arrange (Float/Tile/Cascade/Match/New Window) | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #500 |
 | UI-5 | `menus.md` | Menu customization (Edit ▸ Menus, Show All Menu Items, enablement matrix) | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #501 |
 | UI-6 | `menus.md` | Type menu (work path, convert to shape, spellcheck); warp text landed in #684, convert point/paragraph in #682 | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #502 |
 | UI-7 | `menus.md` | View menu stubs (Proof Setup/Colors, Gamut Warning, Snap To, Lock Slices, Extras, Pixel Aspect Ratio, 32-bit Preview Options) | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #503 |
@@ -91,6 +89,9 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | UI-11 | `accessibility.md` | AT-SPI2 / `QAccessible`, high-contrast, colour-blind, reduced-motion | MISSING | no `QAccessible` in `crates/` | #507 |
 | UI-12 | `keyboard-shortcuts.md` | Shortcut sets (save/load, workspace-assigned, Summarize HTML, Legacy Channel Shortcuts) | PARTIAL | `frame_shortcuts.cpp:20`; `keyboard_shortcuts_dialog.cpp:249-282` | #508 |
 | UI-13 | `color-sweeps-and-modes.md` | Quick fill with Alt+Backspace / Ctrl+Backspace | MISSING | `frame_menus_edit.cpp:307-310` | #524 |
+| UI-14 | `application-frame.md:241`, `:297` | On Wayland a floating document's header drag and a tab tear-out are a drag-and-drop that carries the window (`xdg_toplevel_drag_v1`), so the compositor moves it with the pointer and a drop on the strip docks it; a compositor without that protocol leaves the window in place until the drop, and drop-to-dock and a header double-click still dock | DIVERGENT | `document_float_window.cpp` (`movesByWindowDrag`); `frame_document_menus.cpp` (`startWindowDockDrag`, `windowDropFilter`) | #317 |
+| UI-15 | `application-frame.md:221`, `:285`, `:337` | Floating-window geometry and float state are not saved per workspace or session; relaunch and crash recovery reopen every document as a tab | DIVERGENT | `session.h` has no float or tile state; `frame_recovery.cpp` | #317 |
+| UI-16 | `preferences.md:108`, `application-frame.md:71` | The doc names the Interface option "Enable Floating Document Window"; the CS6 label, used by the code, is "Enable Floating Document Window Docking" | STALE-DOC | `preferences_dialog.cpp:149` | #317 |
 
 ### 02-ui-ux — panels
 
@@ -104,9 +105,6 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | PAN-6 | `panels/history-panel.md` | History Options, Clear History/purge, New Document from state | MISSING | `panel_group_menu.cpp:195-198` | #514 |
 | PAN-7 | `panels/histogram-panel.md` | View modes, statistics, source menu, cache/refresh, 16/32-bit bins | PARTIAL | `histogram_panel.cpp:79-142` | #515 |
 | PAN-8 | `panels/info-panel.md` | Sampler persistence, sample-size readout, marquee/transform readouts, before/after, gamut exclamation | PARTIAL | `info_panel.cpp:623-685` | #516 |
-| PAN-9 | `panels/character-and-paragraph.md` | Character panel missing controls (faux bold/italic, language, tsume, underline, fractional widths) | PARTIAL | `character_panel.cpp:65-132` | #517 |
-| PAN-10 | `panels/character-and-paragraph.md` | Paragraph Justification dialog + RTL direction | MISSING | `paragraph_panel.h:33-40` | #518 |
-| PAN-11 | `panels/character-and-paragraph.md` | Character Styles panel | MISSING | no `character_styles_panel.*`; engine API at `type_tools.rs:632` | #519 |
 | PAN-12 | `panels/navigator-panel.md` | Proxy colour, Ctrl-drag proxy positioning, zoom buttons, typed zoom | MISSING | `navigator_panel.cpp:138-159` | #520 |
 | PAN-13 | `panels/paths-panel.md` | Make Work Path, clipping-path designation, Panel Options thumbnail size | MISSING | `paths_panel.h:24-25` | #521 |
 | PAN-14 | `panels/note-panel.md` | Notes Author/Colour options + PSD/PDF/TIFF annotation round-trip | MISSING | `options_bar.cpp:593`; `annotations.rs:10` | #522 |
@@ -124,7 +122,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | TOOL-6 | `move-and-transform.md` | Transform Path / Transform Points submenus | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #530 |
 | TOOL-7 | `pen-and-path-tools.md` | Magnetic Pen | MISSING | `options_bar_pen.cpp:19` | #531 |
 | TOOL-8 | `merge-and-flatten.md` | Merge Shape Components (path boolean ops) | MISSING | no path-boolean in `pictura-core/src/path*` | #532 |
-| TOOL-9 | `hand-and-zoom.md` | Hand/Zoom options bar (Scrubby/Animated Zoom, Resize Windows, Zoom All/Scroll All/Match) | MISSING | `options_bar.cpp` no case | #533 |
+| TOOL-9 | `hand-and-zoom.md` | Hand/Zoom options bar: Scrubby and Animated Zoom; the multi-window options (Scroll All, Zoom All, Resize Windows To Fit) landed in #500 | PARTIAL | `options_bar_navigate.cpp` | #533 |
 | TOOL-10 | `hand-and-zoom.md` | Bird's Eye View + Flick Panning | MISSING | none found | #534 |
 | TOOL-11 | `eyedropper-color-sampler-ruler.md` | Ruler protractor + Straighten from the ruler | MISSING | `tool_ruler.cpp:37` | #535 |
 | TOOL-12 | `eyedropper-color-sampler-ruler.md` | Eyedropper modifiers (Alt→background, temporary) + Shift-click sampler | MISSING | `tool_eyedropper.cpp:23-36` | #536 |
@@ -132,7 +130,6 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | TOOL-14 | `healing-brushes.md` | Healing Mode/Source/Sample, Sample All Layers, depth/mode handling | PARTIAL | `options_bar.cpp:694-741`; `tool_healing.cpp:165` | #538 |
 | TOOL-15 | `history-brush.md` | Merged/composite source + Edit ▸ Fill ▸ History | PARTIAL | `paint_tools.rs:524-527` | #539 |
 | TOOL-16 | `mixer-brush.md` | Sample All Layers, Load Solid Colors Only, keyboard shortcuts | MISSING | `options_bar_paint.cpp:310`; `tool_mixerbrush.cpp:39-41` | #540 |
-| TOOL-17 | `type-tools.md` | Missing Glyph Protection (#887); gamma blend and missing-font handling landed in #685 (an approximated colour-independent curve, Replace All substitutes Liberation Sans); warp text landed in #684 (outline-warped presets, the caret stays unwarped while editing), type-on-path and area type landed in #683 (area type clips a bounding-box layout), paragraph type in #682 (greedy wrap, resize-only box handles) | PARTIAL | `type_path.rs`; `text_gamma.rs`; `missing_fonts.rs`; `crates/pictura-script/src/command_catalogue/entries.rs` | #541 |
 | TOOL-18 | `path-selection-tools.md` | Path operations/align/arrange, constrain path dragging, Target Path toggle, segment/marquee multi-select | MISSING | `tool_path_selection.cpp:13-14` | #542 |
 | TOOL-19 | `slice-tools.md` | Slice options bar/style/modifiers, Divide/Combine/Duplicate, Slice Options dialog, slices-from-guides | MISSING | `tool_slice.cpp:65-102` | #543 |
 | TOOL-20 | `crop-tool.md` | Crop resampling by W×H×resolution, non-destructive crop/Reveal All, crop shield settings | PARTIAL | `options_bar_crop.cpp:244-375` | #544 |
@@ -144,6 +141,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | TOOL-26 | `gradient-and-paint-bucket.md` | Gradient/Bucket availability gates, Gradient Editor reachability, Gradient Fill dialog | PARTIAL | `tool_fills.cpp`; `options_bar_fill.cpp:129-131`; `frame_menus.cpp:719-725` | #550 |
 | TOOL-27 | `smudge-blur-sharpen.md` | HDR (16/32-bpc) operation | DIVERGENT | `stroke.rs:395` rejects non-8-bit | #551 |
 | TOOL-28 | `clone-stamp-and-pattern-stamp.md` | Cross-document colour-mode rule + Pattern Stamp Impressionist | MISSING | `paint_tools.rs:451`; `tool_stamps.cpp` | #552 |
+| TOOL-29 | `hand-and-zoom.md:76` | `Match All` + `Shift`+click/drag is approximated by the `Shift` forms of Scroll All (Hand drag, location) and Zoom All (Zoom click, zoom) rather than one combined match | DIVERGENT | `frame_document_arrange.cpp:173`; `tool_hand_zoom.cpp:59` | #500 |
 
 ### 04-image-ops and adjustments
 
@@ -205,7 +203,6 @@ Layer Comps (`LAY-022`) is already tracked by `#265`.
 | FILT-5 | `stylize-filters.md` | 8 Stylize filters missing from the Filter Gallery category | DIVERGENT | `filter_gallery_dialog.cpp:118` | #596 |
 | FILT-6 | `artistic-filters.md` | Colored Pencil document-background paper wiring | PARTIAL | `filter_map/mapping.rs` (Colored Pencil arm) | #597 |
 | FILT-7 | `adaptive-wide-angle.md` | Adaptive Wide Angle Auto / lens profiles, Panorama, Smart Filter re-edit, rotation handles | PARTIAL | `pictura-filters/src/distort/adaptive_wide_angle/`, `awa_dialog.cpp` | #891 |
-| FILT-9 | `vanishing-point.md` | Vanishing Point planes saved in PSD / TIFF / JPEG | MISSING | `document_session/session.rs` (`vanishing_planes`) | #918 |
 
 Lens Correction (`#347`),
 De-Interlace (`#344`), NTSC Colors (`#345`), Embed/Read Watermark (`#350`/`#351`)

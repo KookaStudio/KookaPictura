@@ -26,6 +26,7 @@ use cxx_qt_lib::{QByteArray, QImage, QList, QString, QStringList};
 use depth_gate::filter_eight_bit_document;
 pub(super) use depth_gate::{document_supported, eight_bit_refusal};
 use pictura_core::{layer_pixel_locked, Document, Layer, PixelBuffer};
+pub(super) use vanishing_point_file::{saved_planes, store_planes};
 
 pub(super) mod adaptive_wide_angle;
 mod canvas_proxy;
@@ -35,6 +36,7 @@ pub(super) mod jobs;
 pub(super) mod lens_blur_depths;
 pub(super) mod liquify;
 pub(super) mod vanishing_point;
+mod vanishing_point_file;
 mod vanishing_point_retouch;
 
 #[cxx_qt::bridge]

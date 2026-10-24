@@ -10,7 +10,7 @@ use pictura_core::TypeSpec;
 
 use crate::fonts::face_for;
 use crate::type_layer::{align_factor, flat_rect, leading_px, map, text_box_any};
-use crate::type_paragraph::{line_advance, vertical_cell, visual_lines};
+use crate::type_paragraph::{line_advance_with, vertical_cell, visual_lines};
 use crate::type_style::shape_styled;
 
 /// One laid-out line's caret segments, one per character boundary (its end
@@ -27,7 +27,7 @@ struct CaretLine {
 /// Every laid-out line's caret segments, and where the baseline crosses a
 /// segment as a fraction from its first point (the centre for vertical type).
 fn caret_lines(spec: &TypeSpec) -> Option<(Vec<CaretLine>, f64)> {
-    let bundled = face_for(&spec.character.font_family)?;
+    let bundled = face_for(&spec.character.font_family, &spec.character.font_style)?;
     let (left, top, width, height) = text_box_any(spec)?;
     let rect = flat_rect(left, top, width, height);
     let (rl, rt) = (rect.left as f32, rect.top as f32);
@@ -40,17 +40,25 @@ fn caret_lines(spec: &TypeSpec) -> Option<(Vec<CaretLine>, f64)> {
     let size = c.size as f32;
     let ascent = bundled.ascent(size);
     let descent = bundled.descent(size);
-    let leading = leading_px(size, c.leading);
+    let leading = leading_px(size, c.leading, spec.paragraph.auto_leading);
     let cell = vertical_cell(bundled, c);
     let factor = align_factor(spec.justification());
     let justify = spec.paragraph.justify;
+    let rtl = spec.paragraph.direction == pictura_core::TextDirection::Rtl;
     let (ox, oy) = spec.origin;
     let at = |a: (f32, f32), b: (f32, f32)| {
         let rel = |p: (f32, f32)| map(spec, f64::from(rl + p.0) - ox, f64::from(rt + p.1) - oy);
         let (p, q) = (rel(a), rel(b));
         [p.0, p.1, q.0, q.1]
     };
-    let wrapped = visual_lines(bundled, &spec.text, spec.vertical, spec.box_bounds, c);
+    let wrapped = visual_lines(
+        bundled,
+        &spec.text,
+        spec.vertical,
+        spec.box_bounds,
+        c,
+        &spec.paragraph,
+    );
     let lines = wrapped
         .lines
         .iter()
@@ -68,7 +76,7 @@ fn caret_lines(spec: &TypeSpec) -> Option<(Vec<CaretLine>, f64)> {
                     .collect()
             } else {
                 let prefix = |n: usize| chars[..n].iter().collect::<String>();
-                let advance = |n: usize| line_advance(bundled, &prefix(n), c);
+                let advance = |n: usize| line_advance_with(bundled, &prefix(n), c, &spec.paragraph);
                 let ink = match line.soft {
                     true => line.text.trim_end().chars().count(),
                     false => chars.len(),
@@ -105,10 +113,17 @@ fn caret_lines(spec: &TypeSpec) -> Option<(Vec<CaretLine>, f64)> {
                     (aw - ink_advance) * factor
                 };
                 let baseline = ascent + i as f32 * leading;
+                let total_spaces = crate::type_justify::spaces(&prefix(ink));
+                let line_width = ink_advance + total_spaces as f32 * extra;
                 (0..=chars.len())
                     .map(|k| {
                         let spaces = crate::type_justify::spaces(&prefix(k.min(ink)));
-                        let x = shift + advance(k) + spaces as f32 * extra;
+                        let extent = advance(k) + spaces as f32 * extra;
+                        let x = if rtl {
+                            shift + line_width - extent
+                        } else {
+                            shift + extent
+                        };
                         at((x, baseline - ascent), (x, baseline + descent))
                     })
                     .collect()
@@ -278,6 +293,84 @@ mod tests {
         assert!(
             (c[0] - (stops[0][0] + stops[0][2]) / 2.0).abs() < 1e-6,
             "on the axis"
+        );
+    }
+
+    #[test]
+    fn rtl_caret_zero_is_at_right_edge() {
+        let mut rtl = spec("\u{5D0}\u{5D1}\u{5D2}", false, 0);
+        rtl.paragraph.direction = pictura_core::TextDirection::Rtl;
+        let stops = type_caret_stops(&rtl);
+        assert!(stops.len() >= 4);
+        assert!(
+            stops[0][0] > stops[1][0],
+            "position 0 is the rightmost stop"
+        );
+        assert!(
+            stops[0][0] >= stops[3][0],
+            "and the line's last stop is leftmost"
+        );
+    }
+
+    #[test]
+    fn rtl_caret_advances_left() {
+        let mut rtl = spec("\u{5D0}\u{5D1}\u{5D2}", false, 0);
+        rtl.paragraph.direction = pictura_core::TextDirection::Rtl;
+        let stops = type_caret_stops(&rtl);
+        for pair in stops.windows(2).take(3) {
+            assert!(pair[0][0] > pair[1][0], "each step moves left");
+        }
+    }
+
+    #[test]
+    fn rtl_click_maps_to_logical_boundary() {
+        let mut rtl = spec("\u{5D0}\u{5D1}\u{5D2}", false, 0);
+        rtl.paragraph.direction = pictura_core::TextDirection::Rtl;
+        let stops = type_caret_stops(&rtl);
+        let click = (stops[0][0] + stops[1][0]) / 2.0;
+        let nearest = stops
+            .iter()
+            .enumerate()
+            .min_by(|(_, a), (_, b)| {
+                (a[0] - click)
+                    .abs()
+                    .partial_cmp(&(b[0] - click).abs())
+                    .unwrap()
+            })
+            .map(|(i, _)| i)
+            .unwrap();
+        assert!(nearest == 0 || nearest == 1, "the clicked side wins");
+    }
+
+    #[test]
+    fn ltr_caret_unchanged() {
+        let stops = type_caret_stops(&spec("\u{5D0}\u{5D1}\u{5D2}", false, 0));
+        assert!(stops[0][0] < stops[1][0]);
+    }
+
+    #[test]
+    fn mixed_line_caret_matches_fallback_advance() {
+        let _guard = crate::fonts::FALLBACK_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let noto = include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../assets/fonts/NotoSans-Regular.ttf"
+        ));
+        assert!(crate::fonts::register_font(
+            "Fallback Caret",
+            "",
+            noto.to_vec()
+        ));
+        let spec = spec("A\u{370}", false, 0);
+        let on = type_caret_stops(&spec);
+        crate::fonts::set_missing_glyph_protection(false);
+        let off = type_caret_stops(&spec);
+        crate::fonts::set_missing_glyph_protection(true);
+        assert_ne!(
+            on.last().map(|s| s[0]),
+            off.last().map(|s| s[0]),
+            "the fallback face changes the line's final caret stop"
         );
     }
 }

@@ -5,6 +5,8 @@
 #include "brush_tip_preview.h"
 #include "commands.h"
 #include "dialogs.h"
+#include "document_float_window.h"
+#include "document_tile_host.h"
 #include "duplicate_image_dialog.h"
 #include "canvas_scrollbars.h"
 #include "color_settings_dialog.h"
@@ -37,6 +39,7 @@
 #include "panels/navigator_panel.h"
 #include "panels/notes_panel.h"
 #include "panels/paragraph_styles_panel.h"
+#include "panels/character_styles_panel.h"
 #include "panels/paths_panel.h"
 #include "panels/panel_column.h"
 #include "panels/panel_group.h"
@@ -86,6 +89,7 @@
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QSpinBox>
 #include <QtWidgets/QSplitter>
+#include <QtWidgets/QStackedWidget>
 #include <QtWidgets/QStatusBar>
 #include <QtWidgets/QTabBar>
 #include <QtWidgets/QTabWidget>

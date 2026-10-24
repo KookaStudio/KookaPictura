@@ -3,11 +3,16 @@
 
 #include <QtTest/QtTest>
 
+#include <QtCore/QTimer>
+
 #include "commands.h"
 #include "frame.h"
+#include "fonts.h"
 #include "panels/character_panel.h"
 #include "panels/numeric_field.h"
+#include "panels/panel_group.h"
 #include "panels/paragraph_panel.h"
+#include "justification_dialog.h"
 #include "selftest_paint_fixture.h"
 #include "type_fonts.h"
 
@@ -18,9 +23,11 @@
 #include <QtGui/QFontInfo>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
+#include <QtWidgets/QFontComboBox>
 #include <QtWidgets/QDoubleSpinBox>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QLineEdit>
+#include <QtWidgets/QMenu>
 #include <QtWidgets/QToolButton>
 
 #include "qt_test_support.h"
@@ -81,6 +88,91 @@ void scrub(QWidget* widget, int dx)
          Qt::NoButton);
 }
 
+// The live per-panel menu from the group's header button. Making the panel the
+// current tab rebuilds the button's menu for that panel.
+QMenu* livePanelMenu(pictura::PicturaMainWindow& frame, const QString& panelName)
+{
+    for (pictura::PanelGroup* group : frame.findChildren<pictura::PanelGroup*>()) {
+        if (group->containsPanel(panelName)) {
+            group->setCurrentPanel(panelName);
+            break;
+        }
+    }
+    auto* button = frame.findChild<QToolButton*>(QStringLiteral("panelWidgetMenu_") + panelName);
+    return button ? button->menu() : nullptr;
+}
+
+QAction* menuAction(QMenu* menu, const QString& id)
+{
+    for (QAction* action : menu->actions()) {
+        if (action->data().toString() == id) {
+            return action;
+        }
+        if (QMenu* submenu = action->menu()) {
+            if (QAction* found = menuAction(submenu, id)) {
+                return found;
+            }
+        }
+    }
+    return nullptr;
+}
+
+QAction* menuText(QMenu* menu, const QString& text)
+{
+    for (QAction* action : menu->actions()) {
+        if (action->text() == text) {
+            return action;
+        }
+    }
+    return nullptr;
+}
+
+QStringList menuTexts(QMenu* menu)
+{
+    QStringList out;
+    for (QAction* action : menu->actions()) {
+        if (!action->isSeparator()) {
+            out << action->text();
+        }
+    }
+    return out;
+}
+
+QStringList submenuTexts(QMenu* menu, const QString& text)
+{
+    QAction* parent = menuText(menu, text);
+    if (!parent || !parent->menu()) {
+        return {};
+    }
+    QStringList out;
+    for (QAction* action : parent->menu()->actions()) {
+        if (!action->isSeparator()) {
+            out << action->text();
+        }
+    }
+    return out;
+}
+
+// Restores the Horizontal Type options a test's type layer changed.
+struct TypeOptionsGuard {
+    explicit TypeOptionsGuard(Fixture& fixture)
+        : f(fixture)
+        , saved(f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get())
+    {
+    }
+    ~TypeOptionsGuard()
+    {
+        f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(saved);
+    }
+    Fixture& f;
+    pictura::TypeOptions saved;
+};
+
+pictura::CharacterSetting layerCharacter(const Fixture& f, const QString& path)
+{
+    return pictura::type_api::layerCharacterSetting(*f.view, path);
+}
+
 } // namespace
 
 class CharacterParagraphPanelsTest : public QObject {
@@ -91,6 +183,15 @@ private slots:
     void characterPanelReflectsAndEdits();
     void characterDefaultsWithoutType();
     void characterPanelEditsNewText();
+    void fontStyleApplies();
+    void styleFieldListsFamilyFaces();
+    void languageRoundTrips();
+    void tsumeFollowsAsianPreference();
+    void fractionalWidthsMenu();
+    void characterMenuMatchesCs6();
+    void characterMenuCheckStates();
+    void characterMenuToggles();
+    void characterMenuReset();
     void styleButtonAppliesToggle();
     void capsButtonsAreExclusive();
     void positionButtonsAreExclusive();
@@ -102,6 +203,16 @@ private slots:
     void scrubIconRaisesValue();
     void scrubKerningLeavesMetrics();
     void paragraphPanelReflectsAndEdits();
+    void justificationDialogRoundTrips();
+    void justificationCancelWritesNothing();
+    void paragraphMenuMatchesCs6();
+    void paragraphMenuCheckStates();
+    void paragraphMenuToggles();
+    void paragraphMenuReset();
+    void menuDisabledRows();
+    void menuCloseEntriesLast();
+    void directionFollowsMiddleEasternPreference();
+    void rtlDirectionApplies();
     void menusTogglePanels();
     void optionsBarTogglesBoth();
 
@@ -118,6 +229,7 @@ private:
 
 void CharacterParagraphPanelsTest::initTestCase()
 {
+    pictura::registerBundledFonts();
     QVERIFY(stateHome_.isValid());
     window_ = pictura::test::makeMainWindow();
     QVERIFY(window_ != nullptr);
@@ -166,6 +278,12 @@ void CharacterParagraphPanelsTest::characterPanelReflectsAndEdits()
     QCOMPARE(panel->trackingFieldForTest()->currentText(), QStringLiteral("0"));
     QCOMPARE(panel->kerningFieldForTest()->currentText(), QStringLiteral("Metrics"));
     QCOMPARE(panel->underlineForTest()->isChecked(), false);
+    QCOMPARE(panel->languageFieldForTest()->currentText(), QStringLiteral("English: USA"));
+    panel->setShowAsianOptions(true);
+    panel->refresh();
+    QVERIFY(panel->tsumeFieldForTest()->isVisibleTo(panel));
+    QCOMPARE(panel->tsumeFieldForTest()->value(), 0.0);
+    panel->setShowAsianOptions(false);
 
     // Refreshing the controls from the layer records nothing.
     const int shownBase = f.view->history_index();
@@ -290,6 +408,11 @@ void CharacterParagraphPanelsTest::paragraphPanelReflectsAndEdits()
     QVERIFY(panel->editingEnabledForTest());
     QCOMPARE(panel->justifyFieldForTest()->currentIndex(), int(shown.justify));
     QCOMPARE(panel->firstLineIndentFieldForTest()->value(), shown.first_line_indent);
+    panel->setMiddleEastern(true);
+    panel->refresh();
+    QCOMPARE(panel->directionLtrForTest()->isChecked(), shown.direction == 0);
+    QCOMPARE(panel->directionRtlForTest()->isChecked(), shown.direction == 1);
+    panel->setMiddleEastern(false);
 
     // Committing the first-line indent is one state; one undo restores it.
     const int base = f.view->history_index();
@@ -308,6 +431,367 @@ void CharacterParagraphPanelsTest::paragraphPanelReflectsAndEdits()
     QCOMPARE(pictura::type_api::layerParagraphSetting(*f.view, path).justify, 2);
 
     f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(saved);
+}
+
+void CharacterParagraphPanelsTest::justificationDialogRoundTrips()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_para_justify"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    const QString path = makeTypeLayer(f);
+    QVERIFY2(!path.isEmpty(), "a type layer");
+    auto* panel = frame.findChild<pictura::ParagraphPanel*>();
+    QVERIFY(panel);
+    panel->setView(f.view);
+    panel->refresh();
+
+    QMenu* menu = livePanelMenu(frame, QStringLiteral("paragraphPanel"));
+    QVERIFY(menu);
+    panel->updatePanelMenu(menu);
+    QAction* action = menuAction(menu, QStringLiteral("paragraph.justification"));
+    QVERIFY(action);
+
+    QTimer::singleShot(0, [&] {
+        auto* dialog = frame.findChild<pictura::JustificationDialog*>();
+        QVERIFY(dialog);
+        if (!dialog) {
+            return;
+        }
+        dialog->fieldForTest(1)->setValue(110.0);
+        dialog->fieldForTest(3)->setValue(-5.0);
+        dialog->fieldForTest(8)->setValue(120.0);
+        dialog->fieldForTest(9)->setValue(130.0);
+        dialog->accept();
+    });
+    const int base = f.view->history_index();
+    action->trigger();
+    QVERIFY2(f.committedOnce(base, "Edit Type Layer"), "one Edit Type Layer state");
+    const pictura::ParagraphSetting p =
+        pictura::type_api::layerParagraphSetting(*f.view, path);
+    QCOMPARE(p.word_spacing_desired, 1.1);
+    QCOMPARE(p.letter_spacing_min, -0.05);
+    QCOMPARE(p.glyph_spacing_max, 1.2);
+    QCOMPARE(p.auto_leading, 130.0);
+    QVERIFY(f.view->undo());
+}
+
+void CharacterParagraphPanelsTest::justificationCancelWritesNothing()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_para_justify_cancel"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    const QString path = makeTypeLayer(f);
+    QVERIFY2(!path.isEmpty(), "a type layer");
+    auto* panel = frame.findChild<pictura::ParagraphPanel*>();
+    QVERIFY(panel);
+    panel->setView(f.view);
+    panel->refresh();
+
+    QMenu* menu = livePanelMenu(frame, QStringLiteral("paragraphPanel"));
+    QVERIFY(menu);
+    panel->updatePanelMenu(menu);
+    QAction* action = menuAction(menu, QStringLiteral("paragraph.justification"));
+    QVERIFY(action);
+
+    const pictura::ParagraphSetting before =
+        pictura::type_api::layerParagraphSetting(*f.view, path);
+    QTimer::singleShot(0, [&] {
+        auto* dialog = frame.findChild<pictura::JustificationDialog*>();
+        QVERIFY(dialog);
+        if (!dialog) {
+            return;
+        }
+        dialog->fieldForTest(1)->setValue(150.0);
+        dialog->reject();
+    });
+    const int base = f.view->history_index();
+    action->trigger();
+    QCOMPARE(f.view->history_index(), base);
+    QCOMPARE(pictura::type_api::layerParagraphSetting(*f.view, path).word_spacing_desired,
+             before.word_spacing_desired);
+}
+
+void CharacterParagraphPanelsTest::paragraphMenuMatchesCs6()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_para_menu_rows"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    const QString path = makeTypeLayer(f);
+    QVERIFY2(!path.isEmpty(), "a type layer");
+    auto* panel = frame.findChild<pictura::ParagraphPanel*>();
+    QVERIFY(panel);
+    panel->setView(f.view);
+    panel->refresh();
+
+    QMenu* menu = livePanelMenu(frame, QStringLiteral("paragraphPanel"));
+    QVERIFY(menu);
+    panel->updatePanelMenu(menu);
+    const QStringList expected = {
+        QStringLiteral("Roman Hanging Punctuation"),
+        QStringLiteral("Justification…"),
+        QStringLiteral("Hyphenation…"),
+        QStringLiteral("Latin and East Asian Layout"),
+        QStringLiteral("World-Ready Layout"),
+        QStringLiteral("Default Features"),
+        QStringLiteral("East Asian Features"),
+        QStringLiteral("Middle Eastern Features"),
+        QStringLiteral("Single-line Composer"),
+        QStringLiteral("Every-line Composer"),
+        QStringLiteral("Reset Paragraph"),
+        QStringLiteral("Close"),
+        QStringLiteral("Close Tab Group"),
+    };
+    QCOMPARE(menuTexts(menu), expected);
+
+    const QStringList disabled = {
+        QStringLiteral("Hyphenation…"),
+        QStringLiteral("Latin and East Asian Layout"),
+        QStringLiteral("World-Ready Layout"),
+        QStringLiteral("Default Features"),
+        QStringLiteral("East Asian Features"),
+        QStringLiteral("Middle Eastern Features"),
+    };
+    for (const QString& label : disabled) {
+        QAction* action = menuText(menu, label);
+        QVERIFY2(action, qPrintable(label));
+        QVERIFY2(!action->isEnabled(), qPrintable(label));
+        QVERIFY2(action->toolTip().contains(QStringLiteral("not implemented yet")),
+                 qPrintable(label));
+    }
+    QVERIFY(menuText(menu, QStringLiteral("Latin and East Asian Layout"))->isChecked());
+    QVERIFY(menuText(menu, QStringLiteral("Default Features"))->isChecked());
+}
+
+void CharacterParagraphPanelsTest::paragraphMenuCheckStates()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_para_menu_state"));
+    QVERIFY2(f.ok(), "type fixture");
+    TypeOptionsGuard guard(f);
+    QString path;
+    pictura::CharacterPanel* character = characterPanelOn(f, path);
+    QVERIFY2(character, "a type layer and the panel");
+    auto* panel = frame.findChild<pictura::ParagraphPanel*>();
+    QVERIFY(panel);
+    panel->setView(f.view);
+    panel->refresh();
+
+    QMenu* menu = livePanelMenu(frame, QStringLiteral("paragraphPanel"));
+    QVERIFY(menu);
+    panel->updatePanelMenu(menu);
+    QAction* hanging = menuAction(menu, QStringLiteral("paragraph.hanging"));
+    QAction* single = menuAction(menu, QStringLiteral("paragraph.singleLineComposer"));
+    QAction* every = menuAction(menu, QStringLiteral("paragraph.everyLineComposer"));
+    QVERIFY(hanging && single && every);
+    QVERIFY(!hanging->isChecked());
+    QVERIFY(single->isChecked());
+    QVERIFY(!every->isChecked());
+}
+
+void CharacterParagraphPanelsTest::paragraphMenuToggles()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_para_menu_toggle"));
+    QVERIFY2(f.ok(), "type fixture");
+    TypeOptionsGuard guard(f);
+    QString path;
+    pictura::CharacterPanel* character = characterPanelOn(f, path);
+    QVERIFY2(character, "a type layer and the panel");
+    auto* panel = frame.findChild<pictura::ParagraphPanel*>();
+    QVERIFY(panel);
+    panel->setView(f.view);
+    panel->refresh();
+
+    QMenu* menu = livePanelMenu(frame, QStringLiteral("paragraphPanel"));
+    QVERIFY(menu);
+    panel->updatePanelMenu(menu);
+    QAction* hanging = menuAction(menu, QStringLiteral("paragraph.hanging"));
+    QVERIFY(hanging && !hanging->isChecked());
+    int base = f.view->history_index();
+    hanging->trigger();
+    QVERIFY2(f.committedOnce(base, "Edit Type Layer"), "one hanging state");
+    QVERIFY(pictura::type_api::layerParagraphSetting(*f.view, path).hanging);
+    QVERIFY(hanging->isChecked());
+    QVERIFY(f.view->undo());
+    QVERIFY(!pictura::type_api::layerParagraphSetting(*f.view, path).hanging);
+
+    panel->refresh();
+    panel->updatePanelMenu(menu);
+    QAction* single = menuAction(menu, QStringLiteral("paragraph.singleLineComposer"));
+    QAction* every = menuAction(menu, QStringLiteral("paragraph.everyLineComposer"));
+    QVERIFY(single && every);
+    QVERIFY(single->isChecked());
+    QVERIFY(!every->isChecked());
+    base = f.view->history_index();
+    every->trigger();
+    QVERIFY2(f.committedOnce(base, "Edit Type Layer"), "one composer state");
+    QCOMPARE(pictura::type_api::layerParagraphSetting(*f.view, path).composer, 1);
+    panel->updatePanelMenu(menu);
+    QVERIFY(every->isChecked());
+    QVERIFY(!single->isChecked());
+    QVERIFY(f.view->undo());
+    QCOMPARE(pictura::type_api::layerParagraphSetting(*f.view, path).composer, 0);
+}
+
+void CharacterParagraphPanelsTest::paragraphMenuReset()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_para_menu_reset"));
+    QVERIFY2(f.ok(), "type fixture");
+    TypeOptionsGuard guard(f);
+    QString path;
+    pictura::CharacterPanel* character = characterPanelOn(f, path);
+    QVERIFY2(character, "a type layer and the panel");
+    auto* panel = frame.findChild<pictura::ParagraphPanel*>();
+    QVERIFY(panel);
+    panel->setView(f.view);
+    panel->refresh();
+
+    character->styleButtonForTest(0)->click();
+    auto* hangingBox = panel->findChild<QCheckBox*>(QStringLiteral("paragraphHanging"));
+    QVERIFY(hangingBox);
+    hangingBox->setChecked(true);
+    panel->refresh();
+    const pictura::ParagraphSetting before =
+        pictura::type_api::layerParagraphSetting(*f.view, path);
+    QVERIFY(before.hanging);
+    const QString text = pictura::type_api::layerText(*f.view, path);
+    const QString family =
+        pictura::familyForFontName(pictura::type_api::layerFont(*f.view, path));
+
+    QMenu* menu = livePanelMenu(frame, QStringLiteral("paragraphPanel"));
+    QVERIFY(menu);
+    panel->updatePanelMenu(menu);
+    QAction* reset = menuAction(menu, QStringLiteral("paragraph.reset"));
+    QVERIFY(reset && reset->isEnabled());
+    const int base = f.view->history_index();
+    reset->trigger();
+    QVERIFY2(f.committedOnce(base, "Edit Type Layer"), "one Reset Paragraph state");
+
+    const pictura::ParagraphSetting defaults = pictura::type_api::defaultParagraphSetting();
+    const pictura::ParagraphSetting after =
+        pictura::type_api::layerParagraphSetting(*f.view, path);
+    QCOMPARE(after.hanging, defaults.hanging);
+    QCOMPARE(after.composer, defaults.composer);
+    QCOMPARE(after.justify, defaults.justify);
+    QVERIFY(layerCharacter(f, path).faux_bold);
+    QCOMPARE(pictura::type_api::layerText(*f.view, path), text);
+    QCOMPARE(pictura::familyForFontName(pictura::type_api::layerFont(*f.view, path)), family);
+    QVERIFY(f.view->undo());
+    QVERIFY(pictura::type_api::layerParagraphSetting(*f.view, path).hanging);
+}
+
+void CharacterParagraphPanelsTest::menuDisabledRows()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_type_menu_disabled"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    const QString path = makeTypeLayer(f);
+    QVERIFY2(!path.isEmpty(), "a type layer");
+    auto* character = frame.findChild<pictura::CharacterPanel*>();
+    auto* paragraph = frame.findChild<pictura::ParagraphPanel*>();
+    QVERIFY(character && paragraph);
+    character->setView(f.view);
+    character->refresh();
+    paragraph->setView(f.view);
+    paragraph->refresh();
+
+    QMenu* characterMenu = livePanelMenu(frame, QStringLiteral("characterPanel"));
+    QVERIFY(characterMenu);
+    character->updatePanelMenu(characterMenu);
+    for (const QString& label : {QStringLiteral("No Break"),
+                                 QStringLiteral("Change Text Orientation"),
+                                 QStringLiteral("Middle Eastern Features")}) {
+        QAction* action = menuText(characterMenu, label);
+        QVERIFY2(action, qPrintable(label));
+        QVERIFY2(!action->isEnabled(), qPrintable(label));
+        QVERIFY2(action->toolTip().contains(QStringLiteral("not implemented yet")),
+                 qPrintable(label));
+    }
+
+    QMenu* paragraphMenu = livePanelMenu(frame, QStringLiteral("paragraphPanel"));
+    QVERIFY(paragraphMenu);
+    paragraph->updatePanelMenu(paragraphMenu);
+    for (const QString& label : {QStringLiteral("Hyphenation…"),
+                                 QStringLiteral("Latin and East Asian Layout"),
+                                 QStringLiteral("World-Ready Layout"),
+                                 QStringLiteral("Default Features"),
+                                 QStringLiteral("East Asian Features"),
+                                 QStringLiteral("Middle Eastern Features")}) {
+        QAction* action = menuText(paragraphMenu, label);
+        QVERIFY2(action, qPrintable(label));
+        QVERIFY2(!action->isEnabled(), qPrintable(label));
+        QVERIFY2(action->toolTip().contains(QStringLiteral("not implemented yet")),
+                 qPrintable(label));
+    }
+}
+
+void CharacterParagraphPanelsTest::menuCloseEntriesLast()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_type_menu_close_last"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    QVERIFY2(!makeTypeLayer(f).isEmpty(), "a type layer");
+
+    const auto assertLast = [&frame](const QString& panelName) {
+        QMenu* menu = livePanelMenu(frame, panelName);
+        if (!menu) {
+            return false;
+        }
+        const QStringList texts = menuTexts(menu);
+        return texts.size() >= 2
+            && texts.mid(texts.size() - 2)
+                == QStringList{QStringLiteral("Close"), QStringLiteral("Close Tab Group")};
+    };
+    QVERIFY(assertLast(QStringLiteral("characterPanel")));
+    QVERIFY(assertLast(QStringLiteral("paragraphPanel")));
+}
+
+void CharacterParagraphPanelsTest::directionFollowsMiddleEasternPreference()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_para_direction_visible"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    QVERIFY(!makeTypeLayer(f).isEmpty());
+    auto* panel = frame.findChild<pictura::ParagraphPanel*>();
+    QVERIFY(panel);
+    panel->setView(f.view);
+    panel->setMiddleEastern(false);
+    QVERIFY(!panel->directionVisibleForTest());
+    panel->setMiddleEastern(true);
+    QVERIFY(panel->directionVisibleForTest());
+    panel->setMiddleEastern(false);
+    QVERIFY(!panel->directionVisibleForTest());
+}
+
+void CharacterParagraphPanelsTest::rtlDirectionApplies()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_para_rtl"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    const QString path = makeTypeLayer(f);
+    QVERIFY2(!path.isEmpty(), "a type layer");
+    auto* panel = frame.findChild<pictura::ParagraphPanel*>();
+    QVERIFY(panel);
+    panel->setMiddleEastern(true);
+    panel->setView(f.view);
+    panel->refresh();
+    QCOMPARE(pictura::type_api::layerParagraphSetting(*f.view, path).direction, 0);
+
+    const int base = f.view->history_index();
+    panel->directionRtlForTest()->click();
+    QVERIFY2(f.committedOnce(base, "Edit Type Layer"), "one Edit Type Layer state");
+    QCOMPARE(pictura::type_api::layerParagraphSetting(*f.view, path).direction, 1);
+    QVERIFY(f.view->undo());
+    QCOMPARE(pictura::type_api::layerParagraphSetting(*f.view, path).direction, 0);
+    panel->setMiddleEastern(false);
 }
 
 void CharacterParagraphPanelsTest::menusTogglePanels()
@@ -386,30 +870,6 @@ void CharacterParagraphPanelsTest::optionsBarTogglesBoth()
     QVERIFY(!column->isPanelVisible(QStringLiteral("paragraphPanel")));
 }
 
-namespace {
-
-// Restores the Horizontal Type options a test's type layer changed.
-struct TypeOptionsGuard {
-    explicit TypeOptionsGuard(Fixture& fixture)
-        : f(fixture)
-        , saved(f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->get())
-    {
-    }
-    ~TypeOptionsGuard()
-    {
-        f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(saved);
-    }
-    Fixture& f;
-    pictura::TypeOptions saved;
-};
-
-pictura::CharacterSetting layerCharacter(const Fixture& f, const QString& path)
-{
-    return pictura::type_api::layerCharacterSetting(*f.view, path);
-}
-
-} // namespace
-
 pictura::CharacterPanel* CharacterParagraphPanelsTest::characterPanelOn(Fixture& f, QString& path)
 {
     showFrame();
@@ -420,6 +880,316 @@ pictura::CharacterPanel* CharacterParagraphPanelsTest::characterPanelOn(Fixture&
         panel->refresh();
     }
     return path.isEmpty() ? nullptr : panel;
+}
+
+void CharacterParagraphPanelsTest::fontStyleApplies()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_char_style"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    const QString path = makeTypeLayer(f);
+    QVERIFY2(!path.isEmpty(), "a type layer");
+    auto* panel = frame.findChild<pictura::CharacterPanel*>();
+    QVERIFY(panel);
+    panel->setView(f.view);
+    panel->refresh();
+
+    auto* family = panel->findChild<QFontComboBox*>(QStringLiteral("characterFamily"));
+    QVERIFY(family);
+    const int familyIndex = family->findText(QStringLiteral("Noto Sans"), Qt::MatchFixedString);
+    QVERIFY2(familyIndex >= 0, "the bundled UI family is installed");
+    family->setCurrentIndex(familyIndex);
+    const int bold = panel->styleFieldForTest()->findText(QStringLiteral("Bold"),
+                                                           Qt::MatchFixedString);
+    QVERIFY2(bold >= 0, "Noto Sans has a Bold face");
+
+    const int base = f.view->history_index();
+    panel->styleFieldForTest()->setCurrentIndex(bold);
+    QCOMPARE(panel->styleFieldForTest()->currentText(), QStringLiteral("Bold"));
+    QVERIFY2(f.committedOnce(base, "Edit Type Layer"), "one Edit Type Layer state");
+    QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).font_style,
+             QStringLiteral("Bold"));
+    QVERIFY(f.view->undo());
+    QVERIFY(pictura::type_api::layerCharacterSetting(*f.view, path).font_style
+            != QStringLiteral("Bold"));
+}
+
+void CharacterParagraphPanelsTest::styleFieldListsFamilyFaces()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_char_faces"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    QVERIFY(!makeTypeLayer(f).isEmpty());
+    auto* panel = frame.findChild<pictura::CharacterPanel*>();
+    QVERIFY(panel);
+    panel->setView(f.view);
+    panel->refresh();
+
+    auto* family = panel->findChild<QFontComboBox*>(QStringLiteral("characterFamily"));
+    QVERIFY(family);
+    const int familyIndex = family->findText(QStringLiteral("Noto Sans"), Qt::MatchFixedString);
+    QVERIFY2(familyIndex >= 0, "the bundled UI family is installed");
+    family->setCurrentIndex(familyIndex);
+    QVERIFY(panel->styleFieldForTest()->count() >= 2);
+    QVERIFY(panel->styleFieldForTest()->findText(QStringLiteral("Bold"),
+                                                 Qt::MatchFixedString) >= 0);
+}
+
+void CharacterParagraphPanelsTest::languageRoundTrips()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_char_language"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    const QString path = makeTypeLayer(f);
+    QVERIFY2(!path.isEmpty(), "a type layer");
+    auto* panel = frame.findChild<pictura::CharacterPanel*>();
+    QVERIFY(panel);
+    panel->setView(f.view);
+    panel->refresh();
+
+    const QString before = pictura::type_api::layerCharacterSetting(*f.view, path).language;
+    const int base = f.view->history_index();
+    panel->languageFieldForTest()->setCurrentText(QStringLiteral("French"));
+    QVERIFY2(f.committedOnce(base, "Edit Type Layer"), "one Edit Type Layer state");
+    QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).language,
+             QStringLiteral("French"));
+    QVERIFY(f.view->undo());
+    QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).language, before);
+}
+
+void CharacterParagraphPanelsTest::tsumeFollowsAsianPreference()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_char_tsume"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    const QString path = makeTypeLayer(f);
+    QVERIFY2(!path.isEmpty(), "a type layer");
+    auto* panel = frame.findChild<pictura::CharacterPanel*>();
+    QVERIFY(panel);
+    panel->setView(f.view);
+    panel->refresh();
+
+    panel->setShowAsianOptions(false);
+    QVERIFY(!panel->tsumeFieldForTest()->isVisibleTo(panel));
+    panel->setShowAsianOptions(true);
+    QVERIFY(panel->tsumeFieldForTest()->isVisibleTo(panel));
+
+    const int base = f.view->history_index();
+    panel->tsumeFieldForTest()->setValue(50.0);
+    emit panel->tsumeFieldForTest()->valueCommitted(50.0);
+    QVERIFY2(f.committedOnce(base, "Edit Type Layer"), "one Edit Type Layer state");
+    QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).tsume, 50.0);
+    QVERIFY(f.view->undo());
+    QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).tsume, 0.0);
+    panel->setShowAsianOptions(false);
+}
+
+void CharacterParagraphPanelsTest::fractionalWidthsMenu()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_char_fractional"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    const QString path = makeTypeLayer(f);
+    QVERIFY2(!path.isEmpty(), "a type layer");
+    auto* panel = frame.findChild<pictura::CharacterPanel*>();
+    QVERIFY(panel);
+    panel->setView(f.view);
+    panel->refresh();
+    QVERIFY(pictura::type_api::layerCharacterSetting(*f.view, path).fractional_widths);
+
+    QMenu* menu = livePanelMenu(frame, QStringLiteral("characterPanel"));
+    QVERIFY(menu);
+    panel->updatePanelMenu(menu);
+    QAction* action = menuAction(menu, QStringLiteral("character.fractionalWidths"));
+    QVERIFY(action);
+    QVERIFY(action->isChecked());
+    const int base = f.view->history_index();
+    action->trigger();
+    QVERIFY2(f.committedOnce(base, "Edit Type Layer"), "one Edit Type Layer state");
+    QVERIFY(!pictura::type_api::layerCharacterSetting(*f.view, path).fractional_widths);
+    QVERIFY(f.view->undo());
+    QVERIFY(pictura::type_api::layerCharacterSetting(*f.view, path).fractional_widths);
+}
+
+void CharacterParagraphPanelsTest::characterMenuMatchesCs6()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_char_menu_rows"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    const QString path = makeTypeLayer(f);
+    QVERIFY2(!path.isEmpty(), "a type layer");
+    auto* panel = frame.findChild<pictura::CharacterPanel*>();
+    QVERIFY(panel);
+    panel->setView(f.view);
+    panel->refresh();
+
+    QMenu* menu = livePanelMenu(frame, QStringLiteral("characterPanel"));
+    QVERIFY(menu);
+    panel->updatePanelMenu(menu);
+
+    const QStringList expected = {
+        QStringLiteral("Change Text Orientation"),
+        QStringLiteral("OpenType"),
+        QStringLiteral("Faux Bold"),
+        QStringLiteral("Faux Italic"),
+        QStringLiteral("All Caps"),
+        QStringLiteral("Small Caps"),
+        QStringLiteral("Superscript"),
+        QStringLiteral("Subscript"),
+        QStringLiteral("Underline"),
+        QStringLiteral("Strikethrough"),
+        QStringLiteral("Fractional Widths"),
+        QStringLiteral("System Layout"),
+        QStringLiteral("No Break"),
+        QStringLiteral("Middle Eastern Features"),
+        QStringLiteral("Reset Character"),
+        QStringLiteral("Close"),
+        QStringLiteral("Close Tab Group"),
+    };
+    QCOMPARE(menuTexts(menu), expected);
+    QCOMPARE(submenuTexts(menu, QStringLiteral("OpenType")),
+             (QStringList{QStringLiteral("Standard Ligatures"),
+                          QStringLiteral("Contextual Alternates"),
+                          QStringLiteral("Discretionary Ligatures"),
+                          QStringLiteral("Swash"),
+                          QStringLiteral("Stylistic Alternates"),
+                          QStringLiteral("Titling Alternates"),
+                          QStringLiteral("Ordinals"),
+                          QStringLiteral("Fractions")}));
+}
+
+void CharacterParagraphPanelsTest::characterMenuCheckStates()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_char_menu_state"));
+    QVERIFY2(f.ok(), "type fixture");
+    TypeOptionsGuard guard(f);
+    QString path;
+    pictura::CharacterPanel* panel = characterPanelOn(f, path);
+    QVERIFY2(panel, "a type layer and the panel");
+
+    panel->styleButtonForTest(0)->click();
+    int feature = 0;
+    while (feature < 8 && !panel->openTypeButtonForTest(feature)->isEnabled()) {
+        ++feature;
+    }
+    if (feature < 8) {
+        panel->openTypeButtonForTest(feature)->click();
+    }
+    panel->refresh();
+
+    QMenu* menu = livePanelMenu(frame, QStringLiteral("characterPanel"));
+    QVERIFY(menu);
+    panel->updatePanelMenu(menu);
+    QAction* bold = menuAction(menu, QStringLiteral("character.fauxBold"));
+    QAction* fractional = menuAction(menu, QStringLiteral("character.fractionalWidths"));
+    QAction* system = menuAction(menu, QStringLiteral("character.systemLayout"));
+    QVERIFY(bold && fractional && system);
+    QVERIFY(bold->isChecked());
+    QVERIFY(fractional->isChecked());
+    QVERIFY(!system->isChecked());
+    if (feature < 8) {
+        QAction* openType = menuText(menu, QStringLiteral("OpenType"));
+        QVERIFY(openType && openType->menu());
+        QVERIFY(openType->menu()->actions().at(feature)->isChecked());
+    }
+}
+
+void CharacterParagraphPanelsTest::characterMenuToggles()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_char_menu_toggle"));
+    QVERIFY2(f.ok(), "type fixture");
+    TypeOptionsGuard guard(f);
+    QString path;
+    pictura::CharacterPanel* panel = characterPanelOn(f, path);
+    QVERIFY2(panel, "a type layer and the panel");
+
+    QMenu* menu = livePanelMenu(frame, QStringLiteral("characterPanel"));
+    QVERIFY(menu);
+    panel->updatePanelMenu(menu);
+    QAction* bold = menuAction(menu, QStringLiteral("character.fauxBold"));
+    QVERIFY(bold && bold->isEnabled());
+    int base = f.view->history_index();
+    bold->trigger();
+    QVERIFY2(f.committedOnce(base, "Edit Type Layer"), "one Faux Bold state");
+    QVERIFY(layerCharacter(f, path).faux_bold);
+    QVERIFY(panel->styleButtonForTest(0)->isChecked());
+    QVERIFY(bold->isChecked());
+    QVERIFY(f.view->undo());
+    QVERIFY(!layerCharacter(f, path).faux_bold);
+
+    panel->refresh();
+    panel->updatePanelMenu(menu);
+    QAction* fractional = menuAction(menu, QStringLiteral("character.fractionalWidths"));
+    QVERIFY(fractional && fractional->isChecked());
+    base = f.view->history_index();
+    fractional->trigger();
+    QVERIFY2(f.committedOnce(base, "Edit Type Layer"), "one Fractional Widths state");
+    QVERIFY(!layerCharacter(f, path).fractional_widths);
+    QVERIFY(!fractional->isChecked());
+    QVERIFY(f.view->undo());
+    QVERIFY(layerCharacter(f, path).fractional_widths);
+
+    panel->refresh();
+    panel->updatePanelMenu(menu);
+    QAction* system = menuAction(menu, QStringLiteral("character.systemLayout"));
+    QVERIFY(system && !system->isChecked());
+    base = f.view->history_index();
+    system->trigger();
+    QVERIFY2(f.committedOnce(base, "Edit Type Layer"), "one System Layout state");
+    QVERIFY(!layerCharacter(f, path).fractional_widths);
+    QVERIFY(f.view->undo());
+    QVERIFY(layerCharacter(f, path).fractional_widths);
+}
+
+void CharacterParagraphPanelsTest::characterMenuReset()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_char_menu_reset"));
+    QVERIFY2(f.ok(), "type fixture");
+    TypeOptionsGuard guard(f);
+    QString path;
+    pictura::CharacterPanel* panel = characterPanelOn(f, path);
+    QVERIFY2(panel, "a type layer and the panel");
+
+    panel->styleButtonForTest(0)->click();
+    typeInto(panel->trackingFieldForTest(), QStringLiteral("120"));
+    panel->refresh();
+    const pictura::CharacterSetting before = layerCharacter(f, path);
+    QVERIFY(before.faux_bold);
+    QCOMPARE(before.tracking, 120.0);
+    const QString text = pictura::type_api::layerText(*f.view, path);
+    const QString family =
+        pictura::familyForFontName(pictura::type_api::layerFont(*f.view, path));
+
+    QMenu* menu = livePanelMenu(frame, QStringLiteral("characterPanel"));
+    QVERIFY(menu);
+    panel->updatePanelMenu(menu);
+    QAction* reset = menuAction(menu, QStringLiteral("character.reset"));
+    QVERIFY(reset && reset->isEnabled());
+    const int base = f.view->history_index();
+    reset->trigger();
+    QVERIFY2(f.committedOnce(base, "Edit Type Layer"), "one Reset Character state");
+
+    const pictura::CharacterSetting defaults = pictura::type_api::defaultCharacterSetting();
+    const pictura::CharacterSetting after = layerCharacter(f, path);
+    QVERIFY(!after.faux_bold);
+    QCOMPARE(after.tracking, defaults.tracking);
+    QCOMPARE(after.size, before.size);
+    QCOMPARE(after.font_style, before.font_style);
+    QCOMPARE(after.color, before.color);
+    QCOMPARE(pictura::type_api::layerText(*f.view, path), text);
+    QCOMPARE(pictura::familyForFontName(pictura::type_api::layerFont(*f.view, path)), family);
+    QVERIFY(f.view->undo());
+    QVERIFY(layerCharacter(f, path).faux_bold);
+    QCOMPARE(layerCharacter(f, path).tracking, 120.0);
 }
 
 void CharacterParagraphPanelsTest::styleButtonAppliesToggle()
@@ -520,8 +1290,9 @@ void CharacterParagraphPanelsTest::openTypeButtonsFollowTheFont()
 
     const QString family =
         pictura::familyForFontName(pictura::type_api::layerFont(*f.view, path));
-    pictura::registerTypeFont(family);
-    const std::uint32_t features = pictura::type_api::openTypeFeatures(family);
+    const QString style = pictura::type_api::layerCharacterSetting(*f.view, path).font_style;
+    pictura::registerTypeFont(family, style);
+    const std::uint32_t features = pictura::type_api::openTypeFeatures(family, style);
     for (int i = 0; i < 8; ++i) {
         QCOMPARE(panel->openTypeButtonForTest(i)->isEnabled(), bool(features >> i & 1u));
     }

@@ -7,6 +7,9 @@
 class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
+class QFormLayout;
+class QMenu;
+class QToolButton;
 
 namespace pictura {
 
@@ -22,6 +25,9 @@ public:
     explicit ParagraphPanel(QWidget* parent = nullptr);
 
     void setView(PictureView* view);
+    void setMiddleEastern(bool on);
+    void updatePanelMenu(QMenu* menu);
+    void performPanelMenuAction(const QString& actionId);
     void refresh();
 
     // The dense form's natural minimum width would raise the panel column's
@@ -29,16 +35,26 @@ public:
     QSize minimumSizeHint() const override;
 
     QComboBox* justifyFieldForTest() const { return justify_; }
+    QToolButton* directionLtrForTest() const { return ltr_; }
+    QToolButton* directionRtlForTest() const { return rtl_; }
+    bool directionVisibleForTest() const;
     QDoubleSpinBox* firstLineIndentFieldForTest() const { return firstLineIndent_; }
     bool editingEnabledForTest() const;
     void commitForTest();
 
 private:
     void apply();
+    void openJustification();
+    void resetParagraph();
     bool hasTypeLayer() const;
 
     PictureView* view_ = nullptr;
+    bool middleEastern_ = false;
+    QFormLayout* form_ = nullptr;
+    QWidget* direction_ = nullptr;
     QComboBox* justify_ = nullptr;
+    QToolButton* ltr_ = nullptr;
+    QToolButton* rtl_ = nullptr;
     QDoubleSpinBox* startIndent_ = nullptr;
     QDoubleSpinBox* endIndent_ = nullptr;
     QDoubleSpinBox* firstLineIndent_ = nullptr;

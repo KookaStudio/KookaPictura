@@ -36,6 +36,7 @@
 #include <cmath>
 #include <functional>
 #include <limits>
+#include <utility>
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
@@ -106,6 +107,9 @@ FilterPreviewDialog::FilterPreviewDialog(PictureView* view, const FilterCommandS
     previewVisible_ = previewView.visible;
     canvasZoom_ = previewView.canvasZoom;
     canvas_ = previewView.canvas;
+    for (ImageView* mirror : previewView.mirrors) {
+        mirrors_.append(mirror);
+    }
     devicePixelRatio_ = previewView.devicePixelRatio;
     positional_ = filter_kind_positional(spec.kind);
     // Seed the preview zoom from the canvas zoom, snapped to a preview level.
@@ -390,6 +394,11 @@ bool FilterPreviewDialog::showProxy()
     proxyScale_ = scale;
     proxyShown_ = true;
     canvas_->setFilterPreview(picture, region);
+    for (ImageView* mirror : std::as_const(mirrors_)) {
+        if (mirror) {
+            mirror->setFilterPreview(picture, region);
+        }
+    }
     return true;
 }
 
@@ -397,6 +406,13 @@ void FilterPreviewDialog::clearProxy()
 {
     if (proxyShown_ && canvas_) {
         canvas_->clearFilterPreview();
+    }
+    if (proxyShown_) {
+        for (ImageView* mirror : std::as_const(mirrors_)) {
+            if (mirror) {
+                mirror->clearFilterPreview();
+            }
+        }
     }
     proxyShown_ = false;
 }
@@ -419,6 +435,11 @@ void FilterPreviewDialog::pollExactPreview()
     if (!exact.isNull() && proxyShown_ && canvas_) {
         proxyPicture_ = exact;
         canvas_->setFilterPreview(exact, proxyArea_);
+        for (ImageView* mirror : std::as_const(mirrors_)) {
+            if (mirror) {
+                mirror->setFilterPreview(exact, proxyArea_);
+            }
+        }
         if (positional_) {
             updateThumbnail();
         }

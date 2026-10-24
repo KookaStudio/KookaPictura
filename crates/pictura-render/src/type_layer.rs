@@ -15,9 +15,9 @@
 //! `ascent + descent` cell — no `vert` alternates, rotated Latin, or tate-chu-yoko.
 
 use pictura_core::{
-    AntiAlias, BitDepth, Channel, CharacterAttrs, ColorMode, Document, LayerBlock, LayoutLine,
-    LockFlags, PixelBuffer, PlacedGlyph, PsdRect, RasterRequest, TextAlign, TextLayout, TextStyle,
-    TypeSpec, TypeTool,
+    AntiAlias, BitDepth, Channel, CharacterAttrs, ColorMode, Document, Layer, LayerBlock,
+    LayoutLine, LockFlags, PixelBuffer, PlacedGlyph, PsdRect, RasterRequest, TextAlign, TextLayout,
+    TextStyle, TypeSpec, TypeTool,
 };
 
 use crate::text_render::{blit_glyph, glyph_matrix, layout_type, render_text_buffer, BundledText};
@@ -56,7 +56,7 @@ pub(crate) fn vertical_layout(
     let baseline_shift = c.baseline_shift as f32;
     let cell = crate::type_paragraph::vertical_cell(bundled, c);
     let factor = align_factor(justification);
-    let columns = lines
+    let columns: Vec<LayoutLine> = lines
         .iter()
         .enumerate()
         .map(|(j, line)| {
@@ -77,6 +77,9 @@ pub(crate) fn vertical_layout(
                             x: x + g.x_offset,
                             y: y - g.y_offset,
                             scale: g.scale,
+                            x_scale: g.x_scale,
+                            face: g.face,
+                            cluster: g.cluster,
                         };
                         x += g.advance;
                         placed
@@ -90,18 +93,25 @@ pub(crate) fn vertical_layout(
             }
         })
         .collect();
+    let face_count = columns
+        .iter()
+        .flat_map(|line| &line.glyphs)
+        .map(|g| g.face.saturating_add(1))
+        .max()
+        .unwrap_or(1);
     TextLayout {
         lines: columns,
         width,
         height,
+        face_count,
     }
 }
 
 /// Baseline-to-baseline distance: `Auto` is the CS6 `1.2 × size`, `Fixed` the
 /// authored value.
-pub(crate) fn leading_px(size: f32, leading: pictura_core::Leading) -> f32 {
+pub(crate) fn leading_px(size: f32, leading: pictura_core::Leading, auto_percent: f64) -> f32 {
     match leading {
-        pictura_core::Leading::Auto => size * 1.2,
+        pictura_core::Leading::Auto => size * (auto_percent as f32 / 100.0),
         pictura_core::Leading::Fixed(value) => value as f32,
     }
 }
@@ -128,7 +138,7 @@ fn text_box(spec: &TypeSpec) -> Option<(f32, f32, f32, f32)> {
 
 /// [`text_box`] for any text, blank included (the caret still needs a box).
 pub(crate) fn text_box_any(spec: &TypeSpec) -> Option<(f32, f32, f32, f32)> {
-    let bundled = crate::fonts::face_for(&spec.character.font_family)?;
+    let bundled = crate::fonts::face_for(&spec.character.font_family, &spec.character.font_style)?;
     let size = spec.character.size as f32;
     let lines = type_lines(&spec.text);
     if size.is_nan() || size <= 0.0 {
@@ -146,7 +156,7 @@ pub(crate) fn text_box_any(spec: &TypeSpec) -> Option<(f32, f32, f32, f32)> {
     }
     let ascent = bundled.ascent(size);
     let descent = bundled.descent(size);
-    let leading = leading_px(size, spec.character.leading);
+    let leading = leading_px(size, spec.character.leading, spec.paragraph.auto_leading);
     let v = (spec.character.vertical_scale / 100.0) as f32;
     let factor = align_factor(spec.justification());
     let (x, y) = (spec.origin.0 as f32, spec.origin.1 as f32);
@@ -166,7 +176,14 @@ pub(crate) fn text_box_any(spec: &TypeSpec) -> Option<(f32, f32, f32, f32)> {
         let overhang = ascent * run.skew + run.embolden;
         let width = lines
             .iter()
-            .map(|line| crate::type_paragraph::line_advance(bundled, line, &spec.character))
+            .map(|line| {
+                crate::type_paragraph::line_advance_with(
+                    bundled,
+                    line,
+                    &spec.character,
+                    &spec.paragraph,
+                )
+            })
             .fold(0.0f32, f32::max)
             + overhang;
         // A subscript or an underline can hang below the font's descent.
@@ -315,7 +332,7 @@ fn render_mapped(spec: &TypeSpec, rect: PsdRect) -> Option<PixelBuffer> {
             (dy - f64::from(rect.top)) as f32,
         )
     };
-    let rasterizer = bundled.rasterizer();
+    let faces = crate::fonts::faces_in_order(bundled);
     let mut out = PixelBuffer::new(rect.width() as u32, rect.height() as u32, 4);
     let mut painted = false;
     for glyph in layout.lines.iter().flat_map(|line| &line.glyphs) {
@@ -329,7 +346,12 @@ fn render_mapped(spec: &TypeSpec, rect: PsdRect) -> Option<PixelBuffer> {
         };
         // The pens already carry the character H/V scale (layout_type applies
         // it); compose the same outline transform so glyphs stretch with them.
-        let outline = compose(m, glyph_matrix(&run, glyph.scale));
+        let face = faces.get(glyph.face as usize).copied().unwrap_or(bundled);
+        let rasterizer = face.rasterizer();
+        let mut matrix = glyph_matrix(&run, glyph.scale);
+        matrix[0] *= glyph.x_scale;
+        matrix[2] *= glyph.x_scale;
+        let outline = compose(m, matrix);
         if let Some(mask) = rasterizer.rasterize_styled(&request, outline, run.embolden) {
             painted |= blit_glyph(&mut out, &mask, px as i32, py as i32, color);
         }
@@ -355,7 +377,7 @@ fn compose(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
 /// `spec`'s face, its layout in the untransformed, unwarped box, and that
 /// box's rect.
 pub(crate) fn flat_layout(spec: &TypeSpec) -> Option<(&'static BundledText, TextLayout, PsdRect)> {
-    let bundled = crate::fonts::face_for(&spec.character.font_family)?;
+    let bundled = crate::fonts::face_for(&spec.character.font_family, &spec.character.font_style)?;
     let flat = TypeSpec {
         matrix: TypeSpec::IDENTITY,
         warp: pictura_core::warp::TextWarp::default(),
@@ -367,6 +389,18 @@ pub(crate) fn flat_layout(spec: &TypeSpec) -> Option<(&'static BundledText, Text
     Some((bundled, layout, unmapped))
 }
 
+/// Whether any glyph of `spec` needs a fallback face, so PDF must rasterize it
+/// instead of writing one face of live text.
+pub(crate) fn type_needs_fallback(spec: &TypeSpec) -> bool {
+    flat_layout(spec).is_some_and(|(_, layout, _)| {
+        layout
+            .lines
+            .iter()
+            .flat_map(|line| &line.glyphs)
+            .any(|glyph| glyph.face != 0)
+    })
+}
+
 /// Glyph ids with their pens `(u, v)`, as [`type_pens`] lays them out.
 pub(crate) type Pens = Vec<(u16, f64, f64)>;
 
@@ -375,6 +409,16 @@ pub(crate) type Pens = Vec<(u16, f64, f64)>;
 /// The pens carry the horizontal scale, kerning, tracking, and alignment.
 pub(crate) fn type_pens(spec: &TypeSpec) -> Option<(&'static BundledText, Pens)> {
     let (bundled, layout, unmapped) = flat_layout(spec)?;
+    // PDF live text carries one glyph id and one pen per glyph, so a glyph
+    // scaled horizontally by justification must rasterize instead.
+    if layout
+        .lines
+        .iter()
+        .flat_map(|line| &line.glyphs)
+        .any(|glyph| (glyph.x_scale - 1.0).abs() > 1e-4)
+    {
+        return None;
+    }
     let ascent = bundled.ascent(spec.character.size as f32);
     let pens = layout
         .lines
@@ -484,6 +528,40 @@ pub fn add_type_layer(doc: &mut Document, selection_path: &str, spec: &TypeSpec)
         ..Default::default()
     };
     crate::document_ops::insert_node(doc, selection_path, layer)
+}
+
+/// Re-set every live type layer from its own spec, keeping its text, transform,
+/// attributes, and applied styles, and recording no history. A process-wide
+/// render setting (Missing Glyph Protection) changes the pixels without
+/// changing the document's type data.
+pub fn re_render_type_layers(doc: &mut Document) -> usize {
+    if !type_layers_editable(doc) {
+        return 0;
+    }
+    fn walk(layers: &[Layer], prefix: &str, out: &mut Vec<String>) {
+        for (i, layer) in layers.iter().enumerate() {
+            let path = if prefix.is_empty() {
+                i.to_string()
+            } else {
+                format!("{prefix}/{i}")
+            };
+            walk(&layer.children, &path, out);
+            if layer.type_tool.is_some() {
+                out.push(path);
+            }
+        }
+    }
+    let mut paths = Vec::new();
+    walk(&doc.layers, "", &mut paths);
+    paths
+        .iter()
+        .filter(|path| {
+            let Some(spec) = crate::resolve_path(doc, path).and_then(type_layer_spec) else {
+                return false;
+            };
+            replace_type_layer(doc, path, &spec)
+        })
+        .count()
 }
 
 /// The topmost visible type layer whose rect contains `(x, y)`, searching into
@@ -898,7 +976,7 @@ mod tests {
 
     #[test]
     fn fixed_leading_sets_the_line_baselines() {
-        let bundled = crate::fonts::face_for("Liberation Sans").unwrap();
+        let bundled = crate::fonts::face_for("Liberation Sans", "").unwrap();
         let mut fixed = spec("One\rTwo", false, 0);
         fixed.character.leading = Leading::Fixed(10.0);
         let layout = layout_type(bundled, &render_view(&fixed), 300, 300).unwrap();

@@ -133,6 +133,9 @@ private:
     using ShapeSyncs = std::vector<std::function<void(const ShapeOptions&)>>;
     QWidget* buildShapePage(ToolId id);
     QWidget* buildRotateViewPage(ToolId id);
+    // options_bar_navigate.cpp: the Hand and Zoom tools' multi-window options.
+    QWidget* buildHandPage(ToolId id);
+    QWidget* buildZoomPage(ToolId id);
     // options_bar_move.cpp: the Move tool's Align and Distribute buttons.
     QWidget* buildMovePage(ToolId id);
     // options_bar_eyedropper.cpp: the Eyedropper's Sample Size / Sample / ring.
@@ -194,6 +197,8 @@ private:
     PenGroup* pen_ = nullptr;
     ShapeGroup* shape_ = nullptr;
     TypeGroup* type_ = nullptr;
+    HandGroup* hand_ = nullptr;
+    ZoomGroup* zoom_ = nullptr;
     QStackedWidget* stack_ = nullptr;
     QToolButton* workspaceSwitcher_ = nullptr;
     BrushPresetPicker* brushPicker_ = nullptr;

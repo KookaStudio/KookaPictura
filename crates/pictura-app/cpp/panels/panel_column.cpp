@@ -180,12 +180,12 @@ PanelSide PanelColumn::side() const
     const int self = splitter->indexOf(const_cast<PanelColumn*>(this));
     for (int i = 0; i < splitter->count(); ++i) {
         QWidget* pane = splitter->widget(i);
-        if (pane && pane->objectName() == QStringLiteral("documentTabs")) {
+        if (pane && pane->objectName() == QStringLiteral("documentArea")) {
             lastSide_ = self < i ? PanelSide::Left : PanelSide::Right;
             return lastSide_;
         }
     }
-    // The document tabs are the first pane when no left column exists.
+    // The document area is the first pane when no left column exists.
     lastSide_ = self == 0 ? PanelSide::Left : PanelSide::Right;
     return lastSide_;
 }

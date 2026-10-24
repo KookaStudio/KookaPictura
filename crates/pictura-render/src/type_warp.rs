@@ -32,7 +32,10 @@ pub enum WarpRefusal {
 
 /// Whether Warp Text may warp `spec`, and if not, why.
 pub fn type_warp_refusal(spec: &TypeSpec) -> Option<WarpRefusal> {
-    refusal_with(spec, crate::fonts::face_for(&spec.character.font_family))
+    refusal_with(
+        spec,
+        crate::fonts::face_for(&spec.character.font_family, &spec.character.font_style),
+    )
 }
 
 /// [`type_warp_refusal`] against an already resolved `face`.
@@ -95,20 +98,25 @@ fn geometry(spec: &TypeSpec) -> Option<Geometry> {
     let step = ((bounds[2] - bounds[0]).min(bounds[3] - bounds[1]) / 32.0).clamp(0.25, 2.0);
 
     let mut context = ScaleContext::new();
-    let mut scaler = context
-        .builder(bundled.swash())
-        .size(run.size)
-        .hint(false)
-        .build();
+    let faces = crate::fonts::faces_in_order(bundled);
     let mut glyphs = Vec::new();
     for glyph in layout.lines.iter().flat_map(|line| &line.glyphs) {
+        let face = faces.get(glyph.face as usize).copied().unwrap_or(bundled);
+        let mut scaler = context
+            .builder(face.swash())
+            .size(run.size)
+            .hint(false)
+            .build();
         let Some(mut outline) = scaler.scale_outline(glyph.id) else {
             continue;
         };
         if run.embolden > 0.0 {
             outline.embolden(run.embolden, run.embolden);
         }
-        let m = glyph_matrix(&run, glyph.scale).map(f64::from);
+        let mut m = glyph_matrix(&run, glyph.scale);
+        m[0] *= glyph.x_scale;
+        m[2] *= glyph.x_scale;
+        let m = m.map(f64::from);
         let (pen_x, pen_y) = (f64::from(glyph.x), f64::from(glyph.y + ascent));
         // swash's outline is y-up; the layout frame is y-down.
         let place = |p: Point| {

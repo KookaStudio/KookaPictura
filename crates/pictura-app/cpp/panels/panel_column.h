@@ -58,6 +58,9 @@ public:
     // child mode so the branch can be exercised on a top-level platform.
     static bool overlayUsesTopLevel();
     static void setForceChildOverlayForTest(bool force);
+    // Whether the test override is on. Floating document windows read it to
+    // take the in-frame hosting in tests; they are top-level otherwise.
+    static bool childOverlayForcedForTest();
     PanelGroup* group() const { return group_; }
     void setGroup(PanelGroup* group);
     // A whole torn-off `PanelColumn` is hosted through the same overlay: the

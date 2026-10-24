@@ -173,9 +173,9 @@ void PicturaMainWindow::applyTextGamma(bool enabled, double gamma)
     if (!changed) {
         return;
     }
-    for (const DocEntry& entry : docs_) {
-        if (entry.view) {
-            type_api::refreshTextGamma(*entry.view);
+    for (const DocEntry* entry : docs_) {
+        if (entry->view) {
+            type_api::refreshTextGamma(*entry->view);
         }
     }
 }

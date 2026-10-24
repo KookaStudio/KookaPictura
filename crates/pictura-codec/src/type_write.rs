@@ -259,7 +259,7 @@ fn merge_engine_data(root: &mut EngineValue, spec: &TypeSpec, font_name: Option<
     set_child(
         engine,
         "Rendered",
-        crate::type_shape::rendered(spec.box_bounds),
+        crate::type_shape::rendered(spec.box_bounds, spec.paragraph.direction.index()),
     );
 
     let style_run = child(engine, "StyleRun");
@@ -356,15 +356,16 @@ fn merge_character(data: &mut EngineValue, spec: &TypeSpec, font_index: i64) {
         EngineValue::Double(c.vertical_scale / 100.0),
     );
     set_child(data, "BaselineShift", EngineValue::Double(c.baseline_shift));
+    set_child(data, "Tsume", EngineValue::Double(c.tsume));
+    set_child(data, "Language", EngineValue::String(c.language.clone()));
     set_child(data, "FontCaps", EngineValue::Int(font_caps(c)));
     set_child(data, "FontBaseline", EngineValue::Int(font_baseline(c)));
     set_child(data, "Underline", EngineValue::Bool(c.underline));
     set_child(data, "Strikethrough", EngineValue::Bool(c.strikethrough));
     set_child(data, "FauxBold", EngineValue::Bool(c.faux_bold));
     set_child(data, "FauxItalic", EngineValue::Bool(c.faux_italic));
-    // ponytail: the OpenType keys are the CS6 names; `language` and
-    // `vertical_roman_alignment` stay in the model (their EngineData encoding —
-    // a script index — is not modelled).
+    // ponytail: the OpenType keys are the CS6 names; `vertical_roman_alignment`
+    // stays in the model (its EngineData encoding is not modelled).
     set_child(data, "Ligatures", EngineValue::Bool(c.standard_ligatures));
     set_child(
         data,
@@ -525,6 +526,13 @@ fn ensure_font(root: &mut EngineValue, name: &str, family: &str, style: &str) ->
             || (!family.is_empty() && get(entry, "FontFamily").and_then(as_str) == Some(family))
     };
     if let Some(index) = items.iter().position(matches) {
+        if !style.is_empty() {
+            set_child(
+                &mut items[index],
+                "FontStyle",
+                EngineValue::String(style.to_string()),
+            );
+        }
         return index as i64;
     }
     let mut entry = EngineValue::Dict(Vec::new());
@@ -701,7 +709,10 @@ fn skeleton_engine_data(spec: &TypeSpec, font_name: Option<&str>) -> Vec<u8> {
             spec.character.fractional_widths
         ),
     );
-    if let Ok(shape) = encode_engine_data(&crate::type_shape::rendered(spec.box_bounds)) {
+    if let Ok(shape) = encode_engine_data(&crate::type_shape::rendered(
+        spec.box_bounds,
+        spec.paragraph.direction.index(),
+    )) {
         d.line(2, &format!("/Rendered {}", String::from_utf8_lossy(&shape)));
     }
     d.close(1);
@@ -827,6 +838,7 @@ fn style_sheet(d: &mut Dump, depth: usize, spec: &TypeSpec, font_index: usize) {
     ));
     lines.push(format!("/Tracking {}", c.tracking.round() as i64));
     lines.push(format!("/BaselineShift {}", number(c.baseline_shift)));
+    lines.push(format!("/Tsume {}", number(c.tsume)));
     lines.push(format!("/AutoKerning {auto_kerning}"));
     lines.push(format!("/Kerning {kerning}"));
     lines.push(format!("/FontCaps {}", font_caps(c)));
@@ -855,6 +867,7 @@ fn style_sheet(d: &mut Dump, depth: usize, spec: &TypeSpec, font_index: usize) {
     for line in lines {
         d.line(depth + 2, &line);
     }
+    d.string(depth + 2, "/Language", &c.language);
     d.open(depth + 2, "/FillColor");
     // Type 1 is RGB; the values run alpha first, as fractions.
     d.line(depth + 3, "/Type 1");

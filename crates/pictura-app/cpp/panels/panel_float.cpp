@@ -138,6 +138,11 @@ void PanelFloat::setForceChildOverlayForTest(bool force)
     gForceChildOverlayForTest = force;
 }
 
+bool PanelFloat::childOverlayForcedForTest()
+{
+    return gForceChildOverlayForTest;
+}
+
 PanelFlyout::PanelFlyout(QWidget* parent)
     : QWidget(parent)
 {

@@ -21,6 +21,7 @@
 
 #include "api/document_api.h"
 #include "frame.h"
+#include "image_view.h"
 #include "loading_card.h"
 #include "tab_spinner.h"
 
@@ -162,6 +163,8 @@ private slots:
     void closeButtonClosesTheDocument();
     void imageTabHasCloseButton();
     void longTitlesKeepTheCloseButton();
+    void tooltipShowsFullUntitledLabel();
+    void tooltipShowsFullSavedLabel();
     void cancelledResultIsDiscarded();
     void successFillsTabAndActivates();
     void userSelectedTabIsNotStolen();
@@ -172,6 +175,7 @@ private slots:
 
 private:
     QTabBar* tabBar() const;
+    QString fullLabel(const QString& name) const;
     TabSpinner* spinnerAt(int index) const;
     QString makePsd(const QTemporaryDir& dir, const QString& name) const;
 
@@ -182,6 +186,16 @@ private:
 QTabBar* LoadingTabTest::tabBar() const
 {
     return window_->findChild<QTabBar*>(QStringLiteral("documentTabBar"));
+}
+
+// The unelided label of the active 8-bit RGB document: name, zoom, mode/bits.
+QString LoadingTabTest::fullLabel(const QString& name) const
+{
+    ImageView* canvas = window_->imageView();
+    if (!canvas) {
+        return QString();
+    }
+    return QStringLiteral("%1 @ %2% (RGB/8)").arg(name).arg(qRound(canvas->zoom() * 100.0));
 }
 
 TabSpinner* LoadingTabTest::spinnerAt(int index) const
@@ -594,6 +608,41 @@ void LoadingTabTest::longTitlesKeepTheCloseButton()
     QVERIFY2(closeRect.right() <= tab.right(), "the close button ends inside the tab");
     QVERIFY2(tab.right() <= bar->width(), "the tab fits inside the tab bar");
     QVERIFY(bar->tabToolTip(0).contains(QStringLiteral("this-is-a-very-long")));
+}
+
+void LoadingTabTest::tooltipShowsFullUntitledLabel()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("Untitled"), 8, 8, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    const QString name =
+        QStringLiteral("an-untitled-document-whose-name-is-far-wider-than-its-tab");
+    window_->setDocumentNameForTest(window_->activeDocumentIndex(), name);
+
+    QTabBar* bar = tabBar();
+    QVERIFY(bar != nullptr);
+    QCOMPARE(bar->count(), 1);
+    QTRY_COMPARE(bar->tabToolTip(0), fullLabel(name));
+    QVERIFY2(bar->tabText(0).contains(QChar(0x2026)), qPrintable(bar->tabText(0)));
+    QVERIFY(bar->tabToolTip(0) != bar->tabText(0));
+}
+
+void LoadingTabTest::tooltipShowsFullSavedLabel()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString fileName =
+        QStringLiteral("a-saved-document-whose-name-is-far-wider-than-its-tab.psd");
+    const QString path = makePsd(dir, fileName);
+    QVERIFY(!path.isEmpty());
+    QVERIFY(window_->openPath(path));
+
+    QTabBar* bar = tabBar();
+    QVERIFY(bar != nullptr);
+    QCOMPARE(bar->count(), 1);
+    QTRY_COMPARE(bar->tabToolTip(0), fullLabel(fileName));
+    QVERIFY(bar->tabToolTip(0) != path);
+    QVERIFY(!bar->tabToolTip(0).contains(dir.path()));
+    QVERIFY(bar->tabToolTip(0) != bar->tabText(0));
 }
 
 void LoadingTabTest::cancelledResultIsDiscarded()

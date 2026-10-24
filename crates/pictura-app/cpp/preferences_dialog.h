@@ -40,6 +40,10 @@ public:
     void openOn(const QString& page);
 
     void setShiftKeyForToolSwitch(bool on);
+    void setOpenDocumentsAsTabs(bool on);
+    void setFloatingDocumentDocking(bool on);
+    // General: Zoom Resizes Windows.
+    void setZoomResizesWindows(bool on);
     void setAutoCollapseIconic(bool on);
     void setAutoShowHidden(bool on);
     void setBrightnessLevel(int level);
@@ -58,6 +62,10 @@ public:
     void setTraditionalPoints(bool on);
     // Type: Fill New Type Layers With Placeholder Text (not CS6; Photoshop CC).
     void setTypePlaceholderText(bool on);
+    // Type: Show Asian Text Options, Middle Eastern, Missing Glyph Protection.
+    void setTypeShowAsianOptions(bool on);
+    void setTypeMiddleEastern(bool on);
+    void setTypeMissingGlyphProtection(bool on);
 
     // Test hooks.
     QStringList pagesForTest() const;
@@ -67,6 +75,9 @@ public:
 
 signals:
     void useShiftKeyForToolSwitchChanged(bool on);
+    void openDocumentsAsTabsChanged(bool on);
+    void floatingDocumentDockingChanged(bool on);
+    void zoomResizesWindowsChanged(bool on);
     void autoCollapseIconicChanged(bool on);
     void autoShowHiddenChanged(bool on);
     void brightnessLevelChanged(int level);
@@ -78,6 +89,9 @@ signals:
     void rulerUnitChanged(int unit);
     void traditionalPointsChanged(bool on);
     void typePlaceholderTextChanged(bool on);
+    void typeShowAsianOptionsChanged(bool on);
+    void typeMiddleEasternChanged(bool on);
+    void typeMissingGlyphProtectionChanged(bool on);
 
 private:
     void showPage(const QString& page);

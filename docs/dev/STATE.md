@@ -11,6 +11,53 @@ Snapshot for resuming after a context break. Update after each milestone.
   (`docs/00-overview/licensing-and-provenance.md`).
 - **Provenance history:** the git history was rewritten so no reachable commit
   contains reproduced Adobe Help prose or the old wording.
+- **Document tabs and windows** (#317, #499, #500, #917, branch
+  `feat/317-document-tabs-windows`, OpenSpec change `document-tabs-windows`;
+  capabilities `document/document-tabs` and `document/document-windows`). A
+  document is split from the windows that show it.
+  - **Registry.** `DocEntry` holds the document and its `DocWindow`s
+    (`document_window.{h,cpp}`); `windows_` and `activeWindow_` in the frame
+    drive the active document. Each window is hosted as a tab, a floating
+    window (`document_float_window.{h,cpp}`), or a tile pane
+    (`document_tile_host.{h,cpp}`). Document-wide pushes go through
+    `forEachCanvas` (`frame_canvas.cpp`).
+  - **Tabs and floats.** `Ctrl+Tab` / `Shift+Ctrl+Tab` cycle every window. A
+    tab dragged off the strip floats; a float's header dropped on the strip
+    docks it. Tab and header context menus (`frame_document_menus.cpp`). The
+    tab tooltip is the full unelided label (#917). Menu, tool and frame keys
+    reach a top-level float; full-screen modes show only the active window.
+  - **Wayland floats** (OpenSpec change `wayland-floating-document-windows`).
+    A float is a frameless `Qt::Tool` top-level transient for the frame on
+    every platform (in-frame only under `PanelFloat`'s test hook). Ctrl+drag
+    on a header carries the window as `application/x-pictura-document-window`
+    drag-and-drop that the strip docks (`windowDropFilter`); a header
+    double-click docks at the end.
+  - **Window drag and dock line** (OpenSpec change
+    `floating-document-window-drag`). On Wayland a plain header drag and a
+    tear-out start that drag with the `application/x-qt-mainwindowdrag-*`
+    keys, so QtWayland attaches the float (`xdg_toplevel_drag_v1`) and the
+    compositor moves it with the pointer; X11 keeps the hand drag. The dock
+    zone is the strip's band, or the band a tab bar would take when no tab
+    is left; a `#2a7fff` `documentDockIndicator` line shows where a drag
+    docks. A drop records the dock and applies it after `QDrag::exec`.
+  - **Arrange** (`frame_document_arrange.cpp`). Float in Window, Float All,
+    Consolidate All to Tabs, Cascade, Tile, Match Zoom/Location/All, and New
+    Window For (a second `ImageView` on the same document, labelled `:N`).
+    Nine catalogue entries flipped to implemented.
+  - **Preferences and tools.** Interface gains Open Documents As Tabs and
+    Enable Floating Document Window Docking; General gains Zoom Resizes
+    Windows. Hand and Zoom get options-bar pages (`options_bar_navigate.cpp`)
+    with Scroll All Windows, Zoom All Windows and Resize Windows To Fit;
+    `Shift` gives the all-windows form.
+  Ceiling: on Wayland a compositor without `xdg_toplevel_drag_v1` leaves a
+  dragged float in place until the drop, and Cascade positions are the
+  compositor's (UI-14); the float and
+  tile layout is not saved, and recovery reopens as tabs (UI-15); `Match All` +
+  `Shift` is approximated by the `Shift` forms of Scroll/Zoom All (TOOL-29);
+  no CS6 split-group docking, Tile variants, or Window-menu document list.
+  Tests: `tst_document_windows` (25), `tst_document_float` (37),
+  `tst_document_arrange` (30), `tst_document_navigate` (9), and two
+  `tst_loading_tab` tooltip cases.
 - **Vanishing Point planes** (#349, branch `feat/349-vanishing-point`,
   OpenSpec change `add-vanishing-point-planes`, archived into
   `imaging/vanishing-point`). `Filter ▸ Vanishing Point…` (Alt+Ctrl+V)
@@ -49,12 +96,25 @@ Snapshot for resuming after a context break. Update after each milestone.
       lines. The preview recomposes dirty rects (`view.rs`).
     - **App.** `vanishing_point_retouch.rs` is the bridge, and
       `VpOptionsBar` holds the per-tool options.
-  Ceiling (`ponytail:`): planes are not saved in files (#918); the preview
+  - **Planes in files** (#918, OpenSpec change `add-vanishing-point-files`,
+    archived into `codec/vanishing-point-resource`). `VpPlanes::to_bytes` /
+    `from_bytes` (`persist.rs`) store the planes as drawn, and decoding
+    re-solves them. They live in a project-owned `8BIM` resource, id 4900,
+    named `Kooka Vanishing Point`. PSD, PSB, the recovery snapshot, and the
+    JPEG (APP13) and TIFF (tag 34377) Photoshop block carry it. JPEG and
+    TIFF opens now read that block back, less any ICC profile. The session
+    field stays the live copy, because history snapshots document metadata:
+    saves write it out, and installing a document reads it
+    (`filter_tools/vanishing_point_file.rs`). A plane-only OK marks the
+    document modified, with no history state.
+  Ceiling (`ponytail:`): CS6's own plane block is undocumented, so Photoshop
+  neither reads these planes nor do CS6-authored planes load; the preview
   ignores the layer's blend mode and the selection; Heal applies on drop or
   stroke end; the rendered grid's colour and the Grid Size, Diameter and
   Feather ranges are not confirmed against CS6. Tests: 32 Rust engine units,
-  the mapping and gate units, `tst_vanishing_point` (16 cases) and
-  `tst_vanishing_point_retouch` (6 cases).
+  the mapping and gate units, `tst_vanishing_point` (16 cases),
+  `tst_vanishing_point_retouch` (6 cases) and `tst_vanishing_point_files`
+  (2 cases).
 - **Actions panel, engine, and command bus** (OpenSpec change `actions-bundle`;
   issues #301, #616, and #273). `Window > Panels > Actions` (F9) is a real
   content `QWidget` (`actionsPanel`) hosted by a `PanelGroup`, hidden in the
@@ -183,6 +243,39 @@ Snapshot for resuming after a context break. Update after each milestone.
   unwarped while a warped layer is edited. The outlines are rebuilt on every
   render. CS6's refusal of path type is unconfirmed. Tests: `tst_warp_text`
   (16 cases) and Rust `type_warp`, codec, and core units.
+- **Type panels and glyph protection bundle** (#517/#518/#519/#887, branch
+  `feat/517-type-panel-bundle`, OpenSpec change
+  `type-panels-glyph-protection`, archived as
+  `2026-10-24-type-panels-glyph-protection`, synced into
+  `ui/character-paragraph-panels`, `ui/character-styles-panel`,
+  `ui/type-preferences`, `tools/missing-glyph-protection`, and the type
+  layout/render capabilities).
+  - **Character panel** gains the font-style picker backed by a style-keyed face
+    registry, the Language list, Set Tsume behind Show Asian Text Options, and
+    the Fractional Widths panel-menu toggle. Faux Bold/Italic and Underline were
+    already present.
+  - **Paragraph panel** gains the Justification dialog (word/letter/glyph
+    min/desired/max plus auto leading), bounded justification in CS6's
+    word→letter→glyph order, the LTR/RTL direction control behind Middle
+    Eastern, bidi shaping, mirrored line placement and RTL caret order.
+  - **Character Styles panel** lists/applies/creates/deletes styles, opens the
+    three-page Character Style Options dialog with live Preview, and renames
+    applied styles through the bridge; Window/Type menu entries and a bundled
+    icon are registered.
+  - **Missing Glyph Protection** (Type preferences, on by default) shapes and
+    paints an uncovered character in the first registered covering face, with
+    the same advances for wrapping, caret stops, path/warp rendering, and the
+    layer ink width. PDF live text refuses a fallback layer and rasterizes it.
+  - **Preferences** for the two engines and glyph protection are process-wide,
+    saved in the session store, and re-render open documents.
+  Ceiling (`ponytail:`): mixed-direction caret mapping and justification caret
+  stops for letter/glyph spread are not derived from glyph clusters; the
+  fallback candidate list is process-wide rather than rebuilt per document;
+  fallback ink height still uses the active face's metrics; PDF registers by
+  family only. Tests: Rust core/codec/app/render suites, the Rust script
+  catalogue, `tst_character_paragraph_panels` (27), `tst_character_styles_panel`
+  (12), `tst_type_preferences`, `tst_type_tools` fallback, CTest 161/161, and
+  the 472-check self-test.
 - **Help > Search on Shift+Space** (#788, branch `feat/788-searchbar`,
   OpenSpec change `ui-search-bar`, archived into `ui/search-bar`). Not a CS6
   feature; added by owner decision and labelled non-parity.

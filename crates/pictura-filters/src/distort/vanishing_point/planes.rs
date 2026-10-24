@@ -25,7 +25,7 @@ pub enum Part {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-enum Shape {
+pub(super) enum Shape {
     /// `anchor` is corner 0's plane coordinate (3D units) and `unit` the 3D
     /// length of one metric unit, so resizing an edge leaves the grid where
     /// it is on the surface.
@@ -64,7 +64,7 @@ pub struct VpPlanes {
     height: u32,
     centre: P2,
     half: f64,
-    shapes: Vec<Shape>,
+    pub(super) shapes: Vec<Shape>,
     solved: Vec<Solved>,
 }
 
@@ -244,7 +244,7 @@ impl VpPlanes {
         self.solve();
     }
 
-    fn solve(&mut self) {
+    pub(super) fn solve(&mut self) {
         self.solved.clear();
         for i in 0..self.shapes.len() {
             let solved = match &self.shapes[i] {

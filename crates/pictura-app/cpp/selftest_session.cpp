@@ -257,11 +257,13 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
             }
             pump(6);
             auto* tabs = frame.findChild<QTabWidget*>(QStringLiteral("documentTabs"));
+            // The splitter pane is the document area that hosts the tabs.
+            auto* area = frame.findChild<QWidget*>(QStringLiteral("documentArea"));
             auto* cs = frame.findChild<QSplitter*>(QStringLiteral("centerSplitter"));
-            const int wsIndex = (cs && tabs) ? cs->indexOf(tabs) : -1;
+            const int wsIndex = (cs && area) ? cs->indexOf(area) : -1;
             const int splitterW = cs ? cs->width() : -1;
-            const int wsWidth = tabs ? tabs->width() : -1;
-            const bool paneShown = tabs && tabs->isVisible();
+            const int wsWidth = area ? area->width() : -1;
+            const bool paneShown = tabs && area && tabs->isVisible() && area->isVisible();
             const bool stripHidden =
                 tabs && tabs->tabBar() && !tabs->tabBar()->isVisible();
             const bool handleLeft =
@@ -272,7 +274,7 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
             for (pictura::PanelColumn* column : frame.panelColumns()) {
                 columnsW += column->width();
             }
-            const bool reserved = splitterW > 0 && wsWidth >= tabs->minimumWidth()
+            const bool reserved = splitterW > 0 && wsWidth >= area->minimumWidth()
                                   && columnsW + wsWidth <= splitterW;
 
             pictura::PanelColumn* primary = frame.panelColumn();
@@ -290,11 +292,11 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
                                && primary->maximumWidth() > primary->minimumWidthForTest();
                 primary->setRailMode(false);
                 pump(6);
-                beforeWs = tabs->width();
+                beforeWs = area->width();
                 beforeCol = primary->width();
                 primary->setPreferredWidth(beforeCol + 60);
                 pump(6);
-                afterWs = tabs->width();
+                afterWs = area->width();
                 afterCol = primary->width();
                 // The workspace yields exactly what the column gains: the handle
                 // sits between them, not beside a hidden pane.

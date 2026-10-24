@@ -8,7 +8,7 @@
 //!
 //! [`PictureView::new_document`]: super::super::qobject::PictureView
 
-use super::super::impl_core::make_background;
+use super::super::open_jobs::make_background;
 use super::super::qobject::PictureView;
 use crate::history::History;
 use core::pin::Pin;

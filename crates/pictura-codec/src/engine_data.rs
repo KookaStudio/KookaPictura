@@ -8,8 +8,8 @@
 //! the document readable.
 
 use pictura_core::{
-    AntiAlias, CharacterAttrs, Composer, Justify, KerningMode, Leading, ParagraphAttrs, TextStyle,
-    DEFAULT_LANGUAGE,
+    AntiAlias, CharacterAttrs, Composer, Justify, KerningMode, Leading, ParagraphAttrs,
+    TextDirection, TextStyle, DEFAULT_LANGUAGE,
 };
 
 use crate::error::PsdError;
@@ -171,6 +171,13 @@ pub fn extract_style(root: &EngineValue, fonts: &[String]) -> TextStyle {
     let fractional_widths = path(root, &["EngineDict", "UseFractionalGlyphWidths"])
         .and_then(as_bool)
         .unwrap_or(true);
+    let direction = path(
+        root,
+        &["EngineDict", "Rendered", "Shapes", "WritingDirection"],
+    )
+    .and_then(as_i64)
+    .map(|value| TextDirection::from_index(value as i32))
+    .unwrap_or_default();
 
     let character = CharacterAttrs {
         font_family,
@@ -182,6 +189,7 @@ pub fn extract_style(root: &EngineValue, fonts: &[String]) -> TextStyle {
         horizontal_scale: pick_num("HorizontalScale").unwrap_or(1.0) * 100.0,
         vertical_scale: pick_num("VerticalScale").unwrap_or(1.0) * 100.0,
         baseline_shift: pick_num("BaselineShift").unwrap_or(0.0),
+        tsume: pick_num("Tsume").unwrap_or(0.0),
         anti_alias,
         fill_color,
         all_caps: font_caps == 2,
@@ -205,6 +213,7 @@ pub fn extract_style(root: &EngineValue, fonts: &[String]) -> TextStyle {
         fractions: pick_bool("Fractions").unwrap_or(false),
         language: run
             .and_then(|v| get(v, "Language"))
+            .or_else(|| char_default.and_then(|v| get(v, "Language")))
             .and_then(as_str)
             .unwrap_or(DEFAULT_LANGUAGE)
             .to_string(),
@@ -251,6 +260,7 @@ pub fn extract_style(root: &EngineValue, fonts: &[String]) -> TextStyle {
 
     let paragraph = ParagraphAttrs {
         justify: Justify::from_index(p_int("Justification").unwrap_or(0) as u8).unwrap_or_default(),
+        direction,
         word_spacing: p_triplet("WordSpacing", [0.8, 1.0, 1.33]),
         letter_spacing: p_triplet("LetterSpacing", [0.0, 0.0, 0.0]),
         glyph_spacing: p_triplet("GlyphSpacing", [1.0, 1.0, 1.0]),
@@ -817,5 +827,38 @@ mod tests {
     #[test]
     fn macroman_high_bytes_decode() {
         assert_eq!(decode_macroman(&[0x80, 0xA9]), "Ä©");
+    }
+
+    #[test]
+    fn language_falls_back_to_sheet_default() {
+        let root = parse_engine_data(
+            b"<< /EngineDict << /StyleRun << /RunArray [ << /StyleSheet << \
+              /StyleSheetData << /FontSize 12.0 >> >> >> ] >> >> /ResourceDict << \
+              /StyleSheetSet [ << /StyleSheetData << /Language (German) >> >> ] >> >>",
+        )
+        .expect("parses");
+        assert_eq!(extract_style(&root, &[]).character.language, "German");
+    }
+
+    #[test]
+    fn tsume_language_and_direction_decode() {
+        let root = parse_engine_data(
+            b"<< /EngineDict << /StyleRun << /RunArray [ << /StyleSheet << \
+              /StyleSheetData << /Tsume 60.0 /Language (French) >> >> >> ] >> \
+              /Rendered << /Shapes << /WritingDirection 1 >> >> >> >>",
+        )
+        .expect("parses");
+        let style = extract_style(&root, &[]);
+        assert_eq!(style.character.tsume, 60.0);
+        assert_eq!(style.character.language, "French");
+        assert_eq!(style.paragraph.direction, TextDirection::Rtl);
+    }
+
+    #[test]
+    fn missing_tsume_and_direction_take_defaults() {
+        let root = parse_engine_data(b"<< /EngineDict << >> >>").expect("parses");
+        let style = extract_style(&root, &[]);
+        assert_eq!(style.character.tsume, 0.0);
+        assert_eq!(style.paragraph.direction, TextDirection::Ltr);
     }
 }

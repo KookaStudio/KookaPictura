@@ -37,9 +37,11 @@ const QList<PanelToggle>& panelToggles()
         {command_ids::WindowPanelsParagraph, "paragraphPanel"},
         {command_ids::WindowPanelsGlyphs, "glyphsPanel"},
         {command_ids::WindowPanelsParagraphStyles, "paragraphStylesPanel"},
+        {command_ids::WindowPanelsCharacterStyles, "characterStylesPanel"},
         {command_ids::TypePanelsCharacter, "characterPanel"},
         {command_ids::TypePanelsParagraph, "paragraphPanel"},
         {command_ids::TypePanelsParagraphStyles, "paragraphStylesPanel"},
+        {command_ids::TypePanelsCharacterStyles, "characterStylesPanel"},
     };
     return toggles;
 }
@@ -218,7 +220,7 @@ void PicturaMainWindow::registerHandlers()
         }
         revertActive();
     });
-    registry_->setHandler(command_ids::FileClose, [this]() { closeActiveDocument(true); });
+    registry_->setHandler(command_ids::FileClose, [this]() { closeWindow(activeWindow_, true); });
     registry_->setHandler(command_ids::FileCloseAll, [this]() {
         for (int i = docs_.size() - 1; i >= 0; --i) {
             if (!closeDocument(i, true)) {
@@ -978,11 +980,17 @@ void PicturaMainWindow::registerHandlers()
     registry_->setHandler(command_ids::ViewZoomIn, [this]() {
         if (ImageView* canvas = imageView()) {
             canvas->zoomIn();
+            if (zoomResizesWindows_) {
+                resizeWindowToFit(windowOfCanvas(canvas));
+            }
         }
     });
     registry_->setHandler(command_ids::ViewZoomOut, [this]() {
         if (ImageView* canvas = imageView()) {
             canvas->zoomOut();
+            if (zoomResizesWindows_) {
+                resizeWindowToFit(windowOfCanvas(canvas));
+            }
         }
     });
     registry_->setHandler(command_ids::ViewFitOnScreen, [this]() {
@@ -1029,9 +1037,9 @@ void PicturaMainWindow::registerHandlers()
 
     registry_->setHandler(command_ids::ViewFreePan, [this]() {
         freePan_ = !freePan_;
-        for (const DocEntry& entry : docs_) {
-            if (entry.canvas) {
-                entry.canvas->setFreePan(freePan_);
+        for (const DocWindow* window : windows_) {
+            if (window->canvas) {
+                window->canvas->setFreePan(freePan_);
             }
         }
         saveSession();
@@ -1041,9 +1049,9 @@ void PicturaMainWindow::registerHandlers()
 
     registry_->setHandler(command_ids::ViewSnapCanvasToWorkspace, [this]() {
         snapCanvasToWorkspace_ = !snapCanvasToWorkspace_;
-        for (const DocEntry& entry : docs_) {
-            if (entry.canvas) {
-                entry.canvas->setSnapToWorkspace(snapCanvasToWorkspace_);
+        for (const DocWindow* window : windows_) {
+            if (window->canvas) {
+                window->canvas->setSnapToWorkspace(snapCanvasToWorkspace_);
             }
         }
         saveSession();
