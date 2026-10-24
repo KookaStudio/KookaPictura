@@ -14,7 +14,7 @@ Every "Verify" names the check that the final build and test run must pass.
 - [x] 2.2 Add `DocumentFloatWindow::movesBySystem()`, `setSystemMoveForTest()`, and `startSystemMove()`. Make `dragTo` try the system move at the drag threshold. Verify `floatTopLevelUnderWayland` and `dragHeaderDocks`.
 - [x] 2.3 In `tearOutFilter`, try the system move on the new float right after `beginDrag`. Verify `tearOutUnderWayland`, `tearOutFloats`, and `tearOutLastTab`.
 - [x] 2.4 Add the header's Ctrl+drag (`onDockDragRequested`) and double-click (`onDockRequested`). In the frame, add the private MIME type, `startWindowDockDrag` (with `QDrag::exec` on the next event-loop turn), `setWindowDockDragForTest`, `tabStripGlobalRect()`, and `windowDropFilter` on `documentTabBar` and `documentTabs`. Verify `ctrlDragDocksAtDrop`, `ctrlDragRefusedWithoutDocking`, `ctrlDragElsewhereKeepsFloat`, `fileDropOnStripOpensFile`, `headerDoubleClickDocks`, `tst_document_arrange::prefDisablesDocking`, and the layer drop tests in `tst_layers_panel`.
-- [ ] 2.5 Verify `openspec validate --all --strict`, `bash scripts/check-file-size.sh`, `bash scripts/guard.sh`, and the full Qt Test layer.
+- [x] 2.5 Verify `openspec validate --all --strict`, `bash scripts/check-file-size.sh`, `bash scripts/guard.sh`, and the full Qt Test layer.
 
 ## 3. Docs
 
