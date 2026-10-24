@@ -316,6 +316,14 @@ QTabBar#documentTabBar { background: ${surface-header}; }
 QTabBar#documentTabBar::tab { font-size: ${font-size-tab}px; font-weight: 700; padding-right: 4px; border: 0; }
 QToolButton#tabCloseButton { border: 0; background: transparent; }
 QToolButton#tabCloseButton:hover, QToolButton#tabCloseButton:pressed { background: ${surface-hover}; }
+/* Floating document windows and tile panes carry the document tab's header. */
+QWidget#documentFloatWindow { background: ${surface}; border: ${border-width-panel}px solid ${border}; }
+QWidget#documentFloatHeader, QWidget#documentTileHeader { background: ${surface-header}; border: 0; border-bottom: 1px solid ${border-header}; }
+QLabel#documentFloatTitle, QLabel#documentTileTitle { font-size: ${font-size-tab}px; font-weight: 700; padding-left: 6px; }
+QWidget#documentFloatBody, QWidget#documentTilePane { background: ${surface-canvas}; }
+QToolButton#documentFloatClose, QToolButton#documentTileClose { border: 0; background: transparent; }
+QToolButton#documentFloatClose:hover, QToolButton#documentFloatClose:pressed,
+QToolButton#documentTileClose:hover, QToolButton#documentTileClose:pressed { background: ${surface-hover}; }
 /* Columns keep their side rules only; the top and bottom edges are open, and
    the header carries no rule of its own. */
 QWidget#panelColumnContainer { border: 0; border-left: ${border-width-panel}px solid ${border-subtle}; border-right: ${border-width-panel}px solid ${border-subtle}; border-bottom: ${border-width-panel}px solid ${border-subtle}; background: ${surface}; }

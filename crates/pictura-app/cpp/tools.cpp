@@ -723,6 +723,9 @@ void ToolController::unbindCanvas()
         return;
     }
     disconnect(canvas_, nullptr, this, nullptr);
+    // A floating or tiled canvas stays visible once it is no longer active; it
+    // must not keep the blank cursor a brush ring stood in for.
+    canvas_->unsetCursor();
     // Let the active handler release anything tied to this canvas (an
     // in-progress polygon, the warm Move preview) before it goes away.
     if (ToolHandler* h = registry_.forTool(active_)) {

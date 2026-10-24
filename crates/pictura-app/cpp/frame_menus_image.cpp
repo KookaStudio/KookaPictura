@@ -71,20 +71,47 @@ void PicturaMainWindow::wireImageMenu()
         registry_->setEnabledProvider(id, imageEnabled);
     }
 
+    // Resampling keeps each window on the same relative point of the image, so
+    // a shrunken image stays centred where the whole of it was.
+    const auto applyImageSize = [this](PictureView* view, const QString& resample, int width,
+                                       int height, double ppi, bool perCm) {
+        const int index = indexOfView(view);
+        const QSizeF before(view->document_width(), view->document_height());
+        QList<QPair<QPointer<ImageView>, QPointF>> centres;
+        if (index >= 0 && !before.isEmpty()) {
+            forEachCanvas(*docs_.at(index), [&centres, before](ImageView* canvas) {
+                const QPointF centre = canvas->widgetToImage(QRectF(canvas->rect()).center());
+                centres.append({canvas, QPointF(centre.x() / before.width(),
+                                                centre.y() / before.height())});
+            });
+        }
+        if (!image_size_apply(*view, resample, width, height, ppi, perCm)) {
+            return false;
+        }
+        refresh();
+        const QSizeF after(view->document_width(), view->document_height());
+        for (const auto& [canvas, fraction] : centres) {
+            if (canvas) {
+                const QPointF target(fraction.x() * after.width(), fraction.y() * after.height());
+                canvas->centerOnImageRect(QRectF(target - QPointF(0.5, 0.5), QSizeF(1.0, 1.0)));
+            }
+        }
+        return true;
+    };
+
     const QString imageSize =
         commandIdForPath({QStringLiteral("Image"), QStringLiteral("Image Size…")});
     registry_->setImplemented(imageSize, true);
     registry_->setEnabledProvider(imageSize, imageEnabled);
-    registry_->setHandler(imageSize, [this, imageSize]() {
+    registry_->setHandler(imageSize, [this, imageSize, applyImageSize]() {
         PictureView* view = activeView();
         if (!view || !view->has_document()) {
             return;
         }
         ImageSizeDialog dialog(view, this);
         if (runDialog(dialog, this) == QDialog::Accepted
-            && image_size_apply(*view, dialog.resampleKind(), dialog.resultWidth(),
-                                dialog.resultHeight(), dialog.resultPpi(),
-                                dialog.resultPerCm())) {
+            && applyImageSize(view, dialog.resampleKind(), dialog.resultWidth(),
+                              dialog.resultHeight(), dialog.resultPpi(), dialog.resultPerCm())) {
             CommandParams command;
             command.values.insert(QStringLiteral("width"), dialog.resultWidth());
             command.values.insert(QStringLiteral("height"), dialog.resultHeight());
@@ -94,7 +121,7 @@ void PicturaMainWindow::wireImageMenu()
             registry_->recordCommand(imageSize, command);
         }
     });
-    registry_->setExecutor(imageSize, [this](const CommandParams& params) {
+    registry_->setExecutor(imageSize, [this, applyImageSize](const CommandParams& params) {
         PictureView* view = activeView();
         if (!view || !view->has_document()) {
             return false;
@@ -118,13 +145,8 @@ void PicturaMainWindow::wireImageMenu()
                 ppi *= 2.54;
             }
         }
-        const bool applied =
-            image_size_apply(*view, params.values.value(QStringLiteral("resample")).toString(),
-                             width, height, ppi, perCm);
-        if (applied) {
-            refresh();
-        }
-        return applied;
+        return applyImageSize(view, params.values.value(QStringLiteral("resample")).toString(),
+                              width, height, ppi, perCm);
     });
 
     const QString canvasSize =

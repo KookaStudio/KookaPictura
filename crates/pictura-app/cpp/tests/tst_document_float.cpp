@@ -105,6 +105,8 @@ private slots:
     void tearOutLastTab();
     void sidewaysDragReorders();
     void dragHeaderDocks();
+    void imageSizeKeepsWindowCentre();
+    void inactiveCanvasShowsCursor();
     void floatHeaderShowsMarker();
     void floatHostingFollowsPlatform();
     void floatCloseClosesDocument();
@@ -345,6 +347,49 @@ void DocumentFloatTest::dragHeaderDocks()
     QCOMPARE(bar->count(), 3);
     QVERIFY(window_->floatWindowForTest(2) == nullptr);
     QCOMPARE(window_->activeDocumentIndex(), 2);
+}
+
+// Image Size resamples every window of the document around the point at its
+// centre, so a floating window keeps a shrunken image centred.
+void DocumentFloatTest::imageSizeKeepsWindowCentre()
+{
+    QVERIFY(newDoc(QStringLiteral("Resized"), 400, 300));
+    PanelFloat::setForceChildOverlayForTest(true);
+    QVERIFY(window_->floatDocumentForTest(0));
+    QCoreApplication::processEvents();
+    ImageView* canvas = window_->canvasAt(0);
+    QVERIFY(canvas != nullptr);
+    QCOMPARE(viewCentre(canvas), QPointF(200.0, 150.0));
+
+    CommandParams params;
+    params.values.insert(QStringLiteral("width"), 100);
+    params.values.insert(QStringLiteral("height"), 75);
+    params.values.insert(QStringLiteral("resample"), QStringLiteral("bicubic"));
+    QVERIFY(window_->registry()->executeRecorded(
+        commandIdForPath({QStringLiteral("Image"), QStringLiteral("Image Size…")}), params));
+    QCOMPARE(canvas->documentSize(), QSize(100, 75));
+    const QPointF centre = viewCentre(canvas);
+    QVERIFY2(qAbs(centre.x() - 50.0) <= 1.0 && qAbs(centre.y() - 37.5) <= 1.0,
+             qPrintable(QStringLiteral("centre %1,%2").arg(centre.x()).arg(centre.y())));
+}
+
+// The brush ring stands in for the pointer only on the active canvas; a float
+// left behind shows a cursor again.
+void DocumentFloatTest::inactiveCanvasShowsCursor()
+{
+    QVERIFY(newDoc(QStringLiteral("Tabbed"), 64, 64));
+    QVERIFY(newDoc(QStringLiteral("Floating"), 64, 64));
+    PanelFloat::setForceChildOverlayForTest(true);
+    QVERIFY(window_->floatDocumentForTest(1));
+    window_->setActiveTool(ToolId::Brush);
+    window_->setActiveDocumentIndex(1);
+    QCoreApplication::processEvents();
+    ImageView* floating = window_->canvasAt(1);
+    QCOMPARE(floating->cursor().shape(), Qt::BlankCursor);
+
+    window_->setActiveDocumentIndex(0);
+    QCoreApplication::processEvents();
+    QVERIFY(floating->cursor().shape() != Qt::BlankCursor);
 }
 
 void DocumentFloatTest::floatHeaderShowsMarker()
