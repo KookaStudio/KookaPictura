@@ -70,5 +70,5 @@ tests before its code.
 
 ## 11. Integration
 
-- [ ] 11.1 Build once (`cmake --build build --parallel`, ≤80% CPUs), then run `bash scripts/verify-full.sh`. Verify fmt, clippy, the test report (including the four new suites and the self-test), file-size, the self-test budget, guard, openspec, and `python3 scripts/check-test-plan.py` all pass.
+- [x] 11.1 Build once (`cmake --build build --parallel`, ≤80% CPUs), then run `bash scripts/verify-full.sh`. Verify fmt, clippy, the test report (including the four new suites and the self-test), file-size, the self-test budget, guard, openspec, and `python3 scripts/check-test-plan.py` all pass.
 - [ ] 11.2 Archive the change (`openspec archive document-tabs-windows`) and confirm `scripts/check-openspec-archived.sh` passes. Open the PR, listing the test plan's manual checks as the reviewer checklist.
