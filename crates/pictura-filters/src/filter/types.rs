@@ -6,7 +6,7 @@ use crate::{
     HalftoneType, HdrToningParams, IrisPin, IrisShape, LensType, LightDirection, Lighting,
     LiquifyMesh, MezzotintType, NoiseDistribution, PathMotion, PolarKind, Quality, RadialMethod,
     ReduceNoiseParams, RippleSize, SharpenRemove, ShearFill, SmartBlurMode, SpherizeMode, SpinPin,
-    SpinStrobe, StrokeDirection, TextureOptions, TileFill, TiltPin, TonalFade, WaveType,
+    SpinStrobe, StrokeDirection, TextureOptions, TileFill, TiltPin, TonalFade, VpEdit, WaveType,
     WindMethod, ZigZagStyle,
 };
 
@@ -249,6 +249,10 @@ pub enum Filter {
     /// The Adaptive Wide Angle workspace's correction and constraints.
     AdaptiveWideAngle {
         params: AwaParams,
+    },
+    /// A Vanishing Point session's committed edit (its rendered grids).
+    VanishingPoint {
+        edit: Arc<VpEdit>,
     },
     ZigZag {
         amount: f64,

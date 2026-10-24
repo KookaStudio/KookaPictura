@@ -10,6 +10,7 @@ pub mod blur;
 mod crs;
 mod guides;
 pub mod hdr;
+pub mod homography;
 mod layer_stack;
 pub mod nonseparable;
 pub mod path;
@@ -30,6 +31,7 @@ pub use annotations::{
 pub use crs::CrsSettings;
 pub use guides::{guide_near, Guide, GuideOrientation};
 pub use hdr::{validate_hdr_toning_params, HdrToningParams};
+pub use homography::Homography;
 pub use layer_stack::{LayerStack, StackError, StackViolation};
 pub use plane::{fresh_stamp, Plane};
 pub use raw_settings::{

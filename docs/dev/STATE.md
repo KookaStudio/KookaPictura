@@ -11,6 +11,35 @@ Snapshot for resuming after a context break. Update after each milestone.
   (`docs/00-overview/licensing-and-provenance.md`).
 - **Provenance history:** the git history was rewritten so no reachable commit
   contains reproduced Adobe Help prose or the old wording.
+- **Vanishing Point planes** (#349, branch `feat/349-vanishing-point`,
+  OpenSpec change `add-vanishing-point-planes`, archived into
+  `imaging/vanishing-point`). `Filter ▸ Vanishing Point…` (Alt+Ctrl+V)
+  opens a full-canvas workspace for 8-bit RGB and Grayscale documents.
+  - **Shared homography.** `pictura_core::Homography` is the four-point
+    solve; `pictura-render`'s perspective transforms and the app's transform
+    preview dropped their private copies.
+  - **Engine** (`pictura-filters/src/distort/vanishing_point/`). A root plane's
+    four corners give two vanishing points. With the principal point at the
+    document centre, they give a focal length; when `f² ≤ 0` the plane is
+    yellow. Near-parallel edges assume a normal lens. Crossed, concave or
+    degenerate quads are red. The quad lifts to a 3D rectangle at unit
+    distance, whose metric area equals its image area, so Grid Size reads in
+    roughly pixels. Related planes hinge on a parent edge: their span is a
+    fraction of that edge, and their angle runs 0 flat to 90 perpendicular.
+    Each family shares its root's camera, unit and grid. `VpEditor` holds
+    the gestures and the dialog's undo. `Filter::VanishingPoint` draws a
+    kept edit's lines black, 1 px, antialiased.
+  - **App.** `filter_tools/vanishing_point.rs` holds the session and the kept
+    edits; the `vanishing-point` kind's one slot is the edit id. The planes
+    stay on `DocumentSession::vanishing_planes`. `VanishingPointDialog` and
+    `VpCanvas` give Edit Plane, Create Plane, Hand and Zoom, Show Edges,
+    Render Grids To Photoshop, Grid Size and Angle. The 8-bit gate is shared
+    with Adaptive Wide Angle (`filter_tools/depth_gate.rs`).
+  Ceiling (`ponytail:`): no Marquee, Stamp, Brush, Transform, Eyedropper or
+  Paste yet (#349); planes are not saved in files (#918); the rendered grid's
+  colour and the Grid Size range are not confirmed against CS6. Tests: 17
+  Rust engine units, the mapping and gate units, and `tst_vanishing_point`
+  (16 cases).
 - **Actions panel, engine, and command bus** (OpenSpec change `actions-bundle`;
   issues #301, #616, and #273). `Window > Panels > Actions` (F9) is a real
   content `QWidget` (`actionsPanel`) hosted by a `PanelGroup`, hidden in the

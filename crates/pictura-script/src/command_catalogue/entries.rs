@@ -369,7 +369,7 @@ pub(super) static ROWS: &[CommandSpec] = &[
     CommandSpec { id: "filter.lens.correction", path: &["Filter", "Lens Correction…"], label: "Lens Correction…", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "filter.liquify", path: &["Filter", "Liquify…"], label: "Liquify…", shortcut: "Shift+Ctrl+X", implemented: true, checkable: false },
     CommandSpec { id: "filter.oil.paint", path: &["Filter", "Oil Paint…"], label: "Oil Paint…", shortcut: "", implemented: true, checkable: false },
-    CommandSpec { id: "filter.vanishing.point", path: &["Filter", "Vanishing Point…"], label: "Vanishing Point…", shortcut: "Alt+Ctrl+V", implemented: false, checkable: false },
+    CommandSpec { id: "filter.vanishing.point", path: &["Filter", "Vanishing Point…"], label: "Vanishing Point…", shortcut: "Alt+Ctrl+V", implemented: true, checkable: false },
     CommandSpec { id: "filter.artistic.colored.pencil", path: &["Filter", "Artistic", "Colored Pencil"], label: "Colored Pencil", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "filter.artistic.cutout", path: &["Filter", "Artistic", "Cutout"], label: "Cutout", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "filter.artistic.dry.brush", path: &["Filter", "Artistic", "Dry Brush"], label: "Dry Brush", shortcut: "", implemented: true, checkable: false },

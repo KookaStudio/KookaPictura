@@ -522,9 +522,7 @@ fn filter_commit_start_inner(
     label: &QString,
 ) -> bool {
     let kind = kind.to_string();
-    if let Some(reason) =
-        super::adaptive_wide_angle::awa_refusal(&kind, view.rust().session.doc.as_ref())
-    {
+    if let Some(reason) = super::eight_bit_refusal(&kind, view.rust().session.doc.as_ref()) {
         view.as_mut().rust_mut().filter_error = Some(reason);
         return false;
     }

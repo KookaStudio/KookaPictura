@@ -702,6 +702,12 @@ fn moving_kernels() -> Vec<Filter> {
                 ..Default::default()
             },
         },
+        // Grid lines across the soft disc's edge.
+        Filter::VanishingPoint {
+            edit: std::sync::Arc::new(pictura_filters::VpEdit {
+                lines: vec![[(0.0, 12.0), (24.0, 12.0)], [(12.0, 0.0), (12.0, 24.0)]],
+            }),
+        },
         Filter::PictureFrame {
             options: FrameOptions::default(),
         },

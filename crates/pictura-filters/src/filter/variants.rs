@@ -102,6 +102,7 @@ filter_variants! {
     Displace: Filter::Displace { .. } => Ported,
     Liquify: Filter::Liquify { .. } => Native,
     AdaptiveWideAngle: Filter::AdaptiveWideAngle { .. } => Native,
+    VanishingPoint: Filter::VanishingPoint { .. } => Native,
     ZigZag: Filter::ZigZag { .. } => Ported,
     OceanRipple: Filter::OceanRipple { .. } => Native,
     Glass: Filter::Glass { .. } => Native,

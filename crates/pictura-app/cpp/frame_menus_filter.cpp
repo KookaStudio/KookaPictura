@@ -17,9 +17,9 @@
 #include "liquify_dialog.h"
 #include "picture_frame_dialog.h"
 #include "reduce_noise_dialog.h"
+#include "vp_dialog.h"
 
 #include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/filter_tools/adaptive_wide_angle.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/filter_tools/jobs.cxxqt.h"
 
 namespace pictura {
@@ -62,9 +62,9 @@ bool chooseDisplacementMap(QList<double>* values, QWidget* parent)
 }
 
 // Lens Flare's parameters are one struct, Lighting Effects' a list of lights,
-// Liquify's a mesh and Adaptive Wide Angle's a constraint set, each edited on
-// its own dialog; every other filter edits
-// independent slots on the shared one.
+// Liquify's a mesh, Adaptive Wide Angle's a constraint set and Vanishing
+// Point's a set of planes, each edited on its own dialog; every other filter
+// edits independent slots on the shared one.
 // `*kind` is the kind to commit: the spec's, except that the Blur Gallery
 // commits whichever of its effects the user switched on.
 bool runFilterDialog(PictureView* view, const FilterCommandSpec& spec,
@@ -92,6 +92,11 @@ bool runFilterDialog(PictureView* view, const FilterCommandSpec& spec,
         const auto* frame = qobject_cast<PicturaMainWindow*>(parent);
         const QString name = frame ? frame->activeDocumentName() : QString();
         return AdaptiveWideAngleDialog::get(view, name, initial, out, parent);
+    }
+    case FilterDialogKind::VanishingPoint: {
+        const auto* frame = qobject_cast<PicturaMainWindow*>(parent);
+        const QString name = frame ? frame->activeDocumentName() : QString();
+        return VanishingPointDialog::get(view, name, initial, out, parent);
     }
     case FilterDialogKind::Shared:
         break;
@@ -251,13 +256,14 @@ void PicturaMainWindow::wireFilterMenu()
             return captured.params.isEmpty() ? captured.label
                                              : captured.label + QStringLiteral("…");
         });
-        // Adaptive Wide Angle takes 8-bit RGB and Grayscale only, as CS6's
-        // 16- and 32-bpc filter lists leave it out.
-        const bool eightBitOnly = spec.dialog == FilterDialogKind::AdaptiveWideAngle;
+        // Adaptive Wide Angle and Vanishing Point take 8-bit RGB and
+        // Grayscale only, as CS6's 16- and 32-bpc filter lists leave them out.
+        const bool eightBitOnly = spec.dialog == FilterDialogKind::AdaptiveWideAngle ||
+                                  spec.dialog == FilterDialogKind::VanishingPoint;
         registry_->setEnabledProvider(id, [this, eightBitOnly]() {
             PictureView* view = activeView();
             return view && filter_target_ready(*view) &&
-                   (!eightBitOnly || awa_document_supported(*view));
+                   (!eightBitOnly || filter_eight_bit_document(*view));
         });
     }
 

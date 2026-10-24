@@ -964,6 +964,9 @@ pictura::FilterDialogKind dialogForKind(const QString& kind)
     if (kind == QStringLiteral("adaptive-wide-angle")) {
         return pictura::FilterDialogKind::AdaptiveWideAngle;
     }
+    if (kind == QStringLiteral("vanishing-point")) {
+        return pictura::FilterDialogKind::VanishingPoint;
+    }
     return pictura::FilterDialogKind::Shared;
 }
 

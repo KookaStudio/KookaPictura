@@ -7,6 +7,7 @@ mod diffuse_glow;
 mod glass;
 pub mod liquify;
 mod ripples;
+pub mod vanishing_point;
 
 pub use diffuse_glow::diffuse_glow;
 pub use glass::glass;

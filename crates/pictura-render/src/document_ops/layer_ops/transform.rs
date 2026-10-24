@@ -7,7 +7,8 @@
 //! do **not** recomposite: like `translate_layer_rect`, the caller owns the
 //! composite refresh.
 
-use pictura_core::{Channel, Document, LayerMask, LockFlags, PsdRect, SourceChannels};
+use pictura_core::homography::HOMOGRAPHY_EPSILON;
+use pictura_core::{Channel, Document, Homography, LayerMask, LockFlags, PsdRect, SourceChannels};
 
 use super::crossed_quad;
 use super::kernel::{self, Interpolation};
@@ -35,11 +36,6 @@ const SCALE_EPSILON: f64 = 1e-6;
 /// corner must not round out to the next pixel. Same intent as the slack in
 /// `pictura_ops::rotate_arbitrary`.
 const BBOX_SLACK: f64 = 1e-9;
-/// Homography determinant and homogeneous-divisor floor: a projective map whose
-/// scale collapses below this is treated as singular.
-const HOMOGRAPHY_EPSILON: f64 = 1e-12;
-/// Gaussian-elimination pivot floor; a zero (or vanishing) pivot is singular.
-const PIVOT_EPSILON: f64 = 1e-12;
 
 /// Any document-space plane map the shared resample skeleton can drive: a
 /// `forward` map used for the destination bounding box and an `inverse` map used
@@ -182,13 +178,7 @@ fn front_side(h: &[f64; 9], src: &[(f64, f64); 4]) -> f64 {
 /// Apply a row-major homography in homogeneous coordinates, dividing by the
 /// third component; `None` when that divisor is non-finite or ~0.
 fn apply_homography(m: &[f64; 9], x: f64, y: f64) -> Option<(f64, f64)> {
-    let w = m[6] * x + m[7] * y + m[8];
-    if !w.is_finite() || w.abs() < HOMOGRAPHY_EPSILON {
-        return None;
-    }
-    let px = (m[0] * x + m[1] * y + m[2]) / w;
-    let py = (m[3] * x + m[4] * y + m[5]) / w;
-    (px.is_finite() && py.is_finite()).then_some((px, py))
+    Homography(*m).apply(x, y)
 }
 
 /// The four source-rect corners in TL, TR, BR, BL order.
@@ -201,104 +191,15 @@ fn source_corners(rect: PsdRect) -> [(f64, f64); 4] {
     ]
 }
 
-/// Determinant of a row-major 3×3 matrix.
-fn det3(m: &[f64; 9]) -> f64 {
-    m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6])
-        + m[2] * (m[3] * m[7] - m[4] * m[6])
-}
-
-/// Row-major inverse of a 3×3 matrix, or `None` when it is singular.
-fn invert3(m: &[f64; 9]) -> Option<[f64; 9]> {
-    let det = det3(m);
-    if !det.is_finite() || det.abs() < HOMOGRAPHY_EPSILON {
-        return None;
-    }
-    let id = 1.0 / det;
-    Some([
-        (m[4] * m[8] - m[5] * m[7]) * id,
-        (m[2] * m[7] - m[1] * m[8]) * id,
-        (m[1] * m[5] - m[2] * m[4]) * id,
-        (m[5] * m[6] - m[3] * m[8]) * id,
-        (m[0] * m[8] - m[2] * m[6]) * id,
-        (m[2] * m[3] - m[0] * m[5]) * id,
-        (m[3] * m[7] - m[4] * m[6]) * id,
-        (m[1] * m[6] - m[0] * m[7]) * id,
-        (m[0] * m[4] - m[1] * m[3]) * id,
-    ])
-}
-
-/// Solve the 8×8 linear system `a·x = b` by Gaussian elimination with partial
-/// pivoting; deterministic, or `None` when the matrix is singular.
-fn gaussian_solve(mut a: [[f64; 8]; 8], mut b: [f64; 8]) -> Option<[f64; 8]> {
-    for col in 0..8 {
-        let mut pivot = col;
-        let mut best = a[col][col].abs();
-        for (offset, r) in a[(col + 1)..].iter().enumerate() {
-            let v = r[col].abs();
-            if v > best {
-                best = v;
-                pivot = col + 1 + offset;
-            }
-        }
-        if !best.is_finite() || best < PIVOT_EPSILON {
-            return None;
-        }
-        a.swap(col, pivot);
-        b.swap(col, pivot);
-        let prow = a[col];
-        let p = prow[col];
-        for row in (col + 1)..8 {
-            let factor = a[row][col] / p;
-            if factor == 0.0 {
-                continue;
-            }
-            for k in col..8 {
-                a[row][k] -= factor * prow[k];
-            }
-            b[row] -= factor * b[col];
-        }
-    }
-    let mut x = [0.0f64; 8];
-    for i in (0..8).rev() {
-        let row = a[i];
-        let mut s = b[i];
-        for k in (i + 1)..8 {
-            s -= row[k] * x[k];
-        }
-        x[i] = s / row[i];
-    }
-    if x.iter().all(|v| v.is_finite()) {
-        Some(x)
-    } else {
-        None
-    }
-}
-
 /// The homography sending `src[0..4]` to `dst[0..4]`, or `None` for a
 /// non-finite corner or a singular/near-singular map.
 pub(super) fn solve_homography(src: [(f64, f64); 4], dst: [(f64, f64); 4]) -> Option<QuadMap> {
-    for (x, y) in src.iter().chain(dst.iter()) {
-        if !x.is_finite() || !y.is_finite() {
-            return None;
-        }
-    }
-    let mut a = [[0.0f64; 8]; 8];
-    let mut b = [0.0f64; 8];
-    for i in 0..4 {
-        let (x, y) = src[i];
-        let (u, v) = dst[i];
-        a[2 * i] = [x, y, 1.0, 0.0, 0.0, 0.0, -x * u, -y * u];
-        b[2 * i] = u;
-        a[2 * i + 1] = [0.0, 0.0, 0.0, x, y, 1.0, -x * v, -y * v];
-        b[2 * i + 1] = v;
-    }
-    let s = gaussian_solve(a, b)?;
-    let h = [s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7], 1.0];
-    let inv = invert3(&h)?;
+    let h = Homography::from_quads(src, dst)?;
+    let inv = h.inverse()?;
     Some(QuadMap {
-        h,
-        inv,
-        front: front_side(&h, &src),
+        h: h.0,
+        inv: inv.0,
+        front: front_side(&h.0, &src),
     })
 }
 

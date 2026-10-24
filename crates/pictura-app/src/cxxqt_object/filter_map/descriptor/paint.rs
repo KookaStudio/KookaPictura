@@ -48,6 +48,24 @@ pub(super) const ROWS: &[FilterDescriptor] = &[
         live_preview: true,
     },
 
+    // The kept session edit's id.
+    FilterDescriptor {
+        kind: "vanishing-point",
+        path: &["Filter", "Vanishing Point…"],
+        menu: true,
+        label: "Vanishing Point…",
+        params: &[
+            FilterParam { control: FilterControl::Hidden, label: "", minimum: 0.0, maximum: 4e9, value: 0.0, decimals: 0, suffix: "", pixel_distance: false, choices: &[], initial: &[] },
+        ],
+        whole_layer: true,
+        dialog: DialogKind::VanishingPoint,
+        map_after_ok: false,
+        preview_pane: true,
+        stacked: false,
+        preview_below: false,
+        live_preview: true,
+    },
+
     FilterDescriptor {
         kind: "oil-paint",
         path: &["Filter", "Oil Paint…"],

@@ -62,6 +62,10 @@ pub(in crate::cxxqt_object) struct DocumentSession {
     /// The password a protected PDF was opened with, kept in memory only so
     /// Revert can reopen it.
     pub(in crate::cxxqt_object) pdf_password: Option<String>,
+    /// The Vanishing Point planes this document's last session kept, so the
+    /// dialog reopens on them.
+    // ponytail: memory only; CS6 saves planes in PSD, TIFF and JPEG files (#918).
+    pub(in crate::cxxqt_object) vanishing_planes: Option<pictura_filters::VpPlanes>,
 }
 
 impl DocumentSession {
@@ -385,6 +389,7 @@ impl PictureViewRust {
         self.active_path = super::super::paths::ActivePath::Work;
         self.session.pdf_options = None;
         self.session.pdf_password = None;
+        self.session.vanishing_planes = None;
         self.isolation = None;
         self.solo_snapshot = None;
         self.expanded_groups.clear();
