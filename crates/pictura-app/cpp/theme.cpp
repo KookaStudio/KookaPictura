@@ -505,7 +505,7 @@ QPushButton#colorSwatch { background: transparent; border: 0; padding: 0; }
 QToolButton#optionsBrushTip:!hover:!pressed { background: transparent; border: 0; padding: 0; }
 QToolButton#gradientMapPresets::menu-indicator { image: none; width: 0; }
 QWidget#panelDropIndicator, QWidget#panelStripDropIndicator, QWidget#panelFloatDropIndicator,
-QWidget#panelColumnEdgeIndicator { background: ${accent}; }
+QWidget#panelColumnEdgeIndicator, QWidget#documentDockIndicator { background: ${accent}; }
 QWidget#panelOutlineIndicator { background: transparent; border: 2px solid ${accent}; border-radius: 6px; }
 QLabel#imageSizePreview { background: ${surface-input}; border: 1px solid ${border-input}; }
 QLabel#brushTipPreview { background: ${surface-input}; }

@@ -448,8 +448,9 @@ public:
     int windowTabForTest(int index, int ordinal) const;
     DocumentFloatWindow* windowFloatForTest(int index, int ordinal) const;
     void activateWindowForTest(int index, int ordinal);
-    // While set, a floating window's Ctrl+drag hands its drag data to `hook`
-    // instead of running the blocking `QDrag::exec`.
+    // While set, a floating window's dock drag (Ctrl+drag, or the carried
+    // window drag) hands its drag data to `hook` instead of running the
+    // blocking `QDrag::exec`.
     void setWindowDockDragForTest(std::function<void(std::unique_ptr<QMimeData>)> hook)
     {
         windowDockDragForTest_ = std::move(hook);
@@ -783,10 +784,15 @@ private:
     QRect defaultFloatGeometry() const;
     // Keep a child-hosted float under the floating panel overlays.
     void raiseDocumentFloat(DocumentFloatWindow* floating);
-    // The tab strip in global coordinates: the tab bar's band at the top of
-    // the tab widget, a header high at least while the bar has no tabs.
-    QRect tabStripGlobalRect() const;
-    // A float's header drag ended: dock it when released over the tab strip.
+    // The dock zone in global coordinates: the band along the top of the tab
+    // widget, as high as the tab bar while it shows tabs and otherwise as high
+    // as a tab bar would be, a header high at least. Empty while docking is
+    // off, while tiled, or while the tab widget is not the document area's
+    // page.
+    QRect dockZoneGlobalRect() const;
+    // The tab index a dock at `globalPos` inserts at; -1 for the end.
+    int dockIndexAt(const QPoint& globalPos) const;
+    // A float's header drag ended: dock it when released over the dock zone.
     void onFloatDragReleased(DocWindow* window, const QPoint& globalPos);
     // Present every window whose document's frame revision moved.
     void presentWindows();
@@ -801,13 +807,23 @@ private:
     void showTabMenu(const QPoint& barPos);
     void showHeaderMenu(DocWindow* window, const QPoint& globalPos);
     bool tearOutFilter(QEvent* event);
-    // A floating window's Ctrl+drag: carry `window` as drag-and-drop under the
-    // private document-window MIME type. The strip filter docks it where it is
-    // dropped on the tab strip and claims no other drag, so file and layer
+    // A floating window's dock drag: carry `window` as drag-and-drop under the
+    // private document-window MIME type. With `carryWindow` the drag also names
+    // the float's top-level, held at `grabOffset`, so the compositor moves it
+    // with the pointer (Wayland). The strip filter docks it where it is
+    // dropped on the dock zone and claims no other drag, so file and layer
     // drops pass on to `FileDropRouter`.
-    void startWindowDockDrag(DocWindow* window);
+    void startWindowDockDrag(DocWindow* window, bool carryWindow = false,
+                             const QPoint& grabOffset = QPoint());
     DocWindow* windowOfDockMime(const QMimeData* mime) const;
     bool windowDropFilter(QObject* watched, QEvent* event);
+    // The dock line: shown for a dock drag at `globalPos` while it is in the
+    // dock zone (vertical at the insertion point between tabs, horizontal
+    // along the band without tabs), hidden outside. Whether it shows.
+    bool updateDockIndicator(const QPoint& globalPos);
+    void hideDockIndicator();
+    // Dock the window a drop recorded, once no platform drag is running.
+    void applyPendingDock();
     // Dock every floating window, then activate `target` (null: keep the
     // active window).
     void consolidateAllToTabs(DocWindow* target);
@@ -899,6 +915,13 @@ private:
     QPointer<DocumentFloatWindow> tearFloat_;
     bool tearSynthesizing_ = false;
     std::function<void(std::unique_ptr<QMimeData>)> windowDockDragForTest_;
+    // The frame's dock line, made on first use.
+    QWidget* dockIndicator_ = nullptr;
+    // A drop on the dock zone, docked once the drag that carries the window
+    // has finished: the float must outlive a running platform drag.
+    DocWindow* pendingDockWindow_ = nullptr;
+    int pendingDockIndex_ = -1;
+    bool windowDockDragRunning_ = false;
     QPointer<QMenu> documentMenu_;
     // Disconnected in the destructor: the focusChanged handler must not run
     // while the window's children are being torn down.

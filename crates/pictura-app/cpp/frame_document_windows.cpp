@@ -312,12 +312,22 @@ bool PicturaMainWindow::floatWindow(DocWindow* window, const QRect& globalGeomet
             showHeaderMenu(window, globalPos);
         }
     };
+    floating->onDragMoved = [this, window, floating](const QPoint& globalPos) {
+        if (windows_.contains(window) && window->floating == floating) {
+            updateDockIndicator(globalPos);
+        }
+    };
     floating->onDragReleased = [this, window](const QPoint& globalPos) {
         onFloatDragReleased(window, globalPos);
     };
     floating->onDockDragRequested = [this, window, floating]() {
         if (windows_.contains(window) && window->floating == floating) {
             startWindowDockDrag(window);
+        }
+    };
+    floating->onWindowDragRequested = [this, window, floating](const QPoint& grabOffset) {
+        if (windows_.contains(window) && window->floating == floating) {
+            startWindowDockDrag(window, true, grabOffset);
         }
     };
     // A double-click is an explicit dock, like Consolidate, so it ignores the
@@ -470,22 +480,34 @@ void PicturaMainWindow::untileWindow(DocWindow* window)
     host->deleteLater();
 }
 
-QRect PicturaMainWindow::tabStripGlobalRect() const
+QRect PicturaMainWindow::dockZoneGlobalRect() const
 {
+    if (!floatingDocumentDocking_ || tileHost_ || !tabs_->isVisible()) {
+        return QRect();
+    }
+    // Without tabs the bar takes no room, so the zone is the band a bar would
+    // take at the top of the document area, which the tab widget fills.
+    QTabBar* bar = tabs_->tabBar();
+    const int barHeight =
+        bar->isVisible() && bar->count() > 0 ? bar->height() : bar->sizeHint().height();
     return QRect(tabs_->mapToGlobal(QPoint(0, 0)),
-                 QSize(tabs_->width(),
-                       qMax(tabs_->tabBar()->height(), DocumentFloatWindow::kHeaderHeight)));
+                 QSize(tabs_->width(), qMax(barHeight, DocumentFloatWindow::kHeaderHeight)));
+}
+
+int PicturaMainWindow::dockIndexAt(const QPoint& globalPos) const
+{
+    QTabBar* bar = tabs_->tabBar();
+    return bar->isVisible() ? bar->tabAt(bar->mapFromGlobal(globalPos)) : -1;
 }
 
 void PicturaMainWindow::onFloatDragReleased(DocWindow* window, const QPoint& globalPos)
 {
-    if (!floatingDocumentDocking_ || !windows_.contains(window)
-        || window->kind != DocWindow::Host::Float || !tabs_->isVisible()
-        || !tabStripGlobalRect().contains(globalPos)) {
+    hideDockIndicator();
+    if (!windows_.contains(window) || window->kind != DocWindow::Host::Float
+        || !dockZoneGlobalRect().contains(globalPos)) {
         return;
     }
-    QTabBar* bar = tabs_->tabBar();
-    dockWindow(window, bar->tabAt(bar->mapFromGlobal(globalPos)));
+    dockWindow(window, dockIndexAt(globalPos));
 }
 
 bool PicturaMainWindow::closeWindow(DocWindow* window, bool interactive)
@@ -516,6 +538,9 @@ void PicturaMainWindow::detachWindows(const QList<DocWindow*>& windows)
         windows_.removeOne(window);
         if (tearWindow_ == window) {
             tearWindow_ = nullptr;
+        }
+        if (pendingDockWindow_ == window) {
+            pendingDockWindow_ = nullptr;
         }
         if (window->doc->lastActive == window) {
             window->doc->lastActive = nullptr;

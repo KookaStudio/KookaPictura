@@ -12,7 +12,6 @@
 #include <QtGui/QPainter>
 #include <QtGui/QResizeEvent>
 #include <QtGui/QScreen>
-#include <QtGui/QWindow>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
@@ -26,7 +25,7 @@ constexpr int kGripSize = 14;
 constexpr int kMinWidth = 160;
 constexpr int kMinHeight = 120;
 
-bool gSystemMoveForTest = false;
+bool gWindowDragForTest = false;
 
 // The bounds a float may be moved or grown in: the frame's rect for a child
 // overlay, the screen's available area for a top-level window.
@@ -321,21 +320,30 @@ void DocumentFloatWindow::dragTo(const QPoint& globalPos)
         && (globalPos - dragStart_).manhattanLength() < QApplication::startDragDistance()) {
         return;
     }
-    if (!dragMoved_ && startSystemMove()) {
+    if (!dragMoved_ && isWindow() && movesByWindowDrag()) {
+        // The platform drag owns the pointer from here, so no motion or
+        // release reaches this drag again.
+        dragging_ = false;
+        if (onWindowDragRequested) {
+            onWindowDragRequested(grabOffset_);
+        }
         return;
     }
     dragMoved_ = true;
     const QPoint topLeft = globalPos - grabOffset_;
     if (isWindow() || !parentWidget()) {
         move(topLeft);
-        return;
+    } else {
+        // A child overlay stays inside the frame, so its header is never lost.
+        QWidget* host = parentWidget();
+        const QPoint local = host->mapFromGlobal(topLeft);
+        const int maxX = qMax(0, host->width() - width());
+        const int maxY = qMax(0, host->height() - height());
+        move(qBound(0, local.x(), maxX), qBound(0, local.y(), maxY));
     }
-    // A child overlay stays inside the frame, so its header is never lost.
-    QWidget* host = parentWidget();
-    const QPoint local = host->mapFromGlobal(topLeft);
-    const int maxX = qMax(0, host->width() - width());
-    const int maxY = qMax(0, host->height() - height());
-    move(qBound(0, local.x(), maxX), qBound(0, local.y(), maxY));
+    if (onDragMoved) {
+        onDragMoved(globalPos);
+    }
 }
 
 void DocumentFloatWindow::endDrag(const QPoint& globalPos)
@@ -350,30 +358,16 @@ void DocumentFloatWindow::endDrag(const QPoint& globalPos)
     dragMoved_ = false;
 }
 
-bool DocumentFloatWindow::movesBySystem()
+bool DocumentFloatWindow::movesByWindowDrag()
 {
-    return gSystemMoveForTest
-           || QGuiApplication::platformName().contains(QStringLiteral("wayland"),
-                                                       Qt::CaseInsensitive);
+    return gWindowDragForTest
+           || QGuiApplication::platformName().startsWith(QStringLiteral("wayland"),
+                                                         Qt::CaseInsensitive);
 }
 
-void DocumentFloatWindow::setSystemMoveForTest(bool on)
+void DocumentFloatWindow::setWindowDragForTest(bool on)
 {
-    gSystemMoveForTest = on;
-}
-
-bool DocumentFloatWindow::startSystemMove()
-{
-    if (!isWindow() || !movesBySystem()) {
-        return false;
-    }
-    QWindow* handle = windowHandle();
-    if (!handle || !handle->startSystemMove()) {
-        return false;
-    }
-    dragging_ = false;
-    dragMoved_ = false;
-    return true;
+    gWindowDragForTest = on;
 }
 
 bool DocumentFloatWindow::event(QEvent* event)

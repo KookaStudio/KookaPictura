@@ -1,13 +1,16 @@
 // Floating document windows (#317): moving a window between the tab strip and
 // a float keeps its view, tear-out and dock-back, Ctrl+drag and double-click
-// docking, the header and its menu, keys in a top-level float, and how the
-// screen modes and panel controls treat floats. Each test function builds its
-// own frame. Geometry checks force the in-frame hosting; the checks named
-// "top-level" or "under Wayland" run top-level floats. Offscreen has no system
-// move, so the Wayland checks cover the path where the compositor refuses it.
+// docking, the Wayland window drag, the dock zone and its dock line, the header
+// and its menu, keys in a top-level float, and how the screen modes and panel
+// controls treat floats. Each test function builds its own frame. Geometry
+// checks force the in-frame hosting; the checks named "top-level" or "under
+// Wayland" run top-level floats. Offscreen runs no platform drag: the dock
+// drag hook receives the drag data, and synthetic drag events stand in for
+// the compositor's.
 
 #include <QtTest/QtTest>
 
+#include <QtCore/QDataStream>
 #include <QtCore/QLineF>
 #include <QtCore/QMimeData>
 #include <QtCore/QTemporaryDir>
@@ -63,6 +66,49 @@ void sendMouse(QWidget* target, QEvent::Type type, const QPoint& global, Qt::Mou
     QMouseEvent event(type, QPointF(target->mapFromGlobal(global)), QPointF(global), button,
                       held, modifiers);
     QApplication::sendEvent(target, &event);
+}
+
+// Send one drag event of `type` (enter, move, or drop) with `mime` to `target`
+// at `pos`; whether it was accepted.
+bool sendDrag(QWidget* target, QEvent::Type type, const QPoint& pos, const QMimeData* mime)
+{
+    if (type == QEvent::DragEnter) {
+        QDragEnterEvent enter(pos, Qt::MoveAction, mime, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(target, &enter);
+        return enter.isAccepted();
+    }
+    if (type == QEvent::DragMove) {
+        QDragMoveEvent move(pos, Qt::MoveAction, mime, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(target, &move);
+        return move.isAccepted();
+    }
+    QDropEvent drop(QPointF(pos), Qt::MoveAction, mime, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(target, &drop);
+    return drop.isAccepted();
+}
+
+// The keys QtWayland reads to attach a top-level to a drag, as QDockWidget
+// writes them.
+const QString kCarriedWindowMime = QStringLiteral("application/x-qt-mainwindowdrag-window");
+const QString kCarriedPositionMime = QStringLiteral("application/x-qt-mainwindowdrag-position");
+
+QWindow* carriedWindow(const QMimeData* mime)
+{
+    if (!mime->hasFormat(kCarriedWindowMime)) {
+        return nullptr;
+    }
+    QDataStream stream(mime->data(kCarriedWindowMime));
+    qintptr address = 0;
+    stream >> address;
+    return reinterpret_cast<QWindow*>(address);
+}
+
+QPoint carriedGrabOffset(const QMimeData* mime)
+{
+    QDataStream stream(mime->data(kCarriedPositionMime));
+    QPoint offset;
+    stream >> offset;
+    return offset;
 }
 
 // Drag `mime` over `target` at `pos` and drop it there; whether the drop was
@@ -133,6 +179,14 @@ private slots:
     void sidewaysDragReorders();
     void dragHeaderDocks();
     void tearOutUnderWayland();
+    void headerDragCarriesWindow();
+    void tearOutDragDocksOnStrip();
+    void dockIndicatorBetweenTabs();
+    void dockIndicatorWithoutTabs();
+    void dockDropWithoutTabs();
+    void dockIndicatorHidesOnLeave();
+    void handDragShowsIndicator();
+    void dockZoneInactiveTiledOrOff();
     void ctrlDragDocksAtDrop();
     void ctrlDragRefusedWithoutDocking();
     void ctrlDragElsewhereKeepsFloat();
@@ -168,6 +222,16 @@ private:
     // Ctrl+drag `floating`'s header past the drag threshold and release; the
     // drag data the frame would have started a drag with, or null.
     std::unique_ptr<QMimeData> ctrlDragHeader(DocumentFloatWindow* floating);
+    // Drag `floating`'s header 40 px down with `modifiers` held and release;
+    // the drag data the frame would have started a drag with, or null.
+    std::unique_ptr<QMimeData> dragHeader(DocumentFloatWindow* floating,
+                                          Qt::KeyboardModifiers modifiers);
+    // Drag tab `tab` 120 px below the strip and release; the drag data the
+    // tear-out would have started a drag with, or null.
+    std::unique_ptr<QMimeData> tearOutDrag(int tab);
+    // The frame's dock line, or null before it first showed.
+    QWidget* dockLine() const;
+    bool dockLineShown() const;
     // Turn Enable Floating Document Window Docking on or off as the
     // Preferences dialog does.
     bool setDocking(bool on);
@@ -226,19 +290,48 @@ QMenu* DocumentFloatTest::headerMenu(DocumentFloatWindow* floating)
 
 std::unique_ptr<QMimeData> DocumentFloatTest::ctrlDragHeader(DocumentFloatWindow* floating)
 {
+    return dragHeader(floating, Qt::ControlModifier);
+}
+
+std::unique_ptr<QMimeData> DocumentFloatTest::dragHeader(DocumentFloatWindow* floating,
+                                                         Qt::KeyboardModifiers modifiers)
+{
     std::unique_ptr<QMimeData> carried;
     window_->setWindowDockDragForTest(
         [&carried](std::unique_ptr<QMimeData> mime) { carried = std::move(mime); });
     QWidget* header = floating->header();
     const QPoint from = header->mapToGlobal(QPoint(header->width() / 2, header->height() / 2));
     const QPoint to = from + QPoint(0, 40);
-    sendMouse(header, QEvent::MouseButtonPress, from, Qt::LeftButton, Qt::LeftButton,
-              Qt::ControlModifier);
-    sendMouse(header, QEvent::MouseMove, to, Qt::NoButton, Qt::LeftButton, Qt::ControlModifier);
-    sendMouse(header, QEvent::MouseButtonRelease, to, Qt::LeftButton, Qt::NoButton,
-              Qt::ControlModifier);
+    sendMouse(header, QEvent::MouseButtonPress, from, Qt::LeftButton, Qt::LeftButton, modifiers);
+    sendMouse(header, QEvent::MouseMove, to, Qt::NoButton, Qt::LeftButton, modifiers);
+    sendMouse(header, QEvent::MouseButtonRelease, to, Qt::LeftButton, Qt::NoButton, modifiers);
     window_->setWindowDockDragForTest(nullptr);
     return carried;
+}
+
+std::unique_ptr<QMimeData> DocumentFloatTest::tearOutDrag(int tab)
+{
+    std::unique_ptr<QMimeData> carried;
+    window_->setWindowDockDragForTest(
+        [&carried](std::unique_ptr<QMimeData> mime) { carried = std::move(mime); });
+    QTabBar* bar = tabBar();
+    const QPoint from = bar->mapToGlobal(bar->tabRect(tab).center());
+    const QPoint to =
+        bar->mapToGlobal(QPoint(bar->tabRect(tab).center().x(), bar->height() + 120));
+    dragTo(bar, from, to);
+    window_->setWindowDockDragForTest(nullptr);
+    return carried;
+}
+
+QWidget* DocumentFloatTest::dockLine() const
+{
+    return window_->findChild<QWidget*>(QStringLiteral("documentDockIndicator"));
+}
+
+bool DocumentFloatTest::dockLineShown() const
+{
+    const QWidget* line = dockLine();
+    return line && line->isVisible();
 }
 
 bool DocumentFloatTest::setDocking(bool on)
@@ -296,7 +389,7 @@ void DocumentFloatTest::cleanup()
     }
     window_.reset();
     PanelFloat::setForceChildOverlayForTest(false);
-    DocumentFloatWindow::setSystemMoveForTest(false);
+    DocumentFloatWindow::setWindowDragForTest(false);
     setNonInteractiveUnsavedChoice(UnsavedChoice::Discard);
 }
 
@@ -423,26 +516,219 @@ void DocumentFloatTest::dragHeaderDocks()
     QCOMPARE(window_->activeDocumentIndex(), 2);
 }
 
-// With the system move forced, the tear-out offers the drag to the window
-// system; offscreen refuses it, so the top-level float stays where it landed.
+// With the window drag forced, the tear-out floats a top-level and hands the
+// rest of the press to a drag that carries it, held by its header's centre.
 void DocumentFloatTest::tearOutUnderWayland()
 {
     QVERIFY(newDoc(QStringLiteral("First"), 32, 32));
     QVERIFY(newDoc(QStringLiteral("Second"), 32, 32));
     PanelFloat::setForceChildOverlayForTest(false);
-    DocumentFloatWindow::setSystemMoveForTest(true);
-    QTabBar* bar = tabBar();
-    QVERIFY(bar != nullptr);
-    const QPoint from = bar->mapToGlobal(bar->tabRect(1).center());
-    const QPoint to = bar->mapToGlobal(QPoint(bar->tabRect(1).center().x(), bar->height() + 120));
-    dragTo(bar, from, to);
+    DocumentFloatWindow::setWindowDragForTest(true);
+    std::unique_ptr<QMimeData> mime = tearOutDrag(1);
 
     QTRY_VERIFY(window_->floatWindowForTest(1) != nullptr);
-    QVERIFY(window_->floatWindowForTest(1)->isWindow());
-    QVERIFY(window_->floatWindowForTest(1)->isVisible());
+    DocumentFloatWindow* floating = window_->floatWindowForTest(1);
+    QVERIFY(floating->isWindow());
+    QVERIFY(floating->isVisible());
     QCOMPARE(window_->tabOfDocumentForTest(0), 0);
-    QCOMPARE(bar->count(), 1);
+    QCOMPARE(tabBar()->count(), 1);
     QCOMPARE(window_->activeDocumentIndex(), 1);
+    QVERIFY2(mime != nullptr, "the tear-out starts a drag");
+    QVERIFY(mime->hasFormat(QString::fromLatin1(kDocumentWindowMimeType)));
+    QVERIFY(floating->windowHandle() != nullptr);
+    QCOMPARE(carriedWindow(mime.get()), floating->windowHandle());
+    QCOMPARE(carriedGrabOffset(mime.get()),
+             QPoint(floating->width() / 2, DocumentFloatWindow::kHeaderHeight / 2));
+}
+
+void DocumentFloatTest::headerDragCarriesWindow()
+{
+    QVERIFY(newDoc(QStringLiteral("Floating"), 32, 32));
+    PanelFloat::setForceChildOverlayForTest(false);
+    DocumentFloatWindow::setWindowDragForTest(true);
+    QVERIFY(window_->floatDocumentForTest(0));
+    DocumentFloatWindow* floating = window_->floatWindowForTest(0);
+    QVERIFY(floating != nullptr && floating->isWindow());
+    QVERIFY(floating->windowHandle() != nullptr);
+    const QRect geometry = floating->geometry();
+    QWidget* header = floating->header();
+    const QPoint press = header->mapTo(floating, QPoint(header->width() / 2, header->height() / 2));
+
+    std::unique_ptr<QMimeData> mime = dragHeader(floating, Qt::NoModifier);
+    QVERIFY2(mime != nullptr, "a plain header drag starts a drag");
+    QVERIFY(mime->hasFormat(QString::fromLatin1(kDocumentWindowMimeType)));
+    QCOMPARE(carriedWindow(mime.get()), floating->windowHandle());
+    QCOMPARE(carriedGrabOffset(mime.get()), press);
+    QCOMPARE(floating->geometry(), geometry);
+    QCOMPARE(window_->floatWindowForTest(0), floating);
+}
+
+void DocumentFloatTest::tearOutDragDocksOnStrip()
+{
+    QVERIFY(newDoc(QStringLiteral("First"), 32, 32));
+    QVERIFY(newDoc(QStringLiteral("Second"), 32, 32));
+    PanelFloat::setForceChildOverlayForTest(false);
+    DocumentFloatWindow::setWindowDragForTest(true);
+    std::unique_ptr<QMimeData> mime = tearOutDrag(1);
+    QVERIFY(mime != nullptr);
+    QTRY_VERIFY(window_->floatWindowForTest(1) != nullptr);
+
+    QTabBar* bar = tabBar();
+    QCOMPARE(bar->count(), 1);
+    QVERIFY2(dropOn(bar, bar->tabRect(0).center(), mime.get()), "the strip takes the drop");
+    QTRY_COMPARE(window_->tabOfDocumentForTest(1), 0);
+    QCOMPARE(bar->count(), 2);
+    QVERIFY(window_->floatWindowForTest(1) == nullptr);
+    QCOMPARE(window_->activeDocumentIndex(), 1);
+}
+
+void DocumentFloatTest::dockIndicatorBetweenTabs()
+{
+    QVERIFY(newDoc(QStringLiteral("A"), 32, 32));
+    QVERIFY(newDoc(QStringLiteral("B"), 32, 32));
+    QVERIFY(newDoc(QStringLiteral("C"), 32, 32));
+    QVERIFY(window_->floatDocumentForTest(2));
+    std::unique_ptr<QMimeData> mime = ctrlDragHeader(window_->floatWindowForTest(2));
+    QVERIFY(mime != nullptr);
+    QTabBar* bar = tabBar();
+    QCOMPARE(bar->count(), 2);
+
+    const QPoint at = bar->tabRect(1).center();
+    QVERIFY(sendDrag(bar, QEvent::DragEnter, at, mime.get()));
+    QVERIFY(sendDrag(bar, QEvent::DragMove, at, mime.get()));
+    QVERIFY2(dockLineShown(), "the dock line shows over the strip");
+    QWidget* line = dockLine();
+    QCOMPARE(line->width(), 2);
+    QVERIFY(line->height() >= bar->height());
+    const QPoint lineAt = line->mapToGlobal(QPoint(0, 0));
+    QCOMPARE(lineAt.x(), bar->mapToGlobal(bar->tabRect(1).topLeft()).x() - 1);
+    QCOMPARE(lineAt.y(), tabWidget()->mapToGlobal(QPoint(0, 0)).y());
+}
+
+void DocumentFloatTest::dockIndicatorWithoutTabs()
+{
+    QVERIFY(newDoc(QStringLiteral("A"), 32, 32));
+    QVERIFY(newDoc(QStringLiteral("B"), 32, 32));
+    QVERIFY(window_->floatDocumentForTest(0));
+    QVERIFY(window_->floatDocumentForTest(1));
+    QCOMPARE(tabBar()->count(), 0);
+    std::unique_ptr<QMimeData> mime = ctrlDragHeader(window_->floatWindowForTest(1));
+    QVERIFY(mime != nullptr);
+
+    QTabWidget* tabs = tabWidget();
+    QStackedWidget* area = documentArea();
+    const int band = qMax(tabBar()->sizeHint().height(), DocumentFloatWindow::kHeaderHeight);
+    const QPoint at(tabs->width() / 2, band / 2);
+    QVERIFY(sendDrag(tabs, QEvent::DragEnter, at, mime.get()));
+    QVERIFY(sendDrag(tabs, QEvent::DragMove, at, mime.get()));
+    QVERIFY2(dockLineShown(), "the dock line shows over the empty strip's band");
+    QWidget* line = dockLine();
+    QCOMPARE(line->height(), 2);
+    QCOMPARE(line->width(), area->width());
+    const QRect bandRect(area->mapToGlobal(QPoint(0, 0)), QSize(area->width(), band));
+    QVERIFY(bandRect.contains(QRect(line->mapToGlobal(QPoint(0, 0)), line->size())));
+}
+
+void DocumentFloatTest::dockDropWithoutTabs()
+{
+    QVERIFY(newDoc(QStringLiteral("A"), 32, 32));
+    QVERIFY(newDoc(QStringLiteral("B"), 32, 32));
+    QVERIFY(window_->floatDocumentForTest(0));
+    QVERIFY(window_->floatDocumentForTest(1));
+    QCOMPARE(tabBar()->count(), 0);
+    std::unique_ptr<QMimeData> mime = ctrlDragHeader(window_->floatWindowForTest(1));
+    QVERIFY(mime != nullptr);
+
+    QTabWidget* tabs = tabWidget();
+    const QPoint at(tabs->width() / 2, DocumentFloatWindow::kHeaderHeight / 2);
+    QVERIFY2(dropOn(tabs, at, mime.get()), "the empty strip's band takes the drop");
+    QVERIFY(!dockLineShown());
+    QTRY_COMPARE(window_->tabOfDocumentForTest(1), 0);
+    QCOMPARE(tabBar()->count(), 1);
+    QVERIFY(window_->floatWindowForTest(1) == nullptr);
+    QVERIFY(window_->floatWindowForTest(0) != nullptr);
+    QCOMPARE(window_->activeDocumentIndex(), 1);
+}
+
+void DocumentFloatTest::dockIndicatorHidesOnLeave()
+{
+    QVERIFY(newDoc(QStringLiteral("Tabbed"), 32, 32));
+    QVERIFY(newDoc(QStringLiteral("Floating"), 32, 32));
+    QVERIFY(window_->floatDocumentForTest(1));
+    DocumentFloatWindow* floating = window_->floatWindowForTest(1);
+    std::unique_ptr<QMimeData> mime = ctrlDragHeader(floating);
+    QVERIFY(mime != nullptr);
+
+    QTabBar* bar = tabBar();
+    const QPoint at = bar->tabRect(0).center();
+    QVERIFY(sendDrag(bar, QEvent::DragEnter, at, mime.get()));
+    QVERIFY(sendDrag(bar, QEvent::DragMove, at, mime.get()));
+    QVERIFY(dockLineShown());
+    QDragLeaveEvent leave;
+    QApplication::sendEvent(bar, &leave);
+    QVERIFY2(!dockLineShown(), "the dock line hides when the drag leaves");
+    QCOMPARE(window_->floatWindowForTest(1), floating);
+}
+
+// In-frame hosting with the window drag off: the header drag moves the float
+// by hand, as on X11.
+void DocumentFloatTest::handDragShowsIndicator()
+{
+    QVERIFY(newDoc(QStringLiteral("A"), 32, 32));
+    QVERIFY(newDoc(QStringLiteral("B"), 32, 32));
+    QVERIFY(newDoc(QStringLiteral("C"), 32, 32));
+    QVERIFY(window_->floatDocumentForTest(2));
+    DocumentFloatWindow* floating = window_->floatWindowForTest(2);
+    QVERIFY(floating != nullptr);
+    window_->setActiveDocumentIndex(0);
+    QTabBar* bar = tabBar();
+
+    QWidget* header = floating->header();
+    const QPoint from = header->mapToGlobal(QPoint(header->width() / 2, header->height() / 2));
+    const QPoint to = bar->mapToGlobal(bar->tabRect(1).center());
+    sendMouse(header, QEvent::MouseButtonPress, from, Qt::LeftButton, Qt::LeftButton);
+    for (int i = 1; i <= 10; ++i) {
+        sendMouse(header, QEvent::MouseMove, from + (to - from) * i / 10, Qt::NoButton,
+                  Qt::LeftButton);
+    }
+    QVERIFY2(dockLineShown(), "the dock line shows while the hand drag is over the strip");
+    QCOMPARE(dockLine()->width(), 2);
+    sendMouse(header, QEvent::MouseButtonRelease, to, Qt::LeftButton, Qt::NoButton);
+    QVERIFY2(!dockLineShown(), "the dock line hides on the release");
+    QTRY_COMPARE(window_->tabOfDocumentForTest(2), 1);
+}
+
+void DocumentFloatTest::dockZoneInactiveTiledOrOff()
+{
+    QVERIFY(setDocking(false));
+    QVERIFY(newDoc(QStringLiteral("A"), 32, 32));
+    QVERIFY(newDoc(QStringLiteral("B"), 32, 32));
+    QVERIFY(newDoc(QStringLiteral("C"), 32, 32));
+    QVERIFY(window_->floatDocumentForTest(2));
+    std::unique_ptr<QMimeData> mime = ctrlDragHeader(window_->floatWindowForTest(2));
+    QVERIFY(mime != nullptr);
+    QTabBar* bar = tabBar();
+    const QPoint at = bar->tabRect(0).center();
+    QVERIFY2(!sendDrag(bar, QEvent::DragEnter, at, mime.get()), "no dock zone with docking off");
+    QVERIFY(!sendDrag(bar, QEvent::DragMove, at, mime.get()));
+    QVERIFY(!dockLineShown());
+
+    QVERIFY(setDocking(true));
+    QVERIFY(window_->registry()->dispatch(QStringLiteral("window.arrange.tile")));
+    QCoreApplication::processEvents();
+    QVERIFY(window_->tilePaneForTest(0) != nullptr);
+    if (!window_->floatWindowForTest(2)) {
+        QVERIFY(window_->floatDocumentForTest(2));
+    }
+    QVERIFY(window_->floatWindowForTest(2) != nullptr);
+    QTabWidget* tabs = tabWidget();
+    const QPoint band(tabs->width() / 2, DocumentFloatWindow::kHeaderHeight / 2);
+    QVERIFY2(!sendDrag(tabs, QEvent::DragEnter, band, mime.get()), "no dock zone while tiled");
+    QVERIFY(!sendDrag(tabs, QEvent::DragMove, band, mime.get()));
+    QVERIFY(!sendDrag(tabs, QEvent::Drop, band, mime.get()));
+    QVERIFY(!dockLineShown());
+    QCoreApplication::processEvents();
+    QVERIFY(window_->floatWindowForTest(2) != nullptr);
 }
 
 void DocumentFloatTest::ctrlDragDocksAtDrop()
@@ -459,6 +745,7 @@ void DocumentFloatTest::ctrlDragDocksAtDrop()
     std::unique_ptr<QMimeData> mime = ctrlDragHeader(floating);
     QVERIFY2(mime != nullptr, "a Ctrl+drag on the header starts a drag");
     QVERIFY(mime->hasFormat(QString::fromLatin1(kDocumentWindowMimeType)));
+    QVERIFY2(!mime->hasFormat(kCarriedWindowMime), "a Ctrl+drag carries no window");
     QCOMPARE(floating->geometry(), geometry);
     QCOMPARE(window_->floatWindowForTest(2), floating);
 
@@ -643,17 +930,16 @@ void DocumentFloatTest::floatHostingFollowsPlatform()
     QCOMPARE(topLevel->parentWidget(), static_cast<QWidget*>(window_.get()));
 }
 
-// With the system move forced the float is hosted as on Wayland; offscreen
-// refuses the system move, so the header drag falls back to the hand move and
-// a release over the strip docks.
+// With the window drag forced the float is hosted as on Wayland, and a header
+// drag carries it to a drop on the strip.
 void DocumentFloatTest::floatTopLevelUnderWayland()
 {
     QVERIFY(newDoc(QStringLiteral("A"), 32, 32));
     QVERIFY(newDoc(QStringLiteral("B"), 32, 32));
     QVERIFY(newDoc(QStringLiteral("C"), 32, 32));
     PanelFloat::setForceChildOverlayForTest(false);
-    DocumentFloatWindow::setSystemMoveForTest(true);
-    QVERIFY(DocumentFloatWindow::movesBySystem());
+    DocumentFloatWindow::setWindowDragForTest(true);
+    QVERIFY(DocumentFloatWindow::movesByWindowDrag());
     QVERIFY(window_->floatDocumentForTest(2));
     DocumentFloatWindow* floating = window_->floatWindowForTest(2);
     QVERIFY(floating != nullptr);
@@ -661,16 +947,14 @@ void DocumentFloatTest::floatTopLevelUnderWayland()
     QCOMPARE(floating->windowType(), Qt::Tool);
     QVERIFY(floating->windowHandle() != nullptr);
     QCOMPARE(floating->windowHandle()->transientParent(), window_->windowHandle());
-    QVERIFY(!floating->startSystemMove());
     window_->setActiveDocumentIndex(0);
 
+    std::unique_ptr<QMimeData> mime = dragHeader(floating, Qt::NoModifier);
+    QVERIFY2(mime != nullptr, "the header drag carries the window");
+    QCOMPARE(carriedWindow(mime.get()), floating->windowHandle());
     QTabBar* bar = tabBar();
     QVERIFY(bar != nullptr);
-    QWidget* header = floating->header();
-    const QPoint from = header->mapToGlobal(QPoint(header->width() / 2, header->height() / 2));
-    const QPoint to = bar->mapToGlobal(bar->tabRect(1).center());
-    dragTo(header, from, to);
-
+    QVERIFY2(dropOn(bar, bar->tabRect(1).center(), mime.get()), "the strip takes the drop");
     QTRY_COMPARE(window_->tabOfDocumentForTest(2), 1);
     QVERIFY(window_->floatWindowForTest(2) == nullptr);
     QCOMPARE(window_->activeDocumentIndex(), 2);
