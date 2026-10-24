@@ -189,7 +189,7 @@ void ToolController::updateBrushOutline(const QPointF& imagePos)
     if (!canvas_) {
         return;
     }
-    if (!isBrushTool(active_)) {
+    if (transformSessionActive() || !isBrushTool(active_)) {
         canvas_->clearBrushOutline();
         return;
     }
