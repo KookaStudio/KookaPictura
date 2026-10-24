@@ -117,6 +117,9 @@ SessionState loadSession()
         obj.value(QStringLiteral("toolsColumns")).toInt(1) == 2 ? 2 : 1;
     state.useShiftKeyForToolSwitch =
         obj.value(QStringLiteral("useShiftKeyForToolSwitch")).toBool(true);
+    state.openDocumentsAsTabs = obj.value(QStringLiteral("openDocumentsAsTabs")).toBool(true);
+    state.enableFloatingDocumentDocking =
+        obj.value(QStringLiteral("enableFloatingDocumentDocking")).toBool(true);
     state.typePlaceholderText = obj.value(QStringLiteral("typePlaceholderText")).toBool(true);
     state.confirmLiveShapeToPath =
         obj.value(QStringLiteral("confirmLiveShapeToPath")).toBool(true);
@@ -253,6 +256,9 @@ bool saveSession(const SessionState& state)
     obj.insert(QStringLiteral("layersUseDefaultMasksOnFill"), state.layersUseDefaultMasksOnFill);
     obj.insert(QStringLiteral("toolsColumns"), state.toolsColumns);
     obj.insert(QStringLiteral("useShiftKeyForToolSwitch"), state.useShiftKeyForToolSwitch);
+    obj.insert(QStringLiteral("openDocumentsAsTabs"), state.openDocumentsAsTabs);
+    obj.insert(QStringLiteral("enableFloatingDocumentDocking"),
+               state.enableFloatingDocumentDocking);
     obj.insert(QStringLiteral("typePlaceholderText"), state.typePlaceholderText);
     obj.insert(QStringLiteral("confirmLiveShapeToPath"), state.confirmLiveShapeToPath);
     obj.insert(QStringLiteral("confirmDeleteVectorMask"), state.confirmDeleteVectorMask);

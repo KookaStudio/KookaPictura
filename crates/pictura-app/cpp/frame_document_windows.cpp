@@ -59,6 +59,13 @@ int PicturaMainWindow::addTabWindow(DocWindow* window)
     return tabs_->addTab(window->page, documentDisplayName(*window->doc));
 }
 
+void PicturaMainWindow::hostReadyWindow(DocWindow* window, bool activate)
+{
+    if (!openDocumentsAsTabs_ && window->kind == DocWindow::Host::Tab) {
+        floatWindow(window, QRect(), activate);
+    }
+}
+
 bool PicturaMainWindow::stripOwnsActivation() const
 {
     return !activeWindow_ || !windows_.contains(activeWindow_)
@@ -331,8 +338,8 @@ bool PicturaMainWindow::dockWindow(DocWindow* window, int index)
 
 void PicturaMainWindow::onFloatDragReleased(DocWindow* window, const QPoint& globalPos)
 {
-    if (!windows_.contains(window) || window->kind != DocWindow::Host::Float
-        || !tabs_->isVisible()) {
+    if (!floatingDocumentDocking_ || !windows_.contains(window)
+        || window->kind != DocWindow::Host::Float || !tabs_->isVisible()) {
         return;
     }
     // The strip is the tab bar's band at the top of the tab widget; it keeps a

@@ -142,6 +142,8 @@ void PicturaMainWindow::saveSession()
     state.textGamma = textGamma_;
     state.toolsColumns = toolbox_ ? toolbox_->columns() : 1;
     state.useShiftKeyForToolSwitch = useShiftKeyForToolSwitch_;
+    state.openDocumentsAsTabs = openDocumentsAsTabs_;
+    state.enableFloatingDocumentDocking = floatingDocumentDocking_;
     state.typePlaceholderText = tools_ ? tools_->typePlaceholderText() : true;
     state.shortcuts.clear();
     const QHash<QString, QList<QKeySequence>> overrides = registry_->shortcutOverrides();

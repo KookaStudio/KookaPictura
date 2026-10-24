@@ -308,8 +308,13 @@ public:
     // an error for it.
     enum class OpenOutcome { Opened, Cancelled, Failed };
 
-    // Takes ownership of `view` and adds it as a document tab.
-    int addDocument(PictureView* view, const QString& path);
+    // Takes ownership of `view` and adds it as a document window: a tab, or a
+    // floating window while Open Documents As Tabs is off unless `asTab`.
+    int addDocument(PictureView* view, const QString& path, bool asTab = false);
+    // Preferences > Interface: Open Documents As Tabs, and Enable Floating
+    // Document Window Docking (a float dropped on the tab strip docks).
+    bool openDocumentsAsTabs() const { return openDocumentsAsTabs_; }
+    bool floatingDocumentDocking() const { return floatingDocumentDocking_; }
     bool newDocument(const QString& name, int width, int height, const QString& mode,
                      int depth, const QString& background);
     // Start an open and return its token; completion arrives on
@@ -692,6 +697,11 @@ private:
     DocWindow* windowOfCanvas(const ImageView* canvas) const;
     // Register `window` as the last tab and return its tab index.
     int addTabWindow(DocWindow* window);
+    // Host a ready window the tab strip holds as Open Documents As Tabs says:
+    // it floats while the preference is off, activated as `floatWindow` does.
+    // The one place that picks a new ready window's host, so a tile layout's
+    // routing belongs here.
+    void hostReadyWindow(DocWindow* window, bool activate);
     // Make `window` the active one through its host.
     void activateDocWindow(DocWindow* window);
     // True while the tab strip's current tab decides the active window: no
@@ -927,6 +937,8 @@ private:
     double textGamma_ = 1.45;
     bool gpuAvailable_ = true;
     bool useShiftKeyForToolSwitch_ = true;
+    bool openDocumentsAsTabs_ = true;
+    bool floatingDocumentDocking_ = true;
     ScreenMode screenMode_ = ScreenMode::Standard;
     int canvasColorIndex_ = 0;
     bool panelsHidden_ = false;

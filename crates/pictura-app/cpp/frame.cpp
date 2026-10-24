@@ -104,6 +104,8 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent)
     colorPolicy_ = state.colorPolicy;
     applyTextGamma(state.textGammaEnabled, state.textGamma);
     useShiftKeyForToolSwitch_ = state.useShiftKeyForToolSwitch;
+    openDocumentsAsTabs_ = state.openDocumentsAsTabs;
+    floatingDocumentDocking_ = state.enableFloatingDocumentDocking;
     applyShortcutOverrides(state);
     autoSaveRecovery_ = state.autoSaveRecovery;
     autoSaveMinutes_ = state.autoSaveMinutes;
@@ -363,7 +365,7 @@ bool PicturaMainWindow::isActiveDirty() const
     return isDocumentDirty(activeDocumentIndex());
 }
 
-int PicturaMainWindow::addDocument(PictureView* view, const QString& path)
+int PicturaMainWindow::addDocument(PictureView* view, const QString& path, bool asTab)
 {
     if (!view) {
         return -1;
@@ -395,6 +397,9 @@ int PicturaMainWindow::addDocument(PictureView* view, const QString& path)
     addTabWindow(window);
     installCloseButton(window);
     activateDocWindow(window);
+    if (!asTab) {
+        hostReadyWindow(window, true);
+    }
     if (!path.isEmpty()) {
         rememberRecent(path);
     }

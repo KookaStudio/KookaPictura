@@ -140,6 +140,12 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
                  interfacePage);
     makeCheckbox(QStringLiteral("autoShowHidden"), tr("Auto-Show Hidden Panels"),
                  interfacePage);
+    makeCheckbox(QStringLiteral("openDocumentsAsTabs"), tr("Open Documents As Tabs"),
+                 interfacePage)
+        ->setChecked(true);
+    makeCheckbox(QStringLiteral("enableFloatingDocumentDocking"),
+                 tr("Enable Floating Document Window Docking"), interfacePage)
+        ->setChecked(true);
     interfaceLayout->addStretch(1);
     stack_->addWidget(interfacePage);
 
@@ -226,6 +232,10 @@ QCheckBox* PreferencesDialog::makeCheckbox(const QString& key, const QString& la
     connect(box, &QCheckBox::toggled, this, [this, key](bool on) {
         if (key == QStringLiteral("useShiftKeyForToolSwitch")) {
             emit useShiftKeyForToolSwitchChanged(on);
+        } else if (key == QStringLiteral("openDocumentsAsTabs")) {
+            emit openDocumentsAsTabsChanged(on);
+        } else if (key == QStringLiteral("enableFloatingDocumentDocking")) {
+            emit floatingDocumentDockingChanged(on);
         } else if (key == QStringLiteral("autoCollapseIconic")) {
             emit autoCollapseIconicChanged(on);
         } else if (key == QStringLiteral("autoShowHidden")) {
@@ -250,6 +260,20 @@ QCheckBox* PreferencesDialog::checkbox(const QString& key) const
 void PreferencesDialog::setShiftKeyForToolSwitch(bool on)
 {
     if (QCheckBox* box = checkbox(QStringLiteral("useShiftKeyForToolSwitch"))) {
+        box->setChecked(on);
+    }
+}
+
+void PreferencesDialog::setOpenDocumentsAsTabs(bool on)
+{
+    if (QCheckBox* box = checkbox(QStringLiteral("openDocumentsAsTabs"))) {
+        box->setChecked(on);
+    }
+}
+
+void PreferencesDialog::setFloatingDocumentDocking(bool on)
+{
+    if (QCheckBox* box = checkbox(QStringLiteral("enableFloatingDocumentDocking"))) {
         box->setChecked(on);
     }
 }

@@ -42,8 +42,8 @@ tests before its code.
 
 ## 6. Interface preferences
 
-- [ ] 6.1 In `tst_document_arrange`, write `prefOpensFloating`, `prefFloatsOpenedFileAfterLoad`, `prefDisablesDocking`, `prefsPersist`, `prefsDefaultOn`, and `recoveryReopensAsTabs`.
-- [ ] 6.2 Add the `openDocumentsAsTabs` and `enableFloatingDocumentDocking` checkboxes to the Interface page, their `SessionState` fields (`session.h`, `session.cpp`, missing key loads `true`), and their wiring in `frame_preferences.cpp` and `frame_session.cpp`. Make the frame honor them when a ready document's window is hosted and in the dock-drop check, and make crash recovery always host as a tab. Verify the six tests above and `tst_recovery`.
+- [x] 6.1 In `tst_document_arrange`, write `prefOpensFloating`, `prefFloatsOpenedFileAfterLoad`, `prefDisablesDocking`, `prefsPersist`, `prefsDefaultOn`, and `recoveryReopensAsTabs`.
+- [x] 6.2 Add the `openDocumentsAsTabs` and `enableFloatingDocumentDocking` checkboxes to the Interface page, their `SessionState` fields (`session.h`, `session.cpp`, missing key loads `true`), and their wiring in `frame_preferences.cpp` and `frame_session.cpp`. Make the frame honor them when a ready document's window is hosted and in the dock-drop check, and make crash recovery always host as a tab. Verify the six tests above and `tst_recovery`.
 
 ## 7. Tile
 

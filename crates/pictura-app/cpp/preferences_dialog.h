@@ -40,6 +40,8 @@ public:
     void openOn(const QString& page);
 
     void setShiftKeyForToolSwitch(bool on);
+    void setOpenDocumentsAsTabs(bool on);
+    void setFloatingDocumentDocking(bool on);
     void setAutoCollapseIconic(bool on);
     void setAutoShowHidden(bool on);
     void setBrightnessLevel(int level);
@@ -65,6 +67,8 @@ public:
 
 signals:
     void useShiftKeyForToolSwitchChanged(bool on);
+    void openDocumentsAsTabsChanged(bool on);
+    void floatingDocumentDockingChanged(bool on);
     void autoCollapseIconicChanged(bool on);
     void autoShowHiddenChanged(bool on);
     void brightnessLevelChanged(int level);

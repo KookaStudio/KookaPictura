@@ -215,6 +215,9 @@ void PicturaMainWindow::finishLoadingDocument(int index)
         activateDocWindow(window);
         suppressTabTracking_ = false;
     }
+    // The loading tab held the window while it loaded; a ready window then
+    // takes the host the preference names.
+    hostReadyWindow(window, false);
     refresh();
     panelRefreshTimer_->stop();
     refreshPanels();

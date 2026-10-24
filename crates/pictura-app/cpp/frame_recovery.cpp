@@ -153,7 +153,8 @@ int PicturaMainWindow::recoverOrphans()
                 }
                 continue;
             }
-            const int index = addDocument(view, QString());
+            // Recovery reopens as tabs whatever Open Documents As Tabs says.
+            const int index = addDocument(view, QString(), true);
             docs_[index]->displayName = recoveredDocumentName(doc.name);
             updateTabTitle(index);
             updateWindowTitle();
