@@ -157,6 +157,7 @@ pub fn all() -> Vec<Filter> {
             horizontal: 5,
             vertical: -3,
             wrap: false,
+            repeat: false,
             background: [0; 3],
             transparent: false,
         },
@@ -177,6 +178,7 @@ pub fn all() -> Vec<Filter> {
         },
         Filter::FindEdges,
         Filter::Solarize,
+        Filter::NtscColors,
         Filter::Diffuse {
             mode: DiffuseMode::Normal,
         },
@@ -243,6 +245,9 @@ pub fn all() -> Vec<Filter> {
         },
         Filter::AdaptiveWideAngle {
             params: AwaParams::default(),
+        },
+        Filter::VanishingPoint {
+            edit: Arc::new(VpEdit::default()),
         },
         Filter::ZigZag {
             amount: 20.0,

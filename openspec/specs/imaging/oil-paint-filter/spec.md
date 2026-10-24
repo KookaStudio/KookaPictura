@@ -2,7 +2,9 @@
 
 ## Purpose
 The Oil Paint filter with its error contract, alpha preservation, parameter validation, and determinism.
+
 ## Requirements
+
 ### Requirement: Oil Paint application and error contract
 
 The system SHALL implement the CS6 Oil Paint filter as a `Filter::OilPaint`
@@ -79,3 +81,14 @@ The system SHALL implement `Filter::OilPaint { stylization, cleanliness, scale, 
 - **WHEN** Oil Paint is applied at `stylization` 0 and 10 and separately at `scale` 0 and 10
 - **THEN** each pair of outputs differs
 
+### Requirement: Oil Paint dialog exposes the engine parameter range
+
+The Oil Paint dialog SHALL expose Shine as a `0..=10` control opening on
+`5.5`, matching the engine's accepted `0.0..=10.0` range and the `shine / 10`
+normalization both the CPU and GPU kernels apply. The slider SHALL reach the
+maximum without clipping below it.
+
+#### Scenario: Shine reaches the engine range [op_shine_range]
+
+- **WHEN** the Oil Paint dialog opens and Shine is dragged to its maximum
+- **THEN** the control's range is 0 through 10, its opening value is 5.5, and the committed parameter is 10

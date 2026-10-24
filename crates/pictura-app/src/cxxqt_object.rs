@@ -1,5 +1,6 @@
 //! The cxx-qt bridge: a Rust `QObject` that owns the image shown by the shell.
 #![allow(clippy::too_many_arguments)] // brush parameter lists mirror the C++ API
+mod actions_engine;
 mod adjustment_edit;
 mod align;
 mod annotations;
@@ -7,6 +8,7 @@ mod channels;
 mod clipboard;
 mod clipping;
 mod color_range;
+mod command_catalogue;
 mod crop_group;
 mod document_session;
 mod edit;
@@ -15,6 +17,7 @@ mod eyedropper_sample;
 mod filter_map;
 mod filter_tools;
 mod guides;
+mod hdr_conversion;
 mod healing;
 mod helpers;
 mod helpers_composite;
@@ -63,6 +66,8 @@ mod tests_auto_select;
 mod tests_impl;
 #[cfg(test)]
 mod tests_profiles;
+#[cfg(test)]
+mod tool_recording_tests;
 #[cxx_qt::bridge]
 pub mod qobject {
     #[rustfmt::skip]
@@ -76,7 +81,6 @@ pub mod qobject {
         include!("decode_image.h");
         /// Decode `data` with Qt to tightly packed RGBA8888 and report the decoded size; empty with zero dimensions when Qt cannot read it.
         fn decode_image_rgba(data: &[u8], width: &mut i32, height: &mut i32) -> Vec<u8>;
-
         include!("render_text.h");
         /// Render `text` with the system `family` font to packed RGBA8888 of the given size.
         fn render_text_rgba(family: &str, pixel_size: f64, text: &str, justify: i32, r: u8, g: u8, b: u8, a: u8, width: i32, height: i32) -> Vec<u8>;
@@ -173,19 +177,15 @@ pub mod qobject {
         /// Whether the document has unsaved changes (false when none).
         #[qinvokable]
         fn is_dirty(&self) -> bool;
-
         /// Path the document was last opened from or saved to; empty when untitled.
         #[qinvokable]
         fn file_path(&self) -> QString;
-
         /// Set the panel's active layer path; an empty path disables tool edits.
         #[qinvokable]
         fn set_active_layer(self: Pin<&mut Self>, path: &QString);
-
         /// The active layer's panel path, or empty when none is active.
         #[qinvokable]
         fn active_layer_path(&self) -> QString;
-
         /// Whether the single active layer a tool edit may target is visible.
         #[qinvokable]
         fn active_layer_visible(&self) -> bool;
@@ -865,16 +865,6 @@ pub mod qobject {
         /// Discard any pending lasso path without touching the selection.
         #[qinvokable]
         fn cancel_lasso(self: Pin<&mut Self>);
-
-        /// Flood-select around `(x, y)` within `tolerance` and combine per `mode`.
-        #[qinvokable]
-        fn quick_select(
-            self: Pin<&mut Self>,
-            x: i32,
-            y: i32,
-            tolerance: i32,
-            mode: &QString,
-        ) -> bool;
 
         /// Crop to the `w`×`h` rect at `(x, y)`, clear the selection, recomposite.
         #[qinvokable]

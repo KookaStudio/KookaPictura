@@ -54,7 +54,7 @@ block checker in B, so every filter sees both gradients and hard edges. All
 | `Despeckle` | — | **no** | — | IM `-despeckle` uses a different rank detector. Observed max delta 13 (`-despeckle`). |
 | `Maximum` | `-morphology Dilate Square:{radius}` | yes | 0 | Same separable `(2r+1)²` square grayscale dilate, clamp-to-edge; measured max delta 0 (radius 2). **`Square:N` takes a radius** (kernel diameter `2N+1`), so pass `Square:{radius}`; the M7 plan's `N = 2·radius+1` would dilate over a `(4r+3)²` footprint. |
 | `Minimum` | `-morphology Erode Square:{radius}` | yes | 0 | Same separable `(2r+1)²` square grayscale erode, clamp-to-edge; measured max delta 0 (radius 2). Same `Square:N` radius note as `Maximum`. |
-| `Offset` | `-roll {+h}{+v}` (`wrap = true`) | yes | 0 | `wrap = true` is an exact integer roll (positive = right/down); measured max delta 0 at `(3,2)` and `(2,3)`. `wrap = false` fills the exposed area with `background`, which `-roll` cannot do; observed max delta 240 vs `-roll +3+2`, guarded by the background-fill property test. |
+| `Offset` | `-roll {+h}{+v}` (`wrap = true`) | yes | 0 | `wrap = true` is an exact integer roll (positive = right/down); measured max delta 0 at `(3,2)` and `(2,3)`. `repeat = true` clamps to the nearest edge, and `wrap = false` fills the exposed area with `background`; neither is a plain `-roll` case (background fill measured max delta 240 vs `-roll +3+2`), so both are no-equivalent and guarded by known-value tests. |
 | `HighPass` | — | **no** | — | No single IM operator. A hand-built `\( +clone -gaussian-blur 0x{σ} \) -compose Mathematics -define compose:args=0,-1,1,0.5 -composite` re-implements the formula and is within measured max delta 1 (radius 3.0, σ 1.0), but it is not an independent operator; guarded by the flat-field mid-gray test. |
 | `Custom` | `-convolve {kernel}` with `convolve:scale` + `-evaluate add` | yes | 0 | Same f64 5×5 convolution, clamp-to-edge. IM normalizes by the kernel sum, so the matching scale is `sum(kernel)/scale` and the offset is `-evaluate add ({offset}/255)`. Measured max delta 0 (edge kernel: scale 4/offset 8 and scale 9/offset −10). |
 | `Emboss` | — | **no** | — | IM `-emboss` is per-channel with a fixed diagonal kernel and no angle/height/amount; Pictura is an angle-directed second difference on **luma** with an achromatic output. No angle/radius/σ matches: observed max delta 210 (angle 135 vs `-emboss 0x1`; best case 186 on the axis-aligned angles). |
@@ -126,10 +126,11 @@ and scale 9 / offset −10 both measured max delta 0.
 ### `Offset`: `wrap` decides the equivalent
 
 `wrap = true` is a whole-pixel cyclic shift, exactly `-roll +h+v` (positive =
-right/down); measured max delta 0 at `(3,2)` and `(2,3)`. `wrap = false` fills
-the exposed strip with `background`, which no IM operator does without a mask
-(`-roll` always wraps); observed max delta 240. The background fill is guarded
-by a property test instead.
+right/down); measured max delta 0 at `(3,2)` and `(2,3)`. `repeat = true`
+clamps to the nearest edge sample, and `wrap = false` fills the exposed strip
+with `background`; neither is a plain `-roll` case, so both are no-equivalent
+(the background fill measured max delta 240). Both are guarded by known-value
+tests instead.
 
 ## Exact ImageMagick flags
 
@@ -346,8 +347,9 @@ tests in `src/distort/coord.rs` and `src/distort/ripples.rs`.
   (bright edges on dark); Pictura inverts the Sobel magnitude (dark on light).
   Observed max delta 255 vs `-edge 1`. Guarded by the flat-field-light and
   dark-edge property tests.
-- **Offset** with `wrap = false` fills with `background`; IM `-roll` wraps.
-  Observed max delta 240. Guarded by the background-fill property test.
+- **Offset** with `repeat = true` clamps to the nearest edge; `wrap = false`
+  fills with `background`. IM `-roll` wraps. Observed max delta 240 for the
+  background fill. Both cases are guarded by known-value tests.
 - **M8 Pixelate.** `Mosaic` is exact only for cells that divide the image (see
   above). Crystallize, Facet, Fragment, Mezzotint, Pointillize and Color Halftone
   have no faithful IM operator; the closest candidates and measured deltas are in

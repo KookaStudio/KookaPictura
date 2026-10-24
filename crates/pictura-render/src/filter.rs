@@ -168,13 +168,31 @@ fn apply_op_region(
     // Without a mask or a transparency lock every pixel takes the filtered
     // value whole, so the pre-filter copy is kept only for the blend.
     let orig = (mask.is_some() || alpha_locked).then(|| buf.clone());
+    // Auto's histograms count only selected pixels. The coverage plane is in
+    // clip coordinates; any nonzero coverage selects the pixel.
+    let coverage_plane = if matches!(op, Op::Adjustment(_)) {
+        mask.map(|mask| {
+            let mut plane = vec![0u8; n];
+            for y in 0..ch {
+                for x in 0..cw {
+                    plane[y * cw + x] =
+                        coverage(Some(mask), clip.left + x as i32, clip.top + y as i32);
+                }
+            }
+            plane
+        })
+    } else {
+        None
+    };
     match op {
         Op::Filter(filter, gpu_enabled) => {
             let gpu = gpu_enabled && !filter.cpu_outruns_gpu();
             crate::gpu_filter::apply_filter_active(filter, &mut buf, gpu)?;
         }
-        Op::Adjustment(adjustment) => pictura_adjust::apply(adjustment, &mut buf)
-            .map_err(|error| FilterError::InvalidParams(error.to_string()))?,
+        Op::Adjustment(adjustment) => {
+            pictura_adjust::apply_with_coverage(adjustment, &mut buf, coverage_plane.as_deref())
+                .map_err(|error| FilterError::InvalidParams(error.to_string()))?
+        }
     }
 
     let at = Placement {

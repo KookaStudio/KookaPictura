@@ -173,7 +173,9 @@ void PerspectiveCropTest::optionsBarApplyCancelFollowQuad()
     auto* clear = frame.findChild<QToolButton*>(QStringLiteral("optionsPerspectiveClear"));
     auto* apply = frame.findChild<QToolButton*>(QStringLiteral("optionsPerspectiveApply"));
     auto* cancel = frame.findChild<QToolButton*>(QStringLiteral("optionsPerspectiveCancel"));
-    QVERIFY(width && height && clear && apply && cancel);
+    auto* reset = frame.findChild<QToolButton*>(QStringLiteral("optionsPerspectiveReset"));
+    QVERIFY(width && height && clear && apply && cancel && reset);
+    QVERIFY(reset->isHidden());
 
     // Apply/Cancel are hidden until the quad is complete.
     QVERIFY(apply->isHidden());
@@ -184,6 +186,7 @@ void PerspectiveCropTest::optionsBarApplyCancelFollowQuad()
     click(canvas, QPointF(30, 90));
     QVERIFY(!apply->isHidden());
     QVERIFY(!cancel->isHidden());
+    QVERIFY(!reset->isHidden());
 
     // Clear empties the fields.
     width->setValue(200.0);
@@ -191,6 +194,13 @@ void PerspectiveCropTest::optionsBarApplyCancelFollowQuad()
     clear->click();
     QVERIFY(width->isBlank());
     QVERIFY(height->isBlank());
+
+    // Reset drops the quad and the output size, leaving the tool active.
+    width->setValue(200.0);
+    reset->click();
+    QVERIFY(width->isBlank());
+    QVERIFY(apply->isHidden() && cancel->isHidden() && reset->isHidden());
+    QCOMPARE(frame.activeTool(), pictura::ToolId::PerspectiveCrop);
 
     frame.setActiveTool(pictura::ToolId::Move);
     frame.closeDocument(doc, false);

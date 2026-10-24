@@ -1,7 +1,7 @@
 use pictura_core::PixelBuffer;
 
 use crate::{
-    blur, distort, hdr_toning, noise, oil_paint, other, render, sharpen, stylize, validate,
+    blur, distort, hdr_toning, noise, oil_paint, other, render, sharpen, stylize, validate, video,
     FilterError,
 };
 
@@ -29,6 +29,7 @@ fn apply_native(filter: &Filter, buf: &mut PixelBuffer) -> Result<(), FilterErro
         Filter::AdaptiveWideAngle { params } => {
             distort::adaptive_wide_angle::adaptive_wide_angle(buf, params)
         }
+        Filter::VanishingPoint { edit } => distort::vanishing_point::vanishing_point(buf, edit),
         Filter::SmartBlur {
             radius,
             threshold,
@@ -131,6 +132,7 @@ fn apply_native(filter: &Filter, buf: &mut PixelBuffer) -> Result<(), FilterErro
             horizontal,
             vertical,
             wrap,
+            repeat,
             background,
             transparent,
         } => other::offset(
@@ -138,6 +140,7 @@ fn apply_native(filter: &Filter, buf: &mut PixelBuffer) -> Result<(), FilterErro
             *horizontal,
             *vertical,
             *wrap,
+            *repeat,
             *background,
             *transparent,
         ),
@@ -148,6 +151,7 @@ fn apply_native(filter: &Filter, buf: &mut PixelBuffer) -> Result<(), FilterErro
             offset,
         } => other::custom(buf, kernel, *scale, *offset),
         Filter::Solarize => stylize::solarize(buf),
+        Filter::NtscColors => video::ntsc_colors(buf),
         Filter::OceanRipple {
             size,
             magnitude,

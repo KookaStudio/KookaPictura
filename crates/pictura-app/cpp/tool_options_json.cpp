@@ -122,6 +122,19 @@ template <typename F> void fields(ShapeOptions& o, F&& f)
     f("linkSize", o.linkSize);
 }
 
+template <typename F> void fields(CropSettings& o, F&& f)
+{
+    f("showCroppedArea", o.showCroppedArea);
+    f("autoCenterPreview", o.autoCenterPreview);
+    f("shieldEnabled", o.shieldEnabled);
+    f("shieldCustomColor", o.shieldCustomColor);
+    f("shieldColor", o.shieldColor);
+    f("shieldOpacity", o.shieldOpacity);
+    f("autoAdjustOpacity", o.autoAdjustOpacity);
+    f("overlayShow", o.overlayShow);
+    f("overlayOrientation", o.overlayOrientation);
+}
+
 template <typename F> void fields(HealingOptions& o, F&& f)
 {
     f("spotType", o.spotType);
@@ -402,6 +415,9 @@ QJsonObject toolOptionsToJson(const ToolController& tools)
     if (const SelectionOptions* s = tools.optionsFor<SelectionOptions>(ToolId::Marquee)) {
         out.insert(QStringLiteral("selection"), write(selectionFields(*s)));
     }
+    if (const CropOptions* crop = tools.optionsFor<CropOptions>(ToolId::Crop)) {
+        out.insert(QStringLiteral("crop"), write(crop->settings()));
+    }
     return out;
 }
 
@@ -415,6 +431,10 @@ void applyToolOptionsJson(ToolController& tools, const QJsonObject& json)
             group->update(clampOptions(read(value.toObject(), group->get())));
         }
     });
+    const QJsonValue crop = json.value(QStringLiteral("crop"));
+    if (CropOptions* c = tools.optionsFor<CropOptions>(ToolId::Crop); c && crop.isObject()) {
+        c->setSettings(read(crop.toObject(), c->settings()));
+    }
     const QJsonValue brush = json.value(QStringLiteral("brush"));
     if (PaintOptions* paint = tools.optionsFor<PaintOptions>(ToolId::Brush); paint && brush.isObject()) {
         applyPaint(*paint, read(brush.toObject(), paintFields(*paint)));

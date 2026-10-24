@@ -6,12 +6,17 @@ here.
 
 ## Vector artwork (`assets/icons`, `assets/cursors`)
 
-- 238 SVG icons and cursors.
-- 252 SVG icons and cursors.
-- Generated with an AI model (DeepSeek v4.1 Flash) and released by the project
-  under **CC0-1.0 / MIT** (reuse under either).
-- Carry no Adobe/Illustrator/XMP metadata; none are traced from Photoshop or a
-  third-party icon pack.
+- 315 SVG icons and cursors (233 under `assets/icons`, 82 under `assets/cursors`).
+- Except where noted below, generated with an AI model (DeepSeek v4.1 Flash)
+  and released by the project under **CC0-1.0 / MIT** (reuse under either).
+- The `actions.record`, `actions.play`, `actions.stop`, `actions.newSet`,
+  `actions.newAction`, `actions.delete`, and `actions.modalOn` glyphs are from
+  **lucide-static v1.50.0** (**ISC**) under their Lucide slugs (`circle-dot`,
+  `play`, `square`, `folder-plus`, `square-plus`, `trash`, and `panel-top`).
+  `actions.modalOff` and `actions.modalPartial` are original project artwork
+  based on the Lucide `panel-top` dialog-box shape, released under
+  **CC0-1.0 / MIT**.
+- Carry no Adobe/Illustrator/XMP metadata; none are traced from Photoshop.
 - `cursors/tool.pen.close.svg` is `tool.pen.svg` with a small circle added by
   hand (the Pen's close-path cursor), under the same licenses.
 - `cursors/tool.pathselection.svg` (a black arrow) and
@@ -26,6 +31,9 @@ here.
 - `icons/crop.straighten.svg` (a spirit level, the Crop tool's Straighten
   toggle) is original project artwork drawn by hand in the house icon style,
   released under **CC0-1.0 / MIT**.
+- `icons/tool.createplane.svg` (a ruled trapezoid, Vanishing Point's Create
+  Plane tool) is original project artwork drawn by hand in the house icon
+  style, released under **CC0-1.0 / MIT**.
 - The `info.crosshair`, `info.bounds`, and `info.protractor` glyphs are original
   project artwork in the same house style, released under **CC0-1.0 / MIT**.
 - `theme.sun.svg` and `theme.moon.svg` are from **lucide-static v1.50.0**

@@ -2,7 +2,9 @@
 
 ## Purpose
 Brush and Pencil tools that paint the foreground colour through the stroke engine, with their options bar and shortcuts.
+
 ## Requirements
+
 ### Requirement: Brush and Pencil tools paint the foreground colour
 
 The system SHALL provide Brush and Pencil as selectable tools that paint the
@@ -265,3 +267,16 @@ depend on a running Qt application.
   event
 - **THEN** both return the same positive diameter delta
 
+### Requirement: Auto Erase is Pencil-only
+
+The Pencil's Auto Erase option SHALL affect Pencil strokes only. The Brush,
+Eraser, stamps, and retouch tools SHALL ignore the Auto Erase state even when
+the Pencil left it enabled. A Brush stroke that starts over the foreground
+colour SHALL paint the foreground colour and record one "Brush" history state.
+
+#### Scenario: Auto Erase does not leak into the Brush [lbt_auto_erase_pencil_only]
+
+- **WHEN** Auto Erase is enabled on the Pencil and the Brush then paints over a
+  pixel matching the foreground colour
+- **THEN** the Brush paints the foreground colour and records exactly one
+  "Brush" history state

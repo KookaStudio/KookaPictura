@@ -341,8 +341,30 @@ public:
     bool cropRotatingForTest() const { return cropRotating_; }
     double cropStraightenForTest() const { return cropStraighten_; }
     // The active crop guide overlay: 0 Rule of Thirds, 1 Grid, 2 Diagonal,
-    // 3 Triangle, 4 Golden Ratio, 5 Golden Spiral. Drawn only on an active box.
-    void setCropOverlay(int overlay);
+    // 3 Triangle, 4 Golden Ratio, 5 Golden Spiral; -1 hides it (the show
+    // mode). `orientation` mirrors it: bit 0 left-right, bit 1 top-bottom.
+    // Drawn only on an active box.
+    void setCropOverlay(int overlay, int orientation = 0);
+    int cropOverlayOrientationForTest() const { return cropOverlayOrientation_; }
+    // How the area outside the box is drawn. `color` is the shield tint (an
+    // invalid colour matches the canvas); `showOutside` off hides the outside
+    // area entirely; `dragging` thins the shield under Auto Adjust Opacity.
+    struct CropShield {
+        bool enabled = true;
+        bool showOutside = true;
+        QColor color;
+        int opacity = 75;
+        bool autoAdjust = true;
+        bool dragging = false;
+    };
+    void setCropShield(const CropShield& shield);
+    // Classic mode: the straighten angle turns the box over the fixed image
+    // instead of turning the content behind a fixed box.
+    void setCropBoxRotates(bool rotates);
+    // The alpha (0-255) the shield paints with; test hook for the dim level.
+    int cropShieldAlpha() const;
+    // Pan so the image-space `area` is centred in the viewport.
+    void centerOnImageRect(const QRectF& area);
     int cropOverlayForTest() const { return cropOverlay_; }
     // The Modern crop content offset (image space): the composite is drawn
     // shifted by this while the crop box overlay stays fixed, so an inside drag
@@ -673,6 +695,9 @@ private:
     bool cropPreview_ = false;
     bool cropRotating_ = false;
     int cropOverlay_ = 0;
+    int cropOverlayOrientation_ = 0;
+    CropShield cropShield_;
+    bool cropBoxRotates_ = false;
     QPointF cropContentOffset_;
     double cropStraighten_ = 0.0;
     QPointF cropStraightenPivot_;

@@ -6,7 +6,7 @@ use crate::{
     HalftoneType, HdrToningParams, IrisPin, IrisShape, LensType, LightDirection, Lighting,
     LiquifyMesh, MezzotintType, NoiseDistribution, PathMotion, PolarKind, Quality, RadialMethod,
     ReduceNoiseParams, RippleSize, SharpenRemove, ShearFill, SmartBlurMode, SpherizeMode, SpinPin,
-    SpinStrobe, StrokeDirection, TextureOptions, TileFill, TiltPin, TonalFade, WaveType,
+    SpinStrobe, StrokeDirection, TextureOptions, TileFill, TiltPin, TonalFade, VpEdit, WaveType,
     WindMethod, ZigZagStyle,
 };
 
@@ -150,6 +150,9 @@ pub enum Filter {
         horizontal: i32,
         vertical: i32,
         wrap: bool,
+        /// Read past an edge from the nearest edge sample when true; takes
+        /// precedence over `wrap`.
+        repeat: bool,
         background: [u8; 3],
         /// CS6's "Set to Transparent" for the undefined area (vs "Set to
         /// Background", which paints `background` opaque).
@@ -170,6 +173,7 @@ pub enum Filter {
     },
     FindEdges,
     Solarize,
+    NtscColors,
     Diffuse {
         mode: DiffuseMode,
     },
@@ -245,6 +249,10 @@ pub enum Filter {
     /// The Adaptive Wide Angle workspace's correction and constraints.
     AdaptiveWideAngle {
         params: AwaParams,
+    },
+    /// A Vanishing Point session's committed edit (its rendered grids).
+    VanishingPoint {
+        edit: Arc<VpEdit>,
     },
     ZigZag {
         amount: f64,

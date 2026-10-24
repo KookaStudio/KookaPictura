@@ -7,6 +7,7 @@
 
 #include <QtCore/QTimer>
 #include <QtWidgets/QApplication>
+#include <cstddef>
 
 #include "commands.h"
 #include "frame.h"
@@ -51,6 +52,7 @@ private slots:
     void cancelChangesNothing();
     void decontaminateForbidsInPlaceOutput();
     void layerMaskOutputWritesTheMask();
+    void previewMatchesCommitWithinProxyTolerance();
     void optionsBarButtonOpensIt();
 
 private:
@@ -191,6 +193,84 @@ void RefineEdgeTest::layerMaskOutputWritesTheMask()
     });
     QVERIFY(window_->registry()->dispatch(commandId()));
     QVERIFY2(pictura::layers_api::rowAt(*view_, layer).hasMask, "the active layer gained a mask");
+}
+
+void RefineEdgeTest::previewMatchesCommitWithinProxyTolerance()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("PreviewScale"), 400, 400,
+                                 QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    view_ = window_->activeView();
+    QVERIFY(view_);
+    const QString path = view_->add_solid_fill(0xffff0000u);
+    QVERIFY(!path.isEmpty());
+    QVERIFY(view_->rasterize_fill_content(path));
+    window_->selectLayerPath(path);
+    QVERIFY(view_->select_rect(50, 50, 300, 300, QStringLiteral("new"), 0.0));
+
+    // Radius alone is invisible on a flat composite (the band re-estimation
+    // keeps the input), so add a Feather ramp: its width follows the proxy
+    // scale and exposes a preview that forgot to scale the pixel distances.
+    const int radius = 10;
+    const int feather = 8;
+    int pw = 0;
+    int ph = 0;
+    const ::rust::Vec<uint8_t> preview = pictura::refine_edge_preview(
+        *view_, false, radius, 0, feather, 0, 0, 220, pw, ph);
+    QVERIFY(pw > 0 && ph > 0);
+    QCOMPARE(int(preview.size()), pw * ph);
+
+    const int before = view_->history_count();
+    QVERIFY(pictura::refine_edge_apply(*view_, false, radius, 0, feather, 0, 0, false, 0, 0));
+    QCOMPARE(view_->history_count(), before + 1);
+
+    const auto firstHalf = [](auto sample, int width, int y) {
+        for (int x = 0; x < width; ++x) {
+            if (sample(x, y) >= 128) {
+                return x;
+            }
+        }
+        return -1;
+    };
+    // Width of the left transition: first visible coverage to full coverage.
+    const auto transition = [](auto sample, int width, int y) {
+        int lo = -1;
+        for (int x = 0; x < width; ++x) {
+            const int coverage = sample(x, y);
+            if (coverage > 4 && lo < 0) {
+                lo = x;
+            }
+            if (coverage >= 251) {
+                return lo >= 0 ? x - lo : -1;
+            }
+        }
+        return -1;
+    };
+    const auto previewAt = [&](int x, int y) {
+        return int(preview.data()[size_t(y) * size_t(pw) + size_t(x)]);
+    };
+    const auto committedAt = [&](int x, int y) {
+        return view_->selection_coverage(x * 400 / pw, y * 400 / ph);
+    };
+    int maxEdgeDifference = 0;
+    int maxWidthDifference = 0;
+    int compared = 0;
+    for (int y = 10; y + 10 < ph; ++y) {
+        const int previewEdge = firstHalf(previewAt, pw, y);
+        const int committedEdge = firstHalf(committedAt, pw, y);
+        const int previewWidth = transition(previewAt, pw, y);
+        const int committedWidth = transition(committedAt, pw, y);
+        if (previewEdge >= 0 && committedEdge >= 0 && previewWidth > 0 && committedWidth > 0) {
+            maxEdgeDifference = qMax(maxEdgeDifference, qAbs(previewEdge - committedEdge));
+            maxWidthDifference = qMax(maxWidthDifference, qAbs(previewWidth - committedWidth));
+            ++compared;
+        }
+    }
+    QVERIFY2(compared > 0, "the preview and the commit both have an edge to compare");
+    QVERIFY2(maxEdgeDifference <= 2,
+             qPrintable(QStringLiteral("edge differs by %1 proxy px").arg(maxEdgeDifference)));
+    QVERIFY2(maxWidthDifference <= 2,
+             qPrintable(QStringLiteral("feather width differs by %1 proxy px")
+                            .arg(maxWidthDifference)));
 }
 
 void RefineEdgeTest::optionsBarButtonOpensIt()

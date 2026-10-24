@@ -46,6 +46,7 @@ public:
     virtual void setPerspectiveOutput(int width, int height) = 0;
     virtual bool perspectiveQuadComplete() const = 0;
     virtual void setPerspectiveShowGrid(bool on) = 0;
+    virtual void resetPerspectiveQuad() = 0;
 };
 
 // The active type tool's edit session.

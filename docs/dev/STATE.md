@@ -11,6 +11,92 @@ Snapshot for resuming after a context break. Update after each milestone.
   (`docs/00-overview/licensing-and-provenance.md`).
 - **Provenance history:** the git history was rewritten so no reachable commit
   contains reproduced Adobe Help prose or the old wording.
+- **Vanishing Point planes** (#349, branch `feat/349-vanishing-point`,
+  OpenSpec change `add-vanishing-point-planes`, archived into
+  `imaging/vanishing-point`). `Filter ▸ Vanishing Point…` (Alt+Ctrl+V)
+  opens a full-canvas workspace for 8-bit RGB and Grayscale documents.
+  - **Shared homography.** `pictura_core::Homography` is the four-point
+    solve; `pictura-render`'s perspective transforms and the app's transform
+    preview dropped their private copies.
+  - **Engine** (`pictura-filters/src/distort/vanishing_point/`). A root plane's
+    four corners give two vanishing points. With the principal point at the
+    document centre, they give a focal length; when `f² ≤ 0` the plane is
+    yellow. Near-parallel edges assume a normal lens. Crossed, concave or
+    degenerate quads are red. The quad lifts to a 3D rectangle at unit
+    distance, whose metric area equals its image area, so Grid Size reads in
+    roughly pixels. Related planes hinge on a parent edge: their span is a
+    fraction of that edge, and their angle runs 0 flat to 90 perpendicular.
+    Each family shares its root's camera, unit and grid. `VpEditor` holds
+    the gestures and the dialog's undo. `Filter::VanishingPoint` draws a
+    kept edit's lines black, 1 px, antialiased.
+  - **App.** `filter_tools/vanishing_point.rs` holds the session and the kept
+    edits; the `vanishing-point` kind's one slot is the edit id. The planes
+    stay on `DocumentSession::vanishing_planes`. `VanishingPointDialog` and
+    `VpCanvas` give Edit Plane, Create Plane, Hand and Zoom, Show Edges,
+    Render Grids To Photoshop, Grid Size and Angle. The 8-bit gate is shared
+    with Adaptive Wide Angle (`filter_tools/depth_gate.rs`).
+  - **Retouch tools** (OpenSpec change `add-vanishing-point-retouch`). Each
+    family has one flat editing space (`space.rs`): the root's metric, with
+    related planes unfolded about their hinges. The session holds a working
+    copy of the layer (`canvas.rs`), and the dialog's undo swaps pixel steps.
+    - **Floating selections** (`float.rs`): Paste (Ctrl+V), the Marquee
+      (rect, square, whole plane, Alt-drag copy, Destination / Source move,
+      Ctrl-drag fill) and Transform (scale, rotate, move, Flip, Flop).
+    - **Strokes** (`stroke.rs`): Stamp and Brush dabs sized in flat space,
+      with Diameter, Hardness, Opacity and Heal. Heal (`heal.rs`) is Off,
+      Luminance, or On as a Poisson blend.
+    - **Commit.** `VpEdit` carries the changed-pixel patch beside the grid
+      lines. The preview recomposes dirty rects (`view.rs`).
+    - **App.** `vanishing_point_retouch.rs` is the bridge, and
+      `VpOptionsBar` holds the per-tool options.
+  Ceiling (`ponytail:`): planes are not saved in files (#918); the preview
+  ignores the layer's blend mode and the selection; Heal applies on drop or
+  stroke end; the rendered grid's colour and the Grid Size, Diameter and
+  Feather ranges are not confirmed against CS6. Tests: 32 Rust engine units,
+  the mapping and gate units, `tst_vanishing_point` (16 cases) and
+  `tst_vanishing_point_retouch` (6 cases).
+- **Actions panel, engine, and command bus** (OpenSpec change `actions-bundle`;
+  issues #301, #616, and #273). `Window > Panels > Actions` (F9) is a real
+  content `QWidget` (`actionsPanel`) hosted by a `PanelGroup`, hidden in the
+  default Essentials workspace and present in Photography. It has the
+  three-column set/action/step tree (check, modal, name), Button mode, the six
+  button bottom toolbar (Stop, Record, Play, New Set, New Action, Delete), the
+  full panel menu with dynamic enablement, and the New Action / Action Options
+  (including target set) / Set Options / Playback Options / Insert Stop / Insert
+  Menu Item / Insert Path / Insert Conditional dialogs.
+  - **Engine** (`crates/pictura-script`: `command_catalogue`, `command`,
+    `action`, `atn`, `library`, `recorder`, `player`, `error`). The catalogue is
+    the single source for the menu tree and the generated `command_ids.h`; the
+    C++ command bus gains executors, context handlers, a recording sink, and
+    `executeRecorded`, with `command_tree.cpp` removed. Recording, playback
+    (accelerated / step-by-step / pause), single-step and whole-set playback,
+    function keys, modal rules, and per-command history live here.
+  - **Codec** (`pictura-codec/src/action_descriptor.rs`, `action_file.rs`):
+    exact big-endian version-16 `.atn` (one set, no magic, counted UTF-16BE
+    names, byte-string event/display ids, `hasDescriptor` 0/-1, descriptor with
+    no prefix, `Idnt`/`indx` class prefix, `ObAr`/`UnFl`/`Pth `) and
+    `Actions Palette.psp` (version 16, set count then sets). Writes are atomic;
+    unknown event ids and trailing bytes are preserved, unknown descriptor
+    types fail closed.
+  - **Default set and persistence.** `Default Actions` is compiled in (Duplicate
+    Layer, Flatten Image, Grayscale, Resize to 1000 px) and no Adobe preset
+    ships. The library is `Actions Palette.psp` in the app state directory,
+    written on a debounced change and at shutdown through `QSaveFile`; panel
+    state is additive session-schema-10 keys stored by name path, sibling
+    ordinal, and step index.
+  - **Extensions, not parity.** Insert Conditional is a Kooka extension (Adobe
+    documents it for CC, not CS6) with document-is-square / document-mode /
+    document-has-selection conditions. Tool strokes, conditional steps, and
+    Insert Path use bounded, versioned app-native `TEXT` events and are not
+    Adobe-interoperable. Brush/Pencil strokes replay; native tool-specific and
+    mask strokes are refused with a named diagnostic until their replay paths
+    land. Whole-set Play (included actions in library order) is
+    an app decision; playback stops on the first error with no
+    continue-after-error path.
+  - Tests: `tst_command_tree`, `tst_command_bus`, `tst_actions_panel`,
+    `pictura-script` engine units, and `pictura-codec` `.atn`/`.psp` units.
+    Docs: `docs/02-ui-ux/panels/actions-panel.md`,
+    `docs/09-automation/actions.md`; icons `actions.*`.
 - **Adaptive Wide Angle** (#346, branch `feat/346-adaptive-wide-angle`,
   OpenSpec change `add-adaptive-wide-angle`, archived into
   `imaging/adaptive-wide-angle`). `Filter ▸ Adaptive Wide Angle…` opens a
@@ -3313,10 +3399,10 @@ Snapshot for resuming after a context break. Update after each milestone.
   and clears every layer's 32-bit store; the app adds the
   `Image > Mode > 16/8 Bits/Channel` commands (real ids, gated on
   `document_depth_bits() == 32`, which now reports the retained source depth)
-  and a two-field Exposure/Gamma `HdrConversionDialog` plus a `convert_depth`
-  bridge. Ceilings: only Exposure & Gamma is grounded (the Method combo and
-  Local Adaptation/Equalize Histogram/Highlight Compression have closed
-  kernels); the ranges beyond Exposure 0 / Gamma 1.0 are inferred; an
+  and the first `HdrConversionDialog` (Exposure/Gamma) plus a `convert_depth`
+  bridge. Ceilings: only Exposure & Gamma has a fixed formula (Local
+  Adaptation/Equalize Histogram/Highlight Compression have closed kernels); the
+  ranges beyond Exposure 0 / Gamma 1.0 are inferred; an
   already-edited 32-bit document was clamped to `[0, 1]` by `emit_native`, so
   only a clean open tone-maps values above white; 32-bit Lab/CMYK are refused;
   layered documents tone-map the merged composite and drop per-layer native
@@ -3325,6 +3411,19 @@ Snapshot for resuming after a context break. Update after each milestone.
   merge/flatten/via-copy/rasterize, and a true working-depth model stay open;
   retained samples cost
   2×/4× while open and the write path clones each retained plane.
+- **HDR Conversion tone methods** (issue #557, change
+  `hdr-conversion-methods`): the 32→16/8 conversion now offers all four CS6
+  methods through `pictura_adjust::hdr_toning::{tone_map, HdrToneMap}`:
+  Exposure & Gamma, Equalize Histogram, Highlight Compression, and an f32
+  Local Adaptation. `convert_depth` uses the retained `f32` store only while
+  its 8-bit narrowing matches the composite (the open path keeps the file's
+  merged composite, so a clean open counts as current), so an edited document
+  converts its current pixels; a layered document is flattened to one
+  Background built from the tone-mapped composite, so the app's recomposite
+  cannot resurrect the old layers. The dialog exposes the four methods and
+  shares the nine Local Adaptation numeric rows with HDR Toning. The closed
+  kernels are inferred approximations; the Local Adaptation Toning Curve/Corner
+  remains a recorded ceiling.
 - **Native-store edit preservation** (roadmap P4/G4, open change
   `native-depth-edit-preserve`): the destructive geometry ops now keep a
   layer's retained native samples instead of widening them on save. Move/
@@ -5764,7 +5863,7 @@ M6 through M34 are archived; their deltas now live in `openspec/specs/`.
   destructive by default — the Crop tool has an interactive region (handles,
   ratio lock, overlays) and the pixels outside the frame are kept unless
   `Delete Cropped Pixels` is on, so a crop can be widened again.
-- Icon art is Lucide-derived or hand-authored (195 icons, mapped in
+- Icon art is Lucide-derived or hand-authored (233 icons, mapped in
   `docs/dev/icon-provenance.md`); it is not CS6-pixel-exact, and a visual
   refinement pass can still change SVG paths without any code change.
 - Cursors render at a single DPR (no per-screen 2×/3× cursor variants yet).
@@ -5792,13 +5891,13 @@ M6 through M34 are archived; their deltas now live in `openspec/specs/`.
   remaining surfaces are approximations.
 - Panel contents are implemented well beyond M20 (Properties, Channels, Paths,
   History, Navigator, Color, Swatches, Info, Histogram, Notes, Brush, Clone
-  Source, Character, Paragraph, Glyphs, Paragraph Styles), as are the workspace
-  presets and the icon-collapse docks; Gradients, Patterns, Adjustments, Actions
-  and Styles are still empty placeholders.
+  Source, Character, Paragraph, Glyphs, Paragraph Styles, Actions), as are the
+  workspace presets and the icon-collapse docks; Gradients, Patterns and Styles
+  are still empty placeholders.
 - Some M24 panels are still structural placeholders with empty states
-  (Gradients, Patterns, Adjustments, Actions and Styles) while Properties,
-  Channels and Paths carry real content. Icon-collapse, workspace presets and
-  panel-title-bar menus are implemented.
+  (Gradients, Patterns and Styles) while Properties, Channels, Paths,
+  Adjustments and Actions carry real content. Icon-collapse, workspace presets
+  and panel-title-bar menus are implemented.
 - Oil Paint is a CPU behavioural model: CS6 requires a supported GPU (closed
   OpenCL kernel, no CPU fallback), so the CPU result is a deliberate non-parity
   divergence rather than verified parity. The engine also carries a four-pass

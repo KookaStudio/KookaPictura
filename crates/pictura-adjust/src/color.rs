@@ -127,7 +127,13 @@ pub(crate) fn vibrance(
         // contradicts its own acceptance criteria) and is damped in the skin
         // hue band. The exact falloff/skin model is closed.
         let keep = 1.0 - 0.5 * skin_bump(h);
-        let s = (s + kv * (1.0 - s) * keep).clamp(0.0, 1.0);
+        // A neutral pixel has no hue to boost; HSL's H=0 would otherwise turn
+        // it red. The 1-S falloff is the documented approximation.
+        let s = if s == 0.0 {
+            0.0
+        } else {
+            (s + kv * (1.0 - s) * keep).clamp(0.0, 1.0)
+        };
         let s = (s * (1.0 + ks)).clamp(0.0, 1.0);
         let (nr, ng, nb) = hsl_to_rgb(h, s, l);
         *rv = (nr * 255.0).round().clamp(0.0, 255.0) as u8;

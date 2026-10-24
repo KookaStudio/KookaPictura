@@ -353,8 +353,29 @@ mod tests {
             "the left half was not cloned right"
         );
         assert_eq!(pixel(&cloned, 24, 2), BLUE, "the clone escaped the brush");
-        // Sources off the left edge leave the destination as it was.
-        let off = stamp(&half, StampSource::new(snapshot, (-40, 0)), &[20.0, 28.0]);
+        // Sources off the left edge leave the destination as it was and store
+        // no dirty rectangle, so the stroke records no history.
+        let mut off = half.clone();
+        let cfg = StrokeConfig {
+            diameter: 8,
+            ..StrokeConfig::default()
+        };
+        let mut stroke = Stroke::begin_source(&off, "0", cfg, StampSource::new(snapshot, (-40, 0)))
+            .expect("begin");
+        for &x in &[20.0, 28.0] {
+            stroke.sample(
+                &mut off,
+                StrokeSample {
+                    x,
+                    y: 16.0,
+                    pressure: 1.0,
+                },
+            );
+        }
+        assert!(
+            stroke.finish().is_none(),
+            "an off-image source changes no pixel"
+        );
         assert_eq!(pixel(&off, 24, 16), BLUE);
     }
 

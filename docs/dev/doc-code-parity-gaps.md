@@ -57,7 +57,7 @@ and it answers "does a spec exist?", not "is it implemented?".
 |---|---|---|---|
 | SYS-1 | Preset/library codecs + Preset Manager (`.aco/.ase/.grd/.abr/.pat/.csh/.asl/.tpl/.csf`) — no `pictura-presets` crate exists | no `crates/pictura-presets`; `swatches_panel.h:71` | #489 |
 | SYS-2 | Global bit-depth / colour-mode availability gating — every "unavailable at 16/32-bpc, Bitmap, Indexed, CMYK/Lab" rule is unenforced | `filter_tools.rs` (`filter_kind_supported`) checks arity only; no `Edition`/depth gate | #490 |
-| SYS-3 | `Edit > Fade` (post-filter opacity + blend mode) is an inert leaf | `command_tree.cpp:96`, no handler | #491 |
+| SYS-3 | `Edit > Fade` (post-filter opacity + blend mode) is an inert leaf | `crates/pictura-script/src/command_catalogue/entries.rs`, no handler | #491 |
 | SYS-4 | Brush dynamics option sets (texture, dual brush, colour dynamics, transfer, pose, padlocks) | `brush_panel.cpp:115-152` all disabled | #492 |
 | SYS-5 | Sampled / bristle / erodible / airbrush tips + Define Brush Preset | `tip.rs` round/elliptical only | #493 |
 
@@ -81,11 +81,11 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | UI-1 | `application-frame.md` | Status bar readouts + status-bar options popup | MISSING | `frame.cpp:514` | #497 |
 | UI-2 | `application-frame.md` | Active layer name in the title bar | MISSING | `frame.cpp:1006` | #498 |
 | UI-3 | `application-frame.md` | `Ctrl+Tab` / `Shift+Ctrl+Tab` document cycling | MISSING | `frame.cpp:224` | #499 |
-| UI-4 | `application-frame.md` | Window ▸ Arrange (Float/Tile/Cascade/Match/New Window) | MISSING | `command_tree.cpp:891-900` | #500 |
-| UI-5 | `menus.md` | Menu customization (Edit ▸ Menus, Show All Menu Items, enablement matrix) | MISSING | `command_tree.cpp:189` | #501 |
-| UI-6 | `menus.md` | Type menu (work path, convert to shape, spellcheck); warp text landed in #684, convert point/paragraph in #682 | MISSING | `command_tree.cpp:588-618` | #502 |
-| UI-7 | `menus.md` | View menu stubs (Proof Setup/Colors, Gamut Warning, Snap To, Lock Slices, Extras, Pixel Aspect Ratio, 32-bit Preview Options) | MISSING | `command_tree.cpp:807-885` | #503 |
-| UI-8 | `menus.md` | File menu stubs (Open As, Import, Export, Automate, Scripts, Browse in Bridge) | MISSING | `command_tree.cpp:23-75` | #504 |
+| UI-4 | `application-frame.md` | Window ▸ Arrange (Float/Tile/Cascade/Match/New Window) | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #500 |
+| UI-5 | `menus.md` | Menu customization (Edit ▸ Menus, Show All Menu Items, enablement matrix) | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #501 |
+| UI-6 | `menus.md` | Type menu (work path, convert to shape, spellcheck); warp text landed in #684, convert point/paragraph in #682 | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #502 |
+| UI-7 | `menus.md` | View menu stubs (Proof Setup/Colors, Gamut Warning, Snap To, Lock Slices, Extras, Pixel Aspect Ratio, 32-bit Preview Options) | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #503 |
+| UI-8 | `menus.md` | File menu stubs (Open As, Import, Export, Automate, Scripts, Browse in Bridge) | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #504 |
 | UI-9 | `preferences.md` | 5 missing panes (Cursors, Transparency & Gamut, Plug-ins, Type, 3D) | MISSING | `preferences_dialog.cpp:35-47` | #505 |
 | UI-10 | `preferences.md` | Sparse existing panes (General/Interface/File Handling/Performance/Units/Guides) | PARTIAL | `preferences_dialog.cpp:113-177` | #506 |
 | UI-11 | `accessibility.md` | AT-SPI2 / `QAccessible`, high-contrast, colour-blind, reduced-motion | MISSING | no `QAccessible` in `crates/` | #507 |
@@ -97,8 +97,8 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | ID | Spec | Gap | Status | Evidence | Issue |
 |---|---|---|---|---|---|
 | PAN-1 | `panels/adjustments-panel.md` | Adjustments panel icon grid (creation shipped; mode/depth gating and fill-layer presets remain) | PARTIAL | `panels/adjustments_panel.cpp` | #509 |
-| PAN-2 | `panels/measurement-log-panel.md` | Measurement Log panel + measurement engine | MISSING | `command_tree.cpp:962` | #510 |
-| PAN-3 | `panels/tool-presets-panel.md` | Tool Presets panel + `.tpl` libraries | MISSING | `command_tree.cpp:982` | #511 |
+| PAN-2 | `panels/measurement-log-panel.md` | Measurement Log panel + measurement engine | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #510 |
+| PAN-3 | `panels/tool-presets-panel.md` | Tool Presets panel + `.tpl` libraries | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #511 |
 | PAN-4 | `layer-styles.md` | Styles panel + `.asl` presets | MISSING | `frame_build.cpp:79` | #512 |
 | PAN-5 | `panels/channels-panel.md` | Spot channels, Split/Merge, Channel Options, Panel Options | MISSING | `panel_group_menu.cpp:90-98` | #513 |
 | PAN-6 | `panels/history-panel.md` | History Options, Clear History/purge, New Document from state | MISSING | `panel_group_menu.cpp:195-198` | #514 |
@@ -117,11 +117,11 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | ID | Spec | Gap | Status | Evidence | Issue |
 |---|---|---|---|---|---|
 | TOOL-1 | `marquee-selection.md` | Single Row / Single Column marquee tools | MISSING | no `ToolId`/registration | #525 |
-| TOOL-2 | `transform-selection.md` | Select ▸ Transform Selection | MISSING | `command_tree.cpp:658` | #526 |
-| TOOL-3 | `move-and-transform.md` | Puppet Warp | MISSING | `command_tree.cpp:129` | #527 |
-| TOOL-4 | `move-and-transform.md` | Content-Aware Scale | MISSING | `command_tree.cpp:125-127` | #528 |
-| TOOL-5 | `move-and-transform.md` | Transform Scale/Rotate/Again + exact rotations + flip | MISSING | `command_tree.cpp:132-148` | #529 |
-| TOOL-6 | `move-and-transform.md` | Transform Path / Transform Points submenus | MISSING | `command_tree.cpp:149-159` | #530 |
+| TOOL-2 | `transform-selection.md` | Select ▸ Transform Selection | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #526 |
+| TOOL-3 | `move-and-transform.md` | Puppet Warp | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #527 |
+| TOOL-4 | `move-and-transform.md` | Content-Aware Scale | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #528 |
+| TOOL-5 | `move-and-transform.md` | Transform Scale/Rotate/Again + exact rotations + flip | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #529 |
+| TOOL-6 | `move-and-transform.md` | Transform Path / Transform Points submenus | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #530 |
 | TOOL-7 | `pen-and-path-tools.md` | Magnetic Pen | MISSING | `options_bar_pen.cpp:19` | #531 |
 | TOOL-8 | `merge-and-flatten.md` | Merge Shape Components (path boolean ops) | MISSING | no path-boolean in `pictura-core/src/path*` | #532 |
 | TOOL-9 | `hand-and-zoom.md` | Hand/Zoom options bar (Scrubby/Animated Zoom, Resize Windows, Zoom All/Scroll All/Match) | MISSING | `options_bar.cpp` no case | #533 |
@@ -132,7 +132,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | TOOL-14 | `healing-brushes.md` | Healing Mode/Source/Sample, Sample All Layers, depth/mode handling | PARTIAL | `options_bar.cpp:694-741`; `tool_healing.cpp:165` | #538 |
 | TOOL-15 | `history-brush.md` | Merged/composite source + Edit ▸ Fill ▸ History | PARTIAL | `paint_tools.rs:524-527` | #539 |
 | TOOL-16 | `mixer-brush.md` | Sample All Layers, Load Solid Colors Only, keyboard shortcuts | MISSING | `options_bar_paint.cpp:310`; `tool_mixerbrush.cpp:39-41` | #540 |
-| TOOL-17 | `type-tools.md` | Missing Glyph Protection (#887); gamma blend and missing-font handling landed in #685 (an approximated colour-independent curve, Replace All substitutes Liberation Sans); warp text landed in #684 (outline-warped presets, the caret stays unwarped while editing), type-on-path and area type landed in #683 (area type clips a bounding-box layout), paragraph type in #682 (greedy wrap, resize-only box handles) | PARTIAL | `type_path.rs`; `text_gamma.rs`; `missing_fonts.rs`; `command_tree.cpp:595-630` | #541 |
+| TOOL-17 | `type-tools.md` | Missing Glyph Protection (#887); gamma blend and missing-font handling landed in #685 (an approximated colour-independent curve, Replace All substitutes Liberation Sans); warp text landed in #684 (outline-warped presets, the caret stays unwarped while editing), type-on-path and area type landed in #683 (area type clips a bounding-box layout), paragraph type in #682 (greedy wrap, resize-only box handles) | PARTIAL | `type_path.rs`; `text_gamma.rs`; `missing_fonts.rs`; `crates/pictura-script/src/command_catalogue/entries.rs` | #541 |
 | TOOL-18 | `path-selection-tools.md` | Path operations/align/arrange, constrain path dragging, Target Path toggle, segment/marquee multi-select | MISSING | `tool_path_selection.cpp:13-14` | #542 |
 | TOOL-19 | `slice-tools.md` | Slice options bar/style/modifiers, Divide/Combine/Duplicate, Slice Options dialog, slices-from-guides | MISSING | `tool_slice.cpp:65-102` | #543 |
 | TOOL-20 | `crop-tool.md` | Crop resampling by W×H×resolution, non-destructive crop/Reveal All, crop shield settings | PARTIAL | `options_bar_crop.cpp:244-375` | #544 |
@@ -149,12 +149,12 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 
 | ID | Spec | Gap | Status | Evidence | Issue |
 |---|---|---|---|---|---|
-| IMG-1 | `image-modes.md`, `duotone.md` | Duotone conversion + Options dialog | MISSING | `command_tree.cpp:216`; `mode/mod.rs:72` | #553 |
+| IMG-1 | `image-modes.md`, `duotone.md` | Duotone conversion + Options dialog | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs`; `mode/mod.rs:72` | #553 |
 | IMG-2 | `image-modes.md` | Multichannel conversion | MISSING | `mode/mod.rs:72` | #554 |
-| IMG-3 | `image-modes.md`, `indexed-color.md` | Color Table + Indexed transparency/Forced palette | MISSING | `command_tree.cpp:227`; `indexed_color_dialog.h:16` | #555 |
+| IMG-3 | `image-modes.md`, `indexed-color.md` | Color Table + Indexed transparency/Forced palette | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs`; `indexed_color_dialog.h:16` | #555 |
 | IMG-4 | `image-modes.md` | Bitmap Halftone Screen + Custom Pattern | MISSING | `mode/flat.rs:20,185` | #556 |
-| IMG-5 | `bit-depth-and-conversion.md`, `hdr-toning.md` | HDR Conversion remaining tone methods | DIVERGENT | `hdr_conversion_dialog.h:19` | #557 |
-| IMG-6 | `32-bit-hdr.md` | Merge To HDR Pro | MISSING | `command_tree.cpp:65` | #558 |
+| IMG-5 | `bit-depth-and-conversion.md`, `hdr-toning.md` | HDR Conversion tone methods implemented; the Local Adaptation Toning Curve/Corner remains | PARTIAL | `hdr_conversion_dialog.cpp`; `pictura-adjust/src/hdr_toning/` | #557 |
+| IMG-6 | `32-bit-hdr.md` | Merge To HDR Pro | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #558 |
 | IMG-7 | `auto-adjustments.md` | Auto Color Correction Options dialog | MISSING | `panel_group_menu.cpp:249` | #559 |
 | IMG-8 | `adjustments/levels.md` | Levels eyedroppers + Alt-drag clipping preview | MISSING | `levels_dialog.cpp` | #560 |
 | IMG-9 | `adjustments/curves.md` | Curves secondary UI (on-image, pencil/smooth, sliders+eyedroppers, display options, Auto, CMYK/Lab graphs) | MISSING | `curves_dialog.h:17`; `panel_group_menu.cpp:250-251` | #561 |
@@ -181,16 +181,16 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | ID | Spec | Gap | Status | Evidence | Issue |
 |---|---|---|---|---|---|
 | LAY-1 | `blend-modes.md` | Advanced Blending toggles (Blend Clipped, Transparency Shapes, mask hides effects, channel Include; Blend Interior inert) | MISSING | `core/lib.rs:884` stored but never read | #579 |
-| LAY-2 | `layer-styles.md` | Global Light dialog, Create Layers, Rasterize Layer Style | MISSING | `frame_menus_layer_style.cpp:3`; `command_tree.cpp:346-347` | #580 |
+| LAY-2 | `layer-styles.md` | Global Light dialog, Create Layers, Rasterize Layer Style | MISSING | `frame_menus_layer_style.cpp:3`; `crates/pictura-script/src/command_catalogue/entries.rs` | #580 |
 | LAY-3 | `layer-styles.md` | Bevel Contour/Texture UI, gradient editor, channel include in the authoring dialog | MISSING | `layer_style_dialog.h:9` | #581 |
 | LAY-4 | `align-and-distribute.md` | Auto-Align Layers | MISSING | none found | #582 |
 | LAY-5 | `align-and-distribute.md` | Auto-Blend Layers | MISSING | none found | #583 |
 | LAY-6 | `blend-modes.md` | `Fill With (Mode)-Neutral Color` for new layers | MISSING | none found | #584 |
 | LAY-8 | `layer-management-ui.md` | Panel Options thumbnail size (Entire Document/Bounds) | PARTIAL | `session.h:25` | #586 |
-| LAY-9 | `export-formats.md` | File ▸ Scripts ▸ Export Layers To Files | MISSING | `command_tree.cpp:69` | #587 |
+| LAY-9 | `export-formats.md` | File ▸ Scripts ▸ Export Layers To Files | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #587 |
 | LAY-10 | `layer-management-ui.md` | Shape layer naming `<Tool> N` | DIVERGENT | `shapes.rs:238` | #588 |
 | LAY-11 | `blend-modes.md` | 32-bit/Lab blend-mode menu gating | MISSING | `blend.rs` offers all | #589 |
-| LAY-12 | `layer-management-ui.md` | `Ctrl+J` duplicate-group semantics | DIVERGENT | `command_tree.cpp:312` | #590 |
+| LAY-12 | `layer-management-ui.md` | `Ctrl+J` duplicate-group semantics | DIVERGENT | `crates/pictura-script/src/command_catalogue/entries.rs` | #590 |
 | LAY-13 | `smart-objects.md` | Extended Stack Modes | MISSING | no `StackMode`/`reduce_stack` | #591 |
 | LAY-14 | `merge-and-flatten.md` | Merge Down result appearance: the merged node inherits the target's blend mode and opacity, so a target with non-default settings renders the merged result differently from the pre-merge canvas; the pair also composites against a transparent backdrop, so where the target is non-`Normal` or not opaque the source's blend sees the target's unblended colour | UNRESOLVED | `merge.rs:195`; `merge.rs:202-203`; `merge.rs:422-424` | #813 |
 
@@ -200,13 +200,14 @@ Layer Comps (`LAY-022`) is already tracked by `#265`.
 
 | ID | Spec | Gap | Status | Evidence | Issue |
 |---|---|---|---|---|---|
-| FILT-2 | `noise-filters.md` | Reduce Noise (incl. Advanced per-channel) | MISSING | `command_tree.cpp:743` | #593 |
+| FILT-2 | `noise-filters.md` | Reduce Noise (incl. Advanced per-channel) | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #593 |
 | FILT-4 | `sharpen-filters.md` | Smart Sharpen Basic/Advanced split + 32-bpc disable | DIVERGENT | `filter_map/descriptor/render.rs` (Smart Sharpen row) | #595 |
 | FILT-5 | `stylize-filters.md` | 8 Stylize filters missing from the Filter Gallery category | DIVERGENT | `filter_gallery_dialog.cpp:118` | #596 |
 | FILT-6 | `artistic-filters.md` | Colored Pencil document-background paper wiring | PARTIAL | `filter_map/mapping.rs` (Colored Pencil arm) | #597 |
 | FILT-7 | `adaptive-wide-angle.md` | Adaptive Wide Angle Auto / lens profiles, Panorama, Smart Filter re-edit, rotation handles | PARTIAL | `pictura-filters/src/distort/adaptive_wide_angle/`, `awa_dialog.cpp` | #891 |
+| FILT-9 | `vanishing-point.md` | Vanishing Point planes saved in PSD / TIFF / JPEG | MISSING | `document_session/session.rs` (`vanishing_planes`) | #918 |
 
-Lens Correction (`#347`), Vanishing Point (`#349`),
+Lens Correction (`#347`),
 De-Interlace (`#344`), NTSC Colors (`#345`), Embed/Read Watermark (`#350`/`#351`)
 are already tracked.
 
@@ -215,7 +216,7 @@ are already tracked.
 | ID | Spec | Gap | Status | Evidence | Issue |
 |---|---|---|---|---|---|
 | CLR-1 | `gradient-presets.md` | Gradient Editor reachable from the Gradient tool + opacity stops + midpoint | PARTIAL | `options_bar_fill.cpp:129-131`; `gradient_editor_dialog.cpp:481-484` | #598 |
-| CLR-2 | `pattern-presets.md` | Define Pattern, `.pat` library, Scripted Patterns | MISSING | `command_tree.cpp:159`; `codec/patterns.rs` | #599 |
+| CLR-2 | `pattern-presets.md` | Define Pattern, `.pat` library, Scripted Patterns | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs`; `codec/patterns.rs` | #599 |
 | CLR-3 | `color-picker.md` | Gamut/web alerts, Color Libraries (PANTONE), picker preference | MISSING | `color_picker_dialog.cpp:1083-1085` | #600 |
 | CLR-4 | `color-picker.md` | HUD colour picker | MISSING | none found | #601 |
 | CLR-5 | `color-picker.md` | HDR colour picker (32-bpc) | MISSING | `color_picker_dialog.cpp` 8-bit only | #602 |
@@ -229,8 +230,8 @@ are already tracked.
 
 | ID | Spec | Gap | Status | Evidence | Issue |
 |---|---|---|---|---|---|
-| SEL-1 | `channel-based-masking.md` | Apply Image | MISSING | `command_tree.cpp:298` | #609 |
-| SEL-2 | `channel-based-masking.md` | Calculations | MISSING | `command_tree.cpp:299` | #610 |
+| SEL-1 | `channel-based-masking.md` | Apply Image | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #609 |
+| SEL-2 | `channel-based-masking.md` | Calculations | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #610 |
 | SEL-3 | `channel-based-masking.md` | Channel Options (Masked/Selected Areas) | MISSING | no polarity model | #611 |
 | SEL-4 | `refine-edge.md` | Interactive Refine Radius/Erase brushes | MISSING | `changes/refine-edge` out of scope | #612 |
 | SEL-5 | `color-range.md` | Skin Tones, Localized Clusters, Out Of Gamut, previews, save/load | MISSING | `color_range.rs:7` | #613 |
@@ -243,17 +244,17 @@ Quick Mask is tracked by `#172`.
 
 | ID | Spec | Gap | Status | Evidence | Issue |
 |---|---|---|---|---|---|
-| AUTO-1 | `actions.md` + `script-events-and-jsx.md` | Shared ActionDescriptor / command-recording bus (foundation) | MISSING | `commands.cpp:146` dispatcher only | #616 |
-| AUTO-2 | `droplets.md` | Create Droplet, `.opd`, `.desktop` launcher | MISSING | `command_tree.cpp:62` | #617 |
-| AUTO-3 | `batch-processing.md` | File ▸ Automate ▸ Batch engine + dialog | MISSING | `command_tree.cpp:58` | #618 |
-| AUTO-4 | `batch-processing.md` | Remaining Automate commands (Image Processor, Conditional Mode Change, PDF Presentation, Contact Sheet II, Picture Package, Photomerge, Web Photo Gallery, File Naming) | MISSING | `command_tree.cpp:59-68` | #619 |
-| AUTO-5 | `rust-scripting-replacement.md` | Scripting host, DOM, ActionManager, notifiers (QuickJS) | MISSING | no scripting crate/dep | #620 |
+| AUTO-1 | `actions.md` + `script-events-and-jsx.md` | Shared ActionDescriptor / command-recording bus (foundation) | SHIPPED | `crates/pictura-script/src/command_catalogue/`; `crates/pictura-app/cpp/commands.cpp`; `crates/pictura-codec/src/action_descriptor.rs` | #616 |
+| AUTO-2 | `droplets.md` | Create Droplet, `.opd`, `.desktop` launcher | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #617 |
+| AUTO-3 | `batch-processing.md` | File ▸ Automate ▸ Batch engine + dialog | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #618 |
+| AUTO-4 | `batch-processing.md` | Remaining Automate commands (Image Processor, Conditional Mode Change, PDF Presentation, Contact Sheet II, Picture Package, Photomerge, Web Photo Gallery, File Naming) | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #619 |
+| AUTO-5 | `rust-scripting-replacement.md` | Scripting host, DOM, ActionManager, notifiers (QuickJS) | MISSING | `crates/pictura-script` covers action automation, not a scripting host/DOM | #620 |
 | AUTO-6 | `rust-scripting-replacement.md` | Script console, sandbox limits, security prompt, progress bridge | MISSING | none found | #621 |
-| AUTO-7 | `variables-and-data-driven-graphics.md` | Variables / data-driven graphics | MISSING | `command_tree.cpp:293-295` | #622 |
+| AUTO-7 | `variables-and-data-driven-graphics.md` | Variables / data-driven graphics | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #622 |
 | AUTO-8 | `plugin-sdk.md` | Rust C-ABI plugin loader + Plug-in manager dialog | MISSING | no `pictura-plugin` | #623 |
 | AUTO-9 | `mini-bridge.md` | Mini-Bridge replacement Files panel | MISSING | none found | #624 |
 
-The Actions panel/engine is tracked by `#301`.
+The Actions panel and engine shipped in `#301` (`crates/pictura-app/cpp/panels/actions_panel.*`, `crates/pictura-app/cpp/panels/actions_tree_model.*`, `crates/pictura-app/src/cxxqt_object/actions_engine.rs`, `crates/pictura-script`). The command-recording coverage matrix lives with the catalogue: every implemented id is classified **Adobe-verified**, **app-native** (`pictura.<id>`), or **non-recordable**, and the catalogue test fails on an unclassified id. Tool strokes, conditional steps, and Insert Path are app-native `TEXT` events, not Adobe-interoperable; a `.atn` produced with them preserves and replays in Kooka Pictura but is not claimed as CS6-compatible. Brush/Pencil strokes replay; native tool-specific and mask strokes are refused until replay paths land. Unknown imported event identifiers are preserved and reported at playback; an unknown descriptor type fails closed.
 
 ### 10-workflow-io
 
@@ -264,7 +265,7 @@ The Actions panel/engine is tracked by `#301`.
 | WF-3 | `open-and-new.md` | Generic PDF/EPS import (Import PDF and Rasterize Generic EPS Format dialogs) and Open As shipped (#627) through Ghostscript; still missing: native CMYK/16-bit rendering (converted from an 8-bit RGB render), Images mode on encrypted PDFs, inline images, the 3D option | PARTIAL | `pictura-codec/src/pdf/import/mod.rs`; `import_pdf_dialog.cpp`; `frame_import.cpp` | #627 |
 | WF-4 | `save-and-save-as.md` | GIF-via-Indexed on save + Save a Copy | MISSING | `encode_image.cpp` | #628 |
 | WF-5 | `web-export-and-slices.md` | Save for Web slice HTML/CSS emitter, 2-Up/4-Up, colour-table editor, metadata menu | MISSING | `save_for_web_dialog.cpp:176-292` | #629 |
-| WF-6 | `export-formats.md` | Export Layers To Files, Data Sets As Files, Zoomify, Render Video, Paths to Illustrator | MISSING | `command_tree.cpp:53,55-57,69` | #630 |
+| WF-6 | `export-formats.md` | Export Layers To Files, Data Sets As Files, Zoomify, Render Video, Paths to Illustrator | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #630 |
 | WF-7 | `file-info-and-metadata.md` | Extra tabs (IPTC Extension/GPS/Origin/Video/Audio/Photoshop/DICOM) + editing | PARTIAL | `file_info_dialog.cpp:73` | #631 |
 | WF-8 | `camera-raw-workflow.md` | Camera Raw settings stores (XMP sidecar / ACR database) | MISSING | `crs_xmp.rs:1-9` | #632 |
 | WF-9 | `camera-raw-workflow.md` | ACR Workflow Options, ACR preferences, batch, Purge Camera Raw | MISSING | `pictura_raw_dialog.cpp:47-60` | #633 |
@@ -324,7 +325,7 @@ Two entries this list used to carry are corrected here:
 `#102`/`#103`/`#104`/`#309` crop · `#113` linked smart objects · `#166` smart
 filters · `#167`/`#183` filter bundles · `#172` Quick Mask · `#261` vector-mask
 path authoring · `#262` pattern fill layers · `#263` Edit Adjustment row ·
-`#264` Blend-If UI · `#265` Layer Comps · `#301` Actions · `#305` View Snap ·
+`#264` Blend-If UI · `#265` Layer Comps · `#305` View Snap ·
 `#306` canvas right-click menus · `#312` Alt-drag duplicate · `#313` picker
 eyedropper · `#319` Color panel · `#344`/`#345`/`#346`/`#347`/`#349`/`#350`/`#351`
 filters & watermark · `#364` Maximum filter · `#367` Help menu · `#392`/`#396`–`#402`

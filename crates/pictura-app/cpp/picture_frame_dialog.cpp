@@ -165,7 +165,7 @@ void PictureFrameDialog::buildPicker()
     QSignalBlocker block(picker_);
     for (int i = 0; i < spec_.params.at(0).choices.size(); ++i) {
         const QImage thumb = filter_thumbnail(groundRgba, kIconSize, kIconSize, spec_.kind,
-                                              withFrame(defaults, i));
+                                              withFrame(defaults, i), 1.0);
         auto* item = new QListWidgetItem(QIcon(QPixmap::fromImage(thumb)),
                                          spec_.params.at(0).choices.at(i), picker_);
         item->setToolTip(spec_.params.at(0).choices.at(i));
@@ -226,7 +226,7 @@ void PictureFrameDialog::renderPad()
         return;
     }
     const QImage framed =
-        filter_thumbnail(proxyRgba_, proxy_.width(), proxy_.height(), spec_.kind, values());
+        filter_thumbnail(proxyRgba_, proxy_.width(), proxy_.height(), spec_.kind, values(), 1.0);
     pad_->setPixmap(QPixmap::fromImage(framed.isNull() ? proxy_ : framed));
 }
 

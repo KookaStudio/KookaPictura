@@ -8,6 +8,7 @@ use super::super::filter_tools::adaptive_wide_angle::{
 use super::super::filter_tools::displace_maps::displace_map;
 use super::super::filter_tools::lens_blur_depths::depth_map as lens_blur_depth_map;
 use super::super::filter_tools::liquify::liquify_mesh;
+use super::super::filter_tools::vanishing_point::vp_edit;
 use super::choices::*;
 use super::descriptor;
 use super::gallery;
@@ -242,12 +243,14 @@ pub(crate) fn filter_from_kind_params(kind: &str, params: &[f64]) -> Option<Filt
         }
         "offset" => {
             arity!(params, slots);
+            let repeat = flag(params, 3, defaults[3] >= 0.5);
             Filter::Offset {
                 horizontal: i32v(params, 0, defaults[0]),
                 vertical: i32v(params, 1, defaults[1]),
-                wrap: flag(params, 2, defaults[2] >= 0.5),
-                background: rgb(params, 3, [defaults[3], defaults[4], defaults[5]]),
-                transparent: flag(params, 6, defaults[6] >= 0.5),
+                wrap: flag(params, 2, defaults[2] >= 0.5) && !repeat,
+                repeat,
+                background: rgb(params, 4, [defaults[4], defaults[5], defaults[6]]),
+                transparent: flag(params, 7, defaults[7] >= 0.5),
             }
         }
         "high-pass" => {
@@ -283,6 +286,10 @@ pub(crate) fn filter_from_kind_params(kind: &str, params: &[f64]) -> Option<Filt
         "solarize" => {
             arity!(params, slots);
             Filter::Solarize
+        }
+        "ntsc-colors" => {
+            arity!(params, slots);
+            Filter::NtscColors
         }
         "diffuse" => {
             arity!(params, slots);
@@ -472,6 +479,12 @@ pub(crate) fn filter_from_kind_params(kind: &str, params: &[f64]) -> Option<Filt
             arity!(params, slots);
             Filter::Liquify {
                 mesh: liquify_mesh(u32v(params, 0, defaults[0]))?,
+            }
+        }
+        "vanishing-point" => {
+            arity!(params, slots);
+            Filter::VanishingPoint {
+                edit: vp_edit(u32v(params, 0, defaults[0]))?,
             }
         }
         "adaptive-wide-angle" => {

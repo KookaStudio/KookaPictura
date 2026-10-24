@@ -366,8 +366,13 @@ impl Selection {
             for x in 0..w {
                 let mut acc = self.data[y * w + x];
                 for i in -r..=r {
-                    let xx = (x as isize + i).clamp(0, w as isize - 1) as usize;
-                    acc = pick(acc, self.data[y * w + xx]);
+                    let xx = x as isize + i;
+                    let v = if xx < 0 || xx >= w as isize {
+                        0
+                    } else {
+                        self.data[y * w + xx as usize]
+                    };
+                    acc = pick(acc, v);
                 }
                 tmp[y * w + x] = acc;
             }
@@ -377,8 +382,13 @@ impl Selection {
             for x in 0..w {
                 let mut acc = tmp[y * w + x];
                 for i in -r..=r {
-                    let yy = (y as isize + i).clamp(0, h as isize - 1) as usize;
-                    acc = pick(acc, tmp[yy * w + x]);
+                    let yy = y as isize + i;
+                    let v = if yy < 0 || yy >= h as isize {
+                        0
+                    } else {
+                        tmp[yy as usize * w + x]
+                    };
+                    acc = pick(acc, v);
                 }
                 out[y * w + x] = acc;
             }
@@ -992,6 +1002,35 @@ mod tests {
         assert_eq!(b.data[(4 * 24 + 12) as usize], 0, "far outside stays clear");
         assert_eq!(b.data[(10 * 24 + 12) as usize], 255, "band extends inside");
         assert_eq!(Selection::none(4, 4).border(5).data.len(), 16);
+    }
+
+    #[test]
+    fn contract_all_shrinks() {
+        let s = Selection::all(12, 8).contract(2);
+        for x in 0..12 {
+            assert_eq!(s.data[x], 0, "top row");
+            assert_eq!(s.data[7 * 12 + x], 0, "bottom row");
+        }
+        for y in 0..8 {
+            assert_eq!(s.data[y * 12], 0, "left column");
+            assert_eq!(s.data[y * 12 + 11], 0, "right column");
+        }
+        assert_eq!(s.data[4 * 12 + 6], 255, "centre stays selected");
+    }
+
+    #[test]
+    fn border_edge_has_inner_band() {
+        let b = Selection::all(12, 8).border(4);
+        assert_eq!(b.data[0], 255, "outer edge row is in the band");
+        assert_eq!(b.data[12 + 6], 255, "inner half row is in the band");
+        assert_eq!(b.data[2 * 12 + 6], 0, "inside the band is clear");
+
+        let s = Selection::rect(16, 16, 4, 4, 12, 12);
+        let b = s.border(4);
+        assert_eq!(b.data[8 * 16 + 2], 255, "outer half");
+        assert_eq!(b.data[8 * 16 + 4], 255, "edge");
+        assert_eq!(b.data[8 * 16 + 5], 255, "inner half");
+        assert_eq!(b.data[8 * 16 + 6], 0, "beyond the band");
     }
 
     #[test]

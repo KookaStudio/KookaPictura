@@ -19,6 +19,7 @@ use super::helpers::{
     active_layer_visible, active_mask_target, active_pixel_layer, mask_stroke_config,
     paint_mode_from, rgba_from_argb,
 };
+use super::impl_paint::tool_recording;
 use super::qobject::PictureView;
 use super::PictureViewRust;
 use crate::cxxqt_object::edit::Edit;
@@ -100,7 +101,8 @@ pub mod ffi {
 
         /// Begin a Mixer Brush stroke with `reservoir` (`0xAARRGGBB`; alpha 0
         /// is a clean brush) on the brush. `wet`, `load`, `mix`, and `flow` are
-        /// 0–100 %. False as for `begin_color_replacement`.
+        /// 0–100 %. `opacity` caps the deposit and `mode` is a Brush mode
+        /// (`"normal"`, …). False as for `begin_color_replacement`.
         fn begin_mixer_brush(
             view: Pin<&mut PictureView>,
             reservoir: u32,
@@ -109,6 +111,8 @@ pub mod ffi {
             load: i32,
             mix: i32,
             flow: i32,
+            opacity: i32,
+            mode: &QString,
         ) -> bool;
 
         /// The paint on the brush of the active Mixer Brush stroke
@@ -348,6 +352,13 @@ pub mod ffi {
             snapshot: bool,
             index: i32,
         ) -> bool;
+
+        /// Replay a serialized Actions tool stroke (`ToolStroke` JSON) on the
+        /// active layer. False, with a named diagnostic on the recorder hook,
+        /// for a bad version/payload or an unplayable tool.
+        // ponytail: cxx-qt 0.10 has no free qinvokable; the C++ Actions player
+        // calls this bridge function directly, as it does the other tool begins.
+        fn replay_tool_stroke(view: Pin<&mut PictureView>, payload: &QString) -> bool;
     }
 }
 
@@ -375,7 +386,7 @@ fn begin_color_replacement(
         tolerance: (tolerance.clamp(0, 100) as f32 * 2.55).round() as u8,
         antialias,
     };
-    begin(view, "Color Replacement Tool", |doc, path, _| {
+    begin(view, "Color Replacement Tool", cfg, |doc, path, _| {
         Stroke::begin_kind(doc, path, cfg, StrokeKind::Replace(options)).ok()
     })
 }
@@ -388,6 +399,8 @@ fn begin_mixer_brush(
     load: i32,
     mix: i32,
     flow: i32,
+    opacity: i32,
+    mode: &QString,
 ) -> bool {
     let unit = |v: i32| v.clamp(0, 100) as f32 / 100.0;
     let kind = StrokeKind::Mixer {
@@ -399,8 +412,12 @@ fn begin_mixer_brush(
         },
         reservoir: rgba_from_argb(reservoir),
     };
-    let cfg = tip_config(tip);
-    begin(view, "Mixer Brush Tool", |doc, path, _| {
+    let cfg = StrokeConfig {
+        opacity: opacity.clamp(0, 100) as u8,
+        mode: paint_mode_from(&mode.to_string()),
+        ..tip_config(tip)
+    };
+    begin(view, "Mixer Brush Tool", cfg, |doc, path, _| {
         Stroke::begin_kind(doc, path, cfg, kind).ok()
     })
 }
@@ -455,11 +472,24 @@ fn begin_brush(
     };
     let label = if aliased { "Pencil" } else { "Brush" };
     if let Some(path) = active_mask_target(view.rust()) {
-        return view.begin_mask_paint(&path, mask_stroke_config(cfg), label);
+        let mask_cfg = mask_stroke_config(cfg);
+        let begun = view.begin_mask_paint(&path, mask_cfg, label);
+        if begun {
+            tool_recording::begin(
+                label,
+                &mask_cfg.sanitized(),
+                tool_recording::ToolStrokeKind::Mask,
+            );
+        }
+        return begun;
     }
-    begin(view, label, |doc, path, _| {
-        Stroke::begin_at(doc, path, cfg).ok()
-    })
+    begin_kind(
+        view,
+        label,
+        cfg,
+        tool_recording::ToolStrokeKind::Paint,
+        |doc, path, _| Stroke::begin_at(doc, path, cfg).ok(),
+    )
 }
 
 fn begin_clone_stamp(
@@ -493,7 +523,7 @@ fn begin_clone_stamp(
     }
     let sampling = CloneSampling::from_i32(sampling).unwrap_or_default();
     let cfg = stamp_config(tip, opacity, flow, mode);
-    begin(view, "Clone Stamp", |doc, path, _| {
+    begin(view, "Clone Stamp", cfg, |doc, path, _| {
         let image = match sample_scope(doc, path, sampling, ignore_adjustments) {
             Some(scope) => surface_from_composite(&pictura_render::composite_rgba(&scope)),
             None => layer_surface(doc, path)?,
@@ -518,7 +548,7 @@ fn begin_pattern_stamp(
         return false;
     };
     let cfg = stamp_config(tip, opacity, flow, mode);
-    begin(view, "Pattern Stamp", |doc, path, _| {
+    begin(view, "Pattern Stamp", cfg, |doc, path, _| {
         let image = tiled(&tile, doc.width, doc.height, (origin_x, origin_y))?;
         Stroke::begin_source(doc, path, cfg, StampSource::new(image, (0, 0))).ok()
     })
@@ -532,7 +562,7 @@ fn begin_history_brush(
     mode: &QString,
 ) -> bool {
     let cfg = stamp_config(tip, opacity, flow, mode);
-    begin(view, "History Brush", |doc, path, view| {
+    begin(view, "History Brush", cfg, |doc, path, view| {
         // ponytail: the source layer is matched by panel path (layers carry no
         // stable id), so a reordered stack paints from whatever now sits there.
         let past = view.session.history.brush_source_doc()?;
@@ -553,7 +583,7 @@ fn begin_art_history_brush(
         opacity: opacity.clamp(0, 100) as u8,
         ..tip_config(tip)
     };
-    begin(view, "Art History Brush", |doc, path, view| {
+    begin(view, "Art History Brush", cfg, |doc, path, view| {
         let options = ArtHistoryOptions {
             style: ArtStyle::from_i32(style).unwrap_or_default(),
             area: area.clamp(0, 500) as u32,
@@ -606,9 +636,18 @@ fn begin_eraser(
             aliased: mode == EraserMode::Pencil,
             ..cfg
         };
-        return view.begin_mask_paint(&path, mask_stroke_config(mask_cfg), "Eraser");
+        let mask_cfg = mask_stroke_config(mask_cfg);
+        let begun = view.begin_mask_paint(&path, mask_cfg, "Eraser");
+        if begun {
+            tool_recording::begin(
+                "Eraser",
+                &mask_cfg.sanitized(),
+                tool_recording::ToolStrokeKind::Mask,
+            );
+        }
+        return begun;
     }
-    begin(view, "Eraser", |doc, path, view| {
+    begin(view, "Eraser", cfg, |doc, path, view| {
         // ponytail: the source layer is matched by panel path, as for the
         // History Brush.
         let history = if to_history {
@@ -663,7 +702,7 @@ fn begin_background_eraser(
         let mut rust = view.as_mut().rust_mut();
         base = rust.session.doc.replace(layered);
     }
-    let begun = begin(view.as_mut(), "Background Eraser", |doc, path, _| {
+    let begun = begin(view.as_mut(), "Background Eraser", cfg, |doc, path, _| {
         Stroke::begin_kind(doc, path, cfg, StrokeKind::BackgroundErase(options)).ok()
     });
     if !begun {
@@ -700,7 +739,7 @@ fn begin_focus(
     };
     let cfg = tip_config(tip);
     let label = if sharpen { "Sharpen" } else { "Blur" };
-    begin(view, label, |doc, path, view| {
+    begin(view, label, cfg, |doc, path, view| {
         let sampled = sample_all.then(|| composite_surface(doc, view));
         Stroke::begin_focus(doc, path, cfg, options, sampled).ok()
     })
@@ -724,7 +763,7 @@ fn begin_smudge(
         color: rgba_from_argb(foreground),
         ..tip_config(tip)
     };
-    begin(view, "Smudge", |doc, path, view| {
+    begin(view, "Smudge", cfg, |doc, path, view| {
         let sampled = sample_all.then(|| composite_surface(doc, view));
         Stroke::begin_smudge(doc, path, cfg, options, sampled).ok()
     })
@@ -754,7 +793,7 @@ fn begin_tone(
         vibrance,
     };
     let cfg = tip_config(tip);
-    begin(view, label, |doc, path, _| {
+    begin(view, label, cfg, |doc, path, _| {
         Stroke::begin_tone(doc, path, cfg, options).ok()
     })
 }
@@ -916,6 +955,12 @@ fn set_history_brush_source(mut view: Pin<&mut PictureView>, snapshot: bool, ind
         .set_brush_source(source)
 }
 
+fn replay_tool_stroke(mut view: Pin<&mut PictureView>, payload: &QString) -> bool {
+    let mut rust = view.as_mut().rust_mut();
+    let rust = &mut *rust;
+    tool_recording::replay_tool_stroke_json(rust, &payload.to_string()).is_ok()
+}
+
 fn stamp_config(tip: &PaintTip, opacity: i32, flow: i32, mode: &QString) -> StrokeConfig {
     StrokeConfig {
         opacity: opacity.clamp(0, 100) as u8,
@@ -1007,8 +1052,26 @@ fn white_preview(cfg: StrokeConfig, w: i32, h: i32, samples: &[StrokeSample]) ->
 /// from the document, the active path, and the view. False mid-stroke or when
 /// `start` refuses.
 fn begin(
+    view: Pin<&mut PictureView>,
+    label: &str,
+    cfg: StrokeConfig,
+    start: impl FnOnce(&Document, &str, &PictureViewRust) -> Option<Stroke>,
+) -> bool {
+    begin_kind(
+        view,
+        label,
+        cfg,
+        tool_recording::ToolStrokeKind::Native,
+        start,
+    )
+}
+
+/// As [`begin`], tagging the capture with the replay path that can drive it.
+fn begin_kind(
     mut view: Pin<&mut PictureView>,
     label: &str,
+    cfg: StrokeConfig,
+    kind: tool_recording::ToolStrokeKind,
     start: impl FnOnce(&Document, &str, &PictureViewRust) -> Option<Stroke>,
 ) -> bool {
     let stroke = {
@@ -1051,5 +1114,6 @@ fn begin(
     if let Some((width, height)) = dims {
         rust.session.live.reset_stroke_tiles(width, height);
     }
+    tool_recording::begin(label, &cfg.sanitized(), kind);
     true
 }

@@ -30,9 +30,9 @@ Deeper technical status for PSD/PSB lives in
 | Filters | Shipped — 110 filters across the classic families; three CS6 families have no engine |
 | Colour and painting | Shipped — ICC profiles, Assign Profile, Convert to Profile, colour settings, the brush engine |
 | Camera raw files | Open — there is no raw container reader and no demosaic |
-| Panels | 18 of 22 populated; Actions, Gradients, Patterns and Styles are placeholders |
-| Automation | The local control server ships; Actions, batch, scripting and plug-ins are open |
-| HDR tone mapping | One of four methods |
+| Panels | 19 of 22 populated; Gradients, Patterns and Styles are placeholders |
+| Automation | The control server, Rust command catalogue, Actions engine and command bus ship; batch, scripting and plug-ins are open |
+| HDR tone mapping | Shipped — all four conversion methods; the Local Adaptation Toning Curve/Corner is open |
 | Layer comps, preset manager, stack modes, Blend-If UI | Open |
 
 ## Files, formats and metadata
@@ -133,6 +133,8 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [x] Lasso, polygonal lasso and magnetic lasso
 - [x] Magic wand and quick selection
 - [x] Crop, perspective crop, slice and slice select
+- [x] Crop Settings menu: Classic mode, shield colour and opacity, Show Cropped
+      Area, Auto Center Preview (#104)
 - [x] Eyedropper, colour sampler, ruler, note and count
 - [x] Spot healing, healing brush, patch, content-aware move and red eye
 - [x] Brush, pencil, colour replacement and mixer brush
@@ -233,8 +235,9 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       conversion (#554)
 - [ ] The Color Table, and Indexed transparency and Forced palette (#555)
 - [ ] Bitmap Halftone Screen and Custom Pattern (#556)
-- [ ] The remaining HDR Conversion tone methods (#557), and Merge To HDR Pro
-      (#558)
+- [x] The HDR Conversion tone methods (#557)
+- [ ] Merge To HDR Pro (#558)
+- [ ] The Local Adaptation Toning Curve and Corner option (follow-up to #557)
 - [ ] The Auto Color Correction Options dialog (#559)
 - [ ] Levels eyedroppers and the Alt-drag clipping preview (#560)
 - [ ] The Curves secondary UI: on-image, pencil and smooth, sliders and
@@ -286,8 +289,15 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       line and polygon constraints, EXIF focal-length prefill
 - [ ] Adaptive Wide Angle Auto and lens profiles, Panorama, Smart Filter
       re-edit (#891)
-- [ ] Lens Correction (#347) and Vanishing Point (#349)
-- [ ] De-Interlace (#344) and NTSC Colors (#345)
+- [ ] Lens Correction (#347)
+- [x] Vanishing Point planes (#349): Create and Edit Plane, validity colours,
+      Grid Size, related planes torn off at 90° with Angle, Render Grids
+- [x] Vanishing Point Marquee, Stamp, Brush, Transform, Eyedropper and Paste
+      (#349): floating selections in perspective with Feather, Opacity and
+      Heal, cloning and painting that foreshorten with the planes
+- [ ] Vanishing Point planes saved in PSD, TIFF and JPEG (#918)
+- [x] NTSC Colors (#345)
+- [ ] De-Interlace (#344)
 - [ ] Embed and Read Watermark (#350, #351)
 - [ ] Edit ▸ Fade, the post-filter opacity and blend mode (#491)
 
@@ -339,10 +349,10 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 
 ## Panels
 
-- [x] **Seventeen populated panels** — Layers, History, Channels, Paths, Color,
-      Swatches, Info, Histogram, Navigator, Notes, Properties, Brush, Clone
-      Source, Character, Paragraph, Glyphs and Paragraph Styles.
-      `crates/pictura-app/cpp/frame_build.cpp`.
+- [x] **Nineteen populated panels** — Layers, History, Channels, Paths, Color,
+      Swatches, Info, Histogram, Navigator, Notes, Properties, Adjustments,
+      Brush, Clone Source, Character, Paragraph, Glyphs, Paragraph Styles and
+      Actions. `crates/pictura-app/cpp/frame_build.cpp`.
 - [x] **Dockable panels**, a dark theme, a remembered layout, and the
       Essentials, Painting, Photography and Typography workspaces.
       `crates/pictura-app/cpp/frame_workspaces.cpp`.
@@ -371,7 +381,13 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       thumbnail size (#521)
 - [ ] Notes Author and Colour options, and the PSD, PDF and TIFF annotation
       round-trip (#522)
-- [ ] The Actions panel and its engine (#301)
+- [x] **The Actions panel and its engine** — the set/action/step tree, Button
+      mode, command and Brush/Pencil tool-stroke recording, playback including
+      conditional steps, the panel menu, action/step dialogs, exact version-16
+      `.atn` read/write, and atomic `Actions Palette.psp` persistence.
+      `crates/pictura-app/cpp/panels/actions_panel.cpp`,
+      `crates/pictura-script/`, `crates/pictura-codec/src/action_file.rs`
+      (#301).
 
 ## Automation
 
@@ -380,7 +396,12 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [x] **A local control server** on a Unix socket, with twenty JSON methods for
       documents, layers, selections, filters, and pointer and key input.
       `crates/pictura-app/cpp/control_server.cpp`.
-- [ ] A shared ActionDescriptor and command-recording bus (#616)
+- [x] **A Rust command catalogue and the shared command-recording bus** — the
+      catalogue drives the menu tree and the checked-in `command_ids.h`; the
+      C++ command bus gains executors, context handlers, a recording sink, and
+      `executeRecorded` (#273, #616).
+      `crates/pictura-script/src/command_catalogue.rs`,
+      `crates/pictura-app/cpp/commands.cpp`.
 - [ ] Create Droplet, the `.opd` format, and the `.desktop` launcher (#617)
 - [ ] The File ▸ Automate ▸ Batch engine and dialog (#618)
 - [ ] The remaining Automate commands: Image Processor, Conditional Mode

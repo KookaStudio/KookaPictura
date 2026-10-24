@@ -1,5 +1,6 @@
 #include <QtCore/QRect>
 #include "frame_includes.h"
+#include "panels/actions_panel.h"
 
 #include "pictura_debug_timing.h"
 
@@ -145,7 +146,12 @@ void PicturaMainWindow::saveSession()
     state.typePlaceholderText = tools_ ? tools_->typePlaceholderText() : true;
     state.shortcuts.clear();
     const QHash<QString, QList<QKeySequence>> overrides = registry_->shortcutOverrides();
+    const QSet<QString> shadowed =
+        actionsPanel_ ? actionsPanel_->shadowedCommandIds() : QSet<QString>();
     for (auto it = overrides.cbegin(); it != overrides.cend(); ++it) {
+        if (shadowed.contains(it.key())) {
+            continue;
+        }
         QStringList bindings;
         for (const QKeySequence& binding : it.value()) {
             bindings << binding.toString(QKeySequence::PortableText);

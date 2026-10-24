@@ -48,7 +48,7 @@ const MAPPING: &[Mapping] = &[
         op: "contract(r)",
         im: "-morphology Erode Square:r",
         tolerance: 0,
-        note: "as expand; IM clamps at the canvas edge like PS's edge exemption",
+        note: "as expand; out-of-canvas taps are zero, so the fixture stays clear of the edge",
     },
     Mapping {
         op: "feather(r)",

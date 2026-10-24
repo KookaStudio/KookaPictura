@@ -7,7 +7,7 @@
 //! adjustment outside the covered set is refused with [`AdjustError::Unsupported`]
 //! and the store is left unchanged.
 
-use pictura_core::{PixelBuffer, Sample, Samples};
+use pictura_core::{BitDepth, PixelBuffer, Sample, Samples};
 
 use crate::color::{
     hue_saturation_is_identity, hue_saturation_rgb, skin_bump, validate_hue_saturation,
@@ -69,7 +69,7 @@ pub fn apply_native(
             brightness_contrast_native(p, samples, width, height, channels)
         }
         Adjustment::Exposure(p) => {
-            let f = exposure_map(p)?;
+            let f = exposure_map(p, matches!(samples.depth(), BitDepth::ThirtyTwo))?;
             if p.exposure == 0.0 && p.offset == 0.0 && p.gamma == 1.0 {
                 return Ok(());
             }
@@ -169,7 +169,10 @@ fn desaturate_pixel(p: Rgb) -> Rgb {
     [v, v, v]
 }
 
-fn exposure_map(p: &ExposureParams) -> Result<impl Fn(f64) -> f64, AdjustError> {
+fn exposure_map(
+    p: &ExposureParams,
+    linear_source: bool,
+) -> Result<impl Fn(f64) -> f64, AdjustError> {
     if !p.exposure.is_finite() || !p.offset.is_finite() {
         return Err(AdjustError::InvalidParams(
             "exposure/offset must be finite".into(),
@@ -183,8 +186,12 @@ fn exposure_map(p: &ExposureParams) -> Result<impl Fn(f64) -> f64, AdjustError> 
     let gain = 2f64.powf(p.exposure);
     let (offset, gamma) = (p.offset, p.gamma);
     Ok(move |u: f64| {
-        let lin = (srgb_to_linear(u) * gain + offset).max(0.0);
-        linear_to_srgb(lin.powf(gamma))
+        if linear_source {
+            (u * gain + offset).max(0.0).powf(gamma)
+        } else {
+            let lin = (srgb_to_linear(u) * gain + offset).max(0.0);
+            linear_to_srgb(lin.powf(gamma))
+        }
     })
 }
 
@@ -195,10 +202,7 @@ fn posterize_map(levels: u8) -> Result<impl Fn(f64) -> f64, AdjustError> {
         ));
     }
     let denom = (levels - 1) as f64;
-    Ok(move |u: f64| {
-        let q = (u * 255.0 * denom / 255.0).round();
-        (q * 255.0 / denom).round() / 255.0
-    })
+    Ok(move |u: f64| ((u * denom).round() / denom).clamp(0.0, 1.0))
 }
 
 fn shadows_highlights_native(
@@ -407,7 +411,11 @@ fn vibrance_native(
     map(samples, width, height, channels, move |[r, g, b]| {
         let (h, s, l) = rgb_to_hsl(r, g, b);
         let keep = 1.0 - 0.5 * skin_bump(h);
-        let s = (s + kv * (1.0 - s) * keep).clamp(0.0, 1.0);
+        let s = if s == 0.0 {
+            0.0
+        } else {
+            (s + kv * (1.0 - s) * keep).clamp(0.0, 1.0)
+        };
         let s = (s * (1.0 + ks)).clamp(0.0, 1.0);
         let (nr, ng, nb) = hsl_to_rgb(h, s, l);
         [nr, ng, nb]
@@ -481,6 +489,7 @@ fn black_white_native(
             "tint colour must not be black".into(),
         ));
     }
+    let eight_bit = matches!(samples.depth(), BitDepth::Eight);
     let (rw, yw, gw, cw, bw, mw) = (
         p.red / 100.0,
         p.yellow / 100.0,
@@ -500,7 +509,13 @@ fn black_white_native(
         None
     };
     map(samples, width, height, channels, move |[r, g, b]| {
-        let (mut cr, mut cg, mut cb) = (r * 255.0, g * 255.0, b * 255.0);
+        // The u8 store must match the 8-bit kernel's 0..255 arithmetic exactly;
+        // wider stores keep the unit-domain value.
+        let (mut cr, mut cg, mut cb) = if eight_bit {
+            (r * 255.0, g * 255.0, b * 255.0)
+        } else {
+            (r, g, b)
+        };
         let neutral = cr.min(cg).min(cb);
         cr -= neutral;
         cg -= neutral;
@@ -522,13 +537,17 @@ fn black_white_native(
             cg -= yellow;
             gray += yellow * yw + cr * rw + cg * gw;
         }
-        let out = gray.round().clamp(0.0, 255.0);
+        let out = if eight_bit {
+            gray.round().clamp(0.0, 255.0) / 255.0
+        } else {
+            gray.clamp(0.0, 1.0)
+        };
         match tint_hsl {
             Some((h, s)) => {
-                let (tr, tg, tb) = hsl_to_rgb(h, s, out / 255.0);
+                let (tr, tg, tb) = hsl_to_rgb(h, s, out);
                 [tr, tg, tb]
             }
-            None => [out / 255.0, out / 255.0, out / 255.0],
+            None => [out, out, out],
         }
     });
     Ok(())
@@ -592,25 +611,45 @@ fn channel_mixer_native(
     }
     let (monochrome, red, green, blue, constant) =
         (p.monochrome, p.red, p.green, p.blue, p.constant);
+    let eight_bit = matches!(samples.depth(), BitDepth::Eight);
     map(samples, width, height, channels, move |[r, g, b]| {
-        let (ir, ig, ib) = (r * 255.0, g * 255.0, b * 255.0);
-        if monochrome {
-            let c = constant[0] / 100.0 * 255.0;
-            let v = ((red[0] * ir + red[1] * ig + red[2] * ib) / 100.0 + c)
-                .round()
-                .clamp(0.0, 255.0);
-            [v / 255.0, v / 255.0, v / 255.0]
-        } else {
-            let mix = |w: &[f64; 3], k: f64| {
-                ((w[0] * ir + w[1] * ig + w[2] * ib) / 100.0 + k / 100.0 * 255.0)
+        if eight_bit {
+            // Match the 8-bit kernel's 0..255 arithmetic and rounding exactly.
+            let (ir, ig, ib) = (r * 255.0, g * 255.0, b * 255.0);
+            if monochrome {
+                let c = constant[0] / 100.0 * 255.0;
+                let v = ((red[0] * ir + red[1] * ig + red[2] * ib) / 100.0 + c)
                     .round()
-                    .clamp(0.0, 255.0)
-            };
-            [
-                mix(&red, constant[0]) / 255.0,
-                mix(&green, constant[1]) / 255.0,
-                mix(&blue, constant[2]) / 255.0,
-            ]
+                    .clamp(0.0, 255.0);
+                [v / 255.0, v / 255.0, v / 255.0]
+            } else {
+                let mix = |w: &[f64; 3], k: f64| {
+                    ((w[0] * ir + w[1] * ig + w[2] * ib) / 100.0 + k / 100.0 * 255.0)
+                        .round()
+                        .clamp(0.0, 255.0)
+                };
+                [
+                    mix(&red, constant[0]) / 255.0,
+                    mix(&green, constant[1]) / 255.0,
+                    mix(&blue, constant[2]) / 255.0,
+                ]
+            }
+        } else {
+            let (ir, ig, ib) = (r, g, b);
+            if monochrome {
+                let c = constant[0] / 100.0;
+                let v = ((red[0] * ir + red[1] * ig + red[2] * ib) / 100.0 + c).clamp(0.0, 1.0);
+                [v, v, v]
+            } else {
+                let mix = |w: &[f64; 3], k: f64| {
+                    ((w[0] * ir + w[1] * ig + w[2] * ib) / 100.0 + k / 100.0).clamp(0.0, 1.0)
+                };
+                [
+                    mix(&red, constant[0]),
+                    mix(&green, constant[1]),
+                    mix(&blue, constant[2]),
+                ]
+            }
         }
     });
     Ok(())
@@ -778,7 +817,7 @@ fn auto_native(
                 channels,
                 data: std::mem::take(data).into(),
             };
-            let result = crate::auto::auto(kind, &mut buf, n);
+            let result = crate::auto::auto(kind, &mut buf, n, None);
             *data = buf.data.to_vec();
             result
         }

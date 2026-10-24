@@ -10,6 +10,7 @@
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/healing.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_layers/layer_masks.cxxqt.h"
 
 #include <QtCore/QObject>
 #include <QtCore/QPoint>
@@ -23,7 +24,9 @@ namespace {
 // The refusals shared by both healing tools, matching the Brush press path.
 void refuseHeal(ToolServices& ctx, PictureView* v)
 {
-    if (activePixelLocked(v)) {
+    if (!pictura::mask_edit_target_get(*v).isEmpty()) {
+        ctx.refused(QObject::tr("Could not heal: a layer mask is the active target."));
+    } else if (activePixelLocked(v)) {
         ctx.refused(QObject::tr("Could not heal: the layer's pixels are locked."));
     } else if (v->active_layer_path().isEmpty()) {
         ctx.refused(QObject::tr("Could not heal: select a single layer first."));

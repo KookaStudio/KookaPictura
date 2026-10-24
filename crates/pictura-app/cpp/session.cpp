@@ -140,7 +140,7 @@ SessionState loadSession()
     state.guideColor = obj.value(QStringLiteral("guideColor")).toString(state.guideColor);
     state.pdfOptions = obj.value(QStringLiteral("pdfOptions")).toString();
     state.guideDashed = obj.value(QStringLiteral("guideDashed")).toBool(false);
-    state.cropClassicMode = obj.value(QStringLiteral("cropClassicMode")).toBool(true);
+    state.cropClassicMode = obj.value(QStringLiteral("cropClassicMode")).toBool(false);
     state.cropDeletePixels = obj.value(QStringLiteral("cropDeletePixels")).toBool(true);
     state.cropRatio = obj.value(QStringLiteral("cropRatio")).toDouble(0.0);
     state.cropGridOverlay = obj.value(QStringLiteral("cropGridOverlay")).toInt(0);
@@ -150,6 +150,28 @@ SessionState loadSession()
         state.swatches = obj.value(QStringLiteral("swatches")).toArray();
         state.swatchesLoaded = true;
     }
+    state.actionsButtonMode = obj.value(QStringLiteral("actionsButtonMode")).toBool(false);
+    state.actionsAllowToolRecording =
+        obj.value(QStringLiteral("actionsAllowToolRecording")).toBool(false);
+    const QJsonArray actionsExpanded = obj.value(QStringLiteral("actionsExpanded")).toArray();
+    for (const QJsonValue& entry : actionsExpanded) {
+        if (entry.isString()) {
+            state.actionsExpanded << entry.toString();
+        }
+    }
+    const QJsonArray actionsSelection = obj.value(QStringLiteral("actionsSelection")).toArray();
+    for (const QJsonValue& entry : actionsSelection) {
+        if (entry.isString()) {
+            state.actionsSelection << entry.toString();
+        }
+    }
+    const int actionsPlaybackMode =
+        obj.value(QStringLiteral("actionsPlaybackMode")).toInt(0);
+    state.actionsPlaybackMode = (actionsPlaybackMode >= 0 && actionsPlaybackMode <= 2)
+                                    ? actionsPlaybackMode
+                                    : 0;
+    state.actionsPlaybackPause =
+        qMax(0.0, obj.value(QStringLiteral("actionsPlaybackPause")).toDouble(0.0));
     state.panelRailMode = obj.value(QStringLiteral("panelRailMode")).toString(
         QStringLiteral("normal"));
     if (state.panelRailMode != QStringLiteral("iconic")) {
@@ -255,6 +277,14 @@ bool saveSession(const SessionState& state)
     obj.insert(QStringLiteral("cropRatio"), state.cropRatio);
     obj.insert(QStringLiteral("cropGridOverlay"), state.cropGridOverlay);
     obj.insert(QStringLiteral("toolOptions"), state.toolOptions);
+    obj.insert(QStringLiteral("actionsButtonMode"), state.actionsButtonMode);
+    obj.insert(QStringLiteral("actionsAllowToolRecording"), state.actionsAllowToolRecording);
+    obj.insert(QStringLiteral("actionsExpanded"),
+               QJsonArray::fromStringList(state.actionsExpanded));
+    obj.insert(QStringLiteral("actionsSelection"),
+               QJsonArray::fromStringList(state.actionsSelection));
+    obj.insert(QStringLiteral("actionsPlaybackMode"), state.actionsPlaybackMode);
+    obj.insert(QStringLiteral("actionsPlaybackPause"), state.actionsPlaybackPause);
     if (state.swatchesLoaded) {
         obj.insert(QStringLiteral("swatches"), state.swatches);
     }

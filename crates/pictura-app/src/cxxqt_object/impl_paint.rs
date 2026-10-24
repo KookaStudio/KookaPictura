@@ -16,6 +16,7 @@ use std::time::Instant;
 
 mod mask;
 mod mask_gpu;
+pub(super) mod tool_recording;
 
 impl PictureViewRust {
     /// Fold a dab's `rect` into the frame-bounded present. `Some(rect)` is the
@@ -431,7 +432,11 @@ impl PictureViewRust {
             if !self.slot_allows(SessionKind::MaskPaint) {
                 return false;
             }
-            return self.begin_mask_paint(&path, mask_stroke_config(cfg), label);
+            let begun = self.begin_mask_paint(&path, mask_stroke_config(cfg), label);
+            if begun {
+                tool_recording::begin(label, &cfg, tool_recording::ToolStrokeKind::Mask);
+            }
+            return begun;
         }
         if !self.slot_allows(SessionKind::Paint) {
             return false;
@@ -471,6 +476,7 @@ impl PictureViewRust {
                 if let Some((width, height)) = dims {
                     rust.session.live.reset_stroke_tiles(width, height);
                 }
+                tool_recording::begin(label, &cfg, tool_recording::ToolStrokeKind::Paint);
                 // GPU first, but only where the CPU has a ceiling to beat: a dab
                 // over the raster budget. Below it the exact CPU raster is a few
                 // hundred microseconds, while seeding the GPU costs a full-frame
@@ -491,7 +497,10 @@ impl PictureViewRust {
                         rust.session.live.stroke(),
                         rust.session.doc.as_ref(),
                     ) {
-                        (Some(mode), Some(stroke), Some(doc)) if !stroke.transparency_locked() => {
+                        (Some(mode), Some(stroke), Some(doc))
+                            if !stroke.transparency_locked()
+                                && !(cfg.mode == PaintMode::Clear && !stroke.has_alpha_plane()) =>
+                        {
                             let t = Instant::now();
                             let seed = stroke.base_layer_rgba_doc(doc);
                             let (w, h) = (doc.width, doc.height);
@@ -558,6 +567,7 @@ impl PictureViewRust {
 impl qobject::PictureView {
     pub fn paint_dab(mut self: Pin<&mut Self>, x: f64, y: f64, pressure: f64) -> bool {
         let _dab = paint_timing::Scope::new("dab_total");
+        tool_recording::sample(x, y, pressure);
         if self.rust().session.live.mask_stroke().is_some() {
             return self.as_mut().mask_dab(x, y, pressure);
         }
@@ -803,6 +813,7 @@ impl qobject::PictureView {
             (rust.session.live.take_stroke_session(), pending)
         };
         let Some(session) = session else {
+            tool_recording::finish(false);
             paint_timing::record("end_paint_total", t0.elapsed());
             paint_timing::report();
             return false;
@@ -820,6 +831,7 @@ impl qobject::PictureView {
             let ok = self
                 .as_mut()
                 .end_mask_paint(ctx, preview, &stroke_label, stroke_tiles);
+            tool_recording::finish(ok);
             paint_timing::record("end_paint_total", t0.elapsed());
             paint_timing::report();
             return ok;
@@ -886,12 +898,14 @@ impl qobject::PictureView {
                 }
             }
         };
+        tool_recording::finish(ok);
         paint_timing::record("end_paint_total", t0.elapsed());
         paint_timing::report();
         ok
     }
 
     pub fn cancel_paint(mut self: Pin<&mut Self>) {
+        tool_recording::cancel();
         // The stroke puts back the layer pixels it changed, and
         // `cancel_stroke` re-composites its extent into the document composite
         // that the in-stroke presents had patched (a mask stroke never patched

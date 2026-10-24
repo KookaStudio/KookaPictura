@@ -285,13 +285,54 @@ void ImageView::setCropRotating(bool rotating)
     update();
 }
 
-void ImageView::setCropOverlay(int overlay)
+void ImageView::setCropOverlay(int overlay, int orientation)
 {
-    if (cropOverlay_ == overlay) {
+    if (cropOverlay_ == overlay && cropOverlayOrientation_ == orientation) {
         return;
     }
     cropOverlay_ = overlay;
+    cropOverlayOrientation_ = orientation;
     update();
+}
+
+void ImageView::setCropBoxRotates(bool rotates)
+{
+    if (cropBoxRotates_ == rotates) {
+        return;
+    }
+    cropBoxRotates_ = rotates;
+    update();
+}
+
+void ImageView::setCropShield(const CropShield& shield)
+{
+    cropShield_ = shield;
+    update();
+}
+
+// Auto Adjust Opacity: the shield eases off while the box is being dragged so
+// the content under it stays readable.
+int ImageView::cropShieldAlpha() const
+{
+    if (!cropShield_.showOutside) {
+        return 255;
+    }
+    if (!cropShield_.enabled) {
+        return 0;
+    }
+    double opacity = cropShield_.opacity / 100.0;
+    if (cropShield_.autoAdjust && cropShield_.dragging) {
+        opacity *= 0.5;
+    }
+    return int(std::lround(opacity * 255.0));
+}
+
+void ImageView::centerOnImageRect(const QRectF& area)
+{
+    if (area.isNull() || docSize_.isEmpty()) {
+        return;
+    }
+    panBy(QRectF(this->rect()).center() - imageToWidget(area.center()));
 }
 
 void ImageView::setCropContentOffset(const QPointF& offset)
@@ -347,7 +388,7 @@ QRectF ImageView::cropCanvasImageRect() const
         return image;
     }
     QRectF canvas = image;
-    if (cropStraighten_ != 0.0 && !cropBox_.isNull()) {
+    if (cropStraighten_ != 0.0 && !cropBox_.isNull() && !cropBoxRotates_) {
         const double rad = cropStraighten_ * M_PI / 180.0;
         const double c = std::cos(rad);
         const double s = std::sin(rad);
@@ -515,22 +556,50 @@ void ImageView::paintCropGroupOverlays(QPainter& painter)
         // straighten the canvas is the rotated composite's bounding box.
         const QRectF canvasDoc = cropCanvasImageRect();
         const QRectF canvas(toWidget(canvasDoc.topLeft()), toWidget(canvasDoc.bottomRight()));
+        // Classic turns the box about the pivot over the fixed image.
+        QTransform boxTurn;
+        if (cropBoxRotates_ && cropStraighten_ != 0.0) {
+            const QPointF pivot = toWidget(cropStraightenPivot_);
+            boxTurn.translate(pivot.x(), pivot.y());
+            boxTurn.rotate(-cropStraighten_);
+            boxTurn.translate(-pivot.x(), -pivot.y());
+        }
         QPainterPath shield;
         shield.addRect(canvas);
-        shield.addRect(box);
+        if (boxTurn.isIdentity()) {
+            shield.addRect(box);
+        } else {
+            QPainterPath turned;
+            turned.addPolygon(boxTurn.map(QPolygonF(box)));
+            turned.closeSubpath();
+            shield = QPainterPath(shield).subtracted(turned);
+        }
         painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(0, 0, 0, 150));
-        painter.drawPath(shield);
+        if (const int alpha = cropShieldAlpha(); alpha > 0) {
+            QColor tint = cropShield_.color.isValid() ? cropShield_.color : canvasColor_;
+            tint.setAlpha(alpha);
+            painter.setBrush(tint);
+            painter.drawPath(shield);
+        }
         painter.setBrush(Qt::NoBrush);
+        painter.save();
+        painter.setTransform(boxTurn, true);
         // The active guide overlay, chosen from the options-bar menu; the
         // preview box the tool starts with shows its handles but no guides, and
         // a rotation shows the dense rotate grid instead.
         if (cropRotating_) {
             painter.setPen(QPen(QColor(255, 255, 255, 110), 1));
             drawCropRotateGrid(painter, box);
-        } else if (!cropPreview_) {
+        } else if (!cropPreview_ && cropOverlay_ >= 0) {
+            painter.save();
+            const QPointF c = box.center();
+            painter.translate(c);
+            painter.scale((cropOverlayOrientation_ & 1) ? -1.0 : 1.0,
+                          (cropOverlayOrientation_ & 2) ? -1.0 : 1.0);
+            painter.translate(-c);
             painter.setPen(QPen(QColor(255, 255, 255, 90), 1));
             drawCropGuides(painter, box, cropOverlay_);
+            painter.restore();
         }
         // CS6 handles sit inside the outline: L-bracket corners and thin edge
         // bars, drawn white over a dark shadow so they read on any content.
@@ -564,6 +633,7 @@ void ImageView::paintCropGroupOverlays(QPainter& painter)
         painter.setBrush(Qt::NoBrush);
         painter.setPen(QPen(QColor(255, 255, 255, 220), 1));
         painter.drawRect(box);
+        painter.restore();
     }
 
     // The straighten line tool's live horizon: a plain ruled line from press to

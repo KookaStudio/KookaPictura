@@ -3,7 +3,7 @@
 //! Brush mode through the selection.
 
 use crate::replace::grow;
-use crate::stroke::{blend_pixel, layer_at_mut, parse_layer_path, union_rect};
+use crate::stroke::{blend_pixel, layer_at, layer_at_mut, parse_layer_path, union_rect};
 use crate::{PaintMode, Rgba};
 use pictura_core::{
     layer_pixel_locked, layer_transparency_locked, BitDepth, ColorMode, Document, PsdRect, Sample,
@@ -68,6 +68,12 @@ pub(crate) fn fill_layer(
 ) -> Option<PsdRect> {
     // The working model is 8-bit; a document the writer accepts always is.
     if doc.depth != BitDepth::Eight {
+        return None;
+    }
+    // Clear has no alpha plane to change on an opaque layer; treating the
+    // zeroed RGB as a change would dirty a layer the stroke path leaves alone.
+    let target = layer_at(doc, &parse_layer_path(path)?)?;
+    if mode == PaintMode::Clear && !target.channels.iter().any(|c| c.id == -1) {
         return None;
     }
     // A Grayscale document's layer carries one colour plane, an RGB one three.

@@ -62,7 +62,7 @@ struct SessionState {
     QString pdfOptions;
     bool guideDashed = false;
     // Crop options bar, persisted across restarts.
-    bool cropClassicMode = true;     // Classic (default) vs Modern drag semantics
+    bool cropClassicMode = false;    // Classic vs Modern (default) drag semantics
     bool cropDeletePixels = true;    // discard pixels outside the crop
     double cropRatio = 0.0;          // locked aspect ratio, 0 = unconstrained
     int cropGridOverlay = 0;         // 0 Rule of Thirds, 1 Grid, ...
@@ -72,6 +72,15 @@ struct SessionState {
     // absent key (use the default palette) from an intentionally empty panel.
     QJsonArray swatches;
     bool swatchesLoaded = false;
+    // Actions panel state. Expansion and selection are name-path identities
+    // (set/action name plus ordinal, then step index); unknown identities are
+    // ignored on restore.
+    bool actionsButtonMode = false;
+    bool actionsAllowToolRecording = false;
+    QStringList actionsExpanded;
+    QStringList actionsSelection;
+    int actionsPlaybackMode = 0;     // 0 Accelerated / 1 Step By Step / 2 Pause
+    double actionsPlaybackPause = 0.0;
     // v5-v8 panel-column state. `panelGroups` is the legacy flat JSON array of
     // {name, order, visible, minimized, collapsed} for the primary column;
     // `panelColumns` is the ordered array of

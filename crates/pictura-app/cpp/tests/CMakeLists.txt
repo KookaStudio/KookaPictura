@@ -20,6 +20,7 @@ set(PICTURA_QT_TESTS
     tst_image_rotate
     tst_crop_straighten
     tst_crop_shield
+    tst_crop_settings
     tst_crop_grip
     tst_crop_snap
     tst_crop_session
@@ -32,6 +33,7 @@ set(PICTURA_QT_TESTS
     tst_initial_view
     tst_new_document
     tst_image_mode
+    tst_hdr_conversion
     tst_layers_panel
     tst_layer_target
     tst_layers_panel_fixes
@@ -49,6 +51,7 @@ set(PICTURA_QT_TESTS
     tst_transform_warp
     tst_transform_commands
     tst_command_tree
+    tst_command_bus
     tst_merge_commands
     tst_layer_commands
     tst_fill_tools
@@ -83,6 +86,7 @@ set(PICTURA_QT_TESTS
     tst_color_picker
     tst_properties_panel
     tst_adjustments_panel
+    tst_actions_panel
     tst_channels_panel
     tst_paths_panel
     tst_icon_assets
@@ -105,6 +109,8 @@ set(PICTURA_QT_TESTS
     tst_spin_blur
     tst_liquify_dialog
     tst_adaptive_wide_angle
+    tst_vanishing_point
+    tst_vanishing_point_retouch
     tst_layer_style
     tst_color_range
     tst_refine_edge

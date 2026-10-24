@@ -48,6 +48,7 @@ impl FilterKind {
             | FilterKind::Displace
             | FilterKind::Liquify
             | FilterKind::AdaptiveWideAngle
+            | FilterKind::VanishingPoint
             | FilterKind::ZigZag
             | FilterKind::OceanRipple
             | FilterKind::Glass
@@ -61,6 +62,7 @@ impl FilterKind {
             | FilterKind::Emboss
             | FilterKind::FindEdges
             | FilterKind::Solarize
+            | FilterKind::NtscColors
             | FilterKind::Diffuse
             | FilterKind::GlowingEdges
             | FilterKind::Facet
@@ -168,6 +170,7 @@ impl FilterKind {
             | FilterKind::Emboss
             | FilterKind::FindEdges
             | FilterKind::Solarize
+            | FilterKind::NtscColors
             | FilterKind::Diffuse
             | FilterKind::GlowingEdges
             | FilterKind::Mosaic
@@ -187,6 +190,7 @@ impl FilterKind {
             | FilterKind::Displace
             | FilterKind::Liquify
             | FilterKind::AdaptiveWideAngle
+            | FilterKind::VanishingPoint
             | FilterKind::ZigZag
             | FilterKind::OceanRipple
             | FilterKind::Glass
@@ -340,6 +344,7 @@ impl Filter {
             | Filter::Emboss { .. }
             | Filter::FindEdges
             | Filter::Solarize
+            | Filter::NtscColors
             | Filter::Diffuse { .. }
             | Filter::GlowingEdges { .. }
             | Filter::Mosaic { .. }
@@ -359,6 +364,7 @@ impl Filter {
             | Filter::Displace { .. }
             | Filter::Liquify { .. }
             | Filter::AdaptiveWideAngle { .. }
+            | Filter::VanishingPoint { .. }
             | Filter::ZigZag { .. }
             | Filter::OceanRipple { .. }
             | Filter::Glass { .. }

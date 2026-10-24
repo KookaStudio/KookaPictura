@@ -10,7 +10,10 @@ use pictura_core::{Channel, ColorMode, Document, PsdRect};
 use pictura_select::{CombineMode, Selection};
 
 mod bridge;
+mod quick;
 mod refine;
+
+use quick::combine_selection;
 
 impl qobject::PictureView {
     pub fn select_all(mut self: Pin<&mut Self>) {
@@ -555,26 +558,7 @@ impl qobject::PictureView {
             if rust.session.doc.is_none() {
                 return false;
             }
-            let previous = rust.session.selection.take();
-            let replaced = matches!(mode, CombineMode::New)
-                && previous
-                    .as_ref()
-                    .is_some_and(|s| s.data.iter().any(|&v| v > 0));
-            if replaced {
-                rust.session.deselected_selection = previous;
-                rust.session.selection = Some(shape);
-            } else {
-                rust.session.deselected_selection = None;
-                rust.session.selection = Some(match previous {
-                    Some(mut base) => {
-                        base.combine_with(&shape, mode);
-                        base
-                    }
-                    // Combined into nothing, a new or added shape is itself.
-                    None if matches!(mode, CombineMode::New | CombineMode::Add) => shape,
-                    None => Selection::none(shape.width, shape.height),
-                });
-            }
+            combine_selection(&mut rust, shape, mode, false);
         }
         self.as_mut().edit(label, |_| Edit::Meta);
         true
@@ -657,37 +641,6 @@ impl qobject::PictureView {
     pub fn cancel_lasso(mut self: Pin<&mut Self>) {
         let mut rust = self.as_mut().rust_mut();
         rust.session.live.take_selection_gesture();
-    }
-
-    pub fn quick_select(
-        mut self: Pin<&mut Self>,
-        x: i32,
-        y: i32,
-        tolerance: i32,
-        mode: &QString,
-    ) -> bool {
-        let shape = {
-            let rust = self.rust();
-            let Some(doc) = rust.session.doc.as_ref() else {
-                return false;
-            };
-            if x < 0 || y < 0 || x as u32 >= doc.width || y as u32 >= doc.height {
-                return false;
-            }
-            let tolerance = tolerance.clamp(0, 255) as u8;
-            match pictura_select::magic_wand(
-                &current_buffer(doc, rust.gpu_compute),
-                x as u32,
-                y as u32,
-                tolerance,
-                true,
-            ) {
-                Ok(selection) => selection,
-                Err(_) => return false,
-            }
-        };
-        let mode = combine_mode_from(&mode.to_string());
-        self.as_mut().apply_selection(shape, mode)
     }
 
     pub fn crop(mut self: Pin<&mut Self>, x: i32, y: i32, w: i32, h: i32) -> bool {

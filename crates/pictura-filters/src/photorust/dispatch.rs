@@ -1001,8 +1001,10 @@ fn plan(filter: &Filter) -> Option<Result<(u64, Run), FilterError>> {
         | Filter::HighPass { .. }
         | Filter::Custom { .. }
         | Filter::Solarize
+        | Filter::NtscColors
         | Filter::Liquify { .. }
         | Filter::AdaptiveWideAngle { .. }
+        | Filter::VanishingPoint { .. }
         | Filter::OceanRipple { .. }
         | Filter::Glass { .. }
         | Filter::DiffuseGlow { .. }

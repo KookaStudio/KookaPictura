@@ -14,13 +14,13 @@ use std::sync::{Arc, Mutex};
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QImageFormat, QString};
 use pictura_codec::Exif;
-use pictura_core::{BitDepth, ColorMode, Document};
 use pictura_filters::{
     awa_two_to_one, AwaConstraint, AwaCorrection, AwaOrientation, AwaParams, AwaSource, AwaWarp,
 };
 
 use super::super::helpers::{active_mask_target, active_pixel_layer};
 use super::super::qobject::PictureView;
+use super::document_supported;
 
 #[cxx_qt::bridge]
 pub mod ffi {
@@ -38,10 +38,6 @@ pub mod ffi {
 
     #[namespace = "pictura"]
     extern "Rust" {
-        /// Whether the document is one the filter takes: 8-bit RGB or
-        /// Grayscale.
-        fn awa_document_supported(view: &PictureView) -> bool;
-
         /// Open a session over the active layer. False when the document is
         /// not one the filter takes or there is no unmasked pixel layer with
         /// colour data.
@@ -287,26 +283,6 @@ fn orientation_of(code: i32) -> AwaOrientation {
         2 => AwaOrientation::Vertical,
         _ => AwaOrientation::Unfixed,
     }
-}
-
-fn document_supported(doc: &Document) -> bool {
-    doc.source_depth.unwrap_or(doc.depth) == BitDepth::Eight
-        && matches!(doc.mode, ColorMode::Rgb | ColorMode::Grayscale)
-}
-
-fn awa_document_supported(view: &PictureView) -> bool {
-    view.rust()
-        .session
-        .doc
-        .as_ref()
-        .is_some_and(document_supported)
-}
-
-/// Why `kind` may not commit on `doc`: Adaptive Wide Angle takes 8-bit RGB
-/// and Grayscale only, whichever path (Last Filter included) asks for it.
-pub(in crate::cxxqt_object) fn awa_refusal(kind: &str, doc: Option<&Document>) -> Option<String> {
-    (kind == "adaptive-wide-angle" && !doc.is_some_and(document_supported))
-        .then(|| "Adaptive Wide Angle needs an 8-bit RGB or Grayscale document".to_string())
 }
 
 fn awa_begin(view: &PictureView) -> bool {
@@ -718,21 +694,6 @@ mod tests {
         assert_eq!(lens_from_exif(&exif(50, 50)), Some([50.0, 1.0]));
         assert_eq!(lens_from_exif(&exif(200, 200)), Some([69.2, 1.0]));
         assert_eq!(lens_from_exif(&Exif::default()), None);
-    }
-
-    #[test]
-    fn commits_are_refused_off_eight_bit_rgb_and_gray() {
-        let rgb8 = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-        let gray8 = Document::new(4, 4, ColorMode::Grayscale, BitDepth::Eight);
-        let rgb16 = Document::new(4, 4, ColorMode::Rgb, BitDepth::Sixteen);
-        let cmyk8 = Document::new(4, 4, ColorMode::Cmyk, BitDepth::Eight);
-        let kind = "adaptive-wide-angle";
-        assert!(awa_refusal(kind, Some(&rgb8)).is_none());
-        assert!(awa_refusal(kind, Some(&gray8)).is_none());
-        assert!(awa_refusal(kind, Some(&rgb16)).is_some());
-        assert!(awa_refusal(kind, Some(&cmyk8)).is_some());
-        assert!(awa_refusal(kind, None).is_some());
-        assert!(awa_refusal("liquify", Some(&rgb16)).is_none());
     }
 
     #[test]

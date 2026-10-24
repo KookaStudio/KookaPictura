@@ -4,6 +4,7 @@
 #include "tools.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h"
 
 #include <memory>
 
@@ -53,11 +54,15 @@ public:
         if (!v) {
             return true;
         }
+        ctx_ = &ctx;
         ctx.setDragMode(ctx.resolveSelectionMode(mods, v->has_selection()));
         ctx.setDragging(true);
-        ctx.setDragCommitted(v->quick_select(qRound(imagePos.x()), qRound(imagePos.y()),
-                                             selection_->tolerance(),
-                                             selectionModeString(ctx.dragMode())));
+        ctx.setDragCommitted(false);
+        if (!pictura::quick_select_begin(*v)) {
+            ctx.setDragging(false);
+            return true;
+        }
+        applyDab(ctx, imagePos);
         return true;
     }
 
@@ -66,14 +71,7 @@ public:
         if (!ctx.dragging()) {
             return;
         }
-        PictureView* v = ctx.view();
-        if (!v) {
-            return;
-        }
-        if (v->quick_select(qRound(imagePos.x()), qRound(imagePos.y()), selection_->tolerance(),
-                            selectionModeString(ctx.dragMode()))) {
-            ctx.setDragCommitted(true);
-        }
+        applyDab(ctx, imagePos);
     }
 
     void onRelease(ToolServices& ctx, const QPointF&, Qt::KeyboardModifiers) override
@@ -82,16 +80,72 @@ public:
             return;
         }
         ctx.setDragging(false);
+        PictureView* v = ctx.view();
         if (ImageView* canvas = ctx.canvas()) {
             canvas->clearSelectionPreview();
         }
+        if (!v) {
+            return;
+        }
         if (ctx.dragCommitted()) {
-            ctx.emitSelectionCommitted();
+            if (pictura::quick_select_commit(*v)) {
+                ctx.emitSelectionCommitted();
+            }
+        } else {
+            pictura::quick_select_cancel(*v);
         }
     }
 
+    bool onEscape() override
+    {
+        if (!ctx_ || !ctx_->dragging()) {
+            return false;
+        }
+        onSessionCancelled(*ctx_);
+        return true;
+    }
+
+    void onSessionCancelled(ToolServices& ctx) override
+    {
+        if (PictureView* v = ctx.view()) {
+            pictura::quick_select_cancel(*v);
+        }
+        ctx.setDragging(false);
+        if (ImageView* canvas = ctx.canvas()) {
+            canvas->clearSelectionPreview();
+        }
+    }
+
+    void onDeactivate(ToolServices& ctx) override
+    {
+        onSessionCancelled(ctx);
+        ctx_ = nullptr;
+    }
+
 private:
+    // One dab of the stroke. A New-mode dab replaces; the tool then switches
+    // to Add so the rest of the stroke accumulates on top of it.
+    bool applyDab(ToolServices& ctx, const QPointF& imagePos)
+    {
+        PictureView* v = ctx.view();
+        if (!v) {
+            return false;
+        }
+        if (!pictura::quick_select_preview(*v, qRound(imagePos.x()), qRound(imagePos.y()),
+                                           selection_->tolerance(),
+                                           selectionModeString(ctx.dragMode()))) {
+            return false;
+        }
+        ctx.setDragCommitted(true);
+        if (ctx.dragMode() == SelectionMode::New) {
+            ctx.setDragMode(SelectionMode::Add);
+            selection_->setCombineMode(SelectionMode::Add);
+        }
+        return true;
+    }
+
     std::shared_ptr<SelectionOptions> selection_;
+    ToolServices* ctx_ = nullptr;
 };
 
 } // namespace

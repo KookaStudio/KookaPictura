@@ -18,6 +18,6 @@ mod transform;
 pub(super) use active::{PathRestore, SessionKind};
 pub(super) use previews::{FilterPreview, FilterPreviewSession, PreviewBaseline};
 pub(super) use selection::{SelectionGesture, SelectionMoveState};
-pub(super) use session::{DocumentSession, PendingPreviews};
+pub(super) use session::{DocumentSession, PendingPreviews, QuickSelectionSnapshot};
 pub(super) use stroke::{MaskPreview, MaskStroke, PreviewStroke, StrokeSession};
 pub(super) use transform::{RepeatTransform, TransformMode, TransformSession, WarpDrag};

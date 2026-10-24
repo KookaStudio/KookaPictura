@@ -39,6 +39,8 @@ class QWidget;
 
 namespace pictura {
 
+class ActionsEngineBridge;
+class ActionsPanel;
 class CommandRegistry;
 class ColorPanel;
 class ChannelsPanel;
@@ -85,6 +87,10 @@ struct SessionState;
 // path needs it (headless implies self-test), so a normal launch starts on the
 // empty workspace with the document commands disabled.
 bool launchCreatesScratchDocument(bool selfTest, bool codecLoaded);
+
+// True while saveActive() is routing through Save As, so the nested Save As
+// records only the origin Save step.
+bool saveActiveInProgress();
 
 // A Window > Panels (or Type > Panels) command and the panel it toggles.
 struct PanelToggle {
@@ -214,6 +220,9 @@ public:
     ToolId activeTool() const;
     void setActiveTool(ToolId id);
     QColor foregroundColor() const;
+    // Before a paste: take another application's newer clipboard image
+    // (the Vanishing Point dialog pastes too).
+    void importSystemClipboard();
     bool hasPendingCrop() const;
     bool commitCrop();
     // A pending transform locks the Layer menu and greys the Layers panel.
@@ -599,7 +608,6 @@ private:
     void distributeSelectedLayers(int edge);
     void updateAlignControls();
     void exportClipboard();
-    void importSystemClipboard();
     void applyPanelSession(const SessionState& state);
     // Rebuild the widget columns from a workspace-shaped spec, moving panels
     // between groups and restoring floating groups/columns. Shared by session
@@ -791,7 +799,8 @@ private:
     AdjustmentsPanel* adjustmentsPanel_ = nullptr;
     ChannelsPanel* channelsPanel_ = nullptr;
     PathsPanel* pathsPanel_ = nullptr;
-    PlaceholderPanel* actionsPanel_ = nullptr;
+    ActionsPanel* actionsPanel_ = nullptr;
+    ActionsEngineBridge* actionsEngine_ = nullptr;
     PlaceholderPanel* stylesPanel_ = nullptr;
     PanelColumn* panelColumn_ = nullptr;
     // Named workspaces and the active workspace, independent of the session

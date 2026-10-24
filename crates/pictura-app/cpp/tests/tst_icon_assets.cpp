@@ -17,6 +17,7 @@ private slots:
     void pathGlyphsResolve();
     void infoGlyphsResolve();
     void adjustmentsGlyphsResolve();
+    void actionsGlyphsResolve();
     void unknownIdIsNull();
     void explicitColour();
     void disabledDiffers();
@@ -50,6 +51,23 @@ void IconAssetsTest::pathGlyphsResolve()
         QStringLiteral("path.makeWorkPath"),
         QStringLiteral("path.newPath"),
         QStringLiteral("path.delete"),
+    };
+    for (const QString& id : ids) {
+        const QIcon icon = pictura::icon(id);
+        QVERIFY2(!icon.isNull(), qPrintable(id + QStringLiteral(" resolves")));
+        QVERIFY2(!icon.pixmap(16, 16).isNull(),
+                 qPrintable(id + QStringLiteral(" renders at 16px")));
+    }
+}
+
+void IconAssetsTest::actionsGlyphsResolve()
+{
+    const QStringList ids = {
+        QStringLiteral("actions.record"),      QStringLiteral("actions.play"),
+        QStringLiteral("actions.stop"),        QStringLiteral("actions.newSet"),
+        QStringLiteral("actions.newAction"),   QStringLiteral("actions.delete"),
+        QStringLiteral("actions.modalOn"),     QStringLiteral("actions.modalOff"),
+        QStringLiteral("actions.modalPartial"),
     };
     for (const QString& id : ids) {
         const QIcon icon = pictura::icon(id);

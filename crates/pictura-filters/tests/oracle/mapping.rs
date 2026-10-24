@@ -163,8 +163,9 @@ const MAPPING: &[Mapping] = &[
         im: Some("-roll {+horizontal}{+vertical}  (wrap = true)"),
         tolerance: 0,
         note: "wrap = true is an exact integer roll; measured max delta 0 at (3,2) and (2,3). \
-               wrap = false fills the exposed area with `background`, which -roll cannot do (it \
-               always wraps); observed max delta 240 vs -roll",
+               wrap = false fills the exposed area with `background`, and Repeat Edge Pixels \
+               clamps to the nearest edge; neither is a -roll case, so both are no-equivalent \
+               (observed max delta 240 for the background fill vs -roll)",
     },
     Mapping {
         filter: "HighPass",
@@ -205,6 +206,11 @@ const MAPPING: &[Mapping] = &[
         tolerance: 0,
         note: "same fixed 50% inversion curve (v >= 128 -> 255 - v); measured max delta 0",
     },
+    none(
+        "NtscColors",
+        "no ImageMagick NTSC gamut-clamp operator; the YIQ approximation is pinned by the \
+         pictura-color and video kernel tests",
+    ),
     Mapping {
         filter: "Mosaic",
         im: Some("-filter box -resize {W/n}x{H/n}! -filter point -resize WxH!  (n = cell_size)"),
@@ -476,6 +482,10 @@ const MAPPING: &[Mapping] = &[
         "ImageMagick has no mesh-warp operator; guarded by the liquify tests",
     ),
     none(
+        "VanishingPoint",
+        "ImageMagick has no perspective-plane grid; guarded by the vanishing_point tests",
+    ),
+    none(
         "AdaptiveWideAngle",
         "ImageMagick has no constraint-solved projection; guarded by the adaptive_wide_angle \
          tests",
@@ -727,6 +737,18 @@ fn mapping_table_holds_one_row_per_variant() {
     let expected: std::collections::BTreeSet<&str> =
         FilterKind::ALL.iter().map(|kind| kind.name()).collect();
     assert_eq!(unique, expected, "every Filter variant needs one row");
+}
+
+#[test]
+fn offset_mapping_documents_the_fill_and_repeat_cases() {
+    let offset = MAPPING
+        .iter()
+        .find(|mapping| mapping.filter == "Offset")
+        .expect("Offset row");
+    assert!(offset.im.is_some_and(|im| im.contains("-roll")));
+    assert_eq!(offset.tolerance, 0);
+    assert!(offset.note.contains("background"));
+    assert!(offset.note.contains("Repeat Edge Pixels"));
 }
 
 #[test]

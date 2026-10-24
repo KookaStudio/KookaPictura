@@ -13,6 +13,15 @@
     <file>ui/select-chevron-light.svg</file>
     <file>ui/select-chevron-disabled.svg</file>
     <file>icons/app.png</file>
+    <file>icons/actions.delete.svg</file>
+    <file>icons/actions.modalOff.svg</file>
+    <file>icons/actions.modalOn.svg</file>
+    <file>icons/actions.modalPartial.svg</file>
+    <file>icons/actions.newAction.svg</file>
+    <file>icons/actions.newSet.svg</file>
+    <file>icons/actions.play.svg</file>
+    <file>icons/actions.record.svg</file>
+    <file>icons/actions.stop.svg</file>
     <file>icons/adjustments.solid-color.svg</file>
     <file>icons/adjustments.gradient.svg</file>
     <file>icons/adjustments.pattern.svg</file>
@@ -186,6 +195,7 @@
     <file>icons/tool.paintbucket.svg</file>
     <file>icons/tool.patch.svg</file>
     <file>icons/tool.pathselection.svg</file>
+    <file>icons/tool.createplane.svg</file>
     <file>icons/tool.patternstamp.svg</file>
     <file>icons/tool.pencil.svg</file>
     <file>icons/tool.pen.svg</file>

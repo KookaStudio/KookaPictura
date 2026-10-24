@@ -574,7 +574,8 @@ void ImageView::paintEvent(QPaintEvent*)
     painter.setTransform(rotation);
 
     // The canvas frame follows the box at every angle (backdrop pads past it).
-    const bool straightening = cropStraighten_ != 0.0 && !cropBox_.isNull();
+    const bool straightening =
+        cropStraighten_ != 0.0 && !cropBox_.isNull() && !cropBoxRotates_;
     const QRectF canvasDoc = cropBox_.isNull()
                                  ? QRectF(0.0, 0.0, docSize_.width(), docSize_.height())
                                  : cropCanvasImageRect();

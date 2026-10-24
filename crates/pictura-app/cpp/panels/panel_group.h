@@ -9,6 +9,8 @@
 #include <QtGui/QIcon>
 #include <QtWidgets/QWidget>
 
+#include <functional>
+
 class QBoxLayout;
 class QMenu;
 class QTabBar;
@@ -76,6 +78,11 @@ public:
     void setCurrentToFirstVisible();
     // Re-apply the theme scale to the tab bar and icon controls.
     void applyUiScale();
+
+    // A panel may refine its own menu on aboutToShow (enablement, check state,
+    // dynamic rows, and installed lists).
+    using PanelMenuHook = std::function<void(QMenu*)>;
+    void setPanelMenuHook(const QString& panelName, PanelMenuHook hook);
 
     // M47 D10: a group hosted in a floating overlay shows a rightmost close
     // control; docked and flyout hosts hide it.
@@ -173,6 +180,7 @@ private:
     // M45: the flyout-only close control in the header corner.
     QToolButton* flyoutCloseButton_ = nullptr;
     QMenu* headerMenu_ = nullptr;
+    QHash<QString, PanelMenuHook> panelMenuHooks_;
     // M48: panel icons are kept off the normal tabs but retained here for the
     // iconic/icon strip and the tab-drag payloads, keyed by panel objectName.
     QHash<QString, QIcon> panelIcons_;

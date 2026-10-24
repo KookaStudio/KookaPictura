@@ -16,6 +16,7 @@ pictura-codec = { path = "../pictura-codec" }
 pictura-ops = { path = "../pictura-ops" }
 pictura-render = { path = "../pictura-render" }
 pictura-select = { path = "../pictura-select" }
+pictura-script = { path = "../pictura-script" }
 pictura-filters = { path = "../pictura-filters" }
 pictura-paint = { path = "../pictura-paint" }
 # cxx is the FFI layer the `#[cxx_qt::bridge]` macro expands to.

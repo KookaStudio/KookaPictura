@@ -1,5 +1,6 @@
 #include <QtTest/QtTest>
 
+#include <QtCore/QByteArray>
 #include <QtCore/QTimer>
 #include <QtGui/QImage>
 #include <QtGui/QWheelEvent>
@@ -12,6 +13,9 @@
 #include <QtWidgets/QScrollBar>
 #include <QtWidgets/QSlider>
 #include <QtWidgets/QToolButton>
+
+#include <algorithm>
+#include <cstdlib>
 
 #include "commands.h"
 #include "filter_gallery_dialog.h"
@@ -49,6 +53,8 @@ private slots:
     void menuEntryIsEnabled();
     void stackPreviewsInThePaneOnly();
     void largePicturePreviewsReduced();
+    void previewScalesPixelParams();
+    void thumbnailScalesPixelParams();
     void okCommitsOneHistoryState();
     void effectLayersAddDeleteAndHide();
     void thumbnailsRender();
@@ -150,6 +156,63 @@ void FilterGalleryTest::largePicturePreviewsReduced()
     QVERIFY2(preview.width() < 1000 * dialog.devicePixelRatioF(), qPrintable(QString::number(preview.width())));
     QCOMPARE(preview.width() * 3 / 4, preview.height());
     dialog.reject();
+}
+
+void FilterGalleryTest::previewScalesPixelParams()
+{
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(view != nullptr);
+    QVERIFY(apply_filter_params(*view, QStringLiteral("clouds"), {}));
+    const QSize doc(view->document_width(), view->document_height());
+    QStringList kinds;
+    kinds.append(QStringLiteral("gaussian-blur"));
+    const QList<double> params({8.0});
+    const QImage proxy = pictura::filter_gallery_preview(
+        *view, kinds, params, 0, 0, doc.width(), doc.height(), 0.25);
+    const QImage full = pictura::filter_gallery_preview(
+        *view, kinds, params, 0, 0, doc.width(), doc.height(), 1.0);
+    QVERIFY(!proxy.isNull());
+    QVERIFY(!full.isNull());
+    // Scaled to 2 on the quarter-size proxy, the blur matches the full-size
+    // render downsampled; before the fix the proxy used the raw 8.
+    const QImage expected = full.scaled(proxy.size(), Qt::IgnoreAspectRatio,
+                                         Qt::SmoothTransformation);
+    QCOMPARE(proxy.size(), expected.size());
+    const QImage a = proxy.convertToFormat(QImage::Format_RGBA8888);
+    const QImage b = expected.convertToFormat(QImage::Format_RGBA8888);
+    int worst = 0;
+    for (int y = 0; y < a.height(); ++y) {
+        for (int x = 0; x < a.width(); ++x) {
+            const QColor ca = a.pixelColor(x, y);
+            const QColor cb = b.pixelColor(x, y);
+            worst = std::max({worst, std::abs(ca.red() - cb.red()),
+                              std::abs(ca.green() - cb.green()),
+                              std::abs(ca.blue() - cb.blue())});
+        }
+    }
+    QVERIFY2(worst <= 8, qPrintable(QStringLiteral("max channel delta %1").arg(worst)));
+}
+
+void FilterGalleryTest::thumbnailScalesPixelParams()
+{
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(view != nullptr);
+    QVERIFY(apply_filter_params(*view, QStringLiteral("clouds"), {}));
+    const QImage sample =
+        pictura::FilterGalleryDialog::thumbnailSample(view->image())
+            .convertToFormat(QImage::Format_RGBA8888);
+    QByteArray rgba;
+    for (int y = 0; y < sample.height(); ++y) {
+        rgba.append(reinterpret_cast<const char*>(sample.constScanLine(y)), sample.width() * 4);
+    }
+    const QImage scaled = pictura::filter_thumbnail(
+        rgba, sample.width(), sample.height(), QStringLiteral("mosaic-tiles"), QList<double>(),
+        0.0267);
+    const QImage expected = pictura::filter_thumbnail(
+        rgba, sample.width(), sample.height(), QStringLiteral("mosaic-tiles"),
+        QList<double>({2.0, 1.0, 1.0, 1.0}), 1.0);
+    QVERIFY(!scaled.isNull());
+    QCOMPARE(scaled, expected);
 }
 
 void FilterGalleryTest::okCommitsOneHistoryState()

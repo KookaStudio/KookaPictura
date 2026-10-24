@@ -19,18 +19,23 @@ use super::impl_filters::{
 };
 use super::qobject::PictureView;
 use crate::cxxqt_object::edit::Edit;
-pub(super) use canvas_proxy::canvas_proxy_buffer;
+pub(super) use canvas_proxy::{canvas_proxy_buffer, resolve_stack, scaled_stack_params};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QByteArray, QImage, QList, QString, QStringList};
+use depth_gate::filter_eight_bit_document;
+pub(super) use depth_gate::{document_supported, eight_bit_refusal};
 use pictura_core::{layer_pixel_locked, Document, Layer, PixelBuffer};
 
 pub(super) mod adaptive_wide_angle;
 mod canvas_proxy;
+mod depth_gate;
 pub(super) mod displace_maps;
 pub(super) mod jobs;
 pub(super) mod lens_blur_depths;
 pub(super) mod liquify;
+pub(super) mod vanishing_point;
+mod vanishing_point_retouch;
 
 #[cxx_qt::bridge]
 pub mod ffi {
@@ -67,6 +72,7 @@ pub mod ffi {
         suffix: QString,
         choices: QStringList,
         initial: QList_f64,
+        measures_pixels: bool,
     }
 
     #[namespace = "pictura"]
@@ -136,6 +142,10 @@ pub mod ffi {
         /// normal pixel layer in an open document).
         fn filter_target_ready(view: Pin<&mut PictureView>) -> bool;
 
+        /// Whether the document is one Adaptive Wide Angle and Vanishing
+        /// Point take: 8-bit RGB or Grayscale.
+        fn filter_eight_bit_document(view: &PictureView) -> bool;
+
         /// Whether the active pixel layer has nothing to filter: no opaque
         /// pixel at all, or none inside the selection. False when there is no
         /// pixel layer (that is [`filter_target_ready`]'s refusal).
@@ -203,14 +213,16 @@ pub mod ffi {
         ) -> QImage;
 
         /// `kind` with `params` applied to a `width`×`height` straight-alpha
-        /// RGBA8888 image, for a gallery thumbnail. A null image when the
-        /// filter is refused.
+        /// RGBA8888 image, for a gallery thumbnail. `scale` is the image's
+        /// document-to-thumbnail scale; pixel-distance parameters are scaled by
+        /// it. A null image when the filter is refused.
         fn filter_thumbnail(
             rgba: &QByteArray,
             width: i32,
             height: i32,
             kind: &QString,
             params: &QList_f64,
+            scale: f64,
         ) -> QImage;
 
         /// A proxy of the document with the active layer hidden, scaled to
@@ -278,9 +290,7 @@ fn apply_filter_params(
     params: &QList<f64>,
 ) -> bool {
     let kind_s = kind.to_string();
-    if let Some(reason) =
-        adaptive_wide_angle::awa_refusal(&kind_s, view.rust().session.doc.as_ref())
-    {
+    if let Some(reason) = eight_bit_refusal(&kind_s, view.rust().session.doc.as_ref()) {
         eprintln!("pictura: filter '{kind_s}' refused: {reason}");
         view.as_mut().rust_mut().filter_error = Some(reason);
         return false;
@@ -316,6 +326,11 @@ fn filter_preview(mut view: Pin<&mut PictureView>, kind: &QString, params: &QLis
         apply_filter_active(&mut rust, &kind_s, &params_v, false)
     };
     let Some(region) = region else {
+        {
+            let mut rust = view.as_mut().rust_mut();
+            let _ = cancel_filter_preview(&mut rust);
+        }
+        view.as_mut().recomposite();
         return false;
     };
     match region {
@@ -333,9 +348,11 @@ fn filter_preview(mut view: Pin<&mut PictureView>, kind: &QString, params: &QLis
 /// a fraction of the buffer's half-width, Displace stretches or tiles its
 /// map from the buffer's corner, Lens Blur's depth map and Liquify's mesh
 /// align to the layer's rectangle, Picture Frame sizes and insets itself as a
-/// fraction of the buffer, and the Blur Gallery (Field Blur, Iris Blur,
-/// Tilt-Shift, Path Blur, and Spin Blur) places its pins, paths, and spins as
-/// fractions of the buffer.
+/// fraction of the buffer, Radial Blur normalizes its centre to the buffer,
+/// Clouds, Difference Clouds and Fibers generate a field from the buffer
+/// dimensions, and the Blur Gallery (Field Blur, Iris Blur, Tilt-Shift, Path
+/// Blur, and Spin Blur) places its pins, paths, and spins as fractions of the
+/// buffer.
 pub(crate) fn filter_preview_needs_whole_layer(kind: &str) -> bool {
     super::filter_map::descriptor::descriptor(kind).is_some_and(|descriptor| descriptor.whole_layer)
 }
@@ -363,6 +380,11 @@ fn filter_preview_section(
         apply_filter_active_region(&mut rust, &kind_s, &params_v, false, section)
     };
     let Some(region) = region else {
+        {
+            let mut rust = view.as_mut().rust_mut();
+            let _ = cancel_filter_preview(&mut rust);
+        }
+        view.as_mut().recomposite();
         return false;
     };
     match region {
@@ -480,6 +502,7 @@ fn filter_descriptors() -> Vec<ffi::FilterDescriptorRow> {
                         suffix: QString::from(param.suffix),
                         choices,
                         initial,
+                        measures_pixels: param.pixel_distance,
                     }
                 })
                 .collect();
@@ -527,21 +550,6 @@ fn filter_last_error(view: Pin<&mut PictureView>) -> QString {
 // layer through the same snapshot/preview/commit core as a single filter, and
 // render one filter onto a small image for a gallery thumbnail.
 
-/// Resolve a stack: each kind takes the next `arity` slots of `params`.
-fn resolve_stack(kinds: &QStringList, params: &QList<f64>) -> Option<Vec<pictura_filters::Filter>> {
-    let params: Vec<f64> = params.into_iter().copied().collect();
-    let mut at = 0;
-    let mut filters = Vec::new();
-    for kind in &QList::<QString>::from(kinds) {
-        let kind = kind.to_string();
-        let arity = super::filter_map::filter_param_arity(&kind)?;
-        let slots = params.get(at..at + arity)?;
-        filters.push(filter_from_kind_params(&kind, slots)?);
-        at += arity;
-    }
-    (at == params.len()).then_some(filters)
-}
-
 fn run_stack(
     mut view: Pin<&mut PictureView>,
     kinds: &QStringList,
@@ -549,7 +557,8 @@ fn run_stack(
     commit: bool,
     section: Option<pictura_core::PsdRect>,
 ) -> bool {
-    let Some(filters) = resolve_stack(kinds, params) else {
+    let params_v: Vec<f64> = params.into_iter().copied().collect();
+    let Some(filters) = resolve_stack(kinds, &params_v) else {
         view.as_mut().rust_mut().filter_error =
             Some("the gallery stack has an unknown filter or wrong parameters".to_string());
         return false;
@@ -586,7 +595,7 @@ fn run_stack(
 }
 
 fn filter_stack_preview(
-    view: Pin<&mut PictureView>,
+    mut view: Pin<&mut PictureView>,
     kinds: &QStringList,
     params: &QList<f64>,
     x: i32,
@@ -603,7 +612,21 @@ fn filter_stack_preview(
     let positional = QList::<QString>::from(kinds)
         .iter()
         .any(|k| filter_preview_needs_whole_layer(&k.to_string()));
-    run_stack(view, kinds, params, false, (!positional).then_some(visible))
+    let shown = run_stack(
+        view.as_mut(),
+        kinds,
+        params,
+        false,
+        (!positional).then_some(visible),
+    );
+    if !shown {
+        {
+            let mut rust = view.as_mut().rust_mut();
+            let _ = cancel_filter_preview(&mut rust);
+        }
+        view.as_mut().recomposite();
+    }
+    shown
 }
 
 fn apply_filter_stack(
@@ -644,7 +667,8 @@ fn filter_gallery_preview(
     else {
         return QImage::default();
     };
-    let filtered = match (resolve_stack(kinds, params), rust.layer_target.single()) {
+    let scaled = scaled_stack_params(kinds, params, scale);
+    let filtered = match (resolve_stack(kinds, &scaled), rust.layer_target.single()) {
         (Some(filters), Some(path)) => proxy.render(path, &filters, rust.gpu_compute).ok(),
         _ => None,
     };
@@ -659,8 +683,11 @@ fn filter_thumbnail(
     height: i32,
     kind: &QString,
     params: &QList<f64>,
+    scale: f64,
 ) -> QImage {
     let params: Vec<f64> = params.into_iter().copied().collect();
+    let params =
+        super::filter_map::descriptor::scale_pixel_params(&kind.to_string(), &params, scale);
     let (Ok(w), Ok(h)) = (u32::try_from(width), u32::try_from(height)) else {
         return QImage::default();
     };
@@ -1001,174 +1028,4 @@ fn filter_lens_blur_depth(view: &PictureView, source: i32) -> i32 {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn an_empty_layer_or_an_empty_selected_area_has_nothing_to_filter() {
-        use crate::cxxqt_object::tests::pixel_layer;
-        use pictura_select::Selection;
-
-        let mut layer = pixel_layer("layer", 4, 4, (10, 20, 30));
-        assert!(!selected_area_empty(&layer, None));
-        let mut no_alpha = layer.clone();
-        no_alpha.channels.retain(|c| c.id != -1);
-        assert!(!selected_area_empty(&no_alpha, None), "an opaque layer");
-
-        // One opaque pixel at (3, 1); the rest transparent.
-        let mut alpha = vec![0u8; 16];
-        alpha[4 + 3] = 255;
-        layer.channels.last_mut().unwrap().data = alpha.into();
-        assert!(!selected_area_empty(&layer, None));
-        let mut selection = Selection {
-            width: 4,
-            height: 4,
-            data: vec![0; 16],
-        };
-        selection.data[0] = 255;
-        assert!(
-            selected_area_empty(&layer, Some(&selection)),
-            "selection misses it"
-        );
-        selection.data[4 + 3] = 1;
-        assert!(!selected_area_empty(&layer, Some(&selection)));
-
-        layer.channels.last_mut().unwrap().data = vec![0u8; 16].into();
-        assert!(selected_area_empty(&layer, None), "fully transparent");
-        let mut sized_out = pixel_layer("new", 0, 0, (0, 0, 0));
-        assert!(
-            selected_area_empty(&sized_out, None),
-            "a zero-size new layer"
-        );
-        sized_out.channels.clear();
-        assert!(selected_area_empty(&sized_out, None));
-    }
-
-    #[test]
-    fn a_stack_takes_each_kinds_slots_in_turn() {
-        let mut kinds = QStringList::default();
-        kinds.append(QString::from("cutout"));
-        kinds.append(QString::from("palette-knife"));
-        let mut params = QList::<f64>::default();
-        for v in [4.0, 4.0, 2.0, 25.0, 3.0, 0.0] {
-            params.append(v);
-        }
-        let stack = resolve_stack(&kinds, &params).expect("stack resolves");
-        assert_eq!(stack.len(), 2);
-        assert_eq!(
-            stack[1],
-            pictura_filters::Filter::PaletteKnife {
-                stroke_size: 25,
-                stroke_detail: 3,
-                softness: 0,
-            }
-        );
-        // One slot short, or one over, is refused rather than misread.
-        params.remove(5);
-        assert!(resolve_stack(&kinds, &params).is_none());
-        params.append(0.0);
-        params.append(0.0);
-        assert!(resolve_stack(&kinds, &params).is_none());
-    }
-
-    #[test]
-    fn rgba_round_trips_through_a_planar_buffer() {
-        let rgba = [1u8, 2, 3, 4, 5, 6, 7, 8];
-        let buffer = rgba_to_buffer(&rgba, 2, 1).expect("buffer");
-        assert_eq!(buffer.data[0], 1);
-        assert_eq!(buffer.data[1], 5);
-        assert_eq!(buffer.data[2 * 2 + 1], 7);
-        assert_eq!(buffer.data[3 * 2], 4);
-        assert!(rgba_to_buffer(&rgba, 3, 1).is_none());
-    }
-
-    #[test]
-    fn the_proxy_base_hides_the_active_layer_and_restores_it() {
-        use crate::cxxqt_object::tests::pixel_layer;
-        use pictura_core::{BitDepth, ColorMode};
-
-        let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = pictura_core::LayerStack::from_layers(vec![
-            pixel_layer("bottom", 4, 4, (255, 0, 0)),
-            pixel_layer("top", 4, 4, (0, 0, 255)),
-        ]);
-        doc.composite = pictura_render::composite_rgba(&doc);
-
-        let base = hidden_layer_buffer(&mut doc, "1", false).expect("base");
-        assert!(doc.layers[1].visible, "hiding must be undone");
-        let plane = 16;
-        assert_eq!(base.data[0], 255, "the red bottom layer");
-        assert_eq!(base.data[2 * plane], 0, "the blue top layer is still in");
-        assert_eq!(base.data[3 * plane], 255);
-    }
-
-    #[test]
-    fn the_proxy_layer_filters_and_positions_only_the_active_layer() {
-        use crate::cxxqt_object::tests::pixel_layer;
-        use pictura_core::{BitDepth, ColorMode, PsdRect};
-
-        let mut doc = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
-        let mut top = pixel_layer("top", 2, 2, (0, 0, 255));
-        top.rect = PsdRect {
-            top: 2,
-            left: 2,
-            bottom: 4,
-            right: 4,
-        };
-        doc.layers = pictura_core::LayerStack::from_layers(vec![
-            pixel_layer("bottom", 8, 8, (255, 0, 0)),
-            top,
-        ]);
-
-        let frame = proxy_layer_frame_buffer(&doc.layers[1], 8, 8, 8, "gaussian-blur", &[1.0])
-            .expect("frame");
-        let plane = 64;
-        let at = |x: usize, y: usize| y * 8 + x;
-        // Inside the layer's rect the uniform blue survives its blur...
-        assert_eq!(frame.data[at(2, 2)], 0);
-        assert_eq!(frame.data[plane + at(2, 2)], 0);
-        assert_eq!(frame.data[2 * plane + at(2, 2)], 255);
-        assert_eq!(frame.data[3 * plane + at(2, 2)], 255);
-        // ...and everywhere else the frame is transparent: the bottom layer
-        // and the unfiltered position are not drawn.
-        assert_eq!(frame.data[3 * plane + at(0, 0)], 0);
-        assert_eq!(frame.data[3 * plane + at(5, 5)], 0);
-    }
-
-    #[test]
-    fn the_proxy_layer_bakes_opacity_and_mask_into_the_alpha() {
-        use crate::cxxqt_object::tests::pixel_layer;
-
-        let mut layer = pixel_layer("top", 2, 2, (0, 0, 255));
-        layer.opacity = 128;
-        let buffer = proxy_layer_buffer(&layer, 1.0).expect("layer buffer");
-        assert_eq!(buffer.data[3 * 4], 128, "opacity baked into the alpha");
-    }
-
-    #[test]
-    fn a_nested_active_layer_resolves_for_the_proxy() {
-        use crate::cxxqt_object::tests::pixel_layer;
-        use pictura_core::{BitDepth, ColorMode};
-
-        let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-        let mut group = pixel_layer("group", 4, 4, (0, 0, 0));
-        group.is_group = true;
-        group.channels.clear();
-        group.children = pictura_core::LayerStack::from_layers(vec![
-            pixel_layer("nested-red", 4, 4, (255, 0, 0)),
-            pixel_layer("nested-blue", 4, 4, (0, 0, 255)),
-        ]);
-        doc.layers = pictura_core::LayerStack::from_layers(vec![group]);
-        doc.composite = pictura_render::composite_rgba(&doc);
-
-        // The group itself is not a proxy target; the nested leaf is.
-        assert!(active_proxy_layer(&doc, Some("0")).is_none());
-        assert!(active_proxy_layer(&doc, Some("0/1")).is_some());
-
-        let base = hidden_layer_buffer(&mut doc, "0/1", false).expect("nested base");
-        let plane = 16;
-        assert_eq!(base.data[0], 255, "the red nested layer survives");
-        assert_eq!(base.data[2 * plane], 0, "the blue nested layer is hidden");
-        assert!(doc.layers[0].children[1].visible, "visibility restored");
-    }
-}
+mod tests;

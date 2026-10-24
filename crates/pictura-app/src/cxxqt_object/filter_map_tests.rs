@@ -354,6 +354,18 @@ fn liquify_names_a_kept_mesh_and_refuses_one_it_no_longer_has() {
 }
 
 #[test]
+fn vanishing_point_names_a_kept_edit_and_refuses_one_it_no_longer_has() {
+    let Some(Filter::VanishingPoint { edit }) = filter_from_kind_params("vanishing-point", &[0.0])
+    else {
+        panic!("vanishing-point did not map");
+    };
+    assert!(edit.is_empty());
+    assert!(filter_from_kind_params("vanishing-point", &[]).is_some());
+    assert!(filter_from_kind_params("vanishing-point", &[4e9]).is_none());
+    assert!(filter_from_kind_params("vanishing-point", &[1.0, 2.0]).is_none());
+}
+
+#[test]
 fn adaptive_wide_angle_reads_its_slots_and_refuses_an_unkept_set() {
     let Some(Filter::AdaptiveWideAngle { params }) = filter_from_kind_params(
         "adaptive-wide-angle",
@@ -374,6 +386,21 @@ fn adaptive_wide_angle_reads_its_slots_and_refuses_an_unkept_set() {
     assert!(filter_from_kind_params("adaptive-wide-angle", &[]).is_some());
     let unkept = [0.0, 100.0, 10.0, 1.0, 0.0, 0.0, 4e9];
     assert!(filter_from_kind_params("adaptive-wide-angle", &unkept).is_none());
+}
+
+#[test]
+fn offset_default_is_identity() {
+    assert_eq!(
+        filter_from_kind_params("offset", &[]),
+        Some(Filter::Offset {
+            horizontal: 0,
+            vertical: 0,
+            wrap: true,
+            repeat: false,
+            background: [0, 0, 0],
+            transparent: false,
+        })
+    );
 }
 
 #[test]
@@ -1124,4 +1151,26 @@ fn picture_frame_defaults_and_overrides_every_slot() {
             }
         })
     );
+}
+
+#[test]
+fn ntsc_colors_is_a_parameterless_kind() {
+    assert_eq!(
+        filter_from_kind_params("ntsc-colors", &[]),
+        Some(Filter::NtscColors)
+    );
+    assert!(filter_from_kind_params("ntsc-colors", &[0.0]).is_none());
+}
+
+#[test]
+fn ntsc_colors_is_in_the_descriptor() {
+    let descriptor = super::descriptor::descriptor("ntsc-colors").expect("ntsc-colors descriptor");
+    assert_eq!(
+        descriptor.path,
+        &["Filter", "Video", "NTSC Colors"][..],
+        "menu path"
+    );
+    assert!(descriptor.menu, "must be a menu row");
+    assert_eq!(descriptor.label, "NTSC Colors");
+    assert_eq!(descriptor.slots(), 0, "NTSC Colors has no controls");
 }

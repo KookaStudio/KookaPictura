@@ -1,8 +1,8 @@
 use super::*;
 use crate::composite::{Canvas, Px};
 use crate::composite_native::mask_alpha_unit;
-use pictura_adjust::{Adjustment, AutoKind, ExposureGamma};
-use pictura_core::{LayerMask, Samples, SourceChannels, SourcePlanes};
+use pictura_adjust::{Adjustment, AutoKind, ExposureGamma, HdrToneMap, LocalAdaptationParams};
+use pictura_core::{LayerMask, PixelBuffer, Samples, SourceChannels, SourcePlanes};
 
 fn levels_layer(output_white: u16, opacity: u8) -> Layer {
     let mut data = 2u16.to_be_bytes().to_vec();
@@ -42,6 +42,42 @@ fn native_u16(d: &Document) -> Vec<u16> {
         Some(Samples::U16(v)) => v,
         other => panic!("expected a u16 native composite, got {other:?}"),
     }
+}
+
+/// A 32-bit RGB(A) document whose composite is the narrowed colour planes, so
+/// the retained store is current. `samples` is planar RGB followed by alpha.
+fn hdr_doc(width: u32, height: u32, samples: Vec<f32>) -> Document {
+    let plane = (width * height) as usize;
+    let color_len = plane * 3;
+    let narrowed = Samples::F32(samples[..color_len].to_vec()).narrow_to_u8();
+    let mut d = doc(width, height, Vec::new());
+    d.source_depth = Some(BitDepth::ThirtyTwo);
+    d.composite = PixelBuffer {
+        width,
+        height,
+        channels: 3,
+        data: narrowed.into(),
+    };
+    d.source_planes = Some(SourcePlanes {
+        depth: BitDepth::ThirtyTwo,
+        width,
+        height,
+        samples: Samples::F32(samples),
+    });
+    d
+}
+
+fn non_uniform_hdr() -> Document {
+    hdr_doc(
+        2,
+        2,
+        vec![
+            0.2, 0.5, 0.1, 1.2, // R
+            0.4, 0.6, 0.3, 0.7, // G
+            0.8, 0.9, 0.6, 0.3, // B
+            0.9, 0.5, 0.25, 1.0, // alpha
+        ],
+    )
 }
 
 #[test]
@@ -131,14 +167,7 @@ fn composite_native_is_none_without_depth_and_f32_at_32() {
 
 #[test]
 fn depth32_conversion_to_16_tones_above_one_and_keeps_extras() {
-    let mut d = doc(1, 1, Vec::new());
-    d.source_depth = Some(BitDepth::ThirtyTwo);
-    d.source_planes = Some(SourcePlanes {
-        depth: BitDepth::ThirtyTwo,
-        width: 1,
-        height: 1,
-        samples: Samples::F32(vec![4.0, 0.5, 0.25, 0.9]),
-    });
+    let mut d = hdr_doc(1, 1, vec![4.0, 0.5, 0.25, 0.9]);
 
     // gain = 2^-2 = 0.25; 4.0 -> 1.0 -> 65535. A pre-clamp at 1.0 would give
     // 0.25 -> 16384, so the retained store (not `emit_native`) supplied the 4.0.
@@ -169,14 +198,7 @@ fn depth32_conversion_to_16_tones_above_one_and_keeps_extras() {
 
 #[test]
 fn depth32_conversion_to_8_clears_the_retained_store() {
-    let mut d = doc(1, 1, Vec::new());
-    d.source_depth = Some(BitDepth::ThirtyTwo);
-    d.source_planes = Some(SourcePlanes {
-        depth: BitDepth::ThirtyTwo,
-        width: 1,
-        height: 1,
-        samples: Samples::F32(vec![0.0, 0.5, 1.0]),
-    });
+    let mut d = hdr_doc(1, 1, vec![0.0, 0.5, 1.0]);
 
     convert_depth_exposure_gamma(&mut d, BitDepth::Eight, ExposureGamma::default()).unwrap();
 
@@ -209,14 +231,7 @@ fn conversion_refusals_leave_the_document_untouched() {
     .is_err());
     assert_eq!(converted, before, "a converted mode is refused");
 
-    let mut thirty_two = doc(1, 1, Vec::new());
-    thirty_two.source_depth = Some(BitDepth::ThirtyTwo);
-    thirty_two.source_planes = Some(SourcePlanes {
-        depth: BitDepth::ThirtyTwo,
-        width: 1,
-        height: 1,
-        samples: Samples::F32(vec![0.5, 0.5, 0.5]),
-    });
+    let mut thirty_two = hdr_doc(1, 1, vec![0.5, 0.5, 0.5]);
     let before = thirty_two.clone();
     assert!(convert_depth_exposure_gamma(
         &mut thirty_two,
@@ -443,4 +458,138 @@ fn mask_alpha_unit_matches_the_eight_bit_fallbacks() {
         crate::composite::mask_alpha(&plain, full(1, 1), 0, 0) as f32 / 255.0,
         "an 8-bit document keeps the rounded mask_alpha path"
     );
+}
+
+#[test]
+fn hdr_conversion_methods_convert() {
+    let methods = [
+        HdrToneMap::ExposureGamma(ExposureGamma {
+            exposure_ev: -1.0,
+            gamma: 1.0,
+        }),
+        HdrToneMap::EqualizeHistogram,
+        HdrToneMap::HighlightCompression,
+        HdrToneMap::LocalAdaptation(LocalAdaptationParams {
+            radius: 2.0,
+            ..Default::default()
+        }),
+    ];
+    for method in methods {
+        let mut d = non_uniform_hdr();
+        crate::convert_depth(&mut d, BitDepth::Eight, method).unwrap();
+        assert_eq!(d.depth, BitDepth::Eight);
+        assert_eq!(d.source_depth, None, "{method:?}");
+        assert!(d.source_planes.is_none(), "{method:?}");
+
+        // At 16 bits the converted store must not be the identity result.
+        let mut converted = non_uniform_hdr();
+        crate::convert_depth(&mut converted, BitDepth::Sixteen, method).unwrap();
+        let Samples::U16(toned) = &converted.source_planes.as_ref().unwrap().samples else {
+            panic!("expected a u16 store");
+        };
+        let mut identity = non_uniform_hdr();
+        crate::convert_depth_exposure_gamma(
+            &mut identity,
+            BitDepth::Sixteen,
+            ExposureGamma::default(),
+        )
+        .unwrap();
+        let Samples::U16(unchanged) = &identity.source_planes.as_ref().unwrap().samples else {
+            panic!("expected a u16 store");
+        };
+        assert_ne!(toned, unchanged, "{method:?} must reflect its method");
+    }
+}
+
+#[test]
+fn local_adaptation_leaves_alpha_untouched() {
+    let mut d = non_uniform_hdr();
+    let Samples::F32(source) = &d.source_planes.as_ref().unwrap().samples else {
+        panic!("expected an f32 store");
+    };
+    let alpha: Vec<f32> = source[12..16].to_vec();
+    let expected = Samples::F32(alpha).to_u16();
+
+    crate::convert_depth(
+        &mut d,
+        BitDepth::Sixteen,
+        HdrToneMap::LocalAdaptation(LocalAdaptationParams {
+            radius: 2.0,
+            ..Default::default()
+        }),
+    )
+    .unwrap();
+
+    let Samples::U16(v) = &d.source_planes.as_ref().unwrap().samples else {
+        panic!("expected a u16 store");
+    };
+    assert_eq!(&v[12..16], expected.as_slice(), "alpha is untouched");
+}
+
+#[test]
+fn hdr_conversion_copies_extra_planes() {
+    let methods = [
+        HdrToneMap::EqualizeHistogram,
+        HdrToneMap::HighlightCompression,
+        HdrToneMap::LocalAdaptation(LocalAdaptationParams {
+            radius: 2.0,
+            ..Default::default()
+        }),
+    ];
+    for method in methods {
+        let mut d = non_uniform_hdr();
+        let Samples::F32(source) = &d.source_planes.as_ref().unwrap().samples else {
+            panic!("expected an f32 store");
+        };
+        let expected = Samples::F32(source[12..16].to_vec()).to_u16();
+        crate::convert_depth(&mut d, BitDepth::Sixteen, method).unwrap();
+        let Samples::U16(v) = &d.source_planes.as_ref().unwrap().samples else {
+            panic!("expected a u16 store");
+        };
+        assert_eq!(&v[12..16], expected.as_slice(), "{method:?} copied extra");
+    }
+}
+
+#[test]
+fn edited_document_converts_current_composite() {
+    let mut d = hdr_doc(1, 1, vec![4.0, 0.5, 0.25]);
+    // Simulate an edit that updated the composite but not the retained store.
+    d.composite.data = vec![10, 20, 30].into();
+
+    crate::convert_depth(
+        &mut d,
+        BitDepth::Eight,
+        HdrToneMap::ExposureGamma(ExposureGamma::default()),
+    )
+    .unwrap();
+
+    assert_eq!(
+        d.composite.data,
+        vec![10, 20, 30],
+        "the current composite, not the stale 4.0 store"
+    );
+}
+
+#[test]
+fn hdr_conversion_refuses_bad_parameters() {
+    for params in [
+        LocalAdaptationParams {
+            radius: 0.0,
+            ..Default::default()
+        },
+        LocalAdaptationParams {
+            strength: f64::NAN,
+            ..Default::default()
+        },
+    ] {
+        let mut d = non_uniform_hdr();
+        let before = d.clone();
+        let result =
+            crate::convert_depth(&mut d, BitDepth::Eight, HdrToneMap::LocalAdaptation(params));
+        assert!(result.is_err(), "{params:?} must be refused");
+        assert_eq!(
+            d, before,
+            "a refused conversion leaves the document unchanged"
+        );
+    }
 }

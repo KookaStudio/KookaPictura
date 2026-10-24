@@ -49,7 +49,7 @@ public:
                                             quint32(ctx.background().rgba()), paintTip(*paint_),
                                             paint_->opacity(), paint_->flow(), paint_->mode(),
                                             aliased_ || paint_->aliased(),
-                                            paint_->autoErase());
+                                            aliased_ && paint_->autoErase());
         }
         if (!stroke_) {
             if (activePixelLocked(v)) {

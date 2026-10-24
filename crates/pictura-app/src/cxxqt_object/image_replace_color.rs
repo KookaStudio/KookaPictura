@@ -8,7 +8,7 @@
 
 use super::helpers::active_pixel_layer;
 use super::helpers_composite::current_buffer;
-use super::impl_filters::{apply_op_active_region, ActiveOp};
+use super::impl_filters::{apply_op_active_region, cancel_filter_preview, ActiveOp};
 use super::qobject::PictureView;
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
@@ -196,6 +196,11 @@ fn run(
         )
     };
     let Some(region) = region else {
+        {
+            let mut rust = view.as_mut().rust_mut();
+            let _ = cancel_filter_preview(&mut rust);
+        }
+        view.as_mut().recomposite();
         return false;
     };
     let outcome = match region {

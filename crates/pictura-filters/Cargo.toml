@@ -7,6 +7,7 @@ rust-version.workspace = true
 
 [dependencies]
 pictura-core = { path = "../pictura-core" }
+pictura-color = { path = "../pictura-color" }
 thiserror.workspace = true
 rand_chacha = "0.9"
 rayon = "1"

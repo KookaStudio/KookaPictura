@@ -30,6 +30,68 @@ fn rgba_document() -> Vec<u8> {
     rgba
 }
 
+/// A 1x1 32-bit PSD whose half-opaque layer holds 2.0 and whose merged
+/// composite holds the 1.0 result; opening it must keep the merged store (the
+/// display recomposite clamps the layer to 1.0 and halves it).
+fn hdr_layer_psd() -> (std::path::PathBuf, Vec<u8>) {
+    use pictura_core::{
+        BlendMode, Channel, Layer, LayerStack, PsdRect, Samples, SourceChannels, SourcePlanes,
+    };
+    let rect = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: 1,
+        right: 1,
+    };
+    let channel = |id: i16, value: u8| Channel {
+        id,
+        data: vec![value].into(),
+    };
+    let f32_plane = |value: f32| Samples::F32(vec![value]);
+    let layer = Layer {
+        name: "HDR".to_string(),
+        rect,
+        opacity: 128,
+        blend: BlendMode::Normal,
+        channels: vec![
+            channel(0, 255),
+            channel(1, 255),
+            channel(2, 255),
+            channel(-1, 255),
+        ],
+        source_channels: Some(SourceChannels::new(
+            BitDepth::ThirtyTwo,
+            rect,
+            vec![
+                (0, f32_plane(2.0)),
+                (1, f32_plane(2.0)),
+                (2, f32_plane(2.0)),
+                (-1, f32_plane(1.0)),
+            ],
+        )),
+        ..Default::default()
+    };
+    let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
+    doc.source_depth = Some(BitDepth::ThirtyTwo);
+    doc.source_planes = Some(SourcePlanes {
+        depth: BitDepth::ThirtyTwo,
+        width: 1,
+        height: 1,
+        samples: Samples::F32(vec![1.0, 1.0, 1.0]),
+    });
+    doc.composite = pictura_core::PixelBuffer {
+        width: 1,
+        height: 1,
+        channels: 3,
+        data: vec![255, 255, 255].into(),
+    };
+    doc.layers = LayerStack::from_layers(vec![layer]);
+    let bytes = pictura_codec::write_psd(&doc).expect("write 32-bit fixture");
+    let path = temp_path("psd");
+    std::fs::write(&path, &bytes).expect("write fixture");
+    (path, bytes)
+}
+
 #[test]
 fn open_psd_matches_sync() {
     let (path, _) = white_psd();
@@ -46,6 +108,34 @@ fn open_psd_matches_sync() {
     assert_eq!(rust.path.as_deref(), Some(path.to_str().unwrap()));
     assert!(!rust.session.dirty);
     assert_eq!(rust.source_format, "psd");
+    std::fs::remove_file(path).ok();
+}
+
+#[test]
+fn opened_hdr_conversion_uses_the_retained_merged_store() {
+    let (path, _) = hdr_layer_psd();
+    let mut opened =
+        decode_psd(path.to_str().unwrap(), Policy::Preserve, false, &|_, _| {}).expect("decode");
+    assert_eq!(
+        opened.doc.composite.data,
+        vec![255, 255, 255],
+        "the merged composite stays the store's narrowing"
+    );
+
+    pictura_render::convert_depth_exposure_gamma(
+        &mut opened.doc,
+        BitDepth::Eight,
+        pictura_render::ExposureGamma {
+            exposure_ev: -1.0,
+            gamma: 1.0,
+        },
+    )
+    .expect("HDR conversion");
+
+    // 1.0 with -1 EV is 0.5. The clamped layer recomposite would give 0.25.
+    assert_eq!(opened.doc.composite.data, vec![128, 128, 128]);
+    assert_eq!(opened.doc.layers.len(), 1, "the merged tone map flattens");
+    assert_eq!(opened.doc.layers[0].name, "Background");
     std::fs::remove_file(path).ok();
 }
 

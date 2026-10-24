@@ -543,6 +543,7 @@ fn digest_decision(kind: FilterKind) -> bool {
         | FilterKind::Emboss
         | FilterKind::FindEdges
         | FilterKind::Solarize
+        | FilterKind::NtscColors
         | FilterKind::Diffuse
         | FilterKind::GlowingEdges
         | FilterKind::Mosaic
@@ -562,6 +563,7 @@ fn digest_decision(kind: FilterKind) -> bool {
         | FilterKind::Displace
         | FilterKind::Liquify
         | FilterKind::AdaptiveWideAngle
+        | FilterKind::VanishingPoint
         | FilterKind::ZigZag
         | FilterKind::OceanRipple
         | FilterKind::Glass

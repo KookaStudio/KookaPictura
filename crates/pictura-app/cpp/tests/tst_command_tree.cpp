@@ -36,6 +36,7 @@
 #include "toolbox.h"
 
 #include "qt_test_support.h"
+#include "tst_command_tree_cases.h"
 
 class CommandTreeTest : public QObject {
     Q_OBJECT
@@ -44,6 +45,11 @@ private slots:
     void initTestCase();
     void menus();
     void dispatch();
+
+    void cr_menu_catalogue() { pictura::test::crMenuCatalogue(*window_); }
+    void cr_identifiers_stable() { pictura::test::crIdentifiersStable(*window_); }
+    void cr_rust_only() { pictura::test::crRustOnly(); }
+    void cr_list_commands() { pictura::test::crListCommands(*window_); }
     void menusPanel();
     void layerMaskMenu();
     void vectorMaskMenu();

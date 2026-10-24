@@ -120,30 +120,6 @@ the direct Gaussian on a hard edge whose ramp is clear of the canvas edge.
   with radius 4, 8, or 20
 - **THEN** every coverage byte is within 6 levels of the direct Gaussian
 
-### Requirement: Expand and contract
-
-`expand(radius)` SHALL dilate the coverage and `contract(radius)` SHALL erode
-it, using a separable square structuring element of side `2 * radius + 1`. A
-radius of 0 MUST be the identity. Sampling MUST clamp at the canvas edge so that
-a selection touching the canvas border is not eroded from that border. `expand`
-and `contract` by the same radius MUST be inverses on a binary selection clear
-of the canvas edge.
-
-#### Scenario: Zero radius is identity
-
-- **WHEN** `expand(0)` or `contract(0)` is applied
-- **THEN** the selection is returned unchanged
-
-#### Scenario: Expand then contract restores a binary block
-
-- **WHEN** a binary rectangular selection clear of the canvas edge is expanded and then contracted by the same radius
-- **THEN** the result equals the original selection
-
-#### Scenario: Canvas edge is exempt
-
-- **WHEN** a selection touches the canvas border and is contracted
-- **THEN** coverage along the canvas edge is not eroded from the edge side
-
 ### Requirement: Border
 
 `border(width)` SHALL replace the selection with a band centred on the original
@@ -217,3 +193,41 @@ be recorded in the test mapping and README.
 
 - **WHEN** the operation-to-ImageMagick mapping is inspected
 - **THEN** expand/contract map to `Square:r` and the mapping notes that the Euclidean `Disk:r` diverges at the diagonal corners
+
+### Requirement: Expand and contract at the canvas edge
+
+`expand(radius)` SHALL dilate the coverage and `contract(radius)` SHALL erode
+it, using a separable square structuring element of side `2 * radius + 1`. A
+radius of 0 MUST be the identity. Sampling MUST treat a tap outside the canvas
+as zero coverage: `contract` SHALL erode an edge-touching selection inward,
+while `expand` remains unchanged at the edge. `expand` and `contract` by the
+same radius MUST be inverses on a binary selection clear of the canvas edge.
+
+#### Scenario: Zero radius is identity
+
+- **WHEN** `expand(0)` or `contract(0)` is applied
+- **THEN** the selection is returned unchanged
+
+#### Scenario: Expand then contract restores a binary block
+
+- **WHEN** a binary rectangular selection clear of the canvas edge is expanded and then contracted by the same radius
+- **THEN** the result equals the original selection
+
+#### Scenario: Contract pulls away from the canvas edge [sm_contract_edge]
+
+- **WHEN** the all-pixels selection is contracted by a radius
+- **THEN** every side shrinks inward by that radius instead of staying selected
+  along the canvas border
+
+### Requirement: Border band
+
+`border(width)` SHALL return the symmetric difference of
+`expand(ceil(width / 2))` and `contract(floor(width / 2))`, a band centred on
+the input edge. A width of 0 SHALL return the empty selection. At the canvas
+edge the band SHALL keep its inner half.
+
+#### Scenario: Border keeps its inner band at the edge [sm_border_edge_band]
+
+- **WHEN** a selection touching the canvas edge is given a border width
+- **THEN** the returned band covers the inner half of the width along that edge
+  and the outer half is clipped by the canvas

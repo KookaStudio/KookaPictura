@@ -348,6 +348,8 @@ void FilterPreviewDialog::runPreview()
     if (shown) {
         previewShown_ = true;
         updateThumbnail();
+    } else {
+        previewShown_ = false;
     }
 }
 

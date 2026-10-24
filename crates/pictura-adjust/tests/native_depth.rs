@@ -379,6 +379,69 @@ fn depth16_color_adjustment_is_not_the_widened_byte() {
 }
 
 #[test]
+fn native_exposure_linear() {
+    let mut store = Samples::F32(vec![0.5; 3]);
+    let exposure = Adjustment::Exposure(ExposureParams {
+        exposure: 1.0,
+        offset: 0.0,
+        gamma: 1.0,
+    });
+    apply_native(&exposure, &mut store, 1, 1, 3).unwrap();
+    let Samples::F32(v) = &store else { panic!() };
+    assert!((v[0] - 1.0).abs() < 1e-6, "{v:?}");
+}
+
+#[test]
+fn native_posterize_16bit() {
+    let levels = [0u16, 16384, 32768, 49151, 65535];
+    let mut store = Samples::U16(levels.iter().flat_map(|&v| [v; 3]).collect());
+    apply_native(&Adjustment::Posterize(5), &mut store, 5, 1, 3).unwrap();
+    let Samples::U16(v) = &store else { panic!() };
+    for (i, &expected) in levels.iter().enumerate() {
+        assert_eq!(v[i * 3], expected, "level {i}");
+    }
+    let mut identity = store.clone();
+    apply_native(&Adjustment::Posterize(255), &mut identity, 5, 1, 3).unwrap();
+    assert_eq!(identity, store);
+}
+
+#[test]
+fn native_bw_channel_mixer() {
+    let mut store = Samples::U16((0..12).map(|i| (i * 5000) as u16).collect::<Vec<_>>());
+    let bw = Adjustment::BlackWhite(BlackWhiteParams {
+        red: 120.0,
+        yellow: -30.0,
+        green: 60.0,
+        cyan: 10.0,
+        blue: -50.0,
+        magenta: 25.0,
+        tint: true,
+        tint_color: [210, 130, 45],
+    });
+    apply_native(&bw, &mut store, 4, 1, 3).unwrap();
+    let Samples::U16(v) = &store else { panic!() };
+    assert!(
+        v.iter().any(|s| (s >> 8) != (s & 0xff)),
+        "B&W must not stay on the 8-bit grid: {v:?}"
+    );
+
+    let mut store = Samples::U16((0..12).map(|i| (i * 5000) as u16).collect::<Vec<_>>());
+    let mix = Adjustment::ChannelMixer(ChannelMixerParams {
+        monochrome: false,
+        red: [120.0, -20.0, 10.0],
+        green: [10.0, 110.0, -15.0],
+        blue: [-10.0, 20.0, 130.0],
+        constant: [5.0, -3.0, 2.0],
+    });
+    apply_native(&mix, &mut store, 4, 1, 3).unwrap();
+    let Samples::U16(v) = &store else { panic!() };
+    assert!(
+        v.iter().any(|s| (s >> 8) != (s & 0xff)),
+        "Channel Mixer must not stay on the 8-bit grid: {v:?}"
+    );
+}
+
+#[test]
 fn unsupported_adjustment_is_refused_without_mutation() {
     let mut store = Samples::U16(vec![10, 20, 30, 40, 50, 60]);
     let before = store.clone();

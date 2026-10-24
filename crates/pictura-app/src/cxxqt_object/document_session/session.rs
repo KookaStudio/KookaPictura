@@ -15,6 +15,15 @@ use crate::layer_target::LayerTarget;
 use pictura_core::{Document, PsdRect};
 use pictura_select::Selection;
 
+/// The selection state captured at the start of a Quick Selection stroke.
+pub(in crate::cxxqt_object) struct QuickSelectionSnapshot {
+    pub(in crate::cxxqt_object) selection: Option<Selection>,
+    pub(in crate::cxxqt_object) deselected: Option<Selection>,
+    /// The reselect memory the stroke's first dab recorded, kept for the rest
+    /// of the stroke so later dabs do not clear what the first one replaced.
+    pub(in crate::cxxqt_object) reselect: Option<Option<Selection>>,
+}
+
 /// The document state the session owns: the document itself, the selection,
 /// and the history that records its edits.
 ///
@@ -29,6 +38,9 @@ pub(in crate::cxxqt_object) struct DocumentSession {
     /// CS6 "last deselected" memory: the selection replaced by Deselect or a
     /// New-mode commit. Restored by `reselect`.
     pub(in crate::cxxqt_object) deselected_selection: Option<Selection>,
+    /// The selection state at the start of a Quick Selection stroke, restored
+    /// when the stroke is cancelled.
+    pub(in crate::cxxqt_object) quick_selection_snapshot: Option<QuickSelectionSnapshot>,
     /// The recorded states.
     pub(in crate::cxxqt_object) history: History,
     /// Whether the document has unsaved changes.
@@ -50,6 +62,10 @@ pub(in crate::cxxqt_object) struct DocumentSession {
     /// The password a protected PDF was opened with, kept in memory only so
     /// Revert can reopen it.
     pub(in crate::cxxqt_object) pdf_password: Option<String>,
+    /// The Vanishing Point planes this document's last session kept, so the
+    /// dialog reopens on them.
+    // ponytail: memory only; CS6 saves planes in PSD, TIFF and JPEG files (#918).
+    pub(in crate::cxxqt_object) vanishing_planes: Option<pictura_filters::VpPlanes>,
 }
 
 impl DocumentSession {
@@ -362,6 +378,7 @@ impl PictureViewRust {
     pub(in crate::cxxqt_object) fn clear_document_scoped_state(&mut self) {
         self.session.selection = None;
         self.session.deselected_selection = None;
+        self.session.quick_selection_snapshot = None;
         self.session.live = ActiveSession::Idle;
         self.path = None;
         self.mask_edit_target = None;
@@ -372,6 +389,7 @@ impl PictureViewRust {
         self.active_path = super::super::paths::ActivePath::Work;
         self.session.pdf_options = None;
         self.session.pdf_password = None;
+        self.session.vanishing_planes = None;
         self.isolation = None;
         self.solo_snapshot = None;
         self.expanded_groups.clear();

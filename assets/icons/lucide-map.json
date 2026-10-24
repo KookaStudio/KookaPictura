@@ -6,6 +6,53 @@
     "style": "viewBox 0 0 24 24, fill=none, stroke=currentColor, stroke-width=2, round caps/joins; tinted at render time. Custom icons keep their named Lucide base at its original size and position; small added symbols use stroke-width=1."
   },
   "entries": {
+    "actions.delete": {
+      "kind": "lucide",
+      "slug": "trash",
+      "match": "exact"
+    },
+    "actions.modalOff": {
+      "kind": "custom",
+      "match": "custom",
+      "note": "dialog box with a diagonal slash for the off state",
+      "base": "panel-top"
+    },
+    "actions.modalOn": {
+      "kind": "lucide",
+      "slug": "panel-top",
+      "match": "good"
+    },
+    "actions.modalPartial": {
+      "kind": "custom",
+      "match": "custom",
+      "note": "dialog box with a filled centre block for the partial state",
+      "base": "panel-top"
+    },
+    "actions.newAction": {
+      "kind": "lucide",
+      "slug": "square-plus",
+      "match": "exact"
+    },
+    "actions.newSet": {
+      "kind": "lucide",
+      "slug": "folder-plus",
+      "match": "exact"
+    },
+    "actions.play": {
+      "kind": "lucide",
+      "slug": "play",
+      "match": "exact"
+    },
+    "actions.record": {
+      "kind": "lucide",
+      "slug": "circle-dot",
+      "match": "exact"
+    },
+    "actions.stop": {
+      "kind": "lucide",
+      "slug": "square",
+      "match": "exact"
+    },
     "adjustments.black-white": {
       "kind": "lucide",
       "slug": "contrast",
@@ -727,6 +774,11 @@
       "kind": "custom",
       "match": "custom",
       "note": "the numerals \"123\", playfully placed"
+    },
+    "tool.createplane": {
+      "kind": "custom",
+      "match": "custom",
+      "note": "a perspective plane: a trapezoid ruled with one line each way (Vanishing Point Create Plane)"
     },
     "tool.crop": {
       "kind": "lucide",

@@ -20,7 +20,7 @@ pub use crop::{
     crop_document, crop_document_grow, delete_cropped_pixels, translate_layer,
     translate_layer_active, translate_layer_index, translate_layer_path, translate_layer_rect,
 };
-pub use depth::convert_depth_exposure_gamma;
+pub use depth::{convert_depth, convert_depth_exposure_gamma};
 pub use layer_ops::{
     add_gradient_fill, add_group, add_group_full, add_group_in, add_layer, add_layer_full,
     add_layer_in, add_layer_mask, add_layer_mask_converting_background, add_raster_layer_from_rgba,
