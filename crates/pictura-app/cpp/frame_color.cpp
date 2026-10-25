@@ -82,8 +82,10 @@ void PicturaMainWindow::showColorSettings()
     askMismatchOpen_ = out.askMismatchOpen;
     askMissingOpen_ = out.askMissingOpen;
     applyTextGamma(out.textGammaEnabled, out.textGamma);
-    for (const DocEntry& entry : docs_) {
-        applyColorSettings(entry.view);
+    for (const DocEntry* entry : docs_) {
+        if (entry) {
+            applyColorSettings(entry->view);
+        }
     }
     saveSession();
 }

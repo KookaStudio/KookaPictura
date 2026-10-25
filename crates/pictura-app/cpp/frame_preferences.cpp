@@ -86,9 +86,9 @@ void PicturaMainWindow::showPreferences(const QString& page)
                 [this](int choice) {
                     pickerChoice_ = choice == 1 ? 1 : 0;
                     ColorPickerDialog::setPickerPreference(pickerChoice_);
-                    for (const DocEntry& entry : docs_) {
-                        if (entry.view) {
-                            pictura::set_picker_choice(*entry.view, pickerChoice_);
+                    for (const DocEntry* entry : docs_) {
+                        if (entry && entry->view) {
+                            pictura::set_picker_choice(*entry->view, pickerChoice_);
                         }
                     }
                     saveSession();
