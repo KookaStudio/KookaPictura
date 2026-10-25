@@ -31,6 +31,29 @@ Snapshot for resuming after a context break. Update after each milestone.
     `UnsupportedSmartFilter`). Device-dependent GPU tests are `#[ignore]`d and
     run in the `gpu-parity` CI job on lavapipe (`software-vulkan` feature,
     nextest `gpu` profile).
+- **Rust single-source tables** (#269, #271, #272, #274, #403, branch
+  `refactor/269-rust-single-source-bundle`, OpenSpec change
+  `rust-single-source-bundle`). The shell's duplicated tables and colour math
+  now come from the engine through free-function bridges, cached once on the
+  C++ side.
+  - **Blend modes.** `blendModes()` (`blend_modes.{h,cpp}`) reads
+    `BlendMode::LAYER_MODES` with each mode's neutral-colour flag.
+  - **Colour models.** `pictura_color::model` has D50 sRGB↔Lab (the codec's
+    planar Lab now calls it) and `CmykConverter` (sRGB↔CMYK through the
+    bundled coated profile, relative colorimetric with BPC). The picker and
+    the Info panel use it through `color_models.{h,cpp}`; the Info panel's Lab
+    moved from D65 to D50. Channels thumbnails take the engine plate split
+    (`channel_plane`).
+  - **Adjustments.** `pictura_render::ADJUSTMENT_CATALOGUE` (25 kinds) wires
+    Image > Adjustments, New Fill/Adjustment Layer, the Layers panel menu and
+    the Adjustments panel. Dialog ranges come from the layout page
+    (`AdjustmentDialog::paramSpec`).
+  - **Tools.** `pictura_script::tool_catalogue` (71 rows) builds `toolInfo`,
+    `allToolIds` and `toolHintEntries`. `ToolId` stays C++, and a Qt Test
+    checks its order.
+  - **Type.** `type_api` is deepened: `TypeSpec`, `EditSession`,
+    `WarpSession`, and one-call style libraries
+    (`docs/dev/refactor-view-seam.md` §6).
 - **Document tabs and windows** (#317, #499, #500, #917, branch
   `feat/317-document-tabs-windows`, OpenSpec change `document-tabs-windows`;
   capabilities `document/document-tabs` and `document/document-windows`). A
