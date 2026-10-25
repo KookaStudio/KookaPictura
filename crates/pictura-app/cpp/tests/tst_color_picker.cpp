@@ -307,7 +307,9 @@ void ColorPickerTest::colorPanelSwatchOpensPicker()
     QVERIFY2(fg, "foreground swatch present");
 
     bool opened = false;
-    QTimer::singleShot(0, [&opened]() {
+    QTimer timer;
+    timer.setInterval(10);
+    connect(&timer, &QTimer::timeout, [&]() {
         auto* dialog =
             qobject_cast<pictura::ColorPickerDialog*>(QApplication::activeModalWidget());
         if (!dialog) {
@@ -315,14 +317,18 @@ void ColorPickerTest::colorPanelSwatchOpensPicker()
         }
         auto* picker = dialog->findChild<pictura::ColorPicker*>();
         if (!picker) {
+            timer.stop();
             dialog->reject();
             return;
         }
         picker->setColor(QColor(12, 34, 56));
         opened = true;
+        timer.stop();
         dialog->accept();
     });
+    timer.start();
     fg->click();
+    timer.stop();
     QVERIFY2(opened, "the swatch opens the color picker");
     QCOMPARE(state.foreground(), QColor(12, 34, 56));
 }
