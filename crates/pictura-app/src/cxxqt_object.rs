@@ -126,7 +126,6 @@ pub mod qobject {
         #[qobject]
         #[namespace = "pictura"]
         type PictureView = super::PictureViewRust;
-
         /// Emitted whenever the layer stack changes and the image is refreshed.
         #[qsignal]
         fn changed(self: Pin<&mut Self>);
