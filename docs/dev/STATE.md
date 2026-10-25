@@ -11,6 +11,26 @@ Snapshot for resuming after a context break. Update after each milestone.
   (`docs/00-overview/licensing-and-provenance.md`).
 - **Provenance history:** the git history was rewritten so no reachable commit
   contains reproduced Adobe Help prose or the old wording.
+- **Render performance bundle** (#379, #651, #745, #746, branch
+  `perf/379-render-performance-bundle`, OpenSpec changes
+  `render-performance-instrumentation` and `gpu-eligibility-from-dispatch`).
+  - **Metrics.** `PICTURA_METRICS=1` turns on phase totals, one record per
+    committed edit, and GPU counters (`cxxqt_object/metrics.rs`,
+    `pictura_render::metrics`). They are printed as `pictura metrics:` lines and
+    served by the control server's `metrics` method. `profile-tools.py --metrics`
+    prints the per-phase breakdown. Qt phases come in through
+    `MetricsTimer` (`pictura_debug_timing.h`).
+  - **New Layer.** A content-neutral insertion
+    (`pictura_render::insertion_is_content_neutral`) commits as
+    `Edit::Inserted`: links are dropped and one state is captured, with no
+    composite and no pyramid rebuild. The Layers panel coalesces its queued
+    refresh with the synchronous one.
+  - **GPU eligibility.** `ContentRoute` (`composite_route.rs`) drives both the
+    CPU content dispatch and `check_supported`. High-bit-depth documents and
+    smart-filtered layers decline (`UnsupportedDepth`,
+    `UnsupportedSmartFilter`). Device-dependent GPU tests are `#[ignore]`d and
+    run in the `gpu-parity` CI job on lavapipe (`software-vulkan` feature,
+    nextest `gpu` profile).
 - **Document tabs and windows** (#317, #499, #500, #917, branch
   `feat/317-document-tabs-windows`, OpenSpec change `document-tabs-windows`;
   capabilities `document/document-tabs` and `document/document-windows`). A

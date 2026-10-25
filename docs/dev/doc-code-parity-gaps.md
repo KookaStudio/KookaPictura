@@ -290,7 +290,7 @@ Raw file open is tracked by `#400`; DNG output by `#402`.
 | XC-8 | `testing-strategy.md` | DSSIM/PSNR/ΔE2000, property tests, fuzzing, Criterion benches | MISSING | `testkit` abs-diff only | #648 |
 | XC-9 | `update-and-versioning.md` | `--version`, About dialog with Qt/GPU info, update checker | MISSING | `main.cpp` | #649 |
 | XC-10 | `cs6-editions-and-constraints.md` | Edition gating (Standard/Extended) | MISSING | no `Edition::` | #650 |
-| XC-11 | `performance-targets.md` | Performance instrumentation (cache/scratch/frame/metrics) | MISSING | none found | #651 |
+| XC-11 | `performance-targets.md` | Performance instrumentation (cache/scratch/frame/metrics) | PARTIAL | `pictura-app::metrics` shipped (`PICTURA_METRICS`, control-server `metrics`); frame-budget timing, TileCache, scratch, scheduler and cancellation do not exist yet | #651, #941–#945 |
 
 ## D. Code ahead of docs (stale specs)
 

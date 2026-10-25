@@ -276,8 +276,9 @@ Details:
 | `selection` | `op` = `all`\|`deselect`\|`rect`\|`ellipse`\|`lasso_begin`\|`lasso_point`\|`lasso_end`\|`quick`\|`wand`; `x`,`y`,`w`,`h`,`mode?`,`tolerance?` | `{ok, has_selection, count, bounds?}` | `select_all`/`deselect`/`select_rect`/`select_ellipse`/`begin_lasso`/`lasso_add_point`/`end_lasso`/`quick_select`/`magic_wand`/`selection_count`/`selection_bounds` |
 | `filter` | `kind`, `seed?`, `params?` (reserved) | `{ok, kind}` | `PictureView::apply_filter(kind)`; v1 uses the app's fixed in-range defaults (`filter_from_kind`) |
 | `adjustment` | `kind` | `{ok, layers}` | `PictureView::add_adjustment(kind)` |
-| `layer_op` | `op` = `set_name`\|`set_opacity`\|`set_visible`\|`set_blend`\|`set_fill`\|`set_lock`\|`set_color`\|`move`\|`translate`\|`delete`\|`duplicate`\|`add`; `index`, `value`, `dx?`, `dy?` | `{ok, layers}` | `set_layer_*`, `move_layer`, `translate_layer`, `remove_layer`; `duplicate_layer`/`add_layer` `(v)` |
+| `layer_op` | `op` = `set_name`\|`set_opacity`\|`set_visible`\|`set_blend`\|`set_fill`\|`set_lock`\|`set_color`\|`move`\|`translate`\|`delete`\|`duplicate`\|`add`\|`add_group`; `index`, `value`, `dx?`, `dy?` | `{ok, layers}` | `set_layer_*`, `move_layer`, `translate_layer`, `remove_layer`; `duplicate_layer`/`add_layer`/`add_group` `(v)` |
 | `set_gpu_compute` | `on` | `{gpu_compute, backend}` | `set_gpu_compute`/`gpu_compute`/`active_backend` |
+| `metrics` | `reset?` | `{enabled, phases, counters, edits}`; `refused` unless the app runs with `PICTURA_METRICS=1` | `PictureView::metrics_snapshot` |
 
 `filter` params are deliberately deferred: the app currently exposes filters as
 kinds with fixed defaults. Exposing typed params requires plumbing
