@@ -105,9 +105,10 @@ QString LayersRowMenuTest::makeTypeLayer(const QString& text)
     setting.y = 8.0;
     setting.xx = 1.0;
     setting.yy = 1.0;
+    pictura::CharacterSetting character = pictura::type_api::defaultCharacterSetting();
+    character.size = 24.0;
     const QString path = pictura::type_api::commitLayer(
-        *view_, text, QStringLiteral("Liberation Sans"), setting,
-        pictura::type_api::defaultCharacterSetting(),
+        *view_, text, QStringLiteral("DejaVu Sans"), setting, character,
         pictura::type_api::defaultParagraphSetting());
     refreshPanel();
     return path;

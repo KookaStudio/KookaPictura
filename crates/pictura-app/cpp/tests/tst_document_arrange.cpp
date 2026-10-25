@@ -826,6 +826,9 @@ void DocumentArrangeTest::newWindowSharesDocument()
     // The mask overlay shows in both windows.
     const QString layer = view->add_solid_fill(0xff2244aau);
     QVERIFY(!layer.isEmpty());
+    // New fills carry a default mask; replace it so this test controls the
+    // initial coverage.
+    pictura::layer_mask_delete_path(*view, layer);
     QVERIFY(pictura::layer_mask_add_path(*view, layer, QStringLiteral("hide-all")));
     QVERIFY(pictura::mask_overlay_toggle(*view, layer));
     window_->refresh();
