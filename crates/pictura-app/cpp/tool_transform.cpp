@@ -221,6 +221,56 @@ void ToolController::setTransformCursor(const QPointF& imagePos)
     setHandleCursor(hit, imagePos, quadCentre(transform_api::quad(*v), imagePos));
 }
 
+bool ToolController::handleTransformPress(PictureView* v, const QPointF& imagePos,
+                                          Qt::KeyboardModifiers mods)
+{
+    const double z = canvas_ ? canvas_->zoom() : 1.0;
+    const int hit = v->transform_press(imagePos.x(), imagePos.y(), z,
+                                       mods.testFlag(Qt::ShiftModifier),
+                                       mods.testFlag(Qt::AltModifier));
+    transformGuideSnap_ = false;
+    transformPressPos_ = imagePos;
+    if (transformControls_ && (hit < 0 || hit == 9)) {
+        // Inside or outside the Move tool's controls box: an ordinary Move
+        // drag. Suspend the box for the drag; the release path brings it
+        // back on the moved layer.
+        v->transform_release();
+        transformControls_ = false;
+        v->cancel_transform();
+        if (canvas_) {
+            canvas_->clearTransformPreview();
+            canvas_->clearSmartGuides();
+        }
+        return false;
+    }
+    if (hit >= 0) {
+        // Free Transform's transient projective gestures: Perspective wins on
+        // Ctrl+Alt+Shift+corner, then the Ctrl+Shift side-handle skew, then the
+        // Ctrl corner distort.
+        const bool ctrlDown = mods.testFlag(Qt::ControlModifier);
+        const bool shiftDown = mods.testFlag(Qt::ShiftModifier);
+        const bool altDown = mods.testFlag(Qt::AltModifier);
+        if (hit <= 3 && ctrlDown && altDown && shiftDown) {
+            transform_begin_free_perspective(*v);
+        } else if (hit >= 4 && hit <= 7 && ctrlDown && shiftDown) {
+            transform_begin_free_skew(*v);
+        } else if (hit <= 3 && ctrlDown) {
+            transform_begin_free_distort(*v);
+        }
+        const ::rust::Vec<double> quad = transform_quad_extents(*v);
+        if (hit <= 3 && canvas_ && canvas_->guidesVisible()
+            && transform_session_mode(*v) == QStringLiteral("distort")
+            && quad.size() >= 8) {
+            transformGuideSnap_ = true;
+            transformStartCorner_ = QPointF(quad[2 * hit], quad[2 * hit + 1]);
+        }
+        updateTransformOverlay(v);
+        setTransformCursor(imagePos);
+        emit transformChanged();
+    }
+    return true;
+}
+
 void ToolController::setHandleCursor(int hit, const QPointF& imagePos, const QPointF& centre)
 {
     switch (hit) {
