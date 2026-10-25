@@ -48,7 +48,8 @@ Creation (CS6 Help, "Create a fill layer"):
   can also be built from **Color Range** in the Properties panel's Masks section
   (`LAY-012`).
 - Double-click the fill-layer thumbnail (or `Layer > Layer Content Options`) to
-  re-edit the fill in the Properties panel.
+  open the fill type's editor: the color picker for Solid Color, the Gradient
+  Fill dialog for Gradient, or the Pattern Fill dialog for Pattern.
 - A fill layer can be **rasterized** (`Layer > Rasterize > Fill Content`) without
   merging; merging it downward permanently applies its content. Like adjustment
   layers, a fill layer **cannot be the target** of a merge (only the source).

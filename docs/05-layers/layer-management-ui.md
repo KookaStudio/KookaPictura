@@ -172,7 +172,7 @@ above but not every control's widget form.)
 | Panel header | Widget | n/a | Blend mode popup, Opacity, Fill, lock strip, (CS6) filter/search field + toggle. |
 | Panel bottom | Widget | n/a | Link, Layer Style (fx), Layer Mask, Adjustment Layer, New Group, New Layer, Delete buttons. |
 | Layers panel menu | Menu | n/a | Panel Options, New/Duplicate/Delete, Merge/Flatten, Blending Options, Lock, Select, and mask/vector-mask/clipping entries. |
-| Row context menu | Context menu | right-click | CS6 color label, Copy CSS, layer-type-specific entries, group properties. |
+| Row context menu | Context menu | right-click | CS6 color label, layer-type-specific entries, group properties, and disabled placeholders for Copy CSS/SVG and Artboards/Frames. |
 | `Layer` menu | Menu | various | New, Arrange, Rasterize, Layer Mask, Vector Mask, Clipping Mask, Group, Smart Objects, Merge, Flatten. |
 | Rename field | Inline edit | double-click name | `Tab`/`Shift+Tab` move between layers in CS6. |
 | Properties panel | Dock | n/a | Contextual editor for the selected layer components (CS6). |

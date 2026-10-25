@@ -101,6 +101,31 @@ Snapshot for resuming after a context break. Update after each milestone.
   Tests: `tst_document_windows` (25), `tst_document_float` (37),
   `tst_document_arrange` (30), `tst_document_navigate` (9), and two
   `tst_loading_tab` tooltip cases.
+- **Layers panel interaction bundle** (issues #720, #894, #895, #897, #898,
+  #900; OpenSpec changes `layers-panel-bundle` + `fill-layer-editor`, archived).
+  Adjustment and fill creation anchors above the active layer and selects the
+  new node. A group's default mask is document-sized, so its thumbnail and
+  editing target work. `Add Mask by Default` (Adjustments panel) is separate
+  from `Use Default Masks on Fill Layers`; both create a white mask with no
+  selection, and a new adjustment targets its mask. Adjustment rows show the
+  kind icon; fill rows show a solid/gradient/scaled-pattern preview. The row
+  menu follows the CS6 block order, the Background has its brief menu, and the
+  removed opaque canvas backdrop lets a hidden Background reveal the
+  checkerboard. `Layer > New Fill Layer` and the strip/Adjustments fill icons
+  open real Solid Color, Gradient, and Pattern editors over the document's
+  embedded patterns (`PtFl` encoder + full `GdFl` params). Tests:
+  `tst_layers_row_menu`, `tst_layers_panel_bundle`, `tst_canvas_backdrop`,
+  `tst_fill_layer_editor`, plus render round-trips and the extended mask/
+  snapshot suites.
+- **Layers panel smoke follow-ups** (#937, #938, OpenSpec change
+  `layers-panel-smoke-followups`, archived). A mask thumbnail on a non-active
+  row preserves the mask edit target; Ctrl-click loads the raster mask as a
+  selection; an active mask target is a valid Image-adjustment/filter target.
+  Type, fill, and group rows gained their CS6 menu rows, with disabled
+  placeholders for Copy CSS/SVG, Artboards/Frames, work path/shape, and Windows
+  anti-aliasing. Groups open Blending Options with effect pages disabled until
+  group effects render (#939). The smoke fixture now carries the default masks
+  its Invert and Solid Fill rows should have.
 - **Vanishing Point planes** (#349, branch `feat/349-vanishing-point`,
   OpenSpec change `add-vanishing-point-planes`, archived into
   `imaging/vanishing-point`). `Filter ▸ Vanishing Point…` (Alt+Ctrl+V)

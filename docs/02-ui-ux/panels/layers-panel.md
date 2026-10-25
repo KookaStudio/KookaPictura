@@ -39,7 +39,7 @@ Each row is drawn by a custom delegate. Left to right:
 - **Mask thumbnails** — a layer mask thumbnail and/or a vector mask thumbnail, with a **link icon** between the layer and its mask when linked. The link icon is the click target for unlink/relink.
 - **Clip indicator** — a layer clipped to the layer below is indented, and its base layer's name is underlined.
 - **Style / effects badge** — the layer-effects (`fx`) expander; a **Blend If** badge appears when the layer's blending options have been customised. In CS6 the effects are ordered as applied (e.g. Drop Shadow below other effects).
-- **Fill indicator** — the adjustment/fill/smart-object content thumbnail occupies the layer-thumbnail slot (see `LAY-012`, `LAY-013`, `LAY-020`).
+- **Fill indicator** — the adjustment/fill/smart-object content thumbnail occupies the layer-thumbnail slot (see `LAY-012`, `LAY-013`, `LAY-020`). An adjustment row shows its adjustment-type icon; a fill row shows a solid swatch, gradient ramp, or scaled pattern tile.
 
 ### Effects disclosure
 
@@ -53,7 +53,7 @@ A popup selects the **filter dimension** — name, kind, effect, mode, attribute
 
 - **Panel menu** (top-right triangle): `Panel Options`, `New Layer`/`New Group`, `Duplicate Layer`/`Duplicate Group`, `Delete Layer`/`Delete Group`, `Merge Down`/`Merge Layers` (one context-sensitive entry)/`Merge Visible`/`Flatten Image`, `Blending Options`, lock and select entries, mask/vector-mask/clipping entries, `Convert to Smart Object`, and the remaining `Layer`-menu commands.
 - **Panel Options**: thumbnail size (`None`/small/medium/large), thumbnail contents (`Entire Document` / `Layer Bounds`), `Expand New Effects`, `Add "copy" to Copied Layers and Groups`, and `Use Default Masks on Fill Layers`. CS6 Help names only the first three; the CS6-era sources show the copy-name and default-mask options in the same dialog (defaults: `Entire Document`, `Expand New Effects` on, `Add "copy"` on, `Use Default Masks` on).
-- **Row context menu**: CS6 color label, layer-type-specific actions, `Copy CSS`, group commands, and the merge/rasterize/clipping entries valid for the row. Right-clicking the eye is the solo/all visibility menu noted above.
+- **Row context menu**: assembled per layer kind in CS6 block order — blending/adjustment edit and the disabled `Copy CSS`/`Copy SVG` placeholders; layer operations with per-kind Duplicate/Delete labels; Quick Export and Export As for every non-Background kind; Convert to Smart Object plus the disabled Artboard/Frame placeholders; rasterize; layer/vector mask and clipping rows for pixels, groups, and fill/adjustment layers; link; style clipboard; shape attributes; Release from Isolation; merge/flatten; then the color-label submenu. Type rows add the CS6 text block: disabled Create Work Path/Convert to Shape, Horizontal/Vertical, anti-aliasing (with disabled Windows LCD/Windows), Convert to Point/Paragraph Text, and Warp Text…; fill/adjustment rows expose the default raster mask, vector mask, clipping, merge, and export rows. Every applicable command is present, and a not-yet-implemented one is disabled with a `— not implemented yet` tooltip. The Background uses a brief dedicated menu (`Layer from Background…`, `Duplicate Layer…`, `Delete Layer` disabled, `Quick Export as PNG`, `Export As…`, `Convert to Smart Object`) without Rename, Blending Options, color label, merge, or flatten. Right-clicking the eye is the solo/all visibility menu noted above.
 
 ### Multi-select behavior
 
@@ -72,7 +72,7 @@ Click selects; `Shift`-click extends contiguously; `Ctrl`/`Cmd`-click toggles no
 | Row → thumbnail | Select pixels | `Ctrl`/`Cmd`-click | Loads layer transparency as a selection. |
 | Row → name | Inline edit | double-click; `Tab`/`Shift+Tab` | CS6 next/prev while renaming. |
 | Row → `fx` expander | Disclosure | `Alt`-click (show/hide all) | Effects/smart filters. |
-| Row → context menu | Menu | right-click | Color label, type-specific actions, Copy CSS. |
+| Row → context menu | Menu | right-click | Per-kind CS6 blocks, color label, and the brief Background menu. |
 | Panel bottom | Buttons | various | Link, Layer Style (`fx`), Layer Mask, Adjustment, New Group, New Layer, Delete. |
 | Panel menu | Menu | — | Commands + `Panel Options`. |
 | `Layer` menu | Menu | various | Full layer command set (`LAY-002`). |
