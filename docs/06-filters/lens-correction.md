@@ -19,17 +19,19 @@
 
 **Auto Correction (default tab).** Uses **lens profiles** plus **Exif** metadata identifying the camera and lens to correct automatically:
 - `Correction` — the set of problems to fix; if corrections would extend or contract the image beyond its original dimensions, `Auto Scale Image` compensates.
-- `Edge` — how to handle blank areas caused by pincushion/rotation/perspective correction: **transparency**, a **color**, or **extend the edge pixels**.
+- `Edge` — how to handle blank areas caused by pincushion/rotation/perspective correction: **transparency**, a **color**, or **extend the edge pixels**. CS6 captures show the menu as `Edge Extension`, `Transparency`, `Black Color`, `White Color` — black or white, not an arbitrary colour.
 - `Search Criteria` — filters the `Lens Profiles` list; default sorts by sensor-size match, and the pop-up offers `Prefer RAW Profiles`.
 - `Lens Profiles` — by default only profiles matching the current camera/lens are shown (camera need not match exactly). Photoshop auto-selects a matching **sub-profile** by focal length, f-stop, and focus distance; right-click the current profile to pick a different sub-profile. `Search Online` acquires community profiles; `Save Online Profile Locally` stores them. `Set Lens Default` saves the current settings keyed to camera/lens/focal length/f-stop.
 
 **Custom tab.** Manual correction, usable alone or to refine automatic correction:
-- `Settings` menu — `Lens Default` (saved per camera/lens/focal length/f-stop), `Previous Conversion` (last used), and any user-saved settings.
+- `Settings` menu — `Lens Default` (saved per camera/lens/focal length/f-stop), `Previous Conversion` (last used), and any user-saved settings. CS6 captures show it opening on `Default Correction` and reading `Custom` once a slider moves.
 - `Remove Distortion` slider + `Remove Distortion` tool — barrel/pincushion. (Drag toward center = barrel, toward edge = pincushion.)
-- `Fix Fringe` — `Fix Red/Cyan Fringe` and `Fix Blue/Yellow Fringe` scale one channel relative to green. Zoom in; hold `Alt`/`Option` while dragging to isolate the channel.
+- `Fix Fringe` — `Fix Red/Cyan Fringe` and `Fix Blue/Yellow Fringe` scale one channel relative to green. Zoom in; hold `Alt`/`Option` while dragging to isolate the channel. CS6 captures also show a third slider, `Fix Green/Magenta Fringe`, between the two.
 - `Vignette` — `Amount` (lighten/darken edges) and `Midpoint` (width of the affected area).
 - `Transform` — `Vertical Perspective` (corrects up/down camera tilt), `Horizontal Perspective` (left/right tilt), `Angle` (corrects camera tilt; also reachable via the `Straighten` tool by dragging along a line to make horizontal/vertical), and `Scale` (zooms to remove blank areas; pixel dimensions unchanged, so scaling up crops + interpolates back up).
 - `Grid` — `Show Grid`, `Size`, `Color`, and a `Move Grid` tool to align the grid to the image.
+
+**Layout (CS6 captures).** A tool column on the left (`Remove Distortion`, `Straighten`, `Move Grid`, then `Hand` and `Zoom`) under a help line that names the active tool ("Drag towards or away from center to correct distortion.") or the control under the pointer; the preview with a zoom box; `Camera Model`, `Lens Model` and `Camera Settings` (`--mm, f/--, --m` when unknown) status lines; `Preview`, `Show Grid`, grid `Color` and `Size`; and on the right `OK` / `Cancel` over the `Auto Correction` and `Custom` tabs. The title reads `Lens Correction (100%)`. With no matching profile the list reads "No matching profiles found" and the `Correction` checkboxes are disabled. The Transform group's `Angle` has a dial that points up at 0° and turns clockwise with the value (0–360°, two decimals).
 
 **Saving:** `Save Settings` / load from the Settings menu. Auto Correction settings and Custom distortion/CA/vignette settings are saved; **perspective settings are not saved** because they vary per image. A `Lens Default` becomes available when EXIF has camera, lens, focal length, and f-stop.
 
@@ -39,7 +41,7 @@
 
 | Location | Type | Shortcut | Notes |
 |---|---|---|---|
-| `Filter > Lens Correction` | Menu | — | 8-/16-bit RGB or Grayscale only |
+| `Filter > Lens Correction` | Menu | `Shift+Ctrl+R` | 8-/16-bit RGB or Grayscale only |
 | Dialog — `Auto Correction` tab | Tab | — | Default; profile-based |
 | Dialog — `Custom` tab | Tab | — | Manual correction |
 | Dialog — `Settings` menu | Menu | — | Lens Default, Previous Conversion, saved settings |
@@ -57,22 +59,23 @@
 | Control | Type | Default | Range / options | Notes |
 |---|---|---|---|---|
 | Correction — Geometric Distortion | check | on (when profile) | on/off | Auto tab |
-| Correction — Chromatic Aberration | check | on (when profile) | on/off | Auto tab |
-| Correction — Vignetting | check | on (when profile) | on/off | Auto tab |
-| Auto Scale Image | bool | on *(unverified)* | on/off | Compensates extended/contracted result |
-| Edge | enum | Edge Extension *(unverified)* | Transparency / Color / Edge Extension | Fill for blank areas |
+| Correction — Chromatic Aberration | check | off (CS6 capture) | on/off | Auto tab |
+| Correction — Vignetting | check | off (CS6 capture) | on/off | Auto tab |
+| Auto Scale Image | bool | on (CS6 capture) | on/off | Compensates extended/contracted result; captures show a Custom rotation still leaving blank corners with it on |
+| Edge | enum | Transparency (CS6 capture) | Edge Extension / Transparency / Black Color / White Color | Fill for blank areas |
 | Search Criteria | enum | sensor-size first | sensor-size / Prefer RAW Profiles | Filters profile list |
 | Lens Profile | list selection | auto-match | installed profiles | right-click for sub-profile |
-| Remove Distortion | slider | 0 | approx −100…+100 *(community)* | barrel/pincushion |
-| Fix Red/Cyan Fringe | slider | 0 | approx −100…+100 *(community)* | channel scale |
-| Fix Blue/Yellow Fringe | slider | 0 | approx −100…+100 *(community)* | channel scale |
+| Remove Distortion | slider | 0 | approx −100…+100 *(community)*, two decimals (CS6 capture) | barrel/pincushion |
+| Fix Red/Cyan Fringe | slider | 0 | approx −100…+100 *(community)*, two decimals (CS6 capture) | channel scale |
+| Fix Green/Magenta Fringe | slider | 0 | approx −100…+100 *(community)*, two decimals (CS6 capture) | channel scale |
+| Fix Blue/Yellow Fringe | slider | 0 | approx −100…+100 *(community)*, two decimals (CS6 capture) | channel scale |
 | Vignette Amount | slider | 0 | approx −100…+100 *(community)* | + lightens edges |
-| Vignette Midpoint | slider | 50 *(unverified)* | 0…100 | lower = wider |
+| Vignette Midpoint | slider | +50 (CS6 capture) | 0…100 | lower = wider |
 | Vertical Perspective | slider | 0 | approx −100…+100 *(community)* | parallel verticals |
 | Horizontal Perspective | slider | 0 | approx −100…+100 *(community)* | parallel horizontals |
-| Angle | slider | 0 | degrees | rotate/straighten |
+| Angle | dial + field | 0 | 0…360°, two decimals (CS6 capture) | rotate/straighten |
 | Scale | slider | 100 | approx 1…200 *(community)* | px dimensions unchanged |
-| Grid Size | slider | — | preview units | grid |
+| Grid Size | field | 64 (CS6 capture) | preview units | grid |
 | Grid Color | color | grey *(unverified)* | any color | grid |
 
 Numeric ranges absent from the CS6 Help PDF are marked *(community/unverified)* and listed under `## Open questions`.
@@ -166,6 +169,8 @@ Fetched for this document:
 - `https://help.adobe.com/archive/en/photoshop/cs6/photoshop_reference.pdf` — CS6 Help corpus (downloaded, `pdftotext -layout`). Established: `Filter > Lens Correction`; barrel/pincushion/vignetting/CA definitions; **8- and 16-bit RGB or Grayscale only**; Auto Correction tab (`Correction`, `Auto Scale Image`, `Edge`, `Search Criteria`/`Prefer RAW Profiles`, `Lens Profiles` + sub-profile by focal length/f-stop/focus distance, `Search Online`, `Save Online Profile Locally`); Custom tab (`Settings`, `Remove Distortion` + tool, `Fix Red/Cyan` / `Fix Blue/Yellow` fringe, `Vignette Amount`/`Midpoint`, `Vertical`/`Horizontal Perspective`, `Angle` + `Straighten` tool, `Scale`); grid controls (`Show Grid`, `Size`, `Color`, `Move Grid` tool); saving settings and `Set Lens Default` (EXIF-gated; perspective not saved); the CS5 What's-New "Automated lens correction" attribution.
 - `https://help.adobe.com/archive/en/photoshop/cs6/photoshop_reference.pdf` (Camera Raw chapter, same fetch) — established the shared ACR Lens Corrections model (Profile/Manual/Color) reused here, and ACR 7.1 chromatic-aberration checkboxes/sliders.
 
+- CS6 captures of the Lens Correction dialog supplied by the project owner (#347) — established the third `Fix Green/Magenta Fringe` slider, the `Edge` menu (`Edge Extension`, `Transparency`, `Black Color`, `White Color`), the opening defaults (`Transparency`, `Auto Scale Image` on, only `Geometric Distortion` checked, Midpoint +50, Grid Size 64, `Default Correction`), two-decimal distortion/fringe/angle fields, the Angle dial, the tool column and help line, the status lines, and "No matching profiles found".
+
 Marked inferred/community (not primary): the distortion polynomial form, CA and vignette models, resampling kernel, resampling parameters, default values flagged *(unverified)*, and numeric slider bounds not in the PDF.
 
 ## Open questions
@@ -173,7 +178,7 @@ Marked inferred/community (not primary): the distortion polynomial form, CA and 
 - **CS5 vs CS6 delta.** Did anything in the Lens Correction filter change in CS6 (profile handling, UI, sub-profile matching)? The CS6 What's-New does not itemize it. Resolve with a CS5 vs CS6 Help diff or build screenshots.
 - **Profile format.** Which on-disk profile format and distortion/CA/vignette model does Adobe use? Resolve by inspecting installed profiles and the Adobe Lens Profile Creator output; may need a compatible open parser.
 - **Exact slider ranges/defaults.** Not tabulated in the PDF; every `(community)` value needs verification against ACR/Lens-Correction UI metadata.
-- **Default `Edge` and `Auto Scale Image` states.** Confirm the shipped defaults.
+- **Default `Edge` and `Auto Scale Image` states.** Resolved by CS6 captures: `Transparency` and on.
 - **Sub-profile selection rule.** The exact interpolation/tie-break across focal length, f-stop, and focus distance is closed. Resolve with test shots.
 - **Offset control.** Confirm CS6 truly lacks X/Y offset (post-CS6 addition), so the UI does not expose a non-parity control.
 - **Idempotence.** Confirm that re-applying profile correction to an already-corrected image is a no-op (needed for acceptance).
