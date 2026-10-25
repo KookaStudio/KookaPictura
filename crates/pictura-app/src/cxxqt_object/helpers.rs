@@ -686,8 +686,9 @@ pub(super) fn brush_shortcut_delta(
 }
 
 /// Opt-in timing for the paint path, using the same `PICTURA_PAINT_TIMING`
-/// switch the Qt side reads. A no-op unless the variable is set, so normal runs
-/// and tests pay only an `Instant::now()` per phase.
+/// switch the Qt side reads. Every phase also feeds the `PICTURA_METRICS`
+/// totals. A no-op unless one of them is set, so normal runs and tests pay only
+/// an `Instant::now()` per phase.
 pub(crate) mod paint_timing {
     use std::cell::RefCell;
     use std::sync::OnceLock;
@@ -733,8 +734,10 @@ pub(crate) mod paint_timing {
         });
     }
 
-    /// Accumulate `dt` under `label`. No-op unless timing is enabled.
+    /// Accumulate `dt` under `label` into the stroke session and the metrics
+    /// totals. No-op unless one of them is enabled.
     pub(crate) fn record(label: &'static str, dt: Duration) {
+        crate::cxxqt_object::metrics::record_phase(label, dt);
         if level() == 0 {
             return;
         }
@@ -770,27 +773,34 @@ pub(crate) mod paint_timing {
             let Some(stats) = s.borrow_mut().take() else {
                 return;
             };
-            let total: Duration = stats.phases.iter().map(|(_, p)| p.total).sum();
-            eprintln!(
-                "[paint-timing] ===== {} (sum of phases {:.2}ms) =====",
-                stats.title,
-                total.as_secs_f64() * 1000.0
-            );
-            for (label, p) in &stats.phases {
-                let avg = if p.count > 0 {
-                    p.total.as_secs_f64() * 1000.0 / f64::from(p.count)
-                } else {
-                    0.0
-                };
-                eprintln!(
-                    "[paint-timing]   {label:<26} n={:<4} total={:>8.2}ms avg={:>7.3}ms max={:>7.3}ms",
-                    p.count,
-                    p.total.as_secs_f64() * 1000.0,
-                    avg,
-                    p.max.as_secs_f64() * 1000.0,
-                );
+            for line in report_lines(&stats) {
+                eprintln!("{line}");
             }
         });
+    }
+
+    fn report_lines(stats: &Stats) -> Vec<String> {
+        let total: Duration = stats.phases.iter().map(|(_, p)| p.total).sum();
+        let mut lines = vec![format!(
+            "[paint-timing] ===== {} (sum of phases {:.2}ms) =====",
+            stats.title,
+            total.as_secs_f64() * 1000.0
+        )];
+        for (label, p) in &stats.phases {
+            let avg = if p.count > 0 {
+                p.total.as_secs_f64() * 1000.0 / f64::from(p.count)
+            } else {
+                0.0
+            };
+            lines.push(format!(
+                "[paint-timing]   {label:<26} n={:<4} total={:>8.2}ms avg={:>7.3}ms max={:>7.3}ms",
+                p.count,
+                p.total.as_secs_f64() * 1000.0,
+                avg,
+                p.max.as_secs_f64() * 1000.0,
+            ));
+        }
+        lines
     }
 
     /// A scope timer; records its elapsed time under `label` on drop.
@@ -805,6 +815,28 @@ pub(crate) mod paint_timing {
     impl Drop for Scope {
         fn drop(&mut self) {
             record(self.0, self.1.elapsed());
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn paint_timing_report_keeps_phase_labels() {
+            let phase = |ms: u64| Phase {
+                count: 1,
+                total: Duration::from_millis(ms),
+                max: Duration::from_millis(ms),
+            };
+            let stats = Stats {
+                title: "brush".into(),
+                phases: vec![("dab_raster", phase(2)), ("region_blit", phase(3))],
+            };
+            let lines = report_lines(&stats);
+            assert!(lines[0].starts_with("[paint-timing] ===== brush (sum of phases 5.00ms)"));
+            assert!(lines[1].contains("dab_raster") && lines[1].contains("n=1"));
+            assert!(lines[2].contains("region_blit"));
         }
     }
 }

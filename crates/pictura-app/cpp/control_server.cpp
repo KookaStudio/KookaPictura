@@ -577,6 +577,9 @@ QJsonObject ControlServer::dispatch(const QString& method, const QJsonObject& pa
     if (method == QStringLiteral("set_gpu_compute")) {
         return methodSetGpuCompute(params);
     }
+    if (method == QStringLiteral("metrics")) {
+        return methodMetrics(params);
+    }
     if (method == QStringLiteral("pointer")) {
         return methodPointer(params);
     }

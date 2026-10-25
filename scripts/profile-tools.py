@@ -17,7 +17,13 @@ prints a before/after table against an earlier --save:
     # ...change the code, rebuild...
     python3 scripts/profile-tools.py --size 4000x3000 --compare /tmp/before.json
 
---timing-log keeps the app's PICTURA_PAINT_TIMING per-phase breakdown.
+--timing-log keeps the app's PICTURA_PAINT_TIMING per-phase breakdown. --metrics
+runs the app with PICTURA_METRICS=1, resets the metrics before each scenario,
+and prints the scenario's per-phase totals (including Qt-side phases such as
+the Layers panel refresh) from the control server's `metrics` snapshot.
+
+The new-layer and new-group scenarios create a layer or group through
+`layer_op` instead of driving a tool.
 Numbers are for one machine and one build; compare runs on the same machine.
 No dependency beyond python3's standard library.
 """
@@ -49,7 +55,12 @@ SCENARIOS = {
     "gradient": ("gradient", {}, "line"),
     "paintbucket": ("paintbucket", {}, "click"),
 }
-DEFAULT_SCENARIOS = ",".join(SCENARIOS)
+# name -> layer_op op; each creates one node above the bottom layer.
+LAYER_SCENARIOS = {
+    "new-layer": "add",
+    "new-group": "add_group",
+}
+DEFAULT_SCENARIOS = ",".join([*SCENARIOS, *LAYER_SCENARIOS])
 
 
 class Client:
@@ -108,7 +119,7 @@ def gesture_points(gesture, w, h, moves):
     return [(round(x0 + (x1 - x0) * i / steps, 1), round(y0 + (y1 - y0) * i / steps, 1)) for i in range(steps + 1)]
 
 
-def run_scenario(client, name, w, h, moves):
+def run_scenario(client, name, w, h, moves, before_undo):
     tool, options, gesture = SCENARIOS[name]
     client.call("set_tool", tool=tool)
     if options:
@@ -135,13 +146,79 @@ def run_scenario(client, name, w, h, moves):
         row["move_p95_ms"] = ms(ordered[min(len(ordered) - 1, int(round(0.95 * (len(ordered) - 1))))])
         row["move_max_ms"] = ms(ordered[-1])
         row["move_sum_ms"] = ms(sum(ordered))
+    before_undo(row)
     _, undo = client.call("edit", op="undo")
     _, settle = client.call("status")
     row["undo_ms"] = ms(undo + settle)
     return row
 
 
-COLUMNS = ["down_ms", "move_p50_ms", "move_p95_ms", "move_max_ms", "up_ms", "settle_ms", "total_ms", "undo_ms"]
+def run_layer_scenario(client, name, before_undo):
+    op = LAYER_SCENARIOS[name]
+    client.call("status")
+    row = {"tool": "layer_op", "gesture": op}
+    total = time.perf_counter()
+    _, row["op_ms"] = client.call("layer_op", op=op, index=0)
+    _, row["settle_ms"] = client.call("status")
+    row["total_ms"] = ms(time.perf_counter() - total)
+    row["idle_ms"] = ms(wait_idle(client, total))
+    row["op_ms"] = ms(row["op_ms"])
+    row["settle_ms"] = ms(row["settle_ms"])
+    before_undo(row)
+    _, undo = client.call("edit", op="undo")
+    _, settle = client.call("status")
+    row["undo_ms"] = ms(undo + settle)
+    return row
+
+
+def wait_idle(client, start, window=0.4, quiet_s=0.005):
+    """Seconds from `start` until the GUI thread finished its deferred work.
+
+    Polls `status` every 20 ms for at least `window` seconds (past the frame's
+    120 ms panel-refresh debounce). A reply slower than `quiet_s` means the GUI
+    thread was busy, so the idle point is the end of the last slow reply."""
+    busy_until = time.perf_counter()
+    quiet = 0
+    while True:
+        _, took = client.call("status")
+        now = time.perf_counter()
+        if took > quiet_s:
+            busy_until = now
+            quiet = 0
+        else:
+            quiet += 1
+        if quiet >= 3 and now - start > window and now - busy_until > 0.1:
+            return busy_until - start
+        time.sleep(0.02)
+
+
+def run_any(client, name, w, h, moves, metrics):
+    # The snapshot is read before the scenario's undo, whose full restore
+    # would otherwise add composite phases the scenario itself never ran.
+    def before_undo(row):
+        if metrics:
+            snapshot = client.call("metrics")[0]
+            row["phases"] = {label: phase["total_ms"] for label, phase in snapshot.get("phases", {}).items()}
+
+    if metrics:
+        client.call("metrics", reset=True)
+    if name in LAYER_SCENARIOS:
+        return run_layer_scenario(client, name, before_undo)
+    return run_scenario(client, name, w, h, moves, before_undo)
+
+
+def print_phases(results):
+    for name, row in results.items():
+        phases = row.get("phases")
+        if not phases:
+            continue
+        print(f"{name}:")
+        for label, total in sorted(phases.items(), key=lambda item: -item[1]):
+            print(f"    {label:<34}{total:>10.2f}")
+    print("(per-phase totals in milliseconds, from PICTURA_METRICS)")
+
+
+COLUMNS = ["op_ms", "idle_ms", "down_ms", "move_p50_ms", "move_p95_ms", "move_max_ms", "up_ms", "settle_ms", "total_ms", "undo_ms"]
 
 
 def print_table(results):
@@ -157,7 +234,7 @@ def print_table(results):
 
 
 def print_compare(before, after):
-    keys = ["move_p95_ms", "move_max_ms", "up_ms", "total_ms", "undo_ms"]
+    keys = ["op_ms", "idle_ms", "move_p95_ms", "move_max_ms", "up_ms", "total_ms", "undo_ms"]
     header = f"{'scenario':<18}" + "".join(f"{k.replace('_ms', ''):>26}" for k in keys)
     print(header)
     print("-" * len(header))
@@ -184,18 +261,21 @@ def main():
     source.add_argument("--image", help="open this file as the document")
     source.add_argument("--size", default="4000x3000", help="new white RGB document WxH (default 4000x3000)")
     parser.add_argument("--scenarios", default=DEFAULT_SCENARIOS,
-                        help=f"comma list, or 'all' (of: {', '.join(SCENARIOS)})")
+                        help=f"comma list, or 'all' (of: {', '.join([*SCENARIOS, *LAYER_SCENARIOS])})")
     parser.add_argument("--moves", type=int, default=60, help="motion events per stroke (default 60)")
     parser.add_argument("--gpu", choices=["on", "off", "default"], default="default",
                         help="force GPU compute on/off for the document (default: the app's own)")
     parser.add_argument("--save", help="write the results as JSON")
     parser.add_argument("--compare", help="print a before/after table against this --save")
     parser.add_argument("--timing-log", help="keep the app's stderr with PICTURA_PAINT_TIMING=1")
+    parser.add_argument("--metrics", action="store_true",
+                        help="run the app with PICTURA_METRICS=1 and print each scenario's phases")
     parser.add_argument("--timeout", type=float, default=600.0, help="per-request timeout in seconds")
     args = parser.parse_args()
 
-    names = list(SCENARIOS) if args.scenarios == "all" else [s.strip() for s in args.scenarios.split(",") if s.strip()]
-    unknown = [n for n in names if n not in SCENARIOS]
+    known = [*SCENARIOS, *LAYER_SCENARIOS]
+    names = known if args.scenarios == "all" else [s.strip() for s in args.scenarios.split(",") if s.strip()]
+    unknown = [n for n in names if n not in known]
     if unknown:
         parser.error(f"unknown scenario(s): {', '.join(unknown)}")
     if not os.access(args.bin, os.X_OK):
@@ -207,6 +287,10 @@ def main():
     env = dict(os.environ)
     if args.timing_log:
         env["PICTURA_PAINT_TIMING"] = "1"
+    if args.metrics:
+        env["PICTURA_METRICS"] = "1"
+    else:
+        env.pop("PICTURA_METRICS", None)
     with open(log_path, "w") as log:
         app = subprocess.Popen(
             [args.bin, "--headless", "--control", "--control-socket", sock, "--state-home", os.path.join(tmp, "state")],
@@ -243,12 +327,15 @@ def main():
         results = {}
         for name in names:
             try:
-                results[name] = run_scenario(client, name, w, h, args.moves)
+                results[name] = run_any(client, name, w, h, args.moves, args.metrics)
             except (RuntimeError, OSError) as err:
                 results[name] = {"error": str(err)}
                 if app.poll() is not None:
                     break
         print_table(results)
+        if args.metrics:
+            print()
+            print_phases(results)
         if args.save:
             with open(args.save, "w") as out:
                 json.dump({"meta": meta, "results": results}, out, indent=2)

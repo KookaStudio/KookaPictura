@@ -44,6 +44,7 @@ mod layer_style;
 mod layer_target_bridge;
 mod layers_smart_filters;
 mod magnetic;
+mod metrics;
 mod open_jobs;
 mod paint_tools;
 mod path_list;
@@ -1168,6 +1169,14 @@ pub mod qobject {
         /// The persisted GPU-compute preference (true by default).
         #[qinvokable]
         fn gpu_compute(&self) -> bool;
+        /// Record a phase the Qt side timed into the `PICTURA_METRICS` totals;
+        /// a no-op when metrics are off.
+        #[qinvokable]
+        fn record_metric_phase(&self, label: &QString, micros: i64);
+        /// The metrics snapshot as JSON (phases, counters, recent edits), or
+        /// empty when metrics are off. `reset` clears the totals and records.
+        #[qinvokable]
+        fn metrics_snapshot(&self, reset: bool) -> QString;
         /// Whether a usable GPU adapter exists (cached capability probe).
         #[qinvokable]
         fn gpu_available(&self) -> bool;

@@ -15,6 +15,8 @@
 #include "panels/channels_panel.h"
 #include "panels/layers_panel.h"
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/clipping.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/impl_history/display.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/image_adjust/image_ops.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h"
@@ -44,6 +46,10 @@ private slots:
     void aCommitNotifiesOnce();
     void aSaveSelectionNotifies();
     void aCommittedEditShowsUndoState();
+    void newLayerDoesNotRecomposite();
+    void newGroupDoesNotRecomposite();
+    void newLayerInClippingChainRecomposites();
+    void newLayerRecordsOneStateWithoutRecomposite();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -165,6 +171,59 @@ void EditRefreshTest::aCommittedEditShowsUndoState()
     QVERIFY(undo->isEnabled());
     QVERIFY2(undo->text().contains(QStringLiteral("Duplicate")),
              qPrintable(undo->text()));
+}
+
+// A content-neutral insertion keeps the level-0 frame: the frame revision
+// only moves on a full rebuild, and no region is blitted.
+void EditRefreshTest::newLayerDoesNotRecomposite()
+{
+    pictura::PictureView view;
+    QVERIFY(view.new_document(64, 64, QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    const quint64 frame = pictura::frame_revision(view);
+    QSignalSpy blits(&view, &pictura::PictureView::regionBlitted);
+    QSignalSpy changes(&view, &pictura::PictureView::changed);
+    QVERIFY(!view.add_layer_in(QStringLiteral("0")).isEmpty());
+    QCOMPARE(view.layer_count(), 2);
+    QCOMPARE(pictura::frame_revision(view), frame);
+    QCOMPARE(blits.count(), 0);
+    QCOMPARE(changes.count(), 1);
+}
+
+void EditRefreshTest::newGroupDoesNotRecomposite()
+{
+    pictura::PictureView view;
+    QVERIFY(view.new_document(64, 64, QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    const quint64 frame = pictura::frame_revision(view);
+    QVERIFY(!view.add_group_in(QStringLiteral("0")).isEmpty());
+    QCOMPARE(view.layer_kind(1), QStringLiteral("group"));
+    QCOMPARE(pictura::frame_revision(view), frame);
+}
+
+// A new unclipped layer slipped under a clipped one rebases the clipped run,
+// so it is not content-neutral and rebuilds the frame.
+void EditRefreshTest::newLayerInClippingChainRecomposites()
+{
+    pictura::PictureView view;
+    QVERIFY(view.new_document(64, 64, QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    QCOMPARE(view.add_layer_in(QStringLiteral("0")), QStringLiteral("1"));
+    QCOMPARE(view.add_layer_in(QStringLiteral("1")), QStringLiteral("2"));
+    QVERIFY(pictura::clipping_create(view, QStringList{QStringLiteral("2")}) > 0);
+    const quint64 frame = pictura::frame_revision(view);
+    QCOMPARE(view.add_layer_in(QStringLiteral("1")), QStringLiteral("2"));
+    QVERIFY(pictura::frame_revision(view) != frame);
+}
+
+void EditRefreshTest::newLayerRecordsOneStateWithoutRecomposite()
+{
+    pictura::PictureView view;
+    QVERIFY(view.new_document(64, 64, QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    const int history = view.history_count();
+    const quint64 frame = pictura::frame_revision(view);
+    QVERIFY(!view.add_layer_in(QStringLiteral("0")).isEmpty());
+    QCOMPARE(view.history_count(), history + 1);
+    QCOMPARE(pictura::frame_revision(view), frame);
+    QVERIFY(view.undo());
+    QCOMPARE(view.layer_count(), 1);
 }
 
 QTEST_MAIN(EditRefreshTest)

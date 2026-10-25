@@ -455,6 +455,8 @@ private:
     PendingPreview gesture_;
     QTimer* previewTimer_ = nullptr;
     bool refreshing_ = false;
+    // A refresh is queued from `changed` and has not run yet.
+    bool refreshQueued_ = false;
     bool applyingTarget_ = false;
     QMetaObject::Connection viewConnection_;
 

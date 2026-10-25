@@ -13,6 +13,7 @@
 #include "icons.h"
 #include "layer_adjustments.h"
 #include "percent_field.h"
+#include "pictura_debug_timing.h"
 #include "session.h"
 
 #include "pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h"
@@ -488,8 +489,18 @@ void LayersPanel::setView(PictureView* view)
     tree_->setDragSource(view);
     if (view_) {
         set_layers_panel_options(*view_, addCopyOnDuplicate_, useDefaultMasksOnFill_);
+        // One queued refresh per burst of changes; a synchronous refresh
+        // before it runs (New Layer from the panel) consumes it.
         viewConnection_ = connect(view_, &PictureView::changed, this, [this] {
-            QTimer::singleShot(0, this, [this] { refresh(); });
+            if (refreshQueued_) {
+                return;
+            }
+            refreshQueued_ = true;
+            QTimer::singleShot(0, this, [this] {
+                if (refreshQueued_) {
+                    refresh();
+                }
+            });
         });
     }
     refresh();
@@ -497,6 +508,8 @@ void LayersPanel::setView(PictureView* view)
 
 void LayersPanel::refresh()
 {
+    refreshQueued_ = false;
+    const MetricsTimer<PictureView> timer(view_, "layers_panel_refresh");
     const bool wasRefreshing = refreshing_;
     const bool wasApplying = applyingTarget_;
     refreshing_ = true;

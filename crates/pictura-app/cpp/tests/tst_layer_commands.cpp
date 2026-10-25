@@ -45,6 +45,8 @@ private slots:
     void duplicateMultiSelection();
     void duplicateWithoutSelection();
     void solidFillCommandUsesForeground();
+    void managementNoOpRecordsNoHistory();
+    void managementCommandRecordsOneState();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -206,6 +208,45 @@ void LayerCommandsTest::solidFillCommandUsesForeground()
     QVERIFY2(registry->action(id)->isEnabled(), "enabled with a document open");
     QVERIFY(registry->dispatch(id));
     QCOMPARE(view->sample_argb(0, 0), 0xff2266ccu);
+}
+
+// Merge Down on the bottom layer has nothing to merge into: refused, no state.
+void LayerCommandsTest::managementNoOpRecordsNoHistory()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("NoOp"), 16, 16, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY(view != nullptr);
+    const int history = view->history_count();
+    QVERIFY(view->merge_layers(QStringList{QStringLiteral("0")}).isEmpty());
+    QCOMPARE(view->history_count(), history);
+    QCOMPARE(view->layer_count(), 1);
+}
+
+// A content-neutral New Group and a recompositing Merge Down each record one
+// state, and one undo restores the tree.
+void LayerCommandsTest::managementCommandRecordsOneState()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("OneState"), 16, 16, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY(view != nullptr);
+
+    int history = view->history_count();
+    QVERIFY(!view->add_group_in(QStringLiteral("0")).isEmpty());
+    QCOMPARE(view->history_count(), history + 1);
+    QVERIFY(view->undo());
+    QCOMPARE(view->layer_count(), 1);
+
+    QVERIFY(!view->add_layer_in(QStringLiteral("0")).isEmpty());
+    history = view->history_count();
+    QVERIFY(!view->merge_layers(QStringList{QStringLiteral("1")}).isEmpty());
+    QCOMPARE(view->history_count(), history + 1);
+    QCOMPARE(view->layer_count(), 1);
+    QVERIFY(view->undo());
+    QCOMPARE(view->layer_count(), 2);
 }
 
 QTEST_MAIN(LayerCommandsTest)
