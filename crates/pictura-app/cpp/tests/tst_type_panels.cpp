@@ -37,7 +37,7 @@ QImage seed()
 QString typeLayer(const Fixture& f)
 {
     for (int i = 0; i < f.view->layer_count(); ++i) {
-        if (pictura::type_api::isType(*f.view, QString::number(i))) {
+        if (pictura::type_api::readLayer(*f.view, QString::number(i)).isType) {
             return QString::number(i);
         }
     }
@@ -135,7 +135,7 @@ void TypePanelsTest::glyphsPanel()
     const int base = f.view->history_index();
     QVERIFY(f.tools->textSession() && f.tools->textSession()->commitText());
     QVERIFY2(f.committedOnce(base, "Horizontal Type"), "commit");
-    QCOMPARE(QString(pictura::type_api::layerText(*f.view, typeLayer(f))), QStringLiteral("aZ"));
+    QCOMPARE(QString(pictura::type_api::readLayer(*f.view, typeLayer(f)).spec.text), QStringLiteral("aZ"));
 }
 
 QTEST_MAIN(TypePanelsTest)

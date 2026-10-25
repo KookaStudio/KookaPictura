@@ -91,10 +91,8 @@ void CharacterStylesPanel::refresh()
     const int current = list_->currentRow();
     QStringList names;
     if (view_ && view_->has_document()) {
-        const int count = pictura::type_api::characterStyleCount(*view_);
-        names.reserve(count);
-        for (int i = 0; i < count; ++i) {
-            names << pictura::type_api::characterStyleName(*view_, i);
+        for (const pictura::type_api::CharacterStyle& style : pictura::type_api::characterStyles(*view_)) {
+            names << style.name;
         }
     }
     // Only rebuild when the list changed, so a refresh does not swallow the
@@ -129,7 +127,7 @@ void CharacterStylesPanel::applyRow(int row)
         return;
     }
     const QString path = layer_selection_anchor(*view_);
-    if (path.isEmpty() || !pictura::type_api::isType(*view_, path)) {
+    if (path.isEmpty() || !pictura::type_api::readLayer(*view_, path).isType) {
         return;
     }
     pictura::type_api::applyStyle(*view_, path, item->text(), false);
@@ -167,10 +165,10 @@ bool CharacterStylesPanel::editStyle(int row)
         return false;
     }
     const QString name = list_->item(row)->text();
-    const CharacterSetting originalCharacter =
-        pictura::type_api::characterStyleCharacter(*view_, name);
-    const QString family =
-        familyForFontName(pictura::type_api::characterStyleFont(*view_, name));
+    const pictura::type_api::CharacterStyle original =
+        pictura::type_api::findStyle(pictura::type_api::characterStyles(*view_), name);
+    const CharacterSetting originalCharacter = original.character;
+    const QString family = familyForFontName(original.font);
 
     ParagraphStyleDialog dialog(name, family, originalCharacter,
                                 pictura::type_api::defaultParagraphSetting(), true, this, true);

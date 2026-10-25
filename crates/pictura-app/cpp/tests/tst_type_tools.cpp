@@ -42,7 +42,7 @@ QRect layerRect(const Fixture& f, const QString& path)
 QString typeLayer(const Fixture& f)
 {
     for (int i = 0; i < f.view->layer_count(); ++i) {
-        if (pictura::type_api::isType(*f.view, QString::number(i))) {
+        if (pictura::type_api::readLayer(*f.view, QString::number(i)).isType) {
             return QString::number(i);
         }
     }
@@ -98,6 +98,22 @@ QByteArray paragraphFingerprint(const pictura::ParagraphSetting& p)
     return bytes;
 }
 
+// A committed "Session" point type layer at (30, 120), set straight through the
+// adapter; its path.
+QString commitTypeLayer(const Fixture& f)
+{
+    pictura::TypeSetting setting{};
+    setting.x = 30.0;
+    setting.y = 120.0;
+    setting.xx = 1.0;
+    setting.yy = 1.0;
+    pictura::CharacterSetting character = pictura::type_api::defaultCharacterSetting();
+    character.size = 36.0;
+    return pictura::type_api::commitLayer(
+        *f.view, {QStringLiteral("Session"), QStringLiteral("Liberation Sans"), setting, character,
+                  pictura::type_api::defaultParagraphSetting()});
+}
+
 // These checks cover a session that starts empty: the CS6 behaviour, and the
 // one with Edit > Preferences > Type's placeholder fill off.
 struct PlaceholderOff {
@@ -139,6 +155,8 @@ private slots:
     void typeLayerRowHasNoLockBadge();
     void dragOutsideMovesTheText();
     void missingGlyphFallbackRegisters();
+    void editSessionCommitsOnce();
+    void droppedEditSessionCancels();
 
 private:
     void showFrame();
@@ -384,7 +402,7 @@ void TypeToolsTest::freeTransformKeepsType()
     QVERIFY2(f.committedOnce(base, "Free Transform"), "one Free Transform state");
 
     // Still type, twice as wide, and reopening it keeps the stretch.
-    QVERIFY(pictura::type_api::isType(*f.view, path));
+    QVERIFY(pictura::type_api::readLayer(*f.view, path).isType);
     const QRect stretched = layerRect(f, path);
     QVERIFY2(qAbs(stretched.width() - 2 * before.width()) <= 4, "twice as wide");
     frame.setActiveTool(pictura::ToolId::HorizontalType);
@@ -429,7 +447,7 @@ void TypeToolsTest::skewKeepsType()
     QVERIFY(f.view->commit_transform());
     QVERIFY2(f.committedOnce(base, "Free Transform"), "one Free Transform state");
 
-    QVERIFY2(pictura::type_api::isType(*f.view, path), "the skew stays type");
+    QVERIFY2(pictura::type_api::readLayer(*f.view, path).isType, "the skew stays type");
     QVERIFY2(layerRect(f, path).width() > before.width(), "the top edge slid");
     f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(saved);
 }
@@ -596,7 +614,7 @@ void TypeToolsTest::editLikeATextField()
     const int base = f.view->history_index();
     QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
     QVERIFY2(f.committedOnce(base, "Horizontal Type"), "commit");
-    QCOMPARE(QString(pictura::type_api::layerText(*f.view, typeLayer(f))),
+    QCOMPARE(QString(pictura::type_api::readLayer(*f.view, typeLayer(f)).spec.text),
              QStringLiteral("one 2\r3"));
     f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(saved);
 }
@@ -628,7 +646,7 @@ void TypeToolsTest::barRestylesTheSelectedLayer()
     QCOMPARE(f.view->layer_count(), layers);
     const QRect big = layerRect(f, path);
     QVERIFY(qAbs(big.height() - 2 * small.height()) <= 3);
-    QCOMPARE(QString(pictura::type_api::layerText(*f.view, path)), QStringLiteral("iiiiiiii"));
+    QCOMPARE(QString(pictura::type_api::readLayer(*f.view, path).spec.text), QStringLiteral("iiiiiiii"));
 
     // Family: the layer is re-set in that face — monospace i's are wider —
     // and records it, keeping the size.
@@ -641,7 +659,7 @@ void TypeToolsTest::barRestylesTheSelectedLayer()
     QVERIFY2(monoRect.width() > big.width() * 3 / 2, "set in the monospace face");
     // Its own ascent and descent, at the same size.
     QVERIFY(monoRect.height() > big.height() * 3 / 4 && monoRect.height() < big.height() * 3 / 2);
-    QCOMPARE(QString(pictura::type_api::layerFont(*f.view, path)), mono);
+    QCOMPARE(QString(pictura::type_api::readLayer(*f.view, path).spec.font), mono);
 
     // Selecting the layer again shows its family and size in the bar.
     frame.setActiveTool(pictura::ToolId::Move);
@@ -675,29 +693,29 @@ void TypeToolsTest::characterAttributeEdits()
     const QString path = typeLayer(f);
     QVERIFY2(!path.isEmpty(), "a type layer");
     const int base = f.view->history_index();
-    const QString family = pictura::type_api::layerFont(*f.view, path);
-    const QString text = pictura::type_api::layerText(*f.view, path);
+    const QString family = pictura::type_api::readLayer(*f.view, path).spec.font;
+    const QString text = pictura::type_api::readLayer(*f.view, path).spec.text;
 
     // A non-default character attribute records exactly one state...
-    const pictura::TypeSetting placement = pictura::type_api::layerSetting(*f.view, path);
-    const pictura::ParagraphSetting paragraph = pictura::type_api::layerParagraphSetting(*f.view, path);
-    pictura::CharacterSetting character = pictura::type_api::layerCharacterSetting(*f.view, path);
+    const pictura::TypeSetting placement = pictura::type_api::readLayer(*f.view, path).spec.setting;
+    const pictura::ParagraphSetting paragraph = pictura::type_api::readLayer(*f.view, path).spec.paragraph;
+    pictura::CharacterSetting character = pictura::type_api::readLayer(*f.view, path).spec.character;
     QCOMPARE(character.tracking, 0.0);
     QCOMPARE(character.horizontal_scale, 100.0);
     character.tracking = 120.0;
     character.horizontal_scale = 50.0;
     QVERIFY(
-        pictura::type_api::updateLayer(*f.view, path, text, family, placement, character, paragraph));
+        pictura::type_api::updateLayer(*f.view, path, {text, family, placement, character, paragraph}));
     QVERIFY2(f.committedOnce(base, "Edit Type Layer"), "one Edit Type Layer state");
 
     // ...and the re-authored layer reopens with it intact (6.4).
-    const pictura::CharacterSetting set = pictura::type_api::layerCharacterSetting(*f.view, path);
+    const pictura::CharacterSetting set = pictura::type_api::readLayer(*f.view, path).spec.character;
     QCOMPARE(set.tracking, 120.0);
     QCOMPARE(set.horizontal_scale, 50.0);
 
     // One undo restores the previous values (6.3).
     QVERIFY(f.view->undo());
-    const pictura::CharacterSetting back = pictura::type_api::layerCharacterSetting(*f.view, path);
+    const pictura::CharacterSetting back = pictura::type_api::readLayer(*f.view, path).spec.character;
     QCOMPARE(back.tracking, 0.0);
     QCOMPARE(back.horizontal_scale, 100.0);
 
@@ -705,18 +723,18 @@ void TypeToolsTest::characterAttributeEdits()
     const int restoredBase = f.view->history_index();
     const quint64 beforePixels = layerPixelHash(f, path);
     const QByteArray beforeCharacter =
-        characterFingerprint(pictura::type_api::layerCharacterSetting(*f.view, path));
+        characterFingerprint(pictura::type_api::readLayer(*f.view, path).spec.character);
     const QByteArray beforeParagraph =
-        paragraphFingerprint(pictura::type_api::layerParagraphSetting(*f.view, path));
+        paragraphFingerprint(pictura::type_api::readLayer(*f.view, path).spec.paragraph);
     f.drag({QPointF(layerRect(f, path).center())});
     QVERIFY(f.tools->textSession() && f.tools->textSession()->textActive());
-    QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).tracking, 0.0);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.character.tracking, 0.0);
     QTest::keyClick(f.canvas, Qt::Key_Escape);
     QCOMPARE(f.view->history_index(), restoredBase);
     QCOMPARE(layerPixelHash(f, path), beforePixels);
-    QCOMPARE(characterFingerprint(pictura::type_api::layerCharacterSetting(*f.view, path)),
+    QCOMPARE(characterFingerprint(pictura::type_api::readLayer(*f.view, path).spec.character),
              beforeCharacter);
-    QCOMPARE(paragraphFingerprint(pictura::type_api::layerParagraphSetting(*f.view, path)),
+    QCOMPARE(paragraphFingerprint(pictura::type_api::readLayer(*f.view, path).spec.paragraph),
              beforeParagraph);
     f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(saved);
 }
@@ -744,16 +762,15 @@ void TypeToolsTest::manualOverrideSurvivesStyleApply()
     QVERIFY2(!path.isEmpty(), "a type layer");
 
     // Through the real edit path, change tracking only; size stays inherited.
-    const QString text = pictura::type_api::layerText(*f.view, path);
-    const QString family = pictura::type_api::layerFont(*f.view, path);
-    const pictura::TypeSetting placement = pictura::type_api::layerSetting(*f.view, path);
+    const QString text = pictura::type_api::readLayer(*f.view, path).spec.text;
+    const QString family = pictura::type_api::readLayer(*f.view, path).spec.font;
+    const pictura::TypeSetting placement = pictura::type_api::readLayer(*f.view, path).spec.setting;
     const pictura::ParagraphSetting paragraph =
-        pictura::type_api::layerParagraphSetting(*f.view, path);
+        pictura::type_api::readLayer(*f.view, path).spec.paragraph;
     pictura::CharacterSetting character =
-        pictura::type_api::layerCharacterSetting(*f.view, path);
+        pictura::type_api::readLayer(*f.view, path).spec.character;
     character.tracking = 120.0;
-    QVERIFY(pictura::type_api::updateLayer(*f.view, path, text, family, placement, character,
-                                       paragraph));
+    QVERIFY(pictura::type_api::updateLayer(*f.view, path, {text, family, placement, character, paragraph}));
 
     // A style that sets size, but not the manually changed tracking.
     pictura::CharacterSetting style = pictura::type_api::defaultCharacterSetting();
@@ -763,7 +780,7 @@ void TypeToolsTest::manualOverrideSurvivesStyleApply()
     QVERIFY(pictura::type_api::applyStyle(*f.view, path, QStringLiteral("Override Probe"), false));
 
     const pictura::CharacterSetting applied =
-        pictura::type_api::layerCharacterSetting(*f.view, path);
+        pictura::type_api::readLayer(*f.view, path).spec.character;
     QCOMPARE(applied.tracking, 120.0); // the manual override survives
     QCOMPARE(applied.size, 48.0);      // the untouched field follows the style
     f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(saved);
@@ -786,7 +803,7 @@ void TypeToolsTest::reopenKeepsAntiAlias()
     QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
     const QString path = typeLayer(f);
     QVERIFY2(!path.isEmpty(), "a type layer");
-    QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).anti_alias, 0);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.character.anti_alias, 0);
 
     // Selecting the layer seeds the bar's combo from the stored method.
     frame.setActiveTool(pictura::ToolId::Move);
@@ -801,7 +818,7 @@ void TypeToolsTest::reopenKeepsAntiAlias()
     QTest::keyClicks(f.canvas, QStringLiteral("!"));
     QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
     QCOMPARE(f.view->history_index(), base + 1);
-    QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).anti_alias, 0);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.character.anti_alias, 0);
 
     // Esc leaves it as it was.
     f.drag({QPointF(layerRect(f, path).center())});
@@ -809,7 +826,7 @@ void TypeToolsTest::reopenKeepsAntiAlias()
     QTest::keyClicks(f.canvas, QStringLiteral("?"));
     QTest::keyClick(f.canvas, Qt::Key_Escape);
     QCOMPARE(f.view->history_index(), base + 1);
-    QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).anti_alias, 0);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.character.anti_alias, 0);
     f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(saved);
 }
 
@@ -1158,9 +1175,7 @@ void TypeToolsTest::missingGlyphFallbackRegisters()
     pictura::CharacterSetting character = pictura::type_api::defaultCharacterSetting();
     character.size = 48.0;
     const QString text = QStringLiteral("A") + QChar(0x0370);
-    const QString path = pictura::type_api::commitLayer(
-        *f.view, text, QStringLiteral("Liberation Sans"), setting, character,
-        pictura::type_api::defaultParagraphSetting());
+    const QString path = pictura::type_api::commitLayer(*f.view, {text, QStringLiteral("Liberation Sans"), setting, character, pictura::type_api::defaultParagraphSetting()});
     QVERIFY2(!path.isEmpty(), "the type layer commits");
     f.frame.refresh();
     const QImage on = f.canvas->image();
@@ -1172,6 +1187,60 @@ void TypeToolsTest::missingGlyphFallbackRegisters()
     pictura::type_api::setMissingGlyphProtection(true);
     pictura::type_api::refreshMissingGlyphProtection(*f.view);
     QVERIFY2(on != off, "the covering face changes the uncovered glyph");
+}
+
+// The adapter's edit session (#403): begin hides the type layer with no state,
+// commit re-sets it as exactly one "Edit Type Layer" state and shows it again,
+// and the session is then closed. A non-type layer opens no session.
+void TypeToolsTest::editSessionCommitsOnce()
+{
+    Fixture f(*window_, seed(), QStringLiteral("pictura_type_session_commit"));
+    QVERIFY2(f.ok(), "type fixture");
+    pictura::registerTypeFallbacks();
+    const QString path = commitTypeLayer(f);
+    QVERIFY2(!path.isEmpty(), "the type layer commits");
+    const int index = path.toInt();
+    const int base = f.view->history_index();
+
+    QVERIFY(!pictura::type_api::EditSession::begin(*f.view, QStringLiteral("0")).has_value());
+    std::optional<pictura::type_api::EditSession> session =
+        pictura::type_api::EditSession::begin(*f.view, path);
+    QVERIFY(session.has_value() && session->isOpen());
+    QCOMPARE(session->path(), path);
+    QVERIFY(!f.view->layer_visible(index));
+    QCOMPARE(f.view->history_index(), base);
+
+    pictura::type_api::TypeSpec spec = pictura::type_api::readLayer(*f.view, path).spec;
+    spec.text = QStringLiteral("Committed");
+    QVERIFY(session->commit(spec));
+    QVERIFY(!session->isOpen());
+    QVERIFY2(f.committedOnce(base, "Edit Type Layer"), "one Edit Type Layer state");
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.text, QStringLiteral("Committed"));
+    QVERIFY(f.view->layer_visible(index));
+    QVERIFY(!session->commit(spec));
+    QCOMPARE(f.view->history_index(), base + 1);
+}
+
+// A session destroyed without a commit cancels: the layer is shown again
+// unchanged and nothing is recorded.
+void TypeToolsTest::droppedEditSessionCancels()
+{
+    Fixture f(*window_, seed(), QStringLiteral("pictura_type_session_drop"));
+    QVERIFY2(f.ok(), "type fixture");
+    pictura::registerTypeFallbacks();
+    const QString path = commitTypeLayer(f);
+    QVERIFY2(!path.isEmpty(), "the type layer commits");
+    const int index = path.toInt();
+    const int base = f.view->history_index();
+    {
+        std::optional<pictura::type_api::EditSession> session =
+            pictura::type_api::EditSession::begin(*f.view, path);
+        QVERIFY(session.has_value());
+        QVERIFY(!f.view->layer_visible(index));
+    }
+    QVERIFY(f.view->layer_visible(index));
+    QCOMPARE(f.view->history_index(), base);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.text, QStringLiteral("Session"));
 }
 
 QTEST_MAIN(TypeToolsTest)

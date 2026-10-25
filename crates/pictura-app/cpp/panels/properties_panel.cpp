@@ -653,7 +653,7 @@ void PropertiesPanel::showLayer(const pictura::layers_api::LayerRow& row)
     while (info_->rowCount() > 0) {
         info_->removeRow(0);
     }
-    const QString kind = pictura::type_api::isType(*view_, path_) ? QStringLiteral("type") : row.kind;
+    const QString kind = pictura::type_api::readLayer(*view_, path_).isType ? QStringLiteral("type") : row.kind;
     const std::map<QString, QString> kinds = {
         {QStringLiteral("pixel"), QStringLiteral("Pixel")},
         {QStringLiteral("type"), QStringLiteral("Type")},

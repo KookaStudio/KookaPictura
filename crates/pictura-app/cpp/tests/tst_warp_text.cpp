@@ -58,8 +58,7 @@ QString addType(Fixture& f, const QString& text, bool fauxBold = false,
     pictura::CharacterSetting character = pictura::type_api::defaultCharacterSetting();
     character.size = 40.0;
     character.faux_bold = fauxBold;
-    const QString path = pictura::type_api::commitLayer(
-        *f.view, text, kFont, setting, character, pictura::type_api::defaultParagraphSetting());
+    const QString path = pictura::type_api::commitLayer(*f.view, {text, kFont, setting, character, pictura::type_api::defaultParagraphSetting()});
     f.frame.selectLayerPath(path);
     f.frame.refresh();
     return path;
@@ -143,6 +142,7 @@ private slots:
     void fauxBoldIsRefused();
     void typeOnPathIsRefused();
     void layersRowMarksWarp();
+    void warpSessionCancelsOrCommitsOnce();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -372,12 +372,10 @@ void WarpTextTest::editKeepsWarp()
 
     // The setting the Type tool previews from carries the warp.
     const pictura::type_api::LayerType layer = pictura::type_api::readLayer(*f.view, path);
-    pictura::TypeSetting flat = layer.setting;
+    pictura::TypeSetting flat = layer.spec.setting;
     flat.warp_style = QString();
-    QVERIFY2(pictura::type_api::previewRgba(layer.text, kFont, layer.setting, layer.character,
-                                            layer.paragraph)
-                 != pictura::type_api::previewRgba(layer.text, kFont, flat, layer.character,
-                                                   layer.paragraph),
+    QVERIFY2(pictura::type_api::previewRgba({layer.spec.text, kFont, layer.spec.setting, layer.spec.character, layer.spec.paragraph})
+                 != pictura::type_api::previewRgba({layer.spec.text, kFont, flat, layer.spec.character, layer.spec.paragraph}),
              "the edit preview is warped");
 
     // Retype it with the Type tool.
@@ -393,7 +391,7 @@ void WarpTextTest::editKeepsWarp()
     QTest::keyClicks(f.canvas, QStringLiteral("!"));
     QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
     window_->setActiveTool(pictura::ToolId::Move);
-    QCOMPARE(pictura::type_api::layerText(*f.view, path), QStringLiteral("Warp me!"));
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.text, QStringLiteral("Warp me!"));
     const WarpSetting warp = pictura::type_api::layerWarp(*f.view, path);
     QCOMPARE(warp.style, QStringLiteral("arc"));
     QCOMPARE(warp.bend, 50.0);
@@ -412,9 +410,8 @@ void WarpTextTest::attributesAndTransformKeepWarp()
 
     // The Character panel's write: the layer's own setting with a new size.
     pictura::type_api::LayerType layer = pictura::type_api::readLayer(*f.view, path);
-    layer.character.size = 52.0;
-    QVERIFY(pictura::type_api::updateLayer(*f.view, path, layer.text, kFont, layer.setting,
-                                           layer.character, layer.paragraph));
+    layer.spec.character.size = 52.0;
+    QVERIFY(pictura::type_api::updateLayer(*f.view, path, {layer.spec.text, kFont, layer.spec.setting, layer.spec.character, layer.spec.paragraph}));
     QVERIFY2(keeps(), "a size change keeps the warp");
 
     // Free Transform: stretch the right edge out and commit.
@@ -428,7 +425,7 @@ void WarpTextTest::attributesAndTransformKeepWarp()
     f.view->transform_move(right + 60.0, y, 1.0, false, false);
     f.view->transform_release();
     QVERIFY(f.view->commit_transform());
-    QVERIFY(pictura::type_api::isType(*f.view, path));
+    QVERIFY(pictura::type_api::readLayer(*f.view, path).isType);
     QVERIFY2(keeps(), "Free Transform keeps the warp");
 }
 
@@ -478,6 +475,39 @@ void WarpTextTest::layersRowMarksWarp()
     chooseStyle(dialog, QStringLiteral("none"));
     finish(dialog, true);
     QTRY_VERIFY(!panel->rowWarpedForTest(path));
+}
+
+// The adapter's warp session (#403): previews record nothing, a dropped session
+// puts the layer back, and a commit records exactly one "Warp Text" state.
+void WarpTextTest::warpSessionCancelsOrCommitsOnce()
+{
+    Fixture f(*window_, seed(), QStringLiteral("pictura_warp_session"));
+    QVERIFY2(f.ok(), "warp fixture");
+    const QString path = addType(f, QStringLiteral("Warp me"));
+    const auto plain = pixels(f, path);
+    const int base = f.view->history_index();
+    WarpSetting arc;
+    arc.style = QStringLiteral("arc");
+    arc.bend = 50.0;
+    {
+        pictura::type_api::WarpSession session(*f.view, path);
+        QVERIFY(session.preview(arc));
+        QVERIFY(pixels(f, path) != plain);
+        QCOMPARE(f.view->history_index(), base);
+    }
+    QCOMPARE(pixels(f, path), plain);
+    QVERIFY(pictura::type_api::layerWarp(*f.view, path).style.isEmpty());
+    QCOMPARE(f.view->history_index(), base);
+
+    {
+        pictura::type_api::WarpSession session(*f.view, path);
+        QVERIFY(session.preview(arc));
+        QVERIFY(session.commit(arc));
+        QVERIFY(!session.isOpen());
+        QVERIFY(!session.cancel());
+    }
+    QVERIFY2(f.committedOnce(base, "Warp Text"), "one Warp Text state");
+    QCOMPARE(pictura::type_api::layerWarp(*f.view, path).style, QStringLiteral("arc"));
 }
 
 QTEST_MAIN(WarpTextTest)

@@ -47,7 +47,7 @@ QImage seed()
 QString typeLayer(const Fixture& f)
 {
     for (int i = 0; i < f.view->layer_count(); ++i) {
-        if (pictura::type_api::isType(*f.view, QString::number(i))) {
+        if (pictura::type_api::readLayer(*f.view, QString::number(i)).isType) {
             return QString::number(i);
         }
     }
@@ -170,7 +170,7 @@ struct TypeOptionsGuard {
 
 pictura::CharacterSetting layerCharacter(const Fixture& f, const QString& path)
 {
-    return pictura::type_api::layerCharacterSetting(*f.view, path);
+    return pictura::type_api::readLayer(*f.view, path).spec.character;
 }
 
 } // namespace
@@ -296,16 +296,16 @@ void CharacterParagraphPanelsTest::characterPanelReflectsAndEdits()
     typeInto(panel->sizeFieldForTest(), QStringLiteral("48"));
     QVERIFY2(f.committedOnce(base, "Edit Type Layer"), "one Edit Type Layer state");
     QCOMPARE(panel->sizeFieldForTest()->currentText(), QStringLiteral("48 px"));
-    QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).size, 48.0);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.character.size, 48.0);
     QVERIFY(f.view->undo());
-    QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).size, 30.0);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.character.size, 30.0);
 
     // A toggle edit is also one state.
     panel->refresh();
     const int toggleBase = f.view->history_index();
     panel->underlineForTest()->setChecked(true);
     QVERIFY2(f.committedOnce(toggleBase, "Edit Type Layer"), "one toggle state");
-    QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).underline, true);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.character.underline, true);
 
     f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(saved);
     f.tools->setForeground(foreground);
@@ -374,17 +374,17 @@ void CharacterParagraphPanelsTest::characterPanelEditsNewText()
     QString added;
     for (int i = 0; i < f.view->layer_count(); ++i) {
         const QString path = QString::number(i);
-        if (path != old && pictura::type_api::isType(*f.view, path)) {
+        if (path != old && pictura::type_api::readLayer(*f.view, path).isType) {
             added = path;
         }
     }
     QVERIFY2(!added.isEmpty(), "the new text is committed");
     const pictura::CharacterSetting committed
-        = pictura::type_api::layerCharacterSetting(*f.view, added);
+        = pictura::type_api::readLayer(*f.view, added).spec.character;
     QVERIFY(committed.faux_bold);
     QVERIFY(committed.underline);
     const pictura::CharacterSetting untouched
-        = pictura::type_api::layerCharacterSetting(*f.view, old);
+        = pictura::type_api::readLayer(*f.view, old).spec.character;
     QVERIFY2(!untouched.faux_bold && !untouched.underline, "the old layer is unchanged");
 }
 
@@ -404,7 +404,7 @@ void CharacterParagraphPanelsTest::paragraphPanelReflectsAndEdits()
     panel->setView(f.view);
     panel->refresh();
 
-    const pictura::ParagraphSetting shown = pictura::type_api::layerParagraphSetting(*f.view, path);
+    const pictura::ParagraphSetting shown = pictura::type_api::readLayer(*f.view, path).spec.paragraph;
     QVERIFY(panel->editingEnabledForTest());
     QCOMPARE(panel->justifyFieldForTest()->currentIndex(), int(shown.justify));
     QCOMPARE(panel->firstLineIndentFieldForTest()->value(), shown.first_line_indent);
@@ -419,16 +419,16 @@ void CharacterParagraphPanelsTest::paragraphPanelReflectsAndEdits()
     panel->firstLineIndentFieldForTest()->setValue(20.0);
     emit panel->firstLineIndentFieldForTest()->editingFinished();
     QVERIFY2(f.committedOnce(base, "Edit Type Layer"), "one Edit Type Layer state");
-    QCOMPARE(pictura::type_api::layerParagraphSetting(*f.view, path).first_line_indent, 20.0);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.paragraph.first_line_indent, 20.0);
     QVERIFY(f.view->undo());
-    QCOMPARE(pictura::type_api::layerParagraphSetting(*f.view, path).first_line_indent, 0.0);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.paragraph.first_line_indent, 0.0);
 
     // Alignment is editable too.
     panel->refresh();
     const int alignBase = f.view->history_index();
     panel->justifyFieldForTest()->setCurrentIndex(2);
     QVERIFY2(f.committedOnce(alignBase, "Edit Type Layer"), "one alignment state");
-    QCOMPARE(pictura::type_api::layerParagraphSetting(*f.view, path).justify, 2);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.paragraph.justify, 2);
 
     f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType)->set(saved);
 }
@@ -468,7 +468,7 @@ void CharacterParagraphPanelsTest::justificationDialogRoundTrips()
     action->trigger();
     QVERIFY2(f.committedOnce(base, "Edit Type Layer"), "one Edit Type Layer state");
     const pictura::ParagraphSetting p =
-        pictura::type_api::layerParagraphSetting(*f.view, path);
+        pictura::type_api::readLayer(*f.view, path).spec.paragraph;
     QCOMPARE(p.word_spacing_desired, 1.1);
     QCOMPARE(p.letter_spacing_min, -0.05);
     QCOMPARE(p.glyph_spacing_max, 1.2);
@@ -496,7 +496,7 @@ void CharacterParagraphPanelsTest::justificationCancelWritesNothing()
     QVERIFY(action);
 
     const pictura::ParagraphSetting before =
-        pictura::type_api::layerParagraphSetting(*f.view, path);
+        pictura::type_api::readLayer(*f.view, path).spec.paragraph;
     QTimer::singleShot(0, [&] {
         auto* dialog = frame.findChild<pictura::JustificationDialog*>();
         QVERIFY(dialog);
@@ -509,7 +509,7 @@ void CharacterParagraphPanelsTest::justificationCancelWritesNothing()
     const int base = f.view->history_index();
     action->trigger();
     QCOMPARE(f.view->history_index(), base);
-    QCOMPARE(pictura::type_api::layerParagraphSetting(*f.view, path).word_spacing_desired,
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.paragraph.word_spacing_desired,
              before.word_spacing_desired);
 }
 
@@ -613,10 +613,10 @@ void CharacterParagraphPanelsTest::paragraphMenuToggles()
     int base = f.view->history_index();
     hanging->trigger();
     QVERIFY2(f.committedOnce(base, "Edit Type Layer"), "one hanging state");
-    QVERIFY(pictura::type_api::layerParagraphSetting(*f.view, path).hanging);
+    QVERIFY(pictura::type_api::readLayer(*f.view, path).spec.paragraph.hanging);
     QVERIFY(hanging->isChecked());
     QVERIFY(f.view->undo());
-    QVERIFY(!pictura::type_api::layerParagraphSetting(*f.view, path).hanging);
+    QVERIFY(!pictura::type_api::readLayer(*f.view, path).spec.paragraph.hanging);
 
     panel->refresh();
     panel->updatePanelMenu(menu);
@@ -628,12 +628,12 @@ void CharacterParagraphPanelsTest::paragraphMenuToggles()
     base = f.view->history_index();
     every->trigger();
     QVERIFY2(f.committedOnce(base, "Edit Type Layer"), "one composer state");
-    QCOMPARE(pictura::type_api::layerParagraphSetting(*f.view, path).composer, 1);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.paragraph.composer, 1);
     panel->updatePanelMenu(menu);
     QVERIFY(every->isChecked());
     QVERIFY(!single->isChecked());
     QVERIFY(f.view->undo());
-    QCOMPARE(pictura::type_api::layerParagraphSetting(*f.view, path).composer, 0);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.paragraph.composer, 0);
 }
 
 void CharacterParagraphPanelsTest::paragraphMenuReset()
@@ -656,11 +656,11 @@ void CharacterParagraphPanelsTest::paragraphMenuReset()
     hangingBox->setChecked(true);
     panel->refresh();
     const pictura::ParagraphSetting before =
-        pictura::type_api::layerParagraphSetting(*f.view, path);
+        pictura::type_api::readLayer(*f.view, path).spec.paragraph;
     QVERIFY(before.hanging);
-    const QString text = pictura::type_api::layerText(*f.view, path);
+    const QString text = pictura::type_api::readLayer(*f.view, path).spec.text;
     const QString family =
-        pictura::familyForFontName(pictura::type_api::layerFont(*f.view, path));
+        pictura::familyForFontName(pictura::type_api::readLayer(*f.view, path).spec.font);
 
     QMenu* menu = livePanelMenu(frame, QStringLiteral("paragraphPanel"));
     QVERIFY(menu);
@@ -673,15 +673,15 @@ void CharacterParagraphPanelsTest::paragraphMenuReset()
 
     const pictura::ParagraphSetting defaults = pictura::type_api::defaultParagraphSetting();
     const pictura::ParagraphSetting after =
-        pictura::type_api::layerParagraphSetting(*f.view, path);
+        pictura::type_api::readLayer(*f.view, path).spec.paragraph;
     QCOMPARE(after.hanging, defaults.hanging);
     QCOMPARE(after.composer, defaults.composer);
     QCOMPARE(after.justify, defaults.justify);
     QVERIFY(layerCharacter(f, path).faux_bold);
-    QCOMPARE(pictura::type_api::layerText(*f.view, path), text);
-    QCOMPARE(pictura::familyForFontName(pictura::type_api::layerFont(*f.view, path)), family);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.text, text);
+    QCOMPARE(pictura::familyForFontName(pictura::type_api::readLayer(*f.view, path).spec.font), family);
     QVERIFY(f.view->undo());
-    QVERIFY(pictura::type_api::layerParagraphSetting(*f.view, path).hanging);
+    QVERIFY(pictura::type_api::readLayer(*f.view, path).spec.paragraph.hanging);
 }
 
 void CharacterParagraphPanelsTest::menuDisabledRows()
@@ -783,14 +783,14 @@ void CharacterParagraphPanelsTest::rtlDirectionApplies()
     panel->setMiddleEastern(true);
     panel->setView(f.view);
     panel->refresh();
-    QCOMPARE(pictura::type_api::layerParagraphSetting(*f.view, path).direction, 0);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.paragraph.direction, 0);
 
     const int base = f.view->history_index();
     panel->directionRtlForTest()->click();
     QVERIFY2(f.committedOnce(base, "Edit Type Layer"), "one Edit Type Layer state");
-    QCOMPARE(pictura::type_api::layerParagraphSetting(*f.view, path).direction, 1);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.paragraph.direction, 1);
     QVERIFY(f.view->undo());
-    QCOMPARE(pictura::type_api::layerParagraphSetting(*f.view, path).direction, 0);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.paragraph.direction, 0);
     panel->setMiddleEastern(false);
 }
 
@@ -908,10 +908,10 @@ void CharacterParagraphPanelsTest::fontStyleApplies()
     panel->styleFieldForTest()->setCurrentIndex(bold);
     QCOMPARE(panel->styleFieldForTest()->currentText(), QStringLiteral("Bold"));
     QVERIFY2(f.committedOnce(base, "Edit Type Layer"), "one Edit Type Layer state");
-    QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).font_style,
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.character.font_style,
              QStringLiteral("Bold"));
     QVERIFY(f.view->undo());
-    QVERIFY(pictura::type_api::layerCharacterSetting(*f.view, path).font_style
+    QVERIFY(pictura::type_api::readLayer(*f.view, path).spec.character.font_style
             != QStringLiteral("Bold"));
 }
 
@@ -950,14 +950,14 @@ void CharacterParagraphPanelsTest::languageRoundTrips()
     panel->setView(f.view);
     panel->refresh();
 
-    const QString before = pictura::type_api::layerCharacterSetting(*f.view, path).language;
+    const QString before = pictura::type_api::readLayer(*f.view, path).spec.character.language;
     const int base = f.view->history_index();
     panel->languageFieldForTest()->setCurrentText(QStringLiteral("French"));
     QVERIFY2(f.committedOnce(base, "Edit Type Layer"), "one Edit Type Layer state");
-    QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).language,
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.character.language,
              QStringLiteral("French"));
     QVERIFY(f.view->undo());
-    QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).language, before);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.character.language, before);
 }
 
 void CharacterParagraphPanelsTest::tsumeFollowsAsianPreference()
@@ -982,9 +982,9 @@ void CharacterParagraphPanelsTest::tsumeFollowsAsianPreference()
     panel->tsumeFieldForTest()->setValue(50.0);
     emit panel->tsumeFieldForTest()->valueCommitted(50.0);
     QVERIFY2(f.committedOnce(base, "Edit Type Layer"), "one Edit Type Layer state");
-    QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).tsume, 50.0);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.character.tsume, 50.0);
     QVERIFY(f.view->undo());
-    QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).tsume, 0.0);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.character.tsume, 0.0);
     panel->setShowAsianOptions(false);
 }
 
@@ -1000,7 +1000,7 @@ void CharacterParagraphPanelsTest::fractionalWidthsMenu()
     QVERIFY(panel);
     panel->setView(f.view);
     panel->refresh();
-    QVERIFY(pictura::type_api::layerCharacterSetting(*f.view, path).fractional_widths);
+    QVERIFY(pictura::type_api::readLayer(*f.view, path).spec.character.fractional_widths);
 
     QMenu* menu = livePanelMenu(frame, QStringLiteral("characterPanel"));
     QVERIFY(menu);
@@ -1011,9 +1011,9 @@ void CharacterParagraphPanelsTest::fractionalWidthsMenu()
     const int base = f.view->history_index();
     action->trigger();
     QVERIFY2(f.committedOnce(base, "Edit Type Layer"), "one Edit Type Layer state");
-    QVERIFY(!pictura::type_api::layerCharacterSetting(*f.view, path).fractional_widths);
+    QVERIFY(!pictura::type_api::readLayer(*f.view, path).spec.character.fractional_widths);
     QVERIFY(f.view->undo());
-    QVERIFY(pictura::type_api::layerCharacterSetting(*f.view, path).fractional_widths);
+    QVERIFY(pictura::type_api::readLayer(*f.view, path).spec.character.fractional_widths);
 }
 
 void CharacterParagraphPanelsTest::characterMenuMatchesCs6()
@@ -1172,9 +1172,9 @@ void CharacterParagraphPanelsTest::characterMenuReset()
     const pictura::CharacterSetting before = layerCharacter(f, path);
     QVERIFY(before.faux_bold);
     QCOMPARE(before.tracking, 120.0);
-    const QString text = pictura::type_api::layerText(*f.view, path);
+    const QString text = pictura::type_api::readLayer(*f.view, path).spec.text;
     const QString family =
-        pictura::familyForFontName(pictura::type_api::layerFont(*f.view, path));
+        pictura::familyForFontName(pictura::type_api::readLayer(*f.view, path).spec.font);
 
     QMenu* menu = livePanelMenu(frame, QStringLiteral("characterPanel"));
     QVERIFY(menu);
@@ -1192,8 +1192,8 @@ void CharacterParagraphPanelsTest::characterMenuReset()
     QCOMPARE(after.size, before.size);
     QCOMPARE(after.font_style, before.font_style);
     QCOMPARE(after.color, before.color);
-    QCOMPARE(pictura::type_api::layerText(*f.view, path), text);
-    QCOMPARE(pictura::familyForFontName(pictura::type_api::layerFont(*f.view, path)), family);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.text, text);
+    QCOMPARE(pictura::familyForFontName(pictura::type_api::readLayer(*f.view, path).spec.font), family);
     QVERIFY(f.view->undo());
     QVERIFY(layerCharacter(f, path).faux_bold);
     QCOMPARE(layerCharacter(f, path).tracking, 120.0);
@@ -1296,8 +1296,8 @@ void CharacterParagraphPanelsTest::openTypeButtonsFollowTheFont()
     QVERIFY2(panel, "a type layer and the panel");
 
     const QString family =
-        pictura::familyForFontName(pictura::type_api::layerFont(*f.view, path));
-    const QString style = pictura::type_api::layerCharacterSetting(*f.view, path).font_style;
+        pictura::familyForFontName(pictura::type_api::readLayer(*f.view, path).spec.font);
+    const QString style = pictura::type_api::readLayer(*f.view, path).spec.character.font_style;
     pictura::registerTypeFont(family, style);
     const std::uint32_t features = pictura::type_api::openTypeFeatures(family, style);
     for (int i = 0; i < 8; ++i) {

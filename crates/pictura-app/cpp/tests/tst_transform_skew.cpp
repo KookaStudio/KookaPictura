@@ -853,7 +853,7 @@ void TransformSkewTest::typeKeepsTheLayerColor()
 
     QString path;
     for (int i = 0; i < f.view->layer_count(); ++i) {
-        if (pictura::type_api::isType(*f.view, QString::number(i))) {
+        if (pictura::type_api::readLayer(*f.view, QString::number(i)).isType) {
             path = QString::number(i);
             break;
         }

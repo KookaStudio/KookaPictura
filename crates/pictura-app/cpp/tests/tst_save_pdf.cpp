@@ -535,8 +535,7 @@ void SavePdfTest::typeLayerIsLiveText()
     CharacterSetting character = type_api::defaultCharacterSetting();
     character.size = 40;
     const QString font = QStringLiteral("Liberation Sans");
-    QVERIFY(!type_api::commitLayer(*view, QStringLiteral("Kooka Pictura"), font, setting, character,
-                                   type_api::defaultParagraphSetting())
+    QVERIFY(!type_api::commitLayer(*view, {QStringLiteral("Kooka Pictura"), font, setting, character, type_api::defaultParagraphSetting()})
                  .isEmpty());
     QCOMPARE(pdf_type_fonts(*view), font);
     const QString path = dir.filePath(QStringLiteral("type.pdf"));

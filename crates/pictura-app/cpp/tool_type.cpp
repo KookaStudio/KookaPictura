@@ -16,7 +16,7 @@
 // a switch to another document commits. Clicking an existing type layer with
 // Horizontal or Vertical Type reopens it: the layer is hidden while its text
 // is retyped over it, in its own orientation and settings, and the commit
-// re-sets it in place (`type_api::commitEdit`); the mask tools start new type.
+// re-sets it in place (`type_api::EditSession::commit`); the mask tools start new type.
 // Ported from photorust's CanvasView type entry (typeKeyPress / commit).
 //
 // ponytail: no input-method composition, a reopened layer is retyped in one
@@ -157,6 +157,9 @@ public:
     void onSessionCancelled(ToolServices&) override
     {
         if (active_) {
+            if (editSession_) {
+                editSession_->abandon();
+            }
             endSession();
         }
     }
@@ -188,13 +191,17 @@ public:
             return;
         }
         PictureView* v = ctx.view();
-        if (syncing_ || !v || layerPath_.isEmpty() || !pictura::type_api::isType(*v, layerPath_)) {
+        if (syncing_ || !v || layerPath_.isEmpty()) {
             return;
         }
-        TypeSetting s = pictura::type_api::layerSetting(*v, layerPath_);
-        CharacterSetting c = pictura::type_api::layerCharacterSetting(*v, layerPath_);
-        ParagraphSetting p = pictura::type_api::layerParagraphSetting(*v, layerPath_);
-        QString family = familyForFontName(pictura::type_api::layerFont(*v, layerPath_));
+        const pictura::type_api::LayerType layer = pictura::type_api::readLayer(*v, layerPath_);
+        if (!layer.isType) {
+            return;
+        }
+        TypeSetting s = layer.spec.setting;
+        CharacterSetting c = layer.spec.character;
+        ParagraphSetting p = layer.spec.paragraph;
+        QString family = familyForFontName(layer.spec.font);
         if (now.family != was.family) {
             family = now.family;
         }
@@ -211,7 +218,7 @@ public:
             p.justify = now.justification;
         }
         registerTypeFont(family, c.font_style);
-        pictura::type_api::updateLayer(*v, layerPath_, pictura::type_api::layerText(*v, layerPath_), family, s, c, p);
+        pictura::type_api::updateLayer(*v, layerPath_, {layer.spec.text, family, s, c, p});
     }
 
     bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
@@ -288,9 +295,7 @@ public:
                 const QByteArray rgba =
                     rect.isEmpty()
                         ? QByteArray()
-                        : pictura::type_api::previewRgba(edit_.text(), type_->get().family,
-                                                         edit.placement, edit.character,
-                                                         edit.paragraph);
+                        : pictura::type_api::previewRgba({edit_.text(), type_->get().family, edit.placement, edit.character, edit.paragraph});
                 movingInk_ = inkBox(rect, rgba);
                 movingInkOrigin_ = frame_.origin;
                 referenceRects_ = ctx_ && ctx_->view() && ctx_->canvas()
@@ -384,7 +389,8 @@ public:
             return false;
         }
         const QPointer<PictureView> v = view_;
-        const QString editPath = editPath_;
+        std::optional<pictura::type_api::EditSession> session = std::move(editSession_);
+        editSession_.reset();
         const bool current = v == ctx_->view();
         const QString text = edit_.text();
         const SelectionMode mode = mode_;
@@ -395,9 +401,9 @@ public:
         if (!v) {
             return true;
         }
-        if (!editPath.isEmpty()) {
-            if (pictura::type_api::commitEdit(*v, editPath, text, family, edit.placement, edit.character,
-                                 edit.paragraph)
+        if (session) {
+            const QString editPath = session->path();
+            if (session->commit({text, family, edit.placement, edit.character, edit.paragraph})
                 && current) {
                 ctx_->notifyLayerCreated(editPath);
             }
@@ -407,14 +413,12 @@ public:
             return true;
         }
         if (mask_) {
-            if (pictura::type_api::commitMask(*v, text, family, edit.placement, edit.character, edit.paragraph,
-                                 selectionModeString(mode))) {
+            if (pictura::type_api::commitMask(*v, {text, family, edit.placement, edit.character, edit.paragraph}, selectionModeString(mode))) {
                 ctx_->emitSelectionCommitted();
             }
             return true;
         }
-        const QString created = pictura::type_api::commitLayer(*v, text, family, edit.placement, edit.character,
-                                                  edit.paragraph);
+        const QString created = pictura::type_api::commitLayer(*v, {text, family, edit.placement, edit.character, edit.paragraph});
         if (created.isEmpty()) {
             ctx_->refused(QStringLiteral("Type layers can only be added to an 8-bit RGB document"));
         } else if (current) {
@@ -428,11 +432,11 @@ public:
         if (!active_) {
             return false;
         }
-        const QPointer<PictureView> v = view_;
-        const QString editPath = editPath_;
+        std::optional<pictura::type_api::EditSession> session = std::move(editSession_);
+        editSession_.reset();
         endSession();
-        if (v && !editPath.isEmpty()) {
-            pictura::type_api::cancelEdit(*v, editPath);
+        if (session) {
+            session->cancel();
         }
         return true;
     }
@@ -601,16 +605,20 @@ private:
         }
         vertical_ = toolVertical_;
         mode_ = ctx.resolveSelectionMode(mods, v.has_selection());
-        if (!hit.isEmpty() && pictura::type_api::beginEdit(v, hit)) {
+        if (!hit.isEmpty()) {
+            editSession_ = pictura::type_api::EditSession::begin(v, hit);
+        }
+        if (editSession_) {
             editPath_ = hit;
-            edit_.reset(pictura::type_api::layerText(v, hit), 0);
-            const TypeSetting s = pictura::type_api::layerSetting(v, hit);
-            const CharacterSetting c = pictura::type_api::layerCharacterSetting(v, hit);
-            const ParagraphSetting p = pictura::type_api::layerParagraphSetting(v, hit);
+            const pictura::type_api::TypeSpec layer = pictura::type_api::readLayer(v, hit).spec;
+            edit_.reset(layer.text, 0);
+            const TypeSetting s = layer.setting;
+            const CharacterSetting c = layer.character;
+            const ParagraphSetting p = layer.paragraph;
             vertical_ = s.vertical;
             frame_.load(s);
             TypeOptions o = type_->get();
-            const QString family = familyForFontName(pictura::type_api::layerFont(v, hit));
+            const QString family = familyForFontName(layer.font);
             if (!family.isEmpty()) {
                 o.family = family;
             }
@@ -898,14 +906,16 @@ private:
             return;
         }
         layerPath_ = path;
-        if (path.isEmpty() || !pictura::type_api::isType(*v, path)) {
+        const pictura::type_api::LayerType layer =
+            path.isEmpty() ? pictura::type_api::LayerType{} : pictura::type_api::readLayer(*v, path);
+        if (!layer.isType) {
             known_ = ctx_ ? type_->get() : TypeOptions{};
             return;
         }
-        const CharacterSetting c = pictura::type_api::layerCharacterSetting(*v, path);
-        const ParagraphSetting p = pictura::type_api::layerParagraphSetting(*v, path);
+        const CharacterSetting c = layer.spec.character;
+        const ParagraphSetting p = layer.spec.paragraph;
         TypeOptions o = type_->get();
-        const QString family = familyForFontName(pictura::type_api::layerFont(*v, path));
+        const QString family = familyForFontName(layer.spec.font);
         if (!family.isEmpty()) {
             o.family = family;
         }
@@ -929,6 +939,7 @@ private:
         active_ = false;
         view_ = nullptr;
         editPath_.clear();
+        editSession_.reset();
         character_.reset();
         edit_.reset(QString(), 0);
         stops_.clear();
@@ -960,9 +971,12 @@ private:
         edit.paragraph = pictura::type_api::defaultParagraphSetting();
         // A reopened layer keeps its full attribute set; the bar overrides only
         // the fields it exposes.
-        if (!editPath_.isEmpty() && view_ && pictura::type_api::isType(*view_, editPath_)) {
-            edit.character = pictura::type_api::layerCharacterSetting(*view_, editPath_);
-            edit.paragraph = pictura::type_api::layerParagraphSetting(*view_, editPath_);
+        if (!editPath_.isEmpty() && view_) {
+            const pictura::type_api::LayerType layer = pictura::type_api::readLayer(*view_, editPath_);
+            if (layer.isType) {
+                edit.character = layer.spec.character;
+                edit.paragraph = layer.spec.paragraph;
+            }
         }
         edit.character.size = o.size;
         edit.character.color = o.color.rgba();
@@ -975,8 +989,7 @@ private:
 
     QRect previewRect(const QString& text, const TypeEdit& edit) const
     {
-        const QVector<int> r = pictura::type_api::previewRect(
-            text, type_->get().family, edit.placement, edit.character, edit.paragraph);
+        const QVector<int> r = pictura::type_api::previewRect({text, type_->get().family, edit.placement, edit.character, edit.paragraph});
         return r.size() == 4 ? QRect(r[0], r[1], r[2], r[3]) : QRect();
     }
 
@@ -996,16 +1009,14 @@ private:
         const QString family = type_->get().family;
         registerTypeFont(family, edit.character.font_style);
         stops_.clear();
-        const QVector<double> stops = pictura::type_api::caretStops(
-            text, family, edit.placement, edit.character, edit.paragraph);
+        const QVector<double> stops = pictura::type_api::caretStops({text, family, edit.placement, edit.character, edit.paragraph});
         for (int i = 0; i + 3 < stops.size(); i += 4) {
             stops_.append(QLineF(stops[i], stops[i + 1], stops[i + 2], stops[i + 3]));
         }
         const QRect rect = previewRect(text, edit);
         const QByteArray rgba = rect.isEmpty()
             ? QByteArray()
-            : pictura::type_api::previewRgba(text, family, edit.placement, edit.character,
-                                             edit.paragraph);
+            : pictura::type_api::previewRgba({text, family, edit.placement, edit.character, edit.paragraph});
         const uchar* px = reinterpret_cast<const uchar*>(rgba.constData());
         if (std::size_t(rect.width()) * rect.height() * 4 == std::size_t(rgba.size())
             && !rect.isEmpty()) {
@@ -1036,15 +1047,13 @@ private:
         overlay.lightInk = darkUnder(overlay.caret);
         overlay.hasPlacement = !frame_.paragraph && frame_.pathKind == 0;
         overlay.placement = frame_.origin;
-        const QVector<double> lines = pictura::type_api::baselines(
-            text, family, edit.placement, edit.character, edit.paragraph);
+        const QVector<double> lines = pictura::type_api::baselines({text, family, edit.placement, edit.character, edit.paragraph});
         for (int i = 0; i + 3 < lines.size(); i += 4) {
             overlay.baselines.append(QLineF(lines[i], lines[i + 1], lines[i + 2], lines[i + 3]));
         }
         frame_.pointBox.reset();
         if (!frame_.paragraph && ctrlHeld_) {
-            const QVector<double> b = pictura::type_api::localBounds(
-                text, family, edit.placement, edit.character, edit.paragraph);
+            const QVector<double> b = pictura::type_api::localBounds({text, family, edit.placement, edit.character, edit.paragraph});
             if (b.size() == 4) {
                 frame_.pointBox = std::array<double, 4>{b[0], b[1], b[2], b[3]};
             }
@@ -1055,12 +1064,10 @@ private:
             overlay.pivot = frame_.pivotPoint();
         }
         if (frame_.paragraph || frame_.pathKind == 1) {
-            overlay.overflow = pictura::type_api::overflows(text, family, edit.placement,
-                                                            edit.character, edit.paragraph);
+            overlay.overflow = pictura::type_api::overflows({text, family, edit.placement, edit.character, edit.paragraph});
         }
         if (frame_.pathKind == 1) {
-            const QVector<double> point = pictura::type_api::pathOverflowPoint(
-                text, family, edit.placement, edit.character, edit.paragraph);
+            const QVector<double> point = pictura::type_api::pathOverflowPoint({text, family, edit.placement, edit.character, edit.paragraph});
             if (point.size() == 2) {
                 overlay.hasOverflowPoint = true;
                 overlay.overflowPoint = QPointF(point[0], point[1]);
@@ -1075,8 +1082,9 @@ private:
     bool active_ = false;
     // Guarded: the document may close while text is being typed.
     QPointer<PictureView> view_;
-    // The reopened type layer, empty for new type.
+    // The reopened type layer, empty for new type, and its open edit session.
     QString editPath_;
+    std::optional<pictura::type_api::EditSession> editSession_;
     bool vertical_ = false;
     // Where the text sits, its transform, paragraph type's box, the Ctrl box,
     // and the reference point, with the box gestures on them.

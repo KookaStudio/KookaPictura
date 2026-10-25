@@ -57,8 +57,7 @@ QString addType(Fixture& f, const QString& text, const QString& font, double y =
     setting.yy = 1.0;
     pictura::CharacterSetting character = pictura::type_api::defaultCharacterSetting();
     character.size = 40.0;
-    const QString path = pictura::type_api::commitLayer(
-        *f.view, text, font, setting, character, pictura::type_api::defaultParagraphSetting());
+    const QString path = pictura::type_api::commitLayer(*f.view, {text, font, setting, character, pictura::type_api::defaultParagraphSetting()});
     f.frame.selectLayerPath(path);
     f.frame.refresh();
     return path;
@@ -313,15 +312,15 @@ void TextGammaFontsTest::replaceAllMissingFonts()
     QVERIFY(window_->registry()->action(replaceCommand())->isEnabled());
     QVERIFY(window_->registry()->dispatch(replaceCommand()));
     QVERIFY(f.committedOnce(base, "Replace All Missing Fonts"));
-    QCOMPARE(pictura::type_api::layerFont(*f.view, first), kBundled);
-    QCOMPARE(pictura::type_api::layerFont(*f.view, second), kBundled);
-    QCOMPARE(pictura::type_api::layerText(*f.view, first), QStringLiteral("One"));
-    QCOMPARE(pictura::type_api::layerText(*f.view, second), QStringLiteral("Two"));
+    QCOMPARE(pictura::type_api::readLayer(*f.view, first).spec.font, kBundled);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, second).spec.font, kBundled);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, first).spec.text, QStringLiteral("One"));
+    QCOMPARE(pictura::type_api::readLayer(*f.view, second).spec.text, QStringLiteral("Two"));
     QTRY_VERIFY(!window_->layersPanelForTest()->rowMissingFontForTest(first));
     QVERIFY(!window_->layersPanelForTest()->rowMissingFontForTest(second));
     QVERIFY(f.view->undo());
-    QCOMPARE(pictura::type_api::layerFont(*f.view, first), kMissing);
-    QCOMPARE(pictura::type_api::layerFont(*f.view, second), kMissing);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, first).spec.font, kMissing);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, second).spec.font, kMissing);
 }
 
 void TextGammaFontsTest::replaceDisabledWithoutMissingFonts()
@@ -339,12 +338,12 @@ void TextGammaFontsTest::replaceDisabledOutsideRgb8()
     QVERIFY2(f.ok(), "missing-font fixture");
     const QString path = addType(f, QStringLiteral("Gray"), kMissing);
     QVERIFY(pictura::convert_image_mode(*f.view, QStringLiteral("grayscale")));
-    QVERIFY2(pictura::type_api::isType(*f.view, path), "conversion keeps the type layer");
+    QVERIFY2(pictura::type_api::readLayer(*f.view, path).isType, "conversion keeps the type layer");
     QVERIFY(!pictura::type_api::layersEditable(*f.view));
     window_->registry()->refresh();
     QVERIFY(!window_->registry()->action(replaceCommand())->isEnabled());
     QCOMPARE(pictura::type_api::replaceFonts(*f.view, {kMissing}), 0);
-    QCOMPARE(pictura::type_api::layerFont(*f.view, path), kMissing);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.font, kMissing);
 }
 
 QTEST_MAIN(TextGammaFontsTest)

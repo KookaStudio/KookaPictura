@@ -42,7 +42,7 @@ QRect layerRect(const Fixture& f, const QString& path)
 QString typeLayer(const Fixture& f)
 {
     for (int i = 0; i < f.view->layer_count(); ++i) {
-        if (pictura::type_api::isType(*f.view, QString::number(i))) {
+        if (pictura::type_api::readLayer(*f.view, QString::number(i)).isType) {
             return QString::number(i);
         }
     }
@@ -150,7 +150,7 @@ void ParagraphTypeTest::dragMakesParagraphType()
     const QString path = typeLayer(f);
     QVERIFY2(!path.isEmpty(), "a type layer");
     QVERIFY(pictura::type_api::isParagraph(*f.view, path));
-    const pictura::TypeSetting s = pictura::type_api::layerSetting(*f.view, path);
+    const pictura::TypeSetting s = pictura::type_api::readLayer(*f.view, path).spec.setting;
     QVERIFY(s.boxed);
     QVERIFY2(sameRect(QRectF(s.x + s.box_left, s.y + s.box_top, s.box_right - s.box_left,
                              s.box_bottom - s.box_top),
@@ -265,14 +265,14 @@ void ParagraphTypeTest::convertCommands()
     QVERIFY(frame.registry()->dispatch(toParagraph));
     QVERIFY2(f.committedOnce(base, "Convert To Paragraph Text"), "one state");
     QVERIFY(pictura::type_api::isParagraph(*f.view, path));
-    QCOMPARE(pictura::type_api::layerText(*f.view, path), QStringLiteral("Hello type"));
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.text, QStringLiteral("Hello type"));
 
     QVERIFY2(enabled(toPoint) && !enabled(toParagraph), "only To Point for paragraph type");
     base = f.view->history_index();
     QVERIFY(frame.registry()->dispatch(toPoint));
     QVERIFY2(f.committedOnce(base, "Convert To Point Text"), "one state");
     QVERIFY(!pictura::type_api::isParagraph(*f.view, path));
-    QCOMPARE(pictura::type_api::layerText(*f.view, path), QStringLiteral("Hello type"));
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.text, QStringLiteral("Hello type"));
 }
 
 void ParagraphTypeTest::typeIntoBox(const Fixture& f, const QString& text)
@@ -357,7 +357,7 @@ void ParagraphTypeTest::boxRotatesWithReadout()
 
     QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
     QVERIFY2(f.committedOnce(base, "Horizontal Type"), "one Horizontal Type state");
-    const pictura::TypeSetting s = pictura::type_api::layerSetting(*f.view, typeLayer(f));
+    const pictura::TypeSetting s = pictura::type_api::readLayer(*f.view, typeLayer(f)).spec.setting;
     QVERIFY2(qAbs(s.xx) < 1e-3 && qAbs(s.xy - 1.0) < 1e-3, "a quarter turn");
 }
 
@@ -420,7 +420,7 @@ void ParagraphTypeTest::ctrlScalesPointType()
     const int base = f.view->history_index();
     QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
     QVERIFY2(f.committedOnce(base, "Horizontal Type"), "one Horizontal Type state");
-    const pictura::TypeSetting s = pictura::type_api::layerSetting(*f.view, typeLayer(f));
+    const pictura::TypeSetting s = pictura::type_api::readLayer(*f.view, typeLayer(f)).spec.setting;
     QVERIFY2(s.xx > 1.2 && s.yy > 1.2, "scaled up");
 }
 

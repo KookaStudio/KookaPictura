@@ -1,24 +1,17 @@
 #include "api/type_api.h"
 
+#include <utility>
+
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/pdf_export.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/type_tools/fonts.cxxqt.h"
 
 namespace pictura::type_api {
 
-bool isType(const PictureView& view, const QString& path)
-{
-    return view.layer_is_type(path);
-}
+namespace {
 
-QString layerAt(const PictureView& view, double x, double y)
+QVector<double> doubles(const ::rust::Vec<double>& values)
 {
-    return ::pictura::type_layer_at(view, x, y);
-}
-
-QVector<double> pathAt(const PictureView& view, double x, double y, double tolerance)
-{
-    const ::rust::Vec<double> values = ::pictura::type_path_at(view, x, y, tolerance);
     QVector<double> out;
     out.reserve(int(values.size()));
     for (const double value : values) {
@@ -27,41 +20,33 @@ QVector<double> pathAt(const PictureView& view, double x, double y, double toler
     return out;
 }
 
-QString layerText(const PictureView& view, const QString& path)
+} // namespace
+
+QString layerAt(const PictureView& view, double x, double y)
 {
-    return ::pictura::type_layer_text(view, path);
+    return ::pictura::type_layer_at(view, x, y);
 }
 
-QString layerFont(const PictureView& view, const QString& path)
+QVector<double> pathAt(const PictureView& view, double x, double y, double tolerance)
 {
-    return ::pictura::type_layer_font(view, path);
-}
-
-TypeSetting layerSetting(const PictureView& view, const QString& path)
-{
-    return ::pictura::type_layer_setting(view, path);
-}
-
-CharacterSetting layerCharacterSetting(const PictureView& view, const QString& path)
-{
-    return ::pictura::type_layer_character_setting(view, path);
-}
-
-ParagraphSetting layerParagraphSetting(const PictureView& view, const QString& path)
-{
-    return ::pictura::type_layer_paragraph_setting(view, path);
+    return doubles(::pictura::type_path_at(view, x, y, tolerance));
 }
 
 LayerType readLayer(const PictureView& view, const QString& path)
 {
     LayerType out;
     out.isType = view.layer_is_type(path);
-    out.text = layerText(view, path);
-    out.font = layerFont(view, path);
-    out.setting = layerSetting(view, path);
-    out.character = layerCharacterSetting(view, path);
-    out.paragraph = layerParagraphSetting(view, path);
+    out.spec.text = ::pictura::type_layer_text(view, path);
+    out.spec.font = ::pictura::type_layer_font(view, path);
+    out.spec.setting = ::pictura::type_layer_setting(view, path);
+    out.spec.character = ::pictura::type_layer_character_setting(view, path);
+    out.spec.paragraph = ::pictura::type_layer_paragraph_setting(view, path);
     return out;
+}
+
+bool isWarped(const PictureView& view, const QString& path)
+{
+    return ::pictura::type_layer_is_warped(view, path);
 }
 
 CharacterSetting defaultCharacterSetting()
@@ -85,11 +70,10 @@ std::uint32_t openTypeFeatures(const QString& family, const QString& style)
     return ::pictura::type_font_opentype_features(family, style);
 }
 
-QVector<int> previewRect(const QString& text, const QString& font, const TypeSetting& setting,
-                         const CharacterSetting& character, const ParagraphSetting& paragraph)
+QVector<int> previewRect(const TypeSpec& spec)
 {
-    const ::rust::Vec<std::int32_t> rect
-        = ::pictura::type_preview_rect(text, font, setting, character, paragraph);
+    const ::rust::Vec<std::int32_t> rect = ::pictura::type_preview_rect(
+        spec.text, spec.font, spec.setting, spec.character, spec.paragraph);
     QVector<int> out;
     out.reserve(int(rect.size()));
     for (const std::int32_t value : rect) {
@@ -98,61 +82,34 @@ QVector<int> previewRect(const QString& text, const QString& font, const TypeSet
     return out;
 }
 
-QVector<double> caretStops(const QString& text, const QString& font, const TypeSetting& setting,
-                           const CharacterSetting& character, const ParagraphSetting& paragraph)
+QVector<double> caretStops(const TypeSpec& spec)
 {
-    const ::rust::Vec<double> stops
-        = ::pictura::type_caret_stops(text, font, setting, character, paragraph);
-    QVector<double> out;
-    out.reserve(int(stops.size()));
-    for (const double value : stops) {
-        out.append(value);
-    }
-    return out;
+    return doubles(::pictura::type_caret_stops(spec.text, spec.font, spec.setting, spec.character,
+                                               spec.paragraph));
 }
 
-QVector<double> baselines(const QString& text, const QString& font, const TypeSetting& setting,
-                          const CharacterSetting& character, const ParagraphSetting& paragraph)
+QVector<double> baselines(const TypeSpec& spec)
 {
-    const ::rust::Vec<double> lines
-        = ::pictura::type_baselines(text, font, setting, character, paragraph);
-    QVector<double> out;
-    out.reserve(int(lines.size()));
-    for (const double value : lines) {
-        out.append(value);
-    }
-    return out;
+    return doubles(::pictura::type_baselines(spec.text, spec.font, spec.setting, spec.character,
+                                             spec.paragraph));
 }
 
-bool overflows(const QString& text, const QString& font, const TypeSetting& setting,
-               const CharacterSetting& character, const ParagraphSetting& paragraph)
+bool overflows(const TypeSpec& spec)
 {
-    return ::pictura::type_overflows(text, font, setting, character, paragraph);
+    return ::pictura::type_overflows(spec.text, spec.font, spec.setting, spec.character,
+                                     spec.paragraph);
 }
 
-QVector<double> pathOverflowPoint(const QString& text, const QString& font,
-                                  const TypeSetting& setting, const CharacterSetting& character,
-                                  const ParagraphSetting& paragraph)
+QVector<double> pathOverflowPoint(const TypeSpec& spec)
 {
-    const ::rust::Vec<double> point
-        = ::pictura::type_path_overflow_point(text, font, setting, character, paragraph);
-    QVector<double> out;
-    for (const double value : point) {
-        out.append(value);
-    }
-    return out;
+    return doubles(::pictura::type_path_overflow_point(spec.text, spec.font, spec.setting,
+                                                       spec.character, spec.paragraph));
 }
 
-QVector<double> localBounds(const QString& text, const QString& font, const TypeSetting& setting,
-                            const CharacterSetting& character, const ParagraphSetting& paragraph)
+QVector<double> localBounds(const TypeSpec& spec)
 {
-    const ::rust::Vec<double> bounds
-        = ::pictura::type_local_bounds(text, font, setting, character, paragraph);
-    QVector<double> out;
-    for (const double value : bounds) {
-        out.append(value);
-    }
-    return out;
+    return doubles(::pictura::type_local_bounds(spec.text, spec.font, spec.setting,
+                                                spec.character, spec.paragraph));
 }
 
 bool isParagraph(const PictureView& view, const QString& path)
@@ -165,33 +122,29 @@ bool convert(PictureView& view, const QString& path, bool paragraph)
     return ::pictura::type_convert(view, path, paragraph);
 }
 
-QByteArray previewRgba(const QString& text, const QString& font, const TypeSetting& setting,
-                       const CharacterSetting& character, const ParagraphSetting& paragraph)
+QByteArray previewRgba(const TypeSpec& spec)
 {
-    const ::rust::Vec<std::uint8_t> rgba
-        = ::pictura::type_preview_rgba(text, font, setting, character, paragraph);
+    const ::rust::Vec<std::uint8_t> rgba = ::pictura::type_preview_rgba(
+        spec.text, spec.font, spec.setting, spec.character, spec.paragraph);
     return QByteArray(reinterpret_cast<const char*>(rgba.data()), int(rgba.size()));
 }
 
-QString commitLayer(PictureView& view, const QString& text, const QString& font,
-                    const TypeSetting& setting, const CharacterSetting& character,
-                    const ParagraphSetting& paragraph)
+QString commitLayer(PictureView& view, const TypeSpec& spec)
 {
-    return ::pictura::type_commit_layer(view, text, font, setting, character, paragraph);
+    return ::pictura::type_commit_layer(view, spec.text, spec.font, spec.setting, spec.character,
+                                        spec.paragraph);
 }
 
-bool commitMask(PictureView& view, const QString& text, const QString& font,
-                const TypeSetting& setting, const CharacterSetting& character,
-                const ParagraphSetting& paragraph, const QString& mode)
+bool commitMask(PictureView& view, const TypeSpec& spec, const QString& mode)
 {
-    return ::pictura::type_commit_mask(view, text, font, setting, character, paragraph, mode);
+    return ::pictura::type_commit_mask(view, spec.text, spec.font, spec.setting, spec.character,
+                                       spec.paragraph, mode);
 }
 
-bool updateLayer(PictureView& view, const QString& path, const QString& text, const QString& font,
-                 const TypeSetting& setting, const CharacterSetting& character,
-                 const ParagraphSetting& paragraph)
+bool updateLayer(PictureView& view, const QString& path, const TypeSpec& spec)
 {
-    return ::pictura::type_update_layer(view, path, text, font, setting, character, paragraph);
+    return ::pictura::type_update_layer(view, path, spec.text, spec.font, spec.setting,
+                                        spec.character, spec.paragraph);
 }
 
 bool applyStyle(PictureView& view, const QString& path, const QString& name, bool paragraph)
@@ -222,24 +175,13 @@ bool deleteCharacterStyle(PictureView& view, const QString& name)
     return ::pictura::type_delete_character_style(view, name);
 }
 
-int characterStyleCount(const PictureView& view)
+QVector<CharacterStyle> characterStyles(const PictureView& view)
 {
-    return ::pictura::type_character_style_count(view);
-}
-
-QString characterStyleName(const PictureView& view, int index)
-{
-    return ::pictura::type_character_style_name(view, index);
-}
-
-QString characterStyleFont(const PictureView& view, const QString& name)
-{
-    return ::pictura::type_character_style_font(view, name);
-}
-
-CharacterSetting characterStyleCharacter(const PictureView& view, const QString& name)
-{
-    return ::pictura::type_character_style_character(view, name);
+    QVector<CharacterStyle> out;
+    for (const ::pictura::CharacterStyleRow& row : ::pictura::type_character_styles(view)) {
+        out.append({row.name, row.font, row.character});
+    }
+    return out;
 }
 
 bool createParagraphStyle(PictureView& view, const QString& name, const QString& font,
@@ -265,29 +207,33 @@ bool deleteParagraphStyle(PictureView& view, const QString& name)
     return ::pictura::type_delete_paragraph_style(view, name);
 }
 
-int paragraphStyleCount(const PictureView& view)
+CharacterStyle findStyle(const QVector<CharacterStyle>& styles, const QString& name)
 {
-    return int(::pictura::type_paragraph_style_count(view));
+    for (const CharacterStyle& style : styles) {
+        if (style.name == name) {
+            return style;
+        }
+    }
+    return {QString(), QString(), defaultCharacterSetting()};
 }
 
-QString paragraphStyleName(const PictureView& view, int index)
+ParagraphStyle findStyle(const QVector<ParagraphStyle>& styles, const QString& name)
 {
-    return ::pictura::type_paragraph_style_name(view, index);
+    for (const ParagraphStyle& style : styles) {
+        if (style.name == name) {
+            return style;
+        }
+    }
+    return {QString(), QString(), defaultCharacterSetting(), defaultParagraphSetting()};
 }
 
-CharacterSetting paragraphStyleCharacter(const PictureView& view, const QString& name)
+QVector<ParagraphStyle> paragraphStyles(const PictureView& view)
 {
-    return ::pictura::type_paragraph_style_character(view, name);
-}
-
-ParagraphSetting paragraphStyleParagraph(const PictureView& view, const QString& name)
-{
-    return ::pictura::type_paragraph_style_paragraph(view, name);
-}
-
-QString paragraphStyleFont(const PictureView& view, const QString& name)
-{
-    return ::pictura::type_paragraph_style_font(view, name);
+    QVector<ParagraphStyle> out;
+    for (const ::pictura::ParagraphStyleRow& row : ::pictura::type_paragraph_styles(view)) {
+        out.append({row.name, row.font, row.character, row.paragraph});
+    }
+    return out;
 }
 
 bool rasterize(PictureView& view, const QString& path)
@@ -295,21 +241,65 @@ bool rasterize(PictureView& view, const QString& path)
     return view.rasterize_type(path);
 }
 
-bool beginEdit(PictureView& view, const QString& path)
+std::optional<EditSession> EditSession::begin(PictureView& view, const QString& path)
 {
-    return view.layer_is_type(path) && ::pictura::type_edit_begin(view, path);
+    if (!view.layer_is_type(path) || !::pictura::type_edit_begin(view, path)) {
+        return std::nullopt;
+    }
+    return EditSession(view, path);
 }
 
-void cancelEdit(PictureView& view, const QString& path)
+EditSession::EditSession(PictureView& view, const QString& path)
+    : view_(&view)
+    , path_(path)
+    , open_(true)
 {
-    ::pictura::type_edit_cancel(view, path);
 }
 
-bool commitEdit(PictureView& view, const QString& path, const QString& text, const QString& font,
-                const TypeSetting& setting, const CharacterSetting& character,
-                const ParagraphSetting& paragraph)
+EditSession::EditSession(EditSession&& other) noexcept
+    : view_(other.view_)
+    , path_(std::move(other.path_))
+    , open_(other.open_)
 {
-    return ::pictura::type_commit_edit(view, path, text, font, setting, character, paragraph);
+    other.open_ = false;
+}
+
+EditSession& EditSession::operator=(EditSession&& other) noexcept
+{
+    if (this != &other) {
+        cancel();
+        view_ = other.view_;
+        path_ = std::move(other.path_);
+        open_ = other.open_;
+        other.open_ = false;
+    }
+    return *this;
+}
+
+EditSession::~EditSession()
+{
+    cancel();
+}
+
+bool EditSession::commit(const TypeSpec& spec)
+{
+    if (!open_) {
+        return false;
+    }
+    open_ = false;
+    return view_ && ::pictura::type_commit_edit(*view_, path_, spec.text, spec.font, spec.setting,
+                                                spec.character, spec.paragraph);
+}
+
+void EditSession::cancel()
+{
+    if (!open_) {
+        return;
+    }
+    open_ = false;
+    if (view_) {
+        ::pictura::type_edit_cancel(*view_, path_);
+    }
 }
 
 WarpSetting layerWarp(const PictureView& view, const QString& path)
@@ -334,21 +324,48 @@ WarpRefusal warpRefusal(const PictureView& view, const QString& path)
     }
 }
 
-bool previewWarp(PictureView& view, const QString& path, const WarpSetting& warp)
+WarpSession::WarpSession(PictureView& view, const QString& path)
+    : view_(&view)
+    , path_(path)
 {
-    return ::pictura::type_warp_preview(view, path, warp.style, warp.bend, warp.horizontal,
+}
+
+WarpSession::~WarpSession()
+{
+    cancel();
+}
+
+bool WarpSession::preview(const WarpSetting& warp)
+{
+    if (!view_) {
+        open_ = false;
+    }
+    if (!open_) {
+        return false;
+    }
+    previewed_ = true;
+    return ::pictura::type_warp_preview(*view_, path_, warp.style, warp.bend, warp.horizontal,
                                         warp.vertical, warp.verticalOrientation);
 }
 
-bool cancelWarp(PictureView& view)
+bool WarpSession::commit(const WarpSetting& warp)
 {
-    return ::pictura::type_warp_cancel(view);
+    if (!open_ || !view_) {
+        open_ = false;
+        return false;
+    }
+    open_ = false;
+    return ::pictura::type_warp_commit(*view_, path_, warp.style, warp.bend, warp.horizontal,
+                                       warp.vertical, warp.verticalOrientation);
 }
 
-bool commitWarp(PictureView& view, const QString& path, const WarpSetting& warp)
+bool WarpSession::cancel()
 {
-    return ::pictura::type_warp_commit(view, path, warp.style, warp.bend, warp.horizontal,
-                                       warp.vertical, warp.verticalOrientation);
+    if (!open_) {
+        return false;
+    }
+    open_ = false;
+    return view_ && previewed_ && ::pictura::type_warp_cancel(*view_);
 }
 
 void setTextGamma(bool enabled, double gamma)

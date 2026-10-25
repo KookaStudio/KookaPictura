@@ -767,7 +767,7 @@ void PicturaMainWindow::registerHandlers()
     const auto currentTypePath = [this]() -> QString {
         PictureView* view = activeView();
         const QString path = layerAnchor();
-        if (!view || path.isEmpty() || !pictura::type_api::isType(*view, path)) {
+        if (!view || path.isEmpty() || !pictura::type_api::readLayer(*view, path).isType) {
             return QString();
         }
         return path;

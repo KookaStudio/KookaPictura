@@ -38,7 +38,7 @@ QImage seed()
 QString typeLayer(const Fixture& f)
 {
     for (int i = 0; i < f.view->layer_count(); ++i) {
-        if (pictura::type_api::isType(*f.view, QString::number(i))) {
+        if (pictura::type_api::readLayer(*f.view, QString::number(i)).isType) {
             return QString::number(i);
         }
     }
@@ -206,7 +206,7 @@ void TypePreferencesTest::hidingKeepsStoredValue()
     character->refresh();
     character->tsumeFieldForTest()->setValue(50.0);
     emit character->tsumeFieldForTest()->valueCommitted(50.0);
-    QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).tsume, 50.0);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.character.tsume, 50.0);
 
     character->setShowAsianOptions(false);
     character->setShowAsianOptions(true);
@@ -229,9 +229,7 @@ void TypePreferencesTest::glyphProtectionTogglesFallback()
     setting.yy = 1.0;
     pictura::CharacterSetting character = pictura::type_api::defaultCharacterSetting();
     character.size = 48.0;
-    QVERIFY(!pictura::type_api::commitLayer(
-        *f.view, text, QStringLiteral("Liberation Sans"), setting, character,
-        pictura::type_api::defaultParagraphSetting()).isEmpty());
+    QVERIFY(!pictura::type_api::commitLayer(*f.view, {text, QStringLiteral("Liberation Sans"), setting, character, pictura::type_api::defaultParagraphSetting()}).isEmpty());
     f.frame.refresh();
     const QImage on = f.canvas->image();
 
