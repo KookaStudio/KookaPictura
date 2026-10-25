@@ -482,6 +482,7 @@ public:
     // Edit > Color Settings…: show the sRGB working space and incoming-profile
     // policy; on OK persist the choice and apply it to every open view.
     void showColorSettings();
+    void wireColorManagementMenu();
     void applyColorSettings(PictureView* view);
     bool confirmProfileForOpen(PictureView* view, const QString& path);
     // Help > Developer > Design System…: the in-app storybook over the real

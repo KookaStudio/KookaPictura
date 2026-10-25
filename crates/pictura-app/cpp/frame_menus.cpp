@@ -49,7 +49,6 @@ const QList<PanelToggle>& panelToggles()
     };
     return toggles;
 }
-
 void PicturaMainWindow::buildMenus()
 {
     registry_->buildMenuBar(menuBar());
@@ -62,7 +61,6 @@ void PicturaMainWindow::buildMenus()
     if (QMenu* recent = recentMenu()) {
         connect(recent, &QMenu::aboutToShow, this, [this, recent]() { refreshRecentMenu(recent); });
     }
-
     // Icon for every implemented command; ids without an asset are skipped.
     static const char* const kIconCommands[] = {
         command_ids::FileNew,
@@ -105,7 +103,6 @@ void PicturaMainWindow::buildMenus()
     }
     wireWorkspaceCommands();
 }
-
 bool PicturaMainWindow::saveAsWithDialog()
 {
     PictureView* view = activeView();
@@ -276,15 +273,7 @@ void PicturaMainWindow::registerHandlers()
     });
 
     wireEditHistory();
-    registry_->setHandler(command_ids::EditAssignProfile, [this]() { showProfileCommand(false); });
-    registry_->setHandler(command_ids::EditConvertProfile, [this]() { showProfileCommand(true); });
-    registry_->setHandler(command_ids::EditColorSettings, [this]() { showColorSettings(); });
-    for (const char* id : {command_ids::EditAssignProfile, command_ids::EditConvertProfile}) {
-        registry_->setEnabledProvider(id, [this]() {
-            PictureView* view = activeView();
-            return view && view->has_document() && document_api::documentMode(*view) == QStringLiteral("rgb");
-        });
-    }
+    wireColorManagementMenu();
 
     wireTransformMenu();
 

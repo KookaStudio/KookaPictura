@@ -192,7 +192,6 @@ pub mod qobject {
         /// Whether the single active layer a tool edit may target is visible.
         #[qinvokable]
         fn active_layer_visible(&self) -> bool;
-
         /// Record the Layers panel's isolated set: while the Selected filter is on, `paths` are the panel paths Move Auto-Select may pick. `active` false clears the scope.
         #[qinvokable]
         fn isolation_set(self: Pin<&mut Self>, paths: &QStringList, active: bool);
