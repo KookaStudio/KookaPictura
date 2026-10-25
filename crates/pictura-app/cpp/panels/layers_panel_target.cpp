@@ -24,6 +24,12 @@ void LayersPanel::writeTarget()
     if (paths.isEmpty()) {
         set_layer_target(*view_, {}, {});
         rememberTarget();
+        // The tree's current row projects the target; with no target it must
+        // not keep an active highlight the document does not have.
+        const bool wasApplying = applyingTarget_;
+        applyingTarget_ = true;
+        tree_->selectionModel()->setCurrentIndex(QModelIndex(), QItemSelectionModel::NoUpdate);
+        applyingTarget_ = wasApplying;
         return;
     }
     // A current row outside the selection is not a new active layer: keep the
