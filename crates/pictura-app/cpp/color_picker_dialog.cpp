@@ -666,17 +666,20 @@ void ColorPicker::buildUi()
     addRow(4, 4, nullptr, tr("M:"), &m_spinM, 0, 100, tr("%"), false);
     addRow(5, 4, nullptr, tr("Y:"), &m_spinY, 0, 100, tr("%"), false);
     addRow(6, 4, nullptr, tr("K:"), &m_spinK, 0, 100, tr("%"), false);
+    m_spinL->setObjectName(QStringLiteral("colorPickerL"));
+    m_spinLabA->setObjectName(QStringLiteral("colorPickerLabA"));
+    m_spinLabB->setObjectName(QStringLiteral("colorPickerLabB"));
+    m_spinC->setObjectName(QStringLiteral("colorPickerC"));
+    m_spinM->setObjectName(QStringLiteral("colorPickerM"));
+    m_spinY->setObjectName(QStringLiteral("colorPickerY"));
+    m_spinK->setObjectName(QStringLiteral("colorPickerK"));
 
     const QString cmykTip =
         tr("CMYK is projected through the working CMYK profile from Color Settings.");
     // ponytail: the picker fields are 8-bit; 16/32-bit picker fields remain
     // #604's scope.
-    const std::array<QSpinBox*, 4> cmykBoxes = {m_spinC, m_spinM, m_spinY, m_spinK};
-    const std::array<const char*, 4> cmykNames = {
-        "colorPickerCyan", "colorPickerMagenta", "colorPickerYellow", "colorPickerBlack"};
-    for (int i = 0; i < 4; ++i) {
-        cmykBoxes[i]->setToolTip(cmykTip);
-        cmykBoxes[i]->setObjectName(QString::fromLatin1(cmykNames[i]));
+    for (QSpinBox* box : {m_spinC, m_spinM, m_spinY, m_spinK}) {
+        box->setToolTip(cmykTip);
     }
     for (QSpinBox* box : {m_spinL, m_spinLabA, m_spinLabB}) {
         box->setToolTip(tr("CIE L*a*b*, D50 reference white"));
@@ -805,14 +808,11 @@ void ColorPicker::syncControls(QWidget* except)
     assign(m_spinLabA, int(std::lround(a)));
     assign(m_spinLabB, int(std::lround(b)));
 
-    const ::rust::Vec<std::int32_t> cmyk =
-        pictura::picker_cmyk(color.red(), color.green(), color.blue());
-    if (cmyk.size() >= 4) {
-        assign(m_spinC, cmyk[0]);
-        assign(m_spinM, cmyk[1]);
-        assign(m_spinY, cmyk[2]);
-        assign(m_spinK, cmyk[3]);
-    }
+    const CmykPercent cmyk = rgbToCmyk(color);
+    assign(m_spinC, int(std::lround(cmyk.c)));
+    assign(m_spinM, int(std::lround(cmyk.m)));
+    assign(m_spinY, int(std::lround(cmyk.y)));
+    assign(m_spinK, int(std::lround(cmyk.k)));
 
     if (m_hex != except) {
         m_hex->setText(color.name().mid(1).toUpper());

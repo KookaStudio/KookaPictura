@@ -233,10 +233,10 @@ void ColorPickerTest::gamutAlertAppliesClosest()
 void ColorPickerTest::cmykFieldsUpdate()
 {
     pictura::ColorPickerDialog dialog(QColor(200, 50, 100));
-    auto* cyan = dialog.findChild<QSpinBox*>(QStringLiteral("colorPickerCyan"));
-    auto* magenta = dialog.findChild<QSpinBox*>(QStringLiteral("colorPickerMagenta"));
-    auto* yellow = dialog.findChild<QSpinBox*>(QStringLiteral("colorPickerYellow"));
-    auto* black = dialog.findChild<QSpinBox*>(QStringLiteral("colorPickerBlack"));
+    auto* cyan = dialog.findChild<QSpinBox*>(QStringLiteral("colorPickerC"));
+    auto* magenta = dialog.findChild<QSpinBox*>(QStringLiteral("colorPickerM"));
+    auto* yellow = dialog.findChild<QSpinBox*>(QStringLiteral("colorPickerY"));
+    auto* black = dialog.findChild<QSpinBox*>(QStringLiteral("colorPickerK"));
     QVERIFY(cyan && magenta && yellow && black);
     const int m = magenta->value();
     const int y = yellow->value();
