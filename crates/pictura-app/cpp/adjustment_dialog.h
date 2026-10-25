@@ -52,6 +52,18 @@ public:
     ~AdjustmentDialog() override;
 
     QByteArray block() const { return block_; }
+
+    // A slider parameter's range, default and decimals as the engine layout
+    // gives them (`image_adjustment_page` rows); `valid` false when `page`
+    // has no slider `key`. Every dialog takes its numeric limits from here.
+    struct ParamSpec {
+        double min = 0.0;
+        double max = 0.0;
+        double defaultValue = 0.0;
+        int decimals = 0;
+        bool valid = false;
+    };
+    static ParamSpec paramSpec(const QStringList& page, const QString& key);
     virtual QWidget* controlForTest(const QString& key) const;
 
     void accept() override;
@@ -79,6 +91,8 @@ protected:
     QStringList page() const;
     // `key`'s value in the current block, or `fallback` when the page lacks it.
     double param(const QString& key, double fallback = 0.0) const;
+    // `key`'s slider spec on the current block's page.
+    ParamSpec spec(const QString& key) const { return paramSpec(page(), key); }
     // Set `key` and preview; false (the block unchanged) when the engine
     // refuses the result, e.g. Levels' input black at or past its white.
     bool setParam(const QString& key, double value);
@@ -101,16 +115,16 @@ protected:
     // A CS6 value row at `row` / `row + 1` of `grid`: `label` (indented by
     // `indent` px) and a number field over a full-width slider, both editing
     // `key` over `min..max`. The field is named `key`, the slider
-    // `key + "Slider"`.
+    // `key + "Slider"`. The range is the engine layout's for `paramKey(key)`.
     // With `ramp`, the slider's groove is those colours.
     QSpinBox* addStackedRow(QGridLayout* grid, int row, const QString& label,
-                            const QString& key, int min, int max, int indent = 0,
-                            const QList<QColor>& ramp = {}, const QString& suffix = {});
+                            const QString& key, int indent = 0, const QList<QColor>& ramp = {},
+                            const QString& suffix = {});
     // The newer single-column row: `label` with its number field (named
     // `key`, with `suffix`) at the right, over a full-width slider whose
     // groove is the `ramp` colours.
-    QSpinBox* addRampRow(QVBoxLayout* layout, const QString& label, const QString& key, int min,
-                         int max, const QList<QColor>& ramp, const QString& suffix = {});
+    QSpinBox* addRampRow(QVBoxLayout* layout, const QString& label, const QString& key,
+                         const QList<QColor>& ramp, const QString& suffix = {});
     // A colour swatch button and its fill (also kept as its "color" property).
     ColorSwatchWidget* swatch(const QString& name);
     static void paintSwatch(ColorSwatchWidget* button, const QColor& color);

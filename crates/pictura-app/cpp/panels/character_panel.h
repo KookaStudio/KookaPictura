@@ -6,7 +6,7 @@
 #include <QtGui/QColor>
 #include <QtWidgets/QWidget>
 
-#include "pictura_app/src/cxxqt_object/type_tools.cxxqt.h"
+#include "api/type_api.h"
 
 #include <array>
 #include <functional>

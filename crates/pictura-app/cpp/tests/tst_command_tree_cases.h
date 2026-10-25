@@ -10,6 +10,7 @@
 
 #include <functional>
 
+#include "adjustment_catalogue.h"
 #include "commands.h"
 #include "frame.h"
 #include "pictura_app/src/cxxqt_object/command_catalogue.cxxqt.h"
@@ -162,6 +163,72 @@ inline void crListCommands(pictura::PicturaMainWindow& window)
         byId.value(QString::fromLatin1(pictura::command_ids::LayerHideLayers));
     QCOMPARE(hideLayers.path,
              (QStringList{QStringLiteral("Layer"), QStringLiteral("Hide Layers")}));
+}
+
+// Image > Adjustments and the Image-root Auto commands are wired from the engine
+// adjustment catalogue (#272): every catalogue command is implemented with a
+// handler, dialog entries carry the ellipsis, and the menu keeps the catalogue's
+// relative order.
+inline void imageAdjustmentsFollowCatalogue(pictura::PicturaMainWindow& window)
+{
+    pictura::CommandRegistry* registry = window.registry();
+    QVERIFY(registry != nullptr);
+    registry->refresh();
+    QMenu* image = nullptr;
+    for (QAction* top : window.menuBar()->actions()) {
+        if (top->text().remove(QLatin1Char('&')) == QStringLiteral("Image")) {
+            image = top->menu();
+        }
+    }
+    QVERIFY(image != nullptr);
+    QMenu* adjustments = nullptr;
+    for (QAction* action : image->actions()) {
+        if (action->menu() && action->text().remove(QLatin1Char('&')) == QStringLiteral("Adjustments")) {
+            adjustments = action->menu();
+        }
+    }
+    QVERIFY(adjustments != nullptr);
+    QStringList shown;
+    for (QAction* action : adjustments->actions()) {
+        if (!action->isSeparator()) {
+            shown << action->text().remove(QStringLiteral("\u2026"));
+        }
+    }
+
+    QSet<QString> implemented;
+    for (const pictura::CommandInfo& info : registry->describe()) {
+        if (info.implemented) {
+            implemented.insert(info.id);
+        }
+    }
+    int last = -1;
+    int wired = 0;
+    for (const pictura::AdjustmentKind& entry : pictura::adjustmentCatalogue()) {
+        if (entry.image.isEmpty()) {
+            continue;
+        }
+        const bool root = entry.image == QLatin1String("root");
+        const QString id = root ? pictura::commandIdForPath({QStringLiteral("Image"), entry.title})
+                                : pictura::commandIdForPath({QStringLiteral("Image"),
+                                                             QStringLiteral("Adjustments"),
+                                                             entry.title});
+        QVERIFY2(implemented.contains(id), qPrintable(id));
+        QAction* action = registry->action(id);
+        QVERIFY2(action != nullptr, qPrintable(id));
+        const bool dialog = entry.image == QLatin1String("dialog");
+        QCOMPARE(action->text(), dialog ? entry.title + QStringLiteral("\u2026") : entry.title);
+        ++wired;
+        if (root) {
+            continue;
+        }
+        const int at = shown.indexOf(entry.title);
+        QVERIFY2(at >= 0, qPrintable(entry.title));
+        if (dialog || entry.kind == QLatin1String("invert")) {
+            QVERIFY2(at > last, qPrintable(entry.title + QStringLiteral(" keeps CS6 order")));
+            last = at;
+        }
+    }
+    QCOMPARE(wired, 22);
 }
 
 } // namespace pictura::test

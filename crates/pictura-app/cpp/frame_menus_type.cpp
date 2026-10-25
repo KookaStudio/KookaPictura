@@ -9,8 +9,9 @@
 #include "type_fonts.h"
 #include "warp_text_dialog.h"
 
-#include <QtCore/QPointer>
 #include <QtWidgets/QMessageBox>
+
+#include <memory>
 
 namespace pictura {
 
@@ -41,7 +42,7 @@ void PicturaMainWindow::wireTypeMenu()
     const auto convertible = [this](bool paragraph) -> QString {
         PictureView* view = activeView();
         const QString path = layerAnchor();
-        if (!view || path.isEmpty() || !type_api::isType(*view, path)
+        if (!view || path.isEmpty() || !type_api::readLayer(*view, path).isType
             || type_api::isParagraph(*view, path) != paragraph) {
             return QString();
         }
@@ -74,7 +75,7 @@ void PicturaMainWindow::wireWarpText()
     const auto target = [this]() -> QString {
         PictureView* view = activeView();
         const QString path = layerAnchor();
-        return view && !path.isEmpty() && type_api::isType(*view, path) ? path : QString();
+        return view && !path.isEmpty() && type_api::readLayer(*view, path).isType ? path : QString();
     };
     const QString id
         = commandIdForPath({QStringLiteral("Type"), QStringLiteral("Warp Text…")});
@@ -97,19 +98,21 @@ void PicturaMainWindow::wireWarpText()
         }
         auto* dialog = new WarpTextDialog(type_api::layerWarp(*view, path), this);
         dialog->setAttribute(Qt::WA_DeleteOnClose);
-        const QPointer<PictureView> guard(view);
-        connect(dialog, &WarpTextDialog::changed, this, [this, dialog, guard, path]() {
-            if (guard && type_api::previewWarp(*guard, path, dialog->setting())) {
+        // The dialog's connections own the session: closing the dialog
+        // destroys them, and an unfinished session cancels.
+        const auto session = std::make_shared<type_api::WarpSession>(*view, path);
+        connect(dialog, &WarpTextDialog::changed, dialog, [this, dialog, session]() {
+            if (session->preview(dialog->setting())) {
                 refresh();
             }
         });
-        connect(dialog, &QDialog::accepted, this, [this, dialog, guard, path]() {
-            if (guard && type_api::commitWarp(*guard, path, dialog->setting())) {
+        connect(dialog, &QDialog::accepted, dialog, [this, dialog, session]() {
+            if (session->commit(dialog->setting())) {
                 refresh();
             }
         });
-        connect(dialog, &QDialog::rejected, this, [this, guard]() {
-            if (guard && type_api::cancelWarp(*guard)) {
+        connect(dialog, &QDialog::rejected, dialog, [this, session]() {
+            if (session->cancel()) {
                 refresh();
             }
         });

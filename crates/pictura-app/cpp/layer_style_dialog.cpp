@@ -321,8 +321,8 @@ void LayerStyleDialog::bindChoice(QComboBox* combo, const QString& key)
 
 void LayerStyleDialog::bindBlendMode(QComboBox* combo, const QString& key)
 {
-    for (const BlendEntry& entry : kBlends) {
-        combo->addItem(tr(entry.name));
+    for (const BlendEntry& entry : blendModes()) {
+        combo->addItem(entry.name);
     }
     // CS6 groups the modes with separators; the combo keeps one index per
     // mode instead so the index is the engine's.

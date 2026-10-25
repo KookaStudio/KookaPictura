@@ -853,7 +853,7 @@ void TransformSkewTest::typeKeepsTheLayerColor()
 
     QString path;
     for (int i = 0; i < f.view->layer_count(); ++i) {
-        if (pictura::type_api::isType(*f.view, QString::number(i))) {
+        if (pictura::type_api::readLayer(*f.view, QString::number(i)).isType) {
             path = QString::number(i);
             break;
         }
@@ -996,7 +996,7 @@ void TransformSkewTest::ctrlShiftSideKeepsType()
 
     QString path;
     for (int i = 0; i < f.view->layer_count(); ++i) {
-        if (pictura::type_api::isType(*f.view, QString::number(i))) {
+        if (pictura::type_api::readLayer(*f.view, QString::number(i)).isType) {
             path = QString::number(i);
             break;
         }
@@ -1019,7 +1019,7 @@ void TransformSkewTest::ctrlShiftSideKeepsType()
     const int base = f.view->history_index();
     QVERIFY(f.view->commit_transform());
     QVERIFY(f.committedOnce(base, "Free Transform"));
-    QVERIFY(pictura::type_api::isType(*f.view, path));
+    QVERIFY(pictura::type_api::readLayer(*f.view, path).isType);
 }
 
 QTEST_MAIN(TransformSkewTest)

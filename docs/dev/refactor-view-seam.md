@@ -90,3 +90,28 @@ genuinely new engine operation grows the bridge", kept under a new home.
 Same bar as every refactor round (`docs/dev/refactor-tool-architecture.md`
 §5), plus `ctest -R '^tst_'` including `tst_layers_snapshot` and
 `scripts/check-selftest-budget.sh` (no new `ST_BEGIN` sites).
+## 6. `type_api` after #403: deepened, not folded
+
+Unit E landed as a near 1:1 forwarder: 48 of its 60 functions had a one-line
+body, which the §1 rule rejects. Issue #403 weighed two fixes and chose to
+**deepen** it.
+
+- **Rejected: fold it back.** Deleting `type_api` would put the generated
+  `type_tools*.cxxqt.h` headers back into about 35 files, against the
+  exclusive-surface rule in `ui/view-seam-adapters`.
+- **Chosen: deepen.** The adapter now absorbs the unit's real shapes:
+  - `TypeSpec` (text, font, setting, character, paragraph) replaces the
+    five-argument tuple on every preview, bounds, commit and update call;
+  - `readLayer` is the only layer read (the per-field getters are gone);
+  - `EditSession` owns re-editing: begin, then exactly one commit or cancel,
+    and a session dropped open cancels;
+  - `WarpSession` owns the Warp Text preview the same way;
+  - `characterStyles` / `paragraphStyles` read each style library in one
+    call. The count/name/font/setting index getters left the bridge.
+- **The one header exception.** `api/type_api.h` still includes the generated
+  type headers, because its value types are the bridge's shared setting
+  structs. No other production file includes them, other adapters included
+  (`layers_api.cpp` asks `type_api::isWarped`). The Rust test
+  `type_bridge_headers_stay_in_adapter` enforces this.
+
+Change artifacts: `openspec/changes/rust-single-source-bundle/`.

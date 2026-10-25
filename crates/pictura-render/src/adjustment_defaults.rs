@@ -12,26 +12,6 @@ use crate::{
     encode_posterize, encode_selective_color, encode_threshold, identity_cube,
 };
 
-/// The Image > Adjustments dialog kinds, in menu order, as `(kind, title)`.
-pub const ADJUSTMENT_DIALOG_KINDS: [(&str, &str); 16] = [
-    ("brightness-contrast", "Brightness/Contrast"),
-    ("levels", "Levels"),
-    ("curves", "Curves"),
-    ("exposure", "Exposure"),
-    ("vibrance", "Vibrance"),
-    ("hue-saturation", "Hue/Saturation"),
-    ("color-balance", "Color Balance"),
-    ("black-white", "Black & White"),
-    ("photo-filter", "Photo Filter"),
-    ("channel-mixer", "Channel Mixer"),
-    ("posterize", "Posterize"),
-    ("threshold", "Threshold"),
-    ("gradient-map", "Gradient Map"),
-    ("selective-color", "Selective Color"),
-    ("shadows-highlights", "Shadows/Highlights"),
-    ("color-lookup", "Color Lookup"),
-];
-
 fn descriptor(key: [u8; 4], items: Vec<(&[u8], DescValue)>) -> AdjustmentData {
     let obj = DescValue::Object {
         name: String::new(),
@@ -168,15 +148,19 @@ pub fn default_adjustment_block(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::adjustment_editor;
+    use crate::{adjustment_editor, ImageCommand, ADJUSTMENT_CATALOGUE};
 
     #[test]
     fn every_dialog_opens_on_its_defaults() {
-        for (kind, title) in ADJUSTMENT_DIALOG_KINDS {
+        let dialogs = ADJUSTMENT_CATALOGUE
+            .iter()
+            .filter(|entry| entry.image == ImageCommand::AdjustmentsDialog);
+        for entry in dialogs {
+            let kind = entry.kind;
             let block = default_adjustment_block(kind, [0, 0, 0], [255, 255, 255])
                 .unwrap_or_else(|| panic!("{kind} has no default"));
             let editor = adjustment_editor(&block).unwrap_or_else(|| panic!("{kind} decodes"));
-            assert_eq!(editor.title, title);
+            assert_eq!(editor.title, entry.title);
             for param in &editor.params {
                 assert_eq!(
                     param.value, param.default,

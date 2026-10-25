@@ -85,7 +85,7 @@ void PicturaMainWindow::updateAlignControls()
     // command's enablement, so a click is never a silent no-op.
     optionsBar_->setRefineEdgeEnabled(view && refine_edge_available(*view));
     const QString layer = layerAnchor();
-    optionsBar_->setWarpTextEnabled(view && !layer.isEmpty() && type_api::isType(*view, layer));
+    optionsBar_->setWarpTextEnabled(view && !layer.isEmpty() && type_api::readLayer(*view, layer).isType);
 }
 
 } // namespace pictura

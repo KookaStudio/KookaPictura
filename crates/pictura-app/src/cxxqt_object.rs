@@ -12,6 +12,7 @@ mod command_catalogue;
 mod crop_group;
 mod document_session;
 mod edit;
+mod engine_tables;
 mod export;
 mod eyedropper_sample;
 mod filter_map;

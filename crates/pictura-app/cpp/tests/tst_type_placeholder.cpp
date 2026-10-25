@@ -31,7 +31,7 @@ QStringList typeLayers(const Fixture& f)
 {
     QStringList out;
     for (int i = 0; i < f.view->layer_count(); ++i) {
-        if (pictura::type_api::isType(*f.view, QString::number(i))) {
+        if (pictura::type_api::readLayer(*f.view, QString::number(i)).isType) {
             out << QString::number(i);
         }
     }
@@ -110,7 +110,7 @@ void TypePlaceholderTest::dragFillsBox()
     const QStringList layers = typeLayers(f);
     QCOMPARE(layers.size(), 1);
     QVERIFY(pictura::type_api::isParagraph(*f.view, layers.first()));
-    QCOMPARE(pictura::type_api::layerText(*f.view, layers.first()), kPlaceholder);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, layers.first()).spec.text, kPlaceholder);
 }
 
 void TypePlaceholderTest::clickFillsPointType()
@@ -126,7 +126,7 @@ void TypePlaceholderTest::clickFillsPointType()
     const QStringList layers = typeLayers(f);
     QCOMPARE(layers.size(), 1);
     QVERIFY(!pictura::type_api::isParagraph(*f.view, layers.first()));
-    QCOMPARE(pictura::type_api::layerText(*f.view, layers.first()), kPlaceholder);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, layers.first()).spec.text, kPlaceholder);
 }
 
 void TypePlaceholderTest::typingReplacesPlaceholder()
@@ -139,7 +139,7 @@ void TypePlaceholderTest::typingReplacesPlaceholder()
     commit(f);
     const QStringList layers = typeLayers(f);
     QCOMPARE(layers.size(), 1);
-    QCOMPARE(pictura::type_api::layerText(*f.view, layers.first()), QStringLiteral("Hello"));
+    QCOMPARE(pictura::type_api::readLayer(*f.view, layers.first()).spec.text, QStringLiteral("Hello"));
 }
 
 void TypePlaceholderTest::untouchedPlaceholderCommits()
@@ -152,7 +152,7 @@ void TypePlaceholderTest::untouchedPlaceholderCommits()
     commit(f);
     QCOMPARE(f.view->layer_count(), layers + 1);
     QCOMPARE(typeLayers(f).size(), 1);
-    QCOMPARE(pictura::type_api::layerText(*f.view, typeLayers(f).first()), kPlaceholder);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, typeLayers(f).first()).spec.text, kPlaceholder);
 }
 
 void TypePlaceholderTest::maskAndReopenAreExempt()
@@ -177,7 +177,7 @@ void TypePlaceholderTest::maskAndReopenAreExempt()
     QVERIFY(f.tools->textSession() && f.tools->textSession()->textActive());
     QCOMPARE(f.canvas->typeOverlaySelectionForTest(), 0);
     commit(f);
-    QCOMPARE(pictura::type_api::layerText(*f.view, path), QStringLiteral("Mine"));
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.text, QStringLiteral("Mine"));
     QVERIFY(f.view->history_index() <= base + 1);
 }
 

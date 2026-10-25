@@ -52,7 +52,7 @@ ChannelMixerDialog::ChannelMixerDialog(PictureView* view, const QByteArray& bloc
     for (int i = 0; i < 3; ++i) {
         const QString label = QStringList{QStringLiteral("Red:"), QStringLiteral("Green:"),
                                           QStringLiteral("Blue:")}[i];
-        addStackedRow(grid, i * 3, label, kSources[i], -200, 200, 14, {kDark, colors[i]},
+        addStackedRow(grid, i * 3, label, kSources[i], 14, {kDark, colors[i]},
                       QStringLiteral(" %"));
         grid->setRowMinimumHeight(i * 3 + 2, 6);
     }
@@ -69,7 +69,7 @@ ChannelMixerDialog::ChannelMixerDialog(PictureView* view, const QByteArray& bloc
 
     auto* constant = new QGridLayout;
     constant->setColumnStretch(1, 1);
-    addStackedRow(constant, 0, QStringLiteral("Constant:"), kConstant, -200, 200, 0, {},
+    addStackedRow(constant, 0, QStringLiteral("Constant:"), kConstant, 0, {},
                   QStringLiteral(" %"));
     left->addLayout(constant);
     left->addStretch(1);

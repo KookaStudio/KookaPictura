@@ -217,7 +217,7 @@ are already tracked.
 | CLR-3 | `color-picker.md` | Gamut/web alerts, Color Libraries (PANTONE), picker preference | MISSING | `color_picker_dialog.cpp:1083-1085` | #600 |
 | CLR-4 | `color-picker.md` | HUD colour picker | MISSING | none found | #601 |
 | CLR-5 | `color-picker.md` | HDR colour picker (32-bpc) | MISSING | `color_picker_dialog.cpp` 8-bit only | #602 |
-| CLR-7 | `color-models.md` | Out-of-gamut triangle, CMYK→working space, 16/32-bit picker fields | MISSING | `color_picker_dialog.cpp:777-780` | #604 |
+| CLR-7 | `color-models.md` | Out-of-gamut triangle, 16/32-bit picker fields (CMYK now goes through the working profile in `pictura_color::model`) | PARTIAL | `color_picker_dialog.cpp:714` | #604 |
 | CLR-8 | `swatches-and-libraries.md` | `.aco`/`.ase` libraries, rename, display modes | MISSING | `swatches_panel.h:74` | #605 |
 | CLR-9 | `pattern-presets.md` | Pattern Overlay Snap To Origin + style Texture sub-options | PARTIAL | `layer_style_pages.cpp:297-315` | #606 |
 | CLR-10 | `bristle-brushes.md` | Bristle brushes | MISSING | `paint/tip.rs` | #607 |

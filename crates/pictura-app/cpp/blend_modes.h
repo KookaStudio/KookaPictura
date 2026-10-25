@@ -1,45 +1,23 @@
 #pragma once
 
-#include <array>
+#include <QtCore/QString>
+#include <QtCore/QVector>
 
 namespace pictura {
 
-// The 27 CS6 blend entries: 4-byte PSD key plus display name. Shared by the
-// Layers panel's blend combo and Mode filter and the Layer Style dialog. The
-// order is the engine's `BlendMode::LAYER_MODES`.
+// One layer blend mode as the engine lists it (`BlendMode::LAYER_MODES`).
 struct BlendEntry {
-    const char* key;
-    const char* name;
+    QString key;
+    QString name;
+    bool hasNeutral = false;
 };
 
-constexpr std::array<BlendEntry, 27> kBlends{{
-    {"norm", "Normal"},
-    {"diss", "Dissolve"},
-    {"dark", "Darken"},
-    {"mul ", "Multiply"},
-    {"idiv", "Color Burn"},
-    {"lbrn", "Linear Burn"},
-    {"dkCl", "Darker Color"},
-    {"lite", "Lighten"},
-    {"scrn", "Screen"},
-    {"div ", "Color Dodge"},
-    {"lddg", "Linear Dodge (Add)"},
-    {"lgCl", "Lighter Color"},
-    {"over", "Overlay"},
-    {"sLit", "Soft Light"},
-    {"hLit", "Hard Light"},
-    {"vLit", "Vivid Light"},
-    {"lLit", "Linear Light"},
-    {"pLit", "Pin Light"},
-    {"hMix", "Hard Mix"},
-    {"diff", "Difference"},
-    {"smud", "Exclusion"},
-    {"fsub", "Subtract"},
-    {"fdiv", "Divide"},
-    {"hue ", "Hue"},
-    {"sat ", "Saturation"},
-    {"colr", "Color"},
-    {"lum ", "Luminosity"},
-}};
+// The 27 layer modes in engine order, read once from the engine. Shared by the
+// Layers panel's blend combo and Mode filter, the New Layer dialog, the Layer
+// Style dialog, and the Properties panel; a combo index is the engine index.
+const QVector<BlendEntry>& blendModes();
+
+// The display name for PSD key `key`; `key` itself when it is not a layer mode.
+QString blendModeName(const QString& key);
 
 } // namespace pictura

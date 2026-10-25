@@ -653,7 +653,7 @@ void PropertiesPanel::showLayer(const pictura::layers_api::LayerRow& row)
     while (info_->rowCount() > 0) {
         info_->removeRow(0);
     }
-    const QString kind = pictura::type_api::isType(*view_, path_) ? QStringLiteral("type") : row.kind;
+    const QString kind = pictura::type_api::readLayer(*view_, path_).isType ? QStringLiteral("type") : row.kind;
     const std::map<QString, QString> kinds = {
         {QStringLiteral("pixel"), QStringLiteral("Pixel")},
         {QStringLiteral("type"), QStringLiteral("Type")},
@@ -674,13 +674,8 @@ void PropertiesPanel::showLayer(const pictura::layers_api::LayerRow& row)
                       new QLabel(QStringLiteral("X %1, Y %2").arg(rect.left).arg(rect.top),
                                  layerPage_));
     }
-    QString blend = row.blend;
-    for (const BlendEntry& entry : kBlends) {
-        if (blend == QLatin1String(entry.key)) {
-            blend = QLatin1String(entry.name);
-        }
-    }
-    info_->addRow(QStringLiteral("Blend Mode:"), new QLabel(blend, layerPage_));
+    info_->addRow(QStringLiteral("Blend Mode:"),
+                  new QLabel(blendModeName(row.blend), layerPage_));
     const auto percent = [](int v) { return QStringLiteral("%1%").arg(qRound(v * 100.0 / 255.0)); };
     info_->addRow(QStringLiteral("Opacity:"),
                   new QLabel(percent(row.opacity), layerPage_));

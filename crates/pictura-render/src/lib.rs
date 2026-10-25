@@ -66,8 +66,12 @@ pub use channel_mixer::encode_channel_mixer;
 mod curves;
 pub use curves::encode_curves;
 
+mod adjustment_catalogue;
+pub use adjustment_catalogue::{
+    adjustment_entry, AdjustmentEntry, ImageCommand, LayerEntry, ADJUSTMENT_CATALOGUE,
+};
 mod adjustment_defaults;
-pub use adjustment_defaults::{default_adjustment_block, ADJUSTMENT_DIALOG_KINDS};
+pub use adjustment_defaults::default_adjustment_block;
 mod adjustment_params;
 pub use adjustment_params::{
     adjustment_editor, curve_points, reset_adjustment, set_adjustment_param, set_curve_points,

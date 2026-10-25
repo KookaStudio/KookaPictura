@@ -23,7 +23,7 @@ namespace pictura {
 // pages are offered — Basic and Advanced Character Formats, OpenType Features,
 // Indents and Spacing, Composition, Justification, and Hyphenation — over the
 // extended type model. The style's attributes are the effective ones read back
-// from the sheet (type_api::paragraphStyle*), and an unset field reports the
+// from the sheet (type_api::paragraphStyles), and an unset field reports the
 // document default.
 //
 // Preview is live while editing an existing style: a control change emits

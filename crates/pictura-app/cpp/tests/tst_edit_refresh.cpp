@@ -28,7 +28,7 @@ QString typeLayerPath(const pictura::PictureView& view)
 {
     for (int i = 0; i < view.layer_count(); ++i) {
         const QString path = QString::number(i);
-        if (pictura::type_api::isType(view, path)) {
+        if (pictura::type_api::readLayer(view, path).isType) {
             return path;
         }
     }
@@ -115,10 +115,9 @@ void EditRefreshTest::aCommitNotifiesOnce()
     QVERIFY(pictura::type_api::createCharacterStyle(view, QStringLiteral("Probe"), font, character));
     QCOMPARE(changes.count(), 1);
 
-    const pictura::TypeSetting placement = pictura::type_api::layerSetting(view, QString());
+    const pictura::TypeSetting placement = pictura::type_api::readLayer(view, QString()).spec.setting;
     const pictura::ParagraphSetting paragraph = pictura::type_api::defaultParagraphSetting();
-    QVERIFY(!pictura::type_api::commitLayer(view, QStringLiteral("Hello"), font, placement, character,
-                                            paragraph)
+    QVERIFY(!pictura::type_api::commitLayer(view, {QStringLiteral("Hello"), font, placement, character, paragraph})
                  .isEmpty());
     const QString path = typeLayerPath(view);
     QVERIFY2(!path.isEmpty(), "a type layer");

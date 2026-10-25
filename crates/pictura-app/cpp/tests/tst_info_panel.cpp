@@ -8,8 +8,13 @@
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QMenu>
+#include <QtWidgets/QSpinBox>
 #include <QtWidgets/QToolButton>
 
+#include <cmath>
+
+#include "color_models.h"
+#include "color_picker_dialog.h"
 #include "frame.h"
 #include "panels/info_panel.h"
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
@@ -41,9 +46,14 @@ private slots:
     void toolRowDescribesActiveTool();
     void toolHintsOnePerLineCapitalisedReducedFont();
     void menuOpensBesideItsButton();
+    void labMatchesColorPicker();
+    void cmykMatchesColorPicker();
+    void cmykReadoutFollowsProfile();
 
 private:
     void openDocument(const QString& name);
+    // Fill the open document with `rgb` and hover it.
+    void hoverColor(QRgb rgb);
 
     pictura::test::ScopedStateHome stateHome_;
     std::unique_ptr<pictura::PicturaMainWindow> window_;
@@ -386,6 +396,69 @@ void InfoPanelTest::menuOpensBesideItsButton()
         QVERIFY2(area.contains(menuRect),
                  "the first-open menu stays inside the available geometry");
     }
+}
+
+void InfoPanelTest::hoverColor(QRgb rgb)
+{
+    QVERIFY(!view_->add_solid_fill(0xff000000u | rgb).isEmpty());
+    QCoreApplication::processEvents();
+    panel_->setCursorPosition(QPointF(2, 2));
+}
+
+// The picker's Lab fields and the Info panel's Lab readout come from one
+// conversion (D50), so the same colour reads the same everywhere.
+void InfoPanelTest::labMatchesColorPicker()
+{
+    openDocument(QStringLiteral("LabAgree"));
+    const QColor color(0x22, 0x44, 0xaa);
+    hoverColor(color.rgb() & 0xffffff);
+    panel_->setColorModeForTest(0, QStringLiteral("Lab"));
+    pictura::ColorPickerDialog picker(color);
+    const auto field = [&](const char* name) {
+        auto* spin = picker.findChild<QSpinBox*>(QLatin1String(name));
+        return spin ? spin->value() : 9999;
+    };
+    const QString expected = QStringLiteral("L : %1  a : %2  b : %3")
+                                 .arg(field("colorPickerL"))
+                                 .arg(field("colorPickerLabA"))
+                                 .arg(field("colorPickerLabB"));
+    QCOMPARE(panel_->colorBlockTextForTest(0), expected);
+}
+
+void InfoPanelTest::cmykMatchesColorPicker()
+{
+    openDocument(QStringLiteral("CmykAgree"));
+    const QColor color(0xc8, 0x78, 0x50);
+    hoverColor(color.rgb() & 0xffffff);
+    panel_->setColorModeForTest(0, QStringLiteral("CMYK"));
+    pictura::ColorPickerDialog picker(color);
+    const auto field = [&](const char* name) {
+        auto* spin = picker.findChild<QSpinBox*>(QLatin1String(name));
+        return spin ? spin->value() : 9999;
+    };
+    const QString expected = QStringLiteral("C : %1  M : %2  Y : %3  K : %4")
+                                 .arg(field("colorPickerC"))
+                                 .arg(field("colorPickerM"))
+                                 .arg(field("colorPickerY"))
+                                 .arg(field("colorPickerK"));
+    QCOMPARE(panel_->colorBlockTextForTest(0), expected);
+}
+
+// CMYK goes through the working profile, so black is a rich black rather than
+// the naive 0/0/0/100.
+void InfoPanelTest::cmykReadoutFollowsProfile()
+{
+    openDocument(QStringLiteral("CmykBlack"));
+    hoverColor(0x000000);
+    panel_->setColorModeForTest(0, QStringLiteral("CMYK"));
+    const pictura::CmykPercent inks = pictura::rgbToCmyk(QColor(0, 0, 0));
+    const QString expected = QStringLiteral("C : %1  M : %2  Y : %3  K : %4")
+                                 .arg(std::lround(inks.c))
+                                 .arg(std::lround(inks.m))
+                                 .arg(std::lround(inks.y))
+                                 .arg(std::lround(inks.k));
+    QCOMPARE(panel_->colorBlockTextForTest(0), expected);
+    QVERIFY(expected != QStringLiteral("C : 0  M : 0  Y : 0  K : 100"));
 }
 
 QTEST_MAIN(InfoPanelTest)

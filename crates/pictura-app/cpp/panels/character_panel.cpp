@@ -652,7 +652,7 @@ bool CharacterPanel::hasTypeLayer() const
         return false;
     }
     const QString path = layer_selection_anchor(*view_);
-    return !path.isEmpty() && pictura::type_api::isType(*view_, path);
+    return !path.isEmpty() && pictura::type_api::readLayer(*view_, path).isType;
 }
 
 void CharacterPanel::setView(PictureView* view)
@@ -742,17 +742,16 @@ void CharacterPanel::resetCharacter()
     }
     const QString path = layer_selection_anchor(*view_);
     const pictura::type_api::LayerType layer = pictura::type_api::readLayer(*view_, path);
-    CharacterSetting character = layer.character;
+    CharacterSetting character = layer.spec.character;
     const CharacterSetting defaults = pictura::type_api::defaultCharacterSetting();
     copyPanelFields(defaults, character);
     // The model default has no size or style; keep the text legible.
-    character.size = layer.character.size;
-    character.font_style = layer.character.font_style;
+    character.size = layer.spec.character.size;
+    character.font_style = layer.spec.character.font_style;
     // ponytail: Reset Character keeps the layer's family; CS6 also resets it.
-    const QString family = familyForFontName(layer.font);
+    const QString family = familyForFontName(layer.spec.font);
     registerTypeFont(family, character.font_style);
-    pictura::type_api::updateLayer(*view_, path, layer.text, family, layer.setting, character,
-                                   layer.paragraph);
+    pictura::type_api::updateLayer(*view_, path, {layer.spec.text, family, layer.spec.setting, character, layer.spec.paragraph});
     refresh();
 }
 
@@ -784,13 +783,15 @@ void CharacterPanel::refresh()
     const bool newText = session && session->newTextCharacter(live, liveFamily);
     const bool type = newText || hasTypeLayer();
     const QString path = type && !newText ? layer_selection_anchor(*view_) : QString();
+    const pictura::type_api::LayerType layer = path.isEmpty()
+                                                   ? pictura::type_api::LayerType{}
+                                                   : pictura::type_api::readLayer(*view_, path);
     shown_ = newText ? live
-             : type  ? pictura::type_api::layerCharacterSetting(*view_, path)
+             : type  ? layer.spec.character
                      : pictura::type_api::defaultCharacterSetting();
-    const QString family
-        = newText ? liveFamily
-        : type    ? familyForFontName(pictura::type_api::layerFont(*view_, path))
-                  : QString();
+    const QString family = newText ? liveFamily
+                           : type  ? familyForFontName(layer.spec.font)
+                                   : QString();
     std::uint32_t features = 0;
     if (type) {
         // The query must see the host face, not the bundled fallback.
@@ -865,14 +866,13 @@ void CharacterPanel::apply()
     }
     const QString path = layer_selection_anchor(*view_);
     const pictura::type_api::LayerType layer = pictura::type_api::readLayer(*view_, path);
-    CharacterSetting c = layer.character;
+    CharacterSetting c = layer.spec.character;
     copyPanelFields(shown_, c);
     c.color = color_.rgba();
 
     const QString family = family_->currentFont().family();
     registerTypeFont(family, shown_.font_style);
-    pictura::type_api::updateLayer(*view_, path, layer.text, family, layer.setting, c,
-                                   layer.paragraph);
+    pictura::type_api::updateLayer(*view_, path, {layer.spec.text, family, layer.spec.setting, c, layer.spec.paragraph});
 }
 
 bool CharacterPanel::editingEnabledForTest() const { return size_.combo->isEnabled(); }

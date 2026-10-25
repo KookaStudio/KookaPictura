@@ -1,6 +1,7 @@
 #include "panel_group.h"
 
 #include "actions_panel.h"
+#include "adjustment_catalogue.h"
 #include "character_panel.h"
 #include "history_panel.h"
 #include "layers_panel.h"
@@ -292,27 +293,17 @@ const QList<MenuRow>& rowsForPanel(const QString& panel)
              imp(QStringLiteral("Reset Paragraph"), QStringLiteral("paragraph.reset"), true),
          }},
         {QStringLiteral("adjustmentsPanel"),
-         {
-             imp(QStringLiteral("Brightness-Contrast"),
-                 QStringLiteral("adjustment:brightness-contrast")),
-             imp(QStringLiteral("Levels"), QStringLiteral("adjustment:levels")),
-             imp(QStringLiteral("Curves"), QStringLiteral("adjustment:curves")),
-             imp(QStringLiteral("Exposure"), QStringLiteral("adjustment:exposure")),
-             imp(QStringLiteral("Vibrance"), QStringLiteral("adjustment:vibrance")),
-             imp(QStringLiteral("Hue-Saturation"), QStringLiteral("adjustment:hue-saturation")),
-             imp(QStringLiteral("Color Balance"), QStringLiteral("adjustment:color-balance")),
-             imp(QStringLiteral("Black & White"), QStringLiteral("adjustment:black-white")),
-             imp(QStringLiteral("Photo Filter"), QStringLiteral("adjustment:photo-filter")),
-             imp(QStringLiteral("Channel Mixer"), QStringLiteral("adjustment:channel-mixer")),
-             imp(QStringLiteral("Color Lookup"), QStringLiteral("adjustment:color-lookup")),
-             imp(QStringLiteral("Invert"), QStringLiteral("adjustment:invert")),
-             imp(QStringLiteral("Posterize"), QStringLiteral("adjustment:posterize")),
-             imp(QStringLiteral("Threshold"), QStringLiteral("adjustment:threshold")),
-             imp(QStringLiteral("Gradient Map"), QStringLiteral("adjustment:gradient-map")),
-             imp(QStringLiteral("Selective Color"), QStringLiteral("adjustment:selective-color")),
-             dis(QStringLiteral("Add Mask by Default"), true),
-             chk(QStringLiteral("Clip to Layer")),
-         }},
+         [] {
+             QList<MenuRow> rows;
+             for (const AdjustmentKind& entry : adjustmentCatalogue()) {
+                 if (!entry.panelMenu.isEmpty()) {
+                     rows << imp(entry.panelMenu, QStringLiteral("adjustment:") + entry.kind);
+                 }
+             }
+             rows << dis(QStringLiteral("Add Mask by Default"), true)
+                  << chk(QStringLiteral("Clip to Layer"));
+             return rows;
+         }()},
         {QStringLiteral("propertiesPanel"),
          {
              dis(QStringLiteral("Save Preset…")),

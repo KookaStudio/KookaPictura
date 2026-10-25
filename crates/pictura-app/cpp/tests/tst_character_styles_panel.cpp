@@ -38,7 +38,7 @@ QImage seed()
 QString typeLayer(const Fixture& f)
 {
     for (int i = 0; i < f.view->layer_count(); ++i) {
-        if (pictura::type_api::isType(*f.view, QString::number(i))) {
+        if (pictura::type_api::readLayer(*f.view, QString::number(i)).isType) {
             return QString::number(i);
         }
     }
@@ -62,6 +62,7 @@ private slots:
     void dialogRoundTrips();
     void dialogPreviewRestoresOnCancel();
     void menusToggle();
+    void styleLibraryReadsInOneCall();
 
 private:
     void showFrame();
@@ -127,9 +128,9 @@ void CharacterStylesPanelTest::listsAndApplies()
     const int base = f.view->history_index();
     panel->applyRowForTest(0);
     QVERIFY2(f.committedOnce(base, "Apply Type Style"), "one apply state");
-    QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).size, 48.0);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.character.size, 48.0);
     QVERIFY(f.view->undo());
-    QVERIFY(pictura::type_api::layerCharacterSetting(*f.view, path).size != 48.0);
+    QVERIFY(pictura::type_api::readLayer(*f.view, path).spec.character.size != 48.0);
 }
 
 void CharacterStylesPanelTest::noTypeLayerRecordsNothing()
@@ -190,7 +191,7 @@ void CharacterStylesPanelTest::createsAndDeletes()
     QVERIFY(panel->createStyle());
     QCOMPARE(panel->listForTest()->count(), 1);
     QCOMPARE(panel->listForTest()->item(0)->text(), QStringLiteral("Quote"));
-    QVERIFY(pictura::type_api::characterStyleCharacter(*f.view, QStringLiteral("Quote")).faux_italic);
+    QVERIFY(pictura::type_api::findStyle(pictura::type_api::characterStyles(*f.view), QStringLiteral("Quote")).character.faux_italic);
 
     panel->listForTest()->setCurrentRow(0);
     const int base = f.view->history_index();
@@ -219,7 +220,7 @@ void CharacterStylesPanelTest::editsAndReapplies()
     QVERIFY(pictura::type_api::createCharacterStyle(*f.view, QStringLiteral("Quote"), QString(), c));
     panel->refresh();
     panel->applyRowForTest(0);
-    QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).size, 40.0);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.character.size, 40.0);
 
     QTimer::singleShot(0, [&] {
         auto* dialog = frame.findChild<pictura::ParagraphStyleDialog*>();
@@ -233,11 +234,11 @@ void CharacterStylesPanelTest::editsAndReapplies()
     const int base = f.view->history_index();
     QVERIFY(panel->editStyle(0));
     QVERIFY2(f.committedOnce(base, "Edit Character Style"), "one edit state");
-    QCOMPARE(pictura::type_api::characterStyleCharacter(*f.view, QStringLiteral("Quote")).size,
+    QCOMPARE(pictura::type_api::findStyle(pictura::type_api::characterStyles(*f.view), QStringLiteral("Quote")).character.size,
              55.0);
-    QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).size, 55.0);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.character.size, 55.0);
     QVERIFY(f.view->undo());
-    QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).size, 40.0);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.character.size, 40.0);
 }
 
 void CharacterStylesPanelTest::renameKeepsApplied()
@@ -272,12 +273,11 @@ void CharacterStylesPanelTest::renameKeepsApplied()
     QCOMPARE(panel->listForTest()->item(0)->text(), QStringLiteral("Quote 2"));
 
     // The layer still applies the renamed style: editing it changes the layer.
-    pictura::CharacterSetting edited = pictura::type_api::characterStyleCharacter(
-        *f.view, QStringLiteral("Quote 2"));
+    pictura::CharacterSetting edited = pictura::type_api::findStyle(pictura::type_api::characterStyles(*f.view), QStringLiteral("Quote 2")).character;
     edited.size = 60.0;
     QVERIFY(pictura::type_api::editCharacterStyle(*f.view, QStringLiteral("Quote 2"),
                                                   QStringLiteral("Quote 2"), QString(), edited));
-    QCOMPARE(pictura::type_api::layerCharacterSetting(*f.view, path).size, 60.0);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.character.size, 60.0);
 }
 
 void CharacterStylesPanelTest::dialogPages()
@@ -341,7 +341,7 @@ void CharacterStylesPanelTest::dialogRoundTrips()
     });
     QVERIFY(panel->editStyle(0));
     const pictura::CharacterSetting edited =
-        pictura::type_api::characterStyleCharacter(*f.view, QStringLiteral("Heading"));
+        pictura::type_api::findStyle(pictura::type_api::characterStyles(*f.view), QStringLiteral("Heading")).character;
     QVERIFY(edited.faux_bold);
     QVERIFY(edited.fractions);
 }
@@ -367,12 +367,12 @@ void CharacterStylesPanelTest::dialogPreviewRestoresOnCancel()
             return;
         }
         dialog->findChild<QDoubleSpinBox*>(QStringLiteral("paragraphStyleSize"))->setValue(70.0);
-        QCOMPARE(pictura::type_api::characterStyleCharacter(*f.view, QStringLiteral("Heading")).size,
+        QCOMPARE(pictura::type_api::findStyle(pictura::type_api::characterStyles(*f.view), QStringLiteral("Heading")).character.size,
                  70.0);
         dialog->reject();
     });
     QVERIFY(!panel->editStyle(0));
-    QCOMPARE(pictura::type_api::characterStyleCharacter(*f.view, QStringLiteral("Heading")).size,
+    QCOMPARE(pictura::type_api::findStyle(pictura::type_api::characterStyles(*f.view), QStringLiteral("Heading")).character.size,
              40.0);
 }
 
@@ -409,6 +409,43 @@ void CharacterStylesPanelTest::menusToggle()
         frame.registry()->refresh();
         QVERIFY2(!column->isPanelVisible(QStringLiteral("characterStylesPanel")),
                  qPrintable(command));
+    }
+}
+
+// The library reads in one adapter call (#403): every style's name, font and
+// resolved attributes in creation order, the same rows the panel lists.
+void CharacterStylesPanelTest::styleLibraryReadsInOneCall()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_char_styles_library"));
+    QVERIFY2(f.ok(), "type fixture");
+    QVERIFY(pictura::type_api::characterStyles(*f.view).isEmpty());
+    const QStringList names = {QStringLiteral("One"), QStringLiteral("Two"),
+                               QStringLiteral("Three")};
+    for (int i = 0; i < names.size(); ++i) {
+        pictura::CharacterSetting c = pictura::type_api::defaultCharacterSetting();
+        c.size = 20.0 + 10.0 * i;
+        QVERIFY(pictura::type_api::createCharacterStyle(*f.view, names.at(i),
+                                                         QStringLiteral("Liberation Sans"), c));
+    }
+    const QVector<pictura::type_api::CharacterStyle> styles =
+        pictura::type_api::characterStyles(*f.view);
+    QCOMPARE(styles.size(), names.size());
+    for (int i = 0; i < styles.size(); ++i) {
+        QCOMPARE(styles.at(i).name, names.at(i));
+        QCOMPARE(styles.at(i).character.size, 20.0 + 10.0 * i);
+        QVERIFY(!styles.at(i).font.isEmpty());
+    }
+    QCOMPARE(pictura::type_api::findStyle(styles, QStringLiteral("Two")).character.size, 30.0);
+    QVERIFY(pictura::type_api::findStyle(styles, QStringLiteral("Missing")).name.isEmpty());
+
+    auto* panel = frame.findChild<pictura::CharacterStylesPanel*>();
+    QVERIFY(panel);
+    panel->setView(f.view);
+    panel->refresh();
+    QCOMPARE(panel->listForTest()->count(), names.size());
+    for (int i = 0; i < names.size(); ++i) {
+        QCOMPARE(panel->listForTest()->item(i)->text(), names.at(i));
     }
 }
 

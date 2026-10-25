@@ -79,11 +79,11 @@ HueSaturationDialog::HueSaturationDialog(PictureView* view, const QByteArray& bl
     auto* grid = new QGridLayout;
     grid->setColumnStretch(1, 1);
     grid->setVerticalSpacing(4);
-    addStackedRow(grid, 0, QStringLiteral("Hue:"), kKeys[0], -180, 180, 14);
+    addStackedRow(grid, 0, QStringLiteral("Hue:"), kKeys[0], 14);
     grid->setRowMinimumHeight(2, 6);
-    addStackedRow(grid, 3, QStringLiteral("Saturation:"), kKeys[1], -100, 100, 14);
+    addStackedRow(grid, 3, QStringLiteral("Saturation:"), kKeys[1], 14);
     grid->setRowMinimumHeight(5, 6);
-    addStackedRow(grid, 6, QStringLiteral("Lightness:"), kKeys[2], -100, 100, 14);
+    addStackedRow(grid, 6, QStringLiteral("Lightness:"), kKeys[2], 14);
     left->addLayout(grid);
     left->addSpacing(8);
 

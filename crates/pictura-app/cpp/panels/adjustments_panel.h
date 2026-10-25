@@ -10,6 +10,7 @@ class QToolButton;
 namespace pictura {
 
 class PictureView;
+struct AdjustmentKind;
 
 // CS6 Adjustments panel content: an always-visible launch grid of fill and
 // adjustment icons. Clicking an entry emits a request; the frame creates the
@@ -18,15 +19,6 @@ class AdjustmentsPanel : public QWidget {
     Q_OBJECT
 
 public:
-    struct Entry {
-        const char* id;
-        const char* label;
-        const char* iconId;
-        bool fill;
-    };
-
-    static const Entry kEntries[19];
-
     explicit AdjustmentsPanel(QWidget* parent = nullptr);
 
     // A null view disables the grid (no document open).
@@ -43,7 +35,7 @@ signals:
     void fillRequested(const QString& type);
 
 private:
-    QToolButton* makeButton(const Entry& entry);
+    QToolButton* makeButton(const AdjustmentKind& entry);
 
     QVector<QToolButton*> buttons_;
 };

@@ -510,7 +510,7 @@ void LayersPanelFixesTest::typeThumbnailIsSquareWithoutOutline()
     QString pixelPath;
     for (int i = 0; i < f.view->layer_count(); ++i) {
         const QString path = QString::number(i);
-        if (pictura::type_api::isType(*f.view, path)) {
+        if (pictura::type_api::readLayer(*f.view, path).isType) {
             typePath = path;
         } else if (pixelPath.isEmpty()) {
             pixelPath = path;

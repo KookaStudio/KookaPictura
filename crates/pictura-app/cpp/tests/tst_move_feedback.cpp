@@ -32,7 +32,7 @@ QImage seed()
 QString typeLayer(const Fixture& f)
 {
     for (int i = 0; i < f.view->layer_count(); ++i) {
-        if (pictura::type_api::isType(*f.view, QString::number(i))) {
+        if (pictura::type_api::readLayer(*f.view, QString::number(i)).isType) {
             return QString::number(i);
         }
     }

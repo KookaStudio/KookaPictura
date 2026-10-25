@@ -25,7 +25,7 @@ QImage seed()
 QString typeLayer(const Fixture& f)
 {
     for (int i = 0; i < f.view->layer_count(); ++i) {
-        if (pictura::type_api::isType(*f.view, QString::number(i))) {
+        if (pictura::type_api::readLayer(*f.view, QString::number(i)).isType) {
             return QString::number(i);
         }
     }
@@ -160,7 +160,7 @@ void TypeOnPathTest::clickInsideClosedPathMakesAreaType()
     QVERIFY2(f.committedOnce(base, "Horizontal Type"), "one Horizontal Type state");
     const QString path = typeLayer(f);
     QVERIFY2(!path.isEmpty(), "a type layer");
-    const pictura::TypeSetting s = pictura::type_api::layerSetting(*f.view, path);
+    const pictura::TypeSetting s = pictura::type_api::readLayer(*f.view, path).spec.setting;
     QCOMPARE(s.path_kind, 2);
     QVERIFY2(s.boxed, "area type wraps in the path box");
     QVERIFY2(!s.path_points.isEmpty(), "the path is kept");
@@ -183,7 +183,7 @@ void TypeOnPathTest::commitAndReopenOnPath()
     QVERIFY2(f.committedOnce(base, "Horizontal Type"), "one commit state");
     const QString path = typeLayer(f);
     QVERIFY2(!path.isEmpty(), "a type layer");
-    const pictura::TypeSetting s = pictura::type_api::layerSetting(*f.view, path);
+    const pictura::TypeSetting s = pictura::type_api::readLayer(*f.view, path).spec.setting;
     QCOMPARE(s.path_kind, 1);
     QVERIFY2(!s.path_points.isEmpty(), "the path is kept");
     QVERIFY(!pictura::type_api::isParagraph(*f.view, path));
@@ -197,7 +197,7 @@ void TypeOnPathTest::commitAndReopenOnPath()
     QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
     QVERIFY2(f.committedOnce(base + 1, "Edit Type Layer"), "one edit state");
     QCOMPARE(f.view->layer_count(), 2);
-    QVERIFY2(pictura::type_api::layerText(*f.view, path).contains(QStringLiteral("Hello!")),
+    QVERIFY2(pictura::type_api::readLayer(*f.view, path).spec.text.contains(QStringLiteral("Hello!")),
              "the text changed in place");
 }
 
@@ -247,13 +247,13 @@ void TypeOnPathTest::saveAndReopenKeepsPath()
     QVERIFY(reopened != nullptr);
     QString reopenedPath;
     for (int i = 0; i < reopened->layer_count(); ++i) {
-        if (pictura::type_api::isType(*reopened, QString::number(i))) {
+        if (pictura::type_api::readLayer(*reopened, QString::number(i)).isType) {
             reopenedPath = QString::number(i);
             break;
         }
     }
     QVERIFY2(!reopenedPath.isEmpty(), "a type layer reopens");
-    const pictura::TypeSetting s = pictura::type_api::layerSetting(*reopened, reopenedPath);
+    const pictura::TypeSetting s = pictura::type_api::readLayer(*reopened, reopenedPath).spec.setting;
     QCOMPARE(s.path_kind, 1);
     QVERIFY2(!s.path_points.isEmpty(), "the text path survives the save");
     frame.closeDocument(frame.activeDocumentIndex(), false);
@@ -277,15 +277,15 @@ void TypeOnPathTest::moveAndTransformOnPath()
     QVERIFY2(f.committedOnce(base, "Horizontal Type"), "one commit state");
     const QString path = typeLayer(f);
     QVERIFY2(!path.isEmpty(), "a type layer");
-    const pictura::TypeSetting before = pictura::type_api::layerSetting(*f.view, path);
-    const double sizeBefore = pictura::type_api::layerCharacterSetting(*f.view, path).size;
+    const pictura::TypeSetting before = pictura::type_api::readLayer(*f.view, path).spec.setting;
+    const double sizeBefore = pictura::type_api::readLayer(*f.view, path).spec.character.size;
 
     // Move the text object off its controls box; the stored path follows.
     frame.setActiveTool(pictura::ToolId::Move);
     f.canvas->mousePressed(QPointF(200, 180), Qt::LeftButton, int(Qt::NoModifier));
     f.canvas->mouseMoved(QPointF(210, 190));
     f.canvas->mouseReleased(QPointF(210, 190));
-    const pictura::TypeSetting moved = pictura::type_api::layerSetting(*f.view, path);
+    const pictura::TypeSetting moved = pictura::type_api::readLayer(*f.view, path).spec.setting;
     QCOMPARE(moved.path_kind, 1);
     QVERIFY2(moved.path_points != before.path_points, "the path moves with the layer");
 
@@ -294,10 +294,10 @@ void TypeOnPathTest::moveAndTransformOnPath()
     QVERIFY(f.tools->setTransformWidth(200.0, true));
     QVERIFY(f.tools->setTransformHeight(200.0, true));
     f.tools->commitFreeTransform();
-    const pictura::TypeSetting after = pictura::type_api::layerSetting(*f.view, path);
+    const pictura::TypeSetting after = pictura::type_api::readLayer(*f.view, path).spec.setting;
     QCOMPARE(after.path_kind, 1);
     QVERIFY2(!after.path_points.isEmpty(), "the transformed path stays type");
-    const double sizeAfter = pictura::type_api::layerCharacterSetting(*f.view, path).size;
+    const double sizeAfter = pictura::type_api::readLayer(*f.view, path).spec.character.size;
     QVERIFY2(sizeAfter > sizeBefore, "the type size scales with the path");
 
     // The moved and scaled path survives a save and reopen.
@@ -309,17 +309,17 @@ void TypeOnPathTest::moveAndTransformOnPath()
     QVERIFY(reopened != nullptr);
     QString reopenedPath;
     for (int i = 0; i < reopened->layer_count(); ++i) {
-        if (pictura::type_api::isType(*reopened, QString::number(i))) {
+        if (pictura::type_api::readLayer(*reopened, QString::number(i)).isType) {
             reopenedPath = QString::number(i);
             break;
         }
     }
     QVERIFY2(!reopenedPath.isEmpty(), "the transformed type layer reopens");
     const pictura::TypeSetting restored =
-        pictura::type_api::layerSetting(*reopened, reopenedPath);
+        pictura::type_api::readLayer(*reopened, reopenedPath).spec.setting;
     QCOMPARE(restored.path_kind, 1);
     QCOMPARE(restored.path_points, after.path_points);
-    QCOMPARE(pictura::type_api::layerCharacterSetting(*reopened, reopenedPath).size, sizeAfter);
+    QCOMPARE(pictura::type_api::readLayer(*reopened, reopenedPath).spec.character.size, sizeAfter);
     frame.closeDocument(frame.activeDocumentIndex(), false);
     QFile::remove(file);
 }

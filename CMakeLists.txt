@@ -292,11 +292,14 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/liquify_canvas.h
     crates/pictura-app/cpp/liquify_dialog.cpp
     crates/pictura-app/cpp/liquify_dialog.h
+    crates/pictura-app/cpp/blend_modes.cpp
     crates/pictura-app/cpp/blend_modes.h
     crates/pictura-app/cpp/layer_style_dialog.cpp
     crates/pictura-app/cpp/layer_style_dialog.h
     crates/pictura-app/cpp/layer_style_pages.cpp
     crates/pictura-app/cpp/color_settings_dialog.cpp
+    crates/pictura-app/cpp/color_models.cpp
+    crates/pictura-app/cpp/color_models.h
     crates/pictura-app/cpp/color_picker_dialog.cpp
     crates/pictura-app/cpp/color_range_dialog.cpp
     crates/pictura-app/cpp/refine_edge_dialog.cpp
@@ -599,7 +602,8 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/canvas_scrollbars.h
     crates/pictura-app/cpp/canvas_ruler.h
     crates/pictura-app/cpp/icons.h
-    crates/pictura-app/cpp/layer_adjustments.h
+    crates/pictura-app/cpp/adjustment_catalogue.cpp
+    crates/pictura-app/cpp/adjustment_catalogue.h
     crates/pictura-app/cpp/svg_icon_engine.h
     crates/pictura-app/cpp/file_drop_router.h
     crates/pictura-app/cpp/frame.h

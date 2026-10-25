@@ -138,7 +138,7 @@ bool ParagraphPanel::hasTypeLayer() const
         return false;
     }
     const QString path = layer_selection_anchor(*view_);
-    return !path.isEmpty() && pictura::type_api::isType(*view_, path);
+    return !path.isEmpty() && pictura::type_api::readLayer(*view_, path).isType;
 }
 
 void ParagraphPanel::setView(PictureView* view)
@@ -165,7 +165,7 @@ void ParagraphPanel::refresh()
 {
     const bool type = hasTypeLayer();
     const QString path = type ? layer_selection_anchor(*view_) : QString();
-    const ParagraphSetting p = type ? pictura::type_api::layerParagraphSetting(*view_, path)
+    const ParagraphSetting p = type ? pictura::type_api::readLayer(*view_, path).spec.paragraph
                                     : pictura::type_api::defaultParagraphSetting();
 
     const QSignalBlocker blockJustify(justify_);
@@ -209,7 +209,7 @@ void ParagraphPanel::apply()
     }
     const QString path = layer_selection_anchor(*view_);
     const pictura::type_api::LayerType layer = pictura::type_api::readLayer(*view_, path);
-    ParagraphSetting p = layer.paragraph;
+    ParagraphSetting p = layer.spec.paragraph;
     p.justify = justify_->currentIndex();
     p.start_indent = startIndent_->value();
     p.end_indent = endIndent_->value();
@@ -223,10 +223,9 @@ void ParagraphPanel::apply()
         p.direction = rtl_->isChecked() ? 1 : 0;
     }
 
-    const QString family = familyForFontName(layer.font);
-    registerTypeFont(family, layer.character.font_style);
-    pictura::type_api::updateLayer(*view_, path, layer.text, family, layer.setting,
-                                   layer.character, p);
+    const QString family = familyForFontName(layer.spec.font);
+    registerTypeFont(family, layer.spec.character.font_style);
+    pictura::type_api::updateLayer(*view_, path, {layer.spec.text, family, layer.spec.setting, layer.spec.character, p});
 }
 
 void ParagraphPanel::updatePanelMenu(QMenu* menu)
@@ -293,10 +292,9 @@ void ParagraphPanel::resetParagraph()
     const QString path = layer_selection_anchor(*view_);
     const pictura::type_api::LayerType layer = pictura::type_api::readLayer(*view_, path);
     const ParagraphSetting defaults = pictura::type_api::defaultParagraphSetting();
-    const QString family = familyForFontName(layer.font);
-    registerTypeFont(family, layer.character.font_style);
-    pictura::type_api::updateLayer(*view_, path, layer.text, family, layer.setting,
-                                   layer.character, defaults);
+    const QString family = familyForFontName(layer.spec.font);
+    registerTypeFont(family, layer.spec.character.font_style);
+    pictura::type_api::updateLayer(*view_, path, {layer.spec.text, family, layer.spec.setting, layer.spec.character, defaults});
     refresh();
 }
 
@@ -307,15 +305,14 @@ void ParagraphPanel::openJustification()
     }
     const QString path = layer_selection_anchor(*view_);
     const pictura::type_api::LayerType layer = pictura::type_api::readLayer(*view_, path);
-    JustificationDialog dialog(layer.paragraph, this);
+    JustificationDialog dialog(layer.spec.paragraph, this);
     if (runDialog(dialog, this) != QDialog::Accepted) {
         return;
     }
     const ParagraphSetting p = dialog.setting();
-    const QString family = familyForFontName(layer.font);
-    registerTypeFont(family, layer.character.font_style);
-    pictura::type_api::updateLayer(*view_, path, layer.text, family, layer.setting,
-                                   layer.character, p);
+    const QString family = familyForFontName(layer.spec.font);
+    registerTypeFont(family, layer.spec.character.font_style);
+    pictura::type_api::updateLayer(*view_, path, {layer.spec.text, family, layer.spec.setting, layer.spec.character, p});
 }
 
 bool ParagraphPanel::directionVisibleForTest() const

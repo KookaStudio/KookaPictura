@@ -5,10 +5,10 @@
 
 #include "api/layers_api.h"
 
+#include "adjustment_catalogue.h"
 #include "adjustment_dialog.h"
 #include "api/document_api.h"
 #include "hdr_toning_dialog.h"
-#include "layer_adjustments.h"
 #include "match_color_dialog.h"
 #include "replace_color_dialog.h"
 
@@ -17,55 +17,38 @@
 
 namespace pictura {
 
-namespace {
-
-// The dialog adjustments: engine kind and menu leaf.
-struct Entry {
-    const char* kind;
-    const char* leaf;
-};
-
-constexpr Entry kDialogs[] = {
-    {"brightness-contrast", "Brightness/Contrast"},
-    {"levels", "Levels"},
-    {"curves", "Curves"},
-    {"exposure", "Exposure"},
-    {"vibrance", "Vibrance"},
-    {"hue-saturation", "Hue/Saturation"},
-    {"color-balance", "Color Balance"},
-    {"black-white", "Black & White"},
-    {"photo-filter", "Photo Filter"},
-    {"channel-mixer", "Channel Mixer"},
-    {"posterize", "Posterize"},
-    {"threshold", "Threshold"},
-    {"gradient-map", "Gradient Map"},
-    {"selective-color", "Selective Color"},
-    {"shadows-highlights", "Shadows/Highlights"},
-    {"color-lookup", "Color Lookup"},
-};
-
-// The commands that apply at once.
-constexpr Entry kDirect[] = {
-    {"invert", "Invert"},           {"desaturate", "Desaturate"},
-    {"equalize", "Equalize"},       {"auto-tone", "Auto Tone"},
-    {"auto-contrast", "Auto Contrast"}, {"auto-color", "Auto Color"},
-};
-
-} // namespace
-
 void PicturaMainWindow::wireImageAdjustments()
 {
     const auto ready = [this]() {
         PictureView* view = activeView();
         return view && filter_target_ready(*view);
     };
-    for (const Entry& entry : kDialogs) {
-        const QString leaf = QString::fromUtf8(entry.leaf);
-        const QString id =
-            commandIdForPath({QStringLiteral("Image"), QStringLiteral("Adjustments"), leaf});
-        const QString kind = QString::fromLatin1(entry.kind);
+    for (const AdjustmentKind& entry : adjustmentCatalogue()) {
+        if (entry.image.isEmpty()) {
+            continue;
+        }
+        const QString kind = entry.kind;
+        // The Auto commands live at the top of the Image menu, not under
+        // Adjustments.
+        const QString id = entry.image == QLatin1String("root")
+                               ? commandIdForPath({QStringLiteral("Image"), entry.title})
+                               : commandIdForPath({QStringLiteral("Image"),
+                                                   QStringLiteral("Adjustments"), entry.title});
         registry_->setImplemented(id, true);
+        registry_->setEnabledProvider(id, ready);
+        if (entry.image != QLatin1String("dialog")) {
+            registry_->setHandler(id, [this, kind]() {
+                PictureView* view = activeView();
+                if (view && image_adjust_direct(*view, kind)) {
+                    refresh();
+                } else if (view) {
+                    reportFilterRefusal(view);
+                }
+            });
+            continue;
+        }
         // CS6 marks every dialog-opening entry with an ellipsis.
+        const QString leaf = entry.title;
         registry_->setLabelProvider(id, [leaf]() { return leaf + QStringLiteral("…"); });
         registry_->setHandler(id, [this, kind]() {
             PictureView* view = activeView();
@@ -76,27 +59,6 @@ void PicturaMainWindow::wireImageAdjustments()
                 reportFilterRefusal(view);
             }
         });
-        registry_->setEnabledProvider(id, ready);
-    }
-    for (const Entry& entry : kDirect) {
-        const QString leaf = QString::fromUtf8(entry.leaf);
-        const QString kind = QString::fromLatin1(entry.kind);
-        // The Auto commands live at the top of the Image menu, not under
-        // Adjustments.
-        const QString id = kind.startsWith(QLatin1String("auto-"))
-                               ? commandIdForPath({QStringLiteral("Image"), leaf})
-                               : commandIdForPath({QStringLiteral("Image"),
-                                                   QStringLiteral("Adjustments"), leaf});
-        registry_->setImplemented(id, true);
-        registry_->setHandler(id, [this, kind]() {
-            PictureView* view = activeView();
-            if (view && image_adjust_direct(*view, kind)) {
-                refresh();
-            } else if (view) {
-                reportFilterRefusal(view);
-            }
-        });
-        registry_->setEnabledProvider(id, ready);
     }
 
     // HDR Toning is a neighborhood operator, not a pointwise adjustment, so it
@@ -199,13 +161,16 @@ void PicturaMainWindow::wireLayerAdjustments()
     const auto ready = [this]() {
         return activeView() && activeView()->has_document();
     };
-    for (const LayerAdjustment& entry : kLayerAdjustments) {
-        const QString leaf = QString::fromUtf8(entry.leaf);
+    for (const AdjustmentKind& entry : adjustmentCatalogue()) {
+        if (entry.fill || !entry.layer) {
+            continue;
+        }
+        const QString leaf = entry.title;
         const QString id = commandIdForPath(
             {QStringLiteral("Layer"), QStringLiteral("New Adjustment Layer"), leaf});
-        const QString kind = QString::fromLatin1(entry.kind);
+        const QString kind = entry.kind;
         registry_->setImplemented(id, true);
-        if (entry.ellipsis) {
+        if (entry.layerEllipsis) {
             registry_->setLabelProvider(id, [leaf]() { return leaf + QStringLiteral("…"); });
         }
         registry_->setHandler(id, [this, kind]() {

@@ -49,11 +49,13 @@ const QString kCustom = QStringLiteral("Custom");
 const QStringList kChannelPrefixes = {QString(), QStringLiteral("red."),
                                       QStringLiteral("green."), QStringLiteral("blue.")};
 
-QSpinBox* levelSpin(QWidget* parent, const QString& name, int min, int max)
+// A level field over the engine layout's range for `name`; the input pair's
+// limits are then coupled to each other at run time (`loadChannel`).
+QSpinBox* levelSpin(QWidget* parent, const QString& name, const AdjustmentDialog::ParamSpec& range)
 {
     auto* spin = new QSpinBox(parent);
     spin->setObjectName(name);
-    spin->setRange(min, max);
+    spin->setRange(qRound(range.min), qRound(range.max));
     spin->setFixedWidth(AdjustmentDialog::kFieldWidth);
     spin->setKeyboardTracking(false);
     return spin;
@@ -227,15 +229,17 @@ LevelsDialog::LevelsDialog(PictureView* view, const QByteArray& block, const QRe
     input_->setColor(2, Qt::white);
     left->addWidget(input_);
     auto* inputRow = new QHBoxLayout;
-    inBlack_ = levelSpin(this, QStringLiteral("inputBlack"), 0, 253);
+    const auto levelField = [this](const QString& name) { return levelSpin(this, name, spec(name)); };
+    inBlack_ = levelField(QStringLiteral("inputBlack"));
     gamma_ = new QDoubleSpinBox(this);
     gamma_->setObjectName(QStringLiteral("gamma"));
-    gamma_->setRange(0.10, 9.99);
-    gamma_->setDecimals(2);
+    const ParamSpec gamma = spec(QStringLiteral("gamma"));
+    gamma_->setRange(gamma.min, gamma.max);
+    gamma_->setDecimals(gamma.decimals);
     gamma_->setSingleStep(0.01);
     gamma_->setFixedWidth(kFieldWidth);
     gamma_->setKeyboardTracking(false);
-    inWhite_ = levelSpin(this, QStringLiteral("inputWhite"), 2, 255);
+    inWhite_ = levelField(QStringLiteral("inputWhite"));
     inputRow->addWidget(inBlack_);
     inputRow->addStretch(1);
     inputRow->addWidget(gamma_);
@@ -252,8 +256,8 @@ LevelsDialog::LevelsDialog(PictureView* view, const QByteArray& block, const QRe
     output_->setColor(1, Qt::white);
     left->addWidget(output_);
     auto* outputRow = new QHBoxLayout;
-    outBlack_ = levelSpin(this, QStringLiteral("outputBlack"), 0, 255);
-    outWhite_ = levelSpin(this, QStringLiteral("outputWhite"), 0, 255);
+    outBlack_ = levelField(QStringLiteral("outputBlack"));
+    outWhite_ = levelField(QStringLiteral("outputWhite"));
     outputRow->addWidget(outBlack_);
     outputRow->addStretch(1);
     outputRow->addWidget(outWhite_);

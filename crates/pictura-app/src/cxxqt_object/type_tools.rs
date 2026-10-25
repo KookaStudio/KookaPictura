@@ -142,6 +142,23 @@ pub mod ffi {
         hyphenate_caps: bool,
     }
 
+    /// One character style as the Character Styles panel lists it.
+    #[namespace = "pictura"]
+    struct CharacterStyleRow {
+        name: QString,
+        font: QString,
+        character: CharacterSetting,
+    }
+
+    /// One paragraph style as the Paragraph Styles panel lists it.
+    #[namespace = "pictura"]
+    struct ParagraphStyleRow {
+        name: QString,
+        font: QString,
+        character: CharacterSetting,
+        paragraph: ParagraphSetting,
+    }
+
     unsafe extern "C++" {
         include!("cxx-qt-lib/qstring.h");
         type QString = cxx_qt_lib::QString;
@@ -331,17 +348,9 @@ pub mod ffi {
         /// Delete the named character style and record one "Delete Character Style" state; false (no state) for a missing style.
         fn type_delete_character_style(view: Pin<&mut PictureView>, name: &QString) -> bool;
 
-        /// The number of character styles in the document (0 without one).
-        fn type_character_style_count(view: &PictureView) -> i32;
-
-        /// The character style name at `index` in creation order; empty out of range.
-        fn type_character_style_name(view: &PictureView, index: i32) -> QString;
-
-        /// The named character style's effective character attribute set, resolved against the style sheet; the default set for an unknown name.
-        fn type_character_style_character(view: &PictureView, name: &QString) -> CharacterSetting;
-
-        /// The named character style's effective font family; empty for an unknown name.
-        fn type_character_style_font(view: &PictureView, name: &QString) -> QString;
+        /// Every character style in creation order, each resolved against the
+        /// style sheet (a sparse style reports the defaults it leaves unset).
+        fn type_character_styles(view: &PictureView) -> Vec<CharacterStyleRow>;
 
         /// Create the named paragraph style and record one "New Paragraph Style" state; false (no state) for a duplicate name.
         fn type_create_paragraph_style(
@@ -373,20 +382,9 @@ pub mod ffi {
         /// Delete the named paragraph style and record one "Delete Paragraph Style" state; false (no state) for a missing or protected style.
         fn type_delete_paragraph_style(view: Pin<&mut PictureView>, name: &QString) -> bool;
 
-        /// The number of paragraph styles in the document (0 without one).
-        fn type_paragraph_style_count(view: &PictureView) -> i32;
-
-        /// The paragraph style name at `index` in panel order (the default `Basic Paragraph` first); empty out of range.
-        fn type_paragraph_style_name(view: &PictureView, index: i32) -> QString;
-
-        /// The named paragraph style's effective character attribute set, resolved against the style sheet; the default set for an unknown name.
-        fn type_paragraph_style_character(view: &PictureView, name: &QString) -> CharacterSetting;
-
-        /// The named paragraph style's effective paragraph attribute set, resolved against the style sheet; the default set for an unknown name.
-        fn type_paragraph_style_paragraph(view: &PictureView, name: &QString) -> ParagraphSetting;
-
-        /// The named paragraph style's font family (its effective character font), empty for an unknown name.
-        fn type_paragraph_style_font(view: &PictureView, name: &QString) -> QString;
+        /// Every paragraph style in panel order (the default `Basic Paragraph`
+        /// first), each resolved against the style sheet.
+        fn type_paragraph_styles(view: &PictureView) -> Vec<ParagraphStyleRow>;
 
         /// Merge `text`'s coverage into the selection with `mode` ("new", "add", "subtract", "intersect") and record one "Horizontal Type Mask" / "Vertical Type Mask" state. False (no state) for blank text or without a document.
         fn type_commit_mask(
@@ -401,7 +399,7 @@ pub mod ffi {
     }
 }
 
-use ffi::{CharacterSetting, ParagraphSetting, TypeSetting};
+use ffi::{CharacterSetting, CharacterStyleRow, ParagraphSetting, ParagraphStyleRow, TypeSetting};
 
 mod attrs;
 mod fonts;
@@ -893,50 +891,24 @@ fn type_delete_character_style(view: Pin<&mut PictureView>, name: &QString) -> b
     })
 }
 
-fn type_character_style_count(view: &PictureView) -> i32 {
-    view.rust()
-        .session
-        .doc
-        .as_ref()
-        .map_or(0, |doc| doc.text_styles.character_styles.len() as i32)
-}
-
-fn type_character_style_name(view: &PictureView, index: i32) -> QString {
-    if index < 0 {
-        return QString::default();
-    }
-    view.rust()
-        .session
-        .doc
-        .as_ref()
-        .and_then(|doc| doc.text_styles.character_styles.get(index as usize))
-        .map_or_else(QString::default, |style| QString::from(style.name.as_str()))
-}
-
-/// A character style's effective attributes, resolved against the sheet so a
-/// sparse style reports the document defaults for the fields it leaves unset.
-fn resolved_character_style(
-    view: &PictureView,
-    name: &QString,
-) -> Option<pictura_core::ResolvedStyle> {
-    let name = name.to_string();
-    let doc = view.rust().session.doc.as_ref()?;
-    doc.text_styles.character_style(&name).map(|_| {
-        doc.text_styles
-            .resolve(&StyleOverrides::default(), Some(&name), None)
-    })
-}
-
-fn type_character_style_character(view: &PictureView, name: &QString) -> CharacterSetting {
-    resolved_character_style(view, name).map_or_else(type_default_character_setting, |r| {
-        character_setting(&r.character)
-    })
-}
-
-fn type_character_style_font(view: &PictureView, name: &QString) -> QString {
-    resolved_character_style(view, name).map_or_else(QString::default, |r| {
-        QString::from(r.character.font_family.as_str())
-    })
+fn type_character_styles(view: &PictureView) -> Vec<CharacterStyleRow> {
+    let Some(doc) = view.rust().session.doc.as_ref() else {
+        return Vec::new();
+    };
+    let sheet = &doc.text_styles;
+    sheet
+        .character_styles
+        .iter()
+        .map(|style| {
+            let resolved =
+                sheet.resolve(&StyleOverrides::default(), Some(style.name.as_str()), None);
+            CharacterStyleRow {
+                name: QString::from(style.name.as_str()),
+                font: QString::from(resolved.character.font_family.as_str()),
+                character: character_setting(&resolved.character),
+            }
+        })
+        .collect()
 }
 
 fn type_create_paragraph_style(
@@ -1006,56 +978,25 @@ fn type_preview_paragraph_style(
     changed
 }
 
-fn type_paragraph_style_count(view: &PictureView) -> i32 {
-    view.rust()
-        .session
-        .doc
-        .as_ref()
-        .map_or(0, |doc| doc.text_styles.paragraph_styles.len() as i32)
-}
-
-fn type_paragraph_style_name(view: &PictureView, index: i32) -> QString {
-    if index < 0 {
-        return QString::default();
-    }
-    view.rust()
-        .session
-        .doc
-        .as_ref()
-        .and_then(|doc| doc.text_styles.paragraph_styles.get(index as usize))
-        .map_or_else(QString::default, |style| QString::from(style.name.as_str()))
-}
-
-/// A paragraph style's effective attributes, resolved against the sheet so a
-/// sparse style reports the document defaults for the fields it leaves unset.
-fn resolved_paragraph_style(
-    view: &PictureView,
-    name: &QString,
-) -> Option<pictura_core::ResolvedStyle> {
-    let name = name.to_string();
-    let doc = view.rust().session.doc.as_ref()?;
-    doc.text_styles.paragraph_style(&name).map(|_| {
-        doc.text_styles
-            .resolve(&StyleOverrides::default(), None, Some(&name))
-    })
-}
-
-fn type_paragraph_style_character(view: &PictureView, name: &QString) -> CharacterSetting {
-    resolved_paragraph_style(view, name).map_or_else(type_default_character_setting, |r| {
-        character_setting(&r.character)
-    })
-}
-
-fn type_paragraph_style_paragraph(view: &PictureView, name: &QString) -> ParagraphSetting {
-    resolved_paragraph_style(view, name).map_or_else(type_default_paragraph_setting, |r| {
-        paragraph_setting(&r.paragraph)
-    })
-}
-
-fn type_paragraph_style_font(view: &PictureView, name: &QString) -> QString {
-    resolved_paragraph_style(view, name).map_or_else(QString::default, |r| {
-        QString::from(r.character.font_family.as_str())
-    })
+fn type_paragraph_styles(view: &PictureView) -> Vec<ParagraphStyleRow> {
+    let Some(doc) = view.rust().session.doc.as_ref() else {
+        return Vec::new();
+    };
+    let sheet = &doc.text_styles;
+    sheet
+        .paragraph_styles
+        .iter()
+        .map(|style| {
+            let resolved =
+                sheet.resolve(&StyleOverrides::default(), None, Some(style.name.as_str()));
+            ParagraphStyleRow {
+                name: QString::from(style.name.as_str()),
+                font: QString::from(resolved.character.font_family.as_str()),
+                character: character_setting(&resolved.character),
+                paragraph: paragraph_setting(&resolved.paragraph),
+            }
+        })
+        .collect()
 }
 
 fn replace(
@@ -1097,5 +1038,57 @@ fn set_shown(mut view: Pin<&mut PictureView>, path: &QString) {
         .and_then(|doc| pictura_render::resolve_path_mut(doc, &path.to_string()))
     {
         layer.visible = true;
+    }
+}
+
+#[cfg(test)]
+mod header_tests {
+    use std::path::Path;
+
+    fn sources(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
+        for entry in std::fs::read_dir(dir).unwrap().flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                if path.file_name().is_some_and(|name| name != "tests") {
+                    sources(&path, out);
+                }
+            } else if path
+                .extension()
+                .is_some_and(|ext| ext == "cpp" || ext == "h")
+            {
+                out.push(path);
+            }
+        }
+    }
+
+    /// The generated type bridge headers stay inside `type_api` (#403): no
+    /// other production header or source, other adapters included, pulls them
+    /// in directly.
+    #[test]
+    fn type_bridge_headers_stay_in_adapter() {
+        let cpp = Path::new(env!("CARGO_MANIFEST_DIR")).join("cpp");
+        let mut files = Vec::new();
+        sources(&cpp, &mut files);
+        assert!(files.len() > 100, "the shell sources were found");
+        let offenders: Vec<String> = files
+            .iter()
+            .filter(|path| {
+                let name = path.file_name().unwrap().to_string_lossy();
+                !(path.parent().unwrap().ends_with("api")
+                    && (name == "type_api.h" || name == "type_api.cpp"))
+            })
+            .filter(|path| {
+                std::fs::read_to_string(path).unwrap().lines().any(|line| {
+                    line.trim_start().starts_with("#include")
+                        && (line.contains("cxxqt_object/type_tools.cxxqt.h")
+                            || line.contains("cxxqt_object/type_tools/"))
+                })
+            })
+            .map(|path| path.display().to_string())
+            .collect();
+        assert!(
+            offenders.is_empty(),
+            "generated type headers included by {offenders:?}"
+        );
     }
 }

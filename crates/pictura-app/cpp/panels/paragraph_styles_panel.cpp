@@ -89,10 +89,8 @@ void ParagraphStylesPanel::refresh()
     const int current = list_->currentRow();
     QStringList names;
     if (view_ && view_->has_document()) {
-        const int count = pictura::type_api::paragraphStyleCount(*view_);
-        names.reserve(count);
-        for (int i = 0; i < count; ++i) {
-            names << pictura::type_api::paragraphStyleName(*view_, i);
+        for (const pictura::type_api::ParagraphStyle& style : pictura::type_api::paragraphStyles(*view_)) {
+            names << style.name;
         }
     }
     // Applying a style records history, and the frame's debounced panel
@@ -130,7 +128,7 @@ void ParagraphStylesPanel::applyRow(int row)
     }
     const QString name = item->text();
     const QString path = layer_selection_anchor(*view_);
-    if (path.isEmpty() || !pictura::type_api::isType(*view_, path)) {
+    if (path.isEmpty() || !pictura::type_api::readLayer(*view_, path).isType) {
         return;
     }
     pictura::type_api::applyStyle(*view_, path, name, true);
@@ -170,9 +168,11 @@ bool ParagraphStylesPanel::editStyle(int row)
         return false;
     }
     const QString name = list_->item(row)->text();
-    const CharacterSetting originalCharacter = pictura::type_api::paragraphStyleCharacter(*view_, name);
-    const ParagraphSetting originalParagraph = pictura::type_api::paragraphStyleParagraph(*view_, name);
-    const QString family = familyForFontName(pictura::type_api::paragraphStyleFont(*view_, name));
+    const pictura::type_api::ParagraphStyle original =
+        pictura::type_api::findStyle(pictura::type_api::paragraphStyles(*view_), name);
+    const CharacterSetting originalCharacter = original.character;
+    const ParagraphSetting originalParagraph = original.paragraph;
+    const QString family = familyForFontName(original.font);
 
     ParagraphStyleDialog dialog(name, family, originalCharacter, originalParagraph, true, this);
     bool previewed = false;

@@ -10,9 +10,12 @@
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QPushButton>
+#include <QtWidgets/QSpinBox>
 
 #include "color_picker_dialog.h"
 #include "panels/swatches_panel.h"
+
+#include <cmath>
 
 namespace {
 
@@ -49,6 +52,7 @@ private slots:
     void addToSwatchesAppendsCurrentColor();
     void addToSwatchesCancelsCleanly();
     void addToSwatchesIsDisabledWithoutPanel();
+    void labEditUpdatesRgb();
 };
 
 void ColorPickerTest::hexAcceptsPrefixes()
@@ -162,6 +166,32 @@ void ColorPickerTest::addToSwatchesIsDisabledWithoutPanel()
     auto* button = dialog.findChild<QPushButton*>(QStringLiteral("colorPickerAddToSwatches"));
     QVERIFY2(button, "Add to Swatches button present");
     QVERIFY2(!button->isEnabled(), "disabled without a Swatches panel");
+}
+
+// Typing Lab values re-derives RGB and hex through the shared D50 conversion.
+void ColorPickerTest::labEditUpdatesRgb()
+{
+    pictura::ColorPickerDialog dialog(QColor(0, 0, 0));
+    auto* l = dialog.findChild<QSpinBox*>(QStringLiteral("colorPickerL"));
+    auto* a = dialog.findChild<QSpinBox*>(QStringLiteral("colorPickerLabA"));
+    auto* b = dialog.findChild<QSpinBox*>(QStringLiteral("colorPickerLabB"));
+    auto* hex = dialog.findChild<QLineEdit*>(QStringLiteral("colorPickerHex"));
+    QVERIFY(l && a && b && hex);
+    {
+        const QSignalBlocker blockL(l);
+        const QSignalBlocker blockA(a);
+        l->setValue(60);
+        a->setValue(20);
+    }
+    b->setValue(-30);
+    const QColor expected = pictura::labToRgb(60, 20, -30);
+    QCOMPARE(dialog.selectedColor(), expected);
+    QCOMPARE(hex->text(), expected.name().mid(1).toUpper());
+
+    double back[3] = {0.0, 0.0, 0.0};
+    pictura::rgbToLab(expected, &back[0], &back[1], &back[2]);
+    QVERIFY(std::abs(back[0] - 60.0) < 1.0 && std::abs(back[1] - 20.0) < 1.5
+            && std::abs(back[2] + 30.0) < 1.5);
 }
 
 QTEST_MAIN(ColorPickerTest)

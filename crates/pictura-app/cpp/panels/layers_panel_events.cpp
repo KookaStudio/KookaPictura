@@ -10,7 +10,6 @@
 #include "layers_panel_internal.h"
 
 #include "icons.h"
-#include "layer_adjustments.h"
 #include "percent_field.h"
 #include "session.h"
 

@@ -173,25 +173,6 @@ void drawPlaneMarker(QPainter& p, const QPointF& pos)
     p.drawEllipse(pos, 4.5, 4.5);
 }
 
-// -- colour space helpers ---------------------------------------------------
-
-double srgbToLinear(double c)
-{
-    return c <= 0.04045 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4);
-}
-
-double linearToSrgb(double c)
-{
-    return c <= 0.0031308 ? c * 12.92 : 1.055 * std::pow(c, 1.0 / 2.4) - 0.055;
-}
-
-// Photoshop's Lab readout is referenced to D50, not D65.
-constexpr double kXn = 0.96422;
-constexpr double kYn = 1.00000;
-constexpr double kZn = 0.82521;
-constexpr double kEpsilon = 216.0 / 24389.0;
-constexpr double kKappa = 24389.0 / 27.0;
-
 // -- hex input --------------------------------------------------------------
 
 bool isHexDigit(QChar c)
@@ -288,60 +269,6 @@ bool promptForSwatchName(QWidget* parent, const QColor& color, const QString& su
 }
 
 } // namespace
-
-void rgbToLab(const QColor& color, double* l, double* a, double* b)
-{
-    const double r = srgbToLinear(color.redF());
-    const double g = srgbToLinear(color.greenF());
-    const double bl = srgbToLinear(color.blueF());
-
-    const double X = 0.4124564 * r + 0.3575761 * g + 0.1804375 * bl;
-    const double Y = 0.2126729 * r + 0.7151522 * g + 0.0721750 * bl;
-    const double Z = 0.0193339 * r + 0.1191920 * g + 0.9503041 * bl;
-
-    const double x50 = 1.0478112 * X + 0.0228866 * Y - 0.0501270 * Z;
-    const double y50 = 0.0295424 * X + 0.9904844 * Y - 0.0170491 * Z;
-    const double z50 = -0.0092345 * X + 0.0150436 * Y + 0.7521316 * Z;
-
-    const auto f = [](double t) {
-        return t > kEpsilon ? std::cbrt(t) : (kKappa * t + 16.0) / 116.0;
-    };
-    const double fx = f(x50 / kXn);
-    const double fy = f(y50 / kYn);
-    const double fz = f(z50 / kZn);
-
-    *l = 116.0 * fy - 16.0;
-    *a = 500.0 * (fx - fy);
-    *b = 200.0 * (fy - fz);
-}
-
-QColor labToRgb(double l, double a, double b)
-{
-    const double fy = (l + 16.0) / 116.0;
-    const double fx = fy + a / 500.0;
-    const double fz = fy - b / 200.0;
-
-    const auto finv = [](double t) {
-        const double t3 = t * t * t;
-        return t3 > kEpsilon ? t3 : (116.0 * t - 16.0) / kKappa;
-    };
-    const double x50 = finv(fx) * kXn;
-    const double y50 = (l > kKappa * kEpsilon ? std::pow(fy, 3.0) : l / kKappa) * kYn;
-    const double z50 = finv(fz) * kZn;
-
-    const double X = 0.9555766 * x50 - 0.0230393 * y50 + 0.0631636 * z50;
-    const double Y = -0.0282895 * x50 + 1.0099416 * y50 + 0.0210077 * z50;
-    const double Z = 0.0122982 * x50 - 0.0204830 * y50 + 1.3299098 * z50;
-
-    const double r = 3.2404542 * X - 1.5371385 * Y - 0.4985314 * Z;
-    const double g = -0.9692660 * X + 1.8760108 * Y + 0.0415560 * Z;
-    const double bl = 0.0556434 * X - 0.2040259 * Y + 1.0572252 * Z;
-
-    const auto toByte = [](double c) {
-        return int(qBound(0.0, linearToSrgb(qBound(0.0, c, 1.0)), 1.0) * 255.0 + 0.5);
-    };
-    return QColor(toByte(r), toByte(g), toByte(bl));
-}
 
 QColor snapToWebColor(const QColor& color)
 {
@@ -778,10 +705,17 @@ void ColorPicker::buildUi()
     addRow(4, 4, nullptr, tr("M:"), &m_spinM, 0, 100, tr("%"), true);
     addRow(5, 4, nullptr, tr("Y:"), &m_spinY, 0, 100, tr("%"), true);
     addRow(6, 4, nullptr, tr("K:"), &m_spinK, 0, 100, tr("%"), true);
+    m_spinL->setObjectName(QStringLiteral("colorPickerL"));
+    m_spinLabA->setObjectName(QStringLiteral("colorPickerLabA"));
+    m_spinLabB->setObjectName(QStringLiteral("colorPickerLabB"));
+    m_spinC->setObjectName(QStringLiteral("colorPickerC"));
+    m_spinM->setObjectName(QStringLiteral("colorPickerM"));
+    m_spinY->setObjectName(QStringLiteral("colorPickerY"));
+    m_spinK->setObjectName(QStringLiteral("colorPickerK"));
 
     const QString cmykTip =
-        tr("CMYK is a direct conversion without a press profile, so it will not\n"
-           "match a color-managed application that has one loaded.");
+        tr("CMYK through the working CMYK profile (relative colorimetric with\n"
+           "black point compensation); the bundled profile models a coated press.");
     for (QSpinBox* box : {m_spinC, m_spinM, m_spinY, m_spinK}) {
         box->setToolTip(cmykTip);
     }
@@ -909,11 +843,11 @@ void ColorPicker::syncControls(QWidget* except)
     assign(m_spinLabA, int(std::lround(a)));
     assign(m_spinLabB, int(std::lround(b)));
 
-    const QColor cmyk = color.toCmyk();
-    assign(m_spinC, int(std::lround(cmyk.cyan() * 100.0 / 255.0)));
-    assign(m_spinM, int(std::lround(cmyk.magenta() * 100.0 / 255.0)));
-    assign(m_spinY, int(std::lround(cmyk.yellow() * 100.0 / 255.0)));
-    assign(m_spinK, int(std::lround(cmyk.black() * 100.0 / 255.0)));
+    const CmykPercent cmyk = rgbToCmyk(color);
+    assign(m_spinC, int(std::lround(cmyk.c)));
+    assign(m_spinM, int(std::lround(cmyk.m)));
+    assign(m_spinY, int(std::lround(cmyk.y)));
+    assign(m_spinK, int(std::lround(cmyk.k)));
 
     if (m_hex != except) {
         m_hex->setText(color.name().mid(1).toUpper());

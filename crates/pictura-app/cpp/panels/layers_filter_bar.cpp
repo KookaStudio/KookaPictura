@@ -188,8 +188,9 @@ LayerFilterBar::LayerFilterBar(QWidget* parent)
     auto* modeLayout = new QHBoxLayout(modePage);
     modeLayout->setContentsMargins(0, 0, 0, 0);
     mode_ = new QComboBox(modePage);
-    for (const BlendEntry& entry : kBlends) {
-        mode_->addItem(QString::fromLatin1(entry.name), QString::fromLatin1(entry.key));
+    mode_->setObjectName(QStringLiteral("layersFilterMode"));
+    for (const BlendEntry& entry : blendModes()) {
+        mode_->addItem(entry.name, entry.key);
     }
     modeLayout->addWidget(mode_);
     stack_->addWidget(modePage);

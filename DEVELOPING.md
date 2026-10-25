@@ -335,7 +335,7 @@ one atomic add per composite or upload. They are only reported.)
   `scripts/file-size-allowlist.txt` ceiling.
 - **Keep Help > Search complete.** The Shift+Space search bar rebuilds its
   index from the live app each time it opens, so new menu commands, tools
-  (`kToolTable`), and panels with a Window > Panels toggle (`panelToggles()`)
+  (the engine tool catalogue, `pictura_script::tool_catalogue`), and panels with a Window > Panels toggle (`panelToggles()`)
   are found automatically. A new Preferences page goes in the list in
   `buildSearchIndex()` (`search_index.cpp`), and a panel or options-bar control
   worth finding goes in `searchControls()` (`search_controls.cpp`). See

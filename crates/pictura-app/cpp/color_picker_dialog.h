@@ -8,6 +8,8 @@
 
 #include <functional>
 
+#include "color_models.h"
+
 class QCheckBox;
 class QLabel;
 class QLineEdit;
@@ -268,10 +270,6 @@ private:
     SwatchGrid* m_swatches = nullptr;
 };
 
-/// sRGB -> CIE L*a*b* (D50), the space Photoshop's Lab readout uses.
-void rgbToLab(const QColor& color, double* l, double* a, double* b);
-/// CIE L*a*b* (D50) -> sRGB, clamped into gamut.
-QColor labToRgb(double l, double a, double b);
 /// Snap each channel to the nearest web-safe value (multiples of 0x33).
 QColor snapToWebColor(const QColor& color);
 /// Whether every channel is already a multiple of 0x33.

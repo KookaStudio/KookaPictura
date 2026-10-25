@@ -48,8 +48,9 @@ crates/pictura-app/cpp/tools/
   tool_context.h           shared services handed to handlers (view, canvas, settings)
   tool_handler.h           interface: press/move/release/key/cursor/overlay/activate/deactivate
   tool_registry.{h,cpp}    ToolId -> handler; no-op default for unimplemented tools
-  tool_catalog.{h,cpp}     kToolTable, toolInfo, allToolIds, implementedToolIds,
-                           toolIdName, toolCursorId, toolShortcutKeys,
+  tool_catalog.{h,cpp}     toolInfo and allToolIds over the
+                           engine tool catalogue (#274), toolIdName,
+                           toolCursorId, toolShortcutKeys,
                            toolGroupForKey, toolHintEntries, selectionModeString
   tool_settings.{h,cpp}    brush*, tolerance, marquee style/ratio/size, feather,
                            foreground/background, autoErase
@@ -89,8 +90,9 @@ changes.
 `tools.cpp` was split along the existing seams with pure moves
 (`df01173`, `d13e906`; 1156 → 764):
 
-- `tools/tool_catalog.cpp` — the 71-row `kToolTable`, `toolInfo`, `allToolIds`,
-  `implementedToolIds`, `toolImplemented`, `toolIdName`, `toolCursorId`,
+- `tools/tool_catalog.cpp` — the 71-row tool table (since #274 built from the
+  engine catalogue), `toolInfo`, `allToolIds`, `toolImplemented`, `toolIdName`,
+  `toolCursorId`,
   `toolShortcutKeys`, `toolGroupForKey`, `toolHintEntries`, `selectionModeString`.
 - `tools/tool_transform.cpp` — `beginFreeTransform`, `commitFreeTransform`,
   `cancelFreeTransform`, `transformSessionActive`, `updateTransformOverlay`,

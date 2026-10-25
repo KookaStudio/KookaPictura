@@ -24,8 +24,7 @@ SliderDialog::SliderDialog(PictureView* view, const QByteArray& block, const QRe
     grid->setVerticalSpacing(6);
     // Later rows indent their label a little, as CS6 does.
     for (int i = 0; i < rows.size(); ++i) {
-        addStackedRow(grid, i * 3, rows[i].label, rows[i].key, rows[i].min, rows[i].max,
-                      i == 0 ? 0 : 14);
+        addStackedRow(grid, i * 3, rows[i].label, rows[i].key, i == 0 ? 0 : 14);
         grid->setRowMinimumHeight(i * 3 + 2, 8);
     }
     left->addLayout(grid);

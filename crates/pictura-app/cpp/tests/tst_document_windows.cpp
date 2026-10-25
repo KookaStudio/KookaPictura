@@ -442,8 +442,8 @@ void DocumentWindowsTest::typeSessionAfterSwitch(bool viaShortcut, TypeSnapshot&
     out.historyLabel = view->history_label(view->history_index());
     for (int i = 0; i < out.layers; ++i) {
         const QString path = QString::number(i);
-        if (type_api::isType(*view, path)) {
-            out.text += type_api::layerText(*view, path) + QLatin1Char('|');
+        if (type_api::readLayer(*view, path).isType) {
+            out.text += type_api::readLayer(*view, path).spec.text + QLatin1Char('|');
         }
     }
 
