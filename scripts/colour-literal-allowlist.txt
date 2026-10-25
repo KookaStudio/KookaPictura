@@ -88,3 +88,4 @@ crates/pictura-app/cpp/panels/layers_panel.cpp  QColor(153, 153, 153)  # pending
 crates/pictura-app/cpp/panels/layers_panel_internal.h  QColor(0x20, 0x20, 0x20)  # pending conversion (theme-family)
 crates/pictura-app/cpp/panels/layers_panel_internal.h  QColor(0xC8, 0xC8, 0xC8)  # pending conversion (theme-family)
 crates/pictura-app/cpp/panels/layers_panel_internal.h  QColor(0xFF, 0xFF, 0xFF)  # pending conversion (theme-family)
+crates/pictura-app/cpp/vp_canvas.cpp  QColor(0xa8, 0xa8, 0xa8)  # data: CS6 workspace ground

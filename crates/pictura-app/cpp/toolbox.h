@@ -129,6 +129,9 @@ public:
     void resetForegroundBackground();
     ForegroundBackgroundWidget* foregroundBackgroundForTest() const { return fgbg_; }
 
+    // Re-derive slot and icon geometry after a live UI scale change.
+    void applyUiScale();
+
 signals:
     void paintMaskToggled(bool checked);
     void columnsChanged(int columns);

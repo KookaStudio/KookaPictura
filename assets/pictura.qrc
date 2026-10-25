@@ -195,6 +195,7 @@
     <file>icons/tool.paintbucket.svg</file>
     <file>icons/tool.patch.svg</file>
     <file>icons/tool.pathselection.svg</file>
+    <file>icons/tool.createplane.svg</file>
     <file>icons/tool.patternstamp.svg</file>
     <file>icons/tool.pencil.svg</file>
     <file>icons/tool.pen.svg</file>
@@ -231,6 +232,7 @@
     <file>icons/window.panels.brushes.svg</file>
     <file>icons/window.panels.channels.svg</file>
     <file>icons/window.panels.character.svg</file>
+    <file>icons/window.panels.characterStyles.svg</file>
     <file>icons/window.panels.cloneSource.svg</file>
     <file>icons/window.panels.color.svg</file>
     <file>icons/window.panels.glyphs.svg</file>

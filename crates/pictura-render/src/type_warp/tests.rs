@@ -247,7 +247,7 @@ fn refusals() {
     // A face built here, never registered: the process-wide registry keys
     // faces by PostScript name too, so a registered copy would replace
     // Liberation Sans for every test sharing this process.
-    assert!(crate::fonts::font_has_outlines("Liberation Sans"));
+    assert!(crate::fonts::font_has_outlines("Liberation Sans", ""));
     let stripped =
         BundledText::from_bytes(Box::leak(without_outlines(LIBERATION).into_boxed_slice()))
             .expect("parses without outlines");

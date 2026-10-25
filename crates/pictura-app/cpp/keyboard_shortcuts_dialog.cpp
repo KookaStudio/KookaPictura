@@ -184,6 +184,8 @@ const QList<WorkspaceKey>& workspaceKeys()
         {QKeySequence(Qt::Key_Q), QT_TR_NOOP("Quick Mask Mode")},
         {QKeySequence(Qt::Key_Tab), QT_TR_NOOP("Show/Hide Panels")},
         {QKeySequence(Qt::SHIFT | Qt::Key_Tab), QT_TR_NOOP("Show/Hide Panels")},
+        {QKeySequence(Qt::CTRL | Qt::Key_Tab), QT_TR_NOOP("Next Document Window")},
+        {QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Tab), QT_TR_NOOP("Previous Document Window")},
         {QKeySequence(Qt::Key_Delete), QT_TR_NOOP("Delete / Clear")},
         {QKeySequence(Qt::Key_Backspace), QT_TR_NOOP("Delete / Clear")},
         {QKeySequence(Qt::SHIFT | Qt::Key_F1), QT_TR_NOOP("Darker Interface")},

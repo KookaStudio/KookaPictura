@@ -721,6 +721,60 @@ fn editing_a_style_through_the_operation_updates_every_applying_layer() {
 }
 
 #[test]
+fn character_style_reads_resolve_defaults() {
+    let mut doc = doc(1, 1, 0);
+    create_character_style(
+        &mut doc,
+        "Quote",
+        CharacterOverrides {
+            size: Some(48.0),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let resolved = doc.text_styles.resolve(
+        &pictura_core::StyleOverrides::default(),
+        Some("Quote"),
+        None,
+    );
+    assert_eq!(resolved.character.size, 48.0);
+    assert_eq!(resolved.character.language, pictura_core::DEFAULT_LANGUAGE);
+}
+
+#[test]
+fn renaming_an_applied_style_keeps_it_applied() {
+    use pictura_core::TypeSpec;
+    use pictura_render::{add_type_layer, apply_type_style};
+
+    let mut doc = Document::new(128, 64, ColorMode::Rgb, BitDepth::Eight);
+    let path = add_type_layer(&mut doc, "", &TypeSpec::new("Aa", "Liberation Sans", 20.0));
+    create_character_style(
+        &mut doc,
+        "Quote",
+        CharacterOverrides {
+            size: Some(40.0),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert!(apply_type_style(&mut doc, &path, "Quote", false));
+    rename_character_style(&mut doc, "Quote", "Quote 2").unwrap();
+    assert_eq!(
+        doc.layers[0].applied_character_style.as_deref(),
+        Some("Quote 2")
+    );
+    assert!(doc.text_styles.character_style("Quote").is_none());
+    assert!(doc.text_styles.character_style("Quote 2").is_some());
+    assert_eq!(
+        pictura_render::type_layer_spec(&doc.layers[0])
+            .unwrap()
+            .character
+            .size,
+        40.0
+    );
+}
+
+#[test]
 fn a_style_operation_records_one_undoable_state_each() {
     let mut history = History::default();
     let mut doc = doc(1, 1, 7);

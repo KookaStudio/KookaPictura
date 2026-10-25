@@ -161,6 +161,14 @@ template <typename F> void fields(RedEyeOptions& o, F&& f)
     f("darken", o.darken);
 }
 
+template <typename F> void fields(HandOptions& o, F&& f) { f("scrollAll", o.scrollAll); }
+
+template <typename F> void fields(ZoomOptions& o, F&& f)
+{
+    f("resizeToFit", o.resizeToFit);
+    f("zoomAll", o.zoomAll);
+}
+
 template <typename F> void fields(ColorReplaceOptions& o, F&& f)
 {
     f("mode", o.mode);
@@ -397,6 +405,8 @@ template <typename F> void eachGroup(F&& f)
     f("dodge", ToolId::Dodge, static_cast<ToneGroup*>(nullptr));
     f("burn", ToolId::Burn, static_cast<ToneGroup*>(nullptr));
     f("sponge", ToolId::Sponge, static_cast<ToneGroup*>(nullptr));
+    f("hand", ToolId::Hand, static_cast<HandGroup*>(nullptr));
+    f("zoom", ToolId::Zoom, static_cast<ZoomGroup*>(nullptr));
 }
 
 } // namespace

@@ -87,7 +87,7 @@ const SeparatorRow kSeparators[] = {
     {{QStringLiteral("Layer"), QStringLiteral("Smart Objects"), QStringLiteral("Convert to Smart Object")}, {QStringLiteral("Layer")}},
     {{QStringLiteral("Layer"), QStringLiteral("Copy Shape Attributes")}, {QStringLiteral("Layer")}},
     {{QStringLiteral("Layer"), QStringLiteral("Group Layers")}, {QStringLiteral("Layer")}},
-    {{QStringLiteral("Layer"), QStringLiteral("Merge Layers")}, {QStringLiteral("Layer")}},
+    {{QStringLiteral("Layer"), QStringLiteral("Merge"), QStringLiteral("Merge Layers")}, {QStringLiteral("Layer")}},
     {{QStringLiteral("Layer"), QStringLiteral("Matting"), QStringLiteral("Defringe…")}, {QStringLiteral("Layer")}},
     {{QStringLiteral("Select"), QStringLiteral("Reselect")}, {QStringLiteral("Select")}},
     {{QStringLiteral("Select"), QStringLiteral("All Layers")}, {QStringLiteral("Select")}},
@@ -110,6 +110,8 @@ const SeparatorRow kSeparators[] = {
     {{QStringLiteral("Window"), QStringLiteral("Workspace"), QStringLiteral("Keyboard Shortcuts & Menus…")}, {QStringLiteral("Window"), QStringLiteral("Workspace")}},
     {{QStringLiteral("Window"), QStringLiteral("Panels"), QStringLiteral("3D")}, {QStringLiteral("Window")}},
     {{QStringLiteral("Window"), QStringLiteral("Options")}, {QStringLiteral("Window")}},
+    // Owner-requested live UI scale, post-CS6 (CS6 only has four font sizes).
+    {{QStringLiteral("Window"), QStringLiteral("UI Size")}, {QStringLiteral("Window")}},
     {{QStringLiteral("Help"), QStringLiteral("Kooka Pictura Help")}, {QStringLiteral("Help")}},
     {{QStringLiteral("Help"), QStringLiteral("About Plug-in")}, {QStringLiteral("Help")}},
     {{QStringLiteral("Help"), QStringLiteral("About Kooka Pictura")}, {QStringLiteral("Help")}},

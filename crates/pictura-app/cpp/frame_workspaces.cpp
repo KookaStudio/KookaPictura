@@ -60,7 +60,7 @@ QJsonArray workspacePresets(const QString& name)
                        presetGroup({QStringLiteral("propertiesPanel")}),
                        presetGroup({QStringLiteral("actionsPanel")}, {})}));
         columns.append(presetColumn(
-            normal, 1, PanelColumn::kDefaultNormalWidth,
+            normal, 1, PanelColumn::defaultNormalWidth(),
             QJsonArray{
                 presetGroup({QStringLiteral("colorPanel"), QStringLiteral("swatchesPanel")}),
                 presetGroup({QStringLiteral("adjustmentsPanel"),
@@ -71,7 +71,7 @@ QJsonArray workspacePresets(const QString& name)
         columns.append(presetColumn(iconic, 0, kIconicWidth,
                                     QJsonArray{presetGroup({QStringLiteral("historyPanel")})}));
         columns.append(presetColumn(
-            normal, 1, PanelColumn::kDefaultNormalWidth,
+            normal, 1, PanelColumn::defaultNormalWidth(),
             QJsonArray{
                 presetGroup({QStringLiteral("navigatorPanel"),
                              QStringLiteral("swatchesPanel")}),
@@ -85,7 +85,7 @@ QJsonArray workspacePresets(const QString& name)
             QJsonArray{presetGroup({QStringLiteral("historyPanel")}),
                        presetGroup({QStringLiteral("actionsPanel")})}));
         columns.append(presetColumn(
-            normal, 1, PanelColumn::kDefaultNormalWidth,
+            normal, 1, PanelColumn::defaultNormalWidth(),
             QJsonArray{
                 presetGroup({QStringLiteral("colorPanel"), QStringLiteral("swatchesPanel")}),
                 presetGroup({QStringLiteral("adjustmentsPanel"),
@@ -101,11 +101,12 @@ QJsonArray workspacePresets(const QString& name)
             QJsonArray{presetGroup({QStringLiteral("historyPanel")}),
                        presetGroup({QStringLiteral("propertiesPanel")})}));
         columns.append(presetColumn(
-            normal, 1, PanelColumn::kDefaultNormalWidth,
+            normal, 1, PanelColumn::defaultNormalWidth(),
             QJsonArray{
                 presetGroup({QStringLiteral("characterPanel"),
                              QStringLiteral("paragraphPanel")}),
                 presetGroup({QStringLiteral("paragraphStylesPanel"),
+                             QStringLiteral("characterStylesPanel"),
                              QStringLiteral("glyphsPanel")}),
                 presetGroup({QStringLiteral("layersPanel"), QStringLiteral("channelsPanel"),
                              QStringLiteral("pathsPanel")})}));
@@ -126,7 +127,7 @@ PanelColumn* PicturaMainWindow::restoreLegacyDefaultForTest()
                                 QStringLiteral("histogramPanel"),
                                 QStringLiteral("infoPanel")};
     QJsonObject column = presetColumn(
-        QStringLiteral("normal"), 0, PanelColumn::kDefaultNormalWidth,
+        QStringLiteral("normal"), 0, PanelColumn::defaultNormalWidth(),
         QJsonArray{
             presetGroup(color),
             presetGroup({QStringLiteral("adjustmentsPanel"),
@@ -142,7 +143,8 @@ PanelColumn* PicturaMainWindow::restoreLegacyDefaultForTest()
                         {}),
             presetGroup({QStringLiteral("characterPanel"), QStringLiteral("paragraphPanel"),
                          QStringLiteral("glyphsPanel"),
-                         QStringLiteral("paragraphStylesPanel")},
+                         QStringLiteral("paragraphStylesPanel"),
+                         QStringLiteral("characterStylesPanel")},
                         {})});
     regroupAndApply(QJsonArray{column});
     return panelColumn_;

@@ -100,6 +100,7 @@ SessionState loadSession()
     state.schemaVersion = obj.value(QStringLiteral("schemaVersion")).toInt(1);
     state.brightnessLevel = obj.value(QStringLiteral("brightnessLevel")).toInt(1);
     state.themeFamily = obj.value(QStringLiteral("themeFamily")).toInt(0);
+    state.uiScalePercent = obj.value(QStringLiteral("uiScalePercent")).toInt(100);
     state.gpuCompute = obj.value(QStringLiteral("gpuCompute")).toBool(true);
     const int colorPolicy = obj.value(QStringLiteral("colorPolicy")).toInt(0);
     state.colorPolicy = (colorPolicy == 1 || colorPolicy == 2) ? colorPolicy : 0;
@@ -117,7 +118,16 @@ SessionState loadSession()
         obj.value(QStringLiteral("toolsColumns")).toInt(1) == 2 ? 2 : 1;
     state.useShiftKeyForToolSwitch =
         obj.value(QStringLiteral("useShiftKeyForToolSwitch")).toBool(true);
+    state.openDocumentsAsTabs = obj.value(QStringLiteral("openDocumentsAsTabs")).toBool(true);
+    state.enableFloatingDocumentDocking =
+        obj.value(QStringLiteral("enableFloatingDocumentDocking")).toBool(true);
+    state.zoomResizesWindows = obj.value(QStringLiteral("zoomResizesWindows")).toBool(false);
     state.typePlaceholderText = obj.value(QStringLiteral("typePlaceholderText")).toBool(true);
+    state.typeShowAsianOptions =
+        obj.value(QStringLiteral("typeShowAsianOptions")).toBool(false);
+    state.typeMiddleEastern = obj.value(QStringLiteral("typeMiddleEastern")).toBool(false);
+    state.typeMissingGlyphProtection =
+        obj.value(QStringLiteral("typeMissingGlyphProtection")).toBool(true);
     state.confirmLiveShapeToPath =
         obj.value(QStringLiteral("confirmLiveShapeToPath")).toBool(true);
     state.confirmDeleteVectorMask =
@@ -242,6 +252,7 @@ bool saveSession(const SessionState& state)
     obj.insert(QStringLiteral("schemaVersion"), state.schemaVersion);
     obj.insert(QStringLiteral("brightnessLevel"), state.brightnessLevel);
     obj.insert(QStringLiteral("themeFamily"), state.themeFamily);
+    obj.insert(QStringLiteral("uiScalePercent"), state.uiScalePercent);
     obj.insert(QStringLiteral("gpuCompute"), state.gpuCompute);
     obj.insert(QStringLiteral("colorPolicy"), state.colorPolicy);
     obj.insert(QStringLiteral("textGammaEnabled"), state.textGammaEnabled);
@@ -253,7 +264,14 @@ bool saveSession(const SessionState& state)
     obj.insert(QStringLiteral("layersUseDefaultMasksOnFill"), state.layersUseDefaultMasksOnFill);
     obj.insert(QStringLiteral("toolsColumns"), state.toolsColumns);
     obj.insert(QStringLiteral("useShiftKeyForToolSwitch"), state.useShiftKeyForToolSwitch);
+    obj.insert(QStringLiteral("openDocumentsAsTabs"), state.openDocumentsAsTabs);
+    obj.insert(QStringLiteral("enableFloatingDocumentDocking"),
+               state.enableFloatingDocumentDocking);
+    obj.insert(QStringLiteral("zoomResizesWindows"), state.zoomResizesWindows);
     obj.insert(QStringLiteral("typePlaceholderText"), state.typePlaceholderText);
+    obj.insert(QStringLiteral("typeShowAsianOptions"), state.typeShowAsianOptions);
+    obj.insert(QStringLiteral("typeMiddleEastern"), state.typeMiddleEastern);
+    obj.insert(QStringLiteral("typeMissingGlyphProtection"), state.typeMissingGlyphProtection);
     obj.insert(QStringLiteral("confirmLiveShapeToPath"), state.confirmLiveShapeToPath);
     obj.insert(QStringLiteral("confirmDeleteVectorMask"), state.confirmDeleteVectorMask);
     obj.insert(QStringLiteral("showFullScreenMessage"), state.showFullScreenMessage);

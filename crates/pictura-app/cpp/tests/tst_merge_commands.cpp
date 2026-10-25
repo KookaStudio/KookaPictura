@@ -98,6 +98,8 @@ int mergeMenuItems(QMenu* menu)
         const QString text = action->text();
         if (text == QLatin1String("Merge Down") || text == QLatin1String("Merge Layers")) {
             ++count;
+        } else if (action->menu() != nullptr) {
+            count += mergeMenuItems(action->menu());
         }
     }
     return count;
@@ -111,6 +113,7 @@ class MergeCommandsTest : public QObject {
 private slots:
     void initTestCase();
     void layerMenuContextSensitive();
+    void layerMergeSubmenu();
     void layersPanelContextSensitiveLabel();
     void adjustmentSourceMergesDown();
     void adjustmentAboveBottomMergesLayers();
@@ -231,6 +234,47 @@ void MergeCommandsTest::layerMenuContextSensitive()
     QCOMPARE(view->composite_argb(8, 8), pixelBeforeLayers);
 
     frame.closeDocument(multiDoc, false);
+}
+
+// Layer > Merge groups the merge commands so the top-level list stays short.
+void MergeCommandsTest::layerMergeSubmenu()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QMenu* layer = layerMenu(frame);
+    QVERIFY(layer != nullptr);
+
+    QMenu* merge = nullptr;
+    for (QAction* action : layer->actions()) {
+        QString text = action->text();
+        text.remove(QLatin1Char('&'));
+        if (text == QLatin1String("Merge")) {
+            merge = action->menu();
+        }
+    }
+    QVERIFY2(merge != nullptr, "Layer has a Merge submenu");
+
+    pictura::CommandRegistry* registry = frame.registry();
+    QVERIFY(registry != nullptr);
+    const QList<QAction*> expected = {
+        registry->action(QString::fromLatin1(pictura::command_ids::LayerMergeLayers)),
+        registry->action(QString::fromLatin1(pictura::command_ids::LayerMergeVisible)),
+        registry->action(QString::fromLatin1(pictura::command_ids::LayerStampVisible)),
+        registry->action(QString::fromLatin1(pictura::command_ids::LayerStampSelected)),
+        registry->action(QString::fromLatin1(pictura::command_ids::LayerFlattenImage)),
+        registry->action(
+            QString::fromLatin1(pictura::command_ids::LayerMergeClippingMask))};
+    QList<QAction*> entries;
+    for (QAction* action : merge->actions()) {
+        if (!action->isSeparator()) {
+            entries.append(action);
+        }
+    }
+    QCOMPARE(entries.size(), expected.size());
+    for (int i = 0; i < expected.size(); ++i) {
+        QVERIFY2(expected.at(i) != nullptr, qPrintable(QString::number(i)));
+        QCOMPARE(entries.at(i), expected.at(i));
+        QVERIFY2(!layer->actions().contains(expected.at(i)), qPrintable(QString::number(i)));
+    }
 }
 
 void MergeCommandsTest::layersPanelContextSensitiveLabel()

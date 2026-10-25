@@ -354,6 +354,18 @@ fn liquify_names_a_kept_mesh_and_refuses_one_it_no_longer_has() {
 }
 
 #[test]
+fn vanishing_point_names_a_kept_edit_and_refuses_one_it_no_longer_has() {
+    let Some(Filter::VanishingPoint { edit }) = filter_from_kind_params("vanishing-point", &[0.0])
+    else {
+        panic!("vanishing-point did not map");
+    };
+    assert!(edit.is_empty());
+    assert!(filter_from_kind_params("vanishing-point", &[]).is_some());
+    assert!(filter_from_kind_params("vanishing-point", &[4e9]).is_none());
+    assert!(filter_from_kind_params("vanishing-point", &[1.0, 2.0]).is_none());
+}
+
+#[test]
 fn adaptive_wide_angle_reads_its_slots_and_refuses_an_unkept_set() {
     let Some(Filter::AdaptiveWideAngle { params }) = filter_from_kind_params(
         "adaptive-wide-angle",

@@ -110,6 +110,9 @@ impl Found<'_> {
             return None;
         }
         let spec = crate::type_layer_spec(layer)?;
+        if crate::type_layer::type_needs_fallback(&spec) {
+            return None;
+        }
         let (face, pens) = crate::type_layer::type_pens(&spec)?;
         if pens.is_empty() || crate::type_style::needs_raster(face, &spec.character) {
             return None;

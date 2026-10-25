@@ -37,9 +37,11 @@ const QList<PanelToggle>& panelToggles()
         {command_ids::WindowPanelsParagraph, "paragraphPanel"},
         {command_ids::WindowPanelsGlyphs, "glyphsPanel"},
         {command_ids::WindowPanelsParagraphStyles, "paragraphStylesPanel"},
+        {command_ids::WindowPanelsCharacterStyles, "characterStylesPanel"},
         {command_ids::TypePanelsCharacter, "characterPanel"},
         {command_ids::TypePanelsParagraph, "paragraphPanel"},
         {command_ids::TypePanelsParagraphStyles, "paragraphStylesPanel"},
+        {command_ids::TypePanelsCharacterStyles, "characterStylesPanel"},
     };
     return toggles;
 }
@@ -47,6 +49,7 @@ const QList<PanelToggle>& panelToggles()
 void PicturaMainWindow::buildMenus()
 {
     registry_->buildMenuBar(menuBar());
+    buildUiSizeMenu();
     // The History panel's iconic flyout is a separate top-level Qt::Popup.
     if (QAction* undo = registry_->action(QLatin1String(command_ids::EditUndo))) {
         undo->setShortcutContext(Qt::ApplicationShortcut);
@@ -217,7 +220,7 @@ void PicturaMainWindow::registerHandlers()
         }
         revertActive();
     });
-    registry_->setHandler(command_ids::FileClose, [this]() { closeActiveDocument(true); });
+    registry_->setHandler(command_ids::FileClose, [this]() { closeWindow(activeWindow_, true); });
     registry_->setHandler(command_ids::FileCloseAll, [this]() {
         for (int i = docs_.size() - 1; i >= 0; --i) {
             if (!closeDocument(i, true)) {
@@ -977,11 +980,17 @@ void PicturaMainWindow::registerHandlers()
     registry_->setHandler(command_ids::ViewZoomIn, [this]() {
         if (ImageView* canvas = imageView()) {
             canvas->zoomIn();
+            if (zoomResizesWindows_) {
+                resizeWindowToFit(windowOfCanvas(canvas));
+            }
         }
     });
     registry_->setHandler(command_ids::ViewZoomOut, [this]() {
         if (ImageView* canvas = imageView()) {
             canvas->zoomOut();
+            if (zoomResizesWindows_) {
+                resizeWindowToFit(windowOfCanvas(canvas));
+            }
         }
     });
     registry_->setHandler(command_ids::ViewFitOnScreen, [this]() {
@@ -1028,9 +1037,9 @@ void PicturaMainWindow::registerHandlers()
 
     registry_->setHandler(command_ids::ViewFreePan, [this]() {
         freePan_ = !freePan_;
-        for (const DocEntry& entry : docs_) {
-            if (entry.canvas) {
-                entry.canvas->setFreePan(freePan_);
+        for (const DocWindow* window : windows_) {
+            if (window->canvas) {
+                window->canvas->setFreePan(freePan_);
             }
         }
         saveSession();
@@ -1040,9 +1049,9 @@ void PicturaMainWindow::registerHandlers()
 
     registry_->setHandler(command_ids::ViewSnapCanvasToWorkspace, [this]() {
         snapCanvasToWorkspace_ = !snapCanvasToWorkspace_;
-        for (const DocEntry& entry : docs_) {
-            if (entry.canvas) {
-                entry.canvas->setSnapToWorkspace(snapCanvasToWorkspace_);
+        for (const DocWindow* window : windows_) {
+            if (window->canvas) {
+                window->canvas->setSnapToWorkspace(snapCanvasToWorkspace_);
             }
         }
         saveSession();
@@ -1072,6 +1081,27 @@ void PicturaMainWindow::registerHandlers()
     });
     registry_->setCheckedProvider(command_ids::WindowPanelsTools,
                                   [this]() { return toolsColumn_ && toolsColumn_->isVisible(); });
+
+    const auto stepUiScale = [this](int direction) {
+        const QVector<int> choices = Theme::uiScaleChoices();
+        int index = choices.indexOf(uiScalePercent_);
+        if (index < 0) {
+            index = choices.indexOf(Theme::kDefaultUiScalePercent);
+        }
+        setUiScalePercent(choices.at(qBound(0, index + direction, choices.size() - 1)));
+    };
+    registry_->setHandler(command_ids::WindowUiEnlarge, [stepUiScale]() { stepUiScale(1); });
+    registry_->setHandler(command_ids::WindowUiDecrease, [stepUiScale]() { stepUiScale(-1); });
+    registry_->setHandler(command_ids::WindowUiReset,
+                          [this]() { setUiScalePercent(Theme::kDefaultUiScalePercent); });
+    registry_->setEnabledProvider(command_ids::WindowUiEnlarge,
+                                  [this]() { return uiScalePercent_ < Theme::kUiScaleMaxPercent; });
+    registry_->setEnabledProvider(command_ids::WindowUiDecrease,
+                                  [this]() { return uiScalePercent_ > Theme::kUiScaleMinPercent; });
+    registry_->setEnabledProvider(command_ids::WindowUiReset,
+                                  [this]() { return uiScalePercent_ != Theme::kDefaultUiScalePercent; });
+    registry_->setLabelProvider(command_ids::WindowUiSize,
+                                [this]() { return tr("UI Size: %1%").arg(uiScalePercent_); });
 
     registerPreferenceHandlers();
     registerShortcutHandlers();

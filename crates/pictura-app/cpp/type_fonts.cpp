@@ -5,6 +5,8 @@
 
 #include "type_fonts.h"
 
+#include "fonts.h"
+
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "api/type_api.h"
 
@@ -55,8 +57,15 @@ quint32 checksum(const QByteArray& data)
     return sum;
 }
 
-// Families already handed to the engine (or tried).
+// Family+style faces already handed to the engine (or tried).
 QSet<QString>& tried()
+{
+    static QSet<QString> faces;
+    return faces;
+}
+
+// Family names already handed to the engine, whatever their style.
+QSet<QString>& familiesTried()
 {
     static QSet<QString> families;
     return families;
@@ -64,9 +73,36 @@ QSet<QString>& tried()
 
 } // namespace
 
-QByteArray typeFontBytes(const QString& family)
+QByteArray typeFontBytes(const QString& family, const QString& style)
 {
-    const QRawFont raw = QRawFont::fromFont(QFont(family));
+    QFont resolved(family);
+    if (!style.isEmpty()) {
+        const QStringList styles = QFontDatabase::styles(family);
+        const auto match = std::find_if(styles.cbegin(), styles.cend(), [&style](const QString& s) {
+            return s.compare(style, Qt::CaseInsensitive) == 0;
+        });
+        if (match != styles.cend()) {
+            resolved.setStyleName(*match);
+        } else {
+            // A family may name its faces differently from the bridge's style
+            // ("Demi" versus "SemiBold"); map the common words rather than
+            // silently rendering the regular face.
+            const QString lower = style.toLower();
+            resolved.setBold(lower.contains(QStringLiteral("bold"))
+                             || lower.contains(QStringLiteral("black"))
+                             || lower.contains(QStringLiteral("demi"))
+                             || lower.contains(QStringLiteral("semibold")));
+            resolved.setItalic(lower.contains(QStringLiteral("italic"))
+                               || lower.contains(QStringLiteral("oblique")));
+            if (lower.contains(QStringLiteral("light"))) {
+                resolved.setWeight(QFont::Light);
+            }
+        }
+    }
+    QRawFont raw = QRawFont::fromFont(resolved);
+    if (!raw.isValid() && !style.isEmpty()) {
+        raw = QRawFont::fromFont(QFont(family));
+    }
     if (!raw.isValid()) {
         return {};
     }
@@ -112,17 +148,49 @@ QByteArray typeFontBytes(const QString& family)
     return out;
 }
 
-void registerTypeFont(const QString& family)
+void registerTypeFont(const QString& family, const QString& style)
 {
-    if (family.isEmpty() || tried().contains(family)) {
+    const QString key = family + QLatin1Char('|') + style;
+    if (family.isEmpty() || tried().contains(key)) {
         return;
     }
-    tried().insert(family);
-    const QByteArray bytes = typeFontBytes(family);
+    tried().insert(key);
+    familiesTried().insert(family);
+    const QByteArray bytes = typeFontBytes(family, style);
     if (!bytes.isEmpty()) {
-        pictura::type_api::registerFont(family, ::rust::Slice<const std::uint8_t>(
+        pictura::type_api::registerFont(family, style, ::rust::Slice<const std::uint8_t>(
                                        reinterpret_cast<const std::uint8_t*>(bytes.constData()),
                                        std::size_t(bytes.size())));
+    }
+}
+
+void registerTypeFallbacks()
+{
+    static bool done = false;
+    if (done) {
+        return;
+    }
+    done = true;
+    // The bundled UI face is always available and covers Greek and Cyrillic,
+    // which the metric-compatible Liberation face does not.
+    registerBundledFonts();
+    registerTypeFont(QString::fromLatin1(kBundledUiFamily));
+    const QStringList samples = {
+        QStringLiteral("ا"), QStringLiteral("א"), QStringLiteral("अ"),
+        QStringLiteral("漢"), QStringLiteral("あ"), QStringLiteral("한"),
+        QStringLiteral("ก"),
+    };
+    QStringList families = QFontDatabase::families();
+    families.sort(Qt::CaseInsensitive);
+    for (const QString& sample : samples) {
+        const uint code = sample.at(0).unicode();
+        for (const QString& family : families) {
+            const QRawFont raw = QRawFont::fromFont(QFont(family));
+            if (raw.isValid() && raw.supportsCharacter(code)) {
+                registerTypeFont(family);
+                break;
+            }
+        }
     }
 }
 
@@ -130,7 +198,7 @@ QString familyForFontName(const QString& name)
 {
     // A family this session registered is its own answer, even a generic
     // alias such as "monospace" that the database does not list.
-    if (name.isEmpty() || tried().contains(name) || QFontDatabase::hasFamily(name)) {
+    if (name.isEmpty() || familiesTried().contains(name) || QFontDatabase::hasFamily(name)) {
         return name;
     }
     const QString stem = name.section(QLatin1Char('-'), 0, 0).toLower();

@@ -50,10 +50,14 @@ LayerType readLayer(const PictureView& view, const QString& path);
 
 CharacterSetting defaultCharacterSetting();
 ParagraphSetting defaultParagraphSetting();
-bool registerFont(const QString& family, ::rust::Slice<const std::uint8_t> bytes);
-/// The Character panel's OpenType features `family`'s face carries, one bit
+bool registerFont(const QString& family, const QString& style,
+                  ::rust::Slice<const std::uint8_t> bytes);
+void setMissingGlyphProtection(bool on);
+bool missingGlyphProtection();
+void refreshMissingGlyphProtection(PictureView& view);
+/// The Character panel's OpenType features `family`/`style`'s face carries, one bit
 /// each in panel order (bit 0 Standard Ligatures … bit 7 Fractions).
-std::uint32_t openTypeFeatures(const QString& family);
+std::uint32_t openTypeFeatures(const QString& family, const QString& style);
 
 QVector<int> previewRect(const QString& text, const QString& font, const TypeSetting& setting,
                          const CharacterSetting& character, const ParagraphSetting& paragraph);
@@ -94,6 +98,15 @@ bool applyStyle(PictureView& view, const QString& path, const QString& name, boo
 
 bool createCharacterStyle(PictureView& view, const QString& name, const QString& font,
                           const CharacterSetting& character);
+bool editCharacterStyle(PictureView& view, const QString& name, const QString& newName,
+                        const QString& font, const CharacterSetting& character);
+bool previewCharacterStyle(PictureView& view, const QString& name, const QString& font,
+                           const CharacterSetting& character);
+bool deleteCharacterStyle(PictureView& view, const QString& name);
+int characterStyleCount(const PictureView& view);
+QString characterStyleName(const PictureView& view, int index);
+QString characterStyleFont(const PictureView& view, const QString& name);
+CharacterSetting characterStyleCharacter(const PictureView& view, const QString& name);
 bool createParagraphStyle(PictureView& view, const QString& name, const QString& font,
                           const CharacterSetting& character, const ParagraphSetting& paragraph);
 bool editParagraphStyle(PictureView& view, const QString& name, const QString& font,

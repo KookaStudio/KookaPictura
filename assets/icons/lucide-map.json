@@ -775,6 +775,11 @@
       "match": "custom",
       "note": "the numerals \"123\", playfully placed"
     },
+    "tool.createplane": {
+      "kind": "custom",
+      "match": "custom",
+      "note": "a perspective plane: a trapezoid ruled with one line each way (Vanishing Point Create Plane)"
+    },
     "tool.crop": {
       "kind": "lucide",
       "slug": "crop",
@@ -1205,6 +1210,11 @@
       "kind": "lucide",
       "slug": "wrench",
       "match": "good"
+    },
+    "window.panels.characterStyles": {
+      "kind": "lucide",
+      "slug": "a-large-small",
+      "match": "approximate"
     }
   }
 }

@@ -74,14 +74,15 @@ ParagraphSetting defaultParagraphSetting()
     return ::pictura::type_default_paragraph_setting();
 }
 
-bool registerFont(const QString& family, ::rust::Slice<const std::uint8_t> bytes)
+bool registerFont(const QString& family, const QString& style,
+                  ::rust::Slice<const std::uint8_t> bytes)
 {
-    return ::pictura::type_register_font(family, bytes);
+    return ::pictura::type_register_font(family, style, bytes);
 }
 
-std::uint32_t openTypeFeatures(const QString& family)
+std::uint32_t openTypeFeatures(const QString& family, const QString& style)
 {
-    return ::pictura::type_font_opentype_features(family);
+    return ::pictura::type_font_opentype_features(family, style);
 }
 
 QVector<int> previewRect(const QString& text, const QString& font, const TypeSetting& setting,
@@ -204,6 +205,43 @@ bool createCharacterStyle(PictureView& view, const QString& name, const QString&
     return ::pictura::type_create_character_style(view, name, font, character);
 }
 
+bool editCharacterStyle(PictureView& view, const QString& name, const QString& newName,
+                        const QString& font, const CharacterSetting& character)
+{
+    return ::pictura::type_edit_character_style(view, name, newName, font, character);
+}
+
+bool previewCharacterStyle(PictureView& view, const QString& name, const QString& font,
+                           const CharacterSetting& character)
+{
+    return ::pictura::type_preview_character_style(view, name, font, character);
+}
+
+bool deleteCharacterStyle(PictureView& view, const QString& name)
+{
+    return ::pictura::type_delete_character_style(view, name);
+}
+
+int characterStyleCount(const PictureView& view)
+{
+    return ::pictura::type_character_style_count(view);
+}
+
+QString characterStyleName(const PictureView& view, int index)
+{
+    return ::pictura::type_character_style_name(view, index);
+}
+
+QString characterStyleFont(const PictureView& view, const QString& name)
+{
+    return ::pictura::type_character_style_font(view, name);
+}
+
+CharacterSetting characterStyleCharacter(const PictureView& view, const QString& name)
+{
+    return ::pictura::type_character_style_character(view, name);
+}
+
 bool createParagraphStyle(PictureView& view, const QString& name, const QString& font,
                           const CharacterSetting& character, const ParagraphSetting& paragraph)
 {
@@ -321,6 +359,21 @@ void setTextGamma(bool enabled, double gamma)
 void refreshTextGamma(PictureView& view)
 {
     ::pictura::type_text_gamma_refresh(view);
+}
+
+void setMissingGlyphProtection(bool on)
+{
+    ::pictura::type_set_missing_glyph_protection(on);
+}
+
+bool missingGlyphProtection()
+{
+    return ::pictura::type_missing_glyph_protection();
+}
+
+void refreshMissingGlyphProtection(PictureView& view)
+{
+    ::pictura::type_missing_glyph_protection_refresh(view);
 }
 
 QStringList documentFonts(const PictureView& view)

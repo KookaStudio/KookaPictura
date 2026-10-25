@@ -17,24 +17,27 @@
 #include "liquify_dialog.h"
 #include "picture_frame_dialog.h"
 #include "reduce_noise_dialog.h"
+#include "vp_dialog.h"
 
 #include "pictura_app/src/cxxqt_object/filter_tools.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/filter_tools/adaptive_wide_angle.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/filter_tools/jobs.cxxqt.h"
 
 namespace pictura {
 
 namespace {
 
-// Preview against the section and scale the user is currently looking at.
-FilterPreviewView previewViewFor(ImageView* canvas)
+// Preview against the section and scale the user is currently looking at: the
+// first canvas is the active window's; the document's other windows mirror it.
+FilterPreviewView previewViewFor(const QList<ImageView*>& canvases)
 {
     FilterPreviewView view;
-    if (canvas) {
+    if (!canvases.isEmpty()) {
+        ImageView* canvas = canvases.first();
         view.visible = canvas->visibleDocumentRect();
         view.canvasZoom = canvas->zoom();
         view.canvas = canvas;
         view.devicePixelRatio = canvas->devicePixelRatioF();
+        view.mirrors = canvases.mid(1);
     }
     return view;
 }
@@ -62,9 +65,9 @@ bool chooseDisplacementMap(QList<double>* values, QWidget* parent)
 }
 
 // Lens Flare's parameters are one struct, Lighting Effects' a list of lights,
-// Liquify's a mesh and Adaptive Wide Angle's a constraint set, each edited on
-// its own dialog; every other filter edits
-// independent slots on the shared one.
+// Liquify's a mesh, Adaptive Wide Angle's a constraint set and Vanishing
+// Point's a set of planes, each edited on its own dialog; every other filter
+// edits independent slots on the shared one.
 // `*kind` is the kind to commit: the spec's, except that the Blur Gallery
 // commits whichever of its effects the user switched on.
 bool runFilterDialog(PictureView* view, const FilterCommandSpec& spec,
@@ -92,6 +95,11 @@ bool runFilterDialog(PictureView* view, const FilterCommandSpec& spec,
         const auto* frame = qobject_cast<PicturaMainWindow*>(parent);
         const QString name = frame ? frame->activeDocumentName() : QString();
         return AdaptiveWideAngleDialog::get(view, name, initial, out, parent);
+    }
+    case FilterDialogKind::VanishingPoint: {
+        const auto* frame = qobject_cast<PicturaMainWindow*>(parent);
+        const QString name = frame ? frame->activeDocumentName() : QString();
+        return VanishingPointDialog::get(view, name, initial, out, parent);
     }
     case FilterDialogKind::Shared:
         break;
@@ -124,16 +132,17 @@ bool refuseEmptyBlur(PictureView* view, const FilterCommandSpec& spec, QWidget* 
 }
 
 // Commit `kind` on a worker with a busy indicator, recorded under its menu
-// name. A zoomed-out dialog leaves its canvas preview up until the commit lands.
-bool commitFilter(QWidget* parent, PictureView* view, ImageView* canvas, const QString& kind,
-                  const QList<double>& values)
+// name. A zoomed-out dialog leaves its canvas preview up on `canvases` until
+// the commit lands.
+bool commitFilter(QWidget* parent, PictureView* view, const QList<ImageView*>& canvases,
+                  const QString& kind, const QList<double>& values)
 {
     const FilterCommandSpec* spec = filterCommandForKind(kind);
     const QString name = spec ? spec->label : kind;
     const bool applied = runFilterCommit(parent, view, name, [&] {
         return filter_commit_start(*view, kind, values, filterHistoryLabel(name));
     });
-    if (canvas) {
+    for (ImageView* canvas : canvases) {
         canvas->clearFilterPreview();
     }
     return applied;
@@ -201,7 +210,7 @@ void PicturaMainWindow::applyFilterCommand(const FilterCommandSpec& spec)
     }
     if (spec.params.isEmpty()) {
         // Nothing to edit: apply the engine defaults directly.
-        if (commitFilter(this, view, imageView(), spec.kind, QList<double>())) {
+        if (commitFilter(this, view, activeDocumentCanvases(), spec.kind, QList<double>())) {
             refresh();
             registry_->recordCommand(commandIdForPath(spec.path),
                                      filterParams(spec.kind, QList<double>()));
@@ -214,9 +223,9 @@ void PicturaMainWindow::applyFilterCommand(const FilterCommandSpec& spec)
     QString kind;
     // The dialog previews on the canvas as controls change; OK commits one
     // state on a worker, Cancel discards the preview bit-identically.
-    if (runFilterDialog(view, spec, previewViewFor(imageView()), QList<double>(), &values, &kind,
-                        this)) {
-        if (commitFilter(this, view, imageView(), kind, values)) {
+    if (runFilterDialog(view, spec, previewViewFor(activeDocumentCanvases()), QList<double>(),
+                        &values, &kind, this)) {
+        if (commitFilter(this, view, activeDocumentCanvases(), kind, values)) {
             refresh();
             registry_->recordCommand(commandIdForPath(spec.path), filterParams(kind, values));
         } else {
@@ -251,13 +260,14 @@ void PicturaMainWindow::wireFilterMenu()
             return captured.params.isEmpty() ? captured.label
                                              : captured.label + QStringLiteral("…");
         });
-        // Adaptive Wide Angle takes 8-bit RGB and Grayscale only, as CS6's
-        // 16- and 32-bpc filter lists leave it out.
-        const bool eightBitOnly = spec.dialog == FilterDialogKind::AdaptiveWideAngle;
+        // Adaptive Wide Angle and Vanishing Point take 8-bit RGB and
+        // Grayscale only, as CS6's 16- and 32-bpc filter lists leave them out.
+        const bool eightBitOnly = spec.dialog == FilterDialogKind::AdaptiveWideAngle ||
+                                  spec.dialog == FilterDialogKind::VanishingPoint;
         registry_->setEnabledProvider(id, [this, eightBitOnly]() {
             PictureView* view = activeView();
             return view && filter_target_ready(*view) &&
-                   (!eightBitOnly || awa_document_supported(*view));
+                   (!eightBitOnly || filter_eight_bit_document(*view));
         });
     }
 
@@ -321,7 +331,8 @@ void PicturaMainWindow::wireFilterMenu()
         if (spec && refuseEmptyBlur(view, *spec, this)) {
             return;
         }
-        if (commitFilter(this, view, imageView(), filter_last_kind(*view), filter_last_params(*view))) {
+        if (commitFilter(this, view, activeDocumentCanvases(), filter_last_kind(*view),
+                         filter_last_params(*view))) {
             refresh();
             registry_->recordCommand(command_ids::FilterLastFilter,
                                      filterParams(filter_last_kind(*view),
@@ -371,9 +382,9 @@ void PicturaMainWindow::wireFilterMenu()
         }
         QList<double> values;
         QString kind;
-        if (runFilterDialog(view, *spec, previewViewFor(imageView()), filter_last_params(*view),
+        if (runFilterDialog(view, *spec, previewViewFor(activeDocumentCanvases()), filter_last_params(*view),
                             &values, &kind, this)) {
-            if (commitFilter(this, view, imageView(), kind, values)) {
+            if (commitFilter(this, view, activeDocumentCanvases(), kind, values)) {
                 refresh();
                 registry_->recordCommand(command_ids::FilterLastFilterSettings,
                                          filterParams(kind, values));

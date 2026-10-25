@@ -297,6 +297,19 @@ struct RedEyeOptions {
     int darken = 50;
 };
 
+// The Hand tool: Scroll All Windows pans every other visible document window
+// with the dragged one.
+struct HandOptions {
+    bool scrollAll = false;
+};
+
+// The Zoom tool: Resize Windows To Fit resizes a floating window to the
+// zoomed image; Zoom All Windows zooms every other window by the same factor.
+struct ZoomOptions {
+    bool resizeToFit = false;
+    bool zoomAll = false;
+};
+
 // The magnetic lasso's detection settings: Width 1-256 px, Contrast 1-100 %,
 // Frequency 0-100; CS6 defaults 10 / 10 / 57.
 struct MagneticOptions {
@@ -419,6 +432,8 @@ using RetouchGroup = ToolOption<RetouchOptions>;
 using ToneGroup = ToolOption<ToneOptions>;
 using ColorReplaceGroup = ToolOption<ColorReplaceOptions>;
 using MixerGroup = ToolOption<MixerOptions>;
+using HandGroup = ToolOption<HandOptions>;
+using ZoomGroup = ToolOption<ZoomOptions>;
 
 // The paint family's shared brush: tip shape, dynamics, and paint stroke. The
 // size has its own notification (the hover ring and the size readouts); every

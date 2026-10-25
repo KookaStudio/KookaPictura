@@ -62,8 +62,8 @@ PanelColumn::PanelColumn(QWidget* parent)
     auto* layout = new QVBoxLayout(this);
     // The column draws a 1 px side/bottom border (see the theme); the layout is
     // inset so the children do not paint over it.
-    layout->setContentsMargins(Theme::kPanelBorderWidth, 0, Theme::kPanelBorderWidth,
-                               Theme::kPanelBorderWidth);
+    const int border = Theme::scaled(Theme::kPanelBorderWidth);
+    layout->setContentsMargins(border, 0, border, border);
     layout->setSpacing(0);
 
     header_ = new QWidget(this);
@@ -105,7 +105,7 @@ PanelColumn::PanelColumn(QWidget* parent)
 
     splitter_ = new QSplitter(Qt::Vertical, scroll_);
     splitter_->setObjectName(QStringLiteral("panelColumnSplitter"));
-    splitter_->setHandleWidth(Theme::kGroupDividerWidth);
+    splitter_->setHandleWidth(Theme::scaled(Theme::kGroupDividerWidth));
     splitter_->setChildrenCollapsible(false);
     scroll_->setWidget(splitter_);
     layout->addWidget(scroll_, 1);
@@ -125,7 +125,7 @@ PanelColumn::PanelColumn(QWidget* parent)
     // adjacent handle (see PicturaMainWindow::beginWidgetColumnResize).
     resizeGrip_ = new QWidget(this);
     resizeGrip_->setObjectName(QStringLiteral("panelResizeGrip"));
-    resizeGrip_->setFixedWidth(kResizeGripWidth);
+    resizeGrip_->setFixedWidth(Theme::scaled(kResizeGripWidth));
     resizeGrip_->setCursor(Qt::SizeHorCursor);
     resizeGrip_->setAttribute(Qt::WA_NoSystemBackground, true);
     resizeGrip_->installEventFilter(this);
@@ -180,12 +180,12 @@ PanelSide PanelColumn::side() const
     const int self = splitter->indexOf(const_cast<PanelColumn*>(this));
     for (int i = 0; i < splitter->count(); ++i) {
         QWidget* pane = splitter->widget(i);
-        if (pane && pane->objectName() == QStringLiteral("documentTabs")) {
+        if (pane && pane->objectName() == QStringLiteral("documentArea")) {
             lastSide_ = self < i ? PanelSide::Left : PanelSide::Right;
             return lastSide_;
         }
     }
-    // The document tabs are the first pane when no left column exists.
+    // The document area is the first pane when no left column exists.
     lastSide_ = self == 0 ? PanelSide::Left : PanelSide::Right;
     return lastSide_;
 }
@@ -544,11 +544,18 @@ void PanelColumn::setToolsContent(QWidget* content, std::function<int()> columns
     toolsContent_ = content;
     toolsColumnsState_ = std::move(columnsState);
     toolsToggleAction_ = std::move(onToggleRequested);
-    // No group stack and no rail: host the plain content in the column body.
+    // No group stack and no rail: host the plain content in a scroll area so
+    // the toolbox's scaled height cannot set the frame's minimum height.
     scroll_->setVisible(false);
     iconStrip_->setVisible(false);
+    toolsScroll_ = new QScrollArea(this);
+    toolsScroll_->setObjectName(QStringLiteral("toolsScroll"));
+    toolsScroll_->setWidgetResizable(true);
+    toolsScroll_->setFrameShape(QFrame::NoFrame);
+    toolsScroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    toolsScroll_->setWidget(content);
     if (auto* box = qobject_cast<QBoxLayout*>(layout())) {
-        box->addWidget(content, 1);
+        box->insertWidget(1, toolsScroll_, 1);
     }
     content->setVisible(true);
     updateMinimumWidth();
@@ -597,32 +604,34 @@ void PanelColumn::updateMinimumWidth()
         // change the toolbar's width.
         const int want = (toolsContent_->minimumWidth() > 0 ? toolsContent_->minimumWidth()
                                                             : toolsContent_->sizeHint().width())
-                         + 2 * Theme::kPanelBorderWidth;
-        setMinimumWidth(qMax(kIconStripMinWidth, want));
-        setMaximumWidth(qMax(kIconStripMinWidth, want));
+                         + 2 * Theme::scaled(Theme::kPanelBorderWidth);
+        setMinimumWidth(qMax(Theme::scaled(kIconStripMinWidth), want));
+        setMaximumWidth(qMax(Theme::scaled(kIconStripMinWidth), want));
         return;
     }
     if (railMode_) {
-        setMinimumWidth(kIconStripMinWidth);
+        setMinimumWidth(Theme::scaled(kIconStripMinWidth));
         return;
     }
     // M47: derive a shared floor from this column's real content (never from a
     // sibling splitter), clamped so all normal columns converge and none can
     // grow past the max.
-    int need = kPanelMinWidth;
+    const int minWidth = minNormalWidth();
+    const int maxWidth = maxNormalWidth();
+    int need = minWidth;
     if (splitter_) {
         need = qMax(need, splitter_->minimumSizeHint().width());
     }
     if (scroll_) {
         need += scroll_->verticalScrollBar()->sizeHint().width() + 2 * scroll_->frameWidth();
     }
-    gSharedFloor = qBound(kPanelMinWidth, qMax(gSharedFloor, need), kPanelMaxWidth);
+    gSharedFloor = qBound(minWidth, qMax(gSharedFloor, need), maxWidth);
     setMinimumWidth(gSharedFloor);
 }
 
 void PanelColumn::refreshSharedFloor(PicturaMainWindow* frame)
 {
-    gSharedFloor = kPanelMinWidth;
+    gSharedFloor = minNormalWidth();
     if (!frame) {
         return;
     }
@@ -652,6 +661,29 @@ void PanelColumn::setAutoShowHidden(bool on)
     emit stateChanged();
 }
 
+void PanelColumn::applyUiScale()
+{
+    if (QLayout* columnLayout = layout()) {
+        const int border = Theme::scaled(Theme::kPanelBorderWidth);
+        columnLayout->setContentsMargins(border, 0, border, border);
+    }
+    if (columnToggle_) {
+        const int side = Theme::scaled(18);
+        columnToggle_->setFixedSize(side, side);
+    }
+    for (PanelGroup* group : groups_) {
+        if (group) {
+            group->applyUiScale();
+        }
+    }
+    if (railMode_) {
+        buildIconStrip();
+    }
+    updateColumnToggle();
+    updateMinimumWidth();
+    updateResizeGrip();
+}
+
 void PanelColumn::setPreferredWidth(int width)
 {
     if (width <= 0) {
@@ -660,8 +692,8 @@ void PanelColumn::setPreferredWidth(int width)
     // A normal column is never wider than `kMaxNormalWidth`; an iconic strip
     // keeps its own narrow floor. This is both the layout bound and the guard
     // against a stale oversized store expanding the column across the workspace.
-    const int floor = railMode_ ? kIconStripMinWidth : kPanelMinWidth;
-    const int target = qBound(floor, width, kMaxNormalWidth);
+    const int floor = railMode_ ? Theme::scaled(kIconStripMinWidth) : minNormalWidth();
+    const int target = qBound(floor, width, maxNormalWidth());
     auto* splitter = qobject_cast<QSplitter*>(parentWidget());
     const int index = splitter ? splitter->indexOf(this) : -1;
     if (!splitter || index < 0 || splitter->width() <= 0) {
@@ -688,7 +720,7 @@ void PanelColumn::setRestoredWidth(int width)
         return;
     }
     if (railMode_) {
-        normalWidthBeforeIconic_ = qBound(kMinNormalWidth, width, kMaxNormalWidth);
+        normalWidthBeforeIconic_ = qBound(minNormalWidth(), width, maxNormalWidth());
         return;
     }
     setPreferredWidth(width);
@@ -739,7 +771,7 @@ void PanelColumn::setBorderEdgeSuppressed(bool left, bool right)
     if (!l) {
         return;
     }
-    const int b = Theme::kPanelBorderWidth;
+    const int b = Theme::scaled(Theme::kPanelBorderWidth);
     l->setContentsMargins(left ? 0 : b, 0, right ? 0 : b, b);
 }
 

@@ -17,8 +17,9 @@ namespace pictura {
 class CommandRegistry;
 class ShortcutCaptureField;
 
-// A key the workspace itself owns (frame_build.cpp, frame.cpp): no menu
-// command or tool may take it, or the two shortcuts would be ambiguous.
+// A key the workspace itself owns (frame_build.cpp, frame.cpp,
+// frame_document_windows.cpp): no menu command or tool may take it, or the two
+// shortcuts would be ambiguous.
 struct WorkspaceKey {
     QKeySequence key;
     const char* use;

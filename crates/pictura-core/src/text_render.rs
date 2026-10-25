@@ -7,7 +7,9 @@
 
 /// One shaped glyph: a font glyph id, its advance, and its x/y offsets, all in
 /// font units. `scale` sizes the outline against the run's size (1.0 normally;
-/// synthesized small caps draw capitals smaller).
+/// synthesized small caps draw capitals smaller). `x_scale` stretches the
+/// outline horizontally for glyph scaling; `face` indexes the layout's face
+/// palette and `cluster` is the glyph's source byte offset.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ShapedGlyph {
     pub id: u16,
@@ -15,6 +17,9 @@ pub struct ShapedGlyph {
     pub x_offset: f32,
     pub y_offset: f32,
     pub scale: f32,
+    pub x_scale: f32,
+    pub face: u16,
+    pub cluster: u32,
 }
 
 impl ShapedGlyph {
@@ -26,6 +31,9 @@ impl ShapedGlyph {
             x_offset: 0.0,
             y_offset: 0.0,
             scale: 1.0,
+            x_scale: 1.0,
+            face: 0,
+            cluster: 0,
         }
     }
 }
@@ -85,13 +93,17 @@ pub struct LayoutParams {
 }
 
 /// A glyph positioned in device pixels; `y` is the line baseline adjusted by
-/// the shaper's y-offset. `scale` is the shaped glyph's outline scale.
+/// the shaper's y-offset. `scale` is the shaped glyph's outline scale and
+/// `x_scale` its horizontal stretch.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PlacedGlyph {
     pub id: u16,
     pub x: f32,
     pub y: f32,
     pub scale: f32,
+    pub x_scale: f32,
+    pub face: u16,
+    pub cluster: u32,
 }
 
 /// One laid-out line: its glyphs, total advance, and baseline.
@@ -103,12 +115,13 @@ pub struct LayoutLine {
 }
 
 /// The whole layout. `width` is the widest line advance; `height` is
-/// `lines.len() * leading`.
+/// `lines.len() * leading`; `face_count` is one past the highest face id.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TextLayout {
     pub lines: Vec<LayoutLine>,
     pub width: f32,
     pub height: f32,
+    pub face_count: u16,
 }
 
 fn device_advance(glyph: &ShapedGlyph, params: &LayoutParams) -> f32 {
@@ -123,6 +136,7 @@ fn device(value: f32, params: &LayoutParams) -> f32 {
 pub fn layout_lines(lines: &[Vec<ShapedGlyph>], params: &LayoutParams) -> TextLayout {
     let mut out = Vec::with_capacity(lines.len());
     let mut width = 0.0f32;
+    let mut face_count = 1u16;
     for (i, line) in lines.iter().enumerate() {
         let baseline = i as f32 * params.leading;
         let advance: f32 = line.iter().map(|g| device_advance(g, params)).sum();
@@ -136,11 +150,15 @@ pub fn layout_lines(lines: &[Vec<ShapedGlyph>], params: &LayoutParams) -> TextLa
         let mut glyphs = Vec::with_capacity(line.len());
         let mut x = shift;
         for glyph in line {
+            face_count = face_count.max(glyph.face.saturating_add(1));
             glyphs.push(PlacedGlyph {
                 id: glyph.id,
                 x: x + device(glyph.x_offset, params),
                 y: baseline - device(glyph.y_offset, params),
                 scale: glyph.scale,
+                x_scale: glyph.x_scale,
+                face: glyph.face,
+                cluster: glyph.cluster,
             });
             x += device_advance(glyph, params);
         }
@@ -154,6 +172,7 @@ pub fn layout_lines(lines: &[Vec<ShapedGlyph>], params: &LayoutParams) -> TextLa
         lines: out,
         width,
         height: lines.len() as f32 * params.leading,
+        face_count,
     }
 }
 

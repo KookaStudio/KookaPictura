@@ -42,6 +42,10 @@ pub use distort::adaptive_wide_angle::{
 pub use distort::liquify::{
     LiquifyBrush, LiquifyMesh, LiquifySource, LiquifyTool, LIQUIFY_MAX_BRUSH,
 };
+pub use distort::vanishing_point::{
+    DragMode as VpDragMode, VpCanvas, VpEdit, VpEditor, VpHeal, VpMarqueeOptions, VpPaintOptions,
+    VpPart, VpPasteError, VpPatch, VpPlanes, VpRect, VpTexture, VpValidity, VP_DEFAULT_GRID,
+};
 pub use hdr_toning::HdrToningParams;
 pub use noise::{ChannelDetail, ReduceNoiseParams};
 pub use render::{

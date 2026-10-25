@@ -93,7 +93,7 @@ void PicturaMainWindow::openSearch()
     registry_->refresh();
     QWidget* host = imageView();
     if (!host) {
-        host = tabs_ ? static_cast<QWidget*>(tabs_) : centralWidget();
+        host = documentArea_ ? static_cast<QWidget*>(documentArea_) : centralWidget();
     }
     const QRect rect(host->mapTo(this, QPoint(0, 0)), host->size());
     searchBar_->open(buildSearchIndex(*registry_), rect);

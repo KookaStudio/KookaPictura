@@ -14,6 +14,7 @@
 class QComboBox;
 class QFontComboBox;
 class QLabel;
+class QMenu;
 class QToolButton;
 
 namespace pictura {
@@ -44,12 +45,18 @@ public:
     // The open type session, if any: while new type is being set the panel
     // edits that session instead of the selected layer.
     void setTextSession(std::function<TextSession*()> session);
+    void setShowAsianOptions(bool on);
+    void updatePanelMenu(QMenu* menu);
+    void performPanelMenuAction(const QString& actionId);
     void refresh();
 
     // The dense form's natural minimum width would raise the panel column's
     // shared floor; the column supplies the width, so report none.
     QSize minimumSizeHint() const override;
 
+    QComboBox* styleFieldForTest() const { return style_; }
+    QComboBox* languageFieldForTest() const { return language_; }
+    NumericField* tsumeFieldForTest() const { return tsume_; }
     QComboBox* sizeFieldForTest() const { return size_.combo; }
     QComboBox* leadingFieldForTest() const { return leading_.combo; }
     QComboBox* kerningFieldForTest() const { return kerning_.combo; }
@@ -91,15 +98,19 @@ private:
     void syncCombos();
     void updateIcons();
     void apply();
+    void resetCharacter();
     bool hasTypeLayer() const;
     void updateColorIcon();
 
     PictureView* view_ = nullptr;
+    bool showAsianOptions_ = false;
     std::function<TextSession*()> session_;
     // The attributes the controls show; edits land here, then `apply` writes
     // them to the layer.
     CharacterSetting shown_{};
     QFontComboBox* family_ = nullptr;
+    QComboBox* style_ = nullptr;
+    QComboBox* language_ = nullptr;
     ComboField size_;
     ComboField leading_;
     ComboField kerning_;
@@ -107,6 +118,7 @@ private:
     NumericField* verticalScale_ = nullptr;
     NumericField* horizontalScale_ = nullptr;
     NumericField* baselineShift_ = nullptr;
+    NumericField* tsume_ = nullptr;
     QLabel* antiAliasIcon_ = nullptr;
     QComboBox* antiAlias_ = nullptr;
     QToolButton* colorButton_ = nullptr;

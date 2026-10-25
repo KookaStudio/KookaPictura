@@ -62,6 +62,11 @@ pub(in crate::cxxqt_object) struct DocumentSession {
     /// The password a protected PDF was opened with, kept in memory only so
     /// Revert can reopen it.
     pub(in crate::cxxqt_object) pdf_password: Option<String>,
+    /// The Vanishing Point planes this document's last session kept, so the
+    /// dialog reopens on them: read from the file when the document is
+    /// installed and written into it by a save. Kept out of the document so
+    /// undo leaves them alone, as no history state records them.
+    pub(in crate::cxxqt_object) vanishing_planes: Option<pictura_filters::VpPlanes>,
 }
 
 impl DocumentSession {
@@ -366,6 +371,11 @@ impl PictureViewRust {
         self.cancel_active_sessions();
         self.clear_document_scoped_state();
         self.session.install(doc, history, pdf_password);
+        self.session.vanishing_planes = self
+            .session
+            .doc
+            .as_ref()
+            .and_then(crate::cxxqt_object::filter_tools::saved_planes);
         self.layer_target = target;
         self.reset_pyramid();
     }
@@ -385,6 +395,7 @@ impl PictureViewRust {
         self.active_path = super::super::paths::ActivePath::Work;
         self.session.pdf_options = None;
         self.session.pdf_password = None;
+        self.session.vanishing_planes = None;
         self.isolation = None;
         self.solo_snapshot = None;
         self.expanded_groups.clear();

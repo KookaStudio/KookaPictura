@@ -18,11 +18,12 @@ void PicturaMainWindow::wirePanelColumn(PanelColumn* column)
 
 void PicturaMainWindow::reapplyColumnStretch()
 {
-    if (!centerSplitter_ || !tabs_) {
+    if (!centerSplitter_ || !documentArea_) {
         return;
     }
     for (int i = 0; i < centerSplitter_->count(); ++i) {
-        centerSplitter_->setStretchFactor(i, centerSplitter_->widget(i) == tabs_ ? 1 : 0);
+        centerSplitter_->setStretchFactor(i,
+                                          centerSplitter_->widget(i) == documentArea_ ? 1 : 0);
     }
     // The visible width drags come from the widget columns' own 4 px grips on
     // their workspace-facing edge; the splitter's handles are kept inert so a
@@ -52,7 +53,7 @@ void PicturaMainWindow::onCenterSplitterMoved(int, int)
     if (!adjustingColumns_ && resizeAnchorColumn_ && resizeAnchorWidth_ > 0
         && centerSplitter_) {
         const int ai = centerSplitter_->indexOf(resizeAnchorColumn_);
-        const int ti = centerSplitter_->indexOf(tabs_);
+        const int ti = centerSplitter_->indexOf(documentArea_);
         if (ai >= 0 && ti >= 0 && ai != ti) {
             QList<int> sizes = centerSplitter_->sizes();
             if (ai < sizes.size() && ti < sizes.size()) {
@@ -75,7 +76,7 @@ void PicturaMainWindow::beginWidgetColumnResize(PanelColumn* column, int globalX
     resizeHandleIndex_ = -1;
     resizeAnchorColumn_ = nullptr;
     resizeAnchorWidth_ = -1;
-    if (!centerSplitter_ || !tabs_ || !column) {
+    if (!centerSplitter_ || !documentArea_ || !column) {
         return;
     }
     const int k = centerSplitter_->indexOf(column);
@@ -100,8 +101,8 @@ void PicturaMainWindow::beginWidgetColumnResize(PanelColumn* column, int globalX
     auto* left = qobject_cast<PanelColumn*>(centerSplitter_->widget(handleIndex));
     auto* right = qobject_cast<PanelColumn*>(centerSplitter_->widget(handleIndex + 1));
     if (left && right) {
-        const int tabsIndex = centerSplitter_->indexOf(tabs_);
-        PanelColumn* anchor = handleIndex < tabsIndex ? right : left;
+        const int areaIndex = centerSplitter_->indexOf(documentArea_);
+        PanelColumn* anchor = handleIndex < areaIndex ? right : left;
         resizeAnchorColumn_ = anchor;
         resizeAnchorWidth_ = anchor->width();
     }
@@ -245,12 +246,12 @@ int PicturaMainWindow::columnCount() const
 
 PanelSide PicturaMainWindow::sideOf(const PanelColumn* column) const
 {
-    if (!column || !centerSplitter_ || !tabs_) {
+    if (!column || !centerSplitter_ || !documentArea_) {
         return PanelSide::Right;
     }
-    const int tabsIndex = centerSplitter_->indexOf(tabs_);
+    const int areaIndex = centerSplitter_->indexOf(documentArea_);
     const int index = centerSplitter_->indexOf(const_cast<PanelColumn*>(column));
-    return index >= 0 && index < tabsIndex ? PanelSide::Left : PanelSide::Right;
+    return index >= 0 && index < areaIndex ? PanelSide::Left : PanelSide::Right;
 }
 
 PanelColumn* PicturaMainWindow::createPanelColumn(PanelSide side, PanelColumn* anchor)

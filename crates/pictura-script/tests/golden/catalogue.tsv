@@ -294,18 +294,18 @@ layer.lock.layers.transparency	Layer/Lock Layers/Transparency	Transparency		1	0
 layer.lock.layers.image	Layer/Lock Layers/Image	Image		1	0
 layer.lock.layers.position	Layer/Lock Layers/Position	Position		1	0
 layer.lock.allInGroup	Layer/Lock All Layers In Group…	Lock All Layers In Group…		1	0
-layer.merge.layers	Layer/Merge Layers	Merge Layers	Ctrl+E	1	0
-layer.merge.visible	Layer/Merge Visible	Merge Visible	Shift+Ctrl+E	1	0
-layer.stamp.visible	Layer/Stamp Visible	Stamp Visible	Ctrl+Alt+Shift+E	1	0
-layer.stamp.selected	Layer/Stamp Selected	Stamp Selected	Ctrl+Alt+E	1	0
-layer.flatten.image	Layer/Flatten Image	Flatten Image		1	0
-layer.merge.clippingMask	Layer/Merge Clipping Mask	Merge Clipping Mask		1	0
+layer.merge.layers	Layer/Merge/Merge Layers	Merge Layers	Ctrl+E	1	0
+layer.merge.visible	Layer/Merge/Merge Visible	Merge Visible	Shift+Ctrl+E	1	0
+layer.stamp.visible	Layer/Merge/Stamp Visible	Stamp Visible	Ctrl+Alt+Shift+E	1	0
+layer.stamp.selected	Layer/Merge/Stamp Selected	Stamp Selected	Ctrl+Alt+E	1	0
+layer.flatten.image	Layer/Merge/Flatten Image	Flatten Image		1	0
+layer.merge.clippingMask	Layer/Merge/Merge Clipping Mask	Merge Clipping Mask		1	0
 layer.matting.defringe	Layer/Matting/Defringe…	Defringe…		1	0
 layer.matting.removeBlack	Layer/Matting/Remove Black Matte	Remove Black Matte		1	0
 layer.matting.removeWhite	Layer/Matting/Remove White Matte	Remove White Matte		1	0
 type.panels.character	Type/Panels/Character	Character		1	1
 type.panels.paragraph	Type/Panels/Paragraph	Paragraph		1	1
-type.panels.character.styles	Type/Panels/Character Styles	Character Styles		0	0
+type.panels.characterStyles	Type/Panels/Character Styles	Character Styles		1	1
 type.panels.paragraphStyles	Type/Panels/Paragraph Styles	Paragraph Styles		1	1
 type.anti.alias.none	Type/Anti-Alias/None	None		0	0
 type.anti.alias.sharp	Type/Anti-Alias/Sharp	Sharp		0	0
@@ -364,7 +364,7 @@ filter.picturaRaw	Filter/Pictura Raw…	Pictura Raw…		1	0
 filter.lens.correction	Filter/Lens Correction…	Lens Correction…		0	0
 filter.liquify	Filter/Liquify…	Liquify…	Shift+Ctrl+X	1	0
 filter.oil.paint	Filter/Oil Paint…	Oil Paint…		1	0
-filter.vanishing.point	Filter/Vanishing Point…	Vanishing Point…	Alt+Ctrl+V	0	0
+filter.vanishing.point	Filter/Vanishing Point…	Vanishing Point…	Alt+Ctrl+V	1	0
 filter.artistic.colored.pencil	Filter/Artistic/Colored Pencil	Colored Pencil		1	0
 filter.artistic.cutout	Filter/Artistic/Cutout	Cutout		1	0
 filter.artistic.dry.brush	Filter/Artistic/Dry Brush	Dry Brush		1	0
@@ -528,15 +528,15 @@ view.extras	View/Extras	Extras	Ctrl+H	0	0
 view.align	View/Align	Align		0	0
 view.align.to	View/Align To	Align To		0	0
 view.toolHints	View/Tool Hints	Tool Hints		1	1
-window.arrange.cascade	Window/Arrange/Cascade	Cascade		0	0
-window.arrange.tile	Window/Arrange/Tile	Tile		0	0
-window.arrange.consolidate.all.to.tabs	Window/Arrange/Consolidate All to Tabs	Consolidate All to Tabs		0	0
-window.arrange.float.in.window	Window/Arrange/Float in Window	Float in Window		0	0
-window.arrange.float.all.in.windows	Window/Arrange/Float All in Windows	Float All in Windows		0	0
-window.arrange.match.zoom	Window/Arrange/Match Zoom	Match Zoom		0	0
-window.arrange.match.location	Window/Arrange/Match Location	Match Location		0	0
-window.arrange.match.all	Window/Arrange/Match All	Match All		0	0
-window.arrange.new.window.for.file	Window/Arrange/New Window For [file]	New Window For [file]		0	0
+window.arrange.cascade	Window/Arrange/Cascade	Cascade		1	0
+window.arrange.tile	Window/Arrange/Tile	Tile		1	0
+window.arrange.consolidate.all.to.tabs	Window/Arrange/Consolidate All to Tabs	Consolidate All to Tabs		1	0
+window.arrange.float.in.window	Window/Arrange/Float in Window	Float in Window		1	0
+window.arrange.float.all.in.windows	Window/Arrange/Float All in Windows	Float All in Windows		1	0
+window.arrange.match.zoom	Window/Arrange/Match Zoom	Match Zoom		1	0
+window.arrange.match.location	Window/Arrange/Match Location	Match Location		1	0
+window.arrange.match.all	Window/Arrange/Match All	Match All		1	0
+window.arrange.new.window.for.file	Window/Arrange/New Window For [file]	New Window For [file]		1	0
 window.workspace.essentials	Window/Workspace/Essentials	Essentials		1	1
 window.workspace.painting	Window/Workspace/Painting	Painting		1	1
 window.workspace.photography	Window/Workspace/Photography	Photography		1	1
@@ -553,7 +553,7 @@ window.panels.brushes	Window/Panels/Brush	Brush	F5	1	1
 window.panels.brush.presets	Window/Panels/Brush Presets	Brush Presets		0	0
 window.panels.channels	Window/Panels/Channels	Channels		1	1
 window.panels.character	Window/Panels/Character	Character		1	1
-window.panels.character.styles	Window/Panels/Character Styles	Character Styles		0	0
+window.panels.characterStyles	Window/Panels/Character Styles	Character Styles		1	1
 window.panels.cloneSource	Window/Panels/Clone Source	Clone Source		1	1
 window.panels.color	Window/Panels/Color	Color		1	1
 window.panels.glyphs	Window/Panels/Glyphs	Glyphs		1	1
@@ -577,6 +577,10 @@ window.panels.timeline	Window/Panels/Timeline	Timeline		0	0
 window.panels.tool.presets	Window/Panels/Tool Presets	Tool Presets		0	0
 window.panels.tools	Window/Panels/Tools	Tools		1	1
 view.options	Window/Options	Options		1	1
+window.uiSize	Window/UI Size	UI Size: 100%		1	0
+window.uiEnlarge	Window/Enlarge UI Size	Enlarge UI Size	Ctrl+Alt++	1	0
+window.uiDecrease	Window/Decrease UI Size	Decrease UI Size	Ctrl+Alt+-	1	0
+window.uiReset	Window/Reset UI Size	Reset UI Size	Ctrl+Alt+0	1	0
 help.search	Help/Search…	Search…	Shift+Space	1	0
 help.kooka.pictura.help	Help/Kooka Pictura Help	Kooka Pictura Help	F1	0	0
 help.online.support	Help/Online Support	Online Support		0	0

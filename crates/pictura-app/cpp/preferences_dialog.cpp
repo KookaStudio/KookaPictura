@@ -6,6 +6,7 @@
 #include "session.h"
 #include "theme.h"
 
+#include <QtCore/QSignalBlocker>
 #include <QtGui/QPixmap>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QColorDialog>
@@ -111,7 +112,7 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
 
     realPages_ = {kGeneral, kInterface, kFileHandling, kPerformance, kUnits, kGuides, kType};
 
-    // General: the app's real theme brightness is the only General setting.
+    // General: the app's theme brightness and family, and Zoom Resizes Windows.
     auto* generalPage = new QWidget(this);
     generalPage->setObjectName(QStringLiteral("preferencesGeneralPage"));
     auto* generalForm = new QFormLayout(generalPage);
@@ -129,6 +130,8 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     themeFamily_->addItem(tr("Dark"), 0);
     themeFamily_->addItem(tr("Light"), 1);
     generalForm->addRow(tr("Theme"), themeFamily_);
+    makeCheckbox(QStringLiteral("zoomResizesWindows"), tr("Zoom Resizes Windows"),
+                 generalPage);
     stack_->addWidget(generalPage);
 
     auto* interfacePage = new QWidget(this);
@@ -140,6 +143,24 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
                  interfacePage);
     makeCheckbox(QStringLiteral("autoShowHidden"), tr("Auto-Show Hidden Panels"),
                  interfacePage);
+    makeCheckbox(QStringLiteral("openDocumentsAsTabs"), tr("Open Documents As Tabs"),
+                 interfacePage)
+        ->setChecked(true);
+    makeCheckbox(QStringLiteral("enableFloatingDocumentDocking"),
+                 tr("Enable Floating Document Window Docking"), interfacePage)
+        ->setChecked(true);
+    auto* uiScaleRow = new QWidget(interfacePage);
+    auto* uiScaleLayout = new QHBoxLayout(uiScaleRow);
+    uiScaleLayout->addWidget(new QLabel(tr("UI Size"), uiScaleRow));
+    uiScale_ = new QComboBox(uiScaleRow);
+    uiScale_->setObjectName(QStringLiteral("preferencesUiScale"));
+    for (int percent : Theme::uiScaleChoices()) {
+        uiScale_->addItem(tr("%1%").arg(percent), percent);
+    }
+    uiScale_->setCurrentIndex(uiScale_->findData(Theme::kDefaultUiScalePercent));
+    uiScaleLayout->addWidget(uiScale_);
+    uiScaleLayout->addStretch(1);
+    interfaceLayout->addWidget(uiScaleRow);
     interfaceLayout->addStretch(1);
     stack_->addWidget(interfacePage);
 
@@ -179,10 +200,17 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     stack_->addWidget(buildUnitsPage());
     stack_->addWidget(buildGuidesPage());
 
-    // Type: only the placeholder fill, a Photoshop CC option (not CS6).
+    // Type: the CS6 type options and glyph protection, plus the Photoshop CC
+    // placeholder fill.
     auto* typePage = new QWidget(this);
     typePage->setObjectName(QStringLiteral("preferencesTypePage"));
     auto* typeLayout = new QVBoxLayout(typePage);
+    makeCheckbox(QStringLiteral("showAsianTextOptions"),
+                 tr("Show Asian Text Options"), typePage);
+    makeCheckbox(QStringLiteral("middleEastern"), tr("Middle Eastern"), typePage);
+    makeCheckbox(QStringLiteral("missingGlyphProtection"),
+                 tr("Enable Missing Glyph Protection"), typePage)
+        ->setChecked(true);
     makeCheckbox(QStringLiteral("fillPlaceholderText"),
                  tr("Fill New Type Layers With Placeholder Text"), typePage)
         ->setChecked(true);
@@ -213,6 +241,8 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
             [this](double level) { emit brightnessLevelChanged(qRound(level)); });
     connect(themeFamily_, &QComboBox::currentIndexChanged, this,
             [this](int index) { emit themeFamilyChanged(themeFamily_->itemData(index).toInt()); });
+    connect(uiScale_, &QComboBox::currentIndexChanged, this,
+            [this]() { emit uiScalePercentChanged(uiScale_->currentData().toInt()); });
     pageList_->setCurrentRow(0);
 }
 
@@ -226,6 +256,12 @@ QCheckBox* PreferencesDialog::makeCheckbox(const QString& key, const QString& la
     connect(box, &QCheckBox::toggled, this, [this, key](bool on) {
         if (key == QStringLiteral("useShiftKeyForToolSwitch")) {
             emit useShiftKeyForToolSwitchChanged(on);
+        } else if (key == QStringLiteral("openDocumentsAsTabs")) {
+            emit openDocumentsAsTabsChanged(on);
+        } else if (key == QStringLiteral("enableFloatingDocumentDocking")) {
+            emit floatingDocumentDockingChanged(on);
+        } else if (key == QStringLiteral("zoomResizesWindows")) {
+            emit zoomResizesWindowsChanged(on);
         } else if (key == QStringLiteral("autoCollapseIconic")) {
             emit autoCollapseIconicChanged(on);
         } else if (key == QStringLiteral("autoShowHidden")) {
@@ -234,6 +270,12 @@ QCheckBox* PreferencesDialog::makeCheckbox(const QString& key, const QString& la
             emit gpuComputeChanged(on);
         } else if (key == QStringLiteral("fillPlaceholderText")) {
             emit typePlaceholderTextChanged(on);
+        } else if (key == QStringLiteral("showAsianTextOptions")) {
+            emit typeShowAsianOptionsChanged(on);
+        } else if (key == QStringLiteral("middleEastern")) {
+            emit typeMiddleEasternChanged(on);
+        } else if (key == QStringLiteral("missingGlyphProtection")) {
+            emit typeMissingGlyphProtectionChanged(on);
         } else if (key == QStringLiteral("autoSaveRecovery")) {
             autoSaveMinutes_->setEnabled(on);
             emit autoSaveRecoveryChanged(on, autoSaveMinutes_->currentData().toInt());
@@ -250,6 +292,27 @@ QCheckBox* PreferencesDialog::checkbox(const QString& key) const
 void PreferencesDialog::setShiftKeyForToolSwitch(bool on)
 {
     if (QCheckBox* box = checkbox(QStringLiteral("useShiftKeyForToolSwitch"))) {
+        box->setChecked(on);
+    }
+}
+
+void PreferencesDialog::setOpenDocumentsAsTabs(bool on)
+{
+    if (QCheckBox* box = checkbox(QStringLiteral("openDocumentsAsTabs"))) {
+        box->setChecked(on);
+    }
+}
+
+void PreferencesDialog::setFloatingDocumentDocking(bool on)
+{
+    if (QCheckBox* box = checkbox(QStringLiteral("enableFloatingDocumentDocking"))) {
+        box->setChecked(on);
+    }
+}
+
+void PreferencesDialog::setZoomResizesWindows(bool on)
+{
+    if (QCheckBox* box = checkbox(QStringLiteral("zoomResizesWindows"))) {
         box->setChecked(on);
     }
 }
@@ -283,9 +346,50 @@ void PreferencesDialog::setThemeFamily(int family)
     }
 }
 
+void PreferencesDialog::setUiScalePercent(int percent)
+{
+    if (!uiScale_) {
+        return;
+    }
+    const int index = uiScale_->findData(percent);
+    if (index >= 0) {
+        const QSignalBlocker blocker(uiScale_);
+        uiScale_->setCurrentIndex(index);
+    }
+}
+
+int PreferencesDialog::uiScalePercentForTest() const
+{
+    return uiScale_ ? uiScale_->currentData().toInt() : 0;
+}
+
 void PreferencesDialog::setTypePlaceholderText(bool on)
 {
     if (QCheckBox* box = checkbox(QStringLiteral("fillPlaceholderText"))) {
+        box->setChecked(on);
+    }
+}
+
+void PreferencesDialog::setTypeShowAsianOptions(bool on)
+{
+    if (QCheckBox* box = checkbox(QStringLiteral("showAsianTextOptions"))) {
+        const QSignalBlocker block(box);
+        box->setChecked(on);
+    }
+}
+
+void PreferencesDialog::setTypeMiddleEastern(bool on)
+{
+    if (QCheckBox* box = checkbox(QStringLiteral("middleEastern"))) {
+        const QSignalBlocker block(box);
+        box->setChecked(on);
+    }
+}
+
+void PreferencesDialog::setTypeMissingGlyphProtection(bool on)
+{
+    if (QCheckBox* box = checkbox(QStringLiteral("missingGlyphProtection"))) {
+        const QSignalBlocker block(box);
         box->setChecked(on);
     }
 }

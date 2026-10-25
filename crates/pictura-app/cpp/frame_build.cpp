@@ -117,11 +117,12 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
     channelsPanel_ = new ChannelsPanel(this);
     channelsPanel_->setObjectName(QStringLiteral("channelsPanel"));
     // Channel visibility follows the active document; the panel resets it on a
-    // document switch, so applying it to every canvas keeps them in step.
+    // document switch, so applying it to every window's canvas keeps them in
+    // step.
     connect(channelsPanel_, &ChannelsPanel::channelMaskChanged, this, [this](int mask) {
-        for (int i = 0; i < documentCount(); ++i) {
-            if (ImageView* canvas = canvasAt(i)) {
-                canvas->setChannelMask(mask);
+        for (const DocWindow* window : windows_) {
+            if (window->canvas) {
+                window->canvas->setChannelMask(mask);
             }
         }
     });
@@ -218,14 +219,18 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
 
     characterPanel_ = new CharacterPanel(this);
     characterPanel_->setObjectName(QStringLiteral("characterPanel"));
+    characterPanel_->setShowAsianOptions(state.typeShowAsianOptions);
     paragraphPanel_ = new ParagraphPanel(this);
     paragraphPanel_->setObjectName(QStringLiteral("paragraphPanel"));
+    paragraphPanel_->setMiddleEastern(state.typeMiddleEastern);
 
     glyphsPanel_ = new GlyphsPanel(this);
     glyphsPanel_->setObjectName(QStringLiteral("glyphsPanel"));
 
     paragraphStylesPanel_ = new ParagraphStylesPanel(this);
     paragraphStylesPanel_->setObjectName(QStringLiteral("paragraphStylesPanel"));
+    characterStylesPanel_ = new CharacterStylesPanel(this);
+    characterStylesPanel_->setObjectName(QStringLiteral("characterStylesPanel"));
 
     // Content widgets, not docks: the PanelColumn hosts them. Registering the
     // objectNames keeps the Window menu and the duplicate-name guard working.
@@ -251,6 +256,7 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
     registerPanel(paragraphPanel_, Qt::RightDockWidgetArea);
     registerPanel(glyphsPanel_, Qt::RightDockWidgetArea);
     registerPanel(paragraphStylesPanel_, Qt::RightDockWidgetArea);
+    registerPanel(characterStylesPanel_, Qt::RightDockWidgetArea);
 
     // CS6 Essentials groups and order. The tab text is the panel title and the
     // tab icon reuses the panel's `window.panels.<name>` asset.
@@ -327,12 +333,18 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
     auto* typeGroup = new PanelGroup(this);
     addPanel(typeGroup, characterPanel_, tr("Character"),
              QString::fromLatin1(command_ids::WindowPanelsCharacter));
+    typeGroup->setPanelMenuHook(QStringLiteral("characterPanel"),
+                                [this](QMenu* menu) { characterPanel_->updatePanelMenu(menu); });
     addPanel(typeGroup, paragraphPanel_, tr("Paragraph"),
              QString::fromLatin1(command_ids::WindowPanelsParagraph));
+    typeGroup->setPanelMenuHook(QStringLiteral("paragraphPanel"),
+                                [this](QMenu* menu) { paragraphPanel_->updatePanelMenu(menu); });
     addPanel(typeGroup, glyphsPanel_, tr("Glyphs"),
              QString::fromLatin1(command_ids::WindowPanelsGlyphs));
     addPanel(typeGroup, paragraphStylesPanel_, tr("Paragraph Styles"),
              QString::fromLatin1(command_ids::WindowPanelsParagraph));
+    addPanel(typeGroup, characterStylesPanel_, tr("Character Styles"),
+             QString::fromLatin1(command_ids::WindowPanelsCharacterStyles));
     panelColumn_->addGroup(typeGroup);
 
     // Default visibility matches the pre-M41 layout: Color/Swatches/Styles,
@@ -350,6 +362,7 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
     panelColumn_->showPanel(QStringLiteral("characterPanel"), false);
     panelColumn_->showPanel(QStringLiteral("paragraphPanel"), false);
     panelColumn_->showPanel(QStringLiteral("paragraphStylesPanel"), false);
+    panelColumn_->showPanel(QStringLiteral("characterStylesPanel"), false);
 
     // The Layers row menu's Edit / Replace / Export Contents actions run through
     // the frame, so this is wired here where the panel exists (registerHandlers
@@ -396,6 +409,9 @@ void PicturaMainWindow::buildPanels(const SessionState& state)
         }
         if (paragraphStylesPanel_) {
             paragraphStylesPanel_->refresh();
+        }
+        if (characterStylesPanel_) {
+            characterStylesPanel_->refresh();
         }
     });
 }
@@ -721,6 +737,7 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
             toolbox_->zoomMenu()->popup(pos);
         }
     });
+    connect(tools_, &ToolController::toolZoomed, this, &PicturaMainWindow::onToolZoomed);
     connect(tools_, &ToolController::brushPickerRequested, this, [this](const QPoint& pos) {
         if (optionsBar_) {
             optionsBar_->brushPicker()->popUpAt(pos);
@@ -731,14 +748,8 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
             layersPanel_->enterIsolation();
         }
     });
-    tools_->setCanvasActivationHandler([this](ImageView* canvas) {
-        for (int i = 0; i < docs_.size(); ++i) {
-            if (docs_.at(i).canvas == canvas) {
-                setActiveDocumentIndex(i);
-                break;
-            }
-        }
-    });
+    tools_->setCanvasActivationHandler(
+        [this](ImageView* canvas) { activateDocWindow(windowOfCanvas(canvas)); });
 
     if (optionsBar_) {
         optionsBar_->showTool(tools_->activeTool());
@@ -763,7 +774,7 @@ void PicturaMainWindow::buildStatusBar()
     QStatusBar* bar = statusBar();
     bar->setSizeGripEnabled(false);
     bar->setContentsMargins(6, 0, 0, 0);
-    bar->setFixedHeight(28);
+    bar->setFixedHeight(Theme::scaled(28));
 
     // Footer text runs 2px under the app default, matching the tab chrome. A
     // point-sized default font (pixelSize() < 0) falls back to 12px at 96 DPI.
@@ -820,7 +831,7 @@ void PicturaMainWindow::buildStatusBar()
     hintBar_ = new ToolHintBar(bar);
     // A ~28px status strip: cap the readouts and hint so the bar trims 4px
     // without clipping. (The theme already dropped the bar's top border.)
-    constexpr int kStatusItemHeight = 22;
+    const int kStatusItemHeight = Theme::scaled(22);
     zoomField_->setFixedHeight(kStatusItemHeight);
     sizeLabel_->setFixedHeight(kStatusItemHeight);
     statusOptionsButton_->setFixedHeight(kStatusItemHeight);
@@ -836,7 +847,7 @@ void PicturaMainWindow::buildStatusBar()
         separator->setFrameShape(QFrame::VLine);
         separator->setFrameShadow(QFrame::Sunken);
         separator->setFixedWidth(1);
-        separator->setFixedHeight(16);
+        separator->setFixedHeight(Theme::scaled(16));
         separator->setAttribute(Qt::WA_TransparentForMouseEvents);
         return separator;
     };
@@ -913,8 +924,9 @@ void PicturaMainWindow::updateToolHint()
 
 void PicturaMainWindow::installWorkspaceOpenGesture()
 {
-    // The blank pane is the tab widget's internal stacked widget, so both are
-    // filtered.
+    // The blank pane is the tab widget's internal stacked widget, so it, the
+    // tab widget, and the document area holding them are filtered.
+    documentArea_->installEventFilter(this);
     tabs_->installEventFilter(this);
     if (auto* workspace = tabs_->findChild<QStackedWidget*>()) {
         workspace->installEventFilter(this);
@@ -923,6 +935,20 @@ void PicturaMainWindow::installWorkspaceOpenGesture()
 
 bool PicturaMainWindow::eventFilter(QObject* watched, QEvent* event)
 {
+    if (tabs_ && watched == tabs_->tabBar() && tearOutFilter(event)) {
+        return true;
+    }
+    if (tabs_ && (watched == tabs_->tabBar() || watched == tabs_)
+        && windowDropFilter(watched, event)) {
+        return true;
+    }
+    // A press on a canvas activates its window, before the tool sees it.
+    if (event->type() == QEvent::MouseButtonPress) {
+        if (DocWindow* window = windowOfCanvas(qobject_cast<ImageView*>(watched));
+            window && window != activeWindow_) {
+            activateDocWindow(window);
+        }
+    }
     // The empty workspace (no documents open) accepts a left double-click as
     // "Open": the tab widget and its blank stacked page are the only widgets
     // there.
@@ -937,18 +963,19 @@ bool PicturaMainWindow::eventFilter(QObject* watched, QEvent* event)
     if (tabs_ && watched == tabs_->tabBar() && event->type() == QEvent::MouseButtonRelease) {
         auto* mouse = static_cast<QMouseEvent*>(event);
         if (mouse->button() == Qt::MiddleButton) {
-            const int index = tabs_->tabBar()->tabAt(mouse->position().toPoint());
-            if (index >= 0) {
-                const bool loading = isLoadingDocument(index);
-                const QPointer<PictureView> guard(viewAt(index));
-                QTimer::singleShot(0, this, [this, guard, loading] {
+            DocWindow* window =
+                windowAtTab(tabs_->tabBar()->tabAt(mouse->position().toPoint()));
+            if (window) {
+                const bool loading = window->doc->loading;
+                const QPointer<PictureView> guard(window->doc->view);
+                QTimer::singleShot(0, this, [this, window, guard, loading] {
                     if (!guard) {
                         return;
                     }
                     if (loading) {
                         cancelOpenForView(guard.data());
-                    } else {
-                        closeDocument(indexOfView(guard.data()), true);
+                    } else if (windows_.contains(window) && window->doc->view == guard) {
+                        closeWindow(window, true);
                     }
                 });
                 return true;

@@ -72,4 +72,18 @@ void PicturaMainWindow::updateThemeCornerIcon()
     }
 }
 
+void PicturaMainWindow::setBrightnessLevel(int level)
+{
+    applyBrightness(level);
+}
+
+void PicturaMainWindow::applyBrightness(int level)
+{
+    brightnessLevel_ = Theme::clampLevel(level);
+    const Theme::ThemeFamily family = themeFamily_ == 1 ? Theme::ThemeFamily::Light
+                                                        : Theme::ThemeFamily::Dark;
+    Theme::apply(family, brightnessLevel_);
+    applyWorkspaceCanvasColor();
+}
+
 } // namespace pictura
