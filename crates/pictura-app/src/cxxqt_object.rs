@@ -107,7 +107,6 @@ pub mod qobject {
         vector_mask_linked: bool,
         vector_mask_disabled: bool,
         has_adjustment: bool,
-        /// Adjustment kind key for the row icon, empty without an adjustment block.
         adjustment_kind: QString,
         expandable: bool,
         child_count: i32,
