@@ -154,6 +154,7 @@ fn main() {
                 "src/cxxqt_object/channels.rs",
                 "src/cxxqt_object/clipping.rs",
                 "src/cxxqt_object/command_catalogue.rs",
+                "src/cxxqt_object/color_models.rs",
                 "src/cxxqt_object/color_range.rs",
                 "src/cxxqt_object/clipboard.rs",
                 "src/cxxqt_object/crop_group.rs",

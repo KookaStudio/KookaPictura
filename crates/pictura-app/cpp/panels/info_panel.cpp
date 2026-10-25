@@ -1,6 +1,7 @@
 #include "info_panel.h"
 
 #include "api/selection_api.h"
+#include "color_models.h"
 #include "icons.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
@@ -31,10 +32,12 @@ namespace pictura {
 
 namespace {
 
-// CS6 shows CMYK as 0-100%; QColor's CMYK components are 0-255.
-int cmykPercent(int component)
+// The CMYK readout's four whole percentages, through the working profile.
+QVector<int> cmykPercents(const QColor& color)
 {
-    return int(std::lround(component * 100.0 / 255.0));
+    const CmykPercent inks = rgbToCmyk(color);
+    return {int(std::lround(inks.c)), int(std::lround(inks.m)), int(std::lround(inks.y)),
+            int(std::lround(inks.k))};
 }
 
 // Photoshop's "Doc:" memory line: kilobytes below a megabyte, else megabytes.
@@ -55,36 +58,6 @@ QString capitaliseFirst(QString text)
         }
     }
     return text;
-}
-
-struct Lab {
-    double l;
-    double a;
-    double b;
-};
-
-// sRGB (D65) to CIE L*a*b*; L 0-100, a/b roughly -128..127.
-Lab srgbToLab(const QColor& color)
-{
-    const auto linear = [](double v) {
-        v /= 255.0;
-        return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4);
-    };
-    const double r = linear(color.red());
-    const double g = linear(color.green());
-    const double b = linear(color.blue());
-    const double x = (0.4124564 * r + 0.3575761 * g + 0.1804375 * b) / 0.95047;
-    const double y = 0.2126729 * r + 0.7151522 * g + 0.0721750 * b;
-    const double z = (0.0193339 * r + 0.1191920 * g + 0.9503041 * b) / 1.08883;
-    const auto f = [](double t) {
-        const double e = 216.0 / 24389.0;
-        const double k = 24389.0 / 27.0;
-        return t > e ? std::cbrt(t) : (k * t + 16.0) / 116.0;
-    };
-    const double fx = f(x);
-    const double fy = f(y);
-    const double fz = f(z);
-    return Lab{116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz)};
 }
 
 } // namespace
@@ -435,23 +408,23 @@ void InfoPanel::refreshColorBlock(Readout* readout, const QColor& color)
         break;
     }
     case ColorReadout::Cmyk: {
-        const QColor cmyk = color.toCmyk();
-        setValues(readout, {QString::number(cmykPercent(cmyk.cyan())),
-                            QString::number(cmykPercent(cmyk.magenta())),
-                            QString::number(cmykPercent(cmyk.yellow())),
-                            QString::number(cmykPercent(cmyk.black()))});
+        const QVector<int> cmyk = cmykPercents(color);
+        setValues(readout, {QString::number(cmyk[0]), QString::number(cmyk[1]),
+                            QString::number(cmyk[2]), QString::number(cmyk[3])});
         break;
     }
     case ColorReadout::Lab: {
-        const Lab lab = srgbToLab(color);
-        setValues(readout, {QString::number(qRound(lab.l)), QString::number(qRound(lab.a)),
-                            QString::number(qRound(lab.b))});
+        double l = 0.0;
+        double a = 0.0;
+        double b = 0.0;
+        rgbToLab(color, &l, &a, &b);
+        setValues(readout, {QString::number(qRound(l)), QString::number(qRound(a)),
+                            QString::number(qRound(b))});
         break;
     }
     case ColorReadout::TotalInk: {
-        const QColor cmyk = color.toCmyk();
-        const int total = cmykPercent(cmyk.cyan()) + cmykPercent(cmyk.magenta())
-                          + cmykPercent(cmyk.yellow()) + cmykPercent(cmyk.black());
+        const QVector<int> cmyk = cmykPercents(color);
+        const int total = cmyk[0] + cmyk[1] + cmyk[2] + cmyk[3];
         setValues(readout, {QString::number(total)});
         break;
     }

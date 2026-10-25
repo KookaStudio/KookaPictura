@@ -8,6 +8,7 @@ mod blend_modes;
 mod channels;
 mod clipboard;
 mod clipping;
+mod color_models;
 mod color_range;
 mod command_catalogue;
 mod crop_group;

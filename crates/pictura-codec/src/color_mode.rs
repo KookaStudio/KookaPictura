@@ -2,6 +2,7 @@
 //! 8-bit RGB. Bitmap and Indexed are exact; CMYK and Lab are approximations of
 //! the reference's color-managed transforms.
 
+use pictura_color::model;
 use pictura_core::{
     BitDepth, Channel, ColorMode, Document, Layer, LayerStack, Samples, SourceChannels,
 };
@@ -102,121 +103,52 @@ pub(crate) fn rgb_to_cmyk(rgb: &[u8]) -> Vec<u8> {
     out
 }
 
-/// D50 XYZ → linear sRGB (Bradford D50→D65), shared by [`lab_to_rgb`] and
-/// [`xyz_d50_to_srgb_u8`].
-const XYZ_D50_TO_LINEAR_SRGB: [[f64; 3]; 3] = [
-    [3.1338561, -1.6168667, -0.4906146],
-    [-0.9787684, 1.9161415, 0.0334540],
-    [0.0719453, -0.2289914, 1.4052427],
-];
-
 /// Profile-free CIE XYZ (D50) → 8-bit sRGB with the same matrix class as
 /// [`lab_to_rgb`]; out-of-gamut components clamp.
 pub fn xyz_d50_to_srgb_u8(xyz: [f64; 3]) -> [u8; 3] {
-    let mut out = [0u8; 3];
-    for (c, row) in XYZ_D50_TO_LINEAR_SRGB.iter().enumerate() {
-        out[c] = srgb_encode(row[0] * xyz[0] + row[1] * xyz[1] + row[2] * xyz[2]);
-    }
-    out
+    model::xyz_d50_to_srgb(xyz)
 }
 
 /// ponytail: approximation of a color-managed Lab->sRGB transform. This is the
-/// standard CIELAB(D50) -> sRGB(D65) conversion (D50 white through the Bradford
-/// D50->D65 matrix) and matches lcms2's exact, unoptimized transform within 1
-/// LSB for in-gamut colors (verified over a sweep). A renderer that precomputes
-/// an optimized color LUT (psd-tools / Pillow `.convert("RGB")`) can diverge by
-/// up to ~20 LSB on some in-gamut colors, so that optimized path is not the
-/// reference; saturated out-of-gamut colors also clip instead of gamut-mapping.
+/// standard CIELAB(D50) -> sRGB(D65) conversion (`pictura_color::model`) and
+/// matches lcms2's exact, unoptimized transform within 1 LSB for in-gamut
+/// colors (verified over a sweep). A renderer that precomputes an optimized
+/// color LUT (psd-tools / Pillow `.convert("RGB")`) can diverge by up to ~20 LSB
+/// on some in-gamut colors, so that optimized path is not the reference;
+/// saturated out-of-gamut colors also clip instead of gamut-mapping.
 pub fn lab_to_rgb(lab: &[u8]) -> Vec<u8> {
-    const XN: f64 = 0.96422;
-    const ZN: f64 = 0.82521;
     let plane = lab.len() / 3;
     let (l, rest) = lab.split_at(plane);
     let (a, b) = rest.split_at(plane);
     let mut out = vec![0u8; plane * 3];
     for i in 0..plane {
-        let fy = (l[i] as f64 * 100.0 / 255.0 + 16.0) / 116.0;
-        let fx = fy + (a[i] as f64 - 128.0) / 500.0;
-        let fz = fy - (b[i] as f64 - 128.0) / 200.0;
-        let xyz = [XN * lab_f(fx), lab_f(fy), ZN * lab_f(fz)];
-        for (c, row) in XYZ_D50_TO_LINEAR_SRGB.iter().enumerate() {
-            let linear = row[0] * xyz[0] + row[1] * xyz[1] + row[2] * xyz[2];
-            out[c * plane + i] = srgb_encode(linear);
+        let rgb = model::lab_to_srgb([
+            l[i] as f64 * 100.0 / 255.0,
+            a[i] as f64 - 128.0,
+            b[i] as f64 - 128.0,
+        ]);
+        for (c, value) in rgb.into_iter().enumerate() {
+            out[c * plane + i] = value;
         }
     }
     out
 }
 
-/// The profile-free algebraic inverse of [`lab_to_rgb`]: decode sRGB, rotate the
-/// linear RGB back to XYZ D50 with the inverse Bradford matrix, then express it
-/// as CIELAB bytes. Same approximation class as the read side; no profile.
+/// The profile-free algebraic inverse of [`lab_to_rgb`]: sRGB to CIELAB D50
+/// (`pictura_color::model`) as Lab bytes. Same approximation class as the read
+/// side; no profile.
 pub fn rgb_to_lab(rgb: &[u8]) -> Vec<u8> {
-    const M_INV: [[f64; 3]; 3] = [
-        [0.4360747, 0.3850649, 0.1430804],
-        [0.2225045, 0.7168786, 0.0606169],
-        [0.0139322, 0.0971045, 0.7141733],
-    ];
-    const XN: f64 = 0.96422;
-    const ZN: f64 = 0.82521;
     let plane = rgb.len() / 3;
     let (r, rest) = rgb.split_at(plane);
     let (g, b) = rest.split_at(plane);
     let mut out = vec![0u8; plane * 3];
     for i in 0..plane {
-        let linear = [srgb_decode(r[i]), srgb_decode(g[i]), srgb_decode(b[i])];
-        let xyz = [
-            M_INV[0][0] * linear[0] + M_INV[0][1] * linear[1] + M_INV[0][2] * linear[2],
-            M_INV[1][0] * linear[0] + M_INV[1][1] * linear[1] + M_INV[1][2] * linear[2],
-            M_INV[2][0] * linear[0] + M_INV[2][1] * linear[1] + M_INV[2][2] * linear[2],
-        ];
-        let fx = lab_fwd(xyz[0] / XN);
-        let fy = lab_fwd(xyz[1]);
-        let fz = lab_fwd(xyz[2] / ZN);
-        out[i] = lab_byte((116.0 * fy - 16.0) * 255.0 / 100.0);
-        out[plane + i] = lab_byte(128.0 + 500.0 * (fx - fy));
-        out[2 * plane + i] = lab_byte(128.0 + 200.0 * (fy - fz));
+        let [l, a, bb] = model::srgb_to_lab([r[i], g[i], b[i]]);
+        out[i] = lab_byte(l * 255.0 / 100.0);
+        out[plane + i] = lab_byte(128.0 + a);
+        out[2 * plane + i] = lab_byte(128.0 + bb);
     }
     out
-}
-
-fn lab_f(t: f64) -> f64 {
-    const EPSILON: f64 = 216.0 / 24389.0;
-    const KAPPA: f64 = 24389.0 / 27.0;
-    let t3 = t * t * t;
-    if t3 > EPSILON {
-        t3
-    } else {
-        (116.0 * t - 16.0) / KAPPA
-    }
-}
-
-/// The forward CIELAB `f` function: the exact inverse of [`lab_f`].
-fn lab_fwd(t: f64) -> f64 {
-    const EPSILON: f64 = 216.0 / 24389.0;
-    const KAPPA: f64 = 24389.0 / 27.0;
-    if t > EPSILON {
-        t.cbrt()
-    } else {
-        (KAPPA * t + 16.0) / 116.0
-    }
-}
-
-fn srgb_encode(linear: f64) -> u8 {
-    let value = if linear <= 0.0031308 {
-        12.92 * linear
-    } else {
-        1.055 * linear.powf(1.0 / 2.4) - 0.055
-    };
-    (value.clamp(0.0, 1.0) * 255.0 + 0.5).floor() as u8
-}
-
-fn srgb_decode(value: u8) -> f64 {
-    let value = value as f64 / 255.0;
-    if value <= 0.04045 {
-        value / 12.92
-    } else {
-        ((value + 0.055) / 1.055).powf(2.4)
-    }
 }
 
 fn lab_byte(value: f64) -> u8 {

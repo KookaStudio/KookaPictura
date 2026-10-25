@@ -13,6 +13,7 @@ use lcms2::{
     PixelFormat, Profile as LcmsProfile, ToneCurve, Transform,
 };
 
+pub mod model;
 pub mod ntsc;
 
 /// Rendering intent (ICC).

@@ -841,7 +841,7 @@ fn selection_from_named_channel(
 /// leads the list, and the number of colour channels after it. Mirrors the
 /// Channels panel's `channelsForMode`: a single-row mode's one row is the
 /// composite, with no separate colour channel.
-fn color_rows(mode: ColorMode) -> (bool, usize) {
+pub(super) fn color_rows(mode: ColorMode) -> (bool, usize) {
     match mode {
         ColorMode::Rgb | ColorMode::Lab => (true, 3),
         ColorMode::Cmyk => (true, 4),
@@ -853,12 +853,12 @@ fn color_rows(mode: ColorMode) -> (bool, usize) {
 }
 
 /// Qt's `qGray`: `(r*11 + g*16 + b*5) >> 5`.
-fn q_gray(r: u8, g: u8, b: u8) -> u8 {
+pub(super) fn q_gray(r: u8, g: u8, b: u8) -> u8 {
     ((r as u32 * 11 + g as u32 * 16 + b as u32 * 5) >> 5) as u8
 }
 
-/// The naive CMYK ink level `0..=255` for one channel of an RGB pixel, matching
-/// the panel's `toCmyk`.
+/// The naive CMYK ink level `0..=255` for one channel of an RGB pixel: the
+/// plate split the Channels panel thumbnails show (`color_models::channel_plane`).
 fn cmyk_ink(r: u8, g: u8, b: u8, index: usize) -> u8 {
     let (rf, gf, bf) = (r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0);
     let k = 1.0 - rf.max(gf).max(bf);
@@ -873,9 +873,9 @@ fn cmyk_ink(r: u8, g: u8, b: u8, index: usize) -> u8 {
 }
 
 /// The panel thumbnail's grayscale value for colour row `index`
-/// (`channelValue`): RGB uses its own plane, CMYK and Multichannel their naive
+/// (`color_models::channel_plane`): RGB uses its own plane, CMYK and Multichannel their naive
 /// ink coverage, everything else the composite luminance.
-fn channel_value(mode: ColorMode, index: usize, r: u8, g: u8, b: u8) -> u8 {
+pub(super) fn channel_value(mode: ColorMode, index: usize, r: u8, g: u8, b: u8) -> u8 {
     match mode {
         ColorMode::Rgb => [r, g, b][index.min(2)],
         ColorMode::Cmyk => 255 - cmyk_ink(r, g, b, index.min(3)),

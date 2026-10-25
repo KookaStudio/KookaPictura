@@ -1085,6 +1085,7 @@ dependencies = [
  "cxx-qt-build",
  "cxx-qt-lib",
  "pictura-codec",
+ "pictura-color",
  "pictura-core",
  "pictura-filters",
  "pictura-ops",

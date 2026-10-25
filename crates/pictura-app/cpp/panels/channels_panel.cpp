@@ -1,6 +1,7 @@
 #include "channels_panel.h"
 
 #include "api/document_api.h"
+#include "color_models.h"
 #include "icons.h"
 #include "theme.h"
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
@@ -21,6 +22,7 @@
 #include <QtWidgets/QVBoxLayout>
 
 #include <algorithm>
+
 
 namespace pictura {
 
@@ -65,38 +67,6 @@ QList<ChannelDef> channelsForMode(const QString& mode)
     return {{"RGB", "Ctrl+2"}, {"Red", "Ctrl+3"}, {"Green", "Ctrl+4"}, {"Blue", "Ctrl+5"}};
 }
 
-// The ink coverage of `px` as CMYK, each 0..1 (the naive conversion; the
-// working data is RGB).
-void toCmyk(QRgb px, float cmyk[4])
-{
-    const float r = qRed(px) / 255.0f;
-    const float g = qGreen(px) / 255.0f;
-    const float b = qBlue(px) / 255.0f;
-    const float k = 1.0f - std::max({r, g, b});
-    const float inv = k < 1.0f ? 1.0f / (1.0f - k) : 0.0f;
-    cmyk[0] = (1.0f - r - k) * inv;
-    cmyk[1] = (1.0f - g - k) * inv;
-    cmyk[2] = (1.0f - b - k) * inv;
-    cmyk[3] = k;
-}
-
-// Row `row`'s value of `px` in `mode`, as Photoshop's channel thumbnails show
-// it (ink channels white where there is no ink).
-int channelValue(const QString& mode, int row, QRgb px)
-{
-    if (mode == QLatin1String("rgb") && row >= 1 && row <= 3) {
-        return row == 1 ? qRed(px) : row == 2 ? qGreen(px) : qBlue(px);
-    }
-    const bool cmyk = mode == QLatin1String("cmyk");
-    const bool multichannel = mode == QLatin1String("multichannel");
-    if ((cmyk && row >= 1) || multichannel) {
-        float inks[4];
-        toCmyk(px, inks);
-        return 255 - qRound(inks[cmyk ? row - 1 : row] * 255.0f);
-    }
-    return qGray(px);
-}
-
 QPixmap thumbnail(const QImage& source, const QString& mode, int row)
 {
     if (source.isNull()) {
@@ -105,10 +75,12 @@ QPixmap thumbnail(const QImage& source, const QString& mode, int row)
     const QImage scaled =
         source.scaled(kThumbnailSize, kThumbnailSize, Qt::KeepAspectRatio, Qt::FastTransformation)
             .convertToFormat(QImage::Format_ARGB32);
+    // Photoshop's channel thumbnails: ink rows are white where there is no ink.
+    const QVector<uchar> plane = channelPlane(scaled, mode, row);
     QImage gray(scaled.size(), QImage::Format_ARGB32);
     for (int y = 0; y < scaled.height(); ++y) {
         for (int x = 0; x < scaled.width(); ++x) {
-            const int v = channelValue(mode, row, scaled.pixel(x, y));
+            const int v = plane.at(y * scaled.width() + x);
             gray.setPixel(x, y, qRgb(v, v, v));
         }
     }

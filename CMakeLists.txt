@@ -298,6 +298,8 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/layer_style_dialog.h
     crates/pictura-app/cpp/layer_style_pages.cpp
     crates/pictura-app/cpp/color_settings_dialog.cpp
+    crates/pictura-app/cpp/color_models.cpp
+    crates/pictura-app/cpp/color_models.h
     crates/pictura-app/cpp/color_picker_dialog.cpp
     crates/pictura-app/cpp/color_range_dialog.cpp
     crates/pictura-app/cpp/refine_edge_dialog.cpp
