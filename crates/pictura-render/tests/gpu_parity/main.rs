@@ -4,9 +4,10 @@
 //! gradient backdrop and a partially transparent gradient source, and the GPU
 //! output must match `composite_rgba` within ±1 LSB per channel.
 //!
-//! Every test skips with a printed note when no Vulkan adapter is usable, so a
-//! GPU-less CI stays green. On the target machine (RTX 3090, Vulkan) the
-//! parity path actually runs.
+//! A test that needs a device is `#[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]` and
+//! fails when run without one, so a skipped parity check reports as skipped,
+//! never as passed. CI runs them on lavapipe (`software-vulkan`, the nextest
+//! `gpu` profile); locally, run the same command on any Vulkan machine.
 //!
 //! M31 adds region compositing: a region-limited GPU composite must be
 //! byte-identical to the same slice of the full `composite_active` result,

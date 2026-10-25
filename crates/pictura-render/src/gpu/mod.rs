@@ -52,7 +52,7 @@ use pictura_core::{
     PixelBuffer, PsdRect,
 };
 
-use crate::decode_adjustment;
+use crate::composite_route::{content_route, ContentRoute};
 
 mod assemble;
 mod backend;
@@ -97,6 +97,12 @@ pub enum GpuError {
     /// A layer carries a non-default Blend If range, which the GPU has no
     /// shader for.
     UnsupportedAdvancedBlending,
+    /// The document records a source bit depth: the CPU composites it from
+    /// native-precision samples, which the 8-bit shader cannot match.
+    UnsupportedDepth,
+    /// A smart object's enabled filters apply: the CPU re-renders its source
+    /// through them, which the GPU has no path for.
+    UnsupportedSmartFilter,
 }
 
 impl fmt::Display for GpuError {
@@ -119,6 +125,13 @@ impl fmt::Display for GpuError {
             GpuError::UnsupportedAdvancedBlending => {
                 write!(f, "advanced blending (Blend If/knockout) is CPU-only")
             }
+            GpuError::UnsupportedDepth => {
+                write!(
+                    f,
+                    "a 16/32-bit source composites at native depth on the CPU"
+                )
+            }
+            GpuError::UnsupportedSmartFilter => write!(f, "smart filters are CPU-only"),
         }
     }
 }
@@ -157,16 +170,18 @@ fn composite_gpu_region(
     rw: u32,
     rh: u32,
 ) -> Result<PixelBuffer, GpuError> {
-    // A stack with a CPU-only mode must still report that mode, even when the
-    // device is unusable, so the mode check precedes the availability gate.
-    check_supported(doc)?;
+    // A stack the GPU cannot composite exactly must report why, even when the
+    // device is unusable, so the eligibility check precedes the availability
+    // gate.
+    check_supported(doc).inspect_err(crate::metrics::count_decline)?;
     // A device that cannot reproduce the CPU oracle on the validation scene is
     // treated as no device: a wrong-but-plausible composite is worse than the
     // CPU path. See `gpu_composite_verified`.
     if !gpu_available() {
+        crate::metrics::count_decline(&GpuError::Unavailable);
         return Err(GpuError::Unavailable);
     }
-    composite_gpu_region_raw(doc, x0, y0, rw, rh)
+    composite_gpu_region_raw(doc, x0, y0, rw, rh).inspect_err(crate::metrics::count_decline)
 }
 
 /// The ungated region kernel. Callers own `check_supported`: [`composite_gpu_region`]
@@ -269,6 +284,10 @@ pub fn gpu_adapter_info() -> Option<GpuAdapterInfo> {
     })
 }
 
+/// How many times the validation scene ran, for the at-most-once test.
+#[cfg(test)]
+static VALIDATION_RUNS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
 /// Whether the device's compute compositor reproduces the CPU oracle.
 ///
 /// Some drivers (observed on Mesa's Honeykrisp for the Apple M1) accept the
@@ -281,6 +300,8 @@ pub fn gpu_adapter_info() -> Option<GpuAdapterInfo> {
 fn gpu_composite_verified() -> bool {
     static VERIFIED: OnceLock<bool> = OnceLock::new();
     *VERIFIED.get_or_init(|| {
+        #[cfg(test)]
+        VALIDATION_RUNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let doc = validation_document();
         if check_supported(&doc).is_err() {
             return false;
@@ -418,76 +439,42 @@ fn adjustment_params(adjustment: &Adjustment) -> Option<(u32, i32, i32, i32)> {
     }
 }
 
+/// Whether the GPU can composite `doc` exactly as the CPU oracle would.
+///
+/// A document with a source depth declines first. Then the first visible layer
+/// in stack order that declines names the reason; within a layer the checks
+/// run effects, content route, Dissolve, advanced blending, text gamma.
 fn check_supported(doc: &Document) -> Result<(), GpuError> {
     fn walk(layer: &Layer) -> Result<(), GpuError> {
         if !layer.visible {
             return Ok(());
         }
-        // The effect check wins over the adjustment check: a fill layer with an
-        // enabled shadow or glow must report `UnsupportedLayerEffect`, not
-        // `UnsupportedAdjustment`. The resolved set comes from the same
-        // `lfx2`-over-`lrFX` path the CPU compositor uses.
-        let effects = crate::layer_effects::decode_layer_effects(layer);
-        let on = |enabled: bool, present: bool| enabled && present;
-        let bevel = effects.bevel.as_ref().is_some_and(|bevel| {
-            // Only a bevel that would render rejects: Stroke Emboss is a CPU
-            // no-op, so the GPU can run.
-            bevel.enabled
-                && bevel.present
-                && bevel.style != crate::layer_effects::BevelStyle::Stroke
-        });
-        if effects
-            .drop_shadow
-            .as_ref()
-            .is_some_and(|e| on(e.enabled, e.present))
-            || effects
-                .outer_glow
-                .as_ref()
-                .is_some_and(|e| on(e.enabled, e.present))
-            || effects
-                .inner_shadow
-                .as_ref()
-                .is_some_and(|e| on(e.enabled, e.present))
-            || effects
-                .inner_glow
-                .as_ref()
-                .is_some_and(|e| on(e.enabled, e.present))
-            || bevel
-            || effects
-                .satin
-                .as_ref()
-                .is_some_and(|e| on(e.enabled, e.present))
-            || effects
-                .stroke
-                .as_ref()
-                .is_some_and(|e| on(e.enabled, e.present))
-            || effects
-                .color_overlay
-                .as_ref()
-                .is_some_and(|e| on(e.enabled, e.present))
-            || effects
-                .gradient_overlay
-                .as_ref()
-                .is_some_and(|e| on(e.enabled, e.present))
-            || effects
-                .pattern_overlay
-                .as_ref()
-                .is_some_and(|e| on(e.enabled, e.present))
-        {
+        // The resolved set comes from the same `lfx2`-over-`lrFX` path the CPU
+        // compositor uses.
+        if has_rendering_effect(layer) {
             return Err(GpuError::UnsupportedLayerEffect);
         }
-        if let Some(data) = &layer.adjustment {
-            let supported =
-                decode_adjustment(data).is_some_and(|adj| adjustment_params(&adj).is_some());
-            if !supported {
+        let group = match content_route(layer) {
+            ContentRoute::PassThroughGroup | ContentRoute::IsolatedGroup => true,
+            // Only a real adjustment block of a shader kind runs on the GPU; a
+            // fill-content block or a decoded `vscg` vector fill has no shader.
+            ContentRoute::Fill(adjustment) => {
+                if layer.adjustment.is_none()
+                    || adjustment_params(&adjustment).is_none()
+                    || layer.extra_block(b"vscg").is_some()
+                {
+                    return Err(GpuError::UnsupportedAdjustment);
+                }
+                false
+            }
+            ContentRoute::UndecodedAdjustment | ContentRoute::UndecodedVectorFill => {
                 return Err(GpuError::UnsupportedAdjustment);
             }
-        }
-        // A channel-less vector fill has no GPU shader, exactly like a fill
-        // adjustment layer; the CPU composites it.
-        if layer.extra_block(b"vscg").is_some() {
-            return Err(GpuError::UnsupportedAdjustment);
-        }
+            ContentRoute::SmartFiltered => return Err(GpuError::UnsupportedSmartFilter),
+            ContentRoute::SmartSource => return Err(GpuError::UnsupportedSmartObject),
+            ContentRoute::TypeSource => return Err(GpuError::UnsupportedText),
+            ContentRoute::Pixels => false,
+        };
         if matches!(layer.blend, BlendMode::Dissolve) {
             return Err(GpuError::UnsupportedMode(layer.blend));
         }
@@ -498,25 +485,93 @@ fn check_supported(doc: &Document) -> Result<(), GpuError> {
         {
             return Err(GpuError::UnsupportedAdvancedBlending);
         }
-        if layer.smart_object.is_some() && !layer.channels.iter().any(|c| c.id == 0) {
-            return Err(GpuError::UnsupportedSmartObject);
-        }
-        if layer.type_tool.is_some()
-            && (crate::text_gamma::text_gamma().is_some()
-                || !layer.channels.iter().any(|c| c.id == 0))
-        {
+        if layer.type_tool.is_some() && crate::text_gamma::text_gamma().is_some() {
             return Err(GpuError::UnsupportedText);
         }
-        for child in &layer.children {
-            walk(child)?;
+        if group {
+            for child in &layer.children {
+                walk(child)?;
+            }
         }
         Ok(())
+    }
+    // The CPU reads native samples (pixels, masks, adjustments) whenever a
+    // source depth is recorded.
+    if doc.source_depth.is_some() {
+        return Err(GpuError::UnsupportedDepth);
     }
     for layer in &doc.layers {
         walk(layer)?;
     }
     Ok(())
 }
+
+/// An enabled, present object-based effect that renders. Stroke Emboss is a
+/// CPU no-op, so a bevel in that style does not count.
+fn has_rendering_effect(layer: &Layer) -> bool {
+    let effects = crate::layer_effects::decode_layer_effects(layer);
+    let on = |enabled: bool, present: bool| enabled && present;
+    let bevel = effects.bevel.as_ref().is_some_and(|bevel| {
+        bevel.enabled && bevel.present && bevel.style != crate::layer_effects::BevelStyle::Stroke
+    });
+    bevel
+        || effects
+            .drop_shadow
+            .as_ref()
+            .is_some_and(|e| on(e.enabled, e.present))
+        || effects
+            .outer_glow
+            .as_ref()
+            .is_some_and(|e| on(e.enabled, e.present))
+        || effects
+            .inner_shadow
+            .as_ref()
+            .is_some_and(|e| on(e.enabled, e.present))
+        || effects
+            .inner_glow
+            .as_ref()
+            .is_some_and(|e| on(e.enabled, e.present))
+        || effects
+            .satin
+            .as_ref()
+            .is_some_and(|e| on(e.enabled, e.present))
+        || effects
+            .stroke
+            .as_ref()
+            .is_some_and(|e| on(e.enabled, e.present))
+        || effects
+            .color_overlay
+            .as_ref()
+            .is_some_and(|e| on(e.enabled, e.present))
+        || effects
+            .gradient_overlay
+            .as_ref()
+            .is_some_and(|e| on(e.enabled, e.present))
+        || effects
+            .pattern_overlay
+            .as_ref()
+            .is_some_and(|e| on(e.enabled, e.present))
+}
+
+/// Fail a device-dependent test that has no usable GPU. Such tests are
+/// `#[ignore]`d, so reaching this without a device is a misconfigured run, not
+/// a pass.
+#[cfg(test)]
+pub(crate) fn require_gpu() {
+    require_device(gpu_available());
+}
+
+#[cfg(test)]
+pub(crate) fn require_device(available: bool) {
+    assert!(
+        available,
+        "no usable Vulkan device; this test is #[ignore]d and needs one \
+         (software-vulkan in CI)"
+    );
+}
+
+#[cfg(test)]
+mod eligibility_tests;
 
 /// Blend mode ids shared with the WGSL `switch`. `PassThrough` is Normal here
 /// because the CPU isolated-group path treats it as Normal, and true
@@ -612,12 +667,9 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]
     fn resident_uploads_are_reused_and_never_stale() {
-        use std::sync::atomic::Ordering;
-        if !gpu_available() {
-            eprintln!("skipping: no GPU");
-            return;
-        }
+        require_gpu();
         let (w, h) = (64u32, 48u32);
         let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
         let rect = PsdRect {
@@ -664,10 +716,10 @@ mod tests {
         };
 
         check(&doc, "first");
-        let hits = backend::RESIDENT_HITS.load(Ordering::Relaxed);
+        let hits = crate::metrics::counters().resident_hits;
         check(&doc, "again");
         assert!(
-            backend::RESIDENT_HITS.load(Ordering::Relaxed) > hits,
+            crate::metrics::counters().resident_hits > hits,
             "an unchanged document re-uploaded its layers"
         );
 
@@ -694,6 +746,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "software-vulkan"))]
     fn a_software_adapter_is_no_gpu() {
         assert!(!backend::accelerates(wgpu::DeviceType::Cpu));
         for real in [

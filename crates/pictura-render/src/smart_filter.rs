@@ -69,17 +69,7 @@ pub(crate) fn composite_smart_filtered_source(
     let Some(so) = layer.smart_object.as_ref() else {
         return false;
     };
-    let mut enabled = 0usize;
-    for filter in &so.smart_filters {
-        if !filter.enabled {
-            continue;
-        }
-        if decode_smart_filter(filter).is_none() {
-            return false;
-        }
-        enabled += 1;
-    }
-    if enabled == 0 {
+    if !crate::composite_route::smart_filters_apply(layer) {
         return false;
     }
     let region = PsdRect {

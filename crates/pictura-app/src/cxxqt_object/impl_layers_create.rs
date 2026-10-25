@@ -1,14 +1,15 @@
 //! New Layer / New Group dialog and Layer via Copy/Cut bridge commands. An
 //! accepted dialog creates one node with the chosen attributes directly above
-//! the selection path, recomposites, and records exactly one undo state ("New
-//! Layer"/"New Group"); via copy/cut needs an active selection, recomposites,
+//! the selection path, recomposites unless the insertion is
+//! content-neutral, and records exactly one undo state ("New Layer"/"New
+//! Group"); via copy/cut needs an active selection, recomposites,
 //! and records one "Layer via Copy"/"Layer via Cut" state. An invalid blend key,
 //! a missing document, or a missing selection returns empty and records nothing.
 
 use super::helpers::{as_str_slice, list_of_strings};
 use super::helpers_composite::selection_to_mask;
 use super::qobject;
-use crate::cxxqt_object::edit::Edit;
+use crate::cxxqt_object::edit::{insertion_edit, Edit};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QString, QStringList};
@@ -72,8 +73,9 @@ impl qobject::PictureView {
             if created.is_empty() {
                 return Edit::None;
             }
+            let edit = insertion_edit(doc, &created);
             rust.select_only_layer(&created);
-            Edit::Structural
+            edit
         });
         QString::from(created.as_str())
     }
@@ -111,8 +113,9 @@ impl qobject::PictureView {
             if created.is_empty() {
                 return Edit::None;
             }
+            let edit = insertion_edit(doc, &created);
             rust.select_only_layer(&created);
-            Edit::Structural
+            edit
         });
         QString::from(created.as_str())
     }

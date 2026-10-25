@@ -36,8 +36,9 @@ void PicturaMainWindow::retargetDock()
 
     if (layersPanel_) {
         pictura::ScopedTimer t("cxx_layersPanel_refresh");
+        // setView ends with a refresh; a second one rebuilt every row and
+        // thumbnail again (about 0.5 s on a 24 MP document).
         layersPanel_->setView(view);
-        layersPanel_->refresh();
     }
     if (historyPanel_) {
         pictura::ScopedTimer t("cxx_historyPanel_refresh");

@@ -6,10 +6,12 @@ use pictura_render::{
     GpuError,
 };
 
-use crate::common::{is_gpu_gone, scene, CPU_ONLY, GPU_MODES, SIZE};
+use crate::common::{require_gpu, scene, CPU_ONLY, GPU_MODES, SIZE};
 
 #[test]
+#[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]
 fn gpu_matches_cpu_within_one_lsb() {
+    require_gpu();
     let mut checked = 0;
     let mut max_delta = 0i32;
     for &mode in GPU_MODES {
@@ -19,10 +21,6 @@ fn gpu_matches_cpu_within_one_lsb() {
             Ok(buf) => buf,
             Err(GpuError::UnsupportedMode(m)) => {
                 panic!("{mode:?} dispatched to CPU-only mode {m:?}")
-            }
-            Err(e) if is_gpu_gone(&e) => {
-                eprintln!("no usable Vulkan GPU ({e}); skipping parity test");
-                return;
             }
             Err(e) => panic!("{mode:?}: {e}"),
         };
@@ -62,7 +60,9 @@ fn dissolve_still_cpu_only() {
 }
 
 #[test]
+#[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]
 fn non_separable_modes_match_cpu() {
+    require_gpu();
     let mut checked = 0;
     let mut max_delta = 0i32;
     for &mode in &[
@@ -75,10 +75,6 @@ fn non_separable_modes_match_cpu() {
         let cpu = composite_rgba(&doc);
         let gpu = match composite_gpu(&doc) {
             Ok(buf) => buf,
-            Err(e) if is_gpu_gone(&e) => {
-                eprintln!("no usable Vulkan GPU ({e}); skipping non-separable parity");
-                return;
-            }
             Err(e) => panic!("{mode:?}: {e}"),
         };
         assert_eq!((gpu.width, gpu.height, gpu.channels), (SIZE, SIZE, 4));

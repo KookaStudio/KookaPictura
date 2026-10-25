@@ -1,4 +1,4 @@
-use super::edit::Edit;
+use super::edit::{insertion_edit, Edit};
 use super::helpers::*;
 use super::helpers_composite::*;
 use super::qobject;
@@ -242,8 +242,9 @@ impl qobject::PictureView {
             let name = pictura_render::next_layer_name(doc, "Layer");
             created = pictura_render::add_layer(doc, above, &name);
             if created >= 0 {
+                let edit = insertion_edit(doc, &created.to_string());
                 rust.layer_target.select_only(&created.to_string());
-                Edit::Structural
+                edit
             } else {
                 Edit::None
             }
@@ -260,8 +261,9 @@ impl qobject::PictureView {
             let name = pictura_render::next_layer_name(doc, "Group");
             created = pictura_render::add_group(doc, above, &name);
             if created >= 0 {
+                let edit = insertion_edit(doc, &created.to_string());
                 rust.layer_target.select_only(&created.to_string());
-                Edit::Structural
+                edit
             } else {
                 Edit::None
             }
@@ -847,8 +849,9 @@ impl qobject::PictureView {
             if created.is_empty() {
                 return Edit::None;
             }
+            let edit = insertion_edit(doc, &created);
             rust.select_only_layer(&created);
-            Edit::Structural
+            edit
         });
         QString::from(created.as_str())
     }
@@ -864,8 +867,9 @@ impl qobject::PictureView {
             if created.is_empty() {
                 return Edit::None;
             }
+            let edit = insertion_edit(doc, &created);
             rust.select_only_layer(&created);
-            Edit::Structural
+            edit
         });
         QString::from(created.as_str())
     }

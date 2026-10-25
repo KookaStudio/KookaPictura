@@ -4,12 +4,14 @@
 //! link invalidation, history capture, revision and dirty bookkeeping, and
 //! reports what the QObject must present.
 
+use super::metrics;
 use super::qobject;
 use super::PictureViewRust;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QImage;
 use pictura_core::PsdRect;
+use std::time::Instant;
 
 /// What a mutation changed.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -28,6 +30,11 @@ pub(super) enum Edit {
     Full,
     /// The edit invalidates positional links: clear them and recomposite fully.
     Structural,
+    /// A content-neutral layer or group insertion (see
+    /// `pictura_render::insertion_is_content_neutral`): clear the positional
+    /// links like [`Edit::Structural`], but the stored composite and the
+    /// display already match the new tree, so nothing is composited.
+    Inserted,
 }
 
 /// What the QObject must present after a commit.
@@ -43,10 +50,20 @@ pub(super) enum Effect {
 pub(super) fn effect_of(edit: &Edit) -> Effect {
     match edit {
         Edit::None => Effect::Nothing,
-        Edit::Meta | Edit::SelectionPreview => Effect::Notify,
+        Edit::Meta | Edit::SelectionPreview | Edit::Inserted => Effect::Notify,
         Edit::Record => Effect::Nothing,
         Edit::Regions { notify, .. } => Effect::Blit { notify: *notify },
         Edit::Full | Edit::Structural => Effect::Rebuild,
+    }
+}
+
+/// The outcome for a node just inserted at `path`: [`Edit::Inserted`] when the
+/// insertion is content-neutral, [`Edit::Structural`] otherwise.
+pub(super) fn insertion_edit(doc: &pictura_core::Document, path: &str) -> Edit {
+    if pictura_render::insertion_is_content_neutral(doc, path) {
+        Edit::Inserted
+    } else {
+        Edit::Structural
     }
 }
 
@@ -72,27 +89,60 @@ impl PictureViewRust {
         if matches!(edit, Edit::None) {
             return Applied { edit, blit: None };
         }
-        let blit = match &edit {
-            Edit::Regions { rects, .. } => self.refresh_regions(rects),
-            Edit::Full | Edit::Structural => {
-                self.composite_full();
-                None
-            }
-            Edit::None | Edit::Meta | Edit::Record | Edit::SelectionPreview => None,
+        // A live gesture (stroke, preview, placer) leaves the stored composite
+        // stale and needs the full rebuild to end it, so an insertion made
+        // under one recomposites like any other tree edit.
+        let edit = if matches!(edit, Edit::Inserted) && self.has_active_session() {
+            Edit::Structural
+        } else {
+            edit
         };
-        if matches!(edit, Edit::Structural) {
+        metrics::begin_edit(label);
+        let blit = self.refresh_for(&edit);
+        if matches!(edit, Edit::Structural | Edit::Inserted) {
             self.link_sets.clear();
             self.solo_snapshot = None;
         }
         let target = self.layer_target.clone();
+        let t = Instant::now();
         if matches!(edit, Edit::SelectionPreview) {
             self.session.content_revision = self.session.content_revision.wrapping_add(1);
-        } else if bump_revision {
-            self.session.record(&target, label);
         } else {
-            self.session.record_move(&target, label);
+            if bump_revision {
+                self.session.record(&target, label);
+            } else {
+                self.session.record_move(&target, label);
+            }
+            metrics::record_phase("history_capture", t.elapsed());
         }
+        metrics::end_edit();
         Applied { edit, blit }
+    }
+
+    /// The compositing half of an outcome, shared by commits and previews.
+    fn refresh_for(&mut self, edit: &Edit) -> Option<(QImage, i32, i32)> {
+        match edit {
+            Edit::Regions { rects, .. } => {
+                metrics::mark_composited();
+                self.refresh_regions(rects)
+            }
+            Edit::Full | Edit::Structural => {
+                metrics::mark_composited();
+                self.composite_full();
+                None
+            }
+            Edit::Inserted => {
+                // The composite and the pyramid stay valid. A soloed mask's
+                // source is found by path, which the insertion may have
+                // shifted, so only that is re-resolved.
+                if self.mask_solo.is_some() {
+                    self.rebuild_mask_solo_source();
+                    self.frame_revision = self.frame_revision.wrapping_add(1);
+                }
+                None
+            }
+            Edit::None | Edit::Meta | Edit::Record | Edit::SelectionPreview => None,
+        }
     }
 
     /// Present a live edit without capturing history.
@@ -100,14 +150,7 @@ impl PictureViewRust {
         if matches!(edit, Edit::None) {
             return None;
         }
-        let blit = match edit {
-            Edit::Regions { rects, .. } => self.refresh_regions(rects),
-            Edit::Full | Edit::Structural => {
-                self.composite_full();
-                None
-            }
-            Edit::None | Edit::Meta | Edit::Record | Edit::SelectionPreview => None,
-        };
+        let blit = self.refresh_for(edit);
         self.session.content_revision = self.session.content_revision.wrapping_add(1);
         blit
     }
@@ -125,8 +168,13 @@ impl qobject::PictureView {
             if rust.session.doc.is_none() {
                 return Edit::None;
             }
+            // Open the record before the mutation, so its time is counted.
+            metrics::begin_edit(label);
             f(&mut rust)
         };
+        if matches!(edit, Edit::None) {
+            metrics::cancel_edit();
+        }
         let Applied { edit, blit } = self.as_mut().rust_mut().apply_edit(label, edit);
         if let Some((image, x, y)) = blit {
             if image.width() > 0 && image.height() > 0 {
@@ -153,8 +201,12 @@ impl qobject::PictureView {
             if rust.session.doc.is_none() {
                 return Edit::None;
             }
+            metrics::begin_edit(label);
             f(&mut rust)
         };
+        if matches!(edit, Edit::None) {
+            metrics::cancel_edit();
+        }
         let Applied { edit, blit } = self.as_mut().rust_mut().apply_edit_move(label, edit);
         if let Some((image, x, y)) = blit {
             if image.width() > 0 && image.height() > 0 {
@@ -375,6 +427,31 @@ mod tests {
         assert!(view.link_sets.is_empty());
         let doc = view.session.doc.as_ref().expect("document");
         assert_eq!(doc.composite, pictura_render::composite_rgba(doc));
+    }
+
+    #[test]
+    fn an_inserted_outcome_drops_links_without_compositing() {
+        let mut view = view(doc_with_layer());
+        view.link_sets.insert("0".into(), 1);
+        let before = view
+            .session
+            .doc
+            .as_ref()
+            .expect("document")
+            .composite
+            .clone();
+        let frame = view.frame_revision;
+        let applied = view.apply_edit("New Layer", Edit::Inserted);
+        assert_eq!(effect_of(&applied.edit), Effect::Notify);
+        assert!(applied.blit.is_none());
+        assert!(view.link_sets.is_empty());
+        assert_eq!(view.session.history.count(), 1);
+        assert_eq!(view.frame_revision, frame, "no display rebuild");
+        assert_eq!(
+            view.session.doc.as_ref().expect("document").composite,
+            before,
+            "no composite ran"
+        );
     }
 
     #[test]

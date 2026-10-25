@@ -263,18 +263,20 @@ pub(crate) fn is_gpu_gone(err: &GpuError) -> bool {
     )
 }
 
-/// Assert one scene's GPU result matches the CPU oracle within ±1 LSB, or skip
-/// with a printed note when no adapter is usable.
+/// Fail a device-dependent test that has no usable GPU. Such tests are
+/// `#[ignore]`d, so reaching this without a device is a misconfigured run, not
+/// a pass.
+pub(crate) fn require_gpu() {
+    assert!(
+        pictura_render::gpu_available(),
+        "no usable Vulkan device; this test is #[ignore]d and needs one (software-vulkan in CI)"
+    );
+}
+
+/// Assert one scene's GPU result matches the CPU oracle within ±1 LSB.
 pub(crate) fn check_scene_parity(doc: &Document, max_delta: &mut i32) {
     let cpu = composite_rgba(doc);
-    let gpu = match composite_gpu(doc) {
-        Ok(buf) => buf,
-        Err(e) if is_gpu_gone(&e) => {
-            eprintln!("no usable Vulkan GPU ({e}); skipping scene parity");
-            return;
-        }
-        Err(e) => panic!("{e}"),
-    };
+    let gpu = composite_gpu(doc).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(
         (gpu.width, gpu.height, gpu.channels),
         (doc.width, doc.height, 4)

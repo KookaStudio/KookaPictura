@@ -5,7 +5,9 @@ use pictura_core::{
     BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LockFlags, PixelBuffer,
     PsdRect,
 };
-use pictura_render::{composite_active, composite_rgba, gpu_available, Backend};
+use pictura_render::{composite_active, composite_rgba, Backend};
+
+use crate::common::require_gpu;
 
 /// A document shaped exactly like `PictureView::new_document(..., "white")`:
 /// one full-size Normal layer whose colour planes and alpha are all 255.
@@ -66,23 +68,24 @@ fn assert_uniform_white(buffer: &PixelBuffer, ctx: &str) {
     }
 }
 
+const W: u32 = 37;
+const H: u32 = 23;
+
 /// A freshly created white RGB document must composite to a uniform opaque-white
-/// frame on both the first and a repeated composite. The GPU arm skips (like
-/// every parity test) when no Vulkan adapter is usable; an odd width/height
-/// guards against any row-stride assumption in the readback.
+/// frame on the CPU, and on the GPU on both the first and a repeated composite.
+/// An odd width/height guards against any row-stride assumption in the
+/// readback.
 #[test]
-fn fresh_white_document_composites_uniform_white_twice() {
-    const W: u32 = 37;
-    const H: u32 = 23;
-    let doc = fresh_white_document(W, H);
-
-    let cpu = composite_rgba(&doc);
+fn fresh_white_document_composites_uniform_white_on_cpu() {
+    let cpu = composite_rgba(&fresh_white_document(W, H));
     assert_uniform_white(&cpu, "cpu");
+}
 
-    if !gpu_available() {
-        eprintln!("no usable Vulkan GPU; skipping fresh-white GPU arm");
-        return;
-    }
+#[test]
+#[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]
+fn fresh_white_document_composites_uniform_white_twice() {
+    require_gpu();
+    let doc = fresh_white_document(W, H);
     let (first, backend) = composite_active(&doc, true);
     assert_eq!(
         backend,

@@ -357,4 +357,12 @@ mod tests {
             }
         }
     }
+
+    /// The app never treats a software Vulkan device as a GPU: the test-only
+    /// `software-vulkan` feature stays off in every build of this crate.
+    #[test]
+    fn app_never_enables_software_vulkan() {
+        // black_box: a bare constant would trip clippy's assertions_on_constants.
+        assert!(!std::hint::black_box(pictura_render::SOFTWARE_VULKAN));
+    }
 }

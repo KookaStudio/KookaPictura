@@ -7,7 +7,7 @@ use pictura_render::{
     composite_active, composite_gpu, composite_rgba, gpu_available, Backend, GpuError,
 };
 
-use crate::common::{bench_enabled, is_gpu_gone, large_layer, timing_layer};
+use crate::common::{bench_enabled, is_gpu_gone, large_layer, require_gpu, timing_layer};
 
 /// The M29 regression: 4096×2048 is 8.4 MP ⇒ 131072 one-dimensional
 /// workgroups, past the 65535 limit the pre-M29 stack rejected. The 2-D grid
@@ -91,11 +91,9 @@ fn full_4000_document_composites_on_gpu() {
 /// guard; a struct-literal document with oversized dimensions exercises the
 /// limit path with no large allocation. Must return `TooLarge` and not panic.
 #[test]
+#[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]
 fn document_past_2d_product_limit_returns_too_large() {
-    if !gpu_available() {
-        eprintln!("no usable Vulkan GPU; skipping TooLarge check");
-        return;
-    }
+    require_gpu();
     let doc = Document {
         width: u32::MAX,
         height: u32::MAX,

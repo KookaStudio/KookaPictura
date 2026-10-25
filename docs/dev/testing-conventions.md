@@ -67,6 +67,14 @@ suite — currently manual profiling (`4000x4000` region/undo, `1024x1024` filte
 profile) and GPU-mandatory tests (`crates/pictura-render/src/gpu/mod.rs`). Each
 carries a reason string naming how to run it (`--ignored --nocapture`).
 
+A test that needs a Vulkan device is ignored with
+`"requires a Vulkan device; run with --profile gpu --run-ignored all"` and calls
+`require_gpu()`, so it fails, rather than passing silently, when it runs without
+a device. The nextest `gpu` profile (`.config/nextest.toml`) selects these tests
+and the device-free GPU checks, and excludes the `PICTURA_GPU_BENCH` timing
+evidence. CI's `gpu-parity` job runs that profile on Mesa's lavapipe with the
+test-only `software-vulkan` feature.
+
 `#[ignore]` is **not** used to hide unimplemented behavior. The oracle suites
 that used to depend on stubs (`pictura-select`, `pictura-render`) un-ignore once
 the task lands.

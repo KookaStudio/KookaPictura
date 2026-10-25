@@ -593,12 +593,9 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "GPU stroke parity; run explicitly with --ignored"]
+    #[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]
     fn gpu_stroke_matches_the_cpu_oracle() {
-        if !GpuStroke::available() {
-            eprintln!("no GPU adapter; skipping");
-            return;
-        }
+        super::super::require_device(GpuStroke::available());
         let (w, h) = (64u32, 64u32);
         let base = (100u8, 120, 140, 200);
         let cfg = pictura_paint::StrokeConfig {
@@ -694,12 +691,9 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "GPU mask stroke parity; run explicitly with --ignored"]
+    #[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]
     fn gpu_mask_stroke_matches_the_cpu_oracle() {
-        if !GpuStroke::available() {
-            eprintln!("no GPU adapter; skipping");
-            return;
-        }
+        super::super::require_device(GpuStroke::available());
         let (w, h) = (64u32, 64u32);
         let base = 130u8;
         let cfg = pictura_paint::StrokeConfig {

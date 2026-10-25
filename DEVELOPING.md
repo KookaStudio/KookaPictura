@@ -235,7 +235,21 @@ bash scripts/check-openspec-archived.sh          # zero-open change gate
 
 Oracle suites self-skip when `magick` / `psd-tools` are absent. Profiling and
 GPU tests are `#[ignore]`d with a reason string and run with
-`--ignored --nocapture`. See
+`--ignored --nocapture`. A test that needs a Vulkan device is
+`#[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]` and fails when it is run without one,
+so the report counts it as skipped, never as passed. The `gpu` nextest profile
+selects those tests and the device-free GPU checks. CI's `gpu-parity` job runs
+them on Mesa's lavapipe. The test-only `software-vulkan` feature lets the probe
+accept a software device, which release builds reject:
+
+```bash
+# any Vulkan GPU:
+cargo nextest run -p pictura-render --profile gpu --run-ignored all
+# no GPU (install mesa-vulkan-drivers):
+cargo nextest run -p pictura-render --features software-vulkan --profile gpu --run-ignored all
+```
+
+See
 [`docs/dev/testing-conventions.md`](docs/dev/testing-conventions.md) for how
 each layer is built and reports.
 
@@ -278,6 +292,32 @@ checks are Qt Test cases under `crates/pictura-app/cpp/tests/`, not new
 
 `--interop-probe` requires a real platform Vulkan instance and is not
 offscreen-compatible.
+
+## Profiling
+
+`scripts/profile-tools.py` launches the built app in control mode and times
+tool gestures and layer creation end to end (`--scenarios new-layer,new-group`
+for the latter). `--save` and `--compare` give a before/after table.
+
+```bash
+python3 scripts/profile-tools.py --size 6000x4000 --scenarios new-layer,new-group --metrics
+```
+
+`--metrics` starts the app with `PICTURA_METRICS=1`. With that set, the app:
+
+- prints one `pictura metrics: edit label=… composited=… wall_ms=…` line per
+  committed edit, plus a `pictura metrics: phase …` line for each Qt-side
+  phase such as `layers_panel_refresh`;
+- answers the control server's `metrics` method with phase totals, GPU counters
+  (resident hits and misses, declines by reason) and the recent edit records;
+  `reset: true` clears them;
+- requests device timestamps from the GPU when the device supports them, so
+  GPU composites also report `gpu_ms`.
+
+Without the variable it prints nothing and keeps no edit records or phase
+totals, and output is unchanged. (The render crate's GPU counters always count:
+one atomic add per composite or upload. They are only reported.)
+`PICTURA_PAINT_TIMING=1` still prints the per-stroke `[paint-timing]` report.
 
 ## Common tasks
 

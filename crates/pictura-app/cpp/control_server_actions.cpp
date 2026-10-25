@@ -1,5 +1,6 @@
 #include "control_server.h"
 
+#include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 #include <QtCore/QJsonValue>
 #include <QtCore/QString>
@@ -320,6 +321,13 @@ QJsonObject ControlServer::methodLayerOp(const QJsonObject& params)
         if (view->add_layer(index) < 0) {
             return error(QStringLiteral("internal"), QStringLiteral("add_layer failed"));
         }
+    } else if (op == QStringLiteral("add_group")) {
+        if (index < -1 || index >= layerCount) {
+            return invalid(QStringLiteral("index out of range"));
+        }
+        if (view->add_group(index) < 0) {
+            return error(QStringLiteral("internal"), QStringLiteral("add_group failed"));
+        }
     } else {
         return error(QStringLiteral("invalid_param"),
                      QStringLiteral("unknown op: %1").arg(op));
@@ -345,6 +353,24 @@ QJsonObject ControlServer::methodSetGpuCompute(const QJsonObject& params)
     result.insert(QStringLiteral("gpu_compute"), view->gpu_compute());
     result.insert(QStringLiteral("backend"), view->active_backend());
     return ok(result);
+}
+
+QJsonObject ControlServer::methodMetrics(const QJsonObject& params)
+{
+    PictureView* view = frame_->activeView();
+    if (!view) {
+        return error(QStringLiteral("no_document"), QStringLiteral("no active document"));
+    }
+    const QString snapshot = view->metrics_snapshot(params.value(QStringLiteral("reset")).toBool());
+    if (snapshot.isEmpty()) {
+        return error(QStringLiteral("refused"),
+                     QStringLiteral("metrics are off; start the app with PICTURA_METRICS=1"));
+    }
+    const QJsonDocument parsed = QJsonDocument::fromJson(snapshot.toUtf8());
+    if (!parsed.isObject()) {
+        return error(QStringLiteral("internal"), QStringLiteral("malformed metrics snapshot"));
+    }
+    return ok(parsed.object());
 }
 
 } // namespace pictura

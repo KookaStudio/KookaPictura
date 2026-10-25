@@ -139,6 +139,40 @@ jobs:
           name: nextest-junit
           path: target/nextest/default/junit.xml
 
+  # GPU parity on Mesa's lavapipe: the software Vulkan device the
+  # `software-vulkan` feature lets the probe accept. The tests it runs are
+  # #[ignore]d elsewhere, so a runner without the device fails here.
+  gpu-parity:
+    runs-on: ubuntu-24.04
+    needs: changes
+    if: needs.changes.outputs.cpp_only != 'true'
+    timeout-minutes: 30
+    steps:
+      - *checkout
+      - *toolchain
+      - *apt
+
+      - name: Install the software Vulkan driver
+        run: sudo apt-get install -y mesa-vulkan-drivers libvulkan1
+
+      - *sccache
+      - *rustcache
+
+      - uses: taiki-e/install-action@nextest
+
+      - name: Clippy with software-vulkan
+        run: cargo clippy -p pictura-render --all-targets --features software-vulkan -- -D warnings
+
+      - name: GPU parity
+        run: cargo nextest run -p pictura-render --features software-vulkan --profile gpu --run-ignored all
+
+      - name: Upload GPU JUnit
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gpu-parity-junit
+          path: target/nextest/gpu/junit.xml
+
   qt-headless:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
