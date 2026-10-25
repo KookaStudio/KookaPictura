@@ -487,7 +487,13 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [ ] `--version`, an About dialog with the Qt and GPU details, and an update
       checker (#649)
 - [ ] Edition gating for Standard and Extended (#650)
-- [ ] Performance instrumentation: cache, scratch, frame and metrics (#651)
+- [x] Opt-in performance metrics: phase timings, edit records and GPU counters
+      (#651)
+- [ ] Frame-budget instrumentation (#941)
+- [ ] A tile cache with hit-rate accounting (#942)
+- [ ] Scratch paging and Efficiency accounting (#943)
+- [ ] A tile job scheduler with cancellation (#944)
+- [ ] Per-tile filter cancellation (#945)
 - [ ] Global bit-depth and colour-mode availability gating (#490)
 
 ## Specification corpus
