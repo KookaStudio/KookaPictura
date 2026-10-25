@@ -11,6 +11,7 @@ use pictura_core::{
 pub(crate) use crate::blend::blend;
 pub(crate) use crate::composite_knockout::{composite_layer, composite_layers, has_knockout};
 use crate::composite_native::composite_adjustment;
+use crate::composite_route::ContentRoute;
 use crate::composite_rows::{composite_canvas, composite_pixels};
 use crate::smart_source::composite_smart_source;
 pub(crate) use crate::smart_source::render_smart_source;
@@ -223,6 +224,7 @@ impl Canvas {
 
     /// A canvas covering document-space `[ox, ox+w) × [oy, oy+h)`.
     pub(crate) fn new_region(ox: i32, oy: i32, w: usize, h: usize) -> Self {
+        crate::metrics::note_canvas(w * h * std::mem::size_of::<Px>());
         Self {
             w,
             h,
@@ -326,18 +328,17 @@ pub(crate) fn composite_layer_inner(
     canvas.effect_scale = effect_scale * layer.opacity as f32 / 255.0;
     crate::layer_effects::composite_layer_effects(canvas, layer, doc);
     canvas.effect_scale = effect_scale;
-    if layer.is_group {
+    // Each arm keeps the fall-through the old if/else chain had: a source
+    // that cannot render (an empty region, an unreadable payload) leaves the
+    // layer to the next path, ending at `composite_pixels`.
+    match crate::composite_route::content_route(layer) {
         // True pass-through: recurse children onto the running canvas so their
         // blend modes see outside the group (exact only at opacity 255, no
         // mask; else isolated). `deep` threads through so a `Deep` knockout
         // child still reaches the document background; when the subtree knocks
         // out, the backdrop current at group entry is snapshotted as the
         // children's `Shallow` stopping point.
-        if matches!(layer.blend, BlendMode::PassThrough)
-            && layer.opacity == 255
-            && layer.mask.is_none()
-            && layer.vector_mask.is_none()
-        {
+        ContentRoute::PassThroughGroup => {
             let snapshot = has_knockout(layer).then(|| canvas.clone());
             let child_shallow = snapshot.as_ref().or(shallow);
             crate::composite_clipping::composite_siblings(
@@ -351,33 +352,51 @@ pub(crate) fn composite_layer_inner(
         // An isolated group is a boundary: `deep` resets (a `Deep` child falls
         // back to the group's own backdrop) and that backdrop is also the
         // `Shallow` stopping point; the incoming bases are ignored.
-        let mut inner = Canvas::new_region(canvas.ox, canvas.oy, canvas.w, canvas.h);
-        inner.skip_effects = canvas.skip_effects;
-        let ko_base = has_knockout(layer)
-            .then(|| Canvas::new_region(canvas.ox, canvas.oy, canvas.w, canvas.h));
-        crate::composite_clipping::composite_siblings(
-            &mut inner,
-            &layer.children,
-            doc,
-            |canvas, _, child| composite_layer(canvas, child, doc, None, ko_base.as_ref()),
-        );
-        composite_canvas(canvas, layer, doc, &inner);
-    } else if let Some(adjustment) = crate::fill::decode_layer_fill(layer) {
-        composite_adjustment(canvas, layer, doc, &adjustment);
-    } else if layer.adjustment.is_none()
-        && !crate::smart_filter::composite_smart_filtered_source(canvas, layer, doc)
-        && !composite_smart_source(canvas, layer, doc)
-        && !crate::text_render::composite_type_source(canvas, layer, doc)
-    {
-        // A layer with no decoded fill but an adjustment block is a no-op here
-        // (the guard above). With no adjustment block a channel-less layer (for
-        // example a shape whose `vscg` did not decode) falls through to
-        // `composite_pixels`, which paints an opaque black rect over the layer
-        // rect: the "vscg does not change the backdrop" guarantee is relative to
-        // the bare channel-less layer. ponytail: pre-existing channel-less
-        // behavior, left as is; gate it when a fill-less shape layer needs to be
-        // truly transparent.
-        composite_pixels(canvas, layer, doc);
+        ContentRoute::IsolatedGroup => {
+            let mut inner = Canvas::new_region(canvas.ox, canvas.oy, canvas.w, canvas.h);
+            inner.skip_effects = canvas.skip_effects;
+            let ko_base = has_knockout(layer)
+                .then(|| Canvas::new_region(canvas.ox, canvas.oy, canvas.w, canvas.h));
+            crate::composite_clipping::composite_siblings(
+                &mut inner,
+                &layer.children,
+                doc,
+                |canvas, _, child| composite_layer(canvas, child, doc, None, ko_base.as_ref()),
+            );
+            composite_canvas(canvas, layer, doc, &inner);
+        }
+        ContentRoute::Fill(adjustment) => composite_adjustment(canvas, layer, doc, &adjustment),
+        // A layer with no decoded fill but an adjustment block is a no-op.
+        ContentRoute::UndecodedAdjustment => {}
+        ContentRoute::SmartFiltered => {
+            if !crate::smart_filter::composite_smart_filtered_source(canvas, layer, doc)
+                && !composite_smart_source(canvas, layer, doc)
+                && !crate::text_render::composite_type_source(canvas, layer, doc)
+            {
+                composite_pixels(canvas, layer, doc);
+            }
+        }
+        ContentRoute::SmartSource => {
+            if !composite_smart_source(canvas, layer, doc)
+                && !crate::text_render::composite_type_source(canvas, layer, doc)
+            {
+                composite_pixels(canvas, layer, doc);
+            }
+        }
+        ContentRoute::TypeSource => {
+            if !crate::text_render::composite_type_source(canvas, layer, doc) {
+                composite_pixels(canvas, layer, doc);
+            }
+        }
+        // A channel-less layer (for example a shape whose `vscg` did not
+        // decode) reaches `composite_pixels`, which paints an opaque black rect
+        // over the layer rect: the "vscg does not change the backdrop"
+        // guarantee is relative to the bare channel-less layer. ponytail:
+        // pre-existing channel-less behavior, left as is; gate it when a
+        // fill-less shape layer needs to be truly transparent.
+        ContentRoute::UndecodedVectorFill | ContentRoute::Pixels => {
+            composite_pixels(canvas, layer, doc);
+        }
     }
     // The above-content effect (inner shadow) renders over the layer's content.
     let effect_scale = canvas.effect_scale;

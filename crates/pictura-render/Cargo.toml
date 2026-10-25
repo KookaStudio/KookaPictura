@@ -5,6 +5,11 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[features]
+# Test-only: let the GPU probe accept a software (CPU-type) Vulkan device so the
+# GPU parity tests run on lavapipe in CI. Never enable it in a manifest.
+software-vulkan = []
+
 [dependencies]
 unicode-bidi = "0.3"
 # The built-in pattern set a Pattern Overlay offers; also the CPU stroke

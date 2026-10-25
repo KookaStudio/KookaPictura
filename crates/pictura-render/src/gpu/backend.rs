@@ -218,10 +218,19 @@ async fn request_device() -> Option<Devices> {
     {
         return None;
     }
+    // Device timestamps are requested only for the opt-in metrics report, so
+    // ordinary runs create the device exactly as before.
+    let timestamps =
+        crate::metrics::enabled() && adapter.features().contains(wgpu::Features::TIMESTAMP_QUERY);
+    let required_features = if timestamps {
+        wgpu::Features::TIMESTAMP_QUERY
+    } else {
+        wgpu::Features::empty()
+    };
     let (device, queue) = adapter
         .request_device(&wgpu::DeviceDescriptor {
             label: Some("pictura-render-gpu"),
-            required_features: wgpu::Features::empty(),
+            required_features,
             required_limits: adapter.limits(),
             experimental_features: wgpu::ExperimentalFeatures::disabled(),
             memory_hints: wgpu::MemoryHints::default(),
@@ -249,15 +258,11 @@ async fn request_device() -> Option<Devices> {
 /// Whether an adapter of this type can speed compositing up. A software
 /// Vulkan device (Mesa's lavapipe/llvmpipe, found on machines without a GPU)
 /// emulates the GPU on the CPU and measured slower than the CPU compositor
-/// itself, so it is treated as no GPU at all.
+/// itself, so it is treated as no GPU at all, except in a build with the
+/// test-only `software-vulkan` feature, which runs the GPU parity tests on it.
 pub(super) fn accelerates(device_type: wgpu::DeviceType) -> bool {
-    device_type != wgpu::DeviceType::Cpu
+    crate::SOFTWARE_VULKAN || device_type != wgpu::DeviceType::Cpu
 }
-
-/// Uploads served from the resident cache, for the tests.
-#[cfg(test)]
-pub(super) static RESIDENT_HITS: std::sync::atomic::AtomicUsize =
-    std::sync::atomic::AtomicUsize::new(0);
 
 /// Set once the driver reports the shared device lost (a reset after a hung
 /// job, for one). A lost device never comes back, so every later caller sees
@@ -308,12 +313,65 @@ pub(crate) fn grid_2d(n: u32, max_per_dim: u32) -> Option<(u32, u32)> {
     (gy <= u64::from(max_per_dim)).then_some((gx, gy as u32))
 }
 
+/// Device timestamps around one composite's dispatches: slot 0 is the first
+/// pass's start, slot 1 the end of every pass, so the last one stays.
+struct Timing {
+    set: wgpu::QuerySet,
+    resolve: wgpu::Buffer,
+    readback: wgpu::Buffer,
+    /// Whether a pass has written slot 0 yet.
+    started: std::sync::atomic::AtomicBool,
+}
+
+impl Timing {
+    fn new(device: &wgpu::Device) -> Self {
+        let size = 2 * u64::from(wgpu::QUERY_SIZE);
+        Self {
+            set: device.create_query_set(&wgpu::QuerySetDescriptor {
+                label: Some("pictura-composite-timestamps"),
+                ty: wgpu::QueryType::Timestamp,
+                count: 2,
+            }),
+            resolve: device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("pictura-timestamp-resolve"),
+                size,
+                usage: wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC,
+                mapped_at_creation: false,
+            }),
+            readback: device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("pictura-timestamp-readback"),
+                size,
+                usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            }),
+            started: std::sync::atomic::AtomicBool::new(false),
+        }
+    }
+
+    fn writes(&self) -> wgpu::ComputePassTimestampWrites<'_> {
+        let first = !self
+            .started
+            .swap(true, std::sync::atomic::Ordering::Relaxed);
+        wgpu::ComputePassTimestampWrites {
+            query_set: &self.set,
+            beginning_of_pass_write_index: first.then_some(0),
+            end_of_pass_write_index: Some(1),
+        }
+    }
+
+    fn ran(&self) -> bool {
+        self.started.load(std::sync::atomic::Ordering::Relaxed)
+    }
+}
+
 pub(super) struct Gpu {
     pub(super) device: wgpu::Device,
     pub(super) queue: wgpu::Queue,
     res: &'static ComputeResources,
     planar: &'static PlanarResources,
     params: wgpu::Buffer,
+    /// Present only when the device was created with timestamp queries.
+    timing: Option<Timing>,
     /// Region origin in document pixels.
     x0: u32,
     y0: u32,
@@ -346,12 +404,17 @@ impl Gpu {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        let timing = device
+            .features()
+            .contains(wgpu::Features::TIMESTAMP_QUERY)
+            .then(|| Timing::new(&device));
         Ok(Self {
             device,
             queue,
             res: shared.resources(),
             planar: shared.planar_resources(),
             params,
+            timing,
             x0,
             y0,
             w,
@@ -437,9 +500,11 @@ impl Gpu {
             .as_ref()
             .and_then(|k| resident().and_then(|mut r| r.get(k)))
         {
-            #[cfg(test)]
-            RESIDENT_HITS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            crate::metrics::count_resident(true);
             return buffer;
+        }
+        if key.is_some() {
+            crate::metrics::count_resident(false);
         }
         let buffer = upload();
         if let (Some(key), Some(mut r)) = (key, resident()) {
@@ -644,7 +709,7 @@ impl Gpu {
         {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("pictura-blend"),
-                timestamp_writes: None,
+                timestamp_writes: self.timing.as_ref().map(Timing::writes),
             });
             pass.set_pipeline(&self.res.pipeline);
             pass.set_bind_group(0, &bind_group, &[]);
@@ -733,6 +798,11 @@ impl Gpu {
                 label: Some("pictura-readback"),
             });
         encoder.copy_buffer_to_buffer(&planar, 0, &staging, 0, size);
+        let timing = self.timing.as_ref().filter(|t| t.ran());
+        if let Some(t) = timing {
+            encoder.resolve_query_set(&t.set, 0..2, &t.resolve, 0);
+            encoder.copy_buffer_to_buffer(&t.resolve, 0, &t.readback, 0, t.readback.size());
+        }
         self.queue.submit(Some(encoder.finish()));
 
         let slice = staging.slice(..size);
@@ -740,12 +810,26 @@ impl Gpu {
         slice.map_async(wgpu::MapMode::Read, move |result| {
             let _ = tx.send(result);
         });
+        let timing_rx = timing.map(|t| {
+            let (tx, rx) = std::sync::mpsc::channel();
+            t.readback
+                .slice(..)
+                .map_async(wgpu::MapMode::Read, move |result| {
+                    let _ = tx.send(result);
+                });
+            (t, rx)
+        });
         let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
         rx.recv()
             .map_err(|_| GpuError::Readback)?
             .map_err(|_| GpuError::Readback)?;
         if device_lost() {
             return Err(GpuError::Readback);
+        }
+        if let Some((t, rx)) = timing_rx {
+            if matches!(rx.recv(), Ok(Ok(()))) {
+                self.publish_device_time(t);
+            }
         }
 
         // Each plane is `pw` words; copy exactly `n` bytes of it into the
@@ -780,6 +864,24 @@ impl Gpu {
             *kept = Some(staging);
         }
         Ok(out)
+    }
+
+    /// Publish the mapped begin/end timestamps as the composite's device time.
+    fn publish_device_time(&self, t: &Timing) {
+        let ticks = {
+            let Ok(mapped) = t.readback.slice(..).get_mapped_range() else {
+                return;
+            };
+            let word = |i: usize| {
+                let mut bytes = [0u8; 8];
+                bytes.copy_from_slice(&mapped[i * 8..i * 8 + 8]);
+                u64::from_le_bytes(bytes)
+            };
+            word(1).saturating_sub(word(0))
+        };
+        t.readback.unmap();
+        let ns = ticks as f64 * f64::from(self.queue.get_timestamp_period());
+        crate::metrics::publish_device_ms(ns / 1.0e6);
     }
 
     /// De-interleave packed RGBA8 readback into the planar straight-alpha

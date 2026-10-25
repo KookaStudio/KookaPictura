@@ -8,3 +8,24 @@ success-output = "never"
 [profile.default.junit]
 path = "junit.xml"
 report-skipped = "ignored"
+
+# The GPU parity run (`gpu-parity` CI job, or locally on any Vulkan device):
+#   cargo nextest run -p pictura-render --features software-vulkan --profile gpu --run-ignored all
+# Selects the device-dependent tests and the device-free GPU checks; the
+# PICTURA_GPU_BENCH timing and profile evidence is excluded by name.
+[profile.gpu]
+fail-fast = false
+status-level = "all"
+final-status-level = "all"
+failure-output = "final"
+success-output = "never"
+default-filter = """
+package(pictura-render) & (
+    binary(gpu_parity) | binary(gpu_filter_parity)
+    | test(/^gpu(_filter)?::/) | test(/fixture_scene/)
+) & !test(/timing|_1024_|over_1d_limit|full_4000|composite_profile/)
+"""
+
+[profile.gpu.junit]
+path = "junit.xml"
+report-skipped = "ignored"

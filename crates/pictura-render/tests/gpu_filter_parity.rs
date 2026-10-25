@@ -5,8 +5,8 @@
 //! buffers. A filter with no GPU kernel, or the whole path with GPU compute
 //! disabled, must return `Backend::Cpu` with bytes identical to the oracle.
 //!
-//! Tests skip with a printed note when no Vulkan adapter is usable, so a
-//! GPU-less CI stays green.
+//! The parity test needs a device: it is `#[ignore]`d and fails when run
+//! without one. The timing evidence stays opt-in through `PICTURA_GPU_BENCH`.
 
 use pictura_core::PixelBuffer;
 use pictura_filters::{apply, Filter, Quality, RadialMethod};
@@ -222,11 +222,12 @@ fn assert_parity(got: &PixelBuffer, want: &PixelBuffer, label: &str) -> i32 {
 }
 
 #[test]
+#[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]
 fn accelerated_filters_match_cpu_within_one_lsb() {
-    if !filter_gpu_available() {
-        println!("no usable Vulkan GPU; skipping accelerated filter parity");
-        return;
-    }
+    assert!(
+        filter_gpu_available(),
+        "no usable Vulkan device; this test is #[ignore]d and needs one (software-vulkan in CI)"
+    );
     for (label, base) in [
         ("rgb", gradient_rgb()),
         ("rgba", gradient_rgba()),

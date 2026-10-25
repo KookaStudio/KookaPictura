@@ -243,3 +243,56 @@ fn compare_scene(scene_name: &str, modes: &[(BlendMode, &str, u8)]) {
         );
     }
 }
+
+/// Every fixture scene through the active backend on a device: the GPU result
+/// must stay within one LSB of the CPU oracle (never of ImageMagick), or the
+/// document must have declined to the CPU with identical bytes.
+#[test]
+#[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]
+fn fixture_scenes_match_oracle_on_active_backend() {
+    assert!(
+        pictura_render::gpu_available(),
+        "no usable Vulkan device; this test is #[ignore]d and needs one (software-vulkan in CI)"
+    );
+    let mut on_gpu = 0;
+    for (scene_name, modes) in [("solid", MODES), ("ramp", MODES), ("alpha", NORMAL_ONLY)] {
+        let base = read_fixture(&format!("{scene_name}_base.rgba"));
+        let src = read_fixture(&format!("{scene_name}_src.rgba"));
+        for (mode, suffix, _) in modes {
+            let doc = scene(&base, &src, *mode);
+            let cpu = pictura_render::composite_rgba(&doc);
+            let (active, backend) = pictura_render::composite_active(&doc, true);
+            match backend {
+                pictura_render::Backend::Gpu => {
+                    on_gpu += 1;
+                    for (i, (a, b)) in cpu.data.iter().zip(active.data.iter()).enumerate() {
+                        assert!(
+                            a.abs_diff(*b) <= 1,
+                            "{scene_name}/{suffix} byte {i}: cpu {a} vs gpu {b}"
+                        );
+                    }
+                }
+                pictura_render::Backend::Cpu => {
+                    assert_eq!(active, cpu, "{scene_name}/{suffix}: declined bytes");
+                }
+            }
+        }
+    }
+    assert!(on_gpu > 0, "a separable fixture scene must run on the GPU");
+}
+
+/// A fixture scene the GPU declines (Dissolve) falls back to the CPU oracle.
+#[test]
+#[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]
+fn declined_fixture_scene_equals_oracle() {
+    assert!(
+        pictura_render::gpu_available(),
+        "no usable Vulkan device; this test is #[ignore]d and needs one (software-vulkan in CI)"
+    );
+    let base = read_fixture("ramp_base.rgba");
+    let src = read_fixture("ramp_src.rgba");
+    let doc = scene(&base, &src, BlendMode::Dissolve);
+    let (active, backend) = pictura_render::composite_active(&doc, true);
+    assert_eq!(backend, pictura_render::Backend::Cpu);
+    assert_eq!(active, pictura_render::composite_rgba(&doc));
+}

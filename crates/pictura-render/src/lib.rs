@@ -33,6 +33,7 @@ pub use canvas_damage::CanvasDamage;
 mod composite;
 mod composite_clipping;
 mod composite_knockout;
+mod composite_route;
 mod composite_rows;
 mod mask_refine;
 mod smart_source;
@@ -104,6 +105,10 @@ pub use layer_effects::{
 };
 
 pub mod gpu;
+/// Whether this build was compiled with the test-only `software-vulkan`
+/// feature, which lets the GPU probe accept a software Vulkan device. No
+/// workspace manifest enables it; only the `gpu-parity` CI job passes it.
+pub const SOFTWARE_VULKAN: bool = cfg!(feature = "software-vulkan");
 pub use gpu::{
     composite_active, composite_gpu, composite_gpu_or_cpu, composite_region_active,
     gpu_adapter_info, gpu_available, Backend, GpuAdapterInfo, GpuError,
@@ -121,6 +126,7 @@ mod filter_proxy;
 pub use filter_proxy::{FilterProxy, MaskExtremes};
 
 mod gpu_filter;
+pub mod metrics;
 pub use gpu_filter::{apply_filter_active, filter_gpu_available};
 
 pub mod document_ops;
@@ -146,27 +152,28 @@ pub use document_ops::{
     delete_paths_report, delete_smart_filter, delete_vector_mask, distribute_layers,
     document_bit_depth, document_color_mode, duplicate_layer, duplicate_paths, extend_background,
     flatten, flatten_rows, flip_document, group_layer, group_paths, has_forced_locks,
-    has_layer_mask, has_layer_style, has_vector_mask, indexed_exact_available, invert_layer_mask,
-    is_background, is_fill_content_layer, is_shape_layer, is_visible_in_panel,
-    layer_content_bounds, layer_from_background, layer_live_shape, layer_mask_disabled,
-    layer_mask_linked, layer_mask_refinement, layer_shape_paths, layer_style_effect_names,
-    layer_style_pattern_names, layer_style_value, layer_via_copy, layer_via_cut, lift_selection,
-    lock_group_layers, mask_document, mask_document_coverage, merge_lifted, merge_scope,
-    move_mask_selection_content, move_path, move_path_to, move_path_to_result,
-    move_selection_content, neutral_color, new_smart_object_via_copy, next_layer_name,
-    open_as_smart_object, parent_path, paste_clip, paste_layer_style, paste_shape_attributes,
-    perspective_crop, perspective_crop_refusal, perspective_crop_size, perspective_crop_sized,
-    place_smart_object, preview_pictura_raw, rasterize_all_layers, rasterize_fill_content,
-    rasterize_shape, rasterize_smart_object, rasterize_vector_mask, release_clipping_mask,
-    remove_matte, remove_slice, rename_path, reorder_smart_filters, replace_smart_object_contents,
-    reset_smart_object_transform, resize_canvas_document, resize_document, resize_shape,
-    resolve_path, resolve_path_mut, resolve_slices, reverse_paths, reverse_paths_result,
-    rotate_document, rotate_document_in, rotate_document_in_offset, save_view, scale_layer_effects,
-    select_similar, set_all_effects_visible, set_blend_paths, set_color_paths,
-    set_document_layer_style_value, set_fill_paths, set_layer_live_shape, set_layer_mask_density,
-    set_layer_mask_enabled, set_layer_mask_feather, set_layer_mask_linked, set_layer_shape_paths,
-    set_layer_style_value, set_lock_paths, set_opacity_paths, set_shape_fill, set_shape_stroke,
-    set_slice, set_vector_mask_density, set_vector_mask_enabled, set_vector_mask_feather,
+    has_layer_mask, has_layer_style, has_vector_mask, indexed_exact_available,
+    insertion_is_content_neutral, invert_layer_mask, is_background, is_fill_content_layer,
+    is_shape_layer, is_visible_in_panel, layer_content_bounds, layer_from_background,
+    layer_live_shape, layer_mask_disabled, layer_mask_linked, layer_mask_refinement,
+    layer_shape_paths, layer_style_effect_names, layer_style_pattern_names, layer_style_value,
+    layer_via_copy, layer_via_cut, lift_selection, lock_group_layers, mask_document,
+    mask_document_coverage, merge_lifted, merge_scope, move_mask_selection_content, move_path,
+    move_path_to, move_path_to_result, move_selection_content, neutral_color,
+    new_smart_object_via_copy, next_layer_name, open_as_smart_object, parent_path, paste_clip,
+    paste_layer_style, paste_shape_attributes, perspective_crop, perspective_crop_refusal,
+    perspective_crop_size, perspective_crop_sized, place_smart_object, preview_pictura_raw,
+    rasterize_all_layers, rasterize_fill_content, rasterize_shape, rasterize_smart_object,
+    rasterize_vector_mask, release_clipping_mask, remove_matte, remove_slice, rename_path,
+    reorder_smart_filters, replace_smart_object_contents, reset_smart_object_transform,
+    resize_canvas_document, resize_document, resize_shape, resolve_path, resolve_path_mut,
+    resolve_slices, reverse_paths, reverse_paths_result, rotate_document, rotate_document_in,
+    rotate_document_in_offset, save_view, scale_layer_effects, select_similar,
+    set_all_effects_visible, set_blend_paths, set_color_paths, set_document_layer_style_value,
+    set_fill_paths, set_layer_live_shape, set_layer_mask_density, set_layer_mask_enabled,
+    set_layer_mask_feather, set_layer_mask_linked, set_layer_shape_paths, set_layer_style_value,
+    set_lock_paths, set_opacity_paths, set_shape_fill, set_shape_stroke, set_slice,
+    set_vector_mask_density, set_vector_mask_enabled, set_vector_mask_feather,
     set_vector_mask_linked, set_visible_paths, shape_bounds, shape_coverage, shape_fill,
     shape_fill_color, shape_layer_rect, shape_stroke, smart_object_source_bytes, stamp_scope,
     transform_layer, transform_layer_quad, transform_layer_quad_with, transform_layer_warp,

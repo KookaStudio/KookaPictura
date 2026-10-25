@@ -8,7 +8,8 @@ use pictura_render::{
 };
 
 use crate::common::{
-    adjustment_layer, base_layer, bench_enabled, group, large_layer, layer, scene, SIZE,
+    adjustment_layer, base_layer, bench_enabled, group, large_layer, layer, require_gpu, scene,
+    SIZE,
 };
 
 fn whole_rect() -> PsdRect {
@@ -118,11 +119,9 @@ fn assert_region_slice(doc: &Document, full: &PixelBuffer, r: PsdRect, ctx: &str
 }
 
 #[test]
+#[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]
 fn region_matches_full_slice() {
-    if !gpu_available() {
-        eprintln!("no usable Vulkan GPU; skipping region parity");
-        return;
-    }
+    require_gpu();
     let rects = [
         region_rect(0, 0, 4, 4),
         region_rect(1, 2, 7, 6),
@@ -143,11 +142,9 @@ fn region_matches_full_slice() {
 }
 
 #[test]
+#[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]
 fn full_region_equals_full_composite() {
-    if !gpu_available() {
-        eprintln!("no usable Vulkan GPU; skipping full-region parity");
-        return;
-    }
+    require_gpu();
     for (name, doc) in region_scenes() {
         let (full, fb) = composite_active(&doc, true);
         let (region, rb) = composite_region_active(&doc, whole_rect(), true);

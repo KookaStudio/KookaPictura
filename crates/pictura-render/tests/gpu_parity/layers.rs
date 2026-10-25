@@ -9,13 +9,15 @@ use pictura_render::{
 };
 
 use crate::common::{
-    adjustment_layer, base_layer, check_scene_parity, group, is_gpu_gone, layer, SIZE,
+    adjustment_layer, base_layer, check_scene_parity, group, layer, require_gpu, SIZE,
 };
 
 /// The data path's mask plane and packed-group source are exercised here; the
 /// blend/adjustment tests above never bind either.
 #[test]
+#[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]
 fn groups_and_masks_match_cpu() {
+    require_gpu();
     let mut max_delta = 0i32;
 
     // Masked, reduced-opacity pixel layer over an opaque backdrop.
@@ -104,7 +106,9 @@ fn groups_and_masks_match_cpu() {
 /// A reduced-fill layer must match the CPU oracle within ±1 LSB; over an opaque
 /// backdrop the fill factor scales colour only, so the output alpha stays 255.
 #[test]
+#[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]
 fn fill_scene_matches_cpu() {
+    require_gpu();
     let mut top = layer("fill", BlendMode::Multiply, |x, y| {
         (x as u8 * 16 + 8, y as u8 * 16 + 8, 255 - x as u8 * 16, 200)
     });
@@ -129,7 +133,9 @@ fn fill_scene_matches_cpu() {
 }
 
 #[test]
+#[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]
 fn adjustment_layers_match_cpu() {
+    require_gpu();
     use pictura_render::{
         encode_brightness_contrast, encode_hue_saturation, encode_invert, encode_posterize,
         encode_threshold,
@@ -152,10 +158,6 @@ fn adjustment_layers_match_cpu() {
         let cpu = composite_rgba(&doc);
         let gpu = match composite_gpu(&doc) {
             Ok(buf) => buf,
-            Err(e) if is_gpu_gone(&e) => {
-                eprintln!("no usable Vulkan GPU ({e}); skipping adjustment parity");
-                return;
-            }
             Err(e) => panic!("{name}: {e}"),
         };
         assert_eq!((gpu.width, gpu.height, gpu.channels), (SIZE, SIZE, 4));

@@ -23,11 +23,10 @@ fn chunks_cover_the_count_once_in_order() {
 /// Chunked submissions must reproduce the single-submission bytes, including
 /// the read-modify-write combine pass, which would double-apply on overlap.
 #[test]
+#[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]
 fn chunked_dispatch_matches_one_submission() {
-    let Some((device, queue)) = crate::gpu::shared_device() else {
-        eprintln!("skip: no usable Vulkan adapter");
-        return;
-    };
+    crate::gpu::require_gpu();
+    let (device, queue) = crate::gpu::shared_device().expect("a validated device");
     let (w, h) = (53u32, 41u32);
     let n = (w * h) as usize;
     let input: Vec<u8> = (0..3 * n).map(|i| ((i * 37) ^ (i / 7)) as u8).collect();
