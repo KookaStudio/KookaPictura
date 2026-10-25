@@ -394,10 +394,8 @@ impl qobject::PictureView {
                             if pictura_render::is_fill_content_layer(layer) {
                                 let decoded = patterns
                                     .get_or_insert_with(|| pictura_codec::decode_patterns(doc));
-                                fill_thumbnail_image(
-                                    layer, doc, thumb, entire_document, decoded,
-                                )
-                                .unwrap_or_default()
+                                fill_thumbnail_image(layer, doc, thumb, entire_document, decoded)
+                                    .unwrap_or_default()
                             } else {
                                 QImage::default()
                             }

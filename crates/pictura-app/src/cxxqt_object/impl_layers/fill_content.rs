@@ -365,10 +365,7 @@ fn pattern_thumbnail(view: &PictureView, id: &QString, size: i32) -> QImage {
         return QImage::default();
     };
     let pixels = (pattern.width as usize).saturating_mul(pattern.height as usize);
-    if pattern.width == 0
-        || pattern.height == 0
-        || pattern.rgba.len() < pixels.saturating_mul(4)
-    {
+    if pattern.width == 0 || pattern.height == 0 || pattern.rgba.len() < pixels.saturating_mul(4) {
         return QImage::default();
     }
     let (tw, th) = if pattern.width >= pattern.height {
