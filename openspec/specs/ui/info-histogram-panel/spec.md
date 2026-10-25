@@ -93,8 +93,9 @@ Both SHALL remain visually equivalent to the previous full-resolution results.
 ### Requirement: CMYK colour readout
 
 The Info panel SHALL show the CMYK components of the colour under the cursor in
-the top-right block by default, derived from the sampled pixel with no engine call
-beyond the sample. Each component SHALL be reported as a 0–100 percentage.
+the top-right block by default. The components SHALL be derived from the sampled
+pixel through the shared CMYK working-profile conversion, with no document
+call beyond the sample. Each component SHALL be reported as a 0–100 percentage.
 Off-canvas positions SHALL blank the colour blocks.
 
 #### Scenario: Cursor over a white pixel [info_cmyk_white]
@@ -106,6 +107,12 @@ Off-canvas positions SHALL blank the colour blocks.
 
 - **WHEN** the cursor moves off the canvas
 - **THEN** the colour blocks are blank rather than holding their last values
+
+#### Scenario: CMYK follows the working profile [info_cmyk_profile]
+
+- **WHEN** the cursor is over a black pixel and the block shows CMYK
+- **THEN** the components equal the shared conversion's CMYK for black, not
+  `C : 0  M : 0  Y : 0  K : 100`
 
 ### Requirement: Ruler readout mode
 

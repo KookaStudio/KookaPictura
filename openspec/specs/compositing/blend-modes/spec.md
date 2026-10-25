@@ -2,7 +2,9 @@
 
 ## Purpose
 All 27 Photoshop blend functions, the separable W3C formulas, the Photoshop-only extended modes, and Dissolve, checked against an oracle.
+
 ## Requirements
+
 ### Requirement: All 27 Photoshop blend functions
 
 The compositor SHALL implement the 27 Photoshop layer blend modes — Normal, Dissolve, Darken, Multiply, Color Burn, Linear Burn, Darker Color, Lighten, Screen, Color Dodge, Linear Dodge (Add), Lighter Color, Overlay, Soft Light, Hard Light, Vivid Light, Linear Light, Pin Light, Hard Mix, Difference, Exclusion, Subtract, Divide, Hue, Saturation, Color, and Luminosity — one-to-one with the PSD 4-byte blend keys.
@@ -104,3 +106,33 @@ The eight modes for which ImageMagick has no like-for-like operator — Dissolve
 - **WHEN** the unsupported modes are evaluated on fixed color pairs
 - **THEN** the results MUST match hand-computed W3C values within tolerance
 
+### Requirement: The engine layer-mode list is the only blend-mode table
+
+The engine SHALL publish its layer blend-mode list as ordered (PSD key, CS6 display
+name, has-neutral-colour) rows: the 27 layer modes, Normal through Luminosity,
+with Pass Through excluded. Every layer blend-mode control and label in the shell SHALL build from
+that list. That covers the New
+Layer dialog, the Layer Style blend combo, the Layers panel blend combo and Mode
+filter, and the Properties panel's mode label. A control's selected index SHALL
+be the engine list index. The shell SHALL hold no blend key, name or
+neutral-colour table of its own, and the New Layer dialog's neutral-colour option
+SHALL follow the engine's has-neutral flag.
+
+#### Scenario: Engine list order and names [blend_list_engine]
+
+- **WHEN** the engine layer-mode list is enumerated
+- **THEN** it has 27 entries in layer-mode order, with each key round-tripping
+  through the PSD key decoder and each name equal to the mode's display name
+
+#### Scenario: Layer combos build from the engine list [blend_list_combos]
+
+- **WHEN** the Layers panel blend combo and Mode filter, the New Layer dialog's
+  Mode combo and the Layer Style blend combo are populated
+- **THEN** each lists the engine names in engine order. The Layers panel, filter
+  and New Layer combos carry the engine keys as item data, and the Layer Style
+  combo stays index-only, its index being the engine index.
+
+#### Scenario: Choosing a mode sets that engine mode [blend_list_set]
+
+- **WHEN** the user picks the entry at index *i* in the Layers panel blend combo
+- **THEN** the active layer's blend key is the engine list's key at index *i*
