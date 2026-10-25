@@ -15,12 +15,15 @@
 
 use super::super::document_session::{TransformSession, WarpDrag};
 use super::super::qobject::PictureView;
-use super::geometry::{projective_coefficients, session_quad, source_corners};
+use super::geometry::{
+    projective_coefficients, session_quad, source_corners, store_quad, unmap_quad, MapParams,
+};
 use super::session::transform_preview_layer;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
 use pictura_core::warp::{BezierMesh, Warp, WarpStyle};
+use pictura_core::Homography;
 
 #[cxx_qt::bridge]
 pub mod ffi {
@@ -35,12 +38,15 @@ pub mod ffi {
 
     #[namespace = "pictura"]
     extern "Rust" {
-        /// Switch the session into Warp mode: a custom mesh following the
-        /// current box. True when already warping; false without a session.
+        /// Switch the session into Warp mode, reusing a stored mesh or making
+        /// an identity one. False without a session, or when a new mesh needs
+        /// a box frame and the box has none.
         fn transform_enter_warp(view: Pin<&mut PictureView>) -> bool;
-        /// Back to the box: the warp edits are dropped, the box is as it was.
+        /// Back to the box: the warp stays in the session, so the box edits it.
         fn transform_leave_warp(view: Pin<&mut PictureView>) -> bool;
         fn transform_warp_active(view: &PictureView) -> bool;
+        /// Whether the session holds a warp, whether or not Warp mode is active.
+        fn transform_warp_stored(view: &PictureView) -> bool;
         /// Pick a warp style by id (`none`, `custom`, `arc`, `arcLower`…).
         /// Custom keeps the current shape as a mesh, None resets it to the
         /// box, a preset starts at the current bend (50% from a non-preset).
@@ -105,8 +111,20 @@ impl Frame {
         })
     }
 
+    fn from_h(h: [f64; 9]) -> Option<Frame> {
+        Some(Frame {
+            h,
+            inv: invert(&h)?,
+        })
+    }
+
     fn of(session: &TransformSession) -> Option<Frame> {
         Frame::new(source_corners(session.orig_rect), session_quad(session))
+    }
+
+    /// This frame with the warp's post-frame applied after it.
+    fn with_post(&self, post: &[f64; 9]) -> Option<Frame> {
+        Frame::from_h(compose(&self.h, post)?)
     }
 
     fn to_doc(&self, p: [f64; 2]) -> [f64; 2] {
@@ -120,6 +138,25 @@ impl Frame {
     }
 }
 
+/// The frame after the warp's post-frame: what the preview actually samples.
+fn effective_frame(session: &TransformSession) -> Option<Frame> {
+    let frame = Frame::of(session)?;
+    match session.warp_post {
+        Some(post) => frame.with_post(&post),
+        None => Some(frame),
+    }
+}
+
+/// The quad the warp preview and commit send the source box to. It equals the
+/// box when there is no post-frame, and the pre-post frame after leaving Warp.
+pub(super) fn warp_preview_quad(session: &TransformSession) -> Option<[(f64, f64); 4]> {
+    let frame = effective_frame(session)?;
+    Some(source_corners(session.orig_rect).map(|p| {
+        let q = frame.to_doc([p.0, p.1]);
+        (q[0], q[1])
+    }))
+}
+
 fn apply(c: &[f64; 9], p: [f64; 2]) -> [f64; 2] {
     let w = c[2] * p[0] + c[5] * p[1] + c[8];
     [
@@ -128,14 +165,63 @@ fn apply(c: &[f64; 9], p: [f64; 2]) -> [f64; 2] {
     ]
 }
 
+/// A QTransform-layout matrix as Homography's row-major layout.
+fn row_major(c: &[f64; 9]) -> [f64; 9] {
+    [c[0], c[3], c[6], c[1], c[4], c[7], c[2], c[5], c[8]]
+}
+
+/// The inverse of a QTransform-layout matrix, in the same layout.
+fn invert(c: &[f64; 9]) -> Option<[f64; 9]> {
+    let h = Homography(row_major(c)).inverse()?;
+    Some([
+        h.0[0], h.0[3], h.0[6], h.0[1], h.0[4], h.0[7], h.0[2], h.0[5], h.0[8],
+    ])
+}
+
+/// `a ∘ b` in QTransform layout: apply `b`, then `a`.
+fn compose(a: &[f64; 9], b: &[f64; 9]) -> Option<[f64; 9]> {
+    let a = Homography(row_major(a));
+    let b = Homography(row_major(b));
+    let mut m = [0.0; 9];
+    for r in 0..3 {
+        for c in 0..3 {
+            m[r * 3 + c] = (0..3).map(|k| a.0[r * 3 + k] * b.0[k * 3 + c]).sum();
+        }
+    }
+    (m.iter().all(|v| v.is_finite()))
+        .then_some([m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]])
+}
+
+fn map_point(c: &[f64; 9], p: [f64; 2]) -> Option<[f64; 2]> {
+    Homography(row_major(c))
+        .apply(p[0], p[1])
+        .map(|(x, y)| [x, y])
+}
+
+/// A source point after the warp's optional post-frame.
+fn to_post(post: Option<&[f64; 9]>, p: [f64; 2]) -> [f64; 2] {
+    post.map_or(p, |m| apply(m, p))
+}
+
+/// A post-frame point pulled back before the mesh, where a drag edits it.
+fn from_post(post: Option<&[f64; 9]>, p: [f64; 2]) -> Option<[f64; 2]> {
+    match post {
+        Some(m) => map_point(&invert(m)?, p),
+        None => Some(p),
+    }
+}
+
 /// The warp's four corner anchors as a quad (TL, TR, BR, BL), or `None` when
 /// the session is not warping.
+#[cfg(test)]
 pub(super) fn warp_corners(session: &TransformSession) -> Option<[(f64, f64); 4]> {
     let m = session.warp.as_ref()?.to_mesh(1, 1);
     let frame = Frame::of(session)?;
+    let post = session.warp_post.as_ref();
     let (nx, ny) = (m.nx(), m.ny());
     let p = |i: usize, j: usize| {
-        let q = frame.to_doc(m.point(i, j));
+        let q = to_post(post, m.point(i, j));
+        let q = frame.to_doc(q);
         (q[0], q[1])
     };
     Some([p(0, 0), p(nx - 1, 0), p(nx - 1, ny - 1), p(0, ny - 1)])
@@ -178,10 +264,17 @@ fn warp_hit(m: &BezierMesh, p: [f64; 2], tol: f64) -> Option<usize> {
 
 /// The surface parameters under document point `p` when it is inside the
 /// warped mesh (`m` in source space, seen through `frame`).
-fn surface_at(m: &BezierMesh, frame: &Frame, p: [f64; 2]) -> Option<(f64, f64)> {
-    let (s, t) = m.param_at(frame.to_source(p)?);
-    let q = frame.to_doc(m.eval(s, t));
-    ((q[0] - p[0]).hypot(q[1] - p[1]) < 1.0).then_some((s, t))
+fn surface_at(
+    m: &BezierMesh,
+    frame: &Frame,
+    post: Option<&[f64; 9]>,
+    p: [f64; 2],
+) -> Option<(f64, f64)> {
+    let q = frame.to_source(p)?;
+    let q = from_post(post, q)?;
+    let (s, t) = m.param_at(q);
+    let shown = frame.to_doc(to_post(post, m.eval(s, t)));
+    ((shown[0] - p[0]).hypot(shown[1] - p[1]) < 1.0).then_some((s, t))
 }
 
 /// The custom form of `w`: itself when it is a custom mesh, else its shape as a
@@ -196,21 +289,27 @@ fn as_custom(w: &Warp) -> Warp {
 /// What a press at document point `p` would grab: a control point, the
 /// surface, or nothing. A preset hides its points, so only the surface grabs
 /// it. The drag's `start` is the press in source space.
-fn warp_grab(w: &Warp, frame: &Frame, p: [f64; 2], zoom: f64) -> Option<WarpDrag> {
+fn warp_grab(
+    w: &Warp,
+    frame: &Frame,
+    post: Option<&[f64; 9]>,
+    p: [f64; 2],
+    zoom: f64,
+) -> Option<WarpDrag> {
     let custom = as_custom(w);
     let m = custom.mesh.as_ref()?;
-    let start = frame.to_source(p)?;
+    let start = from_post(post, frame.to_source(p)?)?;
     let pts0 = m.points.clone();
     let point = match (w.style, &w.mesh) {
         (WarpStyle::Custom, Some(_)) => {
-            let shown = m.map_points(|q| frame.to_doc(q));
+            let shown = m.map_points(|q| frame.to_doc(to_post(post, q)));
             warp_hit(&shown, p, HANDLE_PX / zoom.max(0.01))
         }
         _ => None,
     };
     match point {
         Some(index) => Some(WarpDrag::Point { index, start, pts0 }),
-        None => surface_at(m, frame, p).map(|(s, t)| WarpDrag::Surface { s, t, start, pts0 }),
+        None => surface_at(m, frame, post, p).map(|(s, t)| WarpDrag::Surface { s, t, start, pts0 }),
     }
 }
 
@@ -229,7 +328,7 @@ pub(super) fn warp_hit_test(session: &TransformSession, x: f64, y: f64, zoom: f6
     session
         .warp
         .as_ref()
-        .and_then(|w| warp_grab(w, &frame, [x, y], zoom))
+        .and_then(|w| warp_grab(w, &frame, session.warp_post.as_ref(), [x, y], zoom))
         .map_or(-1, |d| drag_handle(&d))
 }
 
@@ -239,10 +338,11 @@ pub(super) fn warp_press(session: &mut TransformSession, x: f64, y: f64, zoom: f
     let Some(frame) = Frame::of(session) else {
         return -1;
     };
+    let post = session.warp_post;
     let Some(w) = session.warp.as_mut() else {
         return -1;
     };
-    let Some(drag) = warp_grab(w, &frame, [x, y], zoom) else {
+    let Some(drag) = warp_grab(w, &frame, post.as_ref(), [x, y], zoom) else {
         return -1;
     };
     *w = as_custom(w);
@@ -254,7 +354,11 @@ pub(super) fn warp_press(session: &mut TransformSession, x: f64, y: f64, zoom: f
 /// Follow the pointer with the grabbed point or surface (the move is taken in
 /// source space, through the box's frame).
 pub(super) fn warp_move(session: &mut TransformSession, x: f64, y: f64) -> bool {
-    let Some(p) = Frame::of(session).and_then(|f| f.to_source([x, y])) else {
+    let post = session.warp_post;
+    let Some(p) = Frame::of(session)
+        .and_then(|f| f.to_source([x, y]))
+        .and_then(|p| from_post(post.as_ref(), p))
+    else {
         return false;
     };
     let (Some(drag), Some(m)) = (
@@ -288,12 +392,13 @@ pub(super) fn refresh_warp_preview(mut view: Pin<&mut PictureView>) -> bool {
         let session = rust.session.live.transform()?;
         let warp = session.warp.as_ref()?;
         let mut clone = doc.clone();
+        let quad = warp_preview_quad(session).unwrap_or_else(|| session_quad(session));
         // An identity (or refused) warp previews the untouched layer.
         pictura_render::transform_layer_warp(
             &mut clone,
             &session.path,
             warp,
-            Some(session_quad(session)),
+            Some(quad),
             session.interpolation,
         );
         transform_preview_layer(&clone, &session.path, gpu_compute)
@@ -325,44 +430,103 @@ fn edit_warp(
 }
 
 fn transform_enter_warp(mut view: Pin<&mut PictureView>) -> bool {
-    {
+    let created = {
         let mut rust = view.as_mut().rust_mut();
         let Some(session) = rust.session.live.transform_mut() else {
             return false;
         };
-        if session.warp.is_some() {
-            return true;
+        let created = session.warp.is_none();
+        if created {
+            if Frame::of(session).is_none() {
+                return false;
+            }
+            let b = rect_bounds(session.orig_rect);
+            session.warp = Some(Warp::custom(BezierMesh::identity(b, 1, 1), b));
+            session.warp_post = None;
         }
-        if Frame::of(session).is_none() {
-            return false;
-        }
-        let b = rect_bounds(session.orig_rect);
-        session.warp = Some(Warp::custom(BezierMesh::identity(b, 1, 1), b));
+        session.warp_editing = true;
         session.warp_drag = None;
         session.dragging = false;
         session.handle = -1;
+        created
+    };
+    if created {
+        refresh_warp_preview(view)
+    } else {
+        true
     }
-    refresh_warp_preview(view)
 }
 
 fn transform_leave_warp(mut view: Pin<&mut PictureView>) -> bool {
-    let path = {
-        let mut rust = view.as_mut().rust_mut();
-        let Some(session) = rust.session.live.transform_mut() else {
-            return false;
-        };
-        if session.warp.take().is_none() {
-            return true;
+    let preview = {
+        let rust = view.rust();
+        match (rust.move_layer.as_ref(), rust.session.live.transform()) {
+            (Some(layer), Some(session))
+                if session.warp.is_some() && layer.width() > 0 && layer.height() > 0 =>
+            {
+                Some((
+                    f64::from(rust.move_x),
+                    f64::from(rust.move_y),
+                    f64::from(layer.width()),
+                    f64::from(layer.height()),
+                ))
+            }
+            _ => None,
         }
-        session.warp_drag = None;
-        session.dragging = false;
-        session.handle = -1;
-        session.path.clone()
     };
-    view.as_mut().compute_transform_preview(&path)
+    let mut rust = view.as_mut().rust_mut();
+    let Some(session) = rust.session.live.transform_mut() else {
+        return false;
+    };
+    if let Some((x, y, w, h)) = preview {
+        let new_quad = [(x, y), (x + w, y), (x + w, y + h), (x, y + h)];
+        if let (Some(old), Some(new)) = (
+            Frame::of(session),
+            Frame::new(source_corners(session.orig_rect), new_quad),
+        ) {
+            let old_effective = match session.warp_post {
+                Some(post) => old.with_post(&post),
+                None => Some(old),
+            };
+            if let Some(old_effective) = old_effective {
+                // The new frame's inverse after the old effective frame keeps
+                // every warp pixel where it was while the box takes the
+                // preview's bounds.
+                if let Some(post) = compose(&new.inv, &old_effective.h) {
+                    let box_set = if session.mode.is_projective() {
+                        store_quad(session, new_quad)
+                    } else {
+                        match unmap_quad(&MapParams::of(session), &new_quad) {
+                            Some(base) => {
+                                session.base_quad = Some(base);
+                                true
+                            }
+                            None => false,
+                        }
+                    };
+                    if box_set {
+                        session.warp_post = Some(post);
+                    }
+                }
+            }
+        }
+    }
+    session.warp_editing = false;
+    session.warp_drag = None;
+    session.dragging = false;
+    session.handle = -1;
+    true
 }
 
 fn transform_warp_active(view: &PictureView) -> bool {
+    view.rust()
+        .session
+        .live
+        .transform()
+        .is_some_and(|s| s.warp_editing)
+}
+
+fn transform_warp_stored(view: &PictureView) -> bool {
     view.rust()
         .session
         .live
@@ -454,50 +618,63 @@ fn transform_warp_vertical(view: &PictureView) -> bool {
 fn push_curve(
     m: &BezierMesh,
     frame: &Frame,
+    post: Option<&[f64; 9]>,
     fixed_u: Option<f64>,
     fixed_v: Option<f64>,
     out: &mut Vec<f64>,
 ) {
     for k in 0..CURVE_POINTS {
         let s = k as f64 / (CURVE_POINTS - 1) as f64;
-        let p = frame.to_doc(m.eval(fixed_u.unwrap_or(s), fixed_v.unwrap_or(s)));
+        let p = frame.to_doc(to_post(
+            post,
+            m.eval(fixed_u.unwrap_or(s), fixed_v.unwrap_or(s)),
+        ));
         out.extend_from_slice(&p);
     }
 }
 
 /// The session's warp as a one-patch-or-more mesh and its frame.
-fn warp_mesh(view: &PictureView) -> Option<(BezierMesh, Frame)> {
-    let session = view.rust().session.live.transform()?;
+fn warp_mesh(session: &TransformSession) -> Option<(BezierMesh, Frame)> {
     Some((session.warp.as_ref()?.to_mesh(1, 1), Frame::of(session)?))
 }
 
-fn grid_lines(m: &BezierMesh, frame: &Frame) -> Vec<f64> {
+fn grid_lines(m: &BezierMesh, frame: &Frame, post: Option<&[f64; 9]>) -> Vec<f64> {
     let mut out = Vec::new();
     for u in &m.us {
-        push_curve(m, frame, Some(*u), None, &mut out);
+        push_curve(m, frame, post, Some(*u), None, &mut out);
     }
     for v in &m.vs {
-        push_curve(m, frame, None, Some(*v), &mut out);
+        push_curve(m, frame, post, None, Some(*v), &mut out);
     }
     out
 }
 
 fn transform_warp_grid_lines(view: &PictureView) -> Vec<f64> {
-    warp_mesh(view).map_or_else(Vec::new, |(m, frame)| grid_lines(&m, &frame))
+    let Some(session) = view.rust().session.live.transform() else {
+        return Vec::new();
+    };
+    let Some((m, frame)) = warp_mesh(session) else {
+        return Vec::new();
+    };
+    grid_lines(&m, &frame, session.warp_post.as_ref())
 }
 
 fn transform_warp_guide_lines(view: &PictureView) -> Vec<f64> {
-    let Some((m, frame)) = warp_mesh(view) else {
+    let Some(session) = view.rust().session.live.transform() else {
+        return Vec::new();
+    };
+    let Some((m, frame)) = warp_mesh(session) else {
         return Vec::new();
     };
     // Only a single patch (the default grid) draws the rule-of-thirds guides.
     if m.us.len() != 2 || m.vs.len() != 2 {
         return Vec::new();
     }
+    let post = session.warp_post.as_ref();
     let mut out = Vec::new();
     for third in [1.0 / 3.0, 2.0 / 3.0] {
-        push_curve(&m, &frame, Some(third), None, &mut out);
-        push_curve(&m, &frame, None, Some(third), &mut out);
+        push_curve(&m, &frame, post, Some(third), None, &mut out);
+        push_curve(&m, &frame, post, None, Some(third), &mut out);
     }
     out
 }
@@ -517,6 +694,7 @@ fn transform_warp_points(view: &PictureView) -> Vec<f64> {
     let Some(frame) = Frame::of(session) else {
         return Vec::new();
     };
+    let post = session.warp_post.as_ref();
     let (nx, ny) = (m.nx(), m.ny());
     let dragged = match &session.warp_drag {
         Some(WarpDrag::Point { index, .. }) => Some(handle_anchor(index % nx, index / nx)),
@@ -536,7 +714,10 @@ fn transform_warp_points(view: &PictureView) -> Vec<f64> {
             } else {
                 1.0
             };
-            let (p, a) = (frame.to_doc(m.point(i, j)), frame.to_doc(m.point(ai, aj)));
+            let (p, a) = (
+                frame.to_doc(to_post(post, m.point(i, j))),
+                frame.to_doc(to_post(post, m.point(ai, aj))),
+            );
             out.extend_from_slice(&[kind, p[0], p[1], a[0], a[1]]);
         }
     }
@@ -546,12 +727,60 @@ fn transform_warp_points(view: &PictureView) -> Vec<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pictura_core::PsdRect;
 
     const B: [f64; 4] = [0.0, 0.0, 90.0, 60.0];
     const CORNERS: [(f64, f64); 4] = [(0.0, 0.0), (90.0, 0.0), (90.0, 60.0), (0.0, 60.0)];
 
     fn unmoved() -> Frame {
         Frame::new(CORNERS, CORNERS).unwrap()
+    }
+
+    fn session(warp: Warp) -> TransformSession {
+        let rect = PsdRect {
+            left: 0,
+            top: 0,
+            right: 90,
+            bottom: 60,
+        };
+        let center = (45.0, 30.0);
+        TransformSession {
+            path: "0".to_string(),
+            orig_rect: rect,
+            scale_x: 1.0,
+            scale_y: 1.0,
+            angle: 0.0,
+            dx: 0.0,
+            dy: 0.0,
+            handle: -1,
+            press_x: 0.0,
+            press_y: 0.0,
+            start: [1.0, 1.0, 0.0, 0.0, 0.0],
+            dragging: false,
+            mode: super::super::super::document_session::TransformMode::Free,
+            type_layer: false,
+            quad: None,
+            base_quad: None,
+            free_perspective: false,
+            free_distort: false,
+            free_skew: false,
+            perspective_side: None,
+            start_quad: CORNERS,
+            pivot: center,
+            pivot_origin: center,
+            start_pivot: center,
+            show_pivot: true,
+            skew_x: 0.0,
+            skew_y: 0.0,
+            interpolation: pictura_render::Interpolation::Bicubic,
+            warp: Some(warp),
+            warp_drag: None,
+            warp_editing: false,
+            warp_post: None,
+            lifted: None,
+            untrimmed: None,
+            history_label: "Free Transform".to_string(),
+        }
     }
 
     #[test]
@@ -569,18 +798,18 @@ mod tests {
         let w = Warp::custom(BezierMesh::identity(B, 1, 1), B);
         // The top-left anchor is index 0; (30, 0) is the first handle.
         assert!(matches!(
-            warp_grab(&w, &unmoved(), [1.0, 1.0], 1.0),
+            warp_grab(&w, &unmoved(), None, [1.0, 1.0], 1.0),
             Some(WarpDrag::Point { index: 0, .. })
         ));
         assert!(matches!(
-            warp_grab(&w, &unmoved(), [30.5, 0.5], 1.0),
+            warp_grab(&w, &unmoved(), None, [30.5, 0.5], 1.0),
             Some(WarpDrag::Point { index: 1, .. })
         ));
         assert!(matches!(
-            warp_grab(&w, &unmoved(), [45.0, 30.0], 1.0),
+            warp_grab(&w, &unmoved(), None, [45.0, 30.0], 1.0),
             Some(WarpDrag::Surface { .. })
         ));
-        assert!(warp_grab(&w, &unmoved(), [200.0, 200.0], 1.0).is_none());
+        assert!(warp_grab(&w, &unmoved(), None, [200.0, 200.0], 1.0).is_none());
     }
 
     #[test]
@@ -605,14 +834,14 @@ mod tests {
             .points
             .iter()
             .copied()
-            .filter(|p| surface_at(&mesh, &frame, *p).is_none())
+            .filter(|p| surface_at(&mesh, &frame, None, *p).is_none())
             .collect();
         assert!(
             !off_surface.is_empty(),
             "Bulge has a handle off its surface"
         );
         for p in off_surface {
-            assert!(warp_grab(&w, &frame, p, 1.0).is_none(), "{p:?}");
+            assert!(warp_grab(&w, &frame, None, p, 1.0).is_none(), "{p:?}");
         }
     }
 
@@ -624,7 +853,7 @@ mod tests {
         let quad = [(0.0, 0.0), (90.0, 18.0), (90.0, 42.0), (0.0, 60.0)];
         let frame = Frame::new(CORNERS, quad).unwrap();
         let w = Warp::custom(BezierMesh::identity(B, 1, 1), B);
-        let lines = grid_lines(&w.to_mesh(1, 1), &frame);
+        let lines = grid_lines(&w.to_mesh(1, 1), &frame, None);
         // The third curve is v = 0 (the top edge); its middle point is s = 0.5.
         let mid = 2 * CURVE_POINTS + CURVE_POINTS / 2;
         let want = frame.to_doc([45.0, 0.0]);
@@ -640,7 +869,8 @@ mod tests {
         let frame = Frame::new(CORNERS, quad).unwrap();
         let w = Warp::custom(BezierMesh::identity(B, 1, 1), B);
         let press = frame.to_doc([90.0, 60.0]);
-        let Some(WarpDrag::Point { index, start, pts0 }) = warp_grab(&w, &frame, press, 1.0) else {
+        let Some(WarpDrag::Point { index, start, pts0 }) = warp_grab(&w, &frame, None, press, 1.0)
+        else {
             panic!("the bottom-right anchor is grabbed");
         };
         let mut m = w.mesh.clone().unwrap();
@@ -649,5 +879,45 @@ mod tests {
         m.drag_point(&pts0, index, [p[0] - start[0], p[1] - start[1]]);
         let shown = frame.to_doc(m.points[index]);
         assert!((shown[0] - target[0]).abs() < 1e-9 && (shown[1] - target[1]).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_post_frame_keeps_the_preview_quad_while_the_box_moves() {
+        let mut s = session(Warp::preset(WarpStyle::Arc, 50.0, B));
+        let before_quad = session_quad(&s);
+        let before_corners = warp_corners(&s).unwrap();
+        let before_grid = {
+            let (m, frame) = warp_mesh(&s).unwrap();
+            grid_lines(&m, &frame, s.warp_post.as_ref())
+        };
+
+        // The preview bounds are taller than the box; leaving Warp moves the
+        // box there and folds the difference into a post-frame.
+        let preview = [(0.0, 0.0), (90.0, 0.0), (90.0, 96.0), (0.0, 96.0)];
+        let old = Frame::of(&s).unwrap();
+        let new = Frame::new(source_corners(s.orig_rect), preview).unwrap();
+        let post = compose(&new.inv, &old.h).unwrap();
+        let base = unmap_quad(&MapParams::of(&s), &preview).unwrap();
+        s.base_quad = Some(base);
+        s.warp_post = Some(post);
+
+        for (got, want) in session_quad(&s).iter().zip(preview.iter()) {
+            assert!((got.0 - want.0).abs() < 1e-9 && (got.1 - want.1).abs() < 1e-9);
+        }
+        for (got, want) in warp_preview_quad(&s)
+            .unwrap()
+            .iter()
+            .zip(before_quad.iter())
+        {
+            assert!((got.0 - want.0).abs() < 1e-9 && (got.1 - want.1).abs() < 1e-9);
+        }
+        for (got, want) in warp_corners(&s).unwrap().iter().zip(before_corners.iter()) {
+            assert!((got.0 - want.0).abs() < 1e-9 && (got.1 - want.1).abs() < 1e-9);
+        }
+        let (m, frame) = warp_mesh(&s).unwrap();
+        let after_grid = grid_lines(&m, &frame, s.warp_post.as_ref());
+        for (got, want) in after_grid.iter().zip(before_grid.iter()) {
+            assert!((got - want).abs() < 1e-9);
+        }
     }
 }

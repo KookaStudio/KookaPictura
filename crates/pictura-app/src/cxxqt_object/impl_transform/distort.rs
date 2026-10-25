@@ -1,6 +1,8 @@
 use super::super::document_session::TransformSession;
 use super::convex::keep_convex;
-use super::geometry::{projective_coefficients, store_quad};
+use super::geometry::{
+    projective_coefficients, quad_is_degenerate, set_pivot, store_quad, unmap_quad, MapParams,
+};
 
 /// Map `(x, y)` through `projective_coefficients`' `QTransform`-order matrix:
 /// `x' = (m11·x + m21·y + m31) / w`, `y' = (m12·x + m22·y + m32) / w`.
@@ -18,31 +20,72 @@ pub(super) fn map_qtransform(c: &[f64; 9], x: f64, y: f64) -> Option<(f64, f64)>
 
 /// Where `pivot` lands when the box goes from `from` to `to`, keeping its
 /// position within the box. A singular map leaves it where it was.
-fn carry_pivot(from: [(f64, f64); 4], to: [(f64, f64); 4], pivot: (f64, f64)) -> (f64, f64) {
+pub(super) fn carry_pivot(
+    from: [(f64, f64); 4],
+    to: [(f64, f64); 4],
+    pivot: (f64, f64),
+) -> (f64, f64) {
     projective_coefficients(from, to)
         .and_then(|c| map_qtransform(&c, pivot.0, pivot.1))
         .unwrap_or(pivot)
+}
+
+/// The quad a Distort corner drag produces from `start`; the caller stores it.
+pub(super) fn distort_quad(
+    start: [(f64, f64); 4],
+    corner: i32,
+    delta: (f64, f64),
+) -> Option<[(f64, f64); 4]> {
+    if !(0..=3).contains(&corner) {
+        return None;
+    }
+    let mut quad = start;
+    quad[corner as usize] = (
+        start[corner as usize].0 + delta.0,
+        start[corner as usize].1 + delta.1,
+    );
+    Some(keep_convex(start, quad))
 }
 
 /// Distort, as Photoshop's Distort mode: the grabbed corner moves by the
 /// press-to-pointer delta, keeping the grab offset, and stops where the quad
 /// would become concave. The reference point rides along with the box.
 pub(super) fn gesture_distort(session: &mut TransformSession, corner: i32, x: f64, y: f64) -> bool {
-    if !(0..=3).contains(&corner) {
-        return false;
-    }
-    let start = session.start_quad;
     let delta = (x - session.press_x, y - session.press_y);
-    let mut quad = start;
-    quad[corner as usize] = (
-        start[corner as usize].0 + delta.0,
-        start[corner as usize].1 + delta.1,
-    );
-    let quad = keep_convex(start, quad);
+    let Some(quad) = distort_quad(session.start_quad, corner, delta) else {
+        return false;
+    };
     if !store_quad(session, quad) {
         return false;
     }
-    session.pivot = carry_pivot(start, quad, session.start_pivot);
+    session.pivot = carry_pivot(session.start_quad, quad, session.start_pivot);
+    true
+}
+
+/// A transient `Free` Ctrl distort drag: edit the live box, carry the
+/// reference point, and pull the result back through the similarity into the
+/// session's perspective base. A degenerate result is refused.
+pub(super) fn gesture_free_distort(
+    session: &mut TransformSession,
+    corner: i32,
+    x: f64,
+    y: f64,
+) -> bool {
+    let delta = (x - session.press_x, y - session.press_y);
+    let Some(quad) = distort_quad(session.start_quad, corner, delta) else {
+        return false;
+    };
+    if quad_is_degenerate(&quad) {
+        return false;
+    }
+    let pivot = carry_pivot(session.start_quad, quad, session.start_pivot);
+    if !set_pivot(session, pivot.0, pivot.1) {
+        return false;
+    }
+    let Some(base) = unmap_quad(&MapParams::of(session), &quad) else {
+        return false;
+    };
+    session.base_quad = Some(base);
     true
 }
 
@@ -83,6 +126,8 @@ mod tests {
             quad: Some(corners),
             base_quad: None,
             free_perspective: false,
+            free_distort: false,
+            free_skew: false,
             perspective_side: None,
             start_quad: corners,
             pivot: (50.0, 25.0),
@@ -94,6 +139,8 @@ mod tests {
             interpolation: pictura_render::Interpolation::Bicubic,
             warp: None,
             warp_drag: None,
+            warp_editing: false,
+            warp_post: None,
             lifted: None,
             untrimmed: None,
             history_label: "Free Transform".to_string(),

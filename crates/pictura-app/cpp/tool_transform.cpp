@@ -139,22 +139,27 @@ void ToolController::updateTransformOverlay(PictureView* v)
     }
     canvas_->setTransformQuad(transform_api::quad(*v).corners);
     const bool warping = transform_warp_active(*v);
+    const bool warpStored = transform_warp_stored(*v);
     // Warp mode has no reference point: the grid replaces the box.
     canvas_->setTransformPivot(QPointF(transform_pivot_x(*v), transform_pivot_y(*v)),
                                transform_show_pivot(*v) && !warping);
-    if (warping) {
+    if (warpStored) {
+        // The moving layer already carries the warp and the frame; it is a new
+        // image after every re-warp, so the canvas must be handed the latest.
         canvas_->updateTransformPreviewLayer(v->move_preview_layer(),
                                              QPointF(v->move_preview_x(), v->move_preview_y()));
+    }
+    if (warping) {
         canvas_->setTransformWarp(transform_api::warpOverlay(*v));
     } else {
         canvas_->setTransformWarp(transform_api::WarpOverlay());
     }
     const transform_api::Matrix matrix = transform_api::previewLocalMatrix(*v);
     if (matrix.valid) {
-        // A warped preview layer already carries the transform and warp, so it
-        // is drawn whole (an empty source); otherwise sample the original box.
+        // A preview layer with a stored warp already carries the warp and frame,
+        // so it is drawn whole (an empty source); otherwise sample the box.
         QRectF source;
-        const QStringList parts = transform_warp_active(*v)
+        const QStringList parts = warpStored
             ? QStringList()
             : transform_session_rect(*v).split(QLatin1Char(' '));
         if (parts.size() == 4) {
@@ -216,6 +221,56 @@ void ToolController::setTransformCursor(const QPointF& imagePos)
     setHandleCursor(hit, imagePos, quadCentre(transform_api::quad(*v), imagePos));
 }
 
+bool ToolController::handleTransformPress(PictureView* v, const QPointF& imagePos,
+                                          Qt::KeyboardModifiers mods)
+{
+    const double z = canvas_ ? canvas_->zoom() : 1.0;
+    const int hit = v->transform_press(imagePos.x(), imagePos.y(), z,
+                                       mods.testFlag(Qt::ShiftModifier),
+                                       mods.testFlag(Qt::AltModifier));
+    transformGuideSnap_ = false;
+    transformPressPos_ = imagePos;
+    if (transformControls_ && (hit < 0 || hit == 9)) {
+        // Inside or outside the Move tool's controls box: an ordinary Move
+        // drag. Suspend the box for the drag; the release path brings it
+        // back on the moved layer.
+        v->transform_release();
+        transformControls_ = false;
+        v->cancel_transform();
+        if (canvas_) {
+            canvas_->clearTransformPreview();
+            canvas_->clearSmartGuides();
+        }
+        return false;
+    }
+    if (hit >= 0) {
+        // Free Transform's transient projective gestures: Perspective wins on
+        // Ctrl+Alt+Shift+corner, then the Ctrl+Shift side-handle skew, then the
+        // Ctrl corner distort.
+        const bool ctrlDown = mods.testFlag(Qt::ControlModifier);
+        const bool shiftDown = mods.testFlag(Qt::ShiftModifier);
+        const bool altDown = mods.testFlag(Qt::AltModifier);
+        if (hit <= 3 && ctrlDown && altDown && shiftDown) {
+            transform_begin_free_perspective(*v);
+        } else if (hit >= 4 && hit <= 7 && ctrlDown && shiftDown) {
+            transform_begin_free_skew(*v);
+        } else if (hit <= 3 && ctrlDown) {
+            transform_begin_free_distort(*v);
+        }
+        const ::rust::Vec<double> quad = transform_quad_extents(*v);
+        if (hit <= 3 && canvas_ && canvas_->guidesVisible()
+            && transform_session_mode(*v) == QStringLiteral("distort")
+            && quad.size() >= 8) {
+            transformGuideSnap_ = true;
+            transformStartCorner_ = QPointF(quad[2 * hit], quad[2 * hit + 1]);
+        }
+        updateTransformOverlay(v);
+        setTransformCursor(imagePos);
+        emit transformChanged();
+    }
+    return true;
+}
+
 void ToolController::setHandleCursor(int hit, const QPointF& imagePos, const QPointF& centre)
 {
     switch (hit) {
@@ -264,12 +319,7 @@ void ToolController::commitFreeTransform()
     transformControls_ = false;
     v->commit_transform();
     transformGuideSnap_ = false;
-    if (canvas_) {
-        canvas_->clearTransformPreview();
-        canvas_->clearSmartGuides();
-    }
-    applyToolPolicy();
-    emit transformChanged();
+    resetTransformUi();
 }
 
 void ToolController::cancelFreeTransform()
@@ -281,6 +331,14 @@ void ToolController::cancelFreeTransform()
     transformControls_ = false;
     v->cancel_transform();
     transformGuideSnap_ = false;
+    resetTransformUi();
+}
+
+void ToolController::resetTransformUi()
+{
+    transformControls_ = false;
+    transformGuideSnap_ = false;
+    clearControlsBox();
     if (canvas_) {
         canvas_->clearTransformPreview();
         canvas_->clearSmartGuides();

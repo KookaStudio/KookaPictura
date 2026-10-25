@@ -93,6 +93,11 @@ private slots:
     void cornerCommitUsesTheDelta();
     void cornerStopsBeforeFolding();
     void pivotFollowsTheCorner();
+    void ctrlCornerDistorts();
+    void ctrlShiftCornerDistorts();
+    void ctrlSideStillScales();
+    void ctrlCornerOnTypeScales();
+    void plainDragScalesTheDistortedBox();
     void cornerSnapsToVisibleGuides();
     void steepQuadKeepsTheWholeShape();
     void steepVectorMaskQuadKeepsTheWholeShape();
@@ -778,6 +783,153 @@ void TransformDistortTest::warpPresetPreviewKeepsContentOutsideTheBox()
                                 .arg(shot.pixelColor(mapped).name())));
     }
     f.canvas->clearTransformPreview();
+}
+
+void TransformDistortTest::ctrlCornerDistorts()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_distort_ctrl_corner"));
+    QVERIFY(f.ok());
+    const QString layer = beginLayer(f);
+    QVERIFY(!layer.isEmpty());
+    QVERIFY(f.tools->beginFreeTransform(layer));
+
+    const QPolygonF before = quadOf(f.view);
+    const QPointF pivotBefore(pictura::transform_pivot_x(*f.view),
+                              pictura::transform_pivot_y(*f.view));
+    const QPointF corner = before.at(1);
+    f.canvas->mousePressed(corner, Qt::LeftButton, int(Qt::ControlModifier));
+    f.canvas->mouseMoved(corner + QPointF(8.0, 6.0));
+    const QPolygonF after = quadOf(f.view);
+    QVERIFY(samePoint(after.at(1), corner + QPointF(8.0, 6.0)));
+    QVERIFY(samePoint(after.at(0), before.at(0)));
+    QVERIFY(samePoint(after.at(2), before.at(2)));
+    QVERIFY(samePoint(after.at(3), before.at(3)));
+    const QPointF top = after.at(1) - after.at(0);
+    const QPointF bottom = after.at(2) - after.at(3);
+    QVERIFY2(std::abs(top.x() * bottom.y() - top.y() * bottom.x()) > 1e-6,
+             "the opposite edges are no longer parallel");
+    QVERIFY2(!samePoint(QPointF(pictura::transform_pivot_x(*f.view),
+                                pictura::transform_pivot_y(*f.view)),
+                        pivotBefore),
+             "the shortcut carries the reference point");
+
+    f.canvas->mouseReleased(corner + QPointF(8.0, 6.0));
+    const int base = f.view->history_index();
+    QVERIFY(f.view->commit_transform());
+    QVERIFY(f.committedOnce(base, "Free Transform"));
+    const pictura::transform_api::LayerRect rect =
+        pictura::transform_api::layerRect(*f.view, layer);
+    QVERIFY(rect.valid);
+    QCOMPARE(rect.left, 10);
+    QCOMPARE(rect.right, 48);
+}
+
+void TransformDistortTest::ctrlShiftCornerDistorts()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_distort_ctrl_shift_corner"));
+    QVERIFY(f.ok());
+    const QString layer = beginLayer(f);
+    QVERIFY(!layer.isEmpty());
+    QVERIFY(f.tools->beginFreeTransform(layer));
+
+    const QPolygonF before = quadOf(f.view);
+    const QPointF corner = before.at(1);
+    f.canvas->mousePressed(corner, Qt::LeftButton,
+                           int(Qt::ControlModifier | Qt::ShiftModifier));
+    f.canvas->mouseMoved(corner + QPointF(6.0, 5.0));
+    const QPolygonF after = quadOf(f.view);
+    QVERIFY(samePoint(after.at(1), corner + QPointF(6.0, 5.0)));
+    QVERIFY(samePoint(after.at(0), before.at(0)));
+    const QPointF top = after.at(1) - after.at(0);
+    const QPointF bottom = after.at(2) - after.at(3);
+    QVERIFY2(std::abs(top.x() * bottom.y() - top.y() * bottom.x()) > 1e-6,
+             "a Ctrl+Shift corner stays a distort");
+    f.canvas->mouseReleased(corner + QPointF(6.0, 5.0));
+    f.tools->cancelFreeTransform();
+}
+
+void TransformDistortTest::ctrlSideStillScales()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_distort_ctrl_side"));
+    QVERIFY(f.ok());
+    const QString layer = beginLayer(f);
+    QVERIFY(!layer.isEmpty());
+    QVERIFY(f.tools->beginFreeTransform(layer));
+
+    const QPolygonF before = quadOf(f.view);
+    const QPointF topMid((before.at(0).x() + before.at(1).x()) / 2.0, before.at(0).y());
+    f.canvas->mousePressed(topMid, Qt::LeftButton, int(Qt::ControlModifier));
+    f.canvas->mouseMoved(topMid + QPointF(0.0, -5.0));
+    const QPolygonF after = quadOf(f.view);
+    QVERIFY(samePoint(after.at(2), before.at(2)));
+    QVERIFY(samePoint(after.at(3), before.at(3)));
+    QVERIFY(after.at(0).y() < before.at(0).y());
+    const QPointF top = after.at(1) - after.at(0);
+    const QPointF bottom = after.at(2) - after.at(3);
+    QVERIFY2(std::abs(top.x() * bottom.y() - top.y() * bottom.x()) < 1e-6,
+             "Ctrl on a side handle keeps the ordinary scale");
+    f.canvas->mouseReleased(topMid + QPointF(0.0, -5.0));
+    f.tools->cancelFreeTransform();
+}
+
+void TransformDistortTest::ctrlCornerOnTypeScales()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_distort_ctrl_type"));
+    QVERIFY(f.ok());
+    const QString path = beginTypeLayer(f);
+    QVERIFY(!path.isEmpty());
+    frame.selectLayerPath(path);
+    QVERIFY(f.tools->beginFreeTransform(path));
+
+    const QPolygonF before = quadOf(f.view);
+    const QPointF corner = before.at(1);
+    f.canvas->mousePressed(corner, Qt::LeftButton, int(Qt::ControlModifier));
+    f.canvas->mouseMoved(corner + QPointF(6.0, 4.0));
+    const QPolygonF after = quadOf(f.view);
+    QVERIFY(!samePoint(after.at(1), before.at(1)));
+    const QPointF top = after.at(1) - after.at(0);
+    const QPointF bottom = after.at(2) - after.at(3);
+    QVERIFY2(std::abs(top.x() * bottom.y() - top.y() * bottom.x()) < 1e-6,
+             "the distort shortcut is ignored on editable type");
+    f.canvas->mouseReleased(corner + QPointF(6.0, 4.0));
+    f.tools->cancelFreeTransform();
+}
+
+void TransformDistortTest::plainDragScalesTheDistortedBox()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_distort_ctrl_scale"));
+    QVERIFY(f.ok());
+    const QString layer = beginLayer(f);
+    QVERIFY(!layer.isEmpty());
+    QVERIFY(f.tools->beginFreeTransform(layer));
+
+    const QPolygonF before = quadOf(f.view);
+    const QPointF corner = before.at(1);
+    f.canvas->mousePressed(corner, Qt::LeftButton, int(Qt::ControlModifier));
+    f.canvas->mouseMoved(corner + QPointF(8.0, 6.0));
+    f.canvas->mouseReleased(corner + QPointF(8.0, 6.0));
+
+    const QPolygonF distorted = quadOf(f.view);
+    const QPointF rightMid((distorted.at(1).x() + distorted.at(2).x()) / 2.0,
+                           (distorted.at(1).y() + distorted.at(2).y()) / 2.0);
+    f.canvas->mousePressed(rightMid, Qt::LeftButton, int(Qt::NoModifier));
+    f.canvas->mouseMoved(rightMid + QPointF(6.0, 0.0));
+    const QPolygonF after = quadOf(f.view);
+    QVERIFY(samePoint(after.at(0), distorted.at(0)));
+    QVERIFY(samePoint(after.at(3), distorted.at(3)));
+    QVERIFY(after.at(1).x() > distorted.at(1).x());
+    QVERIFY(after.at(2).x() > distorted.at(2).x());
+    const QPointF left = after.at(3) - after.at(0);
+    const QPointF right = after.at(2) - after.at(1);
+    QVERIFY2(std::abs(left.x() * right.y() - left.y() * right.x()) > 1e-6,
+             "the scaled box keeps its distorted sides");
+    f.canvas->mouseReleased(rightMid + QPointF(6.0, 0.0));
+    f.tools->cancelFreeTransform();
 }
 
 QTEST_MAIN(TransformDistortTest)

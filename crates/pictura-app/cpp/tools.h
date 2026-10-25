@@ -429,6 +429,9 @@ public:
     bool repeatTransform();
     void commitFreeTransform();
     void cancelFreeTransform();
+    // Clear the transform overlay and the Move controls box after a history
+    // restore or document swap cancelled the session in Rust.
+    void resetTransformUi();
     bool transformSessionActive() const;
     // Whether the Move tool's `Show Transform Controls` box is up (idle, or
     // mid-gesture as an auto-managed, per-drag-commit session), not a modal
@@ -560,6 +563,10 @@ private:
     void dragSelectionMove(const QPointF& imagePos);
     void releaseSelectionMove(const QPointF& imagePos);
     void handlePressed(const QPointF& imagePos, int button, int modifiers);
+    // A press while a Free Transform session is live: gesture modifiers,
+    // guide snapping, and the Move controls-box handoff.
+    bool handleTransformPress(PictureView* v, const QPointF& imagePos,
+                              Qt::KeyboardModifiers mods);
     void handleMoved(const QPointF& imagePos);
     void handleModifiers(int modifiers);
     void handleReleased(const QPointF& imagePos);

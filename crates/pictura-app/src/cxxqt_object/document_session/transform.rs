@@ -52,8 +52,9 @@ impl TransformMode {
 
 /// A committed similarity transform that `Edit > Transform > Again` can
 /// reapply to another target: the scale/rotation/shear, the translation, and
-/// the reference point's offset from the source rect's centre (so a reference
-/// point moved off-centre keeps its relative position).
+/// the reference point's offset from the source rect's centre in the item's
+/// source frame (so a reference point moved off-centre keeps its relative
+/// position).
 #[derive(Clone, Copy)]
 pub(in crate::cxxqt_object) struct RepeatTransform {
     pub(in crate::cxxqt_object) scale_x: f64,
@@ -114,16 +115,23 @@ pub(in crate::cxxqt_object) struct TransformSession {
     pub(in crate::cxxqt_object) base_quad: Option<[(f64, f64); 4]>,
     /// Whether the drag in progress is a `Free` Ctrl+Alt+Shift perspective drag.
     pub(in crate::cxxqt_object) free_perspective: bool,
+    /// Whether the drag in progress is a `Free` Ctrl distort drag.
+    pub(in crate::cxxqt_object) free_distort: bool,
+    /// Whether the drag in progress is a `Free` Ctrl+Shift skew drag.
+    pub(in crate::cxxqt_object) free_skew: bool,
     /// The perspective drag's readout side: (moved corner, its unmoved
     /// neighbour, whether the moved edge is the top or bottom edge).
     pub(in crate::cxxqt_object) perspective_side: Option<(usize, usize, bool)>,
     /// Quad captured at begin/press for a projective gesture.
     pub(in crate::cxxqt_object) start_quad: [(f64, f64); 4],
-    /// The reference point (document space) and its position at begin.
+    /// The reference point: the item's source-frame point in Free, Scale, and
+    /// Rotate (its document position is `pivot + (dx, dy)`), and a document
+    /// point in the projective modes. `pivot_origin` is the source-rect centre
+    /// at begin.
     pub(in crate::cxxqt_object) pivot: (f64, f64),
     pub(in crate::cxxqt_object) pivot_origin: (f64, f64),
-    /// The reference point captured at press; a Distort drag carries it with
-    /// the quad from this anchor.
+    /// The reference point's document position captured at press; a projective
+    /// drag carries it from this anchor.
     pub(in crate::cxxqt_object) start_pivot: (f64, f64),
     /// Whether the canvas draws the reference point.
     pub(in crate::cxxqt_object) show_pivot: bool,
@@ -137,6 +145,13 @@ pub(in crate::cxxqt_object) struct TransformSession {
     pub(in crate::cxxqt_object) warp: Option<pictura_core::warp::Warp>,
     /// The Warp-mode drag in progress.
     pub(in crate::cxxqt_object) warp_drag: Option<WarpDrag>,
+    /// Whether Warp mode owns the overlay, gestures, and options page. The mesh
+    /// may stay `Some` after Warp mode is left, so the box can still edit it.
+    pub(in crate::cxxqt_object) warp_editing: bool,
+    /// A source-space homography applied after the warp. Leaving Warp moves the
+    /// box onto the warped preview's bounds; this post-frame keeps the rendered
+    /// pixels unchanged while the box and grid follow the new bounds.
+    pub(in crate::cxxqt_object) warp_post: Option<[f64; 9]>,
     /// For a selection's pixels lifted onto `path` (a floating layer above the
     /// source): the source path and the document before the lift, which a
     /// cancel restores.

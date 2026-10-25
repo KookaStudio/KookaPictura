@@ -450,6 +450,7 @@ void ToolController::notifyToolSessionChanged()
 
 void ToolController::onSessionCancelled()
 {
+    resetTransformUi();
     registry_.forEach([this](ToolHandler& handler) { handler.onSessionCancelled(*this); });
 }
 
@@ -882,46 +883,9 @@ void ToolController::handlePressed(const QPointF& imagePos, int button, int modi
             clearControlsBox();
         }
     }
-    if (v && v->transform_session_active()) {
-        const double z = canvas_ ? canvas_->zoom() : 1.0;
-        const int hit = v->transform_press(imagePos.x(), imagePos.y(), z,
-                                           mods.testFlag(Qt::ShiftModifier),
-                                           mods.testFlag(Qt::AltModifier));
-        transformGuideSnap_ = false;
-        transformPressPos_ = imagePos;
-        if (transformControls_ && (hit < 0 || hit == 9)) {
-            // Inside or outside the Move tool's controls box: an ordinary Move
-            // drag. Suspend the box for the drag; the release path brings it
-            // back on the moved layer.
-            v->transform_release();
-            transformControls_ = false;
-            v->cancel_transform();
-            if (canvas_) {
-                canvas_->clearTransformPreview();
-                canvas_->clearSmartGuides();
-            }
-        } else {
-            if (hit >= 0) {
-                // Free Transform's Ctrl+Alt+Shift corner drag is a Perspective
-                // drag; the session refuses it where it does not apply.
-                if (hit <= 3 && mods.testFlag(Qt::ControlModifier)
-                    && mods.testFlag(Qt::AltModifier) && mods.testFlag(Qt::ShiftModifier)) {
-                    transform_begin_free_perspective(*v);
-                }
-                const ::rust::Vec<double> quad = transform_quad_extents(*v);
-                if (hit <= 3 && canvas_ && canvas_->guidesVisible()
-                    && transform_session_mode(*v) == QStringLiteral("distort")
-                    && quad.size() >= 8) {
-                    transformGuideSnap_ = true;
-                    transformStartCorner_ =
-                        QPointF(quad[2 * hit], quad[2 * hit + 1]);
-                }
-                updateTransformOverlay(v);
-                setTransformCursor(imagePos);
-                emit transformChanged();
-            }
-            return;
-        }
+    if (v && v->transform_session_active()
+        && handleTransformPress(v, imagePos, mods)) {
+        return;
     }
     if (beginGuideDrag(imagePos, mods)) {
         return;

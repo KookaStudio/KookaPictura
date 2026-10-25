@@ -29,6 +29,12 @@ pub(super) fn source_corners(rect: PsdRect) -> [(f64, f64); 4] {
     ]
 }
 
+/// The reference point's document position: the source point through the
+/// session map, `M(P) = P + t`. In a projective mode `t` is zero.
+pub(super) fn pivot_point(session: &TransformSession) -> (f64, f64) {
+    (session.pivot.0 + session.dx, session.pivot.1 + session.dy)
+}
+
 /// The session map's parameters: `M(p) = P + A·(p − P) + (dx, dy)` with
 /// `A = R(θ)·S·K` and `K = [[1, tan(skew_x)], [tan(skew_y), 1]]` (H/V shear in
 /// the local frame). Copyable, so a commit can snapshot it before mutating.
@@ -88,6 +94,22 @@ impl MapParams {
             self.pivot.0 + a[0][0] * ux + a[0][1] * uy + self.dx,
             self.pivot.1 + a[1][0] * ux + a[1][1] * uy + self.dy,
         )
+    }
+
+    /// The source point whose image is `p`; `None` when the linear part is
+    /// singular.
+    pub(super) fn inverse_map_point(&self, p: (f64, f64)) -> Option<(f64, f64)> {
+        let a = self.linear();
+        let det = a[0][0] * a[1][1] - a[0][1] * a[1][0];
+        if !det.is_finite() || det.abs() < 1e-12 {
+            return None;
+        }
+        let ux = p.0 - self.pivot.0 - self.dx;
+        let uy = p.1 - self.pivot.1 - self.dy;
+        Some((
+            self.pivot.0 + (a[1][1] * ux - a[0][1] * uy) / det,
+            self.pivot.1 + (a[0][0] * uy - a[1][0] * ux) / det,
+        ))
     }
 
     /// The corners of `rect` under the map.
@@ -181,25 +203,54 @@ fn start_map_point(session: &TransformSession, p: (f64, f64)) -> (f64, f64) {
     )
 }
 
-/// Set the reference point, compensating the translation so the rendered quad
-/// does not move: `t' = t + (P − A·P) − (P' − A·P')`.
-pub(super) fn set_pivot(session: &mut TransformSession, x: f64, y: f64) {
+/// Move the reference point to the document position `(x, y)`, keeping the
+/// rendered quad unchanged. In `Free`, `Scale`, and `Rotate` the source point
+/// is the inverse image of `(x, y)`; in a projective mode the document point is
+/// set directly. False for a non-finite position or a singular similarity.
+pub(super) fn set_pivot(session: &mut TransformSession, x: f64, y: f64) -> bool {
     if !x.is_finite() || !y.is_finite() {
-        return;
+        return false;
     }
-    let a = linear(session);
+    if session.mode.is_projective() {
+        session.pivot = (x, y);
+        return true;
+    }
+    let params = MapParams::of(session);
+    let Some(source) = params.inverse_map_point((x, y)) else {
+        return false;
+    };
+    let a = params.linear();
     let (px, py) = session.pivot;
     let old = (
         px - (a[0][0] * px + a[0][1] * py),
         py - (a[1][0] * px + a[1][1] * py),
     );
     let new = (
-        x - (a[0][0] * x + a[0][1] * y),
-        y - (a[1][0] * x + a[1][1] * y),
+        source.0 - (a[0][0] * source.0 + a[0][1] * source.1),
+        source.1 - (a[1][0] * source.0 + a[1][1] * source.1),
     );
     session.dx += old.0 - new.0;
     session.dy += old.1 - new.1;
-    session.pivot = (x, y);
+    session.pivot = source;
+    true
+}
+
+/// `quad` pulled back through the similarity `params`, or `None` when its
+/// linear part is singular.
+pub(super) fn unmap_quad(params: &MapParams, quad: &[(f64, f64); 4]) -> Option<[(f64, f64); 4]> {
+    let a = params.linear();
+    let det = a[0][0] * a[1][1] - a[0][1] * a[1][0];
+    if !det.is_finite() || det.abs() < 1e-12 {
+        return None;
+    }
+    let (px, py) = params.pivot;
+    Some(quad.map(|(qx, qy)| {
+        let (rx, ry) = (qx - px - params.dx, qy - py - params.dy);
+        (
+            px + (a[1][1] * rx - a[0][1] * ry) / det,
+            py + (a[0][0] * ry - a[1][0] * rx) / det,
+        )
+    }))
 }
 
 /// The nine anchors of `quad` in row-major order (corners, edge midpoints,
@@ -233,7 +284,7 @@ pub(super) fn pivot_hit(session: &TransformSession, x: f64, y: f64, zoom: f64) -
         1.0
     };
     let tol = HANDLE_TOLERANCE / zoom;
-    dist2((x, y), session.pivot) <= tol * tol
+    dist2((x, y), pivot_point(session)) <= tol * tol
 }
 
 /// Move the reference point to `(x, y)`, snapping to the live quad's nine
@@ -255,7 +306,7 @@ pub(super) fn pivot_drag(session: &mut TransformSession, x: f64, y: f64, zoom: f
             target = anchor;
         }
     }
-    set_pivot(session, target.0, target.1);
+    let _ = set_pivot(session, target.0, target.1);
 }
 
 /// `p' = c + R(θ)·(S·(p − c)) + (dx, dy)` for one point.
@@ -634,6 +685,8 @@ mod tests {
             quad: None,
             base_quad: None,
             free_perspective: false,
+            free_distort: false,
+            free_skew: false,
             perspective_side: None,
             start_quad: source_corners(rect4()),
             pivot: (2.0, 2.0),
@@ -645,6 +698,8 @@ mod tests {
             interpolation: pictura_render::Interpolation::Bicubic,
             warp: None,
             warp_drag: None,
+            warp_editing: false,
+            warp_post: None,
             lifted: None,
             untrimmed: None,
             history_label: "Free Transform".to_string(),
@@ -674,7 +729,7 @@ mod tests {
     #[test]
     fn pivot_drag_snaps_to_an_anchor() {
         let mut s = session();
-        set_pivot(&mut s, 10.0, 10.0);
+        assert!(set_pivot(&mut s, 10.0, 10.0));
         pivot_drag(&mut s, 0.5, 0.5, 1.0);
         assert_eq!(s.pivot, (0.0, 0.0));
     }
@@ -693,7 +748,70 @@ mod tests {
         s.angle = 0.3;
         s.dx = 3.0;
         let before = session_quad(&s);
-        set_pivot(&mut s, 0.0, 0.0);
+        assert!(set_pivot(&mut s, 0.0, 0.0));
+        let after = session_quad(&s);
+        for (b, a) in before.iter().zip(after.iter()) {
+            assert!((b.0 - a.0).abs() < 1e-9 && (b.1 - a.1).abs() < 1e-9);
+        }
+    }
+
+    #[test]
+    fn pivot_setter_sets_a_document_point_in_a_projective_mode() {
+        let mut s = projective();
+        let before = session_quad(&s);
+        assert!(set_pivot(&mut s, 9.0, 7.0));
+        assert_eq!(s.pivot, (9.0, 7.0));
+        assert_eq!(pivot_point(&s), (9.0, 7.0));
+        assert_eq!(session_quad(&s), before);
+    }
+
+    #[test]
+    fn inverse_map_point_round_trips() {
+        let mut s = session();
+        s.scale_x = 2.0;
+        s.scale_y = 0.5;
+        s.angle = 0.3;
+        s.skew_x = 0.1;
+        s.dx = 3.0;
+        s.dy = -2.0;
+        let params = MapParams::of(&s);
+        for p in [(0.0, 0.0), (3.0, 4.0), (-2.0, 7.0)] {
+            let q = params.map_point(p);
+            let back = params.inverse_map_point(q).expect("invertible");
+            assert!((p.0 - back.0).abs() < 1e-9 && (p.1 - back.1).abs() < 1e-9);
+        }
+    }
+
+    #[test]
+    fn inverse_map_point_refuses_a_singular_map() {
+        let mut s = session();
+        s.scale_x = 0.0;
+        assert!(MapParams::of(&s).inverse_map_point((1.0, 1.0)).is_none());
+        let before = (s.pivot, s.dx, s.dy);
+        assert!(!set_pivot(&mut s, 1.0, 1.0));
+        assert_eq!((s.pivot, s.dx, s.dy), before);
+    }
+
+    #[test]
+    fn pivot_setter_keeps_the_quad_and_moves_the_marker() {
+        let mut s = session();
+        s.scale_x = 2.0;
+        s.angle = 0.4;
+        s.skew_x = 0.1;
+        s.dx = 5.0;
+        s.dy = -3.0;
+        let before = session_quad(&s);
+        let source = MapParams::of(&s)
+            .inverse_map_point((9.0, 7.0))
+            .expect("invertible");
+        assert!(set_pivot(&mut s, 9.0, 7.0));
+        assert!(
+            (s.pivot.0 - source.0).abs() < 1e-9 && (s.pivot.1 - source.1).abs() < 1e-9,
+            "{:?} vs {source:?}",
+            s.pivot
+        );
+        let marker = pivot_point(&s);
+        assert!((marker.0 - 9.0).abs() < 1e-9 && (marker.1 - 7.0).abs() < 1e-9);
         let after = session_quad(&s);
         for (b, a) in before.iter().zip(after.iter()) {
             assert!((b.0 - a.0).abs() < 1e-9 && (b.1 - a.1).abs() < 1e-9);

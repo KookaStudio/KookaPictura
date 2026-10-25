@@ -307,6 +307,7 @@ public:
     // the box; an empty overlay brings the box back.
     void setTransformWarp(const transform_api::WarpOverlay& overlay);
     const transform_api::WarpOverlay& transformWarpForTest() const { return transformWarp_; }
+    QImage transformPreviewLayerForTest() const { return moveLayer_; }
     QPointF transformPivotForTest() const { return transformPivot_; }
     bool transformPivotVisibleForTest() const { return transformPivotVisible_; }
     // The document-space map the moving layer is drawn under.

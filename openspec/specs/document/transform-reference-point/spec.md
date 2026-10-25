@@ -1,25 +1,34 @@
 # document/transform-reference-point Specification
 
 ## Purpose
-The Free Transform reference point (pivot): a movable document-space anchor for
-the session's gestures and numeric setters, with 3×3 presets, canvas dragging
-with anchor snapping, and X/Y semantics.
+The Free Transform reference point (pivot): a movable anchor, held in the item's
+source frame in Free, Scale, and Rotate and as a document point in the projective
+modes, for the session's gestures and numeric setters, with 3×3 presets, canvas
+dragging with anchor snapping, and X/Y semantics.
 
 ## Requirements
 
 ### Requirement: Session reference point and presets
 
-The Free Transform session SHALL hold a document-space reference point
-(`pivot`), initialised to the centre of the source rect when the session
-begins, and a `show_pivot` flag, on by default. The session SHALL expose the
-pivot position, the session origin (the initial centre), and the show flag
-through the bridge, and SHALL accept a new pivot position and a preset anchor
-index. A preset index `0..=8` in row-major order (top-left, top-centre,
-top-right, middle-left, centre, middle-right, bottom-left, bottom-centre,
-bottom-right) SHALL place the pivot at the matching anchor of the live quad:
-its four corners, its four edge midpoints, or its centre. An out-of-range index
-SHALL be refused. Setting the pivot SHALL NOT change the rendered quad: the
-session's translation SHALL be compensated so the image stays where it is.
+The Free Transform session SHALL hold a reference point (`pivot`), initialised
+to the centre of the source rect when the session begins, and a `show_pivot`
+flag, on by default. In `Free`, `Scale`, and `Rotate` the pivot SHALL be held in
+the item's source frame, so its document position is the source point through
+the session's similarity map; in a projective mode (`Skew`, `Distort`,
+`Perspective`) it SHALL be a document point. The session SHALL expose the
+pivot's document position, the session origin (the initial centre), and the
+show flag through the bridge, and SHALL accept a new document position and a
+preset anchor index. A preset index
+`0..=8` in row-major order (top-left, top-centre, top-right, middle-left,
+centre, middle-right, bottom-left, bottom-centre, bottom-right) SHALL place the
+pivot at the matching anchor of the live quad: its four corners, its four edge
+midpoints, or its centre. An out-of-range index SHALL be refused, as SHALL a
+document position whose inverse through the session's map does not exist.
+Setting the pivot SHALL NOT change the rendered quad: the request SHALL be
+inverted through the session's map to the source point whose image is the
+requested document position, and the translation SHALL be compensated so the
+image stays where it is and the marker lands on the requested position. In a
+projective mode the request SHALL set the document point directly.
 
 #### Scenario: The pivot starts at the source centre
 
@@ -35,6 +44,11 @@ session's translation SHALL be compensated so the image stays where it is.
 
 - **WHEN** the pivot is set to a new position mid-session
 - **THEN** the quad and the committed result are identical to the same session with the old pivot
+
+#### Scenario: The setter uses the document position [pivot_setter_document_position]
+
+- **WHEN** a translated and scaled session sets the pivot to a document position
+- **THEN** the marker is at that position, the stored source point is its inverse through the session map, and the quad is unchanged
 
 ### Requirement: Reference point drag and snapping
 
@@ -67,13 +81,15 @@ A pivot drag MUST NOT change the quad, scale, rotation, or skew.
 
 ### Requirement: Pivot-anchored gestures and numeric setters
 
-The rotate gesture SHALL rotate about the reference point's current image
-position. The numeric setters SHALL be absolute and SHALL keep the reference
-point's current image position fixed while changing the transform:
+The rotate gesture SHALL rotate about the reference point's current document
+position. The numeric setters SHALL be absolute. Except for X/Y, they SHALL
+keep the reference point's current document position fixed while changing the
+transform:
 
 - X/Y SHALL move the reference point only: in absolute mode the value is the
-  document coordinate, in relative mode it is the offset from the session
-  origin; the rendered image MUST NOT move.
+  document position, in relative mode it is the offset from the session origin;
+  the rendered image MUST NOT move and the marker MUST land on the requested
+  position.
 - W/H SHALL set the horizontal/vertical scale as a percentage of the source
   rect (100 = unchanged), scaling about the reference point; a link flag SHALL
   apply the changed axis's factor to both axes.
@@ -83,12 +99,17 @@ point's current image position fixed while changing the transform:
   reference point; the shear SHALL be committed through the projective
   (affine quad) op.
 
-Handle drags in `Free` and `Skew` SHALL keep the opposite-handle anchor and
-MUST NOT move the reference point. A `Distort` corner drag SHALL carry the
-reference point with the quad, preserving the reference point's position within
-the box. A `Perspective` drag, and the Free Transform Ctrl+Alt+Shift
-perspective drag, SHALL carry the reference point by its bilinear position
-within the box. In a projective mode the W/H setters
+Handle drags in `Free` SHALL keep the opposite-handle anchor. A translation or
+a scale SHALL carry the reference point with the box so it keeps its place on
+the item; a rotation SHALL keep it at the rotation centre. A `Free` scale that
+edits a projective base SHALL carry the reference point by the box's projective
+map. Handle drags in `Skew` SHALL keep the opposite-handle anchor and the
+reference point's document position fixed; the Free Transform Ctrl+Shift skew
+shortcut SHALL also keep the reference point's document position fixed. A
+`Distort` corner drag SHALL carry the reference point with the quad, preserving
+the reference point's position within the box. A `Perspective` drag, and the
+Free Transform Ctrl+Alt+Shift perspective drag, SHALL carry the reference point
+by its bilinear position within the box. In a projective mode the W/H setters
 SHALL be unavailable and the angle and H/V setters SHALL rotate/shear the live
 quad about the reference point.
 
@@ -121,6 +142,21 @@ quad about the reference point.
 
 - **WHEN** a `Perspective` drag spreads one edge of a box whose reference point is at the centre
 - **THEN** the reference point stays at the average of the quad's corners
+
+#### Scenario: The pivot follows a move and an off-anchor scale [pivot_follows_move_and_scale]
+
+- **WHEN** a `Free` session moves the box and then scales it with a handle whose opposite anchor is away from the pivot
+- **THEN** the pivot keeps its source-frame place and its document position follows the box
+
+#### Scenario: A Free scale of a projective base carries the pivot [pivot_follows_base_scale]
+
+- **WHEN** a `Free` session with a projective base scales the box by dragging a handle
+- **THEN** the reference point moves with the box's projective map and keeps its relative place in it
+
+#### Scenario: Rotation keeps the pivot at the rotation centre [pivot_stays_during_rotation]
+
+- **WHEN** a `Free` session rotates the box by dragging the rotate band
+- **THEN** the pivot's document position is unchanged and remains the rotation centre
 
 ### Requirement: Skew readouts
 

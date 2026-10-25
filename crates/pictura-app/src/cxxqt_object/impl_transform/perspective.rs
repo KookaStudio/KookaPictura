@@ -10,10 +10,10 @@
 //! - the reference point keeps its bilinear place in the box.
 
 use super::super::document_session::TransformSession;
-use super::distort::map_qtransform;
+use super::distort::{carry_pivot as carry_projective_pivot, map_qtransform};
 use super::geometry::{
     handle_source_point, opposite_handle, projective_coefficients, quad_is_degenerate,
-    session_quad, set_pivot, source_corners, store_quad, MapParams,
+    session_quad, set_pivot, source_corners, store_quad, unmap_quad, MapParams,
 };
 
 type Quad = [(f64, f64); 4];
@@ -143,7 +143,9 @@ pub(super) fn gesture_perspective(
         }
         // Move the similarity's pivot first (its image is unchanged), then
         // pull the new box back through the similarity into the base.
-        set_pivot(session, pivot.0, pivot.1);
+        if !set_pivot(session, pivot.0, pivot.1) {
+            return false;
+        }
         let Some(base) = unmap_quad(&MapParams::of(session), &quad) else {
             return false;
         };
@@ -156,24 +158,6 @@ pub(super) fn gesture_perspective(
     }
     session.perspective_side = Some(side);
     true
-}
-
-/// `quad` pulled back through the similarity `params`, or `None` when its
-/// linear part is singular.
-fn unmap_quad(params: &MapParams, quad: &Quad) -> Option<Quad> {
-    let a = params.linear();
-    let det = a[0][0] * a[1][1] - a[0][1] * a[1][0];
-    if !det.is_finite() || det.abs() < 1e-12 {
-        return None;
-    }
-    let (px, py) = params.pivot;
-    Some(quad.map(|(qx, qy)| {
-        let (rx, ry) = (qx - px - params.dx, qy - py - params.dy);
-        (
-            px + (a[1][1] * rx - a[0][1] * ry) / det,
-            py + (a[0][0] * ry - a[1][0] * rx) / det,
-        )
-    }))
 }
 
 /// Scale a `Free` box that has a perspective base, in the box's own projective
@@ -252,6 +236,10 @@ pub(super) fn gesture_scale_base(
     let Some(base) = unmap_quad(&MapParams::of(session), &quad) else {
         return false;
     };
+    let pivot = carry_projective_pivot(session.start_quad, quad, session.start_pivot);
+    if !set_pivot(session, pivot.0, pivot.1) {
+        return false;
+    }
     session.base_quad = Some(base);
     true
 }
@@ -275,7 +263,9 @@ pub(super) fn drag_angle_degrees(session: &TransformSession) -> Option<f64> {
 #[cfg(test)]
 mod tests {
     use super::super::super::document_session::{TransformMode, TransformSession};
-    use super::super::geometry::{session_quad, source_corners};
+    use super::super::geometry::{
+        pivot_point, projective_coefficients, session_quad, source_corners,
+    };
     use super::*;
     use pictura_core::PsdRect;
 
@@ -308,6 +298,8 @@ mod tests {
             quad: mode.is_projective().then_some(corners),
             base_quad: None,
             free_perspective: false,
+            free_distort: false,
+            free_skew: false,
             perspective_side: None,
             start_quad: corners,
             pivot: (50.0, 50.0),
@@ -319,6 +311,8 @@ mod tests {
             interpolation: pictura_render::Interpolation::Bicubic,
             warp: None,
             warp_drag: None,
+            warp_editing: false,
+            warp_post: None,
             lifted: None,
             untrimmed: None,
             history_label: "Free Transform".to_string(),
@@ -332,7 +326,7 @@ mod tests {
         s.press_y = y;
         s.start = [s.scale_x, s.scale_y, s.angle, s.dx, s.dy];
         s.start_quad = session_quad(s);
-        s.start_pivot = s.pivot;
+        s.start_pivot = pivot_point(s);
         s.perspective_side = None;
     }
 
@@ -519,6 +513,39 @@ mod tests {
         assert!(
             (left.0 * right.1 - left.1 * right.0).abs() > 1e-6,
             "{after:?}"
+        );
+    }
+
+    #[test]
+    fn scale_base_carries_the_pivot() {
+        let mut s = free_perspective_session();
+        assert!(gesture_perspective(&mut s, 1, 120.0, 0.0));
+        s.free_perspective = false;
+        let before = session_quad(&s);
+        let pivot_before = pivot_point(&s);
+        let right = (
+            (before[1].0 + before[2].0) / 2.0,
+            (before[1].1 + before[2].1) / 2.0,
+        );
+        press(&mut s, 5, right.0, right.1);
+        assert!(gesture_scale_base(&mut s, right.0 + 30.0, right.1, false));
+        let after = session_quad(&s);
+        let pivot_after = pivot_point(&s);
+        assert!(
+            (pivot_after.0 - pivot_before.0).abs() > 1e-6,
+            "the pivot follows the scaled box"
+        );
+
+        // The pivot keeps the same source-space place under both box maps.
+        let source_before = projective_coefficients(before, source_corners(s.orig_rect))
+            .and_then(|c| super::super::distort::map_qtransform(&c, pivot_before.0, pivot_before.1))
+            .expect("start box map");
+        let source_after = projective_coefficients(after, source_corners(s.orig_rect))
+            .and_then(|c| super::super::distort::map_qtransform(&c, pivot_after.0, pivot_after.1))
+            .expect("new box map");
+        assert!(
+            close(source_before, source_after),
+            "{source_before:?} vs {source_after:?}"
         );
     }
 }

@@ -61,6 +61,8 @@ private slots:
 
     void cornerMovesAlongItsDominantEdge();
     void edgeSlidesOnlyAlongItself();
+    void ctrlShiftSideSkews();
+    void ctrlShiftSideKeepsType();
     void altMirrorsTheOppositeEdge();
     void altMirrorsTheOppositeCorner();
     void previewKeepsTheLayerColor();
@@ -935,6 +937,89 @@ void TransformSkewTest::statusShowsTheSkewAction()
     tools->cancelFreeTransform();
     QCoreApplication::processEvents();
     QVERIFY(!label->isVisible());
+}
+
+void TransformSkewTest::ctrlShiftSideSkews()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginLayer(frame);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    pictura::ImageView* canvas = frame.imageView();
+    QVERIFY(view && tools && canvas);
+    QVERIFY(tools->beginFreeTransform(layer));
+
+    const QPolygonF before = quadOf(view);
+    const QPointF pivotBefore(pictura::transform_pivot_x(*view),
+                              pictura::transform_pivot_y(*view));
+    const QPointF mid((before.at(0).x() + before.at(1).x()) / 2.0, before.at(0).y());
+    canvas->mousePressed(mid, Qt::LeftButton, int(Qt::ControlModifier | Qt::ShiftModifier));
+    canvas->mouseMoved(mid + QPointF(2.0, 3.0));
+    const QPolygonF after = quadOf(view);
+    QVERIFY(samePoint(after.at(0), before.at(0) + QPointF(2.0, 0.0)));
+    QVERIFY(samePoint(after.at(1), before.at(1) + QPointF(2.0, 0.0)));
+    QVERIFY(samePoint(after.at(2), before.at(2)));
+    QVERIFY(samePoint(after.at(3), before.at(3)));
+    QVERIFY2(samePoint(QPointF(pictura::transform_pivot_x(*view),
+                               pictura::transform_pivot_y(*view)),
+                       pivotBefore),
+             "the skew shortcut keeps the reference point fixed");
+    canvas->mouseReleased(mid + QPointF(2.0, 3.0));
+    tools->cancelFreeTransform();
+}
+
+void TransformSkewTest::ctrlShiftSideKeepsType()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&frame));
+    QTest::qWait(50);
+    QImage seed(200, 160, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    paint_fixture::Fixture f(frame, seed, QStringLiteral("pictura_skew_ctrl_type"));
+    QVERIFY(f.ok());
+
+    frame.setActiveTool(pictura::ToolId::HorizontalType);
+    auto* options =
+        f.tools->optionsFor<pictura::TypeGroup>(pictura::ToolId::HorizontalType);
+    QVERIFY(options);
+    const pictura::TypeOptions saved = options->get();
+    pictura::TypeOptions large = saved;
+    large.size = 48.0;
+    options->set(large);
+    f.drag({QPointF(20, 60)});
+    QTest::keyClicks(f.canvas, QStringLiteral("Type"));
+    QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
+    options->set(saved);
+    frame.setActiveTool(pictura::ToolId::Move);
+
+    QString path;
+    for (int i = 0; i < f.view->layer_count(); ++i) {
+        if (pictura::type_api::isType(*f.view, QString::number(i))) {
+            path = QString::number(i);
+            break;
+        }
+    }
+    QVERIFY(!path.isEmpty());
+    frame.selectLayerPath(path);
+    QVERIFY(f.tools->beginFreeTransform(path));
+
+    const QPolygonF before = quadOf(f.view);
+    QCOMPARE(before.size(), 4);
+    const QPointF mid((before.at(0).x() + before.at(1).x()) / 2.0, before.at(0).y());
+    f.canvas->mousePressed(mid, Qt::LeftButton, int(Qt::ControlModifier | Qt::ShiftModifier));
+    f.canvas->mouseMoved(mid + QPointF(4.0, 2.0));
+    const QPolygonF after = quadOf(f.view);
+    QVERIFY(after.at(0).x() > before.at(0).x());
+    QVERIFY(std::abs(after.at(0).y() - before.at(0).y()) < kTolerance);
+    QVERIFY(samePoint(after.at(1) - after.at(0), after.at(2) - after.at(3)));
+    f.canvas->mouseReleased(mid + QPointF(4.0, 2.0));
+
+    const int base = f.view->history_index();
+    QVERIFY(f.view->commit_transform());
+    QVERIFY(f.committedOnce(base, "Free Transform"));
+    QVERIFY(pictura::type_api::isType(*f.view, path));
 }
 
 QTEST_MAIN(TransformSkewTest)

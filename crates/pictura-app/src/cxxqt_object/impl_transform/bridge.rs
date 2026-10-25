@@ -8,8 +8,8 @@
 use super::super::document_session::{TransformMode, TransformSession};
 use super::super::qobject::PictureView;
 use super::geometry::{
-    hit_test_quad, projective_coefficients, quad_anchors, quad_driven, rect_center, session_quad,
-    set_pivot, source_corners, store_quad, MapParams,
+    hit_test_quad, pivot_point, projective_coefficients, quad_anchors, quad_driven, rect_center,
+    session_quad, set_pivot, source_corners, store_quad, MapParams,
 };
 use super::perspective::drag_angle_degrees;
 use super::session::can_begin_mode;
@@ -104,6 +104,12 @@ pub mod ffi {
         /// perspective drag. False (the drag stays a scale) outside a `Free`
         /// corner drag, in Warp mode, or on editable type.
         fn transform_begin_free_perspective(view: Pin<&mut PictureView>) -> bool;
+        /// Turn the `Free` corner drag just pressed into a Ctrl distort drag.
+        /// False outside a `Free` corner drag, in Warp mode, or on editable type.
+        fn transform_begin_free_distort(view: Pin<&mut PictureView>) -> bool;
+        /// Turn the `Free` side-handle drag just pressed into a Ctrl+Shift skew
+        /// drag. False outside a `Free` side-handle drag or in Warp mode.
+        fn transform_begin_free_skew(view: Pin<&mut PictureView>) -> bool;
         /// The live Perspective drag's readout angle in degrees; NaN without
         /// one.
         fn transform_drag_angle_degrees(view: &PictureView) -> f64;
@@ -249,7 +255,7 @@ fn transform_quad_extents(view: &PictureView) -> Vec<f64> {
     let Some(session) = view.rust().session.live.transform() else {
         return Vec::new();
     };
-    let quad = super::warp::warp_corners(session).unwrap_or_else(|| session_quad(session));
+    let quad = session_quad(session);
     let mut out = Vec::with_capacity(8);
     for (x, y) in quad {
         out.push(x);
@@ -328,8 +334,7 @@ fn transform_set_pivot(mut view: Pin<&mut PictureView>, x: f64, y: f64) -> bool 
     let Some(session) = rust.session.live.transform_mut() else {
         return false;
     };
-    set_pivot(session, x, y);
-    true
+    set_pivot(session, x, y)
 }
 
 fn transform_set_pivot_preset(mut view: Pin<&mut PictureView>, anchor: i32) -> bool {
@@ -341,8 +346,7 @@ fn transform_set_pivot_preset(mut view: Pin<&mut PictureView>, anchor: i32) -> b
         return false;
     };
     let point = quad_anchors(&session_quad(session))[anchor as usize];
-    set_pivot(session, point.0, point.1);
-    true
+    set_pivot(session, point.0, point.1)
 }
 
 fn transform_set_show_pivot(mut view: Pin<&mut PictureView>, on: bool) {
@@ -367,69 +371,98 @@ fn set_scale_axis(mut view: Pin<&mut PictureView>, pct: f64, link: bool, horizon
     if !pct.is_finite() || pct.abs() < 1e-3 {
         return false;
     }
-    let mut rust = view.as_mut().rust_mut();
-    let Some(session) = rust.session.live.transform_mut() else {
-        return false;
+    let warped = {
+        let mut rust = view.as_mut().rust_mut();
+        let Some(session) = rust.session.live.transform_mut() else {
+            return false;
+        };
+        if session.mode.is_projective() {
+            // W/H are readouts in a projective mode; angle/H/V edit the quad.
+            return false;
+        }
+        let target = pct / 100.0;
+        if horizontal {
+            let factor = target / session.scale_x;
+            session.scale_x = target;
+            if link {
+                session.scale_y *= factor;
+            }
+        } else {
+            let factor = target / session.scale_y;
+            session.scale_y = target;
+            if link {
+                session.scale_x *= factor;
+            }
+        }
+        session.warp.is_some()
     };
-    if session.mode.is_projective() {
-        // W/H are readouts in a projective mode; angle/H/V edit the quad.
-        return false;
-    }
-    let target = pct / 100.0;
-    if horizontal {
-        let factor = target / session.scale_x;
-        session.scale_x = target;
-        if link {
-            session.scale_y *= factor;
-        }
+    if warped {
+        super::warp::refresh_warp_preview(view)
     } else {
-        let factor = target / session.scale_y;
-        session.scale_y = target;
-        if link {
-            session.scale_x *= factor;
-        }
+        true
     }
-    true
 }
 
 fn transform_set_angle(mut view: Pin<&mut PictureView>, degrees: f64) -> bool {
     if !degrees.is_finite() {
         return false;
     }
-    let mut rust = view.as_mut().rust_mut();
-    let Some(session) = rust.session.live.transform_mut() else {
-        return false;
+    let (changed, warped) = {
+        let mut rust = view.as_mut().rust_mut();
+        let Some(session) = rust.session.live.transform_mut() else {
+            return false;
+        };
+        if session.mode.is_projective() {
+            let delta = degrees.to_radians() - derived_readouts(session).2.to_radians();
+            let quad = session_quad(session);
+            (
+                rotate_quad_about(session, &quad, delta),
+                session.warp.is_some(),
+            )
+        } else {
+            session.angle = degrees.to_radians();
+            (true, session.warp.is_some())
+        }
     };
-    if session.mode.is_projective() {
-        let delta = degrees.to_radians() - derived_readouts(session).2.to_radians();
-        let quad = session_quad(session);
-        return rotate_quad_about(session, &quad, delta);
+    if changed && warped {
+        super::warp::refresh_warp_preview(view)
+    } else {
+        changed
     }
-    session.angle = degrees.to_radians();
-    true
 }
 
 fn transform_set_skew(mut view: Pin<&mut PictureView>, h_degrees: f64, v_degrees: f64) -> bool {
     if !h_degrees.is_finite() || !v_degrees.is_finite() {
         return false;
     }
-    let mut rust = view.as_mut().rust_mut();
-    let Some(session) = rust.session.live.transform_mut() else {
-        return false;
+    let (changed, warped) = {
+        let mut rust = view.as_mut().rust_mut();
+        let Some(session) = rust.session.live.transform_mut() else {
+            return false;
+        };
+        if session.mode.is_projective() {
+            let (_, _, _, h, v) = derived_readouts(session);
+            let quad = session_quad(session);
+            (
+                shear_quad_about(
+                    session,
+                    &quad,
+                    (h_degrees - h).to_radians(),
+                    (v_degrees - v).to_radians(),
+                ),
+                session.warp.is_some(),
+            )
+        } else {
+            session.skew_x = h_degrees.to_radians();
+            session.skew_y = v_degrees.to_radians();
+            (true, session.warp.is_some())
+        }
     };
-    if session.mode.is_projective() {
-        let (_, _, _, h, v) = derived_readouts(session);
-        let quad = session_quad(session);
-        return shear_quad_about(
-            session,
-            &quad,
-            (h_degrees - h).to_radians(),
-            (v_degrees - v).to_radians(),
-        );
+    if changed && warped {
+        super::warp::refresh_warp_preview(view)
+    } else {
+        changed
     }
-    session.skew_x = h_degrees.to_radians();
-    session.skew_y = v_degrees.to_radians();
-    true
 }
 
 fn transform_set_interpolation(mut view: Pin<&mut PictureView>, id: &QString) -> bool {
@@ -449,7 +482,7 @@ fn transform_pivot_x(view: &PictureView) -> f64 {
         .session
         .live
         .transform()
-        .map_or(0.0, |s| s.pivot.0)
+        .map_or(0.0, |s| pivot_point(s).0)
 }
 
 fn transform_pivot_y(view: &PictureView) -> f64 {
@@ -457,17 +490,17 @@ fn transform_pivot_y(view: &PictureView) -> f64 {
         .session
         .live
         .transform()
-        .map_or(0.0, |s| s.pivot.1)
+        .map_or(0.0, |s| pivot_point(s).1)
 }
 
-/// The reference point at session begin (the source-rect centre); the base of
-/// the relative-positioning display.
+/// The session origin's document position: the initial source-rect centre
+/// carried by the translation. The base of the relative-positioning display.
 fn transform_pivot_origin_x(view: &PictureView) -> f64 {
     view.rust()
         .session
         .live
         .transform()
-        .map_or(0.0, |s| s.pivot_origin.0)
+        .map_or(0.0, |s| s.pivot_origin.0 + s.dx)
 }
 
 fn transform_pivot_origin_y(view: &PictureView) -> f64 {
@@ -475,7 +508,7 @@ fn transform_pivot_origin_y(view: &PictureView) -> f64 {
         .session
         .live
         .transform()
-        .map_or(0.0, |s| s.pivot_origin.1)
+        .map_or(0.0, |s| s.pivot_origin.1 + s.dy)
 }
 
 fn transform_show_pivot(view: &PictureView) -> bool {
@@ -559,7 +592,7 @@ fn rotate_quad_about(session: &mut TransformSession, quad: &[(f64, f64); 4], del
         return false;
     }
     let (sin, cos) = delta.sin_cos();
-    let (px, py) = session.pivot;
+    let (px, py) = pivot_point(session);
     let mut out = *quad;
     for corner in &mut out {
         let (x, y) = (corner.0 - px, corner.1 - py);
@@ -580,7 +613,7 @@ fn shear_quad_about(
         return false;
     }
     let (th, tv) = (dh.tan(), dv.tan());
-    let (px, py) = session.pivot;
+    let (px, py) = pivot_point(session);
     let mut out = *quad;
     for corner in &mut out {
         let (x, y) = (corner.0 - px, corner.1 - py);
@@ -597,7 +630,7 @@ fn transform_begin_free_perspective(mut view: Pin<&mut PictureView>) -> bool {
     if session.mode != TransformMode::Free
         || !session.dragging
         || !(0..=3).contains(&session.handle)
-        || session.warp.is_some()
+        || session.warp_editing
         || session.type_layer
     {
         return false;
@@ -606,6 +639,51 @@ fn transform_begin_free_perspective(mut view: Pin<&mut PictureView>) -> bool {
         .base_quad
         .get_or_insert(source_corners(session.orig_rect));
     session.free_perspective = true;
+    session.free_distort = false;
+    session.free_skew = false;
+    true
+}
+
+fn transform_begin_free_distort(mut view: Pin<&mut PictureView>) -> bool {
+    let mut rust = view.as_mut().rust_mut();
+    let Some(session) = rust.session.live.transform_mut() else {
+        return false;
+    };
+    if session.mode != TransformMode::Free
+        || !session.dragging
+        || !(0..=3).contains(&session.handle)
+        || session.warp_editing
+        || session.type_layer
+    {
+        return false;
+    }
+    session
+        .base_quad
+        .get_or_insert(source_corners(session.orig_rect));
+    session.free_distort = true;
+    session.free_skew = false;
+    session.free_perspective = false;
+    true
+}
+
+fn transform_begin_free_skew(mut view: Pin<&mut PictureView>) -> bool {
+    let mut rust = view.as_mut().rust_mut();
+    let Some(session) = rust.session.live.transform_mut() else {
+        return false;
+    };
+    if session.mode != TransformMode::Free
+        || !session.dragging
+        || !(4..=7).contains(&session.handle)
+        || session.warp_editing
+    {
+        return false;
+    }
+    session
+        .base_quad
+        .get_or_insert(source_corners(session.orig_rect));
+    session.free_skew = true;
+    session.free_distort = false;
+    session.free_perspective = false;
     true
 }
 
@@ -645,38 +723,47 @@ fn transform_apply(mut view: Pin<&mut PictureView>, op: &QString) -> bool {
     let Some(op) = TransformOp::parse(&op.to_string()) else {
         return false;
     };
-    let mut rust = view.as_mut().rust_mut();
-    let Some(session) = rust.session.live.transform_mut() else {
-        return false;
-    };
-    // Warp keeps the mesh in source space; the box's similarity frame still
-    // rotates and flips, but the quad belongs to the warp path.
-    if session.warp.is_none() && session.mode.is_projective() {
-        let quad = session_quad(session);
-        return match op {
-            TransformOp::Rotate180 => rotate_quad_about(session, &quad, std::f64::consts::PI),
-            TransformOp::Rotate90Cw => {
-                rotate_quad_about(session, &quad, std::f64::consts::FRAC_PI_2)
-            }
-            TransformOp::Rotate90Ccw => {
-                rotate_quad_about(session, &quad, -std::f64::consts::FRAC_PI_2)
-            }
-            TransformOp::FlipHorizontal => reflect_quad_about(session, &quad, true),
-            TransformOp::FlipVertical => reflect_quad_about(session, &quad, false),
+    let (changed, warped) = {
+        let mut rust = view.as_mut().rust_mut();
+        let Some(session) = rust.session.live.transform_mut() else {
+            return false;
         };
+        // With a stored warp, the quad is the frame applied after the mesh;
+        // the exact command still turns that frame.
+        if session.mode.is_projective() {
+            let quad = session_quad(session);
+            let changed = match op {
+                TransformOp::Rotate180 => rotate_quad_about(session, &quad, std::f64::consts::PI),
+                TransformOp::Rotate90Cw => {
+                    rotate_quad_about(session, &quad, std::f64::consts::FRAC_PI_2)
+                }
+                TransformOp::Rotate90Ccw => {
+                    rotate_quad_about(session, &quad, -std::f64::consts::FRAC_PI_2)
+                }
+                TransformOp::FlipHorizontal => reflect_quad_about(session, &quad, true),
+                TransformOp::FlipVertical => reflect_quad_about(session, &quad, false),
+            };
+            (changed, session.warp.is_some())
+        } else {
+            match op {
+                TransformOp::Rotate180 => session.angle += std::f64::consts::PI,
+                TransformOp::Rotate90Cw => session.angle += std::f64::consts::FRAC_PI_2,
+                TransformOp::Rotate90Ccw => session.angle -= std::f64::consts::FRAC_PI_2,
+                TransformOp::FlipHorizontal => session.scale_x = -session.scale_x,
+                TransformOp::FlipVertical => session.scale_y = -session.scale_y,
+            }
+            (true, session.warp.is_some())
+        }
+    };
+    if changed && warped {
+        super::warp::refresh_warp_preview(view)
+    } else {
+        changed
     }
-    match op {
-        TransformOp::Rotate180 => session.angle += std::f64::consts::PI,
-        TransformOp::Rotate90Cw => session.angle += std::f64::consts::FRAC_PI_2,
-        TransformOp::Rotate90Ccw => session.angle -= std::f64::consts::FRAC_PI_2,
-        TransformOp::FlipHorizontal => session.scale_x = -session.scale_x,
-        TransformOp::FlipVertical => session.scale_y = -session.scale_y,
-    }
-    true
 }
 
 fn can_set_mode(session: &TransformSession, mode: TransformMode) -> bool {
-    session.warp.is_none() && !session.mode.is_projective() && !mode.is_projective()
+    !session.warp_editing && !session.mode.is_projective() && !mode.is_projective()
 }
 
 fn transform_set_mode(mut view: Pin<&mut PictureView>, mode: &QString) -> bool {
@@ -746,7 +833,7 @@ fn reflect_quad_about(
     quad: &[(f64, f64); 4],
     horizontal: bool,
 ) -> bool {
-    let (px, py) = session.pivot;
+    let (px, py) = pivot_point(session);
     let mut out = *quad;
     for corner in &mut out {
         if horizontal {
