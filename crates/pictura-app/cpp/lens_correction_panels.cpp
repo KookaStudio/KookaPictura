@@ -98,6 +98,10 @@ LensAutoPanel::LensAutoPanel(bool ready, QWidget* parent) : QWidget(parent)
     searchLayout->addRow(QStringLiteral("Camera Make:"), make_);
     searchLayout->addRow(QStringLiteral("Camera Model:"), model_);
     searchLayout->addRow(QStringLiteral("Lens Model:"), lens_);
+    info_ = new QLabel(search);
+    info_->setObjectName(QStringLiteral("lcCriteriaInfo"));
+    info_->setWordWrap(true);
+    searchLayout->addRow(info_);
     layout->addWidget(search);
 
     auto* profileBox = new QGroupBox(QStringLiteral("Lens Profiles"), this);
@@ -119,9 +123,9 @@ LensAutoPanel::LensAutoPanel(bool ready, QWidget* parent) : QWidget(parent)
             exif.append(s);
         }
     }
-    fillCombo(make_, lc_profile_makes(), exif.value(0));
-    fillCombo(model_, lc_profile_models(make_->currentText()), exif.value(1));
-    fillCombo(lens_, lc_profile_lenses(make_->currentText(), model_->currentText()),
+    fillCombo(make_, lc_makes(), exif.value(0));
+    fillCombo(model_, lc_models(make_->currentText()), exif.value(1));
+    fillCombo(lens_, lc_lenses(make_->currentText(), model_->currentText()),
               exif.value(2));
     fillProfiles();
     connect(make_, &QComboBox::currentIndexChanged, this, [this] {
@@ -147,12 +151,12 @@ LensAutoPanel::LensAutoPanel(bool ready, QWidget* parent) : QWidget(parent)
 
 void LensAutoPanel::fillModels()
 {
-    fillCombo(model_, lc_profile_models(make_->currentText()), QString());
+    fillCombo(model_, lc_models(make_->currentText()), QString());
 }
 
 void LensAutoPanel::fillLenses()
 {
-    fillCombo(lens_, lc_profile_lenses(make_->currentText(), model_->currentText()),
+    fillCombo(lens_, lc_lenses(make_->currentText(), model_->currentText()),
               QString());
 }
 
@@ -182,6 +186,8 @@ void LensAutoPanel::fillProfiles()
         profiles_->setCurrentRow(row);
     }
     updateCorrections();
+    info_->setText(QString(
+        lc_criteria_info(make_->currentText(), model_->currentText(), lens_->currentText())));
 }
 
 void LensAutoPanel::updateCorrections()

@@ -7,8 +7,10 @@
 //!
 //! ponytail: profiles carry one model each (no focal-length, f-stop, or
 //! focus-distance sub-profiles), and the bundled set is a synthetic test
-//! profile; no GPU path.
+//! profile; the camera and lens catalogues name what exists but carry no
+//! correction data. No GPU path.
 
+mod catalog;
 mod map;
 mod profile;
 mod render;
@@ -19,6 +21,10 @@ use pictura_core::PixelBuffer;
 
 use crate::{validate, FilterError};
 
+pub use catalog::{
+    camera_models, cameras, find_camera, find_lens, find_make, lenses, lenses_for, makes,
+    parse_lens_name, CameraSpec, LensSpec,
+};
 pub use map::LensMap;
 pub use profile::{builtin_profiles, match_profiles, parse_profiles, LensProfile};
 pub use render::LensSource;

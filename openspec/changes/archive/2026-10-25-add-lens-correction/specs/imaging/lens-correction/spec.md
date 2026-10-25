@@ -348,3 +348,54 @@ OK's distortion, fringe, and vignette values, never the transform.
   runs Last Filter Settings
 - **THEN** the dialog opens with the committed values and Cancel adds no
   state
+
+### Requirement: Lens Correction camera and lens catalogues
+
+The Auto Correction tab's Search Criteria SHALL list camera makes and
+models from a bundled camera catalogue (crop factor, sensor, and a fixed
+lens's range and aperture per body) and lens models from a bundled lens
+catalogue (crop factor and which corrections lensfun calibrates per lens),
+with the photo's EXIF names mapped to the catalogue's spelling. Lens models
+SHALL be listed with the camera's own make first, each group nearest the
+camera's crop factor first, and, when EXIF gives a focal length, only lenses
+whose range covers it. A line SHALL describe the chosen camera and lens. The
+catalogues SHALL carry no correction data: choosing a catalogue lens SHALL
+NOT select a profile.
+
+#### Scenario: The catalogues load [lc_catalog]
+
+- **WHEN** `lens_correction::tests::catalogues_load` reads both catalogues
+- **THEN** there are over 3,000 bodies and 1,500 lenses, a full-frame body
+  has crop 1 and no fixed lens, a compact keeps its fixed lens's range and
+  aperture, and a lens keeps its calibrated flags and focal range
+
+#### Scenario: Lens names give their range and aperture [lc_lens_names]
+
+- **WHEN** `lens_correction::tests::lens_names_give_their_range_and_aperture`
+  parses prime, zoom, variable-aperture, and nameless-range lens names
+- **THEN** each gives its focal range and maximum aperture, or none
+
+#### Scenario: EXIF names find the catalogue spelling [lc_exif_names]
+
+- **WHEN** `lens_correction::tests::exif_names_find_the_catalogue_spelling`
+  and the bridge's `exif_names_take_the_catalogue_spelling` look up EXIF
+  makes, models, and lenses such as "NIKON CORPORATION" / "NIKON D850"
+- **THEN** they resolve to the catalogue's "Nikon" / "D850", and unknown
+  names pass through unchanged
+
+#### Scenario: Lenses follow the camera and its settings [lc_lens_settings]
+
+- **WHEN** `lens_correction::tests::lenses_follow_the_camera_and_its_settings`
+  and `tst_lens_correction::exifPrefillsSearchAndStatus` list lenses for a
+  camera with and without a focal length
+- **THEN** the camera's make comes first, the nearest crop factor first
+  within it, and a focal length keeps only lenses covering it
+
+#### Scenario: The criteria describe the camera and lens [lc_criteria]
+
+- **WHEN** `tst_lens_correction::criteriaListCamerasAndLenses` and the
+  bridge's `criteria_info_describes_camera_and_lens` pick Canon, EOS 5D
+  Mark III, and a 24-70 mm lens
+- **THEN** the makes include the major brands, the models and lenses fill
+  from the catalogues, the line gives the crop factor, sensor, lens range,
+  aperture, and calibrated corrections, and no profile is selected

@@ -484,3 +484,86 @@ fn profile_composes_with_custom() {
     );
     assert!(px(&both, 0, 0)[0] < px(&out, 0, 0)[0]);
 }
+
+#[test]
+fn catalogues_load() {
+    assert!(cameras().len() > 3000, "{}", cameras().len());
+    assert!(lenses().len() > 1500, "{}", lenses().len());
+    assert!(makes().len() > 60);
+    let canon = cameras()
+        .iter()
+        .find(|c| c.make == "Canon" && c.model == "EOS 5D Mark III")
+        .unwrap();
+    assert_eq!(canon.crop, 1.0);
+    assert_eq!(canon.fixed_focal, None);
+    // A compact keeps its fixed lens's 35 mm range and aperture.
+    let compact = cameras()
+        .iter()
+        .find(|c| c.make == "Acer" && c.model == "CE-6430")
+        .unwrap();
+    assert_eq!(compact.fixed_focal, Some((34.0, 102.0)));
+    assert_eq!(compact.fixed_aperture, Some((2.8, 4.8)));
+    let lens = lenses()
+        .iter()
+        .find(|l| l.model == "Canon EF 24-70mm f/2.8L II USM")
+        .unwrap();
+    assert!(lens.distortion && lens.tca && lens.vignetting);
+    assert_eq!(lens.focal, Some((24.0, 70.0)));
+}
+
+#[test]
+fn lens_names_give_their_range_and_aperture() {
+    assert_eq!(
+        parse_lens_name("Canon EF 24-70mm f/2.8L USM"),
+        (Some((24.0, 70.0)), Some((2.8, 2.8)))
+    );
+    assert_eq!(
+        parse_lens_name("Nikkor AF-S DX 18-55mm f/3.5-5.6G VR"),
+        (Some((18.0, 55.0)), Some((3.5, 5.6)))
+    );
+    assert_eq!(
+        parse_lens_name("7Artisans 35mm f/0.95"),
+        (Some((35.0, 35.0)), Some((0.95, 0.95)))
+    );
+    assert_eq!(
+        parse_lens_name("AEE MagiCam SD19 & compatibles, fixed lens"),
+        (None, None)
+    );
+}
+
+#[test]
+fn exif_names_find_the_catalogue_spelling() {
+    assert_eq!(find_make("NIKON CORPORATION"), Some("Nikon"));
+    assert_eq!(find_make("Canon"), Some("Canon"));
+    assert_eq!(find_make("ACME Cameras"), None);
+    let d850 = find_camera("NIKON CORPORATION", "NIKON D850").unwrap();
+    assert_eq!((d850.make, d850.model), ("Nikon", "D850"));
+    let five = find_camera("Canon", "Canon EOS 5D Mark III").unwrap();
+    assert_eq!(five.model, "EOS 5D Mark III");
+    assert!(find_camera("Canon", "EOS 99Z").is_none());
+    assert_eq!(
+        find_lens("canon ef 24-70mm  f/2.8L II USM").unwrap().model,
+        "Canon EF 24-70mm f/2.8L II USM"
+    );
+    assert!(camera_models("Canon").contains(&"EOS 5D Mark III"));
+}
+
+#[test]
+fn lenses_follow_the_camera_and_its_settings() {
+    let all = lenses_for("Canon", Some(1.0), None);
+    assert_eq!(all.len(), lenses().len());
+    // The camera's own make first, then the rest.
+    let first_other = all.iter().position(|l| l.make != "Canon").unwrap();
+    assert!(all[first_other..].iter().all(|l| l.make != "Canon"));
+    // Within the make, the nearest crop factor first.
+    assert_eq!(all[0].crop, 1.0);
+    // A 100 mm setting keeps only lenses whose range covers it.
+    let at100 = lenses_for("Canon", Some(1.0), Some(100.0));
+    assert!(!at100.is_empty() && at100.len() < all.len());
+    assert!(at100
+        .iter()
+        .all(|l| l.focal.is_some_and(|(lo, hi)| lo <= 100.5 && hi >= 99.5)));
+    assert!(!at100
+        .iter()
+        .any(|l| l.model == "Canon EF 24-70mm f/2.8L II USM"));
+}

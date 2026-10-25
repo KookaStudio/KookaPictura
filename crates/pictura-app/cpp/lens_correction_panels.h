@@ -2,10 +2,11 @@
 
 // The Lens Correction dialog's two tabs. Auto Correction holds the slots the
 // profile path uses (the Correction checkboxes, Auto Scale Image, Edge, and
-// the chosen profile) with the Search Criteria combos and the Lens Profiles
-// list; Custom holds the Settings menu and the manual sliders (Remove
-// Distortion, the three fringes, Vignette, and Transform). Each reports its
-// part of the `lens-correction` slots in order.
+// the chosen profile) with the Search Criteria combos (filled from the camera
+// and lens catalogues, the lenses filtered by the photo's focal length) and
+// the Lens Profiles list; Custom holds the Settings menu and the manual
+// sliders (Remove Distortion, the three fringes, Vignette, and Transform).
+// Each reports its part of the `lens-correction` slots in order.
 // ponytail: no Prefer RAW Profiles, sub-profiles, Search Online, Save /
 // Load Settings, or Set Lens Default.
 
@@ -17,6 +18,7 @@
 class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
+class QLabel;
 class QListWidget;
 class QPushButton;
 
@@ -61,6 +63,8 @@ private:
     QComboBox* lens_ = nullptr;
     QListWidget* profiles_ = nullptr;
     QPushButton* searchOnline_ = nullptr;
+    // The catalogues' line about the chosen camera and lens.
+    QLabel* info_ = nullptr;
 };
 
 class LensCustomPanel : public QWidget {

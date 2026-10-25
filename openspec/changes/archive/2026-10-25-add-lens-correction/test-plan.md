@@ -41,6 +41,11 @@
 | `lc_commit` | Cancel, then OK with Remove Distortion 40 | No change; then one state, 16 slots, pixels changed | `tst_lens_correction::cancelAndOk` |
 | `lc_previous` | Commit distortion, fringe, perspective; pick Previous Conversion | Enabled; distortion and fringe restored; perspective 0 | `tst_lens_correction::previousConversionRestoresLastCommit` |
 | `lc_last_settings` | Commit, then Last Filter Settings | Committed values shown; Cancel adds no state | `tst_lens_correction::lastSettingsRestoresValues` |
+| `lc_catalog` | Load both catalogues | >3,000 bodies, >1,500 lenses; full-frame crop 1; a compact's fixed lens; a lens's flags and range | `pictura-filters::catalogues_load` |
+| `lc_lens_names` | Parse prime, zoom, variable-aperture, and rangeless names | Range and aperture, or none | `pictura-filters::lens_names_give_their_range_and_aperture` |
+| `lc_exif_names` | Look up "NIKON CORPORATION" / "NIKON D850" and unknown names | "Nikon" / "D850"; unknown pass through | `pictura-filters::exif_names_find_the_catalogue_spelling`, `pictura-app::exif_names_take_the_catalogue_spelling` |
+| `lc_lens_settings` | List lenses for Canon with and without 100 mm; open on a 50 mm photo | Own make first, nearest crop first; only covering lenses | `pictura-filters::lenses_follow_the_camera_and_its_settings`, `tst_lens_correction::exifPrefillsSearchAndStatus` |
+| `lc_criteria` | Pick Canon, EOS 5D Mark III, EF 24-70mm f/2.8L II | Lists fill; line gives crop, sensor, range, aperture, calibrated corrections; no profile | `tst_lens_correction::criteriaListCamerasAndLenses`, `pictura-app::criteria_info_describes_camera_and_lens` |
 | Visual match to CS6 | Correct the same barrel, pincushion, tilted, and fringed photos in CS6 and Pictura at matching slider values | Comparable direction and strength of each correction | manual: no CS6 oracle; the distortion, fringe, vignette, and tilt scales are approximations of closed algorithms |
 | Interactive feel | Drag Remove Distortion and the sliders on a 24 MP photo | Preview stays responsive | manual: responsiveness on real hardware is not observable offscreen |
 | Grid colour picker | Click the Color swatch, pick a colour | The grid redraws in it | manual: the Color Picker is a modal dialog the suite does not drive |

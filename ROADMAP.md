@@ -299,8 +299,11 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [x] Lens Correction (#347): Remove Distortion, three fringe sliders,
       Vignette, Vertical/Horizontal Perspective, Angle and Scale; Edge fill
       and Auto Scale; Straighten, Remove Distortion and Move Grid tools;
-      EXIF profile search over an in-tree profile format
-- [ ] Lens Correction lens-profile database and sub-profiles (#932)
+      EXIF profile search over an in-tree profile format; camera (3,860
+      bodies) and lens (lensfun's list) catalogues for the Search Criteria,
+      lenses filtered by the photo's focal length
+- [ ] Lens Correction correction profiles for real lenses and sub-profiles
+      (#932)
 - [ ] Lens Correction Save/Load Settings and Set Lens Default (#933)
 - [ ] Lens Correction as a Smart Filter (#934)
 - [x] Vanishing Point planes (#349): Create and Edit Plane, validity colours,

@@ -11,8 +11,9 @@ use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QImageFormat, QString, QStringList};
 use pictura_codec::Exif;
 use pictura_filters::{
-    builtin_lens_profiles, match_lens_profiles, straighten_angle, Filter, LensCorrectionParams,
-    LensEdge, LensMap, LensModel, LensSource,
+    builtin_lens_profiles, camera_models, catalog_makes, find_camera, find_camera_make, find_lens,
+    lenses_for, match_lens_profiles, straighten_angle, Filter, LensCorrectionParams, LensEdge,
+    LensMap, LensModel, LensSource,
 };
 
 use super::super::helpers::{active_mask_target, active_pixel_layer};
@@ -51,15 +52,28 @@ pub mod ffi {
         fn lc_grayscale() -> bool;
 
         /// What EXIF says: `[make, model, lens, camera settings]`, each
-        /// empty when unknown; the settings read "50mm, f/2.8, 3m" with
-        /// `--` for a missing part.
+        /// empty when unknown, the names in the catalogue's spelling when it
+        /// knows them; the settings read "50mm, f/2.8, 3m" with `--` for a
+        /// missing part.
         fn lc_exif() -> QStringList;
 
-        /// The installed profiles' makes, models of `make`, and lenses of
-        /// `make` and `model` (empty criteria match all), sorted.
-        fn lc_profile_makes() -> QStringList;
-        fn lc_profile_models(make: &QString) -> QStringList;
-        fn lc_profile_lenses(make: &QString, model: &QString) -> QStringList;
+        /// Every make the camera and lens catalogues and the profiles know,
+        /// sorted.
+        fn lc_makes() -> QStringList;
+
+        /// The camera models of `make`, sorted.
+        fn lc_models(make: &QString) -> QStringList;
+
+        /// Lens models for a camera, best first: profiles' lenses, then
+        /// `make`'s own lenses, then the rest; each group nearest the
+        /// camera's crop factor first. When the photo's EXIF gives a focal
+        /// length, only lenses covering it are listed.
+        fn lc_lenses(make: &QString, model: &QString) -> QStringList;
+
+        /// One line about the chosen camera and lens: crop factor and
+        /// sensor, a fixed lens's range, the lens's range and aperture, and
+        /// what lensfun has calibrated for it; empty when nothing is known.
+        fn lc_criteria_info(make: &QString, model: &QString, lens: &QString) -> QString;
 
         /// Profile ids (1-based) that suit the criteria, best first.
         fn lc_match_profiles(make: &QString, model: &QString, lens: &QString) -> Vec<i32>;
@@ -137,6 +151,23 @@ pub(in crate::cxxqt_object) fn lens_correction_filter(values: &[f64]) -> Option<
     params_of(values).map(|params| Filter::LensCorrection { params })
 }
 
+/// EXIF's make, model, and lens in the catalogue's spelling where it knows
+/// them ("NIKON CORPORATION", "NIKON D850" → "Nikon", "D850"), then the
+/// camera settings.
+fn catalogue_names(make: &str, model: &str, lens: &str, settings: String) -> [String; 4] {
+    let camera = find_camera(make, model);
+    [
+        camera
+            .map(|c| c.make)
+            .or_else(|| find_camera_make(make))
+            .unwrap_or(make)
+            .to_string(),
+        camera.map_or(model, |c| c.model).to_string(),
+        find_lens(lens).map_or(lens, |l| l.model).to_string(),
+        settings,
+    ]
+}
+
 /// "50mm, f/2.8, 3m" from FocalLength, FNumber, and SubjectDistance.
 fn camera_settings(exif: &Exif) -> String {
     let tag = |t: u16| {
@@ -157,6 +188,8 @@ struct Session {
     slots: Vec<f64>,
     map: LensMap,
     exif: [String; 4],
+    /// The photo's focal length in millimetres, from EXIF.
+    focal: Option<f64>,
 }
 
 static SESSION: Mutex<Option<Session>> = Mutex::new(None);
@@ -221,12 +254,16 @@ fn lc_begin(view: &PictureView) -> bool {
         source: LensSource::new(w, h, color, channel(-1)),
         slots: Vec::new(),
         map: LensMap::new(&params, w, h),
-        exif: [
-            exif_text(&exif, &[0x010f]),
-            exif_text(&exif, &[0x0110]),
-            exif_text(&exif, &[0xa434]),
+        exif: catalogue_names(
+            &exif_text(&exif, &[0x010f]),
+            &exif_text(&exif, &[0x0110]),
+            &exif_text(&exif, &[0xa434]),
             camera_settings(&exif),
-        ],
+        ),
+        focal: exif
+            .get(0x920a)
+            .and_then(|v| v.as_f64())
+            .filter(|f| f.is_finite() && *f > 0.0),
     };
     *SESSION.lock().unwrap_or_else(|e| e.into_inner()) = Some(session);
     true
@@ -255,26 +292,99 @@ fn same(a: &str, b: &QString) -> bool {
     b.trim().is_empty() || a.eq_ignore_ascii_case(b.trim())
 }
 
-fn lc_profile_makes() -> QStringList {
-    list(builtin_lens_profiles().iter().map(|p| p.make.as_str()))
+/// `items` without repeats (ignoring case), in their order.
+fn ordered<'a>(items: impl IntoIterator<Item = &'a str>) -> QStringList {
+    let mut seen = std::collections::HashSet::new();
+    let mut out = QStringList::default();
+    for s in items {
+        if !s.is_empty() && seen.insert(s.to_lowercase()) {
+            out.append(QString::from(s));
+        }
+    }
+    out
 }
 
-fn lc_profile_models(make: &QString) -> QStringList {
-    list(
-        builtin_lens_profiles()
-            .iter()
-            .filter(|p| same(&p.make, make))
-            .map(|p| p.model.as_str()),
-    )
+fn lc_makes() -> QStringList {
+    let profiles = builtin_lens_profiles().iter().map(|p| p.make.as_str());
+    list(catalog_makes().into_iter().chain(profiles))
 }
 
-fn lc_profile_lenses(make: &QString, model: &QString) -> QStringList {
-    list(
-        builtin_lens_profiles()
-            .iter()
-            .filter(|p| same(&p.make, make) && same(&p.model, model))
-            .map(|p| p.lens.as_str()),
-    )
+fn lc_models(make: &QString) -> QStringList {
+    let make_s = make.to_string();
+    let profiles = builtin_lens_profiles()
+        .iter()
+        .filter(|p| same(&p.make, make))
+        .map(|p| p.model.as_str());
+    list(camera_models(make_s.trim()).into_iter().chain(profiles))
+}
+
+fn lc_lenses(make: &QString, model: &QString) -> QStringList {
+    let (make_s, model_s) = (make.to_string(), model.to_string());
+    let crop = find_camera(&make_s, &model_s).map(|c| c.crop);
+    let focal = with_session(None, |s| s.focal);
+    let profiles = builtin_lens_profiles()
+        .iter()
+        .filter(|p| same(&p.make, make) && same(&p.model, model))
+        .map(|p| p.lens.as_str());
+    let catalogue = lenses_for(make_s.trim(), crop, focal);
+    ordered(profiles.chain(catalogue.into_iter().map(|l| l.model)))
+}
+
+/// "24-70" or "50" from a range.
+fn span((lo, hi): (f64, f64)) -> String {
+    if lo == hi {
+        format!("{lo}")
+    } else {
+        format!("{lo}-{hi}")
+    }
+}
+
+fn criteria_info(make: &str, model: &str, lens: &str) -> String {
+    let mut parts = Vec::new();
+    if let Some(c) = find_camera(make, model) {
+        let mut camera = format!("Crop {}×, {}", c.crop, c.sensor);
+        if let Some(f) = c.fixed_focal {
+            camera += &format!("; fixed lens {} mm (35 mm equiv.)", span(f));
+            if let Some(a) = c.fixed_aperture {
+                camera += &format!(" f/{}", span(a));
+            }
+        }
+        parts.push(camera);
+    }
+    if let Some(l) = find_lens(lens) {
+        let mut text = String::new();
+        if let Some(f) = l.focal {
+            text += &format!("{} mm", span(f));
+        }
+        if let Some(a) = l.aperture {
+            text += &format!(" f/{}", span(a));
+        }
+        let calibrated: Vec<&str> = [
+            (l.distortion, "distortion"),
+            (l.tca, "TCA"),
+            (l.vignetting, "vignetting"),
+        ]
+        .into_iter()
+        .filter_map(|(on, name)| on.then_some(name))
+        .collect();
+        let calibrated = if calibrated.is_empty() {
+            "nothing".to_string()
+        } else {
+            calibrated.join(", ")
+        };
+        let text = format!("{text}; lensfun calibrates {calibrated} (crop {})", l.crop);
+        parts.push(text.trim_start_matches("; ").to_string());
+    }
+    parts.join(" · ")
+}
+
+fn lc_criteria_info(make: &QString, model: &QString, lens: &QString) -> QString {
+    let info = criteria_info(
+        make.to_string().trim(),
+        model.to_string().trim(),
+        lens.to_string().trim(),
+    );
+    QString::from(info.as_str())
 }
 
 fn lc_match_profiles(make: &QString, model: &QString, lens: &QString) -> Vec<i32> {
@@ -440,6 +550,42 @@ mod tests {
         }
         assert_eq!(camera_settings(&parse_exif(&t)), "50mm, f/2.8, --m");
         assert_eq!(camera_settings(&Exif::default()), "--mm, f/--, --m");
+    }
+
+    #[test]
+    fn exif_names_take_the_catalogue_spelling() {
+        let names = catalogue_names(
+            "NIKON CORPORATION",
+            "NIKON D850",
+            "Nikkor AF-S 24-70mm f/2.8E ED VR",
+            String::new(),
+        );
+        assert_eq!(
+            names[..3],
+            ["Nikon", "D850", "Nikkor AF-S 24-70mm f/2.8E ED VR"]
+        );
+        // Unknown names pass through.
+        let names = catalogue_names("ACME Cameras", "ACME One", "", String::new());
+        assert_eq!(names[..3], ["ACME Cameras", "ACME One", ""]);
+    }
+
+    #[test]
+    fn criteria_info_describes_camera_and_lens() {
+        let info = criteria_info("Canon", "EOS 5D Mark III", "Canon EF 24-70mm f/2.8L II USM");
+        assert!(
+            info.starts_with("Crop 1×, 36 x 24 mm · 24-70 mm f/2.8"),
+            "{info}"
+        );
+        assert!(
+            info.contains("lensfun calibrates distortion, TCA, vignetting"),
+            "{info}"
+        );
+        let compact = criteria_info("Acer", "CE-6430", "");
+        assert!(
+            compact.contains("fixed lens 34-102 mm (35 mm equiv.) f/2.8-4.8"),
+            "{compact}"
+        );
+        assert_eq!(criteria_info("ACME", "One", ""), "");
     }
 
     #[test]

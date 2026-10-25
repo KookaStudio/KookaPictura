@@ -119,6 +119,7 @@ private slots:
     void menuRowHasItsShortcut();
     void opensWithControls();
     void exifPrefillsSearchAndStatus();
+    void criteriaListCamerasAndLenses();
     void settingsComboSwitchesToCustom();
     void removeDistortionToolDragsSlider();
     void straightenToolSetsAngle();
@@ -297,6 +298,10 @@ void LensCorrectionTest::exifPrefillsSearchAndStatus()
         QVERIFY2(camera.contains(QStringLiteral("ACME Cameras ACME One")), qPrintable(camera));
         const QString settings = child<QLabel>(dialog.get(), "lcCameraSettings")->text();
         QVERIFY2(settings.contains(QStringLiteral("50mm, f/2.8")), qPrintable(settings));
+        // The photo's 50 mm setting keeps only lenses that cover it.
+        auto* lens = child<QComboBox>(dialog.get(), "lcLens");
+        QVERIFY(lens->findText(QStringLiteral("Canon EF 24-70mm f/2.8L II USM")) >= 0);
+        QCOMPARE(lens->findText(QStringLiteral("Canon EF 100-300mm f/5.6L")), -1);
         // The synthetic profile matches and is chosen; its corrections apply.
         QCOMPARE(dialog->autoPanel()->profileId(), 1);
         auto* geometric = child<QCheckBox>(dialog.get(), "lcGeometric");
@@ -311,6 +316,34 @@ void LensCorrectionTest::exifPrefillsSearchAndStatus()
         dialog->reject();
     }
     QVERIFY(window_->closeActiveDocument(false));
+}
+
+void LensCorrectionTest::criteriaListCamerasAndLenses()
+{
+    auto dialog = showDialog();
+    QVERIFY(dialog);
+    auto* make = child<QComboBox>(dialog.get(), "lcMake");
+    auto* model = child<QComboBox>(dialog.get(), "lcModel");
+    auto* lens = child<QComboBox>(dialog.get(), "lcLens");
+    auto* info = child<QLabel>(dialog.get(), "lcCriteriaInfo");
+    QVERIFY(make->count() > 60);
+    for (const char* name : {"Canon", "Nikon", "Sigma", "Tamron", "Fujifilm"}) {
+        QVERIFY2(make->findText(QString::fromLatin1(name)) >= 0, name);
+    }
+    make->setCurrentIndex(make->findText(QStringLiteral("Canon")));
+    QVERIFY(model->findText(QStringLiteral("EOS 5D Mark III")) >= 0);
+    // No EXIF focal length: every lens, Canon's own first.
+    // lensfun lists some lenses once per calibration crop; names show once.
+    QVERIFY2(lens->count() > 1400, qPrintable(QString::number(lens->count())));
+    QVERIFY(lens->itemText(0).startsWith(QStringLiteral("Canon")));
+    model->setCurrentIndex(model->findText(QStringLiteral("EOS 5D Mark III")));
+    QVERIFY(info->text().startsWith(QStringLiteral("Crop 1×, 36 x 24 mm")));
+    lens->setCurrentIndex(lens->findText(QStringLiteral("Canon EF 24-70mm f/2.8L II USM")));
+    QVERIFY2(info->text().contains(QStringLiteral("24-70 mm f/2.8; lensfun calibrates distortion")),
+             qPrintable(info->text()));
+    // Catalogue names carry no correction data.
+    QCOMPARE(dialog->autoPanel()->profileId(), 0);
+    dialog->reject();
 }
 
 void LensCorrectionTest::settingsComboSwitchesToCustom()
