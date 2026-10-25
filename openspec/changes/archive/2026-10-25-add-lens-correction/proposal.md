@@ -12,12 +12,13 @@ transform, with an alignment grid.
 ## What Changes
 
 - `pictura-filters` adds `distort::lens_correction`: one inverse map per
-  output pixel through Scale, an angle-and-perspective homography (a virtual
-  camera tilt about the centre, re-centred, then rotated), Remove Distortion
-  (Brown–Conrady `k1` on the radius over the half-diagonal), Auto Scale, and a
-  profile's `k1 k2 k3`; per-channel radial scale for the three fringe
-  sliders and a profile's chromatic aberration; a radial vignette gain over
-  the profile's divided-out falloff; Edge Extension / Transparency / Black /
+  output pixel through Scale, an angle-and-perspective homography (a keystone
+  about the centre zoomed to keep the frame filled, then rotated), Remove
+  Distortion (Brown–Conrady `k1` on the radius over the half-diagonal; the
+  pincushion side bulges with the corners kept), Auto Scale, and a profile's
+  `k1 k2 k3`; per-channel radial scale for the three fringe sliders and a
+  profile's chromatic aberration; a radial vignette gain in linear light
+  over the profile's divided-out falloff; Edge Extension / Transparency / Black /
   White fill blended by coverage; premultiplied Catmull-Rom sampling.
   Lens profiles use a small in-tree text format; the bundled set holds one
   synthetic profile so the Auto path runs end to end. `Filter::LensCorrection`

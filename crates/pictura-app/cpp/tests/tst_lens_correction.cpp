@@ -128,6 +128,7 @@ private slots:
     void toolShortcuts();
     void hintFollowsTool();
     void previewToggleShowsSource();
+    void vignetteLightensThePreview();
     void grayscaleDisablesChromaticAberration();
     void cancelAndOk();
     void previousConversionRestoresLastCommit();
@@ -454,6 +455,24 @@ void LensCorrectionTest::previewToggleShowsSource()
     // Black Color fills the blank.
     child<QComboBox>(dialog.get(), "lcEdge")->setCurrentIndex(2);
     QCOMPARE(viewPixel(canvas, corner), QColor(Qt::black));
+    dialog->reject();
+}
+
+void LensCorrectionTest::vignetteLightensThePreview()
+{
+    auto dialog = showDialog();
+    QVERIFY(dialog);
+    LensCorrectionCanvas* canvas = dialog->canvas();
+    // Near the right edge, a mid-tone: +100 at Midpoint 0 lifts it hard.
+    const QPointF edge(290, 100);
+    const QColor before = viewPixel(canvas, edge);
+    box(dialog.get(), "lcVignetteAmount")->setValue(100);
+    box(dialog.get(), "lcVignetteMidpoint")->setValue(0);
+    const QColor lighter = viewPixel(canvas, edge);
+    QVERIFY2(lighter.green() > before.green() + 60,
+             qPrintable(QStringLiteral("%1 -> %2").arg(before.name(), lighter.name())));
+    box(dialog.get(), "lcVignetteAmount")->setValue(-100);
+    QVERIFY(viewPixel(canvas, edge).green() < before.green() / 2);
     dialog->reject();
 }
 

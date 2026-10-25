@@ -89,27 +89,33 @@ fn distortion_keeps_centre_and_moves_edges_monotonically() {
         };
         LensMap::new(&p, w, h)
     };
+    // The source radius over the output radius along a ray to the corner.
+    let ratio = |m: &LensMap, t: f64| {
+        let q = [100.0 + 100.0 * t, 50.0 + 50.0 * t];
+        dist(m.source(q).unwrap(), centre) / dist(q, centre)
+    };
     for d in [-100.0, -30.0, 30.0, 100.0] {
-        assert!(dist(map(d).source(centre).unwrap(), centre) < 1e-9);
+        let m = map(d);
+        assert!(dist(m.source(centre).unwrap(), centre) < 1e-9);
+        // Monotone: the source radius grows along the ray.
+        let mut prev = 0.0;
+        for i in 1..=50 {
+            let t = i as f64 / 50.0;
+            let r = ratio(&m, t) * t;
+            assert!(r > prev, "Remove Distortion {d} folds at {t}");
+            prev = r;
+        }
     }
-    let edge = [200.0, 50.0];
-    let mut last = f64::INFINITY;
-    for d in [-100.0, -50.0, 0.0, 50.0, 100.0] {
-        let r = dist(map(d).source(edge).unwrap(), centre);
-        assert!(r < last, "Remove Distortion {d} moved the edge to {r}");
-        last = r;
-    }
-    // Along a ray the source radius still grows at the slider's end.
-    let m = map(100.0);
-    let mut prev = 0.0;
-    for i in 1..=50 {
-        let r = dist(
-            m.source([100.0 + 2.0 * i as f64, 50.0 + i as f64]).unwrap(),
-            centre,
-        );
-        assert!(r > prev);
-        prev = r;
-    }
+    // Removing barrel samples nearer the centre toward the edges, more as
+    // the value rises; the centre keeps its scale.
+    assert!(ratio(&map(30.0), 1.0) < 1.0);
+    assert!(ratio(&map(100.0), 1.0) < ratio(&map(30.0), 1.0));
+    assert!((ratio(&map(100.0), 0.01) - 1.0).abs() < 1e-3);
+    // Removing pincushion bulges the centre (magnified 2.5× at −100) while
+    // the corners stay put, so the frame stays filled.
+    assert!((ratio(&map(-100.0), 0.01) - 0.4).abs() < 1e-3);
+    assert!((ratio(&map(-100.0), 1.0) - 1.0).abs() < 1e-9);
+    assert!(ratio(&map(-100.0), 0.5) < ratio(&map(-30.0), 0.5));
 }
 
 #[test]
@@ -171,27 +177,28 @@ fn vignette_darkens_and_lightens_corners() {
     assert!(px(&wide, 15, 10)[0] < px(&narrow, 15, 10)[0]);
 }
 
+fn perspective(vertical: f64, horizontal: f64) -> LensMap {
+    LensMap::new(
+        &LensCorrectionParams {
+            vertical,
+            horizontal,
+            ..Default::default()
+        },
+        200,
+        100,
+    )
+}
+
 #[test]
-fn vertical_perspective_narrows_the_top_and_mirrors() {
-    let (w, h) = (200u32, 100u32);
-    let map = |v: f64| {
-        LensMap::new(
-            &LensCorrectionParams {
-                vertical: v,
-                ..Default::default()
-            },
-            w,
-            h,
-        )
-    };
-    let up = map(60.0);
+fn vertical_perspective_widens_the_top_and_mirrors() {
+    let up = perspective(60.0, 0.0);
     assert!(dist(up.source([100.0, 50.0]).unwrap(), [100.0, 50.0]) < 1e-6);
-    // The top is narrower: its corner shows past the layer's left edge,
-    // the bottom's inside it.
-    assert!(up.source([0.5, 0.5]).unwrap()[0] < 0.0);
-    assert!(up.source([0.5, 99.5]).unwrap()[0] > 0.0);
+    // The top is wider: a row there shows a narrower span of the source
+    // than a row at the bottom.
+    let span = |y: f64| up.source([199.5, y]).unwrap()[0] - up.source([0.5, y]).unwrap()[0];
+    assert!(span(0.5) < span(99.5));
     // The opposite value is the same correction flipped top to bottom.
-    let down = map(-60.0);
+    let down = perspective(-60.0, 0.0);
     for q in [[10.0, 10.0], [150.0, 30.0], [80.0, 95.0]] {
         let a = up.source(q).unwrap();
         let b = down.source([q[0], 100.0 - q[1]]).unwrap();
@@ -201,33 +208,44 @@ fn vertical_perspective_narrows_the_top_and_mirrors() {
 
 #[test]
 fn horizontal_perspective_narrows_the_right_side() {
-    let map = LensMap::new(
+    let map = perspective(0.0, 60.0);
+    // A column at the right shows a taller span of the source.
+    let span = |x: f64| map.source([x, 99.5]).unwrap()[1] - map.source([x, 0.5]).unwrap()[1];
+    assert!(span(199.5) > span(0.5));
+}
+
+#[test]
+fn perspective_alone_leaves_no_blank() {
+    for (v, h) in [(100.0, 0.0), (-100.0, 0.0), (0.0, 100.0), (100.0, -100.0)] {
+        let map = perspective(v, h);
+        for q in [[0.0, 0.0], [200.0, 0.0], [0.0, 100.0], [200.0, 100.0]] {
+            let s = map.source(q).unwrap();
+            assert!(map.inside(s, 1e-6), "{v} {h}: {q:?} shows {s:?}");
+        }
+    }
+    let alpha = |buf: &PixelBuffer| {
+        let n = buf.pixel_count();
+        buf.data[3 * n..].iter().copied().min().unwrap()
+    };
+    let out = corrected(
+        layer(60, 40, 4),
         &LensCorrectionParams {
-            horizontal: 60.0,
+            vertical: 100.0,
+            horizontal: 70.0,
             ..Default::default()
         },
-        200,
-        100,
     );
-    assert!(map.source([199.5, 0.5]).unwrap()[1] < 0.0);
-    assert!(map.source([0.5, 0.5]).unwrap()[1] > 0.0);
+    assert_eq!(alpha(&out), 255);
 }
 
 #[test]
 fn vertical_perspective_converges_verticals() {
     // A layer whose verticals lean in toward the top (shot looking up) is
-    // undone by a negative Vertical Perspective: the output's vertical
+    // undone by a positive Vertical Perspective: the output's vertical
     // lines map to source lines that converge upward.
-    let map = LensMap::new(
-        &LensCorrectionParams {
-            vertical: -50.0,
-            ..Default::default()
-        },
-        200,
-        200,
-    );
+    let map = perspective(50.0, 0.0);
     let top = map.source([20.0, 10.0]).unwrap();
-    let bottom = map.source([20.0, 190.0]).unwrap();
+    let bottom = map.source([20.0, 90.0]).unwrap();
     assert!(top[0] > bottom[0], "{top:?} {bottom:?}");
 }
 
@@ -453,7 +471,7 @@ fn profile_composes_with_custom() {
         },
     );
     assert_eq!(px(&out, 30, 20), vec![128; 3]);
-    assert!(px(&out, 0, 0)[0] > 150);
+    assert!(px(&out, 0, 0)[0] > 140);
     // A custom darkening on top pulls the corner back down.
     let both = corrected(
         grey(60, 40, 3),

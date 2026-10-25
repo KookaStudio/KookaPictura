@@ -109,6 +109,25 @@ impl LensSource {
     }
 }
 
+/// sRGB-encoded 0..1 to linear light.
+fn to_linear(v: f64) -> f64 {
+    let v = v.clamp(0.0, 1.0);
+    if v <= 0.04045 {
+        v / 12.92
+    } else {
+        ((v + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+fn to_srgb(v: f64) -> f64 {
+    let v = v.clamp(0.0, 1.0);
+    if v <= 0.003_130_8 {
+        v * 12.92
+    } else {
+        1.055 * v.powf(1.0 / 2.4) - 0.055
+    }
+}
+
 fn snap(v: f64) -> f64 {
     let r = v.round();
     if (v - r).abs() < 1e-6 {
@@ -154,9 +173,13 @@ fn shade(map: &LensMap, src: &LensSource, p: [f64; 2], clear: bool) -> [f64; 4] 
             v[c] = if o[3] > 0.0 { o[c] * v[3] / o[3] } else { 0.0 };
         }
     }
-    let (gain, alpha) = (map.gain(s), v[3]);
-    for c in &mut v[..3] {
-        *c = (*c * gain).clamp(0.0, alpha);
+    let alpha = v[3];
+    if map.shades() && alpha > 0.0 {
+        let gain = map.gain(s);
+        for c in &mut v[..3] {
+            let lit = to_linear(*c / alpha) * gain;
+            *c = to_srgb(lit.min(1.0)) * alpha;
+        }
     }
     if cover < 1.0 {
         for (o, f) in v.iter_mut().zip(fill) {

@@ -8,11 +8,17 @@ use pictura_core::homography::HOMOGRAPHY_EPSILON;
 
 use super::{LensCorrectionParams, LensEdge, LensModel};
 
-/// The virtual camera tilt at a perspective slider's end.
+/// A perspective slider's end keystones like a 30° camera tilt with a
+/// focal length of the diagonal.
 const MAX_TILT: f64 = PI / 6.0;
-/// Remove Distortion ±100 is `k1` ∓0.3, inside the ±⅓ that keeps the
-/// radial map monotone out to the corners.
-const DISTORTION_K1: f64 = 0.3;
+/// Remove Distortion +100 (removing barrel) is `k1` −0.25: the corners show
+/// the source at three-quarters of their radius, and the map stays
+/// monotone.
+const BARREL_K1: f64 = 0.25;
+/// Remove Distortion −100 (removing pincushion) is `k1` +1.5, divided by
+/// `1 + k1` so the corners stay put and the frame stays filled: the centre
+/// is magnified 2.5×, the bulge CS6 captures show.
+const PINCUSHION_K1: f64 = 1.5;
 /// A fringe slider's end scales its channel by ±0.5 %.
 const FRINGE_SCALE: f64 = 0.005;
 /// Auto Scale's search range.
@@ -33,11 +39,15 @@ pub struct LensMap {
     /// perspective are zero.
     inverse: Option<[f64; 9]>,
     k1: f64,
+    /// Remove Distortion's normalisation, `1 / (1 + k1)` for a bulge.
+    k1_norm: f64,
     profile: Option<LensModel>,
     auto: f64,
     ca: [f64; 3],
     vignette_amount: f64,
     vignette_start: f64,
+    /// Whether the vignette or the profile's falloff changes colour.
+    shades: bool,
     pub(super) edge: LensEdge,
 }
 
@@ -47,6 +57,12 @@ impl LensMap {
         let profile = p.profile.filter(|m| *m != LensModel::NONE);
         let fringe = |i: usize| 1.0 + FRINGE_SCALE * p.fringe[i].clamp(-100.0, 100.0) / 100.0;
         let ca_profile = profile.map_or([1.0; 3], |m| m.ca_scale);
+        let d = p.distortion.clamp(-100.0, 100.0) / 100.0;
+        let k1 = if d >= 0.0 {
+            -BARREL_K1 * d
+        } else {
+            -PINCUSHION_K1 * d
+        };
         let mut map = Self {
             width: w,
             height: h,
@@ -54,12 +70,14 @@ impl LensMap {
             radius: w.hypot(h) / 2.0,
             scale: p.scale,
             inverse: None,
-            k1: -DISTORTION_K1 * p.distortion.clamp(-100.0, 100.0) / 100.0,
+            k1,
+            k1_norm: if k1 > 0.0 { 1.0 / (1.0 + k1) } else { 1.0 },
             profile,
             auto: 1.0,
             ca: [0, 1, 2].map(|i| fringe(i) * ca_profile[i]),
             vignette_amount: p.vignette_amount.clamp(-100.0, 100.0) / 100.0,
-            vignette_start: 0.8 * p.vignette_midpoint.clamp(0.0, 100.0) / 100.0,
+            vignette_start: 0.7 * p.vignette_midpoint.clamp(0.0, 100.0) / 100.0,
+            shades: p.vignette_amount != 0.0 || profile.is_some_and(|m| m.vignette != [0.0; 3]),
             edge: p.edge,
         };
         map.inverse = map.homography(p).and_then(|m| invert(m, map.centre));
@@ -70,8 +88,12 @@ impl LensMap {
     }
 
     /// The forward angle-and-perspective map, `None` when it is the
-    /// identity. The tilt is a virtual camera rotation about the centre
-    /// (focal length = the diagonal), re-centred, then rotated on screen.
+    /// identity. The perspective is a keystone about the centre, `(u, v) /
+    /// (1 + gx·u + gy·v)` in units of the diagonal, so the centre lines stay
+    /// level and plumb as in CS6 captures; it is zoomed so the frame stays
+    /// filled (the captures show no blank from the perspective sliders
+    /// alone), then rotated on screen. Positive Vertical widens the top,
+    /// positive Horizontal narrows the right side.
     fn homography(&self, p: &LensCorrectionParams) -> Option<[f64; 9]> {
         let angle = p.angle.rem_euclid(360.0);
         if p.vertical == 0.0 && p.horizontal == 0.0 && angle == 0.0 {
@@ -79,24 +101,58 @@ impl LensMap {
         }
         let [cx, cy] = self.centre;
         let f = 2.0 * self.radius;
-        let a = -MAX_TILT * p.vertical.clamp(-100.0, 100.0) / 100.0;
-        let b = -MAX_TILT * p.horizontal.clamp(-100.0, 100.0) / 100.0;
-        let rx = [1.0, 0.0, 0.0, 0.0, a.cos(), -a.sin(), 0.0, a.sin(), a.cos()];
-        let ry = [b.cos(), 0.0, b.sin(), 0.0, 1.0, 0.0, -b.sin(), 0.0, b.cos()];
-        let k = [f, 0.0, cx, 0.0, f, cy, 0.0, 0.0, 1.0];
-        let k_inv = [1.0 / f, 0.0, -cx / f, 0.0, 1.0 / f, -cy / f, 0.0, 0.0, 1.0];
-        let tilt = mul(&k, &mul(&mul(&rx, &ry), &k_inv));
-        let moved = project(&tilt, self.centre).unwrap_or(self.centre);
-        let back = translate(cx - moved[0], cy - moved[1]);
-        let t = angle.to_radians();
-        let spin = mul(
+        let gy = MAX_TILT.tan() * p.vertical.clamp(-100.0, 100.0) / 100.0;
+        let gx = MAX_TILT.tan() * p.horizontal.clamp(-100.0, 100.0) / 100.0;
+        let keystone = mul(
             &translate(cx, cy),
             &mul(
-                &[t.cos(), -t.sin(), 0.0, t.sin(), t.cos(), 0.0, 0.0, 0.0, 1.0],
+                &[1.0, 0.0, 0.0, 0.0, 1.0, 0.0, gx / f, gy / f, 1.0],
                 &translate(-cx, -cy),
             ),
         );
-        Some(mul(&spin, &mul(&back, &tilt)))
+        let z = self.fill_zoom(&keystone);
+        let tilted = mul(&about(cx, cy, [z, 0.0, 0.0, z]), &keystone);
+        let t = angle.to_radians();
+        let spin = about(cx, cy, [t.cos(), -t.sin(), t.sin(), t.cos()]);
+        Some(mul(&spin, &tilted))
+    }
+
+    /// The smallest zoom about the centre (1…8) at which the forward
+    /// perspective map `m` covers the whole frame. The frame and its image
+    /// are convex, so the four corners decide.
+    fn fill_zoom(&self, m: &[f64; 9]) -> f64 {
+        let Some(inv) = invert(*m, self.centre) else {
+            return 1.0;
+        };
+        let [cx, cy] = self.centre;
+        let corners = [
+            [0.0, 0.0],
+            [self.width, 0.0],
+            [0.0, self.height],
+            [self.width, self.height],
+        ];
+        let fits = |z: f64| {
+            corners.iter().all(|c| {
+                project(&inv, [cx + (c[0] - cx) / z, cy + (c[1] - cy) / z])
+                    .is_some_and(|s| self.inside(s, 1e-6))
+            })
+        };
+        let (mut lo, mut hi) = (1.0, 8.0);
+        if fits(lo) {
+            return lo;
+        }
+        if !fits(hi) {
+            return hi;
+        }
+        for _ in 0..50 {
+            let mid = 0.5 * (lo + hi);
+            if fits(mid) {
+                hi = mid;
+            } else {
+                lo = mid;
+            }
+        }
+        hi
     }
 
     /// The smallest zoom (within [`AUTO_RANGE`]) at which the profile's
@@ -162,6 +218,10 @@ impl LensMap {
         }
         if self.k1 != 0.0 {
             q = self.radial(q, [self.k1, 0.0, 0.0], 1.0);
+            q = [
+                cx + (q[0] - cx) * self.k1_norm,
+                cy + (q[1] - cy) * self.k1_norm,
+            ];
         }
         Some(self.profile_point(q, self.auto))
     }
@@ -179,14 +239,25 @@ impl LensMap {
         self.ca != [1.0; 3]
     }
 
-    /// The colour gain at source point `s`: the Vignette sliders' falloff
-    /// over the profile's divided-out lens falloff.
+    pub(super) fn shades(&self) -> bool {
+        self.shades
+    }
+
+    /// The linear-light gain at source point `s`: the Vignette sliders'
+    /// falloff over the profile's divided-out lens falloff. The sliders
+    /// weigh a smoothstep from the Midpoint's start radius out to the
+    /// corners; +100 is two stops brighter there, −100 black.
     pub(super) fn gain(&self, s: [f64; 2]) -> f64 {
         let r = (s[0] - self.centre[0]).hypot(s[1] - self.centre[1]) / self.radius;
         let mut g = 1.0;
         if self.vignette_amount != 0.0 {
             let t = ((r - self.vignette_start) / (1.0 - self.vignette_start)).clamp(0.0, 1.0);
-            g += self.vignette_amount * t * t;
+            let w = t * t * (3.0 - 2.0 * t);
+            g = if self.vignette_amount > 0.0 {
+                1.0 + 3.0 * self.vignette_amount * w
+            } else {
+                1.0 + self.vignette_amount * w
+            };
         }
         if let Some(m) = &self.profile {
             let r2 = r * r;
@@ -212,6 +283,17 @@ fn mul(a: &[f64; 9], b: &[f64; 9]) -> [f64; 9] {
 
 fn translate(x: f64, y: f64) -> [f64; 9] {
     [1.0, 0.0, x, 0.0, 1.0, y, 0.0, 0.0, 1.0]
+}
+
+/// The linear map `[a b; c d]` about `(cx, cy)`.
+fn about(cx: f64, cy: f64, l: [f64; 4]) -> [f64; 9] {
+    mul(
+        &translate(cx, cy),
+        &mul(
+            &[l[0], l[1], 0.0, l[2], l[3], 0.0, 0.0, 0.0, 1.0],
+            &translate(-cx, -cy),
+        ),
+    )
 }
 
 /// `m` applied to `q`, `None` on or behind the horizon (the inverse is

@@ -3,16 +3,17 @@
 | Scenario | Steps | Expected | Coverage |
 |---|---|---|---|
 | `lc_identity` | Apply default settings (Midpoint 10, Edge Black, Angle 360; then a profile with every part off) | Every sample unchanged | `pictura-filters::default_params_are_bit_identical` |
-| `lc_distortion` | Map the centre and an edge point at Remove Distortion −100…+100; walk a ray at +100 | Centre fixed; edge source radius falls as the value rises; radius grows along the ray | `pictura-filters::distortion_keeps_centre_and_moves_edges_monotonically` |
-| `lc_vertical` | Map corners at Vertical +60, −60, −50 | Centre fixed; top-left past the left edge, bottom-left inside; −60 mirrors +60; verticals converge upward at −50 | `pictura-filters::vertical_perspective_narrows_the_top_and_mirrors`, `pictura-filters::vertical_perspective_converges_verticals` |
-| `lc_horizontal` | Map the top corners at Horizontal +60 | Top-right above the layer, top-left inside | `pictura-filters::horizontal_perspective_narrows_the_right_side` |
+| `lc_distortion` | Walk a ray to the corner at Remove Distortion −100…+100 | Centre fixed; radius grows along the ray; positive samples nearer the centre at the corner; −100 magnifies the centre 2.5× and keeps the corner | `pictura-filters::distortion_keeps_centre_and_moves_edges_monotonically` |
+| `lc_vertical` | Map rows at Vertical +60, −60, +50 | Centre fixed; the top row shows a narrower source span; −60 mirrors +60; verticals converge upward at +50 | `pictura-filters::vertical_perspective_widens_the_top_and_mirrors`, `pictura-filters::vertical_perspective_converges_verticals` |
+| `lc_horizontal` | Map the side columns at Horizontal +60 | The right column shows a taller source span | `pictura-filters::horizontal_perspective_narrows_the_right_side` |
+| `lc_perspective_fill` | Map the frame corners at several perspectives; apply V +100, H +70 | Every corner on the layer; every pixel opaque | `pictura-filters::perspective_alone_leaves_no_blank` |
 | `lc_angle` | Map a square layer at Angle 90 | Centre fixed; source top-left shows at the top right | `pictura-filters::angle_rotates_clockwise_about_the_centre` |
 | `lc_scale` | Map a point at Scale 200 % | Halfway to the centre | `pictura-filters::scale_zooms_about_the_centre` |
 | `lc_scale_refused` | Apply Scale 0 | Error | `pictura-filters::zero_scale_is_refused` |
 | `lc_straighten` | Measure a leaning line both ways; set Angle to undo it | Lean within (−45°, 45°]; Angle wraps to 0–360; a level row shows the line | `pictura-filters::straighten_levels_a_line`, `pictura-app::straighten_returns_the_levelling_angle` |
 | `lc_deterministic` | Apply the same settings twice | Byte-identical | `pictura-filters::deterministic` |
 | `lc_fringe` | Apply each fringe slider alone; map a point at Red +100 / Blue −100 | Only that channel changes; red further out, blue nearer | `pictura-filters::fringe_scales_only_its_channel` |
-| `lc_vignette` | Amount ±100 at Midpoints 0, 50, 100 on flat grey | Centre unchanged; corners dark or light; Midpoint 0 reaches a mid-radius point Midpoint 100 does not | `pictura-filters::vignette_darkens_and_lightens_corners`, `pictura-filters::geometry_free_settings_keep_every_sample_position` |
+| `lc_vignette` | Amount ±100 at Midpoints 0, 50, 100 on flat grey | Centre unchanged; corners dark or light; Midpoint 0 reaches a mid-radius point Midpoint 100 does not | `pictura-filters::vignette_darkens_and_lightens_corners`, `pictura-filters::geometry_free_settings_keep_every_sample_position`, `tst_lens_correction::vignetteLightensThePreview` |
 | `lc_edge_transparent` | Shrink to 50 % with Transparency, with and without alpha | Corner clear / white; centre opaque | `pictura-filters::edge_transparency_clears_or_whitens` |
 | `lc_edge_color` | Shrink to 50 % with Black and White | Opaque black / white corners | `pictura-filters::edge_colours_fill_opaque` |
 | `lc_edge_extend` | Shrink to 50 % with Edge Extension | Corners repeat the source corners | `pictura-filters::edge_extension_repeats_the_edge` |

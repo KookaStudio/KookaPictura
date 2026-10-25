@@ -9,19 +9,23 @@ Each output pixel centre `p` is mapped back to the source, with `c` the layer
 centre and `R` the half-diagonal:
 
 1. **Scale.** `q = c + (p − c) / scale`.
-2. **Angle and perspective.** The forward homography is
-   `H = Rot(angle) · T · K·Rx(a)·Ry(b)·K⁻¹`, `K` a pinhole camera with focal
-   length equal to the diagonal, `a = −30° · vertical / 100`,
-   `b = −30° · horizontal / 100`, and `T` the translation that puts the tilted
-   centre back on `c`. The inverse is applied; a point on or behind the
-   horizon is blank. Positive Vertical narrows the top, positive Horizontal
-   narrows the right side, and a positive Angle turns clockwise. Rotation is
-   applied last, in output space, so Straighten's measured deviation is
-   exactly the angle to undo.
-3. **Remove Distortion.** `s = c + d·(1 + k1·(|d|/R)²)`, `k1 = −0.3 ·
-   value / 100`: positive values sample nearer the centre at the edges, which
-   removes barrel distortion. `|k1| ≤ 0.3` keeps the map monotone to the
-   corners.
+2. **Angle and perspective.** The perspective is a keystone about the
+   centre, `(u, v) / (1 + gx·u + gy·v)` in units of the diagonal, with
+   `gy = tan 30° · vertical / 100` and `gx = tan 30° · horizontal / 100`:
+   positive Vertical widens the top, positive Horizontal narrows the right
+   side, and the centre lines stay level and plumb (a composed 3D tilt
+   twisted the frame, which CS6 captures do not show). It is then zoomed
+   about the centre by the smallest factor (bisection, 1–8) at which the
+   frame's four corners land on the layer, so the perspective sliders
+   alone never leave a blank, as in the captures. Rotation is applied last,
+   in output space, so Straighten's measured deviation is exactly the angle
+   to undo. A point on or behind the horizon is blank.
+3. **Remove Distortion.** `s = c + d·g(|d|/R)`. Positive values remove
+   barrel: `g = 1 − 0.25·value/100·r²`, sampling nearer the centre toward
+   the edges with the centre's scale kept. Negative values remove
+   pincushion: `g = (1 + k·r²) / (1 + k)`, `k = 1.5·|value|/100`, a bulge
+   that magnifies the centre up to 2.5× while the corners stay put, so the
+   frame stays filled (the CS6 capture at −100). Both stay monotone.
 4. **Auto Scale and the profile.** With a profile whose distortion is not
    zero and Auto Scale on, the point is divided by the smallest zoom (found
    by bisection over frame-edge samples, 0.25–4) at which the profile's map
@@ -35,10 +39,14 @@ centre and `R` the half-diagonal:
 
 ## Colour
 
-- **Vignette.** Gain `1 + amount/100 · t²`, `t = clamp((r − 0.8·mid/100) /
-  (1 − 0.8·mid/100), 0, 1)` on the source radius over `R`; a lower midpoint
-  starts the falloff nearer the centre. A profile's falloff
-  `1 + v1 r² + v2 r⁴ + v3 r⁶` is divided out.
+- **Vignette.** A gain in linear light (sRGB decoded, multiplied,
+  re-encoded): `1 + 3·a·w` for a positive amount `a` (two stops at the
+  corners at +100) and `1 + a·w` for a negative one (black at −100), with
+  `w` the smoothstep of `t = clamp((r − 0.7·mid/100) / (1 − 0.7·mid/100),
+  0, 1)` on the source radius over `R`; a lower midpoint starts the falloff
+  nearer the centre. A plain multiplier on the encoded values barely moved
+  dark tones, unlike the CS6 captures. A profile's falloff
+  `1 + v1 r² + v2 r⁴ + v3 r⁶` is divided out of the same gain.
 - **Sampling.** Premultiplied Catmull-Rom with the taps clamped to the layer;
   results are clamped so colour never exceeds alpha.
 

@@ -12,9 +12,11 @@ The system SHALL implement `Filter::LensCorrection` as one inverse map per
 output pixel through Scale about the centre, an angle-and-perspective
 homography, Remove Distortion, Auto Scale, and the profile's radial
 distortion, resampled once. Positive Remove Distortion SHALL remove barrel
-distortion, positive Vertical Perspective SHALL narrow the top, positive
-Horizontal Perspective SHALL narrow the right side, and a positive Angle
-SHALL turn clockwise about the centre. All-default settings SHALL leave the
+distortion; negative SHALL bulge the centre while the corners stay put, so
+the frame stays filled. Positive Vertical Perspective SHALL widen the top,
+positive Horizontal Perspective SHALL narrow the right side, and the
+perspective sliders alone SHALL leave no blank area; a positive Angle SHALL
+turn clockwise about the centre. All-default settings SHALL leave the
 layer bit-identical, a non-positive Scale SHALL be refused, and the result
 SHALL be deterministic.
 
@@ -27,24 +29,34 @@ SHALL be deterministic.
 #### Scenario: Remove Distortion keeps the centre and moves the edges [lc_distortion]
 
 - **WHEN** `lens_correction::tests::distortion_keeps_centre_and_moves_edges_monotonically`
-  maps the centre and an edge point at Remove Distortion −100…+100
-- **THEN** the centre maps to itself, the edge's source radius falls as the
-  value rises, and at +100 the source radius still grows along a ray
+  walks a ray to the corner at Remove Distortion −100…+100
+- **THEN** the centre maps to itself and the source radius grows along the
+  ray; positive values sample nearer the centre toward the corner, more as
+  the value rises; −100 magnifies the centre 2.5× and keeps the corner
 
-#### Scenario: Vertical Perspective narrows the top [lc_vertical]
+#### Scenario: Vertical Perspective widens the top [lc_vertical]
 
-- **WHEN** `lens_correction::tests::vertical_perspective_narrows_the_top_and_mirrors`
+- **WHEN** `lens_correction::tests::vertical_perspective_widens_the_top_and_mirrors`
   and `lens_correction::tests::vertical_perspective_converges_verticals` map
-  points at Vertical +60 and −60, and −50
-- **THEN** the centre is fixed, the top-left corner shows past the layer's
-  left edge while the bottom-left shows inside it, −60 is +60 flipped top to
-  bottom, and an output vertical line maps to source points converging upward
+  points at Vertical +60 and −60, and +50
+- **THEN** the centre is fixed, a row at the top shows a narrower span of the
+  source than a row at the bottom, −60 is +60 flipped top to bottom, and an
+  output vertical line maps to source points converging upward
 
 #### Scenario: Horizontal Perspective narrows the right side [lc_horizontal]
 
 - **WHEN** `lens_correction::tests::horizontal_perspective_narrows_the_right_side`
-  maps the top corners at Horizontal +60
-- **THEN** the top-right corner shows above the layer and the top-left inside
+  maps the side columns at Horizontal +60
+- **THEN** a column at the right shows a taller span of the source than one
+  at the left
+
+#### Scenario: Perspective alone leaves no blank [lc_perspective_fill]
+
+- **WHEN** `lens_correction::tests::perspective_alone_leaves_no_blank` maps
+  the frame corners at several Vertical and Horizontal values and applies
+  Vertical +100 with Horizontal +70 to an opaque layer
+- **THEN** every corner shows a point on the layer and every pixel stays
+  opaque
 
 #### Scenario: Angle turns clockwise about the centre [lc_angle]
 
@@ -83,9 +95,10 @@ SHALL be deterministic.
 
 Fix Red/Cyan, Green/Magenta, and Blue/Yellow Fringe SHALL each scale only
 their channel radially about the centre, alpha following the green sample.
-Vignette Amount SHALL darken (negative) or lighten (positive) toward the
-corners, leaving the centre unchanged, and a lower Midpoint SHALL widen the
-area it affects. A profile's vignette falloff SHALL be divided out.
+Vignette Amount SHALL darken (negative, to black at −100) or lighten
+(positive, two stops at +100) toward the corners in linear light, leaving
+the centre unchanged, and a lower Midpoint SHALL widen the area it affects.
+A profile's vignette falloff SHALL be divided out.
 
 #### Scenario: Each fringe slider scales only its channel [lc_fringe]
 
@@ -96,11 +109,13 @@ area it affects. A profile's vignette falloff SHALL be divided out.
 
 #### Scenario: Vignette darkens or lightens the corners [lc_vignette]
 
-- **WHEN** `lens_correction::tests::vignette_darkens_and_lightens_corners`
-  and `lens_correction::tests::geometry_free_settings_keep_every_sample_position`
-  apply Amount −100 and +100 at several midpoints to flat grey
-- **THEN** the centre keeps its value, the corners darken or lighten, and
-  Midpoint 0 darkens a mid-radius point that Midpoint 100 leaves alone
+- **WHEN** `lens_correction::tests::vignette_darkens_and_lightens_corners`,
+  `lens_correction::tests::geometry_free_settings_keep_every_sample_position`
+  and `tst_lens_correction::vignetteLightensThePreview` apply Amount −100
+  and +100 at several midpoints to flat grey and to the dialog's preview
+- **THEN** the centre keeps its value, the corners darken or lighten,
+  Midpoint 0 darkens a mid-radius point that Midpoint 100 leaves alone, and
+  a mid-tone near the preview's edge visibly lifts and darkens
 
 ### Requirement: Lens Correction edge fill
 
