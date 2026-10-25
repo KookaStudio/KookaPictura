@@ -39,6 +39,11 @@ bool isRed(const QColor& colour)
     return colour.red() > 200 && colour.green() < 80 && colour.blue() < 80;
 }
 
+bool samePoint(const QPointF& a, const QPointF& b)
+{
+    return std::abs(a.x() - b.x()) < kTolerance && std::abs(a.y() - b.y()) < kTolerance;
+}
+
 } // namespace
 
 class TransformCommandsTest : public QObject {
@@ -58,7 +63,9 @@ private slots:
     void exactRotationsAndFlipsMoveTheContent();
     void selectionTransformsOnlyItsPixels();
     void openSessionUpdatesInPlace();
+    void undoCancelsAndClearsTheTransform();
     void againRepeatsTheLastTransform();
+    void againUsesTheSourcePivot();
     void againIsUnavailableBeforeATransform();
 
 private:
@@ -426,6 +433,71 @@ void TransformCommandsTest::againRepeatsTheLastTransform()
     QCOMPARE(view->history_count(), base + 2);
     QCOMPARE(view->history_label(base + 1), QStringLiteral("Transform Again"));
     QVERIFY2(isRed(view->image().pixelColor(20, 16)), "Again adds another quarter turn");
+}
+
+void TransformCommandsTest::againUsesTheSourcePivot()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginLayer(frame, {QRect(5, 5, 30, 20)});
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(view && tools);
+
+    // Move the box, then put the pivot on its moved top-left and commit. The
+    // recorded offset is in the source frame, so Again must keep the pivot at
+    // the repeated box's top-left instead of adding the carried translation.
+    QVERIFY(tools->beginFreeTransform(layer));
+    QCOMPARE(view->transform_press(27.0, 22.0, 1.0, false, false), 9);
+    QVERIFY(view->transform_move(32.0, 27.0, 1.0, false, false));
+    QVERIFY(view->transform_release());
+    QVERIFY(std::abs(pictura::transform_pivot_x(*view) - 25.0) < kTolerance);
+    QVERIFY(std::abs(pictura::transform_pivot_y(*view) - 20.0) < kTolerance);
+    QVERIFY(pictura::transform_set_pivot(*view, 10.0, 10.0));
+    tools->commitFreeTransform();
+
+    const pictura::transform_api::LayerRect committed =
+        pictura::transform_api::layerRect(*view, layer);
+    QVERIFY(committed.valid);
+    QCOMPARE(committed.left, 10);
+    QCOMPARE(committed.top, 10);
+
+    QVERIFY(tools->beginFreeTransform(layer));
+    QVERIFY(pictura::transform_repeat(*view));
+    const QPolygonF quad = pictura::transform_api::quad(*view).corners;
+    QCOMPARE(quad.size(), 4);
+    const QPointF pivot(pictura::transform_pivot_x(*view), pictura::transform_pivot_y(*view));
+    QVERIFY2(samePoint(pivot, quad.at(0)),
+             qPrintable(QStringLiteral("pivot %1,%2 corner %3,%4")
+                            .arg(pivot.x())
+                            .arg(pivot.y())
+                            .arg(quad.at(0).x())
+                            .arg(quad.at(0).y())));
+    tools->cancelFreeTransform();
+}
+
+void TransformCommandsTest::undoCancelsAndClearsTheTransform()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginLayer(frame, {QRect(5, 5, 30, 20)});
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    auto* canvas = frame.findChild<pictura::ImageView*>();
+    QVERIFY(view && tools && canvas);
+    const int base = view->history_index();
+
+    QVERIFY(tools->beginFreeTransform(layer));
+    QVERIFY(tools->setTransformWidth(150.0, true));
+    QVERIFY(!canvas->transformPreviewLayerForTest().isNull());
+
+    QVERIFY(frame.registry()->dispatch(
+        QString::fromLatin1(pictura::command_ids::EditUndo)));
+    QVERIFY(!view->transform_session_active());
+    QVERIFY(canvas->transformPreviewLayerForTest().isNull());
+    QVERIFY(pictura::transform_api::quad(*view).corners.isEmpty());
+    QVERIFY(!tools->transformControlsSession());
+    QCOMPARE(view->history_index(), base - 1);
 }
 
 void TransformCommandsTest::againIsUnavailableBeforeATransform()

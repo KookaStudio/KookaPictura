@@ -31,6 +31,29 @@ constexpr double kTolerance = 1e-6;
 constexpr int kWarpPoint = 11;
 constexpr int kWarpSurface = 12;
 
+QPolygonF overlayQuad(const pictura::transform_api::WarpOverlay& overlay)
+{
+    if (overlay.grid.size() < 4) {
+        return {};
+    }
+    QPolygonF quad;
+    quad << overlay.grid.at(0).first() << overlay.grid.at(1).first()
+         << overlay.grid.at(1).last() << overlay.grid.at(0).last();
+    return quad;
+}
+
+bool fillBox(pictura::PictureView* view, const QRect& box)
+{
+    if (!view->select_rect(box.x(), box.y(), box.width(), box.height(), QStringLiteral("new"),
+                           0.0)) {
+        return false;
+    }
+    const bool ok = pictura::edit_fill(*view, qRgba(0, 0, 0, 255), -1,
+                                       QStringLiteral("normal"), 100, false);
+    view->deselect();
+    return ok;
+}
+
 } // namespace
 
 class TransformWarpTest : public QObject {
@@ -46,6 +69,15 @@ private slots:
     void presetStyleAndValuesFromTheBar();
     void anchorDragCommitsOneState();
     void releaseHidesTheDraggedHandles();
+    void reenteringWarpKeepsTheMesh();
+    void leavingWarpPutsTheBoxOnThePreviewBounds();
+    void cancelWarpLeavesNoOverlay();
+    void undoAfterWarpCommitRestores();
+    void boxDragKeepsTheWarpedPreview();
+    void boxScaleCommitsWithTheWarp();
+    void numericBoxEditRefreshesTheWarpedPreview();
+    void exactCommandRefreshesTheWarpedPreview();
+    void perspectiveBoxWarpPreviews();
     void pressOnAPresetMakesItCustom();
     void escapeRestoresAWarpedSession();
     void identityWarpCommitsNothing();
@@ -171,6 +203,8 @@ void TransformWarpTest::toggleSwitchesBetweenBoxAndWarp()
 
     warpToggle->click();
     QVERIFY(!pictura::transform_warp_active(*view));
+    QVERIFY(pictura::transform_warp_stored(*view));
+    QCOMPARE(pictura::transform_warp_style_id(*view), QStringLiteral("custom"));
     QVERIFY(!angle->isHidden());
     QVERIFY(canvas->transformWarpForTest().isEmpty());
     QCOMPARE(view->transform_hit_test(10.0, 8.0, 1.0), 0);
@@ -184,18 +218,21 @@ void TransformWarpTest::boxTransformCarriesIntoTheMesh()
     QVERIFY(!layer.isEmpty());
     pictura::PictureView* view = frame.activeView();
     auto* tools = frame.findChild<pictura::ToolController*>();
-    QVERIFY(view && tools && tools->beginFreeTransform(layer));
+    auto* canvas = frame.findChild<pictura::ImageView*>();
+    QVERIFY(view && tools && canvas && tools->beginFreeTransform(layer));
 
     QVERIFY(tools->setTransformAngle(30.0));
     const QPolygonF box = pictura::transform_api::quad(*view).corners;
     QVERIFY(tools->enterTransformWarp());
-    const QPolygonF grid = pictura::transform_api::quad(*view).corners;
+    const QPolygonF grid = overlayQuad(canvas->transformWarpForTest());
     QCOMPARE(grid.size(), 4);
     for (int i = 0; i < 4; ++i) {
         QVERIFY(QLineF(box.at(i), grid.at(i)).length() < kTolerance);
     }
-    // Leaving Warp gives the turned box back as it was.
+    // Leaving Warp gives the turned box back with the warp still applied.
     QVERIFY(tools->leaveTransformWarp());
+    QVERIFY(pictura::transform_warp_stored(*view));
+    QCOMPARE(pictura::transform_warp_style_id(*view), QStringLiteral("custom"));
     QVERIFY(qAbs(pictura::transform_angle_degrees(*view) - 30.0) < kTolerance);
     tools->cancelFreeTransform();
 }
@@ -257,7 +294,7 @@ void TransformWarpTest::anchorDragCommitsOneState()
     canvas->mousePressed(QPointF(10.0, 8.0), Qt::LeftButton, int(Qt::NoModifier));
     canvas->mouseMoved(QPointF(4.0, 2.0));
     canvas->mouseReleased(QPointF(4.0, 2.0));
-    QCOMPARE(pictura::transform_api::quad(*view).corners.at(0), QPointF(4.0, 2.0));
+    QCOMPARE(canvas->transformWarpForTest().points.front().pos, QPointF(4.0, 2.0));
     QCOMPARE(view->history_count(), base);
 
     auto* apply = frame.findChild<QToolButton*>(QStringLiteral("optionsTransformApply"));
@@ -337,6 +374,8 @@ void TransformWarpTest::escapeRestoresAWarpedSession()
     QVERIFY(tools->setTransformWarpStyle(QStringLiteral("wave")));
     QTest::keyClick(canvas, Qt::Key_Escape);
     QVERIFY(!view->transform_session_active());
+    QVERIFY(canvas->transformPreviewLayerForTest().isNull());
+    QVERIFY(canvas->transformWarpForTest().isEmpty());
     QCOMPARE(view->history_count(), base);
     QCOMPARE(pictura::transform_api::layerRect(*view, layer).toString(), before);
 }
@@ -354,6 +393,283 @@ void TransformWarpTest::identityWarpCommitsNothing()
     tools->commitFreeTransform();
     QVERIFY(!view->transform_session_active());
     QCOMPARE(view->history_count(), base);
+}
+
+void TransformWarpTest::reenteringWarpKeepsTheMesh()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginLayer(frame);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    auto* canvas = frame.findChild<pictura::ImageView*>();
+    QVERIFY(view && tools && canvas);
+    QVERIFY(tools->beginWarp(layer));
+
+    canvas->mousePressed(QPointF(10.0, 8.0), Qt::LeftButton, int(Qt::NoModifier));
+    canvas->mouseMoved(QPointF(4.0, 2.0));
+    canvas->mouseReleased(QPointF(4.0, 2.0));
+    QCOMPARE(canvas->transformWarpForTest().points.front().pos, QPointF(4.0, 2.0));
+
+    QVERIFY(tools->leaveTransformWarp());
+    QVERIFY(!pictura::transform_warp_active(*view));
+    QVERIFY(pictura::transform_warp_stored(*view));
+    QVERIFY(tools->enterTransformWarp());
+    QVERIFY(pictura::transform_warp_active(*view));
+    QCOMPARE(canvas->transformWarpForTest().points.front().pos, QPointF(4.0, 2.0));
+    QCOMPARE(pictura::transform_warp_style_id(*view), QStringLiteral("custom"));
+    tools->cancelFreeTransform();
+}
+
+void TransformWarpTest::leavingWarpPutsTheBoxOnThePreviewBounds()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginLayer(frame);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    auto* canvas = frame.findChild<pictura::ImageView*>();
+    QVERIFY(view && tools && canvas);
+    QVERIFY(tools->beginWarp(layer));
+
+    // A custom corner drag makes the preview's bounds differ from the box.
+    canvas->mousePressed(QPointF(10.0, 8.0), Qt::LeftButton, int(Qt::NoModifier));
+    canvas->mouseMoved(QPointF(4.0, 2.0));
+    canvas->mouseReleased(QPointF(4.0, 2.0));
+    const QImage preview = view->move_preview_layer();
+    const QPointF origin(view->move_preview_x(), view->move_preview_y());
+    const QSize size = preview.size();
+    QVERIFY(!preview.isNull());
+
+    QVERIFY(tools->leaveTransformWarp());
+    QCOMPARE(view->move_preview_layer(), preview);
+    const QPolygonF box = pictura::transform_api::quad(*view).corners;
+    QCOMPARE(box.size(), 4);
+    const QPointF want[4] = {
+        origin,
+        origin + QPointF(size.width(), 0.0),
+        origin + QPointF(size.width(), size.height()),
+        origin + QPointF(0.0, size.height()),
+    };
+    for (int i = 0; i < 4; ++i) {
+        QVERIFY2(QLineF(box.at(i), want[i]).length() < kTolerance,
+                 qPrintable(QStringLiteral("box corner %1").arg(i)));
+    }
+
+    // Re-entering Warp reuses the mesh, whose top-left anchor is on the box.
+    QVERIFY(tools->enterTransformWarp());
+    const pictura::transform_api::WarpOverlay& overlay = canvas->transformWarpForTest();
+    QCOMPARE(overlay.points.size(), 12);
+    QVERIFY(QLineF(overlay.points.front().pos, QPointF(4.0, 2.0)).length() < kTolerance);
+    QCOMPARE(view->move_preview_layer(), preview);
+
+    // The post-frame's inverse keeps a re-entered anchor drag on the pointer.
+    canvas->mousePressed(QPointF(4.0, 2.0), Qt::LeftButton, int(Qt::NoModifier));
+    canvas->mouseMoved(QPointF(2.0, 1.0));
+    canvas->mouseReleased(QPointF(2.0, 1.0));
+    QVERIFY(QLineF(canvas->transformWarpForTest().points.front().pos, QPointF(2.0, 1.0))
+                .length()
+            < kTolerance);
+    tools->cancelFreeTransform();
+}
+
+void TransformWarpTest::cancelWarpLeavesNoOverlay()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginLayer(frame);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    auto* canvas = frame.findChild<pictura::ImageView*>();
+    QVERIFY(view && tools && canvas);
+    const QString before = pictura::transform_api::layerRect(*view, layer).toString();
+    const int base = view->history_count();
+
+    QVERIFY(tools->beginWarp(layer));
+    QVERIFY(tools->setTransformWarpStyle(QStringLiteral("arc")));
+    QVERIFY(!canvas->transformPreviewLayerForTest().isNull());
+    tools->cancelFreeTransform();
+
+    QVERIFY(!view->transform_session_active());
+    QVERIFY(canvas->transformPreviewLayerForTest().isNull());
+    QVERIFY(pictura::transform_api::quad(*view).corners.isEmpty());
+    QCOMPARE(view->history_count(), base);
+    QCOMPARE(pictura::transform_api::layerRect(*view, layer).toString(), before);
+}
+
+void TransformWarpTest::undoAfterWarpCommitRestores()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginLayer(frame);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    auto* canvas = frame.findChild<pictura::ImageView*>();
+    QVERIFY(view && tools && canvas);
+    const QString before = pictura::transform_api::layerRect(*view, layer).toString();
+    const int base = view->history_count();
+
+    QVERIFY(tools->beginWarp(layer));
+    QVERIFY(tools->setTransformWarpStyle(QStringLiteral("arc")));
+    QVERIFY(tools->leaveTransformWarp());
+    QVERIFY(tools->setTransformWidth(150.0, true));
+    tools->commitFreeTransform();
+    QVERIFY(!view->transform_session_active());
+    QCOMPARE(view->history_count(), base + 1);
+    QVERIFY(view->undo());
+    QCOMPARE(pictura::transform_api::layerRect(*view, layer).toString(), before);
+    QVERIFY(canvas->transformPreviewLayerForTest().isNull());
+    QVERIFY(view->redo());
+    QVERIFY(pictura::transform_api::layerRect(*view, layer).toString() != before);
+}
+
+void TransformWarpTest::boxDragKeepsTheWarpedPreview()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginLayer(frame);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    auto* canvas = frame.findChild<pictura::ImageView*>();
+    QVERIFY(view && tools && canvas);
+    QVERIFY(fillBox(view, QRect(5, 5, 30, 20)));
+    QVERIFY(tools->beginWarp(layer));
+    QVERIFY(tools->setTransformWarpStyle(QStringLiteral("arc")));
+    const QSize arc = view->move_preview_layer().size();
+    QCOMPARE(canvas->transformPreviewLayerForTest().size(), arc);
+
+    QVERIFY(tools->leaveTransformWarp());
+    QVERIFY(!pictura::transform_warp_active(*view));
+    pictura::transform_set_show_pivot(*view, false);
+    const QPolygonF box = pictura::transform_api::quad(*view).corners;
+    const QPointF rightMid((box.at(1).x() + box.at(2).x()) / 2.0,
+                           (box.at(1).y() + box.at(2).y()) / 2.0);
+    canvas->mousePressed(rightMid, Qt::LeftButton, int(Qt::NoModifier));
+    canvas->mouseMoved(rightMid + QPointF(4.0, 0.0));
+    canvas->mouseReleased(rightMid + QPointF(4.0, 0.0));
+
+    QVERIFY(view->move_preview_layer().width() > arc.width());
+    QVERIFY(canvas->transformPreviewLayerForTest().width() > arc.width());
+    QVERIFY(canvas->transformWarpForTest().isEmpty());
+    tools->cancelFreeTransform();
+}
+
+void TransformWarpTest::boxScaleCommitsWithTheWarp()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginLayer(frame);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    auto* canvas = frame.findChild<pictura::ImageView*>();
+    QVERIFY(view && tools && canvas);
+    QVERIFY(fillBox(view, QRect(5, 5, 30, 20)));
+    QVERIFY(tools->beginWarp(layer));
+    QVERIFY(tools->setTransformWarpStyle(QStringLiteral("arc")));
+    const QSize arc = view->move_preview_layer().size();
+    QVERIFY(arc.height() > 20);
+    QVERIFY(tools->leaveTransformWarp());
+    pictura::transform_set_show_pivot(*view, false);
+
+    const QPolygonF box = pictura::transform_api::quad(*view).corners;
+    QCOMPARE(box.size(), 4);
+    const QPointF origin(view->move_preview_x(), view->move_preview_y());
+    QVERIFY(QLineF(box.at(0), origin).length() < kTolerance);
+    QVERIFY(QLineF(box.at(2), origin + QPointF(arc.width(), arc.height())).length() < kTolerance);
+    const QPointF rightMid((box.at(1).x() + box.at(2).x()) / 2.0,
+                           (box.at(1).y() + box.at(2).y()) / 2.0);
+    canvas->mousePressed(rightMid, Qt::LeftButton, int(Qt::NoModifier));
+    canvas->mouseMoved(rightMid + QPointF(4.0, 0.0));
+    canvas->mouseReleased(rightMid + QPointF(4.0, 0.0));
+
+    const int base = view->history_count();
+    QVERIFY(view->commit_transform());
+    QCOMPARE(view->history_count(), base + 1);
+    QCOMPARE(view->history_label(base), QStringLiteral("Free Transform"));
+    const pictura::transform_api::LayerRect rect =
+        pictura::transform_api::layerRect(*view, layer);
+    QVERIFY(rect.valid);
+    QVERIFY(rect.width() > 30);
+    QVERIFY2(qAbs(rect.height() - arc.height()) <= 1,
+             "the arc still bends the scaled layer");
+}
+
+void TransformWarpTest::numericBoxEditRefreshesTheWarpedPreview()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginLayer(frame);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    auto* canvas = frame.findChild<pictura::ImageView*>();
+    QVERIFY(view && tools && canvas);
+    QVERIFY(tools->beginWarp(layer));
+    QVERIFY(tools->setTransformWarpStyle(QStringLiteral("arc")));
+    const QSize arc = view->move_preview_layer().size();
+    QCOMPARE(canvas->transformPreviewLayerForTest().size(), arc);
+
+    QVERIFY(tools->leaveTransformWarp());
+    QVERIFY(tools->setTransformWidth(200.0, true));
+    QVERIFY(view->move_preview_layer().width() > arc.width());
+    QVERIFY(canvas->transformPreviewLayerForTest().width() > arc.width());
+    QVERIFY(!pictura::transform_warp_active(*view));
+    tools->cancelFreeTransform();
+}
+
+void TransformWarpTest::exactCommandRefreshesTheWarpedPreview()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginLayer(frame);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    auto* canvas = frame.findChild<pictura::ImageView*>();
+    QVERIFY(view && tools && canvas);
+    QVERIFY(tools->beginWarp(layer));
+    QVERIFY(tools->setTransformWarpStyle(QStringLiteral("arc")));
+    const QSize arc = view->move_preview_layer().size();
+    QCOMPARE(canvas->transformPreviewLayerForTest().size(), arc);
+
+    QVERIFY(tools->leaveTransformWarp());
+    QVERIFY(frame.registry()->dispatch(
+        QString::fromLatin1(pictura::command_ids::EditTransformRotate90Cw)));
+    const QSize after = view->move_preview_layer().size();
+    QVERIFY(qAbs(after.width() - arc.height()) <= 1);
+    QVERIFY(qAbs(after.height() - arc.width()) <= 1);
+    const QSize canvasAfter = canvas->transformPreviewLayerForTest().size();
+    QVERIFY(qAbs(canvasAfter.width() - arc.height()) <= 1);
+    QVERIFY(qAbs(canvasAfter.height() - arc.width()) <= 1);
+    QVERIFY(!pictura::transform_warp_active(*view));
+    tools->cancelFreeTransform();
+}
+
+void TransformWarpTest::perspectiveBoxWarpPreviews()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginLayer(frame);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    auto* canvas = frame.findChild<pictura::ImageView*>();
+    QVERIFY(view && tools && canvas);
+    QVERIFY(tools->beginFreeTransform(layer));
+
+    const QPolygonF before = pictura::transform_api::quad(*view).corners;
+    const QPointF corner = before.at(1);
+    const int mods = int(Qt::ControlModifier | Qt::AltModifier | Qt::ShiftModifier);
+    canvas->mousePressed(corner, Qt::LeftButton, mods);
+    canvas->mouseMoved(corner + QPointF(10.0, -2.0));
+    canvas->mouseReleased(corner + QPointF(10.0, -2.0));
+    const QPolygonF box = pictura::transform_api::quad(*view).corners;
+
+    QVERIFY(tools->enterTransformWarp());
+    const QPolygonF grid = overlayQuad(canvas->transformWarpForTest());
+    QCOMPARE(grid.size(), 4);
+    for (int i = 0; i < 4; ++i) {
+        QVERIFY(QLineF(grid.at(i), box.at(i)).length() < 1e-6);
+    }
+    QVERIFY(!view->move_preview_layer().isNull());
+    tools->cancelFreeTransform();
 }
 
 QTEST_MAIN(TransformWarpTest)

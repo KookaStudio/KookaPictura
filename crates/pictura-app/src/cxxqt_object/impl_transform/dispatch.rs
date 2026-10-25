@@ -1,13 +1,13 @@
 use super::super::document_session::{TransformMode, TransformSession};
 use super::super::helpers::*;
 use super::super::qobject;
-use super::distort::gesture_distort;
+use super::distort::{gesture_distort, gesture_free_distort};
 use super::geometry::{
     gesture_rotate, gesture_scale, gesture_translate, hit_test_quad, pivot_drag, pivot_hit,
-    session_quad, MOVE_HANDLE, PIVOT_HANDLE, ROTATE_HANDLE,
+    pivot_point, session_quad, MOVE_HANDLE, PIVOT_HANDLE, ROTATE_HANDLE,
 };
 use super::perspective::{gesture_perspective, gesture_scale_base};
-use super::skew::gesture_skew;
+use super::skew::{gesture_free_skew, gesture_skew};
 use super::warp::{refresh_warp_preview, warp_hit_test, warp_move, warp_press};
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
@@ -39,7 +39,7 @@ impl qobject::PictureView {
         let (hit, start_quad) = {
             let rust = self.rust();
             match rust.session.live.transform() {
-                Some(session) if session.warp.is_some() => {
+                Some(session) if session.warp_editing => {
                     let hit = warp_hit_test(session, x, y, zoom);
                     (hit, session_quad(session))
                 }
@@ -60,7 +60,7 @@ impl qobject::PictureView {
         }
         let mut rust = self.as_mut().rust_mut();
         if let Some(session) = rust.session.live.transform_mut() {
-            if session.warp.is_some() && warp_press(session, x, y, zoom) < 0 {
+            if session.warp_editing && warp_press(session, x, y, zoom) < 0 {
                 return -1;
             }
             session.handle = hit;
@@ -75,8 +75,10 @@ impl qobject::PictureView {
                 session.dy,
             ];
             session.start_quad = start_quad;
-            session.start_pivot = session.pivot;
+            session.start_pivot = pivot_point(session);
             session.free_perspective = false;
+            session.free_distort = false;
+            session.free_skew = false;
             session.perspective_side = None;
         }
         hit
@@ -85,7 +87,7 @@ impl qobject::PictureView {
     /// Hover hit-test for cursor selection; no session is mutated.
     pub fn transform_hit_test(&self, x: f64, y: f64, zoom: f64) -> i32 {
         match self.rust().session.live.transform() {
-            Some(session) if session.warp.is_some() => warp_hit_test(session, x, y, zoom),
+            Some(session) if session.warp_editing => warp_hit_test(session, x, y, zoom),
             Some(session) => {
                 if pivot_hit(session, x, y, zoom) {
                     return PIVOT_HANDLE;
@@ -119,7 +121,7 @@ impl qobject::PictureView {
         if !session.dragging {
             return false;
         }
-        if session.warp.is_some() {
+        if session.warp_editing {
             if !warp_move(session, x, y) {
                 return false;
             }
@@ -131,7 +133,7 @@ impl qobject::PictureView {
         }
         let mode = session.mode;
         let handle = session.handle;
-        match mode {
+        let changed = match mode {
             TransformMode::Distort => gesture_distort(session, handle, x, y),
             TransformMode::Perspective => gesture_perspective(session, handle, x, y),
             TransformMode::Skew => gesture_skew(session, handle, x, y, alt),
@@ -160,6 +162,12 @@ impl qobject::PictureView {
             TransformMode::Free if session.free_perspective => {
                 gesture_perspective(session, handle, x, y)
             }
+            TransformMode::Free if session.free_distort => {
+                gesture_free_distort(session, handle, x, y)
+            }
+            TransformMode::Free if session.free_skew => {
+                gesture_free_skew(session, handle, x, y, alt)
+            }
             TransformMode::Free => match handle {
                 MOVE_HANDLE => {
                     gesture_translate(session, x, y);
@@ -176,6 +184,12 @@ impl qobject::PictureView {
                 }
                 _ => false,
             },
+        };
+        let warped = changed && session.warp.is_some();
+        if warped {
+            refresh_warp_preview(self)
+        } else {
+            changed
         }
     }
 
@@ -189,6 +203,8 @@ impl qobject::PictureView {
         session.handle = -1;
         session.warp_drag = None;
         session.free_perspective = false;
+        session.free_distort = false;
+        session.free_skew = false;
         session.perspective_side = None;
         true
     }

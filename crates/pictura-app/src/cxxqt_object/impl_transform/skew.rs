@@ -1,22 +1,15 @@
 use super::super::document_session::TransformSession;
 use super::convex::keep_convex;
-use super::geometry::store_quad;
+use super::geometry::{quad_is_degenerate, store_quad, unmap_quad, MapParams};
 
-/// Skew, as Photoshop's Skew mode: a corner moves alone along whichever of its
-/// two adjacent edges the drag follows most, while an edge handle slides its two
-/// endpoints only along the edge's own axis. Alt moves the opposite corner or
-/// edge by the same displacement in the opposite direction. An editable type
-/// layer keeps a parallelogram, so a corner drag slides the whole followed edge.
-/// Shift has no effect in this mode.
-pub(super) fn gesture_skew(
-    session: &mut TransformSession,
+/// The quad a Skew drag produces from `start`; the caller stores it.
+pub(super) fn skew_quad(
+    start: [(f64, f64); 4],
     handle: i32,
-    x: f64,
-    y: f64,
+    delta: (f64, f64),
     alt: bool,
-) -> bool {
-    let start = session.start_quad;
-    let delta = (x - session.press_x, y - session.press_y);
+    type_layer: bool,
+) -> Option<[(f64, f64); 4]> {
     if (0..=3).contains(&handle) {
         let corner = handle as usize;
         let (h_neighbor, v_neighbor) = match corner {
@@ -44,7 +37,7 @@ pub(super) fn gesture_skew(
         } else {
             (vertical, v_neighbor)
         };
-        let moved: &[usize] = if session.type_layer {
+        let moved: &[usize] = if type_layer {
             &[corner, partner]
         } else {
             &[corner]
@@ -54,7 +47,7 @@ pub(super) fn gesture_skew(
             let sign = if moved.contains(&k) {
                 1.0
             } else if alt
-                && (if session.type_layer {
+                && (if type_layer {
                     true
                 } else {
                     k == (corner + 2) % 4
@@ -66,14 +59,14 @@ pub(super) fn gesture_skew(
             };
             quad[k] = (start[k].0 + sign * shift.0, start[k].1 + sign * shift.1);
         }
-        return store_quad(session, keep_convex(start, quad));
+        return Some(keep_convex(start, quad));
     }
     let (e0, e1) = match handle {
         4 => (0, 1),
         5 => (1, 2),
         6 => (2, 3),
         7 => (3, 0),
-        _ => return false,
+        _ => return None,
     };
     let (ex, ey) = (start[e1].0 - start[e0].0, start[e1].1 - start[e0].1);
     let len2 = ex * ex + ey * ey;
@@ -91,7 +84,51 @@ pub(super) fn gesture_skew(
         quad[o0] = (start[o0].0 - shift.0, start[o0].1 - shift.1);
         quad[o1] = (start[o1].0 - shift.0, start[o1].1 - shift.1);
     }
+    Some(quad)
+}
+
+/// Skew, as Photoshop's Skew mode: a corner moves alone along whichever of its
+/// two adjacent edges the drag follows most, while an edge handle slides its two
+/// endpoints only along the edge's own axis. Alt moves the opposite corner or
+/// edge by the same displacement in the opposite direction. An editable type
+/// layer keeps a parallelogram, so a corner drag slides the whole followed edge.
+/// Shift has no effect in this mode.
+pub(super) fn gesture_skew(
+    session: &mut TransformSession,
+    handle: i32,
+    x: f64,
+    y: f64,
+    alt: bool,
+) -> bool {
+    let delta = (x - session.press_x, y - session.press_y);
+    let Some(quad) = skew_quad(session.start_quad, handle, delta, alt, session.type_layer) else {
+        return false;
+    };
     store_quad(session, quad)
+}
+
+/// A transient `Free` Ctrl+Shift skew drag: edit the live box and pull the
+/// result back through the similarity into the session's perspective base. The
+/// reference point stays where it is.
+pub(super) fn gesture_free_skew(
+    session: &mut TransformSession,
+    handle: i32,
+    x: f64,
+    y: f64,
+    alt: bool,
+) -> bool {
+    let delta = (x - session.press_x, y - session.press_y);
+    let Some(quad) = skew_quad(session.start_quad, handle, delta, alt, session.type_layer) else {
+        return false;
+    };
+    if quad_is_degenerate(&quad) {
+        return false;
+    }
+    let Some(base) = unmap_quad(&MapParams::of(session), &quad) else {
+        return false;
+    };
+    session.base_quad = Some(base);
+    true
 }
 
 #[cfg(test)]
@@ -131,6 +168,8 @@ mod tests {
             quad: Some(corners),
             base_quad: None,
             free_perspective: false,
+            free_distort: false,
+            free_skew: false,
             perspective_side: None,
             start_quad: corners,
             pivot: (50.0, 25.0),
@@ -142,6 +181,8 @@ mod tests {
             interpolation: pictura_render::Interpolation::Bicubic,
             warp: None,
             warp_drag: None,
+            warp_editing: false,
+            warp_post: None,
             lifted: None,
             untrimmed: None,
             history_label: "Free Transform".to_string(),

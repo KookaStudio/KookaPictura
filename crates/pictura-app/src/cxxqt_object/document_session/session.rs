@@ -421,6 +421,14 @@ impl PictureViewRust {
     /// Restore the pre-lift document or the pre-trim layer extent. Returns
     /// whether the document changed and needs a rebuild.
     fn cancel_transform_session(&mut self, session: TransformSession) -> bool {
+        self.move_base = None;
+        self.move_layer = None;
+        self.move_x = 0;
+        self.move_y = 0;
+        self.move_opacity = 0;
+        self.move_prepared_revision = 0;
+        self.move_prepared_layer.clear();
+        self.move_preview_cache_hit = false;
         if let Some(rect) = session.untrimmed {
             if let Some(doc) = self.session.doc.as_mut() {
                 pictura_render::untrim_to(doc, &session.path, rect);

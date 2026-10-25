@@ -445,6 +445,7 @@ void ToolController::notifyToolSessionChanged()
 
 void ToolController::onSessionCancelled()
 {
+    resetTransformUi();
     registry_.forEach([this](ToolHandler& handler) { handler.onSessionCancelled(*this); });
 }
 
@@ -881,11 +882,18 @@ void ToolController::handlePressed(const QPointF& imagePos, int button, int modi
             }
         } else {
             if (hit >= 0) {
-                // Free Transform's Ctrl+Alt+Shift corner drag is a Perspective
-                // drag; the session refuses it where it does not apply.
-                if (hit <= 3 && mods.testFlag(Qt::ControlModifier)
-                    && mods.testFlag(Qt::AltModifier) && mods.testFlag(Qt::ShiftModifier)) {
+                // Free Transform's transient projective gestures: Perspective
+                // wins on Ctrl+Alt+Shift+corner, then the Ctrl+Shift side-handle
+                // skew, then the Ctrl corner distort.
+                const bool ctrlDown = mods.testFlag(Qt::ControlModifier);
+                const bool shiftDown = mods.testFlag(Qt::ShiftModifier);
+                const bool altDown = mods.testFlag(Qt::AltModifier);
+                if (hit <= 3 && ctrlDown && altDown && shiftDown) {
                     transform_begin_free_perspective(*v);
+                } else if (hit >= 4 && hit <= 7 && ctrlDown && shiftDown) {
+                    transform_begin_free_skew(*v);
+                } else if (hit <= 3 && ctrlDown) {
+                    transform_begin_free_distort(*v);
                 }
                 const ::rust::Vec<double> quad = transform_quad_extents(*v);
                 if (hit <= 3 && canvas_ && canvas_->guidesVisible()

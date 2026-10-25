@@ -25,6 +25,23 @@ namespace {
 
 constexpr double kTolerance = 1e-6;
 
+bool samePoint(const QPointF& a, const QPointF& b)
+{
+    return std::abs(a.x() - b.x()) < kTolerance && std::abs(a.y() - b.y()) < kTolerance;
+}
+
+bool fillBox(pictura::PictureView* view, const QRect& box)
+{
+    if (!view->select_rect(box.x(), box.y(), box.width(), box.height(), QStringLiteral("new"),
+                           0.0)) {
+        return false;
+    }
+    const bool ok = pictura::edit_fill(*view, qRgba(0, 0, 0, 255), -1,
+                                       QStringLiteral("normal"), 100, false);
+    view->deselect();
+    return ok;
+}
+
 } // namespace
 
 class TransformOptionsTest : public QObject {
@@ -37,6 +54,10 @@ private slots:
     void pageSwitchesWithTheSession();
     void fieldsSeedFromTheSession();
     void pivotLocatorMovesTheReferencePoint();
+    void pivotPresetUsesTheLiveQuad();
+    void pivotSetterUsesDocumentPosition();
+    void pivotFollowsMoveAndScale();
+    void pivotStaysDuringRotation();
     void relativePositioningOffsetsFromTheOrigin();
     void widthLinkScalesBothAxes();
     void angleAndSkewSettersReachTheSession();
@@ -203,7 +224,7 @@ void TransformOptionsTest::pivotLocatorMovesTheReferencePoint()
     tools->cancelFreeTransform();
 }
 
-void TransformOptionsTest::relativePositioningOffsetsFromTheOrigin()
+void TransformOptionsTest::pivotPresetUsesTheLiveQuad()
 {
     pictura::PicturaMainWindow& frame = *window_;
     const QString layer = beginLayer(frame);
@@ -211,6 +232,136 @@ void TransformOptionsTest::relativePositioningOffsetsFromTheOrigin()
     pictura::PictureView* view = frame.activeView();
     auto* tools = frame.findChild<pictura::ToolController*>();
     QVERIFY(view && tools && tools->beginFreeTransform(layer));
+    QVERIFY(tools->setTransformWidth(150.0, true));
+    QVERIFY(tools->setTransformAngle(30.0));
+
+    const QPolygonF quad = pictura::transform_api::quad(*view).corners;
+    QCOMPARE(quad.size(), 4);
+    auto* cell = frame.findChild<QToolButton*>(QStringLiteral("optionsPivot0"));
+    QVERIFY(cell);
+    cell->click();
+    QVERIFY(std::abs(pictura::transform_pivot_x(*view) - quad.at(0).x()) < kTolerance);
+    QVERIFY(std::abs(pictura::transform_pivot_y(*view) - quad.at(0).y()) < kTolerance);
+    tools->cancelFreeTransform();
+}
+
+void TransformOptionsTest::pivotSetterUsesDocumentPosition()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginLayer(frame);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(view && tools);
+    QVERIFY(fillBox(view, QRect(5, 5, 30, 20)));
+    QVERIFY(tools->beginFreeTransform(layer));
+
+    // Move the box by (5, 5); the pivot is carried to the new centre.
+    QCOMPARE(view->transform_press(27.0, 22.0, 1.0, false, false), 9);
+    QVERIFY(view->transform_move(32.0, 27.0, 1.0, false, false));
+    QVERIFY(view->transform_release());
+    QVERIFY(std::abs(pictura::transform_pivot_x(*view) - 25.0) < kTolerance);
+    QVERIFY(std::abs(pictura::transform_pivot_y(*view) - 20.0) < kTolerance);
+
+    const QPolygonF before = pictura::transform_api::quad(*view).corners;
+    QVERIFY(pictura::transform_set_pivot(*view, 8.0, 9.0));
+    QVERIFY(std::abs(pictura::transform_pivot_x(*view) - 8.0) < kTolerance);
+    QVERIFY(std::abs(pictura::transform_pivot_y(*view) - 9.0) < kTolerance);
+    const QPolygonF after = pictura::transform_api::quad(*view).corners;
+    QCOMPARE(after.size(), before.size());
+    for (int i = 0; i < after.size(); ++i) {
+        QVERIFY2(samePoint(after.at(i), before.at(i)), "the pivot move leaves the quad alone");
+    }
+
+    tools->commitFreeTransform();
+    const pictura::transform_api::LayerRect rect =
+        pictura::transform_api::layerRect(*view, layer);
+    QVERIFY(rect.valid);
+    QCOMPARE(rect.left, 10);
+    QCOMPARE(rect.top, 10);
+    QCOMPARE(rect.width(), 30);
+    QCOMPARE(rect.height(), 20);
+}
+
+void TransformOptionsTest::pivotFollowsMoveAndScale()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginLayer(frame);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(view && tools);
+    QVERIFY(fillBox(view, QRect(5, 5, 30, 20)));
+    QVERIFY(tools->beginFreeTransform(layer));
+
+    QCOMPARE(view->transform_press(27.0, 22.0, 1.0, false, false), 9);
+    QVERIFY(view->transform_move(32.0, 27.0, 1.0, false, false));
+    QVERIFY(view->transform_release());
+    QVERIFY(std::abs(pictura::transform_pivot_x(*view) - 25.0) < kTolerance);
+    QVERIFY(std::abs(pictura::transform_pivot_y(*view) - 20.0) < kTolerance);
+
+    // Scale about the bottom-right anchor; the centred pivot moves with the
+    // box to the new centre.
+    const QPolygonF quad = pictura::transform_api::quad(*view).corners;
+    QCOMPARE(view->transform_press(quad.at(0).x(), quad.at(0).y(), 1.0, false, false), 0);
+    QVERIFY(view->transform_move(quad.at(0).x() - 8.0, quad.at(0).y() - 6.0, 1.0, false,
+                                 false));
+    QVERIFY(view->transform_release());
+    const QPolygonF after = pictura::transform_api::quad(*view).corners;
+    QPointF mean;
+    for (const QPointF& p : after) {
+        mean += p / 4.0;
+    }
+    const QPointF pivot(pictura::transform_pivot_x(*view), pictura::transform_pivot_y(*view));
+    QVERIFY2(samePoint(pivot, mean), "the pivot stays at the scaled box's centre");
+    tools->cancelFreeTransform();
+}
+
+void TransformOptionsTest::pivotStaysDuringRotation()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginLayer(frame);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(view && tools);
+    QVERIFY(fillBox(view, QRect(5, 5, 30, 20)));
+    QVERIFY(tools->beginFreeTransform(layer));
+
+    QCOMPARE(view->transform_press(27.0, 22.0, 1.0, false, false), 9);
+    QVERIFY(view->transform_move(32.0, 27.0, 1.0, false, false));
+    QVERIFY(view->transform_release());
+    const QPointF pivot(pictura::transform_pivot_x(*view), pictura::transform_pivot_y(*view));
+    QVERIFY(samePoint(pivot, QPointF(25.0, 20.0)));
+
+    // A rotate-band drag turns about the pivot and leaves it in place.
+    const QPolygonF quad = pictura::transform_api::quad(*view).corners;
+    const QPointF topMid = (quad.at(0) + quad.at(1)) / 2.0;
+    QCOMPARE(view->transform_press(topMid.x(), topMid.y() - 10.0, 1.0, false, false), 8);
+    QVERIFY(view->transform_move(topMid.x() + 10.0, topMid.y() - 6.0, 1.0, false, false));
+    QVERIFY(view->transform_release());
+    QVERIFY(samePoint(QPointF(pictura::transform_pivot_x(*view),
+                              pictura::transform_pivot_y(*view)),
+                      pivot));
+
+    // The numeric angle setter also turns about the pivot.
+    QVERIFY(tools->setTransformAngle(30.0));
+    QVERIFY(samePoint(QPointF(pictura::transform_pivot_x(*view),
+                              pictura::transform_pivot_y(*view)),
+                      pivot));
+    tools->cancelFreeTransform();
+}
+
+void TransformOptionsTest::relativePositioningOffsetsFromTheOrigin()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginLayer(frame);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(view && tools);
+    QVERIFY(fillBox(view, QRect(5, 5, 30, 20)));
+    QVERIFY(tools->beginFreeTransform(layer));
 
     auto* x = frame.findChild<pictura::NumericField*>(QStringLiteral("optionsTransformX"));
     auto* relative = frame.findChild<QToolButton*>(QStringLiteral("optionsTransformRelative"));
@@ -219,11 +370,21 @@ void TransformOptionsTest::relativePositioningOffsetsFromTheOrigin()
     QVERIFY(std::abs(x->value()) < kTolerance);
 
     typeInto(x, QStringLiteral("10"));
-    QVERIFY(std::abs(pictura::transform_pivot_x(*view) - 26.0) < kTolerance);
+    QVERIFY(std::abs(pictura::transform_pivot_x(*view) - 30.0) < kTolerance);
     QVERIFY(std::abs(x->value() - 10.0) < kTolerance);
 
     relative->setChecked(false);
-    QVERIFY(std::abs(x->value() - 26.0) < kTolerance);
+    QVERIFY(std::abs(x->value() - 30.0) < kTolerance);
+
+    // The origin follows the box; relative X stays the source-frame offset.
+    QCOMPARE(view->transform_press(27.0, 22.0, 1.0, false, false), 9);
+    QVERIFY(view->transform_move(32.0, 27.0, 1.0, false, false));
+    QVERIFY(view->transform_release());
+    QVERIFY(std::abs(pictura::transform_pivot_x(*view) - 35.0) < kTolerance);
+    QVERIFY(std::abs(pictura::transform_pivot_y(*view) - 20.0) < kTolerance);
+    relative->setChecked(true);
+    QVERIFY2(std::abs(x->value() - 10.0) < kTolerance,
+             "relative X is the offset from the carried origin");
     tools->cancelFreeTransform();
 }
 
@@ -272,9 +433,9 @@ void TransformOptionsTest::angleAndSkewSettersReachTheSession()
     typeInto(angle, QStringLiteral("30"));
     QVERIFY(std::abs(pictura::transform_angle_degrees(*view) - 30.0) < 1e-3);
 
-    typeInto(skewH, QStringLiteral("15"));
+    typeInto(skewH, QStringLiteral("30"));
     typeInto(skewV, QStringLiteral("-10"));
-    QVERIFY(std::abs(pictura::transform_skew_h_degrees(*view) - 15.0) < 1e-3);
+    QVERIFY(std::abs(pictura::transform_skew_h_degrees(*view) - 30.0) < 1e-3);
     QVERIFY(std::abs(pictura::transform_skew_v_degrees(*view) + 10.0) < 1e-3);
 
     // A sheared similarity commits through the affine quad as one state.

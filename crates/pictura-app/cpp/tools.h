@@ -418,6 +418,9 @@ public:
     bool repeatTransform();
     void commitFreeTransform();
     void cancelFreeTransform();
+    // Clear the transform overlay and the Move controls box after a history
+    // restore or document swap cancelled the session in Rust.
+    void resetTransformUi();
     bool transformSessionActive() const;
     // Whether the Move tool's `Show Transform Controls` box is up (idle, or
     // mid-gesture as an auto-managed, per-drag-commit session), not a modal

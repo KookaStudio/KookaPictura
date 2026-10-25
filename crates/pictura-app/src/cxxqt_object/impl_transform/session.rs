@@ -276,6 +276,8 @@ fn repeatable_transform(session: &TransformSession) -> Option<RepeatTransform> {
         skew_y: session.skew_y,
         dx: session.dx,
         dy: session.dy,
+        // `pivot` is a source-frame point, so this offset is not shifted by a
+        // gesture that carried the pivot through the map.
         pivot_offset: (session.pivot.0 - cx, session.pivot.1 - cy),
     })
 }
@@ -407,8 +409,9 @@ impl qobject::PictureView {
     }
 
     /// Clear the session; a lifted selection's pixels go back where they were.
-    pub fn cancel_transform(self: Pin<&mut Self>) {
-        self.drop_transform_session();
+    pub fn cancel_transform(mut self: Pin<&mut Self>) {
+        self.as_mut().drop_transform_session();
+        self.as_mut().clear_transform_preview();
     }
 
     /// Drop any session, restoring the document from before a lift, or the
@@ -432,25 +435,42 @@ impl qobject::PictureView {
 
     /// Commit the session: one transform op (the similarity, an affine quad
     /// when a shear is set, or `transform_layer_quad` in a projective mode), or
-    /// in Warp mode the warp followed by the box's frame, a recomposite,
-    /// and one `"Free Transform"` history state on success. An identity
-    /// transform or warp records nothing; an engine refusal records nothing.
-    /// The session always clears.
+    /// when a warp is stored the warp followed by the box's frame, a
+    /// recomposite, and one `"Free Transform"` history state on success. An
+    /// identity transform or warp records nothing; an engine refusal records
+    /// nothing. The session always clears.
     pub fn commit_transform(mut self: Pin<&mut Self>) -> bool {
-        let Some((path, projective, quad, params, orig_rect, interpolation, warp, history_label)) =
-            self.rust().session.live.transform().map(|session| {
-                (
-                    session.path.clone(),
-                    quad_driven(session),
-                    session_quad(session),
-                    MapParams::of(session),
-                    session.orig_rect,
-                    session.interpolation,
-                    session.warp.clone(),
-                    session.history_label.clone(),
-                )
-            })
+        let Some((
+            path,
+            projective,
+            quad,
+            preview_quad,
+            params,
+            orig_rect,
+            interpolation,
+            warp,
+            history_label,
+        )) = self.rust().session.live.transform().map(|session| {
+            let quad = session_quad(session);
+            let preview_quad = if session.warp.is_some() {
+                super::warp::warp_preview_quad(session).unwrap_or(quad)
+            } else {
+                quad
+            };
+            (
+                session.path.clone(),
+                quad_driven(session),
+                quad,
+                preview_quad,
+                MapParams::of(session),
+                session.orig_rect,
+                session.interpolation,
+                session.warp.clone(),
+                session.history_label.clone(),
+            )
+        })
         else {
+            self.as_mut().clear_transform_preview();
             return false;
         };
         let repeat = self
@@ -471,12 +491,17 @@ impl qobject::PictureView {
         };
         if identity {
             self.as_mut().drop_transform_session();
+            self.as_mut().clear_transform_preview();
             return false;
         }
         let changed = match (self.as_mut().rust_mut().session.doc.as_mut(), &warp) {
-            (Some(doc), Some(warp)) => {
-                pictura_render::transform_layer_warp(doc, &path, warp, Some(quad), interpolation)
-            }
+            (Some(doc), Some(warp)) => pictura_render::transform_layer_warp(
+                doc,
+                &path,
+                warp,
+                Some(preview_quad),
+                interpolation,
+            ),
             (Some(doc), None) => apply_session_transform(
                 doc,
                 &path,
@@ -507,6 +532,7 @@ impl qobject::PictureView {
             if !merged {
                 self.as_mut().rust_mut().session.doc = Some(*before);
                 self.as_mut().recomposite();
+                self.as_mut().clear_transform_preview();
                 return false;
             }
             // ponytail: CS6 carries the selection border through the transform;
@@ -514,6 +540,7 @@ impl qobject::PictureView {
             self.as_mut().rust_mut().session.selection = None;
             self.as_mut().rust_mut().last_transform = repeat;
             self.as_mut().edit(&history_label, |_| Edit::Structural);
+            self.as_mut().clear_transform_preview();
             return true;
         }
         if changed {
@@ -534,6 +561,7 @@ impl qobject::PictureView {
             }
             self.as_mut().record(&history_label);
         }
+        self.as_mut().clear_transform_preview();
         changed
     }
 
@@ -793,6 +821,21 @@ impl qobject::PictureView {
         // layer, and clamped rect are unchanged.
     }
 
+    /// Drop the transform overlay's prepared base/layer. The C++ canvas clears
+    /// its copy separately; this keeps the Rust side from handing a stale
+    /// preview to a later undo or move.
+    pub fn clear_transform_preview(self: Pin<&mut Self>) {
+        let mut rust = self.rust_mut();
+        rust.move_base = None;
+        rust.move_layer = None;
+        rust.move_x = 0;
+        rust.move_y = 0;
+        rust.move_opacity = 0;
+        rust.move_prepared_revision = 0;
+        rust.move_prepared_layer.clear();
+        rust.move_preview_cache_hit = false;
+    }
+
     pub fn commit_move(mut self: Pin<&mut Self>, dx: i32, dy: i32) -> bool {
         if dx == 0 && dy == 0 {
             return false;
@@ -953,6 +996,8 @@ impl PictureViewRust {
             quad: mode.is_projective().then_some(corners),
             base_quad: None,
             free_perspective: false,
+            free_distort: false,
+            free_skew: false,
             perspective_side: None,
             start_quad: corners,
             pivot: center,
@@ -964,6 +1009,8 @@ impl PictureViewRust {
             interpolation: Interpolation::Bicubic,
             warp: None,
             warp_drag: None,
+            warp_editing: false,
+            warp_post: None,
             lifted,
             untrimmed,
             history_label: "Free Transform".to_string(),
@@ -986,9 +1033,73 @@ impl PictureViewRust {
 
 #[cfg(test)]
 mod tests {
+    use super::super::super::document_session::{TransformMode, TransformSession};
+    use super::super::geometry::{pivot_point, rect_center, set_pivot, source_corners};
     use super::*;
     use pictura_core::shape::{outline_in_box, ShapeKind, ShapeOptions};
-    use pictura_core::{BitDepth, Channel, ColorMode, Document};
+    use pictura_core::{BitDepth, Channel, ColorMode, Document, PsdRect};
+    use pictura_render::Interpolation;
+
+    fn transform_session(rect: PsdRect) -> TransformSession {
+        TransformSession {
+            path: "0".to_string(),
+            orig_rect: rect,
+            scale_x: 1.0,
+            scale_y: 1.0,
+            angle: 0.0,
+            dx: 0.0,
+            dy: 0.0,
+            handle: -1,
+            press_x: 0.0,
+            press_y: 0.0,
+            start: [1.0, 1.0, 0.0, 0.0, 0.0],
+            dragging: false,
+            mode: TransformMode::Free,
+            type_layer: false,
+            quad: None,
+            base_quad: None,
+            free_perspective: false,
+            free_distort: false,
+            free_skew: false,
+            perspective_side: None,
+            start_quad: source_corners(rect),
+            pivot: rect_center(rect),
+            pivot_origin: rect_center(rect),
+            start_pivot: rect_center(rect),
+            show_pivot: true,
+            skew_x: 0.0,
+            skew_y: 0.0,
+            interpolation: Interpolation::Bicubic,
+            warp: None,
+            warp_drag: None,
+            warp_editing: false,
+            warp_post: None,
+            lifted: None,
+            untrimmed: None,
+            history_label: "Free Transform".to_string(),
+        }
+    }
+
+    #[test]
+    fn repeatable_transform_records_the_source_pivot() {
+        let rect = PsdRect {
+            left: 0,
+            top: 0,
+            right: 10,
+            bottom: 10,
+        };
+        let mut session = transform_session(rect);
+        // A translated session takes a document pivot at the origin; the
+        // stored source point is its inverse, and the recorded offset is in
+        // the source frame, not the translated document frame.
+        session.dx = 5.0;
+        session.dy = 5.0;
+        assert!(set_pivot(&mut session, 0.0, 0.0));
+        assert_eq!(session.pivot, (-5.0, -5.0));
+        assert_eq!(pivot_point(&session), (0.0, 0.0));
+        let repeat = repeatable_transform(&session).expect("repeatable");
+        assert_eq!(repeat.pivot_offset, (-10.0, -10.0));
+    }
 
     #[test]
     fn a_shape_preview_ignores_empty_channels() {
