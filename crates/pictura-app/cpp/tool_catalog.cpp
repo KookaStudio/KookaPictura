@@ -1,6 +1,6 @@
 #include "tools.h"
 
-#include "pictura_app/src/cxxqt_object/tool_catalogue.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/engine_tables/tool_catalogue.cxxqt.h"
 
 #include <QtCore/QByteArray>
 #include <QtCore/QHash>

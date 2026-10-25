@@ -1,6 +1,6 @@
 #include "blend_modes.h"
 
-#include "pictura_app/src/cxxqt_object/blend_modes.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/engine_tables/blend_modes.cxxqt.h"
 
 namespace pictura {
 

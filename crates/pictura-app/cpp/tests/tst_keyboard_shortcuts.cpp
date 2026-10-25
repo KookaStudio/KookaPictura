@@ -20,7 +20,7 @@
 #include "keyboard_shortcuts_dialog.h"
 #include "session.h"
 #include "tool_catalogue_golden.h"
-#include "pictura_app/src/cxxqt_object/tool_catalogue.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/engine_tables/tool_catalogue.cxxqt.h"
 #include "theme.h"
 #include "tools.h"
 

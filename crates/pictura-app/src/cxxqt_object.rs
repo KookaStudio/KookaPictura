@@ -1,20 +1,18 @@
 //! The cxx-qt bridge: a Rust `QObject` that owns the image shown by the shell.
 #![allow(clippy::too_many_arguments)] // brush parameter lists mirror the C++ API
 mod actions_engine;
-mod adjustment_catalogue;
 mod adjustment_edit;
 mod align;
 mod annotations;
-mod blend_modes;
 mod channels;
 mod clipboard;
 mod clipping;
-mod color_models;
 mod color_range;
 mod command_catalogue;
 mod crop_group;
 mod document_session;
 mod edit;
+mod engine_tables;
 mod export;
 mod eyedropper_sample;
 mod filter_map;
@@ -57,7 +55,6 @@ mod selection_move;
 mod shapes;
 mod state;
 mod svg_export;
-mod tool_catalogue;
 mod type_tools;
 mod web_export;
 pub use state::PictureViewRust;

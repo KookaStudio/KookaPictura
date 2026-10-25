@@ -3,8 +3,8 @@
 //! engine's plate split, so the shell keeps no colour formula of its own.
 
 use self::ffi::{CmykValue, LabValue};
-use super::channels::mode_name;
-use super::impl_selection::{channel_value, color_rows, q_gray};
+use super::super::channels::mode_name;
+use super::super::impl_selection::{channel_value, color_rows, q_gray};
 use cxx_qt_lib::QString;
 use pictura_color::model::{self, CmykConverter};
 use pictura_core::ColorMode;
