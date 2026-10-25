@@ -144,8 +144,8 @@ LayersPanel::LayersPanel(ColorState* colors, QWidget* parent)
     auto* controls = new QHBoxLayout();
     blend_ = new QComboBox(body);
     blend_->setObjectName(QStringLiteral("layersBlendCombo"));
-    for (const BlendEntry& entry : kBlends) {
-        blend_->addItem(QString::fromLatin1(entry.name), QString::fromLatin1(entry.key));
+    for (const BlendEntry& entry : blendModes()) {
+        blend_->addItem(entry.name, entry.key);
     }
     blend_->setEnabled(false);
     blend_->setSizeAdjustPolicy(QComboBox::AdjustToContents);

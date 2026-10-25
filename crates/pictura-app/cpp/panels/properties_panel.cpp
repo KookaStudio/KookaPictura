@@ -674,13 +674,8 @@ void PropertiesPanel::showLayer(const pictura::layers_api::LayerRow& row)
                       new QLabel(QStringLiteral("X %1, Y %2").arg(rect.left).arg(rect.top),
                                  layerPage_));
     }
-    QString blend = row.blend;
-    for (const BlendEntry& entry : kBlends) {
-        if (blend == QLatin1String(entry.key)) {
-            blend = QLatin1String(entry.name);
-        }
-    }
-    info_->addRow(QStringLiteral("Blend Mode:"), new QLabel(blend, layerPage_));
+    info_->addRow(QStringLiteral("Blend Mode:"),
+                  new QLabel(blendModeName(row.blend), layerPage_));
     const auto percent = [](int v) { return QStringLiteral("%1%").arg(qRound(v * 100.0 / 255.0)); };
     info_->addRow(QStringLiteral("Opacity:"),
                   new QLabel(percent(row.opacity), layerPage_));

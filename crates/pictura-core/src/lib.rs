@@ -530,7 +530,8 @@ impl BlendMode {
             .find(|m| m.to_psd_key() == key)
     }
 
-    /// The CS6 display name, matching the app's blend combo (`blend_modes.h`).
+    /// The CS6 display name, which the app's blend combos read through the
+    /// `blend_modes` bridge.
     pub fn name(&self) -> &'static str {
         match self {
             BlendMode::Normal => "Normal",

@@ -292,6 +292,7 @@ set(PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/liquify_canvas.h
     crates/pictura-app/cpp/liquify_dialog.cpp
     crates/pictura-app/cpp/liquify_dialog.h
+    crates/pictura-app/cpp/blend_modes.cpp
     crates/pictura-app/cpp/blend_modes.h
     crates/pictura-app/cpp/layer_style_dialog.cpp
     crates/pictura-app/cpp/layer_style_dialog.h

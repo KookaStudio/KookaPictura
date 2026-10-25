@@ -117,6 +117,7 @@ set(PICTURA_QT_TESTS
     tst_vanishing_point_retouch
     tst_vanishing_point_files
     tst_layer_style
+    tst_blend_mode_list
     tst_color_range
     tst_refine_edge
     tst_replace_color

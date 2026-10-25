@@ -1,10 +1,10 @@
 #include "layer_new_dialog.h"
+#include "blend_modes.h"
 #include "dialogs.h"
 
 #include "panels/layers_panel_internal.h"
 #include "panels/numeric_field.h"
 
-#include <QtCore/QSet>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QDialogButtonBox>
@@ -12,22 +12,6 @@
 #include <QtWidgets/QLineEdit>
 
 namespace pictura {
-
-namespace {
-
-// The seven modes whose neutral color is undefined (docs/05-layers/blend-modes.md).
-// The engine's `pictura_render::neutral_color` returns None for the same set and
-// is the authority for the pixels actually written.
-const QSet<QString>& modesWithoutNeutral()
-{
-    static const QSet<QString> keys = {
-        QStringLiteral("norm"), QStringLiteral("diss"), QStringLiteral("hMix"),
-        QStringLiteral("hue "), QStringLiteral("sat "), QStringLiteral("colr"),
-        QStringLiteral("lum ")};
-    return keys;
-}
-
-} // namespace
 
 LayerNewDialog::LayerNewDialog(bool group, QWidget* parent)
     : QDialog(parent)
@@ -48,8 +32,9 @@ LayerNewDialog::LayerNewDialog(bool group, QWidget* parent)
     colorCombo_->addItem(QStringLiteral("Gray"), 7);
 
     modeCombo_ = new QComboBox(this);
-    for (const BlendEntry& entry : kBlends) {
-        modeCombo_->addItem(QString::fromLatin1(entry.name), QString::fromLatin1(entry.key));
+    modeCombo_->setObjectName(QStringLiteral("layerNewMode"));
+    for (const BlendEntry& entry : blendModes()) {
+        modeCombo_->addItem(entry.name, entry.key);
     }
 
     NumericFieldConfig opacityConfig;
@@ -93,7 +78,10 @@ void LayerNewDialog::syncNeutralForMode()
     if (!neutralCheck_) {
         return;
     }
-    const bool available = !modesWithoutNeutral().contains(modeCombo_->currentData().toString());
+    // The engine's `neutral_color` decides which modes have a neutral fill.
+    const int index = modeCombo_->currentIndex();
+    const bool available = index >= 0 && index < blendModes().size()
+                           && blendModes().at(index).hasNeutral;
     neutralCheck_->setEnabled(available);
     if (!available) {
         neutralCheck_->setChecked(false);

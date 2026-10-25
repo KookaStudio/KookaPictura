@@ -150,6 +150,7 @@ fn main() {
                 "src/cxxqt_object/adjustment_edit.rs",
                 "src/cxxqt_object/align.rs",
                 "src/cxxqt_object/annotations.rs",
+                "src/cxxqt_object/blend_modes.rs",
                 "src/cxxqt_object/channels.rs",
                 "src/cxxqt_object/clipping.rs",
                 "src/cxxqt_object/command_catalogue.rs",
